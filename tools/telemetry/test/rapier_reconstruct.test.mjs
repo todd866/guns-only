@@ -23,7 +23,7 @@ import {
 const SORTIE_ID = "sortie-test-001";
 const SESSION_T0 = 1_700_000_000_000;
 
-function header(batchId = "batch-001", session = "web-test-session") {
+function header(batchId = "batch-001", session = "web-test-session", overrides = {}) {
   return {
     k: "hdr",
     schema_version: "2.0.0",
@@ -33,6 +33,8 @@ function header(batchId = "batch-001", session = "web-test-session") {
     build: "47",
     batch_id: batchId,
     t0: SESSION_T0,
+    clock_basis: "performance_time_origin_plus_monotonic_ms",
+    ...overrides,
   };
 }
 
@@ -55,7 +57,12 @@ function baseState(overrides = {}) {
     radar_alt_ft: 500,
     vertical_speed_fpm: 0,
     g_actual: 1,
+    g_hardmax: 12,
+    g_override_max: 15,
     requested_g_cmd: 1,
+    requested_envelope_override: false,
+    dynamic_pressure_kpa: 20,
+    rapier_over_q: false,
     throttle: 0.8,
     rapier_mission_phase: 1,
     rapier_mission_phase_name: "LAUNCH",
@@ -70,6 +77,10 @@ function baseState(overrides = {}) {
     engagement_number: 0,
     rounds_fired: 0,
     bandit_alive: true,
+    time_compression_requested_factor: 8,
+    time_compression_safety_factor_cap: 8,
+    time_compression_factor: 1,
+    time_compression_inhibit_reason: "TRANSIT_NOT_ESTABLISHED",
     pilot_control_interlocked: false,
     ...overrides,
   };
@@ -177,6 +188,54 @@ test("uses session epoch plus row elapsed time for video alignment", () => {
   });
   assert.equal(clipped.coverage.covered_video_s, 0.05);
   assert.equal(clipped.coverage.intervals[0].first_video_s, 0.025);
+});
+
+test("repairs a legacy clock origin only when a stable wall anchor proves the offset", () => {
+  const legacyOffsetMs = 1709;
+  const rows = encodeSortie([
+    baseState({ t: 0 }),
+    baseState({ t: 0.05, mach: 0.6 }),
+  ]);
+  Object.assign(rows[0], {
+    t0: SESSION_T0 + legacyOffsetMs,
+    clock_basis: undefined,
+  });
+  rows.push({
+    k: "in",
+    t: 1250,
+    sortie: SORTIE_ID,
+    type: "flight-test-sync",
+    code: "MARK-LEGACY",
+    wall_epoch_ms: SESSION_T0 + 1250,
+  });
+
+  const reconstruction = reconstructRapierFlight({
+    rows,
+    sortieId: SORTIE_ID,
+    videoStartEpochMs: SESSION_T0 + 1000,
+    videoDurationS: 1,
+  });
+
+  assert.equal(reconstruction.coverage.clock.status, "repaired_from_wall_anchor");
+  assert.equal(reconstruction.coverage.clock.correction_ms, -legacyOffsetMs);
+  assert.equal(reconstruction.track[0].wall_epoch_ms, SESSION_T0 + 1000);
+  assert.equal(reconstruction.track[0].video_s, 0);
+  assert.ok(reconstruction.audit.findings.some(
+    (item) => item.code === "clock_origin_repaired",
+  ));
+});
+
+test("labels an unanchored legacy clock unknown instead of inventing a correction", () => {
+  const rows = encodeSortie([baseState()]);
+  delete rows[0].clock_basis;
+  const reconstruction = reconstructRapierFlight({ rows, sortieId: SORTIE_ID });
+
+  assert.equal(reconstruction.coverage.clock.status, "legacy_unverified");
+  assert.equal(reconstruction.coverage.clock.correction_ms, 0);
+  assert.ok(reconstruction.audit.findings.some(
+    (item) => item.code === "legacy_clock_unverified"
+      && item.severity === "warning",
+  ));
 });
 
 test("projects pilot sync markers into the video-aligned event timeline", () => {
@@ -390,6 +449,106 @@ test("derives RAM crossings, extrema, takeoff, interlocks, and landing from nume
   assert.equal(reconstruction.summary.max_mach.value, 2.85);
 });
 
+test("audits performance, autonomous compression handoff, and raw exposure without pricing damage", () => {
+  const rows = encodeSortie([
+    baseState({
+      t: 0,
+      g_actual: 12.8,
+      requested_envelope_override: true,
+      rapier_over_q: true,
+      rapier_thermal_margin_c: -15,
+      time_compression_factor: 8,
+      time_compression_inhibit_reason: "NONE",
+    }),
+    baseState({
+      t: 0.05,
+      g_actual: 12.6,
+      requested_envelope_override: true,
+      rapier_over_q: true,
+      rapier_thermal_margin_c: -10,
+      time_compression_factor: 1,
+      time_compression_safety_factor_cap: 1,
+      time_compression_inhibit_reason: "CONTACT_THREAT",
+      rapier_economy_active: true,
+      rapier_economy_model_id: "rapier.operations.allocation-credit.v1",
+      rapier_economy_target_kind: "TRANSPORT",
+      rapier_economy_application_key: "a".repeat(64),
+      rapier_economy_sortie_net_credits: 68,
+      rapier_economy_inspection_reserved: true,
+      rapier_economy_damage_cost_computed: false,
+      rapier_economy_lines: [
+        {
+          category: "INSPECTION",
+          code: "EXCEEDANCE_INSPECTION",
+          credits: -90,
+        },
+      ],
+    }),
+  ]);
+  rows.push({
+    k: "perf",
+    t: 1025,
+    frame_ms_p95: 33,
+    frame_ms_max: 75,
+    frames_over_22ms: 3,
+    time_compression_cost_dropped_ticks: 5,
+  });
+  const reconstruction = reconstructRapierFlight({ rows, sortieId: SORTIE_ID });
+  const codes = new Set(reconstruction.audit.findings.map((item) => item.code));
+
+  assert.equal(reconstruction.audit.verdict, "review");
+  assert.ok(codes.has("presentation_frame_stall"));
+  assert.ok(codes.has("time_compression_cost_backpressure"));
+  assert.ok(codes.has("time_compression_abrupt_handoff"));
+  assert.ok(codes.has("structural_limit_exposure"));
+  assert.ok(codes.has("dynamic_pressure_exposure"));
+  assert.ok(codes.has("thermal_proxy_exposure"));
+  assert.equal(
+    reconstruction.exposure_summary.mechanical.observed_seconds_above_structural_limit,
+    0.05,
+  );
+  assert.equal(reconstruction.exposure_summary.damage_assessment, "not_computed");
+  assert.equal(reconstruction.exposure_summary.cost_projection, "not_computed");
+  assert.equal(reconstruction.track[1].rapier_economy_target_kind, "TRANSPORT");
+  assert.equal(reconstruction.track[1].rapier_economy_sortie_net_credits, 68);
+  assert.equal(reconstruction.track[1].rapier_economy_inspection_reserved, true);
+  assert.equal(reconstruction.track[1].rapier_economy_damage_cost_computed, false);
+  assert.deepEqual(reconstruction.track[1].rapier_economy_lines, [
+    {
+      category: "INSPECTION",
+      code: "EXCEEDANCE_INSPECTION",
+      credits: -90,
+    },
+  ]);
+});
+
+test("accepts the deterministic 8 to 4 to 2 to 1 compression taper", () => {
+  const rows = encodeSortie([
+    baseState({ t: 0, time_compression_factor: 8 }),
+    baseState({
+      t: 0.05,
+      time_compression_factor: 4,
+      time_compression_safety_factor_cap: 4,
+    }),
+    baseState({
+      t: 0.10,
+      time_compression_factor: 2,
+      time_compression_safety_factor_cap: 2,
+    }),
+    baseState({
+      t: 0.15,
+      time_compression_factor: 1,
+      time_compression_safety_factor_cap: 1,
+      time_compression_inhibit_reason: "CONTACT_THREAT",
+    }),
+  ]);
+  const reconstruction = reconstructRapierFlight({ rows, sortieId: SORTIE_ID });
+
+  assert.equal(reconstruction.audit.findings.some(
+    (item) => item.code === "time_compression_abrupt_handoff",
+  ), false);
+});
+
 test("filters sorties and fails closed on an orphan delta", () => {
   const encoder = new TelemetryStateEncoder({ keyframeIntervalSamples: 4 });
   const rows = [
@@ -435,6 +594,7 @@ test("exports CSV and CLI writes JSON plus optional CSV", async (t) => {
   });
 
   assert.equal(JSON.parse(logs.at(-1)).status, "reconstructed");
+  assert.equal(JSON.parse(logs.at(-1)).clock_status, "declared_monotonic_origin");
   const written = JSON.parse(await readFile(outputPath, "utf8"));
   const csv = await readFile(csvPath, "utf8");
   assert.equal(written.track.length, 2);

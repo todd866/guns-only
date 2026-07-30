@@ -1,5 +1,6 @@
 export const CAMPAIGN_STORAGE_KEY = "guns-only.raptor-program.v1";
-export const CAMPAIGN_PROFILE_VERSION = 1;
+export const CAMPAIGN_PROFILE_VERSION = 2;
+export const MAX_APPLIED_RAPIER_SORTIES = 64;
 
 export const CAMPAIGN_NODES = Object.freeze([
   Object.freeze({
@@ -42,11 +43,11 @@ export const CAMPAIGN_NODES = Object.freeze([
   }),
   Object.freeze({
     id: "rapier-intercept",
-    mission: 10,
+    mission: 12,
     sequence: 5,
     aircraft: "Rapier",
     title: "Rapier Intercept",
-    shortObjective: "Climb around M0.90 to FL560, cross the live ram handover, ram-climb to FL700, release the swarm, recover.",
+    shortObjective: "Take the dealt balloon, transport, airborne-enabler, or swarm contract; recover the Rapier and protect the operating balance.",
     qualification: "",
   }),
 ]);
@@ -63,6 +64,19 @@ function cleanQualification(value) {
   });
 }
 
+function cleanAppliedRapierSorties(value) {
+  if (!Array.isArray(value)) return Object.freeze([]);
+  const unique = [];
+  const seen = new Set();
+  for (const candidate of value) {
+    const key = String(candidate || "").trim().toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(key) || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(key);
+  }
+  return Object.freeze(unique.slice(-MAX_APPLIED_RAPIER_SORTIES));
+}
+
 export function createCampaignProfile(value = null) {
   const source = value && typeof value === "object" ? value : {};
   const qualifications = {};
@@ -72,7 +86,14 @@ export function createCampaignProfile(value = null) {
   }
   return Object.freeze({
     version: CAMPAIGN_PROFILE_VERSION,
-    pointsBalance: Math.trunc(Number(source.pointsBalance) || 0),
+    // Version 1 called the same fictional allocation unit "points". Accept it once as migration
+    // input, but keep the Rapier budget explicitly separate from arcade scores thereafter.
+    rapierBalanceCredits: Math.trunc(Number(
+      source.rapierBalanceCredits ?? source.pointsBalance,
+    ) || 0),
+    appliedRapierSortieKeys: cleanAppliedRapierSorties(
+      source.appliedRapierSortieKeys,
+    ),
     qualifications: Object.freeze(qualifications),
   });
 }
@@ -94,6 +115,25 @@ export function saveCampaignProfile(profile, storage = globalThis.localStorage) 
     // Storage can be unavailable in private/embedded contexts. The in-memory profile still works.
   }
   return clean;
+}
+
+export function applyRapierSortieCredits(profile, applicationKey, credits) {
+  const current = createCampaignProfile(profile);
+  const key = String(applicationKey || "").trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(key)
+    || current.appliedRapierSortieKeys.includes(key)) {
+    return Object.freeze({ profile: current, applied: false });
+  }
+  const next = createCampaignProfile({
+    ...current,
+    rapierBalanceCredits:
+      current.rapierBalanceCredits + Math.trunc(Number(credits) || 0),
+    appliedRapierSortieKeys: [
+      ...current.appliedRapierSortieKeys,
+      key,
+    ],
+  });
+  return Object.freeze({ profile: next, applied: true });
 }
 
 export function campaignNode(nodeId) {

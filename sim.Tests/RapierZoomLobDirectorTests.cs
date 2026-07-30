@@ -150,7 +150,7 @@ public class RapierZoomLobDirectorTests {
         BeatSetup b = Beats.RapierGoFly(jobSeed: 7);
         Assert.Equal(a.ScriptedIntercept!.Job, b.ScriptedIntercept!.Job);
         Assert.True(a.ScriptedIntercept.ZoomLobProfile);
-        Assert.StartsWith("Go fly the Rapier", a.Name);
+        Assert.StartsWith("Rapier intercept", a.Name);
     }
 
     [Fact]

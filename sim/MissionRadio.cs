@@ -87,22 +87,73 @@ public static class MissionRadioExchangeContracts {
         ],
         ImplicitAcknowledgment: MissionRadioImplicitAcknowledgment.PatternBreakFlown);
 
-    public static readonly MissionRadioExchangeContract LandingClearance = new(
-        "landing-clearance",
-        MissionRadioKnowledge.Identity
-        | MissionRadioKnowledge.Position
-        | MissionRadioKnowledge.RequestOrIntent,
-        "Tower already owns the identified aircraft in the closed circuit and sees it on base; "
-        + "the established recovery intent persists.",
+    static MissionRadioExchangeContract IndependentLanding(
+        string contractId,
+        string reportId,
+        string clearanceId,
+        string acknowledgmentId) => new(
+        contractId,
+        MissionRadioKnowledge.None,
+        "Each Rapier is an independent single ship. Its base report establishes identity, "
+        + "position, achieved gear state, and any non-default landing intent before Tower grants "
+        + "that aircraft its own landing authority.",
         MissionRadioKnowledge.All,
-        MissionRadioAcknowledgment.Callsign,
-        "A callsign-only reply confirms receipt of the new landing authority.",
+        MissionRadioAcknowledgment.FullReadback,
+        "The compact reply names the authority accepted and the aircraft accepting it.",
         [
-            new("tower-cleared-arrested-landing", MissionRadioKnowledge.CurrentAuthority),
-            new("pilot-landing-ack", MissionRadioKnowledge.None, true),
+            new(
+                reportId,
+                MissionRadioKnowledge.Identity
+                | MissionRadioKnowledge.Position
+                | MissionRadioKnowledge.RequestOrIntent),
+            new(clearanceId, MissionRadioKnowledge.CurrentAuthority),
+            new(acknowledgmentId, MissionRadioKnowledge.None, true),
         ],
-        ContextSource: MissionRadioContextSource.SharedChannel,
         Repeatable: true);
+
+    public static readonly MissionRadioExchangeContract LandingClearance =
+        IndependentLanding(
+            "landing-clearance",
+            "pilot-base",
+            "tower-cleared-arrested-landing",
+            "pilot-landing-ack");
+
+    public static readonly MissionRadioExchangeContract TouchAndGoClearance =
+        IndependentLanding(
+            "touch-and-go-clearance",
+            "pilot-base-touch-and-go",
+            "tower-cleared-touch-and-go",
+            "pilot-touch-and-go-ack");
+
+    public static readonly MissionRadioExchangeContract TrafficTwoLanding =
+        IndependentLanding(
+            "traffic-rapier-2-landing",
+            "traffic-rapier-2-base",
+            "tower-rapier-2-cleared-landing",
+            "traffic-rapier-2-landing-ack");
+
+    public static readonly MissionRadioExchangeContract TrafficThreeLanding =
+        IndependentLanding(
+            "traffic-rapier-3-landing",
+            "traffic-rapier-3-base",
+            "tower-rapier-3-cleared-landing",
+            "traffic-rapier-3-landing-ack");
+
+    public static readonly MissionRadioExchangeContract TrafficFourLanding =
+        IndependentLanding(
+            "traffic-rapier-4-landing",
+            "traffic-rapier-4-base",
+            "tower-rapier-4-cleared-landing",
+            "traffic-rapier-4-landing-ack");
+
+    public static MissionRadioExchangeContract TrafficLanding(string callsign) =>
+        callsign switch {
+            "RAPIER 2" or "GHOST 12" => TrafficTwoLanding,
+            "RAPIER 3" or "GHOST 13" => TrafficThreeLanding,
+            "RAPIER 4" or "GHOST 14" => TrafficFourLanding,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(callsign), callsign, "unknown circuit-traffic callsign"),
+        };
 
     public static readonly MissionRadioExchangeContract TacticalCommit = new(
         "tactical-commit",
@@ -150,29 +201,36 @@ public static class MissionRadioExchangeContracts {
         ContextSource: MissionRadioContextSource.MissionDatalink,
         ImplicitAcknowledgment: MissionRadioImplicitAcknowledgment.ReturnInitiated);
 
-    public static readonly MissionRadioExchangeContract WeaponsSafe = new(
-        "weapons-safe",
-        MissionRadioKnowledge.Identity
-        | MissionRadioKnowledge.Position
-        | MissionRadioKnowledge.CurrentAuthority,
-        "The post-engagement tactical picture retains identity, geometry, and existing authority.",
-        MissionRadioKnowledge.All,
-        MissionRadioAcknowledgment.FullReadback,
-        "The pilot explicitly confirms the requested switch state.",
+    public static readonly MissionRadioExchangeContract PilotGoAround = new(
+        "pilot-go-around",
+        MissionRadioKnowledge.None,
+        "The observed aircraft is already in Tower's pattern; exact position and superseded "
+        + "landing authority are not uncertainties this discontinuation must restate. The pilot "
+        + "identifies itself and reports the go-around; Tower acknowledges only when it has no "
+        + "new sequencing or safety instruction.",
+        MissionRadioKnowledge.Identity | MissionRadioKnowledge.RequestOrIntent,
+        MissionRadioAcknowledgment.None,
+        "Tower's callsign response closes the shared-state update without adding an instruction.",
         [
-            new("control-confirm-safe", MissionRadioKnowledge.RequestOrIntent),
-            new("pilot-switch-safe", MissionRadioKnowledge.None, true),
+            new(
+                "pilot-going-around",
+                MissionRadioKnowledge.Identity | MissionRadioKnowledge.RequestOrIntent),
+            new("tower-going-around-ack", MissionRadioKnowledge.None),
         ],
-        ContextSource: MissionRadioContextSource.MissionDatalink);
+        Repeatable: true);
 
     public static IReadOnlyList<MissionRadioExchangeContract> All { get; } = [
         TacticalCheckIn,
         PatternEntry,
         LandingClearance,
+        TouchAndGoClearance,
+        TrafficTwoLanding,
+        TrafficThreeLanding,
+        TrafficFourLanding,
         TacticalCommit,
         RecoveryRequest,
         BingoReturn,
-        WeaponsSafe,
+        PilotGoAround,
     ];
 }
 
@@ -210,6 +268,9 @@ public readonly record struct MissionRadioState(
     string PlayerLeg,
     IReadOnlyList<CircuitTrafficShip> Traffic,
     bool GearDownAndLocked,
+    CircuitLandingIntent PlayerLandingIntent,
+    bool LandingAuthorityAvailable,
+    bool PilotGoingAround,
     bool RecoveryApproach,
     bool MaritimeRecovery,
     Carrier.Recovery Recovery,
@@ -227,6 +288,39 @@ public readonly record struct MissionRadioState(
     IReadOnlyList<SessionEvent> Events,
     string ChecklistName = "",
     string ChecklistCompletedCall = "");
+
+enum MissionRadioTruthKind {
+    Unspecified = 0,
+    MissionActive = 1,
+    PlayerLeg = 2,
+    PlayerLandingReport = 3,
+    PlayerLandingAuthority = 4,
+    TrafficLandingReport = 5,
+    TrafficLandingAuthority = 6,
+    GearUnsafeFinal = 7,
+    TacticalAirborne = 8,
+    TacticalPhase = 9,
+    RecoveryActive = 10,
+    RecoveryState = 11,
+    ArrestmentStopped = 12,
+    LsoCall = 13,
+    MissileEmployment = 14,
+    DroneEmployment = 15,
+    Remington = 16,
+    Winchester = 17,
+    Joker = 18,
+    Bingo = 19,
+    SessionEvent = 20,
+    PilotGoingAround = 21,
+    PlayerGearUnsafe = 22,
+}
+
+readonly record struct MissionRadioTruth(
+    MissionRadioTruthKind Kind,
+    string Subject = "",
+    long Number = 0,
+    int Count = 0,
+    CircuitLandingIntent LandingIntent = CircuitLandingIntent.FullStop);
 
 /// <summary>Formatting shared by authored calls and tests, following ICAO/military pronunciation.</summary>
 public static class RadioPhraseology {
@@ -319,7 +413,10 @@ public sealed class MissionRadioDirector {
     bool _initialized;
     bool _catapultActive;
     bool _playerInitialReported;
+    bool _playerGearDownAndLocked;
+    bool _playerLandingReportedThisBase;
     bool _gearUnsafeOnFinal;
+    bool _pilotGoingAround;
     bool _joker;
     bool _bingo;
     bool _missionFinished;
@@ -338,19 +435,20 @@ public sealed class MissionRadioDirector {
     long _exchangeSequence;
     long _currentExchangeInstance;
     int _currentExchangeTurnIndex = -1;
-    bool _launchClearanceComplete;
-
     sealed class TrafficRadioAgentState(
         string leg,
         bool gearDownAndLocked,
-        long circuitNumber) {
+        long circuitNumber,
+        CircuitLandingIntent landingIntent) {
         public string Leg { get; set; } = leg;
         public bool GearDownAndLocked { get; set; } = gearDownAndLocked;
         public long CircuitNumber { get; set; } = circuitNumber;
-        public bool GearReportPending { get; set; }
-        public long GearReportCircuitNumber { get; set; } = circuitNumber;
-        public double GearReportDueAtSeconds { get; set; }
-        public double GearReportExpiresAtSeconds { get; set; }
+        public CircuitLandingIntent LandingIntent { get; set; } = landingIntent;
+        public bool LandingReportPending { get; set; }
+        public long LandingReportCircuitNumber { get; set; } = circuitNumber;
+        public CircuitLandingIntent LandingReportIntent { get; set; } = landingIntent;
+        public double LandingReportDueAtSeconds { get; set; }
+        public double LandingReportExpiresAtSeconds { get; set; }
     }
 
     readonly record struct PendingCall(
@@ -369,7 +467,8 @@ public sealed class MissionRadioDirector {
         int ExchangeTurnIndex = -1,
         MissionRadioKnowledge Requires = MissionRadioKnowledge.None,
         MissionRadioKnowledge Establishes = MissionRadioKnowledge.None,
-        bool AcknowledgesPriorAuthority = false);
+        bool AcknowledgesPriorAuthority = false,
+        MissionRadioTruth Truth = default);
 
     sealed class ExchangeProgress(
         long instance,
@@ -402,12 +501,6 @@ public sealed class MissionRadioDirector {
             TerminalReason);
     }
 
-    /// <summary>
-    /// True once the shot crew has handed the aircraft to the launcher. Carrier-style launch
-    /// control is visual, so this interlock never waits for a fictional radio clearance.
-    /// </summary>
-    public bool LaunchClearanceComplete => _launchClearanceComplete;
-
     public IReadOnlyList<MissionRadioDecision> Decisions => _decisions;
 
     public IReadOnlyList<MissionRadioExchangeSnapshot> ExchangeHistory =>
@@ -430,7 +523,10 @@ public sealed class MissionRadioDirector {
         _initialized = false;
         _catapultActive = false;
         _playerInitialReported = false;
+        _playerGearDownAndLocked = false;
+        _playerLandingReportedThisBase = false;
         _gearUnsafeOnFinal = false;
+        _pilotGoingAround = false;
         _joker = false;
         _bingo = false;
         _missionFinished = false;
@@ -449,7 +545,6 @@ public sealed class MissionRadioDirector {
         _exchangeSequence = 0;
         _currentExchangeInstance = 0;
         _currentExchangeTurnIndex = -1;
-        _launchClearanceComplete = false;
         DroppedRoutineCalls = 0;
     }
 
@@ -516,6 +611,7 @@ public sealed class MissionRadioDirector {
             _initialized = true;
             _catapultActive = state.CatapultActive;
             _playerLeg = playerLeg;
+            _playerGearDownAndLocked = state.GearDownAndLocked;
             _recovery = state.Recovery;
             _arrestmentPhase = state.ArrestmentPhase;
             _recoveryApproach = state.RecoveryApproach;
@@ -528,10 +624,9 @@ public sealed class MissionRadioDirector {
             _lastEventSequence = 0;
             foreach (CircuitTrafficShip ship in state.Traffic) {
                 _trafficAgents[ship.Callsign] = new TrafficRadioAgentState(
-                    ship.Leg, ship.GearDownAndLocked, ship.CircuitNumber);
+                    ship.Leg, ship.GearDownAndLocked, ship.CircuitNumber,
+                    ship.LandingIntent);
             }
-            if (state.MissionActive && state.RapierMissionAvailable && state.CatapultActive)
-                QueueLaunch(state);
             if (state.MissionActive && !state.PatternOnly && state.RecoveryApproach)
                 QueueRecoveryCheckIn(state);
             // Airborne attach may init already in Intercept (DirectJoin / LevelDash). Check-in
@@ -543,9 +638,6 @@ public sealed class MissionRadioDirector {
             }
             ObserveEvents(state);
         } else {
-            if (state.MissionActive && state.RapierMissionAvailable
-                && !_catapultActive && state.CatapultActive)
-                QueueLaunch(state);
             if (state.PatternOnly)
                 ObservePattern(state, playerLeg);
             else
@@ -559,8 +651,10 @@ public sealed class MissionRadioDirector {
 
         _catapultActive = state.CatapultActive;
         _playerLeg = playerLeg;
+        _playerGearDownAndLocked = state.GearDownAndLocked;
         _gearUnsafeOnFinal = playerLeg is "SHORT_FINAL" or "WIRE_FINAL"
             && !state.GearDownAndLocked;
+        _pilotGoingAround = state.PilotGoingAround;
         _recovery = state.Recovery;
         _arrestmentPhase = state.ArrestmentPhase;
         _recoveryApproach = state.RecoveryApproach;
@@ -572,28 +666,48 @@ public sealed class MissionRadioDirector {
         _dronesRemaining = state.DronesRemaining;
     }
 
-    void QueueLaunch(in MissionRadioState state) {
-        _ = state;
-        // Catapult launches are controlled by the shot crew's visual hand-signal sequence:
-        // readiness salute, launch-bar/catapult state, then the shooter. There is no pilot radio
-        // clearance to put late or out of order. The launcher may release immediately.
-        _launchClearanceComplete = true;
-    }
-
     void ObservePattern(in MissionRadioState state, string playerLeg) {
+        if (playerLeg != "BASE")
+            _playerLandingReportedThisBase = false;
         if (playerLeg.Length > 0 && playerLeg != _playerLeg)
             QueuePlayerLeg(playerLeg, state);
+        else if (playerLeg == "BASE"
+            && !_playerGearDownAndLocked
+            && state.GearDownAndLocked
+            && !_playerLandingReportedThisBase) {
+            QueuePlayerLanding(state);
+        }
 
         foreach (CircuitTrafficShip ship in state.Traffic)
             ObserveTrafficAgent(state, ship);
 
         bool final = playerLeg is "SHORT_FINAL" or "WIRE_FINAL";
         bool gearUnsafe = final && !state.GearDownAndLocked;
+        bool pilotInitiatedGoAround = state.PilotGoingAround && !_pilotGoingAround;
+        if (pilotInitiatedGoAround && !gearUnsafe) {
+            EnqueueExchange(
+                state,
+                MissionRadioExchangeContracts.PilotGoAround,
+                [
+                    Tower(
+                        "pilot-going-around", Player, "RAPIER TOWER",
+                        $"{PlayerSpoken}, going around.",
+                        "pilot", MissionRadioPriority.Urgent,
+                        new(MissionRadioTruthKind.PilotGoingAround)),
+                    Tower(
+                        "tower-going-around-ack", "RAPIER TOWER", Player,
+                        $"{PlayerSpoken}.",
+                        "tower", MissionRadioPriority.Advisory,
+                        new(MissionRadioTruthKind.PilotGoingAround)),
+                ],
+                preempt: true);
+        }
         if (gearUnsafe && !_gearUnsafeOnFinal) {
             Enqueue(state, Tower(
                 "tower-waveoff-gear", "RAPIER TOWER", Player,
                 $"{PlayerSpoken}, go around. Gear unsafe.",
-                "tower", MissionRadioPriority.Urgent), preempt: true);
+                "tower", MissionRadioPriority.Urgent,
+                new(MissionRadioTruthKind.GearUnsafeFinal)), preempt: true);
         }
     }
 
@@ -604,7 +718,8 @@ public sealed class MissionRadioDirector {
             ship.Callsign, out TrafficRadioAgentState? agent)) {
             // Joining an already-live sortie must not manufacture a historical position report.
             _trafficAgents[ship.Callsign] = new TrafficRadioAgentState(
-                ship.Leg, ship.GearDownAndLocked, ship.CircuitNumber);
+                ship.Leg, ship.GearDownAndLocked, ship.CircuitNumber,
+                ship.LandingIntent);
             return;
         }
 
@@ -617,64 +732,114 @@ public sealed class MissionRadioDirector {
             && ship.GearDownAndLocked) {
             // The agent reports the achieved configuration, not the nominal gate. A student who
             // is late with the handle remains correctly silent until the wheels are actually down.
-            agent.GearReportPending = true;
-            agent.GearReportCircuitNumber = ship.CircuitNumber;
-            agent.GearReportDueAtSeconds =
+            agent.LandingReportPending = true;
+            agent.LandingReportCircuitNumber = ship.CircuitNumber;
+            agent.LandingReportIntent = ship.LandingIntent;
+            agent.LandingReportDueAtSeconds =
                 state.TimeSeconds + Math.Max(0.0, ship.RadioReactionSeconds);
-            agent.GearReportExpiresAtSeconds = state.TimeSeconds + 6.0;
+            agent.LandingReportExpiresAtSeconds = state.TimeSeconds + 6.0;
         }
 
         bool reportStillRelevant = ship.Leg == "BASE"
             && ship.GearDownAndLocked
-            && ship.CircuitNumber == agent.GearReportCircuitNumber;
-        if (agent.GearReportPending
+            && ship.CircuitNumber == agent.LandingReportCircuitNumber
+            && ship.LandingIntent == agent.LandingReportIntent;
+        if (agent.LandingReportPending
             && (!reportStillRelevant
-                || state.TimeSeconds > agent.GearReportExpiresAtSeconds)) {
-            agent.GearReportPending = false;
-        } else if (agent.GearReportPending
-            && state.TimeSeconds >= agent.GearReportDueAtSeconds) {
-            string id = $"traffic-{CallsignSlug(ship.Callsign)}-gear";
-            string text = $"{SpokenTrafficCallsign(ship.Callsign)}, gear.";
-            bool queued = Enqueue(state, Tower(
-                id, NormalizedTrafficCallsign(ship.Callsign), "RAPIER TOWER",
-                text, TrafficVoice(ship.Callsign), MissionRadioPriority.Routine));
-            bool alreadyRepresented = _queue.Any(call => call.Id == id)
-                || _current.Active && _current.Id == id;
-            agent.GearReportPending = !queued && !alreadyRepresented;
-            if (agent.GearReportPending)
-                agent.GearReportDueAtSeconds = state.TimeSeconds + 0.75;
+                || state.TimeSeconds > agent.LandingReportExpiresAtSeconds)) {
+            agent.LandingReportPending = false;
+        } else if (agent.LandingReportPending
+            && state.TimeSeconds >= agent.LandingReportDueAtSeconds) {
+            string slug = CallsignSlug(ship.Callsign);
+            string spoken = SpokenTrafficCallsign(ship.Callsign);
+            string normalized = NormalizedTrafficCallsign(ship.Callsign);
+            string reportId = $"traffic-{slug}-base";
+            MissionRadioTruth reportTruth = new(
+                MissionRadioTruthKind.TrafficLandingReport,
+                ship.Callsign,
+                ship.CircuitNumber,
+                LandingIntent: ship.LandingIntent);
+            MissionRadioTruth authorityTruth = reportTruth with {
+                Kind = MissionRadioTruthKind.TrafficLandingAuthority,
+            };
+            bool queued = EnqueueExchange(
+                state,
+                MissionRadioExchangeContracts.TrafficLanding(ship.Callsign),
+                [
+                    Tower(
+                        reportId, normalized, "RAPIER TOWER",
+                        $"{spoken}, base, three greens"
+                        + LandingIntentSuffix(ship.LandingIntent) + ".",
+                        TrafficVoice(ship.Callsign), MissionRadioPriority.Routine,
+                        reportTruth),
+                    Tower(
+                        $"tower-{slug}-cleared-landing", "RAPIER TOWER", normalized,
+                        $"{spoken}, {LandingClearance(ship.LandingIntent)}.",
+                        "tower", MissionRadioPriority.Advisory, authorityTruth),
+                    Tower(
+                        $"traffic-{slug}-landing-ack", normalized, "RAPIER TOWER",
+                        $"{LandingAcknowledgment(ship.LandingIntent)}, {spoken}.",
+                        TrafficVoice(ship.Callsign), MissionRadioPriority.Routine,
+                        authorityTruth),
+                ]);
+            bool alreadyRepresented = _queue.Any(call => call.Id == reportId)
+                || _current.Active && _current.Id == reportId;
+            agent.LandingReportPending = !queued && !alreadyRepresented;
+            if (agent.LandingReportPending)
+                agent.LandingReportDueAtSeconds = state.TimeSeconds + 0.75;
         }
 
         if (ship.Leg != "BASE"
             || !ship.GearDownAndLocked
-            || ship.CircuitNumber != agent.GearReportCircuitNumber) {
-            CancelQueuedTrafficCall(
+            || ship.CircuitNumber != agent.LandingReportCircuitNumber) {
+            CancelQueuedTrafficExchange(
                 state.TimeSeconds,
-                $"traffic-{CallsignSlug(ship.Callsign)}-gear",
-                "aircraft left the reportable configuration gate before key-down");
+                $"traffic-{CallsignSlug(ship.Callsign)}-base",
+                "aircraft left base before its independent landing report keyed");
         }
 
         agent.Leg = ship.Leg;
         agent.GearDownAndLocked = ship.GearDownAndLocked;
         agent.CircuitNumber = ship.CircuitNumber;
+        agent.LandingIntent = ship.LandingIntent;
     }
 
-    void CancelQueuedTrafficCall(
+    void CancelQueuedTrafficExchange(
         double nowSeconds,
-        string transmissionId,
+        string reportTransmissionId,
         string reason) {
-        foreach (PendingCall call in _queue
-            .Where(call => call.ExchangeInstance == 0
-                && call.Id == transmissionId)
-            .ToArray()) {
-            _queue.Remove(call);
+        int reportIndex = _queue.FindIndex(
+            call => call.Id == reportTransmissionId);
+        if (reportIndex < 0)
+            return;
+        PendingCall report = _queue[reportIndex];
+        if (report.ExchangeInstance == 0) {
+            _queue.RemoveAt(reportIndex);
             RecordDecision(
                 nowSeconds,
                 MissionRadioDecisionKind.Expired,
-                call.Id,
+                report.Id,
                 "",
                 reason);
+            return;
         }
+        if (!_exchanges.TryGetValue(
+            report.ExchangeInstance, out ExchangeProgress? exchange)
+            || exchange.TransmittedTurns > 0)
+            return;
+        RecordDecision(
+            nowSeconds,
+            MissionRadioDecisionKind.Expired,
+            report.Id,
+            exchange.Id,
+            reason);
+        AbandonExchange(
+            exchange.Instance,
+            MissionRadioExchangeStatus.Expired,
+            MissionRadioDecisionKind.SuppressedMissingContext,
+            nowSeconds,
+            report.Id,
+            reason);
     }
 
     void QueuePlayerLeg(string leg, in MissionRadioState state) {
@@ -694,16 +859,27 @@ public sealed class MissionRadioDirector {
                             Tower(
                                 "pilot-initial", Player, "RAPIER TOWER",
                                 $"{PlayerSpoken}, initial.",
-                                "pilot", MissionRadioPriority.Routine),
+                                "pilot", MissionRadioPriority.Routine,
+                                new(MissionRadioTruthKind.PlayerLeg, "INITIAL")),
                             Tower(
                                 "tower-break-approved", "RAPIER TOWER", Player,
                                 $"{PlayerSpoken}, left break approved.",
-                                "tower", MissionRadioPriority.Advisory),
+                                "tower", MissionRadioPriority.Advisory,
+                                new(
+                                    MissionRadioTruthKind.PlayerLeg,
+                                    "INITIAL_OR_BREAK")),
                         ]);
                 }
                 break;
             // BREAK is flown, not spoken: the approval preceded it, and the maneuver
             // announces itself. (PHRASEOLOGY.md: responses to approvals are the jet moving.)
+            case "CROSSWIND":
+                Enqueue(state, Tower(
+                    "pilot-crosswind", Player, "RAPIER TOWER",
+                    $"{PlayerSpoken}, crosswind.",
+                    "pilot", MissionRadioPriority.Routine,
+                    new(MissionRadioTruthKind.PlayerLeg, "CROSSWIND")));
+                break;
             case "DOWNWIND":
                 // A working closed pattern does not narrate every leg. Tower breaks that silence
                 // only for a configuration discrepancy.
@@ -711,35 +887,67 @@ public sealed class MissionRadioDirector {
                     Enqueue(state, Tower(
                         "tower-check-gear-downwind", "RAPIER TOWER", Player,
                         $"{PlayerSpoken}, check wheels down.",
-                        "tower", MissionRadioPriority.Advisory));
+                        "tower", MissionRadioPriority.Advisory,
+                        new(MissionRadioTruthKind.PlayerGearUnsafe, "DOWNWIND")));
                 }
                 break;
             case "BASE":
-                // Sequence is machine-held; Tower can issue the landing clearance without a
-                // redundant base report or an echo readback.
+                // Independent single ships own individual landing transactions. Position,
+                // achieved configuration and intent belong in the pilot report; checklist detail
+                // remains in the cockpit.
                 if (state.GearDownAndLocked) {
-                    EnqueueExchange(
-                        state,
-                        MissionRadioExchangeContracts.LandingClearance,
-                        [
-                            Tower(
-                                "tower-cleared-arrested-landing", "RAPIER TOWER", Player,
-                                $"{PlayerSpoken}, cable indicates up, cleared to land.",
-                                "tower", MissionRadioPriority.Advisory),
-                            Tower(
-                                "pilot-landing-ack", Player, "RAPIER TOWER",
-                                $"{PlayerSpoken}.",
-                                "pilot", MissionRadioPriority.Routine),
-                        ]);
+                    QueuePlayerLanding(state);
                 } else {
                     Enqueue(state, Tower(
                         "tower-continue-check-gear", "RAPIER TOWER", Player,
                         $"{PlayerSpoken}, continue, check wheels down.",
-                        "tower", MissionRadioPriority.Advisory));
+                        "tower", MissionRadioPriority.Advisory,
+                        new(MissionRadioTruthKind.PlayerGearUnsafe, "BASE")));
                 }
                 break;
             // SHORT_FINAL and WIRE_FINAL stay silent: seconds from the wire the pilot flies.
         }
+    }
+
+    void QueuePlayerLanding(in MissionRadioState state) {
+        if (_playerLandingReportedThisBase || !state.GearDownAndLocked)
+            return;
+        bool touchAndGo = state.PlayerLandingIntent == CircuitLandingIntent.TouchAndGo;
+        _playerLandingReportedThisBase = EnqueueExchange(
+            state,
+            touchAndGo
+                ? MissionRadioExchangeContracts.TouchAndGoClearance
+                : MissionRadioExchangeContracts.LandingClearance,
+            [
+                Tower(
+                    touchAndGo ? "pilot-base-touch-and-go" : "pilot-base",
+                    Player, "RAPIER TOWER",
+                    $"{PlayerSpoken}, base, three greens"
+                    + LandingIntentSuffix(state.PlayerLandingIntent) + ".",
+                    "pilot", MissionRadioPriority.Routine,
+                    new(
+                        MissionRadioTruthKind.PlayerLandingReport,
+                        LandingIntent: state.PlayerLandingIntent)),
+                Tower(
+                    touchAndGo
+                        ? "tower-cleared-touch-and-go"
+                        : "tower-cleared-arrested-landing",
+                    "RAPIER TOWER", Player,
+                    $"{PlayerSpoken}, {LandingClearance(state.PlayerLandingIntent)}.",
+                    "tower", MissionRadioPriority.Advisory,
+                    new(
+                        MissionRadioTruthKind.PlayerLandingAuthority,
+                        LandingIntent: state.PlayerLandingIntent)),
+                Tower(
+                    touchAndGo ? "pilot-touch-and-go-ack" : "pilot-landing-ack",
+                    Player, "RAPIER TOWER",
+                    $"{LandingAcknowledgment(state.PlayerLandingIntent)}, "
+                    + $"{PlayerSpoken}.",
+                    "pilot", MissionRadioPriority.Routine,
+                    new(
+                        MissionRadioTruthKind.PlayerLandingAuthority,
+                        LandingIntent: state.PlayerLandingIntent)),
+            ]);
     }
 
     void ObserveTacticalMission(in MissionRadioState state) {
@@ -751,11 +959,13 @@ public sealed class MissionRadioDirector {
                     Tactical(
                         "pilot-check-in", Player, "CONTROL",
                         $"Control, {PlayerSpoken}, up as fragged.",
-                        "pilot", MissionRadioPriority.Routine),
+                        "pilot", MissionRadioPriority.Routine,
+                        new(MissionRadioTruthKind.TacticalAirborne)),
                     Tactical(
                         "control-radar-contact", "CONTROL", Player,
                         $"{PlayerSpoken}, radar contact.",
-                        "controller", MissionRadioPriority.Routine),
+                        "controller", MissionRadioPriority.Routine,
+                        new(MissionRadioTruthKind.TacticalAirborne)),
                 ]);
         }
         if (state.RapierPhase == _rapierPhase) return;
@@ -767,14 +977,20 @@ public sealed class MissionRadioDirector {
                 Enqueue(state, Tactical(
                     "pilot-separating", Player, "CONTROL",
                     $"{PlayerSpoken}, separating.",
-                    "pilot", MissionRadioPriority.Advisory));
+                    "pilot", MissionRadioPriority.Advisory,
+                    new(
+                        MissionRadioTruthKind.TacticalPhase,
+                        state.RapierPhase.ToString())));
                 break;
             case RapierMissionPhase.ReturnToBase:
                 // Pilot states the want. CONTROL's roger is pure echo — omit it.
                 Enqueue(state, Tactical(
                     "pilot-rtb", Player, "CONTROL",
                     $"Control, {PlayerSpoken}, RTB.",
-                    "pilot", MissionRadioPriority.Advisory));
+                    "pilot", MissionRadioPriority.Advisory,
+                    new(
+                        MissionRadioTruthKind.TacticalPhase,
+                        state.RapierPhase.ToString())));
                 break;
             case RapierMissionPhase.Recovery:
                 QueueRecoveryCheckIn(state);
@@ -791,11 +1007,17 @@ public sealed class MissionRadioDirector {
                 ? Tower(
                     "tower-bolter", "RAPIER TOWER", Player,
                     $"{PlayerSpoken}, go around.",
-                    "tower", MissionRadioPriority.Urgent)
+                    "tower", MissionRadioPriority.Urgent,
+                    new(
+                        MissionRadioTruthKind.RecoveryState,
+                        state.Recovery.ToString()))
                 : Approach(
                     "lso-bolter", "PADDLES", Player,
                     "Bolter.",
-                    "lso", MissionRadioPriority.Urgent);
+                    "lso", MissionRadioPriority.Urgent,
+                    new(
+                        MissionRadioTruthKind.RecoveryState,
+                        state.Recovery.ToString()));
             Enqueue(state, bolter, preempt: true);
         }
         if (state.ArrestmentPhase == ArrestmentModel.ArrestmentPhase.Stopped
@@ -808,7 +1030,8 @@ public sealed class MissionRadioDirector {
                 Enqueue(state, Tower(
                     "tower-hold-position", "RAPIER TOWER", Player,
                     $"{PlayerSpoken}, hold position.",
-                    "tower", MissionRadioPriority.Advisory));
+                    "tower", MissionRadioPriority.Advisory,
+                    new(MissionRadioTruthKind.ArrestmentStopped)));
             }
         }
     }
@@ -827,28 +1050,36 @@ public sealed class MissionRadioDirector {
         PendingCall? transmission = call switch {
             "WAVE OFF, WAVE OFF" => Approach(
                 "lso-waveoff", "PADDLES", Player,
-                "Wave off.", "lso", MissionRadioPriority.Urgent),
+                "Wave off.", "lso", MissionRadioPriority.Urgent,
+                new(MissionRadioTruthKind.LsoCall, call)),
             "ADD POWER NOW" => Approach(
                 "lso-add-power", "PADDLES", Player,
-                "A little power.", "lso", MissionRadioPriority.Advisory),
+                "A little power.", "lso", MissionRadioPriority.Advisory,
+                new(MissionRadioTruthKind.LsoCall, call)),
             "POWER" => Approach(
                 "lso-power", "PADDLES", Player,
-                "Power.", "lso", MissionRadioPriority.Advisory),
+                "Power.", "lso", MissionRadioPriority.Advisory,
+                new(MissionRadioTruthKind.LsoCall, call)),
             "YOU'RE LOW" => Approach(
                 "lso-low", "PADDLES", Player,
-                "You're low.", "lso", MissionRadioPriority.Advisory),
+                "You're low.", "lso", MissionRadioPriority.Advisory,
+                new(MissionRadioTruthKind.LsoCall, call)),
             "YOU'RE HIGH" => Approach(
                 "lso-high", "PADDLES", Player,
-                "You're high.", "lso", MissionRadioPriority.Advisory),
+                "You're high.", "lso", MissionRadioPriority.Advisory,
+                new(MissionRadioTruthKind.LsoCall, call)),
             "FAST" => Approach(
                 "lso-fast", "PADDLES", Player,
-                "You're fast.", "lso", MissionRadioPriority.Advisory),
+                "You're fast.", "lso", MissionRadioPriority.Advisory,
+                new(MissionRadioTruthKind.LsoCall, call)),
             "COME LEFT" => Approach(
                 "lso-come-left", "PADDLES", Player,
-                "Left for lineup.", "lso", MissionRadioPriority.Advisory),
+                "Left for lineup.", "lso", MissionRadioPriority.Advisory,
+                new(MissionRadioTruthKind.LsoCall, call)),
             "COME RIGHT" => Approach(
                 "lso-come-right", "PADDLES", Player,
-                "Right for lineup.", "lso", MissionRadioPriority.Advisory),
+                "Right for lineup.", "lso", MissionRadioPriority.Advisory,
+                new(MissionRadioTruthKind.LsoCall, call)),
             _ => null,
         };
         if (transmission is not { } selected) return;
@@ -864,11 +1095,13 @@ public sealed class MissionRadioDirector {
                 Approach(
                     "pilot-recovery-request", Player, "RAPIER APPROACH",
                     $"Rapier Approach, {PlayerSpoken}, inbound, request recovery.",
-                    "pilot", MissionRadioPriority.Routine),
+                    "pilot", MissionRadioPriority.Routine,
+                    new(MissionRadioTruthKind.RecoveryActive)),
                 Approach(
                     "approach-recovery-continue", "RAPIER APPROACH", Player,
                     $"{PlayerSpoken}, continue.",
-                    "controller", MissionRadioPriority.Advisory),
+                    "controller", MissionRadioPriority.Advisory,
+                    new(MissionRadioTruthKind.RecoveryActive)),
             ]);
     }
 
@@ -883,11 +1116,17 @@ public sealed class MissionRadioDirector {
                 Tactical(
                     "control-commit-short", "CONTROL", Player,
                     "Ghost, commit.",
-                    "controller", MissionRadioPriority.Advisory),
+                    "controller", MissionRadioPriority.Advisory,
+                    new(
+                        MissionRadioTruthKind.TacticalPhase,
+                        RapierMissionPhase.Intercept.ToString())),
                 Tactical(
                     "pilot-commit-ack", Player, "CONTROL",
                     $"{PlayerSpoken}.",
-                    "pilot", MissionRadioPriority.Routine),
+                    "pilot", MissionRadioPriority.Routine,
+                    new(
+                        MissionRadioTruthKind.TacticalPhase,
+                        RapierMissionPhase.Intercept.ToString())),
             ]);
     }
 
@@ -896,13 +1135,19 @@ public sealed class MissionRadioDirector {
             Enqueue(state, Tactical(
                 "pilot-fox-two", Player, "PACKAGE",
                 "Fox Two.",
-                "pilot", MissionRadioPriority.Advisory), preempt: true);
+                "pilot", MissionRadioPriority.Advisory,
+                new(
+                    MissionRadioTruthKind.MissileEmployment,
+                    Count: state.MissilesRemaining)), preempt: true);
         }
         if (state.DronesRemaining < _dronesRemaining) {
             Enqueue(state, Tactical(
                 "pilot-drone-away", Player, "PACKAGE",
                 "Drone away.",
-                "pilot", MissionRadioPriority.Advisory), preempt: true);
+                "pilot", MissionRadioPriority.Advisory,
+                new(
+                    MissionRadioTruthKind.DroneEmployment,
+                    Count: state.DronesRemaining)), preempt: true);
         }
 
         bool hadAirToAirOrdnance = _missilesRemaining + _dronesRemaining > 0;
@@ -913,20 +1158,23 @@ public sealed class MissionRadioDirector {
             Enqueue(state, Tactical(
                 "pilot-remington", Player, "PACKAGE",
                 "Remington.",
-                "pilot", MissionRadioPriority.Advisory));
+                "pilot", MissionRadioPriority.Advisory,
+                new(MissionRadioTruthKind.Remington)));
         }
         if (hadAnyOrdnance && !hasAnyOrdnance) {
             Enqueue(state, Tactical(
                 "pilot-winchester", Player, "PACKAGE",
                 "Winchester.",
-                "pilot", MissionRadioPriority.Advisory));
+                "pilot", MissionRadioPriority.Advisory,
+                new(MissionRadioTruthKind.Winchester)));
         }
 
         if (!_joker && state.Joker && !state.Bingo) {
             Enqueue(state, Tactical(
                 "pilot-joker", Player, "CONTROL",
                 $"{PlayerSpoken}, Joker.",
-                "pilot", MissionRadioPriority.Advisory));
+                "pilot", MissionRadioPriority.Advisory,
+                new(MissionRadioTruthKind.Joker)));
         }
         if (!_bingo && state.Bingo) {
             EnqueueExchange(
@@ -936,11 +1184,13 @@ public sealed class MissionRadioDirector {
                     Tactical(
                         "pilot-bingo", Player, "CONTROL",
                         $"{PlayerSpoken}, Bingo.",
-                        "pilot", MissionRadioPriority.Urgent),
+                        "pilot", MissionRadioPriority.Urgent,
+                        new(MissionRadioTruthKind.Bingo)),
                     Tactical(
                         "control-bingo-rtb", "CONTROL", Player,
                         $"{PlayerSpoken}, RTB.",
-                        "controller", MissionRadioPriority.Urgent),
+                        "controller", MissionRadioPriority.Urgent,
+                        new(MissionRadioTruthKind.Bingo)),
                 ],
                 preempt: true);
         }
@@ -964,28 +1214,15 @@ public sealed class MissionRadioDirector {
                 Enqueue(state, Tactical(
                     "pilot-splash", Player, "PACKAGE",
                     "Splash one.",
-                    "pilot", MissionRadioPriority.Advisory));
+                    "pilot", MissionRadioPriority.Advisory,
+                    new(
+                        MissionRadioTruthKind.SessionEvent,
+                        Number: sessionEvent.Sequence)));
             } else if (sessionEvent.Type == SessionEventType.SortieFinished
                 && !_missionFinished) {
                 _missionFinished = true;
-                // Victory only — CONTROL congratulating a shoot-down fails audience and delta.
-                if (sessionEvent.Outcome == SortieOutcome.Victory) {
-                    // Real kill chains close administratively, not congratulatorily: C2
-                    // queries weapons state, the pilot safes the switch (PHRASEOLOGY.md §3.4).
-                    EnqueueExchange(
-                        state,
-                        MissionRadioExchangeContracts.WeaponsSafe,
-                        [
-                            Tactical(
-                                "control-confirm-safe", "CONTROL", Player,
-                                $"{PlayerSpoken}, confirm weapons safe.",
-                                "controller", MissionRadioPriority.Advisory),
-                            Tactical(
-                                "pilot-switch-safe", Player, "CONTROL",
-                                $"{PlayerSpoken}, switch is safe.",
-                                "pilot", MissionRadioPriority.Routine),
-                        ]);
-                }
+                // Administrative closure belongs in telemetry/AAR. The simulation does not own a
+                // weapons-safe switch state, so radio must not claim one after victory.
             }
         }
     }
@@ -1076,6 +1313,25 @@ public sealed class MissionRadioDirector {
     }
 
     bool TryBeginTransmission(PendingCall call, in MissionRadioState state) {
+        if (!TruthIsValid(call.Truth, state)) {
+            string reason = $"asserted state is no longer true: {call.Truth.Kind}";
+            RecordDecision(
+                state.TimeSeconds,
+                MissionRadioDecisionKind.SuppressedInvalidState,
+                call.Id,
+                ExchangeId(call.ExchangeInstance),
+                reason);
+            if (call.ExchangeInstance != 0) {
+                AbandonExchange(
+                    call.ExchangeInstance,
+                    MissionRadioExchangeStatus.Suppressed,
+                    MissionRadioDecisionKind.SuppressedInvalidState,
+                    state.TimeSeconds,
+                    call.Id,
+                    reason);
+            }
+            return false;
+        }
         if (call.ExchangeInstance == 0) {
             RecordDecision(
                 state.TimeSeconds,
@@ -1187,7 +1443,7 @@ public sealed class MissionRadioDirector {
             bool acknowledged = exchange.Contract.ImplicitAcknowledgment switch {
                 MissionRadioImplicitAcknowledgment.PatternBreakFlown =>
                     (state.PlayerLeg ?? "") is
-                        "BREAK" or "DOWNWIND" or "BASE" or "SHORT_FINAL"
+                        "BREAK" or "CROSSWIND" or "DOWNWIND" or "BASE" or "SHORT_FINAL"
                         or "WIRE_FINAL" or "ROLLOUT",
                 MissionRadioImplicitAcknowledgment.RecoveryContinued =>
                     state.RecoveryApproach
@@ -1414,6 +1670,18 @@ public sealed class MissionRadioDirector {
             or MissionRadioExchangeStatus.Suppressed;
 
     bool Enqueue(in MissionRadioState state, PendingCall call, bool preempt = false) {
+        if (call.Truth.Kind == MissionRadioTruthKind.Unspecified)
+            throw new InvalidOperationException(
+                $"{call.Id} has no simulation-truth assertion");
+        if (!TruthIsValid(call.Truth, state)) {
+            RecordDecision(
+                state.TimeSeconds,
+                MissionRadioDecisionKind.SuppressedInvalidState,
+                call.Id,
+                ExchangeId(call.ExchangeInstance),
+                $"asserted state was false at enqueue: {call.Truth.Kind}");
+            return false;
+        }
         if (_queue.Any(item => item.Id == call.Id)
             || _current.Active && _current.Id == call.Id) {
             RecordDecision(
@@ -1487,8 +1755,17 @@ public sealed class MissionRadioDirector {
     static double StaleAfterSeconds(in PendingCall call) {
         if (call.Voice == "lso") return 3.0;
         if (call.Priority == MissionRadioPriority.Urgent) return 8.0;
+        // The opening report is tied to an operational gate and may go stale there. Once that
+        // report has keyed, its controller response and required acknowledgment are no longer
+        // ambient pattern chatter; leave enough time for the ordered transaction to close.
+        if (call.Channel == MissionRadioChannel.Tower
+            && call.ExchangeInstance != 0
+            && call.ExchangeTurnIndex > 0)
+            return 45.0;
         if (call.Id.StartsWith("traffic-", StringComparison.Ordinal)
-            || call.Channel == MissionRadioChannel.Tower) return 8.0;
+            || call.Id.StartsWith("tower-rapier-", StringComparison.Ordinal))
+            return 45.0;
+        if (call.Channel == MissionRadioChannel.Tower) return 10.0;
         return 15.0;
     }
 
@@ -1496,27 +1773,160 @@ public sealed class MissionRadioDirector {
     /// tuning signal (queue depth, call volume), never a silent event.
     public int DroppedRoutineCalls { get; private set; }
 
+    static bool TruthIsValid(
+        in MissionRadioTruth truth,
+        in MissionRadioState state) {
+        string playerLeg = state.PlayerLeg ?? "";
+        string subject = truth.Subject;
+        long assertedSequence = truth.Number;
+        bool playerOnLandingLeg = playerLeg is
+            "BASE" or "SHORT_FINAL" or "WIRE_FINAL";
+        CircuitTrafficShip? traffic = subject.Length == 0
+            ? null
+            : state.Traffic
+                .Where(ship => ship.Present && ship.Callsign == subject)
+                .Select(ship => (CircuitTrafficShip?)ship)
+                .FirstOrDefault();
+        bool trafficOnLandingLeg = traffic is { } landingTraffic
+            && landingTraffic.Leg is "BASE" or "SHORT_FINAL" or "WIRE_FINAL";
+
+        return truth.Kind switch {
+            MissionRadioTruthKind.MissionActive => state.MissionActive,
+            MissionRadioTruthKind.PlayerLeg =>
+                state.MissionActive
+                && state.PatternOnly
+                && (subject == "INITIAL_OR_BREAK"
+                    ? playerLeg is "INITIAL" or "BREAK"
+                    : playerLeg == subject),
+            MissionRadioTruthKind.PlayerLandingReport =>
+                state.MissionActive
+                && state.PatternOnly
+                && playerLeg == "BASE"
+                && state.GearDownAndLocked
+                && state.PlayerLandingIntent == truth.LandingIntent,
+            MissionRadioTruthKind.PlayerLandingAuthority =>
+                state.MissionActive
+                && state.PatternOnly
+                && playerOnLandingLeg
+                && state.GearDownAndLocked
+                && state.LandingAuthorityAvailable
+                && state.PlayerLandingIntent == truth.LandingIntent,
+            MissionRadioTruthKind.TrafficLandingReport =>
+                traffic is { } reportTraffic
+                && reportTraffic.Leg == "BASE"
+                && reportTraffic.GearDownAndLocked
+                && reportTraffic.CircuitNumber == truth.Number
+                && reportTraffic.LandingIntent == truth.LandingIntent,
+            MissionRadioTruthKind.TrafficLandingAuthority =>
+                state.LandingAuthorityAvailable
+                && trafficOnLandingLeg
+                && traffic is { } authorityTraffic
+                && authorityTraffic.GearDownAndLocked
+                && authorityTraffic.CircuitNumber == truth.Number
+                && authorityTraffic.LandingIntent == truth.LandingIntent,
+            MissionRadioTruthKind.GearUnsafeFinal =>
+                state.MissionActive
+                && state.PatternOnly
+                && playerLeg is "SHORT_FINAL" or "WIRE_FINAL"
+                && !state.GearDownAndLocked,
+            MissionRadioTruthKind.TacticalAirborne =>
+                state.MissionActive
+                && state.RapierMissionAvailable
+                && !state.PatternOnly
+                && !state.CatapultActive,
+            MissionRadioTruthKind.TacticalPhase =>
+                state.MissionActive
+                && !state.PatternOnly
+                && state.RapierPhase.ToString() == truth.Subject,
+            MissionRadioTruthKind.RecoveryActive =>
+                state.MissionActive
+                && (state.RecoveryApproach
+                    || state.RapierPhase == RapierMissionPhase.Recovery),
+            MissionRadioTruthKind.RecoveryState =>
+                state.MissionActive && state.Recovery.ToString() == truth.Subject,
+            MissionRadioTruthKind.ArrestmentStopped =>
+                state.MissionActive
+                && state.ArrestmentPhase == ArrestmentModel.ArrestmentPhase.Stopped
+                && !state.MaritimeRecovery
+                && !state.CatapultActive,
+            MissionRadioTruthKind.LsoCall =>
+                state.MissionActive && state.LsoCall == truth.Subject,
+            MissionRadioTruthKind.MissileEmployment =>
+                state.MissionActive
+                && state.MissileInFlight
+                && state.MissilesRemaining <= truth.Count,
+            MissionRadioTruthKind.DroneEmployment =>
+                state.MissionActive && state.DronesRemaining <= truth.Count,
+            MissionRadioTruthKind.Remington =>
+                state.MissionActive
+                && state.MissilesRemaining + state.DronesRemaining == 0
+                && state.GunAmmoRemaining > 0,
+            MissionRadioTruthKind.Winchester =>
+                state.MissionActive
+                && state.MissilesRemaining + state.DronesRemaining == 0
+                && state.GunAmmoRemaining == 0,
+            MissionRadioTruthKind.Joker =>
+                state.MissionActive && state.Joker && !state.Bingo,
+            MissionRadioTruthKind.Bingo =>
+                state.MissionActive && state.Bingo,
+            MissionRadioTruthKind.SessionEvent =>
+                state.Events.Any(sessionEvent => sessionEvent.Sequence == assertedSequence),
+            MissionRadioTruthKind.PilotGoingAround =>
+                state.MissionActive && state.PatternOnly && state.PilotGoingAround,
+            MissionRadioTruthKind.PlayerGearUnsafe =>
+                state.MissionActive
+                && state.PatternOnly
+                && playerLeg == subject
+                && !state.GearDownAndLocked,
+            _ => false,
+        };
+    }
+
+    static string LandingIntentSuffix(CircuitLandingIntent intent) => intent switch {
+        CircuitLandingIntent.FullStop => "",
+        CircuitLandingIntent.TouchAndGo => ", touch and go",
+        _ => throw new ArgumentOutOfRangeException(nameof(intent), intent, null),
+    };
+
+    static string LandingClearance(CircuitLandingIntent intent) => intent switch {
+        CircuitLandingIntent.FullStop => "cleared to land",
+        CircuitLandingIntent.TouchAndGo => "cleared touch and go",
+        _ => throw new ArgumentOutOfRangeException(nameof(intent), intent, null),
+    };
+
+    static string LandingAcknowledgment(CircuitLandingIntent intent) => intent switch {
+        CircuitLandingIntent.FullStop => "Land",
+        CircuitLandingIntent.TouchAndGo => "Cleared touch and go",
+        _ => throw new ArgumentOutOfRangeException(nameof(intent), intent, null),
+    };
+
     static PendingCall Tactical(
         string id, string speaker, string callsign, string text, string voice,
-        MissionRadioPriority priority) => new(
+        MissionRadioPriority priority, MissionRadioTruth truth) => new(
             id, MissionRadioChannel.Tactical, "PACKAGE", TacticalFrequency,
-            speaker, callsign, text, voice, priority, 0.0, double.PositiveInfinity);
+            speaker, callsign, text, voice, priority, 0.0, double.PositiveInfinity,
+            Truth: truth);
 
     static PendingCall Tower(
         string id, string speaker, string callsign, string text, string voice,
-        MissionRadioPriority priority) => new(
+        MissionRadioPriority priority, MissionRadioTruth truth) => new(
             id, MissionRadioChannel.Tower, "RAPIER TOWER", TowerFrequency,
-            speaker, callsign, text, voice, priority, 0.0, double.PositiveInfinity);
+            speaker, callsign, text, voice, priority, 0.0, double.PositiveInfinity,
+            Truth: truth);
 
     static PendingCall Approach(
         string id, string speaker, string callsign, string text, string voice,
-        MissionRadioPriority priority) => new(
+        MissionRadioPriority priority, MissionRadioTruth truth) => new(
             id, MissionRadioChannel.Approach, "RAPIER APPROACH", ApproachFrequency,
-            speaker, callsign, text, voice, priority, 0.0, double.PositiveInfinity);
+            speaker, callsign, text, voice, priority, 0.0, double.PositiveInfinity,
+            Truth: truth);
 
     static double EstimateDurationSeconds(string text) {
         int words = text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
-        return Math.Clamp(0.70 + words / 2.65, 1.35, 6.0);
+        // Short R/T packets run by semantic unit, not audiobook WPM. This conservative fallback
+        // covers an unheard fresh line without reintroducing the padded, three-second cadence of
+        // the stale v3 corpus; promoted clips still provide their measured trimmed duration.
+        return Math.Clamp(0.38 + words / 4.5, 0.65, 4.0);
     }
 
     static double GapFraction(long sequence) {
@@ -1537,8 +1947,8 @@ public sealed class MissionRadioDirector {
         _ => callsign,
     };
 
-    // Static squadron slots speak group form ("Ghost Twelve"); only formation flights
-    // with positional numbering would speak digits ("Ghost one two"). PHRASEOLOGY.md §2.2.
+    // Static squadron slots remain full military callsigns. GHOST's monosyllabic prosody uses
+    // digit form ("Ghost One Two") throughout. PHRASEOLOGY.md §2.2.
     static string SpokenTrafficCallsign(string callsign) => callsign switch {
         "RAPIER 2" or "GHOST 12" => "Ghost One Two",
         "RAPIER 3" or "GHOST 13" => "Ghost One Three",

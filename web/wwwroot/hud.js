@@ -1192,7 +1192,7 @@ class CombatHud {
         projection.x, projection.y + size + 5);
       this.drawTargetDataLine(projection, size, state, color);
     }
-    if (circuitTraffic) {
+    if (circuitTraffic && padlocked) {
       ctx.font = "600 9px ui-monospace, monospace";
       ctx.fillStyle = color;
       ctx.textAlign = "center";
@@ -2530,6 +2530,12 @@ class CombatHud {
   }
 
   drawLimitsPanel(state) {
+    const phaseHud = hudPhasePresentation(state);
+    if (phaseHud.mission !== "other" && !phaseHud.surfaces.limitsFuel) {
+      this._limitsPanelRect = null;
+      if (this._debug) this._debug.limitsPanel = null;
+      return;
+    }
     const panel = limitsPanelPresentation(state);
     if (!panel) {
       this._limitsPanelRect = null;
@@ -2725,12 +2731,20 @@ class CombatHud {
     // Rapier Intercept: gear/systems chrome only in recovery — warnings still annunciate.
     const phaseHud = hudPhasePresentation(state ?? {});
     if (phaseHud.mission === "rapier_intercept" && !phaseHud.surfaces.systemsGear) return;
+    if (phaseHud.mission === "rapier_circuits"
+      && !phaseHud.surfaces.systemsGear
+      && systems.warnings.length === 0) return;
     const ctx = this.ctx;
+    const circuitVerifyDue = phaseHud.mission === "rapier_circuits"
+      && phaseHud.surfaces.systemsGear;
+    const circuitLandingLeg = circuitVerifyDue
+      && ["DOWNWIND", "BASE", "SHORT_FINAL", "WIRE_FINAL"].includes(phaseHud.circuitLeg);
+    const compactVerify = circuitVerifyDue && systems.warnings.length === 0;
     const warning = systems.warnings.some((item) => item.level === "warning");
-    const caution = systems.warnings.length > 0;
+    const caution = systems.warnings.length > 0 || circuitVerifyDue;
     const accent = warning ? RED : caution ? AMBER : GREEN;
     const width = this.touchMode ? 184 : 228;
-    const height = this.touchMode ? 62 : 72;
+    const height = compactVerify ? 48 : this.touchMode ? 62 : 72;
     const x = this.width - this.safeInsets.right - width - 18;
     const fuelY = this.getLayout().secondaryBottom - 42;
     const lowerPanelTop = this._limitsPanelRect?.y ?? fuelY;
@@ -2753,7 +2767,9 @@ class CombatHud {
     ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.fillStyle = systems.gearUnsafe || systems.gearLimitExceeded ? accent : GREEN;
     ctx.textAlign = "left";
-    ctx.fillText(`GEAR ${gearArrow}`, x + 9, y + 13);
+    ctx.fillText(circuitVerifyDue
+      ? `GEAR ${circuitLandingLeg ? "↓" : "↑"} REQD`
+      : `GEAR ${gearArrow}`, x + 9, y + 13);
 
     if (systems.gearAvailable) {
       const legEntries = [
@@ -2777,9 +2793,16 @@ class CombatHud {
     ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
     ctx.fillStyle = systems.flapSplit || systems.flapLimitExceeded ? accent : GREEN;
-    ctx.fillText(`${systems.flapLabel ?? "FLAP"} ${flapLever}`, x + 9, y + 34);
+    ctx.fillText(circuitVerifyDue
+      ? `${systems.flapLabel ?? "FLAP"} ${circuitLandingLeg ? "DN" : "UP"} REQD`
+      : `${systems.flapLabel ?? "FLAP"} ${flapLever}`, x + 9, y + 34);
     ctx.textAlign = "right";
     ctx.fillText(systems.flapPositionText, x + width - 9, y + 34);
+
+    if (compactVerify) {
+      ctx.restore();
+      return;
+    }
 
     const rpm = systems.engineRpmPct === null ? "RPM --"
       : `RPM ${Math.round(systems.engineRpmPct)}%`;
@@ -2999,8 +3022,8 @@ class CombatHud {
         statusDirective(patternOnly ? "ACQUIRING" : `ACQUIRING ${targetLabel}`, AMBER);
       }
 
-      // === STEERING TRUTH: kernel-first physical roll error; the drawing lives in the
-      // body-fixed locator inset below (drawPadlockLocatorInset), never in camera space.
+      // === STEERING TRUTH: kernel-first physical roll error; the live drawing is the body-fixed
+      // action strip below, never a camera-space inference.
       const targetVectorLength = this.relative.copy(padlockTargetPosition)
         .sub(frame.playerPosition).length();
       if (targetVectorLength > 1e-6) this.relative.multiplyScalar(1 / targetVectorLength);
@@ -3053,36 +3076,30 @@ class CombatHud {
         }
       }
 
-      if (steering?.valid && !groundDanger && !centralPullUp) {
-        if (steering.anyPlane || steering.captured) {
-          statusDirective(`${targetLabel} · PULL · BRING NOSE TO TARGET`, "#7dffb0");
-        } else if (Number.isFinite(steering.rollErrorRad)) {
-          const direction = steering.rollErrorRad >= 0 ? "RIGHT" : "LEFT";
-          const degrees = Math.max(1, Math.round(Math.abs(steering.rollErrorRad) / DEG));
-          statusDirective(`${targetLabel} · ROLL ${direction} ${degrees}\u00B0`, AMBER);
-        }
-      } else if (steeringAvailable && !groundDanger && !centralPullUp) {
+      if (!steering?.valid && steeringAvailable && !groundDanger && !centralPullUp) {
         statusDirective(`${targetLabel} · STEERING UNAVAILABLE`, AMBER);
       }
 
-      this.drawPadlockLocatorInset(frame, {
+      this.drawPadlockActionStrip(frame, {
         centreX, top, bottom, left, right,
         steering, groundDanger, centralPullUp, blink,
         pitchDeg, radarAltFt, sinkFpm,
         targetPosition: padlockTargetPosition,
+        targetLabel,
       });
 
-      // === BANDIT LOCATOR: drawBandit owns the single on-screen target box. This layer only adds
-      // an edge caret when a manual slew puts that target off-screen or behind the current view.
+      // === BANDIT LOCATOR: drawBandit owns the single on-screen target box. A temporary manual
+      // look already has one complete instruction — RELEASE LOOK TO REACQUIRE — so do not chase
+      // that with a second edge arrow and clock cue. The locator only covers genuine servo lag.
       if (this._debug && isBanditPadlock) {
         this._debug.padlockLocator = {
           dirX: banditDirX,
           dirY: banditDirY,
           valid: banditDirValid,
-          drawn: !banditOnScreen && banditDirValid,
+          drawn: !frame.manualLookActive && !banditOnScreen && banditDirValid,
         };
       }
-      if (isBanditPadlock) {
+      if (isBanditPadlock && !frame.manualLookActive) {
         padlockCtx.save();
         if (!banditOnScreen && banditDirValid) {
           const scale = Math.min(
@@ -3118,60 +3135,62 @@ class CombatHud {
         padlockCtx.restore();
       }
 
-      // NOSE tick: a small amber caret at the waterline projection (or the view edge if the nose is
-      // off-screen), so the pilot keeps a sense of where the jet points relative to the padlock.
-      const anchorVisible = noseAnchor && !noseAnchor.behind
-        && Number.isFinite(noseAnchor.x) && Number.isFinite(noseAnchor.y)
-        && noseAnchor.x >= left && noseAnchor.x <= right
-        && noseAnchor.y >= top && noseAnchor.y <= bottom;
-      let noseX;
-      let noseY;
-      let noseDirectionX;
-      let noseDirectionY;
-      if (anchorVisible) {
-        noseX = noseAnchor.x;
-        noseY = noseAnchor.y;
-        noseDirectionX = orientation.nose.x;
-        noseDirectionY = orientation.nose.y;
-      } else {
-        let dx = orientation.nose.x;
-        let dy = orientation.nose.y;
-        if (noseAnchor && !noseAnchor.behind
-            && Number.isFinite(noseAnchor.x) && Number.isFinite(noseAnchor.y)) {
-          dx = noseAnchor.x - centreX;
-          dy = noseAnchor.y - centreY;
-          const magnitude = Math.hypot(dx, dy) || 1;
-          dx /= magnitude;
-          dy /= magnitude;
+      if (!frame.manualLookActive) {
+        // NOSE tick: a small amber caret at the waterline projection (or the view edge if the nose
+        // is off-screen), so the pilot keeps a sense of where the jet points relative to padlock.
+        const anchorVisible = noseAnchor && !noseAnchor.behind
+          && Number.isFinite(noseAnchor.x) && Number.isFinite(noseAnchor.y)
+          && noseAnchor.x >= left && noseAnchor.x <= right
+          && noseAnchor.y >= top && noseAnchor.y <= bottom;
+        let noseX;
+        let noseY;
+        let noseDirectionX;
+        let noseDirectionY;
+        if (anchorVisible) {
+          noseX = noseAnchor.x;
+          noseY = noseAnchor.y;
+          noseDirectionX = orientation.nose.x;
+          noseDirectionY = orientation.nose.y;
+        } else {
+          let dx = orientation.nose.x;
+          let dy = orientation.nose.y;
+          if (noseAnchor && !noseAnchor.behind
+              && Number.isFinite(noseAnchor.x) && Number.isFinite(noseAnchor.y)) {
+            dx = noseAnchor.x - centreX;
+            dy = noseAnchor.y - centreY;
+            const magnitude = Math.hypot(dx, dy) || 1;
+            dx /= magnitude;
+            dy /= magnitude;
+          }
+          const scale = Math.min(
+            (dx >= 0 ? right - centreX : centreX - left) / Math.max(Math.abs(dx), 0.001),
+            (dy >= 0 ? bottom - centreY : centreY - top) / Math.max(Math.abs(dy), 0.001),
+          );
+          noseX = centreX + dx * scale;
+          noseY = centreY + dy * scale;
+          noseDirectionX = dx;
+          noseDirectionY = dy;
         }
-        const scale = Math.min(
-          (dx >= 0 ? right - centreX : centreX - left) / Math.max(Math.abs(dx), 0.001),
-          (dy >= 0 ? bottom - centreY : centreY - top) / Math.max(Math.abs(dy), 0.001),
-        );
-        noseX = centreX + dx * scale;
-        noseY = centreY + dy * scale;
-        noseDirectionX = dx;
-        noseDirectionY = dy;
+        padlockCtx.save();
+        padlockCtx.translate(noseX, noseY);
+        if (!anchorVisible) {
+          padlockCtx.rotate(Math.atan2(noseDirectionY, noseDirectionX));
+          this.setLine("rgba(255, 176, 32, 0.86)", 2.0);
+          padlockCtx.beginPath();
+          padlockCtx.moveTo(12, 0);
+          padlockCtx.lineTo(-6, -7);
+          padlockCtx.lineTo(-2, 0);
+          padlockCtx.lineTo(-6, 7);
+          padlockCtx.stroke();
+          padlockCtx.rotate(-Math.atan2(noseDirectionY, noseDirectionX));
+        }
+        padlockCtx.fillStyle = "rgba(255, 176, 32, 0.85)";
+        padlockCtx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        padlockCtx.textAlign = "center";
+        padlockCtx.textBaseline = "alphabetic";
+        padlockCtx.fillText("NOSE", 0, anchorVisible ? 16 : -11);
+        padlockCtx.restore();
       }
-      padlockCtx.save();
-      padlockCtx.translate(noseX, noseY);
-      if (!anchorVisible) {
-        padlockCtx.rotate(Math.atan2(noseDirectionY, noseDirectionX));
-        this.setLine("rgba(255, 176, 32, 0.86)", 2.0);
-        padlockCtx.beginPath();
-        padlockCtx.moveTo(12, 0);
-        padlockCtx.lineTo(-6, -7);
-        padlockCtx.lineTo(-2, 0);
-        padlockCtx.lineTo(-6, 7);
-        padlockCtx.stroke();
-        padlockCtx.rotate(-Math.atan2(noseDirectionY, noseDirectionX));
-      }
-      padlockCtx.fillStyle = "rgba(255, 176, 32, 0.85)";
-      padlockCtx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      padlockCtx.textAlign = "center";
-      padlockCtx.textBaseline = "alphabetic";
-      padlockCtx.fillText("NOSE", 0, anchorVisible ? 16 : -11);
-      padlockCtx.restore();
 
     }
     padlockCtx.restore();
@@ -3189,6 +3208,150 @@ class CombatHud {
 
   }
 
+  // One quiet, body-fixed action cue for padlock. The earlier miniature ADI made the pilot decode
+  // a second horizon, a bank scale, an animated roll gate, an aft label, and a text directive at
+  // the same time. This strip answers the actual control question directly: roll left/right or
+  // pull. Pitch, bank, radar altitude, and aft hemisphere remain as compact cross-checks.
+  drawPadlockActionStrip(frame, {
+    centreX, top, bottom, left, right,
+    steering, groundDanger, centralPullUp,
+    pitchDeg, radarAltFt, sinkFpm, targetPosition, targetLabel,
+  }) {
+    const ctx = this.ctx;
+    const state = frame.state;
+    const bankDeg = Number(state.bank_deg) || 0;
+    const rollErrorRad = steering?.valid === true && Number.isFinite(steering.rollErrorRad)
+      ? steering.rollErrorRad : null;
+    const urgentPull = groundDanger || centralPullUp;
+    const captured = steering?.valid === true
+      && (steering.anyPlane === true || steering.captured === true);
+
+    let direction = null;
+    let action = null;
+    let accent = AMBER;
+    let directive = null;
+    if (urgentPull) {
+      direction = "up";
+      action = "PULL UP";
+      accent = RED;
+    } else if (captured) {
+      direction = "up";
+      action = "PULL";
+      accent = "#7dffb0";
+      directive = `${targetLabel} · PULL · BRING NOSE TO TARGET`;
+    } else if (rollErrorRad !== null) {
+      direction = rollErrorRad >= 0 ? "right" : "left";
+      const degrees = Math.max(1, Math.round(Math.abs(rollErrorRad) / DEG));
+      action = `ROLL ${direction.toUpperCase()} ${degrees}\u00B0`;
+      directive = `${targetLabel} · ${action}`;
+    }
+
+    // During acquisition the top status line already owns the job. Do not leave a passive
+    // attitude ornament on screen while there is no valid control command.
+    if (!action) {
+      if (this._debug) this._debug.padlockAction = null;
+      return;
+    }
+
+    this.relative.copy(targetPosition ?? frame.banditPosition).sub(frame.playerPosition);
+    const relLength = this.relative.length();
+    let hemisphere = null;
+    if (relLength > 1e-6) {
+      this.relative.multiplyScalar(1 / relLength);
+      const targetForward = this.relative.dot(frame.playerForward);
+      const targetRight = this.relative.dot(frame.playerRight);
+      if (targetForward < -0.17) {
+        hemisphere = Math.abs(targetRight) < 0.05
+          ? "AFT" : `AFT ${targetRight >= 0 ? "R" : "L"}`;
+      }
+    }
+    if (frame.shoulderHandoffLatched) hemisphere = "AFT SIDE CHANGED";
+
+    const width = clamp((right - left) * 0.34, 168, 238);
+    const height = 58;
+    const cx = centreX;
+    const cy = clamp(top + (bottom - top) * 0.68, top + 62, bottom - 62);
+    const x = cx - width / 2;
+    const y = cy - height / 2;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(1, 8, 12, 0.7)";
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = urgentPull ? 1.8 : 1.2;
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, height, 5);
+    ctx.fill();
+    ctx.stroke();
+
+    // One static chevron. It is deliberately not animated: motion here competed with the moving
+    // world and made an already time-critical instruction feel like another target locator.
+    const arrowX = direction === "left" ? x + 20
+      : direction === "right" ? x + width - 20 : cx;
+    const arrowY = direction === "up" ? y + 13 : y + 22;
+    ctx.save();
+    ctx.translate(arrowX, arrowY);
+    ctx.rotate(direction === "left" ? Math.PI
+      : direction === "up" ? -Math.PI / 2 : 0);
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(8, 0);
+    ctx.lineTo(-4, -7);
+    ctx.moveTo(8, 0);
+    ctx.lineTo(-4, 7);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.fillStyle = accent;
+    ctx.font = "900 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const compactTargetLabel = targetLabel.replace(/^TARGET\s+/, "T");
+    const compactAction = action
+      .replace(/^ROLL RIGHT /, "ROLL R ")
+      .replace(/^ROLL LEFT /, "ROLL L ");
+    const displayLabel = `${compactTargetLabel} · ${compactAction}`;
+    ctx.fillText(this.fitText(displayLabel, width - 44), cx, y + 21);
+
+    const pitchText = `P ${pitchDeg >= 0 ? "+" : ""}${Math.round(pitchDeg)}\u00B0`;
+    const bankText = Math.abs(bankDeg) < 0.5
+      ? "B 0\u00B0"
+      : `B ${bankDeg > 0 ? "R" : "L"}${Math.round(Math.abs(bankDeg))}\u00B0`;
+    const radarText = Number.isFinite(radarAltFt)
+      ? `R ${radarAltFt >= 9950
+        ? `${(radarAltFt / 1000).toFixed(1)}K`
+        : Math.round(radarAltFt).toLocaleString("en-US")}`
+      : "R ---";
+    const verticalTrend = Number.isFinite(sinkFpm) && Math.abs(sinkFpm) >= 500
+      ? sinkFpm < 0 ? "\u2193" : "\u2191" : "";
+    const context = [pitchText, bankText, `${radarText}${verticalTrend}`, hemisphere]
+      .filter(Boolean).join("  ");
+    ctx.fillStyle = urgentPull ? "rgba(255, 220, 224, 0.9)" : GREEN_DIM;
+    ctx.font = "750 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillText(this.fitText(context, width - 16), cx, y + 43);
+    ctx.restore();
+
+    if (this._debug) {
+      this._debug.padlockDirective = directive ?? `${targetLabel} · ${action}`;
+      this._debug.padlockAction = {
+        x, y, width, height,
+        action,
+        direction,
+        rollErrorRad,
+        captured,
+        bankDeg,
+        pitchDeg,
+        radarAltFt,
+        hemisphere,
+        displayLabel,
+      };
+    }
+  }
+
+  // Legacy reference implementation retained temporarily for geometry archaeology. It is no
+  // longer called by the live HUD; drawPadlockActionStrip owns combat steering presentation.
   // One body-fixed ownship instrument for padlock: a true ADI (attitude from the jet, never
   // the camera), a fixed waterline, the physical roll gate at the signed body-frame roll error,
   // radar altitude and vertical trend. Chevrons always mean keyboard roll direction; nothing in
@@ -4067,13 +4230,11 @@ class CombatHud {
       ctx.lineTo(cx + 46, cy - pitchClamp + 7);
       ctx.closePath();
       ctx.stroke();
-      if (fd.speedCall || fd.targetKtas > 0) {
+      if (fd.speedCall) {
         ctx.font = "700 10px ui-monospace, monospace";
         ctx.textAlign = "left";
         ctx.textBaseline = "middle";
-        const speedText = fd.speedCall
-          ? `${fd.speedCall} · ${Math.round(fd.targetKtas)} KT`
-          : `${Math.round(fd.targetKtas)} KT`;
+        const speedText = `${fd.speedCall} · ${Math.round(fd.targetKtas)} KT`;
         ctx.fillText(speedText, cx + 64, cy - pitchClamp);
       }
       if (fd.altitudeCall) {

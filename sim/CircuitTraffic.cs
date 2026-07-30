@@ -12,6 +12,11 @@ public enum CircuitTrafficIntent {
     Recover = 2,
 }
 
+public enum CircuitLandingIntent {
+    FullStop = 0,
+    TouchAndGo = 1,
+}
+
 /// <summary>
 /// One observable training-pattern aircraft. Position remains kinematic, but operational state
 /// belongs to a stable pilot profile so radio and sequencing can react to what that pilot is
@@ -29,7 +34,8 @@ public readonly record struct CircuitTrafficShip(
     CircuitTrafficIntent Intent = CircuitTrafficIntent.FlyPattern,
     bool GearDownAndLocked = true,
     long CircuitNumber = 0,
-    double RadioReactionSeconds = 0.0);
+    double RadioReactionSeconds = 0.0,
+    CircuitLandingIntent LandingIntent = CircuitLandingIntent.TouchAndGo);
 
 public static class CircuitPatternTraffic {
     /// <summary>Match RapierMission Circuits shelf — 2,500 ft AGL.</summary>
@@ -166,7 +172,8 @@ public static class CircuitPatternTraffic {
                 Intent: intent,
                 GearDownAndLocked: gearDownAndLocked,
                 CircuitNumber: circuitNumber,
-                RadioReactionSeconds: profile.RadioReactionSeconds);
+                RadioReactionSeconds: profile.RadioReactionSeconds,
+                LandingIntent: CircuitLandingIntent.TouchAndGo);
         }
         return ships;
     }

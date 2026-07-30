@@ -83,6 +83,10 @@ public sealed record AircraftCapability(
     public static AircraftCapability AwacsTargetPrototype { get; } = new(
         "aircraft.awacs-target.prototype.v1", "AEW&C target prototype",
         "presentation.vehicle.awacs-target.v1", "systems.target-only.prototype.v1", false);
+    public static AircraftCapability TransportTargetPrototype { get; } = new(
+        "aircraft.transport-target.prototype.v1", "Transport target prototype",
+        "presentation.vehicle.transport-target.prototype.v1",
+        "systems.target-only.prototype.v1", false);
     public static AircraftCapability F22ASurrogate { get; } = new(
         "aircraft.f22a.public-data-surrogate.v1", "F-22A public-data surrogate",
         "presentation.vehicle.f22a.public-data-surrogate.v1",
@@ -263,13 +267,24 @@ public static class Ukraine2030sTheatre {
     };
 }
 
-/// <summary>Stable mission identity lives with content, not a bridge switch over menu indexes.</summary>
+public enum MissionEconomicMode {
+    Arcade,
+    RapierOperations
+}
+
+/// <summary>
+/// Stable mission identity lives with content, not a bridge switch over menu indexes. Economy is
+/// an explicit mission contract: sharing the Rapier airframe or presentation never opts a sortie
+/// into campaign debits.
+/// </summary>
 public sealed record MissionContract(
     string Id,
     MissionContentFamily ContentFamily,
     bool PublicDataSurrogate = false,
     string RulesOfEngagement = "GUNS_ONLY",
-    string Era = "UNSPECIFIED") {
+    string Era = "UNSPECIFIED",
+    MissionEconomicMode EconomicMode = MissionEconomicMode.Arcade,
+    bool AllowsTimeCompression = false) {
     public static MissionContract Custom { get; } = new(
         "mission.custom.v1", MissionContentFamily.Custom);
 }
@@ -908,7 +923,8 @@ public static class Beats {
                 MissionContentFamily.ModernPublicDataSurrogate,
                 PublicDataSurrogate: true,
                 RulesOfEngagement: "GUNS_ONLY_FIRST_PASS_SAFE",
-                Era: "MODERN_PUBLIC_DATA_EXERCISE"),
+                Era: "MODERN_PUBLIC_DATA_EXERCISE",
+                AllowsTimeCompression: true),
             PlayerCapability: AircraftCapability.RapierSurrogate,
             BanditCapability: AircraftCapability.Su27SSurrogate,
             PlayerPhysiologyProfile: PilotPhysiologyProfile.RapierReclinedInterceptor,
@@ -955,6 +971,9 @@ public static class Beats {
                 DogfightingDrones: 0,
                 PursuerCount: 0,
                 PatternOnly: true,
+                // The current automated card accepts the arrestor on its first approach. A future
+                // planned touch-and-go card must change both this intent and the flown profile.
+                LandingIntent: CircuitLandingIntent.FullStop,
                 AutomationDefaultEnabled: true,
                 RecoveryRequired: true),
             Combat = CombatConfig.CarrierRecoveryOnly,
@@ -992,29 +1011,33 @@ public static class Beats {
         AircraftState authoredContact = sortie.Bandit;
         AircraftState contact = job switch {
             RapierJobKind.Balloon => new AircraftState(
-                new Vec3D(12_000, 18_500, 420_000), 40.0, 0.0, Math.PI, 0.0,
+                // The dealt jobs stay in the same practical transit class as the 320 km fixed
+                // engineering card. Target variety must not restore the old 680 km wait.
+                new Vec3D(12_000, 18_500, 300_000), 40.0, 0.0, Math.PI, 0.0,
                 FlightModel.GliderStrike.MassKg),
             RapierJobKind.Awacs => new AircraftState(
-                new Vec3D(8_000, 9_144, 380_000), 130.0, 0.0, Math.PI, 0.0,
+                new Vec3D(8_000, 9_144, 300_000), 130.0, 0.0, Math.PI, 0.0,
                 FlightModel.AwacsTarget.MassKg),
             RapierJobKind.Transport => new AircraftState(
                 // Low and slow after the lob — the dive is the job.
-                new Vec3D(4_000, 2_200, 340_000), 145.0, 0.0, Math.PI, 0.0,
-                FlightModel.Su27SPublicDataSurrogate.MassKg),
+                new Vec3D(4_000, 2_200, 260_000), 145.0, 0.0, Math.PI, 0.0,
+                FlightModel.TransportTargetPrototype.MassKg),
             RapierJobKind.SwarmLob => new AircraftState(
                 // High formation: apex release window, then leave.
-                new Vec3D(10_000, 18_500, 390_000), 200.0, 0.0, Math.PI, 0.0,
+                new Vec3D(10_000, 18_500, 320_000), 200.0, 0.0, Math.PI, 0.0,
                 FlightModel.Su27SPublicDataSurrogate.MassKg),
             _ => authoredContact
         };
         AircraftParams banditParams = job switch {
             RapierJobKind.Balloon => FlightModel.GliderStrike,
             RapierJobKind.Awacs => FlightModel.AwacsTarget,
+            RapierJobKind.Transport => FlightModel.TransportTargetPrototype,
             _ => FlightModel.Su27SPublicDataSurrogate
         };
         AircraftCapability banditCapability = job switch {
             RapierJobKind.Balloon => AircraftCapability.BalloonGliderPrototype,
             RapierJobKind.Awacs => AircraftCapability.AwacsTargetPrototype,
+            RapierJobKind.Transport => AircraftCapability.TransportTargetPrototype,
             _ => AircraftCapability.Su27SSurrogate
         };
         // AWACS / enabler kill: F-22-class pursuers home — Escape path already models them.
@@ -1025,7 +1048,7 @@ public static class Beats {
             _ => "SYSTEMS NOMINAL"
         };
         return sortie with {
-            Name = $"Go fly the Rapier — {job} · {computerVariant}",
+            Name = $"Rapier intercept — {job} · {computerVariant}",
             Bandit = contact,
             BanditParams = banditParams,
             BanditCapability = banditCapability,
@@ -1041,11 +1064,13 @@ public static class Beats {
                 Job: job,
                 ComputerFailureAtZoomCoast: computerFailure),
             Mission = new MissionContract(
-                "mission.modern.rapier-go-fly.public-data-surrogate.v1",
+                "mission.modern.rapier-economic-intercept.public-data-surrogate.v1",
                 MissionContentFamily.ModernPublicDataSurrogate,
                 PublicDataSurrogate: true,
                 RulesOfEngagement: "GUNS_ONLY_FIRST_PASS_SAFE",
-                Era: "MODERN_PUBLIC_DATA_EXERCISE"),
+                Era: "MODERN_PUBLIC_DATA_EXERCISE",
+                EconomicMode: MissionEconomicMode.RapierOperations,
+                AllowsTimeCompression: true),
             OpenSegmentNav = true
         };
     }

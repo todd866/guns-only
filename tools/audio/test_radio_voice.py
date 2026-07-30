@@ -38,6 +38,33 @@ def catalog():
     }
 
 
+def equipment_catalog():
+    authored = catalog()
+    authored["version"] = 6
+    authored["roles"]["tower"].update({
+        "talker_profile": "ground.controller.close-mic",
+        "transceiver_profile": "modern.uhf-am.ground",
+    })
+    authored["lines"][0]["target_duration_s"] = [0.01, 1.0]
+    return authored
+
+
+def cadence_catalog():
+    authored = equipment_catalog()
+    authored["version"] = 7
+    authored["lines"][0].update({
+        "text": "Ghost One One.",
+        "rt_profile": "acknowledgement",
+        "cadence": [{
+            "text": "Ghost One One",
+            "pace": "connected",
+            "focus": "authority received",
+        }],
+        "direction": "One connected unit.",
+    })
+    return authored
+
+
 def wav_bytes():
     output = io.BytesIO()
     with wave.open(output, "wb") as audio:
@@ -74,6 +101,36 @@ class RadioVoiceTests(unittest.TestCase):
         missing_target["version"] = 5
         with self.assertRaisesRegex(ValueError, "target_duration_s"):
             radio_voice.validate_catalog(missing_target)
+
+    def test_version_six_catalog_requires_known_equipment_profiles(self):
+        missing_talker = equipment_catalog()
+        del missing_talker["roles"]["tower"]["talker_profile"]
+        with self.assertRaisesRegex(ValueError, "talker_profile"):
+            radio_voice.validate_catalog(missing_talker)
+
+        unknown_radio = equipment_catalog()
+        unknown_radio["roles"]["tower"]["transceiver_profile"] = "generic.radio"
+        with self.assertRaisesRegex(ValueError, "transceiver_profile"):
+            radio_voice.validate_catalog(unknown_radio)
+
+    def test_cadence_map_must_cover_canonical_words_in_order(self):
+        authored = cadence_catalog()
+        radio_voice.validate_catalog(authored)
+        instructions = radio_voice.line_instructions(
+            authored, authored["lines"][0]
+        )
+        self.assertIn("Cadence map", instructions)
+        self.assertIn("connected", instructions)
+
+        authored["lines"][0]["cadence"][0]["text"] = "One One Ghost"
+        with self.assertRaisesRegex(ValueError, "canonical spoken words"):
+            radio_voice.validate_catalog(authored)
+
+    def test_cadence_map_requires_a_known_performance_profile(self):
+        authored = cadence_catalog()
+        authored["lines"][0]["rt_profile"] = "cinematic"
+        with self.assertRaisesRegex(ValueError, "unknown rt_profile"):
+            radio_voice.validate_catalog(authored)
 
     def test_request_uses_official_speech_shape_without_leaking_key(self):
         captured = {}
@@ -116,7 +173,241 @@ class RadioVoiceTests(unittest.TestCase):
             self.assertEqual(24_000, details["sample_rate_hz"])
             data = json.loads(manifest.read_text(encoding="utf-8"))
             self.assertIn("tower-test", data["clips"])
+            self.assertEqual(
+                "Continue.", data["clips"]["tower-test"]["transcript"]
+            )
             self.assertNotIn("secret-test-key", manifest.read_text(encoding="utf-8"))
+
+    def test_generate_reuses_only_wavs_with_matching_manifest_provenance(self):
+        authored = catalog()
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            manifest = output / "manifest.json"
+            wav_path = output / "tower-test.wav"
+            wav_path.write_bytes(wav_bytes())
+            radio_voice.write_manifest(
+                authored,
+                output,
+                manifest,
+                trusted_sources={
+                    wav_path.name: radio_voice.source_hash(
+                        authored, authored["lines"][0]
+                    )
+                },
+            )
+            requests = []
+            original = radio_voice.speech_request
+            radio_voice.speech_request = lambda *_args, **_kwargs: (
+                requests.append(True) or wav_bytes()
+            )
+            try:
+                self.assertEqual(
+                    0,
+                    radio_voice.generate(
+                        authored, output, manifest, "secret-test-key"
+                    ),
+                )
+                authored["roles"]["tower"]["instructions"] = "Different person."
+                self.assertEqual(
+                    1,
+                    radio_voice.generate(
+                        authored, output, manifest, "secret-test-key"
+                    ),
+                )
+            finally:
+                radio_voice.speech_request = original
+
+            self.assertEqual([True], requests)
+            refreshed = json.loads(manifest.read_text(encoding="utf-8"))
+            self.assertEqual(
+                radio_voice.source_hash(authored, authored["lines"][0]),
+                refreshed["clips"]["tower-test"]["takes"][0]["source_sha256"],
+            )
+
+    def test_manifest_does_not_relabel_a_stale_take_with_new_words(self):
+        authored = catalog()
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            manifest = output / "manifest.json"
+            wav_path = output / "tower-test.wav"
+            wav_path.write_bytes(wav_bytes())
+            radio_voice.write_manifest(
+                authored,
+                output,
+                manifest,
+                trusted_sources={
+                    wav_path.name: radio_voice.source_hash(
+                        authored, authored["lines"][0]
+                    )
+                },
+            )
+
+            authored["lines"][0]["text"] = "Different words."
+            radio_voice.write_manifest(authored, output, manifest)
+            refreshed = json.loads(manifest.read_text(encoding="utf-8"))
+
+        self.assertEqual({}, refreshed["clips"])
+
+    def test_manifest_rejects_a_take_whose_file_hash_changed(self):
+        authored = catalog()
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            manifest = output / "manifest.json"
+            wav_path = output / "tower-test.wav"
+            wav_path.write_bytes(wav_bytes())
+            radio_voice.write_manifest(
+                authored,
+                output,
+                manifest,
+                trusted_sources={
+                    wav_path.name: radio_voice.source_hash(
+                        authored, authored["lines"][0]
+                    )
+                },
+            )
+            wav_path.write_bytes(wav_path.read_bytes() + b"tampered")
+
+            radio_voice.write_manifest(authored, output, manifest)
+            refreshed = json.loads(manifest.read_text(encoding="utf-8"))
+
+        self.assertEqual({}, refreshed["clips"])
+
+    def test_manifest_carries_equipment_without_baking_the_radio_into_source_hash(self):
+        authored = equipment_catalog()
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            (output / "tower-test.wav").write_bytes(wav_bytes())
+            manifest = radio_voice.build_manifest(authored, output)
+            clip = manifest["clips"]["tower-test"]
+
+            self.assertEqual(3, manifest["version"])
+            self.assertEqual(1, manifest["equipment_profile_version"])
+            self.assertEqual(
+                "ground.controller.close-mic", clip["talker_profile"]
+            )
+            self.assertEqual(
+                "modern.uhf-am.ground", clip["transceiver_profile"]
+            )
+
+            source_before = radio_voice.source_hash(
+                authored, authored["lines"][0]
+            )
+            authored["roles"]["tower"][
+                "transceiver_profile"
+            ] = "modern.uhf-am.airborne"
+            source_after_radio_change = radio_voice.source_hash(
+                authored, authored["lines"][0]
+            )
+            self.assertEqual(source_before, source_after_radio_change)
+
+            authored["roles"]["tower"][
+                "talker_profile"
+            ] = "carrier.deck-lso.close-mic"
+            source_after_mic_change = radio_voice.source_hash(
+                authored, authored["lines"][0]
+            )
+            self.assertNotEqual(source_before, source_after_mic_change)
+
+    def test_manifest_records_objective_rt_performance_result(self):
+        authored = cadence_catalog()
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            (output / "tower-test.wav").write_bytes(wav_bytes())
+            manifest = radio_voice.build_manifest(authored, output)
+
+        performance = manifest["clips"]["tower-test"]["takes"][0][
+            "rt_performance"
+        ]
+        self.assertEqual("pass", performance["status"])
+        self.assertEqual("acknowledgement", performance["profile"])
+
+    def test_generate_rejects_take_outside_rt_performance_envelope(self):
+        authored = cadence_catalog()
+        authored["lines"][0].update({
+            "text": "Ghost One One base gear down full stop.",
+            "rt_profile": "pattern-report",
+            "cadence": [
+                {
+                    "text": "Ghost One One",
+                    "pace": "clear-even",
+                    "focus": "identity",
+                },
+                {
+                    "text": "base gear down",
+                    "pace": "compressed",
+                    "focus": "position and configuration",
+                },
+                {
+                    "text": "full stop",
+                    "pace": "measured",
+                    "focus": "intention",
+                },
+            ],
+        })
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            manifest = output / "manifest.json"
+            with mock.patch.object(
+                radio_voice,
+                "speech_request",
+                return_value=wav_bytes(),
+            ):
+                with self.assertRaisesRegex(
+                    ValueError, "does not pass pattern-report R/T performance"
+                ):
+                    radio_voice.generate(
+                        authored, output, manifest, "secret-test-key"
+                    )
+            self.assertFalse((output / "tower-test.wav").exists())
+
+    def test_failed_regeneration_preserves_previous_take(self):
+        authored = cadence_catalog()
+        authored["lines"][0].update({
+            "text": "Ghost One One base gear down full stop.",
+            "rt_profile": "pattern-report",
+            "cadence": [
+                {
+                    "text": "Ghost One One",
+                    "pace": "clear-even",
+                    "focus": "identity",
+                },
+                {
+                    "text": "base gear down",
+                    "pace": "compressed",
+                    "focus": "position and configuration",
+                },
+                {
+                    "text": "full stop",
+                    "pace": "measured",
+                    "focus": "intention",
+                },
+            ],
+        })
+        previous = b"previous-production-take"
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            manifest = output / "manifest.json"
+            wav_path = output / "tower-test.wav"
+            wav_path.write_bytes(previous)
+            with mock.patch.object(
+                radio_voice,
+                "speech_request",
+                return_value=wav_bytes(),
+            ):
+                with self.assertRaisesRegex(
+                    ValueError, "does not pass pattern-report R/T performance"
+                ):
+                    radio_voice.generate(
+                        authored,
+                        output,
+                        manifest,
+                        "secret-test-key",
+                        force=True,
+                    )
+            self.assertEqual(previous, wav_path.read_bytes())
+            self.assertFalse(
+                (output / ".tower-test.wav.candidate").exists()
+            )
 
     def test_generate_rejects_audio_outside_authored_duration(self):
         authored = catalog()
@@ -293,6 +584,90 @@ class RadioVoiceTests(unittest.TestCase):
         )
         self.assertEqual("hume-secret", captured["request"].get_header("X-hume-api-key"))
         self.assertEqual(wav_bytes(), result)
+
+    def test_hume_line_source_voice_override_preserves_role_and_provenance(self):
+        hume = {
+            "version": 1,
+            "provider": "hume",
+            "model": "1",
+            "response_format": "wav",
+            "roles": {
+                "tower": {
+                    "voice_id": "primary-tower-id",
+                    "voice_name": "Primary Tower",
+                    "speed": 1.15,
+                    "instructions": "Calm controller.",
+                    "description": "professional, clipped, matter-of-fact",
+                }
+            },
+            "lines": [{
+                "id": "tower-safety",
+                "role": "tower",
+                "text": "Go around.",
+                "source_voice_id": "safety-controller-id",
+                "source_voice_name": "Safety Controller",
+                "source_casting_status": "provisional; rights review pending",
+                "source_voice_context": "second tower operator on the same frequency",
+            }],
+        }
+        radio_voice.validate_catalog(hume)
+        captured = {}
+        encoded = base64.b64encode(wav_bytes()).decode("ascii")
+
+        def urlopen(request, timeout):
+            captured["request"] = request
+            return FakeResponse(json.dumps({
+                "generations": [{"audio": encoded}],
+            }).encode("utf-8"))
+
+        radio_voice.speech_request(
+            hume, hume["lines"][0], "hume-secret", urlopen=urlopen
+        )
+        utterance = json.loads(captured["request"].data)["utterances"][0]
+        self.assertEqual("safety-controller-id", utterance["voice"]["id"])
+
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            (output / "tower-safety.wav").write_bytes(wav_bytes())
+            manifest = radio_voice.build_manifest(hume, output)
+        clip = manifest["clips"]["tower-safety"]
+        self.assertEqual("tower", clip["role"])
+        self.assertEqual("safety-controller-id", clip["voice"])
+        self.assertEqual("Safety Controller", clip["voice_name"])
+        self.assertEqual(
+            "second tower operator on the same frequency",
+            clip["source_voice_context"],
+        )
+
+        source_before = radio_voice.source_hash(hume, hume["lines"][0])
+        hume["lines"][0]["source_voice_id"] = "different-controller-id"
+        self.assertNotEqual(
+            source_before,
+            radio_voice.source_hash(hume, hume["lines"][0]),
+        )
+
+    def test_hume_line_source_voice_override_requires_complete_provenance(self):
+        hume = {
+            "version": 1,
+            "provider": "hume",
+            "model": "1",
+            "response_format": "wav",
+            "roles": {
+                "tower": {
+                    "voice_id": "primary-tower-id",
+                    "instructions": "Calm controller.",
+                    "description": "professional, clipped, matter-of-fact",
+                }
+            },
+            "lines": [{
+                "id": "tower-safety",
+                "role": "tower",
+                "text": "Go around.",
+                "source_voice_id": "safety-controller-id",
+            }],
+        }
+        with self.assertRaisesRegex(ValueError, "requires source_voice_id"):
+            radio_voice.validate_catalog(hume)
 
     def test_hume_octave_two_omits_unsupported_description(self):
         hume = {

@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   CAMPAIGN_NODES,
   CAMPAIGN_STORAGE_KEY,
+  MAX_APPLIED_RAPIER_SORTIES,
+  applyRapierSortieCredits,
   campaignNode,
   campaignNodeQualified,
   campaignNodeUnlocked,
@@ -25,7 +27,7 @@ test("the menu is five missions and all are always available", () => {
     // Circuits sits before the intercept: the trap is the hardest thing the aircraft asks for and
     // the intercept gives exactly one attempt at it, far from home and low on fuel.
     { id: "rapier-circuits", mission: 11, aircraft: "Rapier" },
-    { id: "rapier-intercept", mission: 10, aircraft: "Rapier" },
+    { id: "rapier-intercept", mission: 12, aircraft: "Rapier" },
   ]);
 
   const fresh = createCampaignProfile();
@@ -57,8 +59,8 @@ test("the missions are genuinely different fights and expose their aircraft hone
   assert.notEqual(guns.mission, rapier.mission);
   assert.notEqual(guns.aircraft, rapier.aircraft);
   assert.match(medevac.shortObjective, /pickup.*capsule.*clinic/i);
-  assert.match(rapier.shortObjective, /M0\.90.*FL560.*live ram handover.*FL700/,
-    "the Rapier card must teach the altitude-gated ram acceleration profile");
+  assert.match(rapier.shortObjective, /balloon.*transport.*operating balance/i,
+    "the Rapier card must declare the varied economic contract");
   // None advertises a qualification: there is nothing to earn.
   assert.equal(guns.qualification, "");
   assert.equal(drone.qualification, "");
@@ -86,4 +88,40 @@ test("anonymous selection survives storage failures and malformed saved data", (
   };
   assert.doesNotThrow(() => loadCampaignProfile(hostile));
   assert.doesNotThrow(() => saveCampaignProfile(createCampaignProfile(), hostile));
+});
+
+test("Rapier sortie hashes apply exactly once and remain bounded", () => {
+  const key = "a".repeat(64);
+  const first = applyRapierSortieCredits(createCampaignProfile(), key, 75);
+  assert.equal(first.applied, true);
+  assert.equal(first.profile.rapierBalanceCredits, 75);
+
+  const duplicate = applyRapierSortieCredits(first.profile, key, 75);
+  assert.equal(duplicate.applied, false);
+  assert.equal(duplicate.profile.rapierBalanceCredits, 75);
+  assert.equal(duplicate.profile.appliedRapierSortieKeys.length, 1);
+
+  let profile = duplicate.profile;
+  for (let i = 0; i < MAX_APPLIED_RAPIER_SORTIES + 8; i += 1) {
+    profile = applyRapierSortieCredits(
+      profile,
+      i.toString(16).padStart(64, "0"),
+      1,
+    ).profile;
+  }
+  assert.equal(profile.appliedRapierSortieKeys.length, MAX_APPLIED_RAPIER_SORTIES);
+  assert.equal(profile.rapierBalanceCredits, 75 + MAX_APPLIED_RAPIER_SORTIES + 8);
+});
+
+test("legacy points migrate into the Rapier balance without importing junk keys", () => {
+  const profile = createCampaignProfile({
+    pointsBalance: -12,
+    appliedRapierSortieKeys: [
+      "not-a-hash",
+      "b".repeat(64),
+      "b".repeat(64),
+    ],
+  });
+  assert.equal(profile.rapierBalanceCredits, -12);
+  assert.deepEqual(profile.appliedRapierSortieKeys, ["b".repeat(64)]);
 });

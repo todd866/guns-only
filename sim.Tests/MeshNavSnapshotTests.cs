@@ -34,10 +34,10 @@ public sealed class MeshNavSnapshotTests {
     }
 
     [Fact]
-    public void HotFrameLayoutIncludesMeshSlotsAtVersion18() {
+    public void HotFrameLayoutIncludesMeshSlotsAtVersion19() {
         string layoutJson = SnapshotHotFrame.LayoutJson();
         using JsonDocument document = JsonDocument.Parse(layoutJson);
-        Assert.Equal(18, document.RootElement.GetProperty("layout_version").GetInt32());
+        Assert.Equal(19, document.RootElement.GetProperty("layout_version").GetInt32());
         Assert.Contains(
             "mesh_fuel_to_dest_lb",
             layoutJson,

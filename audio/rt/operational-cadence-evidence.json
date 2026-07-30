@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "1.0.0",
+  "method": "Semantic units were hand-bounded from public cockpit/ATC recordings using the word-onset offsets in their automatic-caption tracks. The measurements describe relative pace inside a packet; they are not treated as authoritative transcripts.",
+  "limitations": "Receiver squelch, overlapping speakers, automatic-caption substitutions, and the lack of word-end timestamps make every boundary approximate. The final word end is extrapolated from the neighboring onset interval. Use these results to reject flat or theatrical timing, not to imitate a recording frame-for-frame.",
+  "packets": [
+    {
+      "id": "t38-base-configuration-intention",
+      "source": {
+        "title": "Full AT-38 sortie with cockpit and ATC audio",
+        "url": "https://www.youtube.com/watch?v=v12QCwJtRq0",
+        "sourceOffsetSeconds": 3136.8
+      },
+      "timingBasis": "YouTube automatic-caption token onsets at 3136.800, +0.319, +0.559, +0.799 and +1.039 seconds. The caption substitutes 'check' in the gear phrase; semantic labels are analyst interpretation.",
+      "confidence": "approximate",
+      "units": [
+        {
+          "label": "position",
+          "text": "base",
+          "focus": "pattern position",
+          "startSeconds": 0.0,
+          "endSeconds": 0.319
+        },
+        {
+          "label": "configuration",
+          "text": "gear check",
+          "focus": "gear state",
+          "startSeconds": 0.319,
+          "endSeconds": 0.799
+        },
+        {
+          "label": "intention",
+          "text": "full stop",
+          "focus": "landing intention",
+          "startSeconds": 0.799,
+          "endSeconds": 1.279
+        }
+      ]
+    },
+    {
+      "id": "edwards-gear-and-touch-and-go",
+      "source": {
+        "title": "Military aircraft ATC at Edwards AFB",
+        "url": "https://www.youtube.com/watch?v=4zhmGHrWKuk",
+        "sourceOffsetSeconds": 1914.46
+      },
+      "timingBasis": "YouTube automatic-caption token onsets at +0.720, +1.020, +1.170, +1.470 and +1.500 seconds. The garbled identity fragment before +0.720 and the following runway fragment are excluded.",
+      "confidence": "approximate",
+      "units": [
+        {
+          "label": "configuration",
+          "text": "gear down",
+          "focus": "achieved gear state",
+          "startSeconds": 0.72,
+          "endSeconds": 1.17
+        },
+        {
+          "label": "intention",
+          "text": "touch and go",
+          "focus": "landing intention",
+          "startSeconds": 1.17,
+          "endSeconds": 1.77
+        }
+      ]
+    }
+  ]
+}

@@ -17,7 +17,8 @@ test("the Rapier briefing teaches the kernel-verified altitude-gated ram profile
   assert.match(rapierBrief, /full augmentation/);
   assert.match(rapierBrief, /\{RAM_LIGHT_MACH\}/);
   assert.match(rapierBrief, /\{FULL_RAM_MACH\}/);
-  assert.match(appSource, /rapierBriefingText\(brief\.brief, latestState \?\? \{\}\)/);
+  assert.match(appSource, /rapierBriefingText\(brief\.brief, state\)/);
+  assert.match(appSource, /Rapier balance \$\{balance\} CR/);
   assert.match(rapierBrief, /FL700/);
   assert.match(rapierBrief, /at FL315 the aircraft can gather speed but cannot cross into full ram/);
   assert.match(rapierBrief, /Mach and KTAS/);

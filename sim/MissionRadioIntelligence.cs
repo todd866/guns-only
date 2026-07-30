@@ -35,6 +35,7 @@ public enum MissionRadioDecisionKind {
     QueueFull = 6,
     ImplicitAcknowledgment = 7,
     ExchangeCompleted = 8,
+    SuppressedInvalidState = 9,
 }
 
 /// <summary>

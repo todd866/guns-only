@@ -70,6 +70,11 @@ test("an explicit performance override keeps desktop weather on the impostor pat
   assert.deepEqual(field.cloudMesh.material.defines, {});
   assert.match(field.cloudMesh.material.fragmentShader, /nearFade/,
     "camera-intersecting impostors must fade instead of becoming a screen-sized slab");
+  assert.match(field.cloudMesh.material.fragmentShader, /authoredBody/,
+    "production impostors should carry the painted billow-density silhouette");
+  assert.match(field.cloudMesh.material.fragmentShader, /uCloudArtEnabled \* 0\.84/);
+  assert.ok(field.uniforms.uCloudArt);
+  assert.ok(field.uniforms.uCloudArtEnabled);
   assert.match(field.shadowMesh.material.fragmentShader, /shadowEnvelope/,
     "cloud shadows must feather instead of exposing rectangular proxy geometry");
   field.dispose();

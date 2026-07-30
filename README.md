@@ -123,8 +123,9 @@ That product direction, its no-copy boundaries, role-progression rules, and plan
 recorded in [docs/product-north-star.md](docs/product-north-star.md).
 
 Deeper background lives in [docs/platform-architecture.md](docs/platform-architecture.md),
-[docs/world-backstory-research.md](docs/world-backstory-research.md) and the dated design records
-under `docs/`.
+[docs/world-backstory-research.md](docs/world-backstory-research.md), the
+[future air-war economy and force-management design](docs/air-war-economy-and-force-management.md),
+and the dated design records under `docs/`.
 
 ## Status
 

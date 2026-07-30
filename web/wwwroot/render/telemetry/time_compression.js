@@ -1,13 +1,21 @@
-// Four ordinary fixed ticks per wall-clock tick is the highest offer that kept the presentation
-// hand-back inside one 60 Hz frame in recorded Rapier sorties. Higher factors saved little on the
-// now-shorter intercept while producing large terrain/view invalidations at the ×N → ×1 boundary.
-export const TIME_COMPRESSION_MAX_FACTOR = 4;
+// The host may offer eight ordinary fixed ticks per wall-clock tick when measured cost permits it.
+// The kernel independently tapers predictable contact/fuel/GCAS/ram boundaries through 8→4→2→1;
+// the renderer cannot declare that higher rate safe or bypass an immediate pilot/damage handback.
+export const TIME_COMPRESSION_MAX_FACTOR = 8;
 export const TIME_COMPRESSION_SIM_BUDGET_MS = 8;
 export const TIME_COMPRESSION_INITIAL_TICK_COST_MS = 1;
 
 const finitePositive = (value, fallback) => {
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
+};
+
+const powerOfTwoFactorCap = (maximum) => {
+  const cap = Math.max(1, Math.floor(Number(maximum) || 1));
+  if (cap >= 8) return 8;
+  if (cap >= 4) return 4;
+  if (cap >= 2) return 2;
+  return 1;
 };
 
 /**
@@ -58,7 +66,7 @@ export class MeasuredTimeCompressionBudget {
     const affordableTicks = baseTicks === 0 ? 0 : Math.max(
       baseTicks, Math.floor(this.budgetMs / this.tickCostMs),
     );
-    const maximumFactor = baseTicks === 0 ? 1 : Math.max(1, Math.min(
+    const maximumFactor = baseTicks === 0 ? 1 : powerOfTwoFactorCap(Math.min(
       this.maximumFactor, Math.floor(affordableTicks / baseTicks),
     ));
     const scheduledTicks = baseTicks * maximumFactor;

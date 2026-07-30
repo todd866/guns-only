@@ -350,6 +350,40 @@ test("G-LOC and Auto-GCAS lessons coexist exactly once", () => {
   assert.equal(result.brief.match(/Auto-GCAS:/g)?.length, 1);
 });
 
+test("Rapier exceedance evidence queues review without inventing damage or cost", () => {
+  const result = sortieResultCopy({
+    sortie_outcome: "VICTORY",
+    service_life_record_available: true,
+    service_life_exceedance_review_required: true,
+    service_life_over_structural_limit_s: 9.245,
+    service_life_over_dynamic_pressure_s: 58.231,
+    service_life_max_g: 15.043,
+    service_life_damage_assessment: "not_computed",
+    service_life_cost_projection: "not_computed",
+  });
+
+  assert.equal(result.serviceLifeReviewRequired, true);
+  assert.match(result.brief, /9\.2 s above the structural limit, peak 15\.0 G/);
+  assert.match(result.brief, /58\.2 s above the q placard/);
+  assert.match(result.brief, /Maintenance assessment pending/);
+  assert.match(result.brief, /no damage or repair cost has been inferred/);
+  assert.doesNotMatch(result.brief, /\$|grounded|condemned/i);
+});
+
+test("a clean or unfinished lifecycle record adds no debrief clutter", () => {
+  const expected = sortieResultCopy({ sortie_outcome: "VICTORY" });
+  assert.deepEqual(sortieResultCopy({
+    sortie_outcome: "VICTORY",
+    service_life_record_available: false,
+    service_life_exceedance_review_required: true,
+  }), expected);
+  assert.deepEqual(sortieResultCopy({
+    sortie_outcome: "VICTORY",
+    service_life_record_available: true,
+    service_life_exceedance_review_required: false,
+  }), expected);
+});
+
 test("combat handoff presentation preserves every authoritative phase flag", () => {
   const available = combatHandoffPresentation({
     combat_handoff_phase: "AVAILABLE",

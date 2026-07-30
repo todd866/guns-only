@@ -377,12 +377,15 @@ test("phone settings remain scrollable and collapse desktop-only binding density
     "touchmove protection must exempt every scrollable modal surface");
 });
 
-test("touch flight uses distinct spring-loaded flight and look/fire sticks", () => {
+test("touch flight separates spring-loaded flight, look, target selection, and fire", () => {
   const buttons = htmlButtons(indexSource);
   const stick = buttons.filter((button) =>
     button.attributes["data-mobile-action"] === "virtual-stick");
   const targetStick = buttons.filter((button) =>
     button.attributes["data-mobile-action"] === "target-stick");
+  const targetCycle = buttons.filter((button) =>
+    button.attributes["data-mobile-action"] === "target-cycle");
+  const fire = buttons.filter((button) => button.attributes.id === "touch-fire");
   // The ban protects against the old four-button directional pad returning as the PRIMARY
   // flight control. Portrait assisted flight (Build 75) deliberately carries exactly two
   // marked pitch-bias chips (PULL/EASE) on top of tilt; lateral buttons stay banned outright.
@@ -394,9 +397,13 @@ test("touch flight uses distinct spring-loaded flight and look/fire sticks", () 
   assert.equal(stick.length, 1, "fallback mode needs one visible thumb target");
   assert.equal(stick[0].attributes.id, "fallback-stick");
   assert.equal(stick[0].attributes["aria-label"], "Left flight stick");
-  assert.equal(targetStick.length, 1, "touch mode needs one separate look/fire target");
+  assert.equal(targetStick.length, 1, "touch mode needs one separate look target");
   assert.equal(targetStick[0].attributes.id, "target-stick");
-  assert.equal(targetStick[0].attributes["aria-label"], "Right look and fire stick");
+  assert.equal(targetStick[0].attributes["aria-label"], "Right look stick");
+  assert.equal(targetCycle.length, 1, "touch mode needs an explicit target selector");
+  assert.equal(targetCycle[0].attributes.id, "touch-target-cycle");
+  assert.equal(fire.length, 1, "touch mode needs a dedicated fire control");
+  assert.equal(fire[0].attributes["data-hold-key"], "KeyF");
   assert.equal(lateralButtons.length, 0,
     "lateral directional buttons must not return");
   assert.equal(pitchButtons.length, 2, "exactly the two assisted pitch-bias chips");
@@ -420,9 +427,41 @@ test("touch flight uses distinct spring-loaded flight and look/fire sticks", () 
   assert.match(appSource,
     /\.touch-mode #test-flight-console,[\s\S]*?\.touch-mode #nav-console,[\s\S]*?\.touch-mode #multiplayer-status[\s\S]*?display: none !important/,
     "phone flight must remove diagnostic and network panels from the two-thumb view");
-  assert.match(appSource,
+  assert.doesNotMatch(appSource,
     /\.touch-mode\.touch-primary #touch-fire[\s\S]*?display: none !important/,
-    "the right stick owns firing, so the redundant phone FIRE button must not consume space");
+    "the primary phone profile must expose the dedicated FIRE button");
+  assert.match(indexSource,
+    /\.portrait-assist \.touch-right\s*\{\s*display:\s*flex/,
+    "portrait flight must keep TARGET, PADLOCK, and FIRE reachable");
+  assert.match(appSource,
+    /@media \(orientation: portrait\)[\s\S]*?\.touch-mode\.touch-primary \.touch-right[\s\S]*?min\(36vw, 156px\)/,
+    "the live mobile override must park actions above, not underneath, the right stick");
+  assert.match(appSource,
+    /touchTargetCycleButton\?\.addEventListener\("click"[\s\S]*?cyclePadlockTarget\(\)/,
+    "the touch target control must use the same persistent selection path as Tab");
+  assert.match(appSource,
+    /touchTargetNumber\.textContent = patternOnly \? "NEXT" : String\(selectedNumber\)/,
+    "the selected contact number must remain visible on the control");
+  assert.match(appSource,
+    /patternOnly \? circuitsPadlockTargets\(latestState\)[\s\S]*?touchTargetLabel\.textContent = patternOnly \? "TRAFFIC" : "TARGET"[\s\S]*?patternOnly \? "NEXT"/,
+    "the same touch control must expose circuit-traffic cycling instead of disappearing");
+  const beginLook = appSource.match(
+    /function beginTargetStick\(event\)\s*\{([\s\S]*?)\n\s*function moveTargetStick/,
+  )?.[1] ?? "";
+  assert.ok(beginLook, "look-stick pointerdown path must remain inspectable");
+  assert.doesNotMatch(beginLook, /pressMappedKey|Touch:TargetStickFire|armAudio/,
+    "touching the look stick must never fire or arm weapon audio");
+  assert.match(beginLook, /fire:\s*false/,
+    "look-stick telemetry must explicitly record that it did not fire");
+  const releaseLook = appSource.match(
+    /function releaseTargetStick\(\)\s*\{([\s\S]*?)\n\s*function beginTargetStick/,
+  )?.[1] ?? "";
+  assert.ok(releaseLook, "look-stick release path must remain inspectable");
+  assert.doesNotMatch(releaseLook, /KeyF|TargetStickFire|releaseMappedKey/,
+    "releasing the look stick must not own or disturb the gun trigger");
+  assert.match(appSource,
+    /querySelectorAll\("\[data-hold-key\]"\)[\s\S]*?physicalCode === "KeyF"[\s\S]*?view\.hud\.armAudio\(\)/,
+    "the dedicated FIRE control must retain the ordinary held-gun and audio-arm path");
 
   assert.match(appSource,
     /fallbackStick\?\.addEventListener\("pointerdown", beginVirtualStick[\s\S]*?pointermove", moveVirtualStick[\s\S]*?pointerup", endVirtualStick[\s\S]*?pointercancel", endVirtualStick[\s\S]*?lostpointercapture", endVirtualStick/,
@@ -568,7 +607,7 @@ test("nothing in the menu is gated behind anything else", () => {
   // this was a programme of exercises; both aircraft are now available from a cold start, with no
   // qualification, no sequence gate and no LOCKED state to render.
   assert.match(progressionSource,
-    /id: "first-merge"[\s\S]*?mission: 7[\s\S]*?id: "low-level-drone"[\s\S]*?mission: 8[\s\S]*?id: "rapier-intercept"[\s\S]*?mission: 10/);
+    /id: "first-merge"[\s\S]*?mission: 7[\s\S]*?id: "low-level-drone"[\s\S]*?mission: 8[\s\S]*?id: "rapier-intercept"[\s\S]*?mission: 12/);
   assert.match(progressionSource,
     /function campaignNodeUnlocked[\s\S]*?return Boolean\(campaignNode\(nodeId\)\)/,
     "availability must depend on the node existing, not on what the pilot has flown");

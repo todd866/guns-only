@@ -245,7 +245,7 @@ public class RapierCircuitOftTests {
         session.Begin();
 
         string[] expectedLegs = [
-            "DEPART", "INITIAL", "BREAK", "DOWNWIND",
+            "DEPART", "INITIAL", "BREAK", "CROSSWIND", "DOWNWIND",
             "BASE", "SHORT_FINAL", "WIRE_FINAL"
         ];
         var seenLegs = new List<string>();
@@ -412,7 +412,8 @@ public class RapierCircuitOftTests {
                 reason = session.RapierPhaseReason;
                 if (session.RapierRecoveryGate == 0
                     && session.Player.State.Position.Y > 600.0
-                    && session.RapierCircuitLeg is "INITIAL" or "BREAK" or "DOWNWIND"
+                    && session.RapierCircuitLeg is
+                        "INITIAL" or "BREAK" or "CROSSWIND" or "DOWNWIND"
                     && tick > AircraftSim.TickHz / 2)
                     break;
             }
@@ -421,7 +422,8 @@ public class RapierCircuitOftTests {
 
         bool ok = sawRecovery && session.RapierRecoveryGate == 0
             && session.PlayerTerminalState == AircraftTerminalState.Flying
-            && (session.RapierCircuitLeg is "INITIAL" or "BREAK" or "DOWNWIND" or "BASE"
+            && (session.RapierCircuitLeg is
+                "INITIAL" or "BREAK" or "CROSSWIND" or "DOWNWIND" or "BASE"
                 or "SHORT_FINAL");
         string detail = $"phase {session.RapierPhase} gate {session.RapierRecoveryGate} "
             + $"leg {session.RapierCircuitLeg} reason {reason} cue {session.RapierMissionCue}";

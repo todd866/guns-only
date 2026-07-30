@@ -116,6 +116,8 @@ internal static class SnapshotProjection {
         Carrier.TouchdownResult _touchdown = Session.Touchdown;
         ArrestmentModel _arrestment = Session.Arrestment;
         CatapultLaunchModel _catapult = Session.Catapult;
+        RapierServiceLifeSortieRecord? serviceLife =
+            Session.RapierServiceLife.LatestRecord;
         DoctrineAdvice _advice = Session.Advice;
         PromptCue _cue = Session.Cue;
         double _simTimeMs = Session.TimeMilliseconds;
@@ -390,9 +392,22 @@ internal static class SnapshotProjection {
             + $"\"time_compression_enabled\":{(Session.TimeCompressionPilotEnabled ? "true" : "false")},"
             + $"\"time_compression_eligible\":{(Session.TimeCompressionEligible ? "true" : "false")},"
             + $"\"time_compression_requested_factor\":{Session.TimeCompressionRequestedFactor},"
+            + $"\"time_compression_safety_factor_cap\":{Session.TimeCompressionSafetyFactorCap},"
             + $"\"time_compression_factor\":{Session.TimeCompressionFactor},"
             + $"\"time_compression_inhibit_reason\":\"{TimeCompressionInhibitToken(Session.TimeCompressionInhibitReason)}\","
             + $"\"rapier_mission_available\":{(Session.RapierMissionAvailable ? "true" : "false")},"
+            + $"\"service_life_record_available\":{(serviceLife is not null ? "true" : "false")},"
+            + $"\"service_life_record_sequence\":{serviceLife?.RecordSequence ?? 0L},"
+            + $"\"service_life_record_sha256\":{JsonString(serviceLife?.RecordSha256 ?? "")},"
+            + $"\"service_life_evidence_status\":{JsonString(serviceLife?.EvidenceStatus.ToString().ToUpperInvariant() ?? "UNAVAILABLE")},"
+            + $"\"service_life_exceedance_review_required\":{(serviceLife?.ExceedanceReviewRequired == true ? "true" : "false")},"
+            + $"\"service_life_over_structural_limit_s\":{(serviceLife?.Mechanical.StructuralLimitExceedanceTicks ?? 0L) / AircraftSim.TickHz:F3},"
+            + $"\"service_life_over_dynamic_pressure_s\":{(serviceLife?.Mechanical.DynamicPressureLimitExceedanceTicks ?? 0L) / AircraftSim.TickHz:F3},"
+            + $"\"service_life_max_g\":{(serviceLife?.Mechanical.MaximumLoadMilliG ?? 0L) / 1000.0:F3},"
+            + $"\"service_life_max_dynamic_pressure_kpa\":{(serviceLife?.Mechanical.MaximumDynamicPressurePa ?? 0L) / 1000.0:F2},"
+            + $"\"service_life_min_thermal_margin_c\":{(serviceLife?.ThermalProxy.MinimumThermalMarginMilliK ?? 0L) / 1000.0:F1},"
+            + $"\"service_life_damage_assessment\":\"{RapierServiceLifeRecorder.DamageAssessment}\","
+            + $"\"service_life_cost_projection\":\"{RapierServiceLifeRecorder.CostProjection}\","
             + $"\"rapier_pattern_only\":{(Session.Beat.ScriptedIntercept?.PatternOnly == true ? "true" : "false")},"
             + $"\"rapier_automation_enabled\":{(Session.RapierAutomationEnabled ? "true" : "false")},"
             + $"\"rapier_automation_active\":{(Session.RapierAutomationActive ? "true" : "false")},"
@@ -508,7 +523,7 @@ internal static class SnapshotProjection {
             + $"\"finished\":{(finished ? "true" : "false")},\"session_phase\":\"{sessionPhase}\","
             + $"\"sortie_outcome\":\"{SortieOutcomeToken(Session.Outcome)}\","
             + $"\"pending_sortie_outcome\":\"{SortieOutcomeToken(Session.PendingOutcome)}\","
-            + PointsLedgerJson(finished)
+            + RapierEconomyJson(finished)
             + $"\"terminal_phase_active\":{(Session.TerminalPhaseActive ? "true" : "false")},"
             + $"\"player_terminal_state\":\"{TerminalStateToken(Session.PlayerTerminalState)}\","
             + $"\"opponent_terminal_state\":\"{TerminalStateToken(Session.OpponentTerminalState)}\","
@@ -1393,41 +1408,65 @@ internal static class SnapshotProjection {
         _ => "NONE"
     };
 
-    static string PointsLedgerJson(bool finished) {
+    static string RapierEconomyJson(bool finished) {
         double initialFuelLb = Session.Beat.FuelLoadout.InitialFuelLb;
         double burnedLb = Math.Max(0.0, initialFuelLb - Session.PlayerFuel.FuelLb);
         bool playerLost = Session.Outcome == SortieOutcome.Defeat
             || Session.PlayerTerminalState != AircraftTerminalState.Flying;
-        bool playerAlive = Session.PlayerAlive && !playerLost;
-        bool banditDestroyed = !Session.PlayerGun.BanditAlive;
+        bool targetNeutralized = !Session.PlayerGun.BanditAlive;
         bool cleanRecovery = Session.Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped
             || Session.Recovery == Carrier.Recovery.Trap
             || Session.ConventionalRunwayPhase == RunwayRecoveryPhase.Recovered;
-        PointsLedgerSlip slip = PointsLedger.Evaluate(
-            new SortieLedgerFacts(
+        RapierServiceLifeSortieRecord? serviceLife =
+            Session.RapierServiceLife.LatestRecord;
+        RapierJobKind target =
+            Session.Beat.ScriptedIntercept?.Job
+            ?? RapierJobKind.FormationIntercept;
+        RapierEconomicSortieSlip slip = RapierEconomicModel.Evaluate(
+            new RapierEconomicSortieFacts(
+                EconomicMode: Session.Beat.MissionIdentity.EconomicMode,
                 Finished: finished,
-                PlayerAlive: playerAlive,
-                BanditDestroyed: banditDestroyed,
+                Target: target,
+                TargetNeutralized: targetNeutralized,
                 CleanRecovery: cleanRecovery,
+                PlayerLost: playerLost,
                 FuelBurnedLb: burnedLb,
-                PlayerLost: playerLost),
-            balanceBefore: 0);
+                RoundsExpended:
+                    serviceLife?.Consumables.RoundsExpended
+                    ?? Session.PlayerGun.RoundsFired,
+                ExceedanceInspectionRequired:
+                    serviceLife?.ExceedanceReviewRequired == true,
+                EvidenceStatus:
+                    serviceLife?.EvidenceStatus
+                    ?? RapierServiceLifeEvidenceStatus.Partial));
         var lines = new System.Text.StringBuilder();
         lines.Append('[');
         for (int i = 0; i < slip.Lines.Count; i++) {
             if (i > 0) lines.Append(',');
-            LedgerLine line = slip.Lines[i];
+            RapierEconomicLine line = slip.Lines[i];
             lines.Append('{')
+                .Append("\"category\":").Append(JsonString(line.Category))
+                .Append(',')
                 .Append("\"code\":").Append(JsonString(line.Code))
                 .Append(",\"label\":").Append(JsonString(line.Label))
-                .Append(",\"points\":").Append(line.Points)
+                .Append(",\"credits\":").Append(line.Credits)
                 .Append('}');
         }
         lines.Append(']');
         return $"\"fuel_initial_lb\":{initialFuelLb:F1},"
-            + $"\"points_sortie_net\":{slip.SortieNet},"
-            + $"\"points_lines\":{lines},"
-            + $"\"points_clearance_sortie\":\"{slip.Clearance.ToString().ToUpperInvariant()}\",";
+            + $"\"rapier_economy_active\":{(slip.Active ? "true" : "false")},"
+            + $"\"rapier_economy_model_id\":{JsonString(slip.ModelId)},"
+            + $"\"rapier_economy_currency\":{JsonString(slip.Currency)},"
+            + $"\"rapier_economy_price_basis_id\":{JsonString(slip.PriceBasisId)},"
+            + $"\"rapier_economy_target_kind\":{JsonString(target.ToString().ToUpperInvariant())},"
+            + $"\"rapier_economy_target_contract_id\":{JsonString(slip.Target.Id)},"
+            + $"\"rapier_economy_target_label\":{JsonString(slip.Target.Label)},"
+            + $"\"rapier_economy_target_reward_credits\":{slip.Target.NeutralizationCredit},"
+            + $"\"rapier_economy_application_key\":{JsonString(serviceLife?.RecordSha256 ?? "")},"
+            + $"\"rapier_economy_sortie_net_credits\":{slip.SortieNetCredits},"
+            + $"\"rapier_economy_inspection_reserved\":{(slip.InspectionReserved ? "true" : "false")},"
+            + $"\"rapier_economy_damage_cost_computed\":{(slip.DamageCostComputed ? "true" : "false")},"
+            + $"\"rapier_economy_lines\":{lines},";
     }
 
     static string EventTypeToken(SessionEventType type) => type switch {

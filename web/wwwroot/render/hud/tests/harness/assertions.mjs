@@ -356,72 +356,73 @@ function assertFunnelContainsTarget(data) {
     + ` at r=${best.rangeM.toFixed(0)} m`);
 }
 
-function assertPadlockInsetAndLocator(data) {
+function assertPadlockActionAndLocator(data) {
   const { name, geometry, probes, padlockState, state } = data;
   if (!data.padlock || padlockState?.target === "carrier") return;
 
-  // The body-fixed locator inset is the padlock's single ownship instrument: always present in
-  // bandit padlock, valid at every camera attitude (that is the point of being body-fixed).
-  const inset = geometry.padlockInset;
-  check(name, "locator inset present in bandit padlock", Boolean(inset),
-    inset ? "present" : "missing");
-  if (!inset) return;
-
-  const bankDeg = Number(data.state.bank_deg) || 0;
-  check(name, "inset ADI bank == ownship bank",
-    Math.abs(inset.bankDeg - bankDeg) <= 1e-9, `${inset.bankDeg} vs ${bankDeg}`);
-  const pitchDeg = Number(data.state.pitch_deg) || 0;
-  const expectedHorizonOffset = pitchDeg * inset.ballRadius / 35;
-  check(name, "inset horizon uses the full body pitch without shallow-attitude clamping",
-    Number.isFinite(inset.horizonOffsetPx)
-      && Math.abs(inset.horizonOffsetPx - expectedHorizonOffset) <= 1e-9,
-    `offset ${inset.horizonOffsetPx?.toFixed?.(2)} px vs `
-      + `${expectedHorizonOffset.toFixed(2)} px for pitch ${pitchDeg} deg`);
-  if (Math.abs(pitchDeg) > 35) {
-    check(name, "steep attitude lets the true horizon leave the ball",
-      Math.abs(inset.horizonOffsetPx) > inset.ballRadius,
-      `|offset| ${Math.abs(inset.horizonOffsetPx).toFixed(2)} px > `
-        + `radius ${inset.ballRadius.toFixed(2)} px`);
-  }
-  const expectedBankPointer = -Math.PI / 2 + bankDeg * DEG;
-  check(name, "bank pointer follows ownship bank on the fixed scale",
-    Math.abs(inset.bankPointerAngleRad - expectedBankPointer) <= 1e-9,
-    `${(inset.bankPointerAngleRad * RAD).toFixed(3)} deg vs `
-      + `${(expectedBankPointer * RAD).toFixed(3)} deg`);
-
-  // The gate is the signed BODY-FRAME roll error, never mirrored by camera azimuth or target
-  // hemisphere. Chevrons therefore always mean keyboard roll direction.
+  // Steering is one body-fixed action, never a second attitude ball. The action must agree with
+  // the fixed-tick roll director and carry only compact ownship cross-checks.
+  const action = geometry.padlockAction;
   const director = geometry.padlockDirector;
-  if (director && !director.captured && !director.anyPlane) {
+  const radarAltFt = Number(state.radar_alt_ft);
+  const sinkFpm = Number(state.vertical_speed_fpm);
+  const pitchDeg = Number(state.pitch_deg);
+  const urgentPull = state.auto_gcas_active === true
+    || state.auto_gcas_warning === true
+    || (radarAltFt < 2000 && (pitchDeg < -2 || sinkFpm < -1500))
+    || (state.auto_gcas_available !== true && radarAltFt < 500 && sinkFpm < -1000);
+  if (director || urgentPull) {
+    check(name, "padlock has exactly one actionable steering strip", Boolean(action),
+      action ? `${action.action} ${action.direction}` : "missing");
+  }
+  if (action) {
+    const bankDeg = Number(state.bank_deg) || 0;
+    const pitchDeg = Number(state.pitch_deg) || 0;
+    check(name, "action strip bank and pitch are ownship truth",
+      Math.abs(action.bankDeg - bankDeg) <= 1e-9
+        && Math.abs(action.pitchDeg - pitchDeg) <= 1e-9,
+      `bank ${action.bankDeg}/${bankDeg}; pitch ${action.pitchDeg}/${pitchDeg}`);
+    check(name, "portrait-safe action label stays compact",
+      /^T[12] · (?:ROLL [LR] \d+°|PULL(?: UP)?)$/.test(action.displayLabel ?? ""),
+      `displayLabel=${JSON.stringify(action.displayLabel)}`);
+  }
+
+  if (urgentPull && action) {
+    check(name, "ground/GCAS danger pre-empts combat steering with PULL UP",
+      action.action === "PULL UP" && action.direction === "up",
+      `action=${action.action}; direction=${action.direction}`);
+  } else if (director && action && !director.captured && !director.anyPlane) {
     const expectedRollErrorRad = state.padlock_preferred_plane_valid === true
       ? Number(state.padlock_preferred_plane_deg) * DEG
       : probes.padlockRollErrorRad;
-    const error = Math.abs(inset.gateAngleFromUpRad - expectedRollErrorRad);
+    const error = Math.abs(action.rollErrorRad - expectedRollErrorRad);
+    const expectedDirection = expectedRollErrorRad >= 0 ? "right" : "left";
     check(name, state.padlock_preferred_plane_valid === true
-      ? "inset gate == kernel preferred-plane error"
-      : "inset gate == body-frame roll error (never mirrored)",
+      ? "action == kernel preferred-plane error"
+      : "action == body-frame roll error (never mirrored)",
       error <= 1e-9,
       `error ${(error * RAD).toFixed(9)} deg`);
-  } else if (director && (director.captured || director.anyPlane)) {
-    check(name, "captured/neutral gate sits on the lift line",
-      inset.gateAngleFromUpRad === 0,
-      `gate ${inset.gateAngleFromUpRad}`);
+    check(name, "action names the correct roll direction once",
+      action.direction === expectedDirection
+        && action.action.startsWith(`ROLL ${expectedDirection.toUpperCase()}`),
+      `action=${action.action}; direction=${action.direction}`);
+  } else if (director && action && (director.captured || director.anyPlane)) {
+    check(name, "captured/neutral director becomes one PULL command",
+      action.action === "PULL" && action.direction === "up",
+      `action=${action.action}; direction=${action.direction}`);
   }
-  check(name, "neutral ring follows the dead-six anyPlane state",
-    Boolean(inset.neutral) === Boolean(director?.anyPlane),
-    `neutral=${inset.neutral}; anyPlane=${director?.anyPlane}`);
 
-  // AFT / shoulder language from the body-frame hemisphere.
-  if (probes.padlockTargetForward < -0.17) {
+  // AFT language remains body-relative but drops the verbose shoulder instruction.
+  if (action && probes.padlockTargetForward < -0.17) {
     const ambiguous = Math.abs(probes.padlockTargetRight) < 0.05;
     const expectedShoulder = probes.padlockTargetRight >= 0 ? "R" : "L";
-    check(name, "aft label present with the correct shoulder",
-      typeof inset.aftLabel === "string"
-        && inset.aftLabel.includes("AFT")
+    check(name, "action strip names the correct aft side",
+      typeof action.hemisphere === "string"
+        && action.hemisphere.includes("AFT")
         && (ambiguous
-          ? !inset.aftLabel.includes("SHOULDER")
-          : inset.aftLabel.includes(`${expectedShoulder} SHOULDER`)),
-      `label "${inset.aftLabel}" for targetRight ${probes.padlockTargetRight.toFixed(3)}`);
+          ? !/[LR]$/.test(action.hemisphere)
+          : action.hemisphere.endsWith(expectedShoulder)),
+      `hemisphere "${action.hemisphere}" for targetRight ${probes.padlockTargetRight.toFixed(3)}`);
   }
 
   // The off-axis locator caret must track the camera-space great-circle direction to the
@@ -618,28 +619,49 @@ function assertRapierMission(data) {
     `box=${line.x},${line.y} ${line.width}x${line.height}`);
 
   const phase = Math.floor(Number(state.rapier_mission_phase) || 0);
+  const circuits = state.rapier_pattern_only === true;
   const drones = Math.floor(Number(state.rapier_gun_drones_remaining) || 0);
   const gate = Math.floor(Number(state.rapier_recovery_gate) || 0);
 
-  if (phase === 10) {
+  if (!circuits && phase === 10) {
     check(name, "attack mode line authorizes F swarm release",
       /F RELEASES SWARM/i.test(line.text) && line.text.includes(String(drones)),
       line.text);
     check(name, "attack level is attack (not buried under propulsion essay)",
       line.level === "attack", `level=${line.level}`);
   }
-  if (phase === 11) {
+  if (!circuits && phase === 11) {
     check(name, "egress mode line is short EGRESS · HOME",
       /EGRESS/.test(line.text) && /HOME/.test(line.text) && !/NEED/.test(line.text),
       line.text);
   }
-  if (phase === 13) {
+  if (!circuits && phase === 13) {
     check(name, "recovery mode line carries gate index",
       line.text.includes(`GATE ${gate}/4`),
       line.text);
   }
 
   const panel = geometry.limitsPanel;
+  if (circuits) {
+    check(name, "Circuits line is only authority plus current leg",
+      line.text.endsWith(String(state.rapier_circuit_leg).replaceAll("_", " "))
+        && !/CIRCUITS|HOOK|GEAR|ELEVONS|\d+ KT|\d+ FT/.test(line.text),
+      line.text);
+    check(name, "non-limiting Circuits fuel stays latent",
+      !panel, panel ? `${panel.profile} rows=${panel.rows?.length}` : "absent");
+    if (name.includes("rapier-circuits-downwind-verified")) {
+      check(name, "verified Circuits configuration expires",
+        !geometry.systemsPanel,
+        geometry.systemsPanel ? "systems panel still drawn" : "absent");
+    }
+    if (name.includes("rapier-circuits-downwind-config-due")) {
+      check(name, "configuration disagreement resurfaces VERIFY",
+        Boolean(geometry.systemsPanel),
+        geometry.systemsPanel ? "systems panel drawn" : "missing");
+    }
+    return;
+  }
+
   const compact = panel?.compact === true;
   const expectedRows = compact ? 2 : 5;
   check(name, "Rapier Limits Panel is drawn (nav to strip)",
@@ -754,7 +776,7 @@ async function runViewport(site, browser, { label, width, height, subset }) {
     if (data.padlock) assertPadlockDirector(data);
     assertTargetTwoDirector(data);
     assertPresentationCaptureSequence(data);
-    assertPadlockInsetAndLocator(data);
+    assertPadlockActionAndLocator(data);
     assertBasicJobs(data);
     assertGunHeat(data);
     assertSpeedBrake(data);

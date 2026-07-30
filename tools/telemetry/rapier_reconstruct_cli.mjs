@@ -24,6 +24,9 @@ Options:
 Inputs must be local .jsonl or .jsonl.gz files already on disk. This command never
 contacts the network, reads credentials, or downloads telemetry. Missing rows and
 coverage intervals are recorded explicitly; state is never invented across a gap.
+The JSON output includes an audit verdict/findings plus raw exposure evidence. Legacy
+clock origins are repaired only when stable wall_epoch_ms anchors prove the offset;
+otherwise the clock is explicitly reported as unverified.
 
 WARNING: Never download telemetry through the Vercel dashboard, a browser, the Codex
 Chrome bridge, or browser automation. Use tools/telemetry/download.mjs or
@@ -113,6 +116,9 @@ export async function main(args = process.argv.slice(2), io = console) {
     decoded_samples: reconstruction.coverage.decoded_samples,
     covered_video_fraction: reconstruction.coverage.covered_video_fraction,
     gaps: reconstruction.gaps.length,
+    audit_verdict: reconstruction.audit.verdict,
+    audit_findings: reconstruction.audit.finding_counts,
+    clock_status: reconstruction.coverage.clock.status,
     events: reconstruction.events.length,
     sources: reconstruction.sources.map(({ basename: name, sha256 }) => ({ basename: name, sha256 })),
   }));

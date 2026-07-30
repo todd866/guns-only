@@ -7,11 +7,13 @@ import argparse
 from array import array
 import base64
 import hashlib
+import importlib.util
 import io
 import json
 import math
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -39,6 +41,88 @@ VALID_VOICES = {
     "alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx",
     "sage", "shimmer", "verse", "marin", "cedar",
 }
+VALID_TALKER_PROFILES = {
+    "rapier.pressure-vessel.emergency-mask",
+    "modern.fast-jet.oxygen-mask",
+    "korea.f9f.a13a-mask",
+    "ground.controller.close-mic",
+    "carrier.deck-lso.close-mic",
+}
+VALID_TRANSCEIVER_PROFILES = {
+    "modern.uhf-am.airborne",
+    "modern.uhf-am.ground",
+    "modern.uhf-am.deck",
+    "korea.arc-1.vhf-airborne",
+    "korea.arc-1.vhf-ship",
+}
+VALID_CADENCE_PACES = {
+    "clear-even",
+    "compressed",
+    "measured",
+    "connected",
+}
+SPOKEN_WORD = re.compile(r"[a-z0-9]+(?:['’][a-z0-9]+)?", re.IGNORECASE)
+_RT_PERFORMANCE = None
+_RT_PROFILES = None
+
+
+def normalized_spoken_words(text: str) -> list[str]:
+    return [word.lower() for word in SPOKEN_WORD.findall(text)]
+
+
+def rt_performance_module():
+    """Load the sibling audit tool without assuming tools/audio is on sys.path."""
+    global _RT_PERFORMANCE
+    if _RT_PERFORMANCE is not None:
+        return _RT_PERFORMANCE
+    module_path = Path(__file__).with_name("rt_performance.py")
+    specification = importlib.util.spec_from_file_location(
+        "guns_only_rt_performance", module_path
+    )
+    if specification is None or specification.loader is None:
+        raise RuntimeError(f"cannot load R/T performance audit module: {module_path}")
+    module = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(module)
+    _RT_PERFORMANCE = module
+    return module
+
+
+def rt_profiles():
+    global _RT_PROFILES
+    if _RT_PROFILES is None:
+        _RT_PROFILES = rt_performance_module().load_profiles()
+    return _RT_PROFILES
+
+
+def analyze_rt_take(path: Path, line: dict) -> dict | None:
+    profile = line.get("rt_profile")
+    if profile is None:
+        return None
+    return rt_performance_module().analyze_wav(
+        path,
+        str(line["text"]),
+        str(profile),
+        rt_profiles(),
+    )
+
+
+def compact_rt_result(result: dict | None) -> dict | None:
+    if result is None:
+        return None
+    keys = (
+        "status",
+        "profile",
+        "wordCount",
+        "durationSeconds",
+        "wholePacketWordsPerMinute",
+        "articulationWordsPerMinute",
+        "internalSilenceRatio",
+        "longestInternalPauseSeconds",
+        "errorCount",
+        "warningCount",
+        "issues",
+    )
+    return {key: result[key] for key in keys if key in result}
 
 
 def load_catalog(path: Path) -> dict:
@@ -97,6 +181,18 @@ def validate_catalog(catalog: dict) -> None:
                     )
         if not str(spec.get("instructions", "")).strip():
             raise ValueError(f"role {role!r} has no instructions")
+        if catalog["version"] >= 6:
+            talker_profile = str(spec.get("talker_profile", "")).strip()
+            if talker_profile not in VALID_TALKER_PROFILES:
+                raise ValueError(
+                    f"role {role!r} has unsupported talker_profile {talker_profile!r}"
+                )
+            transceiver_profile = str(spec.get("transceiver_profile", "")).strip()
+            if transceiver_profile not in VALID_TRANSCEIVER_PROFILES:
+                raise ValueError(
+                    f"role {role!r} has unsupported transceiver_profile "
+                    f"{transceiver_profile!r}"
+                )
         if "voice_settings" in spec and not isinstance(spec["voice_settings"], dict):
             raise ValueError(f"role {role!r} voice_settings must be an object")
     if provider == "cartesia" and not str(catalog.get("api_version", "")).strip():
@@ -137,6 +233,31 @@ def validate_catalog(catalog: dict) -> None:
                 raise ValueError(
                     f"line {line_id!r} Hume description exceeds 100 characters"
                 )
+        source_voice_fields = (
+            "source_voice_id",
+            "source_voice_name",
+            "source_casting_status",
+            "source_voice_context",
+        )
+        present_source_voice_fields = [
+            field for field in source_voice_fields if field in line
+        ]
+        if present_source_voice_fields:
+            if provider != "hume":
+                raise ValueError(
+                    f"line {line_id!r} source voice override is unsupported for "
+                    f"{provider}"
+                )
+            missing_source_voice_fields = [
+                field
+                for field in source_voice_fields
+                if not str(line.get(field, "")).strip()
+            ]
+            if missing_source_voice_fields:
+                raise ValueError(
+                    f"line {line_id!r} source voice override requires "
+                    f"{', '.join(source_voice_fields)}"
+                )
         if "speed" in line:
             speed = line["speed"]
             if provider == "hume":
@@ -152,6 +273,76 @@ def validate_catalog(catalog: dict) -> None:
         takes = line.get("takes", 1)
         if not isinstance(takes, int) or not 1 <= takes <= 4:
             raise ValueError(f"line {line_id!r} takes must be an integer from 1 to 4")
+        rt_profile = line.get("rt_profile")
+        cadence = line.get("cadence")
+        if rt_profile is not None:
+            profile_document = rt_profiles()["profiles"]
+            if rt_profile not in profile_document:
+                raise ValueError(
+                    f"line {line_id!r} has unknown rt_profile {rt_profile!r}"
+                )
+            if not isinstance(cadence, list) or not cadence:
+                raise ValueError(
+                    f"line {line_id!r} with rt_profile requires a cadence map"
+                )
+        elif cadence is not None:
+            raise ValueError(
+                f"line {line_id!r} cadence map requires an rt_profile"
+            )
+        if cadence is not None:
+            cadence_words = []
+            for unit_index, unit in enumerate(cadence):
+                if not isinstance(unit, dict):
+                    raise ValueError(
+                        f"line {line_id!r} cadence unit {unit_index} must be an object"
+                    )
+                unit_text = str(unit.get("text", "")).strip()
+                if not unit_text:
+                    raise ValueError(
+                        f"line {line_id!r} cadence unit {unit_index} requires text"
+                    )
+                if unit.get("pace") not in VALID_CADENCE_PACES:
+                    raise ValueError(
+                        f"line {line_id!r} cadence unit {unit_index} has invalid pace"
+                    )
+                if not str(unit.get("focus", "")).strip():
+                    raise ValueError(
+                        f"line {line_id!r} cadence unit {unit_index} requires focus"
+                    )
+                cadence_words.extend(normalized_spoken_words(unit_text))
+            if cadence_words != normalized_spoken_words(str(line["text"])):
+                raise ValueError(
+                    f"line {line_id!r} cadence text must cover the canonical "
+                    "spoken words in order"
+                )
+            profile = profile_document[rt_profile]
+            words = len(normalized_spoken_words(str(line["text"])))
+            if (
+                target_duration is not None
+                and words >= int(profile.get("minimumWordsForRate", 0))
+            ):
+                preferred_maximum_wpm = profile.get(
+                    "targetMaximumWordsPerMinute",
+                    profile.get("maximumWordsPerMinute"),
+                )
+                preferred_minimum_wpm = profile.get(
+                    "targetMinimumWordsPerMinute",
+                    profile.get("minimumWordsPerMinute"),
+                )
+                if preferred_maximum_wpm is not None:
+                    minimum_duration = words * 60.0 / preferred_maximum_wpm
+                    if target_duration[0] + 1e-9 < minimum_duration:
+                        raise ValueError(
+                            f"line {line_id!r} duration target permits speech "
+                            f"faster than its {rt_profile} preferred envelope"
+                        )
+                if preferred_minimum_wpm is not None:
+                    maximum_duration = words * 60.0 / preferred_minimum_wpm
+                    if target_duration[1] - 1e-9 > maximum_duration:
+                        raise ValueError(
+                            f"line {line_id!r} duration target permits speech "
+                            f"slower than its {rt_profile} preferred envelope"
+                        )
 
 
 def line_instructions(catalog: dict, line: dict, take: int = 1) -> str:
@@ -161,6 +352,17 @@ def line_instructions(catalog: dict, line: dict, take: int = 1) -> str:
     direction = str(line.get("direction", "")).strip()
     if direction:
         parts.append(f"This moment: {direction}")
+    cadence = line.get("cadence")
+    if cadence:
+        units = "; ".join(
+            f"“{unit['text']}” = {unit['pace']} ({unit['focus']})"
+            for unit in cadence
+        )
+        parts.append(
+            "Cadence map—relative pace inside one connected transmission: "
+            f"{units}. Preserve these pace changes; do not flatten every unit to "
+            "the same tempo or separate them into dramatic sentences."
+        )
     if "target_duration_s" in line:
         minimum, maximum = line["target_duration_s"]
         parts.append(
@@ -186,6 +388,18 @@ def line_speed(catalog: dict, line: dict) -> float:
     return float(line.get("speed", role.get("speed", 1.0)))
 
 
+def source_voice_id(catalog: dict, line: dict) -> str | None:
+    """Resolve the dry-performance voice without changing the runtime radio role."""
+    role = catalog["roles"][line["role"]]
+    return line.get("source_voice_id", role.get("voice_id"))
+
+
+def source_voice_name(catalog: dict, line: dict) -> str | None:
+    """Resolve the review-facing source voice name for provenance."""
+    role = catalog["roles"][line["role"]]
+    return line.get("source_voice_name", role.get("voice_name"))
+
+
 def take_filename(line_id: str, take: int) -> str:
     return f"{line_id}.wav" if take == 1 else f"{line_id}--t{take}.wav"
 
@@ -198,8 +412,11 @@ def source_hash(catalog: dict, line: dict, take: int = 1) -> str:
         "api_version": catalog.get("api_version"),
         "response_format": catalog["response_format"],
         "voice": role.get("voice"),
-        "voice_id": role.get("voice_id"),
+        "voice_id": source_voice_id(catalog, line),
         "voice_settings": role.get("voice_settings"),
+        # The microphone/mask affects the dry performance and must invalidate a take. The
+        # transceiver is applied non-destructively at runtime and deliberately is not hashed.
+        "talker_profile": role.get("talker_profile"),
         "speed": line_speed(catalog, line),
         "instructions": line_instructions(catalog, line, take),
         "description": (
@@ -329,7 +546,7 @@ def hume_speech_request(
     role = catalog["roles"][line["role"]]
     utterance = {
         "text": line["text"],
-        "voice": {"id": role["voice_id"]},
+        "voice": {"id": source_voice_id(catalog, line)},
         "speed": line_speed(catalog, line),
         "trailing_silence": 0.08,
     }
@@ -599,13 +816,24 @@ def write_atomic(path: Path, data: bytes) -> None:
         raise
 
 
-def build_manifest(catalog: dict, output_dir: Path) -> dict:
+def build_manifest(
+    catalog: dict,
+    output_dir: Path,
+    *,
+    trusted_sources: dict[str, str] | None = None,
+) -> dict:
     clips: dict[str, dict] = {}
     for line in catalog["lines"]:
         takes = []
         for take in range(1, line.get("takes", 1) + 1):
             wav_path = output_dir / take_filename(line["id"], take)
             if not wav_path.exists():
+                continue
+            expected_source = source_hash(catalog, line, take)
+            if (
+                trusted_sources is not None
+                and trusted_sources.get(wav_path.name) != expected_source
+            ):
                 continue
             wav = inspect_wav(wav_path)
             padding = wav_silence_padding(wav_path)
@@ -616,9 +844,9 @@ def build_manifest(catalog: dict, output_dir: Path) -> dict:
                 3,
             )
             target_duration = line.get("target_duration_s")
-            takes.append({
+            take_manifest = {
                 "url": f"./{wav_path.name}",
-                "source_sha256": source_hash(catalog, line, take),
+                "source_sha256": expected_source,
                 "file_sha256": hashlib.sha256(wav_path.read_bytes()).hexdigest(),
                 **wav,
                 **padding,
@@ -628,19 +856,36 @@ def build_manifest(catalog: dict, output_dir: Path) -> dict:
                     target_duration is None
                     or target_duration[0] <= audible_duration <= target_duration[1]
                 ),
-            })
+            }
+            rt_result = compact_rt_result(analyze_rt_take(wav_path, line))
+            if rt_result is not None:
+                take_manifest["rt_performance"] = rt_result
+            takes.append(take_manifest)
         if not takes:
             continue
         role = catalog["roles"][line["role"]]
         clips[line["id"]] = {
             "url": takes[0]["url"],
             "role": line["role"],
-            "voice": role.get("voice", role.get("voice_id")),
+            # The browser refuses to play a take unless this exact authored transcript matches
+            # current simulation state. Reusing an id after phraseology changes must fail silent,
+            # never put stale words on the air.
+            "transcript": line["text"],
+            "voice": role.get("voice", source_voice_id(catalog, line)),
+            "voice_name": source_voice_name(catalog, line),
+            "source_casting_status": line.get(
+                "source_casting_status",
+                role.get("casting_status"),
+            ),
+            "source_voice_context": line.get("source_voice_context"),
+            "talker_profile": role.get("talker_profile"),
+            "transceiver_profile": role.get("transceiver_profile"),
             "duration_s": max(take["duration_s"] for take in takes),
             "takes": takes,
         }
     return {
-        "version": 2,
+        "version": 3,
+        "equipment_profile_version": 1,
         "catalog_version": catalog["version"],
         "provider": catalog.get("provider", "openai"),
         "model": catalog["model"],
@@ -688,12 +933,69 @@ def write_durations(manifest: dict, durations_path: Path) -> int:
     return len(entries)
 
 
-def write_manifest(catalog: dict, output_dir: Path, manifest_path: Path) -> None:
-    manifest = build_manifest(catalog, output_dir)
+def write_manifest(
+    catalog: dict,
+    output_dir: Path,
+    manifest_path: Path,
+    *,
+    trusted_sources: dict[str, str] | None = None,
+) -> None:
+    if trusted_sources is None:
+        trusted_sources = manifest_source_hashes(
+            manifest_path, output_dir=output_dir
+        )
+    manifest = build_manifest(
+        catalog, output_dir, trusted_sources=trusted_sources
+    )
     write_atomic(
         manifest_path,
         (json.dumps(manifest, indent=2, sort_keys=False) + "\n").encode("utf-8"),
     )
+
+
+def manifest_source_hashes(
+    manifest_path: Path,
+    *,
+    output_dir: Path | None = None,
+) -> dict[str, str]:
+    """Return source hashes only for takes whose recorded file hash still matches."""
+    if not manifest_path.exists():
+        return {}
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    result: dict[str, str] = {}
+    clips = manifest.get("clips", {})
+    if not isinstance(clips, dict):
+        return result
+    for clip in clips.values():
+        if not isinstance(clip, dict):
+            continue
+        takes = clip.get("takes", [])
+        if not isinstance(takes, list):
+            continue
+        for take in takes:
+            if not isinstance(take, dict):
+                continue
+            url = str(take.get("url", "")).strip()
+            source = str(take.get("source_sha256", "")).strip()
+            if url and source:
+                name = Path(urllib.parse.urlparse(url).path).name
+                if not name:
+                    continue
+                if output_dir is not None:
+                    file_hash = str(take.get("file_sha256", "")).strip()
+                    wav_path = output_dir / name
+                    if (
+                        not file_hash
+                        or not wav_path.is_file()
+                        or hashlib.sha256(wav_path.read_bytes()).hexdigest()
+                            != file_hash
+                    ):
+                        continue
+                result[name] = source
+    return result
 
 
 def generate(
@@ -708,6 +1010,10 @@ def generate(
     api_url: str | None = None,
 ) -> int:
     made = 0
+    recorded_sources = manifest_source_hashes(
+        manifest_path, output_dir=output_dir
+    )
+    trusted_sources = dict(recorded_sources)
     for line in catalog["lines"]:
         if selected and line["id"] not in selected:
             continue
@@ -715,20 +1021,26 @@ def generate(
             wav_path = output_dir / take_filename(line["id"], take)
             if wav_path.exists() and not force:
                 inspect_wav(wav_path)
-                continue
+                expected_source = source_hash(catalog, line, take)
+                if recorded_sources.get(wav_path.name) == expected_source:
+                    continue
             if dry_run:
-                print(f"would generate {line['id']} take {take} -> {wav_path}")
+                action = "regenerate stale" if wav_path.exists() else "generate"
+                print(
+                    f"would {action} {line['id']} take {take} -> {wav_path}"
+                )
                 continue
             audio = speech_request(catalog, line, api_key, take=take, api_url=api_url)
-            write_atomic(wav_path, audio)
+            candidate_path = wav_path.with_name(f".{wav_path.name}.candidate")
+            write_atomic(candidate_path, audio)
             try:
-                normalize_wav(wav_path)
-                trim_wav_silence(wav_path)
-                wav = inspect_wav(wav_path)
-                padding = wav_silence_padding(wav_path)
+                normalize_wav(candidate_path)
+                trim_wav_silence(candidate_path)
+                wav = inspect_wav(candidate_path)
+                padding = wav_silence_padding(candidate_path)
                 if padding.get("trailing_silence_s", 0.0) > 0.12:
                     raise ValueError(
-                        f"WAV has excessive trailing silence after trim: {wav_path}"
+                        f"WAV has excessive trailing silence after trim: {candidate_path}"
                     )
                 if "target_duration_s" in line:
                     audible_duration = (
@@ -740,15 +1052,36 @@ def generate(
                     if not minimum <= audible_duration <= maximum:
                         raise ValueError(
                             f"WAV audible duration {audible_duration:.3f}s is outside "
-                            f"{minimum:g}-{maximum:g}s target: {wav_path}"
+                            f"{minimum:g}-{maximum:g}s target: {candidate_path}"
+                        )
+                rt_result = analyze_rt_take(candidate_path, line)
+                if rt_result is not None:
+                    if rt_result["status"] != "pass":
+                        codes = ", ".join(
+                            problem["code"]
+                            for problem in rt_result.get("issues", [])
+                        )
+                        raise ValueError(
+                            f"WAV does not pass {line['rt_profile']} R/T "
+                            f"performance profile ({rt_result['status']}: {codes}): "
+                            f"{candidate_path}"
                         )
             except Exception:
-                wav_path.unlink(missing_ok=True)
+                candidate_path.unlink(missing_ok=True)
                 raise
+            candidate_path.replace(wav_path)
+            trusted_sources[wav_path.name] = source_hash(
+                catalog, line, take
+            )
             made += 1
             print(f"generated {line['id']} take {take}")
     if not dry_run:
-        write_manifest(catalog, output_dir, manifest_path)
+        write_manifest(
+            catalog,
+            output_dir,
+            manifest_path,
+            trusted_sources=trusted_sources,
+        )
     return made
 
 
@@ -788,7 +1121,17 @@ def main() -> int:
         print(f"wrote {args.manifest}")
         return 0
     if args.command == "durations":
-        count = write_durations(build_manifest(catalog, args.output), args.durations)
+        trusted_sources = manifest_source_hashes(
+            args.manifest, output_dir=args.output
+        )
+        count = write_durations(
+            build_manifest(
+                catalog,
+                args.output,
+                trusted_sources=trusted_sources,
+            ),
+            args.durations,
+        )
         print(f"wrote {count} durations to {args.durations}")
         return 0
     provider = str(catalog.get("provider", "openai")).strip().lower()
@@ -815,7 +1158,17 @@ def main() -> int:
     )
     print(f"{made} clip(s) generated")
     if not args.dry_run:
-        count = write_durations(build_manifest(catalog, args.output), args.durations)
+        trusted_sources = manifest_source_hashes(
+            args.manifest, output_dir=args.output
+        )
+        count = write_durations(
+            build_manifest(
+                catalog,
+                args.output,
+                trusted_sources=trusted_sources,
+            ),
+            args.durations,
+        )
         print(f"wrote {count} durations to {args.durations}")
     return 0
 

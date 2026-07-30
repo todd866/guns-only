@@ -9,6 +9,10 @@ const DEFAULT_ENTRY_RESIDENT_CHUNKS = 8;
 const DEFAULT_ENTRY_HOLD_TIMEOUT_SECONDS = 6;
 const DEFAULT_ENTRY_CLEAR_SECONDS = 2.6;
 const DEFAULT_ENTRY_EXTINCTION_PER_M = 0.024;
+const RAPIER_CLOUD_BILLOWS_URL = new URL(
+  "../../content/packs/ukraine-modern/environment/textures/rapier-cloud-billows-v1.webp",
+  import.meta.url,
+).href;
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -397,6 +401,8 @@ const IMPOSTOR_VERTEX = /* glsl */ `
 const IMPOSTOR_FRAGMENT = /* glsl */ `
   precision highp float;
   uniform float uTime;
+  uniform sampler2D uCloudArt;
+  uniform float uCloudArtEnabled;
   uniform vec3 uLightColor;
   uniform vec3 uShadowColor;
   uniform vec3 uFogColor;
@@ -425,6 +431,16 @@ const IMPOSTOR_FRAGMENT = /* glsl */ `
     float detail = noise21(vCloudUv * 8.9 - vInstancePhase * 0.3);
     float envelope = 1.0 - smoothstep(0.44, 1.0, length(centred * vec2(0.83, 1.22)));
     float body = smoothstep(0.39, 0.61, broad * 0.72 + detail * 0.28 + envelope * 0.38);
+    // Placement, coverage and opacity stay authoritative. This texture contributes only a more
+    // deliberate painted silhouette than procedural threshold noise can give a billboard.
+    float artAngle = fract(vInstancePhase * 0.15915494) * 6.28318531;
+    mat2 artRotation = mat2(
+      cos(artAngle), -sin(artAngle),
+      sin(artAngle), cos(artAngle)
+    );
+    vec2 artUv = artRotation * (vCloudUv - 0.5) * 0.92 + 0.5;
+    float authoredBody = smoothstep(0.035, 0.42, texture2D(uCloudArt, artUv).r);
+    body = mix(body, max(body * 0.34, authoredBody), uCloudArtEnabled * 0.84);
     float lowerShade = smoothstep(0.95, 0.08, vCloudUv.y);
     vec3 color = mix(uLightColor, uShadowColor, lowerShade * (0.30 + broad * 0.30));
     float distanceToCamera = distance(cameraPosition, vWorldCenter);
@@ -677,8 +693,27 @@ export function createTacticalCloudField(THREE, options = {}) {
   const group = new THREE.Group();
   group.name = "TACTICAL_CLOUD_FIELD";
 
+  const cloudArtEnabled = { value: 0 };
+  let cloudArtMap = options.cloudArtMap ?? null;
+  let ownsCloudArtMap = false;
+  if (cloudArtMap) {
+    cloudArtEnabled.value = 1;
+  } else if (!volumetric && typeof document !== "undefined"
+      && typeof THREE.TextureLoader === "function") {
+    cloudArtMap = new THREE.TextureLoader().load(
+      RAPIER_CLOUD_BILLOWS_URL,
+      () => { cloudArtEnabled.value = 1; },
+    );
+    ownsCloudArtMap = true;
+    cloudArtMap.name = "TEX_RAPIER_CLOUD_BILLOWS_V1";
+    cloudArtMap.wrapS = THREE.ClampToEdgeWrapping;
+    cloudArtMap.wrapT = THREE.ClampToEdgeWrapping;
+    cloudArtMap.colorSpace = THREE.NoColorSpace;
+  }
   const uniforms = {
     uTime: { value: 0 },
+    uCloudArt: { value: cloudArtMap },
+    uCloudArtEnabled: cloudArtEnabled,
     uOpticalScale: { value: tier === "desktop" ? 0.0018 : 0.00155 },
     uSunDirection: { value: new THREE.Vector3(0.50, 0.28, -0.82).normalize() },
     uLightColor: { value: new THREE.Color(0xf8f3e8) },
@@ -1068,7 +1103,7 @@ export function createTacticalCloudField(THREE, options = {}) {
       if (!shown) continue;
       dummy.position.set(descriptor.x, descriptor.y, descriptor.z);
       dummy.rotation.set(0, 0, 0);
-      dummy.scale.set(descriptor.radiusX, descriptor.radiusY,
+      dummy.scale.set(descriptor.radiusX, descriptor.radiusY * (volumetric ? 1 : 1.16),
         volumetric ? descriptor.radiusZ : 1);
       dummy.updateMatrix();
       cloudMesh.setMatrixAt(index, dummy.matrix);
@@ -1153,6 +1188,7 @@ export function createTacticalCloudField(THREE, options = {}) {
     material.dispose();
     shadowGeometry.dispose();
     shadowMaterial.dispose();
+    if (ownsCloudArtMap) cloudArtMap?.dispose();
   }
 
   return Object.freeze({

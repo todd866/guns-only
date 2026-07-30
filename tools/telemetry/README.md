@@ -244,8 +244,33 @@ observed control/phase dwell, video alignment, performance samples, and SHA-256 
 source files. Sync markers are first-class timeline events with their derived video time. The
 optional CSV is intended for plots and notebooks.
 
+The output also contains `audit` and `exposure_summary`. The audit calls out clock uncertainty,
+coverage gaps, cold-label lag, unexplained phase jumps, frame stalls, cost-dropped fast-time ticks,
+abrupt autonomous handoffs, and observed structural/dynamic-pressure/thermal exposure. Exposure is
+raw evidence only: the tool explicitly reports damage assessment and cost projection as
+`not_computed`, leaving the versioned service-life and economic models to price inspection, repair,
+replacement, or loss later.
+
+Current Rapier sorties also finalize a bounded kernel-authored
+`guns-only.service-life-sortie.v1` record. Its snapshot seam publishes the record hash, evidence
+status, peak load/q, observed exceedance dwell, minimum thermal-proxy margin, and whether an
+engineering review is warranted. These fields are retained by the compact reconstruction. They do
+not ground an aircraft or book money: both `service_life_damage_assessment` and
+`service_life_cost_projection` remain `not_computed` until a separately versioned assessment and
+maintenance authority consumes the immutable record.
+
+The dealt Rapier operations mission separately projects
+`rapier.operations.allocation-credit.v1` boundary fields: explicit economy opt-in, target contract,
+fictional credit basis, finalized record application key, kernel-authored line items, sortie net,
+and whether an exceedance inspection was reserved. The reconstructor retains these fields so an
+analyst can reconcile the debrief with the same immutable sortie evidence. F-22 arcade fights,
+Rapier Circuits, and the fixed engineering intercept publish `rapier_economy_active:false`; target
+or airframe names alone never activate a ledger.
+
 Mission-phase event labels come from the numeric hot-state phase code. The independently recorded
 cold text label and phase reason remain in the evidence so a transition-time UI lag is visible
 instead of silently becoming the reconstruction's ground truth. Recording alignment uses
-`header.t0 + row.t`; pass the recording's actual epoch metadata rather than inferring it from the
-filename.
+the header's declared monotonic origin plus `row.t`. For older headers, a stable
+`wall_epoch_ms - row.t` sync-marker anchor automatically repairs a proven offset and records the
+exact correction. Without such an anchor the tool keeps the original timestamps but reports
+`legacy_unverified`; it never guesses a correction from the filename or MOV creation time.

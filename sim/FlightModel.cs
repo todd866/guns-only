@@ -315,6 +315,18 @@ public static class FlightModel {
         MCrit: 0.60, WaveDragK: 90.0,
         MaxThrustFraction: 1.0);
 
+    /// Fictional twin-jet transport target for the Rapier operations deck. This is a transparent
+    /// target surrogate, not a claim about a named civil or military type: large, subsonic,
+    /// lightly manoeuvring, and visually distinct from the fighter-family compatibility body.
+    public static readonly AircraftParams TransportTargetPrototype = new(
+        MassKg: 68000.0, WingAreaM2: 125.0, ThrustMaxN: 240000.0,
+        CD0: 0.024, InducedK: 0.044, CLMax: 1.55, CLMin: -0.35,
+        RollRateMaxRad: 0.28, BankTau: 2.4,
+        MCrit: 0.78, WaveDragK: 105.0,
+        PositiveStructuralLimitG: 2.5,
+        MaxPerformFraction: 0.85,
+        MaxThrustFraction: 1.0);
+
     /// Fictional one-way attack-drone PROTOTYPE. These rounded values define a transparent
     /// mission surrogate, not an extant Chinese or American system: a 500 kg, subsonic powered
     /// airframe that holds one straight inbound track while the player learns defensive cutoff

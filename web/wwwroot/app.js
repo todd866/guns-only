@@ -17,7 +17,7 @@ import {
   combatHandoffPresentation,
   sortieResultCopy,
 } from "./render/debrief/sortie_result.js?v=199";
-import { pointsLedgerPresentation } from "./render/debrief/points_ledger.js";
+import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
 import { loadKoreaTerrain } from "./render/environment/korea_terrain.js";
@@ -123,6 +123,7 @@ import { rapierBriefingText } from "./render/mission/rapier_guidance.js";
 import { createHotSnapshotSource } from "./render/state/hot_snapshot.js";
 import {
   CAMPAIGN_NODES,
+  applyRapierSortieCredits,
   campaignNode,
   campaignNodeQualified,
   campaignNodeUnlocked,
@@ -196,6 +197,7 @@ import {
   createRapier,
   createRapierDispersedStrip,
   createRapierGunDrone,
+  createTransport,
   updateConventionalRunwayPresentation,
 } from "./render/scene/scene_builders.js?v=199";
 import {
@@ -416,6 +418,10 @@ const touchGearButton = document.querySelector("#touch-gear");
 const touchFlapUpButton = document.querySelector("#touch-flap-up");
 const touchFlapDownButton = document.querySelector("#touch-flap-down");
 const touchLimitOverride = document.querySelector("#touch-limit-override");
+const touchTargetCycleButton = touchControls?.querySelector('[data-mobile-action="target-cycle"]')
+  ?? null;
+const touchTargetLabel = document.querySelector("#touch-target-label");
+const touchTargetNumber = document.querySelector("#touch-target-number");
 const touchFireButton = document.querySelector("#touch-fire");
 const portraitChips = document.querySelector("#portrait-chips");
 const fallbackStick = touchControls?.querySelector('[data-mobile-action="virtual-stick"]') ?? null;
@@ -1083,8 +1089,11 @@ if (mobileControls) {
       right: calc(env(safe-area-inset-right, 0px) + 136px);
     }
 
-    .touch-mode.touch-primary #touch-fire {
-      display: none !important;
+    @media (orientation: portrait) {
+      .touch-mode.touch-primary .touch-right {
+        right: calc(env(safe-area-inset-right, 0px) + 12px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + min(36vw, 156px) + 20px);
+      }
     }
 
     .touch-mode.run-frozen .touch-left,
@@ -2177,7 +2186,6 @@ let setMobileFrozen = () => {};
 let activeView = null;
 let latestState = null;
 let campaignProfile = loadCampaignProfile();
-let pointsLedgerAppliedKey = "";
 const requestedProgramNode = campaignNode(
   new URLSearchParams(window.location.search).get("program"),
 );
@@ -2510,6 +2518,9 @@ function syncMobileControlProfile(state) {
   if (touchFlapUpButton) touchFlapUpButton.hidden = casevac || !profile.flaps;
   if (touchFlapDownButton) touchFlapDownButton.hidden = casevac || !profile.flaps;
   if (touchPadlockButton) touchPadlockButton.hidden = casevac || !profile.padlock;
+  if (touchTargetCycleButton) {
+    touchTargetCycleButton.hidden = casevac || !profile.padlock;
+  }
   if (touchLimitOverride) touchLimitOverride.hidden = casevac || !profile.limitOverride;
   if (touchFireButton) touchFireButton.hidden = casevac || !profile.fire;
   if (touchGcasPaddle) {
@@ -2519,6 +2530,7 @@ function syncMobileControlProfile(state) {
   if (touchContextControls) {
     touchContextControls.hidden = casevac || (!profile.gear && !profile.flaps);
   }
+  syncPadlockUi();
   releaseHiddenMobileControls();
 }
 
@@ -2669,11 +2681,11 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     ]),
   }),
   "rapier-intercept": Object.freeze({
-    kicker: "Eastern corridor · guns-only",
+    kicker: "Eastern corridor · Rapier operations",
     title: "Rapier Intercept",
-    sortie: "Rapier turbo-ramjet interceptor · guns-only · one-pass sweep · pursued recovery",
-    configuration: "Fictional TBCC Rapier · measured design dash {DESIGN_DASH_MACH} · CMC hot structure · reusable gun-drones · 3,600 LB alert fuel · Mach 4 is bible fiction, never commanded",
-    brief: "Mission automation owns the long profile by default: use full augmentation to launch, climb around M0.90 to FL560 (56,000 ft), and drive cleanly through the transonic drag rise. RAM LIGHT begins at {RAM_LIGHT_MACH} and full ram arrives at {FULL_RAM_MACH}; at FL315 the aircraft can gather speed but cannot cross into full ram, so hold the altitude profile, ram-climb to FL700, and dash to the measured design speed of {DESIGN_DASH_MACH}. Mach and KTAS, range, closure, and intercept ETA stay visible throughout the long leg. Mach 4 is SE-bible fiction only — the mission never commands it. At the formation, press F to release the gun-drone load; Rapier egresses while drones fight. Return, shed energy for marshal, lineup, and four large square gates into wire three.",
+    sortie: "Dealt {TARGET_LABEL} contract · guns-only · one-pass sweep · pursued recovery",
+    configuration: "Fictional TBCC Rapier · measured design dash {DESIGN_DASH_MACH} · 3,600 LB alert fuel · allocation-credit ledger active",
+    brief: "Today's contract is the {TARGET_LABEL}. {TARGET_TASK} Verified neutralization pays {TARGET_REWARD} CR; fuel, ammunition, confirmed loss, and any reserved exceedance inspection hit the Rapier operating balance. The recorder does not invent component damage or a whole-airframe repair percentage. Mission automation owns the long profile by default: use full augmentation to launch, climb around M0.90 to FL560 (56,000 ft), and drive cleanly through the transonic drag rise. RAM LIGHT begins at {RAM_LIGHT_MACH} and full ram arrives at {FULL_RAM_MACH}; at FL315 the aircraft can gather speed but cannot cross into full ram, so hold the altitude profile, ram-climb to FL700, and dash to the measured design speed of {DESIGN_DASH_MACH}. Mach and KTAS, range, closure, and intercept ETA stay visible throughout the long leg. Mach 4 remains fiction. Return through the recovery squares and trap.",
     controls: "P mission automation · F release gun-drones · arrows/W/S pilot takeover\nT safe time compression · V padlock · Tab target · fly every recovery square · trap on wire three",
   }),
   "ace-duel": Object.freeze({
@@ -3081,6 +3093,36 @@ function wingmanPadlockAvailable(state = latestState) {
 }
 
 function syncPadlockUi(announcement = null) {
+  const selectedNumber = selectedCombatTarget === "wingman" ? 2 : 1;
+  const otherNumber = selectedNumber === 1 ? 2 : 1;
+  const patternOnly = latestState?.rapier_pattern_only === true;
+  const circuitTargets = patternOnly ? circuitsPadlockTargets(latestState) : [];
+  const anotherContactAvailable = patternOnly
+    ? circuitTargets.length > 1
+    : wingmanPadlockAvailable();
+  if (touchTargetCycleButton) {
+    touchTargetCycleButton.dataset.selected = patternOnly
+      ? padlock ? padlockLabel() : "traffic"
+      : String(selectedNumber);
+    touchTargetCycleButton.disabled = !anotherContactAvailable;
+    touchTargetCycleButton.setAttribute("aria-disabled", String(!anotherContactAvailable));
+    touchTargetCycleButton.setAttribute(
+      "aria-label",
+      patternOnly ? (
+        anotherContactAvailable
+          ? "Cycle circuit traffic"
+          : "No other circuit traffic"
+      ) : (
+        anotherContactAvailable
+          ? `Target ${selectedNumber} selected; select Target ${otherNumber}`
+          : `Target ${selectedNumber} selected; no other contact`
+      ),
+    );
+  }
+  if (touchTargetLabel) touchTargetLabel.textContent = patternOnly ? "TRAFFIC" : "TARGET";
+  if (touchTargetNumber) {
+    touchTargetNumber.textContent = patternOnly ? "NEXT" : String(selectedNumber);
+  }
   if (touchPadlockButton) {
     touchPadlockButton.classList.toggle("active", padlock);
     touchPadlockButton.setAttribute("aria-pressed", String(padlock));
@@ -3141,6 +3183,7 @@ function resetMissionPresentation() {
   syncPlayerGunTargetPadlockRollAssist();
   appliedPlayerGunTargetSlot = null;
   syncPlayerGunTarget();
+  syncPadlockUi();
   gimbalReturnFast = false;
   activeView?.cancelCloudBreakEntry();
   activeView?.resetCasevacPresentation();
@@ -3301,9 +3344,16 @@ function missionBrief() {
   const brief = CAMPAIGN_BRIEFS[selectedProgramNodeId]
     || MISSION_BRIEFS[selectedBeat] || CAMPAIGN_BRIEFS["first-merge"];
   if (brief !== CAMPAIGN_BRIEFS["rapier-intercept"]) return brief;
+  const state = latestState ?? {};
+  const balance = Math.trunc(
+    Number(campaignProfile.rapierBalanceCredits) || 0,
+  );
   return Object.freeze({
     ...brief,
-    brief: rapierBriefingText(brief.brief, latestState ?? {}),
+    brief: rapierBriefingText(brief.brief, state),
+    sortie: rapierBriefingText(brief.sortie, state),
+    configuration:
+      `${rapierBriefingText(brief.configuration, state)} · Rapier balance ${balance} CR`,
   });
 }
 
@@ -3595,25 +3645,30 @@ function renderPauseUi(state = latestState) {
     const carrierQualification = isCarrierQualificationState(state);
     const carrierFacts = carrierQualification
       ? carrierQualificationDebriefFacts(state) : null;
-    const ledgerMission = String(state?.mission_definition_id || "").toLowerCase();
-    const ledgerIsRapier = ledgerMission.includes("rapier");
-    const ledgerNet = Math.trunc(Number(state?.points_sortie_net) || 0);
-    const ledgerApplyKey = [
-      ledgerMission,
-      String(state?.sortie_outcome || ""),
-      String(ledgerNet),
-    ].join("|");
-    const ledgerAlreadyApplied = ledgerApplyKey === pointsLedgerAppliedKey;
+    const ledgerIsEconomicMission = state?.rapier_economy_active === true;
+    const ledgerNet = Math.trunc(
+      Number(state?.rapier_economy_sortie_net_credits) || 0,
+    );
+    const ledgerApplyKey = String(
+      state?.rapier_economy_application_key || "",
+    ).trim().toLowerCase();
+    const ledgerHasStableKey = /^[a-f0-9]{64}$/.test(ledgerApplyKey);
+    const ledgerAlreadyApplied = ledgerHasStableKey
+      && campaignProfile.appliedRapierSortieKeys.includes(ledgerApplyKey);
     const ledgerBalanceBefore = ledgerAlreadyApplied
-      ? Math.trunc(Number(campaignProfile.pointsBalance) || 0) - ledgerNet
-      : Math.trunc(Number(campaignProfile.pointsBalance) || 0);
-    const ledger = pointsLedgerPresentation(state, ledgerBalanceBefore);
-    if (ledger && ledgerIsRapier && !ledgerAlreadyApplied) {
-      pointsLedgerAppliedKey = ledgerApplyKey;
-      campaignProfile = saveCampaignProfile({
-        ...campaignProfile,
-        pointsBalance: ledger.balanceAfter,
-      });
+      ? Math.trunc(Number(campaignProfile.rapierBalanceCredits) || 0) - ledgerNet
+      : Math.trunc(Number(campaignProfile.rapierBalanceCredits) || 0);
+    const ledger = rapierEconomyPresentation(state, ledgerBalanceBefore);
+    if (ledger && ledgerIsEconomicMission
+      && ledgerHasStableKey && !ledgerAlreadyApplied) {
+      const applied = applyRapierSortieCredits(
+        campaignProfile,
+        ledgerApplyKey,
+        ledgerNet,
+      );
+      if (applied.applied) {
+        campaignProfile = saveCampaignProfile(applied.profile);
+      }
     }
     readyKicker.textContent = casevac ? result.kicker : ledger?.kicker || result.kicker;
     readyTitle.textContent = result.title;
@@ -3656,7 +3711,7 @@ function renderPauseUi(state = latestState) {
             ? [carrierFacts.passGrade, carrierFacts.waveOff, carrierFacts.phases]
               .filter(Boolean).join(" · ")
             : ledger
-              ? `${ledger.netText} · ${ledger.balanceText} · ${ledger.clearanceText}`
+            ? `${ledger.netText} · ${ledger.balanceText} · ${ledger.clearanceText}`
               : replayAnalysis
               ? `Sim touchdown ${replayAnalysis.touchdownAssessment.grade === "NONE" ? "not graded" : replayAnalysis.touchdownAssessment.grade} · ${replayAnalysis.touchdownAssessment.profile} v${replayAnalysis.touchdownAssessment.version} · replay cached · causal review is not an LSO grade`
               : `Airframe ${healthPercent(state?.player_health)}% · opponent ${healthPercent(state?.opponent_health)}%`;
@@ -3673,12 +3728,12 @@ function renderPauseUi(state = latestState) {
         : carrierQualification
           ? `Full-pass primary · ${carrierFacts.passCorrection}\nTouchdown assessment · ${carrierFacts.touchdown}\nTouchdown primary · ${carrierFacts.touchdownCorrection}`
           : ledger
-            ? `${ledger.lines.map((line) => `${line.label} · ${line.pointsText}`).join("\n") || "No lines"}\n${ledger.clearanceText}`
+            ? `${ledger.lines.map((line) => `${line.label} · ${line.creditsText}`).join("\n") || "No lines"}\n${ledger.clearanceText}`
             : "Fly again, or open the mission list to take the other aircraft up";
     readyHint.textContent = background
       ? "Return to the game to restage"
       : ledger?.clearance === "GROUNDED"
-        ? "Exception denied · grounded pending allocation — Press Enter to fly again"
+        ? "Allocation exception recorded — Press Enter to fly the next contract"
         : "Press Enter to fly again";
   } else if (ready) {
     if (readySortieLabel) readySortieLabel.textContent = "Sortie";
@@ -3697,7 +3752,7 @@ function renderPauseUi(state = latestState) {
       const keyboardControls = brief.controls
         || "Arrows fly · W/S power · F guns · V padlock · Tab target\nH opens controls · R restarts";
       readyControls.textContent = mobileControls
-        ? "LEFT STICK fly · RIGHT STICK look + fire · tap TILT TRIM to opt in\nController: LS fly · RS look · RT fire · A padlock · LB/RB power"
+        ? "LEFT STICK fly · RIGHT STICK look · TARGET changes contact · PADLOCK tracks · FIRE shoots\nController: LS fly · RS look · RT fire · A padlock · LB/RB power"
         : `${keyboardControls}\nController: LS fly · RS look · RT fire · A padlock · LB/RB power`;
     }
     readyStart.textContent = `Fly ${brief.title}`;
@@ -3775,7 +3830,6 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
   const preserveCalibration = pauseReasons.has("calibration");
   const preserveBackground = pauseReasons.has("background");
   if (resetBridge) recorder.endSortie("restaged", latestState);
-  pointsLedgerAppliedKey = "";
   resetMissionPresentation();
   pauseReasons.clear();
   pauseReasons.add("ready");
@@ -4655,6 +4709,7 @@ const PRODUCTION_AUTHORED_COCKPIT_ENABLED = false;
 const COMPATIBILITY_PRESENTATION_FACTORIES = new Map([
   ["presentation.vehicle.bandit.v1", createDrone],
   ["presentation.vehicle.awacs-target.v1", createAwacs],
+  ["presentation.vehicle.transport-target.prototype.v1", createTransport],
   ["presentation.vehicle.player.v1", createDrone],
   ["presentation.vehicle.glider-strike.v1", createGlider],
   // Mission 7 deliberately uses the existing abstract contact body until purpose-built,
@@ -6548,7 +6603,7 @@ class FlightView {
       ? (state?.terrain_scenery_profile || "ukraine-modern")
       : (state?.terrain_scenery_profile
         || (terrainPackId.includes("modern") || selectedBeat === 7 || selectedBeat === 9
-          || selectedBeat === 10 ? "modern" : "1950s"));
+          || selectedBeat === 10 || selectedBeat === 12 ? "modern" : "1950s"));
     const terrainKey = ukraineTheatre
       ? `${UKRAINE_2030S_TERRAIN_ID}|${missionFeaturePackCacheIdentity(state)}`
       : `terrain.korea.central-front.v2|${missionFeaturePackCacheIdentity(state)}`;
@@ -8422,7 +8477,6 @@ function installMobileInput(view) {
   let targetStickPointerId = null;
   let targetStickX = 0;
   let targetStickY = 0;
-  let targetStickFireSource = null;
   let flightGesture = null;
   let targetGesture = null;
   let suspended = false;
@@ -8779,10 +8833,6 @@ function installMobileInput(view) {
     targetStickY = 0;
     touchStickLookActive = false;
     gimbalReturnFast = true;
-    if (targetStickFireSource) {
-      releaseMappedKey("Touch:TargetStickFire", targetStickFireSource);
-      targetStickFireSource = null;
-    }
     renderTargetStick();
     if (pointerId !== null && targetStick?.hasPointerCapture?.(pointerId)) {
       try { targetStick.releasePointerCapture(pointerId); } catch { /* already released */ }
@@ -8802,15 +8852,13 @@ function installMobileInput(view) {
       samples: 0,
       maxLook: 0,
     };
-    targetStickFireSource = `touch:target-stick:${event.pointerId}`;
-    pressMappedKey("Touch:TargetStickFire", targetStickFireSource, 8);
-    view.hud.armAudio();
     targetStick.focus({ preventScroll: true });
     try { targetStick.setPointerCapture(event.pointerId); } catch { /* pointer may be gone */ }
     updateTargetStickPointer(event);
     recorder.event("mobile_control", "right_stick_started", {
       profile: "dual_stick",
-      fire: true,
+      look: true,
+      fire: false,
     });
   }
 
@@ -9171,6 +9219,16 @@ function installMobileInput(view) {
         button.setAttribute("aria-pressed", "false");
       }, 140);
     });
+  });
+
+  touchTargetCycleButton?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (touchTargetCycleButton.disabled || touchTargetCycleButton.closest?.("[hidden]")
+        || frozen || suspended || document.hidden || pauseReasons.size > 0) return;
+    cyclePadlockTarget();
+    touchTargetCycleButton.classList.add("active");
+    window.setTimeout(() => touchTargetCycleButton.classList.remove("active"), 140);
   });
 
   touchThrottleRocker?.addEventListener("pointerdown", beginThrottleRocker, { passive: false });

@@ -299,18 +299,10 @@ function communicationPosture(state) {
 
 export function communicateRow(state) {
   const posture = communicationPosture(state);
-  const transmitting = state?.radio_active === true;
-  if (!posture && !transmitting) return null;
-
-  const audience = transmitting
-    ? upperToken(state?.radio_channel) || upperToken(state?.radio_frequency) || "R/T"
-    : posture.audience;
-  const parts = [audience];
-  if (posture?.posture) parts.push(posture.posture);
-  if (transmitting) parts.push("AUTO TX");
+  if (!posture) return null;
   return {
-    line: parts.join(" · "),
-    tone: transmitting ? "active" : "steady",
+    line: `${posture.audience} · ${posture.posture}`,
+    tone: "steady",
   };
 }
 

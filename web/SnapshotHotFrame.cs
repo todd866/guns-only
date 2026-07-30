@@ -42,7 +42,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 18;
+    public const int LayoutVersion = 19;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -112,8 +112,17 @@ internal static class SnapshotHotFrame {
         Bool("time_compression_enabled");
         Bool("time_compression_eligible");
         Num("time_compression_requested_factor", RawInteger);
+        Num("time_compression_safety_factor_cap", RawInteger);
         Num("time_compression_factor", RawInteger);
         Bool("rapier_mission_available");
+        Bool("service_life_record_available");
+        Num("service_life_record_sequence", RawInteger);
+        Bool("service_life_exceedance_review_required");
+        Num("service_life_over_structural_limit_s", 3);
+        Num("service_life_over_dynamic_pressure_s", 3);
+        Num("service_life_max_g", 3);
+        Num("service_life_max_dynamic_pressure_kpa", 2);
+        Num("service_life_min_thermal_margin_c", 1);
         Bool("rapier_pattern_only");
         Bool("rapier_automation_enabled");
         Bool("rapier_automation_active");
@@ -924,8 +933,35 @@ internal static class SnapshotHotFrame {
         w.Bool("time_compression_eligible", session.TimeCompressionEligible);
         w.Num("time_compression_requested_factor",
             session.TimeCompressionRequestedFactor, RawInteger);
+        w.Num("time_compression_safety_factor_cap",
+            session.TimeCompressionSafetyFactorCap, RawInteger);
         w.Num("time_compression_factor", session.TimeCompressionFactor, RawInteger);
         w.Bool("rapier_mission_available", session.RapierMissionAvailable);
+        RapierServiceLifeSortieRecord? serviceLife =
+            session.RapierServiceLife.LatestRecord;
+        w.Bool("service_life_record_available", serviceLife is not null);
+        w.Num("service_life_record_sequence",
+            serviceLife?.RecordSequence ?? 0L, RawInteger);
+        w.Bool("service_life_exceedance_review_required",
+            serviceLife?.ExceedanceReviewRequired == true);
+        w.Num("service_life_over_structural_limit_s",
+            (serviceLife?.Mechanical.StructuralLimitExceedanceTicks ?? 0L)
+                / AircraftSim.TickHz,
+            3);
+        w.Num("service_life_over_dynamic_pressure_s",
+            (serviceLife?.Mechanical.DynamicPressureLimitExceedanceTicks ?? 0L)
+                / AircraftSim.TickHz,
+            3);
+        w.Num("service_life_max_g",
+            (serviceLife?.Mechanical.MaximumLoadMilliG ?? 0L) / 1000.0,
+            3);
+        w.Num("service_life_max_dynamic_pressure_kpa",
+            (serviceLife?.Mechanical.MaximumDynamicPressurePa ?? 0L) / 1000.0,
+            2);
+        w.Num("service_life_min_thermal_margin_c",
+            (serviceLife?.ThermalProxy.MinimumThermalMarginMilliK ?? 0L)
+                / 1000.0,
+            1);
         w.Bool("rapier_pattern_only", session.Beat.ScriptedIntercept?.PatternOnly == true);
         w.Bool("rapier_automation_enabled", session.RapierAutomationEnabled);
         w.Bool("rapier_automation_active", session.RapierAutomationActive);

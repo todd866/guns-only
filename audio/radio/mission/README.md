@@ -15,6 +15,9 @@ The wording follows two public baselines:
 
 `PERFORMANCE-CORPUS.md` is the equally binding listening baseline. It maps game events to
 operational recordings and specifies packet length, turn timing, escalation, and silence.
+[`EQUIPMENT-PROFILES.md`](../EQUIPMENT-PROFILES.md) defines the separate mask/microphone and
+radio-link layers. Catalog version 6 requires both profile IDs for every role so Rapier, modern
+fast-jet, and Korean War R/T cannot collapse into one generic “radio” filter.
 
 Validate the catalog and preview the generation plan:
 
@@ -133,9 +136,16 @@ only listener is yourself watching the pipper.
 | **Pilots** (ownship + traffic) | Brevity | Short position or state update; never recite the checklist out loud |
 | **LSO** | Correction ladder | Mostly silent; calm information, then a firmer correction, then a calm waveoff |
 
-Formation members in the local pattern use the sourced compact form `Ghost One Two, gear`.
-The flight lead acknowledges the landing clearance with callsign rather than echoing the whole
-transmission. Checklist state stays on ANCA.
+Ghost 11–14 are squadron slots flying independent single-ship recoveries, not elements covered
+by one flight lead's landing clearance. Each therefore reports callsign, base, achieved gear
+state, and only a non-default intention. Tower grants that aircraft's landing authority; the
+pilot compactly reads back the authority plus callsign. Full stop is the local default and
+remains implicit (`base, three greens`); touch-and-go traffic explicitly states and reads back
+the different intention. The compact formation-only `Ghost One Two, gear` form is specifically
+inapplicable here. Checklist state stays on ANCA.
+Mission-authored ownship touch-and-go uses a separate exact three-line transaction and separate
+clip IDs; it never reuses the full-stop recordings under different words. The current automated
+Circuits card plans a full stop, while a later pilot wave-off/go-around explicitly supersedes it.
 
 One-breath test: *which field, for whom (human or agent), what's the delta, and would this be
 keyed in an AI-first cockpit?*
@@ -158,12 +168,13 @@ calls, not inserting seconds between every line. Pending calls expire when their
 moment has passed instead of narrating an old leg.
 
 Pattern traffic uses the same occupied frequency rather than an ambient-chatter timer. Each
-aircraft has a stable training role, configuration state, and reaction delay. It creates a compact
-`GEAR` intention only after the gear is actually down and locked; that intention waits behind an
-occupied frequency, expires if the aircraft leaves base, and yields to urgent safety traffic.
-Several legitimate intentions may therefore make the frequency briefly busy, while an
-uneventful circuit remains quiet. Character comes from flying/configuration judgment and key-down
-timing, not longer dialogue.
+aircraft has a stable training role, configuration state, and reaction delay. It opens its
+landing transaction only after reaching base with gear actually down and locked; the complete
+pilot report, Tower clearance and acknowledgment remain ordered on the shared frequency. An
+unkeyed transaction expires if the aircraft leaves base, and the whole transaction yields to
+urgent safety traffic. Several legitimate recoveries may therefore make the frequency briefly
+busy, while an uneventful circuit remains quiet. Character comes from flying/configuration
+judgment and key-down timing, not longer dialogue.
 
 ### Voice bar — behavior, not acting
 
@@ -175,8 +186,10 @@ lives in `roles.*.instructions`; speech-act timing lives in each line's `directi
 
 Short packets are not governed by one global words-per-minute target. Each line declares its
 audible-duration window, legitimate phrase boundary, information focus, final contour, and
-urgency. Callsigns and numbers remain clear; a line may rise, fall, compress, or pause only when
-its speech act calls for it.
+urgency. Landing lines also declare a semantic-unit `cadence` map and an `rt_profile`: identity
+stays clear, familiar operational blocks may compress, and authority or intention receives only
+the modest local timing/stress change supported by the listening corpus. Callsigns and numbers
+remain clear; a line may rise, fall, compress, or pause only when its speech act calls for it.
 
 Urgency changes key-down timing, syntax, and consonant firmness. It does not create shouting,
 growling, a movie-trailer register, or an “explosive” LSO. Repetition occurs only when the
@@ -206,8 +219,9 @@ gate before replacing production clips.
 - Launch is a visual shot-crew sequence. It has no radio clearance and audio cannot hold the catapult.
 - Circuits establishes initial/break once, then keeps only each required landing transaction and
   safety calls. Routine downwind/base/final narration is silent.
-- Each formation member independently reports achieved `GEAR`; the shared frequency arbitrates
-  simultaneous calls and discards stale ones instead of applying a global chatter throttle.
+- Each independent Rapier owns a base/configuration/intention → clearance → acknowledgment
+  transaction; the shared frequency arbitrates simultaneous arrivals and discards unkeyed stale
+  transactions instead of applying a global chatter throttle.
 - Tactical COMMIT is `Ghost, commit` followed by the required callsign acknowledgment; no
   cinematic engage order.
 - Package weapons brevity carries no callsign ceremony (`Fox Two.`, `Splash one.`).

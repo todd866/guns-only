@@ -153,8 +153,40 @@ function withAutoGcasLesson(result, state) {
   };
 }
 
+function withServiceLifeReview(result, state) {
+  if (state?.service_life_record_available !== true
+    || state?.service_life_exceedance_review_required !== true) return result;
+
+  const overStructuralSeconds = Math.max(0,
+    finiteNumber(state?.service_life_over_structural_limit_s) ?? 0);
+  const overDynamicPressureSeconds = Math.max(0,
+    finiteNumber(state?.service_life_over_dynamic_pressure_s) ?? 0);
+  const maximumG = finiteNumber(state?.service_life_max_g);
+  const exposure = [];
+  if (overStructuralSeconds > 0) {
+    exposure.push(`${overStructuralSeconds.toFixed(1)} s above the structural limit${
+      maximumG === null ? "" : `, peak ${maximumG.toFixed(1)} G`
+    }`);
+  }
+  if (overDynamicPressureSeconds > 0) {
+    exposure.push(`${overDynamicPressureSeconds.toFixed(1)} s above the q placard`);
+  }
+  const evidence = exposure.length > 0
+    ? exposure.join("; ")
+    : "a propulsion or thermal exceedance";
+
+  return {
+    ...result,
+    brief: `${result.brief} Airframe exposure: ${evidence}. Maintenance assessment pending; no damage or repair cost has been inferred.`,
+    serviceLifeReviewRequired: true,
+  };
+}
+
 function withSortieLessons(result, state) {
-  return withAutoGcasLesson(withGToleranceLesson(result, state), state);
+  return withServiceLifeReview(
+    withAutoGcasLesson(withGToleranceLesson(result, state), state),
+    state,
+  );
 }
 
 function readableToken(value, fallback = "Not recorded") {

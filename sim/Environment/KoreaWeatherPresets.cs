@@ -141,9 +141,11 @@ public static class KoreaWeatherPresets {
         Wind((5.0, 1.0), (15.0, 6.0), (31.0, 14.0)),
         new LayeredCloudField(
         [
-            // A sparse high deck keeps the 12-22 km climb readable without pretending the
-            // deterministic day is an observation from the real conflict.
-            Layer(8_600.0, 11_400.0, 0.18, 11_500.0, 0.0045,
+            // A broad broken deck gives the 12-22 km climb a composed lower hemisphere: large
+            // cloud islands with visible ground between them, not dozens of expensive cotton
+            // balls. These remain deterministic fictional training conditions rather than an
+            // observation from the real conflict.
+            Layer(8_400.0, 11_600.0, 0.32, 14_000.0, 0.0045,
                 ice: 0.00007, windEast: 31.0, windNorth: 14.0)
         ], seed: 0x2030_0824_a11e_0010UL, clearAirVisibilityM: 115_000.0),
         id: "weather.ukraine-2030s.rapier-high-altitude.v1");
@@ -157,7 +159,9 @@ public static class KoreaWeatherPresets {
         // surface truth remain independently sampleable.
         8 => UkraineWinterWeatherPresets.SnowSquall,
         13 => UkraineLowLevel,
-        10 or 11 => RapierHighAltitude,
+        // Beat 12 is the economic Rapier Intercept menu mission. It must not silently fall back
+        // to the inland low deck used by unrelated sorties.
+        10 or 11 or 12 => RapierHighAltitude,
         _ => HistoricalInland
     };
 

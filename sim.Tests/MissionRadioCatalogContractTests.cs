@@ -39,6 +39,9 @@ public class MissionRadioCatalogContractTests {
         string leg = "DEPART",
         IReadOnlyList<CircuitTrafficShip>? traffic = null,
         bool gearDownAndLocked = true,
+        CircuitLandingIntent landingIntent = CircuitLandingIntent.FullStop,
+        bool landingAuthorityAvailable = true,
+        bool pilotGoingAround = false,
         bool recoveryApproach = false,
         bool maritimeRecovery = false,
         Carrier.Recovery recovery = Carrier.Recovery.Flying,
@@ -64,6 +67,9 @@ public class MissionRadioCatalogContractTests {
             PlayerLeg: leg,
             Traffic: traffic ?? NoTraffic,
             GearDownAndLocked: gearDownAndLocked,
+            PlayerLandingIntent: landingIntent,
+            LandingAuthorityAvailable: landingAuthorityAvailable,
+            PilotGoingAround: pilotGoingAround,
             RecoveryApproach: recoveryApproach,
             MaritimeRecovery: maritimeRecovery,
             Recovery: recovery,
@@ -151,6 +157,7 @@ public class MissionRadioCatalogContractTests {
         Drain(director, heard, ref clock, t => State(t, leg: "DEPART"));
         Drain(director, heard, ref clock, t => State(t, leg: "INITIAL"));
         Drain(director, heard, ref clock, t => State(t, leg: "BREAK"));
+        Drain(director, heard, ref clock, t => State(t, leg: "CROSSWIND"));
         Drain(director, heard, ref clock, t => State(t, leg: "DOWNWIND"));
         Drain(director, heard, ref clock, t => State(t, leg: "BASE"));
         Drain(director, heard, ref clock, t => State(t, leg: "SHORT_FINAL"));
@@ -158,7 +165,19 @@ public class MissionRadioCatalogContractTests {
             t, leg: "ROLLOUT",
             arrestment: ArrestmentModel.ArrestmentPhase.Stopped, wire: 3));
 
-        // Several traffic laps exercise the sparse formation-member gear calls.
+        // A mission-authored non-default plan uses its own exact recorded transaction.
+        var touchAndGoDirector = new MissionRadioDirector();
+        double touchClock = 0.0;
+        touchAndGoDirector.Step(State(
+            touchClock,
+            leg: "DOWNWIND",
+            landingIntent: CircuitLandingIntent.TouchAndGo));
+        Drain(touchAndGoDirector, heard, ref touchClock, t => State(
+            t,
+            leg: "BASE",
+            landingIntent: CircuitLandingIntent.TouchAndGo));
+
+        // Several traffic laps exercise each independent aircraft's landing transaction.
         foreach (string traffic_leg in new[] { "BASE", "SHORT_FINAL", "DEPART", "BASE", "SHORT_FINAL" }) {
             Drain(director, heard, ref clock, t => State(t, leg: "DOWNWIND", traffic: [
                 Ship("RAPIER 2", traffic_leg),
@@ -177,6 +196,15 @@ public class MissionRadioCatalogContractTests {
             t => State(t, leg: "BASE", gearDownAndLocked: false));
         Drain(unsafeDirector, heard, ref clock,
             t => State(t, leg: "SHORT_FINAL", gearDownAndLocked: false));
+
+        // A pilot-initiated discontinuation is a separate transaction from Tower's safety call.
+        var goAroundDirector = new MissionRadioDirector();
+        clock = 0.0;
+        goAroundDirector.Step(State(clock, leg: "DEPART"));
+        Drain(goAroundDirector, heard, ref clock, t => State(t, leg: "INITIAL"));
+        Drain(goAroundDirector, heard, ref clock, t => State(t, leg: "BREAK"));
+        Drain(goAroundDirector, heard, ref clock, t => State(
+            t, leg: "DOWNWIND", pilotGoingAround: true));
 
         // Bolters and every wire, tower-side and LSO-side.
         foreach (bool maritime in new[] { false, true }) {
@@ -310,8 +338,12 @@ public class MissionRadioCatalogContractTests {
         string[] required = [
             "pilot-initial",
             "tower-break-approved",
+            "pilot-crosswind",
             "tower-cleared-arrested-landing",
             "pilot-landing-ack",
+            "pilot-base-touch-and-go",
+            "tower-cleared-touch-and-go",
+            "pilot-touch-and-go-ack",
             "tower-waveoff-gear",
             "lso-waveoff",
             "control-commit-short",
@@ -323,6 +355,8 @@ public class MissionRadioCatalogContractTests {
             + string.Join(", ", required.Where(id => !heardIds.Contains(id))));
         Assert.DoesNotContain("launch-cleared", heardIds);
         Assert.DoesNotContain("pilot-launch-readback", heardIds);
+        Assert.DoesNotContain("control-confirm-safe", heardIds);
+        Assert.DoesNotContain("pilot-switch-safe", heardIds);
 
         // Content contracts are also runtime contracts: the director must emit each turn in
         // exchange order, not merely retain semantically valid lines in the catalog.

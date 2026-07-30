@@ -1,5 +1,6 @@
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
+using GunsOnly.Sim.Environment;
 
 namespace GunsOnly.Sim.Tests;
 
@@ -16,6 +17,9 @@ public class MissionRadioTests {
         string leg = "DEPART",
         IReadOnlyList<CircuitTrafficShip>? traffic = null,
         bool gearDownAndLocked = true,
+        CircuitLandingIntent landingIntent = CircuitLandingIntent.FullStop,
+        bool landingAuthorityAvailable = true,
+        bool pilotGoingAround = false,
         bool recoveryApproach = false,
         bool maritimeRecovery = false,
         Carrier.Recovery recovery = Carrier.Recovery.Flying,
@@ -41,6 +45,9 @@ public class MissionRadioTests {
             PlayerLeg: leg,
             Traffic: traffic ?? NoTraffic,
             GearDownAndLocked: gearDownAndLocked,
+            PlayerLandingIntent: landingIntent,
+            LandingAuthorityAvailable: landingAuthorityAvailable,
+            PilotGoingAround: pilotGoingAround,
             RecoveryApproach: recoveryApproach,
             MaritimeRecovery: maritimeRecovery,
             Recovery: recovery,
@@ -86,7 +93,7 @@ public class MissionRadioTests {
         MissionRadioTransmission launch =
             director.Step(State(0.0, catapult: true));
         Assert.False(launch.Active);
-        Assert.True(director.LaunchClearanceComplete);
+        Assert.Empty(director.Decisions);
 
         // Once airborne, pattern R/T begins at the first reportable gate.
         clock += 1.0;
@@ -98,6 +105,23 @@ public class MissionRadioTests {
         Assert.Equal("pilot-initial", initial.Id);
         Assert.Equal("GHOST 11", initial.Speaker);
         Assert.Equal(MissionRadioChannel.Tower, initial.Channel);
+    }
+
+    [Fact]
+    public void SessionLauncherCannotBeHeldByAmbientRadio() {
+        var session = new SimulationSession(11,
+            weather: KoreaWeatherPresets.ForBeat(11));
+        session.Begin();
+
+        Assert.Equal(
+            CatapultLaunchModel.LaunchPhase.Hold,
+            session.Catapult.Phase);
+        session.StepFixed();
+
+        Assert.NotEqual(
+            CatapultLaunchModel.LaunchPhase.Hold,
+            session.Catapult.Phase);
+        Assert.False(session.MissionRadio.Active);
     }
 
     [Fact]
@@ -115,7 +139,7 @@ public class MissionRadioTests {
     }
 
     [Fact]
-    public void TrafficReportsOnlyWhenCrossingAReportableLeg() {
+    public void IndependentTrafficOpensACompleteLandingTransactionOnBase() {
         var director = new MissionRadioDirector();
         CircuitTrafficShip downwind = Ship("RAPIER 2", "DOWNWIND");
         CircuitTrafficShip onBase = Ship("RAPIER 2", "BASE");
@@ -124,13 +148,29 @@ public class MissionRadioTests {
         director.Step(State(0.0, traffic: [downwind]));
         director.Step(State(1.0, traffic: [onBase]));
         clock = 1.0;
-        MissionRadioTransmission call = WaitFor(
-            director, ref clock, "traffic-rapier-2-gear",
+        MissionRadioTransmission report = WaitFor(
+            director, ref clock, "traffic-rapier-2-base",
+            t => State(t, traffic: [onBase]));
+        MissionRadioTransmission clearance = WaitFor(
+            director, ref clock, "tower-rapier-2-cleared-landing",
+            t => State(t, traffic: [onBase]));
+        MissionRadioTransmission acknowledgment = WaitFor(
+            director, ref clock, "traffic-rapier-2-landing-ack",
             t => State(t, traffic: [onBase]));
 
-        Assert.Equal("GHOST 12", call.Speaker);
-        Assert.Equal("Ghost One Two, gear.", call.Text);
-        Assert.True(call.StartedAtSeconds >= 1.25);
+        Assert.Equal("GHOST 12", report.Speaker);
+        Assert.Equal(
+            "Ghost One Two, base, three greens, touch and go.",
+            report.Text);
+        Assert.Equal(
+            "Ghost One Two, cleared touch and go.",
+            clearance.Text);
+        Assert.Equal(
+            "Cleared touch and go, Ghost One Two.",
+            acknowledgment.Text);
+        Assert.True(report.StartedAtSeconds >= 1.25);
+        Assert.True(clearance.StartedAtSeconds >= report.EndsAtSeconds);
+        Assert.True(acknowledgment.StartedAtSeconds >= clearance.EndsAtSeconds);
     }
 
     [Fact]
@@ -149,15 +189,138 @@ public class MissionRadioTests {
             clock = step * 0.1;
             MissionRadioTransmission silent =
                 director.Step(State(clock, traffic: [configuring]));
-            Assert.NotEqual("traffic-rapier-2-gear", silent.Id);
+            Assert.NotEqual("traffic-rapier-2-base", silent.Id);
         }
 
         MissionRadioTransmission call = WaitFor(
-            director, ref clock, "traffic-rapier-2-gear",
+            director, ref clock, "traffic-rapier-2-base",
             t => State(t, traffic: [configured]),
             step: 0.1);
 
-        Assert.Equal("Ghost One Two, gear.", call.Text);
+        Assert.Equal(
+            "Ghost One Two, base, three greens, touch and go.",
+            call.Text);
+    }
+
+    [Fact]
+    public void PlayerBaseReportCarriesPositionConfigurationAndIntentBeforeClearance() {
+        var director = new MissionRadioDirector();
+        double clock = 0.0;
+
+        director.Step(State(clock, leg: "DOWNWIND"));
+        director.Step(State(1.0, leg: "BASE"));
+        clock = 1.0;
+        MissionRadioTransmission report = WaitFor(
+            director, ref clock, "pilot-base",
+            t => State(t, leg: "BASE"));
+        MissionRadioTransmission clearance = WaitFor(
+            director, ref clock, "tower-cleared-arrested-landing",
+            t => State(t, leg: "BASE"));
+        MissionRadioTransmission acknowledgment = WaitFor(
+            director, ref clock, "pilot-landing-ack",
+            t => State(t, leg: "BASE"));
+
+        Assert.Equal(
+            "Ghost One One, base, three greens.",
+            report.Text);
+        Assert.Equal(
+            "Ghost One One, cleared to land.",
+            clearance.Text);
+        Assert.Equal("Land, Ghost One One.", acknowledgment.Text);
+        MissionRadioExchangeSnapshot exchange = Assert.Single(
+            director.ExchangeHistory,
+            item => item.ContractId == "landing-clearance");
+        Assert.Equal(MissionRadioExchangeStatus.Complete, exchange.Status);
+        Assert.True(exchange.AuthorityAcknowledged);
+    }
+
+    [Fact]
+    public void PlannedTouchAndGoIsExplicitThroughTheLandingTransaction() {
+        var director = new MissionRadioDirector();
+        double clock = 0.0;
+
+        director.Step(State(
+            clock,
+            leg: "DOWNWIND",
+            landingIntent: CircuitLandingIntent.TouchAndGo));
+        director.Step(State(
+            1.0,
+            leg: "BASE",
+            landingIntent: CircuitLandingIntent.TouchAndGo));
+        clock = 1.0;
+        MissionRadioTransmission report = WaitFor(
+            director, ref clock, "pilot-base-touch-and-go",
+            t => State(
+                t,
+                leg: "BASE",
+                landingIntent: CircuitLandingIntent.TouchAndGo));
+        MissionRadioTransmission clearance = WaitFor(
+            director, ref clock, "tower-cleared-touch-and-go",
+            t => State(
+                t,
+                leg: "BASE",
+                landingIntent: CircuitLandingIntent.TouchAndGo));
+        MissionRadioTransmission acknowledgment = WaitFor(
+            director, ref clock, "pilot-touch-and-go-ack",
+            t => State(
+                t,
+                leg: "BASE",
+                landingIntent: CircuitLandingIntent.TouchAndGo));
+
+        Assert.Equal(
+            "Ghost One One, base, three greens, touch and go.",
+            report.Text);
+        Assert.Equal(
+            "Ghost One One, cleared touch and go.",
+            clearance.Text);
+        Assert.Equal(
+            "Cleared touch and go, Ghost One One.",
+            acknowledgment.Text);
+    }
+
+    [Fact]
+    public void PlayerDoesNotReportLandingUntilLateGearIsActuallySafe() {
+        var director = new MissionRadioDirector();
+        double clock = 0.0;
+
+        director.Step(State(clock, leg: "DOWNWIND", gearDownAndLocked: false));
+        director.Step(State(1.0, leg: "BASE", gearDownAndLocked: false));
+        clock = 1.0;
+        for (int step = 0; step < 10; step++) {
+            clock += 0.1;
+            MissionRadioTransmission current = director.Step(
+                State(clock, leg: "BASE", gearDownAndLocked: false));
+            Assert.NotEqual("pilot-base", current.Id);
+        }
+
+        MissionRadioTransmission report = WaitFor(
+            director, ref clock, "pilot-base",
+            t => State(t, leg: "BASE", gearDownAndLocked: true),
+            step: 0.1);
+
+        Assert.Equal(
+            "Ghost One One, base, three greens.",
+            report.Text);
+    }
+
+    [Fact]
+    public void GearReminderExpiresIfTheGearBecomesSafeBeforeKeyDown() {
+        var director = new MissionRadioDirector();
+
+        director.Step(State(0.0, leg: "DEPART", gearDownAndLocked: false));
+        director.Step(State(1.0, leg: "DOWNWIND", gearDownAndLocked: false));
+        MissionRadioTransmission afterGear =
+            director.Step(State(1.1, leg: "DOWNWIND", gearDownAndLocked: true));
+        MissionRadioTransmission later =
+            director.Step(State(2.0, leg: "DOWNWIND", gearDownAndLocked: true));
+
+        Assert.NotEqual("tower-check-gear-downwind", afterGear.Id);
+        Assert.NotEqual("tower-check-gear-downwind", later.Id);
+        Assert.Contains(
+            director.Decisions,
+            decision =>
+                decision.Kind == MissionRadioDecisionKind.SuppressedInvalidState
+                && decision.TransmissionId == "tower-check-gear-downwind");
     }
 
     [Fact]
@@ -179,7 +342,7 @@ public class MissionRadioTests {
         double clock = 1.0;
         long seenSequence = 0;
         var heard = new List<MissionRadioTransmission>();
-        for (int step = 0; step < 160 && heard.Count < 3; step++) {
+        for (int step = 0; step < 320 && heard.Count < 9; step++) {
             clock += 0.1;
             MissionRadioTransmission current =
                 director.Step(State(clock, traffic: onBase));
@@ -191,12 +354,18 @@ public class MissionRadioTests {
 
         Assert.Equal(
             [
-                "traffic-rapier-3-gear",
-                "traffic-rapier-4-gear",
-                "traffic-rapier-2-gear",
+                "traffic-rapier-3-base",
+                "tower-rapier-3-cleared-landing",
+                "traffic-rapier-3-landing-ack",
+                "traffic-rapier-4-base",
+                "tower-rapier-4-cleared-landing",
+                "traffic-rapier-4-landing-ack",
+                "traffic-rapier-2-base",
+                "tower-rapier-2-cleared-landing",
+                "traffic-rapier-2-landing-ack",
             ],
             heard.Select(call => call.Id));
-        Assert.True(heard[^1].StartedAtSeconds - heard[0].StartedAtSeconds < 10.0);
+        Assert.True(heard[^1].StartedAtSeconds - heard[0].StartedAtSeconds < 40.0);
         for (int index = 1; index < heard.Count; index++)
             Assert.True(heard[index].StartedAtSeconds >= heard[index - 1].EndsAtSeconds);
     }
@@ -216,18 +385,18 @@ public class MissionRadioTests {
         Assert.Contains(
             director.Decisions,
             decision => decision.Kind == MissionRadioDecisionKind.Queued
-                && decision.TransmissionId == "traffic-rapier-2-gear");
+                && decision.TransmissionId == "traffic-rapier-2-base");
         for (int step = 1; step <= 80; step++) {
             double clock = 1.0 + step * 0.1;
             MissionRadioTransmission current =
                 director.Step(State(clock, traffic: [onFinal]));
-            Assert.NotEqual("traffic-rapier-2-gear", current.Id);
+            Assert.NotEqual("traffic-rapier-2-base", current.Id);
         }
         Assert.Contains(
             director.Decisions,
             decision => decision.Kind == MissionRadioDecisionKind.Expired
-                && decision.TransmissionId == "traffic-rapier-2-gear"
-                && decision.Reason.Contains("left the reportable"));
+                && decision.TransmissionId == "traffic-rapier-2-base"
+                && decision.Reason.Contains("left base"));
     }
 
     [Fact]
@@ -262,11 +431,11 @@ public class MissionRadioTests {
         Assert.Contains(
             director.Decisions,
             decision => decision.Kind == MissionRadioDecisionKind.Preempted
-                && decision.TransmissionId == "traffic-rapier-2-gear");
+                && decision.TransmissionId == "traffic-rapier-2-base");
     }
 
     [Fact]
-    public void GeneratedTrafficMakesAtMostOneRelevantGearCallPerAircraftPerCircuit() {
+    public void GeneratedTrafficMakesAtMostOneLandingReportPerAircraftPerCircuit() {
         var director = new MissionRadioDirector();
         var home = new Vec3D(1_000.0, 40.0, 2_000.0);
         var initial = new Vec3D(1_000.0, 1_040.0, -14_000.0);
@@ -283,23 +452,23 @@ public class MissionRadioTests {
                 director.Step(State(clock, traffic: traffic));
             if (!current.Active
                 || current.Sequence == seenSequence
-                || !current.Id.StartsWith("traffic-", StringComparison.Ordinal))
+                || !current.Id.EndsWith("-base", StringComparison.Ordinal))
                 continue;
 
             seenSequence = current.Sequence;
             CircuitTrafficShip ship = Assert.Single(
                 traffic,
                 candidate => candidate.Callsign switch {
-                    "RAPIER 2" => current.Id == "traffic-rapier-2-gear",
-                    "RAPIER 3" => current.Id == "traffic-rapier-3-gear",
-                    "RAPIER 4" => current.Id == "traffic-rapier-4-gear",
+                    "RAPIER 2" => current.Id == "traffic-rapier-2-base",
+                    "RAPIER 3" => current.Id == "traffic-rapier-3-base",
+                    "RAPIER 4" => current.Id == "traffic-rapier-4-base",
                     _ => false,
                 });
             Assert.Equal("BASE", ship.Leg);
             Assert.True(ship.GearDownAndLocked);
             Assert.True(
                 heardCircuits.Add((ship.Callsign, ship.CircuitNumber)),
-                $"{ship.Callsign} reported gear twice on circuit {ship.CircuitNumber}");
+                $"{ship.Callsign} reported landing twice on circuit {ship.CircuitNumber}");
         }
 
         Assert.Contains(heardCircuits, report => report.Callsign == "RAPIER 2");
@@ -669,28 +838,35 @@ public class MissionRadioTests {
     }
 
     [Fact]
-    public void LandingClearanceIsSuppressedWithoutAnEstablishedTowerPicture() {
+    public void BaseReportEstablishesLandingPictureWithoutHistoricalPatternNarration() {
         var director = new MissionRadioDirector();
+        double clock = 0.0;
         director.Step(State(0.0, leg: "DEPART"));
 
         director.Step(State(1.0, leg: "BASE"));
-        MissionRadioTransmission result = director.Step(State(1.5, leg: "BASE"));
+        clock = 1.0;
+        MissionRadioTransmission report = WaitFor(
+            director, ref clock, "pilot-base",
+            t => State(t, leg: "BASE"),
+            step: 0.1);
+        MissionRadioTransmission clearance = WaitFor(
+            director, ref clock, "tower-cleared-arrested-landing",
+            t => State(t, leg: "BASE"),
+            step: 0.1);
+        MissionRadioTransmission acknowledgment = WaitFor(
+            director, ref clock, "pilot-landing-ack",
+            t => State(t, leg: "BASE"),
+            step: 0.1);
 
-        Assert.False(result.Active);
+        Assert.Equal("pilot-base", report.Id);
+        Assert.Equal("tower-cleared-arrested-landing", clearance.Id);
+        Assert.Equal("pilot-landing-ack", acknowledgment.Id);
         MissionRadioExchangeSnapshot landing = Assert.Single(
             director.ExchangeHistory,
             exchange => exchange.ContractId == "landing-clearance");
-        Assert.Equal(MissionRadioExchangeStatus.Suppressed, landing.Status);
-        Assert.Equal(MissionRadioKnowledge.None, landing.Knowledge);
-        Assert.Contains(
-            director.Decisions,
-            decision => decision.Kind
-                == MissionRadioDecisionKind.SuppressedMissingContext
-                && decision.TransmissionId == "tower-cleared-arrested-landing");
-        Assert.DoesNotContain(
-            director.Decisions,
-            decision => decision.Kind == MissionRadioDecisionKind.Transmitted
-                && decision.TransmissionId == "pilot-landing-ack");
+        Assert.Equal(MissionRadioExchangeStatus.Complete, landing.Status);
+        Assert.True(landing.KnowledgeClosed);
+        Assert.True(landing.AuthorityAcknowledged);
     }
 
     [Fact]
@@ -862,6 +1038,127 @@ public class MissionRadioTests {
         MissionRadioTransmission late = director.Step(State(20.0, leg: "BASE"));
 
         Assert.False(late.Active);
+    }
+
+    [Fact]
+    public void QueuedBaseExchangeIsSuppressedWhenItsClaimStopsBeingTrue() {
+        var director = new MissionRadioDirector();
+        director.Step(State(0.0, leg: "DOWNWIND"));
+        director.Step(State(1.0, leg: "BASE"));
+
+        MissionRadioTransmission stale =
+            director.Step(State(2.0, leg: "DOWNWIND"));
+
+        Assert.False(stale.Active);
+        Assert.Contains(
+            director.Decisions,
+            decision =>
+                decision.Kind == MissionRadioDecisionKind.SuppressedInvalidState
+                && decision.TransmissionId == "pilot-base");
+        MissionRadioExchangeSnapshot exchange = Assert.Single(
+            director.ExchangeHistory,
+            item => item.ContractId == "landing-clearance");
+        Assert.Equal(MissionRadioExchangeStatus.Suppressed, exchange.Status);
+    }
+
+    [Fact]
+    public void LandingAuthorityCannotKeyAfterItBecomesUnavailable() {
+        var director = new MissionRadioDirector();
+        double clock = 0.0;
+        director.Step(State(clock, leg: "DOWNWIND"));
+        director.Step(State(1.0, leg: "BASE"));
+        clock = 1.0;
+        MissionRadioTransmission report = WaitFor(
+            director, ref clock, "pilot-base",
+            t => State(t, leg: "BASE"),
+            step: 0.1);
+
+        bool heardClearance = false;
+        for (int step = 0; step < 80; step++) {
+            clock = Math.Max(clock, report.EndsAtSeconds) + 0.1;
+            MissionRadioTransmission current = director.Step(State(
+                clock,
+                leg: "BASE",
+                landingAuthorityAvailable: false));
+            heardClearance |= current.Id == "tower-cleared-arrested-landing";
+        }
+
+        Assert.False(heardClearance);
+        Assert.Contains(
+            director.Decisions,
+            decision =>
+                decision.Kind == MissionRadioDecisionKind.SuppressedInvalidState
+                && decision.TransmissionId == "tower-cleared-arrested-landing");
+    }
+
+    [Fact]
+    public void CrosswindCallRequiresThePublishedCrosswindState() {
+        var director = new MissionRadioDirector();
+        double clock = 0.0;
+        director.Step(State(clock, leg: "BREAK"));
+        director.Step(State(1.0, leg: "CROSSWIND"));
+        clock = 1.0;
+
+        MissionRadioTransmission crosswind = WaitFor(
+            director, ref clock, "pilot-crosswind",
+            t => State(t, leg: "CROSSWIND"),
+            step: 0.1);
+
+        Assert.Equal("Ghost One One, crosswind.", crosswind.Text);
+
+        var skipped = new MissionRadioDirector();
+        skipped.Step(State(0.0, leg: "BREAK"));
+        skipped.Step(State(1.0, leg: "DOWNWIND"));
+        Assert.DoesNotContain(
+            skipped.Decisions,
+            decision => decision.TransmissionId == "pilot-crosswind");
+    }
+
+    [Fact]
+    public void PilotInitiatedGoAroundIsDistinctFromATowerSafetyInstruction() {
+        var director = new MissionRadioDirector();
+        double clock = 0.0;
+        director.Step(State(clock, leg: "DEPART"));
+        director.Step(State(1.0, leg: "INITIAL"));
+        clock = 1.0;
+        WaitFor(
+            director, ref clock, "pilot-initial",
+            t => State(t, leg: "INITIAL"),
+            step: 0.1);
+        WaitFor(
+            director, ref clock, "tower-break-approved",
+            t => State(t, leg: "INITIAL"),
+            step: 0.1);
+        clock += 0.1;
+        director.Step(State(clock, leg: "BREAK"));
+        clock += 0.1;
+        director.Step(State(clock, leg: "DOWNWIND", pilotGoingAround: true));
+
+        MissionRadioTransmission report = WaitFor(
+            director, ref clock, "pilot-going-around",
+            t => State(t, leg: "DOWNWIND", pilotGoingAround: true),
+            step: 0.1);
+        MissionRadioTransmission acknowledgment = WaitFor(
+            director, ref clock, "tower-going-around-ack",
+            t => State(t, leg: "DOWNWIND", pilotGoingAround: true),
+            step: 0.1);
+
+        Assert.Equal("Ghost One One, going around.", report.Text);
+        Assert.Equal("Ghost One One.", acknowledgment.Text);
+
+        var unsafeDirector = new MissionRadioDirector();
+        unsafeDirector.Step(State(0.0, leg: "DOWNWIND"));
+        unsafeDirector.Step(State(
+            1.0,
+            leg: "SHORT_FINAL",
+            gearDownAndLocked: false,
+            pilotGoingAround: true));
+        Assert.DoesNotContain(
+            unsafeDirector.Decisions,
+            decision => decision.TransmissionId == "pilot-going-around");
+        Assert.Contains(
+            unsafeDirector.Decisions,
+            decision => decision.TransmissionId == "tower-waveoff-gear");
     }
 
     [Theory]

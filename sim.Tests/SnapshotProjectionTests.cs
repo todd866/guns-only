@@ -65,12 +65,77 @@ public class SnapshotProjectionTests {
             root.GetProperty("rapier_material_mach_ceiling").GetDouble());
     }
 
+    [Fact]
+    public void RapierFinalizedExposurePublishesReviewEvidenceWithoutDamageOrCost() {
+        var session = new SimulationSession(
+            beatIndex: 10,
+            weather: KoreaWeatherPresets.ForBeat(10));
+        session.Begin();
+        session.StepFixed(120);
+        session.Restart();
+
+        using JsonDocument document = JsonDocument.Parse(
+            SnapshotProjection.BuildState(
+                session,
+                Carrier.DeckConfiguration.Angled,
+                0.0,
+                0.0,
+                false,
+                null));
+        JsonElement root = document.RootElement;
+
+        Assert.True(root.GetProperty(
+            "service_life_record_available").GetBoolean());
+        Assert.Equal(1, root.GetProperty(
+            "service_life_record_sequence").GetInt64());
+        Assert.Equal("COMPLETE", root.GetProperty(
+            "service_life_evidence_status").GetString());
+        Assert.Equal(64, root.GetProperty(
+            "service_life_record_sha256").GetString()!.Length);
+        Assert.Equal("not_computed", root.GetProperty(
+            "service_life_damage_assessment").GetString());
+        Assert.Equal("not_computed", root.GetProperty(
+            "service_life_cost_projection").GetString());
+        Assert.Equal(
+            session.RapierServiceLife.LatestRecord!
+                .Mechanical.MaximumLoadMilliG / 1000.0,
+            root.GetProperty("service_life_max_g").GetDouble());
+    }
+
+    [Fact]
+    public void VariedRapierInterceptAlonePublishesTheEconomicMissionContract() {
+        using JsonDocument economicDocument = JsonDocument.Parse(
+            ProjectAfterSteps(beatIndex: 12, ticks: 1, terrain: null));
+        JsonElement economic = economicDocument.RootElement;
+        Assert.True(economic.GetProperty("rapier_economy_active").GetBoolean());
+        Assert.Equal(RapierEconomicModel.ModelId, economic.GetProperty(
+            "rapier_economy_model_id").GetString());
+        Assert.StartsWith("rapier.target-contract.", economic.GetProperty(
+            "rapier_economy_target_contract_id").GetString());
+        Assert.True(economic.GetProperty(
+            "rapier_economy_target_reward_credits").GetInt32() > 0);
+        Assert.Equal("", economic.GetProperty(
+            "rapier_economy_application_key").GetString());
+        Assert.False(economic.GetProperty(
+            "rapier_economy_damage_cost_computed").GetBoolean());
+
+        foreach (int arcadeBeat in new[] { 7, 10, 11 }) {
+            using JsonDocument arcadeDocument = JsonDocument.Parse(
+                ProjectAfterSteps(arcadeBeat, ticks: 1, terrain: null));
+            Assert.False(arcadeDocument.RootElement.GetProperty(
+                "rapier_economy_active").GetBoolean());
+            Assert.Equal(0, arcadeDocument.RootElement.GetProperty(
+                "rapier_economy_sortie_net_credits").GetInt32());
+        }
+    }
+
     [Theory]
     [InlineData(7, 12)]   // F-22 modern visual-merge beat
     [InlineData(8, 12)]   // fictional Ukraine low-level drone intercept
     [InlineData(9, 12)]   // single Ace duel in the same theatre
     [InlineData(10, 12)]  // Rapier fixed-strip sortie
     [InlineData(11, 12)]  // Rapier Circuits with traffic and structured R/T
+    [InlineData(12, 12)]  // varied Rapier operations contract
     [InlineData(5, 30)]   // carrier recovery beat
     [InlineData(1, 8)]    // grammar/physics slice beat
     public void BuildStateEmitsParseableFiniteJson(int beatIndex, int ticks) {
@@ -126,6 +191,8 @@ public class SnapshotProjectionTests {
         Assert.InRange(timeCompressionFactor.GetInt32(), 1, 16);
         Assert.InRange(root.GetProperty("time_compression_requested_factor").GetInt32(),
             1, 16);
+        Assert.InRange(root.GetProperty("time_compression_safety_factor_cap").GetInt32(),
+            1, 8);
         Assert.True(root.TryGetProperty("time_compression_inhibit_reason", out _));
         // The automatic speed brake is an F-22 surrogate surface: beats 7/8/9 carry it, the F-86
         // and carrier beats project a hard 0.0 with the capability off, so the HUD shows no dead
@@ -165,7 +232,7 @@ public class SnapshotProjectionTests {
         Assert.True(root.TryGetProperty("fuel_joker", out _));
         Assert.True(root.TryGetProperty("fuel_minimum", out _));
         Assert.True(root.TryGetProperty("fuel_emergency", out _));
-        bool recoveryPointKnown = beatIndex is 5 or 7 or 9 or 10 or 11;
+        bool recoveryPointKnown = beatIndex is 5 or 7 or 9 or 10 or 11 or 12;
         Assert.Equal(recoveryPointKnown,
             root.GetProperty("recovery_point_known").GetBoolean());
         bool runwayAvailable = beatIndex is 7 or 9;
@@ -228,7 +295,7 @@ public class SnapshotProjectionTests {
             Assert.Equal(JsonValueKind.Null, fuelOnArrival.ValueKind);
             Assert.Equal(3000.0, reserveTarget.GetDouble());
             Assert.Equal(JsonValueKind.Null, reserveMargin.ValueKind);
-        } else if (beatIndex == 10) {
+        } else if (beatIndex is 10 or 12) {
             Assert.Equal("recovery.rapier.eastern-dispersed-strip.v1",
                 root.GetProperty("recovery_id").GetString());
             Assert.Equal("Eastern dispersed strip",
@@ -250,7 +317,7 @@ public class SnapshotProjectionTests {
             Assert.Equal(5500.0, jokerThreshold.GetDouble());
             Assert.Equal(2100.0, minimumThreshold.GetDouble());
             Assert.Equal(1200.0, emergencyThreshold.GetDouble());
-        } else if (beatIndex == 10) {
+        } else if (beatIndex is 10 or 12) {
             Assert.Equal(1200.0, jokerThreshold.GetDouble());
             Assert.Equal(600.0, minimumThreshold.GetDouble());
             Assert.Equal(300.0, emergencyThreshold.GetDouble());

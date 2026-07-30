@@ -27,6 +27,60 @@ function thermalOver(state) {
   return marginC !== null && marginC < 0;
 }
 
+const CIRCUIT_LEG_FROM_CODE = Object.freeze({
+  1: "DEPART",
+  2: "INITIAL",
+  3: "BREAK",
+  4: "DOWNWIND",
+  5: "BASE",
+  6: "SHORT_FINAL",
+  7: "WIRE_FINAL",
+  8: "COMPLETE",
+});
+
+function circuitLeg(state) {
+  if (typeof state?.rapier_circuit_leg === "string" && state.rapier_circuit_leg) {
+    return state.rapier_circuit_leg.toUpperCase();
+  }
+  const code = Math.floor(Number(state?.rapier_circuit_leg_code) || 0);
+  return CIRCUIT_LEG_FROM_CODE[code] ?? "";
+}
+
+/**
+ * VERIFY owns configuration only while the aircraft disagrees with the current circuit leg.
+ * Once the expected state is physically established, the normal systems card expires.
+ */
+export function circuitConfigurationMatches(state = {}) {
+  const leg = circuitLeg(state);
+  if (!leg || leg === "COMPLETE") return true;
+  const gear = [
+    finiteNumber(state.gear_nose),
+    finiteNumber(state.gear_left),
+    finiteNumber(state.gear_right),
+  ];
+  const elevons = [
+    finiteNumber(state.flap_left_deg),
+    finiteNumber(state.flap_right_deg),
+  ];
+  const gearDown = gear.every((position) => position !== null && position > 0.85);
+  const gearUp = gear.every((position) => position !== null && position < 0.15);
+  const elevonsDown = elevons.every((angle) => angle !== null && angle > 8);
+  const elevonsUp = elevons.every((angle) => angle !== null && angle < 1);
+  const landingLeg = leg === "DOWNWIND" || leg === "BASE"
+    || leg === "SHORT_FINAL" || leg === "WIRE_FINAL";
+  return landingLeg
+    ? gearDown && elevonsDown
+    : gearUp && elevonsUp;
+}
+
+function circuitFuelNeedsAttention(state) {
+  if (state.fuel_emergency === true || state.fuel_minimum === true
+    || state.fuel_bingo === true || state.fuel_joker === true) return true;
+  const fuelLb = finiteNumber(state.fuel_lb);
+  const bingoLb = finiteNumber(state.fuel_bingo_lb);
+  return fuelLb !== null && bingoLb !== null && fuelLb <= bingoLb;
+}
+
 /**
  * Which always-on HUD surfaces may speak for this snapshot.
  * Non-Rapier missions leave Rapier-specific surfaces off and do not constrain carrier gear chrome.
@@ -57,17 +111,20 @@ export function hudPhasePresentation(state = {}) {
   }
 
   if (patternOnly) {
-    // Circuits inherits sockets later; keep FD + config chrome for pattern school.
+    const configurationMatches = circuitConfigurationMatches(snapshot);
     return Object.freeze({
       mission: "rapier_circuits",
       phaseBand: band,
+      circuitLeg: circuitLeg(snapshot),
       surfaces: Object.freeze({
         quietLine: true,
         centerFdCommands: true,
         contactGeometry: true,
         cycleTeach: false,
-        systemsGear: true,
-        limitsFuel: true,
+        // VERIFY expires when the leg's physical configuration is established.
+        systemsGear: !configurationMatches,
+        // Pattern fuel is latent unless it becomes a real constraint.
+        limitsFuel: circuitFuelNeedsAttention(snapshot),
       }),
     });
   }

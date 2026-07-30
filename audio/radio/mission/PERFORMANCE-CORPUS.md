@@ -15,7 +15,7 @@ through the aircraft and ANCA.
 | Game event | Real-world analogue | Observed behavior | Binding decision |
 |---|---|---|---|
 | Buried-tube launch | Carrier catapult shot | The flight deck uses standardized visual hand signals; the pilot salutes readiness and the shot crew launches the aircraft. This is not a pilot/controller radio-clearance transaction. | No launch R/T and no audio-dependent launcher interlock. First possible call is after the aircraft is airborne. |
-| Fighter pattern | Nellis overhead/formation recovery | Aircraft report initial. A flight lead owns the landing clearance; following formation members reduce their call to callsign plus `GEAR`. ATC moves the break only when sequencing requires it. | Establish the pattern once, retain one landing transaction per pass, and allow at most one ambient `GEAR` call per 90 seconds. |
+| Rapier training pattern | Independent single-ship recoveries using a common local frequency | Each aircraft owns its landing transaction. Position and achieved gear state precede Tower's aircraft-specific landing authority; only a non-default intention is added. The aircraft reads back the authority it accepts. ATC moves the break only for a real sequencing delta. | Establish the pattern once. Normal full-stop ownship: `base, three greens` → `cleared to land` → `Land, Ghost One One`. Touch-and-go traffic states and reads back `touch and go`. Never borrow the bare `GEAR` call that belongs to subsequent members of one formation flight. |
 | Tactical commit | Current US multiservice air-control procedure | Pre-COMMIT the controller has priority. With controller authority, the directive ends `[flight] COMMIT`; the fighter acknowledges with callsign. During employment, fighters become the priority communicators. | `Ghost, commit.` / `Ghost One One.` replaces the invented “you are ordered to engage.” Check-in is not replayed when the playable beat begins in medias res. |
 | Normal carrier pass | LSO/aircraft ball exchange | The pilot's ball call hands control to the LSO. `Roger ball` is prompt and calm. A good pass can then be silent to touchdown. | Silence is the normal LSO state. Do not add encouragement or continuous talkdown. A correctly timed ball event still needs simulation support before it can ship. |
 | Degrading carrier pass | LSO correction ladder | Calls begin as information or a small correction, become shorter and firmer only if the aircraft does not respond, then terminate in a calm waveoff. Repetition follows an inadequate response; it is not flavor. | Directions ban barking, shouting, and “explosive” delivery. Call density must follow a persistent deviation, not elapsed time. |
@@ -34,12 +34,25 @@ through the aircraft and ANCA.
 
 ### Pattern
 
+- The project identity decision in
+  [`docs/2026-07-29-callsign-and-pilot-identity.md`](../../../docs/2026-07-29-callsign-and-pilot-identity.md)
+  makes Ghost 11–14 static squadron slots and says the Rapier force flies single-ship from
+  dispersed tubes. They are not elements recovering under one flight lead's clearance.
 - [NELLISAFBI 11-250, 9 July 2026](https://static.e-publishing.af.mil/production/1/nellisafb/publication/nellisafbi11-250/nellisafbi11-250.pdf),
   paragraphs 4.14 and 4.14.1, requires an initial report, has Tower assign break direction
   and runway before initial, and reduces subsequent formation members to a gear call such
-  as `HOSS 2, GEAR`.
+  as `HOSS 2, GEAR`. That compact call is evidence for formation recovery only, and is the
+  reason a bare `GEAR` call is prohibited for the independent Rapier traffic.
+- FAA JO 7110.65 paragraph 2-1-25 has Tower issue `CHECK WHEELS DOWN` unless the pilot has
+  already reported wheels down. In the normal Rapier transaction the pilot reports the
+  achieved gear state; Tower does not narrate a redundant check.
 - The same instruction uses `BREAK MIDFIELD TO FOLLOW TRAFFIC` as the model for an actual
   sequencing delta. A controller need not decorate every lap with a different sentence.
+- Public cockpit/ATC pattern references used for pace measurement:
+  [full AT-38 sortie](https://www.youtube.com/watch?v=v12QCwJtRq0) and
+  [military traffic at Edwards AFB](https://www.youtube.com/watch?v=4zhmGHrWKuk).
+  The approximate semantic-unit timings and their limitations are checked into
+  `audio/rt/operational-cadence-evidence.json`.
 
 ### Intercept and employment
 
@@ -76,6 +89,8 @@ four-second dramatic reads.
 
 | Material | Useful observed timing | Performance implication |
 |---|---|---|
+| AT-38 base report | Automatic-caption onsets put `base`, the two-word gear block, and `full stop` inside about 1.3 s, with neighboring word onsets mostly 240–319 ms apart. The exact transcript and boundaries remain approximate. | Keep the packet connected. The familiar operational core may compress, but key identity/numerals remain clear and there is no multi-second dramatic pause before intention. |
+| Edwards gear/intention fragment | Approximate word-onset timing puts `gear down` near 267 WPM and `touch and go` near 300 WPM. | Real emphasis is a modest local pace/stress change, not a flat recital and not a theatrical slowdown on every important word. |
 | Normal/rough carrier ball exchange | Ball call about 2.5–3.5 s because it carries side number, type, fuel, and mode; `Roger ball` about 0.6–1.0 s; response begins promptly rather than after a dramatic pause. | Data determines duration. An acknowledgment is a quick turn, not a scene beat. |
 | Degrading pass scanner sample | Corrections are usually 0.5–1.5 s. `Power` repeats at roughly human reaction intervals when the low trend continues. Waveoff terminates the sequence. | Repeat only after observing no adequate aircraft response. Escalate syntax and timing, not acting. |
 | Clara talkdown | Longer 1–4 s packets are used because the pilot lacks ordinary visual cues. Corrections are separated into actionable chunks; the voice remains even. | Verbosity is a degraded-mode service, not the default LSO personality. |
@@ -131,8 +146,12 @@ without moving to a model/API path that supports generation configuration.
 ## Acceptance examples
 
 - **Normal pattern:** long silence; `Ghost One One, initial` / prompt Tower response; long
-  silence; one landing clearance and a callsign acknowledgment.
-- **Ambient pattern:** at most one unrelated formation `GEAR` call in ninety seconds.
+  silence; `Ghost One One, base, three greens` / aircraft-specific `cleared to land` /
+  `Land, Ghost One One`. Full stop is the local default and remains implicit.
+- **Ambient pattern:** each independent aircraft uses that same three-turn landing transaction
+  only when it reaches base with gear actually down. The generated traffic is touch-and-go, so
+  it explicitly requests, receives, and reads back `touch and go`. Several valid arrivals may
+  briefly saturate the common frequency; otherwise the circuit stays quiet.
 - **Direct-join intercept:** no catch-up check-in dialogue; `Ghost, commit` / `Ghost One One`.
 - **Good carrier pass:** ball exchange, then silence.
 - **Decaying carrier pass:** one correction; wait for response; repeat or strengthen only

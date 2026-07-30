@@ -263,6 +263,11 @@
       transform: scale(.96);
     }
 
+    .touch-control:disabled {
+      opacity: .34;
+      pointer-events: none;
+    }
+
     .touch-left,
     .touch-right {
       position: absolute;
@@ -428,6 +433,12 @@
       font-size: 8px;
     }
 
+    #touch-target-cycle {
+      border-color: rgba(255, 176, 32, .62);
+      color: #ffe0a0;
+      background: rgba(45, 27, 2, .76);
+    }
+
     #fallback-stick,
     #target-stick {
       appearance: none;
@@ -540,17 +551,7 @@
     .touch-mode.touch-primary #target-stick {
       right: calc(env(safe-area-inset-right, 0px) + 12px);
       left: auto;
-      border-color: rgba(255, 92, 109, .38);
-      color: rgba(255, 228, 232, .68);
-      background: radial-gradient(circle at 50% 50%,
-        rgba(91, 28, 42, .36) 0 27%, rgba(14, 3, 9, .58) 29% 100%);
       transform: none;
-    }
-
-    #target-stick-knob {
-      border-color: rgba(255, 158, 170, .7);
-      background: rgba(91, 24, 37, .86);
-      box-shadow: 0 0 18px rgba(255, 70, 93, .22);
     }
 
     #tilt-prompt {
@@ -649,13 +650,18 @@
       letter-spacing: .12em;
     }
 
-    /* Portrait is the two-stick assisted profile: the left thumb flies, the right thumb looks
-       and fires, while the machine holds corner speed. Tilt is optional low-authority trim. */
+    /* Portrait is the two-stick assisted profile: the left thumb flies, the right thumb looks,
+       while explicit TARGET / PADLOCK / FIRE controls sit above it. Tilt is optional
+       low-authority trim. */
     #portrait-chips { display: none; }
     #portrait-chips[hidden] { display: none !important; }
     @media (orientation: portrait) {
-      .portrait-assist .touch-left,
-      .portrait-assist .touch-right { display: none; }
+      .portrait-assist .touch-left { display: none; }
+      .portrait-assist .touch-right { display: flex; }
+      .touch-mode.touch-primary .touch-right {
+        right: calc(env(safe-area-inset-right, 0px) + 12px);
+        bottom: calc(env(safe-area-inset-bottom, 0px) + min(36vw, 156px) + 20px);
+      }
       .touch-mode.touch-primary #fallback-stick,
       .touch-mode.touch-primary #target-stick {
         width: min(36vw, 156px);
@@ -749,14 +755,6 @@
 
     .boot-card::before { top: 0; }
     .boot-card::after { bottom: 0; }
-
-    .boot-kicker {
-      margin-bottom: 9px;
-      color: #4dff88;
-      font: 600 11px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      letter-spacing: .28em;
-      text-transform: uppercase;
-    }
 
     .boot-title {
       margin: 0;
@@ -2511,8 +2509,9 @@
       <div class="touch-actions">
         <button id="touch-gcas-paddle" class="touch-control touch-wave" type="button" data-hold-key="KeyK" aria-label="Hold Auto-GCAS paddle override" hidden>GCAS<br>PADDLE</button>
         <button id="touch-limit-override" class="touch-control" type="button" data-hold-key="Space" aria-label="G-limiter and high-alpha override" hidden>LIMIT<br>OVR</button>
+        <button id="touch-target-cycle" class="touch-control touch-utility" type="button" data-mobile-action="target-cycle" aria-label="Select Target 2" data-selected="1" hidden><span id="touch-target-label">TARGET</span><br><span id="touch-target-number">1</span></button>
         <button class="touch-control touch-utility" type="button" data-pulse-key="KeyV" aria-label="Padlock target or nearby carrier" aria-pressed="false" hidden>PADLOCK<br>V</button>
-        <button id="touch-fire" class="touch-control touch-fire" type="button" data-hold-key="KeyF" hidden>FIRE</button>
+        <button id="touch-fire" class="touch-control touch-fire" type="button" data-hold-key="KeyF" aria-label="Fire guns" hidden>FIRE</button>
       </div>
       <div id="portrait-chips" role="group" aria-label="Assisted flight controls">
         <button class="touch-control" type="button" data-assist-nudge="-1" aria-label="Hold a slower speed">SLOWER</button>
@@ -2528,10 +2527,10 @@
       <span id="fallback-stick-help" class="visually-hidden">Left thumb: drag left or right to roll; drag down to pull and up to push. The stick centres when released.</span>
     </button>
 
-    <button id="target-stick" type="button" data-mobile-action="target-stick" data-active="false" aria-label="Right look and fire stick" aria-describedby="target-stick-help">
+    <button id="target-stick" type="button" data-mobile-action="target-stick" data-active="false" aria-label="Right look stick" aria-describedby="target-stick-help">
       <span id="target-stick-knob" aria-hidden="true"></span>
-      <span class="fallback-stick-label" aria-hidden="true">LOOK · FIRE</span>
-      <span id="target-stick-help" class="visually-hidden">Right thumb: touch and hold to fire; drag to look around. The view returns when released.</span>
+      <span class="fallback-stick-label" aria-hidden="true">LOOK</span>
+      <span id="target-stick-help" class="visually-hidden">Right thumb: drag to look around. The view returns when released. Use the separate FIRE button to shoot.</span>
     </button>
 
     <div id="tilt-prompt" role="dialog" aria-modal="true" aria-labelledby="tilt-title">
@@ -2697,7 +2696,6 @@ Splash one bandit to qualify · H controls · R restarts</p>
 
   <div id="boot" role="status" aria-live="polite">
     <div class="boot-card">
-      <div class="boot-kicker">Rapier · Ukraine jet range</div>
       <h1 class="boot-title">GUNS ONLY</h1>
       <p class="boot-subtitle">Loading deterministic flight kernel</p>
       <div class="boot-track"></div>

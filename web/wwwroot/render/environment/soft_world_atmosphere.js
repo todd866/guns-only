@@ -2,14 +2,15 @@
 // ordinary scene-fog materials. Keep these values in one dependency-free module so the custom
 // terrain shader and Three's built-in material path cannot silently drift apart again.
 
-// Clearer near/mid field so Ukraine desktop reads meadow structure, not cream SNES mush.
-// World-edge bury (terrain shader) still closes the streamed disc.
-export const UKRAINE_SOFT_WORLD_FOG_DENSITY_SCALE = 0.34;
-export const UKRAINE_SOFT_WORLD_HAZE_MIX = 0.58;
-export const UKRAINE_SOFT_WORLD_HAZE_RGB = Object.freeze([0.66, 0.51, 0.30]);
+// Clear enough to retain the painted regional surface from Rapier altitude, but dense enough for
+// the ground to recede through a blue-grey aerial layer instead of ending as a tan render slab.
+// World-edge bury (terrain shader) still closes the streamed disc independently.
+export const UKRAINE_SOFT_WORLD_FOG_DENSITY_SCALE = 0.32;
+export const UKRAINE_SOFT_WORLD_HAZE_MIX = 0.72;
+export const UKRAINE_SOFT_WORLD_HAZE_RGB = Object.freeze([0.48, 0.59, 0.68]);
 // Single source for the soft-world fog hex; fallback paths in scenery/mission features must
 // use this, never a literal — two hardcoded fallbacks forked the palette once already.
-export const UKRAINE_SOFT_WORLD_FOG_HEX = 0xa8814b;
+export const UKRAINE_SOFT_WORLD_FOG_HEX = 0xa69d89;
 export const UKRAINE_SOFT_WORLD_EDGE_HIDE_START = 0.36;
 export const UKRAINE_SOFT_WORLD_EDGE_HIDE_END = 0.72;
 

@@ -166,6 +166,15 @@ down call)" — and 5.8.4.4 defers it until safely established: aviate, navigate
 communicate. Wording per local SOP; the UPT script (community transcription, **[LORE]**-tier
 source for the exact string) is "(Callsign), base, gear down, (no-flap/full stop/departure)."
 
+**Rapier applicability.** Ghost 11–14 are independent squadron slots flying single-ship
+recoveries from dispersed tubes; they are not formation positions sharing a lead's landing
+clearance. The Nellis `HOSS 2, GEAR` reduction is valid only for subsequent members of one
+formation flight after the lead has received the landing clearance. Rapier traffic therefore
+uses the complete local transaction on every recovery: callsign + base + achieved gear state +
+any non-default intention; aircraft-specific landing authority; compact authority readback plus
+callsign. Full stop is the local default and is normally implicit (`Ghost One One, base, three
+greens`); touch-and-go traffic must say the different intention and read back that authority.
+
 **The real script (Navy flavor).** **[OFFICIAL]** The VT-10 "Hollywood Script"
 (TRARONTENNOTE 3710) scripts the whole recovery:
 
@@ -498,13 +507,14 @@ as strong-secondary for the FCLP-identity quote).
    *string* is not (rests on a community flashcard deck).
 2. **Current-generation AFMAN 11-2F-16V3** — e-publishing blocked; radio-discipline quotes are
    from the superseded 1999 AFI (doctrine corroborated stable by 11-248).
-3. **No real recording of an overhead at an operational fighter base** — every pattern
-   verbatim is a scripted training document. Delivery, pacing, and clipping under G in the
-   pattern set rest on inference, not tape.
-4. **Wire-number and rigged-gear radio calls** — no source anywhere voices a wire to the
-   pilot or announces gear rigged; wire is an internal 6JG datum. The catalog's wire lines are
-   unsupported. No official phraseology for announcing cable readiness exists; observed
-   practice is improvised plain language ("Cable coming down." — Kingsley AIB).
+3. **Pattern recording transcription** — public AT-38 cockpit and Edwards ATC recordings now
+   ground delivery and pace, but receiver squelch and automatic-caption substitutions make the
+   exact word boundaries approximate. The measured semantic units and limitations live in
+   `audio/rt/operational-cadence-evidence.json`.
+4. **Wire-number radio calls** — no source voices the caught wire to the pilot; wire is an
+   internal 6JG datum. The catalog's old wire lines were unsupported and remain cut. Cable-state
+   wording is separate: `CABLE INDICATES UP/DOWN` follows the JO 7110.65 arresting-system
+   template and must not be paraphrased as fictional "gear rigged."
 5. **Doubled/tripled urgent LSO delivery** ("Wave off, wave off", "Bolter, bolter") — Figure
    9-1 lists single forms; the repetition convention is plausible-but-unproven (tertiary only).
 6. **LSO cadence timing** — operational recordings are now measured in
@@ -548,13 +558,13 @@ sites, QueuePlayerLeg interpolation, caption/clip regeneration) are recorded at 
 
 | Line | From → To | Basis |
 |------|-----------|-------|
-| `pilot-initial` | "…initial, full stop." → "Rapier One One, initial." | Intentions never ride the initial call; move "full stop" to base |
-| `pilot-base` | "…base, 3 greens." → "Rapier One One, base, gear down, full stop." | Scripted gear call = position + "gear down" + intentions; "3 greens" unsourced as R/T |
+| `pilot-initial` | "…initial, full stop." → "Rapier One One, initial." | Intentions never ride the initial call; the default full-stop intention remains implicit |
+| `pilot-base` | "…base, gear down, full stop." → "Ghost One One, base, three greens." | User local script controls: full stop is the default and stays implicit; voice an intention only when it differs |
 | `pilot-downwind` | "…3 greens." → "…gear down." | VT-6 / AETCMAN "gear down" token |
 | `pilot-checklist-recovery-config` | "…3 greens." → "…gear down." | Same; closes the JO 2-1-25 wheels-check waiver loop |
 | `tower-check-gear-downwind` | "check gear down" → "check wheels down" | JO 7110.65 2-1-25 exact string; keep the omission trigger |
 | `tower-continue-check-gear` | "…check gear down" → "…check wheels down" | Same; third rung if ever needed re-issues with "immediately" |
-| `tower-cleared-arrested-landing` | "…Arresting gear rigged." → "Rapier One One, cable indicates up, cleared to land." | JO 3-3-6 official template; "rigged" exists in no pub |
+| `tower-cleared-arrested-landing` | "…cable indicates up…" → "Ghost One One, cleared to land." | No modeled cable-ready fact authorizes a cable-state claim; retain only the aircraft-specific authority |
 | `traffic-*-base-alt` (×3) | "…3 greens." → "…gear down." | Same gear-token finding |
 | `tower-trap-wire-1` | "wire one, hold position" → "Rapier One One, hold position." | Wire never rides the radio (6JG circuit); hold/rollout is real tower content. Collapse wires 1–4 |
 | `lso-bolter` | "Bolter, bolter." → "Bolter." | Figure 9-1 single form; doubling unproven. If kept for audibility, document as deviation |
@@ -565,7 +575,6 @@ sites, QueuePlayerLeg interpolation, caption/clip regeneration) are recorded at 
 | `lso-fast` | "Fast." → "You're fast." | Figure 9-1 informative framing |
 | `lso-come-right` | "Come right." → "Right for lineup." | The official asymmetry; no "Come right." exists |
 | `control-commit-short` | prior cinematic engage order → "Ghost, commit." | Current ACC controller-authority example ends `[flight] COMMIT`; the fighter gives a callsign-only acknowledgment. Correlated geometry is already on datalink |
-| `control-mission-complete` | → "Rapier One One, confirm weapons safe." | "Mission complete" has no tactical-net analog; real close is the weapons-safe roll call. Pairs with new `pilot-switch-safe` |
 | `pilot-rtb` | "RTB home plate" → "Control, Rapier One One, RTB." | "RTB home plate" doubles one meaning (Table 3 + Table 2) |
 | `control-bingo-rtb` | "RTB home plate" → "Rapier One One, RTB." | Same; keep the cold administrative delivery |
 
@@ -578,6 +587,7 @@ sites, QueuePlayerLeg interpolation, caption/clip regeneration) are recorded at 
 | `tower-trap-wire-*-relaunch` (×4) | Once wire leaves the radio, the relaunch variant has no content; post-trap silence is grounded |
 | `lso-wire-1..4` | Figure 9-1 has no post-landing call; README's "Wire final stays silent" already half-commits |
 | `pilot-checklist-gear-up` ("Gear up.") | Fails AFI 11-2F-16V3 "not a flight intercom" + the catalog's own audience filter; ANCA carries it |
+| `control-confirm-safe` / `pilot-switch-safe` | The simulation owns no weapons-safe switch state. Administrative evidence belongs in telemetry/AAR; radio cannot claim an unmodeled action |
 
 ### ADD
 
@@ -592,7 +602,8 @@ sites, QueuePlayerLeg interpolation, caption/clip regeneration) are recorded at 
 | `control-radar-contact` | "Rapier One One, radar contact." — measured, flat, done | P-1290 sec 601 reply; establishes CONTROL in two words |
 | `pilot-commit-ack` | "Ghost One One." — immediate, level | Current ACC requires two-way communication for a directed COMMIT and shows a callsign-only fighter acknowledgment |
 | `control-picture-clean` | "Control, picture clean." — flat; nothing left on sensors is the whole message | P-1290 sec 611; colder than praise, and the natural RTB trigger |
-| `pilot-switch-safe` | "Rapier One One, switch is safe." — adrenaline draining, flat compliance | Verbatim shooter reply from the balloon-shootdown roll call |
+| `pilot-crosswind` | "Ghost One One, crosswind." — connected routine position report | Emitted only from the published player `CROSSWIND` semantic state |
+| `pilot-going-around` / `tower-going-around-ack` | "Ghost One One, going around." / "Ghost One One." | Pilot-initiated discontinuation; Tower acknowledges only when it has no new instruction |
 
 ### REDIRECT DELIVERY
 
@@ -611,15 +622,17 @@ sites, QueuePlayerLeg interpolation, caption/clip regeneration) are recorded at 
   tick-0 airborne attach and the normal phase transition.
 - Cutting `pilot-break` empties the BREAK case in `QueuePlayerLeg`; `tower-break-approved`
   fires on the INITIAL leg (approval precedes the maneuver), with the 1.5 s tower hold.
-- Moving "full stop" to base changes two interpolated strings in `QueuePlayerLeg`; texts,
-  clips, and captions regenerate together.
+- Full stop is the local default: ownship reports `base, three greens` without an intention.
+  Generated touch-and-go traffic states its non-default intention; texts, clips, and captions
+  regenerate together. A mission-authored ownship touch-and-go uses distinct line IDs so the
+  exact-audio gate can never relabel the default full-stop recordings.
 - Ball call needs a new emission site in the deliberately-silent SHORT_FINAL/WIRE_FINAL gap;
   `tower-waveoff-gear` preempt must still outrank both; `lso-roger-ball` uses the 0.45 s hold.
-- Weapons-safe pair replaces mission-complete in `ObserveEvents`' Victory branch; existing
-  FIFO earliest-time chaining sequences the reply behind the query.
-- Keep two validated silences exactly as coded: no tower reply to traffic base/final calls
-  (VANCEAFBI: "though Tower may not respond") and no reply of any kind to Guns/Fox/Splash
-  (P-1290: "There is no reply to this comm").
+- `ObserveEvents` keeps post-engagement administrative closure off-air until the simulation owns
+  a real weapons-safe state.
+- Preserve validated silence where no transaction needs closure. The independent Rapier base
+  report does need aircraft-specific landing authority, so Tower answers it; tactical
+  Guns/Fox/Splash reporting does not require a reply (P-1290: "There is no reply to this comm").
 - Gear-challenge trigger logic (challenge only when the gear word is omitted) is rulebook-true
   per JO 2-1-25's waiver; change only the wording, never the trigger.
 - Wire removal collapses `ObserveRecovery`'s four-way wire clamp to one hold-position call (or

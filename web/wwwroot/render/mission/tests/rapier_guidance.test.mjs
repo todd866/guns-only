@@ -14,6 +14,19 @@ test("Rapier guidance is absent outside the scripted sortie", () => {
   assert.equal(rapierGuidancePresentation({}), null);
 });
 
+test("Rapier economic briefing names the dealt target and reward", () => {
+  const copy = rapierBriefingText(
+    "Contract: {TARGET_LABEL}. {TARGET_TASK} Pays {TARGET_REWARD} CR.",
+    {
+      rapier_job: "TRANSPORT",
+      rapier_economy_target_reward_credits: 160,
+    },
+  );
+  assert.match(copy, /transport aircraft/i);
+  assert.match(copy, /dive pass/i);
+  assert.match(copy, /Pays 160 CR/);
+});
+
 test("mission-computer loss removes automation and flight-director promises but keeps manual FBW", () => {
   const state = {
     rapier_mission_available: true,
@@ -232,7 +245,7 @@ test("cycle teach uses pounds-force with the CMC thermal channels", () => {
   assert.match(teach.skinText, /SKIN 461/);
 });
 
-test("flight director essays stay on Circuits; Intercept suppresses them", () => {
+test("flight director corrections stay on Circuits; Intercept suppresses them", () => {
   const circuits = rapierFlightDirectorPresentation({
     rapier_mission_available: true,
     rapier_pattern_only: true,
@@ -262,6 +275,19 @@ test("flight director essays stay on Circuits; Intercept suppresses them", () =>
   assert.equal(intercept.speedCall, "");
   assert.equal(intercept.targetKtas, 0);
   assert.equal(intercept.centerFdCommands, false);
+});
+
+test("Circuits director is silent when speed is already on profile", () => {
+  const fd = rapierFlightDirectorPresentation({
+    rapier_mission_available: true,
+    rapier_pattern_only: true,
+    rapier_fd_target_ktas: 250,
+    true_airspeed_kts: 249,
+    rapier_target_altitude_ft: 2500,
+    alt_ft: 2500,
+  });
+  assert.equal(fd.speedCall, "");
+  assert.equal(fd.targetKtas, 250);
 });
 
 test("Circuits RAM climb director predicts FL700 capture before a high-rate overshoot", () => {
@@ -347,7 +373,7 @@ test("coast mode line carries nose→V align cue", () => {
   assert.equal(cue.boxLabel, "NOSE→V");
 });
 
-test("Circuits mode line names the pattern leg without Intercept attack chrome", () => {
+test("Circuits mode line is only authority plus current leg", () => {
   const cue = rapierGuidancePresentation({
     rapier_mission_available: true,
     rapier_pattern_only: true,
@@ -361,14 +387,13 @@ test("Circuits mode line names the pattern leg without Intercept attack chrome",
     rapier_stagnation_temp_c: 90,
     rapier_thermal_margin_c: 1110,
   });
-  assert.match(cue.text, /DIRECT · CIRCUITS · SHORT FINAL/);
-  assert.match(cue.text, /HOOK DOWN · GEAR DOWN · ELEVONS DOWN · 170 KT/);
-  assert.match(cue.text, /LINE UP · CONFIGURED/);
+  assert.equal(cue.text, "DIRECT · SHORT FINAL");
+  assert.doesNotMatch(cue.text, /HOOK|GEAR|ELEVONS|170 KT|950 FT|CONFIGURED/);
   assert.doesNotMatch(cue.text, /SWARM|ATTACK|FL700|SKIN/);
-  assert.equal(cue.boxLabel, "SHORT FINAL");
+  assert.equal(cue.boxLabel, "");
 });
 
-test("Circuits DEMO strips skin and publishes leg config", () => {
+test("Circuits DEMO strips skin and leaves profile/config to their owners", () => {
   const cue = rapierGuidancePresentation({
     rapier_mission_available: true,
     rapier_pattern_only: true,
@@ -381,10 +406,10 @@ test("Circuits DEMO strips skin and publishes leg config", () => {
     rapier_stagnation_temp_c: 90,
     rapier_thermal_margin_c: 1110,
   });
-  assert.match(cue.text, /DEMO · CIRCUITS · DEPART/);
-  assert.match(cue.text, /HOOK DOWN · GEAR UP · ELEVONS UP · 250 KT · 2500 FT/);
+  assert.equal(cue.text, "DEMO · DEPART");
+  assert.doesNotMatch(cue.text, /HOOK|GEAR|ELEVONS|250 KT|2500 FT/);
   assert.doesNotMatch(cue.text, /SKIN|TBCC|RAM|AUTO ·/);
-  assert.equal(cue.boxLabel, "DEPART");
+  assert.equal(cue.boxLabel, "");
 });
 
 test("Circuits MONITOR posture when automation is off", () => {
@@ -400,12 +425,12 @@ test("Circuits MONITOR posture when automation is off", () => {
     rapier_stagnation_temp_c: 120,
     rapier_thermal_margin_c: 1080,
   });
-  assert.match(cue.text, /MONITOR · CIRCUITS · DOWNWIND/);
-  assert.match(cue.text, /HOOK DOWN · GEAR DOWN · ELEVONS DOWN/);
+  assert.equal(cue.text, "MONITOR · DOWNWIND");
+  assert.doesNotMatch(cue.text, /HOOK|GEAR|ELEVONS|250 KT|2500 FT/);
   assert.doesNotMatch(cue.text, /SKIN/);
 });
 
-test("Circuits wire final asks for the arrest", () => {
+test("Circuits wire final leaves the arrest point to world geometry", () => {
   const cue = rapierGuidancePresentation({
     rapier_mission_available: true,
     rapier_pattern_only: true,
@@ -419,11 +444,10 @@ test("Circuits wire final asks for the arrest", () => {
     rapier_stagnation_temp_c: 90,
     rapier_thermal_margin_c: 1110,
   });
-  assert.match(cue.text, /DEMO · CIRCUITS · WIRE FINAL/);
-  assert.match(cue.text, /HOOK DOWN · GEAR DOWN · ELEVONS DOWN/);
-  assert.match(cue.text, /ACCEPT WIRE/);
+  assert.equal(cue.text, "DEMO · WIRE FINAL");
+  assert.doesNotMatch(cue.text, /HOOK|GEAR|ELEVONS|ACCEPT WIRE/);
   assert.doesNotMatch(cue.text, /SKIN/);
-  assert.equal(cue.boxLabel, "WIRE FINAL");
+  assert.equal(cue.boxLabel, "");
 });
 
 test("circuit gate presents world half-size and energy/config status", () => {
@@ -447,8 +471,8 @@ test("circuit gate presents world half-size and energy/config status", () => {
   assert.equal(open.halfM, 100);
   assert.equal(open.status, "GATE OPEN");
   assert.equal(open.accent, "open");
-  assert.match(open.boxLabel, /INITIAL · GATE OPEN/);
-  assert.match(open.configLine, /250 KT/);
+  assert.equal(open.boxLabel, "GATE OPEN");
+  assert.equal(open.configLine, "");
 
   const energy = circuitGatePresentation({
     rapier_mission_available: true,
@@ -467,6 +491,28 @@ test("circuit gate presents world half-size and energy/config status", () => {
   });
   assert.equal(energy.status, "ENERGY");
   assert.equal(energy.accent, "fault");
+  assert.equal(energy.boxLabel, "ENERGY");
+  assert.equal(energy.configLine, "");
+});
+
+test("circuit gate names configuration only when it is the blocking exception", () => {
+  const config = circuitGatePresentation({
+    rapier_mission_available: true,
+    rapier_pattern_only: true,
+    rapier_circuit_leg: "DOWNWIND",
+    rapier_gate_half_m: 100,
+    rapier_gate_face_z: 1,
+    rapier_gate_in_volume: true,
+    rapier_gate_energy_ok: true,
+    gear_nose: 0,
+    gear_left: 0,
+    gear_right: 0,
+    flap_left_deg: 0,
+    flap_right_deg: 0,
+  });
+  assert.equal(config.status, "CONFIG");
+  assert.equal(config.boxLabel, "CONFIG");
+  assert.equal(config.configLine, "GEAR · ELEVONS DOWN");
 });
 
 test("recoveryGatePresentation uses Mesh procedure fields with straight-in accent", () => {

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { hudPhasePresentation, rapierPhaseBand } from "../hud_phase.js";
+import {
+  circuitConfigurationMatches,
+  hudPhasePresentation,
+  rapierPhaseBand,
+} from "../hud_phase.js";
 
 test("rapier phase bands collapse kernel phases", () => {
   assert.equal(rapierPhaseBand(4), "ascent");
@@ -53,14 +57,78 @@ test("thermal OVER resurfaces cycle teach outside ascent", () => {
   assert.equal(hud.surfaces.cycleTeach, true);
 });
 
-test("Circuits keeps FD and gear chrome", () => {
+test("Circuits keeps the director but expires normal config and fuel chrome", () => {
   const hud = hudPhasePresentation({
     rapier_mission_available: true,
     rapier_pattern_only: true,
     rapier_mission_phase: 13,
+    rapier_circuit_leg: "DOWNWIND",
+    gear_nose: 1,
+    gear_left: 1,
+    gear_right: 1,
+    flap_left_deg: 30,
+    flap_right_deg: 30,
+    fuel_lb: 9800,
+    fuel_bingo_lb: 1000,
   });
   assert.equal(hud.mission, "rapier_circuits");
+  assert.equal(hud.circuitLeg, "DOWNWIND");
   assert.equal(hud.surfaces.centerFdCommands, true);
-  assert.equal(hud.surfaces.systemsGear, true);
+  assert.equal(hud.surfaces.systemsGear, false);
+  assert.equal(hud.surfaces.limitsFuel, false);
   assert.equal(hud.surfaces.cycleTeach, false);
+});
+
+test("Circuits VERIFY appears for a leg/config disagreement then expires", () => {
+  const due = {
+    rapier_mission_available: true,
+    rapier_pattern_only: true,
+    rapier_circuit_leg: "DOWNWIND",
+    gear_nose: 0,
+    gear_left: 0,
+    gear_right: 0,
+    flap_left_deg: 0,
+    flap_right_deg: 0,
+  };
+  assert.equal(circuitConfigurationMatches(due), false);
+  assert.equal(hudPhasePresentation(due).surfaces.systemsGear, true);
+
+  const verified = {
+    ...due,
+    gear_nose: 1,
+    gear_left: 1,
+    gear_right: 1,
+    flap_left_deg: 30,
+    flap_right_deg: 30,
+  };
+  assert.equal(circuitConfigurationMatches(verified), true);
+  assert.equal(hudPhasePresentation(verified).surfaces.systemsGear, false);
+
+  assert.equal(circuitConfigurationMatches({
+    ...verified,
+    gear_right: 0.4,
+  }), false, "all three gear legs must verify down");
+  assert.equal(circuitConfigurationMatches({
+    ...verified,
+    flap_right_deg: 0,
+  }), false, "both elevons must verify down");
+});
+
+test("Circuits fuel remains latent until it is limiting", () => {
+  const normal = {
+    rapier_mission_available: true,
+    rapier_pattern_only: true,
+    rapier_circuit_leg: "INITIAL",
+    fuel_lb: 9800,
+    fuel_bingo_lb: 1000,
+  };
+  assert.equal(hudPhasePresentation(normal).surfaces.limitsFuel, false);
+  assert.equal(hudPhasePresentation({
+    ...normal,
+    fuel_joker: true,
+  }).surfaces.limitsFuel, true);
+  assert.equal(hudPhasePresentation({
+    ...normal,
+    fuel_lb: 900,
+  }).surfaces.limitsFuel, true);
 });

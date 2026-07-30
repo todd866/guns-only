@@ -66,14 +66,29 @@ public class KoreaWeatherPresetsTests {
     [Fact]
     public void RapierReceivesTheUkraineHighAltitudeColumn() {
         WeatherProfile rapier = KoreaWeatherPresets.ForBeat(10);
+        WeatherProfile economicRapier = KoreaWeatherPresets.ForBeat(12);
         WeatherProfile inland = KoreaWeatherPresets.ForBeat(1);
 
         Assert.Equal("weather.ukraine-2030s.rapier-high-altitude.v1", rapier.Id);
+        Assert.Same(rapier, economicRapier);
         Assert.Same(rapier.Atmosphere, inland.Atmosphere);
         Assert.True(rapier.Clouds.Sample(new Vec3D(0.0, 21_500.0, 0.0), 0.0)
             .VisibilityM > 50_000.0);
         Assert.True(rapier.Wind.Sample(new Vec3D(0.0, 21_500.0, 0.0)).Length
             > rapier.Wind.Sample(new Vec3D(0.0, 500.0, 0.0)).Length);
+
+        int cloud = 0, clear = 0;
+        for (double x = -70_000.0; x <= 70_000.0; x += 5_000.0)
+        for (double z = -70_000.0; z <= 70_000.0; z += 5_000.0) {
+            double visibilityM = rapier.Clouds
+                .Sample(new Vec3D(x, 10_000.0, z), 0.0).VisibilityM;
+            if (visibilityM < 5_000.0) cloud++;
+            else if (visibilityM > 50_000.0) clear++;
+        }
+        Assert.True(cloud > 0,
+            $"Rapier deck has no readable cloud islands: {cloud} cloud / {clear} clear");
+        Assert.True(clear > 0,
+            $"Rapier deck is an unbroken slab: {cloud} cloud / {clear} clear");
     }
 
     [Fact]

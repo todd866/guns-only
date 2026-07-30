@@ -20,17 +20,26 @@ test("measured sim cost raises the existing catch-up cap only as far as the fram
   assert.equal(expensive.baseTicks, 2);
   assert.equal(expensive.maximumFactor, 2);
   assert.equal(expensive.scheduledTicks, 4);
-  assert.equal(expensive.requestedTicks, 8);
-  assert.equal(expensive.droppedTicks, 4);
+  assert.equal(expensive.requestedTicks, 16);
+  assert.equal(expensive.droppedTicks, 12);
   assert.equal(expensive.catchupCapSeconds, 10 / 120,
     "the ordinary ten-tick recovery cap already covers the measured cost budget");
 
-  for (let frame = 0; frame < 12; frame += 1)
+  for (let frame = 0; frame < 24; frame += 1)
     budget.observeSimPhase(0.8, 4); // repeated measured 0.2 ms/tick
   const cheap = budget.plan(1000 / 60, 10 / 120);
   assert.ok(cheap.maximumFactor > expensive.maximumFactor);
   assert.ok(cheap.maximumFactor <= TIME_COMPRESSION_MAX_FACTOR);
-  assert.equal(cheap.maximumFactor, 4);
+  assert.equal(cheap.maximumFactor, 8);
+
+  const middling = new MeasuredTimeCompressionBudget({
+    tickHz: 120,
+    budgetMs: 12,
+    maximumFactor: TIME_COMPRESSION_MAX_FACTOR,
+    initialTickCostMs: 1,
+  }).plan(1000 / 60, 10 / 120);
+  assert.equal(middling.maximumFactor, 4,
+    "an affordable 6x offer floors to the deterministic 4x ladder rung");
 
   budget.observeSimPhase(12, 4); // 3 ms/tick takes effect immediately
   const overloaded = budget.plan(1000 / 60, 10 / 120);

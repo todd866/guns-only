@@ -1430,9 +1430,12 @@ test("reconciles same-LOD boundary normals and restores them across LOD swaps", 
 test("terrain shading consumes baked occlusion and opens the value range", () => {
   const period = createTerrainMaterial(THREE, { sceneryEra: "period", qualityTier: "desktop" });
   const modern = createTerrainMaterial(THREE, { sceneryEra: "modern", qualityTier: "desktop" });
-  const ukraine = createTerrainMaterial(
-    THREE, { sceneryEra: "ukraine-modern", qualityTier: "desktop" },
-  );
+  const regionalPaintMap = new THREE.Texture();
+  const ukraine = createTerrainMaterial(THREE, {
+    sceneryEra: "ukraine-modern",
+    qualityTier: "desktop",
+    ukraineRegionalPaintMap: regionalPaintMap,
+  });
 
   assert.match(period.vertexShader, /attribute float concavity;/,
     "the vertex shader must declare the baked occlusion attribute");
@@ -1482,6 +1485,13 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
     /heroMix = rewildFloor[\s\S]{0,80}?\(0\.72 \+ \(1\.0 - ukraineElevationBand\) \* 0\.12\)[\s\S]{0,40}?\* uTerrainDetail01/,
     "rewild wash remains part of terrain albedo, faded by altitude so the hero/regional LOD"
     + " quilt cannot print at combat apex (2026-07-29)");
+  assert.match(ukraine.fragmentShader, /uRegionalPaintMapEnabled > 0\.5/,
+    "the high-altitude regional layer should admit authored pigment without replacing terrain");
+  assert.match(ukraine.fragmentShader,
+    /vTerrainWorldPosition\.xz \* \(1\.0 \/ 160000\.0\)/,
+    "painted macro structure must be world-space and broad enough to survive Rapier altitude");
+  assert.equal(ukraine.uniforms.uRegionalPaintMap.value, regionalPaintMap);
+  assert.equal(ukraine.uniforms.uRegionalPaintMapEnabled.value, 1);
   assert.ok(ukraine.uniforms.uTerrainDetail01,
     "altitude detail fraction must be a uniform the presentations drive from cameraAglM");
   assert.match(ukraine.fragmentShader, /reliefGain = mix\(2\.2, 7\.5, uTerrainDetail01\)/,
@@ -1499,7 +1509,7 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   assert.doesNotMatch(ukraine.fragmentShader, /sin\(rewild/,
     "land-cover structure belongs in the worker, not nested fragment sine calls");
   assert.match(ukraine.fragmentShader,
-    /mix\(0\.34, 1\.0, halfLambert\)/,
+    /mix\(0\.28, 1\.0, halfLambert\)/,
     "Ukraine soft-world lighting must be continuous, not a hard two-step toon ramp");
   assert.match(ukraine.fragmentShader,
     /dot\(normal\.xz, regionalSunDirection\) \* reliefGain/,
@@ -1507,17 +1517,18 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   assert.match(ukraine.fragmentShader,
     /0\.5 \+ \(terrainOcclusion - 0\.5\) \* 4\.0/,
     "Ukraine drainage relief must expand around the seam-neutral concavity midpoint");
-  assert.ok(ukraine.uniforms.uShadowFloor.value >= 0.18,
-    "Ukraine soft-world should lift the shadow floor for painterly lee slopes");
-  assert.ok(ukraine.uniforms.uHazeBandBlend.value <= 0.25,
-    "Ukraine soft-world should soften aerial haze banding");
+  assert.ok(ukraine.uniforms.uShadowFloor.value >= 0.14,
+    "Ukraine soft-world should retain readable lee slopes without flattening their value");
+  assert.equal(ukraine.uniforms.uHazeBands.value, 0,
+    "Rapier altitude must not expose discrete simulator-like haze shelves");
+  assert.equal(ukraine.uniforms.uHazeBandBlend.value, 0);
   assert.match(ukraine.fragmentShader,
     /mix\(uFogColor, uAtmosphereHazeColor, uAtmosphereHazeMix\)/,
-    "terrain and scenery must share one warm haze contract");
-  assert.equal(ukraine.uniforms.uAtmosphereDensityScale.value, 0.34);
+    "terrain and scenery must share one naturalistic haze contract");
+  assert.equal(ukraine.uniforms.uAtmosphereDensityScale.value, 0.32);
   assert.deepEqual(ukraine.uniforms.uAtmosphereHazeColor.value.toArray(),
-    [0.66, 0.51, 0.30]);
-  assert.equal(ukraine.uniforms.uAtmosphereHazeMix.value, 0.58);
+    [0.48, 0.59, 0.68]);
+  assert.equal(ukraine.uniforms.uAtmosphereHazeMix.value, 0.72);
   assert.ok(ukraine.uniforms.uWorldEdgeM, "stream-edge bury uniform must exist");
   assert.equal(ukraine.uniforms.uSnowCover01.value, 0,
     "winter surface shading must preserve the current green-world default");
@@ -1539,6 +1550,7 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   period.dispose();
   modern.dispose();
   ukraine.dispose();
+  regionalPaintMap.dispose();
 });
 
 test("aerial perspective is banded so ridgelines separate in value", () => {

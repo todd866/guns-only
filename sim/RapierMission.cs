@@ -62,7 +62,7 @@ public readonly record struct RapierMissionGuidance(
     double CommandedMach = 0.0,
     /// <summary>Stable token for why the current phase was entered (OFT gate rows).</summary>
     string PhaseReason = "",
-    /// <summary>Circuits pattern leg token: DEPART, INITIAL, BREAK, DOWNWIND, BASE, SHORT_FINAL, WIRE_FINAL.</summary>
+    /// <summary>Circuits pattern leg token: DEPART, INITIAL, BREAK, CROSSWIND, DOWNWIND, BASE, SHORT_FINAL, WIRE_FINAL.</summary>
     string CircuitLeg = "",
     /// <summary>Director bank target in degrees for the Circuits flight director.</summary>
     double FdBankDeg = 0.0,
@@ -114,6 +114,12 @@ public sealed record ScriptedInterceptConfig(
     /// FL700" during the catapult stroke, and must not chase a parked phantom bandit.
     /// </summary>
     bool PatternOnly = false,
+    /// <summary>
+    /// Mission-authored intention in force when the aircraft reports base. Full stop is the local
+    /// default and remains unspoken; a planned touch-and-go must be selected here before the
+    /// transaction. A later pilot wave-off/go-around supersedes this plan on frequency.
+    /// </summary>
+    CircuitLandingIntent LandingIntent = CircuitLandingIntent.FullStop,
     /// <summary>
     /// Zoom-lob profile: after ram climb, pull into a ballistic coast, align nose to V, relight.
     /// </summary>
@@ -404,6 +410,7 @@ public sealed class RapierMissionDirector {
             "DEPART" => "CLIMB TO PATTERN",
             "INITIAL" => "BREAK LEFT ABM",
             "BREAK" => "~60° TO DOWNWIND",
+            "CROSSWIND" => "ROLL OUT DOWNWIND",
             "DOWNWIND" => "GEAR FLAPS · ABEAM",
             "BASE" => "~45° TO FINAL",
             "SHORT_FINAL" => "LINE UP · CONFIGURED",
@@ -651,7 +658,12 @@ public sealed class RapierMissionDirector {
             waypoint = LineLookAhead(
                 playerPosition, downwindAbeam, runwayForward * -1.0, 1_000.0);
             approachSpeedMps = CircuitPatternSpeedMps;
-            circuitLeg = "DOWNWIND";
+            // Publish the turn as CROSSWIND until the aircraft has actually established the
+            // reciprocal. Radio and ANCA can now consume a real semantic state instead of
+            // guessing from audio timing.
+            circuitLeg = downwindHeadingError <= 35.0 * Math.PI / 180.0
+                ? "DOWNWIND"
+                : "CROSSWIND";
             gateHalfM = CircuitGateHalfM * 1.4;
             gateFace = downwindFace;
         } else if (!_circuitBaseReached) {
@@ -677,7 +689,7 @@ public sealed class RapierMissionDirector {
         }
 
         double targetKtas = circuitLeg switch {
-            "INITIAL" or "DOWNWIND" => CircuitPatternKtas,
+            "INITIAL" or "CROSSWIND" or "DOWNWIND" => CircuitPatternKtas,
             "BREAK" => CircuitBreakKtas,
             "BASE" => CircuitBaseKtas,
             "SHORT_FINAL" => CircuitFinalKtas,
@@ -1252,7 +1264,7 @@ public sealed class RapierMissionDirector {
                         patternSpeedMps, trueAirspeedMps, patternTrimLever);
                     targetAltitudeFt = patternGate.Y * FeetPerMetre;
                     fdTargetKtas = circuitLeg switch {
-                        "INITIAL" or "DOWNWIND" => CircuitPatternKtas,
+                        "INITIAL" or "CROSSWIND" or "DOWNWIND" => CircuitPatternKtas,
                         "BREAK" => CircuitBreakKtas,
                         "BASE" => CircuitBaseKtas,
                         "SHORT_FINAL" => CircuitFinalKtas,

@@ -2477,6 +2477,49 @@ export function createAwacs() {
   return group;
 }
 
+export function createTransport() {
+  const group = new THREE.Group();
+  const skin = makeMaterial(0xaeb8bb, 0.58, 0.22);
+  const lower = makeMaterial(0x69777d, 0.74, 0.18);
+  const dark = makeMaterial(0x202a2f, 0.68, 0.26);
+  const glass = makeMaterial(0x263b48, 0.26, 0.48, 0x061118);
+
+  cylinder(group, 2.45, 43.0, new THREE.Vector3(0, 0, 0), skin, 22);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(2.46, 22, 12), skin);
+  nose.scale.z = 0.78;
+  nose.position.z = -21.5;
+  group.add(nose);
+  const tailCone = new THREE.Mesh(new THREE.ConeGeometry(2.1, 8.5, 18), lower);
+  tailCone.rotation.x = Math.PI / 2;
+  tailCone.position.z = 25.5;
+  group.add(tailCone);
+
+  box(group, new THREE.Vector3(43.0, 0.52, 8.2), new THREE.Vector3(0, 0.0, 1.7), skin);
+  box(group, new THREE.Vector3(15.0, 0.34, 5.2), new THREE.Vector3(0, 1.0, 18.0), lower);
+  box(group, new THREE.Vector3(0.42, 8.4, 5.8), new THREE.Vector3(0, 3.5, 18.4), lower);
+
+  for (const x of [-9.2, 9.2]) {
+    cylinder(group, 1.35, 6.8, new THREE.Vector3(x, -1.25, 1.2), dark, 18);
+    const intake = new THREE.Mesh(
+      new THREE.CircleGeometry(1.02, 18),
+      new THREE.MeshBasicMaterial({ color: 0x0b1215, side: THREE.DoubleSide }),
+    );
+    intake.rotation.y = Math.PI;
+    intake.position.set(x, -1.25, -2.22);
+    group.add(intake);
+  }
+
+  const cockpit = box(
+    group,
+    new THREE.Vector3(3.75, 1.0, 1.15),
+    new THREE.Vector3(0, 1.2, -20.9),
+    glass,
+  );
+  cockpit.rotation.x = -0.10;
+  group.userData.targetArchetype = "transport";
+  return group;
+}
+
 // Shared ocean mesh used by the decision-support sea below. (It formerly lived between the retired
 // createSky/createSea builders; those were deleted in Build 56 but this helper is still live.)
 export function createOceanGeometry(radius = 360000, radialSegments = 145, angularSegments = 192) {

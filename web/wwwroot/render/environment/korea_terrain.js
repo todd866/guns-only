@@ -21,6 +21,10 @@ const DEFAULT_MANIFEST_URL = new URL(
   "../../content/packs/korea-1950s/environment/terrain/central-front.manifest.json",
   import.meta.url,
 ).href;
+const UKRAINE_REGIONAL_PAINT_URL = new URL(
+  "../../content/packs/ukraine-modern/environment/textures/rapier-painted-ground-v1.webp",
+  import.meta.url,
+).href;
 
 const TIER_DISTANCE_METRES = Object.freeze({
   mobile: Object.freeze([10_000, 25_000, 58_000]),
@@ -48,9 +52,9 @@ const UKRAINE_AMBIENT_SCENERY_RADIUS_M = Object.freeze({
 const AMBIENT_SCENERY_ALTITUDE_WEIGHT = 3;
 const AMBIENT_SCENERY_HYSTERESIS = 0.12;
 
-// Hero-detail convergence band: full patch/rewild grammar below the floor, pure regional
-// elevation palette above the ceiling (smoothstepped). At zoom-apex altitudes the per-chunk
-// landcover otherwise reads as a quilt of green rectangles against the regional base.
+// Hero-detail convergence band: full patch/rewild grammar below the floor, seamless regional
+// paint above the ceiling (smoothstepped). At zoom-apex altitudes the per-chunk landcover
+// otherwise reads as a quilt of green rectangles against the regional base.
 const TERRAIN_DETAIL_FULL_AGL_M = 2_500;
 const TERRAIN_DETAIL_ZERO_AGL_M = 7_500;
 
@@ -384,6 +388,8 @@ uniform float uTerrainDetail01;
 uniform vec2 uOcclusionRange;
 uniform float uCloudShadowStrength;
 uniform vec2 uCloudShadowOffset;
+uniform sampler2D uRegionalPaintMap;
+uniform float uRegionalPaintMapEnabled;
 
 // Value noise for wind-scrolled cloud shadows: the cumulus deck darkening the steppe is the
 // value structure this flat plain cannot get from relief alone.
@@ -475,10 +481,11 @@ void main() {
   #ifdef UKRAINE_SCENERY
   // ADR-0003 soft world + Stage C rewild: continent-scale human no-go that reads as succession —
   // meadow → scrub → young woodland — not a live cadastral crop map. Metre-true DEM underneath;
-  // fictional strip / no identifiable live-war locality.
-  vec3 sValley = vec3(0.38, 0.52, 0.24);
-  vec3 sFoothill = vec3(0.28, 0.42, 0.18);
-  vec3 sUpland = vec3(0.22, 0.34, 0.15);
+  // fictional strip / no identifiable live-war locality. Keep enough value range for the ground
+  // to remain a painted surface from Rapier altitude instead of flattening into one pale wash.
+  vec3 sValley = vec3(0.32, 0.46, 0.21);
+  vec3 sFoothill = vec3(0.24, 0.37, 0.17);
+  vec3 sUpland = vec3(0.17, 0.29, 0.13);
   vec3 sRock = vec3(0.36, 0.32, 0.24);
   vec3 sRidge = vec3(0.40, 0.38, 0.32);
   #else
@@ -535,6 +542,52 @@ void main() {
   // elevation palette and fading the blend with uTerrainDetail01 makes every chunk converge
   // on one regional grammar before its rectangle becomes visible.
   vec3 regionalAlbedo = sAlbedo;
+  // Once the baked hero bytes fade, replace them with a WORLD-SPACE painted layer rather than a
+  // blank regional colour. Two broad organic frequencies survive at 15–22 km AGL, cross chunk/LOD
+  // seams continuously as a no-asset fallback. The production art texture replaces both noise
+  // octaves with one sample, so authored pigment is cheaper than the procedural approximation.
+  // This is deliberately vegetation mass, not a cadastral lattice: no straight parcel edges,
+  // roads, or claims about a real locality.
+  float regionalDistanceMix = 1.0 - uTerrainDetail01;
+  if (regionalDistanceMix > 0.001) {
+    vec3 authoredPaint = vec3(0.5);
+    float authoredLuma = 0.5;
+    float regionalStructure = 0.5;
+    if (uRegionalPaintMapEnabled > 0.5) {
+      authoredPaint = texture2D(
+        uRegionalPaintMap,
+        vTerrainWorldPosition.xz * (1.0 / 160000.0) + vec2(0.19, -0.37)
+      ).rgb;
+      authoredLuma = dot(authoredPaint, vec3(0.2126, 0.7152, 0.0722));
+      // Dark painted masses are woodland; lighter ochre areas remain open ground.
+      regionalStructure = 1.0 - authoredLuma;
+    } else {
+      float regionalBroad = terrainCloudNoise(
+        vTerrainWorldPosition.xz * (1.0 / 18000.0) + vec2(17.3, -9.1));
+      float regionalMeso = terrainCloudNoise(
+        vTerrainWorldPosition.xz * (1.0 / 6200.0) + vec2(-31.7, 24.6));
+      regionalStructure = regionalBroad * 0.68 + regionalMeso * 0.32;
+    }
+    float regionalWoodland = smoothstep(0.54, 0.73, regionalStructure);
+    float regionalOpen = 1.0 - smoothstep(0.32, 0.57, regionalStructure);
+    vec3 regionalPaint = regionalAlbedo;
+    regionalPaint *= mix(vec3(1.0), vec3(0.57, 0.78, 0.60), regionalWoodland);
+    regionalPaint *= mix(vec3(1.0), vec3(1.12, 1.04, 0.78), regionalOpen * 0.52);
+    float regionalGround = 1.0 - smoothstep(0.11, 0.28, steepness);
+    // Authored pigment adds composition that procedural noise alone cannot: the map supplies
+    // colour/value rhythm only, while sourced height and simulation weather continue to decide
+    // geometry and visibility. Mirrored world-space sampling makes it continuous across chunks.
+    if (uRegionalPaintMapEnabled > 0.5) {
+      float baseLuma = dot(regionalPaint, vec3(0.2126, 0.7152, 0.0722));
+      vec3 authoredMatched = authoredPaint * (baseLuma / max(authoredLuma, 0.12));
+      regionalPaint = mix(regionalPaint, authoredMatched, 0.62);
+      regionalPaint *= mix(0.86, 1.14, smoothstep(0.16, 0.76, authoredLuma));
+    }
+    regionalAlbedo = mix(
+      regionalAlbedo,
+      regionalPaint,
+      regionalDistanceMix * regionalGround * 0.62);
+  }
   const vec3 TERRAIN_LUMA = vec3(0.2126, 0.7152, 0.0722);
   float coverValueScale = dot(regionalAlbedo, TERRAIN_LUMA)
     / max(dot(rewildCover, TERRAIN_LUMA), 0.04);
@@ -556,8 +609,9 @@ void main() {
   halfLambert *= halfLambert;
   #ifdef UKRAINE_SCENERY
   // Continuous soft lighting — painterly value without the hard two-step toon posterization.
+  // A deeper low end keeps drainage and broad vegetation masses legible after aerial perspective.
   float toneRamp = uShadowFloor
-    + (1.0 - uShadowFloor) * mix(0.34, 1.0, halfLambert);
+    + (1.0 - uShadowFloor) * mix(0.28, 1.0, halfLambert);
   vec3 rimTint = vec3(0.18, 0.14, 0.07);
   #else
   float toneRamp = uShadowFloor
@@ -571,7 +625,7 @@ void main() {
     + rim * rimTint * (0.4 + 0.6 * clamp(normal.y, 0.0, 1.0));
   #ifdef UKRAINE_SCENERY
   // Low-relief macro normals need a bounded directional cue so sun-facing versus lee-facing
-  // terrain still separates without hard toon steps, textures, or micro-scenery at altitude.
+  // terrain still separates without hard toon steps or micro-scenery at altitude.
   vec2 regionalSunDirection = normalize(uSunDirection.xz + vec2(0.0001));
   // The 7.5x gain is a per-chunk LOD signature: adjacent LODs disagree about macro normals,
   // so at altitude it prints chunk-shaped brightness seams. Relax toward a gentle regional
@@ -666,12 +720,12 @@ void main() {
   lit = mix(lit, waterLit, waterMask);
 
   // Aerial perspective: period haze whites the world out from altitude. Korea-modern thins
-  // density toward cool sky blue. Ukraine soft-world (ADR-0003) hazes warm and dusty so distance
-  // reads as atmosphere rather than a blue poster wash.
+  // density toward cool sky blue. Ukraine retains a warm ground contribution but resolves toward
+  // blue-grey air aloft, so the painted surface has depth instead of becoming an ochre slab.
   #ifdef MODERN_SCENERY
   #ifdef UKRAINE_SCENERY
   float fogDensity = uFogDensity * uAtmosphereDensityScale;
-  // Warm dusty atmosphere — Ghibli-adjacent distance, not cool poster blue.
+  // Natural painted atmosphere: warm land underneath a cool high-altitude scattering layer.
   vec3 hazeColor = mix(uFogColor, uAtmosphereHazeColor, uAtmosphereHazeMix);
   #else
   float fogDensity = uFogDensity * 0.45;
@@ -685,9 +739,9 @@ void main() {
   float aerial = 1.0 - exp(-fogDensity * fogDensity
     * distanceToCamera * distanceToCamera);
   #ifdef UKRAINE_SCENERY
-  // Painterly mid-field haze is intentionally thin (0.34×). That same thinning leaves the
-  // streamed disc readable as a render-square against sky / cool void. Force warm haze opaque
-  // approaching the visual world edge so distance stays Ghibli atmosphere, not a tile boundary.
+  // Painterly mid-field haze is intentionally thin. That same thinning leaves the streamed disc
+  // readable as a render-square against sky / cool void. Force the shared atmosphere opaque
+  // approaching the visual world edge so distance stays painted atmosphere, not a tile boundary.
   if (uWorldEdgeM > 1.0) {
     // Start the bury early: at altitude the disc silhouette still reads square if haze only
     // thickens in the last 15% of the stream radius.
@@ -972,6 +1026,21 @@ export function createTerrainMaterial(THREE, options = {}) {
   const illustrative = options.sceneryEra === "modern"
     || options.sceneryEra === "ukraine-modern";
   const ukraine = options.sceneryEra === "ukraine-modern";
+  const regionalPaintEnabled = { value: 0 };
+  let regionalPaintMap = options.ukraineRegionalPaintMap ?? null;
+  if (regionalPaintMap) {
+    regionalPaintEnabled.value = 1;
+  } else if (ukraine && typeof document !== "undefined"
+      && typeof THREE.TextureLoader === "function") {
+    regionalPaintMap = new THREE.TextureLoader().load(
+      UKRAINE_REGIONAL_PAINT_URL,
+      () => { regionalPaintEnabled.value = 1; },
+    );
+    regionalPaintMap.name = "TEX_RAPIER_PAINTED_GROUND_V1";
+    regionalPaintMap.wrapS = THREE.MirroredRepeatWrapping;
+    regionalPaintMap.wrapT = THREE.MirroredRepeatWrapping;
+    regionalPaintMap.colorSpace = THREE.SRGBColorSpace;
+  }
   const material = new THREE.ShaderMaterial({
     name: "MAT_KOREA_CENTRAL_FRONT_TERRAIN",
     vertexShader: TERRAIN_VERTEX,
@@ -1007,7 +1076,7 @@ export function createTerrainMaterial(THREE, options = {}) {
       // discs haze out instead of reading as squares.
       uWorldEdgeM: { value: finite(options.worldEdgeM, 0) },
       // Hero-detail fraction, driven each frame from cameraAglM: full patch grammar below
-      // TERRAIN_DETAIL_FULL_AGL_M, pure regional palette above TERRAIN_DETAIL_ZERO_AGL_M.
+      // TERRAIN_DETAIL_FULL_AGL_M, seamless regional paint above TERRAIN_DETAIL_ZERO_AGL_M.
       uTerrainDetail01: { value: 1 },
       uModernScenery: { value: illustrative ? 1 : 0 },
       // Full-detail parcel/cultivation tint only affects the period desktop treatment. Modern
@@ -1019,7 +1088,7 @@ export function createTerrainMaterial(THREE, options = {}) {
       // top 60% of the value range, which is why densely dissected Korean terrain rendered as a
       // flat wash. Legibility now comes from value, and hue separation keeps dark slopes readable.
       // Ukraine soft-world lifts the floor so lee slopes stay painterly rather than crushed.
-      uShadowFloor: { value: finite(options.shadowFloor, ukraine ? 0.20 : 0.12) },
+      uShadowFloor: { value: finite(options.shadowFloor, ukraine ? 0.16 : 0.12) },
       // Baked-occlusion multiplier at fully concave (x) and fully convex (y).
       uOcclusionRange: {
         value: new THREE.Vector2(
@@ -1027,13 +1096,15 @@ export function createTerrainMaterial(THREE, options = {}) {
           finite(options.occlusionMax, 1.10),
         ),
       },
-      // Discrete aerial-perspective planes. Korea-modern keeps stronger banding; Ukraine softens
-      // the posterization so distance reads as continuous atmosphere (ADR-0003).
+      // Discrete aerial-perspective planes. Korea-modern keeps stronger banding; Ukraine disables
+      // it because three visible haze shelves at Rapier altitude read as a simulator backdrop.
       // Wind-scrolled cloud-shadow field. Strength 0 = clear sky; weather drives it.
       uCloudShadowStrength: { value: finite(options.cloudShadowStrength, 0.34) },
       uCloudShadowOffset: { value: new THREE.Vector2(0, 0) },
-      uHazeBands: { value: finite(options.hazeBands, ukraine ? 3 : 6) },
-      uHazeBandBlend: { value: finite(options.hazeBandBlend, ukraine ? 0.18 : 0.65) },
+      uRegionalPaintMap: { value: regionalPaintMap },
+      uRegionalPaintMapEnabled: regionalPaintEnabled,
+      uHazeBands: { value: finite(options.hazeBands, ukraine ? 0 : 6) },
+      uHazeBandBlend: { value: finite(options.hazeBandBlend, ukraine ? 0 : 0.65) },
       // Surface truth is opt-in and defaults to the existing snow-free presentation.
       uSnowCover01: { value: Math.max(0, Math.min(1, finite(options.snowCover01))) },
       uSnowWetness01: { value: Math.max(0, Math.min(1, finite(options.snowWetness01))) },
@@ -1043,6 +1114,9 @@ export function createTerrainMaterial(THREE, options = {}) {
   // Non-Ukraine chunks skip the two-byte-per-vertex field entirely. A neutral default keeps
   // the shared shader valid if a presentation is restyled after its meshes are resident.
   material.defaultAttributeValues.landcover = [0.5, 0.5];
+  if (regionalPaintMap && regionalPaintMap !== options.ukraineRegionalPaintMap) {
+    material.addEventListener("dispose", () => regionalPaintMap.dispose());
+  }
   return material;
 }
 

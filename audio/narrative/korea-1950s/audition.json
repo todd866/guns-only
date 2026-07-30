@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "1.0.0",
+  "auditionId": "audition.korea-1951.armstrong-cable-strike.v1",
+  "catalogId": "radio.korea-1951.armstrong-cable-strike.v1",
+  "sequenceId": "sequence.korea-1951.armstrong-cable-strike.v1",
+  "sourceCatalog": "docs/art-direction/korea-1950s/narrative/radio-lines.json",
+  "defaultOutput": "../armstrong-korea-research/derived/voice-auditions",
+  "policy": {
+    "purpose": "Voice and model casting only. These clips are not approved production dialogue.",
+    "historicalPersons": "Use stock or designed adult voices that do not imitate Neil Armstrong, John Carpenter, a celebrity or a known recording.",
+    "runtime": "Generate fixed dry masters offline. Never call a speech provider during gameplay.",
+    "fallback": "A missing historical-mission clip degrades to synchronized captions, never device speech.",
+    "sound": "Audition dry output first. Radio filtering and cockpit masking are a separate review pass.",
+    "rights": "A candidate cannot be promoted until its provider tier, voice license and commercial-use terms are recorded."
+  },
+  "providers": {
+    "elevenlabs": {
+      "displayName": "ElevenLabs Eleven v3",
+      "model": "eleven_v3",
+      "apiKeyEnvironment": "ELEVENLABS_API_KEY",
+      "endpoint": "https://api.elevenlabs.io/v1/text-to-speech",
+      "outputFormat": "pcm_48000",
+      "sampleRateHz": 48000,
+      "directionControl": "Audio-tag prefix supplied per take profile.",
+      "status": "primary_audition"
+    },
+    "hume": {
+      "displayName": "Hume Octave 2",
+      "model": "2",
+      "apiKeyEnvironment": "HUME_API_KEY",
+      "endpoint": "https://api.hume.ai/v0/tts",
+      "outputFormat": "wav",
+      "sampleRateHz": 48000,
+      "directionControl": "Octave 2 currently infers delivery from text and voice; take profiles vary speed only because per-utterance description is not yet supported.",
+      "status": "challenger_preview"
+    },
+    "cartesia": {
+      "displayName": "Cartesia Sonic 3.5",
+      "model": "sonic-3.5",
+      "apiKeyEnvironment": "CARTESIA_API_KEY",
+      "endpoint": "https://api.cartesia.ai/tts/bytes",
+      "apiVersion": "2026-03-01",
+      "outputFormat": "wav_pcm_s16le_48000",
+      "sampleRateHz": 48000,
+      "directionControl": "Sonic 3.5 natural delivery; speed and volume controls remain disabled in the current provider release.",
+      "status": "challenger"
+    }
+  },
+  "takeProfiles": [
+    {
+      "takeId": "restrained",
+      "direction": "Normal professional cadence. Economical, unperformed and easy enough to remain intelligible after radio treatment.",
+      "providerControls": {
+        "elevenlabs": {
+          "audioTag": "[calm]"
+        },
+        "hume": {
+          "speed": 1.0
+        },
+        "cartesia": {}
+      }
+    },
+    {
+      "takeId": "compressed",
+      "direction": "High workload: one compact information burst. Crisp consonants, minimal internal pause, urgency through breath economy and tempo rather than volume or melodrama.",
+      "providerControls": {
+        "elevenlabs": {
+          "audioTag": "[tense]"
+        },
+        "hume": {
+          "speed": 1.12
+        },
+        "cartesia": {}
+      }
+    },
+    {
+      "takeId": "recovery",
+      "direction": "The immediate upset has passed. Controlled urgency remains in breath and timing without retrospective heroism.",
+      "providerControls": {
+        "elevenlabs": {
+          "audioTag": "[calm]"
+        },
+        "hume": {
+          "speed": 0.98
+        },
+        "cartesia": {}
+      }
+    }
+  ],
+  "evaluationLines": [
+    "line.armstrong.06-damage-report.v1",
+    "line.armstrong.07-control-margin.v1",
+    "line.carpenter.07-visible-damage.v1",
+    "line.carpenter.07-no-landing.v1",
+    "line.armstrong.10-going-out.v1"
+  ],
+  "blindReviewCriteria": [
+    "Natural timing",
+    "Operational restraint",
+    "Workload response",
+    "Intelligibility",
+    "Role continuity",
+    "Directional control",
+    "Pronunciation",
+    "Artifact rate",
+    "Non-resemblance to a historical or famous voice"
+  ]
+}

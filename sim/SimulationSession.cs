@@ -250,6 +250,7 @@ public sealed class SimulationSession {
     // T toggles it off/back; the inhibit policy still drops to 1x near contact and control input.
     bool _timeCompressionPilotEnabled = true;
     int _timeCompressionHostMaximumFactor = 1;
+    int _timeCompressionSafetyFactorCap = 1;
     int _timeCompressionFactor = 1;
     double _timeCompressionAccumulatorSeconds;
     TimeCompressionInhibitReason _timeCompressionInhibitReason =
@@ -288,6 +289,7 @@ public sealed class SimulationSession {
     readonly List<DetachedOpponentWreck> _detachedOpponentWrecks = new();
     readonly IncidentReplayRecorder _incidentReplay = new();
     readonly DecisionRecorder _decisionRecorder = new();
+    readonly RapierServiceLifeRecorder _rapierServiceLifeRecorder;
     long _eventSequence;
     long _decisionClosedActorSpawnSequence;
     long _decisionLastCapturedActorSpawnSequence;
@@ -338,7 +340,10 @@ public sealed class SimulationSession {
 
     public SimulationSession(int beatIndex = 1,
         Carrier.DeckConfiguration deckConfiguration = Carrier.DeckConfiguration.Axial,
-        WeatherProfile? weather = null) {
+        WeatherProfile? weather = null,
+        bool serviceLifeCaptureEnabled = true) {
+        _rapierServiceLifeRecorder = new RapierServiceLifeRecorder(
+            captureEnabled: serviceLifeCaptureEnabled);
         _weatherProfile = weather;
         _terrainSurface = weather?.Terrain;
         StartBeat(beatIndex, deckConfiguration);
@@ -351,15 +356,14 @@ public sealed class SimulationSession {
     public double TimeSeconds => _simTimeMs / 1000.0;
     public long Tick => _tick;
     public bool TimeCompressionAvailable =>
-        _beatIndex == 10
-        || _beat.MissionIdentity.Id
-            == "mission.modern.rapier-intercept.public-data-surrogate.v1";
+        _beat.MissionIdentity.AllowsTimeCompression;
     public bool TimeCompressionPilotEnabled => _timeCompressionPilotEnabled;
     public bool TimeCompressionEligible =>
         _timeCompressionInhibitReason == TimeCompressionInhibitReason.None;
     public int TimeCompressionRequestedFactor =>
         TimeCompressionAvailable && _timeCompressionPilotEnabled
             ? TimeCompressionPolicy.PreferredFactor : 1;
+    public int TimeCompressionSafetyFactorCap => _timeCompressionSafetyFactorCap;
     public int TimeCompressionFactor => _timeCompressionFactor;
     public TimeCompressionInhibitReason TimeCompressionInhibitReason =>
         _timeCompressionInhibitReason;
@@ -780,6 +784,8 @@ public sealed class SimulationSession {
         _detachedOpponentWrecks;
     public IncidentReplayRecorder IncidentReplay => _incidentReplay;
     public DecisionRecorder Decisions => _decisionRecorder;
+    public RapierServiceLifeRecorder RapierServiceLife =>
+        _rapierServiceLifeRecorder;
     /// <summary>
     /// Selects whether a staged sortie emits decision records. Changing this while the simulation
     /// clock is released would create an unmarked hole in an otherwise contiguous episode, so the
@@ -1049,7 +1055,76 @@ public sealed class SimulationSession {
             else if (_beat.StageAtTrimThrottle) ShowTransition("PWR SET · FIGHT", 1800.0);
         }
         Lifecycle = LifecycleState.Active;
+        BeginRapierServiceLifeCapture();
         UpdateTimeCompressionDecision();
+    }
+
+    void BeginRapierServiceLifeCapture() {
+        if (!RapierMissionAvailable) return;
+        _rapierServiceLifeRecorder.Begin(
+            sessionSortieSequence: _playerSpawnSequence,
+            missionContractId: _beat.MissionIdentity.Id,
+            airframeDefinitionId: _beat.PlayerAircraft.Id,
+            airframeDefinitionRevision: "embedded-aircraft-capability-v1",
+            startTick: _tick,
+            eventSequence: _eventSequence,
+            initialFuelLb: _fuel.FuelLb,
+            initialRoundsFired: _gunKill.RoundsFired,
+            initialRcsGasKg: _player.ColdGasRcsGasKg);
+    }
+
+    void ObserveRapierServiceLifeTick() {
+        if (!_rapierServiceLifeRecorder.Active
+            || _playerTerminalState != AircraftTerminalState.Flying)
+            return;
+        AircraftState state = _player.State;
+        AtmosphericState atmosphere =
+            _player.AtmosphereModel.Sample(state.Position.Y);
+        double trueAirspeedMps = _player.AirspeedMps;
+        double mach = trueAirspeedMps
+            / Math.Max(1.0, atmosphere.SpeedOfSoundMps);
+        double thermalCapabilityK =
+            Math.Max(0.0, _beat.PlayerAir.SkinTemperatureLimitK);
+        _rapierServiceLifeRecorder.Observe(new RapierServiceLifeSample(
+            Tick: _tick,
+            EventSequence: _eventSequence,
+            NormalLoadFactor: _player.LastNz,
+            StructuralLimitG: Protection.HardMaxG(
+                state, _beat.PlayerAir, trueAirspeedMps,
+                _player.AtmosphereModel),
+            OverrideSelected:
+                _keys.PhaseAt(GKey.Override, _simTimeMs) != KeyPhase.Idle,
+            DynamicPressurePa: _player.DynamicPressurePa,
+            OverDynamicPressure: _player.OverDynamicPressure,
+            Mach: mach,
+            SkinTemperatureK: _player.SkinTemperatureK,
+            StagnationTemperatureK: AirData.StagnationTemperatureK(
+                mach, atmosphere.TemperatureK),
+            ThermalCapabilityK: thermalCapabilityK,
+            PropulsionRegime: RapierServiceLifeRegime(mach),
+            InletUnstarted: _player.InletUnstarted,
+            FuelLb: _fuel.FuelLb,
+            RoundsFired: _gunKill.RoundsFired,
+            RcsGasKg: _player.ColdGasRcsGasKg));
+    }
+
+    static RapierServiceLifePropulsionRegime RapierServiceLifeRegime(
+        double mach) {
+        if (mach < TurboRamjetPerformanceMap.RamFadeStartMach)
+            return RapierServiceLifePropulsionRegime.Turbine;
+        if (mach < TurboRamjetPerformanceMap.FullRamMach)
+            return RapierServiceLifePropulsionRegime.Transition;
+        if (mach < TurboRamjetPerformanceMap.TurbineGoneMach)
+            return RapierServiceLifePropulsionRegime.RamCombined;
+        return RapierServiceLifePropulsionRegime.RamOnly;
+    }
+
+    void FinalizeRapierServiceLife(
+        RapierServiceLifeTerminationReason reason) {
+        _rapierServiceLifeRecorder.Finalize(
+            reason,
+            endTickExclusive: _tick,
+            eventSequence: _eventSequence);
     }
 
     /// <summary>Pause or resume an active sortie. Ready remains Ready until Begin is explicit.</summary>
@@ -1623,64 +1698,77 @@ public sealed class SimulationSession {
             || double.IsFinite(command.CommandedAlphaRad);
     }
 
-    bool ContactInsideLedThreatRange(in AircraftState contact) {
+    double SecondsUntilContactThreat(in AircraftState contact) {
         AircraftState player = _player.State;
         Vec3D separation = contact.Position - player.Position;
         double rangeM = separation.Length;
-        if (!double.IsFinite(rangeM) || rangeM < 1e-6) return true;
+        if (!double.IsFinite(rangeM) || rangeM < 1e-6) return 0.0;
+        if (rangeM <= TimeCompressionPolicy.ThreatRangeM) return 0.0;
         Vec3D relativeVelocity = contact.VelocityVector() - player.VelocityVector();
         double closingMps = -separation.Dot(relativeVelocity) / rangeM;
-        double ledRangeM = TimeCompressionPolicy.ThreatRangeM
-            + Math.Max(0.0, closingMps) * TimeCompressionPolicy.BoundaryLeadSeconds;
-        return rangeM <= ledRangeM;
+        if (!double.IsFinite(closingMps)) return 0.0;
+        if (closingMps <= 0.0) return double.PositiveInfinity;
+        return (rangeM - TimeCompressionPolicy.ThreatRangeM) / closingMps;
     }
 
-    bool HasContactThreat() {
+    int ContactApproachFactorCap() {
+        double seconds = double.PositiveInfinity;
         if (_opponentTerminalState == AircraftTerminalState.Flying
-            && ContactInsideLedThreatRange(_bandit.State))
-            return true;
+            && _bandit is not null)
+            seconds = SecondsUntilContactThreat(_bandit.State);
         foreach (Wingman wingman in _wingmen) {
-            if (wingman.StillFighting
-                && ContactInsideLedThreatRange(wingman.Bandit.State))
-                return true;
+            if (wingman.StillFighting)
+                seconds = Math.Min(seconds,
+                    SecondsUntilContactThreat(wingman.Bandit.State));
         }
-        return false;
+        return TimeCompressionPolicy.FactorCapForLeadSeconds(seconds);
     }
 
-    bool HasFuelThresholdOrLead() {
-        if (!_fuel.ConsumesFuel) return false;
+    double SecondsUntilFuelThreshold() {
+        if (!_fuel.ConsumesFuel) return double.PositiveInfinity;
         if (_fuel.IsJoker || _fuel.IsBingo
             || _fuel.IsMinimumFuel || _fuel.IsEmergencyFuel)
-            return true;
-        double leadBurnLb = Math.Max(0.0, _fuel.BurnLbPerMinute)
-            * TimeCompressionPolicy.BoundaryLeadSeconds / 60.0;
-        bool AtOrNear(double? threshold) => threshold is { } value
-            && _fuel.FuelLb <= value + leadBurnLb;
-        return AtOrNear(_fuel.JokerThresholdLb)
-            || AtOrNear(_fuel.BingoThresholdLb)
-            || AtOrNear(_fuel.MinimumFuelThresholdLb)
-            || AtOrNear(_fuel.EmergencyFuelThresholdLb);
+            return 0.0;
+        double burnLbPerSecond = Math.Max(0.0, _fuel.BurnLbPerMinute) / 60.0;
+        if (burnLbPerSecond <= 1e-9) return double.PositiveInfinity;
+        double fuelLb = _fuel.FuelLb;
+        return Math.Min(
+            Math.Min(
+                SecondsToFuelThreshold(fuelLb, burnLbPerSecond,
+                    _fuel.JokerThresholdLb),
+                SecondsToFuelThreshold(fuelLb, burnLbPerSecond,
+                    _fuel.BingoThresholdLb)),
+            Math.Min(
+                SecondsToFuelThreshold(fuelLb, burnLbPerSecond,
+                    _fuel.MinimumFuelThresholdLb),
+                SecondsToFuelThreshold(fuelLb, burnLbPerSecond,
+                    _fuel.EmergencyFuelThresholdLb)));
     }
 
-    bool HasAutoGcasActivityOrLead() {
-        if (_autoGcasState.Active || _autoGcasState.Warning) return true;
+    static double SecondsToFuelThreshold(double fuelLb,
+        double burnLbPerSecond, double? threshold) =>
+        threshold is { } value
+            ? Math.Max(0.0, (fuelLb - value) / burnLbPerSecond)
+            : double.PositiveInfinity;
+
+    double SecondsUntilAutoGcasBoundary() {
+        if (_autoGcasState.Active || _autoGcasState.Warning) return 0.0;
         AutoGcasPrediction prediction = _autoGcasState.Prediction;
-        return prediction.Valid
-            && (prediction.TimeAvailableToAvoidGroundImpactSeconds
-                    <= TimeCompressionPolicy.BoundaryLeadSeconds
-                || prediction.PilotViolationTimeSeconds
-                    <= TimeCompressionPolicy.BoundaryLeadSeconds);
+        if (!prediction.Valid) return double.PositiveInfinity;
+        return Math.Min(
+            prediction.TimeAvailableToAvoidGroundImpactSeconds,
+            prediction.PilotViolationTimeSeconds);
     }
 
-    bool HasRamTransitionLead() {
+    double RamTransitionMachMargin() {
         if (_beat.PlayerAir.PropulsionModel
             != PropulsionModelKind.TurboRamjetPublicDataSurrogate)
-            return false;
+            return double.PositiveInfinity;
         if (TransitionCueActive
             && (_transitionCue.StartsWith("RAM ", StringComparison.Ordinal)
                 || _transitionCue.StartsWith("FULL RAM", StringComparison.Ordinal)
                 || _transitionCue.StartsWith("TURBINE ", StringComparison.Ordinal)))
-            return true;
+            return 0.0;
         double mach = _player.AirspeedMps
             / _player.AtmosphereModel.Sample(_player.State.Position.Y).SpeedOfSoundMps;
         double nextBoundary = _ramCueStage switch {
@@ -1689,7 +1777,7 @@ public sealed class SimulationSession {
             2 => Propulsion.TurboRamjetPerformanceMap.TurbineGoneMach,
             _ => double.PositiveInfinity
         };
-        return mach >= nextBoundary - TimeCompressionPolicy.RamBoundaryLeadMach;
+        return nextBoundary - mach;
     }
 
     bool IsEstablishedTransit() {
@@ -1723,54 +1811,70 @@ public sealed class SimulationSession {
         && RapierPhase is RapierMissionPhase.ReturnToBase
             or RapierMissionPhase.Recovery;
 
-    TimeCompressionSafetyState CaptureTimeCompressionSafety() => new(
-        PilotEnabled: _timeCompressionPilotEnabled,
-        SupportedSortie: TimeCompressionAvailable,
-        SessionActive: Lifecycle == LifecycleState.Active
-            && (!TerminalPhaseActive || RapierReturnTransit),
-        EstablishedTransit: IsEstablishedTransit(),
-        CatapultOrConfigurationTransition: _catapult.IsActive
-            || ConfigurationTransitionActive,
-        ContactInsideLedThreatRange: HasContactThreat(),
-        GunSolutionInEitherDirection: _gunKill.GunSolution
-            || _gunKill.InstantaneousGunSolution
-            || _opponentGun.GunSolution
-            || _opponentGun.InstantaneousGunSolution
-            || _gunKill.RoundsInFlight.Count > 0
-            || _opponentGun.RoundsInFlight.Count > 0
-            || _retiredOpponentGuns.Any(static retired =>
-                retired.Gun.RoundsInFlight.Count > 0)
-            || _wingmen.Any(static wingman =>
-                wingman.Gun.GunSolution
-                || wingman.Gun.InstantaneousGunSolution
-                || wingman.Gun.RoundsInFlight.Count > 0),
-        AutoGcasActivityOrLead: HasAutoGcasActivityOrLead(),
-        DamagePresent: PlayerHitsTaken > 0
-            || _playerTerminalState != AircraftTerminalState.Flying
-            || _rapierComputerFailureActive != RapierComputerFailure.None
-            || (!RapierReturnTransit
-                && (_gunKill.TotalHitCount > 0
-                    || _bandit.CatastrophicallyDamaged
-                    || _opponentTerminalState != AircraftTerminalState.Flying)),
-        FuelThresholdOrLead: HasFuelThresholdOrLead(),
-        ControlInputBeyondTrim: HasControlInputBeyondTrim(),
-        RamTransitionLead: HasRamTransitionLead());
+    TimeCompressionSafetyState CaptureTimeCompressionSafety() {
+        int contactFactorCap = ContactApproachFactorCap();
+        int fuelFactorCap = TimeCompressionPolicy.FactorCapForLeadSeconds(
+            SecondsUntilFuelThreshold());
+        int autoGcasFactorCap = TimeCompressionPolicy.FactorCapForLeadSeconds(
+            SecondsUntilAutoGcasBoundary());
+        int ramFactorCap = TimeCompressionPolicy.FactorCapForRamMachMargin(
+            RamTransitionMachMargin());
+        int approachFactorCap = Math.Min(
+            Math.Min(contactFactorCap, fuelFactorCap),
+            Math.Min(autoGcasFactorCap, ramFactorCap));
+        return new TimeCompressionSafetyState(
+            PilotEnabled: _timeCompressionPilotEnabled,
+            SupportedSortie: TimeCompressionAvailable,
+            SessionActive: Lifecycle == LifecycleState.Active
+                && (!TerminalPhaseActive || RapierReturnTransit),
+            EstablishedTransit: IsEstablishedTransit(),
+            CatapultOrConfigurationTransition: _catapult.IsActive
+                || ConfigurationTransitionActive,
+            ContactInsideLedThreatRange: contactFactorCap == 1,
+            GunSolutionInEitherDirection: _gunKill.GunSolution
+                || _gunKill.InstantaneousGunSolution
+                || _opponentGun.GunSolution
+                || _opponentGun.InstantaneousGunSolution
+                || _gunKill.RoundsInFlight.Count > 0
+                || _opponentGun.RoundsInFlight.Count > 0
+                || _retiredOpponentGuns.Any(static retired =>
+                    retired.Gun.RoundsInFlight.Count > 0)
+                || _wingmen.Any(static wingman =>
+                    wingman.Gun.GunSolution
+                    || wingman.Gun.InstantaneousGunSolution
+                    || wingman.Gun.RoundsInFlight.Count > 0),
+            AutoGcasActivityOrLead: autoGcasFactorCap == 1,
+            DamagePresent: PlayerHitsTaken > 0
+                || _playerTerminalState != AircraftTerminalState.Flying
+                || _rapierComputerFailureActive != RapierComputerFailure.None
+                || (!RapierReturnTransit
+                    && (_gunKill.TotalHitCount > 0
+                        || _bandit.CatastrophicallyDamaged
+                        || _opponentTerminalState != AircraftTerminalState.Flying)),
+            FuelThresholdOrLead: fuelFactorCap == 1,
+            ControlInputBeyondTrim: HasControlInputBeyondTrim(),
+            RamTransitionLead: ramFactorCap == 1,
+            ApproachFactorCap: approachFactorCap);
+    }
 
     void UpdateTimeCompressionDecision() {
         if (_beat is null || _player is null || _bandit is null
             || _fuel is null || _keys is null || _detents is null) {
+            _timeCompressionSafetyFactorCap = 1;
             _timeCompressionFactor = 1;
             _timeCompressionInhibitReason =
                 TimeCompressionInhibitReason.SessionInactive;
             return;
         }
+        TimeCompressionSafetyState safety = CaptureTimeCompressionSafety();
+        _timeCompressionSafetyFactorCap = Math.Clamp(
+            safety.ApproachFactorCap, 1, TimeCompressionPolicy.PreferredFactor);
         _timeCompressionInhibitReason =
-            TimeCompressionPolicy.Evaluate(CaptureTimeCompressionSafety());
-        _timeCompressionFactor =
-            _timeCompressionInhibitReason == TimeCompressionInhibitReason.None
-                ? Math.Clamp(_timeCompressionHostMaximumFactor,
-                    1, TimeCompressionRequestedFactor)
-                : 1;
+            TimeCompressionPolicy.Evaluate(safety);
+        _timeCompressionFactor = TimeCompressionPolicy.SelectFactor(
+            safety,
+            Math.Min(_timeCompressionHostMaximumFactor,
+                TimeCompressionRequestedFactor));
         if (_timeCompressionFactor == 1)
             _timeCompressionAccumulatorSeconds = 0.0;
     }
@@ -2115,6 +2219,13 @@ public sealed class SimulationSession {
             RapierCircuitLeg,
             _circuitTraffic,
             _systems.AllGearDownAndLocked,
+            _beat.ScriptedIntercept?.LandingIntent
+                ?? CircuitLandingIntent.FullStop,
+            _beat.ScriptedIntercept?.PatternOnly == true
+                && _carrier is not null
+                && !_catapult.IsActive
+                && _arrestment.Phase == ArrestmentModel.ArrestmentPhase.None,
+            WaveOffActive,
             _carrier is not null && _detents.ApproachMode,
             _carrier?.IsMaritime == true,
             _recovery,
@@ -2276,13 +2387,18 @@ public sealed class SimulationSession {
         StepCore();
         UpdateMissionChecklists();
         UpdateMissionRadio();
-        if (_catapult.Phase == CatapultLaunchModel.LaunchPhase.Hold
-            && _missionRadioDirector.LaunchClearanceComplete)
+        // The shot crew and launcher own this visual transaction. Ambient R/T is never a
+        // gameplay interlock: missing, muted, delayed, or expired speech cannot hold the jet.
+        if (_catapult.Phase == CatapultLaunchModel.LaunchPhase.Hold)
             _catapult.Release();
         UpdateRecoveryProcedure();
         if (decisionCapture is { } capture) CompleteDecisionTickCapture(capture);
         StepPendingTerminalDecision();
         _tick++;
+        ObserveRapierServiceLifeTick();
+        if (Lifecycle != LifecycleState.Active)
+            FinalizeRapierServiceLife(
+                RapierServiceLifeTerminationReason.SortieFinished);
         CaptureIncidentReplaySample();
         UpdateTimeCompressionDecision();
     }
@@ -2590,6 +2706,8 @@ public sealed class SimulationSession {
 
     void StageBeat(BeatSetup setup) {
         ArgumentNullException.ThrowIfNull(setup);
+        FinalizeRapierServiceLife(
+            RapierServiceLifeTerminationReason.Restaged);
         // Restaging discards any still-airborne rounds, so a buffered terminal record can no
         // longer change: append it before the terminal states below are reset.
         FinalizePendingTerminalDecision();
@@ -2788,6 +2906,7 @@ public sealed class SimulationSession {
         _accumulatorSeconds = 0.0;
         _timeCompressionAccumulatorSeconds = 0.0;
         _timeCompressionHostMaximumFactor = 1;
+        _timeCompressionSafetyFactorCap = 1;
         _timeCompressionFactor = 1;
         _timeCompressionInhibitReason =
             TimeCompressionInhibitReason.SessionInactive;
@@ -2958,6 +3077,7 @@ public sealed class SimulationSession {
         _accumulatorSeconds = 0.0;
         _timeCompressionAccumulatorSeconds = 0.0;
         _timeCompressionHostMaximumFactor = 1;
+        _timeCompressionSafetyFactorCap = 1;
         _timeCompressionFactor = 1;
         _timeCompressionInhibitReason =
             TimeCompressionInhibitReason.SessionInactive;
@@ -4134,6 +4254,9 @@ public sealed class SimulationSession {
             }
         } else return;
         EmitEvent(SessionEventType.Destroyed, source, target);
+        if (target == CombatRole.Player)
+            FinalizeRapierServiceLife(
+                RapierServiceLifeTerminationReason.OwnshipDestroyed);
         if (target == CombatRole.Opponent
             && promoteFormationSurvivor
             && _playerTerminalState == AircraftTerminalState.Flying)
@@ -4754,6 +4877,8 @@ public sealed class SimulationSession {
             _playerTerminalState = AircraftTerminalState.SimulationBounded;
             if (_playerImpactSurface == ImpactSurface.None)
                 _playerImpactSurface = ImpactSurface.SimulationBoundary;
+            FinalizeRapierServiceLife(
+                RapierServiceLifeTerminationReason.OwnshipDestroyed);
         } else {
             _opponentTerminalState = AircraftTerminalState.SimulationBounded;
             if (_opponentImpactSurface == ImpactSurface.None)
