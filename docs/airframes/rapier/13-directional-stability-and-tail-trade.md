@@ -285,7 +285,9 @@ Risks:
   continuous atmospheric replacement.
 
 This architecture is a research branch. It is a poor default for the programme's simple,
-high-rate, 50-sortie-shell thesis.
+high-rate, modular-service aircraft: extra safety-critical effectors add their own serialized
+actuators, hot joints, inspections, spares, and life limits without eliminating the need to close
+the low-speed failure case.
 
 ## 7. Cross-discipline implications
 

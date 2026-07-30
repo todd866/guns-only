@@ -77,11 +77,20 @@ low.
 4. **Drone release.** Drone skin envelope is cooler than Rapier dash; release waits for a compatible
    band (glide-drone vertical slice) — do not spawn melting airframes. See
    [60 — Armament and drones](60-armament-and-drones.md).
-5. **Cost.** CMC premium already implied (~2% structural life at $180k → ~$9M airframe class). The
-   ledger must not pretend a stainless flyaway cost — see [95 — Cost ledger](95-cost-ledger.md).
+5. **Cost and life.** The ~$9M flyaway remains a separate production-cost surrogate; it is not
+   derived from a life percentage. CMC durability is component-specific and requires local peak
+   temperature, gradient, dwell, heat/cool cycles, oxidation/coating condition, impact, attachment,
+   seal, and hot/cold-joint evidence. See [85 — Service life, maintenance, and telemetry](85-service-life-maintenance-and-telemetry.md)
+   and [95 — Cost ledger](95-cost-ledger.md).
 
 The conservative CMC/T0 screen is ~M5.37 at FL700 while the flown energy ladder peaks around M3.6–3.7:
 **engine/inlet binds first**. See [00 — Mission and flight regime](00-mission-and-ops.md).
+
+The present lagged wall channel is a flight-envelope diagnostic, not a component retirement model.
+It does not resolve the different temperature histories of the inlet lip, leading edges, liner,
+panels, seals, joints, nozzle, cold structure, or capsule attachments. A future life accumulator
+must retain those raw component exposures before it estimates thermal damage; it must never turn
+one skin-temperature scalar or one completed sortie into a universal life deduction.
 
 ## Epistemic
 

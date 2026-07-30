@@ -42,9 +42,11 @@ manufacturing rate, and the crew economics.
    **fiber-reinforced** SiC/SiC by AM is demonstrator-stage (NASA Glenn binder-jet vanes).
    Fourteen years buys **rate production of panels, edges, lip, duct, and nozzle** — never a
    whole-CMC airframe, which the design does not ask for.
-2. **Manufacturing** — the 1960s article was a hand-built jewel. This one is priced as a munition
-   (~$9M class, ~2% structural life per sortie — [95](95-cost-ledger.md)); that price is coherent
-   only after a qualified **CMC preform + densification + coating line** is paired with
+2. **Manufacturing** — the 1960s article was a hand-built jewel. This one is a high-rate,
+   recoverable combat aircraft (~$9M mature flyaway surrogate — [95](95-cost-ledger.md)) whose
+   affordability depends on independently tracked shells, hot modules, propulsion, capsule, and
+   rotables ([85](85-service-life-maintenance-and-telemetry.md)). That price is coherent only after
+   a qualified **CMC preform + densification + coating line** is paired with
    out-of-autoclave/fibre-placed cold structure, a single-stream propulsion install with **no TVC
    and no second nozzle**, and government-owned production data. Flight-critical SiC/SiC panels are
    not “printed whole”: fibre architecture, interphase, CVI/MI/PIP or a qualified hybrid,
@@ -69,7 +71,7 @@ manufacturing rate, and the crew economics.
 | --- | --- | --- | --- |
 | TBCC propulsion ([30](30-propulsion-and-inlet.md)) | J58 bleed-bypass ran as a quasi-combined cycle in squadron service | Turbojet→ramjet mode transition ground-demonstrated 2022 (Hermeus Chimera — built in 21 months for ~$18M); DARPA/AFRL TBCC lineage (FaCET, HTV-3X Blackswift, AFRE) | Flight-weight transition across M2.0–3.0 (`RamFadeStartMach`–`TurbineGoneMach`), cert of the M3.3–3.8 spill band — **the pacing item, matching the sim: engine/inlet binds first** |
 | Mixed-compression inlet | A-12/SR-71 solved unstart operationally | CFD + the sticky-unstart control problem is modelled in this repo's own surrogate (`sim/RapierAerodynamics.cs`) | Unstart-tolerant control law; the sim already treats this as a first-class failure |
-| CMC hot structure ([20](20-thermal-and-materials.md)) | Did not exist — the gap that forced titanium/steel | CMC hot-section parts in revenue service since 2016; printed monolithic SiC commercial, AM fiber-reinforced SiC/SiC demonstrator-stage | Panel-family rate production; **thermal-cycling life data at joints — the 2%-life cost line is secretly a fatigue claim** |
+| CMC hot structure ([20](20-thermal-and-materials.md)) | Did not exist — the gap that forced titanium/steel | CMC hot-section parts in revenue service since 2016; printed monolithic SiC commercial, AM fiber-reinforced SiC/SiC demonstrator-stage | Panel-family rate production; **thermal-cycling, coating, impact, attachment, and joint life data—the retired flat-per-sortie cost line had no such evidence** |
 | EM launch ([80](80-basing-and-ground.md), [82](82-launch-gallery-engineering-basis.md)) | Steam catapults at sea; the live alert shot is 520 m / 49.75 MJ kinetic / 12.37 MW end-ramp mechanical output | EMALS at sea since 2017; a second navy **commissioned** an EM-catapult carrier in 2025 (Fujian, three catapults) | Civil works, controlled land power/storage, maintainability, and qualification dominate; Rapier is not a copied naval system |
 | Arrested recovery ([70](70-landing-gear-arrest.md)) | Solved at sea, 1950s | 35 MJ land arrestor sits inside shipboard practice — a routine operating point against Mk 7's ~64 MJ maximum (careful: Mk 7's rating is 47.5 million **foot-pounds**, numerically near the gallery's 47.5 MJ by coincidence) | Strip survivability doctrine, not hardware |
 | Buried dispersed basing ([80](80-basing-and-ground.md)) | Sweden's Bas 60/90 road-base dispersal system, plus its separate early-1950s rock hangars (Barkarby/Säve class); Swiss cavern air bases; Taiwan mountain-shelter complexes | The same works, plus the 2020s dispersal lesson relearned in Ukraine | Earthworks per lane ([95](95-cost-ledger.md)) — engineering brigades, not aerospace |
@@ -87,13 +89,15 @@ manufacturing rate, and the crew economics.
   Fourteen years is **triple skunk-works precedent** — the margin is for rate production and
   the automation doctrine, not for inventing physics.
 - **The discipline the timeline enforces:** every requirement that arrives after the 2026 freeze
-  is a 2050s aircraft trying to get out. The volume thesis is the requirements firewall — a
-  50-sortie, $9M article cannot absorb exquisite growth and stay itself. (The XF-108 died of
-  exactly this; the F-108's fire control survived only by escaping to a simpler airframe.)
+  is a 2050s aircraft trying to get out. The affordability and volume thesis is the requirements
+  firewall—a ~$9M-class aircraft with independently tracked structure and rotables, exchangeable
+  hot modules, and field repair cannot absorb exquisite growth and stay itself.
+  (The XF-108 died of exactly this; the F-108's fire control survived only by escaping to a simpler
+  airframe.)
 - **Volume doctrine:** Bomarc shipped ramjet interceptors in the hundreds in 1959. The unit of
   capability is not the airframe, it is the **lane** (gallery + strip + arrestor + alert cells,
-  [95](95-cost-ledger.md)) times the **line rate**. The production line is the weapon system;
-  the aircraft is its ammunition.
+  [95](95-cost-ledger.md)) times the **line, depot, and rotable rates**. Production depth makes
+  combat loss tolerable and expansion possible; planned disposal of healthy aircraft does not.
 
 ## Sources (verified 2026-07-29; primary set held in PaperLibrary)
 
@@ -123,8 +127,9 @@ adversarial verification outside this repo, correctable here without touching th
 program-shape section is **fiction** disciplined by those anchors. The honest hard parts a real
 2026 program would sweat are the same three the sim already flags as open findings: TBCC mode
 transition across the handover band, CMC joint/coating durability and densification defects under
-thermal cycling (the 2%-life line), and inlet behavior through the M3.3–3.8 spill schedule. Nothing in this chapter
-claims those are easy — it claims they are **1960s-adjacent engineering plus 2026 materials**,
+thermal cycling (exposed, but not quantified, by the retired flat life-cost line), and inlet
+behavior through the M3.3–3.8 spill schedule. Nothing in this chapter claims those are easy—it
+claims they are **1960s-adjacent engineering plus 2026 materials**,
 which is a different thing from a frontier. That claim holds only while signature work stays inside
 robust shaping/aperture/emissions discipline rather than becoming an exquisite full-spectrum LO
 programme—see [17 — Signatures and survivability](17-signatures-and-survivability.md) and

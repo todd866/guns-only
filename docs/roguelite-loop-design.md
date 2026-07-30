@@ -64,6 +64,13 @@ beat (rearm guns, keep/lose state per mission ruleset).
   (Codex's warning: grinding must not trivialise the sim). Progress persists locally (today
   `campaign_progression.js` localStorage; see §9 authority note).
 
+This currency is an isolated arcade/sandbox abstraction, not the persistent world's military
+economy. It cannot buy force inventory, repair, airworthiness, industrial capacity, authority, or
+people, and it does not cross into the
+[future air-war economy and force-management ledger](air-war-economy-and-force-management.md).
+Persistent-world access instead follows the product north star's competence, contribution,
+relationships, and delegated authority.
+
 ### 5. Escalation — a seeded difficulty budget
 
 Each run has a rising **difficulty budget** the seed spends per engagement across three axes:

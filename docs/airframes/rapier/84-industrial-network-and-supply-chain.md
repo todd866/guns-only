@@ -2,7 +2,9 @@
 
 ← [82 — Launch-gallery engineering basis](82-launch-gallery-engineering-basis.md) · Related:
 [16 — Manufacturing and the 2026 industrial basis](16-manufacturing-and-industrial-basis.md) ·
-[95 — Cost ledger](95-cost-ledger.md) · Back to [README](README.md)
+[85 — Service life, maintenance, and telemetry](85-service-life-maintenance-and-telemetry.md) ·
+[95 — Cost ledger](95-cost-ledger.md) ·
+[force economy](../../air-war-economy-and-force-management.md) · Back to [README](README.md)
 
 > **Status:** proposed production baseline and fictional worldbuilding, constrained by closed Rapier
 > interfaces. This chapter is not a construction release, supplier solicitation, certified production
@@ -30,8 +32,8 @@ final-assembly lines, two hot-structure sources, two propulsion integration sour
 government-controlled depot and rotable pool.
 
 The expensive object is the **production-and-sustainment network**. The aircraft is the network's
-repeatable output. That is the industrial meaning of chapter 16's doctrine that the line is the
-weapon and the aircraft is its ammunition.
+repeatable, repairable output. The line, depots, data, and rotable pool provide strategic depth;
+the aircraft remains a recoverable asset rather than planned ammunition.
 
 The baseline has six rules:
 
@@ -409,10 +411,11 @@ capsule and specialist-tier capacity scaled above that. **240 aircraft/year is r
 current baseline:** it would require another or expanded final line and upstream capacity above
 approximately 260 complete shipsets/year, not merely extra shifts at the named sites.
 
-At exactly 50 sorties per structural shell, 144 aircraft represent **7,200 full-life-equivalent
-sorties per year** before combat loss. That is only planning arithmetic. The real rate decision must
-use measured thermal/mechanical life consumption by mission rather than assuming every sortie costs
-the same 2%.
+Aircraft output is not directly convertible into sortie capacity. The required annual rate must be
+solved from fleet size, availability, mission mix, measured component consumption, combat and
+accident loss, inspection findings, repair yield, depot turnaround, and rotable policy. Chapter
+[85 — Service life, maintenance, and telemetry](85-service-life-maintenance-and-telemetry.md)
+defines the severity-weighted component record that this industrial model must eventually consume.
 
 ### 11.2 Workforce
 
@@ -493,8 +496,8 @@ US DoD guidance for aircraft and missile NDI programme plans.
     every production article.
 
 No production acceptance card may claim sustained Mach 4, qualified whole-aircraft 1,200 °C
-operation, a closed escape survival envelope, or a closed 50-sortie life until those programmes
-produce evidence.
+operation, a closed escape survival envelope, or qualified component lives and inspection
+intervals until those programmes produce evidence.
 
 ## 13. Depot, rotables, and field support
 
@@ -573,23 +576,35 @@ was reported as a roughly $1B investment
 Rapier is smaller and simpler in some respects but adds novel TBCC and large hot-structure
 qualification. No direct unit-rate transfer is valid.
 
-### 14.3 Shell life and recovered value
+### 14.3 Component life and recovered value
 
-**Open decision:** “50-sortie article” must be split into component lives.
+**Accepted programme doctrine:** Rapier is a long-lived carrier assembled from independently
+life-limited components. Chapter
+[85 — Service life, maintenance, and telemetry](85-service-life-maintenance-and-telemetry.md) is
+the controlling system design.
 
-The preferred lifecycle model is:
-
-- the cold/hot structural shell owns measured mechanical and thermal life;
-- engine core, ram hot kit, capsule, avionics, gun, gear, hook, actuators, pumps and RCS pressure
-  equipment own independent serial lives;
-- an expired shell is stripped at a regional depot;
+- the cold primary shell, wing/carry-through structure, and directional-control attachments own
+  their measured mechanical spectrum, environment, damage, inspection, and repair histories;
+- each removable inlet lip, leading edge, liner, panel, seal/attachment set, and aft hot shipset
+  owns its local thermal, oxidation/coating, impact, and joint history;
+- turbine core, ram hot kit, capsule, avionics, gun, gear, hook, launch fittings, actuators, pumps,
+  and RCS pressure equipment own independent serial lives;
+- the first Block-0 forensic teardown occurs at **50 severe-mission equivalents**; that gate is not
+  retirement;
+- **250** severe equivalents is the provisional minimum production-shell requirement, **500** the
+  production structural objective, and **1,000** an extension target available only after evidence;
+- all four labels remain inactive until chapter 85's `SME-v0` reference spectrum exists and may not
+  yet drive production, dispatch, inspection due dates, or cost;
+- an expired or uneconomic shell is stripped at a regional depot;
 - serviceable rotables are inspected, repaired as authorised, and installed in a new shell;
 - remaining structural and hot components become test articles, repair stock, material-recovery
-  candidates, or controlled scrap;
-- no component receives a fresh life merely by moving to a new shell.
+  candidates, or controlled scrap; and
+- no component receives a fresh life merely by moving, repair does not erase history, and unknown
+  history is never interpreted as zero damage.
 
-Until those lives, yields and salvage values exist, the current 2%-of-flyaway structural-life price
-is a deliberately conservative accounting sketch, not a depot business case.
+The former flat-per-sortie depreciation sketch is retired. Until qualified lives, mission spectra,
+repair yields, inspection costs, and salvage values exist, lifecycle cost remains an uncertainty
+band rather than a depot business case.
 
 ## 15. Wartime vulnerability and geographic dispersion
 
@@ -684,4 +699,5 @@ different failure signatures.
 | Buried pressure/escape capsule as a controlled subsystem | **proposed production baseline** consuming the closed opaque-capsule interface; escape sequence remains open |
 | $14–27B development/industrialisation/support and $15–25M early aircraft | **concept planning ranges**, not bids |
 | Approximately $9M mature recurring flyaway | Existing **repo surrogate**, conditional on rate and exclusions |
+| Fixed whole-aircraft sortie life | **rejected**; the serialized component-ledger doctrine is closed, while 50/250/500/1,000 severe-equivalent programme labels remain provisional and inactive pending `SME-v0` |
 | A real company, factory, military unit, or exact real installation is depicted | **false / prohibited claim** |

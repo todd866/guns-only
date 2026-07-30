@@ -1,7 +1,7 @@
 # Rapier phase-aware HUD (design)
 
-Status: Approved in conversation 2026-07-29 · Owner chose approach 1 (phase
-presentation profiles) · Build immediately; iterate in production.
+Status: Approved in conversation 2026-07-29 · Circuits decision-priority
+extension approved and implemented 2026-07-30 · Iterate in production.
 
 Supersedes presentation hierarchy of
 `2026-07-27-hud-limits-panel-design.md` for Rapier Intercept surfaces and Limits
@@ -43,6 +43,28 @@ Hard kills (Intercept v1, all bands unless noted):
 - Quiet line longer than ~3–4 tokens
 - Cycle teach except ascent (thermal OVER may override quiet line / accent anywhere)
 
+## Circuits decision-priority extension
+
+Circuits uses the same surface gate as Intercept, but keys it by pattern leg and
+physical configuration. The authoring questions are:
+
+1. **NOW / Aviate** — tapes show actual state; director geometry shows the
+   authored profile. Text speaks only when materially off profile.
+2. **NEXT / Navigate** — the world gate owns the next spatial job. Its label is
+   blank in the normal armed state and speaks only for `GATE OPEN`, `ENERGY`, or
+   `CONFIG`.
+3. **WHO / Communicate** — radio events and relevant traffic own this layer.
+   Unselected, unambiguous circuit traffic does not need a persistent noun under
+   its bracket.
+4. **VERIFY / Administrate** — gear/elevon state appears only while it disagrees
+   with the current leg, as a compact target-explicit card. It expires as soon
+   as all three gear legs and both elevons verify.
+
+The persistent mode line is authority plus current leg only (`DEMO · DOWNWIND`).
+It does not repeat mission name, target speed/altitude, next action, or normal
+configuration. Pattern fuel is latent until Joker, Bingo, minimum fuel, or
+emergency fuel makes it decision-relevant.
+
 ## Limits / fuel panel (always-on Intercept airborne)
 
 Five rows, always:
@@ -76,7 +98,6 @@ belongs in Controls).
 
 ## Non-goals v1
 
-- Circuits full rewrite (inherit sockets later)
 - ANCA panel content
 - Tape / funnel projective math
 - Per-stream fuel as kernel truth
@@ -89,3 +110,10 @@ belongs in Controls).
 3. Crossing Bingo/Joker does not rename the ARR cell; callouts remain separate.
 4. `hudPhasePresentation` / updated `limitsPanelPresentation` unit tests green.
 5. HUD harness Rapier scenarios green; `./bin/check` or scoped gate green.
+6. Circuits normal downwind: no Limits card, systems card, gate essay, or
+   on-speed prose.
+7. Circuits configuration disagreement: red `CONFIG` at the gate plus a compact
+   amber `GEAR/ELEV REQD` verification card.
+8. Circuits verified configuration removes the verification card immediately.
+9. Deterministic harness scenarios cover both verified and configuration-due
+   downwind states.

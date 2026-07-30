@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "1.0.0",
+  "targetId": "visual-target.korea-1950s.exploratory-palette.v1",
+  "packId": "korea-1950s",
+  "scope": "exploratory_palette_and_atmosphere_only",
+  "narrativeSequenceId": "sequence.korea-1951.armstrong-cable-strike.v1",
+  "presentationOnly": true,
+  "referenceManifest": "reference/manifest.json",
+  "states": {
+    "golden-departure": {
+      "referenceImageId": "golden-departure",
+      "sky": "#6F8492",
+      "lightBreak": "#F3D08C",
+      "cloudLight": "#F4E7C9",
+      "cloudShadow": "#78838B",
+      "ridge": "#394A3A",
+      "field": "#A89858",
+      "water": "#274D5D",
+      "roofOrDeck": "#2B3031",
+      "aluminium": "#899399",
+      "amber": "#DEA34F",
+      "exposure": 1.02,
+      "hazeIntent": "gold confined to horizon break and reflections"
+    },
+    "mountain-encounter": {
+      "referenceImageId": "mountain-encounter",
+      "sky": "#6E8DA5",
+      "lightBreak": "#E9D8B3",
+      "cloudLight": "#F3E9D3",
+      "cloudShadow": "#697986",
+      "ridge": "#344B32",
+      "field": "#AAA05A",
+      "water": "#6F9798",
+      "roofOrDeck": "#4B443A",
+      "aluminium": "#8D9699",
+      "amber": "#D7B06B",
+      "exposure": 1.0,
+      "hazeIntent": "value-separated ridges with soft continuous distance"
+    },
+    "quiet-valley-glide": {
+      "referenceImageId": "quiet-valley-glide",
+      "sky": "#687887",
+      "lightBreak": "#D8BE82",
+      "cloudLight": "#E9DDC2",
+      "cloudShadow": "#727A78",
+      "ridge": "#30452F",
+      "field": "#B1A15A",
+      "water": "#719A98",
+      "roofOrDeck": "#403A32",
+      "aluminium": "#8A9291",
+      "amber": "#C99A58",
+      "exposure": 1.0,
+      "hazeIntent": "lived-in foreground and broad quiet middle distance"
+    },
+    "rain-recovery": {
+      "referenceImageId": "rain-recovery",
+      "sky": "#505B66",
+      "lightBreak": "#C89451",
+      "cloudLight": "#C7CBC8",
+      "cloudShadow": "#59616A",
+      "ridge": "#34403D",
+      "field": "#77745D",
+      "water": "#183241",
+      "roofOrDeck": "#292E31",
+      "aluminium": "#858D91",
+      "amber": "#D39A50",
+      "exposure": 0.94,
+      "hazeIntent": "low-contrast weather with preserved aircraft and wire silhouettes"
+    }
+  },
+  "invariants": {
+    "minimumTargetPixels": 8,
+    "hudProjectiveTruth": true,
+    "generatedImagesInRuntimeClosure": false,
+    "historicalMissionEvidence": false,
+    "ukraineVisualChange": false,
+    "simulationStateMutation": false,
+    "requiresDeclaredPackCapability": true
+  },
+  "runtimeOwners": {
+    "atmosphere": "content/packs/korea-1950s/environment/atmosphere.material.json",
+    "ocean": "content/packs/korea-1950s/environment/ocean.material.json",
+    "visualProfile": "content/packs/korea-1950s/visual-profile.json",
+    "terrain": "web/wwwroot/render/environment/korea_terrain.js",
+    "scenery": "web/wwwroot/render/environment/korea_scenery_planner.js",
+    "environment": "web/wwwroot/render/environment/korea_environment.js",
+    "effects": "content/packs/korea-1950s/effects/guns.effects.json",
+    "narrativeContract": "docs/art-direction/korea-1950s/narrative/armstrong-ejection.sequence.json",
+    "narrativeRuntime": "planned:system.fixed-history-director.v1"
+  }
+}

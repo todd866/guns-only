@@ -1,0 +1,415 @@
+{
+  "schemaVersion": "1.0.0",
+  "catalogId": "radio.korea-1951.armstrong-cable-strike.v1",
+  "status": "draft_reconstruction",
+  "sequenceId": "sequence.korea-1951.armstrong-cable-strike.v1",
+  "canonicalTextLocale": "en-US",
+  "policy": {
+    "authority": "The mission controller selects line identity and timing from authoritative state. Audio duration may delay later audio, never mission progression.",
+    "epistemic": "No surviving sortie transcript is registered. Every spoken line in this draft is procedural reconstruction, not a quotation.",
+    "historicalPersons": "Use original disclosed synthetic performances. Do not clone, match or request resemblance to Neil Armstrong, John Carpenter or any real recording.",
+    "captions": "Canonical captions exist independently of generated audio and remain available when audio is missing.",
+    "generation": "Generation remains blocked until source, phraseology, script, rights and performance-direction review."
+  },
+  "speakers": [
+    {
+      "speakerId": "speaker.armstrong.v1",
+      "characterId": "character.neil-armstrong-1951.v1",
+      "captionLabel": "ARMSTRONG · TWO",
+      "role": "young naval aviator and wingman",
+      "performanceDirection": "Young adult military pilot; contained, technically attentive and breathing under workload. Neutral Midwestern American speech without impersonation, celebrity resemblance or Apollo-era cadence.",
+      "voiceSelectionStatus": "unselected"
+    },
+    {
+      "speakerId": "speaker.carpenter.v1",
+      "characterId": "character.john-carpenter-korea.v1",
+      "captionLabel": "CARPENTER · LEAD",
+      "role": "flight lead and USAF exchange officer",
+      "performanceDirection": "Mature operational pilot; concise, observant and unshowy. Distinct from Armstrong through pace and register, not a theatrical accent or imitation.",
+      "voiceSelectionStatus": "unselected"
+    }
+  ],
+  "lines": [
+    {
+      "lineId": "line.carpenter.02-take-position.v1",
+      "beatId": "beat.armstrong.02-join-and-coast.v1",
+      "speakerId": "speaker.carpenter.v1",
+      "text": "Two, take the right.",
+      "function": "Assign the player a readable formation station without exposition.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.carpenter-flight-lead.v1"
+      ],
+      "sourceRefs": [],
+      "reconstructionBasis": "The exact formation and words are unknown; the line encodes the documented lead-wingman relationship.",
+      "trigger": {
+        "eventRef": "event.narrative.deck-launch-complete.v1",
+        "observerFacts": [
+          "Carpenter is established as lead.",
+          "The player is airborne and not yet inside the join envelope."
+        ]
+      },
+      "priority": "advisory",
+      "interruptPolicy": "drop_if_beat_complete",
+      "estimatedDurationSeconds": 1.35
+    },
+    {
+      "lineId": "line.armstrong.02-position-ack.v1",
+      "beatId": "beat.armstrong.02-join-and-coast.v1",
+      "speakerId": "speaker.armstrong.v1",
+      "text": "Two.",
+      "function": "Acknowledge the formation assignment with minimal radio load.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.carpenter-flight-lead.v1"
+      ],
+      "sourceRefs": [],
+      "reconstructionBasis": "Position acknowledgement; exact call signs and wording require period phraseology review.",
+      "trigger": {
+        "afterLineRef": "line.carpenter.02-take-position.v1",
+        "observerFacts": [
+          "The player is converging on the assigned formation station."
+        ]
+      },
+      "priority": "routine",
+      "interruptPolicy": "drop_if_beat_complete",
+      "estimatedDurationSeconds": 0.65
+    },
+    {
+      "lineId": "line.carpenter.03-descend.v1",
+      "beatId": "beat.armstrong.03-valley-ingress.v1",
+      "speakerId": "speaker.carpenter.v1",
+      "text": "Going down. Stay with me.",
+      "function": "Mark the workload transition from coast transit to low-level ingress.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-armed-recon-wonsan.v1",
+        "claim.carpenter-flight-lead.v1"
+      ],
+      "sourceRefs": [],
+      "reconstructionBasis": "The target region and low-altitude work are supported; the exact route and call are not.",
+      "trigger": {
+        "eventRef": "event.narrative.korea-coast-crossed.v1",
+        "observerFacts": [
+          "Carpenter has begun the authored descent.",
+          "The player remains within recoverable formation range."
+        ]
+      },
+      "priority": "advisory",
+      "interruptPolicy": "drop_if_beat_complete",
+      "estimatedDurationSeconds": 1.55
+    },
+    {
+      "lineId": "line.carpenter.04-lead-in.v1",
+      "beatId": "beat.armstrong.04-attack-run.v1",
+      "speakerId": "speaker.carpenter.v1",
+      "text": "Lead's in.",
+      "function": "Provide the operational timing cue for the required attack run.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-armed-recon-wonsan.v1"
+      ],
+      "sourceRefs": [],
+      "reconstructionBasis": "A restrained attack-position call; exact formation, target, ordnance and wording remain source-blocked.",
+      "trigger": {
+        "eventRef": "event.narrative.target-area-entered.v1",
+        "observerFacts": [
+          "Carpenter has entered the authored employment path."
+        ]
+      },
+      "priority": "advisory",
+      "interruptPolicy": "drop_if_beat_complete",
+      "estimatedDurationSeconds": 0.95
+    },
+    {
+      "lineId": "line.armstrong.04-two-in.v1",
+      "beatId": "beat.armstrong.04-attack-run.v1",
+      "speakerId": "speaker.armstrong.v1",
+      "text": "Two's in.",
+      "function": "Commit the player to the required task and route.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-armed-recon-wonsan.v1"
+      ],
+      "sourceRefs": [],
+      "reconstructionBasis": "Generic position call pending Korean War naval aviation phraseology review.",
+      "trigger": {
+        "afterLineRef": "line.carpenter.04-lead-in.v1",
+        "observerFacts": [
+          "The player has entered the attack gate with the validated target selected."
+        ]
+      },
+      "priority": "advisory",
+      "interruptPolicy": "drop_if_beat_complete",
+      "estimatedDurationSeconds": 0.85
+    },
+    {
+      "lineId": "line.armstrong.06-damage-report.v1",
+      "beatId": "beat.armstrong.06-arrest-the-roll.v1",
+      "speakerId": "speaker.armstrong.v1",
+      "text": "Lead, Two. I hit a cable. Right wing's damaged.",
+      "performanceText": "Lead, Two—I hit a cable; right wing's damaged.",
+      "function": "Name the event only after the player has recovered enough capacity to transmit.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-cable-strike.v1",
+        "claim.armstrong-wing-loss.v1"
+      ],
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1"
+      ],
+      "reconstructionBasis": "Armstrong later described the cable and right-wing loss; this is not presented as his historical radio wording.",
+      "trigger": {
+        "eventRef": "event.narrative.right-wing-damaged.v1",
+        "observerFacts": [
+          "The player remains conscious.",
+          "Roll rate has fallen below the do-not-interrupt threshold.",
+          "The radio remains operable."
+        ]
+      },
+      "priority": "urgent",
+      "interruptPolicy": "queue_until_workload_allows",
+      "estimatedDurationSeconds": 2.35
+    },
+    {
+      "lineId": "line.carpenter.06-coming-across.v1",
+      "beatId": "beat.armstrong.06-arrest-the-roll.v1",
+      "speakerId": "speaker.carpenter.v1",
+      "text": "Climb if you can. I'm coming across.",
+      "function": "Convert the lead from route authority to external inspection support.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.carpenter-flight-lead.v1",
+        "claim.armstrong-no-landing-decision.v1"
+      ],
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1"
+      ],
+      "reconstructionBasis": "Carpenter's continued presence and joint assessment are supported; the exact call is not.",
+      "trigger": {
+        "afterLineRef": "line.armstrong.06-damage-report.v1",
+        "observerFacts": [
+          "Carpenter has a safe path toward the inspection station."
+        ]
+      },
+      "priority": "urgent",
+      "interruptPolicy": "queue_until_workload_allows",
+      "estimatedDurationSeconds": 1.8
+    },
+    {
+      "lineId": "line.carpenter.07-hold-inspection.v1",
+      "beatId": "beat.armstrong.07-carpenter-inspection.v1",
+      "speakerId": "speaker.carpenter.v1",
+      "text": "Hold it there.",
+      "function": "Tell the player that stable formation, not another maneuver, is the current task.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.carpenter-flight-lead.v1",
+        "claim.armstrong-no-landing-decision.v1"
+      ],
+      "sourceRefs": [],
+      "reconstructionBasis": "Inspection geometry is reconstructed from operational necessity.",
+      "trigger": {
+        "eventRef": "event.narrative.damaged-flight-stabilized.v1",
+        "observerFacts": [
+          "Carpenter has reached the outer inspection gate."
+        ]
+      },
+      "priority": "advisory",
+      "interruptPolicy": "drop_if_beat_complete",
+      "estimatedDurationSeconds": 0.95
+    },
+    {
+      "lineId": "line.carpenter.07-visible-damage.v1",
+      "beatId": "beat.armstrong.07-carpenter-inspection.v1",
+      "speakerId": "speaker.carpenter.v1",
+      "text": "Your right tip is gone.",
+      "function": "Give Armstrong only the damage facts another pilot could visibly assess.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-wing-loss.v1",
+        "claim.carpenter-flight-lead.v1"
+      ],
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.hansen-first-man-2012.v1"
+      ],
+      "reconstructionBasis": "The substantial outer right-wing loss is source-supported; Carpenter's exact observation and words are not.",
+      "trigger": {
+        "eventRef": "event.narrative.damage-inspection-complete.v1",
+        "observerFacts": [
+          "The detached outer right-wing geometry is visible from Carpenter's current station."
+        ]
+      },
+      "priority": "urgent",
+      "interruptPolicy": "queue_until_workload_allows",
+      "estimatedDurationSeconds": 1.85
+    },
+    {
+      "lineId": "line.armstrong.07-control-margin.v1",
+      "beatId": "beat.armstrong.07-carpenter-inspection.v1",
+      "speakerId": "speaker.armstrong.v1",
+      "text": "It takes nearly all the stick to hold it. If I slow down, it'll go.",
+      "function": "Express the no-landing decision through player-demonstrated control margin.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-no-landing-decision.v1",
+        "claim.panther-damage-flight-reconstruction.v1"
+      ],
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1"
+      ],
+      "reconstructionBasis": "Armstrong later explained the low-speed snap risk; wording and degree of stick demand are bound to simulation evidence, not historical quotation.",
+      "trigger": {
+        "afterLineRef": "line.carpenter.07-visible-damage.v1",
+        "observerFacts": [
+          "The player's sustained lateral input exceeds the authored high-demand threshold.",
+          "The damaged-aircraft model reports insufficient low-speed control margin for the landing envelope."
+        ]
+      },
+      "priority": "urgent",
+      "interruptPolicy": "queue_until_workload_allows",
+      "estimatedDurationSeconds": 2.8
+    },
+    {
+      "lineId": "line.carpenter.07-no-landing.v1",
+      "beatId": "beat.armstrong.07-carpenter-inspection.v1",
+      "speakerId": "speaker.carpenter.v1",
+      "text": "Then we don't land it. Head south. I'll stay with you.",
+      "function": "Commit the documented decision and turn the next task into reaching friendly territory.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-no-landing-decision.v1",
+        "claim.armstrong-ejection-friendly-territory.v1"
+      ],
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1"
+      ],
+      "reconstructionBasis": "The joint no-landing decision and southbound flight are supported; the line is newly written.",
+      "trigger": {
+        "afterLineRef": "line.armstrong.07-control-margin.v1",
+        "observerFacts": [
+          "Inspection is complete.",
+          "The no-landing decision predicate is authoritative."
+        ]
+      },
+      "priority": "urgent",
+      "interruptPolicy": "must_complete_before_beat_exit",
+      "estimatedDurationSeconds": 2.4
+    },
+    {
+      "lineId": "line.carpenter.08-friendly-ahead.v1",
+      "beatId": "beat.armstrong.08-southbound.v1",
+      "speakerId": "speaker.carpenter.v1",
+      "text": "Friendly territory ahead.",
+      "function": "Make the historical boundary legible without turning the flight into chatter.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-ejection-friendly-territory.v1"
+      ],
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1"
+      ],
+      "reconstructionBasis": "Armstrong recalled taking the aircraft south into friendly territory; exact route calls are unknown.",
+      "trigger": {
+        "eventRef": "event.narrative.ejection-decision.v1",
+        "observerFacts": [
+          "The player is within the final authored distance to the friendly-territory gate."
+        ]
+      },
+      "priority": "advisory",
+      "interruptPolicy": "drop_if_beat_complete",
+      "estimatedDurationSeconds": 1.3
+    },
+    {
+      "lineId": "line.carpenter.09-clear-aircraft.v1",
+      "beatId": "beat.armstrong.09-ejection-setup.v1",
+      "speakerId": "speaker.carpenter.v1",
+      "text": "Point it clear. Keep the speed.",
+      "function": "Prioritize disposal alignment and the damaged aircraft's control margin.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-no-landing-decision.v1",
+        "claim.armstrong-ejection-friendly-territory.v1",
+        "claim.panther-ejection-seat.v1"
+      ],
+      "sourceRefs": [],
+      "reconstructionBasis": "The exact disposal heading, ejection procedure and words remain handbook- and route-blocked.",
+      "trigger": {
+        "eventRef": "event.narrative.friendly-territory-entered.v1",
+        "observerFacts": [
+          "The player has entered the ejection-area checkpoint."
+        ]
+      },
+      "priority": "urgent",
+      "interruptPolicy": "must_complete_before_beat_exit",
+      "estimatedDurationSeconds": 1.45
+    },
+    {
+      "lineId": "line.armstrong.10-going-out.v1",
+      "beatId": "beat.armstrong.10-ejection.v1",
+      "speakerId": "speaker.armstrong.v1",
+      "text": "I'm getting out.",
+      "function": "Mark the irreversible transition with the fewest possible words.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-ejection-friendly-territory.v1"
+      ],
+      "sourceRefs": [],
+      "reconstructionBasis": "No incident radio transcript is registered.",
+      "trigger": {
+        "eventRef": "event.narrative.ejection-ready.v1",
+        "observerFacts": [
+          "Every exposed ejection preparation action is complete.",
+          "The aircraft remains inside the validated ejection envelope."
+        ]
+      },
+      "priority": "urgent",
+      "interruptPolicy": "must_complete_before_action_enable",
+      "estimatedDurationSeconds": 1.05
+    },
+    {
+      "lineId": "line.carpenter.10-ack.v1",
+      "beatId": "beat.armstrong.10-ejection.v1",
+      "speakerId": "speaker.carpenter.v1",
+      "text": "Roger.",
+      "function": "Acknowledge without adding prophecy, sentiment or instruction after the decision.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.carpenter-flight-lead.v1",
+        "claim.armstrong-ejection-friendly-territory.v1"
+      ],
+      "sourceRefs": [],
+      "reconstructionBasis": "No incident radio transcript is registered.",
+      "trigger": {
+        "afterLineRef": "line.armstrong.10-going-out.v1",
+        "observerFacts": [
+          "Carpenter remains in radio range."
+        ]
+      },
+      "priority": "urgent",
+      "interruptPolicy": "allow_ejection_during_line",
+      "estimatedDurationSeconds": 0.7
+    }
+  ],
+  "generation": {
+    "status": "blocked_until_script_lock",
+    "modelCandidates": [],
+    "evaluationSet": [
+      "line.armstrong.06-damage-report.v1",
+      "line.armstrong.07-control-margin.v1",
+      "line.carpenter.07-visible-damage.v1",
+      "line.carpenter.07-no-landing.v1",
+      "line.armstrong.10-going-out.v1"
+    ],
+    "evaluationCriteria": [
+      "Intelligibility through the period radio treatment.",
+      "Distinct speakers without caricature.",
+      "Composure that still exposes workload and breath.",
+      "No resemblance to a known recording or celebrity performance.",
+      "Stable pronunciation of Panther, Pohang and K-3 after phraseology lock.",
+      "Caption and measured-duration agreement.",
+      "Reproducible model snapshot, prompt, voice ID, take ID, file hash and loudness."
+    ]
+  }
+}

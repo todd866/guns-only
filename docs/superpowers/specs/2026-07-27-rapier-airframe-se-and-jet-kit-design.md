@@ -187,8 +187,12 @@ Credibility path: CMC already flies in engine hot sections (e.g. LEAP shrouds); 
    and automation own the outside world.
 4. **Drone release:** drone skin envelope is cooler than Rapier dash; release waits for a compatible
    band (glide-drone vertical slice) — do not spawn melting airframes.
-5. **Cost:** CMC premium already implied (~2% structural life at $180k → ~$9M airframe class). Ledger
-   must not pretend stainless flyaway.
+5. **Cost and service life (superseded 2026-07-30):** the old `2% × ~$9M = ~$180k` line was circular
+   accounting, not a fatigue result. The ~$9M flyaway remains a separate production-cost surrogate.
+   Component-specific life, severe-mission qualification objectives, maintenance telemetry, and
+   recovered value are governed by
+   [Rapier chapter 85](../../airframes/rapier/85-service-life-maintenance-and-telemetry.md); no
+   completed sortie receives a flat life deduction.
 
 Thermal headroom to ~M5.7 on skin vs ~M4.5 on thrust → **engine binds first**.
 

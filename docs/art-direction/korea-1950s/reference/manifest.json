@@ -1,0 +1,71 @@
+{
+  "schemaVersion": "1.0.0",
+  "referenceSetId": "art-reference.korea-1950s.exploratory-palette.v1",
+  "generatedAt": "2026-07-30",
+  "tool": {
+    "surface": "Codex built-in ImageGen",
+    "model": null,
+    "modelNote": "The built-in surface did not expose a model identifier; none is inferred."
+  },
+  "epistemicStatus": "fiction",
+  "scope": "exploratory_palette_and_atmosphere_only",
+  "runtimeUse": false,
+  "excludedUses": [
+    "Neil Armstrong character or likeness reference",
+    "F9F Panther geometry, livery, cockpit or damage reference",
+    "USS Essex deck-layout or procedure reference",
+    "historical target, cable, ejection or recovery evidence"
+  ],
+  "promptRecord": "PROMPTS.md",
+  "commonConstraints": [
+    "original hand-painted mid-century animation language",
+    "no direct imitation of a named studio, living artist, character, prop, composition, or film frame",
+    "no logos, trademarks, readable text, or watermarks",
+    "fictional unmarked early swept-wing aircraft",
+    "historically plausible 1950s environment and carrier operations",
+    "guns only with restrained combat",
+    "consistent protagonist aircraft, carrier, palette, and world"
+  ],
+  "images": [
+    {
+      "id": "storyboard",
+      "path": "long-way-home-storyboard-v1.png",
+      "role": "superseded fictional continuity board retained for palette and pacing exploration",
+      "width": 1672,
+      "height": 941,
+      "sha256": "a6a44970e6abe968d06c291cf2642c8000d2c73438c5d1a0419de766d2749512"
+    },
+    {
+      "id": "golden-departure",
+      "path": "golden-departure-v1.png",
+      "role": "exploratory carrier-dawn atmosphere and material target",
+      "width": 1672,
+      "height": 941,
+      "sha256": "03b797bcb519796ca43d4849872922ae7d06184fa1d7d72fa033ff25d6feed9e"
+    },
+    {
+      "id": "mountain-encounter",
+      "path": "mountain-encounter-v1.png",
+      "role": "exploratory terrain, cloud and combat-restraint target",
+      "width": 1672,
+      "height": 941,
+      "sha256": "6c9ef3a9b49bb72a88a31ce2e689d02c82aa5af11af357838ded8a566b9855a7"
+    },
+    {
+      "id": "quiet-valley-glide",
+      "path": "quiet-valley-glide-v1.png",
+      "role": "exploratory low-altitude settlement, cultivation, foliage and quiet target",
+      "width": 1672,
+      "height": 941,
+      "sha256": "9365c341ed77e567deeb43d6caaa9582a2d4c049d358fc6d23ac9976c716e3c1"
+    },
+    {
+      "id": "rain-recovery",
+      "path": "rain-recovery-v1.png",
+      "role": "exploratory storm visibility, wet-deck and silhouette-contrast target",
+      "width": 1672,
+      "height": 941,
+      "sha256": "c8e39761987c0846d24abaa5c14b3860835c70a2121d23533a7aa709bd1566de"
+    }
+  ]
+}

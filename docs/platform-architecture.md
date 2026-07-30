@@ -356,6 +356,15 @@ state hashes. Procedure evaluation consumes observer evidence and semantic actio
 not direct access to live failure state. Its rich result remains separate from the compressed tactical
 outcome: a lucky recovery can still contain unsafe reasoning, while a safe abort can be correct.
 
+Persistent force state is a separate consumer of that evidence. The campaign journal/orchestrator
+defined by
+[future air-war economy and force management](air-war-economy-and-force-management.md) freezes a
+stable assignment before launch and receives one immutable result. One atomic accepted-result
+journal append transitions the assignment and its reservations; independent inventory,
+maintenance, cost, verification, and allocation projections then replay idempotently from that
+sequence. Browser local storage, presentation snapshots, tactical scores, and lossy telemetry
+cannot reserve or mutate stock, money, work, industrial capacity, or command authority.
+
 A replay records:
 
 - Initial mission definition and content hashes.

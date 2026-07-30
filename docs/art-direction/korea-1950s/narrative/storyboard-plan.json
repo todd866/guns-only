@@ -1,0 +1,228 @@
+{
+  "schemaVersion": "1.0.0",
+  "boardId": "storyboard.korea-1951.armstrong-cable-strike.v1",
+  "status": "prompt_ready_source_lock_pending",
+  "sequenceId": "sequence.korea-1951.armstrong-cable-strike.v1",
+  "format": {
+    "frameCount": 12,
+    "aspectRatio": "16:9",
+    "continuity": "One visual day and one aircraft/wardrobe/livery package after source lock.",
+    "delivery": "Generate individual high-resolution reference frames first, then a labeled continuity sheet from approved frames.",
+    "runtimeUse": "Reference only. Generated pixels do not enter production runtime closure."
+  },
+  "styleContract": {
+    "positive": [
+      "Original hand-painted mid-century animated feature language.",
+      "Gouache backgrounds with broad value-separated mountain planes.",
+      "Soft cel-shaped people and machinery with restrained edge accents.",
+      "Mechanically exact aircraft silhouette, deck equipment and damage continuity.",
+      "Large expressive weather, visible wind and human-scale inhabited land.",
+      "Warm light as a local accent inside a cool Korean atmosphere.",
+      "Affection for imperfect machinery without romanticizing weapon effects."
+    ],
+    "negative": [
+      "Do not imitate a named studio, filmmaker, living artist, character design or existing film frame.",
+      "No modern carrier, angled deck, swept-wing substitute or afterburner plume.",
+      "No photorealism, glossy 3D render, anime speed lines, comic onomatopoeia or game HUD.",
+      "No heroic poster pose, Moon imagery, astronaut symbolism or retrospective destiny.",
+      "No decorative Korean script, generalized East Asian motifs or invented traditional costume.",
+      "No celebratory explosion, gore, civilian targeting or enemy caricature."
+    ]
+  },
+  "frames": [
+    {
+      "frameId": "frame.armstrong.essex-launch.v1",
+      "beatId": "beat.armstrong.01-deck-launch.v1",
+      "title": "Essex",
+      "historicalLabel": "reconstruction",
+      "sourceRefs": [
+        "source.media-essex-ho3s-korea-1951.v1",
+        "source.media-npc-80-leyte-1950.v1",
+        "source.media-npc-159-leyte-1951.v1",
+        "source.hansen-first-man-2012.v1"
+      ],
+      "sourceLimits": "Leyte footage is an operational analog, not Essex geometry. Exact launch station, weather, deck crew dress and Panther configuration await source lock.",
+      "shot": "Cockpit-adjacent wide view down the straight deck, low enough that handlers and deck equipment establish the Panther's scale; enormous sky beyond the bow.",
+      "moment": "Final hand signal before the catapult shot.",
+      "playerInformation": "Aircraft alignment, launch readiness and deck clearance must remain legible.",
+      "prompt": "Original hand-painted mid-century animated feature frame, 1951 United States Navy straight-deck carrier at sea off Korea, compact dark gloss sea-blue Grumman F9F Panther at the launch station, period deck crew and equipment, low cockpit-adjacent wide composition down the axial deck, cool blue-grey sea and immense cloud field with one restrained warm light break, gouache background, soft cel forms, mechanically precise Panther silhouette, matte weathered surfaces, quiet concentration before launch, 16:9.",
+      "avoid": "Angled deck, modern catapult markings, modern cranials, swept wing, F-86, modern carrier island, sunrise cliché, heroic portrait, text."
+    },
+    {
+      "frameId": "frame.armstrong.coast-crossing.v1",
+      "beatId": "beat.armstrong.02-join-and-coast.v1",
+      "title": "Join",
+      "historicalLabel": "reconstruction",
+      "sourceRefs": [
+        "source.media-vf51-panthers-korea-1951.v1"
+      ],
+      "sourceLimits": "The source supports VF-51 Panther appearance and a formation over Korea, not this exact sortie position or coast crossing.",
+      "shot": "Player-adjacent formation view with Carpenter's Panther forward-left and the Korean coast entering under the formation.",
+      "moment": "The two aircraft settle into station before crossing land.",
+      "playerInformation": "Lead bearing, relative altitude, closure and coast gate are readable without an artificial trail.",
+      "prompt": "Original hand-painted mid-century animated feature frame, two dark sea-blue straight-wing F9F Panther jets of VF-51 in disciplined loose formation over a cool grey-green sea, mountainous Korean coast entering beneath them, lead aircraft forward-left at operational spacing, restrained 1951 markings, large layered cloud masses, subtle propulsive haze without afterburners, broad gouache values, soft cel aircraft forms with exact silhouette and canopy scale, calm concentrated flight, 16:9.",
+      "avoid": "Dogfight, contrails, MiG, modern HUD, close formation aerobatics, polished airshow paint, famous-film composition."
+    },
+    {
+      "frameId": "frame.armstrong.valley-ingress.v1",
+      "beatId": "beat.armstrong.03-valley-ingress.v1",
+      "title": "Into the valley",
+      "historicalLabel": "reconstruction",
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.hansen-first-man-2012.v1"
+      ],
+      "sourceLimits": "The mission region and low-level work are supported; the exact valley, route, cultivation, settlement and weather are not yet mapped.",
+      "shot": "Cockpit view just above a descending ridgeline, lead aircraft small and low in the next valley opening.",
+      "moment": "The sea disappears behind terrain and the player's visual world narrows.",
+      "playerInformation": "Terrain clearance, lead position and the next route landmark dominate; no cable is yet privileged.",
+      "prompt": "Original hand-painted mid-century animated feature cockpit view from a 1951 F9F Panther descending into a Korean mountain valley, lead Panther small ahead, broad overlapping ridges separated by blue atmospheric haze, worked fields and a few low roof clusters embedded in the land, wind moving tree masses and thin cloud shadows crossing slopes, gouache landscape, soft cel cockpit edges, mechanically readable gunsight and canopy framing without invented modern symbology, beautiful but unsentimental inhabited terrain, 16:9.",
+      "avoid": "Fantasy mountains, pagoda shorthand, dense city, pristine wilderness, cable highlight, modern MFD, photoreal cockpit."
+    },
+    {
+      "frameId": "frame.armstrong.attack-run.v1",
+      "beatId": "beat.armstrong.04-attack-run.v1",
+      "title": "Armed reconnaissance",
+      "historicalLabel": "reconstruction",
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.nhhc-armstrong-photo-l38.v1",
+        "source.thompson-f9f-units-2014.v1"
+      ],
+      "sourceLimits": "Transportation and storage targets near Majon-ni are supported. Exact target, loadout, run direction and employment are source-blocked.",
+      "shot": "Forward cockpit view during a low armed-reconnaissance attack with a bounded military transportation objective isolated by geography rather than a glowing marker.",
+      "moment": "The player's attention is divided among aim, terrain, lead and recovery path.",
+      "playerInformation": "Validated target identity and prohibited inhabited scenery remain distinguishable.",
+      "prompt": "Original hand-painted mid-century animated feature cockpit frame during a low 1951 naval jet attack run in a Korean valley, period transportation and storage objective beside a road and rail alignment, inhabited fields and low houses clearly outside the target area, lead aircraft already pulling away, restrained smoke and dust, broad gouache terrain planes, soft cel canopy and gunsight, strong sense of speed from perspective and wind rather than speed lines, operational concentration, 16:9.",
+      "avoid": "Exploding village, civilians in danger, glowing target outline, modern bomb camera, napalm spectacle, propaganda framing, excessive flak."
+    },
+    {
+      "frameId": "frame.armstrong.cable-strike.v1",
+      "beatId": "beat.armstrong.05-cable-strike.v1",
+      "title": "The cable",
+      "historicalLabel": "history",
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.hansen-first-man-2012.v1"
+      ],
+      "sourceLimits": "A cable and major right-wing loss are supported. Cable installation, exact contact geometry, structure failure and terrain are reconstruction.",
+      "shot": "Three-quarter rear reference view at the instant a taut cable slices through the outer right wing; the player-facing runtime moment remains in the normal flight camera.",
+      "moment": "Cable contact, before the aircraft has completed the first roll impulse.",
+      "playerInformation": "Cable location, physical contact point, detached structure and initial roll direction agree with simulation truth.",
+      "prompt": "Original hand-painted mid-century animated feature reference frame, dark sea-blue straight-wing F9F Panther at very low altitude in a Korean mountain corridor, one physically taut thin antiaircraft cable crossing between terrain supports and slicing through the outer right wing, outer wing structure beginning to separate with exact control-surface damage left unresolved, aircraft not yet engulfed or exploded, violent asymmetric impulse conveyed by attitude and fragments, inhabited landscape distant and intact, gouache ridges, soft cel machinery with precise geometry, brief shocking mechanical event, 16:9.",
+      "avoid": "Fireball, missile hit, visible bullets, utility pole collision, multiple impossible wires at once, gore, slow-motion glamour, hidden cable."
+    },
+    {
+      "frameId": "frame.armstrong.arrest-roll.v1",
+      "beatId": "beat.armstrong.06-arrest-the-roll.v1",
+      "title": "Hold it",
+      "historicalLabel": "engineering",
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.hansen-first-man-2012.v1"
+      ],
+      "sourceLimits": "Control difficulty is supported qualitatively; attitude, deformation, loose structure and cockpit cues depend on the validated damage model.",
+      "shot": "First-person cockpit with the horizon steeply rotating, full deliberate lateral input visible and terrain rising across the canopy.",
+      "moment": "The first recoverable second after contact.",
+      "playerInformation": "Correct roll response, airspeed, terrain clearance and remaining control authority are legible despite impact motion.",
+      "prompt": "Original hand-painted mid-century animated feature first-person F9F Panther cockpit immediately after right-wing damage, Korean ridge horizon rolling sharply across the canopy, pilot's gloved hand driving strong corrective lateral stick, period instruments trembling but readable, torn right wing edge barely visible through the canopy, dust and small metal fragments receding, gouache world and soft cel cockpit, restrained camera impulse, technical fear without melodrama, 16:9.",
+      "avoid": "Hands off controls, cinematic exterior camera, red damage vignette, modern warning text, blood, blackout tunnel, impossible cockpit visibility."
+    },
+    {
+      "frameId": "frame.armstrong.carpenter-inspection.v1",
+      "beatId": "beat.armstrong.07-carpenter-inspection.v1",
+      "title": "No landing",
+      "historicalLabel": "history",
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.media-vf51-panthers-korea-1951.v1",
+        "source.hansen-first-man-2012.v1"
+      ],
+      "sourceLimits": "Carpenter's role and joint decision are supported. Relative station, visible report, exact damage appearance and words are reconstruction.",
+      "shot": "Player-adjacent view across the damaged right side, Carpenter carefully offset where he can see the missing tip without flying an implausibly close formation.",
+      "moment": "The inspection dwell while Armstrong holds the crippled aircraft steady.",
+      "playerInformation": "Relative geometry, wing loss, asymmetric attitude and terrain clearance remain visible.",
+      "prompt": "Original hand-painted mid-century animated feature frame of two 1951 dark sea-blue F9F Panthers over layered Korean ridges, player's aircraft foreground with roughly six feet of outer right wing missing and exact control-surface damage left unresolved, lead aircraft carefully offset in a believable inspection station, both jets carrying a slight asymmetric attitude, thin structural flutter and no flames, broad gouache atmosphere, precise aircraft silhouettes, professional mutual attention rather than hero pose, 16:9.",
+      "avoid": "Wingtip-to-wingtip airshow formation, hidden damage, burning aircraft, smiling pilots, salute, modern markings, Moon symbolism."
+    },
+    {
+      "frameId": "frame.armstrong.damaged-southbound.v1",
+      "beatId": "beat.armstrong.08-southbound.v1",
+      "title": "South",
+      "historicalLabel": "history",
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.media-vf51-panthers-korea-1951.v1"
+      ],
+      "sourceLimits": "Southbound flight into friendly territory is supported; exact route, light, weather and formation geometry are reconstruction.",
+      "shot": "Long side view with both aircraft small over inhabited terrain, damaged Panther slightly low and banked, Carpenter maintaining station.",
+      "moment": "The return has become endurance rather than emergency reaction.",
+      "playerInformation": "Route landmarks, lead station and persistent damage attitude remain readable.",
+      "prompt": "Original hand-painted mid-century animated feature long shot, two small straight-wing F9F Panthers flying south over a vast inhabited Korean landscape, damaged wingman's outer right wing missing and aircraft held in a subtle compensating attitude, lead staying nearby, broad fields, river, low settlements and layered mountain haze, cool blue-green atmosphere with a narrow warm light break, gouache scale, quiet sustained tension, 16:9.",
+      "avoid": "Triumphal sunset, empty wilderness, formation aerobatics, contrails, celebratory music imagery, target smoke everywhere."
+    },
+    {
+      "frameId": "frame.armstrong.ejection-setup.v1",
+      "beatId": "beat.armstrong.09-ejection-setup.v1",
+      "title": "Prepare",
+      "historicalLabel": "reconstruction",
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1"
+      ],
+      "sourceLimits": "The ejection location near K-3 is supported. Cockpit action order, seat hardware, envelope and disposal corridor await technical source lock.",
+      "shot": "Tight cockpit view with one hand holding the damaged aircraft and the other beginning a sourced ejection preparation action.",
+      "moment": "The player has crossed into friendly territory but has not yet made the aircraft safe to leave.",
+      "playerInformation": "Flight attitude, speed margin, disposal heading and the single current procedure action are clear.",
+      "prompt": "Original hand-painted mid-century animated feature cockpit frame inside a damaged 1951 F9F Panther over friendly Korean terrain, young naval aviator in period exposure suit, survival vest, helmet and oxygen equipment, one gloved hand holding strong lateral control while the other reaches for a historically sourced ejection preparation control, strained but contained posture, period instrument panel mechanically precise, gouache landscape through canopy, no retrospective symbolism, 16:9.",
+      "avoid": "Apollo suit, modern harness, unverified face-cover action, tears, prayer pose, heroic close-up, text checklist baked into art."
+    },
+    {
+      "frameId": "frame.armstrong.ejection.v1",
+      "beatId": "beat.armstrong.10-ejection.v1",
+      "title": "Punch out",
+      "historicalLabel": "history",
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.hansen-first-man-2012.v1"
+      ],
+      "sourceLimits": "Ejection is supported. Exact seat, canopy, body pose, acceleration, timing and aircraft trajectory require technical lock.",
+      "shot": "External continuity reference showing the pilot and seat just clear of the Panther while the damaged aircraft remains on its prior vector.",
+      "moment": "Immediate seat-aircraft separation before parachute deployment.",
+      "playerInformation": "Aircraft, seat and pilot are distinct and spatially continuous; there is no teleport or decorative cut.",
+      "prompt": "Original hand-painted mid-century animated feature reference frame, 1951 F9F Panther with major outer right-wing loss continuing forward over Korean terrain as a period cartridge ejection seat and young naval aviator have just cleared the cockpit, abrupt compact blast and small fragments, no fireball, aircraft seat and pilot trajectories physically coherent, lead aircraft at safe distance, broad gouache landscape, soft cel forms with mechanically exact separation, harsh mechanical transition rather than spectacle, 16:9.",
+      "avoid": "Rocket-chair fantasy, modern zero-zero seat, exploding jet, parachute already fully open at the canopy, superhero pose, slow-motion glamour."
+    },
+    {
+      "frameId": "frame.armstrong.parachute-descent.v1",
+      "beatId": "beat.armstrong.11-parachute-descent.v1",
+      "title": "Back over land",
+      "historicalLabel": "history",
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.hansen-first-man-2012.v1"
+      ],
+      "sourceLimits": "Wind drift over friendly land is supported by Armstrong's retrospective account. Canopy type, descent path, exact surface and aircraft wreck path remain source-blocked.",
+      "shot": "Very wide frame with a small round canopy over worked land; the damaged Panther departs far away on a separate path.",
+      "moment": "The canopy has opened and aircraft noise is receding.",
+      "playerInformation": "Wind direction, ground approach, canopy state and landing area are readable without turning the canopy into a modern steerable wing.",
+      "prompt": "Original hand-painted mid-century animated feature very wide frame, small period round parachute carrying a young naval aviator over worked Korean land near the coast, suspension lines and canopy pulled visibly by crosswind, damaged dark-blue Panther far away on a separate descending trajectory, broad fields, low roofs, ridges and sea haze, gouache atmosphere, exposed human scale, quiet after extreme noise, 16:9.",
+      "avoid": "Modern ram-air canopy, precise rice paddy claim, jubilant pose, giant parachute filling frame, aircraft explosion, angelic light."
+    },
+    {
+      "frameId": "frame.armstrong.ground-recovery.v1",
+      "beatId": "beat.armstrong.12-ground-recovery.v1",
+      "title": "Recovery",
+      "historicalLabel": "reconstruction",
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.hansen-first-man-2012.v1"
+      ],
+      "sourceLimits": "Armstrong later recalled a jeep from K-3 driven by Goodell Warren arriving as he landed. Exact terrain, vehicle model, timing, injury and interaction require corroboration.",
+      "shot": "Held ground-level wide shot: collapsed canopy in foreground, Armstrong getting upright, jeep stopping at a respectful distance.",
+      "moment": "Aircraft sound is absent; recovery is ordinary work.",
+      "playerInformation": "Friendly recovery is clear without an interaction prompt or triumphal pose.",
+      "prompt": "Original hand-painted mid-century animated feature ground-level wide frame in friendly South Korean territory, young 1951 naval aviator beside a collapsed round parachute on worked ground, period U.S. military jeep from K-3 arriving and stopping, one Marine lieutenant visible but no staged greeting, broad cool landscape and low warm late light, gouache background, soft cel people, quiet human-scale survival without triumph or prophecy, 16:9.",
+      "avoid": "Exact rice paddy without source lock, embrace, joke, thumbs-up, crowd, Moon in sky, memorial composition, modern vehicle, spotless uniform."
+    }
+  ]
+}

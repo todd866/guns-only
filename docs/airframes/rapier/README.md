@@ -70,6 +70,22 @@ This decision keeps **CMC** and rejects stainless. **Mach-4 dash remains fiction
 telemetry, Identity T/W, and the map agree — see
 [`REALISM-AND-OVERPERFORMANCE.md`](REALISM-AND-OVERPERFORMANCE.md).
 
+## Owner-directed service-life correction — 2026-07-30
+
+Rapier is a long-lived carrier assembled from independently life-limited components. A physical
+sortie is not a damage unit, and the former fixed whole-aircraft fifty-sortie story is retired.
+The number fifty now labels only the first Block-0 severe-mission-equivalent teardown gate. The
+provisional programme ladder labels 250 severe equivalents as the minimum economically useful
+production-shell threshold, 500 as the production structural objective, and 1,000 as an
+evidence-led extension target. Those labels are inactive and cannot size production, dispatch, or
+cost until chapter 85's `SME-v0` reference spectrum exists.
+
+The cold shell, CMC hot shipset, turbine core, ram hot kit, capsule, gear, hook, launch fittings,
+avionics, gun, actuators, pumps, and pressure equipment retain independent serialized histories.
+Raw exposure, modelled damage, approved life, maintenance state, and cost remain separate. Start
+with [85 — Service life, maintenance, and telemetry](85-service-life-maintenance-and-telemetry.md);
+its numerical bands are provisional until the qualification programme closes them.
+
 ## Companions (not replaced by this bible)
 
 - `docs/rapier-gun-drone-system.md` — gun-drone gameplay contract and open system boundary.
@@ -91,6 +107,9 @@ telemetry, Identity T/W, and the map agree — see
 - [`84-industrial-network-and-supply-chain.md`](84-industrial-network-and-supply-chain.md) —
   fictional production network grounded in real process analogues, workforce, rate, cost, rotables
   and strategic chokepoints.
+- [`85-service-life-maintenance-and-telemetry.md`](85-service-life-maintenance-and-telemetry.md) —
+  component-specific service-life doctrine, qualification objectives, maintenance state, bounded
+  telemetry, and the retirement of the false fifty-sortie whole-aircraft life.
 - `docs/2026-07-26-buried-launch-tube-and-the-ukraine-theatre.md` — historical buried-gallery and
   Ukraine-siting design record; its 150 m/s geometry, timing, loads, and quantities are superseded.
 - `docs/2026-07-26-reclined-seat-and-ukraine-setting.md` — reclined-occupant physiology thesis
@@ -123,6 +142,7 @@ mass; systems follow)
 | [82](82-launch-gallery-engineering-basis.md) | Launch-gallery engineering basis | closed live interface; conceptual construction/cost/presentation contract |
 | [83](83-ground-cycle-and-facility.md) | Ground cycle and facility | proposed cell/transfer/shuttle/turn system; safety closure open |
 | [84](84-industrial-network-and-supply-chain.md) | Industrial network and supply chain | proposed fictional network; real process analogues and open rate/cost decisions |
+| [85](85-service-life-maintenance-and-telemetry.md) | Service life, maintenance, and telemetry | component-ledger doctrine closed; life bands and damage models provisional/open |
 | [90](90-failure-modes.md) | Failure modes | provisional FMECA seed list |
 | [95](95-cost-ledger.md) | Cost ledger | surrogate CMC premium; Phase 2 closes the table |
 | [icds/propulsion-airframe](icds/propulsion-airframe.md) | Propulsion ↔ airframe ICD | provisional |

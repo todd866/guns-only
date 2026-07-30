@@ -1,12 +1,25 @@
 # Eastern authority · points ledger · Ghibli tragedy (sortie pass)
 
 Date: 2026-07-27  
-Status: accepted (implementation plan: `docs/superpowers/plans/2026-07-27-eastern-authority-points.md`)  
+Status: accepted sortie-presentation prototype; superseded as campaign-economy authority by
+[`future air-war economy and force management`](../../air-war-economy-and-force-management.md)
+(implementation plan: `docs/superpowers/plans/2026-07-27-eastern-authority-points.md`)
+
 Related: [ADR-0003](../../adr-0003-ghibli-adjacent-world-presentation.md),
 [ghibli-adjacent art direction](2026-07-27-ghibli-adjacent-art-direction-design.md),
 [Ukraine setting idea capture](../../2026-07-26-reclined-seat-and-ukraine-setting.md),
 [buried launch / Ukraine theatre](../../2026-07-26-buried-launch-tube-and-the-ukraine-theatre.md),
 [content governance](../../content-governance.md)
+
+> **2026-07-30 authority correction:** the shipped points slip is political/institutional
+> presentation, not money, operating cost, readiness, inventory, airworthiness, industrial
+> capacity, or authoritative flight clearance. Ukraine's current model uses outcome-linked credits
+> as an additional purchasing channel alongside baseline state supply, direct unit allocations,
+> centralized procurement, repair, and partner-funded production. A future persistent campaign
+> must migrate this universal balance into a capped supplemental allocation envelope. Until then,
+> its “cleared/deferred/grounded” wording is tonal UI only and cannot block sandbox flight.
+> Economy Phase 0 replaces that dispatch-shaped vocabulary with an explicitly fictional political
+> standing before any authoritative campaign service ships.
 
 ## Goal
 
@@ -46,7 +59,8 @@ conscience.
   launcher datum may move east of Soniachne — see basing).
 - Player launches from the **East** — buried strip / launcher on the eastern approach.
 - Sortie-only loop: fly, land or punch out, debrief.
-- Thin **points ledger** on debrief: credits, debits, net, running balance, next-sortie clearance.
+- Thin **points ledger** on debrief: credits, debits, net, running balance, and a fictional
+  presentation label. It is not the future force-economy ledger or a real dispatch decision.
 
 ### Quiet aim
 
@@ -104,8 +118,8 @@ and phosphor. You always return to the machine.
 
 1. Sortie ends (trap, punch-out, or loss).
 2. Debrief shows a short **ledger slip**: credits, debits, net, running balance.
-3. Balance gates the next offer — fuel load / cleared / deferred / grounded pending allocation —
-   not a full shop UI.
+3. The prototype displays a cleared / deferred / grounded **political label**. It never gates
+   sandbox launch. Future campaign availability comes only from the typed force economy.
 
 ### v1 rate card (fiction, labeled)
 
@@ -174,7 +188,7 @@ Eastern home = concrete and strip lights; west of home = lived-in land. No Sovie
 | --- | --- |
 | Ukraine theatre geography / soft-world look | Existing theatre + ADR-0003 |
 | Player as eastern authority / AI-governed post-Putin Russia / China-propped imports | `fiction` |
-| Points rate card and clearance gates | `fiction` (inspired by real wartime points systems; not a forecast) |
+| Points rate card and clearance labels | `fiction` (inspired by real wartime points systems; not a forecast) |
 | Yurchak / “everything was forever…” tone | Aesthetic reference, not historical reenactment |
 
 ### Governance delta
@@ -188,7 +202,7 @@ Eastern home = concrete and strip lights; west of home = lived-in land. No Sovie
 
 ### UI surfaces (sortie pass)
 
-- Debrief ledger slip (credits / debits / net / running balance / next-sortie clearance).
+- Debrief ledger slip (credits / debits / net / running balance / fictional clearance label).
 - Optional one-line mission header (“Eastern corridor · guns-only”).
 - No clinic, village rep, or medevac boards.
 
@@ -198,14 +212,14 @@ Eastern home = concrete and strip lights; west of home = lived-in land. No Sovie
 SimulationSession (unchanged physics / HUD truth)
     -> sortie outcome events (kills, recovery, fuel, fatigue, geofence flags)
         -> PointsLedger (deterministic rate card over recorded events)
-            -> debrief slip + next-sortie clearance token
+            -> debrief slip + fictional presentation label
 Presentation: eastern strip placement + heading; ADR-0003 world; municipal copy
 ```
 
 - Ledger may only score facts derivable from the sortie record (same debrief evidence rule as
   governance).
-- Campaign/profile may store running balance; it may not rewrite physical outcomes or buff airframe
-  performance.
+- Browser profile may store the prototype running balance for presentation only. It may not
+  reserve stock, change readiness or dispatch, rewrite physical outcomes, or buff performance.
 
 ## Success criteria
 
