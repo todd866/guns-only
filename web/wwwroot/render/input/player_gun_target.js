@@ -3,21 +3,35 @@ function authoritativeTargetSlot(state) {
   return Number.isInteger(slot) && slot >= 0 ? slot : null;
 }
 
-/**
- * The gun follows the combat contact the pilot has actually selected. Circuit traffic is visual
- * only, and a destroyed/promoted w1 cannot keep the weapon pointed at a stale formation slot.
- */
-export function desiredPlayerGunTargetSlot({
-  padlock = false,
-  padlockTarget = "bandit",
-  state = null,
-} = {}) {
-  const liveCombatWingman = padlock
-    && padlockTarget === "wingman"
-    && state?.rapier_pattern_only !== true
+function primaryCombatTargetLive(state) {
+  return state?.opponent_body_present !== false
+    && state?.bandit_alive !== false
+    && state?.opponent_alive !== false;
+}
+
+function wingmanCombatTargetLive(state) {
+  return state?.rapier_pattern_only !== true
     && state?.w1_present === 1
     && state?.w1_alive === 1;
-  return liveCombatWingman ? 1 : 0;
+}
+
+/**
+ * Resolve the pilot's persistent combat-target choice to the formation slot that currently owns
+ * that physical aircraft. Padlock is deliberately absent from this contract: V changes the view,
+ * while Tab changes the weapon target.
+ *
+ * If the chosen contact has just died or moved slots during promotion, retain the kernel's live
+ * fallback instead of re-requesting a stale slot. The next browser frame then adopts that slot as
+ * the pilot-facing selection.
+ */
+export function desiredPlayerGunTargetSlot({
+  selectedTarget = "bandit",
+  state = null,
+} = {}) {
+  const authoritativeSlot = authoritativeTargetSlot(state);
+  if (selectedTarget === "wingman" && wingmanCombatTargetLive(state)) return 1;
+  if (selectedTarget === "bandit" && primaryCombatTargetLive(state)) return 0;
+  return authoritativeSlot ?? (wingmanCombatTargetLive(state) ? 1 : 0);
 }
 
 /**
@@ -28,13 +42,12 @@ export function desiredPlayerGunTargetSlot({
 export function syncPlayerGunTargetSelection({
   bridge = null,
   state = null,
-  padlock = false,
-  padlockTarget = "bandit",
+  selectedTarget = "bandit",
   appliedSlot = null,
 } = {}) {
   const authoritativeSlot = authoritativeTargetSlot(state);
   const reconciledSlot = authoritativeSlot ?? appliedSlot;
-  const desiredSlot = desiredPlayerGunTargetSlot({ padlock, padlockTarget, state });
+  const desiredSlot = desiredPlayerGunTargetSlot({ selectedTarget, state });
   if (!bridge || typeof bridge.SetPlayerGunTargetSlot !== "function") {
     return {
       appliedSlot: reconciledSlot,

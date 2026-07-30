@@ -107,7 +107,8 @@ internal static class SnapshotProjection {
         AutoGcasState autoGcas = Session.AutoGcas;
         AutoGcasPrediction autoGcasPrediction = autoGcas.Prediction;
         GunneryPitchAssistState gunneryPitchAssist = Session.GunneryPitchAssist;
-        PadlockRollAssistState padlockRollAssist = Session.BanditPadlockRollAssist;
+        PadlockRollAssistState padlockRollAssist =
+            Session.PlayerGunTargetPadlockRollAssist;
         string autoGcasProfileIdJson = JsonString(Session.PlayerAutoGcasCapability.Id);
         string autoGcasCueJson = JsonString(autoGcas.Cue);
         Carrier? _carrier = Session.Carrier;

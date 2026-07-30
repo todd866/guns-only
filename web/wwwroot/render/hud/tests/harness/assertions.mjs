@@ -281,6 +281,37 @@ function assertPadlockDirector(data) {
   }
 }
 
+function assertTargetTwoDirector(data) {
+  if (data.name.endsWith("forward-target-two-offscreen")) {
+    check(data.name, "forward view gives the selected wingman the sole target locator",
+      data.geometry.selectedTargetLocator?.owner === "wingman"
+        && data.geometry.banditLocator?.arrowDrawn === false,
+      `selected=${JSON.stringify(data.geometry.selectedTargetLocator)}; `
+        + `primary=${JSON.stringify(data.geometry.banditLocator)}`);
+    check(data.name, "forward TARGET 2 locator carries identity, range, and closure",
+      /^TARGET 2 · SELECTED · .+ · .+$/.test(
+        data.geometry.selectedTargetLocator?.label ?? "",
+      ),
+      `label=${JSON.stringify(data.geometry.selectedTargetLocator?.label)}`);
+    return;
+  }
+  if (!data.name.endsWith("padlock-target-two-roll-right")) return;
+  const { geometry, padlockState } = data;
+  check(data.name, "TARGET 2 remains the padlocked camera contact",
+    padlockState?.target === "wingman",
+    `target=${padlockState?.target}`);
+  check(data.name, "TARGET 2 is explicitly identified as selected",
+    geometry.padlockMode?.title === "TARGET 2 · SELECTED · PADLOCK",
+    `title=${JSON.stringify(geometry.padlockMode?.title)}`);
+  check(data.name, "TARGET 2 receives an explicit roll-right command",
+    /^TARGET 2 · ROLL RIGHT \d+°$/.test(geometry.padlockDirective ?? ""),
+    `directive=${JSON.stringify(geometry.padlockDirective)}`);
+  check(data.name, "off-axis gun sight stays caged and names TARGET 2",
+    geometry.offAxisGunCue
+      === "GUN CAGED · TARGET 2 · FOLLOW ROLL / PULL",
+    `cue=${JSON.stringify(geometry.offAxisGunCue)}`);
+}
+
 function assertPresentationCaptureSequence(data) {
   const steps = data.presentationCaptureSequence;
   if (!Array.isArray(steps)) return;
@@ -680,9 +711,10 @@ function assertRapierPanelLayout(data) {
 const PORTRAIT_SCENARIOS = new Set([
   "assisted-corner-hold",
   "forward-level", "forward-bandit-near-edge", "forward-bandit-offscreen",
+  "forward-target-two-offscreen",
   "gun-overheat-latched", "gcas-bottom-out-release",
   "funnel-level-mid", "padlock-bandit-right-high", "padlock-bandit-behind",
-  "padlock-aft-right-high",
+  "padlock-aft-right-high", "padlock-target-two-roll-right",
   "idle-speed-brake-out", "idle-speed-brake-transit",
   "rapier-attack-authorize", "rapier-escape-fuel-triad",
   "rapier-ram-only-systems-layout",
@@ -720,6 +752,7 @@ async function runViewport(site, browser, { label, width, height, subset }) {
     assertFunnel(data);
     assertBandit(data);
     if (data.padlock) assertPadlockDirector(data);
+    assertTargetTwoDirector(data);
     assertPresentationCaptureSequence(data);
     assertPadlockInsetAndLocator(data);
     assertBasicJobs(data);

@@ -287,6 +287,8 @@ class CombatHud {
     this._lastLeadPipperY = null;
     this._banditMarkerInside = false;
     this._banditMarkerEntityId = "";
+    this._wingmanLocatorArrowAngle = null;
+    this._wingmanLocatorArrowLastNow = -Infinity;
     this._padlockLiftCaptured = false;
     this._padlockCaptureEntityId = "";
     this._padlockTrackEstablished = false;
@@ -764,10 +766,28 @@ class CombatHud {
       };
     }
 
-    if (!anchor || anchor.behind || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) {
+    if (!anchor || anchor.behind || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)
+        || anchor.x < -20 || anchor.x > this.width + 20
+        || anchor.y < -20 || anchor.y > this.height + 20) {
       this._leadPipperEnvelope.reset();
       this._lastLeadPipperX = null;
       this._lastLeadPipperY = null;
+      if (frame.padlock
+          && (frame.padlockTarget === "bandit" || frame.padlockTarget === "wingman")) {
+        const targetNumber = targetDataLineOwner(state) === "wingman" ? 2 : 1;
+        ctx.save();
+        ctx.fillStyle = AMBER;
+        ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(`GUN CAGED · TARGET ${targetNumber} · FOLLOW ROLL / PULL`,
+          this.width / 2, this.getLayout().weaponCueY + 15);
+        ctx.restore();
+        if (this._debug) {
+          this._debug.offAxisGunCue =
+            `GUN CAGED · TARGET ${targetNumber} · FOLLOW ROLL / PULL`;
+        }
+      }
       return;
     }
 
@@ -1016,6 +1036,92 @@ class CombatHud {
     ctx.fillText(dataLine, textX, textY + textHeight / 2);
   }
 
+  drawSelectedWingmanLocator(frame) {
+    if (frame.padlock) return;
+    const position = frame.wingmanPosition;
+    this.relative.copy(position).sub(frame.playerPosition)
+      .transformDirection(frame.camera.matrixWorldInverse);
+    const planeMagnitude = Math.hypot(this.relative.x, this.relative.y);
+    let rawAngle;
+    if (planeMagnitude > 0.02) {
+      rawAngle = Math.atan2(-this.relative.y / planeMagnitude,
+        this.relative.x / planeMagnitude);
+    } else if (Number.isFinite(this._wingmanLocatorArrowAngle)) {
+      rawAngle = this._wingmanLocatorArrowAngle;
+    } else {
+      rawAngle = 0;
+    }
+
+    const now = Number(frame.now) || 0;
+    const continuous = Number.isFinite(this._wingmanLocatorArrowAngle)
+      && now > this._wingmanLocatorArrowLastNow
+      && now - this._wingmanLocatorArrowLastNow < 0.25;
+    if (continuous) {
+      this._wingmanLocatorArrowAngle += clamp(
+        wrapPi(rawAngle - this._wingmanLocatorArrowAngle),
+        -6 * (Number(frame.dt) || 0.016),
+        6 * (Number(frame.dt) || 0.016),
+      );
+    } else {
+      this._wingmanLocatorArrowAngle = rawAngle;
+    }
+    this._wingmanLocatorArrowLastNow = now;
+
+    const dx = Math.cos(this._wingmanLocatorArrowAngle);
+    const dy = Math.sin(this._wingmanLocatorArrowAngle);
+    const safe = this.getLayout().targetSafe;
+    const centreX = (safe.left + safe.right) * 0.5;
+    const centreY = (safe.top + safe.bottom) * 0.5;
+    const scale = Math.min(
+      (safe.right - safe.left) * 0.5 / Math.max(Math.abs(dx), 0.0001),
+      (safe.bottom - safe.top) * 0.5 / Math.max(Math.abs(dy), 0.0001),
+    );
+    const x = centreX + dx * scale;
+    const y = centreY + dy * scale;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.atan2(dy, dx));
+    this.setLine(AMBER, 2.0);
+    ctx.fillStyle = "rgba(255, 176, 32, 0.24)";
+    ctx.beginPath();
+    ctx.moveTo(12, 0);
+    ctx.lineTo(-8, -8);
+    ctx.lineTo(-3, 0);
+    ctx.lineTo(-8, 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    const range = targetRangeReadout(frame.state.range_m).compactText;
+    const closure = targetClosureReadout(frame.state.closure_kts).compactText;
+    const label = `TARGET 2 · SELECTED · ${range} · ${closure}`;
+    ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const fitted = this.fitText(label, Math.max(80, safe.right - safe.left - 12));
+    const width = ctx.measureText(fitted).width;
+    const labelX = clamp(x - dx * 40,
+      safe.left + width * 0.5 + 5, safe.right - width * 0.5 - 5);
+    const labelY = clamp(y - dy * 28, safe.top + 8, safe.bottom - 8);
+    ctx.fillStyle = "rgba(1, 8, 12, 0.78)";
+    ctx.fillRect(labelX - width * 0.5 - 4, labelY - 7, width + 8, 14);
+    ctx.fillStyle = AMBER;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(fitted, labelX, labelY);
+
+    if (this._debug) {
+      this._debug.selectedTargetLocator = {
+        owner: "wingman",
+        x,
+        y,
+        dirX: dx,
+        dirY: dy,
+        label,
+      };
+    }
+  }
+
   /// Symbology for the second aircraft of a formation. Deliberately a SMALLER, thinner bracket in
   /// the same green, going amber when the pilot padlocks it with V. The range/closure data line
   /// follows the player's gun-target selection: padlock TRAFFIC 2 and its bracket carries the
@@ -1026,26 +1132,31 @@ class CombatHud {
     if (frame.padlock && frame.padlockTarget === "carrier") return;
     // Fight formation wingman uses fight HUD; Circuits uses the same slots for pattern traffic.
     if (!isFightHudActive(state) && !isCircuitTrafficHudActive(state)) return;
+    const circuitTraffic = isCircuitTrafficHudActive(state);
+    const selected = !circuitTraffic && targetDataLineOwner(state) === "wingman";
     const projection = this.project(frame.wingmanPosition, camera);
-    if (projection.behind === true) return;
     // Same tally discipline as the primary: no positional bracket for a BVR contact.
+    let rangeM = Number.POSITIVE_INFINITY;
     if (frame.wingmanPosition && frame.playerPosition) {
       const dx = frame.wingmanPosition.x - frame.playerPosition.x;
       const dy = frame.wingmanPosition.y - frame.playerPosition.y;
       const dz = frame.wingmanPosition.z - frame.playerPosition.z;
-      if (Math.sqrt(dx * dx + dy * dy + dz * dz) > BANDIT_TALLY_RANGE_M) return;
+      rangeM = Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
     const inside = projection.x > 8 && projection.x < this.width - 8
       && projection.y > 8 && projection.y < this.height - 8;
-    if (!inside) return;
+    if (projection.behind === true || !inside || rangeM > BANDIT_TALLY_RANGE_M) {
+      if (selected) this.drawSelectedWingmanLocator(frame);
+      return;
+    }
 
-    const circuitTraffic = isCircuitTrafficHudActive(state);
     const padlocked = frame.padlock && (frame.padlockTarget === "wingman"
       || frame.padlockTarget === "traffic2"
       || frame.padlockTarget === "traffic3");
-    const color = padlocked ? AMBER : GREEN;
+    const solution = selected && frame.visualGunSolution === true;
+    const color = padlocked || selected || solution ? AMBER : GREEN;
     const ctx = this.ctx;
-    const size = padlocked ? 26 : 20;
+    const size = solution ? 30 : padlocked || selected ? 26 : 20;
     const corner = 6;
     this.setLine(color, padlocked ? 1.5 : 1.05);
     ctx.shadowColor = padlocked
@@ -1066,8 +1177,21 @@ class CombatHud {
     ctx.lineTo(projection.x - size, projection.y + size - corner);
     ctx.stroke();
     ctx.shadowBlur = 0;
-    if (!circuitTraffic && targetDataLineOwner(state) === "wingman")
+    if (padlocked) {
+      ctx.fillStyle = AMBER;
+      ctx.beginPath();
+      ctx.arc(projection.x, projection.y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (selected) {
+      ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillStyle = AMBER;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText(solution ? "TARGET 2 · SHOOT" : "TARGET 2 · SELECTED",
+        projection.x, projection.y + size + 5);
       this.drawTargetDataLine(projection, size, state, color);
+    }
     if (circuitTraffic) {
       ctx.font = "600 9px ui-monospace, monospace";
       ctx.fillStyle = color;
@@ -1096,12 +1220,15 @@ class CombatHud {
     // read as a visible aircraft and horizon-flatten into a false co-altitude cue (owner
     // report 2026-07-29: "if the bad guy is 360nm away why can I see him?"). The contact
     // keeps its bearing locator and data line; brackets wait for tally range.
-    const bvrContact = Number(state.range_m) > BANDIT_TALLY_RANGE_M;
-    const solution = frame.visualGunSolution === true;
-    const padlockedBandit = frame.padlock && frame.padlockTarget !== "carrier";
-    const color = padlockedBandit || solution ? AMBER : GREEN;
+    const primaryRangeM = banditPosition && frame.playerPosition
+      ? banditPosition.distanceTo(frame.playerPosition) : Number(state.range_m);
+    const bvrContact = primaryRangeM > BANDIT_TALLY_RANGE_M;
+    const selectedPrimary = targetDataLineOwner(state) === "primary";
+    const solution = selectedPrimary && frame.visualGunSolution === true;
+    const padlockedBandit = frame.padlock && frame.padlockTarget === "bandit";
+    const color = padlockedBandit || selectedPrimary || solution ? AMBER : GREEN;
     const ctx = this.ctx;
-    const size = solution ? 32 : padlockedBandit ? 30 : 27;
+    const size = solution ? 32 : padlockedBandit || selectedPrimary ? 30 : 27;
     const markerEntityId = String(state.bandit_entity_id ?? "legacy");
     if (markerEntityId !== this._banditMarkerEntityId) {
       this._banditMarkerEntityId = markerEntityId;
@@ -1154,6 +1281,14 @@ class CombatHud {
       // measures.
       if (targetDataLineOwner(state) === "primary")
         this.drawTargetDataLine(projection, size, state, color);
+      if (selectedPrimary) {
+        ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        ctx.fillStyle = AMBER;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillText(solution ? "TARGET 1 · SHOOT" : "TARGET 1 · SELECTED",
+          projection.x, projection.y + size + 5);
+      }
 
       return;
     }
@@ -1161,6 +1296,9 @@ class CombatHud {
     // Combat padlock owns one edge locator at every look angle. Drawing the ordinary forward-HUD
     // arrow as well would create two differently referenced directions around the threshold.
     if (frame.padlock && frame.padlockTarget !== "carrier") return;
+    // The off-screen locator belongs to the selected gun target. A quiet primary bracket may
+    // remain on-screen for formation awareness, but it must not point the pilot away from TARGET 2.
+    if (!selectedPrimary) return;
 
     // Direction from the CAMERA-SPACE target vector — the same continuous rule the padlock
     // caret uses. The old projected-point path blew up near the side plane and switched frames
@@ -1253,7 +1391,7 @@ class CombatHud {
     const closure = targetClosureReadout(state.closure_kts);
     const fullLabel = `${Math.abs(azimuth) > 150 ? "6 · " : ""}${numbersHere
       ? `${targetRangeReadout(state.range_m).compactText} · ${closure.compactText}`
-      : "BANDIT"}`;
+      : "TARGET 1"}`;
     ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     const labelText = this.fitText(fullLabel, Math.max(60, locatorRight - locatorLeft - 12));
     const labelWidth = ctx.measureText(labelText).width;
@@ -2700,16 +2838,22 @@ class CombatHud {
 
     const patternOnly = frame.state?.rapier_pattern_only === true;
     const isBanditPadlock = frame.padlockTarget !== "carrier";
+    const isCombatPadlock = !patternOnly
+      && (frame.padlockTarget === "bandit" || frame.padlockTarget === "wingman");
+    const padlockTargetPosition = frame.padlockTargetPosition ?? frame.banditPosition;
     const targetLabel = patternOnly
       ? (frame.padlockTarget === "carrier" ? "THRESHOLD"
         : frame.padlockTarget === "wingman" ? "TRAFFIC 2"
         : frame.padlockTarget === "traffic2" ? "TRAFFIC 3"
         : frame.padlockTarget === "traffic3" ? "TRAFFIC 4"
         : "THRESHOLD")
-      : isBanditPadlock ? "BANDIT"
+      : frame.padlockTarget === "wingman" ? "TARGET 2"
+        : isBanditPadlock ? "TARGET 1"
         : recoveryPlatformIsMaritime(frame.state) ? "BOAT" : "STRIP";
     if (isBanditPadlock) {
-      const captureEntityId = String(frame.state.bandit_entity_id ?? "legacy");
+      const captureEntityId = String(
+        frame.padlockTargetEntityId || frame.state.bandit_entity_id || "legacy",
+      );
       if (captureEntityId !== this._padlockCaptureEntityId) {
         this._padlockCaptureEntityId = captureEntityId;
         this._padlockLiftCaptured = false;
@@ -2729,13 +2873,23 @@ class CombatHud {
     const exitBinding = this.touchMode
       ? "PADLOCK: EXIT"
       : `${controlBindingLabel(this.controlBindings?.padlock, "KeyV")}: FORWARD`;
-    const modeTitle = `${targetLabel} PADLOCK`;
+    const modeTitle = isCombatPadlock
+      ? `${targetLabel} · SELECTED · PADLOCK`
+      : `${targetLabel} PADLOCK`;
     const cameraSettling = isBanditPadlock && this._padlockTrackEstablished
       && phase !== "TRACK" && !frame.manualLookActive;
     const modeStatus = frame.manualLookActive
       ? "RELEASE LOOK TO REACQUIRE"
       : phase === "TRACK" ? `TRACKING · ${exitBinding}`
         : cameraSettling ? `CAMERA SETTLING · ${exitBinding}` : `${phase} TARGET`;
+    if (this._debug) {
+      this._debug.padlockMode = {
+        targetLabel,
+        title: modeTitle,
+        status: modeStatus,
+        target: frame.padlockTarget,
+      };
+    }
     padlockCtx.save();
     padlockCtx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     const titleWidth = padlockCtx.measureText(modeTitle).width;
@@ -2792,7 +2946,9 @@ class CombatHud {
       // Where is the bandit in this view. In padlock the sensor is slaved to it, so it usually sits
       // near centre (offset toward the nose by the protected-offset geometry); a manual slew can
       // push it off-screen or behind, so we always resolve a screen direction to point at it.
-      const banditProj = this.project(frame.banditPosition, padlockCamera, this._funnelTargetProj);
+      const banditProj = this.project(
+        padlockTargetPosition, padlockCamera, this._funnelTargetProj,
+      );
       const banditOnScreen = isBanditPadlock && !banditProj.behind
         && Number.isFinite(banditProj.x) && Number.isFinite(banditProj.y)
         && banditProj.x >= 8 && banditProj.x <= this.width - 8
@@ -2808,7 +2964,7 @@ class CombatHud {
       let banditDirY = 0;
       let banditDirValid = false;
       if (isBanditPadlock) {
-        this.relative.copy(frame.banditPosition).sub(frame.playerPosition)
+        this.relative.copy(padlockTargetPosition).sub(frame.playerPosition)
           .transformDirection(padlockCamera.matrixWorldInverse);
         const planeMagnitude = Math.hypot(this.relative.x, this.relative.y);
         if (planeMagnitude > 0.02) {
@@ -2819,6 +2975,7 @@ class CombatHud {
       }
 
       const statusDirective = (text, accent) => {
+        if (this._debug) this._debug.padlockDirective = text;
         padlockCtx.save();
         padlockCtx.font = "800 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
         const directiveWidth = Math.min(right - left,
@@ -2834,17 +2991,17 @@ class CombatHud {
         padlockCtx.restore();
       };
 
-      const steeringAvailable = isBanditPadlock && this._padlockTrackEstablished
+      const steeringAvailable = isCombatPadlock && this._padlockTrackEstablished
         && !frame.manualLookActive && !groundDanger && !centralPullUp;
       if (!steeringAvailable) this._padlockLiftCaptured = false;
       if (isBanditPadlock && !this._padlockTrackEstablished && !frame.manualLookActive
           && !groundDanger && !centralPullUp) {
-        statusDirective(patternOnly ? "ACQUIRING" : "ACQUIRING BANDIT", AMBER);
+        statusDirective(patternOnly ? "ACQUIRING" : `ACQUIRING ${targetLabel}`, AMBER);
       }
 
       // === STEERING TRUTH: kernel-first physical roll error; the drawing lives in the
       // body-fixed locator inset below (drawPadlockLocatorInset), never in camera space.
-      const targetVectorLength = this.relative.copy(frame.banditPosition)
+      const targetVectorLength = this.relative.copy(padlockTargetPosition)
         .sub(frame.playerPosition).length();
       if (targetVectorLength > 1e-6) this.relative.multiplyScalar(1 / targetVectorLength);
       // In production, the fixed-tick controller publishes the exact geometry and capture latch it
@@ -2896,10 +3053,23 @@ class CombatHud {
         }
       }
 
+      if (steering?.valid && !groundDanger && !centralPullUp) {
+        if (steering.anyPlane || steering.captured) {
+          statusDirective(`${targetLabel} · PULL · BRING NOSE TO TARGET`, "#7dffb0");
+        } else if (Number.isFinite(steering.rollErrorRad)) {
+          const direction = steering.rollErrorRad >= 0 ? "RIGHT" : "LEFT";
+          const degrees = Math.max(1, Math.round(Math.abs(steering.rollErrorRad) / DEG));
+          statusDirective(`${targetLabel} · ROLL ${direction} ${degrees}\u00B0`, AMBER);
+        }
+      } else if (steeringAvailable && !groundDanger && !centralPullUp) {
+        statusDirective(`${targetLabel} · STEERING UNAVAILABLE`, AMBER);
+      }
+
       this.drawPadlockLocatorInset(frame, {
         centreX, top, bottom, left, right,
         steering, groundDanger, centralPullUp, blink,
         pitchDeg, radarAltFt, sinkFpm,
+        targetPosition: padlockTargetPosition,
       });
 
       // === BANDIT LOCATOR: drawBandit owns the single on-screen target box. This layer only adds
@@ -3026,7 +3196,7 @@ class CombatHud {
   drawPadlockLocatorInset(frame, {
     centreX, top, bottom, left, right,
     steering, groundDanger, centralPullUp, blink,
-    pitchDeg, radarAltFt, sinkFpm,
+    pitchDeg, radarAltFt, sinkFpm, targetPosition,
   }) {
     const ctx = this.ctx;
     const state = frame.state;
@@ -3053,7 +3223,7 @@ class CombatHud {
     // Body-frame target hemisphere for the AFT / shoulder language. Independent of the camera:
     // "aft" means behind the WING LINE of the jet, and the shoulder is where the target actually
     // is, so the label survives every sensor slew.
-    this.relative.copy(frame.banditPosition).sub(frame.playerPosition);
+    this.relative.copy(targetPosition ?? frame.banditPosition).sub(frame.playerPosition);
     const relLength = this.relative.length();
     let aftLabel = null;
     if (relLength > 1e-6) {

@@ -726,7 +726,8 @@ internal static class SnapshotHotFrame {
         AutoGcasState autoGcas = session.AutoGcas;
         AutoGcasPrediction gcasPrediction = autoGcas.Prediction;
         GunneryPitchAssistState pitchAssist = session.GunneryPitchAssist;
-        PadlockRollAssistState padlockRollAssist = session.BanditPadlockRollAssist;
+        PadlockRollAssistState padlockRollAssist =
+            session.PlayerGunTargetPadlockRollAssist;
         Carrier? carrier = session.Carrier;
         Carrier.Recovery recovery = session.Recovery;
         Carrier.TouchdownResult touchdown = session.Touchdown;

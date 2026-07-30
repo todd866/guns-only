@@ -165,6 +165,15 @@ export function buildFrame(scenario) {
     );
   }
   const banditForward = playerPosition.clone().sub(banditPosition).normalize();
+  const wingmanPosition = scenario.wingman
+    ? playerPosition.clone().addScaledVector(
+      bodyDirection(quaternion, scenario.wingman),
+      scenario.wingman.rangeM,
+    )
+    : banditPosition.clone();
+  const padlockTargetName = view.padlockTarget ?? "bandit";
+  const padlockTargetPosition = padlockTargetName === "wingman"
+    ? wingmanPosition : banditPosition;
   const leadPipper = scenario.lead
     ? playerPosition.clone().addScaledVector(
       bodyDirection(quaternion, scenario.lead),
@@ -185,7 +194,7 @@ export function buildFrame(scenario) {
     sensorYaw = (Number(view.lookYawDeg) || 0) * DEG;
     sensorPitch = (Number(view.lookPitchDeg) || 0) * DEG;
   } else if (view.sensor === "auto") {
-    const localTarget = banditPosition.clone().sub(playerPosition).normalize()
+    const localTarget = padlockTargetPosition.clone().sub(playerPosition).normalize()
       .applyQuaternion(quaternion.clone().invert());
     const desired = desiredPadlockAngles(targetLookAngles(localTarget, 0), {
       aspect: WIDTH / HEIGHT,
@@ -222,6 +231,9 @@ export function buildFrame(scenario) {
     playerVelocity,
     banditPosition,
     banditForward,
+    wingmanPosition,
+    wingmanPresent: scenario.wingman !== undefined
+      || (state.w1_present === 1 && state.w1_alive === 1),
     leadPipper,
     aimPoint: null,
     directorPoint: null,
@@ -231,7 +243,10 @@ export function buildFrame(scenario) {
     lookYaw: hasManualLook ? sensorYaw : 0,
     lookPitch: hasManualLook ? sensorPitch : 0,
     padlock: view.padlock === true,
-    padlockTarget: view.padlockTarget ?? "bandit",
+    padlockTarget: padlockTargetName,
+    padlockTargetPosition,
+    padlockTargetEntityId: padlockTargetName === "wingman"
+      ? `${state.bandit_entity_id}.wingman` : state.bandit_entity_id,
     padlockPhase: view.padlockPhase ?? "OFF",
     manualLookActive: view.manualLookActive === true,
     padlockTrackPrimed: view.primeTrack === true,
@@ -326,7 +341,8 @@ function computeProbes(frame) {
   const position = frame.playerPosition;
   const far = (direction) => position.clone().addScaledVector(direction, 10000);
   const velocityDirection = frame.playerVelocity.clone().normalize();
-  const targetDirection = frame.banditPosition.clone().sub(frame.playerPosition).normalize();
+  const targetDirection = frame.padlockTargetPosition.clone()
+    .sub(frame.playerPosition).normalize();
   const targetRight = targetDirection.dot(frame.playerRight);
   const targetUp = targetDirection.dot(frame.playerUp);
   const targetForward = targetDirection.dot(frame.playerForward);
@@ -382,7 +398,7 @@ function computeProbes(frame) {
     // Independent expectation for the off-axis locator: camera-space target direction mapped to
     // screen (+y down). Continuous through the aft hemisphere, unlike a perspective projection.
     banditCameraDir: (() => {
-      const rel = new THREE.Vector3().copy(frame.banditPosition)
+      const rel = new THREE.Vector3().copy(frame.padlockTargetPosition)
         .sub(frame.playerPosition)
         .transformDirection(camera.matrixWorldInverse);
       const planeMagnitude = Math.hypot(rel.x, rel.y);

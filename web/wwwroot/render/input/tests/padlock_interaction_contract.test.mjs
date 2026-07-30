@@ -85,7 +85,7 @@ test("two-finger slew is a temporary manual look and never cancels selected padl
     "trackpad deltas must share the same bounded gimbal state as pointer look");
   assert.match(wheelBody, /trackpadLookActive = true/);
   assert.match(wheelBody,
-    /trackpadLookActive = true[\s\S]*?padlockTrackEstablished = false[\s\S]*?syncBanditPadlockRollAssist\(\)/,
+    /trackpadLookActive = true[\s\S]*?padlockTrackEstablished = false[\s\S]*?syncPlayerGunTargetPadlockRollAssist\(\)/,
     "trackpad look must stand down physical assist before the next simulation advance");
   assert.doesNotMatch(wheelBody, /releasePadlock\(|togglePadlock\(|padlock\s*=\s*false/,
     "manual head movement is an override of the camera, not an override of padlock selection");
@@ -174,19 +174,21 @@ test("padlock owns a specific contact and exposes an honest accessible lifecycle
   assert.match(appSource, /hudFrame\.manualLookActive = manualLookActive\(\)/);
 
   const syncAssist = balancedBlock(appSource,
-    "function syncBanditPadlockRollAssist()");
+    "function syncPlayerGunTargetPadlockRollAssist()");
   assert.match(syncAssist,
-    /padlock && padlockTarget === "bandit"[\s\S]*?padlockTrackEstablished[\s\S]*?!manualLookActive\(\)/,
-    "only a tracked, unslewed bandit padlock may request the physical roll hold");
-  assert.match(syncAssist, /selected === appliedBanditPadlockRollAssist/,
-    "render cadence must collapse to discrete assist-selection transitions");
-  assert.match(syncAssist, /bridge\.SetBanditPadlockRollAssist\(selected\)/,
-    "the browser must send semantic selection, never a render-derived aileron value");
+    /padlock[\s\S]*?padlockTarget === "bandit"[\s\S]*?padlockTarget === "wingman"[\s\S]*?padlockTrackEstablished[\s\S]*?!manualLookActive\(\)/,
+    "either tracked, unslewed combat-target padlock may request the physical roll hold");
+  assert.match(syncAssist,
+    /semanticSelection === appliedPlayerGunTargetPadlockRollAssist/,
+    "render cadence and unchanged target slots must collapse to semantic transitions");
+  assert.match(syncAssist,
+    /bridge\?\.SetPlayerGunTargetPadlockRollAssist[\s\S]*?\?\? bridge\?\.SetBanditPadlockRollAssist[\s\S]*?applySelection\(selected\)/,
+    "the browser must prefer selected-target semantics, retain the legacy bridge fallback, and never send a render-derived aileron value");
   assert.doesNotMatch(syncAssist, /sensorYaw|sensorPitch|rollError|SetAnalogRollControl/);
 
   const syncGunTarget = balancedBlock(appSource, "function syncPlayerGunTarget()");
   assert.match(syncGunTarget,
-    /syncPlayerGunTargetSelection\(\{[\s\S]*?bridge,[\s\S]*?state: latestState,[\s\S]*?padlock,[\s\S]*?padlockTarget,[\s\S]*?appliedSlot: appliedPlayerGunTargetSlot/,
+    /syncPlayerGunTargetSelection\(\{[\s\S]*?bridge,[\s\S]*?state: latestState,[\s\S]*?selectedTarget: selectedCombatTarget,[\s\S]*?appliedSlot: appliedPlayerGunTargetSlot/,
     "browser selection state must be reconciled through the tested semantic target helper");
   assert.match(syncGunTarget,
     /appliedPlayerGunTargetSlot = result\.appliedSlot/,
@@ -200,15 +202,25 @@ test("padlock owns a specific contact and exposes an honest accessible lifecycle
     appSource.indexOf("function resetMissionPresentation()"),
   );
   assert.match(release,
-    /padlock = false[\s\S]*?padlockTarget = "bandit"[\s\S]*?syncPlayerGunTarget\(\)/,
-    "releasing padlock must safely return the gun to the primary slot");
+    /padlock = false[\s\S]*?syncPlayerGunTarget\(\)[\s\S]*?syncPlayerGunTargetPadlockRollAssist\(\)/,
+    "releasing padlock must stand down assist while reconciling the persistent gun target");
+  assert.doesNotMatch(release, /selectedCombatTarget\s*=\s*["']/,
+    "V release must never change the persistent combat target");
 
   const acquire = balancedBlock(appSource, "function acquirePadlock(");
   assert.match(acquire,
-    /padlockTarget = target[\s\S]*?syncPlayerGunTarget\(\)/,
+    /padlockTarget = target[\s\S]*?selectedCombatTarget = target[\s\S]*?syncPlayerGunTarget\(\)/,
     "acquiring or cycling padlock must select the same combat target for the gun");
-  assert.match(toggle, /padlockTarget = defaultPadlockTarget\(\)[\s\S]*?syncPlayerGunTarget\(\)/,
-    "manual padlock acquisition must select the same combat target for the gun");
+  assert.match(toggle,
+    /padlockTarget = defaultPadlockTarget\(\)[\s\S]*?syncPlayerGunTarget\(\)/,
+    "manual padlock acquisition must reconcile without inventing another target");
+  const cycle = balancedBlock(appSource, "function cyclePadlockTarget()");
+  assert.match(cycle,
+    /const nextTarget = selectedCombatTarget === "bandit" \? "wingman" : "bandit"[\s\S]*?selectedCombatTarget = nextTarget[\s\S]*?syncPlayerGunTarget\(\)/,
+    "Tab changes the persistent gun target even with the camera forward");
+  assert.match(cycle,
+    /if \(padlock\)[\s\S]*?acquirePadlock\(selectedCombatTarget, "cycle"\)[\s\S]*?else[\s\S]*?TARGET \$\{selectedNumber\} selected/,
+    "Tab only moves the camera when padlock is already active");
 
   const update = balancedBlock(
     appSource,
@@ -224,15 +236,15 @@ test("padlock owns a specific contact and exposes an honest accessible lifecycle
 
   const updateGimbal = balancedBlock(appSource, "updateGimbal(dt)");
   assert.match(updateGimbal,
-    /padlockPhase === "TRACK"[\s\S]*?padlockTrackEstablished = true[\s\S]*?syncBanditPadlockRollAssist\(\)/,
+    /padlockPhase === "TRACK"[\s\S]*?padlockTrackEstablished = true[\s\S]*?syncPlayerGunTargetPadlockRollAssist\(\)/,
     "assist must wait for first camera acquisition but survive ordinary later servo lag");
   assert.match(updateGimbal,
-    /manualLookActive\(\)[\s\S]*?padlockTrackEstablished = false[\s\S]*?syncBanditPadlockRollAssist\(\)/,
+    /manualLookActive\(\)[\s\S]*?padlockTrackEstablished = false[\s\S]*?syncPlayerGunTargetPadlockRollAssist\(\)/,
     "manual look must stand the assist down and require reacquisition");
   const pointerDown = balancedBlock(appSource,
     'sceneCanvas.addEventListener("pointerdown"');
   assert.match(pointerDown,
-    /dragging = true[\s\S]*?padlockTrackEstablished = false[\s\S]*?syncBanditPadlockRollAssist\(\)/,
+    /dragging = true[\s\S]*?padlockTrackEstablished = false[\s\S]*?syncPlayerGunTargetPadlockRollAssist\(\)/,
     "pointer look must stand down physical assist before the next simulation advance");
 });
 
@@ -292,7 +304,7 @@ test("padlock-only orientation and target cues solve roll-then-pull without perm
   // This keeps camera-relative steering from being mistaken for ownship bank or pitch.
   // The method definition's BODY brace: the destructured parameter list has its own braces, so
   // anchor past the signature's closing "})" (4-space indent is unique to the definition).
-  const inset = balancedBlock(hudSource, "sinkFpm,\n  })");
+  const inset = balancedBlock(hudSource, "targetPosition,\n  })");
   assert.match(padlockSa, /this\.drawPadlockLocatorInset\(frame/,
     "padlock steering must render through the body-fixed locator inset");
   assert.match(inset, /rotate\(-bankRad\)/,
@@ -304,11 +316,11 @@ test("padlock-only orientation and target cues solve roll-then-pull without perm
   assert.match(inset,
     /Captured: the roll task has ended[\s\S]*?fraction \* \(ballRadius \* 0\.48\)/,
     "capture must become an unmistakable graphical pull flow inside the attitude ball");
-  assert.doesNotMatch(padlockSa, /ROLL LEFT|ROLL RIGHT|`ROLL \$\{/,
-    "tracked padlock steering must not depend on reading left/right command text");
+  assert.match(padlockSa, /ROLL \$\{direction\} \$\{degrees\}/,
+    "the graphical director must be reinforced by an explicit signed roll command");
   assert.match(padlockSa, /RELEASE LOOK TO REACQUIRE/,
     "temporary manual look must suppress steering and teach the return behavior once");
-  assert.match(padlockSa, /ACQUIRING BANDIT/,
+  assert.match(padlockSa, /ACQUIRING \$\{targetLabel\}/,
     "camera motion and pilot steering commands must not compete during acquisition");
   assert.match(padlockSa,
     /const steeringAvailable = [\s\S]*?!groundDanger && !centralPullUp/,
@@ -327,18 +339,20 @@ test("padlock-only orientation and target cues solve roll-then-pull without perm
   assert.match(bandit, /targetClosureReadout\(state\.closure_kts\)/);
 });
 
-test("Tab swaps the padlocked contact without passing through the forward view", () => {
+test("Tab selects a persistent combat target and moves the camera only while padlocked", () => {
   const cycle = balancedBlock(appSource, "function cyclePadlockTarget()");
-  // Cold press: Tab acquires rather than doing nothing, so a pilot who reaches for it first still
-  // gets a tally.
-  assert.match(cycle, /if \(!padlock\)[\s\S]*?acquirePadlock\(defaultPadlockTarget\(\), "cycle"\)/,
-    "Tab from the forward view must acquire the obvious contact");
+  assert.match(cycle,
+    /selectedCombatTarget = nextTarget[\s\S]*?syncPlayerGunTarget\(\)[\s\S]*?if \(padlock\)/,
+    "Tab must change the gun target before considering camera state");
+  assert.match(cycle,
+    /if \(padlock\)[\s\S]*?acquirePadlock\(selectedCombatTarget, "cycle"\)[\s\S]*?else[\s\S]*?TARGET \$\{selectedNumber\} selected/,
+    "forward-view Tab must preserve the view while announcing its new target");
   // The whole point: swap targets while STILL padlocked. A release would centre the gimbal and
   // cost the pilot sight of both aircraft for the seconds it takes to come back.
   assert.doesNotMatch(cycle, /releasePadlock\(/,
     "cycling must never let go of the padlock");
   assert.match(cycle,
-    /acquirePadlock\(padlockTarget === "bandit" \? "wingman" : "bandit", "cycle"\)/,
+    /selectedCombatTarget === "bandit" \? "wingman" : "bandit"[\s\S]*?acquirePadlock\(selectedCombatTarget, "cycle"\)/,
     "Tab must alternate between the live contacts");
   // A key that appears to do nothing reads as a bug. Say why instead.
   assert.match(cycle, /!wingmanPadlockAvailable\(\)[\s\S]*?no other contact/,

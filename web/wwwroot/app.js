@@ -2123,7 +2123,10 @@ let padlockKillCamUntilMs = 0;
 /// The engagement the current lock belongs to. A promoted wingman is the SAME fight and the camera
 /// should follow it; a replacement wave is a new tally and must be acquired deliberately.
 let padlockEngagement = null;
-let appliedBanditPadlockRollAssist = null;
+// Tab owns this selection even while the camera is forward. Padlock is only a view of the selected
+// contact; it never owns the gun target.
+let selectedCombatTarget = "bandit";
+let appliedPlayerGunTargetPadlockRollAssist = null;
 let appliedPlayerGunTargetSlot = null;
 let dragging = false;
 let activePointer = null;
@@ -3021,20 +3024,27 @@ function manualLookActive() {
 }
 
 // Padlock selection remains a presentation decision, but the resulting low-authority hold is a
-// fixed-tick simulation control law. Cross the bridge only on semantic state transitions; camera
-// pixels and render cadence never become actuator input.
-function syncBanditPadlockRollAssist() {
-  const selected = padlock && padlockTarget === "bandit"
+// fixed-tick simulation control law. The bridge captures the kernel's authoritative selected gun
+// target, so both formation slots use identical geometry without browser-derived actuator input.
+function syncPlayerGunTargetPadlockRollAssist() {
+  const selected = padlock
+    && (padlockTarget === "bandit" || padlockTarget === "wingman")
     && padlockTrackEstablished && !manualLookActive();
-  if (!bridge || typeof bridge.SetBanditPadlockRollAssist !== "function"
-      || selected === appliedBanditPadlockRollAssist) return;
-  bridge.SetBanditPadlockRollAssist(selected);
-  appliedBanditPadlockRollAssist = selected;
+  const selectedSlot = Number.isInteger(appliedPlayerGunTargetSlot)
+    ? appliedPlayerGunTargetSlot
+    : Number(latestState?.selected_player_gun_target_slot) || 0;
+  const semanticSelection = selected ? `slot:${selectedSlot}` : "off";
+  const applySelection = bridge?.SetPlayerGunTargetPadlockRollAssist
+    ?? bridge?.SetBanditPadlockRollAssist;
+  if (typeof applySelection !== "function"
+      || semanticSelection === appliedPlayerGunTargetPadlockRollAssist) return;
+  applySelection(selected);
+  appliedPlayerGunTargetPadlockRollAssist = semanticSelection;
 }
 
 // The camera can look at carriers and circuit traffic, but the gun may only solve against combat
-// contacts. In a two-ship fight the padlocked wingman is slot 1; every other view state, including
-// forward view and Rapier traffic, safely selects the primary combat slot.
+// contacts. Tab's persistent selection is reconciled with kernel truth every frame; padlock/view
+// state is intentionally not part of this operation.
 function syncPlayerGunTarget() {
   if (!opponentPresentationAllowed()) {
     appliedPlayerGunTargetSlot = null;
@@ -3043,11 +3053,12 @@ function syncPlayerGunTarget() {
   const result = syncPlayerGunTargetSelection({
     bridge,
     state: latestState,
-    padlock,
-    padlockTarget,
+    selectedTarget: selectedCombatTarget,
     appliedSlot: appliedPlayerGunTargetSlot,
   });
   appliedPlayerGunTargetSlot = result.appliedSlot;
+  if (result.desiredSlot === 1) selectedCombatTarget = "wingman";
+  else if (result.desiredSlot === 0) selectedCombatTarget = "bandit";
   return result.accepted;
 }
 
@@ -3059,7 +3070,8 @@ function padlockLabel(target = padlockTarget) {
     if (target === "traffic3") return "TRAFFIC 4";
     return "THRESHOLD";
   }
-  return target === "carrier" ? "BOAT" : target === "wingman" ? "WINGMAN" : "BANDIT";
+  return target === "carrier" ? "BOAT"
+    : target === "wingman" ? "TARGET 2" : "TARGET 1";
 }
 
 /// True when the wave has a second aircraft to look at. Padlock cycles through the contacts that
@@ -3093,9 +3105,10 @@ function releasePadlock(reason = "manual", { announce = true, record = true } = 
   padlockTrackEstablished = false;
   gimbalReturnFast = true;
   syncPlayerGunTarget();
-  syncBanditPadlockRollAssist();
+  syncPlayerGunTargetPadlockRollAssist();
+  const selectedNumber = selectedCombatTarget === "wingman" ? 2 : 1;
   const message = reason === "manual"
-    ? "Padlock off · forward view"
+    ? `Padlock off · TARGET ${selectedNumber} still selected`
     : reason === "combat task"
       ? "Boat padlock off · V for bandit"
     : `Padlock lost · ${reason}`;
@@ -3123,8 +3136,9 @@ function resetMissionPresentation() {
   sensorPitch = 0;
   padlockPhase = "OFF";
   padlockTrackEstablished = false;
-  appliedBanditPadlockRollAssist = null;
-  syncBanditPadlockRollAssist();
+  selectedCombatTarget = "bandit";
+  appliedPlayerGunTargetPadlockRollAssist = null;
+  syncPlayerGunTargetPadlockRollAssist();
   appliedPlayerGunTargetSlot = null;
   syncPlayerGunTarget();
   gimbalReturnFast = false;
@@ -3138,6 +3152,7 @@ function resetMissionPresentation() {
 function acquirePadlock(target, reason) {
   padlock = true;
   padlockTarget = target;
+  if (target === "bandit" || target === "wingman") selectedCombatTarget = target;
   padlockEntityId = target === "carrier" ? "carrier"
     : target === "traffic2" ? "traffic2"
     : target === "traffic3" ? "traffic3"
@@ -3150,7 +3165,7 @@ function acquirePadlock(target, reason) {
   padlockKillCamUntilMs = 0;
   padlockEngagement = Number(latestState?.engagement_number);
   syncPlayerGunTarget();
-  syncBanditPadlockRollAssist();
+  syncPlayerGunTargetPadlockRollAssist();
   syncPadlockUi(`${padlockLabel()} padlock on`);
   recorder.event("view", "Padlock", {
     selected: true,
@@ -3198,20 +3213,22 @@ function defaultPadlockTarget() {
       && wingmanPadlockAvailable()) {
     return "wingman";
   }
+  if (target === "bandit" && selectedCombatTarget === "wingman"
+      && wingmanPadlockAvailable()) {
+    return "wingman";
+  }
   return target;
 }
 
-/// TAB — swap which contact the padlock holds, WITHOUT letting go of it. Cycling used to be folded
-/// into V, which meant the only way from one bandit to the other was through the forward view: the
-/// pilot lost sight of both aircraft for the two seconds the gimbal took to centre and come back.
-/// In a 1v2 that is the whole fight. V is now purely "am I padlocked", Tab is purely "at whom".
+/// TAB — select the other combat contact. The selection persists in forward view. If padlock is
+/// already up, the camera follows the newly selected aircraft without passing through boresight.
 function cyclePadlockTarget() {
   if (!opponentPresentationAllowed()) return;
-  if (!padlock) {
-    acquirePadlock(defaultPadlockTarget(), "cycle");
-    return;
-  }
   if (latestState?.rapier_pattern_only === true) {
+    if (!padlock) {
+      acquirePadlock(defaultPadlockTarget(), "cycle");
+      return;
+    }
     const order = circuitsPadlockTargets(latestState);
     if (order.length < 2) {
       syncPadlockUi(`${padlockLabel()} padlock · no other traffic`);
@@ -3223,10 +3240,31 @@ function cyclePadlockTarget() {
   }
   if (!wingmanPadlockAvailable()) {
     // Nothing to cycle to. Say so rather than silently doing nothing to a pressed key.
-    syncPadlockUi(`${padlockLabel()} padlock · no other contact`);
+    const selectedNumber = selectedCombatTarget === "wingman" ? 2 : 1;
+    syncPadlockUi(`TARGET ${selectedNumber} selected · no other contact`);
     return;
   }
-  acquirePadlock(padlockTarget === "bandit" ? "wingman" : "bandit", "cycle");
+  const nextTarget = selectedCombatTarget === "bandit" ? "wingman" : "bandit";
+  if (!padlockTargetValid(latestState, nextTarget)) {
+    const selectedNumber = selectedCombatTarget === "wingman" ? 2 : 1;
+    syncPadlockUi(`TARGET ${selectedNumber} selected · no other contact`);
+    return;
+  }
+  selectedCombatTarget = nextTarget;
+  syncPlayerGunTarget();
+  const selectedNumber = selectedCombatTarget === "wingman" ? 2 : 1;
+  if (padlock) {
+    acquirePadlock(selectedCombatTarget, "cycle");
+  } else {
+    syncPlayerGunTargetPadlockRollAssist();
+    syncPadlockUi(`TARGET ${selectedNumber} selected · V padlock`);
+    recorder.event("target", "Player gun target", {
+      selected: true,
+      target: selectedCombatTarget,
+      slot: selectedNumber - 1,
+      reason: "cycle",
+    });
+  }
 }
 
 /// V — padlock on or off. It keeps the contact Tab last selected, so V is a view toggle and
@@ -3249,7 +3287,7 @@ function togglePadlock() {
   padlockTrackEstablished = false;
   gimbalReturnFast = false;
   syncPlayerGunTarget();
-  syncBanditPadlockRollAssist();
+  syncPlayerGunTargetPadlockRollAssist();
   syncPadlockUi(`${padlockLabel()} padlock on`);
   recorder.event("view", "Padlock", {
     selected: true,
@@ -6399,6 +6437,8 @@ class FlightView {
       lookPitch: 0,
       padlock: false,
       padlockTarget: "bandit",
+      padlockTargetPosition: this.banditPosition,
+      padlockTargetEntityId: "",
       padlockPhase: "OFF",
       manualLookActive: false,
       periodGunsightVisible: false,
@@ -6912,7 +6952,7 @@ class FlightView {
     if (manualLookActive()) {
       padlockPhase = padlock ? "SLEW" : "FREE";
       padlockTrackEstablished = false;
-      syncBanditPadlockRollAssist();
+      syncPlayerGunTargetPadlockRollAssist();
       return;
     }
 
@@ -6943,7 +6983,7 @@ class FlightView {
         ? "TRACK"
         : gimbalReturnFast ? "RETURN" : "ACQUIRE";
       if (padlockPhase === "TRACK") padlockTrackEstablished = true;
-      syncBanditPadlockRollAssist();
+      syncPlayerGunTargetPadlockRollAssist();
     } else {
       const next = advanceForwardGimbal({
         yawRad: sensorYaw,
@@ -6959,7 +6999,7 @@ class FlightView {
         padlockPhase = "RETURN";
       }
       padlockTrackEstablished = false;
-      syncBanditPadlockRollAssist();
+      syncPlayerGunTargetPadlockRollAssist();
     }
   }
 
@@ -7544,7 +7584,7 @@ class FlightView {
       // Promotion changes formation slots, not the identity of the aircraft in the pilot's tally.
       // Rebind immediately rather than showing a second, false kill cam at stale w1 coordinates.
       acquirePadlock("bandit", "promotion");
-      syncPadlockUi("BANDIT padlock · wingman promoted");
+      syncPadlockUi("TARGET 1 selected · same aircraft promoted");
     } else if (padlock && padlockTarget === "bandit" && padlockEntityId
         && nextBanditEntityId !== padlockEntityId) {
       // The primary slot changed under the lock. A promoted wingman is the SAME engagement still
@@ -7554,7 +7594,7 @@ class FlightView {
       if (Number(state.engagement_number) === padlockEngagement
         && padlockTargetValid(state, "bandit")) {
         acquirePadlock("bandit", "auto-jump");
-        syncPadlockUi("BANDIT padlock · wingman engaged");
+        syncPadlockUi("TARGET 1 selected · wingman engaged");
       } else {
         releasePadlock("target changed");
       }
@@ -8149,6 +8189,13 @@ class FlightView {
     hudFrame.lookPitch = padlock ? 0 : sensorPitch;
     hudFrame.padlock = !casevac && padlock;
     hudFrame.padlockTarget = padlockTarget;
+    hudFrame.padlockTargetPosition = padlockTarget === "carrier"
+      ? this.carrierPadlockPosition
+      : padlockTarget === "traffic2" ? this.wingman2Position
+      : padlockTarget === "traffic3" ? this.wingman3Position
+      : padlockTarget === "wingman" ? this.wingmanPosition
+      : this.banditPosition;
+    hudFrame.padlockTargetEntityId = padlockEntityId;
     hudFrame.wingmanPresent = state.w1_present === 1 && state.w1_alive === 1;
     hudFrame.padlockPhase = padlockPhase;
     hudFrame.manualLookActive = manualLookActive();
@@ -8331,7 +8378,7 @@ function installGamepadInput(view) {
         { yawRad: MAX_GIMBAL_YAW, pitchRad: MAX_GIMBAL_PITCH },
       ));
       padlockTrackEstablished = false;
-      syncBanditPadlockRollAssist();
+      syncPlayerGunTargetPadlockRollAssist();
       gimbalReturnFast = false;
     } else if (previous.lookActive) {
       gimbalReturnFast = true;
@@ -9294,7 +9341,7 @@ function installMobileInput(view) {
       { yawRad: MAX_GIMBAL_YAW, pitchRad: MAX_GIMBAL_PITCH },
     ));
     padlockTrackEstablished = false;
-    syncBanditPadlockRollAssist();
+    syncPlayerGunTargetPadlockRollAssist();
     gimbalReturnFast = false;
   };
 }
@@ -9514,7 +9561,7 @@ function installInput(view) {
     // Stand the fixed-tick augmentation down before the next RAF advances simulation. Waiting for
     // updateGimbal would permit one catch-up frame of assist after the pilot starts a manual look.
     padlockTrackEstablished = false;
-    syncBanditPadlockRollAssist();
+    syncPlayerGunTargetPadlockRollAssist();
     activePointer = event.pointerId;
     lastPointerX = event.clientX;
     lastPointerY = event.clientY;
@@ -9562,7 +9609,7 @@ function installInput(view) {
     ));
     trackpadLookActive = true;
     padlockTrackEstablished = false;
-    syncBanditPadlockRollAssist();
+    syncPlayerGunTargetPadlockRollAssist();
     gimbalReturnFast = false;
     if (trackpadLookReleaseTimer) window.clearTimeout(trackpadLookReleaseTimer);
     trackpadLookReleaseTimer = window.setTimeout(() => {

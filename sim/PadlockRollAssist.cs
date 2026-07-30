@@ -1,9 +1,9 @@
 namespace GunsOnly.Sim;
 
 /// <summary>
-/// Observable truth for the bandit-padlock lift-plane hold. The controller contribution is kept
-/// separate from pilot aileron so telemetry, physiology, and safety automation retain clear
-/// ownership of the lateral axis.
+/// Observable truth for the selected-combat-target padlock lift-plane hold. The controller
+/// contribution is kept separate from pilot aileron so telemetry, physiology, and safety
+/// automation retain clear ownership of the lateral axis.
 /// </summary>
 public readonly record struct PadlockRollAssistState(
     bool Selected,
@@ -50,7 +50,7 @@ public readonly record struct PadlockRollAssistEnergy(
     bool GcasWarningOrActive);
 
 /// <summary>
-/// A low-authority target-plane trim for bandit padlock. The pilot must first put lift within the
+/// A low-authority target-plane trim for combat padlock. The pilot must first put lift within the
 /// capture gate; this law only retains that plane against residual roll and target motion. It has
 /// no integrator, cannot perform the initial roll, and yields immediately to deliberate aileron.
 /// </summary>

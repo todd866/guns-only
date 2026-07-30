@@ -124,16 +124,19 @@ test("player action contract preserves the C# GKey ABI and classifies every live
   assert.deepEqual(unclassified, []);
 });
 
-test("bandit padlock roll hold stays a fixed-tick, safety-preemptible augmentation", () => {
+test("selected-target padlock roll hold stays a fixed-tick, safety-preemptible augmentation", () => {
   assert.match(webBridgeSource,
-    /SetBanditPadlockRollAssist\(bool selected\)[\s\S]*?Session\.SetBanditPadlockRollAssist\(selected\)/,
+    /SetPlayerGunTargetPadlockRollAssist\(bool selected\)[\s\S]*?Session\.SetPlayerGunTargetPadlockRollAssist\(selected\)/,
     "the browser may send only the discrete selected/tracked state");
   assert.match(sessionSource,
-    /RapierAutomationOr\(_detents\.Command\)[\s\S]*?ApplyGunneryPitchAssist\(directedCommand\)[\s\S]*?ApplyPilotPhysiology\(assistedCommand\)[\s\S]*?ApplyBanditPadlockRollAssist\([\s\S]*?ApplyAutoGcas\(padlockAssistedCommand\)/,
+    /RapierAutomationOr\(_detents\.Command\)[\s\S]*?ApplyGunneryPitchAssist\(directedCommand\)[\s\S]*?ApplyPilotPhysiology\(assistedCommand\)[\s\S]*?ApplyPlayerGunTargetPadlockRollAssist\([\s\S]*?ApplyAutoGcas\(padlockAssistedCommand\)/,
     "padlock SAS must follow the effective human or Rapier-directed path and remain below Auto-GCAS priority");
   assert.match(sessionSource,
-    /_banditPadlockRollAssistTargetSequence == _banditSpawnSequence/,
-    "a replacement opponent must not inherit the old capture latch");
+    /_playerGunTargetPadlockRollAssistTargetId == _selectedPlayerGunTargetId/,
+    "assist geometry must remain bound to the same authoritative gun-target identity");
+  assert.match(sessionSource,
+    /AircraftState selectedTarget = SelectedOpponentState[\s\S]*?selectedTarget\.Position/,
+    "both primary and formation-wingman geometry must come from the selected target");
   assert.match(projectionSource,
     /padlock_roll_assist_active[\s\S]*?padlock_roll_error_deg[\s\S]*?padlock_roll_assist_aileron/,
     "the applied augmentation needs distinct observable telemetry");

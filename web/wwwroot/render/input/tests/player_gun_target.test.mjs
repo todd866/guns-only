@@ -10,29 +10,28 @@ import {
 const livePair = Object.freeze({
   selected_player_gun_target_slot: 0,
   rapier_pattern_only: false,
+  opponent_body_present: true,
+  bandit_alive: true,
+  opponent_alive: true,
   w1_present: 1,
   w1_alive: 1,
 });
 
-test("only a live combat-wingman padlock requests slot one", () => {
+test("combat target selection persists independently of padlock view state", () => {
   assert.equal(desiredPlayerGunTargetSlot({
-    padlock: true,
-    padlockTarget: "wingman",
+    selectedTarget: "wingman",
     state: livePair,
   }), 1);
   assert.equal(desiredPlayerGunTargetSlot({
-    padlock: false,
-    padlockTarget: "wingman",
+    selectedTarget: "wingman",
     state: livePair,
-  }), 0);
+  }), 1, "forward view must retain TARGET 2");
   assert.equal(desiredPlayerGunTargetSlot({
-    padlock: true,
-    padlockTarget: "wingman",
+    selectedTarget: "wingman",
     state: { ...livePair, w1_alive: 0 },
   }), 0);
   assert.equal(desiredPlayerGunTargetSlot({
-    padlock: true,
-    padlockTarget: "wingman",
+    selectedTarget: "wingman",
     state: { ...livePair, rapier_pattern_only: true },
   }), 0);
 });
@@ -50,8 +49,7 @@ test("rejected bridge selections are not cached and authoritative slots reconcil
   let result = syncPlayerGunTargetSelection({
     bridge,
     state: livePair,
-    padlock: true,
-    padlockTarget: "wingman",
+    selectedTarget: "wingman",
     appliedSlot: 0,
   });
   assert.deepEqual(calls, [1]);
@@ -61,8 +59,7 @@ test("rejected bridge selections are not cached and authoritative slots reconcil
   result = syncPlayerGunTargetSelection({
     bridge,
     state: livePair,
-    padlock: true,
-    padlockTarget: "wingman",
+    selectedTarget: "wingman",
     appliedSlot: result.appliedSlot,
   });
   assert.deepEqual(calls, [1, 1], "a later frame retries the rejected selection");
@@ -71,8 +68,7 @@ test("rejected bridge selections are not cached and authoritative slots reconcil
   result = syncPlayerGunTargetSelection({
     bridge,
     state: livePair,
-    padlock: true,
-    padlockTarget: "wingman",
+    selectedTarget: "wingman",
     appliedSlot: result.appliedSlot,
   });
   assert.equal(result.appliedSlot, 1);
@@ -81,8 +77,7 @@ test("rejected bridge selections are not cached and authoritative slots reconcil
   result = syncPlayerGunTargetSelection({
     bridge,
     state: { ...livePair, selected_player_gun_target_slot: 1 },
-    padlock: true,
-    padlockTarget: "wingman",
+    selectedTarget: "wingman",
     appliedSlot: result.appliedSlot,
   });
   assert.equal(result.requested, false);
@@ -91,12 +86,21 @@ test("rejected bridge selections are not cached and authoritative slots reconcil
   result = syncPlayerGunTargetSelection({
     bridge,
     state: { ...livePair, selected_player_gun_target_slot: 1 },
-    padlock: false,
-    padlockTarget: "bandit",
+    selectedTarget: "wingman",
+    appliedSlot: result.appliedSlot,
+  });
+  assert.equal(result.appliedSlot, 1);
+  assert.deepEqual(calls, [1, 1, 1],
+    "releasing padlock never changes the selected gun target");
+
+  result = syncPlayerGunTargetSelection({
+    bridge,
+    state: { ...livePair, selected_player_gun_target_slot: 1 },
+    selectedTarget: "bandit",
     appliedSlot: result.appliedSlot,
   });
   assert.equal(result.appliedSlot, 0);
-  assert.deepEqual(calls, [1, 1, 1, 0], "release returns the gun to primary");
+  assert.deepEqual(calls, [1, 1, 1, 0], "an explicit Tab selection changes target");
 });
 
 test("kernel fallback from a dead w1 reconciles without re-requesting the stale slot", () => {
@@ -113,8 +117,7 @@ test("kernel fallback from a dead w1 reconciles without re-requesting the stale 
       selected_player_gun_target_slot: 0,
       w1_alive: 0,
     },
-    padlock: true,
-    padlockTarget: "wingman",
+    selectedTarget: "wingman",
     appliedSlot: 1,
   });
 

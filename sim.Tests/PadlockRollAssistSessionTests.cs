@@ -171,4 +171,36 @@ public class PadlockRollAssistSessionTests {
         Assert.False(session.BanditPadlockRollAssist.Captured);
         Assert.Equal(0.0, session.BanditPadlockRollAssist.SasRollControl, 12);
     }
+
+    [Fact]
+    public void FormationWingmanSelectionOwnsRollGeometryAndRebindsByIdentity() {
+        var session = new SimulationSession(7);
+        session.Begin();
+        Assert.Single(session.Wingmen);
+
+        Assert.True(session.SetPlayerGunTargetSlot(1));
+        long wingmanTargetId = session.PlayerGun.SelectedTargetId;
+        session.SetPlayerGunTargetPadlockRollAssist(true);
+        session.StepFixed();
+
+        PadlockRollAssistState wingman = session.PlayerGunTargetPadlockRollAssist;
+        Assert.True(wingman.Selected);
+        Assert.True(wingman.GeometryValid);
+        Assert.Equal(wingmanTargetId, wingman.TargetSpawnSequence);
+        Assert.Equal(1, session.SelectedPlayerGunTargetSlot);
+
+        Assert.True(session.SetPlayerGunTargetSlot(0));
+        long primaryTargetId = session.PlayerGun.SelectedTargetId;
+        Assert.NotEqual(wingmanTargetId, primaryTargetId);
+        Assert.False(session.PlayerGunTargetPadlockRollAssist.Selected);
+        Assert.Equal(0, session.PlayerGunTargetPadlockRollAssist.TargetSpawnSequence);
+        session.SetPlayerGunTargetPadlockRollAssist(true);
+        session.StepFixed();
+
+        PadlockRollAssistState primary = session.PlayerGunTargetPadlockRollAssist;
+        Assert.True(primary.Selected);
+        Assert.True(primary.GeometryValid);
+        Assert.Equal(primaryTargetId, primary.TargetSpawnSequence);
+        Assert.Equal(0, session.SelectedPlayerGunTargetSlot);
+    }
 }
