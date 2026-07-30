@@ -2625,7 +2625,7 @@ const MISSION_BRIEFS = Object.freeze({
     sortie: "Continuous visual merges · public-data surrogates · guns only",
     configuration: "F-22 public-data surrogate · 480 rounds across all fights · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
     card: "Splash successive Su-27 surrogates; each replacement enters through a fresh neutral merge.",
-    brief: "Every splash stages another offset merge. Fuel, ammunition, damage and kills persist, so mind your bursts. Fight for the rear quarter and keep your energy \u2014 9 G is there, but so is your vision.",
+    brief: "Every splash stages another offset merge. Fuel, ammunition, ownship damage, and kill count persist, so mind your bursts. Fight for the rear quarter and keep your energy \u2014 9 G is there, but so is your vision.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO hands the fight off and starts RTB · Space G limiter · K Auto-GCAS paddle",
   },
   8: {
@@ -2635,7 +2635,7 @@ const MISSION_BRIEFS = Object.freeze({
     sortie: "Fictional Soniachne sector · four sequential raiders · guns only",
     configuration: "F-22 public-data surrogate · 480 rounds · low-level VMC · Auto-GCAS armed · one authoritative target at a time",
     card: "Intercept four low-flying fictional raiders over a stylized Ukrainian rural training sector.",
-    brief: "Four raiders over true-scale Ukrainian lowland, one at a time. Fly cutoff geometry, use the terrain, take the first valid gun solution and protect your ammunition.",
+    brief: "Four sequential airborne raiders over true-scale Ukrainian lowland: one target is authoritative at a time, and the next enters only after the current raider is killed or leaks. Fly cutoff geometry, use the terrain, take the first valid gun solution and protect your ammunition.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\n480 rounds for four raiders · hold K only during an active Auto-GCAS fly-up",
   },
   13: {
@@ -2645,7 +2645,7 @@ const MISSION_BRIEFS = Object.freeze({
     sortie: "One orchard pickup · one clinic handoff · no opponent",
     configuration: "Fictional automated vertical-lift air ambulance · one opaque casualty capsule · VMC · 12–42 m masking band",
     card: "Fly the low route, make two stable contacts, and deliver the capsule to the clinic.",
-    brief: "Reach the orchard, settle inside the marked contact area and hold while the capsule is secured, then fly it to the clinic and hold through handoff. At either pad: within 6 m, under 0.45 m/s lateral and 0.25 m/s vertical, pitch and bank inside 5\u00B0, steady for 2 seconds.",
+    brief: "Reach the orchard, settle inside the marked contact area and hold while the capsule is secured, then fly it to the clinic and hold through handoff; the assessed safe masking band is 12–42 m AGL. At either pad, enter within 6 m at no more than 0.45 m/s lateral speed and 0.25 m/s vertical speed, keep absolute pitch and bank at or below 5°, then remain stable for 2 seconds.",
     controls: "Arrows command horizontal motion · W/S vertical · A/D yaw\nN requests a controlled abort before loading · contact: R 6 m · H ≤0.45 · |V| ≤0.25 m/s · |pitch/bank| ≤5° · stable 2 s",
   },
 });
@@ -2709,7 +2709,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Rapier Intercept",
     sortie: "Dealt {TARGET_LABEL} contract · guns-only · one-pass sweep · pursued recovery",
     configuration: "Fictional TBCC Rapier · measured design dash {DESIGN_DASH_MACH} · 3,600 LB alert fuel · allocation-credit ledger active",
-    brief: "Today's contract is the {TARGET_LABEL}. {TARGET_TASK} Verified neutralization pays {TARGET_REWARD} CR against fuel, ammunition and any loss. Launch on full augmentation, climb at M0.90 to FL560, then ram-climb to FL700 and dash at {DESIGN_DASH_MACH}. Recover through the squares and trap.",
+    brief: "Today's contract is the {TARGET_LABEL}. {TARGET_TASK} Verified neutralization pays {TARGET_REWARD} CR against fuel, ammunition and any loss. Launch on full augmentation and climb at M0.90 to FL560 (56,000 ft). RAM LIGHT begins at {RAM_LIGHT_MACH} and full ram at {FULL_RAM_MACH}; at FL315 the aircraft can gather speed but cannot cross into full ram, so hold the profile, ram-climb to FL700 and dash at {DESIGN_DASH_MACH}. Mach and KTAS, range, closure and ETA stay up throughout. Recover through the squares and trap.",
     controls: "P mission automation · F release gun-drones · arrows/W/S pilot takeover\nT safe time compression · V padlock · Tab target · fly every recovery square · trap on wire three",
   }),
   "ace-duel": Object.freeze({

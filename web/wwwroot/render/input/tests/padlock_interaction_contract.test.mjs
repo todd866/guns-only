@@ -300,34 +300,32 @@ test("padlock-only orientation and target cues solve roll-then-pull without perm
     "ordinary camera-servo lag after first acquisition must not blank physical steering");
   assert.match(padlockSa, /CAMERA SETTLING/,
     "camera lag may be reported but must not masquerade as loss of physical steering");
-  // The live presentation is one quiet body-fixed action strip. It names the selected target and
-  // gives exactly one static ROLL or PULL command; attitude/altitude are compact cross-checks.
-  const actionStrip = balancedBlock(
+  // The live presentation is the ADI, not a banner. A command to the pilot is graphical: the
+  // roll error is a gate on the instrument, not the string "ROLL R 167". The text strip that
+  // used to carry it also sat across the ball's horizon, which is the part that must stay
+  // readable, so it is not drawn at all.
+  const adi = balancedBlock(
     hudSource,
-    "pitchDeg, radarAltFt, sinkFpm, targetPosition, targetLabel,\n  })",
+    "pitchDeg, radarAltFt, sinkFpm, targetPosition,\n  })",
   );
-  assert.match(padlockSa, /this\.drawPadlockActionStrip\(frame/,
-    "padlock steering must render through the compact action strip");
-  assert.match(actionStrip, /action = `ROLL \$\{direction\.toUpperCase\(\)\} \$\{degrees\}/,
-    "the selected body-frame roll error must become an explicit signed command");
-  assert.match(actionStrip,
-    /replace\(\/\^TARGET\\s\+\/, "T"\)[\s\S]*?replace\(\/\^ROLL RIGHT \/, "ROLL R "\)/,
-    "the drawn phone label must abbreviate identity and direction without changing guidance truth");
-  assert.match(actionStrip, /action = "PULL"/,
-    "capture must end the roll task with one unmistakable pull command");
-  assert.match(actionStrip, /P \$\{pitchDeg[\s\S]*?B \$\{bankDeg[\s\S]*?radarText/,
-    "pitch, bank, and radar altitude must remain compact ownship cross-checks");
-  assert.match(actionStrip, /targetForward < -0\.17[\s\S]*?`AFT \$\{/,
-    "aft-hemisphere geometry must remain explicit without shoulder prose");
-  assert.match(actionStrip, /deliberately not animated/,
-    "the action cue must stay static instead of competing with world motion");
-  assert.doesNotMatch(actionStrip, /setTransform\(/,
-    "the action strip must preserve the HUD's HiDPI canvas transform");
-  assert.match(actionStrip,
-    /ctx\.save\(\)[\s\S]*?ctx\.translate\(arrowX, arrowY\)[\s\S]*?ctx\.restore\(\)/,
-    "arrow-local transforms must be bounded by save/restore");
-  assert.doesNotMatch(actionStrip, /padlockAttitudeModel|pitch ladder|bank scale/,
-    "the live cue must not recreate the miniature attitude instrument");
+  assert.match(padlockSa, /this\.drawPadlockLocatorInset\(frame/,
+    "padlock must render the attitude instrument");
+  assert.doesNotMatch(padlockSa, /this\.drawPadlockActionStrip\(frame/,
+    "the text action strip must not return: it restated the dial and covered its horizon");
+  assert.match(adi, /lift-plane gate/,
+    "actual bank must be readable off the instrument without decoding the director");
+  assert.match(adi, /directorRadius/,
+    "the roll command must be a director mark on the dial, not a printed heading");
+  assert.match(adi, /"PULL"/,
+    "capture must end the roll task with one unmistakable pull cue");
+  assert.match(adi, /bankDeg: Number\(state\.bank_deg\)/,
+    "the ball must read attitude from the jet, never from the slewed padlock camera");
+  assert.doesNotMatch(adi, /setTransform\(/,
+    "the instrument must preserve the HUD's HiDPI canvas transform");
+  assert.match(adi, /padlockAttitudeModel\(\{/,
+    "the attitude instrument must be driven by the shared attitude model");
+  assert.match(adi, /ctx\.save\(\)[\s\S]*?ctx\.restore\(\)/,
+    "instrument-local transforms must be bounded by save/restore");
   assert.match(padlockSa, /RELEASE LOOK TO REACQUIRE/,
     "temporary manual look must suppress steering and teach the return behavior once");
   assert.match(padlockSa, /ACQUIRING \$\{targetLabel\}/,

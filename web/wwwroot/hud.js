@@ -3266,13 +3266,10 @@ class CombatHud {
         targetPosition: padlockTargetPosition,
       });
 
-      this.drawPadlockActionStrip(frame, {
-        centreX, top, bottom, left, right,
-        steering, groundDanger, centralPullUp, blink,
-        pitchDeg, radarAltFt, sinkFpm,
-        targetPosition: padlockTargetPosition,
-        targetLabel,
-      });
+      // The action strip is deliberately not drawn. It restated as text what the ADI shows as
+      // geometry -- "T2 ROLL R 167" over a dial already displaying that roll error on its gate --
+      // and its panel sat across the ball's horizon. A command to the pilot belongs in the
+      // instrument, not in a banner covering it.
 
       // === BANDIT LOCATOR: drawBandit owns the single on-screen target box. A temporary manual
       // look already has one complete instruction — RELEASE LOOK TO REACQUIRE — so do not chase
