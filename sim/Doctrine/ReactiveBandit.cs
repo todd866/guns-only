@@ -143,7 +143,12 @@ public static class BanditFireControl {
     }
 }
 
-public enum BanditTactic { Acquire, Defend, Energy, Return }
+/// Present is the co-operative opening tactic: a stable reference line the newcomer joins up on.
+/// It is NOT a weak fighter — the bandit underneath stays whatever tier it was fielded at, per the
+/// standing doctrine that the opening fight is the hardest one. It is simply not fighting yet.
+/// One-way: once the player demonstrates a gun position the bandit graduates and never presents
+/// again for that instance.
+public enum BanditTactic { Acquire, Defend, Energy, Return, Present }
 
 /// Deterministic, deliberately beatable BFM opponent. It owns a normal AircraftSim and supplies
 /// only pilot controls: no kinematic shortcuts, wall clock, or random source enters the kernel.
@@ -272,7 +277,7 @@ public sealed class ReactiveBandit :
         PilotSkill skill = PilotSkill.Competent,
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
         int engagementNumber = 1, BanditSkillProfile? profile = null,
-        int? doctrineIndex = null) {
+        int? doctrineIndex = null, bool presenting = false) {
         if (engagementNumber < 1)
             throw new System.ArgumentOutOfRangeException(nameof(engagementNumber));
         Skill = skill;
@@ -296,6 +301,8 @@ public sealed class ReactiveBandit :
         // multiplier is 5 rather than 1 because the session stages a wingman at engagementNumber + 1
         // (WingmanSpawnStride), and a one-tick separation still lands both inside a single rendered
         // frame at 60 fps, where the sim advances about two ticks per frame.
+        Presenting = presenting;
+        if (presenting) Tactic = BanditTactic.Present;
         _lookaheadHoldTicks = (engagementNumber - 1) * 5 % LookaheadDecisionCadenceTicks;
         _parameters = parameters;
         _terrain = terrain;
@@ -586,6 +593,17 @@ public sealed class ReactiveBandit :
         _wreckMotion?.SurfaceChangedThisStep ?? false;
     public double ThrustFraction => _sim.ThrustFraction;
     public BanditTactic Tactic { get; private set; } = BanditTactic.Acquire;
+
+    /// Two burst lengths of sustained tracking. FightDirector judges the reciprocal question about
+    /// the bandit's own gun with WalkoverSolutionSecondsConceded = 0.75; this is the player-side
+    /// equivalent with margin. It is the primary tuning knob for the whole introduction.
+    public const double PresentHoldSeconds = 2.0;
+    const double PresentFunnelRangeM = 900.0;      // gun_funnel.js EFFECTIVE_CEILING_M
+    const double PresentFunnelAngleRad = 0.2094;   // 12 deg, matching CameraSolver.GunWindow
+
+    /// True while this bandit is deliberately setting the player up rather than fighting them.
+    public bool Presenting { get; private set; }
+    double _presentHeldSeconds;
     public PilotCommand LastCommand { get; private set; } = new(1.0, 0.0, 0.85, 0.0);
     public PilotCommand AppliedCommand => LastCommand;
     public BanditDecisionTrace DecisionTrace { get; private set; }
@@ -707,6 +725,9 @@ public sealed class ReactiveBandit :
     }
 
     public bool WantsToFire(in ActorObservation player) {
+        // A bandit that is setting the player up does not shoot them. Step's presenting gate
+        // cannot cover this: the session asks the actor to fire on a separate path.
+        if (Presenting) return false;
         if (CatastrophicallyDamaged || _terrainRecoveryActive
             || (!BanditFireControl.InFiringEnvelope(
                     State, player, EffectiveFireConeRad)
@@ -854,6 +875,21 @@ public sealed class ReactiveBandit :
         // candidate maneuvers forward in the deterministic kernel and fly the one that best improves
         // the future firing position. The vertical fight emerges from the score, it is not scripted.
         // Novice keeps LookaheadHorizonTicks == 0 and the state machine below.
+        // The co-operative opening. Short-circuits BOTH the lookahead and simple paths: a
+        // presenting bandit does not acquire, does not defend, does not commit as a boss, and does
+        // not fire. Withdrawal is evaluated first so the graduating tick already fights.
+        if (Presenting) {
+            UpdatePresentWithdrawal(player, dt);
+            if (Presenting) {
+                Tactic = BanditTactic.Present;
+                LastCommand = PresentCommand();
+                RecordSingleCandidateDecision(LastCommand);
+                _sim.Step(LastCommand, dt);
+                T += dt;
+                return;
+            }
+        }
+
         if (_profile.IsBoss && !BossCommitted) UpdateBossCommitment(player, dt);
 
         if (_profile.LookaheadHorizonTicks > 0) {
@@ -1378,6 +1414,30 @@ public sealed class ReactiveBandit :
         }
         return new PilotCommand(0.55, LimitedBankTo(extension, 0.38),
             _maximumThrottle, 0.0);
+    }
+
+    /// Pure function of kernel state — range, angle-off and accumulated time. No director state,
+    /// no wall clock, no randomness, so replays reproduce and FightDirector never counter-picks.
+    /// Setting Presenting false is one-way; nothing sets it true again.
+    void UpdatePresentWithdrawal(in ActorObservation player, double dt) {
+        double range = Geometry.Range(player, State);
+        double angleOff = Geometry.AngleOff(player, State);
+        bool tracking = range <= PresentFunnelRangeM && angleOff <= PresentFunnelAngleRad;
+        _presentHeldSeconds = tracking ? _presentHeldSeconds + dt : 0.0;
+        if (_presentHeldSeconds >= PresentHoldSeconds) Presenting = false;
+    }
+
+    /// A shallow, constant, predictable turn the newcomer can join up on. It does not react to the
+    /// player at all — that is exactly what makes it presenting rather than defending. The task it
+    /// sets is closure and station-keeping: formation flying, which is the same motor skill as gun
+    /// tracking, learned without anyone being told they are being taught.
+    PilotCommand PresentCommand() {
+        const double bank = 0.26;                                  // 15 deg: readable, under 2 G
+        double g = 1.0 / System.Math.Cos(bank);                    // sustains the turn level
+        double throttle = State.Speed < _lowSpeedMps
+            ? System.Math.Min(_maximumThrottle, 1.00)
+            : System.Math.Min(_maximumThrottle, 0.70);
+        return new PilotCommand(g, bank, throttle, 0.0);
     }
 
     PilotCommand ReturnCommand() {
