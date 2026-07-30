@@ -3501,22 +3501,14 @@ class CombatHud {
     const displayLabel = `${compactTargetLabel} · ${compactAction}`;
     ctx.fillText(this.fitText(displayLabel, width - 44), cx, y + 21);
 
-    const pitchText = `P ${pitchDeg >= 0 ? "+" : ""}${Math.round(pitchDeg)}\u00B0`;
-    const bankText = Math.abs(bankDeg) < 0.5
-      ? "B 0\u00B0"
-      : `B ${bankDeg > 0 ? "R" : "L"}${Math.round(Math.abs(bankDeg))}\u00B0`;
-    const radarText = Number.isFinite(radarAltFt)
-      ? `R ${radarAltFt >= 9950
-        ? `${(radarAltFt / 1000).toFixed(1)}K`
-        : Math.round(radarAltFt).toLocaleString("en-US")}`
-      : "R ---";
-    const verticalTrend = Number.isFinite(sinkFpm) && Math.abs(sinkFpm) >= 500
-      ? sinkFpm < 0 ? "\u2193" : "\u2191" : "";
-    const context = [pitchText, bankText, `${radarText}${verticalTrend}`, hemisphere]
-      .filter(Boolean).join("  ");
-    ctx.fillStyle = urgentPull ? "rgba(255, 220, 224, 0.9)" : GREEN_DIM;
-    ctx.font = "750 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(this.fitText(context, width - 16), cx, y + 43);
+    // Pitch, bank, radar altitude and vertical trend used to be spelled out here. The ADI draws
+    // all four, and a dial is read faster than "P -3 B L98 R 9,675". Only the body-frame
+    // hemisphere survives as text, because the dial cannot say which shoulder the target is over.
+    if (hemisphere) {
+      ctx.fillStyle = urgentPull ? "rgba(255, 220, 224, 0.9)" : GREEN_DIM;
+      ctx.font = "750 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillText(this.fitText(hemisphere, width - 16), cx, y + 43);
+    }
     ctx.restore();
 
     if (this._debug) {
@@ -3555,7 +3547,10 @@ class CombatHud {
     const cx = centreX;
     const cy = clamp(centreY0(top, bottom), top + radius + 30, bottom - radius - 34);
     function centreY0(topPx, bottomPx) {
-      return topPx + (bottomPx - topPx) * 0.5 + 118;
+      // Clear of drawPadlockActionStrip, which anchors at 0.68 of the same span. The two were
+      // drawn on top of each other when the dial came back: the strip's panel sat across the
+      // ball's horizon, which is the one part of it that has to stay readable.
+      return topPx + (bottomPx - topPx) * 0.5 - 40;
     }
     // Reserve the outside of the instrument for steering. The attitude ball and its bank scale
     // remain a self-contained conventional instrument; amber/green director marks cannot be

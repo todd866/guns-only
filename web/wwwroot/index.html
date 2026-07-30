@@ -2782,7 +2782,7 @@
         <div class="ready-menu-brand">Guns Only</div>
         <div>
           <h1 id="ready-menu-title">Pick a mission</h1>
-          <p id="ready-menu-help">Every experience is available. Fly whichever you feel like.</p>
+          <p id="ready-menu-help" hidden>Pick a mission</p>
         </div>
       </header>
 
@@ -2931,14 +2931,12 @@ Splash one bandit to qualify · H controls · R restarts</p>
     aria-describedby="boot-deck" aria-busy="true">
     <div class="boot-card">
       <header class="boot-hero">
-        <div class="boot-kicker">Visual-range air combat</div>
         <h1 id="boot-title" class="boot-title">GUNS ONLY</h1>
         <p id="boot-deck" class="boot-deck">
           Fight the merge. Manage the energy. Make the shot.
         </p>
       </header>
       <section class="boot-sortie" aria-labelledby="boot-sortie-title">
-        <span>Selected sortie</span>
         <strong id="boot-sortie-title">F-22A SURROGATE / ENDLESS MERGE</strong>
         <small id="boot-sortie-detail">
           Escalating opposition · 480 rounds · first pass safe
@@ -2951,10 +2949,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
             LOADING SIMULATION FILES…
           </div>
         </div>
-        <p class="boot-note">
-          First load can take a moment on mobile. The simulation runs on this device.
-          <span class="boot-standalone-note">Add it to your Home Screen for a full-screen cockpit.</span>
-        </p>
+        <p class="boot-note">Runs on this device · first load is slow on mobile</p>
       </footer>
     </div>
   </div>
@@ -2973,31 +2968,26 @@ Splash one bandit to qualify · H controls · R restarts</p>
     {
       const bootSorties = {
         "first-merge": {
-          kicker: "Visual-range air combat",
           deck: "Fight the merge. Manage the energy. Make the shot.",
           title: "F-22A SURROGATE / ENDLESS MERGE",
           detail: "Escalating opposition · 480 rounds · first pass safe",
         },
         "low-level-drone": {
-          kicker: "Low-level air defence",
           deck: "Find the raider. Use the terrain. Protect every round.",
           title: "F-22A SURROGATE / LOW-LEVEL INTERCEPT",
           detail: "Four low-flying raiders · true-scale terrain · guns only",
         },
         medevac: {
-          kicker: "Low-level emergency aviation",
           deck: "Fly the route. Hold the hover. Bring them home.",
           title: "AIR AMBULANCE / MEDEVAC",
           detail: "Orchard pickup · one casualty capsule · clinic handoff",
         },
         "rapier-circuits": {
-          kicker: "Experimental interceptor operations",
           deck: "Launch hard. Fly the circuit. Put it back on the wire.",
           title: "RAPIER / CIRCUITS",
           detail: "Catapult launch · overhead pattern · hook recovery",
         },
         "rapier-intercept": {
-          kicker: "Experimental interceptor operations",
           deck: "Launch fast. Climb beyond the weather. Make one pass count.",
           title: "RAPIER / INTERCEPT",
           detail: "Buried launch gallery · stratospheric intercept · one-pass recovery",
@@ -3005,7 +2995,6 @@ Splash one bandit to qualify · H controls · R restarts</p>
       };
       const requested = new URLSearchParams(location.search).get("program");
       const selected = bootSorties[requested] ?? bootSorties["first-merge"];
-      document.querySelector(".boot-kicker").textContent = selected.kicker;
       document.querySelector("#boot-deck").textContent = selected.deck;
       document.querySelector("#boot-sortie-title").textContent = selected.title;
       document.querySelector("#boot-sortie-detail").textContent = selected.detail;

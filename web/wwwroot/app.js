@@ -2606,7 +2606,7 @@ const MISSION_BRIEFS = Object.freeze({
     sortie: "One recovery attempt · trap or bolter",
     configuration: "F-35C public-data carrier surrogate · recovery only · angled deck",
     card: "Convert to the carrier after three Raptor qualifications, then fly one scored pass.",
-    brief: "This is a reduced-order F-35C carrier surrogate, not an OEM systems or flight-control model. Use power to control glideslope, hold lineup inside the angled landing area, and fly through touchdown without a flare. A trap or bolter ends the attempt with its recorded grade and primary correction.",
+    brief: "Power controls glideslope. Hold lineup inside the angled landing area and fly it onto the deck \u2014 no flare. A trap or bolter ends the attempt.",
     controls: "W/S power · arrows fly · V padlocks the boat\nFly the on-speed AOA cue · power for glideslope · no flare",
   },
   6: {
@@ -2625,7 +2625,7 @@ const MISSION_BRIEFS = Object.freeze({
     sortie: "Continuous visual merges · public-data surrogates · guns only",
     configuration: "F-22 public-data surrogate · 480 rounds across all fights · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
     card: "Splash successive Su-27 surrogates; each replacement enters through a fresh neutral merge.",
-    brief: "Each splash stages another offset Su-27 visual merge after a short destruction dwell. Fuel, ammunition, ownship damage, and kill count persist, so burst discipline matters; every new opponent starts guns-safe through the first pass. Fight for the rear quarter, preserve energy, and manage both G onset and duration: 9 G is available, but vision and consciousness are physiological state. Auto-GCAS responds only to predicted terrain collision; hold K to paddle an active fly-up. No missiles or unmodelled modern sensors.",
+    brief: "Every splash stages another offset merge. Fuel, ammunition, damage and kills persist, so mind your bursts. Fight for the rear quarter and keep your energy \u2014 9 G is there, but so is your vision.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO hands the fight off and starts RTB · Space G limiter · K Auto-GCAS paddle",
   },
   8: {
@@ -2635,7 +2635,7 @@ const MISSION_BRIEFS = Object.freeze({
     sortie: "Fictional Soniachne sector · four sequential raiders · guns only",
     configuration: "F-22 public-data surrogate · 480 rounds · low-level VMC · Auto-GCAS armed · one authoritative target at a time",
     card: "Intercept four low-flying fictional raiders over a stylized Ukrainian rural training sector.",
-    brief: "This is the first low-altitude scenery slice: a fictional Ukrainian lowland, true-scale terrain, and four sequential airborne raiders. One target is authoritative at a time, and the next enters only after the current raider is killed or leaks. Fly cutoff geometry, use the terrain as a real flight reference, take the first valid gun solution, and protect ammunition. Buildings are ambient scenery in this slice—not ground targets or collision truth. Auto-GCAS is terrain-triggered and K is its held paddle override.",
+    brief: "Four raiders over true-scale Ukrainian lowland, one at a time. Fly cutoff geometry, use the terrain, take the first valid gun solution and protect your ammunition.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\n480 rounds for four raiders · hold K only during an active Auto-GCAS fly-up",
   },
   13: {
@@ -2645,7 +2645,7 @@ const MISSION_BRIEFS = Object.freeze({
     sortie: "One orchard pickup · one clinic handoff · no opponent",
     configuration: "Fictional automated vertical-lift air ambulance · one opaque casualty capsule · VMC · 12–42 m masking band",
     card: "Fly the low route, make two stable contacts, and deliver the capsule to the clinic.",
-    brief: "You command a heavily automated air ambulance. The pickup team is preparing one opaque casualty capsule before you arrive; your job is to reach the orchard at the right time, settle inside the marked contact area, hold while the capsule is secured, then fly it to the clinic and hold again through handoff. The shorter line is more exposed and the longer drainage route offers better masking; the assessed safe masking band is 12–42 m AGL. At either pad, enter within 6 m at no more than 0.45 m/s lateral speed and 0.25 m/s vertical speed, keep absolute pitch and bank at or below 5°, then remain stable for 2 seconds. The urgency clock is a coordination target, not a patient death countdown, and there is no clinical diagnosis or treatment simulation in this sortie.",
+    brief: "Reach the orchard, settle inside the marked contact area and hold while the capsule is secured, then fly it to the clinic and hold through handoff. At either pad: within 6 m, under 0.45 m/s lateral and 0.25 m/s vertical, pitch and bank inside 5\u00B0, steady for 2 seconds.",
     controls: "Arrows command horizontal motion · W/S vertical · A/D yaw\nN requests a controlled abort before loading · contact: R 6 m · H ≤0.45 · |V| ≤0.25 m/s · |pitch/bank| ≤5° · stable 2 s",
   },
 });
@@ -2656,7 +2656,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Guns Only",
     sortie: "F-22A vs escalating opposition · guns only · first pass safe",
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
-    brief: "You are already at the visual merge, and the opening wave is a pair of Aces. Survive the first pass, fight into the rear quarter, and keep going — the fight director watches how you actually flew and moves the pilot tier, the opponent's jet and the number of aircraft you face. Win and it stays hard. Lose twice and it eases. There is no radar, missile, stealth, or classified-system simulation hiding behind the labels.",
+    brief: "You start at the merge, and the opening wave is a pair of Aces. Survive the first pass, fight into the rear quarter, and keep going. The director watches how you actually flew and answers in kind.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO hands the fight off and starts RTB · Space G limiter · H controls",
   }),
   "low-level-drone": Object.freeze({
@@ -2709,7 +2709,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Rapier Intercept",
     sortie: "Dealt {TARGET_LABEL} contract · guns-only · one-pass sweep · pursued recovery",
     configuration: "Fictional TBCC Rapier · measured design dash {DESIGN_DASH_MACH} · 3,600 LB alert fuel · allocation-credit ledger active",
-    brief: "Today's contract is the {TARGET_LABEL}. {TARGET_TASK} Verified neutralization pays {TARGET_REWARD} CR; fuel, ammunition, confirmed loss, and any reserved exceedance inspection hit the Rapier operating balance. The recorder does not invent component damage or a whole-airframe repair percentage. Mission automation owns the long profile by default: use full augmentation to launch, climb around M0.90 to FL560 (56,000 ft), and drive cleanly through the transonic drag rise. RAM LIGHT begins at {RAM_LIGHT_MACH} and full ram arrives at {FULL_RAM_MACH}; at FL315 the aircraft can gather speed but cannot cross into full ram, so hold the altitude profile, ram-climb to FL700, and dash to the measured design speed of {DESIGN_DASH_MACH}. Mach and KTAS, range, closure, and intercept ETA stay visible throughout the long leg. Mach 4 remains fiction. Return through the recovery squares and trap.",
+    brief: "Today's contract is the {TARGET_LABEL}. {TARGET_TASK} Verified neutralization pays {TARGET_REWARD} CR against fuel, ammunition and any loss. Launch on full augmentation, climb at M0.90 to FL560, then ram-climb to FL700 and dash at {DESIGN_DASH_MACH}. Recover through the squares and trap.",
     controls: "P mission automation · F release gun-drones · arrows/W/S pilot takeover\nT safe time compression · V padlock · Tab target · fly every recovery square · trap on wire three",
   }),
   "ace-duel": Object.freeze({
@@ -2717,7 +2717,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Ace Duel",
     sortie: "F-22A vs Su-27S ace · lone guns-only duel · first pass safe",
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
-    brief: "The programme's final exam: one merge, one bandit, flown by the best pilot the ladder can field. This Su-27 surrogate reads the fight a manoeuvre ahead—it converts the merge and takes it into the vertical. Survive the first pass, then out-fly a genuine ace for the rear quarter and splash it. There is no radar, missile, stealth, or classified-system simulation hiding behind the labels.",
+    brief: "The final exam: one merge, one bandit, the best pilot the ladder can field. It reads the fight a manoeuvre ahead and will take it vertical. Out-fly it.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSplash the ace to complete the programme · Space releases the G limiter",
   }),
 });
