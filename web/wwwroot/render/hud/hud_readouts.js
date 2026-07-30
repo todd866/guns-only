@@ -43,10 +43,10 @@ function compactActualAltitude(value) {
   return `${compactMagnitude(altitudeFt, { suffix: " FT" })}`;
 }
 
-function compactVerticalSpeed(value) {
+function compactVerticalSpeed(value, { condensed = false } = {}) {
   const verticalFpm = finiteNumber(value);
   if (verticalFpm === null) return "V/S ---";
-  if (Math.abs(verticalFpm) < 25) return "V/S 0";
+  if (Math.abs(verticalFpm) < 25) return condensed ? "V/S0" : "V/S 0";
   return `${verticalFpm > 0 ? "↑" : "↓"}${compactMagnitude(verticalFpm)}`;
 }
 
@@ -59,6 +59,7 @@ export function mobileTacticalReadout(state = {}, display = {}, {
   fightActive = false,
   targetNumber = 1,
   tallyRangeM = 18_520,
+  condensed = false,
 } = {}) {
   const airdata = airdataReadout(state);
   const indicatedKts = finiteNumber(display.indicatedDigits)
@@ -82,17 +83,20 @@ export function mobileTacticalReadout(state = {}, display = {}, {
   const compressionFactor = state.time_compression_available === true
     ? Math.max(1, Math.floor(finiteNumber(state.time_compression_factor) ?? 1))
     : 1;
+  const separator = condensed ? "·" : " · ";
   const actualParts = [];
   if (compressionFactor > 1) actualParts.push(`×${compressionFactor}`);
   actualParts.push(mach === null
     ? "M---"
     : `M${Math.max(0, mach).toFixed(2).replace(/^0/, "")}`);
-  actualParts.push(`${indicatedKts === null ? "---" : Math.round(indicatedKts)} ${airdata.speedUnit}`);
+  actualParts.push(`${indicatedKts === null ? "---" : Math.round(indicatedKts)}${
+    condensed ? "" : " "}${airdata.speedUnit}`);
   let energyToken = null;
   if (assistedFlight) {
     energyToken = assistedSpeedBiasKts === 0
-      ? "AUTO COR"
-      : `AUTO COR${assistedSpeedBiasKts > 0 ? "+" : ""}${assistedSpeedBiasKts}`;
+      ? condensed ? "AUTO" : "AUTO COR"
+      : `${condensed ? "AUTO" : "AUTO COR"}${
+        assistedSpeedBiasKts > 0 ? "+" : ""}${assistedSpeedBiasKts}`;
   } else if (fightActive
       && state.rapier_mission_available !== true
       && cornerDeltaKts !== null) {
@@ -101,7 +105,7 @@ export function mobileTacticalReadout(state = {}, display = {}, {
       : `COR${cornerDeltaKts > 0 ? "+" : ""}${cornerDeltaKts}`;
   }
   if (energyToken) actualParts.push(energyToken);
-  if (state.rapier_mission_available === true || !energyToken) {
+  if (!condensed && (state.rapier_mission_available === true || !energyToken)) {
     actualParts.push(headingDeg === null
       ? "H---"
       : `H${String(Math.round(((headingDeg % 360) + 360) % 360)).padStart(3, "0")}`);
@@ -110,7 +114,11 @@ export function mobileTacticalReadout(state = {}, display = {}, {
     actualParts.push(`${actualG.toFixed(1)}G`);
   }
   const altitudeToken = compactActualAltitude(altitudeFt).replace(/ FT$/, "");
-  actualParts.push(`${altitudeToken} ${compactVerticalSpeed(verticalFpm)}`);
+  if (condensed) {
+    actualParts.push(altitudeToken, compactVerticalSpeed(verticalFpm, { condensed: true }));
+  } else {
+    actualParts.push(`${altitudeToken} ${compactVerticalSpeed(verticalFpm)}`);
+  }
 
   const ammo = finiteNumber(state.ammo);
   const gunHeat = Math.max(0, Math.min(1, finiteNumber(state.gun_heat) ?? 0));
@@ -145,19 +153,17 @@ export function mobileTacticalReadout(state = {}, display = {}, {
 
   const ammoLevel = ammo !== null && ammo <= 0 ? "warning"
     : ammo !== null && ammo <= 100 ? "caution" : "normal";
-  const weaponLevel = state.gun_overheat === true
-      || fuel.minimumFuel
-      || fuel.emergencyFuel
-      || ammoLevel === "warning" ? "warning"
-    : gunHeat >= 0.7
-      || fuel.joker
-      || fuel.bingo
-      || ammoLevel === "caution" ? "caution"
-        : "normal";
+  const combatWarning = fightActive
+    && (state.gun_overheat === true || ammoLevel === "warning");
+  const combatCaution = fightActive
+    && (gunHeat >= 0.7 || ammoLevel === "caution");
+  const weaponLevel = combatWarning || fuel.minimumFuel || fuel.emergencyFuel
+    ? "warning"
+    : combatCaution || fuel.joker || fuel.bingo ? "caution" : "normal";
 
   return Object.freeze({
-    actualText: actualParts.join(" · "),
-    contextText: weaponParts.join(" · "),
+    actualText: actualParts.join(separator),
+    contextText: weaponParts.join(separator),
     actual: Object.freeze({
       mach,
       indicatedKts,
@@ -166,6 +172,7 @@ export function mobileTacticalReadout(state = {}, display = {}, {
       altitudeFt,
       verticalFpm,
       compressionFactor,
+      condensed,
     }),
     energy: Object.freeze({
       cornerKts,

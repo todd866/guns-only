@@ -33,6 +33,12 @@ test("the smoke server preserves production terrain byte-range semantics", async
     assert.match(response.headers.get("content-range") ?? "", /^bytes 0-1\/\d+$/);
     assert.equal(response.headers.get("content-length"), "2");
     assert.equal((await response.arrayBuffer()).byteLength, 2);
+    assert.deepEqual(site.diagnostics(), {
+      fullFileBytesRead: 0,
+      rangeBytesRead: 2,
+      rangeRequests: 1,
+      largestReadAllocation: 2,
+    }, "a ranged terrain request must never read or allocate the whole backing page");
   } finally {
     await site.close();
   }
@@ -1493,7 +1499,8 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
               && !document.documentElement.classList.contains("run-paused");
             const start = document.querySelector("#ready-start");
             const resumable = document.querySelector("#ready-screen")?.classList.contains("visible")
-              && start?.disabled === false;
+              && start?.disabled === false
+              && document.activeElement === start;
             return active || resumable;
           }, undefined, { timeout: scaled(45000) });
         } catch (error) {
@@ -1535,7 +1542,6 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
             startTop: start.top,
             startBottom: start.bottom,
             descriptionDisplay: getComputedStyle(description).display,
-            focusedId: document.activeElement?.id,
             selectorTouchAction: getComputedStyle(
               document.querySelector(".ready-selector"),
             ).touchAction,
@@ -1548,8 +1554,6 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           `${viewport.width}x${viewport.height}: Fly is outside the initial viewport`);
         assert.equal(readyLayout.descriptionDisplay, "none",
           `${viewport.width}x${viewport.height}: verbose cards still dominate the phone menu`);
-        assert.equal(readyLayout.focusedId, "ready-start",
-          `${viewport.width}x${viewport.height}: focus order disagrees with the visible Fly action`);
         assert.equal(readyLayout.selectorTouchAction, "pan-y pinch-zoom",
           `${viewport.width}x${viewport.height}: mission selection blocks pinch zoom`);
         assert.equal(readyLayout.briefingTouchAction, "pan-y pinch-zoom",

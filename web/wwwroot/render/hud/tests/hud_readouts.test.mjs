@@ -181,6 +181,7 @@ test("mobile tactical rail carries actual energy, vertical state, heading, and a
     altitudeFt: 4236,
     verticalFpm: 5034,
     compressionFactor: 4,
+    condensed: false,
   });
   assert.deepEqual(readout.energy, {
     cornerKts: null,
@@ -212,6 +213,32 @@ test("mobile tactical rail makes BVR target, ammunition, closure, and fuel expli
   assert.equal(readout.target.rangeNm, 158);
   assert.equal(readout.target.closureTrend, "closing");
   assert.equal(readout.weapon.level, "normal");
+});
+
+test("small-phone tactical rail preserves Rapier truth without ellipsis-prone spacing", () => {
+  const readout = mobileTacticalReadout({
+    calibrated_airspeed_kts: 478.6,
+    alt_ft: 4236,
+    vertical_speed_fpm: 5034,
+    heading_deg: 269.4,
+    mach: 0.774,
+    time_compression_available: true,
+    time_compression_factor: 4,
+    rapier_mission_available: true,
+    ammo: 480,
+    fuel_lb: 3523,
+    range_m: 160 * 1852,
+    closure_kts: 916,
+  }, {}, {
+    fightActive: true,
+    targetNumber: 1,
+    condensed: true,
+  });
+
+  assert.equal(readout.actualText, "×4·M.77·479KCAS·4.2K·↑5K");
+  assert.equal(readout.contextText, "GUN480·T1 160NM·CLOS916·F3.5K");
+  assert.doesNotMatch(readout.actualText, /H269/,
+    "heading yields to vertical state only at the narrowest supported width");
 });
 
 test("mobile tactical rail leaves WVR numbers on the physical target and qualifies weapon limits", () => {
@@ -249,6 +276,16 @@ test("mobile tactical rail leaves WVR numbers on the physical target and qualifi
   }, {}, { fightActive: true });
   assert.equal(empty.contextText, "GUN0");
   assert.equal(empty.weapon.level, "warning");
+
+  const nonCombat = mobileTacticalReadout({
+    ammo: 0,
+    gun_heat: 1,
+    gun_overheat: true,
+    fuel_lb: 3500,
+  }, {}, { fightActive: false });
+  assert.equal(nonCombat.contextText, "F3.5K");
+  assert.equal(nonCombat.weapon.level, "normal",
+    "hidden combat state must not tint an unrelated normal fuel value red");
 });
 
 test("mobile tactical rail replaces low-value heading with corner, G, and assist state", () => {

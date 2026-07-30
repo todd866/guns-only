@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=199";
+import { createHud } from "./hud.js?v=200";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=199";
+} from "./render/debrief/sortie_result.js?v=200";
 import { pointsLedgerPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -48,7 +48,7 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=199";
+} from "./render/release/release_identity.js?v=200";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -61,7 +61,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=199";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=200";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -137,13 +137,13 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=199";
+} from "./render/telemetry/ai_frame_pressure.js?v=200";
 import { FrameGovernorPolicy } from "./render/telemetry/frame_governor.js";
 import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compression.js";
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=199";
+} from "./render/telemetry/telemetry_batch.js?v=200";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -152,7 +152,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=199";
+} from "./render/settings/player_settings.js?v=200";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -197,11 +197,11 @@ import {
   createRapierDispersedStrip,
   createRapierGunDrone,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=199";
+} from "./render/scene/scene_builders.js?v=200";
 import {
   setFlightAudioEnabled,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=199";
+} from "./render/audio/flight_audio.js?v=200";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -1109,14 +1109,26 @@ if (mobileControls) {
 // Centralised, deliberately conservative quality knobs. The shader work stays identical across
 // tiers; mobile saves fill-rate and vertex cost while desktop keeps the silhouette and deck edges
 // crisp. These are evaluated once and never branch inside the render loop.
-const detectedDeviceMemoryGiB = Number(navigator.deviceMemory) || 8;
-const detectedLogicalCores = Number(navigator.hardwareConcurrency) || 8;
-const constrainedVisualDevice = detectedDeviceMemoryGiB <= 4 || detectedLogicalCores <= 4;
-// Touch is an input modality, not a performance class. Capable phones get the balanced visual
-// profile; only hardware signals, rather than screen size alone, select the aggressively reduced
-// mobile tier.
+const reportedDeviceMemoryGiB = Number(navigator.deviceMemory);
+const reportedLogicalCores = Number(navigator.hardwareConcurrency);
+const detectedDeviceMemoryGiB = Number.isFinite(reportedDeviceMemoryGiB)
+    && reportedDeviceMemoryGiB > 0
+  ? reportedDeviceMemoryGiB : null;
+const detectedLogicalCores = Number.isFinite(reportedLogicalCores) && reportedLogicalCores > 0
+  ? reportedLogicalCores : null;
+const constrainedVisualDevice = (detectedDeviceMemoryGiB !== null
+    && detectedDeviceMemoryGiB <= 4)
+  || (detectedLogicalCores !== null && detectedLogicalCores <= 4);
+// Safari does not publish deviceMemory. Missing data is not evidence that a phone can safely pay
+// the balanced tier's clouds, particles, scenery and streaming concurrency. Touch gets that tier
+// only when both explicit signals show real headroom; native CSS-pixel density still protects
+// readability on the conservative mobile tier.
+const touchBalancedVisualDevice = detectedDeviceMemoryGiB !== null
+  && detectedDeviceMemoryGiB >= 8
+  && detectedLogicalCores !== null
+  && detectedLogicalCores >= 8;
 const detectedVisualTier = mobileControls
-  ? constrainedVisualDevice ? "mobile" : "balanced"
+  ? touchBalancedVisualDevice ? "balanced" : "mobile"
   : constrainedVisualDevice ? "balanced" : "desktop";
 const VISUAL_QUALITY = Object.freeze({
   tier: detectedVisualTier,
@@ -9819,7 +9831,6 @@ async function boot() {
   syncPadlockUi();
   installTestFlightConsole();
   renderPauseUi();
-  queueMicrotask(tryAutoLaunch);
   let firstFrame = true;
 
   globalThis.__gunsLifecycle = {
@@ -10007,6 +10018,10 @@ async function boot() {
         firstFrame = false;
         bootScreen.setAttribute("aria-busy", "false");
         bootScreen.classList.add("ready");
+        // Desktop deep links may depart automatically, but never let terrain warmup or a loaded
+        // SwiftShader context get ahead of the first presented frame. The landing surface must
+        // become visible and responsive before optional world streaming begins.
+        queueMicrotask(tryAutoLaunch);
       }
       requestAnimationFrame(tick);
     } catch (error) {
@@ -10050,7 +10065,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=199")
+    navigator.serviceWorker.register("service-worker.js?v=200")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);

@@ -717,6 +717,10 @@ function assertMobileTacticalHierarchy(data) {
   check(name, "mobile tactical rail is drawn", Boolean(rail),
     rail ? `${rail.actualText} / ${rail.contextText}` : "missing");
   if (!rail) return;
+  if (data.largeText) {
+    check(name, "large-interface text reaches the tactical rail",
+      rail.fontSize === 11, `fontSize=${rail.fontSize}`);
+  }
   const drawnRows = Object.fromEntries(
     (rail.drawnRows ?? []).map((row) => [row.key, row.text]),
   );
@@ -763,7 +767,7 @@ function assertMobileTacticalHierarchy(data) {
   }
   if (name.endsWith(":assisted-corner-hold")) {
     check(name, "portrait assistance mode remains explicit after tape removal",
-      /AUTO COR\+30/.test(actualDrawn),
+      /AUTO(?: COR)?\+30/.test(actualDrawn),
       actualDrawn);
   }
   if (name.endsWith(":rapier-mobile-climb-bvr")) {
@@ -818,7 +822,7 @@ const MOBILE_SCENARIOS = new Set([
 ]);
 
 async function runViewport(site, browser, {
-  label, width, height, subset, profile = "standard",
+  label, width, height, subset, profile = "standard", largeText = false,
 }) {
   const page = await browser.newPage({ viewport: { width, height } });
   const pageErrors = [];
@@ -828,6 +832,10 @@ async function runViewport(site, browser, {
     { waitUntil: "load", timeout: 30000 },
   );
   await page.waitForFunction(() => window.__hudReady === "harness", { timeout: 15000 });
+  if (largeText) {
+    await page.evaluate(() =>
+      document.documentElement.classList.add("large-interface-text"));
+  }
   const names = await page.evaluate(() => window.__scenarioNames);
   if (!Array.isArray(names) || names.length === 0) {
     throw new Error("harness exposed no scenarios");
@@ -846,6 +854,7 @@ async function runViewport(site, browser, {
     }
     data.name = `${label}:${name}`;
     data.viewport = { width, height };
+    data.largeText = largeText;
     assertAirframeSymbols(data);
     assertLadder(data);
     assertFunnel(data);
@@ -890,6 +899,21 @@ async function main() {
       height: 390,
       subset: MOBILE_SCENARIOS,
       profile: "touch_dual_stick",
+    });
+    await runViewport(site, browser, {
+      label: "mobile-small-portrait",
+      width: 320,
+      height: 568,
+      subset: MOBILE_SCENARIOS,
+      profile: "portrait_dual_stick",
+    });
+    await runViewport(site, browser, {
+      label: "mobile-small-portrait-large-text",
+      width: 320,
+      height: 568,
+      subset: new Set(["assisted-corner-hold", "rapier-mobile-climb-bvr"]),
+      profile: "portrait_dual_stick",
+      largeText: true,
     });
   } finally {
     await browser.close();

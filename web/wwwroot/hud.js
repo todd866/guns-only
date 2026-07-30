@@ -52,7 +52,7 @@ import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=199";
+} from "./render/audio/flight_audio.js?v=200";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -2123,10 +2123,12 @@ class CombatHud {
     const state = frame.state;
     const fightActive = isFightHudActive(state);
     const targetNumber = targetDataLineOwner(state) === "wingman" ? 2 : 1;
+    const condensed = this.width < 360;
     const tactical = mobileTacticalReadout(state, display, {
       fightActive,
       targetNumber,
       tallyRangeM: BANDIT_TALLY_RANGE_M,
+      condensed,
     });
     const guidance = rapierGuidancePresentation(state);
     const cycle = rapierCycleTeachPresentation(state);
@@ -2160,6 +2162,7 @@ class CombatHud {
       directiveText = cycle.skinText;
       directiveLevel = cycle.thermalLevel === "fault" ? "attack" : "active";
     }
+    if (condensed) directiveText = directiveText.replaceAll(" · ", "·");
 
     const rows = [
       { key: "actual", text: tactical.actualText, color: GREEN },
@@ -2227,6 +2230,7 @@ class CombatHud {
         width,
         height,
         fontSize,
+        condensed,
         actualText: tactical.actualText,
         contextText: tactical.contextText,
         directiveText,

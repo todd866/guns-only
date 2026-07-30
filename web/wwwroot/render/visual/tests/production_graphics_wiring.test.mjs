@@ -286,7 +286,7 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
   assert.match(source, /cameraPosition: this\.camera\.position,[\s\S]*deltaSeconds: dt/,
     "terrain streaming must receive frame time for bounded velocity-ahead prefetch");
   assert.match(source,
-    /import \{[\s\S]*createDecisionSupportSea[\s\S]*\} from "\.\/render\/scene\/scene_builders\.js\?v=199"/,
+    /import \{[\s\S]*createDecisionSupportSea[\s\S]*\} from "\.\/render\/scene\/scene_builders\.js\?v=200"/,
     "the active ocean builder must be sourced from the scene builder module");
   assert.match(source, /createDecisionSupportSea\(\)/,
     "production must instantiate the decision-support sea");
@@ -528,8 +528,11 @@ test("packless modern flight owns adaptive 3D resolution and raw foreground fram
     readFile(sceneBuildersUrl, "utf8"),
   ]);
   assert.match(source,
-    /const constrainedVisualDevice = detectedDeviceMemoryGiB <= 4 \|\| detectedLogicalCores <= 4[\s\S]*?const detectedVisualTier = mobileControls[\s\S]*?"mobile" : "balanced"/,
-    "touch input must not automatically demote capable phones to the lowest visual tier");
+    /const touchBalancedVisualDevice = detectedDeviceMemoryGiB !== null[\s\S]*?detectedDeviceMemoryGiB >= 8[\s\S]*?detectedLogicalCores !== null[\s\S]*?detectedLogicalCores >= 8[\s\S]*?const detectedVisualTier = mobileControls[\s\S]*?touchBalancedVisualDevice \? "balanced" : "mobile"/,
+    "touch may enter the heavier tier only when both explicit hardware signals show headroom");
+  assert.doesNotMatch(source,
+    /Number\(navigator\.deviceMemory\) \|\| 8|Number\(navigator\.hardwareConcurrency\) \|\| 8/,
+    "missing Safari hardware signals must not be mistaken for a high-end phone");
   assert.doesNotMatch(source, /oceanRadialSegments: mobileControls|oceanAngularSegments: mobileControls|carrierSprayCount: mobileControls/,
     "touch input must not independently demote effects after hardware selected the visual tier");
   assert.match(source,

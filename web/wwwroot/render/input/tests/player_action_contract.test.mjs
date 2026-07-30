@@ -580,6 +580,9 @@ test("desktop auto-launches while touch pilots retain a real Fly gesture", () =>
   assert.match(appSource,
     /function tryAutoLaunch\([\s\S]*?pauseReasons\.has\("ready"\)[\s\S]*?return launchMission\(selectedBeat\)/);
   assert.match(appSource,
+    /if \(firstFrame\) \{[\s\S]*?bootScreen\.classList\.add\("ready"\);[\s\S]*?queueMicrotask\(tryAutoLaunch\);[\s\S]*?\}/,
+    "desktop auto-launch must wait until the landing surface has presented its first frame");
+  assert.match(appSource,
     /readyStart\.addEventListener\("click"[\s\S]*?requestMobileFullscreenFromGesture\(\)[\s\S]*?activateReadyAction\(\)/,
     "fullscreen must be requested synchronously from the Fly gesture before terrain warmup");
 
