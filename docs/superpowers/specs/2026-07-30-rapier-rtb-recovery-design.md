@@ -113,7 +113,29 @@ Pure consumers of `ApproachSolution`. No presentation code recomputes the profil
 - **Fuel:** surface `fuel_on_arrival_estimate_lb` and `fuel_reserve_margin_lb` against the current
   solution, so the cost of extending is visible at the moment the choice is made.
 
-## Nav display
+## 3D path guidance — the primary display
+
+The Rapier is flown through a screen. There is no cockpit and no canopy; the pilot is looking at a
+rendered image either way, so painting the solved path into that image is not an arcade
+concession — it is the honest depiction of a remotely piloted aircraft, and confining guidance to
+two-dimensional instruments would be the less realistic choice. Real synthetic-vision systems
+already fly this (Garmin SVT pathways and comparable highway-in-the-sky implementations).
+
+It is also the direct fix for the original defect. The gates were invisible spheres; the remedy is
+to draw them.
+
+- The solved path renders as a tunnel: a sequence of frames along the path, sized to the capture
+  corridor, so flying the approach is flying through the frames.
+- Gates are the frames that carry a target speed and a configuration change, marked distinctly.
+- Deviation needs no symbology. Above the tunnel is high, inside is on profile, and the frames
+  compress ahead of you when you are fast.
+- The extension is visible as geometry: a downwind that runs long, or an orbit, is something you can
+  see and fly rather than a number to interpret.
+
+This subsumes most of what deviation cues would have carried, and it is cheaper than either 2D view
+because the 3D scene graph already exists.
+
+## Nav display — supporting
 
 Today's `mesh_nav_map.js` is a free-flight Mesh ND: north-up, pan/zoom/follow, places, free fix,
 active-destination drag, spans 15–400 NM. It is the right tool for the Open Segment and the wrong
@@ -132,8 +154,10 @@ including any extension or 360, the derived gates, the threshold and runway alig
 standard pattern geometry as a faint reference. The free-fly behaviour is untouched; this is a
 second mode and scale band, not a replacement.
 
-**Vertical situation display** — new, and the centre of gravity of this feature. Distance-to-go on
-the horizontal, altitude on the vertical:
+**Vertical situation display** — still earns its place, but as support rather than the centre of
+gravity, which the 3D path now holds. It answers the long-range question the tunnel cannot: at 40 NM
+the path is off-screen or foreshortened to nothing, and "how many track miles do I need" is exactly
+what the VSD shows at a glance. Distance-to-go on the horizontal, altitude on the vertical:
 
 - the required profile from the solution, as a line to the stabilisation point
 - own-ship, and a predicted path from current energy and rate

@@ -721,7 +721,7 @@ git commit -m "Publish the approach solution to the snapshot"
 
 **Spec coverage.** Energy core → Task 1. Always-flyable/track-miles rule → Task 2. Solver, path synthesis, derived gates, deterministic fixed-step, continuous deviation inputs → Task 3. Sphere-conjunction deletion, capture-by-crossing, always-advance, units defect → Task 4. Publication → Task 5.
 
-**Deliberately deferred to later plans**, each named in the decomposition: HUD and ANCA Navigate wiring; fuel-cost-of-extension surfacing; plan-view ARC mode, altitude range arc and predicted track curve; the vertical situation display; the headless multi-quadrant profile harness (it exercises presentation-independent solver behaviour but belongs with the OFT rigs, and Task 3's determinism and monotonicity tests cover the kernel until then).
+**Deliberately deferred to later plans**, each named in the decomposition: HUD and ANCA Navigate wiring; fuel-cost-of-extension surfacing; the 3D path tunnel (now the primary display); plan-view ARC mode, altitude range arc and predicted track curve; the vertical situation display; the headless multi-quadrant profile harness (it exercises presentation-independent solver behaviour but belongs with the OFT rigs, and Task 3's determinism and monotonicity tests cover the kernel until then).
 
 **Known deviation:** S-turn extension folded into `ExtendDownwind` — recorded with rationale in Global Constraints.
 
