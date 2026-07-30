@@ -1,99 +1,165 @@
 import { deriveAncaView } from "./anca_view_model.js";
 
-/// Persistent ANCA spine/panel. Desktop: four full rows, top-right. Portrait/touch: four
-/// letter chips on the right edge, kept clear of the touch stick reservation; tapping a chip
-/// reveals its row line for 6 s. View-only by doctrine — the only interaction is peeking at
-/// a row; the automation runs everything the panel reports.
-const EXPAND_MS = 6000;
+/// Stowable ANCA auxiliary panel. One quiet control is present during a sortie; the four-channel
+/// automation readout opens only when the player asks for it. It remains view-only — stowing or
+/// opening the panel never changes what the automation does.
 
 export function createAncaPanelPresentation(documentLike, mount = documentLike.body) {
   const root = documentLike.createElement("aside");
   root.setAttribute("data-anca-panel", "");
-  root.setAttribute("aria-label", "ANCA situational awareness");
+  root.setAttribute("aria-label", "ANCA auxiliary automation status");
+  root.hidden = true;
+  root.dataset.open = "false";
   root.innerHTML = `
     <style>
+      [data-anca-panel][hidden] { display: none; }
       [data-anca-panel] {
         position: fixed;
         z-index: 9;
         right: max(10px, env(safe-area-inset-right));
-        top: 50%;
-        transform: translateY(-50%);
+        top: max(98px, calc(env(safe-area-inset-top) + 84px));
         display: flex;
         flex-direction: column;
-        gap: 6px;
+        align-items: flex-end;
+        gap: 7px;
         color: #bfe9e4;
         font: 700 10px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         letter-spacing: .06em;
         text-shadow: 0 1px 4px #000;
         pointer-events: none;
       }
-      [data-anca-panel] .anca-row {
-        display: flex;
-        align-items: center;
-        gap: 7px;
-        justify-content: flex-end;
-      }
-      [data-anca-panel] .anca-chip {
+      [data-anca-panel] .anca-toggle {
         pointer-events: auto;
-        width: 26px;
+        min-width: 58px;
         height: 26px;
-        display: grid;
-        place-items: center;
-        padding: 0;
-        border: 1px solid rgba(191, 233, 228, .3);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        padding: 0 9px;
+        border: 1px solid rgba(191, 233, 228, .24);
         border-radius: 6px;
-        background: rgba(6, 15, 18, .82);
-        color: inherit;
+        background: rgba(6, 15, 18, .72);
+        color: rgba(191, 233, 228, .72);
         font: inherit;
-        letter-spacing: inherit;
+        letter-spacing: .12em;
+        text-shadow: inherit;
         backdrop-filter: blur(3px);
-        opacity: .55;
+        cursor: pointer;
+      }
+      [data-anca-panel] .anca-toggle::after {
+        content: "+";
+        font-size: 12px;
+        line-height: 1;
+        opacity: .7;
+      }
+      [data-anca-panel][data-open="true"] .anca-toggle::after { content: "−"; }
+      [data-anca-panel][data-tone="attention"] .anca-toggle {
+        border-color: rgba(232, 194, 104, .72);
+        color: #e8c268;
+      }
+      [data-anca-panel][data-tone="attention"] .anca-toggle::before {
+        content: "";
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+        box-shadow: 0 0 7px currentColor;
+      }
+      [data-anca-panel] .anca-drawer {
+        width: min(340px, calc(100vw - 20px));
+        box-sizing: border-box;
+        padding: 10px;
+        border: 1px solid rgba(191, 233, 228, .22);
+        border-radius: 8px;
+        background: rgba(6, 15, 18, .86);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, .22);
+        backdrop-filter: blur(5px);
+        pointer-events: none;
+      }
+      [data-anca-panel] .anca-drawer[hidden] { display: none; }
+      [data-anca-panel] .anca-title {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin: 0 0 8px;
+        padding: 0 2px 7px;
+        border-bottom: 1px solid rgba(191, 233, 228, .14);
+      }
+      [data-anca-panel] .anca-title strong {
+        letter-spacing: .14em;
+        color: rgba(191, 233, 228, .9);
+      }
+      [data-anca-panel] .anca-title span {
+        color: rgba(191, 233, 228, .46);
+        font-size: 8px;
+        letter-spacing: .08em;
+      }
+      [data-anca-panel] .anca-row {
+        display: grid;
+        grid-template-columns: 94px minmax(0, 1fr);
+        gap: 10px;
+        align-items: baseline;
+        padding: 6px 4px;
+        border-left: 2px solid transparent;
+      }
+      [data-anca-panel] .anca-label {
+        color: rgba(191, 233, 228, .5);
+        letter-spacing: .08em;
+        text-transform: uppercase;
       }
       [data-anca-panel] .anca-line {
-        display: none;
-        max-width: min(46vw, 330px);
+        display: block;
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
-        padding: 5px 8px;
-        border: 1px solid rgba(191, 233, 228, .22);
-        border-radius: 6px;
-        background: rgba(6, 15, 18, .82);
-        backdrop-filter: blur(3px);
+        text-align: right;
+        color: rgba(191, 233, 228, .82);
       }
-      [data-anca-panel] .anca-row.expanded .anca-line { display: block; }
-      [data-anca-panel] .anca-row[data-tone="steady"] .anca-chip { opacity: .85; }
-      [data-anca-panel] .anca-row[data-tone="attention"] .anca-chip {
-        opacity: 1; border-color: #e8c268; color: #e8c268;
+      [data-anca-panel] .anca-row[data-tone="attention"] {
+        border-left-color: #e8c268;
       }
-      [data-anca-panel] .anca-row[data-tone="active"] .anca-chip {
-        opacity: 1; border-color: #6fc3ff; color: #6fc3ff;
+      [data-anca-panel] .anca-row[data-tone="attention"] .anca-label,
+      [data-anca-panel] .anca-row[data-tone="attention"] .anca-line {
+        color: #e8c268;
       }
-      /* Desktop: full rows always visible, top-right. */
-      html:not(.touch-mode) [data-anca-panel] {
-        top: max(98px, calc(env(safe-area-inset-top) + 84px));
-        transform: none;
+      [data-anca-panel] .anca-row[data-tone="active"] {
+        border-left-color: #6fc3ff;
       }
-      html:not(.touch-mode) [data-anca-panel] .anca-line { display: block; }
-      /* Portrait touch: hold the spine above the movement stick reservation
-         (stick is min(36vw, 156px) square plus its safe-area bottom inset) AND the
-         radio caption box that rides above the sticks while a call is up — the
-         caption is ~120px tall, so the spine clears stick + caption together. */
+      [data-anca-panel] .anca-row[data-tone="active"] .anca-label,
+      [data-anca-panel] .anca-row[data-tone="active"] .anca-line {
+        color: #6fc3ff;
+      }
+      /* Portrait touch: hold the optional drawer above the movement stick reservation. */
       @media (orientation: portrait) {
         .touch-mode [data-anca-panel] {
           top: auto;
-          transform: none;
-          bottom: max(280px, calc(env(safe-area-inset-bottom) + min(36vw, 156px) + 124px));
+          bottom: max(184px, calc(env(safe-area-inset-bottom) + min(36vw, 156px) + 28px));
         }
       }
     </style>
-    ${["aviate", "navigate", "communicate", "administrate"].map((key, index) => `
+    <button class="anca-toggle" data-anca-toggle type="button"
+      aria-expanded="false" aria-controls="anca-auxiliary-drawer"
+      aria-label="Show ANCA automation status">ANCA</button>
+    <div class="anca-drawer" data-anca-drawer id="anca-auxiliary-drawer" hidden>
+      <div class="anca-title">
+        <strong>ANCA</strong>
+        <span>AUTOMATION STATUS · VIEW ONLY</span>
+      </div>
+      ${[
+        ["aviate", "Aviate"],
+        ["navigate", "Navigate"],
+        ["communicate", "Communicate"],
+        ["administrate", "Administrate"],
+      ].map(([key, label]) => `
       <div class="anca-row" data-anca-row="${key}" data-tone="quiet">
+        <span class="anca-label">${label}</span>
         <output class="anca-line" data-anca-line="${key}">—</output>
-        <button class="anca-chip" data-anca-chip="${key}" type="button"
-          aria-label="${key} status">${"ANCA"[index]}</button>
       </div>`).join("")}
+    </div>
   `;
+  const toggle = root.querySelector("[data-anca-toggle]");
+  const drawer = root.querySelector("[data-anca-drawer]");
   const rows = Object.fromEntries(
     [...root.querySelectorAll("[data-anca-row]")]
       .map((node) => [node.dataset.ancaRow, node]),
@@ -102,12 +168,16 @@ export function createAncaPanelPresentation(documentLike, mount = documentLike.b
     [...root.querySelectorAll("[data-anca-line]")]
       .map((node) => [node.dataset.ancaLine, node]),
   );
-  const expandedUntil = Object.create(null);
-  for (const chip of root.querySelectorAll("[data-anca-chip]")) {
-    chip.addEventListener("click", () => {
-      expandedUntil[chip.dataset.ancaChip] = Date.now() + EXPAND_MS;
-    });
-  }
+  let open = false;
+  const setOpen = (nextOpen) => {
+    open = nextOpen === true;
+    root.dataset.open = open ? "true" : "false";
+    drawer.hidden = !open;
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    toggle.setAttribute("aria-label",
+      open ? "Hide ANCA automation status" : "Show ANCA automation status");
+  };
+  toggle.addEventListener("click", () => setOpen(!open));
   mount.appendChild(root);
   let disposed = false;
 
@@ -115,21 +185,24 @@ export function createAncaPanelPresentation(documentLike, mount = documentLike.b
     if (disposed) return;
     const view = deriveAncaView(state);
     root.hidden = !view.visible;
-    if (root.hidden) return;
-    const now = Date.now();
+    if (root.hidden) {
+      setOpen(false);
+      return;
+    }
+    root.dataset.tone = view.tone;
     for (const rowView of view.rows) {
       const node = rows[rowView.key];
       const line = lines[rowView.key];
       if (!node || !line) continue;
       node.dataset.tone = rowView.tone;
       if (line.textContent !== rowView.line) line.textContent = rowView.line;
-      node.classList.toggle("expanded", (expandedUntil[rowView.key] ?? 0) > now);
     }
   };
 
   return Object.freeze({
     element: root,
     update,
+    setOpen,
     dispose() {
       if (disposed) return;
       disposed = true;

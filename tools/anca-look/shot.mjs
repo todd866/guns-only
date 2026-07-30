@@ -1,6 +1,6 @@
-// ANCA panel visual-doctrine probe: boots the PUBLISHED app headless, drives a Rapier
-// intercept sortie into panel-relevant states, and saves PNGs for human review. Pixels are
-// the gate — structural green is not sufficient (memory: hud-visual-verification).
+// ANCA auxiliary-drawer visual-doctrine probe: boots the PUBLISHED app headless, drives
+// a Rapier intercept sortie into panel-relevant states, and saves PNGs for human review.
+// Pixels are the gate — structural green is not sufficient.
 //
 // Usage:
 //   dotnet publish web/GunsOnly.Web.csproj -c Release -o /tmp/guns-only-web ...  # fresh!
@@ -64,31 +64,30 @@ const browser = await chromium.launch({
   args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
 });
 try {
-  // Desktop: full four-row panel.
+  // Desktop: quiet stowed control by default, then the requested four-row drawer.
   const desktop = await browser.newPage({ viewport: { width: 1280, height: 800 } });
   await bootSortie(desktop, `${site.url}${QUERY}`);
+  await shoot(desktop, "desktop-stowed");
+  await desktop.locator("[data-anca-toggle]").click();
+  await desktop.waitForFunction(() =>
+    document.querySelector("[data-anca-toggle]")?.getAttribute("aria-expanded") === "true",
+  undefined, { timeout: 15000 });
   await shoot(desktop, "desktop-panel");
 
-  // Desktop with a live call: the launch sequence talks within the first minute.
-  await desktop.waitForFunction(
-    () => globalThis.__gunsState?.radio_active === true,
-    undefined, { timeout: 120000 });
-  await shoot(desktop, "desktop-radio-active");
   await desktop.close();
 
-  // Portrait touch: the chip spine.
+  // Portrait touch: the same stowed control, above touch reservations.
   const portrait = await browser.newPage({
     viewport: { width: 430, height: 860 }, hasTouch: true });
   await bootSortie(portrait, `${site.url}${QUERY}&input=touch`);
-  await shoot(portrait, "portrait-spine");
+  await shoot(portrait, "portrait-stowed");
 
-  // Tap-to-expand.
-  await portrait.locator('[data-anca-chip="navigate"]').click();
+  // Tap to open the whole optional drawer; tap again would stow it.
+  await portrait.locator("[data-anca-toggle]").click();
   await portrait.waitForFunction(() =>
-    document.querySelector('[data-anca-row="navigate"]')?.classList
-      .contains("expanded") === true,
+    document.querySelector("[data-anca-toggle]")?.getAttribute("aria-expanded") === "true",
   undefined, { timeout: 15000 });
-  await shoot(portrait, "portrait-expanded");
+  await shoot(portrait, "portrait-open");
   await portrait.close();
 } finally {
   await browser.close();

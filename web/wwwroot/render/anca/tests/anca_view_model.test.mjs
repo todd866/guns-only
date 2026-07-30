@@ -4,6 +4,7 @@ import {
   CHECKLIST_NAMES,
   administrateRow,
   aviateRow,
+  closedAncaTone,
   communicateRow,
   deriveAncaView,
   navigateRow,
@@ -54,6 +55,23 @@ test("panel hides on the ready and finished screens", () => {
   assert.equal(deriveAncaView(state()).visible, true);
 });
 
+test("the stowed control stays quiet for routine automation and live radio", () => {
+  const routine = deriveAncaView(state());
+  assert.equal(routine.tone, "quiet");
+  assert.equal(closedAncaTone(routine.rows), "quiet");
+
+  const talking = deriveAncaView(state({
+    radio_active: true, radio_speaker: "TOWER", radio_text: "Check gear down.",
+  }));
+  assert.equal(talking.rows[2].tone, "steady");
+  assert.equal(talking.tone, "quiet");
+});
+
+test("the stowed control advertises a genuine attention state", () => {
+  assert.equal(deriveAncaView(state({ gear_unsafe: true })).tone, "attention");
+  assert.equal(deriveAncaView(state({ fuel_bingo: true })).tone, "attention");
+});
+
 test("aviate reads config truth and flags unsafe gear", () => {
   const steady = aviateRow(state());
   assert.equal(steady.tone, "steady");
@@ -91,23 +109,23 @@ test("idle communicate names the channel when the wire carries one", () => {
   assert.doesNotMatch(named.line, /MONITORING/);
 });
 
-test("communicate shows the live call, else the monitored frequency", () => {
+test("communicate keeps net state instead of duplicating the radio transcript", () => {
   const quietRow = communicateRow(state());
   assert.equal(quietRow.tone, "steady");
   assert.match(quietRow.line, /281\.800/);
 
   const talking = communicateRow(state({
     radio_active: true, radio_speaker: "TOWER", radio_text: "Check gear down." }));
-  assert.equal(talking.tone, "active");
-  assert.match(talking.line, /TOWER/);
-  assert.match(talking.line, /Check gear down\./);
+  assert.equal(talking.tone, "steady");
+  assert.match(talking.line, /281\.800/);
+  assert.doesNotMatch(talking.line, /Check gear down\./);
 });
 
 test("administrate shows checklist progress and next item", () => {
   const row = administrateRow(state());
   assert.match(row.line, /LAUNCH 2\/4/);
   assert.match(row.line, /GEAR UP/);
-  assert.equal(row.tone, "attention");
+  assert.equal(row.tone, "steady");
 
   const complete = administrateRow(state({
     checklist_done: 4, checklist_next: "" }));

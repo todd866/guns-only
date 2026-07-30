@@ -49,13 +49,8 @@ export function navigateRow(state) {
 }
 
 export function communicateRow(state) {
-  // Live call wins: the spoken delta is the Communicate channel right now.
-  if (state?.radio_active === true) {
-    const speaker = token(state?.radio_speaker) || "R/T";
-    const text = token(state?.radio_text);
-    return { line: `${speaker} · ${text}`, tone: "active" };
-  }
-  // Idle SA: who owns the net / what frequency — next intent, not a caption log.
+  // ANCA carries net state, not a transcript. R/T remains audible atmosphere unless the player
+  // explicitly enables the accessibility caption.
   const frequency = token(state?.radio_frequency);
   const channel = token(state?.radio_channel);
   if (!frequency && !channel) return null;
@@ -76,7 +71,14 @@ export function administrateRow(state) {
   const parts = [`${name} ${done}/${total}`.trim()];
   const next = token(state?.checklist_next);
   if (next) parts.push(next);
-  return { line: parts.join(" · "), tone: done >= total ? "steady" : "attention" };
+  // An automatic checklist being in progress is normal state, not a pilot alert. The panel can
+  // report progress when requested without leaving an amber demand on the edge of the sortie.
+  return { line: parts.join(" · "), tone: "steady" };
+}
+
+export function closedAncaTone(rows) {
+  // The stowed control only advertises a real exception.
+  return rows.some((item) => item.tone === "attention") ? "attention" : "quiet";
 }
 
 export function deriveAncaView(state) {
@@ -89,5 +91,5 @@ export function deriveAncaView(state) {
   const visible = Boolean(state)
     && state.ready !== true
     && state.finished !== true;
-  return Object.freeze({ visible, rows });
+  return Object.freeze({ visible, tone: closedAncaTone(rows), rows });
 }
