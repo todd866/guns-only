@@ -10,6 +10,9 @@ public interface IBandit {
     IAtmosphereModel Atmosphere { get; set; }
     double T { get; }
     bool CatastrophicallyDamaged { get; }
+    /// True while this actor is deliberately setting the player up rather than fighting them.
+    /// Default false: only the opening sparring pair ever answers otherwise.
+    bool Presenting => false;
     bool WreckSettled { get; }
     ImpactSurface WreckSurface { get; }
     bool WreckSurfaceChangedThisStep { get; }

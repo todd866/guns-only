@@ -20,6 +20,9 @@ public sealed class NeutralMergeBandit :
     /// Carried across the merge gate so the opening pair keeps setting the player up after the
     /// neutral pass ends, instead of snapping straight into a fight they cannot win.
     readonly bool _presenting;
+
+    /// Before the merge gate this is the briefed intent; after it, the live fight owns the answer.
+    public bool Presenting => _fight?.Presenting ?? _presenting;
     readonly PilotSkill _skill;
     readonly BanditSkillProfile _profile;
     readonly int? _doctrineIndex;

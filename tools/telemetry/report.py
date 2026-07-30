@@ -259,7 +259,8 @@ def deep_funnel(sessions, visitors, refresh):
         parallel(jobs)
 
     stats = collections.defaultdict(
-        lambda: {"flew": False, "rounds": 0.0, "hits": 0.0, "kills": 0.0, "sorties": set()})
+        lambda: {"flew": False, "rounds": 0.0, "hits": 0.0, "kills": 0.0, "sorties": set(),
+                 "sparred": False, "graduated": False})
     for name in visitors:
         for blob in sessions[name]:
             path = os.path.join(chunk_dir, blob["pathname"].replace("/", "_"))
@@ -280,6 +281,12 @@ def deep_funnel(sessions, visitors, refresh):
                     state = replay_state(row, state)
                     if not state:
                         continue
+                    # Did the opening pair set them up, and did they earn their way out of it?
+                    presenting = state.get("bandit_presenting")
+                    if presenting is True:
+                        entry["sparred"] = True
+                    elif presenting is False and entry["sparred"]:
+                        entry["graduated"] = True
                     sortie = state.get("telemetry_sortie_id")
                     if sortie:
                         entry["sorties"].add(sortie)
@@ -377,7 +384,11 @@ def main():
         kills = int(sum(stats[n]["kills"] for n in visitors))
         print("COMBAT FUNNEL (visitors only)")
         print(line)
+        sparred = [n for n in visitors if stats[n]["sparred"]]
+        graduated = [n for n in visitors if stats[n]["graduated"]]
         print(f"  loaded the sim          {len(visitors):>6}")
+        print(f"  met a sparring partner  {len(sparred):>6}")
+        print(f"  graduated it            {len(graduated):>6}")
         print(f"  started a sortie        {len(flew):>6}")
         print(f"  fired the guns          {len(fired):>6}")
         print(f"  landed a hit            {len(scored):>6}")
