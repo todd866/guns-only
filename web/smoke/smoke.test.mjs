@@ -661,22 +661,46 @@ test("the published web app boots to a running flight kernel (no fatal render er
     );
     assert.ok(audioRuntime.sessionId, "audio QA session must be attributable to one page instance");
 
-    // The per-frame path must ride the hot buffer: over a 5.5-second window the full JSON
+    // The per-frame path must ride the hot buffer: over a nominal 5.5-second window the full JSON
     // snapshot should be fetched only on cold_version edges + the five-second fallback, never
     // per frame (~60+/s). This catches a silent regression to JSON-per-frame while still proving
     // the low-rate correctness fallback remains alive.
     const snapshotWindow = await page.evaluate(async () => {
       const diagnostics = () => globalThis.__gunsSnapshotBridge?.diagnostics() ?? null;
+      const firstAtMs = performance.now();
       const first = diagnostics();
       await new Promise((resolve) => setTimeout(resolve, 5500));
-      return { first, second: diagnostics() };
+      return {
+        first,
+        firstAtMs,
+        second: diagnostics(),
+        secondAtMs: performance.now(),
+      };
     });
     assert.ok(snapshotWindow.first && snapshotWindow.second,
       "hot snapshot bridge diagnostics unavailable");
     const coldFetchesInWindow =
       snapshotWindow.second.coldFetches - snapshotWindow.first.coldFetches;
-    assert.ok(coldFetchesInWindow >= 1 && coldFetchesInWindow <= 2,
-      `cold JSON fetch cadence out of band: ${coldFetchesInWindow}/5.5s`);
+    const elapsedMs = snapshotWindow.secondAtMs - snapshotWindow.firstAtMs;
+    const coldVersionDelta = Math.max(
+      0,
+      snapshotWindow.second.coldVersion - snapshotWindow.first.coldVersion,
+    );
+    // A busy SwiftShader process can delay the page timer well past its requested 5.5 seconds.
+    // Bound fallbacks against elapsed page time, allowing one partial five-second interval at the
+    // start plus every intentional cold_version edge observed during the window.
+    const timerAndEdgeMaximum =
+      Math.floor(elapsedMs / 5_000) + 1 + coldVersionDelta;
+    // Preserve the original gross anti-churn guard even if a future fingerprint bug advances
+    // cold_version every frame and would otherwise make every fetch look intentional.
+    const grossColdFetchMaximum = Math.ceil(elapsedMs / 1_000) * 15;
+    const maximumColdFetches = Math.min(timerAndEdgeMaximum, grossColdFetchMaximum);
+    assert.ok(
+      coldFetchesInWindow >= 1 && coldFetchesInWindow <= maximumColdFetches,
+      `cold JSON fetch cadence out of band: ${coldFetchesInWindow} fetches `
+        + `in ${elapsedMs.toFixed(1)}ms (max ${maximumColdFetches}, `
+        + `cold-version delta ${coldVersionDelta})`,
+    );
 
     await page.evaluate(async () => {
       const { suspendFlightAudio } = await import("/render/audio/flight_audio.js");
