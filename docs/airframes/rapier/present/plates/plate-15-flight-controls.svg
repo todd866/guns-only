@@ -2,7 +2,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 520" width="720" height="520" font-family="IBM Plex Mono, ui-monospace, monospace">
   <rect width="100%" height="100%" fill="#f7f4ef"/>
   <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 15 — Flight controls · rapier.public-data-surrogate.v1 @ 1.2.0</text>
-  <text x="24" y="48" font-size="10" fill="#555">Elevons + twin rudders · FBW · RCS at collapsed q · epistemic: provisional actuators</text>
+  <text x="24" y="48" font-size="10" fill="#555">Elevons + open directional-control trade · FBW · RCS at collapsed q · provisional actuators</text>
   <line x1="24" y1="58" x2="696" y2="58" stroke="#222" stroke-width="1"/>
 
   <text x="40" y="90" font-size="12" font-weight="700">PLAN · control surfaces</text>
@@ -26,7 +26,7 @@
   <text x="370" y="378" font-size="9">Hydraulic vs EMA — prefer EMA (mass/heat)</text>
   <text x="370" y="394" font-size="9">Elevon rate ≥ 40°/s design target</text>
   <text x="370" y="410" font-size="9">Dual-redundant per surface</text>
-  <text x="370" y="426" font-size="9">FBW laws in spine computers (plate 16)</text>
+  <text x="370" y="426" font-size="9">FBW laws in distributed computers; installation open (plate 16)</text>
   <text x="370" y="442" font-size="9">Trim: elevon bias, no separate stab</text>
 
 </svg>

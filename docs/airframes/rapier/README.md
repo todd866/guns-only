@@ -47,6 +47,24 @@ make a sustained air-breathing Mach-4 dash closed engineering:
 
 **Read first:** [`REALISM-AND-OVERPERFORMANCE.md`](REALISM-AND-OVERPERFORMANCE.md).
 
+## Owner-directed geometry reopening — 2026-07-30
+
+Two local parts of the checked-in 1.4.0 geometry are no longer design authority:
+
+- the pilot is fully reclined in a capsule buried inside the forward centrebody, with **no cockpit
+  bump, windscreen, canopy or transparency**; the raised `escapePodSpine` is superseded; and
+- Rapier requires directional stability and yaw control, but the current 7.5938 m² twin-fin pair is
+  an unsized visual surrogate. Fin count, area, height, cant and rudder geometry are reopened.
+
+The 13 m length, 7.35 m span, 18 m² aerodynamic reference wing, cranked-delta planform, one ventral
+inlet and one fixed nozzle remain the controlling starting constraints. Runtime geometry,
+and the geometric content of the blueprint plates intentionally remain at the implementation
+snapshot until capsule packaging, crew access, directional derivatives, inlet coupling, structure,
+thermal, signature and failure gates can move together; status and stale fuel/control annotations
+are corrected now. Start with [11 — Visual identity](11-visual-identity-and-buried-capsule.md),
+[13 — Tail trade](13-directional-stability-and-tail-trade.md), and
+[51 — Crew ingress](51-crew-ingress-egress-and-rescue.md).
+
 
 This decision keeps **CMC** and rejects stainless. **Mach-4 dash remains fiction-labelled** until
 telemetry, Identity T/W, and the map agree — see
@@ -57,9 +75,22 @@ telemetry, Identity T/W, and the map agree — see
 - `docs/rapier-gun-drone-system.md` — gun-drone gameplay contract and open system boundary.
 - `docs/superpowers/specs/2026-07-27-rapier-glide-drone-vertical-slice-design.md` — first physical
   drone vertical slice.
+- [`11-visual-identity-and-buried-capsule.md`](11-visual-identity-and-buried-capsule.md) — controlling
+  no-bump/no-transparency exterior contract and synchronized migration.
+- [`13-directional-stability-and-tail-trade.md`](13-directional-stability-and-tail-trade.md) —
+  exact legacy-fin audit, low-fin trade, aerodynamic/failure gates and telemetry.
+- [`18-signature-and-2040-detectability-trade.md`](18-signature-and-2040-detectability-trade.md) —
+  track-delay doctrine, multispectral threat hypotheses and RF/IR/EM test programme.
+- [`51-crew-ingress-egress-and-rescue.md`](51-crew-ingress-egress-and-rescue.md) — flush structural
+  plug, separate pressure hatch, powered couch sled, rescue and escape-envelope work.
 - [`82-launch-gallery-engineering-basis.md`](82-launch-gallery-engineering-basis.md) — durable live
   launch contract plus conceptual civil works, machinery, utilities, cost, visual truth, and
   generated-plate contract.
+- [`83-ground-cycle-and-facility.md`](83-ground-cycle-and-facility.md) — alert cells, transporter,
+  rear handling hall, shuttle loading, turn, recovery and safety state machine.
+- [`84-industrial-network-and-supply-chain.md`](84-industrial-network-and-supply-chain.md) —
+  fictional production network grounded in real process analogues, workforce, rate, cost, rotables
+  and strategic chokepoints.
 - `docs/2026-07-26-buried-launch-tube-and-the-ukraine-theatre.md` — historical buried-gallery and
   Ukraine-siting design record; its 150 m/s geometry, timing, loads, and quantities are superseded.
 - `docs/2026-07-26-reclined-seat-and-ukraine-setting.md` — reclined-occupant physiology thesis
@@ -73,32 +104,43 @@ mass; systems follow)
 | # | Chapter | Status |
 | --- | --- | --- |
 | [00](00-mission-and-ops.md) | Mission and flight regime | closed regime boxes; surrogate dash claim |
-| [10](10-geometry.md) | Geometry | closed envelope |
-| [12](12-aerodynamics-and-controls.md) | Aerodynamics and control allocation | closed architecture; provisional schedules |
-| [15](15-structure-and-build.md) | Structure and build | provisional gauges; OML closed |
+| [10](10-geometry.md) | Geometry | principal envelope/wing closed; capsule and tail locally reopened |
+| [11](11-visual-identity-and-buried-capsule.md) | Visual identity and buried capsule | no bump/transparency closed; synchronized geometry revision open |
+| [12](12-aerodynamics-and-controls.md) | Aerodynamics and control allocation | wing/control architecture; tail-derived yaw deck open |
+| [13](13-directional-stability-and-tail-trade.md) | Directional stability and tail trade | exact current audit; smaller twins proposed; geometry not frozen |
+| [15](15-structure-and-build.md) | Structure and build | provisional gauges; principal OML constrained; capsule/tail attachments reopened |
 | [16](16-manufacturing-and-industrial-basis.md) | Manufacturing and the 2026 industrial basis | anchor lineage + 2026 basis; fiction program shape |
-| [17](17-signatures-and-survivability.md) | Signatures and survivability | closed refusal of LO; surrogate kinematic doctrine |
+| [17](17-signatures-and-survivability.md) | Signatures and survivability | full-LO refusal; kinematic/dispersed doctrine |
+| [18](18-signature-and-2040-detectability-trade.md) | Signature and 2040 detectability trade | signature discipline proposed; threat/performance evidence open |
 | [20](20-thermal-and-materials.md) | Thermal and materials | closed CMC freeze; surrogate zones |
 | [30](30-propulsion-and-inlet.md) | Propulsion and inlet | closed map constants + per-stream fuel |
 | [40](40-mass-and-cg.md) | Mass and CG | closed mass statement; provisional CG travel |
 | [50](50-crew-escape-fbw.md) | Crew, escape, FBW | provisional escape jettison; surrogate FBW gains |
+| [51](51-crew-ingress-egress-and-rescue.md) | Crew ingress, egress, and rescue | flush plug/couch sled proposed; packaging/qualification open |
 | [60](60-armament-and-drones.md) | Armament and drones | closed ownship gun; provisional drone packaging |
 | [70](70-landing-gear-arrest.md) | Landing gear, arrest | closed catapult geometry; provisional strip/hook detail |
 | [80](80-basing-and-ground.md) | Basing and ground | closed gallery clearance; fiction theatre siting |
 | [82](82-launch-gallery-engineering-basis.md) | Launch-gallery engineering basis | closed live interface; conceptual construction/cost/presentation contract |
+| [83](83-ground-cycle-and-facility.md) | Ground cycle and facility | proposed cell/transfer/shuttle/turn system; safety closure open |
+| [84](84-industrial-network-and-supply-chain.md) | Industrial network and supply chain | proposed fictional network; real process analogues and open rate/cost decisions |
 | [90](90-failure-modes.md) | Failure modes | provisional FMECA seed list |
 | [95](95-cost-ledger.md) | Cost ledger | surrogate CMC premium; Phase 2 closes the table |
 | [icds/propulsion-airframe](icds/propulsion-airframe.md) | Propulsion ↔ airframe ICD | provisional |
 | [icds/fbw-crew](icds/fbw-crew.md) | FBW ↔ crew capsule ICD | provisional |
 | [icds/gun-drone-carriage](icds/gun-drone-carriage.md) | Carrier ↔ drone cell ICD | provisional |
 | [icds/basing-arrest](icds/basing-arrest.md) | Basing ↔ arrest ICD | provisional |
-| [blueprints/](blueprints/README.md) | Plates **00–20** construction package | `rapier.v1.json` @ **1.2.0** |
+| [blueprints/](blueprints/README.md) | Plates **00–20** construction package | current implementation `rapier.v1.json` @ **1.4.0**; capsule/tail revision pending |
 | [present/](present/index.html) | Teaching deck (MD `/present` grammar) | serve via `web/wwwroot/present/rapier-design/` |
+| [airframe concept](present/rapier-airframe-concept-v4-no-gun-cue.md) | Current no-bump/low-fin visual candidate + exact prompt/provenance | reference only; gun aperture and fin geometry remain open |
+| [crew-ingress concept](present/rapier-crew-ingress-concept-v1.md) | Four-stage flush-hatch/couch-sled study + exact prompt | reference only; packaging gate open |
+| [ground-cycle concept](present/rapier-ground-cycle-concept-v1.md) | Alert-cell-to-shuttle storyboard + exact prompts | reference only; launcher ICD/runout open |
 | [REALISM](REALISM-AND-OVERPERFORMANCE.md) | Telemetry / overperformance audit + dynamics↔sound map | **read with chapter 00**; program: [flight+sound realism design](../../superpowers/specs/2026-07-29-rapier-flight-sound-realism-design.md) |
 
-Chapters 00–40 (§§1–5 of the design spec) are the closed engineering spine and must be readable on
-their own, without the JSON Airframe Definition or its schema. Chapters 50–95 and the ICDs (§6 of
-the design spec) are systems that *follow* from that spine; several are explicitly stubbed and
-tagged provisional or open finding rather than filled with invented precision.
+Chapters 00–40 (§§1–5 of the design spec) are the mission-driven engineering spine and must be
+readable on their own, without the JSON Airframe Definition or its schema. Principal planform,
+propulsion and mass constraints remain closed; chapters 11, 13 and 18 explicitly reopen the local
+capsule/tail/signature integration. Chapters 50–95 and the ICDs (§6 of the design spec) are systems
+that *follow* from that spine; several are tagged proposed, provisional or open finding rather than
+filled with invented precision.
 
 **Live deck:** with the web host running, open `/present/rapier-design/` (arrow keys / Space / F).

@@ -16,7 +16,7 @@ prose in `docs/2026-07-26-buried-launch-tube-and-the-ukraine-theatre.md` and
 | --- | --- | --- |
 | Leading edges, inlet lip, nozzle / aft tunnel | SiC/SiC-class CMC, authored 1200 °C material-capability surrogate | Survive M4 stagnation + hot gas |
 | Primary airframe skins, tanks, cold structure | Ordinary composite | Mass and cost |
-| Escape / sensor spine | Opaque composite | No glass canopy; thermal and ballistic shell |
+| Buried capsule zone / flush sensor apertures | Opaque composite outer skin over an internal pressure shell | No glass canopy and no exterior cockpit bump; access plug, seals and separation path remain open |
 | Tip accents | Paint / cool metal | Presentation only |
 
 Closed repo number: `SkinTemperatureLimitK = 1473.15` (1200 °C) in

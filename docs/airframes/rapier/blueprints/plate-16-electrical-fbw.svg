@@ -17,7 +17,7 @@
   <text x="490" y="168" text-anchor="middle" font-size="8">escape + FBW hold-up</text>
   <rect x="60" y="220" width="200" height="90" fill="#11191d" fill-opacity="0.85"/>
   <text x="160" y="255" text-anchor="middle" font-size="10" fill="#fff" font-weight="700">FBW A / B</text>
-  <text x="160" y="275" text-anchor="middle" font-size="8" fill="#ccc">dual lane · spine rack</text>
+  <text x="160" y="275" text-anchor="middle" font-size="8" fill="#ccc">redundant lanes · rack location open</text>
   <rect x="280" y="220" width="140" height="90" fill="#596b73" fill-opacity="0.35" stroke="#222"/>
   <text x="350" y="255" text-anchor="middle" font-size="10" font-weight="700">MISSION</text>
   <text x="350" y="275" text-anchor="middle" font-size="8">sensors · datalink</text>

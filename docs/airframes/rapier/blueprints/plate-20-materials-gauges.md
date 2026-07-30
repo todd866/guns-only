@@ -22,7 +22,7 @@ Skin limit **1473.15 K** closed as materials freeze constant.
 | --- | --- | --- |
 | Wing skins | 2–4 mm face + core | Stiffness vs mass for AR 3 |
 | Fuselage cold skins | 2–3 mm sandwich | Cabin rule + pressurization of spine only |
-| CMC LE | as printable insert | Thermal, not primary bending |
+| CMC LE | qualified preform/infiltration insert; exact route open | Thermal, not primary bending |
 | Keel longeron | section TBD | Carry cat + hook + gear |
 
 **Do not treat these gauges as closed.** They are shop-start numbers so the BOM has something to
@@ -38,5 +38,7 @@ iterate; validate against 12 G dive and catapult loads before claiming build rea
 
 ## Epistemic
 
-CMC temperature capability is the **materials freeze**. Printed CMC as a 2030s trajectory is
-**surrogate**. Gauges and fastener specs are **provisional** until a structural sizing pass closes them.
+CMC temperature capability is the **materials freeze**. The fibre architecture, interphase,
+densification, coating, machining and joining route is **provisional**; this plate makes no
+printed-whole-component claim. Gauges and fastener specs remain provisional until a structural
+sizing pass closes them.

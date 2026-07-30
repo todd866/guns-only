@@ -1,6 +1,8 @@
 # 10 — Geometry
 
-← [00 — Mission and flight regime](00-mission-and-ops.md) · Next: [20 — Thermal and materials](20-thermal-and-materials.md)
+← [00 — Mission and flight regime](00-mission-and-ops.md) ·
+Next: [11 — Visual identity and buried crew capsule](11-visual-identity-and-buried-capsule.md) ·
+Related: [13 — Directional stability and tail trade](13-directional-stability-and-tail-trade.md)
 
 Geometry follows from the regime in [00](00-mission-and-ops.md): a fast pass and a trap, not a
 sustained turning fight, sized around a duct-dominated body rather than a fat fighter fuselage.
@@ -28,17 +30,19 @@ sustained turning fight, sized around a duct-dominated body rather than a fat fi
   ~M0.85).
 - **Area-ruled body.** `CD0` 0.0175, `InducedK` 0.105 — slender OML, small high-speed wing;
   the presentation loft is a pinched ellipse sequence, not a fat fighter fuselage.
-- **Twin fins + tip accents.** Directional stability at altitude; accents are readability, not
-  stores.
+- **Directional-control solution + tip accents.** Directional stability and yaw control remain
+  requirements; the current enormous twin-fin polygon is a visual surrogate, not an aerodynamic
+  sizing result. Fin count and geometry are reopened in [13](13-directional-stability-and-tail-trade.md).
+  Accents are readability, not stores.
 
 ## Inlet / nozzle placement (from `createRapier`, mesh frame)
 
 | Feature | Placement (mesh frame) | Why |
 | --- | --- | --- |
-| Blended ventral inlet | ring ~r 0.29–0.55 at `(0, −0.22, −3.72)`, scaleY 0.72 | Single capture for TBCC; keep duct under spine |
+| Blended ventral inlet | ring ~r 0.29–0.55 at `(0, −0.22, −3.72)`, scaleY 0.72 | Single capture for TBCC; keep duct below the forward centrebody/capsule package |
 | Propulsion tunnel | loft under belly −3.68 → 6.1 | Continuous core-bypass path; one nozzle |
 | Exhaust | torus r~0.34 at `(0, −0.10, 6.12)` | Aft hot zone; CMC fairing |
-| Opaque escape/sensor spine | loft above body, no canopy | No windscreen; crew behind sensors |
+| Buried opaque crew capsule | inside the forward centrebody, no canopy or exterior bump | Owner direction; current raised `escapePodSpine` is superseded pending synchronized geometry revision |
 
 **Frame convention (closed):** the Three.js Rapier space uses +Z aft (nose toward −Z). The capture
 kit documents this as `frameConvention: "threejs-createRapier-v1"` so plates and JSON do not flip the
@@ -68,7 +72,11 @@ grow span without revisiting the launcher.
 
 ## Epistemic
 
-All dimensions above are **closed**, tied to concrete repo constants (`FlightModel.RapierPublicDataSurrogate`,
-`createRapier` in `scene_builders.js`, `TurboRamjetPerformanceMap.RamCaptureAreaM2`). This chapter is
-readable without the JSON Airframe Definition — the definition is a 1:1 migration of these same
-numbers, not a separate source of truth.
+The 13 m length, 7.35 m span, 18 m² aerodynamic reference area, authored wing planform, inlet and
+nozzle are the controlling closed starting constraints tied to concrete repo constants
+(`FlightModel.RapierPublicDataSurrogate`, `createRapier` in `scene_builders.js`,
+`TurboRamjetPerformanceMap.RamCaptureAreaM2`). Local centrebody/capsule and tail geometry are
+**reopened**: the checked-in definition still contains the superseded raised spine and an unsized
+twin-fin surrogate. This chapter remains readable without the JSON Airframe Definition; the
+definition records the current implementation and must now be revised with the engineering
+evidence, not treated as authority against the newer owner direction.

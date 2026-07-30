@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 520" width="720" height="520" font-family="IBM Plex Mono, ui-monospace, monospace">
   <rect width="100%" height="100%" fill="#f7f4ef"/>
-  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 13 — Fuel system · rapier.public-data-surrogate.v1 @ 1.2.0</text>
+  <text x="24" y="28" font-size="14" font-weight="700" fill="#1a1a1a">Plate 13 — Fuel system · rapier.public-data-surrogate.v1 @ 1.4.0</text>
   <text x="24" y="48" font-size="10" fill="#555">Usable 4500 kg closed capacity · tank layout provisional · lever-only burn still open finding</text>
   <line x1="24" y1="58" x2="696" y2="58" stroke="#222" stroke-width="1"/>
 
@@ -20,7 +20,7 @@
   <rect x="40" y="320" width="320" height="160" fill="#fff" stroke="#3d9b7a"/>
   <text x="50" y="340" font-size="10" font-weight="700" fill="#3d9b7a">CLOSED</text>
   <text x="50" y="358" font-size="9">Capacity 4500 kg (~9920 lb)</text>
-  <text x="50" y="374" font-size="9">Alert load 3100 lb (~1406 kg)</text>
+  <text x="50" y="374" font-size="9">Alert load 3600 lb (~1633 kg)</text>
   <text x="50" y="390" font-size="9">Bingo / min / emerg 1000/600/300 lb</text>
   <text x="50" y="406" font-size="9">CG kept in FBW envelope by burn order</text>
   <text x="50" y="422" font-size="9">FWD→CENTRE→AFT transfer preference</text>
@@ -29,10 +29,10 @@
   <text x="390" y="340" font-size="10" font-weight="700" fill="#c45c48">OPEN / PROVISIONAL</text>
   <text x="390" y="358" font-size="9">Tank walls / bladder design</text>
   <text x="390" y="374" font-size="9">Exact station volumes</text>
-  <text x="390" y="390" font-size="9">Per-stream fuel (turbine vs ram)</text>
-  <text x="390" y="406" font-size="9">— still lever-only in map</text>
-  <text x="390" y="422" font-size="9">Do not claim ram-cruise lb/nm</text>
-  <text x="390" y="438" font-size="9">until per-stream lands</text>
+  <text x="390" y="390" font-size="9">Per-stream map closed in kernel</text>
+  <text x="390" y="406" font-size="9">Mission burn calibration surrogate</text>
+  <text x="390" y="422" font-size="9">Transfer / collector architecture</text>
+  <text x="390" y="438" font-size="9">Do not claim qualified range</text>
   <text x="390" y="454" font-size="9">Inerting / vent: provisional</text>
 
 </svg>

@@ -3,9 +3,10 @@
 ← [10 — Geometry](10-geometry.md) · Next: [15 — Structure and build](15-structure-and-build.md)
 
 This chapter closes the *simulation architecture* of the Rapier wing. It does not claim that a
-fictional aircraft has acquired OEM wind-tunnel data. Geometry is closed; coefficients and
-high-speed schedules are public-theory **surrogates / provisional** until a CFD, tunnel, or flight
-deck replaces them.
+fictional aircraft has acquired OEM wind-tunnel data. The wing reference geometry and principal
+planform are closed; the local capsule and directional-control geometry are reopened. Coefficients
+and high-speed schedules are public-theory **surrogates / provisional** until a CFD, tunnel, or
+flight deck replaces them.
 
 ## Wing-of-record
 
@@ -17,13 +18,18 @@ deck replaces them.
 | Mean reference chord, S/b | **2.449 m** | derived / closed |
 | Rendered solid planform polygon | **24.3173 m²** | closed mesh arithmetic |
 | Body-overlap / non-reference residual | **6.3173 m²** | named; must not become lift area |
-| Controls | one elevon each side + twin rudders | closed arrangement |
+| Controls | one elevon each side; directional-stability/yaw solution required | elevons closed; current twin-fin/rudder geometry reopened |
 
 The mesh has always depicted a thin cranked/delta planform. What was missing was the explicit
 distinction between the **24.3173 m² drawn polygon** and the **18 m² aerodynamic reference area**.
 The renderer includes carry-through/body-overlap geometry; the flight equations nondimensionalise
 forces and moments with S = 18 m². Silently swapping one for the other would add about 35% lift and
 moment area.
+
+The kernel still names twin rudders, but the definition contains only two mirrored fixed fin
+polygons: no hinge, movable chord, actuator, deflection schedule, tail-derived `Cnβ`, `Cnr`, or
+`Cnδr` exists. The control requirement is closed; the surface architecture is not. See
+[13 — Directional stability and tail trade](13-directional-stability-and-tail-trade.md).
 
 ## Lift: three limits, not one magic G number
 
@@ -123,6 +129,8 @@ Mach-two-class aircraft; the repo's deeper coefficients remain labelled surrogat
 
 - Reynolds-number and control-deflection aerodynamic tables (`CL/CD/Cm/Cl/Cn` vs Mach, alpha,
   beta, rate, and configuration), including hysteresis.
+- Tail-off and with-tail lateral-directional derivatives, rudder geometry/hinge moments, recovery
+  crosswind, high-Mach buffet/heating, jam/hard-over and RCS-inhibited handling evidence.
 - Inlet mass-flow, distortion, buzz, and unstart/restart states rather than scalar recovery.
 - Aeroelastic twist, hinge moment / actuator load, flutter, and control reversal versus q.
 - V-n / V-q structural damage, fatigue life, asymmetric failure, and stores/bay-door effects.

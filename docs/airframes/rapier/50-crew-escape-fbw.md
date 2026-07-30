@@ -6,13 +6,19 @@
 [20](20-thermal-and-materials.md) and [00](00-mission-and-ops.md) — it does not introduce new
 freezes of its own.*
 
+**Controlling owner direction, 2026-07-30:** the fully reclined capsule is completely buried inside
+the forward centrebody. There is no cockpit bump, windscreen, canopy, transparency or direct-view
+panel. The checked-in raised `escapePodSpine` is superseded. Normal access, emergency rescue and
+the proposed flush structural hatch/couch-sled architecture are developed in
+[51 — Crew ingress, egress, and rescue](51-crew-ingress-egress-and-rescue.md).
+
 ## Why no windscreen
 
 CMC hot structure and Mach-4 stagnation heating make a transparency a liability, not a feature (see
 [20 — Thermal and materials](20-thermal-and-materials.md)). The occupant rides reclined inside an
-opaque composite escape pod; sensors and automation fly the aircraft and present the outside world.
-The pod is a sealed shell, not a canopy over a cockpit — pressure vessel and escape capsule are the
-same object.
+opaque composite escape pod buried under the continuous outer skin; sensors and automation fly the
+aircraft and present the outside world. The pod is a sealed shell, not a canopy over a
+cockpit—pressure vessel and escape capsule are the same object.
 
 ## Structural limit and the reclined thesis
 
@@ -53,7 +59,8 @@ lob and consumes gas on all three axes. Symmetric landing elevon droop consumes 
 
 ## Power / avionics — qualitative only (Phase 2 closes watts)
 
-Driven by: sensor spine, FBW, environmental conditioning for drone cells, cold-gas RCS storage
+Driven by: distributed flush sensors and buried capsule, FBW, environmental conditioning for drone
+cells, cold-gas RCS storage
 (see [30 — Propulsion and inlet](30-propulsion-and-inlet.md)), and clinical capsule displays (cold
 instruments vs the soft outside world — ADR-0003). **Phase 1 states interfaces only; Phase 2 closes
 a power budget table.** Do not publish a watt figure in this chapter until that table exists.

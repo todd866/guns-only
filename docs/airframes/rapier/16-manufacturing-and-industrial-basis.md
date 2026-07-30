@@ -43,15 +43,17 @@ manufacturing rate, and the crew economics.
    Fourteen years buys **rate production of panels, edges, lip, duct, and nozzle** — never a
    whole-CMC airframe, which the design does not ask for.
 2. **Manufacturing** — the 1960s article was a hand-built jewel. This one is priced as a munition
-   (~$9M class, ~2% structural life per sortie — [95](95-cost-ledger.md)); that price is only
-   coherent as an **additive + out-of-autoclave production line**: printed CMC panel families,
-   fiber-placed cold structure, a single-stream propulsion install with **no TVC and no second
-   nozzle** (`sim/FlightModel.cs` refusal: "hot actuators, mass, maintenance and cost").
-   2026 anchor: additively manufactured flight-critical engine parts fly commercially at
-   scale — the LEAP fuel-nozzle tip was certified November 2015 and passed its **100,000th**
-   printed unit years ago; turboprop cores fly with roughly a third of parts printed;
-   printed-airframe manufacturers deliver military drones and cruise-missile airframes at
-   rate today.
+   (~$9M class, ~2% structural life per sortie — [95](95-cost-ledger.md)); that price is coherent
+   only after a qualified **CMC preform + densification + coating line** is paired with
+   out-of-autoclave/fibre-placed cold structure, a single-stream propulsion install with **no TVC
+   and no second nozzle**, and government-owned production data. Flight-critical SiC/SiC panels are
+   not “printed whole”: fibre architecture, interphase, CVI/MI/PIP or a qualified hybrid,
+   machining, coating and NDI remain the process. Additive manufacture belongs in tooling,
+   sacrificial forms and selected qualified monolithic or metal parts. See
+   [84 — Industrial network and supply chain](84-industrial-network-and-supply-chain.md).
+   2026 anchor: additively manufactured flight-critical engine parts fly commercially at scale—the
+   LEAP fuel-nozzle tip was certified November 2015 and passed its **100,000th** printed unit years
+   ago; that fact supports selected parts and tooling, not a printed CMC airframe.
 3. **Crew economics** — the SR-71 flew a two-man priesthood with astronaut-grade training and a
    tanker fleet. This jet flies one occupant in a reclined, windowless capsule
    ([50](50-crew-escape-fbw.md)) with the automation flying admin ([ANCA](../../superpowers/specs/2026-07-29-anca2040-design.md)) —
@@ -120,9 +122,11 @@ Everything in the lineage and 2026-basis tables is **anchor** — real-world fac
 adversarial verification outside this repo, correctable here without touching the kernel. The
 program-shape section is **fiction** disciplined by those anchors. The honest hard parts a real
 2026 program would sweat are the same three the sim already flags as open findings: TBCC mode
-transition across the handover band, additive-CMC joint fatigue under thermal cycling (the
-2%-life line), and inlet behavior through the M3.3–3.8 spill schedule. Nothing in this chapter
+transition across the handover band, CMC joint/coating durability and densification defects under
+thermal cycling (the 2%-life line), and inlet behavior through the M3.3–3.8 spill schedule. Nothing in this chapter
 claims those are easy — it claims they are **1960s-adjacent engineering plus 2026 materials**,
-which is a different thing from a frontier. That claim holds only because signature
-management is explicitly refused — see [17 — Signatures and survivability](17-signatures-and-survivability.md);
-"somewhat stealthy" would put this aircraft back on a frontier and break the cost thesis with it.
+which is a different thing from a frontier. That claim holds only while signature work stays inside
+robust shaping/aperture/emissions discipline rather than becoming an exquisite full-spectrum LO
+programme—see [17 — Signatures and survivability](17-signatures-and-survivability.md) and
+[18 — Signature and 2040 detectability trade](18-signature-and-2040-detectability-trade.md).
+“Invisible at Mach 3.55” would put this aircraft back on a frontier and break the cost thesis.

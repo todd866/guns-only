@@ -11,7 +11,7 @@
 | --- | --- | --- |
 | Structure (CMC hot + composite cold) | ~$5–6M | CMC premium vs stainless counterfactual |
 | TBCC core + duct + inlet | ~$2–3M | single stream, no TVC |
-| Avionics / opaque sensor spine / FBW | ~$0.8–1.2M | reclined capsule, no HUD glass boat |
+| Avionics / distributed opaque sensors / FBW | ~$0.8–1.2M | buried reclined capsule; no windscreen or glass cockpit |
 | Escape pod / seat / life support | ~$0.4–0.6M | |
 | **Flyaway class** | **~$9M** | Matches `FlightModel` class comment |
 

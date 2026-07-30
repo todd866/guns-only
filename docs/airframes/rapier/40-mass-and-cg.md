@@ -39,7 +39,7 @@ for the dive pass, not for a turning war at altitude. Opponent doctrine: survive
 
 | Condition | CG intent |
 | --- | --- |
-| Empty | forward of aft duct mass; spine/crew mid-forward |
+| Empty | forward of aft duct mass; buried capsule/crew mid-forward |
 | Alert fuelled | fuel stations keep CG in FBW envelope |
 | After drone release | aft/mid belly −1440 kg · CG shifts forward/up (order-of-magnitude) |
 | Near bingo | light, recovery CG |
@@ -55,4 +55,3 @@ class and still approximately a ~8 t article — **provisional** vs 11 t design 
 Mass statement, fuel fraction, design bay load, and doctrine thresholds are **closed**. CG travel
 after drone release remains **provisional** — named here so Phase 2 packaging trades can close
 moments without silently overwriting this table.
-
