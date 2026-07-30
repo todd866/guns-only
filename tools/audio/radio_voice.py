@@ -1,19 +1,28 @@
 #!/usr/bin/env python3
-"""Validate and build Guns Only mission-radio WAV assets with the OpenAI speech API."""
+"""Validate and build Guns Only mission-radio WAV assets with authored TTS providers."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 import wave
 
-DEFAULT_API_URL = "https://api.openai.com/v1/audio/speech"
+DEFAULT_API_URLS = {
+    "openai": "https://api.openai.com/v1/audio/speech",
+    "elevenlabs": "https://api.elevenlabs.io/v1/text-to-speech",
+}
+API_KEY_ENVIRONMENTS = {
+    "openai": "OPENAI_API_KEY",
+    "elevenlabs": "ELEVENLABS_API_KEY",
+}
 VALID_FORMATS = {"mp3", "opus", "aac", "flac", "wav", "pcm"}
 VALID_VOICES = {
     "alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx",
@@ -33,6 +42,9 @@ def validate_catalog(catalog: dict) -> None:
         raise ValueError("catalog version must be a positive integer")
     if not str(catalog.get("model", "")).strip():
         raise ValueError("catalog model is required")
+    provider = str(catalog.get("provider", "openai")).strip().lower()
+    if provider not in DEFAULT_API_URLS:
+        raise ValueError(f"unsupported speech provider: {provider!r}")
     response_format = catalog.get("response_format")
     if response_format not in VALID_FORMATS:
         raise ValueError(f"unsupported response_format: {response_format!r}")
@@ -47,10 +59,21 @@ def validate_catalog(catalog: dict) -> None:
     for role, spec in roles.items():
         if not role or not isinstance(spec, dict):
             raise ValueError("every role needs an object definition")
-        if spec.get("voice") not in VALID_VOICES:
-            raise ValueError(f"role {role!r} has unsupported voice {spec.get('voice')!r}")
+        if provider == "openai":
+            voice = spec.get("voice")
+            built_in = isinstance(voice, str) and voice in VALID_VOICES
+            custom = isinstance(voice, dict) and bool(str(voice.get("id", "")).strip())
+            if not built_in and not custom:
+                raise ValueError(f"role {role!r} has unsupported voice {voice!r}")
+            speed = spec.get("speed", 1.0)
+            if not isinstance(speed, (int, float)) or not 0.25 <= speed <= 4.0:
+                raise ValueError(f"role {role!r} speed must be from 0.25 to 4.0")
+        elif not str(spec.get("voice_id", "")).strip():
+            raise ValueError(f"role {role!r} needs an ElevenLabs voice_id")
         if not str(spec.get("instructions", "")).strip():
             raise ValueError(f"role {role!r} has no instructions")
+        if "voice_settings" in spec and not isinstance(spec["voice_settings"], dict):
+            raise ValueError(f"role {role!r} voice_settings must be an object")
     seen: set[str] = set()
     for line in lines:
         if not isinstance(line, dict):
@@ -93,10 +116,15 @@ def take_filename(line_id: str, take: int) -> str:
 def source_hash(catalog: dict, line: dict, take: int = 1) -> str:
     role = catalog["roles"][line["role"]]
     source = {
+        "provider": catalog.get("provider", "openai"),
         "model": catalog["model"],
         "response_format": catalog["response_format"],
-        "voice": role["voice"],
+        "voice": role.get("voice"),
+        "voice_id": role.get("voice_id"),
+        "voice_settings": role.get("voice_settings"),
+        "speed": role.get("speed"),
         "instructions": line_instructions(catalog, line, take),
+        "audio_tags": line.get("audio_tags"),
         "text": line["text"],
     }
     canonical = json.dumps(source, sort_keys=True, separators=(",", ":"))
@@ -109,17 +137,40 @@ def speech_request(
     api_key: str,
     *,
     take: int = 1,
-    api_url: str = DEFAULT_API_URL,
+    api_url: str | None = None,
     urlopen=urllib.request.urlopen,
 ) -> bytes:
+    provider = str(catalog.get("provider", "openai")).strip().lower()
+    resolved_url = api_url or DEFAULT_API_URLS[provider]
+    if provider == "elevenlabs":
+        return elevenlabs_speech_request(
+            catalog, line, api_key, take=take, api_url=resolved_url, urlopen=urlopen
+        )
+    return openai_speech_request(
+        catalog, line, api_key, take=take, api_url=resolved_url, urlopen=urlopen
+    )
+
+
+def openai_speech_request(
+    catalog: dict,
+    line: dict,
+    api_key: str,
+    *,
+    take: int,
+    api_url: str,
+    urlopen,
+) -> bytes:
     role = catalog["roles"][line["role"]]
-    payload = json.dumps({
+    request_body = {
         "model": catalog["model"],
         "input": line["text"],
         "voice": role["voice"],
         "instructions": line_instructions(catalog, line, take),
         "response_format": catalog["response_format"],
-    }).encode("utf-8")
+    }
+    if "speed" in role:
+        request_body["speed"] = role["speed"]
+    payload = json.dumps(request_body).encode("utf-8")
     request = urllib.request.Request(
         api_url,
         data=payload,
@@ -129,6 +180,49 @@ def speech_request(
             "Content-Type": "application/json",
         },
     )
+    return perform_request(request, urlopen)
+
+
+def elevenlabs_speech_request(
+    catalog: dict,
+    line: dict,
+    api_key: str,
+    *,
+    take: int,
+    api_url: str,
+    urlopen,
+) -> bytes:
+    role = catalog["roles"][line["role"]]
+    tags = str(line.get("audio_tags", "")).strip()
+    spoken_text = f"{tags} {line['text']}".strip()
+    request_body: dict[str, object] = {
+        "text": spoken_text,
+        "model_id": catalog["model"],
+    }
+    if "voice_settings" in role:
+        request_body["voice_settings"] = role["voice_settings"]
+    if str(catalog.get("language_code", "")).strip():
+        request_body["language_code"] = str(catalog["language_code"]).strip()
+    # PCM keeps the provider response lossless; wrap it as a browser-safe WAV before writing.
+    sample_rate = int(catalog.get("pcm_sample_rate_hz", 24_000))
+    endpoint = (
+        f"{api_url.rstrip('/')}/{urllib.parse.quote(str(role['voice_id']), safe='')}"
+        f"?output_format=pcm_{sample_rate}"
+    )
+    request = urllib.request.Request(
+        endpoint,
+        data=json.dumps(request_body).encode("utf-8"),
+        method="POST",
+        headers={
+            "xi-api-key": api_key,
+            "Content-Type": "application/json",
+        },
+    )
+    pcm = perform_request(request, urlopen)
+    return pcm16_mono_wav(pcm, sample_rate)
+
+
+def perform_request(request: urllib.request.Request, urlopen) -> bytes:
     try:
         with urlopen(request, timeout=120) as response:
             return response.read()
@@ -137,6 +231,20 @@ def speech_request(
         raise RuntimeError(f"speech API returned HTTP {error.code}: {detail}") from error
     except urllib.error.URLError as error:
         raise RuntimeError(f"speech API request failed: {error.reason}") from error
+
+
+def pcm16_mono_wav(pcm: bytes, sample_rate_hz: int) -> bytes:
+    if sample_rate_hz <= 0:
+        raise ValueError("PCM sample rate must be positive")
+    if len(pcm) == 0 or len(pcm) % 2:
+        raise ValueError("PCM response must contain whole 16-bit samples")
+    output = io.BytesIO()
+    with wave.open(output, "wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(sample_rate_hz)
+        audio.writeframes(pcm)
+    return output.getvalue()
 
 
 def inspect_wav(path: Path) -> dict:
@@ -237,13 +345,14 @@ def build_manifest(catalog: dict, output_dir: Path) -> dict:
         clips[line["id"]] = {
             "url": takes[0]["url"],
             "role": line["role"],
-            "voice": role["voice"],
+            "voice": role.get("voice", role.get("voice_id")),
             "duration_s": max(take["duration_s"] for take in takes),
             "takes": takes,
         }
     return {
         "version": 2,
         "catalog_version": catalog["version"],
+        "provider": catalog.get("provider", "openai"),
         "model": catalog["model"],
         "disclosure": catalog.get(
             "disclosure", "Radio speech may use AI-generated training voices."
@@ -306,7 +415,7 @@ def generate(
     selected: set[str] | None = None,
     force: bool = False,
     dry_run: bool = False,
-    api_url: str = DEFAULT_API_URL,
+    api_url: str | None = None,
 ) -> int:
     made = 0
     for line in catalog["lines"]:
@@ -353,7 +462,10 @@ def parser() -> argparse.ArgumentParser:
     generate_command.add_argument("--only", action="append", default=[])
     generate_command.add_argument("--force", action="store_true")
     generate_command.add_argument("--dry-run", action="store_true")
-    generate_command.add_argument("--api-url", default=DEFAULT_API_URL)
+    generate_command.add_argument(
+        "--api-url",
+        help="Override the selected provider's API base URL (normally only for tests).",
+    )
     return result
 
 
@@ -371,9 +483,11 @@ def main() -> int:
         count = write_durations(build_manifest(catalog, args.output), args.durations)
         print(f"wrote {count} durations to {args.durations}")
         return 0
-    api_key = os.environ.get("OPENAI_API_KEY", "")
+    provider = str(catalog.get("provider", "openai")).strip().lower()
+    key_environment = API_KEY_ENVIRONMENTS[provider]
+    api_key = os.environ.get(key_environment, "")
     if not api_key and not args.dry_run:
-        raise SystemExit("OPENAI_API_KEY is required for generate (or use --dry-run)")
+        raise SystemExit(f"{key_environment} is required for generate (or use --dry-run)")
     selected = set(args.only) or None
     if selected:
         known = {line["id"] for line in catalog["lines"]}

@@ -17,11 +17,13 @@ SPEC.loader.exec_module(radio_voice)
 def catalog():
     return {
         "version": 1,
+        "provider": "openai",
         "model": "gpt-4o-mini-tts",
         "response_format": "wav",
         "roles": {
             "tower": {
                 "voice": "cedar",
+                "speed": 1.08,
                 "instructions": "Calm controller.",
             }
         },
@@ -77,6 +79,7 @@ class RadioVoiceTests(unittest.TestCase):
         self.assertEqual("gpt-4o-mini-tts", payload["model"])
         self.assertEqual("cedar", payload["voice"])
         self.assertEqual("wav", payload["response_format"])
+        self.assertEqual(1.08, payload["speed"])
         self.assertEqual("Calm controller.", payload["instructions"])
         self.assertEqual(wav_bytes(), audio)
 
@@ -127,6 +130,57 @@ class RadioVoiceTests(unittest.TestCase):
             radio_voice.normalize_wav(path)
             with wave.open(str(path), "rb") as audio:
                 self.assertEqual(24_000, audio.getnframes())
+
+    def test_elevenlabs_request_uses_voice_id_and_wraps_pcm_as_wav(self):
+        eleven = {
+            "version": 1,
+            "provider": "elevenlabs",
+            "model": "eleven_v3",
+            "response_format": "wav",
+            "pcm_sample_rate_hz": 24_000,
+            "roles": {
+                "tower": {
+                    "voice_id": "tower-character-id",
+                    "instructions": "Calm controller.",
+                    "voice_settings": {"stability": 0.45},
+                }
+            },
+            "lines": [{
+                "id": "tower-test",
+                "role": "tower",
+                "text": "Continue.",
+                "audio_tags": "[calm]",
+            }],
+        }
+        radio_voice.validate_catalog(eleven)
+        captured = {}
+        pcm = b"\0\0" * 2_400
+
+        class PcmResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return pcm
+
+        def urlopen(request, timeout):
+            captured["request"] = request
+            captured["timeout"] = timeout
+            return PcmResponse()
+
+        result = radio_voice.speech_request(
+            eleven, eleven["lines"][0], "eleven-secret", urlopen=urlopen
+        )
+        request = captured["request"]
+        payload = json.loads(request.data)
+        self.assertIn("/tower-character-id?output_format=pcm_24000", request.full_url)
+        self.assertEqual("eleven_v3", payload["model_id"])
+        self.assertEqual("[calm] Continue.", payload["text"])
+        self.assertEqual("eleven-secret", request.get_header("Xi-api-key"))
+        self.assertTrue(result.startswith(b"RIFF"))
 
 
 if __name__ == "__main__":

@@ -99,7 +99,7 @@ test("new radio sequence opens squelch once and ducks propulsion", async () => {
   updateRadioVoice(voice, context, state);
 
   assert.equal(voice.squelchCount, 1);
-  assert.equal(engineMaster.gain.targets.at(-1).value, 0.16);
+  assert.equal(engineMaster.gain.targets.at(-1).value, 0.38);
   assert.equal(voice.highpass.type, "highpass");
   assert.equal(voice.lowpass.type, "lowpass");
 });
@@ -163,4 +163,34 @@ test("tactical radio is not restricted to the Circuits mission", async () => {
   });
 
   assert.equal(voice.squelchCount, 1);
+});
+
+test("a missing authored clip fails silent instead of invoking device TTS", async () => {
+  const { createRadioVoice, updateRadioVoice } = await import("../radio_audio.js?radio=missing");
+  const context = new Context();
+  const voice = createRadioVoice(context, context.destination, {
+    fetchImpl: silentManifest,
+  });
+  let spoken = 0;
+  const previousSynth = globalThis.speechSynthesis;
+  const previousUtterance = globalThis.SpeechSynthesisUtterance;
+  globalThis.speechSynthesis = { speak() { spoken += 1; }, cancel() {} };
+  globalThis.SpeechSynthesisUtterance = class {};
+  try {
+    updateRadioVoice(voice, context, {
+      radio_active: true,
+      radio_sequence: 9,
+      radio_id: "not-in-the-catalog",
+      radio_text: "This must never use the system voice.",
+      radio_voice: "controller",
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(voice.missingClipCount, 1);
+    assert.equal(spoken, 0);
+  } finally {
+    if (previousSynth === undefined) delete globalThis.speechSynthesis;
+    else globalThis.speechSynthesis = previousSynth;
+    if (previousUtterance === undefined) delete globalThis.SpeechSynthesisUtterance;
+    else globalThis.SpeechSynthesisUtterance = previousUtterance;
+  }
 });

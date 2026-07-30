@@ -79,31 +79,30 @@ public class MissionRadioTests {
     }
 
     [Fact]
-    public void LaunchClearanceLeadsThePatternWithoutAnEchoReadback() {
+    public void LaunchClearanceAndReadbackCompleteBeforeThePatternStarts() {
         var director = new MissionRadioDirector();
         double clock = 0.0;
 
         MissionRadioTransmission clearance =
             director.Step(State(0.0, catapult: true));
         Assert.Equal("launch-cleared", clearance.Id);
+        Assert.False(director.LaunchClearanceComplete);
 
-        // End the stroke; ANCA hold delays airborne until after aviate.
-        director.Step(State(10.0, catapult: false, leg: "INITIAL"));
-        clock = 10.0;
-        MissionRadioTransmission airborne = WaitFor(
-            director, ref clock, "pilot-airborne",
-            t => State(t, catapult: false, leg: "INITIAL"));
-        MissionRadioTransmission patternInstruction = WaitFor(
-            director, ref clock, "tower-join-initial",
-            t => State(t, catapult: false, leg: "INITIAL"));
+        MissionRadioTransmission readback = WaitFor(
+            director, ref clock, "pilot-launch-readback",
+            t => State(t, catapult: true));
+        clock = readback.EndsAtSeconds + 0.01;
+        director.Step(State(clock, catapult: true));
+        Assert.True(director.LaunchClearanceComplete);
+
+        // Once airborne, the machine-held pattern needs no departure narration.
+        clock += 1.0;
+        director.Step(State(clock, catapult: false, leg: "INITIAL"));
         MissionRadioTransmission initial = WaitFor(
             director, ref clock, "pilot-initial",
             t => State(t, catapult: false, leg: "INITIAL"));
 
-        Assert.True(airborne.StartedAtSeconds >= 12.5,
-            "airborne must wait for the aviate hold after the stroke");
-        Assert.Contains("two thousand five hundred", patternInstruction.Text);
-        Assert.DoesNotContain("report initial", patternInstruction.Text);
+        Assert.Equal("Launch Ghost One One.", readback.Text);
         Assert.Equal("pilot-initial", initial.Id);
         Assert.Equal("GHOST 11", clearance.Callsign);
         Assert.Equal(MissionRadioChannel.Tower, clearance.Channel);
@@ -139,7 +138,7 @@ public class MissionRadioTests {
 
         Assert.Equal("GHOST 12", call.Speaker);
         Assert.Equal("Rapier Tower, Ghost One Two, base.", call.Text);
-        Assert.True(call.StartedAtSeconds >= 2.4);
+        Assert.True(call.StartedAtSeconds >= 1.25);
     }
 
     [Fact]
@@ -209,12 +208,13 @@ public class MissionRadioTests {
         director.Step(State(
             1.0, pattern: false, phase: RapierMissionPhase.Intercept));
         clock = 1.0;
-        WaitFor(director, ref clock, "control-commit-braa",
+        WaitFor(director, ref clock, "control-commit",
             t => State(t, pattern: false, phase: RapierMissionPhase.Intercept));
 
+        double gunTriggeredAt = clock + 1.0;
         director.Step(State(
-            clock + 1.0, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 4));
-        clock += 1.0;
+            gunTriggeredAt, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 4));
+        clock = gunTriggeredAt;
         MissionRadioTransmission first = WaitFor(
             director, ref clock, "pilot-guns",
             t => State(t, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 4));
@@ -229,15 +229,15 @@ public class MissionRadioTests {
         Assert.Equal("Guns.", first.Text);
         Assert.Equal(first.Sequence, steady.Sequence);
         Assert.Equal(first.Sequence, secondBurst.Sequence);
-        Assert.True(first.StartedAtSeconds >= clock - 13.0 + 2.5,
-            "guns must wait for the aviate hold after employment starts");
+        Assert.True(first.StartedAtSeconds <= gunTriggeredAt + 1.25,
+            "machine-keyed GUNS must land on the employment beat");
 
         director.Step(State(
             clock + 20.0, pattern: false, phase: RapierMissionPhase.Escape, gunRounds: 12));
         director.Step(State(
             clock + 30.0, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 12));
         clock += 30.0;
-        WaitFor(director, ref clock, "control-commit-braa",
+        WaitFor(director, ref clock, "control-commit",
             t => State(t, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 12));
         director.Step(State(
             clock + 1.0, pattern: false, phase: RapierMissionPhase.Intercept, gunRounds: 16));
@@ -339,7 +339,7 @@ public class MissionRadioTests {
             t => State(t, pattern: false, events: [destroyed]));
 
         Assert.Equal("Splash one.", splash.Text);
-        Assert.True(splash.StartedAtSeconds >= 3.5);
+        Assert.True(splash.StartedAtSeconds <= 2.25);
     }
 
     [Fact]
@@ -398,22 +398,34 @@ public class MissionRadioTests {
     }
 
     [Fact]
-    public void PilotCallDoesNotKeyDuringTheAviateHold() {
+    public void TacticalCallUsesAShortHumanBeatInsteadOfArrivingLate() {
         var director = new MissionRadioDirector();
         director.Step(State(0.0, pattern: false, phase: RapierMissionPhase.Launch));
-        // Commit event at t=1 — must stay silent through the aviate window.
+        // Commit event at t=1: a fractional beat preserves cadence without making it stale.
         MissionRadioTransmission duringHold = director.Step(State(
             1.0, pattern: false, phase: RapierMissionPhase.Intercept));
         MissionRadioTransmission stillHolding = director.Step(State(
-            3.0, pattern: false, phase: RapierMissionPhase.Intercept));
-        double clock = 3.0;
+            1.2, pattern: false, phase: RapierMissionPhase.Intercept));
+        double clock = 1.2;
         MissionRadioTransmission commit = WaitFor(
-            director, ref clock, "control-commit-braa",
-            t => State(t, pattern: false, phase: RapierMissionPhase.Intercept));
+            director, ref clock, "control-commit",
+            t => State(t, pattern: false, phase: RapierMissionPhase.Intercept),
+            step: 0.1);
 
         Assert.False(duringHold.Active);
         Assert.False(stillHolding.Active);
-        Assert.True(commit.StartedAtSeconds >= 3.7);
+        Assert.InRange(commit.StartedAtSeconds, 1.25, 1.5);
+    }
+
+    [Fact]
+    public void StalePatternCallsExpireInsteadOfNarratingAnOldLeg() {
+        var director = new MissionRadioDirector();
+        director.Step(State(0.0, leg: "DEPART"));
+        director.Step(State(1.0, leg: "INITIAL"));
+
+        MissionRadioTransmission late = director.Step(State(20.0, leg: "BASE"));
+
+        Assert.False(late.Active);
     }
 
     [Theory]

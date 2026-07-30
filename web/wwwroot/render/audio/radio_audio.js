@@ -1,9 +1,6 @@
-// Shared mission-radio presentation. Captions remain authoritative; generated WAV assets are
-// preferred, with device speech used only when a catalog clip has not been built. The clip path
-// runs a military-UHF voice chain: steep band-pass with a presence bark, limiter-grade
-// compression, a carrier-noise floor under the voice, and key/unkey squelch artifacts — all
-// jittered per transmission (deterministically, from the kernel sequence) so no two calls are
-// bit-identical even when they reuse one recorded take.
+// Shared mission-radio presentation. Authored WAV assets are the only production speech path:
+// a missing clip fails silent instead of suddenly replacing a character with the device's robot
+// voice. A restrained UHF chain supplies station colour without crushing the performance.
 
 const MANIFEST_URL = new URL("./samples/radio/manifest.json", import.meta.url);
 
@@ -51,15 +48,15 @@ function carrierNoiseBuffer(context, seconds = 1.5) {
 /// Per-station color: output trim and how much carrier hiss sits under the voice. Airborne and
 /// deck stations read noisier than the tower's ground installation.
 const ROLE_PRESETS = {
-  tower: { level: 0.90, noise: 0.015 },
-  controller: { level: 0.85, noise: 0.020 },
-  launch: { level: 0.95, noise: 0.030 },
-  lso: { level: 0.95, noise: 0.030 },
-  pilot: { level: 0.80, noise: 0.035 },
-  "traffic-two": { level: 0.78, noise: 0.040 },
-  "traffic-three": { level: 0.76, noise: 0.045 },
-  "traffic-four": { level: 0.77, noise: 0.042 },
-  traffic: { level: 0.78, noise: 0.040 },
+  tower: { level: 0.72, noise: 0.009 },
+  controller: { level: 0.69, noise: 0.011 },
+  launch: { level: 0.76, noise: 0.017 },
+  lso: { level: 0.78, noise: 0.018 },
+  pilot: { level: 0.67, noise: 0.020 },
+  "traffic-two": { level: 0.64, noise: 0.022 },
+  "traffic-three": { level: 0.62, noise: 0.024 },
+  "traffic-four": { level: 0.63, noise: 0.023 },
+  traffic: { level: 0.64, noise: 0.022 },
 };
 
 export async function loadRadioManifest(fetchImpl = globalThis.fetch) {
@@ -74,48 +71,48 @@ export function createRadioVoice(context, destination, {
   engineMaster = null,
   fetchImpl = globalThis.fetch,
 } = {}) {
-  // Two cascaded biquads per band edge give radio-steep 4th-order skirts; the peaking stage
-  // between them is the 2 kHz presence bark that makes a channel read as "radio".
+  // The second-order skirts retain consonants and human texture. Character should come from the
+  // take; the processing only locates it on a UHF net.
   const highpass = context.createBiquadFilter();
   highpass.type = "highpass";
-  highpass.frequency.value = 320;
-  highpass.Q.value = 0.54;
+  highpass.frequency.value = 260;
+  highpass.Q.value = 0.64;
 
   const highpass2 = context.createBiquadFilter();
   highpass2.type = "highpass";
-  highpass2.frequency.value = 320;
-  highpass2.Q.value = 1.31;
+  highpass2.frequency.value = 260;
+  highpass2.Q.value = 0.72;
 
   const presence = context.createBiquadFilter();
   presence.type = "peaking";
-  presence.frequency.value = 2_000;
-  presence.Q.value = 1.2;
-  presence.gain.value = 5;
+  presence.frequency.value = 1_900;
+  presence.Q.value = 0.9;
+  presence.gain.value = 2;
 
   const lowpass = context.createBiquadFilter();
   lowpass.type = "lowpass";
-  lowpass.frequency.value = 3_100;
-  lowpass.Q.value = 0.54;
+  lowpass.frequency.value = 3_850;
+  lowpass.Q.value = 0.64;
 
   const lowpass2 = context.createBiquadFilter();
   lowpass2.type = "lowpass";
-  lowpass2.frequency.value = 3_100;
-  lowpass2.Q.value = 1.31;
+  lowpass2.frequency.value = 3_850;
+  lowpass2.Q.value = 0.72;
 
-  // Limiter territory, not bus glue: hard knee, high ratio, audible AGC pumping on release.
+  // Firm radio AGC, short of the limiter-like pumping that flattened the source performances.
   const compressor = context.createDynamicsCompressor();
-  compressor.threshold.value = -24;
-  compressor.knee.value = 2;
-  compressor.ratio.value = 12;
-  compressor.attack.value = 0.003;
-  compressor.release.value = 0.25;
+  compressor.threshold.value = -20;
+  compressor.knee.value = 5;
+  compressor.ratio.value = 5;
+  compressor.attack.value = 0.006;
+  compressor.release.value = 0.14;
 
   const output = context.createGain();
-  output.gain.value = 0.82;
+  output.gain.value = 0.68;
   highpass.connect(highpass2).connect(presence).connect(lowpass)
     .connect(lowpass2).connect(compressor).connect(output).connect(destination);
 
-  return {
+  const voice = {
     highpass,
     lowpass,
     highpass2,
@@ -136,7 +133,12 @@ export function createRadioVoice(context, destination, {
     generation: 0,
     squelchCount: 0,
     unkeyCount: 0,
+    missingClipCount: 0,
   };
+  // Fetch the tiny manifest as soon as the flight graph exists so the first launch call does not
+  // spend its opening syllable waiting on catalog discovery.
+  void ensureManifest(voice);
+  return voice;
 }
 
 function ensureManifest(voice) {
@@ -224,27 +226,6 @@ function radioValue(state, field) {
   return state?.[`radio_${field}`] ?? state?.[`rapier_radio_${field}`];
 }
 
-// speechSynthesis renders straight to the device output: it CANNOT be routed through the
-// WebAudio chain above, so the fallback voice is intentionally unprocessed. Real clips are the
-// production path; this exists so a missing clip degrades to speech rather than silence.
-function deviceSpeech(voice, state, generation) {
-  const synth = globalThis.speechSynthesis;
-  const Utterance = globalThis.SpeechSynthesisUtterance;
-  if (!voice.enabled || generation !== voice.generation
-    || !synth || typeof Utterance !== "function") return;
-  synth.cancel?.();
-  const utterance = new Utterance(String(radioValue(state, "text") ?? ""));
-  utterance.lang = "en-US";
-  const role = radioValue(state, "voice");
-  utterance.rate = role === "tower" || role === "controller" ? 0.91 : 0.96;
-  utterance.pitch = role === "launch" ? 0.82 : 0.96;
-  utterance.volume = 0.78;
-  const english = synth.getVoices?.().find((candidate) =>
-    /^en([-_]|$)/i.test(candidate.lang ?? ""));
-  if (english) utterance.voice = english;
-  synth.speak(utterance);
-}
-
 function clipUrl(clip, sequence) {
   const takes = Array.isArray(clip?.takes) && clip.takes.length > 0
     ? clip.takes
@@ -261,7 +242,7 @@ async function playTransmission(voice, context, state, generation, sequence) {
   const clip = manifest.clips?.[radioValue(state, "id")];
   const url = clipUrl(clip, sequence);
   if (!url) {
-    deviceSpeech(voice, state, generation);
+    voice.missingClipCount += 1;
     return;
   }
 
@@ -277,12 +258,12 @@ async function playTransmission(voice, context, state, generation, sequence) {
     stopSource(voice);
     const role = radioValue(state, "voice");
     const preset = ROLE_PRESETS[role] ?? ROLE_PRESETS.traffic;
-    // ±1 dB level and ±1.5% rate jitter: inaudible as such, but no replay is sample-identical.
-    const level = preset.level * (0.891 + 0.218 * hash01(sequence, 6));
+    // Subtle station gain and rate drift keeps repeated takes alive without changing cadence.
+    const level = preset.level * (0.944 + 0.112 * hash01(sequence, 6));
     target(voice.output.gain, level, context.currentTime, 0.015);
     const source = context.createBufferSource();
     source.buffer = decoded;
-    source.playbackRate.value = 0.985 + 0.030 * hash01(sequence, 7);
+    source.playbackRate.value = 0.995 + 0.010 * hash01(sequence, 7);
     source.connect(voice.highpass);
     source.onended = () => {
       if (voice.source !== source) return;
@@ -295,7 +276,7 @@ async function playTransmission(voice, context, state, generation, sequence) {
     source.start(context.currentTime);
     voice.source = source;
   } catch {
-    deviceSpeech(voice, state, generation);
+    voice.missingClipCount += 1;
   }
 }
 
@@ -316,7 +297,6 @@ export function updateRadioVoice(voice, context, state, { enabled = true } = {})
       voice.enabled = false;
       voice.generation += 1;
       stopSource(voice);
-      globalThis.speechSynthesis?.cancel?.();
       restoreEngine(voice, context);
     }
     return;
@@ -324,7 +304,7 @@ export function updateRadioVoice(voice, context, state, { enabled = true } = {})
 
   voice.enabled = true;
   if (voice.engineMaster?.gain)
-    target(voice.engineMaster.gain, 0.16, context.currentTime, 0.025);
+    target(voice.engineMaster.gain, 0.38, context.currentTime, 0.045);
   if (sequence <= 0 || sequence === voice.lastSequence) return;
 
   const preempted = voice.source != null;
@@ -332,7 +312,6 @@ export function updateRadioVoice(voice, context, state, { enabled = true } = {})
   voice.generation += 1;
   const generation = voice.generation;
   stopSource(voice, context, { unkey: preempted });
-  globalThis.speechSynthesis?.cancel?.();
   playSquelch(voice, context, sequence);
   void playTransmission(voice, context, state, generation, sequence);
 }

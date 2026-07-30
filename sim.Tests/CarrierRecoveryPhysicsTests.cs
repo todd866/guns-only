@@ -265,4 +265,27 @@ public class CarrierRecoveryPhysicsTests {
         Assert.True(a.State.Gamma > 0.0);
         Assert.True(shipA.AirspeedMps(a.State) > 75.0);
     }
+
+    [Fact]
+    public void HeldCatapultTracksThePlatformButDoesNotStartUntilReleased() {
+        var ship = Ship();
+        var launch = new CatapultLaunchModel();
+        launch.Begin(ship, FlightModel.Sabre.MassKg, holdForClearance: true);
+        AircraftState staged = launch.State;
+
+        for (int tick = 0; tick < 60; tick++) {
+            ship.Step(1.0 / AircraftSim.TickHz);
+            launch.Step(ship, 1.0 / AircraftSim.TickHz);
+        }
+
+        Assert.Equal(CatapultLaunchModel.LaunchPhase.Hold, launch.Phase);
+        Assert.Equal(0.0, launch.DistanceM);
+        Assert.Equal(0.0, launch.RelativeSpeedMps);
+        Assert.NotEqual(staged.Position, launch.State.Position);
+        Assert.True(launch.Release());
+        Assert.False(launch.Release());
+        launch.Step(ship, 1.0 / AircraftSim.TickHz);
+        Assert.Equal(CatapultLaunchModel.LaunchPhase.Stroke, launch.Phase);
+        Assert.True(launch.DistanceM > 0.0);
+    }
 }

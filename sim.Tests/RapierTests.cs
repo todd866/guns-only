@@ -34,6 +34,31 @@ public class RapierTests {
             });
 
     [Fact]
+    public void InterceptStartsInsideTheAuthoredRegionAtAUsefulMissionRange() {
+        BeatSetup beat = Beats.RapierIntercept();
+        Vec3D separation = beat.Bandit.Position - beat.Player.Position;
+        double horizontalRangeM = Math.Sqrt(
+            separation.X * separation.X + separation.Z * separation.Z);
+
+        Assert.Equal(-240_000.0, beat.Bandit.Position.X);
+        Assert.InRange(horizontalRangeM, 240_000.0, 242_000.0);
+        Assert.True(horizontalRangeM < 262_000.0,
+            "the opening intercept must stay inside the authored regional truth");
+    }
+
+    [Fact]
+    public void OverrideReleasesIncidenceWithoutExceedingTheTwelveGStructure() {
+        var state = new AircraftState(
+            new Vec3D(0.0, 3_000.0, 0.0),
+            Speed: 400.0, Gamma: 0.0, Chi: 0.0, Bank: 0.0, Mass: Jet.MassKg);
+
+        Assert.Equal(12.0, Jet.PositiveStructuralLimitG);
+        Assert.Equal(Jet.PositiveStructuralLimitG, Jet.PositiveOverrideLimitG);
+        Assert.Equal(12.0, Protection.OverrideMaxG(state, Jet), precision: 6);
+        Assert.True(Jet.DynamicPressureScheduledPostStallOverride);
+    }
+
+    [Fact]
     public void TheTurbineCarriesItLowAndTheRamCarriesItHigh() {
         _out.WriteLine("thrust fraction of sea-level static dry, by Mach and altitude:");
         _out.WriteLine("  (turbine fades 1.9->3.0, ram fades in 1.6->2.2; they OVERLAP on purpose)");
@@ -345,6 +370,14 @@ public class RapierTests {
         session.Begin();
         _out.WriteLine($"after Begin(): lever {session.Controls.Throttle:F2}");
         Assert.True(session.Catapult.IsActive, "the sortie must begin ON the catapult");
+
+        // Clearance/readback holds the aircraft at the mouth of the tube. That transaction is
+        // deliberately outside the physical stroke budget below.
+        int clearanceTicks = 0;
+        while (session.Catapult.Phase == CatapultLaunchModel.LaunchPhase.Hold
+            && clearanceTicks++ < AircraftSim.TickHz * 10)
+            session.StepFixed();
+        Assert.Equal(CatapultLaunchModel.LaunchPhase.Stroke, session.Catapult.Phase);
 
         // Track the fastest the aircraft gets during and just after the stroke. Sampling only the
         // single tick the phase flips is fragile — the handoff state lands a tick later.
@@ -676,6 +709,28 @@ public class RapierTests {
         Assert.Equal(ready, session.Player.State);
         Assert.False(session.Catapult.IsActive);
         Assert.True(session.LaunchTerrainClearance.Safe);
+    }
+
+    [Fact]
+    public void FixedLauncherWaitsForClearanceAndReadbackBeforeTheStroke() {
+        var session = new SimulationSession(10);
+        session.SetTerrainSurface(Assert.IsAssignableFrom<ITerrainSurface>(
+            UkraineTerrainTruth.Load()));
+        AircraftState staged = session.Player.State;
+
+        session.Begin();
+        for (int tick = 0; tick < AircraftSim.TickHz; tick++) session.StepFixed();
+
+        Assert.Equal(CatapultLaunchModel.LaunchPhase.Hold, session.Catapult.Phase);
+        Assert.Equal(staged.Position, session.Player.State.Position);
+
+        int waitTicks = 0;
+        while (session.Catapult.Phase == CatapultLaunchModel.LaunchPhase.Hold
+            && waitTicks++ < AircraftSim.TickHz * 10)
+            session.StepFixed();
+
+        Assert.Equal(CatapultLaunchModel.LaunchPhase.Stroke, session.Catapult.Phase);
+        Assert.InRange(session.TimeSeconds, 3.5, 7.0);
     }
 
     [Fact]

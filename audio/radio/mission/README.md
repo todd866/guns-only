@@ -24,11 +24,13 @@ Generate WAV clips and the web manifest:
 
 ```sh
 OPENAI_API_KEY=... python3 tools/audio/radio_voice.py generate
+# When lines.json selects provider "elevenlabs":
+ELEVENLABS_API_KEY=... python3 tools/audio/radio_voice.py generate
 ```
 
-The generated WAV files are intentionally untracked. The tracked manifest can remain empty; when
-a clip is absent, the browser uses device speech and still applies the same radio band-pass,
-compression, squelch, and engine ducking.
+Production WAVs and their manifest are tracked assets. A missing clip fails silent and increments
+the presentation QA counter; it never falls through to browser/device speech synthesis. Radio is
+atmosphere, not a gameplay dependency, so silence is safer than changing a character mid-sortie.
 
 ## Comms doctrine
 
@@ -39,11 +41,9 @@ battlespace the shared mental model still matters — who / where / cleared / wa
 mostly held and updated by machines. Tower, CONTROL, traffic, and the jet itself are agents.
 Speech is how a human stays on the loop, not how two humans negotiate every gate by hand.
 
-So R/T is **AI-generated a lot of the time**, diegetically: the automation keys the mic, picks
-the brevity word, and speaks in a military register. Catalog clips and device-speech fallback
-are not a production shortcut pretending to be pilots — they are the fiction of machine voices
-on a bandwidth-limited channel. The player's job is judgment (commit, refuse, RTB, waveoff
-override), not performing the phraseology.
+So R/T is **machine-keyed a lot of the time**, diegetically: the automation keys the mic, picks
+the brevity word, and plays an owner-approved performance in a military register. The player's
+job is judgment (commit, refuse, RTB, waveoff override), not performing the phraseology.
 
 That splits the Communicate channel cleanly:
 
@@ -51,6 +51,7 @@ That splits the Communicate channel cleanly:
 |---------|-----|
 | **ANCA panel** | Continuous machine truth — glanceable who/where/cleared/want |
 | **Radio** | Sparse spoken *deltas* when a human ear (yours or someone else's) needs the update now |
+| **Optional caption** | One current-line accessibility transcript, off by default |
 
 If the panel already shows it and no other human-in-the-fiction needs to hear it, silence is
 correct. Talking because "radios talk in sims" fails the redesign.
@@ -118,14 +119,16 @@ it must not jump the queue the instant an event fires. Pilots fly the airplane, 
 
 | After… | Hold before keying | Why |
 |--------|--------------------|-----|
-| Pilot / package / CONTROL event | ~2.8 s | Finish aviate (and a beat of navigate) |
-| Tower / traffic after an event | ~1.5 s | Don't leapfrog the pilot on the same beat |
-| LSO | ~0.45 s | Flying the pass *with* the pilot |
-| Urgent (waveoff, bingo) | ~0.25 s | Safety still nearly immediate |
-| Pre-stroke launch clearance | 0 s | Talk, *then* aviate the shot |
+| Tactical/package event | ~0.25 s | Machine-keyed and tied to the employment beat |
+| Pilot / CONTROL event | ~0.45 s | One human-scale beat, never several seconds late |
+| Tower / traffic after an event | ~0.30 s | Prompt, without sounding sample-quantized |
+| LSO | ~0.15 s | Flying the pass *with* the pilot |
+| Urgent (waveoff, bingo) | ~0.10 s | Safety is effectively immediate |
+| Pre-stroke launch clearance | 0 s | Launcher physically holds through clearance + readback |
 
-Between calls, dead air is ~1.7–3.2 s (deterministic jitter) — not a 0.3 s metronome. Tower
-replies share the pilot's earliest-air time so they cannot speak before the call they answer.
+Reply gaps are ~0.28–0.60 s (deterministic jitter). Natural dead air comes from authoring fewer
+calls, not inserting seconds between every line. Pending calls expire when their operational
+moment has passed instead of narrating an old leg.
 
 ### Voice bar — characters, not robots
 
@@ -155,41 +158,40 @@ Clips are pre-generated and re-used; no live token spend in the sortie loop. `Ai
 playback/disclosure about the voice path, consistent with machine-keyed mics speaking in a
 human register. Owner ear is the acceptance gate: if it sounds like a robot, regenerate.
 
-**Generator pin:** `lines.json` locks `gpt-4o-mini-tts-2025-03-20` (character/emotion
-instruction-following) with OpenAI's recommended stock voices (`marin` pilot, `cedar` tower).
-Do not float to the unversioned `gpt-4o-mini-tts` alias — newer snapshots have been flatter
-and worse at directions. Regenerate the whole catalog after any model or role change.
+**Generator engines:** `radio_voice.py` supports the OpenAI Speech API and ElevenLabs PCM output,
+normalizing either to the same browser-safe WAV/manifest contract. The checked-in catalog pins
+`gpt-4o-mini-tts-2025-12-15` and brisk per-role speeds rather than floating an alias. For the next
+full cast, `eleven_v3` plus designed/custom role voices is the preferred character-quality
+candidate. Provider, model, voice ID, settings, instructions, line tags, and take number all enter
+the source hash. Regenerate the complete catalog after any of them changes, then pass the owner-ear
+gate before replacing production clips.
 
 ### Binding consequences (current catalog)
 
 - Machines key the mic; the game does not make the player perform echo readbacks.
-- Pattern legs speak once. No "report X" prompts for gates that self-announce.
+- Circuits uses launch clearance/readback, initial/break approval, landing clearance, and
+  safety calls. Routine downwind/base/final narration is silent.
+- Ambient traffic is one base report at most every 45 seconds, never every ship on every leg.
 - Package weapons brevity carries no callsign ceremony (`Guns.`, `Fox Two.`, `Splash one.`).
 - `GUNS` / `SPLASH` are package calls on Rapier tactical only — never classic guns-only trigger FX.
 - CONTROL / Tower / Approach keep callsign when *who* matters to the addressee — and keep
   rulebook wording (full clearances, gear challenges, waveoffs).
-- Pilots: `3 greens` / `gear to come` / `Land Rapier One One.` — never "three down and locked."
 - LSO stays ultra-short. Wire final stays silent.
-- ANCA holds the continuous model; radio only speaks deltas.
-- **ANCA sequencing:** aviate hold before routine speech (~2.8 s pilot/package); longer dead air
-  between calls; urgent stays nearly immediate.
+- ANCA holds net/frequency state, not a duplicate transcript. Radio only speaks deltas.
+- Radio captions are a one-line opt-in accessibility preference, off by default.
 
 **Not a chore.** Airspace and radio happen in the background as atmosphere and curriculum.
 No forced readbacks, no comms minigame — the player's job stays aviate and decide.
 
 ## Open work
 
-- **Chatter where it teaches**: Circuits and Rapier recovery keep ambient tower/approach traffic.
-  Classic guns-only dogfight stays quiet on the trigger; fuel / sortie-complete remain the sparse
-  layer there.
-- **Clip catalog**: `manifest.json` ships empty; device-speech fallback carries the feature until
-  authored WAVs land. Generation must pass the owner-ear character bar (chill pilot ladder),
-  not merely validate JSON.
-- **Captions beyond Circuits**: tactical/approach calls have no caption surface yet.
+- **Full character recast**: cast/design stable role voices, generate the finite catalog with
+  `eleven_v3` and the current OpenAI snapshot, then choose by blind owner-ear review. The existing
+  production clips remain interim until that review; API credentials are intentionally not stored
+  in the repository.
+- **Chatter tuning**: keep watching call density in Circuits and Rapier recovery. Classic
+  guns-only stays quiet on the trigger.
 - **Traffic is heard, not seen**: CircuitPatternTraffic ships render no hulls.
-- **AiGenerated labeling**: playback/disclosure for the voice path; in-world it is consistent
-  with machine speakers. Prefer deciding at playback (catalog clip vs device speech), not at
-  authoring.
 - **Geometry unification**: CircuitPatternTraffic re-states Circuits shelf/final constants beside
   RapierMissionDirector; a future pattern edit can desync flown gates from spoken legs.
 - **LSO advisor dedup**: UpdateMissionRadio re-runs Lso.AdviseForMode in parallel with the HUD

@@ -643,7 +643,7 @@ public readonly record struct LaunchTerrainClearanceAssessment(
 }
 
 public sealed class CatapultLaunchModel {
-    public enum LaunchPhase { None, Stroke, Airborne }
+    public enum LaunchPhase { None, Hold, Stroke, Airborne }
 
     /// Default deck-catapult geometry. A land-based electromagnetic launcher for a high-wing-loading
     /// aircraft needs a longer stroke and a higher end speed than a 1950s deck catapult — 62 m/s is
@@ -714,18 +714,28 @@ public sealed class CatapultLaunchModel {
     public double DistanceM => _distanceM;
     public double RelativeSpeedMps { get; private set; }
     public double ElapsedSeconds { get; private set; }
-    public bool IsActive => Phase == LaunchPhase.Stroke;
+    public bool IsActive => Phase is LaunchPhase.Hold or LaunchPhase.Stroke;
 
-    public void Begin(Carrier carrier, double massKg) {
+    public void Begin(Carrier carrier, double massKg, bool holdForClearance = false) {
         if (massKg <= 0.0 || !double.IsFinite(massKg))
             throw new System.ArgumentOutOfRangeException(nameof(massKg));
         _massKg = massKg;
         _distanceM = 0.0;
         RelativeSpeedMps = 0.0;
         ElapsedSeconds = 0.0;
-        Phase = LaunchPhase.Stroke;
+        Phase = holdForClearance ? LaunchPhase.Hold : LaunchPhase.Stroke;
         State = StrokeState(carrier, _massKg, _distanceM,
             RelativeSpeedMps, ParkedNosePitchRad);
+    }
+
+    /// <summary>
+    /// Release a launch held for its clearance/readback transaction. The stroke begins on the
+    /// following fixed tick, so the last word is never spoken over an already-moving aircraft.
+    /// </summary>
+    public bool Release() {
+        if (Phase != LaunchPhase.Hold) return false;
+        Phase = LaunchPhase.Stroke;
+        return true;
     }
 
     /// Exact Ready/Restart pose at the launcher start. Previewing this state avoids a one-frame
@@ -738,7 +748,14 @@ public sealed class CatapultLaunchModel {
 
     /// Call after Carrier.Step(dt), matching ArrestmentModel's moving-deck convention.
     public void Step(Carrier carrier, double dt) {
-        if (Phase != LaunchPhase.Stroke || dt <= 0.0) return;
+        if (dt <= 0.0) return;
+        if (Phase == LaunchPhase.Hold) {
+            // The platform can move under a held aircraft; keep the supported pose exact without
+            // accumulating stroke time or distance.
+            State = StrokeState(carrier, _massKg, 0.0, 0.0, ParkedNosePitchRad);
+            return;
+        }
+        if (Phase != LaunchPhase.Stroke) return;
 
         double nextSpeed = System.Math.Min(_endRelativeSpeedMps,
             RelativeSpeedMps + AccelerationForStroke * dt);

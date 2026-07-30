@@ -200,9 +200,11 @@ at the end of the break zone ("Texan 33, break point straight through" — AETCM
 deepest cut — if TOWER directed the carry-through, "aircrew will maintain radio silence and
 not call 'break point straight through.'" (14 FTW T-6 In-Flight Guide.)
 
-**Delivery.** Radio calls deferred until "safely established in the turn" — the README's
-~2.8 s aviate hold is literally doctrinal. Shortest real calls are two tokens (callsign +
-position); no scripted pattern call is one word.
+**Delivery.** Human pilots defer a call until safely established in the turn. The earlier runtime
+translated that into a blanket ~2.8 s delay, but deployed QA showed the result arriving after its
+operational moment. Current machine-keyed R/T uses a short ~0.25–0.45 s beat, expires stale calls,
+and creates workload margin by removing calls rather than delaying them. Shortest real calls are
+two tokens (callsign + position); no scripted pattern call is one word.
 
 **What sims get wrong.**
 - Tower acknowledging every position call (real towers often say nothing back).

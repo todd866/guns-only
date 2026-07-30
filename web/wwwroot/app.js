@@ -483,6 +483,7 @@ const settingsClose = document.querySelector("#settings-close");
 const settingsCloseBottom = document.querySelector("#settings-close-bottom");
 const settingsAudio = document.querySelector("#setting-audio");
 const settingsRadioVoice = document.querySelector("#setting-radio-voice");
+const settingsRadioCaptions = document.querySelector("#setting-radio-captions");
 const settingsAutoGcas = document.querySelector("#setting-autogcas");
 const settingsHighContrast = document.querySelector("#setting-high-contrast");
 const settingsReducedMotion = document.querySelector("#setting-reduced-motion");
@@ -493,11 +494,7 @@ const settingsKeyboardBindings = document.querySelector("#settings-keyboard-bind
 const settingsBindings = document.querySelector("#settings-bindings");
 const settingsResetBindings = document.querySelector("#settings-reset-bindings");
 const rapierRadio = document.querySelector("#rapier-radio");
-const rapierRadioNet = document.querySelector("#rapier-radio-net");
-const rapierRadioRoute = document.querySelector("#rapier-radio-route");
 const rapierRadioText = document.querySelector("#rapier-radio-text");
-const rapierRadioHistory = document.querySelector("#rapier-radio-history");
-const rapierRadioDisclosure = document.querySelector("#rapier-radio-disclosure");
 const navConsole = document.querySelector("#nav-console");
 const navMeshMapCanvas = document.querySelector("#nav-mesh-map");
 const navUi = navConsole ? bindNavNdChrome(document) : null;
@@ -567,7 +564,6 @@ function bindMeshNdToolbar(bridgeRef) {
 }
 
 let lastRapierRadioSequence = 0;
-let rapierRadioCalls = [];
 
 function radioValue(state, field) {
   return state?.[`radio_${field}`] ?? state?.[`rapier_radio_${field}`];
@@ -578,62 +574,28 @@ function updateMissionRadio(state) {
   if (!state) {
     rapierRadio.hidden = true;
     lastRapierRadioSequence = 0;
-    rapierRadioCalls = [];
-    rapierRadioHistory?.replaceChildren();
     return;
   }
 
   const sequence = Math.max(0, Math.floor(Number(radioValue(state, "sequence")) || 0));
-  if (sequence === 0 && lastRapierRadioSequence > 0) {
-    lastRapierRadioSequence = 0;
-    rapierRadioCalls = [];
-    rapierRadioHistory?.replaceChildren();
-  }
+  if (sequence === 0 && lastRapierRadioSequence > 0) lastRapierRadioSequence = 0;
   const rawText = radioValue(state, "text");
   const rawSpeaker = radioValue(state, "speaker");
-  const rawCallsign = radioValue(state, "callsign");
-  const rawChannel = radioValue(state, "channel");
-  const rawFrequency = radioValue(state, "frequency");
   const text = typeof rawText === "string" ? rawText.trim() : "";
   const speaker = typeof rawSpeaker === "string" ? rawSpeaker.trim() : "";
-  const callsign = typeof rawCallsign === "string" ? rawCallsign.trim() : "";
-  const channel = typeof rawChannel === "string" ? rawChannel.trim() : "";
-  const frequency = typeof rawFrequency === "string" ? rawFrequency.trim() : "";
   const priority = Math.max(0, Math.min(2,
     Math.floor(Number(radioValue(state, "priority")) || 0)));
 
   if (sequence > 0 && sequence !== lastRapierRadioSequence && text) {
     lastRapierRadioSequence = sequence;
-    rapierRadioCalls = [
-      { sequence, channel, frequency, speaker, callsign, text, priority },
-      ...rapierRadioCalls.filter((call) => call.sequence !== sequence),
-    ].slice(0, 4);
-    if (rapierRadioNet)
-      rapierRadioNet.textContent = `${channel || "TACTICAL"}${frequency ? ` · ${frequency}` : ""}`;
     if (rapierRadioText)
-      rapierRadioText.textContent = `${speaker}${callsign ? ` TO ${callsign}` : ""} · ${text}`;
-    if (rapierRadioRoute)
-      rapierRadioRoute.textContent = `${speaker || "PATTERN"} → ${callsign || "ALL STATIONS"}`;
-    if (rapierRadioHistory) {
-      // One line of history, not a scrollback: the live call is the message and the ANCA C
-      // row already carries the net (owner declutter verdict 2026-07-29).
-      const rows = rapierRadioCalls.slice(1, 2).map((call) => {
-        const row = document.createElement("li");
-        row.textContent = `${call.channel || "NET"} · ${call.speaker} · ${call.text}`;
-        return row;
-      });
-      rapierRadioHistory.replaceChildren(...rows);
-    }
+      rapierRadioText.textContent = `${speaker || "R/T"}: ${text}`;
   }
 
-  if (rapierRadioDisclosure)
-    rapierRadioDisclosure.hidden = radioValue(state, "ai_generated") !== true;
   const active = radioValue(state, "active") === true;
-  const timeSeconds = Number(state?.t);
-  const endsAtSeconds = Number(radioValue(state, "ends_s"));
-  const recent = Number.isFinite(timeSeconds) && Number.isFinite(endsAtSeconds)
-    && timeSeconds <= endsAtSeconds + 2.5;
-  rapierRadio.hidden = rapierRadioCalls.length === 0 || (!active && !recent);
+  const captionsEnabled = playerSettings?.radioCaptions === true;
+  rapierRadio.hidden = !captionsEnabled || !active || !text;
+  rapierRadio.setAttribute("aria-hidden", captionsEnabled ? "false" : "true");
   rapierRadio.dataset.active = active ? "true" : "false";
   rapierRadio.dataset.priority = String(priority);
 }
@@ -2273,6 +2235,8 @@ function applyPlayerSettings() {
     settingsRadioVoice.checked = playerSettings.radioVoice !== false;
     settingsRadioVoice.disabled = !playerSettings.audio;
   }
+  if (settingsRadioCaptions)
+    settingsRadioCaptions.checked = playerSettings.radioCaptions === true;
   if (settingsAutoGcas) settingsAutoGcas.checked = playerSettings.autoGcas !== false;
   activeView && bridge?.SetAutoGcasEnabled?.(playerSettings.autoGcas !== false);
   if (settingsHighContrast) settingsHighContrast.checked = playerSettings.highContrast;
@@ -2291,6 +2255,7 @@ function commitPlayerSettings(next) {
   recorder.context("player_settings", {
     audio: playerSettings.audio,
     radioVoice: playerSettings.radioVoice,
+    radioCaptions: playerSettings.radioCaptions,
     highContrast: playerSettings.highContrast,
     reducedMotion: playerSettings.reducedMotion,
     largeText: playerSettings.largeText,
@@ -2402,6 +2367,9 @@ settingsAudio?.addEventListener("change", () => {
 });
 settingsRadioVoice?.addEventListener("change", () => commitPlayerSettings({
   ...playerSettings, radioVoice: settingsRadioVoice.checked,
+}));
+settingsRadioCaptions?.addEventListener("change", () => commitPlayerSettings({
+  ...playerSettings, radioCaptions: settingsRadioCaptions.checked,
 }));
 settingsHighContrast?.addEventListener("change", () => commitPlayerSettings({
   ...playerSettings, highContrast: settingsHighContrast.checked,

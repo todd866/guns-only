@@ -119,66 +119,34 @@
       position: fixed;
       z-index: 7;
       left: 50%;
-      bottom: calc(var(--safe-bottom) + 24px);
-      width: min(620px, calc(100vw - var(--safe-left) - var(--safe-right) - 32px));
+      bottom: calc(var(--safe-bottom) + 18px);
+      max-width: min(720px, calc(100vw - var(--safe-left) - var(--safe-right) - 32px));
       transform: translateX(-50%);
-      padding: 9px 12px 8px;
-      border: 1px solid rgba(105, 255, 169, .38);
-      border-radius: 5px;
-      color: #d9ffe7;
-      background: linear-gradient(180deg, rgba(3, 18, 24, .91), rgba(2, 9, 15, .86));
-      box-shadow: 0 7px 30px rgba(0, 0, 0, .38), inset 0 0 20px rgba(42, 255, 132, .035);
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      padding: 5px 8px;
+      border-radius: 3px;
+      color: rgba(235, 255, 242, .88);
+      background: rgba(2, 9, 15, .62);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, .28);
       pointer-events: none;
       text-shadow: 0 1px 3px #000;
     }
 
     #rapier-radio[hidden] { display: none; }
     #rapier-radio[data-priority="2"] {
-      border-color: rgba(255, 118, 88, .78);
       color: #fff0e9;
-      box-shadow: 0 7px 30px rgba(0, 0, 0, .38), 0 0 18px rgba(255, 75, 43, .14);
+      background: rgba(24, 7, 5, .70);
     }
-    #rapier-radio:not([data-active="true"]) { opacity: .68; }
-    .rapier-radio-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 5px;
-      color: rgba(169, 255, 202, .78);
-      font: 700 9px/1.15 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-    }
-    #rapier-radio-route { color: #b9ffcf; }
     #rapier-radio-text {
       display: block;
       color: inherit;
-      font: 680 14px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      letter-spacing: .025em;
-      text-transform: uppercase;
-    }
-    #rapier-radio-history {
-      display: flex;
-      gap: 7px 14px;
-      flex-wrap: wrap;
-      margin: 7px 0 0;
-      padding: 6px 0 0;
-      border-top: 1px solid rgba(137, 255, 180, .14);
-      list-style: none;
-      color: rgba(205, 255, 221, .56);
-      font: 600 8px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      text-transform: uppercase;
-    }
-    #rapier-radio-disclosure {
-      color: rgba(190, 226, 202, .46);
-      white-space: nowrap;
+      font: 560 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .01em;
     }
     .touch-mode #rapier-radio {
       bottom: calc(var(--safe-bottom) + 148px);
-      width: min(540px, calc(100vw - var(--safe-left) - var(--safe-right) - 22px));
+      max-width: min(540px, calc(100vw - var(--safe-left) - var(--safe-right) - 22px));
     }
-    .large-interface-text #rapier-radio-text { font-size: 17px; }
+    .large-interface-text #rapier-radio-text { font-size: 15px; }
 
     #pilot-physiology {
       --pilot-vignette-opacity: 0;
@@ -1790,16 +1758,17 @@
       cursor: not-allowed;
     }
 
-    /* Top-LEFT, under the multiplayer badge. The top-right corner belongs to the GUN TEMP
-       instrument and the aircraft-systems console; this chrome was sitting on top of the
-       temperature bar and hiding a primary gunnery instrument behind a pause button. */
+    /* A compact, discoverable pause target. The full "Pause · Esc" label was permanent flight
+       chrome even though the keyboard binding is taught once in Controls. */
     #pause-button {
       position: fixed;
       z-index: 9;
       top: calc(var(--safe-top) + 38px);
       left: calc(var(--safe-left) + 11px);
-      min-width: 76px;
+      width: 44px;
+      min-width: 44px;
       min-height: 44px;
+      padding: 0;
       border: 1px solid rgba(77, 255, 136, .35);
       border-radius: 4px;
       color: rgba(217, 255, 229, .76);
@@ -2327,16 +2296,10 @@
   <canvas id="hud" aria-hidden="true"></canvas>
   <div id="view-status" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="multiplayer-status" role="status" aria-live="polite" data-phase="off" hidden>SOLO · ROOM NOT CONFIGURED</div>
-  <button id="pause-button" type="button" aria-label="Pause sortie"><span class="pause-desktop">Pause · Esc</span><span class="pause-mobile" aria-hidden="true">Ⅱ</span></button>
+  <button id="pause-button" type="button" aria-label="Pause sortie (Escape)"><span class="pause-desktop" aria-hidden="true">Ⅱ</span><span class="pause-mobile" aria-hidden="true">Ⅱ</span></button>
   <output id="flight-announcer" class="visually-hidden" role="status" aria-live="assertive" aria-atomic="true"></output>
-  <section id="rapier-radio" aria-label="Mission radio" hidden>
-    <div class="rapier-radio-head">
-      <span id="rapier-radio-net">TACTICAL · 251.000 UHF</span>
-      <span id="rapier-radio-route">PACKAGE FREQUENCY</span>
-      <span id="rapier-radio-disclosure">AI-GENERATED TRAINING VOICE</span>
-    </div>
+  <section id="rapier-radio" aria-label="Optional radio captions" hidden>
     <output id="rapier-radio-text" role="status" aria-live="polite" aria-atomic="true"></output>
-    <ol id="rapier-radio-history" aria-label="Recent radio calls" aria-live="off"></ol>
   </section>
 
   <div id="pilot-physiology" aria-hidden="true" hidden>
@@ -2638,7 +2601,7 @@
                 <span class="sortie-number">RAPIER <b data-program-status="rapier-intercept"></b></span>
                 <strong>Rapier Intercept</strong>
                 <span>Catapult off a buried strip, climb, light the ram, kill the enabler, trap on the hook.</span>
-                <small>ONE PASS · 12 G STRUCTURAL, 15 G ON OVERRIDE · HOOK RECOVERY</small>
+                <small>ONE PASS · 12 G STRUCTURAL · LOW-Q INCIDENCE OVERRIDE · HOOK RECOVERY</small>
               </button>
             </div>
             <div class="sortie-option" data-program-state="available">
@@ -2712,6 +2675,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
       <div class="settings-grid">
         <label class="settings-toggle"><input id="setting-audio" type="checkbox"> Sound</label>
         <label class="settings-toggle"><input id="setting-radio-voice" type="checkbox"> Radio voices</label>
+        <label class="settings-toggle"><input id="setting-radio-captions" type="checkbox"> Radio captions</label>
         <label class="settings-toggle"><input id="setting-autogcas" type="checkbox"> Auto-GCAS backstop</label>
         <label class="settings-toggle"><input id="setting-high-contrast" type="checkbox"> High-contrast HUD</label>
         <label class="settings-toggle"><input id="setting-reduced-motion" type="checkbox"> Reduce motion</label>
