@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import http from "node:http";
-import { readFile, stat } from "node:fs/promises";
-import { join, normalize, extname } from "node:path";
+import { join } from "node:path";
 import { chromium } from "playwright";
+// Keep one server implementation: terrain requests rely on its production-like HTTP 206 support.
+import { serveStatic } from "../wwwroot/render/hud/tests/harness/static_server.mjs";
 
 // Boots the PUBLISHED web app (its wwwroot passed via SMOKE_WWWROOT) in headless Chromium and
 // requires it to reach a running flight kernel. Blazor loads the WASM sim, then app.js constructs
@@ -21,53 +21,22 @@ const WWWROOT = process.env.SMOKE_WWWROOT;
 const TIMEOUT_SCALE = Math.max(1, Number(process.env.SMOKE_TIMEOUT_SCALE) || 1);
 const scaled = (ms) => ms * TIMEOUT_SCALE;
 
-const MIME = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".wasm": "application/wasm",
-  ".png": "image/png",
-  ".webp": "image/webp",
-  ".svg": "image/svg+xml",
-  ".ico": "image/x-icon",
-  ".woff2": "font/woff2",
-};
+test("the smoke server preserves production terrain byte-range semantics", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 
-async function serveStatic(root) {
-  const rootNormal = normalize(root);
-  const server = http.createServer(async (request, response) => {
-    try {
-      const url = new URL(request.url, "http://127.0.0.1");
-      let pathname = decodeURIComponent(url.pathname);
-      if (pathname.endsWith("/")) pathname += "index.html";
-      const filePath = normalize(join(rootNormal, pathname));
-      if (filePath !== rootNormal && !filePath.startsWith(rootNormal)) {
-        response.writeHead(403).end();
-        return;
-      }
-      const info = await stat(filePath).catch(() => null);
-      if (!info || !info.isFile()) {
-        response.writeHead(404).end("not found");
-        return;
-      }
-      response.writeHead(200, {
-        "content-type": MIME[extname(filePath).toLowerCase()] ?? "application/octet-stream",
-        "cache-control": "no-store",
-      });
-      response.end(await readFile(filePath));
-    } catch (error) {
-      response.writeHead(500).end(String(error));
-    }
-  });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address();
-  return {
-    url: `http://127.0.0.1:${port}/`,
-    close: () => new Promise((resolve) => server.close(resolve)),
-  };
-}
+  const site = await serveStatic(WWWROOT);
+  try {
+    const response = await fetch(`${site.url}index.html`, {
+      headers: { Range: "bytes=0-1" },
+    });
+    assert.equal(response.status, 206);
+    assert.match(response.headers.get("content-range") ?? "", /^bytes 0-1\/\d+$/);
+    assert.equal(response.headers.get("content-length"), "2");
+    assert.equal((await response.arrayBuffer()).byteLength, 2);
+  } finally {
+    await site.close();
+  }
+});
 
 test("the published Indoor route boots its Three.js facility and transitions optical to radio", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
