@@ -120,9 +120,12 @@ is taught without the player being told they are being taught.
 
 ### 2. Spawn geometry does the visualisation work
 
-Engagement 0 opens the merge at **1,000 m** slant range rather than 5,000. The bandit is then
-~4 px and growing rather than 1 px and static, and reads as an aircraft with a visible aspect. The
-range problem is solved by putting the player where seeing works, not by adding HUD furniture.
+The first engagement (`engagementNumber == 1`) opens the merge at **1,000 m** slant range.
+`ReactiveBandit.SpawnForMerge` currently opens at `alongM = 2200.0 + variation * 220.0`, and the
+fight then opens out as the Ace manoeuvres — which is how a 2,200 m spawn produces a 3,716 m median
+firing range. At 1,000 m the bandit is ~4 px and growing rather than 1 px and receding, and reads
+as an aircraft with a visible aspect. The range problem is solved by putting the player where
+seeing works, not by adding HUD furniture.
 
 ### 3. Withdrawal is per-second, and belongs to the bandit
 
@@ -164,9 +167,9 @@ the player is doing fine. This is what keeps hand-holding from becoming boredom.
 
 | Change | File |
 |---|---|
-| Restore a real opening rung for engagement 0 | `sim/Doctrine/PilotSkill.cs` |
+| Restore a real opening rung for the first engagement | `sim/Doctrine/PilotSkill.cs` |
 | `BanditTactic.Present` + the transition rule | `sim/Doctrine/ReactiveBandit.cs` |
-| Sparring-partner `SpawnSpec` at engagement 0: close spawn range, `FormationSize 1`, no coordination role | `sim/Doctrine/FightDirector.cs` |
+| Sparring-partner `SpawnSpec` at the first engagement: close spawn range, `FormationSize 1`, no coordination role | `sim/Doctrine/FightDirector.cs` |
 | Instructor lines in LSO idiom | `audio/radio/mission/lines.json`, `sim/MissionRadio.cs` |
 | Emit `bandit_tactic` and the withdrawal trigger | snapshot projection |
 
@@ -212,4 +215,11 @@ unnecessary. Ship the mechanism, re-read the telemetry, then decide.
   fight they cannot hold. Mitigation: the sustained-seconds threshold is the tuning knob, and
   telemetry records the trigger so it can be tuned on evidence rather than taste.
 - **Returning players get the sparring partner again** because the store forgot them. Mitigation:
-  engagement 0 is a cold-start-only path; a learner estimate that already exists skips it.
+  the sparring spawn is gated on `!_anyObserved && _phase == DirectorPhase.Calm`, the director's
+  existing cold-start branch — a learner estimate that already exists skips it.
+
+## A note on engagement numbering
+
+`ReactiveBandit`'s constructor and `SpawnForMerge` both throw `ArgumentOutOfRangeException` when
+`engagementNumber < 1`. "The first engagement" therefore always means `engagementNumber == 1`
+throughout this design and its implementation plan; there is no engagement 0.
