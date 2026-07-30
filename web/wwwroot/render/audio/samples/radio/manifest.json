@@ -1,1208 +1,2043 @@
 {
-  "version": 2,
-  "catalog_version": 3,
-  "model": "gpt-4o-mini-tts-2025-03-20",
+  "version": 3,
+  "equipment_profile_version": 1,
+  "catalog_version": 8,
+  "provider": "hume",
+  "model": "1",
   "disclosure": "Radio speech may use AI-generated training voices.",
   "clips": {
-    "launch-cleared": {
-      "url": "./launch-cleared.wav",
-      "role": "launch",
-      "voice": "onyx",
-      "duration_s": 2.35,
-      "takes": [
-        {
-          "url": "./launch-cleared.wav",
-          "source_sha256": "23516cf46feb22ecf0a598196fa124b663ff7a5b6c380dd8fe6e150cace90120",
-          "file_sha256": "e65704400b01e9c9eda7c692b06c0ee707eb003066a0be88615e6992fa0a4672",
-          "duration_s": 2.35,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
-        }
-      ]
-    },
-    "pilot-launch-readback": {
-      "url": "./pilot-launch-readback.wav",
-      "role": "pilot",
-      "voice": "marin",
-      "duration_s": 1.35,
-      "takes": [
-        {
-          "url": "./pilot-launch-readback.wav",
-          "source_sha256": "167b5fecbbe7eb9d3e4e17d5966c2fa35fe06bd9820fbfa7a924d27381a5d8fe",
-          "file_sha256": "c31794be2e7dbf77dc8c5d59f029944b84c86b8ab2fc4ad168ea8185b5a406a8",
-          "duration_s": 1.35,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
-        }
-      ]
-    },
-    "pilot-airborne": {
-      "url": "./pilot-airborne.wav",
-      "role": "pilot",
-      "voice": "marin",
-      "duration_s": 2.6,
-      "takes": [
-        {
-          "url": "./pilot-airborne.wav",
-          "source_sha256": "2e14586b303c9f78b4c13e87eaf3e68bf1dcc5fcf835443d181f27e8e9a11e33",
-          "file_sha256": "c7d4bda88c94e14ddea45bb151218ea2cd123c6e5bd7a22615c596d389b26501",
-          "duration_s": 2.6,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
-        }
-      ]
-    },
-    "tower-join-initial": {
-      "url": "./tower-join-initial.wav",
-      "role": "tower",
-      "voice": "cedar",
-      "duration_s": 4.8,
-      "takes": [
-        {
-          "url": "./tower-join-initial.wav",
-          "source_sha256": "c8a2f91311482ba20c181041474e9620f585b5e6310ac168d33632396732da8c",
-          "file_sha256": "7b5283ca235acbe5bbf1f08da31db3fe1546af7f83c84de3d5810f5810ffcf33",
-          "duration_s": 4.8,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
-        }
-      ]
-    },
     "pilot-initial": {
       "url": "./pilot-initial.wav",
       "role": "pilot",
-      "voice": "marin",
-      "duration_s": 2.6,
+      "transcript": "Ghost One One, initial.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 1.138,
       "takes": [
         {
           "url": "./pilot-initial.wav",
-          "source_sha256": "0e0031a9835570a410e64774d9e27e1722d8937df9a830c79f6b06afeffc48c6",
-          "file_sha256": "2399aa35716ec79e67d2c33439bfdfc99a50744bf85625f4e0d4d7e3054b317a",
-          "duration_s": 2.6,
-          "sample_rate_hz": 24000,
+          "source_sha256": "84cbccacb2d2c4ce62cbc32938fc12115f618b34daf1ac9ff801f241220eefc4",
+          "file_sha256": "087fdf1cf0b3431ab03aa610ea084b3b01186496120e0059ae73570de77ca8fb",
+          "duration_s": 1.138,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.038,
+          "target_duration_s": [
+            0.75,
+            1.05
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "tower-break-approved": {
       "url": "./tower-break-approved.wav",
       "role": "tower",
-      "voice": "cedar",
-      "duration_s": 3.5,
+      "transcript": "Ghost One One, left break approved.",
+      "voice": "82a76fb8-3524-4e87-9265-9795c8e4ede6",
+      "voice_name": "Male Protagonist",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "duration_s": 1.493,
       "takes": [
         {
           "url": "./tower-break-approved.wav",
-          "source_sha256": "c6e220c774ff63de61416e62d6d8bd0d63f30882cfd4af977418a9b574fa1b18",
-          "file_sha256": "d1b9415fe6615cb5603f9c69097cda7ac2d7f72642e1639b3d01d833a1587c34",
-          "duration_s": 3.5,
-          "sample_rate_hz": 24000,
+          "source_sha256": "8705f52f13606c63cbfc7d72716b59db50177df379827d00f2aac2d7bb4553b5",
+          "file_sha256": "b3e7864082bd29728db29b8a17e90a7283c4fe092c9e956c18436a5fd56e538a",
+          "duration_s": 1.493,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.393,
+          "target_duration_s": [
+            1.0,
+            1.4
+          ],
+          "duration_within_target": true
         }
       ]
     },
-    "pilot-downwind": {
-      "url": "./pilot-downwind.wav",
+    "pilot-crosswind": {
+      "url": "./pilot-crosswind.wav",
       "role": "pilot",
-      "voice": "marin",
-      "duration_s": 2.85,
+      "transcript": "Ghost One One, crosswind.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 1.135,
       "takes": [
         {
-          "url": "./pilot-downwind.wav",
-          "source_sha256": "ca04a853dc9386ee9d6a12945e37d59aeeea30529f832dbb2d84be67dda3c1df",
-          "file_sha256": "416c188b349ede309a3e8fcd7d3388d04dc1772e115653bdddf52faa05260aec",
-          "duration_s": 2.85,
-          "sample_rate_hz": 24000,
+          "url": "./pilot-crosswind.wav",
+          "source_sha256": "687ab6bb2c5b62383ba913a7b0301356c3b2d3aa4ae2bf9bd6558545bafdb887",
+          "file_sha256": "2b18ad48575d1c2819be9355369942f278dc737dd149d9e8e52ca658de2e983e",
+          "duration_s": 1.135,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
-        }
-      ]
-    },
-    "pilot-downwind-gear-unsafe": {
-      "url": "./pilot-downwind-gear-unsafe.wav",
-      "role": "pilot",
-      "voice": "marin",
-      "duration_s": 1.7,
-      "takes": [
-        {
-          "url": "./pilot-downwind-gear-unsafe.wav",
-          "source_sha256": "e9ff0319fd7fe1330d7a448db76f13792e07680e55d4d7a96464034a25a4eed8",
-          "file_sha256": "25ce0d8da9ec33c5af29aea50263925a72691b9f05fde276579e01a84b0413c5",
-          "duration_s": 1.7,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.035,
+          "target_duration_s": [
+            0.8,
+            1.15
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "pattern-report",
+            "wordCount": 4,
+            "durationSeconds": 1.1349,
+            "wholePacketWordsPerMinute": 211.5,
+            "articulationWordsPerMinute": 247.4,
+            "internalSilenceRatio": 0.0,
+            "longestInternalPauseSeconds": 0.0,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
         }
       ]
     },
     "tower-check-gear-downwind": {
       "url": "./tower-check-gear-downwind.wav",
       "role": "tower",
-      "voice": "cedar",
-      "duration_s": 2.55,
+      "transcript": "Ghost One One, check wheels down.",
+      "voice": "82a76fb8-3524-4e87-9265-9795c8e4ede6",
+      "voice_name": "Male Protagonist",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "duration_s": 1.481,
       "takes": [
         {
           "url": "./tower-check-gear-downwind.wav",
-          "source_sha256": "81681f334ccc97fa0a53481bdfddc2d48b5461afe9f21c503353582e8b055d67",
-          "file_sha256": "b126fb777909aaa460040029a9743e8b026608920e89973242f4ae5e7c5cb89a",
-          "duration_s": 2.55,
-          "sample_rate_hz": 24000,
+          "source_sha256": "6afcc6ee17b5863671587f018b50deb1cae87618e2b2d273f0727beb1105aac3",
+          "file_sha256": "4c90d84fb1cf59028e65a622f7150744a52f610d35f031a37b5f642c292d161f",
+          "duration_s": 1.481,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.381,
+          "target_duration_s": [
+            1.0,
+            1.4
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "pilot-base": {
       "url": "./pilot-base.wav",
       "role": "pilot",
-      "voice": "marin",
-      "duration_s": 3.55,
+      "transcript": "Ghost One One, base, three greens.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 1.494,
       "takes": [
         {
           "url": "./pilot-base.wav",
-          "source_sha256": "82aab066e8e180f5d3f5440673233551d8803e5efbde0509cf29170a624b622d",
-          "file_sha256": "2c9bee2b9d3f4a304f5c5ca2fdb55925da1ec0b88a04faa4f839958ecbc2d3be",
-          "duration_s": 3.55,
-          "sample_rate_hz": 24000,
+          "source_sha256": "a4c6e8790b452a0c7cc805ea4acee872ecb3558a81b65e8976fe7cd145049454",
+          "file_sha256": "a008fb5490239e5c0ccd861a530a51fccf088af810708c52f42f5cac018ff12b",
+          "duration_s": 1.494,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
-        }
-      ]
-    },
-    "pilot-base-gear-unsafe": {
-      "url": "./pilot-base-gear-unsafe.wav",
-      "role": "pilot",
-      "voice": "marin",
-      "duration_s": 2.4,
-      "takes": [
-        {
-          "url": "./pilot-base-gear-unsafe.wav",
-          "source_sha256": "f60e2d376f533e66668ee0b6a7e1caa05a433f6cba0fc32ce46e243466ea362f",
-          "file_sha256": "d465c1c7f529a024d77c0932ebdc99b0292067cc4e5b607b959a9ebf1d613e4f",
-          "duration_s": 2.4,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.394,
+          "target_duration_s": [
+            1.3,
+            1.6
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "pattern-report",
+            "wordCount": 6,
+            "durationSeconds": 1.4943,
+            "wholePacketWordsPerMinute": 240.9,
+            "articulationWordsPerMinute": 266.7,
+            "internalSilenceRatio": 0.0,
+            "longestInternalPauseSeconds": 0.0,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
         }
       ]
     },
     "tower-cleared-arrested-landing": {
       "url": "./tower-cleared-arrested-landing.wav",
       "role": "tower",
-      "voice": "cedar",
-      "duration_s": 4.4,
+      "transcript": "Ghost One One, cleared to land.",
+      "voice": "82a76fb8-3524-4e87-9265-9795c8e4ede6",
+      "voice_name": "Male Protagonist",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "duration_s": 1.656,
       "takes": [
         {
           "url": "./tower-cleared-arrested-landing.wav",
-          "source_sha256": "1076da308745de524df9d91f83e62c803ab844be26d2a754e0f5e1ce5318e47a",
-          "file_sha256": "f6c221fdd6ccb6d693995f48f53ed7e86da981e2367389d5c24a8c66b26d0931",
-          "duration_s": 4.4,
-          "sample_rate_hz": 24000,
+          "source_sha256": "ee2c83d89f3daaf26b21c8b3297d88318b704e71a90302e4c6304d2f5a1ee34d",
+          "file_sha256": "7ce75b29a709e2de3dc9ac95308edecc16581aff078ef7bf36601ed54a8755e9",
+          "duration_s": 1.656,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.556,
+          "target_duration_s": [
+            1.5,
+            1.9
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "pattern-clearance",
+            "wordCount": 6,
+            "durationSeconds": 1.6562,
+            "wholePacketWordsPerMinute": 217.4,
+            "articulationWordsPerMinute": 266.7,
+            "internalSilenceRatio": 0.1234,
+            "longestInternalPauseSeconds": 0.19,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
         }
       ]
     },
-    "pilot-land": {
-      "url": "./pilot-land.wav",
+    "pilot-landing-ack": {
+      "url": "./pilot-landing-ack.wav",
       "role": "pilot",
-      "voice": "marin",
-      "duration_s": 1.65,
+      "transcript": "Land, Ghost One One.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 1.113,
       "takes": [
         {
-          "url": "./pilot-land.wav",
-          "source_sha256": "49812475b129c1086f8060810a46c3a5cfa57d4927dae394300ec9f8310aaa67",
-          "file_sha256": "2d5c97e1f4bb8abeece8b83b96275a06393d31deb1ef14c743e763de636952b0",
-          "duration_s": 1.65,
-          "sample_rate_hz": 24000,
+          "url": "./pilot-landing-ack.wav",
+          "source_sha256": "bb580ddae8d946080574392ff7da3b044d555dacc3cf2caa0abaf31b892a77ca",
+          "file_sha256": "4526fb011c39782d1de6741363c64562b628bd22c8a536e10425691dc63f7c02",
+          "duration_s": 1.113,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.017,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.016,
+          "target_duration_s": [
+            0.85,
+            1.2
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "acknowledgement",
+            "wordCount": 4,
+            "durationSeconds": 1.1132,
+            "wholePacketWordsPerMinute": 215.6,
+            "articulationWordsPerMinute": 242.4,
+            "internalSilenceRatio": 0.0,
+            "longestInternalPauseSeconds": 0.0,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
         }
       ]
     },
-    "pilot-checklist-recovery-config": {
-      "url": "./pilot-checklist-recovery-config.wav",
+    "pilot-base-touch-and-go": {
+      "url": "./pilot-base-touch-and-go.wav",
       "role": "pilot",
-      "voice": "marin",
-      "duration_s": 2.7,
+      "transcript": "Ghost One One, base, three greens, touch and go.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 1.955,
       "takes": [
         {
-          "url": "./pilot-checklist-recovery-config.wav",
-          "source_sha256": "39673629d65d52cdcdaa65f1a9c1262a303f4787f474a9cafc837835b8b7d51f",
-          "file_sha256": "31eb4dc83cde709836719d479a732759c433c79aa97dbfa90a06b2378286debf",
-          "duration_s": 2.7,
-          "sample_rate_hz": 24000,
+          "url": "./pilot-base-touch-and-go.wav",
+          "source_sha256": "ba534819656a353e82067503f63fc3a4c200e376018505a9068c768d10d5b89a",
+          "file_sha256": "0511343526ac5e7e3ded24800959031a150246e43eb1478cae80f5ef24486872",
+          "duration_s": 1.955,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.855,
+          "target_duration_s": [
+            1.8,
+            2.3
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "pattern-report",
+            "wordCount": 9,
+            "durationSeconds": 1.9546,
+            "wholePacketWordsPerMinute": 276.3,
+            "articulationWordsPerMinute": 291.9,
+            "internalSilenceRatio": 0.0,
+            "longestInternalPauseSeconds": 0.0,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
+        }
+      ]
+    },
+    "tower-cleared-touch-and-go": {
+      "url": "./tower-cleared-touch-and-go.wav",
+      "role": "tower",
+      "transcript": "Ghost One One, cleared touch and go.",
+      "voice": "82a76fb8-3524-4e87-9265-9795c8e4ede6",
+      "voice_name": "Male Protagonist",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "duration_s": 1.808,
+      "takes": [
+        {
+          "url": "./tower-cleared-touch-and-go.wav",
+          "source_sha256": "b541d88750e37acd323fd3903652f57aefdc7c6de406279f99a1a857c3ad7f85",
+          "file_sha256": "d9d89ae6b89f962cc05b3fd6f9da58502b0b0adf5710436a68bf3d7ad0aeee6d",
+          "duration_s": 1.808,
+          "sample_rate_hz": 48000,
+          "channels": 1,
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.013,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.715,
+          "target_duration_s": [
+            1.6,
+            2.0
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "pattern-clearance",
+            "wordCount": 7,
+            "durationSeconds": 1.8079,
+            "wholePacketWordsPerMinute": 232.3,
+            "articulationWordsPerMinute": 250.0,
+            "internalSilenceRatio": 0.0,
+            "longestInternalPauseSeconds": 0.0,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
+        }
+      ]
+    },
+    "pilot-touch-and-go-ack": {
+      "url": "./pilot-touch-and-go-ack.wav",
+      "role": "pilot",
+      "transcript": "Cleared touch and go, Ghost One One.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 2.183,
+      "takes": [
+        {
+          "url": "./pilot-touch-and-go-ack.wav",
+          "source_sha256": "79106696c80c355f99445b84270b8195d3201430bb04363ab482f953c22ab3fb",
+          "file_sha256": "1e26ed233a35b02743a91b8fec48b44d4d0a5b607ee9fd66746a345e11d61d53",
+          "duration_s": 2.183,
+          "sample_rate_hz": 48000,
+          "channels": 1,
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 2.083,
+          "target_duration_s": [
+            2.0,
+            2.5
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "routine",
+            "wordCount": 7,
+            "durationSeconds": 2.1835,
+            "wholePacketWordsPerMinute": 192.4,
+            "articulationWordsPerMinute": 222.2,
+            "internalSilenceRatio": 0.087,
+            "longestInternalPauseSeconds": 0.18,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
+        }
+      ]
+    },
+    "pilot-going-around": {
+      "url": "./pilot-going-around.wav",
+      "role": "pilot",
+      "transcript": "Ghost One One, going around.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 1.241,
+      "takes": [
+        {
+          "url": "./pilot-going-around.wav",
+          "source_sha256": "2604f287eb308fb236be4647baa3f24169c3d7930322193a14cd2b3340bf7280",
+          "file_sha256": "1e199284d1b67f8a3128f3117a1905d14dd611204f0b5727d4972a7cbf3e706c",
+          "duration_s": 1.241,
+          "sample_rate_hz": 48000,
+          "channels": 1,
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.141,
+          "target_duration_s": [
+            0.85,
+            1.25
+          ],
+          "duration_within_target": true
+        }
+      ]
+    },
+    "tower-going-around-ack": {
+      "url": "./tower-going-around-ack.wav",
+      "role": "tower",
+      "transcript": "Ghost One One.",
+      "voice": "82a76fb8-3524-4e87-9265-9795c8e4ede6",
+      "voice_name": "Male Protagonist",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "duration_s": 0.845,
+      "takes": [
+        {
+          "url": "./tower-going-around-ack.wav",
+          "source_sha256": "426897c136b52bc04a131f4595e5e262977135e4905c15e5e5dd262514292ce7",
+          "file_sha256": "66db3e79ef8fce8b39a3199999a07819b908dd93a830d4215524bc232a17e5c4",
+          "duration_s": 0.845,
+          "sample_rate_hz": 48000,
+          "channels": 1,
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.745,
+          "target_duration_s": [
+            0.55,
+            0.85
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "tower-waveoff-gear": {
       "url": "./tower-waveoff-gear.wav",
       "role": "tower",
-      "voice": "cedar",
-      "duration_s": 3.25,
+      "transcript": "Ghost One One, go around. Gear unsafe.",
+      "voice": "6a42908a-f332-4c39-a93a-98c7d6017f12",
+      "voice_name": "Tough Guy",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": "second tower operator on the same frequency",
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "duration_s": 2.005,
       "takes": [
         {
           "url": "./tower-waveoff-gear.wav",
-          "source_sha256": "16a8e2d0e8e2694bc19f801c9bba68e44708dee88080cb53a16619ff31bfe363",
-          "file_sha256": "af153c16c2e6ab2824244a4f3ba4d513c83e33347909a257594f689deffb300b",
-          "duration_s": 3.25,
-          "sample_rate_hz": 24000,
+          "source_sha256": "ac4629ba66b301a67b75d5aab34b3fc34ab825dcb5890c524833309338335c98",
+          "file_sha256": "550323a27e9fe9a753b2685ed0ac737359c7d35627403af9a1b2d5e4b30a1175",
+          "duration_s": 2.005,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.905,
+          "target_duration_s": [
+            1.75,
+            2.25
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "tower-bolter": {
       "url": "./tower-bolter.wav",
       "role": "tower",
-      "voice": "cedar",
-      "duration_s": 2.6,
+      "transcript": "Ghost One One, go around.",
+      "voice": "82a76fb8-3524-4e87-9265-9795c8e4ede6",
+      "voice_name": "Male Protagonist",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "duration_s": 1.179,
       "takes": [
         {
           "url": "./tower-bolter.wav",
-          "source_sha256": "0b643a322a81a5acd95e9dbd2679c330f29789c0e06ac9066b24d8c2b69077e4",
-          "file_sha256": "8debcff0be450f1d277a34a97e2387da3be9f1eef2d857db8b44be1965647885",
-          "duration_s": 2.6,
-          "sample_rate_hz": 24000,
+          "source_sha256": "2e1f5eb09c8e73d1897594cce0eedc8326c9acf4bcfee76881e5fad87f3b91c2",
+          "file_sha256": "eaff97e2b01b871297aa43a7192ea0289257f9d54052650cb2886d5e26c167b6",
+          "duration_s": 1.179,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.079,
+          "target_duration_s": [
+            0.8,
+            1.2
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "traffic-rapier-2-base": {
       "url": "./traffic-rapier-2-base.wav",
       "role": "traffic-two",
-      "voice": "verse",
-      "duration_s": 2.8,
+      "transcript": "Ghost One Two, base, three greens, touch and go.",
+      "voice": "b152864b-6720-496a-9d18-eaadb31516ee",
+      "voice_name": "Soft Male Conversationalist",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 2.215,
       "takes": [
         {
           "url": "./traffic-rapier-2-base.wav",
-          "source_sha256": "29a2b7e9e6fa574662ae1d3dd4dd8a9fd833c9b32064faadb7556ccf39720b7b",
-          "file_sha256": "e5f954ca259b6db96d2c2dbdbcdb258ec909d76ea59b07d097463fe40a95a0fc",
-          "duration_s": 2.8,
-          "sample_rate_hz": 24000,
+          "source_sha256": "7ac45318facbe3aaa1d402d0852aa7770e98bb4408b18b02c860a7a565243564",
+          "file_sha256": "fb8c1ea8593f1780f2180f987bb58c69b15d2b93dad2626f22db2354f231ca53",
+          "duration_s": 2.083,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.0,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 2.003,
+          "target_duration_s": [
+            1.9,
+            2.4
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "pattern-report",
+            "wordCount": 9,
+            "durationSeconds": 2.0832,
+            "wholePacketWordsPerMinute": 259.2,
+            "articulationWordsPerMinute": 303.4,
+            "internalSilenceRatio": 0.0825,
+            "longestInternalPauseSeconds": 0.08,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
         },
         {
           "url": "./traffic-rapier-2-base--t2.wav",
-          "source_sha256": "79950c7e413d582af6a28c39b4a2a80a952fe1cd5042f601648154d5db6fe84c",
-          "file_sha256": "930145a646477262687c934d62dcd355bd651b8b2600f4772683f72824a8d677",
-          "duration_s": 2.55,
-          "sample_rate_hz": 24000,
+          "source_sha256": "3b935c44364651445987a7fcc60f42bf4893a768b14179e315f7663a9775223d",
+          "file_sha256": "8b6c0b5c9c28a1be8b88ef943a51417c55510b332ca20cea4786b063e406f858",
+          "duration_s": 2.215,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 2.115,
+          "target_duration_s": [
+            1.9,
+            2.4
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "pattern-report",
+            "wordCount": 9,
+            "durationSeconds": 2.2148,
+            "wholePacketWordsPerMinute": 243.8,
+            "articulationWordsPerMinute": 272.7,
+            "internalSilenceRatio": 0.0481,
+            "longestInternalPauseSeconds": 0.1,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
         }
       ]
     },
-    "traffic-rapier-2-base-alt": {
-      "url": "./traffic-rapier-2-base-alt.wav",
-      "role": "traffic-two",
-      "voice": "verse",
-      "duration_s": 3.4,
+    "tower-rapier-2-cleared-landing": {
+      "url": "./tower-rapier-2-cleared-landing.wav",
+      "role": "tower",
+      "transcript": "Ghost One Two, cleared touch and go.",
+      "voice": "82a76fb8-3524-4e87-9265-9795c8e4ede6",
+      "voice_name": "Male Protagonist",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "duration_s": 2.041,
       "takes": [
         {
-          "url": "./traffic-rapier-2-base-alt.wav",
-          "source_sha256": "1047d9063dfd40cdbc8d9fd0a9bce8b6c4a74ba5b568ba125db05c7a9224afaa",
-          "file_sha256": "00c4339a21d0125db6a1deed9a567e60e6155a22f156fe7433177e0f5f2732ca",
-          "duration_s": 3.4,
-          "sample_rate_hz": 24000,
+          "url": "./tower-rapier-2-cleared-landing.wav",
+          "source_sha256": "2f553d8ed41871870732e598a21086baab98ffe99d2a47ae151d802a2a24093c",
+          "file_sha256": "bcb6a22dadcaeed655012d3215b428589d6af575ca5d462b79c90433b581e8c8",
+          "duration_s": 2.041,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
-        },
-        {
-          "url": "./traffic-rapier-2-base-alt--t2.wav",
-          "source_sha256": "7695b9be21bc0c2a7e3ce47833b1790fb77ad540dda25510b216dda4f3821ba5",
-          "file_sha256": "7eeb7b59b6fd1d094e87f8e119a356e0b4c4588f0aeeda973fa32d8f4997ba91",
-          "duration_s": 2.75,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.941,
+          "target_duration_s": [
+            1.6,
+            2.2
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "pattern-clearance",
+            "wordCount": 7,
+            "durationSeconds": 2.0409,
+            "wholePacketWordsPerMinute": 205.8,
+            "articulationWordsPerMinute": 254.5,
+            "internalSilenceRatio": 0.1223,
+            "longestInternalPauseSeconds": 0.23,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
         }
       ]
     },
-    "traffic-rapier-2-final": {
-      "url": "./traffic-rapier-2-final.wav",
+    "traffic-rapier-2-landing-ack": {
+      "url": "./traffic-rapier-2-landing-ack.wav",
       "role": "traffic-two",
-      "voice": "verse",
-      "duration_s": 2.75,
+      "transcript": "Cleared touch and go, Ghost One Two.",
+      "voice": "b152864b-6720-496a-9d18-eaadb31516ee",
+      "voice_name": "Soft Male Conversationalist",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 2.294,
       "takes": [
         {
-          "url": "./traffic-rapier-2-final.wav",
-          "source_sha256": "76ded764ce472bda70e795b08c11887768ff906be26f14bc05da560c135f652f",
-          "file_sha256": "d8789c4b797e3e93ce5b404c9ca4ce4eb1ea2041c41fa23c03b4f43cf09b62f0",
-          "duration_s": 2.3,
-          "sample_rate_hz": 24000,
+          "url": "./traffic-rapier-2-landing-ack.wav",
+          "source_sha256": "f4971d29b65c5ea9849b6d63a1a2955a04e92844f162d5ba0fbf92e4cb94089a",
+          "file_sha256": "ded2563d038eabc720a9d114da69b3c5d8d249a4d4c22f1e71d5de4e63079f37",
+          "duration_s": 2.294,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
-        },
-        {
-          "url": "./traffic-rapier-2-final--t2.wav",
-          "source_sha256": "8e3eddcebb00cae2b48b236bed7d0d3ec62c0f5dd290554418e7e78cd7b5c2a7",
-          "file_sha256": "aa9c02aece24c8945756d75e880e0b15c3204036194118502e5e004f18954b1a",
-          "duration_s": 2.75,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
-        }
-      ]
-    },
-    "traffic-rapier-2-final-alt": {
-      "url": "./traffic-rapier-2-final-alt.wav",
-      "role": "traffic-two",
-      "voice": "verse",
-      "duration_s": 2.4,
-      "takes": [
-        {
-          "url": "./traffic-rapier-2-final-alt.wav",
-          "source_sha256": "0b0029f96abdf0a344359127a1eb13b61997aadbbd1d905b86df589e54ec5f64",
-          "file_sha256": "87318b13d7c10631d1213a42eaa3603c51cac310e16834bbd35f8f78bbb2911e",
-          "duration_s": 2.0,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
-        },
-        {
-          "url": "./traffic-rapier-2-final-alt--t2.wav",
-          "source_sha256": "a2427cd8da2e4ec15b6ada9715aa92b459c7feae008eb58bbb2a787655514cae",
-          "file_sha256": "70292cd31a3c252d7727d548fac52f82101c175a8019cfcc459cf1a2daad2837",
-          "duration_s": 2.4,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 2.194,
+          "target_duration_s": [
+            2.0,
+            2.5
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "routine",
+            "wordCount": 7,
+            "durationSeconds": 2.2936,
+            "wholePacketWordsPerMinute": 183.1,
+            "articulationWordsPerMinute": 217.6,
+            "internalSilenceRatio": 0.0896,
+            "longestInternalPauseSeconds": 0.19,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
         }
       ]
     },
     "traffic-rapier-3-base": {
       "url": "./traffic-rapier-3-base.wav",
       "role": "traffic-three",
-      "voice": "echo",
-      "duration_s": 3.35,
+      "transcript": "Ghost One Three, base, three greens, touch and go.",
+      "voice": "f4703974-b6a1-45c8-ac72-72ea06e3dd43",
+      "voice_name": "Steve Frisch",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 2.268,
       "takes": [
         {
           "url": "./traffic-rapier-3-base.wav",
-          "source_sha256": "d148f059a50d77c15485e4722510d29a66691a26b1745dceea58d8e525891f84",
-          "file_sha256": "f4289e3a5569ba7c0b283f154e95299af1bc4839da3e6e63da99bb5ed08ac7c3",
-          "duration_s": 3.35,
-          "sample_rate_hz": 24000,
+          "source_sha256": "9bb3777725a7af21d4d1a994d11206e283299a305e5e370342e87079488b211f",
+          "file_sha256": "b54107c56c63451e83224490ff69292f573cf72d6e4ed180279c5bfbd5a70433",
+          "duration_s": 2.238,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.001,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 2.157,
+          "target_duration_s": [
+            1.9,
+            2.4
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "pattern-report",
+            "wordCount": 9,
+            "durationSeconds": 2.2381,
+            "wholePacketWordsPerMinute": 241.3,
+            "articulationWordsPerMinute": 260.9,
+            "internalSilenceRatio": 0.0,
+            "longestInternalPauseSeconds": 0.0,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
         },
         {
           "url": "./traffic-rapier-3-base--t2.wav",
-          "source_sha256": "273f8872f51eae6295b1b130356a6191aa54bdaf20a516eca56ee66b3c19d342",
-          "file_sha256": "f632b8cf1ceb2eaa82af3d343e537bc28b33b432933b2b5c0824165b127a0c34",
-          "duration_s": 3.1,
-          "sample_rate_hz": 24000,
+          "source_sha256": "ccac2f9979b26eeb906afdb4ab0fc364b1e8086f0a22cad26c85e78bbee4cc90",
+          "file_sha256": "fad84b08951e931f2832335d65f6e277e59cddb56f73e862e6863887b2464117",
+          "duration_s": 2.268,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 2.168,
+          "target_duration_s": [
+            1.9,
+            2.4
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "pattern-report",
+            "wordCount": 9,
+            "durationSeconds": 2.2681,
+            "wholePacketWordsPerMinute": 238.1,
+            "articulationWordsPerMinute": 257.1,
+            "internalSilenceRatio": 0.0,
+            "longestInternalPauseSeconds": 0.0,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
         }
       ]
     },
-    "traffic-rapier-3-base-alt": {
-      "url": "./traffic-rapier-3-base-alt.wav",
-      "role": "traffic-three",
-      "voice": "echo",
-      "duration_s": 3.8,
+    "tower-rapier-3-cleared-landing": {
+      "url": "./tower-rapier-3-cleared-landing.wav",
+      "role": "tower",
+      "transcript": "Ghost One Three, cleared touch and go.",
+      "voice": "82a76fb8-3524-4e87-9265-9795c8e4ede6",
+      "voice_name": "Male Protagonist",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "duration_s": 2.12,
       "takes": [
         {
-          "url": "./traffic-rapier-3-base-alt.wav",
-          "source_sha256": "09aa657505dc13ca649b546a3c3da4fd9a9ed201df1044db6ca65ab858bf0ab4",
-          "file_sha256": "4b7d94a6d5e4599c91accd75cfba8da6d66475c7053d2eed0c16aa8efc7833b0",
-          "duration_s": 3.8,
-          "sample_rate_hz": 24000,
+          "url": "./tower-rapier-3-cleared-landing.wav",
+          "source_sha256": "fca01753da11de46a7d9dbede59dd4f73f8ebb9882228c68fb1736662bf7145f",
+          "file_sha256": "9754c9e2dd7c2c3e82f1684eb02062094e3eb3018d016275574b663c8935b35f",
+          "duration_s": 2.12,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
-        },
-        {
-          "url": "./traffic-rapier-3-base-alt--t2.wav",
-          "source_sha256": "5ff9b17834ed5f7ecd358a22d957aae24bce012521064b3d80363c835fc396a3",
-          "file_sha256": "9f7d4f2fc0f74a7397d5e628eb42edbd6fb6760b56b9662f98f61ef0f70b606f",
-          "duration_s": 3.25,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 2.02,
+          "target_duration_s": [
+            1.6,
+            2.2
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "pattern-clearance",
+            "wordCount": 7,
+            "durationSeconds": 2.1199,
+            "wholePacketWordsPerMinute": 198.1,
+            "articulationWordsPerMinute": 240.0,
+            "internalSilenceRatio": 0.1117,
+            "longestInternalPauseSeconds": 0.22,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
         }
       ]
     },
-    "traffic-rapier-3-final": {
-      "url": "./traffic-rapier-3-final.wav",
+    "traffic-rapier-3-landing-ack": {
+      "url": "./traffic-rapier-3-landing-ack.wav",
       "role": "traffic-three",
-      "voice": "echo",
-      "duration_s": 3.65,
+      "transcript": "Cleared touch and go, Ghost One Three.",
+      "voice": "f4703974-b6a1-45c8-ac72-72ea06e3dd43",
+      "voice_name": "Steve Frisch",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 2.264,
       "takes": [
         {
-          "url": "./traffic-rapier-3-final.wav",
-          "source_sha256": "7fdea8ba7b869ce120d180ce7ea73d10846b1a7c04046eda72cd9e3e977c14b0",
-          "file_sha256": "87911ee835f04c9246143a331c3f40467c510a8de3ba31da649cfdb8b51286d2",
-          "duration_s": 3.65,
-          "sample_rate_hz": 24000,
+          "url": "./traffic-rapier-3-landing-ack.wav",
+          "source_sha256": "ef9064acc40e0e6edb74fdd4500760a62fb900a25266a42f14a3603dac9a93ed",
+          "file_sha256": "e22141fb31ddd340bac3d623a847539377b42f34fce22f3bb7c0d6fbd1bc192b",
+          "duration_s": 2.264,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
-        },
-        {
-          "url": "./traffic-rapier-3-final--t2.wav",
-          "source_sha256": "4d496c31d9852f3e9f1e6036b9ed3275128ad5309e9a6bfdbe06b869f1579e39",
-          "file_sha256": "70c2267deaeac5a0733af7755f01400f536ed5bb9402fdf82f6efe48ced3cc48",
-          "duration_s": 2.7,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
-        }
-      ]
-    },
-    "traffic-rapier-3-final-alt": {
-      "url": "./traffic-rapier-3-final-alt.wav",
-      "role": "traffic-three",
-      "voice": "echo",
-      "duration_s": 2.55,
-      "takes": [
-        {
-          "url": "./traffic-rapier-3-final-alt.wav",
-          "source_sha256": "5c604426393e2c3714214ce37f1a048c09d915699a5297b341e91860278ff528",
-          "file_sha256": "bebd423368190db28fa68a7743feb855ed3528c5d5395b993c7a2d26296a343f",
-          "duration_s": 2.55,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
-        },
-        {
-          "url": "./traffic-rapier-3-final-alt--t2.wav",
-          "source_sha256": "6901d3ffc266de71309903749fd6b6f82def4da6ca87a04f2535bafdffa4307c",
-          "file_sha256": "54de78859c6155f19b8c2436783c6d09d55c7d454ab170e94935fe04d2d86c47",
-          "duration_s": 1.85,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 2.164,
+          "target_duration_s": [
+            2.0,
+            2.5
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "routine",
+            "wordCount": 7,
+            "durationSeconds": 2.2645,
+            "wholePacketWordsPerMinute": 185.5,
+            "articulationWordsPerMinute": 228.3,
+            "internalSilenceRatio": 0.1321,
+            "longestInternalPauseSeconds": 0.28,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
         }
       ]
     },
     "traffic-rapier-4-base": {
       "url": "./traffic-rapier-4-base.wav",
       "role": "traffic-four",
-      "voice": "ballad",
-      "duration_s": 4.0,
+      "transcript": "Ghost One Four, base, three greens, touch and go.",
+      "voice": "01854384-4e4e-48d4-90d1-b22f760a58b5",
+      "voice_name": "Male Podcaster",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 2.269,
       "takes": [
         {
           "url": "./traffic-rapier-4-base.wav",
-          "source_sha256": "4cae5419c5ae3e4efcad9c6a96d423c1381a05124897555a658d969675058c99",
-          "file_sha256": "abd87e9cd9dc3f457bee7e297520e6d50aa942f87696a82423369c877252c435",
-          "duration_s": 3.7,
-          "sample_rate_hz": 24000,
+          "source_sha256": "1e9c8e0f6451305ee0dae0cba239edc9b4515d489e02f4facceb3f5421fcac02",
+          "file_sha256": "b23925c4f7f1e6f100d2467dd64146dc491e593dfad68f2396b58d09242a1e4d",
+          "duration_s": 2.269,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 2.169,
+          "target_duration_s": [
+            1.9,
+            2.4
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "pattern-report",
+            "wordCount": 9,
+            "durationSeconds": 2.2685,
+            "wholePacketWordsPerMinute": 238.0,
+            "articulationWordsPerMinute": 266.0,
+            "internalSilenceRatio": 0.0425,
+            "longestInternalPauseSeconds": 0.09,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
         },
         {
           "url": "./traffic-rapier-4-base--t2.wav",
-          "source_sha256": "3b012ddada2e78434857e98f036e3cc07e96717b13f0a2fa8babbfc2660a59ca",
-          "file_sha256": "baefb10a3d4a7da58f299d3bafd5ee1cd9d24a33ed16fd17eed60dbca47eead1",
-          "duration_s": 4.0,
-          "sample_rate_hz": 24000,
+          "source_sha256": "64ac7d01648df2b7d822d0a1554e8f1b6a37788a4fa679bbaa16b2101ded2a49",
+          "file_sha256": "67efa1bfc8a0b91ae5a436ef2b5fe90e3bc952f4cbb06e26d6385b19f798af92",
+          "duration_s": 2.05,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.95,
+          "target_duration_s": [
+            1.9,
+            2.4
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "pattern-report",
+            "wordCount": 9,
+            "durationSeconds": 2.0504,
+            "wholePacketWordsPerMinute": 263.4,
+            "articulationWordsPerMinute": 284.2,
+            "internalSilenceRatio": 0.0,
+            "longestInternalPauseSeconds": 0.0,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
         }
       ]
     },
-    "traffic-rapier-4-base-alt": {
-      "url": "./traffic-rapier-4-base-alt.wav",
-      "role": "traffic-four",
-      "voice": "ballad",
-      "duration_s": 4.8,
+    "tower-rapier-4-cleared-landing": {
+      "url": "./tower-rapier-4-cleared-landing.wav",
+      "role": "tower",
+      "transcript": "Ghost One Four, cleared touch and go.",
+      "voice": "82a76fb8-3524-4e87-9265-9795c8e4ede6",
+      "voice_name": "Male Protagonist",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "duration_s": 2.107,
       "takes": [
         {
-          "url": "./traffic-rapier-4-base-alt.wav",
-          "source_sha256": "9c1d1893ed535b90d8a9b7addd1aefee1b2fda771476107176a41966ba6e7717",
-          "file_sha256": "df0072e5fbda39bf8a03d7a5e0cbbce70ed4f2a2941e52f460a39e18377592e5",
-          "duration_s": 4.8,
-          "sample_rate_hz": 24000,
+          "url": "./tower-rapier-4-cleared-landing.wav",
+          "source_sha256": "45373c83b00e0c1d96de20039af930a2204902a653ad79dd74d046ba74be2859",
+          "file_sha256": "c5326ae2c5f320375f57e1065a5ac4750f5a2ea15bb3990a468a5e694266fd57",
+          "duration_s": 2.107,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
-        },
-        {
-          "url": "./traffic-rapier-4-base-alt--t2.wav",
-          "source_sha256": "cd7b77062cc90e81bf86b1aacb66d05477d4276a816127721728284a12579ea1",
-          "file_sha256": "655d96823a72f7c2aed500dd53af882bda3b909924e6eea00241633ce791179b",
-          "duration_s": 4.35,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 2.007,
+          "target_duration_s": [
+            1.6,
+            2.2
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "pattern-clearance",
+            "wordCount": 7,
+            "durationSeconds": 2.1069,
+            "wholePacketWordsPerMinute": 199.3,
+            "articulationWordsPerMinute": 247.1,
+            "internalSilenceRatio": 0.1192,
+            "longestInternalPauseSeconds": 0.23,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
         }
       ]
     },
-    "traffic-rapier-4-final": {
-      "url": "./traffic-rapier-4-final.wav",
+    "traffic-rapier-4-landing-ack": {
+      "url": "./traffic-rapier-4-landing-ack.wav",
       "role": "traffic-four",
-      "voice": "ballad",
-      "duration_s": 4.1,
+      "transcript": "Cleared touch and go, Ghost One Four.",
+      "voice": "01854384-4e4e-48d4-90d1-b22f760a58b5",
+      "voice_name": "Male Podcaster",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 2.178,
       "takes": [
         {
-          "url": "./traffic-rapier-4-final.wav",
-          "source_sha256": "7c6ffcf8d267ebce97242ca3b702c7edebdeae777cf73c01a40890f3433b104b",
-          "file_sha256": "e3f3768e7c034f6ecc0cf65e827c94db4437c2f0f786da052a24103bf35c5901",
-          "duration_s": 3.55,
-          "sample_rate_hz": 24000,
+          "url": "./traffic-rapier-4-landing-ack.wav",
+          "source_sha256": "ec9d4456e5a333eb4cec3d280d6c1e9b2673a34d8a98006b70024967df785aad",
+          "file_sha256": "0bb9dda0bdb06116225b01ee3fc8a1a36a161ce92fdad599fb5b9cbf13f7f1e4",
+          "duration_s": 2.178,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
-        },
-        {
-          "url": "./traffic-rapier-4-final--t2.wav",
-          "source_sha256": "3b18900c3d9fc1abc4bbaa830a0da5cef7a2888703cfd19385454f1a1914929f",
-          "file_sha256": "14aef7d930e7aef2b088d41c5a9cccbac33abfc68ab0542ac119767aa57f78b3",
-          "duration_s": 4.1,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
-        }
-      ]
-    },
-    "traffic-rapier-4-final-alt": {
-      "url": "./traffic-rapier-4-final-alt.wav",
-      "role": "traffic-four",
-      "voice": "ballad",
-      "duration_s": 3.9,
-      "takes": [
-        {
-          "url": "./traffic-rapier-4-final-alt.wav",
-          "source_sha256": "d69cf4f783555942ad3a5e9d69c5be376aee41d1dec59425f8a80724c83be5e7",
-          "file_sha256": "1d88097535408f518b1f38739f82f9d10388fe128a80a77993fc0490ec94889f",
-          "duration_s": 3.85,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
-        },
-        {
-          "url": "./traffic-rapier-4-final-alt--t2.wav",
-          "source_sha256": "d4ec3dbfa7a1dd53eee9d12d1cc029f0cca7c701738030061d67b7b713aeb88d",
-          "file_sha256": "a39e472f0707736c9bbd7a78a44795ae859ccc37ecb8501faaa23703de2e8772",
-          "duration_s": 3.9,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.016,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 2.082,
+          "target_duration_s": [
+            2.0,
+            2.5
+          ],
+          "duration_within_target": true,
+          "rt_performance": {
+            "status": "pass",
+            "profile": "routine",
+            "wordCount": 7,
+            "durationSeconds": 2.1784,
+            "wholePacketWordsPerMinute": 192.8,
+            "articulationWordsPerMinute": 229.5,
+            "internalSilenceRatio": 0.0896,
+            "longestInternalPauseSeconds": 0.1,
+            "errorCount": 0,
+            "warningCount": 0,
+            "issues": []
+          }
         }
       ]
     },
     "tower-continue-check-gear": {
       "url": "./tower-continue-check-gear.wav",
       "role": "tower",
-      "voice": "cedar",
-      "duration_s": 3.25,
+      "transcript": "Ghost One One, continue, check wheels down.",
+      "voice": "82a76fb8-3524-4e87-9265-9795c8e4ede6",
+      "voice_name": "Male Protagonist",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "duration_s": 1.621,
       "takes": [
         {
           "url": "./tower-continue-check-gear.wav",
-          "source_sha256": "fa8c3214551cea57312afad1c82272cbdc4553d08220c6fd6b7ed2956a7e7637",
-          "file_sha256": "081c830957d9925d553818927f78161fbc5f86cbff2c93b3de19301936237a5d",
-          "duration_s": 3.25,
-          "sample_rate_hz": 24000,
+          "source_sha256": "5ab9b0b74a66f554aa42047c09aaa8e1123e7b89ac9bd58dd0e787e929e39560",
+          "file_sha256": "edb0d8339b30e37847fbd5677de07f72af9118b871e4ba750472ebcd3b49b2d9",
+          "duration_s": 1.621,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.521,
+          "target_duration_s": [
+            1.25,
+            1.75
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "tower-hold-position": {
       "url": "./tower-hold-position.wav",
       "role": "tower",
-      "voice": "cedar",
-      "duration_s": 2.7,
+      "transcript": "Ghost One One, hold position.",
+      "voice": "82a76fb8-3524-4e87-9265-9795c8e4ede6",
+      "voice_name": "Male Protagonist",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "duration_s": 1.284,
       "takes": [
         {
           "url": "./tower-hold-position.wav",
-          "source_sha256": "745380a2580349aa1ab7206c8294c39e7a081e7e67e0883ced92f226e1df1c9c",
-          "file_sha256": "c7b50c7869cefeca9f3dae9789f276cf727037d08af11b40620272fd119e3f87",
-          "duration_s": 2.7,
-          "sample_rate_hz": 24000,
+          "source_sha256": "9acfefc07dddfc335a92999056c8a486c82295571bf687c4e5d7c9a46ccbe122",
+          "file_sha256": "4a64ca0ea8686f4413be504c0bbe8dac73143f7ae50ee4a59ba1a017015daeb8",
+          "duration_s": 1.284,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.184,
+          "target_duration_s": [
+            0.8,
+            1.25
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "lso-bolter": {
       "url": "./lso-bolter.wav",
       "role": "lso",
-      "voice": "onyx",
-      "duration_s": 0.85,
+      "transcript": "Bolter.",
+      "voice": "89989d92-1de8-4e5d-97e4-23cd363e9788",
+      "voice_name": "Opinionated Guy",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "carrier.deck-lso.close-mic",
+      "transceiver_profile": "modern.uhf-am.deck",
+      "duration_s": 0.585,
       "takes": [
         {
           "url": "./lso-bolter.wav",
-          "source_sha256": "b8d4f4143fbffbbb0a81c3e84261708204465fb16e1f9ffa8350a107925e5a57",
-          "file_sha256": "b27dff660facc94412773b7377269a3cb26ebac55bd275e95ca47b02f53fbe95",
-          "duration_s": 0.7,
-          "sample_rate_hz": 24000,
+          "source_sha256": "5b2de3d7b8f6eb1e5d7b195724fe629750f703166111869297072e23a129103f",
+          "file_sha256": "ca28d041965dac12c4b6e339ff3b84c23bb47ff3907b42b7f187be95e2831589",
+          "duration_s": 0.569,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.469,
+          "target_duration_s": [
+            0.25,
+            0.55
+          ],
+          "duration_within_target": true
         },
         {
           "url": "./lso-bolter--t2.wav",
-          "source_sha256": "3040e947790a079c5e0d07486c1bf3436cba31149f3002944876cfab6d44d3bb",
-          "file_sha256": "2bb86dc8f8e528c36438574c1cec266b6b7e80934f9eb3ada450b95c53e7c89c",
-          "duration_s": 0.85,
-          "sample_rate_hz": 24000,
+          "source_sha256": "5e9e0cb6633d93e6bc1229afda4603fae99ee7472458d33e60ff79e7f8488ecb",
+          "file_sha256": "9b298253ff2c1b77bade419e24a8a5d4645e4203c2fd874e75ddf3b3398603ee",
+          "duration_s": 0.585,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.485,
+          "target_duration_s": [
+            0.25,
+            0.55
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "lso-waveoff": {
       "url": "./lso-waveoff.wav",
       "role": "lso",
-      "voice": "onyx",
-      "duration_s": 0.95,
+      "transcript": "Wave off.",
+      "voice": "89989d92-1de8-4e5d-97e4-23cd363e9788",
+      "voice_name": "Opinionated Guy",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "carrier.deck-lso.close-mic",
+      "transceiver_profile": "modern.uhf-am.deck",
+      "duration_s": 0.749,
       "takes": [
         {
           "url": "./lso-waveoff.wav",
-          "source_sha256": "dc58e6f75beb20937e34704bc88948629c9240bfa5243557aea2cafb74920373",
-          "file_sha256": "00e37143ce9b50954b60528abaaa3a2a30bb2ea74ecf63f79adc017cfafe9c1e",
-          "duration_s": 0.85,
-          "sample_rate_hz": 24000,
+          "source_sha256": "c2a0fce1afb1e1e85c767fa1c7e115fb53be41c1da58083d00e03ea9c3e45211",
+          "file_sha256": "00f160300e464a7d9ba5b8cc5331df70e1e80752bbce9235f49131dd94b98d29",
+          "duration_s": 0.743,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.643,
+          "target_duration_s": [
+            0.35,
+            0.8
+          ],
+          "duration_within_target": true
         },
         {
           "url": "./lso-waveoff--t2.wav",
-          "source_sha256": "ced69c2f94819c2507dba90baeeeee395f23f27701e23df3e44f9fb6b5703149",
-          "file_sha256": "d328185bda95c67ce8314450d3715bc6178842147e2f8ca8a2cffac8df0a8880",
-          "duration_s": 0.95,
-          "sample_rate_hz": 24000,
+          "source_sha256": "32759ef3ae2bc69c47b3c8b1b3ba17c964951430a3b36f7d9f83b7f210228b85",
+          "file_sha256": "268438b7c2725713804e0966b4eb00cc4929f7805eb6af49e4251dbf42bdf028",
+          "duration_s": 0.749,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.013,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.656,
+          "target_duration_s": [
+            0.35,
+            0.8
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "lso-add-power": {
       "url": "./lso-add-power.wav",
       "role": "lso",
-      "voice": "onyx",
-      "duration_s": 1.15,
+      "transcript": "A little power.",
+      "voice": "89989d92-1de8-4e5d-97e4-23cd363e9788",
+      "voice_name": "Opinionated Guy",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "carrier.deck-lso.close-mic",
+      "transceiver_profile": "modern.uhf-am.deck",
+      "duration_s": 0.949,
       "takes": [
         {
           "url": "./lso-add-power.wav",
-          "source_sha256": "4e44a2c693e6cd9fa182abff1572b18909d9e8538e25269de878bf3fee020e2f",
-          "file_sha256": "6d417eb2d30e32754a195aa26cb7039a900dc1ed7bbba45a8d54c62528043d1d",
-          "duration_s": 1.15,
-          "sample_rate_hz": 24000,
+          "source_sha256": "f9673fa20f6f4b5dd37ae7dff697bb0592679c9d12e4bee9eb9bc580fa426433",
+          "file_sha256": "59f9aa3998647acf8234468c2f36930728bac46985f7b694181b0b5f48b942be",
+          "duration_s": 0.949,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.0,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.869,
+          "target_duration_s": [
+            0.55,
+            1.05
+          ],
+          "duration_within_target": true
         },
         {
           "url": "./lso-add-power--t2.wav",
-          "source_sha256": "d8abb8a0a2ec2b27f350b8d0ebc25f9cf42d843f0140ba0c55b48ddb4f5f430d",
-          "file_sha256": "949f211823874e37cc55e4501be60549d9b7d2207845d548eb70b3f6b8efbbfd",
-          "duration_s": 0.95,
-          "sample_rate_hz": 24000,
+          "source_sha256": "9ead6c29f13739c23da3a6748df0d09b676f705d00a7497a8a66973d0c8cac1b",
+          "file_sha256": "bf07d7ac51feddc5ea92aa7967eb1eacf103af4f7fff876c9db1ff1303328833",
+          "duration_s": 0.87,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.013,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.777,
+          "target_duration_s": [
+            0.55,
+            1.05
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "lso-power": {
       "url": "./lso-power.wav",
       "role": "lso",
-      "voice": "onyx",
-      "duration_s": 0.75,
+      "transcript": "Power.",
+      "voice": "89989d92-1de8-4e5d-97e4-23cd363e9788",
+      "voice_name": "Opinionated Guy",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "carrier.deck-lso.close-mic",
+      "transceiver_profile": "modern.uhf-am.deck",
+      "duration_s": 0.549,
       "takes": [
         {
           "url": "./lso-power.wav",
-          "source_sha256": "b1b2d2e7fcbe88648d032596368654bc4708511bbb424f418d5b7a2832670f6c",
-          "file_sha256": "af0294eb10e890260b5c022294a50a077b49e69756d04fa9dd3bceb10e5b1611",
-          "duration_s": 0.75,
-          "sample_rate_hz": 24000,
+          "source_sha256": "eaedae9768bd9191c66b48013fa3a405cc67017e08bcacc3086b98ce26d7b1db",
+          "file_sha256": "55fb29c1c626fc4b5c9464100a8e7431056bcf6ae7c274e806343434e5c6f0c1",
+          "duration_s": 0.539,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.001,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.458,
+          "target_duration_s": [
+            0.25,
+            0.55
+          ],
+          "duration_within_target": true
         },
         {
           "url": "./lso-power--t2.wav",
-          "source_sha256": "e67886038671594b7cf38353a207e379676c81684c37d9132ac32c7fd8de4ba2",
-          "file_sha256": "097a726098d806f1870df27682648aae2fbf699cf9943d3655794fd2dd838625",
-          "duration_s": 0.5,
-          "sample_rate_hz": 24000,
+          "source_sha256": "4c95dcdfdc34574a6ddf8b2a59959dfb4e584869d3bfd08ab03203b200850e7b",
+          "file_sha256": "af010036563eaa2c7a604b6b639cb9c922ba1b937e442f367a58c7b6a4d4e990",
+          "duration_s": 0.549,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.449,
+          "target_duration_s": [
+            0.25,
+            0.55
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "lso-low": {
       "url": "./lso-low.wav",
       "role": "lso",
-      "voice": "onyx",
-      "duration_s": 0.55,
+      "transcript": "You're low.",
+      "voice": "89989d92-1de8-4e5d-97e4-23cd363e9788",
+      "voice_name": "Opinionated Guy",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "carrier.deck-lso.close-mic",
+      "transceiver_profile": "modern.uhf-am.deck",
+      "duration_s": 0.749,
       "takes": [
         {
           "url": "./lso-low.wav",
-          "source_sha256": "9f321f3591f94f835674a1dccd5c9f7064a76a2cf4e40d575265d989b44a192a",
-          "file_sha256": "7606a9e30f70faf9c43fbf76941f7d83d4a6030df160eefdd7bffd755865efad",
-          "duration_s": 0.5,
-          "sample_rate_hz": 24000,
+          "source_sha256": "6122a103c88a385ad3e90e6b941534c33e650f70abb97d294b9b92746b6e0cc1",
+          "file_sha256": "29ea955e20c1051b03c97a61c86e08d98851b4eba6587b7f47ca7b91fc0c85f6",
+          "duration_s": 0.749,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.019,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.65,
+          "target_duration_s": [
+            0.45,
+            0.75
+          ],
+          "duration_within_target": true
         },
         {
           "url": "./lso-low--t2.wav",
-          "source_sha256": "d19fa892e86275e3a9befbe0fea6ddeb17193be2a8486ee3c9b9454ee6d1d09f",
-          "file_sha256": "dc1df2b07341b5af99a98374fa5e10ce6f5646874383ab72ee48fe262a0fd700",
-          "duration_s": 0.55,
-          "sample_rate_hz": 24000,
+          "source_sha256": "7dfbe1762f06b2d90298b5dd324e7d5c357361396ce7a0c28da7e7bded345187",
+          "file_sha256": "1c80ec9f69b685955a141798d3566279c7791f385bf3fca14aa7785dbee7ab47",
+          "duration_s": 0.667,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.567,
+          "target_duration_s": [
+            0.45,
+            0.75
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "lso-high": {
       "url": "./lso-high.wav",
       "role": "lso",
-      "voice": "onyx",
-      "duration_s": 0.85,
+      "transcript": "You're high.",
+      "voice": "89989d92-1de8-4e5d-97e4-23cd363e9788",
+      "voice_name": "Opinionated Guy",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "carrier.deck-lso.close-mic",
+      "transceiver_profile": "modern.uhf-am.deck",
+      "duration_s": 0.844,
       "takes": [
         {
           "url": "./lso-high.wav",
-          "source_sha256": "19a77930fcd4888666b493967ab5708de9aa69e31bdb0994ffab59e5dd51350a",
-          "file_sha256": "2dbfb4f3b14cabcf467265c55075b551bccd528d9cf134b62f95c9cf22d4040c",
-          "duration_s": 0.85,
-          "sample_rate_hz": 24000,
+          "source_sha256": "47458828c130930d45d22e029b23a9f7229368ca2340765b452be7accfa71557",
+          "file_sha256": "bec7500068d67c5e12592b6c95323187d7be2009badb71885d570ebd7b897d6e",
+          "duration_s": 0.681,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.017,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.584,
+          "target_duration_s": [
+            0.45,
+            0.75
+          ],
+          "duration_within_target": true
         },
         {
           "url": "./lso-high--t2.wav",
-          "source_sha256": "0164ea36d7e19f4e59f6494faa1aa405a98977648aa90d1ca61be091a9627485",
-          "file_sha256": "0bce99b394bd5a26982038bfb151f5bf30f6bba19ffd1591ea8c72b7f2a1f153",
-          "duration_s": 0.7,
-          "sample_rate_hz": 24000,
+          "source_sha256": "b694c1cedc298b077258cd038764abc88e4f1ee9d3857d41d5b2cf80516714dc",
+          "file_sha256": "ea64e9efa0ca06e8914d13137464750b97bf0eca9a9ff4a29840081e04f87ce6",
+          "duration_s": 0.844,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.744,
+          "target_duration_s": [
+            0.45,
+            0.75
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "lso-fast": {
       "url": "./lso-fast.wav",
       "role": "lso",
-      "voice": "onyx",
-      "duration_s": 1.25,
+      "transcript": "You're fast.",
+      "voice": "89989d92-1de8-4e5d-97e4-23cd363e9788",
+      "voice_name": "Opinionated Guy",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "carrier.deck-lso.close-mic",
+      "transceiver_profile": "modern.uhf-am.deck",
+      "duration_s": 0.724,
       "takes": [
         {
           "url": "./lso-fast.wav",
-          "source_sha256": "243f86786571c999079ebb505d9f59cfcf9274411f9ea86370cb98ba3a6f2022",
-          "file_sha256": "fe038c460a67c79a0016cf39b4b5ca0a82b4ac2566a95ed87cafef645098ee2c",
-          "duration_s": 1.25,
-          "sample_rate_hz": 24000,
+          "source_sha256": "fb1a99613671cf6fb027f7b5749cdd99dd326c29593b7a43f58557fc13253bc4",
+          "file_sha256": "772245da8081e85c302441a2d71444a799b05698df106e1334601a13f0205715",
+          "duration_s": 0.724,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.0,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.644,
+          "target_duration_s": [
+            0.45,
+            0.75
+          ],
+          "duration_within_target": true
         },
         {
           "url": "./lso-fast--t2.wav",
-          "source_sha256": "e30ccf26bfc1bbd62fc763363dc91cd5308a07508cd1948de273a19848be1efb",
-          "file_sha256": "cd1cd2d75f8dd0c7316c6e4ed25828843fea1db5679c784148e7fb1578330f78",
-          "duration_s": 0.8,
-          "sample_rate_hz": 24000,
+          "source_sha256": "0aa5139abfcd42320eba98f63d0bd8d35fd9e0f9803b31de1e094b02e8e724a8",
+          "file_sha256": "9a5674c68688bd04406be6b631161410f54d7538015f8c27f11cf86411588238",
+          "duration_s": 0.685,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.585,
+          "target_duration_s": [
+            0.45,
+            0.75
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "lso-come-left": {
       "url": "./lso-come-left.wav",
       "role": "lso",
-      "voice": "onyx",
-      "duration_s": 1.7,
+      "transcript": "Left for lineup.",
+      "voice": "89989d92-1de8-4e5d-97e4-23cd363e9788",
+      "voice_name": "Opinionated Guy",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "carrier.deck-lso.close-mic",
+      "transceiver_profile": "modern.uhf-am.deck",
+      "duration_s": 0.888,
       "takes": [
         {
           "url": "./lso-come-left.wav",
-          "source_sha256": "ca60d784cb26d81d0287abe67cba53283992a60b23d50c8ce63dce5680d3826b",
-          "file_sha256": "b588d3bbd931c282b7686a98ef8ad20682c92e84fd3afac46ccbd20f0abcd255",
-          "duration_s": 1.15,
-          "sample_rate_hz": 24000,
+          "source_sha256": "f6506adc7609b850beee0d7e1b0fbb2440ad63dc34643be99c71b872c04f12a1",
+          "file_sha256": "3985b828a14d538eb9be72ba658b9b48557c8984af2d186ebde00496cbc20ff2",
+          "duration_s": 0.796,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.0,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.716,
+          "target_duration_s": [
+            0.55,
+            0.85
+          ],
+          "duration_within_target": true
         },
         {
           "url": "./lso-come-left--t2.wav",
-          "source_sha256": "92311546428009c6d7001940b57ee97b9baedb7830c1abc3313e620345f8939b",
-          "file_sha256": "42da35c2632fccd97e771e3d7fa94c22aeb7816b950041f3b73fdcdde0bb5ca0",
-          "duration_s": 1.7,
-          "sample_rate_hz": 24000,
+          "source_sha256": "46819e94519d44342624f23c7a9bf8699c25f323eb3b67890b0a04d09a215bd8",
+          "file_sha256": "1ad6ea0f4ce2ecb05372d3cd4cece62f6eaa262d811aa151e1396aa04276cab9",
+          "duration_s": 0.888,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.007,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.801,
+          "target_duration_s": [
+            0.55,
+            0.85
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "lso-come-right": {
       "url": "./lso-come-right.wav",
       "role": "lso",
-      "voice": "onyx",
-      "duration_s": 1.05,
+      "transcript": "Right for lineup.",
+      "voice": "89989d92-1de8-4e5d-97e4-23cd363e9788",
+      "voice_name": "Opinionated Guy",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "carrier.deck-lso.close-mic",
+      "transceiver_profile": "modern.uhf-am.deck",
+      "duration_s": 0.94,
       "takes": [
         {
           "url": "./lso-come-right.wav",
-          "source_sha256": "de7f24f194221d693ea093225272edff8f447d855ca02cf1539bc9ee0ad56c5f",
-          "file_sha256": "b689846bf01453f2bc651cc82dc2bdcd6b44eafcf2507aa9934a189beb7a8943",
-          "duration_s": 0.7,
-          "sample_rate_hz": 24000,
+          "source_sha256": "68baba31bfa5b990ae29d314f92d7888b7cbc3a26f07aa928e1854b8e1bb7c57",
+          "file_sha256": "9d00353dee58fb2c267edba33b20f62ca7285d4d2e437c1eb2ae5a1db13749e6",
+          "duration_s": 0.94,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.84,
+          "target_duration_s": [
+            0.55,
+            0.85
+          ],
+          "duration_within_target": true
         },
         {
           "url": "./lso-come-right--t2.wav",
-          "source_sha256": "d303de7be57ec03029bf8dfdc28c1001a621058c29ab5045670ad14bce349805",
-          "file_sha256": "db10c8d5549856301bd61458d21f4060cbf394c170d374208f08546af7247d89",
-          "duration_s": 1.05,
-          "sample_rate_hz": 24000,
+          "source_sha256": "0bc895819035081fe2ca6d5710235e2a917658cd0771f2aaea465eb8c43c4f47",
+          "file_sha256": "4812dbaf195ddf30634765fd00480eb768aa0d0bfd6ed5aa8d7ea0de8f97701a",
+          "duration_s": 0.784,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
-        }
-      ]
-    },
-    "pilot-departure-airborne": {
-      "url": "./pilot-departure-airborne.wav",
-      "role": "pilot",
-      "voice": "marin",
-      "duration_s": 2.45,
-      "takes": [
-        {
-          "url": "./pilot-departure-airborne.wav",
-          "source_sha256": "fc6f0c673fb96d752c38dc8ca8961b713beee6af1acd03dfb2a95eca41ad3705",
-          "file_sha256": "493e5e5fc6dec6e78afa4c0f0a20e04bef465aa290bdcabb2e81e4e22878b814",
-          "duration_s": 2.45,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.015,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.689,
+          "target_duration_s": [
+            0.55,
+            0.85
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "pilot-check-in": {
       "url": "./pilot-check-in.wav",
       "role": "pilot",
-      "voice": "marin",
-      "duration_s": 2.35,
+      "transcript": "Control, Ghost One One, up as fragged.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 1.957,
       "takes": [
         {
           "url": "./pilot-check-in.wav",
-          "source_sha256": "78d85adfeb4da71989dc0105ce314d0ba98d89f802103008a3cbe69783e6f4ae",
-          "file_sha256": "10cd3e37b0345eff739a0f48c6df5747bf78e90772cc22a00bdf786ee8374563",
-          "duration_s": 2.35,
-          "sample_rate_hz": 24000,
+          "source_sha256": "4fdd1c09f9b3a9d59d0bb29ff7e87a92eb1d82286956ae06c6085204d454457e",
+          "file_sha256": "b21b39e736c1152dba5ed53f0971871272e904dd09fd42e7a529b1b3ae0f5422",
+          "duration_s": 1.957,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.013,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.864,
+          "target_duration_s": [
+            1.5,
+            2.1
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "control-radar-contact": {
       "url": "./control-radar-contact.wav",
       "role": "controller",
-      "voice": "ash",
-      "duration_s": 2.15,
+      "transcript": "Ghost One One, radar contact.",
+      "voice": "9c5a3d53-4a8c-4fa2-adad-8e61a830d0e8",
+      "voice_name": "Deep Male Conversational Voice",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "duration_s": 1.419,
       "takes": [
         {
           "url": "./control-radar-contact.wav",
-          "source_sha256": "d1e5f39d96924973e2ea2f1bf281899446e1f78bea4950ef0cb4e4c0eb601d93",
-          "file_sha256": "f2b747d069a51dadcb31ee04ac2be7f05bdec62ba419017a540314a5b3f06c08",
-          "duration_s": 2.15,
-          "sample_rate_hz": 24000,
+          "source_sha256": "989e2f513824af9dd96223eb6379107f1c1d9de451015ca23a4c77f4d8e67ca8",
+          "file_sha256": "587a567b1f3f4b86f8da3fbbd60af31efa3bb698938bb6047cf7449a00ee4b61",
+          "duration_s": 1.419,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.018,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.321,
+          "target_duration_s": [
+            0.9,
+            1.35
+          ],
+          "duration_within_target": true
         }
       ]
     },
-    "control-commit": {
-      "url": "./control-commit.wav",
+    "control-commit-short": {
+      "url": "./control-commit-short.wav",
       "role": "controller",
-      "voice": "ash",
-      "duration_s": 4.2,
+      "transcript": "Ghost, commit.",
+      "voice": "9c5a3d53-4a8c-4fa2-adad-8e61a830d0e8",
+      "voice_name": "Deep Male Conversational Voice",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "duration_s": 0.872,
       "takes": [
         {
-          "url": "./control-commit.wav",
-          "source_sha256": "83ff7fd8bf0603f00d58fa9f48139e65d5bb7a93553d78f9f482edba1d3d0556",
-          "file_sha256": "521ffac021696e02ced91b470de71dca5914f7a514fad9c9f752459b033284c0",
-          "duration_s": 4.2,
-          "sample_rate_hz": 24000,
+          "url": "./control-commit-short.wav",
+          "source_sha256": "2c6e9e8f290f88d417f119ad968ad790bc1f8050082246e5605953676c6227e5",
+          "file_sha256": "b5c4b800d7a65e0246cce6e12072c80797ad9a53db692bca3a2f3edc1a55a77e",
+          "duration_s": 0.872,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.772,
+          "target_duration_s": [
+            0.55,
+            0.9
+          ],
+          "duration_within_target": true
+        }
+      ]
+    },
+    "pilot-commit-ack": {
+      "url": "./pilot-commit-ack.wav",
+      "role": "pilot",
+      "transcript": "Ghost One One.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 0.9,
+      "takes": [
+        {
+          "url": "./pilot-commit-ack.wav",
+          "source_sha256": "7117534f757eaba0ab1bdc1b54630f252270754ccfcbd98ddd5ebe019d0c94f2",
+          "file_sha256": "e2728f6191d72f0d853f811c79781358678a98537bfee4594e1014e6062c69b6",
+          "duration_s": 0.9,
+          "sample_rate_hz": 48000,
+          "channels": 1,
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.8,
+          "target_duration_s": [
+            0.55,
+            0.9
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "pilot-separating": {
       "url": "./pilot-separating.wav",
       "role": "pilot",
-      "voice": "marin",
-      "duration_s": 2.3,
+      "transcript": "Ghost One One, separating.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 1.107,
       "takes": [
         {
           "url": "./pilot-separating.wav",
-          "source_sha256": "36b91a27838e4bc702b223bef5a5496a841ed065a07715f642fd26273d229eb5",
-          "file_sha256": "9d842972106ff801258fce9964e4ceb04bcc53b0715d6e032e25b0519f79b153",
-          "duration_s": 2.3,
-          "sample_rate_hz": 24000,
+          "source_sha256": "9a212d9941c1bb1c6edf669804e6ffa05bf3ca209725d2bc88db1dd110a1e877",
+          "file_sha256": "0010454e0e5d376773708c6d9e4b1f285bcd02ee0b74ab3205e92e84769bc171",
+          "duration_s": 1.107,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.007,
+          "target_duration_s": [
+            0.8,
+            1.15
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "pilot-rtb": {
       "url": "./pilot-rtb.wav",
       "role": "pilot",
-      "voice": "marin",
-      "duration_s": 2.1,
+      "transcript": "Control, Ghost One One, RTB.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 1.476,
       "takes": [
         {
           "url": "./pilot-rtb.wav",
-          "source_sha256": "2ad92663e600787d088cfdb24ce2aec5b8e03dc41abf2465c9c67e6475967244",
-          "file_sha256": "a6c6df7a5e09478e74fe51a4e9222c4c404b9952fa3931f03ca04629bbd25efc",
-          "duration_s": 2.1,
-          "sample_rate_hz": 24000,
+          "source_sha256": "a91019d14e489f057bc2bdc1fcae0b2418492789d1002977c8866870a90977e9",
+          "file_sha256": "07d7ed74079f81ea6a15be5e8276edac02557bd26030fc505131b6efd265e519",
+          "duration_s": 1.476,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.376,
+          "target_duration_s": [
+            1.0,
+            1.45
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "pilot-recovery-request": {
       "url": "./pilot-recovery-request.wav",
       "role": "pilot",
-      "voice": "marin",
-      "duration_s": 3.8,
+      "transcript": "Rapier Approach, Ghost One One, inbound, request recovery.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 2.157,
       "takes": [
         {
           "url": "./pilot-recovery-request.wav",
-          "source_sha256": "2d699e78fd25582d4958c24569545a225dc77ab6db8a675fad9706db19887760",
-          "file_sha256": "19a38f150a8d99ddf36b53e96b6ff2d590c918ee4afd99611f965b7373bd2519",
-          "duration_s": 3.8,
-          "sample_rate_hz": 24000,
+          "source_sha256": "fcd9936f5bebc5a6385ebafdab80e4ddf73afce7e49f05ae8d5306e5d0e40b3c",
+          "file_sha256": "8f24387b9a46a0985f60eef3cf3f4d7332de2d3489cf72b847ebe90d83dbfb1c",
+          "duration_s": 2.157,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 2.057,
+          "target_duration_s": [
+            2.0,
+            2.7
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "approach-recovery-continue": {
       "url": "./approach-recovery-continue.wav",
       "role": "controller",
-      "voice": "ash",
-      "duration_s": 1.8,
+      "transcript": "Ghost One One, continue.",
+      "voice": "9c5a3d53-4a8c-4fa2-adad-8e61a830d0e8",
+      "voice_name": "Deep Male Conversational Voice",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "duration_s": 1.179,
       "takes": [
         {
           "url": "./approach-recovery-continue.wav",
-          "source_sha256": "333007a2104a3daa84e665f4819f0f9bd291f27418b15ee7c1b33a06b87255f3",
-          "file_sha256": "04172aed9a526f389d36f4608d85202c9dfedb78aa058057479eadf091182a91",
-          "duration_s": 1.8,
-          "sample_rate_hz": 24000,
+          "source_sha256": "591931007d9836f359cdb616d6fa37ecd1532f2283f52d2fbbdac2846bf62d82",
+          "file_sha256": "539c3bf1a9557e092dabf677cecdeec7b074d9b4bba76ee73407995d87179919",
+          "duration_s": 1.179,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
-        }
-      ]
-    },
-    "pilot-guns": {
-      "url": "./pilot-guns.wav",
-      "role": "pilot",
-      "voice": "marin",
-      "duration_s": 1.4,
-      "takes": [
-        {
-          "url": "./pilot-guns.wav",
-          "source_sha256": "79738f099cb7e2804c954a1e4e09cabce4d07d13166605829b5cdb28cd840da8",
-          "file_sha256": "81f84244971671eb05761c638f1df511fb42c0353f70677904e32e1636732d50",
-          "duration_s": 1.4,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
-        },
-        {
-          "url": "./pilot-guns--t2.wav",
-          "source_sha256": "0166c7cc831af3ff8c79b2521415158caaf5d4d8c8833af040e063bdf90e64d0",
-          "file_sha256": "0a558c9d5311bde63df7585abe7a3d07ab932d51964b03e00dde1089c64bc5a6",
-          "duration_s": 0.85,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.079,
+          "target_duration_s": [
+            0.9,
+            1.25
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "pilot-fox-two": {
       "url": "./pilot-fox-two.wav",
       "role": "pilot",
-      "voice": "marin",
-      "duration_s": 1.4,
+      "transcript": "Fox Two.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 0.867,
       "takes": [
         {
           "url": "./pilot-fox-two.wav",
-          "source_sha256": "8f04005d303f6cb395e557e48010a60ae2525858c06ddeab2b924c141bbdfc91",
-          "file_sha256": "96469b8ae4772d5420b3afc7b60ca65149e0b6f526f5d3ac820a11578368cdc6",
-          "duration_s": 1.15,
-          "sample_rate_hz": 24000,
+          "source_sha256": "06381d39db7c43dce33b72c27695bfbff985393915130ff45a268a6c670cbfb9",
+          "file_sha256": "94e45e1d47bb77bdc437ea5fe6097818dc2c9b6f7920b2c842a1f2546699a93e",
+          "duration_s": 0.707,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.607,
+          "target_duration_s": [
+            0.35,
+            1.05
+          ],
+          "duration_within_target": true
         },
         {
           "url": "./pilot-fox-two--t2.wav",
-          "source_sha256": "6ae83fd45ce996ab749faa05e53b62a268c447d17c9f94509513200d395ce047",
-          "file_sha256": "434ba17a2ec7b1b8b22d071c76111a4ba7d53f124446be97852ed93cdae4a877",
-          "duration_s": 1.4,
-          "sample_rate_hz": 24000,
+          "source_sha256": "b5f8d2f1ebc58f424972fd96d0607b9ea935f91d8004a012548f9650afcff3b6",
+          "file_sha256": "ed0b24e62288483bc15d351662b45e1b45490c15b4e99ea6867134ae18af1905",
+          "duration_s": 0.867,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.001,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.786,
+          "target_duration_s": [
+            0.35,
+            1.05
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "pilot-drone-away": {
       "url": "./pilot-drone-away.wav",
       "role": "pilot",
-      "voice": "marin",
-      "duration_s": 1.1,
+      "transcript": "Drone away.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 0.751,
       "takes": [
         {
           "url": "./pilot-drone-away.wav",
-          "source_sha256": "0110b1b58cf01a921b96635d91aa863ec6444477db934fc77f117f09f54c6ac3",
-          "file_sha256": "9a69b9ee402576e83cae08beec358f331068edf688c69b0027c088cbdbdad5c0",
-          "duration_s": 1.1,
-          "sample_rate_hz": 24000,
+          "source_sha256": "82bc019cc187a4b7daf4c0cc64cbb1ee063027c97cf9519c0bacd8a5f1d078a6",
+          "file_sha256": "592c5d6f208ce665dd32b4fb5d8c77088c13b8125a65744793fee5711ca0f2fe",
+          "duration_s": 0.751,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.018,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.653,
+          "target_duration_s": [
+            0.45,
+            0.8
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "pilot-remington": {
       "url": "./pilot-remington.wav",
       "role": "pilot",
-      "voice": "marin",
-      "duration_s": 0.75,
+      "transcript": "Remington.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 0.738,
       "takes": [
         {
           "url": "./pilot-remington.wav",
-          "source_sha256": "09737785a8998dcae715dbedce4c65886c1b3bb4d7591ab0e829151587d6e4b8",
-          "file_sha256": "06ec50e2879ba3ac679a31cb92926ef7d8aafed603dcf478d7b56aa242a2a967",
-          "duration_s": 0.75,
-          "sample_rate_hz": 24000,
+          "source_sha256": "021ce8ad8ffd649d1c81e83b4c5068980d77169595ca47d97771abac76cc7aa1",
+          "file_sha256": "03a6be88af06e6fd1b59d52bfbde7c65b4ac3abce70f397a8008916d42f3bc9e",
+          "duration_s": 0.738,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.638,
+          "target_duration_s": [
+            0.4,
+            0.75
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "pilot-winchester": {
       "url": "./pilot-winchester.wav",
       "role": "pilot",
-      "voice": "marin",
-      "duration_s": 1.05,
+      "transcript": "Winchester.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 0.752,
       "takes": [
         {
           "url": "./pilot-winchester.wav",
-          "source_sha256": "47f2bd6ef38c216e5c22af9fdd10eea73369361fe78bcf0d0dcb423abb3806f0",
-          "file_sha256": "035bce444449682c32ebcc3d45f5d7b91f33f782dab0de53f2bc312451da60b3",
-          "duration_s": 1.05,
-          "sample_rate_hz": 24000,
+          "source_sha256": "e66828d540ced8e5c0454fa4d1b282617e53570e95ca69c36cafe807d9d2ff3d",
+          "file_sha256": "4a877675420901d38e73ca0b00f391a31a7576d168c97da3004ae5b0d59a6993",
+          "duration_s": 0.752,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.652,
+          "target_duration_s": [
+            0.4,
+            0.75
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "pilot-joker": {
       "url": "./pilot-joker.wav",
       "role": "pilot",
-      "voice": "marin",
-      "duration_s": 1.9,
+      "transcript": "Ghost One One, Joker.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 0.942,
       "takes": [
         {
           "url": "./pilot-joker.wav",
-          "source_sha256": "e7680fc47b5ff983b292b403bf8255cd6c0e9544fe0a8682443623222d1bbf6e",
-          "file_sha256": "5841dbf0f567224b7047d7e272bf5ebf017f39394e56e8d89a0caf21c1e866de",
-          "duration_s": 1.9,
-          "sample_rate_hz": 24000,
+          "source_sha256": "82ad4147c3e27926203421dd6b53ccb061c0ef41c202a71bb042d5fc98a9f08a",
+          "file_sha256": "9dba2d10aeb93efaf067cc4b1e3459c72dd600a4c787a14e95e96d98101fc358",
+          "duration_s": 0.942,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.842,
+          "target_duration_s": [
+            0.75,
+            1.1
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "pilot-bingo": {
       "url": "./pilot-bingo.wav",
       "role": "pilot",
-      "voice": "marin",
-      "duration_s": 1.85,
+      "transcript": "Ghost One One, Bingo.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 0.932,
       "takes": [
         {
           "url": "./pilot-bingo.wav",
-          "source_sha256": "b3d46bb5e54842085a74fe6fc5b331bde1bdc518ebb475d08bdad3b77cb00427",
-          "file_sha256": "631ab62a95565b97959ac20904bfc716d4cd4dd502ac606c0fbddfd180ef21db",
-          "duration_s": 1.85,
-          "sample_rate_hz": 24000,
+          "source_sha256": "afa92221e3e5e04729416e0a03daa7a661cece74e0ad03f3fa76fcf6627984e4",
+          "file_sha256": "928e73b0aecdf075c058697d6e3254a0786e96ee6d4f4bd66a772368c6a29258",
+          "duration_s": 0.932,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.0,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.852,
+          "target_duration_s": [
+            0.75,
+            1.1
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "control-bingo-rtb": {
       "url": "./control-bingo-rtb.wav",
       "role": "controller",
-      "voice": "ash",
-      "duration_s": 2.7,
+      "transcript": "Ghost One One, RTB.",
+      "voice": "9c5a3d53-4a8c-4fa2-adad-8e61a830d0e8",
+      "voice_name": "Deep Male Conversational Voice",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "duration_s": 1.342,
       "takes": [
         {
           "url": "./control-bingo-rtb.wav",
-          "source_sha256": "3cb1bf7afef07e08b43a41893e10112a0750c3f9223adba86ea560948972052b",
-          "file_sha256": "93e43a9d99d6a3ee3b48ca06729506bda03df909714aa4cf0c3ad55c13f931b6",
-          "duration_s": 2.7,
-          "sample_rate_hz": 24000,
+          "source_sha256": "068dbdc97cc000141e992a280712c76239e410ac31c62f12f8ddbbf8e0928107",
+          "file_sha256": "703f1e96a1faf0ad34972f56e15696ade167ac0eb41e496e407f9dc76802f9ea",
+          "duration_s": 1.342,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.242,
+          "target_duration_s": [
+            0.9,
+            1.4
+          ],
+          "duration_within_target": true
         }
       ]
     },
     "pilot-splash": {
       "url": "./pilot-splash.wav",
       "role": "pilot",
-      "voice": "marin",
-      "duration_s": 1.75,
+      "transcript": "Splash one.",
+      "voice": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_voice_context": null,
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "duration_s": 1.099,
       "takes": [
         {
           "url": "./pilot-splash.wav",
-          "source_sha256": "d6d954c708dfafd39a6eef67fd8858d578b6612d5f7d5e4f840b36b306b6df52",
-          "file_sha256": "2b786e58d89eafd9489ab71d6d92788815b27fc7fc6da385861ac8b668f90601",
-          "duration_s": 1.15,
-          "sample_rate_hz": 24000,
+          "source_sha256": "a29c72ea5f2893c3e3531132d8293777b6452d857f8eac5cf1f2311a6f8ffbfa",
+          "file_sha256": "17a6fa30e968c2e962f1dd8778f8f1185201d25cb902c3086389e68cd36a98a0",
+          "duration_s": 1.099,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.0,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 1.019,
+          "target_duration_s": [
+            0.35,
+            1.05
+          ],
+          "duration_within_target": true
         },
         {
           "url": "./pilot-splash--t2.wav",
-          "source_sha256": "28f42bbd8ae56075b7ace3b465d34f88d2780a83c75fdd538ae2e4712f8aafb9",
-          "file_sha256": "ae5402efc1d5b7fac59c203f66ef4daa5b606b970086ee38326255b1b04b5315",
-          "duration_s": 1.75,
-          "sample_rate_hz": 24000,
+          "source_sha256": "fc5fa72128ecd1378a801d5128ccd7087601e7c4f6ef79cebfd497fd71b707a3",
+          "file_sha256": "f25a1548188c39c55d72b50b1b01558d728f7d7c18b501d89ec181c27995922e",
+          "duration_s": 0.751,
+          "sample_rate_hz": 48000,
           "channels": 1,
-          "sample_width_bytes": 2
-        }
-      ]
-    },
-    "control-confirm-safe": {
-      "url": "./control-confirm-safe.wav",
-      "role": "controller",
-      "voice": "ash",
-      "duration_s": 3.05,
-      "takes": [
-        {
-          "url": "./control-confirm-safe.wav",
-          "source_sha256": "6005a944b8f9d6988d2914f8d176fe77b72b8f123eae9ce92131dde990eb7cb6",
-          "file_sha256": "b9f74662d92e6163b7b19a7ab28717b18b36bcb293aa5cccd17056e22467df86",
-          "duration_s": 3.05,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
-        }
-      ]
-    },
-    "pilot-switch-safe": {
-      "url": "./pilot-switch-safe.wav",
-      "role": "pilot",
-      "voice": "marin",
-      "duration_s": 2.15,
-      "takes": [
-        {
-          "url": "./pilot-switch-safe.wav",
-          "source_sha256": "dba66174f2eb738d21051a9d8ae1251730c72a91850a068bd03a51549a20c799",
-          "file_sha256": "787c3134074b3a92da5470f472109b6f246a683ffef5a3c2d6f191df59b447f1",
-          "duration_s": 2.15,
-          "sample_rate_hz": 24000,
-          "channels": 1,
-          "sample_width_bytes": 2
+          "sample_width_bytes": 2,
+          "leading_silence_s": 0.02,
+          "trailing_silence_s": 0.08,
+          "audible_duration_s": 0.651,
+          "target_duration_s": [
+            0.35,
+            1.05
+          ],
+          "duration_within_target": true
         }
       ]
     }
