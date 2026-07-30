@@ -11,7 +11,7 @@
   <meta name="apple-mobile-web-app-title" content="Guns Only">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="theme-color" content="#030913">
-  <title>Guns Only — ANCA2040 Flight Curriculum</title>
+  <title>Guns Only</title>
   <base href="/">
   <link rel="icon" type="image/png" href="./favicon.png">
   <style>
@@ -1225,16 +1225,6 @@
       font-weight: 850;
       letter-spacing: .2em;
       text-transform: uppercase;
-    }
-
-    .ready-menu-program {
-      display: block;
-      margin-top: 2px;
-      color: #9fb8a8;
-      font-size: 7px;
-      font-weight: 700;
-      letter-spacing: .14em;
-      opacity: .75;
     }
 
     #ready-menu-title {
@@ -2594,7 +2584,7 @@
   <div id="ready-screen" role="dialog" aria-modal="true" aria-labelledby="ready-menu-title" aria-describedby="ready-menu-help" aria-hidden="true" data-mode="program">
     <div class="ready-card">
       <header class="ready-menu-header">
-        <div class="ready-menu-brand">Guns Only<span class="ready-menu-program">ANCA2040 · AVIATE NAVIGATE COMMUNICATE ADMINISTRATE</span></div>
+        <div class="ready-menu-brand">Guns Only</div>
         <div>
           <h1 id="ready-menu-title">Pick a mission</h1>
           <p id="ready-menu-help">Every experience is available. Fly whichever you feel like.</p>
@@ -2704,7 +2694,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
           </div>
           <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 196 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 197 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
         </section>
@@ -2743,7 +2733,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
 
   <div id="boot" role="status" aria-live="polite">
     <div class="boot-card">
-      <div class="boot-kicker">ANCA2040 Flight Curriculum</div>
+      <div class="boot-kicker">Rapier · Ukraine jet range</div>
       <h1 class="boot-title">GUNS ONLY</h1>
       <p class="boot-subtitle">Loading deterministic flight kernel</p>
       <div class="boot-track"></div>
@@ -2760,12 +2750,12 @@ Splash one bandit to qualify · H controls · R restarts</p>
   </div>
 
   <script>
-    // A network-fresh Build 196 document may still be controlled by Build 178's cache-first
+    // A network-fresh Build 197 document may still be controlled by Build 178's cache-first
     // service worker. Purge that controller and its Cache Storage before Blazor requests the
     // unversioned boot manifest/WASM graph. Offline clients never see this newer document until a
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = "196";
+      const releaseBuild = "197";
       const controller = navigator.serviceWorker?.controller;
       if (!controller) return;
       const controllerBuild = new URL(controller.scriptURL, location.href)
@@ -2784,8 +2774,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       }
     })();
   </script>
-  <script src="./multiplayer-config.js?v=196"></script>
-  <script type="module" src="./app.js?v=196"></script>
-  <script src="./_framework/blazor.webassembly.js?v=196" autostart="false"></script>
+  <script src="./multiplayer-config.js?v=197"></script>
+  <script type="module" src="./app.js?v=197"></script>
+  <script src="./_framework/blazor.webassembly.js?v=197" autostart="false"></script>
 </body>
 </html>

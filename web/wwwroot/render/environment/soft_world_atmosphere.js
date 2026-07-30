@@ -13,6 +13,30 @@ export const UKRAINE_SOFT_WORLD_FOG_HEX = 0xa8814b;
 export const UKRAINE_SOFT_WORLD_EDGE_HIDE_START = 0.36;
 export const UKRAINE_SOFT_WORLD_EDGE_HIDE_END = 0.72;
 
+// The three uniforms that resolve the far-field wash colour. The sky dome must paint its
+// below-horizon hemisphere with the exact colour the terrain buries to — beyond the streamed disc
+// the sky IS the ground, hazed. Sharing the uniform objects by reference (not copied values) keeps
+// them identical as fog colour moves with altitude and weather every frame.
+export const UKRAINE_SOFT_WORLD_GROUND_HAZE_UNIFORM_NAMES = Object.freeze([
+  "uFogColor",
+  "uAtmosphereHazeColor",
+  "uAtmosphereHazeMix",
+]);
+
+/// Point a sky material's ground-haze uniforms at the terrain's own atmosphere uniforms. Returns
+/// false when either side is missing a name, so a caller can fail loudly instead of silently
+/// rendering a forked horizon.
+export function attachSoftWorldGroundHaze(skyUniforms, atmosphereUniforms) {
+  if (!skyUniforms || !atmosphereUniforms) return false;
+  for (const name of UKRAINE_SOFT_WORLD_GROUND_HAZE_UNIFORM_NAMES) {
+    if (!skyUniforms[name] || !atmosphereUniforms[name]) return false;
+  }
+  for (const name of UKRAINE_SOFT_WORLD_GROUND_HAZE_UNIFORM_NAMES) {
+    skyUniforms[name] = atmosphereUniforms[name];
+  }
+  return true;
+}
+
 export const UKRAINE_SOFT_WORLD_ATMOSPHERE_UNIFORM_NAMES = Object.freeze([
   "uFogColor",
   "uFogDensity",

@@ -1,6 +1,8 @@
 import * as THREE from "../vendor/three.module.js";
 import { OrbitControls } from "../vendor/three/addons/controls/OrbitControls.js";
 import { loadKoreaEnvironment } from "../render/environment/korea_environment.js";
+import { attachSoftWorldGroundHaze } from "../render/environment/soft_world_atmosphere.js";
+import { createDecisionSupportSky } from "../render/scene/scene_builders.js?v=197";
 import { loadKoreaTerrain } from "../render/environment/korea_terrain.js";
 import { createTacticalCloudField } from "../render/environment/tactical_clouds.js?v=authoritative-clouds-v3";
 import { AdaptiveResolutionController } from "../render/visual/adaptive_resolution.js";
@@ -137,6 +139,7 @@ sun.target = sunTarget;
 scene.add(ambient, sun, sunTarget);
 
 let environment = null;
+let productionSky = null;
 let terrain = null;
 let tacticalClouds = null;
 let visualProfile = null;
@@ -539,6 +542,16 @@ function configureProductionShadows() {
   }
 }
 
+// FlightView carries its 4 km sky sphere with the camera and feeds it altitude (app.js:8014).
+// Skipping either leaves the dome behind the camera at Rapier altitudes and the gate captures a
+// sky that no cockpit ever shows.
+function updateProductionSky() {
+  if (!productionSky) return;
+  productionSky.mesh.position.copy(camera.position);
+  productionSky.uniforms.uAltitude.value = Math.max(0, camera.position.y);
+  productionSky.uniforms.uSunDirection.value.copy(sunDirection()).normalize();
+}
+
 function terrainFrame(deltaSeconds = 0) {
   return {
     cameraPosition: camera.position,
@@ -621,6 +634,21 @@ async function rebuild() {
   });
   await terrain.ready;
   scene.add(terrain.group);
+  // One engine: the look gate must judge the sky the pilot actually flies under. The pack
+  // atmosphere's own dome is a second, diverging sky — it made every high-altitude capture show a
+  // horizon production never renders, which is precisely how the 72,000 ft two-tone silhouette
+  // survived a "passing" look gate. FlightView's decision-support sky is now the only sky here.
+  environment.sky.visible = false;
+  if (!productionSky) {
+    productionSky = createDecisionSupportSky();
+    scene.add(productionSky.mesh);
+  }
+  productionSky.uniforms.uSoftWorld.value = site.value === "ukraine" ? 1 : 0;
+  productionSky.uniforms.uSunDirection.value.copy(sunDirection()).normalize();
+  if (site.value === "ukraine"
+    && !attachSoftWorldGroundHaze(productionSky.uniforms, terrain.material?.uniforms)) {
+    throw new Error("sky/terrain ground haze uniforms did not join — the horizon would fork");
+  }
   if (terrainLookMode) {
     window.__terrainLookProbe = () => terrain?.diagnostics?.() ?? null;
   }
@@ -715,6 +743,7 @@ function animate(now) {
   sun.position.copy(sunTarget.position).addScaledVector(sunDirection(), 1600);
   sunTarget.updateMatrixWorld();
   environment?.update({ timeSeconds: elapsed, cameraPosition: camera.position, sunDirection: sunDirection() });
+  updateProductionSky();
   terrain?.update(terrainFrame(delta));
   if (tacticalClouds) {
     tacticalClouds.group.visible = tacticalCloudsVisible();
@@ -764,6 +793,7 @@ async function setTerrainLookView(view) {
   camera.position.fromArray(view.position);
   controls.target.fromArray(view.target);
   controls.update();
+  updateProductionSky();
   environment.update({
     timeSeconds: 0,
     cameraPosition: camera.position,

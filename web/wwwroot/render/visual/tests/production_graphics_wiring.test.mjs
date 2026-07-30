@@ -30,10 +30,25 @@ test("production admits only state-bearing environment visuals and event-bearing
   assert.match(source, /createDecisionSupportSky\(\)/);
   assert.match(source, /uSoftWorld/,
     "decision-support sky must expose the Ukraine soft-world atmosphere switch");
+  const skySource = await readFile(sceneBuildersUrl, "utf8");
+  assert.match(skySource,
+    /vec3 belowWarm = mix\(uFogColor, uAtmosphereHazeColor, uAtmosphereHazeMix\)/,
+    "the sky's below-horizon wash must resolve the terrain's haze mix, never its own literal");
+  assert.doesNotMatch(skySource, /vec3 belowWarm = vec3\(/,
+    "a hardcoded below-horizon colour forks the horizon from the terrain again");
+  assert.match(skySource, /UKRAINE_SOFT_WORLD_FOG_HEX/,
+    "sky ground-haze defaults must come from the single soft-world atmosphere source");
   assert.match(source, /this\.sky\.uniforms\.uSoftWorld\.value = ukraineTheatre \? 1 : 0/,
     "Ukraine theatre must warm the production sky without enabling the Korea pack environment");
   assert.match(source, /this\.sky\.uniforms\.uSunDirection\.value\.copy\(SUN_DIRECTION\)/,
     "soft-world sky sun bloom must follow the scene sun direction");
+  // 2026-07-30: at 72,000 ft the 64 km streamed disc edge sits ~19 deg below the horizontal, so
+  // the sky's below-horizon hemisphere and the terrain's world-edge bury are adjacent on screen.
+  // They were separate literals, and the mismatch printed the chunk-height silhouette as a hard
+  // two-tone staircase. Sharing the uniform objects is what keeps them equal as fog moves.
+  assert.match(source,
+    /attachSoftWorldGroundHaze\(\s*this\.sky\?\.uniforms, terrain\.material\?\.uniforms\)/,
+    "the sky must paint its below-horizon wash with the terrain's own haze uniforms");
   assert.match(source, /this\.ambient\.color\.set\(0xe8d8b8\)/,
     "Ukraine soft-world fill light must lean warm painterly");
   assert.match(source, /this\.fogLow\.set\(0xa8814b\)/,
@@ -271,7 +286,7 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
   assert.match(source, /cameraPosition: this\.camera\.position,[\s\S]*deltaSeconds: dt/,
     "terrain streaming must receive frame time for bounded velocity-ahead prefetch");
   assert.match(source,
-    /import \{[\s\S]*createDecisionSupportSea[\s\S]*\} from "\.\/render\/scene\/scene_builders\.js\?v=196"/,
+    /import \{[\s\S]*createDecisionSupportSea[\s\S]*\} from "\.\/render\/scene\/scene_builders\.js\?v=197"/,
     "the active ocean builder must be sourced from the scene builder module");
   assert.match(source, /createDecisionSupportSea\(\)/,
     "production must instantiate the decision-support sea");
@@ -348,6 +363,20 @@ test("environment lab exercises the production terrain manifest and exposes the 
     "the lab must fail visibly instead of retaining an ocean-only scene");
   assert.match(source, /logarithmicDepthBuffer: true/,
     "the look gate must exercise production horizon depth precision");
+  // One engine. PRODUCTION_PACK_ENVIRONMENT_ENABLED is false, so the pack atmosphere's own sky
+  // dome ships nowhere — yet the look gate rendered it, which is how a two-tone 72,000 ft horizon
+  // passed a green gate for months. The gate now judges FlightView's sky or it judges nothing.
+  assert.match(source, /createDecisionSupportSky/,
+    "the look gate must render the production sky, not the pack atmosphere's own dome");
+  assert.match(source, /environment\.sky\.visible = false/,
+    "the pack atmosphere dome must be hidden so two skies cannot composite");
+  assert.match(source,
+    /attachSoftWorldGroundHaze\(productionSky\.uniforms, terrain\.material\?\.uniforms\)/,
+    "the gate must exercise the same sky/terrain haze join production uses");
+  assert.match(source, /productionSky\.mesh\.position\.copy\(camera\.position\)/,
+    "the 4 km sky sphere must ride the camera as app.js does, or Rapier altitudes leave it behind");
+  assert.match(source, /productionSky\.uniforms\.uAltitude\.value = Math\.max\(0, camera\.position\.y\)/,
+    "the sky's altitude-keyed palette must see the captured camera's real height");
   assert.match(source, /new THREE\.HemisphereLight\(0xb5cad0, 0x102229, 0\.78\)/);
   assert.match(source, /new THREE\.DirectionalLight\(0xffe2b4, 2\.65\)/);
   assert.match(source, /loadVisualProfile\(\)/);
