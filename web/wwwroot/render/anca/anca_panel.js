@@ -103,6 +103,15 @@ export function createAncaPanelPresentation(documentLike, mount = documentLike.b
         padding: 6px 4px;
         border-left: 2px solid transparent;
       }
+      [data-anca-panel] .anca-row[hidden] { display: none; }
+      [data-anca-panel] .anca-empty {
+        padding: 8px 4px 6px;
+        color: rgba(191, 233, 228, .5);
+        font-size: 9px;
+        letter-spacing: .08em;
+        text-align: center;
+      }
+      [data-anca-panel] .anca-empty[hidden] { display: none; }
       [data-anca-panel] .anca-label {
         color: rgba(191, 233, 228, .5);
         letter-spacing: .08em;
@@ -144,7 +153,10 @@ export function createAncaPanelPresentation(documentLike, mount = documentLike.b
     <div class="anca-drawer" data-anca-drawer id="anca-auxiliary-drawer" hidden>
       <div class="anca-title">
         <strong>ANCA</strong>
-        <span>AUTOMATION STATUS · VIEW ONLY</span>
+        <span>ACTIVE AUTOMATION · CROSS-CHECKS</span>
+      </div>
+      <div class="anca-empty" data-anca-empty>
+        ROUTINE STATE · NOTHING TO CROSS-CHECK
       </div>
       ${[
         ["aviate", "Aviate"],
@@ -160,6 +172,7 @@ export function createAncaPanelPresentation(documentLike, mount = documentLike.b
   `;
   const toggle = root.querySelector("[data-anca-toggle]");
   const drawer = root.querySelector("[data-anca-drawer]");
+  const empty = root.querySelector("[data-anca-empty]");
   const rows = Object.fromEntries(
     [...root.querySelectorAll("[data-anca-row]")]
       .map((node) => [node.dataset.ancaRow, node]),
@@ -190,10 +203,12 @@ export function createAncaPanelPresentation(documentLike, mount = documentLike.b
       return;
     }
     root.dataset.tone = view.tone;
+    empty.hidden = view.shownRows.length > 0;
     for (const rowView of view.rows) {
       const node = rows[rowView.key];
       const line = lines[rowView.key];
       if (!node || !line) continue;
+      node.hidden = !rowView.shown;
       node.dataset.tone = rowView.tone;
       if (line.textContent !== rowView.line) line.textContent = rowView.line;
     }

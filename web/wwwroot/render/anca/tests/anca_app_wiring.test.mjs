@@ -22,10 +22,13 @@ test("the panel yields to the dedicated casevac presentation", () => {
 test("ANCA is a closed-by-default auxiliary drawer", () => {
   assert.match(panelSource, /data-anca-toggle/);
   assert.match(panelSource, /data-anca-drawer[^>]*hidden/);
+  assert.match(panelSource, /data-anca-empty/);
   assert.match(panelSource, /aria-expanded="false"/);
   assert.match(panelSource, /root\.hidden = true/);
   assert.match(panelSource, /\[data-anca-panel\]\[hidden\] \{ display: none; \}/);
   assert.match(panelSource, /toggle\.addEventListener\("click", \(\) => setOpen\(!open\)\)/);
   assert.match(panelSource, /if \(root\.hidden\) \{\s+setOpen\(false\);\s+return;\s+\}/);
+  assert.match(panelSource, /empty\.hidden = view\.shownRows\.length > 0/);
+  assert.match(panelSource, /node\.hidden = !rowView\.shown/);
   assert.doesNotMatch(panelSource, /html:not\(\.touch-mode\).*anca-line.*display: block/s);
 });

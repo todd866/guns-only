@@ -72,7 +72,20 @@ try {
   await desktop.waitForFunction(() =>
     document.querySelector("[data-anca-toggle]")?.getAttribute("aria-expanded") === "true",
   undefined, { timeout: 15000 });
-  await shoot(desktop, "desktop-panel");
+  await shoot(desktop, "desktop-active");
+
+  // Completed automatic work must expire instead of leaving a success dashboard behind.
+  await desktop.waitForFunction(() => {
+    const state = globalThis.__gunsState;
+    return state?.checklist_active === true
+      && Number(state.checklist_done) >= Number(state.checklist_total)
+      && state.radio_active !== true
+      && state.configuration_transition !== true;
+  }, undefined, { timeout: 120000 });
+  await desktop.waitForFunction(() =>
+    document.querySelector("[data-anca-empty]")?.hidden === false,
+  undefined, { timeout: 15000 });
+  await shoot(desktop, "desktop-routine");
 
   await desktop.close();
 
