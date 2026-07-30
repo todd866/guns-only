@@ -1670,8 +1670,13 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           };
         });
 
+        // Landscape carries the target selector and FIRE alongside the right stick's centre-hold
+        // fire. Both are correct on a combat sortie with ammo, and the redundancy is deliberate:
+        // centre-hold is discoverable only once you know it exists. Portrait still hides the whole
+        // actions column so nothing sits over the stick.
         assert.deepEqual(phoneState.direct,
-          ["touch-throttle-rocker", "touch-limit-override", "pulse:KeyV"],
+          ["touch-throttle-rocker", "touch-limit-override", "touch-target-cycle", "pulse:KeyV",
+            "touch-fire"],
           `${viewport.width}x${viewport.height}: ${JSON.stringify(phoneState.controlState)}`);
         assert.match(phoneState.tiltText, /TILT|STICK/);
         assert.equal(phoneState.ancaVisible, false,

@@ -674,12 +674,11 @@
     #portrait-chips { display: none; }
     #portrait-chips[hidden] { display: none !important; }
     @media (orientation: portrait) {
-      .portrait-assist .touch-left { display: none; }
-      .portrait-assist .touch-right { display: flex; }
-      .touch-mode.touch-primary .touch-right {
-        right: calc(env(safe-area-inset-right, 0px) + 12px);
-        bottom: calc(env(safe-area-inset-bottom, 0px) + min(36vw, 156px) + 20px);
-      }
+      /* Portrait keeps both sticks clear. Parking the actions column above the right stick put
+         a button over the centre-hold fire target, so the stick never armed. Fire in portrait is
+         the stick's centre hold, which is the whole point of that design. */
+      .portrait-assist .touch-left,
+      .portrait-assist .touch-right { display: none; }
       .touch-mode.touch-primary #fallback-stick,
       .touch-mode.touch-primary #target-stick {
         width: min(31vw, 124px);
