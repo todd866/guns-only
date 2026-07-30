@@ -8933,6 +8933,13 @@ function installMobileInput(view) {
     targetStickY = 0;
     touchStickLookActive = false;
     gimbalReturnFast = true;
+    // Releasing the stick must also release the centre-hold gun. Without this the fire source
+    // stays set, targetFireHeld latches on, and armTargetStickFire's `|| targetStickFireSource`
+    // guard bails out of every later press: the gun fires once and never again.
+    if (targetStickFireSource) {
+      releaseMappedKey("Touch:TargetStickFire", targetStickFireSource);
+      targetStickFireSource = null;
+    }
     renderTargetStick();
     if (pointerId !== null && targetStick?.hasPointerCapture?.(pointerId)) {
       try { targetStick.releasePointerCapture(pointerId); } catch { /* already released */ }
