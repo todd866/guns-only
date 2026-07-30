@@ -51,6 +51,24 @@ test("ignores background stalls and resets its window when mode changes", () => 
   assert.equal(controller.targetFrameMs, 20);
 });
 
+test("an explicitly foreground severe stall is clamped and drives a resolution drop", () => {
+  const controller = new AdaptiveResolutionController({
+    targetFps: 60,
+    warmupSamples: 1,
+    cooldownSamples: 1,
+    smoothing: 1,
+    minScale: 0.6,
+    stepDown: 0.1,
+  });
+  controller.setViewport(800, 600, 1);
+  const result = controller.sample(500, { activeForeground: true });
+
+  assert.equal(result.ignored, false);
+  assert.equal(result.changed, true);
+  assert.equal(result.scale, 0.9);
+  assert.equal(result.emaFrameMs, 250);
+});
+
 test("disabled adaptation still honors the quality-tier pixel ratio cap", () => {
   const controller = new AdaptiveResolutionController({ enabled: false, pixelRatioCap: 1.4 });
   controller.setViewport(1280, 720, 3);

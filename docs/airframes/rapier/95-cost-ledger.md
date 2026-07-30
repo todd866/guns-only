@@ -29,10 +29,24 @@ with the CMC freeze. Do not cost the product as stainless.
 
 ## Infrastructure (per lane, not per airframe)
 
-Buried gallery earthworks, 520 m strip, 35 MJ arrestor, catapult — **per basing lane**. Amortise
-across the alert inventory, not into flyaway.
+Buried gallery earthworks, **520 m launcher**, 1,200 m recovery surface, 35 MJ arrestor, utilities,
+and support works are **per basing lane**. Amortise them across the alert inventory, not into
+flyaway.
+
+[82 — Launch-gallery engineering basis](82-launch-gallery-engineering-basis.md) carries the
+documented Class 4/5 2026-USD assumptions:
+
+| Scope | Concept planning range | Exclusions/status |
+| --- | ---: | --- |
+| Gallery + electromagnetic catapult | **$130–430M** | low-definition parametric study; not a bid |
+| Complete basing lane | **$190–650M** | adds recovery surface, arrestor, revetments, utilities, support areas |
+
+The ranges exclude land, aircraft, off-site generation/transmission, extraordinary ground or
+groundwater, defined-threat combat hardening, wartime logistics, and post-2026 escalation. Burial is
+not a costed guarantee against cratering.
 
 ## Epistemic
 
-~$9M flyaway class **surrogate**. Itemised rows above are Phase 2 sketch for planning — not a
-contract cost. Per-sortie $ remains open until fuel model is instrument-true.
+~$9M flyaway class **surrogate**. Itemised rows above and the linked infrastructure ranges are
+planning studies — not contract costs. Per-sortie $ remains open until fuel model is
+instrument-true.

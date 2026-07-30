@@ -10,11 +10,25 @@ function clamp01(value) {
   return Math.min(1, Math.max(0, number));
 }
 
-function makeDustPoints(count, color, size) {
+// Stable integer hash for authored particle scatter. Launch presentation must be reproducible from
+// simulation state: unseeded randomness made every rendered frame a new cloud and forced three
+// complete position-buffer uploads throughout the catapult stroke.
+function deterministicUnit(index, channel) {
+  let value = Math.imul(index + 1, 0x9e3779b1) ^ Math.imul(channel + 1, 0x85ebca6b);
+  value ^= value >>> 16;
+  value = Math.imul(value, 0x7feb352d);
+  value ^= value >>> 15;
+  value = Math.imul(value, 0x846ca68b);
+  value ^= value >>> 16;
+  return (value >>> 0) / 0x1_0000_0000;
+}
+
+function makeDustPoints(count, color, size, seedChannel, writePosition) {
   const positions = new Float32Array(count * 3);
   const seeds = new Float32Array(count);
   for (let i = 0; i < count; i += 1) {
-    seeds[i] = Math.random();
+    seeds[i] = deterministicUnit(i, seedChannel);
+    writePosition(positions, i * 3, i, count, seedChannel);
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
@@ -59,12 +73,64 @@ export function createRapierLaunchFx(layout = {}) {
   const railCount = Math.max(16, Math.round(28 * particleMultiplier));
 
   // Warm dusty vents; soft daylight portal sheet; amber rail cue (not cyber blue).
-  const vents = makeDustPoints(ventCount, 0xc4b896, 1.8);
+  // Geometry is authored once in each effect's local frame. During flight only Object3D
+  // transforms and material opacity change, retaining three bounded draw calls without dynamic
+  // attribute uploads.
+  const vents = makeDustPoints(
+    ventCount,
+    0xc4b896,
+    1.8,
+    11,
+    (positions, offset, index, count, channel) => {
+      const side = index % 2 === 0 ? -1 : 1;
+      const along = (index / count) * flatLengthM;
+      positions[offset] = side * (
+        galleryHalfWidth + 0.6 + deterministicUnit(index, channel + 1) * 1.2
+      );
+      positions[offset + 1] = galleryHeight - 1.2
+        + deterministicUnit(index, channel + 2) * 1.4;
+      positions[offset + 2] = railStartZ - along
+        + (deterministicUnit(index, channel + 3) - 0.5) * 4;
+    },
+  );
   vents.name = "LAUNCH_FX_VENT_DUST";
-  const portal = makeDustPoints(portalCount, 0xfff0d0, 3.2);
+  vents.position.x = catapultX;
+  const portal = makeDustPoints(
+    portalCount,
+    0xfff0d0,
+    3.2,
+    29,
+    (positions, offset, index, count, channel) => {
+      const t = index / count;
+      positions[offset] = (deterministicUnit(index, channel + 1) - 0.5)
+        * galleryHalfWidth * 2.1;
+      positions[offset + 1] = 0.2
+        + deterministicUnit(index, channel + 2) * (galleryHeight + 2.5);
+      // Soft daylight sheet just outside the portal mouth — reads as sky pouring in.
+      positions[offset + 2] = -1
+        - deterministicUnit(index, channel + 3) * 14 - t * 10;
+    },
+  );
   portal.name = "LAUNCH_FX_PORTAL_SHEET";
-  const rail = makeDustPoints(railCount, 0xffd090, 1.2);
+  portal.position.set(catapultX, 0, galleryEndZ);
+  const rail = makeDustPoints(
+    railCount,
+    0xffd090,
+    1.2,
+    47,
+    (positions, offset, index, count, channel) => {
+      const localZ = 8 - (index / count) * 24
+        + (deterministicUnit(index, channel + 3) - 0.5) * 1.5;
+      positions[offset] = (deterministicUnit(index, channel + 1) - 0.5) * 0.7;
+      positions[offset + 1] = 0.2 + deterministicUnit(index, channel + 2) * 0.35;
+      // The leading points stay on/behind the aircraft while the remainder trails down the rail.
+      positions[offset + 2] = localZ > 2
+        ? deterministicUnit(index, channel + 4) * 2
+        : localZ;
+    },
+  );
   rail.name = "LAUNCH_FX_RAIL_SHIMMER";
+  rail.position.set(catapultX, 0, railStartZ);
   group.add(vents, portal, rail);
 
   const ribLamps = layout.ribLamps ?? null;
@@ -79,49 +145,16 @@ export function createRapierLaunchFx(layout = {}) {
   let lastPortalOpacity = 0;
   let lastRailOpacity = 0;
 
-  function seedVentPositions(attr, progress) {
-    const arr = attr.array;
-    const midZ = railStartZ - flatLengthM * progress;
-    for (let i = 0; i < ventCount; i += 1) {
-      const side = i % 2 === 0 ? -1 : 1;
-      const along = (i / ventCount) * flatLengthM;
-      const z = railStartZ - along;
-      const weight = 1 - Math.min(1, Math.abs(z - midZ) / 80);
-      arr[i * 3] = catapultX + side * (galleryHalfWidth + 0.6 + Math.random() * 1.2);
-      arr[i * 3 + 1] = galleryHeight - 1.2 + Math.random() * 1.4 + weight * 0.4;
-      arr[i * 3 + 2] = z + (Math.random() - 0.5) * 4;
-    }
-    attr.needsUpdate = true;
-  }
-
-  function seedPortalPositions(attr) {
-    const arr = attr.array;
-    for (let i = 0; i < portalCount; i += 1) {
-      const t = i / portalCount;
-      // Soft daylight sheet just outside the portal mouth — reads as sky pouring in.
-      arr[i * 3] = catapultX + (Math.random() - 0.5) * galleryHalfWidth * 2.1;
-      arr[i * 3 + 1] = 0.2 + Math.random() * (galleryHeight + 2.5);
-      arr[i * 3 + 2] = galleryEndZ - 1 - Math.random() * 14 - t * 10;
-    }
-    attr.needsUpdate = true;
-  }
-
-  function seedRailPositions(attr, progress) {
-    const arr = attr.array;
-    const aircraftZ = railStartZ - flatLengthM * progress;
-    for (let i = 0; i < railCount; i += 1) {
-      const along = progress * flatLengthM - 8 + (i / railCount) * 24;
-      arr[i * 3] = catapultX + (Math.random() - 0.5) * 0.7;
-      arr[i * 3 + 1] = 0.2 + Math.random() * 0.35;
-      arr[i * 3 + 2] = railStartZ - along + (Math.random() - 0.5) * 1.5;
-      if (arr[i * 3 + 2] > aircraftZ + 2) arr[i * 3 + 2] = aircraftZ + Math.random() * 2;
-    }
-    attr.needsUpdate = true;
+  function resetTransforms() {
+    vents.position.set(catapultX, 0, 0);
+    portal.position.set(catapultX, 0, galleryEndZ);
+    rail.position.set(catapultX, 0, railStartZ);
   }
 
   function clearFx() {
     strokeActive = false;
     fadeRemainingS = 0;
+    timeS = 0;
     vents.visible = false;
     portal.visible = false;
     rail.visible = false;
@@ -131,6 +164,7 @@ export function createRapierLaunchFx(layout = {}) {
     lastVentOpacity = 0;
     lastPortalOpacity = 0;
     lastRailOpacity = 0;
+    resetTransforms();
     if (ribLamps?.material?.color) ribLamps.material.color.copy(baseLampColor);
   }
 
@@ -138,6 +172,8 @@ export function createRapierLaunchFx(layout = {}) {
     if (next) {
       strokeActive = true;
       fadeRemainingS = 0;
+      timeS = 0;
+      resetTransforms();
       vents.visible = true;
       portal.visible = true;
       rail.visible = true;
@@ -179,10 +215,6 @@ export function createRapierLaunchFx(layout = {}) {
       lastVentOpacity = ventOpacity;
       lastPortalOpacity = portalOpacity;
       lastRailOpacity = railOpacity;
-
-      seedVentPositions(vents.geometry.attributes.position, progress);
-      seedPortalPositions(portal.geometry.attributes.position);
-      seedRailPositions(rail.geometry.attributes.position, progress);
     } else {
       fadeRemainingS = Math.max(0, fadeRemainingS - dt);
       const fade = fadeRemainingS / POST_HANDOFF_FADE_S;
@@ -198,7 +230,8 @@ export function createRapierLaunchFx(layout = {}) {
     const drift = timeS * (4 + progress * 18);
     vents.position.z = -((drift * 0.15) % 3);
     portal.position.y = Math.sin(timeS * 2.2) * 0.18;
-    rail.position.x = Math.sin(timeS * 14) * 0.04;
+    rail.position.x = catapultX + Math.sin(timeS * 14) * 0.04;
+    rail.position.z = railStartZ - flatLengthM * progress;
 
     vents.material.opacity = ventOpacity;
     portal.material.opacity = portalOpacity;

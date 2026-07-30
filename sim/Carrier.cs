@@ -784,8 +784,8 @@ public sealed class CatapultLaunchModel {
 
     /// Normal acceleration the ramp arc pulls on the aircraft, on top of the along-rail stroke.
     /// A ski jump is a constant-radius arc, not a kink: the rail has to turn the aircraft's
-    /// velocity vector, and how hard it turns it is the design choice. 3 G is comfortable — the
-    /// pilot sees sqrt(2.21^2 + 3^2) = 3.73 G combined against a 12 G airframe, reclined.
+    /// velocity vector, and how hard it turns it is the design choice. At Rapier's live 110 m/s
+    /// launch, 3 G normal combines with 1.186 G tangential to about 3.23 G against a 12 G airframe.
     public const double RampNormalG = 3.0;
 
     /// Arc radius that turns the launch velocity through the ramp angle at RampNormalG.

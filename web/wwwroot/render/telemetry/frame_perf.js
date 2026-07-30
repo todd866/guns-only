@@ -3,7 +3,17 @@
 // "perf" row per interval. Aggregation is pure with an injected clock: node tests drive window
 // boundaries exactly, and the browser recorder stays a thin enqueue shim.
 
+import {
+  evaluateForegroundFrameContract,
+  FOREGROUND_FRAME_CONTRACT,
+} from "./frame_contract.js";
+
 export const FRAME_PERF_INTERVAL_MS = 5_000;
+// A 60 Hz browser does not present every requestAnimationFrame callback at exactly 16.667 ms:
+// compositor scheduling and timer precision add a small amount of jitter. 18.5 ms is the
+// foreground-flight scheduling tolerance shared with the closed-loop frame governor. It is
+// deliberately separate from the 22 ms hardware acceptance ceiling retained below.
+export const FRAME_PERF_BUDGET_MS = FOREGROUND_FRAME_CONTRACT.budgetFrameMs;
 // Align with FRAME_GOVERNOR_LATE_FRAME_MS: one missed display interval. The old 50 ms threshold
 // left felt-30-fps tapes reporting ~0 long frames while p95 sat at 33 ms.
 export const FRAME_PERF_LONG_FRAME_MS = 22;
@@ -21,6 +31,10 @@ function rounded(value) {
   return Math.round(value * 100) / 100;
 }
 
+function roundedFraction(value) {
+  return Math.round(value * 10_000) / 10_000;
+}
+
 /**
  * Windowed requestAnimationFrame-delta aggregator. `observe(deltaMs, nowMs)` returns null while
  * a window is filling and one summary object when `nowMs` closes the window (the closing frame
@@ -29,6 +43,7 @@ function rounded(value) {
  */
 export function createFramePerfAggregator({
   intervalMs = FRAME_PERF_INTERVAL_MS,
+  budgetFrameMs = FRAME_PERF_BUDGET_MS,
   longFrameMs = FRAME_PERF_LONG_FRAME_MS,
   maxWindowSamples = FRAME_PERF_MAX_WINDOW_SAMPLES,
   // Optional () => ({name: number}) of renderer/scene counters, sampled ONCE per closed window
@@ -44,6 +59,10 @@ export function createFramePerfAggregator({
   let deltas = [];
   let frames = 0;
   let longFrames = 0;
+  let budgetMissFrames = 0;
+  let budgetMissStreak = 0;
+  let longestBudgetMissStreak = 0;
+  let observedMilliseconds = 0;
   let maxDelta = 0;
   // name -> { sum, count, max } of main-thread milliseconds. See observePhase.
   let phases = new Map();
@@ -109,21 +128,51 @@ export function createFramePerfAggregator({
       if (!Number.isFinite(delta) || delta <= 0 || !Number.isFinite(now)) return null;
       if (windowStartedAt === null) windowStartedAt = now;
       frames += 1;
+      observedMilliseconds += delta;
+      if (delta > budgetFrameMs) {
+        budgetMissFrames += 1;
+        budgetMissStreak += 1;
+        longestBudgetMissStreak = Math.max(longestBudgetMissStreak, budgetMissStreak);
+      } else {
+        budgetMissStreak = 0;
+      }
       if (delta > longFrameMs) longFrames += 1;
       if (delta > maxDelta) maxDelta = delta;
       if (deltas.length < maxWindowSamples) deltas.push(delta);
       if (now - windowStartedAt < intervalMs) return null;
 
       const sorted = deltas.slice().sort((a, b) => a - b);
+      const p50 = rounded(nearestRank(sorted, 0.50));
+      const p95 = rounded(nearestRank(sorted, 0.95));
+      const p99 = rounded(nearestRank(sorted, 0.99));
+      const deliveredFps = rounded(frames * 1_000 / observedMilliseconds);
+      const budgetMissFraction = budgetMissFrames / frames;
+      const budgetMissRate = roundedFraction(budgetMissFraction);
       const summary = {
-        frame_ms_p50: rounded(nearestRank(sorted, 0.50)),
-        frame_ms_p95: rounded(nearestRank(sorted, 0.95)),
+        frame_ms_p50: p50,
+        frame_ms_p95: p95,
+        frame_ms_p99: p99,
         frame_ms_max: rounded(maxDelta),
         long_frames: longFrames,
         frames,
+        window_ms: rounded(observedMilliseconds),
+        delivered_fps: deliveredFps,
+        frame_budget_ms: budgetFrameMs,
+        frame_budget_misses: budgetMissFrames,
+        frame_budget_miss_rate: budgetMissRate,
+        longest_frame_budget_miss_streak: longestBudgetMissStreak,
+        frames_over_18_5ms: budgetMissFrames,
         // Alias of long_frames under the 22 ms contract so agent tapes and harness gates share one
         // name with the closed-loop governor without breaking older consumers of long_frames.
         frames_over_22ms: longFrames,
+        contract_pass: evaluateForegroundFrameContract({
+          fps: deliveredFps,
+          p95Ms: p95,
+          p99Ms: p99,
+          // Evaluate the unrounded ratio. A 3.4% miss rate must not become a passing 3% merely
+          // because the diagnostic display is rounded.
+          budgetMissFraction,
+        }) ? 1 : 0,
       };
       if (sampleScene) {
         // Guarded exactly like the rest of the recorder: diagnostics must never be able to
@@ -152,6 +201,10 @@ export function createFramePerfAggregator({
       deltas = [];
       frames = 0;
       longFrames = 0;
+      budgetMissFrames = 0;
+      budgetMissStreak = 0;
+      longestBudgetMissStreak = 0;
+      observedMilliseconds = 0;
       maxDelta = 0;
       compressionRequestedTicks = 0;
       compressionExecutedTicks = 0;
@@ -159,6 +212,23 @@ export function createFramePerfAggregator({
       compressionMaximumFactor = 1;
       resetPhases();
       return summary;
+    },
+
+    reset() {
+      windowStartedAt = null;
+      deltas = [];
+      frames = 0;
+      longFrames = 0;
+      budgetMissFrames = 0;
+      budgetMissStreak = 0;
+      longestBudgetMissStreak = 0;
+      observedMilliseconds = 0;
+      maxDelta = 0;
+      compressionRequestedTicks = 0;
+      compressionExecutedTicks = 0;
+      compressionCostDroppedTicks = 0;
+      compressionMaximumFactor = 1;
+      resetPhases();
     },
   };
 }

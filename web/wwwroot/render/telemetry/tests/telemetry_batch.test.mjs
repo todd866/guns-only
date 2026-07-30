@@ -213,3 +213,40 @@ test("backpressure retains and serializes the latest sortie AI baseline in order
     [20, 26, 27, 28, 29],
   );
 });
+
+test("backpressure preserves the latest failed foreground frame contract", () => {
+  const baseline = {
+    k: "in",
+    t: 1,
+    type: "perf",
+    code: "AiComputeLevel",
+    cause: "sortie-initial",
+    initial: true,
+  };
+  const staleBreach = {
+    k: "perf",
+    t: 2,
+    active_foreground: 1,
+    contract_pass: 0,
+    frame_ms_p99: 40,
+  };
+  const latestBreach = {
+    k: "perf",
+    t: 3,
+    active_foreground: 1,
+    contract_pass: 0,
+    frame_ms_p99: 31,
+  };
+  const rows = [
+    baseline,
+    staleBreach,
+    latestBreach,
+    ...Array.from({ length: 8 }, (_, index) => ({ k: "st", t: 4 + index })),
+  ];
+
+  const retained = retainTelemetryRowsUnderBackpressure(rows, 5);
+  assert.deepEqual(retained.map((row) => row.t), [1, 3, 9, 10, 11]);
+  assert.equal(retained.includes(staleBreach), false);
+  assert.equal(retained.includes(latestBreach), true);
+  assert.equal(retained.length, 5);
+});

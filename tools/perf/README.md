@@ -34,10 +34,18 @@ substitute for a hardware frame-rate run.
 
 ## Gates and configuration
 
-Each leg reports frame count, p50, p95, p99, MAX, and the count/percentage over **22 ms**
-(aligned with the closed-loop frame governor / `FRAME_PERF_LONG_FRAME_MS`). The gate uses only
-MAX and long-frame percentage. It deliberately never gates on p50: a perfect 16.7 ms median
-coexists with this regression.
+Each leg reports delivered FPS, p50, p95, p99, MAX, the count/percentage over the shared **18.5
+ms** scheduling budget, and a compatibility diagnostic count over 22 ms. Hardware qualification
+uses the same foreground-flight contract as production telemetry and the environment lab:
+
+- delivered FPS: at least `59`
+- p95: at most `18.5 ms`
+- p99: at most `22 ms`
+- frames over `18.5 ms`: at most `3.0%`
+- MAX: at most `100 ms` as a separate catastrophic-hitch safety guard
+
+The gate deliberately does not use p50: a perfect 16.7 ms median can coexist with a severe tail
+regression.
 
 Every run also writes an agent-readable report under `analysis/perf/`:
 
@@ -46,14 +54,15 @@ analysis/perf/<iso>-beat7-flight.json
 analysis/perf/<iso>-beat7-flight.md
 ```
 
-Those files carry per-leg percentiles, `% >22 ms`, RAF phase averages (`sim` / `view` / …), and
-load-context counters from `document.documentElement.dataset.framePerf` (governor level, stream
-radius, scenery shed, engagement). Use them for post-flight triage — there is no on-screen FPS HUD.
+Those files carry the effective contract, delivered FPS, percentiles, `% >18.5 ms`, the legacy
+`>22 ms` count, RAF phase averages (`sim` / `view` / …), and load-context counters from
+`document.documentElement.dataset.framePerf` (governor level, stream radius, scenery shed,
+engagement). Use them for post-flight triage — there is no on-screen FPS HUD.
 
 Defaults:
 
 - MAX: `100 ms`
-- frames over 22 ms: `1.0%`
+- frames over 18.5 ms: `3.0%`
 - warmup: `15,000 ms` before each leg (discarded)
 - measured duration: `60,000 ms` per leg after warmup (cannot be shortened)
 - wall-clock capture: at least `75,000 ms` per leg with the defaults
@@ -66,14 +75,17 @@ CLI flags and their environment equivalents:
 | `--wwwroot PATH` | `GUNS_FLIGHT_WWWROOT` |
 | `--leg-duration-ms N` (measured window after warmup) | `GUNS_FLIGHT_LEG_DURATION_MS` |
 | `--max-frame-ms N` | `GUNS_FLIGHT_MAX_FRAME_MS` |
-| `--max-long-frame-pct N` | `GUNS_FLIGHT_MAX_LONG_FRAME_PCT` |
+| `--max-budget-miss-pct N` | `GUNS_FLIGHT_MAX_BUDGET_MISS_PCT` |
 | `--min-frames N` | `GUNS_FLIGHT_MIN_FRAMES` |
+
+`--max-long-frame-pct` / `GUNS_FLIGHT_MAX_LONG_FRAME_PCT` remain accepted for older automation.
+They are aliases for the 18.5 ms budget-miss percentage; the >22 ms count is diagnostic only.
 
 Example CI invocation:
 
 ```sh
 GUNS_FLIGHT_MAX_FRAME_MS=80 \
-GUNS_FLIGHT_MAX_LONG_FRAME_PCT=0.75 \
+GUNS_FLIGHT_MAX_BUDGET_MISS_PCT=1.5 \
 node tools/perf/flight_frame_harness.mjs
 ```
 

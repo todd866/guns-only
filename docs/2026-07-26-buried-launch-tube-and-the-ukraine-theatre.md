@@ -1,5 +1,14 @@
 # The buried launch tube, and siting the Rapier in Ukraine
 
+> **Historical design record — numerical launch study superseded.** The live launcher is now
+> **520 m at 110 m/s**, with **433.86 m flat + 86.14 m open arc**, a **411.29 m** radius,
+> **8.99 m** rise, **12°** release, and a **9.4545 s** stroke with **3,600 lb** alert fuel. The
+> 150 m/s, 360 m + 160 m, 765 m radius, 16.7 m rise, 6.93 s, 88.3 MJ, 416-frame, and ~50,000 m³
+> values below are retained only to show the design path; do not reuse them. The durable live,
+> engineering, cost, safety, and hybrid generated-plate basis is
+> [`airframes/rapier/82-launch-gallery-engineering-basis.md`](airframes/rapier/82-launch-gallery-engineering-basis.md).
+> Burial can reduce exposure but is **not crater-proof**.
+
 Design record for the work that started from a one-line bug report — "right now I'm taxying
 through aircraft" — and ended up rebuilding where the aircraft lives and what launches it.
 
@@ -61,7 +70,10 @@ recovery strip returned exactly **one** viable site in 131 km². On flat steppe 
 The answer is to put the launcher underground: a cut-and-cover tube below grade, exiting through a
 portal into an open cutting. It removes the terrain dependency completely, and it is a *better*
 answer to the premise that created this aircraft. Forward airfields get cratered, which is why the
-basing is deep. A buried launcher cannot be cratered, and you can dig another one anywhere.
+basing is deep. This record originally claimed that a buried launcher could not be cratered and
+could simply be dug anywhere. **That absolute claim is withdrawn:** burial can reduce exposure, but
+portal attack, ground shock, collapse, flooding, geology, utilities, and repairability still govern
+survivability and siting.
 
 ### The kernel decided the shape — until it was told to decide differently
 

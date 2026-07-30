@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=197";
+import { createHud } from "./hud.js?v=198";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=197";
+} from "./render/debrief/sortie_result.js?v=198";
 import { pointsLedgerPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -48,7 +48,7 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=197";
+} from "./render/release/release_identity.js?v=198";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -61,7 +61,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=197";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=198";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -132,17 +132,18 @@ import {
   recommendedCampaignNode,
   saveCampaignProfile,
 } from "./render/progression/campaign_progression.js";
+import { FOREGROUND_FRAME_CONTRACT } from "./render/telemetry/frame_contract.js";
 import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=197";
+} from "./render/telemetry/ai_frame_pressure.js?v=198";
 import { FrameGovernorPolicy } from "./render/telemetry/frame_governor.js";
 import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compression.js";
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=197";
+} from "./render/telemetry/telemetry_batch.js?v=198";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -151,7 +152,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=197";
+} from "./render/settings/player_settings.js?v=198";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -167,7 +168,11 @@ import {
   TelemetryStateEncoder,
   TELEMETRY_STATE_ENCODING,
 } from "./render/telemetry/state_delta.js";
-import { createVisualRuntime } from "./render/visual/index.js";
+import {
+  AdaptiveResolutionController,
+  createVisualRuntime,
+  normalizeVisualProfile,
+} from "./render/visual/index.js";
 import {
   createKoreaEffectsFactory,
   createKoreaEnvironmentFactory,
@@ -192,11 +197,11 @@ import {
   createRapierDispersedStrip,
   createRapierGunDrone,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=197";
+} from "./render/scene/scene_builders.js?v=198";
 import {
   setFlightAudioEnabled,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=197";
+} from "./render/audio/flight_audio.js?v=198";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -1163,6 +1168,19 @@ const VISUAL_QUALITY = Object.freeze({
   carrierSprayCount: mobileControls ? 28 : 44,
 });
 
+// Modern public-data missions intentionally have no downloadable content pack, but pixel cost
+// does not disappear with the pack. Give the direct renderer the same bounded, tier-normalized
+// 60 fps resolution controller as VisualRuntime without borrowing Korea's atmosphere, post stack,
+// or asset bindings.
+const DIRECT_ADAPTIVE_RESOLUTION_CONFIG = normalizeVisualProfile({
+  profileId: "visual.direct-flight.performance.v1",
+  qualityTiers: [{
+    id: VISUAL_QUALITY.tier,
+    order: 0,
+    settings: { pixelRatioCap: VISUAL_QUALITY.pixelRatioCap },
+  }],
+}, { tierId: VISUAL_QUALITY.tier }).adaptiveResolution;
+
 configureSceneBuilders({
   visualQuality: VISUAL_QUALITY,
   mobileControls,
@@ -1293,8 +1311,9 @@ let previousExecutedTicks = 2;
 
 // A 22 ms threshold only detects 45 fps after the pilot can already feel it. Keep a little browser
 // scheduling tolerance over 16.67 ms, but treat sustained 17–22 ms delivery as a missed contract.
-const FRAME_GOVERNOR_LATE_FRAME_MS = 18.5;
-const FRAME_GOVERNOR_TRIP_FRACTION = 0.03;
+const FRAME_GOVERNOR_LATE_FRAME_MS = FOREGROUND_FRAME_CONTRACT.budgetFrameMs;
+const FRAME_GOVERNOR_TRIP_FRACTION =
+  FOREGROUND_FRAME_CONTRACT.maximumBudgetMissFraction;
 const FRAME_GOVERNOR_RECOVER_FRACTION = 0.01;
 const FRAME_GOVERNOR_RECOVER_CLEAN_WINDOWS = 8;
 const FRAME_GOVERNOR_SEVERE_FRAME_MS = 28;
@@ -1554,12 +1573,19 @@ function sampleSceneCounters() {
   if (!info) return null;
   let sceneObjects = 0;
   activeView.scene?.traverse?.(() => { sceneObjects += 1; });
+  const terrain = activeView.terrainPresentation?.diagnostics?.();
+  const visual = activeView.visualRuntime?.diagnostics?.();
+  const resolution = visual?.resolution ?? activeView.directAdaptiveResolution?.status?.();
+  const pixelRatio = Number(activeView.renderer?.getPixelRatio?.());
+  const renderWidth = Number(activeView.renderer?.domElement?.width);
+  const renderHeight = Number(activeView.renderer?.domElement?.height);
   const streamRadius = Number(
     activeView.terrainPresentation?.streamingRadiusM
       ?? activeView.terrainNominalStreamingRadiusM,
   );
   const radarAltFt = Number(latestState?.radar_alt_ft ?? latestState?.alt_ft);
   const engagement = Number(latestState?.engagement_number);
+  const catapultProgress = Number(latestState?.catapult_progress);
   return {
     draw_calls: info.render?.calls ?? 0,
     triangles: info.render?.triangles ?? 0,
@@ -1568,6 +1594,7 @@ function sampleSceneCounters() {
     programs: info.programs?.length ?? 0,
     scene_objects: sceneObjects,
     governor_level: frameGovernor.level,
+    governor_terminal: frameGovernor.level >= frameGovernorPolicy.maxLevel ? 1 : 0,
     ai_compute_level: adaptiveAiWorkBudget.snapshot().computeLevel,
     stream_radius_m: Number.isFinite(streamRadius) ? streamRadius : 0,
     scenery_suppressed: activeView.terrainGovernorSuppressesAmbientScenery === true ? 1 : 0,
@@ -1575,6 +1602,27 @@ function sampleSceneCounters() {
     radar_alt_ft: Number.isFinite(radarAltFt) ? radarAltFt : 0,
     engagement: Number.isFinite(engagement) ? engagement : 0,
     bandit_alive: latestState?.bandit_alive === true ? 1 : 0,
+    catapult_active: latestState?.catapult_active === true ? 1 : 0,
+    catapult_progress_pct: Number.isFinite(catapultProgress) ? catapultProgress * 100 : 0,
+    rapier_launch_active: latestState?.rapier_mission_available === true
+      && latestState?.catapult_active === true ? 1 : 0,
+    pixel_ratio_x100: Number.isFinite(pixelRatio) ? pixelRatio * 100 : 0,
+    render_pixels: Number.isFinite(renderWidth) && Number.isFinite(renderHeight)
+      ? renderWidth * renderHeight : 0,
+    viewport_width_px: Number(activeView._surfaceWidth) || 0,
+    viewport_height_px: Number(activeView._surfaceHeight) || 0,
+    resolution_scale_pct: Number.isFinite(Number(resolution?.scale))
+      ? Number(resolution.scale) * 100 : 0,
+    resolution_ema_ms_x100: Number.isFinite(Number(resolution?.emaFrameMs))
+      ? Number(resolution.emaFrameMs) * 100 : 0,
+    terrain_resident_pages: Number(terrain?.residentPages) || 0,
+    terrain_resident_chunks: Number(terrain?.residentChunks) || 0,
+    terrain_visible_scenery_chunks: Number(terrain?.visibleSceneryChunks) || 0,
+    terrain_active_loads: Number(terrain?.activePageLoads ?? terrain?.activeLoads) || 0,
+    terrain_queued_loads: Number(terrain?.queuedPageLoads ?? terrain?.queuedLoads) || 0,
+    terrain_queued_builds: Number(terrain?.queuedBuilds) || 0,
+    terrain_network_bytes: Number(terrain?.networkBytes ?? terrain?.transfer?.networkBytes) || 0,
+    terrain_errors: Number(terrain?.errors) || 0,
   };
 }
 
@@ -1600,6 +1648,7 @@ const recorder = {
   _stateEncoder: new TelemetryStateEncoder(),
   _sampleScheduler: new TelemetrySampleScheduler({ strideTicks: TELEMETRY_TICK_STRIDE }),
   _framePerf: createFramePerfAggregator({ sampleScene: () => sampleSceneCounters() }),
+  _framePerfEligible: false,
   _sortieSequence: 0,
   _sortie: null,
   _lastSessionPhase: null,
@@ -1680,29 +1729,50 @@ const recorder = {
     } catch (e) { this.errors++; this.lastError = String(e); }
   },
   // One "perf" row per 5 s window of requestAnimationFrame deltas: the 20 Hz state stream is
-  // sim-tick-scheduled and cannot see render stalls. Perf rows are diagnostic garnish — when the
-  // bounded queue is already full it is the perf row that is skipped, never a state row that the
-  // enqueue overflow trim would displace from the head of the queue.
+  // sim-tick-scheduled and cannot see render stalls. Healthy perf rows yield to state under
+  // backpressure. The latest failed foreground contract is retained as an explicit diagnostic
+  // anchor, because losing the evidence of a terminal-quality miss would defeat the recorder.
   /// Attribute a block of main-thread milliseconds to a named phase of the render loop. Guarded
   /// like everything else here: instrumentation must never be able to cost a frame or kill one.
   observeFramePhase(name, milliseconds) {
+    if (!this._framePerfEligible) return;
     try { this._framePerf.observePhase(name, milliseconds); }
     catch (e) { this.errors++; this.lastError = String(e); }
   },
   observeTimeCompression(plan) {
+    if (!this._framePerfEligible) return;
     try { this._framePerf.observeTimeCompression(plan); }
     catch (e) { this.errors++; this.lastError = String(e); }
   },
-  observeFrameDelta(deltaMs) {
+  observeFrameDelta(deltaMs, activeForeground) {
     try {
+      if (activeForeground !== true) {
+        this._framePerf.reset();
+        this._framePerfEligible = false;
+        return;
+      }
+      if (!this._framePerfEligible) {
+        // The delta that woke ACTIVE flight spans an ineligible Ready/pause/background frame.
+        // Start clean here; the next RAF delta is the first one wholly owned by foreground flight.
+        this._framePerf.reset();
+        this._framePerfEligible = true;
+        return;
+      }
       const summary = this._framePerf.observe(deltaMs, performance.now());
       if (!summary) return;
       // Read-only browser QA seam: phase ownership of a reported hitch can be inspected without
       // making the recorder or kernel mutable from the page.
       document.documentElement.dataset.framePerf = JSON.stringify(summary);
-      if (this.buf.length >= TELEMETRY_BUFFER_LIMIT) return;
+      if (this.buf.length >= TELEMETRY_BUFFER_LIMIT && summary.contract_pass === 1) return;
       this.ensureHeader();
-      this.enqueue({ k: "perf", t: Math.round(performance.now()), ...summary });
+      this.enqueue({
+        k: "perf",
+        t: Math.round(performance.now()),
+        sortie: this._sortie?.id ?? null,
+        active_foreground: 1,
+        quality_tier: VISUAL_QUALITY.tier,
+        ...summary,
+      });
     } catch (e) { this.errors++; this.lastError = String(e); }
   },
   // Every method is fully guarded: telemetry must NEVER be able to crash the flight loop (an
@@ -2624,7 +2694,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     kicker: "Eastern corridor · guns-only",
     title: "Rapier Intercept",
     sortie: "Rapier turbo-ramjet interceptor · guns-only · one-pass sweep · pursued recovery",
-    configuration: "Fictional TBCC Rapier · measured design dash {DESIGN_DASH_MACH} · CMC hot structure · reusable gun-drones · 3,100 LB alert fuel · Mach 4 is bible fiction, never commanded",
+    configuration: "Fictional TBCC Rapier · measured design dash {DESIGN_DASH_MACH} · CMC hot structure · reusable gun-drones · 3,600 LB alert fuel · Mach 4 is bible fiction, never commanded",
     brief: "Mission automation owns the long profile by default: use full augmentation to launch, climb around M0.90 to FL560 (56,000 ft), and drive cleanly through the transonic drag rise. RAM LIGHT begins at {RAM_LIGHT_MACH} and full ram arrives at {FULL_RAM_MACH}; at FL315 the aircraft can gather speed but cannot cross into full ram, so hold the altitude profile, ram-climb to FL700, and dash to the measured design speed of {DESIGN_DASH_MACH}. Mach and KTAS, range, closure, and intercept ETA stay visible throughout the long leg. Mach 4 is SE-bible fiction only — the mission never commands it. At the formation, press F to release the gun-drone load; Rapier egresses while drones fight. Return, shed energy for marshal, lineup, and four large square gates into wire three.",
     controls: "P mission automation · F release gun-drones · arrows/W/S pilot takeover\nT safe time compression · V padlock · Tab target · fly every recovery square · trap on wire three",
   }),
@@ -6219,6 +6289,12 @@ class FlightView {
     this.scene.add(this.periodGunsight.object3d, this.banditContact.object3d);
     this.scene.add(this.f22CanopyGlass.group);
     this.visualRuntime = null;
+    this.directAdaptiveResolution = new AdaptiveResolutionController({
+      ...DIRECT_ADAPTIVE_RESOLUTION_CONFIG,
+      pixelRatioCap: VISUAL_QUALITY.pixelRatioCap,
+      mode: "combat",
+      onChange: (pixelRatio) => this.applyDirectRenderPixelRatio(pixelRatio),
+    });
     this.visualRuntimeRequestedKey = "";
     this.visualRuntimeEpoch = 0;
     this.visualRuntimeError = null;
@@ -6611,19 +6687,10 @@ class FlightView {
     return true;
   }
 
-  resize() {
-    const { width, height } = gameViewport();
-    const pixelRatio = Math.min(window.devicePixelRatio || 1, VISUAL_QUALITY.pixelRatioCap);
-    const safeInsets = gameSafeInsets();
-    document.documentElement.style.setProperty("--game-width", `${width}px`);
-    document.documentElement.style.setProperty("--game-height", `${height}px`);
-    this.hud.resize(width, height, pixelRatio, safeInsets);
-    const surfaceChanged = this._surfaceWidth !== width
-      || this._surfaceHeight !== height
-      || this._surfacePixelRatio !== pixelRatio;
-    if (!surfaceChanged) return;
-    this._surfaceWidth = width;
-    this._surfaceHeight = height;
+  applyRendererSurfacePixelRatio(pixelRatio) {
+    if (this.disposed) return;
+    const width = this._surfaceWidth ?? gameViewport().width;
+    const height = this._surfaceHeight ?? gameViewport().height;
     this._surfacePixelRatio = pixelRatio;
     this.renderer.setPixelRatio(pixelRatio);
     this.renderer.setSize(width, height, false);
@@ -6632,9 +6699,35 @@ class FlightView {
       carrierVisual.userData.sprayUniforms.uPixelRatio.value = pixelRatio;
     }
     this.carrierRuntime.water.sprayUniforms.uPixelRatio.value = pixelRatio;
+  }
+
+  applyDirectRenderPixelRatio(pixelRatio) {
+    if (this.visualRuntime?.initialized) return;
+    this.applyRendererSurfacePixelRatio(pixelRatio);
+  }
+
+  resize() {
+    const { width, height } = gameViewport();
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    const hudPixelRatio = Math.min(devicePixelRatio, VISUAL_QUALITY.pixelRatioCap);
+    const safeInsets = gameSafeInsets();
+    document.documentElement.style.setProperty("--game-width", `${width}px`);
+    document.documentElement.style.setProperty("--game-height", `${height}px`);
+    // The HUD remains at the tier cap: adaptive resolution owns the 3D surface only, so text and
+    // sight symbology do not soften when the scene sheds pixels to hold 60.
+    this.hud.resize(width, height, hudPixelRatio, safeInsets);
+    const surfaceChanged = this._surfaceWidth !== width
+      || this._surfaceHeight !== height;
+    if (!surfaceChanged) return;
+    this._surfaceWidth = width;
+    this._surfaceHeight = height;
     this.camera.aspect = width / Math.max(height, 1);
     this.camera.updateProjectionMatrix();
-    this.visualRuntime?.resize(width, height, window.devicePixelRatio || 1);
+    if (this.visualRuntime?.initialized) {
+      this.visualRuntime.resize(width, height, devicePixelRatio);
+    } else {
+      this.directAdaptiveResolution.setViewport(width, height, devicePixelRatio);
+    }
   }
 
   queueVisualRuntimeTransition(operation) {
@@ -6660,6 +6753,14 @@ class FlightView {
         await Promise.resolve(previous?.dispose()).catch((error) => {
           console.warn("Pack visual runtime cleanup failed.", error);
         });
+        if (!this.disposed) {
+          const { width, height } = gameViewport();
+          this.directAdaptiveResolution.setViewport(
+            width,
+            height,
+            window.devicePixelRatio || 1,
+          );
+        }
       });
       return;
     }
@@ -6748,11 +6849,7 @@ class FlightView {
           shadowModes: mobileControls ? ["carrier"] : ["carrier", "replay"],
           shadowHalfExtents: { combat: 44, carrier: 190, replay: 160 },
           onResolutionChange: (pixelRatio) => {
-            const carrierVisual = this.presentationAssets.carrierSlot.object;
-            if (carrierVisual?.userData.sprayUniforms) {
-              carrierVisual.userData.sprayUniforms.uPixelRatio.value = pixelRatio;
-            }
-            this.carrierRuntime.water.sprayUniforms.uPixelRatio.value = pixelRatio;
+            this.applyRendererSurfacePixelRatio(pixelRatio);
           },
           onDiagnostic: (diagnostic) => console.debug("Visual runtime", diagnostic),
         });
@@ -6805,9 +6902,8 @@ class FlightView {
     return frame;
   }
 
-  updateSunAndShadows(isCarrier, carrierRoot) {
-    const extent = isCarrier ? 190 : 44;
-    const target = isCarrier ? carrierRoot.position : this.playerPosition;
+  updateSunAndShadows(mode, target) {
+    const extent = mode === "carrier" ? 190 : mode === "replay" ? 160 : 44;
     const texelSize = extent * 2 / Math.max(1, VISUAL_QUALITY.shadowMapSize);
 
     // Snap the tracked volume in the sun's light-space plane. This keeps fine cockpit rails and
@@ -6829,9 +6925,10 @@ class FlightView {
       this.sun.shadow.camera.bottom = -extent;
       this.sun.shadow.camera.updateProjectionMatrix();
     }
-    // Desktop dogfights receive cockpit/airframe self-shadow; mobile retains the carrier-only
-    // path because fill-rate, not shadow-map resolution, is its dominant cost.
-    this.sun.castShadow = isCarrier || !mobileControls;
+    // Match VisualRuntime: the production cockpit and normal ownship exterior are hidden, so the
+    // combat shadow pass has no useful receiver. Pay for it only near a recovery platform or in an
+    // external replay where the aircraft/deck can actually be seen.
+    this.sun.castShadow = mode === "carrier" || mode === "replay";
     this.sunTarget.position.copy(this.shadowTargetPosition);
     this.sun.position.copy(this.shadowTargetPosition).addScaledVector(SUN_DIRECTION, 1600);
     this.sunTarget.updateMatrixWorld();
@@ -7429,7 +7526,7 @@ class FlightView {
     return true;
   }
 
-  update(state, dt, nowSeconds) {
+  update(state, dt, nowSeconds, renderFrameMs = dt * 1000) {
     this.configureTerrainMission(state);
     const casevac = isCasevacState(state);
     const opponentPresent = opponentPresentationAllowed(state);
@@ -8031,7 +8128,17 @@ class FlightView {
     this.sea.uniforms.uWind.value.y += (windTargetZ - this.sea.uniforms.uWind.value.y) * windBlend;
     this.sea.uniforms.uWindSpeed.value = this.sea.uniforms.uWind.value.length();
 
-    const shadowFocus = isRecoveryPlatform ? carrierRoot.position : this.playerPosition;
+    const recoveryShadowRelevant = isRecoveryPlatform
+      && (state.catapult_active === true
+        || this.camera.position.distanceToSquared(carrierRoot.position) <= 2_500 ** 2);
+    const shadowMode = replayExternal ? "replay" : recoveryShadowRelevant ? "carrier" : "combat";
+    const shadowFocus = recoveryShadowRelevant ? carrierRoot.position : this.playerPosition;
+    const activeForeground = state?.session_phase === "ACTIVE"
+      && !replayExternal
+      && dt > 0
+      && document.visibilityState === "visible";
+    const measuredFrameMs = Number.isFinite(Number(renderFrameMs)) && Number(renderFrameMs) > 0
+      ? Number(renderFrameMs) : dt * 1000;
     if (this.visualRuntime?.initialized) {
       // Establish the authored sun direction first; the shared runtime then owns shadow-map
       // bounds, texel snapping, adaptive resolution, post-processing and the final color transform.
@@ -8040,13 +8147,18 @@ class FlightView {
       this.visualRuntime.update({
         deltaSeconds: dt,
         elapsedSeconds: nowSeconds,
-        frameTimeMs: dt * 1000,
-        mode: replayExternal ? "replay" : isRecoveryPlatform ? "carrier" : "combat",
+        frameTimeMs: measuredFrameMs,
+        activeForeground,
+        mode: shadowMode,
         shadowFocus,
       });
       this.visualRuntime.render(dt);
     } else {
-      this.updateSunAndShadows(isRecoveryPlatform, carrierRoot);
+      this.directAdaptiveResolution.setMode(shadowMode);
+      if (activeForeground) {
+        this.directAdaptiveResolution.sample(measuredFrameMs, { activeForeground: true });
+      }
+      this.updateSunAndShadows(shadowMode, shadowFocus);
       this.renderer.render(this.scene, this.camera);
     }
     const hudFrame = this.hudFrame;
@@ -8089,6 +8201,8 @@ class FlightView {
     return Object.freeze({
       ...this.presentationAssets.diagnostics(),
       visualRuntime: this.visualRuntime?.diagnostics() ?? null,
+      directResolution: this.visualRuntime?.initialized
+        ? null : this.directAdaptiveResolution.status(),
       visualRuntimeError: this.visualRuntimeError,
       terrain: this.terrainPresentation?.diagnostics() ?? null,
       terrainError: this.terrainPresentationError,
@@ -9642,7 +9756,11 @@ async function boot() {
       // Raw (unclamped) render-frame delta: perf telemetry must see the true stall length, not the
       // deliberately short simulation-advance cap used to prevent a catch-up spiral.
       const renderDeltaMs = now - previous;
-      recorder.observeFrameDelta(renderDeltaMs);
+      recorder.observeFrameDelta(renderDeltaMs,
+        replayActive !== true
+          && pauseReasons.size === 0
+          && latestState?.session_phase === "ACTIVE"
+          && document.visibilityState === "visible");
       const dt = clamp(renderDeltaMs / 1000, 0, SIM_CATCHUP_CAP_SECONDS);
       const aiBudgetDecision = adaptiveAiWorkBudget.observe({
         // RAF's delta closes the preceding rendered frame, so pair it with the sim phase measured
@@ -9748,7 +9866,12 @@ async function boot() {
       const presentedState = replayPresentation.presentedState;
       const beforeView = performance.now();
       recorder.observeFramePhase("dom", beforeView - afterTelemetry);
-      view.update(presentedState, replayActive ? dt : pauseReasons.size > 0 ? 0 : dt, now / 1000);
+      view.update(
+        presentedState,
+        replayActive ? dt : pauseReasons.size > 0 ? 0 : dt,
+        now / 1000,
+        renderDeltaMs,
+      );
       const afterView = performance.now();
       recorder.observeFramePhase("view", afterView - beforeView);
       renderPilotPhysiology(presentedState);
@@ -9801,7 +9924,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=197")
+    navigator.serviceWorker.register("service-worker.js?v=198")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);

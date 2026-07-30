@@ -931,6 +931,9 @@ test("streams atlas pages around the aircraft and evicts pages behind it", async
   assert.equal(terrain.diagnostics().residentChunks, 1);
   assert.equal(terrain.diagnostics().localResidentChunks, 1);
   assert.equal(terrain.diagnostics().localSceneryChunks, 0);
+  // A 206-answering server must report healthy range streaming with no whole-bundle fallback.
+  assert.equal(terrain.diagnostics().rangeSupportedPages, 1);
+  assert.equal(terrain.diagnostics().completeBundleFallbackPages, 0);
   const westPresentation = terrain.pages.get("west").presentation;
   assert.equal(westPresentation.streamingRadiusM, 6);
   assert.equal(terrain.setStreamingRadiusM(3), true);
@@ -951,6 +954,65 @@ test("streams atlas pages around the aircraft and evicts pages behind it", async
   assert.equal(terrain.pages.get("west").presentation, null);
   assert.ok(terrain.pages.get("east").presentation);
   assert.equal(requested.filter((request) => request.range).length, 2);
+  terrain.dispose();
+});
+
+test("atlas diagnostics name a Range-ignorant server instead of stalling silently", async () => {
+  // A server that answers 200 with the full body sends TerrainBundleReader down its whole-bundle
+  // fallback. That path is correct but catastrophic at atlas scale, and it used to present only as
+  // an unexplained multi-second stall somewhere downstream. The atlas must report it by name.
+  const page = {
+    schemaVersion: "1.0.0",
+    terrainId: "terrain.page-rangeless.v1",
+    boundsLocalM: [0, 0, 8, 8],
+    quantization,
+    bundle: { uri: "rangeless.terrain", byteLength: 18, sha256: "b".repeat(64) },
+    chunks: [{
+      id: "rangeless-chunk",
+      boundsLocalM: [0, 0, 8, 8],
+      lods: [{ level: 0, sampleCount: 3, byteOffset: 0, byteLength: 18, spacingM: 4 }],
+    }],
+  };
+  const atlas = {
+    schemaVersion: "2.0.0",
+    terrainId: "terrain.korea.atlas-rangeless-test.v1",
+    boundsLocalM: [0, 0, 8, 8],
+    tileSpanM: 8,
+    pageSpanM: 8,
+    pages: [{
+      id: "only",
+      boundsLocalM: [0, 0, 8, 8],
+      manifest: { uri: "only.manifest.json", byteLength: 100, sha256: "c".repeat(64) },
+    }],
+  };
+  const terrain = await loadKoreaTerrain(THREE, {
+    manifestUrl: "https://game.test/content/rangeless.atlas.json",
+    qualityTier: "balanced",
+    pageLoadRadiusM: 1,
+    pageEvictRadiusM: 2,
+    chunkLoadRadiusM: 6,
+    chunkEvictRadiusM: 8,
+    lookAheadSeconds: 0,
+    maximumPageLoads: 1,
+    maximumConcurrentLoads: 1,
+    fetch: async (url) => {
+      if (String(url).endsWith("rangeless.atlas.json")) {
+        return { ok: true, status: 200, json: async () => atlas };
+      }
+      if (String(url).includes("only.manifest.json")) {
+        return { ok: true, status: 200, json: async () => page };
+      }
+      // The defining behaviour: Range requested, Range ignored, whole bundle returned.
+      return { ok: true, status: 200, arrayBuffer: async () => new ArrayBuffer(18) };
+    },
+  });
+
+  terrain.update({ cameraPosition: new THREE.Vector3(1, 500, -4), deltaSeconds: 1 });
+  await terrain.whenIdle();
+  const diagnostics = terrain.diagnostics();
+  assert.equal(diagnostics.residentPages, 1, "the page must still load — the fallback is not a failure");
+  assert.equal(diagnostics.completeBundleFallbackPages, 1);
+  assert.equal(diagnostics.rangeSupportedPages, 0);
   terrain.dispose();
 });
 

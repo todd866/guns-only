@@ -6,9 +6,12 @@ import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
 import { serveStatic } from "../../web/wwwroot/render/hud/tests/harness/static_server.mjs";
+import { FOREGROUND_FRAME_CONTRACT } from "../../web/wwwroot/render/telemetry/frame_contract.js";
 import {
   DEFAULT_LEG_WARMUP_MS,
+  foregroundFrameGateFailures,
   measuredFrameWindow,
+  summarizeFrameDeltas,
   totalLegCaptureDurationMs,
 } from "./flight_frame_metrics.mjs";
 
@@ -23,15 +26,18 @@ const DEFAULT_WWWROOT = resolve(
   SCRIPT_DIRECTORY,
   "../../web/bin/Release/net8.0/publish/wwwroot",
 );
-// Align with FRAME_PERF_LONG_FRAME_MS / FRAME_GOVERNOR_LATE_FRAME_MS (felt 30 fps is >22 ms).
-const LONG_FRAME_MS = 22;
+// Keep the historical >22 ms count as a diagnostic, while the actual scheduling-budget gate is
+// the shared >18.5 ms foreground contract below.
+const LONG_FRAME_MS = FOREGROUND_FRAME_CONTRACT.maximumP99Ms;
+const FRAME_BUDGET_MS = FOREGROUND_FRAME_CONTRACT.budgetFrameMs;
 const ANALYSIS_PERF_DIRECTORY = resolve(REPO_ROOT, "analysis/perf");
 const DEFAULT_LEG_DURATION_MS = 60_000;
 // Discard the opening of each measured leg: Ace decision bursts and terrain settle dominate the
 // first seconds after altitude capture and must not poison the steady-state 60 fps gate.
 const LEG_WARMUP_MS = DEFAULT_LEG_WARMUP_MS;
 const DEFAULT_MAX_FRAME_MS = 100;
-const DEFAULT_MAX_LONG_FRAME_PERCENT = 1;
+const DEFAULT_MAX_BUDGET_MISS_PERCENT =
+  FOREGROUND_FRAME_CONTRACT.maximumBudgetMissFraction * 100;
 const DEFAULT_MIN_FRAMES = 600;
 const DEFAULT_HIGH_AGL_FT = 9_000;
 const DEFAULT_LOW_AGL_FT = 2_600;
@@ -55,6 +61,9 @@ const ENVIRONMENT = Object.freeze({
   wwwroot: "GUNS_FLIGHT_WWWROOT",
   legDurationMs: "GUNS_FLIGHT_LEG_DURATION_MS",
   maxFrameMs: "GUNS_FLIGHT_MAX_FRAME_MS",
+  maxBudgetMissPercent: "GUNS_FLIGHT_MAX_BUDGET_MISS_PCT",
+  // Compatibility alias retained for existing automation. It now controls the shared 18.5 ms
+  // scheduling-budget miss fraction rather than the separate >22 ms diagnostic count.
   maxLongFramePercent: "GUNS_FLIGHT_MAX_LONG_FRAME_PCT",
   minFrames: "GUNS_FLIGHT_MIN_FRAMES",
 });
@@ -67,8 +76,9 @@ function usage() {
     "  --leg-duration-ms N         Measured duration AFTER a 15 s warmup; minimum 60000",
     `                              (default: ${DEFAULT_LEG_DURATION_MS})`,
     `  --max-frame-ms N            MAX gate for each leg (default: ${DEFAULT_MAX_FRAME_MS})`,
-    "  --max-long-frame-pct N      >22 ms percentage gate for each leg",
-    `                              (default: ${DEFAULT_MAX_LONG_FRAME_PERCENT})`,
+    `  --max-budget-miss-pct N      >${FRAME_BUDGET_MS} ms percentage gate for each leg`,
+    `                              (default: ${DEFAULT_MAX_BUDGET_MISS_PERCENT})`,
+    "  --max-long-frame-pct N      Compatibility alias for --max-budget-miss-pct",
     `  --min-frames N              Minimum RAF deltas in each measured window (default: ${DEFAULT_MIN_FRAMES})`,
     "  -h, --help                  Show this help",
     "",
@@ -76,6 +86,7 @@ function usage() {
     `  ${ENVIRONMENT.wwwroot}`,
     `  ${ENVIRONMENT.legDurationMs}`,
     `  ${ENVIRONMENT.maxFrameMs}`,
+    `  ${ENVIRONMENT.maxBudgetMissPercent}`,
     `  ${ENVIRONMENT.maxLongFramePercent}`,
     `  ${ENVIRONMENT.minFrames}`,
     "",
@@ -100,6 +111,10 @@ function environmentNumber(name, fallback) {
 }
 
 function parseArguments(argv) {
+  const environmentBudgetMissPercent =
+    process.env[ENVIRONMENT.maxBudgetMissPercent]
+    ?? process.env[ENVIRONMENT.maxLongFramePercent]
+    ?? DEFAULT_MAX_BUDGET_MISS_PERCENT;
   const options = {
     wwwroot: resolve(process.env[ENVIRONMENT.wwwroot] ?? DEFAULT_WWWROOT),
     legDurationMs: finiteNumber(
@@ -112,12 +127,11 @@ function parseArguments(argv) {
       ENVIRONMENT.maxFrameMs,
       { minimum: 0, inclusive: false },
     ),
-    maxLongFramePercent: finiteNumber(
-      environmentNumber(
-        ENVIRONMENT.maxLongFramePercent,
-        DEFAULT_MAX_LONG_FRAME_PERCENT,
-      ),
-      ENVIRONMENT.maxLongFramePercent,
+    maxBudgetMissPercent: finiteNumber(
+      environmentBudgetMissPercent,
+      process.env[ENVIRONMENT.maxBudgetMissPercent] === undefined
+        ? ENVIRONMENT.maxLongFramePercent
+        : ENVIRONMENT.maxBudgetMissPercent,
       { minimum: 0 },
     ),
     minFrames: finiteNumber(
@@ -145,8 +159,9 @@ function parseArguments(argv) {
         minimum: 0,
         inclusive: false,
       });
-    } else if (option === "--max-long-frame-pct") {
-      options.maxLongFramePercent = finiteNumber(value, option, { minimum: 0 });
+    } else if (option === "--max-budget-miss-pct"
+      || option === "--max-long-frame-pct") {
+      options.maxBudgetMissPercent = finiteNumber(value, option, { minimum: 0 });
     } else if (option === "--min-frames") {
       options.minFrames = finiteNumber(value, option, { minimum: 1 });
     } else {
@@ -381,10 +396,12 @@ function summarizeLeg(raw) {
   if (measuredDeltas.length < 1) {
     throw new Error(`${raw.name} retained no frames after ${warmupMs} ms warmup.`);
   }
-  const timing = summarize(measuredDeltas);
+  const timing = summarizeFrameDeltas(measuredDeltas, {
+    budgetFrameMs: FRAME_BUDGET_MS,
+    longFrameMs: LONG_FRAME_MS,
+  });
   const agl = summarize(measuredRadar);
   const speed = summarize(measuredTas);
-  const longFrames = measuredDeltas.filter((delta) => delta > LONG_FRAME_MS).length;
   const distanceM = Math.hypot(
     raw.after.x - raw.before.x,
     raw.after.z - raw.before.z,
@@ -396,15 +413,21 @@ function summarizeLeg(raw) {
     capturedFrames: raw.deltas.length,
     warmupMs,
     warmupSampledMs: window.warmupSampledMs,
-    sampledMs: measuredDeltas.reduce((sum, delta) => sum + delta, 0),
-    p50Ms: timing.p50,
-    p95Ms: timing.p95,
-    p99Ms: timing.p99,
-    maxMs: timing.max,
-    longFrameMs: LONG_FRAME_MS,
-    longFrames,
-    longFramePercent: longFrames / measuredDeltas.length * 100,
-    framesOver22Ms: longFrames,
+    sampledMs: timing.sampledMs,
+    fps: timing.fps,
+    p50Ms: timing.p50Ms,
+    p95Ms: timing.p95Ms,
+    p99Ms: timing.p99Ms,
+    maxMs: timing.maxMs,
+    budgetFrameMs: timing.budgetFrameMs,
+    budgetMissFrames: timing.budgetMissFrames,
+    budgetMissFraction: timing.budgetMissFraction,
+    budgetMissPercent: timing.budgetMissPercent,
+    framesOver18_5Ms: timing.budgetMissFrames,
+    longFrameMs: timing.longFrameMs,
+    longFrames: timing.longFrames,
+    longFramePercent: timing.longFramePercent,
+    framesOver22Ms: timing.longFrames,
     radarAltitudeFt: agl,
     terrainHeightFt: summarize(measuredTerrain),
     trueAirspeedKts: speed,
@@ -447,10 +470,12 @@ function formatLeg(leg) {
       + `draw=${load.draw_calls ?? "?"} tris=${load.triangles ?? "?"}`
     : "  load: (no framePerf sample yet — first 5s window may still be open)";
   return [
-    `${leg.name}: frames=${leg.frames} p50=${leg.p50Ms.toFixed(2)} ms `
+    `${leg.name}: frames=${leg.frames} FPS=${leg.fps.toFixed(2)} `
+      + `p50=${leg.p50Ms.toFixed(2)} ms `
       + `p95=${leg.p95Ms.toFixed(2)} ms p99=${leg.p99Ms.toFixed(2)} ms `
-      + `MAX=${leg.maxMs.toFixed(2)} ms long(>${LONG_FRAME_MS}ms)=${leg.longFrames} `
-      + `(${leg.longFramePercent.toFixed(3)}%)`,
+      + `MAX=${leg.maxMs.toFixed(2)} ms budget(>${FRAME_BUDGET_MS}ms)=`
+      + `${leg.budgetMissFrames} (${leg.budgetMissPercent.toFixed(3)}%) `
+      + `over-${LONG_FRAME_MS}ms=${leg.longFrames}`,
     `  flight: median AGL=${leg.radarAltitudeFt.p50.toFixed(0)} ft `
       + `median TAS=${leg.trueAirspeedKts.p50.toFixed(0)} kt `
       + `distance=${(leg.distanceM / 1000).toFixed(1)} km `
@@ -472,6 +497,15 @@ async function writeFlightReport(result) {
   const report = {
     schema: "guns-only.flight-frame-report.v1",
     writtenAt: new Date().toISOString(),
+    foregroundFrameContract: FOREGROUND_FRAME_CONTRACT,
+    effectiveGate: {
+      minimumFps: FOREGROUND_FRAME_CONTRACT.minimumFps,
+      maximumP95Ms: FOREGROUND_FRAME_CONTRACT.maximumP95Ms,
+      maximumP99Ms: FOREGROUND_FRAME_CONTRACT.maximumP99Ms,
+      budgetFrameMs: FRAME_BUDGET_MS,
+      maximumBudgetMissFraction: result.options.maxBudgetMissPercent / 100,
+      maximumFrameMs: result.options.maxFrameMs,
+    },
     longFrameMs: LONG_FRAME_MS,
     renderer: result.renderer,
     softwareRenderer: result.softwareRenderer,
@@ -486,10 +520,16 @@ async function writeFlightReport(result) {
       warmupMs: leg.warmupMs,
       warmupSampledMs: leg.warmupSampledMs,
       sampledMs: leg.sampledMs,
+      fps: leg.fps,
       p50Ms: leg.p50Ms,
       p95Ms: leg.p95Ms,
       p99Ms: leg.p99Ms,
       maxMs: leg.maxMs,
+      budgetFrameMs: leg.budgetFrameMs,
+      budgetMissFrames: leg.budgetMissFrames,
+      budgetMissFraction: leg.budgetMissFraction,
+      budgetMissPercent: leg.budgetMissPercent,
+      framesOver18_5Ms: leg.framesOver18_5Ms,
       longFrames: leg.longFrames,
       longFramePercent: leg.longFramePercent,
       framesOver22Ms: leg.framesOver22Ms,
@@ -514,7 +554,13 @@ async function writeFlightReport(result) {
     `- Renderer: ${report.renderer}`,
     `- Mode: ${report.modeLabel}`,
     `- Passed: ${report.passed}`,
-    `- Long frame threshold: >${LONG_FRAME_MS} ms`,
+    `- Contract: >=${FOREGROUND_FRAME_CONTRACT.minimumFps} FPS; `
+      + `p95 <=${FOREGROUND_FRAME_CONTRACT.maximumP95Ms} ms; `
+      + `p99 <=${FOREGROUND_FRAME_CONTRACT.maximumP99Ms} ms`,
+    `- Scheduling-budget misses: >${FRAME_BUDGET_MS} ms must be <=`
+      + `${result.options.maxBudgetMissPercent}%`,
+    `- Catastrophic-frame safety guard: MAX <=${result.options.maxFrameMs} ms`,
+    `- Compatibility diagnostic: frames >${LONG_FRAME_MS} ms`,
     "",
     ...result.legs.flatMap((leg) => [
       `## ${leg.name}`,
@@ -580,21 +626,12 @@ function profileValidation(legs, options) {
 }
 
 function gateFailures(legs, options) {
-  const failures = [];
-  for (const leg of legs) {
-    if (leg.maxMs > options.maxFrameMs) {
-      failures.push(
-        `${leg.name} MAX ${leg.maxMs.toFixed(2)} ms > ${options.maxFrameMs.toFixed(2)} ms`,
-      );
-    }
-    if (leg.longFramePercent > options.maxLongFramePercent) {
-      failures.push(
-        `${leg.name} long-frame percentage ${leg.longFramePercent.toFixed(3)}% `
-        + `> ${options.maxLongFramePercent.toFixed(3)}%`,
-      );
-    }
-  }
-  return failures;
+  return legs.flatMap((leg) => foregroundFrameGateFailures(leg, {
+    contract: FOREGROUND_FRAME_CONTRACT,
+    maximumBudgetMissFraction: options.maxBudgetMissPercent / 100,
+    maxFrameMs: options.maxFrameMs,
+    label: leg.name,
+  }));
 }
 
 async function bootPublishedApp(page, siteUrl) {
@@ -1031,13 +1068,19 @@ export async function run(options) {
       const low = legs[1];
       console.log(
         "low-minus-high: "
+        + `FPS=${(low.fps - high.fps).toFixed(2)} `
         + `p99=${(low.p99Ms - high.p99Ms).toFixed(2)} ms `
         + `MAX=${(low.maxMs - high.maxMs).toFixed(2)} ms `
-        + `long=${(low.longFramePercent - high.longFramePercent).toFixed(3)} points`,
+        + `budget-miss=`
+        + `${(low.budgetMissPercent - high.budgetMissPercent).toFixed(3)} points`,
       );
       console.log(
-        `Gates: MAX <= ${options.maxFrameMs.toFixed(2)} ms; `
-        + `long(>${LONG_FRAME_MS}ms) <= ${options.maxLongFramePercent.toFixed(3)}%; `
+        `Gates: FPS >= ${FOREGROUND_FRAME_CONTRACT.minimumFps.toFixed(2)}; `
+        + `p95 <= ${FOREGROUND_FRAME_CONTRACT.maximumP95Ms.toFixed(2)} ms; `
+        + `p99 <= ${FOREGROUND_FRAME_CONTRACT.maximumP99Ms.toFixed(2)} ms; `
+        + `budget(>${FRAME_BUDGET_MS}ms) <= `
+        + `${options.maxBudgetMissPercent.toFixed(3)}%; `
+        + `MAX <= ${options.maxFrameMs.toFixed(2)} ms; `
         + `minimum frames/leg = ${options.minFrames}`,
       );
 
@@ -1075,8 +1118,11 @@ export async function run(options) {
         },
         legs,
         lowMinusHigh: {
+          fps: low.fps - high.fps,
           p99Ms: low.p99Ms - high.p99Ms,
           maxMs: low.maxMs - high.maxMs,
+          budgetMissPercentagePoints:
+            low.budgetMissPercent - high.budgetMissPercent,
           longFramePercentagePoints: low.longFramePercent - high.longFramePercent,
         },
         invalidProfile,

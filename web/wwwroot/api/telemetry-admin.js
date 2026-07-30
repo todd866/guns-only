@@ -416,6 +416,130 @@ function applyMobileControlRow(row, session, mobile) {
   }
 }
 
+const PERF_PHASES = Object.freeze(["sim", "snap", "mp", "tele", "dom", "view", "ui"]);
+const PERF_TARGET_FPS = 60;
+const PERF_MIN_DELIVERED_FPS = 59;
+const PERF_SCHEDULING_BUDGET_MS = 18.5;
+const PERF_ACCEPTANCE_P95_MS = 18.5;
+const PERF_ACCEPTANCE_P99_MS = 22;
+const PERF_MAX_BUDGET_MISS_RATE = 0.03;
+
+function createPerformanceSummary() {
+  return {
+    windows: 0,
+    contractWindows: 0,
+    healthyWindows: 0,
+    frames: 0,
+    observedMilliseconds: 0,
+    budgetMissFrames: 0,
+    over22Frames: 0,
+    worstFrameMs: 0,
+    worstP95Ms: 0,
+    worstP99Ms: 0,
+    longestBudgetMissStreak: 0,
+    governorShedWindows: 0,
+    maximumGovernorLevel: 0,
+    terminalGovernorContractFailures: 0,
+    minimumResolutionScalePct: null,
+    rapierLaunchWindows: 0,
+    rapierLaunchContractFailures: 0,
+    maximumTerrainQueuedLoads: 0,
+    phasePeakMs: Object.create(null),
+    dominantPhaseFailures: Object.create(null),
+    qualityTiers: Object.create(null),
+  };
+}
+
+function applyPerformanceRow(row, performance) {
+  if (row?.k !== "perf") return;
+  performance.windows += 1;
+
+  const frames = nonNegativeNumber(row.frames);
+  const windowMs = nonNegativeNumber(row.window_ms);
+  const budgetMisses = nonNegativeNumber(
+    row.frame_budget_misses ?? row.frames_over_18_5ms,
+  );
+  const over22 = nonNegativeNumber(row.frames_over_22ms ?? row.long_frames);
+  const p95 = nonNegativeNumber(row.frame_ms_p95);
+  const p99 = nonNegativeNumber(row.frame_ms_p99);
+  const maximum = nonNegativeNumber(row.frame_ms_max);
+  const streak = nonNegativeNumber(row.longest_frame_budget_miss_streak);
+  const governorLevel = nonNegativeNumber(row.governor_level);
+  const terminalGovernor = row.governor_terminal === 1 || row.governor_terminal === true;
+  const resolutionScale = nonNegativeNumber(row.resolution_scale_pct);
+  const queuedLoads = nonNegativeNumber(row.terrain_queued_loads);
+  const rapierLaunch = row.rapier_launch_active === 1 || row.rapier_launch_active === true;
+  const qualityTier = typeof row.quality_tier === "string"
+    && /^[a-z0-9._-]{1,32}$/i.test(row.quality_tier)
+    ? row.quality_tier : null;
+
+  if (frames !== null) performance.frames += frames;
+  if (windowMs !== null) performance.observedMilliseconds += windowMs;
+  if (budgetMisses !== null) performance.budgetMissFrames += budgetMisses;
+  if (over22 !== null) performance.over22Frames += over22;
+  if (p95 !== null) performance.worstP95Ms = Math.max(performance.worstP95Ms, p95);
+  if (p99 !== null) performance.worstP99Ms = Math.max(performance.worstP99Ms, p99);
+  if (maximum !== null) performance.worstFrameMs = Math.max(performance.worstFrameMs, maximum);
+  if (streak !== null) {
+    performance.longestBudgetMissStreak = Math.max(
+      performance.longestBudgetMissStreak,
+      streak,
+    );
+  }
+  if (governorLevel !== null) {
+    performance.maximumGovernorLevel = Math.max(performance.maximumGovernorLevel, governorLevel);
+    if (governorLevel > 0) performance.governorShedWindows += 1;
+  }
+  if (resolutionScale !== null && resolutionScale > 0) {
+    performance.minimumResolutionScalePct = performance.minimumResolutionScalePct === null
+      ? resolutionScale
+      : Math.min(performance.minimumResolutionScalePct, resolutionScale);
+  }
+  if (queuedLoads !== null) {
+    performance.maximumTerrainQueuedLoads = Math.max(
+      performance.maximumTerrainQueuedLoads,
+      queuedLoads,
+    );
+  }
+  if (rapierLaunch) performance.rapierLaunchWindows += 1;
+  if (qualityTier) increment(performance.qualityTiers, qualityTier);
+
+  let dominantPhase = null;
+  let dominantPhaseMs = -1;
+  for (const phase of PERF_PHASES) {
+    const phaseMax = nonNegativeNumber(row[`${phase}_ms_max`]);
+    if (phaseMax === null) continue;
+    performance.phasePeakMs[phase] = Math.max(
+      performance.phasePeakMs[phase] ?? 0,
+      phaseMax,
+    );
+    if (phaseMax > dominantPhaseMs) {
+      dominantPhase = phase;
+      dominantPhaseMs = phaseMax;
+    }
+  }
+
+  // Older perf rows remain countable, but only the enriched contract has enough evidence to call
+  // a five-second window healthy. Do not silently substitute the looser 22 ms counter for the
+  // foreground 18.5 ms scheduling budget.
+  if (frames === null || frames <= 0 || windowMs === null || windowMs <= 0
+    || budgetMisses === null || p95 === null || p99 === null) return;
+  performance.contractWindows += 1;
+  const deliveredFps = frames * 1_000 / windowMs;
+  const missRate = budgetMisses / frames;
+  const healthy = deliveredFps >= PERF_MIN_DELIVERED_FPS
+    && missRate <= PERF_MAX_BUDGET_MISS_RATE
+    && p95 <= PERF_ACCEPTANCE_P95_MS
+    && p99 <= PERF_ACCEPTANCE_P99_MS;
+  if (healthy) {
+    performance.healthyWindows += 1;
+    return;
+  }
+  increment(performance.dominantPhaseFailures, dominantPhase || "unattributed");
+  if (terminalGovernor) performance.terminalGovernorContractFailures += 1;
+  if (rapierLaunch) performance.rapierLaunchContractFailures += 1;
+}
+
 function applyStateToSortie(state, row, session, sorties) {
   const sortie = summarySortie(sorties, session, state?.telemetry_sortie_id);
   if (!sortie) return;
@@ -469,7 +593,7 @@ function ratio(numerator, denominator) {
 
 function finishSummary({ page, chunksRead, compressedBytes, uncompressedBytes, rowCount,
   failedChunks, skippedChunks, unsupportedChunks, sessions, sessionBuilds, sorties,
-  mobileControls, uploadedAt }) {
+  mobileControls, performance, uploadedAt }) {
   const outcomeCounts = Object.create(null);
   const endReasonCounts = Object.create(null);
   let started = 0;
@@ -582,6 +706,41 @@ function finishSummary({ page, chunksRead, compressedBytes, uncompressedBytes, r
       saturation_heavy_rate: ratio(mobileControls.saturationHeavy, mobileControls.gestures),
       median_gesture_duration_ms: medianGestureDuration,
     },
+    performance: {
+      target_fps: PERF_TARGET_FPS,
+      minimum_delivered_fps: PERF_MIN_DELIVERED_FPS,
+      scheduling_budget_ms: PERF_SCHEDULING_BUDGET_MS,
+      acceptance_p95_ms: PERF_ACCEPTANCE_P95_MS,
+      acceptance_p99_ms: PERF_ACCEPTANCE_P99_MS,
+      maximum_budget_miss_rate: PERF_MAX_BUDGET_MISS_RATE,
+      windows_observed: performance.windows,
+      contract_windows_observed: performance.contractWindows,
+      healthy_windows: performance.healthyWindows,
+      contract_pass_rate: ratio(performance.healthyWindows, performance.contractWindows),
+      frames_observed: performance.frames,
+      observed_seconds: Number((performance.observedMilliseconds / 1_000).toFixed(3)),
+      delivered_fps: performance.observedMilliseconds > 0
+        ? Number((performance.frames * 1_000 / performance.observedMilliseconds).toFixed(2))
+        : null,
+      budget_miss_frames: performance.budgetMissFrames,
+      budget_miss_rate: ratio(performance.budgetMissFrames, performance.frames),
+      frames_over_22ms: performance.over22Frames,
+      frames_over_22ms_rate: ratio(performance.over22Frames, performance.frames),
+      worst_p95_frame_ms: performance.windows > 0 ? performance.worstP95Ms : null,
+      worst_p99_frame_ms: performance.windows > 0 ? performance.worstP99Ms : null,
+      worst_frame_ms: performance.windows > 0 ? performance.worstFrameMs : null,
+      longest_budget_miss_streak: performance.longestBudgetMissStreak,
+      governor_shed_windows: performance.governorShedWindows,
+      maximum_governor_level: performance.maximumGovernorLevel,
+      terminal_governor_contract_failures: performance.terminalGovernorContractFailures,
+      minimum_resolution_scale_pct: performance.minimumResolutionScalePct,
+      rapier_launch_windows: performance.rapierLaunchWindows,
+      rapier_launch_contract_failures: performance.rapierLaunchContractFailures,
+      maximum_terrain_queued_loads: performance.maximumTerrainQueuedLoads,
+      phase_peak_ms: performance.phasePeakMs,
+      dominant_phase_contract_failures: performance.dominantPhaseFailures,
+      quality_tier_windows: performance.qualityTiers,
+    },
     privacy: {
       raw_rows_returned: false,
       identifiers_returned: false,
@@ -615,6 +774,7 @@ async function summarizeOnePage(requestUrl) {
     saturationHeavy: 0,
     durations: [],
   };
+  const performance = createPerformanceSummary();
   const uploadedAt = [];
   let chunksRead = 0;
   let compressedBytes = 0;
@@ -669,6 +829,7 @@ async function summarizeOnePage(requestUrl) {
       for (const row of rows) {
         applyLifecycleRow(row, session, sorties);
         applyMobileControlRow(row, session, mobileControls);
+        applyPerformanceRow(row, performance);
         if (row.k !== "st") continue;
         state = applyStateRow(row, state);
         if (state) applyStateToSortie(state, row, session, sorties);
@@ -695,6 +856,7 @@ async function summarizeOnePage(requestUrl) {
     sessionBuilds,
     sorties,
     mobileControls,
+    performance,
     uploadedAt,
   });
 }

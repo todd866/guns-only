@@ -87,6 +87,14 @@ test("VisualRuntime coordinates profile, adapters, quality, resize, and idempote
   assert.equal(sun.intensity, 2.4);
   assert.equal(sun.castShadow, false);
   assert.equal(runtime.update({ deltaSeconds: 0.016, frameTimeMs: 16 }), true);
+  const foregroundSamples = runtime.adaptiveResolution.status().samples;
+  assert.equal(runtime.update({
+    deltaSeconds: 0,
+    frameTimeMs: 40,
+    activeForeground: false,
+  }), true);
+  assert.equal(runtime.adaptiveResolution.status().samples, foregroundSamples,
+    "Ready/pause/background frames must not train foreground adaptive resolution");
   assert.equal(runtime.render(0.016), true);
   assert.equal(runtime.dispatchEffect("event.weapon.gun-fire.v1", { rounds: 1 }), true);
   assert.equal(runtime.dispatchEffect("event.unknown.v1"), false);

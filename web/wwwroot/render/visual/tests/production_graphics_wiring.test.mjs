@@ -252,7 +252,7 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /!replayActive && pauseReasons\.size === 0 && state\.session_phase === "ACTIVE"[\s\S]*?frameGovernor\.observe/,
     "Ready, warmup, pause, and replay frames must not spend the sortie frame budget");
   assert.match(source,
-    /FRAME_GOVERNOR_LATE_FRAME_MS = 18\.5[\s\S]*?FRAME_GOVERNOR_SEVERE_FRAME_COUNT = 3/,
+    /FRAME_GOVERNOR_LATE_FRAME_MS = FOREGROUND_FRAME_CONTRACT\.budgetFrameMs[\s\S]*?FRAME_GOVERNOR_SEVERE_FRAME_COUNT = 3/,
     "the governor must react before sustained delivery has fallen to 45 fps");
   assert.match(source,
     /Math\.min\(currentRadiusM, requestedRadiusM\)/,
@@ -286,7 +286,7 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
   assert.match(source, /cameraPosition: this\.camera\.position,[\s\S]*deltaSeconds: dt/,
     "terrain streaming must receive frame time for bounded velocity-ahead prefetch");
   assert.match(source,
-    /import \{[\s\S]*createDecisionSupportSea[\s\S]*\} from "\.\/render\/scene\/scene_builders\.js\?v=197"/,
+    /import \{[\s\S]*createDecisionSupportSea[\s\S]*\} from "\.\/render\/scene\/scene_builders\.js\?v=198"/,
     "the active ocean builder must be sourced from the scene builder module");
   assert.match(source, /createDecisionSupportSea\(\)/,
     "production must instantiate the decision-support sea");
@@ -409,7 +409,7 @@ test("environment lab exercises the production terrain manifest and exposes the 
     /lowLevelCameraGroundM: 184\.8[\s\S]*?siteConfig\.lowLevelCameraGroundM \+ heightAglM/,
     "the representative hero-cell camera must interpret its slider against sampled LOD0 ground");
   assert.match(source,
-    /const FRAME_STATS_SAMPLE_LIMIT = 600[\s\S]*?new Float32Array\(FRAME_STATS_SAMPLE_LIMIT\)/,
+    /const FRAME_STATS_SAMPLE_LIMIT = FOREGROUND_FRAME_CONTRACT\.labSampleCount[\s\S]*?new Float32Array\(FRAME_STATS_SAMPLE_LIMIT\)/,
     "rolling RAF evidence must stay bounded rather than growing for the life of the tab");
   assert.match(source,
     /document\.visibilityState !== "visible"[\s\S]*?frameMs > FRAME_STATS_BACKGROUND_STALL_MS/,
@@ -418,7 +418,7 @@ test("environment lab exercises the production terrain manifest and exposes the 
     /fps:[\s\S]*?p95Ms:[\s\S]*?p99Ms:[\s\S]*?overBudgetFraction:/,
     "the rail must publish rate, tail latency, and the production-governor late fraction");
   assert.match(source,
-    /FRAME_STATS_LATE_FRAME_MS = 18\.5[\s\S]*?FRAME_GATE_MIN_FPS = 59[\s\S]*?FRAME_GATE_MAX_P95_MS = 18\.5[\s\S]*?FRAME_GATE_MAX_P99_MS = 22[\s\S]*?FRAME_GATE_MAX_LATE_FRACTION = 0\.03/,
+    /FRAME_STATS_LATE_FRAME_MS = FOREGROUND_FRAME_CONTRACT\.budgetFrameMs[\s\S]*?evaluateForegroundFrameContract\(\{[\s\S]*?budgetMissFraction: frameStats\.overBudgetFraction/,
     "the lab must enforce the production 60 fps/tail-latency contract");
   assert.match(source,
     /function evaluatePerformanceGate\(frameStats\)[\s\S]*?frameStats\.sampleCount >= FRAME_STATS_SAMPLE_LIMIT[\s\S]*?state: sampled \? \(pass \? "pass" : "fail"\) : "warming"/,
@@ -520,6 +520,32 @@ test("hidden replay exterior is preloaded and obsolete pack runtimes are dispose
     /if \(!pack\?\.profile \|\| !key\) \{[\s\S]*const epoch = \+\+this\.visualRuntimeEpoch;[\s\S]*queueVisualRuntimeTransition/,
     "an unstaged or invalidated pack must retire its old visual runtime");
   assert.match(source, /previous\?\.dispose\(\)/);
+});
+
+test("packless modern flight owns adaptive 3D resolution and raw foreground frame timing", async () => {
+  const source = await readFile(appUrl, "utf8");
+  assert.match(source,
+    /DIRECT_ADAPTIVE_RESOLUTION_CONFIG = normalizeVisualProfile\([\s\S]*?pixelRatioCap: VISUAL_QUALITY\.pixelRatioCap[\s\S]*?\)\.adaptiveResolution/,
+    "packless missions must use the same tier-normalized pixel budgets as pack flight");
+  assert.match(source,
+    /this\.directAdaptiveResolution = new AdaptiveResolutionController\([\s\S]*?applyDirectRenderPixelRatio/,
+    "FlightView must own a direct-path adaptive controller");
+  assert.match(source,
+    /if \(this\.visualRuntime\?\.initialized\)[\s\S]*?this\.visualRuntime\.resize[\s\S]*?else \{[\s\S]*?this\.directAdaptiveResolution\.setViewport/,
+    "pack and direct resolution controllers must never own the renderer simultaneously");
+  assert.match(source,
+    /view\.update\([\s\S]*?now \/ 1000,[\s\S]*?renderDeltaMs/,
+    "FlightView must receive raw RAF time rather than only the simulation catch-up clamp");
+  assert.match(source,
+    /frameTimeMs: measuredFrameMs,[\s\S]*?activeForeground,[\s\S]*?this\.directAdaptiveResolution\.sample\(measuredFrameMs, \{ activeForeground: true \}\)/,
+    "both renderer paths must respond to measured foreground stalls");
+  assert.match(source,
+    /directResolution: this\.visualRuntime\?\.initialized[\s\S]*?this\.directAdaptiveResolution\.status\(\)/,
+    "packless adaptive state must remain inspectable");
+  assert.match(source,
+    /const recoveryShadowRelevant = isRecoveryPlatform[\s\S]*?2_500 \*\* 2[\s\S]*?shadowMode = replayExternal \? "replay"/,
+    "the fixed strip must stop submitting its shadow pass after departure");
+  assert.match(source, /this\.sun\.castShadow = mode === "carrier" \|\| mode === "replay"/);
 });
 
 test("production keeps the rejected authored cockpit out of the pilot's SA view", async () => {

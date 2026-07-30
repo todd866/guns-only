@@ -25,13 +25,21 @@ function isSortieInitialAiComputeLevel(row) {
     && row.cause === "sortie-initial";
 }
 
+function isForegroundFrameContractBreach(row) {
+  return row?.k === "perf"
+    && row.active_foreground === 1
+    && (row.contract_pass === 0 || row.contract_pass === false);
+}
+
 /**
- * Bound the live recorder queue without orphaning its AI compute-level tape.
+ * Bound the live recorder queue without orphaning its diagnostic baselines or latest breach.
  *
  * Reconstruction favors the newest rows during backpressure, but the latest sortie's initial
  * level is the baseline that gives every later transition meaning. If ordinary head trimming
- * would remove it, sacrifice only the oldest retained tail row and keep the baseline first. The
- * result remains chronological and never exceeds `maximumRows`.
+ * would remove it, preserve it. The latest failed foreground frame contract is similarly the
+ * evidence needed to explain a machine that remained slow at minimum quality. Sacrifice the
+ * oldest non-critical retained tail rows for those at most two anchors. The result remains
+ * chronological and never exceeds `maximumRows`.
  */
 export function retainTelemetryRowsUnderBackpressure(rows, maximumRows) {
   const retained = retainNewestTelemetryRows(rows, maximumRows);
@@ -39,14 +47,31 @@ export function retainTelemetryRowsUnderBackpressure(rows, maximumRows) {
     return retained;
 
   let baselineIndex = -1;
+  let breachIndex = -1;
   for (let index = rows.length - 1; index >= 0; index -= 1) {
-    if (isSortieInitialAiComputeLevel(rows[index])) {
+    if (baselineIndex < 0 && isSortieInitialAiComputeLevel(rows[index])) {
       baselineIndex = index;
-      break;
     }
+    if (breachIndex < 0 && isForegroundFrameContractBreach(rows[index])) breachIndex = index;
+    if (baselineIndex >= 0 && breachIndex >= 0) break;
   }
-  if (baselineIndex < 0 || retained.includes(rows[baselineIndex])) return retained;
-  return [rows[baselineIndex], ...retained.slice(1)];
+
+  const firstRetainedIndex = rows.length - retained.length;
+  const selected = new Set(
+    Array.from({ length: retained.length }, (_, offset) => firstRetainedIndex + offset),
+  );
+  const critical = new Set(
+    [baselineIndex, breachIndex].filter((index) => index >= 0),
+  );
+  for (const criticalIndex of [...critical].sort((a, b) => a - b)) {
+    if (selected.has(criticalIndex)) continue;
+    const victim = [...selected].sort((a, b) => a - b)
+      .find((index) => !critical.has(index));
+    if (victim === undefined) continue;
+    selected.delete(victim);
+    selected.add(criticalIndex);
+  }
+  return [...selected].sort((a, b) => a - b).map((index) => rows[index]);
 }
 
 function serializeObjectRow(row) {

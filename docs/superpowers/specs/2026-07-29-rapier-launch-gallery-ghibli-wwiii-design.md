@@ -6,11 +6,18 @@ Related: [buried launch tube](../../2026-07-26-buried-launch-tube-and-the-ukrain
 [ADR-0003 Ghibli-adjacent](../../adr-0003-ghibli-adjacent-world-presentation.md),
 [Rapier ops](../../airframes/rapier/00-mission-and-ops.md)
 
+> **Live-contract update, 2026-07-30.** This remains the accepted visual-intent record, but its
+> approximate seven-second wording is superseded. The current 520 m / 110 m/s stroke lasts
+> **9.4545 s** and the covered gallery ends at **8.6360 s**. Engineering, cost, and hybrid-media
+> details now live in
+> [`82-launch-gallery-engineering-basis.md`](../../airframes/rapier/82-launch-gallery-engineering-basis.md).
+
 ## Goal
 
-Make the Rapier catshot — the player's first ~7 s in the world — feel like **Studio Ghibli doing
+Make the Rapier catshot — the player's first 9.45 s in the world — feel like **Studio Ghibli doing
 WWIII**: soft lived-in earth and daylight beauty over a hard, buried EM launcher that exists for
-**defensive** reasons (hard to see, hard to crater). Physics-honest first; looks second; FX included.
+**defensive** reasons (hard to see, lower exposure; not crater-proof). Physics-honest first; looks
+second; FX included.
 
 ## Non-goals
 

@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   createFramePerfAggregator,
+  FRAME_PERF_BUDGET_MS,
   FRAME_PERF_INTERVAL_MS,
   FRAME_PERF_LONG_FRAME_MS,
   FRAME_PERF_MAX_WINDOW_SAMPLES,
@@ -27,12 +28,22 @@ test("a window closes after the interval and summarizes exactly its own deltas",
   assert.equal(summary.frames, observed);
   assert.equal(summary.frame_ms_p50, 16.7);
   assert.equal(summary.frame_ms_p95, 16.7);
+  assert.equal(summary.frame_ms_p99, 16.7);
   assert.equal(summary.frame_ms_max, 120);
   assert.equal(summary.long_frames, 1);
+  assert.equal(summary.frame_budget_misses, 1);
+  assert.equal(summary.frame_budget_miss_rate, Number((1 / observed).toFixed(4)));
+  assert.equal(summary.longest_frame_budget_miss_streak, 1);
+  assert.equal(summary.frames_over_18_5ms, 1);
   assert.equal(summary.frames_over_22ms, 1);
+  assert.equal(summary.window_ms, Number((16.7 * (observed - 1) + 120).toFixed(2)));
+  assert.equal(summary.delivered_fps,
+    Number((observed * 1_000 / summary.window_ms).toFixed(2)));
   assert.deepEqual(Object.keys(summary),
-    ["frame_ms_p50", "frame_ms_p95", "frame_ms_max", "long_frames", "frames",
-      "frames_over_22ms"]);
+    ["frame_ms_p50", "frame_ms_p95", "frame_ms_p99", "frame_ms_max", "long_frames", "frames",
+      "window_ms", "delivered_fps", "frame_budget_ms", "frame_budget_misses",
+      "frame_budget_miss_rate", "longest_frame_budget_miss_streak",
+      "frames_over_18_5ms", "frames_over_22ms", "contract_pass"]);
 
   // The next window starts empty: its summary must not inherit the previous stall.
   let next = null;
@@ -42,6 +53,7 @@ test("a window closes after the interval and summarizes exactly its own deltas",
   }
   assert.equal(next.frame_ms_max, 20);
   assert.equal(next.long_frames, 0);
+  assert.ok(next.frame_budget_misses > 0, "20 ms misses the 60 Hz scheduling budget");
   assert.equal(next.frames_over_22ms, 0);
 });
 
@@ -51,6 +63,7 @@ test("felt 30 fps frames over 22 ms count as long even when under the old 50 ms 
   aggregator.observe(33, 50);
   const summary = aggregator.observe(16.7, 100);
   assert.equal(summary.frames_over_22ms, 1);
+  assert.equal(summary.frames_over_18_5ms, 1);
   assert.equal(summary.long_frames, 1);
   assert.equal(summary.frame_ms_max, 33);
 });
@@ -68,6 +81,7 @@ test("percentiles use nearest-rank over the sorted window", () => {
   assert.notEqual(summary, null);
   assert.equal(summary.frame_ms_p50, 10);
   assert.equal(summary.frame_ms_p95, 19);
+  assert.equal(summary.frame_ms_p99, 20);
   assert.equal(summary.frame_ms_max, 20);
   assert.equal(summary.frames, 20);
   assert.equal(summary.long_frames, 0);
@@ -102,6 +116,7 @@ test("invalid deltas and clocks are ignored instead of poisoning the window", ()
 
 test("exported defaults match the documented perf-row contract", () => {
   assert.equal(FRAME_PERF_INTERVAL_MS, 5_000);
+  assert.equal(FRAME_PERF_BUDGET_MS, 18.5);
   // Align with the closed-loop frame governor: one missed display interval, not a 50 ms stall.
   assert.equal(FRAME_PERF_LONG_FRAME_MS, 22);
   assert.ok(FRAME_PERF_MAX_WINDOW_SAMPLES >= 4_000);
@@ -125,10 +140,15 @@ test("the browser recorder feeds raw render deltas and never displaces state row
   assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?radar_alt_ft:/);
   assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?engagement:/);
   assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?bandit_alive:/);
+  assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?catapult_active:/);
+  assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?terrain_queued_loads:/);
+  assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?resolution_scale_pct:/);
   // The render loop hands the recorder the raw delta before the simulation-advance clamp, so a
   // stall is measured at its true length rather than at the length the kernel was willing to run.
   assert.match(app,
-    /const renderDeltaMs = now - previous;[\s\S]{0,300}?recorder\.observeFrameDelta\(renderDeltaMs\);[\s\S]{0,300}?clamp\(renderDeltaMs \/ 1000, 0, SIM_CATCHUP_CAP_SECONDS\)/);
+    /const renderDeltaMs = now - previous;[\s\S]{0,500}?recorder\.observeFrameDelta\(renderDeltaMs,[\s\S]{0,300}?session_phase === "ACTIVE"[\s\S]{0,500}?clamp\(renderDeltaMs \/ 1000, 0, SIM_CATCHUP_CAP_SECONDS\)/);
+  assert.match(app,
+    /observeFrameDelta\(deltaMs, activeForeground\) \{[\s\S]*?this\._framePerf\.reset\(\)[\s\S]*?active_foreground: 1/);
   // That cap is a spiral brake. At 120 Hz a healthy 60 fps frame owes the kernel 2 ticks; letting
   // one frame catch up 0.25 s meant THIRTY, so a single hitch bought its own successor and the tape
   // showed five-second windows with a 166 ms and a 283 ms MEDIAN frame. Keep it within a handful of
@@ -138,11 +158,11 @@ test("the browser recorder feeds raw render deltas and never displaces state row
   const capSeconds = Number(new Function(`return ${cap}`)());
   assert.ok(capSeconds > 2 / 120 && capSeconds <= 12 / 120,
     `catch-up cap must recover an ordinary hitch without spiralling, got ${capSeconds}s`);
-  // Backpressure discipline: a full bounded queue skips the perf row rather than letting the
-  // enqueue overflow trim displace a state row.
-  assert.match(app, /observeFrameDelta\(deltaMs\) \{[\s\S]*?if \(this\.buf\.length >= TELEMETRY_BUFFER_LIMIT\) return;[\s\S]*?k: "perf"/);
+  // Healthy windows remain expendable under backpressure; a failed foreground contract is
+  // admitted so bounded retention can preserve the latest breach.
+  assert.match(app, /observeFrameDelta\(deltaMs, activeForeground\) \{[\s\S]*?this\.buf\.length >= TELEMETRY_BUFFER_LIMIT && summary\.contract_pass === 1[\s\S]*?k: "perf"/);
   // Perf rows share the time base of every other recorder row.
-  assert.match(app, /\{ k: "perf", t: Math\.round\(performance\.now\(\)\), \.\.\.summary \}/);
+  assert.match(app, /k: "perf",[\s\S]*?t: Math\.round\(performance\.now\(\)\),[\s\S]*?\.\.\.summary/);
 });
 
 test("scene counters are sampled once per closed window and merged into the summary", () => {
@@ -196,6 +216,52 @@ test("no sampler leaves the row exactly as it was before instrumentation", () =>
   plain.observe(16, 0);
   const summary = plain.observe(16, 100);
   assert.deepEqual(Object.keys(summary).sort(),
-    ["frame_ms_max", "frame_ms_p50", "frame_ms_p95", "frames", "frames_over_22ms",
-      "long_frames"]);
+    ["delivered_fps", "frame_budget_miss_rate", "frame_budget_misses", "frame_budget_ms",
+      "frame_ms_max", "frame_ms_p50", "frame_ms_p95", "frame_ms_p99", "frames",
+      "frames_over_18_5ms", "frames_over_22ms", "long_frames",
+      "longest_frame_budget_miss_streak", "window_ms", "contract_pass"].sort());
+});
+
+test("budget miss streaks expose sustained 30 fps runs instead of only a total", () => {
+  const aggregator = createFramePerfAggregator({ intervalMs: 100 });
+  aggregator.observe(16, 0);
+  aggregator.observe(33, 25);
+  aggregator.observe(34, 50);
+  aggregator.observe(16, 75);
+  const summary = aggregator.observe(40, 100);
+
+  assert.equal(summary.frame_budget_misses, 3);
+  assert.equal(summary.longest_frame_budget_miss_streak, 2);
+  assert.equal(summary.frames_over_18_5ms, 3);
+  assert.equal(summary.frames_over_22ms, 3);
+  assert.equal(summary.window_ms, 139);
+  assert.equal(summary.delivered_fps, 35.97);
+  assert.equal(summary.contract_pass, 0);
+});
+
+test("contract evaluation does not round a failing miss fraction down to three percent", () => {
+  const aggregator = createFramePerfAggregator({ intervalMs: 100 });
+  for (let index = 0; index < 29; index += 1) {
+    aggregator.observe(index === 0 ? 19 : 16, index);
+  }
+  const summary = aggregator.observe(16, 100);
+
+  assert.equal(summary.frames, 30);
+  assert.equal(summary.frame_budget_miss_rate, 0.0333);
+  assert.equal(summary.contract_pass, 0);
+});
+
+test("reset discards an ineligible partial window and all phase ownership", () => {
+  const aggregator = createFramePerfAggregator({ intervalMs: 100 });
+  aggregator.observePhase("view", 80);
+  aggregator.observe(80, 0);
+  aggregator.reset();
+  aggregator.observePhase("view", 4);
+  aggregator.observe(16, 100);
+  const summary = aggregator.observe(16, 200);
+
+  assert.equal(summary.frames, 2);
+  assert.equal(summary.frame_ms_max, 16);
+  assert.equal(summary.view_ms_max, 4);
+  assert.equal(summary.contract_pass, 1);
 });

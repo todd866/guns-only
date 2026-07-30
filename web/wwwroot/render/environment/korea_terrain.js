@@ -2556,6 +2556,8 @@ class KoreaTerrainAtlasPresentation {
     let errors = 0;
     let networkRequests = 0;
     let networkBytes = 0;
+    let rangeSupportedPages = 0;
+    let completeBundleFallbackPages = 0;
     for (const state of this.pages.values()) {
       if (state.presentation) {
         residentPages++;
@@ -2567,6 +2569,8 @@ class KoreaTerrainAtlasPresentation {
         localSceneryChunks += Number(page.localSceneryChunks) || 0;
         networkRequests += page.transfer.networkRequests;
         networkBytes += page.transfer.networkBytes;
+        if (page.transfer.rangeSupported === true) rangeSupportedPages++;
+        if (page.transfer.completeBundleFallback) completeBundleFallbackPages++;
       }
       if (state.error) errors++;
     }
@@ -2593,6 +2597,13 @@ class KoreaTerrainAtlasPresentation {
       loadedPageManifests: this.loadedPageManifests,
       networkRequests,
       networkBytes,
+      // Range health, surfaced per atlas because each page owns its own TerrainBundleReader. A
+      // page whose server answers 200 instead of 206 silently degrades to holding the WHOLE
+      // bundle, and its first read becomes a capability probe every other read awaits — so one
+      // Range-ignorant server serializes the entire terrain stream behind one huge transfer.
+      // Aggregating only bytes/requests hid that as an unexplained multi-second stall elsewhere.
+      rangeSupportedPages,
+      completeBundleFallbackPages,
       missionFeaturePackId: this.missionFeaturePack?.featurePackId ?? null,
       missionFeaturePackSha256: this.missionFeaturePackSha256 || null,
       missionFeatures: this.missionFeaturePresentation?.diagnostics?.() ?? null,

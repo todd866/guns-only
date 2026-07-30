@@ -267,7 +267,15 @@ export class VisualRuntime {
       });
     }
 
-    this.adaptiveResolution.sample(frame.frameTimeMs ?? deltaSeconds * 1000);
+    // Legacy/lab callers that do not declare eligibility retain ordinary adaptive behaviour.
+    // Production flight declares false during Ready, pause, replay, and background frames; those
+    // costs must not train the foreground-flight resolution controller.
+    if (frame.activeForeground !== false) {
+      this.adaptiveResolution.sample(
+        frame.frameTimeMs ?? deltaSeconds * 1000,
+        { activeForeground: frame.activeForeground === true },
+      );
+    }
     this.options.onUpdate?.(updateContext.frame, updateContext);
     return true;
   }

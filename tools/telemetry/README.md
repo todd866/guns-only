@@ -37,15 +37,27 @@ build, batch ID, session start time, and keyframe interval. A selected chunk is 
 self-describing without downloading an earlier object; its first state row is also a full keyframe.
 
 Render stalls are invisible to the sim-tick-scheduled state stream, so the recorder also emits one
-`{"k":"perf"}` row per 5 seconds of wall time while recording: `t` (same `performance.now()` time
-base as every other row), `frame_ms_p50`, `frame_ms_p95`, `frame_ms_max`, `long_frames` /
-`frames_over_22ms` (frames over **22 ms** in the window — aligned with the closed-loop frame
-governor), and `frames`, all computed from the render loop's raw requestAnimationFrame deltas
-(`web/wwwroot/render/telemetry/frame_perf.js`). Rows also carry once-per-window scene/load
-counters (draw calls, triangles, governor level, stream radius, scenery shed, engagement) when
-available. Perf rows are best-effort diagnostics: when the bounded recorder queue is full the perf
-row is skipped, so it can never displace a state row, and decoders that filter on `k === "st"`
-ignore it unchanged.
+`{"k":"perf"}` row per eligible 5-second wall-time window. Eligibility is deliberately narrow:
+the session must be `ACTIVE`, unpaused, outside incident replay, and the document must be visible.
+Crossing into or out of that state resets the partial window, so a Ready, pause, replay, or hidden
+tab delta cannot contaminate foreground-flight evidence. Each emitted row is marked
+`active_foreground: 1`.
+
+Perf rows use raw requestAnimationFrame deltas and include `t` (the normal `performance.now()` time
+base), `frames`, `window_ms`, `delivered_fps`, `frame_ms_p50`, `frame_ms_p95`,
+`frame_ms_p99`, and `frame_ms_max`. The shared 60 fps contract requires at least 59 delivered FPS,
+p95 at most 18.5 ms, p99 at most 22 ms, and no more than 3% of frames over the 18.5 ms scheduling
+budget. `frame_budget_ms`, `frame_budget_misses` / `frames_over_18_5ms`,
+`frame_budget_miss_rate`, `longest_frame_budget_miss_streak`, and `contract_pass` record that
+decision. `long_frames` / `frames_over_22ms` remain a separate compatibility diagnostic; they are
+not a substitute for the 18.5 ms budget-miss rate.
+
+Rows also carry the quality tier, once-per-window renderer/scene/load counters (including draw
+calls, resources, governor level, resolution scale, terrain queues, launch state, and engagement),
+plus average and maximum main-thread phase timings when available. Healthy perf rows yield to state
+rows when the live queue is already full. A failing foreground contract row is allowed into the
+queue, and backpressure retention preserves the newest such breach as a diagnostic anchor. All
+perf rows remain diagnostics: state decoders that filter on `k === "st"` ignore them unchanged.
 
 This encoding is primarily a browser/envelope and Function-parse optimization. On a real Build 47
 trace it reduced uncompressed JSON by about 76%, but gzip of the same trace was effectively
@@ -81,11 +93,16 @@ supplying the returned cursor explicitly.
 `admin.mjs summary` is the preferred routine reporting path. One operator request lists at most 20
 objects, then reads only that page inside Vercel. It caps compressed input at 16 MiB, decompressed
 input at 32 MiB, each decompressed chunk at 2 MiB, and total work at 25 seconds. Its response
-contains counts, coverage/partiality, build mix, lifecycle outcomes, and aggregate combat measures;
-it never returns raw rows or identifiers. `has_more`, `next_cursor`, failed chunks, and skipped
-chunks make incomplete coverage explicit. Legacy flat-file objects are reported separately as
-`chunks_unsupported_format` and are never downloaded by the summary route. Each summary still
-performs billed Blob reads, so keep the prefix narrow and request another cursor only deliberately.
+contains counts, coverage/partiality, build mix, lifecycle outcomes, aggregate combat measures,
+and a non-identifying `performance` summary: observed/contract/healthy windows, delivered FPS,
+budget-miss rate, worst p95/p99/MAX, longest miss streak, governor and resolution pressure,
+quality-tier mix, launch-window failures, terrain queue pressure, phase peaks, and the dominant
+phase of failed windows. Older perf rows without FPS-window, p95, p99, and 18.5 ms budget evidence
+remain counted but cannot be called contract-healthy. The endpoint never returns raw rows or
+identifiers. `has_more`, `next_cursor`, failed chunks, and skipped chunks make incomplete coverage
+explicit. Legacy flat-file objects are reported separately as `chunks_unsupported_format` and are
+never downloaded by the summary route. Each summary still performs billed Blob reads, so keep the
+prefix narrow and request another cursor only deliberately.
 
 ## Workflow
 

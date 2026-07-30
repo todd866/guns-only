@@ -57,8 +57,11 @@ telemetry, Identity T/W, and the map agree — see
 - `docs/rapier-gun-drone-system.md` — gun-drone gameplay contract and open system boundary.
 - `docs/superpowers/specs/2026-07-27-rapier-glide-drone-vertical-slice-design.md` — first physical
   drone vertical slice.
-- `docs/2026-07-26-buried-launch-tube-and-the-ukraine-theatre.md` — buried catapult/gallery
-  geometry and Ukraine theatre siting (airframe story there is superseded; basing geometry is not).
+- [`82-launch-gallery-engineering-basis.md`](82-launch-gallery-engineering-basis.md) — durable live
+  launch contract plus conceptual civil works, machinery, utilities, cost, visual truth, and
+  generated-plate contract.
+- `docs/2026-07-26-buried-launch-tube-and-the-ukraine-theatre.md` — historical buried-gallery and
+  Ukraine-siting design record; its 150 m/s geometry, timing, loads, and quantities are superseded.
 - `docs/2026-07-26-reclined-seat-and-ukraine-setting.md` — reclined-occupant physiology thesis
   (airframe story there is superseded; physiology thesis is not).
 - ADR-0003 — Ghibli-adjacent presentation discipline (fiction stills are not runtime source of
@@ -82,6 +85,7 @@ mass; systems follow)
 | [60](60-armament-and-drones.md) | Armament and drones | closed ownship gun; provisional drone packaging |
 | [70](70-landing-gear-arrest.md) | Landing gear, arrest | closed catapult geometry; provisional strip/hook detail |
 | [80](80-basing-and-ground.md) | Basing and ground | closed gallery clearance; fiction theatre siting |
+| [82](82-launch-gallery-engineering-basis.md) | Launch-gallery engineering basis | closed live interface; conceptual construction/cost/presentation contract |
 | [90](90-failure-modes.md) | Failure modes | provisional FMECA seed list |
 | [95](95-cost-ledger.md) | Cost ledger | surrogate CMC premium; Phase 2 closes the table |
 | [icds/propulsion-airframe](icds/propulsion-airframe.md) | Propulsion ↔ airframe ICD | provisional |

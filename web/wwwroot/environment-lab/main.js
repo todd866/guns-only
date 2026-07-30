@@ -2,9 +2,13 @@ import * as THREE from "../vendor/three.module.js";
 import { OrbitControls } from "../vendor/three/addons/controls/OrbitControls.js";
 import { loadKoreaEnvironment } from "../render/environment/korea_environment.js";
 import { attachSoftWorldGroundHaze } from "../render/environment/soft_world_atmosphere.js";
-import { createDecisionSupportSky } from "../render/scene/scene_builders.js?v=197";
+import { createDecisionSupportSky } from "../render/scene/scene_builders.js?v=198";
 import { loadKoreaTerrain } from "../render/environment/korea_terrain.js";
 import { createTacticalCloudField } from "../render/environment/tactical_clouds.js?v=authoritative-clouds-v3";
+import {
+  evaluateForegroundFrameContract,
+  FOREGROUND_FRAME_CONTRACT,
+} from "../render/telemetry/frame_contract.js";
 import { AdaptiveResolutionController } from "../render/visual/adaptive_resolution.js";
 import { normalizeVisualProfile } from "../render/visual/profile.js";
 
@@ -155,13 +159,9 @@ let previousMetricsSample = 0;
 const requestedSite = parameters.get("site");
 site.value = SITE_CONFIGURATIONS[requestedSite] ? requestedSite : "ukraine";
 
-const FRAME_STATS_SAMPLE_LIMIT = 600;
-const FRAME_STATS_BACKGROUND_STALL_MS = 250;
-const FRAME_STATS_LATE_FRAME_MS = 18.5;
-const FRAME_GATE_MIN_FPS = 59;
-const FRAME_GATE_MAX_P95_MS = 18.5;
-const FRAME_GATE_MAX_P99_MS = 22;
-const FRAME_GATE_MAX_LATE_FRACTION = 0.03;
+const FRAME_STATS_SAMPLE_LIMIT = FOREGROUND_FRAME_CONTRACT.labSampleCount;
+const FRAME_STATS_BACKGROUND_STALL_MS = FOREGROUND_FRAME_CONTRACT.backgroundStallMs;
+const FRAME_STATS_LATE_FRAME_MS = FOREGROUND_FRAME_CONTRACT.budgetFrameMs;
 
 function percentile(sorted, quantile) {
   if (!sorted.length) return null;
@@ -223,21 +223,22 @@ const foregroundFrameStats = createForegroundFrameStats();
 
 function evaluatePerformanceGate(frameStats) {
   const sampled = frameStats.sampleCount >= FRAME_STATS_SAMPLE_LIMIT;
-  const pass = sampled
-    && frameStats.fps >= FRAME_GATE_MIN_FPS
-    && frameStats.p95Ms <= FRAME_GATE_MAX_P95_MS
-    && frameStats.p99Ms <= FRAME_GATE_MAX_P99_MS
-    && frameStats.overBudgetFraction <= FRAME_GATE_MAX_LATE_FRACTION;
+  const pass = sampled && evaluateForegroundFrameContract({
+    fps: frameStats.fps,
+    p95Ms: frameStats.p95Ms,
+    p99Ms: frameStats.p99Ms,
+    budgetMissFraction: frameStats.overBudgetFraction,
+  });
   return Object.freeze({
     state: sampled ? (pass ? "pass" : "fail") : "warming",
     pass: sampled ? pass : null,
     thresholds: Object.freeze({
       sampleCount: FRAME_STATS_SAMPLE_LIMIT,
-      minimumFps: FRAME_GATE_MIN_FPS,
-      maximumP95Ms: FRAME_GATE_MAX_P95_MS,
-      maximumP99Ms: FRAME_GATE_MAX_P99_MS,
-      maximumLateFraction: FRAME_GATE_MAX_LATE_FRACTION,
-      lateFrameMs: FRAME_STATS_LATE_FRAME_MS,
+      minimumFps: FOREGROUND_FRAME_CONTRACT.minimumFps,
+      maximumP95Ms: FOREGROUND_FRAME_CONTRACT.maximumP95Ms,
+      maximumP99Ms: FOREGROUND_FRAME_CONTRACT.maximumP99Ms,
+      maximumLateFraction: FOREGROUND_FRAME_CONTRACT.maximumBudgetMissFraction,
+      lateFrameMs: FOREGROUND_FRAME_CONTRACT.budgetFrameMs,
     }),
   });
 }

@@ -1,5 +1,8 @@
-// Minimal static file server shared by the harness runners (screenshot.mjs, assertions.mjs).
-// Mirrors web/smoke/smoke.test.mjs. Test instrument only — excluded from publish.
+// Minimal static file server shared by every harness runner (screenshot.mjs, assertions.mjs) and
+// by web/smoke/smoke.test.mjs. This is the ONE server implementation — the smoke test used to
+// carry its own fork that ignored Range, which made TerrainBundleReader fall back to downloading
+// whole bundles and stalled the boot smoke past 30 s. Do not re-fork it; production serves 206.
+// Test instrument only — excluded from publish (see wwwroot/render/**/tests/** in the csproj).
 
 import http from "node:http";
 import { readFile, stat } from "node:fs/promises";

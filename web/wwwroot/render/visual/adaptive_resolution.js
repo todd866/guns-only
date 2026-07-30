@@ -111,15 +111,23 @@ export class AdaptiveResolutionController {
     return true;
   }
 
-  /** Samples one completed frame. Long tab/background stalls are ignored. */
-  sample(frameMs) {
-    if (!this.enabled || !Number.isFinite(frameMs) || frameMs <= 0 || frameMs > this.ignoredFrameMs) {
+  /**
+   * Samples one completed frame. Callers that cannot prove foreground ownership retain the
+   * historical background-stall filter. The flight loop can explicitly mark an ACTIVE foreground
+   * sample; a severe stall then clamps into the controller rather than disappearing from it.
+   */
+  sample(frameMs, { activeForeground = false } = {}) {
+    if (!this.enabled || !Number.isFinite(frameMs) || frameMs <= 0
+      || (!activeForeground && frameMs > this.ignoredFrameMs)) {
       return { changed: false, pixelRatio: this.pixelRatio, ignored: true };
     }
 
+    const sampledFrameMs = activeForeground
+      ? Math.min(frameMs, this.ignoredFrameMs)
+      : frameMs;
     this.emaFrameMs = this.emaFrameMs === null
-      ? frameMs
-      : this.emaFrameMs + (frameMs - this.emaFrameMs) * this.smoothing;
+      ? sampledFrameMs
+      : this.emaFrameMs + (sampledFrameMs - this.emaFrameMs) * this.smoothing;
     this.samples++;
     this.samplesSinceChange++;
 

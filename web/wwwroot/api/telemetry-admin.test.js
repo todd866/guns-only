@@ -262,6 +262,18 @@ test("summary returns bounded, non-identifying session, sortie, and combat aggre
         { k: "in", type: "mobile_control", code: "gamepad_connected",
           profile: "dual_stick" },
         { k: "in", type: "lifecycle", code: "sortie_started", sortie: "sortie-private-a" },
+        { k: "perf", frames: 300, window_ms: 5000, frame_budget_misses: 0,
+          frames_over_22ms: 0, frame_ms_p95: 16.8, frame_ms_p99: 17.2, frame_ms_max: 20,
+          longest_frame_budget_miss_streak: 0, governor_level: 0,
+          governor_terminal: 0, quality_tier: "desktop",
+          resolution_scale_pct: 100, terrain_queued_loads: 0, rapier_launch_active: 0,
+          sim_ms_max: 3, view_ms_max: 8 },
+        { k: "perf", frames: 285, window_ms: 5100, frame_budget_misses: 20,
+          frames_over_22ms: 12, frame_ms_p95: 24.5, frame_ms_p99: 33, frame_ms_max: 90,
+          longest_frame_budget_miss_streak: 4, governor_level: 2,
+          governor_terminal: 0, quality_tier: "desktop",
+          resolution_scale_pct: 76, terrain_queued_loads: 8, rapier_launch_active: 1,
+          sim_ms_max: 9, view_ms_max: 38 },
         { k: "st", q: 0, s: { telemetry_sortie_id: "sortie-private-a", t: 0, rounds_fired: 0,
           hits: 0, kill_count: 0, shots_total: 0, shots_in_window: 0, player_alive: true,
           opponent_alive: true, finished: false, sortie_outcome: "NONE" } },
@@ -285,6 +297,12 @@ test("summary returns bounded, non-identifying session, sortie, and combat aggre
           profile: "dual_stick", duration_ms: 1200, max_tilt_trim: 0,
           saturation_share: 0.1, cancelled: true },
         { k: "in", type: "lifecycle", code: "sortie_started", sortie: "sortie-private-b" },
+        { k: "perf", frames: 295, window_ms: 5000, frame_budget_misses: 10,
+          frames_over_22ms: 2, frame_ms_p95: 18, frame_ms_p99: 21, frame_ms_max: 34,
+          longest_frame_budget_miss_streak: 2, governor_level: 1,
+          governor_terminal: 1, quality_tier: "balanced",
+          resolution_scale_pct: 88, terrain_queued_loads: 2, rapier_launch_active: 1,
+          sim_ms_max: 20, view_ms_max: 10 },
         { k: "st", q: 0, s: { telemetry_sortie_id: "sortie-private-b", t: 0, rounds_fired: 0,
           hits: 0, kill_count: 0, shots_total: 0, shots_in_window: 0, player_alive: true,
           opponent_alive: true, bandit_alive: false, finished: false,
@@ -365,6 +383,33 @@ test("summary returns bounded, non-identifying session, sortie, and combat aggre
     assert.equal(payload.mobile_controls.tilt_trim_use_rate, 0.5);
     assert.equal(payload.mobile_controls.saturation_heavy_rate, 0.5);
     assert.equal(payload.mobile_controls.median_gesture_duration_ms, 1000);
+    assert.equal(payload.performance.target_fps, 60);
+    assert.equal(payload.performance.scheduling_budget_ms, 18.5);
+    assert.equal(payload.performance.windows_observed, 3);
+    assert.equal(payload.performance.contract_windows_observed, 3);
+    assert.equal(payload.performance.healthy_windows, 1);
+    assert.equal(payload.performance.contract_pass_rate, 0.3333);
+    assert.equal(payload.performance.frames_observed, 880);
+    assert.equal(payload.performance.observed_seconds, 15.1);
+    assert.equal(payload.performance.delivered_fps, 58.28);
+    assert.equal(payload.performance.budget_miss_frames, 30);
+    assert.equal(payload.performance.budget_miss_rate, 0.0341);
+    assert.equal(payload.performance.frames_over_22ms, 14);
+    assert.equal(payload.performance.frames_over_22ms_rate, 0.0159);
+    assert.equal(payload.performance.worst_p95_frame_ms, 24.5);
+    assert.equal(payload.performance.worst_p99_frame_ms, 33);
+    assert.equal(payload.performance.worst_frame_ms, 90);
+    assert.equal(payload.performance.longest_budget_miss_streak, 4);
+    assert.equal(payload.performance.governor_shed_windows, 2);
+    assert.equal(payload.performance.maximum_governor_level, 2);
+    assert.equal(payload.performance.terminal_governor_contract_failures, 1);
+    assert.equal(payload.performance.minimum_resolution_scale_pct, 76);
+    assert.equal(payload.performance.rapier_launch_windows, 2);
+    assert.equal(payload.performance.rapier_launch_contract_failures, 2);
+    assert.equal(payload.performance.maximum_terrain_queued_loads, 8);
+    assert.deepEqual(payload.performance.phase_peak_ms, { sim: 20, view: 38 });
+    assert.deepEqual(payload.performance.dominant_phase_contract_failures, { view: 1, sim: 1 });
+    assert.deepEqual(payload.performance.quality_tier_windows, { desktop: 2, balanced: 1 });
     assert.equal(payload.privacy.raw_rows_returned, false);
     const serialized = JSON.stringify(payload);
     assert.doesNotMatch(serialized, /web-private|sortie-private|private agent/);

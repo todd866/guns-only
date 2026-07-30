@@ -661,6 +661,47 @@ test("the published web app boots to a running flight kernel (no fatal render er
     );
     assert.ok(audioRuntime.sessionId, "audio QA session must be attributable to one page instance");
 
+    // Terrain must stream through real HTTP 206 ranges. When a server ignores Range,
+    // TerrainBundleReader legitimately falls back to holding the WHOLE bundle — and because its
+    // first read is a capability probe every other read awaits, one such server serializes the
+    // entire terrain stream behind a single huge transfer. That used to surface only as an
+    // unexplained multi-second stall in whatever step came next, so assert the mechanism by name.
+    // Poll with evaluate() rather than waitForFunction(): waitForFunction polls on rAF, so a
+    // starved frame loop would hang here instead of failing with the diagnosis.
+    const readTerrainTransfer = () => page.evaluate(() => {
+      const terrain = globalThis.__gunsAssets?.diagnostics()?.terrain ?? null;
+      if (!terrain) return null;
+      // Single-manifest terrain owns one reader; a paged atlas owns one per page and aggregates.
+      return terrain.transfer
+        ? {
+          shape: "single-manifest",
+          rangeSupportedPages: terrain.transfer.rangeSupported === true ? 1 : 0,
+          completeBundleFallbackPages: terrain.transfer.completeBundleFallback ? 1 : 0,
+          networkRequests: terrain.transfer.networkRequests,
+        }
+        : {
+          shape: "atlas",
+          rangeSupportedPages: terrain.rangeSupportedPages,
+          completeBundleFallbackPages: terrain.completeBundleFallbackPages,
+          networkRequests: terrain.networkRequests,
+        };
+    });
+    let terrainTransfer = null;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      terrainTransfer = await readTerrainTransfer();
+      const probed = (terrainTransfer?.rangeSupportedPages ?? 0)
+        + (terrainTransfer?.completeBundleFallbackPages ?? 0);
+      if (probed > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, scaled(250)));
+    }
+    assert.ok(terrainTransfer,
+      "terrain presentation diagnostics unavailable via __gunsAssets");
+    assert.equal(terrainTransfer.completeBundleFallbackPages, 0,
+      "terrain fell back to whole-bundle downloads, so the server ignored Range: "
+        + JSON.stringify(terrainTransfer));
+    assert.ok(terrainTransfer.rangeSupportedPages >= 1,
+      "no terrain page confirmed HTTP 206 range streaming: " + JSON.stringify(terrainTransfer));
+
     // The per-frame path must ride the hot buffer: over a nominal 5.5-second window the full JSON
     // snapshot should be fetched only on cold_version edges + the five-second fallback, never
     // per frame (~60+/s). This catches a silent regression to JSON-per-frame while still proving

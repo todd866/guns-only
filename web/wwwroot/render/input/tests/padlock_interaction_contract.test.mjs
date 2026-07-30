@@ -210,7 +210,10 @@ test("padlock owns a specific contact and exposes an honest accessible lifecycle
   assert.match(toggle, /padlockTarget = defaultPadlockTarget\(\)[\s\S]*?syncPlayerGunTarget\(\)/,
     "manual padlock acquisition must select the same combat target for the gun");
 
-  const update = balancedBlock(appSource, "update(state, dt, nowSeconds)");
+  const update = balancedBlock(
+    appSource,
+    "update(state, dt, nowSeconds, renderFrameMs = dt * 1000)",
+  );
   const promotionIndex = update.indexOf("wingmanPadlockPromotedToPrimary({");
   const invalidTargetIndex = update.indexOf("!padlockTargetValid(state, padlockTarget)");
   assert.ok(promotionIndex >= 0 && invalidTargetIndex > promotionIndex,

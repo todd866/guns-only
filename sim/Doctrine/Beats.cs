@@ -878,7 +878,7 @@ public static class Beats {
                 JokerThresholdLb: 1_200.0,
                 MinimumFuelThresholdLb: 600.0,
                 EmergencyFuelThresholdLb: 300.0),
-            // FULL AUGMENTED POWER on the stroke. 1.0 is the dry lever stop, and a 7.85 t aircraft
+            // FULL AUGMENTED POWER on the stroke. 1.0 is the dry lever stop, and an 8.22 t aircraft
             // leaving a ramp on dry thrust decays below stall while it is still climbing away —
             // nobody launches a heavy jet at military power.
             InitialThrottle: 1.55,
@@ -888,9 +888,10 @@ public static class Beats {
             // 1.67 Vs at launch mass, with 1.19 g along-rail acceleration. The superseded 150 m/s
             // study drove a very different rail and is not the geometry simulated here.
             CatapultStrokeM: 520.0,
-            // At the staged mass this is about 47.5 MJ and 10.0 MW peak, versus the superseded
-            // 150 m/s study's 88.3 MJ / 25.5 MW. Gear/flap qualification is therefore the live
-            // near-ground 214 KIAS handoff, not the old 291 KIAS case.
+            // At the staged 3,600 lb-fuel mass this is 49.75 MJ kinetic energy and 10.52 MW peak
+            // inertial power on the flat; the terminal 12° grade brings machinery output to about
+            // 12.37 MW before losses. Gear/flap qualification is the live near-ground 214 KIAS
+            // handoff, not the superseded 150 m/s study's 291 KIAS case.
             CatapultEndSpeedMps: 110.0,
             // A real ski jump, and the earlier seven degrees was an excuse rather than a design.
             // The steppe is flat, so the ramp is built either way; once you are building it, the
