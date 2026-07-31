@@ -2974,7 +2974,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
           </div>
           <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 213 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 214 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
         </section>
@@ -3094,12 +3094,12 @@ Splash one bandit to qualify · H controls · R restarts</p>
       document.querySelector("#boot-sortie-detail").textContent = selected.detail;
     }
 
-    // A network-fresh Build 213 document may still be controlled by Build 178's cache-first
+    // A network-fresh Build 214 document may still be controlled by Build 178's cache-first
     // service worker. Purge that controller and its Cache Storage before Blazor requests the
     // unversioned boot manifest/WASM graph. Offline clients never see this newer document until a
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = "213";
+      const releaseBuild = "214";
       const controller = navigator.serviceWorker?.controller;
       if (!controller) return;
       const controllerBuild = new URL(controller.scriptURL, location.href)
@@ -3118,8 +3118,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       }
     })();
   </script>
-  <script src="./multiplayer-config.js?v=213"></script>
-  <script type="module" src="./app.js?v=213"></script>
-  <script src="./_framework/blazor.webassembly.js?v=213" autostart="false"></script>
+  <script src="./multiplayer-config.js?v=214"></script>
+  <script type="module" src="./app.js?v=214"></script>
+  <script src="./_framework/blazor.webassembly.js?v=214" autostart="false"></script>
 </body>
 </html>
