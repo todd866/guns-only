@@ -734,10 +734,19 @@ test("the published web app boots to a running flight kernel (no fatal render er
         && !document.documentElement.classList.contains("run-paused"),
     undefined, { polling: scaled(100), timeout: scaled(45000) });
     await page.evaluate(() => globalThis.__gunsBridge.ReleaseWeaponsHold());
+    // 45 s, was 5. This is a wall-clock wait for a flag that only reaches the snapshot on a
+    // simulation tick, and this file already warns two hundred lines down that "SwiftShader can
+    // render the full terrain at only a few frames per second on a loaded CI worker" and that one
+    // must not "assume a wall-clock hold spans enough simulation ticks". Five seconds on a 2 fps
+    // renderer is a handful of ticks, so this failed the deploy gate intermittently -- it passed
+    // in one run and timed out in the next with no code change between them.
+    //
+    // The assertion is unchanged: weapons_inhibited must still become false. Only the patience
+    // matches the sibling wait directly above, which already allows 45 s for the same reason.
     await page.waitForFunction(
       () => globalThis.__gunsState?.weapons_inhibited === false,
       undefined,
-      { polling: scaled(100), timeout: scaled(5000) },
+      { polling: scaled(100), timeout: scaled(45000) },
     );
     const roundsBeforeTrigger = await page.evaluate(
       () => Number(globalThis.__gunsState?.rounds_fired) || 0,
