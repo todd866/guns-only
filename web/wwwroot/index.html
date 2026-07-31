@@ -21,7 +21,7 @@
       --safe-bottom: env(safe-area-inset-bottom, 0px);
       --safe-left: env(safe-area-inset-left, 0px);
       color-scheme: dark;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
       background: #030913;
     }
 
@@ -708,9 +708,11 @@
         bottom: calc(20px + env(safe-area-inset-bottom));
         pointer-events: none;
       }
-      /* Only FIRE lives in the centre gap between the sticks. Everything else in that column
-         stays hidden -- parking the full actions column there is what once covered the stick's
-         centre-hold fire target. */
+      /* FIRE owns the centre gap between the sticks. PADLOCK and TARGET stack above it in the
+         same column -- the padlock view and its ADI already exist in the HUD, and target cycling
+         already works; they were simply unreachable in portrait because this whole column was
+         collapsed. Nothing else from the column is promoted: parking the FULL actions column in
+         that gap is what once covered the stick's centre-hold fire target. */
       .portrait-assist .touch-actions > * { display: none; }
       .portrait-assist .touch-actions > #touch-fire:not([hidden]) {
         display: grid;
@@ -721,6 +723,23 @@
         letter-spacing: .1em;
         pointer-events: auto;
       }
+      /* Padlock and target-cycle ride above FIRE, side by side, still clear of both sticks. */
+      .portrait-assist .touch-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+      .portrait-assist .touch-actions > #touch-target-cycle:not([hidden]),
+      .portrait-assist .touch-actions > [data-pulse-key="KeyV"]:not([hidden]) {
+        display: grid;
+        place-items: center;
+        width: 58px; min-width: 58px;
+        height: 44px; min-height: 44px;
+        font-size: 9px;
+        letter-spacing: .06em;
+        pointer-events: auto;
+      }
 
       /* Gear and flaps sit above FIRE, still clear of both sticks. */
       .portrait-assist #touch-context-controls:not([hidden]) {
@@ -729,7 +748,7 @@
         position: absolute;
         left: 50%;
         transform: translateX(-50%);
-        bottom: calc(124px + env(safe-area-inset-bottom));
+        bottom: calc(186px + env(safe-area-inset-bottom));
         pointer-events: auto;
       }
 
@@ -865,7 +884,7 @@
       /* Present for screen readers and the shell contract, quiet to the eye: the splash should
          read as one title over a painting, not as a paragraph. */
       color: rgba(43, 48, 49, .52);
-      font: 450 clamp(12px, 1.4vw, 14px)/1.4 Inter, ui-sans-serif, system-ui, sans-serif;
+      font: 450 clamp(12px, 1.4vw, 14px)/1.4 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
       letter-spacing: .01em;
     }
 
@@ -911,7 +930,7 @@
     .boot-sortie > small {
       margin-top: 8px;
       color: rgba(196, 224, 229, .6);
-      font: 500 12px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+      font: 500 12px/1.5 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
     }
 
     .boot-load {
@@ -953,7 +972,7 @@
     .boot-note {
       margin: 9px 0 0 17px;
       color: rgba(191, 221, 226, .46);
-      font: 500 11px/1.45 Inter, ui-sans-serif, system-ui, sans-serif;
+      font: 500 11px/1.45 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
     }
 
     .boot-standalone-note { display: none; }
@@ -1440,7 +1459,7 @@
     #ready-menu-title {
       margin: 0;
       color: #f2fff6;
-      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
       font-size: 18px;
       font-weight: 650;
       letter-spacing: .02em;
@@ -1533,7 +1552,7 @@
     .ready-group-heading h2 {
       margin: 0;
       color: rgba(242, 255, 246, .9);
-      font: 650 16px/1.2 Inter, ui-sans-serif, system-ui, sans-serif;
+      font: 650 16px/1.2 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
     }
 
     .ready-group-heading p {
@@ -1609,7 +1628,7 @@
     .sortie-choice strong {
       display: block;
       color: #f2fff6;
-      font: 650 13px/1.25 Inter, ui-sans-serif, system-ui, sans-serif;
+      font: 650 13px/1.25 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
     }
 
     .sortie-choice > span:not(.sortie-number) {
@@ -1643,7 +1662,7 @@
     #ready-title {
       margin: 0;
       color: #f2fff6;
-      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
       font-size: clamp(25px, 5vw, 34px);
       font-weight: 640;
       letter-spacing: .025em;
@@ -2473,7 +2492,7 @@
     }
 
     .settings-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-    .settings-head h2 { margin: 0; font: 650 24px/1.1 Inter, ui-sans-serif, system-ui, sans-serif; }
+    .settings-head h2 { margin: 0; font: 650 24px/1.1 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif; }
     .settings-copy { color: rgba(217, 255, 229, .55); font-size: 10px; line-height: 1.5; }
     .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; margin: 18px 0; }
     .settings-toggle { display: flex; align-items: center; gap: 10px; min-height: 42px; font-size: 10px; }
