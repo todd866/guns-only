@@ -1,4 +1,4 @@
-export const RELEASE_BUILD = "219";
+export const RELEASE_BUILD = "220";
 export const CANONICAL_PRODUCTION_ORIGIN = "https://guns-only.com";
 
 // Custom domains the guns-only Vercel project serves in production. guns-only.com is the
