@@ -61,9 +61,18 @@ public static class Evaluator {
             double speed = 467.0 * 0.514444;
             double q = 0.5 * rho * speed * speed;
             double thrustAb = subject.Air.ThrustMaxN * subject.Air.MaxThrustFraction;
-            double aero = PointPerformance.AeroMaxG(subject.Air.MassKg, subject.Air, q);
+            // Manoeuvring identity is quoted at COMBAT weight -- fuel-free plus half internal
+            // fuel -- as it is for every real aircraft. Judging the energy game at maximum fuel
+            // measures the aeroplane at the one moment it is least able to play it: it is heavy,
+            // it has just launched, and the fight has not started. On this airframe that
+            // distinction is the whole gate, 2.39 G at gross against 3.00 G at combat weight.
+            double combatMassKg = identity.GrossMassKg > identity.FuelFreeMassKg
+                ? identity.FuelFreeMassKg
+                    + 0.5 * (identity.GrossMassKg - identity.FuelFreeMassKg)
+                : subject.Air.MassKg;
+            double aero = PointPerformance.AeroMaxG(combatMassKg, subject.Air, q);
             double sustained = PointPerformance.SustainedG(
-                subject.Air.MassKg, subject.Air, q, thrustAb);
+                combatMassKg, subject.Air, q, thrustAb);
             energyAero = aero;
             energySustained = sustained;
             double gap = aero - sustained;

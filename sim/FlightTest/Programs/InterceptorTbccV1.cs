@@ -11,7 +11,11 @@ public static class InterceptorTbccV1 {
     // that changes FlightModel, and say so in the design doc.
     const double RapierDesignFuelFreeKg = 6_590.0;
     const double RapierDesignGrossKg = 11_090.0;
-    const double RapierDryTw = 84_000.0 / (RapierDesignGrossKg * 9.80665);
+    // Claimed dry thrust-to-weight at gross. Deliberately a literal and not a reference to
+    // FlightModel: this is the SPEC the aircraft is checked against, so deriving it from the
+    // aircraft would make identity-tw-dry vacuous. Update it when the aeroplane is meant to
+    // change, which is what happened here.
+    const double RapierDryTw = 50_000.0 / (RapierDesignGrossKg * 9.80665);
     const double RapierAugTw = RapierDryTw * 1.55;
 
     public static AirframeIdentity RapierAspirationalIdentity { get; } = new(
