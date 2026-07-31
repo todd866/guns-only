@@ -1,0 +1,116 @@
+#!/bin/sh
+# whose-red -- did MY change break this test, or was it already broken?
+#
+# Written after a real failure on 2026-07-31. Three agents shared this tree; HEAD moved twice
+# during one task; the agent compared against a baseline it had measured before those commits and
+# confidently reported three Rapier failures as its own. They belonged to somebody else's
+# in-flight engine rewrite. The wrong half of a bug report is worse than no bug report: it sends
+# two agents chasing each other's work.
+#
+# The honest question is not "does the suite pass" but "what changes when MY paths are removed,
+# holding everyone else's work -- committed AND uncommitted -- exactly as it is". That is what
+# this measures.
+#
+#   bin/whose-red sim/Doctrine/Beats.cs -- "FullyQualifiedName~Carrier"
+#   bin/whose-red sim/FlightModel.cs docs/thing.md
+#
+# Everything before `--` is yours. Everything after is passed to dotnet test --filter.
+#
+# It NEVER mutates the shared working tree. It builds a scratch worktree, replays the whole
+# tree's uncommitted state into it, then reverts only your paths there. Stashing in a tree three
+# agents are writing to is how you lose somebody's afternoon.
+set -eu
+
+repo_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+cd "$repo_dir"
+. "$repo_dir/bin/dotnet-env"
+
+mine=""
+filter=""
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --) shift; filter=${1:-}; break ;;
+        -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) mine="$mine $1"; shift ;;
+    esac
+done
+[ -n "$mine" ] || { echo "whose-red: name at least one path that is yours" >&2; exit 2; }
+
+project=${WHOSE_RED_PROJECT:-sim.Tests/GunsOnly.Sim.Tests.csproj}
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/whose-red.XXXXXX")
+worktree="$scratch/without-mine"
+cleanup() {
+    git worktree remove --force "$worktree" >/dev/null 2>&1 || true
+    rm -rf "$scratch"
+}
+trap cleanup EXIT INT TERM
+
+run_tests() {   # <dir> <outfile> -- prints the sorted set of failing test names
+    if [ -n "$filter" ]; then
+        (cd "$1" && dotnet test "$project" --nologo --filter "$filter" 2>&1) > "$2" || true
+    else
+        (cd "$1" && dotnet test "$project" --nologo 2>&1) > "$2" || true
+    fi
+    # "  Failed Some.Test.Name(params) [12 ms]" -> "Some.Test.Name(params)"
+    sed -n 's/^[[:space:]]*Failed[[:space:]]\{1,\}\(.*\)[[:space:]]\[[0-9].*$/\1/p' "$2" | sort -u
+}
+
+echo "whose-red: building a tree WITHOUT your paths (nothing in $repo_dir is touched)"
+git worktree add --detach "$worktree" HEAD >/dev/null 2>&1
+
+# Replay every agent's uncommitted tracked change, then untracked files. Without this the
+# comparison silently answers a different question -- "is HEAD green" -- and HEAD is not what
+# anyone is running.
+if ! git diff HEAD -- . > "$scratch/all.patch"; then :; fi
+if [ -s "$scratch/all.patch" ]; then
+    (cd "$worktree" && git apply --whitespace=nowarn "$scratch/all.patch") \
+        || { echo "whose-red: could not replay the tree's uncommitted state; aborting rather" >&2
+             echo "           than reporting a comparison against something nobody is running." >&2
+             exit 1; }
+fi
+git ls-files --others --exclude-standard | while IFS= read -r f; do
+    mkdir -p "$worktree/$(dirname "$f")"
+    cp "$f" "$worktree/$f"
+done
+
+# ...and now remove only what is yours.
+for p in $mine; do
+    if git cat-file -e "HEAD:$p" 2>/dev/null; then
+        (cd "$worktree" && git checkout HEAD -- "$p")
+    else
+        rm -rf "${worktree:?}/$p"   # a file you newly added: without you it does not exist
+    fi
+done
+
+echo "whose-red: running WITHOUT your paths..."
+without=$(run_tests "$worktree" "$scratch/without.log")
+echo "whose-red: running WITH your paths..."
+with=$(run_tests "$repo_dir" "$scratch/with.log")
+
+printf '%s\n' "$without" | sed '/^$/d' > "$scratch/without.set"
+printf '%s\n' "$with"    | sed '/^$/d' > "$scratch/with.set"
+
+yours=$(comm -13 "$scratch/without.set" "$scratch/with.set")
+theirs=$(comm -12 "$scratch/without.set" "$scratch/with.set")
+fixed=$(comm -23 "$scratch/without.set" "$scratch/with.set")
+
+echo
+echo "================ whose-red ================"
+if [ -n "$yours" ]; then
+    echo "YOURS -- these fail only with your paths present:"
+    printf '%s\n' "$yours" | sed 's/^/    /'
+else
+    echo "YOURS -- none. Your paths break nothing."
+fi
+echo
+if [ -n "$theirs" ]; then
+    echo "NOT YOURS -- already failing without you; do not chase these:"
+    printf '%s\n' "$theirs" | sed 's/^/    /'
+fi
+if [ -n "$fixed" ]; then
+    echo
+    echo "FIXED BY YOU -- failing without your paths, passing with them:"
+    printf '%s\n' "$fixed" | sed 's/^/    /'
+fi
+echo "=========================================="
+[ -z "$yours" ]
