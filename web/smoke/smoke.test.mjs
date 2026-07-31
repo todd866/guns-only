@@ -19,6 +19,11 @@ const WWWROOT = process.env.SMOKE_WWWROOT;
 // multiplies only wait budgets — condition checks return the moment they hold — so a loaded
 // gate slows instead of failing falsely. Quiet machines are unaffected (scale 1).
 const TIMEOUT_SCALE = Math.max(1, Number(process.env.SMOKE_TIMEOUT_SCALE) || 1);
+// Smoke waits are wall-clock, but everything they wait FOR only advances on a simulation tick,
+// and these run under SwiftShader at a few frames per second on a loaded machine. Short waits
+// therefore fail non-deterministically: the deploy gate failed on test 5 in one run, passed it in
+// the next, then failed 5, 7 and 9 in a third, with no code change between any of them. Every
+// wait under 20 s has been raised to 20 s; none of the assertions changed, only the patience.
 const scaled = (ms) => ms * TIMEOUT_SCALE;
 
 test("the smoke server preserves production terrain byte-range semantics", async () => {
@@ -280,7 +285,7 @@ test("the published Indoor route boots its Three.js facility and transitions opt
     await page.waitForFunction(
       () => globalThis.__gunsIndoor.state?.link?.mode === "rf",
       undefined,
-      { timeout: scaled(3000) },
+      { timeout: scaled(20000) },
     );
     const handoff = await page.evaluate(() => ({
       phase: document.body.dataset.phase,
@@ -756,7 +761,7 @@ test("the published web app boots to a running flight kernel (no fatal render er
       await page.waitForFunction((roundsBefore) =>
         globalThis.__gunsState?.gun_firing === true
           && Number(globalThis.__gunsState?.rounds_fired) > roundsBefore,
-      roundsBeforeTrigger, { polling: scaled(100), timeout: scaled(5000) });
+      roundsBeforeTrigger, { polling: scaled(100), timeout: scaled(20000) });
     } finally {
       await page.keyboard.up("f");
     }
@@ -1810,7 +1815,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         await page.waitForFunction((initialG) =>
           Number(globalThis.__gunsState?.requested_roll_control) > 0.2
             && Number(globalThis.__gunsState?.requested_g_cmd) > initialG + 0.2,
-        baselineG, { timeout: scaled(5000) });
+        baselineG, { timeout: scaled(20000) });
         const engagedStick = await page.evaluate(() => {
           const element = document.querySelector("#fallback-stick");
           return {
@@ -1839,7 +1844,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           return element?.dataset.active === "false"
             && Math.abs(Number(globalThis.__gunsState?.requested_roll_control)) < 0.05
             && Number(globalThis.__gunsState?.requested_g_cmd) < initialG + 0.2;
-        }, baselineG, { timeout: scaled(5000) });
+        }, baselineG, { timeout: scaled(20000) });
         const releasedStick = await page.evaluate(() => {
           const element = document.querySelector("#fallback-stick");
           return {
@@ -1912,7 +1917,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         });
         await page.waitForFunction(() =>
           globalThis.__gunsMobile?.targetFireHeld === true,
-        undefined, { timeout: scaled(5000) });
+        undefined, { timeout: scaled(20000) });
         await targetStick.dispatchEvent("pointerup", {
           pointerId: firePointerId,
           pointerType: "touch",
@@ -1925,7 +1930,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         await page.waitForFunction(() =>
           globalThis.__gunsMobile?.targetFireHeld !== true
             && globalThis.__gunsState?.gun_firing !== true,
-          undefined, { timeout: scaled(5000) });
+          undefined, { timeout: scaled(20000) });
 
         const throttleRocker = page.locator("#touch-throttle-rocker");
         const throttleBox = await throttleRocker.boundingBox();
@@ -1986,7 +1991,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         });
         await page.waitForFunction((initialThrottle) =>
           Number(globalThis.__gunsState?.requested_throttle) < initialThrottle - 0.025,
-        baselineThrottle, { timeout: scaled(5000) });
+        baselineThrottle, { timeout: scaled(20000) });
         const decreasedThrottle = await page.evaluate(() => {
           const element = document.querySelector("#touch-throttle-rocker");
           return {
@@ -2039,7 +2044,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
             direction: element.dataset.direction,
             y: Number.parseFloat(element.style.getPropertyValue("--throttle-y")),
           };
-        }, steadyThrottle, { timeout: scaled(5000) });
+        }, steadyThrottle, { timeout: scaled(20000) });
         // Capture the exact animation frame which satisfied the motion predicate. A separate
         // evaluate() can race the flight automation on slower CI runners and observe a later
         // throttle value even though the rocker already proved it moved upward.
@@ -2254,7 +2259,7 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
       await page.waitForFunction(
         () => Number(globalThis.__gunsState?.requested_roll_control) <= -0.5,
         undefined,
-        { timeout: scaled(5000) },
+        { timeout: scaled(20000) },
       );
       await page.waitForFunction(
         () => Math.abs(Number(globalThis.__gunsState?.bank_deg)) >= 8,
@@ -2267,7 +2272,7 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
     await page.waitForFunction(
       () => Number(globalThis.__gunsState?.requested_roll_control) === 0,
       undefined,
-      { timeout: scaled(5000) },
+      { timeout: scaled(20000) },
     );
 
     // The right stick must arm the look gesture rather than falling through to the scene.
@@ -2295,7 +2300,7 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
             )) >= 4;
         },
         undefined,
-        { timeout: scaled(5000) },
+        { timeout: scaled(20000) },
       );
       await page.waitForTimeout(350);
       const lookOnly = await page.evaluate(() => ({
@@ -2317,14 +2322,14 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
     try {
       await page.waitForFunction(() =>
         globalThis.__gunsMobile?.targetFireHeld === true,
-      undefined, { timeout: scaled(5000) });
+      undefined, { timeout: scaled(20000) });
     } finally {
       await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     }
     await page.waitForFunction(() =>
       globalThis.__gunsMobile?.targetFireHeld !== true
         && globalThis.__gunsState?.gun_firing !== true,
-      undefined, { timeout: scaled(5000) });
+      undefined, { timeout: scaled(20000) });
 
     assert.deepEqual(pageErrors, [], `uncaught page errors:\n${pageErrors.join("\n")}`);
   } finally {

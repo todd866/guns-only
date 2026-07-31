@@ -1339,6 +1339,28 @@ class CombatHud {
     // remain on-screen for formation awareness, but it must not point the pilot away from TARGET 2.
     if (!selectedPrimary) return;
 
+    // A LOCATOR IS FOR SOMETHING YOU CANNOT SEE. If the contact is in front and projects inside
+    // the display, do not draw one: the marker already says where it is, and an arrow adds a
+    // second, contradictory answer.
+    //
+    // Without this the locator drew whenever a target was selected, and the scale below ALWAYS
+    // projects it onto the rect boundary -- so it sat on the edge even with the contact dead
+    // ahead. Centring the target collapses dx/dy toward zero, where the direction is noise, and
+    // the arrow whips around the edge pointing offscreen at the exact moment the pilot has
+    // finally pointed at the thing it is meant to point to.
+    //
+    // Turn toward the arrow and it leaves. That is the whole affordance.
+    const locatorOnScreen = projection.behind !== true
+      && projection.x > this.safeInsets.left + 12
+      && projection.x < this.width - this.safeInsets.right - 12
+      && projection.y > this.safeInsets.top + 12
+      && projection.y < this.height - this.safeInsets.bottom - 12;
+    if (locatorOnScreen) {
+      if (this._debug) this._debug.locatorArrow = null;
+      this._locatorArrowLastNow = Number(frame.now) || 0;
+      return;
+    }
+
     // Direction from the CAMERA-SPACE target vector — the same continuous rule the padlock
     // caret uses. The old projected-point path blew up near the side plane and switched frames
     // entirely for a target behind, which is exactly the "arrow bouncing around" the pilot
@@ -1381,12 +1403,28 @@ class CombatHud {
 
     // Padlock locators live at the actual display edge; normal HUD locators retain the protected
     // tape area. Keep these as scalars so the hot draw path creates no extra layout object.
-    const locatorLeft = safe.left;
-    const locatorRight = safe.right;
-    const locatorTop = frame.padlock ? Math.max(safe.top, this.safeInsets.top + 78) : safe.top;
+    // A BVR contact gets a BEARING, and a bearing belongs on the display edge. Clamping it to
+    // targetSafe instead put a 137 NM contact's chevron mid-screen, planted over the terrain,
+    // where it reads as "the enemy is there in the dirt" rather than "turn that way" -- the same
+    // complaint as the brackets, which were already fixed for exactly this reason. targetSafe's
+    // bottom deliberately stops above the tape area, so on a phone its "edge" is nowhere near
+    // the edge of the screen.
+    //
+    // Inside tally range the contact is a real thing you can see, so the protected tape area
+    // still applies and the locator stays where the rest of the HUD lives.
+    const edgeInsetPx = 10;
+    const atDisplayEdge = frame.padlock || bvrContact;
+    const locatorLeft = atDisplayEdge
+      ? this.safeInsets.left + edgeInsetPx : safe.left;
+    const locatorRight = atDisplayEdge
+      ? this.width - this.safeInsets.right - edgeInsetPx : safe.right;
+    const locatorTop = frame.padlock ? Math.max(safe.top, this.safeInsets.top + 78)
+      : bvrContact ? this.safeInsets.top + edgeInsetPx : safe.top;
     const locatorBottom = frame.padlock
       ? Math.max(locatorTop + 20, safe.bottom)
-      : safe.bottom;
+      : bvrContact
+        ? Math.max(locatorTop + 20, this.height - this.safeInsets.bottom - edgeInsetPx)
+        : safe.bottom;
     const safeCenterX = (locatorLeft + locatorRight) * 0.5;
     const safeCenterY = (locatorTop + locatorBottom) * 0.5;
     const halfWidth = (locatorRight - locatorLeft) * 0.5;
