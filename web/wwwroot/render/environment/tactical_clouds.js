@@ -970,7 +970,12 @@ export function createTacticalCloudField(THREE, options = {}) {
         .addScaledVector(entryForward, distanceAhead)
         .addScaledVector(entryRight, side)
         .addScaledVector(entryUp, height);
-      entryWispDummy.quaternion.copy(camera.quaternion);
+      // FACE the camera, do not COPY it. Copying the camera quaternion inherits its ROLL, so the
+      // whole wisp field rotated with the aircraft and the sky visibly span around the canopy in
+      // every turn -- clouds do not do that, and it is the fastest way to make a painted sky read
+      // as a decal stuck to the screen. lookAt keeps the billboard facing the eye while its own
+      // up-vector stays world-up, which is what a roll-free billboard is.
+      entryWispDummy.lookAt(camera.position);
       entryWispDummy.rotateZ((unitHash(index, 0, 96) - 0.5) * 0.55);
       entryWispDummy.scale.set(
         4.5 + unitHash(index, 0, 97) * 7.5 + proximity * 5,

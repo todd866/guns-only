@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=225";
+import { createHud } from "./hud.js?v=226";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=225";
+} from "./render/debrief/sortie_result.js?v=226";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -49,7 +49,7 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=225";
+} from "./render/release/release_identity.js?v=226";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -62,7 +62,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=225";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=226";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -139,13 +139,13 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=225";
+} from "./render/telemetry/ai_frame_pressure.js?v=226";
 import { FrameGovernorPolicy } from "./render/telemetry/frame_governor.js";
 import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compression.js";
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=225";
+} from "./render/telemetry/telemetry_batch.js?v=226";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -154,7 +154,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=225";
+} from "./render/settings/player_settings.js?v=226";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -200,11 +200,12 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=225";
+} from "./render/scene/scene_builders.js?v=226";
 import {
   setFlightAudioEnabled,
+  suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=225";
+} from "./render/audio/flight_audio.js?v=226";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -983,6 +984,7 @@ const governorQaLevel = ["localhost", "127.0.0.1"].includes(location.hostname)
   ? Number(new URL(location.href).searchParams.get("governorLevel"))
   : NaN;
 let governorQaApplied = false;
+let previousRunPausedForAudio = false;
 const mobileControls = localTouchPreview || coarsePointer || (touchCapable && smallViewport);
 document.documentElement.classList.toggle("touch-mode", mobileControls);
 document.documentElement.classList.toggle("touch-primary", mobileControls);
@@ -3642,7 +3644,18 @@ function renderPauseUi(state = latestState) {
       + (ready ? iosFullscreenHint : "");
   }
 
-  document.documentElement.classList.toggle("run-paused", pauseReasons.size > 0);
+  const runPaused = pauseReasons.size > 0;
+  document.documentElement.classList.toggle("run-paused", runPaused);
+  // A paused flight clock with a running engine note is a bug you can hear. suspendFlightAudio has
+  // existed the whole time and nothing ever called it, so the engine kept singing through every
+  // pause, every ready screen and every debrief. It cuts the master before asking the browser to
+  // suspend, so a rejected suspend cannot leave a ghost voice behind; the next armAudio on resume
+  // brings it back.
+  if (runPaused !== previousRunPausedForAudio) {
+    previousRunPausedForAudio = runPaused;
+    if (runPaused) suspendFlightAudio("run-paused");
+    else activeView?.hud?.armAudio?.();
+  }
   sceneCanvas.inert = showScreen;
   touchControls.inert = showScreen;
   if (testFlightConsole) testFlightConsole.inert = showScreen;
@@ -10188,7 +10201,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=225")
+    navigator.serviceWorker.register("service-worker.js?v=226")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);
