@@ -5857,6 +5857,50 @@ public sealed class SimulationSession {
         return QuaternionD.FromFrame(bodyUp.Cross(forward).Normalized(), bodyUp, forward);
     }
 
+    /// <summary>
+    /// Ground kinematics for a fixed-strip rollout: aerobrake, rolling resistance and wheel brake.
+    ///
+    /// The coefficients are ConventionalRunwayRecoveryModel's, which are already used and tested
+    /// for a land rollout, and they turn out to describe this aircraft well: a delta held at about
+    /// 20 degrees alpha has CD near 0.184, which at recovery weight is a deceleration of
+    /// 0.000213 x V^2 against that model's 0.00022 aerodynamic factor. The aerobrake the recovery
+    /// is designed around is therefore what the numbers already say it is, not a new invention.
+    ///
+    /// Throttle still matters, and deliberately: idle commands the hardest braking, and leaving
+    /// power on lengthens the rollout and can carry the hook past the array.
+    /// </summary>
+    AircraftState CurrentStripRolloutState(double stepSeconds) {
+        const double RollingResistanceMps2 = 0.22;
+        const double AerobrakeDragFactor = 0.00022;
+        const double MaximumWheelBrakeMps2 = 3.4;
+        const double FullBrakeThrottle = 0.22;
+
+        AircraftState state = _player.State;
+        if (_carrier is null) return state;
+
+        Vec3D forward = _carrier.LandingFwd;
+        double speedAlong = System.Math.Max(0.0, state.VelocityVector().Dot(forward));
+        double throttle = System.Math.Clamp(_player.LastAppliedCommand.Throttle, 0.0, 1.5);
+        double brakeFraction = System.Math.Clamp(
+            (FullBrakeThrottle - throttle) / FullBrakeThrottle, 0.0, 1.0);
+        double deceleration = RollingResistanceMps2
+            + AerobrakeDragFactor * speedAlong * speedAlong
+            + MaximumWheelBrakeMps2 * brakeFraction;
+        double nextSpeed = System.Math.Max(0.0,
+            speedAlong - deceleration * System.Math.Max(0.0, stepSeconds));
+
+        // Hold the aircraft ON the surface, not in it. LandingAircraftSupportFrame subtracts
+        // AircraftSupportReferenceHeightM, so placing the jet back at LandingPoint(along, cross)
+        // with no height put it that far UNDER the strip -- measured -0.8 m, which reads as a
+        // surface penetration and ends the sortie the instant the rollout begins.
+        var (along, cross, _) = _carrier.LandingAircraftSupportFrame(state.Position);
+        Vec3D position = _carrier.LandingPoint(
+            along, cross, _carrier.AircraftSupportReferenceHeightM);
+        Vec3D velocity = _carrier.DeckVelocityWorld + forward * nextSpeed;
+        return Carrier.StateFromVelocity(position, velocity, state.Mass,
+            CarrierConstrainedAttitude(_carrier, _player.BodyPitchRad));
+    }
+
     AircraftState CurrentArrestmentState() {
         if (_carrier is null) return _player.State;
         Vec3D velocity = _carrier.DeckVelocityWorld
@@ -5934,13 +5978,22 @@ public sealed class SimulationSession {
         var currentDeck = _carrier.AircraftSupportFrame(_player.State.Position);
         bool topDeckContact = contact is Carrier.Recovery.Trap
                 or Carrier.Recovery.Bolter or Carrier.Recovery.HardLanding
+                or Carrier.Recovery.RollingOut
             && previousDeck.height >= -0.05 && currentDeck.height <= 0.05
             && _carrier.DeckSinkRateMps(_player.State) > 0.0;
         Carrier.SolidCollision solid = _carrier.SweptSolidCollision(
             previousPlayerState.Position, _player.State.Position);
 
-        if (_touchdown.Recovery == Carrier.Recovery.Flying
-            && contact != Carrier.Recovery.Flying) {
+        // The recorded result must be the ENGAGEMENT, not the arrival. A strip recovery now makes
+        // contact as RollingOut and only takes the wire a kilometre later, so latching the first
+        // non-Flying contact froze the result as "missed the wires" while the aircraft went on to
+        // arrest and stop. Refresh it when the rollout converts to a trap: on a strip the wire is
+        // the outcome, and the touchdown was only how the aircraft got to it.
+        if ((_touchdown.Recovery == Carrier.Recovery.Flying
+                && contact != Carrier.Recovery.Flying)
+            || (_touchdown.Recovery == Carrier.Recovery.RollingOut
+                && contact is Carrier.Recovery.Trap or Carrier.Recovery.Bolter
+                    or Carrier.Recovery.HardLanding)) {
             _touchdown = touchdown;
             _carrierPass.Complete(touchdown);
         }
@@ -5984,6 +6037,16 @@ public sealed class SimulationSession {
                     - _carrier.DeckFrame(_player.State.Position).height;
             RegisterUndamagedCrash(CombatRole.Player, surface,
                 surfaceVelocity, surfaceHeight, carrierSolid: solid);
+        } else if (contact == Carrier.Recovery.RollingOut) {
+            // ON THE GROUND, BRAKING, WIRES AHEAD. Hold the aircraft on the surface and let it
+            // decelerate; the per-tick EvaluateRecovery will return Trap by itself the moment the
+            // hook sweeps a wire, so the engagement happens at rollout speed rather than at
+            // approach speed. This is the state that never existed: a strip touchdown short of the
+            // wires used to be called a bolter and flown away in the same tick.
+            if (_recovery != Carrier.Recovery.RollingOut) ShowTransition("ROLLOUT");
+            _recovery = Carrier.Recovery.RollingOut;
+            _detents.ApproachMode = false;
+            _player.AdoptExternalKinematics(CurrentStripRolloutState(FixedDeltaSeconds));
         } else if (contact == Carrier.Recovery.Bolter) {
             _attemptHadSetback = true;
             SelectAutomaticConfigurationTarget(FlightConfigurationTarget.Combat);

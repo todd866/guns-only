@@ -355,7 +355,10 @@ public class RapierTests {
         Assert.Same(FlightModel.RapierPublicDataSurrogate, session.Beat.PlayerAir);
         Assert.Equal(Carrier.PlatformKind.FixedArrestingStrip, session.Carrier!.Kind);
         Assert.False(session.Carrier.IsMaritime);
-        Assert.Equal(1_200.0, session.Carrier.DeckLengthM, precision: 6);
+        // 10,000 ft. The strip was 1,200 m purely because it reused the ship deck's geometry;
+        // a dispersed strip for a Mach 4 interceptor is a runway and needs a braking run in
+        // front of the midfield wire.
+        Assert.Equal(3_048.0, session.Carrier.DeckLengthM, precision: 6);
         Assert.Equal(48.0, session.Carrier.DeckHalfWidthM * 2.0, precision: 6);
         Assert.Equal(RapierLaunchSite.OperatingSurfaceElevationM,
             session.Carrier.Position.Y, precision: 6);

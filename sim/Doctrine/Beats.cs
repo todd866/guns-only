@@ -942,7 +942,13 @@ public static class Beats {
             deckCentre: new Vec3D(0, RapierLaunchSite.OperatingSurfaceElevationM, 0),
             headingRad: -Math.PI / 2, speedMps: 0,
             deckAltM: RapierLaunchSite.OperatingSurfaceElevationM,
-            deckLengthM: 1_200, deckWidthM: 48,
+            // 10,000 ft x 48 m. This was 1,200 m, inherited wholesale from the ship deck whose
+            // geometry it reuses -- nobody ever sized it as a runway. A dispersed strip for a
+            // Mach 4 interceptor is a runway, and the recovery it is built around (touch down,
+            // aerobrake on the delta, take the wire at midfield) needs braking distance in front
+            // of the wire. At 1,200 m there was none: the wires sat at the touchdown point, so the
+            // arrest had to be won at approach speed, which this aircraft cannot fly.
+            deckLengthM: 3_048, deckWidthM: 48,
             configuration: GunsOnly.Sim.Carrier.DeckConfiguration.Axial,
             kind: GunsOnly.Sim.Carrier.PlatformKind.FixedArrestingStrip,
             aircraftSupportReferenceHeightM:

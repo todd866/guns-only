@@ -174,7 +174,14 @@ public sealed class Carrier {
     /// This remains separate from ApproachCuePoint because the flown jet has pitch/flight-path lag:
     /// commanding the current velocity vector at the wire itself all the way in steepens the last
     /// seconds of the pass and produces a ramp strike or a blown touchdown.
-    public double TouchdownAlongM => -DeckLengthM * 0.2;
+    /// On a ship, 20% aft of centre, and it IS wire three -- a deck landing has no braking run.
+    /// On a strip, 35% aft, which on a 3,048 m strip puts the wheels 457 m in from the threshold
+    /// with 1,067 m of aerobrake ahead of the midfield wire. That distance is the point: it takes
+    /// the aircraft from a safe 1.3 Vs touchdown to roughly 147 kt at the wire, inside the 159 kt
+    /// arrest gate, which it cannot achieve in the air at any realistic recovery weight.
+    public double TouchdownAlongM => Kind == PlatformKind.FixedArrestingStrip
+        ? -DeckLengthM * 0.35
+        : -DeckLengthM * 0.2;
     public Vec3D TouchdownPoint => _difficulty.Level <= 0
         ? Position + Fwd * TouchdownAlongM
         : DeckPoint(Fwd * TouchdownAlongM);
@@ -326,9 +333,25 @@ public sealed class Carrier {
         + new Vec3D(0, horizontalOffset.Dot(Fwd) * System.Math.Tan(DeckPitchRad), 0);
 
     /// Wire numbers run aft-to-forward. The visual aim point is deliberately wire three.
+    /// <summary>
+    /// Where the wire array sits along the landing area.
+    ///
+    /// On a ship this is the touchdown point: the wires are at the round-down because a deck
+    /// landing is a controlled crash into them and there is no room for anything else.
+    ///
+    /// A fixed arresting strip is not a deck. Its recovery is touchdown, aerobrake, THEN engage,
+    /// so the array sits at midfield with the braking run in front of it. Wires at the touchdown
+    /// point forced the whole arrest to happen at approach speed, and this aircraft cannot fly a
+    /// safe approach speed and meet the arrest gate at once: at recovery weight 1.3 Vs is 192 kt
+    /// against a 159 kt gate. The braking run is what closes that gap.
+    /// </summary>
+    public double WireDatumAlongM => Kind == PlatformKind.FixedArrestingStrip
+        ? 0.0
+        : TouchdownAlongM;
+
     public double WireAlongM(int wire) {
         if (wire < 1 || wire > 4) throw new System.ArgumentOutOfRangeException(nameof(wire));
-        return TouchdownAlongM + (wire - 3) * WireSpacingM;
+        return WireDatumAlongM + (wire - 3) * WireSpacingM;
     }
 
     public int CaughtWire(in Vec3D contactPoint) {
@@ -454,7 +477,19 @@ public sealed class Carrier {
         HardLanding,
         RampStrike,
         InTheWater,
-        ArrestmentFailed
+        ArrestmentFailed,
+        /// <summary>
+        /// On the surface, decelerating, wires still ahead. Produced ONLY by a
+        /// <see cref="PlatformKind.FixedArrestingStrip"/> -- a ship has no braking run, so a deck
+        /// pass either catches in that instant or goes around, and no ship code path can reach
+        /// this value.
+        ///
+        /// This is the state the Rapier recovery is actually built around: touch down, aerobrake
+        /// on the delta, then take the wire at midfield. Without it, a strip landing that had not
+        /// yet reached the wires was classified a bolter and flown away in the same tick, so the
+        /// braking run could never happen and the arrest had to be won at approach speed.
+        /// </summary>
+        RollingOut
     }
 
     /// Classify the aircraft against the deck this instant. Trap = touched the deck within its
@@ -527,6 +562,20 @@ public sealed class Carrier {
 
         bool captured = wire != 0 && sweep <= MaxHookSweepAfterTouchdownM;
         double lastWireBehind = hookAlong - WireAlongM(4);
+
+        // STRIP ROLLOUT. On a strip the wires are at midfield, so a touchdown in the first third
+        // of the runway leaves the hook a kilometre short of them. That is not a bolter -- the
+        // aeroplane is on the ground, decelerating, doing exactly what the recovery asks. It was
+        // being called a bolter and flown away in the same tick, which is why a ground roll has
+        // never been seen in this game and why landing felt impossible: there was no state in
+        // which an aircraft was simply ON the runway.
+        //
+        // A ship can never reach this: its wires are AT the touchdown point, so the hook is never
+        // short of them, and the guard on Kind makes that explicit rather than implied.
+        bool rollingToTheWires = Kind == PlatformKind.FixedArrestingStrip
+            && !captured
+            && hookAlong < WireAlongM(1) - MaxHookSweepAfterTouchdownM
+            && quality != TouchdownQuality.Blown;
         HookOutcome hook = captured ? HookOutcome.Engaged
             : lastWireBehind >= 0.0 && lastWireBehind <= InFlightWireWindowM
                 ? HookOutcome.InFlightEngagement
@@ -542,7 +591,10 @@ public sealed class Carrier {
                 sink, measuredIasMps, closure, cross, wheelAlong, hookAlong);
         }
 
-        return new TouchdownResult(captured ? Recovery.Trap : Recovery.Bolter,
+        return new TouchdownResult(
+            captured ? Recovery.Trap
+                : rollingToTheWires ? Recovery.RollingOut
+                : Recovery.Bolter,
             quality, hook, grade, deviations, correction, capturedWire,
             sink, measuredIasMps, closure, cross, wheelAlong, hookAlong);
     }

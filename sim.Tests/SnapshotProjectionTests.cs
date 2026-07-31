@@ -607,7 +607,7 @@ public class SnapshotProjectionTests {
             root.GetProperty("platform_presentation_id").GetString());
         Assert.Equal("presentation.vehicle.rapier.public-data-surrogate.v1",
             root.GetProperty("player_presentation_id").GetString());
-        Assert.Equal(1_200.0, root.GetProperty("deck_len").GetDouble());
+        Assert.Equal(3_048.0, root.GetProperty("deck_len").GetDouble());
         Assert.Equal(0.0, root.GetProperty("wod_kts").GetDouble());
     }
 

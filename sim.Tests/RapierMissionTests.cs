@@ -305,10 +305,34 @@ public class RapierMissionTests {
                 + $"hook {session.Touchdown.HookAlongM:F1} m; "
                 + $"mass {session.Player.State.Mass:F0} kg / "
                 + $"fuel {session.PlayerFuel.FuelLb:F0} lb");
-        Assert.InRange(session.PlayerFuel.FuelLb, 100.0, 2_200.0);
-        Assert.True(maximumAltitudeM <= 75_000.0 * 0.3048,
+        // Assert the FUEL PLAN, not a band. 100-2,200 lb was calibrated against the old 3,600 lb
+        // alert load, where landing on fumes was normal because the aircraft launched with barely
+        // enough to get home. On a full internal load the sortie lands with roughly 6,000 lb, and
+        // the property worth protecting is the one a fuel plan actually states: never below MFR,
+        // and having genuinely burned something getting there.
+        Assert.True(session.PlayerFuel.FuelLb >= FuelPlan.MinimumFuelReserveLb,
+            $"landed below MFR: {session.PlayerFuel.FuelLb:F0} lb against "
+                + $"{FuelPlan.MinimumFuelReserveLb:F0} lb (approach 300 + FFR 500)");
+        Assert.True(session.PlayerFuel.FuelLb < 9_920.0 - 1_000.0,
+            $"the sortie barely used any fuel: {session.PlayerFuel.FuelLb:F0} lb remaining");
+        // 105,000 ft, was 75,000. The cap was written while the Sanger skip-glide was not firing
+        // at all -- the profile never reached ZoomPull -- so FL750 looked like a ceiling when it
+        // was only the RamClimb target (CruiseAltitudeM). The lob now works, and leaving the
+        // atmosphere is the entire point of it: that is why the airframe carries 220 kNm of
+        // cold-gas RCS and has ZoomCoast and ReenterAlign phases at all.
+        //
+        // The apex is energetically honest rather than a model escape. Pulling at M2.2 from FL464
+        // is an energy height near 116,800 ft, so a 98,288 ft apex leaves roughly M0.9 over the
+        // top, which is what the flown profile shows. The bound is kept, just moved to where it
+        // still catches nonsense instead of catching the design.
+        Assert.True(maximumAltitudeM <= 105_000.0 * 0.3048,
             $"profile climbed to {maximumAltitudeM / 0.3048:F0} ft");
-        Assert.True(maximumAbsVerticalSpeedMps <= 60_000.0 * 0.00508,
+        // 75,000 ft/min, was 60,000, and for the same reason as the altitude bound above: the
+        // number was set while the lob never fired. 62,111 ft/min is 315 m/s of vertical speed,
+        // which is simply M2.2 -- 649 m/s -- pulled through the lob's ~30 degree path angle. It is
+        // the zoom being a zoom, not the model running away, and the bound still catches a runaway
+        // at a third again as much.
+        Assert.True(maximumAbsVerticalSpeedMps <= 75_000.0 * 0.00508,
             $"profile reached {maximumAbsVerticalSpeedMps / 0.00508:F0} ft/min");
         Assert.True(maximumAbsBankRad <= 32.0 * Math.PI / 180.0,
             $"automation banked {maximumAbsBankRad * 180.0 / Math.PI:F1}°");
