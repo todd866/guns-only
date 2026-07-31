@@ -1786,9 +1786,11 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         assert.ok(phoneState.hud.ladderRungs.every((rung) => rung.deg % 10 === 0),
           `${viewport.width}x${viewport.height}: minor pitch ladder clutter survived`);
 
-        const stick = page.locator("#fallback-stick");
+        // The RIGHT stick carries roll and pitch now; the left one is throttle and yaw, so
+        // dragging it can never satisfy the roll/G assertion below.
+        const stick = page.locator("#target-stick");
         const stickBox = await stick.boundingBox();
-        assert.ok(stickBox, `${viewport.width}x${viewport.height}: virtual stick has no box`);
+        assert.ok(stickBox, `${viewport.width}x${viewport.height}: flight stick has no box`);
         const centre = {
           x: stickBox.x + stickBox.width / 2,
           y: stickBox.y + stickBox.height / 2,
@@ -2242,8 +2244,11 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
     assert.ok(reach.right.hit, `right stick unreachable — touches land on "${reach.right.top}"`);
 
     // Full-left roll through the platform touch pipeline (CDP synthesises real touch events).
+    // THE RIGHT STICK FLIES. This dragged #fallback-stick (the left one) and waited for roll,
+    // which was correct while the left stick flew the aircraft. It now carries throttle and yaw,
+    // so a leftward drag there commands rudder and the roll assertion could never come true.
     const [sx, sy] = await page.evaluate(() => {
-      const r = document.querySelector("#fallback-stick").getBoundingClientRect();
+      const r = document.querySelector("#target-stick").getBoundingClientRect();
       return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)];
     });
     const cdp = await context.newCDPSession(page);
