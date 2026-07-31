@@ -2634,6 +2634,25 @@ class CombatHud {
     ctx.closePath();
     ctx.fill();
 
+    // Commanded-power bug from the golden-path schedule. The pilot's whole energy task is to put
+    // the lever caret on this: no "PULL POWER" caption, no number to read, and when the descent
+    // schedule says come off the gas the bug simply slides down and you follow it. Drawn soft and
+    // hollow so it reads as a target rather than as another gauge competing for the rail.
+    const commandedPower = Number(state?.golden_path_power_01);
+    if (state?.golden_path_valid === true && Number.isFinite(commandedPower)) {
+      const by = yOf(clamp(commandedPower, 0, 1));
+      ctx.save();
+      ctx.strokeStyle = "rgba(242, 217, 160, 0.72)";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(x - 7, by);
+      ctx.lineTo(x - 1, by - 4);
+      ctx.lineTo(x - 1, by + 4);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";

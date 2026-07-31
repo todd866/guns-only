@@ -4,6 +4,7 @@ using GunsOnly.Sim.Casevac;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
 using GunsOnly.Sim.Propulsion;
+using GunsOnly.Sim.Recovery;
 using GunsOnly.Sim.Training;
 using GunsOnly.Sim.Turbulence;
 
@@ -3155,11 +3156,54 @@ public sealed class SimulationSession {
         return _recoveryProcedure.TrySet((RecoveryProcedureKind)kindCode, homePos, heading);
     }
 
+    GoldenPathPoint _goldenPath;
+    /// <summary>
+    /// The recovery schedule: what altitude and speed the pilot should hold at their present
+    /// distance-to-go, how much power that wants, and which limit is shaping it. Drawn as a
+    /// ribbon and a power bug; never spoken.
+    /// </summary>
+    public GoldenPathPoint RecoverySchedule => _goldenPath;
+
+    /// Provisional until fitted from a flown descent. Every track-mile figure the schedule
+    /// reports scales directly off this, so it is the first thing to measure rather than assume.
+    const double RecoveryDragToWeight = 0.12;
+
+    /// Distance-to-go is range to the ladder's last gate: the stabilisation point is the only
+    /// fixed end of the recovery, and it is what the schedule is solved backwards from.
+    void UpdateGoldenPath() {
+        if (_recoveryProcedure.Gates.Count == 0) {
+            _goldenPath = default;
+            return;
+        }
+        RecoveryGate last = _recoveryProcedure.Gates[^1];
+        Vec3D p = Player.State.Position;
+        double dx = p.X - last.EastM;
+        double dz = p.Z - last.NorthM;
+        double distanceToGoM = System.Math.Sqrt(dx * dx + dz * dz);
+        // The gear/flap placard only binds once something is hanging out. Clean, the corridor is
+        // owned by q and skin temperature instead.
+        bool dirty = PlayerSystems.AllGearDownAndLocked
+            || System.Math.Max(PlayerSystems.LeftFlapDegrees, PlayerSystems.RightFlapDegrees) > 1.0;
+        double placardMps = dirty
+            ? (_beat.SystemsProfile ?? AirframeSystemsProfile.RapierSurrogate).GearAndFlapLimitKias / AirData.MpsToKnots
+            : double.PositiveInfinity;
+        _goldenPath = GoldenPath.Solve(
+            distanceToGoM,
+            Player.State.Position.Y,
+            Player.State.Speed,
+            _weatherProfile?.Atmosphere ?? StandardAtmosphere1976.Instance,
+            stabiliseAltitudeM: 152.0,
+            stabiliseSpeedMps: 90.0,
+            dragToWeight: RecoveryDragToWeight,
+            configurationCeilingMps: placardMps);
+    }
+
     void UpdateRecoveryProcedure() {
         if (_recoveryProcedure.Kind == RecoveryProcedureKind.None) return;
         // RecoveryGate.TargetKtas is TRUE airspeed. IndicatedAirspeedMps is not, and by the top of
         // a recovery the difference is most of the energy band being measured against.
         double trueAirspeedKnots = Player.State.Speed * AirData.MpsToKnots;
+        UpdateGoldenPath();
         _recoveryProcedure.Step(
             Player.State.Position,
             trueAirspeedKnots,

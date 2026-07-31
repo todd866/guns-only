@@ -922,7 +922,17 @@ internal static class SnapshotProjection {
             + $"\"recovery_gate_config_ok\":{(recovery.ConfigOk ? "true" : "false")},"
             + $"\"recovery_gate_target_ktas\":{NullableNumberJson(recoveryGate?.TargetKtas)},"
             + $"\"recovery_gate_dirty\":{(recoveryGate?.DirtyConfig == true ? "true" : "false")},"
-            + $"\"recovery_gates_json\":{SnapshotJson.JsonString(MeshSnapshot.RecoveryGatesJson(Session))},";
+            + $"\"recovery_gates_json\":{SnapshotJson.JsonString(MeshSnapshot.RecoveryGatesJson(Session))},"
+            // The golden-path schedule. The ribbon reads the target altitude and speed, the power
+            // bug reads commanded_power, and the console tab reads the limit so the pilot can ask
+            // WHY the bug moved instead of being told to pull power and having to trust it.
+            + $"\"golden_path_valid\":{(Session.RecoverySchedule.Valid ? "true" : "false")},"
+            + $"\"golden_path_target_alt_m\":{Session.RecoverySchedule.TargetAltitudeM:F1},"
+            + $"\"golden_path_target_tas_mps\":{Session.RecoverySchedule.TargetTrueAirspeedMps:F1},"
+            + $"\"golden_path_power_01\":{Session.RecoverySchedule.CommandedPower01:F3},"
+            + $"\"golden_path_excess_energy_m\":{Session.RecoverySchedule.ExcessEnergyM:F0},"
+            + $"\"golden_path_track_required_m\":{Session.RecoverySchedule.TrackRequiredM:F0},"
+            + $"\"golden_path_limit\":{SnapshotJson.JsonString(LimitToken(Session.RecoverySchedule.Limit))},";
     }
 
     static string FiniteNumberJson(double value) => SnapshotJson.FiniteNumberJson(value);
@@ -1764,5 +1774,12 @@ internal static class SnapshotProjection {
         "WIRE_FINAL" => 7,
         "COMPLETE" => 8,
         _ => 0,
+    };
+
+    static string LimitToken(GunsOnly.Sim.Recovery.DescentLimit limit) => limit switch {
+        GunsOnly.Sim.Recovery.DescentLimit.DynamicPressure => "dynamic_pressure",
+        GunsOnly.Sim.Recovery.DescentLimit.SkinTemperature => "skin_temperature",
+        GunsOnly.Sim.Recovery.DescentLimit.Configuration => "configuration",
+        _ => "none",
     };
 }
