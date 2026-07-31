@@ -677,8 +677,57 @@
       /* Portrait keeps both sticks clear. Parking the actions column above the right stick put
          a button over the centre-hold fire target, so the stick never armed. Fire in portrait is
          the stick's centre hold, which is the whole point of that design. */
-      .portrait-assist .touch-left,
-      .portrait-assist .touch-right { display: none; }
+      /* Hide the ACTIONS column, not the whole right rail. The documented bug was that parking
+         the actions column above the right stick covered the centre-hold fire target so the stick
+         never armed -- that was .touch-actions specifically. Hiding all of .touch-right took the
+         gear and flaps with it, and a child of a display:none parent cannot be brought back, so
+         the landing controls were unreachable in portrait on an aircraft whose whole mission ends
+         in a landing. */
+      .portrait-assist .touch-left { display: none; }
+      .portrait-assist .touch-right .touch-actions { display: none; }
+
+      /* ...and #portrait-chips is what replaces them. It carried `display: none` with no rule
+         anywhere turning it back on, so portrait hid the throttle, the gear, the flaps, FIRE,
+         PADLOCK and TARGET and put NOTHING in their place: two sticks and no other control on
+         the aircraft. The block comment above already says these controls "sit above it"; they
+         simply never did.
+
+         The row sits above the sticks rather than beside them, which is what keeps the documented
+         bug fixed -- parking the actions column over the right stick covered the centre-hold fire
+         target and the stick never armed. Fire stays the stick's centre hold. */
+      .portrait-assist #portrait-chips:not([hidden]) {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: 1fr;
+        gap: 8px;
+        position: absolute;
+        left: max(12px, env(safe-area-inset-left));
+        right: max(12px, env(safe-area-inset-right));
+        bottom: calc(min(36vw, 156px) + 28px + env(safe-area-inset-bottom));
+        pointer-events: auto;
+      }
+      .portrait-assist #portrait-chips .touch-control {
+        min-height: 52px;
+        font-size: 12px;
+        letter-spacing: .08em;
+      }
+      /* Gear and flaps are not optional on a landing, and the Rapier recovery ends in one. Ride
+         them above the chip row rather than over the stick. */
+      .portrait-assist .touch-right {
+        position: absolute;
+        left: max(12px, env(safe-area-inset-left));
+        right: max(12px, env(safe-area-inset-right));
+        bottom: calc(min(36vw, 156px) + 88px + env(safe-area-inset-bottom));
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        pointer-events: none;
+      }
+      .portrait-assist #touch-context-controls:not([hidden]) {
+        display: flex;
+        gap: 8px;
+        pointer-events: auto;
+      }
       .touch-mode.touch-primary #fallback-stick,
       .touch-mode.touch-primary #target-stick {
         width: min(31vw, 124px);
