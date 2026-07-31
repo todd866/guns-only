@@ -8,7 +8,7 @@ import {
   UKRAINE_SOFT_WORLD_HAZE_MIX,
   UKRAINE_SOFT_WORLD_HAZE_RGB,
 } from "../environment/soft_world_atmosphere.js";
-import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=217";
+import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=218";
 import rapierV1Definition from "../../airframes/rapier_v1.embedded.js";
 import { createRapierLaunchFx } from "../effects/rapier_launch_fx.js";
 
