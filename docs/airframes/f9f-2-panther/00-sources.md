@@ -56,15 +56,42 @@ paddles LSO, barrier at the far end. There is no bolter. A late wave-off is ther
 paid for by an engine that is still spooling, and `SpoolUpTau` is what makes that trade real
 rather than decorative. If one number here is worth replacing with a measured one, it is this.
 
+## Approach speed — CLOSED, 2026-07-31
+
+**114 knots.** From a pilot's account of the carrier pattern in Ginter/Squadron *F9F
+Panther/Cougar in Action*: aircraft lower flaps and gear on the downwind leg, and the approach is
+flown at 114 kt, turning in "looking for a roger and cut" — i.e. this is the paddles groove
+itself, not a handbook figure.
+
+Recovered by OCR (the book is an image-only scan; PaperLibrary held it with no text layer).
+Verification, because a misread digit goes straight into a flight model:
+
+- The figure appears **twice in the same passage**, independently OCR'd — once as
+  "Approach speed was 114 knots" and again as "hold 114 knots and turn into the carrier". Letters
+  around it are mangled; both digit groups agree.
+- It is **running prose, not a table**, which is what tesseract reads reliably. The tabular
+  artwork panel on the same book's spec page is *not* trustworthy — see below.
+- The same book independently corroborates two figures already held from Osprey: maximum speed
+  500 kt, and 923 gal total fuel (= 682 internal + 2 × 120 tip).
+
+**It validates `CLMax` rather than changing it.** A 114 kt approach at a conventional ~1.3 × Vs
+with a full-flap increment of ~0.5 implies a clean CLmax near 1.4, against the 1.35 derived here
+from wing planform alone. No parameter change was warranted — the provisional value survived
+contact with the measurement, which is the outcome worth recording.
+
+**Do not use the spec-panel figures from that book.** The artwork panel OCRs (at 600 dpi) as
+"Stall Speed = 78 Knots" and "Time to Climb = 68 seconds to 10,000 feet". The climb figure is
+~8,800 ft/min, which is not a Panther — Osprey documents 5,140 ft/min. A panel carrying one
+impossible number does not get to supply the others, so the stall speed is discarded too.
+
 ## Known gaps
 
-- **No approach or stall speed with a locator.** The corpus establishes that the Panther's
-  approach speed was a binding design constraint (the Cougar wing grew to preserve it) and that
-  its stalling speed drew complaints, but no number was found. Currently implied by `CLMax` and
-  wing loading rather than asserted.
-- Three Panther books in PaperLibrary are **image-only PDFs with no OCR** — *Detail & Scale*,
-  *in Action*, and *First Grumman Cat of the Jet Age*. Detail & Scale in particular is where
-  approach speeds and structural limits usually live. OCRing those is the obvious next step.
+- **Stall speed still has no trustworthy locator** (see above).
+- *F9F Panther in Detail & Scale* OCR'd to 140k characters of largely unusable text: it is
+  caption-and-diagram heavy, and its performance table defeats OCR (it surfaces only as fragments
+  like "Limited by rate of sink", which is Standard Aircraft Characteristics language — the data
+  is on the page, but not machine-readable at 300 dpi). Reading that page by eye is the way to
+  close the remaining gaps.
 - Water injection is documented but **not modelled**: it is a ~30-second catapult aid, and the
   kernel has no time-boxed boost, so `MaxThrustFraction` stays 1.0. Modelling it as a sustained
   multiplier would hand the pilot a permanent 3.5% — worse than omitting it.
