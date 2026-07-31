@@ -89,10 +89,15 @@ public static class GoldenPath {
         (double ceilingMps, DescentLimit limit) = DescentCorridor.Ceiling(
             here.DensityKgM3, here.TemperatureK, a, configurationCeilingMps);
 
+        double unclippedSpeed = Math.Max(stabiliseSpeedMps, ScheduledSpeed(
+            distanceToGoM, required, stabiliseSpeedMps, trueAirspeedMps));
         double targetSpeed = Math.Min(
-            Math.Max(stabiliseSpeedMps, ScheduledSpeed(
-                distanceToGoM, required, stabiliseSpeedMps, trueAirspeedMps)),
-            double.IsFinite(ceilingMps) ? ceilingMps : double.MaxValue);
+            unclippedSpeed, double.IsFinite(ceilingMps) ? ceilingMps : double.MaxValue);
+        // A placard is only the reason when it actually clips the schedule. Reporting the lowest
+        // ceiling regardless said "skin temperature" for a jet at M3.7 with a M5.67 ceiling --
+        // naming an innocent limit while the real problem was carrying more energy than the
+        // distance can absorb. Nothing binding is itself the honest answer there.
+        bool clipped = targetSpeed < unclippedSpeed - 1e-9;
 
         double targetAltitude = Math.Max(
             stabiliseAltitudeM,
@@ -108,7 +113,7 @@ public static class GoldenPath {
         return new GoldenPathPoint(
             true, distanceToGoM, targetAltitude, targetSpeed, commandedPower,
             excess, required,
-            energyError > 0.0 ? limit : DescentLimit.None);
+            clipped ? limit : DescentLimit.None);
     }
 
     /// <summary>

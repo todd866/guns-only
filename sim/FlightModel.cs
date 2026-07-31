@@ -62,6 +62,9 @@ public readonly record struct PullLimitStatus(PullLimitReason Reason) {
 public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN,
     double CD0, double InducedK, double CLMax, double CLMin, double RollRateMaxRad, double BankTau,
     double MCrit = 0.85, double WaveDragK = 8.0,
+    // Supersonic drag rise beyond the transonic peak. Zero keeps every other airframe
+    // exactly as it was; only aircraft that actually go there need it.
+    double HighMachDragOnset = double.PositiveInfinity, double HighMachDragK = 0.0,
     /// Mach at which the transonic drag rise stops growing. Infinite (the default) reproduces the
     /// original unbounded quadratic exactly; a supersonic airframe declares its peak so the law
     /// stops charging it more drag the faster it goes.
@@ -264,6 +267,73 @@ public static class FlightModel {
         WingSpanM: 11.31,                     // 37 ft 1 in; sets differential-wing moment arm
         PropulsionModel: PropulsionModelKind.J47Ge27,
         FuelFreeMassKg: 6900.0 - FuelModel.DefaultFuelLb * 0.45359237);
+
+    /// KOREA 1950-53 — GRUMMAN F9F-2 PANTHER. The aeroplane Armstrong flew on 78 missions with
+    /// VF-51 off USS Essex (CV-9), and the reason the carrier beat is a different game from the
+    /// Sabre's: a straight thick wing, a centrifugal engine that takes its time, and a deck with
+    /// no angle, no mirror and no bolter.
+    ///
+    /// Dimensions, area, weights, thrust and the sea-level maximum are PUBLIC MEASURED DATA for
+    /// the F9F-2 (Osprey Duel 90, "F9F-2 Panther Specification" data box; wing area corroborated
+    /// in Ginter, Grumman F9F Panther Part 1, in the passage explaining that the Cougar grew the
+    /// wing from 250 to 300 sq ft specifically to hold the Panther's carrier approach speed).
+    /// Everything below marked PROVISIONAL is a fit or a scaling from <see cref="Sabre"/>, which
+    /// is the right neighbour: same decade, same piloted dry-thrust-only class, already tuned in
+    /// this kernel. Deriving from a tuned real contemporary beats deriving from a fictional one.
+    ///
+    /// WHAT MAKES IT FLY UNLIKE THE SABRE, and why the numbers below are not cosmetic:
+    ///   - Draggier and slower on comparable thrust. 575 mph at sea level is documented; against
+    ///     25.6 kN and 23.23 m2 that closes at CD0 ~0.0265, versus the Sabre's fitted 0.0166.
+    ///   - Straight wing: stalls later in CL and buffets more honestly, so CLMax goes UP, while
+    ///     compressibility arrives EARLY -- the drag rise is placed near M0.76, not M0.89.
+    ///   - It comes aboard on CLMax, NOT on wing loading. Worth stating because the intuition is
+    ///     backwards: at these masses the Panther is the more heavily loaded of the two
+    ///     (286 kg/m2 against the Sabre's 257). What buys the approach is the straight wing's
+    ///     much higher usable CL -- approach speed scales as sqrt((W/S)/CLmax), and the CL term
+    ///     more than pays for the loading. Raise CLMax here and you silently make the deck easy.
+    ///   - The engine is the headline. See SpoolUpTau.
+    public static readonly AircraftParams F9F2Panther = new(
+        MassKg: 6650,                         // clean, full internal fuel, pilot and 4x20 mm load
+        WingAreaM2: 23.23,                    // 250 sq ft (measured)
+        ThrustMaxN: 25577,                    // P&W J42-P-6, 5,750 lbf SLS (measured)
+        CD0: 0.0265,                          // PROVISIONAL fit: closes ~500 kt TAS at sea level
+        InducedK: 0.0380,                     // PROVISIONAL: Sabre's fitted 0.045 scaled by AR 4.77 -> 5.78
+        CLMax: 1.35,                          // PROVISIONAL: straight wing holds more CL than the swept Sabre's 1.10
+        CLMin: -0.65,
+        // Roll was never the Panther's party trick, and it should not feel like the Sabre's.
+        RollRateMaxRad: 0.55, BankTau: 0.60,
+        FightRollRateMaxRad: 1.60,            // PROVISIONAL ~90 deg/s against the Sabre's ~140
+        CompatibilityRollRateMaxRad: 1.50, CompatibilityBankTau: 0.22,
+        LateralDerivativeProfileId: "f9f2-lateral-provisional-v1",
+        CLAlpha: 4.67,                        // 2*pi*AR/(AR+2); AR = span^2/area = 38^2/250 = 5.78
+        WingSpanM: 11.58,                     // 38 ft 0 in (measured); folds to 23 ft 5 in on deck
+        // Straight, thick, unswept: the drag rise is early and the aeroplane is placarded well
+        // below the Sabre's. This is the honest reason a Panther cannot simply dive away.
+        MCrit: 0.76, WaveDragK: 420.0,
+        HighLiftDragOnsetFraction: 0.88, HighLiftDragK: 10.0,   // PROVISIONAL
+        PositiveStructuralLimitG: 6.5,        // PROVISIONAL: no NATOPS-equivalent locator held yet
+        MaxPerformFraction: 1.0,
+        // No afterburner. Take-off water/alcohol injection raised the J42 from 5,750 to 5,950 lbf
+        // (+3.5%) for about 30 seconds from a 22.5-gallon tank -- documented, but it is a
+        // time-limited catapult aid, NOT a sustained multiplier. Modelling it as MaxThrustFraction
+        // would hand the pilot a permanent 3.5%, which is worse than not modelling it. It needs a
+        // time-boxed boost the kernel does not have yet.
+        MaxThrustFraction: 1.0,
+        // THE CARRIER-BEAT PARAMETER. A centrifugal-flow J42 (a licence-built Nene) does not
+        // answer the throttle the way an axial J47 does. On a straight deck there is no bolter:
+        // a late wave-off is a decision that has to be paid for by an engine that is still
+        // thinking about it. If any single number here decides whether the paddles beat teaches
+        // the right lesson, it is this one.
+        SpoolUpTau: 4.5, SpoolDownTau: 2.2,   // PROVISIONAL early-centrifugal lag
+        // No J42/Nene map exists in this kernel and the J47's axial lapse is the wrong shape for
+        // a centrifugal engine, so bind the generic model rather than borrow a misleading curve.
+        PropulsionModel: PropulsionModelKind.GenericDensityScaled,
+        // 9,909 lb empty + pilot + 4x20 mm ammunition. Internal fuel is 682 US gal, taken at
+        // AVGAS density on purpose: Essex-class carriers stocked piston-engine aviation fuel, and
+        // early J42-P-4s had to have 3% lubricating oil added to burn it at all. The Panther also
+        // drank about four times what the F4Us alongside it did -- fuel is a live pressure on
+        // this deck, not scenery.
+        FuelFreeMassKg: 4791.0);
 
     /// KOREA 2030s PROXY WAR — balloon-lofted glider strike drone. A BALLOON DRONE, a different
     /// lineage from the powered jet drones: it is a one-way sniper against soft high-value
@@ -601,7 +671,18 @@ public static class FlightModel {
         // stopped at. Contrast the subsonic sibling, which is deliberately walled at M0.85.
         // Peaks just past M1.1 and holds: this wing is meant to be pushed THROUGH the rise, not
         // stopped by it. K=38 gives roughly a 3x zero-lift drag penalty at the peak.
+        // The transonic bump. Moving its peak to bleed off top speed also kills cruise -- at
+        // peak 1.40 the aircraft could not hold its own M2.6 design cruise, decaying to M2.04 --
+        // because it raises drag across the whole supersonic range. High-Mach drag is a separate
+        // term below.
         MCrit: 0.94, WaveDragK: 20.0, WaveDragPeakMach: 1.18,
+        // Past the transonic peak the old model held drag CONSTANT: the factor was identical at
+        // M1.18 and M3.7. Nothing could ever catch thrust, so the aircraft was a rocket to M3.7
+        // and was stopped only by the ram spill ramp zeroing thrust between M3.3 and M3.8 -- the
+        // "hidden schedule" that ramp's own comment says must not be the limiter. This term bites
+        // only above the onset, so the design cruise at M2.6 is untouched and the dash tops out
+        // on thrust against drag instead.
+        HighMachDragOnset: 2.7, HighMachDragK: 0.6,
         SpoolUpTau: 1.40, SpoolDownTau: 0.90,
         CLAlpha: 3.60,                        // low aspect ratio
         PitchModeFreq: 3.4, PitchModeDamp: 0.46,
@@ -987,7 +1068,12 @@ public static class FlightModel {
     static double MachDragFactor(double mach, in AircraftParams p) {
         if (mach < p.MCrit) return 1.0;
         double excess = System.Math.Min(mach, p.WaveDragPeakMach) - p.MCrit;
-        return 1.0 + p.WaveDragK * excess * excess;
+        double factor = 1.0 + p.WaveDragK * excess * excess;
+        if (p.HighMachDragK > 0.0 && mach > p.HighMachDragOnset) {
+            double beyond = mach - p.HighMachDragOnset;
+            factor += p.HighMachDragK * beyond * beyond;
+        }
+        return factor;
     }
 
     internal static double BankRate(double bank, double target, in AircraftParams p) {

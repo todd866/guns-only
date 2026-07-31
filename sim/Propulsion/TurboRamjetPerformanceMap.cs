@@ -87,8 +87,8 @@ public static class TurboRamjetPerformanceMap {
     /// aircraft is limited by the ram cycle falling away naturally, not by a hidden schedule.
     /// Keying this off DesignMach was a real bug: moving the design point moved the spill with it
     /// and produced zero thrust by M2.78.
-    public const double RamSpillStartMach = 3.3;
-    public const double RamSpillCompleteMach = 3.8;
+    public const double RamSpillStartMach = 4.4;
+    public const double RamSpillCompleteMach = 5.0;
 
     const double Gamma = 1.4;
 

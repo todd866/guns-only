@@ -37,10 +37,17 @@ public static class DescentCorridor {
     /// module is about the recovery envelope and must not depend on the Rapier aero surrogate.
     public const double PlacardDynamicPressurePa = 80_000.0;
 
-    /// The 320 C skin limit the propulsion map cites when it explains why the design point sits
-    /// at M2.6 rather than M4 — "agrees with the 320 C skin limit instead of running 1,000 K
-    /// past it".
-    public const double SkinLimitKelvin = 320.0 + 273.15;
+    /// SiC/SiC-class CMC material capability, the closed repo number from
+    /// docs/airframes/rapier/20-thermal-and-materials.md: SkinTemperatureLimitK = 1473.15 K.
+    ///
+    /// An earlier version of this file used 320 C, taken from a stale aside in the propulsion
+    /// map. That is an organic-matrix figure and it is wrong for this airframe: the thermal doc
+    /// states there is deliberately NO 650 C operating limit, and screens the CMC at about M5.37
+    /// at FL700 against a flown ladder that peaks near M3.6-3.7. With 320 C the corridor reported
+    /// skin as the binding limit at M3.7, which is not true and would have had the schedule
+    /// taking power off for the wrong reason. Callers should pass the airframe's own
+    /// SkinTemperatureLimitK; this default exists only so the corridor is usable without one.
+    public const double SkinLimitKelvin = 1473.15;
 
     /// Recovery ratio for a turbulent boundary layer. The kernel's own skin model uses the same
     /// adiabatic-wall form; this is the inverse of it, solved for Mach.
@@ -58,9 +65,10 @@ public static class DescentCorridor {
     /// because ambient temperature rises: the envelope closes on you as you come down, which is
     /// the opposite of the intuition that thicker air is safer.
     /// </summary>
-    public static double MaxMach(double ambientTemperatureK) {
+    public static double MaxMach(double ambientTemperatureK, double skinLimitK = SkinLimitKelvin) {
         if (!double.IsFinite(ambientTemperatureK) || ambientTemperatureK <= 0.0) return 0.0;
-        double ratio = SkinLimitKelvin / ambientTemperatureK - 1.0;
+        double limitK = double.IsFinite(skinLimitK) && skinLimitK > 0.0 ? skinLimitK : SkinLimitKelvin;
+        double ratio = limitK / ambientTemperatureK - 1.0;
         if (ratio <= 0.0) return 0.0;   // ambient alone is already past the limit
         return Math.Sqrt(ratio / (RecoveryFactor * GammaMinusOneOverTwo));
     }
@@ -73,9 +81,10 @@ public static class DescentCorridor {
         double densityKgM3,
         double ambientTemperatureK,
         double speedOfSoundMps,
-        double configurationMps = double.PositiveInfinity) {
+        double configurationMps = double.PositiveInfinity,
+        double skinLimitK = SkinLimitKelvin) {
         double q = MaxTrueAirspeedMps(densityKgM3);
-        double skin = MaxMach(ambientTemperatureK) * speedOfSoundMps;
+        double skin = MaxMach(ambientTemperatureK, skinLimitK) * speedOfSoundMps;
         double config = double.IsFinite(configurationMps) && configurationMps > 0.0
             ? configurationMps
             : double.PositiveInfinity;
