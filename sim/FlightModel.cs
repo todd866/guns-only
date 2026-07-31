@@ -663,9 +663,37 @@ public static class FlightModel {
         WingAreaM2: 18.0,                     // high wing loading: cruise beats low-speed G
         // 84 kN dry keeps augmented T/W at design gross (four drones) ≤ family cap 1.20.
         // Prior 85 kN on a clean 9650 kg card read ~1.39 wet — past Identity aspiration.
-        ThrustMaxN: 84_000.0,                 // sea-level static DRY turbine core
+        // 11,240 lbf sea-level static DRY turbine core. Was 18,883 lbf, which put dry
+        // thrust-to-weight at 1.30 on the 6,590 kg empty airframe -- above an F-22 with two
+        // F119s, and roughly double a MiG-25, the aircraft this one actually resembles. It also
+        // made the jet climb VERTICALLY while holding M0.9 once fuel burned down, because excess
+        // thrust exceeded weight.
+        //
+        // The architecture is the argument: a turbo-ramjet gets its performance from ram
+        // compression at speed, the way the J58 did, not from a fighter core at sea level. So the
+        // core comes down to a dry T/W of 0.77 -- between a MiG-25 (0.73) and an F-16 (0.90) --
+        // and the speed stays, because top speed is drag-limited rather than core-limited: 40%
+        // less static thrust costs about 0.2 Mach at the design altitude while turning a vertical
+        // sea-level climb into 29 degrees.
+        ThrustMaxN: 50_000.0,                 // sea-level static DRY turbine core
         CD0: 0.0175, InducedK: 0.105,         // area-ruled body, small high-speed wing
-        CLMax: 1.35, CLMin: -0.60,
+        // 1.35 was a manoeuvring-wing number on a Mach-4 planform. The same thin, sharp,
+        // low-aspect wing that survives M4 is poor at making lift slowly, which is why the SR-71
+        // and the F-104 both land near 175 kt despite being nothing alike. At 394 kg/m2 this
+        // aircraft has essentially the SR-71's wing loading, so it should approach like one:
+        // CLmax 1.0 puts Vs near 154 kt and Vref near 200 kt. The fast approach is the price of
+        // the supersonic wing, and feeling that is the point.
+        // Slender cranked delta, AR 3.0, CLAlpha 3.60/rad, D-21-like. CLmax is not an analogy to
+        // some other aeroplane -- it is a choice of approach attitude, since CL = CLAlpha * alpha:
+        // 1.35 needs 21.5 deg, 1.20 needs 19.1 deg, 1.00 needs 15.9 deg. A delta reaches these on
+        // vortex lift and does not break down until roughly 30-35 deg, so all three are reachable.
+        //
+        // 1.20 is chosen because it makes the authored recovery ladder correct: Vs becomes 141 kt
+        // and the wire_final gate's 175 kt is then 1.24 Vs, a textbook threshold speed. Go-around
+        // is not the binding constraint it looks like -- at recovery weight the gradient is 48%
+        // against a 3.2% requirement -- so the gates decide it. 1.35 was a manoeuvring-wing
+        // number that made this thing land like a trainer.
+        CLMax: 1.20, CLMin: -0.55,
         RollRateMaxRad: 2.60, BankTau: 0.22,
         // Thin sharp supersonic wing: the rise is real but it is meant to be pushed through, not
         // stopped at. Contrast the subsonic sibling, which is deliberately walled at M0.85.
