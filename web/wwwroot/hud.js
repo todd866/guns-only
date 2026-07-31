@@ -1355,7 +1355,11 @@ class CombatHud {
       && projection.x < this.width - this.safeInsets.right - 12
       && projection.y > this.safeInsets.top + 12
       && projection.y < this.height - this.safeInsets.bottom - 12;
-    if (locatorOnScreen) {
+    // Only stand down when something ELSE is already showing where the contact is. Inside tally
+    // range that is the marker. A BVR contact has no marker by design -- there is nothing to see
+    // at 137 NM -- so suppressing its arrow too would leave the pilot with no cue whatever, which
+    // is worse than the bug being fixed and is what the geometry contract caught.
+    if (locatorOnScreen && !bvrContact) {
       if (this._debug) this._debug.locatorArrow = null;
       this._locatorArrowLastNow = Number(frame.now) || 0;
       return;
@@ -1429,12 +1433,24 @@ class CombatHud {
     const safeCenterY = (locatorTop + locatorBottom) * 0.5;
     const halfWidth = (locatorRight - locatorLeft) * 0.5;
     const halfHeight = (locatorBottom - locatorTop) * 0.5;
-    const scale = Math.min(
-      halfWidth / Math.max(Math.abs(dx), 0.0001),
-      halfHeight / Math.max(Math.abs(dy), 0.0001),
-    );
-    const x = safeCenterX + dx * scale;
-    const y = safeCenterY + dy * scale;
+    // A BVR contact that projects ON screen is drawn AT the projection, not flung out to the
+    // edge. Clamping it outward is what made the arrow "point offscreen when I point at the thing
+    // it is meant to point to": centring the target collapses dx/dy toward zero, where direction
+    // is noise, and the edge projection then whips the arrow around the rim. Placed at the
+    // projection it simply sits on the contact and stops moving.
+    let x;
+    let y;
+    if (bvrContact && locatorOnScreen) {
+      x = projection.x;
+      y = projection.y;
+    } else {
+      const scale = Math.min(
+        halfWidth / Math.max(Math.abs(dx), 0.0001),
+        halfHeight / Math.max(Math.abs(dy), 0.0001),
+      );
+      x = safeCenterX + dx * scale;
+      y = safeCenterY + dy * scale;
+    }
     const angle = Math.atan2(dy, dx);
 
     if (this._debug && this._debug.banditLocator) {
