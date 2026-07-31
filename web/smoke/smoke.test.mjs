@@ -1719,7 +1719,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         assert.equal(phoneState.stickTouchAction, "none");
         assert.equal(phoneState.targetStickVisible, true);
         assert.equal(phoneState.targetStickTouchAction, "none");
-        assert.equal(phoneState.targetStickLabel, "Right look stick; hold centre to fire");
+        assert.equal(phoneState.targetStickLabel, "Right stick: pitch and roll");
         assert.equal(phoneState.fallbackDirectionButtons, 0);
         assert.equal(phoneState.ordinaryPowerButtons, 0);
         assert.equal(phoneState.throttleRockerTouchAction, "none");
@@ -2318,20 +2318,30 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
       await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     }
 
+    // FIRE IS A BUTTON NOW, NOT A STICK CENTRE-HOLD. The right stick flies, and a control that
+    // doubles as a trigger cannot be trimmed -- near-centre meant both "fine correction" and
+    // "fire". So this drives the dedicated FIRE control between the sticks and proves it reaches
+    // the gun, which is the property that actually matters.
+    const fireBox = await page.evaluate(() => {
+      const fire = document.querySelector("#touch-fire");
+      if (!fire || fire.hidden) return null;
+      const r = fire.getBoundingClientRect();
+      return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+    });
+    assert.ok(fireBox, "portrait must expose a FIRE control once the stick no longer fires");
+    const ammoBeforeFire = await page.evaluate(() => Number(globalThis.__gunsState?.ammo));
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchStart",
-      touchPoints: [touchPoint(tx, ty, 3)],
+      touchPoints: [touchPoint(fireBox.x, fireBox.y, 3)],
     });
     try {
-      await page.waitForFunction(() =>
-        globalThis.__gunsMobile?.targetFireHeld === true,
-      undefined, { timeout: scaled(20000) });
+      await page.waitForFunction((before) => Number(globalThis.__gunsState?.ammo) < before,
+        ammoBeforeFire, { timeout: scaled(20000) });
     } finally {
       await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     }
     await page.waitForFunction(() =>
-      globalThis.__gunsMobile?.targetFireHeld !== true
-        && globalThis.__gunsState?.gun_firing !== true,
+      globalThis.__gunsState?.gun_firing !== true,
       undefined, { timeout: scaled(20000) });
 
     assert.deepEqual(pageErrors, [], `uncaught page errors:\n${pageErrors.join("\n")}`);
