@@ -664,7 +664,11 @@ public sealed class RailBandit : IBandit {
 
 public static class Beats {
     public const int FirstBuiltInIndex = 1;
-    public const int LastBuiltInIndex = 13;
+    /// Raise this WITH the switch below. An index past the end does not throw and does not warn:
+    /// StartBeat silently clamps it to FirstBuiltInIndex, so the mission the player picked quietly
+    /// becomes Perch in an F-86. That is exactly how the Korea sortie shipped a boot card reading
+    /// "F9F-2 PANTHER" over a running mission.perch-attack.v1.
+    public const int LastBuiltInIndex = 14;
 
     public static bool IsBuiltInIndex(int index) =>
         index is >= FirstBuiltInIndex and <= LastBuiltInIndex;
@@ -819,6 +823,52 @@ public static class Beats {
             FlightModel.F9F2Panther,
             AircraftCapability.F9F2Panther);
 
+    /// KOREA 1951, THE WHOLE SORTIE — catshot, climb, cruise, descend and trap.
+    ///
+    /// <see cref="KoreaCarrierApproach"/> starts the aeroplane 1500 m astern, already on speed and
+    /// already on the slope. That is a useful drill and it is not a sortie: it hands the pilot the
+    /// one part of the day that was already set up for them, and it is why the Panther has been
+    /// tested but unflyable — no BuiltIn index, no menu tile, nothing to launch from.
+    ///
+    /// This beat starts where a VF-51 pilot actually started: spotted on Essex's hydraulic
+    /// catapult, brakes on, engine already at full power because a centrifugal J42 will not make
+    /// it in the stroke otherwise. Then off the bow, up, out, back, and down onto the same axial
+    /// deck with no bolter and no second chance.
+    ///
+    /// The catapult machinery is not new — <c>CatapultLaunchModel</c> has existed and been wired
+    /// to <c>StartsOnCatapult</c> the whole time. It had simply never been pointed at a ship.
+    public static BeatSetup KoreaSortie() {
+        BeatSetup approach = CarrierApproach(
+            GunsOnly.Sim.Carrier.DeckConfiguration.Axial,
+            FlightModel.F9F2Panther,
+            AircraftCapability.F9F2Panther);
+        GunsOnly.Sim.Carrier deck = approach.Carrier!;
+        return approach with {
+            Name = "Korea sortie",
+            // The session replaces Player with the parked catapult pose when this is set, so the
+            // approach state above is only a mass and a mission carrier at this point.
+            StartsOnCatapult = true,
+            // Essex's H-4 hydraulic catapults were short and the Panther was heavy for them. The
+            // deck default stroke stands; the end speed is the number that matters, and 62 m/s
+            // (~120 kt) is comfortably above this airframe's take-off-configuration stall while
+            // being the sort of figure a 1950s hydraulic cat actually produced.
+            CatapultEndSpeedMps = 62.0,
+            // A flat wooden deck. No ski jump anywhere near the Korean War.
+            CatapultRampAngleRad = 0.0,
+            // A trap ends the day rather than firing the catapult again: this is a sortie, not a
+            // circuit drill, and the pilot should be told they got aboard.
+            RecoveryCompletesSortie = true,
+            Mission = KoreaMission("mission.korea.panther-sortie.v1"),
+            // Home is the ship. It moves, which is the entire difficulty, but the recovery plan
+            // needs a datum and the deck centre at staging is the honest one.
+            RecoveryPlan = new RecoveryPlan(
+                "recovery.korea.uss-essex.v1",
+                "USS Essex",
+                deck.Position,
+                requiredLandingReserveLb: 400.0),
+        };
+    }
+
     /// <summary>
     /// Reduced-order F-35C conversion sortie used by the player-facing Raptor programme. Public
     /// geometry, mass, fuel and thrust anchors identify the aircraft; the carrier model and generic
@@ -892,7 +942,13 @@ public static class Beats {
             deckCentre: new Vec3D(0, RapierLaunchSite.OperatingSurfaceElevationM, 0),
             headingRad: -Math.PI / 2, speedMps: 0,
             deckAltM: RapierLaunchSite.OperatingSurfaceElevationM,
-            deckLengthM: 1_200, deckWidthM: 48,
+            // 10,000 ft x 48 m. This was 1,200 m, inherited wholesale from the ship deck it reuses
+            // the geometry of -- nobody ever sized it as a runway. A dispersed strip for a Mach 4
+            // interceptor is a runway, and the recovery it is built around (touch down, aerobrake
+            // on the delta, take the wire midfield) needs braking distance in front of the wire.
+            // At 1,200 m there was none: the wires sat at the touchdown point and the arrest had
+            // to happen at approach speed, which this aircraft cannot make.
+            deckLengthM: 3_048, deckWidthM: 48,
             configuration: GunsOnly.Sim.Carrier.DeckConfiguration.Axial,
             kind: GunsOnly.Sim.Carrier.PlatformKind.FixedArrestingStrip,
             aircraftSupportReferenceHeightM:
@@ -1499,6 +1555,10 @@ public static class Beats {
         11 => RapierCircuits(deckConfiguration),
         12 => RapierGoFly(jobSeed: 0, deckConfiguration),
         13 => Medevac(),
+        // Korea 1951: the F9F-2 off USS Essex, whole sortie. Index 14 is the first player entry
+        // point this aircraft has ever had — the Panther and the paddles/LSO machinery built for
+        // it were reachable only from a unit test until now.
+        14 => KoreaSortie(),
         _ => Perch()
     };
 }

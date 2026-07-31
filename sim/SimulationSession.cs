@@ -1781,6 +1781,32 @@ public sealed class SimulationSession {
         return nextBoundary - mach;
     }
 
+    /// <summary>
+    /// Width of the handover band the aircraft is currently crossing: previous boundary to next.
+    /// TimeCompressionPolicy scales its lead against this so closely-spaced boundaries cannot
+    /// chain their leads together and block compression across a whole Mach range.
+    /// </summary>
+    double RamTransitionBandWidthMach() {
+        if (_beat.PlayerAir.PropulsionModel
+            != PropulsionModelKind.TurboRamjetPublicDataSurrogate)
+            return double.PositiveInfinity;
+        double previousBoundary = _ramCueStage switch {
+            0 => 0.0,
+            1 => Propulsion.TurboRamjetPerformanceMap.RamFadeStartMach,
+            2 => Propulsion.TurboRamjetPerformanceMap.FullRamMach,
+            _ => double.PositiveInfinity
+        };
+        double nextBoundary = _ramCueStage switch {
+            0 => Propulsion.TurboRamjetPerformanceMap.RamFadeStartMach,
+            1 => Propulsion.TurboRamjetPerformanceMap.FullRamMach,
+            2 => Propulsion.TurboRamjetPerformanceMap.TurbineGoneMach,
+            _ => double.PositiveInfinity
+        };
+        if (!double.IsFinite(previousBoundary) || !double.IsFinite(nextBoundary))
+            return double.PositiveInfinity;
+        return nextBoundary - previousBoundary;
+    }
+
     bool IsEstablishedTransit() {
         AircraftState state = _player.State;
         double clearanceM = state.Position.Y;
@@ -1819,7 +1845,7 @@ public sealed class SimulationSession {
         int autoGcasFactorCap = TimeCompressionPolicy.FactorCapForLeadSeconds(
             SecondsUntilAutoGcasBoundary());
         int ramFactorCap = TimeCompressionPolicy.FactorCapForRamMachMargin(
-            RamTransitionMachMargin());
+            RamTransitionMachMargin(), RamTransitionBandWidthMach());
         int approachFactorCap = Math.Min(
             Math.Min(contactFactorCap, fuelFactorCap),
             Math.Min(autoGcasFactorCap, ramFactorCap));
@@ -2393,6 +2419,10 @@ public sealed class SimulationSession {
         if (_catapult.Phase == CatapultLaunchModel.LaunchPhase.Hold)
             _catapult.Release();
         UpdateRecoveryProcedure();
+        // Deliberately a sibling of UpdateRecoveryProcedure, not a child: that method returns
+        // early when no recovery procedure exists, which is precisely the state the aircraft is in
+        // while it is still on the catapult.
+        UpdateSortieSchedule();
         if (decisionCapture is { } capture) CompleteDecisionTickCapture(capture);
         StepPendingTerminalDecision();
         _tick++;
@@ -3196,6 +3226,72 @@ public sealed class SimulationSession {
             stabiliseSpeedMps: 90.0,
             dragToWeight: RecoveryDragToWeight,
             configurationCeilingMps: placardMps);
+    }
+
+    SortieScheduleState _sortiePlan;
+
+    /// <summary>
+    /// The whole-sortie schedule — catshot, climb, cruise, descend, groove — as opposed to
+    /// <see cref="RecoverySchedule"/>, which only ever answers for the way back down.
+    ///
+    /// This runs OUTSIDE UpdateRecoveryProcedure on purpose. That method returns immediately when
+    /// no recovery procedure exists, which is exactly the state a launch is in, so a schedule
+    /// nested inside it could never say anything about getting off the deck.
+    /// </summary>
+    public SortieScheduleState SortiePlan => _sortiePlan;
+
+    void UpdateSortieSchedule() {
+        Carrier? ship = _carrier;
+        if (ship is null || !_beat.StartsOnCatapult) {
+            _sortiePlan = default;
+            return;
+        }
+
+        AircraftParams air = _beat.PlayerAir;
+        double approachMps = GunsOnly.Sim.Recovery.SortieSchedule.ApproachSpeedMps(Player.State.Mass, air);
+        // Climb and cruise are expressed as multiples of the aircraft's OWN on-speed rather than
+        // as authored knots, so a second airframe inherits a shape instead of a Panther's numbers.
+        // PROVISIONAL: the multiples want fitting from a flown profile, but a wrong ratio is
+        // recoverable in a way that a hard-coded speed belonging to one aeroplane is not.
+        var reference = new SortieReference(
+            ApproachSpeedMps: approachMps,
+            ClimbSpeedMps: 2.2 * approachMps,
+            TransitSpeedMps: 2.7 * approachMps,
+            TransitHeightM: 4_500.0,
+            StabiliseHeightM: 110.0,
+            // Korean-War paddles worked a steeper slope than a modern optical ball.
+            GlideslopeRad: 3.5 * System.Math.PI / 180.0,
+            DragToWeight: RecoveryDragToWeight,
+            SpoolUpTauS: air.SpoolUpTau);
+
+        double heightAboveDeckM = ship.DeckFrame(Player.State.Position).height;
+        Vec3D toShip = ship.Position - Player.State.Position;
+        double rangeToShipM = System.Math.Sqrt(toShip.X * toShip.X + toShip.Z * toShip.Z);
+
+        SortieLeg leg;
+        if (_catapult.IsActive) {
+            leg = _catapult.Phase == CatapultLaunchModel.LaunchPhase.Stroke
+                ? SortieLeg.Launch : SortieLeg.OnDeck;
+        } else if (PlayerRtbActive || _recoveryProcedure.Kind != RecoveryProcedureKind.None) {
+            // Inside the stabilisation point the problem stops being energy and starts being
+            // glideslope, lineup and an engine that will not answer quickly.
+            leg = rangeToShipM <= 1_500.0 ? SortieLeg.Groove : SortieLeg.Recovery;
+        } else if (heightAboveDeckM < 150.0) {
+            leg = SortieLeg.Launch;
+        } else if (heightAboveDeckM < 0.95 * reference.TransitHeightM) {
+            leg = SortieLeg.Climb;
+        } else {
+            leg = SortieLeg.Transit;
+        }
+
+        double distanceToGoM = leg switch {
+            SortieLeg.Recovery or SortieLeg.Groove => rangeToShipM,
+            SortieLeg.Climb => System.Math.Max(0.0, reference.TransitHeightM - heightAboveDeckM),
+            _ => rangeToShipM,
+        };
+
+        _sortiePlan = GunsOnly.Sim.Recovery.SortieSchedule.Solve(
+            leg, heightAboveDeckM, Player.State.Speed, distanceToGoM, reference);
     }
 
     void UpdateRecoveryProcedure() {

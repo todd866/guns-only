@@ -216,7 +216,23 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     /// transonic speed; false preserves every legacy airframe bit-for-bit.
     /// </summary>
     bool SupersonicLiftSlopeSchedule = false,
-    AerodynamicModelKind AerodynamicModel = AerodynamicModelKind.Generic);
+    AerodynamicModelKind AerodynamicModel = AerodynamicModelKind.Generic,
+    /// <summary>
+    /// Lift-coefficient increment from the landing configuration — flaps and gear down. The
+    /// approach is not flown on the clean wing, and deriving an on-speed number from clean CLmax
+    /// is the mistake this pair exists to stop: it flatters straight wings and punishes deltas,
+    /// which is exactly why an earlier attempt to derive a fleet-wide stabilisation speed from
+    /// clean CLmax had to be reverted.
+    ///
+    /// Zero is the default and reproduces every existing airframe bit-for-bit.
+    /// </summary>
+    double ApproachFlapCLIncrement = 0.0,
+    /// <summary>
+    /// On-speed margin over the stall in the landing configuration. 1.14 is the legacy F-86
+    /// fixture ratio and is the default so nothing moves for an airframe that has not measured
+    /// its own; an aircraft with a real figure declares it and stops inheriting someone else's.
+    /// </summary>
+    double ApproachStallMargin = 1.14);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).
@@ -333,7 +349,25 @@ public static class FlightModel {
         // early J42-P-4s had to have 3% lubricating oil added to burn it at all. The Panther also
         // drank about four times what the F4Us alongside it did -- fuel is a live pressure on
         // this deck, not scenery.
-        FuelFreeMassKg: 4791.0);
+        FuelFreeMassKg: 4791.0,
+        // APPROACH REFERENCE — the one measured number in this airframe's recovery.
+        //
+        // A pilot's account of the VF-51 carrier pattern (Ginter/Squadron, F9F Panther/Cougar in
+        // Action) has gear and flaps down on the downwind and the approach flown at 114 kt, turning
+        // in "looking for a roger and cut" — the paddles groove itself, not a handbook figure. It
+        // appears twice in the same passage of running prose, independently OCR'd, and both digit
+        // groups agree. See docs/airframes/f9f-2-panther/00-sources.md.
+        //
+        // It is expressed here as the two physical quantities that PRODUCE it rather than as the
+        // number itself, so it stays honest when the aircraft is heavy or light: a full-flap
+        // increment of 0.50 (which that sources file predicted independently, from the clean CLmax
+        // this wing was given) over a 1.18 on-speed margin lands on 114.2 kt at modelled mass —
+        // 0.2 kt from the measurement.
+        //
+        // The alternative the beat used before this — 1.14 x CLEAN stall — gives the Panther
+        // 129 kt. Fifteen knots fast is not a detail on a straight deck with no bolter.
+        ApproachFlapCLIncrement: 0.50,
+        ApproachStallMargin: 1.18);
 
     /// KOREA 2030s PROXY WAR — balloon-lofted glider strike drone. A BALLOON DRONE, a different
     /// lineage from the powered jet drones: it is a one-way sniper against soft high-value

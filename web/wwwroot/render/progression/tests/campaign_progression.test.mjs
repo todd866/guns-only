@@ -19,7 +19,7 @@ import {
 // exercises; every shipping mission is available immediately. These tests stop the gate from
 // growing back as new mission types and environments are added.
 
-test("the menu is five missions and all are always available", () => {
+test("the menu is six missions and all are always available", () => {
   assert.deepEqual(CAMPAIGN_NODES.map(({ id, mission, aircraft }) => ({ id, mission, aircraft })), [
     { id: "first-merge", mission: 7, aircraft: "F-22A" },
     { id: "low-level-drone", mission: 8, aircraft: "F-22A" },
@@ -28,6 +28,9 @@ test("the menu is five missions and all are always available", () => {
     // the intercept gives exactly one attempt at it, far from home and low on fuel.
     { id: "rapier-circuits", mission: 11, aircraft: "Rapier" },
     { id: "rapier-intercept", mission: 12, aircraft: "Rapier" },
+    // Korea last: it is the only straight-deck recovery in the game, and the only aircraft here
+    // that cannot simply go around.
+    { id: "korea-panther", mission: 14, aircraft: "F9F-2 Panther" },
   ]);
 
   const fresh = createCampaignProfile();

@@ -2244,13 +2244,17 @@ class CombatHud {
   drawGTape(state) {
     const actualG = Number(state.g_actual) || 0;
     const overrideSelected = state.requested_envelope_override === true;
-    const visible = overrideSelected
-      || state.tier === 3
-      || Math.abs(actualG) >= 3.0;
-    if (!visible) {
-      if (this._debug) this._debug.gTape = null;
-      return;
-    }
+    // ALWAYS VISIBLE. This used to appear only above 3 G, in tier 3, or with the override
+    // selected, on declutter grounds. That is the wrong trade for an accelerometer: every
+    // aeroplane that can pull G has one permanently in view, and a G meter that appears only once
+    // you are already pulling 3 cannot teach you what your hands are doing below 3 -- which is
+    // most of a circuit, all of an approach, and the part of a roll where this airframe's inertia
+    // coupling is worth watching.
+    //
+    // It declutters by WEIGHT rather than by disappearing: the backing wash fades toward nothing
+    // at 1 G and reaches full strength by 3 G, which is where the old code used to pop it into
+    // existence. So the numbers and the needle are always readable, and the furniture around them
+    // gets out of the way when you are not manoeuvring.
     const ctx = this.ctx;
     const layout = this.getLayout();
     const x = this.safeInsets.left + 24;
@@ -2265,9 +2269,13 @@ class CombatHud {
     const tierColor = actualG > hardG + 0.05 ? RED
       : overrideSelected || state.tier === 3 ? AMBER : GREEN;
 
+    // 0 at 1 G, 1 by 3 G. Never below 0.28, so the tape always has enough backing to read
+    // against a bright sky rather than vanishing into it.
+    const prominence = clamp((Math.abs(actualG) - 1.0) / 2.0, 0, 1);
+    const washScale = 0.28 + 0.72 * prominence;
     const wash = ctx.createLinearGradient(x - 6, 0, x + width + 6, 0);
-    wash.addColorStop(0, "rgba(1, 9, 14, 0.42)");
-    wash.addColorStop(0.72, "rgba(1, 9, 14, 0.20)");
+    wash.addColorStop(0, `rgba(1, 9, 14, ${(0.42 * washScale).toFixed(3)})`);
+    wash.addColorStop(0.72, `rgba(1, 9, 14, ${(0.20 * washScale).toFixed(3)})`);
     wash.addColorStop(1, "rgba(1, 9, 14, 0)");
     if (this._debug) {
       this._debug.gTape = { x: x - 6, y: y - 27, width: width + 12, height: 50 };
@@ -2638,8 +2646,15 @@ class CombatHud {
     // the lever caret on this: no "PULL POWER" caption, no number to read, and when the descent
     // schedule says come off the gas the bug simply slides down and you follow it. Drawn soft and
     // hollow so it reads as a target rather than as another gauge competing for the rail.
-    const commandedPower = Number(state?.golden_path_power_01);
-    if (state?.golden_path_valid === true && Number.isFinite(commandedPower)) {
+    // The whole-sortie schedule wins when it is running, because it covers the catapult stroke and
+    // the climb as well as the way back down — and because its command is two-sided. The descent
+    // schedule's power could never exceed 0.5 by construction, so on that one the bug could only
+    // ever tell you to come off the gas; this one can ask for everything the engine has.
+    const sortieValid = state?.sortie_valid === true;
+    const commandedPower = Number(
+      sortieValid ? state?.sortie_power_01 : state?.golden_path_power_01);
+    if ((sortieValid || state?.golden_path_valid === true)
+      && Number.isFinite(commandedPower)) {
       const by = yOf(clamp(commandedPower, 0, 1));
       ctx.save();
       ctx.strokeStyle = "rgba(242, 217, 160, 0.72)";
@@ -2657,7 +2672,22 @@ class CombatHud {
     ctx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("PWR", x + railWidth / 2, y - 9);
+    // Name the leg above the rail rather than anywhere else on the glass: the pilot's question
+    // "what am I supposed to be doing" and their question "where should this lever be" have the
+    // same answer, so they belong in the same glance.
+    ctx.fillText(sortieValid && typeof state?.sortie_leg === "string"
+      ? String(state.sortie_leg).toUpperCase() : "PWR", x + railWidth / 2, y - 9);
+
+    // On a straight deck the wave-off is not a reflex, it is a decision with a price: the engine
+    // has to be given time to answer. Count that time down, and turn it amber when it is gone,
+    // because past it the only remaining outcome is the barrier.
+    const waveOff = Number(state?.sortie_waveoff_s);
+    if (sortieValid && state?.sortie_leg === "Groove" && Number.isFinite(waveOff)) {
+      ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillStyle = waveOff > 0.05 ? GREEN : AMBER;
+      ctx.fillText(waveOff > 0.05 ? `WVOFF ${waveOff.toFixed(1)}` : "COMMITTED",
+        x + railWidth / 2, y - 19);
+    }
 
     if (hasAfterburner && eng > 1.005) {
       ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";

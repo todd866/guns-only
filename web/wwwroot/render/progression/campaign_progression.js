@@ -50,6 +50,18 @@ export const CAMPAIGN_NODES = Object.freeze([
     shortObjective: "Take the dealt balloon, transport, airborne-enabler, or swarm contract; recover the Rapier and protect the operating balance.",
     qualification: "",
   }),
+  // Korea 1951. The oldest aircraft in the game and the only one flown from a straight deck —
+  // and until now the only one with no way in at all: the F9F-2 and the paddles/LSO machinery
+  // built around it existed solely inside a unit test.
+  Object.freeze({
+    id: "korea-panther",
+    mission: 14,
+    sequence: 6,
+    aircraft: "F9F-2 Panther",
+    title: "Korea — Panther off Essex",
+    shortObjective: "Catshot off USS Essex, fly the sortie, and bring it back to the wires. Straight deck: there is no bolter.",
+    qualification: "",
+  }),
 ]);
 
 const NODE_BY_ID = new Map(CAMPAIGN_NODES.map((node) => [node.id, node]));

@@ -2819,7 +2819,7 @@
           <div class="ready-group-heading ready-program-heading">
             <div>
               <h2>Missions</h2>
-              <p>Five flight experiences on the road to the 2040 battlespace, from low-level medical transport to the stratosphere.</p>
+              <p>Seven flight experiences, from a 1951 straight deck to the stratosphere — by way of low-level medical transport and a microdrone indoors.</p>
             </div>
             <output id="ready-program-progress"></output>
           </div>
@@ -2862,6 +2862,14 @@
                 <strong>Rapier Intercept</strong>
                 <span>Catapult off a buried strip, climb, light the ram, kill the enabler, trap on the hook.</span>
                 <small>ONE PASS · 12 G STRUCTURAL · LOW-Q INCIDENCE OVERRIDE · HOOK RECOVERY</small>
+              </button>
+            </div>
+            <div class="sortie-option" data-selected="false" data-program-state="available">
+              <button type="button" class="sortie-choice" data-program-node="korea-panther" aria-pressed="false">
+                <span class="sortie-number">KOREA 1951 <b data-program-status="korea-panther"></b></span>
+                <strong>Panther off Essex</strong>
+                <span>Catshot off the bow of USS Essex, fly the sortie, and bring it back to the wires.</span>
+                <small>STRAIGHT DECK · NO BOLTER · PADDLES LSO · SLOW-SPOOLING J42</small>
               </button>
             </div>
             <div class="sortie-option" data-program-state="available">
@@ -3021,7 +3029,17 @@ Splash one bandit to qualify · H controls · R restarts</p>
         },
       };
       const requested = new URLSearchParams(location.search).get("program");
-      const selected = bootSorties[requested] ?? bootSorties["first-merge"];
+      bootSorties["korea-panther"] = {
+        deck: "Get off the deck. Get the job done. Get aboard.",
+        title: "F9F-2 PANTHER / KOREA SORTIE",
+        detail: "USS Essex · straight deck · no bolter · catshot to trap",
+      };
+      // Own-property lookup: bootSorties is a plain object, so ?program=constructor and
+      // ?program=__proto__ used to resolve to inherited functions and render "undefined" three
+      // times on the title card.
+      const selected = Object.prototype.hasOwnProperty.call(bootSorties, requested)
+        ? bootSorties[requested]
+        : bootSorties["first-merge"];
       document.querySelector("#boot-deck").textContent = selected.deck;
       document.querySelector("#boot-sortie-title").textContent = selected.title;
       document.querySelector("#boot-sortie-detail").textContent = selected.detail;

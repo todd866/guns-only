@@ -2652,6 +2652,14 @@ const MISSION_BRIEFS = Object.freeze({
 });
 
 const CAMPAIGN_BRIEFS = Object.freeze({
+  "korea-panther": Object.freeze({
+    kicker: "Korea 1951 · VF-51 · USS Essex",
+    title: "Panther off Essex",
+    sortie: "F9F-2 · catshot to trap · straight deck",
+    configuration: "F9F-2 Panther · 4×20 mm · approach 114 kt measured · J42 spool 4.5 s · axial deck, barrier, no bolter",
+    brief: "You are spotted on the bow catapult with the engine already at full power, because a centrifugal J42 will not make it in the stroke otherwise. Off the deck, out, and back. There is no angled deck here: if you are not aboard by the ramp there is a barrier, so the wave-off is a decision you take early or not at all.",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO hands the fight off and starts RTB · Space G limiter · H controls",
+  }),
   "first-merge": Object.freeze({
     kicker: "2030s Ukraine · F-22A · endless",
     title: "Guns Only",

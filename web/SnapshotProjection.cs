@@ -932,7 +932,20 @@ internal static class SnapshotProjection {
             + $"\"golden_path_power_01\":{Session.RecoverySchedule.CommandedPower01:F3},"
             + $"\"golden_path_excess_energy_m\":{Session.RecoverySchedule.ExcessEnergyM:F0},"
             + $"\"golden_path_track_required_m\":{Session.RecoverySchedule.TrackRequiredM:F0},"
-            + $"\"golden_path_limit\":{SnapshotJson.JsonString(LimitToken(Session.RecoverySchedule.Limit))},";
+            + $"\"golden_path_limit\":{SnapshotJson.JsonString(LimitToken(Session.RecoverySchedule.Limit))},"
+            // The whole-sortie schedule: catshot, climb, cruise, descend, groove. Height is ABOVE
+            // THE DECK, not MSL, and the power command is two-sided — the older schedule could
+            // only ever ask for less. sortie_waveoff_s is the one that earns its place on a
+            // straight deck: seconds left in which a wave-off is still achievable, set by how long
+            // this engine takes to answer rather than by a fixed distance.
+            + $"\"sortie_valid\":{(Session.SortiePlan.Valid ? "true" : "false")},"
+            + $"\"sortie_leg\":{SnapshotJson.JsonString(Session.SortiePlan.Leg.ToString())},"
+            + $"\"sortie_target_height_m\":{Session.SortiePlan.TargetHeightM:F1},"
+            + $"\"sortie_target_tas_mps\":{Session.SortiePlan.TargetSpeedMps:F1},"
+            + $"\"sortie_power_01\":{Session.SortiePlan.CommandedPower01:F3},"
+            + $"\"sortie_limit\":{SnapshotJson.JsonString(Session.SortiePlan.Limit.ToString())},"
+            + $"\"sortie_distance_to_go_m\":{Session.SortiePlan.DistanceToGoM:F0},"
+            + $"\"sortie_waveoff_s\":{Session.SortiePlan.WaveOffDecisionS:F1},";
     }
 
     static string FiniteNumberJson(double value) => SnapshotJson.FiniteNumberJson(value);
