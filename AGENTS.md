@@ -28,11 +28,23 @@ sourcing". The other agent had not finished, had not tested, and had not chosen 
 
 Stage explicit paths, always. `git commit <path>` or `git add <path>`.
 
-## 3. Check who else is in a file before you edit it.
+## 3. Say what you are in, before you are in it.
 
-`git status --porcelain` shows every agent's uncommitted work, not just yours. If a file you want
-is already modified, you are about to collide. Prefer to **add a new file** over editing a
-contended one — new files have no merge surface.
+```sh
+bin/claim take sim/Doctrine/Beats.cs --as korea-panther --why "split recovery fixture"
+bin/claim check sim/SimulationSession.cs     # before editing; exits 1 if someone else holds it
+bin/claim list
+bin/claim release --as korea-panther
+```
+
+Claims are **advisory** — nothing stops you editing a held file, but if you do it anyway you own
+the merge. They are a directory of plain files on purpose: Claude, Codex, Cursor and a human in an
+editor can all read them with `ls` and `cat`, and a crashed agent leaves a visible stale claim
+rather than a lock nobody can explain. Clear stale ones with `bin/claim release <path>`.
+
+`git status --porcelain` also shows every agent's uncommitted work, not just yours — use it as the
+second check. If a file you want is already modified, you are about to collide. And prefer to
+**add a new file** over editing a contended one; new files have no merge surface.
 
 ## 4. Do not repoint shared fixtures. Add your own.
 

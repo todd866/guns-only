@@ -1,0 +1,110 @@
+#!/bin/sh
+# claim -- tell the other agents which files you are in, before you are in them.
+#
+# Several agents share this checkout. Today they coordinated by collision: one repointed a
+# shared fixture and broke another's aircraft, one's `git add -A` committed another's unfinished
+# work, and a third spent four rounds working out whose red was whose. All three were avoidable
+# with one line of "I am in this file".
+#
+# Deliberately a directory of files, not a daemon or a socket: any agent, any tool (Claude,
+# Codex, Cursor, a human in an editor) can read and write it with `ls` and `cat`, and a crashed
+# agent leaves a stale claim you can see and clear rather than a lock nobody can explain.
+#
+#   bin/claim take sim/Doctrine/Beats.cs --as korea-panther --why "split recovery fixture"
+#   bin/claim check sim/Doctrine/Beats.cs      # before you edit -- exits 1 if someone else holds it
+#   bin/claim list
+#   bin/claim release --as korea-panther       # release everything you hold
+#
+# Claims are advisory. They are a courtesy protocol, not a permission system: nothing stops you
+# editing a claimed file, but if you do it anyway you own the merge.
+set -eu
+
+repo_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+claims_dir="$repo_dir/.agent-claims"
+mkdir -p "$claims_dir"
+
+me=""
+why=""
+cmd=${1:-list}
+[ "$#" -gt 0 ] && shift
+
+paths=""
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --as) me=${2:-}; shift 2 ;;
+        --why) why=${2:-}; shift 2 ;;
+        -h|--help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) paths="$paths $1"; shift ;;
+    esac
+done
+
+slug() { printf '%s' "$1" | tr '/' '_'; }
+now() { date '+%Y-%m-%dT%H:%M:%S'; }
+
+case "$cmd" in
+list)
+    if [ -z "$(ls -A "$claims_dir" 2>/dev/null)" ]; then
+        echo "no active claims"; exit 0
+    fi
+    printf '%-46s %-16s %-20s %s\n' PATH AGENT SINCE WHY
+    for f in "$claims_dir"/*; do
+        # shellcheck disable=SC1090
+        . "$f"
+        printf '%-46s %-16s %-20s %s\n' "$CLAIM_PATH" "$CLAIM_AGENT" "$CLAIM_SINCE" "$CLAIM_WHY"
+    done
+    ;;
+take)
+    [ -n "$me" ] || { echo "claim: --as <agent-name> is required" >&2; exit 2; }
+    [ -n "$paths" ] || { echo "claim: name at least one path" >&2; exit 2; }
+    for p in $paths; do
+        f="$claims_dir/$(slug "$p")"
+        if [ -f "$f" ]; then
+            # shellcheck disable=SC1090
+            . "$f"
+            if [ "$CLAIM_AGENT" != "$me" ]; then
+                echo "claim: $p is already held by $CLAIM_AGENT since $CLAIM_SINCE ($CLAIM_WHY)" >&2
+                echo "claim: talk to them, or pick different work. Not taking it." >&2
+                exit 1
+            fi
+        fi
+        {
+            echo "CLAIM_PATH='$p'"
+            echo "CLAIM_AGENT='$me'"
+            echo "CLAIM_SINCE='$(now)'"
+            echo "CLAIM_WHY='$why'"
+        } > "$f"
+        echo "claimed $p"
+    done
+    ;;
+check)
+    [ -n "$paths" ] || { echo "claim: name at least one path" >&2; exit 2; }
+    rc=0
+    for p in $paths; do
+        f="$claims_dir/$(slug "$p")"
+        [ -f "$f" ] || continue
+        # shellcheck disable=SC1090
+        . "$f"
+        if [ -n "$me" ] && [ "$CLAIM_AGENT" = "$me" ]; then continue; fi
+        echo "HELD  $p  by $CLAIM_AGENT since $CLAIM_SINCE — $CLAIM_WHY" >&2
+        rc=1
+    done
+    [ "$rc" -eq 0 ] && echo "clear"
+    exit "$rc"
+    ;;
+release)
+    if [ -n "$paths" ]; then
+        for p in $paths; do rm -f "$claims_dir/$(slug "$p")"; echo "released $p"; done
+    elif [ -n "$me" ]; then
+        for f in "$claims_dir"/*; do
+            [ -f "$f" ] || continue
+            # shellcheck disable=SC1090
+            . "$f"
+            [ "$CLAIM_AGENT" = "$me" ] && { rm -f "$f"; echo "released $CLAIM_PATH"; }
+        done
+    else
+        echo "claim: release needs paths or --as <agent-name>" >&2; exit 2
+    fi
+    ;;
+*)
+    echo "claim: unknown command '$cmd' (take|check|list|release)" >&2; exit 2 ;;
+esac

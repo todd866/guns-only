@@ -85,3 +85,6 @@ anca-shots/
 # Scratch downloads (research PDFs/imagery). The tracked research store with its licence
 # ledger lives in ../armstrong-korea-research; this public repo must not carry that material.
 tmp/
+
+# Advisory inter-agent file claims (bin/claim) -- local coordination, not history.
+.agent-claims/
