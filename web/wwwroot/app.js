@@ -4468,10 +4468,22 @@ function fogDensityForVisibility(visibilityM) {
 }
 
 function gameViewport() {
-  const viewport = window.visualViewport;
+  // Measure the CANVAS, not the visual viewport. #scene is position:fixed; inset:0, so its CSS
+  // box is the LAYOUT viewport, while visualViewport.height on iOS Safari excludes the collapsing
+  // toolbars and is therefore smaller. Feeding the renderer the smaller number while CSS stretches
+  // the element to the larger one lets the drawn region and the element disagree, which is the
+  // black band along the bottom of the screen on a phone -- terrain stops, the controls carry on
+  // into the dark, and no amount of resize plumbing helps because the two sides are measuring
+  // different boxes.
+  //
+  // Taking the element's own client box makes CSS the single source of truth: the buffer cannot
+  // be a different size from the thing it is painted into.
+  const scene = document.getElementById("scene");
+  const width = scene?.clientWidth || window.visualViewport?.width || window.innerWidth;
+  const height = scene?.clientHeight || window.visualViewport?.height || window.innerHeight;
   return {
-    width: Math.max(1, Math.round(viewport?.width || window.innerWidth)),
-    height: Math.max(1, Math.round(viewport?.height || window.innerHeight)),
+    width: Math.max(1, Math.round(width)),
+    height: Math.max(1, Math.round(height)),
   };
 }
 
