@@ -1066,10 +1066,22 @@
         calc(var(--safe-right) + 20px)
         calc(var(--safe-bottom) + 20px)
         calc(var(--safe-left) + 20px);
-      color: #dfffe9;
-      background:
-        radial-gradient(circle at 50% 42%, rgba(22, 67, 79, .34), transparent 42%),
-        rgba(1, 7, 12, .53);
+      color: #f6f1e4;
+      /* A PAINTING, not a phosphor scrim. The menu used to inherit the HUD's palette -- dark
+         green-black with a radial glow -- which is correct for avionics and wrong for the front
+         door of a film. The backdrop is a gouache sky; the gradient over it is only enough scrim
+         to keep type legible against the bright cloud tops, weighted to the bottom where the
+         cards sit rather than washing the whole image out. 198 KB WebP, 51 KB under 900 px. */
+      background-image:
+        linear-gradient(to bottom,
+          rgba(14, 24, 38, .16) 0%,
+          rgba(14, 24, 38, .30) 42%,
+          rgba(10, 18, 30, .74) 100%),
+        image-set(
+          url("./content/art/menu-sky.webp") type("image/webp"));
+      background-size: cover;
+      background-position: center 38%;
+      background-repeat: no-repeat;
       backdrop-filter: blur(5px) saturate(.9);
       -webkit-backdrop-filter: blur(5px) saturate(.9);
       opacity: 0;
@@ -1093,6 +1105,17 @@
     }
 
     .touch-mode #ready-screen { z-index: 13; }
+    @media (max-width: 900px) {
+      #ready-screen {
+        background-image:
+          linear-gradient(to bottom,
+            rgba(14, 24, 38, .16) 0%,
+            rgba(14, 24, 38, .32) 40%,
+            rgba(10, 18, 30, .80) 100%),
+          image-set(
+            url("./content/art/menu-sky-small.webp") type("image/webp"));
+      }
+    }
     /* app.js moves the same primary action after the title on touch layouts, so visual and focus
        order agree while the desktop briefing retains its original document order. */
     .touch-mode #ready-screen[data-mode="program"] #ready-start {
@@ -2901,56 +2924,46 @@
               <button type="button" class="sortie-choice" data-program-node="first-merge" aria-pressed="true">
                 <span class="sortie-number">F-22A <b data-program-status="first-merge"></b></span>
                 <strong>Guns Only</strong>
-                <span>Endless guns-only dogfight over the regional Ukraine world. The wave escalates while you keep winning and eases when you do not.</span>
-                <small>NO MISSILES · NO RADAR GAME · ANGLES AND ENERGY</small>
               </button>
             </div>
             <div class="sortie-option" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-program-node="low-level-drone" aria-pressed="false">
                 <span class="sortie-number">UKRAINE <b data-program-status="low-level-drone"></b></span>
-                <strong>Low-Level Drone Intercept</strong>
-                <span>Stop four low-flying fictional raiders over the detailed Soniachne low-level cell.</span>
-                <small>GUNS ONLY · TRUE-SCALE TERRAIN · NO GROUND TARGETS YET</small>
+                <strong>Low-Level Drone</strong>
+                <!-- Kept when the rest of the card copy came off. This is not decoration: without
+                     it the ambient buildings in the first scenery slice read as targets, which
+                     they are not. Four words is not the wordiness that was the complaint. -->
+                <small>NO GROUND TARGETS YET</small>
               </button>
             </div>
             <div class="sortie-option" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-program-node="medevac" aria-pressed="false">
                 <span class="sortie-number">AIR AMBULANCE <b data-program-status="medevac"></b></span>
                 <strong>Medevac</strong>
-                <span>Fly low to an orchard pickup, settle the aircraft, secure one opaque casualty capsule, and hand it over at the clinic.</span>
-                <small>NO OPPONENT · STABLE CONTACT · ONE CAPSULE · VISIBLE URGENCY</small>
               </button>
             </div>
             <div class="sortie-option" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-program-node="rapier-circuits" aria-pressed="false">
                 <span class="sortie-number">RAPIER <b data-program-status="rapier-circuits"></b></span>
                 <strong>Rapier Circuits</strong>
-                <span>Launch, fly the pattern, trap. Repeat until the hook is easy.</span>
-                <small>NO CONTACT · NO BINGO PRESSURE · FULL LAUNCHER AND WIRE</small>
               </button>
             </div>
             <div class="sortie-option" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-program-node="rapier-intercept" aria-pressed="false">
                 <span class="sortie-number">RAPIER <b data-program-status="rapier-intercept"></b></span>
                 <strong>Rapier Intercept</strong>
-                <span>Catapult off a buried strip, climb, light the ram, kill the enabler, trap on the hook.</span>
-                <small>ONE PASS · 12 G STRUCTURAL · LOW-Q INCIDENCE OVERRIDE · HOOK RECOVERY</small>
               </button>
             </div>
             <div class="sortie-option" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-program-node="korea-panther" aria-pressed="false">
                 <span class="sortie-number">KOREA 1951 <b data-program-status="korea-panther"></b></span>
                 <strong>Panther off Essex</strong>
-                <span>Catshot off the bow of USS Essex, fly the sortie, and bring it back to the wires.</span>
-                <small>STRAIGHT DECK · NO BOLTER · PADDLES LSO · SLOW-SPOOLING J42</small>
               </button>
             </div>
             <div class="sortie-option" data-program-state="available">
               <a class="sortie-choice" href="/indoor/" data-experience="indoor">
                 <span class="sortie-number">MIDGE-03 · FACILITY NINE</span>
                 <strong>Indoor</strong>
-                <span>Fly a microdrone along a fibre-protected route, shed the line cleanly, then finish over contested radio. If the feed collapses, onboard automation keeps pursuing the task.</span>
-                <small>SIX DEGREES · FIBRE INGRESS · CHOPPY DOWNLINK · BEST-EFFORT AUTONOMY</small>
               </a>
             </div>
           </div>
