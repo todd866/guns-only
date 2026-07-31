@@ -45,7 +45,10 @@ public class GoldenPathTests {
         Assert.True(p.TrackRequiredM > 173 * 1852.0,
             "M3.7 at FL750 must need more track than the theatre contains");
         Assert.Equal(0.0, p.CommandedPower01, precision: 6);
-        Assert.NotEqual(DescentLimit.None, p.Limit);
+        // Nothing is binding: the CMC screens to about M5.67 at FL750 and q to a similar speed,
+        // so at M3.7 no placard is clipping. The problem is energy against distance, and naming
+        // an innocent limit would send the pilot looking at the wrong gauge.
+        Assert.Equal(DescentLimit.None, p.Limit);
     }
 
     [Fact]
