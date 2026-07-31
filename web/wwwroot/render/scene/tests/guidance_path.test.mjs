@@ -82,6 +82,25 @@ test("guidance never occludes: additive, depth-tested, never depth-writing, well
   assert.ok(GUIDANCE_PATH_DEFAULTS.activeOpacity <= 0.45);
 });
 
+test("the whole ladder shares one shader program, so boot does not stutter", () => {
+  const seen = new Set();
+  const counting = {
+    ...THREE,
+    ShaderMaterial: class extends THREE.ShaderMaterial {
+      constructor(o) { super(o); seen.add(this); }
+    },
+  };
+  const path = createGuidancePath(counting);
+  path.update({ recovery_gates_json: gatesJson });
+  // 24 materials meant 24 program compilations in the first frames after boot. One material is
+  // one compile; per-gate colour rides in as a uniform at draw time.
+  assert.equal(seen.size, 1,
+    `guidance must compile one shader program, not ${seen.size}`);
+  const meshes = path.object3d.children;
+  assert.equal(new Set(meshes.map((m) => m.material)).size, 1,
+    "every gate must share the one material instance");
+});
+
 test("no recovery procedure means nothing is drawn at all", () => {
   const path = createGuidancePath(THREE);
   assert.equal(path.update({}), 0);

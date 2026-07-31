@@ -88,27 +88,35 @@ export function createGuidancePath(THREE, options = {}) {
   root.renderOrder = 12;
 
   const gates = [];
-  // One generous quad per gate; the shader decides what of it is visible.
+  // ONE material, therefore one shader program compile. Twenty-four ShaderMaterials meant
+  // twenty-four program compilations in the first frames after boot, which is a visible stutter
+  // exactly when the pilot is watching the world appear. Per-gate colour and density are pushed
+  // as uniforms immediately before each mesh draws instead.
   const quad = new THREE.PlaneGeometry(4, 4);
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color(config.gateColor) },
+      uOpacity: { value: config.gateOpacity },
+    },
+    vertexShader: GATE_VERTEX,
+    fragmentShader: GATE_FRAGMENT,
+    transparent: true,
+    depthWrite: false,
+    depthTest: true,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
   for (let i = 0; i < config.maxGates; i++) {
-    const material = new THREE.ShaderMaterial({
-      uniforms: {
-        uColor: { value: new THREE.Color(config.gateColor) },
-        uOpacity: { value: config.gateOpacity },
-      },
-      vertexShader: GATE_VERTEX,
-      fragmentShader: GATE_FRAGMENT,
-      transparent: true,
-      depthWrite: false,
-      depthTest: true,
-      blending: THREE.AdditiveBlending,
-      side: THREE.DoubleSide,
-      toneMapped: false,
-    });
     const mesh = new THREE.Mesh(quad, material);
     mesh.frustumCulled = false;
     mesh.visible = false;
-    gates.push({ mesh, material });
+    const tint = { color: config.gateColor, opacity: config.gateOpacity };
+    mesh.onBeforeRender = () => {
+      material.uniforms.uColor.value.set(tint.color);
+      material.uniforms.uOpacity.value = tint.opacity;
+    };
+    gates.push({ mesh, tint });
     root.add(mesh);
   }
 
@@ -144,7 +152,7 @@ export function createGuidancePath(THREE, options = {}) {
 
       const drawn = Math.min(points.length, gates.length);
       for (let i = 0; i < gates.length; i++) {
-        const { mesh, material } = gates[i];
+        const { mesh, tint } = gates[i];
         if (i >= drawn) { mesh.visible = false; continue; }
         const gate = ladder[i];
         const half = Math.max(1, Number(gate.halfM) || 1);
@@ -167,11 +175,11 @@ export function createGuidancePath(THREE, options = {}) {
         }
 
         if (gate.active) {
-          material.uniforms.uColor.value.set(config.activeColor);
-          material.uniforms.uOpacity.value = config.activeOpacity;
+          tint.color = config.activeColor;
+          tint.opacity = config.activeOpacity;
         } else {
-          material.uniforms.uColor.value.set(gate.dirty ? config.dirtyColor : config.gateColor);
-          material.uniforms.uOpacity.value = config.gateOpacity;
+          tint.color = gate.dirty ? config.dirtyColor : config.gateColor;
+          tint.opacity = config.gateOpacity;
         }
         mesh.visible = true;
       }
@@ -185,7 +193,7 @@ export function createGuidancePath(THREE, options = {}) {
       disposed = true;
       root.removeFromParent();
       quad.dispose();
-      for (const { material } of gates) material.dispose();
+      material.dispose();
     },
   };
 }
