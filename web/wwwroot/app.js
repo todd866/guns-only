@@ -8976,6 +8976,14 @@ function installMobileInput(view) {
     targetStickPointerId = null;
     targetStickX = 0;
     targetStickY = 0;
+    // THIS STICK FLIES NOW, so releasing it must centre the flight axes. It used to be a look
+    // stick, so releasing it only had to stop the camera; the neutralising path lived on the left
+    // stick, which no longer carries roll or pitch. Without this the last commanded roll stayed
+    // latched after the thumb came off and the aircraft kept rolling -- exactly the "hands-off and
+    // it keeps going" failure the smoke test catches.
+    primaryRollCommand = 0;
+    primaryPitchCommand = 0;
+    releaseDirectFlightAxes("touch");
     touchStickLookActive = false;
     gimbalReturnFast = true;
     // Releasing the stick must also release the centre-hold gun. Without this the fire source

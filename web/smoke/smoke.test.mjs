@@ -1822,7 +1822,8 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
             && Number(globalThis.__gunsState?.requested_g_cmd) > initialG + 0.2,
         baselineG, { timeout: scaled(20000) });
         const engagedStick = await page.evaluate(() => {
-          const element = document.querySelector("#fallback-stick");
+          // The stick being dragged above is the RIGHT one, because that is the one that flies.
+          const element = document.querySelector("#target-stick");
           return {
             active: element.dataset.active,
             x: Number.parseFloat(element.style.getPropertyValue("--stick-x")),
@@ -1910,31 +1911,32 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           clientY: targetCentre.y - targetStickBox.height * 0.28,
         });
 
+        // FIRE IS A BUTTON, NOT THE STICK'S CENTRE. The right stick flies now, and a control
+        // that doubles as a trigger cannot be trimmed: near-centre meant both "fine correction"
+        // and "fire". Drive the dedicated FIRE control and prove it reaches the gun.
+        const fireButton = page.locator("#touch-fire");
+        const fireButtonBox = await fireButton.boundingBox();
+        assert.ok(fireButtonBox,
+          `${viewport.width}x${viewport.height}: no FIRE control once the stick stopped firing`);
+        await page.evaluate(() => globalThis.__gunsBridge?.ReleaseWeaponsHold?.());
+        await page.waitForFunction(() => globalThis.__gunsState?.weapons_inhibited === false,
+          undefined, { timeout: scaled(20000) });
         const firePointerId = 53;
-        await targetStick.dispatchEvent("pointerdown", {
-          pointerId: firePointerId,
-          pointerType: "touch",
-          isPrimary: true,
-          button: 0,
-          buttons: 1,
-          clientX: targetCentre.x,
-          clientY: targetCentre.y,
+        await fireButton.dispatchEvent("pointerdown", {
+          pointerId: firePointerId, pointerType: "touch", isPrimary: true,
+          button: 0, buttons: 1,
+          clientX: fireButtonBox.x + fireButtonBox.width / 2,
+          clientY: fireButtonBox.y + fireButtonBox.height / 2,
         });
-        await page.waitForFunction(() =>
-          globalThis.__gunsMobile?.targetFireHeld === true,
-        undefined, { timeout: scaled(20000) });
-        await targetStick.dispatchEvent("pointerup", {
-          pointerId: firePointerId,
-          pointerType: "touch",
-          isPrimary: true,
-          button: 0,
-          buttons: 0,
-          clientX: targetCentre.x,
-          clientY: targetCentre.y,
+        await page.waitForFunction(() => globalThis.__gunsState?.gun_firing === true,
+          undefined, { timeout: scaled(20000) });
+        await fireButton.dispatchEvent("pointerup", {
+          pointerId: firePointerId, pointerType: "touch", isPrimary: true,
+          button: 0, buttons: 0,
+          clientX: fireButtonBox.x + fireButtonBox.width / 2,
+          clientY: fireButtonBox.y + fireButtonBox.height / 2,
         });
-        await page.waitForFunction(() =>
-          globalThis.__gunsMobile?.targetFireHeld !== true
-            && globalThis.__gunsState?.gun_firing !== true,
+        await page.waitForFunction(() => globalThis.__gunsState?.gun_firing !== true,
           undefined, { timeout: scaled(20000) });
 
         const throttleRocker = page.locator("#touch-throttle-rocker");
@@ -2334,16 +2336,31 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
       return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
     });
     assert.ok(fireBox, "portrait must expose a FIRE control once the stick no longer fires");
+    // The gun will not cycle while the first-pass weapons hold is armed, so ammunition would never
+    // fall no matter how correctly the button is wired. Release it the same way the desktop boot
+    // test does before asserting the trigger reaches the gun.
+    await page.evaluate(() => globalThis.__gunsBridge?.ReleaseWeaponsHold?.());
+    await page.waitForFunction(() => globalThis.__gunsState?.weapons_inhibited === false,
+      undefined, { timeout: scaled(20000) });
     const ammoBeforeFire = await page.evaluate(() => Number(globalThis.__gunsState?.ammo));
-    await cdp.send("Input.dispatchTouchEvent", {
-      type: "touchStart",
-      touchPoints: [touchPoint(fireBox.x, fireBox.y, 3)],
+    // Dispatch on the ELEMENT rather than at raw CDP coordinates. The button listens for pointer
+    // events, and a synthesised touch at a coordinate does not reliably reach it through the
+    // overlay's pointer-events:none parent; the same approach is used for the stick above.
+    const fire = page.locator("#touch-fire");
+    await fire.dispatchEvent("pointerdown", {
+      pointerId: 21, pointerType: "touch", isPrimary: true, button: 0, buttons: 1,
+      clientX: fireBox.x, clientY: fireBox.y,
     });
     try {
-      await page.waitForFunction((before) => Number(globalThis.__gunsState?.ammo) < before,
+      await page.waitForFunction((before) =>
+        globalThis.__gunsState?.gun_firing === true
+          || Number(globalThis.__gunsState?.ammo) < before,
         ammoBeforeFire, { timeout: scaled(20000) });
     } finally {
-      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+      await fire.dispatchEvent("pointerup", {
+        pointerId: 21, pointerType: "touch", isPrimary: true, button: 0, buttons: 0,
+        clientX: fireBox.x, clientY: fireBox.y,
+      });
     }
     await page.waitForFunction(() =>
       globalThis.__gunsState?.gun_firing !== true,
