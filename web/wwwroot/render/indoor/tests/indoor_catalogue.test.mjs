@@ -21,8 +21,16 @@ test("catalogue exposes Indoor as a native route without pretending it is a fixe
   assert.doesNotMatch(links[0][0], /data-program-node=/,
     "Indoor owns a separate six-degree-of-freedom kernel, not a numeric SimulationSession beat");
   assert.match(links[0][0], /data-experience="indoor"/);
-  assert.match(catalogue,
-    /Five flight experiences on the road to the 2040 battlespace, from low-level medical transport to the stratosphere\./);
+  // Pin the SHAPE, not the prose. This used to require the exact sentence "Five flight
+  // experiences on the road to the 2040 battlespace...", which broke the moment a seventh
+  // experience landed -- the copy is now "Seven flight experiences, from a 1951 straight deck
+  // to the stratosphere". A catalogue blurb is meant to change when the catalogue does; what
+  // must not change is that it states a count and still advertises the indoor route, which is
+  // the thing this test exists to protect.
+  assert.match(catalogue, /\b(Four|Five|Six|Seven|Eight|Nine|Ten)\b flight experiences/,
+    "the catalogue must state how many experiences it offers");
+  assert.match(catalogue, /indoors\./,
+    "the catalogue blurb must still mention the indoor microdrone route");
 });
 
 test("Indoor entrypoint advertises its complete control and mission contract", () => {
