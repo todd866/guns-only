@@ -36,7 +36,7 @@ public class RapierMissionTests {
         BeatSetup beat = Beats.RapierIntercept();
         double initialRangeM = (beat.Bandit.Position - beat.Player.Position).Length;
 
-        Assert.InRange(initialRangeM, 390_000.0, 410_000.0);
+        Assert.InRange(initialRangeM, 350_000.0, 370_000.0);
         Assert.Equal(4, beat.ScriptedIntercept?.FormationSize);
         Assert.Same(PilotPhysiologyProfile.RapierReclinedInterceptor,
             beat.PlayerPilotPhysiology);

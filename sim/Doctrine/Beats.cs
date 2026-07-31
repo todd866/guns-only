@@ -942,13 +942,7 @@ public static class Beats {
             deckCentre: new Vec3D(0, RapierLaunchSite.OperatingSurfaceElevationM, 0),
             headingRad: -Math.PI / 2, speedMps: 0,
             deckAltM: RapierLaunchSite.OperatingSurfaceElevationM,
-            // 10,000 ft x 48 m. This was 1,200 m, inherited wholesale from the ship deck it reuses
-            // the geometry of -- nobody ever sized it as a runway. A dispersed strip for a Mach 4
-            // interceptor is a runway, and the recovery it is built around (touch down, aerobrake
-            // on the delta, take the wire midfield) needs braking distance in front of the wire.
-            // At 1,200 m there was none: the wires sat at the touchdown point and the arrest had
-            // to happen at approach speed, which this aircraft cannot make.
-            deckLengthM: 3_048, deckWidthM: 48,
+            deckLengthM: 1_200, deckWidthM: 48,
             configuration: GunsOnly.Sim.Carrier.DeckConfiguration.Axial,
             kind: GunsOnly.Sim.Carrier.PlatformKind.FixedArrestingStrip,
             aircraftSupportReferenceHeightM:
@@ -962,23 +956,22 @@ public static class Beats {
                 FlightModel.RapierPublicDataSurrogate.MassKg),
             // A contact high and slow west of home: the thing this aircraft was built to kill is an
             // enabler, not a fighter. Eastbound closing toward the eastern strip.
-            // 170 km out. This has been walked in twice already -- 680 km, then 320 km -- each time
-            // because the wait before anything happens dominates the sortie, and it was still too
-            // far: on the 320 km card the contact was a dot 173 NM away for the first six minutes
-            // of a flight, which is not a mission, it is a commute.
+            // 360 km out, and this number has moved a lot: 680, then 320, then in to 170 when the
+            // wait dominated the sortie, then back out once the real cause was found. The aircraft
+            // was not bored, it was BROKEN -- launching on 36% fuel, climbing on a schedule that
+            // rode Vmo, and carrying an inlet whose ram never lit below FL350. Fixed, it covers
+            // this distance fast and the transit is the interesting part rather than the wait.
             //
-            // The cost is honest and worth stating: a standing-start climb needs roughly 500 s to
-            // build a M4 dash, and a contact this close merges before that. So the ground-launch
-            // card now teaches the intercept and the trap rather than the peak-Mach dash. The dash
-            // wants an airborne-alert start, where the aircraft begins with the energy instead of
-            // spending the whole sortie buying it.
+            // 360 km is essentially the most the authored terrain allows: the regional atlas ends
+            // at -376,832 m east, and a contact at 380 km cannot be sampled at all. If this card
+            // ever needs to be longer, the atlas has to grow first.
             //
-            // It remains inside the regional atlas and leaves enough
+            // It leaves enough
             // gas for the fight and trap under the current per-stream fuel approximation.
             //
             // Keeping the contact inside the authored regional cell also means an early low fight
             // no longer drops onto the presentation apron.
-            Bandit: new AircraftState(new Vec3D(-400_000, 18_000, 18_000), 210, 0, Math.PI / 2, 0,
+            Bandit: new AircraftState(new Vec3D(-360_000, 18_000, 18_000), 210, 0, Math.PI / 2, 0,
                 FlightModel.Su27SPublicDataSurrogate.MassKg),
             Law: new PurePursuitLaw(),
             BanditTimeline: new() { (0.0, new PilotCommand(1.0, 0.0, 0.55, 0.0)) },

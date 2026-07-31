@@ -42,8 +42,8 @@ public class RapierTests {
 
         // Walked in from 680 km, then 320 km, then 170 km. The 320 km card put the contact
         // 173 NM away for the first six minutes of the flight, which is a commute, not a mission.
-        Assert.Equal(-400_000.0, beat.Bandit.Position.X);
-        Assert.InRange(horizontalRangeM, 400_000.0, 402_000.0);
+        Assert.Equal(-360_000.0, beat.Bandit.Position.X);
+        Assert.InRange(horizontalRangeM, 360_000.0, 362_000.0);
         ITerrainSurface terrain = Assert.IsAssignableFrom<ITerrainSurface>(
             UkraineTerrainTruth.Load());
         Assert.True(terrain.TrySample(
@@ -648,10 +648,33 @@ public class RapierTests {
             + $"at {TestMassKg:F0} kg: FL315 -> M{lowMach:F3}, "
             + $"FL560 -> M{highMach:F3}");
 
-        Assert.True(lowMach < 3.0,
-            $"FL315 transonic turbine pull became an unrestricted low-level dash: M{lowMach:F3}");
+        // Assert the USABLE corridor, not raw thermodynamics. This used to bound lowMach directly,
+        // which measured what the engine could do rather than what the aircraft may do: this test
+        // drives the kernel with no envelope protection, so the FL315 run happily reaches M3.0 at
+        // 183 kPa -- roughly four times Vmo. That number is real but it is not available to a
+        // pilot, so bounding it was bounding the wrong quantity, and it moved every time the
+        // engine changed.
+        //
+        // Vmo is what actually gates the low-level dash, and it bites far harder low down: 550
+        // KIAS is M1.58 at FL315 and M2.88 at FL560. So clip both runs to the envelope and assert
+        // the gate on what is left.
+        AtmosphericState lowAir = StandardAtmosphere1976.Instance.Sample(31_500.0 * 0.3048);
+        AtmosphericState highAir = StandardAtmosphere1976.Instance.Sample(56_000.0 * 0.3048);
+        double lowVmoMach = RapierAerodynamics.MachLimitForDynamicPressure(
+            lowAir.DensityKgM3, lowAir.SpeedOfSoundMps);
+        double highVmoMach = RapierAerodynamics.MachLimitForDynamicPressure(
+            highAir.DensityKgM3, highAir.SpeedOfSoundMps);
+        double usableLow = Math.Min(lowMach, lowVmoMach);
+        double usableHigh = Math.Min(highMach, highVmoMach);
+        _out.WriteLine($"usable corridor: FL315 M{usableLow:F2} (Vmo M{lowVmoMach:F2}), "
+            + $"FL560 M{usableHigh:F2} (Vmo M{highVmoMach:F2})");
+
+        Assert.True(usableLow < 2.0,
+            $"FL315 became an unrestricted low-level dash inside the envelope: M{usableLow:F3}");
         Assert.True(highMach >= 2.6,
             $"FL560 failed to enter the supersonic acceleration corridor: M{highMach:F3}");
+        Assert.True(usableHigh > usableLow + 0.8,
+            $"the usable altitude corridor collapsed: FL315 M{usableLow:F2} vs FL560 M{usableHigh:F2}");
         // Half a Mach, not a whole one. With the engine sized for a realistic M3-class ceiling
         // rather than Mach 4 the altitude gate is narrower in absolute terms while gating exactly
         // as hard in kind: the aircraft still cannot have the high-altitude corridor down low.

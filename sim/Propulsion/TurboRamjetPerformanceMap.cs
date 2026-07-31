@@ -43,7 +43,16 @@ public static class TurboRamjetPerformanceMap {
     // thrust, which is why every one ever flown needed a booster or a host engine. 1.85 was
     // optimistic; 2.0 to 2.8 is the honest band and it puts a genuine thrust bucket between the
     // fading turbine and the rising ram, exactly as a combined cycle really has.
-    public const double RamFadeStartMach = 2.0;
+    // 1.6, NOT 2.0. The turbine begins fading at TurbineFadeStartMach 1.9 and the ram used to
+    // contribute exactly NOTHING until 2.0, so there was a band where one cycle had started
+    // leaving and the other had not arrived. The aircraft fell into it every climb and sat there
+    // -- "a struggle getting it to light off" -- and at altitude, where the turbine is weak
+    // anyway, it could not always push through at all.
+    //
+    // A combined cycle hands over; it does not gap. The J58 opened its bypass while the turbine
+    // was still doing useful work, and the overlap IS the architecture. Starting the ram fade at
+    // 1.6 puts it comfortably under the turbine fade so thrust is continuous across the handover.
+    public const double RamFadeStartMach = 1.6;
     public const double FullRamMach = 2.8;
     /// Net ram-mode thrust at the design point, as a fraction of sea-level static dry turbine thrust.
     // Still two and a half times the original 0.42, so the ram genuinely dominates once lit, but no
@@ -80,8 +89,22 @@ public static class TurboRamjetPerformanceMap {
     /// launch climb it stays substantially spilled to keep diffuser pressure and hot-section load
     /// inside limits; the schedule opens between roughly FL300 and FL500. This is what makes
     /// "climb before accelerating" a real aircraft constraint instead of briefing prose.
-    public const double RamCaptureLockedDensityRatio = 0.38;
-    public const double RamCaptureFullDensityRatio = 0.20;
+    // Opened DOWNWARD, from 0.38/0.20 to 0.60/0.32. The old schedule left the spike shut until
+    // roughly FL270 and only reached full capture near FL430, so at FL300 the inlet was 3% open,
+    // the ram made essentially nothing, and TOTAL thrust FELL from 35 kN at M1.6 to 16 kN at M3.0
+    // -- the aircraft got weaker the faster it went, and lightoff was not merely hard, it was
+    // unreachable from any altitude a climbing pilot actually passes through.
+    //
+    // 0.48/0.28 starts the spike opening near FL225 and reaches full capture near FL375, so the
+    // ram builds through the climb where the pilot needs it: capture at FL300 goes from 3% to 53%.
+    //
+    // The bound on how far this can open is TheTurbineCarriesItLowAndTheRamCarriesItHigh, which
+    // requires under 1.6x static thrust at M2.6 / 9,000 m so the attack dive is never free. 0.60
+    // was tried first and read 2.21x -- the test caught it. This is only safe at all because
+    // CaptureDensityCeiling is now genuinely applied above; with that guard still dropped on the
+    // floor, opening the schedule at all would have made a low dive enormously powerful.
+    public const double RamCaptureLockedDensityRatio = 0.48;
+    public const double RamCaptureFullDensityRatio = 0.28;
 
     /// A FIXED-GEOMETRY INLET CANNOT SWALLOW UNLIMITED AIR. Captured mass flow scales with density
     /// and Mach only until the duct chokes; past that the excess is spilled around the cowl and does
@@ -177,16 +200,27 @@ public static class TurboRamjetPerformanceMap {
         double designGroup = RamGroup(DesignMach, design.TemperatureK) * designDensityRatio;
         double ram = 0.0;
         if (designGroup > 0.0) {
+            // CaptureDensityCeiling is now actually APPLIED. It was computed here and then
+            // dropped on the floor: RamThrustN was handed raw ambient density, so the guard its
+            // own comment describes -- "a fixed-geometry inlet cannot swallow unlimited air" --
+            // did nothing at all. The duct was modelled as swallowing everything the atmosphere
+            // could push at it, which is why ram thrust reached 5.4x the dry rating (271 kN) at
+            // FL400/M3 and would have made a low dive free.
+            //
+            // Feeding the CAPPED density into the cycle is what the ceiling was for: above the cap
+            // the duct is choked and the surplus spills round the cowl, so thrust stops climbing
+            // as the air thickens.
             double capturedDensityRatio = System.Math.Min(densityRatio,
                 designDensityRatio * CaptureDensityCeiling);
+            double capturedDensityKgM3 = capturedDensityRatio * AirData.SeaLevelDensityKgM3;
             double captureSchedule = Fade(
                 RamCaptureLockedDensityRatio - densityRatio,
                 0.0,
                 RamCaptureLockedDensityRatio - RamCaptureFullDensityRatio);
             // Physical thrust, expressed as a fraction of static rating so the rest of the engine
-            // interface is unchanged. The capture schedule still models the inlet not swallowing
-            // usefully in dense air, and the fade models light-up.
-            ram = RamThrustN(mach, ambientTemperatureK, ambientDensityKgM3)
+            // interface is unchanged. The capture schedule still models the spike not being
+            // deployed in dense air, and the fade models light-up.
+            ram = RamThrustN(mach, ambientTemperatureK, capturedDensityKgM3)
                 / StaticThrustReferenceN
                 * captureSchedule
                 * Fade(mach, RamFadeStartMach, FullRamMach);

@@ -26,10 +26,11 @@ public class TimeCompressionTests {
         return baseline with {
             Player = baseline.Player with {
                 Position = new Vec3D(0.0, 15_000.0, 0.0),
-                // M1.35-ish is established supersonic transit but is not inside the M1.6
-                // ram-light handover lead. A fixture at M2.7 accidentally tested transition
-                // protection instead of uneventful cruise.
-                Speed = 400.0,
+                // M1.27. This was 400 m/s / M1.356, which cleared the M1.6 ram-light lead by
+                // 0.0043 Mach -- 0.4% -- so any acceleration at all put the fixture inside the
+                // taper and the test measured transition protection instead of quiet cruise. A
+                // fixture that close to a boundary is not testing what its name says.
+                Speed = 375.0,
                 Gamma = 0.0,
                 Chi = 0.0,
                 Bank = 0.0

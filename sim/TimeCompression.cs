@@ -71,11 +71,34 @@ internal static class TimeCompressionPolicy {
     /// a trustworthy time-to-transition, so its observable Mach margin is kept explicit rather
     /// than pretending an acceleration estimate is qualified.
     /// </summary>
-    public static int FactorCapForRamMachMargin(double marginMach) {
+    /// <param name="marginMach">Mach still to run before the next handover.</param>
+    /// <param name="bandWidthMach">
+    /// Distance from the PREVIOUS handover to the next one — the width of the band the aircraft is
+    /// currently crossing. The lead is scaled so it can never consume more than half of it.
+    ///
+    /// Without this the ladder blocks compression outright wherever two boundaries sit closer
+    /// together than the lead. FullRamMach 2.8 and TurbineGoneMach 3.0 are 0.20 apart against a
+    /// 0.24 lead, so the whole of M2.56-M3.00 could never reach 8x no matter how quiet the
+    /// transit was: the aircraft left one boundary's lead directly into the next one's. A lead
+    /// exists to give warning before a handover, and a lead with no un-led airspace in front of it
+    /// gives no warning, it just withholds the feature.
+    /// </param>
+    public static int FactorCapForRamMachMargin(
+        double marginMach, double bandWidthMach = double.PositiveInfinity) {
         if (double.IsPositiveInfinity(marginMach)) return PreferredFactor;
-        if (!double.IsFinite(marginMach) || marginMach <= RamBoundaryLeadMach) return 1;
-        if (marginMach <= RamBoundaryLeadMach * 2.0) return 2;
-        if (marginMach <= RamTaperLeadMach) return 4;
+        if (!double.IsFinite(marginMach) || marginMach <= 0.0) return 1;
+
+        // Never spend more than half the band on lead, so at least half of every band is
+        // compressible. A non-finite or non-positive band means "no previous boundary", i.e. the
+        // full lead is affordable.
+        double scale = 1.0;
+        if (double.IsFinite(bandWidthMach) && bandWidthMach > 0.0)
+            scale = System.Math.Min(1.0, 0.5 * bandWidthMach / RamTaperLeadMach);
+
+        double hardLead = RamBoundaryLeadMach * scale;
+        if (marginMach <= hardLead) return 1;
+        if (marginMach <= hardLead * 2.0) return 2;
+        if (marginMach <= RamTaperLeadMach * scale) return 4;
         return PreferredFactor;
     }
 

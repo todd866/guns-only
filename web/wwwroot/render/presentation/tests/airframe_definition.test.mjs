@@ -34,11 +34,16 @@ test("rapier.v1.json publishes closed geometry and identity", () => {
   assert.equal(def.sockets.droneBay[0].epistemic, "provisional");
 });
 
-test("rapier.v1.json tags Mach-4 dash as fiction and wet T/W as closed at family cap", () => {
+test("rapier.v1.json tags Mach-4 dash as fiction and wet T/W as closed well under family cap", () => {
   const def = JSON.parse(readFileSync(join(root, "rapier.v1.json"), "utf8"));
   assert.equal(def.performanceClaims.designDashMach.epistemic, "fiction");
   assert.equal(def.performanceClaims.wetThrustWeightGross.epistemic, "closed");
-  assert.equal(def.performanceClaims.wetThrustWeightGross.value, 1.20);
+  // 0.71, not the 1.20 family cap. This pinned 1.20 when the core was 84 kN, i.e. the aircraft
+  // was authored right AT the ceiling it was supposed to be checked against. With the honest
+  // 50 kN core it is 50,000 x 1.55 / (11,090 x 9.80665) = 0.71, and the cap is now a real
+  // constraint with room under it rather than a number the design was resting on.
+  assert.equal(def.performanceClaims.wetThrustWeightGross.value, 0.71);
+  assert.ok(def.performanceClaims.wetThrustWeightGross.value < 1.20);
   assert.equal(def.propulsion.epistemic, "provisional");
 });
 

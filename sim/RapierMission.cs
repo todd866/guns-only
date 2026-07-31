@@ -1426,6 +1426,34 @@ public sealed class RapierMissionDirector {
                 // autopilot turn back toward it after crossing the point.
                 Vec3D touchdownAim = physicalTouchdown
                     + new Vec3D(0.0, -20.0, 0.0);
+                // Closed-loop gamma to a CALIBRATED aim point.
+                //
+                // Predicting deck intersection from the instantaneous flight-path angle and trimming
+                // gamma (tried 2026-07-27) boltered the wire card: reduced-order pitch lag means
+                // the aircraft does not fly the predicted path. HookAimOffsetM is not hook trail
+                // (Carrier.HookToMainGearM = 6 m) — it is measured pitch-response compensation so
+                // the approach aim sits where the hook actually arrives. Dead mass-scheduled gamma
+                // trim was removed; the proper next step is a predictive model of the pitch law,
+                // not another energy-fitted constant.
+                // Pitch/path response is mass-sensitive: the same command at the 7,080 kg recovery
+                // card and the 5,660 kg post-sortie article does not intersect the slab at the same
+                // along coordinate. Use a small bounded first-order predictor rather than another
+                // one-mass constant. It changes lead by ~17 m across those measured cases and leaves
+                // the public 290 m reference unchanged at 7,080 kg.
+                // Lower bound 250, was 275. The predictor is right and the CLAMP was the defect:
+                // the wires span 15.6 m in total (4 x WireSpacingM 5.2) with an 8 m capture sweep,
+                // so the whole landing box is about 24 m wide and 12 m of unwanted lead is enough
+                // to miss it. At the 9,327 kg the full authored sortie actually arrives at, the
+                // predictor asks for 263 m and the floor forced 275, and the hook came down 0.8 m
+                // past wire four -- an InFlightEngagement, missing the entire array by 80 cm.
+                //
+                // 275 was fitted across the 7,080 kg recovery card and the 5,660 kg post-sortie
+                // article; the heavier full-fuel sortie now lands outside the range it was fitted
+                // over. Widening the floor lets the predictor do the job it was written to do.
+                double hookAimOffsetM = Math.Clamp(
+                    290.0 + (7_080.0 - player.Mass) * 0.012,
+                    250.0, 315.0);
+                Vec3D finalAim = touchdownAim + runwayForward * hookAimOffsetM;
                 double distanceToWireM =
                     (physicalTouchdown - player.Position).Dot(runwayForward);
                 Vec3D gatePoint;
@@ -1448,7 +1476,19 @@ public sealed class RapierMissionDirector {
                         + new Vec3D(0.0, 180.0, 0.0);
                 } else {
                     recoveryGate = 4;
-                    gatePoint = touchdownAim;
+                    // finalAim, NOT touchdownAim. touchdownAim carries the deliberate 20 m
+                    // depression that stops the aircraft floating down the deck; hookAimOffsetM
+                    // is the ~290 m of lead that COMPENSATES for that depression and for pitch
+                    // lag, and it was measured for exactly this purpose -- "so the approach aim
+                    // sits where the hook actually arrives".
+                    //
+                    // But it was only ever fed into geometricFinalGamma, which is a clamp FLOOR.
+                    // The steering command itself still pointed at the undepressed-but-unled
+                    // touchdownAim, so the aircraft flew at a point 20 m under the slab with no
+                    // lead at all. On a 3.5 degree path 20 m of depression is 327 m of undershoot,
+                    // and the recovery touched down 219 m short of the wire every single time.
+                    // The compensation existed, was correct, and was not connected to anything.
+                    gatePoint = finalAim;
                 }
                 guidanceWaypoint = gatePoint;
                 waypoint = _recoveryFinal
@@ -1470,24 +1510,7 @@ public sealed class RapierMissionDirector {
                 double horizontalRangeM = Math.Max(1.0, Math.Sqrt(
                     Math.Pow(gatePoint.X - player.Position.X, 2.0)
                     + Math.Pow(gatePoint.Z - player.Position.Z, 2.0)));
-                // Closed-loop gamma to a CALIBRATED aim point.
-                //
-                // Predicting deck intersection from the instantaneous flight-path angle and trimming
-                // gamma (tried 2026-07-27) boltered the wire card: reduced-order pitch lag means
-                // the aircraft does not fly the predicted path. HookAimOffsetM is not hook trail
-                // (Carrier.HookToMainGearM = 6 m) — it is measured pitch-response compensation so
-                // the approach aim sits where the hook actually arrives. Dead mass-scheduled gamma
-                // trim was removed; the proper next step is a predictive model of the pitch law,
-                // not another energy-fitted constant.
-                // Pitch/path response is mass-sensitive: the same command at the 7,080 kg recovery
-                // card and the 5,660 kg post-sortie article does not intersect the slab at the same
-                // along coordinate. Use a small bounded first-order predictor rather than another
-                // one-mass constant. It changes lead by ~17 m across those measured cases and leaves
-                // the public 290 m reference unchanged at 7,080 kg.
-                double hookAimOffsetM = Math.Clamp(
-                    290.0 + (7_080.0 - player.Mass) * 0.012,
-                    275.0, 315.0);
-                Vec3D finalAim = touchdownAim + runwayForward * hookAimOffsetM;
+
                 double geometricFinalGamma = Math.Atan2(
                     finalAim.Y - player.Position.Y,
                     Math.Max(1.0, Math.Sqrt(
@@ -1521,7 +1544,16 @@ public sealed class RapierMissionDirector {
                     player.Position.Y > setupAltitudeM + 1_000.0;
                 double approachSpeedMps;
                 if (_recoveryFinal) {
-                    approachSpeedMps = 88.0;
+                    // 80 m/s = 155 KTAS. This was 88 m/s = 171 KTAS, which is ABOVE the 82 m/s
+                    // (159 KTAS) the arrest assessment will accept -- the automation was flying an
+                    // approach it was not permitted to trap from, so a perfectly flown final could
+                    // only ever bolter. It went unnoticed while the speed loop was too weak to
+                    // reach the commanded speed: the aircraft arrived 21 kt slow, at 149 kt, which
+                    // was inside the gate by accident and looked like a different problem.
+                    //
+                    // 80 m/s is 1.22 Vs at recovery weight (stall 65.7 m/s / 128 kt) and sits
+                    // inside the arrest gate with 2 m/s to spare.
+                    approachSpeedMps = 80.0;
                 } else if (!_recoveryMarshalReached) {
                     approachSpeedMps = setupRangeM > 100_000.0 ? 320.0
                         : setupRangeM > 40_000.0 || highAboveSetupShelf ? 180.0
@@ -1536,17 +1568,43 @@ public sealed class RapierMissionDirector {
                 } else {
                     approachSpeedMps = setupRangeM > 5_000.0 ? 120.0 : 88.0;
                 }
+                // The final shelf was 0.04 -- idle. A delta at 616 kg/m2 on a 3 degree path is on
+                // the back of the drag curve at approach alpha (measured 12.8 deg), where it needs
+                // POWER to hold the path, not to gain speed. At idle it simply descends steeper
+                // than commanded, which is exactly what the trace showed: throttle 0.00 the whole
+                // way down, 21 kt slow, and 3.7 degrees against a 2.95 degree command.
                 double recoveryBaseThrottle = approachSpeedMps > 250.0 ? 0.90
                     : approachSpeedMps > 150.0 ? 0.52
                     : approachSpeedMps > 100.0 ? 0.22
-                    : 0.04;
+                    : 0.20;
                 double recoveryMaximumThrottle = approachSpeedMps > 250.0 ? 1.25
                     : approachSpeedMps > 150.0 ? 1.25
                     : approachSpeedMps > 100.0 ? 0.95
                     : 0.72;
+                // 0.012 per m/s is roughly 1% of lever per knot of error -- an 11 m/s deficit
+                // bought 13% throttle, which cannot hold speed on an approach. 0.045 gives the
+                // loop enough authority to actually be a speed hold.
+                //
+                // POWER CONTROLS THE PATH. The speed term alone left the aircraft holding 3.5
+                // degrees against a 2.34 degree command and touching down 219 m short of the wire,
+                // every attempt, for the same reason it always happens: on the back of the drag
+                // curve at approach alpha, pitch cannot raise the flight path. Only thrust can.
+                // Trimming the aim point, the gate geometry and the commanded gamma all failed to
+                // move the touchdown because none of them was the missing loop.
+                //
+                // So on final the throttle closes on BOTH: speed, and the path error against the
+                // gamma the guidance is asking for. This is the carrier technique -- power for
+                // glideslope, attitude for speed -- and it is only applied once established on
+                // final, where that is the correct way to fly the aeroplane.
+                double pathTerm = 0.0;
+                if (_recoveryFinal) {
+                    double pathErrorRad = targetGamma - player.Gamma;
+                    pathTerm = Math.Clamp(pathErrorRad * 8.0, -0.25, 0.45);
+                }
                 throttle = Math.Clamp(
                     recoveryBaseThrottle
-                        + (approachSpeedMps - trueAirspeedMps) * 0.012,
+                        + (approachSpeedMps - trueAirspeedMps) * 0.045
+                        + pathTerm,
                     0.0, recoveryMaximumThrottle);
                 targetAltitudeFt = gatePoint.Y * FeetPerMetre;
                 // INSTRUCTIONS, not status. This used to report which gate the aircraft was at and
