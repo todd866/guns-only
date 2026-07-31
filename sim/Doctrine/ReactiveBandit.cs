@@ -169,6 +169,19 @@ public sealed class ReactiveBandit :
     const double CombatCeilingM = 11500.0;
     const double ReturnRadiusM = 5200.0;
     const double ThreatRangeM = 1500.0;
+    /// Beyond this the bandit stops manoeuvring and turns back into the player, whatever else it
+    /// was doing. This is a TRAINING opponent: it cannot kill anyone while it is pointing away, so
+    /// past the range where BFM means anything there is exactly one correct move — convert back to
+    /// a merge. It also bounds the worst case the player can be handed, which the fight-centre
+    /// leash does not: that leash measures from the bandit's spawn, so a fight the player drags
+    /// downrange can open indefinitely while both aircraft sit "inside the arena".
+    const double ReengageRangeM = 3500.0;
+    /// Past this the player has left, not extended, and the bandit holds its arena instead of
+    /// tail-chasing across the theatre. Real telemetry made the case: a recorded sortie wanders to
+    /// 346 NM on a return to base, and a re-engage rule written only in terms of "point at the
+    /// player" followed it forever. 8 NM is comfortably outside any guns geometry while still
+    /// well inside the ranges the corpus shows a live fight recovering from.
+    const double AbandonChaseRangeM = 15_000.0;
     const double MergeSpawnClearanceM = 600.0;
     const double LowTargetClearanceM = 400.0;
     const double LowBlockCaptureClearanceM = 480.0;
@@ -203,6 +216,9 @@ public sealed class ReactiveBandit :
     double _defendUntil = double.NegativeInfinity;
     double _defendCooldownUntil = double.NegativeInfinity;
     double _nextJinkAt = double.PositiveInfinity;
+    /// Latched state of the anti-camp ceiling denial. Latched rather than recomputed per tick
+    /// because entry and exit need different thresholds — see SelectTactic.
+    bool _ceilingDenial;
     int _jinkIndex;
     int _breakSign = 1;
     int _damageHandedness = 1;
@@ -327,8 +343,17 @@ public sealed class ReactiveBandit :
         // higher ownship near its present altitude (for example, after the AWACS beat) -- but cap the
         // effective ceiling at the believable combat ceiling so it can never float into the
         // stratosphere and drag a knife-fight to FL600.
+        //
+        // 2,500 m of headroom, not 1,000 m. The old figure gave the modern merge a 13,478 ft cap
+        // over 10,000 ft staging: less vertical than ONE honest manoeuvre. A high yo-yo or a
+        // vertical reverse put the player over the anti-camp trigger at 14,626 ft, and the bandit
+        // answered normal BFM by extending away as though the player were plinking from the
+        // stratosphere. This is a CAP, not a target — the bandit is still pulled back down by
+        // Return, whose aim point tracks _fightCentre (the merge altitude), so the fight continues
+        // to live where the valleys are. It only means the bandit will follow the player up
+        // through a vertical fight instead of declining it.
         _ceilingM = System.Math.Min(CombatCeilingM,
-            System.Math.Max(CeilingM, initial.Position.Y + 1000.0));
+            System.Math.Max(CeilingM, initial.Position.Y + 2500.0));
     }
 
     /// Deterministically put a fresh fighter into a real offset, reciprocal merge. Engagement
@@ -944,6 +969,39 @@ public sealed class ReactiveBandit :
                 LastCommand = LowBlockPerchCommand(player);
                 Tactic = BanditTactic.Return;
                 RecordSingleCandidateDecision(LastCommand);
+            } else if (Tactic == BanditTactic.Return || IsOpeningBeyondReengageRange(player)) {
+                // THE LEASH, FOR THE TIERS THAT ACTUALLY FLY THE LOOKAHEAD.
+                //
+                // The branch below discards whatever SelectTactic decided and force-sets Acquire,
+                // on the reasoning that "the rollout's terrain/ceiling score continues to own
+                // fight-volume shaping". It does not, on either count. BanditTactic.Return was
+                // unreachable for every lookahead tier, so from Veteran up there was no containment
+                // of any kind: the scorer optimises a firing solution over a short horizon and is
+                // perfectly content to fly away for a better one later, which at Ace produced a
+                // bandit 7.0 NM out and opening — a stern chase in a sim with nothing to shoot at
+                // that range. And the rollout's ceiling term guards CombatCeilingM (11.5 km), never
+                // the per-fight _ceilingM, so it permits a bandit to float thousands of metres out
+                // of its own fight volume; traced at 13,437 m against a 5,608 m ceiling.
+                //
+                // So BOTH leashes are honoured here. SelectTactic's Return (radius from the fight
+                // centre, or ownship above the per-fight ceiling) is no longer thrown away, and the
+                // player-relative opening test adds the case a spawn-centred radius cannot see: a
+                // fight the player has dragged downrange, where both aircraft are far from the
+                // centre and the range is opening anyway.
+                CancelPendingLookaheadPlan();
+                // Point at the PLAYER whenever he is far, not merely when the gap is opening. Using
+                // ReturnCommand for the geographic case flew the bandit at the spawn-centred fight
+                // volume while the player sat somewhere else entirely — measured, that put it nose-
+                // cold beyond 4 NM for 24 continuous seconds, which is the reported complaint wearing
+                // a different hat. The fight volume is only the right target when the player is
+                // already close and it is the BANDIT that has strayed out of bounds.
+                double leashRangeM = Geometry.Range(State, player);
+                LastCommand = leashRangeM > ReengageRangeM
+                        && leashRangeM <= AbandonChaseRangeM
+                    ? ReengageCommand(player)
+                    : ReturnCommand();
+                Tactic = BanditTactic.Return;
+                RecordSingleCandidateDecision(LastCommand);
             } else {
                 bool defending = Tactic == BanditTactic.Defend;
                 LastCommand = LookaheadCommand(player);
@@ -1000,24 +1058,55 @@ public sealed class ReactiveBandit :
         // a ceiling-limited bandit into a stationary target; real BFM answers that by unloading,
         // extending away, and rebuilding energy below — dragging the fight back down instead of
         // hovering at the cap waiting to be shot from above.
-        if (player.Position.Y > _ceilingM + 350.0
-            && own.Position.Y > _ceilingM - 900.0) {
-            Tactic = BanditTactic.Energy;
-            return;
-        }
+        //
+        // HYSTERESIS, because a single threshold on own.Y made this oscillate. Entry and exit both
+        // tested `own.Y > _ceilingM - 900`, so Energy's unload dropped the bandit a few metres
+        // below the line, Acquire's pull put it straight back above, and the bandit chattered
+        // Energy<->Acquire every few seconds pinned to that altitude — never committing to the
+        // fight, never finishing the extension. Arm high, disarm 500 m lower, exactly as the speed
+        // gate below already separates _energyEntryMps from _energyExitMps.
+        // AND IT ONLY ARMS FOR A BANDIT THAT ACTUALLY NEEDS THE ENERGY. This is a training
+        // opponent: it cannot kill the player while it is pointing away, so running is never the
+        // hardest it can try. A bandit still carrying fighting speed answers a high player by
+        // climbing into him — the ordinary Acquire lookahead already does that, and the raised
+        // ceiling now gives it the room. The extension is reserved for the case it was written
+        // for: energy-poor, near the cap, genuinely unable to reach the player from here.
+        bool needsEnergyToReach = own.Speed < _highSpeedMps;
+        if (player.Position.Y <= _ceilingM + 350.0 || !needsEnergyToReach) _ceilingDenial = false;
+        else if (own.Position.Y > _ceilingM - 900.0) _ceilingDenial = true;
+        else if (own.Position.Y < _ceilingM - 1400.0) _ceilingDenial = false;
 
+        // Energy state outranks arena housekeeping. Previously a slow bandit outside the return
+        // radius stayed in Return's nose-high 2.8 G turn instead of unloading, decelerated into a
+        // deep stall, and wallowed for the rest of the engagement. Rebuild honest flying energy
+        // first; Return can bend the recovered aircraft back into the fight on a later tick.
         if (own.Speed < _energyEntryMps
             || (Tactic == BanditTactic.Energy && own.Speed < _energyExitMps)) {
             Tactic = BanditTactic.Energy;
             return;
         }
 
-        // Energy state outranks arena housekeeping. Previously a slow bandit outside the return
-        // radius stayed in Return's nose-high 2.8 G turn instead of unloading, decelerated into a
-        // deep stall, and wallowed for the rest of the engagement. Rebuild honest flying energy
-        // first; Return can bend the recovered aircraft back into the fight on a later tick.
+        // THE ARENA LEASH OUTRANKS EVERY DISCRETIONARY REASON TO FLY AWAY.
+        //
+        // This check used to sit BELOW the ceiling-denial branch, which returned early — so while
+        // the player was above the fight ceiling the 5.2 km leash was not merely loose, it was
+        // switched off entirely. A player who climbed 350 m over the cap (in the modern merge that
+        // is 14,626 ft, under one high yo-yo above the 10,000 ft staging) put the bandit into an
+        // unbounded max-throttle extension: reproduced at 5.7 NM and reported from production at
+        // 7.0 NM, with Return never selected once in three minutes. A guns-only opponent that can
+        // open the range without limit is not a fight, it is a fuel-burning tail chase.
+        //
+        // Denial now sets its intent and FALLS THROUGH to here: the bandit may extend, dive and
+        // rebuild energy, but it does all of that inside the arena, and crossing the leash sends
+        // it home regardless of how high the player is sitting. The low-energy gate above still
+        // outranks the leash, for the documented stall reason.
         if (radius > ReturnRadiusM || own.Position.Y > _ceilingM + 350.0) {
             Tactic = BanditTactic.Return;
+            return;
+        }
+
+        if (_ceilingDenial) {
+            Tactic = BanditTactic.Energy;
             return;
         }
 
@@ -1400,7 +1489,16 @@ public sealed class ReactiveBandit :
             return new PilotCommand(1.85, LimitedBankTo(climb, 0.65),
                 _maximumThrottle, 0.0);
         }
-        var extension = own.Position + own.ForwardDir() * 1200.0 + new Vec3D(0.0, -280.0, 0.0);
+        // THE EXTENSION IS AIMED, NOT OPEN-ENDED. Straight ahead from wherever the nose happened to
+        // be pointing is how an energy rebuild became an escape: SelectTactic's low-energy gate
+        // deliberately outranks the arena leash (a slow bandit dragged into Return's nose-high 2.8 G
+        // turn used to stall), so while Energy holds, nothing else was bounding the range — the
+        // bandit extended past the leash and kept going. Clamping the aim point into the fight
+        // volume fixes that where it starts: the extension curves home as it reaches the arena
+        // edge, so the bandit rebuilds its energy AND ends up pointing back at the player, which is
+        // what an extension is supposed to buy. Same helper the low-altitude branch above uses.
+        var extension = KeepAimInFightVolume(
+            own.Position + own.ForwardDir() * 1200.0 + new Vec3D(0.0, -280.0, 0.0));
         // The descending extension must not descend into rising ground ahead.
         double aheadFloor = LocalFloorM(extension.X, extension.Z);
         if (extension.Y < aheadFloor + 180.0)
@@ -1415,8 +1513,40 @@ public sealed class ReactiveBandit :
         double gamma = System.Math.Asin(System.Math.Clamp(
             velocity.Y / System.Math.Max(own.Speed, 1.0), -1.0, 1.0));
         if (gamma > 0.09) {
-            return new PilotCommand(-0.10, LimitedBankTo(extension, 0.38),
-                System.Math.Min(_maximumThrottle, 0.40), 0.0);
+            // Get the nose down the way a pilot does: ROLL, then pull. The old answer here pushed
+            // -0.10 G at 40% power wings-level, which is the worst of both worlds. gamma-dot is
+            // (n - cos gamma) * g / V, so at n = -0.1 from a 40-degree climb the nose takes about
+            // twelve seconds to reach the horizon — and the jet spends all twelve of them climbing
+            // at 20,000+ fpm on reduced thrust. Measured: 2,600 ft gained and 28 m/s LOST while
+            // nominally "unloading to extend", which is precisely the fleeing-bandit zoom the
+            // comment above claims to have fixed.
+            //
+            // Rolling most of the lift vector off vertical drops the supported component below 1 G
+            // so gravity brings the nose down promptly, while the pull keeps the wing working and
+            // the throttle keeps the energy. Bank is capped short of inverted: this is a slice to
+            // level, not a split-S into the terrain.
+            //
+            // The roll direction is CHOSEN, not solved for. Aiming it at the extension point is a
+            // singularity: that point sits in the vertical plane below the flight path, which is
+            // precisely where BankToPlaceLiftVectorOn's atan2 returns +/-pi and the sign is decided
+            // by rounding noise. Traced, it alternated between +1.35 and -1.35 rad on consecutive
+            // ticks — the jet never rolled at all and pitched to 79 degrees nose-up while nominally
+            // recovering. Which way it rolls does not matter here; that it is the same way on the
+            // next tick is the entire requirement. Hold the established bank, and break the tie
+            // with the same deterministic sign the defensive break uses.
+            double side = System.Math.Abs(own.Bank) > 0.05
+                ? System.Math.Sign(own.Bank)
+                : _breakSign;
+            return new PilotCommand(2.2, side * 1.35, _maximumThrottle, 0.0);
+        }
+        // The aim point has been clamped back inside the arena and now sits well off the nose, so
+        // the shallow 22-degree extension bank cannot get there: at 0.55 G that is 0.4 deg/s, which
+        // is not a turn, it is a rounding error. Commit to a real descending energy turn instead.
+        // Nose-LOW is what makes this safe to do at low speed — the deep stall that made the
+        // low-energy gate outrank the leash in the first place came from Return's nose-HIGH 2.8 G
+        // pull, and this is the opposite manoeuvre at full power.
+        if (AngleTo(extension) > 0.45) {
+            return new PilotCommand(2.6, LimitedBankTo(extension, 1.05), _maximumThrottle, 0.0);
         }
         return new PilotCommand(0.55, LimitedBankTo(extension, 0.38),
             _maximumThrottle, 0.0);
@@ -1448,6 +1578,76 @@ public sealed class ReactiveBandit :
             ? System.Math.Min(_maximumThrottle, 1.00)
             : System.Math.Min(_maximumThrottle, 0.70);
         return new PilotCommand(g, bank, throttle, 0.0);
+    }
+
+    /// The leash trigger: beyond gun-fight range AND the gap is still growing.
+    ///
+    /// RANGE RATE, not range alone. Range alone looked right and was wrong: the staged opening is a
+    /// 9 km run-in, so an unqualified range test fired through the entire merge, cancelled the
+    /// lookahead for its whole duration, and flew the opening on a single scripted command. That
+    /// also starved the planner-teacher pipeline — PlannerShadowRoutingCoordinatorTests seeds its
+    /// fixture from the first sample of an Ace episode, and there were no samples left to take.
+    /// What was actually reported was not distance, it was distance INCREASING, which is this.
+    bool IsOpeningBeyondReengageRange(in ActorObservation player) {
+        var own = State;
+        var toPlayer = player.Position - own.Position;
+        double range = toPlayer.Length;
+        if (range <= ReengageRangeM) return false;
+        // Small positive deadband so a bandit holding range does not flicker in and out of the
+        // leash on numerical noise.
+        double openingMps = (player.VelocityVector() - own.VelocityVector())
+            .Dot(toPlayer * (1.0 / range));
+        return openingMps > 5.0;
+    }
+
+    /// Nose onto the player and accelerate. Deliberately NOT ReturnCommand: that one flies to the
+    /// spawn-centred fight volume, which is the wrong answer once the player is the thing that has
+    /// moved — it can open the range while dutifully "returning". The floor guard is the same one
+    /// the defensive jink uses, so a re-engage that points downhill still clears the ground.
+    PilotCommand ReengageCommand(in ActorObservation player) {
+        var own = State;
+        var aim = KeepAimInFightVolume(player.Position);
+        double floorHere = LocalFloorM(own.Position.X, own.Position.Z);
+        if (aim.Y < floorHere + 300.0) aim = aim with { Y = floorHere + 300.0 };
+        // Keep the aim point within a bounded vertical step of our own altitude. A target far below
+        // the flight path drives BankToPlaceLiftVectorOn toward +/-pi — the same ill-conditioned
+        // geometry the nose-high recovery hits — and the bank limit then turns the "descend and
+        // re-engage" into a 75-degree banked LEVEL turn that holds altitude indefinitely. Traced,
+        // that floated the bandit to 44,000 ft while nominally re-engaging a player at 15,000 ft.
+        // Walking the aim down in steps keeps the solution well conditioned and the descent honest.
+        aim = aim with {
+            Y = own.Position.Y + System.Math.Clamp(aim.Y - own.Position.Y, -900.0, 900.0)
+        };
+        // Clamping the vertical delta shortens the descent; it does NOT move the aim out of the
+        // vertical plane through the velocity vector, which is the actual singular geometry. A
+        // player dead ahead-and-below (or dead astern-and-below) still drives the bank solution to
+        // +/-pi, where the sign is rounding noise and the command chatters left/right every tick.
+        // Nudge the aim sideways — toward the side the player already lies on — so the solution is
+        // always well conditioned. The offset is small enough not to bend the intercept.
+        var flatToPlayer = new Vec3D(player.Position.X - own.Position.X, 0.0,
+            player.Position.Z - own.Position.Z);
+        if (flatToPlayer.Length < 400.0) {
+            var wing = new Vec3D(0.0, 1.0, 0.0).Cross(own.ForwardDir());
+            if (wing.Length > 1e-6)
+                aim += wing.Normalized() * (400.0 * _breakSign);
+        }
+        // Sample the floor along the path we are about to fly, not just under our feet. Defend and
+        // Energy both do this; this command did not, so a re-engage toward a low player over rising
+        // ground cleared the aim point and flew the jet into the ridge in between.
+        double aheadFloorM = LocalFloorM(
+            own.Position.X + own.ForwardDir().X * 900.0,
+            own.Position.Z + own.ForwardDir().Z * 900.0);
+        double pathFloorM = System.Math.Max(floorHere, aheadFloorM);
+        if (aim.Y < pathFloorM + 300.0) aim = aim with { Y = pathFloorM + 300.0 };
+        double angle = AngleTo(aim);
+        // Hard enough to actually convert the geometry, soft enough not to scrub to the corner and
+        // arrive at the merge slow: past 90 degrees off it is a max-perform reversal, inside that
+        // it tightens with the angle.
+        // AvailableAcquireG can fall below the 1.4 floor in thin air or at low speed, so this is a
+        // Min against a floored ceiling, not a Clamp — Clamp throws when min exceeds max.
+        double g = System.Math.Min(1.4 + angle * 2.6,
+            System.Math.Max(1.05, AvailableAcquireG(safetyReserve: true)));
+        return new PilotCommand(g, LimitedBankTo(aim, 1.30), _maximumThrottle, 0.0);
     }
 
     PilotCommand ReturnCommand() {
@@ -2166,8 +2366,16 @@ public sealed class ReactiveBandit :
         // player into the stratosphere, so climbing past the believable combat ceiling is penalised.
         // This is a CEILING, not an altitude reward -- it is zero in-band and only ever pushes the
         // fight back down, so vertical maneuvers still emerge purely when they improve the angle.
-        if (maxY > CombatCeilingM - 200.0)
-            score -= 0.02 * (maxY - (CombatCeilingM - 200.0));
+        //
+        // The PER-FIGHT ceiling, not the family constant. Guarding CombatCeilingM (11.5 km) meant
+        // the term was silent for the entire altitude band any modern merge actually occupies: the
+        // Su-27 fight staged at 10,000 ft has _ceilingM = 5,608 m, so a bandit could climb 5.7 km
+        // out of its own fight volume before the scorer objected at all. Traced at 13,437 m. This
+        // is the only ceiling pressure a lookahead tier gets — SelectTactic's Return was discarded
+        // on that path — so it has to be the one that means something.
+        double scoreCeilingM = System.Math.Min(_ceilingM, CombatCeilingM);
+        if (maxY > scoreCeilingM - 200.0)
+            score -= 0.02 * (maxY - (scoreCeilingM - 200.0));
         return score;
     }
 

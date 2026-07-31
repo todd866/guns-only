@@ -20,6 +20,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Real player flight paths replayed by RealPlayerTrackTests. Regenerate with
+         tools/telemetry/extract_bfm_fixtures.py (reads the local chunk cache, no network). -->
+    <None Include="fixtures\**\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\sim\GunsOnly.Sim.csproj" />
     <Compile Include="..\web\IncidentReplayProjection.cs" Link="IncidentReplayProjection.cs" />
     <Compile Include="..\web\SnapshotJson.cs" Link="SnapshotJson.cs" />
