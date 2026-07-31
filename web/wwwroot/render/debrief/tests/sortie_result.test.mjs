@@ -455,7 +455,7 @@ test("app consumes the pure evidence-based debrief module", async () => {
   const app = await readFile(new URL("../../../app.js", import.meta.url), "utf8");
 
   assert.match(app,
-    /import \{[\s\S]*?combatHandoffPresentation,[\s\S]*?sortieResultCopy,[\s\S]*?} from "\.\/render\/debrief\/sortie_result\.js\?v=226";/);
+    /import \{[\s\S]*?combatHandoffPresentation,[\s\S]*?sortieResultCopy,[\s\S]*?} from "\.\/render\/debrief\/sortie_result\.js\?v=227";/);
   assert.doesNotMatch(app, /function sortieResultCopy\(/);
   assert.doesNotMatch(app, /The opponent's gun solution was decisive\. The loss was/);
 });

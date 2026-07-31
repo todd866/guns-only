@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=226";
+import { createHud } from "./hud.js?v=227";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=226";
+} from "./render/debrief/sortie_result.js?v=227";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -49,7 +49,7 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=226";
+} from "./render/release/release_identity.js?v=227";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -62,7 +62,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=226";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=227";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -139,13 +139,13 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=226";
+} from "./render/telemetry/ai_frame_pressure.js?v=227";
 import { FrameGovernorPolicy } from "./render/telemetry/frame_governor.js";
 import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compression.js";
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=226";
+} from "./render/telemetry/telemetry_batch.js?v=227";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -154,7 +154,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=226";
+} from "./render/settings/player_settings.js?v=227";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -200,12 +200,12 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=226";
+} from "./render/scene/scene_builders.js?v=227";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=226";
+} from "./render/audio/flight_audio.js?v=227";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -3812,21 +3812,23 @@ function renderPauseUi(state = latestState) {
       ? "Return to the game to fly"
       : mobileControls ? "Tap Fly to launch" : "Press Enter to fly";
   } else {
-    if (readySortieLabel) readySortieLabel.textContent = "Sortie";
-    if (readyConfigLabel) readyConfigLabel.textContent = "Status";
+    // A pause screen has one job: get you back in the aeroplane. Everything that once sat here --
+    // a kicker, a sentence about the deterministic clock, a two-cell sortie/status table, a
+    // keyboard legend, and a hint repeating the button directly above it -- was text the pilot
+    // already knew, in front of the sky they were looking at. The buttons say it all.
     readyReplay.hidden = true;
-    readyKicker.textContent = "Simulation paused";
-    readyTitle.textContent = "Hold Position";
-    readyBrief.textContent = "The deterministic flight clock is stopped. No aircraft, weapons, fuel, or carrier state advances while the sortie is paused.";
-    readySortie.textContent = brief.title;
+    readyKicker.textContent = "";
+    readyTitle.textContent = "Paused";
+    readyBrief.textContent = "";
+    readySortie.textContent = "";
     readyConfig.textContent = handoff.occurred
-      ? `${handoff.status} · Relief kills ${handoff.reliefKills} (uncredited)`
-      : "Inputs neutralised";
-    if (readyControls) readyControls.textContent = handoffActionAvailable
-      ? `Press Enter to resume · ${controlCodeLabel(playerSettings.bindings.knockItOff)} hands off and resumes RTB · R restages`
-      : "Press Enter to resume · R restages the selected sortie";
-    readyStart.textContent = "Resume flight";
-    readyHint.textContent = mobileControls ? "Tap Resume" : "Press Enter to resume";
+      ? `${handoff.status} · relief kills ${handoff.reliefKills}`
+      : "";
+    if (readySortieLabel) readySortieLabel.textContent = "";
+    if (readyConfigLabel) readyConfigLabel.textContent = handoff.occurred ? "Handoff" : "";
+    if (readyControls) readyControls.textContent = "";
+    readyStart.textContent = "Resume";
+    readyHint.textContent = "";
   }
 
   renderBuildIdentity();
@@ -10201,7 +10203,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=226")
+    navigator.serviceWorker.register("service-worker.js?v=227")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);

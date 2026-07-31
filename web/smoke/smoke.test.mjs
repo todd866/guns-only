@@ -49,38 +49,17 @@ test("the smoke server preserves production terrain byte-range semantics", async
   }
 });
 
-test("the mobile loading shell fills the viewport and names the selected sortie honestly", async () => {
+test("the mobile loading cover is the painted sky and shows no title card", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 
   const site = await serveStatic(WWWROOT);
   const browser = await chromium.launch({ headless: true });
   try {
     const cases = [
-      {
-        viewport: { width: 390, height: 844 },
-        search: "?input=touch&audioQa=silent",
-        expectedSortie: /F-22A SURROGATE \/ ENDLESS MERGE/,
-        expectedDeck: /Fight the merge.*Manage the energy.*Make the shot/,
-      },
-      {
-        viewport: { width: 844, height: 390 },
-        search: "?program=rapier-intercept&input=touch&audioQa=silent",
-        expectedSortie: /RAPIER \/ INTERCEPT/,
-        expectedDeck: /Launch fast.*Climb beyond the weather.*Make one pass count/,
-      },
-      {
-        viewport: { width: 667, height: 375 },
-        search: "?input=touch&audioQa=silent",
-        expectedSortie: /F-22A SURROGATE \/ ENDLESS MERGE/,
-        expectedDeck: /Fight the merge.*Manage the energy.*Make the shot/,
-        safeSides: 44,
-      },
-      {
-        viewport: { width: 390, height: 500 },
-        search: "?program=medevac&input=touch&audioQa=silent",
-        expectedSortie: /AIR AMBULANCE \/ MEDEVAC/,
-        expectedDeck: /Fly the route.*Hold the hover.*Bring them home/,
-      },
+      { viewport: { width: 390, height: 844 }, search: "?input=touch&audioQa=silent" },
+      { viewport: { width: 844, height: 390 }, search: "?program=rapier-intercept&input=touch&audioQa=silent" },
+      { viewport: { width: 667, height: 375 }, search: "?input=touch&audioQa=silent", safeSides: 44 },
+      { viewport: { width: 390, height: 500 }, search: "?program=medevac&input=touch&audioQa=silent" },
     ];
     for (const entry of cases) {
       const context = await browser.newContext({
@@ -104,65 +83,50 @@ test("the mobile loading shell fills the viewport and names the selected sortie 
           requestAnimationFrame(() => requestAnimationFrame(resolve))));
       }
       const layout = await page.evaluate(() => {
-        const box = (selector) => {
-          const rect = document.querySelector(selector).getBoundingClientRect();
-          return {
-            left: rect.left,
-            top: rect.top,
-            right: rect.right,
-            bottom: rect.bottom,
-            width: rect.width,
-            height: rect.height,
-          };
-        };
+        const boot = document.querySelector("#boot");
+        const rect = boot.getBoundingClientRect();
+        // Every text node under the cover that is actually PAINTED. Screen-reader-only content is
+        // clipped to a 1px box, so measuring the rendered element is what separates "announced"
+        // from "shown" -- exactly the distinction the deleted title card kept getting wrong.
+        const painted = [];
+        const walker = document.createTreeWalker(boot, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const text = node.textContent.replace(/\s+/g, " ").trim();
+          if (!text) continue;
+          const box = node.parentElement.getBoundingClientRect();
+          if (box.width > 2 && box.height > 2) painted.push(text);
+        }
         return {
-          boot: box("#boot"),
-          card: box(".boot-card"),
-          hero: box(".boot-hero"),
-          sortie: box(".boot-sortie"),
-          load: box(".boot-load"),
-          title: document.querySelector("#boot-title").textContent.trim(),
-          deck: document.querySelector("#boot-deck").textContent.replace(/\s+/g, " ").trim(),
-          sortieTitle: document.querySelector("#boot-sortie-title").textContent.trim(),
-          status: document.querySelector("#boot-status").textContent.replace(/\s+/g, " ").trim(),
-          busy: document.querySelector("#boot").getAttribute("aria-busy"),
+          rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+          painted,
+          backgroundImage: getComputedStyle(boot).backgroundImage,
+          busy: boot.getAttribute("aria-busy"),
+          announced: document.querySelector("#boot-status") !== null,
           scrollWidth: document.documentElement.scrollWidth,
           scrollHeight: document.documentElement.scrollHeight,
           viewport: { width: innerWidth, height: innerHeight },
         };
       });
       const { width, height } = layout.viewport;
-      for (const [name, rect] of Object.entries({
-        card: layout.card,
-        hero: layout.hero,
-        sortie: layout.sortie,
-        load: layout.load,
-      })) {
-        assert.ok(rect.left >= 0 && rect.top >= 0
-          && rect.right <= width && rect.bottom <= height,
-        `${width}x${height}: boot ${name} escaped viewport: ${JSON.stringify(rect)}`);
-      }
-      assert.equal(layout.title, "GUNS ONLY");
-      assert.match(layout.deck, entry.expectedDeck);
-      assert.match(layout.sortieTitle, entry.expectedSortie);
-      assert.equal(layout.status, "LOADING SIMULATION FILES…");
-      assert.doesNotMatch(`${layout.deck} ${layout.status}`, /\.NET|deterministic flight kernel/i);
+      const where = `${width}x${height}`;
+
+      // The cover is the painted sky, edge to edge. Not a card, not a gradient with a wordmark.
+      assert.ok(layout.rect.left <= 0 && layout.rect.top <= 0
+        && layout.rect.width >= width && layout.rect.height >= height,
+      `${where}: boot cover does not fill the viewport: ${JSON.stringify(layout.rect)}`);
+      assert.match(layout.backgroundImage, /menu-hangar\.webp/,
+        `${where}: boot is not wearing the painted hangar`);
+
+      // The whole point. If a wordmark, tagline or spec sheet ever comes back, this fails.
+      assert.deepEqual(layout.painted, [],
+        `${where}: the title card is back -- visible text on the loading cover: ${JSON.stringify(layout.painted)}`);
+
+      // Deleting it from view must not delete it from the accessibility tree.
       assert.equal(layout.busy, "true");
-      assert.ok(layout.card.height >= height * 0.72,
-        `${width}x${height}: loading composition collapsed into a small floating card`);
-      if (height > width) {
-        assert.ok(layout.hero.top <= height * 0.22,
-          `${width}x${height}: hero leaves the same giant dead zone as production`);
-      }
-      assert.ok(layout.load.bottom >= height * 0.75,
-        `${width}x${height}: loading truth is stranded in the middle of the screen`);
+      assert.ok(layout.announced, `${where}: the announced loading status was removed outright`);
+
       assert.ok(layout.scrollWidth <= width && layout.scrollHeight <= height,
-        `${width}x${height}: loading shell scrolls or clips`);
-      if (entry.safeSides) {
-        assert.ok(layout.card.left >= entry.safeSides
-          && layout.card.right <= width - entry.safeSides,
-        `${width}x${height}: loading card invades the simulated notch-safe region`);
-      }
+        `${where}: loading shell scrolls or clips`);
       await context.close();
     }
   } finally {
