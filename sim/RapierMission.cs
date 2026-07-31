@@ -198,6 +198,11 @@ public sealed class RapierMissionDirector {
     const double CircuitFinalKtas = 190.0;
     // Carrier touchdown assessment currently accepts at most 82 m/s (~159 KT). Authoring a
     // 165–177 KT wire pass made a successful arrest physically impossible even when centred.
+    //
+    // NOT the parameter governing the automated recovery touchdown. Raising this to 178 changed
+    // the delivered touchdown by ~1 KT on the sortie card and not at all on the recovery card,
+    // where the "GATE" cue never appears -- so that approach is flown by a different law and this
+    // constant is not in its path. Recorded so the next person does not spend the same hour here.
     const double CircuitWireKtas = 168.0;
     const double CircuitPatternSpeedMps = CircuitPatternKtas / 1.94384;
     const double CircuitBreakSpeedMps = CircuitBreakKtas / 1.94384;
