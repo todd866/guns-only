@@ -35,7 +35,9 @@ public enum DescentLimit {
 public static class DescentCorridor {
     /// Matches RapierAerodynamics.HighDynamicPressurePlacardPa. Duplicated deliberately: this
     /// module is about the recovery envelope and must not depend on the Rapier aero surrogate.
-    public const double PlacardDynamicPressurePa = 80_000.0;
+    /// Both are now Vmo 550 KIAS restated as q -- the corner of the V-n diagram, where the CLmax
+    /// boundary meets the +12 G structural limit -- and not the old authored 80 kPa.
+    public const double PlacardDynamicPressurePa = 49_035.0;
 
     /// SiC/SiC-class CMC material capability, the closed repo number from
     /// docs/airframes/rapier/20-thermal-and-materials.md: SkinTemperatureLimitK = 1473.15 K.

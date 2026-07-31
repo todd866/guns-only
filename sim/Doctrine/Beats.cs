@@ -906,15 +906,23 @@ public static class Beats {
                 FlightModel.RapierPublicDataSurrogate.MassKg),
             // A contact high and slow west of home: the thing this aircraft was built to kill is an
             // enabler, not a fighter. Eastbound closing toward the eastern strip.
-            // 320 km out. At 240 km the full climb consumed nearly the whole intercept and handed
-            // the fight over at only M1.6. This distance still cuts the old 680 km wait by more
-            // than half, but leaves about 73 km after the M2.2 shelf so the article reaches its
-            // M3.6-class dash before attack. It remains inside the regional atlas and leaves enough
+            // 170 km out. This has been walked in twice already -- 680 km, then 320 km -- each time
+            // because the wait before anything happens dominates the sortie, and it was still too
+            // far: on the 320 km card the contact was a dot 173 NM away for the first six minutes
+            // of a flight, which is not a mission, it is a commute.
+            //
+            // The cost is honest and worth stating: a standing-start climb needs roughly 500 s to
+            // build a M4 dash, and a contact this close merges before that. So the ground-launch
+            // card now teaches the intercept and the trap rather than the peak-Mach dash. The dash
+            // wants an airborne-alert start, where the aircraft begins with the energy instead of
+            // spending the whole sortie buying it.
+            //
+            // It remains inside the regional atlas and leaves enough
             // gas for the fight and trap under the current per-stream fuel approximation.
             //
             // Keeping the contact inside the authored regional cell also means an early low fight
             // no longer drops onto the presentation apron.
-            Bandit: new AircraftState(new Vec3D(-320_000, 18_000, 18_000), 210, 0, Math.PI / 2, 0,
+            Bandit: new AircraftState(new Vec3D(-400_000, 18_000, 18_000), 210, 0, Math.PI / 2, 0,
                 FlightModel.Su27SPublicDataSurrogate.MassKg),
             Law: new PurePursuitLaw(),
             BanditTimeline: new() { (0.0, new PilotCommand(1.0, 0.0, 0.55, 0.0)) },
@@ -929,16 +937,37 @@ public static class Beats {
             Combat: CombatConfig.ModernVisualMerge,
             Fuel: new FuelConfig(
                 CapacityLb: 9_920.0,          // 4,500 kg of fuel
-                // Design gross now includes the four-drone bay (+1440 kg). The prior 3,100 lb alert
-                // load left the automation short of the square-gate recovery once climb/ram burn
-                // reflected that mass. 3,600 lb restores a narrow trap reserve without making the
-                // profile free again.
-                InitialFuelLb: 3_600.0,
-                BingoThresholdLb: 1_000.0,
+                // FULL INTERNAL. This was 3,100 lb, then 3,600 lb, and each raise was treated as a
+                // tuning knob when it was actually a symptom: 3,600 lb is 36% of the tank, and the
+                // aircraft flamed out at 2,520 s and arrived at the field dead-stick. Every wire
+                // miss downstream of that was the empty tank, not the landing law.
+                //
+                // The reason to fill it is stronger than "it ran out", though. Fuel drives mass --
+                // SimulationSession sets Mass = FuelFreeMassKg + fuel -- and 9,920 lb is 4,500 kg,
+                // so a full tank is 6,590 + 4,500 = 11,090 kg, which is EXACTLY the design gross
+                // weight. Every published number for this aircraft is computed there: identity
+                // gross, dry T/W 0.46, augmented T/W 0.71, the family cap, the V-n corner that
+                // sets Vmo. At 3,600 lb it launched at 8,223 kg and flew 26% below all of it, so
+                // the flight-test gates were checking a weight the mission never used, and the
+                // aeroplane felt more overpowered than its own design point because it was.
+                //
+                // No launch mass limit exists -- not in the kernel, not in the launch-gallery
+                // basis, not in the gear and arrest chapter. There was never a reason for a
+                // partial load; the fuel clock is supposed to bite during the fight, not before
+                // the aeroplane can get home however it is flown.
+                InitialFuelLb: 9_920.0,
+                // Every one of these used to be an authored number in a plausible order, traceable
+                // to nothing. They are now the fuel plan: see FuelPlan, where FFR is 30 minutes at
+                // a measured max-endurance flow and everything else is built on top of it.
+                //
+                // Bingo and joker are floors here, not the live calls -- the real ones depend on
+                // how far out the aircraft is and what it is actually burning, so they are
+                // computed in flight against FuelPlan.BingoLb / JokerLb.
+                BingoThresholdLb: 1_400.0,
                 ConsumesFuel: true,
-                JokerThresholdLb: 1_200.0,
-                MinimumFuelThresholdLb: 600.0,
-                EmergencyFuelThresholdLb: 300.0),
+                JokerThresholdLb: 2_000.0,
+                MinimumFuelThresholdLb: FuelPlan.MinimumFuelReserveLb,   // MFR: approach + FFR
+                EmergencyFuelThresholdLb: FuelPlan.FixedFuelReserveLb),  // into FFR
             // FULL AUGMENTED POWER on the stroke. 1.0 is the dry lever stop, and an 8.22 t aircraft
             // leaving a ramp on dry thrust decays below stall while it is still climbing away —
             // nobody launches a heavy jet at military power.

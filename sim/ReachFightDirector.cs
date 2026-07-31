@@ -28,7 +28,15 @@ public readonly record struct ReachFightDecision(
 /// inputs and skip progression required by <c>UpdateZoomLobPhase</c>.
 /// </summary>
 public sealed class ReachFightDirector {
-    public const double ClimbTopM = 56_000.0 * 0.3048;
+    /// The transonic acceleration shelf, and the single source of truth for it: RapierMission
+    /// used to keep its own copy, and when this one said FL560 while that one commanded FL400 the
+    /// director held the aircraft in Climb past the shelf, so Accelerate was skipped entirely.
+    ///
+    /// FL560 was authored against an 84 kN core. On the honest 50 kN core FL560 is the ceiling at
+    /// M0.9 -- the climb asymptoted at FL554/M0.84 and never armed the next phase. FL400 is where
+    /// the drag rise is actually cheap to punch through (M1.2 in 27 s versus 185 s at FL560) and
+    /// is where a real TBCC accelerates before climbing on ram.
+    public const double ClimbTopM = 40_000.0 * 0.3048;
     public const double CruiseAltitudeM = 70_000.0 * 0.3048;
     public const double AttackRangeM = 30_000.0;
     public const double AccelMach = 2.2;
@@ -78,7 +86,7 @@ public sealed class ReachFightDirector {
         if (needsClimbTop) {
             _incumbentStrategy = null;
             return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.ClimbBuild,
-                RapierMissionPhase.Climb, "climb_to_fl560");
+                RapierMissionPhase.Climb, "climb_to_shelf");
         }
 
         bool needsAccel = mach < AccelMach

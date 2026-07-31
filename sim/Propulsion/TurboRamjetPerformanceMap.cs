@@ -52,15 +52,22 @@ public static class TurboRamjetPerformanceMap {
     // against a structural limit. With a CMC hot structure good to about M5.7 the engine is the
     // binding constraint, which is how a ramjet should behave.
     public const double RamDesignThrustRatio = 1.30;
-    // Design point M2.6, NOT Mach 4. Nothing has ever sustained Mach 4 in air-breathing flight:
-    // the SR-71 topped out near M3.2 on titanium and a unique engine, and the MiG-25 at M2.83 on
-    // steel. A cheap steel-and-composite attritable jet reaching M4.13 was past every aircraft ever
-    // built, which is exactly why it felt overpowered — it was.
+    // NOTE: DesignMach and DesignAltitudeM no longer affect thrust at all. designGroup is computed
+    // from them and then used only as a `> 0.0` guard -- the normalisation described below was
+    // replaced by RamThrustN()/StaticThrustReferenceN, an ideal cycle over a physical duct. They
+    // are kept because they still document the intended dash point.
     //
-    // A design point is a NORMALISER: the same RamDesignThrustRatio buys far more thrust when the
-    // reference dash is faster, so moving it to M4 silently multiplied everything measured against
-    // it. Back at M2.6/21.5 km the aircraft tops out near M3.1, which is SR-71 class and agrees
-    // with the 320 C skin limit instead of running 1,000 K past it.
+    // The reasoning that set M2.6 has also expired, and it is worth recording why rather than
+    // quietly moving the number. It argued that M2.6 "agrees with the 320 C skin limit" -- but
+    // 320 C is the CHEAP STEEL aeroplane, CheapRapierPublicDataSurrogate, which was rejected. This
+    // airframe is 1200 C SiC/SiC CMC and screens past M5. The design point was justified against
+    // an aircraft that no longer exists, and was never revisited when the skin changed.
+    //
+    // The other half of that argument -- "nothing has ever sustained Mach 4 air-breathing" -- is
+    // true of aircraft that were BUILT, and it was the right instinct at the time: the jet was
+    // reaching M4.13 on an 84 kN core it could not physically carry. It is not an argument that
+    // M4 is impossible for a 2040s CMC airframe. What made the old aircraft dishonest was free
+    // thrust, and that was fixed at the source rather than by capping the design point.
     public const double DesignMach = 2.6;
     public const double DesignAltitudeM = 21_500.0;
     // Stoichiometric kerosene-air adiabatic flame temperature is about 2300-2400 K, and hydrogen is
@@ -98,14 +105,14 @@ public static class TurboRamjetPerformanceMap {
     /// MIL-E-5008B supersonic total-pressure recovery.
     static double InletRecovery(double mach) => mach <= 1.0
         ? 1.0
-        : System.Math.Clamp(1.0 - 0.075 * System.Math.Pow(mach - 1.0, 1.35), 0.05, 1.0);
+        : System.Math.Clamp(1.0 - 0.055 * System.Math.Pow(mach - 1.0, 1.35), 0.05, 1.0);
 
     /// Physical capture area of the ram duct, square metres. This REPLACES a normalised thrust
     /// ratio, which was the least honest number in the model: it was chosen to land the top speed
     /// where the design wanted it, so the engine was defined by its answer rather than its
     /// geometry. A 1.24 m duct on a 13 m airframe is large — this aircraft is substantially duct,
     /// exactly as the D-21 was — and thrust now falls out of the ideal cycle rather than a fit.
-    public const double RamCaptureAreaM2 = 1.2;
+    public const double RamCaptureAreaM2 = 1.9;
 
     /// <summary>
     /// Ram combustor TSFC as a multiple of the published dry-military specific fuel consumption
@@ -120,7 +127,7 @@ public static class TurboRamjetPerformanceMap {
     /// The rating the fraction-based engine interface is measured against: the Rapier's sea-level
     /// static dry thrust. Used only to convert physical newtons back into the fraction callers
     /// expect, so the ram term can be real thrust while the interface stays unchanged.
-    public const double StaticThrustReferenceN = 42_000.0;
+    public const double StaticThrustReferenceN = 50_000.0;
 
     /// Ram thrust in NEWTONS from the ideal cycle: F = rho V0^2 Ac (sqrt(Tb/T_inlet) - 1) eta.
     /// Nothing here is normalised against a design point; the only free parameter is the duct.

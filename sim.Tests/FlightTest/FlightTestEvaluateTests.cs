@@ -70,8 +70,16 @@ public class FlightTestEvaluateTests {
 
     [Fact]
     public void MatchingIdentityToBuffStillFailsFamilyTwCap() {
+        // The buff has to actually clear FamilyAugmentedTwCap (1.20) for this test to exercise
+        // anything: gross is 11,090 kg and the augmentor lever stop is 1.55, so the cap sits at
+        // 84.2 kN of dry core. x1.20 cleared it comfortably on the old 84 kN engine; on the
+        // honest 50 kN core it reaches only 0.86 aug T/W and trips nothing, so the test passed
+        // vacuously instead of catching buff creep. x1.75 puts it at 1.25, over the cap again.
+        //
+        // The sibling test above keeps x1.20 deliberately -- it checks the 5% identity-drift
+        // tolerance, which a 20% overclaim still clears. Same buff, two different bars.
         AircraftParams buffed = FlightModel.RapierPublicDataSurrogate with {
-            ThrustMaxN = FlightModel.RapierPublicDataSurrogate.ThrustMaxN * 1.20
+            ThrustMaxN = FlightModel.RapierPublicDataSurrogate.ThrustMaxN * 1.75
         };
         AirframeIdentity measured = IdentityMeasurement.FromParams(buffed, inferred: false);
         AirframeIdentity matched = measured with {

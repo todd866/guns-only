@@ -318,13 +318,15 @@ public class SnapshotProjectionTests {
             Assert.Equal(2100.0, minimumThreshold.GetDouble());
             Assert.Equal(1200.0, emergencyThreshold.GetDouble());
         } else if (beatIndex is 10 or 12) {
-            Assert.Equal(1200.0, jokerThreshold.GetDouble());
-            Assert.Equal(600.0, minimumThreshold.GetDouble());
-            Assert.Equal(300.0, emergencyThreshold.GetDouble());
+            // The Rapier's thresholds are now the fuel plan rather than authored numbers:
+            // minimum is MFR (approach 300 lb + FFR 500 lb) and emergency is FFR itself.
+            Assert.Equal(2000.0, jokerThreshold.GetDouble());
+            Assert.Equal(FuelPlan.MinimumFuelReserveLb, minimumThreshold.GetDouble());
+            Assert.Equal(FuelPlan.FixedFuelReserveLb, emergencyThreshold.GetDouble());
         } else if (beatIndex == 11) {
             Assert.Equal(1400.0, jokerThreshold.GetDouble());
-            Assert.Equal(600.0, minimumThreshold.GetDouble());
-            Assert.Equal(300.0, emergencyThreshold.GetDouble());
+            Assert.Equal(FuelPlan.MinimumFuelReserveLb, minimumThreshold.GetDouble());
+            Assert.Equal(FuelPlan.FixedFuelReserveLb, emergencyThreshold.GetDouble());
         } else {
             Assert.Equal(JsonValueKind.Null, jokerThreshold.ValueKind);
             Assert.Equal(JsonValueKind.Null, minimumThreshold.ValueKind);

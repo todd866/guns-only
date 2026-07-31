@@ -36,7 +36,7 @@ public class RapierMissionTests {
         BeatSetup beat = Beats.RapierIntercept();
         double initialRangeM = (beat.Bandit.Position - beat.Player.Position).Length;
 
-        Assert.InRange(initialRangeM, 310_000.0, 330_000.0);
+        Assert.InRange(initialRangeM, 390_000.0, 410_000.0);
         Assert.Equal(4, beat.ScriptedIntercept?.FormationSize);
         Assert.Same(PilotPhysiologyProfile.RapierReclinedInterceptor,
             beat.PlayerPilotPhysiology);
@@ -90,8 +90,12 @@ public class RapierMissionTests {
         }
 
         Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
-        Assert.True(sawAccelerate,
-            $"automation never established the FL560 acceleration shelf: "
+        // The climb and the acceleration are now ONE continuous constant-q energy schedule, not a
+        // climb followed by a level shelf, so the Accelerate phase label is no longer guaranteed to
+        // appear -- the aircraft can pass straight through its Mach band while still climbing. What
+        // matters is the property the shelf existed to produce, so assert that instead of the name.
+        Assert.True(sawAccelerate || maximumMach >= 1.8,
+            $"automation never built supersonic intercept energy: "
                 + $"{session.RapierPhase} at {session.TimeSeconds:F0}s, "
                 + $"FL{session.Player.State.Position.Y / 30.48:F0}, "
                 + $"M{maximumMach:F2}, throttle {session.Controls.Throttle:F2}, "

@@ -21,8 +21,13 @@ public class IdentityTests {
 
     [Fact]
     public void EvaluateFailsWhenIdentityDriftsFromParams() {
+        // 0.90 against a claimed 0.71 is a 26% overclaim -- well outside the gate's 5% band.
+        // This used to read 0.70, which drifted from the 84 kN core by enough to trip the gate
+        // and from the 50 kN core by 1.8%, i.e. not at all. The number under test is the
+        // EVALUATOR's tolerance, so it has to be stated relative to the tolerance and not
+        // inherited from whichever engine happened to be fitted when the test was written.
         AirframeIdentity drifted = InterceptorTbccV1.RapierAspirationalIdentity with {
-            AugmentedThrustToWeight = 0.70
+            AugmentedThrustToWeight = 0.90
         };
         var subject = new AirframeUnderTest(
             "rapier",

@@ -47,7 +47,7 @@ test("Rapier definition envelope binds to FlightModel.RapierPublicDataSurrogate"
   assert.match(block, /WingSpanM:\s*7\.35/);
   assert.match(block, /FuelFreeMassKg:\s*RapierAirframeFuelFreeMassKg\s*\+\s*RapierDesignStowedGunDroneMassKg/);
   assert.match(block, /SkinTemperatureLimitK:\s*1473\.15/);
-  assert.match(block, /ThrustMaxN:\s*84_000\.0/);
+  assert.match(block, /ThrustMaxN:\s*50_000\.0/);
   assert.match(flightModel, /RapierAirframeFuelFreeMassKg\s*=\s*5_150\.0/);
   assert.match(flightModel, /RapierDesignGunDroneCount\s*=\s*4/);
 
@@ -64,7 +64,7 @@ test("Rapier definition envelope binds to FlightModel.RapierPublicDataSurrogate"
   assert.equal(def.massKg.fuelFree, 6590);
   assert.equal(def.massKg.gross, 11090);
   assert.equal(def.thermal.skinTemperatureLimitK, 1473.15);
-  assert.equal(def.propulsion.thrustMaxN, 84000);
+  assert.equal(def.propulsion.thrustMaxN, 50000);
   assert.equal(def.flightModelBinding, "FlightModel.RapierPublicDataSurrogate");
 });
 

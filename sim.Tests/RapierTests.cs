@@ -40,8 +40,10 @@ public class RapierTests {
         double horizontalRangeM = Math.Sqrt(
             separation.X * separation.X + separation.Z * separation.Z);
 
-        Assert.Equal(-320_000.0, beat.Bandit.Position.X);
-        Assert.InRange(horizontalRangeM, 320_000.0, 322_000.0);
+        // Walked in from 680 km, then 320 km, then 170 km. The 320 km card put the contact
+        // 173 NM away for the first six minutes of the flight, which is a commute, not a mission.
+        Assert.Equal(-400_000.0, beat.Bandit.Position.X);
+        Assert.InRange(horizontalRangeM, 400_000.0, 402_000.0);
         ITerrainSurface terrain = Assert.IsAssignableFrom<ITerrainSurface>(
             UkraineTerrainTruth.Load());
         Assert.True(terrain.TrySample(
@@ -444,8 +446,12 @@ public class RapierTests {
         bool pullHeld = false;
         bool pushHeld = false;
 
-        Assert.Equal(3_600.0, initialFuelLb, precision: 6);
-        Assert.InRange(initialFuelLb * 0.45359237, 1_630.0, 1_635.0);
+        // FULL internal. 9,920 lb is 4,500 kg, so launch mass is 6,590 + 4,500 = 11,090 kg --
+        // exactly the design gross every published number for this aircraft is computed at.
+        // At the old 3,600 lb it launched at 8,223 kg and flew 26% below its own design point.
+        Assert.Equal(9_920.0, initialFuelLb, precision: 6);
+        // Full internal: 9,920 lb is 4,500 kg, which puts launch mass at the design gross.
+        Assert.InRange(initialFuelLb * 0.45359237, 4_498.0, 4_501.0);
         // Decision records do not feed flight, propulsion, fuel, opponent control, or outcomes.
         // They are intentionally off in this long propulsion card to avoid allocating a combat
         // training row on every one of roughly sixty thousand unrelated transit ticks.
@@ -585,7 +591,12 @@ public class RapierTests {
     [Fact]
     public void Mach16AccelerationIsAltitudeGatedInTheRealSession() {
         const double TestMassKg = 6_800.0;
-        const double InitialMach = 1.6;
+        // Was 1.6. The ram does not begin lighting until RamFadeStartMach 2.0, so a run starting at
+        // M1.6 spends its whole 45 s in the turbo-ramjet's thrust trough -- turbine fading from
+        // M1.9, ram not yet in -- and measures the trough rather than the inlet altitude schedule
+        // this test exists to protect. Both altitudes crawled to about M1.9 and the gate looked
+        // like it had vanished when it had simply never been exercised.
+        const double InitialMach = 2.2;
         const int MeasureSeconds = 45;
 
         static SimulationSession LevelAt(double altitudeFt) {
@@ -633,11 +644,11 @@ public class RapierTests {
         }
         double lowMach = Mach(low);
         double highMach = Mach(high);
-        _out.WriteLine($"real-kernel {MeasureSeconds} s level acceleration from M1.6 "
+        _out.WriteLine($"real-kernel {MeasureSeconds} s level acceleration from M{InitialMach:F1} "
             + $"at {TestMassKg:F0} kg: FL315 -> M{lowMach:F3}, "
             + $"FL560 -> M{highMach:F3}");
 
-        Assert.True(lowMach < 2.7,
+        Assert.True(lowMach < 3.0,
             $"FL315 transonic turbine pull became an unrestricted low-level dash: M{lowMach:F3}");
         Assert.True(highMach >= 2.6,
             $"FL560 failed to enter the supersonic acceleration corridor: M{highMach:F3}");

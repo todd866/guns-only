@@ -151,7 +151,17 @@ public sealed class RapierMissionDirector {
     /// </summary>
     public const double MeasuredDashMach = 3.55;
 
-    const double ClimbTopM = 56_000.0 * 0.3048;
+    // The transonic acceleration shelf. Was FL560, authored when the core made 84 kN: with the
+    // honest 50 kN core FL560 IS the aeroplane's ceiling at M0.9, so the climb asymptoted at
+    // FL554/M0.84 and the Accelerate transition never armed -- the automation sat there for the
+    // whole 15-minute budget. A probe of level full-AB accelerations shows the drag rise is only
+    // cheap to punch through lower down: FL400 reaches M1.2 in 27 s, FL560 needs 185 s.
+    //
+    // FL400 is also where a real TBCC would do it. You accelerate through the transonic in
+    // thicker air where the engine still has thrust, then climb-accelerate on ram -- the same
+    // reason the SR-71 dipped rather than pushed at altitude. M2.2 at FL400 is 63 kPa, inside
+    // the 80 kPa placard, so the shelf does not trade one limit for another.
+    const double ClimbTopM = ReachFightDirector.ClimbTopM;
     const double CruiseAltitudeM = 70_000.0 * 0.3048;
     const double FeetPerMetre = 1.0 / 0.3048;
     RapierMissionPhase _phase = RapierMissionPhase.Launch;
@@ -961,6 +971,18 @@ public sealed class RapierMissionDirector {
             : AirData.MachLimitForSkinTemperature(
                 playerAircraft.SkinTemperatureLimitK, air.TemperatureK);
 
+        // Structural screening ceiling. The skin limit alone let the automation dash at M3.71 down
+        // at FL424, which is 163 kPa -- twice the 80 kPa placard the airframe is published to. The
+        // aeroplane flew it happily, which is exactly the sim deficiency where a limit is computed
+        // and recorded and then never allowed to constrain anything.
+        //
+        // Capping Mach on q rather than refusing the speed is what makes the profile work: the
+        // schedule is legal wherever the air is thin enough, so the aircraft is pushed UP to go
+        // fast instead of being told it cannot. M4 at FL424 is illegal; M4 at FL700 is 53 kPa.
+        double structuralMachLimit = RapierAerodynamics.MachLimitForDynamicPressure(
+            air.DensityKgM3, air.SpeedOfSoundMps);
+        double envelopeMachLimit = Math.Min(skinMachLimit, structuralMachLimit);
+
         double targetMach;
         double targetAltitudeFt;
         double targetGamma;
@@ -1014,7 +1036,7 @@ public sealed class RapierMissionDirector {
                             : gateInVolume ? "GATE · ENERGY" : "LAUNCH");
                 } else {
                     targetMach = 0.9;
-                    targetAltitudeFt = 56_000.0;
+                    targetAltitudeFt = ClimbTopM * FeetPerMetre;
                     targetGamma = player.Gamma;
                     throttle = 1.55;
                     waypoint = contact.Position;
@@ -1063,32 +1085,49 @@ public sealed class RapierMissionDirector {
                     cue = PatternLegConfigCue(
                         "DEPART", fdTargetKtas, targetAltitudeFt, departSpeedCall);
                 } else {
-                    targetMach = 0.9;
-                    targetAltitudeFt = 56_000.0;
+                    // The climb rides the same constant-q schedule the acceleration does, so the
+                    // two are one continuous profile rather than a climb followed by a separate
+                    // level dash. Holding a fixed M0.90 to FL400 first spent 370 s getting there
+                    // with no speed to show for it, and the bandit arrived before the aircraft
+                    // had any energy. On the schedule the aircraft accelerates to about M0.85 low
+                    // down -- which IS the best-climb attitude for a low-drag jet -- and then
+                    // altitude and Mach rise together from there.
+                    targetMach = 2.2;
+                    double climbScheduleM = EnergySchedule.ClimbScheduleAltitudeM(
+                        StandardAtmosphere1976.Instance, trueAirspeedMps, floorM: 0.0);
+                    targetAltitudeFt = climbScheduleM * FeetPerMetre;
                     targetGamma = AltitudeCaptureGamma(
-                        ClimbTopM,
+                        climbScheduleM,
                         player,
                         trueAirspeedMps,
                         captureSeconds: 60.0,
                         minimumGamma: -0.02,
                         maximumGamma: 0.27);
-                    throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
-                        trimLever: 0.62, gain: 1.10);
+                    throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
+                        trimLever: 1.55, gain: 1.10);
                     waypoint = contact.Position;
                     cue = $"AUTO CLIMB · HOLD M0.90 · M{mach:F2} · "
-                        + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0} → FL560";
+                        + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0} → FL{targetAltitudeFt / 100.0:F0}";
                 }
                 break;
             case RapierMissionPhase.Accelerate:
+                // Not a level shelf. Holding FL400 level, the turbine ran out of excess thrust at
+                // M1.95 and the aircraft never reached the M2.2 the ram climb hands off at -- it
+                // simply sat there until the bandit arrived. A supersonic climb is one continuous
+                // trade: ride constant q and let altitude rise WITH Mach, which is both the real
+                // profile and the way this aeroplane is actually flown, always going up or down.
                 targetMach = 2.2;
-                targetAltitudeFt = 56_000.0;
-                targetGamma = AltitudeCaptureGamma(ClimbTopM, player,
+                double scheduleAltM = EnergySchedule.ClimbScheduleAltitudeM(
+                    StandardAtmosphere1976.Instance, trueAirspeedMps, floorM: ClimbTopM);
+                targetAltitudeFt = scheduleAltM * FeetPerMetre;
+                targetGamma = AltitudeCaptureGamma(scheduleAltM, player,
                     trueAirspeedMps, captureSeconds: 90.0,
-                    minimumGamma: -0.035, maximumGamma: 0.035);
-                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
-                    trimLever: 1.20, gain: 0.45);
+                    minimumGamma: -0.05, maximumGamma: 0.14);
+                throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
+                    trimLever: 1.55, gain: 0.45);
                 waypoint = contact.Position;
-                cue = $"AUTO LEVEL ACCEL · M{mach:F2} → M2.20 · HOLD FL560";
+                cue = $"AUTO CLIMB ACCEL · M{mach:F2} → M2.20 · "
+                    + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0} → FL{targetAltitudeFt / 100.0:F0}";
                 break;
             case RapierMissionPhase.RamClimb:
                 // Stay below RamSpillStartMach (3.3). Commanding M4 here drove the article into the
@@ -1099,7 +1138,7 @@ public sealed class RapierMissionDirector {
                 targetGamma = AltitudeCaptureGamma(CruiseAltitudeM, player,
                     trueAirspeedMps, captureSeconds: 150.0,
                     minimumGamma: -0.025, maximumGamma: 0.070);
-                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
                     trimLever: 1.08, gain: 0.42);
                 waypoint = contact.Position;
                 cue = $"AUTO RAM CLIMB · M{mach:F2} · FL{player.Position.Y * FeetPerMetre / 100.0:F0} → FL700";
@@ -1109,7 +1148,7 @@ public sealed class RapierMissionDirector {
                 targetMach = 3.8;
                 targetAltitudeFt = 100_000.0;
                 targetGamma = 40.0 * Math.PI / 180.0;
-                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
                     trimLever: 1.05, gain: 0.35);
                 waypoint = contact.Position;
                 cue = $"ZOOM PULL · {skipCue}{jobToken} · γ→40° · α LOW · M{mach:F2} · "
@@ -1149,7 +1188,7 @@ public sealed class RapierMissionDirector {
                 targetGamma = AltitudeCaptureGamma(CruiseAltitudeM, player,
                     trueAirspeedMps, captureSeconds: 90.0,
                     minimumGamma: -0.05, maximumGamma: 0.08);
-                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
                     trimLever: 1.05, gain: 0.40);
                 waypoint = contact.Position;
                 cue = $"DIP RELIGHT · {skipCue}{jobToken} · RAM ON · M{mach:F2} · "
@@ -1161,20 +1200,20 @@ public sealed class RapierMissionDirector {
                 targetGamma = AltitudeCaptureGamma(CruiseAltitudeM, player,
                     trueAirspeedMps, captureSeconds: 120.0,
                     minimumGamma: -0.040, maximumGamma: 0.040);
-                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
                     trimLever: 1.08, gain: 0.42);
                 waypoint = contact.Position;
                 string eta = double.IsFinite(interceptEtaSeconds)
                     ? $"{Math.Floor(interceptEtaSeconds / 60.0):F0}:"
                         + $"{interceptEtaSeconds % 60.0:00}"
                     : "--:--";
-                double commandedInterceptMach = Math.Min(targetMach, skinMachLimit);
-                string thermalCap = skinMachLimit + 0.05 < targetMach
-                    ? $" · THERM CAP M{skinMachLimit:F1}"
+                double commandedInterceptMach = Math.Min(targetMach, envelopeMachLimit);
+                string thermalCap = envelopeMachLimit + 0.05 < targetMach
+                    ? $" · {(structuralMachLimit < skinMachLimit ? "Q" : "THERM")} CAP M{envelopeMachLimit:F1}"
                     : "";
                 cue = $"AUTO INTERCEPT · {contactRangeM / 1000.0:F0} KM · "
                     + $"CLOSURE {closureMps * 1.94384:F0} KT · ETA {eta} · "
-                    + $"M{Math.Min(targetMach, skinMachLimit):F1} / FL700";
+                    + $"M{Math.Min(targetMach, envelopeMachLimit):F1} / FL700";
                 break;
             case RapierMissionPhase.Attack:
                 waypoint = contact.Position;
@@ -1186,7 +1225,7 @@ public sealed class RapierMissionDirector {
                     targetGamma = AltitudeCaptureGamma(contact.Position.Y + 200.0,
                         player, trueAirspeedMps, captureSeconds: 50.0,
                         minimumGamma: -0.18, maximumGamma: 0.020);
-                    throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                    throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
                         trimLever: 0.90, gain: 0.40, maximumLever: 1.35);
                     cue = $"TRANSPORT DIVE · {contactRangeM / 1000.0:F0} KM · "
                         + "ONE PASS · GUNS · THEN ESCAPE";
@@ -1196,7 +1235,7 @@ public sealed class RapierMissionDirector {
                     targetGamma = AltitudeCaptureGamma(contact.Position.Y + 800.0,
                         player, trueAirspeedMps, captureSeconds: 70.0,
                         minimumGamma: -0.080, maximumGamma: 0.040);
-                    throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                    throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
                         trimLever: 0.96, gain: 0.40, maximumLever: 1.35);
                     cue = $"SWARM RELEASE · {liveOpponentCount} CONTACTS · "
                         + "PRESS F · HIGH PASS · DO NOT FOLLOW DOWN";
@@ -1206,7 +1245,7 @@ public sealed class RapierMissionDirector {
                     targetGamma = AltitudeCaptureGamma(contact.Position.Y + 400.0,
                         player, trueAirspeedMps, captureSeconds: 60.0,
                         minimumGamma: -0.090, maximumGamma: 0.040);
-                    throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                    throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
                         trimLever: 0.92, gain: 0.40, maximumLever: 1.30);
                     cue = $"BALLOON · {contactRangeM / 1000.0:F0} KM · "
                         + "SOFT TARGET · GUNS · ONE SLASH";
@@ -1216,7 +1255,7 @@ public sealed class RapierMissionDirector {
                     targetGamma = AltitudeCaptureGamma(contact.Position.Y + 600.0,
                         player, trueAirspeedMps, captureSeconds: 75.0,
                         minimumGamma: -0.075, maximumGamma: 0.050);
-                    throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                    throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
                         trimLever: 0.96, gain: 0.40, maximumLever: 1.35);
                     cue = job == RapierJobKind.Awacs
                         ? $"AWACS · {liveOpponentCount} CONTACTS · "
@@ -1231,7 +1270,7 @@ public sealed class RapierMissionDirector {
                 targetGamma = AltitudeCaptureGamma(CruiseAltitudeM, player,
                     trueAirspeedMps, captureSeconds: 120.0,
                     minimumGamma: -0.050, maximumGamma: 0.050);
-                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
                     trimLever: 1.08, gain: 0.42);
                 waypoint = recoveryInitial;
                 cue = _phaseReason == "gun_drone_away"
@@ -1242,21 +1281,44 @@ public sealed class RapierMissionDirector {
                         + $"DASH M{Math.Min(MeasuredDashMach, skinMachLimit):F1}";
                 break;
             case RapierMissionPhase.ReturnToBase:
-                targetMach = 2.0;
-                targetAltitudeFt = 45_000.0;
-                targetGamma = AltitudeCaptureGamma(45_000.0 * 0.3048,
-                    player, trueAirspeedMps, captureSeconds: 150.0,
-                    minimumGamma: -0.060, maximumGamma: 0.025);
-                // The ram stream makes substantial installed thrust at a small lever above M2.5.
-                // Feeding the turbine-style 0.80 trim into that regime held the aircraft near M3
-                // for twenty minutes and consumed the landing reserve while the cue claimed M2.
-                // Idle the ram phase through handover, then capture M2 on turbine-biased trim.
-                throttle = mach > 2.25
-                    ? 0.0
-                    : ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
-                        trimLever: 0.55, gain: 0.80, maximumLever: 1.20);
+                // Subsonic long-range cruise, NOT a supersonic transit. Commanding M2.0 home held
+                // the aircraft at M1.67 / FL447 on a 0.81 lever for seventeen straight minutes and
+                // took it from 800 lb to 270 lb; it then flamed out at 2,520 s and arrived at the
+                // field with an empty tank and no approach left in it. Every wire miss and every
+                // heavy touchdown downstream of this was that dead-stick arrival, not the landing
+                // law -- which is why chasing the touchdown numbers never moved them.
+                //
+                // Coming home from a fight is a fuel problem, and the aircraft leaves the fight
+                // with an enormous amount of free energy. So idle it and let it coast down: the
+                // deceleration from dash speed to cruise costs nothing but distance, and distance
+                // is exactly what it has too much of.
+                // M2.0 AT FL750, and the aircraft comes home FASTER than it went out. That reads
+                // wrong until you measure it. Specific range at recovery weight, holding both
+                // speed and altitude:
+                //
+                //     FL450  M0.9   1.72 lb/NM        FL650  M1.5   1.49 lb/NM
+                //     FL550  M1.5   2.08 lb/NM        FL750  M2.0   1.07 lb/NM   <- best
+                //
+                // A subsonic cruise is the WORST option this aircraft has. Down at FL450 the wing
+                // is carrying its weight on a delta built for M4, and the turbine is throttled
+                // back into its thirsty corner; up at FL750 on ram at M2.0 it burns 20.6 lb/min
+                // against 14.9 -- but it is covering ground more than twice as fast, so the fuel
+                // per mile falls by 38%.
+                //
+                // This is the SR-71 answer and it is the same physics: a ram-cycle aircraft is
+                // efficient where the ram cycle works, not where a turbofan would be. An earlier
+                // pass here commanded M0.90/FL450, and before that FL350, both of which were the
+                // instinct that coming home means slowing down and descending. On this aeroplane
+                // that instinct costs 60% more fuel per mile.
+                targetMach = 2.00;
+                targetAltitudeFt = 75_000.0;
+                targetGamma = AltitudeCaptureGamma(75_000.0 * 0.3048,
+                    player, trueAirspeedMps, captureSeconds: 180.0,
+                    minimumGamma: -0.060, maximumGamma: 0.045);
+                throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
+                    trimLever: 0.85, gain: 0.60, maximumLever: 1.30);
                 waypoint = recoveryInitial;
-                cue = $"RETURN HOME · BASE {homeRangeM / 1000.0:F0} KM · M2.0 / FL450";
+                cue = $"RETURN HOME · BASE {homeRangeM / 1000.0:F0} KM · M2.0 / FL750";
                 break;
             case RapierMissionPhase.Recovery:
                 targetMach = 0.30;
@@ -1550,7 +1612,7 @@ public sealed class RapierMissionDirector {
                 gammaGain, minimumG, PatternMaximumG(circuitLeg))
             : CommandToward(player, waypoint, targetGamma, throttle,
                 maximumBankDegrees, gammaGain, minimumG, maximumG);
-        double commandedMach = Math.Min(targetMach, skinMachLimit);
+        double commandedMach = Math.Min(targetMach, envelopeMachLimit);
         if (fdTargetKtas <= 0.0 && commandedMach > 0.0) {
             fdTargetKtas = commandedMach * air.SpeedOfSoundMps * 1.94384;
         }

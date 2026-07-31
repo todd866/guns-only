@@ -716,7 +716,7 @@ public static class FlightModel {
         // "hidden schedule" that ramp's own comment says must not be the limiter. This term bites
         // only above the onset, so the design cruise at M2.6 is untouched and the dash tops out
         // on thrust against drag instead.
-        HighMachDragOnset: 2.7, HighMachDragK: 0.6,
+        HighMachDragOnset: 2.7, HighMachDragK: 0.3,
         SpoolUpTau: 1.40, SpoolDownTau: 0.90,
         CLAlpha: 3.60,                        // low aspect ratio
         PitchModeFreq: 3.4, PitchModeDamp: 0.46,

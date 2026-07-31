@@ -18,7 +18,7 @@ sustained turning fight, sized around a duct-dominated body rather than a fat fi
 | Non-reference residual | **6.3173 m²** | Named body-overlap geometry; not lift area |
 | Aspect ratio | **~3.0** | Low-AR supersonic wing; `CLAlpha` 3.60 |
 | Wing loading @ cat mass | **~436 kg/m²** | Cruise / dash beats low-speed sustained turn |
-| Frontal / duct | ~duct-dominated | `RamCaptureAreaM2 = 1.2` — aircraft is substantially inlet, D-21-like |
+| Frontal / duct | **duct-dominated** | `RamCaptureAreaM2 = 1.9` (1.55 m) — the aircraft is substantially inlet, D-21-like. Grown from 1.2 m² when M4 proved unreachable at max weight on the old duct; there is no canopy or cockpit bump to package around, so the capture is limited by aerodynamics and mass, not by seating a pilot. |
 
 ## Why this planform
 

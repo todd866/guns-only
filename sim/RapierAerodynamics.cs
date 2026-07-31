@@ -98,11 +98,74 @@ public static class RapierAerodynamics {
         return System.Math.Max(0.0, clNeeded / clAlphaPerRad);
     }
 
-    /// <summary>Authored high-q awareness placard (Pa). Soft cue only — not structural damage.</summary>
-    public const double HighDynamicPressurePlacardPa = 80_000.0;
+    /// <summary>
+    /// Vmo — never-exceed indicated airspeed, in knots.
+    ///
+    /// DERIVED, not authored. This replaces an 80 kPa figure whose recorded provenance was
+    /// literally "authored placard, provisional" and which nothing in the structure supported.
+    /// 80 kPa is 703 KEAS, a fighter's placard on an aircraft whose entire design case is thin
+    /// air; the SR-71, which is the closest real analogue in mission and wing loading, lived at
+    /// 500 KEAS.
+    ///
+    /// 550 KIAS is the corner of this aircraft's own V-n diagram: the speed at which the CLmax
+    /// boundary meets the +12 G structural boundary at max gross.
+    ///
+    ///     V_A = sqrt(2 · n · W / (rho0 · S · CLmax))
+    ///         = sqrt(2 · 12 · 108,760 / (1.225 · 18.0 · 1.47))  =  284 m/s EAS  =  552 KEAS
+    ///
+    /// Below it the wing stalls before the structure yields, so the aeroplane cannot hurt itself.
+    /// Above it the wing can generate more than the airframe is built to carry, and only the FBW
+    /// limiter stands between the stick and the spar. That is exactly what a never-exceed speed
+    /// is for, and here it is a consequence of numbers already closed -- span, area, CLmax and
+    /// the 12 G limit -- rather than a number someone liked.
+    ///
+    /// Two cross-checks, both of which the 80 kPa figure failed:
+    ///
+    ///   Gust. Mass ratio is 114 at 616 kg/m2, so the alleviation factor is 0.84 and a 25 ft/s
+    ///   discrete gust at 550 KEAS adds 0.66 G. Gust does not bind until roughly 9,100 KEAS. A
+    ///   wing this heavily loaded is nearly gust-proof, so manoeuvre owns the envelope alone.
+    ///
+    ///   Crossover. 550 KIAS and Mmo 4.0 cross at FL710, and the authored design cruise altitude
+    ///   is 21,500 m -- FL705. The aeroplane cruises AT the corner where the IAS limit hands over
+    ///   to the Mach limit, which is how a high-Mach cruiser is supposed to be laid out and is
+    ///   not something that would fall out by accident from an invented number.
+    ///
+    /// Still unsized, and the honest residual: flutter, control-surface hinge moments and inlet
+    /// duct pressure. Any of the three could come back lower. None of them can be computed from
+    /// what the structure chapter currently holds, which says "primary structure (provisional)".
+    /// </summary>
+    public const double NeverExceedKias = 550.0;
+
+    /// Mmo. The design dash; the CMC screens to about M5.4, so this is an airframe/inlet number.
+    public const double MaximumOperatingMach = 4.0;
+
+    const double Rho0KgM3 = 1.225;
+    const double MpsPerKnot = 1.0 / 1.94384;
+
+    /// <summary>
+    /// The Vmo placard restated as dynamic pressure, because q and equivalent airspeed are the
+    /// same statement: q = 0.5 · rho0 · V_E². Kept so the existing q-based cues and the recovery
+    /// corridor keep working, but it is now a consequence of the placard rather than its source.
+    /// </summary>
+    public const double HighDynamicPressurePlacardPa =
+        0.5 * Rho0KgM3 * (NeverExceedKias * MpsPerKnot) * (NeverExceedKias * MpsPerKnot);
 
     public static bool IsOverDynamicPressure(double dynamicPressurePa) =>
         double.IsFinite(dynamicPressurePa) && dynamicPressurePa > HighDynamicPressurePlacardPa;
+
+    /// <summary>
+    /// Highest Mach the q placard allows in this air. The inverse of the placard check above:
+    /// that one says "you have broken it", this one says how fast you may go before you do, which
+    /// is the form guidance and automation actually need.
+    /// </summary>
+    public static double MachLimitForDynamicPressure(
+        double densityKgM3, double speedOfSoundMps) {
+        if (!double.IsFinite(densityKgM3) || densityKgM3 <= 0.0
+            || !double.IsFinite(speedOfSoundMps) || speedOfSoundMps <= 0.0)
+            return double.PositiveInfinity;
+        return System.Math.Sqrt(2.0 * HighDynamicPressurePlacardPa / densityKgM3)
+            / speedOfSoundMps;
+    }
 
     /// <summary>
     /// Combined flow-angle magnitude used by the inlet recovery / unstart surrogates.
