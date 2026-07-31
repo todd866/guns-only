@@ -794,7 +794,14 @@ test("production HUD consumes stabilized KIAS plus physical corner and limits pa
   assert.match(source, /this\.drawLimitsPanel\(frame\.state\)/);
   assert.match(source, /const compact = state\.rapier_mission_available === true/);
   assert.match(source, /GUN_HEAT_DISPLAY_THRESHOLD/);
-  assert.match(source, /Math\.abs\(actualG\) >= 3\.0/);
+  // The G tape is now ALWAYS drawn, so this no longer pins a 3.0 G visibility threshold. An
+  // accelerometer that appears only once you are already pulling 3 cannot tell you what your hands
+  // are doing below 3 -- which is most of a circuit, all of an approach, and the part of a roll
+  // where this airframe's inertia coupling is worth watching. What is pinned instead is that it
+  // declutters by WEIGHT rather than by disappearing.
+  assert.match(source, /const prominence = clamp\(\(Math\.abs\(actualG\) - 1\.0\) \/ 2\.0, 0, 1\)/);
+  assert.doesNotMatch(source, /const visible = overrideSelected/,
+    "the G tape must not be conditionally hidden");
   assert.match(source, /this\.showLegendHint !== true/);
   assert.match(source, /systemsReadout\(frame\.state\)/);
   assert.match(source, /speedBrakeReadout\(state\)/,
