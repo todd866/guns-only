@@ -73,6 +73,15 @@ public sealed record AircraftCapability(
     public static AircraftCapability F86F30 { get; } = new(
         "aircraft.f86f30.v1", "F-86F-30",
         "presentation.vehicle.player.v1", "systems.f86f.utility.v1", true);
+    /// The aircraft that actually flew the straight-deck recovery: VF-51's F9F-2 off Essex.
+    /// PresentationId stays the shared player model deliberately -- there is no Panther art yet,
+    /// and a wrong-looking aeroplane is a known gap, not a claim. The systems profile is openly
+    /// the borrowed F-86 one for the same reason: no Panther gear/flap placard has been located
+    /// (docs/airframes/f9f-2-panther/00-sources.md). Naming it "borrowed-f86f" keeps that visible
+    /// instead of minting an id that implies Panther systems data we do not hold.
+    public static AircraftCapability F9F2Panther { get; } = new(
+        "aircraft.f9f2.v1", "F9F-2 Panther",
+        "presentation.vehicle.player.v1", "systems.borrowed-f86f.utility.v1", true);
     public static AircraftCapability F86F30Bandit { get; } = F86F30 with {
         Id = "aircraft.f86f30.bandit.v1",
         PresentationId = "presentation.vehicle.bandit.v1"
@@ -735,18 +744,45 @@ public static class Beats {
     /// CARRIER RECOVERY. You start in the active groove: low, slow, astern of the boat on a shallow
     /// glideslope. Axial preserves the Korean-War straight-deck hazard; Angled rotates the complete
     /// approach, wire and rollout frame nine degrees to port while the ship keeps steaming ahead.
+    /// The generic carrier recovery fixture. Other missions compose this for their recovery leg,
+    /// which is why the aircraft is a PARAMETER and not baked in: repointing the airframe to suit
+    /// one beat used to change every other beat's recovery aircraft silently, and did — a Panther
+    /// swap for the Korea beat broke three Rapier automation tests that had nothing to do with it.
+    ///
+    /// Rapier recovery is not a carrier landing. They share a schedule and a deck geometry; they
+    /// do not share an aeroplane. Callers that pass nothing keep the F-86 fixture they always had.
+    ///
+    /// <param name="playerParams">Airframe flying the recovery. Null keeps the F-86 fixture.</param>
+    /// <param name="playerCapability">Identity for that airframe; must match playerParams, or the
+    /// beat reports flying one aeroplane while actually flying another.</param>
     public static BeatSetup CarrierApproach(
-        GunsOnly.Sim.Carrier.DeckConfiguration configuration = GunsOnly.Sim.Carrier.DeckConfiguration.Axial) {
+        GunsOnly.Sim.Carrier.DeckConfiguration configuration = GunsOnly.Sim.Carrier.DeckConfiguration.Axial,
+        AircraftParams? playerParams = null,
+        AircraftCapability? playerCapability = null) {
+        // Naming an airframe without its identity is not a convenience worth having: it produces a
+        // beat that flies a Panther and reports an F-86, which is precisely the defect the identity
+        // guard exists to catch. Make it unrepresentable rather than merely discouraged.
+        if (playerParams is not null && playerCapability is null)
+            throw new ArgumentException(
+                "a named airframe must carry its AircraftCapability, or the beat misreports what it flies",
+                nameof(playerCapability));
+        AircraftParams air = playerParams ?? FlightModel.Sabre;
         var carrier = new GunsOnly.Sim.Carrier(
             deckCentre: new Vec3D(0, 20, 0), headingRad: 0, speedMps: 3,
             deckAltM: 20, deckLengthM: 250, deckWidthM: 30,
             configuration: configuration);
-        // ~1.5 km down the ACTIVE landing centreline, on-speed (~136 kt) and on a −3.4° slope
-        // toward the ~20 m deck. On the angled configuration this correctly starts off the ship's
-        // starboard quarter and points nine degrees to port, straight down the angled landing area.
+        // ~1.5 km down the ACTIVE landing centreline, on-speed and on a −3.4° slope toward the
+        // ~20 m deck. On the angled configuration this correctly starts off the ship's starboard
+        // quarter and points nine degrees to port, straight down the angled landing area.
+        //
+        // On-speed follows the AIRFRAME. The F-86 fixture's 70 m/s (~136 kt) sits at 1.14x its
+        // clean stall, so that ratio -- not the raw number -- is what transfers to another
+        // aeroplane. Carrying 70 m/s onto a wing that stalls slower would fly the approach fast
+        // and quietly make the deck easier, which is the opposite of the point.
+        double onSpeed = 1.14 * AirData.StallSpeedKias(air.MassKg, air) / AirData.MpsToKnots;
         var start = carrier.LandingPoint(along: -1500, height: 90);
         return new BeatSetup("Carrier approach",
-        Player: new AircraftState(start, 70, -0.06, carrier.LandingHeadingRad, 0, FlightModel.Sabre.MassKg),
+        Player: new AircraftState(start, onSpeed, -0.06, carrier.LandingHeadingRad, 0, air.MassKg),
         // The one-opponent ABI still needs a finite aircraft state, but carrier qualification is a
         // recovery attempt rather than a hidden combat sortie. Keep the inert rail well outside the
         // recovery volume so neither its navigation nor an incidental impact can author the result.
@@ -756,6 +792,8 @@ public static class Beats {
         BanditTimeline: new() {
             (0.0, new PilotCommand(1.0, 0.0, 0.30, 0)),
         },
+        PlayerParams: air,
+        PlayerCapability: playerCapability,
         BanditParams: FlightModel.Sabre,
         // The real target: a ~250 m × 30 m carrier, 20 m freeboard, steaming north into the wind.
         // Kinematic — it does not fly, it steams.
@@ -766,6 +804,20 @@ public static class Beats {
         RecoveryCompletesSortie: true,
         Environment: Ukraine2030sTheatre.CoastalCell);
     }
+
+    /// KOREA 1951 — the recovery this whole beat was always about. VF-51 flew F9F-2 Panthers off
+    /// USS Essex from exactly this deck: axial, hydraulic catapults, paddles LSO, barrier at the
+    /// far end, and no bolter. The F-86 fixture stands in for the geometry elsewhere, but it was a
+    /// land-based USAF fighter that never went to sea, so it cannot teach this.
+    ///
+    /// Axial is not a default here, it is the subject. An angled deck gives you a second chance;
+    /// this one does not, and a Panther's centrifugal J42 takes its time answering the throttle
+    /// (see FlightModel.F9F2Panther.SpoolUpTau). Those two facts together are the lesson.
+    public static BeatSetup KoreaCarrierApproach() =>
+        CarrierApproach(
+            GunsOnly.Sim.Carrier.DeckConfiguration.Axial,
+            FlightModel.F9F2Panther,
+            AircraftCapability.F9F2Panther);
 
     /// <summary>
     /// Reduced-order F-35C conversion sortie used by the player-facing Raptor programme. Public
