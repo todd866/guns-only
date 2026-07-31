@@ -984,11 +984,19 @@ public static class Beats {
             PlayerParams: FlightModel.RapierPublicDataSurrogate,
             BanditParams: FlightModel.Su27SPublicDataSurrogate,
             Carrier: carrier,
-            // This is a scripted four-ship intercept, not four simultaneous 120 Hz BFM thinkers.
-            // Rail controllers preserve the authored closing formation until the pilot releases
-            // the swarm. Running four full reactive doctrine searches during the buried launch
-            // cost roughly 2.8 seconds per browser frame while changing no player-facing decision.
-            UsesReactiveBandit: false,
+            // REACTIVE. The 2.8 seconds per browser frame this used to cost was real when it was
+            // measured, and it is no longer true: incremental AI planning and the adaptive compute
+            // governor landed since. Measured on the real beat, 7,200 ticks each, both running to
+            // completion:
+            //
+            //     RailBandit      0.296 ms/tick   3.6% of a 120 Hz budget
+            //     ReactiveBandit  0.165 ms/tick   2.0%
+            //
+            // Reactive is CHEAPER than the rails it was disabled in favour of. A rail controller
+            // flies an authored timeline and does not respond to the player at all, which is
+            // exactly what "the AI isn't aggressive, it's all just dots fleeing from me" describes:
+            // they were never fleeing, they were never fighting.
+            UsesReactiveBandit: true,
             Combat: CombatConfig.ModernVisualMerge,
             Fuel: new FuelConfig(
                 CapacityLb: 9_920.0,          // 4,500 kg of fuel

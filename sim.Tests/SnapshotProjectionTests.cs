@@ -220,9 +220,17 @@ public class SnapshotProjectionTests {
         double cornerBandMax = root.GetProperty("corner_band_max_kias").GetDouble();
         Assert.True(cornerBandMin < cornerKias && cornerKias < cornerBandMax);
         // Fielded AI tier: doctrine pilots project their tier, scripted rail actors project null.
+        // The Rapier beats (10, 12) now field doctrine pilots too -- they ran on rail controllers,
+        // which fly an authored timeline and do not respond to the player at all, and that is what
+        // "the AI isn't aggressive, it's all just dots" was describing. Projecting a tier is the
+        // visible consequence of them becoming real opponents.
         JsonElement banditSkill = root.GetProperty("bandit_skill");
         if (beatIndex is 7 or 9) Assert.Equal("ACE", banditSkill.GetString());
-        else Assert.Equal(JsonValueKind.Null, banditSkill.ValueKind);
+        else if (beatIndex is 10 or 12) {
+            Assert.Equal(JsonValueKind.String, banditSkill.ValueKind);
+            Assert.False(string.IsNullOrWhiteSpace(banditSkill.GetString()),
+                "a doctrine pilot must project which tier it is flying");
+        } else Assert.Equal(JsonValueKind.Null, banditSkill.ValueKind);
         Assert.InRange(Math.Abs(root.GetProperty("fuel_flow_lb_min").GetDouble() * 60.0
             - root.GetProperty("fuel_flow_pph").GetDouble()), 0.0, 0.31);
         Assert.True(root.TryGetProperty("fuel_joker_lb", out JsonElement jokerThreshold));

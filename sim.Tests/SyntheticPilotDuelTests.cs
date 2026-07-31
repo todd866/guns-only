@@ -25,11 +25,18 @@ public class SyntheticPilotDuelTests {
             new AircraftState(new Vec3D(1280.0, playerAltM, -4500.0), cornerTas,
                 0.0, 0.0, 0.0, PlayerAir.MassKg),
             PlayerAir, profile);
+        // REAL TERRAIN. The duel used to run with none, which made the low-block doctrine
+        // meaningless: SurfaceHeightM returns 0, so LocalFloorM collapses to the bare FloorM
+        // constant and every terrain-recovery decision is taken against a world that is flat and
+        // at sea level. That is why the stalemate this fixture found was recorded as "not a fair
+        // test" rather than fixed -- you cannot judge terrain recovery without terrain.
+        var terrain = (GunsOnly.Sim.Environment.ITerrainSurface)
+            GunsOnly.Web.UkraineTerrainTruth.Load();
         var bandit = new ReactiveBandit(
             new AircraftState(new Vec3D(1520.0, MergeAltitudeM + 60.0, 4500.0),
                 BeatSetup.CornerTrueAirspeedMps(BanditAir, MergeAltitudeM),
                 0.0, System.Math.PI, 0.0, BanditAir.MassKg),
-            BanditAir, PilotSkill.Ace);
+            BanditAir, PilotSkill.Ace, terrain);
 
         var banks = new List<double>();
         var gammas = new List<double>();
@@ -114,8 +121,7 @@ public class SyntheticPilotDuelTests {
     /// It is also not a fair test as written: this duel runs with no ITerrainSurface, so the floor
     /// is the bare FloorM constant and the bandit sits below it. Give the duel real terrain before
     /// concluding how much of this survives in the game.
-    [Fact(Skip = "Records a real low-altitude stalemate found by the synthetic pilot; separate "
-        + "defect from the arena leash, and the duel needs terrain before it is a fair test.")]
+    [Fact]
     public void BanditDoesNotDiveIntoALowAltitudeStalemate() {
         Duel d = Fight(PilotProfile.Competent, seconds: 150.0);
         Assert.True(d.LongestColdOpenS < 20.0,
