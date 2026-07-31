@@ -621,7 +621,19 @@ void main() {
   #endif
   vec3 viewDirection = normalize(cameraPosition - vTerrainWorldPosition);
   float rim = pow(1.0 - clamp(dot(normal, viewDirection), 0.0, 1.0), 3.0);
-  vec3 stylizedLit = sAlbedo * toneRamp
+  // PAINTED LIGHT IS COLOURED LIGHT, NOT DIMMED LIGHT.
+  //
+  // toneRamp was applied as a scalar, and a scalar cannot shift hue: every shadow came out as a
+  // darker copy of the lit colour, which is the single clearest tell of a renderer. Real daylight
+  // has a warm key from the sun and a COOL fill from the sky, and the hue separation between them
+  // is most of what makes a painted frame read as lit. Anime leans on this harder than photography
+  // does because it is the cheapest depth there is: no texture, no geometry, one mix.
+  //
+  // Deliberately NOT the hard two-step toon posterization tried and rejected here. The transition
+  // stays soft and the value range is unchanged -- only the two ENDS now carry different hues.
+  vec3 skyFill = vec3(0.62, 0.74, 1.00);      // cool shadow, from the sky
+  vec3 sunKey  = vec3(1.06, 1.01, 0.92);      // warm key, from the sun
+  vec3 stylizedLit = sAlbedo * mix(skyFill, sunKey, toneRamp) * toneRamp
     + rim * rimTint * (0.4 + 0.6 * clamp(normal.y, 0.0, 1.0));
   #ifdef UKRAINE_SCENERY
   // Low-relief macro normals need a bounded directional cue so sun-facing versus lee-facing

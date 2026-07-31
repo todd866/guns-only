@@ -141,10 +141,20 @@ public static class KoreaWeatherPresets {
         Wind((5.0, 1.0), (15.0, 6.0), (31.0, 14.0)),
         new LayeredCloudField(
         [
-            // A broad broken deck gives the 12-22 km climb a composed lower hemisphere: large
-            // cloud islands with visible ground between them, not dozens of expensive cotton
-            // balls. These remain deterministic fictional training conditions rather than an
-            // observation from the real conflict.
+            // Fair-weather cumulus UNDER the climb. The sky had nothing below 8 km for the whole
+            // sortie, and sky is half the frame. The aircraft is through this deck inside the first
+            // seconds and thereafter looks DOWN on a sunlit cumulus field, which is the view the
+            // art direction is asking for and the one the old empty sky could never give.
+            //
+            // Coverage 0.30 is scattered, not broken: gaps to see ground through, towers that read
+            // as separate masses. Cell scale stays at 5,900 m — Build 101 shrank it to 2,600 m and
+            // multiplied rendered cells by 5.1x. 60 fps is non-negotiable, so that is not paid again.
+            Layer(1_600.0, 3_400.0, 0.30, 5_900.0, 0.014,
+                liquid: 0.00021, turbulence: 0.9,
+                verticalAir: 0.40, icing: 0.05, windEast: 15.0, windNorth: 6.0),
+            // The broad high deck stays: large cloud islands with visible ground between them give
+            // the 12-22 km climb a composed upper hemisphere. Two decks total, which is what the
+            // cheaper single-deck version cost anyway.
             Layer(8_400.0, 11_600.0, 0.32, 14_000.0, 0.0045,
                 ice: 0.00007, windEast: 31.0, windNorth: 14.0)
         ], seed: 0x2030_0824_a11e_0010UL, clearAirVisibilityM: 115_000.0),
