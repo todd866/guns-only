@@ -177,7 +177,10 @@ public sealed class RapierMissionDirector {
     const double CircuitShelfHeightM = 2_500.0 * 0.3048;
     /// Compact overhead (~2–4 min). Hold ~250 KT; idle when fast so T/W cannot walk to 330.
     const double CircuitPatternKtas = 250.0;
-    const double CircuitBreakKtas = 230.0;
+    // Equal to the pattern, not below it. The director demands >= 2.8 G in the break and this
+    // wing offers 2.84 G at 250 KT -- at the old 230 KT it offered only 2.41 G, so the break was
+    // being asked for more lift than existed and the aircraft descended out of it into the sea.
+    const double CircuitBreakKtas = 250.0;
     const double CircuitBaseKtas = 200.0;
     // At circuit weight the wing stalls near 148 KT, so 165 was 1.11 Vs and the aircraft
     // actually arrived at 132 KT -- below flying speed, falling onto the deck 267 m short of the
@@ -196,12 +199,12 @@ public sealed class RapierMissionDirector {
     // A 150 km radius guarantees at least ~104 km of setup from every arrival azimuth.
     const double RecoveryEntryHomeRangeM = 150_000.0;
     /// Crosswind/break bank: prefer 60°, allow 75°. At 250 KT / 60° R ≈ 0.53 NM.
-    // 60 degrees needs 2.00 G and the wing offers 2.41 G at 230 KT -- 17% margin, and the break
-    // also bleeds energy the honest engine cannot replace, so the automation rolled in and flew
-    // into the water at 48 m/s sink. 50 degrees needs 1.56 G, which leaves the turn sustainable
-    // and still looks like a military break.
-    const double CircuitBreakBankDeg = 50.0;
-    const double CircuitBreakBankMaxDeg = 65.0;
+    // The break is meant to be steep and military: 60 degrees preferred, and the director
+    // demands >= 2.8 G. That is a SPEED requirement, not a bank one -- 2.8 G needs at least
+    // 248 KT on this wing, so the pattern and break speeds below carry it rather than the bank
+    // being flattened to suit a slow pattern.
+    const double CircuitBreakBankDeg = 60.0;
+    const double CircuitBreakBankMaxDeg = 75.0;
     /// Base bank: prefer 45°, allow 60°.
     const double CircuitBaseBankDeg = 45.0;
     const double CircuitBaseBankMaxDeg = 60.0;
