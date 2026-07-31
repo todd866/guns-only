@@ -727,9 +727,9 @@
          the gold confined to the horizon break, per that state's hazeIntent. */
       color: #2B3031;
       background:
-        radial-gradient(120% 62% at 50% 78%, rgba(243, 208, 140, .55), transparent 70%),
+        radial-gradient(90% 55% at 68% 82%, rgba(222, 163, 79, .30), transparent 72%),
         linear-gradient(180deg,
-          #6F8492 0%, #8B9AA1 34%, #C8C4A8 62%, #F4E7C9 82%, #A89858 100%);
+          #C4CFD4 0%, #D8D8CC 30%, #EBE4CF 58%, #F4E7C9 80%, #E3D2A6 100%);
       transition: opacity .55s ease, visibility .55s ease;
     }
 
@@ -774,9 +774,8 @@
       box-sizing: border-box;
       grid-template-rows: auto 1fr auto;
       padding: clamp(28px, 5vw, 58px);
-      border-left: 1px solid rgba(77, 255, 136, .16);
-      background: linear-gradient(90deg, rgba(1, 8, 14, .7), rgba(1, 8, 14, .43) 72%, transparent);
-      filter: drop-shadow(0 24px 50px rgba(0, 0, 0, .34));
+      /* No panel. The painting is the background; a dark card over it made ink text
+         unreadable and put a terminal window on a screen that has no terminal. */
     }
 
     .boot-card,
@@ -797,12 +796,13 @@
     .boot-title {
       margin: 0;
       color: #2B3031;
-      font-size: clamp(52px, 10vw, 96px);
-      font-weight: 650;
-      line-height: .92;
-      letter-spacing: .04em;
-      /* Sunlight, not a CRT. */
-      text-shadow: 0 1px 0 rgba(244, 231, 201, .55);
+      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      font-size: clamp(56px, 11vw, 104px);
+      font-weight: 600;
+      line-height: .94;
+      letter-spacing: .01em;
+      /* Sunlight on paper, not a CRT. */
+      text-shadow: 0 1px 0 rgba(255, 252, 244, .6);
     }
 
     .boot-deck {
@@ -818,8 +818,14 @@
     .boot-sortie {
       align-self: center;
       max-width: 34rem;
-      padding: 5px 0 5px 18px;
-      border-left: 2px solid rgba(77, 255, 136, .55);
+      padding: 0;
+    }
+    #boot-sortie-title {
+      color: rgba(43, 48, 49, .74);
+      font: 400 clamp(14px, 1.7vw, 17px)/1.35
+        "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      letter-spacing: .02em;
+      text-transform: none;
     }
 
     .boot-sortie > span,
@@ -865,15 +871,23 @@
       height: 7px;
       flex: 0 0 auto;
       border-radius: 50%;
-      background: #4dff88;
-      box-shadow: 0 0 10px rgba(77, 255, 136, .65);
+      background: rgba(222, 163, 79, .85);
+      box-shadow:  0 0 10px rgba(222, 163, 79, .45);
       animation: boot-pulse 1.25s ease-in-out infinite;
     }
 
-    #boot-status {
-      color: rgba(214, 238, 241, .78);
-      font: 700 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      letter-spacing: .075em;
+    /* Announced, not displayed. "STARTING LOCAL RUNTIME..." is machine chatter; the pulse
+       already says the same thing without asking anyone to read a console. */
+    #boot-status, #boot-deck, #boot-sortie-detail {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
     }
 
     .boot-note {

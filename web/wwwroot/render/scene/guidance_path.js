@@ -121,6 +121,11 @@ export function createGuidancePath(THREE, options = {}) {
   }
 
   let disposed = false;
+  // The ladder is a JSON string on the snapshot and it changes only when the procedure changes.
+  // Parsing it every frame put a string parse in the render loop; cache on the raw string so a
+  // steady recovery costs one identity comparison per frame instead.
+  let cachedRaw = null;
+  let cachedLadder = [];
   const forward = new THREE.Vector3();
   const lookTarget = new THREE.Vector3();
 
@@ -133,7 +138,12 @@ export function createGuidancePath(THREE, options = {}) {
      */
     update(state) {
       if (disposed) return 0;
-      const ladder = parseRecoveryGates(state ?? {});
+      const raw = state?.recovery_gates_json ?? null;
+      if (raw !== cachedRaw) {
+        cachedRaw = raw;
+        cachedLadder = parseRecoveryGates(state ?? {});
+      }
+      const ladder = cachedLadder;
       if (!ladder.length) {
         root.visible = false;
         return 0;

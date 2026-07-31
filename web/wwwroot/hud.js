@@ -3563,10 +3563,10 @@ class CombatHud {
     const cx = centreX;
     const cy = clamp(centreY0(top, bottom), top + radius + 30, bottom - radius - 34);
     function centreY0(topPx, bottomPx) {
-      // Clear of drawPadlockActionStrip, which anchors at 0.68 of the same span. The two were
-      // drawn on top of each other when the dial came back: the strip's panel sat across the
-      // ball's horizon, which is the one part of it that has to stay readable.
-      return topPx + (bottomPx - topPx) * 0.5 - 40;
+      // Low, never centre. An instrument parked over the middle of the screen covers the thing
+      // the pilot is actually looking at -- the target and the horizon beyond it -- which is the
+      // same mistake the text strip made, just rounder.
+      return topPx + (bottomPx - topPx) * 0.78;
     }
     // Reserve the outside of the instrument for steering. The attitude ball and its bank scale
     // remain a self-contained conventional instrument; amber/green director marks cannot be

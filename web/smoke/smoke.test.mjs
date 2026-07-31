@@ -2311,3 +2311,45 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
     await site.close();
   }
 });
+
+test("boot does not stutter: no frame is a wild outlier against this machine's own median", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+  const site = await serveStatic(WWWROOT);
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+  });
+  try {
+    const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } }))
+      .newPage();
+    await page.goto(site.url, { waitUntil: "load", timeout: scaled(60000) });
+    await page.waitForFunction(() => globalThis.__gunsState?.tick > 0,
+      undefined, { timeout: scaled(90000) });
+
+    // Absolute frame rate under software rasterisation says nothing. Stutter does: a shader
+    // compiling mid-run, or a JSON parse landing in the render loop, shows up as a handful of
+    // frames far outside the machine's own steady state whatever that steady state is.
+    const deltas = await page.evaluate(() => new Promise((resolve) => {
+      const out = [];
+      let last = performance.now();
+      const tick = (now) => {
+        out.push(now - last);
+        last = now;
+        if (out.length >= 240) resolve(out);
+        else requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }));
+
+    const sorted = deltas.slice(1).sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    const outliers = sorted.filter((d) => d > median * 6).length;
+    const worst = sorted.at(-1);
+    assert.ok(outliers <= 3,
+      `${outliers} frames exceeded 6x the ${median.toFixed(1)}ms median `
+      + `(worst ${worst.toFixed(0)}ms) — something is compiling or allocating in the render loop`);
+  } finally {
+    await browser.close();
+    await site.close();
+  }
+});
