@@ -109,6 +109,26 @@ prefix narrow and request another cursor only deliberately.
 Run from the repository root with the private store token in the environment. There is no token CLI
 option, so it cannot be copied into command output by argument handling:
 
+### Credentials, once
+
+The Blob token is created by the Vercel Blob integration and is marked sensitive: `vercel env
+pull` returns it **empty**, and `vercel blob` cannot mint one either. There is no CLI path to it.
+Every session that tries rediscovers the same dead end and then works around it, which is worse
+than having no telemetry at all -- the diagnosis quietly falls back to guessing.
+
+So paste it once into `~/.config/guns-only/telemetry.env` (mode `0600`) and every tool here picks
+it up from then on, in this shell and every future one:
+
+```sh
+install -m 700 -d ~/.config/guns-only
+printf 'BLOB_READ_WRITE_TOKEN=%s\n' 'vercel_blob_rw_...' > ~/.config/guns-only/telemetry.env
+chmod 600 ~/.config/guns-only/telemetry.env
+```
+
+`TELEMETRY_ADMIN_TOKEN` and `TELEMETRY_REPORT_TOKEN` go in the same file. The environment always
+wins, so an explicit `TOKEN=... node tools/telemetry/...` still overrides the file, and a file
+readable beyond its owner is refused rather than used.
+
 ```sh
 export BLOB_READ_WRITE_TOKEN='load-this-from-a-secure-local-source'
 node tools/telemetry/list.mjs --prefix 'telemetry/' --limit 50 \

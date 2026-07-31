@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { DEFAULT_LIST_LIMIT, listTelemetryBlobs, MAX_LIST_LIMIT } from "./retrieval.mjs";
+import { environmentWithCredentials } from "./credentials.mjs";
 
 const HELP = `Usage:
   node tools/telemetry/list.mjs [--prefix telemetry/...] [--limit N] [--cursor VALUE]
@@ -66,6 +67,7 @@ function parseArguments(args) {
 }
 
 export async function main(args = process.argv.slice(2), environment = process.env, io = console) {
+  environment = environmentWithCredentials(environment);
   const options = parseArguments(args);
   if (options.help) {
     io.log(HELP);
