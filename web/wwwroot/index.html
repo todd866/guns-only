@@ -684,50 +684,55 @@
          the landing controls were unreachable in portrait on an aircraft whose whole mission ends
          in a landing. */
       .portrait-assist .touch-left { display: none; }
-      .portrait-assist .touch-right .touch-actions { display: none; }
 
-      /* ...and #portrait-chips is what replaces them. It carried `display: none` with no rule
-         anywhere turning it back on, so portrait hid the throttle, the gear, the flaps, FIRE,
-         PADLOCK and TARGET and put NOTHING in their place: two sticks and no other control on
-         the aircraft. The block comment above already says these controls "sit above it"; they
-         simply never did.
+      /* The chip row is NOT the answer. It was added here to give portrait some energy control,
+         but portrait-assist already holds throttle for you -- "throttle holds corner velocity" --
+         so SLOWER/FASTER duplicated something automatic, and the row landed across the middle of
+         the HUD, over the pitch ladder. Two absolutely-positioned boxes were nested (the rail and
+         the row), so their bottom offsets compounded and threw it into mid-screen.
 
-         The row sits above the sticks rather than beside them, which is what keeps the documented
-         bug fixed -- parking the actions column over the right stick covered the centre-hold fire
-         target and the stick never armed. Fire stays the stick's centre hold. */
-      .portrait-assist #portrait-chips:not([hidden]) {
-        display: grid;
-        grid-auto-flow: column;
-        grid-auto-columns: 1fr;
-        gap: 8px;
+         Portrait now gets what it actually needs and nothing else: the two sticks, a FIRE button
+         in the gap between them, and gear/flaps above it for the landing. */
+      .portrait-assist #portrait-chips { display: none; }
+
+      /* display:contents so the rail stops being a positioned box. Its children then place
+         against #touch-controls instead of against the rail, which is what made the offsets
+         stack in the first place. */
+      .portrait-assist .touch-right { display: contents; }
+
+      .portrait-assist .touch-actions {
+        display: block;
         position: absolute;
-        left: max(12px, env(safe-area-inset-left));
-        right: max(12px, env(safe-area-inset-right));
-        bottom: calc(min(36vw, 156px) + 28px + env(safe-area-inset-bottom));
-        pointer-events: auto;
-      }
-      .portrait-assist #portrait-chips .touch-control {
-        min-height: 52px;
-        font-size: 12px;
-        letter-spacing: .08em;
-      }
-      /* Gear and flaps are not optional on a landing, and the Rapier recovery ends in one. Ride
-         them above the chip row rather than over the stick. */
-      .portrait-assist .touch-right {
-        position: absolute;
-        left: max(12px, env(safe-area-inset-left));
-        right: max(12px, env(safe-area-inset-right));
-        bottom: calc(min(36vw, 156px) + 88px + env(safe-area-inset-bottom));
-        display: flex;
-        justify-content: center;
-        gap: 8px;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: calc(20px + env(safe-area-inset-bottom));
         pointer-events: none;
       }
+      /* Only FIRE lives in the centre gap between the sticks. Everything else in that column
+         stays hidden -- parking the full actions column there is what once covered the stick's
+         centre-hold fire target. */
+      .portrait-assist .touch-actions > * { display: none; }
+      .portrait-assist .touch-actions > #touch-fire:not([hidden]) {
+        display: grid;
+        place-items: center;
+        width: 92px; min-width: 92px;
+        height: 92px; min-height: 92px;
+        font-size: 15px;
+        letter-spacing: .1em;
+        pointer-events: auto;
+      }
+
+      /* Gear and flaps sit above FIRE, still clear of both sticks. */
       .portrait-assist #touch-context-controls:not([hidden]) {
         display: flex;
         gap: 8px;
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: calc(124px + env(safe-area-inset-bottom));
         pointer-events: auto;
       }
+
       .touch-mode.touch-primary #fallback-stick,
       .touch-mode.touch-primary #target-stick {
         width: min(31vw, 124px);
