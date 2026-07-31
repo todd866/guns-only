@@ -8688,7 +8688,9 @@ function installMobileInput(view) {
   }
 
   function applyFlightStick() {
-    if (virtualStickPointerId === null) {
+    // Gated on the RIGHT stick now, because that is the one that flies. Gating on the left stick
+    // meant roll and pitch were released the moment the thumb came off the throttle.
+    if (targetStickPointerId === null) {
       releaseDirectFlightAxes("touch");
       return false;
     }
@@ -8871,17 +8873,20 @@ function installMobileInput(view) {
       rollCode: virtualStickAxes.roll?.physicalCode ?? null,
       pitchCode: virtualStickAxes.pitch?.physicalCode ?? null,
     });
-    const source = `touch:virtual-stick:pointer:${event.pointerId}`;
-    if (setAnalogRollCommand(state.x)) {
-      setVirtualStickAxis("roll", null, `${source}:roll`);
-    } else {
-      setVirtualStickAxis("roll", state.rollCode, `${source}:roll`);
+    // THE LEFT STICK IS THROTTLE AND YAW. Throttle is a continuous axis and deserves a thumb;
+    // yaw is nearly useless for gun tracking on an FBW fighter but costs nothing here, because
+    // this stick's horizontal axis is otherwise idle -- and it earns its place twice, on crosswind
+    // recovery and low-speed pointing.
+    //
+    // Up is more power: state.y is positive-up from mobileVirtualStickState, and the lever is an
+    // ABSOLUTE position rather than a rate, so the thumb's position is the throttle setting.
+    setVirtualStickAxis("roll", null, `${source}:roll`);
+    setVirtualStickAxis("pitch", null, `${source}:pitch`);
+    if (typeof bridge?.SetAnalogThrottleControl === "function") {
+      bridge.SetAnalogThrottleControl(clamp((state.y + 1) * 0.5, 0, 1));
     }
-    if (typeof bridge?.SetAnalogPitchControl === "function") {
-      setAnalogPitchCommand(state.y);
-      setVirtualStickAxis("pitch", null, `${source}:pitch`);
-    } else {
-      setVirtualStickAxis("pitch", state.pitchCode, `${source}:pitch`);
+    if (typeof bridge?.SetAnalogYawControl === "function") {
+      bridge.SetAnalogYawControl(clamp(state.x, -1, 1));
     }
     if (flightGesture) {
       flightGesture.samples += 1;
@@ -8917,6 +8922,10 @@ function installMobileInput(view) {
   function updateTargetStickPointer(event) {
     if (!targetStick || event.pointerId !== targetStickPointerId) return;
     const state = mobileVirtualStickState(event, targetStick.getBoundingClientRect());
+    // THE RIGHT STICK FLIES THE AEROPLANE. Roll on x, pitch on y, under the dominant thumb, which
+    // is where the primary axis belongs and where every console flight sim puts it. It used to be
+    // a look stick, and a look stick is not worth an axis: what a gunfight needs is a bearing to
+    // the enemy, and that is a cue, not a control.
     targetStickX = state.x;
     targetStickY = state.y;
     if (targetGesture) {
@@ -8924,7 +8933,9 @@ function installMobileInput(view) {
       targetGesture.maxLook = Math.max(targetGesture.maxLook,
         Math.hypot(targetStickX, targetStickY));
     }
-    touchStickLookActive = Math.abs(targetStickX) + Math.abs(targetStickY) > 0.001;
+    setAnalogRollCommand(state.x);
+    setAnalogPitchCommand(state.y);
+    touchStickLookActive = false;
     renderTargetStick(targetStickX, targetStickY);
   }
 
@@ -8936,6 +8947,12 @@ function installMobileInput(view) {
 
   function armTargetStickFire(pointerId) {
     clearTargetStickFireTimer();
+    // CENTRE-HOLD FIRE IS OFF. The right stick flies the aeroplane now, and a control that doubles
+    // as a trigger cannot be trimmed: near-centre meant BOTH "fine correction" and "fire", so every
+    // small gentle input either armed the gun or cancelled it. That is why fine tracking felt bad.
+    // Fire is the dedicated button in the gap between the sticks, where it costs no stick travel.
+    return;
+    // eslint-disable-next-line no-unreachable
     if (Math.hypot(targetStickX, targetStickY) > TARGET_STICK_FIRE_CANCEL_RADIUS) return;
     targetStickFireTimer = window.setTimeout(() => {
       targetStickFireTimer = null;

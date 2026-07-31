@@ -1552,6 +1552,42 @@ public sealed class SimulationSession {
         _detents.SetAnalogPitchControl(value);
     }
 
+    /// <summary>Set the latest continuous yaw (rudder) command from a direct-input host.</summary>
+    public void SetAnalogYawControl(double value) {
+        if (!double.IsFinite(value))
+            throw new ArgumentOutOfRangeException(nameof(value));
+        if (Lifecycle != LifecycleState.Active
+            || _playerTerminalState != AircraftTerminalState.Flying
+            || _pilotControlInterlocked) {
+            _detents.ClearAnalogYawControl();
+            return;
+        }
+        if (Math.Abs(value) > 0.02) {
+            DisengageTimeCompression(TimeCompressionInhibitReason.ControlInput);
+            ClaimRapierControl();
+        }
+        _detents.SetAnalogYawControl(value);
+    }
+
+    /// <summary>
+    /// Set the throttle LEVER POSITION (0..1 of the aircraft's own range) from a direct-input
+    /// host. Absolute, not a rate: a thumb stick already has a position, and making the pilot
+    /// integrate toward one is what turns flying into tapping.
+    /// </summary>
+    public void SetAnalogThrottleControl(double lever01) {
+        if (!double.IsFinite(lever01))
+            throw new ArgumentOutOfRangeException(nameof(lever01));
+        if (Lifecycle != LifecycleState.Active
+            || _playerTerminalState != AircraftTerminalState.Flying
+            || _pilotControlInterlocked) {
+            _detents.ClearAnalogThrottleControl();
+            return;
+        }
+        DisengageTimeCompression(TimeCompressionInhibitReason.ControlInput);
+        ClaimRapierControl();
+        _detents.SetAnalogThrottleControl(lever01);
+    }
+
     /// <summary>
     /// Select which concurrent opponent owns the player's lead solution. This changes sighting
     /// only: the physical gun, heat, cadence, magazine, and every round in flight remain one

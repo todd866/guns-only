@@ -401,11 +401,11 @@ test("touch flight separates spring-loaded flight, look, target selection, and f
 
   assert.equal(stick.length, 1, "fallback mode needs one visible thumb target");
   assert.equal(stick[0].attributes.id, "fallback-stick");
-  assert.equal(stick[0].attributes["aria-label"], "Left flight stick");
+  assert.equal(stick[0].attributes["aria-label"], "Left stick: throttle and yaw");
   assert.equal(targetStick.length, 1, "touch mode needs one separate look target");
   assert.equal(targetStick[0].attributes.id, "target-stick");
   assert.equal(targetStick[0].attributes["aria-label"],
-    "Right look stick; hold centre to fire");
+    "Right stick: pitch and roll");
   assert.match(indexSource,
     /Hold the centre briefly to fire; moving outside the centre stops firing and looks\./,
     "the accessible help must describe the same centre-hold contract as the input state machine");

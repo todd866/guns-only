@@ -1567,7 +1567,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           return {
             startTop: start.top,
             startBottom: start.bottom,
-            descriptionDisplay: getComputedStyle(description).display,
+            descriptionDisplay: description ? getComputedStyle(description).display : "absent",
             selectorTouchAction: getComputedStyle(
               document.querySelector(".ready-selector"),
             ).touchAction,
@@ -1578,8 +1578,11 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         });
         assert.ok(readyLayout.startTop >= 0 && readyLayout.startBottom <= viewport.height,
           `${viewport.width}x${viewport.height}: Fly is outside the initial viewport`);
-        assert.equal(readyLayout.descriptionDisplay, "none",
-          `${viewport.width}x${viewport.height}: verbose cards still dominate the phone menu`);
+        // "absent" is the stronger outcome. The cards used to carry a paragraph and a caps spec
+        // line that this hid on phones; they no longer carry either, so there is nothing to hide.
+        assert.ok(["none", "absent"].includes(readyLayout.descriptionDisplay),
+          `${viewport.width}x${viewport.height}: verbose cards still dominate the phone menu `
+          + `(description display: ${readyLayout.descriptionDisplay})`);
         assert.equal(readyLayout.selectorTouchAction, "pan-y pinch-zoom",
           `${viewport.width}x${viewport.height}: mission selection blocks pinch zoom`);
         assert.equal(readyLayout.briefingTouchAction, "pan-y pinch-zoom",
