@@ -796,11 +796,11 @@
     .boot-title {
       margin: 0;
       color: #2B3031;
-      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-      font-size: clamp(56px, 11vw, 104px);
-      font-weight: 600;
-      line-height: .94;
-      letter-spacing: .01em;
+      font-family: "Optima", "Gill Sans", "Gill Sans MT", "Hiragino Mincho ProN", "Yu Mincho", serif;
+      font-size: clamp(44px, 8vw, 84px);
+      font-weight: 400;
+      line-height: 1.0;
+      letter-spacing: .12em;
       /* Sunlight on paper, not a CRT. */
       text-shadow: 0 1px 0 rgba(255, 252, 244, .6);
     }
@@ -815,15 +815,21 @@
       letter-spacing: .01em;
     }
 
+    /* Announced, never shown. "F-22A SURROGATE / ENDLESS MERGE" is a spec sheet, and a title
+       card over a painting has room for exactly one name. */
     .boot-sortie {
-      align-self: center;
-      max-width: 34rem;
-      padding: 0;
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
     }
     #boot-sortie-title {
       color: rgba(43, 48, 49, .74);
       font: 400 clamp(14px, 1.7vw, 17px)/1.35
-        "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+        "Optima", "Gill Sans", "Gill Sans MT", "Hiragino Mincho ProN", "Yu Mincho", serif;
       letter-spacing: .02em;
       text-transform: none;
     }
