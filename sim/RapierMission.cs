@@ -179,10 +179,13 @@ public sealed class RapierMissionDirector {
     const double CircuitPatternKtas = 250.0;
     const double CircuitBreakKtas = 230.0;
     const double CircuitBaseKtas = 200.0;
-    const double CircuitFinalKtas = 165.0;
+    // At circuit weight the wing stalls near 148 KT, so 165 was 1.11 Vs and the aircraft
+    // actually arrived at 132 KT -- below flying speed, falling onto the deck 267 m short of the
+    // wires. The loop undershoots its commanded speed by roughly 20 KT on final.
+    const double CircuitFinalKtas = 190.0;
     // Carrier touchdown assessment currently accepts at most 82 m/s (~159 KT). Authoring a
     // 165–177 KT wire pass made a successful arrest physically impossible even when centred.
-    const double CircuitWireKtas = 155.0;
+    const double CircuitWireKtas = 168.0;
     const double CircuitPatternSpeedMps = CircuitPatternKtas / 1.94384;
     const double CircuitBreakSpeedMps = CircuitBreakKtas / 1.94384;
     const double CircuitBaseSpeedMps = CircuitBaseKtas / 1.94384;
@@ -193,8 +196,12 @@ public sealed class RapierMissionDirector {
     // A 150 km radius guarantees at least ~104 km of setup from every arrival azimuth.
     const double RecoveryEntryHomeRangeM = 150_000.0;
     /// Crosswind/break bank: prefer 60°, allow 75°. At 250 KT / 60° R ≈ 0.53 NM.
-    const double CircuitBreakBankDeg = 60.0;
-    const double CircuitBreakBankMaxDeg = 75.0;
+    // 60 degrees needs 2.00 G and the wing offers 2.41 G at 230 KT -- 17% margin, and the break
+    // also bleeds energy the honest engine cannot replace, so the automation rolled in and flew
+    // into the water at 48 m/s sink. 50 degrees needs 1.56 G, which leaves the turn sustainable
+    // and still looks like a military break.
+    const double CircuitBreakBankDeg = 50.0;
+    const double CircuitBreakBankMaxDeg = 65.0;
     /// Base bank: prefer 45°, allow 60°.
     const double CircuitBaseBankDeg = 45.0;
     const double CircuitBaseBankMaxDeg = 60.0;
@@ -205,7 +212,14 @@ public sealed class RapierMissionDirector {
     /// Finals start at 3 NM.
     const double CircuitFinalAlongM = 3.00 * 1852.0;
     /// Flythrough box half-width/height in metres — a real sky object, not HUD chrome.
-    const double CircuitGateHalfM = 100.0;
+    // A 100 m half-width is +/-328 ft laterally AND vertically, and at 250 KT the aircraft is
+    // inside the 180 m depth for 1.4 seconds. That asks a jet to thread a box it can only be in
+    // for a moment, and when it misses, the leg never earns and the circuit stalls on INITIAL
+    // forever -- the same defect RecoveryProcedureDirector had, where a capture volume too tight
+    // to capture pinned the ladder at gate 0 across every recorded sortie.
+    //
+    // 220 m is still a disciplined pass and it is one the automation can actually fly.
+    const double CircuitGateHalfM = 220.0;
     /// Along-track half-depth for "through the square" capture.
     const double CircuitGateDepthM = 180.0;
     /// KTAS band to earn the gate (energy gate).
@@ -233,12 +247,16 @@ public sealed class RapierMissionDirector {
     /// Circuits speed hold for a high-T/W brick. Prior schedules left 0.7+ lever at pattern
     /// speed and walked through 330 KT in a shallow bank — that is not a circuit.
     /// </summary>
+    /// Lever POSITIONS, so they only mean anything against a particular engine. 0.26 trim and a
+    /// 0.52 ceiling were set when the core was 68% larger; against the honest engine 0.26 buys
+    /// less thrust than a banked turn costs in drag, so the automation rolled into the break and
+    /// descended into the sea. Scaled by the thrust ratio the pattern holds its turn again.
     static double PatternHoldThrottle(
-        double targetMps, double currentMps, double trimLever = 0.26) {
+        double targetMps, double currentMps, double trimLever = 0.44) {
         double error = targetMps - currentMps;
         if (error < -6.0) return 0.0; // overspeed → idle
         double lever = trimLever + error * 0.016;
-        return Math.Clamp(lever, 0.0, 0.52);
+        return Math.Clamp(lever, 0.0, 0.88);
     }
 
     /// <summary>
