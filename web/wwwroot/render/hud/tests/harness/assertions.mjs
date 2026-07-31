@@ -303,9 +303,11 @@ function assertTargetTwoDirector(data) {
   check(data.name, "TARGET 2 is explicitly identified as selected",
     geometry.padlockMode?.title === "TARGET 2 · SELECTED · PADLOCK",
     `title=${JSON.stringify(geometry.padlockMode?.title)}`);
+  // The roll command is the director's signed error on the instrument, not the string
+  // "TARGET 2 · ROLL RIGHT 43°". A positive roll error is a roll to the right.
   check(data.name, "TARGET 2 receives an explicit roll-right command",
-    /^TARGET 2 · ROLL RIGHT \d+°$/.test(geometry.padlockDirective ?? ""),
-    `directive=${JSON.stringify(geometry.padlockDirective)}`);
+    Number(geometry.padlockDirector?.rollErrorRad) > 0,
+    `rollErrorRad=${JSON.stringify(geometry.padlockDirector?.rollErrorRad)}`);
   check(data.name, "off-axis gun sight stays caged and names TARGET 2",
     geometry.offAxisGunCue
       === "GUN CAGED · TARGET 2 · FOLLOW ROLL / PULL",
@@ -360,8 +362,8 @@ function assertPadlockActionAndLocator(data) {
   const { name, geometry, probes, padlockState, state } = data;
   if (!data.padlock || padlockState?.target === "carrier") return;
 
-  // Steering is one body-fixed action, never a second attitude ball. The action must agree with
-  // the fixed-tick roll director and carry only compact ownship cross-checks.
+  // Steering IS the attitude ball. The text action strip that used to carry it printed the roll
+  // error across the ball's horizon and was retired; a command to the pilot is graphical.
   const action = geometry.padlockAction;
   const director = geometry.padlockDirector;
   const radarAltFt = Number(state.radar_alt_ft);
@@ -372,8 +374,11 @@ function assertPadlockActionAndLocator(data) {
     || (radarAltFt < 2000 && (pitchDeg < -2 || sinkFpm < -1500))
     || (state.auto_gcas_available !== true && radarAltFt < 500 && sinkFpm < -1000);
   if (director || urgentPull) {
-    check(name, "padlock has exactly one actionable steering strip", Boolean(action),
-      action ? `${action.action} ${action.direction}` : "missing");
+    check(name, "padlock shows the attitude instrument when steering is live",
+      Boolean(geometry.padlockAttitude),
+      geometry.padlockAttitude ? "adi" : "missing");
+    check(name, "no text action strip covers the attitude ball", !action,
+      action ? `${action.action} ${action.direction}` : "absent");
   }
   if (action) {
     const bankDeg = Number(state.bank_deg) || 0;

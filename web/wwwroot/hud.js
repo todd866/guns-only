@@ -3560,6 +3560,15 @@ class CombatHud {
       radius: ballRadius,
     });
     const bankRad = attitude.bankRad;
+    // The instrument is now the steering presentation, so it has to be inspectable by the HUD
+    // geometry harness the way the retired text strip was.
+    if (this._debug) {
+      this._debug.padlockAttitude = {
+        bankDeg: Number(state.bank_deg) || 0,
+        pitchDeg,
+        radius: ballRadius,
+      };
+    }
     const now = Number(frame.now) || 0;
     const rimColor = groundDanger ? RED : GREEN_DIM;
 
