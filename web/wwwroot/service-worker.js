@@ -15,7 +15,7 @@
 // The cache name carries the release build, so shipping a new build orphans the old cache and
 // activate() deletes it. That reuses the existing stamp ritual rather than inventing a second
 // versioning scheme — see web/wwwroot/render/release/release_identity.js.
-const RELEASE_BUILD = "232";
+const RELEASE_BUILD = "233";
 const CACHE = `guns-only-${RELEASE_BUILD}`;
 
 // Never cached: telemetry and the multiplayer room are live services, and a cached reply would be
