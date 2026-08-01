@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=236";
+import { createHud } from "./hud.js?v=237";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=236";
+} from "./render/debrief/sortie_result.js?v=237";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -49,7 +49,7 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=236";
+} from "./render/release/release_identity.js?v=237";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -62,7 +62,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=236";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=237";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -139,13 +139,13 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=236";
+} from "./render/telemetry/ai_frame_pressure.js?v=237";
 import { FrameGovernorPolicy } from "./render/telemetry/frame_governor.js";
 import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compression.js";
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=236";
+} from "./render/telemetry/telemetry_batch.js?v=237";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -154,7 +154,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=236";
+} from "./render/settings/player_settings.js?v=237";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -200,12 +200,12 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=236";
+} from "./render/scene/scene_builders.js?v=237";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=236";
+} from "./render/audio/flight_audio.js?v=237";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -1250,6 +1250,8 @@ let flightTestSyncSequence = 0;
 // Vercel provides it, while local development remains fully offline.
 const ENTRYPOINT_BUILD = new URL(import.meta.url).searchParams.get("v") || "dev";
 let buildIdentity = createReleaseIdentity({ entrypointBuild: ENTRYPOINT_BUILD });
+// One-shot latch so the menu auto-reload to a newer build fires once, never in a loop.
+let autoReloadArmed = false;
 const BUILD = buildIdentity.telemetryBuild;
 const BUILD_IDENTITY_REVALIDATE_MS = 60_000;
 let runningBuildInfo = null;
@@ -3847,8 +3849,23 @@ function renderPauseUi(state = latestState) {
   }
 
   renderBuildIdentity();
+  // Force a fresh build check the moment the MENU appears, so a deploy that landed while the pilot
+  // was flying is noticed as soon as they are back at a safe point rather than up to a minute
+  // later on the revalidate timer.
+  if (ready && !wasScreenVisible) void resolveBuildIdentity({ force: true });
   if (buildIdentity.stale) {
-    readyHint.textContent = "Older or mixed build detected · reload the current release";
+    // A newer build is live. At the menu it is safe to take it AUTOMATICALLY -- no sortie is in
+    // progress -- instead of hoping the pilot notices a hint and taps reload. reloadCurrentBuild
+    // drops the service worker and its caches and hard-navigates, so this actually gets the new
+    // code (a plain reload keeps serving the cache-pinned shell). Guarded to fire once; the fresh
+    // page is not stale so it cannot loop. NEVER mid-flight or paused -- that would bin the sortie.
+    if (ready && !autoReloadArmed) {
+      autoReloadArmed = true;
+      readyHint.textContent = "Updating to the latest build…";
+      setTimeout(() => { void reloadCurrentBuild(); }, 1200);
+    } else {
+      readyHint.textContent = "Older or mixed build detected · reload the current release";
+    }
   } else if (buildIdentity.state === "checking" && ready) {
     readyHint.textContent = "Verifying current release…";
   } else if (terrainLoading && ready) {
@@ -10279,7 +10296,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=236")
+    navigator.serviceWorker.register("service-worker.js?v=237")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);
