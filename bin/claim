@@ -47,14 +47,18 @@ read_claim() {
     c_since=$(sed -n '3p' "$1"); c_why=$(sed -n '4p' "$1")
 }
 now() { date '+%Y-%m-%dT%H:%M:%S'; }
+claim_files() {
+    find "$claims_dir" -mindepth 1 -maxdepth 1 -type f -print | LC_ALL=C sort
+}
 
 case "$cmd" in
 list)
-    if [ -z "$(ls -A "$claims_dir" 2>/dev/null)" ]; then
+    files=$(claim_files)
+    if [ -z "$files" ]; then
         echo "no active claims"; exit 0
     fi
     printf '%-46s %-16s %-20s %s\n' PATH AGENT SINCE WHY
-    for f in "$claims_dir"/*; do
+    printf '%s\n' "$files" | while IFS= read -r f; do
         read_claim "$f"
         printf '%-46s %-16s %-20s %s\n' "$c_path" "$c_agent" "$c_since" "$c_why"
     done
@@ -102,8 +106,9 @@ release)
     if [ -n "$paths" ]; then
         for p in $paths; do rm -f "$claims_dir/$(slug "$p")"; echo "released $p"; done
     elif [ -n "$me" ]; then
-        for f in "$claims_dir"/*; do
-            [ -f "$f" ] || continue
+        files=$(claim_files)
+        [ -n "$files" ] || exit 0
+        printf '%s\n' "$files" | while IFS= read -r f; do
             read_claim "$f"
             [ "$c_agent" = "$me" ] && { rm -f "$f"; echo "released $c_path"; }
         done
