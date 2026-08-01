@@ -3271,7 +3271,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
             <span aria-hidden="true">⤴</span> Full screen: Share → Add to Home Screen
           </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 235 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 236 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
         </section>
@@ -3337,12 +3337,12 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // app.js arrives. The deep link still selects the sortie -- it is read by the module graph
     // from the same query string -- it just no longer has a splash screen to announce itself on.
 
-    // A network-fresh Build 235 document may still be controlled by Build 178's cache-first
+    // A network-fresh Build 236 document may still be controlled by Build 178's cache-first
     // service worker. Purge that controller and its Cache Storage before Blazor requests the
     // unversioned boot manifest/WASM graph. Offline clients never see this newer document until a
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = "235";
+      const releaseBuild = "236";
       const controller = navigator.serviceWorker?.controller;
       if (!controller) return;
       const controllerBuild = new URL(controller.scriptURL, location.href)
@@ -3361,8 +3361,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       }
     })();
   </script>
-  <script src="./multiplayer-config.js?v=235"></script>
-  <script type="module" src="./app.js?v=235"></script>
-  <script src="./_framework/blazor.webassembly.js?v=235" autostart="false"></script>
+  <script src="./multiplayer-config.js?v=236"></script>
+  <script type="module" src="./app.js?v=236"></script>
+  <script src="./_framework/blazor.webassembly.js?v=236" autostart="false"></script>
 </body>
 </html>

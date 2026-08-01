@@ -52,7 +52,7 @@ import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=235";
+} from "./render/audio/flight_audio.js?v=236";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -289,6 +289,11 @@ class CombatHud {
     this._banditMarkerInside = false;
     this._banditMarkerEntityId = "";
     this._wingmanLocatorArrowAngle = null;
+    // Per-contact range/closure tracking so BOTH bandits carry numbers, not just the selected gun
+    // target. The kernel publishes range/closure only for the selected contact; the other one's
+    // range comes from its position and its closure from the range-RATE across frames (smoothed),
+    // which is exactly what "OPENING/CLOSING" means.
+    this._rangeTracks = { bandit: null, wingman: null };
     this._wingmanLocatorArrowLastNow = -Infinity;
     this._padlockLiftCaptured = false;
     this._padlockCaptureEntityId = "";
@@ -1068,6 +1073,29 @@ class CombatHud {
     ctx.fillText(dataLine, textX, textY + textHeight / 2);
   }
 
+  /// Range and closure for a contact that is NOT the selected gun target, so both bandits show
+  /// "<range>NM · <closure>". Range is straight from the two positions; closure is the range-rate
+  /// over the frame, EMA-smoothed so it does not jitter. Positive rate = opening.
+  contactRangeClosureText(position, frame, key) {
+    const player = frame.playerPosition;
+    if (!position || !player) return { rangeText: "---", closureText: "" };
+    const dx = position.x - player.x, dy = position.y - player.y, dz = position.z - player.z;
+    const rangeM = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const now = Number(frame.now) || 0;
+    const track = this._rangeTracks[key];
+    let closureKts = null;
+    if (track && now > track.now && now - track.now < 0.5) {
+      const dt = now - track.now;
+      const rawKts = -((rangeM - track.rangeM) / dt) * 1.94384; // + = closing
+      closureKts = track.closureKts == null ? rawKts : track.closureKts * 0.8 + rawKts * 0.2;
+    }
+    this._rangeTracks[key] = { rangeM, now, closureKts };
+    return {
+      rangeText: targetRangeReadout(rangeM).compactText,
+      closureText: closureKts == null ? "" : targetClosureReadout(closureKts).compactText,
+    };
+  }
+
   drawWingmanLocator(frame, selected = true) {
     if (frame.padlock) return;
     const locatorColor = selected ? AMBER : GREEN;
@@ -1127,13 +1155,20 @@ class CombatHud {
     ctx.stroke();
     ctx.restore();
 
-    // Only the SELECTED target carries range/closure numbers (they follow the gun-target
-    // selection); the unselected wingman still gets its "TARGET 2" name so it is never anonymous.
-    const range = targetRangeReadout(frame.state.range_m).compactText;
-    const closure = targetClosureReadout(frame.state.closure_kts).compactText;
-    const label = selected
-      ? `TARGET 2 · SELECTED · ${range} · ${closure}`
-      : "TARGET 2";
+    // Both bandits carry range/closure. The selected one uses the kernel's authoritative
+    // range_m/closure_kts; the unselected wingman computes its own from position + range-rate so it
+    // is never just a bare name (owner: "I still don't have speed/distance labels on both bandits").
+    let label;
+    if (selected) {
+      const range = targetRangeReadout(frame.state.range_m).compactText;
+      const closure = targetClosureReadout(frame.state.closure_kts).compactText;
+      label = `TARGET 2 · SELECTED · ${range} · ${closure}`;
+    } else {
+      const rc = this.contactRangeClosureText(frame.wingmanPosition, frame, "wingman");
+      label = rc.closureText
+        ? `TARGET 2 · ${rc.rangeText} · ${rc.closureText}`
+        : `TARGET 2 · ${rc.rangeText}`;
+    }
     ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     const fitted = this.fitText(label, Math.max(80, safe.right - safe.left - 12));
     const width = ctx.measureText(fitted).width;
@@ -1230,13 +1265,16 @@ class CombatHud {
         projection.x, projection.y + size + 5);
       this.drawTargetDataLine(projection, size, state, color);
     } else if (!circuitTraffic) {
-      // Named even when it is not the gun target, so an on-screen wingman is never an anonymous
-      // bracket the pilot has to guess at.
+      // Named AND ranged even when it is not the gun target, so both on-screen bandits carry their
+      // numbers, not just the selected one.
+      const rc = this.contactRangeClosureText(frame.wingmanPosition, frame, "wingman");
+      const text = rc.closureText
+        ? `TARGET 2 · ${rc.rangeText} · ${rc.closureText}` : `TARGET 2 · ${rc.rangeText}`;
       ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.fillStyle = GREEN;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText("TARGET 2", projection.x, projection.y + size + 5);
+      ctx.fillText(text, projection.x, projection.y + size + 5);
     }
     if (circuitTraffic && padlocked) {
       ctx.font = "600 9px ui-monospace, monospace";
@@ -1342,13 +1380,15 @@ class CombatHud {
         ctx.fillText(solution ? "TARGET 1 · SHOOT" : "TARGET 1 · SELECTED",
           projection.x, projection.y + size + 5);
       } else if (frame.wingmanPresent === true) {
-        // Name it whenever there is a second bandit to tell it apart from — a lone bandit needs no
-        // "TARGET 1" tag, but in a 2v1 both brackets must be labelled.
+        // In a 2v1 the unselected primary is also named AND ranged, so both bandits carry numbers.
+        const rc = this.contactRangeClosureText(banditPosition, frame, "bandit");
+        const text = rc.closureText
+          ? `TARGET 1 · ${rc.rangeText} · ${rc.closureText}` : `TARGET 1 · ${rc.rangeText}`;
         ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
         ctx.fillStyle = GREEN;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        ctx.fillText("TARGET 1", projection.x, projection.y + size + 5);
+        ctx.fillText(text, projection.x, projection.y + size + 5);
       }
 
       return;
@@ -1516,11 +1556,18 @@ class CombatHud {
     // must not be captioned with the selected wingman's range.
     const numbersHere = targetDataLineOwner(state) === "primary";
     const closure = targetClosureReadout(state.closure_kts);
+    // When the primary is NOT the selected gun target, state.range_m/closure_kts belong to the
+    // wingman -- so compute the primary's own numbers from its position, and always show them.
+    const primaryNumbers = numbersHere
+      ? `${targetRangeReadout(state.range_m).compactText} · ${closure.compactText}`
+      : (() => {
+        const rc = this.contactRangeClosureText(frame.banditPosition, frame, "bandit");
+        return rc.closureText ? `${rc.rangeText} · ${rc.closureText}` : rc.rangeText;
+      })();
+    const sixPrefix = Math.abs(azimuth) > 150 ? "6 · " : "";
     const fullLabel = mobileTactical
-      ? `${Math.abs(azimuth) > 150 ? "6 · " : ""}TGT 1`
-      : `${Math.abs(azimuth) > 150 ? "6 · " : ""}${numbersHere
-        ? `${targetRangeReadout(state.range_m).compactText} · ${closure.compactText}`
-        : "TARGET 1"}`;
+      ? `${sixPrefix}TGT 1 · ${primaryNumbers}`
+      : `${sixPrefix}TARGET 1 · ${primaryNumbers}`;
     ctx.font = `${mobileTactical ? "800 10px" : "600 9px"} ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
     const labelText = this.fitText(fullLabel, Math.max(60, locatorRight - locatorLeft - 12));
     const labelWidth = ctx.measureText(labelText).width;
