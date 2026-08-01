@@ -1,12 +1,20 @@
-# Airframes — SE bible + capture kit
+# Airframes — engineering authority and capture kits
 
-This directory holds, per airframe, the **systems-engineering bible**: the readable record of *why*
-the aircraft is the shape, weight, and material it is. Each bible is paired with a versioned
-**Airframe Definition** JSON under `airframes/` at the repo root, which *captures* the bible's
-closed geometry and material numbers so blueprints and the in-game mesh cannot drift from them
-without a deliberate revision bump.
+This directory records each airframe's engineering authority chain: which artifact authors a
+decision, which artifacts are derived evidence, and which runtime/rendering surfaces consume it.
+Legacy v1 airframes use a prose-first **systems-engineering bible** with a versioned capture JSON.
+Newer shape-first definitions may author geometry and derive engineering evidence directly, but
+must state that different chain explicitly and test every downstream copy.
 
-**Engineering leads. Capture follows. Not the other way around.**
+**The authority chain must be explicit, versioned, and mechanically consistent.**
+
+## Rapier version boundary
+
+The `docs/airframes/rapier/` bible and `airframes/rapier.v1.json` describe the superseded v1
+bible-first workflow. Production Rapier is v2: [its authority guide](rapier-v2/README.md) makes
+`airframes/rapier.v2.json` canonical, derives the engineering artifact and embedded browser module,
+and binds runtime physics and the rendered exterior back to the same definition. Do not use the v1
+guide or chapters to override v2 geometry, fuel, stores, mission, or performance.
 
 ## Directory shape
 
@@ -19,11 +27,14 @@ docs/airframes/<name>/blueprints/ # plates generated/authored from the JSON
 analysis/art-refs/<name>/       # fiction-tagged mood stills (ADR-0003; not runtime SoT)
 ```
 
-See `docs/airframes/rapier/` for the first airframe worked this way, and
+See `docs/airframes/rapier/` for the historical first airframe worked this way, and
 `docs/superpowers/specs/2026-07-27-rapier-airframe-se-and-jet-kit-design.md` for the design record
 that established this pattern.
 
-## The order every future jet follows
+## Legacy v1 bible-first workflow
+
+Use this sequence only when an airframe declares the bible-first authority chain. A shape-first
+airframe instead follows its own documented generator/derivation/runtime chain, as Rapier v2 does.
 
 1. **Write Part I of the bible first.** Mission and flight regime → geometry → thermal/materials →
    propulsion → mass and CG. These are engineering decisions with numbers and reasoning, argued in
@@ -61,4 +72,3 @@ assumption for any new airframe is that it fits the existing schema.
 Fiction-tagged stills under `analysis/art-refs/<name>/` inform palette and mood only, per ADR-0003.
 They are never a source of truth for OML, mass, or performance, and they come **after** the
 engineering bible exists, not instead of it.
-

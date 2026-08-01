@@ -49,6 +49,16 @@ public readonly record struct GunImpact(
     long TargetId,
     double StepFraction);
 
+/// Pure fixed-gun firing geometry. The same evaluator feeds the live sight and any mission gate
+/// which needs to prove that a body-axis opportunity exists; it never fires or advances a round.
+public readonly record struct GunBallisticSolution(
+    bool HasLeadSolution,
+    Vec3D LeadDirection,
+    double TimeOfFlightSeconds,
+    double BoreErrorRad,
+    double HitConeHalfAngleRad,
+    bool BodyAxisOnSolution);
+
 /// Deterministic fixed-gun ballistics and fight damage. Nothing here knows about wall-clock time,
 /// rendering, input devices, or the old camera cone: only a round/target intersection can do damage.
 public sealed class GunKill {
@@ -599,19 +609,16 @@ public sealed class GunKill {
         double effectiveHitRadiusM, double dt) {
         var gunForward = GunDirection(own);
         var muzzle = own.Position + gunForward * MuzzleOffsetM;
+        GunBallisticSolution solution = EvaluateBallisticLead(
+            own, bandit, _profile, effectiveHitRadiusM);
+        HasLeadSolution = solution.HasLeadSolution;
+        LeadDirection = solution.LeadDirection;
+        LeadTimeOfFlight = solution.TimeOfFlightSeconds;
         var relativePosition = bandit.Position - muzzle;
-        var relativeVelocity = bandit.VelocityVector() - own.VelocityVector();
-
-        HasLeadSolution = TrySolveLead(relativePosition, relativeVelocity, out var direction, out var tof);
-        LeadDirection = HasLeadSolution ? direction : gunForward;
-        LeadTimeOfFlight = HasLeadSolution ? tof : 0.0;
         double range = relativePosition.Length;
         LeadPipper = muzzle + LeadDirection * System.Math.Max(range, 1.0);
 
-        double angularRadius = System.Math.Atan2(
-            effectiveHitRadiusM, System.Math.Max(range, 1.0));
-        InstantaneousGunSolution = HasLeadSolution
-            && gunForward.Dot(LeadDirection) >= System.Math.Cos(angularRadius);
+        InstantaneousGunSolution = solution.BodyAxisOnSolution;
         UpdateQualifiedGunSolution(InstantaneousGunSolution, dt);
     }
 
@@ -644,21 +651,116 @@ public sealed class GunKill {
         _gunSolutionTransitionSeconds = 0.0;
     }
 
-    bool TrySolveLead(in Vec3D relativePosition, in Vec3D relativeVelocity,
-        out Vec3D direction, out double timeOfFlight) {
+    /// <summary>
+    /// Solve the same gravity-compensated fixed-gun lead used by the live sight without advancing
+    /// weapon state. Mission directors may use this only to decide whether the aircraft has
+    /// physically earned a forward firing window; rounds and damage still come exclusively from
+    /// <see cref="Step(bool, in AircraftState, in AircraftState, double)"/>.
+    /// </summary>
+    public static bool TrySolveBallisticLead(
+        in AircraftState own,
+        in AircraftState target,
+        GunProfile profile,
+        out Vec3D direction,
+        out double timeOfFlight) {
+        GunBallisticSolution solution = EvaluateBallisticLead(
+            own, target, profile, profile.EffectiveHitRadiusM);
+        direction = solution.LeadDirection;
+        timeOfFlight = solution.TimeOfFlightSeconds;
+        return solution.HasLeadSolution;
+    }
+
+    /// <summary>Evaluate exact live-state lead and body-axis containment without weapon state.</summary>
+    public static GunBallisticSolution EvaluateBallisticLead(
+        in AircraftState own,
+        in AircraftState target,
+        GunProfile profile,
+        double effectiveHitRadiusM) =>
+        EvaluateBallisticLead(
+            own.Position,
+            own.VelocityVector(),
+            GunDirection(own),
+            target.Position,
+            target.VelocityVector(),
+            profile,
+            effectiveHitRadiusM);
+
+    /// <summary>
+    /// Vector-state overload used by deterministic trajectory prediction. Shooter velocity is
+    /// world translational velocity; gun forward is the physical body-fixed muzzle axis.
+    /// </summary>
+    public static GunBallisticSolution EvaluateBallisticLead(
+        in Vec3D shooterPosition,
+        in Vec3D shooterVelocity,
+        in Vec3D gunForward,
+        in Vec3D targetPosition,
+        in Vec3D targetVelocity,
+        GunProfile profile,
+        double effectiveHitRadiusM) {
+        System.ArgumentNullException.ThrowIfNull(profile);
+        if (!double.IsFinite(effectiveHitRadiusM) || effectiveHitRadiusM <= 0.0)
+            throw new System.ArgumentOutOfRangeException(nameof(effectiveHitRadiusM));
+        Vec3D forward = gunForward.Normalized();
+        if (forward.Length < 0.5 || !IsFinite(forward))
+            return new GunBallisticSolution(
+                false, Vec3D.Zero, 0.0, double.NaN, double.NaN, false);
+
+        Vec3D muzzle = shooterPosition + forward * MuzzleOffsetM;
+        Vec3D relativePosition = targetPosition - muzzle;
+        Vec3D relativeVelocity = targetVelocity - shooterVelocity;
+        bool hasLead = TrySolveLead(
+            relativePosition,
+            relativeVelocity,
+            profile.MuzzleVelocityMps,
+            profile.MaximumFlightSeconds,
+            out Vec3D leadDirection,
+            out double timeOfFlight);
+        double range = relativePosition.Length;
+        double hitConeHalfAngleRad = System.Math.Atan2(
+            effectiveHitRadiusM, System.Math.Max(range, 1.0));
+        double boreErrorRad = hasLead
+            ? System.Math.Acos(System.Math.Clamp(
+                forward.Dot(leadDirection), -1.0, 1.0))
+            : double.NaN;
+        // Keep the live sight's original dot/cos predicate exactly: this avoids changing a
+        // boundary comparison while making the shared geometry observable.
+        bool bodyAxisOnSolution = hasLead
+            && forward.Dot(leadDirection) >= System.Math.Cos(hitConeHalfAngleRad);
+        return new GunBallisticSolution(
+            hasLead,
+            hasLead ? leadDirection : forward,
+            hasLead ? timeOfFlight : 0.0,
+            boreErrorRad,
+            hitConeHalfAngleRad,
+            bodyAxisOnSolution);
+    }
+
+    static bool TrySolveLead(
+        in Vec3D relativePosition,
+        in Vec3D relativeVelocity,
+        double muzzleVelocityMps,
+        double maximumFlightSeconds,
+        out Vec3D direction,
+        out double timeOfFlight) {
         direction = Vec3D.Zero;
         timeOfFlight = 0.0;
-        if (relativePosition.Length < 1e-6) return false;
+        if (relativePosition.Length < 1e-6
+            || !double.IsFinite(muzzleVelocityMps) || muzzleVelocityMps <= 0.0
+            || !double.IsFinite(maximumFlightSeconds) || maximumFlightSeconds <= 0.0)
+            return false;
 
         double lo = 0.0;
-        double fLo = LeadEquation(relativePosition, relativeVelocity, lo);
+        double fLo = LeadEquation(
+            relativePosition, relativeVelocity, muzzleVelocityMps, lo);
         for (int i = 1; i <= LeadSearchSteps; i++) {
-            double hi = _profile.MaximumFlightSeconds * i / LeadSearchSteps;
-            double fHi = LeadEquation(relativePosition, relativeVelocity, hi);
+            double hi = maximumFlightSeconds * i / LeadSearchSteps;
+            double fHi = LeadEquation(
+                relativePosition, relativeVelocity, muzzleVelocityMps, hi);
             if (fHi <= 0.0 && fLo > 0.0) {
                 for (int iteration = 0; iteration < LeadBisectionSteps; iteration++) {
                     double mid = 0.5 * (lo + hi);
-                    double fMid = LeadEquation(relativePosition, relativeVelocity, mid);
+                    double fMid = LeadEquation(
+                        relativePosition, relativeVelocity, muzzleVelocityMps, mid);
                     if (fMid > 0.0) lo = mid;
                     else hi = mid;
                 }
@@ -676,9 +778,13 @@ public sealed class GunKill {
         return false;
     }
 
-    double LeadEquation(in Vec3D relativePosition, in Vec3D relativeVelocity, double t) {
+    static double LeadEquation(
+        in Vec3D relativePosition,
+        in Vec3D relativeVelocity,
+        double muzzleVelocityMps,
+        double t) {
         var required = relativePosition + relativeVelocity * t - Gravity * (0.5 * t * t);
-        double muzzleDistance = _profile.MuzzleVelocityMps * t;
+        double muzzleDistance = muzzleVelocityMps * t;
         return required.Dot(required) - muzzleDistance * muzzleDistance;
     }
 

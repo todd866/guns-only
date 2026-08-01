@@ -2,6 +2,7 @@ using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
 using GunsOnly.Sim.Propulsion;
+using GunsOnly.Sim.Recovery;
 using GunsOnly.Sim.Turbulence;
 
 namespace GunsOnly.Web;
@@ -31,7 +32,7 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.4.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
-    const string SnapshotSchemaVersion = "1.25.0";
+    const string SnapshotSchemaVersion = "1.26.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
     const string KoreaAssetProfileId = "asset.korea-1950s.default.v1";
@@ -85,7 +86,8 @@ internal static class SnapshotProjection {
                 WorldOriginNorthM,
                 WorldOriginConfigured);
         AircraftSim _player = Session.Player;
-        IBandit _bandit = Session.Bandit;
+        bool opponentPresent = Session.OpponentPresent;
+        IBandit? _bandit = opponentPresent ? Session.Bandit : null;
         BeatSetup _beat = Session.Beat;
         DetentLayer _detents = Session.Controls;
         PilotCommand requestedCommand = _detents.Command;
@@ -95,8 +97,10 @@ internal static class SnapshotProjection {
                 "F3", System.Globalization.CultureInfo.InvariantCulture)
             : "null";
         bool lateralControlApplied = _player.HasAppliedFlightCommand;
-        GunKill _gunKill = Session.PlayerGun;
-        GunKill _opponentGun = Session.OpponentGun;
+        GunKill? _gunKill = opponentPresent ? Session.PlayerGun : null;
+        GunKill? _opponentGun = opponentPresent ? Session.OpponentGun : null;
+        GunProfile playerGunProfile = _gunKill?.Profile
+            ?? _beat.CombatRules.PlayerGunProfile;
         FuelModel _fuel = Session.PlayerFuel;
         AirframeSystems _systems = Session.PlayerSystems;
         PilotPhysiologyState pilotPhysiology = Session.PilotPhysiologyState;
@@ -116,6 +120,8 @@ internal static class SnapshotProjection {
         Carrier.TouchdownResult _touchdown = Session.Touchdown;
         ArrestmentModel _arrestment = Session.Arrestment;
         CatapultLaunchModel _catapult = Session.Catapult;
+        RapierServiceLifeSortieRecord? serviceLife =
+            Session.RapierServiceLife.LatestRecord;
         DoctrineAdvice _advice = Session.Advice;
         PromptCue _cue = Session.Cue;
         double _simTimeMs = Session.TimeMilliseconds;
@@ -144,8 +150,10 @@ internal static class SnapshotProjection {
 
         bool catapulting = _catapult.IsActive;
         AircraftState s = catapulting ? _catapult.State : _player.State;
-        AircraftState b = _bandit.State;
-        AircraftState gunTarget = Session.SelectedOpponentState;
+        AircraftState b = _bandit?.State ?? default;
+        AircraftState gunTarget = opponentPresent
+            ? Session.SelectedOpponentState
+            : default;
         string formationCoordinationAgeJson =
             Session.FormationCoordinationAgeSeconds is { } coordinationAgeSeconds
             && double.IsFinite(coordinationAgeSeconds)
@@ -195,18 +203,29 @@ internal static class SnapshotProjection {
             : rapierRecoveryTempC;
         double rapierStagnationTempC =
             AirData.StagnationTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
-        double? rapierCmcCapabilityC = Session.RapierMissionAvailable
+        double rapierThermalBasisK = Session.Beat.PlayerAir.AerothermalLimitReference
+            == AerothermalLimitReferenceKind.StagnationTemperature
+                ? AirData.StagnationTemperatureK(mach, atmosphericState.TemperatureK)
+                : AirData.AdiabaticWallTemperatureK(mach, atmosphericState.TemperatureK);
+        double rapierThermalEffectiveC = AirData.EffectiveAerothermalZoneTemperatureK(
+            atmosphericState.TemperatureK,
+            rapierThermalBasisK,
+            Session.Beat.PlayerAir.AerothermalAdiabaticRiseFraction) - 273.15;
+        double? rapierThermalCapabilityC = Session.RapierMissionAvailable
             && Session.Beat.PlayerAir.SkinTemperatureLimitK > 0.0
                 ? Session.Beat.PlayerAir.SkinTemperatureLimitK - 273.15
                 : null;
+        double? rapierThermalMarginC = rapierThermalCapabilityC is { } thermalCapabilityC
+            ? thermalCapabilityC - rapierSkinTempC
+            : null;
+        // Local CMC hot edges are a separate, hotter location. They do not license the ordinary
+        // warm-panel structure to run at 1,200 C.
+        double? rapierCmcCapabilityC = Session.RapierMissionAvailable
+            ? RapierV2Design.CmcHotEdgeLimitK - 273.15
+            : null;
         double? rapierCmcMarginC = rapierCmcCapabilityC is { } cmcCapabilityC
             ? cmcCapabilityC - rapierStagnationTempC
             : null;
-        // Deprecated compatibility field: same numeric shape, now material capability minus true
-        // stagnation T0. New clients consume rapier_cmc_margin_c.
-        double rapierLegacyThermalLimitC =
-            (Session.Beat.PlayerAir.SkinTemperatureLimitK > 0.0
-                ? Session.Beat.PlayerAir.SkinTemperatureLimitK : 593.15) - 273.15;
         Vec3D localWindVelocity = groundVelocity - airVelocity;
         double simulationTimeSeconds = _simTimeMs / 1000.0;
         CloudSample localCloud = (Session.Weather?.Clouds ?? ClearCloudField.Instance)
@@ -243,6 +262,7 @@ internal static class SnapshotProjection {
         bool waveOff = Session.WaveOffActive;
         string mode = _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Failed
             ? "ARRESTMENT FAILED"
+            : _recovery == Carrier.Recovery.BarrierEngagement ? "BARRIER"
             : Session.TerminalPhaseActive ? "TERMINAL"
             : catapulting ? "CATAPULT"
             : _recovery == Carrier.Recovery.Bolter ? "BOLTER"
@@ -265,8 +285,8 @@ internal static class SnapshotProjection {
             }
         }
 
-        Vec3D bl = _bandit.LiftDir;
-        Vec3D bf = b.ForwardDir();
+        Vec3D bl = _bandit?.LiftDir ?? Vec3D.Zero;
+        Vec3D bf = opponentPresent ? b.ForwardDir() : Vec3D.Zero;
         Vec3D pf;
         Vec3D pl;
         if (catapulting) {
@@ -296,6 +316,8 @@ internal static class SnapshotProjection {
             context = "TRAPPED - LAUNCHING";
         } else if (_arrestment.Phase == ArrestmentModel.ArrestmentPhase.Failed) {
             context = $"ARRESTMENT FAILED — {ArrestmentFailureToken(_arrestment.FailureReason).Replace('_', ' ')}";
+        } else if (_recovery == Carrier.Recovery.BarrierEngagement) {
+            context = "BARRIER — STOPPED";
         } else if (_recovery == Carrier.Recovery.Bolter) {
             context = _touchdown.Hook == Carrier.HookOutcome.InFlightEngagement
                 ? "BOLTER — IN-FLIGHT ENGAGEMENT"
@@ -327,6 +349,17 @@ internal static class SnapshotProjection {
                         active: playerRtbActive || _fuel.RtbAdvisory)
                     : RecoveryNavigationProjection.Unknown;
         RtbGuidance rtb = recoveryNavigation.Guidance;
+        CarrierSortieRouteState carrierRoute = Session.CarrierSortieRoute;
+        Vec3D routeDelta = carrierRoute.TargetPosition - playerPosition;
+        double carrierRouteBearingRad = carrierRoute.Active
+            ? Math.Atan2(routeDelta.X, routeDelta.Z)
+            : 0.0;
+        double carrierRouteTurnRad = carrierRoute.Active
+            ? Math.IEEERemainder(carrierRouteBearingRad - displayHeadingRad,
+                2.0 * Math.PI)
+            : 0.0;
+        double carrierRouteBearingDeg =
+            ((carrierRouteBearingRad * 57.29577951308232) % 360.0 + 360.0) % 360.0;
         // Finished freezes simulation time. Timed in-flight cues would otherwise remain active
         // forever, so terminal presentation comes from the durable outcome and ordered events.
         bool splashCue = !finished && Session.SplashCueActive;
@@ -390,9 +423,23 @@ internal static class SnapshotProjection {
             + $"\"time_compression_enabled\":{(Session.TimeCompressionPilotEnabled ? "true" : "false")},"
             + $"\"time_compression_eligible\":{(Session.TimeCompressionEligible ? "true" : "false")},"
             + $"\"time_compression_requested_factor\":{Session.TimeCompressionRequestedFactor},"
+            + $"\"time_compression_safety_factor_cap\":{Session.TimeCompressionSafetyFactorCap},"
             + $"\"time_compression_factor\":{Session.TimeCompressionFactor},"
             + $"\"time_compression_inhibit_reason\":\"{TimeCompressionInhibitToken(Session.TimeCompressionInhibitReason)}\","
+            + $"\"simulation_time_s\":{simulationTimeSeconds:F3},"
             + $"\"rapier_mission_available\":{(Session.RapierMissionAvailable ? "true" : "false")},"
+            + $"\"service_life_record_available\":{(serviceLife is not null ? "true" : "false")},"
+            + $"\"service_life_record_sequence\":{serviceLife?.RecordSequence ?? 0L},"
+            + $"\"service_life_record_sha256\":{JsonString(serviceLife?.RecordSha256 ?? "")},"
+            + $"\"service_life_evidence_status\":{JsonString(serviceLife?.EvidenceStatus.ToString().ToUpperInvariant() ?? "UNAVAILABLE")},"
+            + $"\"service_life_exceedance_review_required\":{(serviceLife?.ExceedanceReviewRequired == true ? "true" : "false")},"
+            + $"\"service_life_over_structural_limit_s\":{(serviceLife?.Mechanical.StructuralLimitExceedanceTicks ?? 0L) / AircraftSim.TickHz:F3},"
+            + $"\"service_life_over_dynamic_pressure_s\":{(serviceLife?.Mechanical.DynamicPressureLimitExceedanceTicks ?? 0L) / AircraftSim.TickHz:F3},"
+            + $"\"service_life_max_g\":{(serviceLife?.Mechanical.MaximumLoadMilliG ?? 0L) / 1000.0:F3},"
+            + $"\"service_life_max_dynamic_pressure_kpa\":{(serviceLife?.Mechanical.MaximumDynamicPressurePa ?? 0L) / 1000.0:F2},"
+            + $"\"service_life_min_thermal_margin_c\":{(serviceLife?.ThermalProxy.MinimumThermalMarginMilliK ?? 0L) / 1000.0:F1},"
+            + $"\"service_life_damage_assessment\":\"{RapierServiceLifeRecorder.DamageAssessment}\","
+            + $"\"service_life_cost_projection\":\"{RapierServiceLifeRecorder.CostProjection}\","
             + $"\"rapier_pattern_only\":{(Session.Beat.ScriptedIntercept?.PatternOnly == true ? "true" : "false")},"
             + $"\"rapier_automation_enabled\":{(Session.RapierAutomationEnabled ? "true" : "false")},"
             + $"\"rapier_automation_active\":{(Session.RapierAutomationActive ? "true" : "false")},"
@@ -474,6 +521,7 @@ internal static class SnapshotProjection {
             + $"\"rapier_gate_in_volume\":{(Session.RapierGateInVolume ? "true" : "false")},"
             + $"\"rapier_gate_energy_ok\":{(Session.RapierGateEnergyOk ? "true" : "false")},"
             + $"\"rapier_nose_on_v_err_deg\":{Session.RapierNoseOnVelocityErrorDeg:F1},"
+            + $"\"rapier_target_gamma_deg\":{Session.RapierTargetGammaDeg:F2},"
             + $"\"rapier_job\":{JsonString(Session.RapierJobToken)},"
             + $"\"rapier_lob_skip\":{Session.RapierLobSkip},"
             + $"\"rapier_lob_skip_max\":{Session.RapierLobSkipMax},"
@@ -491,14 +539,20 @@ internal static class SnapshotProjection {
             + $"\"rapier_ramjet_thrust_lbf\":{Session.RapierRamjetThrustN / J47PerformanceMap.NewtonsPerPoundForce:F0},"
             + $"\"rapier_turbine_thrust_kn\":{Session.RapierTurbineThrustN / 1000.0:F2},"
             + $"\"rapier_ramjet_thrust_kn\":{Session.RapierRamjetThrustN / 1000.0:F2},"
+            + $"\"rapier_drag_lbf\":{_player.LastAerodynamicDragN / J47PerformanceMap.NewtonsPerPoundForce:F1},"
+            + $"\"rapier_dynamic_pressure_limit_kpa\":{RapierAerodynamics.HighDynamicPressurePlacardPa / 1000.0:F2},"
+            + $"\"rapier_relight_dynamic_pressure_kpa\":{RapierMissionDirector.RelightDynamicPressurePa / 1000.0:F2},"
             + $"\"rapier_turbine_fuel_ppm\":{Session.RapierTurbineFuelFlowLbPerMinute:F2},"
             + $"\"rapier_ramjet_fuel_ppm\":{Session.RapierRamjetFuelFlowLbPerMinute:F2},"
             + $"\"rapier_skin_temp_c\":{rapierSkinTempC:F0},"
             + $"\"rapier_recovery_temp_c\":{rapierRecoveryTempC:F0},"
             + $"\"rapier_stagnation_temp_c\":{rapierStagnationTempC:F0},"
+            + $"\"rapier_thermal_zone\":{JsonString(RapierV2Design.BindingThermalZoneId)},"
+            + $"\"rapier_thermal_effective_temp_c\":{rapierThermalEffectiveC:F0},"
+            + $"\"rapier_thermal_capability_c\":{(rapierThermalCapabilityC is { } thermalCapC ? thermalCapC.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) : "null")},"
             + $"\"rapier_cmc_capability_c\":{(rapierCmcCapabilityC is { } cmcCapC ? cmcCapC.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) : "null")},"
             + $"\"rapier_cmc_margin_c\":{(rapierCmcMarginC is { } cmcMarginC ? cmcMarginC.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) : "null")},"
-            + $"\"rapier_thermal_margin_c\":{rapierLegacyThermalLimitC - rapierStagnationTempC:F0},"
+            + $"\"rapier_thermal_margin_c\":{(rapierThermalMarginC is { } thermalMarginC ? thermalMarginC.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) : "null")},"
             // Gross weight in pounds, and time-to-intercept in minutes. ETI is only meaningful on a
             // long-range run-in: inside the merge the number churns every tick and means nothing, so
             // it is published as -1 below 20 km or with no closure, and the HUD hides it.
@@ -508,7 +562,7 @@ internal static class SnapshotProjection {
             + $"\"finished\":{(finished ? "true" : "false")},\"session_phase\":\"{sessionPhase}\","
             + $"\"sortie_outcome\":\"{SortieOutcomeToken(Session.Outcome)}\","
             + $"\"pending_sortie_outcome\":\"{SortieOutcomeToken(Session.PendingOutcome)}\","
-            + PointsLedgerJson(finished)
+            + RapierEconomyJson(finished)
             + $"\"terminal_phase_active\":{(Session.TerminalPhaseActive ? "true" : "false")},"
             + $"\"player_terminal_state\":\"{TerminalStateToken(Session.PlayerTerminalState)}\","
             + $"\"opponent_terminal_state\":\"{TerminalStateToken(Session.OpponentTerminalState)}\","
@@ -516,6 +570,7 @@ internal static class SnapshotProjection {
             + $"\"opponent_impact_surface\":\"{ImpactSurfaceToken(Session.OpponentImpactSurface)}\","
             + $"\"incident_replay_id\":{Session.IncidentReplay.ClipId},"
             + $"\"incident_replay_available\":{(Session.IncidentReplay.ExportAvailable ? "true" : "false")},"
+            + $"\"opponent_present\":{(opponentPresent ? "true" : "false")},"
             + $"\"opponent_body_present\":{(Session.OpponentBodyPresent ? "true" : "false")},"
             + $"\"px\":{playerPosition.X:F3},\"py\":{playerPosition.Y:F3},\"pz\":{playerPosition.Z:F3},"
             // World-frame ground velocity: the browser projects the flight-path marker (FPV) from
@@ -710,39 +765,41 @@ internal static class SnapshotProjection {
             + $"\"aoa_deg\":{_player.AngleOfAttackRad * 57.2958:F2},\"beta_deg\":{_player.SideslipRad * 57.2958:F2},\"gamma_deg\":{displayGammaRad * 57.2958:F2},"
             + $"\"heading_deg\":{((displayHeadingRad * 57.2958) % 360 + 360) % 360:F2},"
             + $"\"roll_rate_dps\":{s.BodyRates.P * 57.2958:F2},\"pitch_rate_dps\":{s.BodyRates.Q * 57.2958:F2},\"yaw_rate_dps\":{s.BodyRates.R * 57.2958:F2},"
-            + $"\"angle_off_deg\":{Geometry.AngleOff(s, gunTarget) * 57.2958:F2},"
-            + $"\"range_m\":{Geometry.Range(s, gunTarget):F1},\"closure_kts\":{_closureKts:F1},"
-            + $"\"selected_player_gun_target_slot\":{Session.SelectedPlayerGunTargetSlot},"
-            + $"\"gun_window\":{(!Session.WeaponsInhibited && CameraSolver.GunWindow(s, gunTarget) ? "true" : "false")},"
-            + $"\"gun_solution_raw\":{(_gunKill.InstantaneousGunSolution ? "true" : "false")},"
-            + $"\"gun_solution\":{(!Session.WeaponsInhibited && _gunKill.GunSolution ? "true" : "false")},"
-            + $"\"lead_valid\":{(!Session.WeaponsInhibited && _gunKill.HasLeadSolution ? "true" : "false")},"
-            + $"\"lead_x\":{_gunKill.LeadPipper.X:F3},\"lead_y\":{_gunKill.LeadPipper.Y:F3},\"lead_z\":{_gunKill.LeadPipper.Z:F3},"
-            + $"\"lead_tof\":{_gunKill.LeadTimeOfFlight:F4},\"ammo\":{_gunKill.AmmoRemaining},"
-            + $"\"gun_heat\":{_gunKill.BarrelHeat:F3},"
-            + $"\"gun_overheat\":{(_gunKill.BarrelOverheated ? "true" : "false")},"
-            + $"\"gun_muzzle_velocity_mps\":{_gunKill.Profile.MuzzleVelocityMps:F2},"
-            + $"\"gun_max_flight_s\":{_gunKill.Profile.MaximumFlightSeconds:F3},"
-            + $"\"target_wingspan_m\":{(_beat.BanditAir.WingSpanM > 0.0 ? _beat.BanditAir.WingSpanM : Math.Sqrt(4.5 * _beat.BanditAir.WingAreaM2)):F2},"
+            + $"\"angle_off_deg\":{(opponentPresent ? Geometry.AngleOff(s, gunTarget) * 57.2958 : 0.0):F2},"
+            + $"\"range_m\":{(opponentPresent ? Geometry.Range(s, gunTarget) : 0.0):F1},\"closure_kts\":{(opponentPresent ? _closureKts : 0.0):F1},"
+            + $"\"selected_player_gun_target_slot\":{(opponentPresent ? Session.SelectedPlayerGunTargetSlot : 0)},"
+            + $"\"gun_window\":{(opponentPresent && !Session.WeaponsInhibited && CameraSolver.GunWindow(s, gunTarget) ? "true" : "false")},"
+            + $"\"gun_solution_raw\":{(opponentPresent && _gunKill!.InstantaneousGunSolution ? "true" : "false")},"
+            + $"\"gun_solution\":{(opponentPresent && !Session.WeaponsInhibited && _gunKill!.GunSolution ? "true" : "false")},"
+            + $"\"lead_valid\":{(opponentPresent && !Session.WeaponsInhibited && _gunKill!.HasLeadSolution ? "true" : "false")},"
+            + $"\"lead_x\":{(opponentPresent ? _gunKill!.LeadPipper.X : 0.0):F3},\"lead_y\":{(opponentPresent ? _gunKill!.LeadPipper.Y : 0.0):F3},\"lead_z\":{(opponentPresent ? _gunKill!.LeadPipper.Z : 0.0):F3},"
+            + $"\"lead_tof\":{(opponentPresent ? _gunKill!.LeadTimeOfFlight : 0.0):F4},\"ammo\":{(_gunKill?.AmmoRemaining ?? 0)},"
+            + $"\"gun_heat\":{(_gunKill?.BarrelHeat ?? 0.0):F3},"
+            + $"\"gun_overheat\":{(_gunKill?.BarrelOverheated == true ? "true" : "false")},"
+            + $"\"gun_muzzle_velocity_mps\":{playerGunProfile.MuzzleVelocityMps:F2},"
+            + $"\"gun_max_flight_s\":{playerGunProfile.MaximumFlightSeconds:F3},"
+            + $"\"target_wingspan_m\":{(opponentPresent ? (_beat.BanditAir.WingSpanM > 0.0 ? _beat.BanditAir.WingSpanM : Math.Sqrt(4.5 * _beat.BanditAir.WingAreaM2)) : 0.0):F2},"
             + GunTrajectoryJson(playerPosition, groundVelocity, pf, pl, s.BodyRates,
-                _gunKill.Profile)
-            + $"\"player_gun_profile_id\":\"{_gunKill.Profile.Id}\","
-            + $"\"rounds_fired\":{_gunKill.RoundsFired},\"hits\":{_gunKill.TotalHitCount},"
-            + $"\"selected_target_hits\":{_gunKill.HitCount},"
-            + $"\"hit\":{(_gunKill.HitThisStep ? "true" : "false")},"
-            + $"\"gun_firing\":{(Session.TriggerDown && Session.PlayerWeaponsAuthorized && _beat.CombatRules.PlayerGunEnabled && !_gunKill.BarrelOverheated && _gunKill.BanditAlive ? "true" : "false")},"
-            + TracerJson("tracers", _gunKill.RoundsInFlight)
-            + $"\"kill_progress\":{_gunKill.KillProgress:F3},"
-            + $"\"opponent_health\":{_gunKill.TargetHealth:F3},\"opponent_alive\":{(_gunKill.TargetAlive ? "true" : "false")},"
+                playerGunProfile)
+            + $"\"player_gun_profile_id\":\"{playerGunProfile.Id}\","
+            + $"\"rounds_fired\":{(opponentPresent ? _gunKill!.RoundsFired : 0)},\"hits\":{(opponentPresent ? _gunKill!.TotalHitCount : 0)},"
+            + $"\"selected_target_hits\":{(opponentPresent ? _gunKill!.HitCount : 0)},"
+            + $"\"hit\":{(opponentPresent && _gunKill!.HitThisStep ? "true" : "false")},"
+            + $"\"gun_firing\":{(opponentPresent && Session.TriggerDown && Session.PlayerWeaponsAuthorized && _beat.CombatRules.PlayerGunEnabled && !_gunKill!.BarrelOverheated && _gunKill.BanditAlive ? "true" : "false")},"
+            + TracerJson("tracers", opponentPresent
+                ? _gunKill!.RoundsInFlight : Array.Empty<GunRound>())
+            + $"\"kill_progress\":{(opponentPresent ? _gunKill!.KillProgress : 0.0):F3},"
+            + $"\"opponent_health\":{(opponentPresent ? _gunKill!.TargetHealth : 0.0):F3},\"opponent_alive\":{(opponentPresent && _gunKill!.TargetAlive ? "true" : "false")},"
             + $"\"bandit_health\":{Session.PrimaryOpponentHealth:F3},"
-            + $"\"fight\":\"{_gunKill.Outcome}\",\"bandit_alive\":{(Session.PrimaryOpponentAlive ? "true" : "false")},"
+            + $"\"fight\":\"{(_gunKill?.Outcome ?? FightOutcome.Flying)}\",\"bandit_alive\":{(Session.PrimaryOpponentAlive ? "true" : "false")},"
             + $"\"player_health\":{Session.PlayerHealth:F3},\"player_alive\":{(Session.PlayerAlive ? "true" : "false")},"
-            + $"\"opponent_ammo\":{_opponentGun.AmmoRemaining},"
-            + $"\"opponent_gun_profile_id\":\"{_opponentGun.Profile.Id}\","
-            + $"\"opponent_rounds_fired\":{_opponentGun.RoundsFired},\"opponent_hits\":{Session.PlayerHitsTaken},"
-            + $"\"opponent_trigger_down\":{(Session.OpponentTriggerDown ? "true" : "false")},"
-            + $"\"opponent_gun_firing\":{(Session.OpponentTriggerDown && _opponentGun.AmmoRemaining > 0 && Session.PlayerAlive ? "true" : "false")},"
-            + TracerJson("opponent_tracers", Session.FormationOpponentRoundsInFlight)
+            + $"\"opponent_ammo\":{(opponentPresent ? _opponentGun!.AmmoRemaining : 0)},"
+            + $"\"opponent_gun_profile_id\":{JsonString(opponentPresent ? _opponentGun!.Profile.Id : null)},"
+            + $"\"opponent_rounds_fired\":{(opponentPresent ? _opponentGun!.RoundsFired : 0)},\"opponent_hits\":{(opponentPresent ? Session.PlayerHitsTaken : 0)},"
+            + $"\"opponent_trigger_down\":{(opponentPresent && Session.OpponentTriggerDown ? "true" : "false")},"
+            + $"\"opponent_gun_firing\":{(opponentPresent && Session.OpponentTriggerDown && _opponentGun!.AmmoRemaining > 0 && Session.PlayerAlive ? "true" : "false")},"
+            + TracerJson("opponent_tracers", opponentPresent
+                ? Session.FormationOpponentRoundsInFlight : Array.Empty<GunRound>())
             + CombatEventsJson()
             + $"\"kill_count\":{Session.KillCount},\"engagement_number\":{Session.EngagementNumber},"
             + $"\"continuous_combat\":{(Session.ContinuousCombat ? "true" : "false")},"
@@ -800,6 +857,24 @@ internal static class SnapshotProjection {
             + $"\"recovery_point_known\":{(recoveryNavigation.RecoveryPointKnown ? "true" : "false")},"
             + $"\"recovery_id\":{JsonString(recoveryPlan?.Id)},"
             + $"\"recovery_display_name\":{JsonString(recoveryPlan?.DisplayName)},"
+            + $"\"carrier_sortie_route_active\":{(carrierRoute.Active ? "true" : "false")},"
+            + $"\"carrier_sortie_route_profile_id\":{JsonString(carrierRoute.ProfileId)},"
+            + $"\"carrier_sortie_route_phase\":{JsonString(CarrierRoutePhaseToken(carrierRoute.Phase))},"
+            + $"\"carrier_sortie_route_phase_code\":{(int)carrierRoute.Phase},"
+            + $"\"carrier_sortie_route_fix\":{JsonString(CarrierRouteFixToken(carrierRoute.ActiveFix))},"
+            + $"\"carrier_sortie_route_fix_code\":{(int)carrierRoute.ActiveFix},"
+            + $"\"carrier_sortie_route_target_x\":{carrierRoute.TargetPosition.X:F2},"
+            + $"\"carrier_sortie_route_target_y\":{carrierRoute.TargetPosition.Y:F2},"
+            + $"\"carrier_sortie_route_target_z\":{carrierRoute.TargetPosition.Z:F2},"
+            + $"\"carrier_sortie_route_target_bearing_deg\":{carrierRouteBearingDeg:F2},"
+            + $"\"carrier_sortie_route_target_turn_deg\":{carrierRouteTurnRad * 57.29577951308232:F2},"
+            + $"\"carrier_sortie_route_distance_m\":{carrierRoute.DistanceToTargetM:F1},"
+            + $"\"carrier_sortie_route_target_tas_mps\":{carrierRoute.TargetSpeedMps:F1},"
+            + $"\"carrier_sortie_route_capture_radius_m\":{carrierRoute.CaptureRadiusM:F1},"
+            + $"\"carrier_sortie_route_rtb_available\":{(carrierRoute.RtbAvailable ? "true" : "false")},"
+            + $"\"carrier_sortie_route_rtb_requested\":{(carrierRoute.RtbRequested ? "true" : "false")},"
+            + $"\"straight_deck_barrier_armed\":{(Session.StraightDeckBarrierArmed ? "true" : "false")},"
+            + $"\"straight_deck_barrier_engaged\":{(_recovery == Carrier.Recovery.BarrierEngagement ? "true" : "false")},"
             + $"\"runway_available\":{(conventionalRunway is not null ? "true" : "false")},"
             + $"\"runway_threshold_x\":{NullableNumberJson(conventionalRunway?.ThresholdPosition.X)},"
             + $"\"runway_threshold_y\":{NullableNumberJson(conventionalRunway?.ThresholdPosition.Y)},"
@@ -907,12 +982,63 @@ internal static class SnapshotProjection {
             + $"\"recovery_gate_config_ok\":{(recovery.ConfigOk ? "true" : "false")},"
             + $"\"recovery_gate_target_ktas\":{NullableNumberJson(recoveryGate?.TargetKtas)},"
             + $"\"recovery_gate_dirty\":{(recoveryGate?.DirtyConfig == true ? "true" : "false")},"
-            + $"\"recovery_gates_json\":{SnapshotJson.JsonString(MeshSnapshot.RecoveryGatesJson(Session))},";
+            + $"\"recovery_gates_json\":{SnapshotJson.JsonString(MeshSnapshot.RecoveryGatesJson(Session))},"
+            // The golden-path schedule. The ribbon reads the target altitude and speed, the power
+            // bug reads commanded_power, and the console tab reads the limit so the pilot can ask
+            // WHY the bug moved instead of being told to pull power and having to trust it.
+            + $"\"golden_path_valid\":{(Session.RecoverySchedule.Valid ? "true" : "false")},"
+            + $"\"golden_path_target_alt_m\":{Session.RecoverySchedule.TargetAltitudeM:F1},"
+            + $"\"golden_path_target_tas_mps\":{Session.RecoverySchedule.TargetTrueAirspeedMps:F1},"
+            + $"\"golden_path_power_01\":{Session.RecoverySchedule.CommandedPower01:F3},"
+            + $"\"golden_path_excess_energy_m\":{Session.RecoverySchedule.ExcessEnergyM:F0},"
+            + $"\"golden_path_track_required_m\":{Session.RecoverySchedule.TrackRequiredM:F0},"
+            + $"\"golden_path_limit\":{SnapshotJson.JsonString(LimitToken(Session.RecoverySchedule.Limit))},"
+            // The whole-sortie schedule: catshot, climb, cruise, descend, groove. Height is ABOVE
+            // THE DECK, not MSL, and the power command is two-sided — the older schedule could
+            // only ever ask for less. sortie_waveoff_s is the one that earns its place on a
+            // straight deck: seconds left in which a wave-off is still achievable, set by how long
+            // this engine takes to answer rather than by a fixed distance.
+            + $"\"sortie_valid\":{(Session.SortiePlan.Valid ? "true" : "false")},"
+            + $"\"sortie_leg\":{SnapshotJson.JsonString(Session.SortiePlan.Leg.ToString())},"
+            + $"\"sortie_leg_code\":{(int)Session.SortiePlan.Leg},"
+            + $"\"sortie_target_height_m\":{Session.SortiePlan.TargetHeightM:F1},"
+            + $"\"sortie_target_tas_mps\":{Session.SortiePlan.TargetSpeedMps:F1},"
+            + $"\"sortie_power_01\":{Session.SortiePlan.CommandedPower01:F3},"
+            + $"\"sortie_limit\":{SnapshotJson.JsonString(Session.SortiePlan.Limit.ToString())},"
+            + $"\"sortie_limit_code\":{(int)Session.SortiePlan.Limit},"
+            + $"\"sortie_distance_to_go_m\":{Session.SortiePlan.DistanceToGoM:F0},"
+            + $"\"sortie_waveoff_s\":{Session.SortiePlan.WaveOffDecisionS:F1},";
     }
 
     static string FiniteNumberJson(double value) => SnapshotJson.FiniteNumberJson(value);
 
     static string JsonString(string? value) => SnapshotJson.JsonString(value);
+
+    static string CarrierRoutePhaseToken(CarrierSortieRoutePhase phase) => phase switch {
+        CarrierSortieRoutePhase.Unavailable => "UNAVAILABLE",
+        CarrierSortieRoutePhase.OnDeck => "ON_DECK",
+        CarrierSortieRoutePhase.Departure => "DEPARTURE",
+        CarrierSortieRoutePhase.Outbound => "OUTBOUND",
+        CarrierSortieRoutePhase.Transit => "TRANSIT",
+        CarrierSortieRoutePhase.AwaitingReturn => "AWAITING_RETURN",
+        CarrierSortieRoutePhase.Return => "RETURN",
+        CarrierSortieRoutePhase.Recovery => "RECOVERY",
+        CarrierSortieRoutePhase.Groove => "GROOVE",
+        CarrierSortieRoutePhase.Complete => "COMPLETE",
+        _ => "UNAVAILABLE"
+    };
+
+    static string CarrierRouteFixToken(CarrierSortieRouteFix fix) => fix switch {
+        CarrierSortieRouteFix.None => "NONE",
+        CarrierSortieRouteFix.Departure => "DEPARTURE",
+        CarrierSortieRouteFix.Outbound => "OUTBOUND",
+        CarrierSortieRouteFix.Transit => "TRANSIT",
+        CarrierSortieRouteFix.ReturnInitial => "RETURN_INITIAL",
+        CarrierSortieRouteFix.RecoveryInitial => "RECOVERY_INITIAL",
+        CarrierSortieRouteFix.Groove => "GROOVE",
+        CarrierSortieRouteFix.Deck => "DECK",
+        _ => "NONE"
+    };
 
     /// <summary>
     /// Slowly changing cloud-definition contract for the browser volume renderer. The exact
@@ -1229,10 +1355,13 @@ internal static class SnapshotProjection {
     static string PresentationContractJson(bool hasCarrier) {
         MissionContract mission = Session.Beat.MissionIdentity;
         AircraftCapability player = Session.Beat.PlayerAircraft;
+        bool opponentPresent = Session.OpponentPresent;
         // The aircraft ACTUALLY flying, not the one the beat staged: the Ace rung, a
         // director-uprated mount and the machine spike all field something other than the
         // staged Su-27S, and the pilot is entitled to know what is shooting at them.
-        AircraftCapability bandit = Session.CurrentBanditCapability;
+        AircraftCapability? bandit = opponentPresent
+            ? Session.CurrentBanditCapability
+            : null;
         // Content family expresses the world/era; presentation follows the actual vehicle stack.
         // The balloon glider and F-22 low-level-drone surrogate must not advertise one another's
         // compatibility profile even though both use explicitly fictional mission content.
@@ -1275,11 +1404,25 @@ internal static class SnapshotProjection {
             : "null";
         // Production telemetry must know which AI tier a fight was against. Skill exists only on
         // the two doctrine pilots; scripted rail/wreck actors project null, never a fake tier.
-        string banditSkillJson = Session.Bandit switch {
-            NeutralMergeBandit merge => $"\"{PilotSkillToken(merge.Skill)}\"",
-            ReactiveBandit reactive => $"\"{PilotSkillToken(reactive.Skill)}\"",
-            _ => "null"
-        };
+        string banditSkillJson = !opponentPresent
+            ? "null"
+            : Session.Bandit switch {
+                NeutralMergeBandit merge => $"\"{PilotSkillToken(merge.Skill)}\"",
+                ReactiveBandit reactive => $"\"{PilotSkillToken(reactive.Skill)}\"",
+                _ => "null"
+            };
+        bool banditPresenting = opponentPresent && Session.Bandit.Presenting;
+        string banditAircraftIdJson = bandit is null
+            ? "null" : JsonString(bandit.Id);
+        string banditAircraftNameJson = bandit is null
+            ? "null" : JsonString(bandit.DisplayName);
+        string banditSystemsProfileJson = bandit is null
+            ? "null" : JsonString(bandit.SystemsProfileId);
+        string banditPresentationJson = bandit is null
+            ? "null" : JsonString(bandit.PresentationId);
+        string banditMountJson = opponentPresent
+            ? JsonString(Session.CurrentBanditMount.ToString())
+            : "null";
 
         return $"\"snapshot_schema_version\":\"{SnapshotSchemaVersion}\","
             + $"\"pack_id\":\"{packId}\",\"pack_version\":\"{packVersion}\","
@@ -1303,17 +1446,18 @@ internal static class SnapshotProjection {
             + $"\"player_entity_id\":\"entity.player.{Session.PlayerSpawnSequence}\","
             + $"\"player_presentation_id\":{JsonString(player.PresentationId)},"
             + $"\"cockpit_presentation_id\":{cockpitPresentationJson},"
-            + $"\"bandit_aircraft_id\":{JsonString(bandit.Id)},"
-            + $"\"bandit_aircraft_name\":{JsonString(bandit.DisplayName)},"
-            + $"\"bandit_systems_profile_id\":{JsonString(bandit.SystemsProfileId)},"
-            + $"\"bandit_systems_simulated\":{(bandit.SystemsSimulated ? "true" : "false")},"
-            + $"\"bandit_entity_id\":\"entity.bandit.{Session.BanditSpawnSequence}\","
-            + $"\"bandit_presentation_id\":{JsonString(bandit.PresentationId)},"
+            + $"\"bandit_aircraft_id\":{banditAircraftIdJson},"
+            + $"\"bandit_aircraft_name\":{banditAircraftNameJson},"
+            + $"\"bandit_systems_profile_id\":{banditSystemsProfileJson},"
+            + $"\"bandit_systems_simulated\":{(bandit?.SystemsSimulated == true ? "true" : "false")},"
+            + $"\"bandit_entity_id\":{(opponentPresent ? JsonString($"entity.bandit.{Session.BanditSpawnSequence}") : "null")},"
+            + $"\"bandit_presentation_id\":{banditPresentationJson},"
             + $"\"bandit_skill\":{banditSkillJson},"
+            + $"\"bandit_presenting\":{(banditPresenting ? "true" : "false")},"
             // Director decision, so a production tape can PROVE what was staged instead of
             // leaving it to be inferred. bandit_mount is the airframe rung; the walkover
             // streak is the evidence that drove both the tier and the mount.
-            + $"\"bandit_mount\":{JsonString(Session.CurrentBanditMount.ToString())},"
+            + $"\"bandit_mount\":{banditMountJson},"
             + $"\"director_phase\":{JsonString(Session.DirectorPhase.ToString())},"
             + $"\"director_walkover_streak\":{Session.DirectorWalkoverStreak},"
             + $"\"director_reason\":{JsonString(Session.LastDirectorSpawn?.Reason ?? "")},"
@@ -1393,41 +1537,68 @@ internal static class SnapshotProjection {
         _ => "NONE"
     };
 
-    static string PointsLedgerJson(bool finished) {
+    static string RapierEconomyJson(bool finished) {
         double initialFuelLb = Session.Beat.FuelLoadout.InitialFuelLb;
         double burnedLb = Math.Max(0.0, initialFuelLb - Session.PlayerFuel.FuelLb);
         bool playerLost = Session.Outcome == SortieOutcome.Defeat
             || Session.PlayerTerminalState != AircraftTerminalState.Flying;
-        bool playerAlive = Session.PlayerAlive && !playerLost;
-        bool banditDestroyed = !Session.PlayerGun.BanditAlive;
+        bool targetNeutralized = Session.OpponentPresent
+            && !Session.PlayerGun.BanditAlive;
         bool cleanRecovery = Session.Arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped
             || Session.Recovery == Carrier.Recovery.Trap
             || Session.ConventionalRunwayPhase == RunwayRecoveryPhase.Recovered;
-        PointsLedgerSlip slip = PointsLedger.Evaluate(
-            new SortieLedgerFacts(
+        RapierServiceLifeSortieRecord? serviceLife =
+            Session.RapierServiceLife.LatestRecord;
+        RapierJobKind target =
+            Session.Beat.ScriptedIntercept?.Job
+            ?? RapierJobKind.FormationIntercept;
+        RapierEconomicSortieSlip slip = RapierEconomicModel.Evaluate(
+            new RapierEconomicSortieFacts(
+                EconomicMode: Session.Beat.MissionIdentity.EconomicMode,
                 Finished: finished,
-                PlayerAlive: playerAlive,
-                BanditDestroyed: banditDestroyed,
+                Target: target,
+                TargetNeutralized: targetNeutralized,
                 CleanRecovery: cleanRecovery,
+                PlayerLost: playerLost,
                 FuelBurnedLb: burnedLb,
-                PlayerLost: playerLost),
-            balanceBefore: 0);
+                RoundsExpended:
+                    serviceLife?.Consumables.RoundsExpended
+                    ?? (Session.OpponentPresent
+                        ? Session.PlayerGun.RoundsFired
+                        : 0),
+                ExceedanceInspectionRequired:
+                    serviceLife?.ExceedanceReviewRequired == true,
+                EvidenceStatus:
+                    serviceLife?.EvidenceStatus
+                    ?? RapierServiceLifeEvidenceStatus.Partial));
         var lines = new System.Text.StringBuilder();
         lines.Append('[');
         for (int i = 0; i < slip.Lines.Count; i++) {
             if (i > 0) lines.Append(',');
-            LedgerLine line = slip.Lines[i];
+            RapierEconomicLine line = slip.Lines[i];
             lines.Append('{')
+                .Append("\"category\":").Append(JsonString(line.Category))
+                .Append(',')
                 .Append("\"code\":").Append(JsonString(line.Code))
                 .Append(",\"label\":").Append(JsonString(line.Label))
-                .Append(",\"points\":").Append(line.Points)
+                .Append(",\"credits\":").Append(line.Credits)
                 .Append('}');
         }
         lines.Append(']');
         return $"\"fuel_initial_lb\":{initialFuelLb:F1},"
-            + $"\"points_sortie_net\":{slip.SortieNet},"
-            + $"\"points_lines\":{lines},"
-            + $"\"points_clearance_sortie\":\"{slip.Clearance.ToString().ToUpperInvariant()}\",";
+            + $"\"rapier_economy_active\":{(slip.Active ? "true" : "false")},"
+            + $"\"rapier_economy_model_id\":{JsonString(slip.ModelId)},"
+            + $"\"rapier_economy_currency\":{JsonString(slip.Currency)},"
+            + $"\"rapier_economy_price_basis_id\":{JsonString(slip.PriceBasisId)},"
+            + $"\"rapier_economy_target_kind\":{JsonString(target.ToString().ToUpperInvariant())},"
+            + $"\"rapier_economy_target_contract_id\":{JsonString(slip.Target.Id)},"
+            + $"\"rapier_economy_target_label\":{JsonString(slip.Target.Label)},"
+            + $"\"rapier_economy_target_reward_credits\":{slip.Target.NeutralizationCredit},"
+            + $"\"rapier_economy_application_key\":{JsonString(serviceLife?.RecordSha256 ?? "")},"
+            + $"\"rapier_economy_sortie_net_credits\":{slip.SortieNetCredits},"
+            + $"\"rapier_economy_inspection_reserved\":{(slip.InspectionReserved ? "true" : "false")},"
+            + $"\"rapier_economy_damage_cost_computed\":{(slip.DamageCostComputed ? "true" : "false")},"
+            + $"\"rapier_economy_lines\":{lines},";
     }
 
     static string EventTypeToken(SessionEventType type) => type switch {
@@ -1494,6 +1665,7 @@ internal static class SnapshotProjection {
     /// 20 km the geometry is a fight rather than a transit, and a receding contact has no ETI.
     static double RapierInterceptEtiMinutes {
         get {
+            if (!Session.OpponentPresent) return -1.0;
             Vec3D delta = Session.Bandit.State.Position - Session.Player.State.Position;
             double rangeM = delta.Length;
             if (rangeM < 20_000.0) return -1.0;
@@ -1724,5 +1896,12 @@ internal static class SnapshotProjection {
         "WIRE_FINAL" => 7,
         "COMPLETE" => 8,
         _ => 0,
+    };
+
+    static string LimitToken(GunsOnly.Sim.Recovery.DescentLimit limit) => limit switch {
+        GunsOnly.Sim.Recovery.DescentLimit.DynamicPressure => "dynamic_pressure",
+        GunsOnly.Sim.Recovery.DescentLimit.SkinTemperature => "skin_temperature",
+        GunsOnly.Sim.Recovery.DescentLimit.Configuration => "configuration",
+        _ => "none",
     };
 }

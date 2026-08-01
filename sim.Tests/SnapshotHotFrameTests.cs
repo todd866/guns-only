@@ -86,7 +86,7 @@ public class SnapshotHotFrameTests {
     static void AssertHotFrameMatchesJson(JsonElement root, double[] buffer) {
         using JsonDocument layoutDocument = JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
         JsonElement layout = layoutDocument.RootElement;
-        Assert.Equal(18, layout.GetProperty("layout_version").GetInt32());
+        Assert.Equal(21, layout.GetProperty("layout_version").GetInt32());
         Assert.Equal(SnapshotHotFrame.SlotCount, layout.GetProperty("slot_count").GetInt32());
         string[] names = layout.GetProperty("blocks")
             .EnumerateArray()
@@ -95,6 +95,8 @@ public class SnapshotHotFrameTests {
             .ToArray();
         Assert.Contains("padlock_preferred_plane_valid", names);
         Assert.Contains("padlock_preferred_plane_deg", names);
+        Assert.Contains("rapier_target_gamma_deg", names);
+        Assert.Contains("rapier_relight_dynamic_pressure_kpa", names);
 
         bool casevac = root.TryGetProperty("casevac_mission", out JsonElement casevacMission)
             && casevacMission.GetBoolean();
@@ -114,7 +116,8 @@ public class SnapshotHotFrameTests {
                     case "boolean":
                         Assert.True(buffer[index] is 0.0 or 1.0,
                             $"{name}: boolean slot holds {buffer[index]}");
-                        Assert.Equal(field.GetBoolean(), buffer[index] != 0.0);
+                        Assert.True(field.GetBoolean() == (buffer[index] != 0.0),
+                            $"{name}: JSON={field.GetBoolean()} hot={buffer[index] != 0.0}");
                         break;
                     case "nullable":
                         if (field.ValueKind == JsonValueKind.Null)
@@ -165,7 +168,8 @@ public class SnapshotHotFrameTests {
                     case "boolean":
                         Assert.True(buffer[index] is 0.0 or 1.0,
                             $"{name}: boolean slot holds {buffer[index]}");
-                        Assert.Equal(field.GetBoolean(), buffer[index] != 0.0);
+                        Assert.True(field.GetBoolean() == (buffer[index] != 0.0),
+                            $"{name}: JSON={field.GetBoolean()} hot={buffer[index] != 0.0}");
                         break;
                     case "nullable":
                         if (field.ValueKind == JsonValueKind.Null)
@@ -223,6 +227,7 @@ public class SnapshotHotFrameTests {
     [InlineData(10, false)] // Rapier fixed strip: recovery present, maritime carrier false
     [InlineData(13, false)] // flight-first CASEVAC: separate commander-safe hot block
     [InlineData(11, false)] // Rapier Circuits: traffic and event-driven radio
+    [InlineData(14, false)] // finite Panther carrier day: route and sortie schedule stay hot
     [InlineData(7, true)]   // terrain surface drives radar_alt/below_ground paths
     public void HotFrameAgreesWithJsonAcrossBeatsAndSteps(int beatIndex, bool withTerrain) {
         SimulationSession session = StartSession(beatIndex,
@@ -231,6 +236,77 @@ public class SnapshotHotFrameTests {
             for (int tick = 0; tick < steps; tick++) session.StepFixed();
             var (root, buffer, document) = Project(session);
             using (document) AssertHotFrameMatchesJson(root, buffer);
+        }
+    }
+
+    [Fact]
+    public void PantherRouteEdgesInvalidateColdLabelsAndPublishHotGuidanceImmediately() {
+        SimulationSession session = StartSession(14, null);
+        var buffer = new double[SnapshotHotFrame.SlotCount];
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        double onDeckVersion = buffer[SnapshotHotFrame.ColdVersionIndex];
+
+        for (int tick = 0; tick < 15 * AircraftSim.TickHz
+            && !session.CarrierSortieRtbAvailable; tick++)
+            session.StepFixed();
+        Assert.True(session.CarrierSortieRtbAvailable);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        double departureVersion = buffer[SnapshotHotFrame.ColdVersionIndex];
+        Assert.True(departureVersion > onDeckVersion,
+            "ON_DECK route/sortie labels did not refresh at catapult handoff");
+
+        session.FeedKey(GKey.KnockItOff, true);
+        session.FeedKey(GKey.KnockItOff, false);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        Assert.True(buffer[SnapshotHotFrame.ColdVersionIndex] > departureVersion,
+            "RETURN route/fix labels did not refresh on the RTB edge");
+
+        using JsonDocument layoutDocument = JsonDocument.Parse(
+            SnapshotHotFrame.LayoutJson());
+        JsonElement[] slots = layoutDocument.RootElement.GetProperty("blocks")
+            .EnumerateArray()
+            .SelectMany(block => block.GetProperty("slots").EnumerateArray())
+            .ToArray();
+        int SlotIndex(string name) => slots
+            .Single(slot => slot.GetProperty("name").GetString() == name)
+            .GetProperty("index").GetInt32();
+        Assert.Equal(1.0, buffer[SlotIndex("carrier_sortie_route_active")]);
+        Assert.Equal(6.0, buffer[SlotIndex("carrier_sortie_route_phase_code")]);
+        Assert.Equal(4.0, buffer[SlotIndex("carrier_sortie_route_fix_code")]);
+        Assert.Equal(1.0, buffer[SlotIndex("carrier_sortie_route_rtb_requested")]);
+        Assert.Equal(1.0, buffer[SlotIndex("straight_deck_barrier_armed")]);
+
+        using JsonDocument stateDocument = JsonDocument.Parse(
+            SnapshotProjection.BuildState(session, Carrier.DeckConfiguration.Axial,
+                0.0, 0.0, false, null));
+        Assert.Equal("RETURN", stateDocument.RootElement
+            .GetProperty("carrier_sortie_route_phase").GetString());
+        Assert.Equal("RETURN_INITIAL", stateDocument.RootElement
+            .GetProperty("carrier_sortie_route_fix").GetString());
+    }
+
+    [Fact]
+    public void NoOpponentMissionKeepsHotAndColdSnapshotsNeutralWithoutAHiddenActor() {
+        BeatSetup circuits = Beats.RapierCircuits(
+            Carrier.DeckConfiguration.Angled) with {
+            OpponentPresence = OpponentPresence.None
+        };
+        var session = new SimulationSession();
+        session.StartBeat(() => circuits);
+        session.Begin();
+        Assert.False(session.OpponentPresent);
+        Assert.True(session.TrySelectMeshPlace(
+            "place.ukraine.crimea-coast-survey.v1"));
+
+        var (root, buffer, document) = Project(session);
+        using (document) {
+            Assert.False(root.GetProperty("opponent_present").GetBoolean());
+            Assert.Equal(JsonValueKind.Null,
+                root.GetProperty("bandit_entity_id").ValueKind);
+            Assert.Equal(0.0, root.GetProperty("range_m").GetDouble());
+            Assert.False(root.GetProperty("gun_solution").GetBoolean());
+            AssertHotFrameMatchesJson(root, buffer);
         }
     }
 
@@ -359,7 +435,7 @@ public class SnapshotHotFrameTests {
     }
 
     [Fact]
-    public void CircuitsRadioTransitionBumpsColdStringsAndMatchesHotState() {
+    public void CircuitsLaunchStaysRadioSilentAndMatchesHotState() {
         SimulationSession session = StartSession(11, null);
         var buffer = new double[SnapshotHotFrame.SlotCount];
         SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
@@ -369,24 +445,12 @@ public class SnapshotHotFrameTests {
         session.StepFixed();
         var (root, after, document) = Project(session);
         using (document) {
-            Assert.True(after[SnapshotHotFrame.ColdVersionIndex] > settled);
-            Assert.True(root.GetProperty("radio_active").GetBoolean());
-            Assert.Equal("launch-cleared",
-                root.GetProperty("radio_id").GetString());
-            Assert.Equal("RAPIER TOWER",
-                root.GetProperty("radio_channel").GetString());
-            Assert.Equal("305.500 UHF",
-                root.GetProperty("radio_frequency").GetString());
-            Assert.Equal("GHOST 11",
-                root.GetProperty("radio_callsign").GetString());
-            Assert.True(root.GetProperty("radio_ai_generated").GetBoolean());
+            Assert.True(after[SnapshotHotFrame.ColdVersionIndex] >= settled);
+            Assert.False(root.GetProperty("radio_active").GetBoolean());
+            Assert.Equal("", root.GetProperty("radio_id").GetString());
             // First-generation Circuits field names remain aliases for older browser bundles.
-            Assert.True(root.GetProperty("rapier_radio_active").GetBoolean());
-            Assert.Equal("launch-cleared",
-                root.GetProperty("rapier_radio_id").GetString());
-            Assert.Equal("LAUNCH",
-                root.GetProperty("rapier_radio_speaker").GetString());
-            Assert.True(root.GetProperty("rapier_radio_ai_generated").GetBoolean());
+            Assert.False(root.GetProperty("rapier_radio_active").GetBoolean());
+            Assert.Equal("", root.GetProperty("rapier_radio_id").GetString());
             AssertHotFrameMatchesJson(root, after);
         }
     }
@@ -515,7 +579,7 @@ public class SnapshotHotFrameTests {
             using JsonDocument layoutDocument =
                 JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
             JsonElement layout = layoutDocument.RootElement;
-            Assert.Equal(18, layout.GetProperty("layout_version").GetInt32());
+            Assert.Equal(21, layout.GetProperty("layout_version").GetInt32());
             JsonElement[] slots = layout.GetProperty("blocks")
                 .EnumerateArray()
                 .SelectMany(block => block.GetProperty("slots").EnumerateArray())

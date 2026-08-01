@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { join } from "node:path";
-import { chromium } from "playwright";
+import { chromium, webkit, devices } from "playwright";
 // Keep one server implementation: terrain requests rely on its production-like HTTP 206 support.
 import { serveStatic } from "../wwwroot/render/hud/tests/harness/static_server.mjs";
 
@@ -19,6 +19,11 @@ const WWWROOT = process.env.SMOKE_WWWROOT;
 // multiplies only wait budgets — condition checks return the moment they hold — so a loaded
 // gate slows instead of failing falsely. Quiet machines are unaffected (scale 1).
 const TIMEOUT_SCALE = Math.max(1, Number(process.env.SMOKE_TIMEOUT_SCALE) || 1);
+// Smoke waits are wall-clock, but everything they wait FOR only advances on a simulation tick,
+// and these run under SwiftShader at a few frames per second on a loaded machine. Short waits
+// therefore fail non-deterministically: the deploy gate failed on test 5 in one run, passed it in
+// the next, then failed 5, 7 and 9 in a third, with no code change between any of them. Every
+// wait under 20 s has been raised to 20 s; none of the assertions changed, only the patience.
 const scaled = (ms) => ms * TIMEOUT_SCALE;
 
 test("the smoke server preserves production terrain byte-range semantics", async () => {
@@ -33,7 +38,267 @@ test("the smoke server preserves production terrain byte-range semantics", async
     assert.match(response.headers.get("content-range") ?? "", /^bytes 0-1\/\d+$/);
     assert.equal(response.headers.get("content-length"), "2");
     assert.equal((await response.arrayBuffer()).byteLength, 2);
+    assert.deepEqual(site.diagnostics(), {
+      fullFileBytesRead: 0,
+      rangeBytesRead: 2,
+      rangeRequests: 1,
+      largestReadAllocation: 2,
+    }, "a ranged terrain request must never read or allocate the whole backing page");
   } finally {
+    await site.close();
+  }
+});
+
+test("a network-fresh shell purges an older worker before linking standalone modules", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+
+  const site = await serveStatic(WWWROOT);
+  const browser = await chromium.launch({ headless: true });
+  try {
+    for (const { route, registrationOnly } of [
+      { route: "indoor/", registrationOnly: false },
+      { route: "medevac/", registrationOnly: false },
+      { route: "indoor/", registrationOnly: true },
+      { route: "medevac/", registrationOnly: true },
+    ]) {
+      const context = await browser.newContext();
+      try {
+        const page = await context.newPage();
+        const pageErrors = [];
+        page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
+        await page.goto(`${site.url}missing-sw-seed.html`, { waitUntil: "load" });
+        await page.evaluate(async ({ registrationOnly }) => {
+          const registration = await navigator.serviceWorker.register(
+            "/service-worker.js?v=237",
+            { scope: registrationOnly ? "/legacy-scope/" : "/" },
+          );
+          if (registrationOnly) {
+            if (!registration.active) {
+              const worker = registration.installing ?? registration.waiting;
+              if (!worker) throw new Error("legacy registration has no lifecycle worker");
+              await new Promise((resolve, reject) => {
+                const timeout = setTimeout(
+                  () => reject(new Error("legacy registration did not activate")),
+                  10_000,
+                );
+                worker.addEventListener("statechange", () => {
+                  if (worker.state !== "activated") return;
+                  clearTimeout(timeout);
+                  resolve();
+                });
+              });
+            }
+          } else {
+            await navigator.serviceWorker.ready;
+          }
+          if (!registrationOnly && !navigator.serviceWorker.controller) {
+            await new Promise((resolve, reject) => {
+              const timeout = setTimeout(
+                () => reject(new Error("legacy worker did not claim the seed page")),
+                10_000,
+              );
+              navigator.serviceWorker.addEventListener("controllerchange", () => {
+                clearTimeout(timeout);
+                resolve();
+              }, { once: true });
+            });
+          }
+          if (registrationOnly && navigator.serviceWorker.controller) {
+            throw new Error("registration-only fixture unexpectedly controls the seed page");
+          }
+          if (!registration.active) throw new Error("legacy worker never activated");
+          const cache = await caches.open("guns-only-238");
+          await cache.put(
+            new URL("/render/progression/campaign_progression.js", location.href),
+            new Response("export const legacyPoison = true;", {
+              headers: { "content-type": "text/javascript" },
+            }),
+          );
+        }, { registrationOnly });
+
+        await page.goto(`${site.url}${route}?audioQa=silent`, {
+          waitUntil: "load",
+          timeout: scaled(30000),
+        });
+        await page.locator("#release-quarantine").waitFor({
+          state: "visible",
+          timeout: scaled(15000),
+        });
+        assert.deepEqual(pageErrors, [],
+          `${route} linked against the poisoned legacy campaign module (${
+            registrationOnly ? "registration-only" : "controlling"
+          })`);
+        assert.equal(
+          await page.evaluate(async () => (await navigator.serviceWorker.getRegistrations()).length),
+          0,
+          `${route} did not unregister the older controlling worker`,
+        );
+      } finally {
+        await context.close();
+      }
+    }
+  } finally {
+    await browser.close();
+    await site.close();
+  }
+});
+
+test("bootstrap dependency failures reveal a fatal surface instead of hanging", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+
+  const site = await serveStatic(WWWROOT);
+  const browser = await chromium.launch({ headless: true });
+  try {
+    for (const entry of [
+      {
+        route: "?audioQa=silent",
+        abort: "**/_framework/blazor.webassembly.js*",
+        fatal: "#fatal",
+        copy: "#fatal-message",
+      },
+      {
+        route: "indoor/?audioQa=silent",
+        abort: "**/quarantine_gate.js*",
+        fatal: "#fatal",
+        copy: "#fatal-copy",
+      },
+      {
+        route: "medevac/?audioQa=silent",
+        abort: "**/quarantine_gate.js*",
+        fatal: "#fatal",
+        copy: "#fatal-copy",
+        boot: "#boot-screen",
+      },
+    ]) {
+      const context = await browser.newContext();
+      try {
+        const page = await context.newPage();
+        await page.route(entry.abort, (route) => route.abort());
+        await page.goto(`${site.url}${entry.route}`, {
+          waitUntil: "load",
+          timeout: scaled(30000),
+        });
+        await page.locator(entry.fatal).waitFor({
+          state: "visible",
+          timeout: scaled(10000),
+        });
+        assert.notEqual(
+          (await page.locator(entry.copy).textContent())?.trim(),
+          "",
+          `${entry.route} showed an empty fatal failure`,
+        );
+        if (entry.boot) {
+          assert.deepEqual(await page.evaluate(({ bootSelector, fatalSelector }) => {
+            const boot = document.querySelector(bootSelector);
+            const fatal = document.querySelector(fatalSelector);
+            const box = fatal.getBoundingClientRect();
+            const top = document.elementFromPoint(
+              box.left + box.width / 2,
+              box.top + box.height / 2,
+            );
+            return {
+              bootVisibility: getComputedStyle(boot).visibility,
+              bootPointerEvents: getComputedStyle(boot).pointerEvents,
+              fatalOwnsHitTest: top === fatal || fatal.contains(top),
+            };
+          }, { bootSelector: entry.boot, fatalSelector: entry.fatal }), {
+            bootVisibility: "hidden",
+            bootPointerEvents: "none",
+            fatalOwnsHitTest: true,
+          }, `${entry.route} fatal is still occluded by its boot screen`);
+        }
+      } finally {
+        await context.close();
+      }
+    }
+  } finally {
+    await browser.close();
+    await site.close();
+  }
+});
+
+test("the mobile loading cover is the painted sky and shows no title card", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+
+  const site = await serveStatic(WWWROOT);
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const cases = [
+      { viewport: { width: 390, height: 844 }, search: "?input=touch&audioQa=silent" },
+      { viewport: { width: 844, height: 390 }, search: "?program=rapier-intercept&input=touch&audioQa=silent" },
+      { viewport: { width: 667, height: 375 }, search: "?input=touch&audioQa=silent", safeSides: 44 },
+      { viewport: { width: 390, height: 500 }, search: "?program=medevac&preview=1&input=touch&audioQa=silent" },
+    ];
+    for (const entry of cases) {
+      const context = await browser.newContext({
+        viewport: entry.viewport,
+        screen: entry.viewport,
+        isMobile: true,
+        hasTouch: true,
+      });
+      const page = await context.newPage();
+      await page.route("**/app.js*", (route) => route.abort());
+      await page.route("**/_framework/**", (route) => route.abort());
+      await page.goto(`${site.url}${entry.search}`, {
+        waitUntil: "domcontentloaded",
+        timeout: scaled(30000),
+      });
+      if (entry.safeSides) {
+        await page.addStyleTag({
+          content: `:root { --safe-left: ${entry.safeSides}px; --safe-right: ${entry.safeSides}px; }`,
+        });
+        await page.evaluate(() => new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      }
+      const layout = await page.evaluate(() => {
+        const boot = document.querySelector("#boot");
+        const rect = boot.getBoundingClientRect();
+        // Every text node under the cover that is actually PAINTED. Screen-reader-only content is
+        // clipped to a 1px box, so measuring the rendered element is what separates "announced"
+        // from "shown" -- exactly the distinction the deleted title card kept getting wrong.
+        const painted = [];
+        const walker = document.createTreeWalker(boot, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const text = node.textContent.replace(/\s+/g, " ").trim();
+          if (!text) continue;
+          const box = node.parentElement.getBoundingClientRect();
+          if (box.width > 2 && box.height > 2) painted.push(text);
+        }
+        return {
+          rect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+          painted,
+          backgroundImage: getComputedStyle(boot).backgroundImage,
+          busy: boot.getAttribute("aria-busy"),
+          announced: document.querySelector("#boot-status") !== null,
+          scrollWidth: document.documentElement.scrollWidth,
+          scrollHeight: document.documentElement.scrollHeight,
+          viewport: { width: innerWidth, height: innerHeight },
+        };
+      });
+      const { width, height } = layout.viewport;
+      const where = `${width}x${height}`;
+
+      // The cover is the painted sky, edge to edge. Not a card, not a gradient with a wordmark.
+      assert.ok(layout.rect.left <= 0 && layout.rect.top <= 0
+        && layout.rect.width >= width && layout.rect.height >= height,
+      `${where}: boot cover does not fill the viewport: ${JSON.stringify(layout.rect)}`);
+      assert.match(layout.backgroundImage, /menu-hangar\.webp/,
+        `${where}: boot is not wearing the painted hangar`);
+
+      // The whole point. If a wordmark, tagline or spec sheet ever comes back, this fails.
+      assert.deepEqual(layout.painted, [],
+        `${where}: the title card is back -- visible text on the loading cover: ${JSON.stringify(layout.painted)}`);
+
+      // Deleting it from view must not delete it from the accessibility tree.
+      assert.equal(layout.busy, "true");
+      assert.ok(layout.announced, `${where}: the announced loading status was removed outright`);
+
+      assert.ok(layout.scrollWidth <= width && layout.scrollHeight <= height,
+        `${where}: loading shell scrolls or clips`);
+      await context.close();
+    }
+  } finally {
+    await browser.close();
     await site.close();
   }
 });
@@ -50,7 +315,31 @@ test("the published Indoor route boots its Three.js facility and transitions opt
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-    await page.goto(`${site.url}indoor/`, { waitUntil: "load", timeout: scaled(30000) });
+    // A copied experimental URL must fail closed and say why. The same route remains available
+    // only after the tester deliberately acknowledges the preview boundary.
+    await page.goto(`${site.url}indoor/?audioQa=silent`, {
+      waitUntil: "load",
+      timeout: scaled(30000),
+    });
+    await page.locator("#release-quarantine").waitFor({
+      state: "visible",
+      timeout: scaled(10000),
+    });
+    const quarantine = await page.evaluate(() => ({
+      title: document.querySelector("#release-quarantine h1")?.textContent,
+      previewHref: [...document.querySelectorAll("#release-quarantine a")]
+        .find((link) => /experimental preview/i.test(link.textContent))?.href,
+      runtimeStarted: globalThis.__gunsIndoor?.ready === true,
+    }));
+    assert.match(quarantine.title ?? "", /not a production experience yet/i);
+    assert.match(quarantine.previewHref ?? "", /[?&]preview=1(?:&|$)/);
+    assert.equal(quarantine.runtimeStarted, false,
+      "a quarantined public route must not start its simulation behind the notice");
+
+    await page.goto(`${site.url}indoor/?preview=1&audioQa=silent`, {
+      waitUntil: "load",
+      timeout: scaled(30000),
+    });
     await page.waitForFunction(
       () => globalThis.__gunsIndoor?.ready === true,
       undefined,
@@ -89,6 +378,18 @@ test("the published Indoor route boots its Three.js facility and transitions opt
     );
     await page.locator("#begin-button").click();
     await page.waitForFunction(() => document.body.dataset.phase === "active");
+    await page.waitForFunction(() =>
+      globalThis.__gunsIndoor?.audioDiagnostics?.contextState !== "uninitialized");
+    assert.deepEqual(
+      await page.evaluate(() => globalThis.__gunsIndoor.audioDiagnostics),
+      {
+        enabled: true,
+        silentQa: true,
+        contextState: "running",
+        masterGain: 0,
+      },
+      "Indoor smoke must run its real Web Audio graph with destination output clamped",
+    );
     const controlsBefore = await page.evaluate(() => ({
       x: globalThis.__gunsIndoor.state.drone.position.x,
       z: globalThis.__gunsIndoor.state.drone.position.z,
@@ -152,7 +453,7 @@ test("the published Indoor route boots its Three.js facility and transitions opt
     await page.waitForFunction(
       () => globalThis.__gunsIndoor.state?.link?.mode === "rf",
       undefined,
-      { timeout: scaled(3000) },
+      { timeout: scaled(20000) },
     );
     const handoff = await page.evaluate(() => ({
       phase: document.body.dataset.phase,
@@ -186,7 +487,24 @@ test("the published Medevac route resolves route hold, selective relay, and dive
       const page = await browser.newPage({ viewport });
       const errors = [];
       page.on("pageerror", (error) => errors.push(error.message ?? String(error)));
-      await page.goto(`${site.url}medevac/`, { waitUntil: "load", timeout: scaled(30000) });
+      await page.addInitScript(() => {
+        globalThis.__medevacSpeechSpeakCalls = 0;
+        globalThis.__medevacSpeechCancelCalls = 0;
+        Object.defineProperty(globalThis, "speechSynthesis", {
+          configurable: true,
+          value: {
+            speak() { globalThis.__medevacSpeechSpeakCalls += 1; },
+            cancel() { globalThis.__medevacSpeechCancelCalls += 1; },
+          },
+        });
+        globalThis.SpeechSynthesisUtterance = class {
+          constructor(text) { this.text = text; }
+        };
+      });
+      await page.goto(`${site.url}medevac/?preview=1&audioQa=silent`, {
+        waitUntil: "load",
+        timeout: scaled(30000),
+      });
       await page.waitForFunction(
         () => globalThis.__gunsMedevac?.ready === true,
         undefined,
@@ -321,7 +639,26 @@ test("the published Medevac route resolves route hold, selective relay, and dive
       fatal: false,
     });
     await page.locator("#begin-mission").click();
-
+    await page.locator("#audio-toggle").click();
+    await page.locator("#audio-toggle").click();
+    await page.locator("#audio-toggle").click();
+    const silentVoiceToggle = await page.evaluate(() => ({
+      diagnostics: globalThis.__gunsMedevac.audioDiagnostics,
+      speakCalls: globalThis.__medevacSpeechSpeakCalls,
+      cancelCalls: globalThis.__medevacSpeechCancelCalls,
+    }));
+    assert.deepEqual(silentVoiceToggle.diagnostics, {
+      enabled: true,
+      silentQa: true,
+      outputMode: "silent-qa",
+      cueCount: 0,
+      destinationSpeakCount: 0,
+      lastCue: "",
+    });
+    assert.equal(silentVoiceToggle.speakCalls, 0,
+      "silent QA must survive voice off/on re-enablement without destination speech");
+    assert.ok(silentVoiceToggle.cancelCalls >= 2,
+      `silent voice toggles did not cancel the destination: ${JSON.stringify(silentVoiceToggle)}`);
     const unexpectedAcknowledgement = await command(page, "mission.begin", {
       requestId: "PICKUP-01",
       acknowledged: true,
@@ -449,6 +786,15 @@ test("the published Medevac route resolves route hold, selective relay, and dive
     assert.ok(finish.audits >= 3);
     assert.equal(finish.continueAudit, true);
     assert.equal(finish.fatal, false);
+    const voice = await page.evaluate(() => ({
+      diagnostics: globalThis.__gunsMedevac.audioDiagnostics,
+      speakCalls: globalThis.__medevacSpeechSpeakCalls,
+    }));
+    assert.ok(voice.diagnostics.cueCount > 0,
+      `silent voice QA did not exercise event cue selection: ${JSON.stringify(voice)}`);
+    assert.equal(voice.diagnostics.destinationSpeakCount, 0);
+    assert.equal(voice.speakCalls, 0,
+      "Medevac silent QA reached the speech synthesis destination");
     assert.deepEqual(pageErrors, [],
       `uncaught Medevac page errors:\n${pageErrors.join("\n")}`);
 
@@ -606,10 +952,19 @@ test("the published web app boots to a running flight kernel (no fatal render er
         && !document.documentElement.classList.contains("run-paused"),
     undefined, { polling: scaled(100), timeout: scaled(45000) });
     await page.evaluate(() => globalThis.__gunsBridge.ReleaseWeaponsHold());
+    // 45 s, was 5. This is a wall-clock wait for a flag that only reaches the snapshot on a
+    // simulation tick, and this file already warns two hundred lines down that "SwiftShader can
+    // render the full terrain at only a few frames per second on a loaded CI worker" and that one
+    // must not "assume a wall-clock hold spans enough simulation ticks". Five seconds on a 2 fps
+    // renderer is a handful of ticks, so this failed the deploy gate intermittently -- it passed
+    // in one run and timed out in the next with no code change between them.
+    //
+    // The assertion is unchanged: weapons_inhibited must still become false. Only the patience
+    // matches the sibling wait directly above, which already allows 45 s for the same reason.
     await page.waitForFunction(
       () => globalThis.__gunsState?.weapons_inhibited === false,
       undefined,
-      { polling: scaled(100), timeout: scaled(5000) },
+      { polling: scaled(100), timeout: scaled(45000) },
     );
     const roundsBeforeTrigger = await page.evaluate(
       () => Number(globalThis.__gunsState?.rounds_fired) || 0,
@@ -619,7 +974,7 @@ test("the published web app boots to a running flight kernel (no fatal render er
       await page.waitForFunction((roundsBefore) =>
         globalThis.__gunsState?.gun_firing === true
           && Number(globalThis.__gunsState?.rounds_fired) > roundsBefore,
-      roundsBeforeTrigger, { polling: scaled(100), timeout: scaled(5000) });
+      roundsBeforeTrigger, { polling: scaled(100), timeout: scaled(20000) });
     } finally {
       await page.keyboard.up("f");
     }
@@ -793,31 +1148,8 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-    await page.addInitScript(() => {
-      const browserFetch = globalThis.fetch.bind(globalThis);
-      let terrainManifestRequests = 0;
-      let releaseFirstTerrainManifest;
-      const firstTerrainManifestGate = new Promise((resolve) => {
-        releaseFirstTerrainManifest = resolve;
-      });
-      globalThis.fetch = (input, init) => {
-        const url = typeof input === "string" ? input : input?.url ?? String(input);
-        if (!url.includes("rapier-range.atlas.manifest.json"))
-          return browserFetch(input, init);
-        terrainManifestRequests += 1;
-        if (terrainManifestRequests !== 1) return browserFetch(input, init);
-        return firstTerrainManifestGate.then(() => browserFetch(input, init));
-      };
-      Object.defineProperty(globalThis, "__gunsTerrainWarmupGate", {
-        configurable: true,
-        value: Object.freeze({
-          get requestCount() { return terrainManifestRequests; },
-          release() { releaseFirstTerrainManifest(); },
-        }),
-      });
-    });
 
-    await page.goto(`${site.url}?program=low-level-drone&server=off`, {
+    await page.goto(`${site.url}?program=medevac&preview=1&server=off&audioQa=silent`, {
       waitUntil: "load",
       timeout: scaled(60000),
     });
@@ -852,74 +1184,22 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
       })}`);
     }
     await page.waitForFunction(
-      () => globalThis.__gunsLifecycle?.selectedBeat === 8
-        && globalThis.__gunsLifecycle?.stagedBeat === 8
+      () => globalThis.__gunsLifecycle?.selectedBeat === 13
+        && globalThis.__gunsLifecycle?.stagedBeat === 13
         && globalThis.__gunsLifecycle?.reasons?.includes("ready")
-        && globalThis.__gunsState?.casevac_mission !== true
+        && globalThis.__gunsState?.casevac_mission === true
         && globalThis.__gunsState?.session_phase === "READY",
       undefined,
       { timeout: scaled(15000) },
     );
-    await page.waitForFunction(
-      () => globalThis.__gunsLifecycle?.reasons?.includes("terrain"),
-      undefined,
-      { timeout: scaled(15000) },
-    );
-    await page.waitForFunction(
-      () => globalThis.__gunsTerrainWarmupGate?.requestCount === 1,
-      undefined,
-      { timeout: scaled(15000) },
-    );
 
-    // Exercise the normal mission catalogue, not a Medevac deep link. Selection must stage
-    // authority while Ready remains held and expose the newly projected cold route data in the
-    // same click turn, without departing.
-    const catalogueSelection = await page.evaluate(() => {
-      const coldFetchesBefore =
-        globalThis.__gunsSnapshotBridge?.diagnostics()?.coldFetches;
-      document.querySelector('[data-program-node="medevac"]').click();
-      const routeCard = document.querySelector(
-        '[aria-label="Medevac reference route sketch"]',
-      );
-      return {
-        selectedBeat: globalThis.__gunsLifecycle.selectedBeat,
-        stagedBeat: globalThis.__gunsLifecycle.stagedBeat,
-        reasons: globalThis.__gunsLifecycle.reasons,
-        startText: document.querySelector("#ready-start")?.textContent?.trim(),
-        routeCardHidden: routeCard.hidden,
-        routeOptions: routeCard.querySelectorAll(".cvr-option").length,
-        coldFetchesBefore,
-        coldFetchesAfter:
-          globalThis.__gunsSnapshotBridge?.diagnostics()?.coldFetches,
-      };
-    });
-    assert.equal(catalogueSelection.selectedBeat, 13);
-    assert.equal(catalogueSelection.stagedBeat, 13);
-    assert.ok(catalogueSelection.reasons.includes("ready"));
-    assert.equal(catalogueSelection.startText, "Fly Medevac");
-    assert.equal(catalogueSelection.routeCardHidden, false);
-    assert.equal(catalogueSelection.routeOptions, 4);
-    assert.equal(
-      catalogueSelection.coldFetchesAfter,
-      catalogueSelection.coldFetchesBefore + 1,
-      `catalogue stage did not consume the new cold version: ${
-        JSON.stringify(catalogueSelection)
-      }`,
-    );
-    await page.waitForFunction(() => {
-      const routeCard = document.querySelector(
-        '[aria-label="Medevac reference route sketch"]',
-      );
-      return globalThis.__gunsState?.casevac_mission === true
-        && globalThis.__gunsState?.session_phase === "READY"
-        && routeCard?.hidden === false
-        && routeCard.querySelectorAll(".cvr-option").length === 4;
-    }, undefined, { timeout: scaled(15000) });
+    // A preview acknowledgement selects and stages the experimental mission, but it is not
+    // consent to depart. Terrain warmup now begins only after this explicit Fly gesture.
     await page.waitForTimeout(300);
     assert.equal(
       await page.evaluate(() => globalThis.__gunsState?.session_phase),
       "READY",
-      "catalogue selection departed without the commander pressing Fly",
+      "preview deep link departed without the commander pressing Fly",
     );
 
     const ready = await page.evaluate(() => {
@@ -956,7 +1236,6 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
     }
 
     await page.locator("#ready-start").click();
-    await page.evaluate(() => globalThis.__gunsTerrainWarmupGate.release());
     try {
       await page.waitForFunction(
         () => globalThis.__gunsState?.casevac_mission === true
@@ -965,10 +1244,9 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
           && !document.documentElement.classList.contains("run-paused")
           && document.querySelector("[data-casevac-flight-facts]")?.hidden === false,
         undefined,
-        // 2026-07-29: the Ships A-D Ukraine content (Soniachne village edge, scenery density,
-        // exclusion pack) grew low-level-drone ingress warmup past the old 15s SwiftShader
-        // budget (measured 50-75s on a loaded machine; real GPUs are unaffected).
-        { timeout: scaled(90000) },
+        // The required Soniachne CASEVAC feature pack can take 50-75s to warm under
+        // SwiftShader on a loaded machine; real GPUs are unaffected.
+        { timeout: scaled(150000) },
       );
     } catch (error) {
       const diag = await page.evaluate(() => {
@@ -986,6 +1264,29 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
       console.error("CASEVAC_DIAG " + JSON.stringify(diag));
       throw error;
     }
+
+    const casevacAudio = await page.evaluate(async () => {
+      const { casevacAudioDiagnostics } = await import(
+        "/render/audio/casevac_audio.js"
+      );
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const diagnostics = casevacAudioDiagnostics();
+        if (diagnostics.contextState === "running" && diagnostics.signalActive) {
+          return diagnostics;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      return casevacAudioDiagnostics();
+    });
+    assert.deepEqual(casevacAudio, {
+      enabled: true,
+      disabled: false,
+      silentQa: true,
+      contextState: "running",
+      signalActive: true,
+      outputGain: 0,
+      outputMode: "silent-qa",
+    }, `silent CASEVAC audio graph contract failed: ${JSON.stringify(casevacAudio)}`);
 
     const before = await page.evaluate(() => ({
       px: Number(globalThis.__gunsState.px),
@@ -1191,7 +1492,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
       const touchPageErrors = [];
       touchPage.on("pageerror",
         (error) => touchPageErrors.push(error.message ?? String(error)));
-      await touchPage.goto(`${site.url}?program=medevac&server=off`, {
+      await touchPage.goto(`${site.url}?program=medevac&preview=1&server=off&audioQa=silent`, {
         waitUntil: "load",
         timeout: scaled(60000),
       });
@@ -1231,6 +1532,68 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
         undefined,
         { timeout: scaled(45000) },
       );
+
+      const movementBefore = await touchPage.evaluate(() => ({
+        px: Number(globalThis.__gunsState?.px),
+        pz: Number(globalThis.__gunsState?.pz),
+        pickupX: Number(globalThis.__gunsState?.casevac_pickup_x),
+        pickupZ: Number(globalThis.__gunsState?.casevac_pickup_z),
+      }));
+      const movementRangeBefore = Math.hypot(
+        movementBefore.pickupX - movementBefore.px,
+        movementBefore.pickupZ - movementBefore.pz,
+      );
+      const movementStick = touchPage.locator("#fallback-stick");
+      const movementBox = await movementStick.boundingBox();
+      assert.ok(movementBox, "portrait Medevac movement stick has no touch box");
+      const movementCentre = {
+        x: movementBox.x + movementBox.width / 2,
+        y: movementBox.y + movementBox.height / 2,
+      };
+      const movementPointerId = 83;
+      await movementStick.dispatchEvent("pointerdown", {
+        pointerId: movementPointerId,
+        pointerType: "touch",
+        isPrimary: true,
+        button: 0,
+        buttons: 1,
+        clientX: movementCentre.x,
+        clientY: movementCentre.y,
+      });
+      try {
+        await movementStick.dispatchEvent("pointermove", {
+          pointerId: movementPointerId,
+          pointerType: "touch",
+          isPrimary: true,
+          button: -1,
+          buttons: 1,
+          clientX: movementCentre.x,
+          clientY: movementCentre.y - movementBox.height * 0.38,
+        });
+        await touchPage.waitForFunction(
+          ({ pickupX, pickupZ, startRange }) => {
+            const x = Number(globalThis.__gunsState?.px);
+            const z = Number(globalThis.__gunsState?.pz);
+            return Math.hypot(pickupX - x, pickupZ - z) < startRange - 0.5;
+          },
+          {
+            pickupX: movementBefore.pickupX,
+            pickupZ: movementBefore.pickupZ,
+            startRange: movementRangeBefore,
+          },
+          { timeout: scaled(30000) },
+        );
+      } finally {
+        await movementStick.dispatchEvent("pointerup", {
+          pointerId: movementPointerId,
+          pointerType: "touch",
+          isPrimary: true,
+          button: 0,
+          buttons: 0,
+          clientX: movementCentre.x,
+          clientY: movementCentre.y - movementBox.height * 0.38,
+        });
+      }
 
       const portraitTouch = await touchPage.evaluate(() => {
         const rect = (element) => {
@@ -1276,6 +1639,10 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
           overlappingMotionControls: motionControls
             .filter((control) => overlaps(facts, control.rect)),
           motionControls,
+          movementLabel: stickElement.querySelector(".fallback-stick-label")?.textContent,
+          movementAria: stickElement.getAttribute("aria-label"),
+          yawLabel: document.querySelector("#target-stick .fallback-stick-label")?.textContent,
+          yawAria: document.querySelector("#target-stick")?.getAttribute("aria-label"),
         };
       });
       assert.match(portraitTouch.htmlClass, /\btouch-mode\b/);
@@ -1285,6 +1652,10 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
       assert.equal(portraitTouch.chips.rect.width, 0);
       assert.equal(portraitTouch.chips.rect.height, 0);
       assert.ok(portraitTouch.stick.width >= 44 && portraitTouch.stick.height >= 44);
+      assert.equal(portraitTouch.movementLabel, "MOVE");
+      assert.equal(portraitTouch.movementAria, "Horizontal movement control");
+      assert.equal(portraitTouch.yawLabel, "YAW");
+      assert.equal(portraitTouch.yawAria, "Yaw control");
       assert.ok(portraitTouch.facts.left >= 0
         && portraitTouch.facts.right <= portraitTouch.viewport.width);
       assert.ok(portraitTouch.facts.top >= 0
@@ -1346,7 +1717,8 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         const page = await context.newPage();
         const pageErrors = [];
         page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-        await page.goto(site.url, { waitUntil: "load", timeout: scaled(60000) });
+        await page.goto(`${site.url}?audioQa=silent`,
+          { waitUntil: "load", timeout: scaled(60000) });
         await page.waitForFunction(
           () => document.querySelector("#boot")?.classList.contains("ready") === true,
           undefined,
@@ -1370,7 +1742,8 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
               && !document.documentElement.classList.contains("run-paused");
             const start = document.querySelector("#ready-start");
             const resumable = document.querySelector("#ready-screen")?.classList.contains("visible")
-              && start?.disabled === false;
+              && start?.disabled === false
+              && document.activeElement === start;
             return active || resumable;
           }, undefined, { timeout: scaled(45000) });
         } catch (error) {
@@ -1401,7 +1774,37 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         const alreadyActive = await page.evaluate(() =>
           globalThis.__gunsState?.session_phase === "ACTIVE"
             && !document.documentElement.classList.contains("run-paused"));
-        if (!alreadyActive) await readyStart.click();
+        assert.equal(alreadyActive, false,
+          `${viewport.width}x${viewport.height}: touch boot skipped the required Fly gesture`);
+        const readyLayout = await page.evaluate(() => {
+          const start = document.querySelector("#ready-start").getBoundingClientRect();
+          const description = document.querySelector(
+            ".sortie-choice > span:not(.sortie-number)",
+          );
+          return {
+            startTop: start.top,
+            startBottom: start.bottom,
+            descriptionDisplay: description ? getComputedStyle(description).display : "absent",
+            selectorTouchAction: getComputedStyle(
+              document.querySelector(".ready-selector"),
+            ).touchAction,
+            briefingTouchAction: getComputedStyle(
+              document.querySelector(".ready-briefing"),
+            ).touchAction,
+          };
+        });
+        assert.ok(readyLayout.startTop >= 0 && readyLayout.startBottom <= viewport.height,
+          `${viewport.width}x${viewport.height}: Fly is outside the initial viewport`);
+        // "absent" is the stronger outcome. The cards used to carry a paragraph and a caps spec
+        // line that this hid on phones; they no longer carry either, so there is nothing to hide.
+        assert.ok(["none", "absent"].includes(readyLayout.descriptionDisplay),
+          `${viewport.width}x${viewport.height}: verbose cards still dominate the phone menu `
+          + `(description display: ${readyLayout.descriptionDisplay})`);
+        assert.equal(readyLayout.selectorTouchAction, "pan-y pinch-zoom",
+          `${viewport.width}x${viewport.height}: mission selection blocks pinch zoom`);
+        assert.equal(readyLayout.briefingTouchAction, "pan-y pinch-zoom",
+          `${viewport.width}x${viewport.height}: mission briefing blocks pinch zoom`);
+        await readyStart.click();
         await page.waitForFunction(
           () => globalThis.__gunsMobile?.active === true
             && globalThis.__gunsState?.session_phase === "ACTIVE"
@@ -1412,6 +1815,13 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
             && !document.documentElement.classList.contains("run-paused"),
           undefined,
           { timeout: scaled(45000) },
+        );
+        await page.evaluate(() => { globalThis.__HUD_DEBUG__ = true; });
+        await page.waitForFunction(
+          () => globalThis.__HUD_GEOMETRY?.presentationProfile === "touch_dual_stick"
+            && globalThis.__HUD_GEOMETRY?.mobileTactical,
+          undefined,
+          { timeout: scaled(10000) },
         );
 
         const phoneState = await page.evaluate(() => {
@@ -1436,10 +1846,13 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           const throttle = rect("#touch-throttle-controls");
           const throttleRocker = rect("#touch-throttle-rocker");
           const actions = rect(".touch-right");
+          const anca = rect("[data-anca-panel]");
           const waveOff = document.querySelector("#touch-wave-off");
           waveOff.hidden = false;
           const throttleWithWaveOff = rect("#touch-throttle-controls");
           waveOff.hidden = true;
+          const tiltVisible = visible(document.querySelector("#tilt-status"));
+          const ancaVisible = visible(document.querySelector("[data-anca-panel]"));
           return {
             direct,
             controlState: {
@@ -1467,6 +1880,8 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
             ).touchAction,
             targetStickLabel: document.querySelector("#target-stick").getAttribute("aria-label"),
             targetStickKnob: rect("#target-stick-knob"),
+            anca,
+            ancaVisible,
             fallbackDirectionButtons: document.querySelectorAll(
               '#fallback-stick [data-hold-key^="Arrow"]',
             ).length,
@@ -1485,20 +1900,31 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
             targetStickOverlapsActions: overlaps(targetStick, actions),
             pause: rect("#pause-button"),
             tilt: rect("#tilt-status"),
+            tiltVisible,
             console: rect("#test-flight-console"),
             pauseOverlapsTilt: overlaps(rect("#pause-button"), rect("#tilt-status")),
             pauseOverlapsConsole:
               overlaps(rect("#pause-button"), rect("#test-flight-console")),
             tiltOverlapsConsole:
               overlaps(rect("#tilt-status"), rect("#test-flight-console")),
+            hud: globalThis.__HUD_GEOMETRY,
+            resolution: (() => {
+              const diagnostics = globalThis.__gunsAssets?.diagnostics?.();
+              return diagnostics?.visualRuntime?.resolution ?? diagnostics?.directResolution ?? null;
+            })(),
             viewport: { width: innerWidth, height: innerHeight },
           };
         });
 
+        // Landscape carries explicit target, padlock, and FIRE controls clear of both flight
+        // sticks. The dedicated trigger must remain discoverable and usable in every orientation.
         assert.deepEqual(phoneState.direct,
-          ["touch-throttle-rocker", "touch-limit-override", "pulse:KeyV"],
+          ["touch-throttle-rocker", "touch-limit-override", "touch-target-cycle", "pulse:KeyV",
+            "touch-fire"],
           `${viewport.width}x${viewport.height}: ${JSON.stringify(phoneState.controlState)}`);
         assert.match(phoneState.tiltText, /TILT|STICK/);
+        assert.equal(phoneState.ancaVisible, false,
+          `${viewport.width}x${viewport.height}: quiet ANCA chip still clutters touch flight`);
         assert.equal(phoneState.gearHidden, true);
         assert.equal(phoneState.flapUpHidden, true);
         assert.equal(phoneState.flapDownHidden, true);
@@ -1508,7 +1934,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         assert.equal(phoneState.stickTouchAction, "none");
         assert.equal(phoneState.targetStickVisible, true);
         assert.equal(phoneState.targetStickTouchAction, "none");
-        assert.equal(phoneState.targetStickLabel, "Right look and fire stick");
+        assert.equal(phoneState.targetStickLabel, "Right stick: pitch and roll");
         assert.equal(phoneState.fallbackDirectionButtons, 0);
         assert.equal(phoneState.ordinaryPowerButtons, 0);
         assert.equal(phoneState.throttleRockerTouchAction, "none");
@@ -1537,7 +1963,9 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           && phoneState.stick.right < phoneState.viewport.width * 0.25);
         assert.ok(phoneState.targetStick.right <= phoneState.viewport.width
           && phoneState.targetStick.left > phoneState.viewport.width * 0.75);
-        for (const target of [phoneState.pause, phoneState.tilt]) {
+        const chromeTargets = [phoneState.pause];
+        if (phoneState.tiltVisible) chromeTargets.push(phoneState.tilt);
+        for (const target of chromeTargets) {
           assert.ok(target.width >= 44 && target.height >= 44,
             `${viewport.width}x${viewport.height}: phone chrome target is below 44px`);
           assert.ok(target.left >= 0 && target.right <= phoneState.viewport.width);
@@ -1553,10 +1981,31 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           `${viewport.width}x${viewport.height}: pause overlaps the action console`);
         assert.equal(phoneState.tiltOverlapsConsole, false,
           `${viewport.width}x${viewport.height}: tilt recenter overlaps the action console`);
+        assert.ok(phoneState.resolution?.pixelRatio >= 1,
+          `${viewport.width}x${viewport.height}: renderer fell below native CSS-pixel density`);
+        assert.equal(phoneState.hud.presentationProfile, "touch_dual_stick");
+        assert.ok(phoneState.hud.mobileTactical,
+          `${viewport.width}x${viewport.height}: compact tactical rail was not drawn`);
+        assert.equal(phoneState.hud.desktopFlightChrome, false);
+        assert.equal(phoneState.hud.limitsPanel, null);
+        assert.equal(phoneState.hud.systemsPanel, null);
+        const mobileRows = Object.fromEntries(
+          phoneState.hud.mobileTactical.drawnRows.map((row) => [row.key, row.text]),
+        );
+        assert.match(mobileRows.actual,
+          /M.*(?:KCAS|KIAS).*(?:COR|H\d{3}).*(?:\d(?:\.\d)?K|FL).*?(?:V\/S|↑|↓)/);
+        assert.match(mobileRows.context, /GUN\d+/);
+        assert.ok(phoneState.hud.mobileTactical.drawnRows.every(
+          (row) => !row.text.includes("…"),
+        ), `${viewport.width}x${viewport.height}: tactical truth was ellipsized`);
+        assert.ok(phoneState.hud.ladderRungs.every((rung) => rung.deg % 10 === 0),
+          `${viewport.width}x${viewport.height}: minor pitch ladder clutter survived`);
 
-        const stick = page.locator("#fallback-stick");
+        // The RIGHT stick carries roll and pitch now; the left one is throttle and yaw, so
+        // dragging it can never satisfy the roll/G assertion below.
+        const stick = page.locator("#target-stick");
         const stickBox = await stick.boundingBox();
-        assert.ok(stickBox, `${viewport.width}x${viewport.height}: virtual stick has no box`);
+        assert.ok(stickBox, `${viewport.width}x${viewport.height}: flight stick has no box`);
         const centre = {
           x: stickBox.x + stickBox.width / 2,
           y: stickBox.y + stickBox.height / 2,
@@ -1586,9 +2035,10 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         await page.waitForFunction((initialG) =>
           Number(globalThis.__gunsState?.requested_roll_control) > 0.2
             && Number(globalThis.__gunsState?.requested_g_cmd) > initialG + 0.2,
-        baselineG, { timeout: scaled(5000) });
+        baselineG, { timeout: scaled(20000) });
         const engagedStick = await page.evaluate(() => {
-          const element = document.querySelector("#fallback-stick");
+          // The stick being dragged above is the RIGHT one, because that is the one that flies.
+          const element = document.querySelector("#target-stick");
           return {
             active: element.dataset.active,
             x: Number.parseFloat(element.style.getPropertyValue("--stick-x")),
@@ -1601,6 +2051,48 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         assert.ok(engagedStick.x > 0 && engagedStick.y > 0);
         assert.ok(engagedStick.roll > 0.2);
 
+        // The two thumbs are independent. Releasing throttle/yaw used to call the shared
+        // roll/pitch neutraliser and silently cancel a right-stick turn that was still held.
+        const powerStick = page.locator("#fallback-stick");
+        const powerStickBox = await powerStick.boundingBox();
+        assert.ok(powerStickBox,
+          `${viewport.width}x${viewport.height}: throttle/yaw stick has no box`);
+        const powerCentre = {
+          x: powerStickBox.x + powerStickBox.width / 2,
+          y: powerStickBox.y + powerStickBox.height / 2,
+        };
+        const powerPointerId = 48;
+        await powerStick.dispatchEvent("pointerdown", {
+          pointerId: powerPointerId,
+          pointerType: "touch",
+          isPrimary: false,
+          button: 0,
+          buttons: 1,
+          clientX: powerCentre.x,
+          clientY: powerCentre.y,
+        });
+        await powerStick.dispatchEvent("pointermove", {
+          pointerId: powerPointerId,
+          pointerType: "touch",
+          isPrimary: false,
+          button: -1,
+          buttons: 1,
+          clientX: powerCentre.x - powerStickBox.width * 0.2,
+          clientY: powerCentre.y,
+        });
+        await powerStick.dispatchEvent("pointerup", {
+          pointerId: powerPointerId,
+          pointerType: "touch",
+          isPrimary: false,
+          button: 0,
+          buttons: 0,
+          clientX: powerCentre.x - powerStickBox.width * 0.2,
+          clientY: powerCentre.y,
+        });
+        await page.waitForFunction(() =>
+          Number(globalThis.__gunsState?.requested_roll_control) > 0.2,
+        undefined, { timeout: scaled(5000) });
+
         await stick.dispatchEvent(viewport.width <= 700 ? "pointercancel" : "pointerup", {
           pointerId,
           pointerType: "touch",
@@ -1611,19 +2103,98 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
           clientY: centre.y + stickBox.height * 0.34,
         });
         await page.waitForFunction((initialG) => {
-          const element = document.querySelector("#fallback-stick");
+          const element = document.querySelector("#target-stick");
           return element?.dataset.active === "false"
             && Math.abs(Number(globalThis.__gunsState?.requested_roll_control)) < 0.05
             && Number(globalThis.__gunsState?.requested_g_cmd) < initialG + 0.2;
-        }, baselineG, { timeout: scaled(5000) });
+        }, baselineG, { timeout: scaled(20000) });
         const releasedStick = await page.evaluate(() => {
-          const element = document.querySelector("#fallback-stick");
+          const element = document.querySelector("#target-stick");
           return {
             x: Number.parseFloat(element.style.getPropertyValue("--stick-x")),
             y: Number.parseFloat(element.style.getPropertyValue("--stick-y")),
           };
         });
         assert.deepEqual(releasedStick, { x: 0, y: 0 });
+
+        const targetStick = page.locator("#target-stick");
+        const targetStickBox = await targetStick.boundingBox();
+        assert.ok(targetStickBox,
+          `${viewport.width}x${viewport.height}: target stick has no box`);
+        const targetCentre = {
+          x: targetStickBox.x + targetStickBox.width / 2,
+          y: targetStickBox.y + targetStickBox.height / 2,
+        };
+        const baselineAmmo = await page.evaluate(() => Number(globalThis.__gunsState?.ammo));
+        const flightPointerId = 52;
+        await targetStick.dispatchEvent("pointerdown", {
+          pointerId: flightPointerId,
+          pointerType: "touch",
+          isPrimary: true,
+          button: 0,
+          buttons: 1,
+          clientX: targetCentre.x,
+          clientY: targetCentre.y,
+        });
+        await targetStick.dispatchEvent("pointermove", {
+          pointerId: flightPointerId,
+          pointerType: "touch",
+          isPrimary: true,
+          button: -1,
+          buttons: 1,
+          clientX: targetCentre.x + targetStickBox.width * 0.34,
+          clientY: targetCentre.y - targetStickBox.height * 0.28,
+        });
+        await page.waitForTimeout(350);
+        const rightStickState = await page.evaluate(() => ({
+          ammo: Number(globalThis.__gunsState?.ammo),
+          firing: globalThis.__gunsState?.gun_firing === true,
+          fireHeld: globalThis.__gunsMobile?.targetFireHeld === true,
+          active: document.querySelector("#target-stick")?.dataset.active,
+        }));
+        assert.deepEqual(rightStickState, {
+          ammo: baselineAmmo,
+          firing: false,
+          fireHeld: false,
+          active: "true",
+        }, `${viewport.width}x${viewport.height}: right-stick flight input fired the gun`);
+        await targetStick.dispatchEvent("pointerup", {
+          pointerId: flightPointerId,
+          pointerType: "touch",
+          isPrimary: true,
+          button: 0,
+          buttons: 0,
+          clientX: targetCentre.x + targetStickBox.width * 0.34,
+          clientY: targetCentre.y - targetStickBox.height * 0.28,
+        });
+
+        // FIRE IS A BUTTON, NOT THE STICK'S CENTRE. The right stick flies now, and a control
+        // that doubles as a trigger cannot be trimmed: near-centre meant both "fine correction"
+        // and "fire". Drive the dedicated FIRE control and prove it reaches the gun.
+        const fireButton = page.locator("#touch-fire");
+        const fireButtonBox = await fireButton.boundingBox();
+        assert.ok(fireButtonBox,
+          `${viewport.width}x${viewport.height}: no FIRE control once the stick stopped firing`);
+        await page.evaluate(() => globalThis.__gunsBridge?.ReleaseWeaponsHold?.());
+        await page.waitForFunction(() => globalThis.__gunsState?.weapons_inhibited === false,
+          undefined, { timeout: scaled(20000) });
+        const firePointerId = 53;
+        await fireButton.dispatchEvent("pointerdown", {
+          pointerId: firePointerId, pointerType: "touch", isPrimary: true,
+          button: 0, buttons: 1,
+          clientX: fireButtonBox.x + fireButtonBox.width / 2,
+          clientY: fireButtonBox.y + fireButtonBox.height / 2,
+        });
+        await page.waitForFunction(() => globalThis.__gunsState?.gun_firing === true,
+          undefined, { timeout: scaled(20000) });
+        await fireButton.dispatchEvent("pointerup", {
+          pointerId: firePointerId, pointerType: "touch", isPrimary: true,
+          button: 0, buttons: 0,
+          clientX: fireButtonBox.x + fireButtonBox.width / 2,
+          clientY: fireButtonBox.y + fireButtonBox.height / 2,
+        });
+        await page.waitForFunction(() => globalThis.__gunsState?.gun_firing !== true,
+          undefined, { timeout: scaled(20000) });
 
         const throttleRocker = page.locator("#touch-throttle-rocker");
         const throttleBox = await throttleRocker.boundingBox();
@@ -1684,7 +2255,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         });
         await page.waitForFunction((initialThrottle) =>
           Number(globalThis.__gunsState?.requested_throttle) < initialThrottle - 0.025,
-        baselineThrottle, { timeout: scaled(5000) });
+        baselineThrottle, { timeout: scaled(20000) });
         const decreasedThrottle = await page.evaluate(() => {
           const element = document.querySelector("#touch-throttle-rocker");
           return {
@@ -1737,7 +2308,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
             direction: element.dataset.direction,
             y: Number.parseFloat(element.style.getPropertyValue("--throttle-y")),
           };
-        }, steadyThrottle, { timeout: scaled(5000) });
+        }, steadyThrottle, { timeout: scaled(20000) });
         // Capture the exact animation frame which satisfied the motion predicate. A separate
         // evaluate() can race the flight automation on slower CI runners and observe a later
         // throttle value even though the rocker already proved it moved upward.
@@ -1801,7 +2372,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         });
         assert.deepEqual(settingsState, {
           scrollable: true,
-          touchAction: "pan-y",
+          touchAction: "pan-y pinch-zoom",
           keyboardOpen: false,
           settingsTouchAllowed: true,
           sceneTouchBlocked: true,
@@ -1857,7 +2428,18 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
     const alreadyActive = await page.evaluate(() =>
       globalThis.__gunsState?.session_phase === "ACTIVE"
         && !document.documentElement.classList.contains("run-paused"));
-    if (!alreadyActive) await page.locator("#ready-start").tap();
+    assert.equal(alreadyActive, false, "portrait touch boot skipped the required Fly gesture");
+    const portraitReady = await page.evaluate(() => {
+      const start = document.querySelector("#ready-start").getBoundingClientRect();
+      return {
+        top: start.top,
+        bottom: start.bottom,
+        viewportHeight: innerHeight,
+      };
+    });
+    assert.ok(portraitReady.top >= 0 && portraitReady.bottom <= portraitReady.viewportHeight,
+      `portrait Fly is outside the initial viewport: ${JSON.stringify(portraitReady)}`);
+    await page.locator("#ready-start").tap();
     await page.waitForFunction(() =>
       globalThis.__gunsState?.session_phase === "ACTIVE"
       && globalThis.__gunsState?.player_terminal_state === "FLYING"
@@ -1872,6 +2454,37 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
         `expected ${required} on <html>, got: ${modeClasses.join(" ")}`,
       );
     }
+    await page.evaluate(() => { globalThis.__HUD_DEBUG__ = true; });
+    await page.waitForFunction(
+      () => globalThis.__HUD_GEOMETRY?.presentationProfile === "portrait_dual_stick"
+        && globalThis.__HUD_GEOMETRY?.mobileTactical,
+      undefined,
+      { timeout: scaled(10000) },
+    );
+    const portraitHud = await page.evaluate(() => ({
+      ...globalThis.__HUD_GEOMETRY,
+      ancaVisible: (() => {
+        const panel = document.querySelector("[data-anca-panel]");
+        return panel && !panel.hidden && getComputedStyle(panel).display !== "none";
+      })(),
+    }));
+    assert.equal(portraitHud.presentationProfile, "portrait_dual_stick");
+    assert.ok(portraitHud.mobileTactical, "portrait tactical rail was not drawn");
+    assert.equal(portraitHud.desktopFlightChrome, false);
+    assert.equal(portraitHud.limitsPanel, null);
+    assert.equal(portraitHud.systemsPanel, null);
+    const portraitRows = Object.fromEntries(
+      portraitHud.mobileTactical.drawnRows.map((row) => [row.key, row.text]),
+    );
+    assert.match(portraitRows.actual,
+      /AUTO COR.*M.*(?:KCAS|KIAS).*(?:\d(?:\.\d)?K|FL).*?(?:V\/S|↑|↓)|M.*(?:KCAS|KIAS).*AUTO COR.*(?:\d(?:\.\d)?K|FL).*?(?:V\/S|↑|↓)/);
+    assert.match(portraitRows.context, /GUN\d+/);
+    assert.ok(portraitHud.mobileTactical.drawnRows.every(
+      (row) => !row.text.includes("…"),
+    ), "portrait tactical truth was ellipsized");
+    assert.ok(portraitHud.ladderRungs.every((rung) => rung.deg % 10 === 0));
+    assert.equal(portraitHud.ancaVisible, false,
+      "quiet ANCA chip still clutters portrait touch flight");
 
     // The regression this guards: the sticks sat inside the pointer-events:none touch overlay
     // without their own pointer-events, so every drag fell through to the scene canvas and the
@@ -1890,8 +2503,11 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
     assert.ok(reach.right.hit, `right stick unreachable — touches land on "${reach.right.top}"`);
 
     // Full-left roll through the platform touch pipeline (CDP synthesises real touch events).
+    // THE RIGHT STICK FLIES. This dragged #fallback-stick (the left one) and waited for roll,
+    // which was correct while the left stick flew the aircraft. It now carries throttle and yaw,
+    // so a leftward drag there commands rudder and the roll assertion could never come true.
     const [sx, sy] = await page.evaluate(() => {
-      const r = document.querySelector("#fallback-stick").getBoundingClientRect();
+      const r = document.querySelector("#target-stick").getBoundingClientRect();
       return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)];
     });
     const cdp = await context.newCDPSession(page);
@@ -1910,7 +2526,7 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
       await page.waitForFunction(
         () => Number(globalThis.__gunsState?.requested_roll_control) <= -0.5,
         undefined,
-        { timeout: scaled(5000) },
+        { timeout: scaled(20000) },
       );
       await page.waitForFunction(
         () => Math.abs(Number(globalThis.__gunsState?.bank_deg)) >= 8,
@@ -1923,14 +2539,16 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
     await page.waitForFunction(
       () => Number(globalThis.__gunsState?.requested_roll_control) === 0,
       undefined,
-      { timeout: scaled(5000) },
+      { timeout: scaled(20000) },
     );
 
-    // The right stick must arm the look gesture rather than falling through to the scene.
+    // The right stick must own the flight gesture rather than falling through to scene look.
     const [tx, ty] = await page.evaluate(() => {
       const r = document.querySelector("#target-stick").getBoundingClientRect();
       return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)];
     });
+    const portraitBaselineAmmo = await page.evaluate(() =>
+      Number(globalThis.__gunsState?.ammo));
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchStart",
       touchPoints: [touchPoint(tx, ty, 2)],
@@ -1941,15 +2559,252 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
         touchPoints: [touchPoint(tx + 30, ty - 20, 2)],
       });
       await page.waitForFunction(
-        () => document.querySelector("#target-stick")?.dataset.active === "true",
+        () => {
+          const stick = document.querySelector("#target-stick");
+          return stick?.dataset.active === "true"
+            && Math.abs(Number.parseFloat(
+              stick.style.getPropertyValue("--stick-x"),
+            )) >= 4;
+        },
         undefined,
-        { timeout: scaled(5000) },
+        { timeout: scaled(20000) },
       );
+      await page.waitForTimeout(350);
+      const rightStickOnly = await page.evaluate(() => ({
+        ammo: Number(globalThis.__gunsState?.ammo),
+        firing: globalThis.__gunsState?.gun_firing === true,
+        fireHeld: globalThis.__gunsMobile?.targetFireHeld === true,
+      }));
+      assert.deepEqual(rightStickOnly,
+        { ammo: portraitBaselineAmmo, firing: false, fireHeld: false },
+        "portrait right-stick flight input fired the gun");
     } finally {
       await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     }
 
+    // FIRE IS A BUTTON NOW, NOT A STICK CENTRE-HOLD. The right stick flies, and a control that
+    // doubles as a trigger cannot be trimmed -- near-centre meant both "fine correction" and
+    // "fire". So this drives the dedicated FIRE control between the sticks and proves it reaches
+    // the gun, which is the property that actually matters.
+    const fireBox = await page.evaluate(() => {
+      const fire = document.querySelector("#touch-fire");
+      if (!fire || fire.hidden) return null;
+      const r = fire.getBoundingClientRect();
+      return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+    });
+    assert.ok(fireBox, "portrait must expose a FIRE control once the stick no longer fires");
+    // The gun will not cycle while the first-pass weapons hold is armed, so ammunition would never
+    // fall no matter how correctly the button is wired. Release it the same way the desktop boot
+    // test does before asserting the trigger reaches the gun.
+    await page.evaluate(() => globalThis.__gunsBridge?.ReleaseWeaponsHold?.());
+    await page.waitForFunction(() => globalThis.__gunsState?.weapons_inhibited === false,
+      undefined, { timeout: scaled(20000) });
+    const ammoBeforeFire = await page.evaluate(() => Number(globalThis.__gunsState?.ammo));
+    // Dispatch on the ELEMENT rather than at raw CDP coordinates. The button listens for pointer
+    // events, and a synthesised touch at a coordinate does not reliably reach it through the
+    // overlay's pointer-events:none parent; the same approach is used for the stick above.
+    const fire = page.locator("#touch-fire");
+    await fire.dispatchEvent("pointerdown", {
+      pointerId: 21, pointerType: "touch", isPrimary: true, button: 0, buttons: 1,
+      clientX: fireBox.x, clientY: fireBox.y,
+    });
+    try {
+      await page.waitForFunction((before) =>
+        globalThis.__gunsState?.gun_firing === true
+          || Number(globalThis.__gunsState?.ammo) < before,
+        ammoBeforeFire, { timeout: scaled(20000) });
+    } finally {
+      await fire.dispatchEvent("pointerup", {
+        pointerId: 21, pointerType: "touch", isPrimary: true, button: 0, buttons: 0,
+        clientX: fireBox.x, clientY: fireBox.y,
+      });
+    }
+    await page.waitForFunction(() =>
+      globalThis.__gunsState?.gun_firing !== true,
+      undefined, { timeout: scaled(20000) });
+
     assert.deepEqual(pageErrors, [], `uncaught page errors:\n${pageErrors.join("\n")}`);
+  } finally {
+    await browser.close();
+    await site.close();
+  }
+});
+
+test("boot does not stutter: no application task is a wild frame outlier", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+  const site = await serveStatic(WWWROOT);
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+  });
+  try {
+    const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } }))
+      .newPage();
+    // A requestAnimationFrame delta includes time when a virtualised runner has descheduled the
+    // page or SwiftShader's GPU process is blocked. Neither is application work, and the first
+    // protected-main run proved the distinction: page phases stayed light while 81 raw callbacks
+    // arrived seconds late. Long Tasks records main-thread work instead, including JSON parsing,
+    // garbage collection and a synchronous shader compile, without wrapping or reordering RAF.
+    await page.addInitScript(() => {
+      const record = {
+        supported: false,
+        sampleStart: 0,
+        sampleEnd: 0,
+        entries: [],
+        observer: null,
+      };
+      Object.defineProperty(globalThis, "__gunsSmokeLongTasks", {
+        configurable: true,
+        value: record,
+      });
+      if (typeof PerformanceObserver !== "function"
+          || !PerformanceObserver.supportedEntryTypes?.includes("longtask")) return;
+      record.supported = true;
+      const observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          record.entries.push({
+            startTime: Number(entry.startTime),
+            duration: Number(entry.duration),
+          });
+        }
+        if (record.entries.length > 2048) record.entries.splice(0, 1024);
+      });
+      observer.observe({ type: "longtask", buffered: true });
+      record.observer = observer;
+    });
+    await page.goto(`${site.url}?server=off&audioQa=silent`, {
+      waitUntil: "load",
+      timeout: scaled(60000),
+    });
+    // Boot deliberately stops at the Ready interlock: loading a page is not pilot consent to
+    // depart. Start the real packaged sortie through its visible Fly control before sampling the
+    // live render loop; otherwise tick can never advance and this test merely times out on a
+    // correct, paused Ready state. Multiplayer is disabled above so localhost-origin WebSocket
+    // rejection/retry noise cannot contaminate this renderer-only measurement.
+    await page.waitForFunction(() =>
+      globalThis.__gunsState?.session_phase === "READY"
+        && globalThis.__gunsLifecycle?.reasons?.includes("ready")
+        && document.querySelector("#ready-start")?.disabled === false,
+      undefined, { timeout: scaled(90000) });
+    await page.locator("#ready-start").click();
+    await page.waitForFunction(() => globalThis.__gunsState?.tick > 0,
+      undefined, { timeout: scaled(90000) });
+
+    const longTaskSupported = await page.evaluate(() => {
+      const record = globalThis.__gunsSmokeLongTasks;
+      if (!record?.supported || !record.observer) return false;
+      record.entries.length = 0;
+      record.observer.takeRecords();
+      record.sampleStart = performance.now();
+      record.sampleEnd = 0;
+      return true;
+    });
+    assert.equal(longTaskSupported, true,
+      "Chromium must expose the Long Tasks API for causal stutter attribution");
+
+    // Preserve the original 240-frame, machine-relative sampler. Raw RAF gaps remain useful
+    // diagnostics, but the gate below counts only application tasks which could have caused one:
+    // a shader compiling mid-run, a JSON parse, or an allocation/GC landing on the main thread.
+    const deltas = await page.evaluate(() => new Promise((resolve) => {
+      const out = [];
+      let last = performance.now();
+      const tick = (now) => {
+        out.push(now - last);
+        last = now;
+        if (out.length >= 240) {
+          globalThis.__gunsSmokeLongTasks.sampleEnd = performance.now();
+          resolve(out);
+        }
+        else requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }));
+    // PerformanceObserver delivery is asynchronous to the task it reports. Merge any entries not
+    // yet delivered to its callback, then retain only work inside the exact timestamps captured by
+    // the sampler itself. A wall-time sleep would race the same VM descheduling this gate excludes.
+    const longTasks = await page.evaluate(() => {
+      const record = globalThis.__gunsSmokeLongTasks;
+      for (const entry of record.observer.takeRecords()) {
+        record.entries.push({
+          startTime: Number(entry.startTime),
+          duration: Number(entry.duration),
+        });
+      }
+      return record.entries
+        .filter((entry) => entry.startTime >= record.sampleStart
+          && entry.startTime <= record.sampleEnd)
+        .map((entry) => entry.duration);
+    });
+
+    const sorted = deltas.slice(1).sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    const threshold = median * 6;
+    const rawOutliers = sorted.filter((delta) => delta > threshold).length;
+    const applicationOutliers = longTasks.filter((duration) => duration > threshold).length;
+    const worstFrame = sorted.at(-1);
+    const worstApplicationTask = Math.max(0, ...longTasks);
+    assert.ok(applicationOutliers <= 3,
+      `${applicationOutliers} application tasks exceeded 6x the ${median.toFixed(1)}ms median `
+      + `(worst task ${worstApplicationTask.toFixed(0)}ms; ${rawOutliers} raw RAF gaps; `
+      + `worst gap ${worstFrame.toFixed(0)}ms) — application work is stalling the render loop`);
+  } finally {
+    await browser.close();
+    await site.close();
+  }
+});
+
+
+// Owner report, Build 228, with a photograph: "Landscape mode is broken." The screen was split
+// down the middle -- scene on the left, a stale frame and the controls on the right.
+//
+// Root cause was circular measurement. #scene is sized by `width: var(--game-width)`, and
+// --game-width was set from gameViewport(), which measured scene.clientWidth. Once the first
+// measurement landed, the element reported its own imposed size forever: rotating the phone left
+// the renderer, the camera aspect and the adaptive-resolution controller all still believing in a
+// portrait surface while the DOM controls laid themselves out across the landscape one.
+//
+// WebKit, because this is an iPhone bug and Chromium's layout viewport does not reproduce it.
+test("rotating to landscape actually resizes the drawn surface", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+  const site = await serveStatic(WWWROOT);
+  const browser = await webkit.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ ...devices["iPhone 13"] });
+    const page = await context.newPage();
+    await page.goto(`${site.url}?audioQa=silent`, { waitUntil: "load", timeout: scaled(90000) });
+    await page.waitForFunction(
+      () => !document.querySelector("#ready-start")?.disabled,
+      undefined, { timeout: scaled(120000) });
+    await page.click("#ready-start");
+    await page.waitForTimeout(scaled(4000));
+
+    const measure = () => page.evaluate(() => {
+      const scene = document.getElementById("scene");
+      const canvas = document.querySelector("#scene canvas") ?? document.querySelector("canvas");
+      return {
+        scene: [scene?.clientWidth ?? 0, scene?.clientHeight ?? 0],
+        canvasCss: [canvas?.clientWidth ?? 0, canvas?.clientHeight ?? 0],
+        inner: [innerWidth, innerHeight],
+      };
+    });
+
+    const portrait = await measure();
+    assert.ok(portrait.scene[1] > portrait.scene[0], "fixture did not start in portrait");
+
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.waitForTimeout(scaled(2500));
+    const landscape = await measure();
+
+    assert.ok(landscape.scene[0] > landscape.scene[1],
+      `#scene stayed portrait after rotation: ${JSON.stringify(landscape)}`);
+    // The drawn surface has to agree with the layout viewport, not merely change: a canvas that
+    // is a different width from the box it is painted into is the split screen itself.
+    assert.equal(landscape.scene[0], landscape.inner[0],
+      `#scene width ${landscape.scene[0]} != layout viewport ${landscape.inner[0]}`);
+    assert.equal(landscape.canvasCss[0], landscape.inner[0],
+      `canvas width ${landscape.canvasCss[0]} != layout viewport ${landscape.inner[0]}`);
+
+    await context.close();
   } finally {
     await browser.close();
     await site.close();

@@ -7,9 +7,11 @@ import { TelemetryStateDecoder } from "../../web/wwwroot/render/telemetry/state_
 
 export const RAM_LIGHT_MACH = 2.0;
 export const FULL_RAM_MACH = 2.8;
-export const RECONSTRUCTION_VERSION = 1;
+export const RECONSTRUCTION_VERSION = 2;
 export const MAX_INPUT_BYTES = 256 * 1024 * 1024;
 export const MAX_ROWS_PER_INPUT = 2_000_000;
+export const CLOCK_REPAIR_THRESHOLD_MS = 250;
+export const CLOCK_ANCHOR_MAX_RESIDUAL_MS = 50;
 
 const RAPIER_PHASE_NAMES = Object.freeze({
   1: "LAUNCH",
@@ -71,6 +73,8 @@ const TRACK_STATE_FIELDS = [
   "indicated_airspeed_kts", "true_airspeed_kts", "ground_speed_kts",
   "alt_ft", "radar_alt_ft", "vertical_speed_fpm",
   "g_actual", "pilot_gz", "requested_g_cmd", "g_cmd",
+  "g_hardmax", "g_override_max", "requested_envelope_override",
+  "dynamic_pressure_kpa", "rapier_over_q",
   "requested_bank_target_deg", "bank_target_deg",
   "throttle", "requested_throttle", "applied_throttle",
   "pilot_aileron", "total_aileron_command_deg",
@@ -83,6 +87,23 @@ const TRACK_STATE_FIELDS = [
   "rapier_fd_bank_deg", "rapier_fd_target_ktas", "rapier_nose_on_v_err_deg",
   "range_m", "closure_kts", "rapier_pursuit_range_m",
   "engagement_number", "rounds_fired", "bandit_alive",
+  "time_compression_requested_factor", "time_compression_safety_factor_cap",
+  "time_compression_factor", "time_compression_inhibit_reason",
+  "service_life_record_available", "service_life_record_sequence",
+  "service_life_record_sha256", "service_life_evidence_status",
+  "service_life_exceedance_review_required",
+  "service_life_over_structural_limit_s",
+  "service_life_over_dynamic_pressure_s", "service_life_max_g",
+  "service_life_max_dynamic_pressure_kpa",
+  "service_life_min_thermal_margin_c",
+  "service_life_damage_assessment", "service_life_cost_projection",
+  "rapier_economy_active", "rapier_economy_model_id",
+  "rapier_economy_currency", "rapier_economy_price_basis_id",
+  "rapier_economy_target_kind", "rapier_economy_target_contract_id",
+  "rapier_economy_target_label", "rapier_economy_target_reward_credits",
+  "rapier_economy_application_key", "rapier_economy_sortie_net_credits",
+  "rapier_economy_inspection_reserved",
+  "rapier_economy_damage_cost_computed", "rapier_economy_lines",
   "pilot_state", "pilot_control_interlocked",
   "pilot_trigger_interlocked", "player_trigger_interlocked",
   "gear_nose", "gear_left", "gear_right",
@@ -207,9 +228,72 @@ function selectHeader(rows) {
     .sort((left, right) => (left.t0 ?? 0) - (right.t0 ?? 0))[0] ?? null;
 }
 
-function wallEpochMs(header, sessionMs) {
-  if (!Number.isFinite(header?.t0) || !Number.isFinite(sessionMs)) return null;
-  return header.t0 + sessionMs;
+function median(numbers) {
+  if (!numbers.length) return null;
+  const sorted = [...numbers].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function resolveClock(rows, header) {
+  const declaredOriginEpochMs = finiteNumber(header?.t0);
+  const declaredBasis = typeof header?.clock_basis === "string"
+    ? header.clock_basis : null;
+  const anchorOrigins = rows
+    .filter((row) => finiteNumber(row?.t) !== null
+      && finiteNumber(row?.wall_epoch_ms) !== null)
+    .map((row) => finiteNumber(row.wall_epoch_ms) - finiteNumber(row.t));
+  const anchoredOriginEpochMs = median(anchorOrigins);
+  const anchorResidualMs = anchoredOriginEpochMs === null
+    ? null
+    : Math.max(...anchorOrigins.map((origin) => Math.abs(origin - anchoredOriginEpochMs)));
+  const correctionMs = declaredOriginEpochMs === null || anchoredOriginEpochMs === null
+    ? null : anchoredOriginEpochMs - declaredOriginEpochMs;
+  const stableAnchors = anchoredOriginEpochMs !== null
+    && anchorResidualMs <= CLOCK_ANCHOR_MAX_RESIDUAL_MS;
+  const declaredMonotonic = declaredBasis
+    === "performance_time_origin_plus_monotonic_ms";
+
+  let status;
+  let effectiveOriginEpochMs = declaredOriginEpochMs;
+  if (stableAnchors && declaredOriginEpochMs === null) {
+    status = "recovered_from_wall_anchor";
+    effectiveOriginEpochMs = anchoredOriginEpochMs;
+  } else if (stableAnchors && Math.abs(correctionMs) >= CLOCK_REPAIR_THRESHOLD_MS) {
+    status = "repaired_from_wall_anchor";
+    effectiveOriginEpochMs = anchoredOriginEpochMs;
+  } else if (anchoredOriginEpochMs !== null && !stableAnchors) {
+    status = "anchor_conflict";
+  } else if (stableAnchors) {
+    status = "wall_anchor_verified";
+  } else if (declaredMonotonic) {
+    status = "declared_monotonic_origin";
+  } else {
+    status = "legacy_unverified";
+  }
+
+  return Object.freeze({
+    status,
+    declared_basis: declaredBasis,
+    declared_origin_epoch_ms: declaredOriginEpochMs,
+    effective_origin_epoch_ms: effectiveOriginEpochMs,
+    correction_ms: effectiveOriginEpochMs !== null && declaredOriginEpochMs !== null
+      ? effectiveOriginEpochMs - declaredOriginEpochMs : null,
+    wall_anchor_count: anchorOrigins.length,
+    wall_anchor_origin_epoch_ms: anchoredOriginEpochMs,
+    wall_anchor_max_residual_ms: anchorResidualMs,
+    trusted: status !== "legacy_unverified"
+      && status !== "anchor_conflict"
+      && effectiveOriginEpochMs !== null,
+  });
+}
+
+function wallEpochMs(clock, sessionMs) {
+  if (!Number.isFinite(clock?.effective_origin_epoch_ms)
+      || !Number.isFinite(sessionMs)) return null;
+  return clock.effective_origin_epoch_ms + sessionMs;
 }
 
 function videoTimeSeconds(wallMs, videoStartEpochMs, videoDurationS) {
@@ -219,7 +303,7 @@ function videoTimeSeconds(wallMs, videoStartEpochMs, videoDurationS) {
   return Number(offset.toFixed(3));
 }
 
-function resolveVideoAlignment(rows, header, {
+function resolveVideoAlignment(rows, clock, {
   videoStartEpochMs,
   videoSyncMarker,
   videoSyncSeconds,
@@ -264,7 +348,7 @@ function resolveVideoAlignment(rows, header, {
     throw new RapierReconstructError(`sync marker not found: ${markerId}`);
   }
   const markerWallMs = finiteNumber(marker.wall_epoch_ms)
-    ?? wallEpochMs(header, finiteNumber(marker.t));
+    ?? wallEpochMs(clock, finiteNumber(marker.t));
   if (markerWallMs === null) {
     throw new RapierReconstructError(`sync marker has no usable time: ${markerId}`);
   }
@@ -357,9 +441,9 @@ function perfAt(perfRows, sessionMs) {
   return hit;
 }
 
-function projectTrackPoint(row, state, header, videoOptions, perfRows) {
+function projectTrackPoint(row, state, clock, videoOptions, perfRows) {
   const sessionMs = finiteNumber(row.t);
-  const wallMs = wallEpochMs(header, sessionMs);
+  const wallMs = wallEpochMs(clock, sessionMs);
   const point = {
     q: row.q,
     session_ms: sessionMs,
@@ -698,13 +782,13 @@ function extremaEvents(track, summary) {
   });
 }
 
-function lifecycleEvents(rows, sortieId, header, videoOptions) {
+function lifecycleEvents(rows, sortieId, clock, videoOptions) {
   return rows
     .filter((row) => row?.k === "in"
       && row.type === "lifecycle"
       && (!sortieId || row.sortie === sortieId))
     .map((row) => {
-      const wallMs = wallEpochMs(header, finiteNumber(row.t));
+      const wallMs = wallEpochMs(clock, finiteNumber(row.t));
       return {
         kind: row.code,
         session_ms: finiteNumber(row.t),
@@ -723,13 +807,13 @@ function lifecycleEvents(rows, sortieId, header, videoOptions) {
     });
 }
 
-function flightTestSyncEvents(rows, sortieId, header, videoOptions) {
+function flightTestSyncEvents(rows, sortieId, clock, videoOptions) {
   return rows
     .filter((row) => row?.k === "in"
       && row.type === "flight-test-sync"
       && (!sortieId || row.sortie === sortieId))
     .map((row) => {
-      const projectedWallMs = wallEpochMs(header, finiteNumber(row.t));
+      const projectedWallMs = wallEpochMs(clock, finiteNumber(row.t));
       const wallMs = finiteNumber(row.wall_epoch_ms) ?? projectedWallMs;
       return {
         kind: "flight_test_sync",
@@ -749,9 +833,9 @@ function flightTestSyncEvents(rows, sortieId, header, videoOptions) {
     });
 }
 
-function projectPerformance(perfRows, header, videoOptions) {
+function projectPerformance(perfRows, clock, videoOptions) {
   return perfRows.map((row) => {
-    const wallMs = wallEpochMs(header, finiteNumber(row.t));
+    const wallMs = wallEpochMs(clock, finiteNumber(row.t));
     const projected = {
       ...row,
       wall_epoch_ms: wallMs,
@@ -788,6 +872,270 @@ function summarizePerformance(performance) {
   };
 }
 
+function observedSecondsWhere(track, predicate) {
+  let seconds = 0;
+  for (let index = 1; index < track.length; index += 1) {
+    const previous = track[index - 1];
+    const point = track[index];
+    const delta = (point.session_ms - previous.session_ms) / 1000;
+    if (point.q !== previous.q + 1 || delta <= 0 || delta > 0.25) continue;
+    if (predicate(previous)) seconds += delta;
+  }
+  return Number(seconds.toFixed(3));
+}
+
+function numericExtreme(track, field, direction = "max") {
+  const candidates = track
+    .map((point) => ({ point, value: finiteNumber(point[field]) }))
+    .filter(({ value }) => value !== null);
+  if (!candidates.length) return null;
+  const hit = candidates.reduce((best, candidate) =>
+    direction === "min"
+      ? (candidate.value < best.value ? candidate : best)
+      : (candidate.value > best.value ? candidate : best));
+  return {
+    value: hit.value,
+    q: hit.point.q,
+    session_ms: hit.point.session_ms,
+    video_s: hit.point.video_s,
+  };
+}
+
+function summarizeExposure(track, gaps) {
+  const aboveStructuralLimit = (point) => {
+    const actual = finiteNumber(point.g_actual);
+    const limit = finiteNumber(point.g_hardmax);
+    return actual !== null && limit !== null && actual > limit + 0.05;
+  };
+  const structuralExceedanceSamples = track.filter(aboveStructuralLimit).length;
+  return {
+    evidence_status: gaps.length ? "partial" : "complete",
+    missing_channel_ids: [
+      "component_stress_strain",
+      "validated_fatigue_damage",
+      "residual_strength",
+      "authoritative_cost_projection",
+    ],
+    mechanical: {
+      max_g_actual: numericExtreme(track, "g_actual"),
+      max_dynamic_pressure_kpa: numericExtreme(track, "dynamic_pressure_kpa"),
+      observed_seconds_above_structural_limit:
+        observedSecondsWhere(track, aboveStructuralLimit),
+      structural_limit_exceedance_samples: structuralExceedanceSamples,
+      observed_seconds_override_selected: observedSecondsWhere(
+        track, (point) => point.requested_envelope_override === true,
+      ),
+      observed_seconds_over_q: observedSecondsWhere(
+        track, (point) => point.rapier_over_q === true,
+      ),
+    },
+    thermal_proxy: {
+      min_stagnation_margin_c: numericExtreme(
+        track, "rapier_thermal_margin_c", "min",
+      ),
+      observed_seconds_negative_margin: observedSecondsWhere(
+        track,
+        (point) => (finiteNumber(point.rapier_thermal_margin_c) ?? 0) < 0,
+      ),
+    },
+    damage_assessment: "not_computed",
+    cost_projection: "not_computed",
+  };
+}
+
+function finding(severity, code, message, evidence = {}) {
+  return { severity, code, message, evidence };
+}
+
+function abruptCompressionHandoffs(track) {
+  const handoffs = [];
+  for (let index = 1; index < track.length; index += 1) {
+    const previous = track[index - 1];
+    const point = track[index];
+    const before = finiteNumber(previous.time_compression_factor);
+    const after = finiteNumber(point.time_compression_factor);
+    if (before === null || after === null || before <= after || before / after <= 2) continue;
+    const reason = String(point.time_compression_inhibit_reason ?? "UNKNOWN");
+    if (reason === "CONTROL_INPUT" || reason === "DAMAGE") continue;
+    handoffs.push({
+      q: point.q,
+      session_ms: point.session_ms,
+      video_s: point.video_s,
+      from_factor: before,
+      to_factor: after,
+      reason,
+      safety_factor_cap: finiteNumber(point.time_compression_safety_factor_cap),
+    });
+  }
+  return handoffs;
+}
+
+function buildAudit({
+  clock,
+  coverage,
+  gaps,
+  track,
+  events,
+  performanceSummary,
+  exposureSummary,
+}) {
+  const findings = [];
+  if (clock.status === "repaired_from_wall_anchor"
+      || clock.status === "recovered_from_wall_anchor") {
+    findings.push(finding(
+      "info",
+      "clock_origin_repaired",
+      "A stable wall-clock anchor replaced the legacy telemetry origin.",
+      {
+        correction_ms: clock.correction_ms,
+        wall_anchor_count: clock.wall_anchor_count,
+        wall_anchor_max_residual_ms: clock.wall_anchor_max_residual_ms,
+      },
+    ));
+  } else if (clock.status === "legacy_unverified") {
+    findings.push(finding(
+      "warning",
+      "legacy_clock_unverified",
+      "The header predates the monotonic clock declaration and has no wall-clock anchor; video alignment may be shifted.",
+    ));
+  } else if (clock.status === "anchor_conflict") {
+    findings.push(finding(
+      "error",
+      "clock_anchor_conflict",
+      "Wall-clock anchors disagree, so the telemetry origin was not repaired automatically.",
+      {
+        wall_anchor_count: clock.wall_anchor_count,
+        wall_anchor_max_residual_ms: clock.wall_anchor_max_residual_ms,
+      },
+    ));
+  }
+
+  if (gaps.length) {
+    findings.push(finding(
+      gaps.some((gap) => String(gap.kind).startsWith("decode")) ? "error" : "warning",
+      "telemetry_coverage_gaps",
+      "The reconstruction contains missing or discontinuous state evidence.",
+      {
+        gaps: gaps.length,
+        decoded_samples: coverage.decoded_samples,
+        intervals: coverage.intervals.length,
+      },
+    ));
+  }
+  if (coverage.video_window
+      && coverage.covered_video_fraction !== null
+      && coverage.covered_video_fraction < 0.95) {
+    findings.push(finding(
+      "warning",
+      "recording_coverage_incomplete",
+      "Telemetry does not continuously cover at least 95% of the supplied recording window.",
+      {
+        covered_video_s: coverage.covered_video_s,
+        covered_video_fraction: coverage.covered_video_fraction,
+      },
+    ));
+  }
+
+  const phaseLabelMismatches = track.filter(
+    (point) => point.rapier_phase_label_matches === false,
+  );
+  if (phaseLabelMismatches.length) {
+    findings.push(finding(
+      "warning",
+      "mission_phase_label_lag",
+      "Numeric mission truth and the cold phase label disagree in sampled state.",
+      {
+        samples: phaseLabelMismatches.length,
+        first_q: phaseLabelMismatches[0].q,
+        first_video_s: phaseLabelMismatches[0].video_s,
+      },
+    ));
+  }
+  const unexplainedPhaseJumps = events.filter((event) =>
+    event.kind === "rapier_mission_phase"
+      && event.evidence.to_phase - event.evidence.from_phase > 1
+      && !event.evidence.observed_cold_reason);
+  if (unexplainedPhaseJumps.length) {
+    findings.push(finding(
+      "warning",
+      "mission_phase_jump_unexplained",
+      "One or more multi-phase advances have no recorded transition reason.",
+      { events: unexplainedPhaseJumps.length, first: unexplainedPhaseJumps[0] },
+    ));
+  }
+
+  if ((performanceSummary.p95_frame_ms_max ?? 0) > 22
+      || (performanceSummary.frame_ms_max ?? 0) > 50) {
+    findings.push(finding(
+      "warning",
+      "presentation_frame_stall",
+      "Recorded presentation timing exceeded the foreground-flight frame contract.",
+      {
+        p95_frame_ms_max: performanceSummary.p95_frame_ms_max,
+        frame_ms_max: performanceSummary.frame_ms_max,
+        frames_over_22ms: performanceSummary.frames_over_22ms,
+      },
+    ));
+  }
+  if (performanceSummary.time_compression_cost_dropped_ticks > 0) {
+    findings.push(finding(
+      "warning",
+      "time_compression_cost_backpressure",
+      "The renderer declined requested compressed ticks because measured simulation cost exceeded budget.",
+      {
+        dropped_ticks: performanceSummary.time_compression_cost_dropped_ticks,
+      },
+    ));
+  }
+  const abruptHandoffs = abruptCompressionHandoffs(track);
+  if (abruptHandoffs.length) {
+    findings.push(finding(
+      "warning",
+      "time_compression_abrupt_handoff",
+      "An autonomous fast-time handoff skipped one or more taper rungs.",
+      { events: abruptHandoffs.length, first: abruptHandoffs[0] },
+    ));
+  }
+
+  if (exposureSummary.mechanical.structural_limit_exceedance_samples > 0) {
+    findings.push(finding(
+      "warning",
+      "structural_limit_exposure",
+      "Observed load exceeded the declared structural limit; retain this as inspection/cost input, not a damage verdict.",
+      exposureSummary.mechanical,
+    ));
+  }
+  if (exposureSummary.mechanical.observed_seconds_over_q > 0) {
+    findings.push(finding(
+      "warning",
+      "dynamic_pressure_exposure",
+      "The aircraft spent observed time above its declared dynamic-pressure limit.",
+      {
+        observed_seconds_over_q:
+          exposureSummary.mechanical.observed_seconds_over_q,
+        max_dynamic_pressure_kpa:
+          exposureSummary.mechanical.max_dynamic_pressure_kpa,
+      },
+    ));
+  }
+  if (exposureSummary.thermal_proxy.observed_seconds_negative_margin > 0) {
+    findings.push(finding(
+      "warning",
+      "thermal_proxy_exposure",
+      "The stagnation-temperature proxy crossed its declared margin.",
+      exposureSummary.thermal_proxy,
+    ));
+  }
+
+  const counts = { error: 0, warning: 0, info: 0 };
+  for (const item of findings) counts[item.severity] += 1;
+  return {
+    verdict: counts.error ? "fail" : counts.warning ? "review" : "pass",
+    finding_counts: counts,
+    findings,
+  };
+}
+
 export function reconstructRapierFlight({
   rows,
   sources = [],
@@ -800,6 +1148,7 @@ export function reconstructRapierFlight({
 } = {}) {
   if (!Array.isArray(rows)) throw new RapierReconstructError("rows must be an array");
   const header = selectHeader(rows);
+  const clock = resolveClock(rows, header);
   const perfRows = rows
     .filter((row) => row?.k === "perf" && Number.isFinite(row.t))
     .sort((left, right) => left.t - right.t);
@@ -807,7 +1156,7 @@ export function reconstructRapierFlight({
     .filter((row) => row?.k === "st" && Number.isSafeInteger(row.q))
     .sort((left, right) => left.q - right.q || (left.t ?? 0) - (right.t ?? 0));
   const { decoded, gaps: decodeGaps } = decodeStateRows(stateRows);
-  const resolvedAlignment = resolveVideoAlignment(rows, header, {
+  const resolvedAlignment = resolveVideoAlignment(rows, clock, {
     videoStartEpochMs,
     videoSyncMarker,
     videoSyncSeconds,
@@ -819,20 +1168,54 @@ export function reconstructRapierFlight({
   };
   const track = decoded
     .filter(({ state }) => sortieMatches(state, sortieId))
-    .map(({ row, state }) => projectTrackPoint(row, state, header, videoOptions, perfRows));
+    .map(({ row, state }) => projectTrackPoint(row, state, clock, videoOptions, perfRows));
   const intervals = continuousIntervals(track);
   const intervalCoverage = coverageFromIntervals(intervals, videoOptions.videoDurationS);
   const summary = summarizeTrack(track);
   const videoTrack = track.filter((point) => point.video_s !== undefined);
   const videoSummary = videoTrack.length ? summarizeTrack(videoTrack) : null;
-  const performance = projectPerformance(perfRows, header, videoOptions);
+  const performance = projectPerformance(perfRows, clock, videoOptions);
+  const performanceSummary = summarizePerformance(performance);
   const events = [
-    ...lifecycleEvents(rows, sortieId, header, videoOptions),
-    ...flightTestSyncEvents(rows, sortieId, header, videoOptions),
+    ...lifecycleEvents(rows, sortieId, clock, videoOptions),
+    ...flightTestSyncEvents(rows, sortieId, clock, videoOptions),
     ...detectEvents(track),
     ...detectGapBracketedThresholds(track),
     ...extremaEvents(track, summary),
   ].sort((left, right) => (left.session_ms ?? 0) - (right.session_ms ?? 0));
+  const gaps = [...decodeGaps, ...recordIntervalGaps(intervals)];
+  const coverage = {
+    input_rows: rawRowCount ?? rows.length,
+    merged_rows: rows.length,
+    state_rows: stateRows.length,
+    decoded_samples: track.length,
+    duplicate_rows_suppressed: Math.max(0, (rawRowCount ?? rows.length) - rows.length),
+    first_q: track[0]?.q ?? null,
+    last_q: track.at(-1)?.q ?? null,
+    first_session_ms: track[0]?.session_ms ?? null,
+    last_session_ms: track.at(-1)?.session_ms ?? null,
+    intervals,
+    ...intervalCoverage,
+    clock,
+    video_window: Number.isFinite(videoOptions.videoStartEpochMs) ? {
+      start_epoch_ms: videoOptions.videoStartEpochMs,
+      duration_s: videoOptions.videoDurationS,
+      samples_in_window: track.filter((point) => point.video_s !== undefined).length,
+      alignment: resolvedAlignment.alignment,
+      sync_marker_id: resolvedAlignment.markerId,
+      sync_marker_video_s: resolvedAlignment.markerVideoSeconds,
+    } : null,
+  };
+  const exposureSummary = summarizeExposure(track, gaps);
+  const audit = buildAudit({
+    clock,
+    coverage,
+    gaps,
+    track,
+    events,
+    performanceSummary,
+    exposureSummary,
+  });
 
   return {
     version: RECONSTRUCTION_VERSION,
@@ -848,31 +1231,13 @@ export function reconstructRapierFlight({
       decoded_bytes: source.decodedBytes,
       row_count: source.rowCount,
     })),
-    coverage: {
-      input_rows: rawRowCount ?? rows.length,
-      merged_rows: rows.length,
-      state_rows: stateRows.length,
-      decoded_samples: track.length,
-      duplicate_rows_suppressed: Math.max(0, (rawRowCount ?? rows.length) - rows.length),
-      first_q: track[0]?.q ?? null,
-      last_q: track.at(-1)?.q ?? null,
-      first_session_ms: track[0]?.session_ms ?? null,
-      last_session_ms: track.at(-1)?.session_ms ?? null,
-      intervals,
-      ...intervalCoverage,
-      video_window: Number.isFinite(videoOptions.videoStartEpochMs) ? {
-        start_epoch_ms: videoOptions.videoStartEpochMs,
-        duration_s: videoOptions.videoDurationS,
-        samples_in_window: track.filter((point) => point.video_s !== undefined).length,
-        alignment: resolvedAlignment.alignment,
-        sync_marker_id: resolvedAlignment.markerId,
-        sync_marker_video_s: resolvedAlignment.markerVideoSeconds,
-      } : null,
-    },
-    gaps: [...decodeGaps, ...recordIntervalGaps(intervals)],
+    coverage,
+    gaps,
     summary,
     video_summary: videoSummary,
-    performance_summary: summarizePerformance(performance),
+    performance_summary: performanceSummary,
+    exposure_summary: exposureSummary,
+    audit,
     events,
     track,
     performance,
@@ -899,7 +1264,11 @@ const CSV_COLUMNS = [
   "mach", "indicated_airspeed_kts", "true_airspeed_kts", "ground_speed_kts",
   "alt_ft", "radar_alt_ft", "vertical_speed_fpm",
   "heading_deg", "pitch_deg", "bank_deg", "aoa_deg",
-  "g_actual", "requested_g_cmd", "rapier_mission_phase",
+  "g_actual", "g_hardmax", "requested_g_cmd", "requested_envelope_override",
+  "dynamic_pressure_kpa", "rapier_over_q",
+  "time_compression_requested_factor", "time_compression_safety_factor_cap",
+  "time_compression_factor", "time_compression_inhibit_reason",
+  "rapier_mission_phase",
   "rapier_mission_phase_label", "rapier_mission_phase_name",
   "rapier_target_altitude_ft", "fuel_lb", "range_m", "closure_kts", "governor_level",
 ];

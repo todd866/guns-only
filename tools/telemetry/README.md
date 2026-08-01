@@ -109,6 +109,26 @@ prefix narrow and request another cursor only deliberately.
 Run from the repository root with the private store token in the environment. There is no token CLI
 option, so it cannot be copied into command output by argument handling:
 
+### Credentials, once
+
+The Blob token is created by the Vercel Blob integration and is marked sensitive: `vercel env
+pull` returns it **empty**, and `vercel blob` cannot mint one either. There is no CLI path to it.
+Every session that tries rediscovers the same dead end and then works around it, which is worse
+than having no telemetry at all -- the diagnosis quietly falls back to guessing.
+
+So paste it once into `~/.config/guns-only/telemetry.env` (mode `0600`) and every tool here picks
+it up from then on, in this shell and every future one:
+
+```sh
+install -m 700 -d ~/.config/guns-only
+printf 'BLOB_READ_WRITE_TOKEN=%s\n' 'vercel_blob_rw_...' > ~/.config/guns-only/telemetry.env
+chmod 600 ~/.config/guns-only/telemetry.env
+```
+
+`TELEMETRY_ADMIN_TOKEN` and `TELEMETRY_REPORT_TOKEN` go in the same file. The environment always
+wins, so an explicit `TOKEN=... node tools/telemetry/...` still overrides the file, and a file
+readable beyond its owner is refused rather than used.
+
 ```sh
 export BLOB_READ_WRITE_TOKEN='load-this-from-a-secure-local-source'
 node tools/telemetry/list.mjs --prefix 'telemetry/' --limit 50 \
@@ -244,8 +264,33 @@ observed control/phase dwell, video alignment, performance samples, and SHA-256 
 source files. Sync markers are first-class timeline events with their derived video time. The
 optional CSV is intended for plots and notebooks.
 
+The output also contains `audit` and `exposure_summary`. The audit calls out clock uncertainty,
+coverage gaps, cold-label lag, unexplained phase jumps, frame stalls, cost-dropped fast-time ticks,
+abrupt autonomous handoffs, and observed structural/dynamic-pressure/thermal exposure. Exposure is
+raw evidence only: the tool explicitly reports damage assessment and cost projection as
+`not_computed`, leaving the versioned service-life and economic models to price inspection, repair,
+replacement, or loss later.
+
+Current Rapier sorties also finalize a bounded kernel-authored
+`guns-only.service-life-sortie.v1` record. Its snapshot seam publishes the record hash, evidence
+status, peak load/q, observed exceedance dwell, minimum thermal-proxy margin, and whether an
+engineering review is warranted. These fields are retained by the compact reconstruction. They do
+not ground an aircraft or book money: both `service_life_damage_assessment` and
+`service_life_cost_projection` remain `not_computed` until a separately versioned assessment and
+maintenance authority consumes the immutable record.
+
+The dealt Rapier operations mission separately projects
+`rapier.operations.allocation-credit.v1` boundary fields: explicit economy opt-in, target contract,
+fictional credit basis, finalized record application key, kernel-authored line items, sortie net,
+and whether an exceedance inspection was reserved. The reconstructor retains these fields so an
+analyst can reconcile the debrief with the same immutable sortie evidence. F-22 arcade fights,
+Rapier Circuits, and the fixed engineering intercept publish `rapier_economy_active:false`; target
+or airframe names alone never activate a ledger.
+
 Mission-phase event labels come from the numeric hot-state phase code. The independently recorded
 cold text label and phase reason remain in the evidence so a transition-time UI lag is visible
 instead of silently becoming the reconstruction's ground truth. Recording alignment uses
-`header.t0 + row.t`; pass the recording's actual epoch metadata rather than inferring it from the
-filename.
+the header's declared monotonic origin plus `row.t`. For older headers, a stable
+`wall_epoch_ms - row.t` sync-marker anchor automatically repairs a proven offset and records the
+exact correction. Without such an anchor the tool keeps the original timestamps but reports
+`legacy_unverified`; it never guesses a correction from the filename or MOV creation time.

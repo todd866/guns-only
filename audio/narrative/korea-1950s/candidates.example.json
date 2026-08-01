@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "1.0.0",
+  "auditionId": "audition.korea-1951.armstrong-cable-strike.v1",
+  "instructions": [
+    "Copy this file outside the public repository or to an ignored local path.",
+    "Use the voices command to list provider voices after setting the provider API key.",
+    "Add at least three non-imitative candidates for each speaker before a serious blind audition.",
+    "Do not add API keys, historical recordings or voice-clone source files."
+  ],
+  "candidates": []
+}

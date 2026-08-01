@@ -4,10 +4,15 @@ import {
   CONTROL_BINDINGS,
   controlCodeLabel,
   keyboardMapForSettings,
+  loadPlayerSettings,
   normalisePlayerSettings,
   rebindControl,
   resetControlBindings,
 } from "../player_settings.js";
+
+const storageWith = (value) => ({
+  getItem: () => value === undefined ? null : JSON.stringify(value),
+});
 
 test("settings normalisation is bounded and produces one unique key per action", () => {
   const settings = normalisePlayerSettings({
@@ -67,4 +72,17 @@ test("Knock It Off is remappable without creating a second action on O", () => {
   assert.equal(keyboardMapForSettings(rebound).get("KeyF"), 10);
   assert.equal(keyboardMapForSettings(rebound).get("KeyO"), 8);
   assert.equal(new Set(Object.values(rebound.bindings)).size, CONTROL_BINDINGS.length);
+});
+
+test("first visit inherits reduced motion while an explicit saved choice always wins", () => {
+  const reduce = () => ({ matches: true });
+  const noReduce = () => ({ matches: false });
+
+  assert.equal(loadPlayerSettings(storageWith(undefined), reduce).reducedMotion, true);
+  assert.equal(loadPlayerSettings(storageWith({ audio: false }), reduce).reducedMotion, true,
+    "legacy settings without a motion choice should inherit the current OS preference");
+  assert.equal(loadPlayerSettings(storageWith({ reducedMotion: false }), reduce).reducedMotion,
+    false, "an explicit opt-out must not be overwritten by the OS default");
+  assert.equal(loadPlayerSettings(storageWith({ reducedMotion: true }), noReduce).reducedMotion,
+    true, "an explicit opt-in must remain durable when the OS default differs");
 });

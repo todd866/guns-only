@@ -8,9 +8,28 @@ import {
   UKRAINE_SOFT_WORLD_HAZE_MIX,
   UKRAINE_SOFT_WORLD_HAZE_RGB,
 } from "../environment/soft_world_atmosphere.js";
-import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=199";
-import rapierV1Definition from "../../airframes/rapier_v1.embedded.js";
+import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=238";
+import {
+  addSemanticSocket,
+  annotateProceduralFallback,
+  applyProceduralFinish,
+  createFinGeometry,
+  createLoftGeometry,
+  createPlanformGeometry,
+  makeMaterial,
+} from "./airframe_primitives.js?v=238";
+import rapierV2Definition from "../../airframes/rapier_v2.embedded.js?v=238";
 import { createRapierLaunchFx } from "../effects/rapier_launch_fx.js";
+
+export {
+  addSemanticSocket,
+  annotateProceduralFallback,
+  applyProceduralFinish,
+  createFinGeometry,
+  createLoftGeometry,
+  createPlanformGeometry,
+  makeMaterial,
+};
 
 // Pure Three.js scene/model builders extracted verbatim from app.js. Runtime-derived configuration
 // is owned by app.js and injected once via configureSceneBuilders() before any builder runs, so
@@ -28,95 +47,6 @@ export function configureSceneBuilders(config) {
   MAX_TRACERS = config.maxTracers;
   fogDensityForVisibility = config.fogDensityForVisibility;
   CLEAR_AIR_VISIBILITY_M = config.clearAirVisibilityM;
-}
-
-export function applyProceduralFinish(material, options = {}) {
-  const grain = options.grain ?? 0.08;
-  const grainScale = options.grainScale ?? 1.2;
-  const panels = options.panels ?? 0;
-  const panelScale = options.panelScale ?? 0.5;
-  const hullBands = options.hullBands === true;
-  material.onBeforeCompile = (shader) => {
-    shader.uniforms.uFinishGrain = { value: grain };
-    shader.uniforms.uFinishScale = { value: grainScale };
-    shader.uniforms.uPanelStrength = { value: panels };
-    shader.uniforms.uPanelScale = { value: panelScale };
-    shader.vertexShader = shader.vertexShader
-      .replace("varying vec3 vViewPosition;", `
-        varying vec3 vViewPosition;
-        varying vec3 vFinishPosition;
-      `)
-      .replace("#include <begin_vertex>", `
-        #include <begin_vertex>
-        vFinishPosition = position;
-      `);
-    shader.fragmentShader = shader.fragmentShader
-      .replace("varying vec3 vViewPosition;", `
-        varying vec3 vViewPosition;
-        varying vec3 vFinishPosition;
-        uniform float uFinishGrain;
-        uniform float uFinishScale;
-        uniform float uPanelStrength;
-        uniform float uPanelScale;
-
-        float finishNoise(vec3 p) {
-          float a = sin(dot(p, vec3(1.73, 3.17, 2.11)));
-          float b = sin(dot(p, vec3(-4.13, 1.37, 3.71)) + a * 1.31);
-          float c = sin(dot(p, vec3(7.07, -2.43, 1.19)) + b * 0.83);
-          return 0.5 + 0.25 * b + 0.25 * c;
-        }
-
-        float finishPanel(vec3 p) {
-          vec3 cell = abs(fract(p) - 0.5);
-          float edge = max(max(cell.x, cell.y), cell.z);
-          return smoothstep(0.472, 0.497, edge);
-        }
-      `)
-      .replace("vec4 diffuseColor = vec4( diffuse, opacity );", `
-        vec4 diffuseColor = vec4( diffuse, opacity );
-        float finishValue = finishNoise(vFinishPosition * uFinishScale);
-        float panelValue = finishPanel(vFinishPosition * uPanelScale);
-      `)
-      .replace("#include <color_fragment>", `
-        #include <color_fragment>
-        diffuseColor.rgb *= 1.0 + (finishValue - 0.5) * uFinishGrain * 0.32;
-        diffuseColor.rgb *= 1.0 - panelValue * uPanelStrength;
-        ${hullBands ? `
-          float antiFouling = 1.0 - smoothstep(-18.6, -17.7, vFinishPosition.y);
-          float bootTop = smoothstep(-18.6, -18.15, vFinishPosition.y)
-            * (1.0 - smoothstep(-17.75, -17.3, vFinishPosition.y));
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.115, 0.057, 0.052), antiFouling * 0.82);
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.012, 0.018, 0.020), bootTop * 0.96);
-        ` : ""}
-      `)
-      .replace("#include <roughnessmap_fragment>", `
-        #include <roughnessmap_fragment>
-        roughnessFactor = clamp(roughnessFactor
-          + (finishValue - 0.5) * uFinishGrain
-          + panelValue * uPanelStrength * 0.7, 0.075, 1.0);
-      `);
-  };
-  material.customProgramCacheKey = () => `procedural-finish-${hullBands ? 1 : 0}`;
-  return material;
-}
-
-export function makeMaterial(color, roughness = 0.72, metalness = 0.08, emissive = 0x000000,
-  options = {}) {
-  // Painted military aluminium is primarily a rough dielectric. MeshPhysicalMaterial supplies a
-  // calibrated Fresnel response; the tiny analytic grain breaks up broad highlights without maps.
-  const material = new THREE.MeshPhysicalMaterial({
-    color,
-    roughness,
-    metalness,
-    emissive,
-    ior: options.ior ?? 1.48,
-    specularIntensity: options.specularIntensity ?? 0.62,
-    specularColor: options.specularColor ?? 0xd9e2e3,
-    clearcoat: options.clearcoat ?? 0,
-    clearcoatRoughness: options.clearcoatRoughness ?? 0.48,
-    envMapIntensity: options.envMapIntensity ?? 0.74,
-  });
-  return applyProceduralFinish(material, options);
 }
 
 export function createLitEnvironment(renderer) {
@@ -165,26 +95,6 @@ export function box(group, size, position, material, rotation = null) {
   if (rotation) mesh.rotation.set(rotation.x, rotation.y, rotation.z);
   group.add(mesh);
   return mesh;
-}
-
-export function addSemanticSocket(parent, name, x, y, z) {
-  const socket = new THREE.Object3D();
-  socket.name = name;
-  socket.position.set(x, y, z);
-  socket.userData.semanticSocket = name;
-  parent.add(socket);
-  return socket;
-}
-
-export function annotateProceduralFallback(object, context = {}) {
-  const parameters = context?.parameters && typeof context.parameters === "object"
-    ? Object.freeze({ ...context.parameters })
-    : Object.freeze({});
-  object.userData.proceduralFallback = Object.freeze({
-    assetId: typeof context?.assetId === "string" ? context.assetId : null,
-    requested: typeof context?.requested === "string" ? context.requested : null,
-    parameters,
-  });
 }
 
 export function deckOverlayBox(group, size, position, material) {
@@ -1018,9 +928,9 @@ export function createRapierDispersedStrip(context = {}) {
     recoveryWires.push(recoveryWire);
   }
 
-  // Live electromagnetic launcher: 433.86 m of flat rail, then an 86.14 m constant-radius arc
-  // rising 8.99 m to a twelve-degree lip. This MIRRORS CatapultLaunchModel exactly —
-  // RampNormalG 3.0 gives a 411.29 m radius at 110 m/s. The old 360 + 160 m / 16.7 m geometry
+  // Live electromagnetic launcher: 417.49 m of flat rail, then a 102.51 m constant-radius arc
+  // rising 10.70 m to a twelve-degree lip. This MIRRORS CatapultLaunchModel exactly —
+  // RampNormalG 3.0 gives a 489.46 m radius at 120 m/s. The old 360 + 160 m / 16.7 m geometry
   // belonged to the superseded 150 m/s study and must not leak back into the live presentation.
   // Matches CatapultLaunchModel's cross offset for this beat. It was -7 m — the DECK default —
   // which put an 8 m gallery under a 10 m berm directly on the 48 m strip's touchdown zone.
@@ -1030,7 +940,7 @@ export function createRapierDispersedStrip(context = {}) {
   const railHeadHeightM = 0.15;
   const aircraftSupportReferenceHeightM = 0.85;
   const rampAngleRad = 12 * Math.PI / 180;
-  const arcRadiusM = 110 * 110 / (3.0 * 9.80665);
+  const arcRadiusM = 120 * 120 / (3.0 * 9.80665);
   const arcLengthM = rampAngleRad * arcRadiusM;
   const flatLengthM = strokeM - arcLengthM;
   const railAngleAt = (d) => d <= flatLengthM
@@ -1178,7 +1088,7 @@ export function createRapierDispersedStrip(context = {}) {
     new THREE.Vector3(catapultX, galleryHeight + 1.6, galleryMidZ), earth)
     .name = "LAUNCH_GALLERY_BERM_CAP";
 
-  // Interior ribs every 10 m — speed strobe at 110 m/s; only speed cue in the bore.
+  // Interior ribs every 10 m — speed strobe at 120 m/s; only speed cue in the bore.
   const ribLampPositions = [];
   const ribPositions = [];
   for (let z = railStartZ - 10; z > galleryEndZ; z -= 10) {
@@ -1626,74 +1536,6 @@ export function createCarrierRuntimePresentation() {
   };
 }
 
-export function createLoftGeometry(stations, radialSegments = 18) {
-  const positions = [];
-  const indices = [];
-  for (const station of stations) {
-    for (let segment = 0; segment < radialSegments; segment++) {
-      const theta = segment / radialSegments * Math.PI * 2;
-      positions.push(
-        Math.cos(theta) * station.rx,
-        station.y + Math.sin(theta) * station.ry,
-        station.z,
-      );
-    }
-  }
-  for (let station = 0; station < stations.length - 1; station++) {
-    const a = station * radialSegments;
-    const b = a + radialSegments;
-    for (let segment = 0; segment < radialSegments; segment++) {
-      const next = (segment + 1) % radialSegments;
-      indices.push(a + segment, a + next, b + segment);
-      indices.push(a + next, b + next, b + segment);
-    }
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setIndex(indices);
-  geometry.computeVertexNormals();
-  return geometry;
-}
-
-export function createPlanformGeometry(points, thickness = 0.16, bevel = 0.045) {
-  const shape = new THREE.Shape();
-  shape.moveTo(points[0][0], points[0][1]);
-  for (let i = 1; i < points.length; i++) shape.lineTo(points[i][0], points[i][1]);
-  shape.closePath();
-  const geometry = new THREE.ExtrudeGeometry(shape, {
-    depth: Math.max(0.02, thickness - bevel * 2),
-    steps: 1,
-    bevelEnabled: true,
-    bevelSegments: 1,
-    bevelSize: bevel,
-    bevelThickness: bevel,
-    curveSegments: 1,
-  });
-  geometry.rotateX(Math.PI / 2);
-  geometry.translate(0, thickness * 0.5, 0);
-  geometry.computeVertexNormals();
-  return geometry;
-}
-
-export function createFinGeometry(points, thickness = 0.12) {
-  const shape = new THREE.Shape();
-  shape.moveTo(points[0][0], points[0][1]);
-  for (let i = 1; i < points.length; i++) shape.lineTo(points[i][0], points[i][1]);
-  shape.closePath();
-  const geometry = new THREE.ExtrudeGeometry(shape, {
-    depth: thickness * 0.55,
-    bevelEnabled: true,
-    bevelSegments: 1,
-    bevelSize: thickness * 0.22,
-    bevelThickness: thickness * 0.22,
-    steps: 1,
-  });
-  geometry.rotateY(-Math.PI / 2);
-  geometry.translate(thickness * 0.5, 0, 0);
-  geometry.computeVertexNormals();
-  return geometry;
-}
-
 export function addFighterPanelLines(group, material) {
   const positions = [];
   const add = (ax, ay, az, bx, by, bz) => positions.push(ax, ay, az, bx, by, bz);
@@ -1865,13 +1707,11 @@ export function createDrone(context = {}) {
   return group;
 }
 
-/// Procedural compatibility model for the fictional Rapier public-data surrogate. Dimensions match
-/// the reduced-order flight model's 13 m length and 7.35 m span; the opaque sensor nose/escape-pod
-/// spine deliberately has no glass canopy, and one blended propulsion tunnel distinguishes it from
-/// the twin-engine compatibility fighter. OML is loaded from the Airframe Definition (embedded sync
-/// copy of airframes/rapier.v1.json) — do not reintroduce a second hand-authored mesh path.
+/// Shape-first production model for the fictional Rapier public-data surrogate. The embedded v2
+/// definition is the same canonical exterior that derives runtime area, mass, inertia, inlet and
+/// thermal zones; do not reintroduce a second hand-authored mesh path.
 export function createRapier(context = {}) {
-  const def = context.definition ?? rapierV1Definition;
+  const def = context.definition ?? rapierV2Definition;
   return createAirframeFromDefinition(def, context);
 }
 
@@ -2477,6 +2317,49 @@ export function createAwacs() {
   return group;
 }
 
+export function createTransport() {
+  const group = new THREE.Group();
+  const skin = makeMaterial(0xaeb8bb, 0.58, 0.22);
+  const lower = makeMaterial(0x69777d, 0.74, 0.18);
+  const dark = makeMaterial(0x202a2f, 0.68, 0.26);
+  const glass = makeMaterial(0x263b48, 0.26, 0.48, 0x061118);
+
+  cylinder(group, 2.45, 43.0, new THREE.Vector3(0, 0, 0), skin, 22);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(2.46, 22, 12), skin);
+  nose.scale.z = 0.78;
+  nose.position.z = -21.5;
+  group.add(nose);
+  const tailCone = new THREE.Mesh(new THREE.ConeGeometry(2.1, 8.5, 18), lower);
+  tailCone.rotation.x = Math.PI / 2;
+  tailCone.position.z = 25.5;
+  group.add(tailCone);
+
+  box(group, new THREE.Vector3(43.0, 0.52, 8.2), new THREE.Vector3(0, 0.0, 1.7), skin);
+  box(group, new THREE.Vector3(15.0, 0.34, 5.2), new THREE.Vector3(0, 1.0, 18.0), lower);
+  box(group, new THREE.Vector3(0.42, 8.4, 5.8), new THREE.Vector3(0, 3.5, 18.4), lower);
+
+  for (const x of [-9.2, 9.2]) {
+    cylinder(group, 1.35, 6.8, new THREE.Vector3(x, -1.25, 1.2), dark, 18);
+    const intake = new THREE.Mesh(
+      new THREE.CircleGeometry(1.02, 18),
+      new THREE.MeshBasicMaterial({ color: 0x0b1215, side: THREE.DoubleSide }),
+    );
+    intake.rotation.y = Math.PI;
+    intake.position.set(x, -1.25, -2.22);
+    group.add(intake);
+  }
+
+  const cockpit = box(
+    group,
+    new THREE.Vector3(3.75, 1.0, 1.15),
+    new THREE.Vector3(0, 1.2, -20.9),
+    glass,
+  );
+  cockpit.rotation.x = -0.10;
+  group.userData.targetArchetype = "transport";
+  return group;
+}
+
 // Shared ocean mesh used by the decision-support sea below. (It formerly lived between the retired
 // createSky/createSea builders; those were deleted in Build 56 but this helper is still live.)
 export function createOceanGeometry(radius = 360000, radialSegments = 145, angularSegments = 192) {
@@ -2729,8 +2612,8 @@ export function createDecisionSupportSea() {
   });
   const mesh = new THREE.Mesh(createOceanGeometry(
     650000,
-    mobileControls ? 84 : 104,
-    mobileControls ? 120 : 156,
+    VISUAL_QUALITY.oceanRadialSegments,
+    VISUAL_QUALITY.oceanAngularSegments,
   ), material);
   mesh.name = "DECISION_SUPPORT_SEA";
   mesh.frustumCulled = false;

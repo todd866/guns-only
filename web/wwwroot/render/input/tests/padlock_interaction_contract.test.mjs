@@ -262,7 +262,8 @@ test("padlock retains stabilized primary flight data instead of swapping to a du
     /drawAirdataLabels\(frame\.state, tapeInset, this\.width - tapeInset, display\)/,
     "secondary G/S and V/S must use the same bounded display filter");
   assert.match(draw, /value:\s*display\.altitudeFt[\s\S]*?displayValue:\s*display\.altitudeDigits/);
-  assert.match(draw, /drawHeadingTape\(frame\.state,[^\n]*display/,
+  assert.match(draw,
+    /drawHeadingTape\(frame\.state,\s*\{[\s\S]*?headingDeg:\s*display\.headingDeg[\s\S]*?headingDigits:\s*display\.headingDigits/,
     "heading scale/digits must receive stabilized presentation truth");
   assert.doesNotMatch(draw, /if \(!frame\.padlock\)\s*\{\s*const tapeInset/,
     "IAS, altitude, G, power and fuel are primary data and must remain present in padlock");
@@ -299,25 +300,32 @@ test("padlock-only orientation and target cues solve roll-then-pull without perm
     "ordinary camera-servo lag after first acquisition must not blank physical steering");
   assert.match(padlockSa, /CAMERA SETTLING/,
     "camera lag may be reported but must not masquerade as loss of physical steering");
-  // The roll director lives outside a body-fixed locator ADI: a moving sky/earth ball and bank
-  // pointer carry actual attitude, while the gate carries only signed body-frame roll error.
-  // This keeps camera-relative steering from being mistaken for ownship bank or pitch.
-  // The method definition's BODY brace: the destructured parameter list has its own braces, so
-  // anchor past the signature's closing "})" (4-space indent is unique to the definition).
-  const inset = balancedBlock(hudSource, "targetPosition,\n  })");
+  // The live presentation is the ADI, not a banner. A command to the pilot is graphical: the
+  // roll error is a gate on the instrument, not the string "ROLL R 167". The text strip that
+  // used to carry it also sat across the ball's horizon, which is the part that must stay
+  // readable, so it is not drawn at all.
+  const adi = balancedBlock(
+    hudSource,
+    "pitchDeg, radarAltFt, sinkFpm, targetPosition,\n  })",
+  );
   assert.match(padlockSa, /this\.drawPadlockLocatorInset\(frame/,
-    "padlock steering must render through the body-fixed locator inset");
-  assert.match(inset, /rotate\(-bankRad\)/,
-    "the inset ADI must derive attitude from ownship bank, never the camera");
-  assert.match(inset, /gateAngleFromUpRad \* fraction/,
-    "the shortest roll arc needs repeated directional chevrons, not a text instruction");
-  assert.match(inset, /TARGET AFT/,
-    "aft-hemisphere geometry must be named, not left for the pilot to infer");
-  assert.match(inset,
-    /Captured: the roll task has ended[\s\S]*?fraction \* \(ballRadius \* 0\.48\)/,
-    "capture must become an unmistakable graphical pull flow inside the attitude ball");
-  assert.match(padlockSa, /ROLL \$\{direction\} \$\{degrees\}/,
-    "the graphical director must be reinforced by an explicit signed roll command");
+    "padlock must render the attitude instrument");
+  assert.doesNotMatch(padlockSa, /this\.drawPadlockActionStrip\(frame/,
+    "the text action strip must not return: it restated the dial and covered its horizon");
+  assert.match(adi, /lift-plane gate/,
+    "actual bank must be readable off the instrument without decoding the director");
+  assert.match(adi, /directorRadius/,
+    "the roll command must be a director mark on the dial, not a printed heading");
+  assert.match(adi, /"PULL"/,
+    "capture must end the roll task with one unmistakable pull cue");
+  assert.match(adi, /bankDeg: Number\(state\.bank_deg\)/,
+    "the ball must read attitude from the jet, never from the slewed padlock camera");
+  assert.doesNotMatch(adi, /setTransform\(/,
+    "the instrument must preserve the HUD's HiDPI canvas transform");
+  assert.match(adi, /padlockAttitudeModel\(\{/,
+    "the attitude instrument must be driven by the shared attitude model");
+  assert.match(adi, /ctx\.save\(\)[\s\S]*?ctx\.restore\(\)/,
+    "instrument-local transforms must be bounded by save/restore");
   assert.match(padlockSa, /RELEASE LOOK TO REACQUIRE/,
     "temporary manual look must suppress steering and teach the return behavior once");
   assert.match(padlockSa, /ACQUIRING \$\{targetLabel\}/,

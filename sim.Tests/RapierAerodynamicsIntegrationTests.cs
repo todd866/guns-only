@@ -73,9 +73,9 @@ public sealed class RapierAerodynamicsIntegrationTests {
         Assert.True(normalLawG < physicalBreakG * 0.55,
             $"ordinary normal-law G {normalLawG:F2} must be materially less than physical-break G {physicalBreakG:F2}");
 
-        Assert.InRange(p.IxxKgM2, 13_400.0, 13_450.0);
-        Assert.InRange(p.IyyKgM2, 87_500.0, 87_650.0);
-        Assert.InRange(p.IzzKgM2, 96_000.0, 96_150.0);
+        Assert.Equal(RapierV2Design.RollInertiaKgM2, p.IxxKgM2, 6);
+        Assert.Equal(RapierV2Design.PitchInertiaKgM2, p.IyyKgM2, 6);
+        Assert.Equal(RapierV2Design.YawInertiaKgM2, p.IzzKgM2, 6);
 
         // Explicit CommandedAlphaRad exposes the physical CL break; ordinary GDemand does not.
         var normalSim = new AircraftSim(
@@ -216,13 +216,17 @@ public sealed class RapierAerodynamicsIntegrationTests {
         AtmosphericState air = StandardAtmosphere1976.Instance.Sample(altitudeM);
         double speedMps = air.SpeedOfSoundMps * mach;
         double throttle = p.MaxThrustFraction;
+        double incidence = RapierAerodynamics.InletDesignFlowIncidenceRad;
 
         var onDesign = new AircraftSim(
-            LevelAt(altitudeM, speedMps, p.MassKg, AttitudeForAlphaBeta(0.0, 0.0)), p);
+            LevelAt(altitudeM, speedMps, p.MassKg,
+                AttitudeForAlphaBeta(incidence, 0.0)), p);
         var alphaOff = new AircraftSim(
-            LevelAt(altitudeM, speedMps, p.MassKg, AttitudeForAlphaBeta(0.28, 0.0)), p);
+            LevelAt(altitudeM, speedMps, p.MassKg,
+                AttitudeForAlphaBeta(incidence + 0.28, 0.0)), p);
         var betaOff = new AircraftSim(
-            LevelAt(altitudeM, speedMps, p.MassKg, AttitudeForAlphaBeta(0.0, 0.28)), p);
+            LevelAt(altitudeM, speedMps, p.MassKg,
+                AttitudeForAlphaBeta(incidence, 0.28)), p);
 
         var hold = new PilotCommand(1.0, 0.0, throttle, 0.0);
         onDesign.Step(hold, Dt);
@@ -244,6 +248,14 @@ public sealed class RapierAerodynamicsIntegrationTests {
             alphaOff.LastEngineOperatingPoint.NetThrustN / onDesign.LastEngineOperatingPoint.NetThrustN,
             alphaOff.InletFlowRecovery,
             5);
+        Assert.Equal(alphaOff.LastEngineOperatingPoint.NetThrustN,
+            alphaOff.LastEngineOperatingPoint.TurbineThrustN
+                + alphaOff.LastEngineOperatingPoint.RamjetThrustN,
+            6);
+        Assert.Equal(alphaOff.InletFlowRecovery,
+            alphaOff.LastEngineOperatingPoint.RamjetThrustN
+                / onDesign.LastEngineOperatingPoint.RamjetThrustN,
+            5);
     }
 
     [Fact]
@@ -254,10 +266,12 @@ public sealed class RapierAerodynamicsIntegrationTests {
         AtmosphericState air = StandardAtmosphere1976.Instance.Sample(altitudeM);
         double speedMps = air.SpeedOfSoundMps * mach;
         double throttle = p.MaxThrustFraction;
-        double tripAlpha = RapierAerodynamics.InletUnstartTripFlowAngleRad + 0.01;
+        double incidence = RapierAerodynamics.InletDesignFlowIncidenceRad;
+        double tripAlpha = incidence + RapierAerodynamics.InletUnstartTripFlowAngleRad + 0.01;
 
         var onDesign = new AircraftSim(
-            LevelAt(altitudeM, speedMps, p.MassKg, AttitudeForAlphaBeta(0.0, 0.0)), p);
+            LevelAt(altitudeM, speedMps, p.MassKg,
+                AttitudeForAlphaBeta(incidence, 0.0)), p);
         var tripped = new AircraftSim(
             LevelAt(altitudeM, speedMps, p.MassKg, AttitudeForAlphaBeta(tripAlpha, 0.0)), p);
         var hold = new PilotCommand(1.0, 0.0, throttle, 0.0);
@@ -271,12 +285,24 @@ public sealed class RapierAerodynamicsIntegrationTests {
         Assert.True(tripped.LastEngineOperatingPoint.NetThrustN
             < onDesign.LastEngineOperatingPoint.NetThrustN
                 * RapierAerodynamics.InletUnstartRecoveryFloor + 1.0);
+        Assert.Equal(tripped.LastEngineOperatingPoint.NetThrustN,
+            tripped.LastEngineOperatingPoint.TurbineThrustN
+                + tripped.LastEngineOperatingPoint.RamjetThrustN,
+            6);
+        Assert.Equal(tripped.InletFlowRecovery,
+            tripped.LastEngineOperatingPoint.TurbineThrustN
+                / onDesign.LastEngineOperatingPoint.TurbineThrustN,
+            5);
+        Assert.Equal(tripped.InletFlowRecovery,
+            tripped.LastEngineOperatingPoint.RamjetThrustN
+                / onDesign.LastEngineOperatingPoint.RamjetThrustN,
+            5);
 
         // Clear path is unit-tested on NextInletUnstartState; prove sticky mid-band holds.
         Assert.True(RapierAerodynamics.NextInletUnstartState(
-            mach, 0.08, 0.0, previouslyUnstarted: true));
+            mach, incidence + 0.08, 0.0, previouslyUnstarted: true));
         Assert.False(RapierAerodynamics.NextInletUnstartState(
-            mach, 0.0, 0.0, previouslyUnstarted: true));
+            mach, incidence, 0.0, previouslyUnstarted: true));
     }
 
     [Fact]

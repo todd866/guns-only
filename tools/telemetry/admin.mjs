@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { link, mkdir, stat, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { environmentWithCredentials } from "./credentials.mjs";
 
 const DEFAULT_ENDPOINT = "https://guns-only.com/telemetry-admin";
 // Canonical production doors only — the retired vercel.app host now 308-redirects, and this
@@ -164,6 +165,7 @@ function normalizeEtag(value) {
 }
 
 export async function main(args = process.argv.slice(2), environment = process.env, io = console) {
+  environment = environmentWithCredentials(environment);
   const options = parseArguments(args);
   if (options.help) {
     io.log(HELP);

@@ -1,328 +1,730 @@
 {
-  "version": 4,
-  "provider": "openai",
-  "model": "gpt-4o-mini-tts-2025-12-15",
+  "version": 8,
+  "provider": "hume",
+  "model": "1",
   "response_format": "wav",
   "disclosure": "Radio speech may use AI-generated training voices.",
-  "quality_note": "Pinned to the current 2025-12-15 snapshot and authored for brisk delivery. The generator also supports ElevenLabs eleven_v3 for the character-cast production pass; every provider/model change still requires an owner-ear acceptance run.",
+  "quality_note": "Hume Octave 1 cast using public-library voices. The project owner approved production rights on 2026-08-01; casting remains provisional pending final owner-ear review. Short acting descriptions and per-line rates are independently QA-gated for exact words and audible duration.",
   "roles": {
     "tower": {
-      "voice": "cedar",
-      "speed": 1.08,
-      "instructions": "You are Rapier Tower: a senior tower controller in his late forties, twenty years of fast-jet patterns behind him. You always follow the exact rulebook — complete clearances, correct order, nothing abbreviated for cool. Clipped, level, quietly authoritative military radio cadence over a bandwidth-limited channel. No theatrical emotion. Natural aviation pronunciation; the callsign must be unmistakable."
-    },
-    "launch": {
-      "voice": "onyx",
-      "speed": 1.1,
-      "instructions": "You are Rapier Launch: the launch controller in the buried catapult's control bunker, speaking over flight-line noise. Firm, brisk, compressed delivery with the ritual cadence of a shot crew. Professional anticipation, never drama."
+      "voice_id": "82a76fb8-3524-4e87-9265-9795c8e4ede6",
+      "voice_name": "Male Protagonist",
+      "casting_status": "provisional cast; production rights approved by project owner; public HUME_AI library",
+      "speed": 1.15,
+      "description": "professional tower controller, concise connected task speech",
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "instructions": "American military tower controller on a busy local fighter frequency. Stable adult voice, narrow habitual pitch range, clear callsigns and numerals, natural radio compression. No announcer voice or command performance. Let the line-specific speech act determine rhythm and contour."
     },
     "controller": {
-      "voice": "ash",
-      "speed": 1.08,
-      "instructions": "You are CONTROL: an airborne command-and-control officer. Measured, detached, precise. Brevity words are read cleanly and without emphasis; the calm gets flatter as the stakes rise. Nothing leaks except compression."
+      "voice_id": "9c5a3d53-4a8c-4fa2-adad-8e61a830d0e8",
+      "voice_name": "Deep Male Conversational Voice",
+      "casting_status": "provisional cast; production rights approved by project owner; public HUME_AI library",
+      "speed": 1.5,
+      "description": "professional tactical controller, concise matter-of-fact task speech",
+      "talker_profile": "ground.controller.close-mic",
+      "transceiver_profile": "modern.uhf-am.ground",
+      "instructions": "American tactical air controller on an established fighter net. Stable adult voice, narrow habitual pitch range, clean consonants, natural radio compression. Brevity words are ordinary shared vocabulary. No announcer cadence or authority acting; use the line-specific timing and contour."
     },
     "lso": {
-      "voice": "onyx",
-      "speed": 1.14,
-      "instructions": "You are the landing signal officer on the flight-deck radio, eyes on the ball: coiled, intense, ultra-short transmissions timed to the half-second. Calm by default, instant explosive command the moment a pass decays. Never add words to the supplied call."
+      "voice_id": "89989d92-1de8-4e5d-97e4-23cd363e9788",
+      "voice_name": "Opinionated Guy",
+      "casting_status": "provisional cast; production rights approved by project owner; public HUME_AI library",
+      "speed": 1.4,
+      "description": "professional landing signal officer, compact controlled correction",
+      "talker_profile": "carrier.deck-lso.close-mic",
+      "transceiver_profile": "modern.uhf-am.deck",
+      "instructions": "American carrier landing signal officer speaking close to the microphone while watching the pass. Stable adult voice, narrow habitual pitch range, clear consonant onset. Never bark, shout, growl, add drama, or add words. Let the line-specific safety state determine timing and contour."
     },
     "pilot": {
-      "voice": "marin",
-      "speed": 1.1,
-      "instructions": "You are Ghost One One — the mission pilot, and you sound like a specific person: a chill, economical fast-jet pilot who trends toward brevity and sounding cool. Never recite the rulebook; ATC does that. Natural speech, military-clean, minimum syllables — '3 greens', 'gear to come', 'Land Ghost One One' — not 'three down and locked'. Slightly dry, understated, breath audible when the body is working, never theatrical. Standard calls are bored-precise and easy. Under G or employment the same chill gets clipped. Bad news (bingo, gear to come, emergency) is slightly concerned trying to stay chill — tighter and flatter, composure held on purpose. Preserve callsign and brevity-word clarity over a bandwidth-limited channel."
+      "voice_id": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
+      "voice_name": "Ito",
+      "casting_status": "provisional cast; production rights approved by project owner; public HUME_AI library",
+      "speed": 1.18,
+      "description": "fighter pilot occupied with flying, concise natural task speech",
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "instructions": "American Rapier pilot sealed inside the aircraft's composite pressure vessel, wearing the lightweight emergency oxygen mask that carries the close microphone. The vessel supplies the routine atmosphere: no continuous regulator rasp or exaggerated mask breathing. Stable adult voice, narrow habitual pitch range, clear callsign and numerals. Let workload affect breath and timing without cultivated coolness, heroics, or emotion acting."
     },
     "traffic-two": {
-      "voice": "verse",
-      "speed": 1.1,
-      "instructions": "You are Ghost One Two: the junior wingman in the pattern, crisp and slightly eager, still proving himself on the radio. Short, correct, a touch quick."
+      "voice_id": "b152864b-6720-496a-9d18-eaadb31516ee",
+      "voice_name": "Soft Male Conversationalist",
+      "casting_status": "provisional cast; production rights approved by project owner; public HUME_AI library",
+      "speed": 1.18,
+      "description": "young wingman occupied with flying, concise natural task speech",
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "instructions": "American Rapier wingman sealed inside the aircraft's pressure vessel, wearing the lightweight emergency oxygen mask that carries the close microphone. Routine cabin atmosphere, no continuous regulator rasp. Stable young-adult voice, narrow habitual pitch range, clear side number. No eagerness, swagger, announcer cadence, or emotion acting."
     },
     "traffic-three": {
-      "voice": "echo",
-      "speed": 1.08,
-      "instructions": "You are Ghost One Three: mid-tour, flat, utterly bored competence, flying the hundredth lap of this pattern. Minimum energy, perfect precision."
+      "voice_id": "f4703974-b6a1-45c8-ac72-72ea06e3dd43",
+      "voice_name": "Steve Frisch",
+      "casting_status": "provisional cast; production rights approved by project owner; public HUME_AI library",
+      "speed": 1.18,
+      "description": "adult wingman occupied with flying, concise natural task speech",
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "instructions": "American Rapier wingman sealed inside the aircraft's pressure vessel, wearing the lightweight emergency oxygen mask that carries the close microphone. Routine cabin atmosphere, no continuous regulator rasp. Stable adult voice, narrow habitual pitch range, slightly rough microphone onset, clear side number. No boredom acting, swagger, or dramatic emphasis."
     },
     "traffic-four": {
-      "voice": "ballad",
-      "speed": 1.06,
-      "instructions": "You are Ghost One Four: the old head of the flight. Relaxed, unhurried, minimum syllables, a hint of drawl. Nothing on this radio has ever surprised him."
+      "voice_id": "01854384-4e4e-48d4-90d1-b22f760a58b5",
+      "voice_name": "Male Podcaster",
+      "casting_status": "provisional cast; production rights approved by project owner; public HUME_AI library",
+      "speed": 1.1,
+      "description": "experienced wingman occupied with flying, concise natural task speech",
+      "talker_profile": "rapier.pressure-vessel.emergency-mask",
+      "transceiver_profile": "modern.uhf-am.airborne",
+      "instructions": "Older American Rapier pilot sealed inside the aircraft's pressure vessel, wearing the lightweight emergency oxygen mask that carries the close microphone. Routine cabin atmosphere, no continuous regulator rasp. Stable mature voice, narrow habitual pitch range, slight regional vowel color, clear side number. Do not perform age, drawl, confidence, boredom, or authority."
     }
   },
   "lines": [
     {
-      "id": "launch-cleared",
-      "role": "launch",
-      "text": "Ghost One One, cleared for launch.",
-      "direction": "Routine catapult shot, the tenth today: brisk, positive, the ritual cadence of a launch crew."
-    },
-    {
-      "id": "pilot-launch-readback",
-      "role": "pilot",
-      "text": "Launch Ghost One One.",
-      "direction": "Clearance readback in the house register, mirror of 'Land Ghost One One': cockpit ritual, one steadying breath, the last words before the stroke."
-    },
-    {
       "id": "pilot-initial",
       "role": "pilot",
       "text": "Ghost One One, initial.",
-      "direction": "Chill pilot, routine gate: bored-precise. Intentions wait for the gear call (AETCMAN)."
+      "target_duration_s": [0.75, 1.05],
+      "speed": 1.4,
+      "description": "fighter pilot, routine arrival call, callsign connected to initial, matter-of-fact",
+      "direction": "Arrival report; no phrase boundary after the callsign. Information focus is initial. Routine falling contour."
     },
     {
       "id": "tower-break-approved",
       "role": "tower",
       "text": "Ghost One One, left break approved.",
-      "direction": "Rulebook approval, level and brief: the pattern is his."
+      "target_duration_s": [1.0, 1.4],
+      "speed": 1.4,
+      "description": "tower controller, routine sequencing approval, concise connected task speech",
+      "direction": "Sequencing response; one boundary after the callsign. Information focus is left break approved. Routine falling contour."
+    },
+    {
+      "id": "pilot-crosswind",
+      "role": "pilot",
+      "text": "Ghost One One, crosswind.",
+      "target_duration_s": [0.8, 1.15],
+      "speed": 1.5,
+      "description": "fighter pilot, close-mic, one crisp connected packet, no pause or breath",
+      "rt_profile": "pattern-report",
+      "cadence": [
+        {
+          "text": "Ghost One One",
+          "pace": "clear-even",
+          "focus": "identity"
+        },
+        {
+          "text": "crosswind",
+          "pace": "connected",
+          "focus": "position"
+        }
+      ],
+      "direction": "Routine position report. Keep identity clear and attach crosswind without a dramatic boundary; one short operational packet."
     },
     {
       "id": "tower-check-gear-downwind",
       "role": "tower",
       "text": "Ghost One One, check wheels down.",
-      "direction": "Rulebook tower, JO 7110.65 exact phraseology: caught the omission. Sharpened, pointed, not alarmed."
+      "target_duration_s": [1.0, 1.4],
+      "description": "tower controller, routine gear reminder, concise advisory task speech",
+      "direction": "Configuration reminder; one boundary after the callsign. Information focus is wheels down. Advisory, not urgent."
+    },
+    {
+      "id": "pilot-base",
+      "role": "pilot",
+      "text": "Ghost One One, base, three greens.",
+      "target_duration_s": [1.3, 1.6],
+      "speed": 1.25,
+      "description": "fighter pilot, one connected practiced base report, compressed, no pauses",
+      "rt_profile": "pattern-report",
+      "cadence": [
+        {
+          "text": "Ghost One One",
+          "pace": "clear-even",
+          "focus": "identity"
+        },
+        {
+          "text": "base, three greens",
+          "pace": "compressed",
+          "focus": "position and achieved configuration"
+        }
+      ],
+      "direction": "Independent-aircraft base report. Keep the callsign intelligible and connect directly into the familiar position-and-configuration block. Full stop is the local default and is not voiced. One practiced packet, no theatrical pauses."
     },
     {
       "id": "tower-cleared-arrested-landing",
       "role": "tower",
-      "text": "Ghost One One, cable indicates up, cleared to land.",
-      "direction": "Rulebook clearance with the real JO 3-3-6 cable status, in order, nothing invented."
+      "text": "Ghost One One, cleared to land.",
+      "target_duration_s": [1.5, 1.9],
+      "speed": 0.85,
+      "description": "tower controller, connected landing clearance, complete consonant endings",
+      "rt_profile": "pattern-clearance",
+      "cadence": [
+        {
+          "text": "Ghost One One",
+          "pace": "clear-even",
+          "focus": "addressee"
+        },
+        {
+          "text": "cleared to land",
+          "pace": "connected",
+          "focus": "landing authority"
+        }
+      ],
+      "direction": "Aircraft-specific landing clearance. Keep the addressee clear and connect the authority with a small final deceleration on land. No invented cable-state announcement; practiced task speech, not ceremony."
+    },
+    {
+      "id": "pilot-landing-ack",
+      "role": "pilot",
+      "text": "Land, Ghost One One.",
+      "target_duration_s": [0.85, 1.2],
+      "description": "fighter pilot, compact landing readback, connected, clean finish",
+      "rt_profile": "acknowledgement",
+      "cadence": [
+        {
+          "text": "Land, Ghost One One",
+          "pace": "connected",
+          "focus": "authority received"
+        }
+      ],
+      "direction": "Compact landing-authority readback. Land carries modest focus, then the callsign closes the packet without a deliberate pause."
+    },
+    {
+      "id": "pilot-base-touch-and-go",
+      "role": "pilot",
+      "text": "Ghost One One, base, three greens, touch and go.",
+      "target_duration_s": [1.8, 2.3],
+      "description": "fighter pilot, practiced base report, compressed, touch and go clear",
+      "rt_profile": "pattern-report",
+      "cadence": [
+        {
+          "text": "Ghost One One",
+          "pace": "clear-even",
+          "focus": "identity"
+        },
+        {
+          "text": "base, three greens",
+          "pace": "compressed",
+          "focus": "position and achieved configuration"
+        },
+        {
+          "text": "touch and go",
+          "pace": "measured",
+          "focus": "landing intention"
+        }
+      ],
+      "direction": "Planned non-default recovery. Keep the callsign clear, compress the familiar base-and-three-greens block, then give touch and go modest focus without a dramatic pause."
+    },
+    {
+      "id": "tower-cleared-touch-and-go",
+      "role": "tower",
+      "text": "Ghost One One, cleared touch and go.",
+      "target_duration_s": [1.6, 2.0],
+      "speed": 0.85,
+      "description": "tower controller, measured connected touch-and-go clearance",
+      "rt_profile": "pattern-clearance",
+      "cadence": [
+        {
+          "text": "Ghost One One",
+          "pace": "clear-even",
+          "focus": "addressee"
+        },
+        {
+          "text": "cleared touch and go",
+          "pace": "connected",
+          "focus": "landing authority"
+        }
+      ],
+      "direction": "Aircraft-specific touch-and-go clearance. Keep the addressee clear and the authority connected; modest focus on touch and go, no ceremony."
+    },
+    {
+      "id": "pilot-touch-and-go-ack",
+      "role": "pilot",
+      "text": "Cleared touch and go, Ghost One One.",
+      "target_duration_s": [2.0, 2.5],
+      "speed": 0.6,
+      "description": "fighter pilot, continuous authority readback, no break at comma, each word complete",
+      "rt_profile": "routine",
+      "cadence": [
+        {
+          "text": "Cleared touch and go, Ghost One One",
+          "pace": "connected",
+          "focus": "authority received"
+        }
+      ],
+      "direction": "Compact authority readback. Keep cleared touch and go connected and close with the callsign; prompt and practiced."
+    },
+    {
+      "id": "pilot-going-around",
+      "role": "pilot",
+      "text": "Ghost One One, going around.",
+      "target_duration_s": [0.85, 1.25],
+      "description": "fighter pilot, routine go-around report, connected, no alarm or apology",
+      "direction": "Pilot-initiated discontinuation report. Identity remains clear; going around is connected and matter-of-fact, with no apology or alarm."
+    },
+    {
+      "id": "tower-going-around-ack",
+      "role": "tower",
+      "text": "Ghost One One.",
+      "target_duration_s": [0.55, 0.85],
+      "speed": 1.3,
+      "description": "tower controller, callsign-only acknowledgment, compact neutral response",
+      "direction": "Acknowledgment only when no new sequencing or safety instruction is required. One connected callsign with a clean fall."
     },
     {
       "id": "tower-waveoff-gear",
       "role": "tower",
       "text": "Ghost One One, go around. Gear unsafe.",
-      "direction": "Immediate command, punched fast: go-around is the tower's word — urgency is speed and compression, not new vocabulary."
+      "target_duration_s": [1.75, 2.25],
+      "source_voice_id": "6a42908a-f332-4c39-a93a-98c7d6017f12",
+      "source_voice_name": "Tough Guy",
+      "source_casting_status": "provisional cast; production rights approved by project owner; public HUME_AI library",
+      "source_voice_context": "second tower operator on the same frequency",
+      "description": "tower safety command, second clause says gear unsafe distinctly, no shout",
+      "direction": "Immediate safety command; hard boundary after go around. Information focus is gear unsafe. Firm controlled contour, no shout."
     },
     {
       "id": "tower-bolter",
       "role": "tower",
       "text": "Ghost One One, go around.",
-      "direction": "Quick, matter-of-fact: bolter is deck vocabulary; the tower just re-flies the jet."
+      "target_duration_s": [0.8, 1.2],
+      "description": "tower controller, prompt go-around command, firm, controlled, no surprise",
+      "direction": "Prompt missed-arrestment instruction; boundary after the callsign. Information focus is go around. No surprise or commentary."
     },
     {
       "id": "traffic-rapier-2-base",
       "role": "traffic-two",
-      "text": "Rapier Tower, Ghost One Two, base.",
-      "direction": "Crisp junior-wingman position report, a touch quick.",
+      "text": "Ghost One Two, base, three greens, touch and go.",
+      "target_duration_s": [1.9, 2.4],
+      "speed": 1.15,
+      "description": "young wingman, one connected base report, three greens and touch-and-go clear",
+      "rt_profile": "pattern-report",
+      "cadence": [
+        {
+          "text": "Ghost One Two",
+          "pace": "clear-even",
+          "focus": "identity"
+        },
+        {
+          "text": "base, three greens",
+          "pace": "compressed",
+          "focus": "position and achieved configuration"
+        },
+        {
+          "text": "touch and go",
+          "pace": "measured",
+          "focus": "landing intention"
+        }
+      ],
+      "direction": "Independent-aircraft base report using the local three-greens script. Keep the side number intelligible, compress the familiar position-and-configuration block, and give the non-default touch-and-go intention modest focus. One operational packet, no theatrical pause.",
       "takes": 2
     },
     {
-      "id": "traffic-rapier-2-base-alt",
+      "id": "tower-rapier-2-cleared-landing",
+      "role": "tower",
+      "text": "Ghost One Two, cleared touch and go.",
+      "target_duration_s": [1.6, 2.2],
+      "speed": 0.6,
+      "description": "tower controller, measured connected touch-and-go clearance, slight final deceleration",
+      "rt_profile": "pattern-clearance",
+      "cadence": [
+        {
+          "text": "Ghost One Two",
+          "pace": "clear-even",
+          "focus": "addressee"
+        },
+        {
+          "text": "cleared touch and go",
+          "pace": "connected",
+          "focus": "landing authority"
+        }
+      ],
+      "direction": "Aircraft-specific touch-and-go clearance. Keep the addressee clear and the authority connected; modest focus on touch and go, with no ceremonial pause."
+    },
+    {
+      "id": "traffic-rapier-2-landing-ack",
       "role": "traffic-two",
-      "text": "Tower, Ghost One Two, base, 3 greens.",
-      "direction": "Same report later in the session, abbreviated station call, still crisp.",
-      "takes": 2
+      "text": "Cleared touch and go, Ghost One Two.",
+      "target_duration_s": [2.0, 2.5],
+      "speed": 0.6,
+      "description": "young wingman, measured connected authority readback, slight final deceleration",
+      "rt_profile": "routine",
+      "cadence": [
+        {
+          "text": "Cleared touch and go, Ghost One Two",
+          "pace": "connected",
+          "focus": "authority received"
+        }
+      ],
+      "direction": "Compact authority readback. Keep cleared touch and go connected and close with the side number; prompt, practiced, no recital."
     },
     {
       "id": "traffic-rapier-3-base",
       "role": "traffic-three",
-      "text": "Rapier Tower, Ghost One Three, base.",
-      "direction": "Flat, bored, perfectly precise.",
+      "text": "Ghost One Three, base, three greens, touch and go.",
+      "target_duration_s": [1.9, 2.4],
+      "speed": 1.25,
+      "description": "adult wingman, one crisp connected base report, three greens and touch-and-go clear",
+      "rt_profile": "pattern-report",
+      "cadence": [
+        {
+          "text": "Ghost One Three",
+          "pace": "clear-even",
+          "focus": "identity"
+        },
+        {
+          "text": "base, three greens",
+          "pace": "compressed",
+          "focus": "position and achieved configuration"
+        },
+        {
+          "text": "touch and go",
+          "pace": "measured",
+          "focus": "landing intention"
+        }
+      ],
+      "direction": "Independent-aircraft base report using the local three-greens script. Keep the side number intelligible, compress the familiar position-and-configuration block, and give the non-default touch-and-go intention modest focus. One operational packet, no theatrical pause.",
       "takes": 2
     },
     {
-      "id": "traffic-rapier-3-base-alt",
+      "id": "tower-rapier-3-cleared-landing",
+      "role": "tower",
+      "text": "Ghost One Three, cleared touch and go.",
+      "target_duration_s": [1.6, 2.2],
+      "speed": 0.6,
+      "description": "tower controller, measured connected touch-and-go clearance, slight final deceleration",
+      "rt_profile": "pattern-clearance",
+      "cadence": [
+        {
+          "text": "Ghost One Three",
+          "pace": "clear-even",
+          "focus": "addressee"
+        },
+        {
+          "text": "cleared touch and go",
+          "pace": "connected",
+          "focus": "landing authority"
+        }
+      ],
+      "direction": "Aircraft-specific touch-and-go clearance. Keep the addressee clear and the authority connected; modest focus on touch and go, with no ceremonial pause."
+    },
+    {
+      "id": "traffic-rapier-3-landing-ack",
       "role": "traffic-three",
-      "text": "Tower, Ghost One Three, base, 3 greens.",
-      "direction": "Same bored precision, abbreviated station call.",
-      "takes": 2
+      "text": "Cleared touch and go, Ghost One Three.",
+      "target_duration_s": [2.0, 2.5],
+      "speed": 0.6,
+      "description": "adult wingman, measured connected authority readback, slight final deceleration",
+      "rt_profile": "routine",
+      "cadence": [
+        {
+          "text": "Cleared touch and go, Ghost One Three",
+          "pace": "connected",
+          "focus": "authority received"
+        }
+      ],
+      "direction": "Compact authority readback. Keep cleared touch and go connected and close with the side number; prompt, practiced, no recital."
     },
     {
       "id": "traffic-rapier-4-base",
       "role": "traffic-four",
-      "text": "Rapier Tower, Ghost One Four, base.",
-      "direction": "Unhurried drawl, old-head economy.",
+      "text": "Ghost One Four, base, three greens, touch and go.",
+      "target_duration_s": [1.9, 2.4],
+      "speed": 0.95,
+      "description": "experienced wingman, one connected base report, no internal pauses, all words clear",
+      "rt_profile": "pattern-report",
+      "cadence": [
+        {
+          "text": "Ghost One Four",
+          "pace": "clear-even",
+          "focus": "identity"
+        },
+        {
+          "text": "base, three greens",
+          "pace": "compressed",
+          "focus": "position and achieved configuration"
+        },
+        {
+          "text": "touch and go",
+          "pace": "measured",
+          "focus": "landing intention"
+        }
+      ],
+      "direction": "Independent-aircraft base report using the local three-greens script. Keep the side number intelligible, compress the familiar position-and-configuration block, and give the non-default touch-and-go intention modest focus. One operational packet, no theatrical pause.",
       "takes": 2
     },
     {
-      "id": "traffic-rapier-4-base-alt",
+      "id": "tower-rapier-4-cleared-landing",
+      "role": "tower",
+      "text": "Ghost One Four, cleared touch and go.",
+      "target_duration_s": [1.6, 2.2],
+      "speed": 0.6,
+      "description": "tower controller, measured connected touch-and-go clearance, slight final deceleration",
+      "rt_profile": "pattern-clearance",
+      "cadence": [
+        {
+          "text": "Ghost One Four",
+          "pace": "clear-even",
+          "focus": "addressee"
+        },
+        {
+          "text": "cleared touch and go",
+          "pace": "connected",
+          "focus": "landing authority"
+        }
+      ],
+      "direction": "Aircraft-specific touch-and-go clearance. Keep the addressee clear and the authority connected; modest focus on touch and go, with no ceremonial pause."
+    },
+    {
+      "id": "traffic-rapier-4-landing-ack",
       "role": "traffic-four",
-      "text": "Tower, Ghost One Four, base, 3 greens.",
-      "direction": "Same drawl, abbreviated, entirely at home.",
-      "takes": 2
+      "text": "Cleared touch and go, Ghost One Four.",
+      "target_duration_s": [2.0, 2.5],
+      "speed": 0.58,
+      "description": "experienced wingman, complete d ending on cleared, continuous authority readback",
+      "rt_profile": "routine",
+      "cadence": [
+        {
+          "text": "Cleared touch and go, Ghost One Four",
+          "pace": "connected",
+          "focus": "authority received"
+        }
+      ],
+      "direction": "Compact authority readback. Keep cleared touch and go connected and close with the side number; prompt, practiced, no recital."
     },
     {
       "id": "tower-continue-check-gear",
       "role": "tower",
       "text": "Ghost One One, continue, check wheels down.",
-      "direction": "Second challenge, same rulebook words, firmer: the gear is still unsafe on base."
+      "target_duration_s": [1.25, 1.75],
+      "speed": 1.5,
+      "description": "tower controller, one brisk connected sequencing and gear-reminder packet",
+      "direction": "Sequencing plus configuration reminder; light boundaries after callsign and continue. Focus is wheels down. Advisory, no shout."
     },
     {
       "id": "tower-hold-position",
       "role": "tower",
       "text": "Ghost One One, hold position.",
-      "direction": "Post-trap: brisk and conclusive, the cable crew is moving. The wire number stays inside the LSO shack."
+      "target_duration_s": [0.8, 1.25],
+      "speed": 1.5,
+      "description": "brisk tower command, pronounce final d in hold, one connected packet",
+      "direction": "Post-arrestment instruction; boundary after the callsign. Information focus is hold position. Firm falling contour."
     },
     {
       "id": "lso-bolter",
       "role": "lso",
       "text": "Bolter.",
-      "direction": "The card's single imperative, loud and instant: the hook missed, fly the jet.",
+      "target_duration_s": [0.25, 0.55],
+      "speed": 1.4,
+      "description": "landing signal officer, one compact word, firm controlled onset",
+      "direction": "Immediate factual call after the hook misses. Single information nucleus, firm onset, clean stop.",
       "takes": 2
     },
     {
       "id": "lso-waveoff",
       "role": "lso",
-      "text": "Waveoff.",
-      "direction": "Explosive single-word imperative off the card. The pass is dead; volume and attack carry it.",
+      "text": "Wave off.",
+      "target_duration_s": [0.35, 0.8],
+      "speed": 1.4,
+      "description": "landing signal officer, firm, unmistakable, controlled",
+      "direction": "Pass-termination command. Single information nucleus, firm controlled contour; unmistakable without anger or extra volume.",
       "takes": 2
     },
     {
       "id": "lso-add-power",
       "role": "lso",
       "text": "A little power.",
-      "direction": "The card's sugar call: rising urgency wrapped in the LSO's soothing idiom.",
+      "target_duration_s": [0.55, 1.05],
+      "description": "plain American English, concise, controlled correction",
+      "direction": "Early energy correction; no internal boundary. Information focus is little. Corrective, not soothing.",
       "takes": 2
     },
     {
       "id": "lso-power",
       "role": "lso",
       "text": "Power.",
-      "direction": "A sharp bark. Half a second late is a crash.",
+      "target_duration_s": [0.25, 0.55],
+      "speed": 1.4,
+      "description": "landing signal officer, one compact word, firm controlled onset",
+      "direction": "Stronger energy correction. Single information nucleus with firm onset and clean stop; never barked.",
       "takes": 2
     },
     {
       "id": "lso-low",
       "role": "lso",
       "text": "You're low.",
-      "direction": "Instant corrective, calm but immediate.",
+      "target_duration_s": [0.45, 0.75],
+      "speed": 1.4,
+      "description": "landing signal officer, concise glidepath correction, calm and firm",
+      "direction": "Glideslope information. No internal boundary; information focus is low. Immediate controlled fall.",
       "takes": 2
     },
     {
       "id": "lso-high",
       "role": "lso",
       "text": "You're high.",
-      "direction": "Instant corrective, calm but immediate.",
+      "target_duration_s": [0.45, 0.75],
+      "speed": 1.4,
+      "description": "landing signal officer, concise glidepath correction, calm and firm",
+      "direction": "Glideslope information. No internal boundary; information focus is high. Immediate controlled fall.",
       "takes": 2
     },
     {
       "id": "lso-fast",
       "role": "lso",
       "text": "You're fast.",
-      "direction": "Instant corrective, clipped, calm.",
+      "target_duration_s": [0.45, 0.75],
+      "speed": 1.4,
+      "description": "landing signal officer, concise energy correction, calm and firm",
+      "direction": "Airspeed information. No internal boundary; information focus is fast. Immediate controlled fall.",
       "takes": 2
     },
     {
       "id": "lso-come-left",
       "role": "lso",
       "text": "Left for lineup.",
-      "direction": "The book's lineup idiom: instant, calm, immediate.",
+      "target_duration_s": [0.55, 0.85],
+      "speed": 1.6,
+      "description": "compact connected LSO lineup correction, no pause",
+      "direction": "Lineup correction. No internal boundary; information focus is left. Immediate controlled fall.",
       "takes": 2
     },
     {
       "id": "lso-come-right",
       "role": "lso",
       "text": "Right for lineup.",
-      "direction": "The book's lineup idiom: instant, calm, immediate.",
+      "target_duration_s": [0.55, 0.85],
+      "speed": 1.6,
+      "description": "compact connected LSO lineup correction, no pause",
+      "direction": "Lineup correction. No internal boundary; information focus is right. Immediate controlled fall.",
       "takes": 2
     },
     {
       "id": "pilot-check-in",
       "role": "pilot",
       "text": "Control, Ghost One One, up as fragged.",
-      "direction": "Chill pilot checking onto the tactical net: the real check-in idiom, easy and complete."
+      "target_duration_s": [1.5, 2.1],
+      "description": "fighter pilot, say as with an open ash vowel, distinct from is, connected check-in",
+      "direction": "Tactical-net check-in; light boundaries after station and callsign. Information focus is up as fragged. Routine fall."
     },
     {
       "id": "control-radar-contact",
       "role": "controller",
       "text": "Ghost One One, radar contact.",
-      "direction": "C2 economy: two facts, flat, the net is open for business."
+      "target_duration_s": [0.9, 1.35],
+      "description": "brisk tactical radio call, connected",
+      "direction": "Sensor-contact acknowledgment; boundary after the callsign. Information focus is radar contact. Routine fall."
     },
     {
-      "id": "control-commit",
+      "id": "control-commit-short",
       "role": "controller",
-      "text": "Ghost One One, hostile. You are ordered to engage.",
-      "direction": "Declaration then directive, cold and exact. This finite authored call prevents unreviewed runtime synthesis; geometry remains on the tactical display."
+      "text": "Ghost, commit.",
+      "target_duration_s": [0.55, 0.9],
+      "description": "tactical controller, brief routine directive, matter-of-fact finish",
+      "direction": "Controller-authority directive with shared datalink context; no deliberate boundary. Focus is commit. Firm falling contour, not dramatic."
+    },
+    {
+      "id": "pilot-commit-ack",
+      "role": "pilot",
+      "text": "Ghost One One.",
+      "target_duration_s": [0.55, 0.9],
+      "description": "fighter pilot, compact callsign acknowledgment, natural task speech",
+      "direction": "Required callsign-only acknowledgment. No internal phrase boundary; clean falling finish."
     },
     {
       "id": "pilot-separating",
       "role": "pilot",
       "text": "Ghost One One, separating.",
-      "direction": "Working chill under G: terse, breath held, no heat in the voice."
+      "target_duration_s": [0.8, 1.15],
+      "description": "fighter pilot under workload, concise separation call, controlled",
+      "direction": "Maneuver call under workload; no deliberate boundary. Information focus is separating. Compressed breath, no acted strain."
     },
     {
       "id": "pilot-rtb",
       "role": "pilot",
       "text": "Control, Ghost One One, RTB.",
-      "direction": "Chill pilot coming off the fight: three syllables of brevity, fatigue at the edges."
+      "target_duration_s": [1.0, 1.45],
+      "description": "fighter pilot, say R T B as three complete letters, one connected return report",
+      "direction": "Post-fight intention; light boundaries after station and callsign. Information focus is RTB. Administrative falling contour."
     },
     {
       "id": "pilot-recovery-request",
       "role": "pilot",
       "text": "Rapier Approach, Ghost One One, inbound, request recovery.",
-      "direction": "Chill pilot coming home: steady, slightly tired, intent clean."
+      "target_duration_s": [2.0, 2.7],
+      "description": "fighter pilot, first recovery call, clipped, connected, no ceremony",
+      "direction": "Approach request; light boundaries after station, callsign, and inbound. Focus is request recovery. Routine falling contour."
     },
     {
       "id": "approach-recovery-continue",
       "role": "controller",
       "text": "Ghost One One, continue.",
-      "direction": "Approach control economy: one word of permission."
-    },
-    {
-      "id": "pilot-guns",
-      "role": "pilot",
-      "text": "Guns.",
-      "direction": "Working chill at first employment: one brevity word, tight, no ceremony.",
-      "takes": 2
+      "target_duration_s": [0.9, 1.25],
+      "description": "approach controller, routine sequencing response, concise connected task speech",
+      "direction": "Sequencing response; no deliberate boundary. Information focus is continue. Routine falling contour."
     },
     {
       "id": "pilot-fox-two",
       "role": "pilot",
       "text": "Fox Two.",
-      "direction": "Working chill: clean brevity, no punch-up.",
+      "target_duration_s": [0.35, 1.05],
+      "description": "fighter pilot under workload, compact missile call, immediate controlled onset",
+      "direction": "Employment call at weapon release. No internal boundary; information focus is Two. Immediate falling contour, no celebration.",
       "takes": 2
     },
     {
       "id": "pilot-drone-away",
       "role": "pilot",
       "text": "Drone away.",
-      "direction": "Chill pilot: soft brevity, almost casual."
+      "target_duration_s": [0.45, 0.8],
+      "description": "fighter pilot under workload, concise launch call, controlled",
+      "direction": "Fictional-weapon release call. No internal boundary; information focus is away. Immediate falling contour."
     },
     {
       "id": "pilot-remington",
       "role": "pilot",
       "text": "Remington.",
-      "direction": "Slightly concerned trying to give chill: matter-of-fact, tighter."
+      "target_duration_s": [0.4, 0.75],
+      "description": "fighter pilot, compact ordnance-state brevity word, matter-of-fact",
+      "direction": "Weapons-state report. Single information nucleus, clean falling stop, no concern acting."
     },
     {
       "id": "pilot-winchester",
       "role": "pilot",
       "text": "Winchester.",
-      "direction": "Slightly concerned trying to give chill: flat, non-negotiable, still dry."
+      "target_duration_s": [0.4, 0.75],
+      "description": "fighter pilot, compact ordnance-state brevity word, matter-of-fact",
+      "direction": "Weapons-state report. Single information nucleus, clean falling stop, no concern acting."
     },
     {
       "id": "pilot-joker",
       "role": "pilot",
       "text": "Ghost One One, Joker.",
-      "direction": "Slightly concerned trying to give chill: fuel clock just entered the voice."
+      "target_duration_s": [0.75, 1.1],
+      "description": "fighter pilot, routine fuel-state report, concise natural task speech",
+      "direction": "Fuel-state report; no deliberate boundary. Information focus is Joker. Advisory falling contour, no emotion added."
     },
     {
       "id": "pilot-bingo",
       "role": "pilot",
       "text": "Ghost One One, Bingo.",
-      "direction": "Slightly concerned trying to give chill: flat, non-negotiable, composure held on purpose."
+      "target_duration_s": [0.75, 1.1],
+      "description": "fighter pilot, firm fuel-state report, clipped, controlled, no alarm",
+      "direction": "Fuel-state report requiring action; no deliberate boundary. Information focus is Bingo. Firm controlled fall, not louder."
     },
     {
       "id": "control-bingo-rtb",
       "role": "controller",
       "text": "Ghost One One, RTB.",
-      "direction": "Cold, final, administrative. There is no argument with fuel."
+      "target_duration_s": [0.9, 1.4],
+      "description": "tactical controller, concise return directive, clipped, matter-of-fact",
+      "direction": "Administrative directive; boundary after the callsign. Information focus is RTB. Firm falling contour."
     },
     {
       "id": "pilot-splash",
       "role": "pilot",
       "text": "Splash one.",
-      "direction": "Chill pilot: dry brevity, no celebration.",
+      "target_duration_s": [0.35, 1.05],
+      "description": "fighter pilot under workload, compact kill confirmation, no celebration",
+      "direction": "Observed-result call. No internal boundary; information focus is one. Immediate falling contour, no celebration.",
       "takes": 2
-    },
-    {
-      "id": "control-confirm-safe",
-      "role": "controller",
-      "text": "Ghost One One, confirm weapons safe.",
-      "direction": "The real closing of a kill chain: administrative, cold, complete."
-    },
-    {
-      "id": "pilot-switch-safe",
-      "role": "pilot",
-      "text": "Ghost One One, switch is safe.",
-      "direction": "Chill pilot, adrenaline draining: the fight is over when this is said, and he knows it."
     }
   ]
 }

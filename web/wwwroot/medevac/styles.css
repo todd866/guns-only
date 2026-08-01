@@ -736,7 +736,13 @@ body[data-mission-type="dustoff"] .mission-type {
   background: #0c120d;
   transition: opacity .28s ease, visibility .28s;
 }
-html[data-kernel="ready"] .boot-screen { visibility: hidden; opacity: 0; pointer-events: none; }
+html[data-kernel="ready"] .boot-screen,
+html[data-kernel="failed"] .boot-screen {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+html[data-kernel="failed"] .boot-screen { display: none; transition: none; }
 .boot-screen div { width: min(340px, 80vw); }
 .boot-screen span, .boot-screen strong { display: block; font-family: var(--mono); }
 .boot-screen span { color: var(--green); font-size: 9px; letter-spacing: .14em; }

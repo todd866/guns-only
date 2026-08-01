@@ -24,6 +24,10 @@ public sealed class DetentLayer {
     internal double AssistedTargetCalibratedAirspeedMps = double.NaN;
 
     double _throttleLever = 0.85;   // continuous, 0..1.3 (>1 = afterburner)
+    double _analogYawControl;
+    bool _analogYawControlActive;
+    double _analogThrottleControl;
+    bool _analogThrottleControlActive;
     bool _manualThrottle;   // on the approach, the pilot touching W/S stands the auto-throttle down
     bool _waveOff;          // pilot firewalled the throttle on the approach → go around, climb away
     double _waveOffSeconds;
@@ -74,6 +78,45 @@ public sealed class DetentLayer {
     public void ClearAnalogPitchControl() {
         _analogPitchControl = 0.0;
         _analogPitchControlActive = false;
+    }
+
+    /// <summary>
+    /// Continuous yaw from a direct-input host. This is a RUDDER command, not a turn command:
+    /// on an FBW fighter it is nearly useless for gun tracking, and it earns its axis on crosswind
+    /// recovery and low-speed pointing. Held rudder keys keep priority so the keyboard path is
+    /// unchanged.
+    /// </summary>
+    public void SetAnalogYawControl(double value) {
+        if (!double.IsFinite(value))
+            throw new System.ArgumentOutOfRangeException(nameof(value));
+        _analogYawControl = System.Math.Clamp(value, -1.0, 1.0);
+        _analogYawControlActive = true;
+    }
+
+    public void ClearAnalogYawControl() {
+        _analogYawControl = 0.0;
+        _analogYawControlActive = false;
+    }
+
+    /// <summary>
+    /// Continuous throttle from a direct-input host, as a LEVER POSITION in 0..1 of the aircraft's
+    /// own range rather than a rate. A thumb stick has an absolute position and the lever should
+    /// follow it directly; treating it as a rate makes the pilot chase a value they can already
+    /// see, which is the "tapping to achieve a rate" complaint about the keyboard path.
+    ///
+    /// Touching it stands the auto-throttle down exactly as W/S does, so an assisted approach
+    /// hands back cleanly the moment the pilot takes the lever.
+    /// </summary>
+    public void SetAnalogThrottleControl(double lever01) {
+        if (!double.IsFinite(lever01))
+            throw new System.ArgumentOutOfRangeException(nameof(lever01));
+        _analogThrottleControl = System.Math.Clamp(lever01, 0.0, 1.0);
+        _analogThrottleControlActive = true;
+        _manualThrottle = true;
+    }
+
+    public void ClearAnalogThrottleControl() {
+        _analogThrottleControlActive = false;
     }
 
     double AssistedBaselineTarget(in AircraftState state, double maxPerform) {
@@ -537,8 +580,9 @@ public sealed class DetentLayer {
         if (wHeld || sHeld || thUp > 0 || thDn > 0) _manualThrottle = true;   // pilot took the throttle
         // Auto-throttle = the shared speed-hold lever. Approach adds its backside/glidepath terms;
         // assisted fight supplies calibrated airspeed and the live corner target through the same
-        // proportional controller. Pilot W/S owns the assisted lever only while held, then neutral
-        // releases it cleanly back to corner hold.
+        // proportional controller. Held W/S owns the lever first. An active direct-input lever
+        // owns it next and remains latched where the phone pilot put it; only without either pilot
+        // input does assisted flight resume corner hold.
         double speedForApproach = double.IsFinite(ApproachAirspeedMps)
             ? ApproachAirspeedMps
             : double.IsFinite(AirspeedMps) ? AirspeedMps : s.Speed;
@@ -574,6 +618,13 @@ public sealed class DetentLayer {
         // while an afterburning definition may expose the full staged range to 1.35.
         if (ApproachMode && !_manualThrottle) {
             _throttleLever = System.Math.Min(autoThr, leverStop); // track the real lever for smooth takeover
+        } else if (_analogThrottleControlActive && !wHeld && !sHeld) {
+            // A thumb stick has an ABSOLUTE position, so the lever follows it directly instead of
+            // integrating a rate. Rate control is what makes the pilot tap repeatedly to reach a
+            // setting they can already see. Held W/S still wins; AssistedFlight no longer silently
+            // takes the lever back while the advertised portrait throttle remains active.
+            _throttleLever = System.Math.Clamp(
+                _analogThrottleControl * leverStop, 0.0, leverStop);
         } else if (AssistedFlight && !wHeld && !sHeld) {
             _throttleLever = System.Math.Min(autoThr, leverStop);
         } else {
@@ -594,6 +645,9 @@ public sealed class DetentLayer {
         double rudder = 0;
         if (keys.PhaseAt(GKey.RudderRight, nowMs) != KeyPhase.Idle) rudder += 0.6;
         if (keys.PhaseAt(GKey.RudderLeft, nowMs) != KeyPhase.Idle)  rudder -= 0.6;
+        // Continuous yaw from a thumb stick, at the same authority a held rudder key gives, so the
+        // two paths feel identical. Keys keep priority while held.
+        if (_analogYawControlActive && rudder == 0.0) rudder = _analogYawControl * 0.6;
 
         double commandedAlpha = !ApproachMode && over && pull != KeyPhase.Idle
             ? OverridePullAlpha(s, p)

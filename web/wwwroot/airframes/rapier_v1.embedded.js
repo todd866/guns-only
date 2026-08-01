@@ -77,12 +77,46 @@ export default {
     "model": "rapier-cranked-delta-public-data-surrogate.v1",
     "epistemic": "surrogate",
     "clAlphaLowSpeedPerRad": 3.6,
-    "clMaxLowSpeed": 1.35,
+    "clMaxLowSpeed": 1.47,
     "supersonicLiftSlopeCeiling": "4/sqrt(M^2-1)",
-    "normalLawAlphaMachKnots": [0, 0.9, 1.05, 1.2, 1.6, 2, 2.5, 3.5, 4.5],
-    "normalLawAlphaRadKnots": [0.42, 0.42, 0.36, 0.3, 0.24, 0.2, 0.16, 0.13, 0.11],
-    "controlEffectivenessMachKnots": [0, 1, 1.65, 2.5, 3.5, 4.5],
-    "controlEffectivenessKnots": [1, 1, 0.5, 0.36, 0.28, 0.22],
+    "normalLawAlphaMachKnots": [
+      0,
+      0.9,
+      1.05,
+      1.2,
+      1.6,
+      2,
+      2.5,
+      3.5,
+      4.5
+    ],
+    "normalLawAlphaRadKnots": [
+      0.42,
+      0.42,
+      0.36,
+      0.3,
+      0.24,
+      0.2,
+      0.16,
+      0.13,
+      0.11
+    ],
+    "controlEffectivenessMachKnots": [
+      0,
+      1,
+      1.65,
+      2.5,
+      3.5,
+      4.5
+    ],
+    "controlEffectivenessKnots": [
+      1,
+      1,
+      0.5,
+      0.36,
+      0.28,
+      0.22
+    ],
     "controlMomentCoefficientMax": {
       "pitchCm": 0.18,
       "yawCn": 0.055,
@@ -394,7 +428,7 @@ export default {
   },
   "propulsion": {
     "ramCaptureAreaM2": 1.2,
-    "thrustMaxN": 84000,
+    "thrustMaxN": 50000,
     "maxThrustFraction": 1.55,
     "designMachNormaliser": 2.6,
     "epistemic": "provisional",
@@ -417,9 +451,9 @@ export default {
       "notes": "analysis/intercept-oft energy-ladder"
     },
     "wetThrustWeightGross": {
-      "value": 1.2,
+      "value": 0.71,
       "epistemic": "closed",
-      "notes": "84 kN × 1.55 / (11090 kg × g) ≈ 1.197; family cap 1.20"
+      "notes": "50 kN × 1.55 / (11090 kg × g) ≈ 0.713; core sized to fit the airframe and to reach ram, not to win a fighter T/W comparison"
     },
     "stowedDroneMassKg": {
       "value": 1440,

@@ -8,10 +8,16 @@ The wording follows two public baselines:
 
 - FAA AIM 4-2 for clear addressing, complete initial callsigns, number pronunciation, and
   acknowledgements/readbacks — **form**, when addressing ATC.
-- AFTTP 3-2.5 for tactical brevity. Brevity is used only for its defined event: `GUNS` means the
-  gun is firing, `FOX TWO` means an IR air-to-air missile was launched, `SPLASH` follows a
-  destruction event, `JOKER`/`BINGO` follow configured fuel thresholds, `REMINGTON` means no
-  usable air-to-air ordnance except gun, and `WINCHESTER` means no ordnance remains.
+- AFTTP 3-2.5 for tactical brevity. A defined word is still transmitted only when an operational
+  recipient needs the delta: `FOX TWO` means an IR air-to-air missile was launched, `SPLASH`
+  follows a destruction event, `JOKER`/`BINGO` follow configured fuel thresholds, `REMINGTON`
+  means no usable air-to-air ordnance except gun, and `WINCHESTER` means no ordnance remains.
+
+`PERFORMANCE-CORPUS.md` is the equally binding listening baseline. It maps game events to
+operational recordings and specifies packet length, turn timing, escalation, and silence.
+[`EQUIPMENT-PROFILES.md`](../EQUIPMENT-PROFILES.md) defines the separate mask/microphone and
+radio-link layers. Catalog version 6 requires both profile IDs for every role so Rapier, modern
+fast-jet, and Korean War R/T cannot collapse into one generic “radio” filter.
 
 Validate the catalog and preview the generation plan:
 
@@ -28,8 +34,10 @@ OPENAI_API_KEY=... python3 tools/audio/radio_voice.py generate
 ELEVENLABS_API_KEY=... python3 tools/audio/radio_voice.py generate
 ```
 
-The generator also supports Hume Octave 2 and Cartesia Sonic 3.5. Provider credentials may be
-supplied through the environment or stored in macOS Keychain under service
+The generator also supports Hume and Cartesia Sonic 3.5. Directed Hume performances use Octave 1
+with a catalog-validated acting description of no more than 100 characters; Octave 2 currently
+accepts speed and saved voices but not per-utterance acting descriptions. Provider credentials may
+be supplied through the environment or stored in macOS Keychain under service
 `guns-only-voice-providers`, using the environment-variable name (`ELEVENLABS_API_KEY`,
 `HUME_API_KEY`, or `CARTESIA_API_KEY`) as the account. Environment variables take precedence.
 Production catalogs pin the provider model or snapshot; gameplay always consumes authored WAVs
@@ -71,6 +79,21 @@ Every radio call is an update to a shared mental model:
 
 Calls that carry none of those four fields are noise. Calls that do are curriculum
 (aviate, navigate, communicate, administrate — present and realistic even when automated).
+The unit of correctness is the whole exchange, not an isolated sentence.
+`MissionRadioExchangeContracts` declares which fields carry forward from the established
+frequency, track, pattern, or datalink; which ordered turns add new information; what must be
+known when the exchange closes; and whether new authority requires a callsign acknowledgment,
+full readback, or observable compliance. Tests fail when inherited context plus the exchange
+leave a required field uncertain.
+
+Those contracts are enforced at runtime, not just linted as documentation. The director keeps a
+per-channel communications picture and an exchange ledger. A field becomes shared only when its
+turn actually keys the mic. A dependent clearance, response, or readback cannot transmit until
+the preceding turn established its prerequisites; expiry or urgent preemption abandons the rest
+of that exchange. Observable acknowledgments close only after the aircraft performs the declared
+action (for example flying the approved break or beginning the return). A bounded decision trail
+records queued, transmitted, duplicate, missing-context, expired, preempted, and completed
+outcomes so tests and telemetry can explain both speech and intelligent silence.
 
 ### The authoring gate
 
@@ -87,11 +110,12 @@ Apply four filters, in order. Fail any filter → the line does not ship.
 
 1. **Audience.** Who is the shared model *for*? Another agent, a human on the loop, tower,
    package — or only the player's ears as narration? Classic guns-only has no package. A
-   trigger call fails here. Pattern traffic has an audience. `GUNS` once on Rapier Intercept
-   has an audience. "The player already sees the gun firing" is not an audience.
+   trigger call fails here. Pattern traffic has an audience. "The player already sees the gun
+   firing" is not an audience, and the current Rapier missions establish no recipient who needs
+   a `GUNS` call for authority, deconfliction, or coordination.
 2. **Delta.** Does this change a field that was already known — including known to the
-   machines? Echo readbacks fail. "Report base" / "report break" fail. Second-burst `GUNS`
-   fails. Restating ANCA fails.
+   machines? Echo readbacks fail. "Report base" / "report break" fail. Trigger narration fails.
+   Restating ANCA fails.
 3. **Workload.** Would a human key the mic *right now*, or would the automation speak only
    if a human ear needs it? Short final, mid-guns, waveoff: fly first. Silence is correct R/T
    when speech steals the scan.
@@ -104,17 +128,24 @@ AIM shapes **ATC form**. AFTTP shapes **whether anyone speaks** and how pilots s
 do. Full callsign on first contact with tower; brevity on package; machine silence when the
 only listener is yourself watching the pipper.
 
-### Two characters on the net
+### Working registers on the net
 
 | Who | Register | Sounds like |
 |-----|----------|-------------|
-| **ATC** (Tower / Approach / Launch / CONTROL) | Exact rulebook | Autistically accurate AIM — complete clearance, correct order, nothing missing |
-| **Pilots** (ownship + traffic) | Brevity, cool | Short position + status; never recite the checklist out loud |
+| **ATC** (Tower / Approach / CONTROL) | Exact rulebook | Connected task speech; complete when a clearance requires it, compressed when shared context permits |
+| **Pilots** (ownship + traffic) | Brevity | Short position or state update; never recite the checklist out loud |
+| **LSO** | Correction ladder | Mostly silent; calm information, then a firmer correction, then a calm waveoff |
 
-Pilots do **not** say "three down and locked" or "gear down and locked." They say what a working
-jet actually keys: `base, 3 greens` / `base, gear to come` / `Land Rapier One One.` Tower still
-clears with the full rulebook string; the pilot's acknowledgement is the brief clearance take —
-not an echo of the whole transmission.
+Ghost 11–14 are squadron slots flying independent single-ship recoveries, not elements covered
+by one flight lead's landing clearance. Each therefore reports callsign, base, achieved gear
+state, and only a non-default intention. Tower grants that aircraft's landing authority; the
+pilot compactly reads back the authority plus callsign. Full stop is the local default and
+remains implicit (`base, three greens`); touch-and-go traffic explicitly states and reads back
+the different intention. The compact formation-only `Ghost One Two, gear` form is specifically
+inapplicable here. Checklist state stays on ANCA.
+Mission-authored ownship touch-and-go uses a separate exact three-line transaction and separate
+clip IDs; it never reuses the full-stop recordings under different words. The current automated
+Circuits card plans a full stop, while a later pilot wave-off/go-around explicitly supersedes it.
 
 One-breath test: *which field, for whom (human or agent), what's the delta, and would this be
 keyed in an AI-first cockpit?*
@@ -131,56 +162,71 @@ it must not jump the queue the instant an event fires. Pilots fly the airplane, 
 | Tower / traffic after an event | ~0.30 s | Prompt, without sounding sample-quantized |
 | LSO | ~0.15 s | Flying the pass *with* the pilot |
 | Urgent (waveoff, bingo) | ~0.10 s | Safety is effectively immediate |
-| Pre-stroke launch clearance | 0 s | Launcher physically holds through clearance + readback |
 
-Reply gaps are ~0.28–0.60 s (deterministic jitter). Natural dead air comes from authoring fewer
+Reply gaps are ~0.18–0.35 s (deterministic jitter). Natural dead air comes from authoring fewer
 calls, not inserting seconds between every line. Pending calls expire when their operational
 moment has passed instead of narrating an old leg.
 
-### Voice bar — characters, not robots
+Pattern traffic uses the same occupied frequency rather than an ambient-chatter timer. Each
+aircraft has a stable training role, configuration state, and reaction delay. It opens its
+landing transaction only after reaching base with gear actually down and locked; the complete
+pilot report, Tower clearance and acknowledgment remain ordered on the shared frequency. An
+unkeyed transaction expires if the aircraft leaves base, and the whole transaction yields to
+urgent safety traffic. Several legitimate recoveries may therefore make the frequency briefly
+busy, while an uneventful circuit remains quiet. Character comes from flying/configuration
+judgment and key-down timing, not longer dialogue.
 
-AI-generated snippets are the delivery path; **character** is the product. Every role is a
-person with peculiarities of talk, feeling, and intonation — not a neutral TTS reader and not
-a sci-fi robot. Standing register lives in `roles.*.instructions`; the moment's feeling lives
-in each line's `direction`. The generator composes both (`tools/audio/radio_voice.py`).
+### Voice bar — behavior, not acting
 
-**ATC** always follows the rulebook. Complete clearances, correct order, no cool-guy
-abbreviation. That precision is the character.
+AI-generated snippets are the delivery path, but acting adjectives are not the route to
+character. Every role is a stable person; the listener recognizes them through vocal grain,
+accent, microphone onset, compression habits, omissions, and turn timing. Stable voice identity
+lives in `roles.*.instructions`; speech-act timing lives in each line's `direction` and
+`target_duration_s`. The generator composes both (`tools/audio/radio_voice.py`).
 
-**Pilot (Rapier One One)** is the owner's voice in the fiction: how *you* talk on the radio —
-chill, economical, sounding cool without trying. Trend toward brevity; never AIM-complete
-when a status word will do. The emotional ladder stays inside that character:
+Short packets are not governed by one global words-per-minute target. Each line declares its
+audible-duration window, legitimate phrase boundary, information focus, final contour, and
+urgency. Landing lines also declare a semantic-unit `cadence` map and an `rt_profile`: identity
+stays clear, familiar operational blocks may compress, and authority or intention receives only
+the modest local timing/stress change supported by the listening corpus. Callsigns and numbers
+remain clear; a line may rise, fall, compress, or pause only when its speech act calls for it.
 
-| Stakes | Reads as |
-|--------|----------|
-| Standard R/T | Chill pilot — bored-precise, easy breath, minimum syllables |
-| Working (G, pattern, employment) | Same chill, body in the voice — clipped, not loud |
-| Bad news (bingo, gear to come, emergency) | Slightly concerned pilot *trying to give chill pilot* — tighter, flatter, never theatrical |
-
-Traffic pilots share the brevity register (junior crisp, bored One Three, old-head One Four).
-Alternate `takes` are the same character with natural micro-timing drift — not a different
-person.
+Urgency changes key-down timing, syntax, and consonant firmness. It does not create shouting,
+growling, a movie-trailer register, or an “explosive” LSO. Repetition occurs only when the
+aircraft has not adequately responded. Alternate `takes` preserve the same role and wording
+with natural micro-timing drift.
 
 Clips are pre-generated and re-used; no live token spend in the sortie loop. `AiGenerated` is
 playback/disclosure about the voice path, consistent with machine-keyed mics speaking in a
 human register. Owner ear is the acceptance gate: if it sounds like a robot, regenerate.
 
-**Generator engines:** `radio_voice.py` supports the OpenAI Speech API and ElevenLabs PCM output,
-normalizing either to the same browser-safe WAV/manifest contract. The checked-in catalog pins
-`gpt-4o-mini-tts-2025-12-15` and brisk per-role speeds rather than floating an alias. For the next
-full cast, `eleven_v3` plus designed/custom role voices is the preferred character-quality
-candidate. Provider, model, voice ID, settings, instructions, line tags, and take number all enter
-the source hash. Regenerate the complete catalog after any of them changes, then pass the owner-ear
+**Generator engines:** `radio_voice.py` supports OpenAI, ElevenLabs, Hume, and Cartesia and
+normalizes them to the same browser-safe WAV/manifest contract. Provider padding is trimmed to
+a short key-up/key-down margin; clips with more than 120 ms of residual tail or an audible
+duration outside the authored window fail generation. Directed Hume auditions use
+Octave 1 because its per-utterance `description` separates voice identity from performance; the
+live Octave 2 endpoint rejects that field and is usable here only as an undirected stock voice.
+The first Hume audition used Octave 2 and therefore did not test the authored direction.
+Cartesia Sonic 3.5 is treated as transcript/voice-only because its speed controls are disabled;
+Eleven v3 likewise has no speed control and relies on voice design, tags, and take selection.
+Provider, model, voice ID, settings, instructions, line direction, and take number all enter the
+source hash. Regenerate the complete catalog after any of them changes, then pass the owner-ear
 gate before replacing production clips.
 
 ### Binding consequences (current catalog)
 
 - Machines key the mic; the game does not make the player perform echo readbacks.
-- Circuits uses launch clearance/readback, initial/break approval, landing clearance, and
+- Launch is a visual shot-crew sequence. It has no radio clearance and audio cannot hold the catapult.
+- Circuits establishes initial/break once, then keeps only each required landing transaction and
   safety calls. Routine downwind/base/final narration is silent.
-- Ambient traffic is one base report at most every 45 seconds, never every ship on every leg.
-- Package weapons brevity carries no callsign ceremony (`Guns.`, `Fox Two.`, `Splash one.`).
-- `GUNS` / `SPLASH` are package calls on Rapier tactical only — never classic guns-only trigger FX.
+- Each independent Rapier owns a base/configuration/intention → clearance → acknowledgment
+  transaction; the shared frequency arbitrates simultaneous arrivals and discards unkeyed stale
+  transactions instead of applying a global chatter throttle.
+- Tactical COMMIT is `Ghost, commit` followed by the required callsign acknowledgment; no
+  cinematic engage order.
+- Package weapons brevity carries no callsign ceremony (`Fox Two.`, `Splash one.`).
+- Gun employment stays in telemetry/AAR. No current mission emits `GUNS`; add it only with a
+  specific recipient and authority/deconfliction contract, and never queue it after the moment.
 - CONTROL / Tower / Approach keep callsign when *who* matters to the addressee — and keep
   rulebook wording (full clearances, gear challenges, waveoffs).
 - LSO stays ultra-short. Wire final stays silent.
@@ -192,10 +238,12 @@ No forced readbacks, no comms minigame — the player's job stays aviate and dec
 
 ## Open work
 
-- **Full character recast**: cast/design stable role voices, generate the finite catalog with
-  `eleven_v3` and the current OpenAI snapshot, then choose by blind owner-ear review. The existing
-  production clips remain interim until that review; API credentials are intentionally not stored
-  in the repository.
+- **Evidence-led recast**: design stable Hume role voices, send the complete performance
+  description on every directed Octave 1 utterance, and owner-review a small representative scene before
+  regenerating the finite catalog. Existing production clips remain interim; API credentials are
+  intentionally not stored in the repository.
+- **Ball timing event**: add a physical carrier-gate event before shipping the pilot ball /
+  `Roger ball` exchange. Do not approximate it with approach-mode engagement.
 - **Chatter tuning**: keep watching call density in Circuits and Rapier recovery. Classic
   guns-only stays quiet on the trigger.
 - **Traffic is heard, not seen**: CircuitPatternTraffic ships render no hulls.

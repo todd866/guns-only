@@ -37,7 +37,27 @@
          renderer's Node tests plus 8 MB of unreferenced template assets only adds deploy/transfer
          surface. -->
     <Content Update="wwwroot/api/*.test.js" CopyToPublishDirectory="Never" />
+    <Content Update="wwwroot/**/*.test.js" CopyToPublishDirectory="Never" />
+    <Content Update="wwwroot/**/*.test.mjs" CopyToPublishDirectory="Never" />
     <Content Update="wwwroot/render/**/tests/**" CopyToPublishDirectory="Never" />
+    <!-- The audio preview is workstation-only authoring tooling. Its gitignored ref/ and out/
+         directories can contain large third-party comparison recordings and local listen renders;
+         Git cleanliness therefore cannot prove they are absent. Exclude the whole lab at the
+         publish boundary so no local QA artifact can become a public static asset. -->
+    <Content Update="wwwroot/render/audio/preview/**/*" CopyToPublishDirectory="Never" />
+    <!-- Raw hybrid extracts are also gitignored and can exist in an otherwise clean worktree.
+         Only the explicitly committed redistributable WAV loops may cross the publish boundary. -->
+    <Content Update="wwwroot/render/audio/samples/jet/_*.wav" CopyToPublishDirectory="Never" />
+    <Content Update="wwwroot/render/audio/samples/jet/_*.flac" CopyToPublishDirectory="Never" />
+    <Content Update="wwwroot/render/audio/samples/jet/*.flac" CopyToPublishDirectory="Never" />
+    <!-- Standalone authoring/review labs remain available from the development host, but they are
+         not experiences in the executable release catalog and have no production route gate.
+         Exclude their entrypoints and local review assets from the public artifact. Cobra Lab is
+         intentionally absent from this list: it is catalogued, quarantined, and fail-closed. -->
+    <Content Update="wwwroot/asset-lab/**/*" CopyToPublishDirectory="Never" />
+    <Content Update="wwwroot/effects-lab/**/*" CopyToPublishDirectory="Never" />
+    <Content Update="wwwroot/environment-lab/**/*" CopyToPublishDirectory="Never" />
+    <Content Update="wwwroot/present/rapier-design/**/*" CopyToPublishDirectory="Never" />
     <Content Update="wwwroot/lib/**" CopyToPublishDirectory="Never" />
   </ItemGroup>
 </Project>

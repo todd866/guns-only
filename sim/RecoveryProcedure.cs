@@ -23,6 +23,10 @@ public readonly record struct RecoveryGate(
 
 public sealed class RecoveryProcedureDirector {
     public const double EnergyBandKtas = 25.0;
+    /// Gate half-widths were authored for a sphere the pilot had to hit. Reused as a lateral
+    /// capture corridor they are the same numbers doing an easier job, widened so that passing
+    /// a gate is forgiving and only the deviation report is exacting.
+    public const double CaptureCorridorScale = 2.0;
 
     RecoveryProcedureKind _kind = RecoveryProcedureKind.None;
     List<RecoveryGate> _gates = new();
@@ -34,6 +38,9 @@ public sealed class RecoveryProcedureDirector {
 
     public RecoveryProcedureKind Kind => _kind;
     public IReadOnlyList<RecoveryGate> Gates => _gates;
+    /// True when the gate just sequenced was passed outside its energy, configuration or
+    /// vertical band. Reported so a sloppy recovery is visible; never used to block the ladder.
+    public bool LastGateMissed { get; private set; }
     public int ActiveIndex => _activeIndex;
     public bool InVolume => _inVolume;
     public bool EnergyOk => _energyOk;
@@ -78,11 +85,28 @@ public sealed class RecoveryProcedureDirector {
         return _gates.Count > 0;
     }
 
-    public void Step(in Vec3D position, double ktas, bool gearDown, bool flapsDown) {
+    /// <summary>
+    /// Advance the ladder. Sequencing is by PASSING a gate, never by satisfying it.
+    ///
+    /// This previously required position, speed and configuration to be true on the same tick,
+    /// inside a 250-700 m sphere, with no re-sequencing and no skip. Miss the first gate --
+    /// which arriving from an intercept you will -- and _activeIndex stuck at 0 for the rest of
+    /// the flight, taking every later phase with it. 129,501 recorded state rows across real
+    /// sorties contain exactly one value of recovery_gate_active_index (0) and one value of
+    /// runway_recovery_phase_name (AIRBORNE): nobody had ever reached a second gate, so nobody
+    /// could land. That was read as the recovery being difficult. It was not difficult; it was
+    /// not running.
+    ///
+    /// Energy and configuration are still measured, and still published, but they report
+    /// deviation instead of blocking progress. A recovery that silently stops sequencing is
+    /// indistinguishable from a broken one, and the pilot has no way to tell which it is.
+    /// </summary>
+    public void Step(in Vec3D position, double trueAirspeedKnots, bool gearDown, bool flapsDown) {
         if (_gates.Count == 0 || _kind == RecoveryProcedureKind.None) {
             _inVolume = false;
             _energyOk = false;
             _configOk = false;
+            LastGateMissed = false;
             return;
         }
 
@@ -92,15 +116,21 @@ public sealed class RecoveryProcedureDirector {
         double dx = position.X - gate.EastM;
         double dy = position.Y - gate.UpM;
         double dz = position.Z - gate.NorthM;
-        double rangeM = Math.Sqrt(dx * dx + dy * dy + dz * dz);
-        _inVolume = rangeM <= gate.HalfM;
-        _energyOk = Math.Abs(ktas - gate.TargetKtas) <= EnergyBandKtas;
+
+        // Lateral capture, vertical graded. Arriving 3,000 m high over the gate is a deviation
+        // worth showing, not a reason to refuse to sequence.
+        double lateralM = Math.Sqrt(dx * dx + dz * dz);
+        double corridorM = gate.HalfM * CaptureCorridorScale;
+        _inVolume = lateralM <= corridorM && Math.Abs(dy) <= corridorM;
+        _energyOk = Math.Abs(trueAirspeedKnots - gate.TargetKtas) <= EnergyBandKtas;
         _configOk = gate.DirtyConfig
             ? gearDown && flapsDown
             : !gearDown && !flapsDown;
 
-        if (_inVolume && _energyOk && _configOk && _activeIndex < _gates.Count - 1)
+        if (lateralM <= corridorM && _activeIndex < _gates.Count - 1) {
+            LastGateMissed = !(_energyOk && _configOk && Math.Abs(dy) <= corridorM);
             _activeIndex++;
+        }
     }
 
     public static IReadOnlyList<RecoveryGate> BuildSchedule(

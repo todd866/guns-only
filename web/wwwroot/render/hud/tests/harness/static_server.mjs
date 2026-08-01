@@ -5,7 +5,7 @@
 // Test instrument only — excluded from publish (see wwwroot/render/**/tests/** in the csproj).
 
 import http from "node:http";
-import { readFile, stat } from "node:fs/promises";
+import { open, readFile, stat } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 
 const MIME = {
@@ -24,6 +24,12 @@ const MIME = {
 
 export async function serveStatic(root) {
   const rootNormal = normalize(root);
+  const diagnostics = {
+    fullFileBytesRead: 0,
+    rangeBytesRead: 0,
+    rangeRequests: 0,
+    largestReadAllocation: 0,
+  };
   const server = http.createServer(async (request, response) => {
     try {
       const url = new URL(request.url, "http://127.0.0.1");
@@ -39,7 +45,6 @@ export async function serveStatic(root) {
         response.writeHead(404).end("not found");
         return;
       }
-      const body = await readFile(filePath);
       const headers = {
         "content-type": MIME[extname(filePath).toLowerCase()] ?? "application/octet-stream",
         "cache-control": "no-store",
@@ -48,23 +53,54 @@ export async function serveStatic(root) {
       if (range) {
         const start = Number(range[1]);
         const end = Number(range[2]);
-        if (start > end || start < 0 || end >= body.length) {
+        if (start > end || start < 0 || end >= info.size) {
           response.writeHead(416, {
             ...headers,
-            "content-range": `bytes */${body.length}`,
+            "content-range": `bytes */${info.size}`,
           }).end();
           return;
         }
-        const slice = body.subarray(start, end + 1);
+        const length = end - start + 1;
+        const slice = Buffer.allocUnsafe(length);
+        diagnostics.rangeRequests++;
+        diagnostics.rangeBytesRead += length;
+        diagnostics.largestReadAllocation = Math.max(
+          diagnostics.largestReadAllocation,
+          length,
+        );
+        const handle = await open(filePath, "r");
+        try {
+          let offset = 0;
+          while (offset < length) {
+            const { bytesRead } = await handle.read(
+              slice,
+              offset,
+              length - offset,
+              start + offset,
+            );
+            if (bytesRead === 0) {
+              throw new Error(`Unexpected EOF while reading ${filePath}`);
+            }
+            offset += bytesRead;
+          }
+        } finally {
+          await handle.close();
+        }
         response.writeHead(206, {
           ...headers,
           "accept-ranges": "bytes",
-          "content-range": `bytes ${start}-${end}/${body.length}`,
+          "content-range": `bytes ${start}-${end}/${info.size}`,
           "content-length": slice.length,
         });
         response.end(slice);
         return;
       }
+      const body = await readFile(filePath);
+      diagnostics.fullFileBytesRead += body.length;
+      diagnostics.largestReadAllocation = Math.max(
+        diagnostics.largestReadAllocation,
+        body.length,
+      );
       response.writeHead(200, headers);
       response.end(body);
     } catch (error) {
@@ -83,5 +119,6 @@ export async function serveStatic(root) {
   return {
     url: `http://127.0.0.1:${port}/`,
     close: () => new Promise((resolvePromise) => server.close(resolvePromise)),
+    diagnostics: () => Object.freeze({ ...diagnostics }),
   };
 }

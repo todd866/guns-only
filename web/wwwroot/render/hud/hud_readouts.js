@@ -19,6 +19,187 @@ function decisionMinutes(prefix, value) {
   return `${prefix} ${minutes} MIN`;
 }
 
+function compactMagnitude(value, {
+  decimals = 1,
+  suffix = "",
+} = {}) {
+  const measured = finiteNumber(value);
+  if (measured === null) return `---${suffix}`;
+  const magnitude = Math.abs(measured);
+  if (magnitude >= 1000) {
+    const digits = magnitude >= 10_000 ? 0 : decimals;
+    const compact = (magnitude / 1000).toFixed(digits).replace(/\.0$/, "");
+    return `${compact}K${suffix}`;
+  }
+  return `${Math.round(magnitude)}${suffix}`;
+}
+
+function compactActualAltitude(value) {
+  const altitudeFt = finiteNumber(value);
+  if (altitudeFt === null) return "--- FT";
+  if (altitudeFt >= 18_000) {
+    return `FL${String(Math.round(altitudeFt / 100)).padStart(3, "0")}`;
+  }
+  return `${compactMagnitude(altitudeFt, { suffix: " FT" })}`;
+}
+
+function compactVerticalSpeed(value, { condensed = false } = {}) {
+  const verticalFpm = finiteNumber(value);
+  if (verticalFpm === null) return "V/S ---";
+  if (Math.abs(verticalFpm) < 25) return condensed ? "V/S0" : "V/S 0";
+  return `${verticalFpm > 0 ? "↑" : "↓"}${compactMagnitude(verticalFpm)}`;
+}
+
+/**
+ * The phone HUD has one bounded tactical rail rather than a miniature desktop instrument panel.
+ * This pure boundary owns only values that change an immediate flying or firing decision; urgent
+ * warnings and projected target/recovery geometry remain separate canvas layers.
+ */
+export function mobileTacticalReadout(state = {}, display = {}, {
+  fightActive = false,
+  targetNumber = 1,
+  tallyRangeM = 18_520,
+  condensed = false,
+} = {}) {
+  const airdata = airdataReadout(state);
+  const indicatedKts = finiteNumber(display.indicatedDigits)
+    ?? airdata.indicatedKts;
+  const altitudeFt = finiteNumber(display.altitudeDigits)
+    ?? finiteNumber(state.alt_ft);
+  const verticalFpm = finiteNumber(display.verticalSpeedDigits)
+    ?? airdata.verticalSpeedFpm;
+  const headingDeg = finiteNumber(display.headingDigits)
+    ?? finiteNumber(state.heading_deg);
+  const mach = finiteNumber(state.mach);
+  const cornerKts = airdata.cornerKts;
+  const cornerDeltaKts = indicatedKts !== null && cornerKts !== null
+    ? Math.round(indicatedKts - cornerKts)
+    : null;
+  const actualG = finiteNumber(state.g_actual);
+  const assistedFlight = state.assisted_flight === true;
+  const assistedSpeedBiasKts = Math.round(
+    finiteNumber(state.assisted_speed_bias_kts) ?? 0,
+  );
+  const compressionFactor = state.time_compression_available === true
+    ? Math.max(1, Math.floor(finiteNumber(state.time_compression_factor) ?? 1))
+    : 1;
+  const separator = condensed ? "·" : " · ";
+  const actualParts = [];
+  if (compressionFactor > 1) actualParts.push(`×${compressionFactor}`);
+  actualParts.push(mach === null
+    ? "M---"
+    : `M${Math.max(0, mach).toFixed(2).replace(/^0/, "")}`);
+  actualParts.push(`${indicatedKts === null ? "---" : Math.round(indicatedKts)}${
+    condensed ? "" : " "}${airdata.speedUnit}`);
+  let energyToken = null;
+  if (assistedFlight) {
+    energyToken = assistedSpeedBiasKts === 0
+      ? condensed ? "AUTO" : "AUTO COR"
+      : `${condensed ? "AUTO" : "AUTO COR"}${
+        assistedSpeedBiasKts > 0 ? "+" : ""}${assistedSpeedBiasKts}`;
+  } else if (fightActive
+      && state.rapier_mission_available !== true
+      && cornerDeltaKts !== null) {
+    energyToken = Math.abs(cornerDeltaKts) <= 5
+      ? "ON COR"
+      : `COR${cornerDeltaKts > 0 ? "+" : ""}${cornerDeltaKts}`;
+  }
+  if (energyToken) actualParts.push(energyToken);
+  if (!condensed && (state.rapier_mission_available === true || !energyToken)) {
+    actualParts.push(headingDeg === null
+      ? "H---"
+      : `H${String(Math.round(((headingDeg % 360) + 360) % 360)).padStart(3, "0")}`);
+  }
+  if (actualG !== null && Math.abs(actualG) >= 2.5) {
+    actualParts.push(`${actualG.toFixed(1)}G`);
+  }
+  const altitudeToken = compactActualAltitude(altitudeFt).replace(/ FT$/, "");
+  if (condensed) {
+    actualParts.push(altitudeToken, compactVerticalSpeed(verticalFpm, { condensed: true }));
+  } else {
+    actualParts.push(`${altitudeToken} ${compactVerticalSpeed(verticalFpm)}`);
+  }
+
+  const ammo = finiteNumber(state.ammo);
+  const gunHeat = Math.max(0, Math.min(1, finiteNumber(state.gun_heat) ?? 0));
+  const weaponParts = [];
+  if (fightActive) {
+    weaponParts.push(`GUN${ammo === null ? "---" : Math.max(0, Math.floor(ammo))}`);
+    if (state.gun_overheat === true) weaponParts.push("OVERHEAT");
+    else if (gunHeat >= 0.05)
+      weaponParts.push(`T${Math.round(gunHeat * 100)}%`);
+  }
+
+  const range = targetRangeReadout(state.range_m);
+  const closure = targetClosureReadout(state.closure_kts);
+  const bvrContact = fightActive
+    && range.rangeNm !== null
+    && range.rangeNm * 1852 > tallyRangeM;
+  if (bvrContact) {
+    weaponParts.push(`T${Math.max(1, Math.floor(targetNumber))} ${range.compactText}`);
+    weaponParts.push(closure.trend === "closing"
+      ? `CLOS${Math.round(closure.closureKts)}`
+      : closure.trend === "opening"
+        ? `OPEN${Math.round(Math.abs(closure.closureKts))}`
+        : closure.closureKts === null ? "CLOS---" : "RNG STEADY");
+  }
+
+  const fuel = fuelReadout(state);
+  if (fuel.consumesFuel && fuel.fuelLb !== null) {
+    weaponParts.push(fuel.statusText
+      ? `${fuel.statusText}${compactMagnitude(fuel.fuelLb)}`
+      : `F${compactMagnitude(fuel.fuelLb)}`);
+  }
+
+  const ammoLevel = ammo !== null && ammo <= 0 ? "warning"
+    : ammo !== null && ammo <= 100 ? "caution" : "normal";
+  const combatWarning = fightActive
+    && (state.gun_overheat === true || ammoLevel === "warning");
+  const combatCaution = fightActive
+    && (gunHeat >= 0.7 || ammoLevel === "caution");
+  const weaponLevel = combatWarning || fuel.minimumFuel || fuel.emergencyFuel
+    ? "warning"
+    : combatCaution || fuel.joker || fuel.bingo ? "caution" : "normal";
+
+  return Object.freeze({
+    actualText: actualParts.join(separator),
+    contextText: weaponParts.join(separator),
+    actual: Object.freeze({
+      mach,
+      indicatedKts,
+      speedUnit: airdata.speedUnit,
+      headingDeg,
+      altitudeFt,
+      verticalFpm,
+      compressionFactor,
+      condensed,
+    }),
+    energy: Object.freeze({
+      cornerKts,
+      cornerDeltaKts,
+      actualG,
+      assistedFlight,
+      assistedSpeedBiasKts,
+      token: energyToken,
+    }),
+    weapon: Object.freeze({
+      ammo,
+      gunHeat,
+      overheated: state.gun_overheat === true,
+      fuelLb: fuel.fuelLb,
+      fuelStatus: fuel.statusText,
+      level: weaponLevel,
+    }),
+    target: Object.freeze({
+      number: Math.max(1, Math.floor(targetNumber)),
+      bvrContact,
+      rangeNm: range.rangeNm,
+      closureKts: closure.closureKts,
+      closureTrend: closure.trend,
+    }),
+  });
+}
+
 export function verticalSpeedText(value) {
   const measuredFpm = finiteNumber(value);
   if (measuredFpm === null) return "V/S --- FPM";
@@ -351,7 +532,7 @@ export function systemsReadout(state = {}) {
       ? `${Math.round(flapLeftDeg)}°/${Math.round(flapRightDeg)}°`
       : `${Math.round(flapLeftDeg ?? flapRightDeg)}°`;
   const mode = normalizedEnum(state.mode,
-    ["FREE", "APPROACH", "WAVE-OFF", "BOLTER", "CATAPULT", "ARRESTED", "STOPPED", "TERMINAL"],
+    ["FREE", "APPROACH", "WAVE-OFF", "BOLTER", "BARRIER", "CATAPULT", "ARRESTED", "STOPPED", "TERMINAL"],
     "--");
   const configurationTarget = normalizedEnum(state.configuration_target,
     ["COMBAT", "RECOVERY"], "--");

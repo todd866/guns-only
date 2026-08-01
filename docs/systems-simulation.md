@@ -79,6 +79,76 @@ scenario scripts.
 - Failure injection is deterministic and named. Random occurrence and maintenance reliability belong
   to scenario/campaign layers, not inside component physics.
 
+## Aircraft service life and maintenance truth
+
+Service life follows the same physical-truth/evidence/belief separation as an in-flight failure.
+A sortie does not deduct an arbitrary percentage from an aircraft. Each vehicle profile records
+only the exposures its fixed-step physics can support; candidate channels include load histories,
+dynamic pressure, temperature/dwell, propulsion regimes, launch/recovery energy, pressure cycles,
+and discrete damage. Unsupported channels remain explicitly unavailable. Versioned engineering
+models then estimate consequences for the specific serialized components that experienced the
+supported exposure.
+
+Four records remain distinct:
+
+1. **Raw exposure** — immutable measured or reconstructed history.
+2. **Modelled damage** — a versioned, uncertainty-bounded estimate that may be recomputed when the
+   engineering model improves.
+3. **Approved limit and maintenance state** — what inspection, qualification, and engineering
+   authority permit today.
+4. **Available evidence** — what the pilot, maintainer, commander, or debrief could legitimately
+   know at that time.
+
+Components retain their serial histories when removed, repaired, overhauled, or installed in
+another shell. Unknown history is not zero damage; repair is not an automatic life reset; and the
+aircraft dispatch state is the most restrictive installed component state. Campaign cost attaches
+to the component life, inspection, repair, and replacement actually consumed rather than to a
+percentage of whole-aircraft flyaway.
+
+The first implementation should be measure-only. It uses fixed-size accumulators inside the
+authoritative tick, emits bounded summaries and sparse exceedance events at lifecycle boundaries,
+and performs persistence away from the render path. It must not change flight limits or threaten
+the 60 fps frame budget merely because a future campaign system will need the data.
+
+`SimulationSession` owns only one sortie's installed-manifest snapshot and exposure report. A
+future campaign/maintenance authority owns cross-sortie component history and dispatch state. It
+reserves one stable sortie identity in its ledger before flight and reuses that reservation across
+retry/reconnect. One installed assembly cannot hold two open reservations. Applying each immutable
+sortie record atomically consumes its reservation; the same identity and canonical content hash is
+a no-op, while the same identity with different content is a quarantined conflict. Replay,
+reconstruction, browser reconnect, and debrief must never consume component life a second time.
+Browser telemetry transports these records but is never their author or persistence authority.
+
+Rapier's complete doctrine, proposed schema, qualification objectives, maintenance state machine,
+economics, and acceptance invariants are in
+[85 — Service life, maintenance, and telemetry](airframes/rapier/85-service-life-maintenance-and-telemetry.md).
+That chapter explicitly replaces the former fixed fifty-sortie whole-aircraft story with a
+component ledger; its numerical life bands remain inactive until `SME-v0` and qualification
+evidence exist.
+
+## Campaign economy boundary
+
+The persistent force economy is downstream of sortie and component truth. Before launch it freezes
+a stable assignment, installed manifest, reservations, mission effect, evidence requirement, and
+policy revisions. After launch it consumes one immutable result exactly once and lets independent
+projections reconcile physical stock, maintenance work, financial cost, effect verification,
+supplemental allocation, and supplier evidence. The exactly-once boundary is one atomic canonical
+`sortie_result_accepted` journal append that transitions the assignment and consumes or releases
+its reservations. Materialized projections are idempotent, sequence-keyed, and rebuildable; a
+crash between projections cannot double-consume stock or suppress unfinished work.
+
+Those projections cannot become a second truth or write back into the completed sortie or each
+other. A tactical score is
+not money; a verified effect is not a maintenance finding; a replacement-value reserve is not
+actual cost; and a political points balance is not airworthiness or dispatch. Browser local
+storage, presentation state, and lossy frame telemetry never author persistent force state.
+
+The complete authority, multi-ledger resource model, procurement lanes, player loop, deterministic
+contracts, and route guarantees are in
+[future air-war economy and force management](air-war-economy-and-force-management.md).
+Its first phase is measure-only shadow accounting so campaign gating cannot outrun trustworthy
+records or the supported 60 fps budget.
+
 ## F-86F research basis
 
 The first checked-in systems profile uses T.O. 1F-86F-1 and NACA/NASA data as a research basis:

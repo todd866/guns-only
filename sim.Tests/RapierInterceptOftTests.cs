@@ -66,6 +66,8 @@ public class RapierInterceptOftTests {
                 ["phase_reason"] = session.RapierPhaseReason,
                 ["cue"] = session.RapierMissionCue,
                 ["mach"] = Math.Round(mach, 3),
+                ["dynamic_pressure_kpa"] = Math.Round(
+                    session.Player.DynamicPressurePa / 1000.0, 3),
                 ["commanded_mach"] = Math.Round(session.RapierCommandedMach, 3),
                 ["authored_mach"] = Math.Round(session.RapierAuthoredTargetMach, 3),
                 ["skin_mach_limit"] = double.IsFinite(session.RapierSkinMachLimit)
@@ -75,6 +77,8 @@ public class RapierInterceptOftTests {
                 ["adiabatic_wall_temp_c"] =
                     Math.Round(session.Player.AdiabaticWallTemperatureK - 273.15, 1),
                 ["skin_temp_c"] = Math.Round(session.Player.SkinTemperatureK - 273.15, 1),
+                ["binding_zone_equilibrium_c"] = Math.Round(
+                    session.Player.AerothermalZoneEquilibriumTemperatureK - 273.15, 1),
                 ["skin_limit_c"] = Math.Round(
                     session.Beat.PlayerAir.SkinTemperatureLimitK - 273.15, 1),
                 ["ktas"] = Math.Round(tas * 1.94384, 1),
@@ -118,7 +122,7 @@ public class RapierInterceptOftTests {
         }
     }
 
-    [Fact(Skip = "Vicinity-kit Rapier rework in flight on pivot-hardening (goal-capable ReachFight director + schema 1.24 tokens). Deliberately skipped 2026-07-29 to unblock the portrait-controls deploy — re-enable with the director ship.")]
+    [Fact]
     public void OftEnergyLadder_ReachesInterceptWithFightingRoom() {
         using var telemetry = new InterceptOftTelemetry("energy-ladder");
         var session = new SimulationSession(10,
@@ -134,7 +138,12 @@ public class RapierInterceptOftTests {
         double dashSkinC = double.NaN;
         double dashRecoveryC = double.NaN;
         double dashStagnationC = double.NaN;
-        int maximumTicks = checked((int)(12 * 60 * AircraftSim.TickHz));
+        double maximumDynamicPressurePa = 0.0;
+        double maximumBindingZoneTemperatureK = 0.0;
+        // Two authored skips plus their physical relights now take about 13 minutes once the
+        // canonical 55 kPa placard is actually obeyed. Fifteen minutes is the OFT budget; the old
+        // twelve-minute cutoff depended on a 71 kPa transonic overspeed.
+        int maximumTicks = checked((int)(15 * 60 * AircraftSim.TickHz));
         for (int tick = 0; tick < maximumTicks; tick++) {
             session.StepFixed();
             telemetry.Observe(session, tick);
@@ -145,7 +154,16 @@ public class RapierInterceptOftTests {
             double mach = session.Player.AirspeedMps
                 / StandardAtmosphere1976.Instance.Sample(
                     session.Player.State.Position.Y).SpeedOfSoundMps;
-            if (session.RapierPhase == RapierMissionPhase.Intercept && mach >= 2.7) {
+            maximumDynamicPressurePa = Math.Max(
+                maximumDynamicPressurePa, session.Player.DynamicPressurePa);
+            maximumBindingZoneTemperatureK = Math.Max(
+                maximumBindingZoneTemperatureK,
+                session.Player.AerothermalZoneEquilibriumTemperatureK);
+            // Intercept after a zoom/relight is an energy-positive M2.2 handoff, not an obsolete
+            // fixed-altitude M2.7 sampling point. Record the first real handoff while there is
+            // still range to fight; the authored target and local q/thermal caps remain separate.
+            if (session.RapierPhase == RapierMissionPhase.Intercept
+                && mach >= ReachFightDirector.LevelDashMinMach) {
                 rangeAtDashM = (session.Bandit.State.Position
                     - session.Player.State.Position).Length;
                 AtmosphericState dashAir = StandardAtmosphere1976.Instance.Sample(
@@ -188,24 +206,38 @@ public class RapierInterceptOftTests {
         Assert.True(File.Exists(Path.Combine(telemetry.DirectoryPath, "gates.jsonl")));
         string gates = File.ReadAllText(Path.Combine(telemetry.DirectoryPath, "gates.jsonl"));
         Assert.Contains("\"reason\"", gates);
-        // Classic ClimbBuild→RamClimb→Intercept corridor only; ZoomLob/post_lob paths may
-        // reach Intercept at lower Mach without camping FL700. Shelf LevelDash at formation
-        // range also enters intercept_dash before the FL700 capture completes.
-        if (reasons.Contains("intercept_dash") && dashAltitudeFt >= 68_000.0) {
-            // Published Build 174/175 energy-ladder corridor: the wall value is genuinely around
-            // 451 C here, while true T0 is around 520 C. Keeping both ranges in the OFT prevents a
-            // future snapshot/HUD change from "fixing" the low wall by relabelling or inflating it.
-            Assert.InRange(dashMach, 3.55, 3.75);
-            Assert.InRange(dashAltitudeFt, 68_000.0, 71_000.0);
-            Assert.InRange(dashSkinC, 430.0, 470.0);
-            Assert.InRange(dashRecoveryC, 440.0, 470.0);
-            Assert.InRange(dashStagnationC, 500.0, 540.0);
-            Assert.True(dashStagnationC > dashRecoveryC + 50.0);
-            Assert.InRange(session.RapierSkinMachLimit, 5.30, 5.40);
-        }
-        Assert.Contains(
-            $"M{RapierMissionDirector.MeasuredDashMach:F1} / FL700",
-            session.RapierMissionCue);
-        Assert.DoesNotContain("M4.0 / FL700", session.RapierMissionCue);
+        Assert.True(maximumDynamicPressurePa <= RapierV2Design.MaximumDynamicPressurePa + 1.0,
+            $"OFT exceeded q placard: {maximumDynamicPressurePa / 1000.0:F2} kPa");
+        Assert.True(maximumBindingZoneTemperatureK
+                <= session.Beat.PlayerAir.SkinTemperatureLimitK + 0.1,
+            $"OFT exceeded binding thermal limit: {maximumBindingZoneTemperatureK:F1} K");
+        // This is the first energy-positive handoff after the physical zoom/relight, not the old
+        // Build 174/175 fixed-FL700 thermal snapshot. Pin the current contract to named thresholds
+        // and the v2 binding-zone equation instead of inheriting v1 Mach and temperature bands.
+        Assert.InRange(dashMach,
+            ReachFightDirector.LevelDashMinMach,
+            ReachFightDirector.LevelDashMinMach + 0.01);
+        Assert.True(double.IsFinite(dashAltitudeFt));
+        Assert.True(dashStagnationC > dashRecoveryC,
+            $"stagnation {dashStagnationC:F1} C must exceed recovered wall {dashRecoveryC:F1} C");
+        Assert.True(dashRecoveryC > dashSkinC,
+            $"recovered wall {dashRecoveryC:F1} C must exceed lagged skin {dashSkinC:F1} C");
+        AtmosphericState handoffAir = StandardAtmosphere1976.Instance.Sample(
+            session.Player.State.Position.Y);
+        double expectedSkinMachLimit = AirData.MachLimitForEffectiveZoneTemperature(
+            session.Beat.PlayerAir.SkinTemperatureLimitK,
+            handoffAir.TemperatureK,
+            session.Beat.PlayerAir.AerothermalLimitReference,
+            session.Beat.PlayerAir.AerothermalAdiabaticRiseFraction);
+        // Guidance is evaluated immediately before the fixed-step state integration observed
+        // here, so compare the same equation to millimach precision across that one-tick altitude.
+        Assert.Equal(expectedSkinMachLimit, session.RapierSkinMachLimit, 3);
+        Assert.True(session.RapierSkinMachLimit > dashMach,
+            $"v2 binding-zone cap M{session.RapierSkinMachLimit:F2} must leave handoff room above M{dashMach:F2}");
+        Assert.Equal(RapierMissionDirector.MeasuredDashMach,
+            session.RapierAuthoredTargetMach, 6);
+        Assert.Contains($"M{session.RapierCommandedMach:F1}", session.RapierMissionCue);
+        Assert.Contains("Q/THERM LIMITS", session.RapierMissionCue);
+        Assert.DoesNotContain("FL700", session.RapierMissionCue);
     }
 }

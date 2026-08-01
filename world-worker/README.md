@@ -31,12 +31,38 @@ world. It is deliberately explicit about what it does **not** yet authorize.
 - Protocol v2 accepts one bounded JSON hello followed by monotonically increasing pose messages.
 - ACTIVE state publishes at 20 Hz. READY, PAUSED, and FINISHED publish at 1 Hz, with lifecycle,
   entity, physical-presence, and impact transitions sent immediately.
-- The worker accepts at most 64 online pilots plus eight pending handshakes. A token bucket permits
-  brief network bursts but rejects sustained input above the 20 Hz contract.
+- The worker accepts at most 64 online pilots plus eight pending handshakes, with at most two
+  pending handshakes from one admission bucket. A token bucket permits brief network bursts but
+  rejects sustained input above the 20 Hz contract.
 - Handshakes time out after five seconds. A connection with no valid pose for 15 seconds is closed;
   the browser clears remote contacts immediately on disconnect, world-epoch change, or stop.
 - A new connection for the same persistent pilot deterministically replaces the older socket.
 - Origins are exact configured origins. `localhost` is not implicitly trusted at arbitrary ports.
+- Existing pilot keys reclaim their stored identity before any creation budget is charged, even
+  during a surge or at connection capacity. New identities are capped at 12 per hour per trusted
+  Cloudflare client-address principal (exact IPv4 or native IPv6 /64), with a separate
+  1,200-per-hour global emergency backstop. Source principals are mapped through SHA-256 into 1,024
+  fixed persisted buckets, so the limiter never stores raw addresses and attacker-controlled input
+  cannot create unbounded limiter state.
+- A capacity-derived global ceiling admits at most 109 new identities per fixed 24-hour window.
+  That is `floor(10,000 / (ceil(90 days / 24 hours) + 1))`: the extra cohort covers the exact
+  90-day expiry boundary, so even adversarially distributed sources cannot consume the namespace
+  before retained identities have had one complete reclamation horizon. Existing identities still
+  reconnect without spending this budget; the per-source and 1,200-per-hour limits remain
+  independent abuse backstops.
+- Hosted `/room` requests fail closed when Cloudflare client context is unavailable; only loopback
+  local-development requests receive a fixed fallback principal. Admission throttles send a
+  bounded `identity-unavailable` retry message before closing with WebSocket code 1013, while
+  `/healthz` exposes aggregate hourly and capacity-derived limits, current window usage, and
+  minute-sampled rejection diagnostics without source identifiers or per-rejection write
+  amplification.
+- Identities which have not reconnected for 90 days are reclaimed in bounded 127-record sweeps;
+  the 128th bulk-write pair is reserved for the durable world cursor. At identity capacity, one
+  hello advances at most four batches (508 records), then returns a five-second retry while the
+  persisted cursor continues on later attempts. The cursor wraps a prior maintenance position
+  exactly once; a genuine full-keyspace cycle with no reclaimed slot starts a one-hour rescan
+  cooldown. Active sockets are never reclaimed, and legacy records receive a fresh activity
+  timestamp on their first sweep rather than being expired without a complete retention window.
 
 ## Scale boundary
 
@@ -50,11 +76,19 @@ adjacent sectors, followed by load tests that measure messages, CPU, egress, rec
 alarm cost. Raising the ceiling before that work would hide an architectural limit rather than
 solve it.
 
+Admission buckets are bounded availability controls, not identities: the unkeyed 1,024-way hash
+can make unrelated principals share quota. Fixed windows can also admit two cohorts close to a
+window boundary; the extra capacity cohort above keeps that burst namespace-safe, but does not
+smooth traffic. Authenticated principals and a keyed or continuously refilling limiter belong with
+the sharded-world scale step.
+
 ## Verification
 
-Run the focused contracts without deploying:
+Wrangler 4.114 requires Node.js 22 or newer (CI uses Node.js 24). Run the focused contracts
+without deploying:
 
 ```sh
+npm --prefix world-worker ci --ignore-scripts
 node --test world-worker/tests/*.test.mjs web/wwwroot/render/presence/tests/*.test.mjs
 dotnet test server.Tests/GunsOnly.Server.Tests.csproj --configuration Release
 ```

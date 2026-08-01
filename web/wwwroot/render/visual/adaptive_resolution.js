@@ -32,6 +32,11 @@ export class AdaptiveResolutionController {
   configure(options = {}) {
     this.enabled = options.enabled !== false;
     this.pixelRatioCap = clamp(finite(options.pixelRatioCap, this.pixelRatioCap ?? 1), 0.5, 4);
+    this.minimumPixelRatio = clamp(
+      finite(options.minimumPixelRatio, this.minimumPixelRatio ?? 0.5),
+      0.5,
+      4,
+    );
     this.maxRenderPixels = Math.round(clamp(
       finite(options.maxRenderPixels, this.maxRenderPixels ?? 3_700_000),
       65_536,
@@ -82,6 +87,32 @@ export class AdaptiveResolutionController {
     return this.apply(reason);
   }
 
+  /**
+   * Apply one explicit quality rung after a caller has attributed frame pressure to the view/GPU
+   * lane. Ordinary `sample()` remains the closed-loop controller; these nudges let the outer frame
+   * governor act immediately without feeding a synthetic frame time into the EMA or confusing a
+   * CPU/terrain stall with renderer pressure.
+   */
+  nudgeDown(reason = "causal-view-pressure") {
+    if (!this.enabled || this.scale <= this.minScale) return this.status(false, reason);
+    const nextScale = quantize(Math.max(this.minScale, this.scale - this.stepDown));
+    if (nextScale === this.scale) return this.status(false, reason);
+    this.scale = nextScale;
+    this.samplesSinceChange = 0;
+    const changed = this.apply(reason);
+    return this.status(changed, reason);
+  }
+
+  nudgeUp(reason = "causal-view-recovery") {
+    if (!this.enabled || this.scale >= this.maxScale) return this.status(false, reason);
+    const nextScale = quantize(Math.min(this.maxScale, this.scale + this.stepUp));
+    if (nextScale === this.scale) return this.status(false, reason);
+    this.scale = nextScale;
+    this.samplesSinceChange = 0;
+    const changed = this.apply(reason);
+    return this.status(changed, reason);
+  }
+
   get maximumPixelRatio() {
     const pixelBudgetRatio = Math.sqrt(this.maxRenderPixels / (this.width * this.height));
     return Math.min(this.devicePixelRatio, this.pixelRatioCap, pixelBudgetRatio);
@@ -90,12 +121,16 @@ export class AdaptiveResolutionController {
   apply(reason) {
     const effectiveScale = this.enabled ? this.scale : this.maxScale;
     const maximumPixelRatio = this.maximumPixelRatio;
+    // A phone-sized surface must not become a visibly enlarged sub-resolution image merely
+    // because CPU-side terrain work missed frame budget. The hard render-pixel ceiling still
+    // wins on genuinely large viewports, so this floor can never violate the memory budget.
+    const minimumPixelRatio = Math.min(maximumPixelRatio, this.minimumPixelRatio);
     // Apply the adaptive scale after all hard limits. Clamping the rounded result
     // back to the limit ensures quantization can never exceed the pixel budget.
-    const next = Math.min(
+    const next = Math.max(minimumPixelRatio, Math.min(
       maximumPixelRatio,
       quantize(maximumPixelRatio * effectiveScale),
-    );
+    ));
     if (next === this.pixelRatio && reason !== "resize") return false;
     this.pixelRatio = next;
     this.onChange(next, {
@@ -106,6 +141,7 @@ export class AdaptiveResolutionController {
       emaFrameMs: this.emaFrameMs,
       targetFrameMs: this.targetFrameMs,
       maximumPixelRatio,
+      minimumPixelRatio,
       maxRenderPixels: this.maxRenderPixels,
     });
     return true;
@@ -162,6 +198,7 @@ export class AdaptiveResolutionController {
       emaFrameMs: this.emaFrameMs,
       targetFrameMs: this.targetFrameMs,
       maximumPixelRatio: this.maximumPixelRatio,
+      minimumPixelRatio: Math.min(this.maximumPixelRatio, this.minimumPixelRatio),
       maxRenderPixels: this.maxRenderPixels,
       samples: this.samples,
       ignored: false,

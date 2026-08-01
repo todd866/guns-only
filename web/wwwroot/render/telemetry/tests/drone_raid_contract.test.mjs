@@ -25,7 +25,12 @@ test("stable beat eight selects the fictional Ukraine low-level staged raid with
   // must admit the new Medevac entry instead of silently falling back to the first beat.
   assert.match(sessionSource,
     /if \(!Beats\.IsBuiltInIndex\(index\)\) index = Beats\.FirstBuiltInIndex;/);
-  assert.match(beatsSource, /public const int LastBuiltInIndex = 13;/);
+  // The comment above already says the ceiling can grow, so do not hard-pin it -- pinning 13 is
+  // what broke this test the moment a fourteenth beat landed. Beat EIGHT staying the drone raid
+  // is the property; the ceiling is just the catalogue getting bigger.
+  const ceiling = Number(
+    /public const int LastBuiltInIndex = (\d+);/.exec(beatsSource)?.[1] ?? NaN);
+  assert.ok(ceiling >= 13, `built-in catalogue shrank below the drone raid: ${ceiling}`);
   assert.match(beatsSource,
     /index is >= FirstBuiltInIndex and <= LastBuiltInIndex;/);
   assert.match(beatsSource, /13 => Medevac\(\),/);

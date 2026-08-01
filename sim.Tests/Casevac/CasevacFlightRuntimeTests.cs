@@ -148,6 +148,49 @@ public class CasevacFlightRuntimeTests {
     }
 
     [Fact]
+    public void InitialPickupGuidanceAndHeadingUseTheAuthoredOrchardGapRoute() {
+        CasevacFlightRuntime runtime = CreateRuntime(out _);
+        runtime.Begin(20);
+
+        CasevacResolvedRoute route = Assert.Single(
+            runtime.ResolvedRoutes,
+            candidate => candidate.Id
+                == "route.casevac.ingress-direct.v1");
+        CasevacResolvedRouteControlPoint start = route.Points[0];
+        CasevacResolvedRouteControlPoint gap = route.Points[1];
+        CasevacResolvedRouteControlPoint pickup = route.Points[^1];
+        CasevacTargetGuidance guidance = runtime.TargetGuidance;
+
+        Assert.Equal(BuiltInCasevacDefinitions.PickupLocationId,
+            guidance.TargetId);
+        Assert.Equal(gap.EastM, guidance.TargetWorldM.X, 12);
+        Assert.Equal(gap.NorthM, guidance.TargetWorldM.Z, 12);
+        Assert.Equal(
+            gap.SurfaceElevationM + gap.TargetAglM,
+            guidance.TargetWorldM.Y,
+            12);
+
+        static double Distance(
+            in CasevacResolvedRouteControlPoint first,
+            in CasevacResolvedRouteControlPoint second) {
+            double east = second.EastM - first.EastM;
+            double north = second.NorthM - first.NorthM;
+            return Math.Sqrt(east * east + north * north);
+        }
+        double expectedRouteRangeM = Distance(start, gap)
+            + Distance(gap, pickup);
+        Assert.Equal(expectedRouteRangeM, guidance.HorizontalRangeM, 8);
+
+        double expectedInitialBearing = Math.Atan2(
+            gap.EastM - start.EastM,
+            gap.NorthM - start.NorthM);
+        Assert.Equal(expectedInitialBearing,
+            guidance.AbsoluteBearingRad, 12);
+        Assert.Equal(expectedInitialBearing,
+            runtime.VehicleObservation.YawRad, 12);
+    }
+
+    [Fact]
     public void EnergyDepletionMakesTheVehicleUnflyableForMissionAuthority() {
         long sequence = 0;
         var runtime = new CasevacFlightRuntime(

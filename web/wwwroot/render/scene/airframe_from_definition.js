@@ -6,7 +6,11 @@ import {
   createLoftGeometry,
   createPlanformGeometry,
   makeMaterial,
-} from "./scene_builders.js?v=199";
+} from "./airframe_primitives.js?v=238";
+import {
+  adaptShapeFirstAirframeDefinition,
+  isShapeFirstAirframeDefinition,
+} from "./shape_first_airframe_adapter.js?v=238";
 
 function parseColor(value, fallback = 0x808080) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -71,7 +75,10 @@ function rapierPartNames(def) {
  * Build a Three.js airframe mesh from a guns-only Airframe Definition.
  * Missing required geometry throws — never falls back to another vehicle mesh.
  */
-export function createAirframeFromDefinition(def, context = {}) {
+export function createAirframeFromDefinition(definition, context = {}) {
+  const def = definition?.geometry && isShapeFirstAirframeDefinition(definition)
+    ? adaptShapeFirstAirframeDefinition(definition)
+    : definition;
   requireGeometry(def);
   const names = rapierPartNames(def);
   const mats = paletteMaterials(def);
@@ -110,6 +117,7 @@ export function createAirframeFromDefinition(def, context = {}) {
     const [ix, iy, iz] = def.intake.position || [0, 0, 0];
     intake.position.set(ix, iy, iz);
     intake.rotation.y = Math.PI;
+    intake.rotation.x = Number(def.intake.rotX) || 0;
     group.add(intake);
   }
 

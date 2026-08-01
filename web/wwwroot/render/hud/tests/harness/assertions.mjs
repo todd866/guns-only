@@ -303,9 +303,11 @@ function assertTargetTwoDirector(data) {
   check(data.name, "TARGET 2 is explicitly identified as selected",
     geometry.padlockMode?.title === "TARGET 2 · SELECTED · PADLOCK",
     `title=${JSON.stringify(geometry.padlockMode?.title)}`);
+  // The roll command is the director's signed error on the instrument, not the string
+  // "TARGET 2 · ROLL RIGHT 43°". A positive roll error is a roll to the right.
   check(data.name, "TARGET 2 receives an explicit roll-right command",
-    /^TARGET 2 · ROLL RIGHT \d+°$/.test(geometry.padlockDirective ?? ""),
-    `directive=${JSON.stringify(geometry.padlockDirective)}`);
+    Number(geometry.padlockDirector?.rollErrorRad) > 0,
+    `rollErrorRad=${JSON.stringify(geometry.padlockDirector?.rollErrorRad)}`);
   check(data.name, "off-axis gun sight stays caged and names TARGET 2",
     geometry.offAxisGunCue
       === "GUN CAGED · TARGET 2 · FOLLOW ROLL / PULL",
@@ -356,72 +358,76 @@ function assertFunnelContainsTarget(data) {
     + ` at r=${best.rangeM.toFixed(0)} m`);
 }
 
-function assertPadlockInsetAndLocator(data) {
+function assertPadlockActionAndLocator(data) {
   const { name, geometry, probes, padlockState, state } = data;
   if (!data.padlock || padlockState?.target === "carrier") return;
 
-  // The body-fixed locator inset is the padlock's single ownship instrument: always present in
-  // bandit padlock, valid at every camera attitude (that is the point of being body-fixed).
-  const inset = geometry.padlockInset;
-  check(name, "locator inset present in bandit padlock", Boolean(inset),
-    inset ? "present" : "missing");
-  if (!inset) return;
-
-  const bankDeg = Number(data.state.bank_deg) || 0;
-  check(name, "inset ADI bank == ownship bank",
-    Math.abs(inset.bankDeg - bankDeg) <= 1e-9, `${inset.bankDeg} vs ${bankDeg}`);
-  const pitchDeg = Number(data.state.pitch_deg) || 0;
-  const expectedHorizonOffset = pitchDeg * inset.ballRadius / 35;
-  check(name, "inset horizon uses the full body pitch without shallow-attitude clamping",
-    Number.isFinite(inset.horizonOffsetPx)
-      && Math.abs(inset.horizonOffsetPx - expectedHorizonOffset) <= 1e-9,
-    `offset ${inset.horizonOffsetPx?.toFixed?.(2)} px vs `
-      + `${expectedHorizonOffset.toFixed(2)} px for pitch ${pitchDeg} deg`);
-  if (Math.abs(pitchDeg) > 35) {
-    check(name, "steep attitude lets the true horizon leave the ball",
-      Math.abs(inset.horizonOffsetPx) > inset.ballRadius,
-      `|offset| ${Math.abs(inset.horizonOffsetPx).toFixed(2)} px > `
-        + `radius ${inset.ballRadius.toFixed(2)} px`);
-  }
-  const expectedBankPointer = -Math.PI / 2 + bankDeg * DEG;
-  check(name, "bank pointer follows ownship bank on the fixed scale",
-    Math.abs(inset.bankPointerAngleRad - expectedBankPointer) <= 1e-9,
-    `${(inset.bankPointerAngleRad * RAD).toFixed(3)} deg vs `
-      + `${(expectedBankPointer * RAD).toFixed(3)} deg`);
-
-  // The gate is the signed BODY-FRAME roll error, never mirrored by camera azimuth or target
-  // hemisphere. Chevrons therefore always mean keyboard roll direction.
+  // Steering IS the attitude ball. The text action strip that used to carry it printed the roll
+  // error across the ball's horizon and was retired; a command to the pilot is graphical.
+  const action = geometry.padlockAction;
   const director = geometry.padlockDirector;
-  if (director && !director.captured && !director.anyPlane) {
+  const radarAltFt = Number(state.radar_alt_ft);
+  const sinkFpm = Number(state.vertical_speed_fpm);
+  const pitchDeg = Number(state.pitch_deg);
+  const urgentPull = state.auto_gcas_active === true
+    || state.auto_gcas_warning === true
+    || (radarAltFt < 2000 && (pitchDeg < -2 || sinkFpm < -1500))
+    || (state.auto_gcas_available !== true && radarAltFt < 500 && sinkFpm < -1000);
+  if (director || urgentPull) {
+    check(name, "padlock shows the attitude instrument when steering is live",
+      Boolean(geometry.padlockAttitude),
+      geometry.padlockAttitude ? "adi" : "missing");
+    check(name, "no text action strip covers the attitude ball", !action,
+      action ? `${action.action} ${action.direction}` : "absent");
+  }
+  if (action) {
+    const bankDeg = Number(state.bank_deg) || 0;
+    const pitchDeg = Number(state.pitch_deg) || 0;
+    check(name, "action strip bank and pitch are ownship truth",
+      Math.abs(action.bankDeg - bankDeg) <= 1e-9
+        && Math.abs(action.pitchDeg - pitchDeg) <= 1e-9,
+      `bank ${action.bankDeg}/${bankDeg}; pitch ${action.pitchDeg}/${pitchDeg}`);
+    check(name, "portrait-safe action label stays compact",
+      /^T[12] · (?:ROLL [LR] \d+°|PULL(?: UP)?)$/.test(action.displayLabel ?? ""),
+      `displayLabel=${JSON.stringify(action.displayLabel)}`);
+  }
+
+  if (urgentPull && action) {
+    check(name, "ground/GCAS danger pre-empts combat steering with PULL UP",
+      action.action === "PULL UP" && action.direction === "up",
+      `action=${action.action}; direction=${action.direction}`);
+  } else if (director && action && !director.captured && !director.anyPlane) {
     const expectedRollErrorRad = state.padlock_preferred_plane_valid === true
       ? Number(state.padlock_preferred_plane_deg) * DEG
       : probes.padlockRollErrorRad;
-    const error = Math.abs(inset.gateAngleFromUpRad - expectedRollErrorRad);
+    const error = Math.abs(action.rollErrorRad - expectedRollErrorRad);
+    const expectedDirection = expectedRollErrorRad >= 0 ? "right" : "left";
     check(name, state.padlock_preferred_plane_valid === true
-      ? "inset gate == kernel preferred-plane error"
-      : "inset gate == body-frame roll error (never mirrored)",
+      ? "action == kernel preferred-plane error"
+      : "action == body-frame roll error (never mirrored)",
       error <= 1e-9,
       `error ${(error * RAD).toFixed(9)} deg`);
-  } else if (director && (director.captured || director.anyPlane)) {
-    check(name, "captured/neutral gate sits on the lift line",
-      inset.gateAngleFromUpRad === 0,
-      `gate ${inset.gateAngleFromUpRad}`);
+    check(name, "action names the correct roll direction once",
+      action.direction === expectedDirection
+        && action.action.startsWith(`ROLL ${expectedDirection.toUpperCase()}`),
+      `action=${action.action}; direction=${action.direction}`);
+  } else if (director && action && (director.captured || director.anyPlane)) {
+    check(name, "captured/neutral director becomes one PULL command",
+      action.action === "PULL" && action.direction === "up",
+      `action=${action.action}; direction=${action.direction}`);
   }
-  check(name, "neutral ring follows the dead-six anyPlane state",
-    Boolean(inset.neutral) === Boolean(director?.anyPlane),
-    `neutral=${inset.neutral}; anyPlane=${director?.anyPlane}`);
 
-  // AFT / shoulder language from the body-frame hemisphere.
-  if (probes.padlockTargetForward < -0.17) {
+  // AFT language remains body-relative but drops the verbose shoulder instruction.
+  if (action && probes.padlockTargetForward < -0.17) {
     const ambiguous = Math.abs(probes.padlockTargetRight) < 0.05;
     const expectedShoulder = probes.padlockTargetRight >= 0 ? "R" : "L";
-    check(name, "aft label present with the correct shoulder",
-      typeof inset.aftLabel === "string"
-        && inset.aftLabel.includes("AFT")
+    check(name, "action strip names the correct aft side",
+      typeof action.hemisphere === "string"
+        && action.hemisphere.includes("AFT")
         && (ambiguous
-          ? !inset.aftLabel.includes("SHOULDER")
-          : inset.aftLabel.includes(`${expectedShoulder} SHOULDER`)),
-      `label "${inset.aftLabel}" for targetRight ${probes.padlockTargetRight.toFixed(3)}`);
+          ? !/[LR]$/.test(action.hemisphere)
+          : action.hemisphere.endsWith(expectedShoulder)),
+      `hemisphere "${action.hemisphere}" for targetRight ${probes.padlockTargetRight.toFixed(3)}`);
   }
 
   // The off-axis locator caret must track the camera-space great-circle direction to the
@@ -485,7 +491,8 @@ function assertBasicJobs(data) {
       check(name, "locator arrow points along the camera-space target direction",
         dot >= 0.995, `dot ${dot.toFixed(5)} (tol 0.995)`);
     }
-    if (geometry.banditPx && !geometry.banditPx.behind
+    if (!locator.bvrContact
+        && geometry.banditPx && !geometry.banditPx.behind
         && geometry.banditPx.x >= 20 && geometry.banditPx.x <= viewport.width - 20
         && geometry.banditPx.y >= 20 && geometry.banditPx.y <= viewport.height - 20) {
       check(name, "visible bandit gets the marker, not the arrow",
@@ -601,6 +608,7 @@ function assertSpeedBrake(data) {
 function assertRapierMission(data) {
   const { name, geometry, state, viewport } = data;
   if (state.rapier_mission_available !== true) return;
+  if (data.profile !== "standard") return;
   rapierMissionObservations += 1;
 
   const line = geometry.rapierModeLine;
@@ -618,28 +626,49 @@ function assertRapierMission(data) {
     `box=${line.x},${line.y} ${line.width}x${line.height}`);
 
   const phase = Math.floor(Number(state.rapier_mission_phase) || 0);
+  const circuits = state.rapier_pattern_only === true;
   const drones = Math.floor(Number(state.rapier_gun_drones_remaining) || 0);
   const gate = Math.floor(Number(state.rapier_recovery_gate) || 0);
 
-  if (phase === 10) {
+  if (!circuits && phase === 10) {
     check(name, "attack mode line authorizes F swarm release",
       /F RELEASES SWARM/i.test(line.text) && line.text.includes(String(drones)),
       line.text);
     check(name, "attack level is attack (not buried under propulsion essay)",
       line.level === "attack", `level=${line.level}`);
   }
-  if (phase === 11) {
+  if (!circuits && phase === 11) {
     check(name, "egress mode line is short EGRESS · HOME",
       /EGRESS/.test(line.text) && /HOME/.test(line.text) && !/NEED/.test(line.text),
       line.text);
   }
-  if (phase === 13) {
+  if (!circuits && phase === 13) {
     check(name, "recovery mode line carries gate index",
       line.text.includes(`GATE ${gate}/4`),
       line.text);
   }
 
   const panel = geometry.limitsPanel;
+  if (circuits) {
+    check(name, "Circuits line is only authority plus current leg",
+      line.text.endsWith(String(state.rapier_circuit_leg).replaceAll("_", " "))
+        && !/CIRCUITS|HOOK|GEAR|ELEVONS|\d+ KT|\d+ FT/.test(line.text),
+      line.text);
+    check(name, "non-limiting Circuits fuel stays latent",
+      !panel, panel ? `${panel.profile} rows=${panel.rows?.length}` : "absent");
+    if (name.includes("rapier-circuits-downwind-verified")) {
+      check(name, "verified Circuits configuration expires",
+        !geometry.systemsPanel,
+        geometry.systemsPanel ? "systems panel still drawn" : "absent");
+    }
+    if (name.includes("rapier-circuits-downwind-config-due")) {
+      check(name, "configuration disagreement resurfaces VERIFY",
+        Boolean(geometry.systemsPanel),
+        geometry.systemsPanel ? "systems panel drawn" : "missing");
+    }
+    return;
+  }
+
   const compact = panel?.compact === true;
   const expectedRows = compact ? 2 : 5;
   check(name, "Rapier Limits Panel is drawn (nav to strip)",
@@ -705,6 +734,140 @@ function assertRapierPanelLayout(data) {
   }
 }
 
+function assertCarrierSortieRouteGuidance(data) {
+  const { geometry, name } = data;
+  const validAwaitingReturn = name.endsWith(":carrier-route-awaiting-return");
+  const malformedActive = name.endsWith(":carrier-route-malformed-active");
+  if (!validAwaitingReturn && !malformedActive) return;
+
+  const route = geometry.carrierSortieRoute;
+  const caret = geometry.carrierRouteCaret;
+  if (validAwaitingReturn) {
+    check(name, "valid carrier route draws its heading caret",
+      caret?.drawn === true
+        && caret.source === "carrier-route"
+        && caret.phase === "AWAITING_RETURN",
+      JSON.stringify(caret));
+    check(name, "valid carrier route publishes route debug",
+      route?.source === "carrier-route"
+        && route.phase === "AWAITING_RETURN"
+        && route.rtbActionRequired === true,
+      JSON.stringify(route));
+    check(name, "route debug text carries guidance and the keyboard RTB prompt",
+      typeof route?.guidanceDirective === "string"
+        && route.text?.includes(route.guidanceDirective) === true
+        && route.keyboardPrompt === "PRESS O — RETURN TO SHIP"
+        && route.text.includes("PRESS O — RETURN TO SHIP"),
+      JSON.stringify(route?.text));
+    check(name, "valid carrier route suppresses the generic boat caret",
+      !geometry.boatRtbCaret, JSON.stringify(geometry.boatRtbCaret));
+    check(name, "valid carrier route suppresses the generic RTB cue",
+      !geometry.rtbCue, JSON.stringify(geometry.rtbCue));
+    return;
+  }
+
+  check(name, "malformed active route publishes no route debug",
+    !route, JSON.stringify(route));
+  check(name, "malformed active route publishes no RTB prompt",
+    route?.keyboardPrompt == null, JSON.stringify(route?.keyboardPrompt));
+  check(name, "malformed active route draws no route caret",
+    !caret, JSON.stringify(caret));
+  check(name, "malformed active route keeps the generic boat caret suppressed",
+    !geometry.boatRtbCaret, JSON.stringify(geometry.boatRtbCaret));
+  check(name, "malformed active route keeps the generic RTB cue suppressed",
+    !geometry.rtbCue, JSON.stringify(geometry.rtbCue));
+}
+
+function assertMobileTacticalHierarchy(data) {
+  if (data.profile === "standard") return;
+  const { geometry, name, viewport } = data;
+  const rail = geometry.mobileTactical;
+  check(name, "production mobile presentation profile reaches the HUD",
+    geometry.presentationProfile === data.profile,
+    `geometry=${geometry.presentationProfile}; requested=${data.profile}`);
+  check(name, "mobile tactical rail is drawn", Boolean(rail),
+    rail ? `${rail.actualText} / ${rail.contextText}` : "missing");
+  if (!rail) return;
+  if (data.largeText) {
+    check(name, "large-interface text reaches the tactical rail",
+      rail.fontSize === 11, `fontSize=${rail.fontSize}`);
+  }
+  const drawnRows = Object.fromEntries(
+    (rail.drawnRows ?? []).map((row) => [row.key, row.text]),
+  );
+  const actualDrawn = drawnRows.actual ?? "";
+  const contextDrawn = drawnRows.context ?? "";
+  const directiveDrawn = drawnRows.directive ?? "";
+  check(name, "mobile rail paints every critical row without ellipsis",
+    rail.drawnRows?.length > 0
+      && rail.drawnRows.every((row) => !row.text.includes("…")),
+    JSON.stringify(rail.drawnRows));
+  check(name, "mobile rail carries actual speed and vertical state",
+    /KCAS|KIAS/.test(actualDrawn)
+      && /(?:\d(?:\.\d)?K|FL\d{3})/.test(actualDrawn)
+      && /(?:V\/S|↑|↓)/.test(actualDrawn),
+    actualDrawn);
+  check(name, "mobile rail carries authoritative ammunition in combat",
+    !/forward-level|gun-overheat|padlock-ground-warning|rapier-mobile-climb-bvr/.test(name)
+      || /GUN\d+/.test(contextDrawn),
+    contextDrawn);
+  check(name, "mobile rail stays wholly on canvas",
+    rail.x >= 0 && rail.y >= 0
+      && rail.x + rail.width <= viewport.width
+      && rail.y + rail.height <= viewport.height,
+    `box=${rail.x},${rail.y} ${rail.width}x${rail.height}; viewport=${viewport.width}x${viewport.height}`);
+  check(name, "desktop tapes and normal secondary cards stay off mobile",
+    geometry.desktopFlightChrome === false
+      && !geometry.limitsPanel
+      && !geometry.systemsPanel
+      && !geometry.rapierCycleTeach
+      && !geometry.rapierModeLine,
+    `desktop=${geometry.desktopFlightChrome}; limits=${Boolean(geometry.limitsPanel)}; `
+      + `systems=${Boolean(geometry.systemsPanel)}; cycle=${Boolean(geometry.rapierCycleTeach)}; `
+      + `mode=${Boolean(geometry.rapierModeLine)}`);
+  check(name, "mobile ladder contains 10-degree majors only",
+    geometry.ladderRungs.every((rung) => rung.deg % 10 === 0),
+    geometry.ladderRungs.map((rung) => rung.deg).join(","));
+
+  if (name.endsWith(":gun-overheat-latched")) {
+    check(name, "mobile weapon line retains the qualified overheat state",
+      /GUN\d+/.test(contextDrawn)
+        && /OVERHEAT/.test(contextDrawn)
+        && geometry.gunHeat?.integrated === true,
+      `${contextDrawn}; gunHeat=${JSON.stringify(geometry.gunHeat)}`);
+  }
+  if (name.endsWith(":assisted-corner-hold")) {
+    check(name, "portrait assistance mode remains explicit after tape removal",
+      /AUTO(?: COR)?\+30/.test(actualDrawn),
+      actualDrawn);
+  }
+  if (name.endsWith(":rapier-mobile-climb-bvr")) {
+    check(name, "BVR target identity, range, closure, fuel, and fast time are explicit",
+      actualDrawn.includes("×4")
+        && /T1 160NM/.test(contextDrawn)
+        && /CLOS916/.test(contextDrawn)
+        && /F3\.5K/.test(contextDrawn),
+      `${actualDrawn} / ${contextDrawn}`);
+    check(name, "Rapier climb shows commanded Mach and flight level",
+      /CMD M0\.90/.test(directiveDrawn)
+        && /FL560/.test(directiveDrawn),
+      directiveDrawn);
+    check(name, "outbound BVR waypoint never becomes a recovery box",
+      !geometry.recoveryGate,
+      JSON.stringify(geometry.recoveryGate));
+    check(name, "BVR contact gets a bearing locator, never a false visual bracket",
+      geometry.banditLocator?.bvrContact === true
+        && geometry.banditLocator?.markerInside === false
+        && geometry.banditLocator?.arrowDrawn === true,
+      JSON.stringify(geometry.banditLocator));
+  }
+  if (name.endsWith(":rapier-recovery-gate-2")) {
+    check(name, "real recovery geometry survives mobile declutter",
+      geometry.recoveryGate?.drawn === true,
+      JSON.stringify(geometry.recoveryGate));
+  }
+}
+
 // The portrait assisted mode is a first-class experience, so a phone-portrait pass runs the
 // core scenarios through the SAME geometry contract at 430x860. The full battery stays on the
 // landscape pass to bound gate time.
@@ -720,15 +883,30 @@ const PORTRAIT_SCENARIOS = new Set([
   "rapier-ram-only-systems-layout",
 ]);
 
-async function runViewport(site, browser, { label, width, height, subset }) {
+const MOBILE_SCENARIOS = new Set([
+  "assisted-corner-hold",
+  "forward-level",
+  "gun-overheat-latched",
+  "padlock-ground-warning",
+  "rapier-mobile-climb-bvr",
+  "rapier-recovery-gate-2",
+]);
+
+async function runViewport(site, browser, {
+  label, width, height, subset, profile = "standard", largeText = false,
+}) {
   const page = await browser.newPage({ viewport: { width, height } });
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
   await page.goto(
-    `${site.url}render/hud/tests/harness/harness.html?all=1&w=${width}&h=${height}`,
+    `${site.url}render/hud/tests/harness/harness.html?all=1&w=${width}&h=${height}&profile=${profile}`,
     { waitUntil: "load", timeout: 30000 },
   );
   await page.waitForFunction(() => window.__hudReady === "harness", { timeout: 15000 });
+  if (largeText) {
+    await page.evaluate(() =>
+      document.documentElement.classList.add("large-interface-text"));
+  }
   const names = await page.evaluate(() => window.__scenarioNames);
   if (!Array.isArray(names) || names.length === 0) {
     throw new Error("harness exposed no scenarios");
@@ -747,6 +925,7 @@ async function runViewport(site, browser, { label, width, height, subset }) {
     }
     data.name = `${label}:${name}`;
     data.viewport = { width, height };
+    data.largeText = largeText;
     assertAirframeSymbols(data);
     assertLadder(data);
     assertFunnel(data);
@@ -754,14 +933,16 @@ async function runViewport(site, browser, { label, width, height, subset }) {
     if (data.padlock) assertPadlockDirector(data);
     assertTargetTwoDirector(data);
     assertPresentationCaptureSequence(data);
-    assertPadlockInsetAndLocator(data);
+    assertPadlockActionAndLocator(data);
     assertBasicJobs(data);
     assertGunHeat(data);
     assertSpeedBrake(data);
     assertRapierMission(data);
     assertRapierPanelLayout(data);
+    assertCarrierSortieRouteGuidance(data);
     assertFunnelContainsTarget(data);
     assertWarningLine(data);
+    assertMobileTacticalHierarchy(data);
   }
   if (pageErrors.length > 0) {
     failures.push(`[${label}] uncaught page errors:\n${pageErrors.join("\n")}`);
@@ -777,6 +958,35 @@ async function main() {
       { label: "landscape", width: 1400, height: 1020, subset: null });
     await runViewport(site, browser,
       { label: "portrait", width: 430, height: 860, subset: PORTRAIT_SCENARIOS });
+    await runViewport(site, browser, {
+      label: "mobile-portrait",
+      width: 430,
+      height: 860,
+      subset: MOBILE_SCENARIOS,
+      profile: "portrait_dual_stick",
+    });
+    await runViewport(site, browser, {
+      label: "mobile-landscape",
+      width: 844,
+      height: 390,
+      subset: MOBILE_SCENARIOS,
+      profile: "touch_dual_stick",
+    });
+    await runViewport(site, browser, {
+      label: "mobile-small-portrait",
+      width: 320,
+      height: 568,
+      subset: MOBILE_SCENARIOS,
+      profile: "portrait_dual_stick",
+    });
+    await runViewport(site, browser, {
+      label: "mobile-small-portrait-large-text",
+      width: 320,
+      height: 568,
+      subset: new Set(["assisted-corner-hold", "rapier-mobile-climb-bvr"]),
+      profile: "portrait_dual_stick",
+      largeText: true,
+    });
   } finally {
     await browser.close();
     await site.close();

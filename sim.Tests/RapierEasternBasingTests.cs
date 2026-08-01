@@ -11,17 +11,18 @@ public class RapierEasternBasingTests {
         Assert.True(strip.Fwd.X < -0.99);
         Assert.True(Math.Abs(strip.Fwd.Z) < 1e-9);
 
-        Assert.InRange(beat.Bandit.Position.X, -330_000.0, -310_000.0);
+        Assert.InRange(beat.Bandit.Position.X, -370_000.0, -350_000.0);
         Assert.True(beat.Bandit.Position.X < strip.Position.X);
         Assert.Equal(Math.PI / 2, beat.Bandit.Chi, precision: 10);
     }
 
     [Fact]
-    public void RapierCircuits_KeepsSameWestStrip_ParksContactOffMerge() {
+    public void RapierCircuits_KeepsSameWestStrip_AndHasNoOpponent() {
         BeatSetup circuits = Beats.RapierCircuits();
         BeatSetup intercept = Beats.RapierIntercept();
         Assert.Equal(intercept.Carrier!.HeadingRad, circuits.Carrier!.HeadingRad, precision: 10);
-        Assert.True(circuits.Bandit.Position.X < -100_000);
+        Assert.Equal(OpponentPresence.None, circuits.OpponentPresence);
+        Assert.Null(circuits.InitialOpponent);
         Assert.Equal(0, circuits.ScriptedIntercept!.FormationSize);
     }
 }

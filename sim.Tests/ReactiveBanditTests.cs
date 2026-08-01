@@ -272,6 +272,52 @@ public class ReactiveBanditTests {
             $"defender stayed effectively straight: chi={first.State.Chi:F3}");
     }
 
+    [Fact]
+    public void ProductionAceSustainsAHighGDefenseWhileTheAttackerStaysOnItsSix() {
+        AircraftParams air = FlightModel.F22APublicDataSurrogate;
+        var defender = new ReactiveBandit(
+            new AircraftState(
+                new Vec3D(0.0, 3_200.0, 0.0),
+                Speed: 245.0,
+                Gamma: 0.0,
+                Chi: 0.0,
+                Bank: 0.0,
+                Mass: air.MassKg),
+            air,
+            PilotSkill.Ace);
+        double maximumCommandedGAfterOriginalWindow = 0.0;
+        int nonDefensiveTicksAfterOriginalWindow = 0;
+
+        for (int tick = 0; tick < 8 * AircraftSim.TickHz; tick++) {
+            AircraftState own = defender.State;
+            Vec3D forward = own.ForwardDir();
+            // Keep a physically coherent faster attacker 300 m behind and pointed down the
+            // defender's flight path. Reconstructing it each tick holds the rear-quarter threat
+            // constant while the defender jinks, so this isolates the defense-duration contract
+            // instead of accidentally declaring success because the synthetic attacker drifted.
+            var attacker = new AircraftState(
+                own.Position - forward * 300.0,
+                Speed: own.Speed + 40.0,
+                Gamma: own.Gamma,
+                Chi: own.Chi,
+                Bank: 0.0,
+                Mass: air.MassKg);
+            defender.Step(ActorObservation.Capture(attacker, tick), Dt);
+            if (tick >= 4 * AircraftSim.TickHz) {
+                maximumCommandedGAfterOriginalWindow = Math.Max(
+                    maximumCommandedGAfterOriginalWindow,
+                    defender.LastCommand.GDemand);
+                if (defender.Tactic != BanditTactic.Defend)
+                    nonDefensiveTicksAfterOriginalWindow++;
+            }
+        }
+
+        Assert.True(maximumCommandedGAfterOriginalWindow > 6.0,
+            $"production Ace stopped making high-G defensive pulls after the old 3.4 s window: "
+            + $"{maximumCommandedGAfterOriginalWindow:F2} G");
+        Assert.Equal(0, nonDefensiveTicksAfterOriginalWindow);
+    }
+
     [Theory]
     [InlineData(BanditFireControl.MinimumRangeM - 0.5, false)]
     [InlineData(BanditFireControl.MinimumRangeM, true)]

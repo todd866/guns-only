@@ -153,8 +153,40 @@ function withAutoGcasLesson(result, state) {
   };
 }
 
+function withServiceLifeReview(result, state) {
+  if (state?.service_life_record_available !== true
+    || state?.service_life_exceedance_review_required !== true) return result;
+
+  const overStructuralSeconds = Math.max(0,
+    finiteNumber(state?.service_life_over_structural_limit_s) ?? 0);
+  const overDynamicPressureSeconds = Math.max(0,
+    finiteNumber(state?.service_life_over_dynamic_pressure_s) ?? 0);
+  const maximumG = finiteNumber(state?.service_life_max_g);
+  const exposure = [];
+  if (overStructuralSeconds > 0) {
+    exposure.push(`${overStructuralSeconds.toFixed(1)} s above the structural limit${
+      maximumG === null ? "" : `, peak ${maximumG.toFixed(1)} G`
+    }`);
+  }
+  if (overDynamicPressureSeconds > 0) {
+    exposure.push(`${overDynamicPressureSeconds.toFixed(1)} s above the q placard`);
+  }
+  const evidence = exposure.length > 0
+    ? exposure.join("; ")
+    : "a propulsion or thermal exceedance";
+
+  return {
+    ...result,
+    brief: `${result.brief} Airframe exposure: ${evidence}. Maintenance assessment pending; no damage or repair cost has been inferred.`,
+    serviceLifeReviewRequired: true,
+  };
+}
+
 function withSortieLessons(result, state) {
-  return withAutoGcasLesson(withGToleranceLesson(result, state), state);
+  return withServiceLifeReview(
+    withAutoGcasLesson(withGToleranceLesson(result, state), state),
+    state,
+  );
 }
 
 function readableToken(value, fallback = "Not recorded") {
@@ -170,12 +202,18 @@ function readableToken(value, fallback = "Not recorded") {
 }
 
 function isCarrierQualification(state) {
+  const mission = token(state?.mission_definition_id);
   return state?.carrier === true
-    && token(state?.mission_definition_id) === "MISSION.CARRIER-QUALIFICATION.V1";
+    && [
+      "MISSION.CARRIER-QUALIFICATION.V1",
+      "MISSION.KOREA.PANTHER-SORTIE.V1",
+    ].includes(mission);
 }
 
 function carrierQualificationCopy(state) {
   const recovery = token(state?.recovery);
+  const barrier = state?.barrier_engagement === true
+    || recovery.replaceAll("_", "").replaceAll(" ", "") === "BARRIERENGAGEMENT";
   const trapped = recovery === "TRAP" || token(state?.arrest_phase) === "STOPPED";
   const bolter = state?.bolter === true || recovery === "BOLTER";
   const wire = Math.max(0, Math.round(Number(state?.wire) || 0));
@@ -186,6 +224,13 @@ function carrierQualificationCopy(state) {
     "Review the approach",
   );
 
+  if (barrier) {
+    return withSortieLessons({
+      kicker: "Carrier qualification debrief",
+      title: "Barrier · Missed wires",
+      brief: `${grade}. The raised barrier retained the aircraft aboard after the arresting wires were missed; no wire was caught. Recorded deviations: ${deviations}. Primary correction: ${correction}.`,
+    }, state);
+  }
   if (trapped) {
     return withSortieLessons({
       kicker: "Carrier qualification debrief",

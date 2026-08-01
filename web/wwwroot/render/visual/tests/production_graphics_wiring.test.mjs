@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import { RELEASE_BUILD } from "../../release/release_identity.js";
+
 const appUrl = new URL("../../../app.js", import.meta.url);
 const sceneBuildersUrl = new URL("../../scene/scene_builders.js", import.meta.url);
 const hudUrl = new URL("../../../hud.js", import.meta.url);
@@ -60,7 +62,7 @@ test("production admits only state-bearing environment visuals and event-bearing
   assert.match(source, /manageFog: Boolean\(environmentFactory\)/);
   assert.match(source, /postStackFactory: createDecisionSupportPostStack/);
   assert.match(source,
-    /shadowModes: mobileControls \? \["carrier"\] : \["carrier", "replay"\]/,
+    /shadowModes: detectedVisualTier === "mobile"\s*\?\s*\["carrier"\]\s*:\s*\["carrier", "replay"\]/,
     "combat must not pay for a shadow pass without a visible ownship or shadow-receiving terrain");
   assert.doesNotMatch(source, /shadowModes:[^\n]*"combat"/);
   assert.match(source, /fogDensityForVisibility\(reportedVisibilityM\)/,
@@ -192,8 +194,11 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /const lowLevelSceneryRequired = view\.terrainMicroRequired === true;[\s\S]*if \(!lowLevelSceneryRequired\) \{[\s\S]*disableAmbientScenery\?\.\(\)/,
     "the frame governor may shed ambient instances at altitude but must retain required micro scenery");
   assert.match(source,
-    /Shadows off · low-level scenery retained · holding 60/,
+    /Shadows off · low-level scenery retained/,
     "the performance status must disclose that essential scenery remains active");
+  assert.doesNotMatch(source,
+    /Shadows off · low-level scenery retained · holding 60/,
+    "a quality reduction must not claim a frame contract that was not measured");
   assert.match(source,
     /Far field over Ukraine[\s\S]*this\.sea\.mesh\.visible = !terrainId/,
     "Ukraine / land theatres hide the decision-support sea when terrain is present; sea remains the no-terrain fallback");
@@ -207,8 +212,11 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /function prepareMissionTerrain\(index, stagedState\)[\s\S]*setPauseReason\("terrain", true\)[\s\S]*warmTerrainAroundReadyAircraft[\s\S]*setPauseReason\("terrain", requiredFeaturePack && !warmupReady\)/,
     "the low-level sortie must warm nearby terrain before releasing the flight clock");
   assert.match(source,
-    /terrainLaunchWarmupFailedKey === warmupKey[\s\S]*requiredFeaturePack[\s\S]*setPauseReason\("terrain", true\)[\s\S]*sortie remains interlocked/,
-    "a required mission pack failure must keep the Ready interlock closed");
+    /terrainLaunchWarmupFailedKey === warmupKey[\s\S]*requiredFeaturePack[\s\S]*automatic retry scheduled[\s\S]*setPauseReason\("terrain", true\)/,
+    "a required mission pack failure must keep Ready closed while truthfully announcing recovery");
+  assert.match(source,
+    /function terrainWarmupRetryDelayMs\(attempt\)[\s\S]*Math\.min\(60_000[\s\S]*terrainLaunchWarmupRetryTimer = window\.setTimeout[\s\S]*terrainLaunchWarmupFailedKey = null;[\s\S]*queueMicrotask\(tryAutoLaunch\)/,
+    "required terrain failures must recover through a bounded automatic retry instead of latching forever");
   assert.match(source,
     /await terrain\.ready[\s\S]*requestAnimationFrame\(\(\) => requestAnimationFrame\(resolve\)\)[\s\S]*await terrain\.whenIdle\?\.\(\)[\s\S]*view\.renderer\.compileAsync\(view\.scene, view\.camera\)/,
     "terrain warmup must include near-LOD, instanced-scenery, and shader work requested by the paused camera");
@@ -231,8 +239,8 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /applyTerrainFlightPolicy\(\)[\s\S]*?terrainNominalStreamingRadiusM/,
     "mission-authored flight radius must expand after local warmup");
   assert.match(source,
-    /deadlineTimer = window\.setTimeout\(\(\) => \{[\s\S]*cancelTerrainPresentationRequest\(terrainKey\)[\s\S]*15_000/,
-    "a bounded warmup must actively cancel a hung terrain request rather than only racing it");
+    /function terrainWarmupDeadlineMs\(attempt, requiredFeaturePack\)[\s\S]*Math\.min\(90_000[\s\S]*deadlineTimer = window\.setTimeout\(\(\) => \{[\s\S]*cancelTerrainPresentationRequest\(terrainKey\)[\s\S]*deadlineMs/,
+    "a slow warmup must receive an adaptive bounded window while a hung request is still cancelled");
   assert.match(source,
     /cancelTerrainPresentationRequest\(terrainKey\)[\s\S]*terrainPresentationRequestEpoch \+= 1[\s\S]*terrainPresentationAbortController\?\.abort\(\)[\s\S]*terrainPresentationPromise = null/,
     "cancelling terrain must invalidate stale completion and leave a later retry possible");
@@ -270,6 +278,18 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /const frameGovernorPolicy = new FrameGovernorPolicy[\s\S]*?recover\(view, transition\)[\s\S]*?enableAmbientScenery/,
     "governor quality must recover one policy-approved rung after sustained clean windows");
   assert.match(source,
+    /terrainFramePressureContext\(view, nowMs, frameDeltaMs\)[\s\S]*?lastBuildFinishedAtMs[\s\S]*?activeLoads[\s\S]*?queuedBuilds/,
+    "sibling terrain build work must cross the RAF boundary into causal frame evidence");
+  assert.match(source,
+    /precedingFramePressureContext = \{[\s\S]*?previousSimPhaseMilliseconds[\s\S]*?previousViewPhaseMilliseconds[\s\S]*?terrainFramePressureContext\(activeView, now, renderDeltaMs\)/,
+    "the governor must attribute a closed RAF interval to that interval's measured owners");
+  assert.match(source,
+    /transition\.action === FRAME_GOVERNOR_ACTION\.REDUCE_SIMULATION_WORK[\s\S]*?visual quality retained/,
+    "simulation pressure must retain visual quality");
+  assert.match(source,
+    /transition\.action === FRAME_GOVERNOR_ACTION\.REDUCE_TERRAIN_WORK[\s\S]*?shedTerrain[\s\S]*?transition\.action === FRAME_GOVERNOR_ACTION\.REDUCE_VIEW_QUALITY[\s\S]*?shedView/,
+    "terrain and renderer pressure must use separate quality lanes");
+  assert.match(source,
     /terrainGovernorSuppressesAmbientScenery = true[\s\S]*?disableAmbientScenery[\s\S]*?terrainGovernorSuppressesAmbientScenery !== true[\s\S]*?enableAmbientScenery/,
     "terminal governor shedding must stay latched until the next sortie reset");
   assert.match(source, /const radarAltitudeFt = Number\(state\?\.radar_alt_ft\)/,
@@ -286,7 +306,7 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
   assert.match(source, /cameraPosition: this\.camera\.position,[\s\S]*deltaSeconds: dt/,
     "terrain streaming must receive frame time for bounded velocity-ahead prefetch");
   assert.match(source,
-    /import \{[\s\S]*createDecisionSupportSea[\s\S]*\} from "\.\/render\/scene\/scene_builders\.js\?v=199"/,
+    new RegExp(`import \\{[\\s\\S]*createDecisionSupportSea[\\s\\S]*\\} from "\\.\\/render\\/scene\\/scene_builders\\.js\\?v=${RELEASE_BUILD}"`),
     "the active ocean builder must be sourced from the scene builder module");
   assert.match(source, /createDecisionSupportSea\(\)/,
     "production must instantiate the decision-support sea");
@@ -482,7 +502,7 @@ test("decision-support ocean and warnings carry truth without presentation flick
   assert.match(hudSource, /this\._aoaIndexerCue\.update/);
   assert.match(hudSource, /this\._lsoDisplayCue\.update/);
   assert.match(hudSource,
-    /if \(!frame\.padlock\) this\.drawPitchLadder[\s\S]*this\.drawAirframeSymbols/,
+    /if \(!frame\.padlock\) \{[\s\S]*?this\.drawPitchLadder[\s\S]*?this\.drawAirframeSymbols/,
     "the 2D horizon and flight-path vector must remain independent of scenery quality");
   assert.doesNotMatch(hudSource, /frameGovernor.*drawPitchLadder|governor_level.*drawPitchLadder/,
     "maximum scenery shedding must never suppress the attitude reference");
@@ -523,13 +543,36 @@ test("hidden replay exterior is preloaded and obsolete pack runtimes are dispose
 });
 
 test("packless modern flight owns adaptive 3D resolution and raw foreground frame timing", async () => {
-  const source = await readFile(appUrl, "utf8");
+  const [source, sceneBuilders] = await Promise.all([
+    readFile(appUrl, "utf8"),
+    readFile(sceneBuildersUrl, "utf8"),
+  ]);
+  assert.match(source,
+    /const touchBalancedVisualDevice = detectedDeviceMemoryGiB !== null[\s\S]*?detectedDeviceMemoryGiB >= 8[\s\S]*?detectedLogicalCores !== null[\s\S]*?detectedLogicalCores >= 8[\s\S]*?const detectedVisualTier = mobileControls[\s\S]*?touchBalancedVisualDevice \? "balanced" : "mobile"/,
+    "touch may enter the heavier tier only when both explicit hardware signals show headroom");
+  assert.doesNotMatch(source,
+    /Number\(navigator\.deviceMemory\) \|\| 8|Number\(navigator\.hardwareConcurrency\) \|\| 8/,
+    "missing Safari hardware signals must not be mistaken for a high-end phone");
+  assert.doesNotMatch(source, /oceanRadialSegments: mobileControls|oceanAngularSegments: mobileControls|carrierSprayCount: mobileControls/,
+    "touch input must not independently demote effects after hardware selected the visual tier");
+  assert.match(source,
+    /oceanRadialSegments: detectedVisualTier[\s\S]*?oceanAngularSegments: detectedVisualTier[\s\S]*?carrierSprayCount: detectedVisualTier/,
+    "geometry and event-bearing effect budgets must follow the hardware visual tier");
+  assert.match(sceneBuilders,
+    /createOceanGeometry\(\s*650000,\s*VISUAL_QUALITY\.oceanRadialSegments,\s*VISUAL_QUALITY\.oceanAngularSegments,/,
+    "the production sea geometry must consume the selected hardware tier, not dead config");
+  assert.doesNotMatch(sceneBuilders,
+    /createOceanGeometry\(\s*650000,\s*mobileControls\s*\?/,
+    "touch modality must not bypass the selected sea quality tier");
   assert.match(source,
     /DIRECT_ADAPTIVE_RESOLUTION_CONFIG = normalizeVisualProfile\([\s\S]*?pixelRatioCap: VISUAL_QUALITY\.pixelRatioCap[\s\S]*?\)\.adaptiveResolution/,
     "packless missions must use the same tier-normalized pixel budgets as pack flight");
   assert.match(source,
-    /this\.directAdaptiveResolution = new AdaptiveResolutionController\([\s\S]*?applyDirectRenderPixelRatio/,
-    "FlightView must own a direct-path adaptive controller");
+    /this\.directAdaptiveResolution = new AdaptiveResolutionController\([\s\S]*?minimumPixelRatio: mobileControls \? 1 : 0\.5[\s\S]*?applyDirectRenderPixelRatio/,
+    "FlightView must own a direct-path adaptive controller with a phone readability floor");
+  assert.match(source,
+    /createVisualRuntime\(\{[\s\S]*?minimumPixelRatio: mobileControls \? 1 : 0\.5/,
+    "pack flight must receive the same phone readability floor as direct rendering");
   assert.match(source,
     /if \(this\.visualRuntime\?\.initialized\)[\s\S]*?this\.visualRuntime\.resize[\s\S]*?else \{[\s\S]*?this\.directAdaptiveResolution\.setViewport/,
     "pack and direct resolution controllers must never own the renderer simultaneously");
@@ -537,8 +580,14 @@ test("packless modern flight owns adaptive 3D resolution and raw foreground fram
     /view\.update\([\s\S]*?now \/ 1000,[\s\S]*?renderDeltaMs/,
     "FlightView must receive raw RAF time rather than only the simulation catch-up clamp");
   assert.match(source,
-    /frameTimeMs: measuredFrameMs,[\s\S]*?activeForeground,[\s\S]*?this\.directAdaptiveResolution\.sample\(measuredFrameMs, \{ activeForeground: true \}\)/,
-    "both renderer paths must respond to measured foreground stalls");
+    /frameTimeMs: measuredFrameMs,[\s\S]*?activeForeground,[\s\S]*?adaptiveResolutionSampling: false/,
+    "pack rendering must leave production resolution changes to the phase-causal governor");
+  assert.doesNotMatch(source,
+    /this\.directAdaptiveResolution\.sample\(measuredFrameMs/,
+    "the direct renderer must not independently lower pixels for simulation or terrain stalls");
+  assert.match(source,
+    /nudgeDown\?\.\("causal-view-pressure"\)[\s\S]*?nudgeUp\?\.\("causal-view-recovery"\)/,
+    "both production renderer paths must still expose bounded causal resolution rungs");
   assert.match(source,
     /directResolution: this\.visualRuntime\?\.initialized[\s\S]*?this\.directAdaptiveResolution\.status\(\)/,
     "packless adaptive state must remain inspectable");

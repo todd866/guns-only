@@ -113,6 +113,7 @@ export class VisualRuntime {
       ...adaptive,
       enabled: adaptive.enabled && this.options.adaptiveResolution !== false,
       pixelRatioCap: this.config.renderer.pixelRatioCap,
+      minimumPixelRatio: this.options.minimumPixelRatio,
       mode: this.mode,
       onChange: (pixelRatio, metadata) => {
         this._setRendererSize(pixelRatio);
@@ -222,6 +223,7 @@ export class VisualRuntime {
       ...this.config.adaptiveResolution,
       enabled: this.config.adaptiveResolution.enabled && this.options.adaptiveResolution !== false,
       pixelRatioCap: this.config.renderer.pixelRatioCap,
+      minimumPixelRatio: this.options.minimumPixelRatio,
     });
     this.adaptiveResolution.setViewport(
       this.viewport.width,
@@ -270,7 +272,7 @@ export class VisualRuntime {
     // Legacy/lab callers that do not declare eligibility retain ordinary adaptive behaviour.
     // Production flight declares false during Ready, pause, replay, and background frames; those
     // costs must not train the foreground-flight resolution controller.
-    if (frame.activeForeground !== false) {
+    if (frame.activeForeground !== false && frame.adaptiveResolutionSampling !== false) {
       this.adaptiveResolution.sample(
         frame.frameTimeMs ?? deltaSeconds * 1000,
         { activeForeground: frame.activeForeground === true },

@@ -1,10 +1,12 @@
+import { circuitConfigurationMatches } from "../hud/hud_phase.js";
+
 /// Short quiet-line phase tokens (≤ ~4 tokens with authority). Full schedule copy left the
 /// heading strip; FL/Mach targets belong on tapes / Limits, not the mode line.
 const PHASE = Object.freeze({
   1: "LAUNCH",
-  2: "CLIMB · FL560",
-  3: "ACCEL · M2.2",
-  4: "RAM CLIMB · FL700",
+  2: "CLIMB",
+  3: "ACCEL",
+  4: "RAM CLIMB",
   5: "ZOOM PULL",
   6: "ZOOM COAST",
   7: "REENTER",
@@ -14,13 +16,6 @@ const PHASE = Object.freeze({
   11: "EGRESS · HOME",
   12: "RETURN · HOME",
   13: "RECOVERY",
-  14: "COMPLETE",
-});
-
-const CIRCUITS_PHASE = Object.freeze({
-  1: "CIRCUITS · DEPART",
-  2: "CIRCUITS · DEPART",
-  13: "CIRCUITS",
   14: "COMPLETE",
 });
 
@@ -60,6 +55,33 @@ const LEGACY_TURBINE_GONE_MACH = 3.0;
 // Pass 1 measured dash — mirrors RapierMissionDirector.MeasuredDashMach for old recordings.
 const LEGACY_DESIGN_DASH_MACH = 3.55;
 
+const JOB_BRIEFING = Object.freeze({
+  BALLOON: Object.freeze({
+    label: "high-altitude balloon",
+    task: "Climb above it, preserve energy, and make the short firing pass.",
+  }),
+  AWACS: Object.freeze({
+    label: "airborne early-warning aircraft",
+    task: "Neutralize the enabler, then expect the strongest pursued egress.",
+  }),
+  TRANSPORT: Object.freeze({
+    label: "transport aircraft",
+    task: "Convert the zoom-lob energy into a controlled low-altitude dive pass.",
+  }),
+  SWARM_LOB: Object.freeze({
+    label: "swarm carrier",
+    task: "Release the gun-drone package at the apex and protect the recovery reserve.",
+  }),
+  FORMATIONINTERCEPT: Object.freeze({
+    label: "fighter formation",
+    task: "Release the gun-drone package on the one-pass formation intercept.",
+  }),
+  FORMATION_INTERCEPT: Object.freeze({
+    label: "fighter formation",
+    task: "Release the gun-drone package on the one-pass formation intercept.",
+  }),
+});
+
 function finiteNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
@@ -80,10 +102,20 @@ export function rapierPropulsionThresholds(state = {}) {
 
 export function rapierBriefingText(template, state = {}) {
   const thresholds = rapierPropulsionThresholds(state);
+  const jobToken = String(
+    state.rapier_economy_target_kind || state.rapier_job || "FORMATION_INTERCEPT",
+  ).trim().toUpperCase();
+  const job = JOB_BRIEFING[jobToken] ?? JOB_BRIEFING.FORMATION_INTERCEPT;
+  const reward = Math.max(0, Math.trunc(
+    finiteNumber(state.rapier_economy_target_reward_credits) ?? 0,
+  ));
   return String(template ?? "")
     .replaceAll("{RAM_LIGHT_MACH}", `M${thresholds.ramLightMach.toFixed(1)}`)
     .replaceAll("{FULL_RAM_MACH}", `M${thresholds.fullRamMach.toFixed(1)}`)
-    .replaceAll("{DESIGN_DASH_MACH}", `M${thresholds.designDashMach.toFixed(1)}`);
+    .replaceAll("{DESIGN_DASH_MACH}", `M${thresholds.designDashMach.toFixed(1)}`)
+    .replaceAll("{TARGET_LABEL}", job.label)
+    .replaceAll("{TARGET_TASK}", job.task)
+    .replaceAll("{TARGET_REWARD}", String(reward));
 }
 
 export function circuitLegFromState(state) {
@@ -156,50 +188,10 @@ function skinFragment(state) {
   });
 }
 
-function circuitsConfigFragment(leg, state) {
-  const targetKtas = finiteNumber(state.rapier_fd_target_ktas);
-  const targetAltFt = finiteNumber(state.rapier_target_altitude_ft);
-  const dirty = leg === "DOWNWIND" || leg === "BASE"
-    || leg === "SHORT_FINAL" || leg === "WIRE_FINAL";
-  const config = dirty
-    ? "HOOK DOWN · GEAR DOWN · ELEVONS DOWN"
-    : "HOOK DOWN · GEAR UP · ELEVONS UP";
-  const speed = targetKtas !== null ? ` · ${Math.round(targetKtas)} KT` : "";
-  const alt = targetAltFt !== null && targetAltFt > 0
-    ? ` · ${Math.round(targetAltFt)} FT`
-    : "";
-  let action = "";
-  if (leg === "SHORT_FINAL") action = " · LINE UP · CONFIGURED";
-  else if (leg === "WIRE_FINAL") action = " · ACCEPT WIRE";
-  else if (leg === "INITIAL") action = " · BREAK LEFT ABM";
-  else if (leg === "BREAK") action = " · ~60° TO DOWNWIND";
-  else if (leg === "DOWNWIND") action = " · GEAR ELEVONS · ABEAM";
-  else if (leg === "BASE") action = " · ~45° TO FINAL";
-  else if (leg === "DEPART") action = " · CLIMB TO PATTERN";
-  return `${config}${speed}${alt}${action}`;
-}
-
 function circuitsCoach(state) {
   if (state.rapier_automation_active === true) return "DEMO";
   if (state.rapier_automation_enabled === true) return "DIRECT";
   return "MONITOR";
-}
-
-function circuitsConfigOk(leg, state) {
-  const gearDown = Math.max(
-    Number(state.gear_nose) || 0,
-    Number(state.gear_left) || 0,
-    Number(state.gear_right) || 0,
-  ) > 0.85;
-  const flapsDown = Math.max(
-    Number(state.flap_left_deg) || 0,
-    Number(state.flap_right_deg) || 0,
-  ) > 8;
-  const dirty = leg === "DOWNWIND" || leg === "BASE"
-    || leg === "SHORT_FINAL" || leg === "WIRE_FINAL";
-  if (dirty) return gearDown && flapsDown;
-  // DEPART / INITIAL / BREAK: gear up, flaps up (hook is always-down teaching).
-  return !gearDown && !flapsDown;
 }
 
 /// Active flythrough gate status for Circuits: volume + energy + config.
@@ -212,11 +204,9 @@ export function circuitGatePresentation(state) {
   const halfM = finiteNumber(state.rapier_gate_half_m) ?? 0;
   if (halfM <= 0) return null;
   const leg = circuitLegFromState(state);
-  const legLabel = circuitLegLabel(leg);
   const inVolume = state.rapier_gate_in_volume === true;
   const energyOk = state.rapier_gate_energy_ok === true;
-  const configOk = circuitsConfigOk(leg, state);
-  const targetKtas = finiteNumber(state.rapier_fd_target_ktas);
+  const configOk = circuitConfigurationMatches(state);
   let status = "FLY THE BOX";
   let accent = "armed";
   if (inVolume && energyOk && configOk) {
@@ -235,9 +225,12 @@ export function circuitGatePresentation(state) {
   const dirty = leg === "DOWNWIND" || leg === "BASE"
     || leg === "SHORT_FINAL" || leg === "WIRE_FINAL";
   const config = dirty
-    ? "HOOK · GEAR · ELEVONS DOWN"
-    : "HOOK DOWN · GEAR UP · ELEVONS UP";
-  const speed = targetKtas !== null ? `${Math.round(targetKtas)} KT` : "";
+    ? "GEAR · ELEVONS DOWN"
+    : "GEAR · ELEVONS UP";
+  // The square owns NEXT. Text appears only for the brief gate-open event or an exception;
+  // current leg, target speed, and verified configuration have other owners.
+  const boxLabel = status === "GATE OPEN" ? status
+    : status === "ENERGY" || status === "CONFIG" ? status : "";
   return Object.freeze({
     halfM,
     faceX: finiteNumber(state.rapier_gate_face_x) ?? 0,
@@ -248,8 +241,8 @@ export function circuitGatePresentation(state) {
     configOk,
     status,
     accent,
-    boxLabel: legLabel ? `${legLabel} · ${status}` : status,
-    configLine: speed ? `${config} · ${speed}` : config,
+    boxLabel,
+    configLine: status === "CONFIG" ? config : "",
     worldX: null,
     worldY: null,
     worldZ: null,
@@ -346,9 +339,7 @@ export function rapierGuidancePresentation(state) {
       && state.rapier_mission_cue.startsWith("CIRCUITS"));
   const leg = circuitLegFromState(state);
   const legLabel = circuitLegLabel(leg);
-  let phaseText = patternOnly
-    ? (legLabel ? `CIRCUITS · ${legLabel}` : (CIRCUITS_PHASE[phase] ?? "CIRCUITS"))
-    : (PHASE[phase] ?? "MISSION");
+  let phaseText = PHASE[phase] ?? "MISSION";
   if (!patternOnly && phase === PHASE_INTERCEPT) {
     const strategy = typeof state.rapier_strategy === "string"
       ? state.rapier_strategy.toLowerCase()
@@ -388,8 +379,9 @@ export function rapierGuidancePresentation(state) {
   let text;
   let level;
   if (patternOnly) {
-    const config = circuitsConfigFragment(leg, state);
-    text = `${authority} · ${phaseText} · ${config}`;
+    // Authority + current leg is the whole persistent line. Profile belongs to director/tapes,
+    // NEXT to the world gate, and configuration to exception-driven VERIFY.
+    text = legLabel ? `${authority} · ${legLabel}` : authority;
     level = active ? "active" : "manual";
   } else if (skin?.level === "attack") {
     // Urgency owns the quiet line; Controls still documents P for auto toggle.
@@ -413,7 +405,7 @@ export function rapierGuidancePresentation(state) {
       const recovery = recoveryGatePresentation(state);
       if (recovery?.boxLabel) return recovery.boxLabel;
       return patternOnly
-        ? (circuitGatePresentation(state)?.boxLabel || legLabel || "")
+        ? (circuitGatePresentation(state)?.boxLabel || "")
         : (phase === PHASE_RECOVERY && gate > 0 ? `GATE ${gate}/4`
           : (!patternOnly && (phase === 6 || phase === 7)
             ? (noseErr !== null && noseErr <= 8 ? "ON V" : "NOSE→V")
@@ -430,8 +422,8 @@ export function rapierGuidancePresentation(state) {
 }
 
 /// Circuits / recovery / zoom-coast flight-director bugs from kernel-published targets.
-/// Intercept v1 suppresses center FD command essays (LEVEL NOW / ADD POWER); those answers
-/// belong on tapes + quiet line. Circuits keeps the full director.
+/// Intercept v1 suppresses center FD command essays. Circuits keeps director geometry, with
+/// textual coaching only when the aircraft is materially off the authored profile.
 export function rapierFlightDirectorPresentation(state) {
   if (state?.rapier_mission_available !== true) return null;
   if (state.rapier_mission_computer_available === false
@@ -458,7 +450,7 @@ export function rapierFlightDirectorPresentation(state) {
   let speedCall = "";
   if (patternOnly && targetKtas > 0) {
     speedCall = currentKtas > targetKtas + 25.0 ? "SLOW"
-      : currentKtas < targetKtas - 25.0 ? "ADD POWER" : "ON SPEED";
+      : currentKtas < targetKtas - 25.0 ? "ADD POWER" : "";
   }
   let noseCall = "";
   if (noseErr !== null && (zoomLob || coastPhase)) {
@@ -510,8 +502,28 @@ export function rapierFlightDirectorPresentation(state) {
   });
 }
 
-function cycleMode(mach, thresholds) {
+/// Ram thrust below this fraction of the total is not "lighting", it is off.
+const RAM_LIT_SHARE = 0.04;
+
+/// The Rapier's dynamic-pressure placard, kPa. RapierAerodynamics derives 49,035 Pa from
+/// Vne 550 KIAS; the kernel publishes q but never published the placard, so it is mirrored here
+/// and asserted against the kernel value by the guidance tests.
+export const DYNAMIC_PRESSURE_PLACARD_KPA = 49.0;
+
+/// Which cycle the engine is ACTUALLY running, not which one its Mach number implies.
+///
+/// This used to be a pure function of Mach, and it was wrong in the one place a pilot most needs
+/// it: the ram spike is scheduled on DENSITY as well as Mach and stays locked below roughly
+/// FL225, so a dive that crosses the ram-light Mach in thick air produced "HANDOVER -- turbine
+/// fading, ram lighting, expect a thrust bucket" while the ram duct was shut and making nothing.
+/// The pilot was told the engine was handing over while it was doing no such thing; the aircraft
+/// then stopped accelerating for a reason nothing on the HUD could explain.
+///
+/// RAM LOCKED is that missing state: fast enough to light, too low to open the spike.
+function cycleMode(mach, thresholds, ramShare = null) {
+  const ramDead = ramShare !== null && ramShare < RAM_LIT_SHARE;
   if (mach < thresholds.ramLightMach) return "TURBINE";
+  if (ramDead) return "RAM LOCKED";
   if (mach < thresholds.fullRamMach) return "HANDOVER";
   if (mach < thresholds.turbineGoneMach) return "FULL RAM";
   return "RAM ONLY";
@@ -521,6 +533,8 @@ function cycleExplainer(mode, thresholds) {
   switch (mode) {
     case "TURBINE":
       return `Turbojet + AB make thrust now. Ram needs ~M${thresholds.ramLightMach.toFixed(1)} before it lights.`;
+    case "RAM LOCKED":
+      return "Fast enough to light, too low to open the spike. The duct stays shut in dense air — climb.";
     case "HANDOVER":
       return "Handover band: turbine fading, ram lighting. Expect a thrust bucket.";
     case "FULL RAM":
@@ -557,10 +571,14 @@ function buildCycleTeach(state) {
     cmcMarginC,
   } = thermal;
   const thresholds = rapierPropulsionThresholds(state);
-  const mode = cycleMode(mach, thresholds);
+  const mode = cycleMode(mach, thresholds, ramLbf / totalLbf);
   let thermalLevel = "normal";
   if (cmcMarginC !== null && cmcMarginC < 0) thermalLevel = "fault";
   else if (cmcMarginC !== null && cmcMarginC < 40) thermalLevel = "caution";
+
+  const dynamicPressureKpa = finiteNumber(state.dynamic_pressure_kpa);
+  const overDynamicPressure = dynamicPressureKpa !== null
+    && dynamicPressureKpa > DYNAMIC_PRESSURE_PLACARD_KPA;
 
   const skinText = skinC !== null ? `SKIN ${Math.round(skinC)}°C` : "SKIN --";
   const t0Text = stagnationC !== null ? ` · T0 ${Math.round(stagnationC)}°C` : "";
@@ -572,6 +590,12 @@ function buildCycleTeach(state) {
     mode,
     explainer: cycleExplainer(mode, thresholds),
     mach,
+    dynamicPressureKpa,
+    overDynamicPressure,
+    // Drawn on the card only while it is being exceeded: a placard you are inside is not news.
+    dynamicPressureText: overDynamicPressure
+      ? `OVER Q ${Math.round(dynamicPressureKpa)} kPa · LIMIT ${Math.round(DYNAMIC_PRESSURE_PLACARD_KPA)}`
+      : "",
     turbineLbf,
     ramLbf,
     totalLbf,
@@ -608,8 +632,24 @@ export function rapierCycleTeachPresentation(state) {
   const marginC = finiteNumber(state.rapier_cmc_margin_c)
     ?? finiteNumber(state.rapier_thermal_margin_c);
   const thermalOver = marginC !== null && marginC < 0;
-  if (!ascent && !thermalOver) return null;
-  return buildCycleTeach(state);
+  const teach = buildCycleTeach(state);
+
+  // The card used to be gated on the ASCENT phase alone, which is exactly backwards for the two
+  // situations a pilot cannot diagnose from anything else on the glass:
+  //
+  //   RAM LOCKED -- a max-afterburner dive from FL500 crosses the ram-light Mach in thick air,
+  //   the spike stays shut, and the aircraft simply stops accelerating around M1.8. Nothing on
+  //   the HUD said why, because the dive is not the ascent phase.
+  //
+  //   OVER Q -- that same dive reaches roughly 185 kPa against a 49 kPa placard, nearly four
+  //   times the limit. The kernel computes it, records it to service life and publishes it, and
+  //   the HUD drew none of it: you can fly the wings off this aeroplane in silence.
+  //
+  // Both now raise the card wherever they happen.
+  const overQ = teach?.overDynamicPressure === true;
+  const ramLocked = teach?.mode === "RAM LOCKED";
+  if (!ascent && !thermalOver && !overQ && !ramLocked) return null;
+  return teach;
 }
 
 /// Diagnostic engine state for the Aircraft Systems console / tests — not drawn on the HUD ladder.

@@ -1,10 +1,19 @@
 # Eastern Authority Points Implementation Plan
 
+> **2026-07-30 authority correction:** this plan delivered a thin political presentation
+> prototype, not a campaign economy. Its local balance and clearance labels cannot authorize or
+> block flight. The replacement authority and migration direction are in
+> `docs/air-war-economy-and-force-management.md`; Phase 0 there retires dispatch-shaped
+> “cleared/deferred/grounded” vocabulary.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Re-orient Rapier home plate to launch west from the eastern Ukraine-theatre edge, and ship a thin deterministic points ledger on debrief — per `docs/superpowers/specs/2026-07-27-eastern-authority-points-design.md`.
 
-**Architecture:** Beat geometry owns eastern basing (`headingRad` + contact offsets). A pure `PointsLedger` scores only facts already on the finished-sortie snapshot/record. Web debrief renders a municipal ledger slip; campaign profile stores running balance and next-sortie clearance. No clinic/medevac UI; no kernel physics changes.
+**Architecture:** Beat geometry owns eastern basing (`headingRad` + contact offsets). A pure
+`PointsLedger` scores only facts already on the finished-sortie snapshot/record. Web debrief renders
+a municipal ledger slip; the browser profile stores a presentation balance and fictional clearance
+label only. No campaign dispatch authority, clinic/medevac UI, or kernel physics changes.
 
 **Tech Stack:** C# `sim` + `sim.Tests` (xUnit), WebAssembly bridge snapshot fields, browser debrief JS (`sortie_result.js` / `app.js`), `node --test` for presentation units, `./bin/check` gate.
 
@@ -31,7 +40,7 @@
 | `web/wwwroot/render/debrief/tests/points_ledger.test.mjs` | Presentation unit tests |
 | `web/wwwroot/render/debrief/sortie_result.js` | Municipal kicker/title hooks for Rapier |
 | `web/wwwroot/app.js` | Wire slip into finished debrief UI; mission brief copy |
-| `web/wwwroot/render/progression/campaign_progression.js` | Persist `pointsBalance` + apply clearance |
+| `web/wwwroot/render/progression/campaign_progression.js` | Persist presentation-only `pointsBalance` and label |
 | `docs/superpowers/specs/2026-07-27-eastern-authority-points-design.md` | Mark status accepted after ship |
 
 ---
@@ -276,7 +285,10 @@ pointsBalance: Math.trunc(Number(source.pointsBalance) || 0),
 On finished Rapier debrief (mission id contains `rapier`), after computing/receiving slip:  
 `campaignProfile = saveCampaignProfile({ ...campaignProfile, pointsBalance: slip.BalanceAfter })`.
 
-Clearance UI: if `GROUNDED`, disable “Fly again” primary until balance recovers — **v1 soft gate:** still allow Fly again but show clearance line `Exception denied · grounded pending allocation` and set `readyHint` accordingly. (Hard lock is follow-on; soft gate matches “clear incentive scheme” without trapping testers.)
+Clearance UI: if `GROUNDED`, show the fictional line
+`Exception denied · grounded pending allocation` and set `readyHint` accordingly, but leave
+“Fly again” available. This is a presentation label, not a soft gate. A future hard campaign
+constraint may come only from the typed force economy and must not reuse this balance.
 
 - [ ] **Step 1: Add `fuel_initial_lb` to snapshot if absent**; wire C# `PointsLedger.Evaluate` in projection when `finished`.
 
@@ -366,4 +378,5 @@ Expected: green (or only pre-existing failures unrelated to this work — do not
 - Heading locked to `-π/2` (west), not `π` (south).
 - Rate-card magnitudes named as constants in Task 3; UI must use projected numbers, not re-hardcode.
 - Circuits may not emit a finished ledger every trap — documented acceptable for v1.
-- Soft clearance gate (copy only) avoids trapping CI/manual testers; hard lock is follow-on.
+- Fictional clearance copy never traps CI, manual testers, or sandbox players; any future campaign
+  constraint comes from typed readiness and authority, not this balance.

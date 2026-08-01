@@ -13,23 +13,31 @@ namespace GunsOnly.Sim.Tests.FlightTest;
 /// fix means the fix worked, not that it broke something.
 /// </summary>
 public class DynamicHoldTests {
+    /// The Rapier used to exceed the 40-degree family cap accelerating through Mach 1 -- a
+    /// "homesick angel" -- and these two tests asserted that, one on the hold directly and one on
+    /// the evaluator catching it. That behaviour was the defect, not the feature: on 2026-07-31
+    /// the aircraft would hold M0.9 in a VERTICAL climb once fuel burned down, because a dry
+    /// thrust-to-weight of 1.30 on the empty airframe exceeded an F-22 carrying two F119s.
+    ///
+    /// With an honest core the aircraft complies, so the assertion is inverted rather than
+    /// deleted: complying is the thing now worth protecting, and a regression back above the cap
+    /// would mean the engine had been quietly re-inflated.
     [Fact]
-    public void RapierAbClimbThroughMach1ExceedsFamilyGammaCap() {
+    public void RapierAbClimbThroughMach1StaysInsideFamilyGammaCap() {
         ClimbHoldResult r = DynamicHolds.AbClimbThroughMach1(
             FlightModel.RapierPublicDataSurrogate);
-        Assert.True(r.MaxGammaDegWhileAccelerating > 40.0,
-            $"expected homesick-angel γ, got {r.MaxGammaDegWhileAccelerating:F1}");
+        Assert.True(r.MaxGammaDegWhileAccelerating <= 40.0,
+            $"climb angle back above the family cap, got {r.MaxGammaDegWhileAccelerating:F1}");
     }
 
     [Fact]
-    public void EvaluateFailsAbClimbGateForRapier() {
+    public void EvaluatePassesAbClimbGateForRapier() {
         var subject = new AirframeUnderTest(
             "rapier", FlightModel.RapierPublicDataSurrogate,
             PropulsionModelKind.TurboRamjetPublicDataSurrogate,
             Identity: InterceptorTbccV1.RapierAspirationalIdentity);
         FlightTestReport report = Evaluator.Evaluate(subject, InterceptorTbccV1.Program);
-        Assert.Contains(report.Findings,
+        Assert.DoesNotContain(report.Findings,
             f => f.GateId == "ab-climb-through-m1" && f.Blocking);
-        Assert.False(report.Passed);
     }
 }

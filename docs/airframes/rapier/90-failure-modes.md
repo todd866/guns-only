@@ -1,15 +1,20 @@
 # 90 — Failure modes (FMECA-lite)
 
-← [80 — Basing and ground](80-basing-and-ground.md) · Next: [95 — Cost ledger](95-cost-ledger.md)
+← [85 — Service life, maintenance, and telemetry](85-service-life-maintenance-and-telemetry.md) ·
+Next: [95 — Cost ledger](95-cost-ledger.md)
 
 Seed FMECA expanded from OFT / open findings. **Provisional** — detection and mitigation are
 directionally right, not certified procedures.
+
+Life-related rows describe the eventual campaign/maintenance response after chapter 85's
+assessment models and procedures exist. The measure-only phase emits evidence/exceedance flags and
+does not itself ground, restrict, inspect, or charge an aircraft.
 
 | ID | Failure | Effect | Detection | Mitigation / note | Sev |
 | --- | --- | --- | --- | --- | --- |
 | P1 | Inlet unstart / spill | Thrust collapse in dash | Mach/q, duct sensors (fiction UI) | Spill band M3.3–3.8 is *commanded*; uncommanded = abort dash | 1 |
 | P2 | TBCC handover hole | Stuck on turbine shoulder | Turbine/ram thrust + fuel shares | Hold altitude; do not rush Mach at FL315 | 1 |
-| P3 | Skin overtemp dive | Structure eat / abort | Lagged skin HUD vs 1473 K | Pull up / shed Mach; CMC is not infinite | 1 |
+| P3 | Hot-component overtemperature | Abort; later assessment may require inspection even if the wall display cools | Configuration-level exposure record plus available temperature indications | Phase 1: flag evidence; later: apply the approved affected-component inspection/disposition rule | 1 |
 | P4 | Bank-hold loss | Occupant cannot hand-fly thesis | FBW health | Automate recovery / punch out | 1 |
 | P5 | Drone bay hang | Asymmetric mass / drag | Bay status | Inhibit further release; land heavy | 2 |
 | P6 | Hook miss / bolter | Reserve fuel burn | Wire gates | Bingo logic; Circuits trains the trap | 2 |
@@ -17,6 +22,9 @@ directionally right, not certified procedures.
 | P11 | RCS bottle/line leak or valve frozen shut | Commanded moment is not delivered | Bottle pressure, commanded vs delivered moment, jet health | Abort lob early; recover on aerodynamic controls as q returns; eject if tumble exceeds recovery envelope | 1 |
 | P12 | RCS valve stuck open / allocator runaway | Uncommanded torque, rapid gas loss, high-altitude tumble | Delivered moment with centred controls, pressure decay | Isolate failed manifold; counter-fire only while reserve permits; descend into aerodynamic authority | 1 |
 | P13 | Compressor/refill unavailable | No replenishment before the next lob | Compressor state, bottle pressure trend | Ground recharge or remain inside one-lob reserve; ram capture alone is not storage pressure | 2 |
+| P14 | Life-ledger/configuration mismatch | Dispatch state and remaining approved limits cannot be established | Installed serials/configuration hash disagree with the digital birth/life record | Phase 1: flag conflict; later campaign authority grounds until reconciled—unknown history is not zero damage | 1 |
+| P15 | Required life sensor/record unavailable | Damage estimate becomes partial or unknown | Channel health, missing samples, summary/replay parity | Phase 1: mark evidence partial/gap; later apply an approved conservative restriction or inspection | 2 |
+| P16 | Load/thermal/launch/trap exceedance | Local residual strength or component life may be reduced | Sparse exceedance event plus raw exposure summary | Phase 1: flag evidence; later order inspection and restrict only the affected configuration/components pending disposition | 1 |
 | P8 | Lever-only fuel lie | Pilot trusts false ram economy | Per-stream kernel fuel | **Closed** Build 163 — re-check OFT burn | — |
 | P9 | Optimistic mass (no drones) | Climb/dash too easy | Mass vs bay count | **Closed** — design bay in MassKg; shed on release | — |
 | P10 | Wet T/W overbuff | Unrealistic accel | Identity ≤1.20 at design gross | **Closed** — 84 kN / 11090 kg card | — |

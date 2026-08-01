@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   clearanceForBalance,
-  pointsLedgerPresentation,
+  rapierEconomyPresentation,
 } from "../points_ledger.js";
 
 test("clearance thresholds", () => {
@@ -12,32 +12,45 @@ test("clearance thresholds", () => {
   assert.equal(clearanceForBalance(-151), "GROUNDED");
 });
 
-test("kill and trap slip formats municipal copy", () => {
-  const slip = pointsLedgerPresentation({
+test("Rapier contract and recovery slip formats allocation credits", () => {
+  const slip = rapierEconomyPresentation({
     finished: true,
-    points_sortie_net: 70,
-    points_lines: [
-      { code: "KILL", label: "Verified splash", points: 100 },
-      { code: "RECOVERY", label: "Clean recovery", points: 50 },
-      { code: "FUEL", label: "Fuel burned", points: -80 },
+    rapier_economy_active: true,
+    rapier_economy_sortie_net_credits: 70,
+    rapier_economy_lines: [
+      { category: "CONTRACT", code: "TARGET_NEUTRALIZED", label: "Balloon contract", credits: 90 },
+      { category: "RECOVERY", code: "ASSET_RETURNED", label: "Rapier returned", credits: 20 },
+      { category: "CONSUMABLE", code: "FUEL", label: "Fuel consumed", credits: -40 },
     ],
   }, 0);
-  assert.equal(slip.kicker, "Allocation posted");
-  assert.equal(slip.netText, "Sortie net · +70");
-  assert.equal(slip.balanceText, "Balance · 70");
-  assert.equal(slip.clearanceText, "Norm fulfilled · cleared");
-  assert.equal(slip.lines[0].pointsText, "+100");
+  assert.equal(slip.kicker, "Rapier budget posted");
+  assert.equal(slip.netText, "Sortie net · +70 CR");
+  assert.equal(slip.balanceText, "Rapier balance · +70 CR");
+  assert.equal(slip.clearanceText, "Operating budget positive");
+  assert.equal(slip.lines[0].creditsText, "+90 CR");
 });
 
-test("grounded phrasing after loss", () => {
-  const slip = pointsLedgerPresentation({
+test("allocation exception phrasing follows a confirmed loss", () => {
+  const slip = rapierEconomyPresentation({
     finished: true,
-    points_sortie_net: -210,
-    points_lines: [
-      { code: "LOSS", label: "Asset not returned", points: -200 },
-      { code: "FUEL", label: "Fuel burned", points: -10 },
+    rapier_economy_active: true,
+    rapier_economy_sortie_net_credits: -720,
+    rapier_economy_lines: [
+      { category: "LOSS", code: "AIRFRAME_LOST", label: "Confirmed Rapier loss reserve", credits: -700 },
+      { category: "CONSUMABLE", code: "FUEL", label: "Fuel consumed", credits: -20 },
     ],
   }, 0);
   assert.equal(slip.clearance, "GROUNDED");
-  assert.match(slip.clearanceText, /Exception denied/);
+  assert.match(slip.clearanceText, /exception required/i);
+});
+
+test("arcade finished sorties never receive a Rapier budget slip", () => {
+  assert.equal(rapierEconomyPresentation({
+    finished: true,
+    rapier_economy_active: false,
+    rapier_economy_sortie_net_credits: 999,
+    rapier_economy_lines: [
+      { category: "CONTRACT", code: "TARGET_NEUTRALIZED", credits: 999 },
+    ],
+  }, 0), null);
 });

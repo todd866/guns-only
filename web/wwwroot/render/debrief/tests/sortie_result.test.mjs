@@ -6,6 +6,7 @@ import {
   combatHandoffPresentation,
   sortieResultCopy,
 } from "../sortie_result.js";
+import { RELEASE_BUILD } from "../../release/release_identity.js";
 
 test("handoff presentation fails closed before the first simulation snapshot", () => {
   for (const state of [undefined, null, false, 0, ""]) {
@@ -149,6 +150,30 @@ test("carrier qualification reports a bolter even when the generic outcome token
   assert.match(result.brief, /HARD SINK RATE/);
   assert.match(result.brief, /ADD POWER EARLIER/);
   assert.doesNotMatch(result.brief, /mutual|opponent/i);
+});
+
+test("Panther barrier retention is neither a trap, bolter, nor generic mutual kill", () => {
+  const result = sortieResultCopy({
+    mission_definition_id: "mission.korea.panther-sortie.v1",
+    carrier: true,
+    sortie_outcome: "DRAW",
+    recovery: "BarrierEngagement",
+    barrier_engagement: true,
+    arrest_phase: "STOPPED",
+    bolter: true,
+    hook_outcome: "MissedWires",
+    wire: 0,
+    touchdown_grade: "NO GRADE",
+    touchdown_deviations: "LINEUP",
+    touchdown_primary_correction: "ESTABLISH LINEUP EARLIER",
+  });
+
+  assert.equal(result.title, "Barrier · Missed wires");
+  assert.match(result.brief, /raised barrier retained the aircraft aboard/i);
+  assert.match(result.brief, /arresting wires were missed; no wire was caught/i);
+  assert.match(result.brief, /LINEUP/);
+  assert.match(result.brief, /ESTABLISH LINEUP EARLIER/);
+  assert.doesNotMatch(`${result.title} ${result.brief}`, /trap|bolter|mutual/i);
 });
 
 test("an explicit opponent destruction event retains the combat-loss diagnosis", () => {
@@ -350,6 +375,40 @@ test("G-LOC and Auto-GCAS lessons coexist exactly once", () => {
   assert.equal(result.brief.match(/Auto-GCAS:/g)?.length, 1);
 });
 
+test("Rapier exceedance evidence queues review without inventing damage or cost", () => {
+  const result = sortieResultCopy({
+    sortie_outcome: "VICTORY",
+    service_life_record_available: true,
+    service_life_exceedance_review_required: true,
+    service_life_over_structural_limit_s: 9.245,
+    service_life_over_dynamic_pressure_s: 58.231,
+    service_life_max_g: 15.043,
+    service_life_damage_assessment: "not_computed",
+    service_life_cost_projection: "not_computed",
+  });
+
+  assert.equal(result.serviceLifeReviewRequired, true);
+  assert.match(result.brief, /9\.2 s above the structural limit, peak 15\.0 G/);
+  assert.match(result.brief, /58\.2 s above the q placard/);
+  assert.match(result.brief, /Maintenance assessment pending/);
+  assert.match(result.brief, /no damage or repair cost has been inferred/);
+  assert.doesNotMatch(result.brief, /\$|grounded|condemned/i);
+});
+
+test("a clean or unfinished lifecycle record adds no debrief clutter", () => {
+  const expected = sortieResultCopy({ sortie_outcome: "VICTORY" });
+  assert.deepEqual(sortieResultCopy({
+    sortie_outcome: "VICTORY",
+    service_life_record_available: false,
+    service_life_exceedance_review_required: true,
+  }), expected);
+  assert.deepEqual(sortieResultCopy({
+    sortie_outcome: "VICTORY",
+    service_life_record_available: true,
+    service_life_exceedance_review_required: false,
+  }), expected);
+});
+
 test("combat handoff presentation preserves every authoritative phase flag", () => {
   const available = combatHandoffPresentation({
     combat_handoff_phase: "AVAILABLE",
@@ -421,7 +480,7 @@ test("app consumes the pure evidence-based debrief module", async () => {
   const app = await readFile(new URL("../../../app.js", import.meta.url), "utf8");
 
   assert.match(app,
-    /import \{[\s\S]*?combatHandoffPresentation,[\s\S]*?sortieResultCopy,[\s\S]*?} from "\.\/render\/debrief\/sortie_result\.js\?v=199";/);
+    new RegExp(`import \\{[\\s\\S]*?combatHandoffPresentation,[\\s\\S]*?sortieResultCopy,[\\s\\S]*?} from "\\.\\/render\\/debrief\\/sortie_result\\.js\\?v=${RELEASE_BUILD}";`));
   assert.doesNotMatch(app, /function sortieResultCopy\(/);
   assert.doesNotMatch(app, /The opponent's gun solution was decisive\. The loss was/);
 });

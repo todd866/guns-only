@@ -1,0 +1,1459 @@
+{
+  "$schema": "https://guns-only.invalid/schemas/v1/playable-narrative-sequence.schema.json",
+  "schemaVersion": "1.0.0",
+  "sequenceId": "sequence.korea-1951.armstrong-cable-strike.v1",
+  "status": "researching",
+  "mode": "fixed_history",
+  "title": "The Long Way Home: 3 September 1951",
+  "logline": "A twenty-one-year-old naval aviator launches from USS Essex, strikes a cable during a low-level armed-reconnaissance run, and must hold a crippled Panther together long enough to reach friendly territory and eject.",
+  "targetDurationMinutes": {
+    "minimum": 16,
+    "nominal": 22,
+    "maximum": 30
+  },
+  "governance": {
+    "governanceId": "governance.korea-braided.v1",
+    "timelineId": "timeline.korea-1950s.v1",
+    "dossierId": "dossier.armstrong-cable-strike.v1",
+    "dossierPath": "content/governance/korea-braided/missions/armstrong-cable-strike.dossier.json",
+    "claimRefs": [
+      "claim.armstrong-vf51-essex.v1",
+      "claim.armstrong-armed-recon-wonsan.v1",
+      "claim.armstrong-cable-strike.v1",
+      "claim.armstrong-wing-loss.v1",
+      "claim.carpenter-flight-lead.v1",
+      "claim.armstrong-no-landing-decision.v1",
+      "claim.armstrong-ejection-friendly-territory.v1",
+      "claim.panther-ejection-seat.v1",
+      "claim.cable-field-gameplay-reconstruction.v1",
+      "claim.panther-damage-flight-reconstruction.v1"
+    ],
+    "openResearchRefs": [
+      "individual-airframe-configuration",
+      "target-run-detail",
+      "cable-layout",
+      "loadout",
+      "damaged-aerodynamics",
+      "radio-transcript",
+      "ejection-seat-model-and-envelope",
+      "ejection-point",
+      "parachute-equipment-wind-and-path",
+      "ground-recovery"
+    ]
+  },
+  "authoredInvariants": [
+    "Armstrong launches from USS Essex as a VF-51 Panther pilot on an armed-reconnaissance sortie.",
+    "Major John Carpenter leads the flight.",
+    "The required low-level attack route intersects physical cable geometry.",
+    "Cable contact removes a substantial portion of the right wing and creates persistent asymmetric flight.",
+    "Armstrong and Carpenter determine that slowing for a landing is unsafe.",
+    "Armstrong carries the aircraft south into friendly territory before ejecting.",
+    "The ejection, parachute descent and ground recovery complete the playable sequence.",
+    "No mission dialogue foreshadows Apollo, the Moon or Armstrong's later fame."
+  ],
+  "playerAgency": {
+    "owns": [
+      "Deck and launch checks that are exposed as controls.",
+      "Formation position, route discipline, attack-run control and terrain clearance.",
+      "Immediate control response after the cable strike.",
+      "Airspeed, roll, yaw, altitude and engine management in the damaged aircraft.",
+      "Execution of the ejection preparation and ejection action.",
+      "The quality of the flight as recorded for replay and debrief."
+    ],
+    "doesNotOwn": [
+      "Whether the historical cable strike occurs.",
+      "Whether the damaged Panther is judged unsafe to land.",
+      "Whether the story becomes a counterfactual biography.",
+      "The documented identities of Armstrong, Carpenter, VF-51 or USS Essex.",
+      "Dialogue, camera, damage or recovery facts not supported by simulation events."
+    ],
+    "plotBreakingDivergence": [
+      "Abandoning or bypassing the required attack corridor.",
+      "Missing the authored cable contact after entering its terminal approach gate.",
+      "Crashing before the damaged-flight beat can advance.",
+      "Leaving the damaged-flight route or ejecting before the friendly-territory gate.",
+      "Failing an ejection action in a way that would replace the documented recovery with an alternate death."
+    ],
+    "retryPolicy": "Restore the nearest completed narrative checkpoint with identical mission seed, authored conditions and disclosed reconstruction status; do not canonize the failed attempt as an alternate historical outcome."
+  },
+  "cast": [
+    {
+      "characterId": "character.neil-armstrong-1951.v1",
+      "kind": "historical_person",
+      "displayName": "Ensign Neil A. Armstrong",
+      "operationalRole": "VF-51 F9F-2 Panther pilot and player character",
+      "dramaticFunction": "Make the story emerge from a young pilot's technical attention, aircraft handling and procedural composure rather than retrospective hero narration.",
+      "knowledgeBoundary": "He knows only what he can see, feel in the controls, hear over the radio or infer from the Panther's instruments and Carpenter's inspection.",
+      "dialoguePolicy": "Use sourced words when available and otherwise only restrained procedural reconstruction; never invent private thought, political exposition, moral instruction or Moon foreshadowing.",
+      "voicePolicy": "Use an original disclosed synthetic performance appropriate to a young Midwestern U.S. naval aviator; never clone, match or instruct the model to imitate Neil Armstrong's recorded voice.",
+      "claimRefs": [
+        "claim.armstrong-vf51-essex.v1",
+        "claim.armstrong-cable-strike.v1",
+        "claim.armstrong-wing-loss.v1",
+        "claim.armstrong-ejection-friendly-territory.v1"
+      ]
+    },
+    {
+      "characterId": "character.john-carpenter-korea.v1",
+      "kind": "historical_person",
+      "displayName": "Major John Carpenter",
+      "operationalRole": "USAF exchange officer and flight lead",
+      "dramaticFunction": "Provide the external damage inspection and professional second judgment that turns a damaged-flight problem into the decision to eject.",
+      "knowledgeBoundary": "He can report what is visible from formation and what the flight's radio exchange establishes; he does not know hidden airframe state.",
+      "dialoguePolicy": "No quotation is locked until supported by a transcript, oral history or clearly declared procedural reconstruction.",
+      "voicePolicy": "Use an original disclosed synthetic performance for a mature U.S. military pilot; do not imitate a real recording or use celebrity resemblance as direction.",
+      "claimRefs": [
+        "claim.carpenter-flight-lead.v1",
+        "claim.armstrong-no-landing-decision.v1"
+      ]
+    },
+    {
+      "characterId": "role.essex-flight-deck.v1",
+      "kind": "documented_operational_role",
+      "displayName": "Essex flight deck",
+      "operationalRole": "Plane handlers, launch crew and flight-deck control",
+      "dramaticFunction": "Establish that the sortie begins inside a practiced human machine before narrowing to two aircraft over the target.",
+      "knowledgeBoundary": "The role knows deck state, launch state and visible aircraft condition only.",
+      "dialoguePolicy": "Prefer hand signals, machinery and period procedure; add named or spoken lines only after cruise records or procedure sources support them.",
+      "voicePolicy": "Operational voices are original performances and remain unnamed until the historical record identifies a speaker.",
+      "claimRefs": [
+        "claim.armstrong-vf51-essex.v1"
+      ]
+    },
+    {
+      "characterId": "role.friendly-ground-recovery.v1",
+      "kind": "documented_operational_role",
+      "displayName": "Friendly ground recovery",
+      "operationalRole": "Personnel who recover Armstrong after descent",
+      "dramaticFunction": "Return the story from machinery and sky to an ordinary human-scale ending.",
+      "knowledgeBoundary": "The role knows only the visible descent, landing and local recovery conditions.",
+      "dialoguePolicy": "Armstrong's retrospective account identifies Goodell Warren and a jeep near Pohang/K-3; do not invent words, exact location, vehicle appearance or interaction while independent corroboration remains open.",
+      "voicePolicy": "No voice is cast until the ground-recovery source gap is resolved.",
+      "claimRefs": [
+        "claim.armstrong-ejection-friendly-territory.v1"
+      ]
+    }
+  ],
+  "referenceIndex": {
+    "worldFacts": [
+      "fact.armed-recon-target.v1",
+      "fact.armstrong-sortie-complete.v1",
+      "fact.attack-run-route.v1",
+      "fact.authored-low-level-route.v1",
+      "fact.carpenter-inspection-geometry.v1",
+      "fact.carpenter-lead-aircraft.v1",
+      "fact.ejection-recorded.v1",
+      "fact.civilian-scenery-nontargetable.v1",
+      "fact.ejection-disposal-corridor.v1",
+      "fact.friendly-ground-recovery.v1",
+      "fact.friendly-landing-area-reconstruction.v1",
+      "fact.friendly-territory-boundary.v1",
+      "fact.korea-coast-route.v1",
+      "fact.majon-ni-valley-terrain.v1",
+      "fact.panther-asymmetric-lift.v1",
+      "fact.panther-ejection-checklist.v1",
+      "fact.panther-ejection-envelope.v1",
+      "fact.panther-landing-speed-risk.v1",
+      "fact.panther-launch-ready.v1",
+      "fact.panther-reduced-roll-authority.v1",
+      "fact.panther-right-wing-damage.v1",
+      "fact.parachute-deployment.v1",
+      "fact.parachute-descent-reconstruction.v1",
+      "fact.physical-cable-collision.v1",
+      "fact.pilot-seat-separation.v1",
+      "fact.player-on-essex-catapult.v1",
+      "fact.southbound-route.v1"
+    ],
+    "events": [
+      "event.narrative.armstrong-sortie-complete.v1",
+      "event.narrative.attack-run-complete.v1",
+      "event.narrative.cable-contact.v1",
+      "event.narrative.cable-corridor-entered.v1",
+      "event.narrative.damage-inspection-complete.v1",
+      "event.narrative.damaged-flight-stabilized.v1",
+      "event.narrative.deck-launch-complete.v1",
+      "event.narrative.ejection-decision.v1",
+      "event.narrative.ejection-initiated.v1",
+      "event.narrative.ejection-ready.v1",
+      "event.narrative.friendly-territory-entered.v1",
+      "event.narrative.korea-coast-crossed.v1",
+      "event.narrative.parachute-deployed.v1",
+      "event.narrative.pilot-ground-contact.v1",
+      "event.narrative.right-wing-damaged.v1",
+      "event.narrative.target-area-entered.v1"
+    ],
+    "mechanics": [
+      "mechanic.airframe-impulse.v1",
+      "mechanic.carrier-catapult.v1",
+      "mechanic.ejection-seat-reconstruction.v1",
+      "mechanic.damaged-aircraft-control.v1",
+      "mechanic.direct-lateral-control.v1",
+      "mechanic.ejection-checklist.v1",
+      "mechanic.ejection-envelope.v1",
+      "mechanic.mission-decision.v1",
+      "mechanic.observer-visible-damage.v1",
+      "mechanic.panther-ordnance.v1",
+      "mechanic.parachute-deployment.v1",
+      "mechanic.parachute-flight.v1",
+      "mechanic.parachute-landing.v1",
+      "mechanic.partial-wing-damage.v1",
+      "mechanic.period-checklist.v1",
+      "mechanic.period-gunsight.v1",
+      "mechanic.pilot-body-transition.v1",
+      "mechanic.quiet-aftermath.v1",
+      "mechanic.replay-backed-debrief.v1",
+      "mechanic.route-gates.v1",
+      "mechanic.swept-cable-collision.v1",
+      "mechanic.target-authorization.v1",
+      "mechanic.terrain-following.v1",
+      "mechanic.two-ship-formation.v1",
+      "mechanic.wind-drift.v1"
+    ],
+    "cues": [
+      "cue.airframe-strain-audio.v1",
+      "cue.attack-objective.v1",
+      "cue.cable-contact-audio.v1",
+      "cue.cable-physical-visibility.v1",
+      "cue.camera-pilot-transition.v1",
+      "cue.carpenter-attack-path.v1",
+      "cue.carpenter-inspection-position.v1",
+      "cue.damage-radio.v1",
+      "cue.damaged-control-response.v1",
+      "cue.damaged-panther-departure.v1",
+      "cue.debrief-transition.v1",
+      "cue.disposal-corridor.v1",
+      "cue.ejection-blast.v1",
+      "cue.ejection-checklist.v1",
+      "cue.ejection-envelope.v1",
+      "cue.ejection-plan.v1",
+      "cue.essex-launch-audio.v1",
+      "cue.essex-launch-hand-signals.v1",
+      "cue.friendly-territory-status.v1",
+      "cue.ground-approach.v1",
+      "cue.ground-recovery.v1",
+      "cue.korea-coast-landmarks.v1",
+      "cue.lead-position.v1",
+      "cue.parachute-opening.v1",
+      "cue.parachute-wind.v1",
+      "cue.prohibited-scenery.v1",
+      "cue.quiet-aftermath.v1",
+      "cue.radar-altitude.v1",
+      "cue.right-wing-damage.v1",
+      "cue.southbound-landmarks.v1",
+      "cue.sparse-flight-radio.v1",
+      "cue.valley-route-landmarks.v1"
+    ],
+    "lines": [
+      "line.armstrong.02-position-ack.v1",
+      "line.armstrong.04-two-in.v1",
+      "line.armstrong.06-damage-report.v1",
+      "line.armstrong.07-control-margin.v1",
+      "line.armstrong.10-going-out.v1",
+      "line.carpenter.02-take-position.v1",
+      "line.carpenter.03-descend.v1",
+      "line.carpenter.04-lead-in.v1",
+      "line.carpenter.06-coming-across.v1",
+      "line.carpenter.07-hold-inspection.v1",
+      "line.carpenter.07-no-landing.v1",
+      "line.carpenter.07-visible-damage.v1",
+      "line.carpenter.08-friendly-ahead.v1",
+      "line.carpenter.09-clear-aircraft.v1",
+      "line.carpenter.10-ack.v1"
+    ],
+    "storyboardFrames": [
+      "frame.armstrong.arrest-roll.v1",
+      "frame.armstrong.attack-run.v1",
+      "frame.armstrong.cable-strike.v1",
+      "frame.armstrong.carpenter-inspection.v1",
+      "frame.armstrong.coast-crossing.v1",
+      "frame.armstrong.damaged-southbound.v1",
+      "frame.armstrong.ejection-setup.v1",
+      "frame.armstrong.ejection.v1",
+      "frame.armstrong.essex-launch.v1",
+      "frame.armstrong.ground-recovery.v1",
+      "frame.armstrong.parachute-descent.v1",
+      "frame.armstrong.valley-ingress.v1"
+    ]
+  },
+  "beats": [
+    {
+      "beatId": "beat.armstrong.01-deck-launch.v1",
+      "order": 1,
+      "kind": "setup",
+      "title": "Essex",
+      "dramaticPurpose": "Introduce Armstrong as one young pilot inside VF-51's practiced carrier operation and establish the Panther as a handled machine.",
+      "playerTask": "Complete the exposed launch checks, hold the aircraft correctly and accept the straight-deck catapult shot.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-vf51-essex.v1"
+      ],
+      "requiredForProgression": true,
+      "authority": {
+        "worldFactRefs": [
+          "fact.player-on-essex-catapult.v1",
+          "fact.panther-launch-ready.v1"
+        ],
+        "enterWhen": [
+          "The mission lifecycle is active and the Panther is secured on the Essex launch station."
+        ],
+        "completeWhen": [
+          "The carrier catapult reports launch complete and the player aircraft is airborne."
+        ],
+        "failWhen": [
+          "The aircraft is lost or leaves the authored launch envelope before the catapult event completes."
+        ],
+        "emittedEventRefs": [
+          "event.narrative.deck-launch-complete.v1"
+        ]
+      },
+      "mechanicRefs": [
+        "mechanic.carrier-catapult.v1",
+        "mechanic.period-checklist.v1"
+      ],
+      "cueRefs": [
+        "cue.essex-launch-hand-signals.v1",
+        "cue.essex-launch-audio.v1"
+      ],
+      "lineRefs": [],
+      "storyboardFrameRefs": [
+        "frame.armstrong.essex-launch.v1"
+      ],
+      "checkpoint": {
+        "policy": "complete",
+        "checkpointId": "checkpoint.armstrong.airborne.v1"
+      },
+      "evidenceCapture": [
+        "Checklist actions and omissions.",
+        "Launch control state and catapult event.",
+        "Aircraft attitude, speed and clearance through the first ten airborne seconds."
+      ]
+    },
+    {
+      "beatId": "beat.armstrong.02-join-and-coast.v1",
+      "order": 2,
+      "kind": "transit",
+      "title": "Join",
+      "dramaticPurpose": "Move from the carrier's collective routine to Armstrong's position on Carpenter's wing and reveal the Korean coast without exposition.",
+      "playerTask": "Join Carpenter, preserve formation spacing and cross the coast on the assigned route.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.carpenter-flight-lead.v1",
+        "claim.armstrong-armed-recon-wonsan.v1"
+      ],
+      "requiredForProgression": true,
+      "authority": {
+        "worldFactRefs": [
+          "fact.carpenter-lead-aircraft.v1",
+          "fact.korea-coast-route.v1"
+        ],
+        "enterWhen": [
+          "The airborne checkpoint has completed."
+        ],
+        "completeWhen": [
+          "The player crosses the authored coast gate inside the bounded formation envelope."
+        ],
+        "failWhen": [
+          "The player loses the lead, leaves the route volume or loses the aircraft."
+        ],
+        "emittedEventRefs": [
+          "event.narrative.korea-coast-crossed.v1"
+        ]
+      },
+      "mechanicRefs": [
+        "mechanic.two-ship-formation.v1",
+        "mechanic.route-gates.v1"
+      ],
+      "cueRefs": [
+        "cue.lead-position.v1",
+        "cue.korea-coast-landmarks.v1"
+      ],
+      "lineRefs": [
+        "line.carpenter.02-take-position.v1",
+        "line.armstrong.02-position-ack.v1"
+      ],
+      "storyboardFrameRefs": [
+        "frame.armstrong.coast-crossing.v1"
+      ],
+      "checkpoint": {
+        "policy": "none",
+        "checkpointId": ""
+      },
+      "evidenceCapture": [
+        "Formation range and bearing history.",
+        "Route-gate entry and exit times.",
+        "Player-visible weather and coast landmarks."
+      ]
+    },
+    {
+      "beatId": "beat.armstrong.03-valley-ingress.v1",
+      "order": 3,
+      "kind": "transit",
+      "title": "Into the valley",
+      "dramaticPurpose": "Turn Korea's mountain geometry into workload and narrow the player's attention before the attack.",
+      "playerTask": "Descend with the flight, maintain terrain clearance and follow the valley toward the target area.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-armed-recon-wonsan.v1",
+        "claim.cable-field-gameplay-reconstruction.v1"
+      ],
+      "requiredForProgression": true,
+      "authority": {
+        "worldFactRefs": [
+          "fact.majon-ni-valley-terrain.v1",
+          "fact.authored-low-level-route.v1"
+        ],
+        "enterWhen": [
+          "The coast gate is complete and Carpenter enters the inland route."
+        ],
+        "completeWhen": [
+          "The player enters the armed-reconnaissance target area within the authored altitude and route envelope."
+        ],
+        "failWhen": [
+          "Terrain contact, route abandonment or sustained separation from the flight prevents target-area entry."
+        ],
+        "emittedEventRefs": [
+          "event.narrative.target-area-entered.v1"
+        ]
+      },
+      "mechanicRefs": [
+        "mechanic.terrain-following.v1",
+        "mechanic.two-ship-formation.v1",
+        "mechanic.route-gates.v1"
+      ],
+      "cueRefs": [
+        "cue.valley-route-landmarks.v1",
+        "cue.radar-altitude.v1"
+      ],
+      "lineRefs": [
+        "line.carpenter.03-descend.v1"
+      ],
+      "storyboardFrameRefs": [
+        "frame.armstrong.valley-ingress.v1"
+      ],
+      "checkpoint": {
+        "policy": "complete",
+        "checkpointId": "checkpoint.armstrong.attack-ingress.v1"
+      },
+      "evidenceCapture": [
+        "Radar altitude, vertical speed and terrain-clearance history.",
+        "Route conformity and formation position.",
+        "Rendered terrain and cable visibility evidence available to the player."
+      ]
+    },
+    {
+      "beatId": "beat.armstrong.04-attack-run.v1",
+      "order": 4,
+      "kind": "task",
+      "title": "Armed reconnaissance",
+      "dramaticPurpose": "Give the sortie a concrete operational task and create the ordinary control workload that carries the Panther onto the cable line.",
+      "playerTask": "Follow Carpenter through the required target run, employ only against the validated military objective and recover into the exit valley.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-armed-recon-wonsan.v1",
+        "claim.cable-field-gameplay-reconstruction.v1"
+      ],
+      "requiredForProgression": true,
+      "authority": {
+        "worldFactRefs": [
+          "fact.armed-recon-target.v1",
+          "fact.attack-run-route.v1",
+          "fact.civilian-scenery-nontargetable.v1"
+        ],
+        "enterWhen": [
+          "The target-area gate is complete and the lead begins the authored run."
+        ],
+        "completeWhen": [
+          "The player completes the required employment gate and enters the cable corridor on the canonical egress line."
+        ],
+        "failWhen": [
+          "The player abandons the run, attacks a prohibited object, loses the aircraft or fails to enter the canonical egress line."
+        ],
+        "emittedEventRefs": [
+          "event.narrative.attack-run-complete.v1",
+          "event.narrative.cable-corridor-entered.v1"
+        ]
+      },
+      "mechanicRefs": [
+        "mechanic.period-gunsight.v1",
+        "mechanic.panther-ordnance.v1",
+        "mechanic.target-authorization.v1",
+        "mechanic.route-gates.v1"
+      ],
+      "cueRefs": [
+        "cue.attack-objective.v1",
+        "cue.prohibited-scenery.v1",
+        "cue.carpenter-attack-path.v1"
+      ],
+      "lineRefs": [
+        "line.carpenter.04-lead-in.v1",
+        "line.armstrong.04-two-in.v1"
+      ],
+      "storyboardFrameRefs": [
+        "frame.armstrong.attack-run.v1"
+      ],
+      "checkpoint": {
+        "policy": "enter",
+        "checkpointId": "checkpoint.armstrong.attack-run.v1"
+      },
+      "evidenceCapture": [
+        "Target identity and authorization evidence visible at employment.",
+        "Weapon release, gun events and aim geometry.",
+        "Exit-route pose, speed and control state."
+      ]
+    },
+    {
+      "beatId": "beat.armstrong.05-cable-strike.v1",
+      "order": 5,
+      "kind": "hazard",
+      "title": "The disputed impact",
+      "dramaticPurpose": "Enact the explicitly disclosed cable reconstruction that changes the sortie from attack to survival without erasing the conflicting contemporary antiaircraft-fire and power-pole account.",
+      "playerTask": "Fly the required egress corridor and respond immediately when the authored cable reconstruction tears the right wing.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-cable-strike.v1",
+        "claim.armstrong-wing-loss.v1",
+        "claim.cable-field-gameplay-reconstruction.v1"
+      ],
+      "requiredForProgression": true,
+      "authority": {
+        "worldFactRefs": [
+          "fact.physical-cable-collision.v1",
+          "fact.panther-right-wing-damage.v1"
+        ],
+        "enterWhen": [
+          "The attack-run completion event places the aircraft inside the terminal cable corridor."
+        ],
+        "completeWhen": [
+          "Authoritative swept collision reports player contact with a cable and the right-wing damage state is committed."
+        ],
+        "failWhen": [
+          "The player leaves the terminal corridor, misses the required cable contact or loses the aircraft before damage authority commits."
+        ],
+        "emittedEventRefs": [
+          "event.narrative.cable-contact.v1",
+          "event.narrative.right-wing-damaged.v1"
+        ]
+      },
+      "mechanicRefs": [
+        "mechanic.swept-cable-collision.v1",
+        "mechanic.partial-wing-damage.v1",
+        "mechanic.airframe-impulse.v1"
+      ],
+      "cueRefs": [
+        "cue.cable-physical-visibility.v1",
+        "cue.cable-contact-audio.v1",
+        "cue.right-wing-damage.v1"
+      ],
+      "lineRefs": [],
+      "storyboardFrameRefs": [
+        "frame.armstrong.cable-strike.v1"
+      ],
+      "checkpoint": {
+        "policy": "complete",
+        "checkpointId": "checkpoint.armstrong.damaged-flight.v1"
+      },
+      "evidenceCapture": [
+        "Cable identity, contact point, relative velocity and collision impulse.",
+        "Detached geometry and committed aerodynamic damage parameters.",
+        "Player control state immediately before and after contact."
+      ]
+    },
+    {
+      "beatId": "beat.armstrong.06-arrest-the-roll.v1",
+      "order": 6,
+      "kind": "consequence",
+      "title": "Hold it",
+      "dramaticPurpose": "Make the missing wing a sustained aerodynamic problem rather than a cosmetic story flag.",
+      "playerTask": "Arrest the roll, avoid terrain and establish a controllable speed and attitude with the damaged Panther.",
+      "historicalLabel": "engineering",
+      "claimRefs": [
+        "claim.armstrong-wing-loss.v1",
+        "claim.panther-damage-flight-reconstruction.v1"
+      ],
+      "requiredForProgression": true,
+      "authority": {
+        "worldFactRefs": [
+          "fact.panther-asymmetric-lift.v1",
+          "fact.panther-reduced-roll-authority.v1"
+        ],
+        "enterWhen": [
+          "The right-wing damage state is committed."
+        ],
+        "completeWhen": [
+          "The aircraft remains airborne and inside bounded roll, terrain-clearance and controllability limits for the authored stabilization interval."
+        ],
+        "failWhen": [
+          "Terrain contact, unrecoverable departure or numerical terminal state occurs before stabilization completes."
+        ],
+        "emittedEventRefs": [
+          "event.narrative.damaged-flight-stabilized.v1"
+        ]
+      },
+      "mechanicRefs": [
+        "mechanic.partial-wing-damage.v1",
+        "mechanic.direct-lateral-control.v1",
+        "mechanic.terrain-following.v1"
+      ],
+      "cueRefs": [
+        "cue.airframe-strain-audio.v1",
+        "cue.damaged-control-response.v1",
+        "cue.radar-altitude.v1"
+      ],
+      "lineRefs": [
+        "line.armstrong.06-damage-report.v1",
+        "line.carpenter.06-coming-across.v1"
+      ],
+      "storyboardFrameRefs": [
+        "frame.armstrong.arrest-roll.v1"
+      ],
+      "checkpoint": {
+        "policy": "none",
+        "checkpointId": ""
+      },
+      "evidenceCapture": [
+        "Roll rate, sideslip, control input and remaining authority.",
+        "Airspeed, altitude, clearance and load factor.",
+        "Time to establish the bounded controllable state."
+      ]
+    },
+    {
+      "beatId": "beat.armstrong.07-carpenter-inspection.v1",
+      "order": 7,
+      "kind": "decision",
+      "title": "No landing",
+      "dramaticPurpose": "Let two pilots reason from visible damage and handling evidence rather than having narration announce the answer.",
+      "playerTask": "Hold a steady inspection formation while Carpenter assesses the wing, then acknowledge the decision to avoid a landing attempt.",
+      "historicalLabel": "history",
+      "claimRefs": [
+        "claim.carpenter-flight-lead.v1",
+        "claim.armstrong-no-landing-decision.v1"
+      ],
+      "requiredForProgression": true,
+      "authority": {
+        "worldFactRefs": [
+          "fact.carpenter-inspection-geometry.v1",
+          "fact.panther-landing-speed-risk.v1"
+        ],
+        "enterWhen": [
+          "Damaged-flight stabilization is complete and Carpenter reaches the inspection station."
+        ],
+        "completeWhen": [
+          "Carpenter's observer-safe inspection state and the player's demonstrated low-speed handling evidence support the no-landing decision."
+        ],
+        "failWhen": [
+          "The player cannot hold the inspection envelope, loses the aircraft or attempts an unauthorized landing route."
+        ],
+        "emittedEventRefs": [
+          "event.narrative.damage-inspection-complete.v1",
+          "event.narrative.ejection-decision.v1"
+        ]
+      },
+      "mechanicRefs": [
+        "mechanic.two-ship-formation.v1",
+        "mechanic.observer-visible-damage.v1",
+        "mechanic.mission-decision.v1"
+      ],
+      "cueRefs": [
+        "cue.carpenter-inspection-position.v1",
+        "cue.damage-radio.v1",
+        "cue.ejection-plan.v1"
+      ],
+      "lineRefs": [
+        "line.carpenter.07-hold-inspection.v1",
+        "line.carpenter.07-visible-damage.v1",
+        "line.armstrong.07-control-margin.v1",
+        "line.carpenter.07-no-landing.v1"
+      ],
+      "storyboardFrameRefs": [
+        "frame.armstrong.carpenter-inspection.v1"
+      ],
+      "checkpoint": {
+        "policy": "complete",
+        "checkpointId": "checkpoint.armstrong.southbound.v1"
+      },
+      "evidenceCapture": [
+        "Inspection formation geometry and duration.",
+        "Damage facts visible to Carpenter.",
+        "Airspeed, roll authority and stability evidence used for the decision."
+      ]
+    },
+    {
+      "beatId": "beat.armstrong.08-southbound.v1",
+      "order": 8,
+      "kind": "transit",
+      "title": "South",
+      "dramaticPurpose": "Turn the long return over hostile terrain into sustained concentration and make friendly territory an earned physical boundary.",
+      "playerTask": "Follow Carpenter south while preserving control, altitude and enough margin to reach the friendly-territory ejection area.",
+      "historicalLabel": "history",
+      "claimRefs": [
+        "claim.armstrong-no-landing-decision.v1",
+        "claim.armstrong-ejection-friendly-territory.v1"
+      ],
+      "requiredForProgression": true,
+      "authority": {
+        "worldFactRefs": [
+          "fact.southbound-route.v1",
+          "fact.friendly-territory-boundary.v1"
+        ],
+        "enterWhen": [
+          "The ejection decision event is committed."
+        ],
+        "completeWhen": [
+          "The player crosses the friendly-territory gate inside the damaged-flight safety envelope."
+        ],
+        "failWhen": [
+          "The aircraft is lost, the player leaves the southbound route or ejects before the friendly-territory gate."
+        ],
+        "emittedEventRefs": [
+          "event.narrative.friendly-territory-entered.v1"
+        ]
+      },
+      "mechanicRefs": [
+        "mechanic.partial-wing-damage.v1",
+        "mechanic.route-gates.v1",
+        "mechanic.two-ship-formation.v1"
+      ],
+      "cueRefs": [
+        "cue.southbound-landmarks.v1",
+        "cue.friendly-territory-status.v1",
+        "cue.sparse-flight-radio.v1"
+      ],
+      "lineRefs": [
+        "line.carpenter.08-friendly-ahead.v1"
+      ],
+      "storyboardFrameRefs": [
+        "frame.armstrong.damaged-southbound.v1"
+      ],
+      "checkpoint": {
+        "policy": "complete",
+        "checkpointId": "checkpoint.armstrong.ejection-area.v1"
+      },
+      "evidenceCapture": [
+        "Route, altitude, airspeed, roll and control-margin history.",
+        "Friendly-territory boundary crossing.",
+        "Any loss-of-control episodes and recoveries."
+      ]
+    },
+    {
+      "beatId": "beat.armstrong.09-ejection-setup.v1",
+      "order": 9,
+      "kind": "task",
+      "title": "Prepare",
+      "dramaticPurpose": "Convert ejection from a button press into a short, dangerous procedure performed while still flying the aircraft.",
+      "playerTask": "Point the Panther into the authored safe disposal corridor, establish the required ejection envelope and complete the exposed preparation actions.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-ejection-friendly-territory.v1",
+        "claim.panther-ejection-seat.v1"
+      ],
+      "requiredForProgression": true,
+      "authority": {
+        "worldFactRefs": [
+          "fact.ejection-disposal-corridor.v1",
+          "fact.panther-ejection-envelope.v1",
+          "fact.panther-ejection-checklist.v1"
+        ],
+        "enterWhen": [
+          "The friendly-territory gate is complete."
+        ],
+        "completeWhen": [
+          "Aircraft pose and speed are inside the authored ejection envelope and every exposed preparation action is committed."
+        ],
+        "failWhen": [
+          "The player leaves the disposal corridor, loses the aircraft or exhausts the recoverable ejection envelope."
+        ],
+        "emittedEventRefs": [
+          "event.narrative.ejection-ready.v1"
+        ]
+      },
+      "mechanicRefs": [
+        "mechanic.ejection-checklist.v1",
+        "mechanic.ejection-envelope.v1",
+        "mechanic.damaged-aircraft-control.v1"
+      ],
+      "cueRefs": [
+        "cue.ejection-checklist.v1",
+        "cue.ejection-envelope.v1",
+        "cue.disposal-corridor.v1"
+      ],
+      "lineRefs": [
+        "line.carpenter.09-clear-aircraft.v1"
+      ],
+      "storyboardFrameRefs": [
+        "frame.armstrong.ejection-setup.v1"
+      ],
+      "checkpoint": {
+        "policy": "enter",
+        "checkpointId": "checkpoint.armstrong.ejection-setup.v1"
+      },
+      "evidenceCapture": [
+        "Checklist action order and omissions.",
+        "Aircraft pose, speed, vertical rate and terrain clearance.",
+        "Disposal-corridor alignment and elapsed margin."
+      ]
+    },
+    {
+      "beatId": "beat.armstrong.10-ejection.v1",
+      "order": 10,
+      "kind": "consequence",
+      "title": "Punch out",
+      "dramaticPurpose": "Make separation from the aircraft abrupt, mechanical and physically consequential without spectacle.",
+      "playerTask": "Initiate ejection only after the ready state and survive seat separation and parachute deployment.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-ejection-friendly-territory.v1",
+        "claim.panther-ejection-seat.v1"
+      ],
+      "requiredForProgression": true,
+      "authority": {
+        "worldFactRefs": [
+          "fact.ejection-recorded.v1",
+          "fact.pilot-seat-separation.v1",
+          "fact.parachute-deployment.v1"
+        ],
+        "enterWhen": [
+          "The ejection-ready event is committed."
+        ],
+        "completeWhen": [
+          "Authoritative ejection, aircraft separation, seat separation and parachute deployment events complete in order."
+        ],
+        "failWhen": [
+          "The ejection action is attempted outside the ready state or modeled separation cannot complete inside the disclosed reconstruction bounds."
+        ],
+        "emittedEventRefs": [
+          "event.narrative.ejection-initiated.v1",
+          "event.narrative.parachute-deployed.v1"
+        ]
+      },
+      "mechanicRefs": [
+        "mechanic.ejection-seat-reconstruction.v1",
+        "mechanic.pilot-body-transition.v1",
+        "mechanic.parachute-deployment.v1"
+      ],
+      "cueRefs": [
+        "cue.ejection-blast.v1",
+        "cue.camera-pilot-transition.v1",
+        "cue.parachute-opening.v1"
+      ],
+      "lineRefs": [
+        "line.armstrong.10-going-out.v1",
+        "line.carpenter.10-ack.v1"
+      ],
+      "storyboardFrameRefs": [
+        "frame.armstrong.ejection.v1"
+      ],
+      "checkpoint": {
+        "policy": "complete",
+        "checkpointId": "checkpoint.armstrong.under-canopy.v1"
+      },
+      "evidenceCapture": [
+        "Ejection action tick and readiness state.",
+        "Declared seat-reconstruction parameters, modeled clearance and separation sequence.",
+        "Aircraft and pilot trajectories through parachute deployment."
+      ]
+    },
+    {
+      "beatId": "beat.armstrong.11-parachute-descent.v1",
+      "order": 11,
+      "kind": "transition",
+      "title": "Under canopy",
+      "dramaticPurpose": "Replace engine noise and cockpit workload with wind, height and the exposed human body as the damaged Panther departs.",
+      "playerTask": "Manage the limited parachute actions exposed by the disclosed equipment-and-wind reconstruction and prepare for ground contact.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-ejection-friendly-territory.v1"
+      ],
+      "requiredForProgression": true,
+      "authority": {
+        "worldFactRefs": [
+          "fact.parachute-descent-reconstruction.v1",
+          "fact.friendly-landing-area-reconstruction.v1"
+        ],
+        "enterWhen": [
+          "The parachute-deployed event is committed."
+        ],
+        "completeWhen": [
+          "The pilot reaches the authoritative ground-contact state inside the friendly recovery area."
+        ],
+        "failWhen": [
+          "The parachute or pilot reaches an unrecoverable state before the friendly ground-contact event."
+        ],
+        "emittedEventRefs": [
+          "event.narrative.pilot-ground-contact.v1"
+        ]
+      },
+      "mechanicRefs": [
+        "mechanic.parachute-flight.v1",
+        "mechanic.wind-drift.v1",
+        "mechanic.parachute-landing.v1"
+      ],
+      "cueRefs": [
+        "cue.parachute-wind.v1",
+        "cue.damaged-panther-departure.v1",
+        "cue.ground-approach.v1"
+      ],
+      "lineRefs": [],
+      "storyboardFrameRefs": [
+        "frame.armstrong.parachute-descent.v1"
+      ],
+      "checkpoint": {
+        "policy": "none",
+        "checkpointId": ""
+      },
+      "evidenceCapture": [
+        "Authored environmental wind, canopy state and reconstructed pilot trajectory.",
+        "Landing-area surface and contact state.",
+        "The damaged aircraft's separately integrated terminal trajectory."
+      ]
+    },
+    {
+      "beatId": "beat.armstrong.12-ground-recovery.v1",
+      "order": 12,
+      "kind": "aftermath",
+      "title": "Recovery",
+      "dramaticPurpose": "End at human scale with survival and ordinary recovery rather than triumph, score or retrospective destiny.",
+      "playerTask": "Remain present through the short recovery beat and then enter the evidence-backed debrief.",
+      "historicalLabel": "reconstruction",
+      "claimRefs": [
+        "claim.armstrong-ejection-friendly-territory.v1"
+      ],
+      "requiredForProgression": true,
+      "authority": {
+        "worldFactRefs": [
+          "fact.friendly-ground-recovery.v1",
+          "fact.armstrong-sortie-complete.v1"
+        ],
+        "enterWhen": [
+          "The friendly pilot ground-contact event is committed."
+        ],
+        "completeWhen": [
+          "The bounded quiet interval and sourced recovery action complete."
+        ],
+        "failWhen": [
+          "Source review blocks the authored recovery action or the authoritative pilot state is not recoverable."
+        ],
+        "emittedEventRefs": [
+          "event.narrative.armstrong-sortie-complete.v1"
+        ]
+      },
+      "mechanicRefs": [
+        "mechanic.quiet-aftermath.v1",
+        "mechanic.replay-backed-debrief.v1"
+      ],
+      "cueRefs": [
+        "cue.ground-recovery.v1",
+        "cue.quiet-aftermath.v1",
+        "cue.debrief-transition.v1"
+      ],
+      "lineRefs": [],
+      "storyboardFrameRefs": [
+        "frame.armstrong.ground-recovery.v1"
+      ],
+      "checkpoint": {
+        "policy": "complete",
+        "checkpointId": "checkpoint.armstrong.complete.v1"
+      },
+      "evidenceCapture": [
+        "Pilot recovery state and recovery-area identity.",
+        "Quiet-interval timing and skip request, if any.",
+        "Complete ordered narrative-event and flight-recorder streams."
+      ]
+    }
+  ],
+  "requiredSystems": [
+    {
+      "systemId": "system.panther-f9f-flight-model.v1",
+      "status": "new",
+      "purpose": "Replace the current Sabre surrogate with a sourced carrier-capable Panther for this historical mission.",
+      "acceptance": [
+        "Variant, mass, propulsion, geometry and control parameters are source-registered.",
+        "Unknown values are isolated and disclosed as public-data reconstruction.",
+        "The model is deterministic at the fixed simulation rate."
+      ]
+    },
+    {
+      "systemId": "system.essex-1951-carrier.v1",
+      "status": "extend",
+      "purpose": "Present and simulate the relevant straight-deck launch environment aboard USS Essex.",
+      "acceptance": [
+        "Deck dimensions, launch station and procedures are source-registered.",
+        "The existing carrier authority remains era-agnostic.",
+        "Launch presentation does not create physics or deck-clearance truth."
+      ]
+    },
+    {
+      "systemId": "system.korea-majon-ni-corridor.v1",
+      "status": "research_blocked",
+      "purpose": "Provide the target-area terrain, route, landmarks and authored cable corridor.",
+      "acceptance": [
+        "Terrain and target geography are bounded by the best available primary record.",
+        "Cable density and placement are explicitly labeled history or reconstruction.",
+        "Every required obstacle is visually legible under the same weather and render path used in play."
+      ]
+    },
+    {
+      "systemId": "system.physical-cable-hazards.v1",
+      "status": "new",
+      "purpose": "Make cable contact an authoritative swept collision rather than a proximity trigger.",
+      "acceptance": [
+        "Cable geometry, collision and rendering share one immutable authored definition.",
+        "Contact point and relative velocity are recorded.",
+        "No presentation-only wire can damage the aircraft."
+      ]
+    },
+    {
+      "systemId": "system.partial-wing-damage.v1",
+      "status": "extend",
+      "purpose": "Apply persistent nonterminal asymmetric lift, drag and control-authority loss after cable contact.",
+      "acceptance": [
+        "Damage uses the existing airframe aerodynamic-state seam.",
+        "The Panther remains controllable inside a validated but demanding envelope.",
+        "Detached geometry and aerodynamic consequences agree."
+      ]
+    },
+    {
+      "systemId": "system.two-ship-damage-inspection.v1",
+      "status": "extend",
+      "purpose": "Let Carpenter occupy a stable inspection station and report only observer-visible damage.",
+      "acceptance": [
+        "Formation control uses no hidden damage truth.",
+        "Inspection completion depends on geometry and observation time.",
+        "Radio cannot announce facts unavailable to Carpenter."
+      ]
+    },
+    {
+      "systemId": "system.fixed-history-director.v1",
+      "status": "new",
+      "purpose": "Advance required beats, own checkpoints and restart plot-breaking divergence without branching the biography.",
+      "acceptance": [
+        "Only authoritative events and predicates advance beats.",
+        "Every required beat is reachable and ordered.",
+        "Restart restores seed, authored conditions and checkpoint state deterministically."
+      ]
+    },
+    {
+      "systemId": "system.panther-ejection.v1",
+      "status": "new",
+      "purpose": "Model preparation, a disclosed seat-launch reconstruction, pilot separation and aircraft continuation.",
+      "acceptance": [
+        "Production equipment, checklist and envelope behavior remain blocked until the period technical sources are registered.",
+        "Any interim greybox uses declared non-authoritative bounds and cannot satisfy promotion evidence.",
+        "Player, seat and aircraft become distinct authoritative entities in sequence."
+      ]
+    },
+    {
+      "systemId": "system.parachute-descent.v1",
+      "status": "new",
+      "purpose": "Carry the player from seat separation through a disclosed parachute-and-wind reconstruction to ground contact.",
+      "acceptance": [
+        "Canopy deployment, descent and limited control remain blocked on equipment evidence before production lock.",
+        "Wind is shared with the environment authority but is not presented as a measured historical drift path.",
+        "Ground contact and recovery-area membership are authoritative."
+      ]
+    },
+    {
+      "systemId": "system.historical-radio-catalog.v1",
+      "status": "extend",
+      "purpose": "Provide sparse sourced or disclosed reconstructed radio with captions and deterministic duration.",
+      "acceptance": [
+        "Every line has speaker, epistemic status, source or reconstruction note and caption.",
+        "Generated performances use original voices and disclose AI generation.",
+        "No line imitates Armstrong, Carpenter or another real person's recording."
+      ]
+    },
+    {
+      "systemId": "system.narrative-flight-recorder.v1",
+      "status": "extend",
+      "purpose": "Retain the causal evidence for cable contact, damaged flight, decision and ejection.",
+      "acceptance": [
+        "Recorder includes pre-strike state, collision, damage, control and ejection events.",
+        "Replay consumes recorded facts and never reruns physics.",
+        "Debrief can identify the first controllable handling error without changing the fixed plot."
+      ]
+    },
+    {
+      "systemId": "system.narrative-presentation.v1",
+      "status": "extend",
+      "purpose": "Bind visual states, captions, sparse radio, quiet aftermath and fixed-history restart UI to observer-safe facts.",
+      "acceptance": [
+        "Presentation cannot advance mission state.",
+        "Critical audio facts have caption and non-audio alternatives.",
+        "Critical visual facts have contrast, label or instrument alternatives."
+      ]
+    }
+  ],
+  "presentation": {
+    "visualStateRefs": [
+      "visual.korea-1951.essex-dawn.v1",
+      "visual.korea-1951.valley-daylight.v1",
+      "visual.korea-1951.cable-strike.v1",
+      "visual.korea-1951.damaged-southbound.v1",
+      "visual.korea-1951.parachute-descent.v1",
+      "visual.korea-1951.ground-recovery.v1"
+    ],
+    "cameraRules": [
+      "Player-controlled flight remains in the normal flight camera; directed exterior cameras may appear only during non-control-critical setup, ejection transition or aftermath.",
+      "The cable is never hidden by a cinematic camera cut at the moment collision authority evaluates it.",
+      "Camera shake conveys impulse but cannot obscure the first recoverable control cue.",
+      "Parachute transition preserves spatial continuity between aircraft, seat and pilot."
+    ],
+    "audioRules": [
+      "Cockpit, engine, airflow, cable impact, structure and ejection mechanics carry the drama before music.",
+      "Radio remains sparse, operational and subordinate to aircraft control.",
+      "No generated voice imitates a historical person's recording.",
+      "A quiet interval follows parachute opening and returns again at ground recovery.",
+      "Production acceptance uses silent audio QA unless the user explicitly requests audible review."
+    ],
+    "interfaceRules": [
+      "The briefing labels the sequence a historical reconstruction and exposes material disputes without front-loading an essay.",
+      "Fixed-history restart copy says that the reconstruction cannot continue from the divergent state.",
+      "Objectives describe operational actions, not narrative spoilers.",
+      "The debrief separates documented event, modeled reconstruction and player performance."
+    ],
+    "accessibilityRules": [
+      "All radio and spoken procedure has synchronized captions with stable speaker labels.",
+      "Cable visibility has a high-contrast accessibility treatment that preserves its physical location and does not move collision truth.",
+      "Ejection preparation supports remappable actions, hold/toggle choice and extended timing without changing story order.",
+      "Reduced-motion mode limits camera impulse and transition motion while preserving collision and control information.",
+      "Difficulty assistance changes control support and timing margins, never historical claims or hidden obstacle geometry."
+    ],
+    "localizationRules": [
+      "Store line identity, source text, performance text and localized caption separately.",
+      "Do not fake Korean or American accents as localization shorthand.",
+      "Period aviation terms retain a reviewed glossary and are not machine-expanded into modern phraseology.",
+      "On-screen dates use 3 September 1951 and the archive discloses why the contemporary Essex/CVG-5 reports outweigh the later 5 September synthesis."
+    ]
+  },
+  "production": {
+    "workstreams": [
+      {
+        "workstreamId": "research",
+        "status": "researching",
+        "deliverables": [
+          "PaperLibrary collection and stable source IDs.",
+          "Claim-level source ledger with page locators.",
+          "Primary-record closure for 3 September and the incident-level F9F-2 treatment, plus the BuNo anomaly and dispute records for cable or pole, target run, ejection and recovery."
+        ],
+        "dependsOn": []
+      },
+      {
+        "workstreamId": "narrative",
+        "status": "design",
+        "deliverables": [
+          "Approved mission dossier.",
+          "Beat sheet and fixed-history checkpoint policy.",
+          "Screenplay with line-level epistemic labels."
+        ],
+        "dependsOn": [
+          "research"
+        ]
+      },
+      {
+        "workstreamId": "mission-design",
+        "status": "design",
+        "deliverables": [
+          "Timed route and workload map.",
+          "Authoritative beat predicates and events.",
+          "Failure, restart and debrief evidence contract."
+        ],
+        "dependsOn": [
+          "research",
+          "narrative"
+        ]
+      },
+      {
+        "workstreamId": "aircraft",
+        "status": "researching",
+        "deliverables": [
+          "F9F-2 capability definition and delivered-configuration source card.",
+          "Flight-model and systems source card.",
+          "Period cockpit, loadout and visual binding."
+        ],
+        "dependsOn": [
+          "research"
+        ]
+      },
+      {
+        "workstreamId": "carrier",
+        "status": "not_started",
+        "deliverables": [
+          "USS Essex 1951 deck and launch configuration.",
+          "Launch procedure and deck presentation.",
+          "Period deck crew and equipment asset list."
+        ],
+        "dependsOn": [
+          "research"
+        ]
+      },
+      {
+        "workstreamId": "environment",
+        "status": "researching",
+        "deliverables": [
+          "Target-area terrain corridor.",
+          "Weather and time-of-day bounds.",
+          "Cable and target feature definitions with source labels."
+        ],
+        "dependsOn": [
+          "research",
+          "mission-design"
+        ]
+      },
+      {
+        "workstreamId": "damage",
+        "status": "design",
+        "deliverables": [
+          "Cable collision model.",
+          "Right-wing geometry and aerodynamic damage state.",
+          "Damaged-flight handling and inspection acceptance envelope."
+        ],
+        "dependsOn": [
+          "aircraft",
+          "mission-design"
+        ]
+      },
+      {
+        "workstreamId": "ejection",
+        "status": "not_started",
+        "deliverables": [
+          "Ejection checklist and envelope.",
+          "Seat, pilot and aircraft separation states.",
+          "Parachute flight, landing and recovery transitions."
+        ],
+        "dependsOn": [
+          "aircraft",
+          "research",
+          "mission-design"
+        ]
+      },
+      {
+        "workstreamId": "visual-art",
+        "status": "design",
+        "deliverables": [
+          "Historical character and wardrobe sheet.",
+          "F9F, Essex, valley, cable, damage, ejection and recovery reference boards.",
+          "Runtime palette, material, effects and performance budgets."
+        ],
+        "dependsOn": [
+          "research",
+          "narrative",
+          "aircraft",
+          "carrier",
+          "environment"
+        ]
+      },
+      {
+        "workstreamId": "audio",
+        "status": "not_started",
+        "deliverables": [
+          "Sourced radio script and role catalog.",
+          "Original disclosed synthetic performances and clip manifest.",
+          "Panther, cable, damage, ejection, parachute and quiet-state sound design."
+        ],
+        "dependsOn": [
+          "research",
+          "narrative",
+          "aircraft",
+          "ejection"
+        ]
+      },
+      {
+        "workstreamId": "interface",
+        "status": "design",
+        "deliverables": [
+          "Briefing, objective strip and fixed-history restart copy.",
+          "Caption and procedure presentation.",
+          "Replay-backed narrative debrief and source/archive entry."
+        ],
+        "dependsOn": [
+          "narrative",
+          "mission-design"
+        ]
+      },
+      {
+        "workstreamId": "accessibility-localization",
+        "status": "design",
+        "deliverables": [
+          "Caption, contrast, remapping and reduced-motion proofs.",
+          "Difficulty-assist boundary.",
+          "String, glossary and localized-audio plan."
+        ],
+        "dependsOn": [
+          "audio",
+          "interface",
+          "visual-art"
+        ]
+      },
+      {
+        "workstreamId": "qa-telemetry",
+        "status": "not_started",
+        "deliverables": [
+          "Beat reachability and determinism tests.",
+          "Replay, source-closure, visual, audio, accessibility and performance gates.",
+          "Playtest instrumentation for workload, comprehension and restart friction."
+        ],
+        "dependsOn": [
+          "mission-design",
+          "damage",
+          "ejection",
+          "audio",
+          "interface",
+          "accessibility-localization"
+        ]
+      },
+      {
+        "workstreamId": "release",
+        "status": "not_started",
+        "deliverables": [
+          "Historical, rights, production and release approvals.",
+          "Versioned content-pack closure.",
+          "Canonical production smoke and rollback record."
+        ],
+        "dependsOn": [
+          "qa-telemetry"
+        ]
+      }
+    ],
+    "gates": [
+      {
+        "gateId": "source-lock",
+        "status": "pending",
+        "exitCriteria": [
+          "Every historical and engineering claim has source closure and page locators.",
+          "Material disputes are resolved or preserved visibly.",
+          "No secondary dramatization is treated as transcript."
+        ]
+      },
+      {
+        "gateId": "scenario-lock",
+        "status": "pending",
+        "exitCriteria": [
+          "Every required beat has authoritative entry, completion, failure and evidence.",
+          "Plot-breaking divergence restarts instead of branching history.",
+          "Target route and cable strike remain physically coherent."
+        ]
+      },
+      {
+        "gateId": "greybox",
+        "status": "pending",
+        "exitCriteria": [
+          "The complete fixed-history sequence is playable with primitive geometry.",
+          "Cable contact, damaged flight, inspection, ejection and descent are authoritative.",
+          "Every checkpoint restores deterministically."
+        ]
+      },
+      {
+        "gateId": "content-lock",
+        "status": "pending",
+        "exitCriteria": [
+          "Character, script, storyboard, voice, environment, aircraft and carrier references agree.",
+          "Every shipped asset has provenance, license and hash.",
+          "Generated references are not silently promoted as historical evidence."
+        ]
+      },
+      {
+        "gateId": "historical-rights-review",
+        "status": "pending",
+        "exitCriteria": [
+          "Historical portrayal, quotations, name and likeness use are reviewed.",
+          "NASA, Navy and archival material do not imply endorsement.",
+          "AI voice disclosure and no-imitation policy are satisfied."
+        ]
+      },
+      {
+        "gateId": "accessibility",
+        "status": "pending",
+        "exitCriteria": [
+          "Critical audio and visual facts have equivalent alternatives.",
+          "Control timing, remapping and reduced-motion paths pass.",
+          "Assistance preserves the same historical sequence and evidence labels."
+        ]
+      },
+      {
+        "gateId": "release",
+        "status": "pending",
+        "exitCriteria": [
+          "Governance, deterministic simulation, browser, silent-audio, visual and performance gates pass.",
+          "Content hashes and snapshot compatibility are pinned.",
+          "Production deploy and rollback paths are proven from a clean checkout."
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "testId": "test.narrative.schema.v1",
+      "kind": "schema",
+      "proves": "The sequence document is structurally complete and rejects undeclared fields."
+    },
+    {
+      "testId": "test.narrative.source-closure.v1",
+      "kind": "historical_review",
+      "proves": "Every non-fiction beat and cast assertion closes through the approved mission dossier."
+    },
+    {
+      "testId": "test.narrative.required-order.v1",
+      "kind": "unit",
+      "proves": "All required beats advance in authored order and no later event skips an invariant."
+    },
+    {
+      "testId": "test.narrative.checkpoint-determinism.v1",
+      "kind": "determinism",
+      "proves": "Restoring any narrative checkpoint reproduces the same seed, authored conditions and initial state hash."
+    },
+    {
+      "testId": "test.cable.physical-authority.v1",
+      "kind": "integration",
+      "proves": "Only authoritative swept cable contact commits wing damage and presentation cannot create the incident."
+    },
+    {
+      "testId": "test.damage.panther-controllability.v1",
+      "kind": "playtest",
+      "proves": "The sourced damage target is difficult but controllable long enough to complete the historical return with learnable inputs."
+    },
+    {
+      "testId": "test.inspection.observer-safety.v1",
+      "kind": "unit",
+      "proves": "Carpenter's inspection and radio use only geometry and observer-visible damage evidence."
+    },
+    {
+      "testId": "test.ejection.lifecycle.v1",
+      "kind": "integration",
+      "proves": "Aircraft, seat, pilot, parachute and ground recovery transition through authoritative states without duplicate or missing events."
+    },
+    {
+      "testId": "test.narrative.replay-causality.v1",
+      "kind": "determinism",
+      "proves": "Replay preserves the pre-strike approach, collision, damage, control response, decision and ejection without rerunning physics."
+    },
+    {
+      "testId": "test.narrative.caption-equivalence.v1",
+      "kind": "accessibility",
+      "proves": "Every critical spoken fact is available through synchronized captions and a non-audio mission cue."
+    },
+    {
+      "testId": "test.narrative.voice-policy.v1",
+      "kind": "rights_review",
+      "proves": "Generated voices are disclosed original performances and no prompt, voice or asset imitates a historical person."
+    },
+    {
+      "testId": "test.narrative.silent-audio.v1",
+      "kind": "audio",
+      "proves": "The real audio graph, event scheduling, clip hashes and cleanup pass with destination gain clamped."
+    },
+    {
+      "testId": "test.narrative.visual-cues.v1",
+      "kind": "visual",
+      "proves": "Cable, wing damage, lead position, ejection envelope and terrain remain legible in every approved weather and quality tier."
+    },
+    {
+      "testId": "test.narrative.frame-budget.v1",
+      "kind": "performance",
+      "proves": "Narrative scenery, damage, ejection and presentation remain inside the existing frame-time and asset budgets."
+    },
+    {
+      "testId": "test.narrative.end-to-end.v1",
+      "kind": "browser",
+      "proves": "A clean production build can complete the full fixed-history sequence, debrief it and restart without fatal render, input or audio waits."
+    }
+  ]
+}

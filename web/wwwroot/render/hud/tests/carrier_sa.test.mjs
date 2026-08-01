@@ -124,7 +124,7 @@ test("a completed trap and relaunch hands contextual padlock from recovery back 
   };
   assert.equal(contextualPadlockTarget(stoppedTrap), "carrier");
   assert.equal(padlockTargetValid(stoppedTrap, "carrier"), true);
-  for (const mode of ["CATAPULT", "WAVE-OFF", "BOLTER"]) {
+  for (const mode of ["CATAPULT", "WAVE-OFF", "BOLTER", "BARRIER"]) {
     const recoveryTransition = {
       ...shared,
       mode,

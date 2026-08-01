@@ -21,7 +21,7 @@ const readBridgeContract = () =>
 test("the snapshot projects the authoritative pilot physiology contract", async () => {
   const source = await readBridgeContract();
 
-  assert.match(source, /const string SnapshotSchemaVersion = "1\.25\.0";/);
+  assert.match(source, /const string SnapshotSchemaVersion = "1\.26\.0";/);
   assert.match(source,
     /PilotPhysiologyState pilotPhysiology = Session\.PilotPhysiologyState;/);
   assert.match(source,
@@ -67,14 +67,14 @@ test("the snapshot projects the authoritative pilot physiology contract", async 
   }
 });
 
-test("snapshot schema 1.19 is mirrored in source and browser pack manifests", async () => {
+test("snapshot schema 1.26 is mirrored in source and browser pack manifests", async () => {
   const [sourcePack, browserPack] = await Promise.all([
     readFile(sourcePackUrl, "utf8").then(JSON.parse),
     readFile(browserPackUrl, "utf8").then(JSON.parse),
   ]);
 
-  assert.equal(sourcePack.compatibility?.snapshotSchemaVersion, "1.25.0");
-  assert.equal(browserPack.compatibility?.snapshotSchemaVersion, "1.25.0");
+  assert.equal(sourcePack.compatibility?.snapshotSchemaVersion, "1.26.0");
+  assert.equal(browserPack.compatibility?.snapshotSchemaVersion, "1.26.0");
   assert.deepEqual(browserPack, sourcePack);
 });
 

@@ -21,8 +21,10 @@ test("catalogue exposes Indoor as a native route without pretending it is a fixe
   assert.doesNotMatch(links[0][0], /data-program-node=/,
     "Indoor owns a separate six-degree-of-freedom kernel, not a numeric SimulationSession beat");
   assert.match(links[0][0], /data-experience="indoor"/);
-  assert.match(catalogue,
-    /Five flight experiences on the road to the 2040 battlespace, from low-level medical transport to the stratosphere\./);
+  assert.match(catalogue, /Two production aircraft/,
+    "the front door must state the size of the production catalogue");
+  assert.match(catalogue, /F-22 guns-only fight/);
+  assert.match(catalogue, /Rapier high-altitude balloon intercept/);
 });
 
 test("Indoor entrypoint advertises its complete control and mission contract", () => {
@@ -45,13 +47,15 @@ test("Indoor entrypoint advertises its complete control and mission contract", (
   }
   assert.match(indoor, /W \/ S/);
   assert.match(indoor, /ARROWS/);
-  assert.match(indoor, /X detaches fibre/);
-  assert.match(indoor, /HOLD B/);
+  assert.match(indoor, /Detach fibre where doctrine permits/);
+  assert.match(indoor, /Broadcast only on radio-authorised profiles/);
   for (const missionId of ["attack-site", "discretionary-site", "diversion-site"]) {
     assert.match(indoor, new RegExp(`data-mission-id="${missionId}"`));
   }
   assert.match(indoor, /Fictional systems and facility/);
-  assert.match(indoor, /type="module" src="\.\/game\.js"/);
+  assert.match(indoor,
+    /await globalThis\.__gunsPrebootReady;[\s\S]*?renderExperienceGate\(\{ experienceId: "indoor" \}\)[\s\S]*?await import\("\.\/game\.js\?v=\d+"\)/,
+    "the quarantined route must require an explicit preview acknowledgement before loading");
 });
 
 test("Indoor keeps the Guns-Only keyboard grammar while remapping aircraft axes to translation", () => {
@@ -70,12 +74,13 @@ test("Indoor keeps the Guns-Only keyboard grammar while remapping aircraft axes 
   assert.match(game,
     /heldKeys\.has\("Space"\) \? 1 : 0\)[\s\S]*heldKeys\.has\("ShiftLeft"\) \? 1 : 0\)/,
     "Space and Left Shift must own climb and descent");
-  assert.match(game, /event\.code === "KeyX"[\s\S]*detachQueued = true/,
-    "X must own the deliberate fibre breakaway");
-  assert.match(game, /event\.code === "KeyB"[\s\S]*broadcastHeld = true/,
-    "B must own the deliberate RF/EW signature");
-  assert.match(game, /returnHome,[\s\S]*broadcast: broadcastHeld/,
-    "the UI must send return and broadcast doctrine choices into the kernel");
+  assert.match(game, /event\.code === "KeyX"[\s\S]*queueDetach\(\)/,
+    "X must pass deliberate fibre breakaway through the doctrine policy");
+  assert.match(game, /event\.code === "KeyB"[\s\S]*beginBroadcast\(\)/,
+    "B must pass RF/EW signature through the doctrine policy");
+  assert.match(game,
+    /returnHome,[\s\S]*broadcast: actionPolicy\.canBroadcast && broadcastHeld/,
+    "the UI must send only doctrine-authorised return and broadcast choices into the kernel");
 });
 
 test("Indoor makes downlink loss visible while keeping simulation cadence independent", () => {

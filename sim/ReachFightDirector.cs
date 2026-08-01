@@ -28,13 +28,33 @@ public readonly record struct ReachFightDecision(
 /// inputs and skip progression required by <c>UpdateZoomLobPhase</c>.
 /// </summary>
 public sealed class ReachFightDirector {
-    public const double ClimbTopM = 56_000.0 * 0.3048;
+    /// The transonic acceleration shelf, and the single source of truth for it: RapierMission
+    /// used to keep its own copy, and when this one said FL560 while that one commanded FL400 the
+    /// director held the aircraft in Climb past the shelf, so Accelerate was skipped entirely.
+    ///
+    /// Transonic phase boundary inside the continuous 35 kPa climb. It is not a level shelf: the
+    /// schedule keeps rising with speed while this boundary merely hands cycle management from
+    /// the turbine-climb phase to acceleration and then ram.
+    public const double ClimbTopM = 40_000.0 * 0.3048;
     public const double CruiseAltitudeM = 70_000.0 * 0.3048;
     public const double AttackRangeM = 30_000.0;
     public const double AccelMach = 2.2;
     public const double LevelDashMinAltM = ClimbTopM;
     public const double LevelDashMinMach = 2.2;
     public const double DirectJoinMinMach = 2.0;
+    /// <summary>
+    /// The balloon profile does not spend its only pass at an ordinary 30 km intercept handoff.
+    /// It first demonstrates the canonical minimum dash condition on the shape-first design
+    /// altitude, then zooms close enough to put the ballistic apex beside the target.
+    /// </summary>
+    // Card 12 teaches the canonical design point, not merely the lower edge of its legal dash
+    // band. The zoom therefore opens only after the flown trajectory has actually crossed M4.2.
+    public static double BalloonZoomGateMach => RapierV2Design.DesignMach;
+    // At M4.2 the protected normal law cannot create the required zoom lift. Card 12 therefore
+    // reserves a finite 55 km pull, idles through a deliberate inlet unstart, and lets the mission
+    // predictor select the real zero-lift coast which intersects the balloon's gun window.
+    public const double BalloonZoomEntryRangeM = 55_000.0;
+    public static double BalloonDashAltitudeM => RapierV2Design.DesignAltitudeM;
     /// <summary>
     /// Soft floor for Employ handoff. Below this, stay on ReachFight even inside 30 km
     /// (dead-slow / parking). ~M0.85 covers reactive Attack cards at low altitude (~285 m/s
@@ -64,7 +84,54 @@ public sealed class ReachFightDirector {
         double reserveFuelLb,
         bool zoomLobPreferred,
         int lobSkip,
-        bool inZoomPhases) {
+        bool inZoomPhases,
+        bool apexBalloonProfile = false) {
+        bool needsClimbTop = altitudeM < ClimbTopM - 40.0
+            && (int)currentPhase <= (int)RapierMissionPhase.Climb;
+        bool needsAccel = mach < AccelMach
+            && (int)currentPhase <= (int)RapierMissionPhase.Accelerate;
+
+        if (apexBalloonProfile) {
+            // Unlike a normal intercept, range alone never opens Employ. The entire point of the
+            // lesson is to earn the apex geometry by first carrying legal Mach-four energy high
+            // enough that dynamic pressure is below the airframe placard.
+            if (needsClimbTop) {
+                _incumbentStrategy = null;
+                return new(MissionIntention.ReachFightGeometry,
+                    ReachFightStrategy.ClimbBuild,
+                    RapierMissionPhase.Climb, "balloon_climb_to_shelf");
+            }
+            if (needsAccel) {
+                _incumbentStrategy = null;
+                return new(MissionIntention.ReachFightGeometry,
+                    ReachFightStrategy.ClimbBuild,
+                    RapierMissionPhase.Accelerate, "balloon_accel_to_m2.2");
+            }
+            if (inZoomPhases) {
+                _incumbentStrategy = ReachFightStrategy.ZoomLob;
+                return new(MissionIntention.ReachFightGeometry,
+                    ReachFightStrategy.ZoomLob, currentPhase, "");
+            }
+            if (altitudeM < BalloonDashAltitudeM - 40.0) {
+                _incumbentStrategy = null;
+                return new(MissionIntention.ReachFightGeometry,
+                    ReachFightStrategy.ClimbBuild,
+                    RapierMissionPhase.RamClimb, "balloon_ram_climb_design_shelf");
+            }
+            if (mach < BalloonZoomGateMach
+                || contactRangeM > BalloonZoomEntryRangeM) {
+                _incumbentStrategy = ReachFightStrategy.LevelDash;
+                return new(MissionIntention.ReachFightGeometry,
+                    ReachFightStrategy.LevelDash,
+                    RapierMissionPhase.Intercept, "balloon_m4_dash");
+            }
+
+            _incumbentStrategy = ReachFightStrategy.ZoomLob;
+            return new(MissionIntention.ReachFightGeometry,
+                ReachFightStrategy.ZoomLob,
+                RapierMissionPhase.ZoomPull, "balloon_zoom_entry");
+        }
+
         bool employHandoff = contactRangeM <= AttackRangeM
             && mach >= SoftEmployMach;
         if (employHandoff) {
@@ -73,16 +140,12 @@ public sealed class ReachFightDirector {
                 RapierMissionPhase.Attack, "contact_leq_30km");
         }
 
-        bool needsClimbTop = altitudeM < ClimbTopM - 40.0
-            && (int)currentPhase <= (int)RapierMissionPhase.Climb;
         if (needsClimbTop) {
             _incumbentStrategy = null;
             return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.ClimbBuild,
-                RapierMissionPhase.Climb, "climb_to_fl560");
+                RapierMissionPhase.Climb, "climb_to_shelf");
         }
 
-        bool needsAccel = mach < AccelMach
-            && (int)currentPhase <= (int)RapierMissionPhase.Accelerate;
         if (needsAccel) {
             _incumbentStrategy = null;
             return new(MissionIntention.ReachFightGeometry, ReachFightStrategy.ClimbBuild,

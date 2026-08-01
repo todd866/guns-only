@@ -101,10 +101,12 @@ export function createKoreaEffectsFactory(THREE, options = {}) {
         if (!disposed) effects.clear();
       },
       diagnostics() {
+        const effectBudget = effects.diagnostics?.() ?? null;
         return Object.freeze({
           sourceId: adapter.sourceId,
           qualityTier: tierId,
-          activeItems: effects.items?.length ?? 0,
+          activeItems: effectBudget?.activeItems ?? effects.items?.length ?? 0,
+          effectBudget,
           disposed,
         });
       },

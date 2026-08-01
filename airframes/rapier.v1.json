@@ -76,7 +76,7 @@
     "model": "rapier-cranked-delta-public-data-surrogate.v1",
     "epistemic": "surrogate",
     "clAlphaLowSpeedPerRad": 3.6,
-    "clMaxLowSpeed": 1.35,
+    "clMaxLowSpeed": 1.47,
     "supersonicLiftSlopeCeiling": "4/sqrt(M^2-1)",
     "normalLawAlphaMachKnots": [0, 0.9, 1.05, 1.2, 1.6, 2, 2.5, 3.5, 4.5],
     "normalLawAlphaRadKnots": [0.42, 0.42, 0.36, 0.3, 0.24, 0.2, 0.16, 0.13, 0.11],
@@ -393,7 +393,7 @@
   },
   "propulsion": {
     "ramCaptureAreaM2": 1.2,
-    "thrustMaxN": 84000,
+    "thrustMaxN": 50000,
     "maxThrustFraction": 1.55,
     "designMachNormaliser": 2.6,
     "epistemic": "provisional",
@@ -416,9 +416,9 @@
       "notes": "analysis/intercept-oft energy-ladder"
     },
     "wetThrustWeightGross": {
-      "value": 1.20,
+      "value": 0.71,
       "epistemic": "closed",
-      "notes": "84 kN \u00d7 1.55 / (11090 kg \u00d7 g) \u2248 1.197; family cap 1.20"
+      "notes": "50 kN \u00d7 1.55 / (11090 kg \u00d7 g) \u2248 0.713; core sized to fit the airframe and to reach ram, not to win a fighter T/W comparison"
     },
     "stowedDroneMassKg": {
       "value": 1440,

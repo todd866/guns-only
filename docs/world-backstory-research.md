@@ -197,6 +197,22 @@ Track battery cycles, motor or engine health, actuator margins, sensor calibrati
 
 Dispersed operating locations need fuel or charging, munitions, data, tools, trained maintainers, weather protection, runway or pad repair and transport. Moving every night improves survivability but consumes readiness. A successful mission may be one that preserves a test set, recovers a damaged aircraft or gets the correct software baseline to a forward strip.
 
+### The force economy is a feedback system
+
+The 2030s force does not buy every capability through one ministry queue or one game currency.
+The source-bounded Ukrainian inspiration joins mission records, effect verification, baseline and
+direct unit allocations, unit product choice, central contracting and delivery, innovation trials,
+digital logistics, repair, and partner-funded domestic production. The fiction carries that
+institutional topology into high-performance aviation while preserving central type authority for
+airframes, propulsion, capsules, flight controls, and launch machinery.
+
+The controlling design is
+[future air-war economy and force management](air-war-economy-and-force-management.md). Its
+worldbuilding consequences are concrete: money may exist without stock; stock without current
+software or keys; aircraft without a launcher or recovery slot; a validated prototype without
+production capacity; and partner-funded equipment without permission for the desired mission.
+Outcome points are supplemental local choice, never baseline supply or personal pay.
+
 ### ROE is part of the sensor model
 
 Positive identification, protected sites, civilian movement, neutral shipping, national boundaries, the DMZ, the Yalu/Tumen border and nuclear facilities should alter what information is required before action. The most capable weapon may be unavailable because its provenance would expose a sponsor or because its target evidence cannot be shared.

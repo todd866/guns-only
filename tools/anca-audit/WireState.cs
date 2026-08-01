@@ -24,8 +24,11 @@ static class WireState {
         "radio_voice", "radio_priority", "radio_started_s", "radio_ends_s",
         "checklist_active", "checklist_id", "checklist_done", "checklist_total",
         "checklist_name", "checklist_next",
-        "rapier_mission_phase_name", "rapier_circuit_leg", "rapier_mission_cue",
+        "rapier_mission_available", "visual_merge_evaluation", "drone_raid_evaluation",
+        "rapier_mission_phase", "rapier_mission_phase_name", "rapier_pattern_only",
+        "rapier_circuit_leg", "rapier_mission_cue",
         "rapier_intention", "rapier_strategy",
+        "combat_handoff_requested", "combat_handoff_active", "player_rtb_active",
         "player_weapons_authorized", "gun_ammo", "lifecycle",
     ];
 
@@ -146,6 +149,17 @@ static class WireState {
             .Append(SnapshotJson.JsonString(checklist.Name)).Append(',');
         json.Append("\"checklist_next\":")
             .Append(SnapshotJson.JsonString(checklist.NextItem)).Append(',');
+        // deriveAncaView picks its mission branch off these three discriminators. Without them
+        // every scenario fell through to "other", which silently blanked the Navigate and
+        // Communicate rows for the whole audit matrix.
+        AppendBool(json, "rapier_mission_available", session.RapierMissionAvailable);
+        AppendBool(json, "visual_merge_evaluation", session.VisualMergeEvaluation is not null);
+        AppendBool(json, "drone_raid_evaluation", session.DroneRaidEvaluation is not null);
+        // The Communicate row reads the numeric phase and the pattern-only flag, not the
+        // display name. Omitting them left the Rapier coordination posture blank.
+        json.Append("\"rapier_mission_phase\":").Append((int)session.RapierPhase).Append(',');
+        AppendBool(json, "rapier_pattern_only",
+            session.Beat.ScriptedIntercept?.PatternOnly == true);
         json.Append("\"rapier_mission_phase_name\":")
             .Append(SnapshotJson.JsonString(session.RapierPhase.ToString().ToUpperInvariant()))
             .Append(',');
@@ -157,6 +171,9 @@ static class WireState {
             .Append(SnapshotJson.JsonString(session.RapierIntention)).Append(',');
         json.Append("\"rapier_strategy\":")
             .Append(SnapshotJson.JsonString(session.RapierStrategy)).Append(',');
+        AppendBool(json, "combat_handoff_requested", session.CombatHandoffRequested);
+        AppendBool(json, "combat_handoff_active", session.CombatHandoffActive);
+        AppendBool(json, "player_rtb_active", session.PlayerRtbActive);
         AppendBool(json, "player_weapons_authorized", session.PlayerWeaponsAuthorized);
         json.Append("\"gun_ammo\":").Append(session.PlayerGun.AmmoRemaining);
         json.Append('}');

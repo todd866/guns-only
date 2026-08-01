@@ -10,6 +10,13 @@ public static class Geometry {
         double d = System.Math.Clamp(own.ForwardDir().Dot(los), -1, 1);
         return System.Math.Acos(d);
     }
+    /// The reversed case: how far a CONTACT's nose is off us. Completes the overload set Range
+    /// already carries, and is what "the player is tracking me" means from the bandit's side.
+    public static double AngleOff(in ActorObservation own, in AircraftState contact) {
+        var los = (contact.Position - own.Position).Normalized();
+        double d = System.Math.Clamp(own.ForwardDir().Dot(los), -1, 1);
+        return System.Math.Acos(d);
+    }
     public static double AngleOff(in AircraftState own, in ActorObservation contact) {
         var los = (contact.Position - own.Position).Normalized();
         double d = System.Math.Clamp(own.ForwardDir().Dot(los), -1, 1);

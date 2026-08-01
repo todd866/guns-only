@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0.0",
+  "assetFamilyId": "art.ukraine-modern.rapier-atmosphere.v1",
+  "authorship": {
+    "method": "OpenAI built-in image generation",
+    "generatedOn": "2026-07-30",
+    "humanDirection": "Rapier high-altitude scenery polish"
+  },
+  "assets": [
+    {
+      "id": "texture.rapier-painted-ground.v1",
+      "uri": "rapier-painted-ground-v1.webp",
+      "role": "high-altitude terrain macro-albedo",
+      "projection": "top-down fictional regional texture",
+      "constraints": [
+        "no identifiable real-world geography",
+        "no roads, buildings, vehicles, or regular farm grid",
+        "visual presentation only; terrain geometry remains authoritative"
+      ],
+      "prompt": "Square hand-painted aerial surface texture for a fictional Eastern European steppe seen from 15–22 km altitude; broad organic forest, meadow and cool drainage masses; gouache/watercolor animation-background character; orthographic, seamless, no focal point or human-made features."
+    },
+    {
+      "id": "texture.rapier-cloud-billows.v1",
+      "uri": "rapier-cloud-billows-v1.webp",
+      "role": "authoritative-weather impostor density art",
+      "projection": "camera-facing grayscale density mask",
+      "constraints": [
+        "uniform black border",
+        "monochrome density only",
+        "cloud placement and coverage remain simulation-authored"
+      ],
+      "prompt": "Square monochrome density painting of one broad cumulus mass; connected rounded billows, soft base, scalloped silhouette and wispy breakup; black background, grayscale cloud density, no scene, text, aircraft or watermark."
+    }
+  ]
+}

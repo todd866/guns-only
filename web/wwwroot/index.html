@@ -2,7 +2,7 @@
 <html lang="en" class="run-paused">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <link rel="manifest" href="manifest.webmanifest">
   <meta name="theme-color" content="#030d14">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -10,7 +10,6 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Guns Only">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <meta name="theme-color" content="#030913">
   <title>Guns Only</title>
   <base href="/">
   <link rel="icon" type="image/png" href="./favicon.png">
@@ -21,7 +20,7 @@
       --safe-bottom: env(safe-area-inset-bottom, 0px);
       --safe-left: env(safe-area-inset-left, 0px);
       color-scheme: dark;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
       background: #030913;
     }
 
@@ -34,7 +33,7 @@
       overflow: hidden;
       overscroll-behavior: none;
       background: linear-gradient(#071b38 0%, #183f5d 52%, #03121d 53%, #01070c 100%);
-      touch-action: none;
+      touch-action: pan-x pan-y pinch-zoom;
     }
 
     body {
@@ -51,8 +50,8 @@
       position: fixed;
       inset: 0;
       display: block;
-      width: 100%;
-      height: 100%;
+      width: var(--game-width, 100%);
+      height: var(--game-height, 100%);
     }
 
     #scene {
@@ -252,7 +251,9 @@
       border-radius: 7px;
       font: 750 10px/1.05 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       letter-spacing: .07em;
+      opacity: .56;
       text-transform: uppercase;
+      transition: opacity 100ms ease, transform 100ms ease;
     }
 
     .touch-control.active {
@@ -260,8 +261,16 @@
       border-color: #a3ffc2;
       background: rgba(77, 255, 136, .88);
       box-shadow: 0 0 22px rgba(77, 255, 136, .34);
+      opacity: 1;
       transform: scale(.96);
     }
+
+    .touch-control:disabled {
+      opacity: .34;
+      pointer-events: none;
+    }
+
+    .touch-control:focus-visible { opacity: 1; }
 
     .touch-left,
     .touch-right {
@@ -428,6 +437,12 @@
       font-size: 8px;
     }
 
+    #touch-target-cycle {
+      border-color: rgba(255, 176, 32, .62);
+      color: #ffe0a0;
+      background: rgba(45, 27, 2, .76);
+    }
+
     #fallback-stick,
     #target-stick {
       appearance: none;
@@ -442,13 +457,13 @@
       width: 112px;
       height: 112px;
       padding: 0;
-      border: 1px solid rgba(141, 255, 179, .34);
+      border: 1px solid rgba(141, 255, 179, .2);
       border-radius: 50%;
       color: rgba(217, 255, 229, .56);
       background: radial-gradient(circle at 50% 50%,
-        rgba(28, 69, 51, .36) 0 27%, rgba(2, 11, 17, .58) 29% 100%);
-      box-shadow: inset 0 0 26px rgba(77, 255, 136, .08), 0 8px 24px rgba(0, 0, 0, .22);
-      opacity: .66;
+        rgba(28, 69, 51, .16) 0 24%, rgba(2, 11, 17, .08) 26% 100%);
+      box-shadow: inset 0 0 20px rgba(77, 255, 136, .035);
+      opacity: .44;
       touch-action: none;
       transform: translateX(-50%);
       transition: border-color 100ms ease, opacity 100ms ease;
@@ -472,15 +487,15 @@
     #fallback-stick::before,
     #target-stick::before {
       top: 50%;
-      right: 17px;
-      left: 17px;
+      right: 24px;
+      left: 24px;
       height: 1px;
     }
 
     #fallback-stick::after,
     #target-stick::after {
-      top: 17px;
-      bottom: 17px;
+      top: 24px;
+      bottom: 24px;
       left: 50%;
       width: 1px;
     }
@@ -491,12 +506,12 @@
       z-index: 1;
       top: 50%;
       left: 50%;
-      width: 48px;
-      height: 48px;
+      width: 44px;
+      height: 44px;
       border: 1px solid rgba(178, 255, 202, .66);
       border-radius: 50%;
-      background: rgba(21, 67, 46, .84);
-      box-shadow: 0 0 18px rgba(77, 255, 136, .2);
+      background: rgba(21, 67, 46, .58);
+      box-shadow: 0 0 12px rgba(77, 255, 136, .12);
       pointer-events: none;
       transform: translate(calc(-50% + var(--stick-x, 0px)),
         calc(-50% + var(--stick-y, 0px)));
@@ -507,7 +522,7 @@
     #target-stick[data-active="true"] {
       border-color: rgba(163, 255, 194, .72);
       background: radial-gradient(circle at 50% 50%,
-        rgba(40, 108, 76, .46) 0 27%, rgba(2, 11, 17, .68) 29% 100%);
+        rgba(40, 108, 76, .28) 0 24%, rgba(2, 11, 17, .18) 26% 100%);
       opacity: 1;
     }
 
@@ -543,14 +558,14 @@
       border-color: rgba(255, 92, 109, .38);
       color: rgba(255, 228, 232, .68);
       background: radial-gradient(circle at 50% 50%,
-        rgba(91, 28, 42, .36) 0 27%, rgba(14, 3, 9, .58) 29% 100%);
+        rgba(91, 28, 42, .2) 0 24%, rgba(14, 3, 9, .1) 26% 100%);
       transform: none;
     }
 
     #target-stick-knob {
       border-color: rgba(255, 158, 170, .7);
-      background: rgba(91, 24, 37, .86);
-      box-shadow: 0 0 18px rgba(255, 70, 93, .22);
+      background: rgba(91, 24, 37, .76);
+      box-shadow: 0 0 14px rgba(255, 70, 93, .18);
     }
 
     #tilt-prompt {
@@ -614,6 +629,7 @@
       top: calc(env(safe-area-inset-top, 0px) + 64px);
       right: calc(env(safe-area-inset-right, 0px) + 12px);
       min-width: 44px;
+      width: 64px;
       min-height: 44px;
       padding: 6px 8px;
       border: 1px solid rgba(77, 255, 136, .2);
@@ -621,12 +637,14 @@
       color: rgba(77, 255, 136, .64);
       background: rgba(2, 11, 17, .52);
       font: 750 8px/1.1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      letter-spacing: .11em;
+      letter-spacing: .07em;
       pointer-events: auto;
       text-shadow: 0 1px 4px #000;
       text-transform: uppercase;
       touch-action: manipulation;
     }
+
+    #tilt-status[hidden] { display: none; }
 
     #tilt-status:focus-visible {
       outline: 2px solid #8dffb3;
@@ -649,17 +667,88 @@
       letter-spacing: .12em;
     }
 
-    /* Portrait is the two-stick assisted profile: the left thumb flies, the right thumb looks
-       and fires, while the machine holds corner speed. Tilt is optional low-authority trim. */
+    /* Portrait is the two-stick assisted profile: the left thumb owns throttle/yaw, the right
+       thumb owns pitch/roll, and explicit TARGET / PADLOCK / FIRE controls sit between them.
+       Tilt is optional low-authority trim. */
     #portrait-chips { display: none; }
     #portrait-chips[hidden] { display: none !important; }
     @media (orientation: portrait) {
-      .portrait-assist .touch-left,
-      .portrait-assist .touch-right { display: none; }
+      /* Portrait keeps both sticks clear. Hide the ACTIONS column, not the whole right rail:
+         hiding all of .touch-right also takes gear and flaps with it, and a child of a
+         display:none parent cannot be brought back. */
+      .portrait-assist .touch-left { display: none; }
+
+      /* The chip row is NOT the answer. It was added here to give portrait some energy control,
+         but portrait-assist already holds throttle for you -- "throttle holds corner velocity" --
+         so SLOWER/FASTER duplicated something automatic, and the row landed across the middle of
+         the HUD, over the pitch ladder. Two absolutely-positioned boxes were nested (the rail and
+         the row), so their bottom offsets compounded and threw it into mid-screen.
+
+         Portrait now gets what it actually needs and nothing else: the two sticks, a FIRE button
+         in the gap between them, and gear/flaps above it for the landing. */
+      .portrait-assist #portrait-chips { display: none; }
+
+      /* display:contents so the rail stops being a positioned box. Its children then place
+         against #touch-controls instead of against the rail, which is what made the offsets
+         stack in the first place. */
+      .portrait-assist .touch-right { display: contents; }
+
+      .portrait-assist .touch-actions {
+        display: block;
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: calc(20px + env(safe-area-inset-bottom));
+        pointer-events: none;
+      }
+      /* FIRE owns the centre gap between the sticks. PADLOCK and TARGET stack above it in the
+         same column -- the padlock view and its ADI already exist in the HUD, and target cycling
+         already works; they were simply unreachable in portrait because this whole column was
+         collapsed. Nothing else from the column is promoted: the full column would cover the
+         right-stick flight envelope. */
+      .portrait-assist .touch-actions > * { display: none; }
+      .portrait-assist .touch-actions > #touch-fire:not([hidden]) {
+        display: grid;
+        place-items: center;
+        width: 92px; min-width: 92px;
+        height: 92px; min-height: 92px;
+        font-size: 15px;
+        letter-spacing: .1em;
+        pointer-events: auto;
+      }
+      /* Padlock and target-cycle ride above FIRE, side by side, still clear of both sticks. */
+      .portrait-assist .touch-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+      .portrait-assist .touch-actions > #touch-target-cycle:not([hidden]),
+      .portrait-assist .touch-actions > [data-pulse-key="KeyV"]:not([hidden]) {
+        display: grid;
+        place-items: center;
+        width: 58px; min-width: 58px;
+        height: 44px; min-height: 44px;
+        font-size: 9px;
+        letter-spacing: .06em;
+        pointer-events: auto;
+      }
+
+      /* Gear and flaps sit above FIRE, still clear of both sticks. */
+      .portrait-assist #touch-context-controls:not([hidden]) {
+        display: flex;
+        gap: 8px;
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: calc(186px + env(safe-area-inset-bottom));
+        pointer-events: auto;
+      }
+
       .touch-mode.touch-primary #fallback-stick,
       .touch-mode.touch-primary #target-stick {
-        width: min(36vw, 156px);
-        height: min(36vw, 156px);
+        width: min(31vw, 124px);
+        height: min(31vw, 124px);
       }
     }
 
@@ -690,37 +779,28 @@
       z-index: 20;
       inset: 0;
       display: grid;
-      place-items: center;
+      box-sizing: border-box;
+      align-items: center;
       overflow: hidden;
-      color: #d8e8eb;
+      padding:
+        calc(var(--safe-top) + clamp(28px, 6vh, 72px))
+        calc(var(--safe-right) + clamp(24px, 6vw, 80px))
+        calc(var(--safe-bottom) + clamp(28px, 6vh, 72px))
+        calc(var(--safe-left) + clamp(24px, 6vw, 80px));
+      /* Painted dawn, not a sci-fi terminal. Values are the locked palette in
+         docs/art-direction/korea-1950s/engine-targets.json (golden-departure): sky #6F8492,
+         cloudLight #F4E7C9, lightBreak #F3D08C, field #A89858, ridge #394A3A. Warm ground with
+         the gold confined to the horizon break, per that state's hazeIntent. */
+      color: #2B3031;
+      /* The painted sky the mission menu is already wearing, with the same gradient underneath it
+         as a fallback while the image decodes. Identical to the menu backdrop on purpose: there is
+         then no visual event at handover, which is the whole point of removing the title card. */
       background:
-        radial-gradient(circle at 50% 46%, rgba(64, 169, 199, .17), transparent 24%),
-        linear-gradient(180deg, #061a35 0%, #123c5b 47%, #0b283b 49%, #02090f 64%, #010509 100%);
+        image-set(url("./art/menu-hangar.webp") type("image/webp")) center 46% / cover no-repeat,
+        radial-gradient(90% 55% at 68% 82%, rgba(222, 163, 79, .30), transparent 72%),
+        linear-gradient(180deg,
+          #C4CFD4 0%, #D8D8CC 30%, #EBE4CF 58%, #F4E7C9 80%, #E3D2A6 100%);
       transition: opacity .55s ease, visibility .55s ease;
-    }
-
-    #boot::before {
-      content: "";
-      position: absolute;
-      width: 44vmin;
-      aspect-ratio: 1;
-      border: 1px solid rgba(77, 255, 136, .09);
-      border-radius: 50%;
-      box-shadow:
-        0 0 0 8vmin rgba(77, 255, 136, .014),
-        0 0 0 16vmin rgba(77, 255, 136, .008);
-      animation: boot-breathe 3.2s ease-in-out infinite;
-    }
-
-    #boot::after {
-      content: "";
-      position: absolute;
-      top: 49%;
-      left: 0;
-      width: 100%;
-      height: 1px;
-      opacity: .32;
-      background: linear-gradient(90deg, transparent 8%, rgba(151, 225, 242, .3) 42%, rgba(255, 208, 121, .72) 50%, rgba(151, 225, 242, .3) 58%, transparent 92%);
     }
 
     #boot.ready {
@@ -728,76 +808,40 @@
       visibility: hidden;
     }
 
-    .boot-card {
-      position: relative;
-      width: min(420px, calc(100vw - 48px));
-      padding: 30px 38px 28px;
-      border-inline: 1px solid rgba(77, 255, 136, .15);
-      background: linear-gradient(90deg, transparent, rgba(1, 8, 14, .62) 13%, rgba(1, 8, 14, .62) 87%, transparent);
-      filter: drop-shadow(0 18px 35px rgba(0, 0, 0, .38));
-    }
-
-    .boot-card::before,
-    .boot-card::after {
-      content: "";
+    /* All that is left of the loading shell: a pulse in the corner of the painted sky. The card,
+       the wordmark, the tagline, the sortie spec sheet and their three responsive layouts are
+       deleted -- roughly 200 lines of styling for a screen nobody wanted to look at. #boot-status
+       stays in the DOM, announced to screen readers, because a silent aria-busy region is a
+       regression for anyone who cannot see the pulse. */
+    .boot-load {
       position: absolute;
-      left: -7px;
-      width: 14px;
-      height: 1px;
-      background: rgba(77, 255, 136, .65);
+      right: calc(var(--safe-right) + clamp(20px, 4vw, 40px));
+      bottom: calc(var(--safe-bottom) + clamp(20px, 4vh, 40px));
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
 
-    .boot-card::before { top: 0; }
-    .boot-card::after { bottom: 0; }
-
-    .boot-kicker {
-      margin-bottom: 9px;
-      color: #4dff88;
-      font: 600 11px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      letter-spacing: .28em;
-      text-transform: uppercase;
-    }
-
-    .boot-title {
-      margin: 0;
-      color: #f1f7f8;
-      font-size: clamp(27px, 6vw, 38px);
-      font-weight: 620;
-      letter-spacing: .065em;
-      text-shadow: 0 0 22px rgba(138, 223, 242, .22);
-    }
-
-    .boot-subtitle {
-      margin: 7px 0 28px;
-      color: rgba(203, 226, 232, .58);
-      font-size: 12px;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-    }
-
-    .boot-track {
-      position: relative;
-      height: 2px;
-      overflow: hidden;
-      background: rgba(151, 218, 232, .12);
-    }
-
-    .boot-track::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      width: 38%;
-      background: linear-gradient(90deg, transparent, #4dff88 45%, #a2ffd0, transparent);
-      filter: drop-shadow(0 0 6px rgba(77, 255, 136, .65));
-      animation: boot-scan 1.15s ease-in-out infinite;
+    .boot-pulse {
+      width: 7px;
+      height: 7px;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      background: rgba(222, 163, 79, .85);
+      box-shadow: 0 0 10px rgba(222, 163, 79, .45);
+      animation: boot-pulse 1.25s ease-in-out infinite;
     }
 
     #boot-status {
-      min-height: 16px;
-      margin-top: 14px;
-      color: rgba(201, 230, 235, .68);
-      font: 500 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      letter-spacing: .08em;
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
     }
 
     #ready-screen {
@@ -811,15 +855,27 @@
         calc(var(--safe-right) + 20px)
         calc(var(--safe-bottom) + 20px)
         calc(var(--safe-left) + 20px);
-      color: #dfffe9;
-      background:
-        radial-gradient(circle at 50% 42%, rgba(22, 67, 79, .34), transparent 42%),
-        rgba(1, 7, 12, .53);
-      backdrop-filter: blur(5px) saturate(.9);
-      -webkit-backdrop-filter: blur(5px) saturate(.9);
+      color: #f6f1e4;
+      /* A PAINTING, not a phosphor scrim. The menu used to inherit the HUD's palette -- dark
+         green-black with a radial glow -- which is correct for avionics and wrong for the front
+         door of a film. The backdrop is a gouache sky; the gradient over it is only enough scrim
+         to keep type legible against the bright cloud tops, weighted to the bottom where the
+         cards sit rather than washing the whole image out. 198 KB WebP, 51 KB under 900 px. */
+      background-image:
+        linear-gradient(105deg,
+          rgba(12, 14, 22, .78) 0%,
+          rgba(12, 14, 22, .46) 34%,
+          rgba(12, 14, 22, .10) 58%,
+          rgba(12, 14, 22, .34) 100%),
+        image-set(
+          url("./art/menu-hangar.webp") type("image/webp"));
+      background-size: cover;
+      background-position: center 46%;
+      background-repeat: no-repeat;
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
+      touch-action: pan-y pinch-zoom;
       transition: opacity .22s ease, visibility .22s ease;
     }
 
@@ -837,6 +893,22 @@
     }
 
     .touch-mode #ready-screen { z-index: 13; }
+    @media (max-width: 900px) {
+      #ready-screen {
+        background-image:
+          linear-gradient(to bottom,
+            rgba(12, 14, 22, .30) 0%,
+            rgba(12, 14, 22, .52) 46%,
+            rgba(12, 14, 22, .82) 100%),
+          image-set(
+            url("./art/menu-hangar-small.webp") type("image/webp"));
+      }
+    }
+    /* app.js moves the same primary action after the title on touch layouts, so visual and focus
+       order agree while the desktop briefing retains its original document order. */
+    .touch-mode #ready-screen[data-mode="program"] #ready-start {
+      margin: 10px 0 12px;
+    }
 
     #test-flight-console, #nav-console {
       position: fixed;
@@ -1147,6 +1219,11 @@
       #test-flight-console, #nav-console > summary { min-height: 36px; padding-block: 7px; }
     }
 
+    /* No card. The menu WAS an opaque phosphor-green terminal panel -- 98%-opaque near-black, a
+       monospace face, a neon rule across the top -- bolted over a painted sky that it completely
+       hid. Two separate objects fighting, and the good one losing. The painting is now the menu:
+       names float on it in warm ink, and the only scrim is the one #ready-screen already lays down
+       to keep type off the cloud tops. */
     .ready-card {
       position: relative;
       display: flex;
@@ -1154,26 +1231,11 @@
       max-height: 100%;
       flex-direction: column;
       overflow: hidden;
-      border: 1px solid rgba(77, 255, 136, .25);
-      border-radius: 10px;
-      background: linear-gradient(145deg, rgba(5, 20, 27, .98), rgba(2, 10, 16, .96));
-      box-shadow:
-        inset 0 0 0 1px rgba(204, 255, 221, .025),
-        0 24px 90px rgba(0, 0, 0, .58),
-        0 0 50px rgba(77, 255, 136, .035);
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    }
-
-    .ready-card::before {
-      content: "";
-      position: absolute;
-      z-index: 1;
-      top: -1px;
-      left: 24px;
-      width: 86px;
-      height: 2px;
-      background: #4dff88;
-      box-shadow: 0 0 12px rgba(77, 255, 136, .58);
+      border: 0;
+      background: none;
+      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      /* Type over a painting needs its own shadow; a panel is not the only way to buy contrast. */
+      text-shadow: 0 1px 14px rgba(6, 14, 24, .85), 0 1px 3px rgba(6, 14, 24, .7);
     }
 
     #ready-screen:not([data-mode="program"]) .ready-card { width: min(520px, 100%); }
@@ -1198,7 +1260,7 @@
     #ready-menu-title {
       margin: 0;
       color: #f2fff6;
-      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
       font-size: 18px;
       font-weight: 650;
       letter-spacing: .02em;
@@ -1227,7 +1289,7 @@
       overflow-x: hidden;
       overflow-y: auto;
       overscroll-behavior: contain;
-      touch-action: pan-y;
+      touch-action: pan-y pinch-zoom;
       -webkit-overflow-scrolling: touch;
     }
 
@@ -1291,7 +1353,7 @@
     .ready-group-heading h2 {
       margin: 0;
       color: rgba(242, 255, 246, .9);
-      font: 650 16px/1.2 Inter, ui-sans-serif, system-ui, sans-serif;
+      font: 650 16px/1.2 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
     }
 
     .ready-group-heading p {
@@ -1367,7 +1429,7 @@
     .sortie-choice strong {
       display: block;
       color: #f2fff6;
-      font: 650 13px/1.25 Inter, ui-sans-serif, system-ui, sans-serif;
+      font: 650 13px/1.25 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
     }
 
     .sortie-choice > span:not(.sortie-number) {
@@ -1401,7 +1463,7 @@
     #ready-title {
       margin: 0;
       color: #f2fff6;
-      font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
       font-size: clamp(25px, 5vw, 34px);
       font-weight: 640;
       letter-spacing: .025em;
@@ -1824,6 +1886,16 @@
 
     #ready-replay[hidden] { display: none; }
 
+    /* Emptying a line is how the pause screen sheds copy. Without these, an emptied element still
+       spends its margin, padding and rule, and the card stays exactly as tall as the words it no
+       longer contains. */
+    #ready-kicker:empty,
+    #ready-brief:empty,
+    #ready-controls:empty,
+    #ready-hint:empty { display: none; }
+    .ready-fact:has(> small:empty):has(> span:empty) { display: none; }
+    .ready-facts:not(:has(span:not(:empty))) { display: none; }
+
     #ready-hint {
       min-height: 12px;
       margin-top: 10px;
@@ -1875,6 +1947,53 @@
 
     #ready-build-reload[hidden] { display: none; }
 
+    .ready-route-notice,
+    .ready-telemetry-disclosure {
+      width: min(560px, calc(100% - 24px));
+      margin: 10px auto 0;
+      color: rgba(253, 246, 230, .72);
+      font: 400 9px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .02em;
+      text-align: center;
+      text-shadow: 0 1px 8px rgba(0, 0, 0, .8);
+    }
+
+    .ready-route-notice {
+      display: grid;
+      gap: 3px;
+      padding: 9px 12px;
+      border: 1px solid rgba(255, 207, 130, .42);
+      border-radius: 4px;
+      color: #ffdf9c;
+      background: rgba(24, 18, 12, .72);
+    }
+
+    .ready-route-notice[hidden] { display: none; }
+    .ready-route-notice strong { text-transform: capitalize; }
+    .ready-route-notice span { color: rgba(253, 232, 194, .72); }
+    .ready-route-notice a {
+      width: max-content;
+      margin: 4px auto 0;
+      color: #b6ffd2;
+      text-underline-offset: 3px;
+    }
+
+    .ready-telemetry-disclosure label {
+      display: inline-flex;
+      min-height: 28px;
+      align-items: center;
+      gap: 7px;
+      cursor: pointer;
+      color: rgba(253, 246, 230, .76);
+    }
+
+    .ready-telemetry-disclosure input { width: 16px; height: 16px; accent-color: #7af0a5; }
+    .ready-telemetry-disclosure small,
+    .ready-telemetry-disclosure output { display: block; color: rgba(253, 246, 230, .45); }
+    .ready-telemetry-disclosure output { margin-top: 2px; color: rgba(182, 255, 210, .58); }
+    #ready-screen:not([data-mode="program"]) .ready-telemetry-disclosure,
+    #ready-screen:not([data-mode="program"]) .ready-route-notice { display: none; }
+
     @media (max-width: 760px) {
       #ready-screen {
         padding:
@@ -1888,25 +2007,58 @@
         overflow-x: hidden;
         overflow-y: auto;
         overscroll-behavior: contain;
-        touch-action: pan-y;
+        touch-action: pan-y pinch-zoom;
         -webkit-overflow-scrolling: touch;
       }
 
-      .ready-menu-header { gap: 12px; padding: 16px 15px 13px; }
-      .ready-menu-brand { font-size: 7px; }
+      .ready-menu-header { gap: 12px; padding: 13px 14px 11px; }
+      .ready-menu-brand { font-size: 8px; }
       #ready-menu-title { font-size: 16px; }
-      #ready-menu-help { font-size: 9px; }
+      #ready-menu-help { font-size: 10px; }
       .ready-layout { display: block; }
-      .ready-selector { overflow: visible; padding: 13px; border: 0; border-bottom: 1px solid rgba(77, 255, 136, .12); }
-      .ready-briefing { overflow: visible; padding: 20px 16px; }
+      .ready-selector {
+        overflow: visible;
+        padding: 11px 12px 9px;
+        border: 0;
+        border-bottom: 1px solid rgba(77, 255, 136, .12);
+      }
+      .ready-program-heading { margin-bottom: 7px; }
+      .ready-program-heading p { display: none; }
+      .ready-mission-groups {
+        display: grid;
+        grid-auto-columns: minmax(136px, 42vw);
+        grid-auto-flow: column;
+        gap: 7px;
+        overflow-x: auto;
+        padding: 1px 2px 7px;
+        overscroll-behavior-x: contain;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: thin;
+        touch-action: pan-x pinch-zoom;
+        -webkit-overflow-scrolling: touch;
+      }
+      .sortie-option {
+        margin-top: 0;
+        scroll-snap-align: start;
+      }
+      .sortie-choice { min-height: 64px; padding: 8px 9px; }
+      .sortie-choice strong { font-size: 12.5px; }
+      .sortie-choice > span:not(.sortie-number),
+      .sortie-choice > small { display: none; }
+      .sortie-number { margin-bottom: 5px; font-size: 8px; }
+      .ready-briefing { overflow: visible; padding: 15px 15px 16px; }
       .ready-activity-nav { margin-bottom: 13px; }
       .ready-activity-nav button { min-height: 48px; font-size: 9px; }
-      .sortie-choice { min-height: 74px; padding: 9px 10px; }
-      #ready-title { font-size: 26px; }
-      #ready-brief { margin: 9px 0 13px; line-height: 1.5; }
-      .ready-facts { margin-bottom: 13px; }
-      .ready-fact { padding-block: 9px; }
+      #ready-kicker { margin-bottom: 7px; font-size: 9px; }
+      #ready-title { font-size: 25px; }
+      #ready-brief { margin: 7px 0 10px; font-size: 12.5px; line-height: 1.5; }
+      .ready-facts { margin-bottom: 10px; }
+      .ready-fact { padding-block: 8px; }
+      .ready-fact span { font-size: 11px; line-height: 1.35; }
       .ready-controls { margin-bottom: 13px; line-height: 1.5; }
+      .touch-mode #ready-controls { display: none; }
+      #ready-start { min-height: 48px; font-size: 12px; }
+      #ready-hint { font-size: 8px; }
     }
 
     @media (max-width: 380px) {
@@ -1919,14 +2071,51 @@
     }
 
     @media (max-height: 500px) and (orientation: landscape) {
-      .ready-menu-header { padding-block: 12px 10px; }
-      .ready-selector { padding-block: 12px; }
-      .ready-briefing { padding-block: 18px; }
-      #ready-title { font-size: 24px; }
-      #ready-brief { margin: 7px 0 11px; line-height: 1.45; }
-      .ready-facts { margin-bottom: 11px; }
-      .ready-fact { padding-block: 8px; }
-      .ready-controls { margin-bottom: 11px; line-height: 1.45; }
+      .touch-mode .ready-card { overflow: hidden; }
+      .touch-mode .ready-menu-header { padding: 9px 13px 8px; }
+      .touch-mode #ready-menu-help { display: none; }
+      .touch-mode #ready-screen[data-mode="program"] .ready-layout {
+        display: grid;
+        min-height: 0;
+        flex: 1;
+        grid-template-columns: minmax(214px, .84fr) minmax(0, 1.16fr);
+      }
+      .touch-mode #ready-screen[data-mode="program"] .ready-selector {
+        overflow-x: hidden;
+        overflow-y: auto;
+        padding: 9px 10px;
+        border-right: 1px solid rgba(77, 255, 136, .12);
+        border-bottom: 0;
+      }
+      .touch-mode #ready-screen[data-mode="program"] .ready-mission-groups {
+        display: block;
+        overflow: visible;
+        padding: 0 1px 4px;
+        touch-action: pan-y pinch-zoom;
+      }
+      .touch-mode #ready-screen[data-mode="program"] .ready-program-heading p,
+      .touch-mode #ready-screen[data-mode="program"] .sortie-choice > span:not(.sortie-number),
+      .touch-mode #ready-screen[data-mode="program"] .sortie-choice > small {
+        display: none;
+      }
+      .touch-mode #ready-screen[data-mode="program"] .sortie-option + .sortie-option {
+        margin-top: 5px;
+      }
+      .touch-mode #ready-screen[data-mode="program"] .sortie-choice {
+        min-height: 48px;
+        padding: 7px 9px;
+      }
+      .touch-mode #ready-screen[data-mode="program"] .ready-briefing {
+        overflow-x: hidden;
+        overflow-y: auto;
+        padding: 11px 14px 12px;
+      }
+      .touch-mode #ready-kicker { margin-bottom: 5px; }
+      .touch-mode #ready-title { font-size: 23px; }
+      .touch-mode #ready-brief { margin: 5px 0 8px; line-height: 1.42; }
+      .touch-mode .ready-facts { margin-bottom: 8px; }
+      .touch-mode .ready-fact { padding-block: 7px; }
+      .touch-mode .ready-controls { display: none; }
       #ready-start { min-height: 44px; }
     }
 
@@ -2139,6 +2328,7 @@
         calc(var(--safe-bottom) + 14px) calc(var(--safe-left) + 14px);
       background: rgba(0, 7, 12, .82);
       backdrop-filter: blur(14px);
+      touch-action: pan-y pinch-zoom;
     }
 
     #settings-screen.visible { display: grid; }
@@ -2155,12 +2345,12 @@
       color: #eafff1;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       overscroll-behavior: contain;
-      touch-action: pan-y;
+      touch-action: pan-y pinch-zoom;
       -webkit-overflow-scrolling: touch;
     }
 
     .settings-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-    .settings-head h2 { margin: 0; font: 650 24px/1.1 Inter, ui-sans-serif, system-ui, sans-serif; }
+    .settings-head h2 { margin: 0; font: 650 24px/1.1 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif; }
     .settings-copy { color: rgba(217, 255, 229, .55); font-size: 10px; line-height: 1.5; }
     .settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; margin: 18px 0; }
     .settings-toggle { display: flex; align-items: center; gap: 10px; min-height: 42px; font-size: 10px; }
@@ -2172,6 +2362,14 @@
     .settings-binding button { min-width: 54px; }
     .settings-binding button[data-capturing="true"] { border-color: #ffcf82; color: #ffdf9c; }
     .settings-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+    .settings-telemetry-copy {
+      grid-column: 1 / -1;
+      margin: -4px 0 4px 30px;
+      color: rgba(217, 255, 229, .48);
+      font-size: 9px;
+      line-height: 1.45;
+    }
 
     .settings-disclosure {
       margin-top: 8px;
@@ -2274,22 +2472,490 @@
       text-transform: uppercase;
     }
 
-    @keyframes boot-scan {
-      from { transform: translateX(-110%); }
-      to { transform: translateX(270%); }
+    /* ------------------------------------------------------------------------------------
+       PICTORIAL MENU
+       The mission menu is a painting with names on it. Everything below strips the avionics
+       chrome the menu inherited from the HUD -- monospace, phosphor green, panel borders, chips,
+       progress counters -- and removes the prose. The owner's brief was "I'd be happy if it was
+       literally just a picture of a jet"; what is left is the picture, seven names, and one
+       button. Copy that is hidden here stays in the DOM for screen readers rather than being
+       deleted from the document: it is wordy to LOOK at, not useless to hear.
+       ------------------------------------------------------------------------------------ */
+
+    #ready-screen .ready-menu-header {
+      align-items: baseline;
+      padding: 4px 8px 18px;
+      border-bottom: 0;
     }
 
-    @keyframes boot-breathe {
-      0%, 100% { opacity: .55; transform: scale(.98); }
-      50% { opacity: 1; transform: scale(1.02); }
+    /* The wordmark is on the browser tab and nowhere else. Repeating it above the title is the
+       same instinct that put GUNS ONLY on an empty gradient. */
+    #ready-screen .ready-menu-brand { display: none; }
+
+    #ready-screen #ready-menu-title {
+      color: #fdf6e6;
+      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      font-size: clamp(22px, 3vw, 30px);
+      font-weight: 400;
+      letter-spacing: .015em;
+    }
+
+    /* "Missions" over a list of missions, and a 30-word paragraph describing what the list
+       already shows. */
+    #ready-screen .ready-group-heading,
+    #ready-screen #ready-program-progress { display: none; }
+
+    #ready-screen .ready-selector { padding: 0 12px 12px; border-right: 0; }
+    #ready-screen .ready-briefing { padding: 0 12px clamp(12px, 2vw, 20px); }
+
+    /* Names on the sky. No plate, no rule, no inset marker -- the selected one is simply the one
+       that is bright and carries the lit edge. */
+    #ready-screen .sortie-option {
+      margin-top: 0;
+      border: 0;
+      border-radius: 0;
+      background: none;
+    }
+
+    #ready-screen .sortie-option[data-selected="true"] {
+      border: 0;
+      background: none;
+      box-shadow: none;
+    }
+
+    #ready-screen .sortie-choice {
+      min-height: 0;
+      padding: 7px 10px;
+      border-left: 2px solid transparent;
+      opacity: .62;
+      transition: opacity .18s ease, border-color .18s ease;
+    }
+
+    #ready-screen .sortie-option[data-selected="true"] .sortie-choice {
+      border-left-color: rgba(255, 226, 163, .95);
+      opacity: 1;
+    }
+
+    #ready-screen .sortie-choice:hover { opacity: 1; }
+
+    #ready-screen .sortie-choice strong {
+      color: #fdf6e6;
+      font: 400 clamp(17px, 2.1vw, 22px)/1.15
+        "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      letter-spacing: .01em;
+    }
+
+    /* Category survives at a whisper -- it is the only thing telling you a Rapier from a Sabre
+       before you commit. The per-node completion badge inside it does not. */
+    #ready-screen .sortie-number {
+      margin-bottom: 1px;
+      color: rgba(255, 232, 190, .5);
+      font: 700 8px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .16em;
+    }
+
+    #ready-screen .sortie-number b { display: none; }
+    #ready-screen .sortie-choice > small { color: rgba(255, 216, 150, .62); }
+
+    /* The briefing column, in program mode, is the aircraft's name and nothing else. */
+    #ready-screen[data-mode="program"] #ready-kicker,
+    #ready-screen[data-mode="program"] #ready-brief,
+    #ready-screen[data-mode="program"] .ready-facts,
+    #ready-screen[data-mode="program"] .ready-controls { display: none; }
+
+    #ready-screen #ready-title {
+      color: #fdf6e6;
+      font: 400 clamp(34px, 5.4vw, 58px)/1.05
+        "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      letter-spacing: .01em;
+    }
+
+    /* Warm ink on a warm sky. The neon-green slab read as a console OK button on a painting. */
+    #ready-screen #ready-start {
+      max-width: 24rem;
+      min-height: 58px;
+      margin-top: 18px;
+      border: 0;
+      border-radius: 3px;
+      color: #2a2113;
+      background: linear-gradient(180deg, #fbe6b4, #f0cf8b);
+      box-shadow: 0 10px 34px rgba(20, 30, 44, .42);
+      font: 500 clamp(15px, 1.7vw, 18px)/1
+        "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      letter-spacing: .06em;
+      text-transform: none;
+      text-shadow: none;
+    }
+
+    #ready-screen #ready-start:hover,
+    #ready-screen #ready-start:focus-visible {
+      background: linear-gradient(180deg, #fff2d2, #f7dda4);
+      box-shadow: 0 12px 40px rgba(20, 30, 44, .5);
+    }
+
+    #ready-screen #ready-start:disabled {
+      color: rgba(253, 246, 230, .5);
+      background: rgba(253, 246, 230, .12);
+      box-shadow: none;
+    }
+
+    /* Secondary actions in the same warm ink. These were console buttons -- neon border, green
+       tint, 9px uppercase monospace -- sitting under a painted sky, which is what made the menu
+       read as two unrelated products stacked on each other. */
+    #ready-screen .ready-secondary-actions {
+      max-width: 24rem;
+      margin-top: 12px;
+      gap: 10px;
+    }
+
+    #ready-screen .ready-secondary-actions button,
+    #ready-screen #ready-handoff,
+    #ready-screen #ready-replay {
+      border: 1px solid rgba(253, 246, 230, .32);
+      border-radius: 3px;
+      color: rgba(253, 246, 230, .88);
+      background: rgba(24, 34, 48, .34);
+      font: 400 13px/1.2 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      letter-spacing: .02em;
+      text-transform: none;
+    }
+
+    #ready-screen #ready-handoff,
+    #ready-screen #ready-replay { max-width: 24rem; margin-top: 10px; }
+
+    #ready-screen .ready-secondary-actions button:hover,
+    #ready-screen #ready-handoff:hover,
+    #ready-screen #ready-replay:hover {
+      border-color: rgba(253, 246, 230, .68);
+      background: rgba(36, 48, 64, .5);
+    }
+
+    /* The pause screen is the same card with the mission list taken away. Centre it: without the
+       selector column beside it, a left-aligned briefing leaves the sky empty on one side. */
+    #ready-screen:not([data-mode="program"]) .ready-briefing {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    #ready-screen:not([data-mode="program"]) #ready-start,
+    #ready-screen:not([data-mode="program"]) #ready-handoff,
+    #ready-screen:not([data-mode="program"]) .ready-secondary-actions { width: min(24rem, 100%); }
+
+    /* ------------------------------------------------------------------------------------
+       WORDLESS AIRCRAFT PICKER
+       "I really just wanna know what airplane am I flying today" -- so the menu is two paintings
+       of two aeroplanes, and you touch one. No heading, no aircraft names, no briefing, no
+       statistics, no keyboard legend, no hint line, no label on the button. Every one of those
+       is still in the DOM and still announced to screen readers; none of them is drawn.
+       Green survives exactly where the paintings put it -- the service lamps on the hangar wall --
+       and is used for one job only: showing which aeroplane is selected, and that it will go.
+       ------------------------------------------------------------------------------------ */
+
+    #ready-screen[data-mode="program"] .ready-menu-header,
+    #ready-screen[data-mode="program"] .ready-activity-nav,
+    #ready-screen[data-mode="program"] #ready-kicker,
+    #ready-screen[data-mode="program"] #ready-title,
+    #ready-screen[data-mode="program"] #ready-brief,
+    #ready-screen[data-mode="program"] .ready-facts,
+    #ready-screen[data-mode="program"] .ready-controls,
+    #ready-screen[data-mode="program"] #ready-hint { display: none; }
+
+    /* The two paintings sit side by side and own the screen. */
+    #ready-screen[data-mode="program"] .ready-layout {
+      display: block;
+      overflow: visible;
+    }
+
+    #ready-screen[data-mode="program"] .ready-mission-groups {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: clamp(10px, 2vw, 26px);
+      overflow: visible;
+    }
+
+    #ready-screen[data-mode="program"] .sortie-option[hidden] { display: none; }
+
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] {
+      display: block;
+      width: 100%;
+      min-height: 0;
+      padding: 0;
+      /* Square, because the paintings are square and a letterbox would crop the aeroplane. */
+      aspect-ratio: 1;
+      border: 1px solid rgba(253, 246, 230, .14);
+      border-radius: 4px;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: cover;
+      /* Unpicked is dimmer and cooler; picked steps into the light. Nothing is greyed out or
+         disabled -- both are always flyable, one is merely the one you are looking at. */
+      filter: brightness(.52) saturate(.72);
+      transition: filter .22s ease, border-color .22s ease, box-shadow .22s ease;
+    }
+
+    #ready-screen .sortie-choice[data-aircraft="f22"] {
+      background-image: image-set(url("./art/jet-f22.webp") type("image/webp"));
+    }
+
+    #ready-screen .sortie-choice[data-aircraft="rapier"] {
+      background-image: image-set(url("./art/jet-rapier.webp") type("image/webp"));
+    }
+
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]:hover { filter: brightness(.78); }
+
+    #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft] {
+      border-color: rgba(122, 240, 165, .62);
+      /* The service lamps, borrowed. Green as light spilling off the painting, which is what it
+         is in the picture -- not a border colour picked off a palette. */
+      box-shadow: 0 0 0 1px rgba(122, 240, 165, .3), 0 0 44px rgba(96, 226, 146, .3);
+      filter: none;
+    }
+
+    /* Announced, never drawn: the aircraft's name and programme state stay in the accessible
+       name of the button that carries the painting. */
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > * {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    /* Go. A chevron, lit like the lamps. Its accessible name is still "Fly <aircraft>". */
+    #ready-screen[data-mode="program"] #ready-start {
+      display: grid;
+      width: min(200px, 46vw);
+      max-width: none;
+      min-height: 52px;
+      margin: clamp(12px, 2.4vh, 26px) auto 0;
+      border: 0;
+      border-radius: 3px;
+      background: rgba(122, 240, 165, .16);
+      box-shadow: inset 0 0 0 1px rgba(122, 240, 165, .5), 0 0 30px rgba(96, 226, 146, .18);
+      font-size: 0;
+      place-items: center;
+      text-shadow: none;
+    }
+
+    #ready-screen[data-mode="program"] #ready-start::after {
+      content: "";
+      width: 15px;
+      height: 15px;
+      border-top: 2px solid #b6ffd2;
+      border-right: 2px solid #b6ffd2;
+      rotate: 45deg;
+      translate: -4px 0;
+    }
+
+    #ready-screen[data-mode="program"] #ready-start:hover:not(:disabled),
+    #ready-screen[data-mode="program"] #ready-start:focus-visible:not(:disabled) {
+      background: rgba(122, 240, 165, .3);
+      box-shadow: inset 0 0 0 1px rgba(122, 240, 165, .9), 0 0 40px rgba(96, 226, 146, .34);
+    }
+
+    #ready-screen[data-mode="program"] #ready-start:disabled {
+      background: rgba(253, 246, 230, .07);
+      box-shadow: inset 0 0 0 1px rgba(253, 246, 230, .16);
+    }
+
+    #ready-screen[data-mode="program"] #ready-start:disabled::after {
+      border-color: rgba(253, 246, 230, .3);
+    }
+
+    /* Settings keeps a word because it is not part of the choice and has nowhere else to live;
+       it shrinks to a footnote in the corner instead of sitting in the row of decisions. */
+    #ready-screen[data-mode="program"] .ready-secondary-actions {
+      display: flex;
+      justify-content: center;
+      margin-top: 12px;
+    }
+
+    #ready-screen[data-mode="program"] .ready-secondary-actions button {
+      min-height: 34px;
+      padding: 0 14px;
+      border-color: rgba(253, 246, 230, .18);
+      color: rgba(253, 246, 230, .5);
+      background: none;
+      font-size: 11px;
+    }
+
+    /* Portrait phones stack the two paintings; there is room for exactly this and nothing else. */
+    @media (max-width: 620px) and (orientation: portrait) {
+      #ready-screen[data-mode="program"] .ready-mission-groups {
+        grid-auto-flow: row;
+        grid-template-columns: minmax(0, 1fr);
+      }
+      #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] { aspect-ratio: 16 / 10; }
+    }
+
+    /* One picture per aeroplane, and NOTHING behind them. The hangar backdrop was a third
+       painting of the same hangar sitting behind two paintings of the same hangar, so the eye had
+       to work out which of the three aeroplanes it was being offered. The surround is now the
+       colour of the shadowed concrete in the paintings, and the only things lit on the screen are
+       the two choices. */
+    #ready-screen[data-mode="program"] {
+      background-image: none;
+      background-color: #0b0d11;
+    }
+
+    #ready-screen[data-mode="program"] .ready-card {
+      width: min(1180px, 100%);
+      height: 100%;
+      justify-content: center;
+    }
+
+    /* Fill the frame. A picker made of two thumbnails floating in a dark field is a file dialog;
+       these want to be posters. */
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] {
+      aspect-ratio: auto;
+      height: min(58vh, 46vw);
+    }
+
+    #ready-screen[data-mode="program"] .ready-secondary-actions {
+      width: 100%;
+      max-width: none;
+    }
+
+    #ready-screen[data-mode="program"] #ready-build-row { justify-content: center; }
+
+    html:not(.touch-mode) #ready-screen[data-mode="program"][data-route-blocked="true"] .ready-card {
+      justify-content: flex-start;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    /* The consent disclosure and an occasional quarantine notice add real controls below the
+       paintings. Short desktop windows need a reachable scroll path just as phones do. */
+    @media (max-height: 720px) {
+      html:not(.touch-mode) #ready-screen[data-mode="program"] .ready-card {
+        justify-content: flex-start;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
+      html:not(.touch-mode) #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] {
+        height: min(46vh, 46vw);
+      }
+    }
+
+    #ready-install-hint {
+      display: none;
+      margin: 14px auto 0;
+      padding: 7px 12px;
+      border: 0;
+      border-radius: 3px;
+      color: rgba(253, 246, 230, .62);
+      background: rgba(24, 34, 48, .34);
+      cursor: pointer;
+      font: 400 12px/1.2 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      letter-spacing: .01em;
+    }
+    /* Revealed by app.js only in an iOS Safari TAB (html.ios-browser-tab), and never again once
+       the pilot has dismissed it (html.install-hint-dismissed). */
+    html.ios-browser-tab #ready-screen[data-mode="program"] #ready-install-hint:not([hidden]) {
+      display: block;
+    }
+    html.install-hint-dismissed #ready-install-hint { display: none !important; }
+    #ready-install-hint:hover { color: rgba(253, 246, 230, .9); }
+
+    /* ---------------------------------------------------------------------------------------
+       PAUSE SCREEN
+       A clean, self-contained panel -- the SAME solid dark surface as the aircraft picker, which
+       the owner signed off on. The translucent-scrim version failed badly: the live HUD (tapes,
+       "854 KT CLOSING", the target brackets, TARGET 2) bled straight through a 58%-opaque wash
+       and collided with the buttons, and the buttons were themselves translucent so the chaos
+       showed through them too -- "ugly, offset, dumb". Solid backdrop, opaque buttons, one
+       centred column: Resume, then three small utilities. RTB HAND-OFF is gone (owner: remove it
+       until it works). Nothing from the frozen frame competes with it.
+       --------------------------------------------------------------------------------------- */
+    #ready-screen[data-mode="pause"] .ready-menu-header,
+    #ready-screen[data-mode="pause"] #ready-kicker,
+    #ready-screen[data-mode="pause"] #ready-title,
+    #ready-screen[data-mode="pause"] #ready-brief,
+    #ready-screen[data-mode="pause"] .ready-facts,
+    #ready-screen[data-mode="pause"] .ready-controls,
+    #ready-screen[data-mode="pause"] #ready-hint,
+    #ready-screen[data-mode="pause"] #ready-handoff,
+    #ready-screen[data-mode="pause"] #ready-build-row { display: none; }
+
+    #ready-screen[data-mode="pause"] {
+      background-color: #0b0d11;
+      background-image: none;
+    }
+    #ready-screen[data-mode="pause"] .ready-card {
+      width: min(24rem, 100%);
+      height: 100%;
+      justify-content: center;
+    }
+    #ready-screen[data-mode="pause"] .ready-briefing {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      padding: 0 clamp(16px, 5vw, 32px);
+    }
+
+    /* Resume: the one lit action, warm ink, same treatment as FLY on the picker. */
+    #ready-screen[data-mode="pause"] #ready-start {
+      width: 100%;
+      max-width: none;
+      min-height: 62px;
+      margin: 0 0 14px;
+      border: 0;
+      border-radius: 3px;
+      color: #2a2113;
+      background: linear-gradient(180deg, #fbe6b4, #f0cf8b);
+      box-shadow: 0 10px 34px rgba(0, 0, 0, .45);
+      font: 500 clamp(17px, 2.1vw, 20px)/1 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      letter-spacing: .03em;
+      text-transform: none;
+      text-shadow: none;
+    }
+    #ready-screen[data-mode="pause"] #ready-start:hover,
+    #ready-screen[data-mode="pause"] #ready-start:focus-visible {
+      background: linear-gradient(180deg, #fff2d2, #f7dda4);
+    }
+
+    /* Three small utilities in a row, OPAQUE so nothing shows through, warm ink on the dark panel. */
+    #ready-screen[data-mode="pause"] .ready-secondary-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      width: 100%;
+      max-width: none;
+      margin: 0;
+    }
+    #ready-screen[data-mode="pause"] .ready-secondary-actions button {
+      min-height: 46px;
+      padding: 0 6px;
+      border: 1px solid rgba(253, 246, 230, .2);
+      border-radius: 3px;
+      color: rgba(253, 246, 230, .82);
+      background: #161b22;
+      font: 400 14px/1.15 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      letter-spacing: .01em;
+      text-transform: none;
+    }
+    #ready-screen[data-mode="pause"] .ready-secondary-actions button:hover,
+    #ready-screen[data-mode="pause"] .ready-secondary-actions button:focus-visible {
+      border-color: rgba(253, 246, 230, .55);
+      background: #1e242d;
+    }
+    #ready-screen[data-mode="pause"] .ready-secondary-actions button[hidden] { display: none; }
+
+    @keyframes boot-pulse {
+      0%, 100% { opacity: .34; transform: scale(.78); }
+      50% { opacity: 1; transform: scale(1); }
     }
 
     @media (prefers-reduced-motion: reduce) {
-      #boot::before, .boot-track::after { animation-duration: 4s; }
+      .boot-pulse { animation: none; }
     }
   </style>
-  <!-- Static-site Web Analytics. Vercel serves this endpoint only on deployed environments. -->
-  <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
   <canvas id="scene" tabindex="0" aria-label="Air combat simulation view"></canvas>
@@ -2511,8 +3177,10 @@
       <div class="touch-actions">
         <button id="touch-gcas-paddle" class="touch-control touch-wave" type="button" data-hold-key="KeyK" aria-label="Hold Auto-GCAS paddle override" hidden>GCAS<br>PADDLE</button>
         <button id="touch-limit-override" class="touch-control" type="button" data-hold-key="Space" aria-label="G-limiter and high-alpha override" hidden>LIMIT<br>OVR</button>
+        <button id="touch-target-cycle" class="touch-control touch-utility" type="button" data-mobile-action="target-cycle" aria-label="Select Target 2" data-selected="1" hidden><span id="touch-target-label">TARGET</span><br><span id="touch-target-number">1</span></button>
         <button class="touch-control touch-utility" type="button" data-pulse-key="KeyV" aria-label="Padlock target or nearby carrier" aria-pressed="false" hidden>PADLOCK<br>V</button>
-        <button id="touch-fire" class="touch-control touch-fire" type="button" data-hold-key="KeyF" hidden>FIRE</button>
+        <button id="touch-carrier-rtb" class="touch-control touch-utility" type="button" data-carrier-route-action="carrier-sortie-request-rtb" data-pulse-key="KeyO" aria-label="Return to ship" hidden disabled>RTB<br>O</button>
+        <button id="touch-fire" class="touch-control touch-fire" type="button" data-hold-key="KeyF" aria-label="Fire guns" hidden>FIRE</button>
       </div>
       <div id="portrait-chips" role="group" aria-label="Assisted flight controls">
         <button class="touch-control" type="button" data-assist-nudge="-1" aria-label="Hold a slower speed">SLOWER</button>
@@ -2522,16 +3190,16 @@
       </div>
     </div>
 
-    <button id="fallback-stick" type="button" data-mobile-action="virtual-stick" data-active="false" aria-label="Left flight stick" aria-describedby="fallback-stick-help" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight">
+    <button id="fallback-stick" type="button" data-mobile-action="virtual-stick" data-active="false" aria-label="Left stick: throttle and yaw" aria-describedby="fallback-stick-help" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight">
       <span id="fallback-stick-knob" aria-hidden="true"></span>
-      <span class="fallback-stick-label" aria-hidden="true">FLY</span>
-      <span id="fallback-stick-help" class="visually-hidden">Left thumb: drag left or right to roll; drag down to pull and up to push. The stick centres when released.</span>
+      <span class="fallback-stick-label" aria-hidden="true">THR / YAW</span>
+      <span id="fallback-stick-help" class="visually-hidden">Left thumb: drag up to increase power or down to decrease it; release holds the selected power. Drag left or right for yaw, which centres when released.</span>
     </button>
 
-    <button id="target-stick" type="button" data-mobile-action="target-stick" data-active="false" aria-label="Right look and fire stick" aria-describedby="target-stick-help">
+    <button id="target-stick" type="button" data-mobile-action="target-stick" data-active="false" aria-label="Right stick: pitch and roll" aria-describedby="target-stick-help">
       <span id="target-stick-knob" aria-hidden="true"></span>
-      <span class="fallback-stick-label" aria-hidden="true">LOOK · FIRE</span>
-      <span id="target-stick-help" class="visually-hidden">Right thumb: touch and hold to fire; drag to look around. The view returns when released.</span>
+      <span class="fallback-stick-label" aria-hidden="true">STICK</span>
+      <span id="target-stick-help" class="visually-hidden">Right thumb: drag left or right to roll, down to pull, or up to push. The stick centres when released. Use the separate Fire button to fire guns.</span>
     </button>
 
     <div id="tilt-prompt" role="dialog" aria-modal="true" aria-labelledby="tilt-title">
@@ -2549,8 +3217,8 @@
       <header class="ready-menu-header">
         <div class="ready-menu-brand">Guns Only</div>
         <div>
-          <h1 id="ready-menu-title">Pick a mission</h1>
-          <p id="ready-menu-help">Every experience is available. Fly whichever you feel like.</p>
+          <h1 id="ready-menu-title">Pick an aircraft</h1>
+          <p id="ready-menu-help" hidden>Pick an aircraft</p>
         </div>
       </header>
 
@@ -2559,57 +3227,63 @@
           <div class="ready-group-heading ready-program-heading">
             <div>
               <h2>Missions</h2>
-              <p>Five flight experiences on the road to the 2040 battlespace, from low-level medical transport to the stratosphere.</p>
+              <p>Two production aircraft: an endless F-22 guns-only fight and the Rapier high-altitude balloon intercept.</p>
             </div>
             <output id="ready-program-progress"></output>
           </div>
+          <!--
+            An AIRCRAFT picker. The owner's whole question at this screen is "what airplane am I
+            flying today?", and the answer is one of two: the Raptor, or the Rapier. The other five
+            entries were a programme tree on the front door -- a drone slice with no ground targets,
+            a broken medevac, a circuits trainer, a 1951 carrier sortie and an indoor microdrone --
+            and every one of them made the reader do triage before they could fly.
+
+            Their source is retained, but hidden is not the release control. Each deep link
+            (?program=medevac, ?program=korea-panther, /indoor/) fails closed at the release gate;
+            deliberate testing requires the explicit ?preview=1 acknowledgement.
+          -->
           <div class="ready-mission-groups">
             <div class="sortie-option" data-selected="true" data-program-state="available">
-              <button type="button" class="sortie-choice" data-program-node="first-merge" aria-pressed="true">
-                <span class="sortie-number">F-22A <b data-program-status="first-merge"></b></span>
-                <strong>Guns Only</strong>
-                <span>Endless guns-only dogfight over the regional Ukraine world. The wave escalates while you keep winning and eases when you do not.</span>
-                <small>NO MISSILES · NO RADAR GAME · ANGLES AND ENERGY</small>
+              <button type="button" class="sortie-choice" data-aircraft="f22" data-program-node="first-merge" aria-pressed="true">
+                <span class="sortie-number">GUNS ONLY <b data-program-status="first-merge"></b></span>
+                <strong>F-22A</strong>
               </button>
             </div>
             <div class="sortie-option" data-selected="false" data-program-state="available">
+              <button type="button" class="sortie-choice" data-aircraft="rapier" data-program-node="rapier-intercept" aria-pressed="false">
+                <span class="sortie-number">INTERCEPT <b data-program-status="rapier-intercept"></b></span>
+                <strong>Rapier</strong>
+              </button>
+            </div>
+            <div class="sortie-option" data-selected="false" data-program-state="available" hidden>
               <button type="button" class="sortie-choice" data-program-node="low-level-drone" aria-pressed="false">
                 <span class="sortie-number">UKRAINE <b data-program-status="low-level-drone"></b></span>
-                <strong>Low-Level Drone Intercept</strong>
-                <span>Stop four low-flying fictional raiders over the detailed Soniachne low-level cell.</span>
-                <small>GUNS ONLY · TRUE-SCALE TERRAIN · NO GROUND TARGETS YET</small>
+                <strong>Low-Level Drone</strong>
+                <small>NO GROUND TARGETS YET</small>
               </button>
             </div>
-            <div class="sortie-option" data-selected="false" data-program-state="available">
+            <div class="sortie-option" data-selected="false" data-program-state="available" hidden>
               <button type="button" class="sortie-choice" data-program-node="medevac" aria-pressed="false">
                 <span class="sortie-number">AIR AMBULANCE <b data-program-status="medevac"></b></span>
                 <strong>Medevac</strong>
-                <span>Fly low to an orchard pickup, settle the aircraft, secure one opaque casualty capsule, and hand it over at the clinic.</span>
-                <small>NO OPPONENT · STABLE CONTACT · ONE CAPSULE · VISIBLE URGENCY</small>
               </button>
             </div>
-            <div class="sortie-option" data-selected="false" data-program-state="available">
+            <div class="sortie-option" data-selected="false" data-program-state="available" hidden>
               <button type="button" class="sortie-choice" data-program-node="rapier-circuits" aria-pressed="false">
                 <span class="sortie-number">RAPIER <b data-program-status="rapier-circuits"></b></span>
                 <strong>Rapier Circuits</strong>
-                <span>Launch, fly the pattern, trap. Repeat until the hook is easy.</span>
-                <small>NO CONTACT · NO BINGO PRESSURE · FULL LAUNCHER AND WIRE</small>
               </button>
             </div>
-            <div class="sortie-option" data-selected="false" data-program-state="available">
-              <button type="button" class="sortie-choice" data-program-node="rapier-intercept" aria-pressed="false">
-                <span class="sortie-number">RAPIER <b data-program-status="rapier-intercept"></b></span>
-                <strong>Rapier Intercept</strong>
-                <span>Catapult off a buried strip, climb, light the ram, kill the enabler, trap on the hook.</span>
-                <small>ONE PASS · 12 G STRUCTURAL · LOW-Q INCIDENCE OVERRIDE · HOOK RECOVERY</small>
+            <div class="sortie-option" data-selected="false" data-program-state="available" hidden>
+              <button type="button" class="sortie-choice" data-program-node="korea-panther" aria-pressed="false">
+                <span class="sortie-number">KOREA 1951 <b data-program-status="korea-panther"></b></span>
+                <strong>Panther off Essex</strong>
               </button>
             </div>
-            <div class="sortie-option" data-program-state="available">
+            <div class="sortie-option" data-program-state="available" hidden>
               <a class="sortie-choice" href="/indoor/" data-experience="indoor">
                 <span class="sortie-number">MIDGE-03 · FACILITY NINE</span>
                 <strong>Indoor</strong>
-                <span>Fly a microdrone along a fibre-protected route, shed the line cleanly, then finish over contested radio. If the feed collapses, onboard automation keeps pursuing the task.</span>
-                <small>SIX DEGREES · FIBRE INGRESS · CHOPPY DOWNLINK · BEST-EFFORT AUTONOMY</small>
               </a>
             </div>
           </div>
@@ -2647,6 +3321,7 @@
           </details>
           <p id="ready-controls" class="ready-controls">Arrows fly · W/S power · F guns · V padlock · Tab target
 Splash one bandit to qualify · H controls · R restarts</p>
+          <div id="ready-route-notice" class="ready-route-notice" role="status" hidden></div>
           <button id="ready-start" type="button">Fly First Merge</button>
           <button id="ready-replay" type="button" hidden>Replay incident again</button>
           <button id="ready-handoff" type="button" hidden disabled>HAND OFF FIGHT &amp; RTB</button>
@@ -2656,9 +3331,23 @@ Splash one bandit to qualify · H controls · R restarts</p>
             <button id="ready-return" type="button" hidden>Mission program</button>
           </div>
           <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
+          <!--
+            The one line of chrome the pictorial menu keeps, and only on iPhone in a browser tab.
+            The bars top and bottom are Safari's, not the game's; the manifest is display:fullscreen
+            so Add to Home Screen sheds them, but iOS never offers that on its own. app.js reveals
+            this only when it applies (html.ios-browser-tab) and hides it for good once tapped.
+          -->
+          <button id="ready-install-hint" type="button" hidden>
+            <span aria-hidden="true">⤴</span> Full screen: Share → Add to Home Screen
+          </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 199 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 238 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
+          </div>
+          <div class="ready-telemetry-disclosure">
+            <label><input id="ready-telemetry-sharing" type="checkbox"> Share detailed flight diagnostics</label>
+            <small>Optional. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning.</small>
+            <output id="ready-telemetry-sharing-status" aria-live="polite">Off by default. No gameplay diagnostics are sent.</output>
           </div>
         </section>
       </div>
@@ -2680,6 +3369,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
         <label class="settings-toggle"><input id="setting-high-contrast" type="checkbox"> High-contrast HUD</label>
         <label class="settings-toggle"><input id="setting-reduced-motion" type="checkbox"> Reduce motion</label>
         <label class="settings-toggle"><input id="setting-large-text" type="checkbox"> Larger interface text</label>
+        <label class="settings-toggle"><input id="setting-telemetry-sharing" type="checkbox" aria-describedby="setting-telemetry-sharing-copy"> Share detailed flight diagnostics</label>
+        <p id="setting-telemetry-sharing-copy" class="settings-telemetry-copy">Off by default. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning. Turning it off discards anything not yet sent.</p>
         <label class="settings-range" for="setting-tilt-sensitivity"><span>Tilt sensitivity</span><output id="setting-tilt-sensitivity-value">1.00×</output><input id="setting-tilt-sensitivity" type="range" min="0.65" max="1.6" step="0.05" value="1"></label>
       </div>
       <details id="settings-keyboard-bindings" class="settings-disclosure" open>
@@ -2695,13 +3386,18 @@ Splash one bandit to qualify · H controls · R restarts</p>
     </div>
   </section>
 
-  <div id="boot" role="status" aria-live="polite">
-    <div class="boot-card">
-      <div class="boot-kicker">Rapier · Ukraine jet range</div>
-      <h1 class="boot-title">GUNS ONLY</h1>
-      <p class="boot-subtitle">Loading deterministic flight kernel</p>
-      <div class="boot-track"></div>
-      <div id="boot-status">INITIALISING WEBASSEMBLY…</div>
+  <!--
+    The title card is gone. It was a wordmark, a tagline and a sortie summary on an empty gradient,
+    shown to someone who had just typed the address in — it told them nothing they did not know and
+    stood between them and the aeroplane. What remains is the SAME painted sky the mission menu
+    uses, so boot and menu are one continuous image and the load reads as the page arriving rather
+    than as a screen you have to sit through. The element itself stays: it is the cover that keeps
+    an unpainted canvas off the screen, and it still carries the shell's phase and status contract.
+  -->
+  <div id="boot" data-phase="files" aria-busy="true">
+    <div class="boot-load">
+      <i class="boot-pulse" aria-hidden="true"></i>
+      <div id="boot-status" role="status" aria-live="polite" aria-atomic="true"></div>
     </div>
   </div>
 
@@ -2714,19 +3410,31 @@ Splash one bandit to qualify · H controls · R restarts</p>
   </div>
 
   <script>
-    // A network-fresh Build 199 document may still be controlled by Build 178's cache-first
+    // The title card is deleted, so there is no per-sortie deck/title/detail to paint before
+    // app.js arrives. The deep link still selects the sortie -- it is read by the module graph
+    // from the same query string -- it just no longer has a splash screen to announce itself on.
+
+    // A network-fresh Build 238 document may still be controlled by Build 178's cache-first
     // service worker. Purge that controller and its Cache Storage before Blazor requests the
     // unversioned boot manifest/WASM graph. Offline clients never see this newer document until a
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = "199";
-      const controller = navigator.serviceWorker?.controller;
-      if (!controller) return;
-      const controllerBuild = new URL(controller.scriptURL, location.href)
+      // Derive from a normal stamped URL so this comparison cannot drift from the next release.
+      const releaseBuild = new URL("./service-worker.js?v=238", location.href)
         .searchParams.get("v");
-      if (controllerBuild === releaseBuild) return;
+      const controller = navigator.serviceWorker?.controller;
+      const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
+      const registeredWorkers = registrations.flatMap((registration) => [
+        registration.active,
+        registration.waiting,
+        registration.installing,
+      ]).filter(Boolean);
+      const staleWorker = [controller, ...registeredWorkers]
+        .filter(Boolean)
+        .find((worker) => new URL(worker.scriptURL, location.href)
+          .searchParams.get("v") !== releaseBuild);
+      if (!staleWorker) return;
 
-      const registrations = await navigator.serviceWorker.getRegistrations();
       await Promise.all(registrations.map((registration) => registration.unregister()));
       if ("caches" in globalThis) {
         const keys = await caches.keys();
@@ -2738,8 +3446,34 @@ Splash one bandit to qualify · H controls · R restarts</p>
       }
     })();
   </script>
-  <script src="./multiplayer-config.js?v=199"></script>
-  <script type="module" src="./app.js?v=199"></script>
-  <script src="./_framework/blazor.webassembly.js?v=199" autostart="false"></script>
+  <script type="module">
+    // Static module tags start fetching and linking their complete dependency graph before the
+    // module body can await anything. Keep this bootstrap import-free until the old controller and
+    // cache are gone, then load both classic prerequisites before app.js starts Blazor.
+    try {
+      await globalThis.__gunsPrebootReady;
+      const loadClassicScript = (src, attributes = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = src;
+        for (const [name, value] of Object.entries(attributes)) script.setAttribute(name, value);
+        script.addEventListener("load", resolve, { once: true });
+        script.addEventListener("error", () => reject(new Error(`Failed to load ${src}`)), {
+          once: true,
+        });
+        document.head.append(script);
+      });
+      await loadClassicScript("./multiplayer-config.js?v=238");
+      await loadClassicScript("./_framework/blazor.webassembly.js?v=238", {
+        autostart: "false",
+      });
+      await import("./app.js?v=238");
+    } catch (error) {
+      console.error(error);
+      document.querySelector("#boot")?.classList.add("ready");
+      const message = document.querySelector("#fatal-message");
+      if (message) message.textContent = error instanceof Error ? error.message : String(error);
+      document.querySelector("#fatal")?.classList.add("visible");
+    }
+  </script>
 </body>
 </html>

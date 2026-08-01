@@ -4,6 +4,7 @@ import {
   advanceIncidentReplay,
   analyseIncidentReplay,
   decodeIncidentReplay,
+  incidentReplayLabels,
   IncidentReplayController,
   interpolateIncidentReplay,
   replayFrameState,
@@ -206,6 +207,27 @@ test("interpolation moves recorded aircraft and carrier without inventing anothe
   assert.equal(projected.opponent_terminal_state, "FLYING");
   assert.equal(projected.opponent_impact_surface, "NONE");
   assert.equal(projected.suppress_unrecorded_combat_transients, true);
+});
+
+test("replay preserves RollingOut and BarrierEngagement as appended recovery outcomes", () => {
+  const barrierPayload = payload({
+    samples: [
+      row(-2),
+      row(-1),
+      row(0, { recovery: 8, hook: 4, wire: 0, terminal: 0 }),
+      row(1, { recovery: 8, hook: 4, wire: 0, terminal: 0 }),
+      row(2, { recovery: 8, hook: 4, wire: 0, terminal: 0 }),
+    ],
+  });
+  const clip = decodeIncidentReplay(barrierPayload);
+  const projected = replayFrameState({}, clip.samples[clip.incidentIndex]);
+
+  assert.equal(incidentReplayLabels.recovery(7), "ROLLING OUT");
+  assert.equal(incidentReplayLabels.recovery(8), "BARRIER ENGAGEMENT");
+  assert.equal(projected.recovery, "BARRIERENGAGEMENT");
+  assert.match(clip.analysis.physicalOutcome,
+    /raised barrier engagement.*missed the arresting wires.*retained the aircraft aboard/i);
+  assert.doesNotMatch(clip.analysis.physicalOutcome, /wreck|bolter|trap/i);
 });
 
 test("causal review uses the exported hard-sink limit and authoritative correction", () => {

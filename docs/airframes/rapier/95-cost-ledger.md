@@ -1,6 +1,11 @@
 # 95 — Cost ledger
 
-← [90 — Failure modes](90-failure-modes.md) · Back to [README](README.md)
+> **Historical Rapier v1 record only.** The production aircraft and deterministic balloon sortie
+> are governed by [Rapier v2](../rapier-v2/README.md). The v1 alert-fuel, drone-bay, lifecycle, and
+> economy figures below are not current runtime or product requirements.
+
+← [90 — Failure modes](90-failure-modes.md) ·
+[force economy](../../air-war-economy-and-force-management.md) · Back to [README](README.md)
 
 *Consequence of CMC hot structure ([20](20-thermal-and-materials.md)) and duct-dominated body
 ([30](30-propulsion-and-inlet.md)). Numbers are **surrogate order-of-magnitude**, not a bid.*
@@ -24,8 +29,42 @@ with the CMC freeze. Do not cost the product as stainless.
 | --- | --- |
 | Fuel | Alert 3,600 LB (raised from 3,100 when design gross absorbed the drone bay); ram burn still lever-modelled (open finding) |
 | Ownship ammo | 480 rounds — negligible $ vs fuel |
-| Structural life | Hard 12 G pulls still consume CMC life; no over-limit repeatability is granted without a residual-strength/fatigue model |
+| Cold-structure mechanical life | Depends on the full load spectrum, dynamic pressure, mass/configuration, reversals, damage, and inspection—not peak G or sortie count alone |
+| CMC hot-shipset life | Local peak temperature, gradient, dwell, thermal cycles, oxidation/coating, impact, attachment, and joint history; independent of cold-shell mechanical life |
+| Propulsion life | Turbine starts/cycles/hours and ram hot-kit cycles/dwell/exceedances are serialized separately and exchanged or overhauled |
+| Launch/recovery life | Launch impulse, touchdown sink/side load, hook load, arrest energy, and bolter history accrue to their fittings and structure |
+| Capsule and rotables | Pressure/calendar/escape-system lives and component histories survive transfer between shells |
 | Gun-drone attrition | Four × attritable fighterettes; reuse only if quiet-strip pickup closes |
+
+## Lifecycle charging (provisional)
+
+The former `$9M × 2% = $180k` line is rejected as circular whole-aircraft accounting. A completed
+sortie receives no flat life charge. The planning equation is:
+
+```text
+fuel + ammunition + lost stores
++ inspections and maintenance performed
++ confirmed repair, replacement, and combat loss
+- confirmed salvage credit
+```
+
+Raw exposure, modelled damage, approved limit, maintenance state, and cost remain separate. A hard
+pull may eventually order an inspection before residual strength or cost is known. A cool,
+low-load balloon mission is expected to record lower exposure in several channels than a full-hot,
+high-load profile, but receives no damage fraction or cost until `SME-v0` and the assessment models
+exist.
+
+Replacement value multiplied by an uncertainty-bounded damage estimate may appear in a separate
+reserve scenario. It is never booked as actual sortie cost before inspection, repair, replacement,
+loss, or an evidence-backed accounting rule makes the cost real.
+
+No valid per-sortie life amortisation can yet be calculated. The physical mission mix, `SME-v0`
+reference spectrum, qualified component lives, inspections, repair yield, rotables, and recovered
+value must exist first.
+
+[85 — Service life, maintenance, and telemetry](85-service-life-maintenance-and-telemetry.md)
+defines the controlling component ledger, inactive 50/250/500/1,000 severe-equivalent programme
+labels, and telemetry boundary.
 
 ## Infrastructure (per lane, not per airframe)
 
@@ -48,5 +87,5 @@ not a costed guarantee against cratering.
 ## Epistemic
 
 ~$9M flyaway class **surrogate**. Itemised rows above and the linked infrastructure ranges are
-planning studies — not contract costs. Per-sortie $ remains open until fuel model is
-instrument-true.
+planning studies—not contract costs. Per-sortie cost remains open until fuel is instrument-true
+and component life, maintenance, repair, and salvage models are evidence-backed.

@@ -292,10 +292,20 @@ public sealed class CasevacFlightRuntime {
         _resolvedRoutes = Array.AsReadOnly(resolvedRoutes);
 
         CasevacHorizontalPoint start = course.World.StartPosition;
-        CasevacHorizontalPoint pickup = course.World.Pickup.Centre;
+        CasevacResolvedRoute? ingressRoute = GuidanceRouteForTarget(
+            course.World.Pickup.Id,
+            _resolvedRoutes);
+        CasevacResolvedRouteControlPoint? firstIngressPoint =
+            ingressRoute is not null && ingressRoute.Points.Count > 1
+                ? ingressRoute.Points[1]
+                : null;
+        double initialTargetEastM = firstIngressPoint?.EastM
+            ?? course.World.Pickup.Centre.XM;
+        double initialTargetNorthM = firstIngressPoint?.NorthM
+            ?? course.World.Pickup.Centre.ZM;
         double initialYawRad = Math.Atan2(
-            pickup.XM - start.XM,
-            pickup.ZM - start.ZM);
+            initialTargetEastM - start.XM,
+            initialTargetNorthM - start.ZM);
         _vehicle = new ReducedOrderVerticalLiftAirAmbulance(
             course.Mission.AircraftId,
             new Vec3D(
@@ -938,12 +948,35 @@ public sealed class CasevacFlightRuntime {
 
         PlayerVehicleObservation observation =
             _vehicle.Observation;
-        double dx = target.EastM
+        Vec3D guidancePoint = new(
+            target.EastM,
+            target.SurfaceElevationM,
+            target.NorthM);
+        double rangeM;
+        CasevacResolvedRoute? route = GuidanceRouteForTarget(
+            target.Id,
+            _resolvedRoutes);
+        if (route is not null
+            && TryBuildRouteGuidance(
+                route,
+                observation.PositionWorldM,
+                out Vec3D routePoint,
+                out double routeRemainingM)) {
+            guidancePoint = routePoint;
+            rangeM = routeRemainingM;
+        } else {
+            double targetDx = target.EastM
+                - observation.PositionWorldM.X;
+            double targetDz = target.NorthM
+                - observation.PositionWorldM.Z;
+            rangeM = Math.Sqrt(
+                targetDx * targetDx + targetDz * targetDz);
+        }
+        double dx = guidancePoint.X
             - observation.PositionWorldM.X;
-        double dz = target.NorthM
+        double dz = guidancePoint.Z
             - observation.PositionWorldM.Z;
-        double rangeM = Math.Sqrt(dx * dx + dz * dz);
-        double bearing = rangeM > 1e-9
+        double bearing = dx * dx + dz * dz > 1e-9
             ? Math.Atan2(dx, dz)
             : observation.YawRad;
         double relative = WrapPi(
@@ -959,14 +992,90 @@ public sealed class CasevacFlightRuntime {
             MaximumForwardSpeedMps);
         return new CasevacTargetGuidance(
             target.Id,
-            new Vec3D(
-                target.EastM,
-                target.SurfaceElevationM,
-                target.NorthM),
+            guidancePoint,
             rangeM,
             bearing,
             relative,
             rangeM / planningSpeedMps);
+    }
+
+    static CasevacResolvedRoute? GuidanceRouteForTarget(
+        string targetId,
+        IReadOnlyList<CasevacResolvedRoute> routes) {
+        CasevacResolvedRoute? fallback = null;
+        for (int index = 0; index < routes.Count; index++) {
+            CasevacResolvedRoute route = routes[index];
+            if (!StringComparer.Ordinal.Equals(
+                route.EndLocationId,
+                targetId)) continue;
+            fallback ??= route;
+            if (route.Id.Contains(
+                "-direct.",
+                StringComparison.Ordinal)) return route;
+        }
+        return fallback;
+    }
+
+    static bool TryBuildRouteGuidance(
+        CasevacResolvedRoute route,
+        in Vec3D position,
+        out Vec3D guidancePoint,
+        out double remainingRangeM) {
+        guidancePoint = Vec3D.Zero;
+        remainingRangeM = 0.0;
+        if (route.Points.Count < 2) return false;
+
+        int nearestSegment = 0;
+        double nearestDistanceSquared = double.PositiveInfinity;
+        for (int index = 0; index < route.Points.Count - 1; index++) {
+            CasevacResolvedRouteControlPoint first = route.Points[index];
+            CasevacResolvedRouteControlPoint second = route.Points[index + 1];
+            double segmentEast = second.EastM - first.EastM;
+            double segmentNorth = second.NorthM - first.NorthM;
+            double lengthSquared = segmentEast * segmentEast
+                + segmentNorth * segmentNorth;
+            double along = lengthSquared > 1e-9
+                ? Math.Clamp(
+                    ((position.X - first.EastM) * segmentEast
+                        + (position.Z - first.NorthM) * segmentNorth)
+                        / lengthSquared,
+                    0.0,
+                    1.0)
+                : 0.0;
+            double nearestEast = first.EastM + segmentEast * along;
+            double nearestNorth = first.NorthM + segmentNorth * along;
+            double errorEast = position.X - nearestEast;
+            double errorNorth = position.Z - nearestNorth;
+            double distanceSquared = errorEast * errorEast
+                + errorNorth * errorNorth;
+            // Prefer the later segment on an exact control-point tie so guidance advances rather
+            // than pointing back at a waypoint the aircraft has already reached.
+            if (distanceSquared <= nearestDistanceSquared) {
+                nearestDistanceSquared = distanceSquared;
+                nearestSegment = index;
+            }
+        }
+
+        int nextPointIndex = nearestSegment + 1;
+        CasevacResolvedRouteControlPoint next = route.Points[nextPointIndex];
+        guidancePoint = new Vec3D(
+            next.EastM,
+            next.SurfaceElevationM + next.TargetAglM,
+            next.NorthM);
+        double firstEast = next.EastM - position.X;
+        double firstNorth = next.NorthM - position.Z;
+        remainingRangeM = Math.Sqrt(
+            firstEast * firstEast + firstNorth * firstNorth);
+        for (int index = nextPointIndex;
+            index < route.Points.Count - 1;
+            index++) {
+            CasevacResolvedRouteControlPoint first = route.Points[index];
+            CasevacResolvedRouteControlPoint second = route.Points[index + 1];
+            double east = second.EastM - first.EastM;
+            double north = second.NorthM - first.NorthM;
+            remainingRangeM += Math.Sqrt(east * east + north * north);
+        }
+        return true;
     }
 
     CasevacDestinationEnergyPlan BuildDestinationEnergyPlan(

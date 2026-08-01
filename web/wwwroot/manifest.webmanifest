@@ -1,7 +1,7 @@
 {
   "name": "Guns Only",
   "short_name": "Guns Only",
-  "description": "F-22 guns-only dogfighting with an honest deterministic flight model.",
+  "description": "Two deterministic flight experiences: F-22 guns-only dogfighting and the Rapier high-altitude balloon intercept.",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",

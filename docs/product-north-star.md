@@ -50,7 +50,11 @@ can perceive, make, negotiate, repair, operate, and teach inside one consequenti
   aerodynamics, propulsion, materials, manufacturing, test evidence, money, people, basing,
   maintenance, fuel, and negotiated access to supply.
 - Supply is not background inventory. Procurement, substitution, transport, storage, reliability,
-  scarcity, trust, and negotiation are themselves playable disciplines.
+  scarcity, trust, and negotiation are themselves playable disciplines. The controlling first
+  implementation is the multi-ledger
+  [future air-war economy and force-management system](air-war-economy-and-force-management.md):
+  central accountability, delegated field choice, physical custody, repair, evidence, industrial
+  capacity, and partner restrictions remain distinct rather than collapsing into one currency.
 - Medicine, engineering, logistics, command, and aviation share people and consequences. A design
   decision can become a maintenance problem, a supply mission, an evacuation constraint, a
   clinical case, and eventually a command decision.

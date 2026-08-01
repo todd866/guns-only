@@ -12,15 +12,15 @@ public class FlightTestEvaluateTests {
             Air: FlightModel.RapierPublicDataSurrogate,
             Propulsion: PropulsionModelKind.TurboRamjetPublicDataSurrogate);
         var program = new FlightTestProgram(
-            Id: "interceptor-tbcc-v1",
-            Version: "0",
+            Id: "interceptor-tbcc-v2",
+            Version: "2",
             Gates: Array.Empty<FlightTestGate>(),
             Points: Array.Empty<FlightTestPoint>());
 
         FlightTestReport report = Evaluator.Evaluate(subject, program);
 
         Assert.Equal("rapier", report.SubjectId);
-        Assert.Equal("interceptor-tbcc-v1", report.ProgramId);
+        Assert.Equal("interceptor-tbcc-v2", report.ProgramId);
     }
 
     [Fact]
@@ -70,8 +70,12 @@ public class FlightTestEvaluateTests {
 
     [Fact]
     public void MatchingIdentityToBuffStillFailsFamilyTwCap() {
+        // V2 has no extra 1.55x lever multiplier and grosses 11.82 t, so the honest 50 kN
+        // sea-level turbine-core rating is only about 0.43 T/W. Triple it to cross the deliberately
+        // broad 1.20 comparison-family cap. The sibling test keeps x1.20 to exercise the tighter
+        // identity-drift tolerance; these are two different gates.
         AircraftParams buffed = FlightModel.RapierPublicDataSurrogate with {
-            ThrustMaxN = FlightModel.RapierPublicDataSurrogate.ThrustMaxN * 1.20
+            ThrustMaxN = FlightModel.RapierPublicDataSurrogate.ThrustMaxN * 3.0
         };
         AirframeIdentity measured = IdentityMeasurement.FromParams(buffed, inferred: false);
         AirframeIdentity matched = measured with {

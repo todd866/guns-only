@@ -209,19 +209,32 @@ public class AirDataTests {
     }
 
     [Fact]
-    public void StagnationReferencedCmcCeilingIsMoreConservativeThanFlatSkinRecovery() {
-        const double altitudeM = 70_000.0 * 0.3048;
-        double ambientK = StandardAtmosphere1976.Instance.Sample(altitudeM).TemperatureK;
-        double limitK = FlightModel.RapierPublicDataSurrogate.SkinTemperatureLimitK;
+    public void RapierV2BindingPanelAndCmcHotEdgeRemainSeparateThermalScreens() {
+        double ambientK = StandardAtmosphere1976.Instance.Sample(
+            RapierV2Design.DesignAltitudeM).TemperatureK;
+        double recoveryK = AirData.AdiabaticWallTemperatureK(
+            RapierV2Design.DesignMach, ambientK);
+        double panelK = AirData.EffectiveAerothermalZoneTemperatureK(
+            ambientK, recoveryK, RapierV2Design.BindingThermalRiseFraction);
 
-        double stagnationCeiling =
-            AirData.MachLimitForStagnationTemperature(limitK, ambientK);
-        double recoveryCeiling =
-            AirData.MachLimitForSkinTemperature(limitK, ambientK);
+        Assert.Equal(
+            RapierV2Design.BindingThermalLimitK - RapierV2Design.DesignPointThermalMarginK,
+            panelK,
+            precision: 5);
+        Assert.True(panelK < RapierV2Design.BindingThermalLimitK);
 
-        Assert.InRange(stagnationCeiling, 5.30, 5.40);
-        Assert.InRange(recoveryCeiling, 5.70, 5.80);
-        Assert.True(stagnationCeiling < recoveryCeiling - 0.3);
+        double panelCeiling = AirData.MachLimitForEffectiveZoneTemperature(
+            RapierV2Design.BindingThermalLimitK,
+            ambientK,
+            RapierV2Design.BindingThermalReference,
+            RapierV2Design.BindingThermalRiseFraction);
+        double hotEdgeCeiling = AirData.MachLimitForStagnationTemperature(
+            RapierV2Design.CmcHotEdgeLimitK, ambientK);
+
+        Assert.InRange(panelCeiling, 4.29, 4.31);
+        Assert.InRange(hotEdgeCeiling, 5.30, 5.40);
+        Assert.True(panelCeiling < hotEdgeCeiling - 1.0,
+            "1,473 K local CMC must not become the whole-aircraft speed permission");
     }
 
     [Fact]

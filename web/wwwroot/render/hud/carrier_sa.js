@@ -136,7 +136,7 @@ function carrierRecoveryIntent(state = {}) {
   const mode = token(state?.mode);
   return state?.maintenance_scenario === true
     || state?.approach === true
-    || ["APPROACH", "WAVE-OFF", "BOLTER", "ARRESTED", "STOPPED", "CATAPULT"].includes(mode)
+    || ["APPROACH", "WAVE-OFF", "BOLTER", "BARRIER", "ARRESTED", "STOPPED", "CATAPULT"].includes(mode)
     || token(state?.configuration_target) === "RECOVERY";
 }
 

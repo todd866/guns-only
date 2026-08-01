@@ -1,9 +1,9 @@
 # Deployed telemetry setup
 
 The function in `api/telemetry.js` uses Vercel Blob's HTTP API directly, so this static deployment
-does not need a `package.json`, an npm install, or a build step. The browser samples the 120 Hz
-authority at 20 Hz and losslessly omits unchanged retained snapshot fields between two-second
-keyframes. It
+does not need a `package.json`, an npm install, or a build step. Hosted flight diagnostics are off
+by default; only after a pilot explicitly opts in does the browser sample the 120 Hz authority at
+20 Hz and losslessly omit unchanged retained snapshot fields between two-second keyframes. It
 uploads one immutable chunk every 30 seconds and keeps only one upload in flight. Failed uploads
 retain a bounded recent trace and back off exponentially, up to five minutes, rather than
 hammering a broken endpoint.
@@ -36,10 +36,9 @@ store**, and connect it to the project/Production environment. Vercel must expos
 the production function receives the variable. Do not put the token in this repository or browser
 code.
 
-Enable **Web Analytics** for the project as well. The static shell loads
-`/_vercel/insights/script.js` directly, so this app does not use the Next.js React component or an
-npm package. After deployment, visit the canonical site and confirm that the script request returns
-`200`; visitor counts begin only after real page views reach that instrumented deployment.
+Do not add Vercel Web Analytics or `/_vercel/insights/script.js` to the static shell. Anonymous page
+analytics would bypass the product's explicit diagnostics-consent boundary. Release verification
+pins that absence; operational tuning uses only the bounded, opt-in flight-diagnostics path above.
 
 Production also has two deliberately separate operator credentials:
 

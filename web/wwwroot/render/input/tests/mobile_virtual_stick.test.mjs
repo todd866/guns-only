@@ -1,9 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { mobileVirtualStickState } from "../mobile_virtual_stick.js";
+import {
+  mobileVirtualStickState,
+  normalisePublishedThrottleLever,
+} from "../mobile_virtual_stick.js";
 
 const BOUNDS = Object.freeze({ left: 20, top: 10, width: 120, height: 120 });
+
+test("published physical throttle becomes an aircraft-relative touch lever without a jump", () => {
+  assert.equal(normalisePublishedThrottleLever(0.85, 1), 0.85);
+  assert.ok(Math.abs(normalisePublishedThrottleLever(0.85, 1.35) - (0.85 / 1.35)) < 1e-12);
+  assert.equal(normalisePublishedThrottleLever(1.35, 1.35), 1);
+  assert.equal(normalisePublishedThrottleLever(1.6, 1.35), 1);
+  assert.equal(normalisePublishedThrottleLever(Number.NaN, 1.35), 0.5);
+  assert.equal(normalisePublishedThrottleLever(0.7, 0), 0.7);
+});
 
 test("thumb stick projects centre, cardinal, and diagonal pointer positions", () => {
   assert.deepEqual(mobileVirtualStickState({ clientX: 80, clientY: 70 }, BOUNDS), {

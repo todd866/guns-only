@@ -128,6 +128,29 @@ public class AssistedFlightTests {
     }
 
     [Fact]
+    public void PortraitAnalogThrottleOwnsTheLeverWhileAssistedFlightIsActive() {
+        SimulationSession session = CornerHoldSession();
+        for (int i = 0; i < 30; i++) session.StepFixed();
+        double automaticThrottle = session.Controls.Throttle;
+        double requestedLever01 = 0.20;
+        double expectedThrottle = requestedLever01
+            * session.Beat.PlayerAir.MaxThrustFraction;
+
+        session.SetAnalogThrottleControl(requestedLever01);
+        for (int i = 0; i < 30; i++) session.StepFixed();
+
+        Assert.True(session.AssistedFlight);
+        Assert.True(automaticThrottle > expectedThrottle + 0.4,
+            "the fixture must distinguish corner auto-throttle from the requested phone lever");
+        Assert.Equal(expectedThrottle, session.Controls.Throttle, 10);
+
+        session.SetAnalogThrottleControl(0.80);
+        session.StepFixed();
+        Assert.Equal(0.80 * session.Beat.PlayerAir.MaxThrustFraction,
+            session.Controls.Throttle, 10);
+    }
+
+    [Fact]
     public void AutoFireUsesInfiniteGunOnlyWhileQualifiedAndPilotTriggerStillWorks() {
         var wideGun = GunProfiles.SixM3FiftyCal with {
             Id = "gun.assisted-flight-test.v1",

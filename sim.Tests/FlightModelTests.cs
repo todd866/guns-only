@@ -47,7 +47,7 @@ public class FlightModelTests {
         AtmosphericState air = StandardAtmosphere1976.Instance.Sample(altitudeM);
         double speedMps = air.SpeedOfSoundMps * 3.5;
         var state = new AircraftState(new Vec3D(0, altitudeM, 0), speedMps,
-            0.0, 0.0, 0.0, 7_900.0);
+            0.0, 0.0, 0.0, RapierV2Design.GrossMassKg);
 
         double expectedScale = 4.0 / Math.Sqrt(3.5 * 3.5 - 1.0) / scheduled.CLAlpha;
         Assert.Equal(expectedScale, FlightModel.SupersonicLiftScale(3.5, scheduled), 9);
@@ -58,8 +58,10 @@ public class FlightModelTests {
         double scheduledG = FlightModel.NzAeroMax(state, scheduled, speedMps,
             StandardAtmosphere1976.Instance);
         Assert.Equal(fixedG * expectedScale, scheduledG, 8);
-        Assert.True(scheduledG < 4.5,
-            $"FL720/M3.5 lift authority should be a few G, not the fixed-CL result {fixedG:F1} G");
+        Assert.True(scheduledG < fixedG * 0.5,
+            $"FL720/M3.5 scheduling must materially cut the fixed-CL result {fixedG:F1} G");
+        Assert.True(scheduledG < scheduled.PositiveStructuralLimitG,
+            $"packaged gross-mass authority {scheduledG:F1} G must remain below structure");
     }
     [Fact] public void BuffetFlagsNearAeroLimit() {
         var sim = new AircraftSim(Level(140), FlightModel.Sabre);

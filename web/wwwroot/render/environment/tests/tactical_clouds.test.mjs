@@ -35,6 +35,32 @@ test("runtime builds one instanced cloud and shadow draw for its tier", () => {
   const shown = field.descriptors.filter((cloud) => cloud.present && cloud.opacity > 0.002);
   assert.equal(field.cloudMesh.count, shown.length);
   assert.equal(field.shadowMesh.count, shown.length);
+  assert.deepEqual(
+    {
+      mode: field.renderDiagnostics().mode,
+      cloudInstances: field.renderDiagnostics().cloudInstances,
+      shadowInstances: field.renderDiagnostics().shadowInstances,
+      drawCalls: field.renderDiagnostics().drawCalls,
+      maxSteadyStateDrawCalls: field.renderDiagnostics().maxSteadyStateDrawCalls,
+      maxDrawCalls: field.renderDiagnostics().maxDrawCalls,
+      cloudTrianglesPerInstance: field.renderDiagnostics().cloudTrianglesPerInstance,
+      shadowTrianglesPerInstance: field.renderDiagnostics().shadowTrianglesPerInstance,
+      impostorDepthLayers: field.renderDiagnostics().impostorDepthLayers,
+      impostorArtSamplesPerFragment: field.renderDiagnostics().impostorArtSamplesPerFragment,
+    },
+    {
+      mode: "impostor",
+      cloudInstances: shown.length,
+      shadowInstances: shown.length,
+      drawCalls: 2,
+      maxSteadyStateDrawCalls: 2,
+      maxDrawCalls: 4,
+      cloudTrianglesPerInstance: 2,
+      shadowTrianglesPerInstance: 2,
+      impostorDepthLayers: 2,
+      impostorArtSamplesPerFragment: 2,
+    },
+  );
 
   const matrixVersion = field.cloudMesh.instanceMatrix.version;
   field.update(new THREE.Vector3(20, 1450, -20), 2,
@@ -70,9 +96,48 @@ test("an explicit performance override keeps desktop weather on the impostor pat
   assert.deepEqual(field.cloudMesh.material.defines, {});
   assert.match(field.cloudMesh.material.fragmentShader, /nearFade/,
     "camera-intersecting impostors must fade instead of becoming a screen-sized slab");
+  assert.match(field.cloudMesh.material.fragmentShader, /authoredBody/,
+    "production impostors should carry the painted billow-density silhouette");
+  assert.match(field.cloudMesh.material.fragmentShader, /uCloudArtEnabled \* 0\.84/);
+  assert.match(field.cloudMesh.material.vertexShader, /Roll-free billboarding/,
+    "production impostors must remain world-up instead of inheriting camera roll");
+  assert.match(field.cloudMesh.material.fragmentShader, /parallaxOffset/,
+    "production impostors should separate their painted front and rear depth cues");
+  assert.match(field.cloudMesh.material.fragmentShader, /vBillboardAspect \/ 2\.15/,
+    "wide authoritative layers must not stretch one square cloud into a horizontal smear");
+  assert.doesNotMatch(field.cloudMesh.material.fragmentShader, /mat2 artRotation/,
+    "cumuliform source art must remain upright rather than rotating sideways or upside down");
+  assert.equal(
+    field.cloudMesh.material.fragmentShader.match(/texture2D\(uCloudArt/g)?.length,
+    2,
+    "impostor depth must stay within its two-sample texture budget",
+  );
+  const varyingNames = (shader) => [...shader.matchAll(/\bvarying\s+\w+\s+(\w+)\s*;/g)]
+    .map((match) => match[1]).sort();
+  assert.deepEqual(
+    varyingNames(field.cloudMesh.material.fragmentShader),
+    varyingNames(field.cloudMesh.material.vertexShader),
+    "the impostor shader stages must expose the same custom varying interface",
+  );
+  assert.ok(field.uniforms.uCloudArt);
+  assert.ok(field.uniforms.uCloudArtEnabled);
   assert.match(field.shadowMesh.material.fragmentShader, /shadowEnvelope/,
     "cloud shadows must feather instead of exposing rectangular proxy geometry");
+  const diagnostics = field.renderDiagnostics();
+  assert.equal(diagnostics.maxCloudInstances, 302);
+  assert.equal(diagnostics.maxSteadyStateDrawCalls, 2);
+  assert.equal(diagnostics.impostorDepthLayers, 2);
+  assert.equal(diagnostics.impostorArtSamplesPerFragment, 2);
+  assert.equal(diagnostics.volumeMarchSteps, 0);
   field.dispose();
+  assert.deepEqual(
+    {
+      disposed: field.renderDiagnostics().disposed,
+      drawCalls: field.renderDiagnostics().drawCalls,
+      cloudInstances: field.renderDiagnostics().cloudInstances,
+    },
+    { disposed: true, drawCalls: 0, cloudInstances: 0 },
+  );
 });
 
 test("browser value noise matches the simulation reference vector", () => {

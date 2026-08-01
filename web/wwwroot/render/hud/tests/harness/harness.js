@@ -25,6 +25,9 @@ import { SCENARIOS, buildScenarioState, scenarioByName } from "./scenarios.js";
 const urlParams = new URLSearchParams(globalThis.location?.search ?? "");
 const WIDTH = Math.max(320, Number(urlParams.get("w")) || 1300);
 const HEIGHT = Math.max(320, Number(urlParams.get("h")) || 900);
+const requestedProfile = String(urlParams.get("profile") || "standard");
+const PROFILE = ["portrait_dual_stick", "touch_dual_stick"].includes(requestedProfile)
+  ? requestedProfile : "standard";
 const DEG = Math.PI / 180;
 const BACKGROUND = "#08192e"; // solid dark blue so the green/amber strokes read on their own
 const SETTLE_FRAMES = 6; // lets acquire/attack envelopes (pipper, cues) reach steady state
@@ -268,6 +271,10 @@ async function renderScenario(name, now = 0) {
   // A fresh CombatHud per scenario: no qualifier/envelope/latch state can leak between renders.
   const hud = createHud(canvas);
   hud.setAudioEnabled(false);
+  if (PROFILE !== "standard") {
+    hud.setTouchMode(true);
+    hud.setPresentationProfile(PROFILE);
+  }
   hud.resize(WIDTH, HEIGHT, 1);
   const frame = buildFrame(scenario);
   frame.now = Number.isFinite(Number(now)) ? Number(now) : 0;
@@ -422,6 +429,7 @@ window.__debugScenario = async (name) => {
   const scenario = scenarioByName(name);
   return {
     name,
+    profile: PROFILE,
     geometry: window.__HUD_GEOMETRY ?? null,
     probes: computeProbes(frame),
     presentationCaptureSequence: lastPresentationCaptureSequence,
@@ -456,10 +464,13 @@ window.__debugScenario = async (name) => {
       gun_heat: frame.state.gun_heat,
       gun_overheat: frame.state.gun_overheat,
       gun_firing: frame.state.gun_firing,
+      ammo: frame.state.ammo,
       speed_brake: frame.state.speed_brake,
       has_speed_brake: frame.state.has_speed_brake,
       rapier_mission_available: frame.state.rapier_mission_available,
+      rapier_pattern_only: frame.state.rapier_pattern_only,
       rapier_mission_phase: frame.state.rapier_mission_phase,
+      rapier_circuit_leg: frame.state.rapier_circuit_leg,
       rapier_gun_drones_remaining: frame.state.rapier_gun_drones_remaining,
       rapier_recovery_gate: frame.state.rapier_recovery_gate,
       rtb_range_nm: frame.state.rtb_range_nm,

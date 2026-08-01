@@ -242,8 +242,8 @@ test("Communicate expresses coordination posture even between transmissions", ()
     radio_channel: "PACKAGE",
     radio_text: "Ghost One One, engaging.",
   }));
-  assert.equal(transmitting.line, "PACKAGE · ENGAGING · AUTO TX");
-  assert.equal(transmitting.tone, "active");
+  assert.equal(transmitting.line, "PACKAGE · ENGAGING");
+  assert.equal(transmitting.tone, "steady");
   assert.doesNotMatch(transmitting.line, /Ghost One One/);
 });
 

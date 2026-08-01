@@ -1,0 +1,96 @@
+{
+  "schemaVersion": "1.0.0",
+  "measurement": {
+    "frameMilliseconds": 10,
+    "silenceThresholdDbfs": -36.0,
+    "minimumPauseMilliseconds": 80,
+    "clippingAmplitude": 32760
+  },
+  "profiles": {
+    "routine": {
+      "description": "Connected normal-workload pilot, controller, tower or LSO task speech.",
+      "minimumWordsForRate": 4,
+      "minimumWordsPerMinute": 145,
+      "targetMinimumWordsPerMinute": 160,
+      "maximumWordsPerMinute": 235,
+      "targetMaximumWordsPerMinute": 215,
+      "maximumInternalPauseMilliseconds": 450,
+      "targetMaximumInternalPauseMilliseconds": 280,
+      "maximumInternalSilenceRatio": 0.28,
+      "targetMaximumInternalSilenceRatio": 0.18,
+      "maximumLeadingSilenceMilliseconds": 180,
+      "maximumTrailingSilenceMilliseconds": 220,
+      "maximumClippedSampleRatio": 0.001
+    },
+    "pattern-report": {
+      "description": "Compact independent-aircraft pattern report: identity stays clear, the familiar position/configuration block compresses, and landing intention receives slight final weight.",
+      "minimumWordsForRate": 6,
+      "minimumWordsPerMinute": 205,
+      "targetMinimumWordsPerMinute": 225,
+      "maximumWordsPerMinute": 340,
+      "targetMaximumWordsPerMinute": 310,
+      "maximumInternalPauseMilliseconds": 300,
+      "targetMaximumInternalPauseMilliseconds": 190,
+      "maximumInternalSilenceRatio": 0.18,
+      "targetMaximumInternalSilenceRatio": 0.10,
+      "maximumLeadingSilenceMilliseconds": 150,
+      "maximumTrailingSilenceMilliseconds": 180,
+      "maximumClippedSampleRatio": 0.001
+    },
+    "pattern-clearance": {
+      "description": "Practiced tower landing clearance: clear addressee and precise aircraft-specific authority, connected without ceremonial spacing.",
+      "minimumWordsForRate": 6,
+      "minimumWordsPerMinute": 165,
+      "targetMinimumWordsPerMinute": 185,
+      "maximumWordsPerMinute": 300,
+      "targetMaximumWordsPerMinute": 270,
+      "maximumInternalPauseMilliseconds": 360,
+      "targetMaximumInternalPauseMilliseconds": 230,
+      "maximumInternalSilenceRatio": 0.22,
+      "targetMaximumInternalSilenceRatio": 0.14,
+      "maximumLeadingSilenceMilliseconds": 170,
+      "maximumTrailingSilenceMilliseconds": 200,
+      "maximumClippedSampleRatio": 0.001
+    },
+    "high-workload": {
+      "description": "Short information burst while aircraft control or immediate safety has priority.",
+      "minimumWordsForRate": 4,
+      "minimumWordsPerMinute": 140,
+      "targetMinimumWordsPerMinute": 160,
+      "maximumWordsPerMinute": 250,
+      "targetMaximumWordsPerMinute": 230,
+      "maximumInternalPauseMilliseconds": 400,
+      "targetMaximumInternalPauseMilliseconds": 250,
+      "maximumInternalSilenceRatio": 0.22,
+      "targetMaximumInternalSilenceRatio": 0.12,
+      "maximumLeadingSilenceMilliseconds": 160,
+      "maximumTrailingSilenceMilliseconds": 200,
+      "maximumClippedSampleRatio": 0.001
+    },
+    "acknowledgement": {
+      "description": "One-word, callsign-only or similarly short acknowledgment where WPM is not meaningful.",
+      "minimumWordsForRate": 99,
+      "maximumDurationSeconds": 1.25,
+      "maximumInternalPauseMilliseconds": 180,
+      "maximumInternalSilenceRatio": 0.12,
+      "maximumLeadingSilenceMilliseconds": 140,
+      "maximumTrailingSilenceMilliseconds": 180,
+      "maximumClippedSampleRatio": 0.001
+    },
+    "degraded-guidance": {
+      "description": "Data-heavy or abnormal guidance deliberately slowed so the receiver can copy it.",
+      "minimumWordsForRate": 4,
+      "minimumWordsPerMinute": 95,
+      "targetMinimumWordsPerMinute": 110,
+      "maximumWordsPerMinute": 205,
+      "targetMaximumWordsPerMinute": 185,
+      "maximumInternalPauseMilliseconds": 600,
+      "targetMaximumInternalPauseMilliseconds": 450,
+      "maximumInternalSilenceRatio": 0.30,
+      "targetMaximumInternalSilenceRatio": 0.22,
+      "maximumLeadingSilenceMilliseconds": 200,
+      "maximumTrailingSilenceMilliseconds": 260,
+      "maximumClippedSampleRatio": 0.001
+    }
+  }
+}

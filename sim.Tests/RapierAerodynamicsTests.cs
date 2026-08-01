@@ -10,36 +10,32 @@ namespace GunsOnly.Sim.Tests;
 public class RapierAerodynamicsTests {
     [Fact]
     public void ReferenceGeometryMatchesClosedRapierSizing() {
-        Assert.Equal(18.0, RapierAerodynamics.ReferenceAreaM2);
-        Assert.Equal(7.35, RapierAerodynamics.SpanM);
-        Assert.Equal(3.00125, RapierAerodynamics.AspectRatio, 12);
+        Assert.Equal(RapierV2Design.ReferenceAreaM2,
+            RapierAerodynamics.ReferenceAreaM2, 12);
+        Assert.Equal(RapierV2Design.SpanM, RapierAerodynamics.SpanM, 12);
+        Assert.Equal(RapierV2Design.AspectRatio,
+            RapierAerodynamics.AspectRatio, 12);
         Assert.Equal(
             RapierAerodynamics.SpanM * RapierAerodynamics.SpanM
                 / RapierAerodynamics.ReferenceAreaM2,
             RapierAerodynamics.AspectRatio,
-            12);
-        Assert.Equal(
-            RapierAerodynamics.ReferenceAreaM2 / RapierAerodynamics.SpanM,
-            RapierAerodynamics.MeanReferenceChordM,
-            12);
+            6);
+        Assert.Equal(RapierV2Design.MeanAerodynamicChordM,
+            RapierAerodynamics.MeanReferenceChordM, 12);
     }
 
     [Fact]
-    public void RenderedPlanformExcessIsNamedBodyOverlapNotLiftArea() {
-        Assert.Equal(24.3173, RapierAerodynamics.RenderedSolidPlanformAreaM2, 4);
-        Assert.Equal(6.3173, RapierAerodynamics.BodyOverlapNonReferenceAreaM2, 4);
+    public void RenderedAndAerodynamicPlanformShareOneCanonicalShape() {
+        Assert.Equal(RapierV2Design.ReferenceAreaM2,
+            RapierAerodynamics.RenderedSolidPlanformAreaM2, 12);
+        Assert.Equal(0.0, RapierAerodynamics.BodyOverlapNonReferenceAreaM2, 12);
         Assert.Equal(
             RapierAerodynamics.RenderedSolidPlanformAreaM2
                 - RapierAerodynamics.ReferenceAreaM2,
             RapierAerodynamics.BodyOverlapNonReferenceAreaM2,
             12);
-        // Audit distinction: the solid mesh area must not silently become S for lift.
-        Assert.True(
-            RapierAerodynamics.BodyOverlapNonReferenceAreaM2 > 0.0,
-            "body-overlap/non-reference geometry must remain a positive named residual");
-        Assert.True(
-            RapierAerodynamics.ReferenceAreaM2
-                < RapierAerodynamics.RenderedSolidPlanformAreaM2);
+        Assert.Equal(RapierV2Design.MeanAerodynamicChordM,
+            RapierAerodynamics.MeanReferenceChordM, 12);
     }
 
     [Fact]
@@ -188,37 +184,41 @@ public class RapierAerodynamicsTests {
                 RapierAerodynamics.RamRegimeStartMach - 1e-6, 0.6, 0.2),
             6);
 
-        double onDesign = RapierAerodynamics.InletFlowRecovery(2.6, 0.0, 0.0);
+        double incidence = RapierAerodynamics.InletDesignFlowIncidenceRad;
+        double onDesign = RapierAerodynamics.InletFlowRecovery(2.6, incidence, 0.0);
         Assert.Equal(1.0, onDesign, 6);
 
-        double alphaOff = RapierAerodynamics.InletFlowRecovery(2.6, 0.25, 0.0);
-        double betaOff = RapierAerodynamics.InletFlowRecovery(2.6, 0.0, 0.25);
-        double bothOff = RapierAerodynamics.InletFlowRecovery(2.6, 0.25, 0.25);
+        double alphaOff = RapierAerodynamics.InletFlowRecovery(2.6, incidence + 0.25, 0.0);
+        double betaOff = RapierAerodynamics.InletFlowRecovery(2.6, incidence, 0.25);
+        double bothOff = RapierAerodynamics.InletFlowRecovery(
+            2.6, incidence + 0.25, 0.25);
         Assert.True(alphaOff < onDesign);
         Assert.True(betaOff < onDesign);
         Assert.Equal(alphaOff, betaOff, 9);
         Assert.True(bothOff < alphaOff);
 
         // Higher Mach makes the same off-design angle hurt more (continuous degradation).
-        double atRam = RapierAerodynamics.InletFlowRecovery(2.1, 0.20, 0.10);
-        double atHigh = RapierAerodynamics.InletFlowRecovery(3.2, 0.20, 0.10);
+        double atRam = RapierAerodynamics.InletFlowRecovery(
+            2.1, incidence + 0.20, 0.10);
+        double atHigh = RapierAerodynamics.InletFlowRecovery(
+            3.2, incidence + 0.20, 0.10);
         Assert.True(atHigh < atRam);
         Assert.True(atHigh > 0.0);
         Assert.True(atRam <= 1.0);
 
         double justBelow = RapierAerodynamics.InletFlowRecovery(
-            RapierAerodynamics.RamRegimeStartMach - 1e-6, 0.3, 0.2);
+            RapierAerodynamics.RamRegimeStartMach - 1e-6, incidence + 0.3, 0.2);
         double atOnset = RapierAerodynamics.InletFlowRecovery(
-            RapierAerodynamics.RamRegimeStartMach, 0.3, 0.2);
+            RapierAerodynamics.RamRegimeStartMach, incidence + 0.3, 0.2);
         double justAbove = RapierAerodynamics.InletFlowRecovery(
-            RapierAerodynamics.RamRegimeStartMach + 1e-6, 0.3, 0.2);
+            RapierAerodynamics.RamRegimeStartMach + 1e-6, incidence + 0.3, 0.2);
         Assert.Equal(1.0, justBelow, 9);
         Assert.Equal(1.0, atOnset, 9);
         Assert.InRange(Math.Abs(justAbove - atOnset), 0.0, 1e-8);
     }
 
     [Fact]
-    public void LevelFlightAlphaFloorSupportsDesignGrossAtFl720Mach35() {
+    public void NormalLawScheduleSupportsDesignGrossAtFl720Mach35() {
         AircraftParams p = FlightModel.RapierPublicDataSurrogate;
         const double fl720M = 21_945.6;
         AtmosphericState air = StandardAtmosphere1976.Instance.Sample(fl720M);
@@ -229,38 +229,71 @@ public class RapierAerodynamicsTests {
         double floor = RapierAerodynamics.LevelFlightAlphaFloorRad(
             p.MassKg, q, clAlpha, loadFactor: 1.05);
         double schedule = RapierAerodynamics.NormalLawAlphaLimitRad(mach);
-        Assert.True(floor > schedule,
-            $"Pass 2 floor {floor:F4} rad should exceed Mach schedule {schedule:F4} at FL720/M3.5");
-        double cl = clAlpha * floor;
+        Assert.True(schedule >= floor,
+            $"Mach schedule {schedule:F4} rad should clear the 1.05g floor {floor:F4} at FL720/M3.5");
+        double cl = clAlpha * schedule;
         double nz = q * RapierAerodynamics.ReferenceAreaM2 * cl / (p.MassKg * 9.80665);
-        Assert.InRange(nz, 1.04, 1.06);
+        Assert.InRange(nz, 1.05, 1.20);
     }
 
     [Fact]
     public void InletUnstartIsStickyAboveRamAndClearsWhenFlowAngleUnloads() {
         const double mach = 2.6;
-        Assert.False(RapierAerodynamics.NextInletUnstartState(mach, 0.0, 0.0, false));
+        double incidence = RapierAerodynamics.InletDesignFlowIncidenceRad;
         Assert.False(RapierAerodynamics.NextInletUnstartState(
-            RapierAerodynamics.RamRegimeStartMach, 0.5, 0.0, false));
+            mach, incidence, 0.0, false));
+        Assert.False(RapierAerodynamics.NextInletUnstartState(
+            RapierAerodynamics.RamRegimeStartMach, incidence + 0.5, 0.0, false));
 
         Assert.True(RapierAerodynamics.NextInletUnstartState(
-            mach, RapierAerodynamics.InletUnstartTripFlowAngleRad, 0.0, false));
+            mach, incidence + RapierAerodynamics.InletUnstartTripFlowAngleRad + 1e-9,
+            0.0, false));
         Assert.True(RapierAerodynamics.NextInletUnstartState(
-            mach, 0.08, 0.0, previouslyUnstarted: true),
+            mach, incidence + 0.08, 0.0, previouslyUnstarted: true),
             "sticky unstart holds until clear angle");
         Assert.False(RapierAerodynamics.NextInletUnstartState(
-            mach, RapierAerodynamics.InletUnstartClearFlowAngleRad, 0.0,
+            mach, incidence + RapierAerodynamics.InletUnstartClearFlowAngleRad - 1e-9, 0.0,
             previouslyUnstarted: true));
 
-        double continuous = RapierAerodynamics.InletFlowRecovery(mach, 0.08, 0.0);
+        double continuous = RapierAerodynamics.InletFlowRecovery(
+            mach, incidence + 0.08, 0.0);
         double collapsed = RapierAerodynamics.InletFlowRecovery(
-            mach, 0.08, 0.0, inletUnstarted: true);
+            mach, incidence + 0.08, 0.0, inletUnstarted: true);
         Assert.True(collapsed <= RapierAerodynamics.InletUnstartRecoveryFloor + 1e-9);
         Assert.True(collapsed <= continuous);
     }
 
+    [Theory]
+    [InlineData(1.9, 0.30, 0.20, false, 1.0, false)]
+    [InlineData(2.3, 0.12, 0.04, false, 0.15, true)]
+    [InlineData(2.6, 0.08, 0.03, false, 0.9240406226587864, false)]
+    [InlineData(2.6, 0.08, 0.03, true, 0.15, true)]
+    [InlineData(4.2, 0.05, 0.04, false, 0.8940458962166633, false)]
+    public void InletGoldenVectorsMatchTheShapeFirstEngineeringModel(
+        double mach,
+        double alphaDeviationRad,
+        double betaRad,
+        bool previouslyUnstarted,
+        double expectedRecovery,
+        bool expectedUnstarted) {
+        double alphaRad = RapierAerodynamics.InletDesignFlowIncidenceRad
+            + alphaDeviationRad;
+        bool unstarted = RapierAerodynamics.NextInletUnstartState(
+            mach, alphaRad, betaRad, previouslyUnstarted);
+        double recovery = RapierAerodynamics.InletFlowRecovery(
+            mach, alphaRad, betaRad, unstarted);
+
+        Assert.Equal(expectedUnstarted, unstarted);
+        Assert.Equal(expectedRecovery, recovery, precision: 12);
+    }
+
     [Fact]
     public void HighDynamicPressurePlacardIsAuthoredSoftCue() {
+        Assert.Equal(55_000.0, RapierAerodynamics.HighDynamicPressurePlacardPa, 9);
+        Assert.Equal(RapierV2Design.MaximumDynamicPressurePa,
+            RapierAerodynamics.HighDynamicPressurePlacardPa, 12);
+        Assert.Equal(RapierV2Design.MaximumScreenedMach,
+            RapierAerodynamics.MaximumOperatingMach, 12);
         Assert.False(RapierAerodynamics.IsOverDynamicPressure(
             RapierAerodynamics.HighDynamicPressurePlacardPa));
         Assert.True(RapierAerodynamics.IsOverDynamicPressure(

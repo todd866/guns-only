@@ -17,7 +17,8 @@ public class TimeCompressionTests {
         DamagePresent: false,
         FuelThresholdOrLead: false,
         ControlInputBeyondTrim: false,
-        RamTransitionLead: false);
+        RamTransitionLead: false,
+        ApproachFactorCap: TimeCompressionPolicy.PreferredFactor);
 
     /// The beat both compression tests fly: established supersonic transit, nothing eventful.
     static BeatSetup RapierCruiseBeat() {
@@ -25,10 +26,11 @@ public class TimeCompressionTests {
         return baseline with {
             Player = baseline.Player with {
                 Position = new Vec3D(0.0, 15_000.0, 0.0),
-                // M1.35-ish is established supersonic transit but is not inside the M1.6
-                // ram-light handover lead. A fixture at M2.7 accidentally tested transition
-                // protection instead of uneventful cruise.
-                Speed = 400.0,
+                // M1.27. This was 400 m/s / M1.356, which cleared the M1.6 ram-light lead by
+                // 0.0043 Mach -- 0.4% -- so any acceleration at all put the fixture inside the
+                // taper and the test measured transition protection instead of quiet cruise. A
+                // fixture that close to a boundary is not testing what its name says.
+                Speed = 375.0,
                 Gamma = 0.0,
                 Chi = 0.0,
                 Bank = 0.0
@@ -70,13 +72,53 @@ public class TimeCompressionTests {
 
         int selected = session.Advance(SimulationSession.FixedDeltaSeconds, 8);
 
-        Assert.True(selected == 4,
-            $"expected 4x, got {selected}x: {session.TimeCompressionInhibitReason}");
-        Assert.True(session.TimeCompressionFactor == 4,
+        Assert.True(selected == 8,
+            $"expected 8x, got {selected}x: {session.TimeCompressionInhibitReason}");
+        Assert.True(session.TimeCompressionFactor == 8,
             $"compression handed back during quiet transit: "
                 + session.TimeCompressionInhibitReason);
         Assert.True(session.TimeCompressionEligible);
-        Assert.Equal(4, session.Tick);
+        Assert.Equal(8, session.Tick);
+        Assert.Equal(8, session.TimeCompressionSafetyFactorCap);
+    }
+
+    [Theory]
+    [InlineData(double.PositiveInfinity, 8)]
+    [InlineData(60.0, 8)]
+    [InlineData(48.0, 4)]
+    [InlineData(24.0, 2)]
+    [InlineData(12.0, 1)]
+    public void PredictableTimeBoundariesTaperThroughThePowerOfTwoLadder(
+        double secondsUntilBoundary, int expectedFactor) {
+        Assert.Equal(expectedFactor,
+            TimeCompressionPolicy.FactorCapForLeadSeconds(secondsUntilBoundary));
+    }
+
+    [Theory]
+    [InlineData(double.PositiveInfinity, 8)]
+    [InlineData(0.25, 8)]
+    [InlineData(0.24, 4)]
+    [InlineData(0.12, 2)]
+    [InlineData(0.06, 1)]
+    public void RamBoundariesUseAnExplicitMachMarginLadder(
+        double machMargin, int expectedFactor) {
+        Assert.Equal(expectedFactor,
+            TimeCompressionPolicy.FactorCapForRamMachMargin(machMargin));
+    }
+
+    [Theory]
+    [InlineData(8, 8, 8)]
+    [InlineData(8, 6, 4)]
+    [InlineData(4, 8, 4)]
+    [InlineData(4, 3, 2)]
+    [InlineData(2, 8, 2)]
+    public void KernelSafetyCapOwnsTheAcceptedFactor(
+        int safetyCap, int hostCap, int expectedFactor) {
+        TimeCompressionSafetyState state = UneventfulTransit() with {
+            ApproachFactorCap = safetyCap
+        };
+        Assert.Equal(expectedFactor,
+            TimeCompressionPolicy.SelectFactor(state, hostMaximumFactor: hostCap));
     }
 
     [Fact]
@@ -127,7 +169,7 @@ public class TimeCompressionTests {
     [Fact]
     public void ControlInputDisengagesBeforeAnotherTick() {
         var session = EstablishedRapierCruise();
-        Assert.Equal(4,
+        Assert.Equal(8,
             session.Advance(SimulationSession.FixedDeltaSeconds, 8));
 
         long tickAtInput = session.Tick;

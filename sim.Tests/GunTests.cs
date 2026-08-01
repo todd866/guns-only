@@ -267,6 +267,71 @@ public class GunTests {
     }
 
     [Fact]
+    public void PureBallisticEvaluatorMatchesLiveLeadAndBodyAxisPredicate() {
+        GunProfile profile = GunProfiles.M61A2PublicDataSurrogate;
+        var target = State(
+            new Vec3D(0.0, 3_000.0, 650.0),
+            speed: 170.0,
+            chi: Math.PI / 2.0);
+        var alignedOwn = State(new Vec3D(0.0, 3_000.0, 0.0), speed: 210.0);
+
+        // Converge the body-fixed muzzle station and the exact ballistic lead together. The
+        // aircraft velocity remains on its original flight path; only its physical gun axis moves.
+        for (int iteration = 0; iteration < 4; iteration++) {
+            GunBallisticSolution solution = GunKill.EvaluateBallisticLead(
+                alignedOwn, target, profile, profile.EffectiveHitRadiusM);
+            Assert.True(solution.HasLeadSolution);
+            alignedOwn = alignedOwn with {
+                BodyAttitude = AimAttitude(solution.LeadDirection),
+            };
+        }
+
+        GunBallisticSolution aligned = GunKill.EvaluateBallisticLead(
+            alignedOwn, target, profile, profile.EffectiveHitRadiusM);
+        Assert.True(aligned.BodyAxisOnSolution);
+        Assert.True(aligned.BoreErrorRad <= aligned.HitConeHalfAngleRad);
+        AssertMatchesLive(alignedOwn, aligned);
+
+        const double DeliberateMissDeg = 2.0;
+        double deliberateMissRad = DeliberateMissDeg * Math.PI / 180.0;
+        Vec3D lateral = new Vec3D(0.0, 1.0, 0.0)
+            .Cross(aligned.LeadDirection)
+            .Normalized();
+        Vec3D outsideConeAxis = (
+            aligned.LeadDirection * Math.Cos(deliberateMissRad)
+            + lateral * Math.Sin(deliberateMissRad)).Normalized();
+        AircraftState outsideOwn = alignedOwn with {
+            BodyAttitude = AimAttitude(outsideConeAxis),
+        };
+        GunBallisticSolution outside = GunKill.EvaluateBallisticLead(
+            outsideOwn, target, profile, profile.EffectiveHitRadiusM);
+
+        Assert.False(outside.BodyAxisOnSolution);
+        Assert.True(outside.BoreErrorRad > outside.HitConeHalfAngleRad);
+        AssertMatchesLive(outsideOwn, outside);
+
+        void AssertMatchesLive(in AircraftState own, in GunBallisticSolution expected) {
+            bool solved = GunKill.TrySolveBallisticLead(
+                own, target, profile, out Vec3D direction, out double timeOfFlight);
+            Assert.Equal(expected.HasLeadSolution, solved);
+            Assert.True((direction - expected.LeadDirection).Length < 1e-12);
+            Assert.Equal(expected.TimeOfFlightSeconds, timeOfFlight, 12);
+
+            var live = new GunKill(
+                ammo: 0,
+                hitsToKill: 1,
+                hitRadiusM: profile.EffectiveHitRadiusM,
+                profile: profile);
+            live.Step(false, own, target, 0.0);
+
+            Assert.Equal(expected.HasLeadSolution, live.HasLeadSolution);
+            Assert.True((expected.LeadDirection - live.LeadDirection).Length < 1e-12);
+            Assert.Equal(expected.TimeOfFlightSeconds, live.LeadTimeOfFlight, 12);
+            Assert.Equal(expected.BodyAxisOnSolution, live.InstantaneousGunSolution);
+        }
+    }
+
+    [Fact]
     public void RealHitsAccumulateDamageToSplash() {
         var gun = new GunKill();
         var own = State(Vec3D.Zero);

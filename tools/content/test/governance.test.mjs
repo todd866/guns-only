@@ -11,6 +11,8 @@ import { validateGovernance } from "../validate-governance.mjs";
 const TEST_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = path.resolve(TEST_DIRECTORY, "../../..");
 const DOSSIER = "content/governance/korea-braided/missions/first-echo.dossier.json";
+const ARMSTRONG_DOSSIER =
+  "content/governance/korea-braided/missions/armstrong-cable-strike.dossier.json";
 
 async function temporaryGovernance(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), "guns-only-governance-"));
@@ -30,17 +32,62 @@ async function mutateDossier(root, mutate) {
   await writeFile(file, stableStringify(document));
 }
 
-test("canonical campaign governance and worked dossier pass the strict gate", async () => {
+test("canonical campaign governance and worked dossiers pass the strict gate", async () => {
   const report = await validateGovernance({ root: REPOSITORY_ROOT, strict: true });
   assert.equal(report.ok, true, stableStringify(report));
   assert.deepEqual(report.summary, {
     schemas: 2,
     campaigns: 1,
-    dossiers: 1,
-    sorties: 3,
-    claims: 6,
-    sources: 5,
+    dossiers: 2,
+    sorties: 5,
+    claims: 17,
+    sources: 13,
   });
+});
+
+test("Armstrong dossier remains source intake rather than false source lock", async () => {
+  const dossier = JSON.parse(await readFile(
+    path.join(REPOSITORY_ROOT, ARMSTRONG_DOSSIER), "utf8"));
+  const claims = new Map(dossier.claims.map((claim) => [claim.claimId, claim]));
+
+  assert.equal(dossier.status, "researching");
+  assert.deepEqual(new Set(dossier.reviews.map((review) => review.status)), new Set(["pending"]));
+  assert.match(claims.get("claim.armstrong-vf51-essex.v1").qualification,
+    /3 September.*F9F-2/s);
+  assert.match(claims.get("claim.armstrong-vf51-essex.v1").qualification,
+    /H-Gram 033.*5 September\/F9F-3/s);
+  assert.equal(dossier.sorties[0].perspective.vehicleCapabilityId,
+    "aircraft.f9f2.v1");
+  assert.equal(dossier.sources.some((source) =>
+    source.sourceId === "source.dpaa-korea-air-loss-register-2021.v1"
+      && source.supportsClaimIds.includes("claim.armstrong-vf51-essex.v1")), true);
+  assert.equal(dossier.sources.some((source) =>
+    source.sourceId === "source.nhhc-essex-action-report-1951.v1"
+      && source.grade === "primary_document"), true);
+  assert.equal(dossier.sources.some((source) =>
+    source.sourceId === "source.nhhc-cvg5-action-report-1951.v1"
+      && source.grade === "primary_document"), true);
+  assert.equal(dossier.sources.some((source) =>
+    source.sourceId === "source.nhhc-buno-appendix-1910-1995.v1"
+      && source.supportsClaimIds.includes("claim.armstrong-vf51-essex.v1")), true);
+  assert.match(claims.get("claim.armstrong-vf51-essex.v1").qualification,
+    /125080-125152.*F9F-5.*aircraft history card/s);
+  assert.match(claims.get("claim.armstrong-armed-recon-wonsan.v1").qualification,
+    /exact target.*corridor.*loadout/);
+  assert.match(claims.get("claim.cable-field-gameplay-reconstruction.v1").qualification,
+    /not the exact local obstacle layout/);
+  assert.match(claims.get("claim.carpenter-flight-lead.v1").qualification,
+    /radio wording/);
+  assert.match(claims.get("claim.panther-ejection-seat.v1").qualification,
+    /first-person recollection.*not as engineering source lock/);
+  assert.match(claims.get("claim.armstrong-ejection-friendly-territory.v1").qualification,
+    /H-Gram synthesis, not Armstrong's interview/);
+  assert.match(claims.get("claim.armstrong-ejection-friendly-territory.v1").qualification,
+    /ground-recovery staging cannot be presented as exact history/i);
+
+  const serialized = JSON.stringify(dossier);
+  assert.doesNotMatch(serialized,
+    /PaperLibrary|paperLibraryId|researchAsset|armstrong-korea-research|primary\/(?:images|video)|sha256/);
 });
 
 test("historical and technical claims cannot silently lose source closure", async (t) => {

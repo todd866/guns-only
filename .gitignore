@@ -28,6 +28,7 @@ testrig/scenarios/_replay.json
 # The tracked record of what they are lives in docs/development-recordings.md.
 recordings/
 .worktrees/
+.claude/worktrees/
 
 # Circuit / intercept / glide-drone OFT run tapes (agent-facing). Keep analysis/*/README.md tracked.
 analysis/circuit-oft/*/
@@ -81,3 +82,10 @@ analysis/audio-refs/
 # metadata remain local so reference-only material cannot enter a web build.
 analysis/jet-audio-library/
 anca-shots/
+
+# Scratch downloads (research PDFs/imagery). The tracked research store with its licence
+# ledger lives in ../armstrong-korea-research; this public repo must not carry that material.
+tmp/
+
+# Advisory inter-agent file claims (bin/claim) -- local coordination, not history.
+.agent-claims/

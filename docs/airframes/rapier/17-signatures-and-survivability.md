@@ -29,9 +29,11 @@ the trade:
    (**anchor**, subject to the ch. 16 verification discipline), precisely the kind of frontier
    the 2026-buildable freeze exists to exclude.
 3. **The economics forbid it.** LO surface maintenance is a defining share of the exquisite
-   fighter's cost per flying hour (**anchor**: the F-22's LO-restoration burden). A ~$9M,
-   ~50-sortie article ([95](95-cost-ledger.md)) that needs coating restoration between sorties
-   is a contradiction in terms.
+   fighter's cost per flying hour (**anchor**: the F-22's LO-restoration burden). A ~$9M high-rate
+   aircraft with exchangeable hot modules and independently tracked component life
+   ([85](85-service-life-maintenance-and-telemetry.md)) cannot depend on delicate all-aspect
+   coating restoration after heat, field handling, or every sortie and retain its availability and
+   cost thesis.
 
 ## What survivability is bought with instead
 
@@ -46,9 +48,11 @@ The 1960s answer, priced honestly: **kinematics, dispersal, and attrition tolera
   the targetable object is a hole in the ground, not a ramp full of jets — the 2020s Ukraine
   lesson this basing already encodes.
 - **Attrition price** ([95](95-cost-ledger.md), [16](16-manufacturing-and-industrial-basis.md)):
-  the airframe is a 50-sortie round from a production line. Losing one is a line item; the
-  line is the weapon. Stealth exists to make rare aircraft survivable; this program makes
-  aircraft non-rare.
+  high-rate production, dispersed depots, repair, and rotable recovery make combat loss
+  replaceable without making the aircraft disposable. A wreck may still be worth recovering for
+  its capsule, engine, hot modules, avionics, and gun. The line and depot network prevent each
+  aircraft becoming irreplaceable; planned retirement after an arbitrary sortie count is not part
+  of the survivability case.
 
 ## What comes nearly free (and is already canon)
 

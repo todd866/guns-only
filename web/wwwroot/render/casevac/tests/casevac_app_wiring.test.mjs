@@ -76,7 +76,10 @@ test("flight-first UI exposes steering, route, power and authored contact limits
   assert.match(source, />DEST RESERVE</);
   assert.match(source, /data-cvf="groundspeed"/);
   assert.match(source, /data-cvf="wind"/);
-  assert.match(source, /the assessed safe masking band is 12–42 m AGL/);
+  assert.match(source, /hold 32–42 m AGL near its 28 m windbreak/,
+    "the visible brief must clear the orchard authority rather than advertising a lethal band");
+  assert.match(source, /away from the orchard the assessed masking band remains 12–42 m AGL/,
+    "route-specific clearance must preserve the authored masking assessment elsewhere");
   assert.match(source,
     /enter within 6 m at no more than 0\.45 m\/s lateral speed and 0\.25 m\/s vertical speed/);
   assert.match(source, /absolute pitch and bank at or below 5°/);
@@ -299,4 +302,40 @@ test("finished Medevac screen uses disposition and four independent axes", () =>
     /readyConfig\.textContent = result\.handoff[\s\S]*: state\?\.maintenance_scenario[\s\S]*: casevac[\s\S]*\? casevacFacts\.axes/);
   assert.match(source,
     /readyControls\.textContent = result\.handoff[\s\S]*: casevac[\s\S]*Primary correction · \$\{casevacFacts\.correction\}/);
+});
+
+test("touch CASEVAC exposes and drives four truthful independent axes", () => {
+  assert.match(source,
+    /fallbackStickLabel\.textContent = casevac \? "MOVE" : "THR \/ YAW"/);
+  assert.match(source,
+    /targetStickLabel\.textContent = casevac \? "YAW" : "STICK"/);
+  assert.match(source,
+    /casevac \? "Yaw control" : "Right stick: pitch and roll"/);
+  assert.match(source,
+    /casevac[\s\S]*?Drag left or right to yaw\. The control centres when released\./);
+  assert.match(source,
+    /function updateVirtualStickPointer[\s\S]*?if \(casevac\)[\s\S]*?setCasevacStickAxis\("roll", state\.rollCode\)[\s\S]*?setCasevacStickAxis\("pitch", state\.pitchCode\)/,
+    "left touch must own translation and forward/reverse through the CASEVAC key grammar");
+  assert.match(source,
+    /function syncVirtualStickKeyboard[\s\S]*?isCasevacState\(latestState\)[\s\S]*?setCasevacStickAxis\("roll"[\s\S]*?setCasevacStickAxis\("pitch"/,
+    "accessible arrow operation must use the same CASEVAC movement grammar");
+  assert.match(source,
+    /function updateTargetStickPointer[\s\S]*?if \(casevac\)[\s\S]*?setCasevacStickAxis\("yaw", state\.rollCode === "ArrowLeft"[\s\S]*?"KeyA"[\s\S]*?"KeyD"/,
+    "right touch must own yaw without advertising fighter pitch/roll");
+  assert.match(source,
+    /function applyFlightStick\(\)[\s\S]*?if \(isCasevacState\(latestState\)\)[\s\S]*?releaseDirectFlightAxes\("touch"\)[\s\S]*?return false/,
+    "fighter tilt trim must not leak analog lateral translation into CASEVAC");
+  assert.match(source,
+    /function releaseVirtualStick\(\)[\s\S]*?releaseCasevacStickAxes\("roll", "pitch"\)/);
+  assert.match(source,
+    /function releaseTargetStick\(\)[\s\S]*?releaseCasevacStickAxes\("yaw"\)/);
+  assert.match(source,
+    /const casevacReady = selectedBeat === 13 \|\| isCasevacState\(state\);[\s\S]*?casevacReady[\s\S]*?LEFT STICK forward\/reverse\/translate · RIGHT STICK yaw · VERT climb\/descend · ABORT requests return[\s\S]*?Medevac has no target, padlock, or gun controls/,
+    "the Ready briefing must teach the CASEVAC touch surface instead of fighter controls");
+});
+
+test("CASEVAC Ready copy does not promise the fighter-only gamepad mapping", () => {
+  assert.match(source,
+    /: casevacReady\s*\? keyboardControls\s*:\s*`\$\{keyboardControls\}\\nController: LS fly/,
+    "desktop CASEVAC must stop at its truthful keyboard contract");
 });

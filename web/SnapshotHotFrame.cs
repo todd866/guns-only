@@ -6,6 +6,7 @@ using GunsOnly.Sim.Casevac;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
 using GunsOnly.Sim.Propulsion;
+using GunsOnly.Sim.Recovery;
 using GunsOnly.Sim.Turbulence;
 using GunsOnly.Sim.Vehicles;
 
@@ -42,7 +43,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 18;
+    public const int LayoutVersion = 21;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -107,13 +108,23 @@ internal static class SnapshotHotFrame {
         Debug.Assert(slots.Count - 1 == ColdVersionIndex);
 
         Num("t", 4);
+        Num("simulation_time_s", 3);
         Num("tick", RawInteger);
         Bool("time_compression_available");
         Bool("time_compression_enabled");
         Bool("time_compression_eligible");
         Num("time_compression_requested_factor", RawInteger);
+        Num("time_compression_safety_factor_cap", RawInteger);
         Num("time_compression_factor", RawInteger);
         Bool("rapier_mission_available");
+        Bool("service_life_record_available");
+        Num("service_life_record_sequence", RawInteger);
+        Bool("service_life_exceedance_review_required");
+        Num("service_life_over_structural_limit_s", 3);
+        Num("service_life_over_dynamic_pressure_s", 3);
+        Num("service_life_max_g", 3);
+        Num("service_life_max_dynamic_pressure_kpa", 2);
+        Num("service_life_min_thermal_margin_c", 1);
         Bool("rapier_pattern_only");
         Bool("rapier_automation_enabled");
         Bool("rapier_automation_active");
@@ -160,6 +171,7 @@ internal static class SnapshotHotFrame {
         Bool("rapier_gate_in_volume");
         Bool("rapier_gate_energy_ok");
         Num("rapier_nose_on_v_err_deg", 1);
+        Num("rapier_target_gamma_deg", 2);
         Num("rapier_lob_skip", RawInteger);
         Num("rapier_lob_skip_max", RawInteger);
         Num("rapier_rcs_gas_frac", 3);
@@ -168,6 +180,7 @@ internal static class SnapshotHotFrame {
         Num("rapier_rcs_firing_frac", 3);
         Num("rapier_inlet_recovery", 3);
         Bool("rapier_inlet_distorted");
+        Bool("rapier_inlet_unstart");
         Num("rapier_normal_alpha_limit_deg", 2);
         Bool("rapier_zoom_lob");
         Num("rapier_commanded_mach", 2);
@@ -178,14 +191,19 @@ internal static class SnapshotHotFrame {
         Num("rapier_ramjet_thrust_lbf", 0);
         Num("rapier_turbine_thrust_kn", 2);
         Num("rapier_ramjet_thrust_kn", 2);
+        Num("rapier_drag_lbf", 1);
+        Num("rapier_dynamic_pressure_limit_kpa", 2);
+        Num("rapier_relight_dynamic_pressure_kpa", 2);
         Num("rapier_turbine_fuel_ppm", 2);
         Num("rapier_ramjet_fuel_ppm", 2);
         Num("rapier_skin_temp_c", 0);
         Num("rapier_recovery_temp_c", 0);
         Num("rapier_stagnation_temp_c", 0);
+        Num("rapier_thermal_effective_temp_c", 0);
+        Nul("rapier_thermal_capability_c", 0);
         Nul("rapier_cmc_capability_c", 0);
         Nul("rapier_cmc_margin_c", 0);
-        Num("rapier_thermal_margin_c", 0);
+        Nul("rapier_thermal_margin_c", 0);
         Num("player_gross_lb", 0);
         Num("rapier_intercept_eti_min", 1);
         Num("px", 3); Num("py", 3); Num("pz", 3);
@@ -194,6 +212,7 @@ internal static class SnapshotHotFrame {
         Num("vx", 3); Num("vy", 3); Num("vz", 3);
         Num("pfx", 5); Num("pfy", 5); Num("pfz", 5);
         Num("plx", 5); Num("ply", 5); Num("plz", 5);
+        Bool("opponent_present");
         Num("bx", 3); Num("by", 3); Num("bz", 3);
         Num("bfx", 5); Num("bfy", 5); Num("bfz", 5);
         Num("blx", 5); Num("bly", 5); Num("blz", 5);
@@ -443,6 +462,29 @@ internal static class SnapshotHotFrame {
         Num("rtb_turn_deg", 2);
         Num("rtb_range_nm", 2);
         Bool("recovery_point_known");
+        Bool("carrier_sortie_route_active");
+        Num("carrier_sortie_route_phase_code", RawInteger);
+        Num("carrier_sortie_route_fix_code", RawInteger);
+        Num("carrier_sortie_route_target_x", 2);
+        Num("carrier_sortie_route_target_y", 2);
+        Num("carrier_sortie_route_target_z", 2);
+        Num("carrier_sortie_route_target_bearing_deg", 2);
+        Num("carrier_sortie_route_target_turn_deg", 2);
+        Num("carrier_sortie_route_distance_m", 1);
+        Num("carrier_sortie_route_target_tas_mps", 1);
+        Num("carrier_sortie_route_capture_radius_m", 1);
+        Bool("carrier_sortie_route_rtb_available");
+        Bool("carrier_sortie_route_rtb_requested");
+        Bool("straight_deck_barrier_armed");
+        Bool("straight_deck_barrier_engaged");
+        Bool("sortie_valid");
+        Num("sortie_leg_code", RawInteger);
+        Num("sortie_target_height_m", 1);
+        Num("sortie_target_tas_mps", 1);
+        Num("sortie_power_01", 3);
+        Num("sortie_limit_code", RawInteger);
+        Num("sortie_distance_to_go_m", 0);
+        Num("sortie_waveoff_s", 1);
         Bool("runway_available");
         Nul("runway_threshold_x", 2);
         Nul("runway_threshold_y", 2);
@@ -712,14 +754,17 @@ internal static class SnapshotHotFrame {
 
         // ---- Derivation prologue: duplicated from SnapshotProjection.BuildState on purpose ----
         AircraftSim player = session.Player;
-        IBandit bandit = session.Bandit;
+        bool opponentPresent = session.OpponentPresent;
+        IBandit? bandit = opponentPresent ? session.Bandit : null;
         BeatSetup beat = session.Beat;
         DetentLayer detents = session.Controls;
         PilotCommand requestedCommand = detents.Command;
         PilotCommand appliedCommand = player.LastAppliedCommand;
         bool lateralControlApplied = player.HasAppliedFlightCommand;
-        GunKill gunKill = session.PlayerGun;
-        GunKill opponentGun = session.OpponentGun;
+        GunKill? gunKill = opponentPresent ? session.PlayerGun : null;
+        GunKill? opponentGun = opponentPresent ? session.OpponentGun : null;
+        GunProfile playerGunProfile = gunKill?.Profile
+            ?? beat.CombatRules.PlayerGunProfile;
         FuelModel fuel = session.PlayerFuel;
         AirframeSystems systems = session.PlayerSystems;
         PilotPhysiologyState physiology = session.PilotPhysiologyState;
@@ -738,8 +783,10 @@ internal static class SnapshotHotFrame {
 
         bool catapulting = catapult.IsActive;
         AircraftState s = catapulting ? catapult.State : player.State;
-        AircraftState b = bandit.State;
-        AircraftState gunTarget = session.SelectedOpponentState;
+        AircraftState b = bandit?.State ?? default;
+        AircraftState gunTarget = opponentPresent
+            ? session.SelectedOpponentState
+            : default;
         bool arrested = arrestment.IsActive && !catapulting;
         Vec3D simulationPosition = arrested ? arrestment.Position : s.Position;
         Vec3D playerPosition = simulationPosition;
@@ -782,27 +829,38 @@ internal static class SnapshotHotFrame {
             : rapierRecoveryTempC;
         double rapierStagnationTempC =
             AirData.StagnationTemperatureK(mach, atmosphericState.TemperatureK) - 273.15;
-        double? rapierCmcCapabilityC = session.RapierMissionAvailable
+        double rapierThermalBasisK = session.Beat.PlayerAir.AerothermalLimitReference
+            == AerothermalLimitReferenceKind.StagnationTemperature
+                ? AirData.StagnationTemperatureK(mach, atmosphericState.TemperatureK)
+                : AirData.AdiabaticWallTemperatureK(mach, atmosphericState.TemperatureK);
+        double rapierThermalEffectiveC = AirData.EffectiveAerothermalZoneTemperatureK(
+            atmosphericState.TemperatureK,
+            rapierThermalBasisK,
+            session.Beat.PlayerAir.AerothermalAdiabaticRiseFraction) - 273.15;
+        double? rapierThermalCapabilityC = session.RapierMissionAvailable
             && session.Beat.PlayerAir.SkinTemperatureLimitK > 0.0
                 ? session.Beat.PlayerAir.SkinTemperatureLimitK - 273.15
                 : null;
+        double? rapierThermalMarginC = rapierThermalCapabilityC is { } thermalCapabilityC
+            ? thermalCapabilityC - rapierSkinTempC
+            : null;
+        double? rapierCmcCapabilityC = session.RapierMissionAvailable
+            ? RapierV2Design.CmcHotEdgeLimitK - 273.15
+            : null;
         double? rapierCmcMarginC = rapierCmcCapabilityC is { } cmcCapabilityC
             ? cmcCapabilityC - rapierStagnationTempC
             : null;
-        // Compatibility field: retain the old numeric shape, but make its reference conservative
-        // and truthful (material capability minus T0, never capability minus lagged wall skin).
-        double rapierLegacyThermalLimitC =
-            (session.Beat.PlayerAir.SkinTemperatureLimitK > 0.0
-                ? session.Beat.PlayerAir.SkinTemperatureLimitK : 593.15) - 273.15;
         // Minutes to the contact at present closure; negative means "do not show". Inside 20 km
         // the geometry is a fight rather than a transit and the number churns uselessly.
         double interceptEtiMinutes = -1.0;
         {
-            Vec3D etiDelta = session.Bandit.State.Position - session.Player.State.Position;
+            Vec3D etiDelta = opponentPresent
+                ? bandit!.State.Position - session.Player.State.Position
+                : Vec3D.Zero;
             double etiRangeM = etiDelta.Length;
-            if (etiRangeM >= 20_000.0) {
+            if (opponentPresent && etiRangeM >= 20_000.0) {
                 Vec3D etiRelative = session.Player.State.VelocityVector()
-                    - session.Bandit.State.VelocityVector();
+                    - bandit!.State.VelocityVector();
                 double etiClosure = etiRelative.Dot(etiDelta) / Math.Max(1.0, etiRangeM);
                 if (etiClosure > 1.0) interceptEtiMinutes = etiRangeM / etiClosure / 60.0;
             }
@@ -836,8 +894,8 @@ internal static class SnapshotHotFrame {
             s.Mass, beat.PlayerAir, playerPosition.Y, configuredLiftIncrement, atmosphere);
         bool waveOff = session.WaveOffActive;
 
-        Vec3D bl = bandit.LiftDir;
-        Vec3D bf = b.ForwardDir();
+        Vec3D bl = bandit?.LiftDir ?? Vec3D.Zero;
+        Vec3D bf = opponentPresent ? b.ForwardDir() : Vec3D.Zero;
         Vec3D pf;
         Vec3D pl;
         if (catapulting) {
@@ -884,6 +942,17 @@ internal static class SnapshotHotFrame {
                         active: playerRtbActive || fuel.RtbAdvisory)
                     : RecoveryNavigationProjection.Unknown;
         RtbGuidance rtb = recoveryNavigation.Guidance;
+        CarrierSortieRouteState carrierRoute = session.CarrierSortieRoute;
+        Vec3D routeDelta = carrierRoute.TargetPosition - playerPosition;
+        double carrierRouteBearingRad = carrierRoute.Active
+            ? Math.Atan2(routeDelta.X, routeDelta.Z)
+            : 0.0;
+        double carrierRouteTurnRad = carrierRoute.Active
+            ? Math.IEEERemainder(carrierRouteBearingRad - displayHeadingRad,
+                2.0 * Math.PI)
+            : 0.0;
+        double carrierRouteBearingDeg =
+            ((carrierRouteBearingRad * 57.29577951308232) % 360.0 + 360.0) % 360.0;
         bool splashCue = !finished && session.SplashCueActive;
         double surfaceAltitudeM = session.Terrain?.TrySample(
             playerPosition.X, playerPosition.Z, out TerrainSample terrainSample) == true
@@ -918,14 +987,42 @@ internal static class SnapshotHotFrame {
         var w = new Writer(buffer);
         w.Num("cold_version", _coldVersion, RawInteger);
         w.Num("t", simTimeMs / 1000.0, 4);
+        w.Num("simulation_time_s", simulationTimeSeconds, 3);
         w.Num("tick", session.Tick, RawInteger);
         w.Bool("time_compression_available", session.TimeCompressionAvailable);
         w.Bool("time_compression_enabled", session.TimeCompressionPilotEnabled);
         w.Bool("time_compression_eligible", session.TimeCompressionEligible);
         w.Num("time_compression_requested_factor",
             session.TimeCompressionRequestedFactor, RawInteger);
+        w.Num("time_compression_safety_factor_cap",
+            session.TimeCompressionSafetyFactorCap, RawInteger);
         w.Num("time_compression_factor", session.TimeCompressionFactor, RawInteger);
         w.Bool("rapier_mission_available", session.RapierMissionAvailable);
+        RapierServiceLifeSortieRecord? serviceLife =
+            session.RapierServiceLife.LatestRecord;
+        w.Bool("service_life_record_available", serviceLife is not null);
+        w.Num("service_life_record_sequence",
+            serviceLife?.RecordSequence ?? 0L, RawInteger);
+        w.Bool("service_life_exceedance_review_required",
+            serviceLife?.ExceedanceReviewRequired == true);
+        w.Num("service_life_over_structural_limit_s",
+            (serviceLife?.Mechanical.StructuralLimitExceedanceTicks ?? 0L)
+                / AircraftSim.TickHz,
+            3);
+        w.Num("service_life_over_dynamic_pressure_s",
+            (serviceLife?.Mechanical.DynamicPressureLimitExceedanceTicks ?? 0L)
+                / AircraftSim.TickHz,
+            3);
+        w.Num("service_life_max_g",
+            (serviceLife?.Mechanical.MaximumLoadMilliG ?? 0L) / 1000.0,
+            3);
+        w.Num("service_life_max_dynamic_pressure_kpa",
+            (serviceLife?.Mechanical.MaximumDynamicPressurePa ?? 0L) / 1000.0,
+            2);
+        w.Num("service_life_min_thermal_margin_c",
+            (serviceLife?.ThermalProxy.MinimumThermalMarginMilliK ?? 0L)
+                / 1000.0,
+            1);
         w.Bool("rapier_pattern_only", session.Beat.ScriptedIntercept?.PatternOnly == true);
         w.Bool("rapier_automation_enabled", session.RapierAutomationEnabled);
         w.Bool("rapier_automation_active", session.RapierAutomationActive);
@@ -976,6 +1073,7 @@ internal static class SnapshotHotFrame {
         w.Bool("rapier_gate_in_volume", session.RapierGateInVolume);
         w.Bool("rapier_gate_energy_ok", session.RapierGateEnergyOk);
         w.Num("rapier_nose_on_v_err_deg", session.RapierNoseOnVelocityErrorDeg, 1);
+        w.Num("rapier_target_gamma_deg", session.RapierTargetGammaDeg, 2);
         w.Num("rapier_lob_skip", session.RapierLobSkip, RawInteger);
         w.Num("rapier_lob_skip_max", session.RapierLobSkipMax, RawInteger);
         w.Num("rapier_rcs_gas_frac", session.RapierRcsGasFraction, 3);
@@ -984,6 +1082,7 @@ internal static class SnapshotHotFrame {
         w.Num("rapier_rcs_firing_frac", session.RapierRcsFiringFraction, 3);
         w.Num("rapier_inlet_recovery", player.InletFlowRecovery, 3);
         w.Bool("rapier_inlet_distorted", player.InletDistorted);
+        w.Bool("rapier_inlet_unstart", player.InletUnstarted);
         w.Num("rapier_normal_alpha_limit_deg",
             RapierAerodynamics.NormalLawAlphaLimitRad(mach) * 57.29577951308232, 2);
         w.Bool("rapier_zoom_lob", session.Beat.ScriptedIntercept?.ZoomLobProfile == true);
@@ -1000,21 +1099,29 @@ internal static class SnapshotHotFrame {
             session.RapierRamjetThrustN / J47PerformanceMap.NewtonsPerPoundForce, 0);
         w.Num("rapier_turbine_thrust_kn", session.RapierTurbineThrustN / 1000.0, 2);
         w.Num("rapier_ramjet_thrust_kn", session.RapierRamjetThrustN / 1000.0, 2);
+        w.Num("rapier_drag_lbf",
+            player.LastAerodynamicDragN / J47PerformanceMap.NewtonsPerPoundForce, 1);
+        w.Num("rapier_dynamic_pressure_limit_kpa",
+            RapierAerodynamics.HighDynamicPressurePlacardPa / 1000.0, 2);
+        w.Num("rapier_relight_dynamic_pressure_kpa",
+            RapierMissionDirector.RelightDynamicPressurePa / 1000.0, 2);
         w.Num("rapier_turbine_fuel_ppm", session.RapierTurbineFuelFlowLbPerMinute, 2);
         w.Num("rapier_ramjet_fuel_ppm", session.RapierRamjetFuelFlowLbPerMinute, 2);
         w.Num("rapier_skin_temp_c", rapierSkinTempC, 0);
         w.Num("rapier_recovery_temp_c", rapierRecoveryTempC, 0);
         w.Num("rapier_stagnation_temp_c", rapierStagnationTempC, 0);
+        w.Num("rapier_thermal_effective_temp_c", rapierThermalEffectiveC, 0);
+        w.Nul("rapier_thermal_capability_c", rapierThermalCapabilityC, 0);
         w.Nul("rapier_cmc_capability_c", rapierCmcCapabilityC, 0);
         w.Nul("rapier_cmc_margin_c", rapierCmcMarginC, 0);
-        w.Num("rapier_thermal_margin_c",
-            rapierLegacyThermalLimitC - rapierStagnationTempC, 0);
+        w.Nul("rapier_thermal_margin_c", rapierThermalMarginC, 0);
         w.Num("player_gross_lb", session.Player.State.Mass * 2.20462262, 0);
         w.Num("rapier_intercept_eti_min", interceptEtiMinutes, 1);
         w.Num("px", playerPosition.X, 3); w.Num("py", playerPosition.Y, 3); w.Num("pz", playerPosition.Z, 3);
         w.Num("vx", groundVelocity.X, 3); w.Num("vy", groundVelocity.Y, 3); w.Num("vz", groundVelocity.Z, 3);
         w.Num("pfx", pf.X, 5); w.Num("pfy", pf.Y, 5); w.Num("pfz", pf.Z, 5);
         w.Num("plx", pl.X, 5); w.Num("ply", pl.Y, 5); w.Num("plz", pl.Z, 5);
+        w.Bool("opponent_present", opponentPresent);
         w.Num("bx", b.Position.X, 3); w.Num("by", b.Position.Y, 3); w.Num("bz", b.Position.Z, 3);
         w.Num("bfx", bf.X, 5); w.Num("bfy", bf.Y, 5); w.Num("bfz", bf.Z, 5);
         w.Num("blx", bl.X, 5); w.Num("bly", bl.Y, 5); w.Num("blz", bl.Z, 5);
@@ -1233,44 +1340,55 @@ internal static class SnapshotHotFrame {
         w.Num("roll_rate_dps", s.BodyRates.P * 57.2958, 2);
         w.Num("pitch_rate_dps", s.BodyRates.Q * 57.2958, 2);
         w.Num("yaw_rate_dps", s.BodyRates.R * 57.2958, 2);
-        w.Num("angle_off_deg", Geometry.AngleOff(s, gunTarget) * 57.2958, 2);
-        w.Num("range_m", Geometry.Range(s, gunTarget), 1);
-        w.Num("closure_kts", session.ClosureKts, 1);
+        w.Num("angle_off_deg",
+            opponentPresent ? Geometry.AngleOff(s, gunTarget) * 57.2958 : 0.0, 2);
+        w.Num("range_m", opponentPresent ? Geometry.Range(s, gunTarget) : 0.0, 1);
+        w.Num("closure_kts", opponentPresent ? session.ClosureKts : 0.0, 1);
         w.Num("selected_player_gun_target_slot",
-            session.SelectedPlayerGunTargetSlot, RawInteger);
+            opponentPresent ? session.SelectedPlayerGunTargetSlot : 0, RawInteger);
         w.Bool("gun_window",
-            !session.WeaponsInhibited && CameraSolver.GunWindow(s, gunTarget));
-        w.Bool("gun_solution_raw", gunKill.InstantaneousGunSolution);
-        w.Bool("gun_solution", !session.WeaponsInhibited && gunKill.GunSolution);
-        w.Bool("lead_valid", !session.WeaponsInhibited && gunKill.HasLeadSolution);
-        w.Num("lead_x", gunKill.LeadPipper.X, 3);
-        w.Num("lead_y", gunKill.LeadPipper.Y, 3);
-        w.Num("lead_z", gunKill.LeadPipper.Z, 3);
-        w.Num("lead_tof", gunKill.LeadTimeOfFlight, 4);
-        w.Num("ammo", gunKill.AmmoRemaining, RawInteger);
+            opponentPresent && !session.WeaponsInhibited
+                && CameraSolver.GunWindow(s, gunTarget));
+        w.Bool("gun_solution_raw",
+            opponentPresent && gunKill!.InstantaneousGunSolution);
+        w.Bool("gun_solution",
+            opponentPresent && !session.WeaponsInhibited && gunKill!.GunSolution);
+        w.Bool("lead_valid",
+            opponentPresent && !session.WeaponsInhibited && gunKill!.HasLeadSolution);
+        w.Num("lead_x", opponentPresent ? gunKill!.LeadPipper.X : 0.0, 3);
+        w.Num("lead_y", opponentPresent ? gunKill!.LeadPipper.Y : 0.0, 3);
+        w.Num("lead_z", opponentPresent ? gunKill!.LeadPipper.Z : 0.0, 3);
+        w.Num("lead_tof", opponentPresent ? gunKill!.LeadTimeOfFlight : 0.0, 4);
+        w.Num("ammo", gunKill?.AmmoRemaining ?? 0, RawInteger);
         w.GunTrajectory("gun_trajectory", playerPosition, groundVelocity, pf, pl,
-            s.BodyRates, gunKill.Profile);
-        w.Num("rounds_fired", gunKill.RoundsFired, RawInteger);
-        w.Num("hits", gunKill.TotalHitCount, RawInteger);
-        w.Num("selected_target_hits", gunKill.HitCount, RawInteger);
-        w.Bool("hit", gunKill.HitThisStep);
-        w.Bool("gun_firing", session.TriggerDown && session.PlayerWeaponsAuthorized
-            && gunKill.AmmoRemaining > 0 && gunKill.BanditAlive);
-        w.Tracers("tracers", gunKill.RoundsInFlight);
-        w.Num("kill_progress", gunKill.KillProgress, 3);
-        w.Num("opponent_health", gunKill.TargetHealth, 3);
-        w.Bool("opponent_alive", gunKill.TargetAlive);
+            s.BodyRates, playerGunProfile);
+        w.Num("rounds_fired", opponentPresent ? gunKill!.RoundsFired : 0, RawInteger);
+        w.Num("hits", opponentPresent ? gunKill!.TotalHitCount : 0, RawInteger);
+        w.Num("selected_target_hits", opponentPresent ? gunKill!.HitCount : 0, RawInteger);
+        w.Bool("hit", opponentPresent && gunKill!.HitThisStep);
+        w.Bool("gun_firing", opponentPresent
+            && session.TriggerDown && session.PlayerWeaponsAuthorized
+            && gunKill!.AmmoRemaining > 0 && gunKill.BanditAlive);
+        w.Tracers("tracers", opponentPresent
+            ? gunKill!.RoundsInFlight : Array.Empty<GunRound>());
+        w.Num("kill_progress", opponentPresent ? gunKill!.KillProgress : 0.0, 3);
+        w.Num("opponent_health", opponentPresent ? gunKill!.TargetHealth : 0.0, 3);
+        w.Bool("opponent_alive", opponentPresent && gunKill!.TargetAlive);
         w.Num("bandit_health", session.PrimaryOpponentHealth, 3);
         w.Bool("bandit_alive", session.PrimaryOpponentAlive);
         w.Num("player_health", session.PlayerHealth, 3);
         w.Bool("player_alive", session.PlayerAlive);
-        w.Num("opponent_ammo", opponentGun.AmmoRemaining, RawInteger);
-        w.Num("opponent_rounds_fired", opponentGun.RoundsFired, RawInteger);
-        w.Num("opponent_hits", session.PlayerHitsTaken, RawInteger);
-        w.Bool("opponent_trigger_down", session.OpponentTriggerDown);
-        w.Bool("opponent_gun_firing", session.OpponentTriggerDown
-            && opponentGun.AmmoRemaining > 0 && session.PlayerAlive);
-        w.Tracers("opponent_tracers", session.FormationOpponentRoundsInFlight);
+        w.Num("opponent_ammo",
+            opponentPresent ? opponentGun!.AmmoRemaining : 0, RawInteger);
+        w.Num("opponent_rounds_fired",
+            opponentPresent ? opponentGun!.RoundsFired : 0, RawInteger);
+        w.Num("opponent_hits", opponentPresent ? session.PlayerHitsTaken : 0, RawInteger);
+        w.Bool("opponent_trigger_down",
+            opponentPresent && session.OpponentTriggerDown);
+        w.Bool("opponent_gun_firing", opponentPresent && session.OpponentTriggerDown
+            && opponentGun!.AmmoRemaining > 0 && session.PlayerAlive);
+        w.Tracers("opponent_tracers", opponentPresent
+            ? session.FormationOpponentRoundsInFlight : Array.Empty<GunRound>());
         w.Num("kill_count", session.KillCount, RawInteger);
         w.Num("engagement_number", session.EngagementNumber, RawInteger);
         w.Bool("opponent_replacement_pending", session.OpponentReplacementPending);
@@ -1310,6 +1428,31 @@ internal static class SnapshotHotFrame {
         w.Num("rtb_turn_deg", rtb.TurnRad * 57.29577951308232, 2);
         w.Num("rtb_range_nm", rtb.RangeM / 1852.0, 2);
         w.Bool("recovery_point_known", recoveryNavigation.RecoveryPointKnown);
+        w.Bool("carrier_sortie_route_active", carrierRoute.Active);
+        w.Num("carrier_sortie_route_phase_code", (int)carrierRoute.Phase, RawInteger);
+        w.Num("carrier_sortie_route_fix_code", (int)carrierRoute.ActiveFix, RawInteger);
+        w.Num("carrier_sortie_route_target_x", carrierRoute.TargetPosition.X, 2);
+        w.Num("carrier_sortie_route_target_y", carrierRoute.TargetPosition.Y, 2);
+        w.Num("carrier_sortie_route_target_z", carrierRoute.TargetPosition.Z, 2);
+        w.Num("carrier_sortie_route_target_bearing_deg", carrierRouteBearingDeg, 2);
+        w.Num("carrier_sortie_route_target_turn_deg",
+            carrierRouteTurnRad * 57.29577951308232, 2);
+        w.Num("carrier_sortie_route_distance_m", carrierRoute.DistanceToTargetM, 1);
+        w.Num("carrier_sortie_route_target_tas_mps", carrierRoute.TargetSpeedMps, 1);
+        w.Num("carrier_sortie_route_capture_radius_m", carrierRoute.CaptureRadiusM, 1);
+        w.Bool("carrier_sortie_route_rtb_available", carrierRoute.RtbAvailable);
+        w.Bool("carrier_sortie_route_rtb_requested", carrierRoute.RtbRequested);
+        w.Bool("straight_deck_barrier_armed", session.StraightDeckBarrierArmed);
+        w.Bool("straight_deck_barrier_engaged",
+            session.Recovery == Carrier.Recovery.BarrierEngagement);
+        w.Bool("sortie_valid", session.SortiePlan.Valid);
+        w.Num("sortie_leg_code", (int)session.SortiePlan.Leg, RawInteger);
+        w.Num("sortie_target_height_m", session.SortiePlan.TargetHeightM, 1);
+        w.Num("sortie_target_tas_mps", session.SortiePlan.TargetSpeedMps, 1);
+        w.Num("sortie_power_01", session.SortiePlan.CommandedPower01, 3);
+        w.Num("sortie_limit_code", (int)session.SortiePlan.Limit, RawInteger);
+        w.Num("sortie_distance_to_go_m", session.SortiePlan.DistanceToGoM, 0);
+        w.Num("sortie_waveoff_s", session.SortiePlan.WaveOffDecisionS, 1);
         w.Bool("runway_available", conventionalRunway is not null);
         w.Nul("runway_threshold_x", conventionalRunway?.ThresholdPosition.X, 2);
         w.Nul("runway_threshold_y", conventionalRunway?.ThresholdPosition.Y, 2);
@@ -2291,7 +2434,12 @@ internal static class SnapshotHotFrame {
         double WorldOriginEastM,
         double WorldOriginNorthM,
         bool WorldOriginConfigured,
-        string MeshActiveKey) {
+        string MeshActiveKey,
+        CarrierSortieRoutePhase CarrierRoutePhase,
+        CarrierSortieRouteFix CarrierRouteFix,
+        string CarrierRouteProfileId,
+        SortieLeg SortieLeg,
+        SortieLimit SortieLimit) {
 
         public static ColdFingerprint Capture(SimulationSession session,
             double worldOriginEastM, double worldOriginNorthM, bool worldOriginConfigured) {
@@ -2319,6 +2467,7 @@ internal static class SnapshotHotFrame {
             bool waveOff = session.WaveOffActive;
             string mode = arrestment.Phase == ArrestmentModel.ArrestmentPhase.Failed
                 ? "ARRESTMENT FAILED"
+                : session.Recovery == Carrier.Recovery.BarrierEngagement ? "BARRIER"
                 : session.TerminalPhaseActive ? "TERMINAL"
                 : catapulting ? "CATAPULT"
                 : session.Recovery == Carrier.Recovery.Bolter ? "BOLTER"
@@ -2386,7 +2535,9 @@ internal static class SnapshotHotFrame {
                 session.TransitionCue,
                 session.ConfigurationCue,
                 session.Advice.Context,
-                session.PlayerGun.Outcome,
+                session.OpponentPresent
+                    ? session.PlayerGun.Outcome
+                    : FightOutcome.Flying,
                 maintenance,
                 maintenance is null ? 0
                     : System.HashCode.Combine((int)maintenance.State, maintenance.Score,
@@ -2421,7 +2572,12 @@ internal static class SnapshotHotFrame {
                 worldOriginEastM,
                 worldOriginNorthM,
                 worldOriginConfigured,
-                FormatMeshNavColdKey(session.MeshNav, session.RecoveryProcedure));
+                FormatMeshNavColdKey(session.MeshNav, session.RecoveryProcedure),
+                session.CarrierSortieRoute.Phase,
+                session.CarrierSortieRoute.ActiveFix,
+                session.CarrierSortieRoute.ProfileId,
+                session.SortiePlan.Leg,
+                session.SortiePlan.Limit);
         }
 
         static string FormatMeshNavColdKey(MeshNavDirector mesh, RecoveryProcedureDirector recovery) {

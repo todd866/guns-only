@@ -148,10 +148,10 @@ public class UkraineTerrainTruthTests {
         Assert.Equal(RapierLaunchSite.OperatingSurfaceElevationM, strip.Position.Y);
         Assert.Equal(RapierLaunchSite.AircraftSupportReferenceHeightM,
             strip.AircraftSupportReferenceHeightM);
-        Assert.Equal(433.861, launcher.RampFlatLengthM, precision: 3);
-        Assert.Equal(86.139, launcher.RampArcLengthM, precision: 3);
-        Assert.Equal(411.286, launcher.RampArcRadiusM, precision: 3);
-        Assert.Equal(8.988, launcher.RampRiseM, precision: 3);
+        Assert.Equal(417.487, launcher.RampFlatLengthM, precision: 3);
+        Assert.Equal(102.513, launcher.RampArcLengthM, precision: 3);
+        Assert.Equal(489.464, launcher.RampArcRadiusM, precision: 3);
+        Assert.Equal(10.696, launcher.RampRiseM, precision: 3);
 
         Vec3D start = strip.ShipPoint(
             CatapultLaunchModel.StartAlongM, launcher.CrossOffsetM);

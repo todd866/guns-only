@@ -96,6 +96,37 @@ public class DetentLayerTests {
         Run(d, g, 80, 500, Fast); // tap commits after the 250 ms double window
         Assert.Equal(expected, d.Throttle, 6);
     }
+    [Fact] public void ActiveAnalogThrottleOverridesAssistedSpeedHoldButHeldKeysStillWin() {
+        AircraftParams parameters = FlightModel.F22APublicDataSurrogate;
+        AircraftState state = Fast with { Mass = parameters.MassKg, Speed = 120.0 };
+        var d = new DetentLayer {
+            AssistedFlight = true,
+            AssistedCalibratedAirspeedMps = 120.0,
+            AssistedTargetCalibratedAirspeedMps = 240.0,
+            AirspeedMps = 120.0
+        };
+        var g = new KeyGrammar();
+        double dt = 1.0 / AircraftSim.TickHz;
+        double expectedAnalog = 0.25 * parameters.MaxThrustFraction;
+
+        d.SetAnalogThrottleControl(0.25);
+        d.Tick(g, 0.0, state, parameters, Advice, dt);
+        Assert.Equal(expectedAnalog, d.Command.Throttle, 10);
+
+        g.Feed(GKey.ThrottleUp, true, 10.0);
+        d.Tick(g, 10.0, state, parameters, Advice, dt);
+        Assert.True(d.Command.Throttle > expectedAnalog,
+            "a held keyboard/direct rocker command must retain top priority");
+
+        g.Feed(GKey.ThrottleUp, false, 20.0);
+        d.Tick(g, 20.0, state, parameters, Advice, dt);
+        Assert.Equal(expectedAnalog, d.Command.Throttle, 10);
+
+        d.ClearAnalogThrottleControl();
+        d.Tick(g, 30.0, state, parameters, Advice, dt);
+        Assert.True(d.Command.Throttle > expectedAnalog + 0.5,
+            "assisted corner-speed hold should resume once analog ownership is cleared");
+    }
     [Theory]
     [InlineData(GKey.ThrottleUp, 0.15)]
     [InlineData(GKey.ThrottleDown, -0.15)]

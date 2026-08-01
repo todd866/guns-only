@@ -17,8 +17,14 @@ import {
 } from "./soft_world_atmosphere.js";
 import { createMissionFeaturePresentation } from "./mission_features.js";
 
+const monotonicNowMs = () => globalThis.performance?.now?.() ?? Date.now();
+
 const DEFAULT_MANIFEST_URL = new URL(
   "../../content/packs/korea-1950s/environment/terrain/central-front.manifest.json",
+  import.meta.url,
+).href;
+const UKRAINE_REGIONAL_PAINT_URL = new URL(
+  "../../content/packs/ukraine-modern/environment/textures/rapier-painted-ground-v1.webp",
   import.meta.url,
 ).href;
 
@@ -48,9 +54,9 @@ const UKRAINE_AMBIENT_SCENERY_RADIUS_M = Object.freeze({
 const AMBIENT_SCENERY_ALTITUDE_WEIGHT = 3;
 const AMBIENT_SCENERY_HYSTERESIS = 0.12;
 
-// Hero-detail convergence band: full patch/rewild grammar below the floor, pure regional
-// elevation palette above the ceiling (smoothstepped). At zoom-apex altitudes the per-chunk
-// landcover otherwise reads as a quilt of green rectangles against the regional base.
+// Hero-detail convergence band: full patch/rewild grammar below the floor, seamless regional
+// paint above the ceiling (smoothstepped). At zoom-apex altitudes the per-chunk landcover
+// otherwise reads as a quilt of green rectangles against the regional base.
 const TERRAIN_DETAIL_FULL_AGL_M = 2_500;
 const TERRAIN_DETAIL_ZERO_AGL_M = 7_500;
 
@@ -384,6 +390,8 @@ uniform float uTerrainDetail01;
 uniform vec2 uOcclusionRange;
 uniform float uCloudShadowStrength;
 uniform vec2 uCloudShadowOffset;
+uniform sampler2D uRegionalPaintMap;
+uniform float uRegionalPaintMapEnabled;
 
 // Value noise for wind-scrolled cloud shadows: the cumulus deck darkening the steppe is the
 // value structure this flat plain cannot get from relief alone.
@@ -475,10 +483,11 @@ void main() {
   #ifdef UKRAINE_SCENERY
   // ADR-0003 soft world + Stage C rewild: continent-scale human no-go that reads as succession —
   // meadow → scrub → young woodland — not a live cadastral crop map. Metre-true DEM underneath;
-  // fictional strip / no identifiable live-war locality.
-  vec3 sValley = vec3(0.38, 0.52, 0.24);
-  vec3 sFoothill = vec3(0.28, 0.42, 0.18);
-  vec3 sUpland = vec3(0.22, 0.34, 0.15);
+  // fictional strip / no identifiable live-war locality. Keep enough value range for the ground
+  // to remain a painted surface from Rapier altitude instead of flattening into one pale wash.
+  vec3 sValley = vec3(0.32, 0.46, 0.21);
+  vec3 sFoothill = vec3(0.24, 0.37, 0.17);
+  vec3 sUpland = vec3(0.17, 0.29, 0.13);
   vec3 sRock = vec3(0.36, 0.32, 0.24);
   vec3 sRidge = vec3(0.40, 0.38, 0.32);
   #else
@@ -535,6 +544,52 @@ void main() {
   // elevation palette and fading the blend with uTerrainDetail01 makes every chunk converge
   // on one regional grammar before its rectangle becomes visible.
   vec3 regionalAlbedo = sAlbedo;
+  // Once the baked hero bytes fade, replace them with a WORLD-SPACE painted layer rather than a
+  // blank regional colour. Two broad organic frequencies survive at 15–22 km AGL, cross chunk/LOD
+  // seams continuously as a no-asset fallback. The production art texture replaces both noise
+  // octaves with one sample, so authored pigment is cheaper than the procedural approximation.
+  // This is deliberately vegetation mass, not a cadastral lattice: no straight parcel edges,
+  // roads, or claims about a real locality.
+  float regionalDistanceMix = 1.0 - uTerrainDetail01;
+  if (regionalDistanceMix > 0.001) {
+    vec3 authoredPaint = vec3(0.5);
+    float authoredLuma = 0.5;
+    float regionalStructure = 0.5;
+    if (uRegionalPaintMapEnabled > 0.5) {
+      authoredPaint = texture2D(
+        uRegionalPaintMap,
+        vTerrainWorldPosition.xz * (1.0 / 160000.0) + vec2(0.19, -0.37)
+      ).rgb;
+      authoredLuma = dot(authoredPaint, vec3(0.2126, 0.7152, 0.0722));
+      // Dark painted masses are woodland; lighter ochre areas remain open ground.
+      regionalStructure = 1.0 - authoredLuma;
+    } else {
+      float regionalBroad = terrainCloudNoise(
+        vTerrainWorldPosition.xz * (1.0 / 18000.0) + vec2(17.3, -9.1));
+      float regionalMeso = terrainCloudNoise(
+        vTerrainWorldPosition.xz * (1.0 / 6200.0) + vec2(-31.7, 24.6));
+      regionalStructure = regionalBroad * 0.68 + regionalMeso * 0.32;
+    }
+    float regionalWoodland = smoothstep(0.54, 0.73, regionalStructure);
+    float regionalOpen = 1.0 - smoothstep(0.32, 0.57, regionalStructure);
+    vec3 regionalPaint = regionalAlbedo;
+    regionalPaint *= mix(vec3(1.0), vec3(0.57, 0.78, 0.60), regionalWoodland);
+    regionalPaint *= mix(vec3(1.0), vec3(1.12, 1.04, 0.78), regionalOpen * 0.52);
+    float regionalGround = 1.0 - smoothstep(0.11, 0.28, steepness);
+    // Authored pigment adds composition that procedural noise alone cannot: the map supplies
+    // colour/value rhythm only, while sourced height and simulation weather continue to decide
+    // geometry and visibility. Mirrored world-space sampling makes it continuous across chunks.
+    if (uRegionalPaintMapEnabled > 0.5) {
+      float baseLuma = dot(regionalPaint, vec3(0.2126, 0.7152, 0.0722));
+      vec3 authoredMatched = authoredPaint * (baseLuma / max(authoredLuma, 0.12));
+      regionalPaint = mix(regionalPaint, authoredMatched, 0.62);
+      regionalPaint *= mix(0.86, 1.14, smoothstep(0.16, 0.76, authoredLuma));
+    }
+    regionalAlbedo = mix(
+      regionalAlbedo,
+      regionalPaint,
+      regionalDistanceMix * regionalGround * 0.62);
+  }
   const vec3 TERRAIN_LUMA = vec3(0.2126, 0.7152, 0.0722);
   float coverValueScale = dot(regionalAlbedo, TERRAIN_LUMA)
     / max(dot(rewildCover, TERRAIN_LUMA), 0.04);
@@ -556,8 +611,9 @@ void main() {
   halfLambert *= halfLambert;
   #ifdef UKRAINE_SCENERY
   // Continuous soft lighting — painterly value without the hard two-step toon posterization.
+  // A deeper low end keeps drainage and broad vegetation masses legible after aerial perspective.
   float toneRamp = uShadowFloor
-    + (1.0 - uShadowFloor) * mix(0.34, 1.0, halfLambert);
+    + (1.0 - uShadowFloor) * mix(0.28, 1.0, halfLambert);
   vec3 rimTint = vec3(0.18, 0.14, 0.07);
   #else
   float toneRamp = uShadowFloor
@@ -567,11 +623,23 @@ void main() {
   #endif
   vec3 viewDirection = normalize(cameraPosition - vTerrainWorldPosition);
   float rim = pow(1.0 - clamp(dot(normal, viewDirection), 0.0, 1.0), 3.0);
-  vec3 stylizedLit = sAlbedo * toneRamp
+  // PAINTED LIGHT IS COLOURED LIGHT, NOT DIMMED LIGHT.
+  //
+  // toneRamp was applied as a scalar, and a scalar cannot shift hue: every shadow came out as a
+  // darker copy of the lit colour, which is the single clearest tell of a renderer. Real daylight
+  // has a warm key from the sun and a COOL fill from the sky, and the hue separation between them
+  // is most of what makes a painted frame read as lit. Anime leans on this harder than photography
+  // does because it is the cheapest depth there is: no texture, no geometry, one mix.
+  //
+  // Deliberately NOT the hard two-step toon posterization tried and rejected here. The transition
+  // stays soft and the value range is unchanged -- only the two ENDS now carry different hues.
+  vec3 skyFill = vec3(0.62, 0.74, 1.00);      // cool shadow, from the sky
+  vec3 sunKey  = vec3(1.06, 1.01, 0.92);      // warm key, from the sun
+  vec3 stylizedLit = sAlbedo * mix(skyFill, sunKey, toneRamp) * toneRamp
     + rim * rimTint * (0.4 + 0.6 * clamp(normal.y, 0.0, 1.0));
   #ifdef UKRAINE_SCENERY
   // Low-relief macro normals need a bounded directional cue so sun-facing versus lee-facing
-  // terrain still separates without hard toon steps, textures, or micro-scenery at altitude.
+  // terrain still separates without hard toon steps or micro-scenery at altitude.
   vec2 regionalSunDirection = normalize(uSunDirection.xz + vec2(0.0001));
   // The 7.5x gain is a per-chunk LOD signature: adjacent LODs disagree about macro normals,
   // so at altitude it prints chunk-shaped brightness seams. Relax toward a gentle regional
@@ -666,12 +734,12 @@ void main() {
   lit = mix(lit, waterLit, waterMask);
 
   // Aerial perspective: period haze whites the world out from altitude. Korea-modern thins
-  // density toward cool sky blue. Ukraine soft-world (ADR-0003) hazes warm and dusty so distance
-  // reads as atmosphere rather than a blue poster wash.
+  // density toward cool sky blue. Ukraine retains a warm ground contribution but resolves toward
+  // blue-grey air aloft, so the painted surface has depth instead of becoming an ochre slab.
   #ifdef MODERN_SCENERY
   #ifdef UKRAINE_SCENERY
   float fogDensity = uFogDensity * uAtmosphereDensityScale;
-  // Warm dusty atmosphere — Ghibli-adjacent distance, not cool poster blue.
+  // Natural painted atmosphere: warm land underneath a cool high-altitude scattering layer.
   vec3 hazeColor = mix(uFogColor, uAtmosphereHazeColor, uAtmosphereHazeMix);
   #else
   float fogDensity = uFogDensity * 0.45;
@@ -685,9 +753,9 @@ void main() {
   float aerial = 1.0 - exp(-fogDensity * fogDensity
     * distanceToCamera * distanceToCamera);
   #ifdef UKRAINE_SCENERY
-  // Painterly mid-field haze is intentionally thin (0.34×). That same thinning leaves the
-  // streamed disc readable as a render-square against sky / cool void. Force warm haze opaque
-  // approaching the visual world edge so distance stays Ghibli atmosphere, not a tile boundary.
+  // Painterly mid-field haze is intentionally thin. That same thinning leaves the streamed disc
+  // readable as a render-square against sky / cool void. Force the shared atmosphere opaque
+  // approaching the visual world edge so distance stays painted atmosphere, not a tile boundary.
   if (uWorldEdgeM > 1.0) {
     // Start the bury early: at altitude the disc silhouette still reads square if haze only
     // thickens in the last 15% of the stream radius.
@@ -972,6 +1040,21 @@ export function createTerrainMaterial(THREE, options = {}) {
   const illustrative = options.sceneryEra === "modern"
     || options.sceneryEra === "ukraine-modern";
   const ukraine = options.sceneryEra === "ukraine-modern";
+  const regionalPaintEnabled = { value: 0 };
+  let regionalPaintMap = options.ukraineRegionalPaintMap ?? null;
+  if (regionalPaintMap) {
+    regionalPaintEnabled.value = 1;
+  } else if (ukraine && typeof document !== "undefined"
+      && typeof THREE.TextureLoader === "function") {
+    regionalPaintMap = new THREE.TextureLoader().load(
+      UKRAINE_REGIONAL_PAINT_URL,
+      () => { regionalPaintEnabled.value = 1; },
+    );
+    regionalPaintMap.name = "TEX_RAPIER_PAINTED_GROUND_V1";
+    regionalPaintMap.wrapS = THREE.MirroredRepeatWrapping;
+    regionalPaintMap.wrapT = THREE.MirroredRepeatWrapping;
+    regionalPaintMap.colorSpace = THREE.SRGBColorSpace;
+  }
   const material = new THREE.ShaderMaterial({
     name: "MAT_KOREA_CENTRAL_FRONT_TERRAIN",
     vertexShader: TERRAIN_VERTEX,
@@ -1007,7 +1090,7 @@ export function createTerrainMaterial(THREE, options = {}) {
       // discs haze out instead of reading as squares.
       uWorldEdgeM: { value: finite(options.worldEdgeM, 0) },
       // Hero-detail fraction, driven each frame from cameraAglM: full patch grammar below
-      // TERRAIN_DETAIL_FULL_AGL_M, pure regional palette above TERRAIN_DETAIL_ZERO_AGL_M.
+      // TERRAIN_DETAIL_FULL_AGL_M, seamless regional paint above TERRAIN_DETAIL_ZERO_AGL_M.
       uTerrainDetail01: { value: 1 },
       uModernScenery: { value: illustrative ? 1 : 0 },
       // Full-detail parcel/cultivation tint only affects the period desktop treatment. Modern
@@ -1019,7 +1102,7 @@ export function createTerrainMaterial(THREE, options = {}) {
       // top 60% of the value range, which is why densely dissected Korean terrain rendered as a
       // flat wash. Legibility now comes from value, and hue separation keeps dark slopes readable.
       // Ukraine soft-world lifts the floor so lee slopes stay painterly rather than crushed.
-      uShadowFloor: { value: finite(options.shadowFloor, ukraine ? 0.20 : 0.12) },
+      uShadowFloor: { value: finite(options.shadowFloor, ukraine ? 0.16 : 0.12) },
       // Baked-occlusion multiplier at fully concave (x) and fully convex (y).
       uOcclusionRange: {
         value: new THREE.Vector2(
@@ -1027,13 +1110,15 @@ export function createTerrainMaterial(THREE, options = {}) {
           finite(options.occlusionMax, 1.10),
         ),
       },
-      // Discrete aerial-perspective planes. Korea-modern keeps stronger banding; Ukraine softens
-      // the posterization so distance reads as continuous atmosphere (ADR-0003).
+      // Discrete aerial-perspective planes. Korea-modern keeps stronger banding; Ukraine disables
+      // it because three visible haze shelves at Rapier altitude read as a simulator backdrop.
       // Wind-scrolled cloud-shadow field. Strength 0 = clear sky; weather drives it.
       uCloudShadowStrength: { value: finite(options.cloudShadowStrength, 0.34) },
       uCloudShadowOffset: { value: new THREE.Vector2(0, 0) },
-      uHazeBands: { value: finite(options.hazeBands, ukraine ? 3 : 6) },
-      uHazeBandBlend: { value: finite(options.hazeBandBlend, ukraine ? 0.18 : 0.65) },
+      uRegionalPaintMap: { value: regionalPaintMap },
+      uRegionalPaintMapEnabled: regionalPaintEnabled,
+      uHazeBands: { value: finite(options.hazeBands, ukraine ? 0 : 6) },
+      uHazeBandBlend: { value: finite(options.hazeBandBlend, ukraine ? 0 : 0.65) },
       // Surface truth is opt-in and defaults to the existing snow-free presentation.
       uSnowCover01: { value: Math.max(0, Math.min(1, finite(options.snowCover01))) },
       uSnowWetness01: { value: Math.max(0, Math.min(1, finite(options.snowWetness01))) },
@@ -1043,6 +1128,9 @@ export function createTerrainMaterial(THREE, options = {}) {
   // Non-Ukraine chunks skip the two-byte-per-vertex field entirely. A neutral default keeps
   // the shared shader valid if a presentation is restyled after its meshes are resident.
   material.defaultAttributeValues.landcover = [0.5, 0.5];
+  if (regionalPaintMap && regionalPaintMap !== options.ukraineRegionalPaintMap) {
+    material.addEventListener("dispose", () => regionalPaintMap.dispose());
+  }
   return material;
 }
 
@@ -1117,6 +1205,55 @@ function disposeMeshScenery(mesh) {
     if (child.userData?.scenery) disposeKoreaSceneryTile(child);
   }
   delete mesh.userData.scenery;
+}
+
+// Index immutable manifest edges once so a chunk finalize never scans every resident entry merely
+// to rediscover its neighbours. Opposing collinear edges link over their positive overlap; this
+// preserves the legacy position-key behaviour where a macro fidelity-band edge meets two or more
+// smaller chunks, while excluding corner-only contacts.
+function linkTerrainNormalNeighbours(entries) {
+  const list = [...entries];
+  for (const entry of list) entry.normalNeighbours = [];
+  const verticalEdges = new Map();
+  const horizontalEdges = new Map();
+  const append = (index, coordinate, side, entry, minimum, maximum) => {
+    let bucket = index.get(coordinate);
+    if (!bucket) {
+      bucket = { negative: [], positive: [] };
+      index.set(coordinate, bucket);
+    }
+    bucket[side].push({ entry, minimum, maximum });
+  };
+  for (const entry of list) {
+    const [minimumEast, minimumNorth, maximumEast, maximumNorth] =
+      entry.chunk.boundsLocalM;
+    append(verticalEdges, minimumEast, "negative", entry, minimumNorth, maximumNorth);
+    append(verticalEdges, maximumEast, "positive", entry, minimumNorth, maximumNorth);
+    append(horizontalEdges, minimumNorth, "negative", entry, minimumEast, maximumEast);
+    append(horizontalEdges, maximumNorth, "positive", entry, minimumEast, maximumEast);
+  }
+  const link = (index, axis) => {
+    for (const [coordinate, bucket] of index) {
+      for (const negative of bucket.negative) {
+        for (const positive of bucket.positive) {
+          if (negative.entry === positive.entry) continue;
+          const intervalMinimum = Math.max(negative.minimum, positive.minimum);
+          const intervalMaximum = Math.min(negative.maximum, positive.maximum);
+          if (intervalMaximum <= intervalMinimum) continue;
+          const edge = {
+            axis,
+            coordinate: axis === "z" ? -coordinate : coordinate,
+            intervalMinimum,
+            intervalMaximum,
+          };
+          negative.entry.normalNeighbours.push({ entry: positive.entry, edge });
+          positive.entry.normalNeighbours.push({ entry: negative.entry, edge });
+        }
+      }
+    }
+  };
+  link(verticalEdges, "x");
+  link(horizontalEdges, "z");
 }
 
 class TerrainChunkBuildScheduler {
@@ -1525,9 +1662,12 @@ class KoreaTerrainPresentation {
       coverageDistance: Number.POSITIVE_INFINITY,
       sceneryDistance: Number.POSITIVE_INFINITY,
     }]));
+    linkTerrainNormalNeighbours(this.entries.values());
     this.queue = [];
     this.activeLoads = 0;
     this.pendingBuilds = 0;
+    this.lastBuildDurationMs = 0;
+    this.lastBuildFinishedAtMs = null;
     this.maximumLoads = Math.max(1, Math.round(finite(options.maximumConcurrentLoads, 6)));
     this.buildScheduler = options.chunkBuildScheduler
       ?? new TerrainChunkBuildScheduler(options);
@@ -1548,10 +1688,20 @@ class KoreaTerrainPresentation {
     this.hasLocalCoverage = false;
     this.loadedBytes = 0;
     this.idleWaiters = [];
+    // diagnostics() is called several times by one presentation frame. Cache the immutable result
+    // until a value it reports actually changes; diagnosticsRevision also lets the atlas detect a
+    // changed child page without asking every unchanged page to rescan all of its chunks.
+    this.diagnosticsRevision = 0;
+    this.diagnosticsCache = null;
     this.ready = options.lazyChunks === true
       ? Promise.resolve([])
       : Promise.all(manifest.chunks.map((chunk) =>
         this.requestLevel(this.entries.get(chunk.id), chunk.lods.length - 1)));
+  }
+
+  invalidateDiagnostics() {
+    this.diagnosticsRevision++;
+    this.diagnosticsCache = null;
   }
 
   requestLevel(entry, level) {
@@ -1563,6 +1713,7 @@ class KoreaTerrainPresentation {
     const token = ++entry.requestToken;
     return new Promise((resolve) => {
       this.queue.push({ entry, level, token, resolve });
+      this.invalidateDiagnostics();
       this.pump();
     });
   }
@@ -1572,11 +1723,14 @@ class KoreaTerrainPresentation {
       const work = this.queue.shift();
       if (work.token !== work.entry.requestToken) {
         work.resolve(work.entry.mesh);
+        this.invalidateDiagnostics();
         continue;
       }
       this.activeLoads++;
+      this.invalidateDiagnostics();
       void this.load(work).finally(() => {
         this.activeLoads--;
+        this.invalidateDiagnostics();
         this.pump();
         this.resolveIdleWaiters();
       });
@@ -1600,6 +1754,7 @@ class KoreaTerrainPresentation {
     const disposePrevious = this.ownsSceneryRuntime;
     this.sceneryRuntime = runtime;
     this.ownsSceneryRuntime = ownsRuntime;
+    this.invalidateDiagnostics();
     const replacements = [];
     for (const entry of this.entries.values()) {
       const mesh = entry.mesh;
@@ -1618,10 +1773,12 @@ class KoreaTerrainPresentation {
         scenery.visible = entry.sceneryDistance <= this.ambientSceneryRadiusM;
         mesh.add(scenery);
         mesh.userData.scenery = scenery.userData.scenery;
+        this.invalidateDiagnostics();
         return scenery;
       }).catch((error) => {
         if (!this.disposed && entry.mesh === mesh) {
           entry.error = String(error?.message ?? error);
+          this.invalidateDiagnostics();
         }
         return null;
       }));
@@ -1661,7 +1818,9 @@ class KoreaTerrainPresentation {
       this.chunkLoadRadiusM + representativeSpanM,
       this.chunkLoadRadiusM * 1.25,
     );
-    return this.chunkLoadRadiusM !== previous;
+    const changed = this.chunkLoadRadiusM !== previous;
+    if (changed) this.invalidateDiagnostics();
+    return changed;
   }
 
   setSceneryEra(era) {
@@ -1679,6 +1838,7 @@ class KoreaTerrainPresentation {
     setTerrainMaterialEra(this.skirtMaterial, era);
     this.material.uniforms.uParcelTint.value =
       this.qualityTier === "desktop" && !["modern", "ukraine-modern"].includes(era) ? 1 : 0;
+    this.invalidateDiagnostics();
     return this.replaceSceneryRuntime(runtime, runtime !== null);
   }
 
@@ -1691,6 +1851,7 @@ class KoreaTerrainPresentation {
       const scenery = meshSceneryGroup(entry.mesh);
       if (scenery) applyKoreaSceneryBudgetLevel(scenery, next);
     }
+    this.invalidateDiagnostics();
     return true;
   }
 
@@ -1700,6 +1861,7 @@ class KoreaTerrainPresentation {
   disableAmbientScenery() {
     if (this.disposed || !this.sceneryRuntime) return Promise.resolve([]);
     this.ambientSceneryEnabled = false;
+    this.invalidateDiagnostics();
     return this.replaceSceneryRuntime(null, false);
   }
 
@@ -1712,6 +1874,7 @@ class KoreaTerrainPresentation {
       atmosphereUniforms: this.material.uniforms,
       ambientExclusionZones: this.ambientExclusionZones,
     });
+    this.invalidateDiagnostics();
     return this.replaceSceneryRuntime(runtime, true);
   }
 
@@ -1728,6 +1891,7 @@ class KoreaTerrainPresentation {
       decoded.includeLandcover = this.terrainLandcoverEnabled;
       work.buildPending = true;
       this.pendingBuilds++;
+      this.invalidateDiagnostics();
       // Mesh off-thread when a worker pool is up. `meshed` is null whenever that is not possible,
       // and the scheduled job below then does the identical arithmetic inline — the pool changes
       // WHERE the ~9.5 ms is spent, never WHETHER the chunk appears.
@@ -1774,6 +1938,7 @@ class KoreaTerrainPresentation {
       if (token === entry.requestToken) {
         entry.requestedLevel = null;
         entry.error = String(error?.message ?? error);
+        this.invalidateDiagnostics();
       }
       resolve(entry.mesh);
     }
@@ -1782,9 +1947,11 @@ class KoreaTerrainPresentation {
   build(work, decoded, meshed = null) {
     const { entry, level, token } = work;
     const record = entry.chunk.lods[level];
+    let buildStartedAtMs = Number.NaN;
     try {
       if (this.disposed || token !== entry.requestToken
         || entry.mesh && entry.level === level) return;
+      buildStartedAtMs = monotonicNowMs();
       const built = meshed
         ? assembleTerrainGeometry(this.THREE, meshed)
         : createTerrainGeometry(this.THREE, entry.chunk, decoded);
@@ -1824,13 +1991,21 @@ class KoreaTerrainPresentation {
         previous.removeFromParent();
         previous.geometry.dispose();
       }
-      this.reconcileLoadedBoundaryNormals();
+      this.invalidateDiagnostics();
+      this.reconcileBoundaryNormalsAround(entry);
     } catch (error) {
       if (token === entry.requestToken) {
         entry.requestedLevel = null;
         entry.error = String(error?.message ?? error);
+        this.invalidateDiagnostics();
       }
     } finally {
+      if (Number.isFinite(buildStartedAtMs)) {
+        const finishedAtMs = monotonicNowMs();
+        this.lastBuildDurationMs = Math.max(0, finishedAtMs - buildStartedAtMs);
+        this.lastBuildFinishedAtMs = finishedAtMs;
+        this.invalidateDiagnostics();
+      }
       this.finishBuild(work);
     }
   }
@@ -1839,41 +2014,100 @@ class KoreaTerrainPresentation {
     if (!work.buildPending) return;
     work.buildPending = false;
     this.pendingBuilds--;
+    this.invalidateDiagnostics();
     work.resolve(work.entry.mesh);
     this.resolveIdleWaiters();
   }
 
-  reconcileLoadedBoundaryNormals() {
+  reconcileBoundaryNormalsAround(entry) {
     const verticesByPosition = new Map();
     const touchedAttributes = new Set();
-    for (const entry of this.entries.values()) {
-      const mesh = entry.mesh;
-      const boundary = entry.normalBoundary;
-      if (!mesh || !boundary || !Number.isInteger(entry.level)) continue;
+    const ready = (candidate) => candidate?.mesh && candidate.normalBoundary
+      && Number.isInteger(candidate.level);
+    const resetEdge = (candidate, edge, addFocal = false, addNeighbour = false) => {
+      if (!ready(candidate)) return;
+      const mesh = candidate.mesh;
+      const boundary = candidate.normalBoundary;
       const positions = mesh.geometry.getAttribute("position");
       const normals = mesh.geometry.getAttribute("normal");
-      touchedAttributes.add(normals);
       for (let boundaryIndex = 0; boundaryIndex < boundary.indices.length; boundaryIndex++) {
         const vertexIndex = boundary.indices[boundaryIndex];
+        const eastM = mesh.position.x + positions.getX(vertexIndex);
+        const renderNorthM = mesh.position.z + positions.getZ(vertexIndex);
+        const edgeCoordinate = edge.axis === "x" ? eastM : renderNorthM;
+        if (edgeCoordinate !== edge.coordinate) continue;
+        const intervalCoordinate = edge.axis === "x" ? -renderNorthM : eastM;
+        if (intervalCoordinate < edge.intervalMinimum
+          || intervalCoordinate > edge.intervalMaximum) continue;
         const offset = boundaryIndex * 3;
         const nx = boundary.normals[offset];
         const ny = boundary.normals[offset + 1];
         const nz = boundary.normals[offset + 2];
-        normals.setXYZ(vertexIndex, nx, ny, nz);
-        const eastM = mesh.position.x + positions.getX(vertexIndex);
-        const renderNorthM = mesh.position.z + positions.getZ(vertexIndex);
-        const key = `${entry.level}:${eastM}:${renderNorthM}`;
-        const shared = verticesByPosition.get(key) ?? [];
-        shared.push({ normals, vertexIndex, nx, ny, nz });
-        verticesByPosition.set(key, shared);
+        if (normals.getX(vertexIndex) !== nx
+          || normals.getY(vertexIndex) !== ny
+          || normals.getZ(vertexIndex) !== nz) {
+          normals.setXYZ(vertexIndex, nx, ny, nz);
+          touchedAttributes.add(normals);
+        }
+        if (!addFocal && !addNeighbour) continue;
+        const key = `${eastM}:${renderNorthM}`;
+        const vertex = { normals, vertexIndex, nx, ny, nz };
+        if (addFocal) {
+          let shared = verticesByPosition.get(key);
+          if (!shared) {
+            shared = new Map();
+            verticesByPosition.set(key, shared);
+          }
+          shared.set(candidate, vertex);
+        } else {
+          verticesByPosition.get(key)?.set(candidate, vertex);
+        }
+      }
+    };
+
+    const neighbours = entry.normalNeighbours ?? [];
+    const readyNeighbours = [];
+    if (ready(entry)) {
+      for (const relation of neighbours) {
+        if (!ready(relation.entry)) continue;
+        readyNeighbours.push(relation.entry);
+        resetEdge(entry, relation.edge,
+          relation.entry.level === entry.level, false);
+      }
+    } else {
+      for (const relation of neighbours) {
+        if (ready(relation.entry)) readyNeighbours.push(relation.entry);
+      }
+    }
+    for (const relation of neighbours) {
+      if (!ready(relation.entry)) continue;
+      const sameLevel = ready(entry) && relation.entry.level === entry.level;
+      // Always restore the neighbour's shared edge first. This removes an average left by the
+      // chunk's previous LOD (or by an evicted chunk) before applying the new same-LOD seam.
+      resetEdge(relation.entry, relation.edge, false, sameLevel);
+    }
+
+    // At a mixed-size T-junction, two direct neighbours can also share an edge with each other.
+    // Restoring either neighbour for the focal chunk's old seam also restores that junction vertex,
+    // so locally re-seal relations inside the same direct-neighbour set. This keeps an eviction or
+    // LOD mismatch from breaking the surviving seam without walking a second ring of chunks.
+    for (let leftIndex = 0; leftIndex < readyNeighbours.length; leftIndex++) {
+      const left = readyNeighbours[leftIndex];
+      for (let rightIndex = leftIndex + 1; rightIndex < readyNeighbours.length; rightIndex++) {
+        const right = readyNeighbours[rightIndex];
+        if (left.level !== right.level) continue;
+        const relation = left.normalNeighbours?.find((candidate) => candidate.entry === right);
+        if (!relation) continue;
+        resetEdge(left, relation.edge, true, false);
+        resetEdge(right, relation.edge, false, true);
       }
     }
     for (const shared of verticesByPosition.values()) {
-      if (shared.length < 2) continue;
+      if (shared.size < 2) continue;
       let nx = 0;
       let ny = 0;
       let nz = 0;
-      for (const vertex of shared) {
+      for (const vertex of shared.values()) {
         nx += vertex.nx;
         ny += vertex.ny;
         nz += vertex.nz;
@@ -1883,8 +2117,12 @@ class KoreaTerrainPresentation {
       nx /= length;
       ny /= length;
       nz /= length;
-      for (const vertex of shared) {
+      for (const vertex of shared.values()) {
+        if (vertex.normals.getX(vertex.vertexIndex) === nx
+          && vertex.normals.getY(vertex.vertexIndex) === ny
+          && vertex.normals.getZ(vertex.vertexIndex) === nz) continue;
         vertex.normals.setXYZ(vertex.vertexIndex, nx, ny, nz);
+        touchedAttributes.add(vertex.normals);
       }
     }
     for (const attribute of touchedAttributes) attribute.needsUpdate = true;
@@ -1901,6 +2139,8 @@ class KoreaTerrainPresentation {
     entry.mesh = null;
     entry.level = null;
     entry.normalBoundary = null;
+    this.invalidateDiagnostics();
+    this.reconcileBoundaryNormalsAround(entry);
   }
 
   setPlacement(eastM = 0, northM = 0) {
@@ -1910,6 +2150,7 @@ class KoreaTerrainPresentation {
       // Until update supplies a camera in the new placement, resident chunks describe the old
       // mission's coverage and must not make a location-local warmup look complete.
       this.hasLocalCoverage = false;
+      this.invalidateDiagnostics();
     }
     this.worldEastM = nextEastM;
     this.worldNorthM = nextNorthM;
@@ -1958,6 +2199,7 @@ class KoreaTerrainPresentation {
     const cameraNorthM = -cameraPosition.z - this.worldNorthM;
     const streamEastM = priorityPosition.x - this.worldEastM;
     const streamNorthM = -priorityPosition.z - this.worldNorthM;
+    let diagnosticsChanged = !this.hasLocalCoverage;
     for (const entry of this.entries.values()) {
       const bounds = entry.chunk.boundsLocalM;
       // Residency is distance to the tile footprint, not its centre. Macro chunks are up to
@@ -1966,8 +2208,14 @@ class KoreaTerrainPresentation {
       const cameraDistance = distanceToBounds(cameraEastM, cameraNorthM, bounds);
       const streamDistance = distanceToBounds(streamEastM, streamNorthM, bounds);
       const distance = Math.min(cameraDistance, streamDistance);
+      const wasLocallyCovered = this.hasLocalCoverage
+        && Number.isFinite(entry.coverageDistance)
+        && entry.coverageDistance <= this.chunkLoadRadiusM;
       entry.priorityDistance = distance;
       entry.coverageDistance = distance;
+      if (entry.mesh && wasLocallyCovered !== (distance <= this.chunkLoadRadiusM)) {
+        diagnosticsChanged = true;
+      }
       const heightRecord = entry.chunk.lods[entry.level ?? 0] ?? entry.chunk.lods[0];
       const terrainTopM = finite(heightRecord?.maximumHeightM, finite(cameraPosition.y));
       const cameraAglM = Math.max(0, finite(cameraPosition.y) - terrainTopM);
@@ -1977,12 +2225,14 @@ class KoreaTerrainPresentation {
       );
       const scenery = meshSceneryGroup(entry.mesh);
       if (scenery) {
+        const wasVisible = scenery.visible;
         const thresholdM = Number.isFinite(this.ambientSceneryRadiusM)
           ? this.ambientSceneryRadiusM * (scenery.visible === false
             ? 1 - AMBIENT_SCENERY_HYSTERESIS
             : 1 + AMBIENT_SCENERY_HYSTERESIS)
           : Number.POSITIVE_INFINITY;
         scenery.visible = entry.sceneryDistance <= thresholdM;
+        if (scenery.visible !== wasVisible) diagnosticsChanged = true;
       }
       if (distance > this.chunkEvictRadiusM) {
         this.evictEntry(entry);
@@ -2008,9 +2258,11 @@ class KoreaTerrainPresentation {
     requests.sort((left, right) => left.distance - right.distance);
     for (const request of requests) this.requestLevel(request.entry, request.level);
     this.hasLocalCoverage = true;
+    if (diagnosticsChanged) this.invalidateDiagnostics();
   }
 
   diagnostics() {
+    if (this.diagnosticsCache) return this.diagnosticsCache;
     const levels = {};
     let errors = 0;
     let residentChunks = 0;
@@ -2033,7 +2285,7 @@ class KoreaTerrainPresentation {
       if (entry.mesh?.userData?.scenery && locallyCovered) localSceneryChunks++;
       if (entry.error) errors++;
     }
-    return Object.freeze({
+    this.diagnosticsCache = Object.freeze({
       terrainId: this.manifest.terrainId,
       qualityTier: this.qualityTier,
       sceneryEra: this.sceneryEra,
@@ -2052,6 +2304,8 @@ class KoreaTerrainPresentation {
       activeLoads: this.activeLoads,
       queuedLoads: this.queue.length,
       queuedBuilds: this.pendingBuilds,
+      lastBuildDurationMs: this.lastBuildDurationMs,
+      lastBuildFinishedAtMs: this.lastBuildFinishedAtMs,
       loadedBytes: this.loadedBytes,
       transfer: this.reader.diagnostics(),
       horizonApron: this.horizonApron !== null,
@@ -2061,6 +2315,7 @@ class KoreaTerrainPresentation {
       errors,
       disposed: this.disposed,
     });
+    return this.diagnosticsCache;
   }
 
   dispose() {
@@ -2094,6 +2349,7 @@ class KoreaTerrainPresentation {
     for (const geometry of apronGeometries) geometry.dispose();
     for (const material of apronMaterials) material.dispose();
     this.horizonApron = null;
+    this.invalidateDiagnostics();
     this.group.removeFromParent();
   }
 }
@@ -2207,7 +2463,29 @@ class KoreaTerrainAtlasPresentation {
     this.previousCameraLocal = null;
     this.lastUpdate = null;
     this.loadedPageManifests = 0;
+    this.diagnosticsRevision = 0;
+    this.diagnosticsCache = null;
+    this.diagnosticsPageRevisions = new Map();
     this.ready = Promise.resolve([]);
+  }
+
+  invalidateDiagnostics() {
+    this.diagnosticsRevision++;
+    this.diagnosticsCache = null;
+  }
+
+  diagnosticsCacheIsCurrent() {
+    if (!this.diagnosticsCache) return false;
+    for (const [id, state] of this.pages) {
+      const cached = this.diagnosticsPageRevisions.get(id);
+      if (!state.presentation) {
+        if (cached) return false;
+        continue;
+      }
+      if (!cached || cached.presentation !== state.presentation
+        || cached.revision !== state.presentation.diagnosticsRevision) return false;
+    }
+    return true;
   }
 
   setPlacement(eastM = 0, northM = 0) {
@@ -2217,6 +2495,7 @@ class KoreaTerrainAtlasPresentation {
       this.hasLocalCoverage = false;
       this.previousCameraLocal = null;
       this.lastUpdate = null;
+      this.invalidateDiagnostics();
     }
     this.worldEastM = nextEastM;
     this.worldNorthM = nextNorthM;
@@ -2273,7 +2552,9 @@ class KoreaTerrainAtlasPresentation {
     for (const state of this.pages.values()) {
       state.presentation?.setStreamingRadiusM(this.chunkLoadRadiusM);
     }
-    return this.chunkLoadRadiusM !== previous;
+    const changed = this.chunkLoadRadiusM !== previous;
+    if (changed) this.invalidateDiagnostics();
+    return changed;
   }
   setSceneryEra(era) {
     if (this.disposed || era === this.sceneryEra) return Promise.resolve([]);
@@ -2292,6 +2573,7 @@ class KoreaTerrainAtlasPresentation {
     setTerrainMaterialEra(this.skirtMaterial, era);
     this.material.uniforms.uParcelTint.value =
       this.qualityTier === "desktop" && !["modern", "ukraine-modern"].includes(era) ? 1 : 0;
+    this.invalidateDiagnostics();
     const replacements = [];
     for (const state of this.pages.values()) {
       if (state.presentation) {
@@ -2312,12 +2594,14 @@ class KoreaTerrainAtlasPresentation {
     for (const state of this.pages.values()) {
       state.presentation?.setAmbientSceneryBudgetLevel(next);
     }
+    this.invalidateDiagnostics();
     return true;
   }
 
   disableAmbientScenery() {
     if (this.disposed || !this.sceneryRuntime) return Promise.resolve([]);
     this.ambientSceneryEnabled = false;
+    this.invalidateDiagnostics();
     const previousRuntime = this.sceneryRuntime;
     this.sceneryRuntime = null;
     const replacements = [];
@@ -2340,6 +2624,7 @@ class KoreaTerrainAtlasPresentation {
     });
     this.sceneryRuntime = runtime;
     this.ambientSceneryEnabled = true;
+    this.invalidateDiagnostics();
     const replacements = [];
     for (const state of this.pages.values()) {
       if (state.presentation) {
@@ -2354,6 +2639,7 @@ class KoreaTerrainAtlasPresentation {
     state.queued = true;
     this.pageQueue.push({ state, distance, generation: state.generation });
     this.pageQueue.sort((left, right) => left.distance - right.distance);
+    this.invalidateDiagnostics();
     this.pumpPages();
   }
 
@@ -2362,13 +2648,18 @@ class KoreaTerrainAtlasPresentation {
       && this.pageQueue.length) {
       const work = this.pageQueue.shift();
       work.state.queued = false;
-      if (work.generation !== work.state.generation || work.state.presentation) continue;
+      if (work.generation !== work.state.generation || work.state.presentation) {
+        this.invalidateDiagnostics();
+        continue;
+      }
       this.activePageLoads++;
       const pending = this.loadPage(work);
       work.state.pending = pending;
+      this.invalidateDiagnostics();
       void pending.finally(() => {
         if (work.state.pending === pending) work.state.pending = null;
         this.activePageLoads--;
+        this.invalidateDiagnostics();
         this.pumpPages();
         this.resolveIdleWaiters();
       });
@@ -2417,9 +2708,11 @@ class KoreaTerrainAtlasPresentation {
       this.loadedPageManifests++;
       this.group.add(presentation.group);
       if (this.lastUpdate) presentation.update(this.lastUpdate);
+      this.invalidateDiagnostics();
     } catch (error) {
       if (!this.disposed && generation === state.generation) {
         state.error = String(error?.message ?? error);
+        this.invalidateDiagnostics();
       }
     }
   }
@@ -2431,6 +2724,7 @@ class KoreaTerrainAtlasPresentation {
     state.presentation?.dispose();
     state.presentation = null;
     state.error = null;
+    this.invalidateDiagnostics();
   }
 
   resolveIdleWaiters() {
@@ -2527,6 +2821,7 @@ class KoreaTerrainAtlasPresentation {
     const streamEastM = streamLocal.x;
     const streamNorthM = -streamLocal.z;
     const requested = [];
+    const diagnosticsChanged = !this.hasLocalCoverage;
     for (const state of this.pages.values()) {
       const bounds = state.descriptor.boundsLocalM;
       const distance = Math.min(
@@ -2544,29 +2839,50 @@ class KoreaTerrainAtlasPresentation {
     requested.sort((left, right) => left.distance - right.distance);
     for (const request of requested) this.requestPage(request.state, request.distance);
     this.hasLocalCoverage = true;
+    if (diagnosticsChanged) this.invalidateDiagnostics();
   }
 
   diagnostics() {
+    if (this.diagnosticsCacheIsCurrent()) return this.diagnosticsCache;
     let residentPages = 0;
     let residentChunks = 0;
     let sceneryChunks = 0;
     let visibleSceneryChunks = 0;
     let localResidentChunks = 0;
     let localSceneryChunks = 0;
+    let activeLoads = 0;
+    let queuedLoads = 0;
+    let queuedBuilds = 0;
+    let lastBuildDurationMs = 0;
+    let lastBuildFinishedAtMs = null;
     let errors = 0;
     let networkRequests = 0;
     let networkBytes = 0;
     let rangeSupportedPages = 0;
     let completeBundleFallbackPages = 0;
-    for (const state of this.pages.values()) {
+    const pageRevisions = new Map();
+    for (const [id, state] of this.pages) {
       if (state.presentation) {
         residentPages++;
         const page = state.presentation.diagnostics();
+        pageRevisions.set(id, {
+          presentation: state.presentation,
+          revision: state.presentation.diagnosticsRevision,
+        });
         residentChunks += page.residentChunks;
         sceneryChunks += Number(page.sceneryChunks) || 0;
         visibleSceneryChunks += Number(page.visibleSceneryChunks) || 0;
         localResidentChunks += Number(page.localResidentChunks) || 0;
         localSceneryChunks += Number(page.localSceneryChunks) || 0;
+        activeLoads += Number(page.activeLoads) || 0;
+        queuedLoads += Number(page.queuedLoads) || 0;
+        queuedBuilds += Number(page.queuedBuilds) || 0;
+        if (Number.isFinite(page.lastBuildFinishedAtMs)
+          && (!Number.isFinite(lastBuildFinishedAtMs)
+            || page.lastBuildFinishedAtMs > lastBuildFinishedAtMs)) {
+          lastBuildFinishedAtMs = page.lastBuildFinishedAtMs;
+          lastBuildDurationMs = Number(page.lastBuildDurationMs) || 0;
+        }
         networkRequests += page.transfer.networkRequests;
         networkBytes += page.transfer.networkBytes;
         if (page.transfer.rangeSupported === true) rangeSupportedPages++;
@@ -2574,7 +2890,8 @@ class KoreaTerrainAtlasPresentation {
       }
       if (state.error) errors++;
     }
-    return Object.freeze({
+    this.diagnosticsPageRevisions = pageRevisions;
+    this.diagnosticsCache = Object.freeze({
       terrainId: this.manifest.terrainId,
       qualityTier: this.qualityTier,
       sceneryEra: this.sceneryEra,
@@ -2594,6 +2911,11 @@ class KoreaTerrainAtlasPresentation {
       maximumChunkLoadsPerPage: this.maximumChunkLoadsPerPage,
       activePageLoads: this.activePageLoads,
       queuedPageLoads: this.pageQueue.length,
+      activeLoads,
+      queuedLoads,
+      queuedBuilds,
+      lastBuildDurationMs,
+      lastBuildFinishedAtMs,
       loadedPageManifests: this.loadedPageManifests,
       networkRequests,
       networkBytes,
@@ -2610,6 +2932,7 @@ class KoreaTerrainAtlasPresentation {
       errors,
       disposed: this.disposed,
     });
+    return this.diagnosticsCache;
   }
 
   dispose() {
@@ -2629,6 +2952,7 @@ class KoreaTerrainAtlasPresentation {
     this.meshWorkers.dispose();
     this.missionFeaturePresentation?.dispose?.();
     this.missionFeaturePresentation = null;
+    this.invalidateDiagnostics();
     this.group.removeFromParent();
   }
 }

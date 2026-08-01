@@ -18,33 +18,143 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  deterministic:
+    name: Deterministic, content, and unit contracts
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: world-worker/package-lock.json
 
       - name: Set up .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
-          dotnet-version: "8.0.x"
+          dotnet-version: "8.0.423"
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: tools/audio/requirements.txt
 
+      - name: Restore verified Rapier terrain atlas cache
+        uses: actions/cache@v5
+        with:
+          path: .cache/terrain-atlas
+          key: rapier-atlas-${{ runner.os }}-${{ hashFiles('content/packs/ukraine-modern/environment/terrain-atlas/rapier-range.atlas.manifest.json') }}
+
+      - name: Hydrate and verify Rapier terrain atlas
+        run: >-
+          python3 tools/terrain/hydrate_rapier_atlas.py hydrate
+          --base-url https://guns-only.com/content/packs/ukraine-modern/environment/terrain-atlas/
+          --cache-dir .cache/terrain-atlas
+
       - name: Install audio-tool dependencies
         run: python -m pip install -r tools/audio/requirements.txt
 
-      - name: Run repository checks
+      - name: Install locked world-worker toolchain
+        working-directory: world-worker
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Run deterministic repository checks
+        env:
+          GUNS_SKIP_SMOKE: "1"
         run: ./bin/check
+
+  browser-smoke:
+    name: Published browser and HUD smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/smoke/package-lock.json
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "8.0.423"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Restore verified Rapier terrain atlas cache
+        uses: actions/cache@v5
+        with:
+          path: .cache/terrain-atlas
+          key: rapier-atlas-${{ runner.os }}-${{ hashFiles('content/packs/ukraine-modern/environment/terrain-atlas/rapier-range.atlas.manifest.json') }}
+
+      - name: Hydrate and verify Rapier terrain atlas
+        run: >-
+          python3 tools/terrain/hydrate_rapier_atlas.py hydrate
+          --base-url https://guns-only.com/content/packs/ukraine-modern/environment/terrain-atlas/
+          --cache-dir .cache/terrain-atlas
+
+      - name: Publish browser artifact
+        id: publish
+        run: |
+          dotnet publish web/GunsOnly.Web.csproj \
+            --configuration Release \
+            --nologo \
+            --output "${{ runner.temp }}/guns-only-publish" \
+            -m:1 \
+            /nodeReuse:false
+          python3 tools/terrain/hydrate_rapier_atlas.py verify \
+            --atlas-dir "${{ runner.temp }}/guns-only-publish/wwwroot/content/packs/ukraine-modern/environment/terrain-atlas"
+
+      - name: Install locked browser toolchain
+        id: smoke_deps
+        working-directory: web/smoke
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          ./node_modules/.bin/playwright install --with-deps chromium webkit
+
+      - name: Run published browser smoke
+        id: browser_contracts
+        env:
+          MEDEVAC_QA_CAPTURE_DIR: ${{ runner.temp }}/guns-only-smoke-artifacts
+          SMOKE_WWWROOT: ${{ runner.temp }}/guns-only-publish/wwwroot
+        run: |
+          mkdir -p "$MEDEVAC_QA_CAPTURE_DIR"
+          set -o pipefail
+          node --test web/smoke/smoke.test.mjs 2>&1 \
+            | tee "$MEDEVAC_QA_CAPTURE_DIR/browser-smoke.log"
+
+      - name: Run HUD geometry smoke
+        if: ${{ always() && steps.publish.outcome == 'success' && steps.smoke_deps.outcome == 'success' }}
+        env:
+          SMOKE_ARTIFACT_DIR: ${{ runner.temp }}/guns-only-smoke-artifacts
+        run: |
+          mkdir -p "$SMOKE_ARTIFACT_DIR"
+          set -o pipefail
+          node web/wwwroot/render/hud/tests/harness/assertions.mjs 2>&1 \
+            | tee "$SMOKE_ARTIFACT_DIR/hud-geometry.log"
+
+      - name: Upload browser diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: browser-smoke-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/guns-only-smoke-artifacts
+          if-no-files-found: warn
+          retention-days: 14

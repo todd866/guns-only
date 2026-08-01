@@ -154,6 +154,13 @@ public static partial class WebBridge {
     public static void SetAnalogPitchControl(double value) => Session.SetAnalogPitchControl(value);
 
     [JSExport]
+    public static void SetAnalogYawControl(double value) => Session.SetAnalogYawControl(value);
+
+    [JSExport]
+    public static void SetAnalogThrottleControl(double lever01) =>
+        Session.SetAnalogThrottleControl(lever01);
+
+    [JSExport]
     public static void SetPlayerGunTargetPadlockRollAssist(bool selected) =>
         Session.SetPlayerGunTargetPadlockRollAssist(selected);
 

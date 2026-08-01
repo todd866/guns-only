@@ -9,6 +9,10 @@ const DEFAULT_ENTRY_RESIDENT_CHUNKS = 8;
 const DEFAULT_ENTRY_HOLD_TIMEOUT_SECONDS = 6;
 const DEFAULT_ENTRY_CLEAR_SECONDS = 2.6;
 const DEFAULT_ENTRY_EXTINCTION_PER_M = 0.024;
+const RAPIER_CLOUD_BILLOWS_URL = new URL(
+  "../../content/packs/ukraine-modern/environment/textures/rapier-cloud-billows-v1.webp",
+  import.meta.url,
+).href;
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -376,20 +380,51 @@ const IMPOSTOR_VERTEX = /* glsl */ `
   varying float vWorldRadius;
   varying float vInstanceOpacity;
   varying float vInstancePhase;
+  varying vec2 vArtRotation;
+  varying vec2 vViewParallax;
+  varying float vBillboardAspect;
   #include <common>
   #include <logdepthbuf_pars_vertex>
   void main() {
     vec4 worldCenter = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
     vec3 axisX = (modelMatrix * vec4(instanceMatrix[0].xyz, 0.0)).xyz;
     vec3 axisY = (modelMatrix * vec4(instanceMatrix[1].xyz, 0.0)).xyz;
-    vec4 viewCenter = viewMatrix * worldCenter;
-    viewCenter.xy += position.xy * vec2(length(axisX), length(axisY));
+    vec3 worldUp = normalize((modelMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
+    vec3 toCamera = cameraPosition - worldCenter.xyz;
+    vec3 horizontalToCamera = toCamera - worldUp * dot(toCamera, worldUp);
+    float horizontalLength = length(horizontalToCamera);
+    // A camera-axis quad inherits camera roll, making the entire cloud bank with the cockpit.
+    // Roll-free billboarding derives its axes from world-up and the view direction, so the cheap
+    // proxy still faces the pilot through pitch without becoming a decal attached to the canopy.
+    vec3 forward = horizontalLength > 0.001
+      ? horizontalToCamera / horizontalLength
+      : vec3(0.0, 0.0, 1.0);
+    vec3 right = normalize(cross(worldUp, forward));
+    vec3 viewDirection = toCamera / max(length(toCamera), 0.001);
+    vec3 billboardUp = normalize(cross(viewDirection, right));
+    vec3 worldSurface = worldCenter.xyz
+      + right * position.x * length(axisX)
+      + billboardUp * position.y * length(axisY);
     vCloudUv = uv;
     vWorldCenter = worldCenter.xyz;
     vWorldRadius = max(length(axisX), length(axisY));
     vInstanceOpacity = instanceOpacity;
     vInstancePhase = instancePhase;
-    gl_Position = projectionMatrix * viewCenter;
+    float artAngle = fract(instancePhase * 0.15915494) * 6.28318531;
+    vArtRotation = vec2(cos(artAngle), sin(artAngle));
+    vBillboardAspect = length(axisX) / max(length(axisY), 0.001);
+    vec3 worldEast = normalize((modelMatrix * vec4(1.0, 0.0, 0.0, 0.0)).xyz);
+    vec3 worldNorth = normalize(cross(worldEast, worldUp));
+    vec3 depthAxis = normalize(
+      worldEast * vArtRotation.x + worldNorth * vArtRotation.y
+    );
+    // Stable world-relative view terms drive two texture depths in the fragment shader. They vary
+    // through a banking pass but are constant over this four-vertex instance.
+    vViewParallax = vec2(
+      dot(viewDirection, depthAxis),
+      dot(viewDirection, worldUp)
+    );
+    gl_Position = projectionMatrix * viewMatrix * vec4(worldSurface, 1.0);
     #include <logdepthbuf_vertex>
   }
 `;
@@ -397,6 +432,8 @@ const IMPOSTOR_VERTEX = /* glsl */ `
 const IMPOSTOR_FRAGMENT = /* glsl */ `
   precision highp float;
   uniform float uTime;
+  uniform sampler2D uCloudArt;
+  uniform float uCloudArtEnabled;
   uniform vec3 uLightColor;
   uniform vec3 uShadowColor;
   uniform vec3 uFogColor;
@@ -406,6 +443,9 @@ const IMPOSTOR_FRAGMENT = /* glsl */ `
   varying float vWorldRadius;
   varying float vInstanceOpacity;
   varying float vInstancePhase;
+  varying vec2 vArtRotation;
+  varying vec2 vViewParallax;
+  varying float vBillboardAspect;
   #include <logdepthbuf_pars_fragment>
   float hash21(vec2 p) {
     p = fract(p * vec2(123.34, 456.21));
@@ -423,10 +463,44 @@ const IMPOSTOR_FRAGMENT = /* glsl */ `
     vec2 centred = vCloudUv * 2.0 - 1.0;
     float broad = noise21(vCloudUv * 3.1 + vInstancePhase + uTime * 0.004);
     float detail = noise21(vCloudUv * 8.9 - vInstancePhase * 0.3);
-    float envelope = 1.0 - smoothstep(0.44, 1.0, length(centred * vec2(0.83, 1.22)));
+    // Layer truth can be four or five times wider than it is thick. Stretching one square
+    // cumuliform cutout across that entire proxy made every cloud read as a horizontal smear.
+    // Preserve a broad ~2.15:1 silhouette inside the authoritative footprint instead; the
+    // remaining footprint still participates in density/fog truth and costs no transparent fill.
+    float artAspectScale = max(1.0, vBillboardAspect / 2.15);
+    float envelope = 1.0 - smoothstep(
+      0.44, 1.0, length(centred * vec2(0.83 * artAspectScale, 1.18))
+    );
     float body = smoothstep(0.39, 0.61, broad * 0.72 + detail * 0.28 + envelope * 0.38);
+    // Placement, coverage and opacity stay authoritative. This texture contributes only a more
+    // deliberate painted silhouette than procedural threshold noise can give a billboard.
+    // The source has a physical bottom and top. Full 2-D rotation could put it sideways or upside
+    // down; deterministic mirroring and a small vertical scale variation keep instances distinct
+    // while preserving gravity and the authored lighting read.
+    float artMirror = vArtRotation.x < 0.0 ? -1.0 : 1.0;
+    float artVerticalScale = mix(0.94, 1.06, abs(vArtRotation.y));
+    vec2 paintedPoint = vec2(
+      (vCloudUv.x - 0.5) * artAspectScale * artMirror,
+      (vCloudUv.y - 0.5) * artVerticalScale
+    );
+    vec2 parallaxOffset = vViewParallax * vec2(0.034, 0.022);
+    // Two samples of the existing authored density map are the complete impostor depth budget.
+    // The broader rear layer and tighter front layer move in opposite directions as the view
+    // changes, giving a fly-by some internal parallax without another instance or draw call.
+    vec2 rearArtUv = paintedPoint * 0.80 + 0.5 - parallaxOffset * 0.62;
+    vec2 frontArtUv = paintedPoint * 0.96 + 0.5 + parallaxOffset;
+    float authoredRear = smoothstep(
+      0.025, 0.40, texture2D(uCloudArt, rearArtUv).r
+    );
+    float authoredFront = smoothstep(
+      0.045, 0.43, texture2D(uCloudArt, frontArtUv).r
+    );
+    float authoredBody = max(authoredFront, authoredRear * 0.72);
+    body = mix(body, max(body * 0.34, authoredBody), uCloudArtEnabled * 0.84);
     float lowerShade = smoothstep(0.95, 0.08, vCloudUv.y);
-    vec3 color = mix(uLightColor, uShadowColor, lowerShade * (0.30 + broad * 0.30));
+    float depthShade = authoredRear * (1.0 - authoredFront) * 0.24;
+    vec3 color = mix(uLightColor, uShadowColor,
+      clamp(lowerShade * (0.30 + broad * 0.30) + depthShade, 0.0, 0.78));
     float distanceToCamera = distance(cameraPosition, vWorldCenter);
     float fog = 1.0 - exp(-uFogDensity * uFogDensity
       * distanceToCamera * distanceToCamera);
@@ -677,8 +751,27 @@ export function createTacticalCloudField(THREE, options = {}) {
   const group = new THREE.Group();
   group.name = "TACTICAL_CLOUD_FIELD";
 
+  const cloudArtEnabled = { value: 0 };
+  let cloudArtMap = options.cloudArtMap ?? null;
+  let ownsCloudArtMap = false;
+  if (cloudArtMap) {
+    cloudArtEnabled.value = 1;
+  } else if (!volumetric && typeof document !== "undefined"
+      && typeof THREE.TextureLoader === "function") {
+    cloudArtMap = new THREE.TextureLoader().load(
+      RAPIER_CLOUD_BILLOWS_URL,
+      () => { cloudArtEnabled.value = 1; },
+    );
+    ownsCloudArtMap = true;
+    cloudArtMap.name = "TEX_RAPIER_CLOUD_BILLOWS_V1";
+    cloudArtMap.wrapS = THREE.ClampToEdgeWrapping;
+    cloudArtMap.wrapT = THREE.ClampToEdgeWrapping;
+    cloudArtMap.colorSpace = THREE.NoColorSpace;
+  }
   const uniforms = {
     uTime: { value: 0 },
+    uCloudArt: { value: cloudArtMap },
+    uCloudArtEnabled: cloudArtEnabled,
     uOpticalScale: { value: tier === "desktop" ? 0.0018 : 0.00155 },
     uSunDirection: { value: new THREE.Vector3(0.50, 0.28, -0.82).normalize() },
     uLightColor: { value: new THREE.Color(0xf8f3e8) },
@@ -740,6 +833,17 @@ export function createTacticalCloudField(THREE, options = {}) {
   shadowMesh.renderOrder = -4;
   shadowMesh.count = 0;
   group.add(shadowMesh);
+
+  const cloudTrianglesPerInstance = geometry.index
+    ? geometry.index.count / 3
+    : geometry.getAttribute("position").count / 3;
+  const shadowTrianglesPerInstance = shadowGeometry.index
+    ? shadowGeometry.index.count / 3
+    : shadowGeometry.getAttribute("position").count / 3;
+  const impostorDepthLayers = volumetric ? 0 : 2;
+  const impostorArtSamplesPerFragment = volumetric ? 0 : 2;
+  const volumeMarchSteps = volumetric ? tierMarchSteps(tier) : 0;
+  let disposed = false;
 
   const dummy = new THREE.Object3D();
   const descriptors = [];
@@ -935,7 +1039,12 @@ export function createTacticalCloudField(THREE, options = {}) {
         .addScaledVector(entryForward, distanceAhead)
         .addScaledVector(entryRight, side)
         .addScaledVector(entryUp, height);
-      entryWispDummy.quaternion.copy(camera.quaternion);
+      // FACE the camera, do not COPY it. Copying the camera quaternion inherits its ROLL, so the
+      // whole wisp field rotated with the aircraft and the sky visibly span around the canopy in
+      // every turn -- clouds do not do that, and it is the fastest way to make a painted sky read
+      // as a decal stuck to the screen. lookAt keeps the billboard facing the eye while its own
+      // up-vector stays world-up, which is what a roll-free billboard is.
+      entryWispDummy.lookAt(camera.position);
       entryWispDummy.rotateZ((unitHash(index, 0, 96) - 0.5) * 0.55);
       entryWispDummy.scale.set(
         4.5 + unitHash(index, 0, 97) * 7.5 + proximity * 5,
@@ -1068,7 +1177,7 @@ export function createTacticalCloudField(THREE, options = {}) {
       if (!shown) continue;
       dummy.position.set(descriptor.x, descriptor.y, descriptor.z);
       dummy.rotation.set(0, 0, 0);
-      dummy.scale.set(descriptor.radiusX, descriptor.radiusY,
+      dummy.scale.set(descriptor.radiusX, descriptor.radiusY * (volumetric ? 1 : 1.16),
         volumetric ? descriptor.radiusZ : 1);
       dummy.updateMatrix();
       cloudMesh.setMatrixAt(index, dummy.matrix);
@@ -1146,13 +1255,48 @@ export function createTacticalCloudField(THREE, options = {}) {
     return true;
   }
 
+  function renderDiagnostics() {
+    const cloudInstances = disposed ? 0 : cloudMesh.count;
+    const shadowInstances = disposed ? 0 : shadowMesh.count;
+    const cloudDrawCalls = cloudInstances > 0 ? 1 : 0;
+    const shadowDrawCalls = shadowInstances > 0 ? 1 : 0;
+    const cloudBreakDrawCalls = disposed
+      ? 0
+      : (entryInsideMesh ? 1 : 0) + (entryWispMesh?.count > 0 ? 1 : 0);
+    return Object.freeze({
+      disposed,
+      mode: volumetric ? "volume" : "impostor",
+      cloudInstances,
+      shadowInstances,
+      maxCloudInstances: capacity,
+      cloudDrawCalls,
+      shadowDrawCalls,
+      cloudBreakDrawCalls,
+      drawCalls: cloudDrawCalls + shadowDrawCalls + cloudBreakDrawCalls,
+      maxSteadyStateDrawCalls: 2,
+      maxDrawCalls: 4,
+      cloudTrianglesPerInstance,
+      shadowTrianglesPerInstance,
+      submittedTriangles: cloudInstances * cloudTrianglesPerInstance
+        + shadowInstances * shadowTrianglesPerInstance,
+      maxSteadyStateTriangles: capacity
+        * (cloudTrianglesPerInstance + shadowTrianglesPerInstance),
+      impostorDepthLayers,
+      impostorArtSamplesPerFragment,
+      volumeMarchSteps,
+    });
+  }
+
   function dispose() {
+    if (disposed) return;
+    disposed = true;
     tearDownEntryResources();
     group.removeFromParent();
     geometry.dispose();
     material.dispose();
     shadowGeometry.dispose();
     shadowMaterial.dispose();
+    if (ownsCloudArtMap) cloudArtMap?.dispose();
   }
 
   return Object.freeze({
@@ -1173,6 +1317,7 @@ export function createTacticalCloudField(THREE, options = {}) {
     updateCloudBreak,
     cancelCloudBreak,
     cloudBreakDiagnostics: entrySnapshot,
+    renderDiagnostics,
     dispose,
   });
 }

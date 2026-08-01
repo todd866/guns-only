@@ -14,6 +14,7 @@ export function fighterHudLayout({
   width,
   height,
   touchMode = false,
+  compactMobile = false,
   safeInsets = {},
 } = {}) {
   const viewportWidth = Math.max(1, Number(width) || 1);
@@ -28,8 +29,14 @@ export function fighterHudLayout({
   const tapeInset = sideSafe > 0
     ? clamp(Math.max(viewportWidth * 0.055 + sideSafe, sideSafe + 56), 48, 140)
     : clamp(viewportWidth * 0.055, 48, 78);
+  // The tape value boxes must sit on the SAME line as the gunsight/waterline, so speed, pipper
+  // and altitude read across one row. Measured on an iPhone 13: the boresight-at-level projects to
+  // 0.50 * height, but the old touch expression (0.49H - safe.bottom/2) put the boxes at 0.46H --
+  // 16 px above the pipper, which is the "don't quite line up" the tapes had. The -safe.bottom/2
+  // lift was the culprit; the tapes clear the controls without it (bottom of tape ~0.68H, sticks
+  // begin below 0.72H).
   const instrumentCenterY = touchMode
-    ? viewportHeight * 0.49 - safe.bottom * 0.5
+    ? viewportHeight * 0.50
     : viewportHeight * 0.51;
   const tapeHeight = Math.min(
     touchMode ? 278 : 288,
@@ -72,14 +79,18 @@ export function fighterHudLayout({
     ),
     secondaryBottom,
     targetSafe: {
-      left: tapeInset + tapeHalfWidth + 20,
-      right: viewportWidth - tapeInset - tapeHalfWidth - 20,
+      left: compactMobile ? safe.left + 24 : tapeInset + tapeHalfWidth + 20,
+      right: compactMobile
+        ? viewportWidth - safe.right - 24
+        : viewportWidth - tapeInset - tapeHalfWidth - 20,
       top: targetTop,
       bottom: viewportHeight - safe.bottom - (touchMode ? 138 : 112),
     },
     ladderSafe: {
-      left: tapeInset + tapeHalfWidth + 10,
-      right: viewportWidth - tapeInset - tapeHalfWidth - 10,
+      left: compactMobile ? safe.left + 22 : tapeInset + tapeHalfWidth + 10,
+      right: compactMobile
+        ? viewportWidth - safe.right - 22
+        : viewportWidth - tapeInset - tapeHalfWidth - 10,
       top: headingY + 72,
       bottom: viewportHeight - safe.bottom - (touchMode ? 128 : 106),
     },

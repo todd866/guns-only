@@ -6,4 +6,16 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Rapier v2 has one geometry authority. The canonical authored shape and its deterministic
+         derived engineering artifact are embedded so runtime physics cannot drift onto a second
+         hand-maintained set of dimensions, masses, inertias, inlet area, or thermal limits. -->
+    <EmbeddedResource Include="../airframes/rapier.v2.json"
+                      Link="Airframes/rapier.v2.json"
+                      LogicalName="GunsOnly.Sim.Airframes.rapier.v2.json" />
+    <EmbeddedResource Include="../airframes/generated/rapier.v2.engineering.json"
+                      Link="Airframes/rapier.v2.engineering.json"
+                      LogicalName="GunsOnly.Sim.Airframes.rapier.v2.engineering.json" />
+  </ItemGroup>
+
 </Project>

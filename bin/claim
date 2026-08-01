@@ -1,0 +1,121 @@
+#!/bin/sh
+# claim -- tell the other agents which files you are in, before you are in them.
+#
+# Several agents share this checkout. Today they coordinated by collision: one repointed a
+# shared fixture and broke another's aircraft, one's `git add -A` committed another's unfinished
+# work, and a third spent four rounds working out whose red was whose. All three were avoidable
+# with one line of "I am in this file".
+#
+# Deliberately a directory of files, not a daemon or a socket: any agent, any tool (Claude,
+# Codex, Cursor, a human in an editor) can read and write it with `ls` and `cat`, and a crashed
+# agent leaves a stale claim you can see and clear rather than a lock nobody can explain.
+#
+#   bin/claim take sim/Doctrine/Beats.cs --as korea-panther --why "split recovery fixture"
+#   bin/claim check sim/Doctrine/Beats.cs      # before you edit -- exits 1 if someone else holds it
+#   bin/claim list
+#   bin/claim release --as korea-panther       # release everything you hold
+#
+# Claims are advisory. They are a courtesy protocol, not a permission system: nothing stops you
+# editing a claimed file, but if you do it anyway you own the merge.
+set -eu
+
+repo_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+claims_dir="$repo_dir/.agent-claims"
+mkdir -p "$claims_dir"
+
+me=""
+why=""
+cmd=${1:-list}
+[ "$#" -gt 0 ] && shift
+
+paths=""
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --as) me=${2:-}; shift 2 ;;
+        --why) why=${2:-}; shift 2 ;;
+        -h|--help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) paths="$paths $1"; shift ;;
+    esac
+done
+
+slug() { printf '%s' "$1" | tr '/' '_' | tr -cd 'A-Za-z0-9._-'; }
+# Strip newlines and control characters: a value spanning lines would shift every later field.
+sanitise() { printf '%s' "$1" | tr -d '\n\r' | tr -cd '[:print:]'; }
+# Read a claim WITHOUT sourcing it. Fixed line order, plain text, no evaluation.
+read_claim() {
+    c_path=$(sed -n '1p' "$1"); c_agent=$(sed -n '2p' "$1")
+    c_since=$(sed -n '3p' "$1"); c_why=$(sed -n '4p' "$1")
+}
+now() { date '+%Y-%m-%dT%H:%M:%S'; }
+claim_files() {
+    find "$claims_dir" -mindepth 1 -maxdepth 1 -type f -print | LC_ALL=C sort
+}
+
+case "$cmd" in
+list)
+    files=$(claim_files)
+    if [ -z "$files" ]; then
+        echo "no active claims"; exit 0
+    fi
+    printf '%-46s %-16s %-20s %s\n' PATH AGENT SINCE WHY
+    printf '%s\n' "$files" | while IFS= read -r f; do
+        read_claim "$f"
+        printf '%-46s %-16s %-20s %s\n' "$c_path" "$c_agent" "$c_since" "$c_why"
+    done
+    ;;
+take)
+    [ -n "$me" ] || { echo "claim: --as <agent-name> is required" >&2; exit 2; }
+    [ -n "$paths" ] || { echo "claim: name at least one path" >&2; exit 2; }
+    for p in $paths; do
+        f="$claims_dir/$(slug "$p")"
+        if [ -f "$f" ]; then
+            read_claim "$f"
+            if [ "$c_agent" != "$me" ]; then
+                echo "claim: $p is already held by $c_agent since $c_since ($c_why)" >&2
+                echo "claim: talk to them, or pick different work. Not taking it." >&2
+                exit 1
+            fi
+        fi
+        # Four plain lines in a fixed order. NEVER shell syntax: these files are written by
+        # one agent and read by every other, so anything eval-able here is code execution across
+        # the whole team. A --why of "'; rm -rf ~; '" used to do exactly that.
+        {
+            printf '%s\n' "$(sanitise "$p")"
+            printf '%s\n' "$(sanitise "$me")"
+            printf '%s\n' "$(now)"
+            printf '%s\n' "$(sanitise "$why")"
+        } > "$f"
+        echo "claimed $p"
+    done
+    ;;
+check)
+    [ -n "$paths" ] || { echo "claim: name at least one path" >&2; exit 2; }
+    rc=0
+    for p in $paths; do
+        f="$claims_dir/$(slug "$p")"
+        [ -f "$f" ] || continue
+        read_claim "$f"
+        if [ -n "$me" ] && [ "$c_agent" = "$me" ]; then continue; fi
+        echo "HELD  $p  by $c_agent since $c_since — $c_why" >&2
+        rc=1
+    done
+    [ "$rc" -eq 0 ] && echo "clear"
+    exit "$rc"
+    ;;
+release)
+    if [ -n "$paths" ]; then
+        for p in $paths; do rm -f "$claims_dir/$(slug "$p")"; echo "released $p"; done
+    elif [ -n "$me" ]; then
+        files=$(claim_files)
+        [ -n "$files" ] || exit 0
+        printf '%s\n' "$files" | while IFS= read -r f; do
+            read_claim "$f"
+            [ "$c_agent" = "$me" ] && { rm -f "$f"; echo "released $c_path"; }
+        done
+    else
+        echo "claim: release needs paths or --as <agent-name>" >&2; exit 2
+    fi
+    ;;
+*)
+    echo "claim: unknown command '$cmd' (take|check|list|release)" >&2; exit 2 ;;
+esac

@@ -1,3 +1,5 @@
+using GunsOnly.Sim.Doctrine;
+
 namespace GunsOnly.Sim;
 
 /// <summary>
@@ -45,24 +47,24 @@ public enum RapierComputerFailure {
 public readonly record struct RapierMissionGuidance(
     RapierMissionPhase Phase,
     string Cue,
-    /// <summary>Mach the director actually commands this tick (authored, skin-clamped).</summary>
+    /// <summary>Mach the director actually commands this tick (authored, envelope-clamped).</summary>
     double TargetMach,
     double TargetAltitudeFt,
     PilotCommand Command,
     Vec3D Waypoint,
     int RecoveryGate,
-    /// <summary>Profile Mach before skin clamp. Equals TargetMach when the structure allows it.</summary>
+    /// <summary>Profile Mach before q and binding-zone thermal screens.</summary>
     double AuthoredTargetMach = 0.0,
     /// <summary>
-    /// Legacy name for the material-capability Mach screening ceiling at current ambient.
-    /// The selected temperature reference may be flat-skin recovery or stagnation-point T0.
+    /// Legacy projection name for the binding-zone thermal Mach ceiling at current ambient. The
+    /// value includes the aircraft's selected freestream reference and declared local-rise share.
     /// </summary>
     double SkinMachLimit = double.PositiveInfinity,
-    /// <summary>Mach after Min(authored, skin). Same as TargetMach; named for snapshot clarity.</summary>
+    /// <summary>Mach after Min(authored, thermal, q). Same as TargetMach.</summary>
     double CommandedMach = 0.0,
     /// <summary>Stable token for why the current phase was entered (OFT gate rows).</summary>
     string PhaseReason = "",
-    /// <summary>Circuits pattern leg token: DEPART, INITIAL, BREAK, DOWNWIND, BASE, SHORT_FINAL, WIRE_FINAL.</summary>
+    /// <summary>Circuits pattern leg token: DEPART, INITIAL, BREAK, CROSSWIND, DOWNWIND, BASE, SHORT_FINAL, WIRE_FINAL.</summary>
     string CircuitLeg = "",
     /// <summary>Director bank target in degrees for the Circuits flight director.</summary>
     double FdBankDeg = 0.0,
@@ -89,7 +91,14 @@ public readonly record struct RapierMissionGuidance(
     /// <summary>Stable reach-fight intention token for guidance and snapshots.</summary>
     string Intention = "",
     /// <summary>Stable reach-fight strategy token for guidance and snapshots.</summary>
-    string Strategy = "");
+    string Strategy = "",
+    /// <summary>Exact director flight-path target; HUDs must not infer it from a waypoint.</summary>
+    double TargetGammaDeg = 0.0,
+    /// <summary>
+    /// Stable configuration-authority handoff. Recovery phase begins in a high-altitude marshal,
+    /// where IAS can be low despite supersonic TAS; gear/flap automation waits for captured lineup.
+    /// </summary>
+    bool RecoveryConfigurationRequested = false);
 
 public sealed record ScriptedInterceptConfig(
     int FormationSize = 4,
@@ -111,9 +120,15 @@ public sealed record ScriptedInterceptConfig(
     /// <summary>
     /// Circuits / pattern-only: launch, climb to the recovery shelf, trap, repeat. No contact,
     /// no egress dash — the director must not treat a zero-opponent count as "go recover from
-    /// FL700" during the catapult stroke, and must not chase a parked phantom bandit.
+    /// dash-shelf cues during the catapult stroke, and must not chase a parked contact.
     /// </summary>
     bool PatternOnly = false,
+    /// <summary>
+    /// Mission-authored intention in force when the aircraft reports base. Full stop is the local
+    /// default and remains unspoken; a planned touch-and-go must be selected here before the
+    /// transaction. A later pilot wave-off/go-around supersedes this plan on frequency.
+    /// </summary>
+    CircuitLandingIntent LandingIntent = CircuitLandingIntent.FullStop,
     /// <summary>
     /// Zoom-lob profile: after ram climb, pull into a ballistic coast, align nose to V, relight.
     /// </summary>
@@ -138,14 +153,85 @@ public sealed record ScriptedInterceptConfig(
 /// an explicit automation command hands the aircraft back to the director.
 /// </summary>
 public sealed class RapierMissionDirector {
+    internal readonly record struct BalloonCoastPrediction(
+        bool HasGunWindow,
+        double ClosestRangeM,
+        Vec3D ClosestRelativeMissM,
+        double VerticalSpeedAtClosestMps,
+        double LosAngleAtClosestDeg,
+        double TimeAtClosestSeconds,
+        double InitialHorizontalLosRateRadPerSecond,
+        double InitialSignedHorizontalZeroEffortMissM,
+        double GunWindowRangeM,
+        double GunWindowBoreErrorDeg,
+        double GunWindowTimeSeconds);
     /// <summary>
-    /// Measured design dash (Intercept OFT energy-ladder ~M3.69 class). Commands Intercept and
-    /// Escape. Stays below <c>RamSpillCompleteMach</c> (3.8). Mach 4 remains SE-bible fiction only
-    /// — never a mission target.
+    /// Legacy formation-intercept dash retained for the experimental cards and their OFT rows.
     /// </summary>
     public const double MeasuredDashMach = 3.55;
+    /// <summary>
+    /// Production balloon-card target, bound to the canonical shape-first design artifact rather
+    /// than a second mission-local performance claim.
+    /// </summary>
+    public static double BalloonDesignDashMach => RapierV2Design.DesignMach;
+    /// <summary>Dynamic pressure required before the post-apex ram relight is called complete.</summary>
+    public const double RelightDynamicPressurePa = 4_000.0;
+    /// <summary>Beyond this distance an opening balloon pass is over; never turn back for a retry.</summary>
+    public const double BalloonApexGunWindowM = 8_000.0;
+    /// <summary>The physical envelope/rigging target sphere used by the live Card 12 gun.</summary>
+    public const double BalloonTargetHitRadiusM = 56.0;
+    /// <summary>
+    /// Authored incidence for the production balloon pull. The command is reduced below this
+    /// value whenever the current q/mass combination would exceed 3.2 g, and is always bounded by
+    /// the physical attached-flow break. This manoeuvre deliberately unstarts the inlet: carrying
+    /// stored M4.2 energy through an idle pull is the lesson, not fictional powered high-alpha
+    /// flight through a started duct.
+    /// </summary>
+    public const double BalloonPullAlphaDeg = 20.0;
+    public const double BalloonPullMaximumG = 3.2;
+    /// <summary>
+    /// The generic experimental zoom cards retain a fixed flight-path target. Card 12 does not:
+    /// its unload is selected by the drag-aware balloon intercept predictor below.
+    /// </summary>
+    public const double ExperimentalZoomCoastGammaDeg = 24.0;
+    // Prediction and live phase entry both use the exact M61 solver. The 0.10 s flight-time margin
+    // keeps a solution away from the projectile lifetime boundary, while three seconds after
+    // unload gives the real alpha/RCS transient time to settle before the predicted shot.
+    public const double BalloonPredictedMaximumFlightSeconds = 1.90;
+    public const double BalloonPredictedMinimumCoastSeconds = 3.0;
+    public const double BalloonPullNavigationMaximumBankDeg = 12.0;
+    public const double BalloonGunSteeringMaximumBoreDeg = 14.0;
+    public const double BalloonGunSteeringMaximumBankDeg = 20.0;
+    public const double BalloonGunSteeringMaximumG = 2.2;
+    /// <summary>
+    /// Speed look-ahead used by the Rapier energy climb. A schedule evaluated at only the
+    /// current speed commands zero climb when the aircraft is exactly on q, even while full power
+    /// is moving that schedule upward. Looking one short acceleration interval ahead supplies the
+    /// missing feed-forward without inventing an altitude or relaxing the structural limit.
+    /// </summary>
+    public const double RapierScheduleMaximumSpeedLeadMps = 100.0;
+    public const double RapierScheduleMinimumSpeedLeadMps = 30.0;
+    const double RapierScheduleLeadTaperStartMps = 600.0;
+    const double RapierScheduleLeadTaperEndMps = 900.0;
+    /// <summary>Start unloading before spool lag can carry the aircraft to the 55 kPa placard.</summary>
+    public const double RapierQProtectionOnsetPa = 38_000.0;
+    /// <summary>
+    /// At this pressure the production director commands idle and its maximum energy-climb angle.
+    /// The remaining 5 kPa to the canonical placard is reserved for engine and flight-path lag.
+    /// </summary>
+    public const double RapierQProtectionHardPa = 50_000.0;
+    public const double RapierQProtectionGammaDeg = 24.0;
+    const double BalloonRamTrimLever = 0.88;
+    // Hold the one published full-power stop until the aircraft is genuinely close to the M4.2
+    // shelf, then taper sharply to the .88 sustaining lever. A soft gain began reducing ram
+    // thrust near M3.7 and reached the design condition only after useful pull range was gone.
+    const double BalloonRamMachGain = 24.0;
 
-    const double ClimbTopM = 56_000.0 * 0.3048;
+    // Transonic phase boundary. Guidance does not hold this altitude as a dash shelf: it rides the
+    // speed-led 35 kPa schedule continuously through it, then hands cycle management to ram.
+    // Keeping one shared boundary prevents the reach-fight and mission directors disagreeing over
+    // whether acceleration has begun.
+    const double ClimbTopM = ReachFightDirector.ClimbTopM;
     const double CruiseAltitudeM = 70_000.0 * 0.3048;
     const double FeetPerMetre = 1.0 / 0.3048;
     RapierMissionPhase _phase = RapierMissionPhase.Launch;
@@ -171,12 +257,23 @@ public sealed class RapierMissionDirector {
     const double CircuitShelfHeightM = 2_500.0 * 0.3048;
     /// Compact overhead (~2–4 min). Hold ~250 KT; idle when fast so T/W cannot walk to 330.
     const double CircuitPatternKtas = 250.0;
-    const double CircuitBreakKtas = 230.0;
+    // Equal to the pattern, not below it. The director demands >= 2.8 G in the break and this
+    // wing offers 2.84 G at 250 KT -- at the old 230 KT it offered only 2.41 G, so the break was
+    // being asked for more lift than existed and the aircraft descended out of it into the sea.
+    const double CircuitBreakKtas = 250.0;
     const double CircuitBaseKtas = 200.0;
-    const double CircuitFinalKtas = 165.0;
+    // At circuit weight the wing stalls near 148 KT, so 165 was 1.11 Vs and the aircraft
+    // actually arrived at 132 KT -- below flying speed, falling onto the deck 267 m short of the
+    // wires. The loop undershoots its commanded speed by roughly 20 KT on final.
+    const double CircuitFinalKtas = 190.0;
     // Carrier touchdown assessment currently accepts at most 82 m/s (~159 KT). Authoring a
     // 165–177 KT wire pass made a successful arrest physically impossible even when centred.
-    const double CircuitWireKtas = 155.0;
+    //
+    // NOT the parameter governing the automated recovery touchdown. Raising this to 178 changed
+    // the delivered touchdown by ~1 KT on the sortie card and not at all on the recovery card,
+    // where the "GATE" cue never appears -- so that approach is flown by a different law and this
+    // constant is not in its path. Recorded so the next person does not spend the same hour here.
+    const double CircuitWireKtas = 168.0;
     const double CircuitPatternSpeedMps = CircuitPatternKtas / 1.94384;
     const double CircuitBreakSpeedMps = CircuitBreakKtas / 1.94384;
     const double CircuitBaseSpeedMps = CircuitBaseKtas / 1.94384;
@@ -187,6 +284,10 @@ public sealed class RapierMissionDirector {
     // A 150 km radius guarantees at least ~104 km of setup from every arrival azimuth.
     const double RecoveryEntryHomeRangeM = 150_000.0;
     /// Crosswind/break bank: prefer 60°, allow 75°. At 250 KT / 60° R ≈ 0.53 NM.
+    // The break is meant to be steep and military: 60 degrees preferred, and the director
+    // demands >= 2.8 G. That is a SPEED requirement, not a bank one -- 2.8 G needs at least
+    // 248 KT on this wing, so the pattern and break speeds below carry it rather than the bank
+    // being flattened to suit a slow pattern.
     const double CircuitBreakBankDeg = 60.0;
     const double CircuitBreakBankMaxDeg = 75.0;
     /// Base bank: prefer 45°, allow 60°.
@@ -199,7 +300,14 @@ public sealed class RapierMissionDirector {
     /// Finals start at 3 NM.
     const double CircuitFinalAlongM = 3.00 * 1852.0;
     /// Flythrough box half-width/height in metres — a real sky object, not HUD chrome.
-    const double CircuitGateHalfM = 100.0;
+    // A 100 m half-width is +/-328 ft laterally AND vertically, and at 250 KT the aircraft is
+    // inside the 180 m depth for 1.4 seconds. That asks a jet to thread a box it can only be in
+    // for a moment, and when it misses, the leg never earns and the circuit stalls on INITIAL
+    // forever -- the same defect RecoveryProcedureDirector had, where a capture volume too tight
+    // to capture pinned the ladder at gate 0 across every recorded sortie.
+    //
+    // 220 m is still a disciplined pass and it is one the automation can actually fly.
+    const double CircuitGateHalfM = 220.0;
     /// Along-track half-depth for "through the square" capture.
     const double CircuitGateDepthM = 180.0;
     /// KTAS band to earn the gate (energy gate).
@@ -210,12 +318,19 @@ public sealed class RapierMissionDirector {
     /// Still worth another lob when contact is beyond attack geometry and fuel has fight room.
     const double AnotherSkipContactRangeM = 90_000.0;
     int _lobSkip;
+    bool _balloonApexPassCommitted;
+    bool _balloonApexPassComplete;
+    bool _balloonPredictedWindowProvenance;
+    int _balloonCoastPredictionTicks;
+    BalloonCoastPrediction _latestBalloonCoastPrediction;
 
     public RapierMissionPhase Phase => _phase;
     public int LobSkip => _lobSkip;
 
     void EnterPhase(RapierMissionPhase next, string reason) {
         if (_phase == next && _phaseReason == reason) return;
+        if (next != RapierMissionPhase.ZoomPull || _phase != RapierMissionPhase.ZoomPull)
+            _balloonCoastPredictionTicks = 0;
         _phase = next;
         _phaseReason = reason;
     }
@@ -227,12 +342,16 @@ public sealed class RapierMissionDirector {
     /// Circuits speed hold for a high-T/W brick. Prior schedules left 0.7+ lever at pattern
     /// speed and walked through 330 KT in a shallow bank — that is not a circuit.
     /// </summary>
+    /// Lever POSITIONS, so they only mean anything against a particular engine. 0.26 trim and a
+    /// 0.52 ceiling were set when the core was 68% larger; against the honest engine 0.26 buys
+    /// less thrust than a banked turn costs in drag, so the automation rolled into the break and
+    /// descended into the sea. Scaled by the thrust ratio the pattern holds its turn again.
     static double PatternHoldThrottle(
-        double targetMps, double currentMps, double trimLever = 0.26) {
+        double targetMps, double currentMps, double trimLever = 0.44) {
         double error = targetMps - currentMps;
         if (error < -6.0) return 0.0; // overspeed → idle
         double lever = trimLever + error * 0.016;
-        return Math.Clamp(lever, 0.0, 0.52);
+        return Math.Clamp(lever, 0.0, 0.88);
     }
 
     /// <summary>
@@ -344,6 +463,122 @@ public sealed class RapierMissionDirector {
             DirectLateralControl: false);
     }
 
+    /// <summary>
+    /// Classical N=3 horizontal proportional navigation for the only powered part of the balloon
+    /// turn. The predictor still publishes closest-miss/ZEM evidence, but the lateral controller
+    /// responds to the directly observed LOS rate so a noisy three-dimensional closest point cannot
+    /// spend the pull's vertical lift. The law ends at unload and cannot reverse into a second pass.
+    /// </summary>
+    static double BalloonPullBankTarget(
+        in AircraftState player,
+        in AircraftState contact,
+        in AircraftParams playerAircraft,
+        double mach,
+        double qPa,
+        double commandedAlphaRad) {
+        Vec3D playerVelocity = player.VelocityVector();
+        Vec3D horizontalVelocity = new(playerVelocity.X, 0.0, playerVelocity.Z);
+        Vec3D horizontalForward = horizontalVelocity.Normalized();
+        if (horizontalForward.Length < 0.5) return 0.0;
+        Vec3D horizontalRight = new(
+            horizontalForward.Z, 0.0, -horizontalForward.X);
+        Vec3D horizontalRange = new(
+            contact.Position.X - player.Position.X,
+            0.0,
+            contact.Position.Z - player.Position.Z);
+        Vec3D contactVelocity = contact.VelocityVector();
+        Vec3D horizontalRelativeVelocity = new(
+            contactVelocity.X - playerVelocity.X,
+            0.0,
+            contactVelocity.Z - playerVelocity.Z);
+        double rangeM = horizontalRange.Length;
+        double closingMps = rangeM > 1.0
+            ? -horizontalRange.Dot(horizontalRelativeVelocity) / rangeM
+            : 0.0;
+        double timeToGoSeconds = closingMps > 1.0
+            ? rangeM / closingMps : double.PositiveInfinity;
+        if (rangeM <= BalloonApexGunWindowM
+            || closingMps <= 100.0
+            || timeToGoSeconds <= 8.0)
+            return 0.0;
+
+        double rangeSquared = horizontalRange.Dot(horizontalRange);
+        double losRateRadPerSecond = rangeSquared > 1.0
+            ? (horizontalRange.Z * horizontalRelativeVelocity.X
+                - horizontalRange.X * horizontalRelativeVelocity.Z) / rangeSquared
+            : 0.0;
+        double requestedLateralAccelerationMps2 =
+            3.0 * closingMps * losRateRadPerSecond;
+
+        double liftCoefficient = FlightModel.LiftCoefficient(
+            commandedAlphaRad, playerAircraft, mach);
+        double liftAccelerationMps2 = qPa * playerAircraft.WingAreaM2
+            * Math.Max(0.0, liftCoefficient) / Math.Max(player.Mass, 1.0);
+        if (liftAccelerationMps2 <= 0.1) return 0.0;
+        double bankLimitRad = BalloonPullNavigationMaximumBankDeg * Math.PI / 180.0;
+        double lateralFraction = Math.Clamp(
+            requestedLateralAccelerationMps2 / liftAccelerationMps2,
+            -Math.Sin(bankLimitRad),
+            Math.Sin(bankLimitRad));
+        return Math.Asin(lateralFraction);
+    }
+
+    /// <summary>
+    /// Point the body-fixed gun toward the authoritative M61 lead once that finite solution first
+    /// exists. Incidence, bank and implied lift remain inside the same attached-flow/2.2-G bounds
+    /// as the aircraft; low-q authority comes from its finite cold-gas RCS, not an attitude snap.
+    /// </summary>
+    static bool TryBalloonGunLeadCommand(
+        in AircraftState player,
+        in AircraftParams playerAircraft,
+        in GunBallisticSolution solution,
+        double mach,
+        double qPa,
+        out double bankTargetRad,
+        out double commandedAlphaRad) {
+        bankTargetRad = 0.0;
+        commandedAlphaRad = double.NaN;
+        if (!solution.HasLeadSolution
+            || !double.IsFinite(solution.BoreErrorRad)
+            || solution.BoreErrorRad
+                > BalloonGunSteeringMaximumBoreDeg * Math.PI / 180.0)
+            return false;
+
+        Vec3D velocityDirection = player.VelocityVector().Normalized();
+        double forwardProjection = Math.Clamp(
+            velocityDirection.Dot(solution.LeadDirection), -1.0, 1.0);
+        Vec3D leadNormal = solution.LeadDirection
+            - velocityDirection * forwardProjection;
+        if (forwardProjection <= 0.0 || leadNormal.Length < 1e-9) return false;
+        double velocityToLeadRad = Math.Atan2(leadNormal.Length, forwardProjection);
+
+        Vec3D worldUp = new(0.0, 1.0, 0.0);
+        Vec3D upReference = worldUp - velocityDirection * velocityDirection.Y;
+        if (upReference.Length < 1e-6) return false;
+        upReference = upReference.Normalized();
+        Vec3D rightReference = upReference.Cross(velocityDirection).Normalized();
+        Vec3D desiredNormal = leadNormal.Normalized();
+        double alphaSign = desiredNormal.Dot(upReference) >= 0.0 ? 1.0 : -1.0;
+        Vec3D liftNormal = desiredNormal * alphaSign;
+        double requestedBankRad = Math.Atan2(
+            liftNormal.Dot(rightReference), liftNormal.Dot(upReference));
+        double bankLimitRad = BalloonGunSteeringMaximumBankDeg * Math.PI / 180.0;
+        bankTargetRad = Math.Clamp(requestedBankRad, -bankLimitRad, bankLimitRad);
+
+        double physicalAlphaMagnitude = alphaSign > 0.0
+            ? FlightModel.AlphaAeroMax(playerAircraft)
+            : -FlightModel.AlphaAeroMin(playerAircraft);
+        double clAlpha = FlightModel.EffectiveClAlpha(playerAircraft, mach);
+        double alphaForMaximumG = BalloonGunSteeringMaximumG
+            * player.Mass * FlightModel.G0
+            / Math.Max(qPa * playerAircraft.WingAreaM2 * clAlpha, 1e-6);
+        double alphaMagnitude = Math.Min(
+            velocityToLeadRad,
+            Math.Min(physicalAlphaMagnitude, alphaForMaximumG));
+        commandedAlphaRad = alphaSign * Math.Max(0.0, alphaMagnitude);
+        return double.IsFinite(commandedAlphaRad);
+    }
+
     static double AltitudeCaptureGamma(double targetAltitudeM,
         in AircraftState player, double trueAirspeedMps,
         double captureSeconds, double minimumGamma, double maximumGamma) {
@@ -352,6 +587,91 @@ public sealed class RapierMissionDirector {
         return Math.Clamp(Math.Atan2(
             targetAltitudeM - player.Position.Y, distanceForCaptureM),
             minimumGamma, maximumGamma);
+    }
+
+    /// <summary>
+    /// Constant-velocity horizontal intercept point. This is the exact positive solution of
+    /// |r + v_target t| = |v_own,h| t, not an empirical ETA multiplier; PN later closes the error
+    /// introduced by finite turn response and changing speed.
+    /// </summary>
+    static Vec3D HorizontalInterceptWaypoint(
+        in AircraftState player,
+        in AircraftState contact) {
+        Vec3D playerVelocity = player.VelocityVector();
+        Vec3D contactVelocity = contact.VelocityVector();
+        double ownHorizontalSpeedMps = Math.Sqrt(
+            playerVelocity.X * playerVelocity.X
+                + playerVelocity.Z * playerVelocity.Z);
+        double relativeX = contact.Position.X - player.Position.X;
+        double relativeZ = contact.Position.Z - player.Position.Z;
+        double targetVelocityX = contactVelocity.X;
+        double targetVelocityZ = contactVelocity.Z;
+        double a = targetVelocityX * targetVelocityX
+            + targetVelocityZ * targetVelocityZ
+            - ownHorizontalSpeedMps * ownHorizontalSpeedMps;
+        double b = 2.0 * (relativeX * targetVelocityX
+            + relativeZ * targetVelocityZ);
+        double c = relativeX * relativeX + relativeZ * relativeZ;
+        double interceptSeconds = double.PositiveInfinity;
+        if (ownHorizontalSpeedMps > 1.0 && c > 1.0) {
+            if (Math.Abs(a) < 1e-9) {
+                if (Math.Abs(b) > 1e-9) {
+                    double candidate = -c / b;
+                    if (candidate > 0.0) interceptSeconds = candidate;
+                }
+            } else {
+                double discriminant = b * b - 4.0 * a * c;
+                if (discriminant >= 0.0) {
+                    double root = Math.Sqrt(discriminant);
+                    double first = (-b - root) / (2.0 * a);
+                    double second = (-b + root) / (2.0 * a);
+                    if (first > 0.0) interceptSeconds = first;
+                    if (second > 0.0) interceptSeconds = Math.Min(interceptSeconds, second);
+                }
+            }
+        }
+        if (!double.IsFinite(interceptSeconds)) return contact.Position;
+        return new Vec3D(
+            contact.Position.X + targetVelocityX * interceptSeconds,
+            contact.Position.Y,
+            contact.Position.Z + targetVelocityZ * interceptSeconds);
+    }
+
+    public static double RapierScheduleSpeedLeadMps(double trueAirspeedMps) {
+        double taper = Math.Clamp(
+            (trueAirspeedMps - RapierScheduleLeadTaperStartMps)
+                / (RapierScheduleLeadTaperEndMps - RapierScheduleLeadTaperStartMps),
+            0.0, 1.0);
+        return RapierScheduleMaximumSpeedLeadMps
+            + (RapierScheduleMinimumSpeedLeadMps
+                - RapierScheduleMaximumSpeedLeadMps) * taper;
+    }
+
+    static double RapierScheduleAltitudeM(
+        IAtmosphereModel atmosphere, double trueAirspeedMps, double floorM) =>
+        EnergySchedule.ClimbScheduleAltitudeM(
+            atmosphere,
+            trueAirspeedMps + RapierScheduleSpeedLeadMps(trueAirspeedMps),
+            floorM);
+
+    static double RapierQProtectedGamma(double scheduledGammaRad, double qPa) {
+        double protection = Math.Clamp(
+            (qPa - RapierQProtectionOnsetPa)
+                / (RapierQProtectionHardPa - RapierQProtectionOnsetPa),
+            0.0, 1.0);
+        double protectionGammaRad = protection
+            * RapierQProtectionGammaDeg * Math.PI / 180.0;
+        return Math.Max(scheduledGammaRad, protectionGammaRad);
+    }
+
+    static double RapierQProtectedThrottle(
+        double requestedLever, double qPa, double maximumLever) {
+        double protection = Math.Clamp(
+            (qPa - RapierQProtectionOnsetPa)
+                / (RapierQProtectionHardPa - RapierQProtectionOnsetPa),
+            0.0, 1.0);
+        double protectedMaximumLever = maximumLever * (1.0 - protection);
+        return Math.Min(requestedLever, protectedMaximumLever);
     }
 
     static string JobToken(RapierJobKind job) => job switch {
@@ -404,6 +724,7 @@ public sealed class RapierMissionDirector {
             "DEPART" => "CLIMB TO PATTERN",
             "INITIAL" => "BREAK LEFT ABM",
             "BREAK" => "~60° TO DOWNWIND",
+            "CROSSWIND" => "ROLL OUT DOWNWIND",
             "DOWNWIND" => "GEAR FLAPS · ABEAM",
             "BASE" => "~45° TO FINAL",
             "SHORT_FINAL" => "LINE UP · CONFIGURED",
@@ -651,7 +972,12 @@ public sealed class RapierMissionDirector {
             waypoint = LineLookAhead(
                 playerPosition, downwindAbeam, runwayForward * -1.0, 1_000.0);
             approachSpeedMps = CircuitPatternSpeedMps;
-            circuitLeg = "DOWNWIND";
+            // Publish the turn as CROSSWIND until the aircraft has actually established the
+            // reciprocal. Radio and ANCA can now consume a real semantic state instead of
+            // guessing from audio timing.
+            circuitLeg = downwindHeadingError <= 35.0 * Math.PI / 180.0
+                ? "DOWNWIND"
+                : "CROSSWIND";
             gateHalfM = CircuitGateHalfM * 1.4;
             gateFace = downwindFace;
         } else if (!_circuitBaseReached) {
@@ -677,7 +1003,7 @@ public sealed class RapierMissionDirector {
         }
 
         double targetKtas = circuitLeg switch {
-            "INITIAL" or "DOWNWIND" => CircuitPatternKtas,
+            "INITIAL" or "CROSSWIND" or "DOWNWIND" => CircuitPatternKtas,
             "BREAK" => CircuitBreakKtas,
             "BASE" => CircuitBaseKtas,
             "SHORT_FINAL" => CircuitFinalKtas,
@@ -727,26 +1053,57 @@ public sealed class RapierMissionDirector {
     }
 
     /// <summary>
-    /// Progressive low-alpha pull, ballistic coast, nose-on-V reentry, then ram dip/relight.
+    /// Progressive stored-energy pull, ballistic coast, nose-on-V reentry, then ram dip/relight.
     /// After dip, another skip may open when range and fuel still warrant it (Sanger multi-skip).
-    /// Entry is FL500–FL600 / high Mach after the ram climb shelf.
+    /// Entry is from the assigned dash shelf after the continuous constant-q energy climb.
     /// </summary>
     void UpdateZoomLobPhase(
-        in AircraftState player, double mach, double qPa, double noseOnVelocityErrorDeg,
-        double contactRangeM, double fuelLb, double reserveFuelLb, bool zoomLobProfile) {
-        const double PullGammaRad = 40.0 * Math.PI / 180.0;
+        in AircraftState player, in AircraftState contact,
+        IAtmosphereModel atmosphere, in AircraftParams playerAircraft,
+        in GunBallisticSolution balloonGunSolution,
+        double mach, double qPa, double noseOnVelocityErrorDeg,
+        double contactRangeM, double fuelLb, double reserveFuelLb,
+        bool zoomLobProfile, RapierJobKind job, string entryReason) {
+        bool balloonApexProfile = zoomLobProfile && job == RapierJobKind.Balloon;
+        double pullGammaRad = ExperimentalZoomCoastGammaDeg * Math.PI / 180.0;
         const double CoastEntryAltM = 28_000.0; // ~FL920 — q collapsing
         const double ReenterAltM = 24_000.0;    // start aligning on the way down
-        const double RelightQPa = 4_000.0;
 
-        if ((int)_phase < (int)RapierMissionPhase.ZoomPull) {
+        if (_phase is not RapierMissionPhase.ZoomPull
+            and not RapierMissionPhase.ZoomCoast
+            and not RapierMissionPhase.ReenterAlign
+            and not RapierMissionPhase.DipRelight) {
             if (_lobSkip <= 0) _lobSkip = 1;
-            EnterPhase(RapierMissionPhase.ZoomPull, "zoom_pull_entry");
+            if (balloonApexProfile) {
+                _balloonPredictedWindowProvenance = false;
+                _latestBalloonCoastPrediction = default;
+            }
+            EnterPhase(RapierMissionPhase.ZoomPull,
+                entryReason.Length > 0 ? entryReason : "zoom_pull_entry");
             return;
         }
 
         if (_phase == RapierMissionPhase.ZoomPull) {
-            if (player.Gamma >= PullGammaRad * 0.85
+            if (balloonApexProfile) {
+                _latestBalloonCoastPrediction = PredictBalloonGunWindowAfterUnload(
+                    player, contact, atmosphere, playerAircraft);
+                bool geometryEarned = _latestBalloonCoastPrediction.HasGunWindow;
+                _balloonCoastPredictionTicks = geometryEarned
+                    ? _balloonCoastPredictionTicks + 1 : 0;
+                if (_balloonCoastPredictionTicks >= 2) {
+                    _balloonPredictedWindowProvenance = true;
+                    EnterPhase(RapierMissionPhase.ZoomCoast,
+                        "balloon_predicted_coast_window");
+                } else if (player.VelocityVector().Dot(
+                        contact.Position - player.Position) <= 0.0) {
+                    // A missed numerical window must still produce a finite one-pass sortie.
+                    // Unload after the target crosses aft, let the ordinary coast declare the
+                    // miss, then reenter and recover; never phase-lock in a pull behind a balloon.
+                    _balloonPredictedWindowProvenance = false;
+                    EnterPhase(RapierMissionPhase.ZoomCoast,
+                        "balloon_pull_overshoot_coast");
+                }
+            } else if (player.Gamma >= pullGammaRad * 0.85
                 || player.Position.Y >= CoastEntryAltM) {
                 EnterPhase(RapierMissionPhase.ZoomCoast, "zoom_coast_ballistic");
             }
@@ -754,6 +1111,29 @@ public sealed class RapierMissionDirector {
         }
 
         if (_phase == RapierMissionPhase.ZoomCoast) {
+            if (balloonApexProfile) {
+                double verticalSpeedMps = player.VelocityVector().Y;
+                bool earnedBodyAxisGunWindow = _balloonPredictedWindowProvenance
+                    && balloonGunSolution.HasLeadSolution
+                    && balloonGunSolution.TimeOfFlightSeconds
+                        <= BalloonPredictedMaximumFlightSeconds
+                    && balloonGunSolution.BodyAxisOnSolution;
+                if (earnedBodyAxisGunWindow) {
+                    _balloonApexPassCommitted = true;
+                    EnterPhase(RapierMissionPhase.Attack,
+                        "balloon_ballistic_body_axis_window");
+                } else if (verticalSpeedMps < -20.0
+                    && player.Position.Y < CoastEntryAltM + 8_000.0) {
+                    // Geometry was not earned. Do not turn the balloon into a dogfight or grant a
+                    // second try: call the pass missed and recover the aircraft through the same
+                    // reentry/relight sequence as a hit.
+                    _balloonApexPassCommitted = true;
+                    _balloonApexPassComplete = true;
+                    EnterPhase(RapierMissionPhase.ReenterAlign,
+                        "balloon_window_missed_reenter");
+                }
+                return;
+            }
             // Apex passed: falling, still thin air — hand the pilot the nose→V problem.
             if (player.VelocityVector().Y < -20.0 && player.Position.Y < CoastEntryAltM + 8_000.0) {
                 EnterPhase(RapierMissionPhase.ReenterAlign, "reenter_nose_on_v");
@@ -762,7 +1142,7 @@ public sealed class RapierMissionDirector {
         }
 
         if (_phase == RapierMissionPhase.ReenterAlign) {
-            if (qPa >= RelightQPa
+            if (qPa >= RelightDynamicPressurePa
                 || (noseOnVelocityErrorDeg < 12.0 && player.Position.Y < ReenterAltM)) {
                 EnterPhase(RapierMissionPhase.DipRelight, "dip_relight");
             }
@@ -770,7 +1150,7 @@ public sealed class RapierMissionDirector {
         }
 
         if (_phase == RapierMissionPhase.DipRelight) {
-            if (mach < 2.2 || qPa < RelightQPa) return;
+            if (mach < 2.2 || qPa < RelightDynamicPressurePa) return;
             if (ShouldAnotherLobSkip(
                     contactRangeM, fuelLb, reserveFuelLb, mach, zoomLobProfile)) {
                 _lobSkip++;
@@ -779,6 +1159,196 @@ public sealed class RapierMissionDirector {
                 EnterPhase(RapierMissionPhase.Intercept, "post_lob_intercept");
             }
         }
+    }
+
+    /// <summary>
+    /// Propagates the state the real controller is about to request: idle, zero lift, production
+    /// atmosphere, production zero-alpha wave/profile drag, gravity, and the target's current
+    /// drift. The pull unloads only when that honest coast contains a conservative first gun
+    /// window. It is deliberately a decision aid rather than a rail: the live rigid-body model
+    /// still has to unload, fly the coast, align, fire and survive the miss distance.
+    /// </summary>
+    internal static BalloonCoastPrediction PredictBalloonGunWindowAfterUnload(
+        in AircraftState player,
+        in AircraftState contact,
+        IAtmosphereModel atmosphere,
+        in AircraftParams playerAircraft) {
+        const double StepSeconds = 0.10;
+        const double HorizonSeconds = 60.0;
+        Vec3D playerPosition = player.Position;
+        Vec3D playerVelocity = player.VelocityVector();
+        Vec3D contactPosition = contact.Position;
+        Vec3D contactVelocity = contact.VelocityVector();
+        double massKg = Math.Max(player.Mass, 1.0);
+
+        Vec3D initialHorizontalRange = new(
+            contactPosition.X - playerPosition.X,
+            0.0,
+            contactPosition.Z - playerPosition.Z);
+        Vec3D initialHorizontalRelativeVelocity = new(
+            contactVelocity.X - playerVelocity.X,
+            0.0,
+            contactVelocity.Z - playerVelocity.Z);
+        double initialHorizontalRangeSquared = initialHorizontalRange.Dot(
+            initialHorizontalRange);
+        double initialHorizontalRelativeSpeedSquared = initialHorizontalRelativeVelocity.Dot(
+            initialHorizontalRelativeVelocity);
+        double initialHorizontalLosRateRadPerSecond = initialHorizontalRangeSquared > 1.0
+            ? (initialHorizontalRange.Z * initialHorizontalRelativeVelocity.X
+                - initialHorizontalRange.X * initialHorizontalRelativeVelocity.Z)
+                / initialHorizontalRangeSquared
+            : 0.0;
+        double horizontalTcaSeconds = initialHorizontalRelativeSpeedSquared > 1e-6
+            ? Math.Clamp(
+                -initialHorizontalRange.Dot(initialHorizontalRelativeVelocity)
+                    / initialHorizontalRelativeSpeedSquared,
+                0.0,
+                HorizonSeconds)
+            : 0.0;
+        Vec3D initialHorizontalZeroEffortMiss = initialHorizontalRange
+            + initialHorizontalRelativeVelocity * horizontalTcaSeconds;
+        Vec3D horizontalForward = new Vec3D(
+            playerVelocity.X, 0.0, playerVelocity.Z).Normalized();
+        Vec3D horizontalRight = new(horizontalForward.Z, 0.0, -horizontalForward.X);
+        double initialSignedHorizontalZeroEffortMissM =
+            initialHorizontalZeroEffortMiss.Dot(horizontalRight);
+
+        bool hasGunWindow = false;
+        double gunWindowRangeM = double.NaN;
+        double gunWindowBoreErrorDeg = double.NaN;
+        double gunWindowTimeSeconds = double.NaN;
+        double closestRangeM = double.PositiveInfinity;
+        Vec3D closestRelativeMissM = Vec3D.Zero;
+        double closestVerticalSpeedMps = double.NaN;
+        double closestLosAngleDeg = double.NaN;
+        double closestTimeSeconds = double.NaN;
+
+        for (double elapsed = 0.0; elapsed <= HorizonSeconds; elapsed += StepSeconds) {
+            Vec3D toContact = contactPosition - playerPosition;
+            double rangeM = toContact.Length;
+            double speedMps = playerVelocity.Length;
+            if (!double.IsFinite(rangeM) || !double.IsFinite(speedMps)
+                || playerPosition.Y < 0.0 || speedMps < 1.0) break;
+
+            double forwardLosCosine = rangeM > 1.0
+                ? Math.Clamp(playerVelocity.Dot(toContact) / (speedMps * rangeM), -1.0, 1.0)
+                : 1.0;
+            double losAngleDeg = Math.Acos(forwardLosCosine) * 180.0 / Math.PI;
+            if (rangeM < closestRangeM) {
+                closestRangeM = rangeM;
+                closestRelativeMissM = toContact;
+                closestVerticalSpeedMps = playerVelocity.Y;
+                closestLosAngleDeg = losAngleDeg;
+                closestTimeSeconds = elapsed;
+            }
+
+            if (!hasGunWindow && elapsed >= BalloonPredictedMinimumCoastSeconds
+                && toContact.Dot(contactVelocity - playerVelocity) < 0.0) {
+                GunBallisticSolution ballistic = GunKill.EvaluateBallisticLead(
+                    playerPosition,
+                    playerVelocity,
+                    playerVelocity.Normalized(),
+                    contactPosition,
+                    contactVelocity,
+                    GunProfiles.M61A2PublicDataSurrogate,
+                    BalloonTargetHitRadiusM);
+                if (ballistic.HasLeadSolution
+                    && ballistic.TimeOfFlightSeconds
+                        <= BalloonPredictedMaximumFlightSeconds
+                    && ballistic.BodyAxisOnSolution) {
+                    hasGunWindow = true;
+                    gunWindowRangeM = rangeM;
+                    gunWindowBoreErrorDeg = ballistic.BoreErrorRad * 180.0 / Math.PI;
+                    gunWindowTimeSeconds = elapsed;
+                }
+            }
+
+            AtmosphericState air;
+            try {
+                air = atmosphere.Sample(playerPosition.Y);
+            } catch (ArgumentOutOfRangeException) {
+                break;
+            }
+            double mach = speedMps / Math.Max(air.SpeedOfSoundMps, 1.0);
+            double dynamicPressurePa = 0.5 * air.DensityKgM3 * speedMps * speedMps;
+            double dragCoefficient = FlightModel.ProfileDragCoefficient(
+                alpha: 0.0, mach, playerAircraft);
+            double dragAccelerationMps2 = dynamicPressurePa * playerAircraft.WingAreaM2
+                * dragCoefficient / massKg;
+            Vec3D acceleration = playerVelocity.Normalized() * -dragAccelerationMps2
+                + new Vec3D(0.0, -FlightModel.G0, 0.0);
+
+            playerPosition += playerVelocity * StepSeconds
+                + acceleration * (0.5 * StepSeconds * StepSeconds);
+            playerVelocity += acceleration * StepSeconds;
+            contactPosition += contactVelocity * StepSeconds;
+        }
+
+        return new BalloonCoastPrediction(
+            hasGunWindow,
+            closestRangeM,
+            closestRelativeMissM,
+            closestVerticalSpeedMps,
+            closestLosAngleDeg,
+            closestTimeSeconds,
+            initialHorizontalLosRateRadPerSecond,
+            initialSignedHorizontalZeroEffortMissM,
+            gunWindowRangeM,
+            gunWindowBoreErrorDeg,
+            gunWindowTimeSeconds);
+    }
+
+    /// <summary>
+    /// Owns the finite part of the production mission after the apex opportunity has opened. A
+    /// kill and a miss follow the same physical recovery path; neither can orbit back for another
+    /// shot. Returning true means the generic formation/no-opponent ladder must not overwrite the
+    /// deliberately regressive Attack → ReenterAlign transition.
+    /// </summary>
+    bool HandleCommittedBalloonPass(
+        in AircraftState player,
+        double mach,
+        double qPa,
+        double noseOnVelocityErrorDeg,
+        double contactRangeM,
+        double closureMps,
+        int liveOpponentCount,
+        double homeRangeM) {
+        if (!_balloonApexPassCommitted) return false;
+
+        if (_phase == RapierMissionPhase.Attack) {
+            if (liveOpponentCount <= 0) {
+                _balloonApexPassComplete = true;
+                EnterPhase(RapierMissionPhase.ReenterAlign, "balloon_hit_reenter");
+            } else if (closureMps <= 0.0
+                || contactRangeM > BalloonApexGunWindowM * 1.25) {
+                _balloonApexPassComplete = true;
+                EnterPhase(RapierMissionPhase.ReenterAlign, "balloon_pass_missed_reenter");
+            }
+            return true;
+        }
+
+        if (_phase == RapierMissionPhase.ReenterAlign) {
+            if (qPa >= RelightDynamicPressurePa
+                || (noseOnVelocityErrorDeg < 12.0 && player.Position.Y < 24_000.0)) {
+                EnterPhase(RapierMissionPhase.DipRelight, "balloon_dip_for_relight");
+            }
+            return true;
+        }
+
+        if (_phase == RapierMissionPhase.DipRelight) {
+            if (mach >= 2.2 && qPa >= RelightDynamicPressurePa) {
+                EnterPhase(RapierMissionPhase.ReturnToBase, "balloon_ram_relit_rtb");
+            }
+            return true;
+        }
+
+        if (_phase == RapierMissionPhase.ReturnToBase) {
+            if (homeRangeM <= RecoveryEntryHomeRangeM)
+                EnterPhase(RapierMissionPhase.Recovery, "balloon_home_leq_150km");
+            return true;
+        }
+
+        return _phase is RapierMissionPhase.Recovery or RapierMissionPhase.Complete;
     }
 
     bool ShouldAnotherLobSkip(
@@ -828,6 +1398,20 @@ public sealed class RapierMissionDirector {
             ? contactRangeM / closureMps : double.PositiveInfinity;
         double homeRangeM = (home - player.Position).Length;
         string jobToken = JobToken(job);
+        bool balloonApexProfile = zoomLobProfile && job == RapierJobKind.Balloon;
+        GunBallisticSolution balloonGunSolution = balloonApexProfile
+            ? GunKill.EvaluateBallisticLead(
+                player,
+                contact,
+                GunProfiles.M61A2PublicDataSurrogate,
+                BalloonTargetHitRadiusM)
+            : default;
+        // Target state owns an exact constant-velocity horizontal intercept point. The balloon
+        // pull adds bounded LOS-rate correction below; no empirical future-point multiplier moves
+        // the waypoint as time-to-go collapses near the pass.
+        Vec3D guidedContactWaypoint = balloonApexProfile
+            ? HorizontalInterceptWaypoint(player, contact)
+            : contact.Position;
 
         // CIRCUITS. Climbing back through pattern altitude with the final gates already set means
         // the aircraft bolted, went around, or did a touch-and-go — so re-arm the pattern and fly
@@ -859,8 +1443,8 @@ public sealed class RapierMissionDirector {
             else
                 EnterPhase(RapierMissionPhase.ReturnToBase, "gun_drone_rtb");
         } else if (patternOnly) {
-            // Pattern-only must not treat "no kill yet" as RTB during the stroke, and must not
-            // chase the parked phantom contact used to satisfy BeatSetup's bandit slot.
+            // Pattern-only must not treat "no kill yet" as RTB during the stroke. Ownship-only
+            // cards now stage no opponent actor at all, so there is no phantom contact to chase.
             if (catapultActive) {
                 _circuitShelfReached = false;
                 _circuitInitialReached = false;
@@ -876,6 +1460,12 @@ public sealed class RapierMissionDirector {
                 _circuitShelfReached = true;
                 EnterPhase(RapierMissionPhase.Recovery, "pattern_recovery");
             }
+        } else if (balloonApexProfile && HandleCommittedBalloonPass(
+            player, mach, qPa, noseOnVelocityErrorDeg, contactRangeM, closureMps,
+            liveOpponentCount, homeRangeM)) {
+            // The handler deliberately owns hit and miss alike through reentry, relight, return,
+            // and recovery. In particular, a killed target must not skip straight from the apex
+            // to RTB merely because the generic no-opponent branch sees zero contacts.
         } else if (liveOpponentCount <= 0) {
             // Start setup far enough out that even an arrival already on the marshal side retains
             // at least ~104 km to decelerate, descend and establish the inbound centreline.
@@ -899,7 +1489,8 @@ public sealed class RapierMissionDirector {
                 reserveFuelLb,
                 zoomLobProfile,
                 _lobSkip,
-                inZoomPhases);
+                inZoomPhases,
+                apexBalloonProfile: balloonApexProfile);
             _intention = decision.Intention;
             _strategy = decision.Strategy;
             if (decision.Strategy != ReachFightStrategy.ZoomLob
@@ -907,26 +1498,38 @@ public sealed class RapierMissionDirector {
                 EnterPhase(decision.SuggestedPhase, decision.PhaseReason);
             }
             if (decision.Strategy == ReachFightStrategy.ZoomLob) {
-                UpdateZoomLobPhase(player, mach, qPa, noseOnVelocityErrorDeg,
-                    contactRangeM, fuelLb, reserveFuelLb, zoomLobProfile);
+                UpdateZoomLobPhase(player, contact, atmosphere, playerAircraft,
+                    balloonGunSolution, mach, qPa,
+                    noseOnVelocityErrorDeg, contactRangeM, fuelLb, reserveFuelLb,
+                    zoomLobProfile, job, decision.PhaseReason);
             }
         }
 
-        int lobSkipMax = zoomLobProfile ? MaxLobSkips : 0;
+        int lobSkipMax = balloonApexProfile ? 1 : zoomLobProfile ? MaxLobSkips : 0;
         string skipCue = zoomLobProfile && _lobSkip > 0
-            ? $"SKIP {_lobSkip}/{MaxLobSkips} · "
+            ? balloonApexProfile ? "PASS 1/1 · " : $"SKIP {_lobSkip}/{MaxLobSkips} · "
             : "";
 
-        // Conservative material-capability screening ceiling. Flat external skins use turbulent
-        // recovery temperature; Rapier's declared hot zones are the inlet lip / leading edges, so
-        // their raw CMC capability must be screened against true stagnation T0 instead. This is a
-        // failsafe, not a substitute for the missing component qualification envelope.
-        double skinMachLimit = playerAircraft.AerothermalLimitReference
-                == AerothermalLimitReferenceKind.StagnationTemperature
-            ? AirData.MachLimitForStagnationTemperature(
-                playerAircraft.SkinTemperatureLimitK, air.TemperatureK)
-            : AirData.MachLimitForSkinTemperature(
-                playerAircraft.SkinTemperatureLimitK, air.TemperatureK);
+        // Thermal screening ceiling for the actual binding zone. The canonical 623 K limit is the
+        // insulated warm panel, whose effective temperature receives only its declared fraction of
+        // the adiabatic rise; it is not a full-recovery nose or raw ceramic-material limit.
+        double skinMachLimit = AirData.MachLimitForEffectiveZoneTemperature(
+            playerAircraft.SkinTemperatureLimitK,
+            air.TemperatureK,
+            playerAircraft.AerothermalLimitReference,
+            playerAircraft.AerothermalAdiabaticRiseFraction);
+
+        // Structural screening ceiling. Thermal margin alone can still invite a dash in dense air
+        // beyond the canonical 55 kPa maximum-q requirement. Computing that requirement as a local
+        // Mach ceiling makes the already-recorded aircraft limit constrain the actual guidance.
+        //
+        // Capping Mach on q rather than refusing the speed is what makes the profile work: the
+        // schedule is legal wherever the air is thin enough, so the aircraft is pushed UP to go
+        // fast instead of being told it cannot. M4 at FL424 is illegal; M4 near FL790 is within the
+        // 55 kPa binding zone.
+        double structuralMachLimit = RapierAerodynamics.MachLimitForDynamicPressure(
+            air.DensityKgM3, air.SpeedOfSoundMps);
+        double envelopeMachLimit = Math.Min(skinMachLimit, structuralMachLimit);
 
         double targetMach;
         double targetAltitudeFt;
@@ -942,6 +1545,8 @@ public sealed class RapierMissionDirector {
         Vec3D gateFace = new(0.0, 0.0, 1.0);
         bool gateInVolume = false;
         bool gateEnergyOk = false;
+        double profileMaximumLever = balloonApexProfile
+            ? playerAircraft.MaxThrustFraction : 1.55;
 
         switch (_phase) {
             case RapierMissionPhase.Launch:
@@ -981,11 +1586,13 @@ public sealed class RapierMissionDirector {
                             : gateInVolume ? "GATE · ENERGY" : "LAUNCH");
                 } else {
                     targetMach = 0.9;
-                    targetAltitudeFt = 56_000.0;
+                    targetAltitudeFt = ClimbTopM * FeetPerMetre;
                     targetGamma = player.Gamma;
-                    throttle = 1.55;
-                    waypoint = contact.Position;
-                    cue = "AUTO LAUNCH · TRACK OWNS THE AIRCRAFT";
+                    throttle = profileMaximumLever;
+                    waypoint = guidedContactWaypoint;
+                    cue = balloonApexProfile
+                        ? "LAUNCH · FULL POWER · BUILD ENERGY"
+                        : "AUTO LAUNCH · TRACK OWNS THE AIRCRAFT";
                 }
                 break;
             case RapierMissionPhase.Climb:
@@ -1030,65 +1637,116 @@ public sealed class RapierMissionDirector {
                     cue = PatternLegConfigCue(
                         "DEPART", fdTargetKtas, targetAltitudeFt, departSpeedCall);
                 } else {
-                    targetMach = 0.9;
-                    targetAltitudeFt = 56_000.0;
+                    // The climb rides the same constant-q schedule the acceleration does, so the
+                    // two are one continuous profile rather than a climb followed by a separate
+                    // level dash. Holding a fixed M0.90 to FL400 first spent 370 s getting there
+                    // with no speed to show for it, and the bandit arrived before the aircraft
+                    // had any energy. On the schedule the aircraft accelerates to about M0.85 low
+                    // down -- which IS the best-climb attitude for a low-drag jet -- and then
+                    // altitude and Mach rise together from there.
+                    targetMach = 2.2;
+                    double climbScheduleM = RapierScheduleAltitudeM(
+                        atmosphere, trueAirspeedMps, floorM: 0.0);
+                    targetAltitudeFt = climbScheduleM * FeetPerMetre;
                     targetGamma = AltitudeCaptureGamma(
-                        ClimbTopM,
+                        climbScheduleM,
                         player,
                         trueAirspeedMps,
-                        captureSeconds: 60.0,
+                        captureSeconds: balloonApexProfile ? 45.0 : 60.0,
                         minimumGamma: -0.02,
-                        maximumGamma: 0.27);
-                    throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
-                        trimLever: 0.62, gain: 1.10);
-                    waypoint = contact.Position;
-                    cue = $"AUTO CLIMB · HOLD M0.90 · M{mach:F2} · "
-                        + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0} → FL560";
+                        maximumGamma: balloonApexProfile
+                            ? RapierQProtectionGammaDeg * Math.PI / 180.0
+                            : 0.27);
+                    throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
+                        trimLever: balloonApexProfile ? profileMaximumLever : 1.55,
+                        gain: 1.10, maximumLever: profileMaximumLever);
+                    waypoint = guidedContactWaypoint;
+                    cue = balloonApexProfile
+                        ? $"ENERGY CLIMB · RIDE 35 KPA · M{mach:F2}"
+                        : $"AUTO CLIMB · HOLD M0.90 · M{mach:F2} · "
+                            + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0} → FL{targetAltitudeFt / 100.0:F0}";
                 }
                 break;
             case RapierMissionPhase.Accelerate:
+                // Not a level shelf. A supersonic climb is one continuous trade: ride constant q
+                // and let altitude rise with Mach. Holding a fixed shelf falls behind the moving
+                // schedule and spends energy in drag instead of the climb.
                 targetMach = 2.2;
-                targetAltitudeFt = 56_000.0;
-                targetGamma = AltitudeCaptureGamma(ClimbTopM, player,
-                    trueAirspeedMps, captureSeconds: 90.0,
-                    minimumGamma: -0.035, maximumGamma: 0.035);
-                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
-                    trimLever: 1.20, gain: 0.45);
-                waypoint = contact.Position;
-                cue = $"AUTO LEVEL ACCEL · M{mach:F2} → M2.20 · HOLD FL560";
+                double scheduleAltM = RapierScheduleAltitudeM(
+                    atmosphere, trueAirspeedMps, floorM: ClimbTopM);
+                targetAltitudeFt = scheduleAltM * FeetPerMetre;
+                targetGamma = AltitudeCaptureGamma(scheduleAltM, player,
+                    trueAirspeedMps, captureSeconds: balloonApexProfile ? 45.0 : 90.0,
+                    minimumGamma: -0.05,
+                    maximumGamma: balloonApexProfile
+                        ? RapierQProtectionGammaDeg * Math.PI / 180.0
+                        : 0.14);
+                throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
+                    trimLever: balloonApexProfile ? profileMaximumLever : 1.55,
+                    gain: 0.45, maximumLever: profileMaximumLever);
+                waypoint = guidedContactWaypoint;
+                cue = balloonApexProfile
+                    ? $"ENERGY CLIMB · 35 KPA · CYCLE TRANSITION · M{mach:F2}"
+                    : $"AUTO CLIMB ACCEL · M{mach:F2} → M2.20 · "
+                        + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0} → FL{targetAltitudeFt / 100.0:F0}";
                 break;
             case RapierMissionPhase.RamClimb:
-                // Stay below RamSpillStartMach (3.3). Commanding M4 here drove the article into the
-                // spill band with almost no climb thrust left — FL694 forever, never FL700. Climb
-                // on useful ram (~M3.1), then Intercept owns the dash.
-                targetMach = 3.15;
-                targetAltitudeFt = 70_000.0;
-                targetGamma = AltitudeCaptureGamma(CruiseAltitudeM, player,
-                    trueAirspeedMps, captureSeconds: 150.0,
-                    minimumGamma: -0.025, maximumGamma: 0.070);
-                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
-                    trimLever: 1.08, gain: 0.42);
-                waypoint = contact.Position;
-                cue = $"AUTO RAM CLIMB · M{mach:F2} · FL{player.Position.Y * FeetPerMetre / 100.0:F0} → FL700";
+                // The production balloon sortie keeps riding the same 35 kPa energy schedule as
+                // speed builds: altitude rises because Mach rises, not because guidance drags an
+                // M3.15 aircraft all the way to a fixed 24 km shelf. That preserves ram excess
+                // thrust and makes the terrain-bounded intercept a continuous physical climb.
+                targetMach = balloonApexProfile ? BalloonDesignDashMach : 3.15;
+                double ramClimbAltitudeM = balloonApexProfile
+                    ? RapierScheduleAltitudeM(
+                        atmosphere, trueAirspeedMps, floorM: ClimbTopM)
+                    : CruiseAltitudeM;
+                targetAltitudeFt = ramClimbAltitudeM * FeetPerMetre;
+                targetGamma = AltitudeCaptureGamma(ramClimbAltitudeM, player,
+                    trueAirspeedMps, captureSeconds: balloonApexProfile ? 45.0 : 150.0,
+                    minimumGamma: -0.025,
+                    maximumGamma: balloonApexProfile
+                        ? RapierQProtectionGammaDeg * Math.PI / 180.0
+                        : 0.070);
+                throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
+                    trimLever: balloonApexProfile ? BalloonRamTrimLever : 1.08,
+                    gain: balloonApexProfile ? BalloonRamMachGain : 0.42,
+                    maximumLever: profileMaximumLever);
+                waypoint = guidedContactWaypoint;
+                cue = balloonApexProfile
+                    ? $"RAM CLIMB · 35 KPA · 24 KM / M{BalloonDesignDashMach:F1} · "
+                        + $"NOW {qPa / 1000.0:F0} KPA / M{mach:F2}"
+                    : $"AUTO RAM CLIMB · FOLLOW Q SCHEDULE · M{mach:F2} · "
+                        + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0}";
                 break;
             case RapierMissionPhase.ZoomPull:
-                // Low-α progressive pull: command ~40° path, keep Mach, mild G — not a 9G snatch.
-                targetMach = 3.8;
-                targetAltitudeFt = 100_000.0;
-                targetGamma = 40.0 * Math.PI / 180.0;
-                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
-                    trimLever: 1.05, gain: 0.35);
-                waypoint = contact.Position;
-                cue = $"ZOOM PULL · {skipCue}{jobToken} · γ→40° · α LOW · M{mach:F2} · "
-                    + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0}";
+                // Card 12 idles the engine and accepts a deliberate unstart while the real wing
+                // trades stored M4.2 energy for height. A drag-aware predictor, not a claimed
+                // flight-path angle, decides when the finite pull has earned its ballistic coast.
+                targetMach = balloonApexProfile ? BalloonDesignDashMach : 3.8;
+                targetAltitudeFt = balloonApexProfile ? 105_000.0 : 100_000.0;
+                targetGamma = balloonApexProfile
+                    ? player.Gamma
+                    : ExperimentalZoomCoastGammaDeg * Math.PI / 180.0;
+                throttle = balloonApexProfile
+                    ? 0.0
+                    : ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
+                        trimLever: 1.05, gain: 0.35,
+                        maximumLever: profileMaximumLever);
+                waypoint = guidedContactWaypoint;
+                cue = balloonApexProfile
+                    ? $"IDLE PULL · α≤{BalloonPullAlphaDeg:F0}° · PREDICT UNLOAD"
+                    : $"ZOOM PULL · {skipCue}{jobToken} · γ→{ExperimentalZoomCoastGammaDeg:F0}° · M{mach:F2} · "
+                        + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0}";
                 break;
             case RapierMissionPhase.ZoomCoast:
                 targetMach = 0.0;
                 targetAltitudeFt = player.Position.Y * FeetPerMetre;
                 targetGamma = player.Gamma;
                 throttle = 0.0; // ballistic — fuel truth is the lob's point
-                waypoint = contact.Position;
-                if (job == RapierJobKind.SwarmLob
+                waypoint = guidedContactWaypoint;
+                if (balloonApexProfile) {
+                    cue = $"ZERO-LIFT COAST · ALIGN BALLOON · {contactRangeM / 1000.0:F0} KM";
+                } else if (job == RapierJobKind.SwarmLob
                     && player.VelocityVector().Y < 40.0
                     && player.Position.Y > 28_000.0) {
                     cue = $"SWARM LOB · {skipCue}APEX WINDOW · F RELEASES SWARM · "
@@ -1104,11 +1762,17 @@ public sealed class RapierMissionDirector {
                 // Hold path; FD cue is nose-on-V error — pilot/RCS closes it.
                 targetGamma = player.Gamma;
                 throttle = 0.0;
-                waypoint = contact.Position;
-                cue = noseOnVelocityErrorDeg <= 8.0
-                    ? $"REENTER · {skipCue}{jobToken} · ON V · HOLD · THEN DIP"
-                    : $"REENTER · {skipCue}{jobToken} · ALIGN NOSE ON V · "
-                        + $"ERR {noseOnVelocityErrorDeg:F0}° · RCS";
+                waypoint = guidedContactWaypoint;
+                cue = balloonApexProfile
+                    ? _balloonApexPassComplete
+                        ? noseOnVelocityErrorDeg <= 8.0
+                            ? "PASS COMPLETE · REENTER · NOSE ON V"
+                            : $"PASS COMPLETE · REENTER · NOSE→V {noseOnVelocityErrorDeg:F0}°"
+                        : "APEX PASS · HOLD THE GUN WINDOW"
+                    : noseOnVelocityErrorDeg <= 8.0
+                        ? $"REENTER · {skipCue}{jobToken} · ON V · HOLD · THEN DIP"
+                        : $"REENTER · {skipCue}{jobToken} · ALIGN NOSE ON V · "
+                            + $"ERR {noseOnVelocityErrorDeg:F0}° · RCS";
                 break;
             case RapierMissionPhase.DipRelight:
                 targetMach = 3.2;
@@ -1116,35 +1780,45 @@ public sealed class RapierMissionDirector {
                 targetGamma = AltitudeCaptureGamma(CruiseAltitudeM, player,
                     trueAirspeedMps, captureSeconds: 90.0,
                     minimumGamma: -0.05, maximumGamma: 0.08);
-                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
-                    trimLever: 1.05, gain: 0.40);
-                waypoint = contact.Position;
-                cue = $"DIP RELIGHT · {skipCue}{jobToken} · RAM ON · M{mach:F2} · "
-                    + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0}";
+                throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
+                    trimLever: balloonApexProfile ? profileMaximumLever : 1.05,
+                    gain: 0.40, maximumLever: profileMaximumLever);
+                waypoint = guidedContactWaypoint;
+                cue = balloonApexProfile
+                    ? $"DIP · BUILD Q {qPa / 1000.0:F1}/{RelightDynamicPressurePa / 1000.0:F0} KPA · RELIGHT RAM"
+                    : $"DIP RELIGHT · {skipCue}{jobToken} · RAM ON · M{mach:F2} · "
+                        + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0}";
                 break;
             case RapierMissionPhase.Intercept:
-                targetMach = MeasuredDashMach;
-                targetAltitudeFt = 70_000.0;
-                targetGamma = AltitudeCaptureGamma(CruiseAltitudeM, player,
+                targetMach = balloonApexProfile ? BalloonDesignDashMach : MeasuredDashMach;
+                double interceptAltitudeM = balloonApexProfile
+                    ? ReachFightDirector.BalloonDashAltitudeM : CruiseAltitudeM;
+                targetAltitudeFt = interceptAltitudeM * FeetPerMetre;
+                targetGamma = AltitudeCaptureGamma(interceptAltitudeM, player,
                     trueAirspeedMps, captureSeconds: 120.0,
                     minimumGamma: -0.040, maximumGamma: 0.040);
-                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
-                    trimLever: 1.08, gain: 0.42);
-                waypoint = contact.Position;
+                throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
+                    trimLever: balloonApexProfile ? BalloonRamTrimLever : 1.08,
+                    gain: balloonApexProfile ? BalloonRamMachGain : 0.42,
+                    maximumLever: profileMaximumLever);
+                waypoint = guidedContactWaypoint;
                 string eta = double.IsFinite(interceptEtaSeconds)
                     ? $"{Math.Floor(interceptEtaSeconds / 60.0):F0}:"
                         + $"{interceptEtaSeconds % 60.0:00}"
                     : "--:--";
-                double commandedInterceptMach = Math.Min(targetMach, skinMachLimit);
-                string thermalCap = skinMachLimit + 0.05 < targetMach
-                    ? $" · THERM CAP M{skinMachLimit:F1}"
+                double commandedInterceptMach = Math.Min(targetMach, envelopeMachLimit);
+                string thermalCap = envelopeMachLimit + 0.05 < targetMach
+                    ? $" · {(structuralMachLimit < skinMachLimit ? "Q" : "THERM")} CAP M{envelopeMachLimit:F1}"
                     : "";
-                cue = $"AUTO INTERCEPT · {contactRangeM / 1000.0:F0} KM · "
-                    + $"CLOSURE {closureMps * 1.94384:F0} KT · ETA {eta} · "
-                    + $"M{Math.Min(targetMach, skinMachLimit):F1} / FL700";
+                cue = balloonApexProfile
+                    ? $"DASH M{BalloonDesignDashMach:F1} · 24 KM SHELF · "
+                        + $"{qPa / 1000.0:F0} KPA · {contactRangeM / 1000.0:F0} KM"
+                    : $"AUTO INTERCEPT · {contactRangeM / 1000.0:F0} KM · "
+                        + $"CLOSURE {closureMps * 1.94384:F0} KT · ETA {eta} · "
+                        + $"M{Math.Min(targetMach, envelopeMachLimit):F1} · Q/THERM LIMITS";
                 break;
             case RapierMissionPhase.Attack:
-                waypoint = contact.Position;
+                waypoint = guidedContactWaypoint;
                 if (job == RapierJobKind.Transport) {
                     // Dive onto a low transport after the lob — commit altitude for the pass.
                     targetMach = 2.4;
@@ -1153,7 +1827,7 @@ public sealed class RapierMissionDirector {
                     targetGamma = AltitudeCaptureGamma(contact.Position.Y + 200.0,
                         player, trueAirspeedMps, captureSeconds: 50.0,
                         minimumGamma: -0.18, maximumGamma: 0.020);
-                    throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                    throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
                         trimLever: 0.90, gain: 0.40, maximumLever: 1.35);
                     cue = $"TRANSPORT DIVE · {contactRangeM / 1000.0:F0} KM · "
                         + "ONE PASS · GUNS · THEN ESCAPE";
@@ -1163,27 +1837,27 @@ public sealed class RapierMissionDirector {
                     targetGamma = AltitudeCaptureGamma(contact.Position.Y + 800.0,
                         player, trueAirspeedMps, captureSeconds: 70.0,
                         minimumGamma: -0.080, maximumGamma: 0.040);
-                    throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                    throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
                         trimLever: 0.96, gain: 0.40, maximumLever: 1.35);
                     cue = $"SWARM RELEASE · {liveOpponentCount} CONTACTS · "
                         + "PRESS F · HIGH PASS · DO NOT FOLLOW DOWN";
                 } else if (job == RapierJobKind.Balloon) {
-                    targetMach = 2.8;
-                    targetAltitudeFt = (contact.Position.Y + 400.0) * FeetPerMetre;
-                    targetGamma = AltitudeCaptureGamma(contact.Position.Y + 400.0,
-                        player, trueAirspeedMps, captureSeconds: 60.0,
-                        minimumGamma: -0.090, maximumGamma: 0.040);
-                    throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
-                        trimLever: 0.92, gain: 0.40, maximumLever: 1.30);
-                    cue = $"BALLOON · {contactRangeM / 1000.0:F0} KM · "
-                        + "SOFT TARGET · GUNS · ONE SLASH";
+                    targetMach = 0.0;
+                    targetAltitudeFt = contact.Position.Y * FeetPerMetre;
+                    targetGamma = AltitudeCaptureGamma(contact.Position.Y,
+                        player, trueAirspeedMps, captureSeconds: 10.0,
+                        minimumGamma: -0.20, maximumGamma: 0.20);
+                    // The zoom already bought the closure. Adding power here only shortens the
+                    // sight picture and encourages a chase after the finite apex pass.
+                    throttle = 0.0;
+                    cue = $"BALLOON · GUNS · ONE PASS · {contactRangeM / 1000.0:F1} KM";
                 } else {
                     targetMach = 3.2;
                     targetAltitudeFt = (contact.Position.Y + 600.0) * FeetPerMetre;
                     targetGamma = AltitudeCaptureGamma(contact.Position.Y + 600.0,
                         player, trueAirspeedMps, captureSeconds: 75.0,
                         minimumGamma: -0.075, maximumGamma: 0.050);
-                    throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                    throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
                         trimLever: 0.96, gain: 0.40, maximumLever: 1.35);
                     cue = job == RapierJobKind.Awacs
                         ? $"AWACS · {liveOpponentCount} CONTACTS · "
@@ -1198,7 +1872,7 @@ public sealed class RapierMissionDirector {
                 targetGamma = AltitudeCaptureGamma(CruiseAltitudeM, player,
                     trueAirspeedMps, captureSeconds: 120.0,
                     minimumGamma: -0.050, maximumGamma: 0.050);
-                throttle = ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
+                throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
                     trimLever: 1.08, gain: 0.42);
                 waypoint = recoveryInitial;
                 cue = _phaseReason == "gun_drone_away"
@@ -1209,21 +1883,44 @@ public sealed class RapierMissionDirector {
                         + $"DASH M{Math.Min(MeasuredDashMach, skinMachLimit):F1}";
                 break;
             case RapierMissionPhase.ReturnToBase:
-                targetMach = 2.0;
-                targetAltitudeFt = 45_000.0;
-                targetGamma = AltitudeCaptureGamma(45_000.0 * 0.3048,
-                    player, trueAirspeedMps, captureSeconds: 150.0,
-                    minimumGamma: -0.060, maximumGamma: 0.025);
-                // The ram stream makes substantial installed thrust at a small lever above M2.5.
-                // Feeding the turbine-style 0.80 trim into that regime held the aircraft near M3
-                // for twenty minutes and consumed the landing reserve while the cue claimed M2.
-                // Idle the ram phase through handover, then capture M2 on turbine-biased trim.
-                throttle = mach > 2.25
-                    ? 0.0
-                    : ThrottleForMach(Math.Min(targetMach, skinMachLimit), mach,
-                        trimLever: 0.55, gain: 0.80, maximumLever: 1.20);
+                // Subsonic long-range cruise, NOT a supersonic transit. Commanding M2.0 home held
+                // the aircraft at M1.67 / FL447 on a 0.81 lever for seventeen straight minutes and
+                // took it from 800 lb to 270 lb; it then flamed out at 2,520 s and arrived at the
+                // field with an empty tank and no approach left in it. Every wire miss and every
+                // heavy touchdown downstream of this was that dead-stick arrival, not the landing
+                // law -- which is why chasing the touchdown numbers never moved them.
+                //
+                // Coming home from a fight is a fuel problem, and the aircraft leaves the fight
+                // with an enormous amount of free energy. So idle it and let it coast down: the
+                // deceleration from dash speed to cruise costs nothing but distance, and distance
+                // is exactly what it has too much of.
+                // M2.0 AT FL750, and the aircraft comes home FASTER than it went out. That reads
+                // wrong until you measure it. Specific range at recovery weight, holding both
+                // speed and altitude:
+                //
+                //     FL450  M0.9   1.72 lb/NM        FL650  M1.5   1.49 lb/NM
+                //     FL550  M1.5   2.08 lb/NM        FL750  M2.0   1.07 lb/NM   <- best
+                //
+                // A subsonic cruise is the WORST option this aircraft has. Down at FL450 the wing
+                // is carrying its weight on a delta built for M4, and the turbine is throttled
+                // back into its thirsty corner; up at FL750 on ram at M2.0 it burns 20.6 lb/min
+                // against 14.9 -- but it is covering ground more than twice as fast, so the fuel
+                // per mile falls by 38%.
+                //
+                // This is the SR-71 answer and it is the same physics: a ram-cycle aircraft is
+                // efficient where the ram cycle works, not where a turbofan would be. An earlier
+                // pass here commanded M0.90/FL450, and before that FL350, both of which were the
+                // instinct that coming home means slowing down and descending. On this aeroplane
+                // that instinct costs 60% more fuel per mile.
+                targetMach = 2.00;
+                targetAltitudeFt = 75_000.0;
+                targetGamma = AltitudeCaptureGamma(75_000.0 * 0.3048,
+                    player, trueAirspeedMps, captureSeconds: 180.0,
+                    minimumGamma: -0.060, maximumGamma: 0.045);
+                throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
+                    trimLever: 0.85, gain: 0.60, maximumLever: 1.30);
                 waypoint = recoveryInitial;
-                cue = $"RETURN HOME · BASE {homeRangeM / 1000.0:F0} KM · M2.0 / FL450";
+                cue = $"RETURN HOME · BASE {homeRangeM / 1000.0:F0} KM · M2.0 / FL750";
                 break;
             case RapierMissionPhase.Recovery:
                 targetMach = 0.30;
@@ -1252,7 +1949,7 @@ public sealed class RapierMissionDirector {
                         patternSpeedMps, trueAirspeedMps, patternTrimLever);
                     targetAltitudeFt = patternGate.Y * FeetPerMetre;
                     fdTargetKtas = circuitLeg switch {
-                        "INITIAL" or "DOWNWIND" => CircuitPatternKtas,
+                        "INITIAL" or "CROSSWIND" or "DOWNWIND" => CircuitPatternKtas,
                         "BREAK" => CircuitBreakKtas,
                         "BASE" => CircuitBaseKtas,
                         "SHORT_FINAL" => CircuitFinalKtas,
@@ -1326,6 +2023,34 @@ public sealed class RapierMissionDirector {
                 // autopilot turn back toward it after crossing the point.
                 Vec3D touchdownAim = physicalTouchdown
                     + new Vec3D(0.0, -20.0, 0.0);
+                // Closed-loop gamma to a CALIBRATED aim point.
+                //
+                // Predicting deck intersection from the instantaneous flight-path angle and trimming
+                // gamma (tried 2026-07-27) boltered the wire card: reduced-order pitch lag means
+                // the aircraft does not fly the predicted path. HookAimOffsetM is not hook trail
+                // (Carrier.HookToMainGearM = 6 m) — it is measured pitch-response compensation so
+                // the approach aim sits where the hook actually arrives. Dead mass-scheduled gamma
+                // trim was removed; the proper next step is a predictive model of the pitch law,
+                // not another energy-fitted constant.
+                // Pitch/path response is mass-sensitive: the same command at the 7,080 kg recovery
+                // card and the 5,660 kg post-sortie article does not intersect the slab at the same
+                // along coordinate. Use a small bounded first-order predictor rather than another
+                // one-mass constant. It changes lead by ~17 m across those measured cases and leaves
+                // the public 290 m reference unchanged at 7,080 kg.
+                // Lower bound 250, was 275. The predictor is right and the CLAMP was the defect:
+                // the wires span 15.6 m in total (4 x WireSpacingM 5.2) with an 8 m capture sweep,
+                // so the whole landing box is about 24 m wide and 12 m of unwanted lead is enough
+                // to miss it. At the 9,327 kg the full authored sortie actually arrives at, the
+                // predictor asks for 263 m and the floor forced 275, and the hook came down 0.8 m
+                // past wire four -- an InFlightEngagement, missing the entire array by 80 cm.
+                //
+                // 275 was fitted across the 7,080 kg recovery card and the 5,660 kg post-sortie
+                // article; the heavier full-fuel sortie now lands outside the range it was fitted
+                // over. Widening the floor lets the predictor do the job it was written to do.
+                double hookAimOffsetM = Math.Clamp(
+                    290.0 + (7_080.0 - player.Mass) * 0.012,
+                    250.0, 315.0);
+                Vec3D finalAim = touchdownAim + runwayForward * hookAimOffsetM;
                 double distanceToWireM =
                     (physicalTouchdown - player.Position).Dot(runwayForward);
                 Vec3D gatePoint;
@@ -1348,7 +2073,19 @@ public sealed class RapierMissionDirector {
                         + new Vec3D(0.0, 180.0, 0.0);
                 } else {
                     recoveryGate = 4;
-                    gatePoint = touchdownAim;
+                    // finalAim, NOT touchdownAim. touchdownAim carries the deliberate 20 m
+                    // depression that stops the aircraft floating down the deck; hookAimOffsetM
+                    // is the ~290 m of lead that COMPENSATES for that depression and for pitch
+                    // lag, and it was measured for exactly this purpose -- "so the approach aim
+                    // sits where the hook actually arrives".
+                    //
+                    // But it was only ever fed into geometricFinalGamma, which is a clamp FLOOR.
+                    // The steering command itself still pointed at the undepressed-but-unled
+                    // touchdownAim, so the aircraft flew at a point 20 m under the slab with no
+                    // lead at all. On a 3.5 degree path 20 m of depression is 327 m of undershoot,
+                    // and the recovery touched down 219 m short of the wire every single time.
+                    // The compensation existed, was correct, and was not connected to anything.
+                    gatePoint = finalAim;
                 }
                 guidanceWaypoint = gatePoint;
                 waypoint = _recoveryFinal
@@ -1370,24 +2107,7 @@ public sealed class RapierMissionDirector {
                 double horizontalRangeM = Math.Max(1.0, Math.Sqrt(
                     Math.Pow(gatePoint.X - player.Position.X, 2.0)
                     + Math.Pow(gatePoint.Z - player.Position.Z, 2.0)));
-                // Closed-loop gamma to a CALIBRATED aim point.
-                //
-                // Predicting deck intersection from the instantaneous flight-path angle and trimming
-                // gamma (tried 2026-07-27) boltered the wire card: reduced-order pitch lag means
-                // the aircraft does not fly the predicted path. HookAimOffsetM is not hook trail
-                // (Carrier.HookToMainGearM = 6 m) — it is measured pitch-response compensation so
-                // the approach aim sits where the hook actually arrives. Dead mass-scheduled gamma
-                // trim was removed; the proper next step is a predictive model of the pitch law,
-                // not another energy-fitted constant.
-                // Pitch/path response is mass-sensitive: the same command at the 7,080 kg recovery
-                // card and the 5,660 kg post-sortie article does not intersect the slab at the same
-                // along coordinate. Use a small bounded first-order predictor rather than another
-                // one-mass constant. It changes lead by ~17 m across those measured cases and leaves
-                // the public 290 m reference unchanged at 7,080 kg.
-                double hookAimOffsetM = Math.Clamp(
-                    290.0 + (7_080.0 - player.Mass) * 0.012,
-                    275.0, 315.0);
-                Vec3D finalAim = touchdownAim + runwayForward * hookAimOffsetM;
+
                 double geometricFinalGamma = Math.Atan2(
                     finalAim.Y - player.Position.Y,
                     Math.Max(1.0, Math.Sqrt(
@@ -1421,7 +2141,16 @@ public sealed class RapierMissionDirector {
                     player.Position.Y > setupAltitudeM + 1_000.0;
                 double approachSpeedMps;
                 if (_recoveryFinal) {
-                    approachSpeedMps = 88.0;
+                    // 80 m/s = 155 KTAS. This was 88 m/s = 171 KTAS, which is ABOVE the 82 m/s
+                    // (159 KTAS) the arrest assessment will accept -- the automation was flying an
+                    // approach it was not permitted to trap from, so a perfectly flown final could
+                    // only ever bolter. It went unnoticed while the speed loop was too weak to
+                    // reach the commanded speed: the aircraft arrived 21 kt slow, at 149 kt, which
+                    // was inside the gate by accident and looked like a different problem.
+                    //
+                    // 80 m/s is 1.22 Vs at recovery weight (stall 65.7 m/s / 128 kt) and sits
+                    // inside the arrest gate with 2 m/s to spare.
+                    approachSpeedMps = 80.0;
                 } else if (!_recoveryMarshalReached) {
                     approachSpeedMps = setupRangeM > 100_000.0 ? 320.0
                         : setupRangeM > 40_000.0 || highAboveSetupShelf ? 180.0
@@ -1436,17 +2165,43 @@ public sealed class RapierMissionDirector {
                 } else {
                     approachSpeedMps = setupRangeM > 5_000.0 ? 120.0 : 88.0;
                 }
+                // The final shelf was 0.04 -- idle. A delta at 616 kg/m2 on a 3 degree path is on
+                // the back of the drag curve at approach alpha (measured 12.8 deg), where it needs
+                // POWER to hold the path, not to gain speed. At idle it simply descends steeper
+                // than commanded, which is exactly what the trace showed: throttle 0.00 the whole
+                // way down, 21 kt slow, and 3.7 degrees against a 2.95 degree command.
                 double recoveryBaseThrottle = approachSpeedMps > 250.0 ? 0.90
                     : approachSpeedMps > 150.0 ? 0.52
                     : approachSpeedMps > 100.0 ? 0.22
-                    : 0.04;
+                    : 0.20;
                 double recoveryMaximumThrottle = approachSpeedMps > 250.0 ? 1.25
                     : approachSpeedMps > 150.0 ? 1.25
                     : approachSpeedMps > 100.0 ? 0.95
                     : 0.72;
+                // 0.012 per m/s is roughly 1% of lever per knot of error -- an 11 m/s deficit
+                // bought 13% throttle, which cannot hold speed on an approach. 0.045 gives the
+                // loop enough authority to actually be a speed hold.
+                //
+                // POWER CONTROLS THE PATH. The speed term alone left the aircraft holding 3.5
+                // degrees against a 2.34 degree command and touching down 219 m short of the wire,
+                // every attempt, for the same reason it always happens: on the back of the drag
+                // curve at approach alpha, pitch cannot raise the flight path. Only thrust can.
+                // Trimming the aim point, the gate geometry and the commanded gamma all failed to
+                // move the touchdown because none of them was the missing loop.
+                //
+                // So on final the throttle closes on BOTH: speed, and the path error against the
+                // gamma the guidance is asking for. This is the carrier technique -- power for
+                // glideslope, attitude for speed -- and it is only applied once established on
+                // final, where that is the correct way to fly the aeroplane.
+                double pathTerm = 0.0;
+                if (_recoveryFinal) {
+                    double pathErrorRad = targetGamma - player.Gamma;
+                    pathTerm = Math.Clamp(pathErrorRad * 8.0, -0.25, 0.45);
+                }
                 throttle = Math.Clamp(
                     recoveryBaseThrottle
-                        + (approachSpeedMps - trueAirspeedMps) * 0.012,
+                        + (approachSpeedMps - trueAirspeedMps) * 0.045
+                        + pathTerm,
                     0.0, recoveryMaximumThrottle);
                 targetAltitudeFt = gatePoint.Y * FeetPerMetre;
                 // INSTRUCTIONS, not status. This used to report which gate the aircraft was at and
@@ -1486,11 +2241,25 @@ public sealed class RapierMissionDirector {
                 break;
         }
 
+        // The q screen is an airframe invariant, not a special balloon trick. Local Mach clamping
+        // alone cannot arrest q while a high-thrust core and its spool are still accelerating, as
+        // the live formation OFT demonstrated at 71 kPa. Unload and reduce power before the 55 kPa
+        // placard in every powered/committed phase; the 5 kPa hard-command margin absorbs spool and
+        // flight-path lag. Recovery is already far below this band.
+        if (_phase is not RapierMissionPhase.Recovery
+            and not RapierMissionPhase.Complete
+            and not RapierMissionPhase.Unavailable) {
+            targetGamma = RapierQProtectedGamma(targetGamma, qPa);
+            throttle = RapierQProtectedThrottle(throttle, qPa, profileMaximumLever);
+        }
+
         double maximumBankDegrees = _phase switch {
             RapierMissionPhase.Launch => patternOnly ? 50.0 : 12.0,
             // Circuits climb joins INITIAL — PatternBankTargetRad owns the real bank when used.
             RapierMissionPhase.Climb or RapierMissionPhase.Accelerate
                 or RapierMissionPhase.RamClimb => patternOnly ? 50.0 : 15.0,
+            // The balloon pull spends only a small, explicit fraction of its lift laterally. The
+            // closed-loop miss law below owns the sign and magnitude inside this ordinary cap.
             RapierMissionPhase.ZoomPull => 12.0,
             RapierMissionPhase.ZoomCoast or RapierMissionPhase.ReenterAlign => 20.0,
             RapierMissionPhase.DipRelight => 15.0,
@@ -1501,7 +2270,7 @@ public sealed class RapierMissionDirector {
             _ => 15.0
         };
         double maximumG = _phase switch {
-            RapierMissionPhase.ZoomPull => 3.5,
+            RapierMissionPhase.ZoomPull => balloonApexProfile ? BalloonPullMaximumG : 3.5,
             RapierMissionPhase.Attack => 2.2,
             RapierMissionPhase.Recovery => 2.0,
             RapierMissionPhase.ReturnToBase => 1.8,
@@ -1517,7 +2286,56 @@ public sealed class RapierMissionDirector {
                 gammaGain, minimumG, PatternMaximumG(circuitLeg))
             : CommandToward(player, waypoint, targetGamma, throttle,
                 maximumBankDegrees, gammaGain, minimumG, maximumG);
-        double commandedMach = Math.Min(targetMach, skinMachLimit);
+        if (balloonApexProfile && _phase == RapierMissionPhase.ZoomPull) {
+            // Direct alpha bypasses the ordinary G-demand mapping, so impose both constraints here:
+            // the real attached-flow break and the alpha which corresponds to 3.2 g at this q and
+            // mass. The force kernel still owns the achieved response, drag and inlet unstart.
+            double physicalAlphaRad = FlightModel.AlphaAeroMax(playerAircraft);
+            double clAlpha = FlightModel.EffectiveClAlpha(playerAircraft, mach);
+            double alphaForMaximumG = BalloonPullMaximumG * player.Mass * FlightModel.G0
+                / Math.Max(qPa * playerAircraft.WingAreaM2 * clAlpha, 1e-6);
+            double commandedAlphaRad = Math.Clamp(Math.Min(
+                BalloonPullAlphaDeg * Math.PI / 180.0,
+                Math.Min(physicalAlphaRad, alphaForMaximumG)), 0.0, physicalAlphaRad);
+            double pullBankTargetRad = BalloonPullBankTarget(
+                player,
+                contact,
+                playerAircraft,
+                mach,
+                qPa,
+                commandedAlphaRad);
+            command = command with {
+                Throttle = 0.0,
+                BankTarget = pullBankTargetRad,
+                CommandedAlphaRad = commandedAlphaRad,
+                EnvelopeOverride = false
+            };
+        }
+        if (balloonApexProfile && _phase is RapierMissionPhase.ZoomCoast
+                or RapierMissionPhase.Attack) {
+            // A zoom apex comes from gravity spending vertical velocity, not an autopilot quietly
+            // holding one G at the displayed flight-path angle. Stay at zero lift until the exact
+            // M61 solver first has a finite lead; then let a bounded incidence/bank/RCS command
+            // converge the body-fixed gun on that authoritative line. It never fires the weapon.
+            command = command with { GDemand = 0.0 };
+            if (balloonGunSolution.TimeOfFlightSeconds
+                    <= BalloonPredictedMaximumFlightSeconds
+                && TryBalloonGunLeadCommand(
+                    player,
+                    playerAircraft,
+                    balloonGunSolution,
+                    mach,
+                    qPa,
+                    out double gunBankTargetRad,
+                    out double gunAlphaTargetRad)) {
+                command = command with {
+                    BankTarget = gunBankTargetRad,
+                    CommandedAlphaRad = gunAlphaTargetRad,
+                    EnvelopeOverride = false
+                };
+            }
+        }
+        double commandedMach = Math.Min(targetMach, envelopeMachLimit);
         if (fdTargetKtas <= 0.0 && commandedMach > 0.0) {
             fdTargetKtas = commandedMach * air.SpeedOfSoundMps * 1.94384;
         }
@@ -1547,6 +2365,10 @@ public sealed class RapierMissionDirector {
             GateInVolume: gateInVolume,
             GateEnergyOk: gateEnergyOk,
             Intention: ReachFightDirector.Token(_intention),
-            Strategy: ReachFightDirector.Token(_strategy));
+            Strategy: ReachFightDirector.Token(_strategy),
+            TargetGammaDeg: targetGamma * (180.0 / Math.PI),
+            RecoveryConfigurationRequested:
+                _phase == RapierMissionPhase.Recovery
+                && (_recoveryLineupReached || _recoveryFinal));
     }
 }

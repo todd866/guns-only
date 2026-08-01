@@ -95,6 +95,14 @@ test("VisualRuntime coordinates profile, adapters, quality, resize, and idempote
   }), true);
   assert.equal(runtime.adaptiveResolution.status().samples, foregroundSamples,
     "Ready/pause/background frames must not train foreground adaptive resolution");
+  assert.equal(runtime.update({
+    deltaSeconds: 0.016,
+    frameTimeMs: 40,
+    activeForeground: true,
+    adaptiveResolutionSampling: false,
+  }), true);
+  assert.equal(runtime.adaptiveResolution.status().samples, foregroundSamples,
+    "a causal outer governor must be able to retain foreground visual quality during CPU stalls");
   assert.equal(runtime.render(0.016), true);
   assert.equal(runtime.dispatchEffect("event.weapon.gun-fire.v1", { rounds: 1 }), true);
   assert.equal(runtime.dispatchEffect("event.unknown.v1"), false);

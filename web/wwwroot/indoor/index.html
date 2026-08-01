@@ -29,7 +29,7 @@
       <div id="phase-strip">
         <span class="phase-step active" data-phase-step="ingress"><b>01</b> INGRESS</span>
         <span class="phase-line"></span>
-        <span class="phase-step" data-phase-step="detach"><b>02</b> BREAKAWAY</span>
+        <span class="phase-step" data-phase-step="detach"><b>02</b> LINK DECISION</span>
         <span class="phase-line"></span>
         <span class="phase-step" data-phase-step="action"><b>03</b> ACTION</span>
       </div>
@@ -114,8 +114,8 @@
 
     <div id="detach-panel">
       <div>
-        <span id="detach-kicker">BREAKAWAY ARMED</span>
-        <strong id="detach-copy">X detaches fibre</strong>
+        <span id="detach-kicker">MISSION LINK</span>
+        <strong id="detach-copy">Doctrine determines whether the fibre may be detached.</strong>
       </div>
       <button id="return-button" type="button" hidden>RETURN · R</button>
       <button id="broadcast-button" type="button" hidden>BROADCAST · HOLD B</button>
@@ -162,7 +162,7 @@
 
         <div class="mission-doctrine">
           <div><b>01</b><span><strong>Survey</strong>Follow the fibre-protected route and hold each observation point.</span></div>
-          <div><b>02</b><span><strong>Choose emissions</strong>Stay dark for a silent return, or detach and announce yourself.</span></div>
+          <div><b>02</b><span><strong>Obey emission doctrine</strong>Stealth sorties keep the fibre attached; discretionary sorties may detach after the survey.</span></div>
           <div><b>03</b><span><strong>Drone response</strong>An investigator may emerge. Firing starts the response clock.</span></div>
         </div>
 
@@ -208,11 +208,11 @@
         <div><kbd>↑ / ↓</kbd><span>Look up / down</span></div>
         <div><kbd>SPACE</kbd><span>Climb</span></div>
         <div><kbd>L-SHIFT</kbd><span>Descend</span></div>
-        <div><kbd>F / CLICK</kbd><span>Fire</span></div>
-        <div><kbd>X</kbd><span>Detach fibre</span></div>
-        <div><kbd>HOLD B</kbd><span>Deliberate RF / EW broadcast</span></div>
+        <div><kbd>F / CLICK</kbd><span>Fire when mission doctrine arms weapons</span></div>
+        <div><kbd>X</kbd><span>Detach fibre where doctrine permits</span></div>
+        <div><kbd>HOLD B</kbd><span>Broadcast only on radio-authorised profiles</span></div>
         <div><kbd>MOUSE</kbd><span>Optional mouselook</span></div>
-        <div><kbd>R</kbd><span>Silent return / restart after finish</span></div>
+        <div><kbd>R</kbd><span>Return after all survey observations / restart after finish</span></div>
       </div>
       <p>On touch screens, the left pad translates and the right side looks. UP/DN control height. After the survey, use RETURN to let the drone retrace the fibre route without broadcasting.</p>
       <button id="help-close" class="primary" type="button">DONE · H</button>
@@ -244,10 +244,10 @@
       <button type="button" data-touch-hold="up">UP</button>
       <button type="button" data-touch-hold="down">DN</button>
     </div>
-    <button id="touch-fire" type="button">FIRE</button>
+    <button id="touch-fire" type="button" hidden>FIRE</button>
     <button id="touch-return" type="button" hidden>RETURN</button>
     <button id="touch-broadcast" type="button" hidden>BCAST</button>
-    <button id="touch-detach" type="button">DETACH</button>
+    <button id="touch-detach" type="button" hidden>DETACH</button>
   </section>
 
   <div id="boot-status" role="status" aria-live="polite">BUILDING FACILITY</div>
@@ -262,6 +262,52 @@
   </div>
   <p id="announcer" class="visually-hidden" aria-live="assertive"></p>
 
-  <script type="module" src="./game.js"></script>
+  <script>
+    // Do not let an older cache-first worker link this build's versioned gate against its stale,
+    // unversioned campaign dependency. This classic, import-free preboot runs before any module
+    // graph is requested; offline clients keep their older document and never enter this path.
+    globalThis.__gunsPrebootReady = (async () => {
+      const releaseBuild = new URL("../service-worker.js?v=238", location.href)
+        .searchParams.get("v");
+      const controller = navigator.serviceWorker?.controller;
+      const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
+      const registeredWorkers = registrations.flatMap((registration) => [
+        registration.active,
+        registration.waiting,
+        registration.installing,
+      ]).filter(Boolean);
+      const staleWorker = [controller, ...registeredWorkers]
+        .filter(Boolean)
+        .find((worker) => new URL(worker.scriptURL, location.href)
+          .searchParams.get("v") !== releaseBuild);
+      if (!staleWorker) return;
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+      if ("caches" in globalThis) {
+        const keys = await caches.keys();
+        await Promise.all(keys
+          .filter((key) => key.startsWith("guns-only-"))
+          .map((key) => caches.delete(key)));
+      }
+    })();
+  </script>
+  <script type="module">
+    try {
+      await globalThis.__gunsPrebootReady;
+      const { renderExperienceGate } = await import(
+        "../render/release/quarantine_gate.js?v=238"
+      );
+      const access = renderExperienceGate({ experienceId: "indoor" });
+      if (access.allowed) await import("./game.js?v=238");
+    } catch (error) {
+      console.error(error);
+      const boot = document.querySelector("#boot-status");
+      if (boot) boot.hidden = true;
+      const copy = document.querySelector("#fatal-copy");
+      if (copy) copy.textContent = error instanceof Error ? error.message : String(error);
+      const fatal = document.querySelector("#fatal");
+      fatal?.classList.add("visible");
+      fatal?.setAttribute("aria-hidden", "false");
+    }
+  </script>
 </body>
 </html>

@@ -55,18 +55,27 @@ Campaign state is deliberately separated from sortie truth:
 
 ```text
 Campaign governance
-    -> run director: route, readiness, unlock eligibility, story sequencing
-        -> mission contract: scenario, aircraft, environment, objectives, seed
-            -> SimulationSession: authoritative physical sortie and outcome
-                -> debrief: evidence from recorded events
-                    -> profile: durable unlocks and archive knowledge
+    -> campaign economy: custody, readiness, work, funding, capacity, evidence, authority
+        -> run director: route, mission offers, unlock eligibility, story sequencing
+            -> mission contract: scenario, aircraft, environment, objectives, seed, reservations
+                -> SimulationSession: authoritative physical sortie and outcome
+                    -> debrief: evidence from recorded events
+                        -> profile: durable unlocks and archive knowledge
 ```
 
 - `SimulationSession` remains authoritative for one deterministic sortie. Campaign code may choose
   inputs and consume its result; it may not rewrite a physical loss into a win or increase aircraft
   performance because of profile level.
-- The future run director owns the deterministic route seed, node graph, readiness ledger, mission
-  offers, and run-scoped resources. It stores stable content IDs, never display names.
+- The future run director owns the deterministic route seed, node graph, mission offers, story
+  sequence, and a derived run-scoped readiness projection. Canonical custody, readiness/work,
+  funding, capacity, people, evidence, time/access, and authority belong to the campaign economy.
+  The dossier's compact readiness resources are authoring projections, not ledger transactions.
+  Stable content IDs are stored instead of display names.
+- The future campaign-economy authority reserves a stable assignment before launch and applies each
+  immutable result exactly once. Physical stock, airworthiness/work, funding, capacity, people,
+  operational evidence, time/access, and command authority remain typed ledgers. Browser state,
+  tactical score, and political points never author them. The controlling contract is
+  [future air-war economy and force management](air-war-economy-and-force-management.md).
 - The durable profile owns unlocked content, discovered archive entries, completed story nodes, and
   records. It does not own transient aircraft physics.
 - A debrief explanation must be derivable from the event/snapshot record. If the game cannot show
@@ -106,6 +115,11 @@ State has three lifetimes:
 The run director may create scarcity through ready aircraft, repair capacity, spare engines,
 ammunition, datalink/network health, trained controllers, intelligence confidence, and time. Every
 readiness change needs a legible cause and a future decision consequence.
+
+Scarcity is not one balance. Money cannot stand in for stock, a repair slot, a qualified person,
+transport, evidence, or permission. Outcome-linked points are at most a capped supplemental
+allocation channel; baseline fuel, safety work, rescue, minimum defence, and campaign viability are
+allocated by task, threat, and need.
 
 An F-22 loss uses a bounded state transition such as `ready -> damaged -> repairable`, `ready ->
 inspection`, or `ready -> lost`. Ordinary failure should usually damage readiness or consume time;
