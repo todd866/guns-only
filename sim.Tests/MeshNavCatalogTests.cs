@@ -26,7 +26,9 @@ public sealed class MeshNavCatalogTests {
 
     [Fact]
     public void SessionOpenSegmentExposesCatalogAndAcceptsFreeFix() {
-        var session = new SimulationSession(12, Carrier.DeckConfiguration.Angled);
+        // Card 11 is the explicit open-segment Rapier laboratory. Production Card 12 is a
+        // deterministic mission and deliberately rejects free-tour destinations.
+        var session = new SimulationSession(11, Carrier.DeckConfiguration.Angled);
         Assert.Equal(MeshNavTransitMode.OpenSegment, session.MeshNav.Mode);
         Assert.True(session.TrySelectMeshPlace("place.ukraine.crimea-coast-survey.v1"));
         Assert.Equal(

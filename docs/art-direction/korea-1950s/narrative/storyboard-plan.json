@@ -99,18 +99,21 @@
     {
       "frameId": "frame.armstrong.cable-strike.v1",
       "beatId": "beat.armstrong.05-cable-strike.v1",
-      "title": "The cable",
-      "historicalLabel": "history",
+      "title": "The disputed impact",
+      "historicalLabel": "reconstruction",
       "sourceRefs": [
         "source.armstrong-nasa-sp-2011-4542.v1",
-        "source.hansen-first-man-2012.v1"
+        "source.hansen-first-man-2012.v1",
+        "source.nhhc-hgram-033.v1",
+        "source.nhhc-essex-action-report-1951.v1",
+        "source.nhhc-cvg5-action-report-1951.v1"
       ],
-      "sourceLimits": "A cable and major right-wing loss are supported. Cable installation, exact contact geometry, structure failure and terrain are reconstruction.",
-      "shot": "Three-quarter rear reference view at the instant a taut cable slices through the outer right wing; the player-facing runtime moment remains in the normal flight camera.",
+      "sourceLimits": "This frame enacts Armstrong's retrospective cable and six-to-eight-foot wing-loss account as a disclosed gameplay reconstruction. Contemporary Essex and CVG-5 reports instead attribute control loss to antiaircraft fire and about two feet of starboard-wing loss to a power pole. No source closes the mechanism, cable installation, contact geometry, fracture, or terrain.",
+      "shot": "Three-quarter rear reference view of the authored cable reconstruction at the instant a taut cable slices through the outer right wing; the player-facing runtime moment remains in the normal flight camera.",
       "moment": "Cable contact, before the aircraft has completed the first roll impulse.",
       "playerInformation": "Cable location, physical contact point, detached structure and initial roll direction agree with simulation truth.",
       "prompt": "Original hand-painted mid-century animated feature reference frame, dark sea-blue straight-wing F9F Panther at very low altitude in a Korean mountain corridor, one physically taut thin antiaircraft cable crossing between terrain supports and slicing through the outer right wing, outer wing structure beginning to separate with exact control-surface damage left unresolved, aircraft not yet engulfed or exploded, violent asymmetric impulse conveyed by attitude and fragments, inhabited landscape distant and intact, gouache ridges, soft cel machinery with precise geometry, brief shocking mechanical event, 16:9.",
-      "avoid": "Fireball, missile hit, visible bullets, utility pole collision, multiple impossible wires at once, gore, slow-motion glamour, hidden cable."
+      "avoid": "Presenting either the retrospective cable account or the contemporary antiaircraft-fire and power-pole account as undisputed history, fireball, missile hit, visible bullets, multiple impossible wires at once, gore, slow-motion glamour, hidden cable."
     },
     {
       "frameId": "frame.armstrong.arrest-roll.v1",
@@ -170,17 +173,17 @@
         "source.armstrong-nasa-sp-2011-4542.v1"
       ],
       "sourceLimits": "The ejection location near K-3 is supported. Cockpit action order, seat hardware, envelope and disposal corridor await technical source lock.",
-      "shot": "Tight cockpit view with one hand holding the damaged aircraft and the other beginning a sourced ejection preparation action.",
+      "shot": "Tight cockpit view with one hand holding the damaged aircraft and the other beginning a disclosed provisional ejection-preparation action.",
       "moment": "The player has crossed into friendly territory but has not yet made the aircraft safe to leave.",
       "playerInformation": "Flight attitude, speed margin, disposal heading and the single current procedure action are clear.",
-      "prompt": "Original hand-painted mid-century animated feature cockpit frame inside a damaged 1951 F9F Panther over friendly Korean terrain, young naval aviator in period exposure suit, survival vest, helmet and oxygen equipment, one gloved hand holding strong lateral control while the other reaches for a historically sourced ejection preparation control, strained but contained posture, period instrument panel mechanically precise, gouache landscape through canopy, no retrospective symbolism, 16:9.",
+      "prompt": "Original hand-painted mid-century animated feature cockpit frame inside a damaged 1951 F9F Panther over friendly Korean terrain, young naval aviator in period exposure suit, survival vest, helmet and oxygen equipment, one gloved hand holding strong lateral control while the other reaches for a visibly provisional ejection-preparation control reconstruction pending handbook review, strained but contained posture, period instrument panel mechanically precise only where sources support it, gouache landscape through canopy, no retrospective symbolism, 16:9.",
       "avoid": "Apollo suit, modern harness, unverified face-cover action, tears, prayer pose, heroic close-up, text checklist baked into art."
     },
     {
       "frameId": "frame.armstrong.ejection.v1",
       "beatId": "beat.armstrong.10-ejection.v1",
       "title": "Punch out",
-      "historicalLabel": "history",
+      "historicalLabel": "reconstruction",
       "sourceRefs": [
         "source.armstrong-nasa-sp-2011-4542.v1",
         "source.hansen-first-man-2012.v1"
@@ -189,19 +192,19 @@
       "shot": "External continuity reference showing the pilot and seat just clear of the Panther while the damaged aircraft remains on its prior vector.",
       "moment": "Immediate seat-aircraft separation before parachute deployment.",
       "playerInformation": "Aircraft, seat and pilot are distinct and spatially continuous; there is no teleport or decorative cut.",
-      "prompt": "Original hand-painted mid-century animated feature reference frame, 1951 F9F Panther with major outer right-wing loss continuing forward over Korean terrain as a period cartridge ejection seat and young naval aviator have just cleared the cockpit, abrupt compact blast and small fragments, no fireball, aircraft seat and pilot trajectories physically coherent, lead aircraft at safe distance, broad gouache landscape, soft cel forms with mechanically exact separation, harsh mechanical transition rather than spectacle, 16:9.",
+      "prompt": "Original hand-painted mid-century animated feature reference frame, 1951 F9F Panther with major outer right-wing loss continuing forward over Korean terrain as a period-appropriate ejection-seat reconstruction and young naval aviator have just cleared the cockpit, informed by Armstrong's recalled cartridge-seat description, abrupt compact blast and small fragments, no fireball, aircraft seat and pilot trajectories spatially coherent, lead aircraft at safe distance, broad gouache landscape, soft cel forms, harsh mechanical transition rather than spectacle, 16:9.",
       "avoid": "Rocket-chair fantasy, modern zero-zero seat, exploding jet, parachute already fully open at the canopy, superhero pose, slow-motion glamour."
     },
     {
       "frameId": "frame.armstrong.parachute-descent.v1",
       "beatId": "beat.armstrong.11-parachute-descent.v1",
-      "title": "Back over land",
-      "historicalLabel": "history",
+      "title": "Under canopy",
+      "historicalLabel": "reconstruction",
       "sourceRefs": [
-        "source.armstrong-nasa-sp-2011-4542.v1",
-        "source.hansen-first-man-2012.v1"
+        "source.nhhc-hgram-033.v1",
+        "source.nhhc-cvg5-action-report-1951.v1"
       ],
-      "sourceLimits": "Wind drift over friendly land is supported by Armstrong's retrospective account. Canopy type, descent path, exact surface and aircraft wreck path remain source-blocked.",
+      "sourceLimits": "The contemporary CVG-5 report supports manual parachute opening and landing near K-3; only the later H-Gram synthesis says wind carried him back over land. Canopy type, wind, descent path, exact surface and aircraft wreck path remain source-blocked.",
       "shot": "Very wide frame with a small round canopy over worked land; the damaged Panther departs far away on a separate path.",
       "moment": "The canopy has opened and aircraft noise is receding.",
       "playerInformation": "Wind direction, ground approach, canopy state and landing area are readable without turning the canopy into a modern steerable wing.",

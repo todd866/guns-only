@@ -26,7 +26,7 @@ test("only the explicit Rapier economy contract reaches persistent campaign bala
     "airframe-name inference would wrongly charge Circuits");
 });
 
-test("Rapier economics stay in the briefing and debrief instead of the flight HUD", async () => {
+test("the retired economy prototype stays explicitly gated to legacy debrief data", async () => {
   const [hud, app, debrief] = await Promise.all([
     source("hud.js"),
     source("app.js"),
@@ -35,6 +35,8 @@ test("Rapier economics stay in the briefing and debrief instead of the flight HU
 
   assert.doesNotMatch(hud, /rapier_economy_/);
   assert.match(app, /Rapier budget posted|rapierEconomyPresentation/);
+  assert.doesNotMatch(app, /Rapier balance \$\{balance\} CR/,
+    "the deterministic production briefing must not advertise an economy ledger");
   assert.match(debrief, /Rapier balance/);
 });
 

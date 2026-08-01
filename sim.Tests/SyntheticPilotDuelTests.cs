@@ -30,8 +30,9 @@ public class SyntheticPilotDuelTests {
         // constant and every terrain-recovery decision is taken against a world that is flat and
         // at sea level. That is why the stalemate this fixture found was recorded as "not a fair
         // test" rather than fixed -- you cannot judge terrain recovery without terrain.
-        var terrain = (GunsOnly.Sim.Environment.ITerrainSurface)
-            GunsOnly.Web.UkraineTerrainTruth.Load();
+        GunsOnly.Sim.Environment.ITerrainSurface terrain =
+            Assert.IsAssignableFrom<GunsOnly.Sim.Environment.ITerrainSurface>(
+                GunsOnly.Web.UkraineTerrainTruth.Load());
         var bandit = new ReactiveBandit(
             new AircraftState(new Vec3D(1520.0, MergeAltitudeM + 60.0, 4500.0),
                 BeatSetup.CornerTrueAirspeedMps(BanditAir, MergeAltitudeM),

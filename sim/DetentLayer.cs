@@ -580,8 +580,9 @@ public sealed class DetentLayer {
         if (wHeld || sHeld || thUp > 0 || thDn > 0) _manualThrottle = true;   // pilot took the throttle
         // Auto-throttle = the shared speed-hold lever. Approach adds its backside/glidepath terms;
         // assisted fight supplies calibrated airspeed and the live corner target through the same
-        // proportional controller. Pilot W/S owns the assisted lever only while held, then neutral
-        // releases it cleanly back to corner hold.
+        // proportional controller. Held W/S owns the lever first. An active direct-input lever
+        // owns it next and remains latched where the phone pilot put it; only without either pilot
+        // input does assisted flight resume corner hold.
         double speedForApproach = double.IsFinite(ApproachAirspeedMps)
             ? ApproachAirspeedMps
             : double.IsFinite(AirspeedMps) ? AirspeedMps : s.Speed;
@@ -617,14 +618,15 @@ public sealed class DetentLayer {
         // while an afterburning definition may expose the full staged range to 1.35.
         if (ApproachMode && !_manualThrottle) {
             _throttleLever = System.Math.Min(autoThr, leverStop); // track the real lever for smooth takeover
-        } else if (AssistedFlight && !wHeld && !sHeld) {
-            _throttleLever = System.Math.Min(autoThr, leverStop);
         } else if (_analogThrottleControlActive && !wHeld && !sHeld) {
             // A thumb stick has an ABSOLUTE position, so the lever follows it directly instead of
             // integrating a rate. Rate control is what makes the pilot tap repeatedly to reach a
-            // setting they can already see. Held W/S still wins, so the keyboard path is unchanged.
+            // setting they can already see. Held W/S still wins; AssistedFlight no longer silently
+            // takes the lever back while the advertised portrait throttle remains active.
             _throttleLever = System.Math.Clamp(
                 _analogThrottleControl * leverStop, 0.0, leverStop);
+        } else if (AssistedFlight && !wHeld && !sHeld) {
+            _throttleLever = System.Math.Min(autoThr, leverStop);
         } else {
             if (wHeld) _throttleLever += ThrottleRate * dt;
             if (sHeld) _throttleLever -= ThrottleRate * dt;

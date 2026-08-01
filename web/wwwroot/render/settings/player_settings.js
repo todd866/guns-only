@@ -90,12 +90,31 @@ export function normalisePlayerSettings(value = {}) {
   });
 }
 
-export function loadPlayerSettings(storage = globalThis.localStorage) {
+function systemPrefersReducedMotion(matchMedia = globalThis.matchMedia) {
+  try {
+    return typeof matchMedia === "function"
+      && matchMedia.call(globalThis, "(prefers-reduced-motion: reduce)")?.matches === true;
+  } catch {
+    return false;
+  }
+}
+
+export function loadPlayerSettings(
+  storage = globalThis.localStorage,
+  matchMedia = globalThis.matchMedia,
+) {
   try {
     const raw = storage?.getItem(STORAGE_KEY);
-    return normalisePlayerSettings(raw ? JSON.parse(raw) : {});
+    const saved = raw ? JSON.parse(raw) : {};
+    // A pilot's explicit checkbox always wins. On a first visit (and for settings saved before the
+    // checkbox existed), inherit the OS request so every app animation uses the same full reduced-
+    // motion class before the first frame rather than merely reducing one isolated effect.
+    const source = saved && typeof saved === "object" ? saved : {};
+    return normalisePlayerSettings(typeof source.reducedMotion === "boolean"
+      ? source
+      : { ...source, reducedMotion: systemPrefersReducedMotion(matchMedia) });
   } catch {
-    return normalisePlayerSettings();
+    return normalisePlayerSettings({ reducedMotion: systemPrefersReducedMotion(matchMedia) });
   }
 }
 

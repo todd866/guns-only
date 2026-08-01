@@ -294,7 +294,8 @@ Complete only the actions the sourced equipment actually required.
 **AUTHORITY**
 
 The ejection control remains unavailable until the authoritative readiness predicate is true. An
-accessibility timing assist can widen margins but cannot falsify the envelope.
+accessibility timing assist can widen margins but cannot bypass the current disclosed
+reconstruction bounds; production lock still requires the period technical sources.
 
 ## 10 — Punch out
 
@@ -310,26 +311,34 @@ The player may actuate the ejection while Carpenter's acknowledgement is still a
 
 **PLAYER / ENGINEERING**
 
-Initiate ejection. Seat, pilot and aircraft separate through authoritative physics in the sourced
-order. The camera maintains a continuous spatial relationship. Blast is abrupt and ugly; it is not
-an action-film launch.
+Initiate ejection. Seat, pilot and aircraft separate through authoritative runtime physics using a
+disclosed reconstruction. The broad ejection, seat-clearance and parachute sequence is recorded;
+exact seat mechanics, acceleration and timing are not. The camera maintains a continuous spatial
+relationship. Blast is abrupt and ugly; it is not an action-film launch.
 
 **AUTHORITY**
 
 The beat completes only after ordered ejection, seat separation and parachute deployment events.
 The damaged aircraft continues its own integration.
 
-## 11 — Back over land
+## 11 — Under canopy
 
 Target: 18:45-21:00
 
-**HISTORY**
+**HISTORY / SOURCE BOUNDARY**
 
-Armstrong recalled being carried over land and descending into friendly territory.
+Contemporary reporting records manual parachute opening and landing near K-3. The later H-Gram
+synthesis—not Armstrong's interview—says wind carried him back over land. The exact wind,
+parachute path and landing surface remain uncorroborated.
+
+**ENGINEERING / RECONSTRUCTION**
+
+Environmental wind, canopy behavior, descent path and the readable landing area are authored
+reconstruction until equipment and location evidence closes them.
 
 **PLAYER**
 
-Use only the limited actions supported by the sourced parachute abstraction. Prepare for ground
+Use only the limited actions exposed by the disclosed parachute reconstruction. Prepare for ground
 contact. Do not turn the descent into a steerable sport canopy sequence.
 
 **SOUND**

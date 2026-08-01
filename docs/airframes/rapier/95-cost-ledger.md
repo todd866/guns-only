@@ -1,5 +1,9 @@
 # 95 — Cost ledger
 
+> **Historical Rapier v1 record only.** The production aircraft and deterministic balloon sortie
+> are governed by [Rapier v2](../rapier-v2/README.md). The v1 alert-fuel, drone-bay, lifecycle, and
+> economy figures below are not current runtime or product requirements.
+
 ← [90 — Failure modes](90-failure-modes.md) ·
 [force economy](../../air-war-economy-and-force-management.md) · Back to [README](README.md)
 

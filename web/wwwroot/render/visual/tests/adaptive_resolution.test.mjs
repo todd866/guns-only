@@ -157,3 +157,41 @@ test("the hard render-pixel budget still wins over the readability floor", () =>
   assert.equal(controller.pixelRatio, budgetRatio);
   assert.ok(controller.pixelRatio ** 2 * 1920 * 1080 <= 1_300_001);
 });
+
+test("causal view-pressure nudges bypass EMA without violating scale bounds", () => {
+  const changes = [];
+  const controller = new AdaptiveResolutionController({
+    pixelRatioCap: 2,
+    maxRenderPixels: 10_000_000,
+    minScale: 0.7,
+    stepDown: 0.1,
+    stepUp: 0.05,
+    onChange: (ratio, metadata) => changes.push([ratio, metadata.reason]),
+  });
+  controller.setViewport(1000, 500, 2);
+
+  assert.equal(controller.nudgeDown().scale, 0.9);
+  assert.equal(controller.nudgeDown().scale, 0.8);
+  assert.equal(controller.nudgeDown().scale, 0.7);
+  assert.equal(controller.nudgeDown().changed, false);
+  assert.equal(controller.emaFrameMs, null, "explicit attribution must not synthesize EMA evidence");
+
+  const recovery = controller.nudgeUp();
+  assert.equal(recovery.scale, 0.75);
+  assert.equal(recovery.reason, "causal-view-recovery");
+  assert.deepEqual(changes.map((entry) => entry[1]), [
+    "resize",
+    "causal-view-pressure",
+    "causal-view-pressure",
+    "causal-view-pressure",
+    "causal-view-recovery",
+  ]);
+});
+
+test("disabled adaptive resolution rejects causal nudges", () => {
+  const controller = new AdaptiveResolutionController({ enabled: false, minScale: 0.6 });
+  controller.setViewport(800, 600, 1);
+  assert.equal(controller.nudgeDown().changed, false);
+  assert.equal(controller.nudgeDown().scale, 1);
+  assert.equal(controller.nudgeUp().changed, false);
+});

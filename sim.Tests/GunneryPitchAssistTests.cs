@@ -19,13 +19,27 @@ public class GunneryPitchAssistTests {
             + aircraft.BodyUp * Math.Sin(radians)).Normalized();
     }
 
+    static Vec3D LateralLead(AircraftSim aircraft, double degrees) {
+        double radians = degrees * DegreesToRadians;
+        return (aircraft.BodyForward * Math.Cos(radians)
+            + aircraft.BodyRight * Math.Sin(radians)).Normalized();
+    }
+
+    static Vec3D TwoAxisLead(AircraftSim aircraft,
+        double pitchDegrees, double lateralDegrees) =>
+        (aircraft.BodyForward
+            + aircraft.BodyUp * Math.Tan(pitchDegrees * DegreesToRadians)
+            + aircraft.BodyRight * Math.Tan(lateralDegrees * DegreesToRadians))
+        .Normalized();
+
     static GunneryPitchAssistResult Apply(AircraftSim aircraft,
         in PilotCommand command, in Vec3D lead, double rangeM = 600.0,
-        bool enabled = true, bool hasLead = true, AircraftParams? parameters = null) =>
+        bool enabled = true, bool hasLead = true, AircraftParams? parameters = null,
+        double closureMps = 0.0) =>
         GunneryPitchAssist.Apply(command, aircraft.State,
             parameters ?? FlightModel.F22APublicDataSurrogate,
             aircraft.AirspeedMps, aircraft.AtmosphereModel,
-            lead, hasLead, rangeM, enabled);
+            lead, hasLead, rangeM, enabled, closureMps: closureMps);
 
     [Fact]
     public void RequestsBoundedProtectedPitchRateTowardBallisticLead() {
@@ -190,6 +204,78 @@ public class GunneryPitchAssistTests {
     }
 
     [Fact]
+    public void StablePursuitShoulderAcquiresBeforeKeyboardFineTuningRange() {
+        AircraftSim aircraft = ModernAircraft();
+        var pilot = new PilotCommand(1.0, 0.0, 1.0, 0.0,
+            RollControl: 0.0, DirectLateralControl: true);
+        Vec3D lead = LateralLead(aircraft, 16.0);
+
+        // Build-237 telemetry: the useful pursuit sat at 1,371 -> 1,003 m with at least ten
+        // seconds to pass. The old 1,000 m gate stayed dark while the pilot made twelve manual
+        // corrections. This geometry must now get a bounded, partial acquisition pull.
+        GunneryPitchAssistResult outer = Apply(aircraft, pilot, lead,
+            rangeM: 1370.0, closureMps: 15.0);
+        GunneryPitchAssistResult nearer = Apply(aircraft, pilot, lead,
+            rangeM: 900.0, closureMps: 15.0);
+
+        Assert.True(outer.State.Active);
+        Assert.True(outer.Command.RollControl > pilot.RollControl);
+        Assert.True(outer.Command.Rudder > pilot.Rudder);
+        Assert.InRange(outer.Command.RollControl, 0.0, nearer.Command.RollControl);
+        Assert.InRange(outer.Command.Rudder, 0.0, nearer.Command.Rudder);
+        Assert.Equal(pilot.GDemand, outer.Command.GDemand, 12);
+    }
+
+    [Fact]
+    public void HighClosurePassDoesNotAcquireTheSafePursuitShoulder() {
+        AircraftSim aircraft = ModernAircraft();
+        var pilot = new PilotCommand(1.0, 0.0, 1.0, 0.0,
+            RollControl: 0.0, DirectLateralControl: true);
+
+        // The same trace crossed 636 m at 484 m/s closure with a 22.3-degree miss. Chasing that
+        // 1.3-second fly-by would wrench the aircraft, so new shoulder geometry stays inactive.
+        AssertInactiveUnchanged(Apply(aircraft, pilot,
+            LateralLead(aircraft, 22.3), rangeM: 636.0, closureMps: 484.0), pilot);
+
+        // Existing <=14-degree/<=1 km behaviour remains available during a pass. Its historical
+        // roll time-to-pass fade still applies, while yaw keeps the legacy full-authority law.
+        GunneryPitchAssistResult legacy = Apply(aircraft, pilot,
+            LateralLead(aircraft, 13.0), rangeM: 636.0, closureMps: 484.0);
+        Assert.True(legacy.State.Active);
+        Assert.True(legacy.Command.RollControl > 0.0);
+        Assert.True(legacy.Command.Rudder > 0.0);
+    }
+
+    [Fact]
+    public void SafePursuitRangeShoulderFadesPitchRollAndYawTogether() {
+        AircraftSim aircraft = ModernAircraft();
+        var pilot = new PilotCommand(1.0, 0.0, 1.0, 0.0,
+            RollControl: 0.0, DirectLateralControl: true);
+        Vec3D lead = TwoAxisLead(aircraft, pitchDegrees: 5.0, lateralDegrees: 5.0);
+
+        GunneryPitchAssistResult full = Apply(aircraft, pilot, lead,
+            rangeM: 900.0, closureMps: 100.0);
+        GunneryPitchAssistResult shoulder = Apply(aircraft, pilot, lead,
+            rangeM: 1250.0, closureMps: 100.0);
+
+        Assert.True(full.State.Active);
+        Assert.True(shoulder.State.Active);
+        Assert.InRange(shoulder.State.LoadFactorCorrectionG,
+            0.0, full.State.LoadFactorCorrectionG);
+        Assert.InRange(shoulder.Command.RollControl,
+            0.0, full.Command.RollControl);
+        Assert.InRange(shoulder.Command.Rudder,
+            0.0, full.Command.Rudder);
+        Assert.InRange(
+            shoulder.State.LoadFactorCorrectionG / full.State.LoadFactorCorrectionG,
+            0.70, 0.72);
+        Assert.InRange(shoulder.Command.RollControl / full.Command.RollControl,
+            0.70, 0.72);
+        Assert.InRange(shoulder.Command.Rudder / full.Command.Rudder,
+            0.70, 0.72);
+    }
+
+    [Fact]
     public void DisengagesOutsideShotGateAndDuringPitchOverride() {
         AircraftSim aircraft = ModernAircraft();
         var pilot = new PilotCommand(4.0, 0.20, 1.0, 0.0,
@@ -201,9 +287,9 @@ public class GunneryPitchAssistTests {
         AssertInactiveUnchanged(Apply(aircraft, pilot, validLead,
             hasLead: false), pilot);
         AssertInactiveUnchanged(Apply(aircraft, pilot, validLead,
-            rangeM: 1000.01), pilot);
+            rangeM: 1500.01), pilot);
         AssertInactiveUnchanged(Apply(aircraft, pilot,
-            PitchLead(aircraft, 14.01)), pilot);
+            PitchLead(aircraft, 24.01)), pilot);
         AssertInactiveUnchanged(Apply(aircraft,
             pilot with { EnvelopeOverride = true }, validLead),
             pilot with { EnvelopeOverride = true });

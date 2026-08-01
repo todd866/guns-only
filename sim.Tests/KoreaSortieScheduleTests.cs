@@ -1,6 +1,8 @@
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
+using GunsOnly.Sim.Environment;
 using GunsOnly.Sim.Recovery;
+using GunsOnly.Web;
 
 namespace GunsOnly.Sim.Tests;
 
@@ -9,6 +11,18 @@ namespace GunsOnly.Sim.Tests;
 /// flies it can say the one thing its predecessor could not — "add power".
 /// </summary>
 public class KoreaSortieScheduleTests {
+    private static ITerrainSurface ProductionTerrain(BeatSetup beat) {
+        ITerrainSurface truth = Assert.IsAssignableFrom<ITerrainSurface>(
+            UkraineTerrainTruth.Load());
+        var apron = new TrainingTerrainApronSurface(
+            truth, marginM: 400_000.0, flatHeightM: 78.0, transitionM: 8_000.0);
+        MissionEnvironmentContract environment = beat.EnvironmentIdentity;
+        return new TranslatedTerrainSurface(
+            apron,
+            -environment.TerrainSourceAnchorEastM,
+            -environment.TerrainSourceAnchorNorthM);
+    }
+
     private static SortieReference PantherReference() {
         AircraftParams air = FlightModel.F9F2Panther;
         return new SortieReference(
@@ -129,9 +143,17 @@ public class KoreaSortieScheduleTests {
         Assert.True(sortie.StartsOnCatapult, "a sortie begins on the deck, not on final");
         Assert.Equal(FlightModel.F9F2Panther, sortie.PlayerAir);
         Assert.Equal("aircraft.f9f2.v1", sortie.PlayerAircraft.Id);
+        Assert.Equal(OpponentPresence.None, sortie.OpponentPresence);
+        Assert.Null(sortie.InitialOpponent);
         Assert.Equal(Carrier.DeckConfiguration.Axial, sortie.Carrier!.Configuration);
         Assert.True(sortie.RecoveryCompletesSortie, "getting aboard should end the day");
         Assert.NotNull(sortie.RecoveryPlan);
+        Assert.Equal(Ukraine2030sTheatre.KoreaCarrierCell, sortie.EnvironmentIdentity);
+        Assert.Equal(Ukraine2030sTheatre.CoastalCell,
+            Beats.KoreaCarrierApproach().EnvironmentIdentity);
+        Assert.NotEqual(
+            Beats.KoreaCarrierApproach().EnvironmentIdentity.LocationId,
+            sortie.EnvironmentIdentity.LocationId);
     }
 
     [Fact]
@@ -141,7 +163,14 @@ public class KoreaSortieScheduleTests {
         // catapult has finished with it.
         var session = new SimulationSession();
         session.StartBeat(Beats.KoreaSortie);
+        ITerrainSurface terrain = ProductionTerrain(session.Beat);
+        session.SetTerrainSurface(terrain);
         Carrier ship = session.Carrier!;
+
+        Assert.True(terrain.TrySample(ship.Position.X, ship.Position.Z,
+            out TerrainSample launchSurface));
+        Assert.Equal(TerrainSurfaceKind.Water, launchSurface.Kind);
+        Assert.Equal(0.0, launchSurface.HeightM, 6);
 
         double parkedHeight = ship.DeckFrame(session.Player.State.Position).height;
         // Spotted, brakes on: at rest RELATIVE TO THE DECK. Its world speed is the ship's 3 m/s,
@@ -151,6 +180,7 @@ public class KoreaSortieScheduleTests {
         session.Begin();
 
         bool sawStroke = false;
+        bool stayedOverAuthoritativeWater = true;
         double bestHeight = parkedHeight;
         double bestSpeed = 0.0;
         for (int tick = 0; tick < 30 * AircraftSim.TickHz; tick++) {
@@ -158,11 +188,24 @@ public class KoreaSortieScheduleTests {
             sawStroke |= session.Catapult.IsActive;
             bestHeight = Math.Max(bestHeight, ship.DeckFrame(session.Player.State.Position).height);
             bestSpeed = Math.Max(bestSpeed, session.Player.State.Speed);
+            Assert.True(terrain.TrySample(
+                session.Player.State.Position.X,
+                session.Player.State.Position.Z,
+                out TerrainSample underAircraft));
+            stayedOverAuthoritativeWater &= underAircraft.Kind == TerrainSurfaceKind.Water;
             if (session.PlayerTerminalState == AircraftTerminalState.Impacted) break;
         }
 
         Assert.True(sawStroke, "the catapult never fired — the beat is not actually on the cat");
-        Assert.NotEqual(AircraftTerminalState.Impacted, session.PlayerTerminalState);
+        Assert.True(stayedOverAuthoritativeWater,
+            "the authored launch route left the dedicated open-water terrain cell");
+        terrain.TrySample(
+            session.Player.State.Position.X,
+            session.Player.State.Position.Z,
+            out TerrainSample surface);
+        Assert.True(session.PlayerTerminalState != AircraftTerminalState.Impacted,
+            $"Panther impacted at {session.Player.State.Position}; "
+                + $"terrain {surface.HeightM:F1} m ({surface.Kind})");
         // Off the bow and climbing away, not mushing into the sea off the end of a straight deck.
         Assert.True(bestHeight > parkedHeight + 30.0,
             $"only reached {bestHeight:F1} m above the deck (parked at {parkedHeight:F1})");

@@ -12,15 +12,15 @@ public class FlightTestEvaluateTests {
             Air: FlightModel.RapierPublicDataSurrogate,
             Propulsion: PropulsionModelKind.TurboRamjetPublicDataSurrogate);
         var program = new FlightTestProgram(
-            Id: "interceptor-tbcc-v1",
-            Version: "0",
+            Id: "interceptor-tbcc-v2",
+            Version: "2",
             Gates: Array.Empty<FlightTestGate>(),
             Points: Array.Empty<FlightTestPoint>());
 
         FlightTestReport report = Evaluator.Evaluate(subject, program);
 
         Assert.Equal("rapier", report.SubjectId);
-        Assert.Equal("interceptor-tbcc-v1", report.ProgramId);
+        Assert.Equal("interceptor-tbcc-v2", report.ProgramId);
     }
 
     [Fact]
@@ -70,16 +70,12 @@ public class FlightTestEvaluateTests {
 
     [Fact]
     public void MatchingIdentityToBuffStillFailsFamilyTwCap() {
-        // The buff has to actually clear FamilyAugmentedTwCap (1.20) for this test to exercise
-        // anything: gross is 11,090 kg and the augmentor lever stop is 1.55, so the cap sits at
-        // 84.2 kN of dry core. x1.20 cleared it comfortably on the old 84 kN engine; on the
-        // honest 50 kN core it reaches only 0.86 aug T/W and trips nothing, so the test passed
-        // vacuously instead of catching buff creep. x1.75 puts it at 1.25, over the cap again.
-        //
-        // The sibling test above keeps x1.20 deliberately -- it checks the 5% identity-drift
-        // tolerance, which a 20% overclaim still clears. Same buff, two different bars.
+        // V2 has no extra 1.55x lever multiplier and grosses 11.82 t, so the honest 50 kN
+        // sea-level turbine-core rating is only about 0.43 T/W. Triple it to cross the deliberately
+        // broad 1.20 comparison-family cap. The sibling test keeps x1.20 to exercise the tighter
+        // identity-drift tolerance; these are two different gates.
         AircraftParams buffed = FlightModel.RapierPublicDataSurrogate with {
-            ThrustMaxN = FlightModel.RapierPublicDataSurrogate.ThrustMaxN * 1.75
+            ThrustMaxN = FlightModel.RapierPublicDataSurrogate.ThrustMaxN * 3.0
         };
         AirframeIdentity measured = IdentityMeasurement.FromParams(buffed, inferred: false);
         AirframeIdentity matched = measured with {

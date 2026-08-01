@@ -734,6 +734,50 @@ function assertRapierPanelLayout(data) {
   }
 }
 
+function assertCarrierSortieRouteGuidance(data) {
+  const { geometry, name } = data;
+  const validAwaitingReturn = name.endsWith(":carrier-route-awaiting-return");
+  const malformedActive = name.endsWith(":carrier-route-malformed-active");
+  if (!validAwaitingReturn && !malformedActive) return;
+
+  const route = geometry.carrierSortieRoute;
+  const caret = geometry.carrierRouteCaret;
+  if (validAwaitingReturn) {
+    check(name, "valid carrier route draws its heading caret",
+      caret?.drawn === true
+        && caret.source === "carrier-route"
+        && caret.phase === "AWAITING_RETURN",
+      JSON.stringify(caret));
+    check(name, "valid carrier route publishes route debug",
+      route?.source === "carrier-route"
+        && route.phase === "AWAITING_RETURN"
+        && route.rtbActionRequired === true,
+      JSON.stringify(route));
+    check(name, "route debug text carries guidance and the keyboard RTB prompt",
+      typeof route?.guidanceDirective === "string"
+        && route.text?.includes(route.guidanceDirective) === true
+        && route.keyboardPrompt === "PRESS O — RETURN TO SHIP"
+        && route.text.includes("PRESS O — RETURN TO SHIP"),
+      JSON.stringify(route?.text));
+    check(name, "valid carrier route suppresses the generic boat caret",
+      !geometry.boatRtbCaret, JSON.stringify(geometry.boatRtbCaret));
+    check(name, "valid carrier route suppresses the generic RTB cue",
+      !geometry.rtbCue, JSON.stringify(geometry.rtbCue));
+    return;
+  }
+
+  check(name, "malformed active route publishes no route debug",
+    !route, JSON.stringify(route));
+  check(name, "malformed active route publishes no RTB prompt",
+    route?.keyboardPrompt == null, JSON.stringify(route?.keyboardPrompt));
+  check(name, "malformed active route draws no route caret",
+    !caret, JSON.stringify(caret));
+  check(name, "malformed active route keeps the generic boat caret suppressed",
+    !geometry.boatRtbCaret, JSON.stringify(geometry.boatRtbCaret));
+  check(name, "malformed active route keeps the generic RTB cue suppressed",
+    !geometry.rtbCue, JSON.stringify(geometry.rtbCue));
+}
+
 function assertMobileTacticalHierarchy(data) {
   if (data.profile === "standard") return;
   const { geometry, name, viewport } = data;
@@ -895,6 +939,7 @@ async function runViewport(site, browser, {
     assertSpeedBrake(data);
     assertRapierMission(data);
     assertRapierPanelLayout(data);
+    assertCarrierSortieRouteGuidance(data);
     assertFunnelContainsTarget(data);
     assertWarningLine(data);
     assertMobileTacticalHierarchy(data);

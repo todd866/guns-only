@@ -146,8 +146,20 @@ test("the browser recorder feeds raw render deltas and never displaces state row
   assert.match(app, /function sampleSceneCounters\(\)[\s\S]*?resolution_scale_pct:/);
   // The render loop hands the recorder the raw delta before the simulation-advance clamp, so a
   // stall is measured at its true length rather than at the length the kernel was willing to run.
-  assert.match(app,
-    /const renderDeltaMs = now - previous;[\s\S]{0,500}?recorder\.observeFrameDelta\(renderDeltaMs,[\s\S]{0,300}?session_phase === "ACTIVE"[\s\S]{0,500}?clamp\(renderDeltaMs \/ 1000, 0, SIM_CATCHUP_CAP_SECONDS\)/);
+  const rawDeltaAt = app.indexOf("const renderDeltaMs = now - previous;");
+  const pressureContextAt = app.indexOf("const precedingFramePressureContext =", rawDeltaAt);
+  const recorderAt = app.indexOf("recorder.observeFrameDelta(renderDeltaMs,", rawDeltaAt);
+  const activeGateAt = app.indexOf('session_phase === "ACTIVE"', recorderAt);
+  const clampAt = app.indexOf(
+    "clamp(renderDeltaMs / 1000, 0, SIM_CATCHUP_CAP_SECONDS)",
+    recorderAt,
+  );
+  assert.ok(rawDeltaAt >= 0
+      && pressureContextAt > rawDeltaAt
+      && recorderAt > pressureContextAt
+      && activeGateAt > recorderAt
+      && clampAt > activeGateAt,
+  "raw frame accounting and same-interval causal evidence must both precede the simulation clamp");
   assert.match(app,
     /observeFrameDelta\(deltaMs, activeForeground\) \{[\s\S]*?this\._framePerf\.reset\(\)[\s\S]*?active_foreground: 1/);
   // That cap is a spiral brake. At 120 Hz a healthy 60 fps frame owes the kernel 2 ticks; letting

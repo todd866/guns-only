@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=237";
+import { createHud } from "./hud.js?v=238";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=237";
+} from "./render/debrief/sortie_result.js?v=238";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -49,7 +49,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=237";
+} from "./render/release/release_identity.js?v=238";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=238";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -62,13 +63,19 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=237";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=238";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
   parseMeshTour,
   parseRecoveryGates,
 } from "./render/nav/mesh_nav_presentation.js";
+import {
+  selectCarrierSortieNavigationPresentation,
+} from "./render/nav/carrier_sortie_route_presentation.js?v=238";
+import {
+  syncCarrierSortieTouchRtbControl,
+} from "./render/nav/carrier_sortie_touch_control.js?v=238";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -105,7 +112,10 @@ import {
   StableTiltCalibration,
   TiltSensorWatchdog,
 } from "./render/input/mobile_tilt_input.js";
-import { mobileVirtualStickState } from "./render/input/mobile_virtual_stick.js";
+import {
+  mobileVirtualStickState,
+  normalisePublishedThrottleLever,
+} from "./render/input/mobile_virtual_stick.js";
 import {
   GlobalRoomClient,
   resolveGlobalRoomUrl,
@@ -126,11 +136,10 @@ import {
   CAMPAIGN_NODES,
   applyRapierSortieCredits,
   campaignNode,
-  campaignNodeQualified,
-  campaignNodeUnlocked,
+  experienceById,
+  experienceLaunchable,
   loadCampaignProfile,
   nextCampaignNode,
-  qualifyCampaignNode,
   recommendedCampaignNode,
   saveCampaignProfile,
 } from "./render/progression/campaign_progression.js";
@@ -139,13 +148,17 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=237";
-import { FrameGovernorPolicy } from "./render/telemetry/frame_governor.js";
+} from "./render/telemetry/ai_frame_pressure.js?v=238";
+import {
+  FRAME_GOVERNOR_ACTION,
+  formatFrameGovernorStatus,
+  FrameGovernorPolicy,
+} from "./render/telemetry/frame_governor.js";
 import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compression.js";
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=237";
+} from "./render/telemetry/telemetry_batch.js?v=238";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -154,7 +167,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=237";
+} from "./render/settings/player_settings.js?v=238";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -200,12 +213,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=237";
+} from "./render/scene/scene_builders.js?v=238";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=238";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=237";
+} from "./render/audio/flight_audio.js?v=238";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -425,6 +439,7 @@ const touchTargetCycleButton = touchControls?.querySelector('[data-mobile-action
 const touchTargetLabel = document.querySelector("#touch-target-label");
 const touchTargetNumber = document.querySelector("#touch-target-number");
 const touchFireButton = document.querySelector("#touch-fire");
+const touchCarrierRtbButton = document.querySelector("#touch-carrier-rtb");
 const portraitChips = document.querySelector("#portrait-chips");
 const fallbackStick = touchControls?.querySelector('[data-mobile-action="virtual-stick"]') ?? null;
 const fallbackStickKnob = document.querySelector("#fallback-stick-knob");
@@ -432,6 +447,8 @@ const fallbackStickLabel = fallbackStick?.querySelector(".fallback-stick-label")
 const fallbackStickHelp = document.querySelector("#fallback-stick-help");
 const targetStick = touchControls?.querySelector('[data-mobile-action="target-stick"]') ?? null;
 const targetStickKnob = document.querySelector("#target-stick-knob");
+const targetStickLabel = targetStick?.querySelector(".fallback-stick-label") ?? null;
+const targetStickHelp = document.querySelector("#target-stick-help");
 const tiltPrompt = document.querySelector("#tilt-prompt");
 const tiltStatus = document.querySelector("#tilt-status");
 const readyScreen = document.querySelector("#ready-screen");
@@ -463,6 +480,11 @@ const readySettings = document.querySelector("#ready-settings");
 const readyRestart = document.querySelector("#ready-restart");
 const readyReturn = document.querySelector("#ready-return");
 const readyHint = document.querySelector("#ready-hint");
+const readyRouteNotice = document.querySelector("#ready-route-notice");
+const readyTelemetrySharing = document.querySelector("#ready-telemetry-sharing");
+const readyTelemetryDisclosure = readyTelemetrySharing?.closest(".ready-telemetry-disclosure")
+  ?? null;
+const readyTelemetrySharingStatus = document.querySelector("#ready-telemetry-sharing-status");
 const readyBuild = document.querySelector("#ready-build");
 const readyBuildReload = document.querySelector("#ready-build-reload");
 const readyCasevacRouteBriefing = createCasevacRouteBriefing(document, {
@@ -496,6 +518,7 @@ const settingsAutoGcas = document.querySelector("#setting-autogcas");
 const settingsHighContrast = document.querySelector("#setting-high-contrast");
 const settingsReducedMotion = document.querySelector("#setting-reduced-motion");
 const settingsLargeText = document.querySelector("#setting-large-text");
+const settingsTelemetrySharing = document.querySelector("#setting-telemetry-sharing");
 const settingsTiltSensitivity = document.querySelector("#setting-tilt-sensitivity");
 const settingsTiltSensitivityValue = document.querySelector("#setting-tilt-sensitivity-value");
 const settingsKeyboardBindings = document.querySelector("#settings-keyboard-bindings");
@@ -612,8 +635,14 @@ function updateMissionRadio(state) {
 function updateNavConsole(state) {
   if (!navConsole || !navUi) return;
   const mesh = meshNavPresentation(state);
-  const navigation = recoveryNavigationPresentation(state);
-  const relevant = mesh !== null || navigation.recoveryPointKnown;
+  const home = recoveryNavigationPresentation(state);
+  const selected = selectCarrierSortieNavigationPresentation(
+    state,
+    { mesh, home },
+  );
+  const route = selected?.source === "route" ? selected.presentation : null;
+  const selectedMesh = selected?.source === "mesh" ? selected.presentation : null;
+  const relevant = selected !== null;
   navConsole.hidden = !relevant;
   if (!relevant) {
     if (navConsole.open) navConsole.open = false;
@@ -640,23 +669,31 @@ function updateNavConsole(state) {
     ? state.recovery_display_name.trim().toUpperCase()
     : state?.rapier_mission_available === true
       ? "DISPERSED STRIP · HOME" : "RECOVERY POINT · HOME";
-  const destinationName = mesh
-    ? mesh.displayName.toUpperCase()
+  const destinationName = route
+    ? (route.phaseLabel === route.fixLabel
+      ? route.fixLabel : `${route.phaseLabel} · ${route.fixLabel}`)
+    : selectedMesh
+    ? selectedMesh.displayName.toUpperCase()
     : (patternOnly && legLabel ? `CIRCUITS · ${legLabel}` : recoveryName);
   set(navUi.destination, destinationName, "nominal");
 
-  const bearingDeg = mesh?.bearingDeg ?? navigation.bearingDeg;
-  const rangeNm = mesh?.rangeNm ?? navigation.rangeNm;
-  const turnDeg = mesh?.turnDeg ?? navigation.turnDeg;
-  const etaMinutes = mesh?.etaMinutes ?? navigation.etaMinutes;
-  const travelState = mesh?.travelState ?? navigation.travelState;
-  const fuelNeedLb = mesh?.fuelToDestLb ?? navigation.fuelToHomeLb;
-  const fuelArrivalLb = mesh?.fuelOnArrivalDestLb ?? navigation.fuelOnArrivalLb;
-  const reserveTargetLb = mesh?.reserveTargetLb ?? navigation.reserveTargetLb;
-  const reserveMarginLb = mesh?.reserveMarginViaDestLb ?? navigation.reserveMarginLb;
-  const nmPerMin = mesh?.nmPerMin ?? navigation.nmPerMin;
-  const lbPerMin = mesh?.lbPerMin ?? navigation.lbPerMin;
-  const lbPerNm = mesh?.lbPerNm ?? navigation.lbPerNm;
+  const bearingDeg = route?.bearingDeg ?? selectedMesh?.bearingDeg ?? home.bearingDeg;
+  const rangeNm = route?.rangeNm ?? selectedMesh?.rangeNm ?? home.rangeNm;
+  const turnDeg = route?.turnDeg ?? selectedMesh?.turnDeg ?? home.turnDeg;
+  // No browser-side ETA is inferred for an authored carrier fix. Home/Mesh travel state belongs
+  // to those sources and must not leak an ARRIVED/AWAY label under route-owned geometry.
+  const etaMinutes = route ? null : selectedMesh?.etaMinutes ?? home.etaMinutes;
+  const travelState = route ? null : selectedMesh?.travelState ?? home.travelState;
+  // Route geometry owns where to fly. Home Plate still owns reserve arithmetic: a stale Mesh
+  // destination must not replace the fuel truth underneath an active finite carrier-day route.
+  const fuelSource = route ? home : (selectedMesh ?? home);
+  const fuelNeedLb = fuelSource.fuelToDestLb ?? fuelSource.fuelToHomeLb;
+  const fuelArrivalLb = fuelSource.fuelOnArrivalDestLb ?? fuelSource.fuelOnArrivalLb;
+  const reserveTargetLb = fuelSource.reserveTargetLb;
+  const reserveMarginLb = fuelSource.reserveMarginViaDestLb ?? fuelSource.reserveMarginLb;
+  const nmPerMin = fuelSource.nmPerMin;
+  const lbPerMin = fuelSource.lbPerMin;
+  const lbPerNm = fuelSource.lbPerNm;
 
   set(navUi.bearing, bearingDeg !== null
     ? `${String(Math.round((bearingDeg % 360 + 360) % 360)).padStart(3, "0")}°`
@@ -721,7 +758,7 @@ function updateNavConsole(state) {
 
   const procLabel = procedureLabelFromState(state);
   set(navUi.procedure, procLabel, procLabel === "NONE" ? "unknown" : "nominal");
-  const homeKnown = navigation.recoveryPointKnown || state?.mesh_home_place_id;
+  const homeKnown = home.recoveryPointKnown || state?.mesh_home_place_id;
   for (const [button, kind] of [
     [navUi.procNone, 0],
     [navUi.procOverhead, 1],
@@ -742,10 +779,10 @@ function updateNavConsole(state) {
       ownshipNorthM: num("pz") ?? 0,
       headingRad,
       places: parseMeshPlaceCatalog(state),
-      activePlaceId: mesh?.placeId ?? null,
-      activeEastM: num("mesh_active_east_m"),
-      activeNorthM: num("mesh_active_north_m"),
-      transitMode: mesh?.transitMode
+      activePlaceId: route ? null : selectedMesh?.placeId ?? null,
+      activeEastM: route?.target.eastM ?? num("mesh_active_east_m"),
+      activeNorthM: route?.target.northM ?? num("mesh_active_north_m"),
+      transitMode: selectedMesh?.transitMode
         ?? (typeof state?.mesh_transit_mode === "string" ? state.mesh_transit_mode : "mission_gated"),
       follow: meshNdFollow,
       tourStops: parseMeshTour(state),
@@ -1267,6 +1304,7 @@ const TELEMETRY_FLUSH_INTERVAL_MS = 30_000;
 const TELEMETRY_MAX_BACKOFF_MS = 5 * 60_000;
 const TELEMETRY_BUFFER_LIMIT = 1_500;
 const TELEMETRY_SCHEMA_VERSION = "2.0.0";
+const TELEMETRY_SHARING_STORAGE_KEY = "guns-only.telemetry-sharing.v1";
 const TELEMETRY_SESSION_STARTED_AT = Date.now();
 // State/context/event rows use performance.now(), so their epoch origin must be
 // performance.timeOrigin. Using the later Date.now() session stamp here shifted every decoded row
@@ -1274,6 +1312,26 @@ const TELEMETRY_SESSION_STARTED_AT = Date.now();
 const TELEMETRY_TIME_ORIGIN_EPOCH_MS = Number.isFinite(performance.timeOrigin)
   ? Math.round(performance.timeOrigin)
   : Math.round(Date.now() - performance.now());
+
+function loadTelemetrySharingPreference(storage = globalThis.localStorage) {
+  try {
+    // Network sharing is deliberately opt-in. Persist both states so turning it off is an
+    // explicit durable choice rather than an absence that a future default could reinterpret.
+    return storage?.getItem?.(TELEMETRY_SHARING_STORAGE_KEY) === "enabled";
+  } catch {
+    return false;
+  }
+}
+
+function saveTelemetrySharingPreference(enabled, storage = globalThis.localStorage) {
+  const next = enabled === true;
+  try {
+    storage?.setItem?.(TELEMETRY_SHARING_STORAGE_KEY, next ? "enabled" : "disabled");
+  } catch { /* Locked-down browsing keeps the safer session-only default. */ }
+  return next;
+}
+
+let telemetrySharingEnabled = loadTelemetrySharingPreference();
 
 function newTelemetryBatchId() {
   const unique = globalThis.crypto?.randomUUID?.()
@@ -1324,7 +1382,9 @@ const SIM_CATCHUP_CAP_SECONDS = 4 / 120;
 const timeCompressionBudget = new MeasuredTimeCompressionBudget();
 const adaptiveAiWorkBudget = new AdaptiveAiWorkBudget();
 let previousSimPhaseMilliseconds = 0;
+let previousViewPhaseMilliseconds = 0;
 let previousExecutedTicks = 2;
+let latestFrameContractPass = null;
 
 // A 22 ms threshold only detects 45 fps after the pilot can already feel it. Keep a little browser
 // scheduling tolerance over 16.67 ms, but treat sustained 17–22 ms delivery as a missed contract.
@@ -1352,6 +1412,38 @@ const TERRAIN_INITIAL_WARMUP_RADIUS_M = 12_000;
 /// thins mid-field haze in-shader, so scene fog needs a tighter close than Korea).
 const WORLD_EDGE_VISIBILITY_FRACTION = 0.60;
 
+function terrainFramePressureContext(view, nowMs, frameDeltaMs) {
+  try {
+    const diagnostics = view?.terrainPresentation?.diagnostics?.();
+    if (!diagnostics) return {};
+    const finishedAtMs = Number(diagnostics.lastBuildFinishedAtMs);
+    const buildAgeMs = nowMs - finishedAtMs;
+    // Terrain finalization owns a sibling RAF callback. Its cost therefore lands just before or
+    // just after the flight callback rather than inside FlightView.update(). Carry the most recent
+    // bounded build duration across that callback boundary, but only for the interval it could
+    // actually have contributed to.
+    const recentBuildWindowMs = Math.min(
+      120,
+      Math.max(24, (Number(frameDeltaMs) || 0) + 8),
+    );
+    const recentBuildMs = Number.isFinite(finishedAtMs)
+      && buildAgeMs >= 0
+      && buildAgeMs <= recentBuildWindowMs
+      ? Number(diagnostics.lastBuildDurationMs) || 0
+      : 0;
+    return {
+      buildMs: recentBuildMs,
+      activeLoads: (Number(diagnostics.activeLoads) || 0)
+        + (Number(diagnostics.activePageLoads) || 0),
+      queuedLoads: (Number(diagnostics.queuedLoads) || 0)
+        + (Number(diagnostics.queuedPageLoads) || 0),
+      queuedBuilds: Number(diagnostics.queuedBuilds) || 0,
+    };
+  } catch {
+    return {};
+  }
+}
+
 const frameGovernorPolicy = new FrameGovernorPolicy({
   windowMs: FRAME_GOVERNOR_WINDOW_MS,
   lateFrameMs: FRAME_GOVERNOR_LATE_FRAME_MS,
@@ -1365,13 +1457,30 @@ const frameGovernorPolicy = new FrameGovernorPolicy({
 });
 
 const frameGovernor = {
+  terrainLevel: 0,
+  viewLevel: 0,
   get level() { return frameGovernorPolicy.level; },
 
-  observe(deltaMs, nowMs, view) {
+  observe(deltaMs, nowMs, view, pressureContext = {}) {
     if (!Number.isFinite(deltaMs) || !view) return;
-    const transition = frameGovernorPolicy.observe(deltaMs, nowMs);
-    if (transition?.direction === "shed") this.shed(view, transition);
-    else if (transition?.direction === "recover") this.recover(view, transition);
+    const transition = frameGovernorPolicy.observe(deltaMs, nowMs, pressureContext);
+    if (!transition) return;
+    if (transition.action === FRAME_GOVERNOR_ACTION.REDUCE_TERRAIN_WORK) {
+      this.shedTerrain(view, transition);
+    } else if (transition.action === FRAME_GOVERNOR_ACTION.REDUCE_VIEW_QUALITY) {
+      this.shedView(view, transition);
+    } else if (transition.action === FRAME_GOVERNOR_ACTION.RESTORE_TERRAIN_WORK) {
+      this.recoverTerrain(view, transition);
+    } else if (transition.action === FRAME_GOVERNOR_ACTION.RESTORE_VIEW_QUALITY) {
+      this.recoverView(view, transition);
+    } else if (transition.direction === "hold") {
+      this.hold(transition);
+    } else if (transition.direction === "shed") {
+      // Local QA and older callers retain the established terrain-first ladder.
+      this.shed(view, transition);
+    } else if (transition.direction === "recover") {
+      this.recover(view, transition);
+    }
   },
 
   idle(nowMs) {
@@ -1380,26 +1489,104 @@ const frameGovernor = {
     frameGovernorPolicy.idle(nowMs);
   },
 
-  // Ordered by what actually costs frames, measured — NOT by what looks most expendable. Shadows
-  // and resolution were the original first moves and they were the wrong ones: a production tape
-  // showed an 11 fps window drawing 2.98M triangles in 78 calls and a 60 fps window drawing 2.91M
-  // in 72. Shedding pixels against a CPU-bound chunk-build stall buys nothing.
+  resolutionController(view) {
+    return view.visualRuntime?.initialized
+      ? view.visualRuntime.adaptiveResolution
+      : view.directAdaptiveResolution;
+  },
+
+  shedTerrain(view, transition) {
+    const nextLevel = Math.min(
+      FRAME_GOVERNOR_RADII_M.length + 3,
+      this.terrainLevel + 1,
+    );
+    if (nextLevel === this.terrainLevel) return;
+    this.terrainLevel = nextLevel;
+    this.shed(view, { ...transition, level: nextLevel, policyLevel: transition.level });
+  },
+
+  recoverTerrain(view, transition) {
+    if (this.terrainLevel <= 0) return;
+    const previousLevel = this.terrainLevel;
+    this.terrainLevel -= 1;
+    this.recover(view, {
+      ...transition,
+      previousLevel,
+      level: this.terrainLevel,
+      policyLevel: transition.level,
+    });
+  },
+
+  shedView(view, transition) {
+    this.viewLevel += 1;
+    const status = this.resolutionController(view)?.nudgeDown?.("causal-view-pressure") ?? null;
+    const scale = Number(status?.scale);
+    announceGovernor(Number.isFinite(scale)
+      ? `Renderer pressure · 3D scale ${Math.round(scale * 100)}%`
+      : "Renderer pressure · adaptive quality active", { freshContract: false });
+    recorder.event("perf", "FrameGovernor", {
+      level: transition.level,
+      view_level: this.viewLevel,
+      direction: "shed",
+      pressure_class: transition.pressureClass,
+      action: transition.action,
+      late_fraction: transition.lateFraction,
+      resolution_scale_x100: Number.isFinite(scale) ? scale * 100 : null,
+    });
+  },
+
+  recoverView(view, transition) {
+    this.viewLevel = Math.max(0, this.viewLevel - 1);
+    const status = this.resolutionController(view)?.nudgeUp?.("causal-view-recovery") ?? null;
+    const scale = Number(status?.scale);
+    announceGovernor(Number.isFinite(scale)
+      ? `3D scale ${Math.round(scale * 100)}% restored`
+      : "Renderer quality partially restored");
+    recorder.event("perf", "FrameGovernor", {
+      level: transition.level,
+      view_level: this.viewLevel,
+      direction: "recover",
+      pressure_class: transition.pressureClass,
+      action: transition.action,
+      late_fraction: transition.lateFraction,
+      resolution_scale_x100: Number.isFinite(scale) ? scale * 100 : null,
+    });
+  },
+
+  hold(transition) {
+    const simulationPressure =
+      transition.action === FRAME_GOVERNOR_ACTION.REDUCE_SIMULATION_WORK;
+    announceGovernor(simulationPressure
+      ? "Simulation pressure · visual quality retained"
+      : "Frame-time spike under measurement · visual quality retained",
+    { freshContract: false });
+    recorder.event("perf", "FrameGovernor", {
+      level: transition.level,
+      direction: "hold",
+      pressure_class: transition.pressureClass,
+      action: transition.action,
+      late_fraction: transition.lateFraction,
+      visual_quality_retained: true,
+    });
+  },
+
+  // Terrain-owned pressure alone may use this ladder. Simulation and unattributed stalls never
+  // enter it, and renderer-owned pressure has its own adaptive-resolution lane above.
   shed(view, transition) {
     const level = transition.level;
+    this.terrainLevel = Math.max(this.terrainLevel, level);
     try {
       if (level <= FRAME_GOVERNOR_RADII_M.length) {
         const requestedRadiusM = FRAME_GOVERNOR_RADII_M[level - 1];
         const currentRadiusM = Number(view.terrainPresentation?.streamingRadiusM);
-        // A fallback rung must never increase a presentation that is already on a tighter warmup
-        // or earlier-governor radius.
         const radiusM = Number.isFinite(currentRadiusM)
           ? Math.min(currentRadiusM, requestedRadiusM)
           : requestedRadiusM;
         const changed = view.terrainPresentation?.setStreamingRadiusM?.(radiusM);
-        announceGovernor(`View distance ${Math.round(radiusM / 1000)} km · holding 60`);
+        announceGovernor(`View distance ${Math.round(radiusM / 1000)} km`,
+          { freshContract: false });
         if (changed === false && level < FRAME_GOVERNOR_RADII_M.length) return;
       } else if (level === FRAME_GOVERNOR_RADII_M.length + 1) {
-        // Only once distance is exhausted does the picture itself start going.
         const shadowCasters = [];
         view.scene?.traverse?.((object) => {
           if (object.castShadow === true) {
@@ -1418,38 +1605,43 @@ const frameGovernor = {
           void view.terrainPresentation?.disableAmbientScenery?.();
         }
         announceGovernor(lowLevelSceneryRequired
-          ? "Shadows off · low-level scenery retained · holding 60"
-          : "Shadows and scenery off · holding 60");
+          ? "Shadows off · low-level scenery retained"
+          : "Shadows and scenery off", { freshContract: false });
       } else {
-        // Authored mission packs (clinic, candidate LZ, and future medevac obstacles) are separate
-        // scene roots and are never touched. These final rungs reduce only secondary procedural
-        // grass/canopy/trunk/line detail while retaining settlement, road and pole cues.
+        // Authored mission packs remain separate scene roots. These final rungs reduce only
+        // secondary procedural detail while retaining settlement, road, pole and landmark cues.
         const ambientLevel = level - (FRAME_GOVERNOR_RADII_M.length + 1);
         view.terrainPresentation?.setAmbientSceneryBudgetLevel?.(ambientLevel);
         announceGovernor(ambientLevel === 1
-          ? "Ambient detail reduced · mission landmarks retained · holding 60"
-          : "Navigation scenery mode · mission landmarks retained · holding 60");
+          ? "Ambient detail reduced · mission landmarks retained"
+          : "Navigation scenery mode · mission landmarks retained",
+        { freshContract: false });
       }
     } catch (error) {
       console.warn("Frame governor could not shed load.", error);
     }
     recorder.event("perf", "FrameGovernor", {
       level,
+      policy_level: transition.policyLevel ?? transition.level,
+      terrain_level: this.terrainLevel,
       direction: "shed",
+      pressure_class: transition.pressureClass ?? "legacy",
+      action: transition.action ?? FRAME_GOVERNOR_ACTION.REDUCE_TERRAIN_WORK,
       late_fraction: transition.lateFraction,
     });
   },
 
   recover(view, transition) {
     const { previousLevel, level } = transition;
+    this.terrainLevel = level;
     try {
       if (previousLevel > FRAME_GOVERNOR_RADII_M.length + 1) {
         const ambientLevel = Math.max(
           0, level - (FRAME_GOVERNOR_RADII_M.length + 1));
         view.terrainPresentation?.setAmbientSceneryBudgetLevel?.(ambientLevel);
         announceGovernor(ambientLevel > 0
-          ? "Ambient detail partially restored after stable 60"
-          : "Ambient scenery detail restored after stable 60");
+          ? "Ambient detail partially restored"
+          : "Ambient scenery detail restored");
       } else if (previousLevel > FRAME_GOVERNOR_RADII_M.length) {
         const shadowState = view.frameGovernorShadowState;
         if (shadowState) {
@@ -1465,16 +1657,14 @@ const frameGovernor = {
         if (sceneryWasSuppressed) {
           void view.terrainPresentation?.enableAmbientScenery?.();
         }
-        announceGovernor("Shadows and scenery restored after stable 60");
+        announceGovernor("Shadows and scenery restored");
       } else {
         const radiusM = level > 0
           ? FRAME_GOVERNOR_RADII_M[level - 1]
           : view.terrainNominalStreamingRadiusM;
         if (Number.isFinite(radiusM)) {
           view.terrainPresentation?.setStreamingRadiusM?.(radiusM);
-          announceGovernor(
-            `View distance ${Math.round(radiusM / 1000)} km restored after stable 60`,
-          );
+          announceGovernor(`View distance ${Math.round(radiusM / 1000)} km restored`);
         }
       }
     } catch (error) {
@@ -1482,7 +1672,11 @@ const frameGovernor = {
     }
     recorder.event("perf", "FrameGovernor", {
       level,
+      policy_level: transition.policyLevel ?? transition.level,
+      terrain_level: this.terrainLevel,
       direction: "recover",
+      pressure_class: transition.pressureClass ?? "legacy",
+      action: transition.action ?? FRAME_GOVERNOR_ACTION.RESTORE_TERRAIN_WORK,
       late_fraction: transition.lateFraction,
     });
   },
@@ -1490,7 +1684,15 @@ const frameGovernor = {
   reset(view = null) {
     // A new sortie re-earns its quality: one bad moment should not permanently downgrade a session.
     frameGovernorPolicy.reset(performance.now());
+    this.terrainLevel = 0;
+    this.viewLevel = 0;
+    latestFrameContractPass = null;
     if (!view) return;
+    const resolutionController = this.resolutionController(view);
+    resolutionController?.reset?.(
+      resolutionController.maxScale,
+      "frame-governor-reset",
+    );
     const shadowState = view.frameGovernorShadowState;
     if (shadowState) {
       view.renderer.shadowMap.enabled = shadowState.enabled;
@@ -1512,8 +1714,13 @@ const frameGovernor = {
   },
 };
 
-function announceGovernor(message) {
-  if (viewStatus) viewStatus.textContent = message;
+function announceGovernor(message, { freshContract = true } = {}) {
+  if (!freshContract) latestFrameContractPass = null;
+  if (viewStatus) {
+    viewStatus.textContent = formatFrameGovernorStatus(message, {
+      contractPass: freshContract ? latestFrameContractPass : null,
+    });
+  }
 }
 
 function applyAiComputeLevel(level) {
@@ -1534,6 +1741,7 @@ function resetAdaptiveAiBudget({ recordInitial = false } = {}) {
     ?? AI_COMPUTE_LEVEL.FULL;
   const state = adaptiveAiWorkBudget.reset(retainedLevel);
   previousSimPhaseMilliseconds = 0;
+  previousViewPhaseMilliseconds = 0;
   previousExecutedTicks = 2;
   const effectiveAuthorityTick =
     applyAiComputeLevel(state.computeLevel);
@@ -1644,6 +1852,7 @@ function sampleSceneCounters() {
 }
 
 const recorder = {
+  enabled: telemetrySharingEnabled,
   session: `web-${TELEMETRY_SESSION_STARTED_AT}-${Math.floor(Math.random() * 1e6)}`,
   build: BUILD,
   buildIdentity: buildIdentity.telemetry,
@@ -1658,6 +1867,7 @@ const recorder = {
   lastPayloadBytes: 0,
   _headerSent: false,
   _sending: null,
+  _fetchAbortController: null,
   _pendingBatch: null,
   _retryDelay: TELEMETRY_FLUSH_INTERVAL_MS,
   _nextPost: performance.now() + TELEMETRY_FLUSH_INTERVAL_MS,
@@ -1669,6 +1879,35 @@ const recorder = {
   _sortieSequence: 0,
   _sortie: null,
   _lastSessionPhase: null,
+  setEnabled(nextEnabled) {
+    const next = nextEnabled === true;
+    if (next === this.enabled) return false;
+    this.enabled = next;
+    if (!next) {
+      // Opt-out applies immediately to everything not already acknowledged by the server. Abort
+      // an in-flight request where the platform still can, then destroy both queued and immutable
+      // pending batches so a later opt-in cannot upload an earlier opted-out flight.
+      this._fetchAbortController?.abort();
+      this._fetchAbortController = null;
+      this.buf = [];
+      this._pendingBatch = null;
+      this._sortie = null;
+      this._headerSent = false;
+      this._lastContext.clear();
+      this._sampleScheduler.reset();
+      this._stateEncoder.forceKeyframe();
+      this._framePerfEligible = false;
+      this._nextPost = Number.POSITIVE_INFINITY;
+      return true;
+    }
+    this._headerSent = false;
+    this._lastContext.clear();
+    this._sampleScheduler.reset();
+    this._stateEncoder.forceKeyframe();
+    this._nextPost = performance.now() + TELEMETRY_FLUSH_INTERVAL_MS;
+    this.context("telemetry_sharing", { enabled: true, source: "pilot_opt_in" });
+    return true;
+  },
   chunkHeader(batchId = null) {
     const header = {
       k: "hdr",
@@ -1690,6 +1929,7 @@ const recorder = {
     return header;
   },
   enqueue(row) {
+    if (!this.enabled) return;
     this.buf.push(row);
     if (this.buf.length > TELEMETRY_BUFFER_LIMIT) {
       const overflow = this.buf.length - TELEMETRY_BUFFER_LIMIT;
@@ -1700,11 +1940,13 @@ const recorder = {
     }
   },
   ensureHeader() {
+    if (!this.enabled) return;
     if (this._headerSent) return;
     this.enqueue(this.chunkHeader());
     this._headerSent = true;
   },
   startSortie({ mission, deckConfiguration } = {}) {
+    if (!this.enabled) return null;
     try {
       if (this._sortie) this.endSortie("superseded");
       this._sortieSequence += 1;
@@ -1732,6 +1974,7 @@ const recorder = {
     }
   },
   endSortie(reason = "ended", state = null) {
+    if (!this.enabled) return;
     try {
       if (!this._sortie) return;
       const sortie = this._sortie;
@@ -1767,6 +2010,7 @@ const recorder = {
       if (activeForeground !== true) {
         this._framePerf.reset();
         this._framePerfEligible = false;
+        latestFrameContractPass = null;
         return;
       }
       if (!this._framePerfEligible) {
@@ -1781,6 +2025,8 @@ const recorder = {
       // Read-only browser QA seam: phase ownership of a reported hitch can be inspected without
       // making the recorder or kernel mutable from the page.
       document.documentElement.dataset.framePerf = JSON.stringify(summary);
+      latestFrameContractPass = summary.contract_pass;
+      if (!this.enabled) return;
       if (this.buf.length >= TELEMETRY_BUFFER_LIMIT && summary.contract_pass === 1) return;
       this.ensureHeader();
       this.enqueue({
@@ -1796,6 +2042,7 @@ const recorder = {
   // Every method is fully guarded: telemetry must NEVER be able to crash the flight loop (an
   // earlier version did — an oversized keepalive-fetch body throws, and it killed the sim).
   event(type, code, detail = {}) {
+    if (!this.enabled) return;
     try {
       this.ensureHeader();
       this.enqueue({
@@ -1811,6 +2058,7 @@ const recorder = {
     catch (e) { this.errors++; this.lastError = String(e); }
   },
   context(type, value) {
+    if (!this.enabled) return;
     try {
       const key = JSON.stringify(value);
       if (this._lastContext.get(type) === key) return;
@@ -1827,6 +2075,7 @@ const recorder = {
     } catch (e) { this.errors++; this.lastError = String(e); }
   },
   sample(state) {
+    if (!this.enabled) return;
     try {
       this.samples++;
       // The renderer can run far faster than the authority. Record an initial state and then one
@@ -1878,6 +2127,7 @@ const recorder = {
     } catch (e) { this.errors++; this.lastError = String(e); }
   },
   flush({ force = false } = {}) {
+    if (!this.enabled) return;
     try {
       const now = performance.now();
       if ((!this.buf.length && !this._pendingBatch)
@@ -1917,12 +2167,16 @@ const recorder = {
       // the next immutable chunk. The server's deterministic Blob path makes an acknowledged retry
       // idempotent even if the first response was lost after storage succeeded.
       let drainAfterSuccess = false;
+      const fetchAbortController = new AbortController();
+      this._fetchAbortController = fetchAbortController;
       this._sending = Promise.resolve().then(() => fetch("/telemetry", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: batch.payload,
+        signal: fetchAbortController.signal,
       }))
         .then((response) => {
+          if (fetchAbortController.signal.aborted || !this.enabled) return;
           if (!response.ok) {
             const error = new Error(`HTTP ${response.status}`);
             error.status = response.status;
@@ -1935,6 +2189,7 @@ const recorder = {
             + (drainAfterSuccess ? 0 : TELEMETRY_FLUSH_INTERVAL_MS);
         })
         .catch((e) => {
+          if (fetchAbortController.signal.aborted) return;
           this.errors++;
           this.lastError = "fetch:" + String(e);
           if (e?.status === 400 || e?.status === 413 || e?.status === 422) {
@@ -1953,6 +2208,8 @@ const recorder = {
           this._nextPost = performance.now() + this._retryDelay;
         })
         .finally(() => {
+          if (this._fetchAbortController === fetchAbortController)
+            this._fetchAbortController = null;
           this._sending = null;
           if (drainAfterSuccess && this.buf.length > 0) {
             queueMicrotask(() => this.flush({ force: true }));
@@ -1962,6 +2219,31 @@ const recorder = {
   },
 };
 globalThis.__rec = recorder;   // inspectable: __rec.samples / .flushes / .errors / .lastError
+
+function renderTelemetrySharingPreference() {
+  for (const control of [readyTelemetrySharing, settingsTelemetrySharing]) {
+    if (control) control.checked = telemetrySharingEnabled;
+  }
+  if (readyTelemetrySharingStatus) {
+    readyTelemetrySharingStatus.textContent = telemetrySharingEnabled
+      ? "Sharing is on. Turn it off at any time; unsent diagnostics are discarded."
+      : "Off by default. No gameplay diagnostics are sent.";
+  }
+  document.documentElement.dataset.telemetrySharing = telemetrySharingEnabled ? "on" : "off";
+}
+
+function commitTelemetrySharingPreference(nextEnabled) {
+  telemetrySharingEnabled = saveTelemetrySharingPreference(nextEnabled);
+  recorder.setEnabled(telemetrySharingEnabled);
+  renderTelemetrySharingPreference();
+  if (flightAnnouncer) {
+    flightAnnouncer.textContent = telemetrySharingEnabled
+      ? "Detailed flight diagnostic sharing on"
+      : "Flight diagnostic sharing off; unsent diagnostics discarded";
+  }
+}
+
+renderTelemetrySharingPreference();
 
 function renderBuildIdentity() {
   if (!readyBuild) return;
@@ -2103,6 +2385,12 @@ async function reloadCurrentBuild() {
     CANONICAL_PRODUCTION_ORIGIN,
   );
   destination.searchParams.delete("mission");
+  // Audio QA is a shared-machine safety boundary, not ordinary navigation state. Preserve only
+  // the explicit silent clamp across an automatic stale-build reload; never carry arbitrary
+  // query parameters into the canonical production URL.
+  if (new URLSearchParams(window.location.search).get("audioQa") === "silent") {
+    destination.searchParams.set("audioQa", "silent");
+  }
   if (selectedProgramNodeId) {
     destination.searchParams.set("program", selectedProgramNodeId);
   }
@@ -2182,7 +2470,6 @@ let activePointer = null;
 let lastPointerX = 0;
 let lastPointerY = 0;
 let trackpadLookActive = false;
-let touchStickLookActive = false;
 let gamepadLookActive = false;
 let trackpadLookReleaseTimer = 0;
 let gimbalReturnFast = false;
@@ -2226,15 +2513,27 @@ let setMobileFrozen = () => {};
 let activeView = null;
 let latestState = null;
 let campaignProfile = loadCampaignProfile();
-const requestedProgramNode = campaignNode(
-  new URLSearchParams(window.location.search).get("program"),
-);
+const requestedProgramId = new URLSearchParams(window.location.search).get("program");
+const requestedProgramNode = campaignNode(requestedProgramId);
+// `program=` belongs to missions hosted by this shell. Standalone catalogue IDs (for example
+// Indoor) own their route and quarantine gate; treating one as a main-shell selection would offer
+// a preview link that could only fall back to the recommended flight.
+const requestedExperience = requestedProgramNode
+  ? experienceById(requestedProgramNode.id) : null;
+const requestedExperienceAccess = requestedExperience
+  ? experienceAccess(requestedExperience.id, window.location) : null;
+const blockedRequestedExperience = requestedExperienceAccess
+  && !requestedExperienceAccess.allowed ? requestedExperience : null;
 const initialProgramNode = requestedProgramNode
-  && campaignNodeUnlocked(campaignProfile, requestedProgramNode.id)
+  && requestedExperienceAccess?.allowed
   ? requestedProgramNode : recommendedCampaignNode(campaignProfile);
-let selectedProgramNodeId = initialProgramNode.id;
-// The recommended front door remains the mission-7 infinite gauntlet, while an explicit programme
-// deep link must launch the card it highlights rather than silently staging a different mission.
+// A recognised preview/quarantined deep link remains represented in the Ready UI instead of
+// silently launching the recommended production mission. The bridge may stage its harmless
+// production default behind that screen, but this selection cannot reach StartBeat or Begin.
+let blockedProgramExperience = blockedRequestedExperience;
+let selectedProgramNodeId = blockedProgramExperience?.id ?? initialProgramNode.id;
+// The recommended front door remains the mission-7 infinite gauntlet, while an allowed explicit
+// programme deep link must launch the card it highlights rather than staging a different mission.
 let selectedBeat = initialProgramNode.mission;
 let stagedBeat = selectedBeat;
 let selectedDeckConfiguration = 1;
@@ -2246,14 +2545,18 @@ let multiplayer = null;
 let incidentReplay = null;
 let appliedMultiplayerWorldOrigin = "";
 const pauseReasons = new Set(["ready"]);
-// The combat front door still launches immediately once its world is warm. Medevac is different:
-// its route card is decision-support, so an explicit deep link must remain at the briefing until
-// the commander chooses to depart.
-let autoLaunchPending = !mobileControls && requestedProgramNode?.id !== "medevac";
+// Every platform sees the same two-aircraft front door. `autoLaunchPending` is armed only after a
+// real Fly gesture needs asynchronous terrain warmup; boot and deep links never imply consent to
+// depart.
+let autoLaunchPending = false;
 let terrainLaunchWarmupPromise = null;
 let terrainLaunchWarmupOwner = null;
 let terrainLaunchWarmupGeneration = 0;
 let terrainLaunchWarmupFailedKey = null;
+let terrainLaunchWarmupAttempt = 0;
+let terrainLaunchWarmupRetryAtMs = 0;
+let terrainLaunchWarmupRetryTimer = 0;
+let terrainLaunchWarmupStatus = "";
 let settingsReturnFocus = null;
 let bindingCaptureAction = null;
 let lastAccessibilityAnnouncement = "";
@@ -2428,6 +2731,11 @@ settingsAutoGcas?.addEventListener("change", () => commitPlayerSettings({
 settingsAudio?.addEventListener("change", () => {
   commitAudioPreferenceFromGesture(settingsAudio.checked);
 });
+for (const control of [readyTelemetrySharing, settingsTelemetrySharing]) {
+  control?.addEventListener("change", () => {
+    commitTelemetrySharingPreference(control.checked);
+  });
+}
 settingsRadioVoice?.addEventListener("change", () => commitPlayerSettings({
   ...playerSettings, radioVoice: settingsRadioVoice.checked,
 }));
@@ -2522,6 +2830,7 @@ function renderPilotPhysiology(state) {
 function syncMobileControlProfile(state) {
   if (!mobileControls || !touchControls) return;
   const profile = mobileControlProfile(state);
+  syncCarrierSortieTouchRtbControl(touchCarrierRtbButton, state);
   const casevac = isCasevacState(state);
   const casevacActive = casevac && state?.session_phase === "ACTIVE";
   if (touchThrottleControls) {
@@ -2550,14 +2859,26 @@ function syncMobileControlProfile(state) {
   if (fallbackStick) {
     fallbackStick.setAttribute(
       "aria-label",
-      casevac ? "Horizontal movement control" : "Flight stick",
+      casevac ? "Horizontal movement control" : "Left stick: throttle and yaw",
     );
   }
-  if (fallbackStickLabel) fallbackStickLabel.textContent = casevac ? "MOVE" : "STICK";
+  if (fallbackStickLabel) fallbackStickLabel.textContent = casevac ? "MOVE" : "THR / YAW";
   if (fallbackStickHelp) {
     fallbackStickHelp.textContent = casevac
       ? "Drag up to move forward, down to reverse, or left and right to translate. The control centres when released."
-      : "Drag in any direction. Down pulls, up pushes. The stick centres when released.";
+      : "Drag up to increase power or down to decrease it; release holds the selected power. Drag left or right for yaw, which centres when released.";
+  }
+  if (targetStick) {
+    targetStick.setAttribute(
+      "aria-label",
+      casevac ? "Yaw control" : "Right stick: pitch and roll",
+    );
+  }
+  if (targetStickLabel) targetStickLabel.textContent = casevac ? "YAW" : "STICK";
+  if (targetStickHelp) {
+    targetStickHelp.textContent = casevac
+      ? "Drag left or right to yaw. The control centres when released."
+      : "Right thumb: drag left or right to roll, down to pull, or up to push. The stick centres when released. Use the separate Fire button to fire guns.";
   }
   if (touchGearButton) touchGearButton.hidden = casevac || !profile.gear;
   if (touchFlapUpButton) touchFlapUpButton.hidden = casevac || !profile.flaps;
@@ -2664,9 +2985,9 @@ const MISSION_BRIEFS = Object.freeze({
     kicker: "2030s Ukraine · Soniachne low-level cell · mission 13",
     title: "Medevac",
     sortie: "One orchard pickup · one clinic handoff · no opponent",
-    configuration: "Fictional automated vertical-lift air ambulance · one opaque casualty capsule · VMC · 12–42 m masking band",
+    configuration: "Fictional automated vertical-lift air ambulance · one opaque casualty capsule · VMC · 32–42 m orchard clearance band",
     card: "Fly the low route, make two stable contacts, and deliver the capsule to the clinic.",
-    brief: "Reach the orchard, settle inside the marked contact area and hold while the capsule is secured, then fly it to the clinic and hold through handoff; the assessed safe masking band is 12–42 m AGL. At either pad, enter within 6 m at no more than 0.45 m/s lateral speed and 0.25 m/s vertical speed, keep absolute pitch and bank at or below 5°, then remain stable for 2 seconds.",
+    brief: "Follow the marked ingress-direct route to the orchard and hold 32–42 m AGL near its 28 m windbreak, then settle inside the marked contact area while the capsule is secured. Fly it to the clinic and hold through handoff; away from the orchard the assessed masking band remains 12–42 m AGL. At either pad, enter within 6 m at no more than 0.45 m/s lateral speed and 0.25 m/s vertical speed, keep absolute pitch and bank at or below 5°, then remain stable for 2 seconds.",
     controls: "Arrows command horizontal motion · W/S vertical · A/D yaw\nN requests a controlled abort before loading · contact: R 6 m · H ≤0.45 · |V| ≤0.25 m/s · |pitch/bank| ≤5° · stable 2 s",
   },
 });
@@ -2678,7 +2999,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     sortie: "F9F-2 · catshot to trap · straight deck",
     configuration: "F9F-2 Panther · 4×20 mm · approach 114 kt measured · J42 spool 4.5 s · axial deck, barrier, no bolter",
     brief: "You are spotted on the bow catapult with the engine already at full power, because a centrifugal J42 will not make it in the stroke otherwise. Off the deck, out, and back. There is no angled deck here: if you are not aboard by the ramp there is a barrier, so the wave-off is a decision you take early or not at all.",
-    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO hands the fight off and starts RTB · Space G limiter · H controls",
+    controls: "Arrows fly · W/S power · O returns to ship when the route calls RTB\nSpace G limiter · H controls",
   }),
   "first-merge": Object.freeze({
     kicker: "2030s Ukraine · F-22A · endless",
@@ -2736,10 +3057,10 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   "rapier-intercept": Object.freeze({
     kicker: "Eastern corridor · Rapier operations",
     title: "Rapier Intercept",
-    sortie: "Dealt {TARGET_LABEL} contract · guns-only · one-pass sweep · pursued recovery",
-    configuration: "Fictional TBCC Rapier · measured design dash {DESIGN_DASH_MACH} · 3,600 LB alert fuel · allocation-credit ledger active",
-    brief: "Today's contract is the {TARGET_LABEL}. {TARGET_TASK} Verified neutralization pays {TARGET_REWARD} CR against fuel, ammunition and any loss. Launch on full augmentation and climb at M0.90 to FL560 (56,000 ft). RAM LIGHT begins at {RAM_LIGHT_MACH} and full ram at {FULL_RAM_MACH}; at FL315 the aircraft can gather speed but cannot cross into full ram, so hold the profile, ram-climb to FL700 and dash at {DESIGN_DASH_MACH}. Mach and KTAS, range, closure and ETA stay up throughout. Recover through the squares and trap.",
-    controls: "P mission automation · F release gun-drones · arrows/W/S pilot takeover\nT safe time compression · V padlock · Tab target · fly every recovery square · trap on wire three",
+    sortie: "High-altitude balloon · finite internal gun · one pass · re-entry · midpoint arrestor recovery",
+    configuration: "Fictional TBCC Rapier · canonical full fuel · finite internal gun · no auxiliary drones",
+    brief: "Catapult, ride the continuous 35 kPa climb through turbine-to-ram handover, make one balloon gun pass from the 24 km M4.2 shelf, then re-enter and recover. Watch Q, thrust minus drag, binding-panel heat, and home reserve.",
+    controls: "P mission automation · F internal gun · arrows/W/S pilot takeover\nT safe time compression · V padlock · Tab target · fly every recovery square · trap at the midpoint arrestor",
   }),
   "ace-duel": Object.freeze({
     kicker: "Raptor programme · final exam",
@@ -3085,7 +3406,7 @@ function clearFlightInput(reason = "presentation-reset") {
 }
 
 function manualLookActive() {
-  return dragging || trackpadLookActive || touchStickLookActive || gamepadLookActive;
+  return dragging || trackpadLookActive || gamepadLookActive;
 }
 
 // Padlock selection remains a presentation decision, but the resulting low-authority hold is a
@@ -3222,6 +3543,9 @@ function resetMissionPresentation() {
   frameGovernor.reset(activeView);
   resetAdaptiveAiBudget();
   terrainLaunchWarmupFailedKey = null;
+  terrainLaunchWarmupAttempt = 0;
+  terrainLaunchWarmupRetryAtMs = 0;
+  terrainLaunchWarmupStatus = "";
   clearFlightInput("mission-reset");
   incidentReplay?.stop();
   renderIncidentReplay(null);
@@ -3398,15 +3722,11 @@ function missionBrief() {
     || MISSION_BRIEFS[selectedBeat] || CAMPAIGN_BRIEFS["first-merge"];
   if (brief !== CAMPAIGN_BRIEFS["rapier-intercept"]) return brief;
   const state = latestState ?? {};
-  const balance = Math.trunc(
-    Number(campaignProfile.rapierBalanceCredits) || 0,
-  );
   return Object.freeze({
     ...brief,
     brief: rapierBriefingText(brief.brief, state),
     sortie: rapierBriefingText(brief.sortie, state),
-    configuration:
-      `${rapierBriefingText(brief.configuration, state)} · Rapier balance ${balance} CR`,
+    configuration: rapierBriefingText(brief.configuration, state),
   });
 }
 
@@ -3490,20 +3810,30 @@ function renderIncidentReplay(frame) {
 }
 
 function renderCampaignProgress() {
-  // Every mission is always available. No counter, locks or status chips: the menu's whole job is
-  // to let the pilot pick an aircraft and environment, then go.
+  // Release state, not qualification progress, owns launchability. Hidden preview fixtures stay
+  // represented for focused development, but a copied URL cannot promote one into production.
   if (readyProgramProgress) readyProgramProgress.textContent = "";
   for (const button of readyProgramButtons) {
     const nodeId = button.dataset.programNode;
     const selected = nodeId === selectedProgramNodeId;
-    button.disabled = false;
+    const experience = experienceById(nodeId);
+    const access = experienceAccess(nodeId, window.location);
+    button.disabled = !access.allowed;
     button.setAttribute("aria-pressed", String(selected));
     button.closest(".sortie-option")?.setAttribute("data-selected", String(selected));
-    button.closest(".sortie-option")?.setAttribute("data-program-state", "available");
+    button.closest(".sortie-option")?.setAttribute(
+      "data-program-state",
+      access.allowed ? (access.preview ? "preview" : "available")
+        : experience?.releaseState ?? "unavailable",
+    );
     if (selected) button.setAttribute("aria-current", "step");
     else button.removeAttribute("aria-current");
   }
-  for (const status of readyProgramStatuses) status.textContent = "";
+  for (const status of readyProgramStatuses) {
+    const nodeId = status.dataset.programStatus;
+    status.textContent = experienceLaunchable(nodeId)
+      ? "" : experienceById(nodeId)?.releaseState ?? "unavailable";
+  }
   if (readyDeckConfig) readyDeckConfig.hidden = true;
   renderCircuitsPreflight(missionBrief());
   for (const button of readyDeckButtons) {
@@ -3515,7 +3845,7 @@ function renderCampaignProgress() {
 
 function readyScreenFocusables() {
   return [...readyScreen.querySelectorAll(
-    'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+    'button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
   )].filter((element) => !element.closest("[hidden]"));
 }
 
@@ -3529,8 +3859,11 @@ function focusReadyScreen() {
     inline: "center",
   });
   // Keep Enter-to-fly honest: when the primary action is available it owns initial focus. During
-  // release verification the selected card is the safe focusable fallback, never a disabled button.
-  const target = !readyStart.disabled ? readyStart : selectedMission;
+  // release verification or quarantine, focus a usable explanation/recovery action rather than a
+  // disabled aircraft card.
+  const target = !readyStart.disabled
+    ? readyStart
+    : readyRouteNotice?.querySelector("a[href]") ?? selectedMission;
   target?.focus({ preventScroll: true });
 }
 
@@ -3549,6 +3882,7 @@ function droneRaidDebriefFacts(state) {
 
 function carrierQualificationDebriefFacts(state) {
   const recovery = String(state?.recovery || "").toUpperCase();
+  const recoveryToken = recovery.replaceAll("_", "").replaceAll(" ", "");
   const touchdownGrade = String(state?.touchdown_grade || "UNASSESSED")
     .replaceAll("_", " ")
     .replaceAll("HARDSINKRATE", "HARD SINK RATE");
@@ -3566,7 +3900,10 @@ function carrierQualificationDebriefFacts(state) {
     : "";
   const wire = Math.max(0, Math.round(Number(state?.wire) || 0));
   let touchdown;
-  if (recovery === "TRAP" || String(state?.arrest_phase || "").toUpperCase() === "STOPPED") {
+  if (recoveryToken === "BARRIERENGAGEMENT") {
+    touchdown = [touchdownGrade === "NONE" ? "not assessed" : touchdownGrade,
+      "missed wires · retained in barrier"].join(" · ");
+  } else if (recovery === "TRAP" || String(state?.arrest_phase || "").toUpperCase() === "STOPPED") {
     touchdown = [touchdownGrade === "NONE" ? "not assessed" : touchdownGrade,
       wire > 0 ? `wire ${wire}` : "wire caught"].join(" · ");
   } else if (state?.bolter === true || recovery === "BOLTER") {
@@ -3587,6 +3924,7 @@ function carrierQualificationDebriefFacts(state) {
 function carrierQualificationPhysicalOutcome(state) {
   const recovery = String(state?.recovery || "").toUpperCase().replaceAll("_", "");
   const surface = String(state?.player_impact_surface || "").toUpperCase();
+  if (recovery.replaceAll(" ", "") === "BARRIERENGAGEMENT") return "Barrier engagement";
   if (state?.bolter === true || recovery === "BOLTER") return "Bolter";
   if (recovery === "TRAP" || String(state?.arrest_phase || "").toUpperCase() === "STOPPED")
     return "Recovered";
@@ -3602,20 +3940,9 @@ function isCarrierQualificationState(state) {
   return state?.carrier === true
     && [
       "mission.carrier-qualification.v1",
+      "mission.korea.panther-sortie.v1",
       "mission.modern.f35c.carrier-conversion.public-data-surrogate.v1",
     ].includes(String(state?.mission_definition_id || "").toLowerCase());
-}
-
-function recordCampaignQualification(state) {
-  const result = qualifyCampaignNode(campaignProfile, selectedProgramNodeId, state);
-  if (!result.newlyQualified) return false;
-  campaignProfile = saveCampaignProfile(result.profile);
-  renderCampaignProgress();
-  recorder.event("progression", "qualification_earned", {
-    node: selectedProgramNodeId,
-    mission: selectedBeat,
-  });
-  return true;
 }
 
 function renderPauseUi(state = latestState) {
@@ -3641,6 +3968,42 @@ function renderPauseUi(state = latestState) {
 
   readyScreen.dataset.mode = ready ? "program" : finished ? "debrief" : "pause";
   readyScreen.dataset.richDebrief = String(richCasevacDebrief);
+  // This must be a semantic visibility edge, not CSS alone. readyScreenFocusables deliberately
+  // ignores descendants of [hidden]; without it the invisible consent checkbox becomes the
+  // computed last item in pause/debrief and lets Tab escape the aria-modal dialog.
+  if (readyTelemetryDisclosure) readyTelemetryDisclosure.hidden = !ready;
+  const routeBlocked = ready && blockedProgramExperience !== null;
+  readyScreen.dataset.routeBlocked = String(routeBlocked);
+  if (readyRouteNotice) {
+    readyRouteNotice.hidden = !routeBlocked;
+    if (!routeBlocked && readyRouteNotice.dataset.noticeKey) {
+      readyRouteNotice.replaceChildren();
+      delete readyRouteNotice.dataset.noticeKey;
+    } else if (routeBlocked) {
+      const stateLabel = String(blockedProgramExperience.releaseState || "unavailable")
+        .replaceAll("_", " ");
+      const detailText = blockedProgramExperience.blocker
+        || "This experience is not available in the production build.";
+      const noticeKey = [blockedProgramExperience.id, stateLabel, detailText,
+        window.location.href].join("|");
+      // renderPauseUi runs every presented frame. Preserve the live region and its focused link
+      // while the blocked route is unchanged instead of replacing interactive DOM at 60 Hz.
+      if (readyRouteNotice.dataset.noticeKey !== noticeKey) {
+        readyRouteNotice.dataset.noticeKey = noticeKey;
+        readyRouteNotice.replaceChildren();
+        const title = document.createElement("strong");
+        title.textContent = `${blockedProgramExperience.title} is ${stateLabel}`;
+        const detail = document.createElement("span");
+        detail.textContent = detailText;
+        const previewUrl = new URL(window.location.href);
+        previewUrl.searchParams.set("preview", "1");
+        const previewLink = document.createElement("a");
+        previewLink.href = previewUrl;
+        previewLink.textContent = "Open experimental preview";
+        readyRouteNotice.append(title, detail, previewLink);
+      }
+    }
+  }
   if (readySelector) readySelector.hidden = !ready;
   if (readyDeckConfig && !ready) readyDeckConfig.hidden = true;
   if (readyCircuitsPreflight && !ready) readyCircuitsPreflight.hidden = true;
@@ -3820,9 +4183,14 @@ function renderPauseUi(state = latestState) {
     if (readyControls) {
       const keyboardControls = brief.controls
         || "Arrows fly · W/S power · F guns · V padlock · Tab target\nH opens controls · R restarts";
+      const casevacReady = selectedBeat === 13 || isCasevacState(state);
       readyControls.textContent = mobileControls
-        ? "LEFT STICK fly · RIGHT STICK look · TARGET changes contact · PADLOCK tracks · FIRE shoots\nController: LS fly · RS look · RT fire · A padlock · LB/RB power"
-        : `${keyboardControls}\nController: LS fly · RS look · RT fire · A padlock · LB/RB power`;
+        ? casevacReady
+          ? "LEFT STICK forward/reverse/translate · RIGHT STICK yaw · VERT climb/descend · ABORT requests return\nMedevac has no target, padlock, or gun controls"
+          : "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll · TARGET changes contact · PADLOCK tracks · FIRE shoots\nController: LS fly · RS look · RT fire · A padlock · LB/RB power"
+        : casevacReady
+          ? keyboardControls
+          : `${keyboardControls}\nController: LS fly · RS look · RT fire · A padlock · LB/RB power`;
     }
     readyStart.textContent = `Fly ${brief.title}`;
     readyHint.textContent = background
@@ -3869,7 +4237,8 @@ function renderPauseUi(state = latestState) {
   } else if (buildIdentity.state === "checking" && ready) {
     readyHint.textContent = "Verifying current release…";
   } else if (terrainLoading && ready) {
-    readyHint.textContent = "Loading nearby terrain and low-level scenery…";
+    readyHint.textContent = terrainLaunchWarmupStatus
+      || "Loading nearby terrain and low-level scenery…";
   }
 
   // Ready cannot be dismissed while another safety interlock is still active. The relevant
@@ -3878,7 +4247,8 @@ function renderPauseUi(state = latestState) {
     reason !== "ready" && reason !== "finished"
       && reason !== "background" && reason !== "session");
   readyStart.disabled = buildIdentityBlocksSortie()
-    || blockers.length > 0 || ((ready || finished) && background);
+    || routeBlocked || blockers.length > 0 || ((ready || finished) && background);
+  if (routeBlocked) readyStart.textContent = "Unavailable in this build";
 
   if (showScreen && !settingsPaused && !wasScreenVisible) queueMicrotask(focusReadyScreen);
   else if (showScreen && !settingsPaused && startWasDisabled && !readyStart.disabled)
@@ -3961,8 +4331,9 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
 
 function selectCampaignNode(nodeId, { focus = true } = {}) {
   const node = campaignNode(nodeId);
-  if (!node || !campaignNodeUnlocked(campaignProfile, node.id)) return false;
+  if (!node || !experienceAccess(node.id, window.location).allowed) return false;
   const previous = selectedProgramNodeId;
+  blockedProgramExperience = null;
   selectedProgramNodeId = node.id;
   selectedBeat = node.mission;
   selectedDeckConfiguration = selectedBeat === 5 ? 1 : selectedDeckConfiguration;
@@ -3992,7 +4363,9 @@ function selectCampaignNode(nodeId, { focus = true } = {}) {
 }
 
 function launchMission(index = selectedBeat) {
-  if (Number(index) !== selectedBeat) return false;
+  if (blockedProgramExperience
+    || !experienceAccess(selectedProgramNodeId, window.location).allowed
+    || Number(index) !== selectedBeat) return false;
   const deckChanged = [5, 6].includes(selectedBeat)
     && stagedDeckConfiguration !== selectedDeckConfiguration;
   let stagedState;
@@ -4014,9 +4387,8 @@ function restartMission() {
   enterReady();
 }
 
-// Called only from real pilot gestures (ready click, fly-again, Enter). Boot-time auto launch
-// goes through launchMission, which must never arm audio — the enable contract test slices
-// launchMission..restartMission to enforce that, so this helper lives below the guarded span.
+// Called only from real pilot gestures (Ready click, fly-again, Enter). Keep audio priming outside
+// launchMission so a delayed terrain retry cannot pretend it still owns the original activation.
 function primeSelectedMissionAudio() {
   activeView?.hud.armAudio();
   if (selectedBeat === 13) primeCasevacAudio();
@@ -4033,7 +4405,9 @@ function returnToCatalogue() {
 }
 
 function tryAutoLaunch() {
-  if (!autoLaunchPending || !bridge || !pauseReasons.has("ready")
+  if (blockedProgramExperience
+    || !experienceAccess(selectedProgramNodeId, window.location).allowed
+    || !autoLaunchPending || !bridge || !pauseReasons.has("ready")
     || buildIdentityBlocksSortie()) return false;
   const blockers = [...pauseReasons].filter((reason) => reason !== "ready");
   if (blockers.length) return false;
@@ -4067,9 +4441,34 @@ function stagedMissionIdentity(index, state) {
   ].join(":");
 }
 
+function terrainWarmupDeadlineMs(attempt, requiredFeaturePack) {
+  // A single 15 s wall-clock budget confused "slow" with "broken" on mobile and in CI. Each
+  // retry gets a larger bounded window, while a genuinely hung request still has an owner and a
+  // cancellation path. Required low-level packs start with more room because they include the
+  // verified feature-pack fetch, scenery instances, and shader compilation.
+  const baseMs = requiredFeaturePack ? (mobileControls ? 45_000 : 30_000) : 20_000;
+  return Math.min(90_000, Math.round(baseMs * (1.5 ** Math.max(0, attempt - 1))));
+}
+
+function terrainWarmupRetryDelayMs(attempt) {
+  // FlightView retains a failed fetch for 15 s, so retrying sooner only rediscovers that backoff.
+  // Exponential delay prevents a real outage from becoming a tight request loop.
+  return Math.min(60_000, 15_000 * (2 ** Math.max(0, attempt - 1)));
+}
+
 function cancelTerrainLaunchWarmup() {
   const owner = terrainLaunchWarmupOwner;
-  if (!owner) return false;
+  const hadRetry = terrainLaunchWarmupRetryTimer !== 0;
+  if (terrainLaunchWarmupRetryTimer) {
+    window.clearTimeout(terrainLaunchWarmupRetryTimer);
+    terrainLaunchWarmupRetryTimer = 0;
+  }
+  terrainLaunchWarmupRetryAtMs = 0;
+  terrainLaunchWarmupStatus = "";
+  if (!owner) {
+    pauseReasons.delete("terrain");
+    return hadRetry;
+  }
   terrainLaunchWarmupGeneration += 1;
   terrainLaunchWarmupOwner = null;
   terrainLaunchWarmupPromise = null;
@@ -4152,27 +4551,48 @@ function prepareMissionTerrain(index, stagedState) {
   const requiredFeaturePack = stagedState?.mission_feature_pack_required === true;
   activeView?.configureTerrainMission?.(stagedState);
   if (!terrainKey || missionTerrainReady(stagedState)) {
+    if (terrainLaunchWarmupRetryTimer) {
+      window.clearTimeout(terrainLaunchWarmupRetryTimer);
+      terrainLaunchWarmupRetryTimer = 0;
+    }
+    terrainLaunchWarmupFailedKey = null;
+    terrainLaunchWarmupAttempt = 0;
+    terrainLaunchWarmupRetryAtMs = 0;
+    terrainLaunchWarmupStatus = "";
     activeView?.applyTerrainFlightPolicy?.();
     return false;
   }
   if (terrainLaunchWarmupFailedKey === warmupKey) {
     if (!requiredFeaturePack) return false;
-    setPauseReason("terrain", true);
-    if (viewStatus) {
-      viewStatus.textContent =
-        "Required mission scenery unavailable · sortie remains interlocked";
+    const retryRemainingMs = terrainLaunchWarmupRetryAtMs - performance.now();
+    if (retryRemainingMs <= 0) {
+      terrainLaunchWarmupFailedKey = null;
+      terrainLaunchWarmupRetryAtMs = 0;
+    } else {
+      terrainLaunchWarmupStatus =
+        "Required scenery unavailable · automatic retry scheduled";
+      setPauseReason("terrain", true);
+      if (viewStatus) viewStatus.textContent = terrainLaunchWarmupStatus;
+      return true;
     }
-    return true;
+  }
+  if (terrainLaunchWarmupFailedKey && terrainLaunchWarmupFailedKey !== warmupKey) {
+    terrainLaunchWarmupFailedKey = null;
+    terrainLaunchWarmupAttempt = 0;
+    terrainLaunchWarmupRetryAtMs = 0;
   }
   if (terrainLaunchWarmupPromise) return true;
   if (!activeView || !stagedState) return false;
 
+  terrainLaunchWarmupAttempt += 1;
+  const attempt = terrainLaunchWarmupAttempt;
+  const deadlineMs = terrainWarmupDeadlineMs(attempt, requiredFeaturePack);
+  terrainLaunchWarmupStatus = attempt === 1
+    ? "Loading nearby terrain and low-level scenery…"
+    : `Retrying terrain and scenery · attempt ${attempt}`;
   setPauseReason("terrain", true);
-  if (viewStatus) {
-    viewStatus.textContent = stagedState.terrain_micro_required === true
-      ? "Loading low-level terrain and scenery…"
-      : "Loading Ukraine theatre terrain…";
-  }
+  if (viewStatus) viewStatus.textContent = terrainLaunchWarmupStatus;
+
   const warmupView = activeView;
   const owner = {
     generation: ++terrainLaunchWarmupGeneration,
@@ -4197,24 +4617,30 @@ function prepareMissionTerrain(index, stagedState) {
     owner.deadlineTimer = window.setTimeout(() => {
       warmupView.cancelTerrainPresentationRequest(terrainKey);
       resolve(false);
-    }, 15_000);
+    }, deadlineMs);
   });
   const cancelled = new Promise((resolve) => {
     owner.cancel = () => resolve(false);
   });
   let warmupReady = false;
+  let retryDelayMs = 0;
   const promise = Promise.race([work, deadline, cancelled]).then((ready) => {
     warmupReady = ready;
     if (terrainLaunchWarmupOwner !== owner) return false;
     if (!ready) {
       terrainLaunchWarmupFailedKey = warmupKey;
-      if (viewStatus) {
-        viewStatus.textContent = requiredFeaturePack
-          ? "Required mission scenery unavailable · sortie remains interlocked"
-          : "Detailed terrain unavailable · presentation fallback active";
-      }
+      retryDelayMs = requiredFeaturePack ? terrainWarmupRetryDelayMs(attempt) : 0;
+      terrainLaunchWarmupRetryAtMs = retryDelayMs > 0
+        ? performance.now() + retryDelayMs : 0;
+      terrainLaunchWarmupStatus = requiredFeaturePack
+        ? "Required scenery unavailable · automatic retry scheduled"
+        : "Detailed terrain unavailable · presentation fallback active";
+      if (viewStatus) viewStatus.textContent = terrainLaunchWarmupStatus;
     } else {
       terrainLaunchWarmupFailedKey = null;
+      terrainLaunchWarmupAttempt = 0;
+      terrainLaunchWarmupRetryAtMs = 0;
+      terrainLaunchWarmupStatus = "";
     }
     return ready;
   }).finally(() => {
@@ -4226,7 +4652,36 @@ function prepareMissionTerrain(index, stagedState) {
     terrainLaunchWarmupPromise = null;
     if (ownsCurrentMission) {
       setPauseReason("terrain", requiredFeaturePack && !warmupReady);
+      if (requiredFeaturePack && !warmupReady && retryDelayMs > 0) {
+        if (terrainLaunchWarmupRetryTimer)
+          window.clearTimeout(terrainLaunchWarmupRetryTimer);
+        terrainLaunchWarmupRetryTimer = window.setTimeout(() => {
+          terrainLaunchWarmupRetryTimer = 0;
+          const stillOwnsMission = selectedBeat === owner.index
+            && stagedMissionIdentity(selectedBeat, latestState) === owner.missionIdentity
+            && pauseReasons.has("ready");
+          if (!stillOwnsMission) {
+            terrainLaunchWarmupStatus = "";
+            terrainLaunchWarmupRetryAtMs = 0;
+            terrainLaunchWarmupFailedKey = null;
+            autoLaunchPending = false;
+            pauseReasons.delete("terrain");
+            applyBridgePause();
+            renderPauseUi();
+            return;
+          }
+          terrainLaunchWarmupFailedKey = null;
+          terrainLaunchWarmupRetryAtMs = 0;
+          terrainLaunchWarmupStatus = `Retrying terrain and scenery · attempt ${attempt + 1}`;
+          pauseReasons.delete("terrain");
+          applyBridgePause();
+          renderPauseUi();
+          queueMicrotask(tryAutoLaunch);
+        }, retryDelayMs);
+      }
     } else {
+      terrainLaunchWarmupStatus = "";
+      terrainLaunchWarmupRetryAtMs = 0;
       pauseReasons.delete("terrain");
       autoLaunchPending = false;
       applyBridgePause();
@@ -4308,7 +4763,9 @@ function requestMobileFullscreenFromGesture() {
 }
 
 function beginFlight() {
-  if (buildIdentityBlocksSortie() || !bridge || !pauseReasons.has("ready")) return false;
+  if (blockedProgramExperience
+    || !experienceAccess(selectedProgramNodeId, window.location).allowed
+    || buildIdentityBlocksSortie() || !bridge || !pauseReasons.has("ready")) return false;
   const blockers = [...pauseReasons].filter((reason) => reason !== "ready");
   if (blockers.length) return false;
   clearFlightInput();
@@ -4848,6 +5305,7 @@ const COMPATIBILITY_PRESENTATION_FACTORIES = new Map([
   ["presentation.vehicle.one-way-attack-drone.prototype.v1", createOneWayAttackDrone],
   ["presentation.vehicle.rapier-gun-drone.prototype.v1", createRapierGunDrone],
   ["presentation.vehicle.rapier.public-data-surrogate.v1", createRapier],
+  ["presentation.vehicle.high-altitude-weather-balloon.target.v1", createHighAltitudeBalloon],
   [DEFAULT_COCKPIT_PRESENTATION_ID, createHiddenPresentation],
   ["presentation.platform.carrier.v1", createCarrier],
   ["presentation.platform.rapier-dispersed-strip.v1", createRapierDispersedStrip],
@@ -8356,15 +8814,16 @@ class FlightView {
         elapsedSeconds: nowSeconds,
         frameTimeMs: measuredFrameMs,
         activeForeground,
+        // Production resolution is an actuator of the phase-causal governor. Feeding raw RAF
+        // time into the legacy EMA here would still punish pixels for simulation/terrain stalls.
+        adaptiveResolutionSampling: false,
         mode: shadowMode,
         shadowFocus,
       });
       this.visualRuntime.render(dt);
     } else {
       this.directAdaptiveResolution.setMode(shadowMode);
-      if (activeForeground) {
-        this.directAdaptiveResolution.sample(measuredFrameMs, { activeForeground: true });
-      }
+      // The outer causal governor owns nudgeDown/nudgeUp for this production path too.
       this.updateSunAndShadows(shadowMode, shadowFocus);
       this.renderer.render(this.scene, this.camera);
     }
@@ -8562,8 +9021,7 @@ function installGamepadInput(view) {
       });
     }
 
-    gamepadLookActive = !touchStickLookActive
-      && Math.abs(state.lookX) + Math.abs(state.lookY) > 0.001;
+    gamepadLookActive = Math.abs(state.lookX) + Math.abs(state.lookY) > 0.001;
     if (gamepadLookActive) {
       ({ yawRad: sensorYaw, pitchRad: sensorPitch } = applyLookDelta(
         { yawRad: sensorYaw, pitchRad: sensorPitch },
@@ -8592,8 +9050,6 @@ function installMobileInput(view) {
   const PITCH_GAIN = 1.15;
   const ROLL_GAIN = 1;
   const TILT_TRIM_AUTHORITY = 0.15;
-  const TARGET_STICK_FIRE_HOLD_MS = 180;
-  const TARGET_STICK_FIRE_CANCEL_RADIUS = 0.2;
   const activeControls = new Map();
   const tiltKeys = { pitch: null, roll: null };
   const tiltTitle = tiltPrompt?.querySelector("strong");
@@ -8612,7 +9068,8 @@ function installMobileInput(view) {
   let tiltRollTrim = 0;
   let throttleRockerPointerId = null;
   let throttleRockerControl = null;
-  const virtualStickAxes = { roll: null, pitch: null };
+  const virtualStickKeyboardCodes = new Set();
+  const casevacStickAxes = { pitch: null, roll: null, yaw: null };
   let virtualStickPointerId = null;
   // Throttle-as-a-rate state. The lever is integrated here rather than read back from the kernel
   // so a dropped frame cannot ratchet the setting, and so the first touch of the sortie inherits
@@ -8628,8 +9085,6 @@ function installMobileInput(view) {
   let targetStickPointerId = null;
   let targetStickX = 0;
   let targetStickY = 0;
-  let targetStickFireSource = null;
-  let targetStickFireTimer = null;
   let flightGesture = null;
   let targetGesture = null;
   let suspended = false;
@@ -8758,6 +9213,13 @@ function installMobileInput(view) {
   }
 
   function applyFlightStick() {
+    // CASEVAC uses the fixed-wing analog roll channel as lateral translation. Tilt trim is a
+    // fighter-only convenience, so never let a held yaw stick turn device lean into helicopter
+    // drift; CASEVAC movement is owned explicitly by the left-stick key grammar below.
+    if (isCasevacState(latestState)) {
+      releaseDirectFlightAxes("touch");
+      return false;
+    }
     // Gated on the RIGHT stick now, because that is the one that flies. Gating on the left stick
     // meant roll and pitch were released the moment the thumb came off the throttle.
     if (targetStickPointerId === null) {
@@ -8895,19 +9357,6 @@ function installMobileInput(view) {
     renderThrottleRocker(physicalCode === "KeyW" ? 0.78 : -0.78, physicalCode);
   }
 
-  function setVirtualStickAxis(axis, physicalCode, source) {
-    const active = virtualStickAxes[axis];
-    if (active?.physicalCode === physicalCode && active.source === source) return;
-    if (active) releaseMappedKey(active.code, active.source);
-    virtualStickAxes[axis] = null;
-    if (!physicalCode) return;
-    const code = `Touch:${physicalCode}`;
-    const gkey = touchGkeyByDefaultCode.get(physicalCode);
-    if (pressMappedKey(code, source, gkey)) {
-      virtualStickAxes[axis] = { code, physicalCode, source };
-    }
-  }
-
   function renderVirtualStick(x = 0, y = 0) {
     if (!fallbackStick) return;
     const active = Math.abs(x) > 0.01 || Math.abs(y) > 0.01;
@@ -8920,18 +9369,40 @@ function installMobileInput(view) {
     fallbackStick.dataset.active = String(active);
   }
 
+  function setCasevacStickAxis(axis, physicalCode) {
+    const active = casevacStickAxes[axis];
+    if (active?.physicalCode === physicalCode) return;
+    if (active) releaseMappedKey(active.code, active.source);
+    casevacStickAxes[axis] = null;
+    if (!physicalCode) return;
+    const source = `touch:casevac-stick:${axis}`;
+    const code = `Touch:Casevac:${physicalCode}`;
+    const gkey = touchGkeyByDefaultCode.get(physicalCode);
+    if (pressMappedKey(code, source, gkey)) {
+      casevacStickAxes[axis] = { code, physicalCode, source };
+    }
+  }
+
+  function releaseCasevacStickAxes(...axes) {
+    for (const axis of axes) setCasevacStickAxis(axis, null);
+  }
+
   function startThrottleIntegrator() {
     if (throttleIntegratorFrame) return;
     throttleIntegratorLastMs = performance.now();
     const step = (nowMs) => {
       throttleIntegratorFrame = 0;
-      if (virtualStickPointerId === null) return;
+      const keyboardThrottleActive = virtualStickKeyboardCodes.has("ArrowUp")
+        || virtualStickKeyboardCodes.has("ArrowDown");
+      if (virtualStickPointerId === null && !keyboardThrottleActive) return;
       const deltaSeconds = Math.min(0.1, Math.max(0, (nowMs - throttleIntegratorLastMs) / 1000));
       throttleIntegratorLastMs = nowMs;
       if (throttleLever === null) {
         // Start from where the aeroplane already is, so the first nudge is a nudge and not a jump.
-        const published = Number(latestState?.throttle);
-        throttleLever = Number.isFinite(published) ? clamp(published, 0, 1) : 0.5;
+        throttleLever = normalisePublishedThrottleLever(
+          latestState?.throttle,
+          latestState?.max_thrust_fraction,
+        );
       }
       throttleLever = clamp(
         throttleLever + throttleRate * THROTTLE_STICK_RATE_PER_SECOND * deltaSeconds, 0, 1);
@@ -8952,19 +9423,18 @@ function installMobileInput(view) {
   function releaseVirtualStick() {
     const pointerId = virtualStickPointerId;
     virtualStickPointerId = null;
-    for (const axis of ["roll", "pitch"]) {
-      const active = virtualStickAxes[axis];
-      if (active) releaseMappedKey(active.code, active.source);
-      virtualStickAxes[axis] = null;
-    }
-    primaryRollCommand = 0;
-    primaryPitchCommand = 0;
+    virtualStickKeyboardCodes.clear();
+    releaseCasevacStickAxes("roll", "pitch");
     // Let go and the power stays where you put it, exactly like a real quadrant. Yaw is the
-    // opposite -- it is an aerodynamic control, so it must centre with the thumb.
+    // opposite -- it is an aerodynamic control, so it must centre with the thumb. This path must
+    // not neutralise roll or pitch: the other thumb may still own those axes on the right stick.
     throttleRate = 0;
+    // This is only a browser-side integration seed. Invalidate it whenever this source releases so
+    // a rocker, keyboard, or gamepad power change cannot be overwritten by a stale next touch.
+    // The authoritative bridge lever itself remains exactly where the pilot left it.
+    throttleLever = null;
     stopThrottleIntegrator();
     if (typeof bridge?.SetAnalogYawControl === "function") bridge.SetAnalogYawControl(0);
-    releaseDirectFlightAxes("touch");
     renderVirtualStick();
     if (pointerId !== null && fallbackStick?.hasPointerCapture?.(pointerId)) {
       try { fallbackStick.releasePointerCapture(pointerId); } catch { /* already released */ }
@@ -8973,10 +9443,36 @@ function installMobileInput(view) {
 
   function updateVirtualStickPointer(event) {
     if (!fallbackStick || event.pointerId !== virtualStickPointerId) return;
-    const state = mobileVirtualStickState(event, fallbackStick.getBoundingClientRect(), {
-      rollCode: virtualStickAxes.roll?.physicalCode ?? null,
-      pitchCode: virtualStickAxes.pitch?.physicalCode ?? null,
-    });
+    const casevac = isCasevacState(latestState);
+    const state = mobileVirtualStickState(
+      event,
+      fallbackStick.getBoundingClientRect(),
+      casevac ? {
+        rollCode: casevacStickAxes.roll?.physicalCode ?? null,
+        pitchCode: casevacStickAxes.pitch?.physicalCode ?? null,
+      } : {},
+    );
+    if (casevac) {
+      throttleRate = 0;
+      throttleLever = null;
+      stopThrottleIntegrator();
+      bridge?.SetAnalogYawControl?.(0);
+      setCasevacStickAxis("roll", state.rollCode);
+      setCasevacStickAxis("pitch", state.pitchCode);
+      if (flightGesture) {
+        flightGesture.samples += 1;
+        flightGesture.maxHorizontal = Math.max(
+          flightGesture.maxHorizontal, Math.abs(state.x));
+        flightGesture.maxForward = Math.max(
+          flightGesture.maxForward, Math.abs(state.y));
+        const authority = Math.hypot(state.x, state.y);
+        if (authority < 0.01) flightGesture.neutralSamples += 1;
+        if (authority >= 0.95) flightGesture.saturatedSamples += 1;
+      }
+      renderVirtualStick(state.x, state.y);
+      return;
+    }
+    releaseCasevacStickAxes("roll", "pitch");
     // THE LEFT STICK IS THROTTLE AND YAW. Throttle is a continuous axis and deserves a thumb;
     // yaw is nearly useless for gun tracking on an FBW fighter but costs nothing here, because
     // this stick's horizontal axis is otherwise idle -- and it earns its place twice, on crosswind
@@ -8989,17 +9485,19 @@ function installMobileInput(view) {
     // middle of a merge; and because a released stick sends no further events, the lever then
     // stays wherever the thumb happened to leave it. A stick that springs back to centre cannot
     // express an absolute setting: centre has to mean "leave it alone", which is a rate of zero.
-    setVirtualStickAxis("roll", null, `${source}:roll`);
-    setVirtualStickAxis("pitch", null, `${source}:pitch`);
-    throttleRate = Math.abs(state.y) < THROTTLE_STICK_DEADZONE ? 0 : clamp(state.y, -1, 1);
+    // Pointer Y grows downward. Negate it so pushing the thumb up increases power and pulling it
+    // down decreases power, matching both the visible lever convention and the accessible help.
+    throttleRate = Math.abs(state.y) < THROTTLE_STICK_DEADZONE
+      ? 0 : -clamp(state.y, -1, 1);
     startThrottleIntegrator();
     if (typeof bridge?.SetAnalogYawControl === "function") {
       bridge.SetAnalogYawControl(clamp(state.x, -1, 1));
     }
     if (flightGesture) {
       flightGesture.samples += 1;
-      flightGesture.maxRoll = Math.max(flightGesture.maxRoll, Math.abs(state.x));
-      flightGesture.maxPitch = Math.max(flightGesture.maxPitch, Math.abs(state.y));
+      flightGesture.maxYaw = Math.max(flightGesture.maxYaw, Math.abs(state.x));
+      flightGesture.maxThrottleRate = Math.max(
+        flightGesture.maxThrottleRate, Math.abs(throttleRate));
       flightGesture.maxTrim = Math.max(flightGesture.maxTrim, Math.abs(tiltRollTrim));
       const authority = Math.hypot(state.x, state.y);
       if (authority < 0.01) flightGesture.neutralSamples += 1;
@@ -9008,11 +9506,33 @@ function installMobileInput(view) {
     renderVirtualStick(state.x, state.y);
   }
 
-  function renderVirtualStickKeyboard() {
-    const roll = virtualStickAxes.roll?.physicalCode;
-    const pitch = virtualStickAxes.pitch?.physicalCode;
-    renderVirtualStick(roll === "ArrowLeft" ? -0.72 : roll === "ArrowRight" ? 0.72 : 0,
-      pitch === "ArrowUp" ? -0.72 : pitch === "ArrowDown" ? 0.72 : 0);
+  function syncVirtualStickKeyboard() {
+    const x = (virtualStickKeyboardCodes.has("ArrowRight") ? 0.72 : 0)
+      - (virtualStickKeyboardCodes.has("ArrowLeft") ? 0.72 : 0);
+    const y = (virtualStickKeyboardCodes.has("ArrowDown") ? 0.72 : 0)
+      - (virtualStickKeyboardCodes.has("ArrowUp") ? 0.72 : 0);
+    if (isCasevacState(latestState)) {
+      throttleRate = 0;
+      throttleLever = null;
+      stopThrottleIntegrator();
+      bridge?.SetAnalogYawControl?.(0);
+      setCasevacStickAxis("roll", x < 0 ? "ArrowLeft" : x > 0 ? "ArrowRight" : null);
+      setCasevacStickAxis("pitch", y < 0 ? "ArrowUp" : y > 0 ? "ArrowDown" : null);
+      renderVirtualStick(x, y);
+      return;
+    }
+    releaseCasevacStickAxes("roll", "pitch");
+    throttleRate = -y;
+    if (throttleRate !== 0) startThrottleIntegrator();
+    else if (virtualStickPointerId === null) {
+      stopThrottleIntegrator();
+      // Arrow-key operation shares the same browser-side rate integrator as pointer touch. Once
+      // vertical authority is released, discard its seed even while a horizontal yaw arrow stays
+      // held; W/S, the rocker, or a gamepad may change authoritative power before the next nudge.
+      throttleLever = null;
+    }
+    bridge?.SetAnalogYawControl?.(x);
+    renderVirtualStick(x, y);
   }
 
   function renderTargetStick(x = 0, y = 0) {
@@ -9029,7 +9549,31 @@ function installMobileInput(view) {
 
   function updateTargetStickPointer(event) {
     if (!targetStick || event.pointerId !== targetStickPointerId) return;
-    const state = mobileVirtualStickState(event, targetStick.getBoundingClientRect());
+    const casevac = isCasevacState(latestState);
+    const previousYawCode = casevacStickAxes.yaw?.physicalCode === "KeyA"
+      ? "ArrowLeft" : casevacStickAxes.yaw?.physicalCode === "KeyD" ? "ArrowRight" : null;
+    const state = mobileVirtualStickState(
+      event,
+      targetStick.getBoundingClientRect(),
+      casevac ? { rollCode: previousYawCode } : {},
+    );
+    if (casevac) {
+      targetStickX = state.x;
+      targetStickY = 0;
+      primaryRollCommand = 0;
+      primaryPitchCommand = 0;
+      releaseDirectFlightAxes("touch");
+      setCasevacStickAxis("yaw", state.rollCode === "ArrowLeft"
+        ? "KeyA" : state.rollCode === "ArrowRight" ? "KeyD" : null);
+      if (targetGesture) {
+        targetGesture.samples += 1;
+        targetGesture.maxDeflection = Math.max(
+          targetGesture.maxDeflection, Math.abs(targetStickX));
+      }
+      renderTargetStick(targetStickX, 0);
+      return;
+    }
+    releaseCasevacStickAxes("yaw");
     // THE RIGHT STICK FLIES THE AEROPLANE. Roll on x, pitch on y, under the dominant thumb, which
     // is where the primary axis belongs and where every console flight sim puts it. It used to be
     // a look stick, and a look stick is not worth an axis: what a gunfight needs is a bearing to
@@ -9038,49 +9582,16 @@ function installMobileInput(view) {
     targetStickY = state.y;
     if (targetGesture) {
       targetGesture.samples += 1;
-      targetGesture.maxLook = Math.max(targetGesture.maxLook,
+      targetGesture.maxDeflection = Math.max(targetGesture.maxDeflection,
         Math.hypot(targetStickX, targetStickY));
     }
     setAnalogRollCommand(state.x);
     setAnalogPitchCommand(state.y);
-    touchStickLookActive = false;
     renderTargetStick(targetStickX, targetStickY);
-  }
-
-  function clearTargetStickFireTimer() {
-    if (targetStickFireTimer === null) return;
-    window.clearTimeout(targetStickFireTimer);
-    targetStickFireTimer = null;
-  }
-
-  function armTargetStickFire(pointerId) {
-    clearTargetStickFireTimer();
-    // CENTRE-HOLD FIRE IS OFF. The right stick flies the aeroplane now, and a control that doubles
-    // as a trigger cannot be trimmed: near-centre meant BOTH "fine correction" and "fire", so every
-    // small gentle input either armed the gun or cancelled it. That is why fine tracking felt bad.
-    // Fire is the dedicated button in the gap between the sticks, where it costs no stick travel.
-    return;
-    // eslint-disable-next-line no-unreachable
-    if (Math.hypot(targetStickX, targetStickY) > TARGET_STICK_FIRE_CANCEL_RADIUS) return;
-    targetStickFireTimer = window.setTimeout(() => {
-      targetStickFireTimer = null;
-      if (targetStickPointerId !== pointerId || targetStickFireSource
-          || frozen || suspended || document.hidden || pauseReasons.size > 0
-          || Math.hypot(targetStickX, targetStickY) > TARGET_STICK_FIRE_CANCEL_RADIUS) return;
-      const source = `touch:target-stick:${pointerId}`;
-      if (!pressMappedKey("Touch:TargetStickFire", source, 8)) return;
-      targetStickFireSource = source;
-      if (targetGesture) targetGesture.fired = true;
-      recorder.event("mobile_control", "right_stick_fire_started", {
-        profile: "dual_stick",
-        hold_ms: TARGET_STICK_FIRE_HOLD_MS,
-      });
-    }, TARGET_STICK_FIRE_HOLD_MS);
   }
 
   function releaseTargetStick() {
     const pointerId = targetStickPointerId;
-    clearTargetStickFireTimer();
     targetStickPointerId = null;
     targetStickX = 0;
     targetStickY = 0;
@@ -9091,16 +9602,8 @@ function installMobileInput(view) {
     // it keeps going" failure the smoke test catches.
     primaryRollCommand = 0;
     primaryPitchCommand = 0;
+    releaseCasevacStickAxes("yaw");
     releaseDirectFlightAxes("touch");
-    touchStickLookActive = false;
-    gimbalReturnFast = true;
-    // Releasing the stick must also release the centre-hold gun. Without this the fire source
-    // stays set, targetFireHeld latches on, and armTargetStickFire's `|| targetStickFireSource`
-    // guard bails out of every later press: the gun fires once and never again.
-    if (targetStickFireSource) {
-      releaseMappedKey("Touch:TargetStickFire", targetStickFireSource);
-      targetStickFireSource = null;
-    }
     renderTargetStick();
     if (pointerId !== null && targetStick?.hasPointerCapture?.(pointerId)) {
       try { targetStick.releasePointerCapture(pointerId); } catch { /* already released */ }
@@ -9118,18 +9621,16 @@ function installMobileInput(view) {
     targetGesture = {
       startedAt: performance.now(),
       samples: 0,
-      maxLook: 0,
-      fired: false,
+      maxDeflection: 0,
     };
     view.hud.armAudio();
     targetStick.focus({ preventScroll: true });
     try { targetStick.setPointerCapture(event.pointerId); } catch { /* pointer may be gone */ }
     updateTargetStickPointer(event);
-    armTargetStickFire(event.pointerId);
     recorder.event("mobile_control", "right_stick_started", {
       profile: "dual_stick",
-      look: true,
-      fire: "hold-centre",
+      axes: isCasevacState(latestState) ? "yaw" : "pitch-roll",
+      fire: isCasevacState(latestState) ? "unavailable" : "dedicated-button",
     });
   }
 
@@ -9142,22 +9643,6 @@ function installMobileInput(view) {
     event.preventDefault();
     event.stopPropagation();
     updateTargetStickPointer(event);
-    if (Math.hypot(targetStickX, targetStickY) > TARGET_STICK_FIRE_CANCEL_RADIUS) {
-      clearTargetStickFireTimer();
-      // Firing belongs only to a deliberate centre hold. If a saturated frame lets the timer run
-      // before this move is delivered, revoke that edge immediately; moving outside the centre
-      // zone always means LOOK, regardless of how long the pilot held before slewing.
-      if (targetStickFireSource) {
-        releaseMappedKey("Touch:TargetStickFire", targetStickFireSource);
-        targetStickFireSource = null;
-        recorder.event("mobile_control", "right_stick_fire_cancelled_by_drag", {
-          profile: "dual_stick",
-          gesture_age_ms: targetGesture
-            ? Math.max(0, Math.round(performance.now() - targetGesture.startedAt))
-            : 0,
-        });
-      }
-    }
   }
 
   function endTargetStick(event) {
@@ -9172,8 +9657,7 @@ function installMobileInput(view) {
       profile: "dual_stick",
       duration_ms: gesture ? Math.round(performance.now() - gesture.startedAt) : 0,
       samples: gesture?.samples ?? 0,
-      max_look: Number((gesture?.maxLook ?? 0).toFixed(3)),
-      fired: gesture?.fired === true,
+      max_deflection: Number((gesture?.maxDeflection ?? 0).toFixed(3)),
     });
   }
 
@@ -9188,11 +9672,14 @@ function installMobileInput(view) {
     virtualStickPointerId = event.pointerId;
     flightGesture = {
       startedAt: performance.now(),
+      casevac: isCasevacState(latestState),
       samples: 0,
       neutralSamples: 0,
       saturatedSamples: 0,
-      maxRoll: 0,
-      maxPitch: 0,
+      maxYaw: 0,
+      maxThrottleRate: 0,
+      maxHorizontal: 0,
+      maxForward: 0,
       maxTrim: 0,
     };
     fallbackStick.focus({ preventScroll: true });
@@ -9225,9 +9712,14 @@ function installMobileInput(view) {
         profile: "dual_stick",
         hand: "left",
         duration_ms: Math.round(performance.now() - gesture.startedAt),
+        role: gesture.casevac ? "horizontal-movement" : "throttle-yaw",
         samples: gesture.samples,
-        max_roll: Number(gesture.maxRoll.toFixed(3)),
-        max_pitch: Number(gesture.maxPitch.toFixed(3)),
+        max_yaw: gesture.casevac ? null : Number(gesture.maxYaw.toFixed(3)),
+        max_throttle_rate: gesture.casevac
+          ? null : Number(gesture.maxThrottleRate.toFixed(3)),
+        max_translate: gesture.casevac
+          ? Number(gesture.maxHorizontal.toFixed(3)) : null,
+        max_forward: gesture.casevac ? Number(gesture.maxForward.toFixed(3)) : null,
         max_tilt_trim: Number(gesture.maxTrim.toFixed(3)),
         neutral_share: Number((gesture.neutralSamples / samples).toFixed(3)),
         saturation_share: Number((gesture.saturatedSamples / samples).toFixed(3)),
@@ -9240,12 +9732,17 @@ function installMobileInput(view) {
     if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.code)) return;
     event.preventDefault();
     event.stopPropagation();
-    const axis = ["ArrowLeft", "ArrowRight"].includes(event.code) ? "roll" : "pitch";
-    const active = virtualStickAxes[axis];
-    if (!pressed && active?.physicalCode !== event.code) return;
-    setVirtualStickAxis(axis, pressed ? event.code : null,
-      `touch:virtual-stick:keyboard:${axis}`);
-    renderVirtualStickKeyboard();
+    if (pressed) {
+      if (virtualStickPointerId !== null || frozen || suspended
+        || document.hidden || pauseReasons.size > 0) return;
+      virtualStickKeyboardCodes.add(event.code);
+    } else {
+      virtualStickKeyboardCodes.delete(event.code);
+    }
+    // Pointer ownership is authoritative until that thumb lifts; a stray key-up from an attached
+    // keyboard must not zero a live throttle/yaw gesture.
+    if (virtualStickPointerId !== null) return;
+    syncVirtualStickKeyboard();
   }
 
   function captureCentre(sample, message = "TILT CENTRED", timestampMs = performance.now()) {
@@ -9350,8 +9847,8 @@ function installMobileInput(view) {
     lastOrientationSampleMs = timestampMs;
     filteredPitch = smoothTilt(filteredPitch, pitch, deltaSeconds);
     filteredRoll = smoothTilt(filteredRoll, roll, deltaSeconds);
-    // Tilt is deliberately a small additive roll trim. The left thumb always owns flight and
-    // fore/aft phone wobble can never become a pitch command.
+    // Tilt is deliberately a small additive roll trim. The right thumb always owns primary
+    // flight, and fore/aft phone wobble can never become a pitch command.
     updateTiltAxis("pitch", 0, "ArrowUp", "ArrowDown");
     if (!updateAnalogRoll(filteredRoll)) {
       updateTiltAxis("roll", filteredRoll * TILT_TRIM_AUTHORITY,
@@ -9546,6 +10043,11 @@ function installMobileInput(view) {
   fallbackStick?.addEventListener("lostpointercapture", endVirtualStick, { passive: false });
   fallbackStick?.addEventListener("keydown", (event) => virtualStickKeyboardEvent(event, true));
   fallbackStick?.addEventListener("keyup", (event) => virtualStickKeyboardEvent(event, false));
+  fallbackStick?.addEventListener("blur", () => {
+    if (virtualStickPointerId === null && virtualStickKeyboardCodes.size > 0) {
+      releaseVirtualStick();
+    }
+  });
   fallbackStick?.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
@@ -9674,22 +10176,9 @@ function installMobileInput(view) {
     active: true,
     get tiltState() { return tiltState; },
     get calibration() { return calibration ? { ...calibration } : null; },
-    get targetFireHeld() { return targetStickFireSource !== null; },
+    // Retained for browser QA compatibility: the right flight stick can never own the gun now.
+    get targetFireHeld() { return false; },
     recenter: recenterTilt,
-  };
-
-  const pollOtherContinuousInput = pollContinuousInput;
-  pollContinuousInput = (dt) => {
-    pollOtherContinuousInput(dt);
-    if (targetStickPointerId === null || pauseReasons.size > 0 || document.hidden) return;
-    ({ yawRad: sensorYaw, pitchRad: sensorPitch } = applyLookDelta(
-      { yawRad: sensorYaw, pitchRad: sensorPitch },
-      gamepadLookDelta({ lookX: targetStickX, lookY: targetStickY }, dt),
-      { yawRad: MAX_GIMBAL_YAW, pitchRad: MAX_GIMBAL_PITCH },
-    ));
-    padlockTrackEstablished = false;
-    syncPlayerGunTargetPadlockRollAssist();
-    gimbalReturnFast = false;
   };
 }
 
@@ -9714,10 +10203,9 @@ function activeFlightAxisOwnsKey(event) {
 }
 
 function installInput(view) {
-  // The default sortie can launch before the pilot has touched the page. Unlock the shared graph
-  // on the first real keyboard/pointer interaction, regardless of which flight control they use.
-  // armFlightAudio verifies browser user activation, so synthetic and automatic launch paths stay
-  // allocation-safe without spending a resume attempt.
+  // Unlock the shared graph on the first real keyboard/pointer interaction, regardless of which
+  // flight control the pilot uses. armFlightAudio verifies browser user activation, so synthetic
+  // automation and delayed terrain work stay allocation-safe without spending a resume attempt.
   const armAudioFromGesture = () => view.hud.armAudio();
   window.addEventListener("pointerdown", armAudioFromGesture, {
     capture: true,
@@ -10123,6 +10611,16 @@ async function boot() {
       // Raw (unclamped) render-frame delta: perf telemetry must see the true stall length, not the
       // deliberately short simulation-advance cap used to prevent a catch-up spiral.
       const renderDeltaMs = now - previous;
+      // That delta closes the preceding rendered frame. Capture its already-measured owners before
+      // the current callback overwrites them, otherwise a current simulation burst would be paired
+      // with the wrong RAF interval and the causal governor would punish the wrong subsystem.
+      const precedingFramePressureContext = {
+        phaseMs: {
+          sim: previousSimPhaseMilliseconds,
+          view: previousViewPhaseMilliseconds,
+        },
+        terrain: terrainFramePressureContext(activeView, now, renderDeltaMs),
+      };
       recorder.observeFrameDelta(renderDeltaMs,
         replayActive !== true
           && pauseReasons.size === 0
@@ -10207,12 +10705,16 @@ async function boot() {
               { direction: "shed", level: qaLevel, previousLevel: qaLevel - 1 });
           }
         }
-        frameGovernor.observe(renderDeltaMs, now, activeView);
+        frameGovernor.observe(
+          renderDeltaMs,
+          now,
+          activeView,
+          precedingFramePressureContext,
+        );
       } else {
         frameGovernor.idle(now);
       }
       if (!replayActive) {
-        recordCampaignQualification(state);
         reconcileBridgeLifecycle(state);
       }
       const beforeMultiplayer = performance.now();
@@ -10240,7 +10742,9 @@ async function boot() {
         renderDeltaMs,
       );
       const afterView = performance.now();
-      recorder.observeFramePhase("view", afterView - beforeView);
+      const viewPhaseMilliseconds = afterView - beforeView;
+      previousViewPhaseMilliseconds = viewPhaseMilliseconds;
+      recorder.observeFramePhase("view", viewPhaseMilliseconds);
       renderPilotPhysiology(presentedState);
       renderIncidentReplay(replayFrame);
       renderPauseUi(state);
@@ -10249,10 +10753,6 @@ async function boot() {
         firstFrame = false;
         bootScreen.setAttribute("aria-busy", "false");
         bootScreen.classList.add("ready");
-        // Desktop deep links may depart automatically, but never let terrain warmup or a loaded
-        // SwiftShader context get ahead of the first presented frame. The landing surface must
-        // become visible and responsive before optional world streaming begins.
-        queueMicrotask(tryAutoLaunch);
       }
       requestAnimationFrame(tick);
     } catch (error) {
@@ -10296,7 +10796,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=237")
+    navigator.serviceWorker.register("service-worker.js?v=238")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);

@@ -76,7 +76,7 @@ test("Rapier guidance is a quiet mode line with authority and takeover", () => {
     rapier_cmc_capability_c: 1200,
     rapier_cmc_margin_c: 1090,
   });
-  assert.match(cue.text, /^AUTO · ACCEL · M2\.2$/);
+  assert.match(cue.text, /^AUTO · ACCEL$/);
   assert.doesNotMatch(cue.text, /SKIN|T0|P TOGGLE|LEVEL ACCEL|M2\.20/);
   assert.equal(cue.detail, "");
   assert.equal(cue.level, "active");

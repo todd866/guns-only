@@ -43,6 +43,67 @@ public class SnapshotProjectionTests {
     }
 
     [Fact]
+    public void PantherCarrierDayPublishesFiniteRouteRtbAndBarrierTruth() {
+        var session = new SimulationSession();
+        session.StartBeat(Beats.KoreaSortie);
+        session.Begin();
+
+        using (JsonDocument onDeckDocument = JsonDocument.Parse(
+            SnapshotProjection.BuildState(session, Carrier.DeckConfiguration.Axial,
+                0.0, 0.0, false, null))) {
+            JsonElement onDeck = onDeckDocument.RootElement;
+            Assert.False(onDeck.GetProperty("opponent_present").GetBoolean());
+            Assert.False(onDeck.GetProperty("opponent_body_present").GetBoolean());
+            Assert.Equal(JsonValueKind.Null,
+                onDeck.GetProperty("bandit_entity_id").ValueKind);
+            Assert.Equal(JsonValueKind.Null,
+                onDeck.GetProperty("bandit_aircraft_id").ValueKind);
+            Assert.Equal(0.0, onDeck.GetProperty("range_m").GetDouble());
+            Assert.Equal(0, onDeck.GetProperty("opponent_rounds_fired").GetInt32());
+            Assert.False(onDeck.GetProperty("gun_solution").GetBoolean());
+            Assert.True(onDeck.GetProperty("carrier_sortie_route_active").GetBoolean());
+            Assert.Equal("PROVISIONAL_KOREA_CARRIER_DAY_V1",
+                onDeck.GetProperty("carrier_sortie_route_profile_id").GetString());
+            Assert.Equal("ON_DECK",
+                onDeck.GetProperty("carrier_sortie_route_phase").GetString());
+            Assert.Equal("DEPARTURE",
+                onDeck.GetProperty("carrier_sortie_route_fix").GetString());
+            Assert.False(onDeck.GetProperty(
+                "carrier_sortie_route_rtb_available").GetBoolean());
+            Assert.True(onDeck.GetProperty("straight_deck_barrier_armed").GetBoolean());
+            Assert.False(onDeck.GetProperty(
+                "straight_deck_barrier_engaged").GetBoolean());
+            Assert.Equal("OnDeck", onDeck.GetProperty("sortie_leg").GetString());
+            Assert.Equal(0, onDeck.GetProperty("sortie_leg_code").GetInt32());
+        }
+
+        for (int tick = 0; tick < 15 * AircraftSim.TickHz
+            && !session.CarrierSortieRtbAvailable; tick++)
+            session.StepFixed();
+        Assert.True(session.CarrierSortieRtbAvailable);
+        session.FeedKey(GKey.KnockItOff, true);
+        session.FeedKey(GKey.KnockItOff, false);
+
+        using JsonDocument returnDocument = JsonDocument.Parse(
+            SnapshotProjection.BuildState(session, Carrier.DeckConfiguration.Axial,
+                0.0, 0.0, false, null));
+        JsonElement returning = returnDocument.RootElement;
+        Assert.Equal("RETURN",
+            returning.GetProperty("carrier_sortie_route_phase").GetString());
+        Assert.Equal("RETURN_INITIAL",
+            returning.GetProperty("carrier_sortie_route_fix").GetString());
+        Assert.True(returning.GetProperty(
+            "carrier_sortie_route_rtb_requested").GetBoolean());
+        Assert.True(returning.GetProperty("player_rtb_active").GetBoolean());
+        Assert.True(double.IsFinite(returning.GetProperty(
+            "carrier_sortie_route_target_bearing_deg").GetDouble()));
+        Assert.True(double.IsFinite(returning.GetProperty(
+            "carrier_sortie_route_target_turn_deg").GetDouble()));
+        Assert.True(returning.GetProperty(
+            "carrier_sortie_route_distance_m").GetDouble() > 0.0);
+    }
+
+    [Fact]
     public void RapierSnapshotSeparatesWallRecoveryStagnationAndCmcCapability() {
         using JsonDocument document = JsonDocument.Parse(
             ProjectAfterSteps(beatIndex: 10, ticks: 12, terrain: null));
@@ -51,18 +112,30 @@ public class SnapshotProjectionTests {
         double skinC = root.GetProperty("rapier_skin_temp_c").GetDouble();
         double recoveryC = root.GetProperty("rapier_recovery_temp_c").GetDouble();
         double stagnationC = root.GetProperty("rapier_stagnation_temp_c").GetDouble();
-        double capabilityC = root.GetProperty("rapier_cmc_capability_c").GetDouble();
-        double marginC = root.GetProperty("rapier_cmc_margin_c").GetDouble();
+        double cmcCapabilityC = root.GetProperty("rapier_cmc_capability_c").GetDouble();
+        double cmcMarginC = root.GetProperty("rapier_cmc_margin_c").GetDouble();
+        double bindingEffectiveC =
+            root.GetProperty("rapier_thermal_effective_temp_c").GetDouble();
+        double bindingCapabilityC =
+            root.GetProperty("rapier_thermal_capability_c").GetDouble();
+        double bindingMarginC = root.GetProperty("rapier_thermal_margin_c").GetDouble();
 
         Assert.True(stagnationC >= recoveryC,
             $"T0 {stagnationC:F0} C must be at least recovery {recoveryC:F0} C");
         Assert.True(double.IsFinite(skinC));
-        Assert.Equal(1200.0, capabilityC);
-        Assert.Equal(capabilityC - stagnationC, marginC);
-        Assert.Equal(marginC,
-            root.GetProperty("rapier_thermal_margin_c").GetDouble());
+        Assert.Equal(1200.0, cmcCapabilityC);
+        Assert.Equal(cmcCapabilityC - stagnationC, cmcMarginC);
+        Assert.Equal("insulated-warm-panel",
+            root.GetProperty("rapier_thermal_zone").GetString());
+        Assert.Equal(350.0, bindingCapabilityC);
+        Assert.Equal(bindingCapabilityC - bindingEffectiveC, bindingMarginC);
+        Assert.NotEqual(cmcMarginC, bindingMarginC);
         Assert.Equal(root.GetProperty("rapier_skin_mach_limit").GetDouble(),
             root.GetProperty("rapier_material_mach_ceiling").GetDouble());
+        Assert.True(double.IsFinite(
+            root.GetProperty("rapier_target_gamma_deg").GetDouble()));
+        Assert.Equal(RapierMissionDirector.RelightDynamicPressurePa / 1000.0,
+            root.GetProperty("rapier_relight_dynamic_pressure_kpa").GetDouble(), 2);
     }
 
     [Fact]
@@ -103,23 +176,8 @@ public class SnapshotProjectionTests {
     }
 
     [Fact]
-    public void VariedRapierInterceptAlonePublishesTheEconomicMissionContract() {
-        using JsonDocument economicDocument = JsonDocument.Parse(
-            ProjectAfterSteps(beatIndex: 12, ticks: 1, terrain: null));
-        JsonElement economic = economicDocument.RootElement;
-        Assert.True(economic.GetProperty("rapier_economy_active").GetBoolean());
-        Assert.Equal(RapierEconomicModel.ModelId, economic.GetProperty(
-            "rapier_economy_model_id").GetString());
-        Assert.StartsWith("rapier.target-contract.", economic.GetProperty(
-            "rapier_economy_target_contract_id").GetString());
-        Assert.True(economic.GetProperty(
-            "rapier_economy_target_reward_credits").GetInt32() > 0);
-        Assert.Equal("", economic.GetProperty(
-            "rapier_economy_application_key").GetString());
-        Assert.False(economic.GetProperty(
-            "rapier_economy_damage_cost_computed").GetBoolean());
-
-        foreach (int arcadeBeat in new[] { 7, 10, 11 }) {
+    public void ProductionBalloonCardAndOtherArcadeRapierCardsDoNotPublishEconomy() {
+        foreach (int arcadeBeat in new[] { 7, 10, 11, 12 }) {
             using JsonDocument arcadeDocument = JsonDocument.Parse(
                 ProjectAfterSteps(arcadeBeat, ticks: 1, terrain: null));
             Assert.False(arcadeDocument.RootElement.GetProperty(
@@ -160,7 +218,7 @@ public class SnapshotProjectionTests {
         Assert.False(root.GetProperty("terrain_present").GetBoolean());
 
         // (d) spot-check stable contract fields.
-        Assert.Equal("1.25.0",
+        Assert.Equal("1.26.0",
             root.GetProperty("snapshot_schema_version").GetString());
         Assert.Contains("\"rapier_intention\"", json);
         Assert.Contains("\"rapier_strategy\"", json);
@@ -220,13 +278,11 @@ public class SnapshotProjectionTests {
         double cornerBandMax = root.GetProperty("corner_band_max_kias").GetDouble();
         Assert.True(cornerBandMin < cornerKias && cornerKias < cornerBandMax);
         // Fielded AI tier: doctrine pilots project their tier, scripted rail actors project null.
-        // The Rapier beats (10, 12) now field doctrine pilots too -- they ran on rail controllers,
-        // which fly an authored timeline and do not respond to the player at all, and that is what
-        // "the AI isn't aggressive, it's all just dots" was describing. Projecting a tier is the
-        // visible consequence of them becoming real opponents.
+        // The legacy Rapier intercept fields a doctrine pilot. Card 12 intentionally targets a
+        // free balloon, so it must not acquire a fighter skill tier merely to satisfy old copy.
         JsonElement banditSkill = root.GetProperty("bandit_skill");
         if (beatIndex is 7 or 9) Assert.Equal("ACE", banditSkill.GetString());
-        else if (beatIndex is 10 or 12) {
+        else if (beatIndex is 10) {
             Assert.Equal(JsonValueKind.String, banditSkill.ValueKind);
             Assert.False(string.IsNullOrWhiteSpace(banditSkill.GetString()),
                 "a doctrine pilot must project which tier it is flying");

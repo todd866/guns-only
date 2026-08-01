@@ -253,7 +253,7 @@ public sealed class ArmstrongCableStrikeControllerTests {
         });
         CableContactRecord wrongComponent = Contact(harness.Definition) with {
             AircraftComponentId =
-                "component.panther-subtype-unresolved.nose.reconstruction.v1"
+                "component.f9f-2-panther.nose.reconstruction.v1"
         };
 
         ArmstrongCableStrikeSnapshot retry = harness.Controller.Advance(

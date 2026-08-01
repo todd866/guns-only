@@ -775,6 +775,15 @@ test("engine-less vehicles do not inherit fighter warnings or systems relevance"
   assert.deepEqual(readout.warnings, []);
 });
 
+test("systems mode allowlist retains an explicit barrier engagement", async () => {
+  const source = await readFile(new URL("../hud_readouts.js", import.meta.url), "utf8");
+  const declaration = source.match(
+    /const mode = normalizedEnum\(state\.mode,\s*\[([^\]]+)]/,
+  );
+  assert.ok(declaration, "systems mode allowlist declaration must remain inspectable");
+  assert.match(declaration[1], /["']BARRIER["']/);
+});
+
 test("production HUD consumes stabilized KIAS plus physical corner and limits panel", async () => {
   const source = await readFile(new URL("../../../hud.js", import.meta.url), "utf8");
   assert.match(source, /this\._signals\.update\(frame\.state, frame\.dt\)/);

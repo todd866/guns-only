@@ -2,6 +2,14 @@ function finite(value, fallback = 0) {
   return Number.isFinite(Number(value)) ? Number(value) : fallback;
 }
 
+export function indoorAudioQaSilent(locationLike = globalThis.location) {
+  try {
+    return new URLSearchParams(locationLike?.search ?? "").get("audioQa") === "silent";
+  } catch {
+    return false;
+  }
+}
+
 export function loadIndoorPreferences(storage = globalThis.localStorage) {
   let source = {};
   try {
@@ -35,8 +43,9 @@ function noiseBuffer(context, seconds = 1) {
 }
 
 export class IndoorAudio {
-  constructor(enabled = true) {
+  constructor(enabled = true, { silentQa = indoorAudioQaSilent() } = {}) {
     this.enabled = enabled;
+    this.silentQa = silentQa === true;
     this.context = null;
     this.master = null;
     this.motor = null;
@@ -51,7 +60,10 @@ export class IndoorAudio {
       if (!AudioContext) return false;
       this.context = new AudioContext();
       this.master = this.context.createGain();
-      this.master.gain.value = this.enabled ? 0.22 : 0;
+      // Silent QA exercises the real oscillator/filter/compressor graph while clamping only the
+      // destination gain. That proves browser audio wiring without leaking sound from shared CI
+      // or a developer's machine.
+      this.master.gain.value = this.enabled && !this.silentQa ? 0.22 : 0;
       this.master.connect(this.context.destination);
 
       const compressor = this.context.createDynamicsCompressor();
@@ -95,7 +107,20 @@ export class IndoorAudio {
   setEnabled(enabled) {
     this.enabled = enabled;
     if (!this.master || !this.context) return;
-    this.master.gain.setTargetAtTime(enabled ? 0.22 : 0, this.context.currentTime, 0.025);
+    this.master.gain.setTargetAtTime(
+      enabled && !this.silentQa ? 0.22 : 0,
+      this.context.currentTime,
+      0.025,
+    );
+  }
+
+  diagnostics() {
+    return Object.freeze({
+      enabled: this.enabled,
+      silentQa: this.silentQa,
+      contextState: this.context?.state ?? "uninitialized",
+      masterGain: Number(this.master?.gain?.value ?? 0),
+    });
   }
 
   tone(frequency, duration = 0.08, gain = 0.12, type = "sine", offset = 0) {

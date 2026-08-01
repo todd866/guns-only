@@ -3,9 +3,10 @@ namespace GunsOnly.Sim.Doctrine;
 
 /// <summary>
 /// The deliberately small combat/loadout seam for the current one-player/one-opponent sortie.
-/// A positive PlayerAmmo value enables the player's infinite-ammunition, thermally limited gun;
-/// OpponentAmmo remains a finite magazine. SimulationSession remains the authority for weapon
-/// instances, projectiles, damage, and outcomes.
+/// A positive PlayerAmmo value enables the player's gun. PlayerInfiniteAmmo selects the historical
+/// thermally limited model; otherwise that number is the finite magazine. OpponentAmmo remains a
+/// finite magazine. SimulationSession remains the authority for weapon instances, projectiles,
+/// damage, and outcomes.
 /// </summary>
 public sealed record CombatConfig(
     int PlayerAmmo = GunKill.DefaultAmmo,
@@ -13,7 +14,18 @@ public sealed record CombatConfig(
     int PlayerHitsToDefeat = 4,
     int OpponentHitsToDefeat = GunKill.DefaultHitsToKill,
     GunProfile? PlayerGun = null,
-    GunProfile? OpponentGun = null) {
+    GunProfile? OpponentGun = null,
+    /// <summary>
+    /// Optional physical target-radius override for the player's gun. Ordinary aircraft keep the
+    /// gun profile's own effective radius; unusually large targets publish their real silhouette
+    /// here instead of corrupting the M61 profile for every other sortie.
+    /// </summary>
+    double? PlayerTargetHitRadiusM = null,
+    /// <summary>
+    /// Player guns historically opt into the thermally limited infinite-ammunition model. A
+    /// finite-pass mission can explicitly retain its declared magazine instead.
+    /// </summary>
+    bool PlayerInfiniteAmmo = true) {
     public static CombatConfig Fighter { get; } = new();
     public static CombatConfig GliderAgainstUnarmedTarget { get; } = new(
         PlayerAmmo: 50,
@@ -48,6 +60,19 @@ public sealed record CombatConfig(
         PlayerHitsToDefeat: 3,
         OpponentHitsToDefeat: 1,
         PlayerGun: GunProfiles.M61A2PublicDataSurrogate);
+    public static CombatConfig RapierBalloonIntercept { get; } = new(
+        // One short trigger opportunity, not a formation-clearing magazine. SimulationSession's
+        // weapon instance remains the ammunition authority; this card selects its finite magazine
+        // and the mission director permits only one apex pass.
+        PlayerAmmo: 120,
+        OpponentAmmo: 0,
+        PlayerHitsToDefeat: 3,
+        OpponentHitsToDefeat: 1,
+        PlayerGun: GunProfiles.M61A2PublicDataSurrogate,
+        // The NASA-scale envelope is 114.5 m broadside. A 56 m radius makes rounds intersect
+        // the actor the pilot can see without changing M61 dispersion or ballistics.
+        PlayerTargetHitRadiusM: RapierMissionDirector.BalloonTargetHitRadiusM,
+        PlayerInfiniteAmmo: false);
 
     public GunProfile PlayerGunProfile => PlayerGun ?? GunProfiles.SixM3FiftyCal;
     public GunProfile OpponentGunProfile => OpponentGun ?? GunProfiles.SixM3FiftyCal;
@@ -89,6 +114,15 @@ public sealed record AircraftCapability(
     public static AircraftCapability BalloonGliderPrototype { get; } = new(
         "aircraft.balloon-glider.prototype.v1", "Balloon glider prototype",
         "presentation.vehicle.glider-strike.v1", "systems.none.engine-less.v1", false);
+    public static AircraftCapability HighAltitudeWeatherBalloonTarget { get; } = new(
+        "target.high-altitude-weather-balloon.public-data-surrogate.v1",
+        "High-altitude scientific balloon",
+        "presentation.vehicle.high-altitude-weather-balloon.target.v1",
+        "systems.free-balloon.target-only.public-data-surrogate.v1",
+        SystemsSimulated: false,
+        PublicDataSurrogate: true,
+        PublicSourceUrl:
+            "https://science.nasa.gov/blogs/super-pressure-balloon/2016/04/04/nasas-super-pressure-balloon-by-the-numbers/");
     public static AircraftCapability AwacsTargetPrototype { get; } = new(
         "aircraft.awacs-target.prototype.v1", "AEW&C target prototype",
         "presentation.vehicle.awacs-target.v1", "systems.target-only.prototype.v1", false);
@@ -251,13 +285,29 @@ public static class Ukraine2030sTheatre {
         MissionFeaturePackRequired = true
     };
 
-    // The source coordinate (-100 km, -100 km) lies in the synthetic coastal water cell. Positive
-    // placement moves that source point to mission-local zero without changing the theatre datum.
+    // Legacy shared recovery-cell origin. The current embedded atlas resolves this source point
+    // to land, so callers must not treat the name as proof of a water launch surface. It remains
+    // fixed because CarrierApproach is a shared fixture; whole sorties that need verified sea own
+    // a separately surveyed cell below.
     public static MissionEnvironmentContract CoastalCell { get; } = Shared with {
         LocationId = "location.ukraine.soniachne-coastal-cell.v1",
         FrameKind = MissionEnvironmentFrameKind.LocalCoastalCell,
         TerrainSourceAnchorEastM = -100_000.0,
         TerrainSourceAnchorNorthM = -100_000.0,
+        PreferredTerrainStreamingRadiusM = 56_000.0
+    };
+
+    // Dedicated open-water origin for the Korea whole-sortie carrier fixture. The earlier
+    // CoastalCell anchor is shared by recovery drills and currently resolves to 153 m land in the
+    // embedded terrain atlas, so changing it here would silently move every caller of
+    // CarrierApproach. This grid point was selected from that same immutable 256 m atlas: its
+    // nearest land sample or atlas edge is 23.585 km away, leaving the complete catapult stroke
+    // and initial climb over authoritative water rather than relying on the out-of-bounds apron.
+    public static MissionEnvironmentContract KoreaCarrierCell { get; } = Shared with {
+        LocationId = "location.ukraine.korea-carrier-open-sea-cell.v1",
+        FrameKind = MissionEnvironmentFrameKind.LocalCoastalCell,
+        TerrainSourceAnchorEastM = -4_864.0,
+        TerrainSourceAnchorNorthM = -180_480.0,
         PreferredTerrainStreamingRadiusM = 56_000.0
     };
 
@@ -845,6 +895,9 @@ public static class Beats {
         GunsOnly.Sim.Carrier deck = approach.Carrier!;
         return approach with {
             Name = "Korea sortie",
+            // Carrier qualification is ownship-only. Do not inherit CarrierApproach's inert
+            // compatibility actor into a finite catapult-to-trap sortie.
+            OpponentPresence = OpponentPresence.None,
             // The session replaces Player with the parked catapult pose when this is set, so the
             // approach state above is only a mass and a mission carrier at this point.
             StartsOnCatapult = true,
@@ -859,6 +912,10 @@ public static class Beats {
             // circuit drill, and the pilot should be told they got aboard.
             RecoveryCompletesSortie = true,
             Mission = KoreaMission("mission.korea.panther-sortie.v1"),
+            // Do not inherit CarrierApproach's shared coastal fixture: that atlas anchor is land
+            // above the Essex deck. The whole sortie owns a surveyed open-water cell while the
+            // reusable approach drill remains exactly where its other callers expect it.
+            Environment = Ukraine2030sTheatre.KoreaCarrierCell,
             // Home is the ship. It moves, which is the entire difficulty, but the recovery plan
             // needs a datum and the deck centre at staging is the honest one.
             RecoveryPlan = new RecoveryPlan(
@@ -1037,24 +1094,20 @@ public static class Beats {
             InitialThrottle: 1.55,
             StartsOnCatapult: true,
             // The deck default of 62 m/s over 75 m cannot fly this wing. A LAND installation is
-            // not constrained by a deck: the live 520 m electromagnetic track delivers 110 m/s,
-            // 1.67 Vs at launch mass, with 1.19 g along-rail acceleration. The superseded 150 m/s
-            // study drove a very different rail and is not the geometry simulated here.
+            // not constrained by a deck: every Rapier card uses the same 520 m electromagnetic
+            // track and 120 m/s flying handoff, with 1.41 g along-rail acceleration. The
+            // superseded 150 m/s study drove a very different rail and is not simulated here.
             CatapultStrokeM: 520.0,
-            // At the staged 3,600 lb-fuel mass this is 49.75 MJ kinetic energy and 10.52 MW peak
-            // inertial power on the flat; the terminal 12° grade brings machinery output to about
-            // 12.37 MW before losses. Gear/flap qualification is the live near-ground 214 KIAS
-            // handoff, not the superseded 150 m/s study's 291 KIAS case.
-            CatapultEndSpeedMps: 110.0,
+            // Gear/flap qualification is the live near-ground 233 KTAS handoff, not the
+            // superseded 150 m/s study's 291 KTAS case.
+            CatapultEndSpeedMps: 120.0,
             // A real ski jump, and the earlier seven degrees was an excuse rather than a design.
             // The steppe is flat, so the ramp is built either way; once you are building it, the
             // angle should be chosen by what the aircraft and the pilot can take, not by what
             // terrain might have offered.
             //
-            // At the live 110 m/s and 3 g rail-normal design load, the twelve-degree turn has a
-            // 411.29 m radius and 86.14 m arc after 433.86 m flat, rising 8.99 m. The pilot sees
-            // sqrt(1.19^2 + 3^2) = 3.23 g combined, reclined, against a 12 g airframe. The old
-            // 765 m / 160 m / 16.7 m figures belong only to the superseded 150 m/s study.
+            // At the live 120 m/s and 3 g rail-normal design load the pilot sees
+            // sqrt(1.41^2 + 3^2) = 3.32 g combined, reclined, inside the 6.5 g airframe limit.
             CatapultRampAngleRad: 12.0 * Math.PI / 180.0,
             // The launch lane is 70 m off the recovery centreline. A carrier shares one deck
             // because it has no choice; a dispersed land site has room and must use it. The launch
@@ -1062,7 +1115,7 @@ public static class Beats {
             // it sat squarely in the touchdown zone of a 48 m strip — an aircraft on short final
             // would fly into it. 70 m clears the strip edge by nearly 40 m.
             CatapultCrossOffsetM: -70.0,
-            // Gear and flaps are qualified past the live near-ground 214 KIAS handoff.
+            // Gear and flaps are qualified past the live near-ground 233 KTAS handoff.
             SystemsProfile: AirframeSystemsProfile.RapierSurrogate,
             Mission: new MissionContract(
                 "mission.modern.rapier-intercept.public-data-surrogate.v1",
@@ -1088,6 +1141,88 @@ public static class Beats {
     }
 
     /// <summary>
+    /// RAPIER BALLOON INTERCEPT — the production statement of what the aircraft is for.
+    /// Launch from the dispersed strip, build Mach four in thin air, trade that energy for one
+    /// brief gun window against a stratospheric balloon, relight in the dip, and bring the same
+    /// aircraft back to the midpoint arrestor. There is no dealt job, escort formation, drone,
+    /// pursuer, economic layer, or injected failure on this card: the airframe physics are the
+    /// adversary and the player's own M61 trigger is the attack.
+    /// </summary>
+    public static BeatSetup RapierBalloonIntercept(
+        GunsOnly.Sim.Carrier.DeckConfiguration configuration =
+            GunsOnly.Sim.Carrier.DeckConfiguration.Angled) {
+        BeatSetup sortie = RapierIntercept(configuration);
+        // Published float point for the NASA 18.8-million-ft3 super-pressure balloon: 33.5 km,
+        // just under 110,000 ft and inside the authored high-altitude target band.
+        const double BalloonAltitudeM = 33_500.0;
+        double canonicalFuelCapacityLb = RapierV2Design.FuelCapacityKg * 2.20462262;
+        AircraftState balloon = new(
+            // The target sits on the long diagonal of the authored atlas rather than at the end
+            // of its short west edge. That leaves enough distance after the aircraft has actually
+            // crossed the 24 km / M4.2 gate for a finite stored-energy pull, deliberate idle/unstart,
+            // and a drag-predicted zero-lift coast instead of invented pitch or thrust authority.
+            // The balloon is 4.8 km inside the west edge and 10.6 km inside the north edge; the
+            // flown intercept remains farther inboard because its finite gun pass crosses below
+            // and southeast of the drifting envelope before the recovery turn.
+            // Eight metres per second is weather drift beside that closure, while the FlightModel
+            // actor's real buoyancy and drag — not a hidden rail — govern its vertical motion.
+            new Vec3D(-372_000.0, BalloonAltitudeM, 186_000.0),
+            Speed: 8.0,
+            Gamma: 0.0,
+            Chi: Math.PI / 2.0,
+            Bank: 0.0,
+            Mass: FlightModel.HighAltitudeBalloonPublicDataSurrogate.MassKg);
+        return sortie with {
+            Name = "Rapier — high-altitude balloon intercept",
+            Bandit = balloon,
+            BanditParams = FlightModel.HighAltitudeBalloonPublicDataSurrogate,
+            BanditCapability = AircraftCapability.HighAltitudeWeatherBalloonTarget,
+            BanditTimeline = new() {
+                (0.0, new PilotCommand(
+                    GDemand: 0.0, BankTarget: 0.0, Throttle: 0.0, Rudder: 0.0))
+            },
+            UsesReactiveBandit = false,
+            Combat = CombatConfig.RapierBalloonIntercept,
+            // V2 has one full-power lever stop. The inherited 1.55 augmentor detent belongs to
+            // the legacy engineering card and is clamped by the v2 engine anyway.
+            InitialThrottle = sortie.PlayerAir.MaxThrustFraction,
+            // This buried 520 m land launcher gives the heavy, sharp-winged article a credible
+            // flying handoff without pretending the rail can replace the propulsion system. At
+            // 120 m/s it delivers about 85 MJ at canonical gross mass, 1.41 g longitudinally;
+            // combined with the declared 3 g ramp arc the resultant remains a comfortable 3.32 g.
+            CatapultEndSpeedMps = 120.0,
+            // Production uses the canonical v2 mass closure. RapierIntercept retains its legacy
+            // engineering-card load so this focused mission does not rewrite unrelated OFT data.
+            Fuel = sortie.FuelLoadout with {
+                CapacityLb = canonicalFuelCapacityLb,
+                InitialFuelLb = canonicalFuelCapacityLb
+            },
+            ScriptedIntercept = new ScriptedInterceptConfig(
+                FormationSize: 1,
+                ShortRangeMissiles: 0,
+                DogfightingDrones: 0,
+                PursuerCount: 0,
+                AutomationDefaultEnabled: false,
+                RecoveryRequired: true,
+                ZoomLobProfile: true,
+                DeterministicSwarmWipe: false,
+                Job: RapierJobKind.Balloon,
+                ComputerFailureAtZoomCoast: RapierComputerFailure.None),
+            Mission = new MissionContract(
+                "mission.modern.rapier-balloon-intercept.public-data-surrogate.v1",
+                MissionContentFamily.ModernPublicDataSurrogate,
+                PublicDataSurrogate: true,
+                RulesOfEngagement: "GUNS_ONLY_ONE_APEX_PASS",
+                Era: "MODERN_PUBLIC_DATA_EXERCISE",
+                EconomicMode: MissionEconomicMode.Arcade,
+                AllowsTimeCompression: true),
+            // Golden-path navigation contains Home Plate only. Free fixes belong to the Go Fly
+            // laboratory, not a lesson whose gates and return geometry are authored.
+            OpenSegmentNav = false
+        };
+    }
+
+    /// <summary>
     /// RAPIER CIRCUITS — the same aircraft, the same launcher, the same strip, and nothing else.
     ///
     /// The trap is the hardest thing this aircraft asks of a pilot and the intercept gives exactly
@@ -1102,14 +1237,10 @@ public static class Beats {
         GunsOnly.Sim.Carrier.DeckConfiguration configuration =
             GunsOnly.Sim.Carrier.DeckConfiguration.Angled) {
         BeatSetup sortie = RapierIntercept(configuration);
-        AircraftState authoredContact = sortie.Bandit;
         return sortie with {
             Name = "Rapier circuits",
-            // No contact. The bandit slot still needs a state, so it is parked far west of home
-            // where it can never become a merge, and combat is disarmed below.
-            Bandit = authoredContact with {
-                Position = new Vec3D(-400_000.0, 24_000.0, 0.0), Speed = 200.0
-            },
+            // Content truth, not a parked actor convention: Circuits has no opponent.
+            OpponentPresence = OpponentPresence.None,
             UsesReactiveBandit = false,
             ScriptedIntercept = new ScriptedInterceptConfig(
                 FormationSize: 0,
@@ -1560,7 +1691,9 @@ public static class Beats {
         9 => ModernAceDuel(),
         10 => RapierIntercept(deckConfiguration),
         11 => RapierCircuits(deckConfiguration),
-        12 => RapierGoFly(jobSeed: 0, deckConfiguration),
+        // The player-facing Rapier card is deterministic. RapierGoFly remains an explicit lab
+        // factory for random jobs/economy/failures, but no catalogue entry silently deals it.
+        12 => RapierBalloonIntercept(deckConfiguration),
         13 => Medevac(),
         // Korea 1951: the F9F-2 off USS Essex, whole sortie. Index 14 is the first player entry
         // point this aircraft has ever had — the Panther and the paddles/LSO machinery built for

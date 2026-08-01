@@ -1,8 +1,8 @@
 namespace GunsOnly.Sim;
 
 /// <summary>
-/// Explicit Rapier aerodynamic design contract: named geometry, provisional high-speed schedules,
-/// and q-scaled control-moment helpers. Pure functions and constants — no session or global state.
+/// Rapier v2 aerodynamic contract: shape-derived geometry plus explicit reduced-order control and
+/// inlet schedules. Pure functions and constants — no session or global state.
 ///
 /// The flight model, installed-inlet model, systems, snapshots and pilot indications consume this
 /// module. Its purpose is to keep distinctions that were previously buried in mesh/params comments
@@ -10,34 +10,34 @@ namespace GunsOnly.Sim;
 /// control-effectiveness Mach fade, and the inlet flow-angle surrogate).
 /// </summary>
 public static class RapierAerodynamics {
-    // --- Closed reference geometry (FlightModel.RapierPublicDataSurrogate + planform shoelace) ---
+    // --- Canonical v2 shape-derived geometry (airframes/rapier.v2.json) ---
 
     /// <summary>Aerodynamic reference area S used for lift/drag and moment non-dimensionalising.</summary>
-    public const double ReferenceAreaM2 = 18.0;
+    public static double ReferenceAreaM2 => RapierV2Design.ReferenceAreaM2;
 
     /// <summary>Tip-to-tip span b; planform tips at ±3.675 m.</summary>
-    public const double SpanM = 7.35;
+    public static double SpanM => RapierV2Design.SpanM;
 
     /// <summary>
-    /// Aspect ratio b²/S. Exactly 7.35²/18 = 3.00125 — not a rounded "AR 3" comment.
+    /// Aspect ratio b²/S derived from the same planform used by the renderer.
     /// </summary>
-    public const double AspectRatio = 3.00125;
+    public static double AspectRatio => RapierV2Design.AspectRatio;
 
     /// <summary>
-    /// Solid rendered planform polygon area from the closed <c>wing.planform</c> polyline (shoelace
-    /// of the authored vertices). Larger than <see cref="ReferenceAreaM2"/> because the mesh
-    /// includes body-carry-through geometry that is not lift reference area.
+    /// Compatibility name for the closed planform area. V2 deliberately uses this canonical solid
+    /// planform as aerodynamic S; there is no second hand-authored 18 m2 reference wing.
     /// </summary>
-    public const double RenderedSolidPlanformAreaM2 = 24.3173;
+    public static double RenderedSolidPlanformAreaM2 => RapierV2Design.ReferenceAreaM2;
 
     /// <summary>
-    /// <see cref="RenderedSolidPlanformAreaM2"/> − <see cref="ReferenceAreaM2"/>. Named
-    /// body-overlap / non-reference geometry — do not silently treat this residual as lift area S.
+    /// V2 eliminated the old 6.3 m2 render/physics discrepancy. Kept only for recorded-client and
+    /// test compatibility; a nonzero value would mean the single-shape contract had regressed.
     /// </summary>
-    public const double BodyOverlapNonReferenceAreaM2 = 6.3173;
+    public static double BodyOverlapNonReferenceAreaM2 =>
+        RenderedSolidPlanformAreaM2 - ReferenceAreaM2;
 
-    /// <summary>Mean aerodynamic reference chord ĉ = S/b.</summary>
-    public static double MeanReferenceChordM => ReferenceAreaM2 / SpanM;
+    /// <summary>Area-weighted mean aerodynamic chord from the canonical cranked planform.</summary>
+    public static double MeanReferenceChordM => RapierV2Design.MeanAerodynamicChordM;
 
     // --- Provisional control-moment coefficient maxima (epistemic: provisional surrogates) ---
 
@@ -55,7 +55,7 @@ public static class RapierAerodynamics {
     /// matter. Aligned with <c>TurboRamjetPerformanceMap.RamFadeStartMach</c>; this schedule is
     /// still an explicit inlet-flow-angle <em>surrogate</em>, not an OEM recovery map.
     /// </summary>
-    public const double RamRegimeStartMach = 2.0;
+    public static double RamRegimeStartMach => RapierV2Design.InletRamRegimeStartMach;
 
     // Piecewise knots: Mach ascending; values continuous via linear interpolation.
     // Normal-law α is a control-law ceiling for a cranked-delta high-speed article — NOT physical CLmax.
@@ -99,45 +99,13 @@ public static class RapierAerodynamics {
     }
 
     /// <summary>
-    /// Vmo — never-exceed indicated airspeed, in knots.
-    ///
-    /// DERIVED, not authored. This replaces an 80 kPa figure whose recorded provenance was
-    /// literally "authored placard, provisional" and which nothing in the structure supported.
-    /// 80 kPa is 703 KEAS, a fighter's placard on an aircraft whose entire design case is thin
-    /// air; the SR-71, which is the closest real analogue in mission and wing loading, lived at
-    /// 500 KEAS.
-    ///
-    /// 550 KIAS is the corner of this aircraft's own V-n diagram: the speed at which the CLmax
-    /// boundary meets the +12 G structural boundary at max gross.
-    ///
-    ///     V_A = sqrt(2 · n · W / (rho0 · S · CLmax))
-    ///         = sqrt(2 · 12 · 108,760 / (1.225 · 18.0 · 1.47))  =  284 m/s EAS  =  552 KEAS
-    ///
-    /// Below it the wing stalls before the structure yields, so the aeroplane cannot hurt itself.
-    /// Above it the wing can generate more than the airframe is built to carry, and only the FBW
-    /// limiter stands between the stick and the spar. That is exactly what a never-exceed speed
-    /// is for, and here it is a consequence of numbers already closed -- span, area, CLmax and
-    /// the 12 G limit -- rather than a number someone liked.
-    ///
-    /// Two cross-checks, both of which the 80 kPa figure failed:
-    ///
-    ///   Gust. Mass ratio is 114 at 616 kg/m2, so the alleviation factor is 0.84 and a 25 ft/s
-    ///   discrete gust at 550 KEAS adds 0.66 G. Gust does not bind until roughly 9,100 KEAS. A
-    ///   wing this heavily loaded is nearly gust-proof, so manoeuvre owns the envelope alone.
-    ///
-    ///   Crossover. 550 KIAS and Mmo 4.0 cross at FL710, and the authored design cruise altitude
-    ///   is 21,500 m -- FL705. The aeroplane cruises AT the corner where the IAS limit hands over
-    ///   to the Mach limit, which is how a high-Mach cruiser is supposed to be laid out and is
-    ///   not something that would fall out by accident from an invented number.
-    ///
-    /// Still unsized, and the honest residual: flutter, control-surface hinge moments and inlet
-    /// duct pressure. Any of the three could come back lower. None of them can be computed from
-    /// what the structure chapter currently holds, which says "primary structure (provisional)".
+    /// Equivalent-airspeed form of the canonical 55 kPa maximum-q requirement.
     /// </summary>
-    public const double NeverExceedKias = 550.0;
+    public static double NeverExceedKias =>
+        System.Math.Sqrt(2.0 * HighDynamicPressurePlacardPa / Rho0KgM3) / MpsPerKnot;
 
-    /// Mmo. The design dash; the CMC screens to about M5.4, so this is an airframe/inlet number.
-    public const double MaximumOperatingMach = 4.0;
+    /// Last Mach passing every canonical propulsion, q and thermal screen at design altitude.
+    public static double MaximumOperatingMach => RapierV2Design.MaximumScreenedMach;
 
     const double Rho0KgM3 = 1.225;
     const double MpsPerKnot = 1.0 / 1.94384;
@@ -147,8 +115,8 @@ public static class RapierAerodynamics {
     /// same statement: q = 0.5 · rho0 · V_E². Kept so the existing q-based cues and the recovery
     /// corridor keep working, but it is now a consequence of the placard rather than its source.
     /// </summary>
-    public const double HighDynamicPressurePlacardPa =
-        0.5 * Rho0KgM3 * (NeverExceedKias * MpsPerKnot) * (NeverExceedKias * MpsPerKnot);
+    public static double HighDynamicPressurePlacardPa =>
+        RapierV2Design.MaximumDynamicPressurePa;
 
     public static bool IsOverDynamicPressure(double dynamicPressurePa) =>
         double.IsFinite(dynamicPressurePa) && dynamicPressurePa > HighDynamicPressurePlacardPa;
@@ -168,21 +136,30 @@ public static class RapierAerodynamics {
     }
 
     /// <summary>
-    /// Combined flow-angle magnitude used by the inlet recovery / unstart surrogates.
+    /// Installed inlet flow-axis incidence from the canonical exterior. Body alpha equal to this
+    /// angle is on-design; recovery and unstart respond only to deviation plus sideslip.
     /// </summary>
+    public static double InletDesignFlowIncidenceRad =>
+        RapierV2Design.InletDesignFlowIncidenceRad;
+
+    /// <summary>Combined off-design flow-angle magnitude used by recovery and unstart.</summary>
     public static double InletFlowAngleRad(double alphaRad, double betaRad) {
         double alpha = double.IsFinite(alphaRad) ? alphaRad : 0.0;
         double beta = double.IsFinite(betaRad) ? betaRad : 0.0;
-        return System.Math.Sqrt(alpha * alpha + beta * beta);
+        double alphaDeviation = alpha - InletDesignFlowIncidenceRad;
+        return System.Math.Sqrt(alphaDeviation * alphaDeviation + beta * beta);
     }
 
     /// <summary>
-    /// Sticky unstart seed above ram regime. Trip near ~7° combined flow angle; clear below ~2.3°.
+    /// Sticky unstart seed above ram regime. Compatibility property names retain "FlowAngle", but
+    /// both thresholds are deviations from installed incidence: trip near ~7°, clear below ~2.3°.
     /// Epistemic: provisional surrogate inspired by mixed-compression incidence envelopes — not OEM.
     /// </summary>
-    public const double InletUnstartTripFlowAngleRad = 0.12;
-    public const double InletUnstartClearFlowAngleRad = 0.04;
-    public const double InletUnstartRecoveryFloor = 0.15;
+    public static double InletUnstartTripFlowAngleRad =>
+        RapierV2Design.InletUnstartTripDeviationRad;
+    public static double InletUnstartClearFlowAngleRad =>
+        RapierV2Design.InletUnstartClearDeviationRad;
+    public static double InletUnstartRecoveryFloor => RapierV2Design.InletUnstartRecoveryFloor;
 
     public static bool NextInletUnstartState(
         double mach, double alphaRad, double betaRad, bool previouslyUnstarted) {
@@ -211,30 +188,33 @@ public static class RapierAerodynamics {
     }
 
     /// <summary>
-    /// Inlet flow-recovery surrogate from Mach and combined incidence √(α²+β²). Returns 1 below
-    /// <see cref="RamRegimeStartMach"/>. At/above ram regime, on-design (α=β=0) stays 1; off-design
-    /// flow angle degrades recovery continuously, with stronger sensitivity as Mach rises.
+    /// Inlet flow-recovery surrogate from Mach and combined off-design incidence
+    /// √((α−α_inlet)²+β²). Returns 1 below <see cref="RamRegimeStartMach"/>. At/above ram regime,
+    /// body alpha aligned to the installed inlet stays at one; deviation degrades recovery
+    /// continuously, with stronger sensitivity as Mach rises.
     /// Explicitly <em>not</em> an OEM inlet map — a transparent stand-in for later deck data.
     /// </summary>
     public static double InletFlowRecovery(double mach, double alphaRad, double betaRad) {
         if (!double.IsFinite(mach) || mach <= RamRegimeStartMach)
             return 1.0;
 
-        double alpha = double.IsFinite(alphaRad) ? alphaRad : 0.0;
-        double beta = double.IsFinite(betaRad) ? betaRad : 0.0;
-        double flowAngleRad = System.Math.Sqrt(alpha * alpha + beta * beta);
+        double flowAngleRad = InletFlowAngleRad(alphaRad, betaRad);
         if (flowAngleRad <= 0.0)
             return 1.0;
 
         // Characteristic angle shrinks with Mach excess so the same geometric off-design hurts more
         // deep in the ram envelope. Floor keeps the law continuous and non-singular.
         double machExcess = mach - RamRegimeStartMach;
-        double characteristicAngleRad = System.Math.Max(0.08, 0.34 - 0.07 * machExcess);
+        double characteristicAngleRad = System.Math.Max(
+            RapierV2Design.InletMinimumCharacteristicAngleRad,
+            RapierV2Design.InletCharacteristicAngleAtRamStartRad
+                - RapierV2Design.InletCharacteristicAngleDecreaseRadPerMach * machExcess);
         double ratio = flowAngleRad / characteristicAngleRad;
         double offDesignRecovery = 1.0 / (1.0 + ratio * ratio);
         // A half-Mach onset avoids teleporting inlet pressure recovery at the first ramjet tick.
         double onset = SmoothStep(System.Math.Clamp(
-            (mach - RamRegimeStartMach) / 0.5, 0.0, 1.0));
+            (mach - RamRegimeStartMach) / RapierV2Design.InletRecoveryOnsetBlendMach,
+            0.0, 1.0));
         double recovery = 1.0 - onset * (1.0 - offDesignRecovery);
         return System.Math.Clamp(recovery, 0.0, 1.0);
     }

@@ -41,7 +41,7 @@ test("canonical campaign governance and worked dossiers pass the strict gate", a
     dossiers: 2,
     sorties: 5,
     claims: 17,
-    sources: 9,
+    sources: 13,
   });
 });
 
@@ -53,9 +53,25 @@ test("Armstrong dossier remains source intake rather than false source lock", as
   assert.equal(dossier.status, "researching");
   assert.deepEqual(new Set(dossier.reviews.map((review) => review.status)), new Set(["pending"]));
   assert.match(claims.get("claim.armstrong-vf51-essex.v1").qualification,
-    /3 and 5 September/);
+    /3 September.*F9F-2/s);
   assert.match(claims.get("claim.armstrong-vf51-essex.v1").qualification,
-    /F9F-2 and F9F-3/);
+    /H-Gram 033.*5 September\/F9F-3/s);
+  assert.equal(dossier.sorties[0].perspective.vehicleCapabilityId,
+    "aircraft.f9f2.v1");
+  assert.equal(dossier.sources.some((source) =>
+    source.sourceId === "source.dpaa-korea-air-loss-register-2021.v1"
+      && source.supportsClaimIds.includes("claim.armstrong-vf51-essex.v1")), true);
+  assert.equal(dossier.sources.some((source) =>
+    source.sourceId === "source.nhhc-essex-action-report-1951.v1"
+      && source.grade === "primary_document"), true);
+  assert.equal(dossier.sources.some((source) =>
+    source.sourceId === "source.nhhc-cvg5-action-report-1951.v1"
+      && source.grade === "primary_document"), true);
+  assert.equal(dossier.sources.some((source) =>
+    source.sourceId === "source.nhhc-buno-appendix-1910-1995.v1"
+      && source.supportsClaimIds.includes("claim.armstrong-vf51-essex.v1")), true);
+  assert.match(claims.get("claim.armstrong-vf51-essex.v1").qualification,
+    /125080-125152.*F9F-5.*aircraft history card/s);
   assert.match(claims.get("claim.armstrong-armed-recon-wonsan.v1").qualification,
     /exact target.*corridor.*loadout/);
   assert.match(claims.get("claim.cable-field-gameplay-reconstruction.v1").qualification,
@@ -63,7 +79,9 @@ test("Armstrong dossier remains source intake rather than false source lock", as
   assert.match(claims.get("claim.carpenter-flight-lead.v1").qualification,
     /radio wording/);
   assert.match(claims.get("claim.panther-ejection-seat.v1").qualification,
-    /not source-locked/);
+    /first-person recollection.*not as engineering source lock/);
+  assert.match(claims.get("claim.armstrong-ejection-friendly-territory.v1").qualification,
+    /H-Gram synthesis, not Armstrong's interview/);
   assert.match(claims.get("claim.armstrong-ejection-friendly-territory.v1").qualification,
     /ground-recovery staging cannot be presented as exact history/i);
 

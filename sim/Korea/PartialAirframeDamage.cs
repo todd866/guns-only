@@ -225,7 +225,7 @@ public static class PantherRightOuterWingLossFamily {
             _ => throw new ArgumentOutOfRangeException(nameof(extent))
         };
         double severity = feet / 7.0;
-        string id = $"damage.panther-subtype-unresolved.right-outer-wing-loss."
+        string id = $"damage.f9f-2-panther.right-outer-wing-loss."
             + $"{variant}.reconstruction.v1";
         var visible = new VisibleAirframeDamage(
             id,
@@ -238,7 +238,7 @@ public static class PantherRightOuterWingLossFamily {
         return new PartialAirframeDamageProfile(
             id,
             visualDetachProfileId:
-                $"visual.panther-subtype-unresolved.right-outer-wing-loss."
+                $"visual.f9f-2-panther.right-outer-wing-loss."
                     + $"{variant}.greybox.v1",
             AirframeDamageEpistemic.Reconstruction,
             removedSpanM: feet * 0.3048,

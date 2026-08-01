@@ -31,8 +31,9 @@ function buttonValue(gamepad, index) {
 }
 
 /**
- * Standard-mapping gamepad projection. It intentionally mirrors the phone:
- * left stick flies, right stick looks, right trigger fires, A padlocks, bumpers move power.
+ * Standard-mapping gamepad projection. Gamepads retain the familiar left-stick flight and
+ * right-stick look layout; the phone's two on-screen sticks use a separate throttle/yaw plus
+ * pitch/roll contract.
  */
 export function standardGamepadState(gamepad, previous = {}) {
   if (!gamepad || gamepad.connected === false || gamepad.mapping !== "standard") {

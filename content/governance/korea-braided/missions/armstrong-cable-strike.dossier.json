@@ -4,7 +4,7 @@
   "dossierId": "dossier.armstrong-cable-strike.v1",
   "governanceId": "governance.korea-braided.v1",
   "status": "researching",
-  "title": "The Long Way Home: September 1951",
+  "title": "The Long Way Home: 3 September 1951",
   "dramaticQuestion": "When damage removes the safe option, can disciplined observation and aircraft handling preserve enough control to choose survival over the machine?",
   "sorties": [
     {
@@ -14,11 +14,11 @@
       "perspective": {
         "faction": "un-command",
         "actorRole": "Ensign Neil A. Armstrong flying a VF-51 Panther from USS Essex",
-        "vehicleCapabilityId": "aircraft.f9f-panther.subtype-unresolved.v1",
+        "vehicleCapabilityId": "aircraft.f9f2.v1",
         "controlMode": "crewed"
       },
       "playerFantasy": "Fly the documented cable-strike sequence as a young naval aviator whose survival depends on precise handling and a wingman's external inspection.",
-      "scenarioSummary": "In September 1951 Armstrong launches from USS Essex, joins Major John Carpenter for armed reconnaissance west of Wonsan, strikes a cable at low altitude, stabilizes a Panther after losing part of the right wing, and flies south before ejecting in friendly territory.",
+      "scenarioSummary": "On 3 September 1951 Armstrong launches from USS Essex in an F9F-2, joins Major John Carpenter for armed reconnaissance west of Wonsan, strikes what he later recalled as a cable at low altitude, stabilizes the Panther after losing part of the right wing, and flies south before ejecting in friendly territory.",
       "centralDecision": "Use aircraft response and Carpenter's bounded visual report to preserve control, reject an unsafe landing, and reach a defensible ejection area.",
       "failureMeaning": "A restart identifies the first controllable route, collision, stabilization, formation, or ejection error without allowing the fixed historical sequence to branch into an alternate biography.",
       "successMeaning": "The player performs the documented survival sequence competently while the debrief separates recorded history from authored route, damage, dialogue, and system reconstruction."
@@ -74,11 +74,11 @@
       "Separate what sources establish from the route, dialogue, collision field, and damaged-flight behavior authored for play."
     ],
     "authoredInvariants": [
-      "The historical sequence is dated only to September 1951 until the 3-versus-5 September conflict is resolved or formally preserved.",
+      "The historical sequence is dated 3 September 1951 and uses the incident-level F9F-2 identity supported by the contemporary CVG-5 report and DPAA register; the conflicting later synthesis and BuNo catalog anomaly remain disclosed, and individual-airframe configuration stays open.",
       "The player cannot avoid the historical cable strike, preserve the aircraft, land the Panther, or create an alternate Armstrong biography.",
       "Cable contact is a physical simulation event, not an invisible narrative trigger.",
       "Carpenter reports only observable exterior condition and never reveals hidden aerodynamic state.",
-      "The exact Panther subtype, target route, cable layout, radio words, seat operation, ejection point, and ground-recovery staging remain unlocked research questions.",
+      "The exact target route, cable or pole geometry, loadout, radio words, seat operation, ejection point, and ground-recovery staging remain unlocked research questions.",
       "The 2034 sortie and every person, event, organization-level consequence, and outcome in it are explicit fiction."
     ],
     "authoredDifferences": [
@@ -176,7 +176,7 @@
           "claim.2034-damaged-diversion-is-fiction.v1"
         ],
         "abstractionRefs": [
-          "abstraction.september-1951-unresolved.v1",
+          "abstraction.primary-record-identity-resolution.v1",
           "abstraction.procedural-radio.v1",
           "abstraction.ejection-and-recovery-gap.v1",
           "abstraction.modern-damage-echo.v1"
@@ -193,14 +193,18 @@
     {
       "claimId": "claim.armstrong-vf51-essex.v1",
       "label": "history",
-      "statement": "Ensign Neil A. Armstrong served as a VF-51 Panther pilot aboard USS Essex during its 1951 Korean War deployment.",
+      "statement": "On 3 September 1951, contemporary records identify Ensign Neil A. Armstrong's VF-51 loss as an F9F-2, record BuNo 125122, and place his bailout near K-3 during USS Essex's Korean War deployment.",
       "appearsInSortieIds": [
         "sortie.1951.armstrong-cable-strike.v1"
       ],
       "sourceRefs": [
-        "source.nhhc-hgram-033.v1"
+        "source.nhhc-hgram-033.v1",
+        "source.dpaa-korea-air-loss-register-2021.v1",
+        "source.nhhc-buno-appendix-1910-1995.v1",
+        "source.nhhc-essex-action-report-1951.v1",
+        "source.nhhc-cvg5-action-report-1951.v1"
       ],
-      "qualification": "The mission remains dated only to September 1951 because official sources conflict between 3 and 5 September. Sources also alternate between F9F-2 and F9F-3 while identifying BuNo 125122, so the runtime subtype, engine, cockpit, livery, and loadout are not source-locked. Use USS Essex rather than a later CVA designation in 1951 presentation."
+      "qualification": "The contemporary USS Essex report dates the loss to 3 September and identifies BuNo 125122 and Armstrong; the contemporary CVG-5 report identifies VF-51's type as F9F-2 and records the same date and damage sequence. The DPAA register and NHHC photograph catalog independently corroborate 3 September, and DPAA also records F9F-2. H-Gram 033's later 5 September/F9F-3 description is retained as a disclosed synthesis error, not treated as equal evidence. A separate NHHC bureau-number appendix assigns the 125080-125152 block, which includes 125122, to F9F-5. The incident-specific records control the mission-level F9F-2 identity, but that catalog anomaly keeps the individual airframe's delivered configuration, suffix, cockpit, engine, markings, loadout, and damaged aerodynamics open pending its aircraft history card. Use USS Essex (CV-9), not its later CVA designation, in 1951 presentation."
     },
     {
       "claimId": "claim.armstrong-armed-recon-wonsan.v1",
@@ -211,9 +215,10 @@
       ],
       "sourceRefs": [
         "source.nhhc-hgram-033.v1",
-        "source.nhhc-armstrong-photo-l38.v1"
+        "source.nhhc-armstrong-photo-l38.v1",
+        "source.nhhc-cvg5-action-report-1951.v1"
       ],
-      "qualification": "The current evidence does not close the exact target, coordinates, corridor, formation size, attack direction, loadout, or the distinction between the flight's planned targets and Armstrong's own pass. Those details remain reconstruction until the Essex action report and related records receive page-level review."
+      "qualification": "The page-reviewed Essex and CVG-5 reports establish the date, aircraft loss, very hilly terrain, and a heavily loaded aircraft, but do not close the exact target, coordinates, corridor, formation size, attack direction, loadout, or the distinction between the flight's planned targets and Armstrong's own pass. Those details remain reconstruction until mission-plan, map, and ordnance records close them."
     },
     {
       "claimId": "claim.armstrong-cable-strike.v1",
@@ -224,9 +229,11 @@
       ],
       "sourceRefs": [
         "source.armstrong-nasa-sp-2011-4542.v1",
-        "source.nhhc-hgram-033.v1"
+        "source.nhhc-hgram-033.v1",
+        "source.nhhc-essex-action-report-1951.v1",
+        "source.nhhc-cvg5-action-report-1951.v1"
       ],
-      "qualification": "This is Armstrong's retrospective account recorded roughly fifty years later. The contemporary operational account attributed the incident to antiaircraft fire and a pole; its full text has not yet received page-level review. The mission may establish one cable without claiming a historically mapped field of cables."
+      "qualification": "This is Armstrong's retrospective account recorded roughly fifty years later. The page-reviewed contemporary Essex report attributes locked controls to enemy antiaircraft fire; the CVG-5 report attributes lost elevator control to antiaircraft fire and two feet of starboard-wing loss to a power pole. Preserve that conflict visibly. The mission may reconstruct one cable from Armstrong's account without claiming a historically mapped cable field or silently replacing the contemporary account."
     },
     {
       "claimId": "claim.armstrong-wing-loss.v1",
@@ -237,9 +244,10 @@
       ],
       "sourceRefs": [
         "source.armstrong-nasa-sp-2011-4542.v1",
-        "source.nhhc-hgram-033.v1"
+        "source.nhhc-hgram-033.v1",
+        "source.nhhc-cvg5-action-report-1951.v1"
       ],
-      "qualification": "Six to eight feet is a retrospective estimate, not a measured fracture record. The exact break geometry, aileron and tip-tank state, fuel and mass effects, and aerodynamic derivatives remain unresolved."
+      "qualification": "Six to eight feet is Armstrong's retrospective estimate; the contemporary CVG-5 report says two feet were sheared from the starboard wing on a power pole. Neither is a measured fracture record. The exact break geometry, aileron and tip-tank state, fuel and mass effects, and aerodynamic derivatives remain unresolved, and the seven-foot gameplay profile remains explicitly an oral-history reconstruction."
     },
     {
       "claimId": "claim.carpenter-flight-lead.v1",
@@ -261,35 +269,39 @@
         "sortie.1951.armstrong-cable-strike.v1"
       ],
       "sourceRefs": [
-        "source.armstrong-nasa-sp-2011-4542.v1"
+        "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.nhhc-cvg5-action-report-1951.v1"
       ],
-      "qualification": "The account supports the reasoning in broad form but does not close exact dialogue, tested speeds, which landing alternatives were discussed, or the precise division of judgment between the two pilots."
+      "qualification": "Armstrong's account supports the joint reasoning in broad form. The contemporary CVG-5 report independently records lost elevator control and a required landing speed above 170 knots before ejection, but does not close exact dialogue, a tested safe-speed envelope, which landing alternatives were discussed, or the precise division of judgment between the two pilots."
     },
     {
       "claimId": "claim.armstrong-ejection-friendly-territory.v1",
       "label": "history",
-      "statement": "Armstrong recalled flying south into friendly territory, ejecting near Pohang or K-3, drifting by parachute over land, and being met by Marine lieutenant Goodell Warren in a jeep.",
+      "statement": "Armstrong recalled flying south into friendly territory, ejecting near Pohang or K-3, and being met by Marine lieutenant Goodell Warren in a jeep.",
       "appearsInSortieIds": [
         "sortie.1951.armstrong-cable-strike.v1"
       ],
       "sourceRefs": [
         "source.armstrong-nasa-sp-2011-4542.v1",
-        "source.nhhc-hgram-033.v1"
+        "source.nhhc-hgram-033.v1",
+        "source.nhhc-essex-action-report-1951.v1",
+        "source.nhhc-cvg5-action-report-1951.v1"
       ],
-      "qualification": "The broad sequence is supported, but exact ejection coordinates, intended disposal corridor, wind, parachute path, landing surface, recovery route, vehicle appearance, interaction, and words remain uncorroborated. Ground-recovery staging cannot be presented as exact history."
+      "qualification": "The Essex report records bailout over friendly K-3; the CVG-5 report records seat clearance, manual chute opening, and landing near K-3. Armstrong's later account adds the southbound plan, ejection near Pohang/K-3, and recovery by Goodell Warren. The later H-Gram synthesis, not Armstrong's interview, adds that wind carried the parachute back over land. Exact ejection coordinates, intended disposal corridor, wind, parachute path, landing surface, recovery route, vehicle appearance, interaction, and words remain uncorroborated. Ground-recovery staging cannot be presented as exact history."
     },
     {
       "claimId": "claim.panther-ejection-seat.v1",
       "label": "reconstruction",
-      "statement": "The current intake establishes that Armstrong ejected but does not establish the exact Panther seat model, operating sequence, envelope, or acceleration to be simulated.",
+      "statement": "Armstrong later described an old-style shotgun-shell-powered ejection seat and a 22-G seat load, but the current intake does not establish the exact Panther seat model, operating sequence, envelope, or acceleration history to be simulated.",
       "appearsInSortieIds": [
         "sortie.1951.armstrong-cable-strike.v1"
       ],
       "sourceRefs": [
         "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.nhhc-cvg5-action-report-1951.v1",
         "source.armstrong-intake-register.v1"
       ],
-      "qualification": "The often repeated cartridge mechanism and 22-g figure are not source-locked here. Ejection and parachute implementation remains blocked on a provenance-verified 1951 Panther handbook, maintenance material, and appropriate technical review."
+      "qualification": "The cartridge description and 22-G figure are source-registered as Armstrong's first-person recollection, not as engineering source lock or a simulation parameter. Ejection and parachute implementation remains blocked on a provenance-verified 1951 Panther handbook, maintenance material, and appropriate technical review."
     },
     {
       "claimId": "claim.cable-field-gameplay-reconstruction.v1",
@@ -301,6 +313,7 @@
       "sourceRefs": [
         "source.armstrong-nasa-sp-2011-4542.v1",
         "source.nhhc-hgram-033.v1",
+        "source.nhhc-cvg5-action-report-1951.v1",
         "source.armstrong-intake-register.v1"
       ],
       "qualification": "The current sources establish a reported cable strike, not the exact local obstacle layout or even that multiple cables formed a deliberate antiaircraft field. Physical gameplay geometry must be tactically plausible, visibly disclosed as reconstruction, and must not masquerade as a map of the historical installation."
@@ -315,6 +328,7 @@
       "sourceRefs": [
         "source.armstrong-nasa-sp-2011-4542.v1",
         "source.nhhc-hgram-033.v1",
+        "source.nhhc-cvg5-action-report-1951.v1",
         "source.armstrong-intake-register.v1"
       ],
       "qualification": "Release requires sourced Panther geometry and controls, damage analogs, a sensitivity study, and declared playable bounds. Current sources support reported wing loss and landing risk but not fracture mechanics, damaged derivatives, fuel effects, or one exact recovery envelope."
@@ -349,7 +363,7 @@
         "claim.cable-field-gameplay-reconstruction.v1",
         "claim.panther-damage-flight-reconstruction.v1"
       ],
-      "perspective": "Armstrong's first-person retrospective account on pages 16-18, recorded approximately fifty years after the event. It supports what Armstrong remembered and the historical anchors used by the reconstruction; it is not a contemporary mission record, radio transcript, seat manual, cable survey, or damaged-aerodynamics dataset."
+      "perspective": "Armstrong's first-person retrospective account on pages 16-18, recorded approximately fifty years after the event. It supports what Armstrong remembered, including his old-style shotgun-shell-powered and 22-G ejection-seat description, and the historical anchors used by the reconstruction; it is not a contemporary mission record, radio transcript, seat manual, cable survey, engineering acceleration trace, or damaged-aerodynamics dataset."
     },
     {
       "sourceId": "source.nhhc-hgram-033.v1",
@@ -368,7 +382,7 @@
         "claim.cable-field-gameplay-reconstruction.v1",
         "claim.panther-damage-flight-reconstruction.v1"
       ],
-      "perspective": "Official U.S. Navy historical synthesis, especially pages 25-26, that identifies VF-51, USS Essex, the broad mission and competing incident accounts. It uses 5 September while other official metadata uses 3 September, and it alternates between F9F-2 and F9F-3 descriptions."
+      "perspective": "Later official U.S. Navy synthesis, especially pages 25-26, that identifies VF-51, USS Essex, the broad mission and competing incident accounts and says wind carried Armstrong's parachute back over land. Its 5 September/F9F-3 description is contradicted by the page-reviewed contemporary Essex and CVG-5 reports, and the exact drift path is uncorroborated; it remains useful for synthesis and source discovery, not as controlling evidence for date, subtype, or playable trajectory."
     },
     {
       "sourceId": "source.nhhc-armstrong-photo-l38.v1",
@@ -381,6 +395,67 @@
         "claim.armstrong-armed-recon-wonsan.v1"
       ],
       "perspective": "Official archival catalog metadata linking the image to a 3 September 1951 reconnaissance mission against transportation and storage facilities south of Majon-ni, west of Wonsan. Its 'shot down' caption does not resolve the damage mechanism or complete sortie sequence."
+    },
+    {
+      "sourceId": "source.dpaa-korea-air-loss-register-2021.v1",
+      "grade": "official_synthesis",
+      "title": "Korean War Air Loss Database by Name",
+      "publisher": "Defense POW/MIA Accounting Agency",
+      "uri": "https://www.dpaa.mil/portals/85/KoreaAccounting/korwald_acc_NAME_20211006.pdf",
+      "publishedOn": "2021-10-06",
+      "accessedOn": "2026-08-01",
+      "supportsClaimIds": [
+        "claim.armstrong-vf51-essex.v1"
+      ],
+      "perspective": "Official Department of Defense loss-register entry on PDF page 4 records Neil A. Armstrong, USN, date 3 September 1951, VF-51, F9F-2, BuNo 125122, and USS Essex. It is strong structured corroboration for identity, date, unit, subtype, bureau number, and carrier, but it is a compiled database rather than the incident report and does not establish the target, damage mechanism, radio, ejection sequence, or recovery details."
+    },
+    {
+      "sourceId": "source.nhhc-buno-appendix-1910-1995.v1",
+      "grade": "official_synthesis",
+      "title": "United States Naval Aviation 1910-1995, Appendix 9: Naval Aircraft Bureau Numbers",
+      "publisher": "Naval Historical Center, via Naval History and Heritage Command",
+      "uri": "https://web.archive.org/web/20240704022315id_/https://www.history.navy.mil/content/dam/nhhc/research/histories/naval-aviation/pdf/app09.pdf",
+      "accessedOn": "2026-08-01",
+      "supportsClaimIds": [
+        "claim.armstrong-vf51-essex.v1"
+      ],
+      "perspective": "Official compiled bureau-number appendix, PDF page 38 and printed page 554, assigns the 125080-125152 block to F9F-5, creating a catalog anomaly for the Essex report's BuNo 125122 and the incident-specific F9F-2 identification. It does not override the contemporary air-group type table or identify the individual aircraft's delivered state; the aircraft history card is required before configuration, suffix, engine, cockpit batch, or markings are locked."
+    },
+    {
+      "sourceId": "source.nhhc-essex-action-report-1951.v1",
+      "grade": "primary_document",
+      "title": "Action Report for the Period, 18 August 1951 to 21 September 1951",
+      "publisher": "Commanding Officer, USS Essex (CV-9), via Naval History and Heritage Command",
+      "uri": "https://web.archive.org/web/20250418222808id_/https://www.history.navy.mil/content/dam/nhhc/research/archives/action-reports/Korean%20War%20-%20Carrier%20Combat/PDF%27s/cv9a-51.pdf",
+      "publishedOn": "1951-09-30",
+      "accessedOn": "2026-08-01",
+      "supportsClaimIds": [
+        "claim.armstrong-vf51-essex.v1",
+        "claim.armstrong-cable-strike.v1",
+        "claim.armstrong-ejection-friendly-territory.v1"
+      ],
+      "perspective": "Contemporary USS Essex Serial 093, page-reviewed at scan and printed page 3. Its 3 September chronology identifies F9F BuNo 125122 and Ensign Armstrong, attributes locked controls to enemy antiaircraft fire, records that control was regained, and records bailout over friendly K-3 before the aircraft burned. The cited URI is an intact Internet Archive capture of the original NHHC PDF asset because the live legacy asset path currently returns 404; NHHC's Essex action-report catalog remains the provenance landing page."
+    },
+    {
+      "sourceId": "source.nhhc-cvg5-action-report-1951.v1",
+      "grade": "primary_document",
+      "title": "Action Report of Carrier Air Group Five, 18 August 1951 to 19 September 1951",
+      "publisher": "Commander, Carrier Air Group Five, via Naval History and Heritage Command",
+      "uri": "https://web.archive.org/web/20250418211010id_/https://www.history.navy.mil/content/dam/nhhc/research/archives/action-reports/Korean%20War%20Carrier%20Air%20Group%20Combat/PDF%27s/cvg5-51.pdf",
+      "publishedOn": "1951-09-22",
+      "accessedOn": "2026-08-01",
+      "supportsClaimIds": [
+        "claim.armstrong-vf51-essex.v1",
+        "claim.armstrong-armed-recon-wonsan.v1",
+        "claim.armstrong-cable-strike.v1",
+        "claim.armstrong-wing-loss.v1",
+        "claim.armstrong-no-landing-decision.v1",
+        "claim.armstrong-ejection-friendly-territory.v1",
+        "claim.panther-ejection-seat.v1",
+        "claim.cable-field-gameplay-reconstruction.v1",
+        "claim.panther-damage-flight-reconstruction.v1"
+      ],
+      "perspective": "Contemporary CVG5/A16-13 Serial 065-51. Page 1 identifies VF-51's aircraft type as F9F-2; pages 4-5 place Armstrong's event on 3 September and record the report's antiaircraft-fire and power-pole account, lost elevator control, heavy ordnance, two feet of starboard-wing loss, a landing speed above 170 knots, ejection, seat clearance, manual chute opening, and landing near K-3. Page 12 carries the VF-51 F9F-2 type through the 3 September damage entries. The cited URI is an intact Internet Archive capture of the original NHHC asset; NHHC's carrier-air-group action-report catalog remains the provenance landing page."
     },
     {
       "sourceId": "source.armstrong-intake-register.v1",
@@ -400,11 +475,11 @@
   ],
   "abstractions": [
     {
-      "abstractionId": "abstraction.september-1951-unresolved.v1",
+      "abstractionId": "abstraction.primary-record-identity-resolution.v1",
       "affects": "history",
-      "description": "Titles and briefings use September 1951 without a day, and the vehicle remains a Panther with subtype unresolved while official sources disagree.",
-      "reason": "Choosing 3 or 5 September or F9F-2 versus F9F-3 now would convert a live evidence conflict into false precision and contaminate cockpit, engine, livery, and loadout choices.",
-      "playerDisclosure": "The historical note exposes the date and subtype disagreements until a later dossier revision resolves or formally preserves them."
+      "description": "Titles and briefings use 3 September 1951 and the incident-level F9F-2 identity because the page-reviewed contemporary reports close the date and identify VF-51's aircraft type; later synthesis disagreements and the BuNo catalog anomaly remain disclosed in the archive.",
+      "reason": "The USS Essex chronology identifies Armstrong and BuNo 125122 on 3 September, while the CVG-5 report identifies VF-51 as F9F-2 and records the same date and event. Those incident-specific records outweigh H-Gram 033's later 5 September/F9F-3 description for mission identity, but NHHC's generic assignment of the 125122 block to F9F-5 prevents exact individual-airframe configuration lock before its history card is reviewed.",
+      "playerDisclosure": "The historical note explains the primary-record basis for 3 September and the mission's F9F-2 treatment, preserves the later synthesis disagreement, and discloses that the BuNo appendix conflict leaves the individual aircraft's exact configuration open."
     },
     {
       "abstractionId": "abstraction.authored-cable-field.v1",
@@ -481,7 +556,7 @@
     "civilianContext": "Transportation and storage targets, the Wonsan region, friendly territory, and the ground-recovery area existed within a war affecting Korean civilians; target and terrain production must not reduce inhabited geography to an empty obstacle course.",
     "perspectiveRisks": [
       "Turning a documented survival event into celebrity origin myth or inevitable astronaut foreshadowing.",
-      "Presenting a disputed operational account, target, cable field, date, subtype, or radio script as settled fact.",
+      "Presenting the disputed cable-versus-antiaircraft-fire/pole account, target, cable field, exact damage, loadout, or radio script as settled fact.",
       "Using Korean landscape and civilians only as scenery for an American biography.",
       "Making ejection injury, parachute descent, or ground recovery into spectacle or comedy.",
       "Implying endorsement by Armstrong's family, NASA, the U.S. Navy, NHHC, or an archive."
@@ -504,7 +579,7 @@
         ],
         "purpose": "Support the complete historical flight from carrier launch through a source-bounded target corridor, physical cable contact, southbound damaged flight, ejection, descent, and ground recovery.",
         "nearFieldRequirements": [
-          "No exact target corridor ships until the Essex action report and map evidence close or the dossier declares an explicit composite geography.",
+          "No exact target corridor ships until mission-plan and map evidence close or the dossier declares an explicit composite geography; the page-reviewed Essex and CVG-5 reports do not locate it precisely.",
           "Collision terrain, rendered terrain, route gates, cable supports, cable sweep, and replay use one authoritative coordinate frame.",
           "Every collision hazard is visible with sufficient contrast and temporal warning without moving or enlarging its physical truth for presentation.",
           "The ejection and ground-recovery cell remains non-authoritative until location, wind, parachute, terrain, and recovery evidence are reviewed.",
@@ -570,7 +645,7 @@
     {
       "gateId": "simulation_integrity",
       "status": "pending",
-      "notes": "The cable-to-decision greybox contracts are under implementation, while subtype-specific Panther behavior, source-locked damaged aerodynamics, ejection, parachute, and complete mission integration remain open.",
+      "notes": "The cable-to-decision greybox contracts are under implementation. Incident-level reporting supports the F9F-2 mission identity, while the BuNo appendix anomaly, exact individual-airframe configuration, suffix, subtype-specific behavior, damaged aerodynamics, ejection, parachute, and complete mission integration remain open.",
       "evidence": [
         "docs/art-direction/korea-1950s/narrative/greybox-implementation.md",
         "docs/airframes/f9f-2-panther/00-sources.md"
@@ -579,7 +654,7 @@
     {
       "gateId": "evidence",
       "status": "pending",
-      "notes": "The usable oral-history and official-synthesis anchors close structurally with explicit qualifications, but this is source intake, not source lock. The Essex report lacks page-level review; date and subtype conflict; target, corridor, cable layout, loadout, radio, seat, damaged aerodynamics, ejection point, parachute, and ground recovery remain open.",
+      "notes": "Page-reviewed contemporary Essex and CVG-5 reports close 3 September 1951 and support the incident-level F9F-2 identity while documenting an antiaircraft-fire/power-pole account that conflicts with Armstrong's later cable recollection. The NHHC BuNo appendix conflict is now explicit. This remains source intake, not mission source lock: individual-airframe configuration, target, corridor, cable or pole geometry, exact damage, loadout, radio, seat, damaged aerodynamics, ejection point, parachute, and ground recovery remain open.",
       "evidence": [
         "docs/art-direction/korea-1950s/narrative/research-ledger.md",
         "docs/art-direction/korea-1950s/narrative/source-register.json",

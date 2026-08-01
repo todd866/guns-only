@@ -16,10 +16,24 @@ function axisCode(value, previous, negativeCode, positiveCode, engage, release) 
 }
 
 /**
+ * Convert the snapshot's physical throttle value (0..airframe lever stop) into the direct-input
+ * bridge's aircraft-relative 0..1 lever command. Without this conversion, taking the touch
+ * throttle on an afterburning aircraft multiplies the published value by the lever stop a second
+ * time and causes a power jump on first contact.
+ */
+export function normalisePublishedThrottleLever(throttle, maxThrustFraction) {
+  const published = Number(throttle);
+  if (!Number.isFinite(published)) return 0.5;
+  const leverStop = Number(maxThrustFraction);
+  if (!Number.isFinite(leverStop) || leverStop <= 0) return clamp(published, 0, 1);
+  return clamp(published / leverStop, 0, 1);
+}
+
+/**
  * Project a pointer onto a circular phone thumb-stick and resolve its fallback key directions.
  *
- * The vector is continuous for the visual puck and analog roll bridge. Direction codes retain a
- * small hysteresis band for the pitch key fallback so a resting thumb cannot chatter controls.
+ * The vector stays control-agnostic and continuous for the visual puck and analog bridges.
+ * Direction codes retain a small hysteresis band for callers that still need key fallbacks.
  */
 export function mobileVirtualStickState(point, bounds, previous = {}, {
   deadzone = 0.12,

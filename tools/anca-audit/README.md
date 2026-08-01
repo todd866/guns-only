@@ -15,9 +15,12 @@ node tools/anca-audit/format.mjs /tmp/anca.jsonl
 Omit `--scenario` to run the full matrix (dogfight + Rapier launch/commit/circuits/guns).
 
 ```sh
-./bin/anca-audit --self-test          # structural smoke used by bin/check
-node --test tools/anca-audit/*.test.mjs
+node --test tools/anca-audit/*.test.mjs # structural/format contracts used by bin/check
+./bin/anca-audit --self-test           # optional live scenario matrix; not release-gated yet
 ```
+
+The live `--self-test` matrix is still hardening. A green `bin/check` currently proves the
+structural and formatter contracts above, not every scripted ANCA/R/T scenario.
 
 ## JSONL record shape
 

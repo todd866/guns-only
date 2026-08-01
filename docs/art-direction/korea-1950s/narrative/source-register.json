@@ -26,21 +26,26 @@
             "He estimated an altitude near 500 feet while cautioning that he did not remember it exactly.",
             "He identified Major John Carpenter as the flight lead and USAF exchange officer.",
             "He recalled that they rejected landing because slowing could produce an uncontrollable snap.",
-            "He recalled flying south, ejecting near Pohang/K-3 and being recovered by Goodell Warren in a jeep."
+            "He recalled flying south, ejecting near Pohang/K-3 and being recovered by Goodell Warren in a jeep.",
+            "He described an old-style shotgun-shell-powered ejection seat and called it a 22-G seat."
           ]
         }
       ],
       "limits": [
         "The interview was recorded approximately fifty years after the incident.",
         "The interviewer supplies 3 September 1951; Armstrong does not independently state the date in this exchange.",
-        "The transcript records a retrospective explanation, not the words spoken over the radio during the sortie."
+        "The transcript records a retrospective explanation, not the words spoken over the radio during the sortie.",
+        "Its seat description is first-person recollection, not a handbook, model identification, engineering acceleration trace or safe-envelope source."
       ],
       "claimRefs": [
         "claim.armstrong-cable-strike.v1",
         "claim.armstrong-wing-loss.v1",
         "claim.carpenter-flight-lead.v1",
         "claim.armstrong-no-landing-decision.v1",
-        "claim.armstrong-ejection-friendly-territory.v1"
+        "claim.armstrong-ejection-friendly-territory.v1",
+        "claim.panther-ejection-seat.v1",
+        "claim.cable-field-gameplay-reconstruction.v1",
+        "claim.panther-damage-flight-reconstruction.v1"
       ],
       "distribution": "citation_only"
     },
@@ -55,20 +60,24 @@
           "pages": "25-26",
           "supports": [
             "VF-51 service from USS Essex, armed reconnaissance west of Wonsan, BuNo 125122, cable damage, wing loss, ejection and recovery in friendly territory.",
-            "The contemporary report attributed the incident to antiaircraft fire and a pole, while Armstrong later attributed it to a cable."
+            "The contemporary report attributed the incident to antiaircraft fire and a pole, while Armstrong later attributed it to a cable.",
+            "This later synthesis says wind carried Armstrong's parachute back over land."
           ]
         }
       ],
       "limits": [
-        "The source uses 5 September 1951 while other official archival metadata and Armstrong's logbook as reproduced by Hansen use 3 September.",
-        "The source alternates between F9F-2 and F9F-3 descriptions."
+        "Its 5 September date is contradicted by the page-reviewed contemporary Essex and CVG-5 reports, the DPAA register, and NHHC archival metadata.",
+        "Its F9F-3 description is contradicted by the contemporary CVG-5 composition and damage tables and by the DPAA register.",
+        "No source currently corroborates its exact landward wind-drift path; any playable wind and parachute trajectory remains reconstruction."
       ],
       "claimRefs": [
         "claim.armstrong-vf51-essex.v1",
         "claim.armstrong-armed-recon-wonsan.v1",
         "claim.armstrong-cable-strike.v1",
         "claim.armstrong-wing-loss.v1",
-        "claim.armstrong-ejection-friendly-territory.v1"
+        "claim.armstrong-ejection-friendly-territory.v1",
+        "claim.cable-field-gameplay-reconstruction.v1",
+        "claim.panther-damage-flight-reconstruction.v1"
       ],
       "distribution": "citation_only"
     },
@@ -97,21 +106,124 @@
       "distribution": "candidate_after_rights_review"
     },
     {
+      "sourceId": "source.dpaa-korea-air-loss-register-2021.v1",
+      "kind": "official_loss_register",
+      "grade": "government_historical_synthesis",
+      "citation": "Defense POW/MIA Accounting Agency, Korean War Air Loss Database by Name, 6 October 2021.",
+      "url": "https://www.dpaa.mil/portals/85/KoreaAccounting/korwald_acc_NAME_20211006.pdf",
+      "locators": [
+        {
+          "pages": "PDF page 4, Armstrong entry",
+          "supports": [
+            "The register records Neil A. Armstrong, USN, on 3 September 1951 with VF-51, F9F-2, BuNo 125122 and USS Essex."
+          ]
+        }
+      ],
+      "limits": [
+        "This is a compiled official database rather than the contemporary incident report.",
+        "The entry does not establish the mission target, damage mechanism, cable geometry, radio, ejection sequence or ground recovery."
+      ],
+      "claimRefs": [
+        "claim.armstrong-vf51-essex.v1"
+      ],
+      "distribution": "citation_only"
+    },
+    {
+      "sourceId": "source.nhhc-buno-appendix-1910-1995.v1",
+      "kind": "official_bureau_number_appendix",
+      "grade": "government_historical_synthesis",
+      "citation": "Naval Historical Center, United States Naval Aviation 1910-1995, Appendix 9: Naval Aircraft Bureau Numbers, printed page 554.",
+      "url": "https://web.archive.org/web/20240704022315id_/https://www.history.navy.mil/content/dam/nhhc/research/histories/naval-aviation/pdf/app09.pdf",
+      "provenanceUrl": "https://www.history.navy.mil/research/histories/naval-aviation-history/aircraft-history-cards/background-on-naval-aircraft-bureau-serial-numbers.html",
+      "sha256": "992c41d4236a6191db5a40552c9c2f4d9b3a24496aed4844b4ba46c9e531b834",
+      "locators": [
+        {
+          "pages": "PDF page 38, printed page 554",
+          "supports": [
+            "The compiled appendix assigns bureau numbers 125080-125152, a block containing 125122, to F9F-5."
+          ]
+        }
+      ],
+      "limits": [
+        "This generic compiled serial appendix conflicts with incident-specific contemporary type reporting and does not establish which recorded identifier contains the error.",
+        "It cannot source-lock the individual loss aircraft's delivered configuration, suffix, engine, cockpit batch or markings; those require the aircraft history card and supporting records."
+      ],
+      "claimRefs": [
+        "claim.armstrong-vf51-essex.v1"
+      ],
+      "distribution": "citation_only"
+    },
+    {
       "sourceId": "source.nhhc-essex-action-report-1951.v1",
       "kind": "contemporary_action_report",
       "grade": "primary_official_record",
-      "citation": "USS Essex Korean Combat Action Report, 18 August-21 September 1951, NHHC Post-1946 Reports collection AR/59.",
-      "url": "https://www.history.navy.mil/content/history/nhhc/research/archives/digital-exhibits-highlights/action-reports/korean-war-carrier-combat/essex-cva9.html",
-      "locators": [],
+      "citation": "Commanding Officer, USS Essex (CV-9), Serial 093, Action Report for the Period, 18 August 1951 to 21 September 1951, 30 September 1951, NHHC Post-1946 Reports collection AR/59.",
+      "url": "https://web.archive.org/web/20250418222808id_/https://www.history.navy.mil/content/dam/nhhc/research/archives/action-reports/Korean%20War%20-%20Carrier%20Combat/PDF%27s/cv9a-51.pdf",
+      "provenanceUrl": "https://www.history.navy.mil/content/history/nhhc/research/archives/digital-exhibits-highlights/action-reports/korean-war-carrier-combat/essex-cva9.html",
+      "sha256": "eb7b3365d4a1144255ef3905237f0027866c7e5ee3d853188cbc1c478ccea00f",
+      "locators": [
+        {
+          "pages": "scan and printed page 3, 3 September entry",
+          "supports": [
+            "The contemporary ship chronology dates Armstrong's loss to 3 September 1951 and identifies F9F BuNo 125122.",
+            "It attributes locked controls to enemy antiaircraft fire, records that Armstrong regained control, and records bailout over friendly K-3 before the aircraft crashed and burned."
+          ]
+        }
+      ],
       "limits": [
-        "The report is identified but page-level acquisition and review remain pending.",
-        "A contemporary report may preserve an initial operational account that Armstrong later corrected."
+        "The report preserves the ship's contemporary operational account, not Armstrong's later cable recollection.",
+        "It does not establish exact target, route, loadout, damage geometry, ejection procedure or ground recovery."
+      ],
+      "claimRefs": [
+        "claim.armstrong-vf51-essex.v1",
+        "claim.armstrong-cable-strike.v1",
+        "claim.armstrong-ejection-friendly-territory.v1"
+      ],
+      "distribution": "citation_only"
+    },
+    {
+      "sourceId": "source.nhhc-cvg5-action-report-1951.v1",
+      "kind": "contemporary_air_group_action_report",
+      "grade": "primary_official_record",
+      "citation": "Commander, Carrier Air Group Five, CVG5/A16-13, Serial 065-51, Action Report of Carrier Air Group FIVE, 18 August 1951 to 19 September 1951, 22 September 1951, NHHC Post-1946 Reports collection AR/59.",
+      "url": "https://web.archive.org/web/20250418211010id_/https://www.history.navy.mil/content/dam/nhhc/research/archives/action-reports/Korean%20War%20Carrier%20Air%20Group%20Combat/PDF%27s/cvg5-51.pdf",
+      "provenanceUrl": "https://www.history.navy.mil/content/history/nhhc/research/archives/digital-exhibits-highlights/action-reports/korean-war-carrier-air-groups.html",
+      "sha256": "048a90242f90324e78cf4407fd2b59ed41821cdcd71253705f901c06123287f2",
+      "locators": [
+        {
+          "pages": "scan and printed page 1",
+          "supports": [
+            "The contemporary composition table identifies VF-51's aircraft type as F9F-2."
+          ]
+        },
+        {
+          "pages": "scan and printed pages 4-5",
+          "supports": [
+            "The report places Armstrong's event on 3 September 1951 in very hilly country and gives the contemporary antiaircraft-fire and power-pole account.",
+            "It records lost elevator control, a heavy ordnance load, two feet of starboard-wing loss, required landing speed above 170 knots, ejection, seat clearance, manual chute opening and landing near K-3."
+          ]
+        },
+        {
+          "pages": "scan and printed page 12",
+          "supports": [
+            "The VF-51 F9F-2 damage table records 3 September entries for elevator stick control rendered inoperative and the aircraft burned completely."
+          ]
+        }
+      ],
+      "limits": [
+        "The report's antiaircraft-fire and power-pole account conflicts with Armstrong's later cable recollection and must remain visible as a source conflict.",
+        "It does not identify exact target coordinates, route, ordnance types, formation geometry, radio wording or exact recovery staging."
       ],
       "claimRefs": [
         "claim.armstrong-vf51-essex.v1",
         "claim.armstrong-armed-recon-wonsan.v1",
         "claim.armstrong-cable-strike.v1",
-        "claim.armstrong-wing-loss.v1"
+        "claim.armstrong-wing-loss.v1",
+        "claim.armstrong-no-landing-decision.v1",
+        "claim.armstrong-ejection-friendly-territory.v1",
+        "claim.panther-ejection-seat.v1",
+        "claim.cable-field-gameplay-reconstruction.v1",
+        "claim.panther-damage-flight-reconstruction.v1"
       ],
       "distribution": "citation_only"
     },

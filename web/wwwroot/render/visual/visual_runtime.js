@@ -272,7 +272,7 @@ export class VisualRuntime {
     // Legacy/lab callers that do not declare eligibility retain ordinary adaptive behaviour.
     // Production flight declares false during Ready, pause, replay, and background frames; those
     // costs must not train the foreground-flight resolution controller.
-    if (frame.activeForeground !== false) {
+    if (frame.activeForeground !== false && frame.adaptiveResolutionSampling !== false) {
       this.adaptiveResolution.sample(
         frame.frameTimeMs ?? deltaSeconds * 1000,
         { activeForeground: frame.activeForeground === true },

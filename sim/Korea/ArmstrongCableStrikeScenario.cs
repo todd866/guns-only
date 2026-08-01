@@ -119,12 +119,12 @@ public sealed class ArmstrongCableStrikeScenarioDefinition {
 
 public static class ArmstrongCableStrikeScenarios {
     public const string RightOuterWingComponentId =
-        "component.panther-subtype-unresolved.right-outer-wing.reconstruction.v1";
+        "component.f9f-2-panther.right-outer-wing.reconstruction.v1";
     public const string CableGeometryReconstructionRecordId =
         "reconstruction-record.armstrong.cable-geometry.local-greybox.v1";
     /// <summary>
-    /// Stable deterministic entropy only. This deliberately does not encode either disputed
-    /// September 1951 incident date.
+    /// Stable deterministic entropy only. This deliberately does not encode the source-locked
+    /// 3 September 1951 incident date.
     /// </summary>
     public const ulong GreyboxMissionSeed = 0xA4C7_51D3_9E2B_6F10UL;
 
@@ -161,8 +161,8 @@ public static class ArmstrongCableStrikeScenarios {
         var rightOuterWing = new AirframeComponentCollisionVolume(
             RightOuterWingComponentId,
             // The provisional F9F-2 handling surrogate has a half-span of about 5.79 m. It sizes
-            // this greybox volume only; it does not identify Armstrong's disputed incident subtype
-            // or source the exact component geometry.
+            // this greybox volume only; it does not resolve the individual loss-airframe
+            // configuration or source the exact component geometry.
             bodyLocalCenterM: new Vec3D(4.65, 0.0, -0.15),
             radiusM: 1.05,
             CableCollisionLayer.PlayerAirframe,

@@ -667,21 +667,15 @@
       letter-spacing: .12em;
     }
 
-    /* Portrait is the two-stick assisted profile: the left thumb flies, the right thumb looks,
-       while explicit TARGET / PADLOCK / FIRE controls sit above it. Tilt is optional
-       low-authority trim. */
+    /* Portrait is the two-stick assisted profile: the left thumb owns throttle/yaw, the right
+       thumb owns pitch/roll, and explicit TARGET / PADLOCK / FIRE controls sit between them.
+       Tilt is optional low-authority trim. */
     #portrait-chips { display: none; }
     #portrait-chips[hidden] { display: none !important; }
     @media (orientation: portrait) {
-      /* Portrait keeps both sticks clear. Parking the actions column above the right stick put
-         a button over the centre-hold fire target, so the stick never armed. Fire in portrait is
-         the stick's centre hold, which is the whole point of that design. */
-      /* Hide the ACTIONS column, not the whole right rail. The documented bug was that parking
-         the actions column above the right stick covered the centre-hold fire target so the stick
-         never armed -- that was .touch-actions specifically. Hiding all of .touch-right took the
-         gear and flaps with it, and a child of a display:none parent cannot be brought back, so
-         the landing controls were unreachable in portrait on an aircraft whose whole mission ends
-         in a landing. */
+      /* Portrait keeps both sticks clear. Hide the ACTIONS column, not the whole right rail:
+         hiding all of .touch-right also takes gear and flaps with it, and a child of a
+         display:none parent cannot be brought back. */
       .portrait-assist .touch-left { display: none; }
 
       /* The chip row is NOT the answer. It was added here to give portrait some energy control,
@@ -710,8 +704,8 @@
       /* FIRE owns the centre gap between the sticks. PADLOCK and TARGET stack above it in the
          same column -- the padlock view and its ADI already exist in the HUD, and target cycling
          already works; they were simply unreachable in portrait because this whole column was
-         collapsed. Nothing else from the column is promoted: parking the FULL actions column in
-         that gap is what once covered the stick's centre-hold fire target. */
+         collapsed. Nothing else from the column is promoted: the full column would cover the
+         right-stick flight envelope. */
       .portrait-assist .touch-actions > * { display: none; }
       .portrait-assist .touch-actions > #touch-fire:not([hidden]) {
         display: grid;
@@ -1953,6 +1947,53 @@
 
     #ready-build-reload[hidden] { display: none; }
 
+    .ready-route-notice,
+    .ready-telemetry-disclosure {
+      width: min(560px, calc(100% - 24px));
+      margin: 10px auto 0;
+      color: rgba(253, 246, 230, .72);
+      font: 400 9px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: .02em;
+      text-align: center;
+      text-shadow: 0 1px 8px rgba(0, 0, 0, .8);
+    }
+
+    .ready-route-notice {
+      display: grid;
+      gap: 3px;
+      padding: 9px 12px;
+      border: 1px solid rgba(255, 207, 130, .42);
+      border-radius: 4px;
+      color: #ffdf9c;
+      background: rgba(24, 18, 12, .72);
+    }
+
+    .ready-route-notice[hidden] { display: none; }
+    .ready-route-notice strong { text-transform: capitalize; }
+    .ready-route-notice span { color: rgba(253, 232, 194, .72); }
+    .ready-route-notice a {
+      width: max-content;
+      margin: 4px auto 0;
+      color: #b6ffd2;
+      text-underline-offset: 3px;
+    }
+
+    .ready-telemetry-disclosure label {
+      display: inline-flex;
+      min-height: 28px;
+      align-items: center;
+      gap: 7px;
+      cursor: pointer;
+      color: rgba(253, 246, 230, .76);
+    }
+
+    .ready-telemetry-disclosure input { width: 16px; height: 16px; accent-color: #7af0a5; }
+    .ready-telemetry-disclosure small,
+    .ready-telemetry-disclosure output { display: block; color: rgba(253, 246, 230, .45); }
+    .ready-telemetry-disclosure output { margin-top: 2px; color: rgba(182, 255, 210, .58); }
+    #ready-screen:not([data-mode="program"]) .ready-telemetry-disclosure,
+    #ready-screen:not([data-mode="program"]) .ready-route-notice { display: none; }
+
     @media (max-width: 760px) {
       #ready-screen {
         padding:
@@ -2321,6 +2362,14 @@
     .settings-binding button { min-width: 54px; }
     .settings-binding button[data-capturing="true"] { border-color: #ffcf82; color: #ffdf9c; }
     .settings-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+    .settings-telemetry-copy {
+      grid-column: 1 / -1;
+      margin: -4px 0 4px 30px;
+      color: rgba(217, 255, 229, .48);
+      font-size: 9px;
+      line-height: 1.45;
+    }
 
     .settings-disclosure {
       margin-top: 8px;
@@ -2773,6 +2822,27 @@
 
     #ready-screen[data-mode="program"] #ready-build-row { justify-content: center; }
 
+    html:not(.touch-mode) #ready-screen[data-mode="program"][data-route-blocked="true"] .ready-card {
+      justify-content: flex-start;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    /* The consent disclosure and an occasional quarantine notice add real controls below the
+       paintings. Short desktop windows need a reachable scroll path just as phones do. */
+    @media (max-height: 720px) {
+      html:not(.touch-mode) #ready-screen[data-mode="program"] .ready-card {
+        justify-content: flex-start;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
+      html:not(.touch-mode) #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] {
+        height: min(46vh, 46vw);
+      }
+    }
+
     #ready-install-hint {
       display: none;
       margin: 14px auto 0;
@@ -2886,8 +2956,6 @@
       .boot-pulse { animation: none; }
     }
   </style>
-  <!-- Static-site Web Analytics. Vercel serves this endpoint only on deployed environments. -->
-  <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
   <canvas id="scene" tabindex="0" aria-label="Air combat simulation view"></canvas>
@@ -3111,6 +3179,7 @@
         <button id="touch-limit-override" class="touch-control" type="button" data-hold-key="Space" aria-label="G-limiter and high-alpha override" hidden>LIMIT<br>OVR</button>
         <button id="touch-target-cycle" class="touch-control touch-utility" type="button" data-mobile-action="target-cycle" aria-label="Select Target 2" data-selected="1" hidden><span id="touch-target-label">TARGET</span><br><span id="touch-target-number">1</span></button>
         <button class="touch-control touch-utility" type="button" data-pulse-key="KeyV" aria-label="Padlock target or nearby carrier" aria-pressed="false" hidden>PADLOCK<br>V</button>
+        <button id="touch-carrier-rtb" class="touch-control touch-utility" type="button" data-carrier-route-action="carrier-sortie-request-rtb" data-pulse-key="KeyO" aria-label="Return to ship" hidden disabled>RTB<br>O</button>
         <button id="touch-fire" class="touch-control touch-fire" type="button" data-hold-key="KeyF" aria-label="Fire guns" hidden>FIRE</button>
       </div>
       <div id="portrait-chips" role="group" aria-label="Assisted flight controls">
@@ -3124,13 +3193,13 @@
     <button id="fallback-stick" type="button" data-mobile-action="virtual-stick" data-active="false" aria-label="Left stick: throttle and yaw" aria-describedby="fallback-stick-help" aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight">
       <span id="fallback-stick-knob" aria-hidden="true"></span>
       <span class="fallback-stick-label" aria-hidden="true">THR / YAW</span>
-      <span id="fallback-stick-help" class="visually-hidden">Left thumb: drag left or right to roll; drag down to pull and up to push. The stick centres when released.</span>
+      <span id="fallback-stick-help" class="visually-hidden">Left thumb: drag up to increase power or down to decrease it; release holds the selected power. Drag left or right for yaw, which centres when released.</span>
     </button>
 
     <button id="target-stick" type="button" data-mobile-action="target-stick" data-active="false" aria-label="Right stick: pitch and roll" aria-describedby="target-stick-help">
       <span id="target-stick-knob" aria-hidden="true"></span>
       <span class="fallback-stick-label" aria-hidden="true">STICK</span>
-      <span id="target-stick-help" class="visually-hidden">Right thumb: drag to look without firing. Hold the centre briefly to fire; moving outside the centre stops firing and looks. The view returns when released.</span>
+      <span id="target-stick-help" class="visually-hidden">Right thumb: drag left or right to roll, down to pull, or up to push. The stick centres when released. Use the separate Fire button to fire guns.</span>
     </button>
 
     <div id="tilt-prompt" role="dialog" aria-modal="true" aria-labelledby="tilt-title">
@@ -3158,7 +3227,7 @@
           <div class="ready-group-heading ready-program-heading">
             <div>
               <h2>Missions</h2>
-              <p>Seven flight experiences, from a 1951 straight deck to the stratosphere — by way of low-level medical transport and a microdrone indoors.</p>
+              <p>Two production aircraft: an endless F-22 guns-only fight and the Rapier high-altitude balloon intercept.</p>
             </div>
             <output id="ready-program-progress"></output>
           </div>
@@ -3169,9 +3238,9 @@
             a broken medevac, a circuits trainer, a 1951 carrier sortie and an indoor microdrone --
             and every one of them made the reader do triage before they could fly.
 
-            They are hidden, not deleted. Each still launches from its deep link (?program=medevac,
-            ?program=korea-panther, /indoor/) and every test that drives one still passes; they are
-            simply not what the front door is for.
+            Their source is retained, but hidden is not the release control. Each deep link
+            (?program=medevac, ?program=korea-panther, /indoor/) fails closed at the release gate;
+            deliberate testing requires the explicit ?preview=1 acknowledgement.
           -->
           <div class="ready-mission-groups">
             <div class="sortie-option" data-selected="true" data-program-state="available">
@@ -3252,6 +3321,7 @@
           </details>
           <p id="ready-controls" class="ready-controls">Arrows fly · W/S power · F guns · V padlock · Tab target
 Splash one bandit to qualify · H controls · R restarts</p>
+          <div id="ready-route-notice" class="ready-route-notice" role="status" hidden></div>
           <button id="ready-start" type="button">Fly First Merge</button>
           <button id="ready-replay" type="button" hidden>Replay incident again</button>
           <button id="ready-handoff" type="button" hidden disabled>HAND OFF FIGHT &amp; RTB</button>
@@ -3271,8 +3341,13 @@ Splash one bandit to qualify · H controls · R restarts</p>
             <span aria-hidden="true">⤴</span> Full screen: Share → Add to Home Screen
           </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 237 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 238 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
+          </div>
+          <div class="ready-telemetry-disclosure">
+            <label><input id="ready-telemetry-sharing" type="checkbox"> Share detailed flight diagnostics</label>
+            <small>Optional. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning.</small>
+            <output id="ready-telemetry-sharing-status" aria-live="polite">Off by default. No gameplay diagnostics are sent.</output>
           </div>
         </section>
       </div>
@@ -3294,6 +3369,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
         <label class="settings-toggle"><input id="setting-high-contrast" type="checkbox"> High-contrast HUD</label>
         <label class="settings-toggle"><input id="setting-reduced-motion" type="checkbox"> Reduce motion</label>
         <label class="settings-toggle"><input id="setting-large-text" type="checkbox"> Larger interface text</label>
+        <label class="settings-toggle"><input id="setting-telemetry-sharing" type="checkbox" aria-describedby="setting-telemetry-sharing-copy"> Share detailed flight diagnostics</label>
+        <p id="setting-telemetry-sharing-copy" class="settings-telemetry-copy">Off by default. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning. Turning it off discards anything not yet sent.</p>
         <label class="settings-range" for="setting-tilt-sensitivity"><span>Tilt sensitivity</span><output id="setting-tilt-sensitivity-value">1.00×</output><input id="setting-tilt-sensitivity" type="range" min="0.65" max="1.6" step="0.05" value="1"></label>
       </div>
       <details id="settings-keyboard-bindings" class="settings-disclosure" open>
@@ -3337,19 +3414,27 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // app.js arrives. The deep link still selects the sortie -- it is read by the module graph
     // from the same query string -- it just no longer has a splash screen to announce itself on.
 
-    // A network-fresh Build 237 document may still be controlled by Build 178's cache-first
+    // A network-fresh Build 238 document may still be controlled by Build 178's cache-first
     // service worker. Purge that controller and its Cache Storage before Blazor requests the
     // unversioned boot manifest/WASM graph. Offline clients never see this newer document until a
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = "237";
-      const controller = navigator.serviceWorker?.controller;
-      if (!controller) return;
-      const controllerBuild = new URL(controller.scriptURL, location.href)
+      // Derive from a normal stamped URL so this comparison cannot drift from the next release.
+      const releaseBuild = new URL("./service-worker.js?v=238", location.href)
         .searchParams.get("v");
-      if (controllerBuild === releaseBuild) return;
+      const controller = navigator.serviceWorker?.controller;
+      const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
+      const registeredWorkers = registrations.flatMap((registration) => [
+        registration.active,
+        registration.waiting,
+        registration.installing,
+      ]).filter(Boolean);
+      const staleWorker = [controller, ...registeredWorkers]
+        .filter(Boolean)
+        .find((worker) => new URL(worker.scriptURL, location.href)
+          .searchParams.get("v") !== releaseBuild);
+      if (!staleWorker) return;
 
-      const registrations = await navigator.serviceWorker.getRegistrations();
       await Promise.all(registrations.map((registration) => registration.unregister()));
       if ("caches" in globalThis) {
         const keys = await caches.keys();
@@ -3361,8 +3446,34 @@ Splash one bandit to qualify · H controls · R restarts</p>
       }
     })();
   </script>
-  <script src="./multiplayer-config.js?v=237"></script>
-  <script type="module" src="./app.js?v=237"></script>
-  <script src="./_framework/blazor.webassembly.js?v=237" autostart="false"></script>
+  <script type="module">
+    // Static module tags start fetching and linking their complete dependency graph before the
+    // module body can await anything. Keep this bootstrap import-free until the old controller and
+    // cache are gone, then load both classic prerequisites before app.js starts Blazor.
+    try {
+      await globalThis.__gunsPrebootReady;
+      const loadClassicScript = (src, attributes = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = src;
+        for (const [name, value] of Object.entries(attributes)) script.setAttribute(name, value);
+        script.addEventListener("load", resolve, { once: true });
+        script.addEventListener("error", () => reject(new Error(`Failed to load ${src}`)), {
+          once: true,
+        });
+        document.head.append(script);
+      });
+      await loadClassicScript("./multiplayer-config.js?v=238");
+      await loadClassicScript("./_framework/blazor.webassembly.js?v=238", {
+        autostart: "false",
+      });
+      await import("./app.js?v=238");
+    } catch (error) {
+      console.error(error);
+      document.querySelector("#boot")?.classList.add("ready");
+      const message = document.querySelector("#fatal-message");
+      if (message) message.textContent = error instanceof Error ? error.message : String(error);
+      document.querySelector("#fatal")?.classList.add("visible");
+    }
+  </script>
 </body>
 </html>

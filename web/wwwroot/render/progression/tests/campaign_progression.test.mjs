@@ -4,50 +4,87 @@ import test from "node:test";
 import {
   CAMPAIGN_NODES,
   CAMPAIGN_STORAGE_KEY,
+  EXPERIENCE_CATALOG,
+  EXPERIENCE_RELEASE_STATE,
   MAX_APPLIED_RAPIER_SORTIES,
   applyRapierSortieCredits,
   campaignNode,
   campaignNodeQualified,
   campaignNodeUnlocked,
   createCampaignProfile,
+  experienceById,
+  experienceLaunchable,
   loadCampaignProfile,
+  productionExperiences,
+  qualifyCampaignNode,
   recommendedCampaignNode,
   saveCampaignProfile,
 } from "../campaign_progression.js";
 
-// The qualification ladder is GONE. It was scaffolding from when this was a programme of graded
-// exercises; every shipping mission is available immediately. These tests stop the gate from
-// growing back as new mission types and environments are added.
+// Qualification locks are gone. Release state is separate: only experiences which have completed
+// their player-path acceptance may launch from production, even when preview code remains present.
 
-test("the menu is six missions and all are always available", () => {
-  assert.deepEqual(CAMPAIGN_NODES.map(({ id, mission, aircraft }) => ({ id, mission, aircraft })), [
-    { id: "first-merge", mission: 7, aircraft: "F-22A" },
-    { id: "low-level-drone", mission: 8, aircraft: "F-22A" },
-    { id: "medevac", mission: 13, aircraft: "Air Ambulance" },
+test("one catalog names every route and exposes only accepted production experiences", () => {
+  assert.deepEqual(EXPERIENCE_CATALOG.map(({ id, mission, releaseState }) => (
+    { id, mission, releaseState }
+  )), [
+    { id: "first-merge", mission: 7, releaseState: "production" },
+    { id: "low-level-drone", mission: 8, releaseState: "quarantined" },
+    { id: "medevac", mission: 13, releaseState: "quarantined" },
     // Circuits sits before the intercept: the trap is the hardest thing the aircraft asks for and
     // the intercept gives exactly one attempt at it, far from home and low on fuel.
-    { id: "rapier-circuits", mission: 11, aircraft: "Rapier" },
-    { id: "rapier-intercept", mission: 12, aircraft: "Rapier" },
+    { id: "rapier-circuits", mission: 11, releaseState: "preview" },
+    { id: "rapier-intercept", mission: 12, releaseState: "production" },
     // Korea last: it is the only straight-deck recovery in the game, and the only aircraft here
     // that cannot simply go around.
-    { id: "korea-panther", mission: 14, aircraft: "F9F-2 Panther" },
+    { id: "korea-panther", mission: 14, releaseState: "quarantined" },
+    { id: "indoor", mission: null, releaseState: "quarantined" },
+    { id: "medevac-command", mission: null, releaseState: "quarantined" },
+    { id: "cobra-lab", mission: null, releaseState: "quarantined" },
   ]);
 
+  assert.deepEqual(productionExperiences().map(({ id }) => id), [
+    "first-merge",
+    "rapier-intercept",
+  ]);
+  assert.equal(CAMPAIGN_NODES.length, 6,
+    "standalone research routes are not campaign beats");
+
   const fresh = createCampaignProfile();
-  for (const node of CAMPAIGN_NODES) {
-    assert.equal(campaignNodeUnlocked(fresh, node.id), true,
-      `${node.id} must be available from a cold start — nothing is gated any more`);
-  }
+  assert.equal(campaignNodeUnlocked(fresh, "first-merge"), true);
+  assert.equal(campaignNodeUnlocked(fresh, "rapier-intercept"), true);
+  assert.equal(campaignNodeUnlocked(fresh, "medevac"), false);
+  assert.equal(campaignNodeUnlocked(fresh, "rapier-circuits"), false);
+  assert.equal(experienceLaunchable("indoor"), false);
   assert.equal(recommendedCampaignNode(fresh).id, "first-merge");
 });
 
-test("nothing is locked, nothing is qualified, and unknown ids are still rejected", () => {
+test("release state is explicit, qualifications stay retired, and unknown ids are rejected", () => {
   const fresh = createCampaignProfile();
   assert.equal(campaignNodeQualified(fresh, "rapier-intercept"), false);
   assert.equal(campaignNodeUnlocked(fresh, "rapier-intercept"), true);
-  // A node that does not exist is still not a node.
+  assert.equal(experienceById("medevac").releaseState, EXPERIENCE_RELEASE_STATE.QUARANTINED);
+  assert.match(experienceById("medevac").blocker, /end-to-end human flight/i);
+  assert.equal(experienceById("carrier-conversion"), null);
   assert.equal(campaignNodeUnlocked(fresh, "carrier-conversion"), false);
   assert.equal(campaignNode("carrier-conversion"), null);
+});
+
+test("retired qualification API remains a side-effect-free compatibility no-op", () => {
+  const fresh = createCampaignProfile();
+  const completedFirstMerge = {
+    visual_merge_evaluation: true,
+    visual_merge_score: 100,
+    kill_count: 3,
+  };
+
+  const first = qualifyCampaignNode(fresh, "first-merge", completedFirstMerge, 1234);
+  const second = qualifyCampaignNode(first.profile, "first-merge", completedFirstMerge, 5678);
+
+  assert.equal(first.newlyQualified, false);
+  assert.equal(second.newlyQualified, false);
+  assert.deepEqual(first.profile.qualifications, {});
+  assert.deepEqual(second.profile, first.profile);
 });
 
 test("the missions are genuinely different fights and expose their aircraft honestly", () => {
@@ -62,8 +99,9 @@ test("the missions are genuinely different fights and expose their aircraft hone
   assert.notEqual(guns.mission, rapier.mission);
   assert.notEqual(guns.aircraft, rapier.aircraft);
   assert.match(medevac.shortObjective, /pickup.*capsule.*clinic/i);
-  assert.match(rapier.shortObjective, /balloon.*transport.*operating balance/i,
-    "the Rapier card must declare the varied economic contract");
+  assert.match(rapier.shortObjective,
+    /thin-air M4\.2.*one gun pass.*high-altitude balloon.*re-enter.*midpoint arrestor/i,
+    "the Rapier card must declare the deterministic balloon energy lesson");
   // None advertises a qualification: there is nothing to earn.
   assert.equal(guns.qualification, "");
   assert.equal(drone.qualification, "");

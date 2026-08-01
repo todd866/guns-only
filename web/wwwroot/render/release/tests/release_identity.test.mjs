@@ -160,8 +160,25 @@ test("build lookup uses canonical production from Vercel deployments but stays o
   assert.equal(buildInfoUrl({ hostname: "localhost" }), null);
 });
 
+test("local release scripts and GitHub verification require the same Node 24 runtime", async () => {
+  assert.equal(process.versions.node.split(".")[0], "24",
+    `release contracts must run on Node 24; found ${process.version}`);
+  const [checkScript, deployScript, workflow] = await Promise.all([
+    readFile(new URL("../../../../../bin/check", import.meta.url), "utf8"),
+    readFile(new URL("../../../../../bin/deploy-web", import.meta.url), "utf8"),
+    readFile(new URL("../../../../../.github/workflows/verify.yml", import.meta.url), "utf8"),
+  ]);
+  assert.match(checkScript, /node_major[\s\S]*?!= "24"/,
+    "the complete local gate must reject a different Node major");
+  assert.match(deployScript, /node_major[\s\S]*?!= "24"/,
+    "deployment must reject a different Node major before verification or publishing");
+  assert.equal((workflow.match(/node-version: "24"/g) ?? []).length, 2,
+    "both deterministic and browser jobs must install Node 24");
+});
+
 test("shell, browser module, service worker, and deployment endpoint share one release number", async () => {
-  const [index, app, hud, serviceWorker, deployScript, sceneBuilders, airframeBuilder] = await Promise.all([
+  const [index, app, hud, serviceWorker, deployScript, sceneBuilders, airframeBuilder,
+    airframePrimitives] = await Promise.all([
     readFile(new URL("index.html", WEB_ROOT), "utf8"),
     readFile(new URL("app.js", WEB_ROOT), "utf8"),
     readFile(new URL("hud.js", WEB_ROOT), "utf8"),
@@ -169,10 +186,11 @@ test("shell, browser module, service worker, and deployment endpoint share one r
     readFile(new URL("../../../../../bin/deploy-web", import.meta.url), "utf8"),
     readFile(new URL("render/scene/scene_builders.js", WEB_ROOT), "utf8"),
     readFile(new URL("render/scene/airframe_from_definition.js", WEB_ROOT), "utf8"),
+    readFile(new URL("render/scene/airframe_primitives.js", WEB_ROOT), "utf8"),
   ]);
-  const entrypoint = index.match(/<script type="module" src="\.\/app\.js\?v=([^"]+)"/);
+  const entrypoint = index.match(/await import\("\.\/app\.js\?v=([^"]+)"\)/);
   const blazorLoader = index.match(
-    /<script src="\.\/_framework\/blazor\.webassembly\.js\?v=([^"]+)"/,
+    /loadClassicScript\("\.\/_framework\/blazor\.webassembly\.js\?v=([^"]+)"/,
   );
   const worker = serviceWorker.match(/const RELEASE_BUILD = "([^"]+)"/);
   assert.ok(entrypoint, "index must cache-bust the application entrypoint");
@@ -225,9 +243,15 @@ test("shell, browser module, service worker, and deployment endpoint share one r
   assert.match(sceneBuilders,
     new RegExp(`from "\\./airframe_from_definition\\.js\\?v=${RELEASE_BUILD}"`),
     "the versioned scene graph must not re-enter an older cached airframe builder");
+  assert.match(sceneBuilders,
+    new RegExp(`from "\\./airframe_primitives\\.js\\?v=${RELEASE_BUILD}"`),
+    "scene builders must share the versioned airframe primitive module");
   assert.match(airframeBuilder,
-    new RegExp(`from "\\./scene_builders\\.js\\?v=${RELEASE_BUILD}"`),
-    "the circular scene-builder edge must resolve to the same versioned module instance");
+    new RegExp(`from "\\./airframe_primitives\\.js\\?v=${RELEASE_BUILD}"`),
+    "the airframe builder must depend on one-way shared primitives");
+  assert.doesNotMatch(airframeBuilder, /from "\.\/scene_builders\.js/,
+    "airframe construction must not recreate the former ESM circular dependency");
+  assert.match(airframePrimitives, /export function createPlanformGeometry/);
   assert.doesNotMatch(app, /const BUILD = new URL\(import\.meta\.url\)/);
   assert.match(app, /BUILD_IDENTITY_REVALIDATE_MS = 60_000/);
   assert.match(app, /function buildIdentityBlocksSortie\(\)[\s\S]*?buildIdentity\.stale \|\| buildIdentity\.state === "checking"/,
@@ -253,6 +277,9 @@ test("shell, browser module, service worker, and deployment endpoint share one r
   assert.match(app, /caches\.keys\(\)/);
   assert.match(app, /caches\.delete/,
     "reload must delete guns-only-* caches before navigating to the current release");
+  assert.match(app,
+    /new URLSearchParams\(window\.location\.search\)\.get\("audioQa"\) === "silent"[\s\S]*?destination\.searchParams\.set\("audioQa", "silent"\)/,
+    "stale-build reload must preserve the explicit shared-machine silent audio clamp");
   assert.match(index, /id="ready-build"/);
   assert.match(
     index,
@@ -264,19 +291,30 @@ test("shell, browser module, service worker, and deployment endpoint share one r
   assert.match(index, /id="ready-build-reload"/);
 
   const prebootGate = index.indexOf("globalThis.__gunsPrebootReady = (async () =>");
+  const prebootAwait = index.indexOf("await globalThis.__gunsPrebootReady;");
   const appEntrypoint = index.indexOf(`./app.js?v=${RELEASE_BUILD}`);
   const blazorEntrypoint = index.indexOf(
     `./_framework/blazor.webassembly.js?v=${RELEASE_BUILD}`,
   );
   assert.ok(prebootGate >= 0, "index must establish the upgrade gate");
-  assert.ok(prebootGate < appEntrypoint && prebootGate < blazorEntrypoint,
-    "the upgrade gate must be established before either runtime script can execute");
-  assert.match(index, new RegExp(`const releaseBuild = "${RELEASE_BUILD}"`));
+  assert.ok(prebootGate < prebootAwait
+    && prebootAwait < appEntrypoint
+    && prebootAwait < blazorEntrypoint,
+  "the upgrade gate must settle before either runtime graph can be fetched");
+  assert.doesNotMatch(index,
+    /<script[^>]+(?:src="\.\/app\.js|src="\.\/_framework\/blazor\.webassembly\.js)/,
+    "static runtime tags can race ESM linking against an older controlling worker");
   assert.match(index,
-    /navigator\.serviceWorker\?\.controller[\s\S]*?controller\.scriptURL[\s\S]*?searchParams\.get\("v"\)/,
-    "the gate must distinguish the controlling worker by its release query");
+    new RegExp(`const releaseBuild = new URL\\("\\.\/service-worker\\.js\\?v=${RELEASE_BUILD}"`),
+    "the preboot comparison must derive from an automatically stamped release URL");
   assert.match(index,
-    /serviceWorker\.getRegistrations\(\)[\s\S]*?registration\.unregister\(\)/,
+    /navigator\.serviceWorker\?\.controller[\s\S]*?\[controller, \.\.\.registeredWorkers\][\s\S]*?worker\.scriptURL[\s\S]*?searchParams\.get\("v"\)/,
+    "the gate must distinguish every current or pending worker by its release query");
+  assert.match(index,
+    /registration\.active,[\s\S]*?registration\.waiting,[\s\S]*?registration\.installing,[\s\S]*?staleWorker/,
+    "the gate must catch a stale registration before it becomes the controlling worker");
+  assert.match(index,
+    /serviceWorker\?\.getRegistrations\?\.\(\)[\s\S]*?registration\.unregister\(\)/,
     "an older controller must be unregistered before runtime startup");
   assert.match(index,
     /caches\.keys\(\)[\s\S]*?key\.startsWith\("guns-only-"\)[\s\S]*?caches\.delete\(key\)/,
@@ -287,6 +325,86 @@ test("shell, browser module, service worker, and deployment endpoint share one r
   assert.match(app,
     new RegExp(`serviceWorker\\.register\\("service-worker\\.js\\?v=${RELEASE_BUILD}"\\)`),
     "the installed worker URL must carry the release query inspected by the next upgrade");
+});
+
+test("every published sub-application shares the release-qualified service worker", async () => {
+  const [indoorIndex, indoorApp, medevacIndex, medevacApp] = await Promise.all([
+    readFile(new URL("../../../indoor/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../../../indoor/game.js", import.meta.url), "utf8"),
+    readFile(new URL("../../../medevac/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../../../medevac/app.js", import.meta.url), "utf8"),
+  ]);
+  for (const [label, source] of [
+    ["indoor HTML", indoorIndex],
+    ["indoor app", indoorApp],
+    ["medevac HTML", medevacIndex],
+    ["medevac app", medevacApp],
+  ]) {
+    assert.match(source,
+      new RegExp(`(?:release_identity\\.js|(?:game|app)\\.js)\\?v=${RELEASE_BUILD}`),
+      `${label} must load its release-qualified entrypoint or identity module`);
+  }
+  assert.match(indoorApp,
+    /serviceWorker\.register\(`\.\.\/service-worker\.js\?v=\$\{RELEASE_BUILD\}`\)/);
+  assert.match(medevacApp,
+    /serviceWorker\.register\(`\.\.\/service-worker\.js\?v=\$\{RELEASE_BUILD\}`\)/);
+  assert.doesNotMatch(`${indoorApp}\n${medevacApp}`,
+    /serviceWorker\.register\("\.\.\/service-worker\.js"\)/,
+    "a sub-app must never replace the release-qualified worker with an unversioned registration");
+  for (const [label, source, entrypoint] of [
+    ["indoor", indoorIndex, `./game.js?v=${RELEASE_BUILD}`],
+    ["medevac", medevacIndex, `/medevac/app.js?v=${RELEASE_BUILD}`],
+  ]) {
+    const gate = source.indexOf("globalThis.__gunsPrebootReady = (async () =>");
+    const settled = source.indexOf("await globalThis.__gunsPrebootReady;");
+    const releaseGate = source.indexOf(
+      `../render/release/quarantine_gate.js?v=${RELEASE_BUILD}`,
+    );
+    const appEntry = source.indexOf(entrypoint);
+    assert.ok(gate >= 0 && gate < settled && settled < releaseGate && releaseGate < appEntry,
+      `${label} must purge an older worker/cache before linking any release module`);
+    assert.match(source,
+      /serviceWorker\?\.getRegistrations\?\.\(\)[\s\S]*?registration\.unregister\(\)[\s\S]*?caches\.delete\(key\)/,
+      `${label} must remove both the older controller registration and its runtime cache`);
+    assert.match(source,
+      /registration\.active,[\s\S]*?registration\.waiting,[\s\S]*?registration\.installing,[\s\S]*?staleWorker/,
+      `${label} must inspect stale registrations even before they control a page`);
+    assert.match(source,
+      new RegExp(`const releaseBuild = new URL\\("\\.\\.\/service-worker\\.js\\?v=${RELEASE_BUILD}"`),
+      `${label} must derive its controller comparison from the stamped release URL`);
+    assert.doesNotMatch(source,
+      /import \{ renderExperienceGate \} from/,
+      `${label} cannot use a static import before its preboot await`);
+  }
+  assert.match(medevacIndex,
+    new RegExp(`script\\.src = "/_framework/blazor\\.webassembly\\.js\\?v=${RELEASE_BUILD}"`),
+    "Medevac must fetch its Blazor loader only after the worker handoff");
+  assert.doesNotMatch(medevacIndex,
+    /<script[^>]+src="\/_framework\/blazor\.webassembly\.js/,
+    "Medevac must not leave a parser-fetched Blazor loader racing preboot");
+  for (const [label, source, fatalCopy] of [
+    ["main", await readFile(new URL("../../../index.html", import.meta.url), "utf8"),
+      "#fatal-message"],
+    ["indoor", indoorIndex, "#fatal-copy"],
+    ["medevac", medevacIndex, "#fatal-copy"],
+  ]) {
+    assert.match(source,
+      new RegExp(`catch \\(error\\)[\\s\\S]*?querySelector\\("${fatalCopy}"\\)[\\s\\S]*?classList\\.add\\("visible"\\)`),
+      `${label} bootstrap failures must reveal the existing fatal surface`);
+  }
+});
+
+test("environment lab immutable module keys use the numeric release identity", async () => {
+  const [environmentIndex, environmentApp] = await Promise.all([
+    readFile(new URL("../../../environment-lab/index.html", import.meta.url), "utf8"),
+    readFile(new URL("../../../environment-lab/main.js", import.meta.url), "utf8"),
+  ]);
+  assert.match(environmentIndex,
+    new RegExp(`\\./main\\.js\\?v=${RELEASE_BUILD}`));
+  assert.match(environmentApp,
+    new RegExp(`tactical_clouds\\.js\\?v=${RELEASE_BUILD}`));
+  assert.doesNotMatch(`${environmentIndex}\n${environmentApp}`, /\?v=[A-Za-z]/,
+    "semantic v= keys become falsely immutable in the service worker cache");
 });
 
 test("a committed production runtime change cannot silently reuse this build", (context) => {

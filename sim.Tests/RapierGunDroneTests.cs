@@ -194,7 +194,7 @@ public class RapierGunDroneTests {
         Assert.Equal(0, session.RapierDogfightingDronesRemaining);
     }
 
-    [Fact(Skip = "Vicinity-kit Rapier rework in flight on pivot-hardening (goal-capable ReachFight director + schema 1.24 tokens). Deliberately skipped 2026-07-29 to unblock the portrait-controls deploy — re-enable with the director ship.")]
+    [Fact]
     public void ReleasedDronePromotesPrimaryBanditOffRailInsideThreatVolume() {
         var session = new SimulationSession();
         session.StartBeat(() => ReactivePlanningAttackCard(startsReactive: false));
@@ -227,7 +227,7 @@ public class RapierGunDroneTests {
             "primary stayed on pure rail after gun-drone release");
     }
 
-    [Fact(Skip = "Vicinity-kit Rapier rework in flight on pivot-hardening (goal-capable ReachFight director + schema 1.24 tokens). Deliberately skipped 2026-07-29 to unblock the portrait-controls deploy — re-enable with the director ship.")]
+    [Fact]
     public void GunDroneContactSwitchInvalidatesReactiveHoldOffLane() {
         var session = new SimulationSession();
         session.StartBeat(() => ReactivePlanningAttackCard(startsReactive: true));

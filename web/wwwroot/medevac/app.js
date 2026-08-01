@@ -7,8 +7,11 @@ import {
   formatDuration,
   formatSignedDuration,
 } from "../render/medevac/commander_view_model.js";
+import { RELEASE_BUILD } from "../render/release/release_identity.js?v=238";
 
 const $ = (selector) => document.querySelector(selector);
+const AUDIO_QA_SILENT = new URLSearchParams(globalThis.location?.search ?? "")
+  .get("audioQa") === "silent";
 
 const elements = {
   commandHeader: $(".command-header"),
@@ -181,6 +184,9 @@ let selectedOptionId = "";
 let ready = false;
 let paused = false;
 let audioEnabled = false;
+let voiceCueCount = 0;
+let destinationSpeakCount = 0;
+let lastVoiceCue = "";
 let lastFrameTime = 0;
 let snapshotAccumulator = 0;
 let lastSpokenEventSequence = 0;
@@ -723,15 +729,26 @@ function eventText(event) {
 }
 
 function speakNewEvents(events) {
-  if (!audioEnabled || !("speechSynthesis" in globalThis)) return;
+  if (!audioEnabled) return;
   for (const event of events) {
     if ((event.sequence ?? 0) <= lastSpokenEventSequence) continue;
     if (["medical.observation-received", "extraction.autonomy-blocked",
       "pod.boarded-air-ambulance"].includes(event.code)) {
-      const utterance = new SpeechSynthesisUtterance(eventText(event));
-      utterance.rate = .98;
-      utterance.pitch = .82;
-      speechSynthesis.speak(utterance);
+      const cue = eventText(event);
+      voiceCueCount += 1;
+      lastVoiceCue = cue;
+      // Silent QA exercises event selection, sequencing, toggle state, and voice diagnostics, but
+      // speechSynthesis is itself the audible destination. Never call it under the shared-machine
+      // clamp; unlike Web Audio there is no downstream gain node that can safely mute speech.
+      if (!AUDIO_QA_SILENT
+        && "speechSynthesis" in globalThis
+        && typeof globalThis.SpeechSynthesisUtterance === "function") {
+        const utterance = new SpeechSynthesisUtterance(cue);
+        utterance.rate = .98;
+        utterance.pitch = .82;
+        speechSynthesis.speak(utterance);
+        destinationSpeakCount += 1;
+      }
     }
     lastSpokenEventSequence = Math.max(lastSpokenEventSequence, event.sequence ?? 0);
   }
@@ -962,7 +979,7 @@ function installEvents() {
     audioEnabled = !audioEnabled;
     elements.audioToggle.setAttribute("aria-pressed", String(audioEnabled));
     setText(elements.audioToggle, audioEnabled ? "VOICE ON" : "VOICE OFF");
-    if (!audioEnabled) globalThis.speechSynthesis?.cancel();
+    if (!audioEnabled || AUDIO_QA_SILENT) globalThis.speechSynthesis?.cancel();
     announce(audioEnabled ? "Rear-crew voice enabled." : "Rear-crew voice disabled.");
   });
   document.addEventListener("keydown", (event) => {
@@ -1014,6 +1031,16 @@ async function boot() {
       get ready() { return ready; },
       get state() { return snapshot; },
       get view() { return view; },
+      get audioDiagnostics() {
+        return Object.freeze({
+          enabled: audioEnabled,
+          silentQa: AUDIO_QA_SILENT,
+          outputMode: AUDIO_QA_SILENT ? "silent-qa" : "speech-synthesis",
+          cueCount: voiceCueCount,
+          destinationSpeakCount,
+          lastCue: lastVoiceCue,
+        });
+      },
       dispatch,
       advanceForSmoke,
       select(optionId) {
@@ -1026,7 +1053,7 @@ async function boot() {
     });
 
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("../service-worker.js").catch(() => {});
+      navigator.serviceWorker.register(`../service-worker.js?v=${RELEASE_BUILD}`).catch(() => {});
     }
     requestAnimationFrame(frame);
   } catch (error) {

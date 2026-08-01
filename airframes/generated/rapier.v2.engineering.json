@@ -1,0 +1,569 @@
+{
+  "schema": "guns-only.shape-derived-airframe-engineering.v1",
+  "source": {
+    "id": "rapier.shape-first-engineering.v2",
+    "revision": "2.0.0",
+    "canonicalSha256": "3a9885d486f7f41f28e830a4b94b3f1fd430babd5f8b3678098d28a26b9c5842",
+    "runtimeBinding": "FlightModel.RapierPublicDataSurrogate",
+    "derivation": "tools/assets/airframes/derive_shape_first_airframe.mjs"
+  },
+  "fixedRequirements": {
+    "launch": {
+      "mode": "catapult",
+      "support": "mechanical-shuttle",
+      "landingGearState": "down"
+    },
+    "recoverySite": {
+      "runwayLengthM": 3048,
+      "arrestorStationM": 1524,
+      "arrestorReference": "distance-from-either-threshold"
+    },
+    "dash": {
+      "minimumMach": 4.05,
+      "designMach": 4.2,
+      "designAltitudeM": 24000,
+      "maximumDynamicPressurePa": 55000
+    },
+    "baselineMission": {
+      "target": "high-altitude-balloon",
+      "weapon": "internal-gun",
+      "droneCount": 0,
+      "attackCount": 1,
+      "phases": [
+        "catapult-launch",
+        "climb",
+        "high-altitude-dash",
+        "zoom",
+        "gun-pass",
+        "reentry",
+        "runway-arrested-recovery"
+      ]
+    }
+  },
+  "referenceGeometry": {
+    "lengthM": 13,
+    "spanM": 7.35,
+    "heightM": 2.228801,
+    "referenceAreaM2": 24.316845,
+    "meanAerodynamicChordM": 4.790958,
+    "aspectRatio": 2.221608,
+    "aerodynamicCenterZM": -0.207622,
+    "wettedAreaM2": 152.549316,
+    "enclosedVolumeM3": 33.471682,
+    "frontalAreaM2": 3.416581,
+    "bounds": {
+      "minM": {
+        "x": -3.675,
+        "y": -0.829881,
+        "z": -6.5
+      },
+      "maxM": {
+        "x": 3.675,
+        "y": 1.39892,
+        "z": 6.5
+      },
+      "lengthM": 13,
+      "spanM": 7.35,
+      "heightM": 2.228801
+    }
+  },
+  "massProperties": {
+    "emptyMassKg": 8068.259074,
+    "fuelCapacityKg": 3755.447606,
+    "grossMassKg": 11823.70668,
+    "emptyCgM": {
+      "x": -0.006115,
+      "y": -0.017378,
+      "z": 0.742613
+    },
+    "grossCgM": {
+      "x": -0.004173,
+      "y": -0.00214,
+      "z": 0.532894
+    },
+    "emptyInertiaKgM2": {
+      "xx": 67477.860023,
+      "yy": 71093.857366,
+      "zz": 5421.976494
+    },
+    "grossInertiaKgM2": {
+      "xx": 94669.263526,
+      "yy": 100219.891522,
+      "zz": 7855.515175
+    }
+  },
+  "internalVolumes": [
+    {
+      "id": "buried-reclined-escape-capsule",
+      "shape": "box",
+      "centerM": [
+        0,
+        0.08,
+        -1.8
+      ],
+      "sizeM": [
+        0.9,
+        0.65,
+        2.4
+      ],
+      "volumeM3": 1.404,
+      "effectiveDensityKgM3": 400,
+      "massKg": 561.6
+    },
+    {
+      "id": "turbo-ramjet-core-and-duct-hardware",
+      "shape": "propulsion-package-cylinder-z",
+      "centerM": [
+        0,
+        -0.075,
+        2.29
+      ],
+      "radiusM": 0.67,
+      "lengthM": 5.48,
+      "volumeM3": 7.72823,
+      "effectiveDensityKgM3": 245,
+      "massKg": 1893.416341
+    },
+    {
+      "id": "internal-gun-and-feed",
+      "shape": "box",
+      "centerM": [
+        -0.26,
+        -0.06,
+        -4.45
+      ],
+      "sizeM": [
+        0.45,
+        0.45,
+        2
+      ],
+      "volumeM3": 0.405,
+      "effectiveDensityKgM3": 800,
+      "massKg": 324
+    },
+    {
+      "id": "port-main-gear-bay",
+      "shape": "box",
+      "centerM": [
+        -1.3,
+        0,
+        -0.3
+      ],
+      "sizeM": [
+        0.4,
+        0.12,
+        1.6
+      ],
+      "volumeM3": 0.0768,
+      "effectiveDensityKgM3": 1580,
+      "massKg": 121.344
+    },
+    {
+      "id": "starboard-main-gear-bay",
+      "shape": "box",
+      "centerM": [
+        1.3,
+        0,
+        -0.3
+      ],
+      "sizeM": [
+        0.4,
+        0.12,
+        1.6
+      ],
+      "volumeM3": 0.0768,
+      "effectiveDensityKgM3": 1580,
+      "massKg": 121.344
+    },
+    {
+      "id": "starboard-nose-gear-bay",
+      "shape": "box",
+      "centerM": [
+        0.59,
+        0,
+        -3.3
+      ],
+      "sizeM": [
+        0.18,
+        0.26,
+        0.8
+      ],
+      "volumeM3": 0.03744,
+      "effectiveDensityKgM3": 1580,
+      "massKg": 59.1552
+    },
+    {
+      "id": "port-avionics-and-flush-sensor-bay",
+      "shape": "box",
+      "centerM": [
+        -1.8,
+        0,
+        -0.65
+      ],
+      "sizeM": [
+        0.5,
+        0.09,
+        2.2
+      ],
+      "volumeM3": 0.099,
+      "effectiveDensityKgM3": 1414,
+      "massKg": 139.986
+    },
+    {
+      "id": "starboard-avionics-and-flush-sensor-bay",
+      "shape": "box",
+      "centerM": [
+        1.8,
+        0,
+        -0.65
+      ],
+      "sizeM": [
+        0.5,
+        0.09,
+        2.2
+      ],
+      "volumeM3": 0.099,
+      "effectiveDensityKgM3": 1414,
+      "massKg": 139.986
+    },
+    {
+      "id": "port-fuel-thermal-and-flight-control-services",
+      "shape": "box",
+      "centerM": [
+        -0.87,
+        0,
+        -1.1
+      ],
+      "sizeM": [
+        0.3,
+        0.14,
+        2.8
+      ],
+      "volumeM3": 0.1176,
+      "effectiveDensityKgM3": 1530,
+      "massKg": 179.928
+    },
+    {
+      "id": "starboard-fuel-thermal-and-flight-control-services",
+      "shape": "box",
+      "centerM": [
+        0.87,
+        0,
+        -1.1
+      ],
+      "sizeM": [
+        0.3,
+        0.14,
+        2.8
+      ],
+      "volumeM3": 0.1176,
+      "effectiveDensityKgM3": 1530,
+      "massKg": 179.928
+    },
+    {
+      "id": "forward-catapult-keel",
+      "shape": "box",
+      "centerM": [
+        0,
+        -0.39,
+        -1.45
+      ],
+      "sizeM": [
+        0.9,
+        0.18,
+        1.8
+      ],
+      "volumeM3": 0.2916,
+      "effectiveDensityKgM3": 350,
+      "massKg": 102.06
+    },
+    {
+      "id": "aft-arrestor-actuator-and-load-path",
+      "shape": "box",
+      "centerM": [
+        0,
+        -0.55,
+        5.35
+      ],
+      "sizeM": [
+        0.4,
+        0.1,
+        0.5
+      ],
+      "volumeM3": 0.02,
+      "effectiveDensityKgM3": 3000,
+      "massKg": 60
+    }
+  ],
+  "propulsion": {
+    "turbineCore": {
+      "seaLevelStaticDryThrustN": 84000,
+      "maximumAugmentedThrustRatio": 1.35,
+      "maximumAugmentedSeaLevelStaticThrustN": 113400,
+      "fadeStartMach": 1.9,
+      "fadeCompleteMach": 3,
+      "fuelFlowAnchorsLbPerMinute": {
+        "idle": 10.08,
+        "military": 144.48,
+        "augmented": 453.6
+      },
+      "augmentationAppliesTo": "turbine-stream-only",
+      "ramStreamAugmentationRatio": 1
+    },
+    "packaging": {
+      "architecture": {
+        "kind": "single-inlet-coannular-variable-cycle-shared-nozzle",
+        "epistemic": "provisional-fictional-integration",
+        "turbineAndRamTelemetryRemainSeparate": true,
+        "sharedNozzle": true
+      },
+      "core": {
+        "diameterM": 1.22,
+        "radiusM": 0.61,
+        "lengthM": 4.88,
+        "centerM": [
+          0,
+          -0.075,
+          2.29
+        ],
+        "minZM": -0.15,
+        "maxZM": 4.73
+      },
+      "envelope": {
+        "shape": "propulsion-package-cylinder-z",
+        "diameterM": 1.34,
+        "radiusM": 0.67,
+        "lengthM": 5.48,
+        "centerM": [
+          0,
+          -0.075,
+          2.29
+        ],
+        "minZM": -0.45,
+        "maxZM": 5.03,
+        "volumeM3": 7.72823,
+        "effectiveDensityKgM3": 245,
+        "massKg": 1893.416341,
+        "structuralRadialClearanceM": 0.03,
+        "thermalRadialClearanceM": 0.03,
+        "foreClearanceM": 0.3,
+        "aftClearanceM": 0.3
+      },
+      "fireBulkhead": {
+        "minimumGapM": 0.15,
+        "actualGapM": 0.15,
+        "passes": true
+      },
+      "tunnel": {
+        "bodyId": "single-ventral-propulsion-tunnel",
+        "shellThicknessM": 0.007,
+        "crossSections": [
+          {
+            "zM": -0.45,
+            "centerYM": -0.075,
+            "outerRadiusXM": 0.75,
+            "outerRadiusYM": 0.75,
+            "innerRadiusXM": 0.743,
+            "innerRadiusYM": 0.743,
+            "radialClearanceM": 0.073,
+            "clearCoannularAreaM2": 0.324052,
+            "maximumPackageEllipseEquation": 0.813152
+          },
+          {
+            "zM": -0.15,
+            "centerYM": -0.075,
+            "outerRadiusXM": 0.75,
+            "outerRadiusYM": 0.75,
+            "innerRadiusXM": 0.743,
+            "innerRadiusYM": 0.743,
+            "radialClearanceM": 0.073,
+            "clearCoannularAreaM2": 0.324052,
+            "maximumPackageEllipseEquation": 0.813152
+          },
+          {
+            "zM": 2.29,
+            "centerYM": -0.075,
+            "outerRadiusXM": 0.75,
+            "outerRadiusYM": 0.75,
+            "innerRadiusXM": 0.743,
+            "innerRadiusYM": 0.743,
+            "radialClearanceM": 0.073,
+            "clearCoannularAreaM2": 0.324052,
+            "maximumPackageEllipseEquation": 0.813152
+          },
+          {
+            "zM": 4.73,
+            "centerYM": -0.075,
+            "outerRadiusXM": 0.75,
+            "outerRadiusYM": 0.75,
+            "innerRadiusXM": 0.743,
+            "innerRadiusYM": 0.743,
+            "radialClearanceM": 0.073,
+            "clearCoannularAreaM2": 0.324052,
+            "maximumPackageEllipseEquation": 0.813152
+          },
+          {
+            "zM": 5.03,
+            "centerYM": -0.075,
+            "outerRadiusXM": 0.75,
+            "outerRadiusYM": 0.75,
+            "innerRadiusXM": 0.743,
+            "innerRadiusYM": 0.743,
+            "radialClearanceM": 0.073,
+            "clearCoannularAreaM2": 0.324052,
+            "maximumPackageEllipseEquation": 0.813152
+          }
+        ],
+        "limitingCrossSectionZM": -0.45,
+        "minimumRadialClearanceM": 0.073,
+        "minimumClearCoannularAreaM2": 0.324052
+      },
+      "internalVolumeCollisionPass": true,
+      "flowCapacity": {
+        "designMach": 4.2,
+        "designAltitudeM": 24000,
+        "designMassFlowKgS": 68.716242,
+        "totalTemperatureK": 998.694452,
+        "idealTotalPressurePa": 587062.186695,
+        "pressureRecoveryFloorFraction": 0.3,
+        "minimumRecoveryRequiredFraction": 0.282447,
+        "chokedMassFluxAtRecoveryFloorKgM2S": 225.23111,
+        "requiredChokedAreaM2": 0.305092,
+        "availableCoannularAreaM2": 0.324052,
+        "coannularAreaMarginM2": 0.01896,
+        "coannularAreaMarginFraction": 0.062145,
+        "nozzleAreaM2": 0.636173,
+        "nozzleToCoannularAreaRatio": 1.963179,
+        "coannularAreaPass": true,
+        "nozzleAreaPass": true,
+        "passes": true,
+        "epistemic": "isentropic-choked-area-screen-not-an-inlet-cycle-deck"
+      }
+    },
+    "ramStream": {
+      "augmentationRatio": 1,
+      "designPointRawNetThrustN": 57515.494188,
+      "designPointNetThrustN": 57511.139568
+    },
+    "inletFlow": {
+      "designFlowIncidenceDeg": 7.5,
+      "designFlowIncidenceRad": 0.1309,
+      "offDesignFlowModel": {
+        "ramRegimeStartMach": 2,
+        "unstartTripDeviationRad": 0.12,
+        "unstartClearDeviationRad": 0.04,
+        "unstartRecoveryFloor": 0.15,
+        "characteristicAngleAtRamStartRad": 0.34,
+        "characteristicAngleDecreaseRadPerMach": 0.07,
+        "minimumCharacteristicAngleRad": 0.08,
+        "onsetBlendMach": 0.5
+      },
+      "designPoint": {
+        "trimLiftCoefficient": 0.129945,
+        "effectiveClAlphaPerRad": 0.980581,
+        "trimAlphaRad": 0.132518,
+        "trimAlphaDeg": 7.592733,
+        "alphaDeviationRad": 0.001618,
+        "alphaDeviationDeg": 0.092733,
+        "betaRad": 0,
+        "combinedOffDesignAngleRad": 0.001618,
+        "combinedOffDesignAngleDeg": 0.092733,
+        "characteristicAngleRad": 0.186,
+        "recovery": 0.999924,
+        "unstarted": false
+      }
+    },
+    "inletCaptureAreaM2": 1.427791,
+    "designPoint": {
+      "mach": 4.2,
+      "altitudeM": 24000,
+      "speedMps": 1250.424183,
+      "dynamicPressurePa": 36695.116014,
+      "massFlowKgS": 68.716242,
+      "specificThrustNPerKgS": 900,
+      "rawRamStreamThrustN": 57515.494188,
+      "netThrustN": 57511.139568,
+      "turbineStreamThrustN": 0,
+      "ramStreamThrustN": 57511.139568,
+      "ramStreamAugmentationRatio": 1,
+      "dragN": 42924.784034,
+      "dragBreakdownN": {
+        "friction": 6654.194871,
+        "wave": 27581.80223,
+        "base": 2334.442415,
+        "induced": 3174.730886
+      },
+      "excessThrustN": 14586.355534,
+      "propulsivePass": true,
+      "dynamicPressurePass": true
+    },
+    "dashEnvelope": {
+      "lastPassingMach": 4.3,
+      "firstFailingMach": 4.31
+    }
+  },
+  "thermal": {
+    "areasM2": {
+      "cmc-stagnation-hot-edge": 22.362815,
+      "insulated-warm-panel": 77.311056,
+      "nozzle-fairing": 7.709535,
+      "titanium-aft-panel": 45.165909
+    },
+    "designPoint": {
+      "stagnationTemperatureK": 998.694452,
+      "recoveryTemperatureK": 905.318285,
+      "zones": [
+        {
+          "id": "cmc-stagnation-hot-edge",
+          "materialId": "sic-sic-cmc",
+          "areaM2": 22.362815,
+          "temperatureBasis": "stagnation",
+          "effectiveTemperatureK": 998.694452,
+          "maximumServiceTemperatureK": 1473.15,
+          "marginK": 474.455548,
+          "passes": true
+        },
+        {
+          "id": "insulated-warm-panel",
+          "materialId": "high-temperature-bmi-composite",
+          "areaM2": 77.311056,
+          "temperatureBasis": "recovery",
+          "effectiveTemperatureK": 604.02452,
+          "maximumServiceTemperatureK": 623.15,
+          "marginK": 19.12548,
+          "passes": true
+        },
+        {
+          "id": "titanium-aft-panel",
+          "materialId": "titanium-aluminide-hot-structure",
+          "areaM2": 45.165909,
+          "temperatureBasis": "recovery",
+          "effectiveTemperatureK": 713.585889,
+          "maximumServiceTemperatureK": 973.15,
+          "marginK": 259.564111,
+          "passes": true
+        },
+        {
+          "id": "nozzle-fairing",
+          "materialId": "nickel-alloy-nozzle",
+          "areaM2": 7.709535,
+          "temperatureBasis": "recovery",
+          "effectiveTemperatureK": 836.842429,
+          "maximumServiceTemperatureK": 1273.15,
+          "marginK": 436.307571,
+          "passes": true
+        }
+      ],
+      "bindingZone": "insulated-warm-panel",
+      "minimumMarginK": 19.12548,
+      "passes": true
+    }
+  },
+  "acceptance": {
+    "dashDesignPointPasses": true,
+    "propulsionPackageFitsTunnel": true,
+    "propulsionPackageClearsInternalVolumes": true,
+    "coannularFlowAreaPass": true,
+    "shapeFirstNoAuthoredDerivedOutputs": true
+  }
+}

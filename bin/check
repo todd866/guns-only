@@ -5,6 +5,18 @@ repo_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 cd "$repo_dir"
 . "$repo_dir/bin/dotnet-env"
 
+# CI and the checked-in release contract use Node 24. Refuse a different local major instead of
+# producing a green gate whose loader, test-runner, and ESM behavior do not match the release job.
+command -v node >/dev/null 2>&1 || {
+    echo "check: Node.js 24 is required but node is unavailable" >&2
+    exit 1
+}
+node_major=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true)
+if [ "$node_major" != "24" ]; then
+    echo "check: Node.js 24 is required; found $(node --version 2>/dev/null || echo unknown)" >&2
+    exit 1
+fi
+
 # Serialize whole-repo gates across agents. Several agents share this workstation; parallel
 # gates (dotnet suites + six SwiftShader Chromiums each) starve one another's browser smoke
 # into false timeouts (2026-07-29: five deploy gates died at load average 70-85). One gate at
@@ -29,6 +41,7 @@ trap 'rm -rf "$gate_lock"' EXIT HUP INT TERM
 sh -n bin/dotnet-env
 sh -n bin/test-in-process
 sh -n bin/deploy-web
+sh -n bin/stamp-release
 node --check web/wwwroot/app.js
 node --check web/wwwroot/hud.js
 node --check web/wwwroot/multiplayer-config.js
@@ -39,6 +52,10 @@ node --check web/wwwroot/indoor/sim.js
 node --check web/wwwroot/medevac/app.js
 node --check web/wwwroot/render/medevac/commander_view_model.js
 node --check web/wwwroot/api/telemetry.js
+node --check web/smoke/remote-smoke.mjs
+release_tests=$(find tools/release/tests -type f -name '*.test.mjs' -print | sort)
+node --test $release_tests
+./bin/stamp-release --check
 node tools/assets/validate-manifests.mjs --strict
 node tools/content/validate-governance.mjs --strict
 asset_tests=$(find tools/assets -type f -name '*.test.mjs' -print | sort)
@@ -54,12 +71,14 @@ if [ -n "$narrative_tests" ]; then
   node --test $narrative_tests
 fi
 python3 tools/audio/cockpit_palette.py self-test
-python3 -m unittest tools/audio/test_cockpit_palette.py tools/audio/test_jet_library.py
+python3 -m unittest discover -s tools/audio -p 'test_*.py'
+python3 tools/terrain/test_hydrate_rapier_atlas.py
 node --test tools/audio/*.test.mjs
 # Format/unit smoke only — the live scenario matrix (--self-test) is still hardening.
 node --test tools/anca-audit/*.test.mjs
 runtime_tests=$(find web/wwwroot/render -type f -path '*/tests/*.test.mjs' -print | sort)
 node --test $runtime_tests
+node --test web/wwwroot/*.test.js
 node --test web/wwwroot/api/*.test.js
 node --test world-worker/tests/*.test.mjs
 
@@ -109,13 +128,19 @@ if [ -d "$ukraine_mesh_source" ]; then
   mkdir -p "$ukraine_mesh_stage"
   cp -R "$ukraine_mesh_source/." "$ukraine_mesh_stage/"
 fi
+# The quarantined Cobra lab still has authoritative source content. Stage it through the same
+# source-to-wwwroot truth check without promoting or routing the experience.
+cobra_source="content/packs/cobra-vietnam"
+cobra_stage="$staged_content_dir/packs/cobra-vietnam"
+test -f "$cobra_source/environment/cobra-canyon.world.json"
+mkdir -p "$cobra_stage"
+cp -R "$cobra_source/." "$cobra_stage/"
 # Rapier-range atlas (eastern corridor). Source of truth under content/; wwwroot is a staged copy.
 ukraine_atlas_source="content/packs/ukraine-modern/environment/terrain-atlas"
 ukraine_atlas_stage="$staged_content_dir/packs/ukraine-modern/environment/terrain-atlas"
-if [ -d "$ukraine_atlas_source" ]; then
-  mkdir -p "$ukraine_atlas_stage"
-  cp -R "$ukraine_atlas_source/." "$ukraine_atlas_stage/"
-fi
+python3 tools/terrain/hydrate_rapier_atlas.py verify --atlas-dir "$ukraine_atlas_source"
+mkdir -p "$ukraine_atlas_stage"
+cp -R "$ukraine_atlas_source/." "$ukraine_atlas_stage/"
 # Hero-cell mission feature packs (authored scenery). Source of truth under content/; wwwroot is
 # a staged copy.
 ukraine_hero_source="content/packs/ukraine-modern/environment/hero-cells"
@@ -162,17 +187,32 @@ test -f "$publish_dir/wwwroot/_framework/blazor.webassembly.js"
 test -f "$publish_dir/wwwroot/content/packs/korea-1950s/pack.json"
 test -f "$publish_dir/wwwroot/content/packs/ukraine-modern/environment/terrain/soniachne-steppe.manifest.json"
 test -f "$publish_dir/wwwroot/content/packs/ukraine-modern/environment/terrain/soniachne-steppe.terrain"
+test -f "$publish_dir/wwwroot/content/packs/cobra-vietnam/environment/cobra-canyon.world.json"
+python3 tools/terrain/hydrate_rapier_atlas.py verify \
+  --atlas-dir "$publish_dir/wwwroot/content/packs/ukraine-modern/environment/terrain-atlas"
 test -f "$publish_dir/wwwroot/render/assets/asset_registry.js"
 test -f "$publish_dir/wwwroot/render/presence/global_room_client.js"
 test -f "$publish_dir/wwwroot/multiplayer-config.js"
 test -f "$publish_dir/wwwroot/api/telemetry.js"
 test -f "$publish_dir/wwwroot/api/build-info.js"
 test -f "$publish_dir/wwwroot/api/telemetry-admin.js"
-test ! -f "$publish_dir/wwwroot/api/telemetry.test.js"
-test ! -f "$publish_dir/wwwroot/api/telemetry-admin.test.js"
+test -z "$(find "$publish_dir/wwwroot" -type f \( -name '*.test.js' -o -name '*.test.mjs' \) -print -quit)"
 test ! -d "$publish_dir/wwwroot/render/presence/tests"
 test ! -d "$publish_dir/wwwroot/render/telemetry/tests"
 test ! -d "$publish_dir/wwwroot/render/hud/tests"
+test ! -e "$publish_dir/wwwroot/render/audio/preview"
+test ! -e "$publish_dir/wwwroot/asset-lab"
+test ! -e "$publish_dir/wwwroot/effects-lab"
+test ! -e "$publish_dir/wwwroot/environment-lab"
+test ! -e "$publish_dir/wwwroot/present/rapier-design"
+test -f "$publish_dir/wwwroot/cobra-lab/index.html"
+test -f "$publish_dir/wwwroot/cobra-lab/main.js"
+test -f "$publish_dir/wwwroot/cobra-lab/styles.css"
+test -f "$publish_dir/wwwroot/render/audio/samples/jet/f22_idle_loop.wav"
+test -f "$publish_dir/wwwroot/render/audio/samples/jet/rapier_idle_cockpit_loop.wav"
+test -z "$(find "$publish_dir/wwwroot/render/audio/samples/jet" -type f \
+  \( -name '_*.wav' -o -name '_*.flac' -o -name '*.flac' \) -print -quit)"
+test -f "$publish_dir/wwwroot/render/audio/samples/radio/manifest.json"
 test ! -d "$publish_dir/wwwroot/lib/bootstrap"
 test -f "$publish_dir/wwwroot/vercel.json"
 grep -Fq '"source": "/telemetry-admin"' "$publish_dir/wwwroot/vercel.json"
@@ -183,11 +223,11 @@ grep -Fq '"source": "/telemetry-admin"' "$publish_dir/wwwroot/vercel.json"
 # deleted render helper that leaves syntax valid but breaks new FlightView() -- that every Node and
 # .NET suite passes green. Set GUNS_SKIP_SMOKE=1 to skip it for a quick offline run.
 if [ -z "${GUNS_SKIP_SMOKE:-}" ]; then
-  (cd web/smoke && npm install --no-audit --no-fund --silent)
+  (cd web/smoke && npm ci --ignore-scripts --no-audit --no-fund --silent)
   if [ -n "${CI:-}" ]; then
-    (cd web/smoke && npx --yes playwright install --with-deps chromium)
+    (cd web/smoke && ./node_modules/.bin/playwright install --with-deps chromium webkit)
   else
-    (cd web/smoke && npx --yes playwright install chromium)
+    (cd web/smoke && ./node_modules/.bin/playwright install chromium webkit)
   fi
   SMOKE_WWWROOT="$publish_dir/wwwroot" node --test web/smoke/smoke.test.mjs
   # HUD geometry contract: numeric assertions through the real hud.js in headless Chromium

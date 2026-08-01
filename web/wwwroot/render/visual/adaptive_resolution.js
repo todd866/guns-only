@@ -87,6 +87,32 @@ export class AdaptiveResolutionController {
     return this.apply(reason);
   }
 
+  /**
+   * Apply one explicit quality rung after a caller has attributed frame pressure to the view/GPU
+   * lane. Ordinary `sample()` remains the closed-loop controller; these nudges let the outer frame
+   * governor act immediately without feeding a synthetic frame time into the EMA or confusing a
+   * CPU/terrain stall with renderer pressure.
+   */
+  nudgeDown(reason = "causal-view-pressure") {
+    if (!this.enabled || this.scale <= this.minScale) return this.status(false, reason);
+    const nextScale = quantize(Math.max(this.minScale, this.scale - this.stepDown));
+    if (nextScale === this.scale) return this.status(false, reason);
+    this.scale = nextScale;
+    this.samplesSinceChange = 0;
+    const changed = this.apply(reason);
+    return this.status(changed, reason);
+  }
+
+  nudgeUp(reason = "causal-view-recovery") {
+    if (!this.enabled || this.scale >= this.maxScale) return this.status(false, reason);
+    const nextScale = quantize(Math.min(this.maxScale, this.scale + this.stepUp));
+    if (nextScale === this.scale) return this.status(false, reason);
+    this.scale = nextScale;
+    this.samplesSinceChange = 0;
+    const changed = this.apply(reason);
+    return this.status(changed, reason);
+  }
+
   get maximumPixelRatio() {
     const pixelBudgetRatio = Math.sqrt(this.maxRenderPixels / (this.width * this.height));
     return Math.min(this.devicePixelRatio, this.pixelRatioCap, pixelBudgetRatio);

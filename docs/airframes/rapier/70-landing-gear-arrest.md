@@ -8,18 +8,18 @@ makes that rationale true.*
 
 ## Catapult (closed geometry)
 
-- **520 m rail stroke**, ~110 m/s end speed, **433.86 m** flat gallery + **86.14 m** arc to
-  **12°**, radius **411.29 m**, rise **8.99 m** at 3 G rail normal.
+- **520 m rail stroke**, **120 m/s** end speed, **417.49 m** flat gallery + **102.51 m** arc to
+  **12°**, radius **489.46 m**, rise **10.70 m** at 3 G rail normal.
 - Angle chosen from the aircraft's capability and pilot/structure load, not from terrain — see
   `docs/2026-07-26-buried-launch-tube-and-the-ukraine-theatre.md` for the full derivation (12° is the
   same angle Kuznetsov and Invincible use; the jet itself sustains a far steeper climb, so the arc,
   not the engine, sets the number).
-- Handoff support plane: rail head 0.15 m + `RampRiseM` 8.99 m +
-  `AirborneHeightM` 4.0 m ≈ **13.14 m above the slab**. The aircraft reference is another
-  provisional 0.85 m above its loaded support plane, ≈ **13.99 m above the slab**.
+- Handoff support plane: rail head 0.15 m + `RampRiseM` 10.70 m +
+  `AirborneHeightM` 4.0 m ≈ **14.85 m above the slab**. The aircraft reference is another
+  provisional 0.85 m above its loaded support plane, ≈ **15.70 m above the slab**.
 
 The 360 m flat + 160 m arc, 765 m radius, and 16.7 m rise were the superseded **150 m/s**
-study. Applying them to the live 110 m/s launcher is physically inconsistent.
+study. Applying them to the live 120 m/s launcher is physically inconsistent.
 
 Full detail on the launch tube, gallery, and bore sizing lives in
 [80 — Basing and ground](80-basing-and-ground.md) and `icds/basing-arrest.md`; this chapter's

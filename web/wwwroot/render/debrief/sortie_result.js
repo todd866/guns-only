@@ -202,12 +202,18 @@ function readableToken(value, fallback = "Not recorded") {
 }
 
 function isCarrierQualification(state) {
+  const mission = token(state?.mission_definition_id);
   return state?.carrier === true
-    && token(state?.mission_definition_id) === "MISSION.CARRIER-QUALIFICATION.V1";
+    && [
+      "MISSION.CARRIER-QUALIFICATION.V1",
+      "MISSION.KOREA.PANTHER-SORTIE.V1",
+    ].includes(mission);
 }
 
 function carrierQualificationCopy(state) {
   const recovery = token(state?.recovery);
+  const barrier = state?.barrier_engagement === true
+    || recovery.replaceAll("_", "").replaceAll(" ", "") === "BARRIERENGAGEMENT";
   const trapped = recovery === "TRAP" || token(state?.arrest_phase) === "STOPPED";
   const bolter = state?.bolter === true || recovery === "BOLTER";
   const wire = Math.max(0, Math.round(Number(state?.wire) || 0));
@@ -218,6 +224,13 @@ function carrierQualificationCopy(state) {
     "Review the approach",
   );
 
+  if (barrier) {
+    return withSortieLessons({
+      kicker: "Carrier qualification debrief",
+      title: "Barrier · Missed wires",
+      brief: `${grade}. The raised barrier retained the aircraft aboard after the arresting wires were missed; no wire was caught. Recorded deviations: ${deviations}. Primary correction: ${correction}.`,
+    }, state);
+  }
   if (trapped) {
     return withSortieLessons({
       kicker: "Carrier qualification debrief",

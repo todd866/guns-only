@@ -6,6 +6,7 @@ import {
   combatHandoffPresentation,
   sortieResultCopy,
 } from "../sortie_result.js";
+import { RELEASE_BUILD } from "../../release/release_identity.js";
 
 test("handoff presentation fails closed before the first simulation snapshot", () => {
   for (const state of [undefined, null, false, 0, ""]) {
@@ -149,6 +150,30 @@ test("carrier qualification reports a bolter even when the generic outcome token
   assert.match(result.brief, /HARD SINK RATE/);
   assert.match(result.brief, /ADD POWER EARLIER/);
   assert.doesNotMatch(result.brief, /mutual|opponent/i);
+});
+
+test("Panther barrier retention is neither a trap, bolter, nor generic mutual kill", () => {
+  const result = sortieResultCopy({
+    mission_definition_id: "mission.korea.panther-sortie.v1",
+    carrier: true,
+    sortie_outcome: "DRAW",
+    recovery: "BarrierEngagement",
+    barrier_engagement: true,
+    arrest_phase: "STOPPED",
+    bolter: true,
+    hook_outcome: "MissedWires",
+    wire: 0,
+    touchdown_grade: "NO GRADE",
+    touchdown_deviations: "LINEUP",
+    touchdown_primary_correction: "ESTABLISH LINEUP EARLIER",
+  });
+
+  assert.equal(result.title, "Barrier · Missed wires");
+  assert.match(result.brief, /raised barrier retained the aircraft aboard/i);
+  assert.match(result.brief, /arresting wires were missed; no wire was caught/i);
+  assert.match(result.brief, /LINEUP/);
+  assert.match(result.brief, /ESTABLISH LINEUP EARLIER/);
+  assert.doesNotMatch(`${result.title} ${result.brief}`, /trap|bolter|mutual/i);
 });
 
 test("an explicit opponent destruction event retains the combat-loss diagnosis", () => {
@@ -455,7 +480,7 @@ test("app consumes the pure evidence-based debrief module", async () => {
   const app = await readFile(new URL("../../../app.js", import.meta.url), "utf8");
 
   assert.match(app,
-    /import \{[\s\S]*?combatHandoffPresentation,[\s\S]*?sortieResultCopy,[\s\S]*?} from "\.\/render\/debrief\/sortie_result\.js\?v=237";/);
+    new RegExp(`import \\{[\\s\\S]*?combatHandoffPresentation,[\\s\\S]*?sortieResultCopy,[\\s\\S]*?} from "\\.\\/render\\/debrief\\/sortie_result\\.js\\?v=${RELEASE_BUILD}";`));
   assert.doesNotMatch(app, /function sortieResultCopy\(/);
   assert.doesNotMatch(app, /The opponent's gun solution was decisive\. The loss was/);
 });

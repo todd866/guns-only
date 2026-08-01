@@ -1,5 +1,11 @@
 # Rapier — systems-engineering bible
 
+> **Superseded production authority.** This directory is the historical Rapier v1 design record.
+> It no longer defines the production aircraft, mission, fuel load, stores, geometry, or runtime
+> physics. Current authority begins at [Rapier v2](../rapier-v2/README.md) and the canonical
+> `airframes/rapier.v2.json`; the chapters below must not be used to restore v1 constants, drones,
+> economy, or briefing claims to Card 12.
+
 **Airframe id:** `rapier.public-data-surrogate.v1`
 
 ## Epistemic banner

@@ -61,7 +61,7 @@ export function projectTestFlightState(state = {}) {
   const gearHandle = enumToken(state.gear_handle, ["UP", "DOWN"]);
   const flapLever = enumToken(state.flap_lever, ["UP", "HOLD", "DOWN"]);
   const mode = enumToken(state.mode,
-    ["FREE", "APPROACH", "WAVE-OFF", "BOLTER", "CATAPULT", "ARRESTED", "STOPPED", "TERMINAL"]);
+    ["FREE", "APPROACH", "WAVE-OFF", "BOLTER", "BARRIER", "CATAPULT", "ARRESTED", "STOPPED", "TERMINAL"]);
   const configurationTarget = enumToken(state.configuration_target, ["COMBAT", "RECOVERY"]);
   const configurationAutomatic = state.configuration_automatic === true;
   const configurationTransition = state.configuration_transition === true;

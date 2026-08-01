@@ -4,10 +4,21 @@
 const MAXIMUM_GROUND_SPEED_MPS = 32;
 const MAXIMUM_VERTICAL_SPEED_MPS = 3;
 
+export function casevacAudioQaSilent(locationLike = globalThis.location) {
+  try {
+    return new URLSearchParams(locationLike?.search ?? "").get("audioQa") === "silent";
+  } catch {
+    return false;
+  }
+}
+
+const silentQa = casevacAudioQaSilent();
+
 let context = null;
 let voices = null;
 let enabled = true;
 let disabled = false;
+let signalActive = false;
 
 function clamp(value, minimum = 0, maximum = 1) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -132,7 +143,7 @@ export function setCasevacAudioEnabled(nextEnabled) {
   enabled = Boolean(nextEnabled);
   if (voices && context) {
     voices.master.gain.setTargetAtTime(
-      enabled ? 0.48 : 0,
+      enabled && !silentQa ? 0.48 : 0,
       context.currentTime,
       0.025,
     );
@@ -146,6 +157,7 @@ export function updateCasevacAudio(state, { muted = false } = {}) {
     if (context.state === "suspended") return;
     const sample = projectCasevacAudioState(state);
     const live = enabled && !muted && sample.flyable;
+    signalActive = live;
     const now = context.currentTime;
     const bladeFrequency = 44
       + sample.power01 * 17
@@ -180,8 +192,28 @@ export function updateCasevacAudio(state, { muted = false } = {}) {
       now,
       0.18,
     );
-    voices.master.gain.setTargetAtTime(live ? 0.48 : 0, now, live ? 0.2 : 0.03);
+    // Keep every presentation oscillator/filter and its authoritative modulation live in silent
+    // QA. Only the destination master is clamped, so browser acceptance exercises the real graph
+    // without putting shared-machine audio on speakers.
+    voices.master.gain.setTargetAtTime(
+      live && !silentQa ? 0.48 : 0,
+      now,
+      live && !silentQa ? 0.2 : 0.03,
+    );
   } catch {
     disabled = true;
+    signalActive = false;
   }
+}
+
+export function casevacAudioDiagnostics() {
+  return Object.freeze({
+    enabled,
+    disabled,
+    silentQa,
+    contextState: context?.state ?? "uninitialized",
+    signalActive,
+    outputGain: Number(voices?.master?.gain?.value ?? 0),
+    outputMode: silentQa ? "silent-qa" : "audible",
+  });
 }

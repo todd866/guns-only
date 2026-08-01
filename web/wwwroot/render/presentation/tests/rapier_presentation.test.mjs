@@ -10,10 +10,10 @@ test("Rapier uses its own canopy-free 13 m by 7.35 m interceptor silhouette", ()
   const rapier = createRapier();
   const size = new THREE.Box3().setFromObject(rapier).getSize(new THREE.Vector3());
   const wingSize = new THREE.Box3()
-    .setFromObject(rapier.getObjectByName("RAPIER_7P35M_PLANFORM"))
+    .setFromObject(rapier.getObjectByName("RAPIER_WING"))
     .getSize(new THREE.Vector3());
 
-  assert.equal(rapier.name, "RAPIER_HIGH_ALTITUDE_INTERCEPTOR_SURROGATE");
+  assert.equal(rapier.name, "RAPIER");
   assert.ok(Math.abs(wingSize.x - 7.35) < 0.12,
     `bevelled visual span ${wingSize.x.toFixed(3)} m must remain within 12 cm of the 7.35 m contract`);
   assert.ok(size.x < 7.5,
@@ -21,14 +21,18 @@ test("Rapier uses its own canopy-free 13 m by 7.35 m interceptor silhouette", ()
   assert.ok(Math.abs(size.z - 13) < 0.02,
     `visual length ${size.z.toFixed(3)} m must match the 13 m flight-model contract`);
   assert.deepEqual(rapier.userData.dimensionsM, { length: 13, span: 7.35 });
-  assert.ok(rapier.getObjectByName("RAPIER_13M_SENSOR_FUSELAGE"));
-  assert.ok(rapier.getObjectByName("RAPIER_OPAQUE_ESCAPE_POD_SPINE"));
-  assert.ok(rapier.getObjectByName("RAPIER_SINGLE_BLENDED_INTAKE"));
-  assert.ok(rapier.getObjectByName("RAPIER_SINGLE_EXHAUST"));
-  assert.equal(rapier.children.some((child) => /canopy/i.test(child.name)), false);
+  assert.equal(rapier.userData.airframeId, "rapier.shape-first-engineering.v2");
+  assert.ok(rapier.getObjectByName("RAPIER_FUSELAGE"));
+  assert.ok(rapier.getObjectByName("RAPIER_PROPULSION_TUNNEL"));
+  assert.ok(rapier.getObjectByName("RAPIER_INTAKE"));
+  assert.ok(rapier.getObjectByName("RAPIER_EXHAUST"));
+  assert.equal(rapier.children.some((child) => /canopy|spine|drone/i.test(child.name)), false);
   assert.equal(rapier.userData.sockets.cockpitCamera.name, "SOCKET_CAMERA_COCKPIT");
   assert.equal(rapier.userData.sockets.muzzleLeft.name, "SOCKET_MUZZLE_LEFT");
   assert.equal(rapier.userData.sockets.muzzleRight.name, "SOCKET_MUZZLE_RIGHT");
+  assert.deepEqual(rapier.userData.sockets.muzzleLeft.position,
+    rapier.userData.sockets.muzzleRight.position,
+    "v2 has one offset gun aperture, not two cheek guns");
 });
 
 test("Rapier dispersed strip is a fixed 520 m launch and arresting platform, not a ship", () => {
@@ -49,7 +53,7 @@ test("Rapier dispersed strip is a fixed 520 m launch and arresting platform, not
   // level. Both numbers below are derived the same way CatapultLaunchModel derives them, so this
   // fails if the renderer and the kernel ever stop agreeing about the shape of the rail — which is
   // a silent visual float, not a crash.
-  const arcRadiusM = 110 * 110 / (3.0 * 9.80665);        // CatapultLaunchModel.RampNormalG
+  const arcRadiusM = 120 * 120 / (3.0 * 9.80665);        // CatapultLaunchModel.RampNormalG
   const rampAngleRad = 12 * Math.PI / 180;               // Beats: CatapultRampAngleRad
   const rampRiseM = arcRadiusM * (1 - Math.cos(rampAngleRad));
   const rampHorizontalM = arcRadiusM * Math.sin(rampAngleRad);
@@ -90,9 +94,9 @@ test("Rapier dispersed strip is a fixed 520 m launch and arresting platform, not
   // Derived, not hardcoded: the gallery roofs the FLAT run, so its length is the stroke minus the
   // ramp arc. Shortening the launcher lengthens the gallery, and a literal here just breaks.
   const flatLengthM = 520 - rampAngleRad * arcRadiusM;
-  assert.ok(Math.abs(flatLengthM - 433.861) < 0.002);
-  assert.ok(Math.abs(strip.userData.launchArcLengthM - 86.139) < 0.002);
-  assert.ok(Math.abs(strip.userData.launchRampRiseM - 8.9876) < 0.001);
+  assert.ok(Math.abs(flatLengthM - 417.487) < 0.002);
+  assert.ok(Math.abs(strip.userData.launchArcLengthM - 102.513) < 0.002);
+  assert.ok(Math.abs(strip.userData.launchRampRiseM - 10.6960) < 0.001);
   assert.equal(strip.userData.launchRailHeadHeightM, 0.15);
   assert.equal(strip.userData.aircraftSupportReferenceHeightM, 0.85);
   const expectedRibs = Math.floor((flatLengthM - 10) / 10) + 1;

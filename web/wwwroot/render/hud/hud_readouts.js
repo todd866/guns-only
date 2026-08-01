@@ -532,7 +532,7 @@ export function systemsReadout(state = {}) {
       ? `${Math.round(flapLeftDeg)}°/${Math.round(flapRightDeg)}°`
       : `${Math.round(flapLeftDeg ?? flapRightDeg)}°`;
   const mode = normalizedEnum(state.mode,
-    ["FREE", "APPROACH", "WAVE-OFF", "BOLTER", "CATAPULT", "ARRESTED", "STOPPED", "TERMINAL"],
+    ["FREE", "APPROACH", "WAVE-OFF", "BOLTER", "BARRIER", "CATAPULT", "ARRESTED", "STOPPED", "TERMINAL"],
     "--");
   const configurationTarget = normalizedEnum(state.configuration_target,
     ["COMBAT", "RECOVERY"], "--");

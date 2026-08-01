@@ -90,14 +90,14 @@ public sealed class PartialAirframeDamageTests {
             > eight.RollControlAuthorityFraction);
         Assert.All(new[] { six, seven, eight }, profile => {
             Assert.Equal(AirframeDamageEpistemic.Reconstruction, profile.Epistemic);
-            Assert.Contains("panther-subtype-unresolved", profile.Id,
+            Assert.Contains("f9f-2-panther", profile.Id,
                 StringComparison.Ordinal);
-            Assert.Contains("panther-subtype-unresolved", profile.VisualDetachProfileId,
+            Assert.Contains("f9f-2-panther", profile.VisualDetachProfileId,
                 StringComparison.Ordinal);
-            Assert.DoesNotContain("f9f2", profile.Id,
-                StringComparison.OrdinalIgnoreCase);
-            Assert.DoesNotContain("f9f2", profile.VisualDetachProfileId,
-                StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("subtype-unresolved", profile.Id,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("subtype-unresolved", profile.VisualDetachProfileId,
+                StringComparison.Ordinal);
             Assert.Equal(0.0, profile.ModeledRemovedMassKg);
             Assert.Equal(
                 TipTankFuelTreatment.RetainedUntilFuelSystemIntegration,

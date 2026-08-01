@@ -221,6 +221,7 @@ public sealed class SimulationSession {
     readonly MeshNavDirector _meshNav = new();
     MeshNavSolution _meshNavSolution = default;
     readonly RecoveryProcedureDirector _recoveryProcedure = new();
+    readonly CarrierSortieRouteDirector _carrierSortieRoute = new();
     // Pattern school starts with a serviceable aircraft. Attrition faults remain available from
     // the systems panel, but silently failing the utility hydraulics 90 seconds into every first
     // circuit left the gear at 91% and made the taught wire pass unrecoverable.
@@ -412,6 +413,8 @@ public sealed class SimulationSession {
         ? _rapierPursuitRangeM : 0.0;
     public Vec3D RapierGuidanceWaypoint => _rapierMissionGuidance.Waypoint;
     public int RapierRecoveryGate => _rapierMissionGuidance.RecoveryGate;
+    public bool RapierRecoveryConfigurationRequested =>
+        _rapierMissionGuidance.RecoveryConfigurationRequested;
     public string RapierCircuitLeg => _rapierMissionGuidance.CircuitLeg ?? "";
     public double RapierFdBankDeg => _rapierMissionGuidance.FdBankDeg;
     public double RapierFdTargetKtas => _rapierMissionGuidance.FdTargetKtas;
@@ -435,6 +438,21 @@ public sealed class SimulationSession {
     public MeshNavDirector MeshNav => _meshNav;
     public MeshNavSolution MeshNavSolution => _meshNavSolution;
     public RecoveryProcedureDirector RecoveryProcedure => _recoveryProcedure;
+    public CarrierSortieRouteState CarrierSortieRoute => _carrierSortieRoute.State;
+    public bool CarrierSortieRtbAvailable =>
+        _carrierSortieRoute.State.RtbAvailable;
+    public bool CarrierSortieRtbRequested =>
+        _carrierSortieRoute.State.RtbRequested;
+    /// <summary>
+    /// The finite axial whole-sortie card raises the crash barrier for recovery. Generic carrier
+    /// drills retain their established bolter behavior, and angled decks always keep a flyaway.
+    /// </summary>
+    public bool StraightDeckBarrierArmed =>
+        _carrierSortieRoute.State.Active
+        && _carrier is {
+            IsMaritime: true,
+            Configuration: Carrier.DeckConfiguration.Axial
+        };
     public bool CircuitsCleanMode => _circuitsCleanMode;
     public bool CircuitsFaultArmed => _circuitsFaultArmed;
     public double RapierNoseOnVelocityErrorDeg =>
@@ -454,6 +472,7 @@ public sealed class SimulationSession {
     public double RapierCommandedMach => _rapierMissionGuidance.CommandedMach;
     public double RapierAuthoredTargetMach => _rapierMissionGuidance.AuthoredTargetMach;
     public double RapierSkinMachLimit => _rapierMissionGuidance.SkinMachLimit;
+    public double RapierTargetGammaDeg => _rapierMissionGuidance.TargetGammaDeg;
     public string RapierPhaseReason => _rapierMissionGuidance.PhaseReason ?? "";
     public string RapierIntention => _rapierMissionGuidance.Intention ?? "";
     public string RapierStrategy => _rapierMissionGuidance.Strategy ?? "";
@@ -461,28 +480,10 @@ public sealed class SimulationSession {
         _rapierGunDrone is { StillActive: true } ? _rapierGunDrone : null;
     public bool RapierGunDroneEgress => _rapierGunDroneEgress;
     public bool RapierGunDroneThreatReactive => _rapierGunDroneThreatReactive;
-    CombinedCycleThrustFractions RapierThrustFractions {
-        get {
-            AtmosphericState air = _player.AtmosphereModel.Sample(_player.State.Position.Y);
-            double mach = _player.AirspeedMps / Math.Max(1.0, air.SpeedOfSoundMps);
-            return TurboRamjetPerformanceMap.ThrustComponents(
-                mach, air.TemperatureK, air.DensityKgM3);
-        }
-    }
-    double RapierTurbineShare {
-        get {
-            CombinedCycleThrustFractions fractions = RapierThrustFractions;
-            // When both streams are dead (exo coast), do not default the residual to "turbine" —
-            // that is how idle fuel kept reading as a live core at 100 kft+.
-            return fractions.Total > 1e-9 ? fractions.Turbine / fractions.Total : 0.0;
-        }
-    }
     public double RapierTurbineThrustN => RapierMissionAvailable
-        ? _player.LastEngineOperatingPoint.NetThrustN * RapierTurbineShare : 0.0;
+        ? _player.LastEngineOperatingPoint.TurbineThrustN : 0.0;
     public double RapierRamjetThrustN => RapierMissionAvailable
-        ? Math.Max(0.0, _player.LastEngineOperatingPoint.NetThrustN
-            - RapierTurbineThrustN)
-        : 0.0;
+        ? _player.LastEngineOperatingPoint.RamjetThrustN : 0.0;
     public double RapierTurbineFuelFlowLbPerMinute => RapierMissionAvailable
         ? _player.LastEngineOperatingPoint.TurbineFuelFlowLbPerMinute
         : 0.0;
@@ -540,8 +541,14 @@ public sealed class SimulationSession {
     }
     public KeyGrammar Keys => _keys;
     public DetentLayer Controls => _detents;
-    public GunKill PlayerGun => _gunKill;
-    public GunKill OpponentGun => _opponentGun;
+    public GunKill PlayerGun => OpponentPresent && _gunKill is not null
+        ? _gunKill
+        : throw new InvalidOperationException(
+            "The active mission does not stage a player combat weapon graph.");
+    public GunKill OpponentGun => OpponentPresent && _opponentGun is not null
+        ? _opponentGun
+        : throw new InvalidOperationException(
+            "The active mission does not stage an opponent combat weapon graph.");
     public IReadOnlyList<GunRound> FormationOpponentRoundsInFlight {
         get {
             _formationOpponentRoundsInFlight.Clear();
@@ -701,8 +708,9 @@ public sealed class SimulationSession {
     /// The navigation/recovery layer's stable authority hook. It remains active after the remote
     /// fight resolves or the relief aircraft is lost, and clears only on explicit recovery.
     public bool PlayerRtbActive =>
-        _combatHandoffPhase >= CombatHandoffPhase.ReliefEngaged
-        && _combatHandoffPhase < CombatHandoffPhase.Recovered;
+        _carrierSortieRoute.State.RtbRequested
+        || (_combatHandoffPhase >= CombatHandoffPhase.ReliefEngaged
+            && _combatHandoffPhase < CombatHandoffPhase.Recovered);
     public ReliefFighter? Relief => _reliefFighter;
     public bool ContinuousCombat => _beat.ContinuousCombat is not null;
     public FormationTacticalRole PrimaryFormationRole =>
@@ -1043,9 +1051,11 @@ public sealed class SimulationSession {
             _detents.ApproachMode = false;
         }
         _maintenanceScenario?.Begin(TimeSeconds);
-        _droneRaidEvaluation?.Begin(TimeSeconds, _gunKill.RoundsFired);
-        _droneRaidEvaluation?.Step(TimeSeconds, _player.State, _bandit.State,
-            _gunKill.GunSolution, _gunKill.RoundsFired);
+        if (OpponentPresent) {
+            _droneRaidEvaluation?.Begin(TimeSeconds, _gunKill.RoundsFired);
+            _droneRaidEvaluation?.Step(TimeSeconds, _player.State, _bandit.State,
+                _gunKill.GunSolution, _gunKill.RoundsFired);
+        }
         // Announce the power the lever is ACTUALLY on, not the beat's authored setting. A beat that
         // opts into StageAtTrimThrottle arrives at the setting that holds its staged fighting speed
         // — typically well below MIL — so reading InitialThrottle here told the pilot "MIL SET"
@@ -1070,7 +1080,7 @@ public sealed class SimulationSession {
             startTick: _tick,
             eventSequence: _eventSequence,
             initialFuelLb: _fuel.FuelLb,
-            initialRoundsFired: _gunKill.RoundsFired,
+            initialRoundsFired: OpponentPresent ? _gunKill.RoundsFired : 0,
             initialRcsGasKg: _player.ColdGasRcsGasKg);
     }
 
@@ -1105,7 +1115,7 @@ public sealed class SimulationSession {
             PropulsionRegime: RapierServiceLifeRegime(mach),
             InletUnstarted: _player.InletUnstarted,
             FuelLb: _fuel.FuelLb,
-            RoundsFired: _gunKill.RoundsFired,
+            RoundsFired: OpponentPresent ? _gunKill.RoundsFired : 0,
             RcsGasKg: _player.ColdGasRcsGasKg));
     }
 
@@ -1169,6 +1179,27 @@ public sealed class SimulationSession {
         ClearFormationCoordination();
         CompleteInterruptedEngagementForHandoff();
         ShowTransition("KNOCK IT OFF · RELIEF INBOUND", 2800.0);
+    }
+
+    /// <summary>
+    /// The browser's O action is shared with combat KNOCK IT OFF. On a finite non-combat carrier
+    /// sortie it means RETURN TO SHIP instead: latch the moving-home route without manufacturing a
+    /// relief fighter or requiring an opponent outcome. The route itself rejects a pre-launch
+    /// request, so this public seam is safe for input hosts and deterministic acceptance tests.
+    /// </summary>
+    public bool TryRequestCarrierSortieRtb() {
+        if (Lifecycle != LifecycleState.Active
+            || _playerTerminalState != AircraftTerminalState.Flying
+            || _carrier is null
+            || !_carrierSortieRoute.TryRequestRtb(_carrier, _player.State))
+            return false;
+        Trigger(false);
+        _gunneryPitchAssistState = GunneryPitchAssistState.Inactive();
+        _playerGunTargetPadlockRollAssistSelected = false;
+        _playerGunTargetPadlockRollAssistTargetId = 0;
+        _padlockRollAssist.Reset();
+        ShowTransition("RTB · RETURN TO SHIP", 2800.0);
+        return true;
     }
 
     /// <summary>
@@ -1287,7 +1318,10 @@ public sealed class SimulationSession {
     /// </summary>
     public bool CompletePlayerRecovery() {
         if (_combatHandoffPhase == CombatHandoffPhase.Recovered) return true;
-        if (!PlayerRtbActive
+        bool combatHandoffRtb = _combatHandoffPhase
+                >= CombatHandoffPhase.ReliefEngaged
+            && _combatHandoffPhase < CombatHandoffPhase.Recovered;
+        if (!combatHandoffRtb
             || Lifecycle != LifecycleState.Active
             || _playerTerminalState != AircraftTerminalState.Flying)
             return false;
@@ -1343,7 +1377,15 @@ public sealed class SimulationSession {
     }
 
     /// <summary>Enable or disable the pilot-selected assisted dogfighting command layer.</summary>
-    public void SetAssistedFlight(bool enabled) => _assistedFlight = enabled;
+    public void SetAssistedFlight(bool enabled) =>
+        _assistedFlight = enabled && OpponentPresent;
+
+    // Card 12 teaches the body-fixed M61 problem. Its bounded mission director may steer toward
+    // GunKill's authoritative lead, but the global dogfight magnet and assisted auto-trigger would
+    // erase the lesson and let portrait touch score without a trigger edge.
+    bool CardTwelveRequiresPilotGunTrigger =>
+        _beat.MissionIdentity.Id
+            == "mission.modern.rapier-balloon-intercept.public-data-surrogate.v1";
 
     /// <summary>
     /// Move the assisted corner-speed preference by one 30-knot step in the requested direction.
@@ -1439,7 +1481,8 @@ public sealed class SimulationSession {
             ClaimRapierControl();
         bool newPress = pressed && _keys.PhaseAt(key, _simTimeMs) == KeyPhase.Idle;
         _keys.Feed(key, pressed, _simTimeMs);
-        if (key == GKey.KnockItOff && newPress)
+        if (key == GKey.KnockItOff && newPress
+            && !TryRequestCarrierSortieRtb())
             RequestCombatHandoff();
         // Weapon release is an edge-triggered cockpit action. Latch a deliberate Rapier F tap so
         // a very short browser key-down/key-up pair cannot fall entirely between fixed ticks.
@@ -1885,6 +1928,17 @@ public sealed class SimulationSession {
         int approachFactorCap = Math.Min(
             Math.Min(contactFactorCap, fuelFactorCap),
             Math.Min(autoGcasFactorCap, ramFactorCap));
+        bool opponentGunActivity = OpponentPresent
+            && (_gunKill.GunSolution
+                || _gunKill.InstantaneousGunSolution
+                || _opponentGun.GunSolution
+                || _opponentGun.InstantaneousGunSolution
+                || _gunKill.RoundsInFlight.Count > 0
+                || _opponentGun.RoundsInFlight.Count > 0);
+        bool opponentDamage = OpponentPresent
+            && (_gunKill.TotalHitCount > 0
+                || _bandit.CatastrophicallyDamaged
+                || _opponentTerminalState != AircraftTerminalState.Flying);
         return new TimeCompressionSafetyState(
             PilotEnabled: _timeCompressionPilotEnabled,
             SupportedSortie: TimeCompressionAvailable,
@@ -1894,12 +1948,7 @@ public sealed class SimulationSession {
             CatapultOrConfigurationTransition: _catapult.IsActive
                 || ConfigurationTransitionActive,
             ContactInsideLedThreatRange: contactFactorCap == 1,
-            GunSolutionInEitherDirection: _gunKill.GunSolution
-                || _gunKill.InstantaneousGunSolution
-                || _opponentGun.GunSolution
-                || _opponentGun.InstantaneousGunSolution
-                || _gunKill.RoundsInFlight.Count > 0
-                || _opponentGun.RoundsInFlight.Count > 0
+            GunSolutionInEitherDirection: opponentGunActivity
                 || _retiredOpponentGuns.Any(static retired =>
                     retired.Gun.RoundsInFlight.Count > 0)
                 || _wingmen.Any(static wingman =>
@@ -1910,10 +1959,7 @@ public sealed class SimulationSession {
             DamagePresent: PlayerHitsTaken > 0
                 || _playerTerminalState != AircraftTerminalState.Flying
                 || _rapierComputerFailureActive != RapierComputerFailure.None
-                || (!RapierReturnTransit
-                    && (_gunKill.TotalHitCount > 0
-                        || _bandit.CatastrophicallyDamaged
-                        || _opponentTerminalState != AircraftTerminalState.Flying)),
+                || (!RapierReturnTransit && opponentDamage),
             FuelThresholdOrLead: fuelFactorCap == 1,
             ControlInputBeyondTrim: HasControlInputBeyondTrim(),
             RamTransitionLead: ramFactorCap == 1,
@@ -1921,7 +1967,7 @@ public sealed class SimulationSession {
     }
 
     void UpdateTimeCompressionDecision() {
-        if (_beat is null || _player is null || _bandit is null
+        if (_beat is null || _player is null
             || _fuel is null || _keys is null || _detents is null) {
             _timeCompressionSafetyFactorCap = 1;
             _timeCompressionFactor = 1;
@@ -2203,12 +2249,21 @@ public sealed class SimulationSession {
         Vec3D recoveryInitial = _carrier.LandingPoint(along: -16_000.0, height: 1_000.0);
         bool recovered = _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped;
         bool patternOnly = _beat.ScriptedIntercept?.PatternOnly == true;
+        AircraftState missionContact = OpponentPresent
+            ? _bandit.State
+            : patternOnly
+                // RapierMissionDirector calculates contact geometry before dispatching to the
+                // pattern-only branch. Those values are structurally unused by Circuits, so feed
+                // ownship as a neutral value without creating or retaining a phantom actor.
+                ? _player.State
+                : throw new InvalidOperationException(
+                    "A Rapier intercept mission requires an opponent actor.");
         // Circuits overhead is authored in the landing frame so OFT LandingPoint cards and
         // threshold padlock share the same home as INITIAL / BREAK / DOWNWIND geometry.
         Vec3D home = patternOnly ? _carrier.LandingPoint(0.0) : _carrier.Position;
         _rapierMissionGuidance = _rapierMissionDirector.Step(
             _player.State,
-            _bandit.State,
+            missionContact,
             _player.AirspeedMps,
             _player.AtmosphereModel,
             _beat.PlayerAir,
@@ -2296,8 +2351,8 @@ public sealed class SimulationSession {
             _arrestment.CaughtWire,
             radioLso?.Call ?? "",
             radioLso?.Severity,
-            _gunKill.RoundsFired,
-            _gunKill.AmmoRemaining,
+            OpponentPresent ? _gunKill.RoundsFired : 0,
+            OpponentPresent ? _gunKill.AmmoRemaining : 0,
             _rapierMissilesRemaining,
             _rapierMissileInFlight,
             _rapierDogfightingDronesRemaining,
@@ -2423,6 +2478,10 @@ public sealed class SimulationSession {
             UpdateTimeCompressionDecision();
             return;
         }
+        if (!OpponentPresent) {
+            RunUnopposedFixedWingTick();
+            return;
+        }
         AdvanceCombatHandoffAtTickBoundary();
         ConfigureAdaptiveAiPlanning();
         // Formation radio traffic is sampled and delivered at the beginning-of-tick boundary.
@@ -2448,6 +2507,7 @@ public sealed class SimulationSession {
             MaybeInjectRapierComputerFailure();
         }
         StepCore();
+        UpdateCarrierSortieRoute();
         UpdateMissionChecklists();
         UpdateMissionRadio();
         // The shot crew and launcher own this visual transaction. Ambient R/T is never a
@@ -2468,6 +2528,50 @@ public sealed class SimulationSession {
                 RapierServiceLifeTerminationReason.SortieFinished);
         CaptureIncidentReplaySample();
         UpdateTimeCompressionDecision();
+    }
+
+    /// <summary>
+    /// Advance a real fixed-wing sortie whose content explicitly stages no opponent. This is a
+    /// separate authority path, not a combat tick with a hidden inert target: ownship and mission
+    /// systems advance normally while no AI, weapon, targeting, damage-ledger or engagement code
+    /// is called.
+    /// </summary>
+    void RunUnopposedFixedWingTick() {
+        _decisionFireIntentEvaluatedThisTick = false;
+        _decisionFireIntentConsumedThisTick = false;
+        _decisionFireAuthorizedThisTick = false;
+        if (_playerTerminalState == AircraftTerminalState.Flying
+            && AtmosphereBoundaryReached(_player.State, _player.AtmosphereModel,
+                integrationMarginM: 250.0))
+            ForceTerminalLimit(CombatRole.Player, includeFlying: true);
+        if (_playerTerminalState == AircraftTerminalState.Flying) {
+            UpdateRapierMissionGuidance();
+            MaybeInjectRapierComputerFailure();
+        }
+        StepUnopposedFixedWingCore();
+        UpdateCarrierSortieRoute();
+        UpdateMissionChecklists();
+        UpdateMissionRadio();
+        if (_catapult.Phase == CatapultLaunchModel.LaunchPhase.Hold)
+            _catapult.Release();
+        UpdateRecoveryProcedure();
+        UpdateSortieSchedule();
+        _tick++;
+        ObserveRapierServiceLifeTick();
+        if (Lifecycle != LifecycleState.Active)
+            FinalizeRapierServiceLife(
+                RapierServiceLifeTerminationReason.SortieFinished);
+        CaptureIncidentReplaySample();
+        UpdateTimeCompressionDecision();
+    }
+
+    void UpdateCarrierSortieRoute() {
+        if (_carrier is null || !_carrierSortieRoute.State.Active) return;
+        _carrierSortieRoute.Step(
+            _carrier,
+            _player.State,
+            _catapult.IsActive,
+            Lifecycle == LifecycleState.Finished);
     }
 
     void ConfigureAdaptiveAiPlanning() {
@@ -2792,9 +2896,9 @@ public sealed class SimulationSession {
         }
         FinishPreviousRecoveryAttempt();
         _beat = setup;
-        // Stowed Rapier drone mass is part of the staged aircraft mass. Initialize the loadout
-        // before CreatePlayer/WithCurrentFuelMass; doing this near the end of StageBeat made the
-        // first ever Rapier sortie 1,440 kg lighter than every restart.
+        // Canonical Rapier v2 carries zero design drones. An explicitly configured legacy
+        // prototype count is additional stowed mass, so initialize that mission loadout before
+        // CreatePlayer/WithCurrentFuelMass and keep first-stage/restart mass identical.
         _rapierDogfightingDronesRemaining =
             Math.Max(0, _beat.ScriptedIntercept?.DogfightingDrones ?? 0);
         if (_beat.Casevac is not null) {
@@ -2880,6 +2984,18 @@ public sealed class SimulationSession {
                 Player = _catapult.ParkedState(_carrier, _beat.Player.Mass)
             };
         }
+        bool finiteMaritimeCarrierSortie = _carrier is { IsMaritime: true }
+            && _beat.StartsOnCatapult
+            && _beat.RecoveryCompletesSortie
+            && _beat.RecoveryPlan is not null;
+        if (_carrier is not null) {
+            double approachSpeedMps = GunsOnly.Sim.Recovery.SortieSchedule.ApproachSpeedMps(
+                _beat.Player.Mass, _beat.PlayerAir);
+            _carrierSortieRoute.Configure(
+                _carrier, approachSpeedMps, finiteMaritimeCarrierSortie);
+        } else {
+            _carrierSortieRoute.Reset();
+        }
         RefreshLaunchTerrainClearance();
         _waveOffArmed = _carrier is not null;
         _waveOffUntilMs = double.NegativeInfinity;
@@ -2887,42 +3003,63 @@ public sealed class SimulationSession {
             ? CreateBurble(_carrier, _difficulty, _weatherProfile?.Wind)
             : null;
         _player = CreatePlayer(_beat.Player);
+        bool stagesOpponent = _beat.InitialOpponent.HasValue;
         // Pacing memory survives the pilot: when the director has observed history and this beat
         // fields a skill-driven continuous-combat opponent, the OPENING spawn is a director
         // decision too — a boss loss last life opens this life in RELEASE, not back at the ramp.
-        SpawnSpec? openingSpawn = _beat.ContinuousCombat is not null
+        SpawnSpec? openingSpawn = stagesOpponent
+            && _beat.ContinuousCombat is not null
             && (_beat.UsesReactiveBandit || _beat.UsesNeutralMergeBandit)
             && _fightDirector.HasHistory
             ? _fightDirector.NextSpawn(1)
             : null;
-        _bandit = _beat.CreateBandit(_terrainSurface, openingSpawn);
         ClearWingmen();
         _retiredOpponentGuns.Clear();
-        _primaryOpponentGunTargetId = AllocateOpponentGunTargetId();
-        _selectedPlayerGunTargetId = _primaryOpponentGunTargetId;
-        // The opening wave is a formation too — the pilot's own call: "first fight is 1v2 and if I
-        // win that it stays that way." A cold start has no director decision yet, so ask the
-        // director what an opening looks like rather than hard-coding a number here.
-        if (_beat.ContinuousCombat is not null)
-            StageWingmen(openingSpawn ?? _fightDirector.NextSpawn(1), 1);
-        else if (_beat.ScriptedIntercept is { FormationSize: > 1 } scriptedFormation)
-            StageScriptedFormation(scriptedFormation.FormationSize);
-        ConfigureFormationLookaheadCadence();
+        if (stagesOpponent) {
+            _bandit = _beat.CreateBandit(_terrainSurface, openingSpawn);
+            _primaryOpponentGunTargetId = AllocateOpponentGunTargetId();
+            _selectedPlayerGunTargetId = _primaryOpponentGunTargetId;
+            // The opening wave is a formation too — the pilot's own call: "first fight is 1v2 and
+            // if I win that it stays that way." A cold start has no director decision yet, so ask
+            // the director what an opening looks like rather than hard-coding a number here.
+            if (_beat.ContinuousCombat is not null)
+                StageWingmen(openingSpawn ?? _fightDirector.NextSpawn(1), 1);
+            else if (_beat.ScriptedIntercept is { FormationSize: > 1 } scriptedFormation)
+                StageScriptedFormation(scriptedFormation.FormationSize);
+            ConfigureFormationLookaheadCadence();
+        } else {
+            // Absence is structural: no parked actor, no target identity and no weapon/damage
+            // graph. These fields remain null until a later staged beat explicitly owns combat.
+            _bandit = null!;
+            _primaryOpponentGunTargetId = 0;
+            _selectedPlayerGunTargetId = 0;
+        }
         _playerSpawnSequence++;
-        _banditSpawnSequence++;
+        if (stagesOpponent) _banditSpawnSequence++;
         if (_carrier is not null) _carrierSpawnSequence++;
-        _bandit.Wind = _player.Wind;
-        _bandit.Atmosphere = _player.AtmosphereModel;
-        CombatConfig combat = _beat.CombatRules;
-        _gunKill = new GunKill(combat.PlayerAmmo, combat.OpponentHitsToDefeat,
-            combat.PlayerGunProfile.EffectiveHitRadiusM, combat.PlayerGunProfile,
-            combat.PlayerGunEnabled ? GunHeatConfig.PlayerInfiniteAmmo : null);
-        RegisterFormationGunTargets();
-        _gunKill.SelectTarget(_selectedPlayerGunTargetId);
-        _opponentGun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
-            combat.OpponentGunProfile.EffectiveHitRadiusM, combat.OpponentGunProfile);
-        _visualMergeEvaluation?.Step(_player.State, _bandit.State,
-            _player.AtmosphereModel, 0.0, _player.AirspeedMps);
+        if (stagesOpponent) {
+            _bandit.Wind = _player.Wind;
+            _bandit.Atmosphere = _player.AtmosphereModel;
+            CombatConfig combat = _beat.CombatRules;
+            double playerTargetHitRadiusM = combat.PlayerTargetHitRadiusM
+                ?? combat.PlayerGunProfile.EffectiveHitRadiusM;
+            GunHeatConfig? playerGunHeat = combat.PlayerGunEnabled
+                && combat.PlayerInfiniteAmmo
+                    ? GunHeatConfig.PlayerInfiniteAmmo
+                    : null;
+            _gunKill = new GunKill(combat.PlayerAmmo, combat.OpponentHitsToDefeat,
+                playerTargetHitRadiusM, combat.PlayerGunProfile, playerGunHeat);
+            RegisterFormationGunTargets();
+            _gunKill.SelectTarget(_selectedPlayerGunTargetId);
+            _opponentGun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
+                combat.OpponentGunProfile.EffectiveHitRadiusM,
+                combat.OpponentGunProfile);
+            _visualMergeEvaluation?.Step(_player.State, _bandit.State,
+                _player.AtmosphereModel, 0.0, _player.AirspeedMps);
+        } else {
+            _gunKill = null!;
+            _opponentGun = null!;
+        }
         _keys = new KeyGrammar();
         _detents = new DetentLayer {
             Variant = _carrier is not null ? ValleyVariant.PhysicsOnly : _requestedVariant,
@@ -2990,14 +3127,16 @@ public sealed class SimulationSession {
         _reliefThreatStateValid = false;
         _reliefKills = 0;
         _playerHitsTaken = 0;
-        _engagementNumber = 1;
+        _engagementNumber = stagesOpponent ? 1 : 0;
         _engagementCounters = default;
         _engagementReports.Clear();
         LastDirectorSpawn = openingSpawn;
         _outcome = SortieOutcome.None;
         _pendingOutcome = SortieOutcome.None;
         _playerTerminalState = AircraftTerminalState.Flying;
-        _opponentTerminalState = AircraftTerminalState.Flying;
+        _opponentTerminalState = stagesOpponent
+            ? AircraftTerminalState.Flying
+            : AircraftTerminalState.Settled;
         _playerImpactSurface = ImpactSurface.None;
         _opponentImpactSurface = ImpactSurface.None;
         _playerCarrierSolid = Carrier.SolidCollision.None;
@@ -3037,12 +3176,14 @@ public sealed class SimulationSession {
         _rapierGunDroneThreatReactive = false;
         _rapierPursuitActive = false;
         _rapierPursuitRangeM = double.PositiveInfinity;
-        _lastRange = Geometry.Range(_player.State, SelectedOpponentState);
+        _lastRange = stagesOpponent
+            ? Geometry.Range(_player.State, SelectedOpponentState)
+            : 0.0;
         _closureKts = 0.0;
         _closureSmooth = 0.0;
         // Drone raids score through DroneRaidEvaluation; a dogfight engagement report for a
         // raid would misattribute the whole raid to one staged skill, so counters stay off.
-        if (_beat.DroneRaid is null)
+        if (stagesOpponent && _beat.DroneRaid is null)
             StartEngagementCounters(openingSpawn?.Skill ?? _beat.BanditSkill,
                 openingSpawn is { } opening && (opening.Boss || opening.Machine));
         // Simulation time is deliberately monotonic across restarts because KeyGrammar timestamps
@@ -3064,6 +3205,10 @@ public sealed class SimulationSession {
         _bandit = null!;
         ClearWingmen();
         _retiredOpponentGuns.Clear();
+        _gunKill = null!;
+        _opponentGun = null!;
+        _primaryOpponentGunTargetId = 0;
+        _selectedPlayerGunTargetId = 0;
         _maintenanceScenario = null;
         _visualMergeEvaluation = null;
         _droneRaidEvaluation = null;
@@ -3164,6 +3309,7 @@ public sealed class SimulationSession {
         _meshNav.Reset();
         _meshNavSolution = default;
         _recoveryProcedure.Reset();
+        _carrierSortieRoute.Reset();
         Lifecycle = LifecycleState.Ready;
     }
 
@@ -3278,56 +3424,129 @@ public sealed class SimulationSession {
 
     void UpdateSortieSchedule() {
         Carrier? ship = _carrier;
-        if (ship is null || !_beat.StartsOnCatapult) {
-            _sortiePlan = default;
-            return;
-        }
-
         AircraftParams air = _beat.PlayerAir;
-        double approachMps = GunsOnly.Sim.Recovery.SortieSchedule.ApproachSpeedMps(Player.State.Mass, air);
+        double approachMps = GunsOnly.Sim.Recovery.SortieSchedule.ApproachSpeedMps(
+            Player.State.Mass, air);
         // Climb and cruise are expressed as multiples of the aircraft's OWN on-speed rather than
         // as authored knots, so a second airframe inherits a shape instead of a Panther's numbers.
         // PROVISIONAL: the multiples want fitting from a flown profile, but a wrong ratio is
         // recoverable in a way that a hard-coded speed belonging to one aeroplane is not.
+        double glideslopeRad = 3.5 * System.Math.PI / 180.0;
+        double stabiliseHeightM = 110.0;
         var reference = new SortieReference(
             ApproachSpeedMps: approachMps,
             ClimbSpeedMps: 2.2 * approachMps,
             TransitSpeedMps: 2.7 * approachMps,
             TransitHeightM: 4_500.0,
-            StabiliseHeightM: 110.0,
+            StabiliseHeightM: stabiliseHeightM,
             // Korean-War paddles worked a steeper slope than a modern optical ball.
-            GlideslopeRad: 3.5 * System.Math.PI / 180.0,
+            GlideslopeRad: glideslopeRad,
             DragToWeight: RecoveryDragToWeight,
             SpoolUpTauS: air.SpoolUpTau);
 
-        double heightAboveDeckM = ship.DeckFrame(Player.State.Position).height;
-        Vec3D toShip = ship.Position - Player.State.Position;
-        double rangeToShipM = System.Math.Sqrt(toShip.X * toShip.X + toShip.Z * toShip.Z);
+        // A launched carrier/strip sortie owns every leg from chocks to the ramp. Preserve that
+        // path exactly: it also runs before an RTB procedure has been selected, which is why the
+        // launch and climb cues exist at all.
+        if (ship is not null && _beat.StartsOnCatapult) {
+            double heightAboveDeckM = ship.DeckFrame(Player.State.Position).height;
+            Vec3D toShip = ship.Position - Player.State.Position;
+            double rangeToShipM = System.Math.Sqrt(toShip.X * toShip.X + toShip.Z * toShip.Z);
 
-        SortieLeg leg;
-        if (_catapult.IsActive) {
-            leg = _catapult.Phase == CatapultLaunchModel.LaunchPhase.Stroke
-                ? SortieLeg.Launch : SortieLeg.OnDeck;
-        } else if (PlayerRtbActive || _recoveryProcedure.Kind != RecoveryProcedureKind.None) {
-            // Inside the stabilisation point the problem stops being energy and starts being
-            // glideslope, lineup and an engine that will not answer quickly.
-            leg = rangeToShipM <= 1_500.0 ? SortieLeg.Groove : SortieLeg.Recovery;
-        } else if (heightAboveDeckM < 150.0) {
-            leg = SortieLeg.Launch;
-        } else if (heightAboveDeckM < 0.95 * reference.TransitHeightM) {
-            leg = SortieLeg.Climb;
-        } else {
-            leg = SortieLeg.Transit;
+            CarrierSortieRouteState route = _carrierSortieRoute.State;
+            SortieLeg shipLeg;
+            if (_catapult.IsActive) {
+                shipLeg = _catapult.Phase == CatapultLaunchModel.LaunchPhase.Stroke
+                    ? SortieLeg.Launch : SortieLeg.OnDeck;
+            } else if (route.Active) {
+                shipLeg = route.Phase switch {
+                    CarrierSortieRoutePhase.OnDeck => SortieLeg.OnDeck,
+                    CarrierSortieRoutePhase.Departure => heightAboveDeckM < 150.0
+                        ? SortieLeg.Launch : SortieLeg.Climb,
+                    CarrierSortieRoutePhase.Outbound
+                        or CarrierSortieRoutePhase.Transit
+                        or CarrierSortieRoutePhase.AwaitingReturn =>
+                        heightAboveDeckM < 0.95 * route.TargetPosition.Y
+                            ? SortieLeg.Climb : SortieLeg.Transit,
+                    CarrierSortieRoutePhase.Return
+                        or CarrierSortieRoutePhase.Recovery => SortieLeg.Recovery,
+                    CarrierSortieRoutePhase.Groove
+                        or CarrierSortieRoutePhase.Complete => SortieLeg.Groove,
+                    _ => SortieLeg.Transit,
+                };
+            } else if (PlayerRtbActive || _recoveryProcedure.Kind != RecoveryProcedureKind.None) {
+                shipLeg = rangeToShipM <= 1_500.0 ? SortieLeg.Groove : SortieLeg.Recovery;
+            } else if (heightAboveDeckM < 150.0) {
+                shipLeg = SortieLeg.Launch;
+            } else if (heightAboveDeckM < 0.95 * reference.TransitHeightM) {
+                shipLeg = SortieLeg.Climb;
+            } else {
+                shipLeg = SortieLeg.Transit;
+            }
+
+            double shipDistanceToGoM = shipLeg switch {
+                _ when route.Active => route.DistanceToTargetM,
+                SortieLeg.Recovery or SortieLeg.Groove => rangeToShipM,
+                SortieLeg.Climb => System.Math.Max(
+                    0.0, reference.TransitHeightM - heightAboveDeckM),
+                _ => rangeToShipM,
+            };
+
+            _sortiePlan = GunsOnly.Sim.Recovery.SortieSchedule.Solve(
+                shipLeg, heightAboveDeckM, Player.State.Speed, shipDistanceToGoM, reference);
+            return;
         }
 
-        double distanceToGoM = leg switch {
-            SortieLeg.Recovery or SortieLeg.Groove => rangeToShipM,
-            SortieLeg.Climb => System.Math.Max(0.0, reference.TransitHeightM - heightAboveDeckM),
-            _ => rangeToShipM,
+        // Conventional and other fixed recovery sites have no Carrier object, but they still have
+        // an airframe, a landing datum, and an authored recovery ladder. Give them the same
+        // two-sided, per-airframe recovery solve instead of falling through to GoldenPath's legacy
+        // <= 0.5 power bug. The ladder's final gate defines the stabilisation point and slope, so
+        // Recovery and Groove meet continuously rather than inventing a generic runway geometry.
+        if (_beat.RecoveryPlan is not { } recoveryPlan
+            || (!PlayerRtbActive
+                && _recoveryProcedure.Kind == RecoveryProcedureKind.None)) {
+            _sortiePlan = default;
+            return;
+        }
+
+        Vec3D recoveryPoint = recoveryPlan.Position;
+        double surfaceElevationM = recoveryPlan.ConventionalRunway?.ElevationM
+            ?? recoveryPoint.Y;
+        double stabiliseDistanceM = 1_500.0;
+        glideslopeRad = 3.0 * System.Math.PI / 180.0;
+        stabiliseHeightM = stabiliseDistanceM * System.Math.Tan(glideslopeRad);
+        if (_recoveryProcedure.Gates.Count > 0) {
+            RecoveryGate stabiliseGate = _recoveryProcedure.Gates[^1];
+            double gateEast = stabiliseGate.EastM - recoveryPoint.X;
+            double gateNorth = stabiliseGate.NorthM - recoveryPoint.Z;
+            double gateDistanceM = System.Math.Sqrt(
+                gateEast * gateEast + gateNorth * gateNorth);
+            double gateHeightM = stabiliseGate.UpM - surfaceElevationM;
+            if (gateDistanceM > 1.0 && gateHeightM > 0.0) {
+                stabiliseDistanceM = gateDistanceM;
+                stabiliseHeightM = gateHeightM;
+                glideslopeRad = System.Math.Atan2(gateHeightM, gateDistanceM);
+            }
+        }
+        reference = reference with {
+            StabiliseHeightM = stabiliseHeightM,
+            GlideslopeRad = glideslopeRad
         };
 
+        Vec3D toRecovery = recoveryPoint - Player.State.Position;
+        double rangeToRecoveryM = System.Math.Sqrt(
+            toRecovery.X * toRecovery.X + toRecovery.Z * toRecovery.Z);
+        double heightAboveSurfaceM = Player.State.Position.Y - surfaceElevationM;
+        SortieLeg recoveryLeg = rangeToRecoveryM <= stabiliseDistanceM
+            ? SortieLeg.Groove : SortieLeg.Recovery;
+        double recoveryDistanceToGoM = recoveryLeg == SortieLeg.Groove
+            ? rangeToRecoveryM
+            : System.Math.Max(0.0, rangeToRecoveryM - stabiliseDistanceM);
         _sortiePlan = GunsOnly.Sim.Recovery.SortieSchedule.Solve(
-            leg, heightAboveDeckM, Player.State.Speed, distanceToGoM, reference);
+            recoveryLeg,
+            heightAboveSurfaceM,
+            Player.State.Speed,
+            recoveryDistanceToGoM,
+            reference);
     }
 
     void UpdateRecoveryProcedure() {
@@ -3386,8 +3605,9 @@ public sealed class SimulationSession {
             _player.SetMassKg(fuelFreeMass + _fuel.FuelLb * 0.45359237);
     }
 
-    /// Published Rapier fuel-free includes the design four-drone bay. Actual stowed count may be
-    /// lower (mission config or after release); shed that delta so climb/dash feel the load.
+    /// Canonical Rapier v2 fuel-free mass includes zero design stores. The versioned design-store
+    /// constant therefore subtracts zero there; explicitly configured legacy prototype drones add
+    /// their actual remaining mass on top and disappear from mass as they release.
     double PlayerFuelFreeMassKgWithStores() {
         double fuelFreeMass = _beat.PlayerAir.FuelFreeMassKg;
         if (fuelFreeMass <= 0.0) return fuelFreeMass;
@@ -3457,9 +3677,19 @@ public sealed class SimulationSession {
             return;
         }
         bool rapierRecoveryConfiguration = RapierAutomationActive
-            && RapierPhase == RapierMissionPhase.Recovery
-            && _player.IndicatedAirspeedMps * 1.94384 <= 300.0;
-        if ((inSlot && !WaveOffActive
+            && _rapierMissionGuidance.RecoveryConfigurationRequested
+            && _player.IndicatedAirspeedMps * 1.94384
+                <= PlayerSystemsProfile.GearAndFlapLimitKias;
+        // The finite carrier route's Recovery fix is the configuration boundary. Waiting for the
+        // generic close-in slot would defer gear/flaps until three kilometres astern, too late for
+        // the physical actuators to lock before the wires. This route-only branch does not engage
+        // ApproachMode early; it starts configuration while the pilot retains ordinary control.
+        bool carrierRouteRecoveryConfiguration =
+            _carrierSortieRoute.State.Active
+            && _carrierSortieRoute.State.Phase is >= CarrierSortieRoutePhase.Recovery
+                and < CarrierSortieRoutePhase.Complete;
+        if (carrierRouteRecoveryConfiguration
+            || (inSlot && !WaveOffActive
                 && _recovery != Carrier.Recovery.Bolter
                 && _detents.Throttle < 0.95)
             || rapierRecoveryConfiguration)
@@ -3540,6 +3770,7 @@ public sealed class SimulationSession {
     }
 
     void Trigger(bool down) {
+        if (!OpponentPresent) down = false;
         if (down && CombatHandoffRequested) down = false;
         if (down && !_triggerDown) {
             _shotsTotal++;
@@ -3569,12 +3800,12 @@ public sealed class SimulationSession {
         if (_recentEvents.Count == RecentEventCapacity) _recentEvents.RemoveAt(0);
         AircraftState? eventKinematics = kinematics ?? target switch {
             CombatRole.Player => _player.State,
-            CombatRole.Opponent => _bandit.State,
+            CombatRole.Opponent when OpponentPresent => _bandit.State,
             _ => null
         };
         long eventEntitySequence = entitySequence > 0 ? entitySequence : target switch {
             CombatRole.Player => _playerSpawnSequence,
-            CombatRole.Opponent => _banditSpawnSequence,
+            CombatRole.Opponent when OpponentPresent => _banditSpawnSequence,
             _ => 0
         };
         var sessionEvent = new SessionEvent(
@@ -3612,7 +3843,8 @@ public sealed class SimulationSession {
     }
 
     bool OpponentWeaponsAuthorized(bool allowNewFire = true) =>
-        Lifecycle == LifecycleState.Active
+        OpponentPresent
+        && Lifecycle == LifecycleState.Active
         && allowNewFire
         && !TerminalPhaseActive
         && !WeaponsInhibited
@@ -3622,7 +3854,7 @@ public sealed class SimulationSession {
         && !_bandit.CatastrophicallyDamaged;
 
     bool SupportsCombatHandoff =>
-        _beat is not null
+        OpponentPresent
         && _beat.ContinuousCombat is not null
         && _beat.PlayerAircraft.Id == AircraftCapability.F22ASurrogate.Id;
 
@@ -3640,7 +3872,8 @@ public sealed class SimulationSession {
     /// drives the same path a real gun kill does, so promotion and wave staging are exercised
     /// rather than simulated.
     public void ForceOpponentDefeatForTest() {
-        if (_opponentTerminalState != AircraftTerminalState.Flying) return;
+        if (!OpponentPresent
+            || _opponentTerminalState != AircraftTerminalState.Flying) return;
         _killCount++;
         BeginCatastrophicDamage(CombatRole.Opponent, CombatRole.Player);
     }
@@ -4537,6 +4770,12 @@ public sealed class SimulationSession {
 
     void UpdatePendingOutcome() {
         bool playerLost = _playerTerminalState != AircraftTerminalState.Flying;
+        if (!OpponentPresent) {
+            _pendingOutcome = playerLost
+                ? SortieOutcome.Defeat
+                : SortieOutcome.None;
+            return;
+        }
         bool opponentLost = _opponentTerminalState != AircraftTerminalState.Flying;
         if (CombatHandoffRequested) {
             // Handoff is not a player victory condition. A surviving pilot remains in the same
@@ -4725,7 +4964,8 @@ public sealed class SimulationSession {
             EmitEvent(SessionEventType.Impact, CombatRole.None, CombatRole.Player,
                 surface: playerWreck.Surface);
         }
-        if (_opponentTerminalState == AircraftTerminalState.Impacted
+        if (OpponentPresent
+            && _opponentTerminalState == AircraftTerminalState.Impacted
             && _bandit.WreckSurfaceChangedThisStep) {
             _opponentImpactSurface = _bandit.WreckSurface;
             EmitEvent(SessionEventType.Impact, CombatRole.None, CombatRole.Opponent,
@@ -4737,7 +4977,8 @@ public sealed class SimulationSession {
             EmitEvent(SessionEventType.Settled, CombatRole.None, CombatRole.Player,
                 surface: _playerImpactSurface);
         }
-        if (_opponentTerminalState == AircraftTerminalState.Impacted
+        if (OpponentPresent
+            && _opponentTerminalState == AircraftTerminalState.Impacted
             && _bandit.WreckSettled) {
             _opponentTerminalState = AircraftTerminalState.Settled;
             EmitEvent(SessionEventType.Settled, CombatRole.None, CombatRole.Opponent,
@@ -4830,6 +5071,14 @@ public sealed class SimulationSession {
         if (_beat.ScriptedIntercept is { RecoveryRequired: true }
             && _playerTerminalState == AircraftTerminalState.Flying
             && _opponentTerminalState != AircraftTerminalState.Flying)
+            return false;
+        // A finite carrier-day route is itself the mission contract. No combat outcome may author
+        // victory while ownship is still returning: only the physical stopped trap or explicit
+        // straight-deck barrier path may finish the card. A later ownship loss still resolves
+        // through the ordinary terminal path.
+        if (_carrierSortieRoute.State.Active
+            && _beat.RecoveryCompletesSortie
+            && _playerTerminalState == AircraftTerminalState.Flying)
             return false;
         bool playerResolved = _playerTerminalState is AircraftTerminalState.Flying
             or AircraftTerminalState.Settled
@@ -5162,7 +5411,18 @@ public sealed class SimulationSession {
     void FinishCarrierQualificationSortie(bool recovered) {
         if (!_beat.RecoveryCompletesSortie || Lifecycle != LifecycleState.Active) return;
         if (recovered) RecordStoppedTrap();
-        _outcome = recovered ? SortieOutcome.Victory : SortieOutcome.Draw;
+        bool cardTwelveBalloonKillRequired = _beat.ScriptedIntercept is {
+            RecoveryRequired: true,
+            Job: RapierJobKind.Balloon
+        };
+        bool physicalBalloonKillEarned = !cardTwelveBalloonKillRequired
+            || (OpponentPresent && _gunKill.Outcome == FightOutcome.Splash);
+        // A safe recovery after missing the one balloon pass is good airmanship, but it did not
+        // complete Card 12. Keep generic carrier qualifications unchanged: only the balloon card
+        // combines a physical target kill and a stopped trap into one Victory transaction.
+        _outcome = recovered && physicalBalloonKillEarned
+            ? SortieOutcome.Victory
+            : SortieOutcome.Draw;
         _pendingOutcome = _outcome;
         EmitEvent(SessionEventType.SortieFinished,
             CombatRole.None, CombatRole.None, outcome: _outcome);
@@ -5189,7 +5449,7 @@ public sealed class SimulationSession {
         }
         _player = CreatePlayer(launchState);
         _player.SeedEnginePowerFraction(retainedEnginePower);
-        _bandit.Wind = _player.Wind;
+        if (OpponentPresent) _bandit.Wind = _player.Wind;
         _catapult.Reset();
         _arrestment.Reset();
         _recovery = Carrier.Recovery.Flying;
@@ -5200,7 +5460,9 @@ public sealed class SimulationSession {
         _recoveryAttemptActive = _carrier is not null;
         _attemptHadSetback = false;
         _attemptCleanRecorded = false;
-        _lastRange = Geometry.Range(_player.State, SelectedOpponentState);
+        _lastRange = OpponentPresent
+            ? Geometry.Range(_player.State, SelectedOpponentState)
+            : 0.0;
         _closureKts = _closureSmooth = 0.0;
         ShowTransition("AIRBORNE · NEXT PASS", 1400.0);
     }
@@ -5547,7 +5809,8 @@ public sealed class SimulationSession {
 
     PilotCommand ApplyGunneryPitchAssist(in PilotCommand requestedPilotCommand) {
         AircraftState selectedTarget = SelectedOpponentState;
-        bool enabled = PlayerWeaponsAuthorized
+        bool enabled = !CardTwelveRequiresPilotGunTrigger
+            && PlayerWeaponsAuthorized
             && _beat.CombatRules.PlayerGunEnabled
             && _playerTerminalState == AircraftTerminalState.Flying
             && SelectedOpponentAlive
@@ -5560,6 +5823,7 @@ public sealed class SimulationSession {
         // funnel the way arrow keys can. Ballistics stay untouched — the assist magnetises the
         // nose, the rounds still have to fly there.
         AircraftParams assistAir = _touchControlModality
+            && !CardTwelveRequiresPilotGunTrigger
             ? _beat.PlayerAir with {
                 GunneryPitchAssistCaptureAngleRad =
                     _beat.PlayerAir.GunneryPitchAssistCaptureAngleRad * 1.35,
@@ -6008,13 +6272,17 @@ public sealed class SimulationSession {
         Carrier.TouchdownResult touchdown = _carrier.EvaluateRecovery(
             _player.State, _player.AngleOfAttackRad, _difficulty,
             _player.IndicatedAirspeedMps,
-            _detents.EffectiveOnSpeedAoARad(_beat.PlayerAir));
+            _detents.EffectiveOnSpeedAoARad(_beat.PlayerAir),
+            StraightDeckBarrierArmed
+                ? Carrier.MissedWireDisposition.Barrier
+                : Carrier.MissedWireDisposition.Bolter);
         Carrier.Recovery contact = touchdown.Recovery;
         var previousDeck = _carrier.AircraftSupportFrame(previousPlayerState.Position);
         var currentDeck = _carrier.AircraftSupportFrame(_player.State.Position);
         bool topDeckContact = contact is Carrier.Recovery.Trap
                 or Carrier.Recovery.Bolter or Carrier.Recovery.HardLanding
                 or Carrier.Recovery.RollingOut
+                or Carrier.Recovery.BarrierEngagement
             && previousDeck.height >= -0.05 && currentDeck.height <= 0.05
             && _carrier.DeckSinkRateMps(_player.State) > 0.0;
         Carrier.SolidCollision solid = _carrier.SweptSolidCollision(
@@ -6029,7 +6297,8 @@ public sealed class SimulationSession {
                 && contact != Carrier.Recovery.Flying)
             || (_touchdown.Recovery == Carrier.Recovery.RollingOut
                 && contact is Carrier.Recovery.Trap or Carrier.Recovery.Bolter
-                    or Carrier.Recovery.HardLanding)) {
+                    or Carrier.Recovery.HardLanding
+                    or Carrier.Recovery.BarrierEngagement)) {
             _touchdown = touchdown;
             _carrierPass.Complete(touchdown);
         }
@@ -6083,6 +6352,18 @@ public sealed class SimulationSession {
             _recovery = Carrier.Recovery.RollingOut;
             _detents.ApproachMode = false;
             _player.AdoptExternalKinematics(CurrentStripRolloutState(FixedDeltaSeconds));
+        } else if (contact == Carrier.Recovery.BarrierEngagement) {
+            // A straight-deck missed wire is not an angled-deck bolter.  The raised barrier owns
+            // the terminal deck state; preserve it explicitly so presentation/debrief cannot show
+            // a fictional flyaway behind parked aircraft.
+            _attemptHadSetback = true;
+            _recovery = Carrier.Recovery.BarrierEngagement;
+            _detents.ApproachMode = false;
+            _player.AdoptExternalKinematics(
+                _carrier.BarrierEngagementState(_player.State));
+            ShowTransition("BARRIER · MISSED WIRES");
+            if (_beat.RecoveryCompletesSortie)
+                FinishCarrierQualificationSortie(recovered: false);
         } else if (contact == Carrier.Recovery.Bolter) {
             _attemptHadSetback = true;
             SelectAutomaticConfigurationTarget(FlightConfigurationTarget.Combat);
@@ -6446,6 +6727,293 @@ public sealed class SimulationSession {
         _simTimeMs = completedTimeMs;
     }
 
+    void StepUnopposedConventionalRunwayRollout() {
+        ConventionalRunwayRecoveryModel recovery =
+            _conventionalRunwayRecovery
+            ?? throw new InvalidOperationException(
+                "Conventional runway rollout requires a staged recovery model.");
+        AircraftState playerState = _player.State;
+
+        _detents.AirspeedMps = _player.AirspeedMps;
+        _detents.MeasuredAngleOfAttackRad = _player.AngleOfAttackRad;
+        _detents.AerodynamicConfiguration = PlayerEffectiveAerodynamicConfiguration;
+        _detents.Tick(
+            _keys,
+            _simTimeMs,
+            playerState,
+            _beat.PlayerAir,
+            _advice,
+            FixedDeltaSeconds);
+        _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);
+
+        PreparePlayerForPoweredTick();
+        _player.AdvanceEngineOnly(_detents.Throttle, FixedDeltaSeconds);
+        Vec3D airVelocity = playerState.VelocityVector()
+            - (_player.Wind?.Sample(playerState.Position) ?? Vec3D.Zero);
+        ConsumeFuelAndStepSystems(
+            playerState,
+            airVelocity.Length,
+            weightOnWheels: true);
+
+        AircraftState constrained = recovery.Step(
+            FixedDeltaSeconds,
+            _detents.Throttle,
+            _player.State.Mass);
+        _player.AdoptExternalKinematics(constrained);
+        StepPilotPhysiology(1.0);
+
+        if (_playerTerminalState == AircraftTerminalState.DestroyedAirborne) {
+            RegisterAirborneImpact(
+                CombatRole.Player,
+                ImpactSurface.Ground,
+                Vec3D.Zero,
+                recovery.Runway.Threshold.Y);
+        } else if (_playerTerminalState == AircraftTerminalState.Flying
+            && recovery.Phase == RunwayRecoveryPhase.Excursion) {
+            RegisterUndamagedCrash(
+                CombatRole.Player,
+                ImpactSurface.Ground,
+                Vec3D.Zero,
+                recovery.Runway.Threshold.Y);
+        }
+
+        ObserveSettledWrecks();
+        double completedTimeMs = _simTimeMs + FixedDeltaSeconds * 1000.0;
+        if (Lifecycle == LifecycleState.Active)
+            FinishTerminalIfResolved(completedTimeMs);
+        _simTimeMs = completedTimeMs;
+    }
+
+    void StepUnopposedTerminalPhase() {
+        AircraftState previousPlayer = _player.State;
+        if (_playerTerminalState == AircraftTerminalState.DestroyedAirborne) {
+            TerminalFlightDynamics.Step(_player, PlayerAerodynamicConfiguration,
+                handedness: -1, FixedDeltaSeconds);
+            StepFailedPlayerSystems(weightOnWheels: false);
+            _player.AerodynamicConfiguration = TerminalFlightDynamics.Configuration(
+                PlayerAerodynamicConfiguration, handedness: -1);
+        } else if (_playerTerminalState == AircraftTerminalState.Impacted
+            && _playerWreckMotion is not null) {
+            _player.AdvanceEngineOnly(0.0, FixedDeltaSeconds);
+            _playerWreckMotion.Step(FixedDeltaSeconds);
+            _player.AdoptExternalKinematics(_playerWreckMotion.State);
+            StepFailedPlayerSystems(
+                weightOnWheels: _playerWreckMotion.HasWeightBearingContact);
+        }
+
+        StepPilotPhysiologyFromAircraft();
+        _carrier?.Step(FixedDeltaSeconds);
+        if (_playerTerminalState == AircraftTerminalState.DestroyedAirborne) {
+            var contact = DetectImpact(previousPlayer, _player.State);
+            if (contact.surface != ImpactSurface.None)
+                RegisterAirborneImpact(CombatRole.Player,
+                    contact.surface, contact.velocity, contact.height,
+                    contact.carrierSolid);
+        }
+        ObserveSettledWrecks();
+        double completedTimeMs = _simTimeMs + FixedDeltaSeconds * 1000.0;
+        FinishTerminalIfResolved(completedTimeMs);
+        _simTimeMs = completedTimeMs;
+    }
+
+    void CompleteUnopposedCarrierConstraintTick(
+        in AircraftState previousPlayer) {
+        double completedTimeMs = _simTimeMs + FixedDeltaSeconds * 1000.0;
+        if (TerminalPhaseActive) {
+            if (_playerTerminalState == AircraftTerminalState.DestroyedAirborne) {
+                var contact = DetectImpact(previousPlayer, _player.State);
+                if (contact.surface != ImpactSurface.None)
+                    RegisterAirborneImpact(CombatRole.Player,
+                        contact.surface, contact.velocity, contact.height,
+                        contact.carrierSolid);
+            }
+            ObserveSettledWrecks();
+            FinishTerminalIfResolved(completedTimeMs);
+        }
+        _simTimeMs = completedTimeMs;
+    }
+
+    /// <summary>
+    /// Ownship-only fixed-wing integration. The ordering of player power, resources, platform
+    /// kinematics, contact and clock matches <see cref="StepCore"/>, but no opponent placeholder
+    /// is manufactured to reuse that combat path.
+    /// </summary>
+    void StepUnopposedFixedWingCore() {
+        if (_playerTerminalState == AircraftTerminalState.Flying
+            && _conventionalRunwayRecovery?.Phase is
+                RunwayRecoveryPhase.Rollout or RunwayRecoveryPhase.Recovered) {
+            StepUnopposedConventionalRunwayRollout();
+            return;
+        }
+
+        if (_playerTerminalState == AircraftTerminalState.Flying
+            && _carrier is not null && _catapult.IsActive) {
+            AircraftState catapultState = _catapult.State;
+            PreparePlayerForPoweredTick();
+            _player.AdvanceEngineOnly(1.0, FixedDeltaSeconds);
+            Vec3D catapultAirVelocity = catapultState.VelocityVector()
+                - (_player.Wind?.Sample(catapultState.Position) ?? Vec3D.Zero);
+            ConsumeFuelAndStepSystems(catapultState, catapultAirVelocity.Length,
+                weightOnWheels: true);
+            _carrier.Step(FixedDeltaSeconds);
+            _catapult.Step(_carrier, FixedDeltaSeconds);
+            _player.AdoptExternalKinematics(_catapult.State);
+            StepPilotPhysiologyFromAircraft();
+            if (_playerTerminalState != AircraftTerminalState.Flying) {
+                AircraftState handoff = _catapult.State;
+                _player.AdoptExternalKinematics(handoff);
+                _catapult.Reset();
+                if (_playerTerminalState == AircraftTerminalState.DestroyedAirborne) {
+                    Vec3D deckVelocity = _carrier.DeckVelocityWorld
+                        + new Vec3D(0.0, _carrier.DeckVerticalVelocityMps, 0.0);
+                    double deckHeight = handoff.Position.Y
+                        - _carrier.DeckFrame(handoff.Position).height;
+                    RegisterAirborneImpact(CombatRole.Player,
+                        ImpactSurface.FlightDeck,
+                        deckVelocity,
+                        deckHeight,
+                        Carrier.SolidCollision.FlightDeck);
+                }
+            }
+            if (_playerTerminalState == AircraftTerminalState.Flying
+                && _catapult.Phase == CatapultLaunchModel.LaunchPhase.Airborne)
+                CompleteRelaunch();
+            CompleteUnopposedCarrierConstraintTick(catapultState);
+            return;
+        }
+
+        if (_playerTerminalState == AircraftTerminalState.Flying
+            && _carrier is not null
+            && _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Arrested) {
+            AircraftState playerState = _player.State;
+            PreparePlayerForPoweredTick();
+            _player.AdvanceEngineOnly(_detents.Throttle, FixedDeltaSeconds);
+            ConsumeFuelAndStepSystems(playerState, _player.AirspeedMps,
+                weightOnWheels: true);
+            _carrier.Step(FixedDeltaSeconds);
+            _arrestment.Step(_carrier, FixedDeltaSeconds);
+            _player.AdoptExternalKinematics(CurrentArrestmentState());
+            StepPilotPhysiologyFromAircraft();
+            bool arrestmentFailed = _arrestment.Phase
+                == ArrestmentModel.ArrestmentPhase.Failed;
+            if (arrestmentFailed) HandleArrestmentFailure();
+            if (_playerTerminalState != AircraftTerminalState.Flying
+                && !arrestmentFailed) {
+                Vec3D velocity = _carrier.DeckVelocityWorld
+                    + _carrier.LandingFwd * _arrestment.RelativeSpeedMps
+                    + new Vec3D(0.0, _carrier.DeckVerticalVelocityMps, 0.0);
+                AircraftState handoff = Carrier.StateFromVelocity(
+                    _arrestment.Position,
+                    velocity,
+                    _player.State.Mass,
+                    _player.State.BodyAttitude);
+                _player.AdoptExternalKinematics(handoff);
+                _arrestment.Reset();
+                if (_playerTerminalState == AircraftTerminalState.DestroyedAirborne) {
+                    Vec3D deckVelocity = _carrier.DeckVelocityWorld
+                        + new Vec3D(0.0, _carrier.DeckVerticalVelocityMps, 0.0);
+                    double deckHeight = handoff.Position.Y
+                        - _carrier.DeckFrame(handoff.Position).height;
+                    RegisterAirborneImpact(CombatRole.Player,
+                        ImpactSurface.FlightDeck,
+                        deckVelocity,
+                        deckHeight,
+                        Carrier.SolidCollision.FlightDeck);
+                }
+            }
+            if (_playerTerminalState == AircraftTerminalState.Flying
+                && _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped) {
+                if (_maintenanceScenario is not null)
+                    FinishRecoveredMaintenanceSortie();
+                else if (_beat.RecoveryCompletesSortie)
+                    FinishCarrierQualificationSortie(recovered: true);
+                else
+                    BeginRelaunch();
+            }
+            CompleteUnopposedCarrierConstraintTick(playerState);
+            return;
+        }
+
+        if (TerminalPhaseActive) {
+            StepUnopposedTerminalPhase();
+            return;
+        }
+
+        if (_carrier is not null) {
+            bool inSlot = _carrier.InApproachSlot(
+                _player.State, _player.IndicatedAirspeedMps);
+            ApplyCarrierConfigurationAutomation(inSlot);
+            if (_detents.ApproachMode) _waveOffArmed = true;
+            else if (!inSlot && _detents.Throttle < 0.95) _waveOffArmed = false;
+            var (gsAlong, _, gsHeight) =
+                _carrier.LandingAircraftSupportFrame(_player.State.Position);
+            double gsLineH = Math.Max(0.0,
+                -_carrier.DeckLengthM * 0.2 - gsAlong) * Carrier.GlideslopeSlope;
+            _detents.GlideslopeErrorM = gsLineH - gsHeight;
+            _detents.ApproachAirspeedMps = _player.AirspeedMps;
+            _detents.DeckClosureMps = _carrier.DeckClosureMps(_player.State);
+        }
+
+        _detents.AirspeedMps = _player.AirspeedMps;
+        _detents.MeasuredAngleOfAttackRad = _player.AngleOfAttackRad;
+        _detents.AerodynamicConfiguration = PlayerEffectiveAerodynamicConfiguration;
+        ConfigureAssistedFlightDetents();
+        if (_carrier is not null)
+            _carrier.ApproachDirectorPitchOffsetRad =
+                _detents.EffectiveOnSpeedAoARad(_beat.PlayerAir);
+        _detents.Tick(_keys, _simTimeMs, _player.State, _beat.PlayerAir, _advice,
+            FixedDeltaSeconds);
+        if (_waveOffArmed && _detents.Throttle >= 0.95
+            && !RapierAutomationActive) {
+            _waveOffUntilMs = _simTimeMs + 5000.0;
+            _waveOffArmed = false;
+            SelectAutomaticConfigurationTarget(FlightConfigurationTarget.Combat);
+            if (_recoveryAttemptActive) _attemptHadSetback = true;
+        }
+        _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);
+
+        AircraftState previousPlayerState = _player.State;
+        PilotCommand directedCommand = RapierAutomationOr(_detents.Command);
+        PilotCommand effectiveCommand = ApplyPilotPhysiology(directedCommand);
+        PilotCommand flightCommand = ApplyAutoGcas(effectiveCommand);
+        PreparePlayerForPoweredTick();
+        _player.Step(flightCommand, FixedDeltaSeconds);
+        StepPilotPhysiologyFromAircraft();
+        ConsumeFuelAndStepSystems(_player.State, _player.AirspeedMps,
+            weightOnWheels: false);
+
+        if (_carrier is not null) {
+            _carrier.Step(FixedDeltaSeconds);
+            ObserveCarrierPass();
+        }
+        if (Lifecycle != LifecycleState.Active) {
+            _simTimeMs += FixedDeltaSeconds * 1000.0;
+            return;
+        }
+
+        HandleCarrierRecovery(previousPlayerState);
+        if (_playerTerminalState != AircraftTerminalState.Flying) {
+            _simTimeMs += FixedDeltaSeconds * 1000.0;
+            return;
+        }
+
+        bool conventionalRunwayContact =
+            _carrier is null
+            && TryBeginConventionalRunwayContact(previousPlayerState);
+        if (_playerTerminalState != AircraftTerminalState.Flying) {
+            _simTimeMs += FixedDeltaSeconds * 1000.0;
+            return;
+        }
+        if (!conventionalRunwayContact
+            && _carrier is null
+            && RegisterPlayerNaturalSurfaceImpact()) {
+            _simTimeMs += FixedDeltaSeconds * 1000.0;
+            return;
+        }
+
+        _simTimeMs += FixedDeltaSeconds * 1000.0;
+    }
+
     void StepCore() {
         // Catapult, arrestment and runway rollout remain real fixed-step phases: other aircraft,
         // weapons, fuel, systems and the authoritative clock continue while ownship is constrained.
@@ -6612,7 +7180,9 @@ public sealed class SimulationSession {
         bool formationSweep = (_triggerDown || _rapierFormationSweepRequested)
             && ExecuteRapierFormationSweep();
         if (formationSweep) _rapierFormationSweepRequested = false;
-        bool assistedTrigger = _assistedFlight && _gunKill.GunSolution;
+        bool assistedTrigger = _assistedFlight
+            && !CardTwelveRequiresPilotGunTrigger
+            && _gunKill.GunSolution;
         StepWeapons(previousPlayerState, previousOpponentState,
             !formationSweep && (_triggerDown || assistedTrigger));
         PreparePlayerForPoweredTick();

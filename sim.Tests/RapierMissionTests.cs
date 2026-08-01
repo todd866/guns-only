@@ -54,7 +54,7 @@ public class RapierMissionTests {
         bool sawZoomPull = false;
         var reasons = new HashSet<string>();
         double maximumMach = 0.0;
-        double rangeAtMach4CorridorM = double.NaN;
+        double rangeAtInterceptHandoffM = double.NaN;
         var phaseTimeline = new List<string>();
         RapierMissionPhase lastPhase = RapierMissionPhase.Unavailable;
         // Eastern outbound (west) is the same energy ladder as the old north route, but the
@@ -77,12 +77,16 @@ public class RapierMissionTests {
             sawZoomPull |= session.RapierPhase == RapierMissionPhase.ZoomPull;
             if (!string.IsNullOrEmpty(session.RapierPhaseReason))
                 reasons.Add(session.RapierPhaseReason);
-            // Dash speed is now what the structure allows, not Mach 4. The property this test
-            // protects is that the aircraft ARRIVES at dash speed with fighting room ahead of it,
-            // and that is independent of what the number happens to be.
-            if (session.RapierPhase == RapierMissionPhase.Intercept && mach >= 2.7) {
-                rangeAtMach4CorridorM = (session.Bandit.State.Position
+            // Intercept opens at the energy-positive M2.2 handoff, while the aircraft continues
+            // accelerating toward the legacy formation-card dash target. Keep those as separate
+            // properties: room belongs to the handoff; M2.7 proves the subsequent acceleration.
+            if (!double.IsFinite(rangeAtInterceptHandoffM)
+                && session.RapierPhase == RapierMissionPhase.Intercept
+                && mach >= ReachFightDirector.LevelDashMinMach) {
+                rangeAtInterceptHandoffM = (session.Bandit.State.Position
                     - session.Player.State.Position).Length;
+            }
+            if (session.RapierPhase == RapierMissionPhase.Intercept && mach >= 2.7) {
                 break;
             }
             if (session.PlayerTerminalState != AircraftTerminalState.Flying)
@@ -116,11 +120,11 @@ public class RapierMissionTests {
                 + $"[{string.Join(", ", phaseTimeline)}]");
         Assert.True(maximumMach >= 2.7,
             $"automation only reached M{maximumMach:F2}");
-        Assert.True(double.IsFinite(rangeAtMach4CorridorM),
-            $"automation never entered the dash intercept phase "
+        Assert.True(double.IsFinite(rangeAtInterceptHandoffM),
+            $"automation never reached the energy-positive Intercept handoff "
                 + $"[{string.Join(", ", phaseTimeline)}]");
-        Assert.True(rangeAtMach4CorridorM > 40_000.0,
-            $"only {rangeAtMach4CorridorM / 1000.0:F0} km remained at dash speed");
+        Assert.True(rangeAtInterceptHandoffM > 40_000.0,
+            $"only {rangeAtInterceptHandoffM / 1000.0:F0} km remained at Intercept handoff");
     }
 
     [Fact]

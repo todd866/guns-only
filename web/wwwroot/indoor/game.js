@@ -7,6 +7,11 @@ import {
 } from "./sim.js";
 import { IndoorPresentation } from "./presentation.js";
 import { IndoorAudio, loadIndoorPreferences } from "./audio.js";
+import { RELEASE_BUILD } from "../render/release/release_identity.js?v=238";
+import {
+  indoorActionPolicy,
+  indoorBlockedActionMessage,
+} from "../render/indoor/control_policy.js?v=238";
 
 const FIXED_STEP = 1 / 60;
 const MAX_FRAME_SECONDS = 0.12;
@@ -211,6 +216,34 @@ function showEventCue(message, duration = 1400) {
 function announce(message) {
   ui.announcer.textContent = "";
   queueMicrotask(() => { ui.announcer.textContent = message; });
+}
+
+function rejectIndoorAction(action, policy) {
+  const message = indoorBlockedActionMessage(action, policy);
+  showSubtitle(message, 2200);
+  announce(message);
+  return false;
+}
+
+function queueDetach() {
+  const policy = indoorActionPolicy(snapshot);
+  if (!policy.canDetach) return rejectIndoorAction("detach", policy);
+  detachQueued = true;
+  return true;
+}
+
+function queueReturn() {
+  const policy = indoorActionPolicy(snapshot);
+  if (!policy.canReturn) return rejectIndoorAction("return", policy);
+  returnQueued = true;
+  return true;
+}
+
+function beginBroadcast() {
+  const policy = indoorActionPolicy(snapshot);
+  if (!policy.canBroadcast) return rejectIndoorAction("broadcast", policy);
+  broadcastHeld = true;
+  return true;
 }
 
 function phaseState() {
@@ -562,19 +595,25 @@ function updateHud() {
       : tension > 0.66 ? "Automatic release is imminent" : "X detaches fibre at any time";
   }
   if (snapshot.survey) {
+    const policy = indoorActionPolicy(snapshot);
     const scansComplete = snapshot.survey.objectives.scan.complete;
     const returning = snapshot.survey.returnRequested;
-    ui.returnHome.hidden = !scansComplete || returning;
-    ui.touchReturn.hidden = !scansComplete || returning;
-    const broadcastAvailable = snapshot.link.mode !== "fiber"
-      && !returning
-      && snapshot.survey.doctrine !== "stealth-mandatory";
-    ui.broadcast.hidden = !broadcastAvailable;
-    ui.touchBroadcast.hidden = !broadcastAvailable;
+    ui.returnHome.hidden = !policy.canReturn;
+    ui.touchReturn.hidden = !policy.canReturn;
+    ui.broadcast.hidden = !policy.canBroadcast;
+    ui.touchBroadcast.hidden = !policy.canBroadcast;
+    ui.touchFire.hidden = !policy.canFire;
     ui.broadcast.classList.toggle("active", broadcastHeld);
     ui.touchBroadcast.classList.toggle("active", broadcastHeld);
-    ui.detach.hidden = snapshot.link.mode !== "fiber";
-    ui.touchDetach.hidden = snapshot.link.mode !== "fiber";
+    ui.detach.hidden = !policy.canDetach;
+    ui.touchDetach.hidden = !policy.canDetach;
+    if (policy.stealthMandatory && !returning) {
+      ui.detachKicker.textContent = scansComplete
+        ? "SILENT RETURN READY" : "STEALTH PROFILE";
+      ui.detachCopy.textContent = scansComplete
+        ? "R starts the dark autonomous retrace. Fibre and weapons remain safe."
+        : "Keep fibre attached and weapons safe. Survey every marked room first.";
+    }
     if (returning) {
       ui.detachKicker.textContent = snapshot.survey.silentReturn
         ? "SILENT AUTONOMOUS RETURN" : "AUTONOMOUS RETURN";
@@ -584,7 +623,9 @@ function updateHud() {
         ? "PROVOCATION PHASE" : "SURVEY CAPTURED";
       ui.detachCopy.textContent = snapshot.survey.doctrine === "noisy-provocation"
         ? "Detach, then hold B to broadcast."
-        : "R returns dark; X exposes the radio.";
+        : policy.stealthMandatory
+          ? "R returns dark. Fibre, radio and weapons remain safe."
+          : "R returns dark; X exposes the radio.";
     }
   }
 
@@ -895,6 +936,11 @@ function outcomeCopy(reason) {
     "battery-depleted": ["Battery exhausted", "The airframe settled before the control loop was severed."],
     "relay-disabled": ["Relay station lost", "The local radio station was overrun before the terminal action finished."],
     "rf-window-expired": ["Radio window expired", "The station could not hold the command channel any longer."],
+    "stealth-rf-breach": ["Optical route exposed", "The fibre was detached on a zero-emission task, exposing the return route to radio detection."],
+    "stealth-broadcast-breach": ["Emission discipline broken", "A deliberate transmission revealed a mission whose doctrine required radio silence."],
+    "stealth-fire-breach": ["Weapons discipline broken", "Firing announced the survey before the drone could return with its observations."],
+    "stealth-detection-breach": ["Survey detected", "The investigator acquired MIDGE-03 before the silent route was complete."],
+    "stealth-doctrine-breach": ["Stealth contract broken", "The mission ended after an action contradicted the zero-emission brief."],
   };
   return copy[reason] ?? ["Mission incomplete", "The facility control loop remains live."];
 }
@@ -946,7 +992,7 @@ function pollGamepad() {
   if (!gamepad) return { forward: 0, right: 0, up: 0, yaw: 0, pitch: 0, fire: false };
   const deadzone = (value) => Math.abs(value || 0) < 0.13 ? 0 : value;
   const detachHeld = gamepad.buttons[1]?.pressed === true;
-  if (detachHeld && !gamepadDetachHeld) detachQueued = true;
+  if (detachHeld && !gamepadDetachHeld) queueDetach();
   gamepadDetachHeld = detachHeld;
   return {
     forward: -deadzone(gamepad.axes[1]),
@@ -966,6 +1012,7 @@ function takeMouseAxis(axis, rate) {
 
 function buildInput() {
   const gamepad = pollGamepad();
+  const actionPolicy = indoorActionPolicy(snapshot);
   const keyboardForward = (heldKeys.has("KeyW") ? 1 : 0) - (heldKeys.has("KeyS") ? 1 : 0);
   const keyboardRight = (heldKeys.has("KeyD") ? 1 : 0) - (heldKeys.has("KeyA") ? 1 : 0);
   const keyboardUp = (heldKeys.has("Space") ? 1 : 0)
@@ -981,14 +1028,13 @@ function buildInput() {
   const keyboardPitch = (heldKeys.has("ArrowUp") ? 0.68 : 0)
     - (heldKeys.has("ArrowDown") ? 0.68 : 0);
   const requestedFire = mouseFire || heldKeys.has("KeyF") || gamepad.fire;
-  const weaponArmed = snapshot.link.mode !== "fiber";
-  if (requestedFire && !weaponArmed && performance.now() - lastSafeNoticeAt > 1200) {
+  if (requestedFire && !actionPolicy.canFire && performance.now() - lastSafeNoticeAt > 1200) {
     lastSafeNoticeAt = performance.now();
-    showSubtitle("GUN SAFE on optical ingress. Break away to arm the terminal phase.", 1800);
+    showSubtitle(indoorBlockedActionMessage("fire", actionPolicy), 1800);
   }
 
-  const detach = detachQueued;
-  const returnHome = returnQueued;
+  const detach = actionPolicy.canDetach && detachQueued;
+  const returnHome = actionPolicy.canReturn && returnQueued;
   detachQueued = false;
   returnQueued = false;
   return {
@@ -997,10 +1043,10 @@ function buildInput() {
     up: clamp(keyboardUp + touchUp + gamepad.up, -1, 1),
     yaw: clamp(mouseYaw.value + touchYaw + gamepad.yaw + keyboardYaw, -1, 1),
     pitch: clamp(mousePitch.value + touchPitch + gamepad.pitch + keyboardPitch, -1, 1),
-    fire: weaponArmed && requestedFire,
+    fire: actionPolicy.canFire && requestedFire,
     detachFiber: detach,
     returnHome,
-    broadcast: broadcastHeld,
+    broadcast: actionPolicy.canBroadcast && broadcastHeld,
     // Facility shutters authenticate automatically at close range so the same mission remains
     // playable on keyboard, touch, and gamepad without a hidden fourth control surface.
     interact: true,
@@ -1197,15 +1243,15 @@ function installInput() {
     }
     if (event.code === "KeyR") {
       if (resultShown) resetMission({ start: true });
-      else if (started && !paused && snapshot.survey) returnQueued = true;
+      else if (started && !paused && snapshot.survey) queueReturn();
       return;
     }
     if (event.code === "KeyX" && started && !paused && snapshot.link.mode === "fiber") {
-      detachQueued = true;
+      queueDetach();
       return;
     }
     if (event.code === "KeyB" && started && !paused && snapshot.survey) {
-      broadcastHeld = true;
+      beginBroadcast();
       return;
     }
     heldKeys.add(event.code);
@@ -1253,16 +1299,16 @@ function installInput() {
   installHoldButton(ui.touchFire, () => { mouseFire = true; }, () => { mouseFire = false; });
   ui.touchDetach.addEventListener("pointerdown", (event) => {
     event.preventDefault();
-    detachQueued = true;
+    queueDetach();
   });
   installHoldButton(
     ui.touchReturn,
-    () => { returnQueued = true; },
+    queueReturn,
     () => {},
   );
   installHoldButton(
     ui.touchBroadcast,
-    () => { broadcastHeld = true; },
+    beginBroadcast,
     () => { broadcastHeld = false; },
   );
 }
@@ -1278,11 +1324,11 @@ function bindUi() {
   ui.helpOpen.addEventListener("click", openHelp);
   ui.helpClose.addEventListener("click", closeHelp);
   ui.flyAgain.addEventListener("click", () => resetMission({ start: true }));
-  ui.detach.addEventListener("click", () => { detachQueued = true; });
-  ui.returnHome.addEventListener("click", () => { returnQueued = true; });
+  ui.detach.addEventListener("click", queueDetach);
+  ui.returnHome.addEventListener("click", queueReturn);
   installHoldButton(
     ui.broadcast,
-    () => { broadcastHeld = true; },
+    beginBroadcast,
     () => { broadcastHeld = false; },
   );
   ui.audioToggle.addEventListener("click", () => {
@@ -1368,10 +1414,11 @@ function exposeDiagnostics() {
     get controlState() { return commandControlState(snapshot); },
     get selectedMissionId() { return selectedMissionId; },
     get profiles() { return Object.keys(SURVEY_PROFILES); },
+    get audioDiagnostics() { return audio.diagnostics(); },
     begin: beginMission,
     restart: () => resetMission({ start: true }),
-    detach: () => { detachQueued = true; },
-    returnHome: () => { returnQueued = true; },
+    detach: queueDetach,
+    returnHome: queueReturn,
     selectMission: selectMissionProfile,
   };
   globalThis.__gunsIndoor = diagnostics;
@@ -1404,7 +1451,7 @@ try {
   exposeDiagnostics();
   requestAnimationFrame(frame);
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("../service-worker.js").catch(() => {});
+    navigator.serviceWorker.register(`../service-worker.js?v=${RELEASE_BUILD}`).catch(() => {});
   }
 } catch (error) {
   showFatal(error);

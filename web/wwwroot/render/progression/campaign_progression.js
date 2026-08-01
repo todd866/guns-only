@@ -2,8 +2,30 @@ export const CAMPAIGN_STORAGE_KEY = "guns-only.raptor-program.v1";
 export const CAMPAIGN_PROFILE_VERSION = 2;
 export const MAX_APPLIED_RAPIER_SORTIES = 64;
 
-export const CAMPAIGN_NODES = Object.freeze([
-  Object.freeze({
+export const EXPERIENCE_RELEASE_STATE = Object.freeze({
+  PRODUCTION: "production",
+  PREVIEW: "preview",
+  QUARANTINED: "quarantined",
+  RETIRED: "retired",
+});
+
+function experience(definition) {
+  return Object.freeze({
+    visible: false,
+    route: definition.mission == null
+      ? `/${definition.id}/`
+      : `/?program=${definition.id}`,
+    blocker: "",
+    ...definition,
+  });
+}
+
+// This is the release source of truth for every experience reachable from the production shell.
+// `hidden` HTML is presentation, never a release gate: routing, menu rendering, tests and status
+// documentation consume these states instead. Only PRODUCTION entries may start from a public
+// route; PREVIEW and QUARANTINED entries remain in the repository for focused development.
+export const EXPERIENCE_CATALOG = Object.freeze([
+  experience({
     id: "first-merge",
     mission: 7,
     sequence: 1,
@@ -11,8 +33,10 @@ export const CAMPAIGN_NODES = Object.freeze([
     title: "Guns Only",
     shortObjective: "Endless guns-only dogfight. The wave escalates while you keep winning.",
     qualification: "",
+    releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
+    visible: true,
   }),
-  Object.freeze({
+  experience({
     id: "low-level-drone",
     mission: 8,
     sequence: 2,
@@ -20,8 +44,10 @@ export const CAMPAIGN_NODES = Object.freeze([
     title: "Low-Level Drone Intercept",
     shortObjective: "Stop four low-flying raiders over a fictional Ukrainian training sector.",
     qualification: "",
+    releaseState: EXPERIENCE_RELEASE_STATE.QUARANTINED,
+    blocker: "Ground-target and complete player-path acceptance are outstanding.",
   }),
-  Object.freeze({
+  experience({
     id: "medevac",
     mission: 13,
     sequence: 3,
@@ -29,10 +55,12 @@ export const CAMPAIGN_NODES = Object.freeze([
     title: "Medevac",
     shortObjective: "Fly low to one pickup, secure the capsule, and hand it over at the clinic.",
     qualification: "",
+    releaseState: EXPERIENCE_RELEASE_STATE.QUARANTINED,
+    blocker: "The orchard-gap guidance is wired; an end-to-end human flight is still outstanding.",
   }),
   // Circuits sits BEFORE the intercept deliberately. The trap is the hardest thing the aircraft
   // asks for and the intercept offered exactly one attempt at it, far from home and low on fuel.
-  Object.freeze({
+  experience({
     id: "rapier-circuits",
     mission: 11,
     sequence: 4,
@@ -40,20 +68,24 @@ export const CAMPAIGN_NODES = Object.freeze([
     title: "Rapier Circuits",
     shortObjective: "Launch west, fly the pattern, trap. Repeat until the hook is easy.",
     qualification: "",
+    releaseState: EXPERIENCE_RELEASE_STATE.PREVIEW,
+    blocker: "This training route is not part of the two-aircraft production front door yet.",
   }),
-  Object.freeze({
+  experience({
     id: "rapier-intercept",
     mission: 12,
     sequence: 5,
     aircraft: "Rapier",
     title: "Rapier Intercept",
-    shortObjective: "Take the dealt balloon, transport, airborne-enabler, or swarm contract; recover the Rapier and protect the operating balance.",
+    shortObjective: "Climb onto the thin-air M4.2 shelf, zoom for one gun pass on the high-altitude balloon, then re-enter and trap at the midpoint arrestor.",
     qualification: "",
+    releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
+    visible: true,
   }),
   // Korea 1951. The oldest aircraft in the game and the only one flown from a straight deck —
   // and until now the only one with no way in at all: the F9F-2 and the paddles/LSO machinery
   // built around it existed solely inside a unit test.
-  Object.freeze({
+  experience({
     id: "korea-panther",
     mission: 14,
     sequence: 6,
@@ -61,10 +93,65 @@ export const CAMPAIGN_NODES = Object.freeze([
     title: "Korea — Panther off Essex",
     shortObjective: "Catshot off USS Essex, fly the sortie, and bring it back to the wires. Straight deck: there is no bolter.",
     qualification: "",
+    releaseState: EXPERIENCE_RELEASE_STATE.QUARANTINED,
+    blocker: "The terrain-loaded open-water launch is green; full sortie, recovery, and human acceptance are still outstanding.",
+  }),
+  experience({
+    id: "indoor",
+    mission: null,
+    sequence: 7,
+    aircraft: "MIDGE-03",
+    title: "Facility Nine",
+    shortObjective: "Fly the indoor reconnaissance exercise without breaking stealth.",
+    qualification: "",
+    releaseState: EXPERIENCE_RELEASE_STATE.QUARANTINED,
+    blocker: "Advertised controls and stealth-failure behavior require player-path acceptance.",
+  }),
+  experience({
+    id: "medevac-command",
+    mission: null,
+    sequence: 8,
+    route: "/medevac/",
+    aircraft: "Command prototype",
+    title: "Medevac command prototype",
+    shortObjective: "Exercise the parked medical logistics and selective-relay prototype.",
+    qualification: "",
+    releaseState: EXPERIENCE_RELEASE_STATE.QUARANTINED,
+    blocker: "This research prototype is not the canonical flight course and has not graduated its player-path acceptance gate.",
+  }),
+  experience({
+    id: "cobra-lab",
+    mission: null,
+    sequence: 9,
+    route: "/cobra-lab/",
+    aircraft: "AH-1G Cobra world prototype",
+    title: "Cobra Canyon Lab",
+    shortObjective: "Inspect the authored Cobra Canyon presentation routes and renderer budget.",
+    qualification: "",
+    releaseState: EXPERIENCE_RELEASE_STATE.QUARANTINED,
+    blocker: "This world-presentation prototype is not the AH-1G flight authority, weapons model, or an accepted player path.",
   }),
 ]);
 
+export const CAMPAIGN_NODES = Object.freeze(
+  EXPERIENCE_CATALOG.filter((entry) => Number.isInteger(entry.mission)),
+);
+
 const NODE_BY_ID = new Map(CAMPAIGN_NODES.map((node) => [node.id, node]));
+const EXPERIENCE_BY_ID = new Map(EXPERIENCE_CATALOG.map((entry) => [entry.id, entry]));
+
+export function experienceById(experienceId) {
+  return EXPERIENCE_BY_ID.get(String(experienceId || "")) ?? null;
+}
+
+export function experienceLaunchable(experienceId) {
+  return experienceById(experienceId)?.releaseState === EXPERIENCE_RELEASE_STATE.PRODUCTION;
+}
+
+export function productionExperiences() {
+  return EXPERIENCE_CATALOG.filter((entry) =>
+    entry.visible && entry.releaseState === EXPERIENCE_RELEASE_STATE.PRODUCTION);
+}
 
 function cleanQualification(value) {
   if (!value || typeof value !== "object") return null;
@@ -153,10 +240,10 @@ export function campaignNode(nodeId) {
 }
 
 export function campaignNodeUnlocked(profile, nodeId) {
-  // EVERYTHING IS AVAILABLE. The qualification ladder was scaffolding from when the game was a
-  // programme of exercises; every shipping mission is now available, and locking one behind
-  // another only stands between the pilot and the aircraft or environment they wanted to fly.
-  return Boolean(campaignNode(nodeId));
+  // This function historically described qualification locks. It now answers the more important
+  // release question: may this production route start? Profile progress never promotes preview or
+  // quarantined content; a release-state change must be explicit and reviewed in the catalog.
+  return experienceLaunchable(nodeId);
 }
 
 export function campaignNodeQualified() {
@@ -178,47 +265,10 @@ export function nextCampaignNode(profile, nodeId) {
     && !campaignNodeQualified(profile, candidate.id)) ?? null;
 }
 
-export function campaignNodeSatisfied(nodeId, state) {
-  const kills = Math.max(0, Math.round(Number(state?.kill_count) || 0));
-  switch (nodeId) {
-    case "first-merge":
-      return state?.visual_merge_evaluation === true && kills >= 1;
-    case "low-level-drone":
-      return state?.drone_raid_evaluation === true
-        && state?.drone_raid_finished === true
-        && Number(state?.drone_raid_score) >= 65
-        && Number(state?.drone_raid_kills) >= 3
-        && Number(state?.drone_raid_leakers) <= 1;
-    case "endurance-merge":
-      return state?.visual_merge_evaluation === true && kills >= 2;
-    case "ace-duel":
-      return state?.visual_merge_evaluation === true && kills >= 1;
-    default:
-      return false;
-  }
-}
-
-export function qualifyCampaignNode(profile, nodeId, state, qualifiedAt = Date.now()) {
+export function qualifyCampaignNode(profile) {
+  // Qualification progression was retired when route availability moved to the explicit release
+  // catalog. Keep this compatibility export side-effect-free while older callers roll off: it
+  // must never resurrect saved qualifications, write storage, or emit an earned event.
   const current = createCampaignProfile(profile);
-  if (!campaignNodeUnlocked(current, nodeId)
-    || campaignNodeQualified(current, nodeId)
-    || !campaignNodeSatisfied(nodeId, state)) {
-    return Object.freeze({ profile: current, newlyQualified: false });
-  }
-  const score = nodeId === "low-level-drone"
-    ? Number(state?.drone_raid_score) : Number(state?.visual_merge_score);
-  const kills = nodeId === "low-level-drone"
-    ? Number(state?.drone_raid_kills) : Number(state?.kill_count);
-  const next = createCampaignProfile({
-    ...current,
-    qualifications: {
-      ...current.qualifications,
-      [nodeId]: {
-        qualifiedAt,
-        score,
-        kills,
-      },
-    },
-  });
-  return Object.freeze({ profile: next, newlyQualified: true });
+  return Object.freeze({ profile: current, newlyQualified: false });
 }

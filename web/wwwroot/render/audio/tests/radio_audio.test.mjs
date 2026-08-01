@@ -116,6 +116,15 @@ test("checked-in radio clips are bound to the exact current catalog transcript",
     [],
     `missing or stale checked-in radio clips: ${mismatches.join(", ")}`,
   );
+  const rightsPending = Object.entries(manifest.clips)
+    .filter(([, clip]) => !String(clip.source_casting_status)
+      .includes("production rights approved by project owner"))
+    .map(([id]) => id);
+  assert.deepEqual(rightsPending, [],
+    `radio clips without recorded production-rights approval: ${rightsPending.join(", ")}`);
+  assert.doesNotMatch(JSON.stringify({ manifest, catalog }), /rights review pending/i,
+    "an approved production corpus must not retain a false pending-rights label");
+  assert.match(catalog.quality_note, /project owner approved production rights on 2026-08-01/i);
 });
 
 test("equipment profiles keep Rapier, modern mask, and Korean ARC-1 distinct", async () => {

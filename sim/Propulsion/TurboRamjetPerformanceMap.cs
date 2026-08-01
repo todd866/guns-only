@@ -1,10 +1,8 @@
 namespace GunsOnly.Sim.Propulsion;
 
 /// <summary>
-/// Variable-geometry turbine-based combined-cycle engine: one inlet, one nozzle, a turbine core
-/// that keeps running while
-/// progressively more inlet air is bypassed around it into a ram combustor. Broadly the J58
-/// operating principle, smaller and with a ceramic-matrix hot section assumed.
+/// Variable-geometry turbine-based combined-cycle surrogate: one inlet, one nozzle, an augmented
+/// turbine core through the transonic gate, and a progressively dominant ram stream above M1.6.
 ///
 /// WHY NOT TWO MODELS. A separate turbojet and a separate ramjet would need two ThrustMaxN values
 /// and a state machine to hand over between them, and the handover is precisely where such an
@@ -17,8 +15,8 @@ namespace GunsOnly.Sim.Propulsion;
 /// ThrustMaxN means SEA-LEVEL STATIC DRY THRUST of the turbine core, which is a number that can be
 /// quoted, sanity-checked and compared against other airframes in this codebase.
 ///
-/// Provisional surrogate. The fade schedules, capture ceiling and ram ratio are transparent
-/// stand-ins for an engine deck, not a claim about the J58 or any other engine.
+/// The canonical shape owns inlet capture area and installed stream performance. Fade, light-off,
+/// dense-air spill and turbine lapse remain transparent reduced-order schedules, not an OEM deck.
 public readonly record struct CombinedCycleThrustFractions(double Turbine, double Ramjet) {
     public double Total => Turbine + Ramjet;
 }
@@ -26,8 +24,8 @@ public readonly record struct CombinedCycleThrustFractions(double Turbine, doubl
 public static class TurboRamjetPerformanceMap {
     /// Turbine contribution begins fading once ram compression starts heating the inlet air beyond
     /// what a ceramic hot section wants to see, and is gone by the time the ram duct owns the flow.
-    public const double TurbineFadeStartMach = 1.9;
-    public const double TurbineGoneMach = 3.0;
+    public static double TurbineFadeStartMach => RapierV2Design.TurbineFadeStartMach;
+    public static double TurbineGoneMach => RapierV2Design.TurbineFadeCompleteMach;
     /// Compressor mass flow collapses with density. Sqrt-density alone still left ~12% of SLS at
     /// FL1000, so a ZoomCoast (throttle 0, RCS only) kept attributing idle fuel and spool to a
     /// core that cannot breathe. Fade the turbine out on density as well as Mach — independent of
@@ -60,31 +58,11 @@ public static class TurboRamjetPerformanceMap {
     // Sized so the aircraft tops out near M4.5 — where the ram cycle itself is dying — rather than
     // against a structural limit. With a CMC hot structure good to about M5.7 the engine is the
     // binding constraint, which is how a ramjet should behave.
-    public const double RamDesignThrustRatio = 1.30;
-    // NOTE: DesignMach and DesignAltitudeM no longer affect thrust at all. designGroup is computed
-    // from them and then used only as a `> 0.0` guard -- the normalisation described below was
-    // replaced by RamThrustN()/StaticThrustReferenceN, an ideal cycle over a physical duct. They
-    // are kept because they still document the intended dash point.
-    //
-    // The reasoning that set M2.6 has also expired, and it is worth recording why rather than
-    // quietly moving the number. It argued that M2.6 "agrees with the 320 C skin limit" -- but
-    // 320 C is the CHEAP STEEL aeroplane, CheapRapierPublicDataSurrogate, which was rejected. This
-    // airframe is 1200 C SiC/SiC CMC and screens past M5. The design point was justified against
-    // an aircraft that no longer exists, and was never revisited when the skin changed.
-    //
-    // The other half of that argument -- "nothing has ever sustained Mach 4 air-breathing" -- is
-    // true of aircraft that were BUILT, and it was the right instinct at the time: the jet was
-    // reaching M4.13 on an 84 kN core it could not physically carry. It is not an argument that
-    // M4 is impossible for a 2040s CMC airframe. What made the old aircraft dishonest was free
-    // thrust, and that was fixed at the source rather than by capping the design point.
-    public const double DesignMach = 2.6;
-    public const double DesignAltitudeM = 21_500.0;
-    // Stoichiometric kerosene-air adiabatic flame temperature is about 2300-2400 K, and hydrogen is
-    // no better. 3000 K is not a materials problem that a ceramic solves — it is chemically
-    // unreachable by burning fuel in air at any budget. The engine was making thrust nothing could
-    // actually produce, which is why the aircraft leapt out of the atmosphere.
-    public const double BurnerTemperatureK = 2300.0;
-
+    public static double RamDesignThrustRatio =>
+        RapierV2Design.DesignPointNetThrustN / StaticThrustReferenceN;
+    /// The cycle design point comes directly from the canonical v2 geometry/engineering artifact.
+    public static double DesignMach => RapierV2Design.DesignMach;
+    public static double DesignAltitudeM => RapierV2Design.DesignAltitudeM;
     /// The translating inlet does not offer the ram duct full capture area in dense air. Below the
     /// launch climb it stays substantially spilled to keep diffuser pressure and hot-section load
     /// inside limits; the schedule opens between roughly FL300 and FL500. This is what makes
@@ -117,25 +95,20 @@ public static class TurboRamjetPerformanceMap {
     /// aircraft is limited by the ram cycle falling away naturally, not by a hidden schedule.
     /// Keying this off DesignMach was a real bug: moving the design point moved the spill with it
     /// and produced zero thrust by M2.78.
-    public const double RamSpillStartMach = 4.4;
-    public const double RamSpillCompleteMach = 5.0;
+    public const double RamSpillStartMach = 4.8;
+    public const double RamSpillCompleteMach = 5.2;
 
     const double Gamma = 1.4;
 
     static double Fade(double value, double from, double to) =>
         System.Math.Clamp((value - from) / System.Math.Max(1e-9, to - from), 0.0, 1.0);
 
-    /// MIL-E-5008B supersonic total-pressure recovery.
-    static double InletRecovery(double mach) => mach <= 1.0
-        ? 1.0
-        : System.Math.Clamp(1.0 - 0.055 * System.Math.Pow(mach - 1.0, 1.35), 0.05, 1.0);
-
     /// Physical capture area of the ram duct, square metres. This REPLACES a normalised thrust
     /// ratio, which was the least honest number in the model: it was chosen to land the top speed
     /// where the design wanted it, so the engine was defined by its answer rather than its
     /// geometry. A 1.24 m duct on a 13 m airframe is large — this aircraft is substantially duct,
     /// exactly as the D-21 was — and thrust now falls out of the ideal cycle rather than a fit.
-    public const double RamCaptureAreaM2 = 1.9;
+    public static double RamCaptureAreaM2 => RapierV2Design.InletCaptureAreaM2;
 
     /// <summary>
     /// Ram combustor TSFC as a multiple of the published dry-military specific fuel consumption
@@ -150,29 +123,20 @@ public static class TurboRamjetPerformanceMap {
     /// The rating the fraction-based engine interface is measured against: the Rapier's sea-level
     /// static dry thrust. Used only to convert physical newtons back into the fraction callers
     /// expect, so the ram term can be real thrust while the interface stays unchanged.
-    public const double StaticThrustReferenceN = 50_000.0;
+    public static double StaticThrustReferenceN => RapierV2Design.SeaLevelStaticDryThrustN;
 
-    /// Ram thrust in NEWTONS from the ideal cycle: F = rho V0^2 Ac (sqrt(Tb/T_inlet) - 1) eta.
-    /// Nothing here is normalised against a design point; the only free parameter is the duct.
+    /// Ram-stream installed thrust in newtons. Captured mass flow comes from the canonical inlet
+    /// area and capture-efficiency schedule; specific thrust and installed retention come from the
+    /// same v2 definition. This is the exact equation used to close its generated M4.2 artifact.
     public static double RamThrustN(double mach, double ambientTemperatureK,
         double ambientDensityKgM3) {
         if (!(mach > 0.0) || !(ambientTemperatureK > 0.0) || !(ambientDensityKgM3 > 0.0)) return 0.0;
-        double inletTotalK = ambientTemperatureK * (1.0 + (Gamma - 1.0) / 2.0 * mach * mach);
-        if (BurnerTemperatureK <= inletTotalK) return 0.0;   // no temperature ratio left to burn into
         double speedOfSound = System.Math.Sqrt(Gamma * 287.05287 * ambientTemperatureK);
         double velocity = mach * speedOfSound;
-        return ambientDensityKgM3 * velocity * velocity * RamCaptureAreaM2
-            * (System.Math.Sqrt(BurnerTemperatureK / inletTotalK) - 1.0)
-            * InletRecovery(mach);
-    }
-
-    /// Ideal-cycle ram specific thrust group, without the density term.
-    static double RamGroup(double mach, double ambientTemperatureK) {
-        if (!(mach > 0.0) || !(ambientTemperatureK > 0.0)) return 0.0;
-        double tauRam = 1.0 + (Gamma - 1.0) / 2.0 * mach * mach;
-        double ratio = BurnerTemperatureK / ambientTemperatureK / tauRam;
-        if (ratio <= 1.0) return 0.0;
-        return mach * mach * (System.Math.Sqrt(ratio) - 1.0) * InletRecovery(mach);
+        double capturedMassFlowKgS = ambientDensityKgM3 * velocity * RamCaptureAreaM2
+            * RapierV2Design.CaptureEfficiency(mach);
+        return capturedMassFlowKgS * RapierV2Design.SpecificThrustNPerKgS(mach)
+            * RapierV2Design.InstalledThrustRetention;
     }
 
     /// Available turbine and ramjet thrust as fractions of sea-level static dry thrust.
@@ -193,13 +157,14 @@ public static class TurboRamjetPerformanceMap {
             * (1.0 - Fade(mach, TurbineFadeStartMach, TurbineGoneMach))
             * Fade(densityRatio, TurbineGoneDensityRatio, TurbineFadeStartDensityRatio);
 
-        // Ram: normalised so the design point yields exactly RamDesignThrustRatio.
+        // Ram: geometry-owned inlet and stream performance. Dense-air capture is still capped by
+        // the translating inlet because the generated artifact closes only the thin-air design
+        // point; this prevents the same duct swallowing unbounded mass in a low-altitude dive.
         GunsOnly.Sim.AtmosphericState design =
             GunsOnly.Sim.StandardAtmosphere1976.Instance.Sample(DesignAltitudeM);
         double designDensityRatio = design.DensityKgM3 / AirData.SeaLevelDensityKgM3;
-        double designGroup = RamGroup(DesignMach, design.TemperatureK) * designDensityRatio;
         double ram = 0.0;
-        if (designGroup > 0.0) {
+        if (RamCaptureAreaM2 > 0.0) {
             // CaptureDensityCeiling is now actually APPLIED. It was computed here and then
             // dropped on the floor: RamThrustN was handed raw ambient density, so the guard its
             // own comment describes -- "a fixed-geometry inlet cannot swallow unlimited air" --
@@ -248,9 +213,15 @@ public static class TurboRamjetPerformanceMap {
         double lever = System.Math.Clamp(commandedFraction, 0.0, System.Math.Max(1.0, leverStop));
         CombinedCycleThrustFractions parts = ThrustComponents(
             mach, ambientTemperatureK, ambientDensityKgM3);
-        double thrustN = lever * parts.Total * staticThrustN;
+        // Lever travel above 1.0 is a turbine augmentor, not a magic multiplier on captured ram
+        // air. The old common multiplication made a 1.35 lever manufacture 35% more M4 ram thrust
+        // than the shape-derived inlet can swallow. Below MIL both streams follow the lever; above
+        // MIL only the still-running turbine stream receives augmentation. Once the core fades out,
+        // full lever therefore equals the canonical ram design point exactly.
+        double streamCommand = System.Math.Min(lever, 1.0);
         double turbineThrustN = lever * parts.Turbine * staticThrustN;
-        double ramThrustN = lever * parts.Ramjet * staticThrustN;
+        double ramThrustN = streamCommand * parts.Ramjet * staticThrustN;
+        double thrustN = turbineThrustN + ramThrustN;
         double core = System.Math.Clamp(lever, 0.0, 1.0);
         // A density- or Mach-dead turbine is not "idle" — it is out. Idle floor and spool only
         // apply while the core can still breathe; ram-only thrust then burns purely against
@@ -300,6 +271,8 @@ public static class TurboRamjetPerformanceMap {
             FuelFlowLbPerMinute: System.Math.Max(0.0, fuelFlow),
             Running: parts.Total > 1e-9 || coreLit,
             TurbineFuelFlowLbPerMinute: System.Math.Max(0.0, turbineFuel),
-            RamjetFuelFlowLbPerMinute: System.Math.Max(0.0, ramFuel));
+            RamjetFuelFlowLbPerMinute: System.Math.Max(0.0, ramFuel),
+            TurbineThrustN: System.Math.Max(0.0, turbineThrustN),
+            RamjetThrustN: System.Math.Max(0.0, ramThrustN));
     }
 }

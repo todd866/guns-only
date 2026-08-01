@@ -10,25 +10,13 @@ public sealed class RollDriftTests {
     readonly ITestOutputHelper _out;
     public RollDriftTests(ITestOutputHelper output) => _out = output;
 
-    // REPRODUCTION for the reported "it keeps rolling". Skipped so the gate stays green while the
-    // cause is still open; un-skip it the moment someone picks this up, it fails immediately.
-    //
-    // MEASURED: roll right for 0.5 s, release at 44.5 deg bank, and 20 s later the aircraft is at
-    // 127.5 deg and still going — 83 deg of drift with no input.
-    //
-    // LOCALISED: LastAppliedCommand.BankTarget reads 127.6 deg against an actual bank of 127.5 deg.
-    // The bank target is TRACKING the aircraft instead of staying frozen at the released attitude,
-    // so the FBW attitude term (RollHoldAttitudeGainNmRad * errP, FlightModel.cs:1552) always sees
-    // an error of about zero and contributes nothing. Only the rate damper is left, and a rate
-    // damper cannot remove steady-state error — hence a slow endless roll.
-    //
-    // RULED OUT: the deadband (widening RollHoldDeadband to 0.5 changes nothing), and the params
-    // reaching DetentLayer (BeatSetup.PlayerAir resolves to the Rapier, whose gain is 1.2e6).
-    // DetentLayer.cs:419 looks correct in isolation — it freezes _bankTarget when the gain is
-    // positive and roll input is inside the deadband — so the next thing to check is whether the
-    // command DetentLayer emits is being rebuilt downstream, and whether Auto-GCAS is substituting
-    // a roll command on this path.
-    [Fact(Skip = "open bug: bank target tracks the aircraft instead of freezing on release")]
+    // Regression for the reported "it keeps rolling". Body attitude is the physical roll truth;
+    // AircraftState.Bank is a compatibility command-bank state and can lag the quaternion while a
+    // direct-aileron roll is still settling. Measuring that compatibility field made the fixed
+    // bank hold look like an 8-degree drift: it was already at the captured physical attitude.
+    // Keep this test on BodyRollRad so it fails only if the aeroplane really keeps rolling after
+    // release, and also verify that the actuator-path target remains on the captured bank.
+    [Fact]
     public void HandsOffCruiseHoldsBankInsteadOfRollingForever() {
         BeatSetup beat = Beats.RapierIntercept() with {
             Carrier = null, StartsOnCatapult = false, ScriptedIntercept = null
@@ -49,21 +37,26 @@ public sealed class RollDriftTests {
         session.FeedKey(GKey.RollRight, true);
         for (int tick = 0; tick < AircraftSim.TickHz / 2; tick++) session.StepFixed();
         session.FeedKey(GKey.RollRight, false);
-        double bankAtRelease = session.Player.State.Bank * 180.0 / Math.PI;
+        double bankAtRelease = session.Player.BodyRollRad * 180.0 / Math.PI;
+        double targetAtRelease = session.Controls.Command.BankTarget * 180.0 / Math.PI;
 
         double drift = 0.0;
         for (int tick = 0; tick < AircraftSim.TickHz * 20; tick++) {
             session.StepFixed();
             drift = Math.Max(drift,
-                Math.Abs(session.Player.State.Bank * 180.0 / Math.PI - bankAtRelease));
+                Math.Abs(Math.IEEERemainder(
+                    session.Player.BodyRollRad * 180.0 / Math.PI - bankAtRelease, 360.0)));
         }
-        double finalBank = session.Player.State.Bank * 180.0 / Math.PI;
+        double finalBank = session.Player.BodyRollRad * 180.0 / Math.PI;
         double commandedTarget =
             session.Player.LastAppliedCommand.BankTarget * 180.0 / Math.PI;
         _out.WriteLine($"commanded BankTarget after release: {commandedTarget:F1} deg "
             + $"(actual bank {finalBank:F1} deg)");
         _out.WriteLine($"released at {bankAtRelease:F1} deg; 20 s later {finalBank:F1} deg "
             + $"(max drift {drift:F1} deg)");
+        _out.WriteLine($"detent target on release {targetAtRelease:F1} deg");
+        Assert.InRange(Math.Abs(Math.IEEERemainder(
+            commandedTarget - targetAtRelease, 360.0)), 0.0, 1.0);
         Assert.True(drift < 8.0,
             $"bank drifted {drift:F1} deg after release from {bankAtRelease:F1} deg "
                 + "— the aircraft keeps rolling instead of holding what the pilot set");

@@ -26,9 +26,21 @@ public readonly record struct GunneryPitchAssistResult(
 /// Bounded two-axis lead convergence: a pitch load-factor correction plus an optional lateral
 /// (roll + rudder) pull, both driven off the ballistic lead direction. It cannot acquire a target,
 /// fire, exceed the protected envelope, or operate during an explicit pitch/alpha override, and the
-/// lateral half stays off entirely for any airframe that leaves its lateral gains at zero.
+/// lateral half stays off entirely for any airframe that leaves its lateral gains at zero. The
+/// airframe's declared range/cone remain the full-authority gate; a soft, closure-gated shoulder
+/// begins helping a stable pursuit before coarse keyboard corrections carry it through that gate.
 /// </summary>
 public static class GunneryPitchAssist {
+    // Build-237 owner telemetry (web-1785563337923): during one stable pursuit the pilot made
+    // twelve corrections in 4.47 s while closing 1,371 -> 1,003 m with >=10 s to pass. The lead
+    // sat mostly 3.9-15.6 deg off, but the 1,000 m range gate kept the assist inactive. The earlier
+    // close pass was radically different (0.7-2.2 s to pass) and must not be chased. Extend only a
+    // soft acquisition shoulder, never the full-authority law or its existing caps.
+    const double SafePursuitRangeMultiplier = 1.5;
+    const double SafePursuitOuterCaptureAngleRad = 24.0 * System.Math.PI / 180.0;
+    const double SafePursuitFadeStartTimeToPassSeconds = 2.5;
+    const double SafePursuitFullTimeToPassSeconds = 6.0;
+
     public static GunneryPitchAssistResult Apply(
         in PilotCommand pilotCommand,
         in AircraftState aircraft,
@@ -56,6 +68,7 @@ public static class GunneryPitchAssist {
             || double.IsFinite(pilotCommand.CommandedPitchRad)
             || !double.IsFinite(rangeM) || rangeM <= 0.0
             || rangeM > parameters.GunneryPitchAssistMaxRangeM
+                * SafePursuitRangeMultiplier
             || !double.IsFinite(airspeedMps) || airspeedMps <= 1.0
             || !aircraft.BodyRates.IsFinite
             || !aircraft.BodyAttitude.IsFinite
@@ -70,9 +83,43 @@ public static class GunneryPitchAssist {
         Vec3D bodyUp = attitude.Rotate(new Vec3D(0.0, 1.0, 0.0));
         double forwardProjection = lead.Dot(bodyForward);
         double totalError = System.Math.Acos(System.Math.Clamp(forwardProjection, -1.0, 1.0));
-        if (forwardProjection <= 0.0
-            || totalError > parameters.GunneryPitchAssistCaptureAngleRad)
+        double fullAuthorityRangeM = parameters.GunneryPitchAssistMaxRangeM;
+        double fullAuthorityCaptureAngleRad =
+            parameters.GunneryPitchAssistCaptureAngleRad;
+        double outerRangeM = fullAuthorityRangeM * SafePursuitRangeMultiplier;
+        double outerCaptureAngleRad = System.Math.Max(
+            fullAuthorityCaptureAngleRad,
+            SafePursuitOuterCaptureAngleRad);
+        if (forwardProjection <= 0.0 || totalError >= outerCaptureAngleRad)
             return inactive;
+
+        double timeToPassS = closureMps > 50.0
+            ? rangeM / closureMps : double.PositiveInfinity;
+        double mergeFade = System.Math.Clamp(
+            timeToPassS / SafePursuitFadeStartTimeToPassSeconds, 0.0, 1.0);
+        bool insideFullAuthorityGate = rangeM <= fullAuthorityRangeM
+            && totalError <= fullAuthorityCaptureAngleRad;
+        double shoulderAuthority = 1.0;
+        if (!insideFullAuthorityGate) {
+            double rangeAuthority = rangeM <= fullAuthorityRangeM
+                ? 1.0
+                : System.Math.Sqrt(System.Math.Clamp(
+                    (outerRangeM - rangeM) / (outerRangeM - fullAuthorityRangeM),
+                    0.0, 1.0));
+            double angleAuthority = totalError <= fullAuthorityCaptureAngleRad
+                ? 1.0
+                : System.Math.Clamp(
+                    (outerCaptureAngleRad - totalError)
+                        / (outerCaptureAngleRad - fullAuthorityCaptureAngleRad),
+                    0.0, 1.0);
+            double pursuitAuthority = SmoothStep01(
+                (timeToPassS - SafePursuitFadeStartTimeToPassSeconds)
+                    / (SafePursuitFullTimeToPassSeconds
+                        - SafePursuitFadeStartTimeToPassSeconds));
+            shoulderAuthority = rangeAuthority * angleAuthority * pursuitAuthority;
+            if (shoulderAuthority <= 0.0)
+                return inactive;
+        }
 
         // Removing the body-right component is implicit in atan2(up, forward): lateral miss angle
         // gates capture through totalError, but only the vertical component may alter the command.
@@ -101,7 +148,7 @@ public static class GunneryPitchAssist {
         // it). Hands-off, the full two-sided damping keeps the smooth capture.
         double negativeAuthority = pilotCommand.GDemand >= 2.0
             ? 0.0 : -parameters.GunneryPitchAssistMaxCorrectionG;
-        double correction = System.Math.Clamp(rateCorrectionG,
+        double correction = shoulderAuthority * System.Math.Clamp(rateCorrectionG,
             negativeAuthority,
             parameters.GunneryPitchAssistMaxCorrectionG);
         double assistedLoadFactor = System.Math.Clamp(
@@ -120,17 +167,20 @@ public static class GunneryPitchAssist {
         // Do not fight the merge (pilot report, desktop, Build 77): inside ~2.5 seconds of a
         // high-closure pass the line of sight swings faster than any capture is worth, and full
         // lateral authority just wrenches the roll axis. Fade the lateral assist with
-        // time-to-pass; the pitch channel keeps its own gates.
-        double timeToPassS = closureMps > 50.0
-            ? rangeM / closureMps : double.PositiveInfinity;
-        double mergeFade = System.Math.Clamp(timeToPassS / 2.5, 0.0, 1.0);
+        // time-to-pass. The legacy full-authority pitch/yaw law remains exact inside its declared
+        // gate; newly admitted shoulder geometry uses shoulderAuthority, whose 2.5-6 s fade keeps
+        // all three axes out of the unsafe fly-by observed in Build 237.
+        double rollAuthority = insideFullAuthorityGate
+            ? mergeFade : shoulderAuthority;
+        double pitchAndYawAuthority = insideFullAuthorityGate
+            ? 1.0 : shoulderAuthority;
         double rollAssist = lateralRollEnabled
-            ? mergeFade * System.Math.Clamp(
+            ? rollAuthority * System.Math.Clamp(
                 parameters.GunneryLateralAssistRollGain * lateralError,
                 -parameters.GunneryLateralAssistMaxRoll,
                 parameters.GunneryLateralAssistMaxRoll)
             : 0.0;
-        double yawAssist = System.Math.Clamp(
+        double yawAssist = pitchAndYawAuthority * System.Math.Clamp(
             parameters.GunneryLateralAssistYawGain * lateralError,
             -parameters.GunneryLateralAssistMaxYaw,
             parameters.GunneryLateralAssistMaxYaw);
@@ -156,4 +206,9 @@ public static class GunneryPitchAssist {
 
     static bool IsFinite(in Vec3D value) => double.IsFinite(value.X)
         && double.IsFinite(value.Y) && double.IsFinite(value.Z);
+
+    static double SmoothStep01(double value) {
+        double x = System.Math.Clamp(value, 0.0, 1.0);
+        return x * x * (3.0 - 2.0 * x);
+    }
 }

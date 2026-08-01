@@ -9,93 +9,100 @@ import { createRapier } from "../../scene/scene_builders.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../../../airframes");
 
-test("rapier.v1.json publishes closed geometry and identity", () => {
-  const def = JSON.parse(readFileSync(join(root, "rapier.v1.json"), "utf8"));
-  assert.equal(def.schema, "guns-only.airframe-definition.v1");
-  assert.equal(def.id, "rapier.public-data-surrogate.v1");
-  assert.equal(def.presentationId, "presentation.vehicle.rapier.public-data-surrogate.v1");
-  assert.equal(def.flightModelBinding, "FlightModel.RapierPublicDataSurrogate");
-  assert.equal(def.frameConvention, "threejs-createRapier-v1");
-  assert.equal(def.dimensionsM.length, 13);
-  assert.equal(def.dimensionsM.span, 7.35);
-  assert.equal(def.wing.areaM2, 18);
-  assert.equal(def.wing.aspectRatio, 3);
-  assert.equal(def.massKg.fuelFree, 6590);
-  assert.equal(def.massKg.fuelCapacity, 4500);
-  assert.equal(def.massKg.gross, 11090);
-  assert.equal(def.propulsion.ramCaptureAreaM2, 1.2);
-  assert.equal(def.thermal.skinTemperatureLimitK, 1473.15);
-  assert.equal(def.wing.planform.length, 12);
-  assert.equal(def.fuselage.stations.length, 7);
-  assert.ok(def.sockets.cockpitCamera);
-  assert.ok(def.sockets.muzzleLeft);
-  assert.ok(def.sockets.muzzleRight);
-  assert.equal(def.sockets.droneBay.length, 4);
-  assert.equal(def.sockets.droneBay[0].epistemic, "provisional");
+function rapierV2() {
+  return JSON.parse(readFileSync(join(root, "rapier.v2.json"), "utf8"));
+}
+
+function gunDronePreview() {
+  return JSON.parse(readFileSync(join(root, "rapier-gun-drone.v1.json"), "utf8"));
+}
+
+test("rapier.v2 publishes shape and operating requirements without duplicate answers", () => {
+  const def = rapierV2();
+  assert.equal(def.schema, "guns-only.shape-first-airframe-definition.v1");
+  assert.equal(def.id, "rapier.shape-first-engineering.v2");
+  assert.equal(def.revision, "2.0.0");
+  assert.equal(def.authority.geometryIsCanonical, true);
+  assert.equal(def.authority.runtimeBinding, "FlightModel.RapierPublicDataSurrogate");
+  assert.equal(def.frameConvention,
+    "right-handed metres: +x starboard, +y up, +z aft");
+  assert.equal(def.geometry.wing.halfStations.at(-1).xM, 3.675);
+  assert.equal(def.geometry.bodies[0].stations[0].zM, -6.5);
+  assert.equal(def.geometry.bodies[0].stations.at(-1).zM, 6.5);
+  assert.equal(def.geometry.inlet.designFlowIncidenceDeg, 7.5);
+  assert.equal(def.geometry.externalInterfaces.canopy, "none");
+  assert.equal(def.fixedRequirements.launch.mode, "catapult");
+  assert.equal(def.fixedRequirements.recoverySite.runwayLengthM, 3048);
+  assert.equal(def.fixedRequirements.recoverySite.arrestorStationM, 1524);
+  assert.equal(def.fixedRequirements.baselineMission.attackCount, 1);
+  assert.equal(def.fixedRequirements.baselineMission.droneCount, 0);
+  assert.equal(Object.hasOwn(def, "dimensionsM"), false);
+  assert.equal(Object.hasOwn(def, "massKg"), false);
 });
 
-test("rapier.v1.json tags Mach-4 dash as fiction and wet T/W as closed well under family cap", () => {
-  const def = JSON.parse(readFileSync(join(root, "rapier.v1.json"), "utf8"));
-  assert.equal(def.performanceClaims.designDashMach.epistemic, "fiction");
-  assert.equal(def.performanceClaims.wetThrustWeightGross.epistemic, "closed");
-  // 0.71, not the 1.20 family cap. This pinned 1.20 when the core was 84 kN, i.e. the aircraft
-  // was authored right AT the ceiling it was supposed to be checked against. With the honest
-  // 50 kN core it is 50,000 x 1.55 / (11,090 x 9.80665) = 0.71, and the cap is now a real
-  // constraint with room under it rather than a number the design was resting on.
-  assert.equal(def.performanceClaims.wetThrustWeightGross.value, 0.71);
-  assert.ok(def.performanceClaims.wetThrustWeightGross.value < 1.20);
-  assert.equal(def.propulsion.epistemic, "provisional");
+test("v2 closes a bounded high-altitude dash rather than a magic Mach number", () => {
+  const def = rapierV2();
+  const dash = def.fixedRequirements.dash;
+  const core = def.propulsionModel.turbineCore;
+  assert.equal(dash.minimumMach, 4.05);
+  assert.equal(dash.designMach, 4.2);
+  assert.equal(dash.designAltitudeM, 24000);
+  assert.equal(dash.maximumDynamicPressurePa, 55000);
+  assert.ok(core.seaLevelStaticDryThrustN > 0);
+  assert.ok(core.maximumAugmentedThrustRatio > 1
+    && core.maximumAugmentedThrustRatio < 1.6);
+  assert.ok(core.fadeCompleteMach > core.fadeStartMach);
+  assert.equal(core.augmentationAppliesTo, "turbine-stream-only");
+  assert.equal(def.geometry.inlet.kind, "single-ventral-ellipse");
+  assert.equal(def.geometry.exhaust.kind, "single-fixed-circular-nozzle");
 });
 
-test("definition-built Rapier matches silhouette contract", () => {
-  const def = JSON.parse(readFileSync(join(root, "rapier.v1.json"), "utf8"));
-  const rapier = createAirframeFromDefinition(def);
+test("definition-built Rapier v2 matches its canopy-free known silhouette", () => {
+  const rapier = createAirframeFromDefinition(rapierV2());
   const size = new THREE.Box3().setFromObject(rapier).getSize(new THREE.Vector3());
-  assert.equal(rapier.name, "RAPIER_HIGH_ALTITUDE_INTERCEPTOR_SURROGATE");
+  assert.equal(rapier.name, "RAPIER");
   assert.ok(Math.abs(size.z - 13) < 0.02);
+  assert.ok(Math.abs(size.x - 7.35) < 0.002);
   assert.deepEqual(rapier.userData.dimensionsM, { length: 13, span: 7.35 });
-  assert.equal(rapier.userData.airframeId, "rapier.public-data-surrogate.v1");
-  assert.ok(rapier.getObjectByName("RAPIER_OPAQUE_ESCAPE_POD_SPINE"));
+  assert.equal(rapier.userData.airframeId, "rapier.shape-first-engineering.v2");
+  assert.equal(rapier.userData.definitionRevision, "2.0.0");
+  assert.ok(rapier.getObjectByName("RAPIER_FUSELAGE"));
+  assert.ok(rapier.getObjectByName("RAPIER_PROPULSION_TUNNEL"));
+  assert.equal(rapier.children.some((child) => /canopy|spine|drone/i.test(child.name)), false);
   assert.equal(rapier.userData.sockets.cockpitCamera.name, "SOCKET_CAMERA_COCKPIT");
-  assert.equal(rapier.children.some((c) => /canopy/i.test(c.name)), false);
-});
-
-test("createRapier thin loader matches definition-built silhouette", () => {
-  const viaLoader = createRapier();
-  const viaDef = createAirframeFromDefinition(
-    JSON.parse(readFileSync(join(root, "rapier.v1.json"), "utf8")),
+  assert.deepEqual(
+    rapier.userData.sockets.muzzleLeft.position,
+    rapier.userData.sockets.muzzleRight.position,
+    "both compatibility muzzle channels must resolve to the one physical gun aperture",
   );
-  assert.equal(viaLoader.name, viaDef.name);
-  assert.deepEqual(viaLoader.userData.dimensionsM, viaDef.userData.dimensionsM);
-  assert.equal(viaLoader.userData.airframeId, "rapier.public-data-surrogate.v1");
-  assert.equal(viaLoader.userData.definitionRevision, "1.4.0");
 });
 
-test("rapier revision 1.4.0 publishes design bay mass and aerodynamic contract", () => {
-  const def = JSON.parse(readFileSync(join(root, "rapier.v1.json"), "utf8"));
-  assert.equal(def.revision, "1.4.0");
-  assert.equal(def.sockets.droneBay.length, 4);
-  assert.equal(def.sockets.droneBay[0].cellClearM.length, 1.1);
-  assert.equal(def.performanceClaims.stowedDroneMassKg.value, 1440);
-  assert.equal(def.performanceClaims.stowedDroneMassKg.epistemic, "closed");
-  assert.equal(def.wing.renderedSolidPlanformAreaM2, 24.3173);
-  assert.equal(def.aerodynamics.normalLawAlphaMachKnots.at(-2), 3.5);
-  assert.equal(def.aerodynamics.normalLawAlphaRadKnots.at(-2), 0.13);
-  assert.equal(def.aerodynamics.landingElevonDroop.rollAuthorityFraction, 0.55);
-});
-
-test("gun-drone definition builds through the jet kit without a bespoke loft path", () => {
-  const def = JSON.parse(readFileSync(join(root, "rapier-gun-drone.v1.json"), "utf8"));
-  const mesh = createAirframeFromDefinition(def);
-  const size = new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3());
-  assert.equal(mesh.userData.airframeId, "rapier-gun-drone.public-data-surrogate.v1");
-  assert.ok(Math.abs(size.x - 5.5) < 0.15, `span ${size.x}`);
-  assert.ok(size.z > 3.0 && size.z < 3.5, `length ${size.z}`);
+test("createRapier loads the same v2 definition rather than the retired v1 exterior", () => {
+  const viaLoader = createRapier();
+  const viaDefinition = createAirframeFromDefinition(rapierV2());
+  assert.equal(viaLoader.name, viaDefinition.name);
+  assert.deepEqual(viaLoader.userData.dimensionsM, viaDefinition.userData.dimensionsM);
+  assert.equal(viaLoader.userData.airframeId, "rapier.shape-first-engineering.v2");
+  assert.equal(viaLoader.userData.definitionRevision, "2.0.0");
 });
 
 test("createAirframeFromDefinition refuses incomplete geometry", () => {
   assert.throws(
-    () => createAirframeFromDefinition({ schema: "guns-only.airframe-definition.v1", id: "x" }),
-    /planform|fuselage|required/i,
+    () => createAirframeFromDefinition({
+      schema: "guns-only.shape-first-airframe-definition.v1",
+      id: "x",
+    }),
+    /geometry|required/i,
   );
+});
+
+test("generic definition builder still renders the quarantined gun-drone preview", () => {
+  const drone = createAirframeFromDefinition(gunDronePreview());
+  const size = new THREE.Box3().setFromObject(drone).getSize(new THREE.Vector3());
+
+  assert.equal(drone.userData.airframeId,
+    "rapier-gun-drone.public-data-surrogate.v1");
+  assert.ok(Math.abs(size.x - 5.5) < 0.1,
+    "preview span should stay approximately 5.5 m including bevel geometry");
+  assert.ok(size.z >= 3 && size.z <= 3.5);
 });

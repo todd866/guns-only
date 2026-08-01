@@ -78,10 +78,13 @@ an archive mirror. Verify the underlying government-work or rights record.
 
 | Source ID | Grade | Use | Current limits |
 |---|---|---|---|
-| `source.armstrong-nasa-sp-2011-4542.v1` | official oral history, pp. 16–18 | Armstrong's first-person account of the cable, six-to-eight-foot wing loss, Carpenter, no-landing decision, ejection near Pohang/K-3 and recovery by Goodell Warren | Personal memory recorded roughly fifty years later; interviewer supplies an incident date and the exchange is not a radio transcript |
-| `source.nhhc-hgram-033.v1` | official synthesis | Mission, unit, target area, aircraft bureau number, competing incident accounts and recovery summary | Internally mixes F9F-2/F9F-3 and uses 5 September |
+| `source.armstrong-nasa-sp-2011-4542.v1` | official oral history, pp. 16–18 | Armstrong's first-person account of the cable, six-to-eight-foot wing loss, Carpenter, no-landing decision, ejection near Pohang/K-3, recovery by Goodell Warren, and his old-style shotgun-shell/22-G seat recollection | Personal memory recorded roughly fifty years later; interviewer supplies an incident date, the exchange is not a radio transcript, and the seat description is not engineering source lock |
+| `source.nhhc-hgram-033.v1` | later official synthesis | Mission, unit, target area, aircraft bureau number, competing incident accounts and recovery summary | Its 5 September/F9F-3 description is contradicted by the incident-specific contemporary Essex and CVG-5 reports |
 | `source.nhhc-armstrong-photo-l38.v1` | primary archival metadata | Contemporary Armstrong image and target-area caption | Catalog says 3 September and “shot down”; caption alone cannot settle the full incident |
-| `source.nhhc-essex-action-report-1951.v1` | primary document | Carrier's contemporary account for the deployment period | Document acquisition and page-level review pending |
+| `source.dpaa-korea-air-loss-register-2021.v1` | official DoD loss register, p. 4 | Records Armstrong, 3 September 1951, VF-51, F9F-2, BuNo 125122 and USS *Essex* | Compiled database, not the incident report; does not establish target, damage, ejection or recovery detail |
+| `source.nhhc-buno-appendix-1910-1995.v1` | official compiled bureau-number appendix, printed p. 554 | Assigns the 125080–125152 block, including 125122, to F9F-5 | Conflicts with the incident-specific F9F-2 reporting; only the aircraft history card can resolve the individual airframe configuration and whether a recorded identifier is wrong |
+| `source.nhhc-essex-action-report-1951.v1` | primary action report, p. 3 | Dates the loss to 3 September; identifies Armstrong and BuNo 125122; records regained control and bailout over K-3 | Contemporary enemy-AA attribution conflicts with Armstrong's later cable recollection; exact target and damage geometry remain open |
+| `source.nhhc-cvg5-action-report-1951.v1` | primary air-group action report, pp. 1, 4–5, 12 | Closes VF-51 as F9F-2 and the event to 3 September; records control loss, heavy ordnance, wing damage, landing-speed problem and ejection near K-3 | Contemporary AA/power-pole and two-foot account conflicts with Armstrong's later cable and six-to-eight-foot recollection |
 | `source.hansen-first-man-2012.v1` | secondary synthesis, pp. 91–96 | Detailed mission synthesis, reproduced logbook, Carpenter inspection, ejection and recovery leads | Copyrighted; use to locate and compare primary records, not as shippable text |
 | `source.thompson-f9f-units-2014.v1` | secondary unit history, pp. 29–30, 39 | VF-51, BuNo 125122, F9F-2 identification, target context and aircraft profile | Repeats the early antiaircraft-fire/telegraph-pole account; copyrighted research only |
 | `source.nasa-armstrong-biography.v1` | official synthesis | Service outline and 78 combat missions | Not detailed enough for mission mechanics |
@@ -96,6 +99,15 @@ Known direct locations:
   `https://www.history.navy.mil/content/history/nhhc/about-us/leadership/director/directors-corner/h-grams/h-gram-033.html`
 - NHHC Armstrong photograph catalog:
   `https://www.history.navy.mil/our-collections/photography/numerical-list-of-images/nhhc-series/naval-subjects-collection/l38-personnel/l38-02-07-013-ensign-neil-armstrong--f9f-pilot-korean-war--recon.html`
+- DPAA Korean War air-loss register by name, Armstrong entry on PDF page 4:
+  `https://www.dpaa.mil/portals/85/KoreaAccounting/korwald_acc_NAME_20211006.pdf`
+- NHHC bureau-number appendix, archived official PDF asset, PDF p. 38 / printed p. 554:
+  `https://web.archive.org/web/20240704022315id_/https://www.history.navy.mil/content/dam/nhhc/research/histories/naval-aviation/pdf/app09.pdf`
+- USS *Essex* Serial 093 action report, archived original NHHC PDF asset; scan/printed p. 3:
+  `https://web.archive.org/web/20250418222808id_/https://www.history.navy.mil/content/dam/nhhc/research/archives/action-reports/Korean%20War%20-%20Carrier%20Combat/PDF%27s/cv9a-51.pdf`
+- CVG-5 Serial 065-51 action report, archived original NHHC PDF asset; scan/printed pp. 1,
+  4–5 and 12:
+  `https://web.archive.org/web/20250418211010id_/https://www.history.navy.mil/content/dam/nhhc/research/archives/action-reports/Korean%20War%20Carrier%20Air%20Group%20Combat/PDF%27s/cvg5-51.pdf`
 - USS *Essex* Korean War action reports:
   `https://www.history.navy.mil/content/history/nhhc/research/archives/digital-exhibits-highlights/action-reports/korean-war-carrier-combat/essex-cva9.html`
 - NHHC F9F Panther historical summary:
@@ -180,29 +192,30 @@ Needed:
 
 ### `claim.armstrong-ejection-friendly-territory.v1`
 
-Provisional statement: Armstrong flew south into friendly territory, ejected and was recovered
-after wind carried his parachute over land.
+Provisional statement: Armstrong flew south into friendly territory, ejected near Pohang/K-3 and
+was met by Goodell Warren in a jeep.
 
 Needed:
 
 - registered support: Armstrong recalls flying south, ejecting near Pohang/K-3 and being met by
   flight-school roommate Goodell Warren in a jeep in NASA SP-2011-4542, pp. 16–18;
 - exact ejection point and intended recovery area;
-- wind, parachute and landing account;
+- separate corroboration for H-Gram's later wind-blown-back-over-land detail, plus the parachute and
+  landing account;
 - Pohang/K-3 relationship and who operated it at the time;
 - independent corroboration of the ground-recovery identity, vehicle and location;
 - source separation between contemporary record and later anecdote.
 
 ### `claim.panther-ejection-seat.v1`
 
-Provisional statement: The Panther used a cartridge-powered ejection seat whose operation imposed a
-severe acceleration load.
+Provisional statement: Armstrong later described an old-style shotgun-shell-powered ejection seat
+and called it a 22-G seat.
 
 Needed:
 
 - 1951 pilot handbook and maintenance source;
 - exact seat model, checklist, limits and separation sequence;
-- source for the often repeated 22-g figure;
+- independent engineering source for the recalled cartridge mechanism and 22-G figure;
 - reconstruction boundaries for body injury and safe envelope.
 
 ### `claim.cable-field-gameplay-reconstruction.v1`
@@ -228,17 +241,23 @@ Needed:
 
 ## Material disputes and open questions
 
-### Incident date
+### Incident date — closed to 3 September 1951
 
-Current official sources conflict between 3 and 5 September 1951. Use **September 1951** in titles,
-briefings and script until the action report and log resolve the discrepancy or the dossier chooses
-to preserve it.
+The page-reviewed contemporary USS *Essex* chronology and CVG-5 report independently place the
+event on 3 September 1951. The DPAA loss register and NHHC photograph catalog corroborate that
+date. H-Gram 033's 5 September date is a later synthesis error: retain it in the source ledger, but
+use **3 September 1951** in titles, briefings and script.
 
-### Panther subtype
+### Panther subtype — incident reporting supports F9F-2; airframe record open
 
-Official material alternates among F9F-2 and F9F-3 while also identifying BuNo 125122. Do not lock
-the runtime capability, engine, livery or cockpit from a secondary caption. Resolve aircraft
-configuration from bureau-number and squadron records plus the applicable handbook.
+The contemporary CVG-5 composition table identifies VF-51's aircraft as F9F-2 and carries that type
+through the 3 September damage table. The Essex report links Armstrong and BuNo 125122 to that
+date; the DPAA register independently records F9F-2. H-Gram 033's F9F-3 description is a later
+synthesis error. However, NHHC's generic bureau-number appendix assigns the 125080–125152 block,
+including 125122, to F9F-5. Lock the incident-level mission identity to **F9F-2**, while preserving
+the BuNo anomaly and treating the individual airframe's suffix, delivered equipment, cockpit,
+engine, markings, loadout and damaged aerodynamics as open until its aircraft history card closes
+the conflict.
 
 ### Cable field
 

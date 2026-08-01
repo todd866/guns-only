@@ -42,6 +42,25 @@ test("Armstrong playable sequence passes schema and semantic validation", async 
   assert.deepEqual(result.errors, []);
   assert.equal(result.document.mode, "fixed_history");
   assert.equal(result.document.beats.length, 12);
+  assert.equal(result.document.title,
+    "The Long Way Home: 3 September 1951");
+  assert.equal(result.document.governance.openResearchRefs.includes(
+    "incident-date"), false);
+  assert.equal(result.document.governance.openResearchRefs.includes(
+    "panther-subtype"), false);
+  assert.equal(result.document.governance.openResearchRefs.includes(
+    "individual-airframe-configuration"), true);
+  assert.equal(result.document.governance.openResearchRefs.includes(
+    "damaged-aerodynamics"), true);
+  assert.equal(result.document.governance.openResearchRefs.includes(
+    "ejection-seat-model-and-envelope"), true);
+  assert.equal(result.document.governance.openResearchRefs.includes(
+    "parachute-equipment-wind-and-path"), true);
+  assert.equal(result.document.beats[9].historicalLabel, "reconstruction");
+  assert.equal(result.document.beats[10].historicalLabel, "reconstruction");
+  assert.equal(result.document.beats[10].title, "Under canopy");
+  assert.doesNotMatch(JSON.stringify(result.document),
+    /fact\.cartridge-ejection-seat|fact\.parachute-wind-drift/);
 });
 
 test("fixed-history sequences cannot make a plot beat optional", async () => {
@@ -85,7 +104,32 @@ test("Armstrong production bundle closes lines, boards and sources", async () =>
   assert.deepEqual(result.errors, []);
   assert.equal(result.radioCatalog.lines.length, 15);
   assert.equal(result.storyboardPlan.frames.length, 12);
-  assert.equal(result.sourceRegister.sources.length, 12);
+  assert.equal(result.sourceRegister.sources.length, 15);
+  const ejectionFrame = result.storyboardPlan.frames.find((frame) =>
+    frame.frameId === "frame.armstrong.ejection.v1");
+  const canopyFrame = result.storyboardPlan.frames.find((frame) =>
+    frame.frameId === "frame.armstrong.parachute-descent.v1");
+  assert.equal(ejectionFrame.historicalLabel, "reconstruction");
+  assert.equal(canopyFrame.historicalLabel, "reconstruction");
+  assert.equal(canopyFrame.title, "Under canopy");
+  assert.match(canopyFrame.sourceLimits,
+    /only the later H-Gram synthesis.*wind carried him back over land/);
+});
+
+test("shared dossier and source-register records retain claim parity", async () => {
+  const bundle = await productionBundle();
+  const dossier = JSON.parse(await readFile(path.resolve(
+    DIRECTORY,
+    "../../../../content/governance/korea-braided/missions/armstrong-cable-strike.dossier.json",
+  ), "utf8"));
+  const dossierSources = new Map(dossier.sources.map((source) =>
+    [source.sourceId, [...source.supportsClaimIds].sort()]));
+
+  for (const source of bundle.sourceRegister.sources) {
+    const dossierClaims = dossierSources.get(source.sourceId);
+    if (dossierClaims === undefined) continue;
+    assert.deepEqual([...source.claimRefs].sort(), dossierClaims, source.sourceId);
+  }
 });
 
 test("radio lines cannot cite an unknown source", async () => {

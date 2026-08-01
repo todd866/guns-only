@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { TEST_FLIGHT_ACTIONS } from "../../systems/test_flight_console.js";
 import { CONTROL_BINDINGS } from "../../settings/player_settings.js";
+import { CARRIER_SORTIE_TOUCH_RTB_ACTION_TOKEN } from "../../nav/carrier_sortie_route_presentation.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../../");
 
@@ -340,6 +341,14 @@ test("touch pilots retain system commands but the live surface makes them contex
   assert.equal(find("data-hold-key", "BracketRight")?.attributes.hidden, "",
     "flaps-down must start absent until the aircraft and configuration make it relevant");
   assert.ok(find("data-pulse-key", "KeyV"), "mobile surface needs the same contextual padlock action as V");
+  const carrierRtb = find("data-carrier-route-action", CARRIER_SORTIE_TOUCH_RTB_ACTION_TOKEN);
+  assert.ok(carrierRtb, "the carrier route needs a stable touch RTB action token");
+  assert.equal(carrierRtb.attributes["data-pulse-key"], "KeyO",
+    "carrier touch RTB must reuse the ordinary KnockItOff/RTB GKey path");
+  assert.equal(carrierRtb.attributes.hidden, "",
+    "carrier touch RTB must start absent until authoritative route presentation requests it");
+  assert.equal(carrierRtb.attributes.disabled, "",
+    "carrier touch RTB must start inert until authoritative route presentation requests it");
   const gcasPaddle = find("data-hold-key", "KeyK");
   assert.ok(gcasPaddle, "touch pilots need the same held Auto-GCAS paddle as keyboard pilots");
   assert.equal(gcasPaddle.attributes.hidden, "",
@@ -384,7 +393,7 @@ test("phone settings remain scrollable, zoomable, and collapse desktop-only bind
     "touchmove protection must exempt every scrollable modal surface");
 });
 
-test("touch flight separates spring-loaded flight, look, target selection, and fire", () => {
+test("touch flight separates throttle/yaw, pitch/roll, target selection, and fire", () => {
   const buttons = htmlButtons(indexSource);
   const stick = buttons.filter((button) =>
     button.attributes["data-mobile-action"] === "virtual-stick");
@@ -404,13 +413,16 @@ test("touch flight separates spring-loaded flight, look, target selection, and f
   assert.equal(stick.length, 1, "fallback mode needs one visible thumb target");
   assert.equal(stick[0].attributes.id, "fallback-stick");
   assert.equal(stick[0].attributes["aria-label"], "Left stick: throttle and yaw");
-  assert.equal(targetStick.length, 1, "touch mode needs one separate look target");
+  assert.equal(targetStick.length, 1, "touch mode needs one separate pitch/roll target");
   assert.equal(targetStick[0].attributes.id, "target-stick");
   assert.equal(targetStick[0].attributes["aria-label"],
     "Right stick: pitch and roll");
   assert.match(indexSource,
-    /Hold the centre briefly to fire; moving outside the centre stops firing and looks\./,
-    "the accessible help must describe the same centre-hold contract as the input state machine");
+    /Right thumb: drag left or right to roll, down to pull, or up to push\.[^<]*Use the separate Fire button to fire guns\./,
+    "the accessible help must describe the actual flight axes and dedicated trigger");
+  assert.match(indexSource,
+    /Left thumb: drag up to increase power or down to decrease it; release holds the selected power\.[^<]*yaw, which centres when released\./,
+    "the left-stick help must distinguish latched throttle from spring-loaded yaw");
   assert.equal(lateralButtons.length, 0,
     "lateral directional buttons must not return");
   assert.equal(pitchButtons.length, 2, "exactly the two assisted pitch-bias chips");
@@ -420,7 +432,7 @@ test("touch flight separates spring-loaded flight, look, target selection, and f
   }
   assert.match(appSource, /data-assist-nudge/,
     "assisted speed nudges must be wired in app.js");
-  // Phone wobble must not add a second pitch command on top of the left stick.
+  // Phone wobble must not add a second pitch command on top of the right stick.
   assert.match(appSource,
     /updateTiltAxis\("pitch", 0, "ArrowUp", "ArrowDown"\)/,
     "touch flight must gate the tilt pitch axis to roll-only");
@@ -436,7 +448,7 @@ test("touch flight separates spring-loaded flight, look, target selection, and f
     "phone flight must remove diagnostic and network panels from the two-thumb view");
   assert.doesNotMatch(appSource,
     /\.touch-mode\.touch-primary #touch-fire[\s\S]*?display: none !important/,
-    "the right stick owns firing, so the redundant phone FIRE button must not consume space");
+    "the right stick owns flight, so the dedicated phone FIRE button must remain available");
   assert.match(appSource,
     /tiltStatus\.hidden = \/\^TILT TRIM OFF\$\/i\.test\(full\)/,
     "an ordinary disabled tilt trim must not occupy permanent flight chrome");
@@ -446,16 +458,33 @@ test("touch flight separates spring-loaded flight, look, target selection, and f
     /function beginTargetStick\(event\)\s*\{([\s\S]*?)\n\s*function moveTargetStick/,
   )?.[1] ?? "";
   assert.doesNotMatch(targetStickStart, /pressMappedKey/,
-    "touching the look stick must not spend ammunition");
+    "touching the flight stick must not spend ammunition");
+  assert.doesNotMatch(appSource,
+    /TARGET_STICK_FIRE|targetStickFire|armTargetStickFire|Touch:TargetStickFire/,
+    "removed centre-hold firing must not survive as unreachable code or stale state");
+  assert.match(targetStickStart,
+    /axes: isCasevacState\(latestState\) \? "yaw" : "pitch-roll"[\s\S]*?fire: isCasevacState\(latestState\) \? "unavailable" : "dedicated-button"/,
+    "diagnostics must describe the control scheme the pilot is actually using");
   assert.match(appSource,
-    /function armTargetStickFire[\s\S]*?setTimeout[\s\S]*?pressMappedKey\("Touch:TargetStickFire"[\s\S]*?TARGET_STICK_FIRE_HOLD_MS/,
-    "only a deliberate centre hold may begin firing");
+    /throttleRate = Math\.abs\(state\.y\)[\s\S]*?\? 0 : -clamp\(state\.y, -1, 1\)/,
+    "pushing the left stick up must increase power and pulling it down must decrease power");
+  const leftStickRelease = appSource.match(
+    /function releaseVirtualStick\([^)]*\)\s*\{([\s\S]*?)\n\s*function updateVirtualStickPointer/,
+  )?.[1] ?? "";
+  assert.doesNotMatch(leftStickRelease,
+    /primaryRollCommand|primaryPitchCommand|releaseDirectFlightAxes/,
+    "releasing throttle/yaw must not neutralise pitch/roll still held by the other thumb");
   assert.match(appSource,
-    /function moveTargetStick[\s\S]*?TARGET_STICK_FIRE_CANCEL_RADIUS[\s\S]*?clearTargetStickFireTimer/,
-    "dragging to look must cancel the pending centre-hold shot");
+    /role: gesture\.casevac \? "horizontal-movement" : "throttle-yaw"[\s\S]*?max_yaw: gesture\.casevac \? null : Number\(gesture\.maxYaw[\s\S]*?max_throttle_rate: gesture\.casevac[\s\S]*?Number\(gesture\.maxThrottleRate/,
+    "left-stick diagnostics must not mislabel throttle/yaw as pitch/roll");
   assert.match(appSource,
-    /function moveTargetStick[\s\S]*?TARGET_STICK_FIRE_CANCEL_RADIUS[\s\S]*?if \(targetStickFireSource\)[\s\S]*?releaseMappedKey\("Touch:TargetStickFire"/,
-    "moving to look must revoke a centre hold even when its timer won a saturated-frame race");
+    /function releaseVirtualStick\(\)[\s\S]*?throttleLever = null;[\s\S]*?resetMobileInput = \(\) => \{[\s\S]*?releaseVirtualStick\(\)/,
+    "a pause or mission reset must reacquire the authored throttle before the next rate input");
+  assert.match(leftStickRelease, /throttleLever = null/,
+    "ordinary release must discard the local throttle seed after another input source can change power");
+  assert.match(appSource,
+    /function syncVirtualStickKeyboard\(\)[\s\S]*?throttleRate = -y;[\s\S]*?else if \(virtualStickPointerId === null\) \{[\s\S]*?stopThrottleIntegrator\(\);[\s\S]*?throttleLever = null;/,
+    "releasing keyboard throttle must also discard the seed while a yaw arrow can remain held");
 
   assert.match(appSource,
     /fallbackStick\?\.addEventListener\("pointerdown", beginVirtualStick[\s\S]*?pointermove", moveVirtualStick[\s\S]*?pointerup", endVirtualStick[\s\S]*?pointercancel", endVirtualStick[\s\S]*?lostpointercapture", endVirtualStick/,
@@ -464,8 +493,8 @@ test("touch flight separates spring-loaded flight, look, target selection, and f
     /function beginVirtualStick[\s\S]*?virtualStickPointerId !== null[\s\S]*?setPointerCapture/,
     "a second finger must not steal the active stick pointer");
   assert.match(appSource,
-    /function releaseVirtualStick[\s\S]*?virtualStickPointerId = null[\s\S]*?releaseMappedKey[\s\S]*?primaryRollCommand = 0[\s\S]*?primaryPitchCommand = 0[\s\S]*?releaseDirectFlightAxes\("touch"\)[\s\S]*?renderVirtualStick\(\)/,
-    "one idempotent release path must neutralise pitch, roll, and the visual knob");
+    /function releaseTargetStick[\s\S]*?targetStickPointerId = null[\s\S]*?primaryRollCommand = 0[\s\S]*?primaryPitchCommand = 0[\s\S]*?releaseDirectFlightAxes\("touch"\)[\s\S]*?renderTargetStick\(\)/,
+    "the right-stick release path must neutralise pitch, roll, and its visual knob");
   assert.match(appSource,
     /source\.startsWith\("gamepad"\)[\s\S]*?directFlightOwner !== source[\s\S]*?return false/,
     "a connected controller must not steal the flight axes while a thumb owns the phone stick");
@@ -570,23 +599,17 @@ test("screen chrome never covers a flight instrument or another tap target", () 
     "the always-available systems console must clear the GUN TEMP instrument");
 });
 
-test("desktop auto-launches while touch pilots retain a real Fly gesture", () => {
+test("every platform sees the aircraft picker and Fly remains a real gesture", () => {
   assert.match(appSource,
     /initialProgramNode = requestedProgramNode[\s\S]*?recommendedCampaignNode\(campaignProfile\)/);
-  // Build 78 front door: INFINITE ENEMIES — every platform boots the continuous-combat
-  // gauntlet (mission 7); the exercise menu remains reachable but is not the entry.
   assert.match(appSource, /let selectedBeat = initialProgramNode\.mission/,
     "the default remains mission 7, while an explicit programme deep link stages its own card");
   assert.match(bridgeSource, /static readonly SimulationSession Session = new\(7,/,
     "the bridge fallback and browser must agree on the F-22 first experience");
-  assert.match(appSource,
-    /let autoLaunchPending = !mobileControls && requestedProgramNode\?\.id !== "medevac"/,
-    "desktop keeps the combat front door while touch holds for a deliberate Fly tap");
+  assert.match(appSource, /let autoLaunchPending = false/,
+    "desktop, touch, and deep links must all stop at the same deliberate aircraft picker");
   assert.match(appSource,
     /function tryAutoLaunch\([\s\S]*?pauseReasons\.has\("ready"\)[\s\S]*?return launchMission\(selectedBeat\)/);
-  assert.match(appSource,
-    /if \(firstFrame\) \{[\s\S]*?bootScreen\.classList\.add\("ready"\);[\s\S]*?queueMicrotask\(tryAutoLaunch\);[\s\S]*?\}/,
-    "desktop auto-launch must wait until the landing surface has presented its first frame");
   assert.match(appSource,
     /readyStart\.addEventListener\("click"[\s\S]*?requestMobileFullscreenFromGesture\(\)[\s\S]*?activateReadyAction\(\)/,
     "fullscreen must be requested synchronously from the Fly gesture before terrain warmup");
@@ -609,8 +632,8 @@ test("desktop auto-launches while touch pilots retain a real Fly gesture", () =>
     /if \(mobileControls && readyTitle && readyStart\) readyTitle\.after\(readyStart\)/,
     "touch DOM order must put Fly where the phone layout shows it");
   assert.match(appSource,
-    /function focusReadyScreen\(\)[\s\S]*?scrollIntoView\(\{[\s\S]*?inline: "center"[\s\S]*?const target = !readyStart\.disabled \? readyStart : selectedMission/,
-    "deep-linked missions must scroll into view while the available primary action owns focus");
+    /function focusReadyScreen\(\)[\s\S]*?scrollIntoView\(\{[\s\S]*?inline: "center"[\s\S]*?const target = !readyStart\.disabled[\s\S]*?readyRouteNotice\?\.querySelector\("a\[href\]"\) \?\? selectedMission/,
+    "deep-linked missions must scroll into view while focus lands on Fly or a usable recovery action");
   assert.match(appSource, /mobileControls \? "Tap Fly to launch" : "Press Enter to fly"/,
     "the touch briefing must name its real launch gesture");
   assert.match(indexSource, /\.sortie-choice\s*\{[\s\S]*?min-height:\s*78px/);
@@ -622,19 +645,36 @@ test("desktop auto-launches while touch pilots retain a real Fly gesture", () =>
     "short landscape screens need independent mission and briefing columns");
 });
 
-test("nothing in the menu is gated behind anything else", () => {
-  // The INVERSE of the contract this test used to hold. The graded ladder was scaffolding from when
-  // this was a programme of exercises; both aircraft are now available from a cold start, with no
-  // qualification, no sequence gate and no LOCKED state to render.
+test("release state gates routes while the two production aircraft remain qualification-free", () => {
   assert.match(progressionSource,
     /id: "first-merge"[\s\S]*?mission: 7[\s\S]*?id: "low-level-drone"[\s\S]*?mission: 8[\s\S]*?id: "rapier-intercept"[\s\S]*?mission: 12/);
   assert.match(progressionSource,
-    /function campaignNodeUnlocked[\s\S]*?return Boolean\(campaignNode\(nodeId\)\)/,
-    "availability must depend on the node existing, not on what the pilot has flown");
+    /function campaignNodeUnlocked[\s\S]*?return experienceLaunchable\(nodeId\)/,
+    "availability must depend on reviewed release state, not profile progress or mere existence");
   assert.doesNotMatch(indexSource, /data-program-state="locked"/,
-    "no sortie card may render as locked");
+    "release quarantine is not a gamified qualification lock");
   assert.match(appSource,
-    /function selectCampaignNode[\s\S]*?selectedBeat = node\.mission/);
+    /function selectCampaignNode[\s\S]*?!experienceAccess\(node\.id, window\.location\)\.allowed[\s\S]*?selectedBeat = node\.mission/);
+  assert.match(appSource,
+    /requestedExperience = requestedProgramNode[\s\S]*?experienceById\(requestedProgramNode\.id\)[\s\S]*?requestedExperienceAccess[\s\S]*?experienceAccess\(requestedExperience\.id, window\.location\)[\s\S]*?blockedRequestedExperience[\s\S]*?!requestedExperienceAccess\.allowed[\s\S]*?blockedProgramExperience/,
+    "a recognised non-production deep link must remain an honest unavailable selection");
+  assert.match(appSource,
+    /function launchMission[\s\S]*?blockedProgramExperience[\s\S]*?!experienceAccess\(selectedProgramNodeId, window\.location\)\.allowed[\s\S]*?return false/,
+    "a quarantined route must not stage or begin through the shared launch path");
+  assert.match(appSource,
+    /requestedExperienceAccess\?\.allowed[\s\S]*?initialProgramNode/,
+    "the explicit preview acknowledgement must retain the experimental node without promoting it");
+  assert.match(indexSource, /id="ready-route-notice"[^>]*role="status"[^>]*hidden/,
+    "blocked deep links need a visible, accessible reason and a path back to production aircraft");
+  assert.match(appSource,
+    /previewUrl\.searchParams\.set\("preview", "1"\)[\s\S]*?Open experimental preview/,
+    "the unavailable selection must expose a deliberate preview acknowledgement rather than a hidden bypass");
+  assert.match(appSource,
+    /readyRouteNotice\.dataset\.noticeKey !== noticeKey[\s\S]*?readyRouteNotice\.replaceChildren\(\)/,
+    "frame-by-frame Ready rendering must preserve the live-region link and its keyboard focus");
+  assert.match(appSource,
+    /readyRouteNotice\?\.querySelector\("a\[href\]"\) \?\? selectedMission/,
+    "keyboard focus must land on a usable recovery action when the selected route is disabled");
 });
 
 test("program modal behavior cannot leak into flight shortcuts", () => {
@@ -648,8 +688,8 @@ test("program modal behavior cannot leak into flight shortcuts", () => {
     "raw beat-number shortcuts must not bypass progression");
 
   assert.match(appSource,
-    /selectedMission\?\.closest\("\.sortie-option"\)\?\.scrollIntoView[\s\S]*?const target = !readyStart\.disabled \? readyStart : selectedMission/,
-    "focus must expose a deep-linked mission and then follow the visible primary action");
+    /selectedMission\?\.closest\("\.sortie-option"\)\?\.scrollIntoView[\s\S]*?const target = !readyStart\.disabled[\s\S]*?readyRouteNotice\?\.querySelector\("a\[href\]"\) \?\? selectedMission/,
+    "focus must expose a deep-linked mission and land on either Fly or a usable recovery action");
   assert.match(appSource,
     /sceneCanvas\.inert = showScreen[\s\S]*?readyScreen\.contains\(document\.activeElement\)[\s\S]*?focusOwner\?\.focus[\s\S]*?readyScreen\.setAttribute\(\s*"aria-hidden"/,
     "focus must leave the dialog before it becomes aria-hidden");
@@ -722,4 +762,13 @@ test("non-bridge player actions advertised by the quicklook have observable UI h
   }
   assert.ok(copy.includes("PRESS ENTER TO FLY"));
   assert.match(appSource, /event\.code === "Enter"[\s\S]*?activateReadyAction\(\)/);
+});
+
+test("touch throttle seeds from aircraft-relative thrust and retired qualification stays inert", () => {
+  assert.match(appSource,
+    /throttleLever = normalisePublishedThrottleLever\(\s*latestState\?\.throttle,\s*latestState\?\.max_thrust_fraction,\s*\)/,
+    "the first touch nudge must preserve the published physical thrust across aircraft");
+  assert.doesNotMatch(appSource,
+    /recordCampaignQualification|qualification_earned|qualifyCampaignNode|campaignNodeQualified/,
+    "release-state availability must not retain a hidden per-frame qualification side effect");
 });

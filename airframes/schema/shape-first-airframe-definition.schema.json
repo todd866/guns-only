@@ -1,0 +1,327 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "guns-only.shape-first-airframe-definition.v1",
+  "title": "Guns Only Shape-First Airframe Definition",
+  "description": "Authored exterior geometry and engineering assumptions. Dimensions, areas, volumes, mass properties, inertias, thermal areas, inlet area, and performance results are generated artifacts and are forbidden in source definitions.",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "revision",
+    "displayName",
+    "role",
+    "epistemic",
+    "frameConvention",
+    "authority",
+    "fixedRequirements",
+    "materials",
+    "thermalModel",
+    "massModel",
+    "propulsionModel",
+    "geometry",
+    "visualIdentity"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schema": { "const": "guns-only.shape-first-airframe-definition.v1" },
+    "id": { "type": "string", "minLength": 1 },
+    "revision": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "displayName": { "type": "string", "minLength": 1 },
+    "role": { "type": "string", "minLength": 1 },
+    "epistemic": {
+      "enum": ["measured", "surrogate", "provisional", "fiction"]
+    },
+    "frameConvention": { "type": "string", "minLength": 1 },
+    "authority": {
+      "type": "object",
+      "required": ["geometryIsCanonical", "runtimeBinding", "derivedArtifact", "rule"],
+      "properties": {
+        "geometryIsCanonical": { "const": true },
+        "runtimeBinding": { "type": "string", "pattern": "^FlightModel\\." },
+        "derivedArtifact": { "type": "string", "minLength": 1 },
+        "rule": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "fixedRequirements": {
+      "type": "object",
+      "required": ["launch", "recoverySite", "dash", "baselineMission"]
+    },
+    "materials": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "densityKgM3",
+          "maximumServiceTemperatureK",
+          "epistemic",
+          "sourceId"
+        ]
+      }
+    },
+    "thermalModel": {
+      "type": "object",
+      "required": ["recoveryFactor", "zones"]
+    },
+    "massModel": {
+      "type": "object",
+      "required": ["fuelDensityKgM3", "epistemic"]
+    },
+    "propulsionModel": {
+      "type": "object",
+      "required": [
+        "kind",
+        "flowpathArchitecture",
+        "turbineCore",
+        "installedThrustRetention",
+        "captureEfficiencySchedule",
+        "specificThrustScheduleNPerKgS",
+        "dragCorrelation"
+      ],
+      "properties": {
+        "kind": {
+          "const": "single-inlet-coannular-variable-cycle-turbo-ramjet-surrogate"
+        },
+        "flowpathArchitecture": {
+          "type": "object",
+          "required": [
+            "kind",
+            "minimumTotalPressureRecoveryFraction",
+            "epistemic"
+          ],
+          "properties": {
+            "kind": {
+              "const": "single-inlet-coannular-variable-cycle-shared-nozzle"
+            },
+            "minimumTotalPressureRecoveryFraction": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 1
+            },
+            "epistemic": { "const": "provisional-fictional-integration" }
+          },
+          "additionalProperties": false
+        },
+        "turbineCore": {
+          "type": "object",
+          "required": [
+            "seaLevelStaticDryThrustN",
+            "maximumAugmentedThrustRatio",
+            "fadeStartMach",
+            "fadeCompleteMach",
+            "fuelFlowAnchorsLbPerMinute",
+            "augmentationAppliesTo",
+            "package"
+          ],
+          "properties": {
+            "seaLevelStaticDryThrustN": { "type": "number", "exclusiveMinimum": 0 },
+            "maximumAugmentedThrustRatio": { "type": "number", "minimum": 1 },
+            "fadeStartMach": { "type": "number", "exclusiveMinimum": 0 },
+            "fadeCompleteMach": { "type": "number", "exclusiveMinimum": 0 },
+            "fuelFlowAnchorsLbPerMinute": {
+              "type": "object",
+              "required": ["idle", "military", "augmented"],
+              "properties": {
+                "idle": { "type": "number", "exclusiveMinimum": 0 },
+                "military": { "type": "number", "exclusiveMinimum": 0 },
+                "augmented": { "type": "number", "exclusiveMinimum": 0 }
+              },
+              "additionalProperties": false
+            },
+            "augmentationAppliesTo": { "const": "turbine-stream-only" },
+            "package": {
+              "type": "object",
+              "required": [
+                "coreDiameterM",
+                "coreLengthM",
+                "minimumStructuralRadialClearanceM",
+                "minimumThermalRadialClearanceM",
+                "foreClearanceM",
+                "aftClearanceM",
+                "minimumFireBulkheadGapM",
+                "axisCenterM",
+                "tunnelBodyId",
+                "internalVolumeId"
+              ],
+              "properties": {
+                "coreDiameterM": { "type": "number", "exclusiveMinimum": 0 },
+                "coreLengthM": { "type": "number", "exclusiveMinimum": 0 },
+                "minimumStructuralRadialClearanceM": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "minimumThermalRadialClearanceM": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "foreClearanceM": { "type": "number", "exclusiveMinimum": 0 },
+                "aftClearanceM": { "type": "number", "exclusiveMinimum": 0 },
+                "minimumFireBulkheadGapM": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "axisCenterM": {
+                  "type": "array",
+                  "prefixItems": [
+                    { "type": "number" },
+                    { "type": "number" },
+                    { "type": "number" }
+                  ],
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "tunnelBodyId": { "type": "string", "minLength": 1 },
+                "internalVolumeId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      }
+    },
+    "geometry": {
+      "type": "object",
+      "required": [
+        "wing",
+        "bodies",
+        "fins",
+        "inlet",
+        "exhaust",
+        "externalInterfaces",
+        "internalVolumes"
+      ],
+      "properties": {
+        "wing": {
+          "type": "object",
+          "required": [
+            "kind",
+            "installationYM",
+            "halfStations",
+            "surfaceZones",
+            "massModel"
+          ]
+        },
+        "bodies": { "type": "array", "minItems": 1 },
+        "fins": { "type": "array" },
+        "inlet": {
+          "type": "object",
+          "required": [
+            "kind",
+            "centerM",
+            "radiusXM",
+            "radiusYM",
+            "lipDepthM",
+            "designFlowIncidenceDeg",
+            "offDesignFlowModel",
+            "boundaryLayerBlockageFraction",
+            "surfaceZone",
+            "shellThicknessM"
+          ],
+          "properties": {
+            "designFlowIncidenceDeg": { "type": "number", "minimum": -45, "maximum": 45 },
+            "offDesignFlowModel": {
+              "type": "object",
+              "required": [
+                "ramRegimeStartMach",
+                "unstartTripDeviationRad",
+                "unstartClearDeviationRad",
+                "unstartRecoveryFloor",
+                "characteristicAngleAtRamStartRad",
+                "characteristicAngleDecreaseRadPerMach",
+                "minimumCharacteristicAngleRad",
+                "onsetBlendMach"
+              ],
+              "properties": {
+                "ramRegimeStartMach": { "type": "number", "exclusiveMinimum": 0 },
+                "unstartTripDeviationRad": { "type": "number", "exclusiveMinimum": 0 },
+                "unstartClearDeviationRad": { "type": "number", "exclusiveMinimum": 0 },
+                "unstartRecoveryFloor": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1
+                },
+                "characteristicAngleAtRamStartRad": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "characteristicAngleDecreaseRadPerMach": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "minimumCharacteristicAngleRad": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "onsetBlendMach": { "type": "number", "exclusiveMinimum": 0 }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "exhaust": { "type": "object" },
+        "externalInterfaces": { "type": "object" },
+        "internalVolumes": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["id", "centerM", "sizeM", "effectiveDensityKgM3"],
+                "properties": {
+                  "id": { "type": "string", "minLength": 1 },
+                  "centerM": {
+                    "type": "array",
+                    "items": { "type": "number" },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "sizeM": {
+                    "type": "array",
+                    "items": { "type": "number", "exclusiveMinimum": 0 },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "effectiveDensityKgM3": { "type": "number", "exclusiveMinimum": 0 }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": [
+                  "id",
+                  "shape",
+                  "centerM",
+                  "packageRef",
+                  "effectiveDensityKgM3"
+                ],
+                "properties": {
+                  "id": { "type": "string", "minLength": 1 },
+                  "shape": { "const": "propulsion-package-cylinder-z" },
+                  "centerM": {
+                    "type": "array",
+                    "items": { "type": "number" },
+                    "minItems": 3,
+                    "maxItems": 3
+                  },
+                  "packageRef": { "const": "propulsionModel.turbineCore.package" },
+                  "effectiveDensityKgM3": { "type": "number", "exclusiveMinimum": 0 }
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "visualIdentity": {
+      "type": "object",
+      "required": ["canonical", "prohibited"]
+    }
+  },
+  "additionalProperties": false,
+  "$comment": "Recursive absence of derived output keys is enforced by derive_shape_first_airframe.mjs and its freshness test because JSON Schema cannot concisely prohibit a property name at every depth while retaining readable component schemas."
+}

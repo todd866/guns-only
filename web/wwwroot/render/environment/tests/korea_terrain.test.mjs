@@ -209,6 +209,98 @@ function adjacentTerrainFixture() {
   };
 }
 
+function curvedTerrainFixture({ terrainId, boundsLocalM, bundleUri, definitions }) {
+  const records = [];
+  let byteOffset = 0;
+  const chunks = definitions.map((definition) => {
+    const [minimumEast, minimumNorth, maximumEast, maximumNorth] =
+      definition.boundsLocalM;
+    const lods = (definition.sampleCounts ?? [3, 2]).map((sampleCount, level) => {
+      const values = [];
+      for (let northIndex = 0; northIndex < sampleCount; northIndex++) {
+        const northM = minimumNorth
+          + (maximumNorth - minimumNorth) * northIndex / (sampleCount - 1);
+        for (let eastIndex = 0; eastIndex < sampleCount; eastIndex++) {
+          const eastM = minimumEast
+            + (maximumEast - minimumEast) * eastIndex / (sampleCount - 1);
+          // One continuous curved surface gives adjacent chunks identical edge heights but
+          // different one-sided derivatives, so every loaded seam genuinely needs averaging.
+          values.push(Math.round((4 * eastM * eastM + 7 * northM * northM) * 10));
+        }
+      }
+      const bytes = new Uint8Array(values.length * 2);
+      const view = new DataView(bytes.buffer);
+      for (let index = 0; index < values.length; index++) {
+        view.setInt16(index * 2, values[index], true);
+      }
+      const record = {
+        level,
+        sampleCount,
+        byteOffset,
+        byteLength: bytes.byteLength,
+        spacingM: (maximumEast - minimumEast) / (sampleCount - 1),
+      };
+      byteOffset += bytes.byteLength;
+      records.push(bytes);
+      return record;
+    });
+    return { ...definition, lods };
+  });
+  const bundle = new Uint8Array(byteOffset);
+  let destinationOffset = 0;
+  for (const record of records) {
+    bundle.set(record, destinationOffset);
+    destinationOffset += record.byteLength;
+  }
+  return {
+    manifest: {
+      schemaVersion: "1.0.0",
+      terrainId,
+      boundsLocalM,
+      quantization,
+      bundle: {
+        uri: bundleUri,
+        byteLength: bundle.byteLength,
+        sha256: "d".repeat(64),
+      },
+      chunks,
+    },
+    bundle: bundle.buffer,
+  };
+}
+
+function crossAdjacentTerrainFixture() {
+  return curvedTerrainFixture({
+    terrainId: "terrain.cardinal-normal-test.v1",
+    boundsLocalM: [-2, -2, 10, 10],
+    bundleUri: "cardinal-normal.terrain",
+    definitions: [
+      { id: "center", boundsLocalM: [0, 0, 2, 2] },
+      { id: "west", boundsLocalM: [-2, 0, 0, 2] },
+      { id: "east", boundsLocalM: [2, 0, 4, 2] },
+      { id: "south", boundsLocalM: [0, -2, 2, 0] },
+      { id: "north", boundsLocalM: [0, 2, 2, 4] },
+      // Corner contact is not a normal seam. It must not expand the cardinal update set.
+      { id: "diagonal", boundsLocalM: [2, 2, 4, 4] },
+      { id: "remote", boundsLocalM: [8, 8, 10, 10] },
+    ],
+  });
+}
+
+function partialEdgeTerrainFixture() {
+  return curvedTerrainFixture({
+    terrainId: "terrain.partial-normal-test.v1",
+    boundsLocalM: [0, 0, 12, 12],
+    bundleUri: "partial-normal.terrain",
+    definitions: [
+      { id: "macro", boundsLocalM: [0, 0, 4, 4], sampleCounts: [5, 3] },
+      { id: "east-south", boundsLocalM: [4, 0, 6, 2] },
+      { id: "east-north", boundsLocalM: [4, 2, 6, 4] },
+      { id: "remote", boundsLocalM: [10, 10, 12, 12] },
+    ],
+  });
+}
+
 function normalAt(entry, vertexIndex) {
   const normals = entry.mesh.geometry.getAttribute("normal");
   return [normals.getX(vertexIndex), normals.getY(vertexIndex), normals.getZ(vertexIndex)];
@@ -219,6 +311,18 @@ function baseBoundaryNormalAt(entry, vertexIndex) {
   assert.notEqual(boundaryIndex, -1);
   const offset = boundaryIndex * 3;
   return [...entry.normalBoundary.normals.slice(offset, offset + 3)];
+}
+
+function boundaryNormalAtWorld(entry, eastM, northM) {
+  const positions = entry.mesh.geometry.getAttribute("position");
+  for (const vertexIndex of entry.normalBoundary.indices) {
+    const vertexEastM = entry.mesh.position.x + positions.getX(vertexIndex);
+    const vertexNorthM = -(entry.mesh.position.z + positions.getZ(vertexIndex));
+    if (vertexEastM === eastM && vertexNorthM === northM) {
+      return normalAt(entry, vertexIndex);
+    }
+  }
+  assert.fail(`missing boundary vertex at ${eastM},${northM} in ${entry.chunk.id}`);
 }
 
 function assertVectorNear(actual, expected, tolerance = 1e-6) {
@@ -700,6 +804,42 @@ test("bounds the successful range cache with least-recently-used eviction", asyn
   assert.equal(reader.diagnostics().cachedRanges, 2);
 });
 
+test("caches terrain diagnostics until an observable value changes", async () => {
+  const source = manifest();
+  const terrain = await loadKoreaTerrain(THREE, {
+    manifestUrl: "https://game.test/content/diagnostics-cache.manifest.json",
+    fetch: async (_url, options = {}) => {
+      if (!options.headers?.Range) {
+        return { ok: true, status: 200, json: async () => source };
+      }
+      return {
+        ok: true,
+        status: 206,
+        arrayBuffer: async () => new ArrayBuffer(18),
+      };
+    },
+  });
+  await terrain.ready;
+
+  const loaded = terrain.diagnostics();
+  assert.strictEqual(terrain.diagnostics(), loaded,
+    "unchanged consumers in one frame must share the frozen diagnostics snapshot");
+  terrain.update({ cameraPosition: new THREE.Vector3(1, 500, -1) });
+  const covered = terrain.diagnostics();
+  assert.notStrictEqual(covered, loaded);
+  assert.strictEqual(terrain.diagnostics(), covered);
+  terrain.update({ cameraPosition: new THREE.Vector3(1, 500, -1) });
+  assert.strictEqual(terrain.diagnostics(), covered,
+    "an update inside the same coverage/visibility bands must keep the cached snapshot");
+
+  assert.equal(terrain.setStreamingRadiusM(1), true);
+  const resized = terrain.diagnostics();
+  assert.notStrictEqual(resized, covered);
+  assert.strictEqual(terrain.diagnostics(), resized);
+  terrain.dispose();
+  assert.equal(terrain.diagnostics().disposed, true);
+});
+
 test("builds at most one nearest terrain chunk per frame and drains queued builds", async () => {
   const source = streamingManifest();
   const scheduledFrames = new Map();
@@ -925,6 +1065,12 @@ test("streams atlas pages around the aircraft and evicts pages behind it", async
   pageFetchReceiver = "not-called";
   terrain.update({ cameraPosition: new THREE.Vector3(1, 500, -4), deltaSeconds: 1 });
   await terrain.whenIdle();
+  const settledDiagnostics = terrain.diagnostics();
+  assert.strictEqual(terrain.diagnostics(), settledDiagnostics,
+    "atlas diagnostics must reuse an unchanged aggregate snapshot");
+  terrain.update({ cameraPosition: new THREE.Vector3(1, 500, -4), deltaSeconds: 1 });
+  assert.strictEqual(terrain.diagnostics(), settledDiagnostics,
+    "an unchanged atlas update must not rescan child-page chunk diagnostics");
   assert.equal(pageFetchReceiver, undefined,
     "atlas page/bundle fetch must not bind the atlas presentation as receiver");
   assert.equal(terrain.diagnostics().residentPages, 1);
@@ -935,8 +1081,33 @@ test("streams atlas pages around the aircraft and evicts pages behind it", async
   assert.equal(terrain.diagnostics().rangeSupportedPages, 1);
   assert.equal(terrain.diagnostics().completeBundleFallbackPages, 0);
   const westPresentation = terrain.pages.get("west").presentation;
+  assert.equal(settledDiagnostics.activeLoads, 0);
+  assert.equal(settledDiagnostics.queuedLoads, 0);
+  assert.equal(settledDiagnostics.queuedBuilds, 0);
+  assert.ok(settledDiagnostics.lastBuildDurationMs >= 0);
+  assert.ok(Number.isFinite(settledDiagnostics.lastBuildFinishedAtMs));
+  westPresentation.activeLoads = 2;
+  westPresentation.queue.push({ testOnly: true }, { testOnly: true });
+  westPresentation.pendingBuilds = 3;
+  westPresentation.lastBuildDurationMs = 5.75;
+  westPresentation.lastBuildFinishedAtMs = 1234;
+  westPresentation.invalidateDiagnostics();
+  const pressuredDiagnostics = terrain.diagnostics();
+  assert.equal(pressuredDiagnostics.activeLoads, 2,
+    "atlas diagnostics must surface active chunk reads for causal frame attribution");
+  assert.equal(pressuredDiagnostics.queuedLoads, 2);
+  assert.equal(pressuredDiagnostics.queuedBuilds, 3);
+  assert.equal(pressuredDiagnostics.lastBuildDurationMs, 5.75);
+  assert.equal(pressuredDiagnostics.lastBuildFinishedAtMs, 1234);
+  westPresentation.activeLoads = 0;
+  westPresentation.queue.length = 0;
+  westPresentation.pendingBuilds = 0;
+  westPresentation.invalidateDiagnostics();
   assert.equal(westPresentation.streamingRadiusM, 6);
   assert.equal(terrain.setStreamingRadiusM(3), true);
+  const resizedDiagnostics = terrain.diagnostics();
+  assert.notStrictEqual(resizedDiagnostics, settledDiagnostics);
+  assert.strictEqual(terrain.diagnostics(), resizedDiagnostics);
   assert.equal(terrain.streamingRadiusM, 3);
   assert.equal(terrain.pageLoadRadiusM, 3,
     "atlas page loading must shrink with the public streaming radius");
@@ -1424,6 +1595,140 @@ test("reconciles same-LOD boundary normals and restores them across LOD swaps", 
   const westFineEdge = 5;
   const eastFineEdge = 3;
   assertVectorNear(normalAt(west, westFineEdge), normalAt(east, eastFineEdge));
+  terrain.dispose();
+});
+
+test("boundary-normal reconciliation updates only the rebuilt chunk's four neighbours", async () => {
+  const fixture = crossAdjacentTerrainFixture();
+  const terrain = await loadKoreaTerrain(THREE, {
+    manifestUrl: "https://game.test/content/cardinal-normal.manifest.json",
+    maximumConcurrentLoads: 1,
+    fetch: async (_url, options = {}) => {
+      if (!options.headers?.Range) {
+        return { ok: true, status: 200, json: async () => fixture.manifest };
+      }
+      const match = /^bytes=(\d+)-(\d+)$/.exec(options.headers.Range);
+      assert.ok(match);
+      return {
+        ok: true,
+        status: 206,
+        arrayBuffer: async () => fixture.bundle.slice(Number(match[1]), Number(match[2]) + 1),
+      };
+    },
+  });
+  await terrain.ready;
+
+  const center = terrain.entries.get("center");
+  const cardinalIds = ["east", "north", "south", "west"];
+  assert.deepEqual(center.normalNeighbours.map(({ entry }) => entry.chunk.id).sort(), cardinalIds,
+    "topology must exclude a corner-only and a remote resident chunk");
+
+  const versions = () => Object.fromEntries([...terrain.entries].map(([id, entry]) => [
+    id,
+    entry.mesh.geometry.getAttribute("normal").version,
+  ]));
+  const beforeFineSwap = versions();
+  await terrain.requestLevel(center, 0);
+  const afterFineSwap = versions();
+  for (const id of cardinalIds) {
+    assert.ok(afterFineSwap[id] > beforeFineSwap[id],
+      `${id} must restore the seam left by the center's previous LOD`);
+  }
+  for (const id of ["diagonal", "remote"]) {
+    assert.equal(afterFineSwap[id], beforeFineSwap[id],
+      `${id} must not receive an unrelated normal-buffer upload`);
+  }
+
+  const beforeCoarseSwap = versions();
+  await terrain.requestLevel(center, 1);
+  const afterCoarseSwap = versions();
+  for (const id of cardinalIds) {
+    assert.ok(afterCoarseSwap[id] > beforeCoarseSwap[id],
+      `${id} must receive the restored same-LOD seam average`);
+  }
+  for (const id of ["diagonal", "remote"]) {
+    assert.equal(afterCoarseSwap[id], beforeCoarseSwap[id],
+      `${id} must remain outside the bounded reconciliation set`);
+  }
+  terrain.dispose();
+});
+
+test("boundary-normal reconciliation preserves partial mixed-size edge seams", async () => {
+  const fixture = partialEdgeTerrainFixture();
+  const terrain = await loadKoreaTerrain(THREE, {
+    manifestUrl: "https://game.test/content/partial-normal.manifest.json",
+    maximumConcurrentLoads: 1,
+    fetch: async (_url, options = {}) => {
+      if (!options.headers?.Range) {
+        return { ok: true, status: 200, json: async () => fixture.manifest };
+      }
+      const match = /^bytes=(\d+)-(\d+)$/.exec(options.headers.Range);
+      assert.ok(match);
+      return {
+        ok: true,
+        status: 206,
+        arrayBuffer: async () => fixture.bundle.slice(Number(match[1]), Number(match[2]) + 1),
+      };
+    },
+  });
+  await terrain.ready;
+
+  const macro = terrain.entries.get("macro");
+  const eastSouth = terrain.entries.get("east-south");
+  const eastNorth = terrain.entries.get("east-north");
+  const remote = terrain.entries.get("remote");
+  assert.deepEqual(macro.normalNeighbours.map(({ entry }) => entry.chunk.id).sort(),
+    ["east-north", "east-south"],
+    "one macro edge must retain both positive-overlap neighbours");
+  assertVectorNear(boundaryNormalAtWorld(macro, 4, 0),
+    boundaryNormalAtWorld(eastSouth, 4, 0));
+  assertVectorNear(boundaryNormalAtWorld(macro, 4, 2),
+    boundaryNormalAtWorld(eastSouth, 4, 2));
+  assertVectorNear(boundaryNormalAtWorld(macro, 4, 2),
+    boundaryNormalAtWorld(eastNorth, 4, 2));
+  assertVectorNear(boundaryNormalAtWorld(macro, 4, 4),
+    boundaryNormalAtWorld(eastNorth, 4, 4));
+
+  const southVersion = eastSouth.mesh.geometry.getAttribute("normal").version;
+  const northVersion = eastNorth.mesh.geometry.getAttribute("normal").version;
+  const remoteVersion = remote.mesh.geometry.getAttribute("normal").version;
+  await terrain.requestLevel(macro, 0);
+  assert.ok(eastSouth.mesh.geometry.getAttribute("normal").version > southVersion);
+  assert.ok(eastNorth.mesh.geometry.getAttribute("normal").version > northVersion);
+  assert.equal(remote.mesh.geometry.getAttribute("normal").version, remoteVersion,
+    "a mixed-size seam update must remain local to its overlapping edge neighbours");
+
+  await terrain.requestLevel(eastSouth, 0);
+  await terrain.requestLevel(eastNorth, 0);
+  for (let northM = 0; northM <= 4; northM++) {
+    const neighbour = northM <= 2 ? eastSouth : eastNorth;
+    assertVectorNear(boundaryNormalAtWorld(macro, 4, northM),
+      boundaryNormalAtWorld(neighbour, 4, northM));
+  }
+
+  const remoteVersionBeforeSiblingSwap =
+    remote.mesh.geometry.getAttribute("normal").version;
+  await terrain.requestLevel(eastSouth, 1);
+  assert.equal(eastSouth.level, 1);
+  for (let northM = 2; northM <= 4; northM++) {
+    assertVectorNear(boundaryNormalAtWorld(macro, 4, northM),
+      boundaryNormalAtWorld(eastNorth, 4, northM));
+  }
+  assert.equal(remote.mesh.geometry.getAttribute("normal").version,
+    remoteVersionBeforeSiblingSwap,
+    "a partial sibling LOD swap must re-seal its T-junction without expanding the update set");
+
+  await terrain.requestLevel(eastSouth, 0);
+  const remoteVersionBeforeEviction = remote.mesh.geometry.getAttribute("normal").version;
+  terrain.evictEntry(eastSouth);
+  assert.equal(eastSouth.mesh, null);
+  for (let northM = 2; northM <= 4; northM++) {
+    assertVectorNear(boundaryNormalAtWorld(macro, 4, northM),
+      boundaryNormalAtWorld(eastNorth, 4, northM));
+  }
+  assert.equal(remote.mesh.geometry.getAttribute("normal").version,
+    remoteVersionBeforeEviction,
+    "partial-edge eviction must repair only relations among its direct neighbours");
   terrain.dispose();
 });
 

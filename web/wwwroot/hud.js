@@ -14,6 +14,16 @@ import {
 } from "./render/hud/hud_readouts.js";
 import { targetDataLineOwner } from "./render/hud/target_data_line.js";
 import {
+  ContactRangeTracker,
+  contactRangeIdentity,
+  contactRangeLifecycle,
+} from "./render/hud/contact_range_tracker.js";
+import {
+  BANDIT_TALLY_RANGE_M,
+  contactPositionCue,
+} from "./render/hud/contact_visibility.js?v=238";
+import { sortiePowerCommand } from "./render/hud/sortie_power.js";
+import {
   carrierAoARelevant,
   carrierConfigurationCue,
   carrierDistanceM,
@@ -47,20 +57,24 @@ import {
   rapierFlightDirectorPresentation,
   rapierGuidancePresentation,
 } from "./render/mission/rapier_guidance.js";
+import {
+  carrierSortieRoutePresentation,
+} from "./render/nav/carrier_sortie_route_presentation.js?v=238";
+import {
+  advanceRapierHighMachInstruments,
+  createRapierHighMachHistory,
+} from "./render/mission/rapier_high_mach_instruments.js?v=238";
 import { limitsPanelPresentation } from "./render/hud/limits_panel.js";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=237";
+} from "./render/audio/flight_audio.js?v=238";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
 const GREEN_FAINT = "rgba(77, 255, 136, 0.18)";
 const AMBER = "#ffb020";
-// Beyond ~10 nm no human eye holds a fighter: BVR contacts keep the bearing locator and the
-// data line, never positional brackets (which horizon-flatten into a false co-altitude cue).
-const BANDIT_TALLY_RANGE_M = 18_520;
 const RED = "#ff465d";
 const GLASS = "rgba(2, 10, 16, 0.72)";
 const DEG = Math.PI / 180;
@@ -136,6 +150,7 @@ function hudMode(state) {
     case "ARRESTMENT FAILED":
     case "CATAPULT":
     case "BOLTER":
+    case "BARRIER":
     case "TERMINAL":
       return state.mode;
     default:
@@ -187,8 +202,8 @@ function hasGunSolution(state) {
 }
 
 function isFightHudActive(state) {
-  // Circuits is pattern school — never paint bandit/gun fight chrome, even though a parked
-  // placeholder still occupies the bandit slot far off-station for kernel bookkeeping.
+  // Circuits is pattern school — never paint bandit/gun fight chrome. Its no-opponent contract is
+  // structural, so there is no parked compatibility actor for presentation to reinterpret.
   if (state?.rapier_pattern_only === true) return false;
   if (!selectedOpponentIsAlive(state)) return false;
   return !recoveryPlatformAvailable(state)
@@ -291,9 +306,11 @@ class CombatHud {
     this._wingmanLocatorArrowAngle = null;
     // Per-contact range/closure tracking so BOTH bandits carry numbers, not just the selected gun
     // target. The kernel publishes range/closure only for the selected contact; the other one's
-    // range comes from its position and its closure from the range-RATE across frames (smoothed),
-    // which is exactly what "OPENING/CLOSING" means.
-    this._rangeTracks = { bandit: null, wingman: null };
+    // range comes from its position and its closure from the range-RATE across frames (smoothed).
+    // Samples are keyed to snapshot entity/sortie identity so a replacement in the same formation
+    // role cannot inherit the previous aircraft's motion.
+    this._contactRangeTracker = new ContactRangeTracker();
+    this._rapierHighMachHistory = createRapierHighMachHistory();
     this._wingmanLocatorArrowLastNow = -Infinity;
     this._padlockLiftCaptured = false;
     this._padlockCaptureEntityId = "";
@@ -1075,21 +1092,17 @@ class CombatHud {
 
   /// Range and closure for a contact that is NOT the selected gun target, so both bandits show
   /// "<range>NM · <closure>". Range is straight from the two positions; closure is the range-rate
-  /// over the frame, EMA-smoothed so it does not jitter. Positive rate = opening.
-  contactRangeClosureText(position, frame, key) {
+  /// over the frame, EMA-smoothed so it does not jitter. Positive closure = closing.
+  contactRangeClosureText(position, frame, role) {
     const player = frame.playerPosition;
     if (!position || !player) return { rangeText: "---", closureText: "" };
-    const dx = position.x - player.x, dy = position.y - player.y, dz = position.z - player.z;
-    const rangeM = Math.sqrt(dx * dx + dy * dy + dz * dz);
-    const now = Number(frame.now) || 0;
-    const track = this._rangeTracks[key];
-    let closureKts = null;
-    if (track && now > track.now && now - track.now < 0.5) {
-      const dt = now - track.now;
-      const rawKts = -((rangeM - track.rangeM) / dt) * 1.94384; // + = closing
-      closureKts = track.closureKts == null ? rawKts : track.closureKts * 0.8 + rawKts * 0.2;
-    }
-    this._rangeTracks[key] = { rangeM, now, closureKts };
+    const { rangeM, closureKts } = this._contactRangeTracker.update({
+      identity: contactRangeIdentity(frame.state, role),
+      lifecycle: contactRangeLifecycle(frame.state),
+      position,
+      playerPosition: player,
+      nowSeconds: frame.now,
+    });
     return {
       rangeText: targetRangeReadout(rangeM).compactText,
       closureText: closureKts == null ? "" : targetClosureReadout(closureKts).compactText,
@@ -1217,17 +1230,37 @@ class CombatHud {
     }
     const inside = projection.x > 8 && projection.x < this.width - 8
       && projection.y > 8 && projection.y < this.height - 8;
-    if (projection.behind === true || !inside || rangeM > BANDIT_TALLY_RANGE_M) {
-      // Always show the second bandit's bearing, selected or not — both must be visible at once.
-      this.drawWingmanLocator(frame, selected);
-      return;
-    }
-
+    const onScreen = projection.behind !== true && inside;
     const padlocked = frame.padlock && (frame.padlockTarget === "wingman"
       || frame.padlockTarget === "traffic2"
       || frame.padlockTarget === "traffic3");
     const solution = selected && frame.visualGunSolution === true;
     const color = padlocked || selected || solution ? AMBER : GREEN;
+    const positionCue = contactPositionCue(rangeM, onScreen);
+    if (!circuitTraffic && positionCue === "box") {
+      this.drawVisibleTargetBox(
+        projection.x,
+        projection.y,
+        color,
+        frame,
+        selected,
+        { role: "wingman", targetLabel: "TARGET 2" },
+      );
+      if (this._debug) {
+        this._debug.wingmanLocator = {
+          arrowDrawn: false,
+          boxDrawn: true,
+          rangeM,
+        };
+      }
+      return;
+    }
+    if (positionCue !== "bracket") {
+      // Always show the second bandit's bearing, selected or not — both must be visible at once.
+      this.drawWingmanLocator(frame, selected);
+      return;
+    }
+
     const ctx = this.ctx;
     const size = solution ? 30 : padlocked || selected ? 26 : 20;
     const corner = 6;
@@ -1283,6 +1316,57 @@ class CombatHud {
       ctx.textBaseline = "top";
       ctx.fillText("TRAFFIC", projection.x, projection.y + size + 6);
     }
+  }
+
+  /// A square target box for a visible-but-distant contact, with its range/closure label.
+  /// Corner brackets, not a solid square, so it never occludes the aircraft it frames.
+  drawVisibleTargetBox(
+    x,
+    y,
+    color,
+    frame,
+    selected,
+    { role = "bandit", targetLabel = "TARGET 1" } = {},
+  ) {
+    const ctx = this.ctx;
+    const size = 18;
+    const corner = 6;
+    this.setLine(color, 1.35);
+    ctx.shadowColor = color === AMBER
+      ? "rgba(255, 176, 32, 0.34)" : "rgba(77, 255, 136, 0.30)";
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    ctx.moveTo(x - size, y - size + corner);
+    ctx.lineTo(x - size, y - size);
+    ctx.lineTo(x - size + corner, y - size);
+    ctx.moveTo(x + size - corner, y - size);
+    ctx.lineTo(x + size, y - size);
+    ctx.lineTo(x + size, y - size + corner);
+    ctx.moveTo(x + size, y + size - corner);
+    ctx.lineTo(x + size, y + size);
+    ctx.lineTo(x + size - corner, y + size);
+    ctx.moveTo(x - size + corner, y + size);
+    ctx.lineTo(x - size, y + size);
+    ctx.lineTo(x - size, y + size - corner);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    const state = frame.state;
+    let label;
+    if (selected) {
+      label = `${targetLabel} · SELECTED · ${targetRangeReadout(state.range_m).compactText}`
+        + ` · ${targetClosureReadout(state.closure_kts).compactText}`;
+    } else {
+      const position = role === "wingman" ? frame.wingmanPosition : frame.banditPosition;
+      const rc = this.contactRangeClosureText(position, frame, role);
+      label = rc.closureText
+        ? `${targetLabel} · ${rc.rangeText} · ${rc.closureText}`
+        : `${targetLabel} · ${rc.rangeText}`;
+    }
+    ctx.font = `${selected ? "800" : "700"} 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+    ctx.fillStyle = color;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(label, x, y + size + 5);
   }
 
   drawBandit(frame) {
@@ -1503,6 +1587,17 @@ class CombatHud {
     // it is meant to point to": centring the target collapses dx/dy toward zero, where direction
     // is noise, and the edge projection then whips the arrow around the rim. Placed at the
     // projection it simply sits on the contact and stops moving.
+    // A contact CLOSE ENOUGH TO SEE that projects on screen gets a SQUARE TARGET BOX on it, not a
+    // bearing arrow. An arrow answers "which way is it" -- right for something off-screen or truly
+    // out of sight; a box answers "there it is" -- right when it is a visible dot in front of you
+    // (owner, at 13 NM: "that should be a square"). The box is gated on VISIBLE_TARGET_RANGE_M so a
+    // genuinely BVR contact (160 NM) still gets only a bearing arrow and never a false "aircraft
+    // here" bracket -- the distinction the geometry contract protects.
+    if (contactPositionCue(primaryRangeM, locatorOnScreen) === "box") {
+      this.drawVisibleTargetBox(projection.x, projection.y, color, frame, selectedPrimary);
+      if (this._debug && this._debug.banditLocator) this._debug.banditLocator.arrowDrawn = false;
+      return;
+    }
     let x;
     let y;
     if (bvrContact && locatorOnScreen) {
@@ -1666,10 +1761,45 @@ class CombatHud {
       ctx.fillText("OWN HDG", this.width / 2, y - 25);
     }
 
+    // A finite carrier-day route owns the heading caret before generic fuel/home steering. The
+    // presenter has already fail-closed contradictory phase/fix geometry, so the HUD never repairs
+    // or reinterprets route state locally.
+    const carrierRoute = carrierSortieRoutePresentation(state);
+    const carrierRouteActive = state?.carrier_sortie_route_active === true;
+    const routeTurn = carrierRoute?.turnDeg;
+    if (headingValid && Number.isFinite(routeTurn)) {
+      const shownTurn = clamp(routeTurn, -48, 48);
+      const routeX = this.width / 2 + shownTurn * pixelsPerDegree;
+      const routeAccent = carrierRoute.rtbActionRequired ? AMBER : GREEN;
+      ctx.fillStyle = routeAccent;
+      ctx.strokeStyle = routeAccent;
+      ctx.lineWidth = 1.3;
+      ctx.beginPath();
+      ctx.moveTo(routeX - 6, y - 21);
+      ctx.lineTo(routeX, y - 15);
+      ctx.lineTo(routeX + 6, y - 21);
+      ctx.stroke();
+      ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      const routeLabel = Math.abs(routeTurn) > 48
+        ? (routeTurn < 0 ? "◀ RTE" : "RTE ▶") : "RTE";
+      ctx.fillText(routeLabel, routeX, y - 28);
+      if (this._debug) {
+        this._debug.carrierRouteCaret = {
+          drawn: true,
+          source: "carrier-route",
+          turnDeg: routeTurn,
+          x: routeX,
+          phase: carrierRoute.phaseToken,
+          fix: carrierRoute.fixToken,
+        };
+      }
+    }
+
     // At bingo the boat caret stays on the visible edge of the tape until the pilot turns it in.
     // This is guidance only: no flight-control command is fed back into the kernel.
     const boatTurn = finiteHudNumber(state.rtb_turn_deg);
-    if (headingValid && state.rtb_steer === true && Number.isFinite(boatTurn)) {
+    if (!carrierRouteActive && headingValid
+        && state.rtb_steer === true && Number.isFinite(boatTurn)) {
       const shownTurn = clamp(boatTurn, -48, 48);
       const boatX = this.width / 2 + shownTurn * pixelsPerDegree;
       ctx.fillStyle = AMBER;
@@ -1682,6 +1812,14 @@ class CombatHud {
       ctx.stroke();
       ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.fillText(Math.abs(boatTurn) > 48 ? (boatTurn < 0 ? "◀ B" : "B ▶") : "B", boatX, y - 28);
+      if (this._debug) {
+        this._debug.boatRtbCaret = {
+          drawn: true,
+          source: "home-rtb",
+          turnDeg: boatTurn,
+          x: boatX,
+        };
+      }
     }
 
     // Exact line-of-sight bearing to the one authoritative raider. This is deliberately not an
@@ -1820,7 +1958,11 @@ class CombatHud {
 
   drawRtbCue(state) {
     if (state.rtb !== true) return;
-    if (["TERMINAL", "ARRESTED", "STOPPED", "CATAPULT"].includes(hudMode(state))) return;
+    // An active route owns the guidance channel even if its payload is malformed. Falling back to
+    // Home/BINGO here would turn rejected carrier geometry into apparently valid steering.
+    if (state?.carrier_sortie_route_active === true) return;
+    if (["TERMINAL", "ARRESTED", "STOPPED", "CATAPULT", "BARRIER"]
+      .includes(hudMode(state))) return;
 
     const ctx = this.ctx;
     const fuel = fuelReadout(state);
@@ -1853,6 +1995,18 @@ class CombatHud {
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.fillText(detail, this.width / 2, y + 32);
+    if (this._debug) {
+      this._debug.rtbCue = {
+        drawn: true,
+        source: "home-rtb",
+        headline,
+        detail,
+        x,
+        y,
+        width,
+        height,
+      };
+    }
     ctx.restore();
   }
 
@@ -2263,9 +2417,14 @@ class CombatHud {
       condensed,
     });
     const guidance = rapierGuidancePresentation(state);
+    const carrierRoute = carrierSortieRoutePresentation(state);
     const cycle = rapierCycleTeachPresentation(state);
-    let directiveText = guidance?.text ?? "";
-    let directiveLevel = guidance?.level ?? "manual";
+    let directiveText = carrierRoute
+      ? `${carrierRoute.guidanceDirective}`
+        + `${carrierRoute.rtbActionRequired ? " · TAP RTB" : ""}`
+      : guidance?.text ?? "";
+    let directiveLevel = carrierRoute?.rtbActionRequired === true
+      ? "active" : guidance?.level ?? "manual";
 
     // Outbound Rapier automation has two distinct truths: what the aircraft is doing now and the
     // command it is chasing. The desktop tapes/limits used to carry the latter; the mobile rail
@@ -2774,19 +2933,13 @@ class CombatHud {
     ctx.closePath();
     ctx.fill();
 
-    // Commanded-power bug from the golden-path schedule. The pilot's whole energy task is to put
-    // the lever caret on this: no "PULL POWER" caption, no number to read, and when the descent
-    // schedule says come off the gas the bug simply slides down and you follow it. Drawn soft and
-    // hollow so it reads as a target rather than as another gauge competing for the rail.
-    // The whole-sortie schedule wins when it is running, because it covers the catapult stroke and
-    // the climb as well as the way back down — and because its command is two-sided. The descent
-    // schedule's power could never exceed 0.5 by construction, so on that one the bug could only
-    // ever tell you to come off the gas; this one can ask for everything the engine has.
+    // Two-sided commanded-power bug from the per-airframe sortie schedule. The pilot's whole
+    // energy task is to put the lever caret on this: no "PULL POWER" caption and no number to read.
+    // GoldenPath's legacy power solve is deliberately not a fallback here: it can never exceed 0.5
+    // by construction, so presenting it as a full throttle command would make low/slow look trim.
     const sortieValid = state?.sortie_valid === true;
-    const commandedPower = Number(
-      sortieValid ? state?.sortie_power_01 : state?.golden_path_power_01);
-    if ((sortieValid || state?.golden_path_valid === true)
-      && Number.isFinite(commandedPower)) {
+    const commandedPower = sortiePowerCommand(state);
+    if (commandedPower !== null) {
       const by = yOf(clamp(commandedPower, 0, 1));
       ctx.save();
       ctx.strokeStyle = "rgba(242, 217, 160, 0.72)";
@@ -2985,11 +3138,74 @@ class CombatHud {
     ctx.restore();
   }
 
-  /// Always-on combined-cycle lesson + skin callout for Rapier. Lives left of the Limits
-  /// panel so skin temperature is readable without opening Nav/Systems.
+  drawRapierHighMachInstruments(panel) {
+    if (!panel?.visible) return;
+    const rows = Array.isArray(panel.rows) ? panel.rows : [];
+    if (rows.length === 0 && !panel.cue?.text) return;
+    const ctx = this.ctx;
+    const width = Math.min(254,
+      this.width - this.safeInsets.left - this.safeInsets.right - 36);
+    const cueHeight = panel.cue?.text ? 15 : 0;
+    const height = 12 + cueHeight + rows.length * 14;
+    const x = this.safeInsets.left + 18;
+    const legendReserve = (!this.legendVisible && !this.touchMode) ? 28 : 0;
+    const y = this.getLayout().secondaryBottom - 36 - 8 - height - legendReserve;
+    const levelColor = (level) => level === "danger" ? RED
+      : level === "caution" ? AMBER : GREEN;
+
+    if (this._debug) {
+      this._debug.rapierHighMachInstruments = {
+        x,
+        y,
+        width,
+        height,
+        cue: panel.cue?.text ?? "",
+        rows: rows.map((row) => ({ ...row })),
+      };
+    }
+
+    ctx.save();
+    roundedRect(ctx, x, y, width, height, 4);
+    ctx.fillStyle = "rgba(1, 9, 14, 0.54)";
+    ctx.fill();
+    ctx.strokeStyle = levelColor(panel.level);
+    ctx.globalAlpha = panel.level === "normal" ? 0.28 : 0.82;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
+
+    let rowY = y + 9;
+    if (panel.cue?.text) {
+      ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillStyle = levelColor(panel.cue.level);
+      ctx.fillText(panel.cue.text, x + 8, rowY, width - 16);
+      rowY += cueHeight;
+    }
+    ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    for (const row of rows) {
+      ctx.fillStyle = levelColor(row.level);
+      ctx.fillText(row.text, x + 8, rowY, width - 16);
+      rowY += 14;
+    }
+    ctx.restore();
+  }
+
+  /// Compact high-Mach causal glass for production Rapier, with the legacy one-line cycle cue
+  /// retained outside its climb/dash/reentry phases.
   drawRapierCycleTeach(state) {
     // Circuits is overhead-pattern school — no Intercept TBCC / skin teach panel.
     if (state?.rapier_pattern_only === true) return;
+    const highMach = advanceRapierHighMachInstruments(
+      this._rapierHighMachHistory,
+      state,
+    );
+    this._rapierHighMachHistory = highMach.history;
+    if (highMach.presentation) {
+      this.drawRapierHighMachInstruments(highMach.presentation);
+      return;
+    }
     const teach = rapierCycleTeachPresentation(state);
     if (!teach) return;
     const ctx = this.ctx;
@@ -4404,6 +4620,54 @@ class CombatHud {
     ctx.restore();
   }
 
+  drawCarrierSortieGuidance(frame, { showModeLine = true } = {}) {
+    const route = carrierSortieRoutePresentation(frame.state);
+    if (!route || !showModeLine) return;
+    const guidanceText = route.guidanceDirective;
+    const promptText = route.keyboardPrompt;
+    const lines = promptText ? [guidanceText, promptText] : [guidanceText];
+    const accent = route.rtbActionRequired ? AMBER : GREEN_DIM;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const width = Math.min(
+      this.width - this.safeInsets.left - this.safeInsets.right - 24,
+      Math.max(...lines.map((line) => ctx.measureText(line).width)) + 24,
+    );
+    const height = promptText ? 36 : 22;
+    const x = (this.width - width) / 2;
+    const occupied = this.annunciationBottom(frame.state);
+    const y = Math.max(this.getLayout().heading.bottom + 8, occupied + 2);
+    this.glassPanel(x, y, width, height, accent);
+    ctx.fillStyle = accent;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(
+      this.fitText(guidanceText, width - 18),
+      this.width / 2,
+      y + (promptText ? 10 : 11),
+    );
+    if (promptText) {
+      ctx.fillText(this.fitText(promptText, width - 18), this.width / 2, y + 26);
+    }
+    if (this._debug) {
+      this._debug.carrierSortieRoute = {
+        text: lines.join(" | "),
+        guidanceDirective: route.guidanceDirective,
+        keyboardPrompt: route.keyboardPrompt,
+        source: "carrier-route",
+        phase: route.phaseToken,
+        fix: route.fixToken,
+        rtbActionRequired: route.rtbActionRequired,
+        x,
+        y,
+        width,
+        height,
+      };
+    }
+    ctx.restore();
+  }
+
   drawRapierGuidance(frame, { showModeLine = true } = {}) {
     const presentation = rapierGuidancePresentation(frame.state);
     if (!presentation) return;
@@ -4812,6 +5076,10 @@ class CombatHud {
         desktopFlightChrome: false,
         limitsPanel: null,
         systemsPanel: null,
+        carrierRouteCaret: null,
+        carrierSortieRoute: null,
+        boatRtbCaret: null,
+        rtbCue: null,
         rapierCycleTeach: null,
         rapierModeLine: null,
         recoveryGate: null,
@@ -4945,6 +5213,7 @@ class CombatHud {
     this.drawVisualMergeWeaponsCue(frame);
     this.drawFooter(frame);
     if (!mobileTactical) this.drawTimeCompression(frame);
+    this.drawCarrierSortieGuidance(frame, { showModeLine: !mobileTactical });
     this.drawRapierGuidance(frame, { showModeLine: !mobileTactical });
     if (!mobileTactical) {
       this.drawLegendHint();

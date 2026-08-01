@@ -4,9 +4,9 @@ import { circuitConfigurationMatches } from "../hud/hud_phase.js";
 /// heading strip; FL/Mach targets belong on tapes / Limits, not the mode line.
 const PHASE = Object.freeze({
   1: "LAUNCH",
-  2: "CLIMB · FL560",
-  3: "ACCEL · M2.2",
-  4: "RAM CLIMB · FL700",
+  2: "CLIMB",
+  3: "ACCEL",
+  4: "RAM CLIMB",
   5: "ZOOM PULL",
   6: "ZOOM COAST",
   7: "REENTER",

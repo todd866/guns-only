@@ -86,6 +86,12 @@ test("effects adapter dispatches only declared bindings and owns its scene lifec
         emit: (...args) => calls.push(["emit", ...args]),
         update: (delta) => calls.push(["update", delta]),
         clear: () => calls.push(["clear"]),
+        diagnostics: () => ({
+          activeItems: 3,
+          maximumItems: 96,
+          pooledObjects: 12,
+          reusedObjects: 41,
+        }),
         dispose: () => { calls.push(["dispose"]); group.removeFromParent(); },
       };
     },
@@ -106,6 +112,13 @@ test("effects adapter dispatches only declared bindings and owns its scene lifec
   assert.deepEqual(calls.find((call) => call[0] === "update"), ["update", 0.02]);
   adapter.clear();
   assert.deepEqual(calls.find((call) => call[0] === "clear"), ["clear"]);
+  assert.deepEqual(adapter.diagnostics().effectBudget, {
+    activeItems: 3,
+    maximumItems: 96,
+    pooledObjects: 12,
+    reusedObjects: 41,
+  });
+  assert.equal(adapter.diagnostics().activeItems, 3);
   adapter.dispose();
   assert.equal(group.parent, null);
 });

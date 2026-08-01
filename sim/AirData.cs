@@ -90,6 +90,25 @@ public static class AirData {
                     * TurbulentRecoveryFactor * mach * mach);
 
     /// <summary>
+    /// Temperature reached by a particular integrated thermal zone when insulation, sweep, or
+    /// local flow keeps it from seeing the full selected adiabatic rise. Fraction one is the
+    /// selected recovery/stagnation temperature; zero remains at ambient.
+    /// </summary>
+    public static double EffectiveAerothermalZoneTemperatureK(
+        double ambientTemperatureK, double basisTemperatureK,
+        double adiabaticRiseFraction) {
+        if (!double.IsFinite(ambientTemperatureK) || ambientTemperatureK < 0.0)
+            return 0.0;
+        if (!double.IsFinite(basisTemperatureK) || basisTemperatureK < 0.0)
+            return ambientTemperatureK;
+        double fraction = double.IsFinite(adiabaticRiseFraction)
+            ? System.Math.Clamp(adiabaticRiseFraction, 0.0, 1.0)
+            : 1.0;
+        return ambientTemperatureK
+            + fraction * (basisTemperatureK - ambientTemperatureK);
+    }
+
+    /// <summary>
     /// First-order lag of structural skin temperature toward the current adiabatic wall
     /// temperature. Uses <see cref="SkinHeatTauSeconds"/> when heating and
     /// <see cref="SkinCoolTauSeconds"/> when cooling.
@@ -139,6 +158,30 @@ public static class AirData {
         double rise = temperatureLimitK / ambientTemperatureK - 1.0;
         if (rise <= 0.0) return 0.0;
         return System.Math.Sqrt(rise / GammaMinusOneOverTwo);
+    }
+
+    /// <summary>
+    /// Mach ceiling for the actual binding zone rather than the raw material at a hypothetical
+    /// full-recovery point. This is the inverse of EffectiveAerothermalZoneTemperatureK applied
+    /// to the selected freestream basis.
+    /// </summary>
+    public static double MachLimitForEffectiveZoneTemperature(
+        double zoneTemperatureLimitK,
+        double ambientTemperatureK,
+        AerothermalLimitReferenceKind reference,
+        double adiabaticRiseFraction) {
+        if (!(zoneTemperatureLimitK > 0.0) || !(ambientTemperatureK > 0.0))
+            return double.PositiveInfinity;
+        double fraction = double.IsFinite(adiabaticRiseFraction)
+            ? System.Math.Clamp(adiabaticRiseFraction, 0.0, 1.0)
+            : 1.0;
+        if (fraction <= 0.0) return double.PositiveInfinity;
+        double rise = zoneTemperatureLimitK / ambientTemperatureK - 1.0;
+        if (rise <= 0.0) return 0.0;
+        double recovery = reference == AerothermalLimitReferenceKind.StagnationTemperature
+            ? 1.0 : TurbulentRecoveryFactor;
+        return System.Math.Sqrt(rise
+            / (GammaMinusOneOverTwo * recovery * fraction));
     }
 
     /// <summary>Local Mach number from TAS and the scenario's thermodynamic state.</summary>

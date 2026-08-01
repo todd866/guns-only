@@ -163,7 +163,7 @@ public sealed class CableHazardFieldTests {
             definition.AttackRunCheckpoint.MissionSeed);
         Assert.NotEqual(0x1951_0903UL, definition.AttackRunCheckpoint.MissionSeed);
         Assert.StartsWith(
-            "component.panther-subtype-unresolved.",
+            "component.f9f-2-panther.",
             definition.RightOuterWingCollisionVolume.ComponentId,
             StringComparison.Ordinal);
     }

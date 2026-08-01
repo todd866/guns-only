@@ -361,7 +361,7 @@
         "eventRef": "event.narrative.ejection-ready.v1",
         "observerFacts": [
           "Every exposed ejection preparation action is complete.",
-          "The aircraft remains inside the validated ejection envelope."
+          "The aircraft remains inside the current disclosed ejection-reconstruction bounds."
         ]
       },
       "priority": "urgent",

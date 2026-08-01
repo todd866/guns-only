@@ -1,14 +1,25 @@
 using System.Text.Json;
 using GunsOnly.Sim;
+using GunsOnly.Sim.Doctrine;
 using GunsOnly.Web;
 using Xunit;
 
 namespace GunsOnly.Sim.Tests;
 
+[Collection("snapshot-projection-statics")]
 public sealed class MeshNavSnapshotTests {
     [Fact]
     public void ColdSnapshotIncludesMeshActiveDestAfterSelect() {
-        var session = new SimulationSession(12, Carrier.DeckConfiguration.Angled);
+        // Card 11 is an unopposed open-segment laboratory. Projection must not manufacture a
+        // hidden actor merely to keep the legacy flat snapshot shape alive.
+        BeatSetup circuits = Beats.RapierCircuits(
+            Carrier.DeckConfiguration.Angled) with {
+            OpponentPresence = OpponentPresence.None
+        };
+        var session = new SimulationSession();
+        session.StartBeat(() => circuits);
+        session.Begin();
+        Assert.False(session.OpponentPresent);
         Assert.True(session.TrySelectMeshPlace("place.ukraine.crimea-coast-survey.v1"));
 
         string json = SnapshotProjection.BuildState(
@@ -31,17 +42,31 @@ public sealed class MeshNavSnapshotTests {
         Assert.True(root.GetProperty("mesh_active_known").GetBoolean());
         Assert.True(root.TryGetProperty("mesh_place_catalog_json", out JsonElement catalog));
         Assert.False(string.IsNullOrWhiteSpace(catalog.GetString()));
+        Assert.False(root.GetProperty("opponent_present").GetBoolean());
+        Assert.Equal(JsonValueKind.Null,
+            root.GetProperty("bandit_entity_id").ValueKind);
+        Assert.Equal(JsonValueKind.Null,
+            root.GetProperty("bandit_aircraft_id").ValueKind);
+        Assert.Equal(0.0, root.GetProperty("bx").GetDouble());
+        Assert.Equal(0.0, root.GetProperty("by").GetDouble());
+        Assert.Equal(0.0, root.GetProperty("bz").GetDouble());
+        Assert.Equal(0.0, root.GetProperty("range_m").GetDouble());
+        Assert.False(root.GetProperty("gun_solution").GetBoolean());
+        Assert.False(root.GetProperty("opponent_gun_firing").GetBoolean());
     }
 
     [Fact]
-    public void HotFrameLayoutIncludesMeshSlotsAtVersion19() {
+    public void HotFrameLayoutIncludesMeshAndCarrierRouteSlotsAtVersion21() {
         string layoutJson = SnapshotHotFrame.LayoutJson();
         using JsonDocument document = JsonDocument.Parse(layoutJson);
-        Assert.Equal(19, document.RootElement.GetProperty("layout_version").GetInt32());
+        Assert.Equal(21, document.RootElement.GetProperty("layout_version").GetInt32());
         Assert.Contains(
             "mesh_fuel_to_dest_lb",
             layoutJson,
             StringComparison.Ordinal);
         Assert.Contains("recovery_procedure_kind", layoutJson, StringComparison.Ordinal);
+        Assert.Contains("carrier_sortie_route_active", layoutJson,
+            StringComparison.Ordinal);
+        Assert.Contains("opponent_present", layoutJson, StringComparison.Ordinal);
     }
 }

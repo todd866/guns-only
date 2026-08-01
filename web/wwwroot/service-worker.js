@@ -2,20 +2,19 @@
 //
 // The site is already installable — there is a web manifest, and macOS/iOS/Android will all give it
 // its own window — but installing only ever changed the CHROME. Every asset still came off the
-// network, so the app was a website in a frame and a dead connection was a dead game. This makes an
-// installed copy actually playable offline.
+// network, so the app was a website in a frame and a dead connection was a dead game. This gives an
+// installed copy an offline path for every asset the browser successfully admits to Cache Storage.
 //
 // DESIGN: runtime caching, not a precache manifest. A precache needs a build-time list of every
 // asset — the WASM runtime, the three.js vendor tree, every render module, the content pack — and a
 // list like that goes stale silently and fails closed. Instead the first online sortie populates the
-// cache with exactly what the app really loads, and everything after that works offline. The honest
-// statement of the contract is "play once online, then it works on a plane", which is both true and
-// checkable.
+// cache with exactly what the app really loads. Resources successfully admitted to Cache Storage
+// are then available offline; large terrain pages remain subject to the browser's storage budget.
 //
 // The cache name carries the release build, so shipping a new build orphans the old cache and
 // activate() deletes it. That reuses the existing stamp ritual rather than inventing a second
 // versioning scheme — see web/wwwroot/render/release/release_identity.js.
-const RELEASE_BUILD = "237";
+const RELEASE_BUILD = "238";
 const CACHE = `guns-only-${RELEASE_BUILD}`;
 
 // Never cached: telemetry and the multiplayer room are live services, and a cached reply would be
@@ -29,10 +28,21 @@ const NEVER_CACHE = [
 // The terrain bundle is read with HTTP Range requests, and the Cache API refuses to store a 206.
 // It does not need to: TerrainBundleReader already handles a server that ignores Range and returns
 // the whole file (korea_terrain.js — `completeBuffer`), slicing every later record out of it. So a
-// cached FULL bundle answers a Range request perfectly well, and offline terrain costs one extra
-// background fetch rather than a range-aware cache layer.
+// cached FULL bundle answers a Range request perfectly well. A successfully admitted terrain page
+// costs one extra background fetch rather than requiring a range-aware cache layer.
 const TERRAIN_BUNDLE = /\.terrain(\?|$)/;
 const MAX_RUNTIME_PRIME_URLS = 768;
+// A failed whole-page prime must not restart for every small Range request. Five minutes is long
+// enough to prevent a streaming sortie from repeatedly downloading the same multi-megabyte page,
+// while still allowing the current worker to recover when connectivity or quota changes.
+const TERRAIN_PRIME_RETRY_COOLDOWN_MS = 5 * 60 * 1000;
+// Do not consume the final sliver of an origin's quota. The StorageManager estimate is advisory,
+// so unsupported or temporarily unavailable estimates preserve the existing Cache API path; a
+// known-insufficient estimate fails closed before another large background download begins.
+const TERRAIN_CACHE_RESERVE_BYTES = 32 * 1024 * 1024;
+// Four workers remove the serialized first-boot bottleneck without letting a resource inventory
+// containing large WASM or terrain responses turn into an unbounded burst of network/body work.
+const MAX_RUNTIME_PRIME_CONCURRENCY = 4;
 
 self.addEventListener("install", (event) => {
   // Nothing to precache; take over as soon as possible so the first sortie starts filling the cache.
@@ -49,6 +59,46 @@ self.addEventListener("activate", (event) => {
 });
 
 const terrainBundlesPrimed = new Set();
+const terrainBundleRetryAfter = new Map();
+
+async function availableStorageBytes() {
+  const estimate = self.navigator?.storage?.estimate;
+  if (typeof estimate !== "function") return null;
+  try {
+    const result = await estimate.call(self.navigator.storage);
+    const quota = Number(result?.quota);
+    const usage = Number(result?.usage);
+    if (!Number.isFinite(quota) || !Number.isFinite(usage) || quota < 0 || usage < 0) return null;
+    return Math.max(0, quota - usage);
+  } catch {
+    // Older browsers and private modes can expose StorageManager but reject estimate(). Falling
+    // back to Cache API behavior preserves compatibility; cache.put still rejects quota overflow.
+    return null;
+  }
+}
+
+function terrainPrimeCoolingDown(url, now = Date.now()) {
+  const retryAfter = terrainBundleRetryAfter.get(url);
+  if (!Number.isFinite(retryAfter)) return false;
+  if (now < retryAfter) return true;
+  terrainBundleRetryAfter.delete(url);
+  return false;
+}
+
+function deferTerrainBundleRetry(url) {
+  terrainBundleRetryAfter.set(url, Date.now() + TERRAIN_PRIME_RETRY_COOLDOWN_MS);
+  terrainBundlesPrimed.delete(url);
+}
+
+async function terrainCacheHasCapacity(response = null) {
+  const available = await availableStorageBytes();
+  if (available === null) return true;
+  if (available <= TERRAIN_CACHE_RESERVE_BYTES) return false;
+
+  const encodedLength = Number(response?.headers?.get?.("content-length"));
+  if (!Number.isFinite(encodedLength) || encodedLength <= 0) return true;
+  return encodedLength + TERRAIN_CACHE_RESERVE_BYTES <= available;
+}
 
 async function primeRuntimeUrls(candidates) {
   const urls = [];
@@ -65,21 +115,40 @@ async function primeRuntimeUrls(candidates) {
   }
   const cache = await caches.open(CACHE);
   let cached = 0;
+  let reused = 0;
   let failed = 0;
-  for (const url of urls) {
-    try {
-      const response = await fetch(url, { cache: "no-store" });
-      if (!response.ok || response.status !== 200 || response.type !== "basic") {
-        failed += 1;
+  let nextUrl = 0;
+  async function primeNextUrl() {
+    while (nextUrl < urls.length) {
+      const url = urls[nextUrl];
+      nextUrl += 1;
+      let existing;
+      try {
+        existing = await cache.match(url);
+      } catch {
+        // A transient Cache Storage read failure must not suppress the network retry that can
+        // repair the entry. A failed write below will still report the URL as failed.
+      }
+      if (existing?.ok && existing.status === 200 && existing.type === "basic") {
+        reused += 1;
         continue;
       }
-      await cache.put(url, response.clone());
-      cached += 1;
-    } catch {
-      failed += 1;
+      try {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok || response.status !== 200 || response.type !== "basic") {
+          failed += 1;
+          continue;
+        }
+        await cache.put(url, response.clone());
+        cached += 1;
+      } catch {
+        failed += 1;
+      }
     }
   }
-  return { requested: urls.length, cached, failed, build: RELEASE_BUILD };
+  const workers = Math.min(MAX_RUNTIME_PRIME_CONCURRENCY, urls.length);
+  await Promise.all(Array.from({ length: workers }, () => primeNextUrl()));
+  return { requested: urls.length, cached, reused, failed, build: RELEASE_BUILD };
 }
 
 self.addEventListener("message", (event) => {
@@ -99,19 +168,38 @@ self.addEventListener("message", (event) => {
 function primeTerrainBundle(url) {
   const bare = new URL(url);
   bare.search = "";
-  if (terrainBundlesPrimed.has(bare.href)) return Promise.resolve();
+  if (terrainBundlesPrimed.has(bare.href) || terrainPrimeCoolingDown(bare.href)) {
+    return Promise.resolve();
+  }
   terrainBundlesPrimed.add(bare.href);
   return (async () => {
     try {
+      // The in-memory Set is only an in-flight/process-lifetime latch. Service workers are
+      // routinely terminated between requests, while Cache Storage survives; consult this
+      // build's persisted bucket before paying for the same multi-megabyte whole page again.
+      const cache = await caches.open(CACHE);
+      const cached = await cache.match(bare.href);
+      if (cached?.ok && cached.status === 200) {
+        terrainBundleRetryAfter.delete(bare.href);
+        return;
+      }
+      // A known-low storage budget cannot accept a terrain page. Check before fetching so every
+      // Range request does not also trigger a doomed whole-page transfer.
+      if (!await terrainCacheHasCapacity()) {
+        deferTerrainBundleRetry(bare.href);
+        return;
+      }
       const response = await fetch(bare.href, { cache: "no-store" });
-      if (response.ok && response.status === 200) {
-        await (await caches.open(CACHE)).put(bare.href, response.clone());
+      if (response.ok && response.status === 200 && await terrainCacheHasCapacity(response)) {
+        await cache.put(bare.href, response.clone());
+        terrainBundleRetryAfter.delete(bare.href);
       } else {
-        terrainBundlesPrimed.delete(bare.href);
+        deferTerrainBundleRetry(bare.href);
       }
     } catch {
-      // Offline, or the bundle moved. A later online request must be allowed to try again.
-      terrainBundlesPrimed.delete(bare.href);
+      // Offline, the bundle moved, or Cache Storage rejected the write. Keep serving the original
+      // Range path, but suppress another whole-page attempt until the deterministic cooldown ends.
+      deferTerrainBundleRetry(bare.href);
     }
   })();
 }
@@ -148,7 +236,7 @@ self.addEventListener("fetch", (event) => {
 
   if (TERRAIN_BUNDLE.test(url.pathname)) {
     // A service worker may be terminated as soon as the response settles. Extend this fetch event
-    // through the full-bundle cache write so "fly once online" is a reliable offline contract.
+    // through the full-bundle cache attempt so successful writes survive worker termination.
     event.waitUntil(primeTerrainBundle(request.url));
     event.respondWith((async () => {
       try {

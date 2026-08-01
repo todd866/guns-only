@@ -10,14 +10,192 @@ export const MESSAGE_RATE_PER_SECOND = 30;
 export const MESSAGE_BURST_CAPACITY = 40;
 export const MAXIMUM_INVALID_MESSAGES = 6;
 export const MAXIMUM_IDENTITIES = 10_000;
+export const IDENTITY_RETENTION_MS = 90 * 24 * 60 * 60 * 1000;
+export const IDENTITY_TOUCH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+export const IDENTITY_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+// Reserve one storage.put entry for the world cursor: a batch of 127 legacy identities plus the
+// world record exactly meets Durable Object storage's 128-pair bulk-operation limit.
+export const IDENTITY_SWEEP_BATCH_SIZE = 127;
+export const MAXIMUM_FORCED_IDENTITY_SWEEP_BATCHES_PER_ALLOCATION = 4;
+export const IDENTITY_FORCED_SWEEP_RETRY_MS = 5_000;
+export const IDENTITY_CREATION_WINDOW_MS = 60 * 60 * 1000;
+export const MAXIMUM_IDENTITY_CREATIONS_PER_SOURCE_WINDOW = 12;
+export const MAXIMUM_GLOBAL_IDENTITY_CREATIONS_PER_WINDOW = 1_200;
+export const IDENTITY_CAPACITY_WINDOW_MS = 24 * 60 * 60 * 1000;
+// A strict `> 90 days` expiry can leave the boundary cohort live when the next window opens.
+// Dividing by retention windows plus that one cohort guarantees fixed-window admission cannot
+// consume the finite namespace before any identity has had its full retention opportunity.
+export const IDENTITY_LIVE_CAPACITY_WINDOWS =
+  Math.ceil(IDENTITY_RETENTION_MS / IDENTITY_CAPACITY_WINDOW_MS) + 1;
+export const MAXIMUM_IDENTITY_CREATIONS_PER_CAPACITY_WINDOW = Math.floor(
+  MAXIMUM_IDENTITIES / IDENTITY_LIVE_CAPACITY_WINDOWS,
+);
+// Admission principals are hashed into a fixed number of persisted buckets. This deliberately
+// trades a small collision risk for a hard storage bound: attacker-controlled source addresses
+// can never create an unbounded collection of limiter records.
+export const IDENTITY_ADMISSION_BUCKET_COUNT = 1_024;
 // One Durable Object still fans each snapshot out to every recipient. Keep this deliberately
 // conservative until measured load testing supports sector/interest-object sharding.
 export const MAXIMUM_CONNECTIONS = 64;
 export const MAXIMUM_PENDING_HANDSHAKES = 8;
+export const MAXIMUM_PENDING_HANDSHAKES_PER_ADMISSION_BUCKET = 2;
 export const MAXIMUM_OUTBOUND_BUFFER_BYTES = 256 * 1024;
 export const INTEREST_RADIUS_METRES = 120_000;
 export const MAXIMUM_VISIBLE_PLAYERS = 64;
 export const MAXIMUM_VISIBLE_SECTORS = 16;
+
+export const ADMISSION_BUCKET_HEADER = "x-guns-internal-admission-bucket";
+const LOCAL_DEVELOPMENT_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+
+const connectingAddressPrincipal = (value) => {
+  if (typeof value !== "string") return "";
+  const clean = value.trim().toLowerCase();
+  if (clean.length <= 2 || clean.length > 64 || !/^[0-9a-f:.]+$/.test(clean)) return "";
+  if (!clean.includes(":")) {
+    const octets = clean.split(".");
+    if (octets.length !== 4 || octets.some((octet) => !/^\d{1,3}$/.test(octet)
+      || Number(octet) > 255)) return "";
+    return `ipv4:${octets.map(Number).join(".")}`;
+  }
+  try {
+    const canonical = new URL(`http://[${clean}]/`).hostname.slice(1, -1);
+    const halves = canonical.split("::");
+    if (halves.length > 2) return "";
+    const left = halves[0] ? halves[0].split(":") : [];
+    const right = halves.length === 2 && halves[1] ? halves[1].split(":") : [];
+    const missing = halves.length === 2 ? 8 - left.length - right.length : 0;
+    const groups = [...left, ...Array.from({ length: missing }, () => "0"), ...right]
+      .map((group) => group.padStart(4, "0"));
+    if (groups.length !== 8 || groups.some((group) => !/^[0-9a-f]{4}$/.test(group))) return "";
+    // A mapped IPv4 address has no meaningful IPv6 /64 ownership boundary; preserve its exact
+    // final 32 bits instead. Native IPv6 privacy-address rotation stays within one /64 principal.
+    if (groups.slice(0, 5).every((group) => group === "0000") && groups[5] === "ffff") {
+      return `ipv4-mapped:${groups[6]}:${groups[7]}`;
+    }
+    return `ipv6-64:${groups.slice(0, 4).join(":")}`;
+  } catch {
+    return "";
+  }
+};
+
+async function admissionBucketForSource(source) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256", new TextEncoder().encode(`guns-only-admission-v1:${source}`),
+  );
+  return new DataView(digest).getUint32(0, false) % IDENTITY_ADMISSION_BUCKET_COUNT;
+}
+
+export async function trustedAdmissionBucketForRequest(request) {
+  const url = new URL(request.url);
+  if (request.cf) {
+    const principal = connectingAddressPrincipal(
+      request.headers.get("CF-Connecting-IP"),
+    );
+    return principal ? admissionBucketForSource(principal) : null;
+  }
+  // Miniflare and the checked-in local server do not provide Cloudflare request metadata. A
+  // single fixed local principal preserves development without allowing a public non-edge route
+  // to accept a caller-selected forwarding header.
+  if (LOCAL_DEVELOPMENT_HOSTS.has(url.hostname)) {
+    return admissionBucketForSource(`local-development:${url.hostname}`);
+  }
+  return null;
+}
+
+const consumeFixedWindowBudget = (
+  previousStart,
+  previousCount,
+  nowMs,
+  maximum,
+  windowMs = IDENTITY_CREATION_WINDOW_MS,
+) => {
+  const now = Number.isFinite(nowMs) ? nowMs : 0;
+  const start = Number.isFinite(previousStart) ? previousStart : now;
+  const count = Number.isSafeInteger(previousCount) ? Math.max(0, previousCount) : 0;
+  const resetWindow = now < start || now - start >= windowMs;
+  const windowStartedAtMs = resetWindow ? now : start;
+  const creationsInWindow = resetWindow ? 0 : count;
+  const allowed = creationsInWindow < maximum;
+  return {
+    allowed,
+    windowStartedAtMs,
+    creationsInWindow: allowed ? creationsInWindow + 1 : creationsInWindow,
+    retryAfterMs: allowed ? 0 : Math.max(1, windowMs
+      - Math.max(0, now - windowStartedAtMs)),
+  };
+};
+
+export function consumeIdentityCapacityBudget(world, nowMs) {
+  const budget = consumeFixedWindowBudget(
+    world?.identityCapacityWindowStartedAtMs,
+    world?.identityCapacityCreationsInWindow,
+    nowMs,
+    MAXIMUM_IDENTITY_CREATIONS_PER_CAPACITY_WINDOW,
+    IDENTITY_CAPACITY_WINDOW_MS,
+  );
+  return {
+    allowed: budget.allowed,
+    retryAfterMs: budget.retryAfterMs,
+    world: {
+      ...world,
+      identityCapacityWindowStartedAtMs: budget.windowStartedAtMs,
+      identityCapacityCreationsInWindow: budget.creationsInWindow,
+    },
+  };
+}
+
+export function consumeIdentityCreationBudget(world, nowMs) {
+  const budget = consumeFixedWindowBudget(
+    world?.identityCreationWindowStartedAtMs,
+    world?.identityCreationsInWindow,
+    nowMs,
+    MAXIMUM_GLOBAL_IDENTITY_CREATIONS_PER_WINDOW,
+  );
+  return {
+    allowed: budget.allowed,
+    retryAfterMs: budget.retryAfterMs,
+    world: {
+      ...world,
+      identityCreationWindowStartedAtMs: budget.windowStartedAtMs,
+      identityCreationsInWindow: budget.creationsInWindow,
+    },
+  };
+}
+
+export function consumeSourceIdentityCreationBudget(previous, nowMs) {
+  const budget = consumeFixedWindowBudget(
+    previous?.windowStartedAtMs,
+    previous?.creationsInWindow,
+    nowMs,
+    MAXIMUM_IDENTITY_CREATIONS_PER_SOURCE_WINDOW,
+  );
+  return {
+    allowed: budget.allowed,
+    retryAfterMs: budget.retryAfterMs,
+    budget: {
+      windowStartedAtMs: budget.windowStartedAtMs,
+      creationsInWindow: budget.creationsInWindow,
+    },
+  };
+}
+
+export function currentIdentityCreationCount(world, nowMs) {
+  const now = Number.isFinite(nowMs) ? nowMs : 0;
+  const start = Number.isFinite(world?.identityCreationWindowStartedAtMs)
+    ? world.identityCreationWindowStartedAtMs : now;
+  if (now < start || now - start >= IDENTITY_CREATION_WINDOW_MS) return 0;
+  return Number.isSafeInteger(world?.identityCreationsInWindow)
+    ? Math.max(0, world.identityCreationsInWindow) : 0;
+}
+
+export function currentIdentityCapacityCreationCount(world, nowMs) {
+  const now = Number.isFinite(nowMs) ? nowMs : 0;
+  const start = Number.isFinite(world?.identityCapacityWindowStartedAtMs)
+    ? world.identityCapacityWindowStartedAtMs : now;
+  if (now < start || now - start >= IDENTITY_CAPACITY_WINDOW_MS) return 0;
+  return Number.isSafeInteger(world?.identityCapacityCreationsInWindow)
+    ? Math.max(0, world.identityCapacityCreationsInWindow) : 0;
+}
 
 const originOnly = (value) => {
   if (typeof value !== "string" || !value.trim()) return "";

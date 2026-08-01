@@ -232,7 +232,21 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     /// fixture ratio and is the default so nothing moves for an airframe that has not measured
     /// its own; an aircraft with a real figure declares it and stops inheriting someone else's.
     /// </summary>
-    double ApproachStallMargin = 1.14);
+    double ApproachStallMargin = 1.14,
+    /// <summary>
+    /// Displaced lifting-gas volume for a free balloon, in cubic metres. Zero preserves ordinary
+    /// aircraft. A positive value adds Archimedean buoyancy rho*V*g to the translational force
+    /// balance, so the target finds its density altitude instead of being nailed to a waypoint.
+    /// Envelope/gas mass remains part of MassKg; this is volume, not a magic weight cancellation.
+    /// </summary>
+    double BuoyantVolumeM3 = 0.0,
+    /// <summary>
+    /// Fraction of the selected recovery/stagnation temperature rise which reaches the binding
+    /// integrated zone. One preserves every legacy whole-surface screen. Rapier v2 derives 0.56
+    /// from its canonical insulated warm-panel zone, so ceramic leading edges can survive while
+    /// ordinary structure still sets a real M4 thermal clock.
+    /// </summary>
+    double AerothermalAdiabaticRiseFraction = 1.0);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).
@@ -245,7 +259,8 @@ public readonly record struct StateDeriv(Vec3D DPos, Vec3D DVel, double DBank,
 
 internal readonly record struct AeroResult(Vec3D Accel, Vec3D LiftDir, Vec3D AirVelocity,
     double Alpha, double Beta, double Nz, double DynamicPressure,
-    double PitchThrustVectorAngleRad, double PitchThrustVectorMomentNm);
+    double PitchThrustVectorAngleRad, double PitchThrustVectorMomentNm,
+    double DragForceN);
 
 internal readonly record struct PitchControlAllocation(double DemandMomentNm,
     double AeroMomentNm, double ResidualMomentNm, double TvcMomentCapacityNm,
@@ -408,6 +423,59 @@ public static class FlightModel {
         YawBetaStiffnessNmRad: 1600.0, RollHoldDampingNms: 600.0,
         WingSpanM: 5.81, // sqrt(AR 13 * 2.6 m2)
         MaxThrustFraction: 0.0);          // no engine and therefore no powered lever range
+
+    public const double HighAltitudeBalloonFloatAltitudeM = 33_500.0;
+    public const double HighAltitudeBalloonEnvelopeAndPayloadMassKg = 4_500.0;
+    public const double HighAltitudeBalloonVolumeM3 = 532_379.0;
+    /// Total inertial mass includes lifting gas/flight ballast, which NASA's quoted combined
+    /// balloon-and-payload hardware weight does not enumerate. Closing it from the independently
+    /// published fixed volume and float altitude makes Archimedes' law the authority.
+    public static double HighAltitudeBalloonTotalMassKg =>
+        StandardAtmosphere1976.Instance.Sample(HighAltitudeBalloonFloatAltitudeM).DensityKgM3
+            * HighAltitudeBalloonVolumeM3;
+
+    /// NASA-scale super-pressure scientific balloon used as Rapier's production intercept target.
+    /// The envelope is intentionally a real physical actor rather than the powered glider target
+    /// wearing a different label. NASA publishes 532,379 m3 volume, 114.5 m diameter, 68.96 m
+    /// height, 4,500 kg hardware mass, and 33.5 km float altitude for this SPB class. The actor's
+    /// total inertial mass adds the lifting-gas/ballast residual required by those published facts.
+    /// Broadside drag uses that published diameter; Cd=0.47 is the transparent bluff-body
+    /// surrogate. Shape, drag and buoyancy therefore agree on what the target is and how it moves.
+    /// https://science.nasa.gov/blogs/super-pressure-balloon/2016/04/04/nasas-super-pressure-balloon-by-the-numbers/
+    public static readonly AircraftParams HighAltitudeBalloonPublicDataSurrogate = new(
+        MassKg: HighAltitudeBalloonTotalMassKg,
+        WingAreaM2: System.Math.PI * 57.25 * 57.25,
+        ThrustMaxN: 0.0,
+        CD0: 0.47,
+        InducedK: 0.0,
+        CLMax: 0.000001,
+        CLMin: -0.000001,
+        RollRateMaxRad: 0.02,
+        BankTau: 20.0,
+        MCrit: 10.0,
+        WaveDragK: 0.0,
+        CLAlpha: 0.000001,
+        IxxKgM2: 4_650_000.0,
+        IyyKgM2: 4_650_000.0,
+        IzzKgM2: 4_650_000.0,
+        RollStiffnessNmRad: 0.0,
+        PitchStiffnessNmRad: 0.0,
+        YawStiffnessNmRad: 0.0,
+        // Numerically finite passive rotational damping; zero control-moment ceilings below still
+        // prevent the envelope from behaving like an aeroplane or responding to combat guidance.
+        RollDampingNms: 1.0,
+        PitchDampingNms: 1.0,
+        YawDampingNms: 1.0,
+        RollMomentMaxNm: 0.0,
+        PitchMomentMaxNm: 0.0,
+        YawMomentMaxNm: 0.0,
+        CYBeta: 0.0,
+        WingSpanM: 114.5,
+        PositiveStructuralLimitG: 1.2,
+        MaxPerformFraction: 0.0,
+        MaxThrustFraction: 0.0,
+        FuelFreeMassKg: HighAltitudeBalloonTotalMassKg,
+        BuoyantVolumeM3: HighAltitudeBalloonVolumeM3);
 
     /// The KJ-500-class AEW&C: how the PLA sees and coordinates. Enormous, slow, turboprop,
     /// structurally ~2.5G and it cannot dodge. Killing it blinds a strike package worth 100x
@@ -645,121 +713,47 @@ public static class FlightModel {
         GenericMilitaryFuelFlowLbPerMinute: 6.00,
         GenericAfterburnerFuelFlowLbPerMinute: 0.00);
 
-    /// Design bay load for the preferred four-cell gun-drone packaging (trade C).
-    /// <see cref="RapierPublicDataSurrogate"/> fuel-free / gross masses include this count.
-    public const int RapierDesignGunDroneCount = 4;
+    /// Rapier v2 is a gun-only balloon interceptor. The legacy drone bay is deleted, not hidden.
+    public const int RapierDesignGunDroneCount = 0;
 
     public static double RapierDesignStowedGunDroneMassKg =>
         RapierDesignGunDroneCount * RapierGunDroneSurrogate.MassKg;
 
-    /// Airframe-only fuel-free mass (no stowed drones). Published
-    /// <see cref="RapierPublicDataSurrogate"/> fuel-free adds the design bay load.
-    public const double RapierAirframeFuelFreeMassKg = 5_150.0;
+    /// Fuel-free mass comes from the canonical shape-first mass model.
+    public static double RapierAirframeFuelFreeMassKg => RapierV2Design.EmptyMassKg;
 
-    /// RAPIER — the 2030s high-altitude turbine-based combined-cycle interceptor, fictional
-    /// public-data surrogate.
+    /// RAPIER v2 — a fictional, shape-known Mach-4.2 balloon interceptor. The canonical exterior,
+    /// mass properties, inlet, drag closure, thermal zones and fixed-site requirements live in
+    /// airframes/rapier.v2.json and its deterministic engineering artifact. This reduced-order
+    /// runtime binds to those values; it does not maintain a second aircraft on the side.
     ///
-    /// Geometry-of-record: airframes/rapier.v1.json · bible: docs/airframes/rapier/ ·
-    /// realism audit: docs/airframes/rapier/REALISM-AND-OVERPERFORMANCE.md
-    ///
-    /// Named for a thrusting weapon rather than a slashing one: it commits to a single lunge and
-    /// spends the rest of the engagement recovering. That is the doctrine, not a limitation.
-    ///
-    /// CMC where the heat is (SkinTemperatureLimitK = 1473.15; SiC/SiC hot structure), ordinary
-    /// composite everywhere else — stainless + Mach-4 is a superseded airframe story. No windscreen;
-    /// reclined occupant in an opaque escape pod; catapult from deep rear basing; hook recovery.
-    /// Climbs on a ceramic-matrix turbine core and blends into a variable-geometry ram duct past
-    /// Mach 2. Mission branding still says a thin-air Mach-4 dash; treat that as aspirational
-    /// fiction until propulsion is retuned — OFT energy-ladder peaks ~M3.69; map DesignMach = 2.6
-    /// is a cycle normaliser only (see TurboRamjetPerformanceMap).
-    ///
-    /// SIZED FOR THE FIGHT IT PICKS, NOT FOR SUSTAINED COMBAT. Wing loading is high because cruise
-    /// beats low-speed manoeuvre for this mission, so its enormous instantaneous G exists only in a
-    /// fast, low box at the bottom of a dive. Everything about it is a single decisive pass: it can
-    /// point at anything once, and then it is slow, low and out of ideas. That is the design, not a
-    /// shortfall — an opponent flying one is beaten by surviving the pass and then hunting it.
-    ///
-    /// ThrustMaxN is SEA-LEVEL STATIC DRY thrust of the turbine core. TurboRamjetPerformanceMap adds
-    /// the ram contribution on top as Mach rises; MaxThrustFraction is the augmentor lever stop.
-    ///
-    /// Mass, polar, inertias, derivatives and the engine are transparent mission surrogates, not
-    /// claims about any real aircraft or engine. Numbers derive from a Codex sizing pass and are
-    /// PREDICTIONS until measured against AircraftSim.
+    /// The aircraft is catapult-launched, climbs before accelerating, makes one internal-gun pass,
+    /// and recovers on 3,048 m of runway using midpoint arresting gear. SiC/SiC protects local hot
+    /// edges, while the ordinary insulated warm-panel zone is the binding M4 thermal clock.
     public static readonly AircraftParams RapierPublicDataSurrogate = new(
-        // 5,150 kg airframe + 1,440 kg design four-drone bay (4 × RapierGunDroneSurrogate)
-        // + 4,500 kg fuel. Session mass sync sheds drone mass as cells empty / missions that
-        // launch with fewer drones. See docs/airframes/rapier/60-armament-and-drones.md trade C.
-        //
-        // The weight is affordable because every landing is an automation-assisted trap: the
-        // aircraft launches heavy off a catapult and arrives light, so the gear and the wire only
-        // ever see recovery weight.
-        MassKg: RapierAirframeFuelFreeMassKg + RapierDesignStowedGunDroneMassKg + 4_500.0,
-        WingAreaM2: 18.0,                     // high wing loading: cruise beats low-speed G
-        // 84 kN dry keeps augmented T/W at design gross (four drones) ≤ family cap 1.20.
-        // Prior 85 kN on a clean 9650 kg card read ~1.39 wet — past Identity aspiration.
-        // 11,240 lbf sea-level static DRY turbine core, sized by three constraints at once.
-        // Was 18,883 lbf, a dry thrust-to-weight of 1.30 on the empty airframe -- above an F-22
-        // with two F119s -- which climbed VERTICALLY holding M0.9 once fuel burned down, and
-        // whose F110-class core would have been 28% of airframe mass before fuel or drones.
-        //
-        // 11,240 lbf is 17% of airframe mass so it physically fits 13 m; the ram carries the
-        // aircraft past M4 at 21,500 m, inside the CMC's M5.4 screen; and it is the least thrust
-        // that still holds the M2.6 design cruise and accelerates like a fast aeroplane. Dropping
-        // to 8,880 lbf closed the energy gate but decayed to M2.27 and gained only 63 m/s in 30 s
-        // -- "this does not feel like a fast aircraft", as the test puts it. The energy game is
-        // bought with wing instead, below.
-        //
-        // The resulting dry T/W of 0.46 loaded is near a MiG-25's 0.40 and that is the point:
-        // this is catapult-launched from a buried gallery, so it never needed to self-launch.
-        // The thrust arrives with Mach, which is what a turbo-ramjet is for.
-        ThrustMaxN: 50_000.0,                 // sea-level static DRY turbine core
-        CD0: 0.0175, InducedK: 0.105,         // area-ruled body, small high-speed wing
-        // 1.35 was a manoeuvring-wing number on a Mach-4 planform. The same thin, sharp,
-        // low-aspect wing that survives M4 is poor at making lift slowly, which is why the SR-71
-        // and the F-104 both land near 175 kt despite being nothing alike. At 394 kg/m2 this
-        // aircraft has essentially the SR-71's wing loading, so it should approach like one:
-        // CLmax 1.0 puts Vs near 154 kt and Vref near 200 kt. The fast approach is the price of
-        // the supersonic wing, and feeling that is the point.
-        // Slender cranked delta, AR 3.0, CLAlpha 3.60/rad, D-21-like. CLmax IS an approach-angle
-        // choice here, since CL = CLAlpha * alpha: 1.35 is 21.5 deg, 1.00 is 15.9 deg. A delta
-        // reaches these on vortex lift and does not break down until roughly 30-35 deg.
-        //
-        // 1.47 is chosen, not inherited. Cruise and acceleration want MORE thrust; the energy
-        // game wants LESS. The wing resolves it: instantaneous G is bought with CLmax without
-        // touching cruise drag, so the engine stays big enough to hold M2.6 while
-        // AeroMaxG - SustainedG lands at exactly 3.00 G at combat weight.
-        //
-        // 23.5 degrees is a real delta approach, and it is wanted twice over: the recovery is
-        // touchdown, aerobrake on the delta, then a wire mid-field, so high alpha is the BRAKE as
-        // well as the approach attitude. A slender delta carries this on vortex lift and does not
-        // break down until roughly 30-35 degrees.
-        CLMax: 1.47, CLMin: -0.60,
+        MassKg: RapierV2Design.GrossMassKg,
+        WingAreaM2: RapierV2Design.ReferenceAreaM2,
+        // Sea-level static turbine-core rating; the canonical inlet supplies the high-Mach stream.
+        ThrustMaxN: RapierV2Design.SeaLevelStaticDryThrustN,
+        // The runtime's transonic multiplier equals 1.6348 at M4.2, so its base coefficient is
+        // backed out from the canonical design-point zero-lift drag rather than independently fit.
+        CD0: RapierV2Design.DesignPointZeroLiftDragCoefficient
+            / (1.0 + 12.0 * System.Math.Pow(1.18 - 0.95, 2.0)),
+        InducedK: RapierV2Design.ReducedOrderInducedDragK,
+        CLMax: 1.35, CLMin: -0.55,
         RollRateMaxRad: 2.60, BankTau: 0.22,
-        // Thin sharp supersonic wing: the rise is real but it is meant to be pushed through, not
-        // stopped at. Contrast the subsonic sibling, which is deliberately walled at M0.85.
-        // Peaks just past M1.1 and holds: this wing is meant to be pushed THROUGH the rise, not
-        // stopped by it. K=38 gives roughly a 3x zero-lift drag penalty at the peak.
-        // The transonic bump. Moving its peak to bleed off top speed also kills cruise -- at
-        // peak 1.40 the aircraft could not hold its own M2.6 design cruise, decaying to M2.04 --
-        // because it raises drag across the whole supersonic range. High-Mach drag is a separate
-        // term below.
-        MCrit: 0.94, WaveDragK: 20.0, WaveDragPeakMach: 1.18,
-        // Past the transonic peak the old model held drag CONSTANT: the factor was identical at
-        // M1.18 and M3.7. Nothing could ever catch thrust, so the aircraft was a rocket to M3.7
-        // and was stopped only by the ram spill ramp zeroing thrust between M3.3 and M3.8 -- the
-        // "hidden schedule" that ramp's own comment says must not be the limiter. This term bites
-        // only above the onset, so the design cruise at M2.6 is untouched and the dash tops out
-        // on thrust against drag instead.
-        HighMachDragOnset: 2.7, HighMachDragK: 0.3,
+        MCrit: 0.95, WaveDragK: 12.0, WaveDragPeakMach: 1.18,
+        // The canonical artifact closes M4.2 directly. Do not add a second top-speed schedule.
+        HighMachDragOnset: RapierV2Design.DesignMach, HighMachDragK: 0.25,
         SpoolUpTau: 1.40, SpoolDownTau: 0.90,
-        CLAlpha: 3.60,                        // low aspect ratio
+        CLAlpha: RapierV2Design.LowSpeedLiftCurveSlopePerRad,
         PitchModeFreq: 3.4, PitchModeDamp: 0.46,
         YawModeFreq: 1.7, YawModeDamp: 0.26,
         RollModeFreq: 4.4, RollModeDamp: 0.70,
         BuffetGain: 0.45,
-        // Rescaled from a ~7.85 t geometry seed to design gross 11,090 kg (×11090/7850).
-        // Pass 2 realism: prior inertias left roll/pitch response too light for the mass card.
-        IxxKgM2: 13_423.0, IyyKgM2: 87_592.0, IzzKgM2: 96_071.0,
+        IxxKgM2: RapierV2Design.RollInertiaKgM2,
+        IyyKgM2: RapierV2Design.PitchInertiaKgM2,
+        IzzKgM2: RapierV2Design.YawInertiaKgM2,
         RollStiffnessNmRad: 320_000.0, PitchStiffnessNmRad: 900_000.0,
         YawStiffnessNmRad: 260_000.0,
         RollDampingNms: 105_000.0, PitchDampingNms: 380_000.0, YawDampingNms: 160_000.0,
@@ -768,7 +762,7 @@ public static class FlightModel {
         CYBeta: 0.60,
         ClBeta: -0.048, ClP: -0.480, ClR: 0.085,
         ClDeltaA: 0.135, ClDeltaR: 0.026,
-        LateralDerivativeProfileId: "high-altitude-interceptor-fictional-tbcc-v2",
+        LateralDerivativeProfileId: "rapier-shape-first-v2",
         ManualPitchRateMaxRad: 0.70, ManualPitchAngleTau: 0.50,
         FightRollRateMaxRad: 2.90,
         CompatibilityRollRateMaxRad: 2.40, CompatibilityBankTau: 0.22,
@@ -784,38 +778,16 @@ public static class FlightModel {
         // old 1 G, while attitude feedback prevents speed/AoA changes wandering the nose. Signed
         // bank compensation also gives the correct negative-G trim inverted.
         NeutralFlightPathHold: FlightPathHoldConfig.Rapier,
-        // These are structural/control ceilings, not promised lift. At sufficient q the reclined
-        // occupant may command all 12 G. Space still releases the normal-law incidence boundary
-        // for low-q post-stall manoeuvring, but it cannot command through the aircraft's declared
-        // structural limit. In the FL700/M3.5 dash, Mach-scheduled lift slope and the small wing
-        // bind first, leaving only a few G of aerodynamic authority.
-        PositiveStructuralLimitG: 12.0, MaxPerformFraction: 1.0,
+        // A long, hot interceptor is not a 12-G dogfighter. Aerodynamics bind first in the dash.
+        PositiveStructuralLimitG: 6.5, MaxPerformFraction: 1.0,
         NormalPullUsesMaxPerformance: true,
-        PositiveOverrideLimitG: 12.0,
+        PositiveOverrideLimitG: 6.5,
         DynamicPressureScheduledPostStallOverride: true,
-        // The augmentor stays. Removing it closed the energy-game gate but cost 35% of usable
-        // thrust, and the aircraft then gained only 87 m/s in 30 s at 3,000 m -- "this does not
-        // feel like a fast aircraft". Cruise and acceleration are the felt experience; the energy
-        // gap is a gate threshold, and the two are in genuine tension on this airframe.
-        MaxThrustFraction: 1.55,              // augmentor lever stop
-        // 1200 C CMC MATERIAL-CAPABILITY SURROGATE. Additively manufactured SiC/SiC ceramic matrix
-        // composite where the heat is, ordinary composite everywhere else. This is extrapolation
-        // rather than invention — CMC already flies in engine hot sections — but it is not a
-        // qualified Rapier inlet, bondline, tank, or whole-airframe operating temperature.
-        //
-        // Screening the hottest external locations against true stagnation temperature gives about
-        // M5.37 at FL700 (the old turbulent-flat-skin calculation said M5.7). The engine/inlet
-        // envelope binds first in the flown M3.6--4.0 regime. Do not read the unused CMC headroom as
-        // a proven sustained-M4 article: component qualification curves do not exist for this
-        // fictional aircraft, and the OFT energy ladder peaks around M3.69.
-        //
-        // Steel was the previous answer at 320 C and M3.14. It was cheap and weldable, the MiG-25
-        // trade, but it made an aircraft nobody would be impressed by. CMC costs more; the cost
-        // layer already assumed it, since 2 percent of structural life at 180,000 dollars implies a
-        // roughly 9 million dollar airframe.
-        SkinTemperatureLimitK: 1473.15,
-        AerothermalLimitReference:
-            AerothermalLimitReferenceKind.StagnationTemperature,
+        // Travel above MIL augments only the turbine stream; inlet-owned ram thrust is never scaled.
+        MaxThrustFraction: RapierV2Design.MaximumAugmentedThrustRatio,
+        // CMC survives at the nose and inlet, but the binding integrated warm panel is much cooler.
+        SkinTemperatureLimitK: RapierV2Design.BindingThermalLimitK,
+        AerothermalLimitReference: RapierV2Design.BindingThermalReference,
         // No thrust vectoring: hot actuators, mass, maintenance and cost.
         PitchThrustVectorMaxRad: 0.0, PitchThrustVectorMomentArmM: 0.0,
         PitchThrustVectorAlphaGain: 0.0, PitchThrustVectorRateGainSeconds: 0.0,
@@ -838,23 +810,22 @@ public static class FlightModel {
         GunneryLateralAssistYawGain: 1.6,
         GunneryLateralAssistMaxYaw: 0.35,
         HighLiftDragOnsetFraction: 0.88, HighLiftDragK: 3.80,
-        WingSpanM: 7.35,                      // sqrt(AR 3.0 * 18 m2)
+        WingSpanM: RapierV2Design.SpanM,
         PostStallAlphaCommandRad: 0.42,
         PostStallDragMax: 0.95,
         StallRollCoupling: 0.18, StallYawCoupling: 0.28,
         StallPitchBreakNm: 60_000.0,
         HighAlphaModel: HighAlphaModelKind.Generic,
         PropulsionModel: PropulsionModelKind.TurboRamjetPublicDataSurrogate,
-        FuelFreeMassKg: RapierAirframeFuelFreeMassKg + RapierDesignStowedGunDroneMassKg,
-        // The first mission calibration returned with 2,682 lb from a 4,400 lb alert load: the
-        // profile was tactically free. These effective anchors double that measured burn and put
-        // the authored Mach-4 sortie near its 900 lb minimum reserve at the trap. They remain a
-        // transparent surrogate until a component engine deck replaces the whole map.
-        GenericIdleFuelFlowLbPerMinute: 6.0,
-        GenericMilitaryFuelFlowLbPerMinute: 86.0,
-        GenericAfterburnerFuelFlowLbPerMinute: 270.0,
+        FuelFreeMassKg: RapierV2Design.EmptyMassKg,
+        GenericIdleFuelFlowLbPerMinute: RapierV2Design.IdleFuelFlowLbPerMinute,
+        GenericMilitaryFuelFlowLbPerMinute: RapierV2Design.MilitaryFuelFlowLbPerMinute,
+        GenericAfterburnerFuelFlowLbPerMinute: RapierV2Design.AugmentedFuelFlowLbPerMinute,
         SupersonicLiftSlopeSchedule: true,
-        AerodynamicModel: AerodynamicModelKind.RapierCrankedDeltaPublicDataSurrogate);
+        AerodynamicModel: AerodynamicModelKind.RapierCrankedDeltaPublicDataSurrogate,
+        ApproachFlapCLIncrement: 0.18,
+        ApproachStallMargin: 1.18,
+        AerothermalAdiabaticRiseFraction: RapierV2Design.BindingThermalRiseFraction);
 
     public static readonly AircraftParams F22APublicDataSurrogate = new(
         MassKg: 27700.0,
@@ -1541,6 +1512,13 @@ public static class FlightModel {
         double dragAccel = q * p.WingAreaM2 * cd / r.Mass;
         double usableThrustN = System.Math.Max(0.0, netThrustN);
         double thrustAccel = usableThrustN / r.Mass;
+        // A free balloon gets the actual displaced-air force, not a frozen altitude or a constant
+        // gravity discount. Because rho changes with height this naturally restores the envelope
+        // toward its density altitude. Ordinary aircraft publish zero volume and remain bit-exact.
+        double buoyancyAccel = p.BuoyantVolumeM3 > 0.0
+            ? rho * p.BuoyantVolumeM3 * G0 / r.Mass
+            : 0.0;
+        var gravityAndBuoyancy = new Vec3D(0.0, G0 - buoyancyAccel, 0.0);
         double pitchThrustVectorAngle = double.IsFinite(pitchThrustVectorAngleRad)
             ? System.Math.Clamp(pitchThrustVectorAngleRad, -p.PitchThrustVectorMaxRad,
                 p.PitchThrustVectorMaxRad)
@@ -1590,11 +1568,12 @@ public static class FlightModel {
             - bodyUp * System.Math.Sin(pitchThrustVectorAngle);
         var accel = useF22BodyAxisForces
             ? thrustDirection * thrustAccel + aerodynamicAccel
-                + sideDir * sideAccel - new Vec3D(0, G0, 0)
+                + sideDir * sideAccel - gravityAndBuoyancy
             : thrustDirection * thrustAccel - vhat * dragAccel + liftDir * liftAccel
-                + sideDir * sideAccel - new Vec3D(0, G0, 0);
+                + sideDir * sideAccel - gravityAndBuoyancy;
         return new AeroResult(accel, liftDir, vAir, alpha, beta, liftAccel / G0, q,
-            pitchThrustVectorAngle, pitchThrustVectorMoment);
+            pitchThrustVectorAngle, pitchThrustVectorMoment,
+            q * p.WingAreaM2 * cd);
     }
 
     static double LegacyPitchThrustVectorAngle(in RawState r, in PilotCommand c,

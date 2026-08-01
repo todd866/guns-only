@@ -8,7 +8,7 @@ const SURFACES = Object.freeze([
 ]);
 const RECOVERIES = Object.freeze([
   "FLYING", "TRAP", "BOLTER", "HARD LANDING", "RAMP STRIKE", "IN THE WATER",
-  "ARRESTMENT FAILED",
+  "ARRESTMENT FAILED", "ROLLING OUT", "BARRIER ENGAGEMENT",
 ]);
 const HOOKS = Object.freeze([
   "NOT CONTACTED", "ENGAGED", "HOOK SKIP", "IN-FLIGHT ENGAGEMENT", "MISSED WIRES",
@@ -504,6 +504,15 @@ function carrierContactLabel(sample) {
 function physicalOutcomeFor(samples, impactIndex) {
   const impact = samples[impactIndex];
   const final = samples.at(-1);
+  const barrier = samples.slice(impactIndex)
+    .find((sample) => Math.round(finite(sample.recovery)) === 8);
+  if (barrier) {
+    const hook = enumText(HOOKS, barrier.hook);
+    const arrival = hook === "MISSED WIRES"
+      ? "after the hook missed the arresting wires"
+      : "after no arresting-wire catch was recorded";
+    return `raised barrier engagement ${arrival}; the barrier retained the aircraft aboard`;
+  }
   const contacts = [];
   for (let index = impactIndex; index < samples.length; index += 1) {
     const solid = enumText(CARRIER_SOLIDS, samples[index].carrierSolid);

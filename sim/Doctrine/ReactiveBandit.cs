@@ -182,6 +182,11 @@ public sealed class ReactiveBandit :
     /// player" followed it forever. 8 NM is comfortably outside any guns geometry while still
     /// well inside the ranges the corpus shows a live fight recovering from.
     const double AbandonChaseRangeM = 15_000.0;
+    /// A fresh Bracket/Extend order may recover mutual support beyond the independent pilot's
+    /// 8 NM abandon boundary, but it is not permission to follow a departing player forever.
+    /// Twice the ordinary ceiling comfortably contains the reproduced 13 NM support gap while
+    /// retaining a finite theatre guard for RTB/departure tracks.
+    const double FormationSupportAbandonChaseRangeM = 2.0 * AbandonChaseRangeM;
     const double MergeSpawnClearanceM = 600.0;
     const double LowTargetClearanceM = 400.0;
     const double LowBlockCaptureClearanceM = 480.0;
@@ -190,7 +195,6 @@ public sealed class ReactiveBandit :
     const double TerrainRecoveryRollSeconds = 1.0;
     const double DefendSeconds = 3.4;
     const double DefendCooldownSeconds = 3.8;
-
     // Uneven timing, direction, and G make the break readable as a jink rather than an orbit.
     // This is a fixed deterministic sequence, advanced only while a real defensive threat exists.
     static readonly double[] JinkDurations = { 0.92, 0.63, 1.08, 0.77, 0.86 };
@@ -996,8 +1000,15 @@ public sealed class ReactiveBandit :
                 // a different hat. The fight volume is only the right target when the player is
                 // already close and it is the BANDIT that has strayed out of bounds.
                 double leashRangeM = Geometry.Range(State, player);
-                LastCommand = leashRangeM > ReengageRangeM
-                        && leashRangeM <= AbandonChaseRangeM
+                bool sharedFightSupport = (EffectiveFormationRole is
+                    FormationTacticalRole.Bracket or FormationTacticalRole.Extend)
+                    && leashRangeM <= FormationSupportAbandonChaseRangeM;
+                // A fresh support order extends the ordinary abandon ceiling enough to recover
+                // the reproduced 13 NM mutual-support gap, but the separate finite support guard
+                // still rejects a coordinator that keeps refreshing while the player departs.
+                LastCommand = sharedFightSupport
+                        || (leashRangeM > ReengageRangeM
+                            && leashRangeM <= AbandonChaseRangeM)
                     ? ReengageCommand(player)
                     : ReturnCommand();
                 Tactic = BanditTactic.Return;
@@ -1017,8 +1028,12 @@ public sealed class ReactiveBandit :
         CancelPendingLookaheadPlan();
         SelectTactic(player);
         LastCommand = Tactic switch {
-            BanditTactic.Defend => DefendCommand(player),
+            BanditTactic.Defend => DefendCommand(),
             BanditTactic.Energy => EnergyCommand(player),
+            BanditTactic.Return when (EffectiveFormationRole is
+                FormationTacticalRole.Bracket or FormationTacticalRole.Extend)
+                && Geometry.Range(State, player) <= FormationSupportAbandonChaseRangeM =>
+                    ReengageCommand(player),
             BanditTactic.Return => ReturnCommand(),
             _ when _profile.LowBlockDoctrine == LowBlockDoctrine.BoomAndZoom && lowTarget
                 => CompetentLowBlockCommand(player, hasLowAttackPlan, lowAttackPlan),
@@ -1048,6 +1063,13 @@ public sealed class ReactiveBandit :
         var own = State;
         double radius = HorizontalDistance(own.Position, _fightCentre);
 
+        // KEEP DEFENDING WHILE THE ATTACKER IS STILL THERE. The break used to end after DefendSeconds
+        // (3.4 s) and then a cooldown blocked re-entry, so a human who stayed on its six watched it
+        // stop breaking and settle into a trackable turn -- "barely defends". While it is defending
+        // AND the attacker is still a gun threat, roll the defence window forward so the break
+        // continues (the jink sequence keeps advancing) instead of expiring under the guns.
+        if (Tactic == BanditTactic.Defend && T >= _defendUntil && IsGunThreat(player))
+            _defendUntil = T + DefendSeconds;
         if (Tactic == BanditTactic.Defend && T < _defendUntil) return;
         if (Tactic == BanditTactic.Defend) {
             _defendCooldownUntil = T + DefendCooldownSeconds;
@@ -1416,7 +1438,7 @@ public sealed class ReactiveBandit :
         return independentAim;
     }
 
-    PilotCommand DefendCommand(in ActorObservation player) {
+    PilotCommand DefendCommand() {
         while (T >= _nextJinkAt && T < _defendUntil) {
             _jinkIndex = (_jinkIndex + 1) % JinkDurations.Length;
             _nextJinkAt += JinkDurations[_jinkIndex];
@@ -1424,44 +1446,13 @@ public sealed class ReactiveBandit :
 
         int direction = _breakSign * JinkDirections[_jinkIndex];
         double bank = direction * 1.18;
+        // This simple path serves the deliberately beatable Novice tier. Skilled production tiers
+        // defend through LookaheadCommand's airframe-limited max-G candidates; keeping that policy
+        // in its real execution path avoids a dead second ceiling here.
         double g = System.Math.Min(
             JinkG[_jinkIndex],
             AvailableAcquireG(safetyReserve: false));
         double throttle = _defensivePower;
-
-        if (Skill != PilotSkill.Novice) {
-            // Put the lift vector out of the attack plane and alternate the across component with
-            // the deterministic jink sequence. This produces a break/reverse with real vertical
-            // displacement, while the ordinary AircraftSim still decides the G and energy actually
-            // available. A closing attacker gets a brief honest power chop to force the overshoot;
-            // once closure is gone the normal defensive power schedule rebuilds energy.
-            Vec3D attackerLos = player.Position - State.Position;
-            double rangeM = attackerLos.Length;
-            Vec3D attackerLosDir = rangeM > 1.0
-                ? attackerLos * (1.0 / rangeM)
-                : State.ForwardDir() * -1.0;
-            Vec3D across = new Vec3D(0.0, 1.0, 0.0).Cross(attackerLosDir);
-            if (across.Length < 1e-6)
-                across = new Vec3D(1.0, 0.0, 0.0);
-            else
-                across = across.Normalized();
-            Vec3D breakDirection =
-                new Vec3D(0.0, 0.75, 0.0) + across * direction;
-            breakDirection -= attackerLosDir
-                * breakDirection.Dot(attackerLosDir);
-            if (breakDirection.Length > 1e-6) {
-                Vec3D breakAim = State.Position
-                    + breakDirection.Normalized() * System.Math.Max(900.0, rangeM);
-                bank = System.Math.Clamp(
-                    Geometry.BankToPlaceLiftVectorOn(State, breakAim),
-                    -1.35, 1.35);
-            }
-            Vec3D playerToOwn = attackerLosDir * -1.0;
-            double closureMps = (player.VelocityVector()
-                - State.VelocityVector()).Dot(playerToOwn);
-            if (closureMps > 25.0)
-                throttle = System.Math.Min(_maximumThrottle, 0.35);
-        }
 
         // Near the surface, keep the hard turn but bias it upward rather than pulling into the
         // ground. The floor is the LOCAL one: sample both here and along the escape direction so
@@ -1707,11 +1698,34 @@ public sealed class ReactiveBandit :
     }
 
     Vec3D KeepAimInFightVolume(in Vec3D aim) {
-        var horizontal = new Vec3D(aim.X - _fightCentre.X, 0.0, aim.Z - _fightCentre.Z);
+        // A SUPPORT FIGHTER'S ARENA IS THE FIGHT, NOT ITS SPAWN. This clamp used to pin every aim
+        // to within 4.7 km of _fightCentre = the bandit's OWN spawn. For the primary that is fine
+        // (the player stays with it, so its bubble is where the fight is). For a WINGMAN it is the
+        // whole bug: after the opening bracket/extend displaces it, the player maneuvers off with
+        // the primary, the fight drifts past 4.7 km of the wingman's spawn, and then Reengage/
+        // Acquire/Energy -- ALL of which route through here -- get clamped back toward that empty
+        // spawn bubble instead of the player. The wingman flies home to nowhere and the range opens
+        // without bound (telemetry: 0.7 -> 13 NM, zero mutual support). Diagnosed by an independent
+        // review 2026-08-01. So for a support role (Bracket/Extend -- which EffectiveFormationRole
+        // only reports when the shared contact is valid, finite and fresh) the clamp recentres on
+        // the SHARED CONTACT (the player everyone is fighting), up to the finite formation-support
+        // abandon range. Beyond that it returns to _fightCentre even if the coordinator keeps a
+        // fresh role alive, preventing a departing player from pulling both opponents across the
+        // theatre. Pressure (the primary) and Independent bandits keep _fightCentre, so nothing
+        // about the primary changes. When the aim is already inside the radius the result is
+        // aim.X/aim.Z regardless of centre, so every close-range formation test stays bit-identical.
+        bool supportFightInRange = (EffectiveFormationRole is FormationTacticalRole.Bracket
+                or FormationTacticalRole.Extend)
+            && Geometry.Range(State, _formationDirective.SharedContact)
+                <= FormationSupportAbandonChaseRangeM;
+        Vec3D centre = supportFightInRange
+            ? _formationDirective.SharedContact.Position
+            : _fightCentre;
+        var horizontal = new Vec3D(aim.X - centre.X, 0.0, aim.Z - centre.Z);
         if (horizontal.Length > ReturnRadiusM - 500.0)
             horizontal = horizontal.Normalized() * (ReturnRadiusM - 500.0);
-        double x = _fightCentre.X + horizontal.X;
-        double z = _fightCentre.Z + horizontal.Z;
+        double x = centre.X + horizontal.X;
+        double z = centre.Z + horizontal.Z;
         double floorY = LocalFloorM(x, z) + 180.0;
         double y = System.Math.Clamp(aim.Y, floorY,
             System.Math.Max(floorY, _ceilingM - 180.0));
@@ -2343,7 +2357,7 @@ public sealed class ReactiveBandit :
             System.Math.Sin(predGamma),
             System.Math.Cos(predChi) * System.Math.Cos(predGamma)) * predSpeed;
         double termRange = Geometry.Range(terminal, terminalPlayer);
-        double termAngle = GunAngleOff(terminal, terminalPlayer);
+        double termAngle = BanditFireControl.NoseErrorRad(terminal, terminalPlayer);
         const double idealRangeM = 450.0; // centre of the gun band: pull the fight inside firing range
 
         // Nose-on shaping is expressed in physical gun-cone widths. The previous per-radian
@@ -2415,9 +2429,5 @@ public sealed class ReactiveBandit :
         if (maxY > scoreCeilingM - 200.0)
             score -= 0.02 * (maxY - (scoreCeilingM - 200.0));
         return score;
-    }
-
-    static double GunAngleOff(in AircraftState own, in ActorObservation contact) {
-        return BanditFireControl.NoseErrorRad(own, contact);
     }
 }

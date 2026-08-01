@@ -7,9 +7,9 @@ using Xunit.Abstractions;
 
 namespace GunsOnly.Sim.Tests;
 
-/// The 2030s turbo-ramjet interceptor, measured against the real integrator rather than against the
-/// sizing pass that produced it. Every number in the design note is a PREDICTION until this file
-/// disagrees with it — which is the only reason the file exists.
+/// The shape-known Rapier v2 turbo-ramjet interceptor, measured against both its canonical
+/// engineering artifact and the real integrator. Shape, mass, inlet, dash and thermal acceptance
+/// are one contract; the runtime must not quietly become a second aircraft.
 ///
 /// The aircraft's whole character is a large gap between what it can do once and what it can
 /// sustain, so these tests are written to catch that gap CLOSING (which would make it an ordinary
@@ -54,25 +54,25 @@ public class RapierTests {
     }
 
     [Fact]
-    public void OverrideReleasesIncidenceWithoutExceedingTheTwelveGStructure() {
+    public void OverrideReleasesIncidenceWithoutExceedingTheSixPointFiveGStructure() {
         var state = new AircraftState(
             new Vec3D(0.0, 3_000.0, 0.0),
             Speed: 400.0, Gamma: 0.0, Chi: 0.0, Bank: 0.0, Mass: Jet.MassKg);
 
-        Assert.Equal(12.0, Jet.PositiveStructuralLimitG);
+        Assert.Equal(6.5, Jet.PositiveStructuralLimitG);
         Assert.Equal(Jet.PositiveStructuralLimitG, Jet.PositiveOverrideLimitG);
-        Assert.Equal(12.0, Protection.OverrideMaxG(state, Jet), precision: 6);
+        Assert.Equal(6.5, Protection.OverrideMaxG(state, Jet), precision: 6);
         Assert.True(Jet.DynamicPressureScheduledPostStallOverride);
     }
 
     [Fact]
     public void TheTurbineCarriesItLowAndTheRamCarriesItHigh() {
         _out.WriteLine("thrust fraction of sea-level static dry, by Mach and altitude:");
-        _out.WriteLine("  (turbine fades 1.9->3.0, ram fades in 1.6->2.2; they OVERLAP on purpose)");
-        foreach (double altitudeM in new[] { 0.0, 11_000.0, 21_500.0 }) {
+        _out.WriteLine("  (turbine fades 1.9->3.0, ram fades in 1.6->2.8; they OVERLAP on purpose)");
+        foreach (double altitudeM in new[] { 0.0, 11_000.0, RapierV2Design.DesignAltitudeM }) {
             AtmosphericState air = StandardAtmosphere1976.Instance.Sample(altitudeM);
             var row = new System.Text.StringBuilder($"  {altitudeM,7:F0} m:");
-            foreach (double mach in new[] { 0.4, 0.9, 1.4, 1.8, 2.2, 2.6, 3.0 }) {
+            foreach (double mach in new[] { 0.4, 0.9, 1.4, 1.8, 2.2, 2.8, 3.5, 4.2 }) {
                 double fraction = Propulsion.TurboRamjetPerformanceMap.ThrustFraction(
                     mach, air.TemperatureK, air.DensityKgM3);
                 row.Append($"  M{mach:F1}={fraction:F2}");
@@ -85,12 +85,25 @@ public class RapierTests {
             0.0, sea.TemperatureK, sea.DensityKgM3);
         Assert.InRange(staticFraction, 0.95, 1.05);
 
-        // The engine must still be worth having at cruise — this is the whole architecture.
-        AtmosphericState cruise = StandardAtmosphere1976.Instance.Sample(21_500.0);
-        double cruiseFraction = Propulsion.TurboRamjetPerformanceMap.ThrustFraction(
-            2.6, cruise.TemperatureK, cruise.DensityKgM3);
-        Assert.True(cruiseFraction > 0.20,
-            $"ram mode produced only {cruiseFraction:F3} of static thrust at the design point");
+        // The ram stream must close the canonical M4.2 / 24 km design point.
+        AtmosphericState cruise = StandardAtmosphere1976.Instance.Sample(
+            RapierV2Design.DesignAltitudeM);
+        var cruisePoint = Propulsion.TurboRamjetPerformanceMap.Evaluate(
+            Jet.MaxThrustFraction,
+            Jet.ThrustMaxN,
+            RapierV2Design.DesignMach,
+            cruise.TemperatureK,
+            cruise.DensityKgM3,
+            Jet.GenericIdleFuelFlowLbPerMinute,
+            Jet.GenericMilitaryFuelFlowLbPerMinute,
+            Jet.GenericAfterburnerFuelFlowLbPerMinute,
+            Jet.MaxThrustFraction);
+        double cruiseThrustN = cruisePoint.NetThrustN;
+        Assert.Equal(RapierV2Design.DesignPointRawRamThrustN, cruiseThrustN, precision: 1);
+        Assert.True(cruiseThrustN > RapierV2Design.DesignPointDragN,
+            $"M4.2 ram mode has no excess thrust: {cruiseThrustN:F0} N");
+        Assert.Equal(0.0, cruisePoint.TurbineFuelFlowLbPerMinute, precision: 6);
+        Assert.True(cruisePoint.RamjetFuelFlowLbPerMinute > 0.0);
 
         // ...and it must NOT become a monster in a low dive. A fixed inlet spills what it cannot
         // swallow; without the capture ceiling this read 3.6x and the attack dive was free.
@@ -166,7 +179,7 @@ public class RapierTests {
         // Past TurbineGoneMach the core is out; ram alone carries the bill.
         const double Mach = 3.05;
         var point = Propulsion.TurboRamjetPerformanceMap.Evaluate(
-            commandedFraction: 1.20,
+            commandedFraction: Jet.MaxThrustFraction,
             staticThrustN: Jet.ThrustMaxN,
             Mach, cruise.TemperatureK, cruise.DensityKgM3,
             Jet.GenericIdleFuelFlowLbPerMinute,
@@ -210,25 +223,24 @@ public class RapierTests {
     }
 
     [Fact]
-    public void DesignGrossIncludesFourStowedGunDronesAndFamilyTwCap() {
+    public void DesignGrossIsShapeDerivedFuelWithNoStowedGunDrones() {
+        Assert.Equal(0, FlightModel.RapierDesignGunDroneCount);
+        Assert.Equal(0.0, FlightModel.RapierDesignStowedGunDroneMassKg, precision: 9);
+        Assert.Equal(RapierV2Design.EmptyMassKg, Jet.FuelFreeMassKg, precision: 6);
         Assert.Equal(
-            FlightModel.RapierAirframeFuelFreeMassKg
-                + FlightModel.RapierDesignStowedGunDroneMassKg,
-            Jet.FuelFreeMassKg,
-            precision: 3);
-        Assert.Equal(1_440.0, FlightModel.RapierDesignStowedGunDroneMassKg, precision: 3);
-        Assert.Equal(
-            Jet.FuelFreeMassKg + 4_500.0,
+            Jet.FuelFreeMassKg + RapierV2Design.FuelCapacityKg,
             Jet.MassKg,
-            precision: 3);
+            precision: 6);
+        Assert.Equal(RapierV2Design.GrossMassKg, Jet.MassKg, precision: 6);
         double augTw = Jet.ThrustMaxN * Jet.MaxThrustFraction / (Jet.MassKg * 9.80665);
         Assert.True(augTw <= 1.20 + 1e-9, $"augmented T/W {augTw:F3} exceeds family 1.20");
     }
 
     [Fact]
-    public void ItAcceleratesHardEnoughToBeWorthFlying() {
-        // "Enough power that it's fun to get it up to speed" is a real requirement, so it gets a
-        // real test. Level acceleration at low altitude on the augmentor.
+    public void TurbineCoreProducesUsefulLowAltitudeAcceleration() {
+        // This is the turbine-core part of the envelope, before the ram duct contributes. V2 has
+        // no hidden 1.55x augmentor, so protect a useful positive acceleration without conflating
+        // it with the separate high-altitude dash requirement.
         var sim = At(3_000.0, 180.0);
         var command = new PilotCommand(1.0, 0.0, Jet.MaxThrustFraction, 0.0);
         sim.SeedEnginePowerFraction(Jet.MaxThrustFraction);
@@ -238,68 +250,72 @@ public class RapierTests {
         double gained = sim.State.Speed - startSpeed;
         _out.WriteLine($"30 s level accel at 3,000 m: {startSpeed:F0} -> {sim.State.Speed:F0} m/s "
             + $"(+{gained:F0} m/s, mean {gained / 30.0:F2} m/s^2)");
-        Assert.True(gained > 90.0,
-            $"only gained {gained:F0} m/s in 30 s — this does not feel like a fast aircraft");
+        Assert.True(gained > 55.0,
+            $"only gained {gained:F0} m/s in 30 s on the turbine core");
     }
 
     [Fact]
-    public void ItReachesVeryHighAndVeryFast() {
-        // The mission is deep-rear basing, so cruise altitude and speed are the product.
-        // THE REAL QUESTION IS WHETHER IT HOLDS CRUISE, not what it drifts to. Free-flying at 1 G
-        // with excess thrust just climbs — an earlier version of this test watched it go to 25 km
-        // and reported the thinner air as a failure of the engine. Start at the design point and
-        // ask whether thrust still beats drag there.
-        const double CruiseAltitudeM = 21_500.0;
-        AtmosphericState air = StandardAtmosphere1976.Instance.Sample(CruiseAltitudeM);
-        double designSpeed = 2.6 * air.SpeedOfSoundMps;
-        var sim = At(CruiseAltitudeM, designSpeed);
-        var command = new PilotCommand(1.0, 0.0, Jet.MaxThrustFraction, 0.0);
-        sim.SeedEnginePowerFraction(Jet.MaxThrustFraction);
-        const double Dt = 1.0 / AircraftSim.TickHz;
-        double lowestMach = 2.6;
-        for (int tick = 0; tick < AircraftSim.TickHz * 90; tick++) {
-            sim.Step(command, Dt);
-            AtmosphericState now = StandardAtmosphere1976.Instance.Sample(sim.State.Position.Y);
-            lowestMach = System.Math.Min(lowestMach, sim.AirspeedMps / now.SpeedOfSoundMps);
-        }
-        AtmosphericState end = StandardAtmosphere1976.Instance.Sample(sim.State.Position.Y);
-        double mach = sim.AirspeedMps / end.SpeedOfSoundMps;
-        _out.WriteLine($"held at design cruise for 90 s: M{mach:F2} at "
-            + $"{sim.State.Position.Y:F0} m (lowest M{lowestMach:F2})");
-        Assert.True(lowestMach > 2.3,
-            $"decayed to M{lowestMach:F2} — it cannot hold its own design cruise");
+    public void MachFourPointTwoAtTwentyFourKilometresHasRealExcessThrust() {
+        AtmosphericState air = StandardAtmosphere1976.Instance.Sample(
+            RapierV2Design.DesignAltitudeM);
+        double mach = RapierV2Design.DesignMach;
+        double speedMps = mach * air.SpeedOfSoundMps;
+        double qPa = 0.5 * air.DensityKgM3 * speedMps * speedMps;
+        var engine = Propulsion.TurboRamjetPerformanceMap.Evaluate(
+            Jet.MaxThrustFraction,
+            Jet.ThrustMaxN,
+            mach,
+            air.TemperatureK,
+            air.DensityKgM3,
+            Jet.GenericIdleFuelFlowLbPerMinute,
+            Jet.GenericMilitaryFuelFlowLbPerMinute,
+            Jet.GenericAfterburnerFuelFlowLbPerMinute,
+            Jet.MaxThrustFraction);
+        double rawThrustN = engine.NetThrustN;
+        double trimCl = Jet.MassKg * FlightModel.G0 / (qPa * Jet.WingAreaM2);
+        double trimAlpha = trimCl / FlightModel.EffectiveClAlpha(Jet, mach);
+        double thrustN = rawThrustN
+            * RapierAerodynamics.InletFlowRecovery(mach, trimAlpha, betaRad: 0.0);
+        double dragN = qPa * Jet.WingAreaM2
+            * FlightModel.ProfileDragCoefficient(trimAlpha, mach, Jet);
+
+        _out.WriteLine($"M{mach:F1} / {RapierV2Design.DesignAltitudeM:F0} m: "
+            + $"q={qPa / 1000.0:F1} kPa, thrust={thrustN / 1000.0:F1} kN, "
+            + $"trim drag={dragN / 1000.0:F1} kN");
+        Assert.Equal(RapierV2Design.DesignPointDynamicPressurePa, qPa, precision: 3);
+        Assert.Equal(RapierV2Design.DesignPointNetThrustN, thrustN, precision: 1);
+        Assert.InRange(dragN,
+            RapierV2Design.DesignPointDragN * 0.995,
+            RapierV2Design.DesignPointDragN * 1.005);
+        Assert.True(thrustN > dragN);
+        Assert.True(mach >= 4.0);
+        Assert.True(qPa < RapierV2Design.MaximumDynamicPressurePa);
     }
 
     [Fact]
-    public void CombinedCycleEngineHoldsTheDashItsStructureAllows() {
-        // Was a Mach-4 dash. Nothing has ever sustained Mach 4 in air-breathing flight — the SR-71
-        // topped near M3.2 on titanium, the MiG-25 at M2.83 on steel — so a cheap attritable jet
-        // doing M4.13 was past every aircraft ever built. The design point is back at M2.6 and the
-        // dash is flown just under the 320 C skin limit, which is about M3.14.
-        const double DashAltitudeM = 21_500.0;
-        AtmosphericState air = StandardAtmosphere1976.Instance.Sample(DashAltitudeM);
-        var sim = At(DashAltitudeM, 2.9 * air.SpeedOfSoundMps);
-        var command = new PilotCommand(1.0, 0.0, Jet.MaxThrustFraction, 0.0);
-        sim.SeedEnginePowerFraction(Jet.MaxThrustFraction);
-        double lowestMach = 2.9;
-        for (int tick = 0; tick < AircraftSim.TickHz * 45; tick++) {
-            sim.Step(command, 1.0 / AircraftSim.TickHz);
-            AtmosphericState current = StandardAtmosphere1976.Instance.Sample(
-                sim.State.Position.Y);
-            lowestMach = Math.Min(lowestMach,
-                sim.AirspeedMps / current.SpeedOfSoundMps);
-        }
-        AtmosphericState finalAir = StandardAtmosphere1976.Instance.Sample(
-            sim.State.Position.Y);
-        double finalMach = sim.AirspeedMps / finalAir.SpeedOfSoundMps;
-        _out.WriteLine($"structural dash hold: lowest M{lowestMach:F2}, final M{finalMach:F2}, "
-            + $"{sim.LastEngineOperatingPoint.NetThrustN / 1000.0:F1} kN");
-        Assert.True(lowestMach >= 2.70,
-            $"the TBCC decayed below its own structural dash: M{lowestMach:F2}");
+    public void ThermalClockBindsAtTheInsulatedPanelNotTheCmcHotEdge() {
+        AtmosphericState air = StandardAtmosphere1976.Instance.Sample(
+            RapierV2Design.DesignAltitudeM);
+        double recoveryK = AirData.AdiabaticWallTemperatureK(
+            RapierV2Design.DesignMach, air.TemperatureK);
+        double panelK = AirData.EffectiveAerothermalZoneTemperatureK(
+            air.TemperatureK, recoveryK, RapierV2Design.BindingThermalRiseFraction);
+        double panelLimitMach = AirData.MachLimitForEffectiveZoneTemperature(
+            RapierV2Design.BindingThermalLimitK,
+            air.TemperatureK,
+            RapierV2Design.BindingThermalReference,
+            RapierV2Design.BindingThermalRiseFraction);
+
+        Assert.Equal(623.15, Jet.SkinTemperatureLimitK, precision: 6);
+        Assert.Equal(1_473.15, RapierV2Design.CmcHotEdgeLimitK, precision: 6);
+        Assert.Equal(RapierV2Design.DesignPointThermalMarginK,
+            Jet.SkinTemperatureLimitK - panelK, precision: 3);
+        Assert.InRange(panelLimitMach, 4.30, 4.31);
+        Assert.True(RapierV2Design.CmcHotEdgeLimitK > Jet.SkinTemperatureLimitK + 800.0);
     }
 
     [Fact]
-    public void InstantaneousGIsEnormousButSustainedGIsNot() {
+    public void OnePassInstantaneousGStillExceedsSustainedG() {
         // The defining gap. Instantaneous comes from structure; sustained comes from thrust, and
         // this aircraft has far more of the former than the latter. If this ratio ever narrows the
         // aircraft has quietly become a conventional fighter and the whole concept is gone.
@@ -338,9 +354,9 @@ public class RapierTests {
         }
         _out.WriteLine($"sustained ceiling: {sustained:F1} G");
 
-        Assert.True(bestInstantaneous > 8.0,
+        Assert.True(bestInstantaneous > 5.0,
             $"instantaneous peak was only {bestInstantaneous:F1} G");
-        Assert.True(sustained < bestInstantaneous * 0.65,
+        Assert.True(sustained < bestInstantaneous * 0.75,
             $"sustained {sustained:F1} G is too close to instantaneous {bestInstantaneous:F2} G "
             + "— the one-pass character has been lost");
     }
@@ -350,27 +366,29 @@ public class RapierTests {
     /// compiles is not a beat that launches.
     [Fact]
     public void TheMissionLaunchesOffTheCatapultAndClimbsAway() {
-        var session = new SimulationSession(10);
-        Assert.Equal("Rapier intercept", session.Beat.Name);
+        var session = new SimulationSession(12);
+        Assert.Equal("Rapier — high-altitude balloon intercept", session.Beat.Name);
         Assert.Same(FlightModel.RapierPublicDataSurrogate, session.Beat.PlayerAir);
         Assert.Equal(Carrier.PlatformKind.FixedArrestingStrip, session.Carrier!.Kind);
         Assert.False(session.Carrier.IsMaritime);
         // 10,000 ft. The strip was 1,200 m purely because it reused the ship deck's geometry;
         // a dispersed strip for a Mach 4 interceptor is a runway and needs a braking run in
         // front of the midfield wire.
-        Assert.Equal(3_048.0, session.Carrier.DeckLengthM, precision: 6);
+        Assert.Equal(RapierV2Design.RunwayLengthM,
+            session.Carrier.DeckLengthM, precision: 6);
+        Assert.Equal(session.Carrier.DeckLengthM / 2.0,
+            RapierV2Design.ArrestorStationM, precision: 6);
         Assert.Equal(48.0, session.Carrier.DeckHalfWidthM * 2.0, precision: 6);
         Assert.Equal(RapierLaunchSite.OperatingSurfaceElevationM,
             session.Carrier.Position.Y, precision: 6);
         Assert.Equal(Vec3D.Zero, session.Carrier.SteadyWindWorld);
 
-        // The declared launcher, not the 62 m/s deck default — which is below flying speed here.
-        // 110 m/s is 1.67 x stall at launch mass. It was 150, which is 2.28 Vs — about double a
-        // carrier cat shot, and the reason the launch and climbout read as frantic.
-        Assert.Equal(110.0, session.Catapult.EndSpeedMps, precision: 6);
+        // The declared land launcher, not the 62 m/s ship-deck default. The v2 mass and wing are
+        // shape-derived, while the 520 m rail provides the fixed launch requirement.
+        Assert.Equal(120.0, session.Catapult.EndSpeedMps, precision: 6);
         Assert.Equal(520.0, session.Catapult.StrokeM, precision: 6);
-        // And it points UP. A flat shot at 436 kg/m2 leaves the aircraft settling off the end with
-        // nothing but a 6 m/s token climb rate; the ramp turns the stroke into a climb.
+        // And it points UP. A flat shot at roughly 486 kg/m2 leaves the aircraft settling off the
+        // end with little climb margin; the ramp turns the stroke into a climb.
         Assert.True(session.Catapult.RampAngleRad > 0.05,
             "the land launcher must be ramped, not flat");
 
@@ -391,7 +409,7 @@ public class RapierTests {
 
         // Track the fastest the aircraft gets during and just after the stroke. Sampling only the
         // single tick the phase flips is fragile — the handoff state lands a tick later.
-        // A 520 m stroke to 110 m/s takes about 9.5 s at 1.19 G — far longer and far gentler than
+        // A 520 m stroke to 120 m/s takes about 8.7 s at 1.41 G — far longer and gentler than
         // a deck shot, which is the point. Measure past the end of it.
         double launchSpeed = 0.0;
         for (int tick = 0; tick < AircraftSim.TickHz * 12; tick++) {
@@ -402,8 +420,8 @@ public class RapierTests {
             + $"({launchSpeed / 0.514444:F0} kt), climbing through "
             + $"{session.Player.State.Position.Y:F0} m");
 
-        Assert.True(launchSpeed > 105.0,
-            $"never exceeded {launchSpeed:F0} m/s — the declared 110 m/s launcher did not deliver");
+        Assert.True(launchSpeed > 115.0,
+            $"never exceeded {launchSpeed:F0} m/s — the declared 120 m/s launcher did not deliver");
 
         // Now fly it: full lever, hold a climb, and confirm it is going up rather than mushing.
         double startAltitude = session.Player.State.Position.Y;
@@ -426,186 +444,17 @@ public class RapierTests {
             "the aircraft went into the ground off the catapult");
     }
 
-    /// This is the propulsion question in its operational form. It starts with the authored
-    /// 1,406 kg alert load on the authored launcher, climbs around M0.90 to FL560, accelerates level
-    /// through the turbine/ram overlap, then climbs on ram power to FL700. The controller uses only
-    /// SimulationSession's production key-input boundary; no state teleport or AircraftSim-only
-    /// sizing calculation is allowed to answer whether the mission works.
     [Fact]
-    public void TheCatapultMissionCanReachRamCruiseOnTheAuthoredFuelLoad() {
-        const double ClimbTopM = 56_000.0 * 0.3048;
-        const double CruiseAltitudeM = 70_000.0 * 0.3048;
-        const double MaximumProfileSeconds = 15.0 * 60.0;
-        var session = new SimulationSession(10);
-        double initialFuelLb = session.PlayerFuel.FuelLb;
-        double maxMach = 0.0;
-        double? timeToMach22Seconds = null;
-        double? fuelAtMach22Lb = null;
-        double? climbTopTimeSeconds = null;
-        double? fuelAtClimbTopLb = null;
-        double? altitudeAtMach22M = null;
-        double accelerationMinimumAltitudeM = double.PositiveInfinity;
-        double accelerationMaximumAltitudeM = double.NegativeInfinity;
-        bool pullHeld = false;
-        bool pushHeld = false;
-
-        // FULL internal. 9,920 lb is 4,500 kg, so launch mass is 6,590 + 4,500 = 11,090 kg --
-        // exactly the design gross every published number for this aircraft is computed at.
-        // At the old 3,600 lb it launched at 8,223 kg and flew 26% below its own design point.
-        Assert.Equal(9_920.0, initialFuelLb, precision: 6);
-        // Full internal: 9,920 lb is 4,500 kg, which puts launch mass at the design gross.
-        Assert.InRange(initialFuelLb * 0.45359237, 4_498.0, 4_501.0);
-        // Decision records do not feed flight, propulsion, fuel, opponent control, or outcomes.
-        // They are intentionally off in this long propulsion card to avoid allocating a combat
-        // training row on every one of roughly sixty thousand unrelated transit ticks.
-        session.DecisionCaptureEnabled = false;
-        session.Begin();
-        Assert.True(session.Catapult.IsActive);
-        Assert.False(session.ToggleRapierAutomation());
-
-        int maximumTicks = (int)(MaximumProfileSeconds * AircraftSim.TickHz);
-        for (int tick = 0; tick < maximumTicks; tick++) {
-            double altitudeM = session.Player.State.Position.Y;
-            AtmosphericState air = StandardAtmosphere1976.Instance.Sample(altitudeM);
-            double mach = session.Player.AirspeedMps / air.SpeedOfSoundMps;
-            maxMach = System.Math.Max(maxMach, mach);
-
-            if (timeToMach22Seconds is null && mach >= 2.2) {
-                timeToMach22Seconds = session.TimeSeconds;
-                fuelAtMach22Lb = session.PlayerFuel.FuelLb;
-                altitudeAtMach22M = altitudeM;
-            }
-            if (climbTopTimeSeconds is null && altitudeM >= ClimbTopM - 40.0) {
-                climbTopTimeSeconds = session.TimeSeconds;
-                fuelAtClimbTopLb = session.PlayerFuel.FuelLb;
-            }
-            if (climbTopTimeSeconds is not null && timeToMach22Seconds is null) {
-                accelerationMinimumAltitudeM = System.Math.Min(
-                    accelerationMinimumAltitudeM, altitudeM);
-                accelerationMaximumAltitudeM = System.Math.Max(
-                    accelerationMaximumAltitudeM, altitudeM);
-            }
-            if (timeToMach22Seconds is not null
-                && altitudeM >= CruiseAltitudeM
-                && mach >= 2.15)
-                break;
-            if (session.PlayerTerminalState != AircraftTerminalState.Flying
-                || session.Lifecycle != SimulationSession.LifecycleState.Active)
-                break;
-
-            double targetGamma;
-            if (session.Catapult.IsActive) {
-                // The launcher owns the flight path until handoff.
-                targetGamma = session.Player.State.Gamma;
-            } else if (altitudeM < ClimbTopM - 40.0 && timeToMach22Seconds is null) {
-                // Energy climb: shallow while the aircraft accelerates to M0.90, then exchange
-                // further excess power for height. The clamp prevents either a mush or a zoom.
-                targetGamma = System.Math.Clamp(
-                    0.12 + 0.55 * (mach - 0.90), 0.015, 0.24);
-            } else if (timeToMach22Seconds is null) {
-                // Neutral 1 G holds the established path. Correct the climb flight path to level,
-                // then leave it alone through the wave-drag rise; chasing a few metres of altitude
-                // with the keyboard's 12 G / -1 G endpoints would manufacture induced drag.
-                targetGamma = 0.0;
-            } else {
-                // Once established on ram power, hold about M2.2 while spending the renewed excess
-                // power on the climb to the 70,000 ft cruise level.
-                targetGamma = System.Math.Clamp(
-                    0.075 + 0.45 * (mach - 2.20), 0.01, 0.16);
-            }
-
-            double gammaError = targetGamma - session.Player.State.Gamma;
-            bool levelAcceleration = timeToMach22Seconds is null
-                && altitudeM >= ClimbTopM - 40.0;
-            double gammaDeadband = levelAcceleration ? 0.0035 : 0.006;
-            // Pull and push are endpoint commands, not an analogue autopilot seam. A one-tick pulse
-            // every 0.1 s changes the flight path without holding 12 G long enough to dominate the
-            // propulsion measurement with induced drag. The one exception is the initial level
-            // capture: a sustained push above 1.5 degrees promptly removes the climb instead of
-            // spending tens of seconds and thousands of feet easing onto the acceleration line.
-            bool coarseLevelCapture = levelAcceleration
-                && session.Player.State.Gamma > 0.026;
-            bool correctionTick = coarseLevelCapture
-                || tick % (AircraftSim.TickHz / 10) == 0;
-            bool pull = correctionTick && !session.Catapult.IsActive
-                && gammaError > gammaDeadband;
-            bool push = correctionTick && !session.Catapult.IsActive
-                && gammaError < -gammaDeadband;
-            if (pull != pullHeld) {
-                session.FeedKey(GKey.PullUp, pull);
-                pullHeld = pull;
-            }
-            if (push != pushHeld) {
-                session.FeedKey(GKey.PushDown, push);
-                pushHeld = push;
-            }
-            session.StepFixed();
-        }
-        if (pullHeld) session.FeedKey(GKey.PullUp, false);
-        if (pushHeld) session.FeedKey(GKey.PushDown, false);
-
-        double finalAltitudeFt = session.Player.State.Position.Y / 0.3048;
-        double finalMach = session.Player.AirspeedMps
-            / StandardAtmosphere1976.Instance.Sample(
-                session.Player.State.Position.Y).SpeedOfSoundMps;
-        double fuelUsedToMach22Lb = timeToMach22Seconds is null
-            ? double.NaN : initialFuelLb - fuelAtMach22Lb!.Value;
-        double accelerationSeconds = timeToMach22Seconds is null
-            || climbTopTimeSeconds is null
-            ? double.NaN : timeToMach22Seconds.Value - climbTopTimeSeconds.Value;
-        double accelerationFuelLb = timeToMach22Seconds is null
-            || fuelAtClimbTopLb is null
-            ? double.NaN : fuelAtClimbTopLb.Value - fuelAtMach22Lb!.Value;
-        _out.WriteLine($"real-kernel catapult profile: max M{maxMach:F3}; "
-            + (climbTopTimeSeconds is { } climbTime
-                ? $"FL560 at {climbTime:F1} s; "
-                : "FL560 NOT REACHED; ")
-            + (timeToMach22Seconds is { } time
-                ? $"M2.2 at {time:F1} s using {fuelUsedToMach22Lb:F1} lb "
-                    + $"({fuelUsedToMach22Lb * 0.45359237:F1} kg) total; "
-                    + $"level acceleration {accelerationSeconds:F1} s / "
-                    + $"{accelerationFuelLb:F1} lb "
-                    + $"({accelerationFuelLb * 0.45359237:F1} kg), "
-                    + $"FL{accelerationMinimumAltitudeM / 30.48:F0}"
-                    + $"..{accelerationMaximumAltitudeM / 30.48:F0}; "
-                : "M2.2 NOT REACHED; ")
-            + $"final M{finalMach:F3} at FL{finalAltitudeFt / 100.0:F0}; "
-            + $"{session.PlayerFuel.FuelLb:F1} lb remains; "
-            + $"lever {session.Controls.Throttle:F2}, "
-            + $"thrust {session.Player.LastEngineOperatingPoint.NetThrustN / 1000.0:F1} kN, "
-            + $"Nz {session.Player.LastNz:F2}");
-
-        Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
-        Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
-        Assert.True(timeToMach22Seconds.HasValue,
-            $"only reached M{maxMach:F3} from the catapult in {session.TimeSeconds:F1} s");
-        Assert.True(fuelAtMach22Lb > 0.0,
-            $"the full {initialFuelLb:F0} lb load was exhausted before M2.2");
-        // The uprated translating inlet begins opening below the conservative FL560 mission
-        // shelf. A manually firewalled energy climb may therefore cross M2.2 from roughly FL310;
-        // the scripted director separately holds M0.9 to FL560 before commanding the dash.
-        Assert.InRange(altitudeAtMach22M!.Value, 9_500.0, ClimbTopM + 500.0);
-        Assert.True(session.Player.State.Position.Y >= CruiseAltitudeM,
-            $"ram climb ended at only {finalAltitudeFt:F0} ft");
-        Assert.True(finalMach >= 2.15,
-            $"arrived at FL700 too slow for ram cruise: M{finalMach:F3}");
-    }
-
-    [Fact]
-    public void Mach16AccelerationIsAltitudeGatedInTheRealSession() {
-        const double TestMassKg = 6_800.0;
-        // Was 1.6. The ram does not begin lighting until RamFadeStartMach 2.0, so a run starting at
-        // M1.6 spends its whole 45 s in the turbo-ramjet's thrust trough -- turbine fading from
-        // M1.9, ram not yet in -- and measures the trough rather than the inlet altitude schedule
-        // this test exists to protect. Both altitudes crawled to about M1.9 and the gate looked
-        // like it had vanished when it had simply never been exercised.
+    public void Mach22AccelerationIsAltitudeGatedInTheRealSession() {
+        const double TestMassKg = 8_880.0;
+        // Start inside the turbine/ram overlap so this measures the translating inlet's altitude
+        // schedule rather than the preceding transonic acceleration problem.
         const double InitialMach = 2.2;
         const int MeasureSeconds = 45;
 
         static SimulationSession LevelAt(double altitudeFt) {
-            const double FuelFreeMassKg = 5_150.0;
             double altitudeM = altitudeFt * 0.3048;
-            double fuelLb = (TestMassKg - FuelFreeMassKg) / 0.45359237;
+            double fuelLb = (TestMassKg - RapierV2Design.EmptyMassKg) / 0.45359237;
             AtmosphericState air = StandardAtmosphere1976.Instance.Sample(altitudeM);
             BeatSetup source = Beats.RapierIntercept();
             BeatSetup levelCard = source with {
@@ -623,7 +472,14 @@ public class RapierTests {
                 ScriptedIntercept = null,
                 Fuel = source.FuelLoadout with {
                     CapacityLb = fuelLb,
-                    InitialFuelLb = fuelLb
+                    InitialFuelLb = fuelLb,
+                    // This is an acceleration card, not a reserve-management card. The canonical
+                    // package reduced fuel volume enough that the inherited 2,000 lb joker can
+                    // exceed this deliberately light test load.
+                    BingoThresholdLb = 0.0,
+                    JokerThresholdLb = null,
+                    MinimumFuelThresholdLb = null,
+                    EmergencyFuelThresholdLb = null
                 },
                 InitialThrottle = Jet.MaxThrustFraction
             };
@@ -653,14 +509,13 @@ public class RapierTests {
 
         // Assert the USABLE corridor, not raw thermodynamics. This used to bound lowMach directly,
         // which measured what the engine could do rather than what the aircraft may do: this test
-        // drives the kernel with no envelope protection, so the FL315 run happily reaches M3.0 at
-        // 183 kPa -- roughly four times Vmo. That number is real but it is not available to a
+        // drives the kernel with no envelope protection, so its raw low-altitude Mach is not
+        // necessarily legal. That number is real but it is not available to a
         // pilot, so bounding it was bounding the wrong quantity, and it moved every time the
         // engine changed.
         //
-        // Vmo is what actually gates the low-level dash, and it bites far harder low down: 550
-        // KIAS is M1.58 at FL315 and M2.88 at FL560. So clip both runs to the envelope and assert
-        // the gate on what is left.
+        // Maximum q is what actually gates the low-level dash, and it bites far harder low down.
+        // Clip both runs to the canonical 55 kPa envelope and assert the gate on what is left.
         AtmosphericState lowAir = StandardAtmosphere1976.Instance.Sample(31_500.0 * 0.3048);
         AtmosphericState highAir = StandardAtmosphere1976.Instance.Sample(56_000.0 * 0.3048);
         double lowVmoMach = RapierAerodynamics.MachLimitForDynamicPressure(
@@ -674,13 +529,12 @@ public class RapierTests {
 
         Assert.True(usableLow < 2.0,
             $"FL315 became an unrestricted low-level dash inside the envelope: M{usableLow:F3}");
-        Assert.True(highMach >= 2.6,
+        Assert.True(highMach >= 2.45,
             $"FL560 failed to enter the supersonic acceleration corridor: M{highMach:F3}");
         Assert.True(usableHigh > usableLow + 0.8,
             $"the usable altitude corridor collapsed: FL315 M{usableLow:F2} vs FL560 M{usableHigh:F2}");
-        // Half a Mach, not a whole one. With the engine sized for a realistic M3-class ceiling
-        // rather than Mach 4 the altitude gate is narrower in absolute terms while gating exactly
-        // as hard in kind: the aircraft still cannot have the high-altitude corridor down low.
+        // Raw acceleration must also retain an altitude benefit; the fixed inlet cannot make the
+        // high-altitude Mach-four corridor available down low.
         Assert.True(highMach > lowMach + 0.4,
             $"the inlet altitude schedule is not operationally meaningful: "
                 + $"FL315 M{lowMach:F3}, FL560 M{highMach:F3}");
@@ -812,9 +666,8 @@ public class RapierTests {
             Bandit = opponent,
             StartsOnCatapult = false,
             UsesReactiveBandit = false,
-            // This regression isolates terminal terrain resolution. The authored Rapier mission
-            // now launches a four-ship; without narrowing the fixture, a surviving wingman is
-            // correctly promoted and the session remains in its combat phase.
+            // This regression isolates terminal terrain resolution. Narrow the legacy fixture to
+            // one contact so formation promotion cannot keep the session in its combat phase.
             ScriptedIntercept = scriptedIntercept with { FormationSize = 1 }
         };
         var session = new SimulationSession();

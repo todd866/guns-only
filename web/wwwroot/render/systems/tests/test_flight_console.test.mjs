@@ -286,6 +286,15 @@ test("projects compact maintenance guidance and score without projecting hidden 
   assert.doesNotMatch(JSON.stringify(projected), /UtilityHydraulicPump|hidden_fault/);
 });
 
+test("test-flight mode allowlist retains an explicit barrier engagement", async () => {
+  const source = await readFile(new URL("../test_flight_console.js", import.meta.url), "utf8");
+  const declaration = source.match(
+    /const mode = enumToken\(state\.mode,\s*\[([^\]]+)]/,
+  );
+  assert.ok(declaration, "test-flight mode allowlist declaration must remain inspectable");
+  assert.match(declaration[1], /["']BARRIER["']/);
+});
+
 test("action ownership is idempotent and does not release another pointer's hold", () => {
   const events = [];
   const changes = [];

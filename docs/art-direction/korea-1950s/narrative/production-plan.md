@@ -11,9 +11,9 @@ artifacts, not source lock, generated media or runtime implementation.
 ## Outcome
 
 Ship one continuous, source-backed historical mission in which the player experiences Armstrong's
-September 1951 Panther cable strike from USS *Essex* launch through ground recovery. The story is
-linear. Performance is simulated. Historical claims, engineering reconstruction and invented
-connective tissue remain visibly distinct.
+3 September 1951 F9F-2 Panther cable-strike reconstruction from USS *Essex* launch through ground
+recovery. The story is linear. Performance is simulated. Historical claims, engineering
+reconstruction and invented connective tissue remain visibly distinct.
 
 The first useful internal milestone is not a polished trailer. It is a greybox run in which:
 
@@ -216,7 +216,8 @@ slice proves the common shape.
 
 - every non-fiction claim closes through the approved dossier;
 - every line has provenance or a reconstruction label;
-- disputed date and subtype are not silently resolved;
+- the primary-record basis for 3 September and the incident-level F9F-2 treatment, the conflicting
+  later synthesis, and the BuNo appendix anomaly are visible;
 - no generated reference is treated as evidence;
 - no scene implies NASA, Navy, Armstrong-family or archive endorsement;
 - a complete playthrough communicates the story without the archive essay.
@@ -282,7 +283,9 @@ Do not collect hidden psychographic inference or use telemetry to rewrite histor
 
 1. Finish PaperLibrary and media intake.
 2. Create and validate the governed Armstrong dossier.
-3. Resolve the Panther subtype enough to bind the flight model.
+3. Bind the incident-level F9F-2 mission identity while the BuNo anomaly, exact delivered
+   configuration, suffix, markings and flight-model details remain blocked on the aircraft history
+   card and technical evidence.
 4. Lock the cable/target corridor as history plus declared reconstruction.
 5. Prototype cable collision and partial-wing damage.
 6. Prototype the damaged-flight checkpoint through inspection.

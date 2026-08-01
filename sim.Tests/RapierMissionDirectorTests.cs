@@ -14,10 +14,13 @@ public class RapierMissionDirectorTests {
 
     static AircraftParams SteelLimitedRapier =>
         FlightModel.RapierPublicDataSurrogate with {
-            // Historical 320 C steel skin — clamps authored M4 dash to ~M3.14 at FL700.
+            // Historical 320 C steel skin — clamps the authored dash to about M3.14.
             SkinTemperatureLimitK = 273.15 + 320.0,
             AerothermalLimitReference =
-                AerothermalLimitReferenceKind.RecoveryTemperature
+                AerothermalLimitReferenceKind.RecoveryTemperature,
+            // This fixture represents an exposed full-recovery steel skin, not Rapier v2's
+            // insulated binding panel with a fractional adiabatic rise.
+            AerothermalAdiabaticRiseFraction = 1.0
         };
 
     static RapierMissionGuidance StepDash(
@@ -84,7 +87,7 @@ public class RapierMissionDirectorTests {
     }
 
     [Fact]
-    public void RapierUsesStagnationCmcScreenButAdvertisesTheMeasuredDash() {
+    public void RapierUsesEffectiveWarmPanelScreenButAdvertisesTheMeasuredDash() {
         var director = new RapierMissionDirector();
         RapierMissionGuidance guidance = default;
         for (int i = 0; i < 8; i++) {
@@ -93,10 +96,11 @@ public class RapierMissionDirectorTests {
         }
 
         Assert.Equal(RapierMissionPhase.Intercept, guidance.Phase);
-        Assert.InRange(guidance.SkinMachLimit, 5.30, 5.40);
+        Assert.InRange(guidance.SkinMachLimit, 4.30, 4.40);
         Assert.Equal(RapierMissionDirector.MeasuredDashMach, guidance.CommandedMach, 3);
-        Assert.Contains(
-            $"M{RapierMissionDirector.MeasuredDashMach:F1} / FL700", guidance.Cue);
+        Assert.Contains($"M{RapierMissionDirector.MeasuredDashMach:F1}", guidance.Cue);
+        Assert.Contains("Q/THERM LIMITS", guidance.Cue);
+        Assert.DoesNotContain("FL700", guidance.Cue);
         Assert.DoesNotContain("M4.0", guidance.Cue);
         Assert.DoesNotContain("M5.", guidance.Cue);
     }

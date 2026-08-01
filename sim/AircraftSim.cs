@@ -139,10 +139,21 @@ public sealed class AircraftSim {
     public double SkinTemperatureK => _skinTemperatureK;
     /// <summary>Instantaneous freestream recovery / adiabatic wall temperature (kelvin).</summary>
     public double AdiabaticWallTemperatureK { get; private set; }
+    /// <summary>
+    /// Instantaneous equilibrium temperature of the airframe's declared binding thermal zone.
+    /// Unlike AdiabaticWallTemperatureK this includes the canonical local-rise fraction.
+    /// </summary>
+    public double AerothermalZoneEquilibriumTemperatureK { get; private set; }
     /// <summary>Degrees between body forward and air-relative velocity (coast reentry cue).</summary>
     public double NoseOnVelocityErrorDeg { get; private set; }
     /// <summary>Authoritative air-relative dynamic pressure from the latest aerodynamic tick.</summary>
     public double DynamicPressurePa { get; private set; }
+    /// <summary>
+    /// Aerodynamic drag magnitude from the same force evaluation as the latest integrated tick.
+    /// This is physical force truth for energy instrumentation; it deliberately excludes gravity
+    /// and propulsive force, so thrust-minus-drag remains a useful causal cue.
+    /// </summary>
+    public double LastAerodynamicDragN { get; private set; }
     /// <summary>Peak RCS moment magnitude commanded on the latest aero tick.</summary>
     public double LastRcsMomentMagnitudeNm { get; private set; }
     /// What the ENGINE is actually delivering, 0..1, as opposed to where the lever is. The gap
@@ -445,6 +456,7 @@ public sealed class AircraftSim {
             configuration, AtmosphereModel, appliedPitchThrustVectorAngle);
         _airVelocity = aero.AirVelocity;
         DynamicPressurePa = aero.DynamicPressure;
+        LastAerodynamicDragN = aero.DragForceN;
         LastNz = aero.Nz;
         LastPitchThrustVectorAngleRad = aero.PitchThrustVectorAngleRad;
         LastPitchThrustVectorMomentNm = aero.PitchThrustVectorMomentNm;
@@ -566,13 +578,21 @@ public sealed class AircraftSim {
         AtmosphericState air = AtmosphereModel.Sample(State.Position.Y);
         double mach = AirspeedMps / System.Math.Max(air.SpeedOfSoundMps, 1e-6);
         AdiabaticWallTemperatureK = AirData.AdiabaticWallTemperatureK(mach, air.TemperatureK);
+        double thermalBasisK = _p.AerothermalLimitReference
+                == AerothermalLimitReferenceKind.StagnationTemperature
+            ? AirData.StagnationTemperatureK(mach, air.TemperatureK)
+            : AdiabaticWallTemperatureK;
+        AerothermalZoneEquilibriumTemperatureK =
+            AirData.EffectiveAerothermalZoneTemperatureK(
+                air.TemperatureK, thermalBasisK,
+                _p.AerothermalAdiabaticRiseFraction);
         if (!_skinInit || !double.IsFinite(_skinTemperatureK) || _skinTemperatureK <= 0.0) {
-            _skinTemperatureK = AdiabaticWallTemperatureK;
+            _skinTemperatureK = AerothermalZoneEquilibriumTemperatureK;
             _skinInit = true;
             return;
         }
         _skinTemperatureK = AirData.StepLaggedSkinTemperatureK(
-            _skinTemperatureK, AdiabaticWallTemperatureK, dt);
+            _skinTemperatureK, AerothermalZoneEquilibriumTemperatureK, dt);
     }
 
     void AdvanceEngine(double throttle, double dt) {
@@ -628,7 +648,9 @@ public sealed class AircraftSim {
                     mach, AngleOfAttackRad, SideslipRad, InletUnstarted);
                 point = point with {
                     NetThrustN = point.NetThrustN * InletFlowRecovery,
-                    NetThrustLbf = point.NetThrustLbf * InletFlowRecovery
+                    NetThrustLbf = point.NetThrustLbf * InletFlowRecovery,
+                    TurbineThrustN = point.TurbineThrustN * InletFlowRecovery,
+                    RamjetThrustN = point.RamjetThrustN * InletFlowRecovery
                 };
             } else {
                 InletUnstarted = false;

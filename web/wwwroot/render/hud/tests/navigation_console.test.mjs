@@ -15,10 +15,19 @@ const updateNavSource = appSource.match(
   /function updateNavConsole\(state\) \{([\s\S]*?)\n}\n+function bindCircuitsSystemsActions/,
 )?.[1] ?? "";
 
-test("navigation console is recovery-authoritative and never repairs ETA from TAS", () => {
+test("navigation console separates route geometry from recovery ETA and fuel truth", () => {
   assert.ok(updateNavSource, "updateNavConsole must remain inspectable");
   assert.match(updateNavSource,
-    /const mesh = meshNavPresentation\(state\);[\s\S]*?const navigation = recoveryNavigationPresentation\(state\);[\s\S]*?const relevant = mesh !== null \|\| navigation\.recoveryPointKnown/);
+    /const mesh = meshNavPresentation\(state\);\s*const home = recoveryNavigationPresentation\(state\);\s*const selected = selectCarrierSortieNavigationPresentation\([\s\S]*?const relevant = selected !== null;/);
+  assert.match(updateNavSource,
+    /const bearingDeg = route\?\.bearingDeg \?\? selectedMesh\?\.bearingDeg \?\? home\.bearingDeg;/,
+    "a validated carrier route owns the steering geometry");
+  assert.match(updateNavSource,
+    /const etaMinutes = route \? null : selectedMesh\?\.etaMinutes \?\? home\.etaMinutes;\s*const travelState = route \? null : selectedMesh\?\.travelState \?\? home\.travelState;/,
+    "an authored route must not inherit a Home or Mesh ETA/travel label");
+  assert.match(updateNavSource,
+    /const fuelSource = route \? home : \(selectedMesh \?\? home\);/,
+    "Home remains the independent fuel/reserve authority under route steering");
   for (const field of [
     "rtb_closure_kts",
     "rtb_eta_min",

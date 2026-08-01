@@ -4,12 +4,12 @@
   "model": "1",
   "response_format": "wav",
   "disclosure": "Radio speech may use AI-generated training voices.",
-  "quality_note": "Review-corpus Hume Octave 1 cast. Public-library voices are provisional pending owner-ear and production-rights approval. Short acting descriptions and per-line rates are independently QA-gated for exact words and audible duration.",
+  "quality_note": "Hume Octave 1 cast using public-library voices. The project owner approved production rights on 2026-08-01; casting remains provisional pending final owner-ear review. Short acting descriptions and per-line rates are independently QA-gated for exact words and audible duration.",
   "roles": {
     "tower": {
       "voice_id": "82a76fb8-3524-4e87-9265-9795c8e4ede6",
       "voice_name": "Male Protagonist",
-      "casting_status": "provisional; public HUME_AI library; rights review pending",
+      "casting_status": "provisional cast; production rights approved by project owner; public HUME_AI library",
       "speed": 1.15,
       "description": "professional tower controller, concise connected task speech",
       "talker_profile": "ground.controller.close-mic",
@@ -19,7 +19,7 @@
     "controller": {
       "voice_id": "9c5a3d53-4a8c-4fa2-adad-8e61a830d0e8",
       "voice_name": "Deep Male Conversational Voice",
-      "casting_status": "provisional; public HUME_AI library; rights review pending",
+      "casting_status": "provisional cast; production rights approved by project owner; public HUME_AI library",
       "speed": 1.5,
       "description": "professional tactical controller, concise matter-of-fact task speech",
       "talker_profile": "ground.controller.close-mic",
@@ -29,7 +29,7 @@
     "lso": {
       "voice_id": "89989d92-1de8-4e5d-97e4-23cd363e9788",
       "voice_name": "Opinionated Guy",
-      "casting_status": "provisional; public HUME_AI library; rights review pending",
+      "casting_status": "provisional cast; production rights approved by project owner; public HUME_AI library",
       "speed": 1.4,
       "description": "professional landing signal officer, compact controlled correction",
       "talker_profile": "carrier.deck-lso.close-mic",
@@ -39,7 +39,7 @@
     "pilot": {
       "voice_id": "f60ecf9e-ff1e-4bae-9206-dba7c653a69e",
       "voice_name": "Ito",
-      "casting_status": "provisional; public HUME_AI library; rights review pending",
+      "casting_status": "provisional cast; production rights approved by project owner; public HUME_AI library",
       "speed": 1.18,
       "description": "fighter pilot occupied with flying, concise natural task speech",
       "talker_profile": "rapier.pressure-vessel.emergency-mask",
@@ -49,7 +49,7 @@
     "traffic-two": {
       "voice_id": "b152864b-6720-496a-9d18-eaadb31516ee",
       "voice_name": "Soft Male Conversationalist",
-      "casting_status": "provisional; public HUME_AI library; rights review pending",
+      "casting_status": "provisional cast; production rights approved by project owner; public HUME_AI library",
       "speed": 1.18,
       "description": "young wingman occupied with flying, concise natural task speech",
       "talker_profile": "rapier.pressure-vessel.emergency-mask",
@@ -59,7 +59,7 @@
     "traffic-three": {
       "voice_id": "f4703974-b6a1-45c8-ac72-72ea06e3dd43",
       "voice_name": "Steve Frisch",
-      "casting_status": "provisional; public HUME_AI library; rights review pending",
+      "casting_status": "provisional cast; production rights approved by project owner; public HUME_AI library",
       "speed": 1.18,
       "description": "adult wingman occupied with flying, concise natural task speech",
       "talker_profile": "rapier.pressure-vessel.emergency-mask",
@@ -69,7 +69,7 @@
     "traffic-four": {
       "voice_id": "01854384-4e4e-48d4-90d1-b22f760a58b5",
       "voice_name": "Male Podcaster",
-      "casting_status": "provisional; public HUME_AI library; rights review pending",
+      "casting_status": "provisional cast; production rights approved by project owner; public HUME_AI library",
       "speed": 1.1,
       "description": "experienced wingman occupied with flying, concise natural task speech",
       "talker_profile": "rapier.pressure-vessel.emergency-mask",
@@ -275,7 +275,7 @@
       "target_duration_s": [1.75, 2.25],
       "source_voice_id": "6a42908a-f332-4c39-a93a-98c7d6017f12",
       "source_voice_name": "Tough Guy",
-      "source_casting_status": "provisional; public HUME_AI library; rights review pending",
+      "source_casting_status": "provisional cast; production rights approved by project owner; public HUME_AI library",
       "source_voice_context": "second tower operator on the same frequency",
       "description": "tower safety command, second clause says gear unsafe distinctly, no shout",
       "direction": "Immediate safety command; hard boundary after go around. Information focus is gear unsafe. Firm controlled contour, no shout."

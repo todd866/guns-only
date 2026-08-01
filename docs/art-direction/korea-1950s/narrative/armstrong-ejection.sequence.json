@@ -4,7 +4,7 @@
   "sequenceId": "sequence.korea-1951.armstrong-cable-strike.v1",
   "status": "researching",
   "mode": "fixed_history",
-  "title": "The Long Way Home: September 1951",
+  "title": "The Long Way Home: 3 September 1951",
   "logline": "A twenty-one-year-old naval aviator launches from USS Essex, strikes a cable during a low-level armed-reconnaissance run, and must hold a crippled Panther together long enough to reach friendly territory and eject.",
   "targetDurationMinutes": {
     "minimum": 16,
@@ -29,13 +29,15 @@
       "claim.panther-damage-flight-reconstruction.v1"
     ],
     "openResearchRefs": [
-      "incident-date",
-      "panther-subtype",
+      "individual-airframe-configuration",
       "target-run-detail",
       "cable-layout",
       "loadout",
+      "damaged-aerodynamics",
       "radio-transcript",
+      "ejection-seat-model-and-envelope",
       "ejection-point",
+      "parachute-equipment-wind-and-path",
       "ground-recovery"
     ]
   },
@@ -79,7 +81,7 @@
       "characterId": "character.neil-armstrong-1951.v1",
       "kind": "historical_person",
       "displayName": "Ensign Neil A. Armstrong",
-      "operationalRole": "VF-51 F9F Panther pilot and player character",
+      "operationalRole": "VF-51 F9F-2 Panther pilot and player character",
       "dramaticFunction": "Make the story emerge from a young pilot's technical attention, aircraft handling and procedural composure rather than retrospective hero narration.",
       "knowledgeBoundary": "He knows only what he can see, feel in the controls, hear over the radio or infer from the Panther's instruments and Carpenter's inspection.",
       "dialoguePolicy": "Use sourced words when available and otherwise only restrained procedural reconstruction; never invent private thought, political exposition, moral instruction or Moon foreshadowing.",
@@ -140,11 +142,11 @@
       "fact.authored-low-level-route.v1",
       "fact.carpenter-inspection-geometry.v1",
       "fact.carpenter-lead-aircraft.v1",
-      "fact.cartridge-ejection-seat.v1",
+      "fact.ejection-recorded.v1",
       "fact.civilian-scenery-nontargetable.v1",
       "fact.ejection-disposal-corridor.v1",
       "fact.friendly-ground-recovery.v1",
-      "fact.friendly-landing-area.v1",
+      "fact.friendly-landing-area-reconstruction.v1",
       "fact.friendly-territory-boundary.v1",
       "fact.korea-coast-route.v1",
       "fact.majon-ni-valley-terrain.v1",
@@ -156,7 +158,7 @@
       "fact.panther-reduced-roll-authority.v1",
       "fact.panther-right-wing-damage.v1",
       "fact.parachute-deployment.v1",
-      "fact.parachute-wind-drift.v1",
+      "fact.parachute-descent-reconstruction.v1",
       "fact.physical-cable-collision.v1",
       "fact.pilot-seat-separation.v1",
       "fact.player-on-essex-catapult.v1",
@@ -183,7 +185,7 @@
     "mechanics": [
       "mechanic.airframe-impulse.v1",
       "mechanic.carrier-catapult.v1",
-      "mechanic.cartridge-ejection-seat.v1",
+      "mechanic.ejection-seat-reconstruction.v1",
       "mechanic.damaged-aircraft-control.v1",
       "mechanic.direct-lateral-control.v1",
       "mechanic.ejection-checklist.v1",
@@ -503,10 +505,10 @@
       "beatId": "beat.armstrong.05-cable-strike.v1",
       "order": 5,
       "kind": "hazard",
-      "title": "The cable",
-      "dramaticPurpose": "Transform an almost invisible terrain obstacle into the incident that changes the sortie from attack to survival.",
-      "playerTask": "Fly the required egress corridor and respond immediately when physical cable contact tears the right wing.",
-      "historicalLabel": "history",
+      "title": "The disputed impact",
+      "dramaticPurpose": "Enact the explicitly disclosed cable reconstruction that changes the sortie from attack to survival without erasing the conflicting contemporary antiaircraft-fire and power-pole account.",
+      "playerTask": "Fly the required egress corridor and respond immediately when the authored cable reconstruction tears the right wing.",
+      "historicalLabel": "reconstruction",
       "claimRefs": [
         "claim.armstrong-cable-strike.v1",
         "claim.armstrong-wing-loss.v1",
@@ -797,7 +799,7 @@
       "title": "Punch out",
       "dramaticPurpose": "Make separation from the aircraft abrupt, mechanical and physically consequential without spectacle.",
       "playerTask": "Initiate ejection only after the ready state and survive seat separation and parachute deployment.",
-      "historicalLabel": "history",
+      "historicalLabel": "reconstruction",
       "claimRefs": [
         "claim.armstrong-ejection-friendly-territory.v1",
         "claim.panther-ejection-seat.v1"
@@ -805,7 +807,7 @@
       "requiredForProgression": true,
       "authority": {
         "worldFactRefs": [
-          "fact.cartridge-ejection-seat.v1",
+          "fact.ejection-recorded.v1",
           "fact.pilot-seat-separation.v1",
           "fact.parachute-deployment.v1"
         ],
@@ -816,7 +818,7 @@
           "Authoritative ejection, aircraft separation, seat separation and parachute deployment events complete in order."
         ],
         "failWhen": [
-          "The ejection action is attempted outside the ready state or physical separation cannot complete inside the validated safety model."
+          "The ejection action is attempted outside the ready state or modeled separation cannot complete inside the disclosed reconstruction bounds."
         ],
         "emittedEventRefs": [
           "event.narrative.ejection-initiated.v1",
@@ -824,7 +826,7 @@
         ]
       },
       "mechanicRefs": [
-        "mechanic.cartridge-ejection-seat.v1",
+        "mechanic.ejection-seat-reconstruction.v1",
         "mechanic.pilot-body-transition.v1",
         "mechanic.parachute-deployment.v1"
       ],
@@ -846,7 +848,7 @@
       },
       "evidenceCapture": [
         "Ejection action tick and readiness state.",
-        "Seat acceleration, clearance and separation sequence.",
+        "Declared seat-reconstruction parameters, modeled clearance and separation sequence.",
         "Aircraft and pilot trajectories through parachute deployment."
       ]
     },
@@ -854,18 +856,18 @@
       "beatId": "beat.armstrong.11-parachute-descent.v1",
       "order": 11,
       "kind": "transition",
-      "title": "Back over land",
+      "title": "Under canopy",
       "dramaticPurpose": "Replace engine noise and cockpit workload with wind, height and the exposed human body as the damaged Panther departs.",
-      "playerTask": "Manage the limited parachute actions exposed by the sourced equipment model and prepare for ground contact.",
-      "historicalLabel": "history",
+      "playerTask": "Manage the limited parachute actions exposed by the disclosed equipment-and-wind reconstruction and prepare for ground contact.",
+      "historicalLabel": "reconstruction",
       "claimRefs": [
         "claim.armstrong-ejection-friendly-territory.v1"
       ],
       "requiredForProgression": true,
       "authority": {
         "worldFactRefs": [
-          "fact.parachute-wind-drift.v1",
-          "fact.friendly-landing-area.v1"
+          "fact.parachute-descent-reconstruction.v1",
+          "fact.friendly-landing-area-reconstruction.v1"
         ],
         "enterWhen": [
           "The parachute-deployed event is committed."
@@ -899,7 +901,7 @@
         "checkpointId": ""
       },
       "evidenceCapture": [
-        "Wind, canopy state and pilot trajectory.",
+        "Authored environmental wind, canopy state and reconstructed pilot trajectory.",
         "Landing-area surface and contact state.",
         "The damaged aircraft's separately integrated terminal trajectory."
       ]
@@ -1032,20 +1034,20 @@
     {
       "systemId": "system.panther-ejection.v1",
       "status": "new",
-      "purpose": "Model preparation, cartridge-seat launch, pilot separation and aircraft continuation.",
+      "purpose": "Model preparation, a disclosed seat-launch reconstruction, pilot separation and aircraft continuation.",
       "acceptance": [
-        "Equipment and checklist behavior are source-registered.",
-        "Ejection success depends on an explicit physical envelope.",
+        "Production equipment, checklist and envelope behavior remain blocked until the period technical sources are registered.",
+        "Any interim greybox uses declared non-authoritative bounds and cannot satisfy promotion evidence.",
         "Player, seat and aircraft become distinct authoritative entities in sequence."
       ]
     },
     {
       "systemId": "system.parachute-descent.v1",
       "status": "new",
-      "purpose": "Carry the player from seat separation through wind drift and ground contact.",
+      "purpose": "Carry the player from seat separation through a disclosed parachute-and-wind reconstruction to ground contact.",
       "acceptance": [
-        "Canopy deployment, descent and limited control follow the sourced equipment abstraction.",
-        "Wind is shared with the environment authority.",
+        "Canopy deployment, descent and limited control remain blocked on equipment evidence before production lock.",
+        "Wind is shared with the environment authority but is not presented as a measured historical drift path.",
         "Ground contact and recovery-area membership are authoritative."
       ]
     },
@@ -1119,7 +1121,7 @@
       "Store line identity, source text, performance text and localized caption separately.",
       "Do not fake Korean or American accents as localization shorthand.",
       "Period aviation terms retain a reviewed glossary and are not machine-expanded into modern phraseology.",
-      "On-screen dates remain September 1951 until the dossier resolves or preserves the source conflict."
+      "On-screen dates use 3 September 1951 and the archive discloses why the contemporary Essex/CVG-5 reports outweigh the later 5 September synthesis."
     ]
   },
   "production": {
@@ -1130,7 +1132,7 @@
         "deliverables": [
           "PaperLibrary collection and stable source IDs.",
           "Claim-level source ledger with page locators.",
-          "Dispute record for date, subtype, cable, target run, ejection and recovery."
+          "Primary-record closure for 3 September and the incident-level F9F-2 treatment, plus the BuNo anomaly and dispute records for cable or pole, target run, ejection and recovery."
         ],
         "dependsOn": []
       },
@@ -1163,7 +1165,7 @@
         "workstreamId": "aircraft",
         "status": "researching",
         "deliverables": [
-          "F9F capability definition.",
+          "F9F-2 capability definition and delivered-configuration source card.",
           "Flight-model and systems source card.",
           "Period cockpit, loadout and visual binding."
         ],

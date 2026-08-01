@@ -75,7 +75,61 @@ const BASE_STATE = {
 // own-ship rotation exactly as a real EEGS funnel does.
 const FUNNEL_PLAYER = { headingDeg: 5, pitchDeg: 0, bankDeg: 0, altFt: 8200 };
 
+// The route owns the HUD guidance channel even though a complete generic Home/RTB solution is
+// deliberately present underneath it. The malformed scenario below changes only the phase token,
+// proving that rejected active-route data fails closed instead of reviving the generic fallback.
+const CARRIER_ROUTE_AWAITING_RETURN_STATE = Object.freeze({
+  carrier: true,
+  recovery_platform: true,
+  recovery_point_known: true,
+  recovery_id: "recovery.harness-straight-deck.v1",
+  recovery_display_name: "HARNESS STRAIGHT DECK",
+  tx: -9000,
+  ty: 18,
+  tz: 14000,
+  rtb: true,
+  rtb_steer: true,
+  rtb_bearing_deg: 225,
+  rtb_turn_deg: -37,
+  rtb_range_nm: 31.2,
+  carrier_sortie_route_active: true,
+  carrier_sortie_route_profile_id: "PROVISIONAL_KOREA_CARRIER_DAY_V1",
+  carrier_sortie_route_phase: "AWAITING_RETURN",
+  carrier_sortie_route_phase_code: 5,
+  carrier_sortie_route_fix: "TRANSIT",
+  carrier_sortie_route_fix_code: 3,
+  carrier_sortie_route_target_x: 8000,
+  carrier_sortie_route_target_y: 1378,
+  carrier_sortie_route_target_z: 2500,
+  carrier_sortie_route_target_bearing_deg: 41.2,
+  carrier_sortie_route_target_turn_deg: 23.6,
+  carrier_sortie_route_distance_m: 22224,
+  carrier_sortie_route_target_tas_mps: 144,
+  carrier_sortie_route_capture_radius_m: 1100,
+  carrier_sortie_route_rtb_available: true,
+  carrier_sortie_route_rtb_requested: false,
+});
+
 export const SCENARIOS = [
+  {
+    name: "carrier-route-awaiting-return",
+    about: "A coherent AWAITING_RETURN route owns the heading caret and prompt while complete generic Home/RTB guidance remains suppressed.",
+    player: { headingDeg: 0, pitchDeg: 0, bankDeg: 0, altFt: 4800 },
+    bandit: { azimuthDeg: 35, elevationDeg: 8, rangeM: 3200 },
+    lead: null,
+    state: { ...CARRIER_ROUTE_AWAITING_RETURN_STATE },
+  },
+  {
+    name: "carrier-route-malformed-active",
+    about: "An active route with contradictory phase token/code fails closed and still suppresses the otherwise complete generic Home/RTB guidance.",
+    player: { headingDeg: 0, pitchDeg: 0, bankDeg: 0, altFt: 4800 },
+    bandit: { azimuthDeg: 35, elevationDeg: 8, rangeM: 3200 },
+    lead: null,
+    state: {
+      ...CARRIER_ROUTE_AWAITING_RETURN_STATE,
+      carrier_sortie_route_phase: "RETURN",
+    },
+  },
   {
     name: "funnel-level-mid",
     about: "Wings-level 3g tracking pull, bandit on the ballistic locus at 450 m, valid lead + gun solution: the canonical wingspan-ranging funnel with SHOOT cue, bandit between the rails.",

@@ -74,19 +74,19 @@ margin the player preserved after impact. Radio becomes sparse. Landmarks and th
 replace a map-arrow chase. The player is not being asked whether to eject; the player is being
 asked to deliver the aircraft to a place where ejection can reproduce the documented outcome.
 
-Near Pohang/K-3, Armstrong aligns the aircraft away from people and valuable structures, establishes
-the sourced ejection envelope and completes the exposed preparation. The exact checklist remains
-blocked on the applicable Panther handbook. The act has no triumphant countdown. Armstrong reports
-that he is getting out. Carpenter acknowledges.
+Near Pohang/K-3, Armstrong aligns the aircraft away from people and valuable structures, enters the
+disclosed greybox ejection bounds and completes the exposed preparation. The exact seat, envelope
+and checklist remain blocked on the applicable Panther handbook and equipment record. The act has
+no triumphant countdown. Armstrong reports that he is getting out. Carpenter acknowledges.
 
 The seat fires. Aircraft, seat and pilot become separate physical bodies. Spatial continuity is
 never broken by a decorative camera cut. Engine and airflow vanish into blast, then wind, risers
 and canopy. The damaged Panther continues without him.
 
-Armstrong later recalled that the wind carried him over land and that a jeep from K-3 arrived as he
-landed, driven by his former flight-school roommate Goodell Warren. The game may show that account
-as an oral-history reconstruction after source and rights review; it does not invent dialogue for
-either man.
+A later H-Gram synthesis says wind carried Armstrong back over land. Armstrong's interview says a
+jeep from K-3 arrived as he landed, driven by his former flight-school roommate Goodell Warren. The
+game may show an authored wind and parachute path only as reconstruction after source and rights
+review; it does not attribute the drift detail to Armstrong or invent dialogue for either man.
 
 The ending is ordinary. A jeep, a parachute collapsing onto worked ground, two young servicemen and
 the sound of the aircraft now absent. After a short quiet interval, the debrief distinguishes:

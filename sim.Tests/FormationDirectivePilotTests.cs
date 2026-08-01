@@ -120,6 +120,95 @@ public class FormationDirectivePilotTests {
     }
 
     [Fact]
+    public void FreshBracketSupportCrossesItsSpawnLeashToRejoinTheSharedFight() {
+        AircraftParams air = FlightModel.F22APublicDataSurrogate;
+        AircraftState initial = new(
+            new Vec3D(0.0, 3_200.0, 0.0),
+            Speed: 245.0,
+            Gamma: 0.0,
+            Chi: Math.PI / 2.0,
+            Bank: 0.0,
+            Mass: air.MassKg);
+        AircraftState sharedState = initial with {
+            Position = new Vec3D(24_000.0, 3_200.0, 0.0)
+        };
+        var support = new ReactiveBandit(initial, air, PilotSkill.Ace);
+        double maximumDistanceFromSpawnM = 0.0;
+        double minimumDistanceToSharedFightM = double.PositiveInfinity;
+
+        for (int tick = 0; tick < 90 * AircraftSim.TickHz; tick++) {
+            ActorObservation shared = ActorObservation.Capture(sharedState, tick);
+            support.AcceptFormationDirective(new FormationDirective(
+                FormationTacticalRole.Bracket,
+                LateralSign: 1,
+                PartnerId: 2,
+                AssignmentSequence: 9,
+                SharedContact: shared));
+            support.Step(shared, Dt);
+            Vec3D displacement = support.State.Position - initial.Position;
+            maximumDistanceFromSpawnM = Math.Max(
+                maximumDistanceFromSpawnM,
+                new Vec3D(displacement.X, 0.0, displacement.Z).Length);
+            minimumDistanceToSharedFightM = Math.Min(
+                minimumDistanceToSharedFightM,
+                (support.State.Position - sharedState.Position).Length);
+        }
+
+        Assert.True(maximumDistanceFromSpawnM >= 9_000.0,
+            $"support turned back into its empty spawn bubble at "
+            + $"{maximumDistanceFromSpawnM / 1_852.0:F1} NM instead of rejoining");
+        Assert.True(minimumDistanceToSharedFightM < 8_000.0,
+            $"support crossed its spawn leash but never closed the shared fight: "
+            + $"closest {minimumDistanceToSharedFightM / 1_852.0:F1} NM");
+        Assert.Equal(
+            FormationTacticalRole.Bracket,
+            support.PolicyMemory.FormationRole);
+    }
+
+    [Fact]
+    public void FreshBracketOrderDoesNotChaseADepartedPlayerAcrossTheTheatre() {
+        AircraftParams air = FlightModel.F22APublicDataSurrogate;
+        AircraftState initial = new(
+            new Vec3D(0.0, 3_200.0, 0.0),
+            Speed: 245.0,
+            Gamma: 0.0,
+            Chi: Math.PI / 2.0,
+            Bank: 0.0,
+            Mass: air.MassKg);
+        AircraftState departing = initial with {
+            Position = new Vec3D(60_000.0, 3_200.0, 0.0),
+            Speed = 320.0
+        };
+        var support = new ReactiveBandit(initial, air, PilotSkill.Ace);
+        double maximumDistanceFromSpawnM = 0.0;
+
+        for (int tick = 0; tick < 90 * AircraftSim.TickHz; tick++) {
+            ActorObservation shared = ActorObservation.Capture(departing, tick);
+            support.AcceptFormationDirective(new FormationDirective(
+                FormationTacticalRole.Bracket,
+                LateralSign: 1,
+                PartnerId: 2,
+                AssignmentSequence: 10,
+                SharedContact: shared));
+            support.Step(shared, Dt);
+            Vec3D displacement = support.State.Position - initial.Position;
+            maximumDistanceFromSpawnM = Math.Max(
+                maximumDistanceFromSpawnM,
+                new Vec3D(displacement.X, 0.0, displacement.Z).Length);
+            departing = departing with {
+                Position = departing.Position + departing.VelocityVector() * Dt
+            };
+        }
+
+        Assert.True(maximumDistanceFromSpawnM < 20_000.0,
+            $"fresh formation refresh chased a departed player "
+            + $"{maximumDistanceFromSpawnM / 1_852.0:F1} NM from the fight centre");
+        Assert.Equal(
+            FormationTacticalRole.Bracket,
+            support.PolicyMemory.FormationRole);
+    }
+
+    [Fact]
     public void NeutralMergeCachesButDoesNotFlyTheFormationOrderBeforeHandoff() {
         BeatSetup beat = Beats.ModernVisualMerge();
         var independent = Assert.IsType<NeutralMergeBandit>(

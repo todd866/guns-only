@@ -192,15 +192,15 @@ public sealed record AirframeSystemsProfile(
     /// <summary>
     /// Rapier surrogate. The limits are not a balance knob — they are forced by the launcher.
     ///
-    /// The catapult releases at 110 m/s — about 214 KIAS — with the gear still down and the flaps
+    /// The catapult releases at 120 m/s — about 233 KIAS — with the gear still down and the flaps
     /// still out, because nothing can retract during the stroke. An aircraft designed around that
     /// launcher therefore has gear and flaps qualified past it, or it breaks itself on every
     /// sortie. The Sabre's 185 KIAS limit tripped an overspeed the instant the aircraft left the
     /// rail, which is what this profile exists to fix.
     ///
-    /// 250 KIAS gear and flap, against a 214 KIAS launch. This used to be 350, which existed only
+    /// 250 KIAS gear and flap, against a 233 KIAS launch. This used to be 350, which existed only
     /// because the catapult threw the aircraft off at 292 KIAS — a number invented to survive
-    /// another invented number. Slowing the launcher to 110 m/s brought the requirement back to an
+    /// another invented number. Slowing the launcher to 120 m/s brought the requirement back to an
     /// ordinary fast-jet limit, and took real weight out of the legs, doors and flap tracks with
     /// it. Emergency extension stays lower at 220 KIAS: the blow-down bottle drives the legs
     /// against the airstream and has no reserve to fight the hinge moment at launch speed.

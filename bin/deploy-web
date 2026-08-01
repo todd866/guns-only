@@ -3,6 +3,7 @@ set -eu
 
 usage() {
     echo "usage: bin/deploy-web --preview|--prod" >&2
+    echo "emergency only: GUNS_DEPLOY_BREAK_GLASS_BUILD_INFO_OUTAGE=1 bin/deploy-web --prod" >&2
     exit 2
 }
 
@@ -13,7 +14,26 @@ case "$target" in
 esac
 [ "$#" -eq 1 ] || usage
 
-repo_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+# Emergency use only. This does not relax candidate or post-promotion verification. It permits the
+# current production deployment ID from Vercel's control plane to serve as the rollback baseline
+# when the public build-info endpoint itself is the incident being repaired. Every exercised path
+# emits an AUDIT line. Values other than the explicit literal 1 fail closed.
+break_glass_build_info=${GUNS_DEPLOY_BREAK_GLASS_BUILD_INFO_OUTAGE:-0}
+case "$break_glass_build_info" in
+    0) ;;
+    1)
+        if [ "$target" != "--prod" ]; then
+            echo "deploy-web: GUNS_DEPLOY_BREAK_GLASS_BUILD_INFO_OUTAGE=1 is production-only" >&2
+            exit 2
+        fi
+        ;;
+    *)
+        echo "deploy-web: GUNS_DEPLOY_BREAK_GLASS_BUILD_INFO_OUTAGE must be 0 or 1" >&2
+        exit 2
+        ;;
+esac
+
+repo_dir=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
 cd "$repo_dir"
 
 . "$repo_dir/bin/dotnet-env"
@@ -30,6 +50,11 @@ command -v node >/dev/null 2>&1 || {
     echo "deploy-web: Node.js is unavailable" >&2
     exit 1
 }
+node_major=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true)
+if [ "$node_major" != "24" ]; then
+    echo "deploy-web: Node.js 24 is required; found $(node --version 2>/dev/null || echo unknown)" >&2
+    exit 1
+fi
 command -v python3 >/dev/null 2>&1 || {
     echo "deploy-web: Python 3 is unavailable" >&2
     exit 1
@@ -37,6 +62,52 @@ command -v python3 >/dev/null 2>&1 || {
 command -v rsync >/dev/null 2>&1 || {
     echo "deploy-web: rsync is unavailable" >&2
     exit 1
+}
+
+sha256_file() {
+    python3 -c 'import hashlib, pathlib, sys; print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())' "$1"
+}
+
+# Hash both relative paths and file bytes. The result identifies the exact published content tree,
+# independent of scratch-directory location or filesystem timestamps.
+sha256_tree() {
+    python3 -c '
+import hashlib
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+digest = hashlib.sha256()
+for path in sorted((value for value in root.rglob("*") if value.is_file()),
+                   key=lambda value: value.relative_to(root).as_posix()):
+    relative = path.relative_to(root).as_posix().encode("utf-8")
+    file_digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            file_digest.update(chunk)
+    digest.update(len(relative).to_bytes(4, "big"))
+    digest.update(relative)
+    digest.update(file_digest.digest())
+print(digest.hexdigest())
+' "$1"
+}
+
+json_field() {
+    field=$1
+    node -e '
+const fs = require("node:fs");
+const value = JSON.parse(fs.readFileSync(0, "utf8"))[process.argv[1]];
+process.stdout.write(typeof value === "string" ? value : "");
+' "$field"
+}
+
+json_meta_field() {
+    field=$1
+    node -e '
+const fs = require("node:fs");
+const value = JSON.parse(fs.readFileSync(0, "utf8")).meta?.[process.argv[1]];
+process.stdout.write(typeof value === "string" ? value : "");
+' "$field"
 }
 
 worktree_is_dirty() {
@@ -67,6 +138,9 @@ fi
 
 release_revision=$(git rev-parse --verify HEAD)
 release_ref=$(git symbolic-ref --quiet --short HEAD || true)
+scratch_dir=$(mktemp -d)
+publish_dir="$scratch_dir/publish"
+trap 'rm -rf "$scratch_dir"' EXIT HUP INT TERM
 
 # The regional Ukraine atlas is intentionally gitignored because its page bundles are hundreds of
 # MiB. A green repository checkout therefore does not prove that a release machine has the data,
@@ -94,6 +168,53 @@ fi
 # syntax-checks this script, so invoking it here does not recurse. Smoke-test bypasses are cleared:
 # a production candidate is not "fully gated" if its real browser boot was skipped.
 if [ "$target" = "--prod" ]; then
+    if [ "$release_ref" != "main" ]; then
+        echo "deploy-web: production must be deployed from local main; found ${release_ref:-detached HEAD}" >&2
+        exit 1
+    fi
+    origin_url=$(git remote get-url origin 2>/dev/null || true)
+    case "$origin_url" in
+        https://github.com/todd866/guns-only|https://github.com/todd866/guns-only.git|\
+        git@github.com:todd866/guns-only.git|ssh://git@github.com/todd866/guns-only.git) ;;
+        *)
+            echo "deploy-web: origin must be the canonical todd866/guns-only repository" >&2
+            echo "found ${origin_url:-no origin}" >&2
+            exit 1
+            ;;
+    esac
+    if ! remote_main_record=$(git ls-remote --exit-code origin refs/heads/main); then
+        echo "deploy-web: could not resolve canonical remote main" >&2
+        exit 1
+    fi
+    remote_main_revision=$(printf '%s\n' "$remote_main_record" | awk 'NR == 1 { print $1 }')
+    if [ "$remote_main_revision" != "$release_revision" ]; then
+        echo "deploy-web: HEAD is not the exact pushed remote-main revision" >&2
+        echo "local $release_revision, remote ${remote_main_revision:-missing}" >&2
+        exit 1
+    fi
+    gh_cli=${GUNS_GH_CLI:-gh}
+    command -v "$gh_cli" >/dev/null 2>&1 || {
+        echo "deploy-web: GitHub CLI is required for protected-branch release verification" >&2
+        exit 1
+    }
+    protection_file="$scratch_dir/github-main-protection.json"
+    workflow_runs_file="$scratch_dir/github-verify-runs.json"
+    if ! "$gh_cli" api repos/todd866/guns-only/branches/main/protection \
+        > "$protection_file"; then
+        echo "deploy-web: main is unprotected or its protection state is unavailable" >&2
+        exit 1
+    fi
+    if ! "$gh_cli" api -X GET \
+        repos/todd866/guns-only/actions/workflows/verify.yml/runs \
+        -f "head_sha=$release_revision" -f branch=main -f status=completed -f per_page=20 \
+        > "$workflow_runs_file"; then
+        echo "deploy-web: exact-sha Verify history is unavailable" >&2
+        exit 1
+    fi
+    node tools/release/verify-github-release.mjs \
+        --revision "$release_revision" \
+        --protection "$protection_file" \
+        --runs "$workflow_runs_file"
     echo "deploy-web: running full repository gate for $release_revision"
     GUNS_DOTNET_CLI="$dotnet_cli" GUNS_SKIP_SMOKE='' "$repo_dir/bin/check"
     if [ "$(git rev-parse --verify HEAD)" != "$release_revision" ] || worktree_is_dirty; then
@@ -102,10 +223,6 @@ if [ "$target" = "--prod" ]; then
         exit 1
     fi
 fi
-
-scratch_dir=$(mktemp -d)
-publish_dir="$scratch_dir/publish"
-trap 'rm -rf "$scratch_dir"' EXIT HUP INT TERM
 
 "$dotnet_cli" publish web/GunsOnly.Web.csproj \
     --configuration Release --nologo --output "$publish_dir" \
@@ -125,13 +242,17 @@ if ! python3 "$repo_dir/tools/terrain/verify_korea_atlas.py" "$staged_atlas_mani
     echo "deploy-web: staged Ukraine jet-range terrain atlas failed verification" >&2
     exit 1
 fi
-
 # Soft-world atmosphere for the Ukraine lab / future pack wiring.
 atmosphere_src="$repo_dir/web/wwwroot/content/packs/ukraine-modern/environment/atmosphere.material.json"
 if [ -f "$atmosphere_src" ]; then
     mkdir -p "$deploy_root/content/packs/ukraine-modern/environment"
     cp "$atmosphere_src" "$deploy_root/content/packs/ukraine-modern/environment/"
 fi
+
+atlas_sha256=$(sha256_file "$staged_atlas_manifest")
+content_sha256=$(sha256_tree "$deploy_root/content")
+echo "deploy-web: immutable atlas sha256 $atlas_sha256"
+echo "deploy-web: immutable content sha256 $content_sha256"
 
 require_file() {
     if [ ! -f "$deploy_root/$1" ]; then
@@ -152,9 +273,12 @@ require_file api/telemetry.js
 require_file vercel.json
 require_file content/packs/ukraine-modern/environment/terrain-atlas/rapier-range.atlas.manifest.json
 
-if [ -f "$deploy_root/api/telemetry.test.js" ] \
-    || [ -d "$deploy_root/render/telemetry/tests" ]; then
-    echo "deploy-web: source/test tree leaked into the production artifact" >&2
+if [ -n "$(find "$deploy_root" -type f \( -name '*.test.js' -o -name '*.test.mjs' \) -print -quit)" ] \
+    || [ -d "$deploy_root/render/telemetry/tests" ] \
+    || [ -e "$deploy_root/render/audio/preview" ] \
+    || [ -n "$(find "$deploy_root/render/audio/samples/jet" -type f \
+        \( -name '_*.wav' -o -name '_*.flac' -o -name '*.flac' \) -print -quit)" ]; then
+    echo "deploy-web: source/test/raw-audio tree leaked into the production artifact" >&2
     exit 1
 fi
 
@@ -180,6 +304,11 @@ fi
 if [ "$target" = "--prod" ]; then
     set -- "$@" --prod --skip-domain
 fi
+set -- "$@" \
+    --env "GUNS_ATLAS_SHA256=$atlas_sha256" \
+    --env "GUNS_CONTENT_SHA256=$content_sha256" \
+    --meta "atlasSha256=$atlas_sha256" \
+    --meta "contentSha256=$content_sha256"
 expected_revision=
 if [ "$worktree_dirty" = "0" ]; then
     set -- "$@" \
@@ -211,54 +340,265 @@ fi
 verify_candidate() {
     deployment=$1
     expected=$2
+    expected_atlas=$3
+    expected_content=$4
+    candidate_shell="$scratch_dir/candidate-shell.html"
+    candidate_atlas="$scratch_dir/candidate-atlas.json"
+    "$vercel_cli" curl '/?audioQa=silent' \
+        --deployment "$deployment" -- \
+        --fail --silent --show-error --output "$candidate_shell"
+    grep -Fq 'app.js?v=' "$candidate_shell"
     "$vercel_cli" curl /_framework/blazor.webassembly.js \
         --deployment "$deployment" -- \
         --fail --silent --show-error --output /dev/null
     "$vercel_cli" curl /_framework/blazor.boot.json \
         --deployment "$deployment" -- \
         --fail --silent --show-error --output /dev/null
+    "$vercel_cli" curl \
+        /content/packs/ukraine-modern/environment/terrain-atlas/rapier-range.atlas.manifest.json \
+        --deployment "$deployment" -- \
+        --fail --silent --show-error --output "$candidate_atlas"
+    candidate_atlas_sha256=$(sha256_file "$candidate_atlas")
+    if [ "$candidate_atlas_sha256" != "$expected_atlas" ]; then
+        echo "deploy-web: candidate atlas mismatch" >&2
+        echo "expected $expected_atlas, received $candidate_atlas_sha256" >&2
+        return 1
+    fi
+    candidate_info=$("$vercel_cli" curl /api/build-info \
+        --deployment "$deployment" -- \
+        --fail --silent --show-error)
+    if ! candidate_revision=$(printf '%s' "$candidate_info" | json_field revision) \
+        || ! candidate_atlas_identity=$(printf '%s' "$candidate_info" | json_field atlasSha256) \
+        || ! candidate_content_identity=$(printf '%s' "$candidate_info" | json_field contentSha256) \
+        || ! candidate_deployment=$(printf '%s' "$candidate_info" | json_field deployment); then
+        echo "deploy-web: candidate build-info is invalid" >&2
+        return 1
+    fi
+    if [ -z "$candidate_deployment" ]; then
+        echo "deploy-web: candidate build-info has no deployment identity" >&2
+        return 1
+    fi
     if [ -n "$expected" ]; then
-        candidate_info=$("$vercel_cli" curl /api/build-info \
-            --deployment "$deployment" -- \
-            --fail --silent --show-error)
-        candidate_revision=$(printf '%s' "$candidate_info" \
-            | node -p 'JSON.parse(require("node:fs").readFileSync(0, "utf8")).revision || ""')
         if [ "$candidate_revision" != "$expected" ]; then
             echo "deploy-web: candidate revision mismatch" >&2
             echo "expected $expected, received ${candidate_revision:-null}" >&2
-            exit 1
+            return 1
         fi
+    fi
+    if [ "$candidate_atlas_identity" != "$expected_atlas" ] \
+        || [ "$candidate_content_identity" != "$expected_content" ]; then
+        echo "deploy-web: candidate immutable content identity mismatch" >&2
+        return 1
+    fi
+}
+
+verify_public_once() {
+    base_url=$1
+    expected=$2
+    expected_atlas=$3
+    expected_content=$4
+    require_build_info=$5
+    expected_deployment=$6
+    public_atlas="$scratch_dir/public-atlas.json"
+    curl --fail --silent --show-error --location --retry 5 --retry-delay 2 --retry-all-errors \
+        "$base_url/?audioQa=silent" | grep -Fq 'app.js?v=' || return 1
+    curl --fail --silent --show-error --location --retry 5 --retry-delay 2 --retry-all-errors \
+        "$base_url/_framework/blazor.webassembly.js" --output /dev/null || return 1
+    curl --fail --silent --show-error --location --retry 5 --retry-delay 2 --retry-all-errors \
+        "$base_url/_framework/blazor.boot.json" --output /dev/null || return 1
+    curl --fail --silent --show-error --location --retry 5 --retry-delay 2 --retry-all-errors \
+        "$base_url/content/packs/ukraine-modern/environment/terrain-atlas/rapier-range.atlas.manifest.json" \
+        --output "$public_atlas" || return 1
+    public_atlas_sha256=$(sha256_file "$public_atlas")
+    if [ -n "$expected_atlas" ] && [ "$public_atlas_sha256" != "$expected_atlas" ]; then
+        echo "deploy-web: promoted atlas mismatch at $base_url" >&2
+        return 1
+    fi
+    if ! public_info=$(curl --fail --silent --show-error --location \
+        --retry 5 --retry-delay 2 --retry-all-errors "$base_url/api/build-info"); then
+        if [ "$require_build_info" = "0" ]; then
+            echo "deploy-web: AUDIT restored shell verified while build-info remains unavailable at $base_url" >&2
+            return 0
+        fi
+        return 1
+    fi
+    if ! public_revision=$(printf '%s' "$public_info" | json_field revision) \
+        || ! public_atlas_identity=$(printf '%s' "$public_info" | json_field atlasSha256) \
+        || ! public_content_identity=$(printf '%s' "$public_info" | json_field contentSha256) \
+        || ! public_deployment=$(printf '%s' "$public_info" | json_field deployment); then
+        if [ "$require_build_info" = "0" ]; then
+            echo "deploy-web: AUDIT restored shell verified while build-info remains invalid at $base_url" >&2
+            return 0
+        fi
+        return 1
+    fi
+    if [ -n "$expected" ] && [ "$public_revision" != "$expected" ]; then
+        echo "deploy-web: promoted revision mismatch at $base_url" >&2
+        echo "expected $expected, received ${public_revision:-null}" >&2
+        return 1
+    fi
+    if [ -n "$expected_atlas" ] && [ "$public_atlas_identity" != "$expected_atlas" ]; then
+        echo "deploy-web: promoted atlas identity mismatch at $base_url" >&2
+        return 1
+    fi
+    if [ -n "$expected_content" ] && [ "$public_content_identity" != "$expected_content" ]; then
+        echo "deploy-web: promoted immutable content identity mismatch at $base_url" >&2
+        return 1
+    fi
+    if [ -n "$expected_deployment" ] \
+        && [ "$public_deployment" != "$expected_deployment" ]; then
+        echo "deploy-web: public deployment identity mismatch at $base_url" >&2
+        echo "expected $expected_deployment, received ${public_deployment:-null}" >&2
+        return 1
     fi
 }
 
 verify_public() {
-    base_url=$1
-    expected=$2
-    curl --fail --silent --show-error --location \
-        "$base_url/_framework/blazor.webassembly.js" --output /dev/null
-    curl --fail --silent --show-error --location \
-        "$base_url/_framework/blazor.boot.json" --output /dev/null
-    public_info=$(curl --fail --silent --show-error --location \
-        "$base_url/api/build-info")
-    public_revision=$(printf '%s' "$public_info" \
-        | node -p 'JSON.parse(require("node:fs").readFileSync(0, "utf8")).revision || ""')
-    if [ "$public_revision" != "$expected" ]; then
-        echo "deploy-web: promoted revision mismatch at $base_url" >&2
-        echo "expected $expected, received ${public_revision:-null}" >&2
-        exit 1
-    fi
+    attempts=1
+    while [ "$attempts" -le 12 ]; do
+        if verify_public_once "$@"; then
+            return 0
+        fi
+        if [ "$attempts" -lt 12 ]; then
+            echo "deploy-web: waiting for the public alias to converge ($attempts/12)" >&2
+            sleep 5
+        fi
+        attempts=$((attempts + 1))
+    done
+    return 1
+}
+
+inspect_public_deployment_id() {
+    inspected_url=$1
+    inspected_info=$("$vercel_cli" inspect "$inspected_url" --format=json) || return 1
+    printf '%s' "$inspected_info" | json_field id
+}
+
+verify_control_plane_deployment() {
+    inspected_url=$1
+    expected_deployment=$2
+    attempts=1
+    while [ "$attempts" -le 12 ]; do
+        inspected_deployment=$(inspect_public_deployment_id "$inspected_url" || true)
+        if [ -n "$inspected_deployment" ] \
+            && [ "$inspected_deployment" = "$expected_deployment" ]; then
+            return 0
+        fi
+        if [ "$attempts" -lt 12 ]; then
+            echo "deploy-web: waiting for the control-plane rollback target to converge ($attempts/12)" >&2
+            sleep 5
+        fi
+        attempts=$((attempts + 1))
+    done
+    echo "deploy-web: restored control-plane deployment does not match $expected_deployment" >&2
+    return 1
 }
 
 # Production is created without touching the public aliases. Only a deployment which serves both
 # stable Blazor bootstrap assets is eligible for promotion. `vercel curl` supplies the authenticated
 # protection bypass which current Vercel deployments require before they own a public alias.
-verify_candidate "$deployment_url" "$expected_revision"
+verify_candidate "$deployment_url" "$expected_revision" "$atlas_sha256" "$content_sha256"
+candidate_control_deployment=$(inspect_public_deployment_id "$deployment_url" || true)
+if [ -z "$candidate_control_deployment" ] \
+    || [ "$candidate_control_deployment" != "$candidate_deployment" ]; then
+    echo "deploy-web: candidate build-info and control-plane deployment identities disagree" >&2
+    exit 1
+fi
 
 if [ "$target" = "--prod" ]; then
+    if [ "$(git rev-parse --verify HEAD)" != "$release_revision" ] || worktree_is_dirty; then
+        echo "deploy-web: repository changed while the production candidate was verified" >&2
+        echo "candidate remains unpromoted; rerun from a stable, clean commit" >&2
+        exit 1
+    fi
+    if ! previous_inspect=$("$vercel_cli" inspect https://guns-only.com --format=json) \
+        || ! previous_deployment=$(printf '%s' "$previous_inspect" | json_field id); then
+        echo "deploy-web: cannot inspect the current production rollback target" >&2
+        exit 1
+    fi
+    if [ -z "$previous_deployment" ]; then
+        echo "deploy-web: cannot establish the current production rollback target" >&2
+        exit 1
+    fi
+    # Control-plane metadata is an additional identity source for deployments made by this tool.
+    # Older releases may not carry these fields, so only non-empty identities are enforced.
+    previous_revision=$(printf '%s' "$previous_inspect" | json_meta_field githubCommitSha || true)
+    previous_atlas=$(printf '%s' "$previous_inspect" | json_meta_field atlasSha256 || true)
+    previous_content=$(printf '%s' "$previous_inspect" | json_meta_field contentSha256 || true)
+    previous_build_info_healthy=0
+    if previous_info=$(curl --fail --silent --show-error --location \
+        --retry 5 --retry-delay 2 --retry-all-errors \
+        "https://guns-only.com/api/build-info"); then
+        if public_previous_revision=$(printf '%s' "$previous_info" | json_field revision) \
+            && public_previous_atlas=$(printf '%s' "$previous_info" | json_field atlasSha256) \
+            && public_previous_content=$(printf '%s' "$previous_info" | json_field contentSha256) \
+            && public_previous_deployment=$(printf '%s' "$previous_info" | json_field deployment) \
+            && [ -n "$public_previous_revision" ] \
+            && [ -n "$public_previous_deployment" ]; then
+            if [ "$public_previous_deployment" != "$previous_deployment" ] \
+                || { [ -n "$previous_revision" ] \
+                    && [ "$previous_revision" != "$public_previous_revision" ]; } \
+                || { [ -n "$previous_atlas" ] && [ -n "$public_previous_atlas" ] \
+                    && [ "$previous_atlas" != "$public_previous_atlas" ]; } \
+                || { [ -n "$previous_content" ] && [ -n "$public_previous_content" ] \
+                    && [ "$previous_content" != "$public_previous_content" ]; }; then
+                echo "deploy-web: public and control-plane rollback identities disagree" >&2
+                exit 1
+            fi
+            previous_revision=$public_previous_revision
+            if [ -n "$public_previous_atlas" ]; then
+                previous_atlas=$public_previous_atlas
+            fi
+            if [ -n "$public_previous_content" ]; then
+                previous_content=$public_previous_content
+            fi
+            previous_build_info_healthy=1
+        fi
+    fi
+    rollback_require_build_info=1
+    if [ "$previous_build_info_healthy" != "1" ]; then
+        if [ "$break_glass_build_info" != "1" ]; then
+            echo "deploy-web: cannot read a valid current production build-info rollback identity" >&2
+            echo "deploy-web: normal production deployment remains fail-closed" >&2
+            exit 1
+        fi
+        rollback_require_build_info=0
+        echo "deploy-web: AUDIT BREAK-GLASS build-info outage for release $release_revision" >&2
+        echo "deploy-web: AUDIT rollback deployment pinned by Vercel control plane: $previous_deployment" >&2
+    fi
+    confirmed_previous_deployment=$(inspect_public_deployment_id \
+        "https://guns-only.com" || true)
+    if [ "$confirmed_previous_deployment" != "$previous_deployment" ]; then
+        echo "deploy-web: production alias changed while the rollback baseline was captured" >&2
+        echo "candidate remains unpromoted; rerun after the production alias is stable" >&2
+        exit 1
+    fi
     "$vercel_cli" promote "$deployment_url" --yes
     # Verify the canonical production door, not the retired vercel.app alias (which only
     # worked via its 308 redirect after the Build 184 canonicalization).
-    verify_public "https://guns-only.com" "$release_revision"
+    if ! verify_public "https://guns-only.com" "$release_revision" \
+        "$atlas_sha256" "$content_sha256" 1 "$candidate_deployment" \
+        || ! node "$repo_dir/web/smoke/remote-smoke.mjs" "https://guns-only.com"; then
+        echo "deploy-web: live verification failed; checking alias ownership before rollback" >&2
+        rollback_owner=$(inspect_public_deployment_id "https://guns-only.com" || true)
+        if [ "$rollback_owner" != "$candidate_deployment" ]; then
+            echo "deploy-web: automatic rollback suppressed because this run no longer owns production" >&2
+            echo "deploy-web: expected $candidate_deployment, found ${rollback_owner:-unknown}" >&2
+            exit 1
+        fi
+        if "$vercel_cli" rollback "$previous_deployment" --yes; then
+            if ! verify_control_plane_deployment \
+                "https://guns-only.com" "$previous_deployment" \
+                || ! verify_public "https://guns-only.com" "$previous_revision" \
+                    "$previous_atlas" "$previous_content" "$rollback_require_build_info" \
+                    "$previous_deployment"; then
+                echo "deploy-web: rollback completed but the restored public release did not verify" >&2
+            fi
+        else
+            echo "deploy-web: automatic rollback failed" >&2
+        fi
+        exit 1
+    fi
 fi
 
 echo "deploy-web: verified $deployment_url"
