@@ -52,7 +52,7 @@ import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=229";
+} from "./render/audio/flight_audio.js?v=230";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -4799,6 +4799,35 @@ class CombatHud {
     const speedTrend = clamp(display.indicatedRateKtsPerSecond * 6, -60, 60);
 
     if (mobileTactical) {
+      // Speed and altitude tapes on the phone. The mobile profile replaced them with a line of
+      // text -- "M.61 - 339 KCAS - 10K" -- which tells you the numbers but not the one thing a
+      // tape is for: which way they are going and how fast. A pilot flies the trend, and on a
+      // phone, where the whole sortie is flown with two thumbs and no peripheral instruments,
+      // that matters more, not less. The strip stays: it carries Mach, corner and closure, none
+      // of which a tape shows.
+      //
+      // The existing layout already has room. At 390 px wide the tapes sit at x = 48 and
+      // x = 342 with a 35 px half-width, leaving the pitch ladder its middle 224 px.
+      const mobileTapeInset = this.getLayout().tapeInset;
+      this.drawVerticalTape({
+        value: spd,
+        displayValue: display.indicatedDigits,
+        x: mobileTapeInset,
+        floor: 0,
+        step: 20,
+        decimals: 0,
+        trend: speedTrend,
+        lowSpeed: stallAwareness(frame.state),
+        fixedMarkers: speedTapeMarkers(frame.state),
+      });
+      this.drawVerticalTape({
+        value: display.altitudeFt,
+        displayValue: display.altitudeDigits,
+        x: this.width - mobileTapeInset,
+        floor: 0,
+        step: frame.state.alt_ft > 10000 ? 1000 : 500,
+        decimals: 0,
+      });
       this.drawMobileTacticalState(frame, display);
     } else {
       if (this._debug) this._debug.desktopFlightChrome = true;
