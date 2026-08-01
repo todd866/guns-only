@@ -2630,7 +2630,7 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
   }
 });
 
-test("boot does not stutter: no frame is a wild outlier against this machine's own median", async () => {
+test("boot does not stutter: no application task is a wild frame outlier", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
   const site = await serveStatic(WWWROOT);
   const browser = await chromium.launch({
@@ -2640,6 +2640,31 @@ test("boot does not stutter: no frame is a wild outlier against this machine's o
   try {
     const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } }))
       .newPage();
+    // A requestAnimationFrame delta includes time when a virtualised runner has descheduled the
+    // page or SwiftShader's GPU process is blocked. Neither is application work, and the first
+    // protected-main run proved the distinction: page phases stayed light while 81 raw callbacks
+    // arrived seconds late. Long Tasks records main-thread work instead, including JSON parsing,
+    // garbage collection and a synchronous shader compile, without wrapping or reordering RAF.
+    await page.addInitScript(() => {
+      const record = { supported: false, sampleStart: 0, entries: [] };
+      Object.defineProperty(globalThis, "__gunsSmokeLongTasks", {
+        configurable: true,
+        value: record,
+      });
+      if (typeof PerformanceObserver !== "function"
+          || !PerformanceObserver.supportedEntryTypes?.includes("longtask")) return;
+      record.supported = true;
+      const observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          record.entries.push({
+            startTime: Number(entry.startTime),
+            duration: Number(entry.duration),
+          });
+        }
+        if (record.entries.length > 2048) record.entries.splice(0, 1024);
+      });
+      observer.observe({ type: "longtask", buffered: true });
+    });
     await page.goto(`${site.url}?server=off&audioQa=silent`, {
       waitUntil: "load",
       timeout: scaled(60000),
@@ -2658,9 +2683,19 @@ test("boot does not stutter: no frame is a wild outlier against this machine's o
     await page.waitForFunction(() => globalThis.__gunsState?.tick > 0,
       undefined, { timeout: scaled(90000) });
 
-    // Absolute frame rate under software rasterisation says nothing. Stutter does: a shader
-    // compiling mid-run, or a JSON parse landing in the render loop, shows up as a handful of
-    // frames far outside the machine's own steady state whatever that steady state is.
+    const longTaskSupported = await page.evaluate(() => {
+      const record = globalThis.__gunsSmokeLongTasks;
+      if (!record?.supported) return false;
+      record.entries.length = 0;
+      record.sampleStart = performance.now();
+      return true;
+    });
+    assert.equal(longTaskSupported, true,
+      "Chromium must expose the Long Tasks API for causal stutter attribution");
+
+    // Preserve the original 240-frame, machine-relative sampler. Raw RAF gaps remain useful
+    // diagnostics, but the gate below counts only application tasks which could have caused one:
+    // a shader compiling mid-run, a JSON parse, or an allocation/GC landing on the main thread.
     const deltas = await page.evaluate(() => new Promise((resolve) => {
       const out = [];
       let last = performance.now();
@@ -2672,14 +2707,29 @@ test("boot does not stutter: no frame is a wild outlier against this machine's o
       };
       requestAnimationFrame(tick);
     }));
+    // PerformanceObserver delivery is asynchronous to the task it reports. Let the final entry
+    // drain, then retain only work which began inside the exact 240-frame window.
+    await page.waitForTimeout(50);
+    const longTasks = await page.evaluate(() => {
+      const record = globalThis.__gunsSmokeLongTasks;
+      const sampleEnd = performance.now();
+      return record.entries
+        .filter((entry) => entry.startTime >= record.sampleStart
+          && entry.startTime <= sampleEnd)
+        .map((entry) => entry.duration);
+    });
 
     const sorted = deltas.slice(1).sort((a, b) => a - b);
     const median = sorted[Math.floor(sorted.length / 2)];
-    const outliers = sorted.filter((d) => d > median * 6).length;
-    const worst = sorted.at(-1);
-    assert.ok(outliers <= 3,
-      `${outliers} frames exceeded 6x the ${median.toFixed(1)}ms median `
-      + `(worst ${worst.toFixed(0)}ms) — something is compiling or allocating in the render loop`);
+    const threshold = median * 6;
+    const rawOutliers = sorted.filter((delta) => delta > threshold).length;
+    const applicationOutliers = longTasks.filter((duration) => duration > threshold).length;
+    const worstFrame = sorted.at(-1);
+    const worstApplicationTask = Math.max(0, ...longTasks);
+    assert.ok(applicationOutliers <= 3,
+      `${applicationOutliers} application tasks exceeded 6x the ${median.toFixed(1)}ms median `
+      + `(worst task ${worstApplicationTask.toFixed(0)}ms; ${rawOutliers} raw RAF gaps; `
+      + `worst gap ${worstFrame.toFixed(0)}ms) — application work is stalling the render loop`);
   } finally {
     await browser.close();
     await site.close();

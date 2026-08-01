@@ -58,13 +58,15 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
   solution and four standalone C# tools build with zero warnings and zero errors; staged/published
   terrain is verified at 16 pages, 2,390 chunks, 9,560 records, and 420,792,736 bytes. The corrected
   machine-relative stutter test now honors the intentional Ready interlock, presses the real Fly
-  control, reaches a live tick, and passes its unchanged 240-frame outlier sampler. This is local
-  candidate evidence, not a substitute for a clean pushed exact-SHA GitHub Verify run.
+  control, reaches a live tick, and gates application-owned Long Tasks against its 240-frame,
+  6x-median, at-most-three-outlier contract. Raw SwiftShader/compositor gaps remain diagnostic
+  rather than being misreported as render-loop work. This is local candidate evidence, not a
+  substitute for a clean pushed exact-SHA GitHub Verify run.
 - GitHub Verify was not a trustworthy release signal at the start: the latest 12 runs were red and
   the last 100 contained 15 successes, 73 failures, and 12 cancellations.
-- GitHub currently reports `main` as unprotected. Enabling strict required checks is an
-  operator-owned repository setting; production deployment now fails closed until `main` is
-  protected and the exact pushed SHA has a successful canonical Verify workflow.
+- GitHub `main` now has strict, admin-enforced protection requiring the deterministic-contract and
+  published-browser/HUD Verify jobs. Production deployment fails closed unless that protection is
+  intact and the exact pushed SHA has a successful canonical Verify workflow.
 - A candidate is releasable only when its exact pushed SHA has a complete green gate. Production
   build metadata must identify both the Git revision and immutable staged-content/atlas digest.
 
