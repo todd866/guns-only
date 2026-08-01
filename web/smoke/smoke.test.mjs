@@ -2646,7 +2646,13 @@ test("boot does not stutter: no application task is a wild frame outlier", async
     // arrived seconds late. Long Tasks records main-thread work instead, including JSON parsing,
     // garbage collection and a synchronous shader compile, without wrapping or reordering RAF.
     await page.addInitScript(() => {
-      const record = { supported: false, sampleStart: 0, entries: [] };
+      const record = {
+        supported: false,
+        sampleStart: 0,
+        sampleEnd: 0,
+        entries: [],
+        observer: null,
+      };
       Object.defineProperty(globalThis, "__gunsSmokeLongTasks", {
         configurable: true,
         value: record,
@@ -2664,6 +2670,7 @@ test("boot does not stutter: no application task is a wild frame outlier", async
         if (record.entries.length > 2048) record.entries.splice(0, 1024);
       });
       observer.observe({ type: "longtask", buffered: true });
+      record.observer = observer;
     });
     await page.goto(`${site.url}?server=off&audioQa=silent`, {
       waitUntil: "load",
@@ -2685,9 +2692,11 @@ test("boot does not stutter: no application task is a wild frame outlier", async
 
     const longTaskSupported = await page.evaluate(() => {
       const record = globalThis.__gunsSmokeLongTasks;
-      if (!record?.supported) return false;
+      if (!record?.supported || !record.observer) return false;
       record.entries.length = 0;
+      record.observer.takeRecords();
       record.sampleStart = performance.now();
+      record.sampleEnd = 0;
       return true;
     });
     assert.equal(longTaskSupported, true,
@@ -2702,20 +2711,28 @@ test("boot does not stutter: no application task is a wild frame outlier", async
       const tick = (now) => {
         out.push(now - last);
         last = now;
-        if (out.length >= 240) resolve(out);
+        if (out.length >= 240) {
+          globalThis.__gunsSmokeLongTasks.sampleEnd = performance.now();
+          resolve(out);
+        }
         else requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
     }));
-    // PerformanceObserver delivery is asynchronous to the task it reports. Let the final entry
-    // drain, then retain only work which began inside the exact 240-frame window.
-    await page.waitForTimeout(50);
+    // PerformanceObserver delivery is asynchronous to the task it reports. Merge any entries not
+    // yet delivered to its callback, then retain only work inside the exact timestamps captured by
+    // the sampler itself. A wall-time sleep would race the same VM descheduling this gate excludes.
     const longTasks = await page.evaluate(() => {
       const record = globalThis.__gunsSmokeLongTasks;
-      const sampleEnd = performance.now();
+      for (const entry of record.observer.takeRecords()) {
+        record.entries.push({
+          startTime: Number(entry.startTime),
+          duration: Number(entry.duration),
+        });
+      }
       return record.entries
         .filter((entry) => entry.startTime >= record.sampleStart
-          && entry.startTime <= sampleEnd)
+          && entry.startTime <= record.sampleEnd)
         .map((entry) => entry.duration);
     });
 
