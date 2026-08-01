@@ -1,0 +1,616 @@
+{
+  "$schema": "https://guns-only.invalid/schemas/v1/mission-dossier.schema.json",
+  "schemaVersion": "1.0.0",
+  "dossierId": "dossier.armstrong-cable-strike.v1",
+  "governanceId": "governance.korea-braided.v1",
+  "status": "researching",
+  "title": "The Long Way Home: September 1951",
+  "dramaticQuestion": "When damage removes the safe option, can disciplined observation and aircraft handling preserve enough control to choose survival over the machine?",
+  "sorties": [
+    {
+      "sortieId": "sortie.1951.armstrong-cable-strike.v1",
+      "timelineId": "timeline.korea-1950s.v1",
+      "missionContractId": "mission.korea-1951.armstrong-cable-strike.prototype.v1",
+      "perspective": {
+        "faction": "un-command",
+        "actorRole": "Ensign Neil A. Armstrong flying a VF-51 Panther from USS Essex",
+        "vehicleCapabilityId": "aircraft.f9f-panther.subtype-unresolved.v1",
+        "controlMode": "crewed"
+      },
+      "playerFantasy": "Fly the documented cable-strike sequence as a young naval aviator whose survival depends on precise handling and a wingman's external inspection.",
+      "scenarioSummary": "In September 1951 Armstrong launches from USS Essex, joins Major John Carpenter for armed reconnaissance west of Wonsan, strikes a cable at low altitude, stabilizes a Panther after losing part of the right wing, and flies south before ejecting in friendly territory.",
+      "centralDecision": "Use aircraft response and Carpenter's bounded visual report to preserve control, reject an unsafe landing, and reach a defensible ejection area.",
+      "failureMeaning": "A restart identifies the first controllable route, collision, stabilization, formation, or ejection error without allowing the fixed historical sequence to branch into an alternate biography.",
+      "successMeaning": "The player performs the documented survival sequence competently while the debrief separates recorded history from authored route, damage, dialogue, and system reconstruction."
+    },
+    {
+      "sortieId": "sortie.2034.damaged-aircraft-diversion.v1",
+      "timelineId": "timeline.korea-2030s.v1",
+      "missionContractId": "mission.korea-2034.damaged-aircraft-diversion.prototype.v1",
+      "perspective": {
+        "faction": "us-rok-coalition",
+        "actorRole": "Fictional coalition pilot managing battle damage and uncertain recovery options",
+        "vehicleCapabilityId": "aircraft.f22a.public-data-surrogate.v1",
+        "controlMode": "crewed"
+      },
+      "playerFantasy": "Reapply the historical discipline under modern pressure: stabilize first, ask a wingman for observable facts, and choose a recovery plan without hidden simulation truth.",
+      "scenarioSummary": "A fictional 2034 aircraft takes control-surface damage while the network is degraded. The player must separate cockpit evidence from a wingman's limited inspection, then choose a divert, controlled ejection, or continued flight within an authored safety envelope.",
+      "centralDecision": "Decide which recovery option the available evidence actually supports instead of treating advanced displays or a wingman's estimate as certainty.",
+      "failureMeaning": "The debrief distinguishes an evidence error from a handling error and preserves an alternate launchable route rather than turning one mistake into a hidden run-ending penalty.",
+      "successMeaning": "The player carries Armstrong's stabilization-and-inspection lesson into a different fictional aircraft and makes a defensible survival decision from observer-safe evidence."
+    }
+  ],
+  "braid": {
+    "revealOrder": [
+      "sortie.1951.armstrong-cable-strike.v1",
+      "sortie.2034.damaged-aircraft-diversion.v1"
+    ],
+    "echoes": [
+      {
+        "echoId": "echo.damage-is-evidence.v1",
+        "sortieIds": [
+          "sortie.1951.armstrong-cable-strike.v1",
+          "sortie.2034.damaged-aircraft-diversion.v1"
+        ],
+        "constant": "A damaged aircraft supplies incomplete evidence through control response, instruments, visible structure, and another pilot's observation.",
+        "changed": "The historical Panther has sparse instruments and direct formation inspection; the fictional modern aircraft has denser but still fallible status and network information.",
+        "dramaticPurpose": "Make Armstrong's survival problem change how the player interprets modern aircraft status, rather than using the historical sortie as detached biography."
+      },
+      {
+        "echoId": "echo.survival-over-machine.v1",
+        "sortieIds": [
+          "sortie.1951.armstrong-cable-strike.v1",
+          "sortie.2034.damaged-aircraft-diversion.v1"
+        ],
+        "constant": "Competent airmanship includes recognizing when preserving the aircraft is no longer the safest achievable outcome.",
+        "changed": "Armstrong's broad outcome is fixed by history; the fictional modern sortie allows several evidence-bounded recovery outcomes without rewriting a real person's life.",
+        "dramaticPurpose": "Turn ejection from spectacle into a reasoned survival decision whose logic can transfer to later play."
+      }
+    ],
+    "carriedKnowledge": [
+      "Stabilize the aircraft before diagnosing every detail of the damage.",
+      "Treat a wingman's report as observer-limited evidence rather than access to hidden simulation state.",
+      "Compare recovery options against controllability, route, fuel, altitude, and ejection conditions.",
+      "Separate what sources establish from the route, dialogue, collision field, and damaged-flight behavior authored for play."
+    ],
+    "authoredInvariants": [
+      "The historical sequence is dated only to September 1951 until the 3-versus-5 September conflict is resolved or formally preserved.",
+      "The player cannot avoid the historical cable strike, preserve the aircraft, land the Panther, or create an alternate Armstrong biography.",
+      "Cable contact is a physical simulation event, not an invisible narrative trigger.",
+      "Carpenter reports only observable exterior condition and never reveals hidden aerodynamic state.",
+      "The exact Panther subtype, target route, cable layout, radio words, seat operation, ejection point, and ground-recovery staging remain unlocked research questions.",
+      "The 2034 sortie and every person, event, organization-level consequence, and outcome in it are explicit fiction."
+    ],
+    "authoredDifferences": [
+      "Player control quality, route precision, stabilization time, formation station, fuel margin, and checkpoint restarts may vary without changing the historical outcome.",
+      "Weather and visibility may vary only inside later source-bounded ranges that preserve every required visual and flight cue.",
+      "The modern echo may vary its damage presentation and recovery availability inside a validated fictional mission contract."
+    ]
+  },
+  "learningObjectives": [
+    {
+      "objectiveId": "learning.stabilize-before-diagnosis.v1",
+      "playerCan": "Arrest an unexpected asymmetric roll, establish a survivable flight state, and only then refine the damage diagnosis.",
+      "introducedInSortieId": "sortie.1951.armstrong-cable-strike.v1",
+      "explainedByDebriefId": "debrief.damage-control-chain.v1",
+      "reappliedInSortieId": "sortie.2034.damaged-aircraft-diversion.v1",
+      "evaluatedBy": [
+        "time from damage event to bounded bank angle and positive terrain clearance",
+        "control saturation and reversal count during initial stabilization",
+        "airspeed, altitude, and load factor at the first diagnostic or route change"
+      ],
+      "archiveEntryId": "archive.armstrong-damage-evidence.v1"
+    },
+    {
+      "objectiveId": "learning.inspect-without-omniscience.v1",
+      "playerCan": "Use a wingman's bounded visual report together with cockpit evidence without assuming either source reveals exact structural or aerodynamic truth.",
+      "introducedInSortieId": "sortie.1951.armstrong-cable-strike.v1",
+      "explainedByDebriefId": "debrief.inspection-and-recovery.v1",
+      "reappliedInSortieId": "sortie.2034.damaged-aircraft-diversion.v1",
+      "evaluatedBy": [
+        "formation stability before an inspection report is accepted",
+        "observations available to each actor at the recovery decision",
+        "whether the selected recovery option follows from visible evidence and demonstrated controllability"
+      ],
+      "archiveEntryId": "archive.armstrong-decision-boundary.v1"
+    }
+  ],
+  "educationDelivery": {
+    "debriefs": [
+      {
+        "debriefId": "debrief.damage-control-chain.v1",
+        "triggerEvidence": [
+          "the ordered cable-contact and partial-wing-damage events",
+          "bank angle, roll rate, control input, speed, altitude, and terrain clearance after contact",
+          "the first point at which the aircraft re-enters or permanently leaves the authored controllability corridor"
+        ],
+        "insight": "Replay the first controllable response after contact and distinguish a route error, collision consequence, control correction, and later diagnosis from one another.",
+        "neverClaims": [
+          "that the reconstructed aerodynamic derivatives reproduce Armstrong's exact aircraft",
+          "that an unavoidable historical contact was caused by player ignorance",
+          "that hidden collision or terrain state was fair evidence"
+        ]
+      },
+      {
+        "debriefId": "debrief.inspection-and-recovery.v1",
+        "triggerEvidence": [
+          "Carpenter or the modern wingman reaches a valid inspection station",
+          "an observer-safe exterior-condition report is recorded",
+          "the player accepts, delays, or rejects a recovery option"
+        ],
+        "insight": "Show exactly what the pilot and wingman could observe when the recovery decision was made, then compare the selected option with demonstrated controllability and route state.",
+        "neverClaims": [
+          "that Carpenter's exact historical radio words are known",
+          "that the wingman can see hidden structural health or future failure",
+          "that ejecting or continuing is universally correct outside the recorded conditions"
+        ]
+      }
+    ],
+    "archiveEntries": [
+      {
+        "archiveEntryId": "archive.armstrong-damage-evidence.v1",
+        "title": "Cable, Wing Loss, and the Limits of Reconstruction",
+        "depth": "deep",
+        "claimRefs": [
+          "claim.armstrong-cable-strike.v1",
+          "claim.armstrong-wing-loss.v1",
+          "claim.cable-field-gameplay-reconstruction.v1",
+          "claim.panther-damage-flight-reconstruction.v1"
+        ],
+        "abstractionRefs": [
+          "abstraction.authored-cable-field.v1",
+          "abstraction.damaged-panther-envelope.v1"
+        ]
+      },
+      {
+        "archiveEntryId": "archive.armstrong-decision-boundary.v1",
+        "title": "Inspection, No-Landing Judgment, and Ejection",
+        "depth": "deep",
+        "claimRefs": [
+          "claim.armstrong-vf51-essex.v1",
+          "claim.armstrong-armed-recon-wonsan.v1",
+          "claim.carpenter-flight-lead.v1",
+          "claim.armstrong-no-landing-decision.v1",
+          "claim.armstrong-ejection-friendly-territory.v1",
+          "claim.panther-ejection-seat.v1",
+          "claim.2034-damaged-diversion-is-fiction.v1"
+        ],
+        "abstractionRefs": [
+          "abstraction.september-1951-unresolved.v1",
+          "abstraction.procedural-radio.v1",
+          "abstraction.ejection-and-recovery-gap.v1",
+          "abstraction.modern-damage-echo.v1"
+        ]
+      }
+    ],
+    "interruptionBudget": {
+      "mandatoryInFlightLessons": 0,
+      "maxPrioritizedDebriefInsights": 2,
+      "archiveIsOptional": true
+    }
+  },
+  "claims": [
+    {
+      "claimId": "claim.armstrong-vf51-essex.v1",
+      "label": "history",
+      "statement": "Ensign Neil A. Armstrong served as a VF-51 Panther pilot aboard USS Essex during its 1951 Korean War deployment.",
+      "appearsInSortieIds": [
+        "sortie.1951.armstrong-cable-strike.v1"
+      ],
+      "sourceRefs": [
+        "source.nhhc-hgram-033.v1"
+      ],
+      "qualification": "The mission remains dated only to September 1951 because official sources conflict between 3 and 5 September. Sources also alternate between F9F-2 and F9F-3 while identifying BuNo 125122, so the runtime subtype, engine, cockpit, livery, and loadout are not source-locked. Use USS Essex rather than a later CVA designation in 1951 presentation."
+    },
+    {
+      "claimId": "claim.armstrong-armed-recon-wonsan.v1",
+      "label": "history",
+      "statement": "The incident occurred during armed reconnaissance against transportation or storage targets west of Wonsan, associated by archival metadata with the Majon-ni area.",
+      "appearsInSortieIds": [
+        "sortie.1951.armstrong-cable-strike.v1"
+      ],
+      "sourceRefs": [
+        "source.nhhc-hgram-033.v1",
+        "source.nhhc-armstrong-photo-l38.v1"
+      ],
+      "qualification": "The current evidence does not close the exact target, coordinates, corridor, formation size, attack direction, loadout, or the distinction between the flight's planned targets and Armstrong's own pass. Those details remain reconstruction until the Essex action report and related records receive page-level review."
+    },
+    {
+      "claimId": "claim.armstrong-cable-strike.v1",
+      "label": "history",
+      "statement": "Armstrong later recalled that his Panther struck a cable during the low-level mission and denied that antiaircraft fire directly caused the damage.",
+      "appearsInSortieIds": [
+        "sortie.1951.armstrong-cable-strike.v1"
+      ],
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.nhhc-hgram-033.v1"
+      ],
+      "qualification": "This is Armstrong's retrospective account recorded roughly fifty years later. The contemporary operational account attributed the incident to antiaircraft fire and a pole; its full text has not yet received page-level review. The mission may establish one cable without claiming a historically mapped field of cables."
+    },
+    {
+      "claimId": "claim.armstrong-wing-loss.v1",
+      "label": "history",
+      "statement": "Armstrong recalled that the cable removed approximately six to eight feet from the Panther's right wing and left the aircraft flyable at speed.",
+      "appearsInSortieIds": [
+        "sortie.1951.armstrong-cable-strike.v1"
+      ],
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.nhhc-hgram-033.v1"
+      ],
+      "qualification": "Six to eight feet is a retrospective estimate, not a measured fracture record. The exact break geometry, aileron and tip-tank state, fuel and mass effects, and aerodynamic derivatives remain unresolved."
+    },
+    {
+      "claimId": "claim.carpenter-flight-lead.v1",
+      "label": "history",
+      "statement": "Armstrong identified USAF Major John Carpenter, an exchange officer, as his flight lead and recalled Carpenter flying alongside the damaged aircraft.",
+      "appearsInSortieIds": [
+        "sortie.1951.armstrong-cable-strike.v1"
+      ],
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1"
+      ],
+      "qualification": "The current source does not establish the exact formation geometry, inspection duration, observations, or radio wording. Carpenter's runtime report must remain observer-safe and procedurally reconstructed."
+    },
+    {
+      "claimId": "claim.armstrong-no-landing-decision.v1",
+      "label": "history",
+      "statement": "Armstrong recalled that he and Carpenter judged slowing the damaged Panther for landing could produce an uncontrollable snap and therefore chose ejection.",
+      "appearsInSortieIds": [
+        "sortie.1951.armstrong-cable-strike.v1"
+      ],
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1"
+      ],
+      "qualification": "The account supports the reasoning in broad form but does not close exact dialogue, tested speeds, which landing alternatives were discussed, or the precise division of judgment between the two pilots."
+    },
+    {
+      "claimId": "claim.armstrong-ejection-friendly-territory.v1",
+      "label": "history",
+      "statement": "Armstrong recalled flying south into friendly territory, ejecting near Pohang or K-3, drifting by parachute over land, and being met by Marine lieutenant Goodell Warren in a jeep.",
+      "appearsInSortieIds": [
+        "sortie.1951.armstrong-cable-strike.v1"
+      ],
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.nhhc-hgram-033.v1"
+      ],
+      "qualification": "The broad sequence is supported, but exact ejection coordinates, intended disposal corridor, wind, parachute path, landing surface, recovery route, vehicle appearance, interaction, and words remain uncorroborated. Ground-recovery staging cannot be presented as exact history."
+    },
+    {
+      "claimId": "claim.panther-ejection-seat.v1",
+      "label": "reconstruction",
+      "statement": "The current intake establishes that Armstrong ejected but does not establish the exact Panther seat model, operating sequence, envelope, or acceleration to be simulated.",
+      "appearsInSortieIds": [
+        "sortie.1951.armstrong-cable-strike.v1"
+      ],
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.armstrong-intake-register.v1"
+      ],
+      "qualification": "The often repeated cartridge mechanism and 22-g figure are not source-locked here. Ejection and parachute implementation remains blocked on a provenance-verified 1951 Panther handbook, maintenance material, and appropriate technical review."
+    },
+    {
+      "claimId": "claim.cable-field-gameplay-reconstruction.v1",
+      "label": "reconstruction",
+      "statement": "Any playable sequence of multiple cable obstacles, their supports, spacing, height, purpose, and placement along an authored attack route is a gameplay reconstruction around the documented cable contact.",
+      "appearsInSortieIds": [
+        "sortie.1951.armstrong-cable-strike.v1"
+      ],
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.nhhc-hgram-033.v1",
+        "source.armstrong-intake-register.v1"
+      ],
+      "qualification": "The current sources establish a reported cable strike, not the exact local obstacle layout or even that multiple cables formed a deliberate antiaircraft field. Physical gameplay geometry must be tactically plausible, visibly disclosed as reconstruction, and must not masquerade as a map of the historical installation."
+    },
+    {
+      "claimId": "claim.panther-damage-flight-reconstruction.v1",
+      "label": "reconstruction",
+      "statement": "A survivable partial-right-wing damage model can reproduce the reported scale and qualitative control problem only as a bounded public-data reconstruction, not as the exact aerodynamics of Armstrong's aircraft.",
+      "appearsInSortieIds": [
+        "sortie.1951.armstrong-cable-strike.v1"
+      ],
+      "sourceRefs": [
+        "source.armstrong-nasa-sp-2011-4542.v1",
+        "source.nhhc-hgram-033.v1",
+        "source.armstrong-intake-register.v1"
+      ],
+      "qualification": "Release requires sourced Panther geometry and controls, damage analogs, a sensitivity study, and declared playable bounds. Current sources support reported wing loss and landing risk but not fracture mechanics, damaged derivatives, fuel effects, or one exact recovery envelope."
+    },
+    {
+      "claimId": "claim.2034-damaged-diversion-is-fiction.v1",
+      "label": "fiction",
+      "statement": "The 2034 damaged-aircraft diversion, its pilot, damage event, wingman, network state, recovery options, and outcomes are campaign fiction created to reapply the historical learning objective.",
+      "appearsInSortieIds": [
+        "sortie.2034.damaged-aircraft-diversion.v1"
+      ],
+      "sourceRefs": [],
+      "qualification": "The sortie may reuse declared public engineering constraints, but it is not presented as a prediction, real incident, or evidence about a future Korean conflict."
+    }
+  ],
+  "sources": [
+    {
+      "sourceId": "source.armstrong-nasa-sp-2011-4542.v1",
+      "grade": "oral_history",
+      "title": "The Spoken Word II: Recollections of Dryden History, Beyond the Sky",
+      "publisher": "National Aeronautics and Space Administration",
+      "uri": "https://www.nasa.gov/wp-content/uploads/2023/03/sp-4542.pdf",
+      "publishedOn": "2011",
+      "accessedOn": "2026-07-30",
+      "supportsClaimIds": [
+        "claim.armstrong-cable-strike.v1",
+        "claim.armstrong-wing-loss.v1",
+        "claim.carpenter-flight-lead.v1",
+        "claim.armstrong-no-landing-decision.v1",
+        "claim.armstrong-ejection-friendly-territory.v1",
+        "claim.panther-ejection-seat.v1",
+        "claim.cable-field-gameplay-reconstruction.v1",
+        "claim.panther-damage-flight-reconstruction.v1"
+      ],
+      "perspective": "Armstrong's first-person retrospective account on pages 16-18, recorded approximately fifty years after the event. It supports what Armstrong remembered and the historical anchors used by the reconstruction; it is not a contemporary mission record, radio transcript, seat manual, cable survey, or damaged-aerodynamics dataset."
+    },
+    {
+      "sourceId": "source.nhhc-hgram-033.v1",
+      "grade": "official_synthesis",
+      "title": "H-Gram 033",
+      "publisher": "Naval History and Heritage Command",
+      "uri": "https://www.history.navy.mil/content/history/nhhc/about-us/leadership/director/directors-corner/h-grams/h-gram-033.html",
+      "publishedOn": "2019",
+      "accessedOn": "2026-07-30",
+      "supportsClaimIds": [
+        "claim.armstrong-vf51-essex.v1",
+        "claim.armstrong-armed-recon-wonsan.v1",
+        "claim.armstrong-cable-strike.v1",
+        "claim.armstrong-wing-loss.v1",
+        "claim.armstrong-ejection-friendly-territory.v1",
+        "claim.cable-field-gameplay-reconstruction.v1",
+        "claim.panther-damage-flight-reconstruction.v1"
+      ],
+      "perspective": "Official U.S. Navy historical synthesis, especially pages 25-26, that identifies VF-51, USS Essex, the broad mission and competing incident accounts. It uses 5 September while other official metadata uses 3 September, and it alternates between F9F-2 and F9F-3 descriptions."
+    },
+    {
+      "sourceId": "source.nhhc-armstrong-photo-l38.v1",
+      "grade": "primary_document",
+      "title": "Ensign Neil Armstrong, F9F Pilot, Korean War Recon Mission, Wonsan",
+      "publisher": "Naval History and Heritage Command",
+      "uri": "https://www.history.navy.mil/our-collections/photography/numerical-list-of-images/nhhc-series/naval-subjects-collection/l38-personnel/l38-02-07-013-ensign-neil-armstrong--f9f-pilot-korean-war--recon.html",
+      "accessedOn": "2026-07-30",
+      "supportsClaimIds": [
+        "claim.armstrong-armed-recon-wonsan.v1"
+      ],
+      "perspective": "Official archival catalog metadata linking the image to a 3 September 1951 reconnaissance mission against transportation and storage facilities south of Majon-ni, west of Wonsan. Its 'shot down' caption does not resolve the damage mechanism or complete sortie sequence."
+    },
+    {
+      "sourceId": "source.armstrong-intake-register.v1",
+      "grade": "primary_document",
+      "title": "Armstrong cable-strike source register, intake snapshot",
+      "publisher": "Guns Only research",
+      "uri": "repo://docs/art-direction/korea-1950s/narrative/source-register.json",
+      "publishedOn": "2026-07-30",
+      "accessedOn": "2026-08-01",
+      "supportsClaimIds": [
+        "claim.panther-ejection-seat.v1",
+        "claim.cable-field-gameplay-reconstruction.v1",
+        "claim.panther-damage-flight-reconstruction.v1"
+      ],
+      "perspective": "Internal intake record used only to prove the declared research gaps and reconstruction boundaries. It is not historical evidence for the incident, not a technical source, not source lock, and not permission to ship any research asset it indexes."
+    }
+  ],
+  "abstractions": [
+    {
+      "abstractionId": "abstraction.september-1951-unresolved.v1",
+      "affects": "history",
+      "description": "Titles and briefings use September 1951 without a day, and the vehicle remains a Panther with subtype unresolved while official sources disagree.",
+      "reason": "Choosing 3 or 5 September or F9F-2 versus F9F-3 now would convert a live evidence conflict into false precision and contaminate cockpit, engine, livery, and loadout choices.",
+      "playerDisclosure": "The historical note exposes the date and subtype disagreements until a later dossier revision resolves or formally preserves them."
+    },
+    {
+      "abstractionId": "abstraction.authored-cable-field.v1",
+      "affects": "history",
+      "description": "The playable target corridor and any cable sequence are authored around one reported contact rather than reconstructed from a surveyed historical obstacle layout.",
+      "reason": "Current evidence does not establish exact target coordinates, route, cable count, support geometry, height, spacing, or purpose, while gameplay requires visible physical collision geometry.",
+      "playerDisclosure": "Briefing, archive, replay, and debrief label the route and cable layout as reconstruction."
+    },
+    {
+      "abstractionId": "abstraction.damaged-panther-envelope.v1",
+      "affects": "physics",
+      "description": "Partial-wing damage uses a bounded controllability envelope and sensitivity-tested surrogate forces rather than claiming exact fracture or aerodynamic derivatives.",
+      "reason": "The account supplies damage scale and qualitative landing risk, but the relevant structure, controls, mass distribution, and damaged-flight data are not yet source-locked.",
+      "playerDisclosure": "The archive distinguishes reported wing loss from simulated handling and publishes the accepted reconstruction bounds."
+    },
+    {
+      "abstractionId": "abstraction.procedural-radio.v1",
+      "affects": "narrative",
+      "description": "Radio lines perform documented communication functions in restrained period-informed language but do not claim to quote Armstrong, Carpenter, the Essex deck, or ground personnel.",
+      "reason": "No incident radio transcript is registered, and later dramatizations cannot be laundered into historical dialogue.",
+      "playerDisclosure": "Line-level provenance labels every unsourced utterance as procedural reconstruction and original performances do not imitate real voices."
+    },
+    {
+      "abstractionId": "abstraction.ejection-and-recovery-gap.v1",
+      "affects": "systems",
+      "description": "Ejection, parachute, landing, and ground recovery remain greybox-only placeholders until seat, procedure, location, wind, equipment, and independent recovery evidence close.",
+      "reason": "The broad survival sequence is supported, but current evidence cannot justify exact hardware behavior, acceleration, action order, trajectory, terrain, vehicle, dialogue, or interpersonal staging.",
+      "playerDisclosure": "No public historical release may present these details as exact; the archive names the unresolved fields."
+    },
+    {
+      "abstractionId": "abstraction.modern-damage-echo.v1",
+      "affects": "narrative",
+      "description": "The 2034 sortie is a fictional transfer exercise that preserves the stabilization, observer-limited inspection, and survival-decision structure without repeating Armstrong's outcome.",
+      "reason": "Campaign governance requires historical knowledge to change the meaning of a later modern decision, while a real person's fixed biography must not become a branching sandbox.",
+      "playerDisclosure": "The mission selection, briefing, archive, and debrief identify the 2034 event and cast as fiction."
+    }
+  ],
+  "progression": {
+    "entryConditions": [
+      "The dossier remains unavailable in public production while its status is researching or any blocking review is pending.",
+      "An internal greybox may launch only with explicit research-mode disclosure and without final historical art, voices, or asset claims.",
+      "The modern echo remains a prototype contract until the historical learning objective and campaign reveal order are reviewed."
+    ],
+    "completionUnlocks": [
+      {
+        "kind": "archive_entry",
+        "contentId": "archive.armstrong-damage-evidence.v1",
+        "storyReason": "Completing the historical sequence gives the player's recorded control response enough context for the damage-evidence archive."
+      },
+      {
+        "kind": "mission",
+        "contentId": "mission.korea-2034.damaged-aircraft-diversion.prototype.v1",
+        "storyReason": "The fictional transfer sortie follows only after the player has experienced the historical stabilization and inspection problem."
+      }
+    ],
+    "failureUnlocks": [
+      {
+        "kind": "archive_entry",
+        "contentId": "archive.armstrong-decision-boundary.v1",
+        "storyReason": "A failed stabilization or recovery attempt may reveal sourced context and reconstruction boundaries without changing the fixed historical outcome."
+      }
+    ],
+    "runStateEffects": [],
+    "routeGuarantee": "Failure or completion cannot strand the campaign: the director retains another launchable mission, and historical restarts never consume permanent aircraft or alter Armstrong's biography."
+  },
+  "representation": {
+    "agencyRules": [
+      "Armstrong is represented as a young naval aviator acting on observable aircraft and formation evidence, not through retrospective astronaut mythology or invented inner monologue.",
+      "Carpenter remains a professional actor with observer-limited knowledge, not an omniscient tutorial voice or a device for assigning Armstrong's decision to someone else.",
+      "Essex deck and ground-recovery personnel remain documented operational roles unless records support names, actions, and words.",
+      "The fixed historical outcome never converts player difficulty into blame for what happened to a real person.",
+      "No dialogue, performance direction, or visual motif uses Moon foreshadowing or imitates a real person's voice."
+    ],
+    "civilianContext": "Transportation and storage targets, the Wonsan region, friendly territory, and the ground-recovery area existed within a war affecting Korean civilians; target and terrain production must not reduce inhabited geography to an empty obstacle course.",
+    "perspectiveRisks": [
+      "Turning a documented survival event into celebrity origin myth or inevitable astronaut foreshadowing.",
+      "Presenting a disputed operational account, target, cable field, date, subtype, or radio script as settled fact.",
+      "Using Korean landscape and civilians only as scenery for an American biography.",
+      "Making ejection injury, parachute descent, or ground recovery into spectacle or comedy.",
+      "Implying endorsement by Armstrong's family, NASA, the U.S. Navy, NHHC, or an archive."
+    ],
+    "mitigations": [
+      "Keep history, engineering reconstruction, procedural dialogue, and fiction labeled at the point of use and in the archive.",
+      "Obtain Korean-history and perspective review before target-area art, briefing language, and civilian context can pass.",
+      "Use original non-imitative performances only after line-level provenance and voice policy review.",
+      "Keep generated references and research-only media outside the evidentiary and runtime asset closures.",
+      "Review the ground ending for restraint, source limits, accessibility, and human scale before content lock."
+    ],
+    "memoryOwnership": "The historical reconstruction belongs to the declared sources and their limits rather than an omniscient narrator; the later fictional pilot may carry the learned decision structure, but cannot claim Armstrong's private thoughts or settle disputed history."
+  },
+  "production": {
+    "terrainCorridors": [
+      {
+        "corridorId": "terrain.armstrong-wonsan-to-pohang.researching.v1",
+        "sortieIds": [
+          "sortie.1951.armstrong-cable-strike.v1"
+        ],
+        "purpose": "Support the complete historical flight from carrier launch through a source-bounded target corridor, physical cable contact, southbound damaged flight, ejection, descent, and ground recovery.",
+        "nearFieldRequirements": [
+          "No exact target corridor ships until the Essex action report and map evidence close or the dossier declares an explicit composite geography.",
+          "Collision terrain, rendered terrain, route gates, cable supports, cable sweep, and replay use one authoritative coordinate frame.",
+          "Every collision hazard is visible with sufficient contrast and temporal warning without moving or enlarging its physical truth for presentation.",
+          "The ejection and ground-recovery cell remains non-authoritative until location, wind, parachute, terrain, and recovery evidence are reviewed.",
+          "Settlements, transport infrastructure, land use, and civilian context receive dated Korea-specific source and representation review."
+        ]
+      },
+      {
+        "corridorId": "terrain.korea-2034-damage-diversion.prototype.v1",
+        "sortieIds": [
+          "sortie.2034.damaged-aircraft-diversion.v1"
+        ],
+        "purpose": "Reapply stabilization, inspection, and recovery judgment in a fictional modern corridor whose terrain and recovery options remain readable under degraded network conditions.",
+        "nearFieldRequirements": [
+          "Terrain collision and every offered recovery route match the visible surface and observer-safe navigation data.",
+          "The fictional setting is visually and textually distinct from the 1951 reconstruction.",
+          "No historical cable, person, voice, or ground-recovery staging is reused as unexplained modern texture."
+        ]
+      }
+    ],
+    "visualProofs": [
+      "A single recorded historical run proves physical cable sweep, one ordered contact, visible right-wing damage, stable inspection geometry, and replay agreement without hidden triggers.",
+      "Independent reviewers can distinguish the documented historical anchors from reconstructed route, cable, damaged-flight, dialogue, ejection, and recovery detail.",
+      "Cable and terrain cues remain readable at the required attack speed across supported display sizes without changing collision geometry.",
+      "The player exterior, cockpit, USS Essex configuration, livery, equipment, terrain, and ground-recovery art remain blocked until their source and rights records close."
+    ],
+    "requiredSystems": [
+      "typed fixed-history mission controller with deterministic checkpoints",
+      "source-bounded route gates and observer-safe two-ship formation",
+      "physical swept-volume cable collision sharing rendered geometry",
+      "persistent partial-wing damage with sensitivity-tested aerodynamic composition",
+      "damage inspection report derived only from observer-visible state",
+      "friendly-territory and recovery-option decision contract",
+      "source-locked seat, pilot, parachute, ground-contact, and recovery lifecycles",
+      "one-shot ordered evidence recorder and replay-backed debrief",
+      "line-level provenance, captions, and non-imitative voice manifest"
+    ],
+    "accessibilityProofs": [
+      "Every critical radio function has synchronized captions, speaker identity, and a non-audio status cue.",
+      "Cable warning and damage state are not encoded by color, stereo position, motion, or vibration alone.",
+      "Control remapping, hold-or-toggle choices, timing assistance, reduced motion, pause, and checkpoint restart cover the complete required sequence.",
+      "Debrief replay supports pause, scrub, text summary, and a reduced-motion mode while preserving historical and reconstruction labels.",
+      "Ejection and parachute sequences avoid unavoidable flashing, camera violence, and inaccessible rapid repeated inputs."
+    ],
+    "telemetryQuestions": [
+      "Can players identify the first controllable action after cable contact without an omniscient prompt?",
+      "Does the attack task occupy enough attention for contact to feel causally connected to the route rather than arbitrary?",
+      "Can players stabilize the reconstructed damage across supported input methods and accessibility settings?",
+      "Do players understand what Carpenter observed, what remained unknown, and why landing was rejected?",
+      "Does the later fictional sortie improve evidence-bounded damage and recovery decisions without making the historical sequence feel like a tutorial pretext?",
+      "Can players correctly distinguish sourced history from reconstruction after a complete run without opening the deep archive?"
+    ]
+  },
+  "reviews": [
+    {
+      "gateId": "narrative_braid",
+      "status": "pending",
+      "notes": "The historical sequence and a clearly fictional modern transfer concept are mapped, but the modern mission contract and campaign reveal position are prototypes rather than narrative lock.",
+      "evidence": [
+        "docs/art-direction/korea-1950s/narrative/armstrong-ejection.sequence.json",
+        "braid and learning-objective records in this dossier"
+      ]
+    },
+    {
+      "gateId": "simulation_integrity",
+      "status": "pending",
+      "notes": "The cable-to-decision greybox contracts are under implementation, while subtype-specific Panther behavior, source-locked damaged aerodynamics, ejection, parachute, and complete mission integration remain open.",
+      "evidence": [
+        "docs/art-direction/korea-1950s/narrative/greybox-implementation.md",
+        "docs/airframes/f9f-2-panther/00-sources.md"
+      ]
+    },
+    {
+      "gateId": "evidence",
+      "status": "pending",
+      "notes": "The usable oral-history and official-synthesis anchors close structurally with explicit qualifications, but this is source intake, not source lock. The Essex report lacks page-level review; date and subtype conflict; target, corridor, cable layout, loadout, radio, seat, damaged aerodynamics, ejection point, parachute, and ground recovery remain open.",
+      "evidence": [
+        "docs/art-direction/korea-1950s/narrative/research-ledger.md",
+        "docs/art-direction/korea-1950s/narrative/source-register.json",
+        "claim and source reciprocity in this dossier"
+      ]
+    },
+    {
+      "gateId": "learning_design",
+      "status": "pending",
+      "notes": "Observable stabilization and inspection objectives are declared, but telemetry thresholds, accessibility timing, debrief prioritization, and transfer to the fictional modern sortie require prototype playtests.",
+      "evidence": [
+        "learningObjectives, educationDelivery, and telemetryQuestions in this dossier"
+      ]
+    },
+    {
+      "gateId": "representation",
+      "status": "pending",
+      "notes": "Agency and anti-mythologizing constraints are explicit. Korean civilian context, target-area representation, historical-person dialogue, name and likeness treatment, non-imitative voice policy, and ground-recovery staging still require dedicated review.",
+      "evidence": [
+        "representation and abstraction records in this dossier",
+        "docs/art-direction/korea-1950s/narrative/production-plan.md"
+      ]
+    },
+    {
+      "gateId": "production",
+      "status": "pending",
+      "notes": "The production records are acceptance requirements, not assertions that art, audio, terrain, runtime integration, rights, performance, browser QA, or release operations currently pass.",
+      "evidence": [
+        "production requirements in this dossier",
+        "docs/art-direction/korea-1950s/narrative/production-plan.md"
+      ]
+    }
+  ]
+}

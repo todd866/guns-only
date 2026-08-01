@@ -11,6 +11,8 @@ import { validateGovernance } from "../validate-governance.mjs";
 const TEST_DIRECTORY = path.dirname(fileURLToPath(import.meta.url));
 const REPOSITORY_ROOT = path.resolve(TEST_DIRECTORY, "../../..");
 const DOSSIER = "content/governance/korea-braided/missions/first-echo.dossier.json";
+const ARMSTRONG_DOSSIER =
+  "content/governance/korea-braided/missions/armstrong-cable-strike.dossier.json";
 
 async function temporaryGovernance(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), "guns-only-governance-"));
@@ -30,17 +32,44 @@ async function mutateDossier(root, mutate) {
   await writeFile(file, stableStringify(document));
 }
 
-test("canonical campaign governance and worked dossier pass the strict gate", async () => {
+test("canonical campaign governance and worked dossiers pass the strict gate", async () => {
   const report = await validateGovernance({ root: REPOSITORY_ROOT, strict: true });
   assert.equal(report.ok, true, stableStringify(report));
   assert.deepEqual(report.summary, {
     schemas: 2,
     campaigns: 1,
-    dossiers: 1,
-    sorties: 3,
-    claims: 6,
-    sources: 5,
+    dossiers: 2,
+    sorties: 5,
+    claims: 17,
+    sources: 9,
   });
+});
+
+test("Armstrong dossier remains source intake rather than false source lock", async () => {
+  const dossier = JSON.parse(await readFile(
+    path.join(REPOSITORY_ROOT, ARMSTRONG_DOSSIER), "utf8"));
+  const claims = new Map(dossier.claims.map((claim) => [claim.claimId, claim]));
+
+  assert.equal(dossier.status, "researching");
+  assert.deepEqual(new Set(dossier.reviews.map((review) => review.status)), new Set(["pending"]));
+  assert.match(claims.get("claim.armstrong-vf51-essex.v1").qualification,
+    /3 and 5 September/);
+  assert.match(claims.get("claim.armstrong-vf51-essex.v1").qualification,
+    /F9F-2 and F9F-3/);
+  assert.match(claims.get("claim.armstrong-armed-recon-wonsan.v1").qualification,
+    /exact target.*corridor.*loadout/);
+  assert.match(claims.get("claim.cable-field-gameplay-reconstruction.v1").qualification,
+    /not the exact local obstacle layout/);
+  assert.match(claims.get("claim.carpenter-flight-lead.v1").qualification,
+    /radio wording/);
+  assert.match(claims.get("claim.panther-ejection-seat.v1").qualification,
+    /not source-locked/);
+  assert.match(claims.get("claim.armstrong-ejection-friendly-territory.v1").qualification,
+    /ground-recovery staging cannot be presented as exact history/i);
+
+  const serialized = JSON.stringify(dossier);
+  assert.doesNotMatch(serialized,
+    /PaperLibrary|paperLibraryId|researchAsset|armstrong-korea-research|primary\/(?:images|video)|sha256/);
 });
 
 test("historical and technical claims cannot silently lose source closure", async (t) => {
