@@ -137,6 +137,35 @@ public sealed class CableHazardFieldTests {
         Assert.True(cable.CollisionBounds(componentRadiusM: 1.0)
             .Contains(new Vec3D(0.0, 0.5, 0.0)));
         Assert.Equal(CableHistoryLabel.Reconstructed, cable.HistoryLabel);
+        Assert.Equal(
+            new[] { "source.test.history.v1" },
+            cable.HistoricalSourceIds);
+        Assert.Equal(
+            "reconstruction-record.test.cable-geometry.v1",
+            cable.GeometryRecordId);
+    }
+
+    [Fact]
+    public void ArmstrongScenarioSeparatesReportedContactFromAuthoredGeometryAndDate() {
+        ArmstrongCableStrikeScenarioDefinition definition =
+            ArmstrongCableStrikeScenarios.CableToDecisionGreybox();
+        CableDefinition cable = Assert.Single(definition.CableField.Cables);
+
+        Assert.Equal(
+            new[] { "source.armstrong-nasa-sp-2011-4542.v1" },
+            cable.HistoricalSourceIds);
+        Assert.Equal(
+            ArmstrongCableStrikeScenarios.CableGeometryReconstructionRecordId,
+            cable.GeometryRecordId);
+        Assert.DoesNotContain(cable.GeometryRecordId, cable.HistoricalSourceIds);
+        Assert.Equal(
+            ArmstrongCableStrikeScenarios.GreyboxMissionSeed,
+            definition.AttackRunCheckpoint.MissionSeed);
+        Assert.NotEqual(0x1951_0903UL, definition.AttackRunCheckpoint.MissionSeed);
+        Assert.StartsWith(
+            "component.panther-subtype-unresolved.",
+            definition.RightOuterWingCollisionVolume.ComponentId,
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -189,7 +218,8 @@ public sealed class CableHazardFieldTests {
         materialProfileId: "material.test.v1",
         renderProfileId: "render.test.v1",
         historyLabel: CableHistoryLabel.Reconstructed,
-        sourceIds: new[] { "source.test.v1" },
+        historicalSourceIds: new[] { "source.test.history.v1" },
+        geometryRecordId: "reconstruction-record.test.cable-geometry.v1",
         collisionLayers: CableCollisionLayer.PlayerAirframe,
         requiredStreamingResidencyId: "streaming.test.v1");
 

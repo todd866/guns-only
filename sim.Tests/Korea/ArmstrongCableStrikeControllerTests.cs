@@ -15,6 +15,7 @@ public sealed class ArmstrongCableStrikeControllerTests {
         Assert.Equal(700, begun.LastSourceTick);
         Assert.Equal(0, begun.SimulationTick);
         Assert.Equal(0, begun.ActiveEpochTicks);
+        Assert.Null(begun.DamageEpistemic);
         Assert.Equal(ArmstrongCableStrikeContract.AttackRunCheckpointId,
             begun.CheckpointId);
         ArmstrongCableStrikeEventRecord started = Assert.Single(harness.Events);
@@ -51,6 +52,9 @@ public sealed class ArmstrongCableStrikeControllerTests {
         Assert.True(snapshot.CableContactObserved);
         Assert.Equal(damage.ProfileId, snapshot.VisibleDamage.ProfileId);
         Assert.Equal(
+            AirframeDamageEpistemic.Reconstruction,
+            snapshot.DamageEpistemic);
+        Assert.Equal(
             new[] {
                 ArmstrongCableStrikeEventKind.CableContact,
                 ArmstrongCableStrikeEventKind.DamageCommitted
@@ -82,8 +86,12 @@ public sealed class ArmstrongCableStrikeControllerTests {
         Assert.Equal(ArmstrongCableStrikePhase.CableCorridor, contacted.Phase);
         Assert.True(contacted.CableContactObserved);
         Assert.False(contacted.VisibleDamage.IsPresent);
+        Assert.Null(contacted.DamageEpistemic);
         Assert.Equal(ArmstrongCableStrikePhase.DamagedUnstable, damaged.Phase);
         Assert.True(damaged.VisibleDamage.IsPresent);
+        Assert.Equal(
+            AirframeDamageEpistemic.Reconstruction,
+            damaged.DamageEpistemic);
     }
 
     [Fact]
@@ -244,7 +252,8 @@ public sealed class ArmstrongCableStrikeControllerTests {
             EnteredCableCorridor = true
         });
         CableContactRecord wrongComponent = Contact(harness.Definition) with {
-            AircraftComponentId = "component.f9f2.nose.v1"
+            AircraftComponentId =
+                "component.panther-subtype-unresolved.nose.reconstruction.v1"
         };
 
         ArmstrongCableStrikeSnapshot retry = harness.Controller.Advance(

@@ -197,9 +197,17 @@ public static class PartialAirframeDamageComposer {
 /// <summary>
 /// A bounded six/eight-foot reconstruction family around Armstrong's retrospective estimate. The
 /// coefficients are provisional sensitivity points, not source claims; tip-tank fuel/mass remains
-/// with its current owner until fuel-system integration can remove it consistently.
+/// with its current owner until fuel-system integration can remove it consistently. Seven feet is
+/// only the explicit midpoint hypothesis of that six-to-eight-foot range, never an exact fracture
+/// claim.
 /// </summary>
 public static class PantherRightOuterWingLossFamily {
+    public const PantherRightOuterWingLossExtent ReportedRangeMidpoint =
+        PantherRightOuterWingLossExtent.SevenFeet;
+
+    public static PartialAirframeDamageProfile ReportedRangeMidpointReconstruction() =>
+        ForExtent(ReportedRangeMidpoint);
+
     public static PartialAirframeDamageProfile ForExtent(
         PantherRightOuterWingLossExtent extent) {
         if (!Enum.IsDefined(extent))
@@ -212,12 +220,13 @@ public static class PantherRightOuterWingLossFamily {
         };
         string variant = extent switch {
             PantherRightOuterWingLossExtent.SixFeet => "six-foot",
-            PantherRightOuterWingLossExtent.SevenFeet => "seven-foot",
+            PantherRightOuterWingLossExtent.SevenFeet => "seven-foot-midpoint",
             PantherRightOuterWingLossExtent.EightFeet => "eight-foot",
             _ => throw new ArgumentOutOfRangeException(nameof(extent))
         };
         double severity = feet / 7.0;
-        string id = $"damage.f9f2.right-outer-wing-loss.{variant}.reconstruction.v1";
+        string id = $"damage.panther-subtype-unresolved.right-outer-wing-loss."
+            + $"{variant}.reconstruction.v1";
         var visible = new VisibleAirframeDamage(
             id,
             rightOuterWingAbsent: true,
@@ -229,7 +238,8 @@ public static class PantherRightOuterWingLossFamily {
         return new PartialAirframeDamageProfile(
             id,
             visualDetachProfileId:
-                $"visual.f9f2.right-outer-wing-loss.{variant}.greybox.v1",
+                $"visual.panther-subtype-unresolved.right-outer-wing-loss."
+                    + $"{variant}.greybox.v1",
             AirframeDamageEpistemic.Reconstruction,
             removedSpanM: feet * 0.3048,
             removedAreaM2: 5.3 * severity,

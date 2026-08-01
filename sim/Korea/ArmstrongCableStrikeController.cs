@@ -99,6 +99,9 @@ public sealed class ArmstrongCableStrikeController {
         _latestEventSequence,
         _contact.HasValue,
         _visibleDamage,
+        _damageProfileId is null
+            ? null
+            : _definition.RightWingDamageProfile.Epistemic,
         _damagedFlightStabilized,
         _persistentLateralDemandObserved,
         _rollMarginBand,

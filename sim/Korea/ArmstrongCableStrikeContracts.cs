@@ -183,6 +183,9 @@ public sealed record ArmstrongCableStrikeSnapshot(
     long LatestEventSequence,
     bool CableContactObserved,
     VisibleAirframeDamage VisibleDamage,
+    /// Null until physical damage commits. A populated value declares how the applied damage
+    /// profile relates to evidence; it is not a hidden aerodynamic coefficient.
+    AirframeDamageEpistemic? DamageEpistemic,
     bool DamagedFlightStabilized,
     bool PersistentLateralDemandObserved,
     ArmstrongRollMarginBand RollMarginBand,

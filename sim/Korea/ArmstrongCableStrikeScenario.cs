@@ -119,7 +119,14 @@ public sealed class ArmstrongCableStrikeScenarioDefinition {
 
 public static class ArmstrongCableStrikeScenarios {
     public const string RightOuterWingComponentId =
-        "component.f9f2.right-outer-wing.v1";
+        "component.panther-subtype-unresolved.right-outer-wing.reconstruction.v1";
+    public const string CableGeometryReconstructionRecordId =
+        "reconstruction-record.armstrong.cable-geometry.local-greybox.v1";
+    /// <summary>
+    /// Stable deterministic entropy only. This deliberately does not encode either disputed
+    /// September 1951 incident date.
+    /// </summary>
+    public const ulong GreyboxMissionSeed = 0xA4C7_51D3_9E2B_6F10UL;
 
     /// <summary>
     /// A deliberately local greybox. Coordinates and cable layout are reconstruction, not a claim
@@ -127,8 +134,7 @@ public static class ArmstrongCableStrikeScenarios {
     /// </summary>
     public static ArmstrongCableStrikeScenarioDefinition CableToDecisionGreybox() {
         PartialAirframeDamageProfile damage =
-            PantherRightOuterWingLossFamily.ForExtent(
-                PantherRightOuterWingLossExtent.SevenFeet);
+            PantherRightOuterWingLossFamily.ReportedRangeMidpointReconstruction();
         var cable = new CableDefinition(
             id: "hazard.armstrong.cable.reconstruction.01.v1",
             supportPoints: new[] {
@@ -139,7 +145,12 @@ public static class ArmstrongCableStrikeScenarios {
             materialProfileId: "material.cable.steel.reconstruction.v1",
             renderProfileId: "render.cable.korea-greybox.v1",
             historyLabel: CableHistoryLabel.Reconstructed,
-            sourceIds: new[] { "source.armstrong-nasa-sp-2011-4542.v1" },
+            // The oral history supports one reported cable contact. It does not supply the local
+            // support points, radius, height, material, or purpose authored above.
+            historicalSourceIds: new[] {
+                "source.armstrong-nasa-sp-2011-4542.v1"
+            },
+            geometryRecordId: CableGeometryReconstructionRecordId,
             collisionLayers: CableCollisionLayer.PlayerAirframe,
             requiredStreamingResidencyId:
                 "streaming.korea.armstrong-cable-corridor.greybox.v1");
@@ -149,8 +160,9 @@ public static class ArmstrongCableStrikeScenarios {
             maximumImpulseNs: 5_000.0);
         var rightOuterWing = new AirframeComponentCollisionVolume(
             RightOuterWingComponentId,
-            // F9F-2 half-span is about 5.79 m. This greybox volume covers the documented-scale
-            // outer loss region; exact component geometry remains reconstruction pending art/mesh.
+            // The provisional F9F-2 handling surrogate has a half-span of about 5.79 m. It sizes
+            // this greybox volume only; it does not identify Armstrong's disputed incident subtype
+            // or source the exact component geometry.
             bodyLocalCenterM: new Vec3D(4.65, 0.0, -0.15),
             radiusM: 1.05,
             CableCollisionLayer.PlayerAirframe,
@@ -161,7 +173,7 @@ public static class ArmstrongCableStrikeScenarios {
             new ArmstrongAttackRunCheckpointDefinition(
                 ArmstrongCableStrikeContract.AttackRunCheckpointId,
                 simulationTick: 0,
-                missionSeed: 0x1951_0903UL,
+                missionSeed: GreyboxMissionSeed,
                 weatherStateId: "weather.korea-armstrong-greybox.fixed.v1"),
             new CableHazardField(new[] { cable }),
             rightOuterWing,

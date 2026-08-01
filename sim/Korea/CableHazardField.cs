@@ -36,7 +36,7 @@ public readonly record struct CableActivationBounds(Vec3D Minimum, Vec3D Maximum
 /// </summary>
 public sealed class CableDefinition {
     readonly ReadOnlyCollection<Vec3D> _supportPoints;
-    readonly ReadOnlyCollection<string> _sourceIds;
+    readonly ReadOnlyCollection<string> _historicalSourceIds;
 
     public CableDefinition(
         string id,
@@ -45,13 +45,16 @@ public sealed class CableDefinition {
         string materialProfileId,
         string renderProfileId,
         CableHistoryLabel historyLabel,
-        IEnumerable<string> sourceIds,
+        IEnumerable<string> historicalSourceIds,
+        string geometryRecordId,
         CableCollisionLayer collisionLayers,
         string requiredStreamingResidencyId) {
         ArmstrongContractValidation.StableId(id, nameof(id));
         ArmstrongContractValidation.StableId(
             materialProfileId, nameof(materialProfileId));
         ArmstrongContractValidation.StableId(renderProfileId, nameof(renderProfileId));
+        ArmstrongContractValidation.StableId(
+            geometryRecordId, nameof(geometryRecordId));
         ArmstrongContractValidation.StableId(
             requiredStreamingResidencyId, nameof(requiredStreamingResidencyId));
         if (!Enum.IsDefined(historyLabel))
@@ -77,24 +80,27 @@ public sealed class CableDefinition {
                     nameof(supportPoints));
         }
 
-        string[] sources = sourceIds?.ToArray()
-            ?? throw new ArgumentNullException(nameof(sourceIds));
-        if (sources.Length == 0)
+        string[] sources = historicalSourceIds?.ToArray()
+            ?? throw new ArgumentNullException(nameof(historicalSourceIds));
+        if (sources.Length == 0 && historyLabel != CableHistoryLabel.Fiction)
             throw new ArgumentException(
-                "Cable truth requires at least one source or reconstruction record.",
-                nameof(sourceIds));
+                "Measured or reconstructed cable history requires at least one source "
+                    + "distinct from its geometry record.",
+                nameof(historicalSourceIds));
         foreach (string sourceId in sources)
-            ArmstrongContractValidation.StableId(sourceId, nameof(sourceIds));
+            ArmstrongContractValidation.StableId(
+                sourceId, nameof(historicalSourceIds));
 
         Id = id;
         RadiusM = radiusM;
         MaterialProfileId = materialProfileId;
         RenderProfileId = renderProfileId;
         HistoryLabel = historyLabel;
+        GeometryRecordId = geometryRecordId;
         CollisionLayers = collisionLayers;
         RequiredStreamingResidencyId = requiredStreamingResidencyId;
         _supportPoints = Array.AsReadOnly(points);
-        _sourceIds = Array.AsReadOnly(sources);
+        _historicalSourceIds = Array.AsReadOnly(sources);
         ActivationBounds = Bounds(points, radiusM);
     }
 
@@ -108,7 +114,16 @@ public sealed class CableDefinition {
     public string MaterialProfileId { get; }
     public string RenderProfileId { get; }
     public CableHistoryLabel HistoryLabel { get; }
-    public IReadOnlyList<string> SourceIds => _sourceIds;
+    /// <summary>
+    /// Sources for the historical claim which motivated this hazard. They do not source the
+    /// authored support points, radius, height, material, or obstacle purpose.
+    /// </summary>
+    public IReadOnlyList<string> HistoricalSourceIds => _historicalSourceIds;
+    /// <summary>
+    /// Stable record for the measured, reconstructed, or fictional geometry itself. Keeping this
+    /// separate prevents a historical source from appearing to contain authored coordinates.
+    /// </summary>
+    public string GeometryRecordId { get; }
     public CableCollisionLayer CollisionLayers { get; }
     public string RequiredStreamingResidencyId { get; }
     /// <summary>

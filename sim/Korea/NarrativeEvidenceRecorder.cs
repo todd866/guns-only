@@ -18,6 +18,7 @@ public readonly record struct ArmstrongNarrativeEvidenceSample(
     double RollRateRadS,
     double PilotLateralInput,
     string? DamageProfileId,
+    AirframeDamageEpistemic? DamageEpistemic,
     AirframeAerodynamicState EffectiveAerodynamicConfiguration);
 
 /// <summary>
@@ -29,6 +30,7 @@ public sealed class ArmstrongNarrativeEvidenceBundle {
         string scenarioId,
         long completedEpochSequence,
         int retryCount,
+        AirframeDamageEpistemic? damageEpistemic,
         bool evidenceIncomplete,
         bool retrySummaryIncomplete,
         long droppedRetrySummaryCount,
@@ -41,6 +43,7 @@ public sealed class ArmstrongNarrativeEvidenceBundle {
         ScenarioId = scenarioId;
         CompletedEpochSequence = completedEpochSequence;
         RetryCount = retryCount;
+        DamageEpistemic = damageEpistemic;
         EvidenceIncomplete = evidenceIncomplete;
         RetrySummaryIncomplete = retrySummaryIncomplete;
         DroppedRetrySummaryCount = droppedRetrySummaryCount;
@@ -55,6 +58,11 @@ public sealed class ArmstrongNarrativeEvidenceBundle {
     public string ScenarioId { get; }
     public long CompletedEpochSequence { get; }
     public int RetryCount { get; }
+    /// <summary>
+    /// Epistemic status of the damage profile in the completed reconstruction epoch. Null means
+    /// that no physical damage profile was present in the supplied debug/test completion.
+    /// </summary>
+    public AirframeDamageEpistemic? DamageEpistemic { get; }
     /// <summary>True only when evidence from the completing epoch was lost.</summary>
     public bool EvidenceIncomplete { get; }
     /// <summary>True when old retry summaries exceeded their bounded history.</summary>
@@ -177,6 +185,7 @@ public sealed class NarrativeEvidenceRecorder {
             observation.RollRateRadS,
             observation.PilotLateralInput,
             snapshot.VisibleDamage.ProfileId,
+            snapshot.DamageEpistemic,
             effectiveAerodynamicConfiguration);
         _lastObservedSourceTick = snapshot.LastSourceTick;
 
@@ -234,6 +243,7 @@ public sealed class NarrativeEvidenceRecorder {
             _scenarioId,
             completedSnapshot.ReconstructionEpochSequence,
             completedSnapshot.RetryCount,
+            completedSnapshot.DamageEpistemic,
             _currentEpochEvidenceIncomplete,
             _retrySummaryIncomplete,
             _droppedRetrySummaryCount,
@@ -296,6 +306,9 @@ public sealed class NarrativeEvidenceRecorder {
         if (!StringComparer.Ordinal.Equals(snapshot.ScenarioId, _scenarioId))
             throw new InvalidOperationException(
                 "Evidence snapshot scenario identity does not match the recorder.");
+        if (snapshot.VisibleDamage.IsPresent != snapshot.DamageEpistemic.HasValue)
+            throw new InvalidOperationException(
+                "Visible damage and its epistemic status must become public together.");
         ValidateCurrentEpoch(snapshot.ReconstructionEpochSequence);
         bool restoredThisTick = snapshot.ActiveEpochTicks == 0
             && snapshot.SimulationTick != observation.SimulationTick;

@@ -106,6 +106,47 @@ public sealed class NarrativeEvidenceRecorderTests {
     }
 
     [Fact]
+    public void DamageReconstructionStatusSurvivesSamplesAndFrozenEvidenceProjection() {
+        PartialAirframeDamageProfile damage =
+            PantherRightOuterWingLossFamily.ReportedRangeMidpointReconstruction();
+        var recorder = new NarrativeEvidenceRecorder(
+            ArmstrongCableStrikeContract.ScenarioId);
+        recorder.ObserveEvent(Event(
+            1, 1, 0, 0,
+            ArmstrongCableStrikeEventKind.ReconstructionEpochStarted));
+        recorder.ObserveTick(
+            Snapshot(
+                sourceTick: 1,
+                simulationTick: 1,
+                activeTicks: 1,
+                epoch: 1,
+                retryCount: 0,
+                visibleDamage: damage.VisibleDamage,
+                damageEpistemic: damage.Epistemic),
+            Observation(sourceTick: 1, simulationTick: 1),
+            AirframeAerodynamicState.Clean);
+
+        ArmstrongNarrativeEvidenceBundle bundle = recorder.Freeze(
+            Snapshot(
+                sourceTick: 1,
+                simulationTick: 1,
+                activeTicks: 1,
+                epoch: 1,
+                retryCount: 0,
+                complete: true,
+                visibleDamage: damage.VisibleDamage,
+                damageEpistemic: damage.Epistemic));
+
+        Assert.Equal(AirframeDamageEpistemic.Reconstruction,
+            bundle.DamageEpistemic);
+        ArmstrongNarrativeEvidenceSample sample = Assert.Single(
+            bundle.PreContactHighRateSamples);
+        Assert.Equal(damage.Id, sample.DamageProfileId);
+        Assert.Equal(AirframeDamageEpistemic.Reconstruction,
+            sample.DamageEpistemic);
+    }
+
+    [Fact]
     public void EvidenceRejectsStaleIdentityAndNonMonotonicEvents() {
         var unbound = new NarrativeEvidenceRecorder(
             ArmstrongCableStrikeContract.ScenarioId);
@@ -336,7 +377,9 @@ public sealed class NarrativeEvidenceRecorderTests {
         long epoch,
         int retryCount,
         bool complete = false,
-        long? latestEventSequence = null) => new(
+        long? latestEventSequence = null,
+        VisibleAirframeDamage visibleDamage = default,
+        AirframeDamageEpistemic? damageEpistemic = null) => new(
         ArmstrongCableStrikeContract.SchemaVersion,
         ArmstrongCableStrikeContract.ScenarioId,
         complete
@@ -354,7 +397,8 @@ public sealed class NarrativeEvidenceRecorderTests {
         ActiveEpochTicks: activeTicks,
         LatestEventSequence: latestEventSequence ?? epoch,
         CableContactObserved: false,
-        VisibleAirframeDamage.None,
+        VisibleDamage: visibleDamage,
+        DamageEpistemic: damageEpistemic,
         DamagedFlightStabilized: false,
         PersistentLateralDemandObserved: false,
         ArmstrongRollMarginBand.NotAssessed,

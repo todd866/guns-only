@@ -69,13 +69,16 @@ public sealed class PartialAirframeDamageTests {
             PantherRightOuterWingLossFamily.ForExtent(
                 PantherRightOuterWingLossExtent.SixFeet);
         PartialAirframeDamageProfile seven =
-            PantherRightOuterWingLossFamily.ForExtent(
-                PantherRightOuterWingLossExtent.SevenFeet);
+            PantherRightOuterWingLossFamily.ReportedRangeMidpointReconstruction();
         PartialAirframeDamageProfile eight =
             PantherRightOuterWingLossFamily.ForExtent(
                 PantherRightOuterWingLossExtent.EightFeet);
 
         Assert.Equal(6.0 * 0.3048, six.RemovedSpanM, 12);
+        Assert.Equal(
+            PantherRightOuterWingLossExtent.SevenFeet,
+            PantherRightOuterWingLossFamily.ReportedRangeMidpoint);
+        Assert.Equal(7.0 * 0.3048, seven.RemovedSpanM, 12);
         Assert.Equal(8.0 * 0.3048, eight.RemovedSpanM, 12);
         Assert.True(six.RemovedAreaM2 < seven.RemovedAreaM2);
         Assert.True(seven.RemovedAreaM2 < eight.RemovedAreaM2);
@@ -87,11 +90,20 @@ public sealed class PartialAirframeDamageTests {
             > eight.RollControlAuthorityFraction);
         Assert.All(new[] { six, seven, eight }, profile => {
             Assert.Equal(AirframeDamageEpistemic.Reconstruction, profile.Epistemic);
+            Assert.Contains("panther-subtype-unresolved", profile.Id,
+                StringComparison.Ordinal);
+            Assert.Contains("panther-subtype-unresolved", profile.VisualDetachProfileId,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain("f9f2", profile.Id,
+                StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("f9f2", profile.VisualDetachProfileId,
+                StringComparison.OrdinalIgnoreCase);
             Assert.Equal(0.0, profile.ModeledRemovedMassKg);
             Assert.Equal(
                 TipTankFuelTreatment.RetainedUntilFuelSystemIntegration,
                 profile.TipTankFuelTreatment);
         });
+        Assert.Contains("seven-foot-midpoint", seven.Id, StringComparison.Ordinal);
     }
 
     [Fact]
