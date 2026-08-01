@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { join } from "node:path";
-import { chromium } from "playwright";
+import { chromium, webkit, devices } from "playwright";
 // Keep one server implementation: terrain requests rely on its production-like HTTP 206 support.
 import { serveStatic } from "../wwwroot/render/hud/tests/harness/static_server.mjs";
 
@@ -2373,6 +2373,64 @@ test("boot does not stutter: no frame is a wild outlier against this machine's o
     assert.ok(outliers <= 3,
       `${outliers} frames exceeded 6x the ${median.toFixed(1)}ms median `
       + `(worst ${worst.toFixed(0)}ms) — something is compiling or allocating in the render loop`);
+  } finally {
+    await browser.close();
+    await site.close();
+  }
+});
+
+
+// Owner report, Build 228, with a photograph: "Landscape mode is broken." The screen was split
+// down the middle -- scene on the left, a stale frame and the controls on the right.
+//
+// Root cause was circular measurement. #scene is sized by `width: var(--game-width)`, and
+// --game-width was set from gameViewport(), which measured scene.clientWidth. Once the first
+// measurement landed, the element reported its own imposed size forever: rotating the phone left
+// the renderer, the camera aspect and the adaptive-resolution controller all still believing in a
+// portrait surface while the DOM controls laid themselves out across the landscape one.
+//
+// WebKit, because this is an iPhone bug and Chromium's layout viewport does not reproduce it.
+test("rotating to landscape actually resizes the drawn surface", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+  const site = await serveStatic(WWWROOT);
+  const browser = await webkit.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ ...devices["iPhone 13"] });
+    const page = await context.newPage();
+    await page.goto(`${site.url}?audioQa=silent`, { waitUntil: "load", timeout: scaled(90000) });
+    await page.waitForFunction(
+      () => !document.querySelector("#ready-start")?.disabled,
+      undefined, { timeout: scaled(120000) });
+    await page.click("#ready-start");
+    await page.waitForTimeout(scaled(4000));
+
+    const measure = () => page.evaluate(() => {
+      const scene = document.getElementById("scene");
+      const canvas = document.querySelector("#scene canvas") ?? document.querySelector("canvas");
+      return {
+        scene: [scene?.clientWidth ?? 0, scene?.clientHeight ?? 0],
+        canvasCss: [canvas?.clientWidth ?? 0, canvas?.clientHeight ?? 0],
+        inner: [innerWidth, innerHeight],
+      };
+    });
+
+    const portrait = await measure();
+    assert.ok(portrait.scene[1] > portrait.scene[0], "fixture did not start in portrait");
+
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.waitForTimeout(scaled(2500));
+    const landscape = await measure();
+
+    assert.ok(landscape.scene[0] > landscape.scene[1],
+      `#scene stayed portrait after rotation: ${JSON.stringify(landscape)}`);
+    // The drawn surface has to agree with the layout viewport, not merely change: a canvas that
+    // is a different width from the box it is painted into is the split screen itself.
+    assert.equal(landscape.scene[0], landscape.inner[0],
+      `#scene width ${landscape.scene[0]} != layout viewport ${landscape.inner[0]}`);
+    assert.equal(landscape.canvasCss[0], landscape.inner[0],
+      `canvas width ${landscape.canvasCss[0]} != layout viewport ${landscape.inner[0]}`);
+
+    await context.close();
   } finally {
     await browser.close();
     await site.close();

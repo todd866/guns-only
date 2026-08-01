@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=228";
+import { createHud } from "./hud.js?v=229";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=228";
+} from "./render/debrief/sortie_result.js?v=229";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -49,7 +49,7 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=228";
+} from "./render/release/release_identity.js?v=229";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -62,7 +62,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=228";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=229";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -139,13 +139,13 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=228";
+} from "./render/telemetry/ai_frame_pressure.js?v=229";
 import { FrameGovernorPolicy } from "./render/telemetry/frame_governor.js";
 import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compression.js";
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=228";
+} from "./render/telemetry/telemetry_batch.js?v=229";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -154,7 +154,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=228";
+} from "./render/settings/player_settings.js?v=229";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -200,12 +200,12 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=228";
+} from "./render/scene/scene_builders.js?v=229";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=228";
+} from "./render/audio/flight_audio.js?v=229";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -4493,9 +4493,21 @@ function gameViewport() {
   //
   // Taking the element's own client box makes CSS the single source of truth: the buffer cannot
   // be a different size from the thing it is painted into.
-  const scene = document.getElementById("scene");
-  const width = scene?.clientWidth || window.visualViewport?.width || window.innerWidth;
-  const height = scene?.clientHeight || window.visualViewport?.height || window.innerHeight;
+  // ...but NOT by measuring #scene, which is what this did and which was circular: #scene is
+  // sized by width: var(--game-width), and --game-width is set from this function's result. Once
+  // the first measurement landed, scene.clientWidth returned that same number forever and the game
+  // viewport could never change again. Rotating a phone to landscape left the renderer, the camera
+  // aspect and the adaptive-resolution controller all still believing in a 390x664 portrait
+  // surface while the DOM controls laid out across 844x390 -- the screen split down the middle,
+  // scene on one side, stale frame on the other.
+  //
+  // documentElement.clientWidth/Height IS the layout viewport: it is precisely what
+  // `position: fixed; inset: 0` resolves against, it excludes scrollbars, and it is NOT the visual
+  // viewport -- so it keeps the property that mattered in the black-bar fix (iOS collapsing
+  // toolbars must not shrink the drawn region) without depending on the element it sizes.
+  const layout = document.documentElement;
+  const width = layout?.clientWidth || window.innerWidth || window.visualViewport?.width;
+  const height = layout?.clientHeight || window.innerHeight || window.visualViewport?.height;
   return {
     width: Math.max(1, Math.round(width)),
     height: Math.max(1, Math.round(height)),
@@ -8570,6 +8582,17 @@ function installMobileInput(view) {
   let throttleRockerControl = null;
   const virtualStickAxes = { roll: null, pitch: null };
   let virtualStickPointerId = null;
+  // Throttle-as-a-rate state. The lever is integrated here rather than read back from the kernel
+  // so a dropped frame cannot ratchet the setting, and so the first touch of the sortie inherits
+  // whatever power the beat started at instead of snapping to the thumb.
+  const THROTTLE_STICK_DEADZONE = 0.12;
+  /// Lever units per second at full deflection. Idle to max afterburner in about 2.6 s, which is
+  /// slower than the engine can actually spool, so the thumb is never the limiting factor.
+  const THROTTLE_STICK_RATE_PER_SECOND = 0.6;
+  let throttleRate = 0;
+  let throttleLever = null;
+  let throttleIntegratorFrame = 0;
+  let throttleIntegratorLastMs = 0;
   let targetStickPointerId = null;
   let targetStickX = 0;
   let targetStickY = 0;
@@ -8865,6 +8888,35 @@ function installMobileInput(view) {
     fallbackStick.dataset.active = String(active);
   }
 
+  function startThrottleIntegrator() {
+    if (throttleIntegratorFrame) return;
+    throttleIntegratorLastMs = performance.now();
+    const step = (nowMs) => {
+      throttleIntegratorFrame = 0;
+      if (virtualStickPointerId === null) return;
+      const deltaSeconds = Math.min(0.1, Math.max(0, (nowMs - throttleIntegratorLastMs) / 1000));
+      throttleIntegratorLastMs = nowMs;
+      if (throttleLever === null) {
+        // Start from where the aeroplane already is, so the first nudge is a nudge and not a jump.
+        const published = Number(latestState?.throttle);
+        throttleLever = Number.isFinite(published) ? clamp(published, 0, 1) : 0.5;
+      }
+      throttleLever = clamp(
+        throttleLever + throttleRate * THROTTLE_STICK_RATE_PER_SECOND * deltaSeconds, 0, 1);
+      if (typeof bridge?.SetAnalogThrottleControl === "function") {
+        bridge.SetAnalogThrottleControl(throttleLever);
+      }
+      throttleIntegratorFrame = requestAnimationFrame(step);
+    };
+    throttleIntegratorFrame = requestAnimationFrame(step);
+  }
+
+  function stopThrottleIntegrator() {
+    if (!throttleIntegratorFrame) return;
+    cancelAnimationFrame(throttleIntegratorFrame);
+    throttleIntegratorFrame = 0;
+  }
+
   function releaseVirtualStick() {
     const pointerId = virtualStickPointerId;
     virtualStickPointerId = null;
@@ -8875,6 +8927,11 @@ function installMobileInput(view) {
     }
     primaryRollCommand = 0;
     primaryPitchCommand = 0;
+    // Let go and the power stays where you put it, exactly like a real quadrant. Yaw is the
+    // opposite -- it is an aerodynamic control, so it must centre with the thumb.
+    throttleRate = 0;
+    stopThrottleIntegrator();
+    if (typeof bridge?.SetAnalogYawControl === "function") bridge.SetAnalogYawControl(0);
     releaseDirectFlightAxes("touch");
     renderVirtualStick();
     if (pointerId !== null && fallbackStick?.hasPointerCapture?.(pointerId)) {
@@ -8893,13 +8950,17 @@ function installMobileInput(view) {
     // this stick's horizontal axis is otherwise idle -- and it earns its place twice, on crosswind
     // recovery and low-speed pointing.
     //
-    // Up is more power: state.y is positive-up from mobileVirtualStickState, and the lever is an
-    // ABSOLUTE position rather than a rate, so the thumb's position is the throttle setting.
+    // Throttle is a RATE, not a position. It was a position: the lever was set to
+    // (state.y + 1) / 2, so the thumb's location on a SELF-CENTRING stick was the power setting.
+    // That is unflyable on the Raptor. Touching the stick at all -- to make a yaw input, or just
+    // to find it -- reads y = 0 and slams the throttle to 50% out of full afterburner in the
+    // middle of a merge; and because a released stick sends no further events, the lever then
+    // stays wherever the thumb happened to leave it. A stick that springs back to centre cannot
+    // express an absolute setting: centre has to mean "leave it alone", which is a rate of zero.
     setVirtualStickAxis("roll", null, `${source}:roll`);
     setVirtualStickAxis("pitch", null, `${source}:pitch`);
-    if (typeof bridge?.SetAnalogThrottleControl === "function") {
-      bridge.SetAnalogThrottleControl(clamp((state.y + 1) * 0.5, 0, 1));
-    }
+    throttleRate = Math.abs(state.y) < THROTTLE_STICK_DEADZONE ? 0 : clamp(state.y, -1, 1);
+    startThrottleIntegrator();
     if (typeof bridge?.SetAnalogYawControl === "function") {
       bridge.SetAnalogYawControl(clamp(state.x, -1, 1));
     }
@@ -10203,7 +10264,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=228")
+    navigator.serviceWorker.register("service-worker.js?v=229")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);
