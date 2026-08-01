@@ -29,8 +29,14 @@ export function fighterHudLayout({
   const tapeInset = sideSafe > 0
     ? clamp(Math.max(viewportWidth * 0.055 + sideSafe, sideSafe + 56), 48, 140)
     : clamp(viewportWidth * 0.055, 48, 78);
+  // The tape value boxes must sit on the SAME line as the gunsight/waterline, so speed, pipper
+  // and altitude read across one row. Measured on an iPhone 13: the boresight-at-level projects to
+  // 0.50 * height, but the old touch expression (0.49H - safe.bottom/2) put the boxes at 0.46H --
+  // 16 px above the pipper, which is the "don't quite line up" the tapes had. The -safe.bottom/2
+  // lift was the culprit; the tapes clear the controls without it (bottom of tape ~0.68H, sticks
+  // begin below 0.72H).
   const instrumentCenterY = touchMode
-    ? viewportHeight * 0.49 - safe.bottom * 0.5
+    ? viewportHeight * 0.50
     : viewportHeight * 0.51;
   const tapeHeight = Math.min(
     touchMode ? 278 : 288,

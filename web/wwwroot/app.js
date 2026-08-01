@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=231";
+import { createHud } from "./hud.js?v=232";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=231";
+} from "./render/debrief/sortie_result.js?v=232";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -49,7 +49,7 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=231";
+} from "./render/release/release_identity.js?v=232";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -62,7 +62,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=231";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=232";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -139,13 +139,13 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=231";
+} from "./render/telemetry/ai_frame_pressure.js?v=232";
 import { FrameGovernorPolicy } from "./render/telemetry/frame_governor.js";
 import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compression.js";
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=231";
+} from "./render/telemetry/telemetry_batch.js?v=232";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -154,7 +154,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=231";
+} from "./render/settings/player_settings.js?v=232";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -200,12 +200,12 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=231";
+} from "./render/scene/scene_builders.js?v=232";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=231";
+} from "./render/audio/flight_audio.js?v=232";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -1006,9 +1006,25 @@ portraitMedia?.addEventListener?.("change", () => syncAssistedFlight());
 const isIosBrowserTab = /iPhone|iPad/.test(navigator.userAgent)
   && window.matchMedia?.("(display-mode: standalone)").matches !== true
   && navigator.standalone !== true;
-const iosFullscreenHint = isIosBrowserTab && mobileControls
-  ? " Fullscreen on iPhone: Share \u2192 Add to Home Screen, then fly from the icon."
-  : "";
+// The install hint used to be appended to #ready-menu-help, which is `hidden` and, since the
+// pictorial menu, inside a display:none header -- so it was authored but never seen. It is now a
+// real, tappable element on the menu, revealed by a class and dismissed for good on tap.
+if (isIosBrowserTab && mobileControls) {
+  document.documentElement.classList.add("ios-browser-tab");
+  try {
+    if (localStorage.getItem("guns-install-hint-dismissed") === "1") {
+      document.documentElement.classList.add("install-hint-dismissed");
+    }
+  } catch { /* private mode: just show it */ }
+  const installHint = document.getElementById("ready-install-hint");
+  if (installHint) {
+    installHint.hidden = false;
+    installHint.addEventListener("click", () => {
+      document.documentElement.classList.add("install-hint-dismissed");
+      try { localStorage.setItem("guns-install-hint-dismissed", "1"); } catch { /* ignore */ }
+    });
+  }
+}
 
 // Keep the phone controls in two shallow, thumb-sized edge groups. The page owns the base visual
 // treatment; this mobile-only override owns the live control geometry so the HUD can reserve a
@@ -3637,11 +3653,10 @@ function renderPauseUi(state = latestState) {
   }
   if (readyMenuHelp) {
     readyMenuHelp.textContent = (ready
-      ? "All five missions are available. Fly whichever you feel like."
+      ? "Pick the aircraft you want to fly."
       : finished
         ? "Review the result, or go again."
-        : "The deterministic flight clock is stopped and all controls are neutralised.")
-      + (ready ? iosFullscreenHint : "");
+        : "The deterministic flight clock is stopped and all controls are neutralised.");
   }
 
   const runPaused = pauseReasons.size > 0;
@@ -10264,7 +10279,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=231")
+    navigator.serviceWorker.register("service-worker.js?v=232")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);

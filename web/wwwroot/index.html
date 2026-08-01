@@ -10,7 +10,6 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Guns Only">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <meta name="theme-color" content="#030913">
   <title>Guns Only</title>
   <base href="/">
   <link rel="icon" type="image/png" href="./favicon.png">
@@ -2774,6 +2773,26 @@
 
     #ready-screen[data-mode="program"] #ready-build-row { justify-content: center; }
 
+    #ready-install-hint {
+      display: none;
+      margin: 14px auto 0;
+      padding: 7px 12px;
+      border: 0;
+      border-radius: 3px;
+      color: rgba(253, 246, 230, .62);
+      background: rgba(24, 34, 48, .34);
+      cursor: pointer;
+      font: 400 12px/1.2 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      letter-spacing: .01em;
+    }
+    /* Revealed by app.js only in an iOS Safari TAB (html.ios-browser-tab), and never again once
+       the pilot has dismissed it (html.install-hint-dismissed). */
+    html.ios-browser-tab #ready-screen[data-mode="program"] #ready-install-hint:not([hidden]) {
+      display: block;
+    }
+    html.install-hint-dismissed #ready-install-hint { display: none !important; }
+    #ready-install-hint:hover { color: rgba(253, 246, 230, .9); }
+
     @keyframes boot-pulse {
       0%, 100% { opacity: .34; transform: scale(.78); }
       50% { opacity: 1; transform: scale(1); }
@@ -3158,8 +3177,17 @@ Splash one bandit to qualify · H controls · R restarts</p>
             <button id="ready-return" type="button" hidden>Mission program</button>
           </div>
           <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
+          <!--
+            The one line of chrome the pictorial menu keeps, and only on iPhone in a browser tab.
+            The bars top and bottom are Safari's, not the game's; the manifest is display:fullscreen
+            so Add to Home Screen sheds them, but iOS never offers that on its own. app.js reveals
+            this only when it applies (html.ios-browser-tab) and hides it for good once tapped.
+          -->
+          <button id="ready-install-hint" type="button" hidden>
+            <span aria-hidden="true">⤴</span> Full screen: Share → Add to Home Screen
+          </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 231 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 232 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
         </section>
@@ -3225,12 +3253,12 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // app.js arrives. The deep link still selects the sortie -- it is read by the module graph
     // from the same query string -- it just no longer has a splash screen to announce itself on.
 
-    // A network-fresh Build 231 document may still be controlled by Build 178's cache-first
+    // A network-fresh Build 232 document may still be controlled by Build 178's cache-first
     // service worker. Purge that controller and its Cache Storage before Blazor requests the
     // unversioned boot manifest/WASM graph. Offline clients never see this newer document until a
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = "231";
+      const releaseBuild = "232";
       const controller = navigator.serviceWorker?.controller;
       if (!controller) return;
       const controllerBuild = new URL(controller.scriptURL, location.href)
@@ -3249,8 +3277,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       }
     })();
   </script>
-  <script src="./multiplayer-config.js?v=231"></script>
-  <script type="module" src="./app.js?v=231"></script>
-  <script src="./_framework/blazor.webassembly.js?v=231" autostart="false"></script>
+  <script src="./multiplayer-config.js?v=232"></script>
+  <script type="module" src="./app.js?v=232"></script>
+  <script src="./_framework/blazor.webassembly.js?v=232" autostart="false"></script>
 </body>
 </html>
