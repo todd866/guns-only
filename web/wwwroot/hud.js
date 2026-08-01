@@ -52,7 +52,7 @@ import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=233";
+} from "./render/audio/flight_audio.js?v=234";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -1068,8 +1068,9 @@ class CombatHud {
     ctx.fillText(dataLine, textX, textY + textHeight / 2);
   }
 
-  drawSelectedWingmanLocator(frame) {
+  drawWingmanLocator(frame, selected = true) {
     if (frame.padlock) return;
+    const locatorColor = selected ? AMBER : GREEN;
     const position = frame.wingmanPosition;
     this.relative.copy(position).sub(frame.playerPosition)
       .transformDirection(frame.camera.matrixWorldInverse);
@@ -1114,8 +1115,8 @@ class CombatHud {
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(Math.atan2(dy, dx));
-    this.setLine(AMBER, 2.0);
-    ctx.fillStyle = "rgba(255, 176, 32, 0.24)";
+    this.setLine(locatorColor, 2.0);
+    ctx.fillStyle = selected ? "rgba(255, 176, 32, 0.24)" : "rgba(77, 255, 136, 0.18)";
     ctx.beginPath();
     ctx.moveTo(12, 0);
     ctx.lineTo(-8, -8);
@@ -1126,9 +1127,13 @@ class CombatHud {
     ctx.stroke();
     ctx.restore();
 
+    // Only the SELECTED target carries range/closure numbers (they follow the gun-target
+    // selection); the unselected wingman still gets its "TARGET 2" name so it is never anonymous.
     const range = targetRangeReadout(frame.state.range_m).compactText;
     const closure = targetClosureReadout(frame.state.closure_kts).compactText;
-    const label = `TARGET 2 · SELECTED · ${range} · ${closure}`;
+    const label = selected
+      ? `TARGET 2 · SELECTED · ${range} · ${closure}`
+      : "TARGET 2";
     ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     const fitted = this.fitText(label, Math.max(80, safe.right - safe.left - 12));
     const width = ctx.measureText(fitted).width;
@@ -1137,7 +1142,7 @@ class CombatHud {
     const labelY = clamp(y - dy * 28, safe.top + 8, safe.bottom - 8);
     ctx.fillStyle = "rgba(1, 8, 12, 0.78)";
     ctx.fillRect(labelX - width * 0.5 - 4, labelY - 7, width + 8, 14);
-    ctx.fillStyle = AMBER;
+    ctx.fillStyle = locatorColor;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(fitted, labelX, labelY);
@@ -1178,7 +1183,8 @@ class CombatHud {
     const inside = projection.x > 8 && projection.x < this.width - 8
       && projection.y > 8 && projection.y < this.height - 8;
     if (projection.behind === true || !inside || rangeM > BANDIT_TALLY_RANGE_M) {
-      if (selected) this.drawSelectedWingmanLocator(frame);
+      // Always show the second bandit's bearing, selected or not — both must be visible at once.
+      this.drawWingmanLocator(frame, selected);
       return;
     }
 
@@ -1223,6 +1229,14 @@ class CombatHud {
       ctx.fillText(solution ? "TARGET 2 · SHOOT" : "TARGET 2 · SELECTED",
         projection.x, projection.y + size + 5);
       this.drawTargetDataLine(projection, size, state, color);
+    } else if (!circuitTraffic) {
+      // Named even when it is not the gun target, so an on-screen wingman is never an anonymous
+      // bracket the pilot has to guess at.
+      ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillStyle = GREEN;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText("TARGET 2", projection.x, projection.y + size + 5);
     }
     if (circuitTraffic && padlocked) {
       ctx.font = "600 9px ui-monospace, monospace";
@@ -1327,6 +1341,14 @@ class CombatHud {
         ctx.textBaseline = "top";
         ctx.fillText(solution ? "TARGET 1 · SHOOT" : "TARGET 1 · SELECTED",
           projection.x, projection.y + size + 5);
+      } else if (frame.wingmanPresent === true) {
+        // Name it whenever there is a second bandit to tell it apart from — a lone bandit needs no
+        // "TARGET 1" tag, but in a 2v1 both brackets must be labelled.
+        ctx.font = "700 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+        ctx.fillStyle = GREEN;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillText("TARGET 1", projection.x, projection.y + size + 5);
       }
 
       return;
@@ -1335,9 +1357,12 @@ class CombatHud {
     // Combat padlock owns one edge locator at every look angle. Drawing the ordinary forward-HUD
     // arrow as well would create two differently referenced directions around the threshold.
     if (frame.padlock && frame.padlockTarget !== "carrier") return;
-    // The off-screen locator belongs to the selected gun target. A quiet primary bracket may
-    // remain on-screen for formation awareness, but it must not point the pilot away from TARGET 2.
-    if (!selectedPrimary) return;
+    // BOTH BANDITS ARE ALWAYS SHOWN. This used to `return` unless the primary was the selected gun
+    // target, so at any moment only ONE of the two bandits had an off-screen cue -- the other
+    // vanished, which is the owner's "the wingman ran away and I couldn't see him" (2026-08-01):
+    // both must be clearly visible at all times. The primary now keeps its locator whether or not
+    // it is selected; `color` is already GREEN when unselected and AMBER when it is, so the two
+    // arrows read as "the one I'm on" vs "the other one" without a second, competing gun readout.
 
     // A LOCATOR IS FOR SOMETHING YOU CANNOT SEE. If the contact is in front and projects inside
     // the display, do not draw one: the marker already says where it is, and an arrow adds a
@@ -1458,11 +1483,17 @@ class CombatHud {
       this._debug.banditLocator.dirX = dx;
       this._debug.banditLocator.dirY = dy;
     }
+    // Green when this is not the selected target, amber when it is. An unselected primary (you are
+    // on TARGET 2) still gets a clearly-visible green arrow rather than disappearing.
+    const locatorAmber = selectedPrimary || padlockedBandit || solution || frame.padlock;
+    const locatorFill = locatorAmber
+      ? (frame.padlock ? "rgba(255, 176, 32, 0.28)" : "rgba(255, 176, 32, 0.16)")
+      : "rgba(77, 255, 136, 0.18)";
     ctx.save();
     ctx.translate(x, y);
     ctx.rotate(angle);
-    this.setLine(AMBER, frame.padlock ? 2.25 : 1.6);
-    ctx.fillStyle = frame.padlock ? "rgba(255, 176, 32, 0.28)" : "rgba(255, 176, 32, 0.16)";
+    this.setLine(locatorAmber ? AMBER : GREEN, frame.padlock ? 2.25 : 1.6);
+    ctx.fillStyle = locatorFill;
     ctx.shadowColor = frame.padlock ? "rgba(255, 176, 32, 0.68)" : "transparent";
     ctx.shadowBlur = frame.padlock ? 8 : 0;
     const locatorTip = mobileTactical ? 17 : 12;
@@ -1499,7 +1530,7 @@ class CombatHud {
     const labelHeight = mobileTactical ? 17 : 14;
     ctx.fillRect(labelX - labelWidth * 0.5 - 4,
       labelY - labelHeight * 0.5, labelWidth + 8, labelHeight);
-    ctx.fillStyle = AMBER;
+    ctx.fillStyle = locatorAmber ? AMBER : GREEN;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(labelText, labelX, labelY);

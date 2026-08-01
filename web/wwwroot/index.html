@@ -2795,11 +2795,13 @@
 
     /* ---------------------------------------------------------------------------------------
        PAUSE SCREEN
-       The same painting, and one button. It was showing "Flight paused" in the header AND
-       "Paused" as a title AND a Resume button -- three ways of saying the clock is stopped,
-       stacked over the art. A pause needs none of them: the frozen scene and the Resume button
-       are the message. Header and both titles come off the glass (kept in the DOM, announced),
-       leaving Resume, the RTB hand-off, and the three small utilities centred on the sky.
+       A clean, self-contained panel -- the SAME solid dark surface as the aircraft picker, which
+       the owner signed off on. The translucent-scrim version failed badly: the live HUD (tapes,
+       "854 KT CLOSING", the target brackets, TARGET 2) bled straight through a 58%-opaque wash
+       and collided with the buttons, and the buttons were themselves translucent so the chaos
+       showed through them too -- "ugly, offset, dumb". Solid backdrop, opaque buttons, one
+       centred column: Resume, then three small utilities. RTB HAND-OFF is gone (owner: remove it
+       until it works). Nothing from the frozen frame competes with it.
        --------------------------------------------------------------------------------------- */
     #ready-screen[data-mode="pause"] .ready-menu-header,
     #ready-screen[data-mode="pause"] #ready-kicker,
@@ -2808,34 +2810,38 @@
     #ready-screen[data-mode="pause"] .ready-facts,
     #ready-screen[data-mode="pause"] .ready-controls,
     #ready-screen[data-mode="pause"] #ready-hint,
+    #ready-screen[data-mode="pause"] #ready-handoff,
     #ready-screen[data-mode="pause"] #ready-build-row { display: none; }
 
-    /* A translucent scrim over the frozen frame, not a fresh painting: a pause should be the
-       flight you just stopped, held and dimmed, with Resume floating on it. */
     #ready-screen[data-mode="pause"] {
-      background-color: rgba(7, 11, 16, .58);
+      background-color: #0b0d11;
       background-image: none;
     }
     #ready-screen[data-mode="pause"] .ready-card {
-      width: min(30rem, 100%);
+      width: min(24rem, 100%);
       height: 100%;
       justify-content: center;
     }
-    #ready-screen[data-mode="pause"] .ready-briefing { align-items: stretch; }
+    #ready-screen[data-mode="pause"] .ready-briefing {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      padding: 0 clamp(16px, 5vw, 32px);
+    }
 
-    /* Resume is the one lit thing, in the warm menu ink rather than the old phosphor slab. */
+    /* Resume: the one lit action, warm ink, same treatment as FLY on the picker. */
     #ready-screen[data-mode="pause"] #ready-start {
       width: 100%;
       max-width: none;
-      min-height: 60px;
-      margin: 0 0 12px;
+      min-height: 62px;
+      margin: 0 0 14px;
       border: 0;
       border-radius: 3px;
       color: #2a2113;
       background: linear-gradient(180deg, #fbe6b4, #f0cf8b);
-      box-shadow: 0 10px 34px rgba(20, 30, 44, .42);
-      font: 500 clamp(16px, 2vw, 19px)/1 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
-      letter-spacing: .04em;
+      box-shadow: 0 10px 34px rgba(0, 0, 0, .45);
+      font: 500 clamp(17px, 2.1vw, 20px)/1 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      letter-spacing: .03em;
       text-transform: none;
       text-shadow: none;
     }
@@ -2843,6 +2849,33 @@
     #ready-screen[data-mode="pause"] #ready-start:focus-visible {
       background: linear-gradient(180deg, #fff2d2, #f7dda4);
     }
+
+    /* Three small utilities in a row, OPAQUE so nothing shows through, warm ink on the dark panel. */
+    #ready-screen[data-mode="pause"] .ready-secondary-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      width: 100%;
+      max-width: none;
+      margin: 0;
+    }
+    #ready-screen[data-mode="pause"] .ready-secondary-actions button {
+      min-height: 46px;
+      padding: 0 6px;
+      border: 1px solid rgba(253, 246, 230, .2);
+      border-radius: 3px;
+      color: rgba(253, 246, 230, .82);
+      background: #161b22;
+      font: 400 14px/1.15 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      letter-spacing: .01em;
+      text-transform: none;
+    }
+    #ready-screen[data-mode="pause"] .ready-secondary-actions button:hover,
+    #ready-screen[data-mode="pause"] .ready-secondary-actions button:focus-visible {
+      border-color: rgba(253, 246, 230, .55);
+      background: #1e242d;
+    }
+    #ready-screen[data-mode="pause"] .ready-secondary-actions button[hidden] { display: none; }
 
     @keyframes boot-pulse {
       0%, 100% { opacity: .34; transform: scale(.78); }
@@ -3238,7 +3271,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
             <span aria-hidden="true">⤴</span> Full screen: Share → Add to Home Screen
           </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 233 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 234 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
         </section>
@@ -3304,12 +3337,12 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // app.js arrives. The deep link still selects the sortie -- it is read by the module graph
     // from the same query string -- it just no longer has a splash screen to announce itself on.
 
-    // A network-fresh Build 233 document may still be controlled by Build 178's cache-first
+    // A network-fresh Build 234 document may still be controlled by Build 178's cache-first
     // service worker. Purge that controller and its Cache Storage before Blazor requests the
     // unversioned boot manifest/WASM graph. Offline clients never see this newer document until a
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = "233";
+      const releaseBuild = "234";
       const controller = navigator.serviceWorker?.controller;
       if (!controller) return;
       const controllerBuild = new URL(controller.scriptURL, location.href)
@@ -3328,8 +3361,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       }
     })();
   </script>
-  <script src="./multiplayer-config.js?v=233"></script>
-  <script type="module" src="./app.js?v=233"></script>
-  <script src="./_framework/blazor.webassembly.js?v=233" autostart="false"></script>
+  <script src="./multiplayer-config.js?v=234"></script>
+  <script type="module" src="./app.js?v=234"></script>
+  <script src="./_framework/blazor.webassembly.js?v=234" autostart="false"></script>
 </body>
 </html>
