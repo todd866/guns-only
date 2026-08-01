@@ -251,6 +251,8 @@ test("every visible HTML button is wired through one auditable action surface", 
     ["ready-restart", /readyRestart\?\.addEventListener\("click", restartMissionNow\)/],
     ["ready-return", /readyReturn\?\.addEventListener\("click", returnToCatalogue\)/],
     ["ready-build-reload", /readyBuildReload\?\.addEventListener\("click", reloadCurrentBuild\)/],
+    // iOS-Safari-only Add-to-Home-Screen hint; dismissed for good on tap.
+    ["ready-install-hint", /installHint\.addEventListener\("click"/],
     ["settings-close", /\[settingsClose, settingsCloseBottom\][\s\S]*?addEventListener\("click", closeSettings\)/],
     ["settings-close-bottom", /\[settingsClose, settingsCloseBottom\][\s\S]*?addEventListener\("click", closeSettings\)/],
     ["settings-reset-bindings", /settingsResetBindings\?\.addEventListener\("click"/],
