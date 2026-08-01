@@ -5,6 +5,7 @@ import {
   recoveryGatePresentation,
   rapierBriefingText,
   rapierCycleTeachPresentation,
+  DYNAMIC_PRESSURE_PLACARD_KPA,
   rapierEnginePresentation,
   rapierFlightDirectorPresentation,
   rapierGuidancePresentation,
@@ -606,4 +607,78 @@ test("engine presentation remains available for Systems / diagnostics", () => {
   assert.doesNotMatch(cue.text, /\bKN\b/);
   assert.match(cue.explainer, /Ram only/);
   assert.equal(cue.channels.length, 2);
+});
+
+// Owner report, Build 226: "in a max a/b dive from FL500 it tops out at like M1.8, seems slow."
+// Reproduced in the kernel: a 25-deg max-afterburner dive from FL500 peaks at M1.85 and settles
+// around M1.82 near 8 kft, and the trace shows ram fuel flow going 26.9 -> 37.2 -> 0.0 lb/min as
+// Mach RISES through M1.88, because the ram spike is scheduled on density and locks shut below
+// roughly FL225. The physics is deliberate. The silence was not: the HUD called that state
+// "HANDOVER -- ram lighting" and drew nothing at all about the 185 kPa it was flying at.
+test("a dive that outruns the ram spike says RAM LOCKED instead of claiming a handover", () => {
+  const diving = {
+    rapier_mission_available: true,
+    rapier_mission_phase: 6,          // NOT the ascent phase: the card used to be hidden here
+    mach: 1.88,
+    // What SnapshotProjection actually publishes: TurboRamjetPerformanceMap.RamFadeStartMach.
+    // (The module's no-field fallback is still the pre-1.6 value of 2.0; every production frame
+    // carries the real one, so the fallback only shapes synthetic states like this.)
+    rapier_ram_light_mach: 1.6,
+    dynamic_pressure_kpa: 102.4,
+    rapier_turbine_thrust_lbf: 13_960,
+    rapier_ramjet_thrust_lbf: 0,      // locked shut by density, despite being past ram-light Mach
+    rapier_skin_temp_c: 120,
+    rapier_cmc_capability_c: 1200,
+    rapier_cmc_margin_c: 1080,        // thermally fine, so nothing else would raise the card
+  };
+  const teach = rapierCycleTeachPresentation(diving);
+  assert.ok(teach, "the card stayed hidden through the exact state the owner could not diagnose");
+  assert.equal(teach.mode, "RAM LOCKED");
+  assert.match(teach.explainer, /too low to open the spike/i);
+  assert.match(teach.explainer, /climb/i);
+
+  // Past ram-light Mach WITH the duct actually lit is still a handover, not a false alarm.
+  const lit = rapierCycleTeachPresentation({
+    ...diving, rapier_ramjet_thrust_lbf: 8_000,
+  });
+  assert.equal(lit.mode, "HANDOVER");
+});
+
+test("flying past the q placard says so, wherever in the sortie it happens", () => {
+  const base = {
+    rapier_mission_available: true,
+    rapier_mission_phase: 6,
+    mach: 1.82,
+    rapier_ram_light_mach: 1.6,
+    rapier_turbine_thrust_lbf: 18_000,
+    rapier_ramjet_thrust_lbf: 9_000,   // lit, so RAM LOCKED is not what raises the card
+    rapier_skin_temp_c: 140,
+    rapier_cmc_capability_c: 1200,
+    rapier_cmc_margin_c: 1060,
+  };
+
+  // 185 kPa is what the kernel trace actually reaches at the bottom of a 45-degree dive.
+  const over = rapierCycleTeachPresentation({ ...base, dynamic_pressure_kpa: 185.5 });
+  assert.ok(over, "over-q did not raise the card outside the ascent phase");
+  assert.equal(over.overDynamicPressure, true);
+  assert.match(over.dynamicPressureText, /OVER Q 186 kPa/);
+  assert.match(over.dynamicPressureText, /LIMIT 49/);
+
+  // Inside the placard the card keeps its old gating and says nothing about q: a limit you are
+  // complying with is not news, and this cue must not become permanent chrome.
+  const inside = rapierCycleTeachPresentation({ ...base, dynamic_pressure_kpa: 31.0 });
+  assert.equal(inside, null);
+  const ascending = rapierCycleTeachPresentation({
+    ...base, rapier_mission_phase: 3, dynamic_pressure_kpa: 31.0,
+  });
+  assert.equal(ascending.overDynamicPressure, false);
+  assert.equal(ascending.dynamicPressureText, "");
+});
+
+test("the mirrored q placard still equals the kernel's own Vne derivation", () => {
+  // RapierAerodynamics: q = 0.5 * rho0 * (550 kt in m/s)^2, rho0 = 1.225, 1 kt = 1/1.94384 m/s.
+  const vneMps = 550.0 / 1.94384;
+  const kernelKpa = 0.5 * 1.225 * vneMps * vneMps / 1000;
+  assert.ok(Math.abs(kernelKpa - DYNAMIC_PRESSURE_PLACARD_KPA) < 0.05,
+    `mirrored placard ${DYNAMIC_PRESSURE_PLACARD_KPA} kPa drifted from the kernel's ${kernelKpa.toFixed(3)} kPa`);
 });

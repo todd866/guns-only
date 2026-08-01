@@ -52,7 +52,7 @@ import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=227";
+} from "./render/audio/flight_audio.js?v=228";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -2928,7 +2928,8 @@ class CombatHud {
     const y = this.getLayout().secondaryBottom - 36 - 8 - height - legendReserve;
     const thermalAccent = teach.thermalLevel === "fault" ? RED
       : teach.thermalLevel === "caution" ? AMBER : GREEN;
-    const modeAccent = teach.mode === "HANDOVER" ? AMBER
+    const modeAccent = teach.overDynamicPressure || teach.mode === "RAM LOCKED" ? RED
+      : teach.mode === "HANDOVER" ? AMBER
       : teach.mode === "TURBINE" ? GREEN : AMBER;
 
     if (this._debug) {
@@ -2950,16 +2951,17 @@ class CombatHud {
     roundedRect(ctx, x, y, width, height, 4);
     ctx.fillStyle = "rgba(1, 9, 14, 0.48)";
     ctx.fill();
-    ctx.strokeStyle = teach.thermalLevel === "normal"
-      ? "rgba(77, 255, 136, 0.22)" : thermalAccent;
+    ctx.strokeStyle = teach.overDynamicPressure ? RED
+      : teach.thermalLevel === "normal" ? "rgba(77, 255, 136, 0.22)" : thermalAccent;
     ctx.lineWidth = 1;
     ctx.stroke();
 
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
     if (!expanded) {
-      const skinLabel = Number.isFinite(teach.skinC)
-        ? ` · SKIN ${Math.round(teach.skinC)}°C` : "";
+      const skinLabel = teach.dynamicPressureText
+        ? ` · ${teach.dynamicPressureText}`
+        : Number.isFinite(teach.skinC) ? ` · SKIN ${Math.round(teach.skinC)}°C` : "";
       ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.fillStyle = modeAccent;
       ctx.fillText(`CYCLE ${teach.mode} · M${teach.mach.toFixed(2)}${skinLabel}`,

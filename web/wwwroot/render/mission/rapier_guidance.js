@@ -502,8 +502,28 @@ export function rapierFlightDirectorPresentation(state) {
   });
 }
 
-function cycleMode(mach, thresholds) {
+/// Ram thrust below this fraction of the total is not "lighting", it is off.
+const RAM_LIT_SHARE = 0.04;
+
+/// The Rapier's dynamic-pressure placard, kPa. RapierAerodynamics derives 49,035 Pa from
+/// Vne 550 KIAS; the kernel publishes q but never published the placard, so it is mirrored here
+/// and asserted against the kernel value by the guidance tests.
+export const DYNAMIC_PRESSURE_PLACARD_KPA = 49.0;
+
+/// Which cycle the engine is ACTUALLY running, not which one its Mach number implies.
+///
+/// This used to be a pure function of Mach, and it was wrong in the one place a pilot most needs
+/// it: the ram spike is scheduled on DENSITY as well as Mach and stays locked below roughly
+/// FL225, so a dive that crosses the ram-light Mach in thick air produced "HANDOVER -- turbine
+/// fading, ram lighting, expect a thrust bucket" while the ram duct was shut and making nothing.
+/// The pilot was told the engine was handing over while it was doing no such thing; the aircraft
+/// then stopped accelerating for a reason nothing on the HUD could explain.
+///
+/// RAM LOCKED is that missing state: fast enough to light, too low to open the spike.
+function cycleMode(mach, thresholds, ramShare = null) {
+  const ramDead = ramShare !== null && ramShare < RAM_LIT_SHARE;
   if (mach < thresholds.ramLightMach) return "TURBINE";
+  if (ramDead) return "RAM LOCKED";
   if (mach < thresholds.fullRamMach) return "HANDOVER";
   if (mach < thresholds.turbineGoneMach) return "FULL RAM";
   return "RAM ONLY";
@@ -513,6 +533,8 @@ function cycleExplainer(mode, thresholds) {
   switch (mode) {
     case "TURBINE":
       return `Turbojet + AB make thrust now. Ram needs ~M${thresholds.ramLightMach.toFixed(1)} before it lights.`;
+    case "RAM LOCKED":
+      return "Fast enough to light, too low to open the spike. The duct stays shut in dense air — climb.";
     case "HANDOVER":
       return "Handover band: turbine fading, ram lighting. Expect a thrust bucket.";
     case "FULL RAM":
@@ -549,10 +571,14 @@ function buildCycleTeach(state) {
     cmcMarginC,
   } = thermal;
   const thresholds = rapierPropulsionThresholds(state);
-  const mode = cycleMode(mach, thresholds);
+  const mode = cycleMode(mach, thresholds, ramLbf / totalLbf);
   let thermalLevel = "normal";
   if (cmcMarginC !== null && cmcMarginC < 0) thermalLevel = "fault";
   else if (cmcMarginC !== null && cmcMarginC < 40) thermalLevel = "caution";
+
+  const dynamicPressureKpa = finiteNumber(state.dynamic_pressure_kpa);
+  const overDynamicPressure = dynamicPressureKpa !== null
+    && dynamicPressureKpa > DYNAMIC_PRESSURE_PLACARD_KPA;
 
   const skinText = skinC !== null ? `SKIN ${Math.round(skinC)}°C` : "SKIN --";
   const t0Text = stagnationC !== null ? ` · T0 ${Math.round(stagnationC)}°C` : "";
@@ -564,6 +590,12 @@ function buildCycleTeach(state) {
     mode,
     explainer: cycleExplainer(mode, thresholds),
     mach,
+    dynamicPressureKpa,
+    overDynamicPressure,
+    // Drawn on the card only while it is being exceeded: a placard you are inside is not news.
+    dynamicPressureText: overDynamicPressure
+      ? `OVER Q ${Math.round(dynamicPressureKpa)} kPa · LIMIT ${Math.round(DYNAMIC_PRESSURE_PLACARD_KPA)}`
+      : "",
     turbineLbf,
     ramLbf,
     totalLbf,
@@ -600,8 +632,24 @@ export function rapierCycleTeachPresentation(state) {
   const marginC = finiteNumber(state.rapier_cmc_margin_c)
     ?? finiteNumber(state.rapier_thermal_margin_c);
   const thermalOver = marginC !== null && marginC < 0;
-  if (!ascent && !thermalOver) return null;
-  return buildCycleTeach(state);
+  const teach = buildCycleTeach(state);
+
+  // The card used to be gated on the ASCENT phase alone, which is exactly backwards for the two
+  // situations a pilot cannot diagnose from anything else on the glass:
+  //
+  //   RAM LOCKED -- a max-afterburner dive from FL500 crosses the ram-light Mach in thick air,
+  //   the spike stays shut, and the aircraft simply stops accelerating around M1.8. Nothing on
+  //   the HUD said why, because the dive is not the ascent phase.
+  //
+  //   OVER Q -- that same dive reaches roughly 185 kPa against a 49 kPa placard, nearly four
+  //   times the limit. The kernel computes it, records it to service life and publishes it, and
+  //   the HUD drew none of it: you can fly the wings off this aeroplane in silence.
+  //
+  // Both now raise the card wherever they happen.
+  const overQ = teach?.overDynamicPressure === true;
+  const ramLocked = teach?.mode === "RAM LOCKED";
+  if (!ascent && !thermalOver && !overQ && !ramLocked) return null;
+  return teach;
 }
 
 /// Diagnostic engine state for the Aircraft Systems console / tests — not drawn on the HUD ladder.
