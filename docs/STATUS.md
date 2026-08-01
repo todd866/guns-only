@@ -49,8 +49,9 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Local `main` is currently 118 commits ahead of `origin/main`; Build 238 remains an uncommitted,
-  unpushed stabilization candidate and is not production.
+- Build 238 is a committed release candidate, not production. It becomes releasable only after
+  its exact protected-`main` SHA passes the canonical GitHub Verify workflow and the outstanding
+  representative human acceptance flights are recorded.
 - A fresh local Node 24.18.0 `./bin/check` is green on the complete Build 238 candidate: 1,231/1,231
   non-browser Node tests, 79/79 Python tests, 1,827/1,827 all-Sim tests, 10/10 server tests, 12/12
   packaged browser smoke tests, and 1,916/1,916 real-HUD assertions, with zero skips. The Release
@@ -67,9 +68,8 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 - A candidate is releasable only when its exact pushed SHA has a complete green gate. Production
   build metadata must identify both the Git revision and immutable staged-content/atlas digest.
 
-No Build 238 GitHub run URL exists yet because the candidate is still dirty and unpushed. Add the
-canonical exact-SHA Verify URL here after the clean commit is pushed; do not treat this local green
-gate as remote release provenance.
+Record the canonical Build 238 protected-`main` Verify URL in release evidence at promotion; do
+not treat local or pull-request green gates as remote release provenance.
 
 ## Current policy and governance
 
