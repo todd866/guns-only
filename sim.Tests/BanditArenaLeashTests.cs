@@ -73,10 +73,16 @@ public class BanditArenaLeashTests {
             longestOutboundTicks = System.Math.Max(longestOutboundTicks, outboundTicks);
         }
 
-        // Pre-fix, the fight-centre leash was unreachable for an Ace at all (Return is discarded on
-        // the lookahead path) and the ceiling guard disabled the check outright.
-        Assert.True(maxRadiusM < 6_200.0,
-            $"bandit wandered {maxRadiusM:F0} m from its fight centre — containment is not holding");
+        // DOCTRINE UPDATE 2026-08-01 (owner: "fleeing from the fight should never be an option ...
+        // never abandon; always reengage"). The old cap of 6,200 m encoded "hold a fixed spawn
+        // arena". The bandit now REENGAGES TOWARD THE PLAYER instead of returning to a spawn point,
+        // so as the fight drifts it follows -- which is the point. The meaningful guard is no
+        // longer a tight radius from a fixed centre; it is the nose-away assertion below (the
+        // bandit must never point AWAY and open the range -- the actual "fleeing"). This bound is
+        // now only a sanity limit against absurd wander (the reported 16 NM abandon), not a leash:
+        // the bandit reengaging nose-on stays inside it while a stern-chase runner would not.
+        Assert.True(maxRadiusM < 9_000.0,
+            $"bandit wandered {maxRadiusM:F0} m from its fight centre — absurd wander, not a reengage");
         double longestOutboundS = longestOutboundTicks / (double)AircraftSim.TickHz;
         Assert.True(longestOutboundS < 15.0,
             $"bandit spent {longestOutboundS:F0} s continuously beyond 4 NM with its nose pointed "

@@ -1489,20 +1489,34 @@ public sealed class ReactiveBandit :
             return new PilotCommand(1.85, LimitedBankTo(climb, 0.65),
                 _maximumThrottle, 0.0);
         }
-        // THE EXTENSION IS AIMED, NOT OPEN-ENDED. Straight ahead from wherever the nose happened to
-        // be pointing is how an energy rebuild became an escape: SelectTactic's low-energy gate
-        // deliberately outranks the arena leash (a slow bandit dragged into Return's nose-high 2.8 G
-        // turn used to stall), so while Energy holds, nothing else was bounding the range — the
-        // bandit extended past the leash and kept going. Clamping the aim point into the fight
-        // volume fixes that where it starts: the extension curves home as it reaches the arena
-        // edge, so the bandit rebuilds its energy AND ends up pointing back at the player, which is
-        // what an extension is supposed to buy. Same helper the low-altitude branch above uses.
-        var extension = KeepAimInFightVolume(
-            own.Position + own.ForwardDir() * 1200.0 + new Vec3D(0.0, -280.0, 0.0));
-        // The descending extension must not descend into rising ground ahead.
+        // THE EXTENSION IS AIMED AT THE PLAYER, NOSE-LOW -- NOT STRAIGHT AHEAD. Straight ahead
+        // (own forward + 1200 m) points AWAY from a player behind the bandit, so once the nose was
+        // level the "energy rebuild" flew the range open nose-cold -- traced opening to 4 km, and
+        // in the merge the reported "all dots fleeing". Owner doctrine 2026-08-01: an extension is
+        // a re-attack, never an escape. Aim at the player's horizontal position instead, so the
+        // nose tracks the fight while the descent rebuilds speed; SelectTactic exits Energy the
+        // instant speed is back, so this lasts a couple of seconds. The gamma>0.09 nose-high slice
+        // BELOW is unchanged -- it still gets a steeply-nose-high bandit's nose down with a fixed
+        // bank first; this only redirects what it does ONCE ROUGHLY LEVEL.
+        //
+        // Held at least 200 m below own altitude and never above the player (nose-LOW is what
+        // rebuilds speed and makes a low-speed pull safe), and nudged sideways in WORLD-HORIZONTAL,
+        // perpendicular to the player bearing on a constant side, so a player dead ahead-and-below
+        // does not sit in the vertical plane where BankToPlaceLiftVectorOn returns +/-pi and the
+        // bank chatters. Scaled to the drop so the aim stays a clean diagonal.
+        double extensionY = System.Math.Min(own.Position.Y - 200.0, player.Position.Y);
+        var extension = KeepAimInFightVolume(player.Position with { Y = extensionY });
         double aheadFloor = LocalFloorM(extension.X, extension.Z);
         if (extension.Y < aheadFloor + 180.0)
             extension = extension with { Y = aheadFloor + 180.0 };
+        var extensionFlat = new Vec3D(extension.X - own.Position.X, 0.0,
+            extension.Z - own.Position.Z);
+        if (extensionFlat.Length > 1e-6) {
+            double extensionDropM = System.Math.Max(0.0, own.Position.Y - extension.Y);
+            var extensionPerp = new Vec3D(-extensionFlat.Z, 0.0, extensionFlat.X).Normalized();
+            extension += extensionPerp
+                * (System.Math.Max(500.0, 1.5 * extensionDropM) * _breakSign);
+        }
         // A real energy extension is flown toward the horizon, not along whatever flight path
         // Energy was entered with. Nose-high at 0.55 G on an afterburning airframe is an
         // accidental sustained zoom: gamma-dot ~ (n - cos(gamma))*g/V barely moves while thrust
@@ -1537,6 +1551,17 @@ public sealed class ReactiveBandit :
             double side = System.Math.Abs(own.Bank) > 0.05
                 ? System.Math.Sign(own.Bank)
                 : _breakSign;
+            // WHEN FAST AND HIGH, PUT THE NOSE DOWN DECISIVELY. The 1.35 rad (77 deg) cap leaves
+            // 0.49 G supporting the climb, so gamma falls only ~2 deg/s -- a bandit that enters
+            // nose-high at merge speed MUSHES upward for the whole extension, traced climbing 5.3
+            // to 11.5 km while "rebuilding energy", the owner's fleeing zoom. Rolling past vertical
+            // (2.0 rad, 115 deg) at 4 G puts the lift vector below the horizon and the nose comes
+            // down through level in a second or two. Only above ~135 m/s (below it the pull just
+            // scrubs the little speed there is -- the slow nose-high test keeps the gentle version)
+            // and with real clearance beneath, since it is a slice toward the ground.
+            double clearanceM = own.Position.Y - hereFloor;
+            if (clearanceM > 1500.0 && own.Speed > 135.0)
+                return new PilotCommand(4.0, side * 2.0, _maximumThrottle, 0.0);
             return new PilotCommand(2.2, side * 1.35, _maximumThrottle, 0.0);
         }
         // The aim point has been clamped back inside the arena and now sits well off the nose, so
@@ -1659,8 +1684,21 @@ public sealed class ReactiveBandit :
         var target = _fightCentre with {
             Y = System.Math.Clamp(_fightCentre.Y + 250.0, lowY, highY)
         };
-        double bank = LimitedBankTo(target, 0.95);
         double angle = AngleTo(target);
+        // NEVER CLIMB HOME. When the centre is well below -- the ordinary case after a fight was
+        // dragged up -- the 0.95 rad (54 deg) cap leaves 1.65 G of vertical lift at 2.8 G, so the
+        // "return" was a shallow CLIMBING turn (traced gamma +57 deg, 6.4 to 8.8 km), the reported
+        // fleeing. Roll steeper (77 deg) so the pull slices the nose DOWN toward the centre below
+        // and trade the altitude back into speed. The centre is horizontally offset from a strayed
+        // bandit, so the bank is well-conditioned without a nudge. Owner doctrine: descend back
+        // into the fight, never fly away from it.
+        double altExcessM = State.Position.Y - target.Y;
+        if (altExcessM > 400.0) {
+            double diveBank = LimitedBankTo(target, 1.35);
+            double diveG = System.Math.Clamp(2.0 + angle * 1.2, 2.0, 3.8);
+            return new PilotCommand(diveG, diveBank, _maximumThrottle, 0.0);
+        }
+        double bank = LimitedBankTo(target, 0.95);
         double g = System.Math.Clamp(1.2 + angle * 1.15, 1.2, 2.8);
         double throttle = State.Speed < _lowSpeedMps
             ? System.Math.Min(_maximumThrottle, 1.05)
