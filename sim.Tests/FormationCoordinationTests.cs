@@ -171,11 +171,12 @@ public class FormationCoordinationTests {
         }
 
         Assert.Equal(FormationTacticalRole.Pressure, first.PrimaryRole);
-        Assert.Equal(FormationTacticalRole.Extend, first.SupportRole);
+        // Bracket, not Extend: a pair that outnumbers the player never disengages.
+        Assert.Equal(FormationTacticalRole.Bracket, first.SupportRole);
     }
 
     [Fact]
-    public void CloseSupportExtendsOnlyAfterDwellEvaluationAndRadioDelay() {
+    public void CloseSupportBracketsInsteadOfExtendingAndStillRespectsRadioDelay() {
         var coordinator = new EnemyPairCoordinator();
         AircraftState primary = State(-100.0, -700.0, chi: 0.0);
         AircraftState support = State(100.0, -750.0, chi: Math.PI);
@@ -183,14 +184,21 @@ public class FormationCoordinationTests {
             (primary.Position - support.Position).Length
             < EnemyPairCoordinator.ExtendPairSeparationM);
 
+        // A tight pair used to be told to Extend, whose command is to fly 1600 m directly away
+        // from the player. Measured in production that removed the support member from the fight
+        // entirely (7.9% of a real sortie spent beyond 10 km while the primary never once
+        // exceeded it). A pair holding a numerical advantage commits instead: proximity is
+        // answered by moving LATERALLY into a bracket, never by disengaging.
         StepThrough(coordinator, 0, 401, primary, support);
         Assert.Equal(FormationTacticalRole.Pressure, coordinator.PrimaryRole);
         Assert.Equal(FormationTacticalRole.Bracket, coordinator.SupportRole);
 
+        // The dwell + radio-delay pipeline still governs delivery: the bracket side is only
+        // assigned once the queued assignment is actually delivered.
         StepThrough(coordinator, 402, 402, primary, support);
         Assert.Equal(FormationTacticalRole.Pressure, coordinator.PrimaryRole);
-        Assert.Equal(FormationTacticalRole.Extend, coordinator.SupportRole);
-        Assert.Equal(0,
+        Assert.Equal(FormationTacticalRole.Bracket, coordinator.SupportRole);
+        Assert.NotEqual(0,
             coordinator.DirectiveFor(SupportId, 402).LateralSign);
     }
 

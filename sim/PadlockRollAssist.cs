@@ -109,7 +109,8 @@ public sealed class PadlockRollAssist {
         bool eligible,
         double rawPilotRollControl,
         double deltaSeconds,
-        PadlockRollAssistEnergy? energy = null) {
+        PadlockRollAssistEnergy? energy = null,
+        double? captureRangeLimitM = null) {
         double dt = System.Math.Clamp(
             double.IsFinite(deltaSeconds) ? deltaSeconds : 0.0, 0.0, 0.05);
         if (!selected || dt <= 0.0
@@ -277,7 +278,24 @@ public sealed class PadlockRollAssist {
             _sasRollControl = 0.0;
         }
 
-        if (!_captured) {
+        // THIS LAW FINE-TUNES A SHOT. IT MUST NOT FLY THE MERGE.
+        //
+        // Capture used to be purely geometric — plane magnitude and roll error, with no notion of
+        // whether a shot existed at all. Measured over a real 915 s sortie (telemetry session
+        // web-1785639986509-531485, Build 238): the assist held authority for 20.7% of the entire
+        // flight, at a median range of 2,232 m and out to 5,846 m, and 88% of that engagement was
+        // beyond the gun's reach. It was trimming the pilot's ailerons through the whole fight,
+        // which is the owner's "the roll-automation is way too aggressive... it should only really
+        // kick in to help fine-tune the final shot".
+        //
+        // Beyond the gun's maximum reach a round cannot arrive at all, so there is by definition
+        // nothing to fine-tune. The bound is the weapon's physical reach, not a taste constant.
+        bool withinShot = captureRangeLimitM is not { } limitM
+            || !double.IsFinite(limitM)
+            || displacement.Length <= limitM;
+        if (!_captured && !withinShot) _captureCandidateSeconds = 0.0;
+
+        if (!_captured && withinShot) {
             if (planeMagnitude >= FullAuthorityPlaneMagnitude
                 && absoluteError <= CaptureEnterRad) {
                 _captureCandidateSeconds += dt;

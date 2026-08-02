@@ -5947,7 +5947,12 @@ public sealed class SimulationSession {
             eligible,
             rawPilotRollControl,
             FixedDeltaSeconds,
-            energy);
+            energy,
+            // The gun's physical reach. Past this a round cannot arrive, so there is no shot for
+            // the plane trim to fine-tune and it must not take the ailerons — see the capture gate
+            // in PadlockRollAssist for the measured 20.7%-of-flight / 88%-out-of-range evidence.
+            captureRangeLimitM: _beat.CombatRules.PlayerGunProfile.MuzzleVelocityMps
+                * _beat.CombatRules.PlayerGunProfile.MaximumFlightSeconds);
         return result.Command;
     }
 

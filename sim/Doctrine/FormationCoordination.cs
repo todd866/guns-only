@@ -203,10 +203,25 @@ public sealed class EnemyPairCoordinator {
                 supportPressureScore > primaryPressureScore + 1e-9;
             double pairSeparationM =
                 (primary.State.Position - support.State.Position).Length;
-            FormationTacticalRole supportRole =
-                pairSeparationM < ExtendPairSeparationM
-                    ? FormationTacticalRole.Extend
-                    : FormationTacticalRole.Bracket;
+            // A PAIR THAT OUTNUMBERS THE PLAYER DOES NOT DISENGAGE.
+            //
+            // This chose Extend purely on mutual proximity, and Extend's command is to fly 1600 m
+            // DIRECTLY AWAY from the player. So mid-fight the two closed, tripped the 850 m
+            // threshold, one ran, came back, tripped it again — a loop. Measured over a real 915 s
+            // sortie (telemetry web-1785639986509-531485): the support member spent 7.9% of the
+            // fight beyond 10 km while the primary NEVER exceeded 10 km once. Same airframe, same
+            // tier, same fight; the only difference was the role. That is the owner's "dash-2 just
+            // flies off into the sunset".
+            //
+            // The trigger was wrong twice over. Two aircraft being near each other is a formation
+            // safety concern, and disengaging from the target is not a response to it. And with a
+            // numerical advantage, disengaging throws away the only advantage the pair has: owner
+            // doctrine is "I'd happily trade two su27s to take down one f22" — commit, accept
+            // losses, take the exchange.
+            //
+            // Splitting a tight pair now means one moves LATERALLY into a bracket, which is the
+            // response that actually addresses proximity while keeping both aircraft in the fight.
+            FormationTacticalRole supportRole = FormationTacticalRole.Bracket;
 
             if (supportPressures) {
                 nextPrimaryRole = supportRole;
