@@ -21,7 +21,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=243";
+} from "./render/hud/contact_visibility.js?v=244";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import {
   carrierAoARelevant,
@@ -59,17 +59,17 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=243";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=244";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=243";
+} from "./render/mission/rapier_high_mach_instruments.js?v=244";
 import { limitsPanelPresentation } from "./render/hud/limits_panel.js";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=243";
+} from "./render/audio/flight_audio.js?v=244";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -2903,7 +2903,15 @@ class CombatHud {
     const centerY = layout.instrumentCenterY;
     const h = layout.tapeHeight;
     const railWidth = 6;
-    const x = layout.tapeInset - 46;
+    // Outboard of the speed tape. On a phone the tape sits close to the edge, so the desktop
+    // offset would push the rail off-screen entirely — clamp it into the safe area instead. The
+    // pilot commands thrust with a rocker or the left stick and had NO readout of it anywhere on
+    // the phone; the strip rows are full (adding a token there ellipsized them and blocked two
+    // deploys), so power belongs here, as an instrument, not as more text.
+    // 13 px of clearance, not 2: the PWR caption is centred on the rail, so a rail hard against
+    // the edge clips its own label.
+    const x = Math.max(
+      (this.safeInsets?.left ?? 0) + 13, layout.tapeInset - 46);
     const y = centerY - h / 2;
     const yOf = (f) => y + h - (clamp(f, 0, maxT) / maxT) * h;
 
@@ -5237,6 +5245,9 @@ class CombatHud {
         step: frame.state.alt_ft > 10000 ? 1000 : 500,
         decimals: 0,
       });
+      // The phone gets the power rail too. It was desktop-only, which left the one control the
+      // pilot holds for the entire sortie with no feedback at all.
+      this.drawThrottle(frame.state);
       this.drawMobileTacticalState(frame, display);
     } else {
       if (this._debug) this._debug.desktopFlightChrome = true;

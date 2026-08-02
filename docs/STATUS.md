@@ -1,9 +1,9 @@
 # Current product and verification status
 
 Updated: 2026-08-02
-Production: Build 242, revision `00173ce9da28e6e2bb734b2e0a4f688da25a72dc`, promoted 2026-08-02
+Production: Build 243, revision `f66d1a157593fa462edbb6f263f8e4fbf5e31dcc`, promoted 2026-08-02
 after its exact protected-`main` SHA passed the canonical GitHub Verify workflow.
-Next candidate: Build 243 (local work); do not deploy until the complete gate is
+Next candidate: Build 244 (local work); do not deploy until the complete gate is
 green and the exact revision is pushed.
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
