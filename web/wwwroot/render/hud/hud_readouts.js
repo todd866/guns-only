@@ -91,16 +91,6 @@ export function mobileTacticalReadout(state = {}, display = {}, {
     : `M${Math.max(0, mach).toFixed(2).replace(/^0/, "")}`);
   actualParts.push(`${indicatedKts === null ? "---" : Math.round(indicatedKts)}${
     condensed ? "" : " "}${airdata.speedUnit}`);
-  // On the phone the pilot commands thrust with a rocker or the left stick and had no readout of
-  // what they had commanded anywhere on screen — an open loop on the one control they hold the
-  // whole sortie. Power reads next to speed because they are flown together. Values above 100%
-  // are real: the lever travels past the military stop into augmentation.
-  const commandedThrottle = finiteNumber(state.applied_throttle)
-    ?? finiteNumber(state.throttle);
-  if (commandedThrottle !== null) {
-    const powerPct = Math.round(Math.max(0, commandedThrottle) * 100);
-    actualParts.push(condensed ? `P${powerPct}` : `PWR ${powerPct}%`);
-  }
   let energyToken = null;
   if (assistedFlight) {
     energyToken = assistedSpeedBiasKts === 0
@@ -133,6 +123,17 @@ export function mobileTacticalReadout(state = {}, display = {}, {
   const ammo = finiteNumber(state.ammo);
   const gunHeat = Math.max(0, Math.min(1, finiteNumber(state.gun_heat) ?? 0));
   const weaponParts = [];
+  // On the phone the pilot commands thrust with a rocker or the left stick and had no readout of
+  // what they commanded anywhere on screen — an open loop on the one control held all sortie.
+  // It rides the SECOND row deliberately: the first row is already at its width budget, and
+  // adding a token there ellipsized it, which the portrait smoke test correctly rejected
+  // ("portrait tactical truth was ellipsized"). Short form, because this row has a budget too.
+  // Values above 100% are real — the lever travels past the military stop into augmentation.
+  const commandedThrottle = finiteNumber(state.applied_throttle)
+    ?? finiteNumber(state.throttle);
+  if (commandedThrottle !== null) {
+    weaponParts.push(`P${Math.round(Math.max(0, commandedThrottle) * 100)}`);
+  }
   if (fightActive) {
     weaponParts.push(`GUN${ammo === null ? "---" : Math.max(0, Math.floor(ammo))}`);
     if (state.gun_overheat === true) weaponParts.push("OVERHEAT");

@@ -1,8 +1,8 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=239";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=240";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=239";
+} from "./cobra_canyon_asset_kit.js?v=240";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 

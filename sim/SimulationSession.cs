@@ -3894,9 +3894,15 @@ public sealed class SimulationSession {
         for (int index = 0; index < extra; index++) {
             // Offset by engagement number AND wingman index so the pair never stacks, and so the
             // whole staging stays a pure function of the engagement (the determinism contract).
+            //
+            // The leader's state is now passed as wingLead, which is what actually makes this a
+            // formation: SpawnForMerge places the wingman on the LEADER's 45 degree aft cone
+            // instead of giving it an unrelated player-relative merge slot. Without it the
+            // alternating `side` term put the pair on opposite sides of the player — two head-on
+            // contacts, not a pair to split.
             IBandit wing = _beat.CreateNextBandit(
                 _player.State, engagementNumber + WingmanSpawnStride * (index + 1),
-                _terrainSurface, spec);
+                _terrainSurface, spec, wingLead: _bandit?.State);
             wing.Wind = _player.Wind;
             wing.Atmosphere = _player.AtmosphereModel;
             var gun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
