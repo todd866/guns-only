@@ -368,7 +368,7 @@ public sealed class ReactiveBandit :
         double speedMps = 180.0, PilotSkill skill = PilotSkill.Competent,
         GunsOnly.Sim.Environment.ITerrainSurface? terrain = null,
         BanditSkillProfile? profile = null, int? doctrineIndex = null,
-        bool presenting = false) {
+        bool presenting = false, AircraftState? wingLead = null) {
         if (engagementNumber < 1)
             throw new System.ArgumentOutOfRangeException(nameof(engagementNumber));
         if (!double.IsFinite(speedMps) || speedMps <= 0.0)
@@ -392,6 +392,35 @@ public sealed class ReactiveBandit :
         double altitudeM = System.Math.Clamp(player.Position.Y + altitudeOffsetM,
             FloorM + 260.0, CombatCeilingM);
         var position = player.Position + forward * alongM + right * offsetM;
+        // FIGHTING WING, NOT A SECOND HEAD-ON CONTACT.
+        //
+        // A formation wingman is positioned off its LEADER. Previously it was handed an
+        // independent player-relative merge slot with a stepped engagement number, and because
+        // `side` alternates with that number the pair arrived line-abreast on OPPOSITE sides of
+        // the player: two separate contacts to be met head-on rather than one formation to split,
+        // which is what StageWingmen's own comment says the pair is for. Owner, after flying it:
+        // "dash-2 is way too close", "dash-2 should be behind dash-1", "not literally trail,
+        // probably 45 degree offset".
+        //
+        // Equal aft and lateral components put dash-2 on the leader's 45 degree cone. It is
+        // deliberately NOT welded trail: a wingman parked on the leader's tail has nowhere to
+        // manoeuvre and dies to the same guns pass. The side term alternates so successive
+        // wingmen of a multi-ship stack across the cone instead of on top of each other.
+        if (wingLead is { } lead) {
+            const double FightingWingRangeM = 760.0;
+            const double FortyFiveDegreeComponent = 0.70710678118654752;
+            var leadForward = new Vec3D(
+                System.Math.Sin(lead.Chi), 0.0, System.Math.Cos(lead.Chi));
+            var leadRight = new Vec3D(
+                System.Math.Cos(lead.Chi), 0.0, -System.Math.Sin(lead.Chi));
+            double component = FightingWingRangeM * FortyFiveDegreeComponent;
+            position = lead.Position
+                - leadForward * component
+                + leadRight * (side * component);
+            // Step off the LEADER, not the player: the pair must read as one formation.
+            altitudeM = System.Math.Clamp(lead.Position.Y + altitudeOffsetM,
+                FloorM + 260.0, CombatCeilingM);
+        }
         // A replacement that tracks a low-flying player must still merge with real room above the
         // actual ground under and ahead of it — a fresh fighter materialising 8 seconds from a
         // ridge it cannot out-turn is a spawn defect, not a fight. Sweep the whole early run-in
@@ -973,7 +1002,23 @@ public sealed class ReactiveBandit :
                 LastCommand = LowBlockPerchCommand(player);
                 Tactic = BanditTactic.Return;
                 RecordSingleCandidateDecision(LastCommand);
-            } else if (Tactic == BanditTactic.Return || IsOpeningBeyondReengageRange(player)) {
+            } else if ((Tactic == BanditTactic.Return || IsOpeningBeyondReengageRange(player))
+                && Geometry.Range(State, player) > ReengageRangeM) {
+                // CONTAINMENT NEVER OUTRANKS AN ACTUAL ENGAGEMENT.
+                //
+                // The range guard is the whole point. Below it this branch fired whenever the
+                // tactic was Return, and the command chosen at the bottom is ReturnCommand() for
+                // every range at or under ReengageRangeM (3.5 km) — so a bandit that had drifted
+                // outside the 5.2 km arena turned cold and drove for a geometric centre point with
+                // the player inside 1.9 NM. Gun range is 120-900 m, so that is the merge: the
+                // closer the player got, the more likely the bandit was to leave. Reported
+                // repeatedly as "the bandits are still running away", and it is the same defect
+                // each time.
+                //
+                // Fighting the aircraft in front of you outranks tidying the arena. Containment
+                // still applies when nobody is engaged — the bandit wandering off with the player
+                // far away, which is the case the leash was actually built for. WantsToFire does
+                // not gate on Tactic, so falling through to ordinary BFM keeps the guns live.
                 // THE LEASH, FOR THE TIERS THAT ACTUALLY FLY THE LOOKAHEAD.
                 //
                 // The branch below discards whatever SelectTactic decided and force-sets Acquire,

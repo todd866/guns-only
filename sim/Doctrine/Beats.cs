@@ -610,7 +610,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
             altitudeM);
 
     public IBandit CreateNextBandit(in AircraftState player, int engagementNumber,
-        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null, SpawnSpec? spec = null) {
+        GunsOnly.Sim.Environment.ITerrainSurface? terrain = null, SpawnSpec? spec = null,
+        AircraftState? wingLead = null) {
         // Without a director decision the interim per-engagement ladder still applies (the
         // director's own cold start reproduces it, so the two paths cannot diverge silently).
         PilotSkill skill = spec?.Skill ?? BanditSkillProfile.ForEngagement(engagementNumber);
@@ -634,7 +635,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
             terrain: terrain,
             profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
             doctrineIndex: spec?.DoctrineIndex,
-            presenting: spec?.Sparring == true);
+            presenting: spec?.Sparring == true,
+            wingLead: wingLead);
     }
 }
 
