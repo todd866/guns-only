@@ -64,6 +64,10 @@ export function fighterHudLayout({
   return {
     tapeInset,
     tapeHeight,
+    // Published so callers that must not overprint the tapes can compute the real gutter. Note
+    // targetSafe/ladderSafe deliberately do NOT exclude the tapes in the compact-mobile profile —
+    // they fall back to the safe-area inset — so they are the wrong bound for that job on a phone.
+    tapeHalfWidth,
     instrumentCenterY,
     heading: {
       y: headingY,

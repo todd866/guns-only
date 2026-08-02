@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=238";
+import { createHud } from "./hud.js?v=239";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=238";
+} from "./render/debrief/sortie_result.js?v=239";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -49,8 +49,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=238";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=238";
+} from "./render/release/release_identity.js?v=239";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=239";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -63,7 +63,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=238";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=239";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -72,10 +72,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=238";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=239";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=238";
+} from "./render/nav/carrier_sortie_touch_control.js?v=239";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -148,7 +148,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=238";
+} from "./render/telemetry/ai_frame_pressure.js?v=239";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -158,7 +158,7 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=238";
+} from "./render/telemetry/telemetry_batch.js?v=239";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -167,7 +167,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=238";
+} from "./render/settings/player_settings.js?v=239";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -213,13 +213,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=238";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=238";
+} from "./render/scene/scene_builders.js?v=239";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=239";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=238";
+} from "./render/audio/flight_audio.js?v=239";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -660,6 +660,14 @@ function updateNavConsole(state) {
     const number = Number(value);
     return Number.isFinite(number) ? number : null;
   };
+  // Every readout below tests its value against null and formats anything else. A non-finite
+  // number is not null, so NaN survives that test and reaches the formatter, which is how the
+  // reserve margin shipped as the literal text "ABOVE NaN LB"; undefined survives it too and
+  // throws on .toFixed, taking every readout after it down with it. `??` does not help, because
+  // it only substitutes on null and undefined and passes NaN straight through. Normalize once,
+  // where presentation values are chosen, rather than hardening eight separate call sites.
+  const finite = (value) =>
+    (typeof value === "number" && Number.isFinite(value) ? value : null);
 
   const patternOnly = state?.rapier_pattern_only === true;
   const legRaw = typeof state?.rapier_circuit_leg === "string" ? state.rapier_circuit_leg : "";
@@ -694,6 +702,19 @@ function updateNavConsole(state) {
   const nmPerMin = fuelSource.nmPerMin;
   const lbPerMin = fuelSource.lbPerMin;
   const lbPerNm = fuelSource.lbPerNm;
+  // The selection expressions above are pinned as source text by
+  // render/nav/tests/carrier_sortie_runtime_wiring.test.mjs, which guards the route/Mesh/Home
+  // fuel-truth precedence. Leave them exact and normalize for display here instead: the readouts
+  // below compare against null, and a non-finite value is not null, which is how the reserve
+  // margin reached the screen as the literal text "ABOVE NaN LB". `??` does not help either, as
+  // it substitutes only on null and undefined and passes NaN straight through.
+  const fuelNeedShown = finite(fuelNeedLb);
+  const fuelArrivalShown = finite(fuelArrivalLb);
+  const reserveTargetShown = finite(reserveTargetLb);
+  const reserveMarginShown = finite(reserveMarginLb);
+  const nmPerMinShown = finite(nmPerMin);
+  const lbPerMinShown = finite(lbPerMin);
+  const lbPerNmShown = finite(lbPerNm);
 
   set(navUi.bearing, bearingDeg !== null
     ? `${String(Math.round((bearingDeg % 360 + 360) % 360)).padStart(3, "0")}°`
@@ -728,33 +749,33 @@ function updateNavConsole(state) {
 
   const fuelLb = num("fuel_lb");
   set(navUi.fuelHave, formatWholeLb(fuelLb), fuelLb !== null ? "nominal" : "unknown");
-  set(navUi.fuelNeed, formatWholeLb(fuelNeedLb),
-    fuelNeedLb !== null ? "nominal" : "unknown");
-  set(navUi.fuelArrival, formatWholeLb(fuelArrivalLb),
-    fuelArrivalLb !== null
-      ? fuelArrivalLb < 0 ? "warning" : "nominal"
+  set(navUi.fuelNeed, formatWholeLb(fuelNeedShown),
+    fuelNeedShown !== null ? "nominal" : "unknown");
+  set(navUi.fuelArrival, formatWholeLb(fuelArrivalShown),
+    fuelArrivalShown !== null
+      ? fuelArrivalShown < 0 ? "warning" : "nominal"
       : "unknown");
-  const reserveCautionThreshold = reserveTargetLb !== null
-    ? reserveTargetLb * 0.10 : 0;
+  const reserveCautionThreshold = reserveTargetShown !== null
+    ? reserveTargetShown * 0.10 : 0;
   set(navUi.fuelMargin,
-    reserveMarginLb === null
+    reserveMarginShown === null
       ? "—"
-      : reserveMarginLb < 0
-        ? `BELOW ${Math.round(-reserveMarginLb)} LB`
-        : `ABOVE ${Math.round(reserveMarginLb)} LB`,
-    reserveMarginLb === null ? "unknown"
-      : reserveMarginLb < 0 ? "warning"
-        : reserveMarginLb < reserveCautionThreshold ? "caution" : "nominal");
+      : reserveMarginShown < 0
+        ? `BELOW ${Math.round(-reserveMarginShown)} LB`
+        : `ABOVE ${Math.round(reserveMarginShown)} LB`,
+    reserveMarginShown === null ? "unknown"
+      : reserveMarginShown < 0 ? "warning"
+        : reserveMarginShown < reserveCautionThreshold ? "caution" : "nominal");
 
-  set(navUi.nmPerMin, nmPerMin !== null
-    ? `${nmPerMin.toFixed(1)}` : "—",
-  nmPerMin !== null ? "nominal" : "unknown");
-  set(navUi.lbPerMin, lbPerMin !== null
-    ? `${Math.round(lbPerMin)}` : "—",
-  lbPerMin !== null ? "nominal" : "unknown");
-  set(navUi.lbPerNm, lbPerNm !== null
-    ? `${lbPerNm.toFixed(2)}` : "—",
-  lbPerNm !== null ? "nominal" : "unknown");
+  set(navUi.nmPerMin, nmPerMinShown !== null
+    ? `${nmPerMinShown.toFixed(1)}` : "—",
+  nmPerMinShown !== null ? "nominal" : "unknown");
+  set(navUi.lbPerMin, lbPerMinShown !== null
+    ? `${Math.round(lbPerMinShown)}` : "—",
+  lbPerMinShown !== null ? "nominal" : "unknown");
+  set(navUi.lbPerNm, lbPerNmShown !== null
+    ? `${lbPerNmShown.toFixed(2)}` : "—",
+  lbPerNmShown !== null ? "nominal" : "unknown");
 
   const procLabel = procedureLabelFromState(state);
   set(navUi.procedure, procLabel, procLabel === "NONE" ? "unknown" : "nominal");
@@ -10796,7 +10817,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=238")
+    navigator.serviceWorker.register("service-worker.js?v=239")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);

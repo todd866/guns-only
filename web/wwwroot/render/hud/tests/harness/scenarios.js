@@ -559,6 +559,19 @@ export const SCENARIOS = [
     },
   },
   {
+    name: "forward-both-bandits-crowded-right",
+    about: "Both bandits project within a couple of degrees of each other and close to the right tape. Reproduces the 2026-08-02 mobile frame where TARGET 1 and TARGET 2 printed on top of each other and the second line ran through the altitude tape. Their labels must stack downward and stay inside the tape gutters.",
+    player: { headingDeg: 0, pitchDeg: 0, bankDeg: 0, altFt: 8000 },
+    bandit: { azimuthDeg: 17, elevationDeg: 2, rangeM: 4300 },
+    wingman: { azimuthDeg: 18, elevationDeg: 2.6, rangeM: 12400 },
+    lead: null,
+    state: {
+      range_m: 4300, closure_kts: 176,
+      selected_player_gun_target_slot: 0,
+      w1_present: 1, w1_alive: 1,
+    },
+  },
+  {
     name: "assisted-corner-hold",
     about: "Rung-1 assisted flight: the AUTO · CORNER chip rides the speed readout while the machine holds corner velocity; +30 bias shows as COR+30KT.",
     player: { headingDeg: 0, pitchDeg: 2, bankDeg: 20, altFt: 9000 },

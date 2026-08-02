@@ -21,7 +21,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=238";
+} from "./render/hud/contact_visibility.js?v=239";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import {
   carrierAoARelevant,
@@ -59,17 +59,17 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=238";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=239";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=238";
+} from "./render/mission/rapier_high_mach_instruments.js?v=239";
 import { limitsPanelPresentation } from "./render/hud/limits_panel.js";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=238";
+} from "./render/audio/flight_audio.js?v=239";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -241,6 +241,9 @@ class CombatHud {
     this.presentationProfile = "standard";
     this.controlBindings = null;
     this.safeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
+    // Rectangles claimed by contact labels this frame; draw() clears it each pass. Initialized
+    // here so a label drawn before the first full frame cannot read undefined.
+    this._contactLabelSlots = [];
 
     this.worldPoint = new THREE.Vector3();
     this.ndc = new THREE.Vector3();
@@ -1294,7 +1297,7 @@ class CombatHud {
       ctx.fillStyle = AMBER;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(solution ? "TARGET 2 · SHOOT" : "TARGET 2 · SELECTED",
+      this.placeContactLabel(solution ? "TARGET 2 · SHOOT" : "TARGET 2 · SELECTED",
         projection.x, projection.y + size + 5);
       this.drawTargetDataLine(projection, size, state, color);
     } else if (!circuitTraffic) {
@@ -1307,7 +1310,7 @@ class CombatHud {
       ctx.fillStyle = GREEN;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText(text, projection.x, projection.y + size + 5);
+      this.placeContactLabel(text, projection.x, projection.y + size + 5);
     }
     if (circuitTraffic && padlocked) {
       ctx.font = "600 9px ui-monospace, monospace";
@@ -1366,7 +1369,7 @@ class CombatHud {
     ctx.fillStyle = color;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillText(label, x, y + size + 5);
+    this.placeContactLabel(label, x, y + size + 5);
   }
 
   drawBandit(frame) {
@@ -1461,7 +1464,7 @@ class CombatHud {
         ctx.fillStyle = AMBER;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        ctx.fillText(solution ? "TARGET 1 · SHOOT" : "TARGET 1 · SELECTED",
+        this.placeContactLabel(solution ? "TARGET 1 · SHOOT" : "TARGET 1 · SELECTED",
           projection.x, projection.y + size + 5);
       } else if (frame.wingmanPresent === true) {
         // In a 2v1 the unselected primary is also named AND ranged, so both bandits carry numbers.
@@ -1472,7 +1475,7 @@ class CombatHud {
         ctx.fillStyle = GREEN;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        ctx.fillText(text, projection.x, projection.y + size + 5);
+        this.placeContactLabel(text, projection.x, projection.y + size + 5);
       }
 
       return;
@@ -1667,9 +1670,19 @@ class CombatHud {
     const labelText = this.fitText(fullLabel, Math.max(60, locatorRight - locatorLeft - 12));
     const labelWidth = ctx.measureText(labelText).width;
     const labelX = clamp(x - (dx / length) * 34, locatorLeft + labelWidth * 0.5 + 5, locatorRight - labelWidth * 0.5 - 5);
-    const labelY = clamp(y - (dy / length) * 30, locatorTop + 8, locatorBottom - 8);
-    ctx.fillStyle = "rgba(1, 8, 12, 0.68)";
     const labelHeight = mobileTactical ? 17 : 14;
+    // This locator label is centred on labelY and carries its own backing plate, so it cannot go
+    // through placeContactLabel unchanged — but it must still share the same per-frame registry,
+    // or an off-screen contact's label lands on top of an on-screen contact's. That is exactly
+    // what happened at phone width: TARGET 1's locator printed through TARGET 2's data line.
+    const labelY = this.reserveContactLabelRow(
+      clamp(y - (dy / length) * 30, locatorTop + 8, locatorBottom - 8),
+      labelX - labelWidth * 0.5 - 4,
+      labelX + labelWidth * 0.5 + 4,
+      labelHeight,
+      { centred: true },
+    );
+    ctx.fillStyle = "rgba(1, 8, 12, 0.68)";
     ctx.fillRect(labelX - labelWidth * 0.5 - 4,
       labelY - labelHeight * 0.5, labelWidth + 8, labelHeight);
     ctx.fillStyle = locatorAmber ? AMBER : GREEN;
@@ -4957,6 +4970,61 @@ class CombatHud {
     ctx.restore();
   }
 
+  /// Row pitch for deconflicted contact labels. Matches the 9px label font's line box.
+  static get CONTACT_LABEL_ROW() { return 12; }
+
+  /// Every contact data line is placed through here. Each label is anchored to its OWN contact's
+  /// bracket, so nothing stopped two contacts that project close together from printing their
+  /// lines on top of each other, and nothing stopped a label beside a contact near the edge from
+  /// printing straight through the speed or altitude tape. Both were visible on the same mobile
+  /// frame (2026-08-02) once BOTH bandits started carrying range and closure: the layout was
+  /// authored when only one contact was ever labelled.
+  ///
+  /// Clamp into the tape gutters the layout already publishes, then push down a row at a time
+  /// until the line clears every label already placed this frame. Placement follows draw order,
+  /// so the selected target keeps its natural position beneath its bracket and later contacts are
+  /// the ones that move.
+  placeContactLabel(text, x, y) {
+    const ctx = this.ctx;
+    const half = ctx.measureText(text).width / 2;
+    const layout = this.getLayout();
+    // Clamp against the TAPES, not targetSafe. targetSafe falls back to the plain safe-area inset
+    // in the compact-mobile profile, so on a phone it does not exclude the tapes at all — which is
+    // exactly where a contact label was seen printing through the altitude tape.
+    const gutterLeft = layout.tapeInset + layout.tapeHalfWidth + 6;
+    const gutterRight = this.width - layout.tapeInset - layout.tapeHalfWidth - 6;
+    // A label wider than the gutter cannot satisfy both edges; keep the left edge visible rather
+    // than centring it and losing both ends.
+    const clampedX = Math.min(
+      Math.max(x, gutterLeft + half),
+      Math.max(gutterLeft + half, gutterRight - half),
+    );
+    const placedY = this.reserveContactLabelRow(
+      y, clampedX - half, clampedX + half, CombatHud.CONTACT_LABEL_ROW);
+    ctx.fillText(text, clampedX, placedY);
+  }
+
+  /// Claim a row in this frame's contact-label registry and return the y to draw at. Shared by the
+  /// top-baseline data lines and the vertically-centred locator plate, which must deconflict
+  /// against each other and not merely within their own kind.
+  reserveContactLabelRow(y, left, right, height, { centred = false } = {}) {
+    const topOf = (value) => (centred ? value - height / 2 : value);
+    let placedY = y;
+    // Bounded. A label that cannot find clear air within four rows is in a crowded corner, and
+    // walking it further only strands it further from the bracket it belongs to.
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const top = topOf(placedY);
+      const collides = this._contactLabelSlots.some((slot) =>
+        top < slot.bottom && top + height > slot.top
+        && left < slot.right && right > slot.left);
+      if (!collides) break;
+      placedY += height;
+    }
+    const top = topOf(placedY);
+    this._contactLabelSlots.push({ left, right, top, bottom: top + height });
+    return placedY;
+  }
+
   /// Top of the annunciation stack. Banners used to land a quarter of the way down the screen —
   /// squarely over the gunsight and over the aircraft the pilot had just shot, which is the one
   /// thing the kill cam exists to show them. They now sit in the band between the bottom of the
@@ -5042,6 +5110,9 @@ class CombatHud {
     const ctx = this.ctx;
     ctx.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
     ctx.clearRect(0, 0, this.width, this.height);
+    // Contact-label collision avoidance is per-frame; stale rectangles would push this frame's
+    // labels down for no reason.
+    this._contactLabelSlots = [];
     this.updateGunAudio(frame);
     this.updateGcasAudio(frame);
     const display = this._signals.update(frame.state, frame.dt);
