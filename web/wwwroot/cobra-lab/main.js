@@ -1,15 +1,15 @@
-import * as THREE from "../vendor/three.module.js?v=239";
+import * as THREE from "../vendor/three.module.js?v=240";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=239";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=239";
+} from "../render/cobra/cobra_canyon_plan.js?v=240";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=240";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=239";
+} from "../render/cobra/cobra_canyon_tour.js?v=240";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
