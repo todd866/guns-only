@@ -44,14 +44,34 @@ async function main() {
   const written = [];
 
   try {
-    const page = await browser.newPage({ viewport: { width: 1400, height: 1020 } });
+    // The viewport was fixed at 1400x1020, so every rendered frame was a desktop frame and the
+    // mobile tactical profile — which is what the phone actually flies, and where most reported
+    // layout defects live — could not be looked at here at all. GUNS_HUD_SHOT_VIEWPORT=WxH
+    // renders the same scenarios at any size; a phone-width value crosses the compact-mobile
+    // threshold and exercises drawMobileTacticalState.
+    const viewportSpec = process.env.GUNS_HUD_SHOT_VIEWPORT ?? "1400x1020";
+    const viewportMatch = /^(\d{2,5})x(\d{2,5})$/.exec(viewportSpec.trim());
+    if (!viewportMatch) {
+      throw new Error(
+        `GUNS_HUD_SHOT_VIEWPORT must look like 390x844; received "${viewportSpec}"`,
+      );
+    }
+    const viewport = {
+      width: Number(viewportMatch[1]),
+      height: Number(viewportMatch[2]),
+    };
+    console.log(`viewport ${viewport.width}x${viewport.height}`);
+    const page = await browser.newPage({ viewport });
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
 
-    await page.goto(`${site.url}render/hud/tests/harness/harness.html?all=1`, {
-      waitUntil: "load",
-      timeout: 30000,
-    });
+    // The harness sizes its own canvas from ?w/?h and ignores the page viewport, so the browser
+    // viewport alone renders a desktop frame no matter how narrow the window is. Pass both.
+    await page.goto(
+      `${site.url}render/hud/tests/harness/harness.html?all=1`
+        + `&w=${viewport.width}&h=${viewport.height}`,
+      { waitUntil: "load", timeout: 30000 },
+    );
     await page.waitForFunction(() => window.__hudReady === "harness", { timeout: 15000 });
 
     const names = await page.evaluate(() => window.__scenarioNames);

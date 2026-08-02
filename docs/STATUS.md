@@ -1,8 +1,9 @@
 # Current product and verification status
 
-Updated: 2026-08-01
-Production at start of stabilization: Build 237, revision `e0b3f49b63cec210dcc3f89c1e5aac369730b19f`
-Next candidate: Build 238 (local stabilization work); do not deploy until the complete gate is
+Updated: 2026-08-02
+Production: Build 238, revision `e4c4c3fbc19705548619bb1829b148c4de521a37`, promoted 2026-08-02
+after its exact protected-`main` SHA passed the canonical GitHub Verify workflow.
+Next candidate: Build 239 (local work); do not deploy until the complete gate is
 green and the exact revision is pushed.
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
@@ -23,7 +24,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 | Experience | State | Public surface | Current evidence | Promotion blocker |
 | --- | --- | --- | --- | --- |
-| F-22A · Guns Only (`first-merge`) | **production** | Aircraft picker | Build 238 automation proves bounded 24 km support rejoin/departure, sustained late-window Ace defense, and primary/secondary 10–20 NM target-box routing; most recent complete human/player-path record predates this candidate | Fresh candidate flight and complete green exact-SHA release gate |
+| F-22A · Guns Only (`first-merge`) | **production** | Aircraft picker | Build 238 automation plus a recorded 2026-08-02 human acceptance flight on the exact production artifact (session `web-1785627445839-631596`): 3 engagements, 5 kills, opponent returned fire with 99 rounds | None for promotion; bandit lead/ballistics and the descent sim-step spike are open defects, not release blockers |
 | Rapier · Intercept (`rapier-intercept`) | **production** | Aircraft picker | Build 238 automation earns the 24 km/M4.2 shelf, takes one physical M61 pass, then traps and stops at 2,520 s; the no-trigger mirror traps without firing and truthfully ends Draw | Fresh representative human launch/intercept/recovery flight and complete green release gate |
 | Low-level drone intercept (`low-level-drone`) | **quarantined** | Preview acknowledgement only | Runtime and automated contracts exist | Ground-target/player-purpose closure and complete human flight |
 | CASEVAC flight course (`medevac`) | **quarantined** | Preview acknowledgement only | Candidate guidance follows the authored orchard-gap route and briefs 32–42 m AGL near the windbreak | End-to-end human pickup, handoff, safe-exit, and debrief flight |
@@ -49,9 +50,17 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Build 238 is a committed release candidate, not production. It becomes releasable only after
-  its exact protected-`main` SHA passes the canonical GitHub Verify workflow and the outstanding
-  representative human acceptance flights are recorded.
+- Build 238 is production, promoted 2026-08-02 from protected-`main` SHA
+  `e4c4c3fbc19705548619bb1829b148c4de521a37` with live post-promotion verification green.
+- A representative human F-22A `first-merge` acceptance flight was recorded on 2026-08-02 against
+  that exact production artifact (telemetry session `web-1785627445839-631596`, stamped
+  `238+rev.e4c4c3f…+dep.dpl_AJiXvkTmPk64agpux1xvj58QyMvE`): 3 engagements to tier 3, 5 kills,
+  573 rounds for 6 hits. The opponent fired 99 rounds across 87 trigger-down snapshots, so the
+  long-standing "bandit never shoots" defect is closed; bandit lead/ballistics remains open.
+  The Rapier `rapier-intercept` human flight is still outstanding.
+- Open defects found by that flight: a descent-phase sim-step cost spike of 39-47 ms against a
+  6-14 ms baseline (terrain build and load counters were flat, so this is not chunk building);
+  tier 1 appeared in only 15 snapshots against 3,012 for tier 2.
 - A fresh local Node 24.18.0 `./bin/check` is green on the complete Build 238 candidate: 1,231/1,231
   non-browser Node tests, 79/79 Python tests, 1,827/1,827 all-Sim tests, 10/10 server tests, 12/12
   packaged browser smoke tests, and 1,916/1,916 real-HUD assertions, with zero skips. The Release
