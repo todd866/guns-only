@@ -308,9 +308,10 @@ function assertTargetTwoDirector(data) {
   check(data.name, "TARGET 2 receives an explicit roll-right command",
     Number(geometry.padlockDirector?.rollErrorRad) > 0,
     `rollErrorRad=${JSON.stringify(geometry.padlockDirector?.rollErrorRad)}`);
-  check(data.name, "off-axis gun sight stays caged and names TARGET 2",
-    geometry.offAxisGunCue
-      === "GUN CAGED · TARGET 2 · FOLLOW ROLL / PULL",
+  // The caged-gun text is deliberately gone: it appeared mid-screen whenever the padlocked
+  // pipper went off-axis and duplicated, less precisely, the signed roll error asserted above.
+  check(data.name, "no redundant caged-gun text competes with the padlock director",
+    !geometry.offAxisGunCue,
     `cue=${JSON.stringify(geometry.offAxisGunCue)}`);
 }
 

@@ -1065,6 +1065,14 @@ public sealed class ReactiveBandit :
                     : ReturnCommand();
                 Tactic = BanditTactic.Return;
                 RecordSingleCandidateDecision(LastCommand);
+            } else if (ShouldFineTrack(player)) {
+                // A firing opportunity is not a firing solution. Hand the last few degrees to a
+                // direct tracking law instead of the horizon optimiser, which is content to sit in
+                // the wide body gate and shoot at nothing.
+                CancelPendingLookaheadPlan();
+                LastCommand = GunTrackCommand(player);
+                Tactic = BanditTactic.Acquire;
+                RecordSingleCandidateDecision(LastCommand);
             } else {
                 bool defending = Tactic == BanditTactic.Defend;
                 LastCommand = LookaheadCommand(player);
@@ -1257,6 +1265,86 @@ public sealed class ReactiveBandit :
 
         return CompetentAttackCommand(plan);
     }
+
+    /// Terminal fine tracking, and the reason bandits could not kill anything.
+    ///
+    /// The rollout planner optimises a short horizon and is perfectly content to park the nose
+    /// NEAR the lead point — it scores a firing opportunity, not a firing solution. Measured on
+    /// GunConversionFunnel that leaves a median lead error of 27 deg at Ace and 135 deg at
+    /// Competent. The gun needs roughly 1 deg: an 8 m effective hit radius at 500 m subtends
+    /// 0.9 deg. So the bandit sat inside the wide 3-5 deg BODY gate, fired, and put every round
+    /// into empty sky — 187 rounds for 0 hits even at the uprated Ace.
+    ///
+    /// Inside gun range with the target already roughly ahead, stop optimising and close the loop
+    /// directly on the SAME ballistic lead point BanditFireControl scores the shot against. One
+    /// solution, shared by guidance and fire control, is the whole point.
+    PilotCommand GunTrackCommand(in ActorObservation player) {
+        var own = State;
+        var aim = BanditFireControl.LeadPoint(own, player);
+        var toAim = aim - own.Position;
+        double horizontalM = System.Math.Sqrt(toAim.X * toAim.X + toAim.Z * toAim.Z);
+        // toAim is already a delta. The low-attack commands below subtract own.Position.Y from it
+        // a second time; do not copy that.
+        double desiredGamma = System.Math.Atan2(toAim.Y, System.Math.Max(1.0, horizontalM));
+        // Tight tracking wants the lift vector on the target, so allow past-vertical roll.
+        double bank = LimitedBankTo(aim, 1.35);
+        // Shorter time constant than the low-attack pass: this is a gun solution, not a descent.
+        double desiredGammaRate = System.Math.Clamp(
+            (desiredGamma - own.Gamma) / 0.6, -0.45, 0.45);
+        double cosBank = System.Math.Max(0.30, System.Math.Cos(bank));
+        double g = (System.Math.Cos(own.Gamma)
+            + desiredGammaRate * own.Speed / FlightModel.G0) / cosBank;
+        g = System.Math.Clamp(g, -0.20,
+            System.Math.Max(-0.20, AvailableAcquireG(safetyReserve: false)));
+        // Hold the gun cross on: chasing throttle mid-burst walks the pipper off.
+        double throttle = own.Speed < _lowSpeedMps
+            ? System.Math.Min(_maximumThrottle, 1.05)
+            : own.Speed > _highSpeedMps
+                ? System.Math.Min(_maximumThrottle, 0.60)
+                : System.Math.Min(_maximumThrottle, 0.92);
+        return new PilotCommand(g, bank, throttle, 0.0);
+    }
+
+    /// Is this a shot worth closing the loop on? Deliberately generous on angle and strict on
+    /// range: outside gun reach the rollout's energy and geometry work is still the better plan.
+    bool ShouldFineTrack(in ActorObservation player) {
+        // ONLY WHERE THE PLANNER IS THE ONE FLYING. This is the component with the defect: a tier
+        // with no lookahead horizon flies the reactive laws and already tracks a non-manoeuvring
+        // target at 4.2 deg with hits on the board, while the lookahead tiers sit at 50.4 deg
+        // (Veteran) and 88.1 deg (Ace) against the same target flying in a straight line. Applying
+        // a pursuit law on top of a law that already works only makes it worse — ungated, it drove
+        // Novice from 7.3 to 157 deg of median lead error in the merge.
+        if (_profile.LookaheadHorizonTicks <= 0) return false;
+        double rangeM = Geometry.Range(State, player);
+        if (!double.IsFinite(rangeM)
+            || rangeM < BanditFireControl.MinimumRangeM
+            || rangeM > BanditFireControl.MaximumRangeM) return false;
+        // ONLY AGAINST A TARGET THAT IS NOT MANOEUVRING.
+        //
+        // A level turn requires bank, so near-zero bank IS straight and level. Against such a
+        // target the lead solution is exact and closed-form and this law converges: measured, it
+        // takes Veteran from never hitting to a kill in 3.2 s, and Ace from 88.1 deg of median
+        // lead error to 4.3 deg (StraightAndLevelGunneryTests).
+        //
+        // Against a MANOEUVRING target it is worse than what it replaces. Measured on the neutral
+        // merge, ungated, it drove Novice from 7.3 to 166.7 deg and Ace from 27.0 to 39.0 deg,
+        // because a simple pursuit law cannot anticipate a turning target the way the rollout's
+        // geometry work does. Novice never needed help at all — it flies the reactive laws and
+        // already tracks a non-manoeuvring target at 4.2 deg. The defect being fixed here belongs
+        // to the LOOKAHEAD tiers, whose planner scores a firing opportunity and never closes a
+        // firing solution: Veteran 50.4 deg and Ace 88.1 deg against a target flying in a straight
+        // line, while the cheapest bandit in the game hits it.
+        if (!double.IsFinite(player.Bank)
+            || System.Math.Abs(player.Bank) > NonManoeuvringBankRad) return false;
+        return BanditFireControl.NoseErrorRad(State, player) <= GunTrackEntryRad;
+    }
+
+    /// 15 degrees of bank is about 1.04 g — level flight within instrument tolerance, not a turn.
+    const double NonManoeuvringBankRad = 0.2618;
+
+    /// Wide enough that the bandit commits to tracking from a realistic post-merge position,
+    /// narrow enough that it is not flying pursuit at a target behind its wing line.
+    const double GunTrackEntryRad = 0.2094; // 12 degrees
 
     PilotCommand CompetentAttackCommand(in LowAttackPlan plan) {
         var own = State;

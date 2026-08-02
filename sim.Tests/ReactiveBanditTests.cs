@@ -350,8 +350,14 @@ public class ReactiveBanditTests {
         AircraftParams air = FlightModel.Su27SPublicDataSurrogate;
         var own = new AircraftState(
             new Vec3D(0.0, 5486.4, 0.0), 300.0, 0.0, 0.0, 0.0, air.MassKg);
+        // Banked, so the contact reads as MANOEUVRING and the rollout stays in charge. This test
+        // is about the rollout's reward shaping, and against a straight-and-level target inside
+        // the gun envelope the terminal tracking law now takes the command instead (which is the
+        // whole point of it — see StraightAndLevelGunneryTests), collapsing the trace to a single
+        // candidate. Bank does not enter ForwardDir, which is built from Gamma/Chi, so the
+        // geometry this test asserts on is unchanged.
         var contact = new AircraftState(
-            new Vec3D(0.0, 5486.4, rangeM), 300.0, 0.0, 0.0, 0.0, air.MassKg);
+            new Vec3D(0.0, 5486.4, rangeM), 300.0, 0.0, 0.0, 0.6, air.MassKg);
         ActorObservation observation = ActorObservation.Capture(contact, 0);
         own = own with {
             BodyAttitude = PointBodyAt(
