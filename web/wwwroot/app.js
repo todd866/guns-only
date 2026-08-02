@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=244";
+import { createHud } from "./hud.js?v=245";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=244";
+} from "./render/debrief/sortie_result.js?v=245";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -49,8 +49,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=244";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=244";
+} from "./render/release/release_identity.js?v=245";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=245";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -63,7 +63,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=244";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=245";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -72,10 +72,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=244";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=245";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=244";
+} from "./render/nav/carrier_sortie_touch_control.js?v=245";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -148,7 +148,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=244";
+} from "./render/telemetry/ai_frame_pressure.js?v=245";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -158,7 +158,7 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=244";
+} from "./render/telemetry/telemetry_batch.js?v=245";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -167,7 +167,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=244";
+} from "./render/settings/player_settings.js?v=245";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -213,13 +213,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=244";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=244";
+} from "./render/scene/scene_builders.js?v=245";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=245";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=244";
+} from "./render/audio/flight_audio.js?v=245";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -10004,8 +10004,21 @@ function installMobileInput(view) {
   });
 
   let pulseSequence = 0;
+  // POINTERDOWN, NOT CLICK. A click is SYNTHESISED by the browser after a complete tap, and the
+  // virtual sticks preventDefault their pointer stream — which suppresses click synthesis for the
+  // whole gesture on iOS. So while the pilot was holding the stick, tapping these produced touch
+  // events and no click ever arrived: "when I'm pulling, it doesn't let me tap the view controls".
+  // The hold buttons (FIRE, LIMIT OVR) were already on pointerdown and worked throughout, which is
+  // exactly why the broken controls were the pulse ones. Pointer events are delivered per pointerId
+  // regardless of what other touches are active.
   touchControls.querySelectorAll("[data-pulse-key]").forEach((button) => {
+    // Swallow the synthesised click so a mouse press cannot fire the action twice.
     button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+    });
+    button.addEventListener("pointerdown", (event) => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
       event.preventDefault();
       event.stopPropagation();
       const physicalCode = button.dataset.pulseKey;
@@ -10024,10 +10037,16 @@ function installMobileInput(view) {
         button.classList.remove("active");
         button.setAttribute("aria-pressed", "false");
       }, 140);
-    });
+    }, { passive: false });
   });
 
+  // Same reason as the pulse buttons above: this is a view control the pilot needs mid-pull.
   touchTargetCycleButton?.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+  });
+  touchTargetCycleButton?.addEventListener("pointerdown", (event) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
     event.preventDefault();
     event.stopPropagation();
     if (touchTargetCycleButton.disabled || touchTargetCycleButton.closest?.("[hidden]")
@@ -10035,7 +10054,7 @@ function installMobileInput(view) {
     cyclePadlockTarget();
     touchTargetCycleButton.classList.add("active");
     window.setTimeout(() => touchTargetCycleButton.classList.remove("active"), 140);
-  });
+  }, { passive: false });
 
   touchThrottleRocker?.addEventListener("pointerdown", beginThrottleRocker, { passive: false });
   touchThrottleRocker?.addEventListener("pointermove", moveThrottleRocker, { passive: false });
@@ -10817,7 +10836,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=244")
+    navigator.serviceWorker.register("service-worker.js?v=245")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);
