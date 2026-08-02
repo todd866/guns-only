@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark">
   <title>Guns Only · Cobra Canyon Lab</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="./styles.css?v=243">
+  <link rel="stylesheet" href="./styles.css?v=244">
 </head>
 <body>
   <header class="topbar">
@@ -90,7 +90,7 @@
     // Complete stale-worker cleanup before linking the versioned release gate to its catalog.
     // A bare public route must remain inert even when an older cache-first worker is present.
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=243", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=244", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -117,10 +117,10 @@
     try {
       await globalThis.__gunsPrebootReady;
       const { renderExperienceGate } = await import(
-        "../render/release/quarantine_gate.js?v=243"
+        "../render/release/quarantine_gate.js?v=244"
       );
       const access = renderExperienceGate({ experienceId: "cobra-lab" });
-      if (access.allowed) await import("./main.js?v=243");
+      if (access.allowed) await import("./main.js?v=244");
     } catch (error) {
       console.error(error);
       const status = document.querySelector("#status");
