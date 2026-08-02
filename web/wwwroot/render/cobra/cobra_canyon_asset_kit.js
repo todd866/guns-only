@@ -1,4 +1,4 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=244";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=245";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
