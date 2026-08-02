@@ -75,7 +75,7 @@ test("legacy Rapier v1 documents cannot claim production authority over v2", asy
 
 test("the evergreen status matrix covers the executable experience catalog", async () => {
   const status = await readFile(path.join(ROOT, "docs/STATUS.md"), "utf8");
-  assert.match(status, /Production: Build 241, revision `2f4e97d/);
+  assert.match(status, /Production: Build 242, revision `00173ce/);
   assert.match(status, new RegExp(`Next candidate: Build ${RELEASE_BUILD}`));
   for (const experience of EXPERIENCE_CATALOG) {
     assert.equal(status.includes(`\`${experience.id}\``), true,

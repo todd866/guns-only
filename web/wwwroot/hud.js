@@ -21,7 +21,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=242";
+} from "./render/hud/contact_visibility.js?v=243";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import {
   carrierAoARelevant,
@@ -59,17 +59,17 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=242";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=243";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=242";
+} from "./render/mission/rapier_high_mach_instruments.js?v=243";
 import { limitsPanelPresentation } from "./render/hud/limits_panel.js";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=242";
+} from "./render/audio/flight_audio.js?v=243";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -828,22 +828,14 @@ class CombatHud {
       this._leadPipperEnvelope.reset();
       this._lastLeadPipperX = null;
       this._lastLeadPipperY = null;
-      if (frame.padlock
-          && (frame.padlockTarget === "bandit" || frame.padlockTarget === "wingman")) {
-        const targetNumber = targetDataLineOwner(state) === "wingman" ? 2 : 1;
-        ctx.save();
-        ctx.fillStyle = AMBER;
-        ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText(`GUN CAGED · TARGET ${targetNumber} · FOLLOW ROLL / PULL`,
-          this.width / 2, this.getLayout().weaponCueY + 15);
-        ctx.restore();
-        if (this._debug) {
-          this._debug.offAxisGunCue =
-            `GUN CAGED · TARGET ${targetNumber} · FOLLOW ROLL / PULL`;
-        }
-      }
+      // NO CAGED-GUN TEXT. This printed "GUN CAGED · TARGET n · FOLLOW ROLL / PULL" mid-screen
+      // whenever the padlocked target's pipper was off-screen or behind, which in a padlock fight
+      // is most of the time — so it read as a label appearing at random. It was also redundant:
+      // the padlock director already publishes a signed roll error on the instrument, which tells
+      // the pilot which way to roll and by how much rather than telling them that a gun they can
+      // already see is caged. A cue the pilot cannot act on more precisely than the instrument
+      // beside it is noise.
+      if (this._debug) this._debug.offAxisGunCue = null;
       return;
     }
 
