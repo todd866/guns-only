@@ -407,7 +407,14 @@ public sealed class ReactiveBandit :
         // manoeuvre and dies to the same guns pass. The side term alternates so successive
         // wingmen of a multi-ship stack across the cone instead of on top of each other.
         if (wingLead is { } lead) {
-            const double FightingWingRangeM = 760.0;
+            // MUST stay above FormationCoordination.ExtendPairSeparationM (850 m). That threshold
+            // reads a tight pair as "too close" and assigns the support member Extend, whose
+            // command is to fly 1600 m DIRECTLY AWAY from the player. Spawning a snug 760 m wing
+            // therefore ordered dash-2 to leave on the first coordination tick — the owner's
+            // "dash-2 just flies off into the sunset", manufactured at spawn. Bracket is the role
+            // that wants angles on a player already committed against the leader, which is the
+            // whole reason a second enemy exists.
+            const double FightingWingRangeM = 1200.0;
             const double FortyFiveDegreeComponent = 0.70710678118654752;
             var leadForward = new Vec3D(
                 System.Math.Sin(lead.Chi), 0.0, System.Math.Cos(lead.Chi));
