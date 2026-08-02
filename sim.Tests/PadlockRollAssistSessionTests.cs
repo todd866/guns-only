@@ -33,7 +33,7 @@ public class PadlockRollAssistSessionTests {
             System.Math.Sin(angleOff) * System.Math.Cos(error),
             System.Math.Cos(angleOff));
         AircraftState bandit = new(
-            Position: player.Position + direction * 5000.0,
+            Position: player.Position + direction * 700.0,
             Speed: 250.0,
             Gamma: 0.0,
             Chi: 0.0,
