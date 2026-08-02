@@ -123,17 +123,16 @@ export function mobileTacticalReadout(state = {}, display = {}, {
   const ammo = finiteNumber(state.ammo);
   const gunHeat = Math.max(0, Math.min(1, finiteNumber(state.gun_heat) ?? 0));
   const weaponParts = [];
-  // On the phone the pilot commands thrust with a rocker or the left stick and had no readout of
-  // what they commanded anywhere on screen — an open loop on the one control held all sortie.
-  // It rides the SECOND row deliberately: the first row is already at its width budget, and
-  // adding a token there ellipsized it, which the portrait smoke test correctly rejected
-  // ("portrait tactical truth was ellipsized"). Short form, because this row has a budget too.
-  // Values above 100% are real — the lever travels past the military stop into augmentation.
-  const commandedThrottle = finiteNumber(state.applied_throttle)
-    ?? finiteNumber(state.throttle);
-  if (commandedThrottle !== null) {
-    weaponParts.push(`P${Math.round(Math.max(0, commandedThrottle) * 100)}`);
-  }
+  // NO POWER TOKEN HERE. The pilot genuinely lacks an engine readout on the phone — they command
+  // thrust with a rocker or the left stick and see nothing back, which is a real defect. But the
+  // mobile rail has no spare width on EITHER row, and this was proven the expensive way: adding
+  // `PWR 87%` to the first row ellipsized it ("portrait tactical truth was ellipsized"), and
+  // moving `P82` to this row ellipsized this one instead
+  // ("P82·GUN480·T1 160NM·CLOS916·F3.…"). Two blocked production deploys for one token.
+  //
+  // Closing that gap is a LAYOUT change — decide what the phone drops, or give power its own
+  // element — not a token insertion into a full row. Do not re-add it here without first
+  // removing something and re-running the HUD geometry smoke at mobile-small-portrait-large-text.
   if (fightActive) {
     weaponParts.push(`GUN${ammo === null ? "---" : Math.max(0, Math.floor(ammo))}`);
     if (state.gun_overheat === true) weaponParts.push("OVERHEAT");
