@@ -10,6 +10,8 @@ public sealed class TopGunBeatTests
         var beat = Beats.TopGunAcm(TopGunSeat.F14A);
         Assert.Equal(AircraftCapability.F14ASurrogate.Id, beat.PlayerAircraft.Id);
         Assert.Equal(AircraftCapability.Mig28Surrogate.Id, beat.BanditAircraft.Id);
+        Assert.Equal(480, beat.CombatRules.PlayerAmmo);
+        Assert.Equal(480, beat.CombatRules.OpponentAmmo);
     }
 
     [Fact]
