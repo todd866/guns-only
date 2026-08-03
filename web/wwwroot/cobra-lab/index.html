@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark">
   <title>Guns Only · Cobra Canyon Lab</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="./styles.css?v=248">
+  <link rel="stylesheet" href="./styles.css?v=249">
 </head>
 <body>
   <header class="topbar">
@@ -100,7 +100,7 @@
     // Complete stale-worker cleanup before linking the versioned release gate to its catalog.
     // A bare public route must remain inert even when an older cache-first worker is present.
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=248", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=249", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -130,7 +130,7 @@
         const script = document.createElement("script");
         // Root-absolute: Blazor resolves dotnet.js relative to the document URL, so a
         // `../_framework/` script under /cobra-lab/ 404s as /cobra-lab/_framework/dotnet.js.
-        script.src = "/_framework/blazor.webassembly.js?v=248";
+        script.src = "/_framework/blazor.webassembly.js?v=249";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load Cobra flight runtime.")), {
@@ -139,10 +139,10 @@
         document.head.append(script);
       });
       const { renderExperienceGate } = await import(
-        "../render/release/quarantine_gate.js?v=248"
+        "../render/release/quarantine_gate.js?v=249"
       );
       const access = renderExperienceGate({ experienceId: "cobra-lab" });
-      if (access.allowed) await import("./main.js?v=248");
+      if (access.allowed) await import("./main.js?v=249");
     } catch (error) {
       console.error(error);
       const status = document.querySelector("#status");
