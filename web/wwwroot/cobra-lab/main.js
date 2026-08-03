@@ -1,15 +1,15 @@
-import * as THREE from "../vendor/three.module.js?v=245";
+import * as THREE from "../vendor/three.module.js?v=247";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=245";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=245";
+} from "../render/cobra/cobra_canyon_plan.js?v=247";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=247";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=245";
+} from "../render/cobra/cobra_canyon_tour.js?v=247";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -41,6 +41,7 @@ const routeSelect = document.querySelector("#route");
 const qualitySelect = document.querySelector("#quality");
 const speedInput = document.querySelector("#speed");
 const heightInput = document.querySelector("#height");
+const targetSelect = document.querySelector("#target");
 const tourInput = document.querySelector("#tour");
 const resetButton = document.querySelector("#reset");
 const status = document.querySelector("#status");
@@ -58,6 +59,14 @@ const instanceMetric = document.querySelector("#instances");
 const setPieceMetric = document.querySelector("#set-pieces");
 const hazardMetric = document.querySelector("#hazards");
 const aglMetric = document.querySelector("#agl");
+const powerMetric = document.querySelector("#power");
+const gunnerMetric = document.querySelector("#gunner");
+let bridge = null;
+let authorityState = null;
+let collectiveLever = 0.5;
+const telemetrySession = `web-cobra-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+const telemetryRows = [];
+let telemetryLastFlushMs = 0;
 
 const renderer = new THREE.WebGLRenderer({
   canvas,
@@ -157,6 +166,57 @@ function setStatus(message, state = "loading") {
   status.dataset.error = state === "error" ? "true" : "false";
 }
 
+function recordTelemetry(nowMs) {
+  if (!authorityState) return;
+  telemetryRows.push({
+    k: "st",
+    t: nowMs,
+    s: {
+      cobra_world_id: authorityState.world_id,
+      cobra_route: authorityState.route,
+      cobra_route_id: authorityState.route_id,
+      cobra_status: authorityState.status,
+      cobra_authority_tick: authorityState.authority_tick,
+      cobra_x_m: authorityState.vehicle.x_m,
+      cobra_y_m: authorityState.vehicle.y_m,
+      cobra_z_m: authorityState.vehicle.z_m,
+      cobra_ground_speed_mps: authorityState.vehicle.ground_speed_mps,
+      cobra_vertical_speed_mps: authorityState.vehicle.vertical_speed_mps,
+      cobra_collective: authorityState.vehicle.collective,
+      cobra_power_margin: authorityState.vehicle.hover_power_margin,
+      cobra_route_remaining_m: authorityState.route_guidance.remaining_m,
+      cobra_cross_track_m: authorityState.route_guidance.cross_track_m,
+      cobra_inside_corridor: authorityState.route_guidance.inside_corridor,
+      cobra_masking: authorityState.masking.state,
+      cobra_gunner_state: authorityState.gunner.state,
+      cobra_gunner_reason: authorityState.gunner.reason,
+      cobra_fire_authorized: authorityState.gunner.fire_authorized,
+    },
+  });
+  if (nowMs - telemetryLastFlushMs < 10_000 || telemetryRows.length < 120) return;
+  flushTelemetry();
+}
+
+async function flushTelemetry() {
+  if (!telemetryRows.length) return;
+  const rows = telemetryRows.splice(0, 1_500);
+  telemetryLastFlushMs = performance.now();
+  try {
+    await fetch("../api/telemetry", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({
+        session: telemetrySession,
+        batchId: `${telemetrySession}-${Date.now()}`,
+        rows,
+      }),
+    });
+  } catch {
+    // Telemetry is diagnostic and must never stall the flight loop.
+  }
+}
+
 function qualityPixelRatio() {
   const ceiling = QUALITY_PIXEL_RATIOS[qualitySelect.value] ?? QUALITY_PIXEL_RATIOS.balanced;
   return Math.min(window.devicePixelRatio || 1, ceiling);
@@ -202,9 +262,15 @@ function formatRouteDistance(distanceM) {
 function updateRouteProgress() {
   if (!routeSampler) return;
   const totalLengthM = routeSampler.lengthM;
-  const clampedDistanceM = THREE.MathUtils.clamp(routeDistanceM, 0, totalLengthM);
-  routeProgress.style.transform = `scaleX(${routeComplete ? 1 : clampedDistanceM / totalLengthM})`;
-  if (routeComplete) {
+  const authorityRemainingM = authorityState?.route_guidance?.remaining_m;
+  const clampedDistanceM = authorityRemainingM == null
+    ? THREE.MathUtils.clamp(routeDistanceM, 0, totalLengthM)
+    : THREE.MathUtils.clamp(totalLengthM - authorityRemainingM, 0, totalLengthM);
+  const authorityComplete = authorityState?.status === "route-complete";
+  routeProgress.style.transform = `scaleX(${authorityComplete || routeComplete
+    ? 1
+    : clampedDistanceM / totalLengthM})`;
+  if (authorityComplete || routeComplete) {
     routeFeature.textContent = "ROUTE COMPLETE · RESTART OR SELECT ANOTHER RUN";
     return;
   }
@@ -274,6 +340,8 @@ function placeCameraOnRoute() {
 function restartRoute() {
   if (!plan) return;
   activeRoute = routeById(routeSelect.value);
+  bridge?.StartRoute(routeSelect.selectedIndex);
+  authorityState = bridge ? JSON.parse(bridge.GetState()) : null;
   routeSampler = createCobraCanyonRouteSampler(activeRoute);
   routeDistanceM = ROUTE_ENTRY_OFFSETS_M[activeRoute.id] ?? 0;
   routeComplete = false;
@@ -334,6 +402,26 @@ function updateManual(deltaSeconds) {
     movement.normalize().multiplyScalar(Number(speedInput.value) * boost * deltaSeconds);
     camera.position.add(movement);
   }
+  if (bridge) {
+    const collectiveRate = keys.has("KeyS") ? 1 : keys.has("KeyW") ? -1 : 0;
+    collectiveLever = THREE.MathUtils.clamp(
+      collectiveLever + collectiveRate * deltaSeconds * 0.40,
+      0,
+      1,
+    );
+    bridge.SetControls(
+      collectiveLever,
+      (keys.has("ArrowUp") ? 1 : 0) + (keys.has("ArrowDown") ? -1 : 0),
+      (keys.has("ArrowRight") ? 1 : 0) + (keys.has("ArrowLeft") ? -1 : 0),
+      (keys.has("KeyD") ? 1 : 0) + (keys.has("KeyA") ? -1 : 0),
+    );
+    bridge.SetGunnerTarget(targetSelect.value || null);
+    bridge.SetEngagementConsent(keys.has("KeyF"));
+    bridge.Advance(deltaSeconds);
+    authorityState = JSON.parse(bridge.GetState());
+    syncAuthorityCamera();
+    recordTelemetry(timeMs);
+  }
   const bounds = plan.boundsLocalM;
   camera.position.x = THREE.MathUtils.clamp(
     camera.position.x,
@@ -346,6 +434,20 @@ function updateManual(deltaSeconds) {
     -bounds.minimumNorthM,
   );
   camera.position.y = Math.max(camera.position.y, groundAt(camera.position.x, -camera.position.z) + 4);
+}
+
+function syncAuthorityCamera() {
+  const vehicle = authorityState?.vehicle;
+  if (!vehicle) return;
+  camera.position.set(vehicle.x_m, vehicle.y_m + 2.4, -vehicle.z_m);
+  const lookDistanceM = 140;
+  lookTarget.set(
+    vehicle.x_m + Math.sin(vehicle.yaw_rad) * lookDistanceM,
+    vehicle.y_m + Math.sin(vehicle.pitch_rad) * lookDistanceM,
+    -vehicle.z_m - Math.cos(vehicle.yaw_rad) * lookDistanceM,
+  );
+  camera.lookAt(lookTarget);
+  camera.rotation.z = vehicle.roll_rad;
 }
 
 function recordFrameDuration(durationMs) {
@@ -371,8 +473,21 @@ function updateMetrics(aglM) {
   frameMetric.textContent = frameP95Ms > 0 ? `${fps} fps · p95 ${frameP95Ms.toFixed(1)} ms` : "sampling…";
   drawMetric.textContent = `${renderer.info.render.calls} live · ${diagnostics.drawCalls}/${diagnostics.budget.maxDrawCalls} world`;
   instanceMetric.textContent = `${diagnostics.instances}/${diagnostics.budget.maxInstances}`;
-  hazardMetric.textContent = `${plan.counts.hazards} authority · ${diagnostics.hazardsVisible ? "visible" : "missing"}`;
-  aglMetric.textContent = `${Math.max(0, aglM).toFixed(1)} m`;
+  hazardMetric.textContent = authorityState
+    ? `${authorityState.masking.state} · ${authorityState.masking.observers_with_line_of_sight} LOS`
+    : `${plan.counts.hazards} authority · ${diagnostics.hazardsVisible ? "visible" : "missing"}`;
+  aglMetric.textContent = authorityState?.route_guidance?.current_clearance_m == null
+    ? `${Math.max(0, aglM).toFixed(1)} m`
+    : `${authorityState.route_guidance.current_clearance_m.toFixed(1)} m`;
+  powerMetric.textContent = authorityState
+    ? `${(authorityState.vehicle.hover_power_margin * 100).toFixed(0)}% · ${authorityState.vehicle.power_assessment}`
+    : "—";
+  gunnerMetric.textContent = authorityState
+    ? `${authorityState.gunner.state} · ${authorityState.gunner.reason}`
+    : "—";
+  if (authorityState?.status !== "active") {
+    setStatus(`MISSION ${authorityState.status.replaceAll("-", " ").toUpperCase()}`, "error");
+  }
   updateRouteProgress();
 }
 
@@ -434,6 +549,7 @@ canvas.addEventListener("webglcontextlost", (event) => {
 });
 
 window.addEventListener("pagehide", () => {
+  void flushTelemetry();
   cancelAnimationFrame(animationFrame);
   presentation?.dispose();
   renderer.dispose();
@@ -442,8 +558,35 @@ window.addEventListener("pagehide", () => {
 async function boot() {
   resize();
   try {
+    await (globalThis.__gunsPrebootReady ?? Promise.resolve());
+    const blazor = await new Promise((resolve, reject) => {
+      const deadline = performance.now() + 15_000;
+      const poll = () => {
+        if (globalThis.Blazor) return resolve(globalThis.Blazor);
+        if (performance.now() >= deadline) return reject(new Error("Flight runtime unavailable."));
+        window.setTimeout(poll, 25);
+      };
+      poll();
+    });
+    await blazor.start();
+    const runtimeAccessor = await new Promise((resolve, reject) => {
+      const deadline = performance.now() + 15_000;
+      const poll = () => {
+        if (globalThis.getDotnetRuntime) return resolve(globalThis.getDotnetRuntime);
+        if (performance.now() >= deadline) return reject(new Error("Cobra authority unavailable."));
+        window.setTimeout(poll, 25);
+      };
+      poll();
+    });
+    const { getAssemblyExports } = await runtimeAccessor(0);
+    const assemblyExports = await getAssemblyExports("GunsOnly.Web");
+    bridge = assemblyExports.GunsOnly.Web.CobraWebBridge;
     world = await loadCobraCanyonWorld();
     rebuildPresentation();
+    bridge.StartRoute(routeSelect.selectedIndex);
+    authorityState = JSON.parse(bridge.GetState());
+    collectiveLever = authorityState.vehicle.collective;
+    setStatus("AH-1G AUTHORITY ONLINE · MANUAL FLIGHT", "ready");
     lastTimeMs = performance.now();
     animationFrame = requestAnimationFrame(animate);
   } catch (error) {

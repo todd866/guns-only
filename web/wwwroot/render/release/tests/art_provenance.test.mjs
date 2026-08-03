@@ -17,6 +17,8 @@ test("every production shell painting has a hash-pinned fiction provenance card"
     .filter((file) => file.endsWith(".webp"))
     .sort();
   assert.deepEqual(files, [
+    "bike-yzf-r1.webp",
+    "jet-cobra.webp",
     "jet-f22.webp",
     "jet-rapier.webp",
     "menu-hangar-small.webp",

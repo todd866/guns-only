@@ -13,6 +13,7 @@ import {
   campaignNodeUnlocked,
   createCampaignProfile,
   experienceById,
+  experienceComingSoon,
   experienceLaunchable,
   loadCampaignProfile,
   productionExperiences,
@@ -40,13 +41,18 @@ test("one catalog names every route and exposes only accepted production experie
     { id: "korea-panther", mission: 14, releaseState: "quarantined" },
     { id: "indoor", mission: null, releaseState: "quarantined" },
     { id: "medevac-command", mission: null, releaseState: "quarantined" },
-    { id: "cobra-lab", mission: null, releaseState: "quarantined" },
+    { id: "cobra-lab", mission: null, releaseState: "production" },
+    { id: "weekend-ride", mission: null, releaseState: "production" },
   ]);
 
   assert.deepEqual(productionExperiences().map(({ id }) => id), [
     "first-merge",
     "rapier-intercept",
+    "cobra-lab",
+    "weekend-ride",
   ]);
+  assert.equal(experienceLaunchable("weekend-ride"), true);
+  assert.equal(experienceComingSoon("weekend-ride"), false);
   assert.equal(CAMPAIGN_NODES.length, 6,
     "standalone research routes are not campaign beats");
 

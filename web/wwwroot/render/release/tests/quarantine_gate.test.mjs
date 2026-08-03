@@ -16,7 +16,6 @@ test("accepted production experiences launch without a preview acknowledgement",
 test("quarantined and preview routes fail closed by default", () => {
   for (const id of [
     "medevac", "medevac-command", "korea-panther", "indoor", "rapier-circuits",
-    "cobra-lab",
   ]) {
     const access = experienceAccess(id, {
       href: `https://guns-only.com/?program=${id}`,
@@ -36,14 +35,28 @@ test("the explicit preview query acknowledges but does not promote a quarantined
   assert.equal(access.experience.releaseState, "quarantined");
 });
 
-test("Cobra Lab requires its standalone preview acknowledgement", () => {
+test("Cobra Canyon remains launchable on its standalone route", () => {
   const access = experienceAccess("cobra-lab", {
     href: "https://guns-only.com/cobra-lab/?preview=1",
   });
   assert.equal(access.allowed, true);
-  assert.equal(access.preview, true);
+  assert.equal(access.preview, false);
   assert.equal(access.experience.route, "/cobra-lab/");
-  assert.equal(access.experience.releaseState, "quarantined");
+  assert.equal(access.experience.releaseState, "production");
+});
+
+test("Weekend Ride launches on its standalone production route", () => {
+  const access = experienceAccess("weekend-ride", {
+    href: "https://guns-only.com/weekend-ride/",
+  });
+  assert.equal(access.allowed, true);
+  assert.equal(access.preview, false);
+  assert.equal(access.experience.releaseState, "production");
+  assert.equal(access.experience.route, "/weekend-ride/");
+  assert.deepEqual(releaseStateAccess("coming-soon", false), {
+    allowed: true,
+    preview: false,
+  });
 });
 
 test("unknown route ids never become launchable", () => {

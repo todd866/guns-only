@@ -1,3 +1,5 @@
+using GunsOnly.Sim.Motorcycle;
+
 namespace GunsOnly.Sim.Vehicles;
 
 /// <summary>
@@ -12,13 +14,15 @@ public static class PlayerVehicleContract {
 
 public enum PlayerVehicleKind {
     FixedWing,
-    VerticalLift
+    VerticalLift,
+    Motorcycle
 }
 
 public enum VehicleCommandFamily {
     None,
     FixedWingPilot,
-    VerticalLiftPilot
+    VerticalLiftPilot,
+    MotorcyclePilot
 }
 
 public enum VehicleContactAuthority {
@@ -65,14 +69,19 @@ public readonly record struct VerticalLiftPilotCommand(
 public readonly record struct PlayerVehicleCommand(
     VehicleCommandFamily Family,
     PilotCommand FixedWing,
-    VerticalLiftPilotCommand VerticalLift) {
+    VerticalLiftPilotCommand VerticalLift,
+    MotorcyclePilotCommand Motorcycle = default) {
 
     public static PlayerVehicleCommand FromFixedWing(in PilotCommand command) =>
-        new(VehicleCommandFamily.FixedWingPilot, command, default);
+        new(VehicleCommandFamily.FixedWingPilot, command, default, default);
 
     public static PlayerVehicleCommand FromVerticalLift(
         in VerticalLiftPilotCommand command) =>
-        new(VehicleCommandFamily.VerticalLiftPilot, default, command);
+        new(VehicleCommandFamily.VerticalLiftPilot, default, command, default);
+
+    public static PlayerVehicleCommand FromMotorcycle(
+        in MotorcyclePilotCommand command) =>
+        new(VehicleCommandFamily.MotorcyclePilot, default, default, command);
 }
 
 public sealed record PlayerVehicleCapability(

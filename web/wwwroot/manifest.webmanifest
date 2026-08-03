@@ -1,7 +1,7 @@
 {
   "name": "Guns Only",
   "short_name": "Guns Only",
-  "description": "Two deterministic flight experiences: F-22 guns-only dogfighting and the Rapier high-altitude balloon intercept.",
+  "description": "Four deterministic machines: F-22 guns-only dogfighting, the Rapier high-altitude balloon intercept, AH-1G Cobra Canyon, and YZF-R1 Weekend Ride.",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",

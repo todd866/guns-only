@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark">
   <title>Guns Only · Cobra Canyon Lab</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="./styles.css?v=245">
+  <link rel="stylesheet" href="./styles.css?v=247">
 </head>
 <body>
   <header class="topbar">
@@ -43,7 +43,15 @@
         <label>Manual start height <output id="height-value">34 m AGL</output>
           <input id="height" type="range" min="12" max="120" value="34" step="1">
         </label>
-        <label class="toggle"><input id="tour" type="checkbox" checked><span>Follow authored route</span></label>
+        <label>Gunner target
+          <select id="target">
+            <option value="">No target</option>
+            <option value="observer.quarry-overwatch.v1">Quarry overwatch</option>
+            <option value="observer.ridge-east.v1">East ridge</option>
+            <option value="observer.plantation-tower.v1">Plantation tower</option>
+          </select>
+        </label>
+        <label class="toggle"><input id="tour" type="checkbox"><span>Guided camera preview</span></label>
         <button id="reset" class="primary" type="button">Restart fly-through</button>
       </section>
 
@@ -51,7 +59,7 @@
         <span class="eyebrow">Manual camera</span>
         <h2>Fly the inspection rig</h2>
         <p><kbd>W</kbd>/<kbd>S</kbd> forward · <kbd>A</kbd>/<kbd>D</kbd> strafe · <kbd>R</kbd>/<kbd>F</kbd> rise/lower · arrows look · <kbd>Shift</kbd> boost.</p>
-        <p class="honesty">This lab exercises authored world presentation. It is not the AH‑1G flight authority, weapons model, or an obstacle/LZ safety product.</p>
+        <p class="honesty">AH‑1G flight authority is active. The model is a disclosed flight foundation; this focused route is not a surveyed combat-representation product.</p>
       </section>
 
       <section class="metrics" aria-label="World metrics">
@@ -64,6 +72,8 @@
           <div><dt>Set pieces</dt><dd id="set-pieces">—</dd></div>
           <div><dt>Hazards</dt><dd id="hazards">—</dd></div>
           <div><dt>AGL</dt><dd id="agl">—</dd></div>
+          <div><dt>Power</dt><dd id="power">—</dd></div>
+          <div><dt>Gunner</dt><dd id="gunner">—</dd></div>
         </dl>
       </section>
     </aside>
@@ -90,7 +100,7 @@
     // Complete stale-worker cleanup before linking the versioned release gate to its catalog.
     // A bare public route must remain inert even when an older cache-first worker is present.
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=245", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=247", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -116,11 +126,21 @@
   <script type="module">
     try {
       await globalThis.__gunsPrebootReady;
+      await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "../_framework/blazor.webassembly.js?v=247";
+        script.setAttribute("autostart", "false");
+        script.addEventListener("load", resolve, { once: true });
+        script.addEventListener("error", () => reject(new Error("Failed to load Cobra flight runtime.")), {
+          once: true,
+        });
+        document.head.append(script);
+      });
       const { renderExperienceGate } = await import(
-        "../render/release/quarantine_gate.js?v=245"
+        "../render/release/quarantine_gate.js?v=247"
       );
       const access = renderExperienceGate({ experienceId: "cobra-lab" });
-      if (access.allowed) await import("./main.js?v=245");
+      if (access.allowed) await import("./main.js?v=247");
     } catch (error) {
       console.error(error);
       const status = document.querySelector("#status");

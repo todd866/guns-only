@@ -23,26 +23,26 @@ const [entrypoint, runtime, presentation, status] = await Promise.all([
   readFile(path.join(ROOT, "docs/STATUS.md"), "utf8"),
 ]);
 
-test("Cobra Lab is an explicit quarantined standalone experience", () => {
+test("Cobra Canyon is a public standalone production experience", () => {
   const experience = experienceById("cobra-lab");
   assert.equal(experience?.route, "/cobra-lab/");
-  assert.equal(experience?.releaseState, "quarantined");
-  assert.ok(experience?.blocker);
+  assert.equal(experience?.releaseState, "production");
+  assert.equal(experience?.blocker, "");
   assert.match(status,
-    /Cobra Canyon world lab \(`cobra-lab`, `\/cobra-lab\/`\)[^\n]*\*\*quarantined\*\*/);
+    /Cobra Canyon \(`cobra-lab`, `\/cobra-lab\/`\)[^\n]*\*\*production\*\*/);
 
   const publicAccess = experienceAccess("cobra-lab", {
     href: "https://guns-only.com/cobra-lab/",
   });
-  assert.equal(publicAccess.allowed, false);
+  assert.equal(publicAccess.allowed, true);
   assert.equal(publicAccess.preview, false);
 
   const previewAccess = experienceAccess("cobra-lab", {
     href: "https://guns-only.com/cobra-lab/?preview=1",
   });
   assert.equal(previewAccess.allowed, true);
-  assert.equal(previewAccess.preview, true);
-  assert.equal(previewAccess.experience.releaseState, "quarantined");
+  assert.equal(previewAccess.preview, false);
+  assert.equal(previewAccess.experience.releaseState, "production");
 });
 
 test("Cobra Lab gates before loading its Build-versioned runtime", () => {

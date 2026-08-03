@@ -40,10 +40,12 @@ export function experienceAccess(experienceId, locationLike = globalThis.locatio
 
 export function releaseStateAccess(releaseState, previewAcknowledged = false) {
   const production = releaseState === EXPERIENCE_RELEASE_STATE.PRODUCTION;
+  const comingSoon = releaseState === EXPERIENCE_RELEASE_STATE.COMING_SOON;
   const previewable = releaseState === EXPERIENCE_RELEASE_STATE.PREVIEW
     || releaseState === EXPERIENCE_RELEASE_STATE.QUARANTINED;
   const preview = previewable && previewAcknowledged === true;
-  return Object.freeze({ allowed: production || preview, preview });
+  // Coming-soon cards may be selected on the public Ready screen, but they never launch.
+  return Object.freeze({ allowed: production || comingSoon || preview, preview });
 }
 
 export function releaseHomeHref(locationLike = globalThis.location) {

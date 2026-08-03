@@ -24,16 +24,21 @@ test("Cobra Canyon lab consumes the authored planner and bounded presentation", 
   assert.match(main, /setPieceCells/);
   assert.match(main, /distanceAlongRouteM/);
   assert.match(main, /route\.cobra-canyon\.river-gorge\.v1/);
+  assert.match(main, /CobraWebBridge/);
+  assert.match(main, /bridge\.SetControls/);
+  assert.match(main, /bridge\.SetGunnerTarget/);
+  assert.match(main, /recordTelemetry/);
   assert.match(main, /requestAnimationFrame/);
 });
 
-test("Cobra Canyon lab labels its camera-flight boundary honestly", async () => {
+test("Cobra Canyon labels its flight authority and fidelity boundary honestly", async () => {
   const html = await source("cobra-lab/index.html");
   assert.match(html, /world prototype/i);
   assert.match(html, /id="route-feature"/);
   assert.match(html, /Set pieces/);
   assert.match(html, /Manual start height/);
-  assert.match(html, /not the AH‑1G flight authority/i);
+  assert.match(html, /AH‑1G flight authority is active/i);
+  assert.match(html, /not a surveyed combat-representation product/i);
   assert.doesNotMatch(html, /combat ready|production fidelity|certified/i);
 });
 

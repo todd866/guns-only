@@ -6,6 +6,7 @@ namespace GunsOnly.Sim.Cobra;
 public enum CobraMissionStatus
 {
     Active,
+    RouteComplete,
     ObstacleCollision,
     TerrainUnavailable,
     VehicleAuthorityLost
@@ -412,6 +413,11 @@ public sealed class CobraMissionRuntime
             Status = CobraMissionStatus.ObstacleCollision;
         } else if (!vehicleResult.State.Flyable) {
             Status = CobraMissionStatus.VehicleAuthorityLost;
+        } else {
+            CobraRouteGuidance guidance = RouteGuidanceAt(currentPositionWorldM);
+            if (guidance.RemainingHorizontalDistanceM <= 45.0
+                && guidance.InsideCorridor)
+                Status = CobraMissionStatus.RouteComplete;
         }
 
         if (Status != CobraMissionStatus.Active

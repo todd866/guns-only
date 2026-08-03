@@ -21,10 +21,12 @@ test("catalogue exposes Indoor as a native route without pretending it is a fixe
   assert.doesNotMatch(links[0][0], /data-program-node=/,
     "Indoor owns a separate six-degree-of-freedom kernel, not a numeric SimulationSession beat");
   assert.match(links[0][0], /data-experience="indoor"/);
-  assert.match(catalogue, /Two production aircraft/,
+  assert.match(catalogue, /Four production machines/,
     "the front door must state the size of the production catalogue");
-  assert.match(catalogue, /F-22 guns-only fight/);
-  assert.match(catalogue, /Rapier high-altitude balloon intercept/);
+  assert.match(catalogue, /F-22 guns-only/);
+  assert.match(catalogue, /Rapier intercept/);
+  assert.match(catalogue, /AH-1G Cobra Canyon/);
+  assert.match(catalogue, /YZF-R1 Weekend Ride/);
 });
 
 test("Indoor entrypoint advertises its complete control and mission contract", () => {
