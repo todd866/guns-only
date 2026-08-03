@@ -631,6 +631,9 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
   assert.match(appSource,
     /experienceComingSoon\(selectedProgramNodeId\)[\s\S]*?Coming soon/,
     "Coming Soon cards keep Fly disabled with an honest label");
+  assert.match(appSource,
+    /function shellProgramEntry[\s\S]*?if \(experience\s*&&\s*experience\.mission == null/,
+    "a missing program query must not treat null experience as a standalone card");
   assert.equal(new Set(nodeIds).size, nodeIds.length, "no duplicate program nodes");
   assert.equal(buttons.filter((button) => button.attributes.id === "ready-start").length, 1);
   assert.match(indexSource, /role="dialog"[^>]*aria-modal="true"/);

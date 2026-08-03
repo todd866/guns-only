@@ -2543,7 +2543,10 @@ function shellProgramEntry(programId) {
   const node = campaignNode(programId);
   if (node) return node;
   const experience = experienceById(programId);
-  if (experience?.mission == null
+  // `experience?.mission == null` is true when experience is missing, so the next conjunct must
+  // also use optional chaining (or an explicit null check) or a bare Ready boot throws.
+  if (experience
+    && experience.mission == null
     && experience.visible
     && (experienceLaunchable(experience.id) || experienceComingSoon(experience.id))) {
     return experience;
