@@ -35,7 +35,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
 | Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Authoritative AH-1G flight foundation, terrain/collision route authority, copilot-gunner consent, compact flight diagnostics, and telemetry path | Fresh representative human desktop/touch route flight and complete green release gate |
 | Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load/tip-over, rider assists, painted Rapier-strip circuit, mission runtime, MotorcycleWebBridge, helmet HUD | Fresh representative human ride on the exact production artifact |
-| Top Gun (`top-gun`) | **coming-soon** | Aircraft picker teaser | design+plan landed | Playable 1v1 + AIM-9 path |
+| Top Gun (`top-gun`) | **preview** | Preview acknowledgement only | Dogfight automation: Tomcat AIM-9 path, Mig-28 boot, gun firing | Representative human dogfight acceptance flight |
 
 ## Research-only packages
 

@@ -15,7 +15,7 @@ test("accepted production experiences launch without a preview acknowledgement",
 
 test("quarantined and preview routes fail closed by default", () => {
   for (const id of [
-    "medevac", "medevac-command", "korea-panther", "indoor", "rapier-circuits",
+    "medevac", "medevac-command", "korea-panther", "indoor", "rapier-circuits", "top-gun",
   ]) {
     const access = experienceAccess(id, {
       href: `https://guns-only.com/?program=${id}`,
