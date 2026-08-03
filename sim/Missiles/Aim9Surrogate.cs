@@ -64,6 +64,29 @@ public sealed class Aim9Surrogate
     /// Exposed for proximity-hit fixture assertions only.
     internal Aim9Pose FixtureTarget => _fixtureTarget ?? default;
 
+    /// Test-only in-flight re-seed so fixtures avoid touching many private fields.
+    internal readonly record struct InFlightSeed(
+        Aim9FlightState State,
+        Vec3D Position,
+        Vec3D Velocity,
+        double SimTimeMs,
+        Vec3D PreviousLosUnit,
+        bool HasPreviousLos = true,
+        double LaunchTimeMs = 0);
+
+    internal void SeedInFlight(in InFlightSeed seed)
+    {
+        _state = seed.State;
+        _position = seed.Position;
+        _velocity = seed.Velocity;
+        _simTimeMs = seed.SimTimeMs;
+        _launchTimeMs = seed.LaunchTimeMs > 0 ? seed.LaunchTimeMs : 0;
+        _previousLos = seed.PreviousLosUnit;
+        _hasPreviousLos = seed.HasPreviousLos;
+        _lastBoresightDeg = 0;
+        _lastTrackRateDegPerSec = 0;
+    }
+
     public bool TryLaunch(in Aim9Pose shooter, in Aim9Pose target, double nowMs)
     {
         if (_state is Aim9FlightState.Seeking or Aim9FlightState.Tracking)
@@ -174,14 +197,33 @@ public sealed class Aim9Surrogate
     public static Aim9Surrogate TestFixture_OffBoresightLoss()
     {
         var aim9 = new Aim9Surrogate(rounds: 1);
-        var shooter = new Aim9Pose(new Vec3D(0, 5000, 0), new Vec3D(0, 0, 400));
-        var ahead = new Aim9Pose(new Vec3D(0, 5000, 2000), Vec3D.Zero);
-        aim9.TryLaunch(shooter, ahead, nowMs: 0);
-        aim9._state = Aim9FlightState.Tracking;
-        aim9._position = new Vec3D(0, 5000, 1000);
-        aim9._velocity = new Vec3D(0, 0, 400);
-        aim9._hasPreviousLos = true;
-        aim9._previousLos = new Vec3D(0, 0, 1);
+        aim9.TryLaunch(
+            new Aim9Pose(new Vec3D(0, 5000, 0), new Vec3D(0, 0, 400)),
+            new Aim9Pose(new Vec3D(0, 5000, 2000), Vec3D.Zero),
+            nowMs: 0);
+        aim9.SeedInFlight(new InFlightSeed(
+            Aim9FlightState.Tracking,
+            new Vec3D(0, 5000, 1000),
+            new Vec3D(0, 0, 400),
+            SimTimeMs: 1000,
+            new Vec3D(0, 0, 1)));
+        return aim9;
+    }
+
+    /// Target jumps laterally while still inside boresight — seeker loses on track rate.
+    public static Aim9Surrogate TestFixture_HighTrackRateLoss()
+    {
+        var aim9 = new Aim9Surrogate(rounds: 1);
+        aim9.TryLaunch(
+            new Aim9Pose(new Vec3D(0, 5000, 0), new Vec3D(0, 0, 400)),
+            new Aim9Pose(new Vec3D(0, 5000, 2000), Vec3D.Zero),
+            nowMs: 0);
+        aim9.SeedInFlight(new InFlightSeed(
+            Aim9FlightState.Tracking,
+            new Vec3D(0, 5000, 1000),
+            new Vec3D(0, 0, 400),
+            SimTimeMs: 1000,
+            new Vec3D(0, 0, 1)));
         return aim9;
     }
 
@@ -191,13 +233,16 @@ public sealed class Aim9Surrogate
         var aim9 = new Aim9Surrogate(rounds: 1);
         var target = new Aim9Pose(new Vec3D(0, 5000, 3000), new Vec3D(0, 0, 200));
         aim9._fixtureTarget = target;
-        var shooter = new Aim9Pose(new Vec3D(0, 5000, 0), new Vec3D(0, 0, 400));
-        aim9.TryLaunch(shooter, target, nowMs: 0);
-        aim9._state = Aim9FlightState.Tracking;
-        aim9._position = target.Position - new Vec3D(0, 0, ProximityFuzeRadiusM * 0.5);
-        aim9._velocity = new Vec3D(0, 0, 400);
-        aim9._hasPreviousLos = true;
-        aim9._previousLos = new Vec3D(0, 0, 1);
+        aim9.TryLaunch(
+            new Aim9Pose(new Vec3D(0, 5000, 0), new Vec3D(0, 0, 400)),
+            target,
+            nowMs: 0);
+        aim9.SeedInFlight(new InFlightSeed(
+            Aim9FlightState.Tracking,
+            target.Position - new Vec3D(0, 0, ProximityFuzeRadiusM * 0.5),
+            new Vec3D(0, 0, 400),
+            SimTimeMs: 1000,
+            new Vec3D(0, 0, 1)));
         return aim9;
     }
 }
