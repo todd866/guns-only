@@ -10,6 +10,7 @@ import {
   syncCarrierSortieTouchRtbControl,
 } from "../carrier_sortie_touch_control.js";
 import { sortieResultCopy } from "../../debrief/sortie_result.js";
+import { RELEASE_BUILD } from "../../release/release_identity.js";
 
 const read = (relativePath) => readFileSync(
   new URL(relativePath, import.meta.url),
@@ -56,14 +57,14 @@ function awaitingReturnSnapshot(overrides = {}) {
 
 test("production imports are stamped and every presented state reaches the RTB adapter", () => {
   assert.match(appSource,
-    /from "\.\/render\/nav\/carrier_sortie_route_presentation\.js\?v=251";/);
+    new RegExp(`from "\\.\\/render\\/nav\\/carrier_sortie_route_presentation\\.js\\?v=${RELEASE_BUILD}";`));
   assert.match(appSource,
-    /from "\.\/render\/nav\/carrier_sortie_touch_control\.js\?v=251";/);
+    new RegExp(`from "\\.\\/render\\/nav\\/carrier_sortie_touch_control\\.js\\?v=${RELEASE_BUILD}";`));
   assert.match(hudSource,
-    /from "\.\/render\/nav\/carrier_sortie_route_presentation\.js\?v=251";/);
+    new RegExp(`from "\\.\\/render\\/nav\\/carrier_sortie_route_presentation\\.js\\?v=${RELEASE_BUILD}";`));
   assert.match(touchAdapterSource,
-    /from "\.\/carrier_sortie_route_presentation\.js\?v=251";/);
-  assert.match(indexSource, /await import\("\.\/app\.js\?v=251"\);/);
+    new RegExp(`from "\\.\\/carrier_sortie_route_presentation\\.js\\?v=${RELEASE_BUILD}";`));
+  assert.match(indexSource, new RegExp(`await import\\("\\.\\/app\\.js\\?v=${RELEASE_BUILD}"\\);`));
 
   assert.match(appSource,
     /function renderPilotPhysiology\(state\) \{\s*syncMobileControlProfile\(state\);/);

@@ -3,7 +3,7 @@
 Updated: 2026-08-02
 Production: Build 244, revision `894edfd4c1a26d393c8ef89191c65e6b0228260c`, promoted 2026-08-02
 after its exact protected-`main` SHA passed the canonical GitHub Verify workflow.
-Next candidate: Build 251 (local work); do not deploy until the complete gate is
+Next candidate: Build 252 (Hold the Bridge); do not deploy until the complete gate is
 green and the exact revision is pushed.
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
@@ -33,7 +33,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | F9F-2 Panther off Essex (`korea-panther`) | **quarantined** | Preview acknowledgement only | Build 238 ownship-only kernel flies the production terrain catapult/route/return/groove to a physical W2 trap (100/100 focused); packaged route, touch-RTB, HUD, and barrier contracts passed silent-browser acceptance | Complete representative human desktop/touch flights and historical/presentation acceptance before any promotion |
 | MIDGE-03 Facility Nine (`indoor`) | **quarantined** | `/indoor/` preview acknowledgement | Candidate UI now enforces doctrine-safe controls and blocks premature return | Re-drive the default stealth route and representative touch/keyboard paths |
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
-| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Authoritative AH-1G flight foundation, terrain/collision route authority, copilot-gunner consent, compact flight diagnostics, and telemetry path | Fresh representative human desktop/touch route flight and complete green release gate |
+| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | **Hold the Bridge** playable mission: River Gorge AH-1G, sim-owned ground war, tip/hold control win (≥+0.55 for 45s) / lose (≤−0.75 for 30s), finite M134 + Camp Ember rearm, Tab/F gunner, full-bleed play shell (`?lab=1` inspection) | Fresh representative human desktop/touch Hold-the-Bridge sortie and complete green release gate |
 | Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load/tip-over, rider assists, painted Rapier-strip circuit, mission runtime, MotorcycleWebBridge, helmet HUD | Fresh representative human ride on the exact production artifact |
 
 ## Research-only packages

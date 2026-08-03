@@ -27,8 +27,14 @@ test("Cobra Canyon lab consumes the authored planner and bounded presentation", 
   assert.match(main, /CobraWebBridge/);
   assert.match(main, /bridge\.SetControls/);
   assert.match(main, /bridge\.SetGunnerTarget/);
+  assert.match(main, /createCobraGroundWarPresentation/);
+  assert.match(main, /ground_war/);
   assert.match(main, /recordTelemetry/);
   assert.match(main, /requestAnimationFrame/);
+  assert.match(main, /PLAY_MODE/);
+  assert.match(main, /showMissionDebrief/);
+  assert.match(main, /victory_hold_progress/);
+  assert.match(main, /HOLD THE BRIDGE/);
 });
 
 test("Cobra Canyon loads Blazor from the site-root framework path", async () => {
@@ -44,14 +50,19 @@ test("Cobra Canyon loads Blazor from the site-root framework path", async () => 
   assert.match(main, /return `\/_framework\/\$\{name\}`/);
 });
 
-test("Cobra Canyon labels its flight authority and fidelity boundary honestly", async () => {
+test("Hold the Bridge play shell is default; lab chrome is opt-in", async () => {
   const html = await source("cobra-lab/index.html");
-  assert.match(html, /world prototype/i);
-  assert.match(html, /id="route-feature"/);
-  assert.match(html, /Set pieces/);
+  assert.match(html, /Hold the Bridge/);
+  assert.match(html, /data-shell="play"/);
+  assert.match(html, /id="objective-hud"/);
+  assert.match(html, /id="objective-line"/);
+  assert.match(html, /id="hold-fill"/);
+  assert.match(html, /id="debrief"/);
+  assert.match(html, /id="lab-panel"/);
+  assert.match(html, /params\.get\("lab"\) === "1"/);
   assert.match(html, /Manual start height/);
-  assert.match(html, /AH‑1G flight authority is active/i);
-  assert.match(html, /not a surveyed combat-representation product/i);
+  assert.match(html, /id="control"/);
+  assert.match(html, /id="ammo"/);
   assert.doesNotMatch(html, /combat ready|production fidelity|certified/i);
 });
 

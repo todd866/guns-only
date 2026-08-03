@@ -15,6 +15,7 @@ import {
   sampleCobraCanyonRenderedBasinHeight,
 } from "../cobra_canyon_presentation.js";
 import { COBRA_CANYON_ASSET_ROLES } from "../cobra_canyon_asset_kit.js";
+import { RELEASE_BUILD } from "../../release/release_identity.js";
 
 const world = JSON.parse(await readFile(new URL(
   "../../../content/packs/cobra-vietnam/environment/cobra-canyon.world.json",
@@ -29,7 +30,7 @@ const QUALITY_TIERS = Object.freeze(["mobile", "balanced", "desktop"]);
 
 test("presentation shares the Build 238 planner module", () => {
   assert.match(presentationSource,
-    /from "\.\/cobra_canyon_plan\.js\?v=251"/);
+    new RegExp(`from "\\.\\/cobra_canyon_plan\\.js\\?v=${RELEASE_BUILD}"`));
   assert.doesNotMatch(presentationSource,
     /from "\.\/cobra_canyon_plan\.js"/);
 });
