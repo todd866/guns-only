@@ -1,7 +1,7 @@
 # Top Gun (1986): F-14A vs MiG-28
 
 Date: 2026-08-03  
-Status: accepted design; implementation plan at
+Status: implementation underway; preview landed on branch `top-gun`. Plan:
 `docs/superpowers/plans/2026-08-03-top-gun.md`
 
 Related: [product north star](../../product-north-star.md),
@@ -62,8 +62,8 @@ v1 is 1v1. 2v1 / section tactics deferred.
 
 | Seat | Gun | Heaters |
 | --- | --- | --- |
-| F-14A | M61 Vulcan | AIM-9 (count TBD from sourced load; provisional until sources land) |
-| MiG-28 | F-5E-class gun under fiction name | AIM-9-class heaters (same toy family; count TBD) |
+| F-14A | M61 Vulcan | 2× AIM-9 (provisional; design resolution) |
+| MiG-28 | F-5E-class gun under fiction name | 2× AIM-9-class heaters (provisional; same toy family) |
 
 Out of scope for v1: AIM-54, AIM-7, bombs, gunpods-as-identity, radar-guided BVR, defensive
 systems encyclopedias (RWR as optional later chrome only if it earns its keep).
@@ -117,7 +117,7 @@ Picker art: one Tomcat painting, one MiG-28 aggressor painting; title treatment 
 ```text
 id: top-gun
 title: Top Gun
-releaseState: coming-soon   # until a dogfight flies; then preview
+releaseState: preview   # promoted after automation gate; production blocked on human dogfight
 ```
 
 STATUS matrix gets a row when the catalog entry lands. `hidden` HTML is never the release gate.
@@ -148,10 +148,23 @@ STATUS matrix gets a row when the catalog entry lands. `hidden` HTML is never th
 3. Swing-wing: **Mach/CAS schedule**, published on snapshot; coarse aero effect before preview.
 4. Missiles: dedicated **`sim/Missiles/Aim9Surrogate`** lane — do not reuse Rapier timed-impact helper as-is.
 
+## Implementation status
+
+Preview automation is green on branch `top-gun` (spawn, loadout, AIM-9 seeker-loss path,
+catalog `preview` gate). Representative human dogfight acceptance remains outstanding before
+production promotion.
+
 ## Success bar (preview → production)
 
-Preview: both seats launch, 1v1 completes with gun or Sidewinder kill/miss, anime skin readable
-on phone and desktop, automation covers spawn/loadout/missile miss path.
+Preview:
 
-Production: representative human dogfight on the exact artifact, STATUS/catalog aligned,
-owner-telemetry not polluting “first Top Gun kill” celebrations.
+- [x] Both seats launch
+- [x] 1v1 completes with gun or Sidewinder kill/miss (automation)
+- [x] Anime skin readable on phone and desktop
+- [x] Automation covers spawn/loadout/missile miss path
+
+Production:
+
+- [ ] Representative human dogfight on the exact artifact
+- [x] STATUS/catalog aligned (`preview`)
+- [ ] Owner-telemetry not polluting “first Top Gun kill” celebrations
