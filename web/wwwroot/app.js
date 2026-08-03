@@ -120,11 +120,6 @@ import {
   GlobalRoomClient,
   resolveGlobalRoomUrl,
 } from "./render/presence/global_room_client.js";
-import "./arena-config.js";
-import {
-  ArenaClient,
-  arenaEnabled,
-} from "./render/arena/arena_client.js";
 import {
   presenceStatusPresentation,
   presenceTelemetryContext,
