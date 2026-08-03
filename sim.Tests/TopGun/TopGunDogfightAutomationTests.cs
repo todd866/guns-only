@@ -12,6 +12,13 @@ public sealed class TopGunDogfightAutomationTests
 {
     const int MaxFoxTwoTicks = 60 * (int)AircraftSim.TickHz;
 
+    static readonly Aim9FlightState[] TerminalFoxTwoOutcomes =
+    [
+        Aim9FlightState.Detonated,
+        Aim9FlightState.Expired,
+        Aim9FlightState.Lost,
+    ];
+
     static SimulationSession StartTomcatSession()
     {
         var session = new SimulationSession();
@@ -40,7 +47,9 @@ public sealed class TopGunDogfightAutomationTests
         var session = StartTomcatSession();
         Assert.Equal(2, session.Aim9Remaining);
 
+        int magazineBeforeLaunch = session.Aim9Remaining;
         Assert.True(session.LaunchFoxTwo());
+        Assert.True(session.Aim9Remaining < magazineBeforeLaunch);
         Assert.Equal(1, session.Aim9Remaining);
         Assert.True(session.Aim9InFlight);
 
@@ -48,14 +57,11 @@ public sealed class TopGunDogfightAutomationTests
 
         Assert.False(session.Aim9InFlight);
         Assert.Equal(1, session.Aim9Remaining);
-        Assert.True(session.Aim9SeekerState is Aim9FlightState.Detonated
-            or Aim9FlightState.Expired
-            or Aim9FlightState.Lost,
-            $"unexpected terminal seeker state: {session.Aim9SeekerState}");
+        Assert.Contains(session.Aim9SeekerState, TerminalFoxTwoOutcomes);
     }
 
     [Fact]
-    public void TomcatSeatDocumentedMissPathAccountsMagazine()
+    public void Aim9OffBoresightFixtureDocumentsSeekerLoss()
     {
         var aim9 = Aim9Surrogate.TestFixture_OffBoresightLoss();
         Assert.Equal(0, aim9.RoundsRemaining);
@@ -63,7 +69,7 @@ public sealed class TopGunDogfightAutomationTests
         aim9.Step(1.0 / 60.0, new Aim9Pose(new Vec3D(8000, 5000, 0), Vec3D.Zero));
 
         Assert.Equal(Aim9FlightState.Lost, aim9.Live.State);
-        Assert.False(aim9.Live.State is Aim9FlightState.Seeking or Aim9FlightState.Tracking);
+        Assert.Contains(aim9.Live.State, TerminalFoxTwoOutcomes);
     }
 
     [Fact]
