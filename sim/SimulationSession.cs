@@ -440,6 +440,8 @@ public sealed class SimulationSession {
     public int RapierMissilesRemaining => _rapierMissilesRemaining;
     public int Aim9Remaining => _topGunFightRuntime?.Aim9Remaining ?? 0;
     public bool Aim9InFlight => _topGunFightRuntime?.Aim9InFlight ?? false;
+    public Missiles.Aim9FlightState Aim9SeekerState =>
+        _topGunFightRuntime?.Aim9Live.State ?? Missiles.Aim9FlightState.Safe;
     public int RapierDogfightingDronesRemaining => _rapierDogfightingDronesRemaining;
     public bool RapierMissileInFlight => _rapierMissileInFlight;
     public double RapierMissileTimeToImpactSeconds => _rapierMissileInFlight

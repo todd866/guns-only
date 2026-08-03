@@ -1,6 +1,7 @@
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
+using GunsOnly.Sim.Missiles;
 using GunsOnly.Sim.Propulsion;
 using GunsOnly.Sim.Recovery;
 using GunsOnly.Sim.Turbulence;
@@ -963,6 +964,7 @@ internal static class SnapshotProjection {
             + $"\"utility_hydraulic_nominal_psi\":{_systems.Profile.UtilityHydraulicNominalPsi:F1},"
             + MaintenanceScenarioJson()
             + VisualMergeEvaluationJson()
+            + TopGunExperienceJson(mach, indicatedAirspeedMps * AirData.MpsToKnots)
             + DroneRaidEvaluationJson()
             + $"\"approach\":{(_detents.ApproachMode ? "true" : "false")},"
             + $"\"mode\":\"{mode}\",\"wave_off\":{(waveOff ? "true" : "false")},"
@@ -1334,6 +1336,42 @@ internal static class SnapshotProjection {
             + $"\"evaluated_projectile_rounds\":{evaluation.ProjectileRoundsFired},"
             + $"\"evaluated_projectile_hits\":{evaluation.ProjectileHits},";
     }
+
+    static string TopGunExperienceJson(double mach, double casKts) {
+        if (!TopGunFightRuntime.IsTopGunMission(Session.Beat.MissionIdentity.Id))
+            return "\"top_gun_seat\":null,"
+                + "\"wing_sweep_deg\":null,"
+                + "\"aim9_remaining\":null,"
+                + $"\"aim9_in_flight\":{(Session.Aim9InFlight ? "true" : "false")},"
+                + "\"aim9_seeker_state\":null,"
+                + "\"opponent_callsign\":null,"
+                + "\"presentation_theme\":null,";
+
+        bool playerIsTomcat =
+            Session.Beat.PlayerAircraft.Id == AircraftCapability.F14ASurrogate.Id;
+        string seatJson = playerIsTomcat ? "\"F-14A\"" : "\"MiG-28\"";
+        string opponentJson = playerIsTomcat ? "\"MiG-28\"" : "\"F-14A\"";
+        string wingSweepJson = playerIsTomcat
+            ? F14WingSweep.DegreesFor(mach, casKts).ToString("F1",
+                System.Globalization.CultureInfo.InvariantCulture)
+            : "null";
+        return $"\"top_gun_seat\":{seatJson},"
+            + $"\"wing_sweep_deg\":{wingSweepJson},"
+            + $"\"aim9_remaining\":{Session.Aim9Remaining},"
+            + $"\"aim9_in_flight\":{(Session.Aim9InFlight ? "true" : "false")},"
+            + $"\"aim9_seeker_state\":{Aim9SeekerStateJson(Session.Aim9SeekerState)},"
+            + $"\"opponent_callsign\":{opponentJson},"
+            + "\"presentation_theme\":\"top-gun-anime-1986\",";
+    }
+
+    static string Aim9SeekerStateJson(Aim9FlightState state) => state switch {
+        Aim9FlightState.Seeking => "\"SEEKING\"",
+        Aim9FlightState.Tracking => "\"TRACKING\"",
+        Aim9FlightState.Lost => "\"LOST\"",
+        Aim9FlightState.Detonated => "\"DETONATED\"",
+        Aim9FlightState.Expired => "\"EXPIRED\"",
+        _ => "\"SAFE\"",
+    };
 
     static string DroneRaidEvaluationJson() {
         DroneRaidEvaluation? evaluation = Session.DroneRaidEvaluation;
