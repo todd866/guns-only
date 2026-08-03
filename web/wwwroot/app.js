@@ -3219,6 +3219,14 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     brief: "Fighter pilots ride on weekends. The Rapier strip becomes a painted circuit for a liter-bike free ride—split authority for throttle, brake, steer, and rider weight. Fly opens the dedicated Weekend Ride surface.",
     controls: "W/S throttle/brake · A/D steer · arrows rider weight · Q/E gears · C auto/manual clutch · R reset",
   }),
+  "top-gun": Object.freeze({
+    kicker: "1986 · training range",
+    title: "Top Gun",
+    sortie: "F-14A vs MiG-28 · guns and Sidewinders · DACT arena",
+    configuration: "F-14A or MiG-28 seat · M61 + AIM-9 · anime-1986 presentation",
+    brief: "Tomcat or aggressor MiG-28 over a Miramar-class training range—guns and heaters, one-on-one ACM. The dogfight slice is not flyable yet.",
+    controls: "Coming soon",
+  }),
   "ace-duel": Object.freeze({
     kicker: "Raptor programme · final exam",
     title: "Ace Duel",

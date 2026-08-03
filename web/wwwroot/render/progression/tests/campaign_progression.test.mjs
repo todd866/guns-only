@@ -43,6 +43,7 @@ test("one catalog names every route and exposes only accepted production experie
     { id: "medevac-command", mission: null, releaseState: "quarantined" },
     { id: "cobra-lab", mission: null, releaseState: "production" },
     { id: "weekend-ride", mission: null, releaseState: "production" },
+    { id: "top-gun", mission: null, releaseState: "coming-soon" },
   ]);
 
   assert.deepEqual(productionExperiences().map(({ id }) => id), [
