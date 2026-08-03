@@ -38,4 +38,4 @@
 ### Task 4: Ship
 
 - [x] Stamp Build 252.
-- [ ] Verify, merge, deploy with clean tree.
+- [x] Verify, merge, deploy with clean tree (live on guns-only.com).

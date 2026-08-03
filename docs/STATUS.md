@@ -1,10 +1,9 @@
 # Current product and verification status
 
-Updated: 2026-08-02
-Production: Build 244, revision `894edfd4c1a26d393c8ef89191c65e6b0228260c`, promoted 2026-08-02
+Updated: 2026-08-03
+Production: Build 252, revision `813f28fca39cb3769254249801a8bf1b2dfc58c6`, promoted 2026-08-03
 after its exact protected-`main` SHA passed the canonical GitHub Verify workflow.
-Next candidate: Build 252 (Hold the Bridge); do not deploy until the complete gate is
-green and the exact revision is pushed.
+Next candidate: none open; stamp before the next production change.
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
 evidence for the build and commit they name, but they do not override this page or the executable
