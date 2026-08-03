@@ -203,6 +203,13 @@ public static partial class CobraWebBridge
                     y_m = evt.PositionWorldM.Y,
                     z_m = evt.PositionWorldM.Z,
                 }).ToArray(),
+                mission = "hold-the-bridge",
+                outcome = groundWar.MissionOutcome.ToString().ToLowerInvariant(),
+                outcome_reason = groundWar.MissionOutcomeReason,
+                victory_hold_progress = groundWar.VictoryHoldProgress,
+                defeat_hold_progress = groundWar.DefeatHoldProgress,
+                victory_control_threshold = CobraGroundWarRuntime.VictoryControlThreshold,
+                defeat_control_threshold = CobraGroundWarRuntime.DefeatControlThreshold,
                 debrief = new {
                     hostile_kills = debrief.HostileKillsByPlayer,
                     friendly_kills = debrief.FriendlyKillsByPlayer,
@@ -211,6 +218,9 @@ public static partial class CobraWebBridge
                     peak_hostile_control = debrief.PeakHostileControl,
                     elapsed_s = debrief.ElapsedSeconds,
                     rounds_expended = debrief.RoundsExpended,
+                    outcome = debrief.MissionOutcome.ToString().ToLowerInvariant(),
+                    outcome_reason = debrief.MissionOutcomeReason,
+                    victory_hold_progress = debrief.VictoryHoldProgress,
                 },
             },
             vehicle = new {
@@ -308,6 +318,8 @@ public static partial class CobraWebBridge
         CobraMissionStatus.ObstacleCollision => "obstacle-collision",
         CobraMissionStatus.TerrainUnavailable => "terrain-unavailable",
         CobraMissionStatus.VehicleAuthorityLost => "vehicle-authority-lost",
+        CobraMissionStatus.Victory => "victory",
+        CobraMissionStatus.Defeat => "defeat",
         _ => throw new ArgumentOutOfRangeException(nameof(status))
     };
 }

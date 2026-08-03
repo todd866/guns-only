@@ -22,6 +22,13 @@ public enum GroundUnitIntent
     EngageNearest
 }
 
+public enum HoldTheBridgeOutcome
+{
+    Pending,
+    Victory,
+    Defeat
+}
+
 /// <summary>
 /// Fiction/provisional ground combatants for Cobra Canyon legibility. Not sourced vehicle models.
 /// </summary>
@@ -163,6 +170,16 @@ public sealed class ControlBalance
     public double PeakFriendlyControl { get; private set; }
     public double PeakHostileControl { get; private set; }
 
+    /// <summary>Test/fixture helper — not a combat impulse.</summary>
+    public void OverrideControl(double control)
+    {
+        if (!double.IsFinite(control))
+            throw new ArgumentOutOfRangeException(nameof(control));
+        Control = Math.Clamp(control, -MaxAbsControl, MaxAbsControl);
+        PeakFriendlyControl = Math.Max(PeakFriendlyControl, Control);
+        PeakHostileControl = Math.Min(PeakHostileControl, Control);
+    }
+
     public void Drift(double friendlyPower, double hostilePower, double dtSeconds)
     {
         RequireNonNegative(friendlyPower, nameof(friendlyPower));
@@ -292,7 +309,10 @@ public readonly record struct GroundWarDebrief(
     double PeakFriendlyControl,
     double PeakHostileControl,
     double ElapsedSeconds,
-    int RoundsExpended);
+    int RoundsExpended,
+    HoldTheBridgeOutcome MissionOutcome,
+    string MissionOutcomeReason,
+    double VictoryHoldProgress);
 
 public readonly record struct GroundWarEvent(
     long AuthorityTick,

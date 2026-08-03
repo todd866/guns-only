@@ -2,119 +2,130 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark">
   <!-- Same as Medevac: Blazor resolves _framework/* against the document base, not the script URL. -->
   <base href="/">
-  <title>Guns Only · Cobra Canyon Lab</title>
+  <title>Guns Only · Hold the Bridge</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/cobra-lab/styles.css?v=251">
 </head>
-<body>
-  <header class="topbar">
-    <div class="title-lockup">
-      <span class="brand">Guns Only</span>
-      <h1>Cobra Canyon</h1>
-      <span class="prototype">world prototype</span>
+<body data-shell="play">
+  <a class="skip-link" href="#scene">Skip to flight</a>
+
+  <div id="play-chrome" class="play-chrome">
+    <header class="play-top" aria-live="polite">
+      <div class="mission-lockup">
+        <span class="brand">Guns Only</span>
+        <strong>Hold the Bridge</strong>
+        <span class="airframe">AH-1G · River Gorge</span>
+      </div>
+      <p id="status"><i></i><span>Loading mission…</span></p>
+    </header>
+
+    <div class="objective-hud" id="objective-hud" aria-label="Mission objective">
+      <div class="objective-copy">
+        <span id="objective-line">TIP CONTROL FRIENDLY · HOLD 45s</span>
+        <span id="objective-detail">Tab target · hold F gunner · rearm at Camp Ember</span>
+      </div>
+      <div class="balance-track" aria-hidden="true">
+        <i id="balance-fill"></i>
+        <b id="balance-label">CONTROL</b>
+      </div>
+      <div class="hold-track" aria-hidden="true">
+        <i id="hold-fill"></i>
+        <span id="hold-label">HOLD 0%</span>
+      </div>
+      <div class="war-readouts">
+        <span id="hud-ammo">AMMO —</span>
+        <span id="hud-fob">FOB —</span>
+        <span id="hud-kills">KILLS —</span>
+        <span id="hud-target">TARGET —</span>
+      </div>
     </div>
-    <p id="status" aria-live="polite"><i></i><span>Loading authored basin…</span></p>
-  </header>
+  </div>
 
-  <main>
-    <aside aria-label="Cobra Canyon controls">
-      <section>
-        <span class="eyebrow">World inspection</span>
-        <h2>Low-level route</h2>
-        <label>Route
-          <select id="route">
-            <option value="route.cobra-canyon.river-gorge.v1">River gorge</option>
-            <option value="route.cobra-canyon.ridge-shadow.v1">Ridge shadow</option>
-            <option value="route.cobra-canyon.road-plantation.v1">Road / plantation</option>
-          </select>
-        </label>
-        <label>Quality tier
-          <select id="quality">
-            <option value="mobile">Mobile</option>
-            <option value="balanced" selected>Balanced</option>
-            <option value="desktop">Desktop</option>
-          </select>
-        </label>
-        <label>Tour speed <output id="speed-value">42 m/s</output>
-          <input id="speed" type="range" min="12" max="72" value="42" step="1">
-        </label>
-        <label>Manual start height <output id="height-value">34 m AGL</output>
-          <input id="height" type="range" min="12" max="120" value="34" step="1">
-        </label>
-        <label>Gunner target
-          <select id="target">
-            <option value="">No target</option>
-          </select>
-        </label>
-        <label class="toggle"><input id="tour" type="checkbox"><span>Guided camera preview</span></label>
-        <button id="reset" class="primary" type="button">Restart fly-through</button>
-      </section>
+  <aside id="lab-panel" class="lab-panel" aria-label="Lab inspection" hidden>
+    <section>
+      <span class="eyebrow">Lab · ?lab=1</span>
+      <h2>Inspection</h2>
+      <label>Route
+        <select id="route">
+          <option value="route.cobra-canyon.river-gorge.v1" selected>River gorge</option>
+          <option value="route.cobra-canyon.ridge-shadow.v1">Ridge shadow</option>
+          <option value="route.cobra-canyon.road-plantation.v1">Road / plantation</option>
+        </select>
+      </label>
+      <label>Quality tier
+        <select id="quality">
+          <option value="mobile">Mobile</option>
+          <option value="balanced" selected>Balanced</option>
+          <option value="desktop">Desktop</option>
+        </select>
+      </label>
+      <label>Tour speed <output id="speed-value">42 m/s</output>
+        <input id="speed" type="range" min="12" max="72" value="42" step="1">
+      </label>
+      <label>Manual start height <output id="height-value">34 m AGL</output>
+        <input id="height" type="range" min="12" max="120" value="34" step="1">
+      </label>
+      <label>Gunner target
+        <select id="target">
+          <option value="">No target</option>
+        </select>
+      </label>
+      <label class="toggle"><input id="tour" type="checkbox"><span>Guided camera preview</span></label>
+      <button id="reset" class="primary" type="button">Restart</button>
+    </section>
+    <section class="metrics" aria-label="World metrics">
+      <dl>
+        <div><dt>Frame</dt><dd id="frame">—</dd></div>
+        <div><dt>Draw</dt><dd id="draws">—</dd></div>
+        <div><dt>AGL</dt><dd id="agl">—</dd></div>
+        <div><dt>Power</dt><dd id="power">—</dd></div>
+        <div><dt>Gunner</dt><dd id="gunner">—</dd></div>
+        <div><dt>Control</dt><dd id="control">—</dd></div>
+        <div><dt>Ammo</dt><dd id="ammo">—</dd></div>
+        <div><dt>FOB</dt><dd id="fob">—</dd></div>
+        <div><dt>Kills</dt><dd id="kills">—</dd></div>
+      </dl>
+    </section>
+  </aside>
 
-      <section class="instructions">
-        <span class="eyebrow">Ground war</span>
-        <h2>BF-legible basin fight</h2>
-        <p><kbd>W</kbd>/<kbd>S</kbd> collective · arrows cyclic · <kbd>A</kbd>/<kbd>D</kbd> pedals · hold <kbd>F</kbd> gunner consent · <kbd>Tab</kbd> cycle hostile · <kbd>R</kbd>/<kbd>C</kbd> camera rise/lower in free look.</p>
-        <p class="honesty">AH‑1G flight authority is active. Friendly olive / hostile dark markers fight under you; shoot hostiles to tip control and rearm only on the Camp Ember pad. The model is a disclosed flight foundation; this focused route is not a surveyed combat-representation product.</p>
-      </section>
-
-      <section class="metrics" aria-label="World metrics">
-        <span class="eyebrow">Live budget</span>
-        <h2>Renderer evidence</h2>
-        <dl>
-          <div><dt>Frame</dt><dd id="frame">—</dd></div>
-          <div><dt>Draw ceiling</dt><dd id="draws">—</dd></div>
-          <div><dt>Instances</dt><dd id="instances">—</dd></div>
-          <div><dt>Set pieces</dt><dd id="set-pieces">—</dd></div>
-          <div><dt>Hazards</dt><dd id="hazards">—</dd></div>
-          <div><dt>AGL</dt><dd id="agl">—</dd></div>
-          <div><dt>Power</dt><dd id="power">—</dd></div>
-          <div><dt>Gunner</dt><dd id="gunner">—</dd></div>
-          <div><dt>Control</dt><dd id="control">—</dd></div>
-          <div><dt>Ammo</dt><dd id="ammo">—</dd></div>
-          <div><dt>FOB</dt><dd id="fob">—</dd></div>
-          <div><dt>Kills</dt><dd id="kills">—</dd></div>
-        </dl>
-      </section>
-    </aside>
-
-    <section class="viewport" aria-label="Interactive Cobra Canyon world preview">
+  <main class="flight-stage">
+    <section class="viewport" aria-label="Hold the Bridge sortie">
       <canvas id="scene"></canvas>
       <div class="reticle" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-      <div class="route-card">
-        <span id="route-kind">MASKED RIVER RUN</span>
-        <strong id="route-name">River gorge</strong>
-        <small id="route-note">Narrow · wire and bridge hazards · strongest terrain masking</small>
-        <div class="route-progress" aria-hidden="true"><i id="route-progress"></i></div>
-        <small id="route-feature" class="route-feature">Loading authored reveals…</small>
-      </div>
-      <div class="war-hud" id="war-hud" aria-label="Ground war HUD">
-        <div class="balance-track" aria-hidden="true">
-          <i id="balance-fill"></i>
-          <span id="balance-label">CONTROL</span>
-        </div>
-        <div class="war-readouts">
-          <span id="hud-ammo">AMMO —</span>
-          <span id="hud-fob">FOB —</span>
-          <span id="hud-kills">KILLS —</span>
-        </div>
-      </div>
       <div class="legend" aria-hidden="true">
         <span><i class="friendly-key"></i> friendly</span>
         <span><i class="hostile-key"></i> hostile</span>
-        <span><i class="landmark-key"></i> contested site</span>
-        <span><i class="hazard-key"></i> authority hazard</span>
+        <span><i class="landmark-key"></i> contested</span>
+      </div>
+      <div id="debrief" class="debrief" hidden>
+        <p id="debrief-title">MISSION COMPLETE</p>
+        <p id="debrief-body"></p>
+        <button id="debrief-restart" type="button">Fly again</button>
       </div>
     </section>
   </main>
 
+  <!-- Hidden hooks kept for main.js lab path / target cycling -->
+  <span id="route-kind" hidden></span>
+  <span id="route-name" hidden></span>
+  <span id="route-note" hidden></span>
+  <span id="route-feature" hidden></span>
+  <i id="route-progress" hidden></i>
+  <span id="instances" hidden></span>
+  <span id="set-pieces" hidden></span>
+  <span id="hazards" hidden></span>
+
   <script>
-    // Complete stale-worker cleanup before linking the versioned release gate to its catalog.
-    // A bare public route must remain inert even when an older cache-first worker is present.
     globalThis.__gunsPrebootReady = (async () => {
+      const params = new URLSearchParams(location.search);
+      document.body.dataset.shell = params.get("lab") === "1" ? "lab" : "play";
+      const labPanel = document.getElementById("lab-panel");
+      if (labPanel) labPanel.hidden = document.body.dataset.shell !== "lab";
+
       const releaseBuild = new URL("../service-worker.js?v=251", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
@@ -143,8 +154,6 @@
       await globalThis.__gunsPrebootReady;
       await new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        // Loader from site root + <base href="/"> so boot resources resolve to /_framework/*,
-        // not /cobra-lab/_framework/* (Medevac pattern).
         script.src = "/_framework/blazor.webassembly.js?v=251";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });

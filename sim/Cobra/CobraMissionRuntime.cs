@@ -10,7 +10,9 @@ public enum CobraMissionStatus
     RouteComplete,
     ObstacleCollision,
     TerrainUnavailable,
-    VehicleAuthorityLost
+    VehicleAuthorityLost,
+    Victory,
+    Defeat
 }
 
 public enum CobraMaskingState
@@ -430,7 +432,15 @@ public sealed class CobraMissionRuntime
         }
 
         _groundWar.Advance(PlayerVehicleContract.FixedDeltaSeconds);
-        _groundWar.TryResupplyAtFob(currentPositionWorldM);
+        if (Status == CobraMissionStatus.Active)
+            _groundWar.TryResupplyAtFob(currentPositionWorldM);
+        if (Status == CobraMissionStatus.Active) {
+            Status = _groundWar.MissionOutcome switch {
+                HoldTheBridgeOutcome.Victory => CobraMissionStatus.Victory,
+                HoldTheBridgeOutcome.Defeat => CobraMissionStatus.Defeat,
+                _ => Status
+            };
+        }
 
         Diagnostics = BuildDiagnostics();
         return new CobraMissionAdvanceResult(vehicleResult, Diagnostics);

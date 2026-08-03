@@ -20,20 +20,20 @@
 
 ### Task 1: Land ground-war onto main
 
-- [ ] Branch from `origin/main`, merge `origin/feature/cobra-canyon-ground-war`, resolve stamp/Blazor conflicts in favor of current main + keep ground-war gameplay.
-- [ ] `dotnet test` filter GroundWar; node tests for cobra_ground_war.
+- [x] Branch from `origin/main`, merge `origin/feature/cobra-canyon-ground-war`, resolve stamp/Blazor conflicts in favor of current main + keep ground-war gameplay.
+- [x] `dotnet test` filter GroundWar; node tests for cobra_ground_war.
 
 ### Task 2: Win/lose (TDD)
 
-- [ ] Failing test: control ≥ 0.55 for 45s → victory; ≤ −0.75 for 30s → defeat.
-- [ ] Implement timers + debrief reason on ground-war / mission runtime.
-- [ ] Bridge exposes `mission.outcome` / hold progress.
+- [x] Failing test: control ≥ 0.55 for 45s → victory; ≤ −0.75 for 30s → defeat.
+- [x] Implement timers + debrief reason on ground-war / mission runtime.
+- [x] Bridge exposes `mission.outcome` / hold progress.
 
 ### Task 3: Play shell
 
-- [ ] Default immersive layout; gate lab chrome with `?lab=1`.
-- [ ] Objective HUD: control, ammo, hold progress, FOB cue.
-- [ ] Update wiring/quarantine/product_truth contracts.
+- [x] Default immersive layout; gate lab chrome with `?lab=1`.
+- [x] Objective HUD: control, ammo, hold progress, FOB cue.
+- [x] Update wiring/quarantine/product_truth contracts.
 
 ### Task 4: Ship
 

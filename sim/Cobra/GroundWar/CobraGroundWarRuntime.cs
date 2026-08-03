@@ -13,6 +13,14 @@ public sealed class CobraGroundWarRuntime
     public const double ReinforceIntervalSeconds = 18.0;
     public const double WreckRetainSeconds = 12.0;
     public const double PlayerRoundDamage = 0.55;
+    public const double VictoryControlThreshold = 0.55;
+    public const double VictoryHoldSeconds = 45.0;
+    public const double DefeatControlThreshold = -0.75;
+    public const double DefeatHoldSeconds = 30.0;
+    public static readonly int VictoryHoldTicks =
+        (int)Math.Round(VictoryHoldSeconds / PlayerVehicleContract.FixedDeltaSeconds);
+    public static readonly int DefeatHoldTicks =
+        (int)Math.Round(DefeatHoldSeconds / PlayerVehicleContract.FixedDeltaSeconds);
 
     static readonly string[] ContestedLandmarkIds = {
         "landmark.cobra-canyon.iron-bell-bridge.v1",
@@ -38,6 +46,11 @@ public sealed class CobraGroundWarRuntime
     int _fobRearmCount;
     int _roundsExpended;
     long _authorityTick;
+    int _friendlyHoldTicks;
+    int _hostileHoldTicks;
+    HoldTheBridgeOutcome _missionOutcome = HoldTheBridgeOutcome.Pending;
+    string _missionOutcomeReason = "";
+    double? _forcedControlForTests;
 
     public CobraGroundWarRuntime(
         CobraCanyonDefinition definition,
@@ -68,6 +81,13 @@ public sealed class CobraGroundWarRuntime
     public FobResupplyZone Fob => _fob;
     public long AuthorityTick => _authorityTick;
     public IReadOnlyList<GroundWarEvent> RecentEvents => _recentEvents;
+    public HoldTheBridgeOutcome MissionOutcome => _missionOutcome;
+    public string MissionOutcomeReason => _missionOutcomeReason;
+    public double VictoryHoldProgress =>
+        Math.Clamp(_friendlyHoldTicks / (double)VictoryHoldTicks, 0.0, 1.0);
+    public double DefeatHoldProgress =>
+        Math.Clamp(_hostileHoldTicks / (double)DefeatHoldTicks, 0.0, 1.0);
+
     public GroundWarDebrief Debrief => new(
         _hostileKillsByPlayer,
         _friendlyKillsByPlayer,
@@ -75,12 +95,22 @@ public sealed class CobraGroundWarRuntime
         _balance.PeakFriendlyControl,
         _balance.PeakHostileControl,
         _elapsedSeconds,
-        _roundsExpended);
+        _roundsExpended,
+        _missionOutcome,
+        _missionOutcomeReason,
+        VictoryHoldProgress);
 
     public GroundUnit? FindUnit(string unitId) =>
         _units.FirstOrDefault(unit => string.Equals(unit.Id, unitId, StringComparison.Ordinal));
 
     public IEnumerable<GroundUnit> LivingUnits() => _units.Where(unit => unit.IsAlive);
+
+    /// <summary>Test/fixture helper for Hold the Bridge outcome timers. Sticky across Advance.</summary>
+    public void OverrideControlForTests(double control)
+    {
+        _forcedControlForTests = control;
+        _balance.OverrideControl(control);
+    }
 
     public void Advance(double dtSeconds)
     {
@@ -89,13 +119,55 @@ public sealed class CobraGroundWarRuntime
 
         _recentEvents.Clear();
         _elapsedSeconds += dtSeconds;
-        AgeWrecks(dtSeconds);
-        ResolveMutualCombat(dtSeconds);
-        MoveUnits(dtSeconds);
-        UpdateSiteControl();
-        DriftBalance(dtSeconds);
-        MaybeReinforce(dtSeconds);
+        if (_missionOutcome == HoldTheBridgeOutcome.Pending) {
+            AgeWrecks(dtSeconds);
+            ResolveMutualCombat(dtSeconds);
+            MoveUnits(dtSeconds);
+            UpdateSiteControl();
+            DriftBalance(dtSeconds);
+            MaybeReinforce(dtSeconds);
+            if (_forcedControlForTests is double forced)
+                _balance.OverrideControl(forced);
+            EvaluateHoldTheBridge(dtSeconds);
+        }
         _authorityTick++;
+    }
+
+    void EvaluateHoldTheBridge(double dtSeconds)
+    {
+        _ = dtSeconds;
+        if (_balance.Control >= VictoryControlThreshold) {
+            _friendlyHoldTicks++;
+            _hostileHoldTicks = 0;
+        } else if (_balance.Control <= DefeatControlThreshold) {
+            _hostileHoldTicks++;
+            _friendlyHoldTicks = 0;
+        } else {
+            _friendlyHoldTicks = 0;
+            _hostileHoldTicks = 0;
+        }
+
+        if (_friendlyHoldTicks >= VictoryHoldTicks) {
+            _missionOutcome = HoldTheBridgeOutcome.Victory;
+            _missionOutcomeReason = "held-bridge";
+            _recentEvents.Add(new GroundWarEvent(
+                _authorityTick,
+                "mission-victory",
+                null,
+                null,
+                GroundFaction.Friendly,
+                _fob.CentreWorldM));
+        } else if (_hostileHoldTicks >= DefeatHoldTicks) {
+            _missionOutcome = HoldTheBridgeOutcome.Defeat;
+            _missionOutcomeReason = "lost-basin";
+            _recentEvents.Add(new GroundWarEvent(
+                _authorityTick,
+                "mission-defeat",
+                null,
+                null,
+                GroundFaction.Hostile,
+                _fob.CentreWorldM));
+        }
     }
 
     /// <summary>

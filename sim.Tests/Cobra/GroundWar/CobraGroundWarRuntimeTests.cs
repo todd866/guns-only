@@ -143,4 +143,58 @@ public class CobraGroundWarRuntimeTests
         Assert.True(runtime.GroundWar.AuthorityTick >= 120);
         Assert.True(runtime.GroundWar.Magazine.RoundsRemaining > 0);
     }
+
+    [Fact]
+    public void HoldingFriendlyControlWinsHoldTheBridge()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        Assert.Equal(HoldTheBridgeOutcome.Pending, war.MissionOutcome);
+
+        for (int tick = 0; tick < CobraGroundWarRuntime.VictoryHoldTicks; tick++) {
+            war.OverrideControlForTests(CobraGroundWarRuntime.VictoryControlThreshold + 0.05);
+            war.Advance(PlayerVehicleContract.FixedDeltaSeconds);
+        }
+
+        Assert.Equal(HoldTheBridgeOutcome.Victory, war.MissionOutcome);
+        Assert.Equal("held-bridge", war.MissionOutcomeReason);
+        Assert.Equal(1.0, war.VictoryHoldProgress, 3);
+    }
+
+    [Fact]
+    public void DeepHostileControlLosesHoldTheBridge()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        for (int tick = 0; tick < CobraGroundWarRuntime.DefeatHoldTicks; tick++) {
+            war.OverrideControlForTests(CobraGroundWarRuntime.DefeatControlThreshold - 0.05);
+            war.Advance(PlayerVehicleContract.FixedDeltaSeconds);
+        }
+
+        Assert.Equal(HoldTheBridgeOutcome.Defeat, war.MissionOutcome);
+        Assert.Equal("lost-basin", war.MissionOutcomeReason);
+    }
+
+    [Fact]
+    public void MissionRuntimeTerminalizesOnHoldTheBridgeVictory()
+    {
+        var runtime = new CobraMissionRuntime(
+            CobraCanyonDefinition.Create(),
+            new FlatTerrain(),
+            CobraCanyonRouteChoice.RiverGorge,
+            groundWarSeed: 9);
+        double collective = runtime.Cobra.EstimateHoverCollective(
+            runtime.Cobra.State.GrossMassKg,
+            CobraMissionRuntime.DefaultAirDensityKgM3);
+        var command = new VerticalLiftPilotCommand(collective, 0.0, 0.0, 0.0);
+        for (int tick = 0;
+            tick < CobraGroundWarRuntime.VictoryHoldTicks
+                && runtime.Status == CobraMissionStatus.Active;
+            tick++) {
+            runtime.GroundWar.OverrideControlForTests(
+                CobraGroundWarRuntime.VictoryControlThreshold + 0.05);
+            runtime.Advance(command);
+        }
+
+        Assert.Equal(CobraMissionStatus.Victory, runtime.Status);
+        Assert.Equal(HoldTheBridgeOutcome.Victory, runtime.GroundWar.MissionOutcome);
+    }
 }
