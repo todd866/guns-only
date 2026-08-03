@@ -4,9 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
+  <!-- Same as Medevac: Blazor resolves _framework/* against the document base, not the script URL. -->
+  <base href="/">
   <title>Guns Only · YZF-R1 Weekend Ride</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="./styles.css?v=249">
+  <link rel="stylesheet" href="/weekend-ride/styles.css?v=250">
 </head>
 <body>
   <header class="topbar">
@@ -35,7 +37,7 @@
 
   <script>
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=249", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=250", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -63,9 +65,9 @@
       await globalThis.__gunsPrebootReady;
       await new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        // Root-absolute: Blazor resolves dotnet.js relative to the document URL, so a
-        // `../_framework/` script under /weekend-ride/ 404s as /weekend-ride/_framework/dotnet.js.
-        script.src = "/_framework/blazor.webassembly.js?v=249";
+        // Loader from site root + <base href="/"> so boot resources resolve to /_framework/*,
+        // not /weekend-ride/_framework/* (Medevac pattern).
+        script.src = "/_framework/blazor.webassembly.js?v=250";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load motorcycle runtime.")), {
@@ -74,10 +76,10 @@
         document.head.append(script);
       });
       const { renderExperienceGate } = await import(
-        "../render/release/quarantine_gate.js?v=249"
+        "/render/release/quarantine_gate.js?v=250"
       );
       const access = renderExperienceGate({ experienceId: "weekend-ride" });
-      if (access.allowed) await import("./main.js?v=249");
+      if (access.allowed) await import("/weekend-ride/main.js?v=250");
     } catch (error) {
       console.error(error);
       const status = document.querySelector("#status");
