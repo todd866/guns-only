@@ -31,6 +31,12 @@ test("Cobra Canyon lab consumes the authored planner and bounded presentation", 
   assert.match(main, /requestAnimationFrame/);
 });
 
+test("Cobra Canyon loads Blazor from the site-root framework path", async () => {
+  const html = await source("cobra-lab/index.html");
+  assert.match(html, /script\.src = "\/_framework\/blazor\.webassembly\.js\?v=\d+"/);
+  assert.doesNotMatch(html, /script\.src = "\.\.\/_framework\/blazor\.webassembly\.js/);
+});
+
 test("Cobra Canyon labels its flight authority and fidelity boundary honestly", async () => {
   const html = await source("cobra-lab/index.html");
   assert.match(html, /world prototype/i);

@@ -30,9 +30,11 @@ test("README describes the current production door, controls and telemetry bound
 });
 
 test("the browser and installed-app descriptions match the four production machines", async () => {
-  const [catalogue, manifestText] = await Promise.all([
+  const [catalogue, manifestText, cobraLab, weekendRide] = await Promise.all([
     readFile(path.join(ROOT, "web/wwwroot/index.html"), "utf8"),
     readFile(path.join(ROOT, "web/wwwroot/manifest.webmanifest"), "utf8"),
+    readFile(path.join(ROOT, "web/wwwroot/cobra-lab/index.html"), "utf8"),
+    readFile(path.join(ROOT, "web/wwwroot/weekend-ride/index.html"), "utf8"),
   ]);
   const manifest = JSON.parse(manifestText);
   assert.match(catalogue, /Four production machines/);
@@ -49,6 +51,13 @@ test("the browser and installed-app descriptions match the four production machi
   assert.match(manifest.description, /AH-1G Cobra Canyon/);
   assert.match(manifest.description, /YZF-R1 Weekend Ride/);
   assert.doesNotMatch(catalogue, /Seven flight experiences/);
+  // Subroute shells must not ask Blazor for /<route>/_framework/dotnet.js.
+  for (const [label, html] of [["cobra-lab", cobraLab], ["weekend-ride", weekendRide]]) {
+    assert.match(html, /script\.src = "\/_framework\/blazor\.webassembly\.js\?v=\d+"/,
+      `${label} must load Blazor from the site root`);
+    assert.doesNotMatch(html, /script\.src = "\.\.\/_framework\/blazor\.webassembly\.js/,
+      `${label} must not use a document-relative framework path`);
+  }
 });
 
 test("production Rapier copy describes the deterministic finite-ammo balloon sortie", async () => {

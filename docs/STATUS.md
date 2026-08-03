@@ -3,7 +3,7 @@
 Updated: 2026-08-02
 Production: Build 244, revision `894edfd4c1a26d393c8ef89191c65e6b0228260c`, promoted 2026-08-02
 after its exact protected-`main` SHA passed the canonical GitHub Verify workflow.
-Next candidate: Build 247 (local work); do not deploy until the complete gate is
+Next candidate: Build 248 (local work); do not deploy until the complete gate is
 green and the exact revision is pushed.
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful

@@ -29,7 +29,7 @@ const QUALITY_TIERS = Object.freeze(["mobile", "balanced", "desktop"]);
 
 test("presentation shares the Build 238 planner module", () => {
   assert.match(presentationSource,
-    /from "\.\/cobra_canyon_plan\.js\?v=247"/);
+    /from "\.\/cobra_canyon_plan\.js\?v=248"/);
   assert.doesNotMatch(presentationSource,
     /from "\.\/cobra_canyon_plan\.js"/);
 });

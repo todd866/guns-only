@@ -1,5 +1,5 @@
-import * as THREE from "../vendor/three.module.js?v=247";
-import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=247";
+import * as THREE from "../vendor/three.module.js?v=248";
+import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=248";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
