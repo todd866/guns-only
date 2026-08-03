@@ -35,6 +35,21 @@ test("the explicit preview query acknowledges but does not promote a quarantined
   assert.equal(access.experience.releaseState, "quarantined");
 });
 
+test("preview catalog entries launch only with explicit preview acknowledgement", () => {
+  for (const id of ["rapier-circuits", "top-gun"]) {
+    const access = experienceAccess(id, {
+      href: `https://guns-only.com/?program=${id}&preview=1`,
+    });
+    assert.equal(access.allowed, true, id);
+    assert.equal(access.preview, true, id);
+    assert.equal(access.experience.releaseState, "preview", id);
+    assert.deepEqual(releaseStateAccess("preview", true), {
+      allowed: true,
+      preview: true,
+    });
+  }
+});
+
 test("Cobra Canyon remains launchable on its standalone route", () => {
   const access = experienceAccess("cobra-lab", {
     href: "https://guns-only.com/cobra-lab/?preview=1",
