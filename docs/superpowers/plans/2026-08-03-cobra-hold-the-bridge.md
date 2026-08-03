@@ -37,4 +37,5 @@
 
 ### Task 4: Ship
 
-- [ ] Stamp next build, Verify, deploy with clean tree.
+- [x] Stamp Build 252.
+- [ ] Verify, merge, deploy with clean tree.
