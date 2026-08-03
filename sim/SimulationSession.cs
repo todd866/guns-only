@@ -2111,10 +2111,24 @@ public sealed class SimulationSession {
     }
 
     void StepTopGunFightRuntime() {
-        if (_topGunFightRuntime is null
-            || _playerTerminalState != AircraftTerminalState.Flying
-            || _opponentTerminalState != AircraftTerminalState.Flying)
+        if (_topGunFightRuntime is null) {
+            _player?.ResetFlightParams();
             return;
+        }
+        if (_playerTerminalState != AircraftTerminalState.Flying
+            || _opponentTerminalState != AircraftTerminalState.Flying) {
+            _player.ResetFlightParams();
+            return;
+        }
+        if (_beat.PlayerAircraft.Id == AircraftCapability.F14ASurrogate.Id) {
+            var air = _player.AtmosphereModel.Sample(_player.State.Position.Y);
+            double mach = _player.AirspeedMps / Math.Max(air.SpeedOfSoundMps, 1e-6);
+            double casKts = _player.IndicatedAirspeedMps * AirData.MpsToKnots;
+            _player.SetEffectiveWingSpanM(
+                TopGunFightRuntime.EffectiveTomcatWingSpanM(mach, casKts, _beat.PlayerAir.WingSpanM));
+        } else {
+            _player.ResetFlightParams();
+        }
         var target = new Missiles.Aim9Pose(
             _bandit.State.Position,
             _bandit.State.VelocityVector());

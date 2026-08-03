@@ -3133,9 +3133,9 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     kicker: "1986 · training range",
     title: "Top Gun",
     sortie: "F-14A vs MiG-28 · guns and Sidewinders · DACT arena",
-    configuration: "F-14A or MiG-28 seat · M61 + AIM-9 · anime-1986 presentation",
-    brief: "Tomcat or aggressor MiG-28 over a Miramar-class training range—guns and heaters, one-on-one ACM. The dogfight slice is not flyable yet.",
-    controls: "Coming soon",
+    configuration: "F-14A or MiG-28 seat · M61 + AIM-9 · anime-1986 presentation · preview with ?preview=1",
+    brief: "Tomcat or aggressor MiG-28 over a Miramar-class training range—guns and heaters, one-on-one ACM. Preview flyable: acknowledge preview, pick your seat, then fight.",
+    controls: "Arrows fly · W/S power · F guns · R fox-two · V padlock · Tab target",
   }),
   "ace-duel": Object.freeze({
     kicker: "Raptor programme · final exam",
@@ -3162,6 +3162,12 @@ function topGunSeatAircraftArt(seat = selectedTopGunSeat) {
 function isTopGunBeatStaged(state = latestState) {
   return String(state?.mission_definition_id || "").includes("top-gun")
     || state?.presentation_theme === "top-gun-anime-1986";
+}
+
+function tryLaunchFoxTwo() {
+  if (!bridge?.LaunchFoxTwo || !isTopGunBeatStaged(latestState)) return false;
+  if (pauseReasons.size > 0 || frozen || latestState?.session_phase !== "ACTIVE") return false;
+  return bridge.LaunchFoxTwo() === true;
 }
 
 function updateTopGunPickerArt() {
@@ -10573,6 +10579,10 @@ function installInput(view) {
     }
 
     if (event.code === "KeyR") {
+      if (tryLaunchFoxTwo()) {
+        view.hud.armAudio?.();
+        return;
+      }
       restartMissionNow();
       return;
     }

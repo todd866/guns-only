@@ -129,6 +129,10 @@ public static partial class WebBridge {
     public static bool LaunchRapierShortRangeMissile() =>
         Session.LaunchRapierShortRangeMissile();
 
+    /// <summary>Top Gun AIM-9 launch — returns false on every other beat (including first-merge).</summary>
+    [JSExport]
+    public static bool LaunchFoxTwo() => Session.LaunchFoxTwo();
+
     [JSExport]
     public static void NudgeAssistedSpeed(int direction) =>
         Session.NudgeAssistedSpeed(direction);
