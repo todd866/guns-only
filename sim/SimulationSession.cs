@@ -266,6 +266,7 @@ public sealed class SimulationSession {
     bool _rapierMissileInFlight;
     double _rapierMissileImpactAtMs = double.PositiveInfinity;
     long _rapierMissileTargetSequence;
+    TopGunFightRuntime? _topGunFightRuntime;
     bool _rapierFormationSweepCommitted;
     bool _rapierFormationSweepRequested;
     RapierGunDrone? _rapierGunDrone;
@@ -437,6 +438,8 @@ public sealed class SimulationSession {
         && Lifecycle == LifecycleState.Active
         && _playerTerminalState == AircraftTerminalState.Flying;
     public int RapierMissilesRemaining => _rapierMissilesRemaining;
+    public int Aim9Remaining => _topGunFightRuntime?.Aim9Remaining ?? 0;
+    public bool Aim9InFlight => _topGunFightRuntime?.Aim9InFlight ?? false;
     public int RapierDogfightingDronesRemaining => _rapierDogfightingDronesRemaining;
     public bool RapierMissileInFlight => _rapierMissileInFlight;
     public double RapierMissileTimeToImpactSeconds => _rapierMissileInFlight
@@ -1592,6 +1595,29 @@ public sealed class SimulationSession {
         return true;
     }
 
+    public bool LaunchFoxTwo() {
+        if (_topGunFightRuntime is null
+            || Lifecycle != LifecycleState.Active
+            || _playerTerminalState != AircraftTerminalState.Flying
+            || _opponentTerminalState != AircraftTerminalState.Flying
+            || !PlayerWeaponsAuthorized)
+            return false;
+
+        var shooter = new Missiles.Aim9Pose(
+            _player.State.Position,
+            _player.State.VelocityVector());
+        var target = new Missiles.Aim9Pose(
+            _bandit.State.Position,
+            _bandit.State.VelocityVector());
+        if (!_topGunFightRuntime.TryLaunchFoxTwo(shooter, target, _simTimeMs))
+            return false;
+
+        ShowTransition(
+            $"FOX TWO · {_topGunFightRuntime.Aim9Remaining} REMAIN",
+            1800.0);
+        return true;
+    }
+
     public void FeedKey(GKey key, bool pressed) {
         if (key == GKey.Restart) {
             if (pressed) Restart();
@@ -2230,6 +2256,17 @@ public sealed class SimulationSession {
             RunFixedTick();
     }
 
+    void StepTopGunFightRuntime() {
+        if (_topGunFightRuntime is null
+            || _playerTerminalState != AircraftTerminalState.Flying
+            || _opponentTerminalState != AircraftTerminalState.Flying)
+            return;
+        var target = new Missiles.Aim9Pose(
+            _bandit.State.Position,
+            _bandit.State.VelocityVector());
+        _topGunFightRuntime.Step(FixedDeltaSeconds, target);
+    }
+
     void StepRapierMissile() {
         if (!_rapierMissileInFlight || _simTimeMs < _rapierMissileImpactAtMs) return;
         _rapierMissileInFlight = false;
@@ -2649,6 +2686,7 @@ public sealed class SimulationSession {
             ForceTerminalLimit(CombatRole.Player, includeFlying: true);
         StepDetachedOpponentWrecks();
         StepRapierMissile();
+        StepTopGunFightRuntime();
         if (_playerTerminalState == AircraftTerminalState.Flying) {
             StepRapierPursuit();
             UpdateRapierMissionGuidance();
@@ -3338,6 +3376,9 @@ public sealed class SimulationSession {
         _rapierManualOverrideUntilMs = double.NegativeInfinity;
         _rapierMissilesRemaining =
             Math.Max(0, _beat.ScriptedIntercept?.ShortRangeMissiles ?? 0);
+        _topGunFightRuntime = TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)
+            ? new TopGunFightRuntime()
+            : null;
         _rapierMissileInFlight = false;
         _rapierMissileImpactAtMs = double.PositiveInfinity;
         _rapierMissileTargetSequence = 0;
