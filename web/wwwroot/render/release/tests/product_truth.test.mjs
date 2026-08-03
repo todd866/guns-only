@@ -36,10 +36,14 @@ test("the browser and installed-app descriptions match the three production airc
   ]);
   const manifest = JSON.parse(manifestText);
   assert.match(catalogue, /Three production aircraft/);
-  assert.match(catalogue, /F-22 guns-only fight/);
-  assert.match(catalogue, /Rapier high-altitude balloon intercept/);
+  assert.match(catalogue, /Weekend Ride coming soon/);
+  assert.match(catalogue, /F-22 guns-only/);
+  assert.match(catalogue, /Rapier intercept/);
   assert.match(catalogue, /AH-1G Cobra Canyon/);
   assert.match(catalogue, /data-program-node="cobra-lab"/);
+  assert.match(catalogue, /data-program-node="weekend-ride"/);
+  assert.match(catalogue, /art\/jet-cobra\.webp/);
+  assert.match(catalogue, /art\/bike-yzf-r1\.webp/);
   assert.match(manifest.description, /F-22 guns-only dogfighting/);
   assert.match(manifest.description, /Rapier high-altitude balloon intercept/);
   assert.match(manifest.description, /AH-1G Cobra Canyon/);

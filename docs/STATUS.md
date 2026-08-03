@@ -13,6 +13,7 @@ catalog in `web/wwwroot/render/progression/campaign_progression.js`.
 ## Release-state meanings
 
 - **production** — visible on the public front door and accepted for normal launch.
+- **coming-soon** — visible on the public front door as a teaser; selectable for briefing, never launches.
 - **preview** — intentionally retained for development; requires explicit preview acknowledgement.
 - **quarantined** — has a known player-path or acceptance blocker; must fail closed before launch.
 - **retired** — retained only for history or migration and must not be routed.
@@ -33,6 +34,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | MIDGE-03 Facility Nine (`indoor`) | **quarantined** | `/indoor/` preview acknowledgement | Candidate UI now enforces doctrine-safe controls and blocks premature return | Re-drive the default stealth route and representative touch/keyboard paths |
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
 | Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Authoritative AH-1G flight foundation, terrain/collision route authority, copilot-gunner consent, compact flight diagnostics, and telemetry path | Fresh representative human desktop/touch route flight and complete green release gate |
+| Weekend Ride (`weekend-ride`) | **coming-soon** | Aircraft picker teaser | Design accepted; picker painting and Coming Soon briefing live | Motorcycle dynamics, helmet HUD, automation, and a representative human ride |
 
 ## Research-only packages
 

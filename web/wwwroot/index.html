@@ -2670,7 +2670,7 @@
 
     #ready-screen[data-mode="program"] .ready-mission-groups {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: clamp(10px, 2vw, 26px);
       overflow: visible;
     }
@@ -2704,10 +2704,11 @@
     }
 
     #ready-screen .sortie-choice[data-aircraft="cobra"] {
-      background-image:
-        linear-gradient(165deg, rgba(18, 42, 28, .18) 0%, rgba(6, 14, 10, .55) 48%, rgba(4, 10, 8, .78) 100%),
-        radial-gradient(120% 80% at 30% 20%, #6f8f52 0%, transparent 55%),
-        linear-gradient(135deg, #2a4630 0%, #0f1c14 55%, #1a2e22 100%);
+      background-image: image-set(url("./art/jet-cobra.webp") type("image/webp"));
+    }
+
+    #ready-screen .sortie-choice[data-aircraft="bike"] {
+      background-image: image-set(url("./art/bike-yzf-r1.webp") type("image/webp"));
     }
 
     #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]:hover { filter: brightness(.78); }
@@ -3234,15 +3235,13 @@
           <div class="ready-group-heading ready-program-heading">
             <div>
               <h2>Missions</h2>
-              <p>Three production aircraft: an endless F-22 guns-only fight, the Rapier high-altitude balloon intercept, and AH-1G Cobra Canyon.</p>
+              <p>Three production aircraft—F-22 guns-only, Rapier intercept, AH-1G Cobra Canyon—plus Weekend Ride coming soon.</p>
             </div>
             <output id="ready-program-progress"></output>
           </div>
           <!--
-            An AIRCRAFT picker. The owner's whole question at this screen is "what airplane am I
-            flying today?": the Raptor, the Rapier, or the Cobra. Quarantined and preview entries
-            remain in the catalogue source but stay hidden; each deep link fails closed at the
-            release gate unless the explicit ?preview=1 acknowledgement is present.
+            An AIRCRAFT picker: flyable production cards plus a Coming Soon teaser. Quarantined
+            and preview entries stay hidden; deep links fail closed unless ?preview=1 is present.
           -->
           <div class="ready-mission-groups">
             <div class="sortie-option" data-selected="true" data-program-state="available">
@@ -3261,6 +3260,12 @@
               <button type="button" class="sortie-choice" data-aircraft="cobra" data-program-node="cobra-lab" aria-pressed="false">
                 <span class="sortie-number">COBRA CANYON <b data-program-status="cobra-lab"></b></span>
                 <strong>AH-1G</strong>
+              </button>
+            </div>
+            <div class="sortie-option" data-selected="false" data-program-state="coming-soon">
+              <button type="button" class="sortie-choice" data-aircraft="bike" data-program-node="weekend-ride" aria-pressed="false">
+                <span class="sortie-number">WEEKEND RIDE <b data-program-status="weekend-ride"></b></span>
+                <strong>YZF-R1</strong>
               </button>
             </div>
             <div class="sortie-option" data-selected="false" data-program-state="available" hidden>

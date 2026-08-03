@@ -626,6 +626,11 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
     "the Rapier full mission must always be selectable");
   assert.ok(nodeIds.includes("cobra-lab"),
     "Cobra Canyon must be selectable from the Ready aircraft picker");
+  assert.ok(nodeIds.includes("weekend-ride"),
+    "Weekend Ride must be selectable as a Coming Soon teaser");
+  assert.match(appSource,
+    /experienceComingSoon\(selectedProgramNodeId\)[\s\S]*?Coming soon/,
+    "Coming Soon cards keep Fly disabled with an honest label");
   assert.equal(new Set(nodeIds).size, nodeIds.length, "no duplicate program nodes");
   assert.equal(buttons.filter((button) => button.attributes.id === "ready-start").length, 1);
   assert.match(indexSource, /role="dialog"[^>]*aria-modal="true"/);

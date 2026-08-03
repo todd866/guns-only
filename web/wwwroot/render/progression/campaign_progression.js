@@ -4,6 +4,7 @@ export const MAX_APPLIED_RAPIER_SORTIES = 64;
 
 export const EXPERIENCE_RELEASE_STATE = Object.freeze({
   PRODUCTION: "production",
+  COMING_SOON: "coming-soon",
   PREVIEW: "preview",
   QUARANTINED: "quarantined",
   RETIRED: "retired",
@@ -132,6 +133,19 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     visible: true,
     blocker: "",
   }),
+  experience({
+    id: "weekend-ride",
+    mission: null,
+    sequence: 10,
+    route: "/?program=weekend-ride",
+    aircraft: "YZF-R1",
+    title: "Weekend Ride",
+    shortObjective: "Free-drive a sourced Yamaha YZF-R1 on the painted 10,000 ft runway circuit.",
+    qualification: "",
+    releaseState: EXPERIENCE_RELEASE_STATE.COMING_SOON,
+    visible: true,
+    blocker: "Motorcycle dynamics, helmet HUD, and a representative human ride are still in progress.",
+  }),
 ]);
 
 export const CAMPAIGN_NODES = Object.freeze(
@@ -147,6 +161,10 @@ export function experienceById(experienceId) {
 
 export function experienceLaunchable(experienceId) {
   return experienceById(experienceId)?.releaseState === EXPERIENCE_RELEASE_STATE.PRODUCTION;
+}
+
+export function experienceComingSoon(experienceId) {
+  return experienceById(experienceId)?.releaseState === EXPERIENCE_RELEASE_STATE.COMING_SOON;
 }
 
 export function productionExperiences() {

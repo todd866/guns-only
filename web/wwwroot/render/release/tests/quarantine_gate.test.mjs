@@ -45,6 +45,19 @@ test("Cobra Canyon remains launchable on its standalone route", () => {
   assert.equal(access.experience.releaseState, "production");
 });
 
+test("Coming Soon teasers are selectable without launching or requiring preview", () => {
+  const access = experienceAccess("weekend-ride", {
+    href: "https://guns-only.com/?program=weekend-ride",
+  });
+  assert.equal(access.allowed, true);
+  assert.equal(access.preview, false);
+  assert.equal(access.experience.releaseState, "coming-soon");
+  assert.deepEqual(releaseStateAccess("coming-soon", false), {
+    allowed: true,
+    preview: false,
+  });
+});
+
 test("unknown route ids never become launchable", () => {
   const access = experienceAccess("missing", {
     href: "https://guns-only.com/?preview=1",

@@ -137,6 +137,7 @@ import {
   applyRapierSortieCredits,
   campaignNode,
   experienceById,
+  experienceComingSoon,
   experienceLaunchable,
   loadCampaignProfile,
   nextCampaignNode,
@@ -2544,7 +2545,7 @@ function shellProgramEntry(programId) {
   const experience = experienceById(programId);
   if (experience?.mission == null
     && experience.visible
-    && experienceLaunchable(experience.id)) {
+    && (experienceLaunchable(experience.id) || experienceComingSoon(experience.id))) {
     return experience;
   }
   return null;
@@ -3105,6 +3106,14 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     configuration: "AH-1G flight-foundation authority · route complete when corridor remaining closes · not a surveyed combat-representation product",
     brief: "Pick a canyon route, keep the rotor in the mask, and work the gunner when a target appears. Fly opens the dedicated Cobra Canyon surface with AH-1G authority.",
     controls: "W/S collective · arrows cyclic · A/D yaw · F gunner consent · click a target to cue the gunner",
+  }),
+  "weekend-ride": Object.freeze({
+    kicker: "Off duty · 10,000 ft runway",
+    title: "Weekend Ride",
+    sortie: "YZF-R1 · painted circuit · free drive",
+    configuration: "Yamaha YZF-R1 · helmet view · no combat · coming soon",
+    brief: "Fighter pilots ride on weekends. The Rapier strip becomes a painted circuit for a liter-bike free ride—split authority for throttle, brake, steer, and rider weight. Not flyable in this build yet.",
+    controls: "W/S throttle/brake · A/D steer · arrows rider weight · Q/E gears\nComing soon",
   }),
   "ace-duel": Object.freeze({
     kicker: "Raptor programme · final exam",
@@ -3867,8 +3876,13 @@ function renderCampaignProgress() {
     button.closest(".sortie-option")?.setAttribute("data-selected", String(selected));
     button.closest(".sortie-option")?.setAttribute(
       "data-program-state",
-      access.allowed ? (access.preview ? "preview" : "available")
-        : experience?.releaseState ?? "unavailable",
+      !access.allowed
+        ? (experience?.releaseState ?? "unavailable")
+        : access.preview
+          ? "preview"
+          : experienceComingSoon(nodeId)
+            ? "coming-soon"
+            : "available",
     );
     if (selected) button.setAttribute("aria-current", "step");
     else button.removeAttribute("aria-current");
@@ -4290,9 +4304,11 @@ function renderPauseUi(state = latestState) {
   const blockers = [...pauseReasons].filter((reason) =>
     reason !== "ready" && reason !== "finished"
       && reason !== "background" && reason !== "session");
+  const comingSoon = ready && experienceComingSoon(selectedProgramNodeId);
   readyStart.disabled = buildIdentityBlocksSortie()
-    || routeBlocked || blockers.length > 0 || ((ready || finished) && background);
+    || routeBlocked || comingSoon || blockers.length > 0 || ((ready || finished) && background);
   if (routeBlocked) readyStart.textContent = "Unavailable in this build";
+  else if (comingSoon) readyStart.textContent = "Coming soon";
 
   if (showScreen && !settingsPaused && !wasScreenVisible) queueMicrotask(focusReadyScreen);
   else if (showScreen && !settingsPaused && startWasDisabled && !readyStart.disabled)
@@ -4432,6 +4448,7 @@ function launchMission(index = selectedBeat) {
   if (blockedProgramExperience
     || !experienceAccess(selectedProgramNodeId, window.location).allowed) return false;
   const standalone = experienceById(selectedProgramNodeId);
+  if (experienceComingSoon(selectedProgramNodeId)) return false;
   if (standalone?.mission == null && standalone.route) {
     window.location.assign(standalone.route);
     return true;
