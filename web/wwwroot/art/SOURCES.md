@@ -88,6 +88,20 @@ These images are no longer in the tree; the filenames were reused by v3.
 - Epistemic label: `fiction`. Rights: project-generated; no third-party asset known to be
   embedded.
 
+### Top Gun anime-1986 picker (F-14A, MiG-28 aggressor)
+
+- Created: 2026-08-03.
+- Orchestrating model: Cursor Composer with workspace Python/Pillow pipeline.
+- Intent: saturated late-day Pacific cel sky, hard aircraft silhouettes, and sparse green service
+  lamps — distinct from the dawn hangar series and scoped to the Top Gun experience picker /
+  `top-gun-anime-1986` presentation theme.
+- Inputs: no third-party reference image. F-14A and MiG-28 names denote public-data / fiction
+  silhouettes only; neither painting is an engineering or Paramount asset.
+- Subjects: stylized Tomcat twin-tail and MiG-28 aggressor delta (F-5-class fiction) for Ready
+  picker backgrounds. `jet-mig-28.webp` is reserved for the seat toggle in Task 9.
+- Epistemic label: `fiction`.
+- Rights status: project-generated; no Paramount marks or third-party asset is known to be embedded.
+
 This shell-only use is a reviewed exception to the earlier mood-board rule in ADR-0003. Generated
 stills still may not become world geometry, textures, factual briefing imagery, or cutscene truth
 without a separate content-pack rights and provenance review.
@@ -113,5 +127,7 @@ table further down stays the single place a filename is bound to a hash.
 | `jet-rapier.webp` | 900×1600 | 21572 | `29699bb08e1878465d1cb21adc07da83f3e7b4479dbe8d57a375a74c05d3ec5b` | Rapier picker poster |
 | `jet-cobra.webp` | 900×1600 | 23000 | `2789e1aa005cb61482b032cee38913f93704abc047d2f630f0d98cafca616e1b` | AH-1G Cobra picker poster |
 | `bike-yzf-r1.webp` | 900×1600 | 31680 | `a42fe42d802e3f3b1ae61fe5b70567226aab2ad28b84349d57c38d6fa4618869` | Weekend Ride picker poster |
+| `jet-f14.webp` | 900×900 | 12660 | `a1168d626220cbb21cb7445626c155ae68bb37a94b50fadacdd42bb69d51900b` | Top Gun F-14A picker painting |
+| `jet-mig-28.webp` | 900×900 | 11212 | `18407c631b85942d7bf1a8f715c1b933cb8c547f90adc16b3925a5eb81894748` | Top Gun MiG-28 aggressor picker painting |
 | `menu-hangar-small.webp` | 900×600 | 8518 | `a17a868a3905c6fc9d8217ae156c7123228baaf1009dce7ef781e9e613ebde45` | Narrow/loading fallback |
 | `menu-hangar.webp` | 1600×1067 | 18382 | `2b0bd29b275e6993c0ad9f355dfc5c048b1e05abaf2cd60323784f881ff9f070` | Wide/loading background |

@@ -2412,6 +2412,75 @@
     }
 
     .high-contrast #hud { filter: contrast(1.32) brightness(1.14); }
+
+    /* Top Gun · anime-1986 experience skin (Ready + in-flight only; see theme.js). */
+    html.top-gun-anime-1986 {
+      --tg-sky-top: #ff5c30;
+      --tg-sky-mid: #ffb048;
+      --tg-sky-horizon: #ffd996;
+      --tg-sea: #122444;
+      --tg-tape: rgba(255, 232, 180, .78);
+      --tg-tape-edge: rgba(18, 28, 52, .92);
+      --tg-lamp: #60e292;
+    }
+
+    html.top-gun-anime-1986,
+    html.top-gun-anime-1986 body {
+      background: linear-gradient(
+        180deg,
+        var(--tg-sky-top) 0%,
+        var(--tg-sky-mid) 46%,
+        var(--tg-sky-horizon) 68%,
+        var(--tg-sea) 70%,
+        #040a14 100%
+      );
+    }
+
+    html.top-gun-anime-1986:not(.run-paused) #scene {
+      filter: saturate(1.28) contrast(1.06) brightness(1.04);
+    }
+
+    html.top-gun-anime-1986 #hud {
+      filter: saturate(1.42) contrast(1.12);
+    }
+
+    html.top-gun-anime-1986 #hud text,
+    html.top-gun-anime-1986 #hud tspan {
+      paint-order: stroke fill;
+      stroke: rgba(8, 12, 24, .72);
+      stroke-width: 2.5px;
+    }
+
+    html.top-gun-anime-1986.run-paused #ready-screen {
+      background:
+        radial-gradient(120% 80% at 50% 18%, rgba(255, 196, 96, .28), transparent 62%),
+        linear-gradient(180deg, rgba(255, 120, 48, .22) 0%, rgba(4, 10, 20, .88) 72%);
+    }
+
+    html.top-gun-anime-1986.run-paused #ready-screen .ready-card {
+      border: 2px solid var(--tg-tape);
+      border-radius: 2px;
+      box-shadow:
+        inset 0 0 0 1px var(--tg-tape-edge),
+        0 0 36px rgba(255, 160, 64, .18);
+      background: rgba(8, 14, 28, .82);
+    }
+
+    html.top-gun-anime-1986.run-paused #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft] {
+      border-color: var(--tg-lamp);
+      box-shadow: 0 0 0 1px rgba(96, 226, 146, .36), 0 0 44px rgba(96, 226, 146, .34);
+    }
+
+    html.top-gun-anime-1986.run-paused #ready-screen #ready-start {
+      border: 2px solid var(--tg-tape);
+      background: rgba(255, 196, 96, .18);
+      box-shadow: inset 0 0 0 1px var(--tg-tape-edge), 0 0 30px rgba(255, 160, 64, .22);
+    }
+
+    html.top-gun-anime-1986.run-paused #ready-screen #ready-start::after {
+      border-color: var(--tg-lamp);
+    }
+
     .high-contrast .ready-card,
     .high-contrast .settings-card { border-color: rgba(141, 255, 179, .72); background: rgba(0, 9, 14, .985); }
     .large-interface-text .ready-card,
@@ -2860,6 +2929,14 @@
 
     #ready-screen .sortie-choice[data-aircraft="bike"] {
       background-image: image-set(url("./art/bike-yzf-r1.webp") type("image/webp"));
+    }
+
+    #ready-screen .sortie-choice[data-aircraft="f14"] {
+      background-image: image-set(url("./art/jet-f14.webp") type("image/webp"));
+    }
+
+    #ready-screen .sortie-choice[data-aircraft="mig-28"] {
+      background-image: image-set(url("./art/jet-mig-28.webp") type("image/webp"));
     }
 
     #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]:hover { filter: brightness(.9) saturate(.95); }
@@ -3422,7 +3499,7 @@
               </button>
             </div>
             <div class="sortie-option" data-selected="false" data-program-state="available">
-              <button type="button" class="sortie-choice" data-program-node="top-gun" aria-pressed="false">
+              <button type="button" class="sortie-choice" data-aircraft="f14" data-program-node="top-gun" aria-pressed="false">
                 <span class="sortie-number">TOP GUN <b data-program-status="top-gun"></b></span>
                 <strong>F-14A</strong>
               </button>
