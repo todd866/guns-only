@@ -10,6 +10,7 @@ import {
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
 } from "../render/cobra/cobra_canyon_tour.js?v=251";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=251";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -61,9 +62,20 @@ const hazardMetric = document.querySelector("#hazards");
 const aglMetric = document.querySelector("#agl");
 const powerMetric = document.querySelector("#power");
 const gunnerMetric = document.querySelector("#gunner");
+const controlMetric = document.querySelector("#control");
+const ammoMetric = document.querySelector("#ammo");
+const fobMetric = document.querySelector("#fob");
+const killsMetric = document.querySelector("#kills");
+const balanceFill = document.querySelector("#balance-fill");
+const hudAmmo = document.querySelector("#hud-ammo");
+const hudFob = document.querySelector("#hud-fob");
+const hudKills = document.querySelector("#hud-kills");
 let bridge = null;
 let authorityState = null;
 let collectiveLever = 0.5;
+let groundWarPresentation = null;
+let hostileTargetIds = [];
+let hostileTargetIndex = -1;
 const telemetrySession = `web-cobra-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const telemetryRows = [];
 let telemetryLastFlushMs = 0;
@@ -191,6 +203,10 @@ function recordTelemetry(nowMs) {
       cobra_gunner_state: authorityState.gunner.state,
       cobra_gunner_reason: authorityState.gunner.reason,
       cobra_fire_authorized: authorityState.gunner.fire_authorized,
+      cobra_control: authorityState.ground_war?.control,
+      cobra_ammo: authorityState.ground_war?.ammo_remaining,
+      cobra_fob_range_m: authorityState.ground_war?.fob_range_m,
+      cobra_hostile_kills: authorityState.ground_war?.debrief?.hostile_kills,
     },
   });
   if (nowMs - telemetryLastFlushMs < 10_000 || telemetryRows.length < 120) return;
@@ -352,11 +368,14 @@ function restartRoute() {
 function rebuildPresentation() {
   if (!world) return;
   presentation?.dispose();
+  groundWarPresentation?.dispose();
   plan = planCobraCanyonWorld(world, { qualityTier: qualitySelect.value });
   presentation = createCobraCanyonPresentation(THREE, plan, {
     qualityTier: qualitySelect.value,
   });
+  groundWarPresentation = createCobraGroundWarPresentation(THREE);
   scene.add(presentation.group);
+  scene.add(groundWarPresentation.group);
   restartRoute();
   resize();
   frameSamples.fill(0);
@@ -365,7 +384,39 @@ function rebuildPresentation() {
   frameCounter = 0;
   frameP95Ms = 0;
   lastTimeMs = performance.now();
-  setStatus(`${plan.counts.landmarks} landmarks · ${plan.counts.hazards} authority hazards`, "ready");
+  setStatus(`${plan.counts.landmarks} landmarks · ground war online`, "ready");
+}
+
+function refreshGroundTargets() {
+  const units = authorityState?.ground_war?.units ?? [];
+  hostileTargetIds = units
+    .filter((unit) => unit.alive && unit.faction === "hostile")
+    .map((unit) => unit.id);
+  const previous = targetSelect.value;
+  targetSelect.replaceChildren();
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "No target";
+  targetSelect.append(none);
+  for (const unit of units.filter((candidate) => candidate.alive)) {
+    const option = document.createElement("option");
+    option.value = unit.id;
+    option.textContent = `${unit.faction === "friendly" ? "FRI" : "HOS"} · ${unit.role} · ${unit.id.slice(-7)}`;
+    targetSelect.append(option);
+  }
+  if (previous && [...targetSelect.options].some((option) => option.value === previous))
+    targetSelect.value = previous;
+  else if (hostileTargetIds.length) {
+    hostileTargetIndex = 0;
+    targetSelect.value = hostileTargetIds[0];
+  }
+}
+
+function cycleHostileTarget() {
+  if (!hostileTargetIds.length) return;
+  hostileTargetIndex = (hostileTargetIndex + 1) % hostileTargetIds.length;
+  targetSelect.value = hostileTargetIds[hostileTargetIndex];
+  bridge?.SetGunnerTarget(targetSelect.value || null);
 }
 
 function updateTour(deltaSeconds) {
@@ -395,8 +446,9 @@ function updateManual(deltaSeconds) {
   if (keys.has("KeyS")) movement.sub(forward);
   if (keys.has("KeyD")) movement.add(right);
   if (keys.has("KeyA")) movement.sub(right);
+  // F is reserved for gunner engagement consent (AH-1G crew contract).
   if (keys.has("KeyR")) movement.y += 1;
-  if (keys.has("KeyF")) movement.y -= 1;
+  if (keys.has("KeyC")) movement.y -= 1;
   if (movement.lengthSq() > 0) {
     const boost = keys.has("ShiftLeft") || keys.has("ShiftRight") ? 2.8 : 1;
     movement.normalize().multiplyScalar(Number(speedInput.value) * boost * deltaSeconds);
@@ -419,6 +471,8 @@ function updateManual(deltaSeconds) {
     bridge.SetEngagementConsent(keys.has("KeyF"));
     bridge.Advance(deltaSeconds);
     authorityState = JSON.parse(bridge.GetState());
+    refreshGroundTargets();
+    groundWarPresentation?.sync(authorityState.ground_war);
     syncAuthorityCamera();
     recordTelemetry(lastTimeMs);
   }
@@ -485,6 +539,31 @@ function updateMetrics(aglM) {
   gunnerMetric.textContent = authorityState
     ? `${authorityState.gunner.state} · ${authorityState.gunner.reason}`
     : "—";
+  const war = authorityState?.ground_war;
+  if (war) {
+    const controlPct = ((war.control + 1) * 50).toFixed(0);
+    controlMetric.textContent = `${war.control >= 0 ? "+" : ""}${war.control.toFixed(2)} · trend ${war.trend.toFixed(3)}`;
+    ammoMetric.textContent = war.ammo_dry
+      ? "DRY · return to FOB"
+      : `${war.ammo_remaining}/${war.ammo_capacity}${war.ammo_bingo ? " · BINGO" : ""}`;
+    fobMetric.textContent = war.over_fob
+      ? "ON PAD · rearm"
+      : `${(war.fob_range_m / 1_000).toFixed(1)} km · ${(war.fob_bearing_rad * 180 / Math.PI + 360) % 360 | 0}°`;
+    killsMetric.textContent = `${war.debrief.hostile_kills} hos · ${war.debrief.friendly_kills} fri · ${war.debrief.fob_rearms} rearm`;
+    balanceFill.style.left = `${controlPct}%`;
+    hudAmmo.textContent = war.ammo_dry
+      ? "AMMO DRY"
+      : `AMMO ${war.ammo_remaining}`;
+    hudFob.textContent = war.over_fob
+      ? "FOB PAD"
+      : `FOB ${(war.fob_range_m / 1_000).toFixed(1)} KM`;
+    hudKills.textContent = `KILLS ${war.debrief.hostile_kills}`;
+  } else {
+    controlMetric.textContent = "—";
+    ammoMetric.textContent = "—";
+    fobMetric.textContent = "—";
+    killsMetric.textContent = "—";
+  }
   if (authorityState?.status !== "active") {
     setStatus(`MISSION ${authorityState.status.replaceAll("-", " ").toUpperCase()}`, "error");
   }
@@ -506,6 +585,16 @@ function animate(timeMs) {
     cameraAglM: aglM,
     ambientBudgetLevel: ambientBudgetLevel(),
   });
+  if (tourInput.checked && bridge) {
+    // Keep the ground war alive during guided preview even when the camera is on rails.
+    bridge.SetControls(collectiveLever, 0, 0, 0);
+    bridge.SetGunnerTarget(null);
+    bridge.SetEngagementConsent(false);
+    bridge.Advance(deltaSeconds);
+    authorityState = JSON.parse(bridge.GetState());
+    refreshGroundTargets();
+  }
+  groundWarPresentation?.sync(authorityState?.ground_war ?? null);
   renderer.render(scene, camera);
   recordFrameDuration(rawDeltaMs);
   updateMetrics(aglM);
@@ -513,10 +602,16 @@ function animate(timeMs) {
 
 function isManualControl(code) {
   return code === "KeyW" || code === "KeyS" || code === "KeyA" || code === "KeyD"
-    || code === "KeyR" || code === "KeyF" || code.startsWith("Arrow");
+    || code === "KeyR" || code === "KeyC" || code === "KeyF" || code.startsWith("Arrow");
 }
 
 window.addEventListener("keydown", (event) => {
+  if (event.code === "Tab") {
+    event.preventDefault();
+    tourInput.checked = false;
+    cycleHostileTarget();
+    return;
+  }
   if (!isManualControl(event.code) && event.code !== "ShiftLeft" && event.code !== "ShiftRight") return;
   event.preventDefault();
   keys.add(event.code);
@@ -528,6 +623,9 @@ window.addEventListener("resize", resize, { passive: true });
 routeSelect.addEventListener("change", restartRoute);
 qualitySelect.addEventListener("change", rebuildPresentation);
 resetButton.addEventListener("click", restartRoute);
+targetSelect.addEventListener("change", () => {
+  bridge?.SetGunnerTarget(targetSelect.value || null);
+});
 speedInput.addEventListener("input", () => {
   speedValue.textContent = `${speedInput.value} m/s`;
 });
@@ -552,6 +650,7 @@ window.addEventListener("pagehide", () => {
   void flushTelemetry();
   cancelAnimationFrame(animationFrame);
   presentation?.dispose();
+  groundWarPresentation?.dispose();
   renderer.dispose();
 }, { once: true });
 
@@ -591,7 +690,9 @@ async function boot() {
     bridge.StartRoute(routeSelect.selectedIndex);
     authorityState = JSON.parse(bridge.GetState());
     collectiveLever = authorityState.vehicle.collective;
-    setStatus("AH-1G AUTHORITY ONLINE · MANUAL FLIGHT", "ready");
+    refreshGroundTargets();
+    groundWarPresentation?.sync(authorityState.ground_war);
+    setStatus("AH-1G AUTHORITY ONLINE · GROUND WAR LIVE", "ready");
     lastTimeMs = performance.now();
     animationFrame = requestAnimationFrame(animate);
   } catch (error) {
