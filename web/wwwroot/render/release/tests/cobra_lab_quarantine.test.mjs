@@ -55,11 +55,11 @@ test("Cobra Lab gates before loading its Build-versioned runtime", () => {
     new RegExp(
       `await globalThis\\.__gunsPrebootReady;[\\s\\S]*?`
       + `renderExperienceGate\\(\\{ experienceId: "cobra-lab" \\}\\)[\\s\\S]*?`
-      + `if \\(access\\.allowed\\) await import\\("\\.\\/main\\.js\\?v=${RELEASE_BUILD}"\\)`,
+      + `if \\(access\\.allowed\\) await import\\("/cobra-lab/main\\.js\\?v=${RELEASE_BUILD}"\\)`,
     ),
     "only an acknowledged preview may request the world runtime");
   assert.match(entrypoint,
-    new RegExp(`styles\\.css\\?v=${RELEASE_BUILD}`));
+    new RegExp(`/cobra-lab/styles\\.css\\?v=${RELEASE_BUILD}`));
 });
 
 test("Cobra Lab direct runtime imports share the Build stamp", () => {
