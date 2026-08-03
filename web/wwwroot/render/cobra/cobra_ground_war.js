@@ -56,6 +56,20 @@ export function createCobraGroundWarPresentation(THREE) {
   /** @type {import("../../vendor/three.module.js").Object3D[]} */
   const transientEffects = [];
 
+  const selection = new THREE.Mesh(
+    new THREE.CylinderGeometry(11, 11, 0.7, 24),
+    new THREE.MeshStandardMaterial({
+      color: 0xffd76a,
+      roughness: 0.5,
+      metalness: 0.1,
+      transparent: true,
+      opacity: 0.7,
+    }),
+  );
+  selection.name = "COBRA_GROUND_WAR_SELECTION";
+  selection.visible = false;
+  effectRoot.add(selection);
+
   function ensureUnit(unit) {
     let entry = unitMeshes.get(unit.id);
     if (entry) return entry;
@@ -155,7 +169,7 @@ export function createCobraGroundWarPresentation(THREE) {
     transientEffects.push(smoke);
   }
 
-  function sync(groundWar) {
+  function sync(groundWar, selectedTargetId = null) {
     const now = performance.now();
     for (let index = transientEffects.length - 1; index >= 0; index -= 1) {
       const effect = transientEffects[index];
@@ -197,6 +211,17 @@ export function createCobraGroundWarPresentation(THREE) {
       entry.mesh.visible = false;
     }
 
+    const selected = selectedTargetId
+      ? (groundWar.units ?? []).find((unit) => unit.id === selectedTargetId && unit.alive)
+      : null;
+    if (selected) {
+      selection.visible = true;
+      selection.position.set(selected.x_m, selected.y_m + 0.5, -selected.z_m);
+      selection.material.opacity = 0.5 + 0.25 * Math.sin(now / 170);
+    } else {
+      selection.visible = false;
+    }
+
     for (const site of groundWar.sites ?? []) {
       const entry = ensureSite(site);
       entry.mesh.position.set(site.x_m, site.y_m + 0.6, -site.z_m);
@@ -230,6 +255,9 @@ export function createCobraGroundWarPresentation(THREE) {
       effect.material?.dispose?.();
     }
     transientEffects.length = 0;
+    effectRoot.remove(selection);
+    selection.geometry.dispose();
+    selection.material.dispose();
     group.removeFromParent();
   }
 

@@ -11,6 +11,7 @@ import {
   sampleCobraCanyonTour,
 } from "../render/cobra/cobra_canyon_tour.js?v=252";
 import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=252";
+import { gunnerStatusText } from "../render/cobra/cobra_gunner_status.js?v=252";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -73,6 +74,7 @@ const hudAmmo = document.querySelector("#hud-ammo");
 const hudFob = document.querySelector("#hud-fob");
 const hudKills = document.querySelector("#hud-kills");
 const hudTarget = document.querySelector("#hud-target");
+const hudGunner = document.querySelector("#hud-gunner");
 const objectiveLine = document.querySelector("#objective-line");
 const objectiveDetail = document.querySelector("#objective-detail");
 const debrief = document.querySelector("#debrief");
@@ -87,6 +89,7 @@ let collectiveLever = 0.5;
 let groundWarPresentation = null;
 let hostileTargetIds = [];
 let hostileTargetIndex = -1;
+let lastTargetKey = null;
 const telemetrySession = `web-cobra-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const telemetryRows = [];
 let telemetryLastFlushMs = 0;
@@ -383,8 +386,16 @@ function restartRoute() {
   routeComplete = false;
   placeCameraOnRoute();
   updateRouteCard();
+  lastTargetKey = null;
   refreshGroundTargets();
-  groundWarPresentation?.sync(authorityState?.ground_war ?? null);
+  groundWarPresentation?.sync(authorityState?.ground_war ?? null, targetSelect.value || null);
+  // Restart must clear the terminal banner, otherwise "MISSION VEHICLE AUTHORITY LOST"
+  // and data-error stay stale above a live sortie.
+  if (bridge) {
+    setStatus(PLAY_MODE
+      ? "HOLD THE BRIDGE · AH-1G ONLINE"
+      : "AH-1G AUTHORITY ONLINE · LAB", "ready");
+  }
 }
 
 function rebuildPresentation() {
@@ -411,8 +422,22 @@ function rebuildPresentation() {
 
 function refreshGroundTargets() {
   const units = authorityState?.ground_war?.units ?? [];
+  // Rebuild only when the living set changes: per-frame DOM churn reset focus and the
+  // ever-shuffling order made Tab cycling unpredictable.
+  const aliveKey = units
+    .filter((unit) => unit.alive)
+    .map((unit) => unit.id)
+    .sort()
+    .join("|");
+  if (aliveKey === lastTargetKey) return;
+  lastTargetKey = aliveKey;
+  const vehicle = authorityState?.vehicle;
+  const distanceToPlayer = (unit) => vehicle
+    ? Math.hypot(unit.x_m - vehicle.x_m, unit.z_m - vehicle.z_m)
+    : 0;
   hostileTargetIds = units
     .filter((unit) => unit.alive && unit.faction === "hostile")
+    .sort((a, b) => distanceToPlayer(a) - distanceToPlayer(b))
     .map((unit) => unit.id);
   const previous = targetSelect.value;
   targetSelect.replaceChildren();
@@ -453,28 +478,32 @@ function updateTour(deltaSeconds) {
 }
 
 function updateManual(deltaSeconds) {
-  const lookRate = 1.12;
-  if (keys.has("ArrowLeft")) yaw += lookRate * deltaSeconds;
-  if (keys.has("ArrowRight")) yaw -= lookRate * deltaSeconds;
-  if (keys.has("ArrowUp")) pitch += lookRate * deltaSeconds;
-  if (keys.has("ArrowDown")) pitch -= lookRate * deltaSeconds;
-  pitch = THREE.MathUtils.clamp(pitch, -1.18, 0.72);
-  camera.rotation.set(pitch, yaw, 0);
+  if (!bridge) {
+    // Vestigial freelook: pre-authority camera control only. Once the bridge owns the
+    // camera, syncAuthorityCamera overwrites these position/rotation writes every frame.
+    const lookRate = 1.12;
+    if (keys.has("ArrowLeft")) yaw += lookRate * deltaSeconds;
+    if (keys.has("ArrowRight")) yaw -= lookRate * deltaSeconds;
+    if (keys.has("ArrowUp")) pitch += lookRate * deltaSeconds;
+    if (keys.has("ArrowDown")) pitch -= lookRate * deltaSeconds;
+    pitch = THREE.MathUtils.clamp(pitch, -1.18, 0.72);
+    camera.rotation.set(pitch, yaw, 0);
 
-  forward.set(Math.sin(yaw), 0, -Math.cos(yaw));
-  right.set(Math.cos(yaw), 0, Math.sin(yaw));
-  movement.set(0, 0, 0);
-  if (keys.has("KeyW")) movement.add(forward);
-  if (keys.has("KeyS")) movement.sub(forward);
-  if (keys.has("KeyD")) movement.add(right);
-  if (keys.has("KeyA")) movement.sub(right);
-  // F is reserved for gunner engagement consent (AH-1G crew contract).
-  if (keys.has("KeyR")) movement.y += 1;
-  if (keys.has("KeyC")) movement.y -= 1;
-  if (movement.lengthSq() > 0) {
-    const boost = keys.has("ShiftLeft") || keys.has("ShiftRight") ? 2.8 : 1;
-    movement.normalize().multiplyScalar(Number(speedInput.value) * boost * deltaSeconds);
-    camera.position.add(movement);
+    forward.set(Math.sin(yaw), 0, -Math.cos(yaw));
+    right.set(Math.cos(yaw), 0, Math.sin(yaw));
+    movement.set(0, 0, 0);
+    if (keys.has("KeyW")) movement.add(forward);
+    if (keys.has("KeyS")) movement.sub(forward);
+    if (keys.has("KeyD")) movement.add(right);
+    if (keys.has("KeyA")) movement.sub(right);
+    // F is reserved for gunner engagement consent (AH-1G crew contract).
+    if (keys.has("KeyR")) movement.y += 1;
+    if (keys.has("KeyC")) movement.y -= 1;
+    if (movement.lengthSq() > 0) {
+      const boost = keys.has("ShiftLeft") || keys.has("ShiftRight") ? 2.8 : 1;
+      movement.normalize().multiplyScalar(Number(speedInput.value) * boost * deltaSeconds);
+      camera.position.add(movement);
+    }
   }
   if (bridge) {
     const collectiveRate = keys.has("KeyS") ? 1 : keys.has("KeyW") ? -1 : 0;
@@ -494,8 +523,10 @@ function updateManual(deltaSeconds) {
       bridge.SetEngagementConsent(keys.has("KeyF"));
       bridge.Advance(deltaSeconds);
       authorityState = JSON.parse(bridge.GetState());
+      // QA seam: headless smoke scripts steer against authoritative truth, not DOM guesses.
+      window.__gunsOnlyCobraAuthority = authorityState;
       refreshGroundTargets();
-      groundWarPresentation?.sync(authorityState.ground_war);
+      groundWarPresentation?.sync(authorityState.ground_war, targetSelect.value || null);
       recordTelemetry(lastTimeMs);
     }
     syncAuthorityCamera();
@@ -591,9 +622,13 @@ function updateObjectiveHud(war) {
   setText(hudKills, `KILLS ${war.debrief?.hostile_kills ?? 0}`);
   const selected = authorityState?.gunner?.selected_target_id;
   setText(hudTarget, selected ? `TARGET ${selected.split(".").pop()}` : "TARGET —");
+  setText(hudGunner, gunnerStatusText(authorityState?.gunner, war));
   if (war.ammo_dry) {
     setText(objectiveLine, "BINGO / DRY · REARM AT CAMP EMBER");
     setText(objectiveDetail, "Put the skids on the Camp Ember pad, then return to the fight");
+  } else if (war.ammo_bingo) {
+    setText(objectiveLine, "BINGO AMMO · CAMP EMBER SOON");
+    setText(objectiveDetail, "Gun can under a fifth — break off for the pad before it runs dry");
   } else if ((war.victory_hold_progress ?? 0) > 0) {
     setText(objectiveLine, `HOLDING FRIENDLY CONTROL · ${holdPct}%`);
     setText(objectiveDetail, "Keep tipping the fight — do not let hostiles claw it back");
@@ -669,7 +704,7 @@ function animate(timeMs) {
     authorityState = JSON.parse(bridge.GetState());
     refreshGroundTargets();
   }
-  groundWarPresentation?.sync(authorityState?.ground_war ?? null);
+  groundWarPresentation?.sync(authorityState?.ground_war ?? null, targetSelect?.value || null);
   renderer.render(scene, camera);
   recordFrameDuration(rawDeltaMs);
   updateMetrics(aglM);

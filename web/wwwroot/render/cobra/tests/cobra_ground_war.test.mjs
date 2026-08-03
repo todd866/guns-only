@@ -147,3 +147,47 @@ test("ground war presentation schema and sync create faction markers from snapsh
   presentation.dispose();
   assert.equal(unitRoot.children.length, 0);
 });
+
+function findByName(root, name) {
+  if (root.name === name) return root;
+  for (const child of root.children ?? []) {
+    const found = findByName(child, name);
+    if (found) return found;
+  }
+  return null;
+}
+
+test("selection marker tracks the selected unit and clears when unselected", () => {
+  const presentation = createCobraGroundWarPresentation(fakeThree());
+  const war = {
+    control: 0,
+    sites: [],
+    events: [],
+    units: [{
+      id: "ground.hostile.infantryclump.001",
+      faction: "hostile",
+      role: "infantry",
+      alive: true,
+      health: 40,
+      max_health: 40,
+      x_m: 10,
+      y_m: 101,
+      z_m: -20,
+      home_site_id: "site.iron-bell-bridge.v1",
+    }],
+  };
+
+  presentation.sync(war, "ground.hostile.infantryclump.001");
+  const selection = findByName(presentation.group, "COBRA_GROUND_WAR_SELECTION");
+  assert.ok(selection, "selection marker exists");
+  assert.equal(selection.visible, true);
+  assert.equal(selection.position.x, 10);
+  assert.equal(selection.position.z, 20);
+
+  presentation.sync(war, null);
+  assert.equal(selection.visible, false);
+
+  presentation.sync(war, "ground.hostile.infantryclump.999");
+  assert.equal(selection.visible, false);
+  presentation.dispose();
+});

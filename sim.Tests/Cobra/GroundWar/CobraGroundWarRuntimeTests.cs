@@ -89,7 +89,9 @@ public class CobraGroundWarRuntimeTests
     [Fact]
     public void DryMagazineCannotDamageTargets()
     {
-        var magazine = new CobraTurretMagazine(capacityRounds: 1, fireRateRoundsPerSecond: 100.0);
+        // 240 rps so one 120 Hz window still expends a whole round; sub-rate windows no longer
+        // invent rounds (fractional pacing), which is what this fixture previously relied on.
+        var magazine = new CobraTurretMagazine(capacityRounds: 1, fireRateRoundsPerSecond: 240.0);
         var war = new CobraGroundWarRuntime(
             CobraCanyonDefinition.Create(), new FlatTerrain(), seed: 3, magazine);
         GroundUnit hostile = war.LivingUnits()
