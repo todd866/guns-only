@@ -2535,19 +2535,31 @@ let activeView = null;
 let latestState = null;
 let campaignProfile = loadCampaignProfile();
 const requestedProgramId = new URLSearchParams(window.location.search).get("program");
-const requestedProgramNode = campaignNode(requestedProgramId);
-// `program=` belongs to missions hosted by this shell. Standalone catalogue IDs (for example
-// Indoor) own their route and quarantine gate; treating one as a main-shell selection would offer
-// a preview link that could only fall back to the recommended flight.
+// Mission-hosted entries use campaignNode. Production-visible standalone routes (Cobra Canyon)
+// also answer `program=` so the Ready card can highlight them; quarantined standalones such as
+// Indoor keep owning only their dedicated route and stay out of this shell selection path.
+function shellProgramEntry(programId) {
+  const node = campaignNode(programId);
+  if (node) return node;
+  const experience = experienceById(programId);
+  if (experience?.mission == null
+    && experience.visible
+    && experienceLaunchable(experience.id)) {
+    return experience;
+  }
+  return null;
+}
+const requestedProgramNode = shellProgramEntry(requestedProgramId);
 const requestedExperience = requestedProgramNode
   ? experienceById(requestedProgramNode.id) : null;
 const requestedExperienceAccess = requestedExperience
   ? experienceAccess(requestedExperience.id, window.location) : null;
 const blockedRequestedExperience = requestedExperienceAccess
   && !requestedExperienceAccess.allowed ? requestedExperience : null;
+const defaultProgramNode = recommendedCampaignNode(campaignProfile);
 const initialProgramNode = requestedProgramNode
   && requestedExperienceAccess?.allowed
-  ? requestedProgramNode : recommendedCampaignNode(campaignProfile);
+  ? requestedProgramNode : defaultProgramNode;
 // A recognised preview/quarantined deep link remains represented in the Ready UI instead of
 // silently launching the recommended production mission. The bridge may stage its harmless
 // production default behind that screen, but this selection cannot reach StartBeat or Begin.
@@ -2555,7 +2567,10 @@ let blockedProgramExperience = blockedRequestedExperience;
 let selectedProgramNodeId = blockedProgramExperience?.id ?? initialProgramNode.id;
 // The recommended front door remains the mission-7 infinite gauntlet, while an allowed explicit
 // programme deep link must launch the card it highlights rather than staging a different mission.
-let selectedBeat = initialProgramNode.mission;
+// Standalone selections keep the last shell beat staged behind Ready until Fly navigates away.
+let selectedBeat = Number.isInteger(initialProgramNode.mission)
+  ? initialProgramNode.mission
+  : defaultProgramNode.mission;
 let stagedBeat = selectedBeat;
 let selectedDeckConfiguration = 1;
 let stagedDeckConfiguration = selectedDeckConfiguration;
@@ -3082,6 +3097,14 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     configuration: "Fictional TBCC Rapier · canonical full fuel · finite internal gun · no auxiliary drones",
     brief: "Catapult, ride the continuous 35 kPa climb through turbine-to-ram handover, make one balloon gun pass from the 24 km M4.2 shelf, then re-enter and recover. Watch Q, thrust minus drag, binding-panel heat, and home reserve.",
     controls: "P mission automation · F internal gun · arrows/W/S pilot takeover\nT safe time compression · V padlock · Tab target · fly every recovery square · trap at the midpoint arrestor",
+  }),
+  "cobra-lab": Object.freeze({
+    kicker: "Cobra Canyon · AH-1G · low-level",
+    title: "Cobra Canyon",
+    sortie: "AH-1G · authored river-gorge routes · masking · copilot gunner",
+    configuration: "AH-1G flight-foundation authority · route complete when corridor remaining closes · not a surveyed combat-representation product",
+    brief: "Pick a canyon route, keep the rotor in the mask, and work the gunner when a target appears. Fly opens the dedicated Cobra Canyon surface with AH-1G authority.",
+    controls: "W/S collective · arrows cyclic · A/D yaw · F gunner consent · click a target to cue the gunner",
   }),
   "ace-duel": Object.freeze({
     kicker: "Raptor programme · final exam",
@@ -4351,6 +4374,28 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
 }
 
 function selectCampaignNode(nodeId, { focus = true } = {}) {
+  const standalone = experienceById(nodeId);
+  if (standalone?.mission == null) {
+    if (!standalone || !experienceAccess(standalone.id, window.location).allowed) return false;
+    const previous = selectedProgramNodeId;
+    blockedProgramExperience = null;
+    selectedProgramNodeId = standalone.id;
+    const missionUrl = new URL(window.location.href);
+    missionUrl.searchParams.delete("mission");
+    missionUrl.searchParams.set("program", selectedProgramNodeId);
+    window.history.replaceState(window.history.state, "", missionUrl);
+    recorder.event("ui", "program_node_previewed", {
+      node: selectedProgramNodeId,
+      mission: null,
+      route: standalone.route,
+      previous_node: previous,
+    });
+    autoLaunchPending = false;
+    // Keep the last shell beat staged behind Ready; Fly navigates to the owned surface.
+    renderPauseUi();
+    if (focus) queueMicrotask(focusReadyScreen);
+    return true;
+  }
   const node = campaignNode(nodeId);
   if (!node || !experienceAccess(node.id, window.location).allowed) return false;
   const previous = selectedProgramNodeId;
@@ -4385,8 +4430,13 @@ function selectCampaignNode(nodeId, { focus = true } = {}) {
 
 function launchMission(index = selectedBeat) {
   if (blockedProgramExperience
-    || !experienceAccess(selectedProgramNodeId, window.location).allowed
-    || Number(index) !== selectedBeat) return false;
+    || !experienceAccess(selectedProgramNodeId, window.location).allowed) return false;
+  const standalone = experienceById(selectedProgramNodeId);
+  if (standalone?.mission == null && standalone.route) {
+    window.location.assign(standalone.route);
+    return true;
+  }
+  if (Number(index) !== selectedBeat) return false;
   const deckChanged = [5, 6].includes(selectedBeat)
     && stagedDeckConfiguration !== selectedDeckConfiguration;
   let stagedState;

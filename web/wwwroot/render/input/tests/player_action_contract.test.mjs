@@ -601,9 +601,10 @@ test("screen chrome never covers a flight instrument or another tap target", () 
 
 test("every platform sees the aircraft picker and Fly remains a real gesture", () => {
   assert.match(appSource,
-    /initialProgramNode = requestedProgramNode[\s\S]*?recommendedCampaignNode\(campaignProfile\)/);
-  assert.match(appSource, /let selectedBeat = initialProgramNode\.mission/,
-    "the default remains mission 7, while an explicit programme deep link stages its own card");
+    /initialProgramNode = requestedProgramNode[\s\S]*?defaultProgramNode/);
+  assert.match(appSource,
+    /let selectedBeat = Number\.isInteger\(initialProgramNode\.mission\)[\s\S]*?defaultProgramNode\.mission/,
+    "shell missions stage their beat; standalone cards keep the default shell beat until Fly navigates");
   assert.match(bridgeSource, /static readonly SimulationSession Session = new\(7,/,
     "the bridge fallback and browser must agree on the F-22 first experience");
   assert.match(appSource, /let autoLaunchPending = false/,
@@ -617,13 +618,14 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
   const buttons = htmlButtons(indexSource);
   const nodeIds = buttons.filter((button) => button.attributes["data-program-node"] !== undefined)
     .map((button) => button.attributes["data-program-node"]);
-  // The catalogue grows; korea-panther is the latest. What this test actually protects is that
-  // every card is a real program node and that the two core experiences are present, so assert
-  // that rather than freezing the whole list and breaking on every new beat.
+  // The catalogue grows. Protect that every card is a real program node and that the production
+  // aircraft remain present, rather than freezing the whole list and breaking on every new beat.
   assert.ok(nodeIds.includes("first-merge"),
     "the F-22 guns-only merge must always be selectable");
   assert.ok(nodeIds.includes("rapier-intercept"),
     "the Rapier full mission must always be selectable");
+  assert.ok(nodeIds.includes("cobra-lab"),
+    "Cobra Canyon must be selectable from the Ready aircraft picker");
   assert.equal(new Set(nodeIds).size, nodeIds.length, "no duplicate program nodes");
   assert.equal(buttons.filter((button) => button.attributes.id === "ready-start").length, 1);
   assert.match(indexSource, /role="dialog"[^>]*aria-modal="true"/);
@@ -645,7 +647,7 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
     "short landscape screens need independent mission and briefing columns");
 });
 
-test("release state gates routes while the two production aircraft remain qualification-free", () => {
+test("release state gates routes while the production aircraft remain qualification-free", () => {
   assert.match(progressionSource,
     /id: "first-merge"[\s\S]*?mission: 7[\s\S]*?id: "low-level-drone"[\s\S]*?mission: 8[\s\S]*?id: "rapier-intercept"[\s\S]*?mission: 12/);
   assert.match(progressionSource,
@@ -655,6 +657,9 @@ test("release state gates routes while the two production aircraft remain qualif
     "release quarantine is not a gamified qualification lock");
   assert.match(appSource,
     /function selectCampaignNode[\s\S]*?!experienceAccess\(node\.id, window\.location\)\.allowed[\s\S]*?selectedBeat = node\.mission/);
+  assert.match(appSource,
+    /standalone\?\.mission == null[\s\S]*?window\.location\.assign\(standalone\.route\)/,
+    "production standalone cards (Cobra) must navigate to their owned surface on Fly");
   assert.match(appSource,
     /requestedExperience = requestedProgramNode[\s\S]*?experienceById\(requestedProgramNode\.id\)[\s\S]*?requestedExperienceAccess[\s\S]*?experienceAccess\(requestedExperience\.id, window\.location\)[\s\S]*?blockedRequestedExperience[\s\S]*?!requestedExperienceAccess\.allowed[\s\S]*?blockedProgramExperience/,
     "a recognised non-production deep link must remain an honest unavailable selection");

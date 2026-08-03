@@ -32,7 +32,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | F9F-2 Panther off Essex (`korea-panther`) | **quarantined** | Preview acknowledgement only | Build 238 ownship-only kernel flies the production terrain catapult/route/return/groove to a physical W2 trap (100/100 focused); packaged route, touch-RTB, HUD, and barrier contracts passed silent-browser acceptance | Complete representative human desktop/touch flights and historical/presentation acceptance before any promotion |
 | MIDGE-03 Facility Nine (`indoor`) | **quarantined** | `/indoor/` preview acknowledgement | Candidate UI now enforces doctrine-safe controls and blocks premature return | Re-drive the default stealth route and representative touch/keyboard paths |
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
-| Cobra Canyon world lab (`cobra-lab`, `/cobra-lab/`) | **quarantined** | Standalone `?preview=1` acknowledgement only | Authored world routes and bounded presentation prototype | Integrate the AH-1G flight authority, production controls/HUD, player-path acceptance, and release-grade presentation before promotion |
+| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Authoritative AH-1G flight foundation, terrain/collision route authority, copilot-gunner consent, compact flight diagnostics, and telemetry path | Fresh representative human desktop/touch route flight and complete green release gate |
 
 ## Research-only packages
 

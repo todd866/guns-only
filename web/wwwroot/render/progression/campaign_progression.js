@@ -69,7 +69,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     shortObjective: "Launch west, fly the pattern, trap. Repeat until the hook is easy.",
     qualification: "",
     releaseState: EXPERIENCE_RELEASE_STATE.PREVIEW,
-    blocker: "This training route is not part of the two-aircraft production front door yet.",
+    blocker: "This training route is not part of the production front door yet.",
   }),
   experience({
     id: "rapier-intercept",
@@ -125,11 +125,12 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     sequence: 9,
     route: "/cobra-lab/",
     aircraft: "AH-1G Cobra world prototype",
-    title: "Cobra Canyon Lab",
-    shortObjective: "Inspect the authored Cobra Canyon presentation routes and renderer budget.",
+    title: "Cobra Canyon",
+    shortObjective: "Fly the authored low-level Cobra Canyon routes with an AH-1G and copilot gunner.",
     qualification: "",
-    releaseState: EXPERIENCE_RELEASE_STATE.QUARANTINED,
-    blocker: "This world-presentation prototype is not the AH-1G flight authority, weapons model, or an accepted player path.",
+    releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
+    visible: true,
+    blocker: "",
   }),
 ]);
 

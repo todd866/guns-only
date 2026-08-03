@@ -2670,7 +2670,7 @@
 
     #ready-screen[data-mode="program"] .ready-mission-groups {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: clamp(10px, 2vw, 26px);
       overflow: visible;
     }
@@ -2701,6 +2701,13 @@
 
     #ready-screen .sortie-choice[data-aircraft="rapier"] {
       background-image: image-set(url("./art/jet-rapier.webp") type("image/webp"));
+    }
+
+    #ready-screen .sortie-choice[data-aircraft="cobra"] {
+      background-image:
+        linear-gradient(165deg, rgba(18, 42, 28, .18) 0%, rgba(6, 14, 10, .55) 48%, rgba(4, 10, 8, .78) 100%),
+        radial-gradient(120% 80% at 30% 20%, #6f8f52 0%, transparent 55%),
+        linear-gradient(135deg, #2a4630 0%, #0f1c14 55%, #1a2e22 100%);
     }
 
     #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]:hover { filter: brightness(.78); }
@@ -3227,20 +3234,15 @@
           <div class="ready-group-heading ready-program-heading">
             <div>
               <h2>Missions</h2>
-              <p>Two production aircraft: an endless F-22 guns-only fight and the Rapier high-altitude balloon intercept.</p>
+              <p>Three production aircraft: an endless F-22 guns-only fight, the Rapier high-altitude balloon intercept, and AH-1G Cobra Canyon.</p>
             </div>
             <output id="ready-program-progress"></output>
           </div>
           <!--
             An AIRCRAFT picker. The owner's whole question at this screen is "what airplane am I
-            flying today?", and the answer is one of two: the Raptor, or the Rapier. The other five
-            entries were a programme tree on the front door -- a drone slice with no ground targets,
-            a broken medevac, a circuits trainer, a 1951 carrier sortie and an indoor microdrone --
-            and every one of them made the reader do triage before they could fly.
-
-            Their source is retained, but hidden is not the release control. Each deep link
-            (?program=medevac, ?program=korea-panther, /indoor/) fails closed at the release gate;
-            deliberate testing requires the explicit ?preview=1 acknowledgement.
+            flying today?": the Raptor, the Rapier, or the Cobra. Quarantined and preview entries
+            remain in the catalogue source but stay hidden; each deep link fails closed at the
+            release gate unless the explicit ?preview=1 acknowledgement is present.
           -->
           <div class="ready-mission-groups">
             <div class="sortie-option" data-selected="true" data-program-state="available">
@@ -3253,6 +3255,12 @@
               <button type="button" class="sortie-choice" data-aircraft="rapier" data-program-node="rapier-intercept" aria-pressed="false">
                 <span class="sortie-number">INTERCEPT <b data-program-status="rapier-intercept"></b></span>
                 <strong>Rapier</strong>
+              </button>
+            </div>
+            <div class="sortie-option" data-selected="false" data-program-state="available">
+              <button type="button" class="sortie-choice" data-aircraft="cobra" data-program-node="cobra-lab" aria-pressed="false">
+                <span class="sortie-number">COBRA CANYON <b data-program-status="cobra-lab"></b></span>
+                <strong>AH-1G</strong>
               </button>
             </div>
             <div class="sortie-option" data-selected="false" data-program-state="available" hidden>
