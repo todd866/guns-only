@@ -1,5 +1,5 @@
-import * as THREE from "../vendor/three.module.js?v=249";
-import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=249";
+import * as THREE from "../vendor/three.module.js?v=250";
+import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=250";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
@@ -274,7 +274,12 @@ async function boot() {
       };
       poll();
     });
-    await blazor.start();
+    await blazor.start({
+      // Subroute pages must never fetch framework assets under /weekend-ride/_framework/.
+      loadBootResource(_type, name) {
+        return `/_framework/${name}`;
+      },
+    });
     const runtimeAccessor = await new Promise((resolve, reject) => {
       const deadline = performance.now() + 15_000;
       const poll = () => {

@@ -52,11 +52,17 @@ test("the browser and installed-app descriptions match the four production machi
   assert.match(manifest.description, /YZF-R1 Weekend Ride/);
   assert.doesNotMatch(catalogue, /Seven flight experiences/);
   // Subroute shells must not ask Blazor for /<route>/_framework/dotnet.js.
+  // Medevac's <base href="/"> is what makes root-absolute blazor.webassembly.js also resolve
+  // subsequent boot resources under /_framework/ rather than /<route>/_framework/.
   for (const [label, html] of [["cobra-lab", cobraLab], ["weekend-ride", weekendRide]]) {
+    assert.match(html, /<base href="\/">/,
+      `${label} needs a site-root document base for Blazor boot resources`);
     assert.match(html, /script\.src = "\/_framework\/blazor\.webassembly\.js\?v=\d+"/,
       `${label} must load Blazor from the site root`);
     assert.doesNotMatch(html, /script\.src = "\.\.\/_framework\/blazor\.webassembly\.js/,
       `${label} must not use a document-relative framework path`);
+    assert.match(html, new RegExp(`import\\("/${label}/main\\.js\\?v=\\d+"\\)`),
+      `${label} main entry must stay absolute once <base href="/"> is set`);
   }
 });
 

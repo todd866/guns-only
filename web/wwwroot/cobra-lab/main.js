@@ -1,15 +1,15 @@
-import * as THREE from "../vendor/three.module.js?v=249";
+import * as THREE from "../vendor/three.module.js?v=250";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=249";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=249";
+} from "../render/cobra/cobra_canyon_plan.js?v=250";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=250";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=249";
+} from "../render/cobra/cobra_canyon_tour.js?v=250";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -568,7 +568,12 @@ async function boot() {
       };
       poll();
     });
-    await blazor.start();
+    await blazor.start({
+      // Subroute pages must never fetch framework assets under /cobra-lab/_framework/.
+      loadBootResource(_type, name) {
+        return `/_framework/${name}`;
+      },
+    });
     const runtimeAccessor = await new Promise((resolve, reject) => {
       const deadline = performance.now() + 15_000;
       const poll = () => {
