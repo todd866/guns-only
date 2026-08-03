@@ -1,15 +1,15 @@
-import * as THREE from "../vendor/three.module.js?v=250";
+import * as THREE from "../vendor/three.module.js?v=251";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=250";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=250";
+} from "../render/cobra/cobra_canyon_plan.js?v=251";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=251";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=250";
+} from "../render/cobra/cobra_canyon_tour.js?v=251";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -420,7 +420,7 @@ function updateManual(deltaSeconds) {
     bridge.Advance(deltaSeconds);
     authorityState = JSON.parse(bridge.GetState());
     syncAuthorityCamera();
-    recordTelemetry(timeMs);
+    recordTelemetry(lastTimeMs);
   }
   const bounds = plan.boundsLocalM;
   camera.position.x = THREE.MathUtils.clamp(
