@@ -33,6 +33,16 @@ public static partial class WebBridge {
         index, KoreaWeatherPresets.ForBeat(index), TerrainForBeat(index), _deckConfiguration);
 
     /// <summary>
+    /// Stage the Top Gun ACM beat for the chosen seat. Custom factory beats use index 0; the browser
+    /// tracks seat separately from built-in mission indices.
+    /// </summary>
+    [JSExport]
+    public static void StartTopGun(int seat) {
+        TopGunSeat topGunSeat = seat == 1 ? TopGunSeat.Mig28 : TopGunSeat.F14A;
+        Session.StartBeat(() => Beats.TopGunAcm(topGunSeat));
+    }
+
+    /// <summary>
     /// Fly again after dying WITHOUT throwing away the gauntlet's pacing memory. StartBeat resets
     /// the FightDirector — correct when the pilot picks a mission, wrong when they are respawning
     /// into the same infinite duel, because it sends a player who had fought their way up to Ace

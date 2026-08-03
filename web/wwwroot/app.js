@@ -467,6 +467,9 @@ const readyConfigLabel = document.querySelector("#ready-config-label");
 const readyControls = document.querySelector("#ready-controls");
 const readyDeckConfig = document.querySelector("#ready-deck-config");
 const readyDeckButtons = [...document.querySelectorAll("[data-deck-configuration]")];
+const readyTopGunSeat = document.querySelector("#ready-top-gun-seat");
+const readyTopGunSeatButtons = [...document.querySelectorAll("[data-top-gun-seat]")];
+const readyTopGunPicker = document.querySelector('[data-program-node="top-gun"]');
 const readyCircuitsPreflight = document.querySelector("#ready-circuits-preflight");
 const readyCircuitsLegs = document.querySelector("#ready-circuits-legs");
 const readyCircuitsCue = document.querySelector("#ready-circuits-cue");
@@ -2580,6 +2583,10 @@ let selectedBeat = Number.isInteger(initialProgramNode.mission)
   ? initialProgramNode.mission
   : defaultProgramNode.mission;
 let stagedBeat = selectedBeat;
+const TOP_GUN_PROGRAM_ID = "top-gun";
+const TOP_GUN_SEAT = Object.freeze({ F14A: 0, MIG28: 1 });
+let selectedTopGunSeat = TOP_GUN_SEAT.F14A;
+let stagedTopGunSeat = TOP_GUN_SEAT.F14A;
 let selectedDeckConfiguration = 1;
 let stagedDeckConfiguration = selectedDeckConfiguration;
 let resetFrameClock = () => {};
@@ -3139,6 +3146,38 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSplash the ace to complete the programme · Space releases the G limiter",
   }),
 });
+
+function isTopGunProgram(programId = selectedProgramNodeId) {
+  return programId === TOP_GUN_PROGRAM_ID;
+}
+
+function topGunSeatLabel(seat = selectedTopGunSeat) {
+  return seat === TOP_GUN_SEAT.MIG28 ? "MiG-28" : "F-14A";
+}
+
+function topGunSeatAircraftArt(seat = selectedTopGunSeat) {
+  return seat === TOP_GUN_SEAT.MIG28 ? "mig-28" : "f14";
+}
+
+function isTopGunBeatStaged(state = latestState) {
+  return String(state?.mission_definition_id || "").includes("top-gun")
+    || state?.presentation_theme === "top-gun-anime-1986";
+}
+
+function updateTopGunPickerArt() {
+  if (!readyTopGunPicker) return;
+  readyTopGunPicker.dataset.aircraft = topGunSeatAircraftArt();
+}
+
+function stageTopGunOnBridge() {
+  const sameSeat = stagedTopGunSeat === selectedTopGunSeat && isTopGunBeatStaged();
+  const restarted = sameSeat && bridge.RestartSortie?.(0);
+  if (!restarted) {
+    bridge.StartTopGun(selectedTopGunSeat);
+    restoreDirectorState();
+  }
+  stagedTopGunSeat = selectedTopGunSeat;
+}
 
 // Codes whose bridge DOWN edge used the source-aware direct throttle path. Their matching UP edge
 // must use the same path so the simulation grammar never classifies a rocker hold as a keyboard
@@ -3908,6 +3947,13 @@ function renderCampaignProgress() {
       ? "" : experienceById(nodeId)?.releaseState ?? "unavailable";
   }
   if (readyDeckConfig) readyDeckConfig.hidden = true;
+  if (readyTopGunSeat) readyTopGunSeat.hidden = !(selectedProgramNodeId === TOP_GUN_PROGRAM_ID);
+  for (const button of readyTopGunSeatButtons) {
+    button.setAttribute("aria-pressed", String(
+      Number(button.dataset.topGunSeat) === selectedTopGunSeat,
+    ));
+  }
+  updateTopGunPickerArt();
   renderCircuitsPreflight(missionBrief());
   for (const button of readyDeckButtons) {
     button.setAttribute("aria-pressed", String(
@@ -4088,6 +4134,7 @@ function renderPauseUi(state = latestState) {
   }
   if (readySelector) readySelector.hidden = !ready;
   if (readyDeckConfig && !ready) readyDeckConfig.hidden = true;
+  if (readyTopGunSeat && !ready) readyTopGunSeat.hidden = true;
   if (readyCircuitsPreflight && !ready) readyCircuitsPreflight.hidden = true;
   if (ready) renderCampaignProgress();
   readyCasevacRouteBriefing.update({
@@ -4257,7 +4304,9 @@ function renderPauseUi(state = latestState) {
     readyTitle.textContent = brief.title;
     readyBrief.textContent = brief.brief;
     readySortie.textContent = brief.sortie;
-    readyConfig.textContent = selectedBeat === 5
+    readyConfig.textContent = isTopGunProgram()
+      ? `${topGunSeatLabel()} · M61 + AIM-9 · anime-1986 presentation`
+      : selectedBeat === 5
       ? "F-35C reduced-order public-data surrogate · recovery only · angled deck"
       : selectedBeat === 6
         ? "Maintenance profile · axial deck"
@@ -4385,26 +4434,35 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
       && bridge.GetDeckConfiguration() !== selectedDeckConfiguration) {
       bridge.SetDeckConfiguration(selectedDeckConfiguration);
     }
-    // Respawning into the SAME gauntlet keeps the fight director's pacing memory: a pilot who
-    // fought their way up to Ace and died must not be sent back to the Novice warm-up. StartBeat
-    // resets that memory (correct when picking a mission), so prefer RestartSortie when the staged
-    // mission is unchanged and fall back only when it actually differs.
-    const sameSortie = stagedBeat === selectedBeat
-      && stagedDeckConfiguration === selectedDeckConfiguration
-      && bridge.RestartSortie?.(selectedBeat);
-    if (!sameSortie) {
-      bridge.StartBeat(selectedBeat);
-      // StartBeat resets the director by design (picking a mission is not a respawn), so the
-      // persisted estimate has to be reapplied AFTER it.
-      restoreDirectorState();
+    if (isTopGunProgram()) {
+      stageTopGunOnBridge();
+      recorder.event("lifecycle", "sortie_staged", {
+        program: TOP_GUN_PROGRAM_ID,
+        top_gun_seat: topGunSeatLabel(selectedTopGunSeat),
+      });
+      refreshStagedMissionSnapshot();
+    } else {
+      // Respawning into the SAME gauntlet keeps the fight director's pacing memory: a pilot who
+      // fought their way up to Ace and died must not be sent back to the Novice warm-up. StartBeat
+      // resets that memory (correct when picking a mission), so prefer RestartSortie when the staged
+      // mission is unchanged and fall back only when it actually differs.
+      const sameSortie = stagedBeat === selectedBeat
+        && stagedDeckConfiguration === selectedDeckConfiguration
+        && bridge.RestartSortie?.(selectedBeat);
+      if (!sameSortie) {
+        bridge.StartBeat(selectedBeat);
+        // StartBeat resets the director by design (picking a mission is not a respawn), so the
+        // persisted estimate has to be reapplied AFTER it.
+        restoreDirectorState();
+      }
+      stagedBeat = selectedBeat;
+      stagedDeckConfiguration = selectedDeckConfiguration;
+      recorder.event("lifecycle", "sortie_staged", {
+        mission: selectedBeat,
+        deck_configuration: selectedDeckConfiguration === 1 ? "ANGLED" : "AXIAL",
+      });
+      refreshStagedMissionSnapshot();
     }
-    stagedBeat = selectedBeat;
-    stagedDeckConfiguration = selectedDeckConfiguration;
-    recorder.event("lifecycle", "sortie_staged", {
-      mission: selectedBeat,
-      deck_configuration: selectedDeckConfiguration === 1 ? "ANGLED" : "AXIAL",
-    });
-    refreshStagedMissionSnapshot();
   }
   if ([5, 6].includes(selectedBeat)) activeView?.clearRemotePlayers();
   bridgePauseApplied = true; // StartBeat is an authoritative transition to Ready.
@@ -4416,6 +4474,32 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
 
 function selectCampaignNode(nodeId, { focus = true } = {}) {
   const standalone = experienceById(nodeId);
+  if (standalone?.id === TOP_GUN_PROGRAM_ID) {
+    if (!experienceAccess(standalone.id, window.location).allowed) return false;
+    const previous = selectedProgramNodeId;
+    blockedProgramExperience = null;
+    selectedProgramNodeId = standalone.id;
+    const missionUrl = new URL(window.location.href);
+    missionUrl.searchParams.delete("mission");
+    missionUrl.searchParams.set("program", selectedProgramNodeId);
+    window.history.replaceState(window.history.state, "", missionUrl);
+    recorder.event("ui", "program_node_previewed", {
+      node: selectedProgramNodeId,
+      mission: null,
+      top_gun_seat: topGunSeatLabel(selectedTopGunSeat),
+      previous_node: previous,
+    });
+    autoLaunchPending = false;
+    const authorityChanged = stagedTopGunSeat !== selectedTopGunSeat
+      || !isTopGunBeatStaged();
+    if (bridge && pauseReasons.has("ready") && authorityChanged) {
+      enterReady({ resetBridge: true, focus: false });
+    } else {
+      renderPauseUi();
+    }
+    if (focus) queueMicrotask(focusReadyScreen);
+    return true;
+  }
   if (standalone?.mission == null) {
     if (!standalone || !experienceAccess(standalone.id, window.location).allowed) return false;
     const previous = selectedProgramNodeId;
@@ -4477,6 +4561,20 @@ function launchMission(index = selectedBeat) {
   if (standalone?.mission == null && standalone.route) {
     window.location.assign(standalone.route);
     return true;
+  }
+  if (isTopGunProgram()) {
+    const seatChanged = stagedTopGunSeat !== selectedTopGunSeat;
+    let stagedState;
+    if (!pauseReasons.has("ready") || seatChanged || !isTopGunBeatStaged()) {
+      stagedState = enterReady({ resetBridge: true, focus: false });
+    } else {
+      stagedState = refreshStagedMissionSnapshot();
+    }
+    if (prepareMissionTerrain(TOP_GUN_PROGRAM_ID, stagedState)) {
+      autoLaunchPending = true;
+      return false;
+    }
+    return beginFlight();
   }
   if (Number(index) !== selectedBeat) return false;
   const deckChanged = [5, 6].includes(selectedBeat)
@@ -4859,6 +4957,24 @@ function selectDeckConfiguration(value) {
   return true;
 }
 
+function selectTopGunSeat(value) {
+  if (!isTopGunProgram() || !pauseReasons.has("ready")) return false;
+  const seat = Number(value) === TOP_GUN_SEAT.MIG28
+    ? TOP_GUN_SEAT.MIG28 : TOP_GUN_SEAT.F14A;
+  if (seat === selectedTopGunSeat) return false;
+  selectedTopGunSeat = seat;
+  recorder.event("ui", "top_gun_seat_previewed", {
+    program: TOP_GUN_PROGRAM_ID,
+    top_gun_seat: topGunSeatLabel(seat),
+  });
+  if (bridge && stagedTopGunSeat !== selectedTopGunSeat) {
+    enterReady({ resetBridge: true, focus: false });
+  } else {
+    renderPauseUi();
+  }
+  return true;
+}
+
 function toggleDeckAndReady() {
   selectDeckConfiguration(selectedDeckConfiguration === 1 ? 0 : 1);
 }
@@ -4972,6 +5088,11 @@ readySelector?.addEventListener("click", (event) => {
 readyDeckConfig?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-deck-configuration]");
   if (button) selectDeckConfiguration(Number(button.dataset.deckConfiguration));
+});
+
+readyTopGunSeat?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-top-gun-seat]");
+  if (button) selectTopGunSeat(Number(button.dataset.topGunSeat));
 });
 
 readyCircuitsPreflight?.addEventListener("toggle", () => {
@@ -10649,7 +10770,8 @@ async function boot() {
     configurable: true,
     value: Object.freeze({ diagnostics: () => snapshotSource.diagnostics() }),
   });
-  bridge.StartBeat(selectedBeat);   // initialise the sortie; Begin is the explicit clock release
+  bridge.StartBeat(isTopGunProgram() ? defaultProgramNode.mission : selectedBeat);
+  if (isTopGunProgram()) stageTopGunOnBridge();
   refreshStagedMissionSnapshot();
   syncPlayerGunTarget();
   bridgePauseApplied = true;
@@ -10688,6 +10810,8 @@ async function boot() {
     get reasons() { return [...pauseReasons]; },
     get selectedBeat() { return selectedBeat; },
     get stagedBeat() { return stagedBeat; },
+    get selectedTopGunSeat() { return selectedTopGunSeat; },
+    get stagedTopGunSeat() { return stagedTopGunSeat; },
     begin: launchMission,
     restart: restartMission,
   };

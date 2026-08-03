@@ -271,7 +271,7 @@ test("every visible HTML button is wired through one auditable action surface", 
     const attrs = button.attributes;
     const hooks = [
       "data-test-action", "data-hold-key", "data-pulse-key", "data-mobile-action",
-      "data-program-node", "data-deck-configuration",
+      "data-program-node", "data-deck-configuration", "data-top-gun-seat",
       // Build 75 portrait-assist speed nudges; wired in app.js via [data-assist-nudge].
       "data-assist-nudge",
       // Circuits OFT harness actions; wired in app.js via [data-circuits-action].
@@ -311,6 +311,11 @@ test("every visible HTML button is wired through one auditable action surface", 
       assert.match(appSource,
         /readyDeckConfig\?\.addEventListener\("click"[\s\S]*?selectDeckConfiguration\(Number\(button\.dataset\.deckConfiguration\)\)/,
         `${button.text}: deck configuration has no delegated selection handler`);
+    }
+    if (attrs["data-top-gun-seat"] !== undefined) {
+      assert.match(appSource,
+        /readyTopGunSeat\?\.addEventListener\("click"[\s\S]*?selectTopGunSeat\(Number\(button\.dataset\.topGunSeat\)\)/,
+        `${button.text}: Top Gun seat has no delegated selection handler`);
     }
   }
 });
