@@ -8,7 +8,7 @@
   <base href="/">
   <title>Guns Only · Cobra Canyon Lab</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/cobra-lab/styles.css?v=250">
+  <link rel="stylesheet" href="/cobra-lab/styles.css?v=251">
 </head>
 <body>
   <header class="topbar">
@@ -102,7 +102,7 @@
     // Complete stale-worker cleanup before linking the versioned release gate to its catalog.
     // A bare public route must remain inert even when an older cache-first worker is present.
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=250", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=251", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -132,7 +132,7 @@
         const script = document.createElement("script");
         // Loader from site root + <base href="/"> so boot resources resolve to /_framework/*,
         // not /cobra-lab/_framework/* (Medevac pattern).
-        script.src = "/_framework/blazor.webassembly.js?v=250";
+        script.src = "/_framework/blazor.webassembly.js?v=251";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load Cobra flight runtime.")), {
@@ -141,10 +141,10 @@
         document.head.append(script);
       });
       const { renderExperienceGate } = await import(
-        "/render/release/quarantine_gate.js?v=250"
+        "/render/release/quarantine_gate.js?v=251"
       );
       const access = renderExperienceGate({ experienceId: "cobra-lab" });
-      if (access.allowed) await import("/cobra-lab/main.js?v=250");
+      if (access.allowed) await import("/cobra-lab/main.js?v=251");
     } catch (error) {
       console.error(error);
       const status = document.querySelector("#status");
