@@ -3,7 +3,7 @@
 Updated: 2026-08-02
 Production: Build 244, revision `894edfd4c1a26d393c8ef89191c65e6b0228260c`, promoted 2026-08-02
 after its exact protected-`main` SHA passed the canonical GitHub Verify workflow.
-Next candidate: Build 246 (local work); do not deploy until the complete gate is
+Next candidate: Build 247 (local work); do not deploy until the complete gate is
 green and the exact revision is pushed.
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
@@ -34,7 +34,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | MIDGE-03 Facility Nine (`indoor`) | **quarantined** | `/indoor/` preview acknowledgement | Candidate UI now enforces doctrine-safe controls and blocks premature return | Re-drive the default stealth route and representative touch/keyboard paths |
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
 | Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Authoritative AH-1G flight foundation, terrain/collision route authority, copilot-gunner consent, compact flight diagnostics, and telemetry path | Fresh representative human desktop/touch route flight and complete green release gate |
-| Weekend Ride (`weekend-ride`) | **coming-soon** | Aircraft picker teaser | Design accepted; picker painting and Coming Soon briefing live | Motorcycle dynamics, helmet HUD, automation, and a representative human ride |
+| Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load/tip-over, rider assists, painted Rapier-strip circuit, mission runtime, MotorcycleWebBridge, helmet HUD | Fresh representative human ride on the exact production artifact |
 
 ## Research-only packages
 

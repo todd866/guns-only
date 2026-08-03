@@ -627,13 +627,13 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
   assert.ok(nodeIds.includes("cobra-lab"),
     "Cobra Canyon must be selectable from the Ready aircraft picker");
   assert.ok(nodeIds.includes("weekend-ride"),
-    "Weekend Ride must be selectable as a Coming Soon teaser");
-  assert.match(appSource,
-    /experienceComingSoon\(selectedProgramNodeId\)[\s\S]*?Coming soon/,
-    "Coming Soon cards keep Fly disabled with an honest label");
+    "Weekend Ride must be selectable from the Ready aircraft picker");
   assert.match(appSource,
     /function shellProgramEntry[\s\S]*?if \(experience\s*&&\s*experience\.mission == null/,
     "a missing program query must not treat null experience as a standalone card");
+  assert.match(appSource,
+    /"weekend-ride": Object\.freeze\([\s\S]*?Fly opens the dedicated Weekend Ride surface/,
+    "Weekend Ride briefing must send Fly to the owned surface");
   assert.equal(new Set(nodeIds).size, nodeIds.length, "no duplicate program nodes");
   assert.equal(buttons.filter((button) => button.attributes.id === "ready-start").length, 1);
   assert.match(indexSource, /role="dialog"[^>]*aria-modal="true"/);

@@ -56,14 +56,14 @@ function awaitingReturnSnapshot(overrides = {}) {
 
 test("production imports are stamped and every presented state reaches the RTB adapter", () => {
   assert.match(appSource,
-    /from "\.\/render\/nav\/carrier_sortie_route_presentation\.js\?v=246";/);
+    /from "\.\/render\/nav\/carrier_sortie_route_presentation\.js\?v=247";/);
   assert.match(appSource,
-    /from "\.\/render\/nav\/carrier_sortie_touch_control\.js\?v=246";/);
+    /from "\.\/render\/nav\/carrier_sortie_touch_control\.js\?v=247";/);
   assert.match(hudSource,
-    /from "\.\/render\/nav\/carrier_sortie_route_presentation\.js\?v=246";/);
+    /from "\.\/render\/nav\/carrier_sortie_route_presentation\.js\?v=247";/);
   assert.match(touchAdapterSource,
-    /from "\.\/carrier_sortie_route_presentation\.js\?v=246";/);
-  assert.match(indexSource, /await import\("\.\/app\.js\?v=246"\);/);
+    /from "\.\/carrier_sortie_route_presentation\.js\?v=247";/);
+  assert.match(indexSource, /await import\("\.\/app\.js\?v=247"\);/);
 
   assert.match(appSource,
     /function renderPilotPhysiology\(state\) \{\s*syncMobileControlProfile\(state\);/);

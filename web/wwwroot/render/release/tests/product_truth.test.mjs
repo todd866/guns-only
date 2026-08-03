@@ -29,17 +29,17 @@ test("README describes the current production door, controls and telemetry bound
   assert.doesNotMatch(readme, /Rapier[^\n]*assigned contract/);
 });
 
-test("the browser and installed-app descriptions match the three production aircraft", async () => {
+test("the browser and installed-app descriptions match the four production machines", async () => {
   const [catalogue, manifestText] = await Promise.all([
     readFile(path.join(ROOT, "web/wwwroot/index.html"), "utf8"),
     readFile(path.join(ROOT, "web/wwwroot/manifest.webmanifest"), "utf8"),
   ]);
   const manifest = JSON.parse(manifestText);
-  assert.match(catalogue, /Three production aircraft/);
-  assert.match(catalogue, /Weekend Ride coming soon/);
+  assert.match(catalogue, /Four production machines/);
   assert.match(catalogue, /F-22 guns-only/);
   assert.match(catalogue, /Rapier intercept/);
   assert.match(catalogue, /AH-1G Cobra Canyon/);
+  assert.match(catalogue, /YZF-R1 Weekend Ride/);
   assert.match(catalogue, /data-program-node="cobra-lab"/);
   assert.match(catalogue, /data-program-node="weekend-ride"/);
   assert.match(catalogue, /art\/jet-cobra\.webp/);
@@ -47,6 +47,7 @@ test("the browser and installed-app descriptions match the three production airc
   assert.match(manifest.description, /F-22 guns-only dogfighting/);
   assert.match(manifest.description, /Rapier high-altitude balloon intercept/);
   assert.match(manifest.description, /AH-1G Cobra Canyon/);
+  assert.match(manifest.description, /YZF-R1 Weekend Ride/);
   assert.doesNotMatch(catalogue, /Seven flight experiences/);
 });
 
@@ -94,6 +95,7 @@ test("the evergreen status matrix covers the executable experience catalog", asy
     "first-merge",
     "rapier-intercept",
     "cobra-lab",
+    "weekend-ride",
   ]);
   assert.equal(EXPERIENCE_CATALOG.some(({ releaseState }) =>
     releaseState === EXPERIENCE_RELEASE_STATE.QUARANTINED), true);

@@ -45,13 +45,14 @@ test("Cobra Canyon remains launchable on its standalone route", () => {
   assert.equal(access.experience.releaseState, "production");
 });
 
-test("Coming Soon teasers are selectable without launching or requiring preview", () => {
+test("Weekend Ride launches on its standalone production route", () => {
   const access = experienceAccess("weekend-ride", {
-    href: "https://guns-only.com/?program=weekend-ride",
+    href: "https://guns-only.com/weekend-ride/",
   });
   assert.equal(access.allowed, true);
   assert.equal(access.preview, false);
-  assert.equal(access.experience.releaseState, "coming-soon");
+  assert.equal(access.experience.releaseState, "production");
+  assert.equal(access.experience.route, "/weekend-ride/");
   assert.deepEqual(releaseStateAccess("coming-soon", false), {
     allowed: true,
     preview: false,

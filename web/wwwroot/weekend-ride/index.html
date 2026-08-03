@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Guns Only · YZF-R1 Weekend Ride</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./styles.css?v=247">
+</head>
+<body>
+  <header class="topbar">
+    <div class="title-lockup">
+      <span class="brand">Guns Only</span>
+      <h1>Weekend Ride</h1>
+    </div>
+    <p id="status" aria-live="polite"><i></i><span>Loading YZF-R1 runtime…</span></p>
+  </header>
+
+  <main>
+    <aside aria-label="Weekend ride controls">
+      <section class="instructions">
+        <span class="eyebrow">Helmet view</span>
+        <h2>YZF-R1 · Rapier strip</h2>
+        <p><kbd>W</kbd>/<kbd>S</kbd> throttle/brake · <kbd>A</kbd>/<kbd>D</kbd> steer · arrows weight shift · <kbd>Q</kbd>/<kbd>E</kbd> shift · <kbd>Shift</kbd> clutch (manual) · <kbd>C</kbd> auto/manual · <kbd>R</kbd> reset · <kbd>Esc</kbd> pause.</p>
+        <p class="honesty">Sourced liter-bike free ride on the painted Rapier strip. Horizon banks from sim view attitude; not a surveyed track product.</p>
+      </section>
+    </aside>
+
+    <section class="viewport" aria-label="Helmet-mounted weekend ride">
+      <canvas id="scene"></canvas>
+      <canvas id="hud" aria-hidden="true"></canvas>
+    </section>
+  </main>
+
+  <script>
+    globalThis.__gunsPrebootReady = (async () => {
+      const releaseBuild = new URL("../service-worker.js?v=247", location.href)
+        .searchParams.get("v");
+      const controller = navigator.serviceWorker?.controller;
+      const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
+      const registeredWorkers = registrations.flatMap((registration) => [
+        registration.active,
+        registration.waiting,
+        registration.installing,
+      ]).filter(Boolean);
+      const staleWorker = [controller, ...registeredWorkers]
+        .filter(Boolean)
+        .find((worker) => new URL(worker.scriptURL, location.href)
+          .searchParams.get("v") !== releaseBuild);
+      if (!staleWorker) return;
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+      if ("caches" in globalThis) {
+        const keys = await caches.keys();
+        await Promise.all(keys
+          .filter((key) => key.startsWith("guns-only-"))
+          .map((key) => caches.delete(key)));
+      }
+    })();
+  </script>
+  <script type="module">
+    try {
+      await globalThis.__gunsPrebootReady;
+      await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "../_framework/blazor.webassembly.js?v=247";
+        script.setAttribute("autostart", "false");
+        script.addEventListener("load", resolve, { once: true });
+        script.addEventListener("error", () => reject(new Error("Failed to load motorcycle runtime.")), {
+          once: true,
+        });
+        document.head.append(script);
+      });
+      const { renderExperienceGate } = await import(
+        "../render/release/quarantine_gate.js?v=247"
+      );
+      const access = renderExperienceGate({ experienceId: "weekend-ride" });
+      if (access.allowed) await import("./main.js?v=247");
+    } catch (error) {
+      console.error(error);
+      const status = document.querySelector("#status");
+      status?.setAttribute("data-error", "true");
+      const copy = status?.querySelector("span");
+      if (copy) copy.textContent = error instanceof Error ? error.message : String(error);
+    }
+  </script>
+</body>
+</html>

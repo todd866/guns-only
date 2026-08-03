@@ -137,14 +137,14 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     id: "weekend-ride",
     mission: null,
     sequence: 10,
-    route: "/?program=weekend-ride",
+    route: "/weekend-ride/",
     aircraft: "YZF-R1",
     title: "Weekend Ride",
-    shortObjective: "Free-drive a sourced Yamaha YZF-R1 on the painted 10,000 ft runway circuit.",
+    shortObjective: "Helmet-view free ride of a sourced Yamaha YZF-R1 on the painted 10,000 ft Rapier-strip circuit.",
     qualification: "",
-    releaseState: EXPERIENCE_RELEASE_STATE.COMING_SOON,
+    releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
     visible: true,
-    blocker: "Motorcycle dynamics, helmet HUD, and a representative human ride are still in progress.",
+    blocker: "",
   }),
 ]);
 

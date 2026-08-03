@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=246";
+import { createHud } from "./hud.js?v=247";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=246";
+} from "./render/debrief/sortie_result.js?v=247";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -49,8 +49,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=246";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=246";
+} from "./render/release/release_identity.js?v=247";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=247";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -63,7 +63,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=246";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=247";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -72,10 +72,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=246";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=247";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=246";
+} from "./render/nav/carrier_sortie_touch_control.js?v=247";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -149,7 +149,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=246";
+} from "./render/telemetry/ai_frame_pressure.js?v=247";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -159,7 +159,7 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=246";
+} from "./render/telemetry/telemetry_batch.js?v=247";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -168,7 +168,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=246";
+} from "./render/settings/player_settings.js?v=247";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -214,13 +214,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=246";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=246";
+} from "./render/scene/scene_builders.js?v=247";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=247";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=246";
+} from "./render/audio/flight_audio.js?v=247";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -3114,9 +3114,9 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     kicker: "Off duty · 10,000 ft runway",
     title: "Weekend Ride",
     sortie: "YZF-R1 · painted circuit · free drive",
-    configuration: "Yamaha YZF-R1 · helmet view · no combat · coming soon",
-    brief: "Fighter pilots ride on weekends. The Rapier strip becomes a painted circuit for a liter-bike free ride—split authority for throttle, brake, steer, and rider weight. Not flyable in this build yet.",
-    controls: "W/S throttle/brake · A/D steer · arrows rider weight · Q/E gears\nComing soon",
+    configuration: "Yamaha YZF-R1 · helmet view · sequential gearbox · no combat",
+    brief: "Fighter pilots ride on weekends. The Rapier strip becomes a painted circuit for a liter-bike free ride—split authority for throttle, brake, steer, and rider weight. Fly opens the dedicated Weekend Ride surface.",
+    controls: "W/S throttle/brake · A/D steer · arrows rider weight · Q/E gears · C auto/manual clutch · R reset",
   }),
   "ace-duel": Object.freeze({
     kicker: "Raptor programme · final exam",
@@ -10906,7 +10906,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=246")
+    navigator.serviceWorker.register("service-worker.js?v=247")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);
