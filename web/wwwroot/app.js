@@ -17,6 +17,10 @@ import {
   combatHandoffPresentation,
   sortieResultCopy,
 } from "./render/debrief/sortie_result.js?v=249";
+import {
+  applyTopGunAnime1986,
+  topGunAnime1986ThemeActive,
+} from "./render/top-gun/theme.js";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -4014,6 +4018,15 @@ function isCarrierQualificationState(state) {
     ].includes(String(state?.mission_definition_id || "").toLowerCase());
 }
 
+function renderTopGunPresentationTheme(state = latestState) {
+  const readyVisible = pauseReasons.has("ready");
+  applyTopGunAnime1986(document.documentElement, topGunAnime1986ThemeActive({
+    programNodeId: selectedProgramNodeId,
+    presentationTheme: state?.presentation_theme,
+    readyVisible,
+  }));
+}
+
 function renderPauseUi(state = latestState) {
   const ready = pauseReasons.has("ready");
   const finished = pauseReasons.has("finished");
@@ -4326,6 +4339,7 @@ function renderPauseUi(state = latestState) {
     queueMicrotask(focusReadyScreen);
   else if (showScreen && !settingsPaused && !readyScreen.contains(document.activeElement))
     queueMicrotask(focusReadyScreen);
+  renderTopGunPresentationTheme(state);
 }
 
 function applyBridgePause() {
