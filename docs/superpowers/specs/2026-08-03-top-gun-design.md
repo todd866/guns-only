@@ -1,7 +1,8 @@
 # Top Gun (1986): F-14A vs MiG-28
 
 Date: 2026-08-03  
-Status: accepted design, not yet implemented
+Status: accepted design; implementation plan at
+`docs/superpowers/plans/2026-08-03-top-gun.md`
 
 Related: [product north star](../../product-north-star.md),
 [STATUS](../../STATUS.md),
@@ -140,12 +141,12 @@ STATUS matrix gets a row when the catalog entry lands. `hidden` HTML is never th
 - Licensed Paramount IP (names/dialogue/logo marks) — we ship an original “Top Gun” *vibe*
   product surface; legal/branding review before any mark that is not ours
 
-## Open questions (resolve in plan, not blockers for this design)
+## Open questions (resolved in plan)
 
-1. Exact AIM-9 count per seat and rail layout for v1.
-2. Whether RIO is a silent seat (no player) or absent (single-seat control fantasy).
-3. How much swing-wing fidelity is required before first dogfight feels honest.
-4. Reuse vs fork of existing missile surrogate in `SimulationSession`.
+1. AIM-9 count per seat: **2** (provisional) for v1.
+2. RIO: **absent** in v1 (single-seat control fantasy).
+3. Swing-wing: **Mach/CAS schedule**, published on snapshot; coarse aero effect before preview.
+4. Missiles: dedicated **`sim/Missiles/Aim9Surrogate`** lane — do not reuse Rapier timed-impact helper as-is.
 
 ## Success bar (preview → production)
 
