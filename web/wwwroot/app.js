@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=251";
+import { createHud } from "./hud.js?v=252";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=251";
+} from "./render/debrief/sortie_result.js?v=252";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -49,8 +49,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=251";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=251";
+} from "./render/release/release_identity.js?v=252";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=252";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -63,7 +63,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=251";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=252";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -72,10 +72,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=251";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=252";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=251";
+} from "./render/nav/carrier_sortie_touch_control.js?v=252";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -149,7 +149,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=251";
+} from "./render/telemetry/ai_frame_pressure.js?v=252";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -159,7 +159,7 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=251";
+} from "./render/telemetry/telemetry_batch.js?v=252";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -168,7 +168,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=251";
+} from "./render/settings/player_settings.js?v=252";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -214,13 +214,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=251";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=251";
+} from "./render/scene/scene_builders.js?v=252";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=252";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=251";
+} from "./render/audio/flight_audio.js?v=252";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -3103,12 +3103,12 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     controls: "P mission automation · F internal gun · arrows/W/S pilot takeover\nT safe time compression · V padlock · Tab target · fly every recovery square · trap at the midpoint arrestor",
   }),
   "cobra-lab": Object.freeze({
-    kicker: "Cobra Canyon · AH-1G · low-level",
-    title: "Cobra Canyon",
-    sortie: "AH-1G · authored river-gorge routes · masking · copilot gunner",
-    configuration: "AH-1G flight-foundation authority · route complete when corridor remaining closes · not a surveyed combat-representation product",
-    brief: "Pick a canyon route, keep the rotor in the mask, and work the gunner when a target appears. Fly opens the dedicated Cobra Canyon surface with AH-1G authority.",
-    controls: "W/S collective · arrows cyclic · A/D yaw · F gunner consent · click a target to cue the gunner",
+    kicker: "Cobra Canyon · Hold the Bridge",
+    title: "Hold the Bridge",
+    sortie: "AH-1G · River Gorge ground war · tip control · hold 45s",
+    configuration: "AH-1G flight-foundation authority · living ground war · finite M134 · Camp Ember rearm · win/lose on basin control",
+    brief: "Tip the basin fight friendly and hold control for 45 seconds. Tab a hostile, hold F for the gunner, and rearm at Camp Ember when you go dry. Fly opens the dedicated Hold the Bridge surface.",
+    controls: "W/S collective · arrows cyclic · A/D yaw · Tab target · F gunner consent · Camp Ember pad to rearm",
   }),
   "weekend-ride": Object.freeze({
     kicker: "Off duty · 10,000 ft runway",
@@ -10906,7 +10906,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=251")
+    navigator.serviceWorker.register("service-worker.js?v=252")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);
