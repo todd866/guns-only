@@ -54,11 +54,12 @@ public sealed record CombatConfig(
         OpponentHitsToDefeat: 3,
         PlayerGun: GunProfiles.M61A2PublicDataSurrogate,
         OpponentGun: GunProfiles.GSh301PublicDataSurrogate);
-    /// Top Gun 1v1 ACM: M61 on both sides (Tomcat canonical; MiG-28 fiction carries the same
-    /// public-data gun surrogate until a dedicated F-5 installation profile lands).
+    /// Top Gun 1v1 DACT: symmetric 480-round M61 magazines on both sides (Tomcat canonical;
+    /// MiG-28 fiction carries the same public-data gun surrogate until a dedicated F-5
+    /// installation profile lands).
     public static CombatConfig TopGunAcm { get; } = new(
         PlayerAmmo: 480,
-        OpponentAmmo: 150,
+        OpponentAmmo: 480,
         PlayerHitsToDefeat: 3,
         OpponentHitsToDefeat: 3,
         PlayerGun: GunProfiles.M61A2PublicDataSurrogate,
