@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="dark">
   <title>Guns Only · Cobra Canyon Lab</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="./styles.css?v=245">
+  <link rel="stylesheet" href="./styles.css?v=246">
 </head>
 <body>
   <header class="topbar">
@@ -100,7 +100,7 @@
     // Complete stale-worker cleanup before linking the versioned release gate to its catalog.
     // A bare public route must remain inert even when an older cache-first worker is present.
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=245", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=246", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -128,7 +128,7 @@
       await globalThis.__gunsPrebootReady;
       await new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        script.src = "../_framework/blazor.webassembly.js?v=245";
+        script.src = "../_framework/blazor.webassembly.js?v=246";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load Cobra flight runtime.")), {
@@ -137,10 +137,10 @@
         document.head.append(script);
       });
       const { renderExperienceGate } = await import(
-        "../render/release/quarantine_gate.js?v=245"
+        "../render/release/quarantine_gate.js?v=246"
       );
       const access = renderExperienceGate({ experienceId: "cobra-lab" });
-      if (access.allowed) await import("./main.js?v=245");
+      if (access.allowed) await import("./main.js?v=246");
     } catch (error) {
       console.error(error);
       const status = document.querySelector("#status");

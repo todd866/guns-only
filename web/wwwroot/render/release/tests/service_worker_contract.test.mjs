@@ -385,9 +385,9 @@ test("runtime priming reuses healthy same-build cache hits without fetching", as
   const event = harness.dispatchMessage({
     type: "prime-runtime",
     urls: [
-      "https://guns-only.vercel.app/render/flight.js?v=245",
+      "https://guns-only.vercel.app/render/flight.js?v=246",
       "https://guns-only.vercel.app/index.html",
-      "https://guns-only.vercel.app/render/flight.js?v=245",
+      "https://guns-only.vercel.app/render/flight.js?v=246",
       "https://guns-only.vercel.app/telemetry/session",
       "https://elsewhere.example/foreign.js",
     ],
@@ -397,7 +397,7 @@ test("runtime priming reuses healthy same-build cache hits without fetching", as
     "runtime priming must keep the message event alive through cache inspection");
   await event.lifetime;
   assert.deepEqual(matched, [
-    "https://guns-only.vercel.app/render/flight.js?v=245",
+    "https://guns-only.vercel.app/render/flight.js?v=246",
     "https://guns-only.vercel.app/index.html",
   ]);
   assert.equal(harness.networkRequests.length, 0);
@@ -407,7 +407,7 @@ test("runtime priming reuses healthy same-build cache hits without fetching", as
     cached: 0,
     reused: 2,
     failed: 0,
-    build: "245",
+    build: "246",
   }]);
 });
 
@@ -417,7 +417,7 @@ test("runtime priming treats a Cache Storage read error as a repairable network 
   });
 
   const result = await harness.primeRuntimeUrls([
-    "https://guns-only.vercel.app/render/repair-cache.js?v=245",
+    "https://guns-only.vercel.app/render/repair-cache.js?v=246",
   ]);
 
   assert.equal(harness.networkRequests.length, 1,
@@ -428,7 +428,7 @@ test("runtime priming treats a Cache Storage read error as a repairable network 
     cached: 1,
     reused: 0,
     failed: 0,
-    build: "245",
+    build: "246",
   });
 });
 
@@ -454,7 +454,7 @@ test("runtime priming caps concurrency and completes after individual errors", a
     },
   });
   const urls = Array.from({ length: 11 }, (_, index) =>
-    `https://guns-only.vercel.app/render/runtime-${index}.js?v=245`);
+    `https://guns-only.vercel.app/render/runtime-${index}.js?v=246`);
   urls.push("https://guns-only.vercel.app/render/failure.js");
   const event = harness.dispatchMessage({ type: "prime-runtime", urls });
 
@@ -475,6 +475,6 @@ test("runtime priming caps concurrency and completes after individual errors", a
     cached: 11,
     reused: 0,
     failed: 1,
-    build: "245",
+    build: "246",
   }], "one rejected fetch must be counted without aborting queue completion");
 });
