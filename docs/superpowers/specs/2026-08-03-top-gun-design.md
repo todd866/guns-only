@@ -86,8 +86,10 @@ Sources live under `docs/airframes/f-14a/` and `docs/airframes/mig-28/` (MiG-28 
 fiction overlay and points at F-5 evidence). Silent invented precision is forbidden — same house
 rule as Panther/Rapier/Cobra.
 
-Swing-wing: v1 may use a scheduled wing-sweep vs Mach/CAS table rather than a full structural
-aero rebuild, but the wing state must be visible and affect the model at least coarsely.
+Swing-wing: v1 uses a scheduled wing-sweep vs Mach/CAS table published on snapshot
+(`wing_sweep_deg`). Coarse aero scales Tomcat effective `WingSpanM` from the mid-sweep
+placeholder toward ~55% span at full sweep each tick (SURROGATE — not AWG-9/RIO logic).
+Follow-up: induced-drag/wave coupling to sweep if preview dogfights need more energy truth.
 
 ## World / mission loop
 

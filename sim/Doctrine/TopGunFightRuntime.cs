@@ -28,4 +28,18 @@ public sealed class TopGunFightRuntime
         _aim9.TryLaunch(shooter, target, nowMs);
 
     public void Step(double dt, in Aim9Pose target) => _aim9.Step(dt, target);
+
+    /// <summary>
+    /// SURROGATE coarse aero: shrink effective span from the static mid-sweep Tomcat placeholder
+    /// toward ~55% span at full sweep. Cosmetic schedule matches snapshot wing_sweep_deg.
+    /// </summary>
+    public static double EffectiveTomcatWingSpanM(
+        double mach, double casKts, double midSpanM = 15.5)
+    {
+        double sweep = F14WingSweep.DegreesFor(mach, casKts);
+        double t = (sweep - F14WingSweep.MinSweepDeg)
+            / Math.Max(F14WingSweep.MaxSweepDeg - F14WingSweep.MinSweepDeg, 1e-9);
+        const double MinSpanFraction = 0.55;
+        return midSpanM * (1.0 - t * (1.0 - MinSpanFraction));
+    }
 }

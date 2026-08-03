@@ -60,6 +60,8 @@ public sealed class AircraftSim {
     /// The physical lift direction: body up projected perpendicular to the relative wind.
     public Vec3D LiftDir { get; private set; } = new(0, 1, 0);
     readonly AircraftParams _p;
+    /// Runtime flight-params overlay (e.g. Top Gun Tomcat wing-sweep span). Engine identity stays on _p.
+    AircraftParams _flightP;
     IAtmosphereModel _atmosphereModel = StandardAtmosphere1976.Instance;
     /// <summary>
     /// Scenario-owned thermodynamic column. It is an instance dependency rather than global
@@ -217,7 +219,7 @@ public sealed class AircraftSim {
 
     public AircraftSim(AircraftState initial, AircraftParams p,
         IAtmosphereModel? atmosphere = null) {
-        State = initial; _p = p;
+        State = initial; _p = p; _flightP = p;
         _atmosphereModel = atmosphere ?? StandardAtmosphere1976.Instance;
         _airVelocity = initial.VelocityVector();
         _buffet = new GunsOnly.Sim.Turbulence.RotationalBuffet(p);
@@ -328,6 +330,12 @@ public sealed class AircraftSim {
         LiftDir = ComputeLiftDir(vhat);
     }
 
+    /// <summary>Coarse swing-wing surrogate: only WingSpanM changes; baseline params remain on _p.</summary>
+    public void SetEffectiveWingSpanM(double wingSpanM) =>
+        _flightP = _p with { WingSpanM = wingSpanM };
+
+    public void ResetFlightParams() => _flightP = _p;
+
     public void Step(in PilotCommand cmd, double dt) =>
         StepCore(cmd, dt, updateDiagnostics: true);
 
@@ -370,20 +378,20 @@ public sealed class AircraftSim {
         var configuration = EffectiveAerodynamicConfiguration;
         double appliedPitchThrustVectorAngle = double.NaN;
         if (_p.HighAlphaModel == HighAlphaModelKind.F22PublicDataSurrogate) {
-            double nozzleTarget = FlightModel.PitchThrustVectorTargetAngle(r, spooled, _p,
+            double nozzleTarget = FlightModel.PitchThrustVectorTargetAngle(r, spooled, _flightP,
                 _liftRef, gust, thrustN, configuration, AtmosphereModel);
             _pitchThrustVectorAngleRad = FlightModel.RateLimitPitchThrustVector(
-                _pitchThrustVectorAngleRad, nozzleTarget, dt, _p);
+                _pitchThrustVectorAngleRad, nozzleTarget, dt, _flightP);
             appliedPitchThrustVectorAngle = _pitchThrustVectorAngleRad;
         }
         double gas = _coldGasKg;
-        var k1 = FlightModel.Derivatives(r, spooled, _p, _liftRef, gust, thrustN,
+        var k1 = FlightModel.Derivatives(r, spooled, _flightP, _liftRef, gust, thrustN,
             configuration, AtmosphereModel, appliedPitchThrustVectorAngle, gas);
-        var k2 = FlightModel.Derivatives(Apply(r, k1, dt / 2), spooled, _p, _liftRef, gust,
+        var k2 = FlightModel.Derivatives(Apply(r, k1, dt / 2), spooled, _flightP, _liftRef, gust,
             thrustN, configuration, AtmosphereModel, appliedPitchThrustVectorAngle, gas);
-        var k3 = FlightModel.Derivatives(Apply(r, k2, dt / 2), spooled, _p, _liftRef, gust,
+        var k3 = FlightModel.Derivatives(Apply(r, k2, dt / 2), spooled, _flightP, _liftRef, gust,
             thrustN, configuration, AtmosphereModel, appliedPitchThrustVectorAngle, gas);
-        var k4 = FlightModel.Derivatives(Apply(r, k3, dt), spooled, _p, _liftRef, gust,
+        var k4 = FlightModel.Derivatives(Apply(r, k3, dt), spooled, _flightP, _liftRef, gust,
             thrustN, configuration, AtmosphereModel, appliedPitchThrustVectorAngle, gas);
         var pos = r.Pos + (k1.DPos + (k2.DPos + k3.DPos) * 2 + k4.DPos) * (dt / 6);
         var vel = r.Vel + (k1.DVel + (k2.DVel + k3.DVel) * 2 + k4.DVel) * (dt / 6);
@@ -452,7 +460,7 @@ public sealed class AircraftSim {
         }
 
         var finalRaw = new RawState(pos, vel, _bank, s.Mass, attitude, bodyRates);
-        var aero = FlightModel.Aerodynamics(finalRaw, spooled, _p, gust, thrustN,
+        var aero = FlightModel.Aerodynamics(finalRaw, spooled, _flightP, gust, thrustN,
             configuration, AtmosphereModel, appliedPitchThrustVectorAngle);
         _airVelocity = aero.AirVelocity;
         DynamicPressurePa = aero.DynamicPressure;
@@ -465,7 +473,7 @@ public sealed class AircraftSim {
             : 0.0;
         NoseOnVelocityErrorDeg = ColdGasRcs.NoseOnVelocityErrorDeg(
             attitude.Rotate(new Vec3D(0, 0, 1)), _airVelocity);
-        PullLimit = FlightModel.EvaluatePullLimit(finalRaw, spooled, _p, _liftRef, gust,
+        PullLimit = FlightModel.EvaluatePullLimit(finalRaw, spooled, _flightP, _liftRef, gust,
             thrustN, aero.PitchThrustVectorAngleRad, configuration, AtmosphereModel);
         var nonGravitationalAcceleration = aero.Accel + new Vec3D(0.0, FlightModel.G0, 0.0);
         LastPilotNormalAccelerationG = nonGravitationalAcceleration.Dot(BodyUp)
@@ -473,7 +481,7 @@ public sealed class AircraftSim {
         HasValidPilotNormalAcceleration = true;
         LiftDir = aero.LiftDir;
         AdvanceSkinTemperature(dt);
-        var (_, nzMax, nzMin) = FlightModel.ClampNz(State, cmd, _p, AirspeedMps,
+        var (_, nzMax, nzMin) = FlightModel.ClampNz(State, cmd, _flightP, AirspeedMps,
             configuration, AtmosphereModel);
         UpdateBuffetCue(cmd.GDemand, nzMax, nzMin, dt);
 
@@ -493,7 +501,9 @@ public sealed class AircraftSim {
             alphaGust = _gustFiltered.Dot(up) / v;
             betaGust = _gustFiltered.Dot(right) / v;
             // Roll off the span differential, itself low-passed at the same rate.
-            double halfSpan = System.Math.Sqrt(_p.WingAreaM2);
+            double halfSpan = _flightP.WingSpanM > 0.0
+                ? 0.5 * _flightP.WingSpanM
+                : System.Math.Sqrt(_flightP.WingAreaM2);
             var bpos = State.Position;
             double rawRoll = (WindAt(bpos - right * halfSpan).Dot(up) - WindAt(bpos + right * halfSpan).Dot(up)) / v;
             _rollGustFiltered += (rawRoll - _rollGustFiltered) * (1.0 - System.Math.Exp(-dt / (12.0 / v)));

@@ -64,4 +64,14 @@ public sealed class TopGunMissileWireTests
         Assert.True(session.LaunchFoxTwo());
         Assert.Equal(1, session.Aim9Remaining);
     }
+
+    [Fact]
+    public void EffectiveTomcatWingSpanShrinksWithSweepSchedule()
+    {
+        double slow = TopGunFightRuntime.EffectiveTomcatWingSpanM(mach: 0.4, casKts: 200);
+        double fast = TopGunFightRuntime.EffectiveTomcatWingSpanM(mach: 1.2, casKts: 500);
+        Assert.True(fast < slow);
+        Assert.InRange(slow, 14.0, 16.0);
+        Assert.InRange(fast, 8.0, 11.0);
+    }
 }
