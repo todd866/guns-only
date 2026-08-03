@@ -46,9 +46,6 @@
         <label>Gunner target
           <select id="target">
             <option value="">No target</option>
-            <option value="observer.quarry-overwatch.v1">Quarry overwatch</option>
-            <option value="observer.ridge-east.v1">East ridge</option>
-            <option value="observer.plantation-tower.v1">Plantation tower</option>
           </select>
         </label>
         <label class="toggle"><input id="tour" type="checkbox"><span>Guided camera preview</span></label>
@@ -56,10 +53,10 @@
       </section>
 
       <section class="instructions">
-        <span class="eyebrow">Manual camera</span>
-        <h2>Fly the inspection rig</h2>
-        <p><kbd>W</kbd>/<kbd>S</kbd> forward · <kbd>A</kbd>/<kbd>D</kbd> strafe · <kbd>R</kbd>/<kbd>F</kbd> rise/lower · arrows look · <kbd>Shift</kbd> boost.</p>
-        <p class="honesty">AH‑1G flight authority is active. The model is a disclosed flight foundation; this focused route is not a surveyed combat-representation product.</p>
+        <span class="eyebrow">Ground war</span>
+        <h2>BF-legible basin fight</h2>
+        <p><kbd>W</kbd>/<kbd>S</kbd> collective · arrows cyclic · <kbd>A</kbd>/<kbd>D</kbd> pedals · hold <kbd>F</kbd> gunner consent · <kbd>Tab</kbd> cycle hostile · <kbd>R</kbd>/<kbd>C</kbd> camera rise/lower in free look.</p>
+        <p class="honesty">AH‑1G flight authority is active. Friendly olive / hostile dark markers fight under you; shoot hostiles to tip control and rearm only on the Camp Ember pad. The model is a disclosed flight foundation; this focused route is not a surveyed combat-representation product.</p>
       </section>
 
       <section class="metrics" aria-label="World metrics">
@@ -74,6 +71,10 @@
           <div><dt>AGL</dt><dd id="agl">—</dd></div>
           <div><dt>Power</dt><dd id="power">—</dd></div>
           <div><dt>Gunner</dt><dd id="gunner">—</dd></div>
+          <div><dt>Control</dt><dd id="control">—</dd></div>
+          <div><dt>Ammo</dt><dd id="ammo">—</dd></div>
+          <div><dt>FOB</dt><dd id="fob">—</dd></div>
+          <div><dt>Kills</dt><dd id="kills">—</dd></div>
         </dl>
       </section>
     </aside>
@@ -88,10 +89,22 @@
         <div class="route-progress" aria-hidden="true"><i id="route-progress"></i></div>
         <small id="route-feature" class="route-feature">Loading authored reveals…</small>
       </div>
+      <div class="war-hud" id="war-hud" aria-label="Ground war HUD">
+        <div class="balance-track" aria-hidden="true">
+          <i id="balance-fill"></i>
+          <span id="balance-label">CONTROL</span>
+        </div>
+        <div class="war-readouts">
+          <span id="hud-ammo">AMMO —</span>
+          <span id="hud-fob">FOB —</span>
+          <span id="hud-kills">KILLS —</span>
+        </div>
+      </div>
       <div class="legend" aria-hidden="true">
+        <span><i class="friendly-key"></i> friendly</span>
+        <span><i class="hostile-key"></i> hostile</span>
+        <span><i class="landmark-key"></i> contested site</span>
         <span><i class="hazard-key"></i> authority hazard</span>
-        <span><i class="landmark-key"></i> route landmark</span>
-        <span><i class="ambient-key"></i> ambient world</span>
       </div>
     </section>
   </main>

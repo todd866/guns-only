@@ -70,7 +70,9 @@ strike, and flight-card calibration against Army/NASA data.
    and turret nodes; governed rotor/engine/gearbox audio; rotorcraft warnings and mobile layout.
 4. **Combat missions:** ground entities, threats, NOE obstacles, component damage/failures, generic
    replay/debrief and AI. Rockets or TOW require an explicit product decision because this is Guns
-   Only.
+   Only. The first ground-war loop is `sim/Cobra/GroundWar/` (BF-Vietnam-legible contested sites,
+   balance tipped by M134 fire, Camp Ember rearm); see
+   `docs/superpowers/specs/2026-08-03-cobra-canyon-ground-war-design.md`.
 
 See [00-sources.md](./00-sources.md) for the evidence ledger and
 [10-flight-model.md](./10-flight-model.md) for equations, known approximations and acceptance

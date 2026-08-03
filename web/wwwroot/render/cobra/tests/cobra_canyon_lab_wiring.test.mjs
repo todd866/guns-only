@@ -27,6 +27,8 @@ test("Cobra Canyon lab consumes the authored planner and bounded presentation", 
   assert.match(main, /CobraWebBridge/);
   assert.match(main, /bridge\.SetControls/);
   assert.match(main, /bridge\.SetGunnerTarget/);
+  assert.match(main, /createCobraGroundWarPresentation/);
+  assert.match(main, /ground_war/);
   assert.match(main, /recordTelemetry/);
   assert.match(main, /requestAnimationFrame/);
 });
@@ -45,6 +47,9 @@ test("Cobra Canyon labels its flight authority and fidelity boundary honestly", 
   assert.match(html, /Manual start height/);
   assert.match(html, /AH‑1G flight authority is active/i);
   assert.match(html, /not a surveyed combat-representation product/i);
+  assert.match(html, /id="war-hud"/);
+  assert.match(html, /id="control"/);
+  assert.match(html, /id="ammo"/);
   assert.doesNotMatch(html, /combat ready|production fidelity|certified/i);
 });
 

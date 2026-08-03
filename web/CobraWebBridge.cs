@@ -3,6 +3,8 @@ using System.Runtime.Versioning;
 using System.Text.Json;
 using GunsOnly.Sim;
 using GunsOnly.Sim.Cobra;
+using GunsOnly.Sim.Cobra.GroundWar;
+using GunsOnly.Sim.Environment;
 using GunsOnly.Sim.Vehicles;
 
 namespace GunsOnly.Web;
@@ -19,10 +21,7 @@ public static partial class CobraWebBridge
     static CobraMissionRuntime? _runtime;
     static CobraCanyonRouteChoice _routeChoice;
     static VerticalLiftPilotCommand _command = new(0.5, 0.0, 0.0, 0.0);
-    static readonly CobraAiGunner Gunner = new(new CobraAiGunnerDefinition(
-        AcquisitionSeconds: 0.75,
-        ReacquisitionSeconds: 0.45,
-        SightCoincidenceToleranceRad: 0.06));
+    static CobraAiGunner _gunner = CreateGunner();
     static CobraAiGunnerDecision _gunnerDecision;
     static string? _selectedTargetId;
     static bool _engagementConsent;
@@ -51,9 +50,15 @@ public static partial class CobraWebBridge
             0.0);
         _selectedTargetId = null;
         _engagementConsent = false;
+        _gunner = CreateGunner();
         _gunnerDecision = default;
         _accumulatorSeconds = 0.0;
     }
+
+    static CobraAiGunner CreateGunner() => new(new CobraAiGunnerDefinition(
+        AcquisitionSeconds: 0.75,
+        ReacquisitionSeconds: 0.45,
+        SightCoincidenceToleranceRad: 0.06));
 
     [JSExport]
     public static void SetControls(
@@ -90,6 +95,8 @@ public static partial class CobraWebBridge
             && runtime.MissionFlyable) {
             runtime.Advance(_command);
             AdvanceGunner(runtime);
+            if (_gunnerDecision.FireAuthorized)
+                runtime.ApplyAuthorizedGunfire(_selectedTargetId);
             _accumulatorSeconds -= FixedDeltaSeconds;
         }
         return checked((int)runtime.Cobra.State.Tick);
@@ -106,6 +113,18 @@ public static partial class CobraWebBridge
         VehiclePowerObservation power = observation.Power;
         Vec3D position = observation.PositionWorldM;
         Vec3D velocity = observation.GroundVelocityMps;
+        CobraGroundWarRuntime groundWar = runtime.GroundWar;
+        GroundWarDebrief debrief = groundWar.Debrief;
+        bool overFob = groundWar.Fob.Contains(
+            position,
+            runtime.Terrain.TrySample(position.X, position.Z, out TerrainSample pad)
+                ? pad.HeightM
+                : double.NegativeInfinity);
+        Vec3D fob = groundWar.Fob.CentreWorldM;
+        double fobEast = fob.X - position.X;
+        double fobNorth = fob.Z - position.Z;
+        double fobRangeM = Math.Sqrt(fobEast * fobEast + fobNorth * fobNorth);
+        double fobBearingRad = Math.Atan2(fobEast, fobNorth);
         return new {
             world_id = diagnostics.WorldId,
             route = RouteToken(runtime.SelectedRoute.Choice),
@@ -135,6 +154,64 @@ public static partial class CobraWebBridge
                 track_requested = _gunnerDecision.TrackRequested,
                 fire_authorized = _gunnerDecision.FireAuthorized,
                 qualified_track_seconds = _gunnerDecision.QualifiedTrackSeconds,
+            },
+            ground_war = new {
+                control = groundWar.Balance.Control,
+                trend = groundWar.Balance.Trend,
+                ammo_remaining = groundWar.Magazine.RoundsRemaining,
+                ammo_capacity = groundWar.Magazine.CapacityRounds,
+                ammo_bingo = groundWar.Magazine.IsBingo,
+                ammo_dry = groundWar.Magazine.IsDry,
+                over_fob = overFob,
+                fob_range_m = fobRangeM,
+                fob_bearing_rad = fobBearingRad,
+                fob = new {
+                    x_m = fob.X,
+                    y_m = fob.Y,
+                    z_m = fob.Z,
+                    radius_m = groundWar.Fob.RadiusM,
+                },
+                sites = groundWar.Sites.Select(site => new {
+                    id = site.Id,
+                    landmark_id = site.LandmarkId,
+                    label = site.Label,
+                    local_control = site.LocalControl,
+                    x_m = site.PositionWorldM.X,
+                    y_m = site.PositionWorldM.Y,
+                    z_m = site.PositionWorldM.Z,
+                    capture_radius_m = site.CaptureRadiusM,
+                }).ToArray(),
+                units = groundWar.Units.Select(unit => new {
+                    id = unit.Id,
+                    faction = unit.Faction.ToString().ToLowerInvariant(),
+                    role = RoleToken(unit.Role),
+                    alive = unit.IsAlive,
+                    health = unit.Health,
+                    max_health = unit.MaxHealth,
+                    x_m = unit.PositionWorldM.X,
+                    y_m = unit.PositionWorldM.Y,
+                    z_m = unit.PositionWorldM.Z,
+                    home_site_id = unit.HomeSiteId,
+                }).ToArray(),
+                events = groundWar.RecentEvents.Select(evt => new {
+                    tick = evt.AuthorityTick,
+                    kind = evt.Kind,
+                    unit_id = evt.UnitId,
+                    site_id = evt.SiteId,
+                    faction = evt.Faction?.ToString().ToLowerInvariant(),
+                    x_m = evt.PositionWorldM.X,
+                    y_m = evt.PositionWorldM.Y,
+                    z_m = evt.PositionWorldM.Z,
+                }).ToArray(),
+                debrief = new {
+                    hostile_kills = debrief.HostileKillsByPlayer,
+                    friendly_kills = debrief.FriendlyKillsByPlayer,
+                    fob_rearms = debrief.FobRearmCount,
+                    peak_friendly_control = debrief.PeakFriendlyControl,
+                    peak_hostile_control = debrief.PeakHostileControl,
+                    elapsed_s = debrief.ElapsedSeconds,
+                    rounds_expended = debrief.RoundsExpended,
+                },
             },
             vehicle = new {
                 tick = observation.Tick,
@@ -170,36 +247,36 @@ public static partial class CobraWebBridge
     {
         CobraGunnerTargetObservation? target = null;
         if (_selectedTargetId is not null) {
-            CobraResolvedThreatObserver? observer = runtime.ResolvedThreatObservers
-                .FirstOrDefault(candidate => candidate.Id == _selectedTargetId);
-            if (observer is { } selected) {
-                CobraThreatLineOfSight sight = runtime.AssessThreatAt(
-                    selected.Id, runtime.Cobra.State.PositionWorldM);
-                Vec3D line = selected.PositionWorldM - runtime.Cobra.State.PositionWorldM;
+            GroundUnit? unit = runtime.GroundWar.FindUnit(_selectedTargetId);
+            if (unit is { IsAlive: true }) {
+                Vec3D line = unit.PositionWorldM - runtime.Cobra.State.PositionWorldM;
                 double rangeM = line.Length;
+                double yaw = runtime.Cobra.Observation.YawRad;
                 double horizontalNoseError = rangeM > 1e-6
                     ? Math.Abs(Math.Atan2(
-                        line.X * Math.Cos(runtime.Cobra.Observation.YawRad)
-                            - line.Z * Math.Sin(runtime.Cobra.Observation.YawRad),
-                        line.X * Math.Sin(runtime.Cobra.Observation.YawRad)
-                            + line.Z * Math.Cos(runtime.Cobra.Observation.YawRad)))
+                        line.X * Math.Cos(yaw) - line.Z * Math.Sin(yaw),
+                        line.X * Math.Sin(yaw) + line.Z * Math.Cos(yaw)))
                     : 0.0;
+                bool hasLos = !runtime.ResolvedObstacles.Any(obstacle =>
+                    !obstacle.IntersectsSphere(runtime.Cobra.State.PositionWorldM, 0.01)
+                    && !obstacle.IntersectsSphere(unit.PositionWorldM, 0.01)
+                    && obstacle.IntersectsSegment(
+                        runtime.Cobra.State.PositionWorldM, unit.PositionWorldM));
                 target = new CobraGunnerTargetObservation(
-                    selected.Id,
+                    unit.Id,
                     Present: true,
-                    Friendly: false,
-                    sight.HasLineOfSight,
-                    WithinTurretEnvelope: horizontalNoseError <= 1.05
-                        && rangeM <= 2_000.0,
-                    HasBallisticSolution: rangeM is >= 150.0 and <= 2_000.0,
+                    Friendly: unit.Faction == GroundFaction.Friendly,
+                    HasLineOfSight: hasLos,
+                    WithinTurretEnvelope: horizontalNoseError <= 1.05 && rangeM <= 2_000.0,
+                    HasBallisticSolution: rangeM is >= 80.0 and <= 2_000.0,
                     SightErrorRad: horizontalNoseError);
             }
         }
-        _gunnerDecision = Gunner.Advance(new CobraAiGunnerInput(
+        _gunnerDecision = _gunner.Advance(new CobraAiGunnerInput(
             runtime.Cobra.State.Tick,
             _selectedTargetId,
             _engagementConsent,
-            WeaponsArmed: true,
+            WeaponsArmed: !runtime.GroundWar.Magazine.IsDry,
             TurretServiceable: true,
             target));
     }
@@ -210,6 +287,13 @@ public static partial class CobraWebBridge
             throw new ArgumentOutOfRangeException(name);
         return Math.Clamp(value, minimum, maximum);
     }
+
+    static string RoleToken(GroundUnitRole role) => role switch {
+        GroundUnitRole.InfantryClump => "infantry",
+        GroundUnitRole.SoftVehicle => "soft-vehicle",
+        GroundUnitRole.HardPoint => "hard-point",
+        _ => throw new ArgumentOutOfRangeException(nameof(role))
+    };
 
     static string RouteToken(CobraCanyonRouteChoice choice) => choice switch {
         CobraCanyonRouteChoice.RiverGorge => "river-gorge",

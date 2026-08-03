@@ -1,3 +1,4 @@
+using GunsOnly.Sim.Cobra.GroundWar;
 using GunsOnly.Sim.Environment;
 using GunsOnly.Sim.Vehicles;
 
@@ -71,7 +72,7 @@ public readonly record struct CobraResolvedObstacle(
         };
     }
 
-    internal bool IntersectsSegment(in Vec3D startWorldM, in Vec3D endWorldM)
+    public bool IntersectsSegment(in Vec3D startWorldM, in Vec3D endWorldM)
     {
         return Primitive switch {
             CobraCanyonCollisionPrimitive.CapsuleSegment =>
@@ -293,6 +294,7 @@ public sealed class CobraMissionRuntime
     readonly Vec3D _windVelocityMps;
     readonly IReadOnlyList<CobraResolvedObstacle> _resolvedObstacles;
     readonly IReadOnlyList<CobraResolvedThreatObserver> _resolvedThreatObservers;
+    readonly CobraGroundWarRuntime _groundWar;
     CobraMaskingAssessment _cachedMaskingAssessment = null!;
     long _maskingAssessmentAuthorityTicks;
     long _nextAuthorityTick;
@@ -306,7 +308,8 @@ public sealed class CobraMissionRuntime
         double additivePayloadMassKg = 0.0,
         double airDensityKgM3 = DefaultAirDensityKgM3,
         Vec3D? windVelocityMps = null,
-        CobraMissionSpawn? spawn = null)
+        CobraMissionSpawn? spawn = null,
+        int? groundWarSeed = null)
     {
         _definition = definition ?? throw new ArgumentNullException(nameof(definition));
         _terrain = terrain ?? throw new ArgumentNullException(nameof(terrain));
@@ -360,6 +363,7 @@ public sealed class CobraMissionRuntime
             recurringBaseMassKg,
             additivePayloadMassKg,
             Ah1gCobraDefinition.LateProduction);
+        _groundWar = new CobraGroundWarRuntime(definition, terrain, groundWarSeed);
         Status = CobraMissionStatus.Active;
         _cachedMaskingAssessment = AssessMaskingAt(_cobra.State.PositionWorldM);
         _maskingAssessmentAuthorityTicks = 0;
@@ -371,6 +375,7 @@ public sealed class CobraMissionRuntime
     public CobraCanyonRouteDefinition SelectedRoute => _selectedRoute;
     public Ah1gCobraDynamics Cobra => _cobra;
     public IPlayerVehicleDynamics Vehicle => _cobra;
+    public CobraGroundWarRuntime GroundWar => _groundWar;
     public IReadOnlyList<CobraResolvedObstacle> ResolvedObstacles => _resolvedObstacles;
     public IReadOnlyList<CobraResolvedThreatObserver> ResolvedThreatObservers =>
         _resolvedThreatObservers;
@@ -413,12 +418,9 @@ public sealed class CobraMissionRuntime
             Status = CobraMissionStatus.ObstacleCollision;
         } else if (!vehicleResult.State.Flyable) {
             Status = CobraMissionStatus.VehicleAuthorityLost;
-        } else {
-            CobraRouteGuidance guidance = RouteGuidanceAt(currentPositionWorldM);
-            if (guidance.RemainingHorizontalDistanceM <= 45.0
-                && guidance.InsideCorridor)
-                Status = CobraMissionStatus.RouteComplete;
         }
+        // Route end is guidance-only: ground war / FOB resupply needs an open sandbox, not a
+        // terminal RouteComplete. Remaining distance stays on RouteGuidance.
 
         if (Status != CobraMissionStatus.Active
             || _nextAuthorityTick - _maskingAssessmentAuthorityTicks
@@ -427,9 +429,18 @@ public sealed class CobraMissionRuntime
             _maskingAssessmentAuthorityTicks = _nextAuthorityTick;
         }
 
+        _groundWar.Advance(PlayerVehicleContract.FixedDeltaSeconds);
+        _groundWar.TryResupplyAtFob(currentPositionWorldM);
+
         Diagnostics = BuildDiagnostics();
         return new CobraMissionAdvanceResult(vehicleResult, Diagnostics);
     }
+
+    /// <summary>
+    /// Applies fire-authorized M134 damage to a ground-war unit and drains the magazine.
+    /// </summary>
+    public bool ApplyAuthorizedGunfire(string? targetUnitId) =>
+        _groundWar.ApplyAuthorizedFire(targetUnitId, PlayerVehicleContract.FixedDeltaSeconds);
 
     public bool TryFindObstacleContact(
         in Vec3D centreWorldM,
