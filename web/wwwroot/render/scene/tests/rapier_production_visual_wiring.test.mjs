@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as THREE from "../../../vendor/three.module.js";
+import { RELEASE_BUILD } from "../../release/release_identity.js";
 import { createRapier } from "../scene_builders.js";
 
 const wwwroot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -33,21 +34,21 @@ test("Build 238 production wiring selects v2, the real balloon, and compact high
   const renderer = source("render/scene/airframe_from_definition.js");
 
   assert.match(builders,
-    /import rapierV2Definition from "\.\.\/\.\.\/airframes\/rapier_v2\.embedded\.js\?v=251"/);
+    new RegExp(`import rapierV2Definition from "\\.\\.\\/\\.\\.\\/airframes\\/rapier_v2\\.embedded\\.js\\?v=${RELEASE_BUILD}"`));
   assert.match(builders, /context\.definition \?\? rapierV2Definition/);
   assert.match(renderer,
-    /from "\.\/shape_first_airframe_adapter\.js\?v=251"/);
+    new RegExp(`from "\\.\\/shape_first_airframe_adapter\\.js\\?v=${RELEASE_BUILD}"`));
   assert.match(renderer, /intake\.rotation\.x = Number\(def\.intake\.rotX\) \|\| 0/);
 
   assert.match(app,
-    /import \{ createHighAltitudeBalloon \} from "\.\/render\/scene\/high_altitude_balloon\.js\?v=251"/);
+    new RegExp(`import \\{ createHighAltitudeBalloon \\} from "\\.\\/render\\/scene\\/high_altitude_balloon\\.js\\?v=${RELEASE_BUILD}"`));
   assert.match(app,
     /\["presentation\.vehicle\.high-altitude-weather-balloon\.target\.v1", createHighAltitudeBalloon\]/);
   assert.match(app, /continuous 35 kPa climb/);
   assert.match(app, /24 km M4\.2 shelf/);
 
   assert.match(hud,
-    /from "\.\/render\/mission\/rapier_high_mach_instruments\.js\?v=251"/);
+    new RegExp(`from "\\.\\/render\\/mission\\/rapier_high_mach_instruments\\.js\\?v=${RELEASE_BUILD}"`));
   assert.match(hud, /createRapierHighMachHistory\(\)/);
   assert.match(hud, /advanceRapierHighMachInstruments\(/);
   assert.match(hud, /drawRapierHighMachInstruments\(highMach\.presentation\)/);
