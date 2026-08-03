@@ -61,11 +61,48 @@ public sealed class Aim9SurrogateTests
     }
 
     [Fact]
+    public void FirstSeekerStepTransitionsSeekingToTracking()
+    {
+        var aim9 = new Aim9Surrogate();
+        var shooter = NorthboundShooter();
+        var target = NorthboundTarget(rangeM: 3000);
+        Assert.True(aim9.TryLaunch(shooter, target, nowMs: 0));
+        Assert.Equal(Aim9FlightState.Seeking, aim9.Live.State);
+
+        aim9.Step(dt: 1.0 / 60.0, target);
+        Assert.Equal(Aim9FlightState.Tracking, aim9.Live.State);
+        Assert.True(aim9.Live.BoresightDeg <= 50.0);
+    }
+
+    [Fact]
     public void SeekerCanLoseTargetOffBoresight()
     {
         var aim9 = Aim9Surrogate.TestFixture_OffBoresightLoss();
         aim9.Step(dt: 1.0 / 60.0, target: new Aim9Pose(new Vec3D(8000, 5000, 0), Vec3D.Zero));
         Assert.Equal(Aim9FlightState.Lost, aim9.Live.State);
+    }
+
+    [Fact]
+    public void SeekerCanLoseTargetOnHighTrackRate()
+    {
+        var aim9 = Aim9Surrogate.TestFixture_HighTrackRateLoss();
+        // Lateral jump stays inside boresight but rotates LOS far faster than 18°/s.
+        var jinkingTarget = new Aim9Pose(new Vec3D(400, 5000, 2000), new Vec3D(600, 0, 0));
+        aim9.Step(dt: 1.0 / 60.0, jinkingTarget);
+        Assert.Equal(Aim9FlightState.Lost, aim9.Live.State);
+        Assert.True(aim9.Live.BoresightDeg <= 50.0);
+        Assert.True(aim9.Live.TrackRateDegPerSec > 18.0);
+    }
+
+    [Fact]
+    public void FlightExpiresAtTimeCap()
+    {
+        var aim9 = new Aim9Surrogate();
+        var target = NorthboundTarget(rangeM: 3000);
+        Assert.True(aim9.TryLaunch(NorthboundShooter(), target, nowMs: 0));
+
+        aim9.Step(dt: 30.0, target);
+        Assert.Equal(Aim9FlightState.Expired, aim9.Live.State);
     }
 
     [Fact]
