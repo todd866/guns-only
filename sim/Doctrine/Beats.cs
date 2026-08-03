@@ -199,6 +199,16 @@ public sealed record AircraftCapability(
         "aircraft.ucav-interceptor.prototype.v1", "UCAV interceptor prototype",
         "presentation.vehicle.one-way-attack-drone.prototype.v1",
         "systems.uncrewed-prototype.not-simulated.v1", false);
+    public static AircraftCapability F14ASurrogate { get; } = new(
+        "aircraft.f14a.public-data-surrogate.v1", "F-14A public-data surrogate",
+        "presentation.vehicle.f14a.public-data-surrogate.v1",
+        "systems.cold-war-fighter.not-simulated.v1", false, true,
+        "https://www.history.navy.mil/content/history/museums/nnam/explore/collections/aircraft/f/f-14a-tomcat.html");
+    public static AircraftCapability Mig28Surrogate { get; } = new(
+        "aircraft.mig-28.f5e-class-fiction.v1", "MiG-28 (F-5E-class fiction)",
+        "presentation.vehicle.mig-28.fiction.v1",
+        "systems.cold-war-fighter.not-simulated.v1", false, true,
+        "https://www.hickoryaviationmuseum.org/aircraft/northrop-f-5-tiger-ii/");
 }
 
 public enum MissionContentFamily {
