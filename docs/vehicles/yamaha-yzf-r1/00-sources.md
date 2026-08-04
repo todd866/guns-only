@@ -63,6 +63,8 @@ dyno-measured, and should be replaced if loaded-radius data appears.
 | `HeadStabilizationFraction` | 0.25 | Helmet view damps 25% of chassis roll | View roll < chassis roll at sustained knee-down lean |
 | `MaximumBarSteerRad` | ±0.12 rad | Provisional low-order single-track input range, not a measured handlebar-stop angle | Curvature stays plausible at 25 m/s without immediately reaching the 56° lean cap |
 | Lean response | 4.0 rad/s natural frequency, 0.85 damping ratio at 95.0 kg·m² reference inertia | Provisional fixed roll stiffness/damping; angular acceleration is torque divided by `RollInertiaKgM2` | Full steer + rider shift settles without oscillation; lower inertia must enter lean faster than higher inertia; replace with a measured roll transient |
+| Rider body-shift steering coupling | 0.50 of combined-CG equilibrium acceleration, full authority by 8 m/s | Provisional low-order coupling; body shift tightens a turn but cannot replace bar input | Full inside shift changes turn rate measurably but by less than 0.05 rad/s in the mild-turn regression |
+| Assisted-rider reaction/rates | 7 ticks (58 ms) delay; 3.0 steer units/s, 2.4 body units/s, 2.2 throttle units/s, 4.0 brake units/s | Provisional elite-rider reflex surrogate, not a biometric claim | Default controls remain progressive and complete the sampled circuit; raw mode bypasses the rider controller for comparison |
 
 ## Surrogate — physics placeholders pending handbook rows
 
@@ -99,11 +101,17 @@ dyno-measured, and should be replaced if loaded-radius data appears.
   stay explicitly labeled surrogate with combined-slip validation targets.
 - **Electronics** — ABS, traction control, slide control, and launch control are out of scope for v1;
   do not silently fold their authority into tyre µ.
+- **Rider-response constants** — the reflex delay and rate limits are gameplay-calibrated provisional
+  values. They model a bounded human stabilization loop, not Yamaha electronics or measured
+  neuromuscular data, and raw mode remains available as the comparison adapter.
 
 ## Operational notes for dynamics consumers
 
 - Use `CurbMassKg + RiderMassKg` for combined mass unless the mission strips the rider.
 - Steady turn curvature target: `v²/(ρ g) ≈ tan φ` with roll inertia lag from `RollInertiaKgM2`.
+- Resolved tyre force is trajectory authority: planar yaw satisfies `v × yawRate = lateralForce /
+  mass`. The earlier direct kinematic-yaw path was rejected because it allowed the bike to corner
+  with tens of kilonewtons more force than the contact patches resolved.
 - Longitudinal load transfer couples through `CombinedCgHeightM` and wheelbase — not a fixed 50/50 split.
 - Rev limiter and peak power map should respect `PeakCrankPowerW` at `PeakPowerRpm`, not exceed
   `RedlineRpm`.

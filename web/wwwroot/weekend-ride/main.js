@@ -1,5 +1,9 @@
 import * as THREE from "../vendor/three.module.js?v=256";
 import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=256";
+import {
+  dominantSignedAxis,
+  gamepadRiderAxes,
+} from "../render/motorcycle/rider_input.js?v=256";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
@@ -95,6 +99,7 @@ let bridge = null;
 let snapshot = null;
 let paused = false;
 let manualClutch = false;
+let rawPhysics = false;
 let animationFrame = 0;
 let lastTimeMs = performance.now();
 
@@ -156,11 +161,20 @@ function axisValue(positiveCode, negativeCode) {
 
 function sendControls() {
   if (!bridge || paused) return;
-  const throttle = keys.has("KeyW") ? 1 : 0;
-  const brake = keys.has("KeyS") ? 1 : 0;
-  const steer = axisValue("KeyD", "KeyA");
-  const riderLateral = axisValue("ArrowRight", "ArrowLeft");
-  const riderForeAft = axisValue("ArrowUp", "ArrowDown");
+  const gamepad = Array.from(navigator.getGamepads?.() ?? [])
+    .find((candidate) => candidate?.connected);
+  const analog = gamepadRiderAxes(gamepad);
+  const throttle = Math.max(keys.has("KeyW") ? 1 : 0, analog.throttle);
+  const brake = Math.max(keys.has("KeyS") ? 1 : 0, analog.brake);
+  const steer = dominantSignedAxis(axisValue("KeyD", "KeyA"), analog.turn);
+  const riderLateral = dominantSignedAxis(
+    axisValue("ArrowRight", "ArrowLeft"),
+    analog.bodyLateral,
+  );
+  const riderForeAft = dominantSignedAxis(
+    axisValue("ArrowUp", "ArrowDown"),
+    analog.bodyForeAft,
+  );
   const clutch = manualClutch
     ? (keys.has("ShiftLeft") || keys.has("ShiftRight") ? 0 : 1)
     : 1;
@@ -202,7 +216,12 @@ function animate(timeMs) {
   } else if (paused) {
     setStatus("PAUSED · ESC TO RESUME", "ready");
   } else {
-    setStatus("YZF-R1 ACTIVE · HELMET VIEW", "ready");
+    setStatus(
+      rawPhysics
+        ? "YZF-R1 ACTIVE · RAW PHYSICS"
+        : "YZF-R1 ACTIVE · RIDER REFLEX ASSIST",
+      "ready",
+    );
   }
 }
 
@@ -232,6 +251,14 @@ window.addEventListener("keydown", (event) => {
     if (!bridge) return;
     manualClutch = !manualClutch;
     bridge.SetClutchMode(manualClutch ? 1 : 0);
+    return;
+  }
+  if (event.code === "KeyT") {
+    event.preventDefault();
+    if (event.repeat) return;
+    if (!bridge) return;
+    rawPhysics = !rawPhysics;
+    bridge.SetControlMode(rawPhysics ? 1 : 0);
     return;
   }
   if (event.code === "KeyQ") {

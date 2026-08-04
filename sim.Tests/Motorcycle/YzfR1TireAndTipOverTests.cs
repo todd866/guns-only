@@ -53,6 +53,33 @@ public sealed class YzfR1TireAndTipOverTests
             $"coast={latCoastN:F0} N, braking={latWithBrakeN:F0} N");
     }
 
+    [Fact]
+    public void ResolvedLateralTireForceBoundsYawRateAtSpeed()
+    {
+        var bike = AtRest("force-authority");
+        var accelerate = Command(throttle: 1.0);
+        Advance(bike, accelerate, startTick: 0, tickCount: 120 * 8);
+        Assert.True(bike.Telemetry.SpeedMps > 25.0);
+
+        PlayerVehicleEnvironmentSample lowGrip = new(
+            AirDensityKgM3: 1.225,
+            WindVelocityMps: Vec3D.Zero,
+            Surface: VehicleSurfaceSample.Horizontal(
+                surfaceId: "low-grip",
+                heightM: RapierLaunchSite.OperatingSurfaceElevationM,
+                frictionPerSecond: 0.5));
+        var hardTurn = Command(throttle: 0.0) with { Steer = 1.0 };
+        Advance(bike, hardTurn, lowGrip, startTick: 120 * 8, tickCount: 1);
+
+        double forceRequiredByYawN = bike.State.GrossMassKg
+            * bike.Telemetry.SpeedMps
+            * Math.Abs(bike.State.BodyRates.R);
+        Assert.True(
+            forceRequiredByYawN <= Math.Abs(bike.Telemetry.LateralForceN) + 1.0,
+            $"yaw requires {forceRequiredByYawN:F0} N but contact resolved "
+            + $"{bike.Telemetry.LateralForceN:F0} N");
+    }
+
     static YzfR1Dynamics AtRest(string id) =>
         YzfR1Dynamics.AtRestOnRunway(
             id,

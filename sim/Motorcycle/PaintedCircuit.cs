@@ -11,8 +11,10 @@ public struct PaintedCircuitQueryState
 {
     public double LastProgressM;
     public int LapIndex;
-    public int LastSectorIndex;
+    public int NextSectorIndex;
     public bool HasSample;
+    public bool LastOnTrack;
+    public bool LapValid;
 }
 
 /// <summary>
@@ -21,9 +23,11 @@ public struct PaintedCircuitQueryState
 /// </summary>
 public sealed class PaintedCircuit
 {
-    const double RunwayLengthM = 3_048.0;
-    const double RunwayWidthM = 48.0;
-    const double StartFinishCrossingWindowM = 12.0;
+    public const double RapierRunwayLengthM = 3_048.0;
+    public const double RapierRunwayWidthM = 48.0;
+    const double CornerBlendDistanceM = 30.0;
+    const double MaximumSampleSpacingM = 10.0;
+    const double MaximumContinuousAdvanceM = 20.0;
 
     readonly Vec3D[] _centreline;
     readonly double[] _segmentLengthM;
@@ -74,7 +78,7 @@ public sealed class PaintedCircuit
     public static PaintedCircuit RapierStripWeekend()
     {
         const double headingRad = -Math.PI / 2.0;
-        const double trackWidthM = 8.0;
+        const double trackWidthM = 20.0;
         const double elevM = RapierLaunchSite.OperatingSurfaceElevationM;
         Vec3D forward = RunwayForward(headingRad);
         Vec3D right = RunwayRight(headingRad);
@@ -85,27 +89,33 @@ public sealed class PaintedCircuit
         Vec3D At(double alongM, double crossM) =>
             origin + forward * alongM + right * crossM;
 
-        Vec3D[] centreline =
+        Vec3D[] controlPoints =
         [
-            At(-1_380.0, 0.0),
-            At(-1_050.0, 12.0),
-            At(-650.0, -12.0),
-            At(-250.0, 14.0),
-            At(150.0, -14.0),
-            At(550.0, 14.0),
-            At(950.0, -12.0),
-            At(1_250.0, 10.0),
-            At(1_480.0, 18.0),
-            At(1_480.0, -18.0),
-            At(1_220.0, -16.0),
-            At(850.0, 16.0),
-            At(450.0, -16.0),
-            At(50.0, 14.0),
-            At(-350.0, -14.0),
-            At(-750.0, 12.0),
-            At(-1_150.0, -10.0),
-            At(-1_380.0, 0.0),
+            At(-1_300.0, -14.0),
+            At(-900.0, -12.0),
+            At(-500.0, -8.0),
+            At(-100.0, -14.0),
+            At(300.0, -8.0),
+            At(700.0, -14.0),
+            At(1_100.0, -12.0),
+            At(1_380.0, -14.0),
+            At(1_460.0, -12.0),
+            At(1_480.0, 0.0),
+            At(1_460.0, 12.0),
+            At(1_380.0, 14.0),
+            At(1_100.0, 12.0),
+            At(700.0, 14.0),
+            At(300.0, 8.0),
+            At(-100.0, 14.0),
+            At(-500.0, 8.0),
+            At(-900.0, 12.0),
+            At(-1_300.0, 14.0),
+            At(-1_460.0, 12.0),
+            At(-1_480.0, 0.0),
+            At(-1_460.0, -12.0),
+            At(-1_300.0, -14.0),
         ];
+        Vec3D[] centreline = BuildRoundedCentreline(controlPoints);
 
         double minAlongM = double.PositiveInfinity;
         double maxAlongM = double.NegativeInfinity;
@@ -124,7 +134,7 @@ public sealed class PaintedCircuit
         double boundingLengthM = maxAlongM - minAlongM;
         double boundingWidthM = maxCrossM - minCrossM;
         int startFinishSegmentIndex = centreline.Length - 2;
-        Vec3D startFinishCentre = At(-1_380.0, 0.0);
+        Vec3D startFinishCentre = centreline[0];
         double[] sectorGateProgressM = [0.25, 0.50, 0.75];
 
         return new PaintedCircuit(
@@ -135,6 +145,77 @@ public sealed class PaintedCircuit
             startFinishCentre,
             startFinishSegmentIndex,
             sectorGateProgressM);
+    }
+
+    static Vec3D[] BuildRoundedCentreline(IReadOnlyList<Vec3D> closedControlPoints)
+    {
+        int uniqueCount = closedControlPoints.Count - 1;
+        if (uniqueCount < 3 || closedControlPoints[0] != closedControlPoints[^1])
+            throw new ArgumentException("Circuit control points must form a closed loop.");
+
+        var entries = new Vec3D[uniqueCount];
+        var exits = new Vec3D[uniqueCount];
+        for (int index = 0; index < uniqueCount; index++)
+        {
+            Vec3D previous = closedControlPoints[(index - 1 + uniqueCount) % uniqueCount];
+            Vec3D current = closedControlPoints[index];
+            Vec3D next = closedControlPoints[(index + 1) % uniqueCount];
+            Vec3D incoming = current - previous;
+            Vec3D outgoing = next - current;
+            double incomingLengthM = HorizontalLength(incoming);
+            double outgoingLengthM = HorizontalLength(outgoing);
+            double blendM = Math.Min(
+                CornerBlendDistanceM,
+                Math.Min(incomingLengthM, outgoingLengthM) * 0.35);
+            Vec3D incomingDirection = HorizontalDirection(incoming);
+            Vec3D outgoingDirection = HorizontalDirection(outgoing);
+            entries[index] = current - incomingDirection * blendM;
+            exits[index] = current + outgoingDirection * blendM;
+        }
+
+        var sampled = new List<Vec3D> { exits[0] };
+        for (int index = 1; index < uniqueCount; index++)
+        {
+            AppendLineSamples(sampled, sampled[^1], entries[index]);
+            AppendQuadraticCorner(
+                sampled,
+                entries[index],
+                closedControlPoints[index],
+                exits[index]);
+        }
+        AppendLineSamples(sampled, sampled[^1], entries[0]);
+        AppendQuadraticCorner(sampled, entries[0], closedControlPoints[0], exits[0]);
+        return sampled.ToArray();
+    }
+
+    static void AppendLineSamples(List<Vec3D> sampled, Vec3D start, Vec3D end)
+    {
+        double lengthM = HorizontalDistance(start, end);
+        int segmentCount = Math.Max(1, (int)Math.Ceiling(lengthM / MaximumSampleSpacingM));
+        for (int segment = 1; segment <= segmentCount; segment++)
+            sampled.Add(Lerp(start, end, (double)segment / segmentCount));
+    }
+
+    static void AppendQuadraticCorner(
+        List<Vec3D> sampled,
+        Vec3D entry,
+        Vec3D corner,
+        Vec3D exit)
+    {
+        double controlLengthM = HorizontalDistance(entry, corner)
+            + HorizontalDistance(corner, exit);
+        int segmentCount = Math.Max(
+            24,
+            (int)Math.Ceiling(controlLengthM / MaximumSampleSpacingM));
+        for (int segment = 1; segment <= segmentCount; segment++)
+        {
+            double t = (double)segment / segmentCount;
+            double oneMinusT = 1.0 - t;
+            sampled.Add(
+                entry * (oneMinusT * oneMinusT)
+                + corner * (2.0 * oneMinusT * t)
+                + exit * (t * t));
+        }
     }
 
     public PaintedCircuitQueryResult Query(Vec3D positionWorld)
@@ -160,28 +241,59 @@ public sealed class PaintedCircuit
         int sectorCrossed = -1;
         int lapIndex = state.LapIndex;
 
-        if (state.HasSample)
+        if (!state.HasSample)
         {
-            crossedStartFinish = CrossedStartFinish(
-                state.LastProgressM,
+            state.LastProgressM = progressM;
+            state.LastOnTrack = onTrack;
+            state.LapValid = onTrack;
+            state.HasSample = true;
+            return new PaintedCircuitQueryResult(
+                onTrack,
                 progressM,
-                out int lapDelta);
-            lapIndex += lapDelta;
+                lapIndex,
+                CrossedStartFinish: false,
+                SectorCrossed: -1);
+        }
 
-            if (crossedStartFinish)
-                state.LastSectorIndex = -1;
+        double rawProgressDeltaM = progressM - state.LastProgressM;
+        bool wrappedForward = state.LastProgressM > CircuitLengthM * 0.5
+            && progressM < CircuitLengthM * 0.5;
+        double forwardAdvanceM = wrappedForward
+            ? rawProgressDeltaM + CircuitLengthM
+            : rawProgressDeltaM;
+        bool stationary = Math.Abs(rawProgressDeltaM) <= 1e-6;
+        bool continuousForward = forwardAdvanceM > 1e-6
+            && forwardAdvanceM <= MaximumContinuousAdvanceM;
+        if (!onTrack || !state.LastOnTrack || (!stationary && !continuousForward))
+            state.LapValid = false;
 
-            sectorCrossed = DetectSectorCrossing(
-                state.LastProgressM,
-                progressM,
-                state.LastSectorIndex);
+        if (continuousForward && onTrack && state.LastOnTrack)
+        {
+            if (wrappedForward)
+            {
+                crossedStartFinish = state.LapValid
+                    && state.NextSectorIndex >= _sectorGateProgressM.Length;
+                if (crossedStartFinish)
+                    lapIndex++;
+                state.NextSectorIndex = 0;
+                state.LapValid = true;
+            }
+            else if (state.LapValid
+                && state.NextSectorIndex < _sectorGateProgressM.Length)
+            {
+                double gateProgressM =
+                    _sectorGateProgressM[state.NextSectorIndex] * CircuitLengthM;
+                if (CrossedForward(state.LastProgressM, progressM, gateProgressM))
+                {
+                    sectorCrossed = state.NextSectorIndex;
+                    state.NextSectorIndex++;
+                }
+            }
         }
 
         state.LastProgressM = progressM;
         state.LapIndex = lapIndex;
-        if (sectorCrossed >= 0)
-            state.LastSectorIndex = sectorCrossed;
-        state.HasSample = true;
+        state.LastOnTrack = onTrack;
 
         return new PaintedCircuitQueryResult(
             onTrack,
@@ -223,44 +335,24 @@ public sealed class PaintedCircuit
         return new ClosestSegmentSample(bestLateralDistanceM, bestProgressM);
     }
 
-    bool CrossedStartFinish(double previousProgressM, double progressM, out int lapDelta)
-    {
-        lapDelta = 0;
-        if (previousProgressM <= progressM)
-            return false;
-
-        double deltaM = previousProgressM - progressM;
-        bool wrappedForward = deltaM >= CircuitLengthM - StartFinishCrossingWindowM;
-        bool crossedHalfway = previousProgressM > CircuitLengthM * 0.5
-            && progressM < CircuitLengthM * 0.5;
-        if (!wrappedForward && !crossedHalfway)
-            return false;
-
-        lapDelta = 1;
-        return true;
-    }
-
-    int DetectSectorCrossing(
-        double previousProgressM,
-        double progressM,
-        int lastSectorIndex)
-    {
-        for (int sectorIndex = lastSectorIndex + 1;
-            sectorIndex < _sectorGateProgressM.Length;
-            sectorIndex++)
-        {
-            double gateProgressM = _sectorGateProgressM[sectorIndex] * CircuitLengthM;
-            if (CrossedForward(previousProgressM, progressM, gateProgressM))
-                return sectorIndex;
-        }
-
-        return -1;
-    }
-
     static bool CrossedForward(double previousProgressM, double progressM, double gateProgressM) =>
         previousProgressM < gateProgressM && progressM >= gateProgressM;
 
     readonly record struct ClosestSegmentSample(double LateralDistanceM, double ProgressM);
+
+    static Vec3D HorizontalDirection(Vec3D vector)
+    {
+        double length = HorizontalLength(vector);
+        if (length <= 1e-9)
+            throw new ArgumentException("Circuit control points must be distinct.");
+        return new Vec3D(vector.X / length, 0.0, vector.Z / length);
+    }
+
+    static double HorizontalLength(Vec3D vector) =>
+        Math.Sqrt(vector.X * vector.X + vector.Z * vector.Z);
+
+    static Vec3D Lerp(Vec3D start, Vec3D end, double t) =>
+        start + (end - start) * t;
 
     static Vec3D RunwayForward(double headingRad) =>
         new(Math.Sin(headingRad), 0.0, Math.Cos(headingRad));
