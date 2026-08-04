@@ -137,6 +137,8 @@ replaced before production-combat fidelity is claimed.
 | Numerical main-rotor load guard | 3.7 × maximum-gross weight | nonphysical divergence guard set no lower than the highest cited clean-configuration load factor; replace with weight/store-specific structural and aerodynamic envelopes |
 | Skid stations/track and impact threshold | current definition | coarse four-point contact; replace from gear geometry and landing-drop evidence |
 | VRS loss amplitude / RBS onset blend | current model coefficients | continuous and dimensionless, but not flight-identified; replace with Johnson VRS and azimuth-resolved stalled-area loads |
+| Keyboard collective full-travel rate | 0.40 /s | matches the existing Hold the Bridge lever feel; identify against AH-1 collective travel times |
+| Keyboard cyclic/pedal full-travel rate | 2.5 /s | production digital slew/spring-center; not a measured stick force or damper rate |
 
 ## Performance facts reserved for validation
 

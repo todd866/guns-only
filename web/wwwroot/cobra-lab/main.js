@@ -12,6 +12,17 @@ import {
 } from "../render/cobra/cobra_canyon_tour.js?v=258";
 import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=258";
 import { gunnerStatusText } from "../render/cobra/cobra_gunner_status.js?v=258";
+import { formatCobraRotorcraftStrip } from "../render/cobra/cobra_rotorcraft_hud.js?v=258";
+import {
+  cobraKeyboardControlIntent,
+  resolveCobraControlProfile,
+} from "../render/cobra/cobra_control_profile.js?v=258";
+import {
+  advanceCobraPilotControls,
+  cobraGamepadControlAxes,
+  createCobraPilotControlState,
+  releaseCobraPilotControls,
+} from "../render/cobra/cobra_pilot_input.js?v=258";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -75,6 +86,7 @@ const hudFob = document.querySelector("#hud-fob");
 const hudKills = document.querySelector("#hud-kills");
 const hudTarget = document.querySelector("#hud-target");
 const hudGunner = document.querySelector("#hud-gunner");
+const hudRotor = document.querySelector("#hud-rotor");
 const objectiveLine = document.querySelector("#objective-line");
 const objectiveDetail = document.querySelector("#objective-detail");
 const debrief = document.querySelector("#debrief");
@@ -85,7 +97,9 @@ const PLAY_MODE = document.body?.dataset?.shell !== "lab";
 let bridge = null;
 let missionTerminal = false;
 let authorityState = null;
-let collectiveLever = 0.5;
+let pilotControls = createCobraPilotControlState(0.5);
+let windowFocused = typeof document === "undefined" ? true : document.hasFocus();
+const cobraControlProfile = resolveCobraControlProfile();
 let groundWarPresentation = null;
 let hostileTargetIds = [];
 let hostileTargetIndex = -1;
@@ -380,7 +394,7 @@ function restartRoute() {
   activeRoute = routeById(routeSelect.value);
   bridge?.StartRoute(routeSelect.selectedIndex);
   authorityState = bridge ? JSON.parse(bridge.GetState()) : null;
-  collectiveLever = authorityState?.vehicle?.collective ?? 0.5;
+  pilotControls = createCobraPilotControlState(authorityState?.vehicle?.collective ?? 0.5);
   routeSampler = createCobraCanyonRouteSampler(activeRoute);
   routeDistanceM = ROUTE_ENTRY_OFFSETS_M[activeRoute.id] ?? 0;
   routeComplete = false;
@@ -506,21 +520,22 @@ function updateManual(deltaSeconds) {
     }
   }
   if (bridge) {
-    const collectiveRate = keys.has("KeyS") ? 1 : keys.has("KeyW") ? -1 : 0;
-    collectiveLever = THREE.MathUtils.clamp(
-      collectiveLever + collectiveRate * deltaSeconds * 0.40,
-      0,
-      1,
-    );
+    const gamepad = Array.from(navigator.getGamepads?.() ?? []).find(Boolean);
+    pilotControls = advanceCobraPilotControls(pilotControls, {
+      keyboardIntent: cobraKeyboardControlIntent(keys, cobraControlProfile),
+      analogAxes: cobraGamepadControlAxes(gamepad),
+      deltaSeconds,
+      focused: windowFocused,
+    });
     if (!missionTerminal) {
       bridge.SetControls(
-        collectiveLever,
-        (keys.has("ArrowUp") ? 1 : 0) + (keys.has("ArrowDown") ? -1 : 0),
-        (keys.has("ArrowRight") ? 1 : 0) + (keys.has("ArrowLeft") ? -1 : 0),
-        (keys.has("KeyD") ? 1 : 0) + (keys.has("KeyA") ? -1 : 0),
+        pilotControls.collective,
+        pilotControls.forwardCyclic,
+        pilotControls.rightCyclic,
+        pilotControls.yaw,
       );
       bridge.SetGunnerTarget(targetSelect.value || null);
-      bridge.SetEngagementConsent(keys.has("KeyF"));
+      bridge.SetEngagementConsent(keys.has(cobraControlProfile.fire.code));
       bridge.Advance(deltaSeconds);
       authorityState = JSON.parse(bridge.GetState());
       // QA seam: headless smoke scripts steer against authoritative truth, not DOM guesses.
@@ -623,6 +638,10 @@ function updateObjectiveHud(war) {
   const selected = authorityState?.gunner?.selected_target_id;
   setText(hudTarget, selected ? `TARGET ${selected.split(".").pop()}` : "TARGET —");
   setText(hudGunner, gunnerStatusText(authorityState?.gunner, war));
+  setText(
+    hudRotor,
+    formatCobraRotorcraftStrip(authorityState?.vehicle, authorityState?.route_guidance),
+  );
   if (war.ammo_dry) {
     setText(objectiveLine, "BINGO / DRY · REARM AT CAMP EMBER");
     setText(objectiveDetail, "Put the skids on the Camp Ember pad, then return to the fight");
@@ -697,7 +716,8 @@ function animate(timeMs) {
   });
   if (tourInput.checked && bridge && !missionTerminal) {
     // Keep the ground war alive during guided preview even when the camera is on rails.
-    bridge.SetControls(collectiveLever, 0, 0, 0);
+    pilotControls = releaseCobraPilotControls(pilotControls);
+    bridge.SetControls(pilotControls.collective, 0, 0, 0);
     bridge.SetGunnerTarget(null);
     bridge.SetEngagementConsent(false);
     bridge.Advance(deltaSeconds);
@@ -728,7 +748,23 @@ window.addEventListener("keydown", (event) => {
   if (isManualControl(event.code) && tourInput) tourInput.checked = false;
 });
 window.addEventListener("keyup", (event) => keys.delete(event.code));
-window.addEventListener("blur", () => keys.clear());
+window.addEventListener("blur", () => {
+  keys.clear();
+  windowFocused = false;
+  pilotControls = releaseCobraPilotControls(pilotControls);
+});
+window.addEventListener("focus", () => {
+  windowFocused = true;
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    keys.clear();
+    windowFocused = false;
+    pilotControls = releaseCobraPilotControls(pilotControls);
+  } else {
+    windowFocused = document.hasFocus();
+  }
+});
 window.addEventListener("resize", resize, { passive: true });
 routeSelect?.addEventListener("change", () => {
   if (PLAY_MODE) {
@@ -807,7 +843,7 @@ async function boot() {
     if (tourInput && PLAY_MODE) tourInput.checked = false;
     rebuildPresentation();
     authorityState = JSON.parse(bridge.GetState());
-    collectiveLever = authorityState.vehicle.collective;
+    pilotControls = createCobraPilotControlState(authorityState.vehicle.collective);
     refreshGroundTargets();
     groundWarPresentation?.sync(authorityState.ground_war);
     updateObjectiveHud(authorityState.ground_war);
