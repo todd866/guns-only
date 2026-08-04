@@ -1,8 +1,8 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=260";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=261";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=260";
+} from "./cobra_canyon_asset_kit.js?v=261";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 
@@ -383,13 +383,13 @@ function tagObject(object, role, extra = {}) {
 function materialFor(THREE, role) {
   const parameters = {
     basin: { color: 0xffffff, roughness: 1 },
-    river: { color: 0x3f7f88, emissive: 0x08262c, roughness: 0.72 },
-    roads: { color: 0xa25d36, emissive: 0x1c0903, roughness: 1 },
+    river: { color: 0x3a8a92, emissive: 0x0a343c, roughness: 0.68 },
+    roads: { color: 0xb0683c, emissive: 0x241008, roughness: 1 },
     heroCells: { color: 0x6a5030, roughness: 1 },
     landmarks: { color: 0xffffff, roughness: 0.95 },
     hazards: { color: 0xe96a43, emissive: 0x411006, roughness: 0.8 },
-    "bridge-deck": { color: 0xc25c3f, emissive: 0x2c0b04, roughness: 0.92 },
-    "bridge-pier": { color: 0xa84e34, emissive: 0x240804, roughness: 0.94 },
+    "bridge-deck": { color: 0xd46a48, emissive: 0x3a1006, roughness: 0.88 },
+    "bridge-pier": { color: 0xb85a3c, emissive: 0x2c0c06, roughness: 0.9 },
     vegetation: { color: 0xffffff, roughness: 1 },
   }[role];
   const material = new THREE.MeshLambertMaterial({
