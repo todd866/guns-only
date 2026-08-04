@@ -19,7 +19,8 @@ public readonly record struct GunConversionFunnelResult(
     int Hits,
     double MedianInRangeBodyErrorDeg,
     double TenthPercentileInRangeBodyErrorDeg,
-    double MedianInRangeLeadErrorDeg) {
+    double MedianInRangeLeadErrorDeg,
+    double TenthPercentileInRangeLeadErrorDeg = double.NaN) {
 
     public double TriggerConversion =>
         EligibleSeconds > 0.0 ? TriggerSeconds / EligibleSeconds : 0.0;
@@ -33,7 +34,8 @@ public readonly record struct GunConversionFunnelResult(
         + $"trigger={TriggerSeconds,5:F1}s conv={TriggerConversion,5:P0}  "
         + $"rounds={RoundsFired,4} hits={Hits,3} h/r={HitsPerRound,5:P0}  "
         + $"bodyErr p10/med={TenthPercentileInRangeBodyErrorDeg,6:F1}/"
-        + $"{MedianInRangeBodyErrorDeg,6:F1}deg  leadErr med={MedianInRangeLeadErrorDeg,6:F1}deg";
+        + $"{MedianInRangeBodyErrorDeg,6:F1}deg  leadErr p10/med="
+        + $"{TenthPercentileInRangeLeadErrorDeg,6:F1}/{MedianInRangeLeadErrorDeg,6:F1}deg";
 }
 
 /// <summary>
@@ -168,7 +170,8 @@ public static class GunConversionFunnel {
             blocked, maxContinuous, trigger, rounds, hits,
             Percentile(bodyErrorsDeg, 0.50),
             Percentile(bodyErrorsDeg, 0.10),
-            Percentile(leadErrorsDeg, 0.50));
+            Percentile(leadErrorsDeg, 0.50),
+            Percentile(leadErrorsDeg, 0.10));
     }
 
     static double Percentile(List<double> values, double fraction) {

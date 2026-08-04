@@ -1281,16 +1281,50 @@ public sealed class ReactiveBandit :
     PilotCommand GunTrackCommand(in ActorObservation player) {
         var own = State;
         var aim = BanditFireControl.LeadPoint(own, player);
-        var toAim = aim - own.Position;
+        double authority = System.Math.Clamp(_profile.MaxAcquireG / 5.5, 0.75, 2.0);
+        double tau = 0.6 / authority;
+        // LEAD THE LEAD POINT. A first-order law chasing a moving aim point settles a whole lag
+        // behind it — aim rate times the loop's time constant, ~3-4 deg against a turning
+        // target, which is ten gate widths: the pipper parks just off the solution and every
+        // burst lands where the lead point WAS. Feed the aim point's measured world-space rate
+        // forward by the loop lag. That rate is dominated by ownship's own translation, which
+        // reads as a bounded lag-pursuit bias along the current heading — measured on the
+        // funnel, that bias is what lets the Competent and Veteran loops settle onto the gate
+        // at all (10 and 4 hits against none without it). Capped relative to range so a
+        // handoff tick or a hard target reversal cannot command a wild lurch.
+        var trackAim = aim;
+        double sincePrev = T - _trackAimT;
+        double rangeM = (aim - own.Position).Length;
+        if (sincePrev > 0.0 && sincePrev <= 4.0 / AircraftSim.TickHz) {
+            var feedforward = (aim - _trackAim) * ((tau + 0.25) / sincePrev);
+            double feedforwardM = feedforward.Length;
+            double maxFeedforwardM = 0.5 * rangeM;
+            trackAim = feedforwardM > maxFeedforwardM && feedforwardM > 1e-9
+                ? aim + feedforward * (maxFeedforwardM / feedforwardM)
+                : aim + feedforward;
+        }
+        _trackAim = aim;
+        _trackAimT = T;
+
+        var toAim = trackAim - own.Position;
         double horizontalM = System.Math.Sqrt(toAim.X * toAim.X + toAim.Z * toAim.Z);
         // toAim is already a delta. The low-attack commands below subtract own.Position.Y from it
         // a second time; do not copy that.
         double desiredGamma = System.Math.Atan2(toAim.Y, System.Math.Max(1.0, horizontalM));
         // Tight tracking wants the lift vector on the target, so allow past-vertical roll.
-        double bank = LimitedBankTo(aim, 1.35);
+        double bank = LimitedBankTo(trackAim, 1.35);
         // Shorter time constant than the low-attack pass: this is a gun solution, not a descent.
+        //
+        // PER-TIER AUTHORITY. One global gain traded three tiers' competence for one tier's
+        // lethality when this law first flew ungated (branch bandit-threat, measured on the
+        // funnel: Veteran 79.3 -> 11.0 deg and its first six hits, Ace 27.0 -> 50.7 deg). The
+        // law is a straitjacket when its rate limit sits below what the airframe and pilot can
+        // fly — the Ace's 9 G planner out-turns a 0.45 rad/s clamp and the law fought it — and
+        // too hot for a tier without the authority to fly it. Scale the loop to the tier's
+        // honest G: Veteran is the reference the gains were validated on.
+        double rateLimit = 0.45 * authority;
         double desiredGammaRate = System.Math.Clamp(
-            (desiredGamma - own.Gamma) / 0.6, -0.45, 0.45);
+            (desiredGamma - own.Gamma) / tau, -rateLimit, rateLimit);
         double cosBank = System.Math.Max(0.30, System.Math.Cos(bank));
         double g = (System.Math.Cos(own.Gamma)
             + desiredGammaRate * own.Speed / FlightModel.G0) / cosBank;
@@ -1314,29 +1348,70 @@ public sealed class ReactiveBandit :
         // (Veteran) and 88.1 deg (Ace) against the same target flying in a straight line. Applying
         // a pursuit law on top of a law that already works only makes it worse — ungated, it drove
         // Novice from 7.3 to 157 deg of median lead error in the merge.
-        if (_profile.LookaheadHorizonTicks <= 0) return false;
+        if (_profile.LookaheadHorizonTicks <= 0) {
+            _fineTrackLatched = false;
+            return false;
+        }
         double rangeM = Geometry.Range(State, player);
         if (!double.IsFinite(rangeM)
             || rangeM < BanditFireControl.MinimumRangeM
-            || rangeM > BanditFireControl.MaximumRangeM) return false;
-        // ONLY AGAINST A TARGET THAT IS NOT MANOEUVRING.
+            || rangeM > BanditFireControl.MaximumRangeM) {
+            _fineTrackLatched = false;
+            return false;
+        }
+        // AGAINST A TARGET THAT IS NOT MANOEUVRING, always.
         //
         // A level turn requires bank, so near-zero bank IS straight and level. Against such a
         // target the lead solution is exact and closed-form and this law converges: measured, it
         // takes Veteran from never hitting to a kill in 3.2 s, and Ace from 88.1 deg of median
         // lead error to 4.3 deg (StraightAndLevelGunneryTests).
+        if (double.IsFinite(player.Bank)
+            && System.Math.Abs(player.Bank) <= NonManoeuvringBankRad) {
+            _fineTrackLatched = false;
+            return BanditFireControl.NoseErrorRad(State, player) <= GunTrackEntryRad;
+        }
+        // AGAINST A MANOEUVRING TARGET, only as the finisher the planner cannot be — and only
+        // for the tiers the law's fixed form actually fits.
         //
-        // Against a MANOEUVRING target it is worse than what it replaces. Measured on the neutral
-        // merge, ungated, it drove Novice from 7.3 to 166.7 deg and Ace from 27.0 to 39.0 deg,
-        // because a simple pursuit law cannot anticipate a turning target the way the rollout's
-        // geometry work does. Novice never needed help at all — it flies the reactive laws and
-        // already tracks a non-manoeuvring target at 4.2 deg. The defect being fixed here belongs
-        // to the LOOKAHEAD tiers, whose planner scores a firing opportunity and never closes a
-        // firing solution: Veteran 50.4 deg and Ace 88.1 deg against a target flying in a straight
-        // line, while the cheapest bandit in the game hits it.
-        if (!double.IsFinite(player.Bank)
-            || System.Math.Abs(player.Bank) > NonManoeuvringBankRad) return false;
-        return BanditFireControl.NoseErrorRad(State, player) <= GunTrackEntryRad;
+        // The planner re-picks among nine constant commands every 0.1 s; between picks nothing
+        // corrects the drift, so it arrives near the solution and dithers around it. A burst is
+        // 0.35 s. Closing and HOLDING the last few degrees wants a loop closed every tick, not
+        // a plan re-rolled every twelve.
+        //
+        // Measured on the funnel, scorer aiming at the lead point, per-tier authority gains:
+        // the law takes Competent and Veteran from 0-1 hits to 4 and 10 (45% of Veteran rounds
+        // on), while EVERY variant tried against the Ace — no feedforward, direction-space,
+        // target-velocity — scores worse than its own 150-tick planner alone (0-3 hits against
+        // 4). At 9 G with the long horizon the planner's anticipation IS the better tracker;
+        // the fixed law only replaces its mid-game with a worse one. So the finisher serves the
+        // middle of the ladder, and the top of the ladder keeps its planner. This is the
+        // per-tier authority limiting the original ungated trial prescribed.
+        //
+        // Enter on LEAD error — the solution itself, not the target's body — and only when the
+        // planner has already brought the pipper inside a few cone widths: from there the law
+        // refines and holds. Any wider and the fixed-form law replaces the planner's superior
+        // mid-game, which is exactly the regression the ungated trial measured (Ace 27.0 ->
+        // 50.7 deg). Hysteresis keeps the handoff from chattering at the boundary; the latch is
+        // a pure function of sim state, replay-safe within a run, and like _ceilingDenial it is
+        // not in PolicyMemory — a mid-fight restore can desync inside the hysteresis band.
+        // ManoeuvringFinisher=false is the frozen BfmDuel reference yardstick: it flies the same
+        // Veteran planner but declines this law, so a tier ladder is measured against a ruler
+        // that does not itself improve with the bandit build.
+        if (!_profile.ManoeuvringFinisher || _profile.MaxAcquireG > 5.5) {
+            _fineTrackLatched = false;
+            return false;
+        }
+        double leadErrorRad = BanditFireControl.LeadNoseErrorRad(State, player);
+        if (_fineTrackLatched) {
+            if (leadErrorRad <= GunTrackLeadExitRad) return true;
+            _fineTrackLatched = false;
+            return false;
+        }
+        if (leadErrorRad <= GunTrackLeadEntryRad) {
+            _fineTrackLatched = true;
+            return true;
+        }
+        return false;
     }
 
     /// 15 degrees of bank is about 1.04 g — level flight within instrument tolerance, not a turn.
@@ -1345,6 +1420,19 @@ public sealed class ReactiveBandit :
     /// Wide enough that the bandit commits to tracking from a realistic post-merge position,
     /// narrow enough that it is not flying pursuit at a target behind its wing line.
     const double GunTrackEntryRad = 0.2094; // 12 degrees
+
+    /// Manoeuvring-target entry: the planner delivers the pipper inside ~17 cone widths of the
+    /// Ace gate (6 deg) and the closed loop takes it from there. Exit a little wider than entry
+    /// so a target's own reversals hand the fight back to the planner instead of oscillating at
+    /// one boundary.
+    const double GunTrackLeadEntryRad = 0.1047; // 6 degrees
+    const double GunTrackLeadExitRad = 0.1745; // 10 degrees
+    bool _fineTrackLatched;
+    // Last tick's ballistic aim point and its timestamp, for the tracking law's rate
+    // feedforward. Sim-state driven only; not in PolicyMemory, same restore caveat as
+    // _ceilingDenial.
+    Vec3D _trackAim;
+    double _trackAimT = double.NegativeInfinity;
 
     PilotCommand CompetentAttackCommand(in LowAttackPlan plan) {
         var own = State;
@@ -2466,11 +2554,24 @@ public sealed class ReactiveBandit :
             minClearanceM = System.Math.Min(minClearanceM, segmentClearanceM);
             previousProbePosition = probeState.Position;
             maxY = System.Math.Max(maxY, probeState.Position.Y);
-            var predictedPlayer = player with { Position = predictedPos };
-            // Reward exactly the envelope the trigger can use. Counting any nose-on sample below
-            // maximum range also rewarded geometry inside the no-fire minimum range, so a close
-            // overshoot could outscore a genuinely usable solution.
-            if (BanditFireControl.InFiringEnvelope(probeState, predictedPlayer))
+            // The lead solve reads the target's VELOCITY, so the predicted contact must carry the
+            // extrapolated flight path, not just the extrapolated position: scoring a turning
+            // target with its old velocity aims where the turn used to be going. Same belief
+            // data, honestly extended -- the threat term below already reads predVel directly.
+            var predictedPlayer = player with
+                { Position = predictedPos, Chi = predChi, Gamma = predGamma };
+            // Reward exactly the envelope the trigger can use — BOTH of its gates. Counting only
+            // the body cone scored a firing OPPORTUNITY (nose on the target) while a hit requires
+            // a firing SOLUTION (nose on the ballistic lead point); against a turning target those
+            // sit tens of degrees apart. Measured on GunConversionFunnel, Build 252: median
+            // in-range lead error 26.1 deg at Ace and 75.0 at Veteran against a 0.35-0.45 deg
+            // trigger gate — 81 and 18 rounds respectively into empty sky, zero hits at any tier.
+            // Counting any nose-on sample below maximum range also rewarded geometry inside the
+            // no-fire minimum range, so a close overshoot could outscore a genuinely usable
+            // solution.
+            if (BanditFireControl.InFiringEnvelope(probeState, predictedPlayer)
+                || BanditFireControl.InLeadFiringEnvelope(
+                    probeState, predictedPlayer, _profile.LeadFireConeRad))
                 windowSeconds += dt;
             // Score the same geometry from the attacker's side. The predicted player direction
             // and position come only from ActorObservation; the probe is this candidate's honest
@@ -2491,22 +2592,47 @@ public sealed class ReactiveBandit :
         }
 
         var terminal = probe.State;
-        var terminalPlayer = player with { Position = predictedPos };
+        var terminalPlayer = player with
+            { Position = predictedPos, Chi = predChi, Gamma = predGamma };
         var terminalPredictedPlayerVelocity = new Vec3D(
             System.Math.Sin(predChi) * System.Math.Cos(predGamma),
             System.Math.Sin(predGamma),
             System.Math.Cos(predChi) * System.Math.Cos(predGamma)) * predSpeed;
         double termRange = Geometry.Range(terminal, terminalPlayer);
-        double termAngle = BanditFireControl.NoseErrorRad(terminal, terminalPlayer);
         const double idealRangeM = 450.0; // centre of the gun band: pull the fight inside firing range
 
-        // Nose-on shaping is expressed in physical gun-cone widths. The previous per-radian
-        // penalty was almost flat around a three-degree solution (only ~0.2 score at the edge),
-        // so range management dominated and the controller happily orbited just outside the
-        // trigger gate. Keep a smooth gradient toward the real envelope without widening it.
+        // Terminal shaping stays on the target's BODY, not the ballistic lead point. A lead
+        // terminal was tried — it is the honest firing solution, and on the funnel it did move
+        // the Ace onto the solution — but the ballistic solve extrapolates the target's CURRENT
+        // velocity, so for a target that will turn it answers "it will be ahead after it passes":
+        // a small lead error for flying AWAY. Scoring that removed the body term's re-engagement
+        // pressure exactly where containment needs it, and the ceiling-corridor and
+        // low-altitude-stalemate tests both regrew 15-24 s nose-cold outbound legs at every range
+        // gate that was wide enough to help the funnel (900 m, 1200 m; 600 m pleased the tests
+        // and converted nobody). The lead-shaping that IS safe lives in the window term above
+        // (trigger-eligible seconds, range-gated to the gun envelope) and in the finisher law,
+        // which closes the last few degrees onto the lead point directly. The terminal term's
+        // job is the coarser one: keep the nose on the target and the fight inside gun range.
+        //
+        // A current-engagement-GATED lead terminal (nose on target, in range, high tiers only)
+        // was also tried: it left the Ace's best-case lead error untouched at 2.7 deg. That floor
+        // is not the terminal objective but the planner itself — nine constant commands re-picked
+        // every 12 ticks cannot hold a 0.35 deg solution no matter what the terminal rewards.
+        // Closing it wants a loop closed every tick, which is the finisher's job and why the
+        // finisher-less top of the ladder keeps its 0-hit funnel row.
+        //
+        // The reference cone stays the 3-degree gun cone, NOT the sub-degree lead gate: the gate
+        // is the trigger's business, and a cone-width gradient referenced to 0.35 deg would
+        // multiply this term by ~9 and drown every energy, range, and threat signal on the way
+        // in. The previous per-radian penalty was almost flat around a three-degree solution
+        // (only ~0.2 score at the edge), so range management dominated and the controller
+        // happily orbited just outside the trigger gate. Keep a smooth gradient toward the real
+        // envelope without widening it.
+        double termAngle = BanditFireControl.NoseErrorRad(terminal, terminalPlayer);
         double coneErrors = termAngle / gunConeRad;
         double score = -0.75 * coneErrors;
-        // Direct conversion reward: seconds of gun window accrued over the rollout.
+        // Direct conversion reward: seconds of trigger-eligible gun window accrued over the
+        // rollout.
         score += 10.0 * windowSeconds;
         // Defensive conversion denial: projected seconds inside the observed player's gun-quality
         // geometry carry the same magnitude as earning our own window.
