@@ -280,34 +280,20 @@ public static partial class CobraWebBridge
         if (_selectedTargetId is not null) {
             GroundUnit? unit = runtime.GroundWar.FindUnit(_selectedTargetId);
             if (unit is { IsAlive: true }) {
-                CobraGunTargetAssessment assessment = CobraGunTargeting.Assess(
+                // Sight and turret reachability are independent signals: HasLineOfSight means
+                // sight alone, WithinTurretEnvelope means the mount can reach it, and the servo
+                // slews only when both hold. Composition (and the reason-chain honesty it buys)
+                // is pinned by CobraGunnerObservationTests.
+                target = CobraGunTargeting.AdvanceGunnerObservation(
+                    runtime.Terrain,
+                    runtime.ResolvedObstacles,
                     runtime.Cobra.State.PositionWorldM,
                     runtime.Cobra.Observation.YawRad,
-                    unit.PositionWorldM);
-                bool hasLos = assessment.WithinTurretEnvelope
-                    && CobraGunTargeting.EvaluateLineOfSight(
-                        runtime.Terrain,
-                        runtime.ResolvedObstacles,
-                        runtime.Cobra.State.PositionWorldM,
-                        unit.PositionWorldM);
-                // The mount slews toward the aim point whenever the target is physically
-                // engageable; the crew contract still gates firing through acquisition,
-                // consent and sight coincidence.
-                if (hasLos)
-                    _turretServo.Advance(
-                        FixedDeltaSeconds,
-                        assessment.SignedAzimuthRad,
-                        assessment.ElevationRad);
-                target = new CobraGunnerTargetObservation(
                     unit.Id,
-                    Present: true,
-                    Friendly: unit.Faction == GroundFaction.Friendly,
-                    HasLineOfSight: hasLos,
-                    WithinTurretEnvelope: assessment.WithinTurretEnvelope,
-                    HasBallisticSolution: assessment.HasBallisticSolution,
-                    SightErrorRad: _turretServo.ErrorRad(
-                        assessment.SignedAzimuthRad,
-                        assessment.ElevationRad));
+                    friendly: unit.Faction == GroundFaction.Friendly,
+                    unit.PositionWorldM,
+                    _turretServo,
+                    FixedDeltaSeconds);
             }
         }
         _gunnerDecision = _gunner.Advance(new CobraAiGunnerInput(
