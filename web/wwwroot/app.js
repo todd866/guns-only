@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=261";
+import { createHud } from "./hud.js?v=262";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=261";
+} from "./render/debrief/sortie_result.js?v=262";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -49,8 +49,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=261";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=261";
+} from "./render/release/release_identity.js?v=262";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=262";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -63,7 +63,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=261";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=262";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -72,10 +72,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=261";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=262";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=261";
+} from "./render/nav/carrier_sortie_touch_control.js?v=262";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -150,7 +150,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=261";
+} from "./render/telemetry/ai_frame_pressure.js?v=262";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -160,7 +160,8 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=261";
+} from "./render/telemetry/telemetry_batch.js?v=262";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=262";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -169,7 +170,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=261";
+} from "./render/settings/player_settings.js?v=262";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -215,13 +216,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=261";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=261";
+} from "./render/scene/scene_builders.js?v=262";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=262";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=261";
+} from "./render/audio/flight_audio.js?v=262";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -1313,6 +1314,11 @@ let buildIdentity = createReleaseIdentity({ entrypointBuild: ENTRYPOINT_BUILD })
 // One-shot latch so the menu auto-reload to a newer build fires once, never in a loop.
 let autoReloadArmed = false;
 const BUILD = buildIdentity.telemetryBuild;
+const shellHealth = createShellHealthBeacon({
+  build: BUILD,
+  revision: buildIdentity.telemetry?.revision ?? null,
+});
+shellHealth.mark("script_load");
 const BUILD_IDENTITY_REVALIDATE_MS = 60_000;
 let runningBuildInfo = null;
 let lastKnownBuildInfo = null;
@@ -5037,6 +5043,11 @@ function waitForGlobal(getter, timeoutMs = 15000) {
 
 function showFatal(error) {
   console.error(error);
+  try {
+    shellHealth?.fatal?.(error);
+  } catch {
+    // Shell health must never block the fatal UI.
+  }
   bootScreen.classList.add("ready");
   fatalMessage.textContent = error instanceof Error ? `${error.message}\n\n${error.stack ?? ""}` : String(error);
   fatalScreen.classList.add("visible");
@@ -10604,6 +10615,7 @@ async function boot() {
   const assemblyExports = await getAssemblyExports("GunsOnly.Web");
   bridge = assemblyExports.GunsOnly.Web.WebBridge;
   bindMeshNdToolbar(bridge);
+  shellHealth.mark("bridge_ready");
   // Per-frame state now rides the kernel's numeric hot buffer; the full JSON snapshot is
   // re-fetched only when its cold_version slot bumps (or on the source's fallback interval).
   // The MemoryView is fetched once; copyTo re-derives the WASM view per call, so a persistent
@@ -10640,6 +10652,7 @@ async function boot() {
   setBootStatus("BUILDING FIRST FRAME…", "scene");
   const view = new FlightView();
   activeView = view;
+  shellHealth.mark("webgl_ok");
   applyPlayerSettings();
   multiplayer = new GlobalRoomClient({
     url: resolveGlobalRoomUrl(),
@@ -10711,6 +10724,9 @@ async function boot() {
     }),
   });
   window.addEventListener("pagehide", () => {
+    try {
+      shellHealth?.stop?.();
+    } catch { /* ignore */ }
     multiplayer?.stop();
     snapshotSource?.dispose?.();
     void view.dispose();
@@ -10868,7 +10884,10 @@ async function boot() {
         firstFrame = false;
         bootScreen.setAttribute("aria-busy", "false");
         bootScreen.classList.add("ready");
+        shellHealth.mark("ready");
       }
+      if (state?.session_phase === "ACTIVE") shellHealth.mark("active");
+      if (state?.session_phase === "READY") shellHealth.mark("ready");
       requestAnimationFrame(tick);
     } catch (error) {
       showFatal(error);
@@ -10911,7 +10930,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=261")
+    navigator.serviceWorker.register("service-worker.js?v=262")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         const result = await primeOfflineRuntime(registration);
