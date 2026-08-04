@@ -23,6 +23,11 @@ import {
   createCobraPilotControlState,
   releaseCobraPilotControls,
 } from "../render/cobra/cobra_pilot_input.js?v=260";
+import {
+  createAh1gPresence,
+  eyeWorldFromVehicle,
+  updateAh1gPresence,
+} from "../render/cobra/ah1g_presence.js?v=261";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -101,6 +106,8 @@ let pilotControls = createCobraPilotControlState(0.5);
 let windowFocused = typeof document === "undefined" ? true : document.hasFocus();
 const cobraControlProfile = resolveCobraControlProfile();
 let groundWarPresentation = null;
+let ah1gPresence = null;
+let presenceDeltaSeconds = 0;
 let hostileTargetIds = [];
 let hostileTargetIndex = -1;
 let lastTargetKey = null;
@@ -120,13 +127,13 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.06;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x78919a);
-scene.fog = new THREE.FogExp2(0x9da99d, 0.000056);
+scene.background = new THREE.Color(0x6f8a7e);
+scene.fog = new THREE.FogExp2(0x8fa08f, 0.000038);
 
 const camera = new THREE.PerspectiveCamera(58, 1, 0.5, 32_000);
 camera.rotation.order = "YXZ";
-scene.add(new THREE.HemisphereLight(0xe8eee2, 0x3d4632, 0.82));
-const sun = new THREE.DirectionalLight(0xffdfb0, 1.28);
+scene.add(new THREE.HemisphereLight(0xf0f4e6, 0x3a4a2e, 0.95));
+const sun = new THREE.DirectionalLight(0xffe2b8, 1.45);
 sun.position.set(-3_800, 7_600, 2_400);
 scene.add(sun);
 
@@ -136,9 +143,9 @@ const skyMaterial = new THREE.ShaderMaterial({
   depthWrite: false,
   fog: false,
   uniforms: {
-    topColor: { value: new THREE.Color(0x486d7a) },
-    horizonColor: { value: new THREE.Color(0xb2b9a7) },
-    lowerHazeColor: { value: new THREE.Color(0x718681) },
+    topColor: { value: new THREE.Color(0x3f6a78) },
+    horizonColor: { value: new THREE.Color(0xc4c4a2) },
+    lowerHazeColor: { value: new THREE.Color(0x7a8f6e) },
     sunColor: { value: new THREE.Color(0xffd59b) },
     sunDirection: { value: new THREE.Vector3(-0.42, 0.54, -0.73).normalize() },
   },
@@ -196,7 +203,7 @@ let routeDistanceM = 0;
 let routeComplete = false;
 let tourCommandedAglM = COBRA_CANYON_TOUR_BASE_AGL_M;
 let yaw = 0;
-let pitch = -0.03;
+let pitch = 0.08;
 let lastTimeMs = performance.now();
 let animationFrame = 0;
 
@@ -412,6 +419,13 @@ function restartRoute() {
   }
 }
 
+function ensureAh1gPresence() {
+  if (ah1gPresence) return ah1gPresence;
+  ah1gPresence = createAh1gPresence(THREE);
+  scene.add(ah1gPresence.group);
+  return ah1gPresence;
+}
+
 function rebuildPresentation() {
   if (!world) return;
   presentation?.dispose();
@@ -423,6 +437,13 @@ function rebuildPresentation() {
   groundWarPresentation = createCobraGroundWarPresentation(THREE);
   scene.add(presentation.group);
   scene.add(groundWarPresentation.group);
+  // Presence is ownship, not canyon scenery — recreate after canyon rebuild so it stays on top.
+  if (ah1gPresence) {
+    scene.remove(ah1gPresence.group);
+    ah1gPresence.dispose();
+    ah1gPresence = null;
+  }
+  ensureAh1gPresence();
   restartRoute();
   resize();
   frameSamples.fill(0);
@@ -492,9 +513,9 @@ function updateTour(deltaSeconds) {
 }
 
 function updateManual(deltaSeconds) {
+  presenceDeltaSeconds = deltaSeconds;
   if (!bridge) {
-    // Vestigial freelook: pre-authority camera control only. Once the bridge owns the
-    // camera, syncAuthorityCamera overwrites these position/rotation writes every frame.
+    // Vestigial freelook: pre-authority camera control only.
     const lookRate = 1.12;
     if (keys.has("ArrowLeft")) yaw += lookRate * deltaSeconds;
     if (keys.has("ArrowRight")) yaw -= lookRate * deltaSeconds;
@@ -557,21 +578,47 @@ function updateManual(deltaSeconds) {
     -bounds.maximumNorthM,
     -bounds.minimumNorthM,
   );
-  camera.position.y = Math.max(camera.position.y, groundAt(camera.position.x, -camera.position.z) + 4);
+  // Authority eye sits inside the airframe — do not yank it to a 4 m AGL freelook floor.
+  if (!bridge) {
+    camera.position.y = Math.max(camera.position.y, groundAt(camera.position.x, -camera.position.z) + 4);
+  }
 }
 
 function syncAuthorityCamera() {
   const vehicle = authorityState?.vehicle;
   if (!vehicle) return;
-  camera.position.set(vehicle.x_m, vehicle.y_m + 2.4, -vehicle.z_m);
+  const presence = ensureAh1gPresence();
+  updateAh1gPresence(presence, vehicle, presenceDeltaSeconds);
+  eyeWorldFromVehicle(THREE, vehicle, camera.position);
+  if (camera.near !== 0.12) {
+    camera.near = 0.12;
+    camera.updateProjectionMatrix();
+  }
+
   const lookDistanceM = 140;
+  const bodyYaw = Number(vehicle.yaw_rad) || 0;
+  const bodyPitch = Number(vehicle.pitch_rad) || 0;
+  // Fixed rear-seat look bias (slightly up through the glass) + gunner-target crew bias.
+  const lookYaw = bodyYaw;
+  const lookPitch = bodyPitch + 0.08;
   lookTarget.set(
-    vehicle.x_m + Math.sin(vehicle.yaw_rad) * lookDistanceM,
-    vehicle.y_m + Math.sin(vehicle.pitch_rad) * lookDistanceM,
-    -vehicle.z_m - Math.cos(vehicle.yaw_rad) * lookDistanceM,
+    camera.position.x + Math.sin(lookYaw) * lookDistanceM,
+    camera.position.y + Math.sin(lookPitch) * lookDistanceM,
+    camera.position.z - Math.cos(lookYaw) * lookDistanceM,
   );
+
+  const selectedId = targetSelect?.value || authorityState?.gunner?.selected_target_id;
+  const units = authorityState?.ground_war?.units ?? [];
+  const selected = selectedId ? units.find((unit) => unit.id === selectedId && unit.alive) : null;
+  if (selected) {
+    const bias = 0.22;
+    lookTarget.x = THREE.MathUtils.lerp(lookTarget.x, selected.x_m, bias);
+    lookTarget.y = THREE.MathUtils.lerp(lookTarget.y, selected.y_m + 1.2, bias);
+    lookTarget.z = THREE.MathUtils.lerp(lookTarget.z, -selected.z_m, bias);
+  }
+
   camera.lookAt(lookTarget);
-  camera.rotation.z = vehicle.roll_rad;
+  camera.rotation.z = Number(vehicle.roll_rad) || 0;
 }
 
 function recordFrameDuration(durationMs) {
@@ -723,6 +770,9 @@ function animate(timeMs) {
     bridge.Advance(deltaSeconds);
     authorityState = JSON.parse(bridge.GetState());
     refreshGroundTargets();
+    if (authorityState?.vehicle) {
+      updateAh1gPresence(ensureAh1gPresence(), authorityState.vehicle, deltaSeconds);
+    }
   }
   groundWarPresentation?.sync(authorityState?.ground_war ?? null, targetSelect?.value || null);
   renderer.render(scene, camera);
@@ -804,6 +854,11 @@ window.addEventListener("pagehide", () => {
   cancelAnimationFrame(animationFrame);
   presentation?.dispose();
   groundWarPresentation?.dispose();
+  if (ah1gPresence) {
+    scene.remove(ah1gPresence.group);
+    ah1gPresence.dispose();
+    ah1gPresence = null;
+  }
   renderer.dispose();
 }, { once: true });
 
