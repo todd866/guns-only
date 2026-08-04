@@ -1,5 +1,12 @@
-import * as THREE from "../vendor/three.module.js?v=253";
-import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=253";
+import * as THREE from "../vendor/three.module.js?v=259";
+import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=259";
+import {
+  dominantSignedAxis,
+  gamepadRiderAxes,
+} from "../render/motorcycle/rider_input.js?v=259";
+import {
+  createRapierTrackDayPresentation,
+} from "../render/motorcycle/track_day_presentation.js?v=259";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
@@ -81,20 +88,14 @@ runway.position.set(0, SURFACE_ELEV_M, 0);
 runway.receiveShadow = true;
 scene.add(runway);
 
-const trackMaterial = new THREE.LineBasicMaterial({ color: 0xd5b56f });
-const trackLine = new THREE.Line(
-  new THREE.BufferGeometry(),
-  trackMaterial,
-);
-trackLine.frustumCulled = false;
-scene.add(trackLine);
-
 const helmetHud = new HelmetHud(hudCanvas);
 
 let bridge = null;
 let snapshot = null;
 let paused = false;
 let manualClutch = false;
+let rawPhysics = false;
+let trackDayPresentation = null;
 let animationFrame = 0;
 let lastTimeMs = performance.now();
 
@@ -142,11 +143,17 @@ function applyViewAttitude(cameraObject, state) {
   cameraObject.quaternion.setFromRotationMatrix(cameraMatrix).normalize();
 }
 
-function rebuildTrackGeometry(circuit) {
+function buildTrackDayPresentation(circuit) {
   if (!Array.isArray(circuit) || circuit.length < 2) return;
-  const points = circuit.map((point) => new THREE.Vector3(point.x, point.y + 0.08, -point.z));
-  trackLine.geometry.dispose();
-  trackLine.geometry = new THREE.BufferGeometry().setFromPoints(points);
+  if (trackDayPresentation) {
+    scene.remove(trackDayPresentation.object3d);
+    trackDayPresentation.dispose();
+  }
+  trackDayPresentation = createRapierTrackDayPresentation(THREE, circuit, {
+    surfaceElevationM: SURFACE_ELEV_M,
+    trackWidthM: 20,
+  });
+  scene.add(trackDayPresentation.object3d);
   helmetHud.updateMinimapBounds(circuit);
 }
 
@@ -156,11 +163,20 @@ function axisValue(positiveCode, negativeCode) {
 
 function sendControls() {
   if (!bridge || paused) return;
-  const throttle = keys.has("KeyW") ? 1 : 0;
-  const brake = keys.has("KeyS") ? 1 : 0;
-  const steer = axisValue("KeyD", "KeyA");
-  const riderLateral = axisValue("ArrowRight", "ArrowLeft");
-  const riderForeAft = axisValue("ArrowUp", "ArrowDown");
+  const gamepad = Array.from(navigator.getGamepads?.() ?? [])
+    .find((candidate) => candidate?.connected);
+  const analog = gamepadRiderAxes(gamepad);
+  const throttle = Math.max(keys.has("KeyW") ? 1 : 0, analog.throttle);
+  const brake = Math.max(keys.has("KeyS") ? 1 : 0, analog.brake);
+  const steer = dominantSignedAxis(axisValue("KeyD", "KeyA"), analog.turn);
+  const riderLateral = dominantSignedAxis(
+    axisValue("ArrowRight", "ArrowLeft"),
+    analog.bodyLateral,
+  );
+  const riderForeAft = dominantSignedAxis(
+    axisValue("ArrowUp", "ArrowDown"),
+    analog.bodyForeAft,
+  );
   const clutch = manualClutch
     ? (keys.has("ShiftLeft") || keys.has("ShiftRight") ? 0 : 1)
     : 1;
@@ -202,7 +218,12 @@ function animate(timeMs) {
   } else if (paused) {
     setStatus("PAUSED · ESC TO RESUME", "ready");
   } else {
-    setStatus("YZF-R1 ACTIVE · HELMET VIEW", "ready");
+    setStatus(
+      rawPhysics
+        ? "YZF-R1 ACTIVE · RAW PHYSICS"
+        : "YZF-R1 ACTIVE · RIDER REFLEX ASSIST",
+      "ready",
+    );
   }
 }
 
@@ -234,6 +255,14 @@ window.addEventListener("keydown", (event) => {
     bridge.SetClutchMode(manualClutch ? 1 : 0);
     return;
   }
+  if (event.code === "KeyT") {
+    event.preventDefault();
+    if (event.repeat) return;
+    if (!bridge) return;
+    rawPhysics = !rawPhysics;
+    bridge.SetControlMode(rawPhysics ? 1 : 0);
+    return;
+  }
   if (event.code === "KeyQ") {
     event.preventDefault();
     bridge?.FeedShift(-1);
@@ -260,6 +289,7 @@ canvas.addEventListener("webglcontextlost", (event) => {
 
 window.addEventListener("pagehide", () => {
   cancelAnimationFrame(animationFrame);
+  trackDayPresentation?.dispose();
   renderer.dispose();
 }, { once: true });
 
@@ -296,9 +326,9 @@ async function boot() {
     bridge = assemblyExports.GunsOnly.Web.MotorcycleWebBridge;
     bridge.Start();
     snapshot = refreshSnapshot();
-    rebuildTrackGeometry(snapshot.circuit);
+    buildTrackDayPresentation(snapshot.circuit);
     manualClutch = snapshot.clutch_mode === "manual";
-    setStatus("YZF-R1 ACTIVE · HELMET VIEW", "ready");
+    setStatus("RAPIER TRACK DAY · RIDER REFLEX ASSIST", "ready");
     lastTimeMs = performance.now();
     animationFrame = requestAnimationFrame(animate);
   } catch (error) {

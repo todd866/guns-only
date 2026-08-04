@@ -3,7 +3,13 @@
 // amplitude-modulated from snapshot buffet magnitude. Speed brake, G-on strain, and aged-canopy
 // seal whine live here so propulsion stays independent. Fail-silent: callers catch at the façade.
 
-import { pinkNoiseBuffer, whiteNoiseBuffer } from "./engine_audio.js";
+import {
+  F22_COCKPIT_DYNAMIC_PRESSURE_CEILING_PA,
+  dynamicPressureFraction,
+  dynamicPressurePa,
+  pinkNoiseBuffer,
+  whiteNoiseBuffer,
+} from "./engine_audio.js";
 import { isAgedF22, resolvePropulsionCharacter } from "./audio_character.js";
 
 const GUN_REPORT_NOISE_POOL_SIZE = 12;
@@ -334,6 +340,28 @@ export function createEventVoices(audioContext, destination) {
   hydraulicOsc.connect(hydraulicFilter).connect(hydraulicGain).connect(destination);
   hydraulicOsc.start();
 
+  // Continuous gear-down bay/door air — dirty-config tell on approach once beds are ducked.
+  // Distinct from the movement mechanism bed (which only speaks while gear is traveling).
+  const gearBaySource = audioContext.createBufferSource();
+  gearBaySource.buffer = whiteNoiseBuffer(audioContext, 0x47424159);
+  gearBaySource.loop = true;
+  const gearBayHighpass = audioContext.createBiquadFilter();
+  gearBayHighpass.type = "highpass";
+  gearBayHighpass.frequency.value = 420;
+  gearBayHighpass.Q.value = 0.55;
+  const gearBayBandpass = audioContext.createBiquadFilter();
+  gearBayBandpass.type = "bandpass";
+  gearBayBandpass.frequency.value = 980;
+  gearBayBandpass.Q.value = 0.85;
+  const gearBayGain = audioContext.createGain();
+  gearBayGain.gain.value = 0;
+  gearBaySource
+    .connect(gearBayHighpass)
+    .connect(gearBayBandpass)
+    .connect(gearBayGain)
+    .connect(destination);
+  gearBaySource.start();
+
   return {
     destination,
     buffetFilter,
@@ -389,6 +417,9 @@ export function createEventVoices(audioContext, destination) {
     hydraulicOsc,
     hydraulicFilter,
     hydraulicGain,
+    gearBayHighpass,
+    gearBayBandpass,
+    gearBayGain,
     lastArrestPhase: "",
     lastHits: 0,
     lastOpponentHits: 0,
@@ -871,14 +902,21 @@ export function updateBuffetVoice(voices, audioContext, state, { enabled = true 
 export function updateAirframeCueVoices(voices, audioContext, state, { enabled = true } = {}) {
   if (!voices || !audioContext) return;
   const now = audioContext.currentTime;
+  const f22Cockpit = isAgedF22(state) && resolveCockpitPerspective(state);
   const q01 = clamp01(dynamicPressureProxy(state));
+  const qPa = dynamicPressurePa(state);
   const tas = Math.max(0, finiteNumber(state?.true_airspeed_kts) ?? 0);
   const speed01 = clamp01((tas - 120) / 480);
 
   const hasBrake = state?.has_speed_brake === true
     || finiteNumber(state?.speed_brake) != null;
   const brake = hasBrake ? clamp01(finiteNumber(state?.speed_brake) ?? 0) : 0;
-  const brakeLevel = enabled ? brake * q01 : 0;
+  // Soften only the sealed F-22's board gate so approach boards speak once its beds are ducked.
+  // Other aircraft retain their established q response.
+  const brakeQ = f22Cockpit
+    ? Math.pow(clamp01((qPa - 500) / 22_000), 0.55)
+    : q01;
+  const brakeLevel = enabled ? brake * brakeQ : 0;
   const brakeExtended = brake > (voices.speedBrakeWasExtended ? 0.04 : 0.1);
   if (enabled
     && voices.lastSpeedBrake != null
@@ -971,7 +1009,7 @@ export function updateAirframeCueVoices(voices, audioContext, state, { enabled =
   // keep it alive in near-vacuum when dynamic pressure has collapsed.
   const canopyG = clamp01((Math.max(1, Math.abs(g)) - 2.1) / 4.8);
   const canopyDrive = aged
-    ? canopyG * Math.pow(q01, 0.58)
+    ? canopyG * Math.pow(q01, 0.45)
     : 0;
   voices.canopyFilter.frequency.setTargetAtTime(
     3600 + canopyG * 1800 + q01 * 1600 + speed01 * 600, now, 0.14);
@@ -1097,6 +1135,35 @@ export function updateConfigurationVoices(
     now,
     0.05,
   );
+
+  // Gear-down bay air: peaks on approach, quiet on the taxiway and under dash roar.
+  const gearDown = gear != null ? clamp01(gear) : 0;
+  const f22Cockpit = isAgedF22(state) && resolveCockpitPerspective(state);
+  const q01 = dynamicPressureProxy(state);
+  const gearDragQ01 = dynamicPressureFraction(state);
+  const qPa = dynamicPressurePa(state);
+  const gearApproachQ = Math.pow(clamp01((qPa - 900) / 14_000), 0.58);
+  const gearBayLevel = enabled
+    ? 0.052 * (f22Cockpit ? gearDown : 0) * gearApproachQ
+      * (1 - 0.72 * Math.pow(gearDragQ01, 1.35))
+    : 0;
+  if (voices.gearBayHighpass) {
+    voices.gearBayHighpass.frequency.setTargetAtTime(
+      380 + gearDown * 120 + q01 * 220,
+      now,
+      0.12,
+    );
+  }
+  if (voices.gearBayBandpass) {
+    voices.gearBayBandpass.frequency.setTargetAtTime(
+      820 + gearDown * 280 + q01 * 520,
+      now,
+      0.12,
+    );
+  }
+  if (voices.gearBayGain) {
+    voices.gearBayGain.gain.setTargetAtTime(gearBayLevel, now, 0.1);
+  }
 
   voices.lastGearPosition = gear;
   voices.lastFlapDegrees = flaps;
@@ -1634,17 +1701,12 @@ function shortNoiseBuffer(audioContext, initialSeed, seconds) {
 }
 
 function dynamicPressureProxy(state) {
-  const normalized = finiteNumber(state?.dynamic_pressure_01, state?.q_01);
-  if (normalized != null) return smoothstep(clamp01(normalized));
-  const publishedPa = finiteNumber(state?.dynamic_pressure_pa, state?.q_pa);
-  if (publishedPa != null) {
-    return smoothstep(clamp01((Math.max(0, publishedPa) - 750) / (45_000 - 750)));
-  }
-  const density = finiteNumber(state?.air_density_kg_m3) ?? 1.225;
-  const kts = finiteNumber(state?.true_airspeed_kts) ?? 0;
-  const mps = finiteNumber(state?.true_airspeed_mps) ?? kts * 0.514444;
-  const q = 0.5 * Math.max(0, density) * Math.max(0, mps) ** 2;
-  return smoothstep(clamp01((q - 750) / (45_000 - 750)));
+  const f22Cockpit = isAgedF22(state) && resolveCockpitPerspective(state);
+  return dynamicPressureFraction(state, {
+    ceilingPa: f22Cockpit
+      ? F22_COCKPIT_DYNAMIC_PRESSURE_CEILING_PA
+      : undefined,
+  });
 }
 
 function readPilotG(state) {

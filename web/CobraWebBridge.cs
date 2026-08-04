@@ -112,6 +112,7 @@ public static partial class CobraWebBridge
         CobraMissionDiagnostics diagnostics = runtime.Diagnostics;
         CobraRouteGuidance guidance = diagnostics.RouteGuidance;
         PlayerVehicleObservation observation = runtime.Cobra.Observation;
+        RotorcraftTelemetry rotorcraft = runtime.Cobra.Telemetry;
         VehiclePowerObservation power = observation.Power;
         Vec3D position = observation.PositionWorldM;
         Vec3D velocity = observation.GroundVelocityMps;
@@ -233,6 +234,7 @@ public static partial class CobraWebBridge
                 y_m = position.Y,
                 z_m = position.Z,
                 ground_speed_mps = observation.GroundSpeedMps,
+                true_airspeed_mps = observation.TrueAirspeedMps,
                 vertical_speed_mps = observation.VerticalSpeedMps,
                 pitch_rad = observation.PitchRad,
                 roll_rad = observation.RollRad,
@@ -247,6 +249,21 @@ public static partial class CobraWebBridge
                 flyable = observation.Flyable,
                 power_assessment = power.Assessment.ToString().ToLowerInvariant(),
                 hover_power_margin = power.HoverPowerMarginFraction,
+                rotorcraft = new {
+                    regime = rotorcraft.Regime.ToString(),
+                    main_rotor_rpm = rotorcraft.MainRotorRpm,
+                    tail_rotor_rpm = rotorcraft.TailRotorRpm,
+                    collective_root_pitch_rad = rotorcraft.CollectiveRootPitchRad,
+                    transmission_torque_nm = rotorcraft.TransmissionTorqueNm,
+                    transmission_limit_fraction = rotorcraft.TransmissionLimitFraction,
+                    governor_saturated = rotorcraft.GovernorSaturated,
+                    vortex_ring_severity = rotorcraft.VortexRingSeverity,
+                    retreating_blade_stall_severity = rotorcraft.RetreatingBladeStallSeverity,
+                    mast_bump_risk = rotorcraft.MastBumpRisk,
+                    main_rotor_clearance_m = rotorcraft.MainRotorClearanceM,
+                    ground_effect_factor = rotorcraft.GroundEffectFactor,
+                    engine_operating = rotorcraft.EngineOperating,
+                },
             },
             collision_obstacle_id = diagnostics.CollisionObstacleId,
             terrain_sample_known = diagnostics.TerrainSampleKnown,

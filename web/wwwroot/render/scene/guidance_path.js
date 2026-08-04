@@ -24,7 +24,7 @@
 // exist here: the kernel knows position and attitude exactly, so a conformal path cannot drift
 // off the world and lie about where the gate is.
 
-import { parseRecoveryGates } from "../nav/mesh_nav_presentation.js";
+import { resolveGuidanceGates } from "../nav/mesh_nav_presentation.js";
 
 // World is east/up/north; the scene negates north. Matches app.js playerPosition.set(px, py, -pz).
 export function gateToScenePosition(gate) {
@@ -133,15 +133,26 @@ export function createGuidancePath(THREE, options = {}) {
     object3d: root,
 
     /**
-     * @param state authoritative snapshot; gates are read from recovery_gates_json.
+     * @param state authoritative snapshot; prefers approach_gates when guidance is active.
      * @returns number of gates drawn, so tests can assert the path is actually present.
      */
     update(state) {
       if (disposed) return 0;
-      const raw = state?.recovery_gates_json ?? null;
-      if (raw !== cachedRaw) {
+      const approachActive = state?.approach_guidance_active === true;
+      const samples = state?.approach_gates;
+      const hotApproach = approachActive && Array.isArray(samples);
+      // Four numeric gates are cheaper to map than to fingerprint, and every coordinate matters
+      // for a moving ship. JSON ladders remain cached because parsing those every frame did cause
+      // visible stutter.
+      const raw = approachActive
+        ? `approach:${state?.approach_gates_json ?? ""}`
+        : (state?.recovery_gates_json ?? null);
+      if (hotApproach) {
+        cachedRaw = null;
+        cachedLadder = resolveGuidanceGates(state ?? {});
+      } else if (raw !== cachedRaw) {
         cachedRaw = raw;
-        cachedLadder = parseRecoveryGates(state ?? {});
+        cachedLadder = resolveGuidanceGates(state ?? {});
       }
       const ladder = cachedLadder;
       if (!ladder.length) {

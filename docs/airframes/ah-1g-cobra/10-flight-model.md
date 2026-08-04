@@ -31,9 +31,11 @@ metaphor, not an altitude-control shortcut:
 
 `cobra_control_profile.js` owns that browser-facing sign contract while honoring remapped player
 bindings. It emits raw collective-rate, cyclic and pedal intent with no filtering or assistance.
-The simulation integrates the lever and determines whether the aircraft climbs, settles, droops
-the rotor or enters an adverse regime. The current Cobra Canyon browser lab remains a camera-only
-world prototype and does not yet consume this control profile or the C# flight authority.
+`cobra_pilot_input.js` is the production seam Hold the Bridge consumes: digital axes slew and
+spring-center, analog gamepad/touch axes stay proportional, and focus loss releases every
+spring-centred command while leaving the collective lever where the pilot set it. The simulation
+integrates the lever and determines whether the aircraft climbs, settles, droops the rotor or
+enters an adverse regime.
 
 ## Production fidelity bar
 

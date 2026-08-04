@@ -2519,6 +2519,7 @@ public sealed class SimulationSession {
         // early when no recovery procedure exists, which is precisely the state the aircraft is in
         // while it is still on the catapult.
         UpdateSortieSchedule();
+        UpdateApproachGuidance();
         if (decisionCapture is { } capture) CompleteDecisionTickCapture(capture);
         StepPendingTerminalDecision();
         _tick++;
@@ -2556,6 +2557,7 @@ public sealed class SimulationSession {
             _catapult.Release();
         UpdateRecoveryProcedure();
         UpdateSortieSchedule();
+        UpdateApproachGuidance();
         _tick++;
         ObserveRapierServiceLifeTick();
         if (Lifecycle != LifecycleState.Active)
@@ -3188,6 +3190,7 @@ public sealed class SimulationSession {
                 openingSpawn is { } opening && (opening.Boss || opening.Machine));
         // Simulation time is deliberately monotonic across restarts because KeyGrammar timestamps
         // all input in this epoch. Only flight-local state and the accumulator reset.
+        _approachGuidance = GunsOnly.Sim.Recovery.ApproachGuidanceState.Inactive;
         Lifecycle = LifecycleState.Ready;
     }
 
@@ -3310,6 +3313,7 @@ public sealed class SimulationSession {
         _meshNavSolution = default;
         _recoveryProcedure.Reset();
         _carrierSortieRoute.Reset();
+        _approachGuidance = GunsOnly.Sim.Recovery.ApproachGuidanceState.Inactive;
         Lifecycle = LifecycleState.Ready;
     }
 
@@ -3411,6 +3415,8 @@ public sealed class SimulationSession {
     }
 
     SortieScheduleState _sortiePlan;
+    GunsOnly.Sim.Recovery.ApproachGuidanceState _approachGuidance =
+        GunsOnly.Sim.Recovery.ApproachGuidanceState.Inactive;
 
     /// <summary>
     /// The whole-sortie schedule — catshot, climb, cruise, descend, groove — as opposed to
@@ -3421,6 +3427,12 @@ public sealed class SimulationSession {
     /// nested inside it could never say anything about getting off the deck.
     /// </summary>
     public SortieScheduleState SortiePlan => _sortiePlan;
+
+    /// <summary>
+    /// Continuous approach guidance: always-flyable path gates plus next-gate energy targets.
+    /// Arms on recovery intent; does not require a Mesh PROC selection.
+    /// </summary>
+    public GunsOnly.Sim.Recovery.ApproachGuidanceState ApproachGuidancePlan => _approachGuidance;
 
     void UpdateSortieSchedule() {
         Carrier? ship = _carrier;
@@ -3547,6 +3559,59 @@ public sealed class SimulationSession {
             Player.State.Speed,
             recoveryDistanceToGoM,
             reference);
+    }
+
+    void UpdateApproachGuidance() {
+        double heading = _beat.RecoveryPlan?.ConventionalRunway?.LandingHeadingRad
+            ?? _carrier?.LandingHeadingRad
+            ?? _recoveryProcedure.HomeHeadingRad;
+        MeshPlace? home = _meshNav.HomePlate;
+        Vec3D? recoveryPoint = null;
+        if (_carrier is not null)
+            recoveryPoint = _carrier.TouchdownPoint;
+        else if (home is { } h)
+            recoveryPoint = new Vec3D(h.EastM, h.UpM ?? 0.0, h.NorthM);
+
+        GunsOnly.Sim.Recovery.RecoverySite site = GunsOnly.Sim.Recovery.RecoverySiteResolver.Resolve(
+            _carrier,
+            home,
+            recoveryPointKnown: recoveryPoint is { } p && p.IsFinite,
+            recoveryPoint,
+            heading);
+
+        bool fuelPressure = _fuel.IsBingo || _fuel.IsMinimumFuel || _fuel.IsEmergencyFuel;
+        bool circuitsActive = _beat.ScriptedIntercept?.PatternOnly == true
+            && Lifecycle == LifecycleState.Active;
+        bool intent = GunsOnly.Sim.Recovery.ApproachGuidance.IntentActive(
+            Lifecycle == LifecycleState.Active
+                && _playerTerminalState == AircraftTerminalState.Flying,
+            site.Known,
+            PlayerRtbActive,
+            fuelPressure,
+            _carrierSortieRoute.State.Phase,
+            circuitsActive,
+            _recoveryProcedure.Kind != RecoveryProcedureKind.None);
+
+        double approachMps = GunsOnly.Sim.Recovery.SortieSchedule.ApproachSpeedMps(
+            Player.State.Mass, _beat.PlayerAir);
+        // Carrier SortieSchedule uses a 110 m shelf; strip recoveries keep the classic 500 ft AGL.
+        double stabiliseHeightAboveSurfaceM = _carrier is { IsMaritime: true }
+            ? 110.0
+            : GunsOnly.Sim.Recovery.ApproachGuidance.DefaultStabiliseHeightAboveSurfaceM;
+        double turnRadiusM = System.Math.Max(
+            800.0,
+            approachMps * approachMps / (FlightModel.G0 * 0.577));
+
+        _approachGuidance = GunsOnly.Sim.Recovery.ApproachGuidance.Publish(
+            intent,
+            site,
+            Player.State.Position,
+            Player.State.Speed,
+            Player.State.Chi,
+            stabiliseHeightAboveSurfaceM,
+            approachMps,
+            GunsOnly.Sim.Recovery.ApproachGuidance.DefaultDragToWeight,
+            turnRadiusM);
     }
 
     void UpdateRecoveryProcedure() {

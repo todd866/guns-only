@@ -285,6 +285,75 @@ test("thin-air RCS authority is silent until the thrusters actually fire", async
     "actual firing schedules a thruster tick");
 });
 
+test("gear-down bay air speaks on approach and stays quiet gear-up", async () => {
+  const {
+    createEventVoices,
+    updateConfigurationVoices,
+  } = await freshEventAudio("gear-bay-approach");
+  const audio = new FakeAudioContext();
+  const voices = createEventVoices(audio, audio.destination);
+  const f22Id = "aircraft.f22a.public-data-surrogate.v1";
+  assert.ok(voices.gearBayGain, "gear-bay voice is part of the event graph");
+
+  updateConfigurationVoices(voices, audio, {
+    player_aircraft_id: f22Id,
+    gear_nose: 0,
+    gear_left: 0,
+    gear_right: 0,
+    true_airspeed_kts: 145,
+    air_density_kg_m3: 1.225,
+  });
+  assert.equal(latest(voices.gearBayGain.gain), 0, "gear-up has no bay air");
+
+  audio.currentTime = 0.1;
+  updateConfigurationVoices(voices, audio, {
+    player_aircraft_id: f22Id,
+    gear_nose: 1,
+    gear_left: 1,
+    gear_right: 1,
+    true_airspeed_kts: 145,
+    air_density_kg_m3: 1.225,
+  });
+  const approachBay = latest(voices.gearBayGain.gain);
+  assert.ok(approachBay > 0.015, "threshold with gear down has dirty-config bay air");
+
+  audio.currentTime = 0.15;
+  updateConfigurationVoices(voices, audio, {
+    player_aircraft_id: "aircraft.f86f.public-data-surrogate.v1",
+    gear_nose: 1,
+    gear_left: 1,
+    gear_right: 1,
+    true_airspeed_kts: 145,
+    air_density_kg_m3: 1.225,
+  });
+  assert.equal(latest(voices.gearBayGain.gain), 0,
+    "F-22 approach tuning does not add bay air to other aircraft");
+
+  audio.currentTime = 0.2;
+  updateConfigurationVoices(voices, audio, {
+    player_aircraft_id: f22Id,
+    gear_nose: 1,
+    gear_left: 1,
+    gear_right: 1,
+    true_airspeed_kts: 40,
+    air_density_kg_m3: 1.225,
+  });
+  assert.ok(latest(voices.gearBayGain.gain) < approachBay * 0.35,
+    "taxi q keeps bay air quieter than approach");
+
+  audio.currentTime = 0.3;
+  updateConfigurationVoices(voices, audio, {
+    player_aircraft_id: f22Id,
+    gear_nose: 1,
+    gear_left: 1,
+    gear_right: 1,
+    true_airspeed_kts: 661,
+    air_density_kg_m3: 1.225,
+  });
+  assert.ok(latest(voices.gearBayGain.gain) < approachBay,
+    "dash q ducks gear bay under the louder air-load mix");
+});
+
 test("speedbrake roar follows dynamic pressure and edge mechanisms remain audible", async () => {
   const {
     createEventVoices,
@@ -329,6 +398,29 @@ test("speedbrake roar follows dynamic pressure and edge mechanisms remain audibl
   });
   assert.ok(latest(voices.brakeGain.gain) > 0.08, "real dynamic pressure drives board roar");
   assert.ok(latest(voices.brakeFlutterDepth.gain) > 0.01, "q drives shallow flutter");
+
+  audio.currentTime = 0.4;
+  updateAirframeCueVoices(voices, audio, {
+    ...base,
+    player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+    speed_brake: 1,
+    true_airspeed_kts: 145,
+    air_density_kg_m3: 1.225,
+  });
+  const f22ApproachBrake = latest(voices.brakeGain.gain);
+  assert.ok(f22ApproachBrake > 0.03,
+    "approach boards remain audible after the sealed-bed duck");
+
+  audio.currentTime = 0.5;
+  updateAirframeCueVoices(voices, audio, {
+    ...base,
+    player_aircraft_id: "aircraft.rapier.fiction.v1",
+    speed_brake: 1,
+    true_airspeed_kts: 145,
+    air_density_kg_m3: 1.225,
+  });
+  assert.ok(latest(voices.brakeGain.gain) < f22ApproachBrake * 0.1,
+    "F-22 approach board lift does not alter another airframe's q response");
 });
 
 test("aged F-22 canopy flex cannot whistle on high TAS without dynamic pressure", async () => {

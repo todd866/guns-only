@@ -1,8 +1,12 @@
-/// The only recovery power command safe to put on the throttle rail is the per-airframe,
-/// two-sided SortieSchedule. GoldenPath remains a useful legacy altitude/speed corridor, but its
-/// power solve is <= 0.5 by construction and must not masquerade as a complete throttle command.
+import { approachPowerFallback } from "./approach_energy.js";
+
+/// Prefer the per-airframe two-sided SortieSchedule. When that is absent, fall back to the
+/// continuous approach-guidance power command (also two-sided). GoldenPath is never used here:
+/// its solve is <= 0.5 by construction and must not masquerade as a complete throttle command.
 export function sortiePowerCommand(state) {
-  if (state?.sortie_valid !== true) return null;
-  const command = Number(state?.sortie_power_01);
-  return Number.isFinite(command) ? command : null;
+  if (state?.sortie_valid === true) {
+    const command = Number(state?.sortie_power_01);
+    return Number.isFinite(command) ? command : null;
+  }
+  return approachPowerFallback(state);
 }

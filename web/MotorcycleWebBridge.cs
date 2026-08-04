@@ -18,8 +18,9 @@ public static partial class MotorcycleWebBridge
     const double MaximumFrameDeltaSeconds = 0.1;
 
     static WeekendRideMissionRuntime? _runtime;
-    static MotorcyclePilotCommand _command = new(
+    static MotorcycleRiderIntent _intent = new(
         0.0, 0.0, 0.0, 0.0, 0.0, 0, 1.0, MotorcycleClutchMode.Auto);
+    static MotorcycleControlMode _controlMode = MotorcycleControlMode.Assisted;
     static int _pendingGearShift;
     static double _accumulatorSeconds;
 
@@ -28,8 +29,9 @@ public static partial class MotorcycleWebBridge
     {
         _runtime = WeekendRideMissionRuntime.CreateDefault();
         _runtime.Begin();
-        _command = new MotorcyclePilotCommand(
+        _intent = new MotorcycleRiderIntent(
             0.0, 0.0, 0.0, 0.0, 0.0, 0, 1.0, MotorcycleClutchMode.Auto);
+        _controlMode = MotorcycleControlMode.Assisted;
         _pendingGearShift = 0;
         _accumulatorSeconds = 0.0;
     }
@@ -43,12 +45,12 @@ public static partial class MotorcycleWebBridge
         double riderForeAft,
         double clutch)
     {
-        _command = _command with {
+        _intent = _intent with {
             Throttle = ClampFinite(throttle, 0.0, 1.0, nameof(throttle)),
             Brake = ClampFinite(brake, 0.0, 1.0, nameof(brake)),
-            Steer = ClampFinite(steer, -1.0, 1.0, nameof(steer)),
-            RiderLateral = ClampFinite(riderLateral, -1.0, 1.0, nameof(riderLateral)),
-            RiderForeAft = ClampFinite(riderForeAft, -1.0, 1.0, nameof(riderForeAft)),
+            Turn = ClampFinite(steer, -1.0, 1.0, nameof(steer)),
+            BodyLateralBias = ClampFinite(riderLateral, -1.0, 1.0, nameof(riderLateral)),
+            BodyForeAftBias = ClampFinite(riderForeAft, -1.0, 1.0, nameof(riderForeAft)),
             Clutch = ClampFinite(clutch, 0.0, 1.0, nameof(clutch)),
         };
     }
@@ -56,12 +58,22 @@ public static partial class MotorcycleWebBridge
     [JSExport]
     public static void SetClutchMode(int mode)
     {
-        _command = _command with {
+        _intent = _intent with {
             ClutchMode = mode switch {
                 0 => MotorcycleClutchMode.Auto,
                 1 => MotorcycleClutchMode.Manual,
                 _ => throw new ArgumentOutOfRangeException(nameof(mode))
             }
+        };
+    }
+
+    [JSExport]
+    public static void SetControlMode(int mode)
+    {
+        _controlMode = mode switch {
+            0 => MotorcycleControlMode.Assisted,
+            1 => MotorcycleControlMode.Raw,
+            _ => throw new ArgumentOutOfRangeException(nameof(mode))
         };
     }
 
@@ -103,11 +115,11 @@ public static partial class MotorcycleWebBridge
         while (_accumulatorSeconds + 1e-12 >= FixedDeltaSeconds
             && ticks++ < 12
             && runtime.Phase == WeekendRidePhase.Active) {
-            MotorcyclePilotCommand stepCommand = _command with {
+            MotorcycleRiderIntent stepIntent = _intent with {
                 GearShiftRequest = _pendingGearShift
             };
             _pendingGearShift = 0;
-            runtime.StepFixed(stepCommand);
+            runtime.StepFixed(stepIntent, _controlMode);
             _accumulatorSeconds -= FixedDeltaSeconds;
         }
         return checked((int)runtime.Bike.State.Tick);
@@ -138,6 +150,7 @@ public static partial class MotorcycleWebBridge
             rider_fore_aft = snap.RiderForeAft,
             gear = snap.Gear,
             clutch_mode = ClutchModeToken(snap.ClutchMode),
+            control_mode = ControlModeToken(_controlMode),
             clutch = snap.ClutchEngagement,
             clutch_engagement = snap.ClutchEngagement,
             rpm = snap.Rpm,
@@ -171,6 +184,7 @@ public static partial class MotorcycleWebBridge
             lap = snap.LapCount,
             lap_time_s = snap.LapTimeSeconds,
             off_track_s = snap.OffTrackSeconds,
+            on_track = runtime.IsOnTrack,
             tipped = snap.IsTippedOver,
             tip_recovery_flash_s = snap.TipRecoveryFlashSeconds,
             phase = PhaseToken(snap.Phase),
@@ -203,6 +217,12 @@ public static partial class MotorcycleWebBridge
     static string ClutchModeToken(MotorcycleClutchMode mode) => mode switch {
         MotorcycleClutchMode.Auto => "auto",
         MotorcycleClutchMode.Manual => "manual",
+        _ => throw new ArgumentOutOfRangeException(nameof(mode))
+    };
+
+    static string ControlModeToken(MotorcycleControlMode mode) => mode switch {
+        MotorcycleControlMode.Assisted => "assisted",
+        MotorcycleControlMode.Raw => "raw",
         _ => throw new ArgumentOutOfRangeException(nameof(mode))
     };
 }

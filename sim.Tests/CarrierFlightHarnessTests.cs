@@ -476,7 +476,11 @@ public class CarrierFlightHarnessTests {
         }, stoppedTrapCue);
         if (trapTouchdown.Grade == Carrier.TouchdownGrade.NoGrade)
             Assert.DoesNotContain("REVIEW TOUCHDOWN ASSESSMENT", stoppedTrapCue);
-        Assert.InRange(arrestDistanceM, 90.0, 100.0);
+        // Floor 90→88 on 2026-08-04: ThrottleInputSchedule slows this scripted pilot's W/S
+        // slew on final (fine below 180 KIAS at low lever), so the Sabre arrives with ~1 m
+        // less energy and the payout shortens to 89.0 m. Trap stays Nominal on wire 1;
+        // arrestment physics unchanged. Epistemic: calibrated to the production input policy.
+        Assert.InRange(arrestDistanceM, 88.0, 100.0);
         Assert.InRange(arrestSeconds, 3.0, 5.5);
         Assert.True(rig.S.Position.Y > rig.Ship.Position.Y,
             "catapult handoff must be airborne above the flight deck");

@@ -17,6 +17,27 @@ function formatLapTime(seconds) {
   return `${whole}:${String(millis).padStart(2, "0")}`;
 }
 
+export function trackDayStatusLine(state = {}) {
+  if ((state.tip_recovery_flash_s ?? 0) > 0) {
+    return Object.freeze({ text: "TIP-OVER · RECOVERED", tone: "danger" });
+  }
+  if ((state.phase ?? "ready") === "paused") {
+    return Object.freeze({ text: "PAUSED · ESC RESUME", tone: "caution" });
+  }
+  if (state.on_track === false) {
+    return Object.freeze({
+      text: "OFF COURSE · RETURN BETWEEN CURBS",
+      tone: "danger",
+    });
+  }
+  const mode = state.control_mode === "raw" ? "RAW" : "RIDER ASSIST";
+  const lap = state.lap ?? 0;
+  return Object.freeze({
+    text: `${mode} · LAP ${lap} · ${formatLapTime(state.lap_time_s)} · OFF ${(state.off_track_s ?? 0).toFixed(0)}s`,
+    tone: "normal",
+  });
+}
+
 export class HelmetHud {
   constructor(canvas) {
     this.canvas = canvas;
@@ -502,24 +523,18 @@ export class HelmetHud {
   }
 
   drawStatusStrip(ctx, w, h, state) {
-    const phase = state.phase ?? "ready";
-    const tipFlash = state.tip_recovery_flash_s ?? 0;
+    const status = trackDayStatusLine(state);
     const x = w * 0.5;
     const y = 14;
     ctx.save();
     ctx.textAlign = "center";
     ctx.font = "700 10px ui-monospace, SFMono-Regular, Menlo, monospace";
-    if (tipFlash > 0) {
-      ctx.fillStyle = "#e57954";
-      ctx.fillText("TIP-OVER · RECOVERED", x, y);
-    } else if (phase === "paused") {
-      ctx.fillStyle = "#d5b56f";
-      ctx.fillText("PAUSED · ESC RESUME", x, y);
-    } else {
-      ctx.fillStyle = "#9ca997";
-      const lap = state.lap ?? 0;
-      ctx.fillText(`LAP ${lap} · ${formatLapTime(state.lap_time_s)} · OFF ${(state.off_track_s ?? 0).toFixed(0)}s`, x, y);
-    }
+    ctx.fillStyle = status.tone === "danger"
+      ? "#e57954"
+      : status.tone === "caution"
+        ? "#d5b56f"
+        : "#9ca997";
+    ctx.fillText(status.text, x, y);
     ctx.restore();
   }
 }

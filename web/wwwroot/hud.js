@@ -21,8 +21,13 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=253";
+} from "./render/hud/contact_visibility.js?v=259";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
+import {
+  approachEnergyCue,
+  approachEnergyPanelY,
+  formatApproachEnergyLine,
+} from "./render/hud/approach_energy.js";
 import {
   carrierAoARelevant,
   carrierConfigurationCue,
@@ -59,17 +64,17 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=253";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=259";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=253";
+} from "./render/mission/rapier_high_mach_instruments.js?v=259";
 import { limitsPanelPresentation } from "./render/hud/limits_panel.js";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=253";
+} from "./render/audio/flight_audio.js?v=259";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -1963,6 +1968,9 @@ class CombatHud {
 
   drawRtbCue(state) {
     if (state.rtb !== true) return;
+    // Continuous recovery guidance already carries destination, energy and next-path intent.
+    // Drawing the generic RTB card as well consumes the only safe compact-HUD lane.
+    if (state?.approach_guidance_active === true && state?.approach_valid === true) return;
     // An active route owns the guidance channel even if its payload is malformed. Falling back to
     // Home/BINGO here would turn rejected carrier geometry into apparently valid steering.
     if (state?.carrier_sortie_route_active === true) return;
@@ -2010,6 +2018,47 @@ class CombatHud {
         y,
         width,
         height,
+      };
+    }
+    ctx.restore();
+  }
+
+  drawApproachEnergyCue(state) {
+    const cue = approachEnergyCue(state);
+    if (!cue) {
+      if (this._debug) this._debug.approachEnergyCue = null;
+      return;
+    }
+    const ctx = this.ctx;
+    const line = formatApproachEnergyLine(cue);
+    const width = Math.min(this.touchMode ? 300 : 380, this.width - 34);
+    const height = 28;
+    const x = (this.width - width) / 2;
+    const y = approachEnergyPanelY(this.getLayout(), height);
+    if (y === null) {
+      if (this._debug) this._debug.approachEnergyCue = {
+        drawn: false,
+        reason: "no-safe-lane",
+      };
+      return;
+    }
+
+    ctx.save();
+    this.glassPanel(x, y, width, height, "rgba(242, 217, 160, 0.85)");
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "rgba(242, 217, 160, 0.95)";
+    ctx.font = "750 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillText(line, this.width / 2, y + height / 2);
+    if (this._debug) {
+      this._debug.approachEnergyCue = {
+        drawn: true,
+        label: cue.label,
+        targetAltM: cue.targetAltM,
+        targetTasMps: cue.targetTasMps,
+        altErrorM: cue.altErrorM,
+        tasErrorMps: cue.tasErrorMps,
+        line,
       };
     }
     ctx.restore();
@@ -5209,6 +5258,7 @@ class CombatHud {
       });
     }
     this.drawRtbCue(frame.state);
+    this.drawApproachEnergyCue(frame.state);
 
     // Speed trend: a windowed presentation estimate projected ~6 s ahead. The rate estimator
     // deliberately ignores one-frame IAS reversals so the caret reports energy trend, not noise.

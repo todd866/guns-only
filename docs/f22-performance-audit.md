@@ -48,6 +48,7 @@ retune wave drag for. Re-pass 2026-07-29 did not open the dash ceiling.
 | Atmosphere and Mach | Pass | 1976 standard atmosphere; Mach from local speed of sound. |
 | Automatic surfaces | Pass | LEF / speed-brake behaviour leaves full-power supersonic runs clean. |
 | Speed-hold feed-forward | **Fixed (2026-07-29)** | `DetentLayer.ThrottleForRequiredThrust` now uses `TurbofanPublicDataSurrogate` (√density × Mach-ram), matching `AircraftSim`. Lever invert is against unit-military available thrust, then clamped to `MaxThrustFraction`. Covered by `TurbofanThrustEstimateTests`. |
+| Relative throttle resolution | **Surrogate (2026-08-04)** | Lever→thrust stays linear. Keyboard/rocker/virtual-stick relative rates follow `ThrottleInputSchedule` (fine ≤180 KIAS and ≤0.20 lever; coarse ≥300 KIAS or ≥0.35 lever) so finals have usable precision without retuning AI, TVC, fuel, RPM, or rollout braking. Epistemic: `surrogate`. |
 | Mass and fuel | Pass as a rounded public-data surrogate | ~43,067 lb fuel-free vs 43,340 lb fact-sheet anchor (~0.6%). |
 | Installed thrust class | Pass as a surrogate | 233.6 kN military × 1.35 stop ≈ public two-by-35,000-lbf class. |
 | Subsonic turn / high alpha | Covered elsewhere | See `docs/f22-high-alpha-review.md` and high-alpha corridor tests. |

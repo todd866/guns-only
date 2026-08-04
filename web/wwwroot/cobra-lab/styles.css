@@ -160,6 +160,10 @@ body[data-shell="play"] .play-top {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: 0.04em;
 }
+#hud-rotor {
+  flex: 1 1 100%;
+  color: #d7ffe0;
+}
 
 .flight-stage, .viewport {
   position: fixed;

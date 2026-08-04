@@ -72,9 +72,16 @@ public static class BfmDuel {
     /// and the win-latch definition above must NOT drift once used to produce a win% matrix -- the
     /// whole point is a stable yardstick, so a later curve change is measured against the same ruler.
     /// Default tier Veteran models a competent-but-not-superhuman human stand-in.
+    ///
+    /// The yardstick declines the closed-loop manoeuvring finisher (ManoeuvringFinisher=false):
+    /// that law is a later curve change to the bandit, and a fixed human stand-in does not track
+    /// like it. Left on, the reference itself improved with the bandit build and moved the ruler --
+    /// the Machine's sustained window against it collapsed (2.14 s to 0.90 s) not because the
+    /// Machine changed but because the measuring stick did.
     public static ReactiveBandit ReferencePlayer(in AircraftState start, AircraftParams parameters,
         PilotSkill tier = PilotSkill.Veteran) =>
-        new ReactiveBandit(start, parameters, tier);
+        new ReactiveBandit(start, parameters, tier,
+            profile: BanditSkillProfile.For(tier) with { ManoeuvringFinisher = false });
 
     /// Aggregate outcome of a deterministic seeded sweep of reference-vs-enemy merges.
     /// WinRate is the decisive-burst outcome (first-to-latch; symmetric merges draw). The

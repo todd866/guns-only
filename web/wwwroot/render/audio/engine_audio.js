@@ -33,6 +33,12 @@ const MAX_CONTROL_STEP_SECONDS = 0.25;
 const KNOTS_TO_MPS = 0.514444;
 const SEA_LEVEL_DENSITY = 1.225;
 const THRUST_REF_KN = 140;
+// Audio dynamic-pressure normalization. Preserve the established 45 kPa response for Rapier,
+// generic jets, and exterior views. The sealed F-22 cockpit alone uses a longer envelope:
+// 95 kPa is ~M1.16 at sea level, leaving M0.6 / M0.9 / M1.2 distinct.
+export const AUDIO_DYNAMIC_PRESSURE_FLOOR_PA = 750;
+export const AUDIO_DYNAMIC_PRESSURE_CEILING_PA = 45_000;
+export const F22_COCKPIT_DYNAMIC_PRESSURE_CEILING_PA = 95_000;
 // Rapier's 18-second interior bed owns the steady cockpit body. The brighter 2.6-second CC0
 // F-4 excerpt remains as identity seasoning, but cannot dominate strongly enough for its short
 // envelope to announce every loop.
@@ -936,7 +942,11 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   const ramShare = streams?.hasThrust
     ? streams.ramShare
     : Math.sin(handover * Math.PI / 2);
-  const q01 = dynamicPressureFraction(state);
+  const q01 = dynamicPressureFraction(state, {
+    ceilingPa: sealedF22
+      ? F22_COCKPIT_DYNAMIC_PRESSURE_CEILING_PA
+      : AUDIO_DYNAMIC_PRESSURE_CEILING_PA,
+  });
   if (voiceGraph.augmentationKick == null) voiceGraph.augmentationKick = 0;
   if (voiceGraph.lastAugmentation == null) voiceGraph.lastAugmentation = augmentation;
   const augmentationRisePerSecond = elapsed > 1e-4
@@ -1004,6 +1014,14 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   const f22AirbornePresence = Math.pow(densityRatio, 0.72);
   const f22StructurePresence = 0.22 + 0.78 * Math.pow(densityRatio, 0.35);
   const f22ThinAir = 1 - f22AirbornePresence;
+  // Demo-cam beds are loudness terciles of a high-energy cockpit track, not true taxi/approach
+  // idle. Duck airborne beds hard at landing q; idle owns short final; mil/grit open with q.
+  // Structure/ECS keep the pressurized floor.
+  const f22QPresence = sealedF22
+    ? 0.08 + 0.92 * Math.pow(q01, 0.68)
+    : 1;
+  const f22LowQIdleBias = sealedF22 ? 1.28 - 0.28 * f22QPresence : 1;
+  const f22HighQBedBias = sealedF22 ? 0.10 + 0.90 * f22QPresence : 1;
   // Rapier needs the same physical split for a different reason. Ram/exhaust and broadband bed
   // energy require atmospheric mass flow and must disappear on an exo-atmospheric climb. A small,
   // low-passed structure path remains for pumps/rocket thrust conducted through the airframe.
@@ -1125,7 +1143,7 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
       * (isF22 || isRapier ? 1 : propulsionPresence);
     nowRamp(voiceGraph.sampleAirborneGain.gain,
       isF22
-        ? 0.82 * f22AirbornePresence * coastGate
+        ? 0.82 * f22AirbornePresence * coastGate * f22QPresence
         : isRapier
           ? 0.9 * rapierAirbornePresence * coastGate
           : 1,
@@ -1141,15 +1159,17 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
       isF22 ? 520 + power * 180 + f22StructurePresence * 120 : 680, 0.3);
     nowRamp(voiceGraph.sampleIdleGain.gain,
       (0.14 + 0.32 * (1 - power)) * (0.55 + 0.45 * turbineShare) * bedPresence
-        * (isF22 ? 1.35 : 1), 0.16);
+        * (isF22 ? 1.35 * f22LowQIdleBias : 1), 0.16);
     nowRamp(voiceGraph.sampleMilGain.gain,
       (0.22 + 1.1 * power) * (0.55 + 0.45 * turbineShare) * bedPresence
-        * (isF22 ? 1.45 : 1), 0.12);
+        * (isF22 ? 1.45 * f22HighQBedBias : 1), 0.12);
     nowRamp(voiceGraph.sampleGritGain.gain,
       ((0.05 + 0.6 * Math.pow(power, 1.25)) * turbineShare
         + accent * 0.35 * turbineShare)
         * bedPresence
-        * (isF22 ? 0.85 * (0.08 + 0.92 * f22AirbornePresence) : 1), 0.08);
+        * (isF22
+          ? 0.85 * (0.08 + 0.92 * f22AirbornePresence) * f22HighQBedBias
+          : 1), 0.08);
     if (voiceGraph.sampleHp) {
       // F-22 sub-thump now lives on sampleStructureLp. Keep only airborne/mid-high content here.
       // Rapier still cuts rumble that reads as blade-pass and rises with ram handover.
@@ -1161,7 +1181,8 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
     }
     nowRamp(voiceGraph.sampleLp.frequency,
       isF22
-        ? 1200 + f22AirbornePresence * (1600 + power * 900 + q01 * 400)
+        ? 1000 + f22AirbornePresence * (0.4 + 0.6 * f22QPresence)
+          * (1800 + power * 900 + q01 * 500)
         : 9500 + power * 4000 - handover * 3500 - thinAir * 1200, 0.22);
   } else {
     nowRamp(voiceGraph.sampleIdleGain.gain, 0, 0.05);
@@ -1179,9 +1200,12 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   const pressurizationLift = sealedF22 ? 1 + 0.32 * f22ThinAir : 1;
   nowRamp(voiceGraph.ecsHighpass.frequency, 150 + power * 120 + q01 * 80, 0.35);
   nowRamp(voiceGraph.ecsBandpass.frequency, 610 + power * 380 + q01 * 260, 0.35);
+  const f22ApproachEcs = sealedF22
+    ? 1 + 0.55 * (1 - f22QPresence) * (1 - power)
+    : 1;
   nowRamp(voiceGraph.ecsGain.gain,
     (0.009 + 0.013 * rpm + 0.006 * (1 - power))
-      * equipment * cabinSeal * pressurizationLift, 0.45);
+      * equipment * cabinSeal * pressurizationLift * f22ApproachEcs, 0.45);
   nowRamp(voiceGraph.inverterOsc.frequency, 400, 0.8);
   nowRamp(voiceGraph.inverterFilter.frequency, 400, 0.8);
   nowRamp(voiceGraph.inverterGain.gain,
@@ -1337,10 +1361,13 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   nowRamp(voiceGraph.ramSpitGain.gain,
     ramShare * (0.02 + power * 0.16 + accent * 0.12) * propulsionPresence * ramPresence, 0.1);
 
+  // Rush/canopy stay quiet through approach and open through high-subsonic into low-supersonic.
+  const rushQ = Math.pow(q01, sealedF22 ? 0.85 : 0.72);
+  const canopyQ = Math.pow(q01, sealedF22 ? 1.25 : 1.08);
   nowRamp(voiceGraph.rushHighpass.frequency, 110 + q01 * 320 + handover * 180, 0.18);
   nowRamp(voiceGraph.rushLowpass.frequency, 900 + q01 * 5600 + handover * 1800, 0.18);
   nowRamp(voiceGraph.rushGain.gain,
-    (externalPerspective ? 0.24 : 0.14) * Math.pow(q01, 0.72)
+    (externalPerspective ? 0.24 : sealedF22 ? 0.12 : 0.14) * rushQ
       * rushPresence * (1 + ramShare * 0.35), 0.18);
 
   nowRamp(voiceGraph.canopyFlowHighpass.frequency,
@@ -1348,14 +1375,14 @@ export function updateEngineVoices(voiceGraph, audioContext, state, {
   nowRamp(voiceGraph.canopyFlowLowpass.frequency,
     3900 + q01 * (externalPerspective ? 6100 : 3900), 0.16);
   nowRamp(voiceGraph.canopyFlowGain.gain,
-    ((sealedF22 ? 0.052 : externalPerspective ? 0.105 : 0.04)
-      * Math.pow(q01, 1.08)
-      + voiceGraph.qAccent * (sealedF22 ? 0.026 : 0.04))
+    ((sealedF22 ? 0.048 : externalPerspective ? 0.105 : 0.04)
+      * canopyQ
+      + voiceGraph.qAccent * (sealedF22 ? 0.022 : 0.04))
       * rushPresence,
     0.12);
 
   if (voiceGraph.master) {
-    const bedMaster = sealedF22 ? 0.72 : 0.58;
+    const bedMaster = sealedF22 ? 0.48 + 0.28 * f22QPresence : 0.58;
     const synthMaster = externalPerspective && isF22 ? 0.48 : isF22 ? 0.52 : 0.42;
     nowRamp(voiceGraph.master.gain, muted ? 0 : (sampled ? bedMaster : synthMaster),
       muted ? 0.02 : 0.18);
@@ -1416,12 +1443,28 @@ function atmosphereDensity(state) {
   return finiteNumber(state?.air_density_kg_m3) ?? standardAtmosphereDensity(altitudeM);
 }
 
-function dynamicPressureFraction(state) {
+export function dynamicPressurePa(state) {
+  const publishedPa = finiteNumber(state?.dynamic_pressure_pa, state?.q_pa);
+  if (publishedPa != null) return Math.max(0, publishedPa);
+  const publishedKpa = finiteNumber(state?.dynamic_pressure_kpa, state?.q_kpa);
+  if (publishedKpa != null) return Math.max(0, publishedKpa * 1000);
   const speedMps = finiteNumber(state?.true_airspeed_mps)
     ?? ((finiteNumber(state?.true_airspeed_kts) ?? 0) * KNOTS_TO_MPS);
   const density = atmosphereDensity(state);
-  const dynamicPressurePa = 0.5 * Math.max(0, density) * Math.max(0, speedMps) ** 2;
-  return smoothstep(clamp01((dynamicPressurePa - 750) / (45_000 - 750)));
+  return 0.5 * Math.max(0, density) * Math.max(0, speedMps) ** 2;
+}
+
+/// Shared 0..1 dynamic-pressure fraction for rush, beds, and airframe cues.
+export function dynamicPressureFraction(state, {
+  ceilingPa = AUDIO_DYNAMIC_PRESSURE_CEILING_PA,
+} = {}) {
+  const normalized = finiteNumber(state?.dynamic_pressure_01, state?.q_01);
+  if (normalized != null) return smoothstep(clamp01(normalized));
+  const boundedCeilingPa = Math.max(AUDIO_DYNAMIC_PRESSURE_FLOOR_PA + 1, ceilingPa);
+  return smoothstep(clamp01(
+    (dynamicPressurePa(state) - AUDIO_DYNAMIC_PRESSURE_FLOOR_PA)
+      / (boundedCeilingPa - AUDIO_DYNAMIC_PRESSURE_FLOOR_PA),
+  ));
 }
 
 export function isExternalAudioPerspective(state) {

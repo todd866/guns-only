@@ -43,7 +43,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 21;
+    public const int LayoutVersion = 22;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -51,6 +51,12 @@ internal static class SnapshotHotFrame {
     // the bullets-in-the-air locus. Slot order per sample is x,y,z,r (r = range from shooter).
     const int TrajectorySampleCount = 9;
     static readonly string[] TrajectoryKeys = { "x", "y", "z", "r" };
+    const int ApproachGateSampleCount = 8;
+    static readonly string[] ApproachGateKeys = {
+        "east_m", "north_m", "up_m", "half_m",
+        "target_alt_m", "target_ktas", "dirty", "active",
+    };
+    static readonly int[] ApproachGateDecimals = { 1, 1, 1, 1, 1, 0, 0, 0 };
     static readonly int[] TrajectoryDecimals = { 2, 2, 2, 1 };
     const int RawInteger = -1;
     const double RadiansToDegrees = 180.0 / Math.PI;
@@ -102,6 +108,13 @@ internal static class SnapshotHotFrame {
             for (int r = 0; r < TrajectorySampleCount; r++)
                 for (int c = 0; c < TrajectoryKeys.Length; c++)
                     Num($"{field}[{r}].{TrajectoryKeys[c]}", TrajectoryDecimals[c]);
+        }
+        void ApproachGateSamples(string field) {
+            SampleArrays.Add(new SampleArrayDef(field, slots.Count, ApproachGateSampleCount,
+                ApproachGateKeys));
+            for (int r = 0; r < ApproachGateSampleCount; r++)
+                for (int c = 0; c < ApproachGateKeys.Length; c++)
+                    Num($"{field}[{r}].{ApproachGateKeys[c]}", ApproachGateDecimals[c]);
         }
 
         Num("cold_version", RawInteger);
@@ -485,6 +498,20 @@ internal static class SnapshotHotFrame {
         Num("sortie_limit_code", RawInteger);
         Num("sortie_distance_to_go_m", 0);
         Num("sortie_waveoff_s", 1);
+        Bool("approach_guidance_active");
+        Bool("approach_valid");
+        Num("approach_excess_energy_m", 0);
+        Num("approach_track_required_m", 0);
+        Num("approach_track_available_m", 0);
+        Num("approach_extension_code", RawInteger);
+        Bool("approach_in_groove");
+        Num("approach_next_alt_m", 1);
+        Num("approach_next_tas_mps", 1);
+        Num("approach_alt_error_m", 1);
+        Num("approach_tas_error_mps", 1);
+        Num("approach_power_01", 3);
+        Num("approach_gate_count", RawInteger);
+        ApproachGateSamples("approach_gates");
         Bool("runway_available");
         Nul("runway_threshold_x", 2);
         Nul("runway_threshold_y", 2);
@@ -1453,6 +1480,21 @@ internal static class SnapshotHotFrame {
         w.Num("sortie_limit_code", (int)session.SortiePlan.Limit, RawInteger);
         w.Num("sortie_distance_to_go_m", session.SortiePlan.DistanceToGoM, 0);
         w.Num("sortie_waveoff_s", session.SortiePlan.WaveOffDecisionS, 1);
+        var approach = session.ApproachGuidancePlan;
+        w.Bool("approach_guidance_active", approach.GuidanceActive);
+        w.Bool("approach_valid", approach.Valid);
+        w.Num("approach_excess_energy_m", approach.ExcessEnergyM, 0);
+        w.Num("approach_track_required_m", approach.TrackRequiredM, 0);
+        w.Num("approach_track_available_m", approach.TrackAvailableM, 0);
+        w.Num("approach_extension_code", (int)approach.Extension, RawInteger);
+        w.Bool("approach_in_groove", approach.InGroove);
+        w.Num("approach_next_alt_m", approach.NextAltitudeM, 1);
+        w.Num("approach_next_tas_mps", approach.NextTrueAirspeedMps, 1);
+        w.Num("approach_alt_error_m", approach.AltitudeErrorM, 1);
+        w.Num("approach_tas_error_mps", approach.TrueAirspeedErrorMps, 1);
+        w.Num("approach_power_01", approach.Power01, 3);
+        w.Num("approach_gate_count", approach.Gates.Count, RawInteger);
+        w.ApproachGates("approach_gates", approach);
         w.Bool("runway_available", conventionalRunway is not null);
         w.Nul("runway_threshold_x", conventionalRunway?.ThresholdPosition.X, 2);
         w.Nul("runway_threshold_y", conventionalRunway?.ThresholdPosition.Y, 2);
@@ -2161,6 +2203,32 @@ internal static class SnapshotHotFrame {
             }
         }
 
+        public void ApproachGates(
+            string field, in GunsOnly.Sim.Recovery.ApproachGuidanceState approach) {
+            SampleArrayDef def = SampleArrays.First(t => t.Field == field);
+            Debug.Assert(_index == def.Start,
+                $"sample array {field}: cursor {_index} != declared start {def.Start}");
+            IReadOnlyList<GunsOnly.Sim.Recovery.WorldApproachGate> gates = approach.Gates;
+            for (int i = 0; i < def.Samples; i++) {
+                if (i < gates.Count) {
+                    GunsOnly.Sim.Recovery.WorldApproachGate gate = gates[i];
+                    _buffer[_index++] = Quantize(gate.EastM, 1);
+                    _buffer[_index++] = Quantize(gate.NorthM, 1);
+                    _buffer[_index++] = Quantize(gate.UpM, 1);
+                    _buffer[_index++] = Quantize(gate.HalfM, 1);
+                    _buffer[_index++] = Quantize(gate.TargetAltitudeM, 1);
+                    _buffer[_index++] = Quantize(gate.TargetKtas, 0);
+                    _buffer[_index++] = gate.DirtyConfig ? 1.0 : 0.0;
+                    _buffer[_index++] = gate.Active ? 1.0 : 0.0;
+                } else {
+                    // Fixed-length sample arrays stay numeric (not NaN) so they match the JSON
+                    // sample_arrays contract the same way gun_trajectory does.
+                    for (int c = 0; c < ApproachGateKeys.Length; c++)
+                        _buffer[_index++] = 0.0;
+                }
+            }
+        }
+
         public bool OpenBlock(string name, bool present) {
             BlockDef block = Blocks.First(bd => bd.Name == name);
             Debug.Assert(_index == block.Start,
@@ -2439,7 +2507,10 @@ internal static class SnapshotHotFrame {
         CarrierSortieRouteFix CarrierRouteFix,
         string CarrierRouteProfileId,
         SortieLeg SortieLeg,
-        SortieLimit SortieLimit) {
+        SortieLimit SortieLimit,
+        bool ApproachGuidanceActive,
+        string ApproachNextLabel,
+        ApproachExtensionKind ApproachExtension) {
 
         public static ColdFingerprint Capture(SimulationSession session,
             double worldOriginEastM, double worldOriginNorthM, bool worldOriginConfigured) {
@@ -2577,7 +2648,10 @@ internal static class SnapshotHotFrame {
                 session.CarrierSortieRoute.ActiveFix,
                 session.CarrierSortieRoute.ProfileId,
                 session.SortiePlan.Leg,
-                session.SortiePlan.Limit);
+                session.SortiePlan.Limit,
+                session.ApproachGuidancePlan.GuidanceActive,
+                session.ApproachGuidancePlan.NextLabel,
+                session.ApproachGuidancePlan.Extension);
         }
 
         static string FormatMeshNavColdKey(MeshNavDirector mesh, RecoveryProcedureDirector recovery) {

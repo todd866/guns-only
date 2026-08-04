@@ -80,16 +80,45 @@ const POWER_AUGMENTED = f22State({
 });
 
 const Q_LOW = f22State({
-  mach: 0.34,
-  true_airspeed_kts: 220,
-  air_density_kg_m3: 0.75,
-  altitude_m: 5_000,
+  mach: 0.22,
+  true_airspeed_kts: 145,
+  air_density_kg_m3: 1.15,
+  altitude_m: 150,
+  gear_nose: 1,
+  gear_left: 1,
+  gear_right: 1,
+  has_speed_brake: true,
+  speed_brake: 0.35,
+});
+const Q_CRUISE = f22State({
+  mach: 0.6,
+  true_airspeed_kts: 400,
+  air_density_kg_m3: 1.05,
+  altitude_m: 2_000,
+  gear_nose: 0,
+  gear_left: 0,
+  gear_right: 0,
 });
 const Q_HIGH = f22State({
-  mach: 0.92,
-  true_airspeed_kts: 600,
+  mach: 0.9,
+  true_airspeed_kts: 595,
   air_density_kg_m3: 1,
   altitude_m: 1_300,
+  gear_nose: 0,
+  gear_left: 0,
+  gear_right: 0,
+});
+const Q_DASH = f22State({
+  mach: 1.15,
+  true_airspeed_kts: 760,
+  air_density_kg_m3: 1.05,
+  altitude_m: 800,
+  applied_throttle: 1.1,
+  engine_rpm_pct: 100,
+  engine_spool_fraction: 1.1,
+  gear_nose: 0,
+  gear_left: 0,
+  gear_right: 0,
 });
 
 const ALTITUDE_Q_PA = 16_000;
@@ -172,17 +201,40 @@ export const CUE_GROUPS = Object.freeze([
   }),
   Object.freeze({
     id: "dynamic-pressure",
-    label: "Dynamic pressure · fixed engine power",
-    description: "Power and RPM stay at 80%; only the air-load state changes.",
+    label: "Dynamic pressure · approach through dash",
+    description:
+      "Threshold / cruise / high-subsonic hold mid power so air-load is isolated; dash adds power as a separate ear gate.",
     cues: Object.freeze([
-      fixedCue("f22_q_low", "Low q · 220 kt", "Thin, slow air at unchanged engine power.", Q_LOW),
-      fixedCue("f22_q_high", "High q · 600 kt", "Dense, fast air at unchanged engine power.", Q_HIGH),
+      fixedCue(
+        "f22_q_low",
+        "Landing threshold · 145 kt · dirty",
+        "Gear down, light board, mid power — sealed beds must stay quiet.",
+        Q_LOW,
+      ),
+      fixedCue(
+        "f22_q_cruise",
+        "Cruise · M0.6",
+        "Clean mid-q cruise at unchanged mid power.",
+        Q_CRUISE,
+      ),
+      fixedCue(
+        "f22_q_high",
+        "High subsonic · M0.9",
+        "Dense high-subsonic air at unchanged mid power.",
+        Q_HIGH,
+      ),
+      fixedCue(
+        "f22_q_dash",
+        "Dash · M1.15",
+        "Low-supersonic air-load with elevated power — rush/beds fully open.",
+        Q_DASH,
+      ),
       animatedCue(
         "f22_q_sweep",
-        "Auto: low q ↔ high q",
-        "Alternates the two fixed-power states every three seconds.",
+        "Auto: threshold → cruise → M0.9 → dash",
+        "Walks the envelope every three seconds.",
         "dynamic-pressure",
-        6,
+        12,
       ),
     ]),
   }),
@@ -332,7 +384,7 @@ export function cueStateAt(cueOrId, elapsedSeconds = 0) {
     return { ...stepState(POWER_STATES, elapsedSeconds, 2.5) };
   }
   if (cue.animation === "dynamic-pressure") {
-    return { ...stepState([Q_LOW, Q_HIGH], elapsedSeconds, 3) };
+    return { ...stepState([Q_LOW, Q_CRUISE, Q_HIGH, Q_DASH], elapsedSeconds, 3) };
   }
   if (cue.animation === "altitude") {
     return { ...stepState(ALTITUDE_STATES, elapsedSeconds, 3) };

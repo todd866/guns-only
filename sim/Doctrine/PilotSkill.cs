@@ -32,7 +32,12 @@ public readonly record struct BanditSkillProfile(
     bool IsBoss = false,
     double CommitDominanceSeconds = 8.0,
     double EnergyRetentionWeight = 1.0,
-    double LeadFireConeDeg = 0.45) {
+    double LeadFireConeDeg = 0.45,
+    // Whether this pilot closes the last degrees onto the ballistic lead point with the
+    // closed-loop manoeuvring finisher (ReactiveBandit.GunTrackCommand). True for every real
+    // tier the law fits; the frozen BfmDuel reference yardstick sets it false so the ruler a
+    // tier ladder is measured against does not itself improve with the bandit build.
+    bool ManoeuvringFinisher = true) {
     /// Trigger nose-error gate in radians. The Veteran deliberately shoots a WIDER gate: with
     /// honest ballistics a wide-gate burst is tracer pressure and near misses — the mid-ladder
     /// player finally gets shot AT without the hit probability of an ace. The Ace stays nearly

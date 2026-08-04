@@ -12,7 +12,7 @@
 The matrix is organized around controlled comparisons:
 
 - 60 / 80 / 100% F-22 core RPM plus full augmentation at fixed dynamic pressure;
-- low / high dynamic pressure at fixed power;
+- dirty threshold / M0.6 cruise / M0.9 high-subsonic at fixed power, plus M1.15 dash;
 - +1 / +3 / +6 / -2 G at fixed power and dynamic pressure;
 - an approaching/crossing/receding close fighter and a distant Tu-95/Bear;
 - cockpit versus external-chase perspective at the same F-22 state.

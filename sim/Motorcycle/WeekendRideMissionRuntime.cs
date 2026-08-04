@@ -17,15 +17,21 @@ public enum WeekendRidePhase
 public sealed class WeekendRideMissionRuntime
 {
     const double RunwayFrictionPerSecond = 2.5;
+    // Provisional dry verge grip relative to the runway-plane reference surface.
+    const double GrassFrictionPerSecond = 0.75;
     const double FixedDeltaSeconds = PlayerVehicleContract.FixedDeltaSeconds;
+    const double LapTimingStartSpeedMps = 0.5;
 
     readonly double _gridHeadingRad;
     readonly double _recurringBaseMassKg;
+    readonly MotorcycleRiderController _riderController = new();
     PaintedCircuitQueryState _circuitQueryState;
     long _authorityTick;
     double _currentLapElapsedSeconds;
     double _offTrackSeconds;
     double _tipRecoveryFlashSeconds;
+    bool _lapTimingActive;
+    bool _isOnTrack = true;
 
     WeekendRideMissionRuntime(
         YzfR1Dynamics bike,
@@ -49,6 +55,7 @@ public sealed class WeekendRideMissionRuntime
     public double LapTimeSeconds => _currentLapElapsedSeconds;
     public int LapCount => _circuitQueryState.LapIndex;
     public double OffTrackSeconds => _offTrackSeconds;
+    public bool IsOnTrack => _isOnTrack;
 
     public static WeekendRideMissionRuntime CreateDefault()
     {
@@ -90,7 +97,7 @@ public sealed class WeekendRideMissionRuntime
         if (Phase != WeekendRidePhase.Active)
             return;
 
-        PlayerVehicleEnvironmentSample environment = CreateEnvironment();
+        PlayerVehicleEnvironmentSample environment = CreateEnvironment(Bike.State.PositionWorldM);
         Bike.Advance(new PlayerVehicleAdvanceInput(
             _authorityTick,
             PlayerVehicleCommand.FromMotorcycle(command),
@@ -104,10 +111,16 @@ public sealed class WeekendRideMissionRuntime
         PaintedCircuitQueryResult circuitSample = Circuit.Query(
             Bike.State.PositionWorldM,
             ref _circuitQueryState);
+        _isOnTrack = circuitSample.OnTrack;
         if (!circuitSample.OnTrack)
             _offTrackSeconds += FixedDeltaSeconds;
 
-        _currentLapElapsedSeconds += FixedDeltaSeconds;
+        if (!_lapTimingActive
+            && circuitSample.OnTrack
+            && Bike.Telemetry.SpeedMps >= LapTimingStartSpeedMps)
+            _lapTimingActive = true;
+        if (_lapTimingActive)
+            _currentLapElapsedSeconds += FixedDeltaSeconds;
         if (circuitSample.CrossedStartFinish)
             _currentLapElapsedSeconds = 0.0;
 
@@ -120,11 +133,37 @@ public sealed class WeekendRideMissionRuntime
             _tipRecoveryFlashSeconds = Math.Max(0.0, _tipRecoveryFlashSeconds - FixedDeltaSeconds);
     }
 
+    public void StepFixed(
+        in MotorcycleRiderIntent intent,
+        MotorcycleControlMode controlMode = MotorcycleControlMode.Assisted)
+    {
+        if (Phase != WeekendRidePhase.Active)
+            return;
+
+        MotorcycleTelemetry telemetry = Bike.Telemetry;
+        var feedback = new MotorcycleRiderFeedback(
+            telemetry.SpeedMps,
+            telemetry.LeanRad,
+            Bike.State.BodyRates.P,
+            telemetry.PitchRad,
+            PitchRateRadPerSec: 0.0,
+            telemetry.FrontGripUse,
+            telemetry.RearGripUse,
+            telemetry.WheelieBalance,
+            telemetry.StoppieBalance,
+            telemetry.IsSliding);
+        MotorcyclePilotCommand command = _riderController.Step(intent, feedback, controlMode);
+        StepFixed(command);
+    }
+
     public void ResetToGrid()
     {
         Bike.ResetTo(GridPosition, _gridHeadingRad);
+        _riderController.Reset();
         _circuitQueryState = default;
         _currentLapElapsedSeconds = 0.0;
+        _lapTimingActive = false;
+        _isOnTrack = true;
     }
 
     public void DebugForceTipOver() => Bike.DebugForceTipOver();
@@ -189,15 +228,26 @@ public sealed class WeekendRideMissionRuntime
         _currentLapElapsedSeconds = 0.0;
         _offTrackSeconds = 0.0;
         _tipRecoveryFlashSeconds = 0.0;
+        _lapTimingActive = false;
+        _isOnTrack = true;
+        _riderController.Reset();
         Bike.ResetTo(GridPosition, _gridHeadingRad);
     }
 
-    static PlayerVehicleEnvironmentSample CreateEnvironment() =>
-        new(
+    static PlayerVehicleEnvironmentSample CreateEnvironment(in Vec3D positionWorldM)
+    {
+        bool onPavement = Math.Abs(positionWorldM.X)
+                <= PaintedCircuit.RapierRunwayLengthM * 0.5
+            && Math.Abs(positionWorldM.Z)
+                <= PaintedCircuit.RapierRunwayWidthM * 0.5;
+        return new(
             1.225,
             Vec3D.Zero,
             VehicleSurfaceSample.Horizontal(
-                surfaceId: "rapier-strip.runway",
+                surfaceId: onPavement ? "rapier-strip.runway" : "rapier-strip.grass",
                 heightM: RapierLaunchSite.OperatingSurfaceElevationM,
-                frictionPerSecond: RunwayFrictionPerSecond));
+                frictionPerSecond: onPavement
+                    ? RunwayFrictionPerSecond
+                    : GrassFrictionPerSecond));
+    }
 }

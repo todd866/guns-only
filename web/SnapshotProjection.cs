@@ -16,6 +16,7 @@ namespace GunsOnly.Web;
 /// recouples to the browser platform.
 /// </summary>
 internal static class SnapshotProjection {
+    static readonly object BuildStateLock = new();
     static SimulationSession Session = null!;
     static Carrier.DeckConfiguration DeckConfiguration;
     static double WorldOriginEastM;
@@ -66,9 +67,23 @@ internal static class SnapshotProjection {
         "visual.modern.abstract-contact.public-data-surrogate.v1";
 
     /// Project the supplied session (plus the world-origin/terrain staging the bridge owns) as one
-    /// flat state blob. The parameters are latched into static fields so the moved projection helpers
-    /// read them exactly as they read WebBridge's static aliases before the extraction.
+    /// flat state blob. Projection is serialized because the extracted helpers still read the
+    /// request through static aliases; without this boundary, concurrent requests can mix sessions.
     public static string BuildState(SimulationSession session,
+        Carrier.DeckConfiguration deckConfiguration, double worldOriginEastM,
+        double worldOriginNorthM, bool worldOriginConfigured, ITerrainSurface? terrain) {
+        lock (BuildStateLock) {
+            return BuildStateCore(
+                session,
+                deckConfiguration,
+                worldOriginEastM,
+                worldOriginNorthM,
+                worldOriginConfigured,
+                terrain);
+        }
+    }
+
+    static string BuildStateCore(SimulationSession session,
         Carrier.DeckConfiguration deckConfiguration, double worldOriginEastM,
         double worldOriginNorthM, bool worldOriginConfigured, ITerrainSurface? terrain) {
         Session = session;
@@ -1007,7 +1022,56 @@ internal static class SnapshotProjection {
             + $"\"sortie_limit\":{SnapshotJson.JsonString(Session.SortiePlan.Limit.ToString())},"
             + $"\"sortie_limit_code\":{(int)Session.SortiePlan.Limit},"
             + $"\"sortie_distance_to_go_m\":{Session.SortiePlan.DistanceToGoM:F0},"
-            + $"\"sortie_waveoff_s\":{Session.SortiePlan.WaveOffDecisionS:F1},";
+            + $"\"sortie_waveoff_s\":{Session.SortiePlan.WaveOffDecisionS:F1},"
+            // Continuous approach guidance: always-flyable path + next-gate energy. Arms on
+            // recovery intent without a Mesh PROC click. Gates also ride the hot frame as a
+            // sample array so the world path stays live between cold JSON refetches.
+            + $"\"approach_guidance_active\":{(Session.ApproachGuidancePlan.GuidanceActive ? "true" : "false")},"
+            + $"\"approach_valid\":{(Session.ApproachGuidancePlan.Valid ? "true" : "false")},"
+            + $"\"approach_excess_energy_m\":{Session.ApproachGuidancePlan.ExcessEnergyM:F0},"
+            + $"\"approach_track_required_m\":{Session.ApproachGuidancePlan.TrackRequiredM:F0},"
+            + $"\"approach_track_available_m\":{Session.ApproachGuidancePlan.TrackAvailableM:F0},"
+            + $"\"approach_extension\":{SnapshotJson.JsonString(GunsOnly.Sim.Recovery.ApproachGuidance.ExtensionToken(Session.ApproachGuidancePlan.Extension))},"
+            + $"\"approach_extension_code\":{(int)Session.ApproachGuidancePlan.Extension},"
+            + $"\"approach_in_groove\":{(Session.ApproachGuidancePlan.InGroove ? "true" : "false")},"
+            + $"\"approach_next_label\":{SnapshotJson.JsonString(Session.ApproachGuidancePlan.NextLabel)},"
+            + $"\"approach_next_alt_m\":{Session.ApproachGuidancePlan.NextAltitudeM:F1},"
+            + $"\"approach_next_tas_mps\":{Session.ApproachGuidancePlan.NextTrueAirspeedMps:F1},"
+            + $"\"approach_alt_error_m\":{Session.ApproachGuidancePlan.AltitudeErrorM:F1},"
+            + $"\"approach_tas_error_mps\":{Session.ApproachGuidancePlan.TrueAirspeedErrorMps:F1},"
+            + $"\"approach_power_01\":{Session.ApproachGuidancePlan.Power01:F3},"
+            + $"\"approach_gate_count\":{Session.ApproachGuidancePlan.Gates.Count},"
+            + ApproachGatesSampleArrayJson(Session.ApproachGuidancePlan)
+            + $"\"approach_gates_json\":{SnapshotJson.JsonString(GunsOnly.Sim.Recovery.ApproachGuidance.GatesJson(Session.ApproachGuidancePlan))},";
+    }
+
+    /// Fixed-length sample array matching SnapshotHotFrame.approach_gates (8 samples).
+    static string ApproachGatesSampleArrayJson(
+        in GunsOnly.Sim.Recovery.ApproachGuidanceState approach) {
+        const int SampleCount = 8;
+        var sb = new System.Text.StringBuilder(512);
+        sb.Append("\"approach_gates\":[");
+        for (int i = 0; i < SampleCount; i++) {
+            if (i > 0) sb.Append(',');
+            if (i < approach.Gates.Count) {
+                GunsOnly.Sim.Recovery.WorldApproachGate gate = approach.Gates[i];
+                sb.Append('{')
+                    .Append("\"east_m\":").Append(gate.EastM.ToString("F1")).Append(',')
+                    .Append("\"north_m\":").Append(gate.NorthM.ToString("F1")).Append(',')
+                    .Append("\"up_m\":").Append(gate.UpM.ToString("F1")).Append(',')
+                    .Append("\"half_m\":").Append(gate.HalfM.ToString("F1")).Append(',')
+                    .Append("\"target_alt_m\":").Append(gate.TargetAltitudeM.ToString("F1")).Append(',')
+                    .Append("\"target_ktas\":").Append(gate.TargetKtas.ToString("F0")).Append(',')
+                    .Append("\"dirty\":").Append(gate.DirtyConfig ? "1" : "0").Append(',')
+                    .Append("\"active\":").Append(gate.Active ? "1" : "0")
+                    .Append('}');
+            } else {
+                sb.Append("{\"east_m\":0.0,\"north_m\":0.0,\"up_m\":0.0,\"half_m\":0.0,"
+                    + "\"target_alt_m\":0.0,\"target_ktas\":0,\"dirty\":0,\"active\":0}");
+            }
+        }
+        sb.Append("],");
+        return sb.ToString();
     }
 
     static string FiniteNumberJson(double value) => SnapshotJson.FiniteNumberJson(value);

@@ -6,6 +6,11 @@ import {
   GUIDANCE_PATH_DEFAULTS,
 } from "../guidance_path.js";
 
+const approachGates = [
+  { east_m: 100, north_m: 200, up_m: 300, half_m: 400, target_ktas: 250, dirty: 0, active: 0 },
+  { east_m: 500, north_m: 600, up_m: 700, half_m: 800, target_ktas: 200, dirty: 1, active: 1 },
+];
+
 // Minimal THREE stand-in: the module must not need a GL context to be testable.
 class V3 {
   constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; }
@@ -105,4 +110,41 @@ test("no recovery procedure means nothing is drawn at all", () => {
   const path = createGuidancePath(THREE);
   assert.equal(path.update({}), 0);
   assert.equal(path.object3d.visible, false);
+});
+
+test("active approach guidance prefers hot sample gates over the PROC ladder", () => {
+  const path = createGuidancePath(THREE);
+  const drawn = path.update({
+    approach_guidance_active: true,
+    approach_gate_count: 2,
+    approach_gates: approachGates,
+    recovery_gates_json: gatesJson,
+  });
+  assert.equal(drawn, 2);
+  const meshes = path.object3d.children.filter((m) => m.visible);
+  assert.equal(meshes[0].position.z, -200);
+  assert.equal(meshes[1].scale.x, 800);
+});
+
+test("hot approach gates update when only north or a non-active altitude changes", () => {
+  const path = createGuidancePath(THREE);
+  path.update({
+    approach_guidance_active: true,
+    approach_gate_count: 2,
+    approach_gates: approachGates,
+  });
+  const first = path.object3d.children[0];
+  assert.equal(first.position.z, -200);
+
+  path.update({
+    approach_guidance_active: true,
+    approach_gate_count: 2,
+    approach_gates: [
+      { ...approachGates[0], north_m: 325, up_m: 425 },
+      approachGates[1],
+    ],
+  });
+
+  assert.equal(first.position.z, -325);
+  assert.equal(first.position.y, 425);
 });

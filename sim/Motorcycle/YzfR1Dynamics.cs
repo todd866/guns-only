@@ -8,7 +8,7 @@ namespace GunsOnly.Sim.Motorcycle;
 /// </summary>
 public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
 {
-    public const string CapabilityVersion = "player-vehicle.yzf-r1-runway-plane.v1";
+    public const string CapabilityVersion = "player-vehicle.yzf-r1-runway-plane.v2";
 
     const double DrivetrainEfficiency = 0.90;
     const double RunwayFrictionPerSecond = 2.5;
@@ -34,6 +34,9 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
     /// <summary>Pitch-rate reflex gain: pitchRate *= (1 - k * PitchReflexAuthority).</summary>
     const double PitchReflexDampingGain = 0.45;
     const double LeanHoldRollDampingBoost = 0.40;
+    // Provisional low-order coupling: body shift can tighten a turn, but cannot replace the bars.
+    const double RiderBodyShiftSteeringFraction = 0.50;
+    const double RiderBodyShiftFullAuthoritySpeedMps = 8.0;
     readonly RiderCerebellum _cerebellum = new();
     CerebellumSample _cerebellumSample;
     // Surrogate combined-CG longitudinal position; see the source ledger's ≈48/52 static split.
@@ -161,8 +164,9 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
                 + "explicitly labelled surrogate drivetrain/traction assumptions. It models "
                 + "drive, 70/30 front/rear braking, and provisional single-track "
                 + "steer/rider-CG lean plus bounded front/rear spring-damper load transfer "
-                + "with a load-sensitive friction-circle tire and latched low-speed tip-over "
-                + "on a horizontal contact plane; airborne dynamics are not yet implemented.");
+                + "with a load-sensitive friction-circle tire that authors planar curvature, "
+                + "plus latched low-speed tip-over on a horizontal contact plane; airborne "
+                + "dynamics are not yet implemented.");
         PlayerVehicleValidation.Capability(Capability);
     }
 
@@ -434,13 +438,22 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
             nextSpeedMps = 0.0;
         double geometricYawRateRadPerSec = nextSpeedMps * Math.Tan(steerAngleRad)
             / effectiveWheelbaseM;
-        double desiredLateralAccelerationMps2 = nextSpeedMps * geometricYawRateRadPerSec;
         double riderMassKg = Math.Clamp(
             grossMassKg - YzfR1Definition.CurbMassKg,
             0.0,
             YzfR1Definition.RiderMassKg);
         double riderLateralCgM = riderMassKg / grossMassKg
             * YzfR1Definition.RiderCgLateralRangeM * command.RiderLateral;
+        double bodyShiftSpeedAuthority = Math.Clamp(
+            Math.Abs(nextSpeedMps) / RiderBodyShiftFullAuthoritySpeedMps,
+            0.0,
+            1.0);
+        double riderBodyShiftAccelerationMps2 = StandardGravityMps2
+            * riderLateralCgM / YzfR1Definition.CombinedCgHeightM
+            * RiderBodyShiftSteeringFraction
+            * bodyShiftSpeedAuthority;
+        double desiredLateralAccelerationMps2 = nextSpeedMps * geometricYawRateRadPerSec
+            + riderBodyShiftAccelerationMps2;
         double desiredLeanRad = -Math.Atan(
             desiredLateralAccelerationMps2 / StandardGravityMps2
             + riderLateralCgM / YzfR1Definition.CombinedCgHeightM);
@@ -482,10 +495,12 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
             YzfR1Definition.MaxLeanRad);
         if (Math.Abs(nextLeanRad) >= YzfR1Definition.MaxLeanRad)
             nextLeanRateRadPerSec = 0.0;
-        // The runway-plane authority retains its kinematic bicycle heading update. The tire
-        // envelope reports the force shortfall and latches a low-speed fall; it does not add
-        // a separate airborne or planar sideslip state.
-        double nextYawRateRadPerSec = geometricYawRateRadPerSec * Math.Cos(nextLeanRad);
+        // Contact force is the trajectory authority: v * yawRate is the lateral acceleration the
+        // tires actually resolved, not the unconstrained geometric demand. The runway-plane model
+        // still omits a separate sideslip state, so saturation widens the turn immediately.
+        double nextYawRateRadPerSec = Math.Abs(nextSpeedMps) > 1e-3
+            ? lateralAccelerationMps2 / nextSpeedMps
+            : 0.0;
         double nextHeadingRad = PlayerVehicleValidation.WrapPi(
             _headingRad + nextYawRateRadPerSec * dt);
         double maximumSupportedLeanRad = Math.Atan(
