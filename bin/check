@@ -53,6 +53,7 @@ node --check web/wwwroot/medevac/app.js
 node --check web/wwwroot/render/medevac/commander_view_model.js
 node --check web/wwwroot/api/telemetry.js
 node --check web/smoke/remote-smoke.mjs
+node --check web/smoke/remote-route-smoke.mjs
 release_tests=$(find tools/release/tests -type f -name '*.test.mjs' -print | sort)
 node --test $release_tests
 ./bin/stamp-release --check

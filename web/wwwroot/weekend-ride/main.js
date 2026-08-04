@@ -170,6 +170,8 @@ function sendControls() {
 function refreshSnapshot() {
   if (!bridge) return null;
   snapshot = JSON.parse(bridge.GetState());
+  // QA seam: headless smoke scripts steer against authoritative truth, not DOM guesses.
+  window.__gunsOnlyWeekendAuthority = snapshot;
   return snapshot;
 }
 

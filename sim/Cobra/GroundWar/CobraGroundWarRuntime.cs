@@ -11,6 +11,14 @@ public sealed class CobraGroundWarRuntime
 {
     public const int MaxLivingUnits = 36;
     public const double ReinforceIntervalSeconds = 18.0;
+    // Hostile seed/reinforce rings stay outside the authored M134 min-solution window so an
+    // aircraft over a contested site can authorize fire before mutual ground combat clears the
+    // wave. Friendlies remain on the pad. See docs/airframes/ah-1g-cobra/00-sources.md.
+    public const double HostileSeedHardPointRingM = 140.0;
+    public const double HostileSeedInfantryRingM = 170.0;
+    public const double HostileSeedSoftVehicleRingM = 200.0;
+    public const double HostileReinforceRingM = 160.0;
+    public const double FriendlyReinforceRingM = 40.0;
     public const double WreckRetainSeconds = 12.0;
     public const double PlayerRoundDamage = 0.55;
     public const double VictoryControlThreshold = 0.55;
@@ -378,7 +386,10 @@ public sealed class CobraGroundWarRuntime
             GroundUnitRole role = index == 0 && _rng.NextDouble() < 0.35
                 ? GroundUnitRole.SoftVehicle
                 : GroundUnitRole.InfantryClump;
-            SpawnUnit(faction, role, site, GroundUnitIntent.Advance, ringM: 40.0 + index * 12.0);
+            double ringM = faction == GroundFaction.Hostile
+                ? HostileReinforceRingM + index * 20.0
+                : FriendlyReinforceRingM + index * 12.0;
+            SpawnUnit(faction, role, site, GroundUnitIntent.Advance, ringM);
         }
     }
 
@@ -409,11 +420,11 @@ public sealed class CobraGroundWarRuntime
                 GroundUnitIntent.Advance, ringM: 48.0, bearingRad: 2.1);
 
             SpawnUnit(GroundFaction.Hostile, GroundUnitRole.HardPoint, site,
-                GroundUnitIntent.Hold, ringM: 30.0, bearingRad: 3.6);
+                GroundUnitIntent.Hold, ringM: HostileSeedHardPointRingM, bearingRad: 3.6);
             SpawnUnit(GroundFaction.Hostile, GroundUnitRole.InfantryClump, site,
-                GroundUnitIntent.Advance, ringM: 42.0, bearingRad: 4.4);
+                GroundUnitIntent.Advance, ringM: HostileSeedInfantryRingM, bearingRad: 4.4);
             SpawnUnit(GroundFaction.Hostile, GroundUnitRole.SoftVehicle, site,
-                GroundUnitIntent.Advance, ringM: 55.0, bearingRad: 5.2);
+                GroundUnitIntent.Advance, ringM: HostileSeedSoftVehicleRingM, bearingRad: 5.2);
         }
         UpdateSiteControl();
         DriftBalance(PlayerVehicleContract.FixedDeltaSeconds);

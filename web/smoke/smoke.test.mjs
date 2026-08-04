@@ -477,6 +477,135 @@ test("the published Indoor route boots its Three.js facility and transitions opt
   }
 });
 
+test("the published Cobra Hold the Bridge route boots authority and accepts Tab/F gunner input", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+
+  const site = await serveStatic(WWWROOT);
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+  });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
+    await page.goto(`${site.url}cobra-lab/index.html?audioQa=silent`, {
+      waitUntil: "load",
+      timeout: scaled(45000),
+    });
+    await page.waitForFunction(
+      () => document.querySelector("#status")?.dataset.ready === "true"
+        && !!window.__gunsOnlyCobraAuthority?.vehicle,
+      undefined,
+      { timeout: scaled(60000) },
+    );
+
+    const boot = await page.evaluate(() => ({
+      status: document.querySelector("#status span")?.textContent ?? "",
+      ammo: document.querySelector("#hud-ammo")?.textContent ?? "",
+      gun: document.querySelector("#hud-gunner")?.textContent ?? "",
+      hostiles: (window.__gunsOnlyCobraAuthority?.ground_war?.units ?? [])
+        .filter((unit) => unit.alive && unit.faction === "hostile").length,
+      tick: window.__gunsOnlyCobraAuthority?.vehicle?.tick ?? -1,
+    }));
+    assert.match(boot.status, /HOLD THE BRIDGE|AH-1G ONLINE/i);
+    assert.match(boot.ammo, /AMMO\s+\d+/i);
+    assert.ok(boot.hostiles >= 1, `Cobra boot found no living hostiles: ${JSON.stringify(boot)}`);
+    assert.ok(boot.tick >= 0, `Cobra authority never ticked: ${JSON.stringify(boot)}`);
+
+    await page.keyboard.press("Tab");
+    await page.waitForFunction(
+      () => {
+        const target = document.querySelector("#hud-target")?.textContent ?? "";
+        return /TARGET\s+\d+/i.test(target);
+      },
+      undefined,
+      { timeout: scaled(10000) },
+    );
+    await page.keyboard.down("f");
+    await page.waitForTimeout(scaled(1500));
+    await page.keyboard.up("f");
+
+    const after = await page.evaluate(() => ({
+      target: document.querySelector("#hud-target")?.textContent ?? "",
+      gun: document.querySelector("#hud-gunner")?.textContent ?? "",
+      consentHeld: window.__gunsOnlyCobraAuthority?.gunner != null,
+    }));
+    assert.match(after.target, /TARGET\s+\d+/i);
+    assert.match(after.gun, /GUN\s+/i);
+    assert.deepEqual(pageErrors, [], `uncaught Cobra page errors:\n${pageErrors.join("\n")}`);
+  } finally {
+    await browser.close();
+    await site.close();
+  }
+});
+
+test("the published Weekend Ride route boots and accepts throttle input", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+
+  const site = await serveStatic(WWWROOT);
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+  });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
+    await page.goto(`${site.url}weekend-ride/?audioQa=silent`, {
+      waitUntil: "load",
+      timeout: scaled(45000),
+    });
+    await page.waitForFunction(
+      () => document.querySelector("#status")?.dataset.ready === "true"
+        && !!window.__gunsOnlyWeekendAuthority,
+      undefined,
+      { timeout: scaled(60000) },
+    );
+
+    const groundSpeed = () => page.evaluate(() => {
+      const state = window.__gunsOnlyWeekendAuthority;
+      const vx = Number(state?.vx ?? 0);
+      const vz = Number(state?.vz ?? 0);
+      return Math.hypot(vx, vz);
+    });
+    const before = await page.evaluate(() => ({
+      status: document.querySelector("#status span")?.textContent ?? "",
+      phase: window.__gunsOnlyWeekendAuthority?.phase ?? "",
+    }));
+    const beforeSpeed = await groundSpeed();
+    assert.match(before.status, /YZF-R1 ACTIVE/i);
+    assert.ok(before.phase === "ready" || before.phase === "active",
+      `unexpected weekend-ride phase: ${JSON.stringify(before)}`);
+
+    await page.keyboard.down("w");
+    await page.waitForFunction(
+      (startSpeed) => {
+        const state = window.__gunsOnlyWeekendAuthority;
+        const speed = Math.hypot(Number(state?.vx ?? 0), Number(state?.vz ?? 0));
+        return speed > startSpeed + 0.5;
+      },
+      beforeSpeed,
+      { timeout: scaled(15000) },
+    );
+    await page.keyboard.up("w");
+
+    const afterSpeed = await groundSpeed();
+    const after = await page.evaluate(() => ({
+      canvasWidth: document.querySelector("#scene")?.width ?? 0,
+      canvasHeight: document.querySelector("#scene")?.height ?? 0,
+    }));
+    assert.ok(afterSpeed > beforeSpeed + 0.5,
+      `Weekend Ride throttle did not advance speed: ${JSON.stringify({ beforeSpeed, afterSpeed, before, after })}`);
+    assert.ok(after.canvasWidth > 0 && after.canvasHeight > 0,
+      `Weekend Ride canvas did not size: ${JSON.stringify(after)}`);
+    assert.deepEqual(pageErrors, [], `uncaught Weekend Ride page errors:\n${pageErrors.join("\n")}`);
+  } finally {
+    await browser.close();
+    await site.close();
+  }
+});
+
 test("the published Medevac route resolves route hold, selective relay, and diversion branches", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 

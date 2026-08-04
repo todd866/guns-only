@@ -66,6 +66,8 @@ Hold the Bridge now evaluates the gun against a flexible-turret envelope instead
 | Ballistic solution window | 80–2,000 m | provisional — gameplay bracket carried over from the initial bridge wiring |
 | Turret servo slew | ≈80°/s | provisional crew/mount model, not an airframe measurement |
 | M134 fire rate | 45 rps | provisional authored magazine value; the fractional-round pacing fix only made consumption honest at 120 Hz, it did not retune the rate |
+| Hostile seed rings | 140 / 170 / 200 m | provisional pacing — previous 30 / 42 / 55 m rings sat inside the 80 m min-solution window and died to friendly ground fire before a player standoff shot existed |
+| Hostile reinforce ring | 160 m (+20 m/slot) | provisional pacing — matches the seed standoff so reinforce waves stay shootable |
 
 Rejected on evidence: the 0.06 rad nose-coincidence gate (unreachable with cyclic-only aim, and
 not what FM 1-40's flexible subsystem does) and obstacle-only line of sight (allowed firing

@@ -47,6 +47,25 @@ public class CobraGroundWarRuntimeTests
     }
 
     [Fact]
+    public void SeededHostilesSitOutsideTheAuthoredMinimumGunSolutionOfTheirHomeSite()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        Dictionary<string, ContestedSite> sites = war.Sites.ToDictionary(site => site.Id);
+
+        foreach (GroundUnit hostile in war.LivingUnits()
+            .Where(unit => unit.Faction == GroundFaction.Hostile)) {
+            ContestedSite home = sites[hostile.HomeSiteId];
+            double horizontalM = Math.Sqrt(
+                Math.Pow(hostile.PositionWorldM.X - home.PositionWorldM.X, 2.0)
+                + Math.Pow(hostile.PositionWorldM.Z - home.PositionWorldM.Z, 2.0));
+            Assert.True(
+                horizontalM + 1e-6 >= CobraGunTargeting.MinimumSolutionRangeM,
+                $"hostile {hostile.Id} seeded {horizontalM:F1} m from {home.Label}; "
+                + $"need ≥ {CobraGunTargeting.MinimumSolutionRangeM} m");
+        }
+    }
+
+    [Fact]
     public void MutualCombatAndDriftAreDeterministicForAFixedSeed()
     {
         CobraGroundWarRuntime a = CreateWar(7);
