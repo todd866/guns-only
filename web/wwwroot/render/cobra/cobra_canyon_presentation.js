@@ -1,8 +1,8 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=259";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=260";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=259";
+} from "./cobra_canyon_asset_kit.js?v=260";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 
@@ -15,25 +15,26 @@ export const COBRA_CANYON_TERRAIN_SEGMENTS = Object.freeze({
   desktop: 160,
 });
 
-// The core analytical terrain and authority cues occupy seven submissions. The asset kit adds at
+// The core analytical terrain and authority cues occupy eight submissions (basin, river, roads,
+// hero cells, landmarks, non-bridge hazards, bridge decks, bridge piers). The asset kit adds at
 // most one instanced submission for each of its seven roles; none cast a second shadow pass.
 export const COBRA_CANYON_RENDER_BUDGETS = Object.freeze({
   mobile: Object.freeze({
-    maxDrawCalls: 14,
+    maxDrawCalls: 15,
     maxInstances: 384,
     maxTriangles: 45_000,
     maxAssetInstances: 330,
     nearRingMaximumAglM: 180,
   }),
   balanced: Object.freeze({
-    maxDrawCalls: 14,
+    maxDrawCalls: 15,
     maxInstances: 640,
     maxTriangles: 75_000,
     maxAssetInstances: 580,
     nearRingMaximumAglM: 260,
   }),
   desktop: Object.freeze({
-    maxDrawCalls: 14,
+    maxDrawCalls: 15,
     maxInstances: 896,
     maxTriangles: 120_000,
     maxAssetInstances: 830,
@@ -280,6 +281,52 @@ function appendTriangle(positions, a, b, c) {
   positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
 }
 
+function appendBoxPrism(positions, minimum, maximum) {
+  const [x0, y0, z0] = minimum;
+  const [x1, y1, z1] = maximum;
+  const corners = [
+    { x: x0, y: y0, z: z0 }, { x: x1, y: y0, z: z0 },
+    { x: x1, y: y1, z: z0 }, { x: x0, y: y1, z: z0 },
+    { x: x0, y: y0, z: z1 }, { x: x1, y: y0, z: z1 },
+    { x: x1, y: y1, z: z1 }, { x: x0, y: y1, z: z1 },
+  ];
+  for (const [a, b, c] of [
+    [0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7],
+    [0, 4, 7], [0, 7, 3], [1, 2, 6], [1, 6, 5],
+    [3, 7, 6], [3, 6, 2], [0, 1, 5], [0, 5, 4],
+  ]) {
+    appendTriangle(positions, corners[a], corners[b], corners[c]);
+  }
+}
+
+/**
+ * Unit-normalized deck truss. Outer AABB is exactly [-0.5,0.5]^3 so composeBox preserves
+ * authored collision bounds while the silhouette reads as a steel span, not a solid orange box.
+ */
+function bridgeDeckTrussGeometry(THREE) {
+  const positions = [];
+  appendBoxPrism(positions, [-0.5, -0.5, -0.42], [0.5, -0.28, 0.42]);
+  appendBoxPrism(positions, [-0.5, -0.5, -0.5], [0.5, 0.5, -0.42]);
+  appendBoxPrism(positions, [-0.5, -0.5, 0.42], [0.5, 0.5, 0.5]);
+  for (const z of [-0.42, 0.42]) {
+    appendBoxPrism(positions, [-0.5, 0.38, z - 0.04], [0.5, 0.5, z + 0.04]);
+    appendBoxPrism(positions, [-0.5, -0.1, z - 0.03], [0.5, 0.02, z + 0.03]);
+    for (const x of [-0.45, -0.15, 0.15, 0.45]) {
+      appendBoxPrism(positions, [x - 0.03, -0.28, z - 0.04], [x + 0.03, 0.5, z + 0.04]);
+    }
+  }
+  return geometryFromPositions(THREE, positions, "COBRA_CANYON_BRIDGE_DECK_TRUSS_GEOMETRY");
+}
+
+/** Unit-normalized pier: footing, shaft, and cap that still fill the collision AABB envelope. */
+function bridgePierGeometry(THREE) {
+  const positions = [];
+  appendBoxPrism(positions, [-0.5, -0.5, -0.5], [0.5, -0.38, 0.5]);
+  appendBoxPrism(positions, [-0.5, 0.38, -0.5], [0.5, 0.5, 0.5]);
+  appendBoxPrism(positions, [-0.32, -0.38, -0.36], [0.32, 0.38, 0.36]);
+  return geometryFromPositions(THREE, positions, "COBRA_CANYON_BRIDGE_PIER_GEOMETRY");
+}
+
 function appendRibbon(positions, points, widthM, yOffsetM) {
   const halfWidthM = Math.max(0.05, widthM * 0.5);
   for (let index = 0; index < points.length - 1; index++) {
@@ -341,7 +388,8 @@ function materialFor(THREE, role) {
     heroCells: { color: 0x6a5030, roughness: 1 },
     landmarks: { color: 0xffffff, roughness: 0.95 },
     hazards: { color: 0xe96a43, emissive: 0x411006, roughness: 0.8 },
-    bridges: { color: 0xc25c3f, emissive: 0x2c0b04, roughness: 0.92 },
+    "bridge-deck": { color: 0xc25c3f, emissive: 0x2c0b04, roughness: 0.92 },
+    "bridge-pier": { color: 0xa84e34, emissive: 0x240804, roughness: 0.94 },
     vegetation: { color: 0xffffff, roughness: 1 },
   }[role];
   const material = new THREE.MeshLambertMaterial({
@@ -366,7 +414,7 @@ function materialFor(THREE, role) {
     material.polygonOffsetFactor = -1;
     material.polygonOffsetUnits = -2;
   }
-  material.name = `COBRA_CANYON_${role.toUpperCase()}_MATERIAL`;
+  material.name = `COBRA_CANYON_${String(role).toUpperCase().replaceAll("-", "_")}_MATERIAL`;
   return material;
 }
 
@@ -1076,7 +1124,8 @@ function aabbPlacement(record) {
 
 function hazardPlacements(plan) {
   const placements = [];
-  const bridges = [];
+  const bridgeDecks = [];
+  const bridgePiers = [];
   const wireSpans = [];
   const poleKeys = new Set();
   let suppressedPresentationPoles = 0;
@@ -1087,7 +1136,8 @@ function hazardPlacements(plan) {
     if (shape === "aabb") {
       const placement = aabbPlacement(record);
       if (!placement) continue;
-      if (kind.includes("bridge")) bridges.push(placement);
+      if (kind.includes("bridge-pier") || kind === "bridgepier") bridgePiers.push(placement);
+      else if (kind.includes("bridge")) bridgeDecks.push(placement);
       else placements.push(placement);
       continue;
     }
@@ -1130,7 +1180,9 @@ function hazardPlacements(plan) {
   }
   return {
     placements,
-    bridges,
+    bridgeDecks,
+    bridgePiers,
+    bridges: [...bridgeDecks, ...bridgePiers],
     wireSpans,
     authoredCount: authored.length,
     suppressedPresentationPoles,
@@ -1303,12 +1355,23 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
     composeHazard,
     { hazardCue: true },
   );
-  const bridgeMesh = addInstancedMesh(
+  const bridgeDeckMesh = addInstancedMesh(
     THREE,
     group,
-    "bridges",
-    new THREE.BoxGeometry(1, 1, 1),
-    hazards.bridges,
+    "bridge-deck",
+    bridgeDeckTrussGeometry(THREE),
+    hazards.bridgeDecks,
+    resources,
+    metrics,
+    composeBox,
+    { hazardCue: true },
+  );
+  const bridgePierMesh = addInstancedMesh(
+    THREE,
+    group,
+    "bridge-pier",
+    bridgePierGeometry(THREE),
+    hazards.bridgePiers,
     resources,
     metrics,
     composeBox,
@@ -1347,9 +1410,19 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
       })),
     );
   }
-  if (bridgeMesh) {
-    bridgeMesh.userData.cobraCanyonInstances = Object.freeze(
-      hazards.bridges.map((placement, instanceId) => Object.freeze({
+  if (bridgeDeckMesh) {
+    bridgeDeckMesh.userData.cobraCanyonInstances = Object.freeze(
+      hazards.bridgeDecks.map((placement, instanceId) => Object.freeze({
+        instanceId,
+        id: placement.id,
+        kind: placement.kind,
+        authoredHazard: true,
+      })),
+    );
+  }
+  if (bridgePierMesh) {
+    bridgePierMesh.userData.cobraCanyonInstances = Object.freeze(
+      hazards.bridgePiers.map((placement, instanceId) => Object.freeze({
         instanceId,
         id: placement.id,
         kind: placement.kind,
@@ -1390,6 +1463,8 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
     hazards: hazards.authoredCount,
     hazardInstances: hazards.placements.length + hazards.bridges.length,
     bridges: hazards.bridges.length,
+    bridgeDecks: hazards.bridgeDecks.length,
+    bridgePiers: hazards.bridgePiers.length,
     routeEnvelopeAdjustedInstances: routeEnvelopePlacements.filter(
       (placement) => placement.routeEnvelopeAdjusted,
     ).length,
@@ -1465,9 +1540,13 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
       hazardMesh.visible = true;
       hazardMesh.count = hazards.placements.length;
     }
-    if (bridgeMesh) {
-      bridgeMesh.visible = true;
-      bridgeMesh.count = hazards.bridges.length;
+    if (bridgeDeckMesh) {
+      bridgeDeckMesh.visible = true;
+      bridgeDeckMesh.count = hazards.bridgeDecks.length;
+    }
+    if (bridgePierMesh) {
+      bridgePierMesh.visible = true;
+      bridgePierMesh.count = hazards.bridgePiers.length;
     }
     assetKit.update({ ambientBudgetLevel, nearRingVisible });
     currentDiagnostics = snapshots[ambientBudgetLevel][nearRingVisible ? 1 : 0];
