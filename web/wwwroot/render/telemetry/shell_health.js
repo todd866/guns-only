@@ -130,6 +130,8 @@ export function createShellHealthBeacon({
   let lastFatal = null;
   let flushChain = Promise.resolve();
   let stopped = false;
+  let flushTimer = null;
+  const FLUSH_DEBOUNCE_MS = 750;
 
   function headerRow(batchId) {
     return {
@@ -197,6 +199,10 @@ export function createShellHealthBeacon({
   function flush({ keepalive = false, force = false } = {}) {
     if (stopped && !force) return flushChain;
     if (reached.size === 0 && !lastFatal) return flushChain;
+    if (flushTimer != null) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
     const { batchId, rows } = rowsForFlush();
     const payload = { session, batchId, rows };
     flushChain = flushChain
@@ -204,6 +210,14 @@ export function createShellHealthBeacon({
       .then(() => postJson(payload, { keepalive }))
       .catch(() => ({ ok: false, via: "error" }));
     return flushChain;
+  }
+
+  function scheduleFlush() {
+    if (flushTimer != null) clearTimeout(flushTimer);
+    flushTimer = setTimeout(() => {
+      flushTimer = null;
+      void flush();
+    }, FLUSH_DEBOUNCE_MS);
   }
 
   return {
@@ -223,7 +237,8 @@ export function createShellHealthBeacon({
       if (milestoneRank(milestone) < previous) return false;
       const first = !reached.has(milestone);
       reached.add(milestone);
-      if (first) void flush();
+      // Debounce boot-edge POSTs so milestone chatter cannot stall the render loop.
+      if (first) scheduleFlush();
       return first;
     },
     fatal(error) {

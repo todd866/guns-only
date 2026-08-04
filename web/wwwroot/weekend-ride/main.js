@@ -1,12 +1,12 @@
-import * as THREE from "../vendor/three.module.js?v=262";
-import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=262";
+import * as THREE from "../vendor/three.module.js?v=263";
+import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=263";
 import {
   dominantSignedAxis,
   gamepadRiderAxes,
-} from "../render/motorcycle/rider_input.js?v=262";
+} from "../render/motorcycle/rider_input.js?v=263";
 import {
   createRapierTrackDayPresentation,
-} from "../render/motorcycle/track_day_presentation.js?v=262";
+} from "../render/motorcycle/track_day_presentation.js?v=263";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
