@@ -16,6 +16,11 @@ public static class ThrottleInputSchedule {
     public const double FineCasKts = 180.0;
     /// <summary>At or above this CAS, relative throttle uses the fight (coarse) rate.</summary>
     public const double CoarseCasKts = 300.0;
+    // The lever band is absolute PLA, calibrated to the F-22's approach trim (~0.08).
+    // Airframes whose approach trim straddles the coarse floor — the Sabre trims on-speed
+    // at 0.28-0.38 — get little or no fine band, so the feature is largely inert for the
+    // aircraft with the hardest recoveries. Keying the band off DetentLayer's
+    // ApproachTrimThrottle would be airframe-agnostic; noted 2026-08-04, not yet done.
     /// <summary>At or below this physical lever, low-speed fine gain applies.</summary>
     public const double FineLeverCeiling = 0.20;
     /// <summary>At or above this physical lever, relative inputs stay coarse even when slow.</summary>

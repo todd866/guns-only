@@ -36,6 +36,45 @@ public sealed class ThrottleInputScheduleTests {
     }
 
     [Fact]
+    public void TapAcrossFineCoarseBoundaryDoesNotRatchet() {
+        // 136 KIAS (fine speed band), lever 0.36 (just coarse). A down-tap crosses into
+        // the blend; the up-tap back must return near the start. Sizing steps by the
+        // pre-tap lever alone ratchets the round trip down by ~0.13 of lever.
+        AircraftParams f22 = FlightModel.F22APublicDataSurrogate;
+        var state = new AircraftState(
+            new Vec3D(0.0, 100.0, 0.0), 70.0, 0.0, 0.0, 0.0, f22.MassKg);
+        var d = new DetentLayer();
+        d.ConfigureFor(f22, 0.36);
+        d.AirspeedMps = state.Speed;
+        var g = new KeyGrammar();
+        var advice = new Doctrine.DoctrineAdvice(1.0, 0.0, "x");
+        double stepMs = 1000.0 / AircraftSim.TickHz;
+        double dt = 1.0 / AircraftSim.TickHz;
+        void Run(int fromTick, int toTick) {
+            for (int i = fromTick; i < toTick; i++)
+                d.Tick(g, i * stepMs, state, f22, advice, dt);
+        }
+
+        Run(0, 12);
+        double before = d.Throttle;
+
+        g.Feed(GKey.ThrottleDown, true, 12 * stepMs);
+        Run(12, 15);
+        g.Feed(GKey.ThrottleDown, false, 15 * stepMs);
+        Run(15, 60); // crosses the 250 ms tap-classification window
+        double afterDown = d.Throttle;
+        Assert.True(afterDown < before - 0.03,
+            $"down-tap should still bite: {before:F3} → {afterDown:F3}");
+
+        g.Feed(GKey.ThrottleUp, true, 60 * stepMs);
+        Run(60, 63);
+        g.Feed(GKey.ThrottleUp, false, 63 * stepMs);
+        Run(63, 110);
+
+        Assert.InRange(d.Throttle, before - 0.075, before + 0.075);
+    }
+
+    [Fact]
     public void RelativeHoldDoesNotMoveLeverWithoutPilotInput() {
         AircraftParams f22 = FlightModel.F22APublicDataSurrogate;
         var state = new AircraftState(

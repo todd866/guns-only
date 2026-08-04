@@ -626,6 +626,14 @@ public sealed class DetentLayer {
         RelativeThrottleHoldRatePerSecond =
             ThrottleInputSchedule.HoldRatePerSecond(iasKts, _throttleLever);
         double relativeTapStep = ThrottleInputSchedule.TapStep(iasKts, _throttleLever);
+        int netTaps = thUp - thDn;
+        if (netTaps != 0) {
+            // A tap can cross the fine/coarse lever band; sizing the step by the pre-tap
+            // lever alone ratchets (a down-tap takes the coarse step, the up-tap back
+            // takes the fine one). Evaluate mid-move so the round trip is symmetric.
+            double midLever = _throttleLever + netTaps * relativeTapStep * 0.5;
+            relativeTapStep = ThrottleInputSchedule.TapStep(iasKts, midLever);
+        }
         // The lever stop is an airframe capability. A dry-thrust Sabre stops at MIL (1.0),
         // while an afterburning definition may expose the full staged range to 1.35.
         if (ApproachMode && !_manualThrottle) {
@@ -642,7 +650,7 @@ public sealed class DetentLayer {
         } else {
             if (wHeld) _throttleLever += RelativeThrottleHoldRatePerSecond * dt;
             if (sHeld) _throttleLever -= RelativeThrottleHoldRatePerSecond * dt;
-            _throttleLever += (thUp - thDn) * relativeTapStep;
+            _throttleLever += netTaps * relativeTapStep;
             _throttleLever = System.Math.Clamp(_throttleLever, 0.0, leverStop);
         }
         Throttle = _throttleLever;
