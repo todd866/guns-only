@@ -1,9 +1,9 @@
-import * as THREE from "../vendor/three.module.js?v=256";
-import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=256";
+import * as THREE from "../vendor/three.module.js?v=257";
+import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=257";
 import {
   dominantSignedAxis,
   gamepadRiderAxes,
-} from "../render/motorcycle/rider_input.js?v=256";
+} from "../render/motorcycle/rider_input.js?v=257";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
