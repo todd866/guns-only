@@ -623,16 +623,21 @@ public sealed class DetentLayer {
         }
         double tasMps = double.IsFinite(AirspeedMps) ? AirspeedMps : s.Speed;
         double iasKts = AirData.IndicatedAirspeedMps(tasMps, s.Position.Y) * AirData.MpsToKnots;
-        RelativeThrottleHoldRatePerSecond =
-            ThrottleInputSchedule.HoldRatePerSecond(iasKts, _throttleLever);
-        double relativeTapStep = ThrottleInputSchedule.TapStep(iasKts, _throttleLever);
+        // ApproachTrimThrottle (this airframe's finals feed-forward, computed above) anchors the
+        // fine lever band; it is 0.0 off the approach, which the schedule reads as "use the
+        // reference band", so fight/cruise behaviour is unchanged.
+        RelativeThrottleHoldRatePerSecond = ThrottleInputSchedule.HoldRatePerSecond(
+            iasKts, _throttleLever, ApproachTrimThrottle);
+        double relativeTapStep = ThrottleInputSchedule.TapStep(
+            iasKts, _throttleLever, ApproachTrimThrottle);
         int netTaps = thUp - thDn;
         if (netTaps != 0) {
             // A tap can cross the fine/coarse lever band; sizing the step by the pre-tap
             // lever alone ratchets (a down-tap takes the coarse step, the up-tap back
             // takes the fine one). Evaluate mid-move so the round trip is symmetric.
             double midLever = _throttleLever + netTaps * relativeTapStep * 0.5;
-            relativeTapStep = ThrottleInputSchedule.TapStep(iasKts, midLever);
+            relativeTapStep = ThrottleInputSchedule.TapStep(
+                iasKts, midLever, ApproachTrimThrottle);
         }
         // The lever stop is an airframe capability. A dry-thrust Sabre stops at MIL (1.0),
         // while an afterburning definition may expose the full staged range to 1.35.
