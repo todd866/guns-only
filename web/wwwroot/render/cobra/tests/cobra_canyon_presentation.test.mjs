@@ -79,13 +79,65 @@ function visibleMetrics(root) {
 
 function representedAuthoredHazards(root) {
   const ids = new Set();
-  for (const role of ["hazards", "bridges"]) {
+  for (const role of ["hazards", "bridge-deck", "bridge-pier"]) {
     const mesh = byRole(root, role);
     for (const entry of mesh?.userData.cobraCanyonInstances ?? []) {
       if (entry.authoredHazard) ids.add(entry.id);
     }
   }
   return ids;
+}
+
+function instanceWorldBounds(mesh, instanceId) {
+  const matrix = new THREE.Matrix4();
+  mesh.getMatrixAt(instanceId, matrix);
+  const position = new THREE.Vector3();
+  const quaternion = new THREE.Quaternion();
+  const scale = new THREE.Vector3();
+  matrix.decompose(position, quaternion, scale);
+  return {
+    minimum: {
+      x: position.x - scale.x * 0.5,
+      y: position.y - scale.y * 0.5,
+      z: position.z - scale.z * 0.5,
+    },
+    maximum: {
+      x: position.x + scale.x * 0.5,
+      y: position.y + scale.y * 0.5,
+      z: position.z + scale.z * 0.5,
+    },
+  };
+}
+
+function collisionToSceneBounds(minimumLocalM, maximumLocalM) {
+  const [minEast, minUp, minNorth] = minimumLocalM;
+  const [maxEast, maxUp, maxNorth] = maximumLocalM;
+  const z0 = -minNorth;
+  const z1 = -maxNorth;
+  return {
+    minimum: {
+      x: Math.min(minEast, maxEast),
+      y: Math.min(minUp, maxUp),
+      z: Math.min(z0, z1),
+    },
+    maximum: {
+      x: Math.max(minEast, maxEast),
+      y: Math.max(minUp, maxUp),
+      z: Math.max(z0, z1),
+    },
+  };
+}
+
+function assertUnitEnvelope(geometry, label) {
+  geometry.computeBoundingBox();
+  const box = geometry.boundingBox;
+  assert.ok(box, `${label} must expose a bounding box`);
+  assert.ok(Math.abs(box.min.x + 0.5) < 1e-6, `${label} min.x`);
+  assert.ok(Math.abs(box.min.y + 0.5) < 1e-6, `${label} min.y`);
+  assert.ok(Math.abs(box.min.z + 0.5) < 1e-6, `${label} min.z`);
+  assert.ok(Math.abs(box.max.x - 0.5) < 1e-6, `${label} max.x`);
+  assert.ok(Math.abs(box.max.y - 0.5) < 1e-6, `${label} max.y`);
+  assert.ok(Math.abs(box.max.z - 0.5) < 1e-6, `${label} max.z`);
 }
 
 test("builds the real analytical basin and stays inside every tier ceiling", () => {
@@ -102,10 +154,10 @@ test("builds the real analytical basin and stays inside every tier ceiling", () 
     assert.ok(actual.instances <= budget.maxInstances);
     assert.ok(actual.triangles <= budget.maxTriangles);
     assert.equal(diagnostics.withinBudget, true);
-    assert.equal(diagnostics.builtDrawCalls, 14);
-    assert.equal(diagnostics.roleCounts.coreRenderBatches, 7);
+    assert.equal(diagnostics.builtDrawCalls, 15);
+    assert.equal(diagnostics.roleCounts.coreRenderBatches, 8);
     assert.equal(diagnostics.roleCounts.assetRenderBatches, 7);
-    assert.equal(diagnostics.roleCounts.worldRenderBatches, 14);
+    assert.equal(diagnostics.roleCounts.worldRenderBatches, 15);
     assert.equal(diagnostics.roleCounts.heroCells, 3);
     assert.equal(diagnostics.roleCounts.landmarks, 11);
     assert.equal(diagnostics.roleCounts.hazards, 14);
@@ -203,11 +255,14 @@ test("represents all fourteen authored hazards and never sheds them", () => {
   assert.deepEqual(representedAuthoredHazards(presentation.group), expectedIds);
 
   const hazardMesh = byRole(presentation.group, "hazards");
-  const bridgeMesh = byRole(presentation.group, "bridges");
+  const deckMesh = byRole(presentation.group, "bridge-deck");
+  const pierMesh = byRole(presentation.group, "bridge-pier");
   const authoredHazardCount = hazardMesh.count;
-  const authoredBridgeCount = bridgeMesh.count;
+  const authoredDeckCount = deckMesh.count;
+  const authoredPierCount = pierMesh.count;
   assert.equal(hazardMesh.frustumCulled, false);
-  assert.equal(bridgeMesh.frustumCulled, false);
+  assert.equal(deckMesh.frustumCulled, false);
+  assert.equal(pierMesh.frustumCulled, false);
 
   for (const ambientBudgetLevel of [0, 1, 2]) {
     presentation.update({
@@ -219,11 +274,65 @@ test("represents all fourteen authored hazards and never sheds them", () => {
     assert.equal(diagnostics.hazards, 14);
     assert.equal(diagnostics.hazardsVisible, true);
     assert.equal(hazardMesh.visible, true);
-    assert.equal(bridgeMesh.visible, true);
+    assert.equal(deckMesh.visible, true);
+    assert.equal(pierMesh.visible, true);
     assert.equal(hazardMesh.count, authoredHazardCount);
-    assert.equal(bridgeMesh.count, authoredBridgeCount);
+    assert.equal(deckMesh.count, authoredDeckCount);
+    assert.equal(pierMesh.count, authoredPierCount);
     assert.deepEqual(representedAuthoredHazards(presentation.group), expectedIds);
   }
+  presentation.dispose();
+});
+
+test("Iron Bell deck and piers keep visible bounds identical to collision AABBs", () => {
+  const { plan, presentation } = create("balanced");
+  const deckMesh = byRole(presentation.group, "bridge-deck");
+  const pierMesh = byRole(presentation.group, "bridge-pier");
+  assertUnitEnvelope(deckMesh.geometry, "bridge-deck");
+  assertUnitEnvelope(pierMesh.geometry, "bridge-pier");
+  assert.notEqual(deckMesh.geometry.uuid, pierMesh.geometry.uuid);
+  assert.match(deckMesh.geometry.name, /TRUSS|DECK/i);
+  assert.match(pierMesh.geometry.name, /PIER/i);
+
+  const byId = new Map(plan.hazards.map((hazard) => [hazard.id, hazard]));
+  for (const entry of deckMesh.userData.cobraCanyonInstances) {
+    assert.equal(entry.kind, "bridge-deck");
+    const hazard = byId.get(entry.id);
+    const expected = collisionToSceneBounds(
+      hazard.collision.minimumLocalM,
+      hazard.collision.maximumLocalM,
+    );
+    const bounds = instanceWorldBounds(deckMesh, entry.instanceId);
+    assert.ok(Math.abs(bounds.minimum.x - expected.minimum.x) < 1e-6);
+    assert.ok(Math.abs(bounds.minimum.y - expected.minimum.y) < 1e-6);
+    assert.ok(Math.abs(bounds.minimum.z - expected.minimum.z) < 1e-6);
+    assert.ok(Math.abs(bounds.maximum.x - expected.maximum.x) < 1e-6);
+    assert.ok(Math.abs(bounds.maximum.y - expected.maximum.y) < 1e-6);
+    assert.ok(Math.abs(bounds.maximum.z - expected.maximum.z) < 1e-6);
+  }
+  for (const entry of pierMesh.userData.cobraCanyonInstances) {
+    assert.equal(entry.kind, "bridge-pier");
+    const hazard = byId.get(entry.id);
+    const expected = collisionToSceneBounds(
+      hazard.collision.minimumLocalM,
+      hazard.collision.maximumLocalM,
+    );
+    const bounds = instanceWorldBounds(pierMesh, entry.instanceId);
+    assert.ok(Math.abs(bounds.minimum.x - expected.minimum.x) < 1e-6);
+    assert.ok(Math.abs(bounds.minimum.y - expected.minimum.y) < 1e-6);
+    assert.ok(Math.abs(bounds.minimum.z - expected.minimum.z) < 1e-6);
+    assert.ok(Math.abs(bounds.maximum.x - expected.maximum.x) < 1e-6);
+    assert.ok(Math.abs(bounds.maximum.y - expected.maximum.y) < 1e-6);
+    assert.ok(Math.abs(bounds.maximum.z - expected.maximum.z) < 1e-6);
+  }
+  assert.equal(deckMesh.count, 1);
+  assert.equal(pierMesh.count, 2);
+  assert.equal(
+    (byRole(presentation.group, "landmarks")?.userData.cobraCanyonInstances ?? [])
+      .filter((entry) => entry.id === "landmark.cobra-canyon.iron-bell-bridge.v1").length,
+    0,
+    "Iron Bell landmark must not double-draw against hazard AABBs",
+  );
   presentation.dispose();
 });
 
@@ -288,10 +397,12 @@ test("ambient rungs and AGL shed only deterministic asset prefixes", () => {
     byRole(presentation.group, role),
   ]));
   const hazards = byRole(presentation.group, "hazards");
-  const bridges = byRole(presentation.group, "bridges");
+  const decks = byRole(presentation.group, "bridge-deck");
+  const piers = byRole(presentation.group, "bridge-pier");
   const baseCounts = new Map([...assets].map(([role, mesh]) => [role, mesh.count]));
   const baseHazardCount = hazards.count;
-  const baseBridgeCount = bridges.count;
+  const baseDeckCount = decks.count;
+  const basePierCount = piers.count;
   const firstMatrix = new THREE.Matrix4();
   const firstPosition = new THREE.Vector3();
   const firstQuaternion = new THREE.Quaternion();
@@ -320,7 +431,8 @@ test("ambient rungs and AGL shed only deterministic asset prefixes", () => {
     assert.equal(presentation.diagnostics().visibleAmbientInstances, expected);
     assert.equal(presentation.diagnostics().visibleAssetInstances, expected);
     assert.equal(hazards.count, baseHazardCount);
-    assert.equal(bridges.count, baseBridgeCount);
+    assert.equal(decks.count, baseDeckCount);
+    assert.equal(piers.count, basePierCount);
   }
 
   presentation.update({
@@ -341,7 +453,8 @@ test("ambient rungs and AGL shed only deterministic asset prefixes", () => {
   assert.equal(presentation.diagnostics().visibleAmbientInstances, structuralCount);
   assert.equal(presentation.diagnostics().nearRingVisible, false);
   assert.equal(hazards.visible, true);
-  assert.equal(bridges.visible, true);
+  assert.equal(decks.visible, true);
+  assert.equal(piers.visible, true);
 
   presentation.update({
     ambientBudgetLevel: 0,
@@ -353,14 +466,15 @@ test("ambient rungs and AGL shed only deterministic asset prefixes", () => {
     assert.equal(mesh.count, baseCounts.get(role));
   }
   assert.equal(hazards.count, baseHazardCount);
-  assert.equal(bridges.count, baseBridgeCount);
+  assert.equal(decks.count, baseDeckCount);
+  assert.equal(piers.count, basePierCount);
   presentation.dispose();
 });
 
 test("uses deterministic static matrices and cached frozen diagnostics", () => {
   const first = create("desktop").presentation;
   const second = create("desktop").presentation;
-  for (const role of ["landmarks", "hazards", "bridges", ...COBRA_CANYON_ASSET_ROLES]) {
+  for (const role of ["landmarks", "hazards", "bridge-deck", "bridge-pier", ...COBRA_CANYON_ASSET_ROLES]) {
     const firstMesh = byRole(first.group, role);
     const secondMesh = byRole(second.group, role);
     assert.equal(firstMesh.count, secondMesh.count);
