@@ -39,7 +39,7 @@ OWNER_UA_MARKERS = (
     "Macintosh; Intel Mac OS X 10_15_7",
 )
 
-SESSION_RE = re.compile(r"telemetry/(web-(\d{13})-\d+)/(.+)\.jsonl\.gz$")
+SESSION_RE = re.compile(r"telemetry/((?:web|shell)-(\d{13})-\d+)/(.+)\.jsonl\.gz$")
 
 
 # ---------------------------------------------------------------- transport
@@ -91,7 +91,12 @@ def window_prefixes(days):
     """
     now = int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000)
     cutoff = now - days * 86_400_000
-    return sorted({f"telemetry/web-{str(ms)[:4]}" for ms in (cutoff, now)}), cutoff
+    prefixes = set()
+    for ms in (cutoff, now):
+        stamp = str(ms)[:4]
+        prefixes.add(f"telemetry/web-{stamp}")
+        prefixes.add(f"telemetry/shell-{stamp}")
+    return sorted(prefixes), cutoff
 
 
 def list_inventory(days, refresh):
@@ -259,8 +264,19 @@ def deep_funnel(sessions, visitors, refresh):
         parallel(jobs)
 
     stats = collections.defaultdict(
-        lambda: {"flew": False, "rounds": 0.0, "hits": 0.0, "kills": 0.0, "sorties": set(),
-                 "sparred": False, "graduated": False})
+        lambda: {
+            "flew": False,
+            "rounds": 0.0,
+            "hits": 0.0,
+            "kills": 0.0,
+            "sorties": set(),
+            "sparred": False,
+            "graduated": False,
+            "touch_ready": False,
+            "frame_governor": 0,
+            "max_phase": None,
+        })
+    phase_rank = {"READY": 1, "ACTIVE": 2, "PAUSED": 2, "FINISHED": 3}
     for name in visitors:
         for blob in sessions[name]:
             path = os.path.join(chunk_dir, blob["pathname"].replace("/", "_"))
@@ -277,16 +293,26 @@ def deep_funnel(sessions, visitors, refresh):
                 if kind == "in" and row.get("type") == "lifecycle" \
                         and row.get("code") == "sortie_started":
                     entry["flew"] = True
+                elif kind == "in" and row.get("type") == "mobile_control" \
+                        and row.get("code") == "touch_ready":
+                    entry["touch_ready"] = True
+                elif kind == "in" and row.get("type") == "perf" \
+                        and row.get("code") == "FrameGovernor":
+                    entry["frame_governor"] += 1
                 elif kind == "st":
                     state = replay_state(row, state)
                     if not state:
                         continue
-                    # Did the opening pair set them up, and did they earn their way out of it?
                     presenting = state.get("bandit_presenting")
                     if presenting is True:
                         entry["sparred"] = True
                     elif presenting is False and entry["sparred"]:
                         entry["graduated"] = True
+                    phase = state.get("session_phase")
+                    if isinstance(phase, str):
+                        current = entry["max_phase"]
+                        if current is None or phase_rank.get(phase, 0) >= phase_rank.get(current, 0):
+                            entry["max_phase"] = phase
                     sortie = state.get("telemetry_sortie_id")
                     if sortie:
                         entry["sorties"].add(sortie)
@@ -297,6 +323,66 @@ def deep_funnel(sessions, visitors, refresh):
                         if value is not None:
                             entry[key] = max(entry[key], value)
     return stats
+
+
+def shell_health_summary(sessions, shell_names, refresh):
+    """Aggregate always-on shell-health milestones and fatals."""
+    chunk_dir = os.path.join(CACHE, "chunks")
+    os.makedirs(chunk_dir, exist_ok=True)
+    jobs = []
+    for name in shell_names:
+        for blob in sessions[name]:
+            out = os.path.join(chunk_dir, blob["pathname"].replace("/", "_"))
+            if not os.path.exists(out) or refresh:
+                jobs.append((blob["url"], blob["size"], blob["etag"], out))
+    if jobs:
+        print(f"  downloading {len(jobs)} shell-health chunks…", file=sys.stderr)
+        parallel(jobs)
+
+    milestones = collections.Counter()
+    fatals = collections.Counter()
+    platforms = collections.Counter()
+    arrivals = collections.Counter()
+    farthest = collections.Counter()
+    order = ["script_load", "bridge_ready", "webgl_ok", "ready", "active"]
+    for name in shell_names:
+        reached = set()
+        platform_name = "unknown"
+        arrival_name = "unknown"
+        for blob in sessions[name]:
+            path = os.path.join(chunk_dir, blob["pathname"].replace("/", "_"))
+            if not os.path.exists(path):
+                continue
+            try:
+                with gzip.open(path, "rt") as fh:
+                    rows = [json.loads(line) for line in fh if line.strip()]
+            except (OSError, ValueError, EOFError):
+                continue
+            for row in rows:
+                if row.get("k") == "hdr":
+                    platform_name = row.get("platform") or platform_name
+                    arrival_name = row.get("arrival") or arrival_name
+                elif row.get("k") == "in" and row.get("type") == "shell_health":
+                    if row.get("code") == "milestone" and row.get("milestone"):
+                        reached.add(row["milestone"])
+                        milestones[row["milestone"]] += 1
+                    elif row.get("code") == "fatal":
+                        fatals[row.get("reason") or "unknown"] += 1
+        platforms[platform_name] += 1
+        arrivals[arrival_name] += 1
+        last = "none"
+        for milestone in order:
+            if milestone in reached:
+                last = milestone
+        farthest[last] += 1
+    return {
+        "sessions": len(shell_names),
+        "platforms": dict(platforms),
+        "arrivals": dict(arrivals),
+        "milestones": dict(milestones),
+        "fatals": dict(fatals),
+        "farthest": dict(farthest),
+    }
 
 
 # ---------------------------------------------------------------- report
@@ -319,9 +405,13 @@ def main():
         sys.exit("no telemetry sessions in that window")
     headers = load_headers(sessions, args.refresh)
 
+    flight_names = [name for name in sessions if name.startswith("web-")]
+    shell_names = [name for name in sessions if name.startswith("shell-")]
+
     visitors, owner, unknown = [], [], []
-    for name in sessions:
-        ua = headers.get(name, {}).get("ua", "")
+    for name in flight_names:
+        hdr = headers.get(name, {})
+        ua = hdr.get("ua", "")
         if not ua:
             unknown.append(name)
         elif is_owner(ua):
@@ -345,16 +435,17 @@ def main():
 
     line = "─" * 62
     print(line)
-    print(f"{'VISITOR SESSIONS':<28}{len(visitors):>6}")
+    print(f"{'FLIGHT SESSIONS (opt-in)':<28}{len(visitors):>6}")
     print(f"{'  distinct phone models':<28}{len(models):>6}")
     print(f"{'your dev Mac':<28}{len(owner):>6}")
     print(f"{'unidentified':<28}{len(unknown):>6}")
+    print(f"{'SHELL-HEALTH SESSIONS':<28}{len(shell_names):>6}")
     print(line)
 
-    print("\narriving via")
+    print("\narriving via (opt-in flight)")
     for source, count in arrivals.most_common():
         print(f"  {source:<24}{count:>5}")
-    print("\non")
+    print("\non (opt-in flight)")
     for name, count in platforms.most_common():
         print(f"  {name:<24}{count:>5}")
     print("\nvisitor sessions per day")
@@ -370,7 +461,37 @@ def main():
         "arrivals": dict(arrivals),
         "platforms": dict(platforms),
         "per_day": dict(per_day),
+        "shell_sessions": len(shell_names),
     }
+
+    if shell_names:
+        print("\n" + line)
+        print("SHELL HEALTH (always-on boot / fatal)")
+        print(line)
+        shell = shell_health_summary(sessions, shell_names, args.refresh)
+        payload["shell_health"] = shell
+        print(f"  sessions                {shell['sessions']:>6}")
+        print("  farthest milestone")
+        for milestone, count in sorted(
+                shell["farthest"].items(),
+                key=lambda item: (
+                    ["none", "script_load", "bridge_ready", "webgl_ok", "ready", "active"]
+                    .index(item[0]) if item[0] in {
+                        "none", "script_load", "bridge_ready", "webgl_ok", "ready", "active"
+                    } else 99)):
+            print(f"    {milestone:<22}{count:>5}")
+        if shell["fatals"]:
+            print("  fatals")
+            for reason, count in sorted(shell["fatals"].items(), key=lambda item: -item[1]):
+                print(f"    {reason:<22}{count:>5}")
+        else:
+            print("  fatals                       0")
+        print("  platforms")
+        for name, count in sorted(shell["platforms"].items(), key=lambda item: -item[1]):
+            print(f"    {name:<22}{count:>5}")
+        print("  arrivals")
+        for name, count in sorted(shell["arrivals"].items(), key=lambda item: -item[1]):
+            print(f"    {name:<22}{count:>5}")
 
     if args.deep:
         print("\n" + line)
@@ -382,7 +503,7 @@ def main():
         rounds = int(sum(stats[n]["rounds"] for n in visitors))
         hits = int(sum(stats[n]["hits"] for n in visitors))
         kills = int(sum(stats[n]["kills"] for n in visitors))
-        print("COMBAT FUNNEL (visitors only)")
+        print("COMBAT FUNNEL (opt-in flight visitors)")
         print(line)
         sparred = [n for n in visitors if stats[n]["sparred"]]
         graduated = [n for n in visitors if stats[n]["graduated"]]
@@ -395,11 +516,39 @@ def main():
         print(f"  killed something        {len(killed):>6}")
         print(f"\n  rounds {rounds:,}   hits {hits}   kills {kills}"
               + (f"   hit rate {hits / rounds:.2%}" if rounds else ""))
+
+        print("\n" + line)
+        print("MOBILE FUNNEL (opt-in flight, by platform)")
+        print(line)
+        by_platform = collections.defaultdict(list)
+        for name in visitors:
+            by_platform[platform(headers[name]["ua"])].append(name)
+        mobile_payload = {}
+        for plat_name, names in sorted(by_platform.items(), key=lambda item: -len(item[1])):
+            plat_flew = sum(1 for n in names if stats[n]["flew"])
+            touch = sum(1 for n in names if stats[n]["touch_ready"])
+            gov = sum(stats[n]["frame_governor"] for n in names)
+            phases = collections.Counter(stats[n]["max_phase"] or "none" for n in names)
+            print(f"  {plat_name}")
+            print(f"    sessions              {len(names):>6}")
+            print(f"    started a sortie      {plat_flew:>6}")
+            print(f"    touch_ready           {touch:>6}")
+            print(f"    FrameGovernor events  {gov:>6}")
+            print(f"    max phase             {dict(phases)}")
+            mobile_payload[plat_name] = {
+                "sessions": len(names),
+                "flew": plat_flew,
+                "touch_ready": touch,
+                "frame_governor_events": gov,
+                "max_phase": dict(phases),
+            }
+
         payload["funnel"] = {
             "loaded": len(visitors), "flew": len(flew), "fired": len(fired),
             "hit": len(scored), "killed": len(killed),
             "rounds": rounds, "hits": hits, "kills": kills,
         }
+        payload["mobile_funnel"] = mobile_payload
 
     if args.json:
         with open(args.json, "w") as fh:

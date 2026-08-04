@@ -161,6 +161,7 @@ import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
 } from "./render/telemetry/telemetry_batch.js?v=261";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=262";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -1313,6 +1314,11 @@ let buildIdentity = createReleaseIdentity({ entrypointBuild: ENTRYPOINT_BUILD })
 // One-shot latch so the menu auto-reload to a newer build fires once, never in a loop.
 let autoReloadArmed = false;
 const BUILD = buildIdentity.telemetryBuild;
+const shellHealth = createShellHealthBeacon({
+  build: BUILD,
+  revision: buildIdentity.telemetry?.revision ?? null,
+});
+shellHealth.mark("script_load");
 const BUILD_IDENTITY_REVALIDATE_MS = 60_000;
 let runningBuildInfo = null;
 let lastKnownBuildInfo = null;
@@ -5037,6 +5043,11 @@ function waitForGlobal(getter, timeoutMs = 15000) {
 
 function showFatal(error) {
   console.error(error);
+  try {
+    shellHealth?.fatal?.(error);
+  } catch {
+    // Shell health must never block the fatal UI.
+  }
   bootScreen.classList.add("ready");
   fatalMessage.textContent = error instanceof Error ? `${error.message}\n\n${error.stack ?? ""}` : String(error);
   fatalScreen.classList.add("visible");
@@ -10604,6 +10615,7 @@ async function boot() {
   const assemblyExports = await getAssemblyExports("GunsOnly.Web");
   bridge = assemblyExports.GunsOnly.Web.WebBridge;
   bindMeshNdToolbar(bridge);
+  shellHealth.mark("bridge_ready");
   // Per-frame state now rides the kernel's numeric hot buffer; the full JSON snapshot is
   // re-fetched only when its cold_version slot bumps (or on the source's fallback interval).
   // The MemoryView is fetched once; copyTo re-derives the WASM view per call, so a persistent
@@ -10640,6 +10652,7 @@ async function boot() {
   setBootStatus("BUILDING FIRST FRAME…", "scene");
   const view = new FlightView();
   activeView = view;
+  shellHealth.mark("webgl_ok");
   applyPlayerSettings();
   multiplayer = new GlobalRoomClient({
     url: resolveGlobalRoomUrl(),
@@ -10711,6 +10724,9 @@ async function boot() {
     }),
   });
   window.addEventListener("pagehide", () => {
+    try {
+      shellHealth?.stop?.();
+    } catch { /* ignore */ }
     multiplayer?.stop();
     snapshotSource?.dispose?.();
     void view.dispose();
@@ -10868,7 +10884,10 @@ async function boot() {
         firstFrame = false;
         bootScreen.setAttribute("aria-busy", "false");
         bootScreen.classList.add("ready");
+        shellHealth.mark("ready");
       }
+      if (state?.session_phase === "ACTIVE") shellHealth.mark("active");
+      if (state?.session_phase === "READY") shellHealth.mark("ready");
       requestAnimationFrame(tick);
     } catch (error) {
       showFatal(error);

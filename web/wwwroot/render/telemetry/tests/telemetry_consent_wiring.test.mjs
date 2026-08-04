@@ -9,6 +9,12 @@ const [appSource, indexSource] = await Promise.all([
   readFile(indexUrl, "utf8"),
 ]);
 
+test("shell-health always-on beacon is disclosed beside gameplay opt-in", () => {
+  assert.match(appSource, /createShellHealthBeacon/);
+  assert.match(indexSource, /Minimal shell-health/i);
+  assert.match(indexSource, /boot milestones and fatals|boot and fatal/i);
+});
+
 test("detailed gameplay telemetry is explicit opt-in with truthful visible disclosure", () => {
   assert.match(appSource,
     /function loadTelemetrySharingPreference[\s\S]*?getItem\?\.\(TELEMETRY_SHARING_STORAGE_KEY\) === "enabled"[\s\S]*?return false/,

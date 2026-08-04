@@ -3359,7 +3359,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
           </div>
           <div class="ready-telemetry-disclosure">
             <label><input id="ready-telemetry-sharing" type="checkbox"> Share detailed flight diagnostics</label>
-            <small>Optional. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning.</small>
+            <small>Optional. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning. Minimal shell-health (boot milestones and fatals, device class) is always sent so broken boots are visible.</small>
             <output id="ready-telemetry-sharing-status" aria-live="polite">Off by default. No gameplay diagnostics are sent.</output>
           </div>
         </section>
@@ -3383,7 +3383,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
         <label class="settings-toggle"><input id="setting-reduced-motion" type="checkbox"> Reduce motion</label>
         <label class="settings-toggle"><input id="setting-large-text" type="checkbox"> Larger interface text</label>
         <label class="settings-toggle"><input id="setting-telemetry-sharing" type="checkbox" aria-describedby="setting-telemetry-sharing-copy"> Share detailed flight diagnostics</label>
-        <p id="setting-telemetry-sharing-copy" class="settings-telemetry-copy">Off by default. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning. Turning it off discards anything not yet sent.</p>
+        <p id="setting-telemetry-sharing-copy" class="settings-telemetry-copy">Off by default. When enabled, controls, aircraft state, multiplayer identifiers, and browser/device details are sent to Guns Only for tuning. Turning it off discards anything not yet sent. Minimal shell-health (boot and fatal signals, device class) remains always-on.</p>
         <label class="settings-range" for="setting-tilt-sensitivity"><span>Tilt sensitivity</span><output id="setting-tilt-sensitivity-value">1.00×</output><input id="setting-tilt-sensitivity" type="range" min="0.65" max="1.6" step="0.05" value="1"></label>
       </div>
       <details id="settings-keyboard-bindings" class="settings-disclosure" open>
