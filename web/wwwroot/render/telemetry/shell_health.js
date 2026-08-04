@@ -122,6 +122,7 @@ export function createShellHealthBeacon({
       || 0,
   }),
   endpoint = "/telemetry",
+  documentRef = globalThis.document,
 } = {}) {
   const startedAt = epochMs();
   const session = `shell-${startedAt}-${Math.floor(Math.random() * 1e6)}`;
@@ -220,6 +221,15 @@ export function createShellHealthBeacon({
     }, FLUSH_DEBOUNCE_MS);
   }
 
+  // Hard tab-kills and OOM terminations — the exact population this beacon exists to count —
+  // fire neither the debounce timer nor pagehide. A hidden tab is the last observable moment
+  // before most of those deaths, so flush immediately (keepalive) instead of waiting 750 ms.
+  if (typeof documentRef?.addEventListener === "function") {
+    documentRef.addEventListener("visibilitychange", () => {
+      if (documentRef.visibilityState === "hidden") void flush({ keepalive: true });
+    });
+  }
+
   return {
     schema: SHELL_HEALTH_SCHEMA,
     session,
@@ -227,7 +237,7 @@ export function createShellHealthBeacon({
     get milestones() {
       return [...SHELL_HEALTH_MILESTONES].filter((name) => reached.has(name));
     },
-    get fatal() {
+    get lastFatal() {
       return lastFatal;
     },
     mark(milestone) {
