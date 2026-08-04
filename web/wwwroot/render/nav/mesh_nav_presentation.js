@@ -113,24 +113,60 @@ export function parseMeshTour(state = {}) {
   }
 }
 
+function mapGateEntry(entry, index = 0) {
+  return Object.freeze({
+    id: String(entry?.id ?? `gate_${index}`),
+    label: String(entry?.label ?? ""),
+    eastM: Number(entry?.east_m ?? entry?.eastM),
+    northM: Number(entry?.north_m ?? entry?.northM),
+    upM: Number(entry?.up_m ?? entry?.upM),
+    halfM: Number(entry?.half_m ?? entry?.halfM),
+    targetKtas: Number(entry?.target_ktas ?? entry?.targetKtas),
+    dirty: entry?.dirty === true || entry?.dirty === 1,
+    active: entry?.active === true || entry?.active === 1,
+  });
+}
+
 export function parseRecoveryGates(state = {}) {
   const raw = state?.recovery_gates_json;
   if (typeof raw !== "string" || !raw.trim()) return Object.freeze([]);
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return Object.freeze([]);
-    return Object.freeze(parsed.map((entry) => Object.freeze({
-      id: String(entry?.id ?? ""),
-      label: String(entry?.label ?? ""),
-      eastM: Number(entry?.east_m),
-      northM: Number(entry?.north_m),
-      upM: Number(entry?.up_m),
-      halfM: Number(entry?.half_m),
-      targetKtas: Number(entry?.target_ktas),
-      dirty: entry?.dirty === true,
-      active: entry?.active === true,
-    })).filter((gate) => Number.isFinite(gate.eastM) && Number.isFinite(gate.northM)));
+    return Object.freeze(parsed.map((entry, index) => mapGateEntry(entry, index))
+      .filter((gate) => Number.isFinite(gate.eastM) && Number.isFinite(gate.northM)));
   } catch {
     return Object.freeze([]);
   }
+}
+
+/// Prefer continuous approach gates (hot sample array or cold JSON) when guidance is active;
+/// otherwise the legacy PROC ladder.
+export function resolveGuidanceGates(state = {}) {
+  if (state?.approach_guidance_active === true) {
+    const samples = state?.approach_gates;
+    const count = Math.max(0, Math.floor(Number(state?.approach_gate_count) || 0));
+    if (Array.isArray(samples) && count > 0) {
+      const gates = [];
+      for (let i = 0; i < Math.min(count, samples.length); i++) {
+        const gate = mapGateEntry(samples[i], i);
+        if (Number.isFinite(gate.eastM) && Number.isFinite(gate.northM)
+          && Number.isFinite(gate.upM) && Number.isFinite(gate.halfM)) {
+          gates.push(gate);
+        }
+      }
+      if (gates.length) return Object.freeze(gates);
+    }
+    const raw = state?.approach_gates_json;
+    if (typeof raw === "string" && raw.trim()) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length) {
+          return Object.freeze(parsed.map((entry, index) => mapGateEntry(entry, index))
+            .filter((gate) => Number.isFinite(gate.eastM) && Number.isFinite(gate.northM)));
+        }
+      } catch { /* fall through to PROC ladder */ }
+    }
+  }
+  return parseRecoveryGates(state);
 }
