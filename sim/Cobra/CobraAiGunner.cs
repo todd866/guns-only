@@ -186,15 +186,20 @@ public sealed class CobraAiGunner
             inhibit, true, inhibit == CobraAiGunnerReason.None);
     }
 
+    /// <summary>
+    /// Physical and armament gates surface before consent: with the trigger untouched the crew must
+    /// report why fire is impossible (no solution, safe weapons, sight still slewing) rather than a
+    /// reassuring "awaiting consent" that a later gate would silently override.
+    /// </summary>
     CobraAiGunnerReason FireInhibit(
         in CobraAiGunnerInput input,
         in CobraGunnerTargetObservation target)
     {
-        if (!input.EngagementConsent) return CobraAiGunnerReason.ConsentReleased;
-        if (!input.WeaponsArmed) return CobraAiGunnerReason.WeaponsSafe;
         if (!target.HasBallisticSolution) return CobraAiGunnerReason.NoBallisticSolution;
+        if (!input.WeaponsArmed) return CobraAiGunnerReason.WeaponsSafe;
         if (target.SightErrorRad > _definition.SightCoincidenceToleranceRad)
             return CobraAiGunnerReason.SightNotCoincident;
+        if (!input.EngagementConsent) return CobraAiGunnerReason.ConsentReleased;
         return CobraAiGunnerReason.None;
     }
 

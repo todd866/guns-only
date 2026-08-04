@@ -22,6 +22,7 @@ public static partial class CobraWebBridge
     static CobraCanyonRouteChoice _routeChoice;
     static VerticalLiftPilotCommand _command = new(0.5, 0.0, 0.0, 0.0);
     static CobraAiGunner _gunner = CreateGunner();
+    static readonly CobraTurretServo _turretServo = new();
     static CobraAiGunnerDecision _gunnerDecision;
     static string? _selectedTargetId;
     static bool _engagementConsent;
@@ -51,6 +52,7 @@ public static partial class CobraWebBridge
         _selectedTargetId = null;
         _engagementConsent = false;
         _gunner = CreateGunner();
+        _turretServo.Reset();
         _gunnerDecision = default;
         _accumulatorSeconds = 0.0;
     }
@@ -154,6 +156,8 @@ public static partial class CobraWebBridge
                 track_requested = _gunnerDecision.TrackRequested,
                 fire_authorized = _gunnerDecision.FireAuthorized,
                 qualified_track_seconds = _gunnerDecision.QualifiedTrackSeconds,
+                turret_azimuth_rad = _turretServo.AzimuthRad,
+                turret_elevation_rad = _turretServo.ElevationRad,
             },
             ground_war = new {
                 control = groundWar.Balance.Control,
@@ -259,27 +263,34 @@ public static partial class CobraWebBridge
         if (_selectedTargetId is not null) {
             GroundUnit? unit = runtime.GroundWar.FindUnit(_selectedTargetId);
             if (unit is { IsAlive: true }) {
-                Vec3D line = unit.PositionWorldM - runtime.Cobra.State.PositionWorldM;
-                double rangeM = line.Length;
-                double yaw = runtime.Cobra.Observation.YawRad;
-                double horizontalNoseError = rangeM > 1e-6
-                    ? Math.Abs(Math.Atan2(
-                        line.X * Math.Cos(yaw) - line.Z * Math.Sin(yaw),
-                        line.X * Math.Sin(yaw) + line.Z * Math.Cos(yaw)))
-                    : 0.0;
-                bool hasLos = !runtime.ResolvedObstacles.Any(obstacle =>
-                    !obstacle.IntersectsSphere(runtime.Cobra.State.PositionWorldM, 0.01)
-                    && !obstacle.IntersectsSphere(unit.PositionWorldM, 0.01)
-                    && obstacle.IntersectsSegment(
-                        runtime.Cobra.State.PositionWorldM, unit.PositionWorldM));
+                CobraGunTargetAssessment assessment = CobraGunTargeting.Assess(
+                    runtime.Cobra.State.PositionWorldM,
+                    runtime.Cobra.Observation.YawRad,
+                    unit.PositionWorldM);
+                bool hasLos = assessment.WithinTurretEnvelope
+                    && CobraGunTargeting.EvaluateLineOfSight(
+                        runtime.Terrain,
+                        runtime.ResolvedObstacles,
+                        runtime.Cobra.State.PositionWorldM,
+                        unit.PositionWorldM);
+                // The mount slews toward the aim point whenever the target is physically
+                // engageable; the crew contract still gates firing through acquisition,
+                // consent and sight coincidence.
+                if (hasLos)
+                    _turretServo.Advance(
+                        FixedDeltaSeconds,
+                        assessment.SignedAzimuthRad,
+                        assessment.ElevationRad);
                 target = new CobraGunnerTargetObservation(
                     unit.Id,
                     Present: true,
                     Friendly: unit.Faction == GroundFaction.Friendly,
                     HasLineOfSight: hasLos,
-                    WithinTurretEnvelope: horizontalNoseError <= 1.05 && rangeM <= 2_000.0,
-                    HasBallisticSolution: rangeM is >= 80.0 and <= 2_000.0,
-                    SightErrorRad: horizontalNoseError);
+                    WithinTurretEnvelope: assessment.WithinTurretEnvelope,
+                    HasBallisticSolution: assessment.HasBallisticSolution,
+                    SightErrorRad: _turretServo.ErrorRad(
+                        assessment.SignedAzimuthRad,
+                        assessment.ElevationRad));
             }
         }
         _gunnerDecision = _gunner.Advance(new CobraAiGunnerInput(

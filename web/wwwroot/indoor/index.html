@@ -267,7 +267,7 @@
     // unversioned campaign dependency. This classic, import-free preboot runs before any module
     // graph is requested; offline clients keep their older document and never enter this path.
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=252", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=253", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -294,10 +294,10 @@
     try {
       await globalThis.__gunsPrebootReady;
       const { renderExperienceGate } = await import(
-        "../render/release/quarantine_gate.js?v=252"
+        "../render/release/quarantine_gate.js?v=253"
       );
       const access = renderExperienceGate({ experienceId: "indoor" });
-      if (access.allowed) await import("./game.js?v=252");
+      if (access.allowed) await import("./game.js?v=253");
     } catch (error) {
       console.error(error);
       const boot = document.querySelector("#boot-status");

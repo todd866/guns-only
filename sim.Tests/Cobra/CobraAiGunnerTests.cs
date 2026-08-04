@@ -173,6 +173,31 @@ public class CobraAiGunnerTests
         Assert.False(decision.FireAuthorized);
     }
 
+    [Theory]
+    [InlineData(false, true, 0.01, CobraAiGunnerReason.WeaponsSafe)]
+    [InlineData(false, false, 0.01, CobraAiGunnerReason.NoBallisticSolution)]
+    [InlineData(false, true, 0.10, CobraAiGunnerReason.WeaponsSafe)]
+    [InlineData(true, true, 0.10, CobraAiGunnerReason.SightNotCoincident)]
+    [InlineData(true, true, 0.01, CobraAiGunnerReason.ConsentReleased)]
+    public void PhysicalAndArmamentGatesOutrankConsentSoHoldFCueIsHonest(
+        bool armed,
+        bool solution,
+        double sightErrorRad,
+        CobraAiGunnerReason expected)
+    {
+        CobraAiGunner gunner = Create(acquireSeconds: 0.0);
+
+        CobraAiGunnerDecision decision = gunner.Advance(Input(
+            0,
+            consent: false,
+            armed: armed,
+            target: Target(ballisticSolution: solution, sightErrorRad: sightErrorRad)));
+
+        Assert.Equal(CobraAiGunnerState.Tracking, decision.State);
+        Assert.Equal(expected, decision.Reason);
+        Assert.False(decision.FireAuthorized);
+    }
+
     [Fact]
     public void NoSelectedTargetCannotBeInventedByHoldingFire()
     {

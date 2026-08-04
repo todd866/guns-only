@@ -578,7 +578,8 @@ if [ "$target" = "--prod" ]; then
     # worked via its 308 redirect after the Build 184 canonicalization).
     if ! verify_public "https://guns-only.com" "$release_revision" \
         "$atlas_sha256" "$content_sha256" 1 "$candidate_deployment" \
-        || ! node "$repo_dir/web/smoke/remote-smoke.mjs" "https://guns-only.com"; then
+        || ! node "$repo_dir/web/smoke/remote-smoke.mjs" "https://guns-only.com" \
+        || ! node "$repo_dir/web/smoke/remote-route-smoke.mjs" "https://guns-only.com"; then
         echo "deploy-web: live verification failed; checking alias ownership before rollback" >&2
         rollback_owner=$(inspect_public_deployment_id "https://guns-only.com" || true)
         if [ "$rollback_owner" != "$candidate_deployment" ]; then

@@ -255,15 +255,23 @@ public sealed class CobraTurretMagazine
     public bool IsDry => RoundsRemaining <= 0;
     public bool IsBingo => RoundsRemaining <= CapacityRounds / 5;
 
-    /// <summary>Consumes rounds while firing. Returns rounds actually expended.</summary>
+    double _fractionalRounds;
+
+    /// <summary>
+    /// Consumes rounds while firing. Returns rounds actually expended. Sub-round windows carry a
+    /// fractional residue so the authored rate holds at 120 Hz; the previous Max(1, ...) floor
+    /// fired a whole round every tick regardless of rate.
+    /// </summary>
     public int TryConsumeWhileFiring(double dtSeconds)
     {
         if (!double.IsFinite(dtSeconds) || dtSeconds < 0.0)
             throw new ArgumentOutOfRangeException(nameof(dtSeconds));
         if (IsDry || dtSeconds <= 0.0) return 0;
-        int requested = Math.Max(1, (int)Math.Round(FireRateRoundsPerSecond * dtSeconds));
-        int expended = Math.Min(RoundsRemaining, requested);
+        double exact = FireRateRoundsPerSecond * dtSeconds + _fractionalRounds;
+        int whole = (int)Math.Floor(exact);
+        int expended = Math.Min(RoundsRemaining, whole);
         RoundsRemaining -= expended;
+        _fractionalRounds = expended < whole ? 0.0 : exact - whole;
         return expended;
     }
 

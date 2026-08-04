@@ -47,6 +47,25 @@ public class CobraGroundWarRuntimeTests
     }
 
     [Fact]
+    public void SeededHostilesSitOutsideTheAuthoredMinimumGunSolutionOfTheirHomeSite()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        Dictionary<string, ContestedSite> sites = war.Sites.ToDictionary(site => site.Id);
+
+        foreach (GroundUnit hostile in war.LivingUnits()
+            .Where(unit => unit.Faction == GroundFaction.Hostile)) {
+            ContestedSite home = sites[hostile.HomeSiteId];
+            double horizontalM = Math.Sqrt(
+                Math.Pow(hostile.PositionWorldM.X - home.PositionWorldM.X, 2.0)
+                + Math.Pow(hostile.PositionWorldM.Z - home.PositionWorldM.Z, 2.0));
+            Assert.True(
+                horizontalM + 1e-6 >= CobraGunTargeting.MinimumSolutionRangeM,
+                $"hostile {hostile.Id} seeded {horizontalM:F1} m from {home.Label}; "
+                + $"need ≥ {CobraGunTargeting.MinimumSolutionRangeM} m");
+        }
+    }
+
+    [Fact]
     public void MutualCombatAndDriftAreDeterministicForAFixedSeed()
     {
         CobraGroundWarRuntime a = CreateWar(7);
@@ -89,7 +108,9 @@ public class CobraGroundWarRuntimeTests
     [Fact]
     public void DryMagazineCannotDamageTargets()
     {
-        var magazine = new CobraTurretMagazine(capacityRounds: 1, fireRateRoundsPerSecond: 100.0);
+        // 240 rps so one 120 Hz window still expends a whole round; sub-rate windows no longer
+        // invent rounds (fractional pacing), which is what this fixture previously relied on.
+        var magazine = new CobraTurretMagazine(capacityRounds: 1, fireRateRoundsPerSecond: 240.0);
         var war = new CobraGroundWarRuntime(
             CobraCanyonDefinition.Create(), new FlatTerrain(), seed: 3, magazine);
         GroundUnit hostile = war.LivingUnits()
