@@ -1,28 +1,28 @@
-import * as THREE from "../vendor/three.module.js?v=260";
+import * as THREE from "../vendor/three.module.js?v=261";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=260";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=260";
+} from "../render/cobra/cobra_canyon_plan.js?v=261";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=261";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=260";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=260";
-import { gunnerStatusText } from "../render/cobra/cobra_gunner_status.js?v=260";
-import { formatCobraRotorcraftStrip } from "../render/cobra/cobra_rotorcraft_hud.js?v=260";
+} from "../render/cobra/cobra_canyon_tour.js?v=261";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=261";
+import { gunnerStatusText } from "../render/cobra/cobra_gunner_status.js?v=261";
+import { formatCobraRotorcraftStrip } from "../render/cobra/cobra_rotorcraft_hud.js?v=261";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=260";
+} from "../render/cobra/cobra_control_profile.js?v=261";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=260";
+} from "../render/cobra/cobra_pilot_input.js?v=261";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
