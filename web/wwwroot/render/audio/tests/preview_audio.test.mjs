@@ -20,7 +20,9 @@ test("cue matrix exposes every controlled F-22 and traffic comparison", () => {
     "f22_power_100",
     "f22_power_augmented",
     "f22_q_low",
+    "f22_q_cruise",
     "f22_q_high",
+    "f22_q_dash",
     "f22_altitude_5k",
     "f22_altitude_30k",
     "f22_altitude_55k",
@@ -63,11 +65,19 @@ test("power comparison holds q constant and makes RPM and power monotonic", () =
 
 test("dynamic-pressure comparison holds F-22 engine controls constant", () => {
   const low = cueStateAt("f22_q_low");
+  const cruise = cueStateAt("f22_q_cruise");
   const high = cueStateAt("f22_q_high");
+  const dash = cueStateAt("f22_q_dash");
   assert.equal(low.applied_throttle, high.applied_throttle);
+  assert.equal(cruise.applied_throttle, high.applied_throttle);
   assert.equal(low.engine_rpm_pct, high.engine_rpm_pct);
   assert.equal(low.engine_spool_fraction, high.engine_spool_fraction);
+  assert.ok(dynamicPressurePa(cruise) > dynamicPressurePa(low));
+  assert.ok(dynamicPressurePa(high) > dynamicPressurePa(cruise));
+  assert.ok(dynamicPressurePa(dash) > dynamicPressurePa(high));
   assert.ok(dynamicPressurePa(high) > dynamicPressurePa(low) * 6);
+  assert.equal(low.gear_nose, 1, "threshold cue is dirty");
+  assert.equal(cruise.gear_nose, 0, "cruise cue is clean");
 });
 
 test("altitude comparison isolates density before the ballistic-apex reference", () => {

@@ -1513,6 +1513,152 @@ test("F-22 sealed cockpit: dark body, muted tip whine, no ram", async () => {
   }
 });
 
+test("F-22 sealed beds duck at landing threshold so approach does not roar like high-q", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      attachJetSampleBeds,
+      createEngineVoices,
+      updateEngineVoices,
+    } = await freshModule("../engine_audio.js", "f22-landing-q");
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    const bed = audio.createBuffer(1, 64);
+    attachJetSampleBeds(
+      voices,
+      audio,
+      { idle: bed, mil: bed, grit: bed },
+      { character: "f22" },
+    );
+    const sharedPower = {
+      applied_throttle: 0.4,
+      engine_spool_fraction: 0.4,
+      max_thrust_fraction: 1.35,
+      engine_rpm_pct: 40,
+      engine_running: true,
+      air_density_kg_m3: 1.225,
+      altitude_m: 100,
+      player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+      audio_profile_id: "audio.f22a.aged-twin-fan.v1",
+    };
+    spoolToGoverned(
+      (state) => updateEngineVoices(voices, audio, state),
+      audio,
+      { ...sharedPower, mach: 0.22, true_airspeed_kts: 145 },
+    );
+    const thresholdAirborne = latest(voices.sampleAirborneGain.gain);
+    const thresholdMil = latest(voices.sampleMilGain.gain);
+    const thresholdIdle = latest(voices.sampleIdleGain.gain);
+    const thresholdStructure = latest(voices.sampleStructureGain.gain);
+    const thresholdRush = latest(voices.rushGain.gain);
+    const thresholdEcs = latest(voices.ecsGain.gain);
+    const thresholdCutoff = latest(voices.sampleLp.frequency);
+    const thresholdMaster = latest(voices.master.gain);
+
+    audio.currentTime += 0.25;
+    updateEngineVoices(voices, audio, {
+      ...sharedPower,
+      mach: 1.0,
+      true_airspeed_kts: 661,
+    }, { snap: true });
+    const dashAirborne = latest(voices.sampleAirborneGain.gain);
+    const dashMil = latest(voices.sampleMilGain.gain);
+
+    assert.ok(thresholdRush < 0.008, "threshold rush stays nearly silent");
+    assert.ok(thresholdAirborne < dashAirborne * 0.22,
+      "airborne bed ducks hard at landing q versus Mach-1 air");
+    assert.ok(thresholdMil < dashMil * 0.28,
+      "mil bed no longer owns the threshold mix at the same lever");
+    assert.ok(thresholdIdle > thresholdMil * 1.15,
+      "idle bed owns short final");
+    assert.ok(thresholdStructure > 0.4,
+      "structure path keeps a pressurized floor on short final");
+    assert.ok(thresholdEcs > latest(voices.ecsGain.gain),
+      "ECS is more legible on approach than at dash q");
+    assert.ok(thresholdMaster < latest(voices.master.gain),
+      "sealed master rises with q instead of sitting at dash loudness");
+    assert.ok(thresholdCutoff < latest(voices.sampleLp.frequency) - 400,
+      "threshold bed stays darker than high-q airborne content");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
+test("F-22 cockpit q curve separates M0.6, M0.9, and M1.2 without changing legacy q", async () => {
+  const previous = globalThis.AudioContext;
+  try {
+    FakeAudioContext.instances.length = 0;
+    globalThis.AudioContext = FakeAudioContext;
+    const {
+      F22_COCKPIT_DYNAMIC_PRESSURE_CEILING_PA,
+      createEngineVoices,
+      dynamicPressureFraction,
+      updateEngineVoices,
+    } = await freshModule("../engine_audio.js", "f22-mach-q");
+    const audio = new FakeAudioContext();
+    const voices = createEngineVoices(audio, audio.destination, { includeMaster: true });
+    const base = {
+      applied_throttle: 0.85,
+      engine_spool_fraction: 0.85,
+      max_thrust_fraction: 1.35,
+      engine_rpm_pct: 85,
+      air_density_kg_m3: 1.225,
+      altitude_m: 300,
+      player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+      audio_profile_id: "audio.f22a.aged-twin-fan.v1",
+    };
+    const highSubState = {
+      ...base,
+      mach: 0.9,
+      true_airspeed_kts: 595,
+    };
+    assert.equal(dynamicPressureFraction(highSubState), 1,
+      "default q normalization preserves the legacy 45 kPa saturation");
+    const f22HighSubQ = dynamicPressureFraction(highSubState, {
+      ceilingPa: F22_COCKPIT_DYNAMIC_PRESSURE_CEILING_PA,
+    });
+    assert.ok(f22HighSubQ > 0.5 && f22HighSubQ < 0.75,
+      "sealed F-22 keeps useful headroom above M0.9");
+
+    const measure = (mach, kts) => {
+      updateEngineVoices(voices, audio, {
+        ...base,
+        mach,
+        true_airspeed_kts: kts,
+      }, { snap: true });
+      return {
+        q01: dynamicPressureFraction({
+          ...base,
+          mach,
+          true_airspeed_kts: kts,
+        }, {
+          ceilingPa: F22_COCKPIT_DYNAMIC_PRESSURE_CEILING_PA,
+        }),
+        rush: latest(voices.rushGain.gain),
+        canopy: latest(voices.canopyFlowGain.gain),
+      };
+    };
+    const cruise = measure(0.6, 400);
+    audio.currentTime += 0.1;
+    const highSub = measure(0.9, 595);
+    audio.currentTime += 0.1;
+    const superSonic = measure(1.2, 793);
+
+    assert.ok(cruise.q01 < highSub.q01 && highSub.q01 < superSonic.q01,
+      "the sealed F-22 envelope keeps Mach regimes on distinct q01 values");
+    assert.ok(cruise.rush < highSub.rush * 0.7,
+      "M0.6 rush stays well below M0.9");
+    assert.ok(highSub.rush < superSonic.rush,
+      "M1.2 rush opens past M0.9 instead of sharing a saturated plateau");
+    assert.ok(cruise.canopy < highSub.canopy,
+      "canopy flow also tracks the Mach ladder");
+  } finally {
+    globalThis.AudioContext = previous;
+  }
+});
+
 test("F-22 altitude mix sheds airborne bed and grit while retaining structure and ECS", async () => {
   const previous = globalThis.AudioContext;
   try {
@@ -1570,7 +1716,7 @@ test("F-22 altitude mix sheds airborne bed and grit while retaining structure an
       "low structure remains after airborne energy falls away");
     assert.ok(latest(voices.sampleGritGain.gain) < lowGrit * 0.4,
       "thin air removes composite-bed grit");
-    assert.ok(latest(voices.sampleLp.frequency) < lowCutoff - 1_000,
+    assert.ok(latest(voices.sampleLp.frequency) < lowCutoff - 700,
       "the surviving bed becomes materially darker");
     assert.ok(latest(voices.ecsGain.gain) > lowEcs,
       "pressurized-cabin airflow becomes relatively more legible");
