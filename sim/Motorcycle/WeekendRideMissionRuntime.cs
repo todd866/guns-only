@@ -31,6 +31,7 @@ public sealed class WeekendRideMissionRuntime
     double _offTrackSeconds;
     double _tipRecoveryFlashSeconds;
     bool _lapTimingActive;
+    bool _isOnTrack = true;
 
     WeekendRideMissionRuntime(
         YzfR1Dynamics bike,
@@ -54,6 +55,7 @@ public sealed class WeekendRideMissionRuntime
     public double LapTimeSeconds => _currentLapElapsedSeconds;
     public int LapCount => _circuitQueryState.LapIndex;
     public double OffTrackSeconds => _offTrackSeconds;
+    public bool IsOnTrack => _isOnTrack;
 
     public static WeekendRideMissionRuntime CreateDefault()
     {
@@ -109,6 +111,7 @@ public sealed class WeekendRideMissionRuntime
         PaintedCircuitQueryResult circuitSample = Circuit.Query(
             Bike.State.PositionWorldM,
             ref _circuitQueryState);
+        _isOnTrack = circuitSample.OnTrack;
         if (!circuitSample.OnTrack)
             _offTrackSeconds += FixedDeltaSeconds;
 
@@ -160,6 +163,7 @@ public sealed class WeekendRideMissionRuntime
         _circuitQueryState = default;
         _currentLapElapsedSeconds = 0.0;
         _lapTimingActive = false;
+        _isOnTrack = true;
     }
 
     public void DebugForceTipOver() => Bike.DebugForceTipOver();
@@ -225,6 +229,7 @@ public sealed class WeekendRideMissionRuntime
         _offTrackSeconds = 0.0;
         _tipRecoveryFlashSeconds = 0.0;
         _lapTimingActive = false;
+        _isOnTrack = true;
         _riderController.Reset();
         Bike.ResetTo(GridPosition, _gridHeadingRad);
     }

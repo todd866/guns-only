@@ -184,6 +184,7 @@ public static partial class MotorcycleWebBridge
             lap = snap.LapCount,
             lap_time_s = snap.LapTimeSeconds,
             off_track_s = snap.OffTrackSeconds,
+            on_track = runtime.IsOnTrack,
             tipped = snap.IsTippedOver,
             tip_recovery_flash_s = snap.TipRecoveryFlashSeconds,
             phase = PhaseToken(snap.Phase),

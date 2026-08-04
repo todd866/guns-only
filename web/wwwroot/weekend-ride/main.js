@@ -4,6 +4,9 @@ import {
   dominantSignedAxis,
   gamepadRiderAxes,
 } from "../render/motorcycle/rider_input.js?v=257";
+import {
+  createRapierTrackDayPresentation,
+} from "../render/motorcycle/track_day_presentation.js?v=257";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
@@ -85,14 +88,6 @@ runway.position.set(0, SURFACE_ELEV_M, 0);
 runway.receiveShadow = true;
 scene.add(runway);
 
-const trackMaterial = new THREE.LineBasicMaterial({ color: 0xd5b56f });
-const trackLine = new THREE.Line(
-  new THREE.BufferGeometry(),
-  trackMaterial,
-);
-trackLine.frustumCulled = false;
-scene.add(trackLine);
-
 const helmetHud = new HelmetHud(hudCanvas);
 
 let bridge = null;
@@ -100,6 +95,7 @@ let snapshot = null;
 let paused = false;
 let manualClutch = false;
 let rawPhysics = false;
+let trackDayPresentation = null;
 let animationFrame = 0;
 let lastTimeMs = performance.now();
 
@@ -147,11 +143,17 @@ function applyViewAttitude(cameraObject, state) {
   cameraObject.quaternion.setFromRotationMatrix(cameraMatrix).normalize();
 }
 
-function rebuildTrackGeometry(circuit) {
+function buildTrackDayPresentation(circuit) {
   if (!Array.isArray(circuit) || circuit.length < 2) return;
-  const points = circuit.map((point) => new THREE.Vector3(point.x, point.y + 0.08, -point.z));
-  trackLine.geometry.dispose();
-  trackLine.geometry = new THREE.BufferGeometry().setFromPoints(points);
+  if (trackDayPresentation) {
+    scene.remove(trackDayPresentation.object3d);
+    trackDayPresentation.dispose();
+  }
+  trackDayPresentation = createRapierTrackDayPresentation(THREE, circuit, {
+    surfaceElevationM: SURFACE_ELEV_M,
+    trackWidthM: 20,
+  });
+  scene.add(trackDayPresentation.object3d);
   helmetHud.updateMinimapBounds(circuit);
 }
 
@@ -287,6 +289,7 @@ canvas.addEventListener("webglcontextlost", (event) => {
 
 window.addEventListener("pagehide", () => {
   cancelAnimationFrame(animationFrame);
+  trackDayPresentation?.dispose();
   renderer.dispose();
 }, { once: true });
 
@@ -323,9 +326,9 @@ async function boot() {
     bridge = assemblyExports.GunsOnly.Web.MotorcycleWebBridge;
     bridge.Start();
     snapshot = refreshSnapshot();
-    rebuildTrackGeometry(snapshot.circuit);
+    buildTrackDayPresentation(snapshot.circuit);
     manualClutch = snapshot.clutch_mode === "manual";
-    setStatus("YZF-R1 ACTIVE · HELMET VIEW", "ready");
+    setStatus("RAPIER TRACK DAY · RIDER REFLEX ASSIST", "ready");
     lastTimeMs = performance.now();
     animationFrame = requestAnimationFrame(animate);
   } catch (error) {

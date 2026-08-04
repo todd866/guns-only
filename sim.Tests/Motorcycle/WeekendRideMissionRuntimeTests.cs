@@ -169,6 +169,7 @@ public sealed class WeekendRideMissionRuntimeTests
             runtime.StepFixed(SteadyThrottle);
 
         Assert.Equal("rapier-strip.grass", runtime.Bike.State.Contact.SurfaceId);
+        Assert.False(runtime.IsOnTrack);
         Assert.True(runtime.Bike.State.PositionWorldM.IsFinite);
         Assert.True(runtime.Bike.State.GroundVelocityMps.IsFinite);
         Assert.True(double.IsFinite(runtime.Bike.Telemetry.SpeedMps));
@@ -177,6 +178,7 @@ public sealed class WeekendRideMissionRuntimeTests
         runtime.StepFixed(SteadyThrottle);
 
         Assert.Equal("rapier-strip.runway", runtime.Bike.State.Contact.SurfaceId);
+        Assert.True(runtime.IsOnTrack);
         Assert.True(runtime.Bike.State.Flyable);
     }
 
