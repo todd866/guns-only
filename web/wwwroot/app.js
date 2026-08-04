@@ -116,6 +116,7 @@ import {
   mobileVirtualStickState,
   normalisePublishedThrottleLever,
 } from "./render/input/mobile_virtual_stick.js";
+import { relativeThrottleUiHoldRatePerSecond } from "./render/input/throttle_rate_schedule.js";
 import {
   GlobalRoomClient,
   resolveGlobalRoomUrl,
@@ -9164,11 +9165,10 @@ function installMobileInput(view) {
   let virtualStickPointerId = null;
   // Throttle-as-a-rate state. The lever is integrated here rather than read back from the kernel
   // so a dropped frame cannot ratchet the setting, and so the first touch of the sortie inherits
-  // whatever power the beat started at instead of snapping to the thumb.
+  // whatever power the beat started at instead of snapping to the thumb. Hold rate follows
+  // throttle_rate_schedule.js (mirrors sim/ThrottleInputSchedule.cs): fine on finals at low
+  // lever, coarse in the fight / go-around band.
   const THROTTLE_STICK_DEADZONE = 0.12;
-  /// Lever units per second at full deflection. Idle to max afterburner in about 2.6 s, which is
-  /// slower than the engine can actually spool, so the thumb is never the limiting factor.
-  const THROTTLE_STICK_RATE_PER_SECOND = 0.6;
   let throttleRate = 0;
   let throttleLever = null;
   let throttleIntegratorFrame = 0;
@@ -9495,8 +9495,13 @@ function installMobileInput(view) {
           latestState?.max_thrust_fraction,
         );
       }
+      const uiHoldRate = relativeThrottleUiHoldRatePerSecond(
+        latestState?.indicated_airspeed_kts,
+        latestState?.throttle,
+        latestState?.max_thrust_fraction,
+      );
       throttleLever = clamp(
-        throttleLever + throttleRate * THROTTLE_STICK_RATE_PER_SECOND * deltaSeconds, 0, 1);
+        throttleLever + throttleRate * uiHoldRate * deltaSeconds, 0, 1);
       if (typeof bridge?.SetAnalogThrottleControl === "function") {
         bridge.SetAnalogThrottleControl(throttleLever);
       }

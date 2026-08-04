@@ -31,7 +31,12 @@ public sealed class DetentLayer {
     bool _manualThrottle;   // on the approach, the pilot touching W/S stands the auto-throttle down
     bool _waveOff;          // pilot firewalled the throttle on the approach → go around, climb away
     double _waveOffSeconds;
-    const double ThrottleRate = 0.7;   // per second while W/S held — a real throttle, not tap-detents
+    /// <summary>
+    /// Latest relative hold rate (PLA/s) from <see cref="ThrottleInputSchedule"/>. Absolute
+    /// analog lever commands ignore this; the browser virtual-stick integrator may mirror it.
+    /// </summary>
+    public double RelativeThrottleHoldRatePerSecond { get; private set; } =
+        ThrottleInputSchedule.CoarseHoldRatePerSecond;
     int _pullReleases;
     double _gCmd = 1.0, _bankTarget;
     Vec3D _capturedPitchForward;
@@ -573,7 +578,9 @@ public sealed class DetentLayer {
 
         // Continuous throttle: HOLD W to spool up (through MIL into A/B where the airframe has it),
         // HOLD S to bring it back. Tap-only detents did nothing on a hold, which is why it felt dead.
-        // Taps still nudge it for fine sets.
+        // Taps still nudge it for fine sets. Relative hold/tap rates follow ThrottleInputSchedule
+        // (fine at low CAS + low lever; coarse in the fight / go-around band). Absolute analog
+        // lever position remains 1:1.
         bool wHeld = keys.PhaseAt(GKey.ThrottleUp, nowMs) != KeyPhase.Idle;
         bool sHeld = keys.PhaseAt(GKey.ThrottleDown, nowMs) != KeyPhase.Idle;
         int thUp = keys.TakeTaps(GKey.ThrottleUp, nowMs), thDn = keys.TakeTaps(GKey.ThrottleDown, nowMs);
@@ -614,6 +621,11 @@ public sealed class DetentLayer {
                 AssistedTargetCalibratedAirspeedMps,
                 AssistedCalibratedAirspeedMps), 0.0, leverStop);
         }
+        double tasMps = double.IsFinite(AirspeedMps) ? AirspeedMps : s.Speed;
+        double iasKts = AirData.IndicatedAirspeedMps(tasMps, s.Position.Y) * AirData.MpsToKnots;
+        RelativeThrottleHoldRatePerSecond =
+            ThrottleInputSchedule.HoldRatePerSecond(iasKts, _throttleLever);
+        double relativeTapStep = ThrottleInputSchedule.TapStep(iasKts, _throttleLever);
         // The lever stop is an airframe capability. A dry-thrust Sabre stops at MIL (1.0),
         // while an afterburning definition may expose the full staged range to 1.35.
         if (ApproachMode && !_manualThrottle) {
@@ -628,9 +640,9 @@ public sealed class DetentLayer {
         } else if (AssistedFlight && !wHeld && !sHeld) {
             _throttleLever = System.Math.Min(autoThr, leverStop);
         } else {
-            if (wHeld) _throttleLever += ThrottleRate * dt;
-            if (sHeld) _throttleLever -= ThrottleRate * dt;
-            _throttleLever += (thUp - thDn) * 0.15;
+            if (wHeld) _throttleLever += RelativeThrottleHoldRatePerSecond * dt;
+            if (sHeld) _throttleLever -= RelativeThrottleHoldRatePerSecond * dt;
+            _throttleLever += (thUp - thDn) * relativeTapStep;
             _throttleLever = System.Math.Clamp(_throttleLever, 0.0, leverStop);
         }
         Throttle = _throttleLever;

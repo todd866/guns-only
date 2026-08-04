@@ -3,7 +3,8 @@ namespace GunsOnly.Sim.Propulsion;
 /// <summary>
 /// Shared afterburning-turbofan public-data thrust lapse used by the force kernel and by
 /// detent / speed-hold feed-forward. Explicitly a bounded surrogate (√density with modest Mach
-/// ram), not an OEM F119 deck.
+/// ram), not an OEM F119 deck. Lever maps linearly to military thrust fraction; approach
+/// resolution is a pilot-input schedule in <see cref="DetentLayer"/>, not an engine curve.
 /// </summary>
 public static class TurbofanPublicDataSurrogate {
     /// <summary>

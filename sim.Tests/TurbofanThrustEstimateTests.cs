@@ -49,4 +49,12 @@ public sealed class TurbofanThrustEstimateTests {
         Assert.InRange(trim, 0.15, f22.MaxThrustFraction);
         Assert.InRange(ratio, 0.92, 1.08);
     }
+
+    [Fact]
+    public void LinearLeverMapsThrustAtHalfMilitary() {
+        AircraftParams f22 = FlightModel.F22APublicDataSurrogate;
+        double half = TurbofanPublicDataSurrogate.AvailableThrustN(
+            f22.ThrustMaxN, densityRatio: 1.0, mach: 0.0, thrustFraction: 0.5);
+        Assert.InRange(half / (0.5 * f22.ThrustMaxN), 0.999, 1.001);
+    }
 }
