@@ -8,7 +8,7 @@
   <base href="/">
   <title>Guns Only · YZF-R1 Weekend Ride</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/weekend-ride/styles.css?v=255">
+  <link rel="stylesheet" href="/weekend-ride/styles.css?v=256">
 </head>
 <body>
   <header class="topbar">
@@ -37,7 +37,7 @@
 
   <script>
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=255", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=256", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -67,7 +67,7 @@
         const script = document.createElement("script");
         // Loader from site root + <base href="/"> so boot resources resolve to /_framework/*,
         // not /weekend-ride/_framework/* (Medevac pattern).
-        script.src = "/_framework/blazor.webassembly.js?v=255";
+        script.src = "/_framework/blazor.webassembly.js?v=256";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load motorcycle runtime.")), {
@@ -76,10 +76,10 @@
         document.head.append(script);
       });
       const { renderExperienceGate } = await import(
-        "/render/release/quarantine_gate.js?v=255"
+        "/render/release/quarantine_gate.js?v=256"
       );
       const access = renderExperienceGate({ experienceId: "weekend-ride" });
-      if (access.allowed) await import("/weekend-ride/main.js?v=255");
+      if (access.allowed) await import("/weekend-ride/main.js?v=256");
     } catch (error) {
       console.error(error);
       const status = document.querySelector("#status");
