@@ -195,6 +195,55 @@ public class CobraGroundWarRuntimeTests
     }
 
     [Fact]
+    public void ZeroInputGroundWarLosesTheBasinWithoutFireSupport()
+    {
+        // The mission must NEED the player: with the turret silent the hostile waves must
+        // drown the garrison. A self-winning ground war (Build 261 production defect: victory
+        // at ~75 s with the Cobra still on the pad) is the failure this test pins.
+        CobraGroundWarRuntime war = CreateWar(seed: 42);
+        int ticks = (int)Math.Round(300.0 / PlayerVehicleContract.FixedDeltaSeconds);
+
+        for (int tick = 0; tick < ticks && war.MissionOutcome == HoldTheBridgeOutcome.Pending; tick++)
+            war.Advance(PlayerVehicleContract.FixedDeltaSeconds);
+
+        Assert.Equal(HoldTheBridgeOutcome.Defeat, war.MissionOutcome);
+        Assert.True(
+            war.Debrief.PeakFriendlyControl < CobraGroundWarRuntime.VictoryControlThreshold,
+            $"friendly control peaked at {war.Debrief.PeakFriendlyControl:F3} with zero input; "
+            + $"it must stay below {CobraGroundWarRuntime.VictoryControlThreshold}");
+    }
+
+    [Fact]
+    public void ScriptedFireSupportHoldsTheBasinAndWins()
+    {
+        // Simulated competent gunner at the sim API: every tick, kill the hostile push with
+        // authorized turret fire and rearm at the Camp Ember pad on bingo. The player's fire
+        // must be the difference between this Victory and the zero-input Defeat above.
+        CobraGroundWarRuntime war = CreateWar(seed: 42);
+        ContestedSite camp = war.Sites.First(site => site.Label == "Camp Ember");
+        Vec3D pad = new(
+            camp.PositionWorldM.X,
+            camp.PositionWorldM.Y + 2.0,
+            camp.PositionWorldM.Z);
+        int ticks = (int)Math.Round(300.0 / PlayerVehicleContract.FixedDeltaSeconds);
+
+        for (int tick = 0; tick < ticks && war.MissionOutcome == HoldTheBridgeOutcome.Pending; tick++) {
+            if (war.Magazine.IsBingo)
+                war.TryResupplyAtFob(pad);
+            GroundUnit? target = war.LivingUnits()
+                .Where(unit => unit.Faction == GroundFaction.Hostile)
+                .OrderBy(unit => unit.Id, StringComparer.Ordinal)
+                .FirstOrDefault();
+            if (target is not null)
+                war.ApplyAuthorizedFire(target.Id, PlayerVehicleContract.FixedDeltaSeconds);
+            war.Advance(PlayerVehicleContract.FixedDeltaSeconds);
+        }
+
+        Assert.Equal(HoldTheBridgeOutcome.Victory, war.MissionOutcome);
+        Assert.True(war.Debrief.HostileKillsByPlayer > 0);
+    }
+
+    [Fact]
     public void MissionRuntimeTerminalizesOnHoldTheBridgeVictory()
     {
         var runtime = new CobraMissionRuntime(

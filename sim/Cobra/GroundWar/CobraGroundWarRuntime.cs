@@ -10,15 +10,24 @@ namespace GunsOnly.Sim.Cobra.GroundWar;
 public sealed class CobraGroundWarRuntime
 {
     public const int MaxLivingUnits = 36;
-    public const double ReinforceIntervalSeconds = 18.0;
-    // Hostile seed/reinforce rings stay outside the authored M134 min-solution window so an
+    // Provisional balance, not sourced doctrine: the ground war must NEED the Cobra. Hostile
+    // assault waves land on a fixed cadence and the friendly garrison gets no automatic
+    // reinforcements, so without effective fire support the basin tips hostile and the mission
+    // is lost. Each wave is 1 soft vehicle + 2 infantry clumps (4.2 combat power, 170 unit
+    // health ~= 310 turret rounds at 0.55 damage/round) assaulting the weakest defended site;
+    // a site garrison grinds at ~6.6 dps, so the ~17 power/minute inflow drowns it unless the
+    // turret is killing pushers. The first wave lands early so friendly control never has a
+    // hostile-free window in which it could self-climb toward the victory threshold.
+    public const double HostileWaveIntervalSeconds = 15.0;
+    public const double FirstHostileWaveDelaySeconds = 5.0;
+    public const int HostileWaveSoftVehicles = 1;
+    public const int HostileWaveInfantryClumps = 2;
+    // Hostile seed/wave rings stay outside the authored M134 min-solution window so an
     // aircraft over a contested site can authorize fire before mutual ground combat clears the
     // wave. Friendlies remain on the pad. See docs/airframes/ah-1g-cobra/00-sources.md.
-    public const double HostileSeedHardPointRingM = 140.0;
     public const double HostileSeedInfantryRingM = 170.0;
     public const double HostileSeedSoftVehicleRingM = 200.0;
-    public const double HostileReinforceRingM = 160.0;
-    public const double FriendlyReinforceRingM = 40.0;
+    public const double HostileWaveRingM = 160.0;
     public const double WreckRetainSeconds = 12.0;
     public const double PlayerRoundDamage = 0.55;
     public const double VictoryControlThreshold = 0.55;
@@ -79,6 +88,7 @@ public sealed class CobraGroundWarRuntime
             new Vec3D(fobLandmark.EastM, fobSurface.HeightM, fobLandmark.NorthM),
             radiusM: 55.0,
             maxClearanceM: 9.0);
+        _reinforceAccumulatorSeconds = HostileWaveIntervalSeconds - FirstHostileWaveDelaySeconds;
         SeedInitialForces();
     }
 
@@ -303,11 +313,12 @@ public sealed class CobraGroundWarRuntime
             best = rangeSq;
             enemy = candidate;
         }
-        if (enemy is not null && best <= unit.EngagementRangeM * unit.EngagementRangeM * 2.25)
+        if (enemy is not null && (unit.Intent == GroundUnitIntent.EngageNearest
+            || best <= unit.EngagementRangeM * unit.EngagementRangeM * 2.25))
             return enemy.PositionWorldM;
 
         ContestedSite home = _sites.First(site => site.Id == unit.HomeSiteId);
-        if (unit.Intent == GroundUnitIntent.Hold)
+        if (unit.Intent is GroundUnitIntent.Hold or GroundUnitIntent.EngageNearest)
             return home.PositionWorldM;
 
         // Advance toward a neighboring site in the direction favored by faction vs balance.
@@ -358,39 +369,30 @@ public sealed class CobraGroundWarRuntime
 
     void MaybeReinforce(double dtSeconds)
     {
+        // Hostile pressure only: the friendly garrison is finite (what you are defending);
+        // hostile assault waves keep coming.
         _reinforceAccumulatorSeconds += dtSeconds;
-        if (_reinforceAccumulatorSeconds < ReinforceIntervalSeconds)
+        if (_reinforceAccumulatorSeconds < HostileWaveIntervalSeconds)
             return;
         _reinforceAccumulatorSeconds = 0.0;
 
-        int living = LivingUnits().Count();
-        if (living >= MaxLivingUnits)
-            return;
-
-        double friendlyPower = LivingUnits()
-            .Where(unit => unit.Faction == GroundFaction.Friendly)
-            .Sum(unit => unit.CombatPower);
-        double hostilePower = LivingUnits()
-            .Where(unit => unit.Faction == GroundFaction.Hostile)
-            .Sum(unit => unit.CombatPower);
-        GroundFaction faction = friendlyPower <= hostilePower
-            ? GroundFaction.Friendly
-            : GroundFaction.Hostile;
-
-        ContestedSite site = faction == GroundFaction.Friendly
-            ? _sites.First(candidate => candidate.LandmarkId.Contains("camp-ember", StringComparison.Ordinal))
-            : _sites.OrderBy(candidate => candidate.LocalControl).First();
-
-        int slots = Math.Min(2, MaxLivingUnits - living);
-        for (int index = 0; index < slots; index++) {
-            GroundUnitRole role = index == 0 && _rng.NextDouble() < 0.35
-                ? GroundUnitRole.SoftVehicle
-                : GroundUnitRole.InfantryClump;
-            double ringM = faction == GroundFaction.Hostile
-                ? HostileReinforceRingM + index * 20.0
-                : FriendlyReinforceRingM + index * 12.0;
-            SpawnUnit(faction, role, site, GroundUnitIntent.Advance, ringM);
-        }
+        // Assault the weakest still-defended site so the wave always finds a fight; once every
+        // garrison is gone any site will do (the basin is already falling).
+        ContestedSite site = _sites
+            .Where(candidate => LivingUnits().Any(unit =>
+                unit.Faction == GroundFaction.Friendly
+                && HorizontalDistanceSquared(unit.PositionWorldM, candidate.PositionWorldM)
+                    <= candidate.CaptureRadiusM * candidate.CaptureRadiusM))
+            .OrderBy(candidate => candidate.LocalControl)
+            .FirstOrDefault()
+            ?? _sites.OrderBy(candidate => candidate.LocalControl).First();
+        int wave = 0;
+        for (int index = 0; index < HostileWaveSoftVehicles && LivingUnits().Count() < MaxLivingUnits; index++)
+            SpawnUnit(GroundFaction.Hostile, GroundUnitRole.SoftVehicle, site,
+                GroundUnitIntent.EngageNearest, HostileWaveRingM + wave++ * 20.0);
+        for (int index = 0; index < HostileWaveInfantryClumps && LivingUnits().Count() < MaxLivingUnits; index++)
+            SpawnUnit(GroundFaction.Hostile, GroundUnitRole.InfantryClump, site,
+                GroundUnitIntent.EngageNearest, HostileWaveRingM + wave++ * 20.0);
     }
 
     void AgeWrecks(double dtSeconds)
@@ -419,12 +421,12 @@ public sealed class CobraGroundWarRuntime
             SpawnUnit(GroundFaction.Friendly, GroundUnitRole.SoftVehicle, site,
                 GroundUnitIntent.Advance, ringM: 48.0, bearingRad: 2.1);
 
-            SpawnUnit(GroundFaction.Hostile, GroundUnitRole.HardPoint, site,
-                GroundUnitIntent.Hold, ringM: HostileSeedHardPointRingM, bearingRad: 3.6);
+            // No seeded hostile hard points: the attackers are the moving wave targets the
+            // turret exists to kill; static hostile armor would outrange the garrison forever.
             SpawnUnit(GroundFaction.Hostile, GroundUnitRole.InfantryClump, site,
-                GroundUnitIntent.Advance, ringM: HostileSeedInfantryRingM, bearingRad: 4.4);
+                GroundUnitIntent.EngageNearest, ringM: HostileSeedInfantryRingM, bearingRad: 4.4);
             SpawnUnit(GroundFaction.Hostile, GroundUnitRole.SoftVehicle, site,
-                GroundUnitIntent.Advance, ringM: HostileSeedSoftVehicleRingM, bearingRad: 5.2);
+                GroundUnitIntent.EngageNearest, ringM: HostileSeedSoftVehicleRingM, bearingRad: 5.2);
         }
         UpdateSiteControl();
         DriftBalance(PlayerVehicleContract.FixedDeltaSeconds);
