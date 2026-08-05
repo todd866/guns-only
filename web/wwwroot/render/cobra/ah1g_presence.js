@@ -38,6 +38,16 @@ function box(THREE, name, size, position, material, rotation = null) {
 }
 
 /**
+ * Box with a lighter +Y (top) face: the one-value-step console/deck treatment.
+ * BoxGeometry material order is [+x, -x, +y, -y, +z, -z].
+ */
+function toppedBox(THREE, name, size, position, sideMaterial, topMaterial) {
+  return box(THREE, name, size, position, [
+    sideMaterial, sideMaterial, topMaterial, sideMaterial, sideMaterial, sideMaterial,
+  ]);
+}
+
+/**
  * Body orientation matching Hold the Bridge lookAt(+sin(yaw), …, -cos(yaw)).
  */
 export function vehicleBodyQuaternion(THREE, vehicle, target = null) {
@@ -59,8 +69,16 @@ export function createAh1gPresence(THREE) {
   group.name = "AH1G_PRESENCE";
   group.visible = true;
 
-  const skin = skinMaterial(THREE, 0x4a5a3a, { emissive: 0x0a1008 });
-  const dark = skinMaterial(THREE, 0x1c2218, { emissive: 0x050605 });
+  // Interior palette (TF2-illustrative: flat painted tones, one value step
+  // between planes, no photorealism). Lambert + emissive floor so faces the
+  // scene sun never reaches still read as painted structure, not construction
+  // paper. Near-black (all RGB < 25) is banned for interior-facing surfaces.
+  const skin = skinMaterial(THREE, 0x4a5a3a, { emissive: 0x161a10 });
+  const frameMat = skinMaterial(THREE, 0x5c6654, { emissive: 0x2c3226 });
+  const consoleSide = skinMaterial(THREE, 0x40483e, { emissive: 0x1c211a });
+  const consoleTop = skinMaterial(THREE, 0x555f4d, { emissive: 0x272d23 });
+  const stickMat = skinMaterial(THREE, 0x353b31, { emissive: 0x171b14 });
+  const noseTop = skinMaterial(THREE, 0x515f42, { emissive: 0x20261a });
   const glass = skinMaterial(THREE, 0x9bb8ae, {
     opacity: 0.2,
     depthWrite: false,
@@ -68,41 +86,48 @@ export function createAh1gPresence(THREE) {
     flatShading: false,
     emissive: 0x142820,
   });
-  const metal = skinMaterial(THREE, 0x2a3030, { emissive: 0x080a0a });
-  const disc = skinMaterial(THREE, 0x151a15, {
-    opacity: 0.38,
+  const metal = skinMaterial(THREE, 0x39423c, { emissive: 0x181d18 });
+  const disc = skinMaterial(THREE, 0x39423a, {
+    opacity: 0.4,
     depthWrite: false,
     side: THREE.DoubleSide,
     flatShading: false,
+    emissive: 0x2a332a,
   });
-  const bladeMat = skinMaterial(THREE, 0x0e120e, { opacity: 0.72, depthWrite: false });
+  const bladeMat = skinMaterial(THREE, 0x23291f, { opacity: 0.72, depthWrite: false, emissive: 0x181d15 });
 
   // Frame members must stay out of the rear-seat forward frustum (eye at
   // REAR_SEAT_EYE_LOCAL_M, fov 58, +0.08 pitch bias): sills stay below the
   // eyeline, the front bow splits around the gunsight, pillars hug the corners.
+  // The frame must also read CONNECTED: pillars run down into the console/sill
+  // line (consoles below overlap the pillar plane), no member floats in air.
   const canopyFrame = new THREE.Group();
   canopyFrame.name = "AH1G_CANOPY_FRAME";
   canopyFrame.add(
-    box(THREE, "AH1G_CANOPY_SILL_L", [0.06, 0.14, 2.4], [-0.52, 0.55, 0.55], dark),
-    box(THREE, "AH1G_CANOPY_SILL_R", [0.06, 0.14, 2.4], [0.52, 0.55, 0.55], dark),
-    box(THREE, "AH1G_CANOPY_PILLAR_L", [0.05, 0.75, 0.05], [-0.52, 0.98, -0.5], dark),
-    box(THREE, "AH1G_CANOPY_PILLAR_R", [0.05, 0.75, 0.05], [0.52, 0.98, -0.5], dark),
-    box(THREE, "AH1G_CANOPY_BOW_L", [0.35, 0.08, 0.08], [-0.375, 1.35, -0.55], dark),
-    box(THREE, "AH1G_CANOPY_BOW_R", [0.35, 0.08, 0.08], [0.375, 1.35, -0.55], dark),
-    box(THREE, "AH1G_CANOPY_AFT", [1.1, 0.08, 0.08], [0, 1.35, 1.65], dark),
+    box(THREE, "AH1G_CANOPY_SILL_L", [0.07, 0.14, 2.5], [-0.52, 0.55, 0.5], frameMat),
+    box(THREE, "AH1G_CANOPY_SILL_R", [0.07, 0.14, 2.5], [0.52, 0.55, 0.5], frameMat),
+    box(THREE, "AH1G_CANOPY_PILLAR_L", [0.06, 0.91, 0.06], [-0.52, 0.9, -0.5], frameMat),
+    box(THREE, "AH1G_CANOPY_PILLAR_R", [0.06, 0.91, 0.06], [0.52, 0.9, -0.5], frameMat),
+    box(THREE, "AH1G_CANOPY_BOW_L", [0.35, 0.08, 0.08], [-0.375, 1.35, -0.55], frameMat),
+    box(THREE, "AH1G_CANOPY_BOW_R", [0.35, 0.08, 0.08], [0.375, 1.35, -0.55], frameMat),
+    box(THREE, "AH1G_CANOPY_AFT", [1.1, 0.08, 0.08], [0, 1.35, 1.65], frameMat),
   );
   group.add(canopyFrame);
 
-  // Full-height shell for the exterior silhouette, with the forward wedge left
-  // open: the rear-seat gunsight looks out through air, not tint. Sphere phi
-  // 270 deg is local -Z (forward), so the gap is centered there.
-  const glassGapRad = Math.PI * (170 / 180);
+  // Shell for the exterior silhouette, with the forward wedge left open: the
+  // rear-seat gunsight looks out through air, not tint. Sphere phi 270 deg is
+  // local -Z (forward), so the gap is centered there. thetaStart trims the
+  // polar cap: with the cap present, its triangles adjacent to the gap edge
+  // hover almost dead-ahead-overhead from the interior eye and read as a
+  // floating pale shard whenever the gunner-target look bias swings the
+  // camera off the body axis.
+  const glassGapRad = Math.PI * (178 / 180);
   const canopyGlass = new THREE.Mesh(
     new THREE.SphereGeometry(
       1, 20, 12,
       Math.PI * 1.5 + glassGapRad / 2,
       Math.PI * 2 - glassGapRad,
-      0, Math.PI * 0.55,
+      Math.PI * 0.18, Math.PI * 0.37,
     ),
     glass,
   );
@@ -113,14 +138,20 @@ export function createAh1gPresence(THREE) {
   group.add(canopyGlass);
 
   // Instrument brow splits around the centerline gunsight so the aim column
-  // stays open; the panels keep the dash line in the lower frame corners.
-  group.add(box(THREE, "AH1G_INSTRUMENT_BROW_L", [0.3, 0.1, 0.3], [-0.33, 0.7, -0.15], metal));
-  group.add(box(THREE, "AH1G_INSTRUMENT_BROW_R", [0.3, 0.1, 0.3], [0.33, 0.7, -0.15], metal));
-  group.add(box(THREE, "AH1G_CYCLIC", [0.05, 0.55, 0.05], [0.12, 0.45, 0.35], dark, [0.35, 0, 0.08]));
-  group.add(box(THREE, "AH1G_COLLECTIVE", [0.04, 0.08, 0.45], [-0.38, 0.48, 0.55], dark, [0, 0, 0.4]));
+  // stays open; the consoles reach outboard past the pillar plane and forward
+  // under the pillar feet, so each pillar plants into its console instead of
+  // ending in mid-air. Top faces take the lighter deck tone.
+  group.add(toppedBox(THREE, "AH1G_INSTRUMENT_BROW_L", [0.38, 0.12, 0.55], [-0.37, 0.68, -0.225], consoleSide, consoleTop));
+  group.add(toppedBox(THREE, "AH1G_INSTRUMENT_BROW_R", [0.38, 0.12, 0.55], [0.37, 0.68, -0.225], consoleSide, consoleTop));
+  group.add(box(THREE, "AH1G_CYCLIC", [0.05, 0.55, 0.05], [0.12, 0.45, 0.35], stickMat, [0.35, 0, 0.08]));
+  group.add(box(THREE, "AH1G_COLLECTIVE", [0.04, 0.08, 0.45], [-0.38, 0.48, 0.55], stickMat, [0, 0, 0.4]));
   // Low sloping nose: the top edge must sit under the rear-seat depressed
-  // sightline (Cobra noses drop away from the canopy anyway).
-  group.add(box(THREE, "AH1G_NOSE", [0.55, 0.3, 2.2], [0, 0.09, -2.4], skin));
+  // sightline (Cobra noses drop away from the canopy anyway). Its aft face is
+  // the forward bulkhead the gunner actually sees, its top deck takes the
+  // lighter step so it reads as airframe, not silhouette.
+  group.add(box(THREE, "AH1G_NOSE", [0.55, 0.3, 2.2], [0, 0.09, -2.4], [
+    skin, skin, noseTop, skin, consoleSide, skin,
+  ]));
   group.add(box(THREE, "AH1G_CHIN_TURRET", [0.35, 0.28, 0.45], [0, -0.05, -3.35], metal));
   // Cabin runs aft under the mast so the rotor pylon stands on structure.
   group.add(box(THREE, "AH1G_CABIN", [0.85, 0.5, 2.7], [0, 0.35, 0.85], skin));
