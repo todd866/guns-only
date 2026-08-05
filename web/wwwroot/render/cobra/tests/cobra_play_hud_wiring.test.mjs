@@ -45,6 +45,22 @@ test("play loop exposes the authoritative snapshot as a headless-QA steering sea
   assert.match(main, /window\.__gunsOnlyCobraAuthority = authorityState/);
 });
 
+test("strike terminal states present a cause card, not the generic sortie-ended line", async () => {
+  const main = await source("cobra-lab/main.js");
+  const debriefFn = main.match(/function showMissionDebrief\([\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(debriefFn, /obstacle-collision/);
+  assert.match(debriefFn, /vehicle-authority-lost/);
+  assert.match(debriefFn, /terrain-unavailable/);
+  assert.match(debriefFn, /collision_obstacle_id/);
+});
+
+test("every terminal card announces and wires the R restart affordance", async () => {
+  const main = await source("cobra-lab/main.js");
+  const debriefFn = main.match(/function showMissionDebrief\([\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(debriefFn, /R restarts/);
+  assert.match(main, /KeyR[\s\S]{0,200}?missionTerminal[\s\S]{0,120}?restartRoute\(\)/);
+});
+
 test("route restart clears the terminal banner back to the online status", async () => {
   const main = await source("cobra-lab/main.js");
   const restart = main.match(/function restartRoute\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
