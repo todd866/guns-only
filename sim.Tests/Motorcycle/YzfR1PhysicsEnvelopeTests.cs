@@ -29,41 +29,29 @@ public sealed class YzfR1PhysicsEnvelopeTests
             new Vec3D(0.0, RapierLaunchSite.OperatingSurfaceElevationM, 0.0),
             headingRad: 0.0);
 
-    static long AccelerateTo(
-        YzfR1Dynamics bike,
-        double targetSpeedMps,
-        long startTick,
-        PlayerVehicleEnvironmentSample? environment = null)
-    {
-        long tick = startTick;
-        var wot = Command(throttle: 1.0);
-        while (bike.Telemetry.SpeedMps < targetSpeedMps && tick < startTick + 120 * 60)
-            bike.Advance(YzfR1TestInput.Of(tick++, wot, environment));
-        Assert.True(bike.Telemetry.SpeedMps >= targetSpeedMps,
-            $"never reached {targetSpeedMps:F1} m/s, got {bike.Telemetry.SpeedMps:F1}");
-        return tick;
-    }
-
     /// <summary>Speed-holding full-lean turn; returns peak |lean| over the settled window.</summary>
     static double SustainedFullTurnLeanRad(
         double targetSpeedMps,
         PlayerVehicleEnvironmentSample? environment = null)
     {
         var bike = AtRest($"lean-{targetSpeedMps:F0}");
+        // Wheel-lift dynamics: a raw WOT straight ramp loops the bike, so the ramp rides
+        // like a test rider (short-shifting, on the tank) before the turn begins.
+        long tick = YzfR1TestRider.ShortShiftAccelerateTo(
+            bike, targetSpeedMps * 0.92, 0, environment);
         double sustainedLeanRad = 0.0;
-        for (long tick = 0; tick < 120 * 25; tick++)
+        for (long i = 0; i < 120 * 23; i++)
         {
             double speed = bike.Telemetry.SpeedMps;
             double throttle = speed < targetSpeedMps
                 ? Math.Min(1.0, (targetSpeedMps - speed) * 0.5)
                 : 0.0;
-            bool turning = tick > 120 * 2 && speed > targetSpeedMps * 0.9;
             var command = Command(throttle) with {
-                Steer = turning ? 1.0 : 0.0,
-                RiderLateral = turning ? 1.0 : 0.0,
+                Steer = 1.0,
+                RiderLateral = 1.0,
             };
-            bike.Advance(YzfR1TestInput.Of(tick, command, environment));
-            if (tick > 120 * 20)
+            bike.Advance(YzfR1TestInput.Of(tick++, command, environment));
+            if (i > 120 * 18)
                 sustainedLeanRad = Math.Max(
                     sustainedLeanRad,
                     Math.Abs(bike.Telemetry.LeanRad));
@@ -71,29 +59,29 @@ public sealed class YzfR1PhysicsEnvelopeTests
         return sustainedLeanRad;
     }
 
+    /// <summary>
+    /// Adjusted with the wheel-lift dynamics: raw braking is now stoppie/grip-limited, not
+    /// capped by the old 0.9 g brake split. The sustained (0.25 s windowed, post-dive)
+    /// deceleration pins at ~1.0-1.15 g (front grip cap plus aero on top), and a full brake
+    /// held from 100 km/h runs the pitch past the critical angle and latches the endo crash
+    /// within about 15-25 m — the distance-to-a-clean-stop pin now lives with the assisted
+    /// rider, who releases before the endo.
+    /// </summary>
     [Fact]
-    public void FullBrakeFromHundredKmhIsTireLimitedOnPavement()
+    public void FullBrakeFromHundredKmhIsStoppieLimitedOnPavement()
     {
         var bike = AtRest("brake-raw");
-        long tick = AccelerateTo(bike, HundredKmhMps, 0);
+        long tick = YzfR1TestRider.ShortShiftAccelerateTo(bike, HundredKmhMps, 0);
         Vec3D start = bike.State.PositionWorldM;
         var brake = Command() with { Brake = 1.0 };
-        double peakDecelMps2 = 0.0;
-        double previousSpeedMps = bike.Telemetry.SpeedMps;
-        long brakeTicks = 0;
-        while (bike.Telemetry.SpeedMps > 0.1 && brakeTicks++ < 120 * 15)
-        {
-            bike.Advance(YzfR1TestInput.Of(tick++, brake));
-            peakDecelMps2 = Math.Max(
-                peakDecelMps2,
-                (previousSpeedMps - bike.Telemetry.SpeedMps) * PlayerVehicleContract.FixedStepHz);
-            previousSpeedMps = bike.Telemetry.SpeedMps;
-        }
+        (double windowedPeakDecelMps2, _) = YzfR1TestRider.HoldBrakeAndMeasure(
+            bike, brake, tick, maxTicks: 120 * 15);
         double distanceM = (bike.State.PositionWorldM - start).Length;
 
-        Assert.InRange(distanceM, 35.0, 55.0);
-        Assert.True(peakDecelMps2 >= 8.6,
-            $"tire-limited capability should approach 0.9 g+, peak={peakDecelMps2:F2} m/s^2");
+        Assert.InRange(distanceM, 12.0, 40.0);
+        Assert.InRange(windowedPeakDecelMps2, 0.98 * 9.80665, 1.15 * 9.80665);
+        Assert.True(bike.Telemetry.IsTippedOver,
+            "full brake held from 100 km/h in raw mode must endo");
     }
 
     [Fact]
@@ -149,7 +137,7 @@ public sealed class YzfR1PhysicsEnvelopeTests
     public void ClosedThrottleCoastFromHundredKmhDecaysVisibly()
     {
         var bike = AtRest("coast");
-        long tick = AccelerateTo(bike, HundredKmhMps, 0);
+        long tick = YzfR1TestRider.ShortShiftAccelerateTo(bike, HundredKmhMps, 0);
         double speedAtCoastMps = bike.Telemetry.SpeedMps;
         var coast = Command(throttle: 0.0);
         for (long i = 0; i < 120 * 3; i++)
@@ -167,7 +155,10 @@ public sealed class YzfR1PhysicsEnvelopeTests
     public void AutoUpshiftFiresClimbingThroughTheBox()
     {
         var bike = AtRest("auto-upshift");
-        var wot = Command(throttle: 1.0);
+        // 0.72 throttle with the rider on the tank keeps drive under the wheelie threshold
+        // (the auto-shift schedule reads coupled rpm, which is speed-driven, so the pin is
+        // unchanged); raw WOT in 1st now loops the bike before the 12,000 rpm shift point.
+        var wot = Command(throttle: 0.72) with { RiderForeAft = 1.0 };
         int highestGear = 1;
         double rpmAtFirstUpshift = double.NaN;
         int previousGear = 1;
@@ -193,13 +184,11 @@ public sealed class YzfR1PhysicsEnvelopeTests
     public void TopSpeedEmergesFromDragAgainstPowerNotTheFirstGearLimiter()
     {
         var bike = AtRest("top-speed");
-        var wot = Command(throttle: 1.0);
-        long tick = 0;
-        for (; tick < 120 * 55; tick++)
-            bike.Advance(YzfR1TestInput.Of(tick, wot));
+        // The test-rider ladder short-shifts through the wheelie band; top speed itself is
+        // unchanged because drag versus power decides it, not the ramp discipline.
+        long tick = YzfR1TestRider.ShortShiftAccelerateTicks(bike, 0, 120 * 55);
         double speedBeforeMps = bike.Telemetry.SpeedMps;
-        for (; tick < 120 * 60; tick++)
-            bike.Advance(YzfR1TestInput.Of(tick, wot));
+        tick = YzfR1TestRider.ShortShiftAccelerateTicks(bike, tick, 120 * 5);
         double terminalSpeedMps = bike.Telemetry.SpeedMps;
 
         Assert.Equal(YzfR1Definition.GearCount, bike.Telemetry.Gear);
@@ -270,11 +259,14 @@ public sealed class YzfR1PhysicsEnvelopeTests
 
         var pavementBike = AtRest("drive-pavement");
         var grassBike = AtRest("drive-grass");
-        var wot = Command(throttle: 1.0);
+        // Managed ladder on both surfaces: pavement WOT would wheelie-loop, grass cannot
+        // lift at all, and the drive-comparison pin only needs the reached speeds.
         for (long tick = 0; tick < 120 * 3; tick++)
         {
-            pavementBike.Advance(YzfR1TestInput.Of(tick, wot));
-            grassBike.Advance(YzfR1TestInput.Of(tick, wot, GrassVerge));
+            pavementBike.Advance(YzfR1TestInput.Of(
+                tick, YzfR1TestRider.NextStraightLineCommand(pavementBike)));
+            grassBike.Advance(YzfR1TestInput.Of(
+                tick, YzfR1TestRider.NextStraightLineCommand(grassBike), GrassVerge));
         }
         Assert.True(
             grassBike.Telemetry.SpeedMps < pavementBike.Telemetry.SpeedMps * 0.75,
@@ -286,16 +278,14 @@ public sealed class YzfR1PhysicsEnvelopeTests
     public void FullLeanCarriedOntoGrassLowSidesAtSpeed()
     {
         var bike = AtRest("low-side");
-        long tick = 0;
         var turning = Command() with { Steer = 1.0, RiderLateral = 1.0 };
-        for (; tick < 120 * 8; tick++)
+        // Managed ramp (raw WOT would wheelie-loop), then four seconds of settled full lean.
+        long tick = YzfR1TestRider.ShortShiftAccelerateTo(bike, 60.0 / 3.6 * 0.92, 0);
+        for (long i = 0; i < 120 * 4; i++)
         {
             double speed = bike.Telemetry.SpeedMps;
             double throttle = speed < 60.0 / 3.6 ? Math.Min(1.0, (60.0 / 3.6 - speed) * 0.5) : 0.0;
-            var command = tick > 120 * 4
-                ? turning with { Throttle = throttle }
-                : Command(throttle);
-            bike.Advance(YzfR1TestInput.Of(tick, command));
+            bike.Advance(YzfR1TestInput.Of(tick++, turning with { Throttle = throttle }));
         }
         Assert.True(Math.Abs(bike.Telemetry.LeanRad) >= 35.0 * Math.PI / 180.0,
             $"setup lean={bike.Telemetry.LeanRad * 180.0 / Math.PI:F1} deg");
@@ -310,18 +300,26 @@ public sealed class YzfR1PhysicsEnvelopeTests
         Assert.False(bike.State.Flyable);
     }
 
+    /// <summary>
+    /// v4 wire-behavior contract: wheels can lift (wheelie/stoppie with loop-over and endo
+    /// crash latches) and brakes are hydraulic capacities clamped by per-axle grip.
+    /// </summary>
     [Fact]
-    public void CapabilityVersionDisclosesTheV3LongitudinalContract()
+    public void CapabilityVersionDisclosesTheV4WheelLiftContract()
     {
         var bike = AtRest("capability");
 
-        Assert.Equal("player-vehicle.yzf-r1-runway-plane.v3", YzfR1Dynamics.CapabilityVersion);
+        Assert.Equal("player-vehicle.yzf-r1-runway-plane.v4", YzfR1Dynamics.CapabilityVersion);
         Assert.Equal(YzfR1Dynamics.CapabilityVersion, bike.Capability.CapabilityVersion);
         Assert.Contains("drag", bike.Capability.FidelityDisclosure,
             StringComparison.OrdinalIgnoreCase);
         Assert.Contains("engine braking", bike.Capability.FidelityDisclosure,
             StringComparison.OrdinalIgnoreCase);
         Assert.Contains("primary", bike.Capability.FidelityDisclosure,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("wheelie", bike.Capability.FidelityDisclosure,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("stoppie", bike.Capability.FidelityDisclosure,
             StringComparison.OrdinalIgnoreCase);
     }
 }

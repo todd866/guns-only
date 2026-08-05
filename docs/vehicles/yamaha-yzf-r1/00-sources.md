@@ -78,17 +78,17 @@ dyno-measured, and should be replaced if loaded-radius data appears.
 | `AutoDownshiftRpm` | 4,000 | Surrogate auto-shift schedule point pending handbook | Auto clutch downshifts itself at/below this coupled RPM; manual downshifts are over-rev protected instead |
 | `StallRpm` | 1,200 | Surrogate manual-clutch dump stall threshold | Engine dies when clutch engages from rest below this band |
 | `EngineInertiaKgM2` | 0.055 | Typical liter-four crank/internals order-of-magnitude | Launch RPM flare with auto-clutch; manual-clutch stall threshold |
-| `CombinedCgHeightM` | 0.585 m | Bike-only ~0.52 m + 80 kg rider scaled over wheelbase | Static front/rear load split ≈ 48/52 at rest on level ground |
+| `CombinedCgHeightM` | 0.68 m | Bike-only ~0.55 m + 80 kg seated rider CG ~1.01 m, mass-weighted | Wheelie threshold ≈ 1.01 g and endo threshold ≈ 1.05 g, matching published liter-bike wheelie-limited 0–100 km/h times and max-braking tests; static split ≈ 49/51 at rest |
 | `RollInertiaKgM2` | 95.0 | Literature order-of-magnitude for liter sportbike + rider | Lean transient time to 30° roll at 25 m/s with full steer + weight |
-| `PitchInertiaKgM2` | 165.0 | ibid. | Hard-brake pitch rate and load transfer magnitude |
+| `PitchInertiaKgM2` | 165.0 | ibid. (about the CoG; lift dynamics add the parallel-axis term to the contact patch) | Wheelie develops within ~2 s of WOT in 1st; stoppie develops within ~1 s of committed braking |
 | `YawInertiaKgM2` | 110.0 | ibid. | Steady-state yaw rate vs. steer angle at 30 m/s |
-| `FrontSpringRateNPerM` | 18_000 | KYB fork scaled to ~119 mm travel and ~283 kg gross | Static sag ~25% travel at rest |
-| `RearSpringRateNPerM` | 22_000 | KYB shock scaled likewise | ibid. |
-| `FrontDamperCoefficientNPerMps` | 1_800 | Critical-damping fraction ~0.25 at ride height | No undamped pitch oscillation after single bump |
-| `RearDamperCoefficientNPerMps` | 2_200 | ibid. | ibid. |
+| `FrontSpringRateNPerM` | 45_000 | KYB fork sized to the ~25% static-sag target at ~283 kg gross (the earlier 18k sagged 62% and bottomed under hard braking, capping deceleration below the stoppie threshold) | Static sag ~25% travel at rest; fork does not bottom at max braking |
+| `RearSpringRateNPerM` | 44_000 | KYB shock sized likewise | Static sag ~28% travel at rest |
+| `FrontDamperCoefficientNPerMps` | 2_800 | Damping ratio ~0.57 at axle natural frequency ~2.9 Hz | No undamped pitch oscillation after single bump |
+| `RearDamperCoefficientNPerMps` | 3_100 | ibid. | ibid. |
 | `GearRatios[0..5]` | 2.846, 2.200, 1.850, 1.600, 1.421, 1.320 | Widely published R1 ratio set; **year-specific handbook not held** | Top speed in 6th ≈ 290 km/h order-of-magnitude; shift RPM drops |
 | `FinalDriveRatio` | 2.470 | Chain sprocket pair commonly paired with above ratios | Matches published 6th-gear ratio × final × tyre radius |
-| `TirePeakFrictionCoefficient` | 1.05 | Dry asphalt sport tyre peak µ order-of-magnitude | Maximum lateral accel at 45° lean on dry runway |
+| `TirePeakFrictionCoefficient` | 1.20 | Dry supersport radial peak µ (1.1–1.3 commonly cited); must exceed the endo threshold over the load-sensitivity penalty (µ > ~1.17) or the front slides before the rear can lift | Maximum lateral accel at 45°+ lean on dry runway; stoppie physically reachable |
 | `TireLoadSensitivity` | 0.85 | Pacejka-like load exponent placeholder | Combined brake+lean reduces lateral force per Task 6 golden path |
 | `TireCamberStiffnessNPerRad` | 1_200 | Lateral force vs. camber slope placeholder | Camber thrust contributes at knee-down lean |
 
@@ -99,6 +99,8 @@ dyno-measured, and should be replaced if loaded-radius data appears.
 | `AeroDragAreaCdAM2` | 0.35 m² | **Estimate.** Sport bike + tucked rider CdA is commonly cited at 0.30–0.40 m²; no R1 wind-tunnel figure held | WOT top speed emerges drag-limited near the R1's ~299 km/h claim, below the 6th-gear redline ceiling |
 | `RollingResistanceCoefficient` | 0.015 | **Estimate.** Motorcycle sport radial on asphalt order-of-magnitude | Closed-throttle coast decays visibly from 100 km/h; no self-propulsion at rest |
 | `EngineBrakingTorqueNmAtRedline` | 20 N·m | **Estimate.** Closed-throttle motoring (friction + pumping) torque order-of-magnitude for a 998 cc four at high rpm, linear from idle; includes drivetrain drag | Gear-dependent coast decel through the rear contact patch; zero at idle so the bike cannot creep backwards |
+| `FrontBrakeForceCapacityN` | 3_900 N | **Estimate.** Dual 320 mm discs + 4-piston calipers generate more contact-patch force than dry grip can transmit (endo-capable); hydraulic capacity, deliberately not surface-scaled — the per-axle tire clamp handles the surface | Committed front brake reaches the tire/stoppie limit on pavement instead of a hydraulic ceiling |
+| `RearBrakeForceCapacityN` | 1_250 N | **Estimate.** Single 220 mm disc locks a lightly-loaded rear easily | Rear brake saturates the unloaded rear contact under hard combined braking |
 
 ## Known gaps
 
@@ -108,8 +110,18 @@ dyno-measured, and should be replaced if loaded-radius data appears.
 - **Longitudinal resistance** — CdA, rolling resistance, and closed-throttle motoring torque are
   labelled estimates; replace with coast-down or dyno data if held.
 - **Redline** — surrogate pending handbook; affects rev limiter and auto-shift ceiling.
-- **Inertias and CG** — no published 6-DOF inertia tensor located; surrogates must be validated
-  against lean transient, wheelie/stoppie, and tip-over golden paths (Tasks 4–6).
+- **Inertias and CG** — no published 6-DOF inertia tensor located; surrogates are validated
+  against the lean transient, wheelie/stoppie balance-point, and tip-over golden-path tests.
+- **Wheel-lift pitch model (v4)** — when an axle's resolved load reaches zero and the
+  rigid-body moment about the remaining contact patch is lift-positive, the bike rotates about
+  that patch: grounded pitch is suspension geometry (squat minus dive over the wheelbase),
+  lifted pitch integrates `m(a·h_arm − g·b_arm)/I_pivot` with a small surrogate damping
+  (60 N·m·s/rad) and a 0.25 touchdown rate retention. Past the static balance angle plus a
+  0.10 rad margin the lift is unrecoverable and latches the crash (loop-over / endo). The
+  contact wheel is held at full weight while lifted — vertical CoG acceleration is a labelled
+  neglect. Thresholds from the geometry: wheelie ≈ 1.01 g, endo ≈ 1.05 g, full-load grip cap
+  ≈ 1.08 g, so raw braking is stoppie/grip-limited at ~1.0–1.15 g including aero and 2nd-gear
+  power wheelies are marginal/absent.
 - **Pacejka coefficients** — only a friction-circle surrogate is modeled in v1; full tyre parameters
   stay explicitly labeled surrogate with combined-slip validation targets.
 - **Electronics** — ABS, traction control, slide control, and launch control are out of scope for v1;

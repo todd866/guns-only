@@ -8,7 +8,7 @@ namespace GunsOnly.Sim.Motorcycle;
 /// </summary>
 public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
 {
-    public const string CapabilityVersion = "player-vehicle.yzf-r1-runway-plane.v3";
+    public const string CapabilityVersion = "player-vehicle.yzf-r1-runway-plane.v4";
 
     const double DrivetrainEfficiency = 0.90;
     const double RunwayFrictionPerSecond = 2.5;
@@ -32,23 +32,30 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
         * RollResponseNaturalFrequencyRadPerSecond * RollResponseNaturalFrequencyRadPerSecond;
     const double RollDampingNmPerRadPerSec = 2.0 * RollResponseDampingRatio
         * RollResponseNaturalFrequencyRadPerSecond * ReferenceRollInertiaKgM2;
-    // Surrogate pitch response; pitch-reflex damps rate by authority * k before integration.
-    const double PitchResponseNaturalFrequencyRadPerSecond = 3.5;
-    const double PitchResponseDampingRatio = 0.70;
-    const double PitchRestoringStiffnessNmPerRad = YzfR1Definition.PitchInertiaKgM2
-        * PitchResponseNaturalFrequencyRadPerSecond * PitchResponseNaturalFrequencyRadPerSecond;
-    const double PitchDampingNmPerRadPerSec = 2.0 * PitchResponseDampingRatio
-        * PitchResponseNaturalFrequencyRadPerSecond * YzfR1Definition.PitchInertiaKgM2;
-    /// <summary>Pitch-rate reflex gain: pitchRate *= (1 - k * PitchReflexAuthority).</summary>
-    const double PitchReflexDampingGain = 0.45;
+    // Wheel-lift pitch dynamics: while both wheels are grounded, pitch is the suspension
+    // geometry (squat minus dive over the wheelbase). When a contact load reaches zero AND
+    // the rigid-body moment about the remaining contact patch is lift-positive, the bike
+    // rotates as a rigid body about that patch. Past the static balance angle plus the
+    // margin, the lift is unrecoverable and latches the crash (loop-over / endo).
+    const double LiftNormalEpsilonN = 2.0;
+    const double LoopOverMarginRad = 0.10;
+    // Surrogate aero/gyroscopic pitch damping about the contact pivot; small on purpose so
+    // the lift keeps its real runaway character.
+    const double PitchLiftDampingNmPerRadPerSec = 60.0;
+    // Surrogate touchdown impact absorption: the suspension eats most of the pitch rate.
+    const double TouchdownRateRetention = 0.25;
+    enum WheelLiftState { Grounded, FrontLifted, RearLifted }
     const double LeanHoldRollDampingBoost = 0.40;
     // Provisional low-order coupling: body shift can tighten a turn, but cannot replace the bars.
     const double RiderBodyShiftSteeringFraction = 0.50;
     const double RiderBodyShiftFullAuthoritySpeedMps = 8.0;
     readonly RiderCerebellum _cerebellum = new();
     CerebellumSample _cerebellumSample;
-    // Surrogate combined-CG longitudinal position; see the source ledger's ≈48/52 static split.
-    const double StaticFrontLoadFraction = 0.48;
+    // Surrogate combined-CG longitudinal position (≈49/51 static split, see the ledger).
+    // With CombinedCgHeightM this sets the wheelie threshold at ~1.01 g and the endo
+    // threshold at ~1.05 g, bracketed by the ~1.08 g full-load tire grip cap so both lifts
+    // are reachable and 2nd-gear power wheelies stay marginal/absent.
+    const double StaticFrontLoadFraction = 0.49;
     static readonly Vec3D WorldUp = new(0.0, 1.0, 0.0);
 
     readonly string _vehicleId;
@@ -61,8 +68,11 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
     double _frontSuspensionVelocityMps;
     double _rearSuspensionCompressionM;
     double _rearSuspensionVelocityMps;
+    double _frontStaticCompressionM;
+    double _rearStaticCompressionM;
     double _pitchRad;
     double _pitchRateRadPerSec;
+    WheelLiftState _liftState;
     bool _kneeDown;
     int _gear = 1;
     double _engineRpm = YzfR1Definition.IdleRpm;
@@ -102,6 +112,8 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
             initialRearNormalForceN,
             YzfR1Definition.RearSpringRateNPerM,
             YzfR1Definition.RearSuspensionTravelM);
+        _frontStaticCompressionM = _frontSuspensionCompressionM;
+        _rearStaticCompressionM = _rearSuspensionCompressionM;
 
         QuaternionD attitude = LeaningAttitude(_headingRad, leanRad: 0.0);
         State = new PlayerVehicleState(
@@ -173,12 +185,15 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
                 + "YZF-R1 mass, power, torque, primary-reduction gearing, and tire-radius "
                 + "constants plus explicitly labelled surrogate drivetrain/traction "
                 + "assumptions. It models drive with an auto/manual sequential shift "
-                + "schedule, 70/30 front/rear braking, CdA aero drag, rolling resistance, "
-                + "closed-throttle engine braking, and provisional single-track "
+                + "schedule, hydraulic-capacity front/rear brakes, CdA aero drag, rolling "
+                + "resistance, closed-throttle engine braking, and provisional single-track "
                 + "steer/rider-CG lean plus bounded front/rear spring-damper load transfer "
-                + "with a load-sensitive friction-circle tire that authors planar curvature, "
-                + "plus latched low-speed tip-over and sustained-slide low-side tip-over on "
-                + "a horizontal contact plane; airborne dynamics are not yet implemented.");
+                + "with a load-sensitive friction-circle tire that authors planar curvature. "
+                + "Wheel-lift pitch dynamics rotate the bike about the contact patch when an "
+                + "axle unloads (power wheelie, brake stoppie) and latch loop-over or endo "
+                + "crashes past the balance angle, alongside latched low-speed tip-over and "
+                + "sustained-slide low-side tip-over on a horizontal contact plane; "
+                + "full-flight airborne dynamics are not yet implemented.");
         PlayerVehicleValidation.Capability(Capability);
     }
 
@@ -210,6 +225,7 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
         _leanRateRadPerSec = 0.0;
         _pitchRad = 0.0;
         _pitchRateRadPerSec = 0.0;
+        _liftState = WheelLiftState.Grounded;
         _frontSuspensionVelocityMps = 0.0;
         _rearSuspensionVelocityMps = 0.0;
         _kneeDown = false;
@@ -233,6 +249,8 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
             rearNormalForceN,
             YzfR1Definition.RearSpringRateNPerM,
             YzfR1Definition.RearSuspensionTravelM);
+        _frontStaticCompressionM = _frontSuspensionCompressionM;
+        _rearStaticCompressionM = _rearSuspensionCompressionM;
 
         QuaternionD attitude = LeaningAttitude(_headingRad, leanRad: 0.0);
         State = new PlayerVehicleState(
@@ -358,15 +376,28 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
         double nominalTireForceLimitN = YzfR1Definition.TirePeakFrictionCoefficient
             * surfaceGrip * grossMassKg * StandardGravityMps2;
         double requestedDriveForceForLoadN = Math.Min(requestedDriveForceN, nominalTireForceLimitN);
-        double requestedFrontBrakeForceN = command.Brake * nominalTireForceLimitN * 0.70;
+        // Brake requests are hydraulic capacities (sourced ledger estimates), deliberately not
+        // surface-scaled: the calipers do not care about grass, the per-axle tire clamp does.
+        double requestedFrontBrakeForceN = command.Brake
+            * YzfR1Definition.FrontBrakeForceCapacityN;
         // Closed-throttle engine braking retards through the rear contact patch with the brakes.
-        double requestedRearBrakeForceN = command.Brake * nominalTireForceLimitN * 0.30
+        double requestedRearBrakeForceN = command.Brake
+            * YzfR1Definition.RearBrakeForceCapacityN
             + engineBrakingForceN;
         double aeroDragForceN = 0.5 * input.Environment.AirDensityKgM3
             * YzfR1Definition.AeroDragAreaCdAM2 * speedMps * speedMps;
         double resistiveDirection = absoluteSpeedMps > 1e-6 ? Math.Sign(speedMps) : 0.0;
+        // The load-transfer estimate clamps each brake request by the previous tick's per-axle
+        // grip so a capacity request the tires cannot transmit does not slam the load targets.
+        double referenceNormalForLoadN = grossMassKg * StandardGravityMps2 * 0.5;
+        double frontBrakeForceForLoadN = Math.Min(
+            requestedFrontBrakeForceN,
+            TireForceLimit(Telemetry.FrontNormalForceN, referenceNormalForLoadN, surfaceGrip));
+        double rearBrakeForceForLoadN = Math.Min(
+            requestedRearBrakeForceN,
+            TireForceLimit(Telemetry.RearNormalForceN, referenceNormalForLoadN, surfaceGrip));
         double requestedBrakeForceForLoadN = absoluteSpeedMps > 1e-6
-            ? Math.Sign(speedMps) * (requestedFrontBrakeForceN + requestedRearBrakeForceN)
+            ? Math.Sign(speedMps) * (frontBrakeForceForLoadN + rearBrakeForceForLoadN)
             : 0.0;
         double requestedLongitudinalAccelerationMps2 = (requestedDriveForceForLoadN
             - requestedBrakeForceForLoadN
@@ -376,6 +407,14 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
                 grossMassKg,
                 requestedLongitudinalAccelerationMps2,
                 command.RiderForeAft);
+        // While a wheel is airborne the grounded transfer formula does not apply: the lifted
+        // wheel carries nothing and the contact wheel carries the full weight.
+        if (_liftState == WheelLiftState.FrontLifted)
+            (targetFrontNormalForceN, targetRearNormalForceN) =
+                (0.0, grossMassKg * StandardGravityMps2);
+        else if (_liftState == WheelLiftState.RearLifted)
+            (targetFrontNormalForceN, targetRearNormalForceN) =
+                (grossMassKg * StandardGravityMps2, 0.0);
         double frontNormalForceN = AdvanceSuspension(
             ref _frontSuspensionCompressionM,
             ref _frontSuspensionVelocityMps,
@@ -398,6 +437,7 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
         RiderReflexSample reflex = RiderReflexAssists.Evaluate(
             frontNormalForceN,
             rearNormalForceN,
+            _pitchRad,
             _pitchRateRadPerSec,
             _leanRad,
             command.RiderLateral,
@@ -428,19 +468,11 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
             dt);
         double assistScale = _cerebellumSample.AssistScale;
 
-        double pitchLoadMomentNm = (rearNormalForceN - frontNormalForceN)
-            * YzfR1Definition.CombinedCgHeightM * 0.5;
-        double pitchRestoringTorqueNm = PitchRestoringStiffnessNmPerRad * (-_pitchRad);
-        double pitchDampingTorqueNm = PitchDampingNmPerRadPerSec * _pitchRateRadPerSec;
-        double pitchAccelerationRadPerSec2 = (pitchLoadMomentNm + pitchRestoringTorqueNm
-            - pitchDampingTorqueNm) / YzfR1Definition.PitchInertiaKgM2;
-        double dampedPitchRateRadPerSec = _pitchRateRadPerSec
-            * (1.0 - PitchReflexDampingGain * assistScale * reflex.PitchReflexAuthority);
-        double nextPitchRateRadPerSec = dampedPitchRateRadPerSec
-            + pitchAccelerationRadPerSec2 * dt;
-        double nextPitchRad = _pitchRad + nextPitchRateRadPerSec * dt;
-
-        double steerAngleRad = command.Steer * MaximumBarSteerRad;
+        // A lifted front wheel has no ground steering authority; the bars come back at
+        // touchdown. (During a stoppie the front is planted, so steering stays live.)
+        double steerAngleRad = _liftState == WheelLiftState.FrontLifted
+            ? 0.0
+            : command.Steer * MaximumBarSteerRad;
         double effectiveWheelbaseM = YzfR1Definition.WheelbaseM
             + YzfR1Definition.TrailM / Math.Cos(YzfR1Definition.RakeRad);
         TireForceSummary longitudinalOnly = ResolveTireForces(
@@ -458,11 +490,20 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
             * (frontNormalForceN + rearNormalForceN);
         double bodyResistiveForceN = resistiveDirection
             * (aeroDragForceN + rollingResistanceForceN);
-        double nextSpeedMps = speedMps
-            + (longitudinalOnly.LongitudinalForceN - bodyResistiveForceN) / grossMassKg * dt;
+        double longitudinalAccelerationMps2 =
+            (longitudinalOnly.LongitudinalForceN - bodyResistiveForceN) / grossMassKg;
+        double nextSpeedMps = speedMps + longitudinalAccelerationMps2 * dt;
         if ((speedMps > 0.0 && nextSpeedMps < 0.0)
             || (speedMps < 0.0 && nextSpeedMps > 0.0))
             nextSpeedMps = 0.0;
+        (double nextPitchRad, double nextPitchRateRadPerSec, bool wheelLiftCrash) =
+            AdvancePitchAndWheelLift(
+                grossMassKg,
+                frontNormalForceN,
+                rearNormalForceN,
+                longitudinalAccelerationMps2,
+                CgFromRearAxle(grossMassKg, command.RiderForeAft),
+                dt);
         double geometricYawRateRadPerSec = nextSpeedMps * Math.Tan(steerAngleRad)
             / effectiveWheelbaseM;
         double riderMassKg = Math.Clamp(
@@ -471,10 +512,12 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
             YzfR1Definition.RiderMassKg);
         double riderLateralCgM = riderMassKg / grossMassKg
             * YzfR1Definition.RiderCgLateralRangeM * command.RiderLateral;
-        double bodyShiftSpeedAuthority = Math.Clamp(
-            Math.Abs(nextSpeedMps) / RiderBodyShiftFullAuthoritySpeedMps,
-            0.0,
-            1.0);
+        double bodyShiftSpeedAuthority = _liftState == WheelLiftState.FrontLifted
+            ? 0.0
+            : Math.Clamp(
+                Math.Abs(nextSpeedMps) / RiderBodyShiftFullAuthoritySpeedMps,
+                0.0,
+                1.0);
         double riderBodyShiftAccelerationMps2 = StandardGravityMps2
             * riderLateralCgM / YzfR1Definition.CombinedCgHeightM
             * RiderBodyShiftSteeringFraction
@@ -540,7 +583,9 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
         bool slideExceedsSupport = tireForces.IsSliding
             && Math.Abs(nextLeanRad) > maximumSupportedLeanRad + LowSideExcessLeanRad;
         _lowSideExcessSeconds = slideExceedsSupport ? _lowSideExcessSeconds + dt : 0.0;
-        _isTippedOver = lowSpeedTipOver || _lowSideExcessSeconds >= LowSideLatchSeconds;
+        _isTippedOver = lowSpeedTipOver
+            || _lowSideExcessSeconds >= LowSideLatchSeconds
+            || wheelLiftCrash;
 
         Vec3D previousVelocity = forward * speedMps;
         Vec3D nextVelocity = Forward(nextHeadingRad) * nextSpeedMps;
@@ -941,22 +986,27 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
         * Math.Pow(Math.Max(0.0, normalForceN), YzfR1Definition.TireLoadSensitivity)
         * Math.Pow(referenceNormalForceN, 1.0 - YzfR1Definition.TireLoadSensitivity);
 
-    static (double FrontNormalForceN, double RearNormalForceN) CalculateNormalLoadTargets(
-        double grossMassKg,
-        double longitudinalAccelerationMps2,
-        double riderForeAft)
+    static double CgFromRearAxle(double grossMassKg, double riderForeAft)
     {
-        double totalNormalForceN = grossMassKg * StandardGravityMps2;
         double riderMassKg = Math.Clamp(
             grossMassKg - YzfR1Definition.CurbMassKg,
             0.0,
             YzfR1Definition.RiderMassKg);
         double riderForeAftCgM = riderMassKg / grossMassKg
             * YzfR1Definition.RiderCgForeAftRangeM * riderForeAft;
-        double cgFromRearAxleM = Math.Clamp(
+        return Math.Clamp(
             YzfR1Definition.WheelbaseM * StaticFrontLoadFraction + riderForeAftCgM,
             0.0,
             YzfR1Definition.WheelbaseM);
+    }
+
+    static (double FrontNormalForceN, double RearNormalForceN) CalculateNormalLoadTargets(
+        double grossMassKg,
+        double longitudinalAccelerationMps2,
+        double riderForeAft)
+    {
+        double totalNormalForceN = grossMassKg * StandardGravityMps2;
+        double cgFromRearAxleM = CgFromRearAxle(grossMassKg, riderForeAft);
         double staticFrontNormalForceN = totalNormalForceN * cgFromRearAxleM
             / YzfR1Definition.WheelbaseM;
         double accelerationTransferN = grossMassKg * longitudinalAccelerationMps2
@@ -966,6 +1016,107 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
             0.0,
             totalNormalForceN);
         return (frontNormalForceN, totalNormalForceN - frontNormalForceN);
+    }
+
+    /// <summary>
+    /// Grounded pitch is suspension geometry; a lifted wheel turns pitch into a rigid-body
+    /// rotation about the remaining contact patch. Returns the crash flag when the rotation
+    /// passes the static balance angle plus the margin (loop-over nose-up, endo nose-down).
+    /// The lifted branches hold the contact wheel at full weight and neglect vertical CoG
+    /// acceleration — a labelled low-order simplification.
+    /// </summary>
+    (double PitchRad, double PitchRateRadPerSec, bool Crash) AdvancePitchAndWheelLift(
+        double grossMassKg,
+        double frontNormalForceN,
+        double rearNormalForceN,
+        double longitudinalAccelerationMps2,
+        double cgFromRearAxleM,
+        double dt)
+    {
+        double cgHeightM = YzfR1Definition.CombinedCgHeightM;
+        double rearArmM = cgFromRearAxleM;
+        double frontArmM = YzfR1Definition.WheelbaseM - cgFromRearAxleM;
+        switch (_liftState)
+        {
+            case WheelLiftState.FrontLifted:
+            {
+                double cos = Math.Cos(_pitchRad);
+                double sin = Math.Sin(_pitchRad);
+                double accelerationArmM = cgHeightM * cos + rearArmM * sin;
+                double gravityArmM = rearArmM * cos - cgHeightM * sin;
+                double pivotInertiaKgM2 = YzfR1Definition.PitchInertiaKgM2
+                    + grossMassKg * (rearArmM * rearArmM + cgHeightM * cgHeightM);
+                double momentNm = grossMassKg
+                    * (longitudinalAccelerationMps2 * accelerationArmM
+                        - StandardGravityMps2 * gravityArmM)
+                    - PitchLiftDampingNmPerRadPerSec * _pitchRateRadPerSec;
+                double rate = _pitchRateRadPerSec + momentNm / pivotInertiaKgM2 * dt;
+                double pitch = _pitchRad + rate * dt;
+                if (pitch > Math.Atan2(rearArmM, cgHeightM) + LoopOverMarginRad)
+                    return (pitch, rate, true);
+                if (pitch <= 0.0)
+                {
+                    TouchDownFront();
+                    return (0.0, Math.Min(0.0, rate) * TouchdownRateRetention, false);
+                }
+                return (pitch, rate, false);
+            }
+            case WheelLiftState.RearLifted:
+            {
+                double noseDownRad = -_pitchRad;
+                double cos = Math.Cos(noseDownRad);
+                double sin = Math.Sin(noseDownRad);
+                double accelerationArmM = cgHeightM * cos + frontArmM * sin;
+                double gravityArmM = frontArmM * cos - cgHeightM * sin;
+                double pivotInertiaKgM2 = YzfR1Definition.PitchInertiaKgM2
+                    + grossMassKg * (frontArmM * frontArmM + cgHeightM * cgHeightM);
+                double momentNm = grossMassKg
+                    * (-longitudinalAccelerationMps2 * accelerationArmM
+                        - StandardGravityMps2 * gravityArmM)
+                    - PitchLiftDampingNmPerRadPerSec * (-_pitchRateRadPerSec);
+                double noseDownRate = -_pitchRateRadPerSec + momentNm / pivotInertiaKgM2 * dt;
+                double noseDown = noseDownRad + noseDownRate * dt;
+                if (noseDown > Math.Atan2(frontArmM, cgHeightM) + LoopOverMarginRad)
+                    return (-noseDown, -noseDownRate, true);
+                if (noseDown <= 0.0)
+                {
+                    TouchDownRear();
+                    return (0.0, Math.Max(0.0, -noseDownRate) * TouchdownRateRetention, false);
+                }
+                return (-noseDown, -noseDownRate, false);
+            }
+            default:
+            {
+                double groundedPitchRad = Math.Atan(
+                    ((_rearSuspensionCompressionM - _rearStaticCompressionM)
+                        - (_frontSuspensionCompressionM - _frontStaticCompressionM))
+                    / YzfR1Definition.WheelbaseM);
+                double rate = (groundedPitchRad - _pitchRad) / dt;
+                if (frontNormalForceN <= LiftNormalEpsilonN
+                    && longitudinalAccelerationMps2 * cgHeightM
+                        > StandardGravityMps2 * rearArmM)
+                    _liftState = WheelLiftState.FrontLifted;
+                else if (rearNormalForceN <= LiftNormalEpsilonN
+                    && -longitudinalAccelerationMps2 * cgHeightM
+                        > StandardGravityMps2 * frontArmM)
+                    _liftState = WheelLiftState.RearLifted;
+                return (groundedPitchRad, rate, false);
+            }
+        }
+    }
+
+    void TouchDownFront()
+    {
+        _liftState = WheelLiftState.Grounded;
+        _frontSuspensionCompressionM = _frontStaticCompressionM;
+        _frontSuspensionVelocityMps = 0.0;
+    }
+
+    void TouchDownRear()
+    {
+        _liftState = WheelLiftState.Grounded;
+        _rearSuspensionCompressionM = _rearStaticCompressionM;
+        _rearSuspensionVelocityMps = 0.0;
     }
 
     static double CompressionForNormalForce(

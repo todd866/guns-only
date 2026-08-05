@@ -12,12 +12,12 @@ public sealed class YzfR1LoadTransferTests
             id: "braking-load",
             position: new Vec3D(0.0, RapierLaunchSite.OperatingSurfaceElevationM, 0.0),
             headingRad: 0.0);
-        var accelerate = new MotorcyclePilotCommand(1.0, 0.0, 0.0, 0.0, 0.0, 0, 1.0,
+        var cruise = new MotorcyclePilotCommand(0.0, 0.0, 0.0, 0.0, 0.0, 0, 1.0,
             MotorcycleClutchMode.Auto);
-        var cruise = accelerate with { Throttle = 0.0 };
         var brake = cruise with { Brake = 1.0 };
 
-        Advance(bike, accelerate, startTick: 0, tickCount: 120 * 5);
+        // Ladder ramp: raw WOT would wheelie-loop under the wheel-lift dynamics.
+        YzfR1TestRider.ShortShiftAccelerateTicks(bike, 0, 120 * 5);
         Advance(bike, cruise, startTick: 120 * 5, tickCount: 120);
         double cruiseFrontN = bike.Telemetry.FrontNormalForceN;
         double cruiseRearN = bike.Telemetry.RearNormalForceN;

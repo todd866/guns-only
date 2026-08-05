@@ -38,16 +38,25 @@ public static class YzfR1Definition
     public const double AutoDownshiftRpm = 4_000.0;   // surrogate auto-shift upper bound
     public const double StallRpm = 1_200.0;           // surrogate manual-clutch stall threshold
     public const double EngineInertiaKgM2 = 0.055;    // surrogate crank/internals
-    public const double CombinedCgHeightM = 0.585;    // surrogate bike + default rider
+    // Surrogate bike (~0.55 m) + 80 kg seated rider CG (~1.01 m) mass-weighted; puts the
+    // wheelie threshold at ~0.99 g and the endo threshold at ~1.07 g, matching published
+    // liter-bike wheelie-limited 0-100 times and max-braking tests.
+    public const double CombinedCgHeightM = 0.68;
     public const double RollInertiaKgM2 = 95.0;       // surrogate roll axis
-    public const double PitchInertiaKgM2 = 165.0;     // surrogate pitch axis
+    public const double PitchInertiaKgM2 = 165.0;     // surrogate pitch axis (about the CoG)
     public const double YawInertiaKgM2 = 110.0;       // surrogate yaw axis
-    public const double FrontSpringRateNPerM = 18_000.0; // surrogate fork spring
-    public const double RearSpringRateNPerM = 22_000.0;  // surrogate shock spring
-    public const double FrontDamperCoefficientNPerMps = 1_800.0; // surrogate fork damper
-    public const double RearDamperCoefficientNPerMps = 2_200.0;  // surrogate shock damper
+    // Surrogate spring rates sized to the ledger's ~25% static-sag validation target for
+    // ~283 kg gross; the earlier 18k/22k rates sagged 55-62% and bottomed the fork under
+    // hard braking, capping deceleration below the stoppie threshold.
+    public const double FrontSpringRateNPerM = 45_000.0;
+    public const double RearSpringRateNPerM = 44_000.0;
+    public const double FrontDamperCoefficientNPerMps = 2_800.0; // surrogate fork damper
+    public const double RearDamperCoefficientNPerMps = 3_100.0;  // surrogate shock damper
     public const double FinalDriveRatio = 2.470;      // surrogate sprocket pair
-    public const double TirePeakFrictionCoefficient = 1.05; // surrogate dry peak µ
+    // Surrogate dry supersport peak µ. Must exceed the endo threshold divided by the
+    // load-sensitivity penalty (µ > ~1.17 for this geometry) or a stoppie is physically
+    // unreachable: the front would slide before the rear lifts.
+    public const double TirePeakFrictionCoefficient = 1.20;
     public const double TireLoadSensitivity = 0.85;   // surrogate Pacejka-like load exponent
     public const double TireCamberStiffnessNPerRad = 1_200.0; // surrogate camber thrust slope
 
@@ -55,6 +64,11 @@ public static class YzfR1Definition
     public const double AeroDragAreaCdAM2 = 0.35;     // estimate: sport bike + tucked rider CdA
     public const double RollingResistanceCoefficient = 0.015; // estimate: sport radial on asphalt
     public const double EngineBrakingTorqueNmAtRedline = 20.0; // estimate: closed-throttle motoring
+    // Estimate: dual 320 mm discs with 4-piston calipers generate more force at the contact
+    // patch than dry grip can transmit (endo-capable); single 220 mm rear disc locks a light
+    // rear wheel easily. Hydraulic capacities, deliberately not scaled by surface grip.
+    public const double FrontBrakeForceCapacityN = 3_900.0;
+    public const double RearBrakeForceCapacityN = 1_250.0;
 
     /// <summary>Gearbox input→output ratios, 1st..6th. Surrogate — see 00-sources.md.</summary>
     public static readonly double[] GearRatios = [2.846, 2.200, 1.850, 1.600, 1.421, 1.320];

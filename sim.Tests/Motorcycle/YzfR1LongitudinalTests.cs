@@ -5,6 +5,12 @@ namespace GunsOnly.Sim.Tests.Motorcycle;
 
 public sealed class YzfR1LongitudinalTests
 {
+    /// <summary>
+    /// Adjusted with the wheel-lift dynamics: raw WOT in 1st lofts the front and, held,
+    /// loops the bike, so the sprint rides the test-rider ladder (short-shifting, on the
+    /// tank). The 20 m/s in 5 s pin stands — acceleration is now wheelie-limited, not
+    /// grip-limited, exactly like the real machine.
+    /// </summary>
     [Fact]
     public void FullThrottleFromRestExceedsTwentyMpsWithinFiveSeconds()
     {
@@ -12,18 +18,8 @@ public sealed class YzfR1LongitudinalTests
             id: "r1",
             position: new Vec3D(0.0, RapierLaunchSite.OperatingSurfaceElevationM, 0.0),
             headingRad: -Math.PI / 2.0);
-        var command = new MotorcyclePilotCommand(
-            Throttle: 1.0,
-            Brake: 0.0,
-            Steer: 0.0,
-            RiderLateral: 0.0,
-            RiderForeAft: 0.0,
-            GearShiftRequest: 0,
-            Clutch: 1.0,
-            ClutchMode: MotorcycleClutchMode.Auto);
 
-        for (long tick = 0; tick < 120 * 5; tick++)
-            bike.Advance(YzfR1TestInput.Of(tick, command));
+        YzfR1TestRider.ShortShiftAccelerateTicks(bike, 0, 120 * 5);
 
         Assert.True(bike.State.GroundVelocityMps.Length > 20.0,
             $"speed={bike.State.GroundVelocityMps.Length:F2}");
@@ -37,15 +33,13 @@ public sealed class YzfR1LongitudinalTests
             id: "r1",
             position: new Vec3D(0.0, RapierLaunchSite.OperatingSurfaceElevationM, 0.0),
             headingRad: -Math.PI / 2.0);
-        var throttle = new MotorcyclePilotCommand(1.0, 0.0, 0.0, 0.0, 0.0, 0, 1.0,
+        var brake = new MotorcyclePilotCommand(0.0, 1.0, 0.0, 0.0, 0.0, 0, 1.0,
             MotorcycleClutchMode.Auto);
-        var brake = throttle with { Throttle = 0.0, Brake = 1.0 };
 
-        for (long tick = 0; tick < 120 * 5; tick++)
-            bike.Advance(YzfR1TestInput.Of(tick, throttle));
+        long tick = YzfR1TestRider.ShortShiftAccelerateTicks(bike, 0, 120 * 5);
         double speedBeforeBrakeMps = bike.State.GroundVelocityMps.Length;
 
-        for (long tick = 120 * 5; tick < 120 * 7; tick++)
+        for (; tick < 120 * 7; tick++)
             bike.Advance(YzfR1TestInput.Of(tick, brake));
 
         Assert.True(bike.State.GroundVelocityMps.Length < speedBeforeBrakeMps - 5.0,
@@ -63,8 +57,7 @@ public sealed class YzfR1LongitudinalTests
         var throttle = new MotorcyclePilotCommand(1.0, 0.0, 0.0, 0.0, 0.0, 0, 1.0,
             MotorcycleClutchMode.Auto);
 
-        for (long tick = 0; tick < 120 * 15; tick++)
-            bike.Advance(YzfR1TestInput.Of(tick, throttle));
+        YzfR1TestRider.ShortShiftAccelerateTicks(bike, 0, 120 * 15);
         double speedBeforeMps = bike.State.GroundVelocityMps.Length;
 
         bike.Advance(YzfR1TestInput.Of(120 * 15, throttle));
