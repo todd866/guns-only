@@ -60,19 +60,22 @@ public static class ApproachSolver {
             return new ApproachSolution(
                 false, 0.0, 0.0, 0.0, default, NoGates, false, 0.0, 0.0, 0.5);
 
-        double dx = input.Position.X - input.Threshold.X;
-        double dz = input.Position.Z - input.Threshold.Z;
-        double directTrackM = Math.Sqrt(dx * dx + dz * dz);
-        var (grooveEntry, _) = GrooveGeometry(input);
-        bool inGroove = EstablishedInGroove(input, directTrackM, grooveEntry);
-
-        if (inGroove)
-            return SolveGroove(directTrackM, input);
-
         Vec3D landingFwd = new(
             Math.Sin(input.LandingHeadingRad),
             0.0,
             Math.Cos(input.LandingHeadingRad));
+        Vec3D landingRight = new(landingFwd.Z, 0.0, -landingFwd.X);
+        Vec3D relative = input.Position - input.Threshold;
+        // Centreline decomposition: astern is positive behind the threshold along the approach
+        // course; cross-track is the lateral line-up error the groove must make visible.
+        double asternM = -relative.Dot(landingFwd);
+        double crossTrackM = Math.Abs(relative.Dot(landingRight));
+        var (grooveEntry, _) = GrooveGeometry(input);
+        bool inGroove = EstablishedInGroove(input, asternM, crossTrackM, grooveEntry);
+
+        if (inGroove)
+            return SolveGroove(asternM, input, landingFwd);
+
         Vec3D stabilisationPoint =
             input.Threshold - landingFwd * grooveEntry;
         double current = ApproachEnergy.SpecificEnergyM(input.Position.Y, input.TrueAirspeedMps);
@@ -102,7 +105,7 @@ public static class ApproachSolver {
                 0.5);
         (double profileAltitude, double profileSpeed) =
             ProfileAtDistance(path.TotalTrackM, input);
-        double power = PowerForProfile(
+        double power = CommandedPower01(
             input.Position.Y, input.TrueAirspeedMps, profileAltitude, profileSpeed);
         return new ApproachSolution(
             true, excess, required, path.TotalTrackM, path,
@@ -110,27 +113,32 @@ public static class ApproachSolver {
             profileAltitude, profileSpeed, power);
     }
 
-    /// Two-sided power from energy error against the next gate schedule. 0.5 is trimmed.
+    /// Two-sided power from energy error against the scheduled profile point. 0.5 is trimmed.
+    /// The single power law: callers fold drag-along-track into the target (see
+    /// ProfileAtDistance); the law itself is pure energy error.
     public static double CommandedPower01(
         double altitudeM, double trueAirspeedMps,
-        double targetAltitudeM, double targetSpeedMps,
-        double dragToWeight, double distanceToGoM) {
+        double targetAltitudeM, double targetSpeedMps) {
         if (!double.IsFinite(altitudeM) || !double.IsFinite(trueAirspeedMps)
             || !double.IsFinite(targetAltitudeM) || !double.IsFinite(targetSpeedMps))
             return 0.5;
-        double scheduled = ApproachEnergy.SpecificEnergyM(targetAltitudeM, targetSpeedMps)
-            + Math.Max(0.0, dragToWeight) * Math.Max(0.0, distanceToGoM);
-        double error = ApproachEnergy.SpecificEnergyM(altitudeM, trueAirspeedMps) - scheduled;
+        double error = ApproachEnergy.SpecificEnergyM(altitudeM, trueAirspeedMps)
+            - ApproachEnergy.SpecificEnergyM(targetAltitudeM, targetSpeedMps);
         return Math.Clamp(0.5 - error / (2.0 * PowerBandM), 0.0, 1.0);
     }
 
-    static ApproachSolution SolveGroove(double distanceToThresholdM, in ApproachSolverInput input) {
-        double distance = Math.Max(0.0, distanceToThresholdM);
+    static ApproachSolution SolveGroove(
+        double alongTrackM, in ApproachSolverInput input, in Vec3D landingFwd) {
+        double distance = Math.Max(0.0, alongTrackM);
         var (_, slope) = GrooveGeometry(input);
         // Touchdown altitude is the threshold surface; slope rises with distance remaining.
         double touchAlt = input.Threshold.Y;
+        // The groove is the runway's line, not the aircraft's: the ladder rides the extended
+        // centreline abeam ownship so lateral error reads as offset instead of re-anchoring to
+        // the aircraft every solve.
+        Vec3D entryAbeam = input.Threshold - landingFwd * distance;
         var pathPoints = new List<Vec3D> {
-            new(input.Position.X, 0.0, input.Position.Z),
+            new(entryAbeam.X, 0.0, entryAbeam.Z),
             new(input.Threshold.X, 0.0, input.Threshold.Z),
         };
         var path = new ApproachPathSolution(
@@ -157,7 +165,7 @@ public static class ApproachSolver {
             touchAlt + distance * slope, input.StabilisationSpeedMps);
         double excess = Math.Max(0.0, current - target);
         double profileAltitude = touchAlt + distance * slope;
-        double power = PowerForProfile(
+        double power = CommandedPower01(
             input.Position.Y, input.TrueAirspeedMps,
             profileAltitude, input.StabilisationSpeedMps);
         return new ApproachSolution(
@@ -211,14 +219,6 @@ public static class ApproachSolver {
         return (Math.Max(input.StabilisationAltitudeM, targetAltitude), targetSpeed);
     }
 
-    static double PowerForProfile(
-        double altitudeM, double trueAirspeedMps,
-        double targetAltitudeM, double targetSpeedMps) {
-        double error = ApproachEnergy.SpecificEnergyM(altitudeM, trueAirspeedMps)
-            - ApproachEnergy.SpecificEnergyM(targetAltitudeM, targetSpeedMps);
-        return Math.Clamp(0.5 - error / (2.0 * PowerBandM), 0.0, 1.0);
-    }
-
     static (double entryTrackM, double slope) GrooveGeometry(
         in ApproachSolverInput input) {
         double authoredSlope = Math.Max(
@@ -239,21 +239,16 @@ public static class ApproachSolver {
 
     static bool EstablishedInGroove(
         in ApproachSolverInput input,
-        double directTrackM,
+        double asternM,
+        double crossTrackM,
         double grooveEntryM) {
-        if (directTrackM > grooveEntryM) return false;
-        Vec3D forward = new(
-            Math.Sin(input.LandingHeadingRad),
-            0.0,
-            Math.Cos(input.LandingHeadingRad));
-        Vec3D right = new(forward.Z, 0.0, -forward.X);
-        Vec3D relative = input.Position - input.Threshold;
-        double asternM = -relative.Dot(forward);
-        double crossTrackM = Math.Abs(relative.Dot(right));
+        if (asternM > grooveEntryM) return false;
         double headingError = Math.Abs(Math.IEEERemainder(
             input.CurrentHeadingRad - input.LandingHeadingRad,
             2.0 * Math.PI));
-        double captureHalfWidthM = Math.Max(250.0, grooveEntryM * 0.2);
+        // A funnel, not a corridor: line-up tolerance (~±4.6°) narrows toward the threshold, so
+        // an aircraft parked hundreds of metres off centreline never reads "established".
+        double captureHalfWidthM = Math.Max(100.0, 0.08 * asternM);
         return asternM >= 0.0
             && crossTrackM <= captureHalfWidthM
             && headingError <= Math.PI / 4.0;

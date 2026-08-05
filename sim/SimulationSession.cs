@@ -3432,6 +3432,13 @@ public sealed class SimulationSession {
     SortieScheduleState _sortiePlan;
     GunsOnly.Sim.Recovery.ApproachGuidanceState _approachGuidance =
         GunsOnly.Sim.Recovery.ApproachGuidanceState.Inactive;
+    long _approachSolveCount;
+    /// <summary>
+    /// 120 Hz sim, ~8 Hz solve. Approach guidance is publish-only HUD state, and each solve can
+    /// run a Dubins binary search; between solves the published state is reused unchanged. The
+    /// grid is keyed off the deterministic tick counter, never wall clock.
+    /// </summary>
+    const int ApproachSolveIntervalTicks = 15;
 
     /// <summary>
     /// The whole-sortie schedule — catshot, climb, cruise, descend, groove — as opposed to
@@ -3448,6 +3455,9 @@ public sealed class SimulationSession {
     /// Arms on recovery intent; does not require a Mesh PROC selection.
     /// </summary>
     public GunsOnly.Sim.Recovery.ApproachGuidanceState ApproachGuidancePlan => _approachGuidance;
+
+    /// <summary>Total approach-solver invocations; instrumentation pinning the solve decimation.</summary>
+    public long ApproachSolveCount => _approachSolveCount;
 
     void UpdateSortieSchedule() {
         Carrier? ship = _carrier;
@@ -3606,6 +3616,14 @@ public sealed class SimulationSession {
             _carrierSortieRoute.State.Phase,
             circuitsActive,
             _recoveryProcedure.Kind != RecoveryProcedureKind.None);
+
+        // Decimate the solve: the solver is pure in sim state, so re-solving every tick only
+        // burns the descent/RTB frame budget. Re-solve on the tick grid or the instant intent
+        // flips; otherwise the previously published state stands (guidance never gates physics).
+        if (intent == _approachGuidance.GuidanceActive
+            && _tick % ApproachSolveIntervalTicks != 0)
+            return;
+        if (intent) _approachSolveCount++;
 
         double approachMps = GunsOnly.Sim.Recovery.SortieSchedule.ApproachSpeedMps(
             Player.State.Mass, _beat.PlayerAir);

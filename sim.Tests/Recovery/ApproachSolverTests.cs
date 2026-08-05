@@ -176,6 +176,34 @@ public class ApproachSolverTests {
     }
 
     [Fact]
+    public void GrooveGatesAnchorToTheRunwayCentrelineNotTheAircraft() {
+        // 120 m right of centreline, 2 km out on final: established, but the ladder must sit on
+        // the extended centreline so the lateral error reads as offset, not follow the aircraft.
+        var s = ApproachSolver.Solve(Input(120.0, 90.0, 800.0) with {
+            Position = new Vec3D(120.0, 120.0, -2_000.0),
+            CurrentHeadingRad = 0.0,
+        });
+        Assert.True(s.Valid);
+        Assert.True(s.InGroove);
+        Assert.NotEmpty(s.Gates);
+        foreach (ApproachGate gate in s.Gates)
+            Assert.Equal(0.0, gate.Position.X, precision: 6);
+        Assert.Equal(0.0, s.Gates[^1].Position.Z, precision: 6);
+        Assert.Equal(0.0, s.Gates[^1].DistanceToGoM, precision: 6);
+    }
+
+    [Fact]
+    public void AnAircraftWellOffCentrelineIsNotEstablishedInTheGroove() {
+        var s = ApproachSolver.Solve(Input(120.0, 90.0, 800.0) with {
+            Position = new Vec3D(200.0, 120.0, -2_000.0),
+            CurrentHeadingRad = 0.0,
+        });
+        Assert.True(s.Valid);
+        Assert.False(s.InGroove);
+        Assert.Equal("STABILISE", s.Gates[^1].Label);
+    }
+
+    [Fact]
     public void RecoveryProfileAndGrooveMeetAtTheSameAltitude() {
         ApproachSolverInput nominal = Input(152.0, 90.0, 3_000.0);
         double entry = Math.Max(
@@ -201,8 +229,8 @@ public class ApproachSolverTests {
 
     [Fact]
     public void CommandedPowerIsTwoSided() {
-        double high = ApproachSolver.CommandedPower01(2_000.0, 200.0, 152.0, 90.0, 0.12, 5_000.0);
-        double low = ApproachSolver.CommandedPower01(50.0, 70.0, 152.0, 90.0, 0.12, 5_000.0);
+        double high = ApproachSolver.CommandedPower01(2_000.0, 200.0, 152.0, 90.0);
+        double low = ApproachSolver.CommandedPower01(50.0, 70.0, 152.0, 90.0);
         Assert.True(high < 0.5, "high/fast must ask for less power");
         Assert.True(low > 0.5, "low/slow must ask for more power");
     }

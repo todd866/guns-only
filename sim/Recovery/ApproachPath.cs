@@ -67,8 +67,9 @@ public static class ApproachPath {
             double low = minimumDownwind;
             double high = MaxDownwindExtensionM;
             // Monotone geometry: only the two parallel legs lengthen. Binary search keeps the
-            // public path length equal to the track the energy solve asked us to buy.
-            for (int i = 0; i < 48; i++) {
+            // public path length equal to the track the energy solve asked us to buy. 24 halvings
+            // of the ~7.8 km bracket resolve to ~0.5 mm; each iteration is a full Dubins build.
+            for (int i = 0; i < 24; i++) {
                 double mid = 0.5 * (low + high);
                 double track = TrackLength(BuildDownwind(
                     start, startHeading, stabilise, landingHeading,
