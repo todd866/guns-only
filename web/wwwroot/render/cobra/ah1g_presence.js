@@ -77,19 +77,33 @@ export function createAh1gPresence(THREE) {
   });
   const bladeMat = skinMaterial(THREE, 0x0e120e, { opacity: 0.72, depthWrite: false });
 
+  // Frame members must stay out of the rear-seat forward frustum (eye at
+  // REAR_SEAT_EYE_LOCAL_M, fov 58, +0.08 pitch bias): sills stay below the
+  // eyeline, the front bow splits around the gunsight, pillars hug the corners.
   const canopyFrame = new THREE.Group();
   canopyFrame.name = "AH1G_CANOPY_FRAME";
   canopyFrame.add(
-    box(THREE, "AH1G_CANOPY_RAIL_L", [0.06, 0.9, 2.4], [-0.52, 0.95, 0.55], dark),
-    box(THREE, "AH1G_CANOPY_RAIL_R", [0.06, 0.9, 2.4], [0.52, 0.95, 0.55], dark),
-    box(THREE, "AH1G_CANOPY_BOW", [1.1, 0.08, 0.08], [0, 1.35, -0.55], dark),
+    box(THREE, "AH1G_CANOPY_SILL_L", [0.06, 0.14, 2.4], [-0.52, 0.55, 0.55], dark),
+    box(THREE, "AH1G_CANOPY_SILL_R", [0.06, 0.14, 2.4], [0.52, 0.55, 0.55], dark),
+    box(THREE, "AH1G_CANOPY_PILLAR_L", [0.05, 0.75, 0.05], [-0.52, 0.98, -0.5], dark),
+    box(THREE, "AH1G_CANOPY_PILLAR_R", [0.05, 0.75, 0.05], [0.52, 0.98, -0.5], dark),
+    box(THREE, "AH1G_CANOPY_BOW_L", [0.35, 0.08, 0.08], [-0.375, 1.35, -0.55], dark),
+    box(THREE, "AH1G_CANOPY_BOW_R", [0.35, 0.08, 0.08], [0.375, 1.35, -0.55], dark),
     box(THREE, "AH1G_CANOPY_AFT", [1.1, 0.08, 0.08], [0, 1.35, 1.65], dark),
-    box(THREE, "AH1G_CANOPY_SPINE", [0.05, 0.06, 2.3], [0, 1.38, 0.55], dark),
   );
   group.add(canopyFrame);
 
+  // Full-height shell for the exterior silhouette, with the forward wedge left
+  // open: the rear-seat gunsight looks out through air, not tint. Sphere phi
+  // 270 deg is local -Z (forward), so the gap is centered there.
+  const glassGapRad = Math.PI * (170 / 180);
   const canopyGlass = new THREE.Mesh(
-    new THREE.SphereGeometry(1, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.55),
+    new THREE.SphereGeometry(
+      1, 20, 12,
+      Math.PI * 1.5 + glassGapRad / 2,
+      Math.PI * 2 - glassGapRad,
+      0, Math.PI * 0.55,
+    ),
     glass,
   );
   canopyGlass.name = "AH1G_CANOPY_GLASS";
@@ -98,23 +112,31 @@ export function createAh1gPresence(THREE) {
   canopyGlass.renderOrder = 2;
   group.add(canopyGlass);
 
-  group.add(box(THREE, "AH1G_INSTRUMENT_BROW", [0.95, 0.12, 0.35], [0, 0.72, -0.15], metal));
+  // Instrument brow splits around the centerline gunsight so the aim column
+  // stays open; the panels keep the dash line in the lower frame corners.
+  group.add(box(THREE, "AH1G_INSTRUMENT_BROW_L", [0.3, 0.1, 0.3], [-0.33, 0.7, -0.15], metal));
+  group.add(box(THREE, "AH1G_INSTRUMENT_BROW_R", [0.3, 0.1, 0.3], [0.33, 0.7, -0.15], metal));
   group.add(box(THREE, "AH1G_CYCLIC", [0.05, 0.55, 0.05], [0.12, 0.45, 0.35], dark, [0.35, 0, 0.08]));
   group.add(box(THREE, "AH1G_COLLECTIVE", [0.04, 0.08, 0.45], [-0.38, 0.48, 0.55], dark, [0, 0, 0.4]));
-  group.add(box(THREE, "AH1G_NOSE", [0.55, 0.45, 2.2], [0, 0.35, -2.4], skin));
+  // Low sloping nose: the top edge must sit under the rear-seat depressed
+  // sightline (Cobra noses drop away from the canopy anyway).
+  group.add(box(THREE, "AH1G_NOSE", [0.55, 0.3, 2.2], [0, 0.09, -2.4], skin));
   group.add(box(THREE, "AH1G_CHIN_TURRET", [0.35, 0.28, 0.45], [0, -0.05, -3.35], metal));
-  group.add(box(THREE, "AH1G_CABIN", [0.85, 0.7, 2.0], [0, 0.45, 0.7], skin));
-  group.add(box(THREE, "AH1G_ROTOR_MAST", [0.12, 1.1, 0.12], [0, 1.85, 0.15], metal));
+  // Cabin runs aft under the mast so the rotor pylon stands on structure.
+  group.add(box(THREE, "AH1G_CABIN", [0.85, 0.5, 2.7], [0, 0.35, 0.85], skin));
+  // Mast is aft of the rear-seat eye (out of the forward frustum) and tall
+  // enough that the translucent rotor wash clears the upper sight picture.
+  group.add(box(THREE, "AH1G_ROTOR_MAST", [0.12, 2.15, 0.12], [0, 1.675, 2.2], metal));
 
   const rotor = new THREE.Mesh(new THREE.CylinderGeometry(5.5, 5.5, 0.04, 48), disc);
   rotor.name = "AH1G_ROTOR_DISC";
-  rotor.position.set(0, 2.35, 0.15);
+  rotor.position.set(0, 2.8, 2.2);
   rotor.renderOrder = 1;
   group.add(rotor);
 
   const blades = [];
   for (const yaw of [0, Math.PI / 2]) {
-    const blade = box(THREE, `AH1G_ROTOR_BLADE_${yaw}`, [0.18, 0.03, 10.8], [0, 2.37, 0.15], bladeMat);
+    const blade = box(THREE, `AH1G_ROTOR_BLADE_${yaw}`, [0.18, 0.03, 10.8], [0, 2.82, 2.2], bladeMat);
     blade.rotation.y = yaw;
     blades.push(blade);
     group.add(blade);

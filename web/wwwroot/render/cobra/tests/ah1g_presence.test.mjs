@@ -25,7 +25,16 @@ test("AH-1G presence exposes canopy frame, rotor disc, nose and turret cues", ()
   assert.equal(presence.group.name, "AH1G_PRESENCE");
   assert.ok(byName(presence.group, "AH1G_CANOPY_FRAME"));
   assert.ok(byName(presence.group, "AH1G_CANOPY_GLASS"));
-  assert.ok(byName(presence.group, "AH1G_INSTRUMENT_BROW"));
+  // Build 261 black-cockpit fix: solid rails/spine became sills, pillars and a
+  // split bow so the rear-seat eye keeps a sight picture.
+  assert.ok(byName(presence.group, "AH1G_CANOPY_SILL_L"));
+  assert.ok(byName(presence.group, "AH1G_CANOPY_SILL_R"));
+  assert.ok(byName(presence.group, "AH1G_CANOPY_PILLAR_L"));
+  assert.ok(byName(presence.group, "AH1G_CANOPY_PILLAR_R"));
+  assert.ok(byName(presence.group, "AH1G_CANOPY_BOW_L"));
+  assert.ok(byName(presence.group, "AH1G_CANOPY_BOW_R"));
+  assert.ok(byName(presence.group, "AH1G_INSTRUMENT_BROW_L"));
+  assert.ok(byName(presence.group, "AH1G_INSTRUMENT_BROW_R"));
   assert.ok(byName(presence.group, "AH1G_CYCLIC"));
   assert.ok(byName(presence.group, "AH1G_COLLECTIVE"));
   assert.ok(byName(presence.group, "AH1G_ROTOR_DISC"));
