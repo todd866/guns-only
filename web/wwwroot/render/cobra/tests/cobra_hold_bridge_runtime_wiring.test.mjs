@@ -46,8 +46,8 @@ test("the tip strip teaches the collective lever: S pulls up, W lowers", async (
     source("cobra-lab/main.js"),
     source("cobra-lab/index.html"),
   ]);
-  assert.match(main, /S collective up · W down/);
-  assert.match(html, /S collective up · W down/);
+  assert.match(main, /W collective up · S down/);
+  assert.match(html, /W collective up · S down/);
 });
 
 test("cobra telemetry records the live power margin, not the dead hover constant", async () => {

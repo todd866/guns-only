@@ -122,7 +122,7 @@ test("level attitude and no demand still recentre the cyclic to neutral", () => 
 test("collective keeps the profile pull-positive lever and holds when keys release", () => {
   let state = createCobraPilotControlState(0.45);
   state = advanceCobraPilotControls(state, {
-    keyboardIntent: cobraKeyboardControlIntent(new Set(["KeyS"])),
+    keyboardIntent: cobraKeyboardControlIntent(new Set(["KeyW"])),
     deltaSeconds: 0.25,
     ...rates,
   });
@@ -181,7 +181,7 @@ test("remapped bindings still drive the production pilot input seam", () => {
     powerDown: "KeyK",
     fire: "Space",
   });
-  const intent = cobraKeyboardControlIntent(new Set(["KeyK", "Numpad8", "KeyE"]), profile);
+  const intent = cobraKeyboardControlIntent(new Set(["KeyI", "Numpad8", "KeyE"]), profile);
   const after = advanceCobraPilotControls(createCobraPilotControlState(0.5), {
     keyboardIntent: intent,
     deltaSeconds: 0.25,
@@ -212,7 +212,7 @@ test("focus loss releases cyclic, pedals, and collective rate while keeping leve
   assert.equal(released.yaw, 0);
 
   const ignoredHold = advanceCobraPilotControls(state, {
-    keyboardIntent: cobraKeyboardControlIntent(new Set(["ArrowUp", "KeyS"])),
+    keyboardIntent: cobraKeyboardControlIntent(new Set(["ArrowUp", "KeyW"])),
     deltaSeconds: 0.5,
     focused: false,
     ...rates,

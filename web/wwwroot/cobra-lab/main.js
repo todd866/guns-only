@@ -797,9 +797,9 @@ function updateObjectiveHud(war) {
     setText(objectiveDetail, "Keep tipping the fight — do not let hostiles claw it back");
   } else {
     setText(objectiveLine, "TIP CONTROL FRIENDLY · HOLD 45s");
-    // The collective is a lever, not a throttle: S pulls it up, W lowers it. Without this hint
-    // a pilot pressing W descends blind. The mapping itself is deliberate — do not "fix" it.
-    setText(objectiveDetail, "S collective up · W down · Tab target · hold F gunner");
+    // Owner ruling 2026-08-05: collective follows game convention — W raises, S lowers
+    // (the Builds 253-264 real-lever mapping with S=pull is overruled).
+    setText(objectiveDetail, "W collective up · S down · Tab target · hold F gunner");
   }
 }
 

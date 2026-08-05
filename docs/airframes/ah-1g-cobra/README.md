@@ -29,11 +29,11 @@ The existing action IDs remain stable:
 | Arrow up/down | Forward/aft cyclic |
 | Arrow left/right | Left/right cyclic |
 | A / D | Left/right pedal |
-| S / W | Pull/increase or push/decrease a persistent collective lever |
+| W / S | Raise or lower a persistent collective lever (game convention, owner ruling 2026-08-05) |
 | F | Hold to ask the AI gunner to engage; release to cease fire |
 | V / Tab | Padlock the view / cycle the selected target |
 
-S/W must move blade collective pitch. It must not directly command thrust, vertical velocity or
+W/S must move blade collective pitch. It must not directly command thrust, vertical velocity or
 climb rate. In normal operation the twist grip is full open; the mechanical droop compensator and
 N2 governor schedule fuel to hold rotor speed. Engine start/stop, governor emergency/manual mode,
 and RPM trim belong to secondary controls later.
