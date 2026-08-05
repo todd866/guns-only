@@ -13,6 +13,11 @@ public interface IBandit {
     /// True while this actor is deliberately setting the player up rather than fighting them.
     /// Default false: only the opening sparring pair ever answers otherwise.
     bool Presenting => false;
+    /// Formation-level graduation. A co-operative opening ends for the whole pair the moment any
+    /// member of it is fighting — the session propagates that here, so a presenting wingman can
+    /// never be orphaned waiting for a gun funnel the player is spending on its leader. One-way
+    /// and idempotent; the default is a no-op for actors that never present.
+    void EndPresentation() { }
     bool WreckSettled { get; }
     ImpactSurface WreckSurface { get; }
     bool WreckSurfaceChangedThisStep { get; }
@@ -1795,6 +1800,11 @@ public sealed class ReactiveBandit :
         return new PilotCommand(0.55, LimitedBankTo(extension, 0.38),
             _maximumThrottle, 0.0);
     }
+
+    /// The pair-level counterpart of the funnel below: the session calls this when this
+    /// aircraft's formation partner is already fighting, so the pair turns together instead of
+    /// one ship parading on after the lesson has visibly ended. Same one-way latch.
+    public void EndPresentation() => Presenting = false;
 
     /// Pure function of kernel state — range, angle-off and accumulated time. No director state,
     /// no wall clock, no randomness, so replays reproduce and FightDirector never counter-picks.

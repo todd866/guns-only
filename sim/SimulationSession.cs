@@ -2619,6 +2619,21 @@ public sealed class SimulationSession {
             return;
         }
 
+        // THE PAIR TURNS TOGETHER. The co-operative opening can brief ships to present, but
+        // graduation was per-aircraft: each ship privately waited for the player to hold the gun
+        // funnel on ITSELF. The player naturally spends that funnel on the primary, so a
+        // presenting wingman was never tracked, never graduated, and paraded its fixed
+        // 15-degree present orbit out of the fight forever — Build 244 production: beyond 10 km
+        // for 68.8% of its live time while the player fought the lead. Every tactic-level fix
+        // was a bit-identical no-op because a presenting airframe does not fly the tactic
+        // layer's commands at all (CommandForFlight substitutes PresentCommand). The moment any
+        // member of the pair is fighting, the whole pair fights; both calls are one-way no-ops
+        // on an actor already fighting.
+        if (_bandit.Presenting != support.Bandit.Presenting) {
+            _bandit.EndPresentation();
+            support.Bandit.EndPresentation();
+        }
+
         ActorObservation sharedContact =
             ObservePlayer(_player.State);
         _enemyPairCoordinator.Step(
