@@ -68,3 +68,17 @@ test("friendly target reads friendly", () => {
     "GUN FRIENDLY",
   );
 });
+
+test("a masked state with a non-masked reason surfaces the bridge reason, never a MASKED relabel", () => {
+  assert.equal(
+    gunnerStatusText({ selected_target_id: "u1", state: "masked", reason: "OutOfLimits" }, {}),
+    "GUN OUT OF LIMITS",
+  );
+});
+
+test("unrecognized bridge reasons pass through as spaced uppercase instead of being relabeled", () => {
+  assert.equal(
+    gunnerStatusText({ selected_target_id: "u1", state: "outoflimits", reason: "OutsideTurretEnvelope" }, {}),
+    "GUN OUTSIDE TURRET ENVELOPE",
+  );
+});
