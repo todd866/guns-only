@@ -36,14 +36,6 @@
         <i id="hold-fill"></i>
         <span id="hold-label">HOLD 0%</span>
       </div>
-      <div class="war-readouts">
-        <span id="hud-ammo">AMMO —</span>
-        <span id="hud-fob">FOB —</span>
-        <span id="hud-kills">KILLS —</span>
-        <span id="hud-target">TARGET —</span>
-        <span id="hud-gunner">GUN —</span>
-        <span id="hud-rotor">NR —</span>
-      </div>
     </div>
   </div>
 
@@ -97,7 +89,9 @@
   <main class="flight-stage">
     <section class="viewport" aria-label="Hold the Bridge sortie">
       <canvas id="scene"></canvas>
-      <div class="reticle" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <!-- Production hud.js combiner (Build 264): world + HUD, zero cockpit. The old
+           CSS reticle and DOM text strip are replaced by the real instrument. -->
+      <canvas id="hud-canvas" aria-hidden="true"></canvas>
       <div class="legend" aria-hidden="true">
         <span><i class="friendly-key"></i> friendly</span>
         <span><i class="hostile-key"></i> hostile</span>

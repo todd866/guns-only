@@ -9,23 +9,27 @@ import {
 } from "../ah1g_presence.js";
 
 /**
- * Regression pin for the Build 261 black-cockpit defect: the rear-seat eye was
- * entombed in exterior-authored geometry (61.5% of the frame opaque-blocked,
- * 1.9% clear). Raycasts the forward frame exactly as cobra-lab/main.js
- * syncAuthorityCamera frames it (fov 58, near 0.12, +0.08 pitch bias) and pins
- * the occlusion budget. Translucent hits (canopy glass, rotor wash) count as
- * tint, not blockage; the bottom quarter of the center column may show the
- * nose/dash — that is cockpit feel, not entombment.
+ * Regression pin for the Build 264 owner ruling: "don't bother with a cockpit,
+ * just do a HUD". In FIRST PERSON the rear-seat eye must see NO airframe
+ * geometry at all — no frame, sills, consoles, mast, nose, glass, and
+ * deliberately no rotor either: the presence's rotor disc/blades are authored
+ * as exterior-silhouette cues (0.72/0.4-opacity paddles), and as a first-person
+ * tint they read as dirt on the lens under the new HUD, not as rotor wash.
+ * Exterior/tour mode keeps the complete silhouette (Build 261 budgets).
+ * Raycasts the forward frame exactly as cobra-lab/main.js syncAuthorityCamera
+ * frames it (fov 58, near 0.12, +0.08 pitch bias).
  */
 const GRID_WIDTH = 96;
 const GRID_HEIGHT = 54;
 
-function measureForwardOcclusion() {
+function measureForwardOcclusion({ firstPerson }) {
   const vehicle = { x_m: 0, y_m: 0, z_m: 0, yaw_rad: 0, pitch_rad: 0, roll_rad: 0, main_rotor_rpm: 324 };
 
   const presence = createAh1gPresence(THREE);
   const scene = new THREE.Scene();
   scene.add(presence.group);
+  // Order matters: updateAh1gPresence runs every frame and must not undo the mode.
+  presence.setFirstPerson(firstPerson);
   updateAh1gPresence(presence, vehicle, 0);
   scene.updateMatrixWorld(true);
 
@@ -49,6 +53,14 @@ function measureForwardOcclusion() {
   let clear = 0;
   let centerColumnFirstOpaqueRow = GRID_HEIGHT;
   const centerColumn = Math.floor(GRID_WIDTH / 2);
+  // THREE's raycaster deliberately ignores `visible`; the renderer does not. Apply
+  // renderer semantics so the measurement reports what the pilot would actually see.
+  const rendered = (object) => {
+    for (let node = object; node; node = node.parent) {
+      if (node.visible === false) return false;
+    }
+    return true;
+  };
   for (let j = 0; j < GRID_HEIGHT; j++) {
     for (let i = 0; i < GRID_WIDTH; i++) {
       const ndc = new THREE.Vector2(
@@ -60,6 +72,7 @@ function measureForwardOcclusion() {
       let opaqueHit = false;
       let translucentHit = false;
       for (const hit of hits) {
+        if (!rendered(hit.object)) continue;
         const material = hit.object.material;
         const opacity = material?.opacity ?? 1;
         if (!material?.transparent || opacity >= 0.99) {
@@ -90,14 +103,41 @@ function measureForwardOcclusion() {
   };
 }
 
-let cachedView = null;
-function forwardView() {
-  cachedView ??= measureForwardOcclusion();
-  return cachedView;
+const cachedViews = new Map();
+function forwardView(firstPerson) {
+  if (!cachedViews.has(firstPerson)) {
+    cachedViews.set(firstPerson, measureForwardOcclusion({ firstPerson }));
+  }
+  return cachedViews.get(firstPerson);
 }
 
-test("rear-seat forward frame is not entombed in exterior geometry", () => {
-  const view = forwardView();
+test("first person renders zero cockpit geometry: no opaque hull, no tint", () => {
+  const view = forwardView(true);
+  assert.equal(
+    view.opaqueFraction, 0,
+    `opaque-blocked ${(view.opaqueFraction * 100).toFixed(1)}% of frame; first person must be 0%`,
+  );
+  assert.equal(
+    view.clearFraction, 1,
+    `fully-clear ${(view.clearFraction * 100).toFixed(1)}% of frame; first person must be 100% `
+      + "(rotor disc/blades excluded by decision: exterior cues, not first-person rotor wash)",
+  );
+  assert.equal(view.centerColumnFirstOpaqueRow, GRID_HEIGHT);
+});
+
+test("exterior mode keeps the complete silhouette (tour/pagehide contract)", () => {
+  const view = forwardView(false);
+  // From INSIDE the silhouette the Build 261 budgets prove the geometry is present
+  // and still authored around the rear-seat wedge: some opaque structure visible,
+  // glass tint present, and the old entombment ceilings still respected.
+  assert.ok(
+    view.opaqueFraction > 0.02,
+    `opaque ${(view.opaqueFraction * 100).toFixed(1)}%; exterior silhouette must still exist`,
+  );
+  assert.ok(
+    view.clearOrGlassFraction < 1,
+    "exterior mode must still tint part of the frame (canopy glass present)",
+  );
   assert.ok(
     view.opaqueFraction < 0.2,
     `opaque-blocked ${(view.opaqueFraction * 100).toFixed(1)}% of frame; budget <20%`,
@@ -112,14 +152,15 @@ test("rear-seat forward frame is not entombed in exterior geometry", () => {
   );
 });
 
-test("crosshair center column is clear well below the aim point", () => {
-  const view = forwardView();
-  // Crosshair sits at 50% frame height; opaque hull (nose/dash under the
-  // depressed sightline) may only intrude below 72% height.
-  const minimumClearRows = Math.floor(GRID_HEIGHT * 0.72);
-  assert.ok(
-    view.centerColumnFirstOpaqueRow >= minimumClearRows,
-    `center column hits opaque geometry at row ${view.centerColumnFirstOpaqueRow}/${GRID_HEIGHT}; `
-      + `must stay clear through row ${minimumClearRows}`,
-  );
+test("first-person mode is reversible: leaving it restores the silhouette", () => {
+  const vehicle = { x_m: 0, y_m: 0, z_m: 0, yaw_rad: 0, pitch_rad: 0, roll_rad: 0, main_rotor_rpm: 324 };
+  const presence = createAh1gPresence(THREE);
+  presence.setFirstPerson(true);
+  updateAh1gPresence(presence, vehicle, 0);
+  assert.equal(presence.group.visible, false, "first person hides the presence even after update");
+  presence.setFirstPerson(false);
+  assert.equal(presence.group.visible, true, "exterior mode restores visibility immediately");
+  updateAh1gPresence(presence, vehicle, 0);
+  assert.equal(presence.group.visible, true);
+  presence.dispose();
 });

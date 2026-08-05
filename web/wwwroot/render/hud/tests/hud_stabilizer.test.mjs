@@ -80,6 +80,26 @@ test("F-22 tape prefers the explicit calibrated-airdata channel", () => {
   assert.equal(display.indicatedKts, 311);
 });
 
+test("TAS-only airframes drive the speed tape from true airspeed", () => {
+  // Same fallback order as airdataReadout: the rotorcraft authority state has no
+  // indicated chain, so the tape follows TAS instead of going dark. Any indicated
+  // channel present still wins, keeping every F-22 snapshot untouched.
+  const filter = new HudSignalStabilizer();
+  const display = filter.update({
+    player_entity_id: "ah1g-tas",
+    true_airspeed_kts: 61.7,
+    alt_ft: 950,
+  }, 1 / 60);
+  assert.equal(display.indicatedKts, 61.7);
+
+  const indicatedWins = new HudSignalStabilizer().update({
+    player_entity_id: "ah1g-tas",
+    speed_kts: 55,
+    true_airspeed_kts: 61.7,
+  }, 1 / 60);
+  assert.equal(indicatedWins.indicatedKts, 55);
+});
+
 test("missing primary signals stay invalid, clear immediately, and reacquire without zero", () => {
   const filter = new HudSignalStabilizer();
   let display = filter.update({ player_entity_id: "validity" }, 1 / 60);

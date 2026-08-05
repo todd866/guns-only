@@ -11,8 +11,15 @@ import {
   sampleCobraCanyonTour,
 } from "../render/cobra/cobra_canyon_tour.js?v=264";
 import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=264";
-import { gunnerStatusText } from "../render/cobra/cobra_gunner_status.js?v=264";
-import { formatCobraRotorcraftStrip } from "../render/cobra/cobra_rotorcraft_hud.js?v=264";
+import { createHud } from "../hud.js?v=264";
+import {
+  cobraHudState,
+  createCobraHudFrame,
+} from "../render/cobra/cobra_hud_adapter.js?v=264";
+import {
+  cobraRotorcraftHudModel,
+  drawCobraRotorcraftHud,
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=264";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
@@ -108,12 +115,6 @@ const killsMetric = document.querySelector("#kills");
 const balanceFill = document.querySelector("#balance-fill");
 const holdFill = document.querySelector("#hold-fill");
 const holdLabel = document.querySelector("#hold-label");
-const hudAmmo = document.querySelector("#hud-ammo");
-const hudFob = document.querySelector("#hud-fob");
-const hudKills = document.querySelector("#hud-kills");
-const hudTarget = document.querySelector("#hud-target");
-const hudGunner = document.querySelector("#hud-gunner");
-const hudRotor = document.querySelector("#hud-rotor");
 const objectiveLine = document.querySelector("#objective-line");
 const objectiveDetail = document.querySelector("#objective-detail");
 const debrief = document.querySelector("#debrief");
@@ -163,6 +164,20 @@ const renderer = new THREE.WebGLRenderer({
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.06;
+
+// Build 264 owner ruling: no cockpit, the STANDARD F-22 HUD instead, with
+// rotorcraft extras. One engine: this is the production hud.js instance fed by
+// the cobra adapter — never a fork. Audio stays off (gun/GCAS tones are jet
+// systems the Cobra does not carry).
+const hudCanvas = document.querySelector("#hud-canvas");
+const hud = createHud(hudCanvas);
+hud.setAudioEnabled(false);
+const hudPresentationCtx = hudCanvas.getContext("2d", { alpha: true });
+const hudFrameKit = createCobraHudFrame(THREE);
+const hudStateScratch = {};
+// Top inset clears the fixed mission header; the mission card lives bottom-left.
+const HUD_SAFE_INSETS = Object.freeze({ top: 40, right: 0, bottom: 0, left: 0 });
+const hudViewport = { width: 1, height: 1, pixelRatio: 1 };
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x6f8a7e);
@@ -329,6 +344,12 @@ function resize() {
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
+  // The HUD keeps device sharpness regardless of the scene quality tier — same
+  // doctrine as app.js: adaptive/scene resolution owns the 3D surface only.
+  hudViewport.width = width;
+  hudViewport.height = height;
+  hudViewport.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  hud.resize(width, height, hudViewport.pixelRatio, HUD_SAFE_INSETS);
 }
 
 function routeById(routeId) {
@@ -642,6 +663,9 @@ function syncAuthorityCamera() {
   const vehicle = readVehiclePose();
   if (!vehicle) return;
   const presence = ensureAh1gPresence();
+  // First person renders NO cockpit geometry (Build 264 owner ruling) — the
+  // silhouette exists only for exterior/tour framing.
+  presence.setFirstPerson(true);
   updateAh1gPresence(presence, vehicle, presenceDeltaSeconds);
   eyeWorldFromVehicle(THREE, vehicle, camera.position);
   if (camera.near !== 0.12) {
@@ -774,18 +798,8 @@ function updateObjectiveHud(war) {
     : war.control <= (war.defeat_control_threshold ?? -0.75)
       ? `LOSING ${Math.round((war.defeat_hold_progress ?? 0) * 100)}%`
       : "HOLD —");
-  setText(hudAmmo, war.ammo_dry ? "AMMO DRY" : `AMMO ${war.ammo_remaining}`);
-  setText(hudFob, war.over_fob
-    ? "FOB PAD · REARM"
-    : `FOB ${(war.fob_range_m / 1_000).toFixed(1)} KM`);
-  setText(hudKills, `KILLS ${war.debrief?.hostile_kills ?? 0}`);
-  const selected = authorityState?.gunner?.selected_target_id;
-  setText(hudTarget, selected ? `TARGET ${selected.split(".").pop()}` : "TARGET —");
-  setText(hudGunner, gunnerStatusText(authorityState?.gunner, war));
-  setText(
-    hudRotor,
-    formatCobraRotorcraftStrip(authorityState?.vehicle, authorityState?.route_guidance),
-  );
+  // Ammo/FOB/kills/target/gunner/rotor truth moved from the DOM text strip into the
+  // canvas HUD (hud.js + drawCobraRotorcraftHud); the card keeps objective copy only.
   if (war.ammo_dry) {
     setText(objectiveLine, "BINGO / DRY · REARM AT CAMP EMBER");
     setText(objectiveDetail, "Put the skids on the Camp Ember pad, then return to the fight");
@@ -871,11 +885,48 @@ function animate(timeMs) {
     bridge.Advance(deltaSeconds);
     sampleAuthorityState(timeMs);
     const pose = readVehiclePose();
-    if (pose) updateAh1gPresence(ensureAh1gPresence(), pose, deltaSeconds);
+    if (pose) {
+      const presence = ensureAh1gPresence();
+      // Exterior framing: the tour camera looks AT the ship, so the silhouette returns.
+      presence.setFirstPerson(false);
+      updateAh1gPresence(presence, pose, deltaSeconds);
+    }
   }
   renderer.render(scene, camera);
+  drawHud(timeMs, deltaSeconds);
   recordFrameDuration(rawDeltaMs);
   updateMetrics(aglM);
+}
+
+/**
+ * World + HUD, zero cockpit: the production hud.js pass over the rendered frame,
+ * then the rotorcraft extras in the same combiner language. Tour/preview is an
+ * exterior camera, so the combiner clears instead.
+ */
+function drawHud(timeMs, deltaSeconds) {
+  const pose = readVehiclePose();
+  const firstPerson = Boolean(bridge) && !tourInput.checked && pose && authorityState;
+  if (!firstPerson) {
+    hudPresentationCtx.save();
+    hudPresentationCtx.setTransform(1, 0, 0, 1, 0, 0);
+    hudPresentationCtx.clearRect(0, 0, hudCanvas.width, hudCanvas.height);
+    hudPresentationCtx.restore();
+    return;
+  }
+  cobraHudState(authorityState, pose, hudStateScratch);
+  hud.draw(hudFrameKit.update({
+    camera,
+    pose,
+    state: hudStateScratch,
+    dt: deltaSeconds,
+    nowSeconds: timeMs / 1000,
+  }));
+  drawCobraRotorcraftHud(hudPresentationCtx, cobraRotorcraftHudModel(authorityState), {
+    width: hudViewport.width,
+    height: hudViewport.height,
+    pixelRatio: hudViewport.pixelRatio,
+    safeInsets: HUD_SAFE_INSETS,
+  });
 }
 
 function isManualControl(code) {

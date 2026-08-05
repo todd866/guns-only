@@ -8,14 +8,19 @@ async function source(path) {
   return readFile(new URL(path, root), "utf8");
 }
 
-test("Hold the Bridge play HUD surfaces gunner status, not just lab chrome", async () => {
-  const [html, main] = await Promise.all([
+test("Hold the Bridge play HUD surfaces gunner status through the canvas HUD", async () => {
+  const [html, main, rotorcraftHud] = await Promise.all([
     source("cobra-lab/index.html"),
     source("cobra-lab/main.js"),
+    source("render/cobra/cobra_rotorcraft_hud.js"),
   ]);
-  assert.match(html, /id="hud-gunner"/);
-  assert.match(main, /gunnerStatusText/);
-  assert.match(main, /hud-gunner/);
+  // Build 264: the DOM text strip is replaced by the production hud.js canvas plus
+  // the rotorcraft extras painter; the gunner truth flows through the extras model.
+  assert.match(html, /id="hud-canvas"/);
+  assert.doesNotMatch(html, /id="hud-gunner"/);
+  assert.match(main, /cobraRotorcraftHudModel/);
+  assert.match(main, /drawCobraRotorcraftHud/);
+  assert.match(rotorcraftHud, /gunnerStatusText/);
 });
 
 test("ground war presentation receives the selected target for the in-world highlight", async () => {
