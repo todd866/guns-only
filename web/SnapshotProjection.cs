@@ -1361,6 +1361,29 @@ internal static class SnapshotProjection {
                 + $"\"{prefix}lx\":0.00000,\"{prefix}ly\":1.00000,"
                 + $"\"{prefix}lz\":0.00000,\"{prefix}_alive\":1,";
         }
+        // A freed slot keeps carrying an airframe that still physically exists: on promotion the
+        // killed primary detaches as a wreck, and leaving it unprojected made it blink out of
+        // the world at the kill tick (production Build 260, w1_present 0 at exactly the moment
+        // the OTHER bandit died). present=1/alive=0 is the encoding a shot-down wingman already
+        // uses, so no consumer learns a new state.
+        if (wingman is null
+            && Session.DetachedWreckForFormationSlot(index) is { } wreck) {
+            AircraftState wreckState = wreck.Aircraft;
+            Vec3D wreckForward = wreckState.ForwardDir();
+            Vec3D wreckLift = wreck.LiftDir;
+            var wreckCulture = System.Globalization.CultureInfo.InvariantCulture;
+            return $"\"{prefix}_present\":1,"
+                + $"\"{prefix}x\":{wreckState.Position.X.ToString("F3", wreckCulture)},"
+                + $"\"{prefix}y\":{wreckState.Position.Y.ToString("F3", wreckCulture)},"
+                + $"\"{prefix}z\":{wreckState.Position.Z.ToString("F3", wreckCulture)},"
+                + $"\"{prefix}fx\":{wreckForward.X.ToString("F5", wreckCulture)},"
+                + $"\"{prefix}fy\":{wreckForward.Y.ToString("F5", wreckCulture)},"
+                + $"\"{prefix}fz\":{wreckForward.Z.ToString("F5", wreckCulture)},"
+                + $"\"{prefix}lx\":{wreckLift.X.ToString("F5", wreckCulture)},"
+                + $"\"{prefix}ly\":{wreckLift.Y.ToString("F5", wreckCulture)},"
+                + $"\"{prefix}lz\":{wreckLift.Z.ToString("F5", wreckCulture)},"
+                + $"\"{prefix}_alive\":0,";
+        }
         if (wingman is null)
             return $"\"{prefix}_present\":0,\"{prefix}x\":0.000,"
                 + $"\"{prefix}y\":0.000,\"{prefix}z\":0.000,"

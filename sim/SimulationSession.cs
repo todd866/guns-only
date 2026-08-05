@@ -94,6 +94,9 @@ public sealed class DetachedOpponentWreck {
     internal IBandit Actor { get; }
     public long SpawnSequence { get; }
     public AircraftState Aircraft => Actor.State;
+    /// The wreck's current lift direction, for snapshot projection: a detached airframe that
+    /// still occupies a formation wire slot must render with honest attitude, not a default up.
+    public Vec3D LiftDir => Actor.LiftDir;
     public AircraftTerminalState TerminalState { get; internal set; }
     public ImpactSurface ImpactSurface { get; internal set; }
 }
@@ -789,6 +792,28 @@ public sealed class SimulationSession {
         || (OpponentPresent
             && _opponentTerminalState != AircraftTerminalState.Flying);
     public IReadOnlyList<SessionEvent> RecentEvents => _recentEvents;
+    /// The detached opponent wreck that backs formation snapshot slot <paramref name="index"/>
+    /// once live wingmen run out. Production Build 260: the instant the player killed the
+    /// primary, promotion moved the surviving wingman into the opponent slot and detached the
+    /// dead airframe into a list neither wire format projected — so w1_present dropped to 0 at
+    /// exactly the kill tick and the falling jet blinked out of the world. Formation slots fill
+    /// with live wingmen first (their existing order, untouched), then with wrecks that still
+    /// physically exist in the air or tumbling on contact. Settled and simulation-bounded hulks
+    /// stay off the wire, which is the same quiet exit the pre-formation replacement flow
+    /// always had.
+    public DetachedOpponentWreck? DetachedWreckForFormationSlot(int index) {
+        int wreckIndex = index - _wingmen.Count;
+        if (wreckIndex < 0) return null;
+        int seen = 0;
+        foreach (DetachedOpponentWreck wreck in _detachedOpponentWrecks) {
+            if (wreck.TerminalState is AircraftTerminalState.Settled
+                or AircraftTerminalState.SimulationBounded) continue;
+            if (seen == wreckIndex) return wreck;
+            seen++;
+        }
+        return null;
+    }
+
     public IReadOnlyList<DetachedOpponentWreck> DetachedOpponentWrecks =>
         _detachedOpponentWrecks;
     public IncidentReplayRecorder IncidentReplay => _incidentReplay;
