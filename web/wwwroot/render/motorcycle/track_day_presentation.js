@@ -12,11 +12,11 @@ function finitePoint(point) {
   return Object.freeze({ x, y, z });
 }
 
-function clampRunwayPoint(point, insetM = 0.5) {
+function clampPavedPoint(point, pavedHalfLengthM, pavedHalfWidthM, insetM = 0.5) {
   return Object.freeze({
-    x: Math.max(-RUNWAY_HALF_LENGTH_M + insetM, Math.min(RUNWAY_HALF_LENGTH_M - insetM, point.x)),
+    x: Math.max(-pavedHalfLengthM + insetM, Math.min(pavedHalfLengthM - insetM, point.x)),
     y: point.y,
-    z: Math.max(-RUNWAY_HALF_WIDTH_M + insetM, Math.min(RUNWAY_HALF_WIDTH_M - insetM, point.z)),
+    z: Math.max(-pavedHalfWidthM + insetM, Math.min(pavedHalfWidthM - insetM, point.z)),
   });
 }
 
@@ -56,6 +56,25 @@ export function planRapierTrackDay(circuitInput, options = {}) {
   const trackWidthM = Number(options.trackWidthM) || DEFAULT_TRACK_WIDTH_M;
   const uniqueCount = circuit.length - 1;
   const elevationM = Number(options.surfaceElevationM) || first.y;
+
+  let minimumX = Infinity;
+  let maximumX = -Infinity;
+  let maximumAbsZ = 0;
+  for (const point of circuit) {
+    minimumX = Math.min(minimumX, point.x);
+    maximumX = Math.max(maximumX, point.x);
+    maximumAbsZ = Math.max(maximumAbsZ, Math.abs(point.z));
+  }
+  // Paved extents follow the authoritative circuit: the runway rectangle plus the
+  // hairpin aprons, so hairpin-side cues are not squashed onto the 48 m strip.
+  const pavedHalfLengthM = Math.max(
+    RUNWAY_HALF_LENGTH_M,
+    Math.max(Math.abs(minimumX), Math.abs(maximumX)) + trackWidthM * 0.5,
+  );
+  const pavedHalfWidthM = Math.max(RUNWAY_HALF_WIDTH_M, maximumAbsZ + trackWidthM * 0.5);
+  const clampPaved = (point, insetM) =>
+    clampPavedPoint(point, pavedHalfLengthM, pavedHalfWidthM, insetM);
+
   const coneStride = Math.max(1, Math.floor(uniqueCount / 48));
   const cones = [];
   for (let index = 0; index < uniqueCount; index += coneStride) {
@@ -63,22 +82,19 @@ export function planRapierTrackDay(circuitInput, options = {}) {
       cones.push({
         kind: "course-cone",
         side,
-        center: clampRunwayPoint(
+        center: clampPaved(
           offsetFromTrack(circuit, index, side * (trackWidthM * 0.5 - 0.7)),
         ),
       });
     }
   }
-
-  let minimumX = Infinity;
-  let maximumX = -Infinity;
-  for (const point of circuit) {
-    minimumX = Math.min(minimumX, point.x);
-    maximumX = Math.max(maximumX, point.x);
-  }
   const tyreWalls = [];
   for (const endX of [minimumX, maximumX]) {
-    const wallX = Math.sign(endX || 1) * Math.min(RUNWAY_HALF_LENGTH_M - 4, Math.abs(endX) + 8);
+    // Beyond the track's OUTER edge at the hairpin apex, never on the racing surface.
+    const wallX = Math.sign(endX || 1) * Math.min(
+      pavedHalfLengthM - 4,
+      Math.abs(endX) + trackWidthM * 0.5 + 8,
+    );
     for (let index = 0; index < 12; index++) {
       tyreWalls.push({
         kind: "tyre-wall",
@@ -97,7 +113,7 @@ export function planRapierTrackDay(circuitInput, options = {}) {
     return {
       kind: "marshal-post",
       sector: sector + 1,
-      center: clampRunwayPoint(
+      center: clampPaved(
         offsetFromTrack(circuit, index, (sector % 2 === 0 ? 1 : -1) * (trackWidthM * 0.5 + 2)),
         1.5,
       ),
@@ -107,9 +123,27 @@ export function planRapierTrackDay(circuitInput, options = {}) {
   const startTangent = tangentAt(circuit, 0);
   const gantry = Object.freeze({
     kind: "start-gantry",
-    center: clampRunwayPoint({ x: first.x, y: elevationM, z: first.z }),
+    center: clampPaved({ x: first.x, y: elevationM, z: first.z }),
     headingRad: Math.atan2(startTangent.x, startTangent.z),
   });
+
+  // Off-track world: a ground plane large enough that a rider a kilometre out still
+  // stands on grass, and tall threshold beacons that point back at the strip.
+  const ground = Object.freeze({ kind: "ground-plane", sizeM: 22_000 });
+  const beacons = [];
+  for (const endSign of [-1, 1]) {
+    for (const sideSign of [-1, 1]) {
+      beacons.push({
+        kind: "threshold-beacon",
+        heightM: 30,
+        center: Object.freeze({
+          x: endSign * (RUNWAY_HALF_LENGTH_M - 12),
+          y: elevationM,
+          z: sideSign * (pavedHalfWidthM + 14),
+        }),
+      });
+    }
+  }
 
   const paddock = [];
   for (let index = 0; index < 6; index++) {
@@ -128,11 +162,17 @@ export function planRapierTrackDay(circuitInput, options = {}) {
     schema: RAPIER_TRACK_DAY_SCHEMA,
     trackWidthM,
     elevationM,
+    // Mirrors sim-side PaintedCircuit.PavedApronHalfWidthM (track half-width + 6 m shoulder).
+    apronHalfWidthM: trackWidthM * 0.5 + 6,
+    pavedHalfLengthM,
+    pavedHalfWidthM,
+    ground,
     circuit: Object.freeze(circuit),
     gantry,
     marshalPosts: freezeAssets(marshalPosts),
     cones: freezeAssets(cones),
     tyreWalls: freezeAssets(tyreWalls),
+    beacons: freezeAssets(beacons),
     paddock: freezeAssets(paddock),
   });
 }
@@ -380,13 +420,33 @@ function addPaddockAndAirfield(THREE, root, plan) {
   root.add(tower);
 }
 
+function addThresholdBeacons(THREE, root, plan) {
+  const orange = new THREE.MeshStandardMaterial({ color: 0xf47b20, roughness: 0.7 });
+  const ivory = new THREE.MeshStandardMaterial({ color: 0xe9e1ce, roughness: 0.7 });
+  for (const beacon of plan.beacons) {
+    const group = new THREE.Group();
+    group.position.copy(scenePoint(THREE, beacon.center, 0));
+    const bandHeightM = beacon.heightM / 5;
+    for (let band = 0; band < 5; band++) {
+      const mast = new THREE.Mesh(
+        new THREE.BoxGeometry(2.4, bandHeightM, 2.4),
+        band % 2 === 0 ? orange : ivory,
+      );
+      mast.position.y = bandHeightM * (band + 0.5);
+      group.add(mast);
+    }
+    root.add(group);
+  }
+}
+
 export function createRapierTrackDayPresentation(THREE, circuit, options = {}) {
   const plan = planRapierTrackDay(circuit, options);
   const root = new THREE.Group();
   root.name = "rapier-track-day";
 
+  // World ground: no void anywhere a rider can plausibly wander (11 km each way).
   const grass = new THREE.Mesh(
-    new THREE.PlaneGeometry(3_800, 900),
+    new THREE.PlaneGeometry(plan.ground.sizeM, plan.ground.sizeM),
     new THREE.MeshStandardMaterial({
       color: 0x566248,
       roughness: 1.0,
@@ -397,6 +457,48 @@ export function createRapierTrackDayPresentation(THREE, circuit, options = {}) {
   grass.position.y = plan.elevationM - 0.08;
   grass.receiveShadow = true;
   root.add(grass);
+
+  // Nearfield verge stays a touch lighter so the strip surrounds read at speed.
+  const verge = new THREE.Mesh(
+    new THREE.PlaneGeometry(3_800, 900),
+    new THREE.MeshStandardMaterial({
+      color: 0x5d6b4e,
+      roughness: 1.0,
+      metalness: 0.0,
+    }),
+  );
+  verge.rotation.x = -Math.PI / 2;
+  verge.position.y = plan.elevationM - 0.06;
+  verge.receiveShadow = true;
+  root.add(verge);
+
+  // Runway edge stripes: the strip must be findable from a kilometre off-track.
+  // Top stays below the track ribbon lift (0.055) so hairpin flares crossing the
+  // runway edge cannot z-fight the stripe.
+  const stripeMaterial = new THREE.MeshBasicMaterial({ color: 0xe9e1ce });
+  for (const side of [-1, 1]) {
+    const stripe = new THREE.Mesh(
+      new THREE.BoxGeometry(RUNWAY_HALF_LENGTH_M * 2, 0.04, 0.9),
+      stripeMaterial,
+    );
+    stripe.position.set(0, plan.elevationM + 0.02, side * (RUNWAY_HALF_WIDTH_M - 1.2));
+    root.add(stripe);
+  }
+
+  addThresholdBeacons(THREE, root, plan);
+
+  // Paved shoulder mirrors the sim's apron corridor (PaintedCircuit.PavedApronHalfWidthM):
+  // wherever grip is asphalt beyond the 48 m strip, the ground must look like asphalt.
+  const shoulder = new THREE.Mesh(
+    buildRibbonGeometry(THREE, plan.circuit, plan.apronHalfWidthM, 0.03),
+    new THREE.MeshStandardMaterial({
+      color: 0x656e66,
+      roughness: 0.95,
+      metalness: 0.01,
+    }),
+  );
+  shoulder.receiveShadow = true;
+  root.add(shoulder);
 
   const track = new THREE.Mesh(
     buildRibbonGeometry(THREE, plan.circuit, plan.trackWidthM * 0.5, 0.055),

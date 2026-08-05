@@ -10,11 +10,25 @@ function speedKmh(state) {
   return mps * 3.6;
 }
 
-function formatLapTime(seconds) {
+export function formatLapTime(seconds) {
   if (!Number.isFinite(seconds) || seconds <= 0) return "—:——";
-  const whole = Math.floor(seconds);
-  const millis = Math.floor((seconds - whole) * 100);
-  return `${whole}:${String(millis).padStart(2, "0")}`;
+  const centiseconds = Math.floor(seconds * 100 + 1e-6);
+  const minutes = Math.floor(centiseconds / 6_000);
+  const wholeSeconds = Math.floor((centiseconds % 6_000) / 100);
+  const hundredths = centiseconds % 100;
+  return `${minutes}:${String(wholeSeconds).padStart(2, "0")}.${String(hundredths).padStart(2, "0")}`;
+}
+
+/** Pure minimap placement: clamps the rider dot to the widget frame, flags off-map. */
+export function minimapDotPlacement(bounds, frame, px, pz) {
+  const spanX = Math.max(1, bounds.maxX - bounds.minX);
+  const spanZ = Math.max(1, bounds.maxZ - bounds.minZ);
+  const innerSize = frame.size - frame.inset * 2;
+  const rawX = frame.x + frame.inset + ((px - bounds.minX) / spanX) * innerSize;
+  const rawY = frame.y + frame.inset + ((pz - bounds.minZ) / spanZ) * innerSize;
+  const x = Math.min(frame.x + frame.size - frame.inset, Math.max(frame.x + frame.inset, rawX));
+  const y = Math.min(frame.y + frame.size - frame.inset, Math.max(frame.y + frame.inset, rawY));
+  return Object.freeze({ x, y, clamped: x !== rawX || y !== rawY });
 }
 
 export function trackDayStatusLine(state = {}) {
@@ -45,7 +59,15 @@ export class HelmetHud {
     this.dpr = 1;
     this.width = 0;
     this.height = 0;
+    this._circuit = null;
     this._minimapBounds = { minX: 0, maxX: 1, minZ: 0, maxZ: 1 };
+  }
+
+  /** Cache the immutable circuit polyline once; the per-frame snapshot no longer carries it. */
+  setCircuit(circuit) {
+    if (!Array.isArray(circuit) || circuit.length === 0) return;
+    this._circuit = circuit;
+    this.updateMinimapBounds(circuit);
   }
 
   resize(width, height, dpr = window.devicePixelRatio || 1) {
@@ -189,8 +211,9 @@ export class HelmetHud {
 
   drawLeanBlock(ctx, w, h, state) {
     const leanDeg = (state.lean_rad ?? 0) * (180 / Math.PI);
-    const x = w * 0.92;
-    const y = h * 0.55;
+    // Right edge, tucked below the CONTACT instrument (h*0.5 ± 84) so the two never overlap.
+    const x = w - 24;
+    const y = h * 0.5 + 118;
     ctx.save();
     ctx.textAlign = "right";
     ctx.fillStyle = "rgba(8, 16, 13, 0.72)";
@@ -270,7 +293,7 @@ export class HelmetHud {
     ctx.fill();
     ctx.stroke();
 
-    const circuit = state.circuit;
+    const circuit = this._circuit ?? state.circuit;
     if (Array.isArray(circuit) && circuit.length > 1) {
       ctx.strokeStyle = "rgba(145, 172, 120, 0.85)";
       ctx.lineWidth = 2;
@@ -285,15 +308,28 @@ export class HelmetHud {
     }
 
     if (Number.isFinite(state.px) && Number.isFinite(state.pz)) {
-      const ox = x + 8 + ((state.px - minX) / spanX) * (size - 16);
-      const oy = y + 8 + ((state.pz - minZ) / spanZ) * (size - 16);
-      ctx.fillStyle = "#d5b56f";
-      ctx.beginPath();
-      ctx.arc(ox, oy, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.strokeStyle = "#171b14";
-      ctx.lineWidth = 1;
-      ctx.stroke();
+      const dot = minimapDotPlacement(
+        this._minimapBounds,
+        { x, y, size, inset: 8 },
+        state.px,
+        state.pz,
+      );
+      if (dot.clamped) {
+        // Off-map: hollow ring pinned to the frame edge points back at the strip.
+        ctx.strokeStyle = "#e57954";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(dot.x, dot.y, 4.5, 0, Math.PI * 2);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = "#d5b56f";
+        ctx.beginPath();
+        ctx.arc(dot.x, dot.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#171b14";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
     }
 
     ctx.fillStyle = "#9ca997";
