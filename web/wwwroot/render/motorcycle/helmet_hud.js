@@ -211,6 +211,7 @@ export class HelmetHud {
 
   drawLeanBlock(ctx, w, h, state) {
     const leanDeg = (state.lean_rad ?? 0) * (180 / Math.PI);
+    const pitchDeg = (state.pitch_rad ?? 0) * (180 / Math.PI);
     // Right edge, tucked below the CONTACT instrument (h*0.5 ± 84) so the two never overlap.
     const x = w - 24;
     const y = h * 0.5 + 118;
@@ -218,7 +219,7 @@ export class HelmetHud {
     ctx.textAlign = "right";
     ctx.fillStyle = "rgba(8, 16, 13, 0.72)";
     ctx.strokeStyle = "rgba(196, 210, 171, 0.28)";
-    roundRect(ctx, x - 78, y - 28, 86, 52, 6);
+    roundRect(ctx, x - 78, y - 28, 86, 68, 6);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = "#9ca997";
@@ -227,6 +228,9 @@ export class HelmetHud {
     ctx.fillStyle = "#e9ede2";
     ctx.font = "700 20px ui-monospace, SFMono-Regular, Menlo, monospace";
     ctx.fillText(`${leanDeg >= 0 ? "+" : ""}${leanDeg.toFixed(0)}°`, x - 8, y + 14);
+    ctx.fillStyle = "#9ca997";
+    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, monospace";
+    ctx.fillText(`PITCH ${pitchDeg >= 0 ? "+" : ""}${pitchDeg.toFixed(0)}°`, x - 8, y + 32);
     ctx.restore();
   }
 

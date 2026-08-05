@@ -7,6 +7,7 @@ import {
 import {
   createRapierTrackDayPresentation,
 } from "../render/motorcycle/track_day_presentation.js?v=264";
+import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=264";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
@@ -28,6 +29,8 @@ const renderer = new THREE.WebGLRenderer({
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.04;
+// QA seam: perf audits read draw calls / triangles from the live renderer.
+window.__gunsOnlyWeekendRenderInfo = renderer.info;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x78919a);
@@ -130,7 +133,11 @@ function simToScenePosition(px, py, pz, target) {
   return target.set(px, py + EYE_HEIGHT_M, -pz);
 }
 
-/** Apply sim view quaternion with Z-flip only — no extra JS roll. */
+/**
+ * Apply sim view quaternion with Z-flip only — no extra JS roll. The sim quaternion
+ * carries yaw + head-stabilized roll; wheelie/stoppie pitch arrives separately as
+ * pitch_rad and tilts the helmet about its own right axis (positive = nose up).
+ */
 function applyViewAttitude(cameraObject, state) {
   simQuat.set(state.view_qx, state.view_qy, state.view_qz, state.view_qw);
   basisRight.set(1, 0, 0).applyQuaternion(simQuat);
@@ -143,6 +150,8 @@ function applyViewAttitude(cameraObject, state) {
   basisRight.copy(basisUp).cross(cameraZAxis).normalize();
   cameraMatrix.makeBasis(basisRight, basisUp, cameraZAxis);
   cameraObject.quaternion.setFromRotationMatrix(cameraMatrix).normalize();
+  const pitchRad = viewPitchRad(state);
+  if (pitchRad !== 0) cameraObject.rotateX(pitchRad);
 }
 
 function buildTrackDayPresentation(circuit) {
