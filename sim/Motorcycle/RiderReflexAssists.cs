@@ -17,6 +17,7 @@ public static class RiderReflexAssists
     public static RiderReflexSample Evaluate(
         double frontNormalN,
         double rearNormalN,
+        double pitchRad,
         double pitchRateRadps,
         double leanRad,
         double riderLateral,
@@ -25,6 +26,7 @@ public static class RiderReflexAssists
         PitchBalanceChannel.Sample pitch = PitchBalanceChannel.Evaluate(
             frontNormalN,
             rearNormalN,
+            pitchRad,
             pitchRateRadps);
         bool pitchRegimeHot = pitch.PitchReflexAuthority > 0.0;
         KneeDownLeanHoldChannel.Sample knee = KneeDownLeanHoldChannel.Evaluate(
@@ -51,13 +53,23 @@ public static class RiderReflexAssists
 
         const double BalanceContactFraction = 0.06;
         const double FarContactFraction = 0.32;
+        // Once a wheel has actually lifted, contact loads freeze at 0/1 and stop carrying
+        // information; past this pitch the channel reports full balance/authority directly.
+        // Sits above the largest suspension-geometry pitch (~0.05 rad brake dive) so plain
+        // grounded braking or squat cannot false-trigger the lifted regime.
+        const double LiftedPitchRad = 0.06;
 
         internal static Sample Evaluate(
             double frontNormalN,
             double rearNormalN,
+            double pitchRad,
             double pitchRateRadps)
         {
             _ = pitchRateRadps;
+            if (pitchRad >= LiftedPitchRad)
+                return new Sample(1.0, -1.0, 1.0);
+            if (pitchRad <= -LiftedPitchRad)
+                return new Sample(-1.0, 1.0, 1.0);
             double totalNormalN = frontNormalN + rearNormalN;
             if (totalNormalN <= 1e-6)
                 return new Sample(-1.0, -1.0, 0.0);

@@ -12,15 +12,14 @@ public sealed class YzfR1LeanTests
             id: "lean",
             position: new Vec3D(0.0, RapierLaunchSite.OperatingSurfaceElevationM, 0.0),
             headingRad: 0.0);
-        var accelerate = new MotorcyclePilotCommand(1.0, 0.0, 0.0, 0.0, 0.0, 0, 1.0,
+        // Wheel-lift dynamics: raw WOT ramps loop the bike, so ride the test-rider ladder.
+        var rightTurn = new MotorcyclePilotCommand(1.0, 0.0, 0.5, 1.0, 0.0, 0, 1.0,
             MotorcycleClutchMode.Auto);
-        var rightTurn = accelerate with { Steer = 0.5, RiderLateral = 1.0 };
 
-        for (long tick = 0; tick < 120 * 8; tick++)
-            bike.Advance(YzfR1TestInput.Of(tick, accelerate));
+        long tick = YzfR1TestRider.ShortShiftAccelerateTicks(bike, 0, 120 * 8);
         Assert.True(bike.Telemetry.SpeedMps > 25.0);
 
-        for (long tick = 120 * 8; tick < 120 * 11; tick++)
+        for (; tick < 120 * 11; tick++)
             bike.Advance(YzfR1TestInput.Of(tick, rightTurn));
 
         double leanRad = Assert.IsType<double>(
@@ -40,12 +39,13 @@ public sealed class YzfR1LeanTests
     {
         var lowInertia = AtRestWithRollInertia("low-inertia", 47.5);
         var highInertia = AtRestWithRollInertia("high-inertia", 190.0);
-        var accelerate = new MotorcyclePilotCommand(1.0, 0.0, 0.0, 0.0, 0.0, 0, 1.0,
+        var rightTurn = new MotorcyclePilotCommand(1.0, 0.0, 0.5, 1.0, 0.0, 0, 1.0,
             MotorcycleClutchMode.Auto);
-        var rightTurn = accelerate with { Steer = 0.5, RiderLateral = 1.0 };
 
-        Advance(lowInertia, accelerate, startTick: 0, tickCount: 120 * 8);
-        Advance(highInertia, accelerate, startTick: 0, tickCount: 120 * 8);
+        // Ladder ramps stay identical across the pair: roll inertia does not touch the
+        // longitudinal path, so the telemetry-driven shift points match tick for tick.
+        YzfR1TestRider.ShortShiftAccelerateTicks(lowInertia, 0, 120 * 8);
+        YzfR1TestRider.ShortShiftAccelerateTicks(highInertia, 0, 120 * 8);
         Advance(lowInertia, rightTurn, startTick: 120 * 8, tickCount: 24);
         Advance(highInertia, rightTurn, startTick: 120 * 8, tickCount: 24);
 
@@ -60,14 +60,14 @@ public sealed class YzfR1LeanTests
     {
         var neutral = AtRestWithRollInertia("neutral-rider", YzfR1Definition.RollInertiaKgM2);
         var shifted = AtRestWithRollInertia("shifted-rider", YzfR1Definition.RollInertiaKgM2);
-        var accelerate = new MotorcyclePilotCommand(1.0, 0.0, 0.0, 0.0, 0.0, 0, 1.0,
-            MotorcycleClutchMode.Auto);
         // Sourced gearing accelerates harder than the v2 box; stop early so the mild turn
         // stays comfortably inside the friction circle where the body-shift delta is visible.
-        Advance(neutral, accelerate, startTick: 0, tickCount: 120 * 5);
-        Advance(shifted, accelerate, startTick: 0, tickCount: 120 * 5);
+        // The ladder ramp replaces raw WOT, which the wheel-lift dynamics would loop.
+        YzfR1TestRider.ShortShiftAccelerateTicks(neutral, 0, 120 * 5);
+        YzfR1TestRider.ShortShiftAccelerateTicks(shifted, 0, 120 * 5);
 
-        var mildRightTurn = accelerate with { Throttle = 0.25, Steer = 0.05 };
+        var mildRightTurn = new MotorcyclePilotCommand(0.25, 0.0, 0.05, 0.0, 0.0, 0, 1.0,
+            MotorcycleClutchMode.Auto);
         Advance(neutral, mildRightTurn, startTick: 120 * 5, tickCount: 120);
         Advance(
             shifted,
