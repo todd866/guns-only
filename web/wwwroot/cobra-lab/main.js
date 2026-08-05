@@ -1,40 +1,40 @@
-import * as THREE from "../vendor/three.module.js?v=263";
+import * as THREE from "../vendor/three.module.js?v=264";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=263";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=263";
+} from "../render/cobra/cobra_canyon_plan.js?v=264";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=264";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=263";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=263";
-import { gunnerStatusText } from "../render/cobra/cobra_gunner_status.js?v=263";
-import { formatCobraRotorcraftStrip } from "../render/cobra/cobra_rotorcraft_hud.js?v=263";
+} from "../render/cobra/cobra_canyon_tour.js?v=264";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=264";
+import { gunnerStatusText } from "../render/cobra/cobra_gunner_status.js?v=264";
+import { formatCobraRotorcraftStrip } from "../render/cobra/cobra_rotorcraft_hud.js?v=264";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=263";
+} from "../render/cobra/cobra_control_profile.js?v=264";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=263";
+} from "../render/cobra/cobra_pilot_input.js?v=264";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=263";
+} from "../render/cobra/ah1g_presence.js?v=264";
 import {
   COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD,
   clampInducedLookRotation,
   lookAnglesFromOffset,
   lookOffsetFromAngles,
-} from "../render/cobra/cobra_camera_bias.js?v=263";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=263";
+} from "../render/cobra/cobra_camera_bias.js?v=264";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=264";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
