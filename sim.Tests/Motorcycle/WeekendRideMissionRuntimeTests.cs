@@ -136,6 +136,26 @@ public sealed class WeekendRideMissionRuntimeTests
     }
 
     [Fact]
+    public void ResetToGridClearsAccumulatedOffTrackTime()
+    {
+        var runtime = WeekendRideMissionRuntime.CreateDefault();
+        runtime.Begin();
+        runtime.Bike.ResetTo(
+            new Vec3D(
+                0.0,
+                RapierLaunchSite.OperatingSurfaceElevationM,
+                PaintedCircuit.RapierRunwayWidthM),
+            runtime.GridHeadingRad);
+        for (int i = 0; i < 120 * 2; i++)
+            runtime.StepFixed(SteadyThrottle);
+        Assert.True(runtime.OffTrackSeconds > 0.0);
+
+        runtime.ResetToGrid();
+
+        Assert.Equal(0.0, runtime.OffTrackSeconds);
+    }
+
+    [Fact]
     public void PauseStopsSimulationUntilResume()
     {
         var runtime = WeekendRideMissionRuntime.CreateDefault();
