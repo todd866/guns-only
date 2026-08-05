@@ -19,14 +19,16 @@ public sealed class YzfR1TireAndTipOverTests
         var accelerate = Command(throttle: 1.0);
         var turn = Command(throttle: 0.0) with { Steer = 1.0, RiderLateral = 1.0 };
 
-        Advance(bike, accelerate, slipperyRunway, startTick: 0, tickCount: 120 * 6);
-        Assert.InRange(bike.Telemetry.SpeedMps, 5.0, 6.0);
-        Advance(bike, turn, slipperyRunway, startTick: 120 * 6, tickCount: 1);
+        // Rolling resistance and drag slow the slippery-surface launch; the tip-over gate
+        // only needs the bike inside the low-speed band when the excessive lean arrives.
+        Advance(bike, accelerate, slipperyRunway, startTick: 0, tickCount: 120 * 8);
+        Assert.InRange(bike.Telemetry.SpeedMps, 4.5, 6.0);
+        Advance(bike, turn, slipperyRunway, startTick: 120 * 8, tickCount: 1);
 
         Assert.True(bike.Telemetry.IsTippedOver);
         Assert.False(bike.State.Flyable);
 
-        bike.Advance(YzfR1TestInput.Of(120 * 6 + 1, Command(throttle: 1.0)));
+        bike.Advance(YzfR1TestInput.Of(120 * 8 + 1, Command(throttle: 1.0)));
 
         Assert.True(bike.Telemetry.IsTippedOver);
         Assert.False(bike.State.Flyable);

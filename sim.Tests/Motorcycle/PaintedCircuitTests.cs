@@ -5,16 +5,135 @@ namespace GunsOnly.Sim.Tests.Motorcycle;
 public sealed class PaintedCircuitTests
 {
     [Fact]
-    public void RapierStripCircuitFitsInside3048By48Pavement()
+    public void RapierStripCircuitStaysOnPavedSurfaceAtStripElevation()
     {
         var circuit = PaintedCircuit.RapierStripWeekend();
         Assert.True(circuit.BoundingLengthM + circuit.TrackWidthM
             <= PaintedCircuit.RapierRunwayLengthM);
-        Assert.True(circuit.BoundingWidthM + circuit.TrackWidthM
-            <= PaintedCircuit.RapierRunwayWidthM);
         foreach (var p in circuit.Centreline)
             Assert.InRange(p.Y, RapierLaunchSite.OperatingSurfaceElevationM - 0.01,
                 RapierLaunchSite.OperatingSurfaceElevationM + 0.01);
+        AssertCorridorIsPaved(circuit);
+    }
+
+    [Fact]
+    public void PavementFollowsTheCircuitUnderHeadingAndOriginChange()
+    {
+        var circuit = PaintedCircuit.RapierStripWeekend(
+            headingRad: 0.7,
+            originOverride: new Vec3D(350.0, RapierLaunchSite.OperatingSurfaceElevationM, -900.0));
+
+        AssertCorridorIsPaved(circuit);
+    }
+
+    static void AssertCorridorIsPaved(PaintedCircuit circuit)
+    {
+        IReadOnlyList<Vec3D> points = circuit.Centreline;
+        int wrap = points.Count - 1;
+        double corridorHalfWidthM = circuit.TrackWidthM * 0.5 + 2.0;
+        for (int i = 0; i < wrap; i++)
+        {
+            Vec3D previous = points[(i - 1 + wrap) % wrap];
+            Vec3D next = points[(i + 1) % wrap];
+            double dx = next.X - previous.X;
+            double dz = next.Z - previous.Z;
+            double length = Math.Sqrt(dx * dx + dz * dz);
+            if (length < 1e-9)
+                continue;
+            Vec3D normal = new(-dz / length, 0.0, dx / length);
+            foreach (double side in (double[])[-1.0, 0.0, 1.0])
+            {
+                Vec3D sample = points[i] + normal * (side * corridorHalfWidthM);
+                Assert.True(
+                    circuit.IsOnPavement(sample),
+                    $"corridor sample {sample} (index {i}, side {side}) left the pavement");
+            }
+        }
+
+        // Far off the corridor and outside the runway rectangle must NOT read as paved.
+        Vec3D apex = points[0];
+        foreach (Vec3D point in points)
+            if (Horizontal(point, points[0]) > Horizontal(apex, points[0]))
+                apex = point;
+        Vec3D away = apex + (apex - points[0]) * (120.0 / Math.Max(1.0, Horizontal(apex, points[0])));
+        Assert.False(circuit.IsOnPavement(away), $"expected grass at {away}");
+    }
+
+    [Fact]
+    public void EveryCornerIsRideableAtHairpinEntrySpeeds()
+    {
+        // A competent rider braking to ~55-60 km/h at ~0.6 g lateral needs r >= 28 m.
+        var circuit = PaintedCircuit.RapierStripWeekend();
+        (double minimumRadiusM, Vec3D tightestPoint) = MinimumCornerRadius(circuit);
+
+        Assert.True(
+            minimumRadiusM >= 28.0,
+            $"tightest corner radius {minimumRadiusM:F1} m at {tightestPoint}");
+    }
+
+    static (double RadiusM, Vec3D At) MinimumCornerRadius(PaintedCircuit circuit)
+    {
+        // Discrete curvature over a fixed arc-length window so sample density
+        // cannot hide a tight corner behind near-collinear neighbours.
+        const double windowM = 6.0;
+        IReadOnlyList<Vec3D> points = circuit.Centreline;
+        double minimumRadiusM = double.PositiveInfinity;
+        Vec3D tightestPoint = points[0];
+        for (int i = 0; i < points.Count - 1; i++)
+        {
+            Vec3D b = points[i];
+            Vec3D a = WalkBack(points, i, windowM);
+            Vec3D c = WalkForward(points, i, windowM);
+            double ab = Horizontal(a, b);
+            double bc = Horizontal(b, c);
+            double ca = Horizontal(c, a);
+            double cross = (b.X - a.X) * (c.Z - a.Z) - (b.Z - a.Z) * (c.X - a.X);
+            double areaTwice = Math.Abs(cross);
+            if (areaTwice < 1e-9)
+                continue;
+            double radiusM = ab * bc * ca / (2.0 * areaTwice);
+            if (radiusM < minimumRadiusM)
+            {
+                minimumRadiusM = radiusM;
+                tightestPoint = b;
+            }
+        }
+        return (minimumRadiusM, tightestPoint);
+    }
+
+    static Vec3D WalkBack(IReadOnlyList<Vec3D> points, int index, double distanceM)
+    {
+        int wrap = points.Count - 1;
+        double travelled = 0.0;
+        int i = index;
+        while (travelled < distanceM)
+        {
+            int previous = (i - 1 + wrap) % wrap;
+            travelled += Horizontal(points[i], points[previous]);
+            i = previous;
+        }
+        return points[i];
+    }
+
+    static Vec3D WalkForward(IReadOnlyList<Vec3D> points, int index, double distanceM)
+    {
+        int wrap = points.Count - 1;
+        double travelled = 0.0;
+        int i = index;
+        while (travelled < distanceM)
+        {
+            int next = (i + 1) % wrap;
+            travelled += Horizontal(points[i], points[next]);
+            i = next;
+        }
+        return points[i];
+    }
+
+    static double Horizontal(Vec3D a, Vec3D b)
+    {
+        double dx = a.X - b.X;
+        double dz = a.Z - b.Z;
+        return Math.Sqrt(dx * dx + dz * dz);
     }
 
     [Fact]

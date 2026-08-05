@@ -1,9 +1,13 @@
 # Current product and verification status
 
-Updated: 2026-08-03
-Production: Build 252, revision `813f28fca39cb3769254249801a8bf1b2dfc58c6`, promoted 2026-08-03
-after its exact protected-`main` SHA passed the canonical GitHub Verify workflow.
-Next candidate: none open; stamp before the next production change.
+Updated: 2026-08-05
+Production: Build 263, revision `32ffd28188c8519119336507f9eeee4c03660d64`, deployment
+`dpl_4SaDXNZ9ZaupW6m88MLk1TZqtppt` (verified live via /api/build-info 2026-08-05). Builds
+253-262 shipped 2026-08-03..08-04 without this ledger being updated; the Build 248 stamp was
+reused and re-stamped as 249 — treat per-build claims in that range with care.
+Next candidate: Build 264 (branch `fix/campaign-2026-08-05`) — wingman pair-graduation fix,
+approach-solve decimation + centreline groove, Cobra view/runtime/mission unbreak, Weekend Ride
+physics envelope + lappable circuit, shell-health and telemetry-transport fixes.
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
 evidence for the build and commit they name, but they do not override this page or the executable
@@ -24,7 +28,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 | Experience | State | Public surface | Current evidence | Promotion blocker |
 | --- | --- | --- | --- | --- |
-| F-22A · Guns Only (`first-merge`) | **production** | Aircraft picker | Build 238 automation plus a recorded 2026-08-02 human acceptance flight on the exact production artifact (session `web-1785627445839-631596`): 3 engagements, 5 kills, opponent returned fire with 99 rounds | None for promotion; bandit lead/ballistics and the descent sim-step spike are open defects, not release blockers |
+| F-22A · Guns Only (`first-merge`) | **production** | Aircraft picker | Build 238 automation plus a recorded 2026-08-02 human acceptance flight (session `web-1785627445839-631596`). Build 264 candidate fixes the wingman-abandonment root cause (the wingman presented forever; pair now graduates together — un-skipped contract test) and decimates approach solves | Open defects, not blockers: opponent fired ZERO rounds in both owner flights on Builds 260/263 (regression, under investigation), w1 despawns from snapshots at the other bandit's kill tick, descent sim-step spike (GCAS suspect), bandit lead/ballistics |
 | Rapier · Intercept (`rapier-intercept`) | **production** | Aircraft picker | Build 238 automation earns the 24 km/M4.2 shelf, takes one physical M61 pass, then traps and stops at 2,520 s; the no-trigger mirror traps without firing and truthfully ends Draw | Fresh representative human launch/intercept/recovery flight and complete green release gate |
 | Low-level drone intercept (`low-level-drone`) | **quarantined** | Preview acknowledgement only | Runtime and automated contracts exist | Ground-target/player-purpose closure and complete human flight |
 | CASEVAC flight course (`medevac`) | **quarantined** | Preview acknowledgement only | Candidate guidance follows the authored orchard-gap route and briefs 32–42 m AGL near the windbreak | End-to-end human pickup, handoff, safe-exit, and debrief flight |
@@ -32,8 +36,8 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | F9F-2 Panther off Essex (`korea-panther`) | **quarantined** | Preview acknowledgement only | Build 238 ownship-only kernel flies the production terrain catapult/route/return/groove to a physical W2 trap (100/100 focused); packaged route, touch-RTB, HUD, and barrier contracts passed silent-browser acceptance | Complete representative human desktop/touch flights and historical/presentation acceptance before any promotion |
 | MIDGE-03 Facility Nine (`indoor`) | **quarantined** | `/indoor/` preview acknowledgement | Candidate UI now enforces doctrine-safe controls and blocks premature return | Re-drive the default stealth route and representative touch/keyboard paths |
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
-| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | **Hold the Bridge** playable mission: River Gorge AH-1G, sim-owned ground war, tip/hold control win (≥+0.55 for 45s) / lose (≤−0.75 for 30s), finite M134 + Camp Ember rearm, Tab/F gunner, full-bleed play shell (`?lab=1` inspection) | Fresh representative human desktop/touch Hold-the-Bridge sortie and complete green release gate |
-| Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load/tip-over, rider assists, painted Rapier-strip circuit, mission runtime, MotorcycleWebBridge, helmet HUD | Fresh representative human ride on the exact production artifact |
+| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | **Hold the Bridge** playable mission: River Gorge AH-1G, sim-owned ground war, tip/hold control win (≥+0.55 for 45s) / lose (≤−0.75 for 30s), finite M134 + Camp Ember rearm, Tab/F gunner, full-bleed play shell (`?lab=1` inspection). 2026-08-05 audit found Build 261-263 effectively unplayable: cockpit occluded 98% of the frame, sim ran 0.62× real time at low fps, the mission won itself with zero input, and telemetry destroyed ~97% of its rows. Build 264 candidate fixes all four (occlusion-regression test, real-time-at-any-fps loop, zero-input now loses in ~3.5 min, bounded telemetry on the production batcher) | Fresh representative human Hold-the-Bridge sortie on the fixed artifact, rendered-screenshot review, and complete green release gate. Longer arc: DCS-BS1-grade flight dynamics program |
+| Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load/tip-over, rider assists, painted Rapier-strip circuit, mission runtime, MotorcycleWebBridge, helmet HUD. 2026-08-05 audit found Builds 257-263 unlappable: r≈14 m hairpins forced every drive onto grass (reproducing the "no brakes / no steering" reports), transmission stuck in a too-tall 1st (missing primary reduction), no aero drag/engine braking, off-track a featureless void, zero telemetry instrumentation. Build 264 candidate: r≥38 m paved hairpins with circuit-bound pavement authority, sourced primary reduction + drag/rolling/engine braking + working shifts (dynamics v3), 0.89 g assisted braking, ground plane + beacons off-track, minimap/lap-timer fixes | Fresh representative human lap on the fixed artifact and rendered-screenshot review. Telemetry instrumentation still absent — rides remain unmeasurable |
 
 ## Research-only packages
 

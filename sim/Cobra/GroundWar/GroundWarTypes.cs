@@ -87,11 +87,15 @@ public sealed class GroundUnit
         _ => 180.0
     };
 
+    // Provisional balance, not sourced weapon effects: ground-vs-ground fire is attritional
+    // (minutes to grind a unit down) so the turret's authored 24.75 dps (45 rps x 0.55
+    // damage/round) is the decisive killer. The previous 8/14/22 dps let the garrison wipe a
+    // seeded wave in under 10 s, which won the mission with zero player input.
     public double DamagePerSecond => Role switch {
-        GroundUnitRole.InfantryClump => 8.0,
-        GroundUnitRole.SoftVehicle => 14.0,
-        GroundUnitRole.HardPoint => 22.0,
-        _ => 8.0
+        GroundUnitRole.InfantryClump => 1.2,
+        GroundUnitRole.SoftVehicle => 2.2,
+        GroundUnitRole.HardPoint => 3.2,
+        _ => 1.2
     };
 
     public double MoveSpeedMps => Role switch {

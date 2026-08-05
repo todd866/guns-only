@@ -90,6 +90,31 @@ public class ApproachGuidanceSessionTests {
     }
 
     [Fact]
+    public void ApproachSolvesAreDecimatedAndTheStateIsReusedBetweenSolves() {
+        var session = new SimulationSession(beatIndex: 11);
+        session.Begin();
+        session.StepFixed(30);
+        Assert.True(session.ApproachGuidancePlan.GuidanceActive);
+
+        long solvesBefore = session.ApproachSolveCount;
+        var gates = session.ApproachGuidancePlan.Gates;
+        int gateListChanges = 0;
+        for (int i = 0; i < 120; i++) {
+            session.StepFixed();
+            if (!ReferenceEquals(gates, session.ApproachGuidancePlan.Gates)) {
+                gateListChanges++;
+                gates = session.ApproachGuidancePlan.Gates;
+            }
+        }
+
+        long solves = session.ApproachSolveCount - solvesBefore;
+        Assert.InRange(solves, 1, 9);
+        Assert.True(gateListChanges <= solves,
+            $"published state must be reused between solves: {gateListChanges} changes"
+            + $" for {solves} solves");
+    }
+
+    [Fact]
     public void RestagingClearsPriorApproachGuidanceBeforeTheFirstNewTick() {
         var session = new SimulationSession(beatIndex: 11);
         session.Begin();

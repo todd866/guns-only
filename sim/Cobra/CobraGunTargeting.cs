@@ -103,6 +103,43 @@ public static class CobraGunTargeting
         return true;
     }
 
+    /// <summary>
+    /// One per-tick gunner picture for a present, live target: geometric assessment, sight-only
+    /// line of sight, and turret slew. HasLineOfSight reports sight alone, so a clear-sighted
+    /// target outside the flexible envelope reads OUT OF LIMITS — not MASKED — in the crew
+    /// reason chain. The servo slews only while the mount can both see and reach the aim point
+    /// (envelope AND sight): a sighted but unreachable target must not drag the barrels onto the
+    /// mechanical stop, and an unseen target gives the gunner nothing to lay on.
+    /// </summary>
+    public static CobraGunnerTargetObservation AdvanceGunnerObservation(
+        ITerrainSurface terrain,
+        IReadOnlyList<CobraResolvedObstacle> obstacles,
+        in Vec3D aircraftPositionWorldM,
+        double aircraftYawRad,
+        string targetId,
+        bool friendly,
+        in Vec3D targetPositionWorldM,
+        CobraTurretServo turret,
+        double dtSeconds)
+    {
+        ArgumentNullException.ThrowIfNull(turret);
+        CobraGunTargetAssessment assessment = Assess(
+            aircraftPositionWorldM, aircraftYawRad, targetPositionWorldM);
+        bool hasLineOfSight = EvaluateLineOfSight(
+            terrain, obstacles, aircraftPositionWorldM, targetPositionWorldM);
+        if (assessment.WithinTurretEnvelope && hasLineOfSight)
+            turret.Advance(dtSeconds, assessment.SignedAzimuthRad, assessment.ElevationRad);
+        return new CobraGunnerTargetObservation(
+            targetId,
+            Present: true,
+            Friendly: friendly,
+            HasLineOfSight: hasLineOfSight,
+            WithinTurretEnvelope: assessment.WithinTurretEnvelope,
+            HasBallisticSolution: assessment.HasBallisticSolution,
+            SightErrorRad: turret.ErrorRad(
+                assessment.SignedAzimuthRad, assessment.ElevationRad));
+    }
+
     static double WrapAngleRad(double angleRad) =>
         Math.Atan2(Math.Sin(angleRad), Math.Cos(angleRad));
 }

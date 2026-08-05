@@ -20,6 +20,7 @@ public static class YzfR1Definition
     public const double PeakTorqueNm = 112.4;         // measured (claimed)
     public const double PeakTorqueRpm = 11_500.0;     // measured (claimed)
     public const int GearCount = 6;                   // measured
+    public const double PrimaryReductionRatio = 1.634; // measured (67/41 published spec)
     public const double MaxLeanRad = 56.0 * Math.PI / 180.0; // measured (OEM lean claim)
     public const double FrontTireRadiusM = 0.300;     // derived from 120/70-ZR17
     public const double RearTireRadiusM = 0.320;    // derived from 190/55-ZR17
@@ -50,16 +51,21 @@ public static class YzfR1Definition
     public const double TireLoadSensitivity = 0.85;   // surrogate Pacejka-like load exponent
     public const double TireCamberStiffnessNPerRad = 1_200.0; // surrogate camber thrust slope
 
-    /// <summary>Primary-to-countershaft ratios, 1st..6th. Surrogate — see 00-sources.md.</summary>
+    // --- Estimated (labelled estimates, not measured) ---
+    public const double AeroDragAreaCdAM2 = 0.35;     // estimate: sport bike + tucked rider CdA
+    public const double RollingResistanceCoefficient = 0.015; // estimate: sport radial on asphalt
+    public const double EngineBrakingTorqueNmAtRedline = 20.0; // estimate: closed-throttle motoring
+
+    /// <summary>Gearbox input→output ratios, 1st..6th. Surrogate — see 00-sources.md.</summary>
     public static readonly double[] GearRatios = [2.846, 2.200, 1.850, 1.600, 1.421, 1.320];
 
     public static double CombinedMassKg => CurbMassKg + RiderMassKg;
 
-    /// <summary>Primary × final-drive ratio for gear 1..<see cref="GearCount"/>.</summary>
+    /// <summary>Primary × gearbox × final-drive ratio for gear 1..<see cref="GearCount"/>.</summary>
     public static double TotalRatio(int gear)
     {
         if (gear is < 1 or > GearCount)
             throw new ArgumentOutOfRangeException(nameof(gear));
-        return GearRatios[gear - 1] * FinalDriveRatio;
+        return GearRatios[gear - 1] * PrimaryReductionRatio * FinalDriveRatio;
     }
 }

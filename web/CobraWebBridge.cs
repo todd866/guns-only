@@ -55,6 +55,9 @@ public static partial class CobraWebBridge
         _turretServo.Reset();
         _gunnerDecision = default;
         _accumulatorSeconds = 0.0;
+        // A restart must show the fresh spawn pose immediately, not one stale frame of the
+        // previous sortie.
+        FillHotPose(_runtime);
     }
 
     static CobraAiGunner CreateGunner() => new(new CobraAiGunnerDefinition(
@@ -101,11 +104,41 @@ public static partial class CobraWebBridge
                 runtime.ApplyAuthorizedGunfire(_selectedTargetId);
             _accumulatorSeconds -= FixedDeltaSeconds;
         }
+        FillHotPose(runtime);
         return checked((int)runtime.Cobra.State.Tick);
     }
 
     [JSExport]
     public static string GetState() => JsonSerializer.Serialize(BuildState(RequireRuntime()));
+
+    // Per-frame numeric pose projection — the Cobra-scale analogue of the F-22 SnapshotHotFrame.
+    // The browser fetches the view once, then reads it via copyTo every rendered frame so the
+    // camera and airframe presence stay at render rate while the full JSON snapshot is sampled
+    // at HUD rate. Slot order is the contract; keep in lockstep with cobra-lab/main.js
+    // readVehiclePose():
+    // [0] x_m, [1] y_m, [2] z_m, [3] pitch_rad, [4] roll_rad, [5] yaw_rad, [6] main_rotor_rpm.
+    static readonly double[] HotPoseBuffer = new double[7];
+
+    [JSExport]
+    [return: JSMarshalAs<JSType.MemoryView>]
+    public static ArraySegment<double> GetHotPose()
+    {
+        FillHotPose(RequireRuntime());
+        return new ArraySegment<double>(HotPoseBuffer);
+    }
+
+    static void FillHotPose(CobraMissionRuntime runtime)
+    {
+        PlayerVehicleObservation observation = runtime.Cobra.Observation;
+        Vec3D position = observation.PositionWorldM;
+        HotPoseBuffer[0] = position.X;
+        HotPoseBuffer[1] = position.Y;
+        HotPoseBuffer[2] = position.Z;
+        HotPoseBuffer[3] = observation.PitchRad;
+        HotPoseBuffer[4] = observation.RollRad;
+        HotPoseBuffer[5] = observation.YawRad;
+        HotPoseBuffer[6] = runtime.Cobra.Telemetry.MainRotorRpm;
+    }
 
     static object BuildState(CobraMissionRuntime runtime)
     {
@@ -249,6 +282,9 @@ public static partial class CobraWebBridge
                 flyable = observation.Flyable,
                 power_assessment = power.Assessment.ToString().ToLowerInvariant(),
                 hover_power_margin = power.HoverPowerMarginFraction,
+                // Live headroom that follows the collective — hover_power_margin is a capability
+                // constant in cruise and serialized as telemetry it read as a dead column.
+                power_margin = power.AppliedPowerMarginFraction,
                 rotorcraft = new {
                     regime = rotorcraft.Regime.ToString(),
                     main_rotor_rpm = rotorcraft.MainRotorRpm,
@@ -280,34 +316,20 @@ public static partial class CobraWebBridge
         if (_selectedTargetId is not null) {
             GroundUnit? unit = runtime.GroundWar.FindUnit(_selectedTargetId);
             if (unit is { IsAlive: true }) {
-                CobraGunTargetAssessment assessment = CobraGunTargeting.Assess(
+                // Sight and turret reachability are independent signals: HasLineOfSight means
+                // sight alone, WithinTurretEnvelope means the mount can reach it, and the servo
+                // slews only when both hold. Composition (and the reason-chain honesty it buys)
+                // is pinned by CobraGunnerObservationTests.
+                target = CobraGunTargeting.AdvanceGunnerObservation(
+                    runtime.Terrain,
+                    runtime.ResolvedObstacles,
                     runtime.Cobra.State.PositionWorldM,
                     runtime.Cobra.Observation.YawRad,
-                    unit.PositionWorldM);
-                bool hasLos = assessment.WithinTurretEnvelope
-                    && CobraGunTargeting.EvaluateLineOfSight(
-                        runtime.Terrain,
-                        runtime.ResolvedObstacles,
-                        runtime.Cobra.State.PositionWorldM,
-                        unit.PositionWorldM);
-                // The mount slews toward the aim point whenever the target is physically
-                // engageable; the crew contract still gates firing through acquisition,
-                // consent and sight coincidence.
-                if (hasLos)
-                    _turretServo.Advance(
-                        FixedDeltaSeconds,
-                        assessment.SignedAzimuthRad,
-                        assessment.ElevationRad);
-                target = new CobraGunnerTargetObservation(
                     unit.Id,
-                    Present: true,
-                    Friendly: unit.Faction == GroundFaction.Friendly,
-                    HasLineOfSight: hasLos,
-                    WithinTurretEnvelope: assessment.WithinTurretEnvelope,
-                    HasBallisticSolution: assessment.HasBallisticSolution,
-                    SightErrorRad: _turretServo.ErrorRad(
-                        assessment.SignedAzimuthRad,
-                        assessment.ElevationRad));
+                    friendly: unit.Faction == GroundFaction.Friendly,
+                    unit.PositionWorldM,
+                    _turretServo,
+                    FixedDeltaSeconds);
             }
         }
         _gunnerDecision = _gunner.Advance(new CobraAiGunnerInput(

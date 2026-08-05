@@ -128,6 +128,18 @@ public static partial class MotorcycleWebBridge
     [JSExport]
     public static string GetState() => JsonSerializer.Serialize(BuildState(RequireRuntime()));
 
+    /// <summary>
+    /// The immutable painted-circuit centreline, fetched once at boot. Kept out of the
+    /// per-frame snapshot: serializing ~1,700 points at 60 fps is pure marshalling waste.
+    /// </summary>
+    [JSExport]
+    public static string GetCircuit() => JsonSerializer.Serialize(
+        RequireRuntime().Circuit.Centreline.Select(point => new {
+            x = point.X,
+            y = point.Y,
+            z = point.Z,
+        }).ToArray());
+
     static object BuildState(WeekendRideMissionRuntime runtime)
     {
         WeekendRideSnapshot snap = runtime.Snapshot();
@@ -188,11 +200,6 @@ public static partial class MotorcycleWebBridge
             tipped = snap.IsTippedOver,
             tip_recovery_flash_s = snap.TipRecoveryFlashSeconds,
             phase = PhaseToken(snap.Phase),
-            circuit = runtime.Circuit.Centreline.Select(point => new {
-                x = point.X,
-                y = point.Y,
-                z = point.Z,
-            }).ToArray(),
         };
     }
 

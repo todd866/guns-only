@@ -234,12 +234,11 @@ public sealed class WeekendRideMissionRuntime
         Bike.ResetTo(GridPosition, _gridHeadingRad);
     }
 
-    static PlayerVehicleEnvironmentSample CreateEnvironment(in Vec3D positionWorldM)
+    PlayerVehicleEnvironmentSample CreateEnvironment(in Vec3D positionWorldM)
     {
-        bool onPavement = Math.Abs(positionWorldM.X)
-                <= PaintedCircuit.RapierRunwayLengthM * 0.5
-            && Math.Abs(positionWorldM.Z)
-                <= PaintedCircuit.RapierRunwayWidthM * 0.5;
+        // Pavement authority lives with the circuit definition (runway rectangle plus the
+        // hairpin apron corridor), so paint and grip cannot drift apart under heading change.
+        bool onPavement = Circuit.IsOnPavement(positionWorldM);
         return new(
             1.225,
             Vec3D.Zero,

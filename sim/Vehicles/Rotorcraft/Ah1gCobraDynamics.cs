@@ -692,6 +692,11 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
     {
         (double pitch, double roll, double yaw) =
             PlayerVehicleValidation.AttitudeAngles(attitude);
+        // Ground speed is horizontal by definition; a pure vertical climb has zero ground speed.
+        // The vertical component already reports separately as VerticalSpeedMps, and true
+        // airspeed legitimately remains the 3D air-relative magnitude.
+        double horizontalGroundSpeedMps = Math.Sqrt(
+            groundVelocity.X * groundVelocity.X + groundVelocity.Z * groundVelocity.Z);
         double hoverThrustN = grossMassKg * FlightModel.G0;
         double hoverInducedMps = HoverInducedVelocity(
             hoverThrustN,
@@ -715,7 +720,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             groundVelocity,
             airVelocity,
             windVelocity,
-            groundVelocity.Length,
+            horizontalGroundSpeedMps,
             airVelocity.Length,
             groundVelocity.Y,
             pitch,

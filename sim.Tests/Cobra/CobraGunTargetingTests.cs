@@ -220,6 +220,111 @@ public sealed class CobraGunLineOfSightTests
     }
 }
 
+public sealed class CobraGunnerObservationTests
+{
+    const double DtSeconds = 1.0 / 120.0;
+    static readonly Vec3D Aircraft = new(0.0, 150.0, 0.0);
+
+    sealed class RidgeTerrain : ITerrainSurface
+    {
+        public TerrainBounds Bounds { get; } = new(-1_000.0, 1_000.0, -1_000.0, 1_000.0);
+        public double HorizontalResolutionM => 10.0;
+
+        public bool TrySample(double eastM, double northM, out TerrainSample sample)
+        {
+            if (!Bounds.Contains(eastM, northM)) {
+                sample = default;
+                return false;
+            }
+            double heightM = eastM is >= 90.0 and <= 110.0 ? 250.0 : 100.0;
+            sample = new TerrainSample(heightM, new Vec3D(0.0, 1.0, 0.0));
+            return true;
+        }
+    }
+
+    sealed class FlatTerrain : ITerrainSurface
+    {
+        public TerrainBounds Bounds { get; } = new(-1_000.0, 1_000.0, -1_000.0, 1_000.0);
+        public double HorizontalResolutionM => 10.0;
+
+        public bool TrySample(double eastM, double northM, out TerrainSample sample)
+        {
+            if (!Bounds.Contains(eastM, northM)) {
+                sample = default;
+                return false;
+            }
+            sample = new TerrainSample(100.0, new Vec3D(0.0, 1.0, 0.0));
+            return true;
+        }
+    }
+
+    static CobraGunnerTargetObservation Observe(
+        ITerrainSurface terrain, in Vec3D targetWorldM, CobraTurretServo servo) =>
+        CobraGunTargeting.AdvanceGunnerObservation(
+            terrain,
+            Array.Empty<CobraResolvedObstacle>(),
+            Aircraft,
+            aircraftYawRad: 0.0,
+            targetId: "hostile-1",
+            friendly: false,
+            targetWorldM,
+            servo,
+            DtSeconds);
+
+    static CobraAiGunnerDecision Decide(in CobraGunnerTargetObservation observation) =>
+        new CobraAiGunner(new CobraAiGunnerDefinition(
+            AcquisitionSeconds: 0.0,
+            ReacquisitionSeconds: 0.0,
+            SightCoincidenceToleranceRad: 0.06))
+        .Advance(new CobraAiGunnerInput(
+            AuthorityTick: 0,
+            SelectedTargetId: "hostile-1",
+            EngagementConsent: true,
+            WeaponsArmed: true,
+            TurretServiceable: true,
+            observation));
+
+    [Fact]
+    public void SightedTargetOutsideTheEnvelopeReadsOutOfLimitsNotMasked()
+    {
+        // Directly astern over flat terrain: the crew can see it; the turret cannot reach it.
+        var servo = new CobraTurretServo();
+        CobraGunnerTargetObservation observation = Observe(
+            new FlatTerrain(), new Vec3D(0.0, 150.0, -500.0), servo);
+
+        Assert.True(observation.HasLineOfSight);
+        Assert.False(observation.WithinTurretEnvelope);
+        Assert.Equal(0.0, servo.AzimuthRad, 12);
+        Assert.Equal(CobraAiGunnerState.OutOfLimits, Decide(observation).State);
+    }
+
+    [Fact]
+    public void OccludedTargetInsideTheEnvelopeReadsMaskedAndHoldsTheServo()
+    {
+        var servo = new CobraTurretServo();
+        CobraGunnerTargetObservation observation = Observe(
+            new RidgeTerrain(), new Vec3D(200.0, 150.0, 0.0), servo);
+
+        Assert.False(observation.HasLineOfSight);
+        Assert.True(observation.WithinTurretEnvelope);
+        Assert.Equal(0.0, servo.AzimuthRad, 12);
+        Assert.Equal(CobraAiGunnerState.Masked, Decide(observation).State);
+    }
+
+    [Fact]
+    public void SightedReachableTargetSlewsTheServoTowardTheAimPoint()
+    {
+        var servo = new CobraTurretServo();
+        CobraGunnerTargetObservation observation = Observe(
+            new FlatTerrain(), new Vec3D(200.0, 150.0, 0.0), servo);
+
+        Assert.True(observation.HasLineOfSight);
+        Assert.True(observation.WithinTurretEnvelope);
+        Assert.True(servo.AzimuthRad > 0.0);
+        Assert.True(observation.SightErrorRad > 0.0);
+    }
+}
+
 public sealed class CobraTurretServoTests
 {
     [Fact]

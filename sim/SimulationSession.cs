@@ -2619,6 +2619,21 @@ public sealed class SimulationSession {
             return;
         }
 
+        // THE PAIR TURNS TOGETHER. The co-operative opening can brief ships to present, but
+        // graduation was per-aircraft: each ship privately waited for the player to hold the gun
+        // funnel on ITSELF. The player naturally spends that funnel on the primary, so a
+        // presenting wingman was never tracked, never graduated, and paraded its fixed
+        // 15-degree present orbit out of the fight forever — Build 244 production: beyond 10 km
+        // for 68.8% of its live time while the player fought the lead. Every tactic-level fix
+        // was a bit-identical no-op because a presenting airframe does not fly the tactic
+        // layer's commands at all (CommandForFlight substitutes PresentCommand). The moment any
+        // member of the pair is fighting, the whole pair fights; both calls are one-way no-ops
+        // on an actor already fighting.
+        if (_bandit.Presenting != support.Bandit.Presenting) {
+            _bandit.EndPresentation();
+            support.Bandit.EndPresentation();
+        }
+
         ActorObservation sharedContact =
             ObservePlayer(_player.State);
         _enemyPairCoordinator.Step(
@@ -3417,6 +3432,13 @@ public sealed class SimulationSession {
     SortieScheduleState _sortiePlan;
     GunsOnly.Sim.Recovery.ApproachGuidanceState _approachGuidance =
         GunsOnly.Sim.Recovery.ApproachGuidanceState.Inactive;
+    long _approachSolveCount;
+    /// <summary>
+    /// 120 Hz sim, ~8 Hz solve. Approach guidance is publish-only HUD state, and each solve can
+    /// run a Dubins binary search; between solves the published state is reused unchanged. The
+    /// grid is keyed off the deterministic tick counter, never wall clock.
+    /// </summary>
+    const int ApproachSolveIntervalTicks = 15;
 
     /// <summary>
     /// The whole-sortie schedule — catshot, climb, cruise, descend, groove — as opposed to
@@ -3433,6 +3455,9 @@ public sealed class SimulationSession {
     /// Arms on recovery intent; does not require a Mesh PROC selection.
     /// </summary>
     public GunsOnly.Sim.Recovery.ApproachGuidanceState ApproachGuidancePlan => _approachGuidance;
+
+    /// <summary>Total approach-solver invocations; instrumentation pinning the solve decimation.</summary>
+    public long ApproachSolveCount => _approachSolveCount;
 
     void UpdateSortieSchedule() {
         Carrier? ship = _carrier;
@@ -3591,6 +3616,14 @@ public sealed class SimulationSession {
             _carrierSortieRoute.State.Phase,
             circuitsActive,
             _recoveryProcedure.Kind != RecoveryProcedureKind.None);
+
+        // Decimate the solve: the solver is pure in sim state, so re-solving every tick only
+        // burns the descent/RTB frame budget. Re-solve on the tick grid or the instant intent
+        // flips; otherwise the previously published state stands (guidance never gates physics).
+        if (intent == _approachGuidance.GuidanceActive
+            && _tick % ApproachSolveIntervalTicks != 0)
+            return;
+        if (intent) _approachSolveCount++;
 
         double approachMps = GunsOnly.Sim.Recovery.SortieSchedule.ApproachSpeedMps(
             Player.State.Mass, _beat.PlayerAir);

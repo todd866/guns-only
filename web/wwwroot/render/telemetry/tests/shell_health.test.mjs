@@ -82,6 +82,56 @@ test("beacon posts shell-health rows on milestone and fatal without opt-in gate"
   assert.match(fatal.message, /WebGL/i);
 });
 
+test("fatal(err) records the fatal and lastFatal returns the record", () => {
+  const beacon = createShellHealthBeacon({
+    build: "261",
+    fetchImpl: async () => ({ ok: true, status: 204 }),
+  });
+  assert.equal(beacon.lastFatal, null);
+  assert.equal(typeof beacon.fatal, "function");
+  const record = beacon.fatal(new Error("Could not create WebGL context"));
+  assert.equal(record.reason, "webgl");
+  assert.equal(beacon.lastFatal, record);
+});
+
+test("visibilitychange to hidden flushes immediately without waiting for debounce", async () => {
+  const posts = [];
+  let hiddenListener = null;
+  let hidden = false;
+  const documentRef = {
+    get visibilityState() { return hidden ? "hidden" : "visible"; },
+    addEventListener(type, listener) {
+      if (type === "visibilitychange") hiddenListener = listener;
+    },
+  };
+  const beacon = createShellHealthBeacon({
+    build: "261",
+    documentRef,
+    fetchImpl: async (url, init) => {
+      posts.push({ url, body: JSON.parse(init.body), keepalive: init.keepalive === true });
+      return { ok: true, status: 204 };
+    },
+    sendBeacon: undefined,
+  });
+  assert.equal(typeof hiddenListener, "function");
+
+  beacon.mark("script_load");
+  assert.equal(posts.length, 0, "milestone alone stays behind the debounce");
+
+  hidden = true;
+  hiddenListener();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(posts.length, 1, "hidden must flush without the 750ms debounce");
+  assert.equal(posts[0].keepalive, true);
+  assert.ok(posts[0].body.rows.some((row) => row.milestone === "script_load"));
+
+  // A visible transition must not flush.
+  hidden = false;
+  hiddenListener();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(posts.length, 1);
+});
+
 test("app wires shell health and keeps gameplay telemetry opt-in", async () => {
   const app = await readFile(new URL("../../../app.js", import.meta.url), "utf8");
   const index = await readFile(new URL("../../../index.html", import.meta.url), "utf8");

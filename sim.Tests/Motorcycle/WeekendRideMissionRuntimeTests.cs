@@ -123,10 +123,12 @@ public sealed class WeekendRideMissionRuntimeTests
     {
         var runtime = WeekendRideMissionRuntime.CreateDefault();
         runtime.Begin();
+        // Ride off the painted circuit without demanding a tip-over: sourced launch torque
+        // means a full-lock full-throttle launch now low-sides before leaving the paint.
         var steerOff = SteadyThrottle with {
-            Throttle = 1.0,
-            Steer = 1.0,
-            RiderLateral = 1.0
+            Throttle = 0.5,
+            Steer = 0.5,
+            RiderLateral = 0.5
         };
 
         for (int i = 0; i < 120 * 12; i++)
@@ -180,6 +182,48 @@ public sealed class WeekendRideMissionRuntimeTests
         Assert.Equal("rapier-strip.runway", runtime.Bike.State.Contact.SurfaceId);
         Assert.True(runtime.IsOnTrack);
         Assert.True(runtime.Bike.State.Flyable);
+    }
+
+    [Fact]
+    public void GrassMeasurablyCutsDriveAuthorityComparedToPavement()
+    {
+        var paved = WeekendRideMissionRuntime.CreateDefault();
+        var grass = WeekendRideMissionRuntime.CreateDefault();
+        paved.Begin();
+        grass.Begin();
+        grass.Bike.ResetTo(
+            new Vec3D(0.0, RapierLaunchSite.OperatingSurfaceElevationM, 120.0),
+            grass.GridHeadingRad);
+        var fullThrottle = SteadyThrottle with { Throttle = 1.0 };
+
+        for (int i = 0; i < 120 * 4; i++)
+        {
+            paved.StepFixed(fullThrottle);
+            grass.StepFixed(fullThrottle);
+        }
+
+        Assert.Equal("rapier-strip.runway", paved.Bike.State.Contact.SurfaceId);
+        Assert.Equal("rapier-strip.grass", grass.Bike.State.Contact.SurfaceId);
+        Assert.False(grass.Bike.Telemetry.IsTippedOver);
+        Assert.True(
+            grass.Bike.Telemetry.SpeedMps < paved.Bike.Telemetry.SpeedMps * 0.6,
+            $"grass {grass.Bike.Telemetry.SpeedMps:F1} m/s vs "
+            + $"pavement {paved.Bike.Telemetry.SpeedMps:F1} m/s");
+    }
+
+    [Fact]
+    public void HairpinApronsBeyondTheRunwayEdgeStayPaved()
+    {
+        var runtime = WeekendRideMissionRuntime.CreateDefault();
+        runtime.Begin();
+        Vec3D apronPoint = runtime.Circuit.Centreline.First(point =>
+            Math.Abs(point.Z) > PaintedCircuit.RapierRunwayWidthM * 0.5 + 5.0);
+        runtime.Bike.ResetTo(apronPoint, runtime.GridHeadingRad);
+
+        runtime.StepFixed(SteadyThrottle);
+
+        Assert.Equal("rapier-strip.runway", runtime.Bike.State.Contact.SurfaceId);
+        Assert.True(runtime.IsOnTrack);
     }
 
     [Fact]
