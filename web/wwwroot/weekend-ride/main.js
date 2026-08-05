@@ -31,7 +31,9 @@ renderer.toneMappingExposure = 1.04;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x78919a);
-scene.fog = new THREE.FogExp2(0x9da99d, 0.00008);
+// Fog and world radius are one knob (~1.87/radius): the 22 km track-day ground plane
+// must dissolve into haze before its edge instead of showing a hard rim against sky.
+scene.fog = new THREE.FogExp2(0x9da99d, 0.00016);
 
 const camera = new THREE.PerspectiveCamera(68, 1, 0.25, 12_000);
 scene.add(new THREE.HemisphereLight(0xe8eee2, 0x3d4632, 0.78));
@@ -154,7 +156,7 @@ function buildTrackDayPresentation(circuit) {
     trackWidthM: 20,
   });
   scene.add(trackDayPresentation.object3d);
-  helmetHud.updateMinimapBounds(circuit);
+  helmetHud.setCircuit(circuit);
 }
 
 function axisValue(positiveCode, negativeCode) {
@@ -326,7 +328,9 @@ async function boot() {
     bridge = assemblyExports.GunsOnly.Web.MotorcycleWebBridge;
     bridge.Start();
     snapshot = refreshSnapshot();
-    buildTrackDayPresentation(snapshot.circuit);
+    // The centreline is immutable: fetch it once instead of re-marshalling ~1,700
+    // points inside every per-frame GetState snapshot.
+    buildTrackDayPresentation(JSON.parse(bridge.GetCircuit()));
     manualClutch = snapshot.clutch_mode === "manual";
     setStatus("RAPIER TRACK DAY · RIDER REFLEX ASSIST", "ready");
     lastTimeMs = performance.now();
