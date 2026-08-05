@@ -28,6 +28,8 @@ const renderer = new THREE.WebGLRenderer({
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.04;
+// QA seam: perf audits read draw calls / triangles from the live renderer.
+window.__gunsOnlyWeekendRenderInfo = renderer.info;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x78919a);

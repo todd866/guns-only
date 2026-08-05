@@ -145,6 +145,157 @@ export function planRapierTrackDay(circuitInput, options = {}) {
     }
   }
 
+  // Horizon ring: a continuous treeline/hill band plus a few far building
+  // silhouettes so deep off-track never reads as a bare two-tone gradient.
+  // 5.5 km sits inside the sky sphere (8 km) and survives the fog (~11.7 km).
+  const HORIZON_SEGMENTS = 48;
+  const horizonSegments = [];
+  for (let index = 0; index < HORIZON_SEGMENTS; index++) {
+    const bearingRad = (index / HORIZON_SEGMENTS) * Math.PI * 2;
+    // Deterministic pseudo-noise: overlapping sines make an irregular ridge.
+    const ripple =
+      Math.sin(index * 1.7) * 0.5 + Math.sin(index * 0.53 + 1.3) * 0.35 + Math.sin(index * 3.1) * 0.15;
+    horizonSegments.push({
+      kind: "horizon-ridge",
+      bearingRad,
+      heightM: 110 + ripple * 62 + 55 * Math.max(0, Math.sin(index * 0.29)),
+      tone: (index % 3 + (index % 7 > 3 ? 1 : 0)) % 3,
+    });
+  }
+  const horizonSilhouettes = [];
+  for (const [bearingRad, rangeM, widthM, heightM] of [
+    [0.35, 3_600, 260, 22],
+    [0.75, 4_100, 180, 17],
+    [2.4, 3_200, 220, 20],
+    [3.6, 4_400, 300, 24],
+    [4.4, 3_800, 160, 16],
+    [5.5, 3_400, 240, 19],
+  ]) {
+    horizonSilhouettes.push({
+      kind: "horizon-silhouette",
+      center: Object.freeze({
+        x: Math.cos(bearingRad) * rangeM,
+        y: elevationM,
+        z: Math.sin(bearingRad) * rangeM,
+      }),
+      bearingRad,
+      widthM,
+      heightM,
+    });
+  }
+  const horizon = Object.freeze({
+    radiusM: 5_500,
+    segments: freezeAssets(horizonSegments),
+    silhouettes: freezeAssets(horizonSilhouettes),
+  });
+
+  // Airfield landmark: the beacons vanish at range; a 44 m aviation water tower
+  // plus a hangar block in the airfield cluster mark the field itself from deep
+  // off-track (Rapier-strip fiction). Mid-field so it does not crowd the gantry.
+  const waterTower = Object.freeze({
+    kind: "water-tower",
+    center: Object.freeze({ x: 120, y: elevationM, z: 150 }),
+    heightM: 50,
+  });
+  const hangar = Object.freeze({
+    kind: "hangar",
+    center: Object.freeze({ x: 10, y: elevationM, z: 190 }),
+    widthM: 92,
+    depthM: 32,
+    heightM: 16,
+    headingRad: 0,
+  });
+
+  // Ground variation: large painted tone bands (mowed/unmowed) and a dirt access
+  // road toward the paddock, so the olive plane is not one uniform value.
+  // Farmland-style bands either side of the strip: staggered x-extents so the
+  // edges never read as one infinite ruler line, tones spanning mowed greens to
+  // harvested tan so the variation survives the haze at a kilometre.
+  const fieldPatches = freezeAssets([
+    { kind: "field-patch", tone: 0, center: { x: 200, y: elevationM, z: -430 }, widthM: 5_600, depthM: 520 },
+    { kind: "field-patch", tone: 2, center: { x: -600, y: elevationM, z: -1_250 }, widthM: 6_400, depthM: 620 },
+    { kind: "field-patch", tone: 1, center: { x: 500, y: elevationM, z: -1_950 }, widthM: 7_200, depthM: 720 },
+    { kind: "field-patch", tone: 3, center: { x: -300, y: elevationM, z: -2_750 }, widthM: 8_000, depthM: 840 },
+    { kind: "field-patch", tone: 2, center: { x: 300, y: elevationM, z: -3_650 }, widthM: 8_800, depthM: 940 },
+    { kind: "field-patch", tone: 0, center: { x: -200, y: elevationM, z: 620 }, widthM: 5_400, depthM: 560 },
+    { kind: "field-patch", tone: 2, center: { x: 500, y: elevationM, z: 1_350 }, widthM: 6_600, depthM: 680 },
+    { kind: "field-patch", tone: 1, center: { x: -500, y: elevationM, z: 2_150 }, widthM: 7_400, depthM: 800 },
+    { kind: "field-patch", tone: 3, center: { x: 300, y: elevationM, z: 3_050 }, widthM: 8_200, depthM: 920 },
+    { kind: "field-patch", tone: 1, center: { x: -3_600, y: elevationM, z: -600 }, widthM: 1_600, depthM: 1_800 },
+    { kind: "field-patch", tone: 2, center: { x: 3_700, y: elevationM, z: 500 }, widthM: 1_800, depthM: 2_000 },
+  ].map((patch) => ({ ...patch, center: Object.freeze(patch.center) })));
+  const accessRoad = Object.freeze({
+    kind: "access-road",
+    start: Object.freeze({
+      x: Math.max(-1_200, Math.min(1_200, first.x - 110)),
+      y: elevationM,
+      z: 72,
+    }),
+    headingRad: 0.22,
+    lengthM: 2_400,
+    widthM: 8,
+  });
+
+  // Hedgerows: field-boundary rows along the patch seams. Kilometre-long
+  // verticals survive the eye-height compression that flattens painted bands,
+  // so the patchwork still reads as fields from deep off-track. The +z rows are
+  // split around the access road so the hedge never grows across the dirt.
+  const roadXAtZ = (z) =>
+    accessRoad.start.x + Math.sin(accessRoad.headingRad) * ((z - accessRoad.start.z) / Math.cos(accessRoad.headingRad));
+  const hedgerows = [];
+  const pushHedgerow = (centerX, z, lengthM, heightM) =>
+    hedgerows.push({
+      kind: "hedgerow",
+      center: Object.freeze({ x: centerX, y: elevationM, z }),
+      lengthM,
+      heightM,
+      depthM: 2.4,
+    });
+  pushHedgerow(-850, -690, 3_500, 3.6);
+  pushHedgerow(800, -1_590, 4_000, 3.1);
+  pushHedgerow(-1_300, -2_330, 3_400, 4.0);
+  for (const [z, heightM] of [[900, 3.4], [1_690, 3.8]]) {
+    const gapX = roadXAtZ(z);
+    pushHedgerow(gapX - 30 - 1_400, z, 2_800, heightM);
+    pushHedgerow(gapX + 30 + 1_150, z, 2_300, heightM);
+  }
+
+  // Midfield verticals: flat tone bands compress to a few pixels past ~300 m,
+  // so copses of illustrative trees and a few farm blocks carry the parallax
+  // that tells a deep off-track rider they are moving and which way is home.
+  const trees = [];
+  let seed = 41;
+  const nextRandom = () => {
+    seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+    return seed / 2_147_483_648;
+  };
+  for (let copse = 0; copse < 46; copse++) {
+    const bearingRad = nextRandom() * Math.PI * 2;
+    const rangeM = 650 + nextRandom() * 3_900;
+    const copseX = Math.cos(bearingRad) * rangeM;
+    const copseZ = Math.sin(bearingRad) * rangeM;
+    if (Math.abs(copseX) < pavedHalfLengthM + 140 && Math.abs(copseZ) < 260) continue;
+    const count = 3 + Math.floor(nextRandom() * 4);
+    for (let index = 0; index < count; index++) {
+      trees.push({
+        kind: "tree",
+        center: Object.freeze({
+          x: copseX + (nextRandom() - 0.5) * 90,
+          y: elevationM,
+          z: copseZ + (nextRandom() - 0.5) * 90,
+        }),
+        heightM: 6 + nextRandom() * 8,
+      });
+    }
+  }
+  const farms = freezeAssets([
+    { kind: "farm", center: { x: 2_250, y: elevationM, z: -950 }, widthM: 26, depthM: 12, heightM: 8, headingRad: 0.4, tone: 0 },
+    { kind: "farm", center: { x: 2_290, y: elevationM, z: -910 }, widthM: 12, depthM: 9, heightM: 5, headingRad: 0.4, tone: 1 },
+    { kind: "farm", center: { x: -1_950, y: elevationM, z: 1_180 }, widthM: 30, depthM: 13, heightM: 9, headingRad: -0.7, tone: 0 },
+    { kind: "farm", center: { x: -1_600, y: elevationM, z: -2_050 }, widthM: 24, depthM: 11, heightM: 7, headingRad: 1.1, tone: 1 },
+    { kind: "farm", center: { x: 1_500, y: elevationM, z: 2_400 }, widthM: 28, depthM: 12, heightM: 8, headingRad: 2.2, tone: 0 },
+  ].map((farm) => ({ ...farm, center: Object.freeze(farm.center) })));
+
   const paddock = [];
   for (let index = 0; index < 6; index++) {
     paddock.push({
@@ -174,6 +325,14 @@ export function planRapierTrackDay(circuitInput, options = {}) {
     tyreWalls: freezeAssets(tyreWalls),
     beacons: freezeAssets(beacons),
     paddock: freezeAssets(paddock),
+    horizon,
+    waterTower,
+    hangar,
+    fieldPatches,
+    accessRoad,
+    hedgerows: freezeAssets(hedgerows),
+    trees: freezeAssets(trees),
+    farms,
   });
 }
 
@@ -439,6 +598,234 @@ function addThresholdBeacons(THREE, root, plan) {
   }
 }
 
+function addHorizon(THREE, root, plan) {
+  // One merged ridge band: quads between consecutive bearing boundaries whose top
+  // edge follows the per-segment heights, so the silhouette reads as wooded hills.
+  const segments = plan.horizon.segments;
+  const radius = plan.horizon.radiusM;
+  const ridgeTones = [
+    new THREE.Color(0x39473a),
+    new THREE.Color(0x324236),
+    new THREE.Color(0x3f4c3b),
+  ];
+  const positions = [];
+  const colours = [];
+  const indices = [];
+  for (let index = 0; index < segments.length; index++) {
+    const segment = segments[index];
+    const x = Math.cos(segment.bearingRad) * radius;
+    const z = Math.sin(segment.bearingRad) * radius;
+    const tone = ridgeTones[segment.tone % ridgeTones.length];
+    // Bottom sinks below ground so no sliver of sky leaks under the band.
+    positions.push(x, plan.elevationM - 12, -z);
+    positions.push(x, plan.elevationM + segment.heightM, -z);
+    for (let vertex = 0; vertex < 2; vertex++) colours.push(tone.r, tone.g, tone.b);
+    const next = ((index + 1) % segments.length) * 2;
+    const base = index * 2;
+    indices.push(base, next, base + 1, base + 1, next, next + 1);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colours, 3));
+  geometry.setIndex(indices);
+  const ridge = new THREE.Mesh(
+    geometry,
+    new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }),
+  );
+  ridge.frustumCulled = false;
+  root.add(ridge);
+
+  // Far building silhouettes: one instanced box, flat tone, hazed by the fog.
+  const silhouettes = plan.horizon.silhouettes;
+  const blocks = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(1, 1, 1),
+    new THREE.MeshBasicMaterial({ color: 0x5a665f }),
+    silhouettes.length,
+  );
+  const transform = new THREE.Object3D();
+  silhouettes.forEach((silhouette, index) => {
+    transform.position.copy(scenePoint(THREE, silhouette.center, silhouette.heightM / 2));
+    transform.rotation.set(0, silhouette.bearingRad, 0);
+    transform.scale.set(silhouette.widthM, silhouette.heightM, 42);
+    transform.updateMatrix();
+    blocks.setMatrixAt(index, transform.matrix);
+  });
+  blocks.instanceMatrix.needsUpdate = true;
+  root.add(blocks);
+}
+
+function addMidfield(THREE, root, plan) {
+  // Illustrative conifer cones, one instanced draw. Solid flat green; the fog
+  // supplies the aerial perspective.
+  const trees = new THREE.InstancedMesh(
+    new THREE.ConeGeometry(1, 1, 6),
+    new THREE.MeshStandardMaterial({ color: 0x35462f, roughness: 0.95 }),
+    plan.trees.length,
+  );
+  const transform = new THREE.Object3D();
+  plan.trees.forEach((tree, index) => {
+    transform.position.copy(scenePoint(THREE, tree.center, tree.heightM / 2));
+    transform.rotation.set(0, index * 0.73, 0);
+    transform.scale.set(tree.heightM * 0.42, tree.heightM, tree.heightM * 0.42);
+    transform.updateMatrix();
+    trees.setMatrixAt(index, transform.matrix);
+  });
+  trees.instanceMatrix.needsUpdate = true;
+  root.add(trees);
+
+  const farmTones = [new THREE.Color(0x74463a), new THREE.Color(0x5d5f58)];
+  const farms = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(1, 1, 1),
+    new THREE.MeshStandardMaterial({ roughness: 0.85 }),
+    plan.farms.length,
+  );
+  plan.farms.forEach((farm, index) => {
+    transform.position.copy(scenePoint(THREE, farm.center, farm.heightM / 2));
+    transform.rotation.set(0, farm.headingRad, 0);
+    transform.scale.set(farm.widthM, farm.heightM, farm.depthM);
+    transform.updateMatrix();
+    farms.setMatrixAt(index, transform.matrix);
+    farms.setColorAt(index, farmTones[farm.tone % farmTones.length]);
+  });
+  farms.instanceMatrix.needsUpdate = true;
+  if (farms.instanceColor) farms.instanceColor.needsUpdate = true;
+  root.add(farms);
+}
+
+function addAirfieldLandmarks(THREE, root, plan) {
+  const tower = plan.waterTower;
+  const group = new THREE.Group();
+  group.position.copy(scenePoint(THREE, tower.center, 0));
+  const shaftHeightM = tower.heightM * 0.62;
+  const tankHeightM = tower.heightM * 0.3;
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.7, 2.3, shaftHeightM, 10),
+    new THREE.MeshStandardMaterial({ color: 0x707a72, roughness: 0.85 }),
+  );
+  shaft.position.y = shaftHeightM / 2;
+  group.add(shaft);
+  // Aviation checker colours: the orange tank is the one saturated accent on the
+  // horizon, so the airfield cluster is unmistakable from kilometres out.
+  const tank = new THREE.Mesh(
+    new THREE.CylinderGeometry(7.4, 6.4, tankHeightM, 14),
+    new THREE.MeshStandardMaterial({ color: 0xe2661f, roughness: 0.62 }),
+  );
+  tank.position.y = shaftHeightM + tankHeightM / 2;
+  group.add(tank);
+  const cap = new THREE.Mesh(
+    new THREE.ConeGeometry(7.6, tower.heightM - shaftHeightM - tankHeightM, 14),
+    new THREE.MeshStandardMaterial({ color: 0xf2ead6, roughness: 0.7 }),
+  );
+  cap.position.y = shaftHeightM + tankHeightM + (tower.heightM - shaftHeightM - tankHeightM) / 2;
+  group.add(cap);
+  root.add(group);
+
+  // Hangar block: a wide light slab reads at ranges where slim masts vanish.
+  const hangar = plan.hangar;
+  const block = new THREE.Mesh(
+    new THREE.BoxGeometry(hangar.widthM, hangar.heightM, hangar.depthM),
+    new THREE.MeshStandardMaterial({ color: 0x9aa099, roughness: 0.82 }),
+  );
+  block.position.copy(scenePoint(THREE, hangar.center, hangar.heightM / 2));
+  block.rotation.y = hangar.headingRad;
+  root.add(block);
+}
+
+function addHedgerows(THREE, root, plan) {
+  const rows = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(1, 1, 1),
+    new THREE.MeshStandardMaterial({ color: 0x39452f, roughness: 0.95 }),
+    plan.hedgerows.length,
+  );
+  const transform = new THREE.Object3D();
+  plan.hedgerows.forEach((row, index) => {
+    transform.position.copy(scenePoint(THREE, row.center, row.heightM / 2));
+    transform.rotation.set(0, 0, 0);
+    transform.scale.set(row.lengthM, row.heightM, row.depthM);
+    transform.updateMatrix();
+    rows.setMatrixAt(index, transform.matrix);
+  });
+  rows.instanceMatrix.needsUpdate = true;
+  root.add(rows);
+}
+
+function addFieldPatchwork(THREE, root, plan) {
+  // Mowed/unmowed tone bands plus the dirt access road, merged into ONE mesh:
+  // flat painted quads a few centimetres above the grass/verge planes.
+  const patchTones = [
+    new THREE.Color(0x6d774f), // mowed, lighter
+    new THREE.Color(0x424d37), // unmowed, darker
+    new THREE.Color(0x5c6649), // scrub
+    new THREE.Color(0x857c55), // harvested tan
+  ];
+  const roadTone = new THREE.Color(0x8f815f);
+  const positions = [];
+  const colours = [];
+  const indices = [];
+  let vertex = 0;
+  const pushQuad = (corners, y, tone) => {
+    for (const [x, z] of corners) {
+      positions.push(x, y, -z);
+      colours.push(tone.r, tone.g, tone.b);
+    }
+    indices.push(vertex, vertex + 2, vertex + 1, vertex + 1, vertex + 2, vertex + 3);
+    vertex += 4;
+  };
+  for (const patch of plan.fieldPatches) {
+    const halfW = patch.widthM / 2;
+    const halfD = patch.depthM / 2;
+    pushQuad(
+      [
+        [patch.center.x - halfW, patch.center.z - halfD],
+        [patch.center.x + halfW, patch.center.z - halfD],
+        [patch.center.x - halfW, patch.center.z + halfD],
+        [patch.center.x + halfW, patch.center.z + halfD],
+      ],
+      plan.elevationM - 0.05,
+      patchTones[patch.tone % patchTones.length],
+    );
+  }
+  const road = plan.accessRoad;
+  const dirX = Math.sin(road.headingRad);
+  const dirZ = Math.cos(road.headingRad);
+  const normalX = dirZ;
+  const normalZ = -dirX;
+  const halfWidth = road.widthM / 2;
+  const endX = road.start.x + dirX * road.lengthM;
+  const endZ = road.start.z + dirZ * road.lengthM;
+  pushQuad(
+    [
+      [road.start.x - normalX * halfWidth, road.start.z - normalZ * halfWidth],
+      [road.start.x + normalX * halfWidth, road.start.z + normalZ * halfWidth],
+      [endX - normalX * halfWidth, endZ - normalZ * halfWidth],
+      [endX + normalX * halfWidth, endZ + normalZ * halfWidth],
+    ],
+    plan.elevationM - 0.035,
+    roadTone,
+  );
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colours, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  const patchwork = new THREE.Mesh(
+    geometry,
+    new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 1.0,
+      metalness: 0.0,
+      side: THREE.DoubleSide,
+      // A few centimetres above the ground plane is below depth precision past
+      // ~200 m; slope-scaled offset keeps the bands winning at any distance.
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+    }),
+  );
+  patchwork.receiveShadow = true;
+  root.add(patchwork);
+}
+
 export function createRapierTrackDayPresentation(THREE, circuit, options = {}) {
   const plan = planRapierTrackDay(circuit, options);
   const root = new THREE.Group();
@@ -471,6 +858,12 @@ export function createRapierTrackDayPresentation(THREE, circuit, options = {}) {
   verge.position.y = plan.elevationM - 0.06;
   verge.receiveShadow = true;
   root.add(verge);
+
+  addFieldPatchwork(THREE, root, plan);
+  addHedgerows(THREE, root, plan);
+  addHorizon(THREE, root, plan);
+  addMidfield(THREE, root, plan);
+  addAirfieldLandmarks(THREE, root, plan);
 
   // Runway edge stripes: the strip must be findable from a kilometre off-track.
   // Top stays below the track ribbon lift (0.055) so hairpin flares crossing the
