@@ -62,15 +62,17 @@ public sealed class YzfR1LeanTests
         var shifted = AtRestWithRollInertia("shifted-rider", YzfR1Definition.RollInertiaKgM2);
         var accelerate = new MotorcyclePilotCommand(1.0, 0.0, 0.0, 0.0, 0.0, 0, 1.0,
             MotorcycleClutchMode.Auto);
-        Advance(neutral, accelerate, startTick: 0, tickCount: 120 * 8);
-        Advance(shifted, accelerate, startTick: 0, tickCount: 120 * 8);
+        // Sourced gearing accelerates harder than the v2 box; stop early so the mild turn
+        // stays comfortably inside the friction circle where the body-shift delta is visible.
+        Advance(neutral, accelerate, startTick: 0, tickCount: 120 * 5);
+        Advance(shifted, accelerate, startTick: 0, tickCount: 120 * 5);
 
         var mildRightTurn = accelerate with { Throttle = 0.25, Steer = 0.05 };
-        Advance(neutral, mildRightTurn, startTick: 120 * 8, tickCount: 120);
+        Advance(neutral, mildRightTurn, startTick: 120 * 5, tickCount: 120);
         Advance(
             shifted,
             mildRightTurn with { RiderLateral = 1.0 },
-            startTick: 120 * 8,
+            startTick: 120 * 5,
             tickCount: 120);
 
         double neutralRate = neutral.State.BodyRates.R;

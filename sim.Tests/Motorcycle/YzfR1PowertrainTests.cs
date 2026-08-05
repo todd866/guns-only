@@ -15,20 +15,21 @@ public sealed class YzfR1PowertrainTests
         var throttle = new MotorcyclePilotCommand(
             1.0, 0.0, 0.0, 0.0, 0.0, 0, 1.0, MotorcycleClutchMode.Auto);
 
-        for (long tick = 0; tick < 120 * 12; tick++)
+        double rpmBeforeShift = double.NaN;
+        int gearBeforeShift = 1;
+        for (long tick = 0; tick < 120 * 12 && bike.Telemetry.Gear == 1; tick++)
+        {
+            rpmBeforeShift = bike.Telemetry.Rpm;
+            gearBeforeShift = bike.Telemetry.Gear;
             bike.Advance(YzfR1TestInput.Of(tick, throttle));
+        }
 
-        Assert.Equal(1, bike.Telemetry.Gear);
-        double rpmBefore = bike.Telemetry.Rpm;
-        Assert.True(rpmBefore >= YzfR1Definition.AutoUpshiftRpm - 500.0,
-            $"expected upshift-ready rpm, got {rpmBefore:F0}");
-
-        bike.Advance(YzfR1TestInput.Of(120 * 12, throttle with { GearShiftRequest = 1 }));
-        bike.Advance(YzfR1TestInput.Of(120 * 12 + 1, throttle));
-
+        Assert.Equal(1, gearBeforeShift);
         Assert.Equal(2, bike.Telemetry.Gear);
-        Assert.True(bike.Telemetry.Rpm < rpmBefore - 500.0,
-            $"rpm before={rpmBefore:F0}, after={bike.Telemetry.Rpm:F0}");
+        Assert.True(rpmBeforeShift >= YzfR1Definition.AutoUpshiftRpm - 500.0,
+            $"expected upshift-ready rpm, got {rpmBeforeShift:F0}");
+        Assert.True(bike.Telemetry.Rpm < rpmBeforeShift - 500.0,
+            $"rpm before={rpmBeforeShift:F0}, after={bike.Telemetry.Rpm:F0}");
     }
 
     [Fact]

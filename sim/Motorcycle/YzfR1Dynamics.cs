@@ -8,13 +8,19 @@ namespace GunsOnly.Sim.Motorcycle;
 /// </summary>
 public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
 {
-    public const string CapabilityVersion = "player-vehicle.yzf-r1-runway-plane.v2";
+    public const string CapabilityVersion = "player-vehicle.yzf-r1-runway-plane.v3";
 
     const double DrivetrainEfficiency = 0.90;
     const double RunwayFrictionPerSecond = 2.5;
     const double StandardGravityMps2 = 9.80665;
     const double LowSpeedTipOverMps = 6.0;
+    // Surrogate low-side latch: sliding with lean this far beyond what the resolved contact can
+    // support, sustained for the latch window, drops the bike at any speed.
+    const double LowSideExcessLeanRad = 0.10;
+    const double LowSideLatchSeconds = 0.20;
     const double AutoLaunchFullEngagementSpeedMps = 8.0;
+    // A manual shift owns gear choice briefly so the auto schedule cannot instantly revert it.
+    const double AutoShiftManualHoldSeconds = 1.5;
     // Provisional single-track response parameters; see the YZF-R1 sources ledger.
     const double MaximumBarSteerRad = 0.12;
     const double RollResponseNaturalFrequencyRadPerSecond = 4.0;
@@ -61,6 +67,8 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
     bool _engineRunning = true;
     double _clutchEngagement = 1.0;
     bool _isTippedOver;
+    double _lowSideExcessSeconds;
+    double _autoShiftInhibitSeconds;
     long? _lastTick;
 
     public YzfR1Dynamics(
@@ -160,13 +168,15 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
             ReportsProtectionInterventionEvidence: true,
             FidelityDisclosure:
                 "Single-track runway-plane longitudinal skeleton using sourced 2020 Yamaha "
-                + "YZF-R1 mass, power, torque, gearing, and tire-radius constants plus "
-                + "explicitly labelled surrogate drivetrain/traction assumptions. It models "
-                + "drive, 70/30 front/rear braking, and provisional single-track "
+                + "YZF-R1 mass, power, torque, primary-reduction gearing, and tire-radius "
+                + "constants plus explicitly labelled surrogate drivetrain/traction "
+                + "assumptions. It models drive with an auto/manual sequential shift "
+                + "schedule, 70/30 front/rear braking, CdA aero drag, rolling resistance, "
+                + "closed-throttle engine braking, and provisional single-track "
                 + "steer/rider-CG lean plus bounded front/rear spring-damper load transfer "
                 + "with a load-sensitive friction-circle tire that authors planar curvature, "
-                + "plus latched low-speed tip-over on a horizontal contact plane; airborne "
-                + "dynamics are not yet implemented.");
+                + "plus latched low-speed tip-over and sustained-slide low-side tip-over on "
+                + "a horizontal contact plane; airborne dynamics are not yet implemented.");
         PlayerVehicleValidation.Capability(Capability);
     }
 
@@ -192,6 +202,7 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
         PlayerVehicleValidation.Finite(headingRad, nameof(headingRad));
 
         _isTippedOver = false;
+        _lowSideExcessSeconds = 0.0;
         _headingRad = PlayerVehicleValidation.WrapPi(headingRad);
         _leanRad = 0.0;
         _leanRateRadPerSec = 0.0;
@@ -206,6 +217,7 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
         _engineRpm = YzfR1Definition.IdleRpm;
         _engineRunning = true;
         _clutchEngagement = 1.0;
+        _autoShiftInhibitSeconds = 0.0;
         _lastTick = null;
 
         double grossMassKg = State.RecurringBaseMassKg + State.AdditivePayloadMassKg;
@@ -331,7 +343,8 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
             out double engineRpm,
             out double clutchEngagement,
             out double totalGearRatio,
-            out double engineTorqueNm);
+            out double engineTorqueNm,
+            out double engineBrakingForceN);
         double requestedDriveForceN = _engineRunning
             ? engineTorqueNm * totalGearRatio
                 * DrivetrainEfficiency * clutchEngagement / YzfR1Definition.RearTireRadiusM
@@ -344,12 +357,18 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
             * surfaceGrip * grossMassKg * StandardGravityMps2;
         double requestedDriveForceForLoadN = Math.Min(requestedDriveForceN, nominalTireForceLimitN);
         double requestedFrontBrakeForceN = command.Brake * nominalTireForceLimitN * 0.70;
-        double requestedRearBrakeForceN = command.Brake * nominalTireForceLimitN * 0.30;
+        // Closed-throttle engine braking retards through the rear contact patch with the brakes.
+        double requestedRearBrakeForceN = command.Brake * nominalTireForceLimitN * 0.30
+            + engineBrakingForceN;
+        double aeroDragForceN = 0.5 * input.Environment.AirDensityKgM3
+            * YzfR1Definition.AeroDragAreaCdAM2 * speedMps * speedMps;
+        double resistiveDirection = absoluteSpeedMps > 1e-6 ? Math.Sign(speedMps) : 0.0;
         double requestedBrakeForceForLoadN = absoluteSpeedMps > 1e-6
             ? Math.Sign(speedMps) * (requestedFrontBrakeForceN + requestedRearBrakeForceN)
             : 0.0;
         double requestedLongitudinalAccelerationMps2 = (requestedDriveForceForLoadN
-            - requestedBrakeForceForLoadN) / grossMassKg;
+            - requestedBrakeForceForLoadN
+            - resistiveDirection * aeroDragForceN) / grossMassKg;
         (double targetFrontNormalForceN, double targetRearNormalForceN) =
             CalculateNormalLoadTargets(
                 grossMassKg,
@@ -432,7 +451,13 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
             requestedRearBrakeForceN,
             speedMps,
             desiredLateralForceN: 0.0);
-        double nextSpeedMps = speedMps + longitudinalOnly.LongitudinalForceN / grossMassKg * dt;
+        // Aero drag and rolling resistance retard the body directly; they consume no tire grip.
+        double rollingResistanceForceN = YzfR1Definition.RollingResistanceCoefficient
+            * (frontNormalForceN + rearNormalForceN);
+        double bodyResistiveForceN = resistiveDirection
+            * (aeroDragForceN + rollingResistanceForceN);
+        double nextSpeedMps = speedMps
+            + (longitudinalOnly.LongitudinalForceN - bodyResistiveForceN) / grossMassKg * dt;
         if ((speedMps > 0.0 && nextSpeedMps < 0.0)
             || (speedMps < 0.0 && nextSpeedMps > 0.0))
             nextSpeedMps = 0.0;
@@ -505,9 +530,15 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
             _headingRad + nextYawRateRadPerSec * dt);
         double maximumSupportedLeanRad = Math.Atan(
             tireForces.AvailableLateralForceN / (grossMassKg * StandardGravityMps2));
-        _isTippedOver = Math.Abs(nextSpeedMps) <= LowSpeedTipOverMps
+        bool lowSpeedTipOver = Math.Abs(nextSpeedMps) <= LowSpeedTipOverMps
             && tireForces.IsSliding
             && Math.Abs(desiredLeanRad) > maximumSupportedLeanRad;
+        // Low-side at any speed: the bike is sliding while carrying more lean than the resolved
+        // contact can hold up (e.g. pavement-limit lean carried onto the grass verge).
+        bool slideExceedsSupport = tireForces.IsSliding
+            && Math.Abs(nextLeanRad) > maximumSupportedLeanRad + LowSideExcessLeanRad;
+        _lowSideExcessSeconds = slideExceedsSupport ? _lowSideExcessSeconds + dt : 0.0;
+        _isTippedOver = lowSpeedTipOver || _lowSideExcessSeconds >= LowSideLatchSeconds;
 
         Vec3D previousVelocity = forward * speedMps;
         Vec3D nextVelocity = Forward(nextHeadingRad) * nextSpeedMps;
@@ -695,7 +726,8 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
         out double engineRpm,
         out double clutchEngagement,
         out double totalGearRatio,
-        out double engineTorqueNm)
+        out double engineTorqueNm,
+        out double engineBrakingForceN)
     {
         double wheelRpm = absoluteSpeedMps
             / (2.0 * Math.PI * YzfR1Definition.RearTireRadiusM) * 60.0;
@@ -703,7 +735,8 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
         double coupledRpm = Math.Max(YzfR1Definition.IdleRpm, wheelRpm * totalGearRatio);
         double previousClutchEngagement = _clutchEngagement;
 
-        ApplyGearShiftRequest(command.GearShiftRequest, coupledRpm);
+        _autoShiftInhibitSeconds = Math.Max(0.0, _autoShiftInhibitSeconds - dt);
+        ApplyGearShiftRequest(command.GearShiftRequest, command.ClutchMode, coupledRpm);
 
         totalGearRatio = YzfR1Definition.TotalRatio(_gear);
         coupledRpm = Math.Max(YzfR1Definition.IdleRpm, wheelRpm * totalGearRatio);
@@ -754,37 +787,62 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
         engineTorqueNm = _engineRunning
             ? command.Throttle * TorqueAt(revLimiterRpm)
             : 0.0;
+        // Closed-throttle motoring drag, linear in rpm above idle; a stalled engine's drag is a
+        // manual-clutch corner case this skeleton does not model yet.
+        double motoringRpmFraction = Math.Clamp(
+            (_engineRpm - YzfR1Definition.IdleRpm)
+                / (YzfR1Definition.RedlineRpm - YzfR1Definition.IdleRpm),
+            0.0,
+            1.0);
+        engineBrakingForceN = _engineRunning
+            ? (1.0 - command.Throttle) * YzfR1Definition.EngineBrakingTorqueNmAtRedline
+                * motoringRpmFraction * totalGearRatio * clutchEngagement
+                / YzfR1Definition.RearTireRadiusM
+            : 0.0;
     }
 
-    void ApplyGearShiftRequest(int gearShiftRequest, double coupledRpm)
+    /// <summary>
+    /// Manual requests shift freely (downshifts are over-rev protected) and hold off the auto
+    /// schedule briefly; with no request the auto clutch schedules its own shifts across the
+    /// surrogate 12,000/4,000 rpm window. Post-shift rpm needs no reassignment here: the caller
+    /// recomputes the coupled rpm with the new gear before integrating engine speed.
+    /// </summary>
+    void ApplyGearShiftRequest(
+        int gearShiftRequest,
+        MotorcycleClutchMode clutchMode,
+        double coupledRpm)
     {
-        if (gearShiftRequest == 0)
-            return;
-
         if (gearShiftRequest > 0)
         {
-            if (_gear >= YzfR1Definition.GearCount
-                || _engineRpm < YzfR1Definition.AutoUpshiftRpm)
-                return;
-
-            _gear++;
-            _engineRpm = Math.Clamp(
-                coupledRpm * YzfR1Definition.TotalRatio(_gear - 1)
-                    / YzfR1Definition.TotalRatio(_gear),
-                YzfR1Definition.IdleRpm,
-                YzfR1Definition.RedlineRpm);
+            if (_gear < YzfR1Definition.GearCount)
+                _gear++;
+            _autoShiftInhibitSeconds = AutoShiftManualHoldSeconds;
             return;
         }
-
-        if (_gear <= 1 || _engineRpm > YzfR1Definition.AutoDownshiftRpm)
+        if (gearShiftRequest < 0)
+        {
+            TryDownshiftWithOverRevProtection(coupledRpm);
+            _autoShiftInhibitSeconds = AutoShiftManualHoldSeconds;
             return;
+        }
+        if (clutchMode != MotorcycleClutchMode.Auto || _autoShiftInhibitSeconds > 0.0)
+            return;
+        if (_gear < YzfR1Definition.GearCount
+            && coupledRpm >= YzfR1Definition.AutoUpshiftRpm)
+            _gear++;
+        else if (_gear > 1 && coupledRpm <= YzfR1Definition.AutoDownshiftRpm)
+            TryDownshiftWithOverRevProtection(coupledRpm);
+    }
 
+    void TryDownshiftWithOverRevProtection(double coupledRpm)
+    {
+        if (_gear <= 1)
+            return;
+        double projectedRpm = coupledRpm
+            * YzfR1Definition.TotalRatio(_gear - 1) / YzfR1Definition.TotalRatio(_gear);
+        if (projectedRpm > YzfR1Definition.RedlineRpm)
+            return;
         _gear--;
-        _engineRpm = Math.Clamp(
-            coupledRpm * YzfR1Definition.TotalRatio(_gear + 1)
-                / YzfR1Definition.TotalRatio(_gear),
-            YzfR1Definition.IdleRpm,
-            YzfR1Definition.RedlineRpm);
     }
 
     static double ResolveClutchEngagement(

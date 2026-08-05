@@ -46,6 +46,7 @@ and Ultimate Specs agree on 448 lb with fluids — the definition targets the US
 | `PeakTorqueNm` | 112.4 N·m | measured (claimed) | Total Motorcycle / Ultimate Specs |
 | `PeakTorqueRpm` | 11,500 | measured (claimed) | ibid. |
 | `GearCount` | 6 | measured | All primary references |
+| `PrimaryReductionRatio` | 1.634 (67/41) | measured (published spec) | Total Motorcycle 2020 guide transmission table ("Primary Reduction Ratio 1.634"); consistent across 2015–2024 crossplane R1 spec sheets |
 | `MaxLeanRad` | 56° | measured (OEM claim) | Total Motorcycle ("56-degree maximum lean angle") |
 | `FrontTireRadiusM` | 0.300 m | derived | 120/70-ZR17 rolling radius from nominal section/aspect |
 | `RearTireRadiusM` | 0.320 m | derived | 190/55-ZR17 rolling radius from nominal section/aspect |
@@ -72,8 +73,8 @@ dyno-measured, and should be replaced if loaded-radius data appears.
 |---|---:|---|---|
 | `RedlineRpm` | 14,500 | Common R1 rev limiter cited in owner community; **no handbook scan held** | Rev limiter clips drive torque; auto-shift window ends below redline |
 | `IdleRpm` | 2,000 | Warm-idle order-of-magnitude for liter four | Manual-clutch free-rev floor; stall threshold reference |
-| `AutoUpshiftRpm` | 12,000 | Surrogate shift lower bound pending handbook | Sequential upshift accepted at/above this RPM |
-| `AutoDownshiftRpm` | 4,000 | Surrogate shift upper bound pending handbook | Sequential downshift accepted at/below this RPM |
+| `AutoUpshiftRpm` | 12,000 | Surrogate auto-shift schedule point pending handbook | Auto clutch upshifts itself at/above this coupled RPM; manual requests shift at any RPM |
+| `AutoDownshiftRpm` | 4,000 | Surrogate auto-shift schedule point pending handbook | Auto clutch downshifts itself at/below this coupled RPM; manual downshifts are over-rev protected instead |
 | `StallRpm` | 1,200 | Surrogate manual-clutch dump stall threshold | Engine dies when clutch engages from rest below this band |
 | `EngineInertiaKgM2` | 0.055 | Typical liter-four crank/internals order-of-magnitude | Launch RPM flare with auto-clutch; manual-clutch stall threshold |
 | `CombinedCgHeightM` | 0.585 m | Bike-only ~0.52 m + 80 kg rider scaled over wheelbase | Static front/rear load split ≈ 48/52 at rest on level ground |
@@ -90,10 +91,21 @@ dyno-measured, and should be replaced if loaded-radius data appears.
 | `TireLoadSensitivity` | 0.85 | Pacejka-like load exponent placeholder | Combined brake+lean reduces lateral force per Task 6 golden path |
 | `TireCamberStiffnessNPerRad` | 1_200 | Lateral force vs. camber slope placeholder | Camber thrust contributes at knee-down lean |
 
+## Estimated — longitudinal resistance (labelled estimates, no test-stand data held)
+
+| Constant | Value | Basis | Validation target |
+|---|---:|---|---|
+| `AeroDragAreaCdAM2` | 0.35 m² | **Estimate.** Sport bike + tucked rider CdA is commonly cited at 0.30–0.40 m²; no R1 wind-tunnel figure held | WOT top speed emerges drag-limited near the R1's ~299 km/h claim, below the 6th-gear redline ceiling |
+| `RollingResistanceCoefficient` | 0.015 | **Estimate.** Motorcycle sport radial on asphalt order-of-magnitude | Closed-throttle coast decays visibly from 100 km/h; no self-propulsion at rest |
+| `EngineBrakingTorqueNmAtRedline` | 20 N·m | **Estimate.** Closed-throttle motoring (friction + pumping) torque order-of-magnitude for a 998 cc four at high rpm, linear from idle; includes drivetrain drag | Gear-dependent coast decel through the rear contact patch; zero at idle so the bike cannot creep backwards |
+
 ## Known gaps
 
-- **Gear ratios and final drive** — surrogate until a 2020 owner's handbook primary-drive table is
-  scanned; wrong ratios show up immediately in top-gear speed and shift RPM tests (Task 7).
+- **Gearbox ratios and final drive** — surrogate until a 2020 owner's handbook table is scanned;
+  wrong ratios show up immediately in top-gear speed and shift RPM tests (Task 7). The **primary
+  reduction (1.634)** is now sourced from published spec tables and applied in `TotalRatio`.
+- **Longitudinal resistance** — CdA, rolling resistance, and closed-throttle motoring torque are
+  labelled estimates; replace with coast-down or dyno data if held.
 - **Redline** — surrogate pending handbook; affects rev limiter and auto-shift ceiling.
 - **Inertias and CG** — no published 6-DOF inertia tensor located; surrogates must be validated
   against lean transient, wheelie/stoppie, and tip-over golden paths (Tasks 4–6).

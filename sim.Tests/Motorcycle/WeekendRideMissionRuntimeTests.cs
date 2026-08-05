@@ -123,10 +123,12 @@ public sealed class WeekendRideMissionRuntimeTests
     {
         var runtime = WeekendRideMissionRuntime.CreateDefault();
         runtime.Begin();
+        // Ride off the painted circuit without demanding a tip-over: sourced launch torque
+        // means a full-lock full-throttle launch now low-sides before leaving the paint.
         var steerOff = SteadyThrottle with {
-            Throttle = 1.0,
-            Steer = 1.0,
-            RiderLateral = 1.0
+            Throttle = 0.5,
+            Steer = 0.5,
+            RiderLateral = 0.5
         };
 
         for (int i = 0; i < 120 * 12; i++)
