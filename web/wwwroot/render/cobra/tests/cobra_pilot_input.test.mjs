@@ -52,6 +52,73 @@ test("released digital axes spring-center through the same rate limit", () => {
   assert.ok(Math.abs(state.forwardCyclic - 0.5) < 1e-9);
 });
 
+test("released cyclic levels against the measured attitude instead of freezing the dive", () => {
+  // Rate-command dynamics latch attitude: a centered stick means zero pitch RATE, so a
+  // nose-down ship stays nose down and diverges into the ground. With no cyclic demand the
+  // seam must fly the stick against the attitude (aft cyclic for nose-down pitch).
+  const after = advanceCobraPilotControls(createCobraPilotControlState(0.5), {
+    keyboardIntent: cobraKeyboardControlIntent(new Set()),
+    attitude: { pitchRad: -0.3, rollRad: 0 },
+    deltaSeconds: 1.0,
+    ...rates,
+  });
+  assert.ok(after.forwardCyclic < 0, "nose-down attitude must command aft cyclic");
+  // clamp(3.0 * -0.3) exceeds the leveling authority, so it saturates at -0.5.
+  assert.ok(Math.abs(after.forwardCyclic + 0.5) < 1e-9);
+});
+
+test("released cyclic levels a right roll with left cyclic, bounded by leveling authority", () => {
+  const after = advanceCobraPilotControls(createCobraPilotControlState(0.5), {
+    keyboardIntent: cobraKeyboardControlIntent(new Set()),
+    attitude: { pitchRad: 0, rollRad: 0.1 },
+    deltaSeconds: 1.0,
+    ...rates,
+  });
+  assert.ok(after.rightCyclic < 0, "right roll must command left cyclic");
+  assert.ok(Math.abs(after.rightCyclic + 0.3) < 1e-9);
+});
+
+test("a held cyclic key overrides the leveling assist entirely", () => {
+  const after = advanceCobraPilotControls(createCobraPilotControlState(0.5), {
+    keyboardIntent: cobraKeyboardControlIntent(new Set(["ArrowUp"])),
+    attitude: { pitchRad: -0.5, rollRad: -0.4 },
+    deltaSeconds: 1.0,
+    ...rates,
+  });
+  assert.equal(after.forwardCyclic, 1, "held key wins its own axis outright");
+  assert.ok(
+    Math.abs(after.rightCyclic - 0.5) < 1e-9,
+    "the idle roll axis still levels the left bank while pitch is hand-flown",
+  );
+});
+
+test("an active analog axis overrides the leveling assist on that axis", () => {
+  const after = advanceCobraPilotControls(createCobraPilotControlState(0.5), {
+    keyboardIntent: cobraKeyboardControlIntent(new Set()),
+    analogAxes: cobraAnalogControlAxes({ forwardCyclic: 0.4, deadzone: 0 }),
+    attitude: { pitchRad: -0.5, rollRad: 0 },
+    deltaSeconds: 1.0,
+    ...rates,
+  });
+  assert.equal(after.forwardCyclic, 0.4);
+});
+
+test("level attitude and no demand still recentre the cyclic to neutral", () => {
+  let state = createCobraPilotControlState(0.5);
+  state = advanceCobraPilotControls(state, {
+    keyboardIntent: cobraKeyboardControlIntent(new Set(["ArrowUp"])),
+    deltaSeconds: 1.0,
+    ...rates,
+  });
+  state = advanceCobraPilotControls(state, {
+    keyboardIntent: cobraKeyboardControlIntent(new Set()),
+    attitude: { pitchRad: 0, rollRad: 0 },
+    deltaSeconds: 1.0,
+    ...rates,
+  });
+  assert.equal(state.forwardCyclic, 0);
+});
+
 test("collective keeps the profile pull-positive lever and holds when keys release", () => {
   let state = createCobraPilotControlState(0.45);
   state = advanceCobraPilotControls(state, {
@@ -180,4 +247,10 @@ test("Hold the Bridge consumes the production pilot input module", async () => {
     main,
     /\(keys\.has\("ArrowUp"\) \? 1 : 0\) \+ \(keys\.has\("ArrowDown"\) \? -1 : 0\)/,
   );
+});
+
+test("Hold the Bridge feeds the hot-pose attitude into the leveling assist", async () => {
+  const main = await readFile(new URL("../../../cobra-lab/main.js", import.meta.url), "utf8");
+  assert.match(main, /attitude:\s*\S[\s\S]{0,160}?pitch_rad/);
+  assert.match(main, /attitude:\s*\S[\s\S]{0,160}?roll_rad/);
 });

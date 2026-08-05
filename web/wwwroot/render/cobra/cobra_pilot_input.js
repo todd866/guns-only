@@ -4,6 +4,17 @@ const DEFAULT_COLLECTIVE_FULL_TRAVEL_PER_SECOND = 0.40;
 const DEFAULT_CYCLIC_FULL_TRAVEL_PER_SECOND = 2.5;
 const DEFAULT_PEDAL_FULL_TRAVEL_PER_SECOND = 2.5;
 const DEFAULT_AXIS_DEADZONE = 0.12;
+// Attitude-leveling assist for idle cyclic axes. The AH-1G dynamics are rate-command: a
+// centered stick means zero pitch/roll RATE, not a level ship, so a one-second keyboard tap
+// used to leave a latched dive attitude that flew the ship into the ground. When neither the
+// keyboard nor an analog device demands an axis, the seam flies that stick against the
+// measured attitude — an honest-pilot assist that moves the real control through the same
+// slew limit, never a teleport of the aircraft. Any held key or live analog deflection on the
+// axis overrides it completely, so deliberate attitude is always available by holding the
+// control. Gain 3.0/rad saturates the assist at ~9.6 deg of attitude error; authority 0.5
+// keeps half the stick throw in reserve so the assist can never out-muscle the pilot.
+const DEFAULT_CYCLIC_LEVELING_GAIN_PER_RAD = 3.0;
+const DEFAULT_CYCLIC_LEVELING_AUTHORITY = 0.5;
 
 function finiteUnit(value, minimum = -1, maximum = 1) {
   const numeric = Number(value);
@@ -118,19 +129,39 @@ export function releaseCobraPilotControls(state) {
 }
 
 /**
+ * Leveling command for one idle cyclic axis: a bounded stick deflection proportional to the
+ * attitude error, in the sense that drives the error toward zero under the AH-1G's
+ * rate-command dynamics (positive pitch = nose up needs forward cyclic; positive roll =
+ * right roll needs left cyclic — the caller passes the already-signed error).
+ */
+function levelingCyclicCommand(attitudeErrorRad, gainPerRad, authority) {
+  const error = Number(attitudeErrorRad);
+  if (!Number.isFinite(error)) return 0;
+  const limit = Math.min(1, Math.max(0, Number(authority) || 0));
+  return Math.min(limit, Math.max(-limit, error * gainPerRad));
+}
+
+/**
  * Integrate one frame of production pilot input.
  *
  * Digital keyboard axes slew and spring-center. Analog axes remain proportional position
  * demands. When both are present they sum and clamp. Unfocused windows release every command.
+ * When a cyclic axis is completely idle and the caller supplies the measured attitude
+ * ({ pitchRad, rollRad }), the spring centers onto a bounded leveling command instead of bare
+ * neutral, because neutral cyclic under rate-command dynamics would freeze the ship in
+ * whatever dive or bank the last tap left behind.
  */
 export function advanceCobraPilotControls(state, {
   keyboardIntent = null,
   analogAxes = null,
+  attitude = null,
   deltaSeconds,
   focused = true,
   collectiveFullTravelPerSecond = DEFAULT_COLLECTIVE_FULL_TRAVEL_PER_SECOND,
   cyclicFullTravelPerSecond = DEFAULT_CYCLIC_FULL_TRAVEL_PER_SECOND,
   pedalFullTravelPerSecond = DEFAULT_PEDAL_FULL_TRAVEL_PER_SECOND,
+  cyclicLevelingGainPerRad = DEFAULT_CYCLIC_LEVELING_GAIN_PER_RAD,
+  cyclicLevelingAuthority = DEFAULT_CYCLIC_LEVELING_AUTHORITY,
 } = {}) {
   const current = freezeState(state ?? createCobraPilotControlState());
   const dt = requireFiniteNonNegative(deltaSeconds, "deltaSeconds");
@@ -186,14 +217,32 @@ export function advanceCobraPilotControls(state, {
   const analogRight = Math.abs(finiteUnit(analog.rightCyclic)) > 1e-9;
   const analogYaw = Math.abs(finiteUnit(analog.yaw)) > 1e-9;
 
+  // Idle cyclic axes (no digital, no analog) spring onto the attitude-leveling command.
+  const forwardIdle = !analogForward && Math.abs(finiteUnit(digital.forwardCyclic)) < 1e-9;
+  const rightIdle = !analogRight && Math.abs(finiteUnit(digital.rightCyclic)) < 1e-9;
+  const forwardSpringTarget = forwardIdle && attitude
+    ? levelingCyclicCommand(
+      attitude.pitchRad,
+      cyclicLevelingGainPerRad,
+      cyclicLevelingAuthority,
+    )
+    : forwardTarget;
+  const rightSpringTarget = rightIdle && attitude
+    ? levelingCyclicCommand(
+      -attitude.rollRad,
+      cyclicLevelingGainPerRad,
+      cyclicLevelingAuthority,
+    )
+    : rightTarget;
+
   return freezeState({
     collective,
     forwardCyclic: analogForward
       ? forwardTarget
-      : moveToward(current.forwardCyclic, forwardTarget, cyclicRate * dt),
+      : moveToward(current.forwardCyclic, forwardSpringTarget, cyclicRate * dt),
     rightCyclic: analogRight
       ? rightTarget
-      : moveToward(current.rightCyclic, rightTarget, cyclicRate * dt),
+      : moveToward(current.rightCyclic, rightSpringTarget, cyclicRate * dt),
     yaw: analogYaw
       ? yawTarget
       : moveToward(current.yaw, yawTarget, pedalRate * dt),

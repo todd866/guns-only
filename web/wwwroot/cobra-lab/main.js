@@ -593,9 +593,16 @@ function updateManual(deltaSeconds) {
   }
   if (bridge) {
     const gamepad = Array.from(navigator.getGamepads?.() ?? []).find(Boolean);
+    // The hot-pose attitude feeds the idle-stick leveling assist: rate-command dynamics
+    // latch whatever attitude a keyboard tap leaves behind, so the released spring must
+    // centre onto a level-the-ship command, not bare neutral.
+    const pose = readVehiclePose();
     pilotControls = advanceCobraPilotControls(pilotControls, {
       keyboardIntent: cobraKeyboardControlIntent(keys, cobraControlProfile),
       analogAxes: cobraGamepadControlAxes(gamepad),
+      attitude: pose
+        ? { pitchRad: pose.pitch_rad, rollRad: pose.roll_rad }
+        : null,
       deltaSeconds,
       focused: windowFocused,
     });
@@ -713,19 +720,42 @@ function showMissionDebrief(war, status) {
   missionTerminal = true;
   const victory = status === "victory";
   const defeat = status === "defeat";
-  const reason = war?.outcome_reason === "held-bridge"
-    ? "You held friendly control long enough to keep the basin."
-    : war?.outcome_reason === "lost-basin"
+  // Every terminal state gets an explicit outcome + cause: the sim halts here, and a frozen
+  // HUD with no card reads as a crash of the game rather than of the helicopter.
+  let title;
+  let reason;
+  if (victory) {
+    title = "BRIDGE HELD";
+    reason = "You held friendly control long enough to keep the basin.";
+  } else if (defeat) {
+    title = "BASIN LOST";
+    reason = war?.outcome_reason === "lost-basin"
       ? "Hostile control locked the basin before you could tip it back."
-      : `Sortie ended: ${status.replaceAll("-", " ")}.`;
-  setText(debriefTitle, victory ? "BRIDGE HELD" : defeat ? "BASIN LOST" : "SORTIE ENDED");
+      : "The ground war is lost.";
+  } else if (status === "obstacle-collision") {
+    title = "OBSTACLE STRIKE";
+    const obstacle = authorityState?.collision_obstacle_id;
+    reason = obstacle
+      ? `Flew into ${String(obstacle).split(".").slice(-2).join(" ")}.`
+      : "Flew into a canyon obstacle.";
+  } else if (status === "vehicle-authority-lost") {
+    title = "AIRFRAME LOST";
+    reason = "Terrain strike — the impact took the rotor and the airframe with it.";
+  } else if (status === "terrain-unavailable") {
+    title = "OFF THE MAP";
+    reason = "You left surveyed terrain; the sortie cannot continue.";
+  } else {
+    title = "SORTIE ENDED";
+    reason = `Sortie ended: ${status.replaceAll("-", " ")}.`;
+  }
+  setText(debriefTitle, title);
   setText(
     debriefBody,
-    `${reason} Hostiles down ${war?.debrief?.hostile_kills ?? 0} · rearms ${war?.debrief?.fob_rearms ?? 0} · ${(war?.debrief?.elapsed_s ?? 0).toFixed(0)}s airborne.`,
+    `${reason} Hostiles down ${war?.debrief?.hostile_kills ?? 0} · rearms ${war?.debrief?.fob_rearms ?? 0} · ${(war?.debrief?.elapsed_s ?? 0).toFixed(0)}s airborne. R restarts.`,
   );
   debrief.hidden = false;
   setStatus(
-    victory ? "MISSION COMPLETE · BRIDGE HELD" : `MISSION ${status.replaceAll("-", " ").toUpperCase()}`,
+    victory ? "MISSION COMPLETE · BRIDGE HELD" : `MISSION ${status.replaceAll("-", " ").toUpperCase()} · R RESTARTS`,
     victory ? "ready" : "error",
   );
 }
@@ -854,6 +884,13 @@ function isManualControl(code) {
 }
 
 window.addEventListener("keydown", (event) => {
+  // Terminal states freeze the sim; R is the keyboard path back into the fight (the debrief
+  // card announces it). Guarded by missionTerminal so mid-sortie R keeps its freelook meaning.
+  if (event.code === "KeyR" && missionTerminal) {
+    event.preventDefault();
+    restartRoute();
+    return;
+  }
   if (event.code === "Tab") {
     event.preventDefault();
     playerHasInteracted = true;
