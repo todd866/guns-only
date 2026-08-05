@@ -22,7 +22,9 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
     // A manual shift owns gear choice briefly so the auto schedule cannot instantly revert it.
     const double AutoShiftManualHoldSeconds = 1.5;
     // Provisional single-track response parameters; see the YZF-R1 sources ledger.
-    const double MaximumBarSteerRad = 0.12;
+    // Public because the rider controller normalizes its lean-stabilizing bar correction by
+    // the steer-to-lean plant gain, which is proportional to this input range.
+    public const double MaximumBarSteerRad = 0.12;
     const double RollResponseNaturalFrequencyRadPerSecond = 4.0;
     const double RollResponseDampingRatio = 0.85;
     const double ReferenceRollInertiaKgM2 = YzfR1Definition.RollInertiaKgM2;
