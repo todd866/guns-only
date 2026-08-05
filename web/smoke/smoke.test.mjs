@@ -2867,13 +2867,22 @@ test("boot does not stutter: no application task is a wild frame outlier", async
 
     const sorted = deltas.slice(1).sort((a, b) => a - b);
     const median = sorted[Math.floor(sorted.length / 2)];
-    const threshold = median * 6;
+    // The purely relative 6x-median bar cried wolf on loaded runners: when the sampler happens to
+    // run with a fast median (a few ms under SwiftShader), 6x is a bar in the tens of ms and any
+    // routine GC or compile tick trips it — this gate failed 3/6 builds and passed every re-run.
+    // The contract is catching application-caused multi-hundred-ms hitches, so hold an absolute
+    // floor of 120 ms (~7 dropped frames at 60 Hz — unmistakably a hitch, well under the
+    // multi-hundred-ms stalls this gate exists to catch). max() keeps the relative bar in charge
+    // whenever the median is at or above a healthy 20 ms frame.
+    const ABS_FLOOR_MS = 120;
+    const threshold = Math.max(median * 6, ABS_FLOOR_MS);
     const rawOutliers = sorted.filter((delta) => delta > threshold).length;
     const applicationOutliers = longTasks.filter((duration) => duration > threshold).length;
     const worstFrame = sorted.at(-1);
     const worstApplicationTask = Math.max(0, ...longTasks);
     assert.ok(applicationOutliers <= 3,
-      `${applicationOutliers} application tasks exceeded 6x the ${median.toFixed(1)}ms median `
+      `${applicationOutliers} application tasks exceeded the ${threshold.toFixed(0)}ms bar `
+      + `(max of 6x the ${median.toFixed(1)}ms median and the ${ABS_FLOOR_MS}ms floor) `
       + `(worst task ${worstApplicationTask.toFixed(0)}ms; ${rawOutliers} raw RAF gaps; `
       + `worst gap ${worstFrame.toFixed(0)}ms) — application work is stalling the render loop`);
   } finally {
