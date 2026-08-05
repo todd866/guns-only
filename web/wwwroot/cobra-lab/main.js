@@ -35,6 +35,8 @@ import {
   lookOffsetFromAngles,
 } from "../render/cobra/cobra_camera_bias.js?v=264";
 import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=264";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=264";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=264";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -136,6 +138,28 @@ let lastTargetKey = null;
 // No target is cued before the pilot's first input: a cold-boot auto-selection used to swing
 // the camera toward a hostile before the player had touched anything.
 let playerHasInteracted = false;
+// Shared first-run controls overlay + contextual nudges (play shell only; created in boot).
+let onboarding = null;
+
+// Sim-derived nudge flags: authority truth, not DOM guesses. Grounded-idle means the ship is
+// on or near the deck with the collective untouched; hostile-idle means a hostile sits inside
+// the gun's 2 km solution envelope (CobraGunTargeting.MaximumSolutionRangeM) with no target cued.
+const NUDGE_HOSTILE_RANGE_M = 2_000;
+function onboardingNudgeState() {
+  if (!bridge || missionTerminal || tourInput?.checked) return {};
+  const clearanceM = authorityState?.route_guidance?.current_clearance_m;
+  const vehicle = authorityState?.vehicle;
+  const hostileInRange = vehicle != null
+    && (authorityState?.ground_war?.units ?? []).some((unit) => unit.alive
+      && unit.faction === "hostile"
+      && Math.hypot(unit.x_m - vehicle.x_m, unit.z_m - vehicle.z_m) <= NUDGE_HOSTILE_RANGE_M);
+  return {
+    groundedIdle: Number.isFinite(clearanceM)
+      && clearanceM <= 3
+      && !keys.has(cobraControlProfile.collective.pull.code),
+    hostileIdle: hostileInRange && !authorityState?.gunner?.selected_target_id,
+  };
+}
 const telemetrySession = `web-cobra-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const telemetryChannel = createCobraTelemetryChannel({
   session: telemetrySession,
@@ -797,9 +821,9 @@ function updateObjectiveHud(war) {
     setText(objectiveDetail, "Keep tipping the fight — do not let hostiles claw it back");
   } else {
     setText(objectiveLine, "TIP CONTROL FRIENDLY · HOLD 45s");
-    // The collective is a lever, not a throttle: S pulls it up, W lowers it. Without this hint
-    // a pilot pressing W descends blind. The mapping itself is deliberate — do not "fix" it.
-    setText(objectiveDetail, "S collective up · W down · Tab target · hold F gunner");
+    // Owner ruling 2026-08-05: collective follows game convention — W raises, S lowers
+    // (the Builds 253-264 real-lever mapping with S=pull is overruled).
+    setText(objectiveDetail, "W collective up · S down · Tab target · hold F gunner");
   }
 }
 
@@ -876,6 +900,7 @@ function animate(timeMs) {
   renderer.render(scene, camera);
   recordFrameDuration(rawDeltaMs);
   updateMetrics(aglM);
+  onboarding?.advanceNudges(onboardingNudgeState(), deltaSeconds);
 }
 
 function isManualControl(code) {
@@ -1017,6 +1042,17 @@ async function boot() {
     setStatus(PLAY_MODE
       ? "HOLD THE BRIDGE · AH-1G ONLINE"
       : "AH-1G AUTHORITY ONLINE · LAB", "ready");
+    if (PLAY_MODE) {
+      onboarding = createControlsOnboarding({
+        modeId: COBRA_ONBOARDING_CONTENT.modeId,
+        content: COBRA_ONBOARDING_CONTENT,
+        nudges: [
+          { id: "lift", text: "HOLD W — COLLECTIVE UP", when: (s) => s.groundedIdle === true, afterSeconds: 3 },
+          { id: "engage", text: "TAB TO TARGET · HOLD F TO ENGAGE", when: (s) => s.hostileIdle === true, afterSeconds: 1.5 },
+        ],
+      });
+      onboarding.maybeShowFirstRun();
+    }
     lastTimeMs = performance.now();
     animationFrame = requestAnimationFrame(animate);
   } catch (error) {

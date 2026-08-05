@@ -8,6 +8,8 @@ import {
   createRapierTrackDayPresentation,
 } from "../render/motorcycle/track_day_presentation.js?v=264";
 import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=264";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=264";
+import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=264";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
@@ -103,6 +105,15 @@ let rawPhysics = false;
 let trackDayPresentation = null;
 let animationFrame = 0;
 let lastTimeMs = performance.now();
+// Shared first-run controls overlay + standstill nudge (created in boot).
+let onboarding = null;
+
+// Standstill means the bike is stopped with the throttle untouched — sim truth, not DOM.
+function onboardingNudgeState(state) {
+  if (!state || paused || state.phase === "finished") return {};
+  const speedMps = Math.hypot(state.vx ?? 0, state.vy ?? 0, state.vz ?? 0);
+  return { standstill: speedMps < 0.5 && !keys.has("KeyW") };
+}
 
 const keys = new Set();
 const simQuat = new THREE.Quaternion();
@@ -221,6 +232,7 @@ function animate(timeMs) {
   syncCamera(state);
   renderer.render(scene, camera);
   helmetHud.draw(state);
+  onboarding?.advanceNudges(onboardingNudgeState(state), deltaSeconds);
 
   if (state.phase === "finished") {
     setStatus("RIDE FINISHED", "error");
@@ -342,6 +354,14 @@ async function boot() {
     buildTrackDayPresentation(JSON.parse(bridge.GetCircuit()));
     manualClutch = snapshot.clutch_mode === "manual";
     setStatus("RAPIER TRACK DAY · RIDER REFLEX ASSIST", "ready");
+    onboarding = createControlsOnboarding({
+      modeId: WEEKEND_RIDE_ONBOARDING_CONTENT.modeId,
+      content: WEEKEND_RIDE_ONBOARDING_CONTENT,
+      nudges: [
+        { id: "ride", text: "HOLD W — THROTTLE TO RIDE", when: (s) => s.standstill === true, afterSeconds: 3 },
+      ],
+    });
+    onboarding.maybeShowFirstRun();
     lastTimeMs = performance.now();
     animationFrame = requestAnimationFrame(animate);
   } catch (error) {

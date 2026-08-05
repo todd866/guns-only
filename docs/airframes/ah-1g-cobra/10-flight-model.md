@@ -10,7 +10,7 @@ rotorcraft provider owns every rotor/drivetrain state and its fidelity disclosur
 This preserves one control language across Guns Only while changing physical meaning:
 
 ```text
-arrows -> cyclic       A/D -> pedals       S pull / W push -> collective lever
+arrows -> cyclic       A/D -> pedals       W pull / S push -> collective lever
                                          |
                                          v
  blade pitch -> rotor thrust/torque -> rotor RPM/governor -> rigid-body forces
@@ -20,13 +20,14 @@ No input directly sets climb rate, velocity, disk tilt, thrust, engine power or 
 
 ### Collective rigging authority
 
-The Cobra deliberately reverses the fixed-wing W/S power sense. This is a pilot-facing lever
-metaphor, not an altitude-control shortcut:
+Builds 253-264 reversed the fixed-wing W/S power sense as a real-lever metaphor (S = pull).
+On 2026-08-05 the owner overruled that in favour of game convention — W raises collective,
+S lowers it — while the lever remains a persistent physical position, not an altitude shortcut:
 
 | Physical input | Lever motion | Semantic result |
 |---|---|---|
-| Hold **S** | pull toward the pilot | increase collective blade pitch |
-| Hold **W** | push away from the pilot | decrease collective blade pitch |
+| Hold **W** | pull toward the pilot | increase collective blade pitch |
+| Hold **S** | push away from the pilot | decrease collective blade pitch |
 | Hold both | opposed inputs | neutral; neither input silently wins |
 
 `cobra_control_profile.js` owns that browser-facing sign contract while honoring remapped player
