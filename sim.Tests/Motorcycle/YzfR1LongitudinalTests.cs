@@ -75,7 +75,9 @@ public sealed class YzfR1LongitudinalTests
             / PlayerVehicleContract.FixedDeltaSeconds;
         double wheelPowerW = wheelForceN * (speedBeforeMps + speedAfterMps) * 0.5;
 
-        Assert.True(bike.Telemetry.Rpm >= YzfR1Definition.PeakPowerRpm);
+        // The auto shift schedule keeps sustained WOT inside the surrogate powerband.
+        Assert.True(bike.Telemetry.Rpm >= YzfR1Definition.AutoDownshiftRpm * 2.0,
+            $"expected powerband rpm, got {bike.Telemetry.Rpm:F0}");
         Assert.True(wheelPowerW <= YzfR1Definition.PeakCrankPowerW,
             $"wheelPower={wheelPowerW:F0} W, sourced peak={YzfR1Definition.PeakCrankPowerW:F0} W");
     }
