@@ -18,11 +18,20 @@ public sealed class NeutralMergeBandit :
     readonly AircraftParams _parameters;
     readonly AircraftSim _mergeSim;
     /// Carried across the merge gate so the opening pair keeps setting the player up after the
-    /// neutral pass ends, instead of snapping straight into a fight they cannot win.
-    readonly bool _presenting;
+    /// neutral pass ends, instead of snapping straight into a fight they cannot win. Mutable for
+    /// exactly one transition: EndPresentation latches it false when the pair graduates.
+    bool _presenting;
 
     /// Before the merge gate this is the briefed intent; after it, the live fight owns the answer.
     public bool Presenting => _fight?.Presenting ?? _presenting;
+
+    /// Pair graduation, forwarded across the merge-gate seam: clearing the briefed intent covers
+    /// the run-in (so BeginFight stages a fighting bandit), and the inner call covers a fight
+    /// already begun.
+    public void EndPresentation() {
+        _presenting = false;
+        _fight?.EndPresentation();
+    }
     readonly PilotSkill _skill;
     readonly BanditSkillProfile _profile;
     readonly int? _doctrineIndex;
