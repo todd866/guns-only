@@ -192,6 +192,16 @@ public readonly record struct VehiclePowerObservation(
     double HoverPowerRequiredW,
     double HoverPowerMarginFraction) {
 
+    /// <summary>
+    /// Live shaft-power headroom: the fraction of currently available power not being consumed.
+    /// Unlike <see cref="HoverPowerMarginFraction"/> — a hover-capability figure that only moves
+    /// with mass, density or ground effect and reads as a constant through an entire sortie —
+    /// this follows the collective every tick.
+    /// </summary>
+    public double AppliedPowerMarginFraction => AvailablePowerW > 1.0
+        ? (AvailablePowerW - AppliedPowerW) / AvailablePowerW
+        : 0.0;
+
     public static VehiclePowerObservation NotAssessed => new(
         VehiclePowerAssessment.NotAssessed,
         0.0,

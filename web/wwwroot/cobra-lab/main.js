@@ -28,6 +28,13 @@ import {
   eyeWorldFromVehicle,
   updateAh1gPresence,
 } from "../render/cobra/ah1g_presence.js?v=263";
+import {
+  COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD,
+  clampInducedLookRotation,
+  lookAnglesFromOffset,
+  lookOffsetFromAngles,
+} from "../render/cobra/cobra_camera_bias.js?v=263";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=263";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -53,6 +60,21 @@ const ROUTE_ENTRY_OFFSETS_M = Object.freeze({
 const FRAME_SAMPLE_COUNT = 180;
 const ROUTE_END_LOOKAHEAD_M = 40;
 const ROUTE_CAMERA_LOOKAHEAD_M = 180;
+// Real-time contract: the sim advances by real elapsed wall time every rendered frame. The only
+// cap is the bridge's own MaximumFrameDeltaSeconds (0.1 s = 12 fixed 120 Hz ticks) — the same
+// spiral-brake doctrine as the F-22 loop's SIM_CATCHUP_CAP_SECONDS: past the cap the mission
+// deliberately loses wall-clock time rather than chase a stall with ever-longer catch-up frames.
+// Low frame rate therefore NEVER means slow motion down to 10 fps; the slow-motion floor exists
+// only for extreme (<10 fps) stalls. The old 50 ms JS clamp silently turned the owner's 12.5 fps
+// production drive into 0.62x real time.
+const SIM_MAX_FRAME_ADVANCE_SECONDS = 0.1;
+// Full-state JSON (units, sites, events…) feeds the HUD and ground-war presentation — 30 Hz is
+// indistinguishable there, and serializing + parsing it at render rate was pure main-thread
+// waste. The camera and airframe presence read the 7-slot binary hot pose every frame instead
+// (the Cobra-scale analogue of the F-22 SnapshotHotFrame).
+const AUTHORITY_STATE_SAMPLE_INTERVAL_MS = 1_000 / 30;
+// Telemetry rows at ~10 Hz keep the channel's 5 s flush cadence draining faster than rows arrive.
+const TELEMETRY_ROW_INTERVAL_MS = 100;
 const canvas = document.querySelector("#scene");
 const viewport = document.querySelector(".viewport");
 const routeSelect = document.querySelector("#route");
@@ -111,9 +133,25 @@ let presenceDeltaSeconds = 0;
 let hostileTargetIds = [];
 let hostileTargetIndex = -1;
 let lastTargetKey = null;
+// No target is cued before the pilot's first input: a cold-boot auto-selection used to swing
+// the camera toward a hostile before the player had touched anything.
+let playerHasInteracted = false;
 const telemetrySession = `web-cobra-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-const telemetryRows = [];
-let telemetryLastFlushMs = 0;
+const telemetryChannel = createCobraTelemetryChannel({
+  session: telemetrySession,
+  build: new URL(import.meta.url).searchParams.get("v") ?? "dev",
+  userAgent: navigator.userAgent,
+});
+let telemetryRowRecordedAtMs = -Infinity;
+let authorityStateSampledAtMs = -Infinity;
+// Per-frame binary vehicle pose (camera + presence read this at render rate). Slot order is the
+// bridge contract — keep in lockstep with CobraWebBridge.FillHotPose:
+// [0] x_m, [1] y_m, [2] z_m, [3] pitch_rad, [4] roll_rad, [5] yaw_rad, [6] main_rotor_rpm.
+let vehiclePoseView = null;
+const vehiclePoseScratch = new Float64Array(7);
+const vehiclePose = {
+  x_m: 0, y_m: 0, z_m: 0, pitch_rad: 0, roll_rad: 0, yaw_rad: 0, main_rotor_rpm: 0,
+};
 
 const renderer = new THREE.WebGLRenderer({
   canvas,
@@ -215,7 +253,9 @@ function setStatus(message, state = "loading") {
 
 function recordTelemetry(nowMs) {
   if (!authorityState) return;
-  telemetryRows.push({
+  if (nowMs - telemetryRowRecordedAtMs < TELEMETRY_ROW_INTERVAL_MS) return;
+  telemetryRowRecordedAtMs = nowMs;
+  telemetryChannel.record({
     k: "st",
     t: nowMs,
     s: {
@@ -230,7 +270,7 @@ function recordTelemetry(nowMs) {
       cobra_ground_speed_mps: authorityState.vehicle.ground_speed_mps,
       cobra_vertical_speed_mps: authorityState.vehicle.vertical_speed_mps,
       cobra_collective: authorityState.vehicle.collective,
-      cobra_power_margin: authorityState.vehicle.hover_power_margin,
+      cobra_power_margin: authorityState.vehicle.power_margin,
       cobra_route_remaining_m: authorityState.route_guidance.remaining_m,
       cobra_cross_track_m: authorityState.route_guidance.cross_track_m,
       cobra_inside_corridor: authorityState.route_guidance.inside_corridor,
@@ -244,28 +284,37 @@ function recordTelemetry(nowMs) {
       cobra_hostile_kills: authorityState.ground_war?.debrief?.hostile_kills,
     },
   });
-  if (nowMs - telemetryLastFlushMs < 10_000 || telemetryRows.length < 120) return;
-  flushTelemetry();
+  telemetryChannel.flushIfDue(nowMs);
 }
 
-async function flushTelemetry() {
-  if (!telemetryRows.length) return;
-  const rows = telemetryRows.splice(0, 1_500);
-  telemetryLastFlushMs = performance.now();
-  try {
-    await fetch("../api/telemetry", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      keepalive: true,
-      body: JSON.stringify({
-        session: telemetrySession,
-        batchId: `${telemetrySession}-${Date.now()}`,
-        rows,
-      }),
-    });
-  } catch {
-    // Telemetry is diagnostic and must never stall the flight loop.
-  }
+/**
+ * Pull the full authority snapshot at HUD rate (30 Hz) and fan it out to every JSON consumer.
+ * The camera does not wait on this — it reads the per-frame hot pose.
+ */
+function sampleAuthorityState(nowMs, { force = false } = {}) {
+  if (!bridge) return;
+  if (!force && nowMs - authorityStateSampledAtMs < AUTHORITY_STATE_SAMPLE_INTERVAL_MS) return;
+  authorityStateSampledAtMs = nowMs;
+  authorityState = JSON.parse(bridge.GetState());
+  // QA seam: headless smoke scripts steer against authoritative truth, not DOM guesses.
+  window.__gunsOnlyCobraAuthority = authorityState;
+  refreshGroundTargets();
+  groundWarPresentation?.sync(authorityState.ground_war ?? null, targetSelect.value || null);
+  recordTelemetry(nowMs);
+}
+
+function readVehiclePose() {
+  if (!vehiclePoseView) return authorityState?.vehicle ?? null;
+  // copyTo re-derives the underlying view, so WASM memory growth cannot detach this read.
+  vehiclePoseView.copyTo(vehiclePoseScratch, 0);
+  vehiclePose.x_m = vehiclePoseScratch[0];
+  vehiclePose.y_m = vehiclePoseScratch[1];
+  vehiclePose.z_m = vehiclePoseScratch[2];
+  vehiclePose.pitch_rad = vehiclePoseScratch[3];
+  vehiclePose.roll_rad = vehiclePoseScratch[4];
+  vehiclePose.yaw_rad = vehiclePoseScratch[5];
+  vehiclePose.main_rotor_rpm = vehiclePoseScratch[6];
+  return vehiclePose;
 }
 
 function qualityPixelRatio() {
@@ -488,7 +537,9 @@ function refreshGroundTargets() {
   }
   if (previous && [...targetSelect.options].some((option) => option.value === previous))
     targetSelect.value = previous;
-  else if (hostileTargetIds.length) {
+  else if (hostileTargetIds.length && playerHasInteracted) {
+    // Auto-reselect keeps continuity after a kill, but never before the pilot's first input —
+    // a cold-boot auto-selection dragged the camera toward a hostile on spawn.
     hostileTargetIndex = 0;
     targetSelect.value = hostileTargetIds[0];
   }
@@ -557,13 +608,9 @@ function updateManual(deltaSeconds) {
       );
       bridge.SetGunnerTarget(targetSelect.value || null);
       bridge.SetEngagementConsent(keys.has(cobraControlProfile.fire.code));
+      // Advance runs every rendered frame; the JSON snapshot is sampled at HUD rate.
       bridge.Advance(deltaSeconds);
-      authorityState = JSON.parse(bridge.GetState());
-      // QA seam: headless smoke scripts steer against authoritative truth, not DOM guesses.
-      window.__gunsOnlyCobraAuthority = authorityState;
-      refreshGroundTargets();
-      groundWarPresentation?.sync(authorityState.ground_war, targetSelect.value || null);
-      recordTelemetry(lastTimeMs);
+      sampleAuthorityState(lastTimeMs);
     }
     syncAuthorityCamera();
   }
@@ -585,7 +632,7 @@ function updateManual(deltaSeconds) {
 }
 
 function syncAuthorityCamera() {
-  const vehicle = authorityState?.vehicle;
+  const vehicle = readVehiclePose();
   if (!vehicle) return;
   const presence = ensureAh1gPresence();
   updateAh1gPresence(presence, vehicle, presenceDeltaSeconds);
@@ -611,10 +658,30 @@ function syncAuthorityCamera() {
   const units = authorityState?.ground_war?.units ?? [];
   const selected = selectedId ? units.find((unit) => unit.id === selectedId && unit.alive) : null;
   if (selected) {
+    // Target cueing leans the view toward the gunner's mark, but the induced rotation is
+    // clamped to ±0.05 rad: the AH-1G's only clear glass is dead ahead, and the old unclamped
+    // lerp swung the sole windshield gap off-axis whenever a near hostile was selected.
     const bias = 0.22;
-    lookTarget.x = THREE.MathUtils.lerp(lookTarget.x, selected.x_m, bias);
-    lookTarget.y = THREE.MathUtils.lerp(lookTarget.y, selected.y_m + 1.2, bias);
-    lookTarget.z = THREE.MathUtils.lerp(lookTarget.z, -selected.z_m, bias);
+    const biasedX = THREE.MathUtils.lerp(lookTarget.x, selected.x_m, bias);
+    const biasedY = THREE.MathUtils.lerp(lookTarget.y, selected.y_m + 1.2, bias);
+    const biasedZ = THREE.MathUtils.lerp(lookTarget.z, -selected.z_m, bias);
+    const base = lookAnglesFromOffset(
+      lookTarget.x - camera.position.x,
+      lookTarget.y - camera.position.y,
+      lookTarget.z - camera.position.z,
+    );
+    const desired = lookAnglesFromOffset(
+      biasedX - camera.position.x,
+      biasedY - camera.position.y,
+      biasedZ - camera.position.z,
+    );
+    const clamped = clampInducedLookRotation(base, desired, COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD);
+    const offset = lookOffsetFromAngles(clamped.yawRad, clamped.pitchRad, lookDistanceM);
+    lookTarget.set(
+      camera.position.x + offset.x,
+      camera.position.y + offset.y,
+      camera.position.z + offset.z,
+    );
   }
 
   camera.lookAt(lookTarget);
@@ -700,7 +767,9 @@ function updateObjectiveHud(war) {
     setText(objectiveDetail, "Keep tipping the fight — do not let hostiles claw it back");
   } else {
     setText(objectiveLine, "TIP CONTROL FRIENDLY · HOLD 45s");
-    setText(objectiveDetail, "Tab target · hold F gunner · olive friendlies / dark hostiles");
+    // The collective is a lever, not a throttle: S pulls it up, W lowers it. Without this hint
+    // a pilot pressing W descends blind. The mapping itself is deliberate — do not "fix" it.
+    setText(objectiveDetail, "S collective up · W down · Tab target · hold F gunner");
   }
 }
 
@@ -749,7 +818,9 @@ function updateMetrics(aglM) {
 function animate(timeMs) {
   animationFrame = requestAnimationFrame(animate);
   const rawDeltaMs = Math.max(0, timeMs - lastTimeMs);
-  const deltaSeconds = Math.min(rawDeltaMs / 1_000, 0.05);
+  // Real elapsed time, capped only by the bridge's 0.1 s spiral brake (see the constant above):
+  // at 20 fps the sim still runs 1.00x real time.
+  const deltaSeconds = Math.min(rawDeltaMs / 1_000, SIM_MAX_FRAME_ADVANCE_SECONDS);
   lastTimeMs = timeMs;
   if (!plan || !presentation) return;
 
@@ -768,13 +839,10 @@ function animate(timeMs) {
     bridge.SetGunnerTarget(null);
     bridge.SetEngagementConsent(false);
     bridge.Advance(deltaSeconds);
-    authorityState = JSON.parse(bridge.GetState());
-    refreshGroundTargets();
-    if (authorityState?.vehicle) {
-      updateAh1gPresence(ensureAh1gPresence(), authorityState.vehicle, deltaSeconds);
-    }
+    sampleAuthorityState(timeMs);
+    const pose = readVehiclePose();
+    if (pose) updateAh1gPresence(ensureAh1gPresence(), pose, deltaSeconds);
   }
-  groundWarPresentation?.sync(authorityState?.ground_war ?? null, targetSelect?.value || null);
   renderer.render(scene, camera);
   recordFrameDuration(rawDeltaMs);
   updateMetrics(aglM);
@@ -788,12 +856,14 @@ function isManualControl(code) {
 window.addEventListener("keydown", (event) => {
   if (event.code === "Tab") {
     event.preventDefault();
+    playerHasInteracted = true;
     if (tourInput) tourInput.checked = false;
     cycleHostileTarget();
     return;
   }
   if (!isManualControl(event.code) && event.code !== "ShiftLeft" && event.code !== "ShiftRight") return;
   event.preventDefault();
+  playerHasInteracted = true;
   keys.add(event.code);
   if (isManualControl(event.code) && tourInput) tourInput.checked = false;
 });
@@ -827,7 +897,10 @@ qualitySelect?.addEventListener("change", rebuildPresentation);
 resetButton?.addEventListener("click", restartRoute);
 debriefRestart?.addEventListener("click", restartRoute);
 targetSelect?.addEventListener("change", () => {
+  playerHasInteracted = true;
   bridge?.SetGunnerTarget(targetSelect.value || null);
+  // Refresh the in-world highlight immediately rather than waiting for the next 30 Hz sample.
+  groundWarPresentation?.sync(authorityState?.ground_war ?? null, targetSelect.value || null);
 });
 speedInput?.addEventListener("input", () => {
   if (speedValue) speedValue.textContent = `${speedInput.value} m/s`;
@@ -850,7 +923,7 @@ canvas.addEventListener("webglcontextlost", (event) => {
 });
 
 window.addEventListener("pagehide", () => {
-  void flushTelemetry();
+  telemetryChannel.flush({ pagehide: true });
   cancelAnimationFrame(animationFrame);
   presentation?.dispose();
   groundWarPresentation?.dispose();
@@ -897,6 +970,8 @@ async function boot() {
     lockPlayRoute();
     if (tourInput && PLAY_MODE) tourInput.checked = false;
     rebuildPresentation();
+    // Fetched once: StartRoute/Advance refill the same WASM buffer, read per frame via copyTo.
+    vehiclePoseView = bridge.GetHotPose();
     authorityState = JSON.parse(bridge.GetState());
     pilotControls = createCobraPilotControlState(authorityState.vehicle.collective);
     refreshGroundTargets();
