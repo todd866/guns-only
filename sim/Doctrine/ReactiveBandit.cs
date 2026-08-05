@@ -1863,15 +1863,61 @@ public sealed class ReactiveBandit :
         var aim = KeepAimInFightVolume(player.Position);
         double floorHere = LocalFloorM(own.Position.X, own.Position.Z);
         if (aim.Y < floorHere + 300.0) aim = aim with { Y = floorHere + 300.0 };
+        // NEVER CONVERT A RE-ENGAGE INTO A CLIMBING SPIRAL. Measured on the cold-opening 2v1
+        // (the production Build 260/263 zero-fire shape): a lead captured by the Return latch
+        // at 3.6 km and 140 degrees nose-off flew this command for 30 continuous seconds and
+        // CLIMBED from 3.7 km to 8.5 km at full burner, nose 54-95 deg off, range pinned above
+        // the 3.5 km release forever — zero rounds for the whole engagement. The mechanism is
+        // the G schedule below at the bank cap: 1.4 + angle*2.6 commands ~7 G at 74 deg of
+        // bank, whose vertical lift component is ~2 g — a self-sustaining climbing spiral that
+        // drops the target ever further below the cap-limited lift vector. The vertical
+        // walk-down clamp cannot help; it moves the AIM, not the lift vector.
+        //
+        // The signature, not a blanket "target below": (a) a genuine REVERSAL (past 90 deg of
+        // nose error — where any hard pull at capped bank is mostly lift-up), or (b) the target
+        // steeply below (the belly-side attractor that sustained the measured 54-95 deg orbit).
+        // A shallow 3-degree step-down at 4 NM is an ordinary chase and must keep the ordinary
+        // pursuit — an earlier gate on altitude alone put the arena-leash corridor's high
+        // runner chase on mil power and re-created the stern chase that test exists to prevent.
+        double altExcessM = own.Position.Y - aim.Y;
+        double horizontalToAimM = System.Math.Sqrt(
+            (aim.X - own.Position.X) * (aim.X - own.Position.X)
+            + (aim.Z - own.Position.Z) * (aim.Z - own.Position.Z));
+        bool steeplyBelow = altExcessM > 400.0
+            && altExcessM > 0.35 * System.Math.Max(1.0, horizontalToAimM);
+        bool reversal = AngleTo(aim) > 1.57;
+        // ARMS ONLY WHEN THE AIM IS GENUINELY THE PLAYER, ON THE BELLY SIDE.
+        //
+        // Below-aim only: climbing hard at a player ABOVE is correct pursuit — the arena-leash
+        // corridors chase a full-power runner holding altitude overhead, and routing their
+        // reversals through this branch (mil power, past-vertical bank) re-created the exact
+        // stern chase and Energy chatter those corridors forbid.
+        //
+        // Undisplaced-aim only: with the player far outside the fight volume,
+        // KeepAimInFightVolume hands this command a spawn-adjacent phantom, and AngleTo(that
+        // phantom) can read as "reversal" while the nose sits dead ON the real player — probed
+        // in the same corridor, the slice then executed a max-performance turn ONTO the
+        // phantom (nose-to-player dot +1.00 to -0.98) and manufactured the 33 s nose-away leg
+        // it exists to prevent. The measured wallow only ever formed with the player inside
+        // the volume and the aim unclamped, so that is the only geometry this branch owns.
+        bool aimIsThePlayer =
+            HorizontalDistance(aim, player.Position) < 200.0;
+        bool diveReengage = aimIsThePlayer
+            && altExcessM > 0.0
+            && (steeplyBelow || reversal);
         // Keep the aim point within a bounded vertical step of our own altitude. A target far below
         // the flight path drives BankToPlaceLiftVectorOn toward +/-pi — the same ill-conditioned
         // geometry the nose-high recovery hits — and the bank limit then turns the "descend and
         // re-engage" into a 75-degree banked LEVEL turn that holds altitude indefinitely. Traced,
         // that floated the bandit to 44,000 ft while nominally re-engaging a player at 15,000 ft.
         // Walking the aim down in steps keeps the solution well conditioned and the descent honest.
-        aim = aim with {
-            Y = own.Position.Y + System.Math.Clamp(aim.Y - own.Position.Y, -900.0, 900.0)
-        };
+        // The dive form keeps the TRUE aim: its low-G banked pull is what makes the descent
+        // honest, and a walked-down aim would re-shallow the bank solution it depends on.
+        if (!diveReengage)
+            aim = aim with {
+                Y = own.Position.Y
+                    + System.Math.Clamp(aim.Y - own.Position.Y, -900.0, 900.0)
+            };
         // Clamping the vertical delta shortens the descent; it does NOT move the aim out of the
         // vertical plane through the velocity vector, which is the actual singular geometry. A
         // player dead ahead-and-below (or dead astern-and-below) still drives the bank solution to
@@ -1894,6 +1940,34 @@ public sealed class ReactiveBandit :
         double pathFloorM = System.Math.Max(floorHere, aheadFloorM);
         if (aim.Y < pathFloorM + 300.0) aim = aim with { Y = pathFloorM + 300.0 };
         double angle = AngleTo(aim);
+        if (diveReengage) {
+            // The SLICE, not the housekeeping dive. ReturnCommand's 3.8 G/77-degree form was
+            // tried here first and merely slowed the runaway (measured: the lead still topped
+            // out at 8.3 km and needed 19 more seconds to point in — g*cos(77 deg) is 0.83 g
+            // vertical, so a +19-degree flight path decays at ~0.2 deg/s, and 3.7 lateral g
+            // turns just 7 deg/s against a 140-degree reversal). What measurably converts this
+            // exact geometry is the solo control's planner command: lift vector rolled PAST
+            // vertical onto the target and a max-performance pull — 148 to 4 degrees of nose
+            // error in 13 s, descending. So: the true bank solution up to 115 degrees, the
+            // reversal G schedule below, and no afterburner — feeding speed into a reversal
+            // only grows the radius (the planner's own converting command held ~mil power).
+            // The moment the reversal completes (angle back under 90 deg, depression shallow)
+            // this branch stops selecting itself and the burner pursuit below resumes.
+            //
+            // Throttle discriminates the failure from the fight: burner only feeds the runaway
+            // while the PATH points up (the measured spiral held gamma +17..29 deg), so mil
+            // power applies exactly then. A reversal flown level or descending keeps burner —
+            // the arena-leash corridors chase a full-power runner through thin air at 11 km,
+            // and cutting their reversals to mil re-created the stern chase and an
+            // Energy-tactic chatter those corridors exist to forbid.
+            double sliceBank = LimitedBankTo(aim, 2.0);
+            double sliceG = System.Math.Min(1.4 + angle * 2.6,
+                System.Math.Max(1.05, AvailableAcquireG(safetyReserve: true)));
+            double sliceThrottle = own.Gamma > 0.05
+                ? System.Math.Min(_maximumThrottle, 1.05)
+                : _maximumThrottle;
+            return new PilotCommand(sliceG, sliceBank, sliceThrottle, 0.0);
+        }
         // Hard enough to actually convert the geometry, soft enough not to scrub to the corner and
         // arrive at the merge slow: past 90 degrees off it is a max-perform reversal, inside that
         // it tightens with the angle.
