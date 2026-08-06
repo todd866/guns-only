@@ -177,7 +177,8 @@ From the owner's three images. What actually carries the look, ranked by value-p
 
 **Where we already match or beat the reference — do not spend here:** aerial perspective and
 banded haze (better than BFV's), palette discipline, sky construction, the 1.87/radius fog law,
-and the shadow *rig*. The gap is entirely asset-shaped.
+and the shadow *rig*. With the single exception of cast shadows — a feature we have built and
+switched off — **the whole gap is asset-shaped.**
 
 ---
 
@@ -209,8 +210,10 @@ with a comment on it). Share **that**. Leave the streamer alone.
 ### The challenge to shadow ordering
 
 Shadows should be **first**, not second. They are the highest visual-per-hour item in the whole
-programme, they need **zero art assets**, and Cobra has 15 draw calls — a shadow pass takes it to
-~30, against a browser that sustains thousands. There is no reason to wait.
+programme and they need **zero art assets** — everything else in this document waits on a
+pipeline that does not exist yet, and this does not. The cost is a light-view fill pass, not the
+draw calls (see §2), so it must be measured rather than assumed; but it is measurable in an
+afternoon, which is itself the argument for doing it first.
 
 ### Recommended sequence
 
