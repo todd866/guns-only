@@ -42,6 +42,7 @@ sh -n bin/dotnet-env
 sh -n bin/test-in-process
 sh -n bin/deploy-web
 sh -n bin/stamp-release
+sh -n bin/worktree-prep
 node --check web/wwwroot/app.js
 node --check web/wwwroot/hud.js
 node --check web/wwwroot/multiplayer-config.js

@@ -1,0 +1,168 @@
+#!/bin/sh
+set -eu
+
+# Create (or refresh) a worktree and hydrate the payload a Git checkout cannot carry.
+#
+# A green clone is not a deployable tree. ~812 MiB of Ukraine terrain-atlas page bundles and the
+# Vercel project link are gitignored, so every fresh worktree needs them copied in by hand. Twice
+# on 2026-08-05 that hand-copy was done as `cp -R web/wwwroot/content ...`, which overwrote the
+# TRACKED file web/wwwroot/content/packs/cobra-vietnam/environment/cobra-canyon.world.json and cost
+# a full 25-minute gate cycle to diagnose from ~20 unrelated-looking test failures.
+#
+# This script makes that mistake structurally impossible instead of merely remembered:
+#   * it copies only paths that `git check-ignore` confirms are ignored, so a copy can never
+#     land on top of tracked content; and
+#   * it asserts `git status --porcelain` is empty afterwards and fails loudly if it is not.
+#
+# usage:
+#   bin/worktree-prep <path> [git-worktree-add args...]
+#
+#   bin/worktree-prep .worktrees/prod-deploy-266 main
+#   bin/worktree-prep .worktrees/fix-thing -b fix/thing origin/main
+#   bin/worktree-prep .worktrees/prod-deploy-266          # existing worktree: re-hydrate only
+#
+# Hydration source defaults to this script's own repository when it is itself hydrated, otherwise
+# the primary worktree. Override with GUNS_HYDRATION_SOURCE=/path/to/hydrated/checkout.
+
+usage() {
+    echo "usage: bin/worktree-prep <path> [git-worktree-add args...]" >&2
+    exit 2
+}
+
+[ "$#" -ge 1 ] || usage
+target_arg=$1
+shift
+
+script_dir=$(CDPATH='' cd -- "$(dirname "$0")/.." && pwd)
+
+# Gitignored payload trees, relative to a checkout root. Every entry must be ignored; the
+# check-ignore assertion below is the safety property, not a formality.
+PAYLOAD_TREES='content/packs/ukraine-modern/environment/terrain-atlas/pages
+web/wwwroot/content/packs/ukraine-modern/environment/terrain-atlas/pages
+.vercel'
+
+tree_is_populated() {
+    [ -d "$1" ] && [ -n "$(find "$1" -type f -print -quit 2>/dev/null)" ]
+}
+
+checkout_is_hydrated() {
+    root=$1
+    for tree in $PAYLOAD_TREES; do
+        tree_is_populated "$root/$tree" || return 1
+    done
+    return 0
+}
+
+source_dir=${GUNS_HYDRATION_SOURCE:-}
+if [ -z "$source_dir" ]; then
+    if checkout_is_hydrated "$script_dir"; then
+        source_dir=$script_dir
+    else
+        source_dir=$(git -C "$script_dir" worktree list --porcelain \
+            | awk 'NR == 1 && $1 == "worktree" { $1 = ""; sub(/^ /, ""); print; exit }')
+    fi
+fi
+[ -n "$source_dir" ] && [ -d "$source_dir" ] || {
+    echo "worktree-prep: no hydration source; set GUNS_HYDRATION_SOURCE to a hydrated checkout" >&2
+    exit 1
+}
+source_dir=$(CDPATH='' cd -- "$source_dir" && pwd)
+
+if ! checkout_is_hydrated "$source_dir"; then
+    echo "worktree-prep: hydration source $source_dir is not itself hydrated" >&2
+    echo "worktree-prep: expected populated:" >&2
+    for tree in $PAYLOAD_TREES; do
+        tree_is_populated "$source_dir/$tree" || echo "  - $tree" >&2
+    done
+    exit 1
+fi
+
+# Resolve the target to an absolute path without requiring it to exist yet.
+case "$target_arg" in
+    /*) target_dir=$target_arg ;;
+    *) target_dir="$(pwd)/$target_arg" ;;
+esac
+
+if [ ! -d "$target_dir" ]; then
+    echo "worktree-prep: creating worktree $target_dir"
+    git -C "$source_dir" worktree add "$target_dir" "$@"
+else
+    if [ "$#" -ne 0 ]; then
+        echo "worktree-prep: $target_dir already exists; refusing to re-point an existing worktree" >&2
+        echo "worktree-prep: rerun without git-worktree-add arguments to re-hydrate in place" >&2
+        exit 1
+    fi
+    echo "worktree-prep: refreshing existing worktree $target_dir"
+fi
+target_dir=$(CDPATH='' cd -- "$target_dir" && pwd)
+
+if [ "$target_dir" = "$source_dir" ]; then
+    echo "worktree-prep: target and hydration source are the same checkout; nothing to do" >&2
+    exit 1
+fi
+
+git -C "$target_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+    echo "worktree-prep: $target_dir is not a Git worktree" >&2
+    exit 1
+}
+
+# Clone-copy on APFS is copy-on-write: instant and free, and the copies stay independent.
+copy_tree() {
+    source_tree=$1
+    target_tree=$2
+    rm -rf "$target_tree"
+    mkdir -p "$(dirname "$target_tree")"
+    if ! cp -Rc "$source_tree" "$target_tree" 2>/dev/null; then
+        cp -R "$source_tree" "$target_tree"
+    fi
+}
+
+for tree in $PAYLOAD_TREES; do
+    # The safety property, asked of the DESTINATION repository two independent ways:
+    #
+    #   * `git ls-files` must report nothing tracked under the path -- the decisive test, and the
+    #     one that would have caught the 2026-08-05 clobber of cobra-canyon.world.json; and
+    #   * `git check-ignore` must agree the path is ignored (queried with a trailing slash, since
+    #     a `dir/` pattern does not match a directory that does not exist yet).
+    #
+    # A payload path that stops satisfying either one fails the run instead of silently
+    # overwriting committed files.
+    tracked=$(git -C "$target_dir" ls-files -- "$tree")
+    if [ -n "$tracked" ]; then
+        echo "worktree-prep: refusing to hydrate '$tree': it contains TRACKED files" >&2
+        printf '%s\n' "$tracked" | head -5 >&2
+        echo "worktree-prep: copying onto tracked content is how cobra-canyon.world.json was lost" >&2
+        exit 1
+    fi
+    if ! git -C "$target_dir" check-ignore --quiet -- "$tree/"; then
+        echo "worktree-prep: refusing to hydrate '$tree' because it is not gitignored in $target_dir" >&2
+        exit 1
+    fi
+    if ! tree_is_populated "$source_dir/$tree"; then
+        echo "worktree-prep: hydration source is missing $tree" >&2
+        exit 1
+    fi
+    echo "worktree-prep: hydrating $tree"
+    copy_tree "$source_dir/$tree" "$target_dir/$tree"
+done
+
+# Hydration must be invisible to Git. A non-empty porcelain status here means a payload copy
+# landed on tracked content (or the worktree was already dirty) -- either way the tree is not a
+# releasable identity for its commit and the deploy would fail 25 minutes later instead of now.
+dirty=$(git -C "$target_dir" status --porcelain)
+if [ -n "$dirty" ]; then
+    echo "worktree-prep: hydration left the worktree dirty; it is NOT deployable" >&2
+    printf '%s\n' "$dirty" >&2
+    echo "worktree-prep: restore tracked files with: git -C $target_dir checkout -- ." >&2
+    exit 1
+fi
+
+for tree in $PAYLOAD_TREES; do
+    tree_is_populated "$target_dir/$tree" || {
+        echo "worktree-prep: $tree is still empty after hydration" >&2
+        exit 1
+    }
+done
+
+echo "worktree-prep: hydrated $target_dir at $(git -C "$target_dir" rev-parse --short HEAD) \
+($(git -C "$target_dir" symbolic-ref --quiet --short HEAD || echo 'detached HEAD')); clean tree"

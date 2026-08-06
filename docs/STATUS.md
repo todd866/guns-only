@@ -87,6 +87,11 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
   intact and the exact pushed SHA has a successful canonical Verify workflow.
 - A candidate is releasable only when its exact pushed SHA has a complete green gate. Production
   build metadata must identify both the Git revision and immutable staged-content/atlas digest.
+- That green canonical Verify run **is** the release provenance: `bin/deploy-web` no longer
+  re-runs the whole of `bin/check` locally to re-derive it. Every fail-closed property is
+  unchanged, including all post-promotion live verification and rollback. See
+  `docs/release-pipeline.md` for what is trusted from CI, what is still checked locally (the
+  gitignored terrain atlas), and `GUNS_DEPLOY_FULL_GATE=1` to force the old behaviour.
 
 Record the canonical Build 238 protected-`main` Verify URL in release evidence at promotion; do
 not treat local or pull-request green gates as remote release provenance.
