@@ -194,7 +194,9 @@ export function createCampEmberFirebase(THREE, plan) {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = "CAMP_EMBER_FIREBASE";
   mesh.position.set(anchor.eastM, anchor.groundY, -anchor.northM);
-  mesh.castShadow = false;
+  // One merged draw with real vertical mass: Camp Ember should sit on the basin under the same
+  // cast-shadow policy as the other landmark silhouettes.
+  mesh.castShadow = true;
   mesh.receiveShadow = true;
   const tag = Object.freeze({
     schema: CAMP_EMBER_FIREBASE_SCHEMA,

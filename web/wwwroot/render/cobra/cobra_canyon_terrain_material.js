@@ -17,18 +17,41 @@
 //
 // Every constant lives in `cobra_canyon_visual_profile.js`, which is also what the lab scene
 // reads for sun direction, sky and fog — one sun for glow, props, haze and terrain relief.
+//
+// CAST SHADOWS (render-architecture stage 0). The tone ramp models the light a surface FACES; it
+// cannot know what stands between that surface and the sun. Ridge-into-gorge shadow and the
+// helicopter's own shadow on the ground are the two cues that put an object in the world rather
+// than on it, and neither is derivable from the normal. A raw ShaderMaterial gets no shadow
+// machinery for free, so both surfaces below opt in through `terrain_shadow_receive.js` and fold
+// the mask into the SAME tone ramp: a fully occluded pixel lands exactly on `uShadowFloor`, which
+// is where a fully lee-facing pixel already lands. Cast shadow therefore inherits the painted
+// key/fill hue separation and the humid-haze lift for free, and can never print blacker than the
+// darkest slope in the scene.
+
+import {
+  TERRAIN_SHADOW_FRAGMENT_PARS,
+  TERRAIN_SHADOW_VERTEX_BODY,
+  TERRAIN_SHADOW_VERTEX_PARS,
+  withTerrainShadowUniforms,
+} from "../environment/terrain_shadow_receive.js?v=307";
 
 const BASIN_VERTEX_SHADER = /* glsl */ `
+#include <common>
+${TERRAIN_SHADOW_VERTEX_PARS}
 attribute float concavity;
 varying vec3 vWorldPosition;
 varying vec3 vTerrainNormal;
 varying float vConcavity;
 void main() {
-  vec4 world = modelMatrix * vec4(position, 1.0);
-  vWorldPosition = world.xyz;
+  vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+  vWorldPosition = worldPosition.xyz;
   vTerrainNormal = normalize(mat3(modelMatrix) * normal);
   vConcavity = concavity;
-  gl_Position = projectionMatrix * viewMatrix * world;
+  // View-space normal: the shadow chunk offsets the lookup along it (normalBias) to keep a
+  // 105 m basin quad from shadowing itself, and rotates it back to world space itself.
+  vec3 transformedNormal = normalMatrix * normal;
+  gl_Position = projectionMatrix * viewMatrix * worldPosition;
+  ${TERRAIN_SHADOW_VERTEX_BODY}
 }
 `;
 
@@ -100,6 +123,8 @@ uniform vec4 uElevationBands;
 varying vec3 vWorldPosition;
 varying vec3 vTerrainNormal;
 varying float vConcavity;
+#include <common>
+${TERRAIN_SHADOW_FRAGMENT_PARS}
 ${NOISE_CHUNK}
 ${HAZE_CHUNK}
 
@@ -188,6 +213,10 @@ void main() {
   float toneRamp = uShadowFloor + (1.0 - uShadowFloor) * (
     uToneGateWeights.x * smoothstep(uToneGateLow.x, uToneGateLow.y, halfLambert)
     + uToneGateWeights.y * smoothstep(uToneGateHigh.x, uToneGateHigh.y, halfLambert));
+  // Cast shadow enters the SAME ramp, so an occluded pixel bottoms out at uShadowFloor — the
+  // value a lee-facing slope already reaches — and takes the cool sky fill with it. Compiles to
+  // a constant 1.0 and costs nothing when the renderer's shadow map is off (mobile tier).
+  toneRamp = mix(uShadowFloor, toneRamp, getShadowMask());
   // NO RIM TERM. korea_terrain adds one because it is viewed from altitude, where the grazing
   // factor only touches ridge edges. This scene is flown at 30 m AGL across a shallow bowl, so
   // 1 - dot(normal, view) saturates over the ENTIRE visible ground and the rim colour becomes a
@@ -220,14 +249,18 @@ void main() {
 `;
 
 const RIVER_VERTEX_SHADER = /* glsl */ `
+#include <common>
+${TERRAIN_SHADOW_VERTEX_PARS}
 attribute vec4 riverFrame;
 varying vec3 vWorldPosition;
 varying vec4 vRiverFrame;
 void main() {
-  vec4 world = modelMatrix * vec4(position, 1.0);
-  vWorldPosition = world.xyz;
+  vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+  vWorldPosition = worldPosition.xyz;
   vRiverFrame = riverFrame;
-  gl_Position = projectionMatrix * viewMatrix * world;
+  vec3 transformedNormal = normalMatrix * normal;
+  gl_Position = projectionMatrix * viewMatrix * worldPosition;
+  ${TERRAIN_SHADOW_VERTEX_BODY}
 }
 `;
 
@@ -241,9 +274,12 @@ uniform vec3 uDeepWater;
 uniform vec3 uShallowWater;
 uniform vec3 uBankGravel;
 uniform vec3 uBankLight;
+uniform vec3 uBankShadowLight;
 uniform vec2 uShoreWindow;
 varying vec3 vWorldPosition;
 varying vec4 vRiverFrame;
+#include <common>
+${TERRAIN_SHADOW_FRAGMENT_PARS}
 ${NOISE_CHUNK}
 ${HAZE_CHUNK}
 
@@ -276,8 +312,15 @@ void main() {
   vec3 water = mix(uShallowWater, uDeepWater, smoothstep(0.08, 0.78, depth));
   water = mix(water, uShallowWater * 1.18, fresnel * 0.35);
   water *= 0.95 + ripple * 0.045;
+  // A gorge wall standing between the river and a 16-degree sun is the single most legible
+  // shadow in this scene, because water is the brightest thing in the frame. Water keeps most of
+  // its value in shade — the bulk of it is reflected SKY, not reflected sun — so the body dims to
+  // 0.66 rather than to the ground's 0.20 floor, and only the glint goes fully dark.
+  float riverShadow = getShadowMask();
   vec3 half3 = normalize(viewDirection + normalize(uSunDirection));
-  water += vec3(0.78, 0.76, 0.64) * pow(max(dot(normal, half3), 0.0), 128.0) * 0.055;
+  water += vec3(0.78, 0.76, 0.64)
+    * pow(max(dot(normal, half3), 0.0), 128.0) * 0.055 * riverShadow;
+  water *= mix(0.66, 1.0, riverShadow);
 
   float gravelGrain = cobraNoise(vWorldPosition.xz * 0.09) * 0.5
     + cobraNoise(vWorldPosition.xz * 0.34) * 0.5;
@@ -285,7 +328,10 @@ void main() {
   // value on the shadowed bank as on the sunlit one, and a strip of constant white either side of
   // the water reads as a concrete levee. uBankLight is the basin's own flat-ground tone times its
   // key/fill tint, computed from the profile — one sun, one value, no second light model.
-  vec3 gravel = uBankGravel * uBankLight * (0.80 + 0.40 * gravelGrain);
+  // The bar is LAND, so it takes the ground's shadow, not the water's: both endpoints come from
+  // the same profile expression, evaluated at the lit tone and at the shadow floor.
+  vec3 gravel = uBankGravel * mix(uBankShadowLight, uBankLight, riverShadow)
+    * (0.80 + 0.40 * gravelGrain);
 
   vec3 lit = mix(water, gravel, shore);
   vec3 color = cobraAerial(lit, vWorldPosition, uFogColor, uFogDensity,
@@ -318,6 +364,17 @@ export function flatGroundLight(profile) {
   return paint.skyFill.map((fill, channel) => (fill + (paint.sunKey[channel] - fill) * tone) * tone);
 }
 
+/**
+ * The same expression at the bottom of the ramp — what flat ground looks like when something
+ * stands between it and the sun. `toneRamp` is clamped below at `shadowFloor` by construction, so
+ * this is the darkest value the basin can print, and cast shadow on land interpolates to it.
+ */
+export function flatGroundShadowLight(profile) {
+  const paint = profile.terrainPaint;
+  const tone = paint.shadowFloor;
+  return paint.skyFill.map((fill, channel) => (fill + (paint.sunKey[channel] - fill) * tone) * tone);
+}
+
 function vector3(THREE, triple) {
   return new THREE.Vector3(triple[0], triple[1], triple[2]);
 }
@@ -337,9 +394,16 @@ export function createCobraCanyonBasinMaterial(THREE, profile) {
     name: "COBRA_CANYON_BASIN_MATERIAL",
     vertexShader: BASIN_VERTEX_SHADER,
     fragmentShader: BASIN_FRAGMENT_SHADER,
-    side: THREE.DoubleSide,
+    // FRONT-SIDE. The basin is an opaque closed-above heightfield; DoubleSide was doubling its
+    // fragment work for no stated reason (design doc §1.1) and, now that the mesh casts, would
+    // have doubled the shadow-map fill too. Back faces are only visible from underground.
+    side: THREE.FrontSide,
     fog: false,
-    uniforms: {
+    // Shadow reception only; the light model is still the tone ramp, and no scene light touches
+    // this material's colour. `lights: true` is how Three is told to define NUM_DIR_LIGHT_SHADOWS
+    // and upload the shadow map — see terrain_shadow_receive.js.
+    lights: true,
+    uniforms: withTerrainShadowUniforms(THREE, {
       uSunDirection: { value: vector3(THREE, profile.sunDirectionWorld) },
       uFogColor: { value: new THREE.Color(profile.fog.color) },
       uFogDensity: { value: profile.fog.density },
@@ -371,7 +435,7 @@ export function createCobraCanyonBasinMaterial(THREE, profile) {
       uElevationBands: {
         value: new THREE.Vector4(...paint.elevationBandsM),
       },
-    },
+    }),
   });
   return material;
 }
@@ -385,7 +449,8 @@ export function createCobraCanyonRiverMaterial(THREE, profile) {
     fragmentShader: RIVER_FRAGMENT_SHADER,
     side: THREE.DoubleSide,
     fog: false,
-    uniforms: {
+    lights: true,
+    uniforms: withTerrainShadowUniforms(THREE, {
       uSunDirection: { value: vector3(THREE, profile.sunDirectionWorld) },
       uFogColor: { value: new THREE.Color(profile.fog.color) },
       uFogDensity: { value: profile.fog.density },
@@ -395,8 +460,9 @@ export function createCobraCanyonRiverMaterial(THREE, profile) {
       uShallowWater: { value: vector3(THREE, water.shallowColor) },
       uBankGravel: { value: vector3(THREE, water.bankColor) },
       uBankLight: { value: vector3(THREE, flatGroundLight(profile)) },
+      uBankShadowLight: { value: vector3(THREE, flatGroundShadowLight(profile)) },
       uShoreWindow: { value: vector2(THREE, water.shoreWindow) },
-    },
+    }),
   });
   material.polygonOffset = true;
   material.polygonOffsetFactor = -1;

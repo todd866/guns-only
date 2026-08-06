@@ -1,4 +1,9 @@
-import { Vector3 } from "../../vendor/three.module.js";
+// NO THREE IMPORT. This module only ever reads and writes .x/.y/.z on objects the caller already
+// owns, so importing Vector3 bought nothing and cost real bytes: the standalone pages load Three
+// as `three.module.js?v=NNN` while app.js loads it unsuffixed, and an ES module URL with a
+// different query string is a DIFFERENT module instance. Importing this file from cobra-lab would
+// otherwise have pulled a second ~1.2 MB copy of Three into that page just to run six lines of
+// vector arithmetic.
 
 const EPSILON = 1e-8;
 
@@ -67,10 +72,14 @@ export function applyTexelStabilizedDirectionalShadow(light, focus, options = {}
   const focusArray = focus?.isVector3
     ? [focus.x, focus.y, focus.z]
     : [focus?.[0] ?? 0, focus?.[1] ?? 0, focus?.[2] ?? 0];
-  const derivedDirection = new Vector3().subVectors(light.target.position, light.position).normalize();
+  const derivedDirection = normalize([
+    light.target.position.x - light.position.x,
+    light.target.position.y - light.position.y,
+    light.target.position.z - light.position.z,
+  ], [0, -1, 0]);
   const direction = options.direction?.isVector3
     ? [options.direction.x, options.direction.y, options.direction.z]
-    : options.direction ?? [derivedDirection.x, derivedDirection.y, derivedDirection.z];
+    : options.direction ?? derivedDirection;
   const frame = computeTexelStabilizedShadowFrame({
     focus: focusArray,
     direction,
@@ -79,11 +88,15 @@ export function applyTexelStabilizedDirectionalShadow(light, focus, options = {}
     mapSize: options.mapSize ?? light.shadow.mapSize.x,
   });
   const lightDistance = Math.max(frame.halfExtent, options.lightDistance ?? frame.halfExtent * 2);
-  const snapped = new Vector3(...frame.focus);
-  const directionVector = new Vector3(...frame.direction);
+  const [focusX, focusY, focusZ] = frame.focus;
+  const [directionX, directionY, directionZ] = frame.direction;
 
-  light.target.position.copy(snapped);
-  light.position.copy(snapped).addScaledVector(directionVector, -lightDistance);
+  light.target.position.set(focusX, focusY, focusZ);
+  light.position.set(
+    focusX - directionX * lightDistance,
+    focusY - directionY * lightDistance,
+    focusZ - directionZ * lightDistance,
+  );
   light.target.updateMatrixWorld();
   light.updateMatrixWorld();
 

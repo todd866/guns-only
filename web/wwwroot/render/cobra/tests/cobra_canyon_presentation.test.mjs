@@ -286,8 +286,32 @@ test("builds the real analytical basin and stays inside every tier ceiling", () 
       assert.equal(tag.collisionSource, false);
       assert.equal(tag.targetSource, false);
       assert.equal(tag.targetable, false);
-      assert.equal(object.castShadow, false);
+      // WAS `castShadow === false` for every object. That assertion encoded the CONCLUSION that
+      // the canyon does not pay for a shadow pass, not the invariant that presentation geometry
+      // is non-authoritative — and once render-architecture stage 0 turned the pass on it was the
+      // only thing standing between the scene and a legible gorge. What must stay true is the
+      // policy: the things with vertical mass cast, and the flat sheets that could only ever
+      // shadow-acne themselves do not.
+      // The asset-kit batches carry their own tag and their own policy (asserted in
+      // cobra_canyon_asset_kit.test.mjs); this traverse owns the world roles only.
+      if (tag.assetKit === true) return;
+      // Tags also live on organisational Groups. Shadow flags only affect renderable leaves, so
+      // asserting them on a Group would pin decorative state rather than the renderer contract.
+      if (!object.isMesh && !object.isInstancedMesh) return;
+      const castingRole = tag.role === "basin" || tag.role === "landmarks"
+        || tag.role === "hazards" || tag.role === "bridge-deck" || tag.role === "bridge-pier"
+        || tag.role === "vegetation" || tag.role === "camp-ember-firebase";
+      assert.equal(object.castShadow, castingRole,
+        `${tag.role} cast-shadow policy regressed`);
+      assert.equal(object.receiveShadow, true,
+        `${tag.role} must receive: everything in this scene sits on the basin`);
     });
+    // The basin is the one that matters. A 300 m gorge wall under a 16-degree sun is the only
+    // caster in the world big enough to change the composition, and it is also the one a
+    // "terrain does not cast" reflex removes first.
+    assert.equal(basin.castShadow, true, "the basin must cast: ridge-into-gorge is the shadow");
+    assert.equal(basin.material.side, THREE.FrontSide,
+      "opaque heightfield: DoubleSide doubles fragment and shadow-map fill for nothing");
     presentation.dispose();
   }
 });

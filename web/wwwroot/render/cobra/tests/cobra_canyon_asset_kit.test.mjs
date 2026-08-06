@@ -80,7 +80,15 @@ test("builds one bounded authored batch per visual role across every tier", () =
       assert.equal(tag.collisionSource, false);
       assert.equal(tag.targetSource, false);
       assert.equal(tag.targetable, false);
-      assert.equal(mesh.castShadow, false);
+      // WAS an unconditional `castShadow === false`. Same defect as its sibling in
+      // cobra_canyon_presentation.test.mjs: it pinned a past cost decision as though it were a
+      // property of ambient scenery. The invariant worth holding is that scenery with height
+      // casts and the two flat/translucent roles never do — `mist` would print a hard-edged
+      // rectangle into the depth map and `waterAccent` is a decal at water level.
+      const standsUp = role === "jungle" || role === "plantation"
+        || role === "village" || role === "rock";
+      assert.equal(mesh.castShadow, standsUp, `${role} cast-shadow policy regressed`);
+      assert.equal(mesh.receiveShadow, role !== "mist" && role !== "waterAccent");
       assert.equal(mesh.instanceMatrix.usage, THREE.StaticDrawUsage);
       assert.equal(mesh.instanceColor.count, mesh.count);
       assert.equal(mesh.geometry.getAttribute("color").count,

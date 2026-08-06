@@ -387,6 +387,26 @@ function geometryTriangles(geometry) {
   return Math.floor((geometry.index?.count ?? geometry.getAttribute("position")?.count ?? 0) / 3);
 }
 
+// Which world roles put geometry BETWEEN the sun and the ground. Render-architecture stage 0
+// turned the shadow pass on; this is the list of things worth paying a second rasterisation of.
+//
+// The basin is on it and it is the important one: a 300 m gorge wall under a 16-degree sun lays a
+// ~1 km shadow across the valley floor, which is the cue the canyon has been missing (the tone
+// ramp can only shade a face by its own normal — see terrain_legibility diagnosis). It costs one
+// extra draw call in the light view for the whole 46 k-triangle mesh.
+//
+// Off the list: the river (a flat sheet at ground level — it can only shadow-acne itself), the
+// roads (a decal on the surface, same problem), the hero-cell markers (transparent authority
+// cues, not world objects) and the group itself.
+const SHADOW_CASTING_ROLES = Object.freeze(new Set([
+  "basin",
+  "landmarks",
+  "hazards",
+  "bridge-deck",
+  "bridge-pier",
+  "vegetation",
+]));
+
 function tagObject(object, role, extra = {}) {
   object.userData.cobraCanyon = Object.freeze({
     schema: COBRA_CANYON_PRESENTATION_SCHEMA,
@@ -394,7 +414,7 @@ function tagObject(object, role, extra = {}) {
     ...PRESENTATION_TAG,
     ...extra,
   });
-  object.castShadow = false;
+  object.castShadow = SHADOW_CASTING_ROLES.has(role);
   object.receiveShadow = true;
   object.matrixAutoUpdate = false;
   object.updateMatrix();
