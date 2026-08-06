@@ -140,6 +140,20 @@ public static class BanditFireControl {
         return System.Math.Acos(System.Math.Clamp(dot, -1.0, 1.0));
     }
 
+    /// <summary>How much lead this shot actually REQUIRES: the angle between the line of sight to
+    /// the contact and the ballistic solution. It is a property of the geometry, not of the
+    /// shooter's tracking — near zero in a low-aspect tail chase, tens of degrees across a
+    /// crossing turn — and it is what decides whether pointing at the target is the same thing as
+    /// pointing at the solution.</summary>
+    public static double RequiredLeadAngleRad(
+        in AircraftState own, in ActorObservation player) {
+        Vec3D line = player.Position - own.Position;
+        double rangeM = line.Length;
+        if (!double.IsFinite(rangeM) || rangeM < 1e-9) return 0.0;
+        double dot = (line * (1.0 / rangeM)).Dot(LeadDirection(own, player));
+        return System.Math.Acos(System.Math.Clamp(dot, -1.0, 1.0));
+    }
+
     public static bool InLeadFiringEnvelope(
         in AircraftState own, in ActorObservation player, double leadErrorGateRad) {
         Vec3D line = player.Position - own.Position;
@@ -808,12 +822,20 @@ public sealed class ReactiveBandit :
         // A bandit that is setting the player up does not shoot them. Step's presenting gate
         // cannot cover this: the session asks the actor to fire on a separate path.
         if (Presenting) return false;
-        if (CatastrophicallyDamaged || _terrainRecoveryActive
-            || (!BanditFireControl.InFiringEnvelope(
-                    State, player, EffectiveFireConeRad)
-                && !BanditFireControl.InLeadFiringEnvelope(
-                    State, player, EffectiveLeadFireConeRad)))
-            return false;
+        if (CatastrophicallyDamaged || _terrainRecoveryActive) return false;
+        bool onSolution = BanditFireControl.InLeadFiringEnvelope(
+            State, player, EffectiveLeadFireConeRad);
+        // The body gate is not wrong everywhere — it is wrong exactly where it DISAGREES with the
+        // solution. In a low-aspect tail chase the required lead is a fraction of a degree, so the
+        // target IS the solution and pointing at it is correct airmanship; across a crossing turn
+        // the solution is 17 deg away and the same gate authorises a shot into empty sky. A pilot
+        // with solution discipline therefore keeps the wide gate only where the two agree, which
+        // is a geometric test on the shot, not a tracking test on the pilot.
+        bool onBody = (_profile.FiresOnBodyGate
+                || BanditFireControl.RequiredLeadAngleRad(State, player)
+                    <= EffectiveLeadFireConeRad)
+            && BanditFireControl.InFiringEnvelope(State, player, EffectiveFireConeRad);
+        if (!onSolution && !onBody) return false;
 
         // Start the burst when a usable opportunity actually appears. The historical absolute
         // engagement clock discarded short post-merge windows whenever they happened to arrive
@@ -1286,7 +1308,8 @@ public sealed class ReactiveBandit :
     PilotCommand GunTrackCommand(in ActorObservation player) {
         var own = State;
         var aim = BanditFireControl.LeadPoint(own, player);
-        double authority = System.Math.Clamp(_profile.MaxAcquireG / 5.5, 0.75, 2.0);
+        double authority = System.Math.Clamp(
+            _profile.EffectiveFineTrackAuthorityG / 5.5, 0.75, 2.0);
         double tau = 0.6 / authority;
         // LEAD THE LEAD POINT. A first-order law chasing a moving aim point settles a whole lag
         // behind it — aim rate times the loop's time constant, ~3-4 deg against a turning
@@ -1402,7 +1425,8 @@ public sealed class ReactiveBandit :
         // ManoeuvringFinisher=false is the frozen BfmDuel reference yardstick: it flies the same
         // Veteran planner but declines this law, so a tier ladder is measured against a ruler
         // that does not itself improve with the bandit build.
-        if (!_profile.ManoeuvringFinisher || _profile.MaxAcquireG > 5.5) {
+        if (!_profile.ManoeuvringFinisher
+            || _profile.MaxAcquireG > _profile.FineTrackMaxG) {
             _fineTrackLatched = false;
             return false;
         }
@@ -2579,10 +2603,29 @@ public sealed class ReactiveBandit :
             // Counting any nose-on sample below maximum range also rewarded geometry inside the
             // no-fire minimum range, so a close overshoot could outscore a genuinely usable
             // solution.
-            if (BanditFireControl.InFiringEnvelope(probeState, predictedPlayer)
-                || BanditFireControl.InLeadFiringEnvelope(
-                    probeState, predictedPlayer, _profile.LeadFireConeRad))
-                windowSeconds += dt;
+            //
+            // SCORE THE SOLUTION, NOT THE OPPORTUNITY. Adding the lead term as an OR alongside the
+            // body term left the EASIER term dominating: the body cone is satisfied by pure
+            // pursuit, which is precisely the geometry a gun cannot use, so the optimiser kept
+            // flying nose-on and the solution never arrived. Measured on GunConversionFunnel, the
+            // Ace's ballistic lead error at the trigger was p10 9.2 deg / median 17.3 deg against
+            // a 0.58 deg requirement, and its lead gate was met for 0.00 s of 62.1 s in range —
+            // its only near-solution moments were head-on merge passes, where crossing rate is low
+            // and the first-pass ROE forbids the shot anyway.
+            //
+            // For a pilot whose trigger is gated on the solution, the ROLLOUT must be too, or the
+            // BFM never produces the geometry the trigger is waiting for. The shaping cone stays
+            // at the 3 deg gun cone rather than the tier's much tighter TRIGGER cone: shaping on
+            // the trigger cone flattens the angle gradient to nothing over a short horizon and the
+            // controller orbits outside it, which is the same failure the body-cone comment above
+            // records.
+            bool scoredWindow = _profile.FiresOnBodyGate
+                ? BanditFireControl.InFiringEnvelope(probeState, predictedPlayer)
+                    || BanditFireControl.InLeadFiringEnvelope(
+                        probeState, predictedPlayer, _profile.LeadFireConeRad)
+                : BanditFireControl.InLeadFiringEnvelope(
+                    probeState, predictedPlayer, gunConeRad);
+            if (scoredWindow) windowSeconds += dt;
             // Score the same geometry from the attacker's side. The predicted player direction
             // and position come only from ActorObservation; the probe is this candidate's honest
             // kernel rollout. A projected player gun line should compete point-for-point with
