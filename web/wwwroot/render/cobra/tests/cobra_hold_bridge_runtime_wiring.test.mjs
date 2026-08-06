@@ -29,7 +29,11 @@ test("authority JSON is sampled at HUD rate while the camera reads the per-frame
 test("telemetry rides the bounded channel and keepalive exists only behind the pagehide path", async () => {
   const main = await source("cobra-lab/main.js");
   assert.match(main, /createCobraTelemetryChannel/);
-  assert.match(main, /flush\(\{ pagehide: true \}\)/);
+  // The flush reason is now the teardown's caller ("pagehide" or Escape's "exit"), because both
+  // routes tear the mission down through one function. Both must still flush.
+  assert.match(main, /teardownMission\("pagehide"\)/);
+  assert.match(main, /teardownMission\("exit"\)/);
+  assert.match(main, /telemetryChannel\.flush\(\{ \[reason\]: true \}\)/);
   assert.doesNotMatch(main, /keepalive/);
   assert.doesNotMatch(main, /telemetryRows\.splice/);
 });

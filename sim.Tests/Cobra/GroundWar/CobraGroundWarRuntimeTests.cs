@@ -161,8 +161,62 @@ public class CobraGroundWarRuntimeTests
             runtime.Advance(command);
 
         Assert.Equal(CobraMissionStatus.Active, runtime.Status);
-        Assert.True(runtime.GroundWar.AuthorityTick >= 120);
+        Assert.True(runtime.GroundWar.AuthorityTick > 0);
         Assert.True(runtime.GroundWar.Magazine.RoundsRemaining > 0);
+    }
+
+    /// <summary>
+    /// Performance invariant, not decoration. The basin fight is a STRATEGIC layer: stepping it
+    /// at the airframe's 120 Hz cost 3.5 ms of every 4.2 ms authority tick in Build 265 (measured
+    /// in the browser via a phase-skip build) and was the whole of the "very laggy" report. The
+    /// mission runtime must batch it to its own cadence. If someone re-couples the two rates,
+    /// this fails before a player ever feels it.
+    /// </summary>
+    [Fact]
+    public void MissionRuntimeStepsGroundWarAtItsStrategicCadenceNotTheAirframeRate()
+    {
+        var runtime = new CobraMissionRuntime(
+            CobraCanyonDefinition.Create(),
+            new FlatTerrain(),
+            CobraCanyonRouteChoice.RiverGorge,
+            groundWarSeed: 5);
+        double collective = runtime.Cobra.EstimateHoverCollective(
+            runtime.Cobra.State.GrossMassKg,
+            CobraMissionRuntime.DefaultAirDensityKgM3);
+        var command = new VerticalLiftPilotCommand(collective, 0.0, 0.0, 0.0);
+
+        int airframeTicksPerSecond = (int)Math.Round(PlayerVehicleContract.FixedStepHz);
+        for (int tick = 0; tick < airframeTicksPerSecond; tick++)
+            runtime.Advance(command);
+
+        Assert.True(CobraMissionRuntime.GroundWarStepHz < PlayerVehicleContract.FixedStepHz,
+            "the ground war must be cheaper than the flight model, not tied to it");
+        Assert.Equal(
+            (long)Math.Round(CobraMissionRuntime.GroundWarStepHz),
+            runtime.GroundWar.AuthorityTick);
+    }
+
+    /// <summary>
+    /// The Hold-the-Bridge timers must be wall-clock, not a count of Advance calls: once the
+    /// ground war steps at its own cadence, a tick-counted timer would stretch the 45 s hold to
+    /// four and a half minutes.
+    /// </summary>
+    [Theory]
+    [InlineData(120.0)]
+    [InlineData(20.0)]
+    [InlineData(10.0)]
+    public void HoldTheBridgeTimersAreWallClockAtAnyStepRate(double stepHz)
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        double stepSeconds = 1.0 / stepHz;
+        int steps = (int)Math.Round(CobraGroundWarRuntime.VictoryHoldSeconds / stepSeconds);
+        for (int step = 0; step < steps; step++) {
+            war.OverrideControlForTests(CobraGroundWarRuntime.VictoryControlThreshold + 0.05);
+            war.Advance(stepSeconds);
+        }
+
+        Assert.Equal(HoldTheBridgeOutcome.Victory, war.MissionOutcome);
+        Assert.Equal(1.0, war.VictoryHoldProgress, 3);
     }
 
     [Fact]

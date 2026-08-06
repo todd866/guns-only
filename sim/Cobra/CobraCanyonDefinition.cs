@@ -614,6 +614,17 @@ public sealed class CobraCanyonTerrainSurface : ITerrainSurface
         return true;
     }
 
+    /// <summary>Height without the four extra evaluations TrySample spends on its normal.</summary>
+    public bool TryHeightM(double eastM, double northM, out double heightM)
+    {
+        if (!Bounds.Contains(eastM, northM)) {
+            heightM = 0.0;
+            return false;
+        }
+        heightM = HeightM(eastM, northM);
+        return true;
+    }
+
     double HeightM(double eastM, double northM)
     {
         double radiusM = Math.Sqrt(eastM * eastM + northM * northM);
