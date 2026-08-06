@@ -6,6 +6,19 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const ART_ROOT = fileURLToPath(new URL("../../../art/", import.meta.url));
+const POSTER_SOURCE_ROOT = fileURLToPath(
+  new URL("../../../../../tools/assets/generators/menu-posters/", import.meta.url));
+
+// name -> the committed SVG it is rasterised from. The small loading cover is the same 3:2
+// picture at a smaller size, so it shares a source rather than keeping a copy that can drift.
+const POSTER_SOURCES = {
+  "bike-yzf-r1.webp": "bike-yzf-r1.svg",
+  "jet-cobra.webp": "jet-cobra.svg",
+  "jet-f22.webp": "jet-f22.svg",
+  "jet-rapier.webp": "jet-rapier.svg",
+  "menu-hangar-small.webp": "menu-hangar.svg",
+  "menu-hangar.webp": "menu-hangar.svg",
+};
 
 test("every production shell painting has a hash-pinned fiction provenance card", async () => {
   const sources = await readFile(path.join(ART_ROOT, "SOURCES.md"), "utf8");
@@ -32,5 +45,24 @@ test("every production shell painting has a hash-pinned fiction provenance card"
     assert.ok(row, `${file} must have a row in art/SOURCES.md`);
     assert.equal(row.includes(`\`${digest}\``), true,
       `${file} must have its exact SHA-256 in art/SOURCES.md`);
+    assert.equal(row.includes(`| ${bytes.length} |`), true,
+      `${file} must have its exact byte count in art/SOURCES.md`);
+  }
+});
+
+// The v1/v2 records could not name their generator or quote their prompt. The current set closes
+// that gap by being reproducible from committed source instead, so the source has to be there.
+test("every current shell poster is reproducible from a committed SVG source", async () => {
+  const sources = await readFile(path.join(ART_ROOT, "SOURCES.md"), "utf8");
+  assert.match(sources, /no image-generation model was used/i,
+    "the current set claims a deterministic pipeline; that claim must be stated, not implied");
+
+  const svgs = new Set((await readdir(POSTER_SOURCE_ROOT)).filter((f) => f.endsWith(".svg")));
+  const renderer = await readFile(path.join(POSTER_SOURCE_ROOT, "render.mjs"), "utf8");
+
+  for (const [webp, svg] of Object.entries(POSTER_SOURCES)) {
+    assert.ok(svgs.has(svg), `${webp} must have its source ${svg} committed`);
+    assert.ok(renderer.includes(`"${webp.replace(/\.webp$/, "")}"`),
+      `${webp} must be listed in the poster renderer`);
   }
 });

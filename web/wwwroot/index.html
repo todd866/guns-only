@@ -860,7 +860,7 @@
          green-black with a radial glow -- which is correct for avionics and wrong for the front
          door of a film. The backdrop is a gouache sky; the gradient over it is only enough scrim
          to keep type legible against the bright cloud tops, weighted to the bottom where the
-         cards sit rather than washing the whole image out. 198 KB WebP, 51 KB under 900 px. */
+         cards sit rather than washing the whole image out. 18 KB WebP, 8 KB under 900 px. */
       background-image:
         linear-gradient(105deg,
           rgba(12, 14, 22, .78) 0%,
@@ -2662,7 +2662,7 @@
     #ready-screen[data-mode="program"] .ready-controls,
     #ready-screen[data-mode="program"] #ready-hint { display: none; }
 
-    /* The two paintings sit side by side and own the screen. */
+    /* The four posters sit side by side and own the screen. */
     #ready-screen[data-mode="program"] .ready-layout {
       display: block;
       overflow: visible;
@@ -2690,8 +2690,11 @@
       background-repeat: no-repeat;
       background-size: cover;
       /* Unpicked is dimmer and cooler; picked steps into the light. Nothing is greyed out or
-         disabled -- both are always flyable, one is merely the one you are looking at. */
-      filter: brightness(.52) saturate(.72);
+         disabled -- all four are always flyable, one is merely the one you are looking at.
+         The dimming is deliberately gentle: it was tuned when the cards were backlit
+         near-silhouettes that had nothing to lose, and the current cards are asked to show you
+         what you would be flying BEFORE you pick it. Dim enough to recede, not enough to hide. */
+      filter: brightness(.74) saturate(.86);
       transition: filter .22s ease, border-color .22s ease, box-shadow .22s ease;
     }
 
@@ -2711,12 +2714,13 @@
       background-image: image-set(url("./art/bike-yzf-r1.webp") type("image/webp"));
     }
 
-    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]:hover { filter: brightness(.78); }
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]:hover { filter: brightness(.9) saturate(.95); }
 
     #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft] {
       border-color: rgba(122, 240, 165, .62);
-      /* The service lamps, borrowed. Green as light spilling off the painting, which is what it
-         is in the picture -- not a border colour picked off a palette. */
+      /* The selection glow is the instrument green this project uses everywhere a system reports
+         that it is live. It is a UI colour on purpose: the four cards no longer share a location
+         or a palette, so the only thing that can mark the chosen one is the interface itself. */
       box-shadow: 0 0 0 1px rgba(122, 240, 165, .3), 0 0 44px rgba(96, 226, 146, .3);
       filter: none;
     }
@@ -2800,11 +2804,12 @@
       #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] { aspect-ratio: 16 / 10; }
     }
 
-    /* One picture per aeroplane, and NOTHING behind them. The hangar backdrop was a third
-       painting of the same hangar sitting behind two paintings of the same hangar, so the eye had
-       to work out which of the three aeroplanes it was being offered. The surround is now the
-       colour of the shadowed concrete in the paintings, and the only things lit on the screen are
-       the two choices. */
+    /* One picture per vehicle, and NOTHING behind them. The backdrop used to be a third
+       painting of the same hangar behind two more paintings of that hangar, so the eye had to
+       work out which of the three aircraft it was being offered. The four cards now share no
+       location and no palette at all -- each one is its own place, weather and time of day -- so
+       the surround is a neutral near-black and the only lit things on the screen are the
+       choices themselves. */
     #ready-screen[data-mode="program"] {
       background-image: none;
       background-color: #0b0d11;
