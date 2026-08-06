@@ -620,7 +620,10 @@ internal static class SnapshotProjection {
             + $"\"bandit_coordination_role\":\"{FormationTacticalRoleToken(Session.PrimaryFormationRole)}\","
             + $"\"w1_coordination_role\":\"{FormationTacticalRoleToken(Session.WingmanFormationRole(0))}\","
             + $"\"formation_coordination_age_s\":{formationCoordinationAgeJson},"
+            // Two distinct signals, two distinct fields: `_stale` keeps its Build-264 BEHAVIOURAL
+            // meaning so the builds stay comparable, `_health_stale` is the new fault watchdog.
             + $"\"formation_coordination_stale\":{(Session.FormationCoordinationStale ? "true" : "false")},"
+            + $"\"formation_coordination_health_stale\":{(Session.FormationCoordinationHealthStale ? "true" : "false")},"
             + RapierGunDroneJson("rd1")
             + $"\"buffet_pitch_deg\":{_player.PitchBuffetRad * 57.2958:F3},\"buffet_roll_deg\":{_player.RollBuffetRad * 57.2958:F3},\"buffet_yaw_deg\":{_player.YawBuffetRad * 57.2958:F3},"
             + $"\"indicated_airspeed_kts\":{indicatedAirspeedMps * AirData.MpsToKnots:F2},"

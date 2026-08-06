@@ -56,13 +56,21 @@ public sealed class EnemyPairCoordinator {
     // completely normal operation.
     public const int DeliveryPeriodTicks =
         EvaluationIntervalTicks + MessageDelayTicks;
-    // Health-signal threshold, deliberately distinct from the BEHAVIOURAL SharedContactStaleAfterTicks
-    // above. Because the behavioural threshold equals the collection interval and the age sawtooths
-    // to a full delivery period, "stale" was true on every normal refresh cycle — the Build 264
-    // production tape carried it true in 8% of rows with a ~1.2 s period, which is the sawtooth, not
-    // a fault. A health flag has to mean a delivery was actually MISSED, so it fires only after two
-    // full delivery periods with no fresh picture (~2.47 s at 180 Hz).
-    public const int SharedContactHealthStaleAfterTicks = 2 * DeliveryPeriodTicks;
+    // Health-signal threshold, deliberately distinct from the BEHAVIOURAL
+    // SharedContactStaleAfterTicks above, which is a pilot-policy decision and not a fault report.
+    //
+    // The arithmetic that sets this number: a healthy cycle sawtooths the age from
+    // MessageDelayTicks (42) up to exactly DeliveryPeriodTicks (222), so anything at or below 222
+    // must stay quiet. Miss ONE scheduled delivery and the picture is not refreshed for another
+    // collection interval, peaking at DeliveryPeriodTicks + EvaluationIntervalTicks = 402. So a
+    // watchdog that actually detects a single missed delivery has to sit strictly inside (222, 402].
+    // Half a collection interval of headroom above the healthy peak buys jitter tolerance while
+    // still leaving 90 ticks (0.5 s) of the missed-delivery gap above the line.
+    //
+    // 2 * DeliveryPeriodTicks (444) was tried and rejected: it is ABOVE 402, so it could not fire
+    // on a missed delivery at all and would only have caught the coordinator ceasing to be stepped.
+    public const int SharedContactHealthStaleAfterTicks =
+        DeliveryPeriodTicks + EvaluationIntervalTicks / 2;
     public const double ExtendPairSeparationM = 850.0;
 
     readonly record struct PendingAssignment(
@@ -102,8 +110,10 @@ public sealed class EnemyPairCoordinator {
     /// True once per normal refresh cycle by construction — never publish it as a health signal.
     public bool SharedContactStale => Active
         && SharedContactAgeTicks > SharedContactStaleAfterTicks;
-    /// Health staleness: a scheduled delivery was genuinely missed. This is the one telemetry
-    /// publishes as formation_coordination_stale.
+    /// Health staleness: a scheduled delivery was genuinely missed. Published as the NEW
+    /// formation_coordination_health_stale — deliberately not as formation_coordination_stale,
+    /// which keeps meaning the behavioural window it has always meant so that a 264-vs-265
+    /// comparison of that field compares like with like.
     public bool SharedContactHealthStale => Active
         && SharedContactAgeTicks > SharedContactHealthStaleAfterTicks;
 

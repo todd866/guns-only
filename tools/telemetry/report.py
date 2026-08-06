@@ -278,6 +278,22 @@ def deep_funnel(sessions, visitors, refresh):
         })
     phase_rank = {"READY": 1, "ACTIVE": 2, "PAUSED": 2, "FINISHED": 3}
     for name in visitors:
+        # SEMANTICS, identical on both wire vintages: rounds / hits / kills are the visitor's BEST
+        # SINGLE SORTIE, never a lifetime sum. That is what max(kill_count) has always meant here,
+        # and all three underlying counters are cleared when a sortie is staged.
+        #
+        # rounds_fired needs no repair and gets none: continuous combat re-stages the player's gun
+        # through GunKill.CreateReplacementTarget, which carries RoundsFired FORWARD precisely so
+        # cumulative fire evidence stays continuous, so the raw field is already the running sortie
+        # total and max() over it is already the honest answer.
+        #
+        # `hits` is the one that genuinely resets — the staged successor's damage ledger starts
+        # clean — so a plain max() reported only the LAST engagement of each sortie. Build 265+
+        # tapes carry the monotone sortie_hits ledger. Older tapes are reconstructed by summing
+        # each engagement's contribution, and the running total is kept per sortie id so the sum
+        # never crosses a sortie boundary (which would silently switch this metric to a lifetime
+        # sum) and never restarts at a chunk boundary mid-sortie (which would double-count).
+        hits_recon = collections.defaultdict(lambda: {"total": 0.0, "last": None})
         for blob in sessions[name]:
             path = os.path.join(chunk_dir, blob["pathname"].replace("/", "_"))
             if not os.path.exists(path):
@@ -288,13 +304,6 @@ def deep_funnel(sessions, visitors, refresh):
             except (OSError, ValueError, EOFError):
                 continue
             entry, state = stats[name], None
-            # rounds_fired and hits belong to the CURRENT engagement's weapon graph: continuous
-            # combat stages a fresh gun for each successor opponent, so both counters RESET at
-            # every engagement boundary and a plain max() over the tape understates the chunk
-            # total. The projection publishes monotone sortie ledgers (sortie_rounds_fired,
-            # sortie_hits); prefer them, and reconstruct across resets for older tapes.
-            reconstructed = {"rounds": 0.0, "hits": 0.0}
-            previous = {"rounds": None, "hits": None}
             for row in rows:
                 kind = row.get("k")
                 if kind == "in" and row.get("type") == "lifecycle" \
@@ -326,23 +335,23 @@ def deep_funnel(sessions, visitors, refresh):
                     value = non_negative(state.get("kill_count"))
                     if value is not None:
                         entry["kills"] = max(entry["kills"], value)
-                    for field, ledger_field, key in (
-                            ("rounds_fired", "sortie_rounds_fired", "rounds"),
-                            ("hits", "sortie_hits", "hits")):
-                        ledger = non_negative(state.get(ledger_field))
-                        if ledger is not None:
-                            reconstructed[key] = max(reconstructed[key], ledger)
-                            continue
-                        value = non_negative(state.get(field))
-                        if value is None:
-                            continue
-                        last = previous[key]
-                        # A drop is a new weapon graph, which starts its own count at zero.
-                        reconstructed[key] += value if last is None or value < last \
-                            else value - last
-                        previous[key] = value
-            for key in ("rounds", "hits"):
-                entry[key] = max(entry[key], reconstructed[key])
+                    value = non_negative(state.get("rounds_fired"))
+                    if value is not None:
+                        entry["rounds"] = max(entry["rounds"], value)
+                    ledger = non_negative(state.get("sortie_hits"))
+                    if ledger is not None:
+                        entry["hits"] = max(entry["hits"], ledger)
+                    else:
+                        value = non_negative(state.get("hits"))
+                        if value is not None:
+                            recon = hits_recon[sortie]
+                            last = recon["last"]
+                            # A drop is a new weapon graph, whose damage ledger
+                            # starts at zero.
+                            recon["total"] += value \
+                                if last is None or value < last else value - last
+                            recon["last"] = value
+                            entry["hits"] = max(entry["hits"], recon["total"])
     return stats
 
 

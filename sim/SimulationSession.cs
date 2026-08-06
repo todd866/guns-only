@@ -143,10 +143,10 @@ public sealed class SimulationSession {
     double _sortiePeakLoadFactorG;
     double _sortieMinimumLoadFactorG;
 
-    /// Last observed counters for one physical gun, so only the increment is banked.
-    /// Rounds baseline is 0 because a fresh weapon graph always starts its own magazine at zero;
-    /// the hit baseline is whatever the gun already carried, because
-    /// GunKill.CreateForFreshShooterAgainstTargets deliberately INHERITS damage already inflicted.
+    /// Last observed counters for one physical gun, so only the increment is banked. A replacement
+    /// is a new dictionary key, so both counters baseline at GunKill.InheritedRoundsFired /
+    /// InheritedHitCount — whatever the successor was born holding, which its predecessor has
+    /// already banked. Both are zero for a gun that succeeded nothing.
     struct GunLedgerBaseline {
         public int Rounds;
         public int Hits;
@@ -787,19 +787,24 @@ public sealed class SimulationSession {
         _enemyPairCoordinator.Active
             ? _enemyPairCoordinator.SharedContactAgeTicks * FixedDeltaSeconds
             : null;
-    /// Genuine coordination staleness — a scheduled shared-picture delivery was MISSED.
-    /// Deliberately NOT EnemyPairCoordinator.SharedContactStale, which is the behavioural fallback
-    /// threshold and is true once per normal refresh cycle by construction.
+    /// The BEHAVIOURAL fallback window, published as formation_coordination_stale: the shared
+    /// picture is older than the collection interval, so each pilot flies on its own senses until
+    /// the next delivery lands. Entered once per refresh cycle in completely normal operation —
+    /// true in 8% of the Build 264 rows on a ~1.2 s period, which is the sawtooth, not a fault.
+    ///
+    /// It keeps this name and this meaning ON PURPOSE. It is noisy but it is INFORMATIVE: it says
+    /// how much of the fight the two ships spent uncoordinated, and that is a real behavioural
+    /// measurement. Quietly redefining the field to a health threshold would have made a
+    /// 264-vs-265 comparison read the resulting ~0% as a sim fix. The fault signal is the separate
+    /// FormationCoordinationHealthStale below.
     public bool FormationCoordinationStale =>
         _enemyPairCoordinator.Active
-        && _enemyPairCoordinator.SharedContactHealthStale;
-    /// The BEHAVIOURAL fallback window: the shared picture is older than the collection interval,
-    /// so each pilot flies on its own senses until the next delivery lands. Entered once per
-    /// refresh cycle in completely normal operation, which is exactly why it is not published as
-    /// formation_coordination_stale.
-    public bool FormationCoordinationBehaviourFallback =>
-        _enemyPairCoordinator.Active
         && _enemyPairCoordinator.SharedContactStale;
+    /// Genuine coordination staleness — a scheduled shared-picture delivery was MISSED — published
+    /// as the NEW formation_coordination_health_stale. This is the one to alarm on.
+    public bool FormationCoordinationHealthStale =>
+        _enemyPairCoordinator.Active
+        && _enemyPairCoordinator.SharedContactHealthStale;
     public int EngagementNumber => _engagementNumber;
     public EngagementReport? LastEngagementReport =>
         _engagementReports.Count == 0 ? null : _engagementReports[^1];
@@ -5382,7 +5387,10 @@ public sealed class SimulationSession {
 
     void AccumulateEngagementCounters() {
         // Deliberately before the engagement-active guard: the sortie ledgers span engagements and
-        // must keep counting between them, which is the whole point of having them.
+        // must keep counting between them, which is the whole point of having them. A drone raid
+        // never starts engagement counters at all, so behind the guard every raid would report
+        // zero rounds fired. Pinned by
+        // SortieGunLedgerTests.SortieLedgersAccrueOnASortieThatNeverStartsEngagementCounters.
         AccumulateSortieLedgers();
         if (!_engagementCounters.Active) return;
         _engagementCounters.DurationSeconds += FixedDeltaSeconds;
@@ -5430,10 +5438,14 @@ public sealed class SimulationSession {
 
     (int Rounds, int Hits) BankGun(GunKill gun) {
         if (!_sortieGunLedger.TryGetValue(gun, out GunLedgerBaseline baseline)) {
-            // A fresh weapon graph always starts its own magazine at zero rounds, so a zero rounds
-            // baseline loses nothing. Inflicted damage is deliberately inherited across a shooter
-            // swap, so hits must baseline at what the gun already carries or the swap double-counts.
-            baseline = new GunLedgerBaseline { Rounds = 0, Hits = gun.TotalHitCount };
+            // First sight of this gun: bank nothing it was BORN holding, because the weapon it
+            // succeeded already banked that. Deliberately the gun's own record of what it
+            // inherited rather than its current counters — a gun can fire on the same tick it is
+            // staged, and reading the live counters here would silently swallow those rounds.
+            baseline = new GunLedgerBaseline {
+                Rounds = gun.InheritedRoundsFired,
+                Hits = gun.InheritedHitCount
+            };
         }
         int rounds = Math.Max(0, gun.RoundsFired - baseline.Rounds);
         int hits = Math.Max(0, gun.TotalHitCount - baseline.Hits);

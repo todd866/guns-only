@@ -776,6 +776,11 @@ public class SnapshotHotFrameTests {
             Assert.True(root.GetProperty("formation_coordination_age_s").GetDouble()
                 > SimulationSession.FixedDeltaSeconds);
             Assert.False(root.GetProperty("formation_coordination_stale").GetBoolean());
+            // Two DISTINCT fields, and both must ride the wire. formation_coordination_stale keeps
+            // its Build-264 behavioural meaning so cross-build comparison stays honest; the health
+            // watchdog is a new field beside it rather than a redefinition of the old one.
+            Assert.False(
+                root.GetProperty("formation_coordination_health_stale").GetBoolean());
             AssertHotFrameMatchesJson(root, buffer);
         }
 
@@ -791,6 +796,9 @@ public class SnapshotHotFrameTests {
                 soloRoot.GetProperty("formation_coordination_age_s").ValueKind);
             Assert.False(
                 soloRoot.GetProperty("formation_coordination_stale").GetBoolean());
+            Assert.False(
+                soloRoot.GetProperty("formation_coordination_health_stale")
+                    .GetBoolean());
             AssertHotFrameMatchesJson(soloRoot, soloBuffer);
         }
     }

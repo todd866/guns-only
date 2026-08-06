@@ -248,7 +248,11 @@ internal static class SnapshotHotFrame {
             Num($"{prefix}_gun_firing", RawInteger);
         }
         Nul("formation_coordination_age_s", 3);
+        // Two distinct signals, deliberately two distinct fields. `_stale` is the BEHAVIOURAL
+        // window and keeps its Build-264 meaning so the two builds stay comparable; `_health_stale`
+        // is the fault watchdog and is the one to alarm on.
         Bool("formation_coordination_stale");
+        Bool("formation_coordination_health_stale");
         // One released Rapier reusable gun-drone rides the hot path while it is still active.
         Num("rd1_present", RawInteger);
         Num("rd1x", 3); Num("rd1y", 3); Num("rd1z", 3);
@@ -1180,6 +1184,8 @@ internal static class SnapshotHotFrame {
             3);
         w.Bool("formation_coordination_stale",
             session.FormationCoordinationStale);
+        w.Bool("formation_coordination_health_stale",
+            session.FormationCoordinationHealthStale);
         WriteRapierGunDrone(ref w, session);
         w.Num("buffet_pitch_deg", player.PitchBuffetRad * 57.2958, 3);
         w.Num("buffet_roll_deg", player.RollBuffetRad * 57.2958, 3);

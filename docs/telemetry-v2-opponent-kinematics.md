@@ -58,16 +58,37 @@ is contact slot 0 and keeps the `opponent_*` names it has always had.
 
 ### Reset semantics, made discoverable
 
-`rounds_fired`, `hits` and `opponent_rounds_fired` are properties of the CURRENT engagement's
-weapon graph. Continuous combat stages a fresh `GunKill` for each successor aircraft, so all three
-reset to zero at every engagement boundary. This is correct behaviour, and it means a session-wide
-`max()` over the tape understates the sortie. Two things now make that discoverable:
+Continuous combat stages a fresh `GunKill` for each successor aircraft, but the two replacement
+families inherit OPPOSITE counters, and the difference decides which raw fields need repair:
 
-1. `sortie_rounds_fired`, `sortie_hits` and `sortie_opponent_rounds_fired` are monotone ledgers
-   over the whole sortie, banked per gun identity so a retired or replaced weapon keeps the rounds
-   it already put in the air.
-2. `tools/telemetry/report.py` prefers those ledgers and, for tapes recorded before they existed,
-   reconstructs the total across resets instead of taking a `max()`.
+| replacement | rounds | damage | used by |
+| --- | --- | --- | --- |
+| `CreateReplacementTarget` (`CreateForStagedNextTarget` / `CreateForRetargetedTarget`) | carried FORWARD | starts clean | the player's gun at every engagement boundary and every drone-raid target advance; opponent guns retargeted onto a relief fighter |
+| `CreateForFreshShooterAgainstTargets` | starts clean | carried FORWARD | a successor opponent's gun; the relief fighter's own gun |
+
+So:
+
+- **`rounds_fired` does NOT reset for the player.** `CreateReplacementTarget` copies `RoundsFired`
+  forward precisely so cumulative fire evidence stays continuous across a boundary. A `max()` over
+  the tape was already the honest sortie total, and `report.py` still uses it.
+- **`hits` DOES reset.** The staged successor's damage ledger starts clean, so `max(hits)` reported
+  only the last engagement of the sortie.
+- **`opponent_rounds_fired` is the PRIMARY ship's current gun only**, and the primary's gun IS a
+  fresh-shooter successor at every boundary, so it does reset.
+
+`sortie_rounds_fired`, `sortie_hits` and `sortie_opponent_rounds_fired` are monotone ledgers over
+the whole sortie, banked per gun identity. Because a replacement is a new object and therefore a
+new ledger key, each gun's baseline is `GunKill.InheritedRoundsFired` / `InheritedHitCount` — what
+that gun was BORN holding, which the weapon it succeeded already banked. Baselining rounds at zero
+instead re-banked the whole inherited running total at every re-stage; five 100-round engagements
+would have reported 1500. Baselining from the gun's LIVE counters at first sight would have been
+wrong the other way, silently swallowing rounds fired on the same tick the gun was staged.
+
+`tools/telemetry/report.py` semantics, identical on both wire vintages: `rounds` / `hits` / `kills`
+are the visitor's BEST SINGLE SORTIE, never a lifetime sum — all three underlying counters clear
+when a sortie is staged, which is what `max(kill_count)` has always meant there. It takes
+`max(rounds_fired)` unchanged, prefers `sortie_hits` where the tape carries it, and for older tapes
+reconstructs hits by summing each engagement's contribution within one sortie id.
 
 ### Two instruments that were dead, and why
 
@@ -80,18 +101,29 @@ flown. `service_life_capture_active` now makes that legible instead of silent, a
 `sortie_peak_g`/`sortie_min_g` give the airframe-agnostic, always-live load-factor envelope that
 the question actually wanted.
 
-**`formation_coordination_stale` alarmed on every normal cycle** (true in 8% of Build 264 rows on
-a ~1.2 s period). It was publishing `EnemyPairCoordinator.SharedContactStale`, whose threshold is
+**`formation_coordination_stale` alarms on every normal cycle** (true in 8% of Build 264 rows on
+a ~1.2 s period). It publishes `EnemyPairCoordinator.SharedContactStale`, whose threshold is
 `EvaluationIntervalTicks` — the BEHAVIOURAL fallback bound, the point past which each pilot flies
-on its own senses. But a healthy coordinator samples every `EvaluationIntervalTicks` and then
-spends `MessageDelayTicks` in the radio path, so the picture age sawtooths to a full
-`DeliveryPeriodTicks` (222 ticks, ~1.23 s at 180 Hz) every cycle and crosses that bound by
-construction. Telemetry now publishes `SharedContactHealthStale`, thresholded at
-`SharedContactHealthStaleAfterTicks = 2 * DeliveryPeriodTicks` (~2.47 s): two full delivery
-periods with no fresh picture, which can only mean a delivery was genuinely missed. The
-behavioural threshold is untouched — changing it would have changed how the bandits fly.
-`SimulationSession.FormationCoordinationBehaviourFallback` exposes the behavioural window
-separately for diagnosis.
+on its own senses. A healthy coordinator samples every `EvaluationIntervalTicks` and then spends
+`MessageDelayTicks` in the radio path, so the picture age sawtooths to a full `DeliveryPeriodTicks`
+(222 ticks, ~1.23 s at 180 Hz) every cycle and crosses that bound by construction.
+
+**That field KEEPS its name and its meaning.** It is noisy but it is informative — it measures how
+much of the fight the two ships spent uncoordinated. Redefining it in place to a health threshold
+would have made a 264-vs-265 comparison read the resulting ~0% as a sim fix, which is the padlock
+defect relocated to the analysis layer. The fault signal is a NEW, separately named field:
+
+`formation_coordination_health_stale` publishes `SharedContactHealthStale`, thresholded at
+`SharedContactHealthStaleAfterTicks = DeliveryPeriodTicks + EvaluationIntervalTicks / 2`
+(312 ticks, ~1.73 s at 180 Hz). The arithmetic that fixes that number: a healthy cycle peaks at
+`DeliveryPeriodTicks` = 222, and ONE missed delivery peaks a further collection interval later at
+`DeliveryPeriodTicks + EvaluationIntervalTicks` = 402, so a watchdog that can actually detect a
+single missed delivery has to sit strictly inside (222, 402]. Half a collection interval of
+headroom above the healthy peak buys jitter tolerance while leaving 90 ticks of the missed-delivery
+gap above the line. `2 * DeliveryPeriodTicks` (444) was tried and rejected: it is ABOVE 402, so it
+could not have fired on a missed delivery at all and would only have caught the coordinator ceasing
+to be stepped — a noisy instrument swapped for a permanently quiet one. The behavioural threshold
+itself is untouched; changing it would change how the bandits fly.
 
 ### Tests pinning the above
 
@@ -101,6 +133,14 @@ separately for diagnosis.
 - `SnapshotHotFrameTests.LoadFactorEnvelopeIsLiveWhereTheServiceLifeRecordIsRapierScoped`
 - `FormationCoordinationTests.HealthStalenessIgnoresTheNormalSawtoothAndFiresOnAMissedDelivery`
 - `FormationCoordinationSessionTests.ProductionTickCadenceCyclesTheBehaviourWindowWithoutRaisingTheHealthFlag`
+- `SortieGunLedgerTests.PlayerRoundsLedgerTracksTheInheritedGunTotalAcrossAnEngagementBoundary` —
+  the ledger must AGREE with the player's gun across a boundary, because that counter already
+  carries forward. It read 129 against a gun total of 115 before the baseline was fixed.
+- `SortieGunLedgerTests.OpponentRoundsLedgerSurvivesTheReliefHandoffWithoutRebanking` — the same
+  defect on the opponent side, reached through `RetargetOpponentGun`.
+- `SortieGunLedgerTests.SortieLedgersAccrueOnASortieThatNeverStartsEngagementCounters` — pins
+  `AccumulateSortieLedgers()` in front of the engagement-active guard. A drone raid deliberately
+  never starts engagement counters, so behind the guard every raid reports zero rounds fired.
 - plus every existing hot/JSON parity test, which covers the new fields automatically.
 
 ---

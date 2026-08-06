@@ -287,12 +287,27 @@ public class FormationCoordinationTests {
             < fresh.SharedContact.Confidence);
     }
 
-    // The health signal published as telemetry's formation_coordination_stale. It must stay quiet
-    // across a full healthy delivery period — which the behavioural threshold provably does not,
-    // since the picture age sawtooths past it every cycle — and must fire once a delivery is
-    // genuinely missed.
+    // The health signal published as telemetry's formation_coordination_health_stale. It must stay
+    // quiet across a full healthy delivery period — which the behavioural threshold provably does
+    // not, since the picture age sawtooths past it every cycle — and it must be able to fire on a
+    // SINGLE missed delivery, which is the only thing that makes it a usable watchdog.
     [Fact]
     public void HealthStalenessIgnoresTheNormalSawtoothAndFiresOnAMissedDelivery() {
+        // The threshold's whole justification, as arithmetic rather than as a comment. A healthy
+        // cycle peaks at DeliveryPeriodTicks; one missed delivery peaks a further collection
+        // interval later. The bound has to be strictly between the two or it is either noise or
+        // permanently silent — 2 * DeliveryPeriodTicks was the latter.
+        Assert.True(
+            EnemyPairCoordinator.SharedContactHealthStaleAfterTicks
+                > EnemyPairCoordinator.DeliveryPeriodTicks,
+            "the health bound is at or below the healthy sawtooth peak, so it is noise");
+        Assert.True(
+            EnemyPairCoordinator.SharedContactHealthStaleAfterTicks
+                < EnemyPairCoordinator.DeliveryPeriodTicks
+                    + EnemyPairCoordinator.EvaluationIntervalTicks,
+            "the health bound is above the peak age of a single missed delivery, so a missed "
+            + "delivery cannot raise it");
+
         var coordinator = new EnemyPairCoordinator();
         AircraftState primary = State(-350.0, -1_100.0, chi: 0.0);
         AircraftState support = State(420.0, -1_250.0, chi: 0.0);

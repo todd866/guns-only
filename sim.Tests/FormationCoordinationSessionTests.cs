@@ -139,10 +139,9 @@ public class FormationCoordinationSessionTests {
     }
 
     // Build 264 production evidence: formation_coordination_stale was true in 8% of 15,731 rows on
-    // a ~1.2 s period, which is exactly the delivery cadence. The published flag was reading the
-    // BEHAVIOURAL fallback threshold (= the collection interval), so it alarmed on every healthy
-    // refresh and carried no information. The behavioural window must still be entered and left on
-    // that cadence; the HEALTH flag must stay quiet throughout.
+    // a ~1.2 s period, which is exactly the delivery cadence — the sawtooth, not a fault. That
+    // field is the BEHAVIOURAL window and it KEEPS that meaning, so 264 and 265 tapes stay
+    // comparable; the separate health flag is what has to stay quiet through a healthy cycle.
     [Fact]
     public void ProductionTickCadenceCyclesTheBehaviourWindowWithoutRaisingTheHealthFlag() {
         var session = new SimulationSession(7);
@@ -154,12 +153,11 @@ public class FormationCoordinationSessionTests {
             tick < 3 * EnemyPairCoordinator.DeliveryPeriodTicks;
             tick++) {
             session.StepFixed();
-            Assert.False(session.FormationCoordinationStale,
+            Assert.False(session.FormationCoordinationHealthStale,
                 $"tick {tick}: the health flag fired inside a healthy refresh cycle");
-            observedFallbackWindow |=
-                session.FormationCoordinationBehaviourFallback;
+            observedFallbackWindow |= session.FormationCoordinationStale;
             if (observedFallbackWindow
-                && !session.FormationCoordinationBehaviourFallback
+                && !session.FormationCoordinationStale
                 && session.FormationCoordinationAgeSeconds is not null)
                 observedRadioRefresh = true;
         }
