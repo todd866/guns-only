@@ -1,15 +1,15 @@
-import * as THREE from "../vendor/three.module.js?v=265";
-import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=265";
+import * as THREE from "../vendor/three.module.js?v=266";
+import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=266";
 import {
   dominantSignedAxis,
   gamepadRiderAxes,
-} from "../render/motorcycle/rider_input.js?v=265";
+} from "../render/motorcycle/rider_input.js?v=266";
 import {
   createRapierTrackDayPresentation,
-} from "../render/motorcycle/track_day_presentation.js?v=265";
-import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=265";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=265";
-import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=265";
+} from "../render/motorcycle/track_day_presentation.js?v=266";
+import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=266";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=266";
+import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=266";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
