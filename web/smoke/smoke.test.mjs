@@ -151,10 +151,41 @@ test("bootstrap dependency failures reveal a fatal surface instead of hanging", 
   try {
     for (const entry of [
       {
+        // Build 265 moved the flight route's bootstrap failure off the phosphor console: when the
+        // inline module bootstrap cannot load multiplayer-config, the Blazor loader or app.js, the
+        // screen a player actually gets is #shell-fallback -- plain English, a route out of an
+        // in-app browser, and the exception kept as small print. That is the surface asserted here,
+        // because a smoke test that watches a card nobody is shown proves nothing about hanging.
+        // #fatal remains the honest last resort and is still reachable (showFatal, and the inline
+        // catch when even boot_fallback.js will not load); the two other routes below still use it.
         route: "?audioQa=silent",
         abort: "**/_framework/blazor.webassembly.js*",
+        fatal: "#shell-fallback",
+        copy: "#shell-fallback-body",
+        // The engineering truth must survive the friendlier screen, not be swallowed by it.
+        detail: { selector: "#shell-fallback-detail", match: /blazor\.webassembly\.js/ },
+        // Desktop has no in-app browser to escape, so the escape row must not paint an empty
+        // 48 px slab: an author `display: flex` outranks the UA sheet's [hidden] rule.
+        unpainted: ["#shell-fallback-open"],
+        // The cover the player was staring at must be gone, and the failure screen must own the
+        // middle of the glass -- "a surface exists in the DOM" is not the contract, being LOOKED
+        // at is. #boot.ready is visibility:hidden (no pointer-events rule of its own), so the
+        // hit test is what proves it stands down.
+        boot: "#boot",
+        // Exactly one failure screen. Two alert dialogs stacked on a stuck player is worse than
+        // either alone, and it would mean the prefer-human branch had stopped being a choice.
+        invisible: ["#fatal"],
+      },
+      {
+        // The last resort the prefer-human branch introduced: when even the two tiny fallback
+        // modules cannot be fetched, the engineering console must still appear with the cause.
+        // Untested, this branch is where a stuck player gets nothing at all.
+        route: "?audioQa=silent",
+        abort: "**/{_framework/blazor.webassembly.js,render/shell/boot_fallback.js}*",
         fatal: "#fatal",
         copy: "#fatal-message",
+        invisible: ["#shell-fallback"],
+        boot: "#boot",
       },
       {
         route: "indoor/?audioQa=silent",
@@ -168,6 +199,7 @@ test("bootstrap dependency failures reveal a fatal surface instead of hanging", 
         fatal: "#fatal",
         copy: "#fatal-copy",
         boot: "#boot-screen",
+        bootPointerEvents: "none",
       },
     ]) {
       const context = await browser.newContext();
@@ -187,8 +219,37 @@ test("bootstrap dependency failures reveal a fatal surface instead of hanging", 
           "",
           `${entry.route} showed an empty fatal failure`,
         );
+        if (entry.detail) {
+          const detail = (await page.locator(entry.detail.selector).textContent())?.trim() ?? "";
+          assert.match(detail, entry.detail.match,
+            `${entry.route} dropped the technical cause from its failure screen`);
+        }
+        for (const selector of entry.invisible ?? []) {
+          assert.equal(await page.locator(selector).isVisible(), false,
+            `${entry.route} showed ${selector} alongside ${entry.fatal}`);
+        }
+        for (const selector of entry.unpainted ?? []) {
+          assert.deepEqual(await page.evaluate((target) => {
+            const node = document.querySelector(target);
+            const box = node?.getBoundingClientRect();
+            return { width: box?.width ?? 0, height: box?.height ?? 0 };
+          }, selector), { width: 0, height: 0 },
+          `${entry.route} paints ${selector}, a control this browser cannot use`);
+        }
         if (entry.boot) {
-          assert.deepEqual(await page.evaluate(({ bootSelector, fatalSelector }) => {
+          const expected = {
+            bootVisibility: "hidden",
+            fatalOwnsHitTest: true,
+          };
+          if (entry.bootPointerEvents) expected.bootPointerEvents = entry.bootPointerEvents;
+          // The cover fades out over a 0.55 s transition, so give it that long to stand down
+          // before measuring; the assertion below is what states the contract.
+          await page.waitForFunction(
+            (selector) => getComputedStyle(document.querySelector(selector)).visibility === "hidden",
+            entry.boot,
+            { timeout: scaled(5000) },
+          ).catch(() => {});
+          assert.deepEqual(await page.evaluate(({ bootSelector, fatalSelector, wantPointerEvents }) => {
             const boot = document.querySelector(bootSelector);
             const fatal = document.querySelector(fatalSelector);
             const box = fatal.getBoundingClientRect();
@@ -196,16 +257,17 @@ test("bootstrap dependency failures reveal a fatal surface instead of hanging", 
               box.left + box.width / 2,
               box.top + box.height / 2,
             );
-            return {
+            const measured = {
               bootVisibility: getComputedStyle(boot).visibility,
-              bootPointerEvents: getComputedStyle(boot).pointerEvents,
               fatalOwnsHitTest: top === fatal || fatal.contains(top),
             };
-          }, { bootSelector: entry.boot, fatalSelector: entry.fatal }), {
-            bootVisibility: "hidden",
-            bootPointerEvents: "none",
-            fatalOwnsHitTest: true,
-          }, `${entry.route} fatal is still occluded by its boot screen`);
+            if (wantPointerEvents) measured.bootPointerEvents = getComputedStyle(boot).pointerEvents;
+            return measured;
+          }, {
+            bootSelector: entry.boot,
+            fatalSelector: entry.fatal,
+            wantPointerEvents: Boolean(entry.bootPointerEvents),
+          }), expected, `${entry.route} fatal is still occluded by its boot screen`);
         }
       } finally {
         await context.close();
@@ -500,39 +562,132 @@ test("the published Cobra Hold the Bridge route boots authority and accepts Tab/
       { timeout: scaled(60000) },
     );
 
-    const boot = await page.evaluate(() => ({
-      status: document.querySelector("#status span")?.textContent ?? "",
-      ammo: document.querySelector("#hud-ammo")?.textContent ?? "",
-      gun: document.querySelector("#hud-gunner")?.textContent ?? "",
-      hostiles: (window.__gunsOnlyCobraAuthority?.ground_war?.units ?? [])
-        .filter((unit) => unit.alive && unit.faction === "hostile").length,
-      tick: window.__gunsOnlyCobraAuthority?.vehicle?.tick ?? -1,
-    }));
+    // Build 265 replaced the Cobra's DOM text strip with the production F-22 combiner plus the
+    // rotorcraft extras, both painted to #hud-canvas -- so ammo, target and gun status are pixels,
+    // not textContent. The truth behind those pixels is read from the two seams the play HUD
+    // itself draws from: the authority snapshot (__gunsOnlyCobraAuthority) and the SAME production
+    // model function main.js hands the painter, imported here from the published bundle.
+    const readHud = () => page.evaluate(async () => {
+      const { cobraRotorcraftHudModel } =
+        await import("/render/cobra/cobra_rotorcraft_hud.js?v=265");
+      const state = window.__gunsOnlyCobraAuthority ?? null;
+      const canvas = document.querySelector("#hud-canvas");
+      return {
+        status: document.querySelector("#status span")?.textContent ?? "",
+        model: cobraRotorcraftHudModel(state),
+        gunner: state?.gunner ?? null,
+        ammo: state?.ground_war?.ammo_remaining ?? null,
+        ammoCapacity: state?.ground_war?.ammo_capacity ?? null,
+        hostiles: (state?.ground_war?.units ?? [])
+          .filter((unit) => unit.alive && unit.faction === "hostile").length,
+        tick: state?.vehicle?.tick ?? -1,
+        canvas: canvas ? { width: canvas.width, height: canvas.height } : null,
+      };
+    });
+
+    const boot = await readHud();
     assert.match(boot.status, /HOLD THE BRIDGE|AH-1G ONLINE/i);
-    assert.match(boot.ammo, /AMMO\s+\d+/i);
+    assert.ok(boot.canvas && boot.canvas.width > 0 && boot.canvas.height > 0,
+      `Cobra play HUD canvas has no backing store: ${JSON.stringify(boot.canvas)}`);
+    // Ammo is present, finite and a real magazine -- not a placeholder and not NaN.
+    assert.ok(Number.isFinite(boot.ammo) && boot.ammo > 0
+      && Number.isFinite(boot.ammoCapacity) && boot.ammo <= boot.ammoCapacity,
+    `Cobra booted without a finite magazine: ${JSON.stringify(boot)}`);
+    assert.match(boot.model.gunner.detail, /AMMO\s+\d+/i,
+      `the combiner is not carrying ammo: ${JSON.stringify(boot.model.gunner)}`);
+    assert.equal(boot.model.gunner.line, "GUN —");
+    assert.equal(boot.model.designation, null, "a fresh sortie must designate nothing");
     assert.ok(boot.hostiles >= 1, `Cobra boot found no living hostiles: ${JSON.stringify(boot)}`);
     assert.ok(boot.tick >= 0, `Cobra authority never ticked: ${JSON.stringify(boot)}`);
 
-    await page.keyboard.press("Tab");
-    await page.waitForFunction(
-      () => {
-        const target = document.querySelector("#hud-target")?.textContent ?? "";
-        return /TARGET\s+\d+/i.test(target);
-      },
-      undefined,
-      { timeout: scaled(10000) },
-    );
-    await page.keyboard.down("f");
-    await page.waitForTimeout(scaled(1500));
-    await page.keyboard.up("f");
+    // Tab designates. Which hostile the turret can actually reach from the spawn hover is
+    // geometry, and the ground war kills units while we look, so cycle until the gunner reports a
+    // qualified track rather than assuming the first mark is engageable -- then hold F on THAT one.
+    let engaged = null;
+    for (let press = 0; press < 8 && !engaged; press += 1) {
+      await page.keyboard.press("Tab");
+      await page.waitForFunction(
+        () => !!window.__gunsOnlyCobraAuthority?.gunner?.selected_target_id,
+        undefined,
+        { timeout: scaled(10000) },
+      );
+      const designated = await readHud();
+      assert.ok(designated.gunner.selected_target_id,
+        "Tab did not reach the gunner authority");
+      // The ground war keeps killing units, so a mark can die between the press and this read.
+      // That is the authority being honest, not a HUD defect: take the next one.
+      if (designated.gunner.reason === "TargetUnavailable") continue;
+      assert.match(designated.model.gunner.detail, /TGT\s+\S+/,
+        `the combiner is not carrying the designated target: ${
+          JSON.stringify(designated.model.gunner)}`);
+      assert.equal(designated.model.designation?.id, designated.gunner.selected_target_id,
+        "the designation bracket and the authority disagree about the mark");
+      assert.ok(Number.isFinite(designated.model.designation?.rangeM)
+        && designated.model.designation.rangeM > 0,
+      `designation has no slant range: ${JSON.stringify(designated.model.designation)}`);
+      try {
+        // The ready cue, exactly: a qualified track whose ONLY remaining inhibit is the trigger.
+        // "tracking" alone is reached while the turret is still slewing onto the sight line.
+        await page.waitForFunction(
+          () => window.__gunsOnlyCobraAuthority?.gunner?.state === "tracking"
+            && window.__gunsOnlyCobraAuthority?.gunner?.reason === "ConsentReleased",
+          undefined,
+          { timeout: scaled(4000) },
+        );
+        engaged = await readHud();
+      } catch {
+        // Masked, out of limits or still dying: try the next mark.
+      }
+    }
+    assert.ok(engaged,
+      "no designated hostile ever produced a qualified track from the spawn hover");
+    // Trigger up, the crew says so in as many words. This is the state F has to change.
+    assert.equal(engaged.gunner.reason, "ConsentReleased");
+    assert.equal(engaged.model.gunner.line, "GUN ON TARGET — HOLD F");
 
-    const after = await page.evaluate(() => ({
-      target: document.querySelector("#hud-target")?.textContent ?? "",
-      gun: document.querySelector("#hud-gunner")?.textContent ?? "",
-      consentHeld: window.__gunsOnlyCobraAuthority?.gunner != null,
-    }));
-    assert.match(after.target, /TARGET\s+\d+/i);
-    assert.match(after.gun, /GUN\s+/i);
+    await page.keyboard.down("f");
+    let held;
+    try {
+      // Latch the exact snapshot in which consent produced fire, atomically: the target this is
+      // shooting at can die a second later, and a snapshot read after that would be measuring the
+      // aftermath instead of the trigger.
+      await page.waitForFunction(
+        (before) => {
+          const state = window.__gunsOnlyCobraAuthority;
+          if (state?.gunner?.fire_authorized !== true) return false;
+          if (!(state?.ground_war?.ammo_remaining < before)) return false;
+          window.__smokeFiringSnapshot = state;
+          return true;
+        },
+        engaged.ammo,
+        { timeout: scaled(15000) },
+      );
+      held = await page.evaluate(async () => {
+        const { cobraRotorcraftHudModel } =
+          await import("/render/cobra/cobra_rotorcraft_hud.js?v=265");
+        const state = window.__smokeFiringSnapshot;
+        return {
+          model: cobraRotorcraftHudModel(state),
+          gunner: state.gunner,
+          ammo: state.ground_war.ammo_remaining,
+        };
+      });
+    } finally {
+      await page.keyboard.up("f");
+    }
+    // Holding F is consent reaching the authority: fire authorized, the reason chain clear of
+    // ConsentReleased, the combiner saying FIRING, and rounds actually leaving the magazine.
+    assert.equal(held.gunner.fire_authorized, true);
+    assert.equal(held.gunner.reason, "None");
+    assert.equal(held.model.gunner.line, "GUN FIRING");
+    assert.ok(held.ammo < engaged.ammo && held.ammo >= 0,
+      `holding F spent no ammunition: ${engaged.ammo} -> ${held.ammo}`);
+    assert.match(held.model.gunner.detail, /AMMO\s+\d+/i);
+
+    const released = await page.evaluate(() => new Promise((resolve) => setTimeout(
+      () => resolve(window.__gunsOnlyCobraAuthority?.gunner ?? null), 600)));
+    assert.equal(released?.fire_authorized, false,
+      "releasing F left the gun authorized to fire");
     assert.deepEqual(pageErrors, [], `uncaught Cobra page errors:\n${pageErrors.join("\n")}`);
   } finally {
     await browser.close();
