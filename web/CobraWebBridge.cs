@@ -54,6 +54,10 @@ public static partial class CobraWebBridge
         _gunner = CreateGunner();
         _turretServo.Reset();
         _gunnerDecision = default;
+        // The cached sight verdict belongs to the previous sortie's world and tick line.
+        _gunnerSightTargetId = null;
+        _gunnerSightAuthorityTick = long.MinValue;
+        _gunnerSightHasLineOfSight = false;
         _accumulatorSeconds = 0.0;
         // A restart must show the fresh spawn pose immediately, not one stale frame of the
         // previous sortie.
@@ -310,12 +314,37 @@ public static partial class CobraWebBridge
     static CobraMissionRuntime RequireRuntime() =>
         _runtime ?? throw new InvalidOperationException("Cobra route has not been started.");
 
+    // Sight cadence. The gunner's line of sight is a terrain march, and re-marching it on every
+    // 120 Hz authority tick was measured at 41.6 ms per tick in flight — the whole of the Build 265
+    // "very laggy" report, and the reason the page felt fine until you cued a target and climbed
+    // out of terrain masking. Twelve ticks is the same 10 Hz cadence CobraMissionRuntime already
+    // uses for threat masking, so a masking transition reaches the crew inside 100 ms — an order
+    // of magnitude under the gunner's own acquisition time. The turret servo still slews, and the
+    // envelope and ballistic solution are still assessed, every tick: those are pure trigonometry.
+    const int GunnerSightIntervalTicks = 12;
+    static long _gunnerSightAuthorityTick = long.MinValue;
+    static string? _gunnerSightTargetId;
+    static bool _gunnerSightHasLineOfSight;
+
     static void AdvanceGunner(CobraMissionRuntime runtime)
     {
         CobraGunnerTargetObservation? target = null;
         if (_selectedTargetId is not null) {
             GroundUnit? unit = runtime.GroundWar.FindUnit(_selectedTargetId);
             if (unit is { IsAlive: true }) {
+                long authorityTick = runtime.Cobra.State.Tick;
+                // A new mark is re-sighted immediately; nobody should inherit the last target's
+                // verdict, and a stale "masked" would silently withhold fire authority.
+                if (!string.Equals(_gunnerSightTargetId, unit.Id, StringComparison.Ordinal)
+                    || authorityTick - _gunnerSightAuthorityTick >= GunnerSightIntervalTicks) {
+                    _gunnerSightTargetId = unit.Id;
+                    _gunnerSightAuthorityTick = authorityTick;
+                    _gunnerSightHasLineOfSight = CobraGunTargeting.EvaluateLineOfSight(
+                        runtime.Terrain,
+                        runtime.ResolvedObstacles,
+                        runtime.Cobra.State.PositionWorldM,
+                        unit.PositionWorldM);
+                }
                 // Sight and turret reachability are independent signals: HasLineOfSight means
                 // sight alone, WithinTurretEnvelope means the mount can reach it, and the servo
                 // slews only when both hold. Composition (and the reason-chain honesty it buys)
@@ -329,7 +358,8 @@ public static partial class CobraWebBridge
                     friendly: unit.Faction == GroundFaction.Friendly,
                     unit.PositionWorldM,
                     _turretServo,
-                    FixedDeltaSeconds);
+                    FixedDeltaSeconds,
+                    _gunnerSightHasLineOfSight);
             }
         }
         _gunnerDecision = _gunner.Advance(new CobraAiGunnerInput(

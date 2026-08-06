@@ -285,6 +285,36 @@ public sealed class CobraMissionRuntime
     public const double WaterSurfaceFrictionPerSecond = 0.7;
     public const double LineOfSightTerrainClearanceM = 0.5;
     public const int MaskingAssessmentIntervalTicks = 12;
+    /// <summary>
+    /// Hard ceiling on the number of terrain lookups a single line-of-sight ray may take.
+    ///
+    /// The march step is the terrain's own resolution (clamped to 10-50 m), so without a ceiling
+    /// the cost of a sight line scales with its length: the gun's 2 km envelope took 80 lookups
+    /// and the threat observers' rays more. 64 samples puts a full-envelope gun ray at ~31 m
+    /// spacing — inside the 10-50 m band the march already treats as honest — and makes the worst
+    /// ray cost the same as the average one.
+    /// </summary>
+    public const int MaximumLineOfSightSamples = 64;
+    /// <summary>
+    /// Cadence of the basin ground war, in hertz. Same doctrine as
+    /// <see cref="MaskingAssessmentIntervalTicks"/>: only the airframe needs the airframe's rate.
+    ///
+    /// Build 265 shipped the ground war stepped once per 120 Hz authority tick. Measured in the
+    /// browser with a phase-skip build, that single call was 3.5 ms of a 4.2 ms authority tick —
+    /// roughly 85% of the whole simulation, and at two ticks per rendered frame it ate 7 ms of a
+    /// 16.7 ms budget before the renderer drew anything. Worse, it was self-amplifying: a long
+    /// frame asks for more catch-up ticks, which lengthens the next frame. That was the owner's
+    /// "very laggy".
+    ///
+    /// Nothing in the basin fight needs 120 Hz. Units move at ~10 m/s, so a 50 ms step displaces
+    /// one by half a metre; damage, control drift and reinforcement cadence are all dt-scaled and
+    /// therefore rate-invariant by construction. What changes is combat granularity — mutual
+    /// damage now resolves in 50 ms slices rather than 8.3 ms ones, so a unit that dies mid-slice
+    /// still returns that slice's fire. The balance here is explicitly provisional (see
+    /// CobraGroundWarRuntime's header), and this is well inside its tolerance.
+    /// </summary>
+    public const double GroundWarStepHz = 20.0;
+    const double GroundWarStepSeconds = 1.0 / GroundWarStepHz;
 
     readonly CobraCanyonDefinition _definition;
     readonly ITerrainSurface _terrain;
@@ -301,6 +331,10 @@ public sealed class CobraMissionRuntime
     long _maskingAssessmentAuthorityTicks;
     long _nextAuthorityTick;
     string? _collisionObstacleId;
+    double _groundWarAccumulatorSeconds;
+    // Diagnostics are read once per GetState (30 Hz), never once per tick. Building them eagerly
+    // walked the route polyline and resampled terrain 120 times a second to throw 119 away.
+    CobraMissionDiagnostics? _diagnostics;
 
     public CobraMissionRuntime(
         CobraCanyonDefinition definition,
@@ -369,7 +403,6 @@ public sealed class CobraMissionRuntime
         Status = CobraMissionStatus.Active;
         _cachedMaskingAssessment = AssessMaskingAt(_cobra.State.PositionWorldM);
         _maskingAssessmentAuthorityTicks = 0;
-        Diagnostics = BuildDiagnostics();
     }
 
     public CobraCanyonDefinition Definition => _definition;
@@ -384,7 +417,11 @@ public sealed class CobraMissionRuntime
     public double CollisionEnvelopeRadiusM => _cobra.Definition.MainRotor.RadiusM;
     public CobraMissionStatus Status { get; private set; }
     public bool MissionFlyable => Status == CobraMissionStatus.Active && _cobra.State.Flyable;
-    public CobraMissionDiagnostics Diagnostics { get; private set; }
+    /// <summary>
+    /// Authority diagnostics for the current tick, built on first read and cached until the next
+    /// Advance. Consumers sample this at snapshot rate, not tick rate.
+    /// </summary>
+    public CobraMissionDiagnostics Diagnostics => _diagnostics ??= BuildDiagnostics();
 
     public CobraMissionAdvanceResult Advance(in VerticalLiftPilotCommand command)
     {
@@ -431,7 +468,16 @@ public sealed class CobraMissionRuntime
             _maskingAssessmentAuthorityTicks = _nextAuthorityTick;
         }
 
-        _groundWar.Advance(PlayerVehicleContract.FixedDeltaSeconds);
+        // Strategic cadence (see GroundWarStepHz): batch the airframe's fixed steps until a
+        // ground-war step is due, then advance the basin fight by exactly the time that elapsed.
+        // Rearm stays at authority rate — it is one terrain sample and the pilot must feel it
+        // the instant the skids settle on the Camp Ember pad.
+        _groundWarAccumulatorSeconds += PlayerVehicleContract.FixedDeltaSeconds;
+        if (_groundWarAccumulatorSeconds + 1e-12 >= GroundWarStepSeconds) {
+            double groundWarDeltaSeconds = _groundWarAccumulatorSeconds;
+            _groundWarAccumulatorSeconds = 0.0;
+            _groundWar.Advance(groundWarDeltaSeconds);
+        }
         if (Status == CobraMissionStatus.Active)
             _groundWar.TryResupplyAtFob(currentPositionWorldM);
         if (Status == CobraMissionStatus.Active) {
@@ -442,7 +488,7 @@ public sealed class CobraMissionRuntime
             };
         }
 
-        Diagnostics = BuildDiagnostics();
+        _diagnostics = null;
         return new CobraMissionAdvanceResult(vehicleResult, Diagnostics);
     }
 
@@ -652,13 +698,18 @@ public sealed class CobraMissionRuntime
         Vec3D delta = targetWorldM - observerWorldM;
         double horizontalRangeM = Math.Sqrt(delta.X * delta.X + delta.Z * delta.Z);
         double sampleStepM = Math.Clamp(_terrain.HorizontalResolutionM, 10.0, 50.0);
-        int steps = Math.Max(1, (int)Math.Ceiling(horizontalRangeM / sampleStepM));
+        int steps = Math.Clamp(
+            (int)Math.Ceiling(horizontalRangeM / sampleStepM),
+            1,
+            MaximumLineOfSightSamples);
         for (int index = 1; index < steps; index++) {
             double fraction = (double)index / steps;
             Vec3D point = observerWorldM + delta * fraction;
-            if (!_terrain.TrySample(point.X, point.Z, out TerrainSample sample))
+            // Height only: the normal and surface kind cost four extra evaluations each and this
+            // march reads neither. See ITerrainSurface.TryHeightM.
+            if (!_terrain.TryHeightM(point.X, point.Z, out double heightM))
                 return (false, false);
-            if (sample.HeightM + LineOfSightTerrainClearanceM >= point.Y)
+            if (heightM + LineOfSightTerrainClearanceM >= point.Y)
                 return (true, true);
         }
         return (true, false);
