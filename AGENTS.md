@@ -84,3 +84,20 @@ Airframe data carries an `epistemic` label (`measured` / `surrogate` / `provisio
 and airframes keep a sources file (see `docs/airframes/f9f-2-panther/00-sources.md`). When you
 change a physical constant, record where it came from and what you rejected. Another agent will
 otherwise re-derive it, differently, next week.
+
+## 9. Never hand-copy the gitignored payload into a worktree.
+
+A fresh worktree needs ~812 MiB of gitignored terrain-atlas pages plus `.vercel/`. Twice on
+2026-08-05 that was done as a wholesale `cp -R web/wwwroot/content …`, which overwrote the
+**tracked** `web/wwwroot/content/packs/cobra-vietnam/environment/cobra-canyon.world.json` and
+produced ~20 unrelated-looking test failures from one reverted terrain field. The first one cost a
+full gate cycle to diagnose.
+
+```sh
+bin/worktree-prep .worktrees/prod-deploy-NNN main   # create + hydrate
+bin/worktree-prep .worktrees/prod-deploy-NNN        # re-hydrate in place
+```
+
+It copies only paths with nothing tracked under them, and fails loudly if hydration left
+`git status --porcelain` non-empty. It takes under a second (APFS clone). See
+`docs/release-pipeline.md` for the whole ship ritual and for what production now trusts from CI.

@@ -38,31 +38,8 @@ cd "$repo_dir"
 
 . "$repo_dir/bin/dotnet-env"
 vercel_cli=${GUNS_VERCEL_CLI:-vercel}
-command -v "$vercel_cli" >/dev/null 2>&1 || {
-    echo "deploy-web: Vercel CLI is unavailable" >&2
-    exit 1
-}
-command -v curl >/dev/null 2>&1 || {
-    echo "deploy-web: curl is unavailable" >&2
-    exit 1
-}
-command -v node >/dev/null 2>&1 || {
-    echo "deploy-web: Node.js is unavailable" >&2
-    exit 1
-}
-node_major=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true)
-if [ "$node_major" != "24" ]; then
-    echo "deploy-web: Node.js 24 is required; found $(node --version 2>/dev/null || echo unknown)" >&2
-    exit 1
-fi
-command -v python3 >/dev/null 2>&1 || {
-    echo "deploy-web: Python 3 is unavailable" >&2
-    exit 1
-}
-command -v rsync >/dev/null 2>&1 || {
-    echo "deploy-web: rsync is unavailable" >&2
-    exit 1
-}
+gh_cli=${GUNS_GH_CLI:-gh}
+verify_max_age_hours=${GUNS_DEPLOY_MAX_VERIFY_AGE_HOURS:-72}
 
 sha256_file() {
     python3 -c 'import hashlib, pathlib, sys; print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())' "$1"
@@ -115,25 +92,38 @@ worktree_is_dirty() {
         || [ -n "$(git ls-files --others --exclude-standard)" ]
 }
 
-worktree_dirty=0
-if worktree_is_dirty; then
-    worktree_dirty=1
-    if [ "$target" = "--prod" ]; then
-        echo "deploy-web: refusing to deploy a dirty worktree to production" >&2
-        echo "production provenance must identify an exact tested commit" >&2
-        exit 1
-    fi
-    if [ "${GUNS_ALLOW_DIRTY_DEPLOY:-0}" != "1" ]; then
-        echo "deploy-web: refusing to deploy a dirty worktree" >&2
-        echo "commit the intended release or set GUNS_ALLOW_DIRTY_DEPLOY=1 for a preview" >&2
-        exit 1
-    fi
-fi
+# ---------------------------------------------------------------------------------------------
+# Preflight.
+#
+# Every precondition that can be decided WITHOUT building anything is decided here, in seconds,
+# and every failure is collected so a single run reports the whole list. On 2026-08-05 two ships
+# each burned several cycles discovering these one at a time -- missing --prod, dirty worktree,
+# missing .vercel/project.json, detached HEAD, no Verify run -- and some of them only surfaced
+# AFTER a 25-minute gate had already run. Order here is cheap-to-expensive, but nothing exits
+# until the whole list is known.
+# ---------------------------------------------------------------------------------------------
+preflight_failures=''
+preflight_count=0
+fail_preflight() {
+    preflight_count=$((preflight_count + 1))
+    preflight_failures="${preflight_failures}  ${preflight_count}. $1
+"
+}
 
-project_link="$repo_dir/.vercel/project.json"
-if [ ! -f "$project_link" ]; then
-    echo "deploy-web: $project_link is missing; run 'vercel link' at the repository root" >&2
-    exit 1
+require_command() {
+    command -v "$1" >/dev/null 2>&1 || fail_preflight "$2"
+}
+
+require_command "$vercel_cli" "Vercel CLI is unavailable"
+require_command curl "curl is unavailable"
+require_command node "Node.js is unavailable"
+require_command python3 "Python 3 is unavailable"
+require_command rsync "rsync is unavailable"
+if command -v node >/dev/null 2>&1; then
+    node_major=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true)
+    if [ "$node_major" != "24" ]; then
+        fail_preflight "Node.js 24 is required; found $(node --version 2>/dev/null || echo unknown)"
+    fi
 fi
 
 release_revision=$(git rev-parse --verify HEAD)
@@ -142,10 +132,33 @@ scratch_dir=$(mktemp -d)
 publish_dir="$scratch_dir/publish"
 trap 'rm -rf "$scratch_dir"' EXIT HUP INT TERM
 
-# The regional Ukraine atlas is intentionally gitignored because its page bundles are hundreds of
-# MiB. A green repository checkout therefore does not prove that a release machine has the data,
-# and deploying without it produces a valid-looking build with empty Rapier terrain. Resolve the
-# source once, then fail closed on every deployment before spending time on the release gate.
+worktree_dirty=0
+if worktree_is_dirty; then
+    worktree_dirty=1
+    if [ "$target" = "--prod" ]; then
+        fail_preflight "worktree is dirty; production provenance must identify an exact tested commit (see 'git status --short')"
+    elif [ "${GUNS_ALLOW_DIRTY_DEPLOY:-0}" != "1" ]; then
+        fail_preflight "worktree is dirty; commit the intended release or set GUNS_ALLOW_DIRTY_DEPLOY=1 for a preview"
+    fi
+fi
+
+project_link="$repo_dir/.vercel/project.json"
+if [ ! -f "$project_link" ]; then
+    fail_preflight "$project_link is missing; run 'bin/worktree-prep $repo_dir' (or 'vercel link' at the repository root)"
+fi
+
+# Gitignored payload trees. A green checkout does not prove the release machine has ~812 MiB of
+# terrain page bundles, and deploying without them produces a valid-looking build with empty
+# Rapier terrain. bin/worktree-prep hydrates exactly these without touching tracked files.
+hydrated_trees='content/packs/ukraine-modern/environment/terrain-atlas/pages
+web/wwwroot/content/packs/ukraine-modern/environment/terrain-atlas/pages'
+for hydrated_tree in $hydrated_trees; do
+    if [ ! -d "$repo_dir/$hydrated_tree" ] \
+        || [ -z "$(find "$repo_dir/$hydrated_tree" -type f -print -quit 2>/dev/null)" ]; then
+        fail_preflight "gitignored payload tree is not hydrated: $hydrated_tree (run 'bin/worktree-prep $repo_dir')"
+    fi
+done
+
 content_atlas="$repo_dir/content/packs/ukraine-modern/environment/terrain-atlas"
 web_atlas="$repo_dir/web/wwwroot/content/packs/ukraine-modern/environment/terrain-atlas"
 atlas_src="$content_atlas"
@@ -154,69 +167,110 @@ if [ ! -d "$content_atlas/pages" ] || [ ! -f "$content_atlas/rapier-range.atlas.
 fi
 atlas_manifest="$atlas_src/rapier-range.atlas.manifest.json"
 if [ ! -d "$atlas_src/pages" ] || [ ! -f "$atlas_manifest" ]; then
-    echo "deploy-web: Ukraine jet-range terrain atlas is missing" >&2
-    echo "expected a manifest and pages under $atlas_src" >&2
-    exit 1
-fi
-echo "deploy-web: verifying Ukraine jet-range terrain atlas"
-if ! python3 "$repo_dir/tools/terrain/verify_korea_atlas.py" "$atlas_manifest"; then
-    echo "deploy-web: Ukraine jet-range terrain atlas failed verification" >&2
-    exit 1
+    fail_preflight "Ukraine jet-range terrain atlas is missing; expected a manifest and pages under $atlas_src"
+elif ! python3 "$repo_dir/tools/terrain/verify_korea_atlas.py" "$atlas_manifest" >/dev/null; then
+    fail_preflight "Ukraine jet-range terrain atlas failed verification ($atlas_manifest)"
 fi
 
-# Production must be built from the exact tree which passed the repository gate. bin/check only
-# syntax-checks this script, so invoking it here does not recurse. Smoke-test bypasses are cleared:
-# a production candidate is not "fully gated" if its real browser boot was skipped.
+# Production must be built from the exact tree that CI proved green. bin/check only syntax-checks
+# this script, so invoking it below does not recurse.
+release_run_url=''
 if [ "$target" = "--prod" ]; then
     if [ "$release_ref" != "main" ]; then
-        echo "deploy-web: production must be deployed from local main; found ${release_ref:-detached HEAD}" >&2
-        exit 1
+        fail_preflight "production must be deployed from local main; found ${release_ref:-detached HEAD}"
     fi
     origin_url=$(git remote get-url origin 2>/dev/null || true)
     case "$origin_url" in
         https://github.com/todd866/guns-only|https://github.com/todd866/guns-only.git|\
         git@github.com:todd866/guns-only.git|ssh://git@github.com/todd866/guns-only.git) ;;
         *)
-            echo "deploy-web: origin must be the canonical todd866/guns-only repository" >&2
-            echo "found ${origin_url:-no origin}" >&2
-            exit 1
+            fail_preflight "origin must be the canonical todd866/guns-only repository; found ${origin_url:-no origin}"
             ;;
     esac
-    if ! remote_main_record=$(git ls-remote --exit-code origin refs/heads/main); then
-        echo "deploy-web: could not resolve canonical remote main" >&2
-        exit 1
+    if remote_main_record=$(git ls-remote --exit-code origin refs/heads/main 2>/dev/null); then
+        remote_main_revision=$(printf '%s\n' "$remote_main_record" | awk 'NR == 1 { print $1 }')
+        if [ "$remote_main_revision" != "$release_revision" ]; then
+            fail_preflight "HEAD is not the exact pushed remote-main revision (local $release_revision, remote ${remote_main_revision:-missing}); push or fetch main first"
+        fi
+    else
+        fail_preflight "could not resolve canonical remote main"
     fi
-    remote_main_revision=$(printf '%s\n' "$remote_main_record" | awk 'NR == 1 { print $1 }')
-    if [ "$remote_main_revision" != "$release_revision" ]; then
-        echo "deploy-web: HEAD is not the exact pushed remote-main revision" >&2
-        echo "local $release_revision, remote ${remote_main_revision:-missing}" >&2
-        exit 1
+    if ! command -v "$gh_cli" >/dev/null 2>&1; then
+        fail_preflight "GitHub CLI is required for protected-branch release verification"
+    else
+        protection_file="$scratch_dir/github-main-protection.json"
+        workflow_runs_file="$scratch_dir/github-verify-runs.json"
+        if ! "$gh_cli" api repos/todd866/guns-only/branches/main/protection \
+            > "$protection_file" 2>/dev/null; then
+            fail_preflight "main is unprotected or its protection state is unavailable"
+        else
+            fetch_verify_runs() {
+                "$gh_cli" api -X GET \
+                    repos/todd866/guns-only/actions/workflows/verify.yml/runs \
+                    -f "head_sha=$1" -f status=completed -f per_page=20 > "$2" 2>/dev/null
+            }
+            if ! fetch_verify_runs "$release_revision" "$workflow_runs_file"; then
+                fail_preflight "exact-sha Verify history is unavailable"
+            else
+                # `gh pr merge --merge` lands a merge commit CI has never seen, which cost
+                # Builds 264 and 265 a second full ~17-minute Verify cycle each. Gather the merge
+                # parents' Verify history and GitHub's own pull-request attestation so the
+                # verifier can decide whether this merge is fast-forward-equivalent to an
+                # already-verified head. It decides; this only gathers, and evidence that does
+                # not qualify simply goes unused.
+                release_args="--revision $release_revision --protection $protection_file"
+                release_args="$release_args --runs $workflow_runs_file --repo $repo_dir"
+                release_args="$release_args --max-age-hours $verify_max_age_hours"
+                merge_parents=$(git rev-list --parents -n 1 "$release_revision" | cut -d' ' -f2-)
+                if [ "$(printf '%s\n' "$merge_parents" | wc -w | tr -d ' ')" = "2" ]; then
+                    for merge_parent in $merge_parents; do
+                        parent_runs="$scratch_dir/verify-runs-$merge_parent.json"
+                        parent_pulls="$scratch_dir/pulls-$merge_parent.json"
+                        if fetch_verify_runs "$merge_parent" "$parent_runs"; then
+                            release_args="$release_args --runs $parent_runs"
+                        fi
+                        if "$gh_cli" api "repos/todd866/guns-only/commits/$merge_parent/pulls" \
+                            > "$parent_pulls" 2>/dev/null; then
+                            release_args="$release_args --pull-requests $parent_pulls"
+                        fi
+                    done
+                fi
+                if release_verdict=$(node tools/release/verify-github-release.mjs \
+                    $release_args 2>&1); then
+                    release_run_url=$release_verdict
+                else
+                    fail_preflight \
+"canonical GitHub Verify run is not acceptable for $release_revision:
+$(printf '%s\n' "$release_verdict" | sed 's/^/       /')"
+                fi
+            fi
+        fi
     fi
-    gh_cli=${GUNS_GH_CLI:-gh}
-    command -v "$gh_cli" >/dev/null 2>&1 || {
-        echo "deploy-web: GitHub CLI is required for protected-branch release verification" >&2
-        exit 1
-    }
-    protection_file="$scratch_dir/github-main-protection.json"
-    workflow_runs_file="$scratch_dir/github-verify-runs.json"
-    if ! "$gh_cli" api repos/todd866/guns-only/branches/main/protection \
-        > "$protection_file"; then
-        echo "deploy-web: main is unprotected or its protection state is unavailable" >&2
-        exit 1
+fi
+
+if [ -n "$preflight_failures" ]; then
+    echo "deploy-web: preflight failed with $preflight_count problem(s); nothing was built:" >&2
+    printf '%s' "$preflight_failures" >&2
+    exit 1
+fi
+echo "deploy-web: preflight passed for $release_revision (${release_ref:-detached HEAD})"
+
+if [ "$target" = "--prod" ]; then
+    printf 'deploy-web: %s\n' "$release_run_url"
+    # The exact pushed SHA already has a complete green canonical Verify run: the deterministic
+    # job runs ./bin/check with GUNS_SKIP_SMOKE=1 and the browser job runs the published smoke and
+    # HUD geometry assertions -- together, the whole of bin/check, on protected main, for THIS
+    # commit. Re-running the same gate locally added ~25-30 min per ship and proved nothing new,
+    # because the tree here is asserted identical to that SHA (clean worktree, HEAD == remote
+    # main, and re-checked after publish and again before promotion). Post-promotion live
+    # verification is unchanged. Set GUNS_DEPLOY_FULL_GATE=1 to force the local gate anyway.
+    if [ "${GUNS_DEPLOY_FULL_GATE:-0}" = "1" ]; then
+        echo "deploy-web: running full repository gate for $release_revision"
+        GUNS_DOTNET_CLI="$dotnet_cli" GUNS_SKIP_SMOKE='' "$repo_dir/bin/check"
+    else
+        echo "deploy-web: local re-gate skipped; the exact-SHA green Verify run is the release provenance"
+        echo "deploy-web: set GUNS_DEPLOY_FULL_GATE=1 to run the full local gate as well"
     fi
-    if ! "$gh_cli" api -X GET \
-        repos/todd866/guns-only/actions/workflows/verify.yml/runs \
-        -f "head_sha=$release_revision" -f branch=main -f status=completed -f per_page=20 \
-        > "$workflow_runs_file"; then
-        echo "deploy-web: exact-sha Verify history is unavailable" >&2
-        exit 1
-    fi
-    node tools/release/verify-github-release.mjs \
-        --revision "$release_revision" \
-        --protection "$protection_file" \
-        --runs "$workflow_runs_file"
-    echo "deploy-web: running full repository gate for $release_revision"
-    GUNS_DOTNET_CLI="$dotnet_cli" GUNS_SKIP_SMOKE='' "$repo_dir/bin/check"
     if [ "$(git rev-parse --verify HEAD)" != "$release_revision" ] || worktree_is_dirty; then
         echo "deploy-web: repository changed while the production gate was running" >&2
         echo "rerun the deployment from a stable, clean commit" >&2
@@ -574,12 +628,41 @@ if [ "$target" = "--prod" ]; then
         exit 1
     fi
     "$vercel_cli" promote "$deployment_url" --yes
+
+    # A freshly promoted deployment has a completely cold edge cache. Build 265 promoted cleanly
+    # and then failed post-promotion verification because `cobra-lab` could not reach ready in
+    # 90 s -- not because it was broken (served from the same tree it is ready in 1.9 s) but
+    # because 58 of its 58 assets had to be pulled through a cold edge. Measured on 2026-08-06
+    # against a 20-hour-old production, the same route went 5404 ms (35 misses) -> 2530 ms
+    # (0 misses) on its second load.
+    #
+    # So warm each route once BEFORE asserting anything. This is not a raised ceiling: the
+    # readiness assertions keep their 90 s budget and their strictness, and a route that is
+    # genuinely broken still fails and still rolls back. It separates "is this route healthy"
+    # from "is the CDN warm", which are different questions that were being answered together.
+    #
+    # It also pays a cost that real users would otherwise pay. Every visitor arriving in the
+    # minutes after a promotion hits the same cold cache -- that is what made 264 look broken to
+    # the owner (43 s before app.js executed, 99.6 s to first frame, against 3 s warmed). Doing
+    # this here, once, means the first real visitor arrives to a warm edge instead.
+    warm_production_edge() {
+        echo "deploy-web: warming the production edge before asserting readiness"
+        node "$repo_dir/web/smoke/prewarm-origin.mjs" "https://guns-only.com" || {
+            echo "deploy-web: edge warm pass did not complete; continuing to verification" >&2
+        }
+    }
+
+    verify_promoted_production() {
+        verify_public "https://guns-only.com" "$release_revision" \
+            "$atlas_sha256" "$content_sha256" 1 "$candidate_deployment" || return 1
+        warm_production_edge
+        node "$repo_dir/web/smoke/remote-smoke.mjs" "https://guns-only.com" || return 1
+        node "$repo_dir/web/smoke/remote-route-smoke.mjs" "https://guns-only.com" || return 1
+    }
+
     # Verify the canonical production door, not the retired vercel.app alias (which only
     # worked via its 308 redirect after the Build 184 canonicalization).
-    if ! verify_public "https://guns-only.com" "$release_revision" \
-        "$atlas_sha256" "$content_sha256" 1 "$candidate_deployment" \
-        || ! node "$repo_dir/web/smoke/remote-smoke.mjs" "https://guns-only.com" \
-        || ! node "$repo_dir/web/smoke/remote-route-smoke.mjs" "https://guns-only.com"; then
+    if ! verify_promoted_production; then
         echo "deploy-web: live verification failed; checking alias ownership before rollback" >&2
         rollback_owner=$(inspect_public_deployment_id "https://guns-only.com" || true)
         if [ "$rollback_owner" != "$candidate_deployment" ]; then
