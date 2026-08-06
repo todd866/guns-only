@@ -39,7 +39,7 @@ Four numbers frame it:
 | | us | Battlefield Vietnam (2004, DX8-class, 128 MB GPU) | a 2026 browser sustains |
 | --- | --- | --- | --- |
 | draw calls | **15** (Cobra, hard cap, headroom 0) / 72–78 (F-22) | ~500–1,500 | 1,000–3,000 |
-| triangles | **110 k** budget, 46 k terrain (Cobra) | ~150–250 k | 3–5 M (we already draw 2.9 M at 60 fps) |
+| triangles | **120 k** budget, 46 k terrain drawn (Cobra) | ~150–250 k | 3–5 M (we already draw 2.9 M at 60 fps) |
 | terrain texture memory | **0 bytes** (Cobra, Weekend Ride), 1 texture (F-22) | ~100–200 MB | 500 MB+ |
 | terrain fragment ALU | **~900 scalar ops/px** | ~10–20 ops + 4 texture fetches | — |
 
@@ -64,9 +64,20 @@ On whether we have room to draw more: `terrain_mesh_builder.js:8` records an 11 
 **2.98 M triangles / 78 draw calls** against a 60 fps window at **2.91 M triangles / 72 draw
 calls**. Geometry throughput is flat across a 5.5× frame-time swing. That falsifies *"we are
 slow because we draw too much"* — it does **not** prove the GPU is idle, and §7 in fact budgets
-0.9–3.4 ms of terrain ALU. The honest conclusion is narrower and still sufficient: **draw-call
-and triangle count are not the binding constraint, so the fidelity plan is not blocked by
-them.**
+0.9–3.4 ms of terrain ALU. The honest conclusion is narrower and still sufficient: **steady-state
+raster throughput is not the binding constraint, so the fidelity plan is not blocked by it.**
+
+**Two cautions on that row, both from sources this document must not quote selectively.** First,
+the same comment (`terrain_mesh_builder.js:4-9`) says where the time *did* go: a ~9.5 ms
+synchronous **geometry construction** per LOD0 chunk, with `geometries` climbing 88 → 126 in a
+five-second window. Construction is precisely the axis stages 4 and 5 load — foliage instancing
+and structure meshes are built, uploaded and evicted per chunk. Second, that telemetry is
+**Build 112**; live is 265, and [[descent-stutter-is-sim-side]] records a later, partly
+contradicting picture: `sim_ms_max` 39–47 ms as the dominant cost, plus a render-side ramp near
+the ground where `view_ms_max` went **1.4 → 34.1 ms as draw calls went 33 → 248**. So drawing is
+*not* free at low level, and the "72–78 draw calls" figure above is itself a high-altitude
+number. **Every stage from 3 onward needs a construction-and-upload budget, not just a
+fill budget.**
 
 ### The one thing we have been doing wrong
 
@@ -89,11 +100,11 @@ without shimmering. The file's own header argues the case honestly —
 | draw calls | **15**, hard cap, `presentationDrawCallHeadroom === 0` | `cobra_canyon_presentation.js:30-52`; test `cobra_canyon_presentation.test.mjs:204` |
 | triangles | 46,208 terrain (desktop) of a 120,000 budget | `COBRA_CANYON_TERRAIN_SEGMENTS` 92/120/152 |
 | terrain | one 152² grid, **no chunking, no LOD, one draw call**, 105 m vertex spacing over 16 km | `cobra_canyon_presentation.js:571-640` |
-| vegetation | 7 `InstancedMesh`, 18–100 tris/instance, ≤1,330 instances | `cobra_canyon_asset_kit.js` |
+| vegetation | 7 instanced render batches (2 `InstancedMesh` construction sites), 18–100 tris/instance, ≤1,330 instances | `cobra_canyon_asset_kit.js` |
 | textures | **none, anywhere** | grep: zero `Texture`/`.map =`/`.glb` in `render/cobra/` |
 | shadows | **none**; `renderer.shadowMap` never touched, every object `castShadow = false` | `cobra_canyon_presentation.js:388`, `asset_kit.js:966` |
 | post | none — direct `renderer.render` | `cobra-lab/main.js:966` |
-| AH-1G | 21 procedural boxes, 11 Lambert materials, no texture, hidden in first person | `ah1g_presence.js` |
+| AH-1G | 19 procedural box primitives, 11 Lambert materials, no texture, hidden in first person | `ah1g_presence.js` |
 
 Basin fragment shader per pixel: **10 `cobraNoise` → 40 `cobraHash`, +2 standalone = 42 hashes;
 12 `smoothstep`; 40 `mix`; 0 texture fetches.** Material is `DoubleSide` on opaque terrain —
@@ -101,13 +112,16 @@ back-face culling is off for no stated reason.
 
 ### 1.2 Weekend Ride — `web/wwwroot/weekend-ride/main.js` + `render/motorcycle/track_day_presentation.js`
 
-The weakest scene in the product, and the only one with no budget and no rendering test.
+The weakest scene in the product. It *does* have a rendering test —
+`render/motorcycle/tests/track_day_presentation.test.mjs`, 8 cases, including a bound on ambient
+marker counts under adversarial input (`:178`). What it has **no** equivalent of is Cobra's
+`maxDrawCalls`/`maxTriangles` budget with a build-time failure.
 
 - **~110+ individually-added meshes** against 6 instanced batches (beacons 20, start/finish 32,
   paddock/airfield 30, marshal posts 9, …). No budget constant, no draw-call assertion anywhere.
 - The world is **flat**: `SURFACE_ELEV_M = 192.0`, ground is `PlaneGeometry(22000, 22000)` — two
   triangles. No heightfield at all.
-- 202 cone "trees" (`ConeGeometry(1,1,6)`), no billboards, no alpha test, no LOD.
+- ~190–200 cone "trees" (`ConeGeometry(1,1,6)`, seeded LCG over 46 copses of 3–6), no billboards, no alpha test, no LOD.
 - **`MeshStandardMaterial` everywhere with `scene.environment` never set.** PBR with no IBL is
   lit by one hemisphere light and one directional — which is precisely how you get plastic. This
   is a two-line defect, not an art problem.
@@ -121,8 +135,10 @@ The weakest scene in the product, and the only one with no budget and no renderi
 
 The sophisticated one, and still short of the reference.
 
-- Fragment shader: **44 `smoothstep`, 49 `mix`, 5 cloud-noise calls, 4 `texture2D`** (only one
-  compiled era path runs at a time).
+- Fragment shader: **44 `smoothstep`, 49 `mix`, 4 `terrainCloudNoise` call sites, 4 `texture2D`**
+  (only one compiled era path runs at a time). Two of those cloud-noise sites sit inside the
+  `regionalDistanceMix > 0.001` branch that is dead below 2,500 m AGL — so at low level, the case
+  this document argues about, it is **two**.
 - **The entire terrain has one texture**: `rapier-painted-ground-v1.webp`, and only when
   `sceneryEra === "ukraine-modern"`.
 - The pre-265 regional weighting is **unchanged**: `regionalDistanceMix = 1 - uTerrainDetail01`
@@ -168,10 +184,15 @@ depend on the number.
 
 From the owner's three images. What actually carries the look, ranked by value-per-effort here:
 
-| # | Feature | What it buys | Cost (ms @ desktop) | Memory | Difficulty here |
+**The ms column below is ESTIMATED and unmeasured**, except the texture row, which is scaled
+from §7. It is offered to rank the stages, not to budget them. The shadow figure is the one most
+worth distrusting: it is the cost case for stages 0 *and* 1, and it omits the per-fragment
+PCFSoft tap cost added to a shader that already cannot early-Z out (§1.4).
+
+| # | Feature | What it buys | Cost (ms @ desktop, **estimated**) | Memory | Difficulty here |
 | --- | --- | --- | --- | --- | --- |
 | 1 | **Cast shadows** | Contact, mass, time of day. Our own [[terrain-legibility-diagnosis]] named absent shadows as the primary cause of flat reads. In the village image the palm shadows *are* the composition. | **0.4–1.5 ms.** Cost is light-view *fill* of the cascade plus PCFSoft taps, not draw-call count — a 1,200 m cascade at 2048² is the variable, and the 15–78 draw calls are the cheap part | 2048² depth ≈ 16 MB | **Low.** Rig exists and works. Blocked only by a policy line and a test. |
-| 2 | **Ground albedo/detail/splat textures** | Everything the eye reads as "ground" at low level: dirt roads, sand/grass transition, tracks, tonal variety at every scale. | **−0.8 ms** at full terrain coverage (it is *cheaper* than what we do now). Imported from the §7 fullscreen measurement; real saving scales with actual terrain coverage and overdraw | 7–23 MB VRAM, ~1–3 MB on the wire as WebP | **Low-medium.** Shader change is small; the pipeline (§6) is the work. |
+| 2 | **Ground albedo/detail/splat textures** | Everything the eye reads as "ground" at low level: dirt roads, sand/grass transition, tracks, tonal variety at every scale. | **−1.3 ms/frame** (it is *cheaper* than what we do now): §7's 0.81 ms per *full 1920×1080 coverage*, scaled to a Retina frame at ~55% terrain coverage with no overdraw. Every other cell in this column is per-frame; this one was previously quoted unscaled | 7–23 MB VRAM, ~1–3 MB on the wire as WebP | **Low-medium.** Shader change is small; the pipeline (§6) is the work. |
 | 3 | **Alpha-tested foliage** | The single biggest jump toward the reference. BFV's palms are cut-out cards with readable fronds; ours are faceted cones with no trunks. | **+1–3 ms.** Alpha test is fill-bound and cannot early-Z out *at all* while `logarithmicDepthBuffer` is on (§1.4), so this is the stage most exposed to that decision | 2–8 MB atlas | **Medium.** Needs an authoring pipeline and a sorting/LOD policy. |
 | 4 | **Structures and props** | Human scale. A hut, a fence, a jetty tell you how high you are; a noise field never does. | +0.2–0.6 ms per 100 instanced props | 5–20 MB | **Medium-high.** No 3D model pipeline exists at all. |
 | 5 | **Textured airframes** | The F-4 in the reference reads as an aircraft because of camo, panel lines and roundels. `createDrone` extrudes planforms and applies procedural grain. | negligible | 2–6 MB per airframe | **Medium.** `tools/assets/generators/aircraft-assets.mjs` already carries tri/draw budgets (12,000/5,000/1,800; 24/16/9). |
@@ -229,7 +250,13 @@ No new assets, no new architecture.
 
 1. **Enable shadows in Cobra Canyon.** `renderer.shadowMap.enabled = true`, PCFSoft, sun
    `castShadow`, and flip the ~9 `castShadow = false` lines in `cobra_canyon_presentation.js:388`
-   / `asset_kit.js:966` / `ah1g_presence.js:35`. Cascade half-extent **600 m**, not 44 m — the
+   / `asset_kit.js:966` / `ah1g_presence.js:35` / `cobra_ground_war.js:87` — **four sites, and
+   two tests pin them**: `cobra_canyon_presentation.test.mjs:288` and
+   `cobra_canyon_asset_kit.test.mjs:81` both assert `castShadow === false`. Those assertions
+   encode a conclusion exactly as `production_graphics_wiring.test.mjs:67` does (stage 1), and
+   rewriting them is part of stage 0's scope, not a surprise during it. Note also that
+   `cobra_canyon_presentation.js:389` already sets `receiveShadow = true` — Cobra has the same
+   dead-flag pattern this document scolds Weekend Ride for. Cascade half-extent **600 m**, not 44 m — the
    AH-1G lives at 30 m AGL and the visual interest radius is the near ring
    (`nearRingMaximumAglM` 180/260/360). Reuse `shadow_stabilizer.js` for texel snapping.
 2. **Weekend Ride, four defects**: set `scene.environment` from a PMREM of the existing sky shader
@@ -250,7 +277,10 @@ No new assets, no new architecture.
 waste. Correct decision then; wrong state now. To break it, all three must land together:
 
 1. Set `receiveShadow = true` on terrain chunk meshes (`korea_terrain.js` `build()`, L2063-2085)
-   and `castShadow`/`receiveShadow` on `korea_scenery.js` instanced batches.
+   and `castShadow`/`receiveShadow` on `korea_scenery.js` instanced batches. Decide explicitly
+   what happens to `korea_terrain.js:298` and `:342`, which set `receiveShadow = false` on the
+   Ukraine apron/transition strips — those are deliberate and should probably stay, but a stage
+   that turns shadows on must say so rather than leave two silent exceptions.
 2. Add `"combat"` to `shadowModes` for `desktop` and `balanced` (mobile stays out).
 3. **Re-size the cascade.** 44 m is a cockpit extent. A flight sim wants either a 2-cascade CSM
    (~250 m near / ~2,500 m far) or, cheaper and adequate for stage 1, a single 1,200 m cascade
@@ -279,8 +309,12 @@ Korea's `fract(sin(dot(...)))` hash collapses to a constant at 16 km world scale
 version must be the safe one for everybody), and **a flat-ground path** for Weekend Ride, which
 has no heightfield, no concavity attribute and no normals worth the name.
 
-Ship it **behind pixel-identity tests**, not "looks the same": render each mode before and after
-and assert frame equality. This is the stage where "build it once and every mode gains" stops
+**Pixel-identity is the wrong gate here, and saying otherwise was sloppy.** Unifying the noise
+*necessarily* changes pixels in at least one mode: the two hashes are different functions for a
+documented numerical reason, so whichever survives, the other mode's grain moves. The gate is
+therefore a **frame-diff review with a bounded, explained delta** — and no frame-diff harness
+exists today (the repo has HUD scenario screenshots, [[hud-visual-verification]]), so building
+one is part of stage 2's 2–3 days, not an assumed tool. This is the stage where "build it once and every mode gains" stops
 being false ([[cobra-bike-dont-use-terrain-engine]]).
 
 *Do not* migrate Cobra onto the chunk streamer — but do not leave the trigger vague either.
@@ -294,8 +328,9 @@ not a shortcut. Record this trigger so the next agent does not re-litigate it.
 
 **Stage 3 — Bake the albedo; texture the ground. ~3–5 days. 9.7× cheaper in the §7 harness.**
 
-*(That ratio is a synthetic fullscreen measurement, not the production path. Re-measure in-scene
-before quoting it as a shipped win.)*
+*(9.7× isolates albedo derivation; **7.3×** is the end-to-end terrain-pass figure — see §7. Both
+are synthetic fullscreen measurements, not the production path, and the appearance question is
+open. Re-measure in-scene before quoting either as a shipped win.)*
 
 Replace the per-fragment analytic albedo chain with:
 
@@ -393,10 +428,24 @@ to it, or stage 4 will be uncapped there.
 
 ## 6. Asset pipeline reality
 
-**We have no texture-authoring pipeline and almost no 3D models.** That is the real constraint,
-not the renderer.
+**Correction after review: we DO have an offline texture-generation pipeline, and an earlier
+draft of this document said we did not.** That was the largest factual error in this review and
+it changed a cost estimate, so it is recorded rather than quietly fixed.
+
+`tools/assets/generators/generate-environment-textures.mjs` is a Node procedural texture baker
+with its own `smoothstep`/value-noise, SHA-256 content hashing, atomic `rename`, and
+`DEFAULT_OUTPUT = content/packs/korea-1950s/environment/textures` — it **produced three of the
+five world textures this document counts**. `tools/assets/generators/pbr-textures.mjs` generates
+RGBA material maps. Stage 3 therefore **extends an existing generator**; it does not build one.
+
+What is genuinely missing is narrower: **3D models** (no GLB is loaded by Cobra or Weekend Ride;
+`createDrone` extrudes planforms procedurally), **GPU-compressed texture formats**, a **foliage
+atlas policy**, and a **GLSL-parity** bake path (today's generator reimplements its noise in JS,
+so a bake of the *shipped shader* needs the shader evaluated, not re-typed).
 
 What exists:
+- `tools/assets/generators/` — 8 generators plus `menu-posters/`, including the environment
+  texture baker and a PBR map generator described above.
 - `web/wwwroot/art/` — six shell/menu WebPs. **No material maps.** `SOURCES.md` explicitly
   restricts them: generated stills *"may not become world geometry, textures, factual briefing
   imagery, or cutscene truth"* without separate review.
@@ -404,15 +453,16 @@ What exists:
   in the entire product.
 - **No `.ktx2`, `.basis`, `.hdr` or `.exr` anywhere.** No GPU-compressed texture path at all.
 - No GLB is loaded by Cobra or Weekend Ride. `createDrone` extrudes planforms procedurally.
-- One real generator precedent: `tools/assets/generators/menu-posters/` — hand-authored SVG →
+- Provenance precedent: `tools/assets/generators/menu-posters/` — hand-authored SVG →
   headless Chromium at `deviceScaleFactor: 2` → `cwebp -q 82 -m 6 -sharp_yuv`, with SHA-256 file
   closure and an epistemic label in `SOURCES.md`.
 - One asset budget precedent: `tools/assets/generators/aircraft-assets.mjs:947-949` —
   12,000/5,000/1,800 triangles, 24/16/9 draw calls.
 
 **Are procedurally-baked textures an acceptable first step? Yes — and here they are strictly
-better than acceptable.** The proposed `tools/assets/generators/terrain-textures/` evaluates
-*the GLSL albedo function we already ship* offline and writes WebP. That means:
+better than acceptable.** The work is a GLSL-parity bake mode on
+`generate-environment-textures.mjs`: evaluate *the shader we already ship* offline (headless GL,
+the same trick `bakelook.html` uses in §7) and write WebP. That means:
 
 - **Provenance is trivially clean.** No diffusion model, no third-party image, no prompt. The
   source of record is a shader already in the repo, exactly the shape `SOURCES.md` v3 documents
@@ -430,8 +480,10 @@ layer, each with its own `SOURCES.md` card. **World textures need a review note*
 mood-board rule) before the first one lands — flag it now rather than discovering it at review.
 
 Required to exist, in order:
-1. `tools/assets/generators/terrain-textures/` + `SOURCES.md` in the target pack. *(stage 3)*
-2. A KTX2/Basis compression step and a loader. 23 MB of RGBA8 is 4 MB as BC7/ASTC. *(stage 3–4)*
+1. A GLSL-parity bake mode on the existing `generate-environment-textures.mjs`, plus a
+   `SOURCES.md` card in the target pack. *(stage 3)*
+2. A KTX2/Basis compression step and a loader. 23 MB of RGBA8 is **5.75 MB as BC7** (8 bpp);
+   4 MB needs ASTC 6×6 or looser. *(stage 3–4)*
 3. A foliage atlas generator with an alpha-coverage/mip policy. *(stage 4)*
 4. A GLB authoring and validation path with tri/draw budgets. *(stage 5)*
 
@@ -448,9 +500,11 @@ Own isolated headed Chromium (`--use-angle=metal`), **not** the shared MCP brows
 Renderer `ANGLE (Apple, ANGLE Metal Renderer: Apple M5)`. Method: render N fullscreen passes of
 each shader into an offscreen 1920×1080 RGBA8 FBO and **sweep N**, fitting ms-per-pass as the
 slope — which removes submit/sync overhead and proves the work executes. Additive blending is
-enabled so no pass can be elided (without it, the analytic sweep showed a physically impossible
-~zero slope; that was a measurement artefact, and it is exactly the trap that makes naive
-shader benchmarks lie).
+enabled because **without it the analytic sweep produced a physically impossible flat slope that
+we could not explain**; blending removed it. (An earlier draft asserted driver dead-store
+elimination as the cause. That is unverified — a sync/timing artefact is at least as likely — and
+stating it as fact was the same error this document criticises elsewhere. Blending adds an equal
+ROP cost to all three programs, which the floor subtraction then cancels.)
 
 ```
 sweep (passes -> ms), 16/32/64/128/256:
@@ -465,6 +519,18 @@ SHADING COST per full 1920x1080 coverage (floor subtracted):
   texture memory      : 7.0 MB (RGBA8 1024+512+256 with mips)
 ```
 
+**Two ratios, and they answer different questions.** 9.68× is floor-subtracted: it isolates the
+*albedo-derivation* cost, which is what stage 3 replaces. The floor (rasterisation, haze, the
+additive ROP write) is 4% of the analytic but **30% of the baked**, and it is not avoidable in a
+real draw — so the honest **end-to-end** improvement for a terrain pass is
+`0.9415 / 0.1294 = ` **7.3×**, and the per-frame baked figure is ~0.19 ms, not 0.14 ms. Use 9.7×
+when arguing about the shader; use **7.3×** when arguing about the frame.
+
+**What the baked path in this bench actually samples:** three LCG white-noise textures, not a
+bake of the shipped function, and it omits the elevation-band and slope smoothsteps. That is
+legitimate for a *cost* measurement — three fetches cost what three fetches cost, and the ALU it
+drops is ALU stage 3 also drops — but it means this harness measured cost only. The harness that
+bakes the real function (`bakelook.html`) was never cost-measured.
 Scaled to a Retina frame (3024×1890, terrain ≈ 55% coverage, **no overdraw**): analytic
 ≈ **1.4 ms/frame**, baked ≈ **0.14 ms/frame**. With the 2–3× terrain overdraw that no-early-Z
 (§1.4) makes inevitable at low level, the analytic figure plausibly reaches **3–4 ms** — a fifth
@@ -493,15 +559,33 @@ the single sweep printed above fits 0.091 ms.
 tiling detail + 256² cloud field, then renders analytic (left) and baked (right) side by side
 through identical lighting, haze and geometry.
 
-They read as the same material: same palette, same value structure, same landcover bands, same
-near-field scrub grain. The baked half is slightly softer in the far field — which is **the
-texture anti-aliasing correctly**. The analytic half has no mip chain and therefore shimmers
-under motion. That is a second, unlooked-for argument for baking.
+They read as the same material at the macro scale: same palette, same value structure, same
+landcover bands, same near-field scrub grain.
 
-Honest limits of this PoC: it is a synthetic ground projection, not the Cobra scene; it does not
-test streaming, memory pressure, or the F-22 chunk path; and it uses a *bake of our own shader*
-rather than an authored texture, so it proves cost-and-parity, not that authored art will look
-better. It is not offered as more than that.
+**A defect found in review, and what it cost.** An earlier draft reported the baked half's softer
+far field as "the texture anti-aliasing correctly" and offered it as an unlooked-for second
+argument for baking. It was **an artefact**: the view walked to 45 km while `uMacro` covers only
+±8 km, so everything past 8 km was sampling one `CLAMP_TO_EDGE` texel row. The harness now bounds
+the view to 6.5 km, inside the baked domain, and the screenshot is regenerated.
+
+**With that fixed, the honest verdict is weaker than the draft claimed.** The macro agreement
+holds, but the baked half now shows **anisotropic streaking** toward the horizon, because this
+synthetic projection maps `groundUv = (lateral, distance)` — a mapping whose UV derivatives are
+wildly anisotropic and which drives mip selection badly. A real terrain mesh has well-conditioned
+derivatives and would not do this; but that is an argument, not a measurement, and this PoC does
+not settle it.
+
+**So the appearance question is open and stage 3 must not quote this as settled.** What the PoC
+establishes: the analytic albedo chain is reproducible from a bake at macro scale, at ~7–10×
+lower shading cost. What it does **not** establish: fine-detail parity, behaviour under motion,
+or that mip filtering is a net win here.
+
+Further limits, stated plainly: it is a synthetic ground projection, not the Cobra scene; it does
+not run through Three.js, the chunk path, or the production `logarithmicDepthBuffer`; and the
+analytic half is the shipped chain **restructured** into a macro/detail split, with the
+`concavity` vertex attribute replaced by a noise stand-in. That last one matters most — the §3/§4
+proposal to move concavity into the macro texture's alpha is exactly the term this PoC fakes, so
+**that proposal is untested**.
 
 ---
 
