@@ -164,28 +164,53 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.06;
 
+// One-sun doctrine for the canyon scene: the sky shader, the scene light rig, the fog and the
+// basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
+// terrain relief agree about the light. Import lives here to keep the whole scene-constants
+// block contiguous (top-level imports are hoisted regardless of position).
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=264";
+
+const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x6f8a7e);
-scene.fog = new THREE.FogExp2(0x8fa08f, 0.000038);
+scene.background = new THREE.Color(sceneProfile.fog.color);
+scene.fog = new THREE.FogExp2(sceneProfile.fog.color, sceneProfile.fog.density);
 
 const camera = new THREE.PerspectiveCamera(58, 1, 0.5, 32_000);
 camera.rotation.order = "YXZ";
-scene.add(new THREE.HemisphereLight(0xf0f4e6, 0x3a4a2e, 0.95));
-const sun = new THREE.DirectionalLight(0xffe2b8, 1.45);
-sun.position.set(-3_800, 7_600, 2_400);
+scene.add(new THREE.HemisphereLight(
+  sceneProfile.lighting.hemisphereSkyColor,
+  sceneProfile.lighting.hemisphereGroundColor,
+  sceneProfile.lighting.hemisphereIntensity,
+));
+const sunDirection = new THREE.Vector3(...sceneProfile.sunDirectionWorld);
+const sun = new THREE.DirectionalLight(
+  sceneProfile.lighting.sunColor,
+  sceneProfile.lighting.sunIntensity,
+);
+sun.position.copy(sunDirection).multiplyScalar(sceneProfile.lighting.sunDistanceM);
 scene.add(sun);
 
 const skyGeometry = new THREE.SphereGeometry(23_000, 32, 16);
+// THE F-22'S SKY. This is createDecisionSupportSky's cool (Korea) branch at zero altitude —
+// render/scene/scene_builders.js — reproduced here rather than imported, because that builder
+// lives inside a 2,600-line module with a configureSceneBuilders() runtime handshake and an
+// airframe/effects dependency chain this page must not pull in to draw a dome. The maths and the
+// constants are the same, and the constants themselves live in the shared visual profile. The
+// honest follow-up is extracting the sky into its own module both pages import.
 const skyMaterial = new THREE.ShaderMaterial({
   side: THREE.BackSide,
   depthWrite: false,
   fog: false,
   uniforms: {
-    topColor: { value: new THREE.Color(0x3f6a78) },
-    horizonColor: { value: new THREE.Color(0xc4c4a2) },
-    lowerHazeColor: { value: new THREE.Color(0x7a8f6e) },
-    sunColor: { value: new THREE.Color(0xffd59b) },
-    sunDirection: { value: new THREE.Vector3(-0.42, 0.54, -0.73).normalize() },
+    zenithColor: { value: new THREE.Vector3(...sceneProfile.sky.zenithColor) },
+    horizonColor: { value: new THREE.Vector3(...sceneProfile.sky.horizonColor) },
+    belowHorizonColor: { value: new THREE.Vector3(...sceneProfile.sky.belowHorizonColor) },
+    cloudColor: { value: new THREE.Vector3(...sceneProfile.sky.cloudColor) },
+    cloudShelf: { value: new THREE.Vector2(...sceneProfile.sky.cloudShelf) },
+    skyCurveExponent: { value: sceneProfile.sky.skyCurveExponent },
+    shoulderFalloff: { value: sceneProfile.sky.horizonShoulderFalloff },
+    shoulderWeight: { value: sceneProfile.sky.horizonShoulderWeight },
+    sunDirection: { value: sunDirection.clone() },
   },
   vertexShader: `
     varying vec3 vSkyDirection;
@@ -195,19 +220,38 @@ const skyMaterial = new THREE.ShaderMaterial({
     }
   `,
   fragmentShader: `
-    uniform vec3 topColor;
+    uniform vec3 zenithColor;
     uniform vec3 horizonColor;
-    uniform vec3 lowerHazeColor;
-    uniform vec3 sunColor;
+    uniform vec3 belowHorizonColor;
+    uniform vec3 cloudColor;
+    uniform vec2 cloudShelf;
+    uniform float skyCurveExponent;
+    uniform float shoulderFalloff;
+    uniform float shoulderWeight;
     uniform vec3 sunDirection;
     varying vec3 vSkyDirection;
     void main() {
-      float height = vSkyDirection.y;
-      vec3 colour = mix(lowerHazeColor, horizonColor, smoothstep(-0.14, 0.06, height));
-      colour = mix(colour, topColor, smoothstep(0.02, 0.72, height));
-      float sunGlow = pow(max(dot(vSkyDirection, sunDirection), 0.0), 18.0) * 0.26;
-      float sunCore = pow(max(dot(vSkyDirection, sunDirection), 0.0), 320.0) * 1.25;
-      gl_FragColor = vec4(colour + sunColor * (sunGlow + sunCore), 1.0);
+      vec3 direction = normalize(vSkyDirection);
+      float aboveHorizon = max(direction.y, 0.0);
+      float skyCurve = pow(aboveHorizon, skyCurveExponent);
+      vec3 colour = mix(horizonColor, zenithColor, skyCurve);
+      // Narrow non-luminous horizon shoulder: stays readable in unusual attitudes.
+      float horizonShoulder = exp(-abs(direction.y) * shoulderFalloff);
+      colour = mix(colour, horizonColor * 1.08, horizonShoulder * shoulderWeight);
+      // Painted cumulus band (the documented divergence: no tactical cloud field here).
+      float azimuth = atan(direction.z, direction.x);
+      float shelf = smoothstep(cloudShelf.x, cloudShelf.x + 0.035, direction.y)
+        * (1.0 - smoothstep(cloudShelf.y * 0.62, cloudShelf.y, direction.y));
+      float puff = 0.5 * sin(azimuth * 7.3 + 1.7)
+        + 0.34 * sin(azimuth * 16.7 - direction.y * 47.0 + 0.6)
+        + 0.22 * sin(azimuth * 29.3 + direction.y * 83.0);
+      colour = mix(colour, cloudColor, shelf * smoothstep(0.16, 0.68, puff) * 0.55);
+      if (direction.y < 0.0) {
+        colour = mix(belowHorizonColor, horizonColor, exp(direction.y * 16.0));
+      }
+      gl_FragColor = vec4(colour, 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
     }
   `,
 });
