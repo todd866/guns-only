@@ -52,6 +52,25 @@ public interface ITerrainSurface {
         heightM = sample.HeightM;
         return true;
     }
+
+    /// <summary>
+    /// A CONSERVATIVE ceiling on HeightM anywhere inside <see cref="Bounds"/>: no point of this
+    /// surface is higher than this. It is the broad phase for anything that would otherwise march
+    /// the ground to prove it cannot hit it.
+    ///
+    /// The whole value of this one scalar is that a predictor can answer "could this trajectory
+    /// touch the ground?" for FREE. Auto-GCAS rolls a full recovery trajectory and bisects it, and
+    /// at 33,000 ft in a dogfight every one of those thousands of lookups returns the same useless
+    /// answer: kilometres of air. Comparing the trajectory's lowest predicted altitude against this
+    /// ceiling rules the whole path out without touching the terrain at all.
+    ///
+    /// It must be an UPPER bound, never an estimate — a caller that trusts it skips sampling
+    /// entirely, so a ceiling that under-reports a peak would hide a real mountain. The default is
+    /// therefore positive infinity: "this surface does not know", which every broad phase reads as
+    /// "sample it properly". An implementation overrides this only when it can prove a bound
+    /// cheaply, and a composite takes the maximum over everything it can return.
+    /// </summary>
+    double MaximumHeightM => double.PositiveInfinity;
 }
 
 /// <summary>
@@ -86,6 +105,9 @@ public sealed class TranslatedTerrainSurface : ITerrainSurface {
 
     public bool TryHeightM(double eastM, double northM, out double heightM) =>
         _source.TryHeightM(eastM - _eastOffsetM, northM - _northOffsetM, out heightM);
+
+    /// A translation moves the surface horizontally; it cannot raise it.
+    public double MaximumHeightM => _source.MaximumHeightM;
 }
 
 /// <summary>Immutable regular grid with analytic bilinear height and normal interpolation.</summary>
@@ -100,6 +122,9 @@ public sealed class BilinearHeightGrid : ITerrainSurface {
     public int NorthPointCount { get; }
     public TerrainBounds Bounds { get; }
     public double HorizontalResolutionM => Math.Min(EastSpacingM, NorthSpacingM);
+    /// Exact: bilinear interpolation never exceeds the largest node it interpolates between, so
+    /// the tallest grid node IS the tallest point of the surface.
+    public double MaximumHeightM { get; } = double.NegativeInfinity;
 
     /// <param name="heightMNorthRowsEastColumns">
     /// Heights in metres. First dimension advances north; second advances east. The values are
@@ -131,6 +156,7 @@ public sealed class BilinearHeightGrid : ITerrainSurface {
                 double value = heightMNorthRowsEastColumns[north, east];
                 DefinitionValidation.Finite(value, nameof(heightMNorthRowsEastColumns));
                 _heightM[Index(east, north)] = value;
+                if (value > MaximumHeightM) MaximumHeightM = value;
             }
         }
 

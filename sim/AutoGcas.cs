@@ -196,6 +196,34 @@ public static class AutoGcasController {
     const double ResponseAuthorityMargin = 0.90;
     const double RecoveryCompletionHorizonSeconds = 20.0;
 
+    /// <summary>
+    /// Broad-phase clearance: how far above the tallest ground the whole theatre contains a
+    /// predicted segment must stand before this predictor will accept the terrain's own ceiling as
+    /// the answer and skip marching that segment.
+    ///
+    /// This is the gate that makes most of a sortie cost nothing. Measured on the production
+    /// Ukraine truth through the real session, Auto-GCAS was issuing 1,703 terrain samples per
+    /// 120 Hz tick on a visual-merge beat — 76% of every terrain lookup the whole kernel made —
+    /// and essentially all of it was a fight at altitude asking the ground the same question
+    /// thousands of times and getting "kilometres of air" every time. A rolled 20 s trajectory
+    /// integrates for free; only the terrain reads cost anything.
+    ///
+    /// The number is chosen so the shortcut is INVISIBLE to every decision this file makes, not to
+    /// be tight. Each comparison downstream tests a clearance against a threshold, and the largest
+    /// of them is the release gate at TerrainBufferM + ExitPredictionMarginM = 88.7 m; the trigger
+    /// floors are 30.48 m manoeuvring and 6.1 m stable. A gated segment reports a clearance of at
+    /// least this constant, so it lands on the same side of every one of those thresholds as the
+    /// true value would. 305 m is 1,000 ft — three and a half times the largest threshold, and the
+    /// same round figure as the low-level standby gate, so it can be reasoned about in the units
+    /// the rest of the doctrine is written in.
+    ///
+    /// What a gated segment reports is a LOWER bound on its true clearance (segment floor minus
+    /// theatre ceiling), never an estimate. Reporting low is the safe direction: it can only make
+    /// the system more willing to protect, and it cannot cross any threshold because it is bounded
+    /// below by this constant.
+    /// </summary>
+    const double BroadPhaseClearanceM = 305.0;
+
     public static AutoGcasStepResult Step(double dtSeconds,
         in AutoGcasState previous, in AutoGcasInput input,
         AutoGcasCapabilityProfile capability) {
@@ -288,8 +316,21 @@ public static class AutoGcasController {
 
         PathPrediction pilot = Predict(input, effectiveConfig,
             automatedRecoveryDelaySeconds: null);
-        PathPrediction immediateRecovery = Predict(input, effectiveConfig,
-            automatedRecoveryDelaySeconds: 0.0);
+        // Narrow phase, and only when the broad question came back "yes". The immediate-recovery
+        // path is the expensive one — a rolled 20 s completion horizon, four hundred integration
+        // steps — and every consumer of it is downstream of the pilot path already having
+        // penetrated the protection floor: TimeAvailable() returns positive infinity outright
+        // otherwise, and `collisionThreat` is a precondition of both the trigger and the warning.
+        // Rolling it on a clear pilot path computed a number the tick then discarded.
+        bool collisionThreat = pilot.Valid
+            && pilot.MinimumClearanceM <= effectiveConfig.TerrainBufferM;
+        PathPrediction immediateRecovery = collisionThreat
+            ? Predict(input, effectiveConfig, automatedRecoveryDelaySeconds: 0.0)
+            // Not evaluated because no recovery is in question. Positive infinity is the honest
+            // reading of "this path never came near the ground", and it is the same answer every
+            // threshold downstream would have drawn from the real number.
+            : new PathPrediction(true, false, pilot.CurrentClearanceM,
+                double.PositiveInfinity, double.PositiveInfinity);
         if (!pilot.Valid || !immediateRecovery.Valid) {
             // Terrain-model loss during a commanded recovery is fail-operational. Continue the
             // bounded fly-up using the last valid prediction until the pilot paddles or a valid
@@ -302,7 +343,13 @@ public static class AutoGcasController {
                 AutoGcasPrediction.Invalid);
         }
 
-        double timeAvailable = TimeAvailable(input, effectiveConfig, pilot, immediateRecovery);
+        // Every threshold this file draws against time-available sits at or below the warning
+        // boundary; nothing downstream can tell two figures above it apart.
+        double decisionBoundarySeconds =
+            (config.TriggerTimeAvailableSeconds + config.WarningLeadSeconds)
+            * config.AttentivePilotTriggerFactor;
+        double timeAvailable = TimeAvailable(input, effectiveConfig, pilot, immediateRecovery,
+            decisionBoundarySeconds);
         bool pilotRecoveryCredited = PilotRecoveryCredited(input);
         var prediction = new AutoGcasPrediction(
             Valid: true,
@@ -342,7 +389,6 @@ public static class AutoGcasController {
                 RecoveryCommand(input, config));
         }
 
-        bool collisionThreat = pilot.MinimumClearanceM <= effectiveConfig.TerrainBufferM;
         // Auto-GCAS is a pure terrain/trajectory backstop and knows NOTHING about pilot physiology.
         // (Owner directive 2026-07-24: "only trigger if the jet will crash otherwise, autogcas
         // doesn't know pilot physiology.") It commits at the true last instant an automated recovery
@@ -447,9 +493,20 @@ public static class AutoGcasController {
             DirectLateralControl: true);
     }
 
+    /// <param name="decisionBoundarySeconds">
+    /// The largest time-available figure any decision in this file can still distinguish — the
+    /// warning boundary, which sits above the trigger boundary. The bisection below only ever
+    /// RAISES its lower bound, so the moment that bound clears this value the answer to every
+    /// question anyone asks of it is settled, and the remaining refinement rolls whole extra
+    /// recovery trajectories to sharpen a number nothing reads. Time compression, the one other
+    /// consumer, ladders at TimeCompressionPolicy.BoundaryLeadSeconds = 12 s against a lookahead
+    /// of 8, so every finite result already lands in its bottom rung alike. Past the boundary the
+    /// returned figure is therefore "at least this long", not a measurement, and the telemetry
+    /// field carries it as such.
+    /// </param>
     static double TimeAvailable(in AutoGcasInput input,
         AutoGcasConfiguration config, in PathPrediction pilot,
-        in PathPrediction immediate) {
+        in PathPrediction immediate, double decisionBoundarySeconds) {
         if (pilot.MinimumClearanceM > config.TerrainBufferM)
             return double.PositiveInfinity;
         if (immediate.MinimumClearanceM <= config.TerrainBufferM) return 0.0;
@@ -460,6 +517,7 @@ public static class AutoGcasController {
         if (latest.Valid && latest.MinimumClearanceM > config.TerrainBufferM)
             return high;
         for (int iteration = 0; iteration < 8; iteration++) {
+            if (low > decisionBoundarySeconds) return low;
             double middle = (low + high) * 0.5;
             PathPrediction candidate = Predict(input, config, middle);
             if (!candidate.Valid) return 0.0;
@@ -480,6 +538,17 @@ public static class AutoGcasController {
         double recoveryG = Math.Clamp(Math.Min(1.0,
             input.EffectivePilotCommand.GDemand), -1.5, 1.0);
         RecoveryResponse response = ResponseFor(input, config);
+        // The broad phase needs a proven ceiling on the ground, and only a real terrain model
+        // offers one. The flat-datum fallback path already costs no lookups, so it is left alone
+        // rather than losing its UsedFallback reporting to a shortcut that buys nothing.
+        double terrainCeilingM = input.Terrain is not null
+            ? input.Terrain.MaximumHeightM : double.PositiveInfinity;
+        bool broadPhaseArmed = double.IsFinite(terrainCeilingM);
+        // A pure threat path never reads the per-step point clearance: it feeds only the
+        // recovery-climb detector, which is gated on `recovery`, which is unreachable unless a
+        // recovery delay was supplied. Sampling it on the pilot path was a lookup per step for a
+        // value nothing read.
+        bool recoveryPath = automatedRecoveryDelaySeconds.HasValue;
         bool usedFallback = false;
         if (!TryClearance(input, position, out double currentClearance,
             out bool currentFallback))
@@ -519,8 +588,15 @@ public static class AutoGcasController {
                 ? velocity.Normalized() : input.Aircraft.ForwardDir();
             liftNormal = TransportNormal(liftNormal, vhat,
                 ActualLiftNormal(input.Aircraft, velocity));
-            EscapeFrame frame = BuildEscapeFrame(input, position, velocity,
-                liftNormal);
+            // The escape frame costs a terrain lookup (it wants the local up-normal) and is read
+            // by exactly two things: recovery guidance, and the bank-capture law used when the
+            // pilot command is NOT direct lateral. A direct-lateral threat step reads neither, so
+            // building it there bought a terrain sample per step and threw the result away.
+            bool needEscapeFrame = recovery
+                || !input.EffectivePilotCommand.DirectLateralControl;
+            EscapeFrame frame = needEscapeFrame
+                ? BuildEscapeFrame(input, position, velocity, liftNormal)
+                : default;
             double gDemand;
             double rollControl;
             if (recovery) {
@@ -618,25 +694,39 @@ public static class AutoGcasController {
             // Endpoint-only sampling aliases narrow ridges at combat speed. Sweep every predicted
             // segment at the terrain grid's resolution-aware spacing; if any interior point enters
             // the buffer, use the segment start time as a conservative violation boundary.
-            if (!TryMinimumSegmentClearance(input, segmentStart, position,
-                out double clearance, out bool fallback))
-                return new PathPrediction(false, usedFallback, currentClearance,
-                    minimumClearance, violationTime);
-            usedFallback |= fallback;
-            minimumClearance = Math.Min(minimumClearance, clearance);
-            if (double.IsPositiveInfinity(violationTime)
-                && clearance <= config.TerrainBufferM)
-                violationTime = (step - 1) * dt;
+            //
+            // Broad phase first. The march below walks a STRAIGHT segment, whose lowest point is
+            // therefore one of its two ends, and no ground anywhere in the theatre stands higher
+            // than the surface's own ceiling. So if both ends clear that ceiling by the broad-phase
+            // margin, the segment provably cannot find terrain and the march is skipped entirely.
+            // The clearance recorded is the proven lower bound, not a guess.
+            double segmentFloorClearanceM =
+                Math.Min(segmentStart.Y, position.Y) - terrainCeilingM;
+            if (broadPhaseArmed && segmentFloorClearanceM > BroadPhaseClearanceM) {
+                minimumClearance = Math.Min(minimumClearance, segmentFloorClearanceM);
+            } else {
+                if (!TryMinimumSegmentClearance(input, segmentStart, position,
+                    out double clearance, out bool fallback))
+                    return new PathPrediction(false, usedFallback, currentClearance,
+                        minimumClearance, violationTime);
+                usedFallback |= fallback;
+                minimumClearance = Math.Min(minimumClearance, clearance);
+                if (double.IsPositiveInfinity(violationTime)
+                    && clearance <= config.TerrainBufferM)
+                    violationTime = (step - 1) * dt;
+            }
 
-            if (!TryClearance(input, position, out double nextPointClearance,
-                out bool pointFallback))
-                return new PathPrediction(false, usedFallback, currentClearance,
-                    minimumClearance, violationTime);
-            usedFallback |= pointFallback;
-            if (recovery && nextPointClearance > pointClearance + 1e-5)
-                recoveryClearanceGainSeconds += dt;
-            else recoveryClearanceGainSeconds = 0.0;
-            pointClearance = nextPointClearance;
+            if (recoveryPath) {
+                if (!TryClearance(input, position, out double nextPointClearance,
+                    out bool pointFallback))
+                    return new PathPrediction(false, usedFallback, currentClearance,
+                        minimumClearance, violationTime);
+                usedFallback |= pointFallback;
+                if (recovery && nextPointClearance > pointClearance + 1e-5)
+                    recoveryClearanceGainSeconds += dt;
+                else recoveryClearanceGainSeconds = 0.0;
+                pointClearance = nextPointClearance;
+            }
 
             // A half-second of increasing terrain clearance establishes that the predicted
             // trajectory has passed its real minimum. World vertical speed alone is insufficient
@@ -676,13 +766,14 @@ public static class AutoGcasController {
     static bool TryClearance(in AutoGcasInput input, in Vec3D position,
         out double clearanceM, out bool usedFallback) {
         if (input.Terrain is not null) {
-            if (!input.Terrain.TrySample(position.X, position.Z,
-                out TerrainSample sample)) {
+            // Height only: this reads no normal and no surface kind.
+            if (!input.Terrain.TryHeightM(position.X, position.Z,
+                out double heightM)) {
                 clearanceM = double.NaN;
                 usedFallback = false;
                 return false;
             }
-            clearanceM = position.Y - sample.HeightM;
+            clearanceM = position.Y - heightM;
             usedFallback = false;
             return double.IsFinite(clearanceM);
         }
@@ -949,5 +1040,20 @@ public static class AutoGcasController {
             || config.AttentivePilotTriggerFactor <= 0.0
             || config.AttentivePilotTriggerFactor > 1.0)
             throw new ArgumentOutOfRangeException(nameof(config));
+        // The broad phase reports a gated segment's clearance as a lower bound of at least
+        // BroadPhaseClearanceM, and is only invisible while that bound sits above every clearance
+        // threshold this file draws. That is a relationship between constants, so it is checked
+        // here rather than trusted to a comment: a future retune that pushed the release margin or
+        // a protection floor past the broad-phase clearance would turn a gated segment's honest
+        // "at least 305 m" into a threshold crossing, and the failure would be a false fly-up or a
+        // fly-up that will not release — silently, with the reasoning above still reading correct.
+        double largestClearanceThresholdM = Math.Max(
+            config.TerrainBufferM + config.ExitPredictionMarginM,
+            Math.Max(config.ManeuveringTerrainBufferM, config.StableTerrainBufferM));
+        if (!(largestClearanceThresholdM < BroadPhaseClearanceM))
+            throw new ArgumentOutOfRangeException(nameof(config),
+                $"the largest clearance threshold ({largestClearanceThresholdM:F1} m) must stay "
+                + $"below the broad-phase clearance ({BroadPhaseClearanceM:F1} m), or skipping a "
+                + "terrain march stops being invisible to the trigger and release logic");
     }
 }

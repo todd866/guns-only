@@ -61,6 +61,8 @@ internal sealed class NestedTerrainSurface : ITerrainSurface {
             _overrides.Length == 0
                 ? _base.HorizontalResolutionM
                 : _overrides.Min(surface => surface.HorizontalResolutionM));
+        MaximumHeightM = _overrides.Aggregate(_base.MaximumHeightM,
+            static (ceiling, surface) => Math.Max(ceiling, surface.MaximumHeightM));
     }
 
     public bool TrySample(double eastM, double northM, out TerrainSample sample) {
@@ -77,6 +79,11 @@ internal sealed class NestedTerrainSurface : ITerrainSurface {
         }
         return _base.TryHeightM(eastM, northM, out heightM);
     }
+
+    /// An override can only ever be READ where it covers the base, so the composite's ceiling is
+    /// the highest ceiling any layer offers. If any layer does not know its own ceiling the
+    /// composite does not either — infinity propagates, and broad phases fall back to sampling.
+    public double MaximumHeightM { get; }
 }
 
 /// <summary>
@@ -131,6 +138,8 @@ internal static class PackedTerrainTruth {
 
         public TerrainBounds Bounds { get; }
         public double HorizontalResolutionM { get; }
+        /// Exact: the bilinear patch never exceeds its tallest corner node.
+        public double MaximumHeightM { get; }
 
         public QuantizedTerrainGrid(double originEastM, double originNorthM,
             double spacingM, int width, int height, double metresPerUnit,
@@ -143,6 +152,14 @@ internal static class PackedTerrainTruth {
             _metresPerUnit = metresPerUnit;
             _waterSentinel = waterSentinel;
             _samples = samples;
+            // Water collapses to 0.0 in Height(), so the sentinel is skipped rather than scaled.
+            double ceilingM = 0.0;
+            foreach (short raw in samples) {
+                if (raw == waterSentinel) continue;
+                double heightM = raw * metresPerUnit;
+                if (heightM > ceilingM) ceilingM = heightM;
+            }
+            MaximumHeightM = ceilingM;
             Bounds = new TerrainBounds(originEastM,
                 originEastM + (width - 1) * spacingM,
                 originNorthM,
@@ -312,4 +329,8 @@ internal sealed class TrainingTerrainApronSurface : ITerrainSurface {
         heightM = edgeHeightM + (_flatHeightM - edgeHeightM) * fraction;
         return true;
     }
+
+    /// Inside the source, the source's own ceiling; outside it, a linear blend between a source
+    /// edge height and the flat datum, which cannot exceed either end.
+    public double MaximumHeightM => Math.Max(_source.MaximumHeightM, _flatHeightM);
 }
