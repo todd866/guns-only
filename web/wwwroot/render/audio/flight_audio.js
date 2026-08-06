@@ -543,6 +543,13 @@ export function projectPrimaryContactAudioState(
       plx: state.plx,
       ply: state.ply,
       plz: state.plz,
+      // The contact's own forward axis gives the flyby its front/rear aspect, and ownship speed
+      // lets Doppler split the closure rate between listener and source instead of charging all
+      // of it to the source.
+      bfx: finiteNumber(state.bfx),
+      bfy: finiteNumber(state.bfy),
+      bfz: finiteNumber(state.bfz),
+      true_airspeed_kts: finiteNumber(state.true_airspeed_kts),
       air_temperature_c: finiteNumber(
         state.air_temperature_c,
         state.static_temperature_c,
@@ -634,6 +641,12 @@ export function projectFormationContactAudioState(
       plx: state.plx,
       ply: state.ply,
       plz: state.plz,
+      // Formation slots publish their own forward axis; the flyby aspect term uses it directly
+      // rather than falling back to the closure-sign approximation.
+      bfx: finiteNumber(state[`${prefix}fx`]),
+      bfy: finiteNumber(state[`${prefix}fy`]),
+      bfz: finiteNumber(state[`${prefix}fz`]),
+      true_airspeed_kts: finiteNumber(state.true_airspeed_kts),
       air_temperature_c: finiteNumber(
         state.air_temperature_c,
         state.static_temperature_c,

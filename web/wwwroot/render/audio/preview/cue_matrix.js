@@ -339,37 +339,59 @@ function stepState(states, elapsedSeconds, secondsPerStep) {
   return states[Math.floor(elapsed / secondsPerStep) % states.length];
 }
 
+/// One straight-line constant-velocity pass down the left side of the cockpit, integrated properly.
+///
+/// This used to hold range on a triangle wave and closure on a square wave that flipped sign in one
+/// frame at the midpoint. That is not a pass — it is a step, and it hid the very Doppler sweep the
+/// production graph is supposed to produce, because the radial velocity of a real crossing goes
+/// smoothly through zero over the time it takes to fly a couple of miss distances.
+///
+/// The frame is ownship-relative: the listener sits at the origin with `pfx = 1` while the contact
+/// moves, which is exactly how every consumer reads these fields (they only ever use
+/// `contact - player`). The ownship `true_airspeed_kts: 400` in `F22_CONTROL` is therefore part of
+/// the closure, not separate from it: at `closingSpeedKts: 700` the merge is a 400 kt ownship and a
+/// 300 kt contact, which is what the Doppler split will charge to each of them.
+///
+/// Geometry: the contact closes along the ownship fore/aft axis at `closingSpeedKts`, offset
+/// laterally by `missDistanceM`. With s = v t measured from closest approach,
+///   range(t)   = hypot(v t, d)
+///   closure(t) = -d(range)/dt = -v^2 t / range(t)
+/// which is positive (closing) before the crossing and negative after it, with the crossing rate
+/// set by the geometry rather than by an author.
 function trafficState({
   id,
   audioClass,
   elapsedSeconds,
   durationSeconds,
-  farRangeM,
-  nearRangeM,
-  approachingClosureKts,
-  recedingClosureKts,
+  missDistanceM,
+  closingSpeedKts,
+  timeLapse = 1,
 }) {
   const progress = loopingProgress(elapsedSeconds, durationSeconds);
-  const approaching = progress < 0.5;
-  const leg = approaching ? progress * 2 : (progress - 0.5) * 2;
-  const rangeM = approaching
-    ? farRangeM + (nearRangeM - farRangeM) * leg
-    : nearRangeM + (farRangeM - nearRangeM) * leg;
-  // Fly one consistent side of the cockpit: far ahead-left → closest abeam-left → behind-left.
-  // This is a physically plausible straight pass and exercises production stereo positioning
-  // without inventing a contact that teleports through the ownship centreline.
-  const lateralM = Math.min(nearRangeM, rangeM);
-  const alongM = Math.sqrt(Math.max(0, rangeM * rangeM - lateralM * lateralM))
-    * (approaching ? 1 : -1);
+  const speedMps = closingSpeedKts * 0.514444;
+  // Centre the crossing at 55% of the cue so the approach is heard in full before it happens.
+  // `timeLapse` scales the simulated clock only: range and closure still come from one consistent
+  // geometry, so a transit that genuinely takes minutes can be auditioned in seconds without the
+  // fixture lying about the relationship between them.
+  const t = (progress - 0.55) * durationSeconds * timeLapse;
+  const alongM = -speedMps * t;
+  const rangeM = Math.hypot(alongM, missDistanceM);
+  const closureKts = (-(speedMps * speedMps) * t / Math.max(1, rangeM)) / 0.514444;
   return {
     ...F22_CONTROL,
     bandit_aircraft_id: id,
     bandit_audio_class: audioClass,
     range_m: rangeM,
-    closure_kts: approaching ? approachingClosureKts : recedingClosureKts,
+    closure_kts: closureKts,
     bx: alongM,
     by: 0,
-    bz: lateralM,
+    bz: missDistanceM,
+    // The contact is flying the reciprocal of the ownship forward axis, so it presents its nose on
+    // the way in and its tailpipes on the way out. This is what makes the two halves of a pass
+    // sound different, so the lab must publish it.
+    bfx: -1,
+    bfy: 0,
+    bfz: 0,
     cue_pass_progress_01: progress,
   };
 }
@@ -398,10 +420,8 @@ export function cueStateAt(cueOrId, elapsedSeconds = 0) {
       audioClass: "fighter_jet",
       elapsedSeconds,
       durationSeconds: cue.durationSeconds,
-      farRangeM: 3_200,
-      nearRangeM: 140,
-      approachingClosureKts: 680,
-      recedingClosureKts: -720,
+      missDistanceM: 140,
+      closingSpeedKts: 700,
     });
   }
   if (cue.animation === "bear-pass") {
@@ -410,10 +430,11 @@ export function cueStateAt(cueOrId, elapsedSeconds = 0) {
       audioClass: "heavy_contra_prop",
       elapsedSeconds,
       durationSeconds: cue.durationSeconds,
-      farRangeM: 65_000,
-      nearRangeM: 14_000,
-      approachingClosureKts: 360,
-      recedingClosureKts: -360,
+      missDistanceM: 14_000,
+      closingSpeedKts: 360,
+      // A 360 kt aircraft passing 14 km abeam takes minutes to develop; 16x compresses that into
+      // an auditionable cue without letting range and closure disagree with each other.
+      timeLapse: 16,
     });
   }
   return { ...F22_CONTROL };

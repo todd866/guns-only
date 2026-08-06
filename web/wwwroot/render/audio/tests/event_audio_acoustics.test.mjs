@@ -72,6 +72,8 @@ class FakeFilter extends FakeNode {
     this.type = "lowpass";
     this.frequency = new FakeAudioParam();
     this.Q = new FakeAudioParam();
+    // Shelf and peaking filters carry a gain param; the contact canopy model uses one.
+    this.gain = new FakeAudioParam();
   }
 }
 
@@ -487,10 +489,12 @@ test("nearby fighter is canopy-occluded and closure sign crossing fires one pass
 
   const first = updateContactAcousticVoices(voices, audio, approaching);
   assert.equal(first.acousticClass, "fighter_jet");
-  assert.ok(first.fighterPresence > 0.5);
-  assert.ok(latest(voices.fighterGain.gain) > 0.08);
+  assert.ok(first.fighterPresence > 0, "a fighter inside a kilometre is audible");
+  assert.ok(latest(voices.fighterGain.gain) > 0);
   assert.equal(latest(voices.propNoiseGain.gain), 0);
   assert.equal(latest(voices.contactOcclusionFilter.frequency), 920, "sealed F-22 canopy");
+  assert.ok(latest(voices.contactOcclusionFilter.gain) < -15,
+    "the sealed canopy is a deep high shelf, not a brick-wall lowpass");
 
   audio.currentTime = 0.1;
   updateContactAcousticVoices(voices, audio, {
@@ -518,6 +522,8 @@ test("nearby fighter is canopy-occluded and closure sign crossing fires one pass
   audio.currentTime = 0.4;
   updateContactAcousticVoices(voices, audio, approaching, { cockpit: false });
   assert.equal(latest(voices.contactOcclusionFilter.frequency), 12_000);
+  assert.equal(latest(voices.contactOcclusionFilter.gain), 0,
+    "an exterior listener has no canopy between him and the contact");
   assert.equal(latest(voices.contactOutput.gain), 1.35);
 
   audio.currentTime = 0.5;
@@ -590,7 +596,7 @@ test("bounded Doppler distinguishes approach and departure and pass completion i
     closure_kts: 220,
   }, { cockpit: false });
   assert.equal(approach.passPhase, "approach");
-  assert.ok(approach.doppler > 1.3 && approach.doppler <= 1.55);
+  assert.ok(approach.doppler > 1.3 && approach.doppler <= 1.85);
 
   audio.currentTime = 0.1;
   const closest = updateContactAcousticVoices(voices, audio, {
@@ -608,7 +614,7 @@ test("bounded Doppler distinguishes approach and departure and pass completion i
     closure_kts: -220,
   }, { cockpit: false });
   assert.equal(departure.passPhase, "departure");
-  assert.ok(departure.doppler < 0.8 && departure.doppler >= 0.72);
+  assert.ok(departure.doppler < 0.8 && departure.doppler >= 0.66);
   assert.equal(departure.crossedPass, true);
   assert.equal(voices.passTransientCount, 1);
 
@@ -650,7 +656,7 @@ test("relative geometry pans subtly in cockpit and strongly outside with neutral
     ...geometry,
     bx: 0, by: 0, bz: -100,
   });
-  assert.ok(Math.abs(cockpitRight.pan - 0.28) < 1e-9);
+  assert.ok(Math.abs(cockpitRight.pan - 0.5) < 1e-9);
   assert.equal(latest(voices.contactPanner.pan), cockpitRight.pan);
 
   audio.currentTime = 0.1;
@@ -658,14 +664,14 @@ test("relative geometry pans subtly in cockpit and strongly outside with neutral
     ...geometry,
     bx: 0, by: 0, bz: 100,
   });
-  assert.ok(Math.abs(cockpitLeft.pan + 0.28) < 1e-9);
+  assert.ok(Math.abs(cockpitLeft.pan + 0.5) < 1e-9);
 
   audio.currentTime = 0.2;
   const externalLeft = updateContactAcousticVoices(voices, audio, {
     ...geometry,
     bx: 0, by: 0, bz: 100,
   }, { cockpit: false });
-  assert.ok(Math.abs(externalLeft.pan + 0.78) < 1e-9);
+  assert.ok(Math.abs(externalLeft.pan + 0.92) < 1e-9);
 
   audio.currentTime = 0.3;
   const missingAxes = updateContactAcousticVoices(voices, audio, {
@@ -740,4 +746,274 @@ test("Tu-95 contra-prop branch remains present at long range", async () => {
   });
   assert.equal(beyond.propPresence, 0, "long range is finite, not omnipresent");
   assert.equal(latest(voices.propNoiseGain.gain), 0);
+});
+
+test("fighter level follows inverse-distance spreading instead of a linear cliff", async () => {
+  const {
+    createContactAcousticVoices,
+    updateContactAcousticVoices,
+  } = await freshEventAudio("contact-spreading");
+  const audio = new FakeAudioContext();
+  const voices = createContactAcousticVoices(audio, audio.destination);
+  const base = {
+    bandit_aircraft_id: "aircraft.su27.v1",
+    closure_kts: 0,
+    audio_perspective: "external",
+  };
+
+  const sample = (rangeM) => {
+    audio.currentTime += 0.1;
+    return updateContactAcousticVoices(voices, audio, { ...base, range_m: rangeM });
+  };
+
+  // Sound pressure goes as 1/r, so every doubling of range is half the amplitude (-6 dB).
+  const near = sample(250);
+  const far = sample(500);
+  const ratio = near.fighterPresence / far.fighterPresence;
+  assert.ok(ratio > 1.85 && ratio < 2.15,
+    `doubling range should roughly halve pressure, got ${ratio.toFixed(3)}`);
+
+  // Inside the near-field reference the level stops climbing rather than going singular.
+  const veryNear = sample(20);
+  const atReference = sample(110);
+  assert.ok(veryNear.fighterPresence / atReference.fighterPresence < 1.001,
+    "an airframe-sized source is not a point source at 20 m: level stops climbing inside the "
+    + "near-field reference instead of going singular");
+
+  // The old linear law switched a fighter off completely at 2.6 km. Distant contacts must fade,
+  // not vanish, and must still be gone by the horizon.
+  assert.ok(sample(4_000).fighterPresence > 0, "a fighter at 4 km is quiet, not absent");
+  assert.equal(sample(14_000).fighterPresence, 0, "the horizon is finite");
+});
+
+test("a jet sounds different coming at you than going away", async () => {
+  const {
+    createContactAcousticVoices,
+    updateContactAcousticVoices,
+  } = await freshEventAudio("contact-aspect");
+  const audio = new FakeAudioContext();
+  const voices = createContactAcousticVoices(audio, audio.destination);
+  const geometry = {
+    bandit_aircraft_id: "aircraft.su27.v1",
+    range_m: 400,
+    closure_kts: 0,
+    audio_perspective: "external",
+    px: 0, py: 0, pz: 0,
+    pfx: 1, pfy: 0, pfz: 0,
+    plx: 0, ply: 1, plz: 0,
+    bx: 400, by: 0, bz: 0,
+  };
+
+  // Contact 400 m ahead, pointed straight at the listener: nose-on, inlet arc.
+  const noseOn = updateContactAcousticVoices(voices, audio, {
+    ...geometry,
+    bfx: -1, bfy: 0, bfz: 0,
+  });
+  const noseOnPlume = latest(voices.fighterGain.gain);
+  const noseOnFan = latest(voices.fighterFanGain.gain);
+
+  // Same position and range, now pointed away: tail-on, looking up the tailpipe.
+  audio.currentTime = 0.1;
+  const tailOn = updateContactAcousticVoices(voices, audio, {
+    ...geometry,
+    bfx: 1, bfy: 0, bfz: 0,
+  });
+  const tailOnPlume = latest(voices.fighterGain.gain);
+  const tailOnFan = latest(voices.fighterFanGain.gain);
+
+  assert.ok(noseOn.exhaustAspect < -0.99, "listener is dead ahead of the contact");
+  assert.ok(tailOn.exhaustAspect > 0.99, "listener is dead astern of the contact");
+  assert.ok(tailOnPlume > noseOnPlume * 2.5,
+    "plume mixing noise is thrown backwards, so the rear arc is far louder");
+  assert.ok(noseOnFan > tailOnFan * 2.5,
+    "inlet-radiated fan tone dominates the forward arc instead");
+
+  // With no published contact axis the closure sign carries the aspect: closing is nose-on.
+  audio.currentTime = 0.2;
+  const closingProxy = updateContactAcousticVoices(voices, audio, {
+    bandit_aircraft_id: "aircraft.su27.v1",
+    range_m: 400,
+    closure_kts: 400,
+  });
+  audio.currentTime = 0.3;
+  const openingProxy = updateContactAcousticVoices(voices, audio, {
+    bandit_aircraft_id: "aircraft.su27.v1",
+    range_m: 400,
+    closure_kts: -400,
+  });
+  assert.ok(closingProxy.exhaustAspect < -0.9);
+  assert.ok(openingProxy.exhaustAspect > 0.9);
+});
+
+test("the fan tone sweeps with Doppler through a pass", async () => {
+  const {
+    createContactAcousticVoices,
+    updateContactAcousticVoices,
+  } = await freshEventAudio("contact-fan-sweep");
+  const audio = new FakeAudioContext();
+  const voices = createContactAcousticVoices(audio, audio.destination);
+  const base = {
+    bandit_aircraft_id: "aircraft.su27.v1",
+    audio_perspective: "external",
+    range_m: 600,
+  };
+
+  const approach = updateContactAcousticVoices(voices, audio, { ...base, closure_kts: 600 });
+  const approachHz = latest(voices.fighterFanOsc.frequency);
+  assert.equal(latest(voices.fighterFanFilter.frequency), approachHz,
+    "the bandpass tracks the tone rather than sitting still while it moves");
+
+  audio.currentTime = 0.5;
+  const depart = updateContactAcousticVoices(voices, audio, { ...base, closure_kts: -600 });
+  const departHz = latest(voices.fighterFanOsc.frequency);
+
+  assert.ok(approach.doppler > 1.4 && depart.doppler < 0.75);
+  assert.ok(approachHz / departHz > 2,
+    `the pass must sweep more than an octave, got ${(approachHz / departHz).toFixed(2)}x`);
+});
+
+test("Doppler charges listener motion to the listener, not to the source", async () => {
+  const {
+    createContactAcousticVoices,
+    updateContactAcousticVoices,
+  } = await freshEventAudio("contact-doppler-split");
+  const audio = new FakeAudioContext();
+  const voices = createContactAcousticVoices(audio, audio.destination);
+  const geometry = {
+    bandit_aircraft_id: "aircraft.su27.v1",
+    range_m: 1_000,
+    closure_kts: 400,
+    air_temperature_c: 15,
+    px: 0, py: 0, pz: 0,
+    pfx: 1, pfy: 0, pfz: 0,
+    plx: 0, ply: 1, plz: 0,
+    bx: 1_000, by: 0, bz: 0,
+  };
+
+  // All 400 kt of closure belongs to a stationary listener's target.
+  const allSource = updateContactAcousticVoices(voices, audio, {
+    ...geometry,
+    true_airspeed_kts: 0,
+  }, { cockpit: false });
+
+  // The same 400 kt of closure, now produced entirely by the listener's own speed.
+  audio.currentTime = 0.1;
+  const allListener = updateContactAcousticVoices(voices, audio, {
+    ...geometry,
+    true_airspeed_kts: 400,
+  }, { cockpit: false });
+
+  assert.ok(allSource.doppler > allListener.doppler,
+    "a source running at you shifts more than you running at it — the source term is hyperbolic "
+    + "and the listener term is linear, which is exactly why the split matters");
+  assert.ok(allListener.doppler > 1, "closing still raises the pitch either way");
+});
+
+test("every merge of a dogfight cracks, not just the first", async () => {
+  const {
+    createContactAcousticVoices,
+    updateContactAcousticVoices,
+  } = await freshEventAudio("contact-pass-rearm");
+  const audio = new FakeAudioContext();
+  const voices = createContactAcousticVoices(audio, audio.destination);
+  const bandit = { bandit_aircraft_id: "aircraft.su27.v1" };
+  let clock = 0;
+  const frame = (range_m, closure_kts) => {
+    clock += 0.1;
+    audio.currentTime = clock;
+    return updateContactAcousticVoices(voices, audio, { ...bandit, range_m, closure_kts });
+  };
+
+  const merge = () => {
+    frame(2_000, 600);
+    frame(400, 600);
+    frame(200, 0);
+    return frame(300, -600);
+  };
+
+  assert.equal(merge().crossedPass, true);
+  assert.equal(voices.passTransientCount, 1);
+
+  // Separate for a re-attack. This is a turning fight, not a BVR reset: the aircraft never leave
+  // a couple of kilometres of each other, and the fix has to cover that or it covers nothing.
+  frame(700, -600);
+  frame(900, -400);
+  assert.equal(merge().crossedPass, true, "the second merge of a turning fight must be heard too");
+  assert.equal(voices.passTransientCount, 2);
+
+  // Noise around zero closure inside the same encounter still cannot manufacture one.
+  frame(320, 90);
+  assert.equal(frame(330, -90).crossedPass, false);
+  assert.equal(voices.passTransientCount, 2);
+});
+
+test("a contact behind the listener is shaded darker than the same contact ahead", async () => {
+  const {
+    createContactAcousticVoices,
+    updateContactAcousticVoices,
+  } = await freshEventAudio("contact-rear-shade");
+  const audio = new FakeAudioContext();
+  const voices = createContactAcousticVoices(audio, audio.destination);
+  const geometry = {
+    bandit_aircraft_id: "aircraft.su27.v1",
+    range_m: 300,
+    closure_kts: 0,
+    player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
+    px: 0, py: 0, pz: 0,
+    pfx: 1, pfy: 0, pfz: 0,
+    plx: 0, ply: 1, plz: 0,
+  };
+
+  const ahead = updateContactAcousticVoices(voices, audio, {
+    ...geometry, bx: 300, by: 0, bz: 0,
+  });
+  const aheadCorner = latest(voices.contactOcclusionFilter.frequency);
+  const aheadDb = latest(voices.contactOcclusionFilter.gain);
+
+  audio.currentTime = 0.1;
+  const behind = updateContactAcousticVoices(voices, audio, {
+    ...geometry, bx: -300, by: 0, bz: 0,
+  });
+  const behindCorner = latest(voices.contactOcclusionFilter.frequency);
+  const behindDb = latest(voices.contactOcclusionFilter.gain);
+
+  assert.ok(ahead.foreAft > 0.99 && behind.foreAft < -0.99);
+  assert.ok(behindCorner < aheadCorner, "the shelf reaches further down behind the listener");
+  assert.ok(behindDb < aheadDb, "and takes more out of the band it reaches");
+});
+
+test("the pass crack sweeps from the approach Doppler, not the departing one", async () => {
+  const {
+    createContactAcousticVoices,
+    updateContactAcousticVoices,
+  } = await freshEventAudio("contact-pass-sweep-latch");
+  const audio = new FakeAudioContext();
+  const voices = createContactAcousticVoices(audio, audio.destination);
+  const bandit = { bandit_aircraft_id: "aircraft.su27.v1" };
+  let clock = 0;
+  const frame = (range_m, closure_kts) => {
+    clock += 0.1;
+    audio.currentTime = clock;
+    return updateContactAcousticVoices(voices, audio, { ...bandit, range_m, closure_kts });
+  };
+
+  frame(2_000, 700);
+  frame(600, 700);
+  const approaching = frame(220, 400);
+  // A crossing is detected only once closure has already gone negative, so the ratio on that frame
+  // is the DEPARTING one. Handing it to the transient would clamp the sweep to unity and the crack
+  // would sweep nowhere.
+  assert.ok(voices.approachDoppler >= approaching.doppler);
+  assert.ok(voices.approachDoppler > 1.3, "the approach ratio is latched while the pass is armed");
+
+  const before = audio.filters.length;
+  const crossing = frame(260, -700);
+  assert.equal(crossing.crossedPass, true);
+  assert.ok(crossing.doppler < 1, "the crossing frame itself is already receding");
+  const passFilter = audio.filters.at(-1);
+  assert.ok(audio.filters.length > before, "the transient allocated its own sweep filter");
+  const [start, end] = passFilter.frequency.targets.map((entry) => entry.value);
+  assert.ok(start / end > 5,
+    `the crack must sweep down hard, got ${(start / end).toFixed(2)}x`);
+  assert.ok(start > 1850, "and start above the un-shifted band because it arrived shifted up");
 });

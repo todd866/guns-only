@@ -118,30 +118,52 @@ test("signed-G references hold engine and air state constant", () => {
   assert.ok(negative.pilot_negative_onset_rate_g_per_second > 0);
 });
 
-test("fighter sequence crosses close and changes closure sign", () => {
+test("fighter sequence is one integrated straight pass, not a range triangle", () => {
   const approaching = cueStateAt("fighter_close_pass", 1);
-  const crossing = cueStateAt("fighter_close_pass", 4);
-  const receding = cueStateAt("fighter_close_pass", 5);
+  const crossing = cueStateAt("fighter_close_pass", 4.4);
+  const receding = cueStateAt("fighter_close_pass", 6);
   assert.equal(approaching.bandit_audio_class, "fighter_jet");
   assert.ok(approaching.closure_kts > 0);
-  assert.ok(crossing.range_m <= 140);
+  assert.ok(crossing.range_m <= 145);
   assert.ok(receding.closure_kts < 0);
   assert.ok(receding.range_m > crossing.range_m);
   assert.ok(approaching.bx > 0, "contact begins ahead");
-  assert.ok(Math.abs(crossing.bx) < 1, "closest approach is abeam");
+  assert.ok(Math.abs(crossing.bx) < 30, "closest approach is abeam");
   assert.ok(receding.bx < 0, "contact departs behind");
   assert.ok([approaching, crossing, receding].every((state) => state.bz > 0),
     "straight pass remains on one side of the canopy");
+  assert.ok([approaching, crossing, receding].every((state) => state.bfx === -1),
+    "the contact flies the reciprocal heading, so its aspect reverses through the pass");
+
+  // Closure must be the derivative of range, not an author's square wave. The previous fixture
+  // flipped it from +680 to -720 in a single frame, which hid the whole Doppler sweep the
+  // production graph produces and made the lab useless for judging a pass.
+  const dt = 1 / 60;
+  for (const t of [1, 3, 4.3, 4.5, 6]) {
+    const before = cueStateAt("fighter_close_pass", t - dt / 2);
+    const after = cueStateAt("fighter_close_pass", t + dt / 2);
+    const derivedKts = ((before.range_m - after.range_m) / dt) / 0.514444;
+    const published = cueStateAt("fighter_close_pass", t).closure_kts;
+    assert.ok(Math.abs(derivedKts - published) < 8,
+      `closure at t=${t} must equal the range derivative (${derivedKts.toFixed(1)} vs ${published.toFixed(1)})`);
+  }
+
+  // And it must pass through zero continuously rather than stepping across it.
+  const justBefore = cueStateAt("fighter_close_pass", 4.35).closure_kts;
+  const justAfter = cueStateAt("fighter_close_pass", 4.5).closure_kts;
+  assert.ok(justBefore > 0 && justAfter < 0, "the crossing happens in this window");
+  assert.ok(Math.abs(justBefore) < 400 && Math.abs(justAfter) < 500,
+    "radial velocity collapses towards zero at closest approach instead of holding full closure");
 });
 
 test("Bear sequence remains distant and identifies contra-rotating propulsion", () => {
   const far = cueStateAt("bear_distant_pass", 0);
-  const nearest = cueStateAt("bear_distant_pass", 8);
-  const receding = cueStateAt("bear_distant_pass", 10);
+  const nearest = cueStateAt("bear_distant_pass", 8.8);
+  const receding = cueStateAt("bear_distant_pass", 12);
   assert.match(far.bandit_aircraft_id, /tu95/);
   assert.equal(far.bandit_audio_class, "heavy_contra_prop");
   assert.equal(resolveContactAcousticClass(far), "heavy_contra_prop");
-  assert.ok(far.range_m >= 60_000);
+  assert.ok(far.range_m >= 25_000);
   assert.ok(nearest.range_m >= 10_000);
   assert.ok(nearest.range_m < far.range_m);
   assert.ok(receding.closure_kts < 0);
