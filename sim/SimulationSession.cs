@@ -173,6 +173,10 @@ public sealed class SimulationSession {
     GunneryPitchAssistState _gunneryPitchAssistState =
         GunneryPitchAssistState.Inactive();
     readonly PadlockRollAssist _padlockRollAssist = new();
+    readonly GunneryLeadRateEstimator _gunneryLeadRate = new();
+    readonly PilotLateralCommitment _pilotLateralCommitment = new();
+    PilotLateralCommitmentState _pilotLateralCommitmentState =
+        PilotLateralCommitmentState.Neutral;
     bool _playerGunTargetPadlockRollAssistSelected;
     long _playerGunTargetPadlockRollAssistTargetId;
     PilotCommand _pilotDelayedCommand;
@@ -5911,6 +5915,17 @@ public sealed class SimulationSession {
             && !_autoGcasState.Active;
     }
 
+    /// <summary>
+    /// The one place that decides whether the human owns the lateral axis right now. Both roll-axis
+    /// assists read it; neither re-derives "the pilot is flying a reversal" from geometry.
+    /// </summary>
+    public PilotLateralCommitmentState PlayerLateralCommitment =>
+        _pilotLateralCommitmentState;
+
+    void UpdatePilotLateralCommitment(double rawPilotRollControl) =>
+        _pilotLateralCommitmentState = _pilotLateralCommitment.Step(
+            rawPilotRollControl, FixedDeltaSeconds);
+
     PilotCommand ApplyGunneryPitchAssist(in PilotCommand requestedPilotCommand) {
         AircraftState selectedTarget = SelectedOpponentState;
         bool enabled = !CardTwelveRequiresPilotGunTrigger
@@ -5948,7 +5963,10 @@ public sealed class SimulationSession {
             Geometry.Range(_player.State, selectedTarget),
             enabled,
             lateralRollEnabled: !padlockOwnsRollPlane,
-            closureMps: _closureKts / 1.94384);
+            closureMps: _closureKts / 1.94384,
+            leadRate: _gunneryLeadRate,
+            lateralCommitment: _pilotLateralCommitmentState,
+            deltaSeconds: FixedDeltaSeconds);
         _gunneryPitchAssistState = result.State;
         return result.Command;
     }
@@ -6050,7 +6068,8 @@ public sealed class SimulationSession {
             // the plane trim to fine-tune and it must not take the ailerons — see the capture gate
             // in PadlockRollAssist for the measured 20.7%-of-flight / 88%-out-of-range evidence.
             captureRangeLimitM: _beat.CombatRules.PlayerGunProfile.MuzzleVelocityMps
-                * _beat.CombatRules.PlayerGunProfile.MaximumFlightSeconds);
+                * _beat.CombatRules.PlayerGunProfile.MaximumFlightSeconds,
+            lateralCommitment: _pilotLateralCommitmentState);
         return result.Command;
     }
 
@@ -6570,6 +6589,7 @@ public sealed class SimulationSession {
             }
             _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);
             PilotCommand directedCommand = RapierAutomationOr(_detents.Command);
+            UpdatePilotLateralCommitment(_detents.Command.RollControl);
             PilotCommand assistedCommand = ApplyGunneryPitchAssist(directedCommand);
             PilotCommand effectiveCommand = ApplyPilotPhysiology(assistedCommand);
             PilotCommand padlockAssistedCommand = ApplyPlayerGunTargetPadlockRollAssist(
@@ -7281,6 +7301,7 @@ public sealed class SimulationSession {
         AircraftState previousPlayerState = _player.State;
         AircraftState previousOpponentState = _bandit.State;
         PilotCommand directedCommand = RapierAutomationOr(_detents.Command);
+        UpdatePilotLateralCommitment(_detents.Command.RollControl);
         PilotCommand assistedCommand = ApplyGunneryPitchAssist(directedCommand);
         PilotCommand effectiveCommand = ApplyPilotPhysiology(assistedCommand);
         PilotCommand padlockAssistedCommand = ApplyPlayerGunTargetPadlockRollAssist(
