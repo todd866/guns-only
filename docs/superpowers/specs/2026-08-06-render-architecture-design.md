@@ -7,6 +7,8 @@ Base: `8540ee4` (live Build 265). Branch `docs/render-architecture`.
 Related: [[graphics-fidelity-target]], [[bf-vietnam-graphics-reference]], [[visual-house-style-f22]],
 [[cobra-bike-dont-use-terrain-engine]], [[terrain-legibility-diagnosis]], [[one-engine-doctrine]],
 [[adaptive-world-radius-doctrine]], [[minimum-viable-hardware-project]], [[art-direction-tf2]],
+[[cobra-bike-quality-bar]], [[descent-stutter-is-sim-side]], [[terrain-chunk-build-hitch]],
+[[renderer-early-z-disabled]] (**stale — see §1.4**),
 `docs/superpowers/specs/2026-07-29-soft-world-look-gate-design.md`
 
 Owner, 2026-08-06: *"we have really bad graphics **and** really bad framerate on a very powerful
@@ -466,7 +468,8 @@ SHADING COST per full 1920x1080 coverage (floor subtracted):
 Scaled to a Retina frame (3024×1890, terrain ≈ 55% coverage, **no overdraw**): analytic
 ≈ **1.4 ms/frame**, baked ≈ **0.14 ms/frame**. With the 2–3× terrain overdraw that no-early-Z
 (§1.4) makes inevitable at low level, the analytic figure plausibly reaches **3–4 ms** — a fifth
-of a 60 fps budget, spent on arithmetic, on the most powerful consumer GPU Apple ships.
+of a 60 fps budget, spent on arithmetic, on a current-generation Apple M5. Whatever a mid-range
+Windows laptop or a phone does with that shader is worse, and unmeasured.
 
 **Known biases in this harness, stated so the ratio is used correctly.** Additive blending adds
 one ROP write per pass — but it adds it to *both* shaders equally, so it inflates the floor
