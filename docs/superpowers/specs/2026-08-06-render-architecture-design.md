@@ -12,16 +12,27 @@ Related: [[graphics-fidelity-target]], [[bf-vietnam-graphics-reference]], [[visu
 Owner, 2026-08-06: *"we have really bad graphics **and** really bad framerate on a very powerful
 machine, it shouldn't be that difficult to improve on this."*
 
-He is right, and the two halves of the complaint have the same cause.
+He is right about both halves. They are not the same defect, but they share a root:
+**almost none of our rendering budget is spent on the things that make a frame look good.**
 
 ---
 
 ## 0. Headline
 
-**We are not GPU-limited. We are asset-limited, and we spend the GPU on the one axis that does
-not produce fidelity.**
+**We are not limited by how *much* we draw. We are limited by what we draw it *with* — and we
+spend the GPU on the one axis that does not produce fidelity.**
 
-Three numbers make the case:
+**Scope, stated up front so this document is not misread as a framerate diagnosis.** The owner's
+complaint has two halves and they are *related*, not identical. This document answers the
+**graphics** half and the *fidelity-per-millisecond* half. It does **not** re-diagnose frame
+rate: [[descent-stutter-is-sim-side]] attributes the stutter to sim-side CPU cost
+(`sim_ms_max` 39–47 ms) and [[terrain-chunk-build-hitch]] to a ~9.5 ms main-thread chunk build,
+and the `perf-attribution` agent owns the current numbers. **"Draw more" is not offered as a
+framerate fix, and every stage below can make stutter worse if those CPU costs are still live** —
+shadow casters, texture uploads and prop instancing all add main-thread and upload work. Stage 0
+should not ship until frame attribution says where the time actually goes.
+
+Four numbers frame it:
 
 | | us | Battlefield Vietnam (2004, DX8-class, 128 MB GPU) | a 2026 browser sustains |
 | --- | --- | --- | --- |
@@ -30,20 +41,30 @@ Three numbers make the case:
 | terrain texture memory | **0 bytes** (Cobra, Weekend Ride), 1 texture (F-22) | ~100–200 MB | 500 MB+ |
 | terrain fragment ALU | **~900 scalar ops/px** | ~10–20 ops + 4 texture fetches | — |
 
+*Our column is measured or read from source (§1, §7). The Battlefield Vietnam column is an
+**estimate** from platform class — DX8-era, 128 MB VRAM target, fixed-function-plus-simple-shader
+terrain — not from that game's telemetry, which we do not have. It is offered as an order of
+magnitude, and the argument does not depend on its precision: the gaps are 30× and unbounded,
+not 20%.*
+
 We have a 2004 game's *asset* budget and a 2015 game's *shader* budget. 2004 games looked better
 because fidelity lives in assets, not in arithmetic.
 
 The decisive measurement (§7, reproducible): the shipped Cobra basin fragment shading costs
-**0.90 ms per full 1920×1080 coverage** on an Apple M5. The identical look, baked into three
-textures and read back with 3 fetches, costs **0.093 ms**. **9.7× more expensive, for less
-detail** — and the baked version is also the only one of the two that anti-aliases, because a
-texture has a mip chain and `cobraNoise()` does not.
+**0.90 ms per full 1920×1080 coverage** on an Apple M5. **The same albedo function, baked into
+three textures** and read back with 3 fetches, costs **0.093 ms** — **9.7× cheaper at equal
+output**. That is a cost-at-parity result, not a fidelity result: it says the arithmetic buys
+nothing a bake cannot deliver, and says nothing yet about *authored* art, which is the actual
+prize. The bake is also the only one of the two that anti-aliases, because a texture has a mip
+chain and `cobraNoise()` does not.
 
-And the frame-rate half is already settled by evidence we own:
-`terrain_mesh_builder.js:8` records an 11 fps window at **2.98 M triangles / 78 draw calls**
-against a 60 fps window at **2.91 M triangles / 72 draw calls**. Geometry throughput is flat
-across a 5.5× frame-time swing. Whatever is eating frames, **it is not the amount we draw** —
-which is exactly why the answer to "our graphics are bad" is *draw more, not less*.
+On whether we have room to draw more: `terrain_mesh_builder.js:8` records an 11 fps window at
+**2.98 M triangles / 78 draw calls** against a 60 fps window at **2.91 M triangles / 72 draw
+calls**. Geometry throughput is flat across a 5.5× frame-time swing. That falsifies *"we are
+slow because we draw too much"* — it does **not** prove the GPU is idle, and §7 in fact budgets
+0.9–3.4 ms of terrain ALU. The honest conclusion is narrower and still sufficient: **draw-call
+and triangle count are not the binding constraint, so the fidelity plan is not blocked by
+them.**
 
 ### The one thing we have been doing wrong
 
@@ -147,12 +168,12 @@ From the owner's three images. What actually carries the look, ranked by value-p
 
 | # | Feature | What it buys | Cost (ms @ desktop) | Memory | Difficulty here |
 | --- | --- | --- | --- | --- | --- |
-| 1 | **Cast shadows** | Contact, mass, time of day. Our own [[terrain-legibility-diagnosis]] named absent shadows as the primary cause of flat reads. In the village image the palm shadows *are* the composition. | 0.3–0.8 ms (one extra pass over 15–78 draw calls) | 2048² depth = 16 MB | **Low.** Rig exists and works. Blocked only by a policy line and a test. |
-| 2 | **Ground albedo/detail/splat textures** | Everything the eye reads as "ground" at low level: dirt roads, sand/grass transition, tracks, tonal variety at every scale. | **−0.8 ms** (it is *cheaper* than what we do now) | 7–23 MB VRAM, ~1–3 MB on the wire as WebP | **Low-medium.** Shader change is small; the pipeline (§6) is the work. |
-| 3 | **Alpha-tested foliage** | The single biggest jump toward the reference. BFV's palms are cut-out cards with readable fronds; ours are faceted cones with no trunks. | +0.5–1.5 ms (alpha test is fill-bound; instancing already exists) | 2–8 MB atlas | **Medium.** Needs an authoring pipeline and a sorting/LOD policy. |
+| 1 | **Cast shadows** | Contact, mass, time of day. Our own [[terrain-legibility-diagnosis]] named absent shadows as the primary cause of flat reads. In the village image the palm shadows *are* the composition. | **0.4–1.5 ms.** Cost is light-view *fill* of the cascade plus PCFSoft taps, not draw-call count — a 1,200 m cascade at 2048² is the variable, and the 15–78 draw calls are the cheap part | 2048² depth ≈ 16 MB | **Low.** Rig exists and works. Blocked only by a policy line and a test. |
+| 2 | **Ground albedo/detail/splat textures** | Everything the eye reads as "ground" at low level: dirt roads, sand/grass transition, tracks, tonal variety at every scale. | **−0.8 ms** at full terrain coverage (it is *cheaper* than what we do now). Imported from the §7 fullscreen measurement; real saving scales with actual terrain coverage and overdraw | 7–23 MB VRAM, ~1–3 MB on the wire as WebP | **Low-medium.** Shader change is small; the pipeline (§6) is the work. |
+| 3 | **Alpha-tested foliage** | The single biggest jump toward the reference. BFV's palms are cut-out cards with readable fronds; ours are faceted cones with no trunks. | **+1–3 ms.** Alpha test is fill-bound and cannot early-Z out *at all* while `logarithmicDepthBuffer` is on (§1.4), so this is the stage most exposed to that decision | 2–8 MB atlas | **Medium.** Needs an authoring pipeline and a sorting/LOD policy. |
 | 4 | **Structures and props** | Human scale. A hut, a fence, a jetty tell you how high you are; a noise field never does. | +0.2–0.6 ms per 100 instanced props | 5–20 MB | **Medium-high.** No 3D model pipeline exists at all. |
 | 5 | **Textured airframes** | The F-4 in the reference reads as an aircraft because of camo, panel lines and roundels. `createDrone` extrudes planforms and applies procedural grain. | negligible | 2–6 MB per airframe | **Medium.** `tools/assets/generators/aircraft-assets.mjs` already carries tri/draw budgets (12,000/5,000/1,800; 24/16/9). |
-| 6 | **Effects** | The napalm fireball is a third of that frame's impact. Ours are minimal. | +0.3 ms | small | **Low-medium.** Additive billboards; the unused post stack's bloom would carry it. |
+| 6 | **Effects** | The napalm fireball is a third of that frame's impact. Ours are minimal. | **+0.3 ms** for additive billboards alone; enabling the bloom path is a full-frame treatment at **+0.8–2 ms**, and is a separate decision | small | **Low-medium.** Additive billboards; the unused post stack's bloom would carry it. |
 
 **Where we already match or beat the reference — do not spend here:** aerial perspective and
 banded haze (better than BFV's), palette discipline, sky construction, the 1.87/radius fog law,
@@ -247,16 +268,29 @@ cloud shadow, banded aerial haze, surface detail — into
 `cobra_canyon_terrain_material.js` and a new Weekend Ride ground material. Uniform names and
 semantics become the contract.
 
+Two things the module must carry or "build once" fails again: **the precision-safe hash**
+(Cobra forked `cobraHash` deliberately — `cobra_canyon_terrain_material.js:37-41` — because
+Korea's `fract(sin(dot(...)))` hash collapses to a constant at 16 km world scale; the shared
+version must be the safe one for everybody), and **a flat-ground path** for Weekend Ride, which
+has no heightfield, no concavity attribute and no normals worth the name.
+
 Ship it **behind pixel-identity tests**, not "looks the same": render each mode before and after
 and assert frame equality. This is the stage where "build it once and every mode gains" stops
 being false ([[cobra-bike-dont-use-terrain-engine]]).
 
-*Do not* migrate Cobra onto the chunk streamer. If a later mode needs a 100 km+ world, that is
-when the streamer gets shared.
+*Do not* migrate Cobra onto the chunk streamer — but do not leave the trigger vague either.
+**Adopt the streamer for a mode when any of these becomes true:** the world exceeds ~30 km on a
+side; the terrain needs real DEM data rather than an analytic height function; or the single-mesh
+vertex spacing can no longer resolve authored features (Cobra is at 105 m today and a village
+needs ~5 m). Until then a 16 km analytic basin in one draw call is the correct implementation,
+not a shortcut. Record this trigger so the next agent does not re-litigate it.
 
 ---
 
-**Stage 3 — Bake the albedo; texture the ground. ~3–5 days. Measured 9.7× cheaper (§7).**
+**Stage 3 — Bake the albedo; texture the ground. ~3–5 days. 9.7× cheaper in the §7 harness.**
+
+*(That ratio is a synthetic fullscreen measurement, not the production path. Re-measure in-scene
+before quoting it as a shipped win.)*
 
 Replace the per-fragment analytic albedo chain with:
 
@@ -378,7 +412,10 @@ better than acceptable.** The proposed `tools/assets/generators/terrain-textures
 - **Provenance is trivially clean.** No diffusion model, no third-party image, no prompt. The
   source of record is a shader already in the repo, exactly the shape `SOURCES.md` v3 documents
   for the menu posters ("no image-generation model was used").
-- **Zero look risk.** Stage 3 can ship at pixel parity by construction (§7 demonstrates it).
+- **Near-zero look risk.** Because the bake evaluates the shader we already ship, stage 3 starts
+  from the current look rather than a new one. Not *pixel* parity — the bake is resolution-limited
+  at the macro scale and mip-filtered in the far field (§7) — but the delta is bounded, visible in
+  a diff, and in the far field is an improvement.
 - **It converts the expensive thing into the cheap thing.** The analytic shader stops being a
   per-frame cost and becomes an authoring tool — arguably the best possible outcome for work
   already done.
@@ -428,8 +465,21 @@ Scaled to a Retina frame (3024×1890, terrain ≈ 55% coverage, **no overdraw**)
 (§1.4) makes inevitable at low level, the analytic figure plausibly reaches **3–4 ms** — a fifth
 of a 60 fps budget, spent on arithmetic, on the most powerful consumer GPU Apple ships.
 
-*Assumptions flagged:* coverage fraction and overdraw factor are estimates, not measurements.
-The `perf-attribution` agent owns those. The 9.7× ratio does not depend on either.
+**Known biases in this harness, stated so the ratio is used correctly.** Additive blending adds
+one ROP write per pass — but it adds it to *both* shaders equally, so it inflates the floor
+(subtracted) and not the ratio. The synthetic `gl_FragCoord`→world mapping walks memory
+sequentially, which gives the texture path **better cache locality than a real terrain draw**;
+the true baked cost in-scene will be somewhat higher than 0.093 ms and the ratio somewhat lower
+than 9.7×. The harness also does **not** run the production `logarithmicDepthBuffer` path, does
+not run through Three.js, and is 100% coverage with no partial-triangle quads. And it is an M5 —
+the mobile tier is unmeasured, though §5 argues the direction there is more favourable, not less.
+
+**Use the ratio, not the absolute.** 9.7× is robust to all of the above; 0.90 ms as a frame-budget
+line is not, and is quoted here only to give the ratio a scale.
+
+*Assumptions flagged:* coverage fraction and overdraw factor are estimates, not measurements. The
+`perf-attribution` agent owns those. The published 0.093 ms is the mean of two interleaved runs;
+the single sweep printed above fits 0.091 ms.
 
 ### Appearance
 
@@ -451,9 +501,16 @@ better. It is not offered as more than that.
 
 ## 8. If there were one day
 
-Stage 0. Shadows on in Cobra Canyon and Weekend Ride, plus Weekend Ride's `scene.environment`,
-far plane and fog/background colour. No new assets, ~0.5 ms, and it is the biggest visible step
-in this entire document.
+Stage 0, instrumented. Shadows on in Cobra Canyon and Weekend Ride, plus Weekend Ride's
+`scene.environment`, far plane and fog/background colour. No new assets, and it is the biggest
+visible step in this entire document.
+
+Ship it **with a before/after frame-time capture in the same rail the `perf-attribution` agent
+is building**, not on the strength of the estimate in §2. Stage 0 is the cheapest possible
+experiment for the question the whole programme rests on — *does adding rendering work actually
+cost us frames on this machine?* — and it answers that question while also being the single
+best-looking change available. If it costs more than the estimate, that is the most valuable
+result of the day, not a failure.
 
 ---
 
