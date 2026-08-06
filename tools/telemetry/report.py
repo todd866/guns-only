@@ -288,6 +288,13 @@ def deep_funnel(sessions, visitors, refresh):
             except (OSError, ValueError, EOFError):
                 continue
             entry, state = stats[name], None
+            # rounds_fired and hits belong to the CURRENT engagement's weapon graph: continuous
+            # combat stages a fresh gun for each successor opponent, so both counters RESET at
+            # every engagement boundary and a plain max() over the tape understates the chunk
+            # total. The projection publishes monotone sortie ledgers (sortie_rounds_fired,
+            # sortie_hits); prefer them, and reconstruct across resets for older tapes.
+            reconstructed = {"rounds": 0.0, "hits": 0.0}
+            previous = {"rounds": None, "hits": None}
             for row in rows:
                 kind = row.get("k")
                 if kind == "in" and row.get("type") == "lifecycle" \
@@ -316,12 +323,26 @@ def deep_funnel(sessions, visitors, refresh):
                     sortie = state.get("telemetry_sortie_id")
                     if sortie:
                         entry["sorties"].add(sortie)
-                    for field, key in (("rounds_fired", "rounds"),
-                                       ("hits", "hits"),
-                                       ("kill_count", "kills")):
+                    value = non_negative(state.get("kill_count"))
+                    if value is not None:
+                        entry["kills"] = max(entry["kills"], value)
+                    for field, ledger_field, key in (
+                            ("rounds_fired", "sortie_rounds_fired", "rounds"),
+                            ("hits", "sortie_hits", "hits")):
+                        ledger = non_negative(state.get(ledger_field))
+                        if ledger is not None:
+                            reconstructed[key] = max(reconstructed[key], ledger)
+                            continue
                         value = non_negative(state.get(field))
-                        if value is not None:
-                            entry[key] = max(entry[key], value)
+                        if value is None:
+                            continue
+                        last = previous[key]
+                        # A drop is a new weapon graph, which starts its own count at zero.
+                        reconstructed[key] += value if last is None or value < last \
+                            else value - last
+                        previous[key] = value
+            for key in ("rounds", "hits"):
+                entry[key] = max(entry[key], reconstructed[key])
     return stats
 
 

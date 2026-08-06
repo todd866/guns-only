@@ -89,6 +89,7 @@ const TRACK_STATE_FIELDS = [
   "engagement_number", "rounds_fired", "bandit_alive",
   "time_compression_requested_factor", "time_compression_safety_factor_cap",
   "time_compression_factor", "time_compression_inhibit_reason",
+  "service_life_capture_active",
   "service_life_record_available", "service_life_record_sequence",
   "service_life_record_sha256", "service_life_evidence_status",
   "service_life_exceedance_review_required",

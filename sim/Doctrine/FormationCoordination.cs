@@ -51,6 +51,18 @@ public sealed class EnemyPairCoordinator {
     // a short, honest stale window before each refresh instead of making the stale fallback
     // reachable only by skipping hundreds of coordinator ticks in one call.
     public const int SharedContactStaleAfterTicks = EvaluationIntervalTicks;
+    // One healthy delivery period: a sample is taken every EvaluationIntervalTicks and then spends
+    // MessageDelayTicks in the radio path, so the picture age sawtooths up to exactly this value in
+    // completely normal operation.
+    public const int DeliveryPeriodTicks =
+        EvaluationIntervalTicks + MessageDelayTicks;
+    // Health-signal threshold, deliberately distinct from the BEHAVIOURAL SharedContactStaleAfterTicks
+    // above. Because the behavioural threshold equals the collection interval and the age sawtooths
+    // to a full delivery period, "stale" was true on every normal refresh cycle — the Build 264
+    // production tape carried it true in 8% of rows with a ~1.2 s period, which is the sawtooth, not
+    // a fault. A health flag has to mean a delivery was actually MISSED, so it fires only after two
+    // full delivery periods with no fresh picture (~2.47 s at 180 Hz).
+    public const int SharedContactHealthStaleAfterTicks = 2 * DeliveryPeriodTicks;
     public const double ExtendPairSeparationM = 850.0;
 
     readonly record struct PendingAssignment(
@@ -86,8 +98,14 @@ public sealed class EnemyPairCoordinator {
     public int SharedContactAgeTicks => Active
         ? AgeContact(_sharedContact, _lastTick).ObservationAgeTicks
         : 0;
+    /// Behavioural staleness: the pilot policy falls back to its own senses past this age.
+    /// True once per normal refresh cycle by construction — never publish it as a health signal.
     public bool SharedContactStale => Active
         && SharedContactAgeTicks > SharedContactStaleAfterTicks;
+    /// Health staleness: a scheduled delivery was genuinely missed. This is the one telemetry
+    /// publishes as formation_coordination_stale.
+    public bool SharedContactHealthStale => Active
+        && SharedContactAgeTicks > SharedContactHealthStaleAfterTicks;
 
     public void Reset() {
         Active = false;

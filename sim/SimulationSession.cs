@@ -130,6 +130,27 @@ public sealed class SimulationSession {
     // which is re-elected from this list when it dies.
     readonly List<Wingman> _wingmen = new();
     readonly List<RetiredOpponentGun> _retiredOpponentGuns = new();
+    // Sortie-cumulative gunnery. Every individual GunKill is per-engagement: continuous combat
+    // stages a fresh weapon graph for each successor aircraft, so rounds_fired/hits RESET at every
+    // engagement boundary and a session-wide max() over the tape understates the sortie total.
+    // These ledgers bank each gun's delta so the sortie figure is monotone, keyed by gun identity
+    // so a retired or replaced weapon keeps the rounds it already put in the air.
+    readonly Dictionary<GunKill, GunLedgerBaseline> _sortieGunLedger = new();
+    int _sortiePlayerRoundsFired;
+    int _sortiePlayerHits;
+    int _sortieOpponentRoundsFired;
+    bool _sortieLoadFactorSeen;
+    double _sortiePeakLoadFactorG;
+    double _sortieMinimumLoadFactorG;
+
+    /// Last observed counters for one physical gun, so only the increment is banked.
+    /// Rounds baseline is 0 because a fresh weapon graph always starts its own magazine at zero;
+    /// the hit baseline is whatever the gun already carried, because
+    /// GunKill.CreateForFreshShooterAgainstTargets deliberately INHERITS damage already inflicted.
+    struct GunLedgerBaseline {
+        public int Rounds;
+        public int Hits;
+    }
     // A handoff never changes Wingman semantics: _wingmen remains the enemy formation. Friendly
     // relief and the enemy guns retargeted against it live in their own authority records.
     ReliefFighter? _reliefFighter;
@@ -568,6 +589,41 @@ public sealed class SimulationSession {
     }
     /// Opponents beyond the primary — the 1v2 and beyond.
     public IReadOnlyList<Wingman> Wingmen => _wingmen;
+    /// True while ANY opponent ship — primary, wingman, retired or retargeted — has its trigger
+    /// down with a usable gun. The primary-only OpponentTriggerDown answers a narrower question.
+    public bool FormationOpponentGunFiring {
+        get {
+            if (!OpponentPresent || !PlayerAlive) return false;
+            if (_opponentTriggerDown
+                && _opponentGun is not null
+                && _opponentGun.AmmoRemaining > 0
+                && _opponentTerminalState == AircraftTerminalState.Flying)
+                return true;
+            foreach (Wingman wingman in _wingmen)
+                if (wingman.TriggerDown
+                    && wingman.StillFighting
+                    && wingman.Gun.AmmoRemaining > 0)
+                    return true;
+            return false;
+        }
+    }
+    /// Rounds the PLAYER has fired across the whole sortie. Unlike `rounds_fired`, which is the
+    /// current engagement's weapon graph and resets at every engagement boundary, this is monotone.
+    public int SortiePlayerRoundsFired => _sortiePlayerRoundsFired;
+    /// Rounds the PLAYER has put into opponents across the whole sortie. Monotone; `hits` is not.
+    public int SortiePlayerHits => _sortiePlayerHits;
+    /// Rounds every opponent ship has fired across the whole sortie — primary, wingmen, retired
+    /// guns and retargeted relief guns. Monotone; `opponent_rounds_fired` is the PRIMARY'S current
+    /// gun only and resets at every engagement boundary.
+    public int SortieOpponentRoundsFired => _sortieOpponentRoundsFired;
+    /// Peak and trough normal load factor the player has flown this sortie. Airframe-agnostic and
+    /// always live — the RapierServiceLife record is captured only on scripted-intercept missions
+    /// and only exists once one has been finalized, which is why service_life_max_g reads 0 on an
+    /// ordinary fighter sortie no matter how hard it was flown.
+    public double SortiePeakLoadFactorG =>
+        _sortieLoadFactorSeen ? _sortiePeakLoadFactorG : 0.0;
+    public double SortieMinimumLoadFactorG =>
+        _sortieLoadFactorSeen ? _sortieMinimumLoadFactorG : 0.0;
     /// Formation slot selected for the player's gun sight: 0 is the primary and 1..N are the
     /// additional contacts in their stable browser/render order.
     public int SelectedPlayerGunTargetSlot {
@@ -731,7 +787,17 @@ public sealed class SimulationSession {
         _enemyPairCoordinator.Active
             ? _enemyPairCoordinator.SharedContactAgeTicks * FixedDeltaSeconds
             : null;
+    /// Genuine coordination staleness — a scheduled shared-picture delivery was MISSED.
+    /// Deliberately NOT EnemyPairCoordinator.SharedContactStale, which is the behavioural fallback
+    /// threshold and is true once per normal refresh cycle by construction.
     public bool FormationCoordinationStale =>
+        _enemyPairCoordinator.Active
+        && _enemyPairCoordinator.SharedContactHealthStale;
+    /// The BEHAVIOURAL fallback window: the shared picture is older than the collection interval,
+    /// so each pilot flies on its own senses until the next delivery lands. Entered once per
+    /// refresh cycle in completely normal operation, which is exactly why it is not published as
+    /// formation_coordination_stale.
+    public bool FormationCoordinationBehaviourFallback =>
         _enemyPairCoordinator.Active
         && _enemyPairCoordinator.SharedContactStale;
     public int EngagementNumber => _engagementNumber;
@@ -3135,6 +3201,13 @@ public sealed class SimulationSession {
         _shotsTotal = 0;
         _shotsInWindow = 0;
         _killCount = 0;
+        _sortieGunLedger.Clear();
+        _sortiePlayerRoundsFired = 0;
+        _sortiePlayerHits = 0;
+        _sortieOpponentRoundsFired = 0;
+        _sortieLoadFactorSeen = false;
+        _sortiePeakLoadFactorG = 0.0;
+        _sortieMinimumLoadFactorG = 0.0;
         _combatHandoffPhase = SupportsCombatHandoff
             ? CombatHandoffPhase.Available
             : CombatHandoffPhase.Unavailable;
@@ -5308,6 +5381,9 @@ public sealed class SimulationSession {
     }
 
     void AccumulateEngagementCounters() {
+        // Deliberately before the engagement-active guard: the sortie ledgers span engagements and
+        // must keep counting between them, which is the whole point of having them.
+        AccumulateSortieLedgers();
         if (!_engagementCounters.Active) return;
         _engagementCounters.DurationSeconds += FixedDeltaSeconds;
         if ((_opponentTerminalState == AircraftTerminalState.Flying
@@ -5315,6 +5391,57 @@ public sealed class SimulationSession {
             || _wingmen.Any(static wingman =>
                 wingman.StillFighting && wingman.Gun.GunSolution))
             _engagementCounters.SolutionSecondsConceded += FixedDeltaSeconds;
+    }
+
+    /// Bank this tick's gunnery increments and the load-factor envelope. Called every stepped tick
+    /// on every sortie shape, including the ones that stage no opponent.
+    void AccumulateSortieLedgers() {
+        if (_playerTerminalState == AircraftTerminalState.Flying) {
+            double loadFactor = _player.LastNz;
+            if (double.IsFinite(loadFactor)) {
+                if (!_sortieLoadFactorSeen) {
+                    _sortieLoadFactorSeen = true;
+                    _sortiePeakLoadFactorG = loadFactor;
+                    _sortieMinimumLoadFactorG = loadFactor;
+                } else {
+                    if (loadFactor > _sortiePeakLoadFactorG)
+                        _sortiePeakLoadFactorG = loadFactor;
+                    if (loadFactor < _sortieMinimumLoadFactorG)
+                        _sortieMinimumLoadFactorG = loadFactor;
+                }
+            }
+        }
+        if (!OpponentPresent) return;
+        if (_gunKill is not null) {
+            (int rounds, int hits) = BankGun(_gunKill);
+            _sortiePlayerRoundsFired += rounds;
+            _sortiePlayerHits += hits;
+        }
+        if (_opponentGun is not null)
+            _sortieOpponentRoundsFired += BankGun(_opponentGun).Rounds;
+        foreach (Wingman wingman in _wingmen)
+            _sortieOpponentRoundsFired += BankGun(wingman.Gun).Rounds;
+        foreach (RetiredOpponentGun retired in _retiredOpponentGuns)
+            _sortieOpponentRoundsFired += BankGun(retired.Gun).Rounds;
+        foreach (ReliefTargetingOpponentGun relief in
+            _reliefTargetingOpponentGuns.Values)
+            _sortieOpponentRoundsFired += BankGun(relief.Gun).Rounds;
+    }
+
+    (int Rounds, int Hits) BankGun(GunKill gun) {
+        if (!_sortieGunLedger.TryGetValue(gun, out GunLedgerBaseline baseline)) {
+            // A fresh weapon graph always starts its own magazine at zero rounds, so a zero rounds
+            // baseline loses nothing. Inflicted damage is deliberately inherited across a shooter
+            // swap, so hits must baseline at what the gun already carries or the swap double-counts.
+            baseline = new GunLedgerBaseline { Rounds = 0, Hits = gun.TotalHitCount };
+        }
+        int rounds = Math.Max(0, gun.RoundsFired - baseline.Rounds);
+        int hits = Math.Max(0, gun.TotalHitCount - baseline.Hits);
+        _sortieGunLedger[gun] = new GunLedgerBaseline {
+            Rounds = gun.RoundsFired,
+            Hits = gun.TotalHitCount
+        };
+        return (rounds, hits);
     }
 
     void CompleteEngagementIfEnded() {

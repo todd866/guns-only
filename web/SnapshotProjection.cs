@@ -33,6 +33,12 @@ internal static class SnapshotProjection {
     const string KoreaPackId = "korea-1950s";
     const string KoreaPackVersion = "0.4.0";
     const string KoreaPackUri = "content/packs/korea-1950s/pack.json";
+    // Deliberately NOT bumped for the 2026-08-06 per-contact gunnery block. This string is a
+    // CONTENT-PACK COMPATIBILITY HANDSHAKE, not a wire-shape stamp: app.js `activatePack` refuses
+    // any pack whose `compatibility.snapshotSchemaVersion` differs from this value and silently
+    // falls back to procedural presentation. Bumping it is therefore a coordinated pack release.
+    // The change was purely additive, so the wire-shape signals are SnapshotHotFrame.LayoutVersion
+    // (22 -> 23) and ordinary feature detection of the new keys in archived JSON rows.
     const string SnapshotSchemaVersion = "1.26.0";
     const string KoreaPresentationProfileId = "presentation.korea-1950s.fixed-wing.v1";
     const string KoreaVisualProfileId = "visual.korea-1950s.default.v1";
@@ -113,6 +119,10 @@ internal static class SnapshotProjection {
             : "null";
         bool lateralControlApplied = _player.HasAppliedFlightCommand;
         GunKill? _gunKill = opponentPresent ? Session.PlayerGun : null;
+        // The PRIMARY opponent's gun — one ship, not the formation. Every `opponent_*` weapon field
+        // derived from this is therefore a lead-only lower bound on what the enemy formation fired,
+        // and it resets when continuous combat stages a successor. Per-ship truth lives in the
+        // w1_*/w2_*/w3_* gunnery fields; sortie-wide truth in sortie_opponent_rounds_fired.
         GunKill? _opponentGun = opponentPresent ? Session.OpponentGun : null;
         GunProfile playerGunProfile = _gunKill?.Profile
             ?? _beat.CombatRules.PlayerGunProfile;
@@ -443,6 +453,13 @@ internal static class SnapshotProjection {
             + $"\"time_compression_inhibit_reason\":\"{TimeCompressionInhibitToken(Session.TimeCompressionInhibitReason)}\","
             + $"\"simulation_time_s\":{simulationTimeSeconds:F3},"
             + $"\"rapier_mission_available\":{(Session.RapierMissionAvailable ? "true" : "false")},"
+            // SCOPE: every service_life_* field below is read off the most recently FINALIZED
+            // RapierServiceLifeSortieRecord. Capture only ever begins on a scripted-intercept
+            // (Rapier) mission and the record only exists once that sortie has ended, so on an
+            // ordinary fighter sortie the whole block reads its zero default no matter how the jet
+            // was flown. service_life_capture_active makes that legible instead of silent; the
+            // always-live load-factor envelope is sortie_peak_g / sortie_min_g.
+            + $"\"service_life_capture_active\":{(Session.RapierServiceLife.Active ? "true" : "false")},"
             + $"\"service_life_record_available\":{(serviceLife is not null ? "true" : "false")},"
             + $"\"service_life_record_sequence\":{serviceLife?.RecordSequence ?? 0L},"
             + $"\"service_life_record_sha256\":{JsonString(serviceLife?.RecordSha256 ?? "")},"
@@ -663,6 +680,10 @@ internal static class SnapshotProjection {
             + $"\"stall_load_factor\":{positiveLoadFactor:F3},\"alt_ft\":{playerPosition.Y * 3.28084:F1},"
             + $"\"radar_alt_ft\":{radarAltitudeM * 3.28084:F1},\"vertical_speed_fpm\":{verticalSpeedMps * 196.8504:F1},"
             + $"\"g_actual\":{_player.LastNz:F3},\"g_cmd\":{appliedCommand.GDemand:F3},"
+            // Sortie-wide load-factor envelope. Airframe-agnostic and always live, unlike
+            // service_life_max_g, which is Rapier-record scoped and reads 0 on a fighter sortie.
+            + $"\"sortie_peak_g\":{Session.SortiePeakLoadFactorG:F3},"
+            + $"\"sortie_min_g\":{Session.SortieMinimumLoadFactorG:F3},"
             + $"\"pilot_physiology_profile_id\":{pilotPhysiologyProfileIdJson},"
             + $"\"pilot_state\":\"{pilotState}\","
             + $"\"pilot_gz\":{pilotPhysiology.NormalAccelerationG:F4},"
@@ -810,9 +831,19 @@ internal static class SnapshotProjection {
             + $"\"player_health\":{Session.PlayerHealth:F3},\"player_alive\":{(Session.PlayerAlive ? "true" : "false")},"
             + $"\"opponent_ammo\":{(opponentPresent ? _opponentGun!.AmmoRemaining : 0)},"
             + $"\"opponent_gun_profile_id\":{JsonString(opponentPresent ? _opponentGun!.Profile.Id : null)},"
+            // SCOPE, and it is not uniform across this block — read the doc comment on _opponentGun.
+            // `opponent_rounds_fired` / `_trigger_down` / `_gun_firing` / `_ammo` are the PRIMARY
+            // opponent's CURRENT gun only, and reset with it at every engagement boundary.
+            // `opponent_hits` is SESSION-WIDE (rounds the player has taken from anyone).
+            // `opponent_tracers` is FORMATION-WIDE. The honest per-ship and sortie-wide answers are
+            // the w1_*/w2_*/w3_* gunnery fields and the sortie_* ledgers below.
             + $"\"opponent_rounds_fired\":{(opponentPresent ? _opponentGun!.RoundsFired : 0)},\"opponent_hits\":{(opponentPresent ? Session.PlayerHitsTaken : 0)},"
             + $"\"opponent_trigger_down\":{(opponentPresent && Session.OpponentTriggerDown ? "true" : "false")},"
             + $"\"opponent_gun_firing\":{(opponentPresent && Session.OpponentTriggerDown && _opponentGun!.AmmoRemaining > 0 && Session.PlayerAlive ? "true" : "false")},"
+            + $"\"formation_gun_firing\":{(Session.FormationOpponentGunFiring ? "true" : "false")},"
+            + $"\"sortie_rounds_fired\":{Session.SortiePlayerRoundsFired},"
+            + $"\"sortie_hits\":{Session.SortiePlayerHits},"
+            + $"\"sortie_opponent_rounds_fired\":{Session.SortieOpponentRoundsFired},"
             + TracerJson("opponent_tracers", opponentPresent
                 ? Session.FormationOpponentRoundsInFlight : Array.Empty<GunRound>())
             + CombatEventsJson()
@@ -1359,7 +1390,8 @@ internal static class SnapshotProjection {
                 + $"\"{prefix}fy\":0.00000,"
                 + $"\"{prefix}fz\":{fz.ToString("F5", culture)},"
                 + $"\"{prefix}lx\":0.00000,\"{prefix}ly\":1.00000,"
-                + $"\"{prefix}lz\":0.00000,\"{prefix}_alive\":1,";
+                + $"\"{prefix}lz\":0.00000,\"{prefix}_alive\":1,"
+                + NoWingmanGunneryJson(prefix);
         }
         if (wingman is null)
             return $"\"{prefix}_present\":0,\"{prefix}x\":0.000,"
@@ -1367,7 +1399,8 @@ internal static class SnapshotProjection {
                 + $"\"{prefix}fx\":0.00000,\"{prefix}fy\":1.00000,"
                 + $"\"{prefix}fz\":0.00000,\"{prefix}lx\":0.00000,"
                 + $"\"{prefix}ly\":1.00000,\"{prefix}lz\":0.00000,"
-                + $"\"{prefix}_alive\":0,";
+                + $"\"{prefix}_alive\":0,"
+                + NoWingmanGunneryJson(prefix);
         AircraftState state = wingman.Bandit.State;
         Vec3D forward = state.ForwardDir();
         Vec3D lift = wingman.Bandit.LiftDir;
@@ -1382,8 +1415,22 @@ internal static class SnapshotProjection {
             + $"\"{prefix}lx\":{lift.X.ToString("F5", invariant)},"
             + $"\"{prefix}ly\":{lift.Y.ToString("F5", invariant)},"
             + $"\"{prefix}lz\":{lift.Z.ToString("F5", invariant)},"
-            + $"\"{prefix}_alive\":{(wingman.StillFighting ? 1 : 0)},";
+            + $"\"{prefix}_alive\":{(wingman.StillFighting ? 1 : 0)},"
+            + $"\"{prefix}_ammo\":{wingman.Gun.AmmoRemaining},"
+            + $"\"{prefix}_rounds_fired\":{wingman.Gun.RoundsFired},"
+            + $"\"{prefix}_hits\":{wingman.Gun.TotalHitCount},"
+            + $"\"{prefix}_trigger_down\":{(wingman.TriggerDown ? 1 : 0)},"
+            + $"\"{prefix}_gun_firing\":{(wingman.TriggerDown
+                && wingman.StillFighting
+                && wingman.Gun.AmmoRemaining > 0
+                && Session.PlayerAlive ? 1 : 0)},";
     }
+
+    /// Per-contact gunnery for a slot that carries no fighting aircraft. Kept beside the live
+    /// encoder so the two can never disagree on field set or order.
+    static string NoWingmanGunneryJson(string prefix) =>
+        $"\"{prefix}_ammo\":0,\"{prefix}_rounds_fired\":0,\"{prefix}_hits\":0,"
+        + $"\"{prefix}_trigger_down\":0,\"{prefix}_gun_firing\":0,";
 
     /// Released Rapier reusable gun-drone while it remains active. Mirrors SnapshotHotFrame's rd1
     /// block field-for-field so golden tests can keep JSON and the hot buffer in lockstep.

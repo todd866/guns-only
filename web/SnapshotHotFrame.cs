@@ -43,7 +43,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 22;
+    public const int LayoutVersion = 23;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -132,6 +132,7 @@ internal static class SnapshotHotFrame {
         Bool("rapier_mission_available");
         Bool("service_life_record_available");
         Num("service_life_record_sequence", RawInteger);
+        Bool("service_life_capture_active");
         Bool("service_life_exceedance_review_required");
         Num("service_life_over_structural_limit_s", 3);
         Num("service_life_over_dynamic_pressure_s", 3);
@@ -237,6 +238,14 @@ internal static class SnapshotHotFrame {
             Num($"{prefix}fx", 5); Num($"{prefix}fy", 5); Num($"{prefix}fz", 5);
             Num($"{prefix}lx", 5); Num($"{prefix}ly", 5); Num($"{prefix}lz", 5);
             Num($"{prefix}_alive", RawInteger);
+            // Per-contact gunnery. Without these, only the PRIMARY opponent's fire was observable
+            // and "the bandit never shoots" could not be told apart from "the wingman shot and we
+            // never measured it". Encoded as raw integers to match this block's 1/0 flag style.
+            Num($"{prefix}_ammo", RawInteger);
+            Num($"{prefix}_rounds_fired", RawInteger);
+            Num($"{prefix}_hits", RawInteger);
+            Num($"{prefix}_trigger_down", RawInteger);
+            Num($"{prefix}_gun_firing", RawInteger);
         }
         Nul("formation_coordination_age_s", 3);
         Bool("formation_coordination_stale");
@@ -295,6 +304,8 @@ internal static class SnapshotHotFrame {
         Num("corner_speed_kcas", 2);
         Num("effective_on_speed_aoa_deg", 3);
         Num("stall_load_factor", 3);
+        Num("sortie_peak_g", 3);
+        Num("sortie_min_g", 3);
         Num("alt_ft", 1);
         Num("radar_alt_ft", 1);
         Num("vertical_speed_fpm", 1);
@@ -432,6 +443,10 @@ internal static class SnapshotHotFrame {
         Num("opponent_hits", RawInteger);
         Bool("opponent_trigger_down");
         Bool("opponent_gun_firing");
+        Bool("formation_gun_firing");
+        Num("sortie_rounds_fired", RawInteger);
+        Num("sortie_hits", RawInteger);
+        Num("sortie_opponent_rounds_fired", RawInteger);
         Tracers("opponent_tracers");
         Num("kill_count", RawInteger);
         Num("engagement_number", RawInteger);
@@ -1030,6 +1045,7 @@ internal static class SnapshotHotFrame {
         w.Bool("service_life_record_available", serviceLife is not null);
         w.Num("service_life_record_sequence",
             serviceLife?.RecordSequence ?? 0L, RawInteger);
+        w.Bool("service_life_capture_active", session.RapierServiceLife.Active);
         w.Bool("service_life_exceedance_review_required",
             serviceLife?.ExceedanceReviewRequired == true);
         w.Num("service_life_over_structural_limit_s",
@@ -1233,6 +1249,8 @@ internal static class SnapshotHotFrame {
         w.Num("effective_on_speed_aoa_deg",
             detents.EffectiveOnSpeedAoARad(beat.PlayerAir) * 57.29577951308232, 3);
         w.Num("stall_load_factor", positiveLoadFactor, 3);
+        w.Num("sortie_peak_g", session.SortiePeakLoadFactorG, 3);
+        w.Num("sortie_min_g", session.SortieMinimumLoadFactorG, 3);
         w.Num("alt_ft", playerPosition.Y * 3.28084, 1);
         w.Num("radar_alt_ft", radarAltitudeM * 3.28084, 1);
         w.Num("vertical_speed_fpm", verticalSpeedMps * 196.8504, 1);
@@ -1414,6 +1432,11 @@ internal static class SnapshotHotFrame {
             opponentPresent && session.OpponentTriggerDown);
         w.Bool("opponent_gun_firing", opponentPresent && session.OpponentTriggerDown
             && opponentGun!.AmmoRemaining > 0 && session.PlayerAlive);
+        w.Bool("formation_gun_firing", session.FormationOpponentGunFiring);
+        w.Num("sortie_rounds_fired", session.SortiePlayerRoundsFired, RawInteger);
+        w.Num("sortie_hits", session.SortiePlayerHits, RawInteger);
+        w.Num("sortie_opponent_rounds_fired",
+            session.SortieOpponentRoundsFired, RawInteger);
         w.Tracers("opponent_tracers", opponentPresent
             ? session.FormationOpponentRoundsInFlight : Array.Empty<GunRound>());
         w.Num("kill_count", session.KillCount, RawInteger);
@@ -2060,6 +2083,7 @@ internal static class SnapshotHotFrame {
             writer.Num($"{prefix}ly", 1.0, 5);
             writer.Num($"{prefix}lz", 0.0, 5);
             writer.Num($"{prefix}_alive", 1, RawInteger);
+            WriteNoWingmanGunnery(ref writer, prefix);
             return;
         }
         if (wingman is null) {
@@ -2074,6 +2098,7 @@ internal static class SnapshotHotFrame {
             writer.Num($"{prefix}ly", 1.0, 5);
             writer.Num($"{prefix}lz", 0.0, 5);
             writer.Num($"{prefix}_alive", 0, RawInteger);
+            WriteNoWingmanGunnery(ref writer, prefix);
             return;
         }
 
@@ -2091,6 +2116,25 @@ internal static class SnapshotHotFrame {
         writer.Num($"{prefix}ly", lift.Y, 5);
         writer.Num($"{prefix}lz", lift.Z, 5);
         writer.Num($"{prefix}_alive", wingman.StillFighting ? 1 : 0, RawInteger);
+        writer.Num($"{prefix}_ammo", wingman.Gun.AmmoRemaining, RawInteger);
+        writer.Num($"{prefix}_rounds_fired", wingman.Gun.RoundsFired, RawInteger);
+        writer.Num($"{prefix}_hits", wingman.Gun.TotalHitCount, RawInteger);
+        writer.Num($"{prefix}_trigger_down", wingman.TriggerDown ? 1 : 0, RawInteger);
+        writer.Num($"{prefix}_gun_firing",
+            wingman.TriggerDown
+                && wingman.StillFighting
+                && wingman.Gun.AmmoRemaining > 0
+                && session.PlayerAlive ? 1 : 0,
+            RawInteger);
+    }
+
+    /// Mirrors SnapshotProjection.NoWingmanGunneryJson for a slot with no fighting aircraft.
+    static void WriteNoWingmanGunnery(ref Writer writer, string prefix) {
+        writer.Num($"{prefix}_ammo", 0, RawInteger);
+        writer.Num($"{prefix}_rounds_fired", 0, RawInteger);
+        writer.Num($"{prefix}_hits", 0, RawInteger);
+        writer.Num($"{prefix}_trigger_down", 0, RawInteger);
+        writer.Num($"{prefix}_gun_firing", 0, RawInteger);
     }
 
     static void WriteRapierGunDrone(ref Writer writer, SimulationSession session) {
