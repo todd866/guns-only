@@ -580,6 +580,9 @@ test("the published Cobra Hold the Bridge route boots authority and accepts Tab/
         ammoCapacity: state?.ground_war?.ammo_capacity ?? null,
         hostiles: (state?.ground_war?.units ?? [])
           .filter((unit) => unit.alive && unit.faction === "hostile").length,
+        // The ground war's own mission clock. Everything the engagement depends on moves on
+        // THIS clock, not on the test's wall clock, so every budget below is spent in it.
+        elapsedS: state?.ground_war?.debrief?.elapsed_s ?? null,
         tick: state?.vehicle?.tick ?? -1,
         canvas: canvas ? { width: canvas.width, height: canvas.height } : null,
       };
@@ -600,47 +603,130 @@ test("the published Cobra Hold the Bridge route boots authority and accepts Tab/
     assert.ok(boot.hostiles >= 1, `Cobra boot found no living hostiles: ${JSON.stringify(boot)}`);
     assert.ok(boot.tick >= 0, `Cobra authority never ticked: ${JSON.stringify(boot)}`);
 
-    // Tab designates. Which hostile the turret can actually reach from the spawn hover is
-    // geometry, and the ground war kills units while we look, so cycle until the gunner reports a
-    // qualified track rather than assuming the first mark is engageable -- then hold F on THAT one.
-    let engaged = null;
-    for (let press = 0; press < 8 && !engaged; press += 1) {
-      await page.keyboard.press("Tab");
+    // Re-arm the tactical picture before acting, because the sortie ages in real time and the
+    // engageable picture is a SPAWN picture. Hold the Bridge seeds two hostiles on the rings
+    // around the spawn site (170 m and 200 m) and puts every other hostile on the contested
+    // sites the assault waves feed, 6.7-7.2 km away -- permanently outside the M28A1's 2 km
+    // ballistic window. The friendly garrison kills the two near ones inside the first ~20 s
+    // of MISSION time, after which no living hostile is reachable from the hover no matter how
+    // long the test looks. A quiet laptop boots in ~2 s and engages inside that window; the CI
+    // runner boots in ~40 s and finds an empty envelope, which is how run 31070089059 failed
+    // with "no designated hostile ever produced a qualified track".
+    //
+    // So drive the app's own restart -- restartRoute(), the production handler behind the play
+    // debrief's "Fly again" button and the terminal-state R key -- and fly from a fresh spawn.
+    // The ground war is deterministically seeded, so the picture at a given mission second is
+    // identical on every machine; re-spawning makes MISSION time since restart, not wall time
+    // since page load, the only clock this engagement rides on. That is what makes the test
+    // speed-invariant: a slow runner spends more wall time per mission second, never more
+    // mission seconds before it acts.
+    const restartSortie = async () => {
+      const beforeS = (await readHud()).elapsedS;
+      assert.ok(Number.isFinite(beforeS), "the ground war reports no mission clock");
+      await page.evaluate(() => {
+        const restart = document.querySelector("#reset");
+        if (!restart) throw new Error("the Cobra restart control is gone");
+        restart.click();
+      });
       await page.waitForFunction(
-        () => !!window.__gunsOnlyCobraAuthority?.gunner?.selected_target_id,
-        undefined,
-        { timeout: scaled(10000) },
+        (prior) => {
+          const elapsed = window.__gunsOnlyCobraAuthority?.ground_war?.debrief?.elapsed_s;
+          return Number.isFinite(elapsed) && elapsed < prior;
+        },
+        beforeS,
+        { timeout: scaled(20000) },
       );
-      const designated = await readHud();
-      assert.ok(designated.gunner.selected_target_id,
-        "Tab did not reach the gunner authority");
-      // The ground war keeps killing units, so a mark can die between the press and this read.
-      // That is the authority being honest, not a HUD defect: take the next one.
-      if (designated.gunner.reason === "TargetUnavailable") continue;
-      assert.match(designated.model.gunner.detail, /TGT\s+\S+/,
-        `the combiner is not carrying the designated target: ${
-          JSON.stringify(designated.model.gunner)}`);
-      assert.equal(designated.model.designation?.id, designated.gunner.selected_target_id,
-        "the designation bracket and the authority disagree about the mark");
-      assert.ok(Number.isFinite(designated.model.designation?.rangeM)
-        && designated.model.designation.rangeM > 0,
-      `designation has no slant range: ${JSON.stringify(designated.model.designation)}`);
-      try {
-        // The ready cue, exactly: a qualified track whose ONLY remaining inhibit is the trigger.
-        // "tracking" alone is reached while the turret is still slewing onto the sight line.
+      const fresh = await readHud();
+      // Prove the restart actually re-spawned rather than silently no-opping: the mission clock
+      // went backwards to the start line and the magazine is whole again.
+      assert.ok(fresh.elapsedS < beforeS && fresh.elapsedS < 3,
+        `restart did not reset the mission clock: ${beforeS} -> ${fresh.elapsedS}`);
+      assert.equal(fresh.ammo, fresh.ammoCapacity,
+        `restart did not restore the magazine: ${JSON.stringify(fresh)}`);
+      assert.ok(fresh.hostiles >= 1,
+        `a fresh sortie seeded no hostiles: ${JSON.stringify(fresh)}`);
+      return fresh;
+    };
+
+    // Reasons that mean the mount is working the problem and time will resolve it. Every other
+    // reason (Masked, OutOfLimits, NoBallisticSolution, FriendlyTarget, TargetUnavailable) is a
+    // standing geometric verdict from the authority itself: waiting on it only burns the window,
+    // so take the next mark immediately instead.
+    const WORKING_REASONS = new Set(["Acquiring", "SightNotCoincident", "ConsentReleased"]);
+    // Budgets in mission seconds, not wall seconds. The seeded pair lives ~20 s; qualifying a
+    // track costs 0.75 s of acquisition plus <1.4 s of turret slew (80 deg/s across the 110 deg
+    // flexible envelope), so 14 s is several times the cost of the whole search.
+    const ENGAGEMENT_WINDOW_S = 14;
+
+    // Tab designates. Which hostile the turret can reach is geometry and the ground war keeps
+    // killing units, so cycle until the gunner reports a qualified track rather than assuming
+    // the first mark is engageable -- then hold F on THAT one. If a whole cycle finds nothing
+    // before the window shuts, take a fresh sortie and cycle again.
+    let engaged = null;
+    const attempted = [];
+    for (let sortie = 0; sortie < 4 && !engaged; sortie += 1) {
+      const fresh = await restartSortie();
+      for (let press = 0; press <= fresh.hostiles && !engaged; press += 1) {
+        await page.keyboard.press("Tab");
+        // Wait for the authority to acknowledge THIS mark, not merely to hold some mark: the
+        // designation is pushed to the bridge on the next rendered frame, and on a slow runner
+        // a read taken before that frame reports the previous target's reason chain.
         await page.waitForFunction(
-          () => window.__gunsOnlyCobraAuthority?.gunner?.state === "tracking"
-            && window.__gunsOnlyCobraAuthority?.gunner?.reason === "ConsentReleased",
+          () => {
+            const chosen = document.querySelector("#target")?.value ?? "";
+            return chosen !== ""
+              && window.__gunsOnlyCobraAuthority?.gunner?.selected_target_id === chosen;
+          },
           undefined,
-          { timeout: scaled(4000) },
+          { timeout: scaled(20000) },
         );
-        engaged = await readHud();
-      } catch {
-        // Masked, out of limits or still dying: try the next mark.
+        const designated = await readHud();
+        assert.ok(designated.gunner.selected_target_id,
+          "Tab did not reach the gunner authority");
+        attempted.push({
+          id: designated.gunner.selected_target_id,
+          reason: designated.gunner.reason,
+          atMissionS: Number(designated.elapsedS?.toFixed?.(1) ?? designated.elapsedS),
+        });
+        // The ground war keeps killing units, so a mark can die between the press and this read.
+        // That is the authority being honest, not a HUD defect: take the next one.
+        if (designated.gunner.reason === "TargetUnavailable") continue;
+        assert.match(designated.model.gunner.detail, /TGT\s+\S+/,
+          `the combiner is not carrying the designated target: ${
+            JSON.stringify(designated.model.gunner)}`);
+        assert.equal(designated.model.designation?.id, designated.gunner.selected_target_id,
+          "the designation bracket and the authority disagree about the mark");
+        assert.ok(Number.isFinite(designated.model.designation?.rangeM)
+          && designated.model.designation.rangeM > 0,
+        `designation has no slant range: ${JSON.stringify(designated.model.designation)}`);
+        // Out of the spawn window: this sortie has nothing left to offer, take a fresh one.
+        if (designated.elapsedS > ENGAGEMENT_WINDOW_S) break;
+        if (!WORKING_REASONS.has(designated.gunner.reason)) continue;
+        try {
+          // The ready cue, exactly: a qualified track whose ONLY remaining inhibit is the
+          // trigger. "tracking" alone is reached while the turret is still slewing onto the
+          // sight line. The budget is a mission-clock deadline, so a slow runner gets all the
+          // wall time it needs to reach the same 14 mission seconds a fast one gets.
+          await page.waitForFunction(
+            (deadlineS) => {
+              const state = window.__gunsOnlyCobraAuthority;
+              const elapsed = state?.ground_war?.debrief?.elapsed_s ?? 0;
+              if (elapsed > deadlineS) throw new Error("engagement window shut");
+              return state?.gunner?.state === "tracking"
+                && state?.gunner?.reason === "ConsentReleased";
+            },
+            ENGAGEMENT_WINDOW_S,
+            { timeout: scaled(30000) },
+          );
+          engaged = await readHud();
+        } catch {
+          // Masked, out of limits, still dying, or the window shut: try the next mark.
+        }
       }
     }
     assert.ok(engaged,
-      "no designated hostile ever produced a qualified track from the spawn hover");
+      "no designated hostile ever produced a qualified track from a fresh spawn hover; "
+      + `marks tried: ${JSON.stringify(attempted)}`);
     // Trigger up, the crew says so in as many words. This is the state F has to change.
     assert.equal(engaged.gunner.reason, "ConsentReleased");
     assert.equal(engaged.model.gunner.line, "GUN ON TARGET — HOLD F");
