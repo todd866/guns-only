@@ -87,8 +87,28 @@ test("builds one bounded authored batch per visual role across every tier", () =
       assert.equal(kit.roleCounts[`${role}Instances`], mesh.count);
       assert.ok(mesh.userData.cobraCanyonInstances.every((entry) => entry.archetypeId));
     }
-    assert.ok(triangleCount(meshes.get("jungle").geometry) >= 72,
-      "jungle stands need a readable multi-lobed canopy silhouette");
+    // A CANOPY IS COUNTED IN LOBES, NOT IN TRIANGLES. This used to assert a 72-triangle floor,
+    // which pinned the exact shape rather than the property that matters and blocked the cheaper
+    // five-sided interlocking stand that buys the extra instances density actually needs. Each
+    // lobe contributes one crown apex shared by exactly `sides` fan triangles, so counting
+    // apexes measures the silhouette directly.
+    const jungleGeometry = meshes.get("jungle").geometry;
+    const jungleVertices = jungleGeometry.getAttribute("position");
+    const vertexUses = new Map();
+    for (let index = 0; index < jungleVertices.count; index++) {
+      const key = [
+        jungleVertices.getX(index),
+        jungleVertices.getY(index),
+        jungleVertices.getZ(index),
+      ].join(",");
+      vertexUses.set(key, (vertexUses.get(key) ?? 0) + 1);
+    }
+    const crownApexes = [...vertexUses].filter(([key, uses]) =>
+      uses >= 5 && Number(key.split(",")[1]) > 0.4);
+    assert.ok(crownApexes.length >= 5,
+      `jungle stands need a multi-lobed canopy silhouette (${crownApexes.length} crowns)`);
+    assert.ok(triangleCount(jungleGeometry) >= 40,
+      "jungle stands must stay solid enough to read as mass");
     assert.ok(triangleCount(meshes.get("plantation").geometry) >= 100,
       "plantation rows need trunks and crowns instead of marker pyramids");
     assert.deepEqual(visibleMetrics(kit.group), kit.builtMetrics);

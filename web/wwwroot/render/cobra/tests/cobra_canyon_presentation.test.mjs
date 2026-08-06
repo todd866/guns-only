@@ -141,6 +141,41 @@ function assertUnitEnvelope(geometry, label) {
   assert.ok(Math.abs(box.max.z - 0.5) < 1e-6, `${label} max.z`);
 }
 
+test("the drawn basin never stands proud of the terrain the simulation flies", () => {
+  // PRESENTATION MUST NOT OUTRUN THE KERNEL. CobraCanyonTerrainSurface (sim/Cobra) flies the
+  // aircraft over the analytic field; the browser draws a triangle mesh sampled from it. Where the
+  // field is convex — every gorge rim and ridge crest — a chord across a 133 m quad sits ABOVE the
+  // surface, and the pilot flies into a hill the sim does not have. Sharpening the gorge put 20 m
+  // of that error onto the ridge-shadow route, half its recommended AGL band, which is what forced
+  // the neighbourhood-minimum vertex bias in basinVertexHeight. This test is that bias's contract:
+  // along every authored route, at every tier, the drawn ground stays at or below simulated ground
+  // within a margin far under the lowest recommended AGL band (10 m, road-plantation).
+  const MAXIMUM_OVERSHOOT_M = 6;
+  for (const qualityTier of QUALITY_TIERS) {
+    const plan = planCobraCanyonWorld(world, { qualityTier });
+    let worstM = -Infinity;
+    let worstAt = null;
+    for (const lane of plan.routeLanes) {
+      for (let index = 0; index < lane.pathLocalM.length - 1; index++) {
+        const from = lane.pathLocalM[index];
+        const to = lane.pathLocalM[index + 1];
+        for (let blend = 0; blend <= 1; blend += 0.004) {
+          const eastM = from[0] + (to[0] - from[0]) * blend;
+          const northM = from[2] + (to[2] - from[2]) * blend;
+          const overshootM = sampleCobraCanyonRenderedBasinHeight(plan, qualityTier, eastM, northM)
+            - sampleCobraCanyonTerrain(plan, eastM, northM);
+          if (overshootM > worstM) {
+            worstM = overshootM;
+            worstAt = `${eastM.toFixed(0)},${northM.toFixed(0)}`;
+          }
+        }
+      }
+    }
+    assert.ok(worstM <= MAXIMUM_OVERSHOOT_M,
+      `${qualityTier} drawn basin stands ${worstM.toFixed(2)} m proud of simulated ground at ${worstAt}`);
+  }
+});
+
 test("builds the real analytical basin and stays inside every tier ceiling", () => {
   for (const qualityTier of QUALITY_TIERS) {
     const { plan, presentation } = create(qualityTier);
@@ -417,8 +452,18 @@ test("ambient rungs and AGL shed only deterministic asset prefixes", () => {
   assets.get("jungle").getMatrixAt(0, firstMatrix);
   firstMatrix.decompose(firstPosition, firstQuaternion, firstScale);
   const firstGroundM = sampleCobraCanyonTerrain(plan, firstPosition.x, -firstPosition.z);
-  assert.ok(Math.abs(firstPosition.y - firstGroundM) < 1e-4,
-    "asset instances must sit on the analytical terrain instead of floating above it");
+  // The invariant is ONE-SIDED, and it has to be: an instance may be bedded INTO the hill but
+  // never lifted off it. Canopy placement deliberately seeks steep ground, and a stand anchored
+  // exactly at its centre sample cantilevers off a gorge wall — the visible artefact is a grove
+  // hanging in mid-air on the downhill side. Seating sinks each instance by the drop across its
+  // own half-width, so the uphill skirt buries and the downhill skirt meets the slope. The bound
+  // below is that half-width drop plus slack; anything deeper is a placement bug, and anything
+  // above ground is the float this assertion was written to catch.
+  assert.ok(firstPosition.y <= firstGroundM + 1e-4,
+    "asset instances must never float above the analytical terrain");
+  const firstFootprintM = Math.max(firstScale.x, firstScale.z) * 0.5;
+  assert.ok(firstGroundM - firstPosition.y <= firstFootprintM + 1e-3,
+    "asset instances must not be buried deeper than their own footprint drop");
 
   for (const level of [0, 1, 2]) {
     presentation.update({

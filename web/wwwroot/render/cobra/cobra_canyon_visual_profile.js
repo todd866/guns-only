@@ -47,8 +47,15 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
   // one knob (density = 1.87 / radius, adaptive-world-radius doctrine): 5.5e-5 implies a ~34 km
   // readable world, comfortably past this 16 km theatre's rim.
   fog: Object.freeze({
-    color: 0x6f8790,
-    density: 0.000055,
+    color: 0x8a9fa5,
+    // HUMID AIR, NOT CLEAR AIR. The F-22's clear-air 5.5e-5 implies a ~34 km readable world; over
+    // a 16 km theatre nothing recedes, so every ridge rendered at full contrast to the world edge
+    // and depth had to come from geometry alone. Owner reference (Battlefield Vietnam, 2026-08-06)
+    // is layered ridgelines dissolving into sky — aerial perspective is the signature of the
+    // theatre. 2.3e-4 is the same 1.87/radius law (adaptive-world-radius doctrine) solved for an
+    // ~8 km readable radius, which is tropical monsoon-season air rather than a Korean winter.
+    // The colour warms and lightens with it: humid haze is pale blue-grey, not slate.
+    density: 0.00023,
     hazeBands: 6,
     hazeBandBlend: 0.65,
   }),
@@ -95,7 +102,15 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // korea_terrain's shipped uShadowFloor default. The terrain-legibility diagnosis is that a
     // ~0.40 floor puts the whole world inside the top 60% of the value range and reads as a flat
     // wash; 0.12 is the number the F-22 world actually ships, and this scene uses it unchanged.
-    shadowFloor: 0.12,
+    // RAISED FROM THE F-22'S 0.12, and the raise is forced by the heightfield, not by taste. That
+    // floor was calibrated against a bowl whose median gradient was 0.10, where almost nothing was
+    // ever fully in shade. The gorge and the ridged uplands now put whole valley walls on the lee
+    // side of a 0.28-elevation sun, and at 0.12 they rendered as black cut-outs. Humid air does not
+    // permit a black shadow at any distance. 0.20 is the ceiling of the terrain-legibility guard
+    // (a ~0.40 floor is the flat wash that diagnosis condemns) and above korea_terrain's own
+    // Ukraine-branch 0.16; the rest of the shadow lift comes from the humid haze above, which is
+    // where the reference frame gets it from too.
+    shadowFloor: 0.20,
     // Two-softstep tone-ramp gates over squared half-Lambert, verbatim from korea_terrain's
     // non-Ukraine branch. Under the shared 0.28-elevation sun, level ground sits at halfLambert
     // ~0.41 — through the lower gate, short of the upper — so flat basin floor reads mid-dark,
@@ -105,9 +120,13 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
       Object.freeze({ start: 0.26, end: 0.40, weight: 0.42 }),
       Object.freeze({ start: 0.58, end: 0.76, weight: 0.58 }),
     ]),
-    // Baked-occlusion multiplier at fully concave (x) and fully convex (y) — korea_terrain's
-    // shipped uOcclusionRange, unchanged.
-    occlusionRange: Object.freeze([0.55, 1.10]),
+    // Baked-occlusion multiplier at fully concave (x) and fully convex (y). korea_terrain ships
+    // 0.55 at the concave end and it is right for a dissected ridge system, where full concavity
+    // is a rare tight hollow. A GORGE saturates it: every point on both walls sits below its
+    // neighbourhood, so the whole channel took the deepest occlusion the ramp can give, stacked on
+    // top of the shadow floor, and the near wall rendered near-black at 30 m AGL. 0.72 keeps the
+    // valley-sinks-crests-catch reading without turning the corridor the player flies into a hole.
+    occlusionRange: Object.freeze([0.72, 1.10]),
     // Height difference (m) against the ~200 m neighbourhood ring that saturates concavity.
     concavityNormalizerM: 22,
     // DELIBERATE DIVERGENCE, and the only one in the light model. korea_terrain applies this
@@ -129,7 +148,10 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     slopeFaceWindow: Object.freeze([0.035, 0.19]),
     // Elevation gates (m): lowland fades out over [x,y], upland comes in over [y,z], rim rock
     // over [z,w]. Set from the measured basin, not from Korea's 70-1500 m span.
-    elevationBandsM: Object.freeze([185, 330, 545, 790]),
+    // Re-measured on the gorge heightfield (201x201 lattice, 16 km): min 92, p10 216, p50 329,
+    // p90 655, p99 949. The old gates were set on the pre-gorge bowl and put the entire new upland
+    // in one band.
+    elevationBandsM: Object.freeze([150, 300, 600, 900]),
     // Albedo bands in LINEAR working space, sitting in korea_terrain's own value family: its
     // period valley (0.22, 0.27, 0.075), upland (0.075, 0.13, 0.035), drySlope (0.27, 0.17, 0.075)
     // and ridge (0.32, 0.31, 0.26) are the anchors, and rimRock is that ridge verbatim. The HUE is
@@ -141,15 +163,17 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // wild ground toward green, worked ground toward gold — which is the separation the
     // patchwork needs and which Korea gets from its own parcel tint instead.
     bands: Object.freeze({
-      valleyFloor: Object.freeze([0.130, 0.210, 0.065]),
-      cultivationGold: Object.freeze([0.330, 0.270, 0.075]),
-      jungleMid: Object.freeze([0.055, 0.110, 0.035]),
+      valleyFloor: Object.freeze([0.176, 0.186, 0.092]),
+      cultivationGold: Object.freeze([0.230, 0.245, 0.175]),
+      jungleMid: Object.freeze([0.072, 0.118, 0.055]),
       lateriteSlope: Object.freeze([0.285, 0.150, 0.062]),
-      ridgeSage: Object.freeze([0.150, 0.165, 0.075]),
+      ridgeSage: Object.freeze([0.142, 0.162, 0.108]),
       rimRock: Object.freeze([0.320, 0.310, 0.260]),
     }),
     // Valley cultivation parcels: world-space cell pitch of the patchwork tint.
-    parcelPitchM: Object.freeze([155, 115]),
+    // Paddy-scale, not wheat-field scale. At 155x115 m the parcels read as European arable
+    // quilting; a delta paddy is 60-110 m on a side and terraces smaller still.
+    parcelPitchM: Object.freeze([92, 68]),
   }),
 
   // Analytic river paint, linear working space. The gravel bank window is expressed in units of

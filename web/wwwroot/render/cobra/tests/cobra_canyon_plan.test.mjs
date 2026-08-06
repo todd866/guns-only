@@ -131,7 +131,7 @@ test("keeps authority content invariant and sheds only ambient presentation by t
   assert.ok(balanced.counts.ambientInstances < desktop.counts.ambientInstances);
   assert.deepEqual(
     [mobile.counts.ambientInstances, balanced.counts.ambientInstances, desktop.counts.ambientInstances],
-    [274, 644, 1376],
+    [350, 794, 1582],
   );
   assert.throws(
     () => planCobraCanyonWorld(world, { qualityTier: "cinematic" }),
@@ -229,15 +229,18 @@ test("preserves route XYZ, terrain shaping, landmark anchors, and hazard authori
       halfWidthM,
       blendWidthM,
       bankRiseM,
-    }) => ({ id, laneId, pointsLocalM, halfWidthM, blendWidthM, bankRiseM })),
+      floorFraction,
+    }) => ({
+      id, laneId, pointsLocalM, halfWidthM, blendWidthM, bankRiseM, floorFraction,
+    })),
     patches: world.heroCells.map(({ id, terrainPatch }) => ({ id, terrainPatch })),
-  }), "6394f37857f7eb8fb42eaebbf15e3a552fc4f199b22287da55709f099fa91755");
+  }), "3e2206463d46c59872d6e6e4060290d9d7754b3a90135205f6ff24569c6c297a");
   assert.equal(contentHash(
     world.landmarks.map(({ id, positionLocalM }) => ({ id, positionLocalM })),
   ), "51a15145fef93e0011b70e9b218159dca5b2df9d2e21438902598242d5bb2be5");
   assert.equal(world.hazards.length, 14);
   assert.equal(contentHash(world.hazards),
-    "12b7cd466a6b0c1661c2b39e2ef12e45ab488340e05ade5035809a37b2eb2d30");
+    "c4a0eb80e25575135def5a892bce61db27ebd64cd5ba1176877c64437370e640");
 });
 
 test("copies exact collision-authority shapes without generating hazards", async () => {

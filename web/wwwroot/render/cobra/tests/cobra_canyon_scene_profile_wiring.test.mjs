@@ -25,12 +25,16 @@ test("visual profile keeps the painted-tactical invariants", () => {
   const sun = profile.sunDirectionWorld;
   assert.ok(Math.abs(Math.hypot(...sun) - 1) < 1e-6, "sun direction must be unit length");
 
-  // Haze and view radius are one knob: fog density = 1.87 / radius. Keep the readable world
-  // between ~19 km and ~40 km so the rim layers without dissolving (adaptive-world-radius
-  // doctrine) — and never again the Build 264 no-fog setting.
+  // Haze and view radius are one knob: fog density = 1.87 / radius (adaptive-world-radius
+  // doctrine) — and never again the Build 264 no-fog setting. The band is THEATRE AIR, not the
+  // F-22's: owner reference 2026-08-06 (Battlefield Vietnam) is monsoon-season humidity, whose
+  // signature is layered ridgelines dissolving into sky well inside the world edge. A 19-40 km
+  // readable radius over a 16 km theatre means nothing ever recedes, which is what left every
+  // ridge at full contrast to the map boundary. 6-11 km puts the far rim in the haze and leaves
+  // the 3 km gorge run crisp.
   const radiusM = 1.87 / profile.fog.density;
-  assert.ok(radiusM > 19_000 && radiusM < 40_000,
-    `fog radius ${radiusM.toFixed(0)} m must sit in the painted-depth band`);
+  assert.ok(radiusM > 6_000 && radiusM < 11_000,
+    `fog radius ${radiusM.toFixed(0)} m must sit in the tropical-depth band`);
 
   // Value-structure guards, straight from the terrain-legibility diagnosis: no 40% value floor,
   // enclosure occlusion must both sink valleys and lift crests, and the sun key must be warmer
@@ -61,8 +65,18 @@ test("visual profile keeps the painted-tactical invariants", () => {
   const bandLuminances = Object.values(paint.bands).map(luminance);
   assert.ok(Math.max(...bandLuminances) - Math.min(...bandLuminances) > 0.12,
     "albedo bands must span a real value range");
-  const { valleyFloor, cultivationGold } = paint.bands;
-  assert.ok(cultivationGold[0] - valleyFloor[0] > 0.10,
+  // Worked ground must separate from wild ground in HUE, not only in value — a pure value split
+  // collapses back to one colour under the tone ramp. The direction is theatre-specific and is not
+  // asserted: Korea's worked ground goes gold, and this one goes toward the pale blue-grey of a
+  // flooded paddy (owner reference 2026-08-06), which is the opposite way round the red axis. What
+  // is asserted is that the two bands sit apart in chromaticity at all.
+  const chromaticity = (band) => {
+    const total = band[0] + band[1] + band[2];
+    return [band[0] / total, band[2] / total];
+  };
+  const [wildRed, wildBlue] = chromaticity(paint.bands.valleyFloor);
+  const [workedRed, workedBlue] = chromaticity(paint.bands.cultivationGold);
+  assert.ok(Math.abs(workedRed - wildRed) + Math.abs(workedBlue - wildBlue) > 0.05,
     "worked ground must separate from wild ground in hue, not only in value");
 
   // The river's gravel bar lives inside the authored ribbon, so 1.0 stays the waterline.
@@ -91,8 +105,26 @@ test("the canyon reads as the same product as the F-22: one sun, one air, one li
       "the canyon must fly under the F-22's sun");
   }
 
-  assert.match(app, /this\.fogLow = new THREE\.Color\(0x6f8790\)/);
-  assert.equal(profile.fog.color, 0x6f8790, "the canyon must recede into the F-22's air");
+  // THE F-22'S AIR, HUMIDIFIED BY A STATED RULE — not a hand-picked colour. Two owner rulings
+  // are both live: the canyon must look like the same product as the F-22 (2026-08-06), and this
+  // theatre is tropical and hazy (Battlefield Vietnam reference, same day). They compose the way
+  // the coordinator put it — the F-22 fixes HOW the world is rendered, the reference fixes WHAT
+  // this theatre's air is — so the canyon's fog is derived from app.js's own fogLow, lifted a
+  // fixed 22% toward the humid white the reference frame shows. The F-22 remains the anchor: move
+  // fogLow and this fails until the canyon is moved with it.
+  const appFog = app.match(/this\.fogLow = new THREE\.Color\(0x([0-9a-f]{6})\)/);
+  assert.ok(appFog, "app.js must still declare fogLow");
+  const appFogValue = Number.parseInt(appFog[1], 16);
+  const HUMIDITY_LIFT = 0.22;
+  const HUMID_WHITE = [235, 242, 240];
+  for (let channel = 0; channel < 3; channel++) {
+    const shift = 8 * (2 - channel);
+    const base = (appFogValue >> shift) & 0xff;
+    const expected = Math.round(base + (HUMID_WHITE[channel] - base) * HUMIDITY_LIFT);
+    const actual = (profile.fog.color >> shift) & 0xff;
+    assert.ok(Math.abs(actual - expected) <= 1,
+      `the canyon must recede into the F-22's air, humidified (channel ${channel})`);
+  }
   assert.match(app, /this\.ambient = new THREE\.HemisphereLight\(0xb5cad0, 0x102229, 0\.78\)/);
   assert.equal(profile.lighting.hemisphereSkyColor, 0xb5cad0);
   assert.match(app, /this\.sun = new THREE\.DirectionalLight\(0xffe2b4, 2\.65\)/);
@@ -101,10 +133,23 @@ test("the canyon reads as the same product as the F-22: one sun, one air, one li
 
   // korea_terrain's shipped surface constants, adopted rather than reinvented.
   assert.match(terrain, /uShadowFloor: \{ value: finite\(options\.shadowFloor, ukraine \? 0\.16 : 0\.12\) \}/);
-  assert.equal(profile.terrainPaint.shadowFloor, 0.12);
+  // DOCUMENTED DIVERGENCE, bounded by the F-22's own two branches. korea_terrain ships 0.12 for
+  // Korea and 0.16 for Ukraine; this scene sits above both because the gorge and ridged uplands
+  // put whole valley walls on the lee side of a 0.28-elevation sun, where 0.12 rendered them as
+  // black cut-outs rather than shaded ground. It stays under the 0.20 flat-wash ceiling asserted
+  // at the top of this file, so the value structure the diagnosis protects is intact.
+  assert.ok(profile.terrainPaint.shadowFloor > 0.16 && profile.terrainPaint.shadowFloor <= 0.20,
+    "canyon shadow floor must sit above korea_terrain's branches but under the flat-wash ceiling");
   assert.match(terrain, /finite\(options\.occlusionMin, 0\.55\)/);
   assert.match(terrain, /finite\(options\.occlusionMax, 1\.10\)/);
-  assert.deepEqual([...profile.terrainPaint.occlusionRange], [0.55, 1.10]);
+  // Convex end verbatim; concave end lifted, because a gorge saturates the concavity term over
+  // both entire walls where a dissected ridge system only saturates it in tight hollows. The
+  // enclosure reading (valleys sink, crests catch) is preserved — see the profile for the frame
+  // that forced it.
+  assert.equal(profile.terrainPaint.occlusionRange[1], 1.10);
+  assert.ok(profile.terrainPaint.occlusionRange[0] > 0.55
+    && profile.terrainPaint.occlusionRange[0] < 0.85,
+    "the enclosure term must still sink valleys without turning the gorge into a hole");
   assert.match(terrain, /finite\(options\.cloudShadowStrength, 0\.34\)/);
   assert.equal(profile.terrainPaint.cloudShadowStrength, 0.34);
   assert.match(terrain, /finite\(options\.hazeBands, ukraine \? 0 : 6\)/);

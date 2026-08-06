@@ -439,6 +439,70 @@ function outsideRotorCorridor(plan, cell, role, point, seed) {
   };
 }
 
+/** Terrain gradient magnitude at a point, from the same analytic field everything else reads. */
+function terrainGradient(plan, eastM, northM) {
+  const stepM = 40;
+  const east = sampleCobraCanyonTerrain(plan, eastM + stepM, northM)
+    - sampleCobraCanyonTerrain(plan, eastM - stepM, northM);
+  const north = sampleCobraCanyonTerrain(plan, eastM, northM + stepM)
+    - sampleCobraCanyonTerrain(plan, eastM, northM - stepM);
+  return Math.hypot(east, north) / (2 * stepM);
+}
+
+/**
+ * Scores a candidate point for a role against the ground it would stand on.
+ *
+ * Vegetation in this world used to be placed by seeded grid jitter alone, so canopy landed on
+ * paddy flats and open ground landed on gorge walls with equal probability — which is most of
+ * why the basin read as scattered dark cones on a lawn rather than jungle on slopes. Vietnam's
+ * legibility comes from the CORRELATION: closed canopy on the valley sides, cleared and worked
+ * ground on the flats, a treeline hugging the water. The scores below are that correlation, and
+ * `bestPlacement` uses them to pick between a handful of seeded candidates — a bias, never a
+ * hard filter, so no authored batch bound is silently emptied.
+ */
+function terrainAffinity(plan, role, eastM, northM) {
+  const gradient = terrainGradient(plan, eastM, northM);
+  if (role === "jungle") return clamp(gradient / 0.34, 0, 1) * 0.82 + 0.18;
+  if (role === "paddy") return 1 - clamp(gradient / 0.09, 0, 1) * 0.94;
+  if (role === "plantation" || role === "village") {
+    return 1 - clamp(gradient / 0.16, 0, 1) * 0.88;
+  }
+  if (role === "rock") return clamp(gradient / 0.5, 0, 1);
+  return 1;
+}
+
+/**
+ * How far to sink an instance below the terrain sample at its centre.
+ *
+ * Placement deliberately seeks steep ground for canopy, and a footprint anchored at the centre
+ * sample cantilevers off a gorge wall — the stand visibly floats in mid-air on the downhill side,
+ * and a flat paddy panel becomes a plate hanging in space. Sinking by the drop across the
+ * instance's own half-width buries the uphill edge instead, which is what vegetation on a hillside
+ * actually looks like. Flat-ground roles get the same treatment for the cases where the affinity
+ * search could not find level ground inside an authored batch bound.
+ */
+function seatDrop(plan, role, eastM, northM, scale) {
+  const footprintM = Math.max(scale.widthM, scale.depthM) * 0.5;
+  const gradient = terrainGradient(plan, eastM, northM);
+  const bite = role === "jungle" || role === "rock" ? 0.85
+    : role === "paddy" || role === "plantation" || role === "village" ? 1
+      : 0;
+  return gradient * footprintM * bite;
+}
+
+function bestPlacement(plan, role, candidates) {
+  let best = candidates[0];
+  let bestScore = -Infinity;
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const score = terrainAffinity(plan, role, candidate.eastM, candidate.northM);
+    if (score <= bestScore) continue;
+    bestScore = score;
+    best = candidate;
+  }
+  return best ?? candidates.find(Boolean);
+}
+
 function allocateQuotas(batches, target) {
   const total = batches.reduce((sum, batch) => sum + batch.instanceCount, 0);
   if (!target || !total) return batches.map((batch) => ({ ...batch, count: 0 }));
@@ -529,7 +593,8 @@ function setPiecePlacements(plan, descriptors) {
         id: `${cell.id}.${archetypeId}`,
         role,
         x: eastM,
-        y: sampleCobraCanyonTerrain(plan, eastM, northM),
+        y: sampleCobraCanyonTerrain(plan, eastM, northM)
+          - seatDrop(plan, role, eastM, northM, scale),
         z: -northM,
         yaw: routeAligned && nearest
           ? Math.atan2(nearest.tangentEastM, nearest.tangentNorthM)
@@ -587,21 +652,57 @@ function planPlacements(plan, qualityTier, maximumInstances) {
       const seed = mixedUint32(batchSeed ^ Math.imul(ordinal + 1, 0x9e3779b1));
       const grid = gridPoint(bounds, ordinal, quota.count, seed);
       const biased = routeBiasedPoint(plan, quota.role, quota, bounds, seed);
-      const point = biased ?? grid;
+      // CLUSTERS, NOT A SCATTER. Every third instance is drawn tight to its predecessor's seed
+      // cell instead of its own, so stands grow into each other and leave real clearings between
+      // them. An even scatter at any density reads as texture; clumping is what reads as jungle.
+      const clusterSeed = mixedUint32(batchSeed ^ Math.imul(Math.floor(ordinal / 3) + 1, 0x9e3779b1));
+      const clustered = seededUnit(seed, 0x51633e2d) < 0.62
+        ? (() => {
+          const anchor = routeBiasedPoint(plan, quota.role, quota, bounds, clusterSeed)
+            ?? gridPoint(bounds, Math.floor(ordinal / 3) * 3, quota.count, clusterSeed);
+          const spreadM = quota.role === "jungle" ? 190 : 120;
+          return {
+            eastM: clamp(
+              anchor.eastM + (seededUnit(seed, 0x7f4a7c15) - 0.5) * spreadM,
+              bounds.minimumEastM,
+              bounds.maximumEastM,
+            ),
+            northM: clamp(
+              anchor.northM + (seededUnit(seed, 0x2545f491) - 0.5) * spreadM,
+              bounds.minimumNorthM,
+              bounds.maximumNorthM,
+            ),
+            yaw: anchor.yaw,
+          };
+        })()
+        : null;
+      const point = bestPlacement(plan, quota.role, [biased ?? grid, clustered, grid]);
       const variation = seededUnit(seed, 0xc2b2ae35);
       const scale = roleScale(quota.role, quota.descriptor, variation);
-      // One jungle instance represents a small canopy stand, not one isolated tree. Expanding only
-      // its horizontal footprint turns the same bounded instance count into readable valley walls
-      // while retaining authored tree height and every route-clearance placement decision.
+      // One jungle instance represents a stand of canopy, not one isolated tree. Expanding its
+      // horizontal footprint turns a bounded instance count into readable valley walls while
+      // retaining authored tree height and every route-clearance placement decision. The spread
+      // is now per-instance rather than a flat multiplier: a stand of uniform size at uniform
+      // spacing is the tell that gave the old canopy its wallpaper look.
       if (quota.role === "jungle") {
-        scale.widthM *= 2.35;
-        scale.depthM *= 2.15;
+        // A STAND, NOT A PANCAKE. Scaling only the footprint made 110 m stands 25 m tall, which
+        // from any angle above the treetops reads as a flat green plate laid on the hill. Height
+        // rides with bulk so the aspect ratio stays in the 2:1-3:1 band a real canopy block has.
+        const bulk = 1.22 + seededUnit(seed, 0x8f51a67b) * 0.86;
+        scale.widthM *= bulk;
+        scale.depthM *= bulk * (0.78 + seededUnit(seed, 0x1d2c9f43) * 0.5);
+        scale.heightM *= 0.86 + bulk * 0.28 + seededUnit(seed, 0x39aa5c11) * 0.4;
       }
+      // BED THE STAND INTO THE SLOPE. Placement deliberately seeks steep ground, and a 50 m
+      // footprint anchored at the centre sample cantilevers off a gorge wall — the stand visibly
+      // floats in mid-air on the downhill side. Sinking it by the drop across its own half-width
+      // buries the uphill skirt instead, which is what a canopy on a hillside actually looks like.
+      const seatDropM = seatDrop(plan, quota.role, point.eastM, point.northM, scale);
       placements.push({
         id: `${quota.id}.${ordinal}`,
         role: quota.role,
         x: point.eastM,
-        y: sampleCobraCanyonTerrain(plan, point.eastM, point.northM),
+        y: sampleCobraCanyonTerrain(plan, point.eastM, point.northM) - seatDropM,
         z: -point.northM,
         yaw: point.yaw ?? seededUnit(seed, 0x27d4eb2f) * Math.PI * 2,
         variation,
@@ -712,24 +813,28 @@ function geometryForRole(THREE, role) {
   const positions = [];
   const colors = [];
   if (role === "jungle") {
-    appendBox(positions, colors, [-0.045, 0, -0.045], [0.045, 0.46, 0.045], [0.30, 0.20, 0.10]);
+    // ONE INSTANCE IS A STAND OF CANOPY, NOT A TREE. The old shape was a trunk box plus five
+    // hexagonal puffs at a uniform 0.72-1.0 crown height: 72 triangles that read, at any distance,
+    // as the scattered dark cones the owner called out. Jungle reads as MASS, so the lobes now
+    // interlock — overlapping footprints, crowns staggered across a 0.58-1.0 band, and a low skirt
+    // lobe that closes the gap to the ground where the old trunk left daylight under every stand.
+    //
+    // Five-sided rings instead of six, and no trunk: 50 triangles against 72. That third is not
+    // a saving for its own sake — it is what buys the extra instances below, and density is what
+    // actually makes a canopy read. Silhouette loss is nil at 5 sides under flat shading.
+    // The tints are SHADING VARIATION, not albedo: the instance tint already carries the authored
+    // palette, and these multiply it. The old 0.33-0.56 values multiplied a dark canopy palette
+    // down to ~0.15 linear, which is why stands read as black holes punched in the hillside
+    // rather than as canopy catching light. Held near 1.0 with a modest crown-to-skirt gradient.
     const lobes = [
-      [0, 0, 0.34, 0.28, 1], [-0.42, 0.18, 0.3, 0.22, 0.82],
-      [0.4, -0.22, 0.32, 0.24, 0.9], [0.16, 0.42, 0.28, 0.2, 0.76],
-      [-0.2, -0.42, 0.27, 0.18, 0.72],
+      [0.00, 0.00, 0.40, 0.24, 1.00, [1.06, 1.10, 1.00]],
+      [-0.34, 0.20, 0.36, 0.20, 0.84, [0.94, 0.98, 0.90]],
+      [0.33, -0.20, 0.38, 0.18, 0.91, [1.12, 1.16, 1.06]],
+      [0.14, 0.36, 0.32, 0.14, 0.72, [0.86, 0.90, 0.83]],
+      [-0.16, -0.34, 0.34, 0.00, 0.58, [0.76, 0.80, 0.74]],
     ];
-    for (const [x, z, radius, bottom, top] of lobes) {
-      appendCanopy(
-        positions,
-        colors,
-        x,
-        z,
-        radius,
-        radius,
-        bottom,
-        top,
-        [0.54, 0.78, 0.42],
-      );
+    for (const [x, z, radius, skirt, top, tint] of lobes) {
+      appendCanopy(positions, colors, x, z, radius, radius * 0.86, skirt, top, tint, 5);
     }
   } else if (role === "plantation") {
     for (let index = 0; index < 5; index++) {

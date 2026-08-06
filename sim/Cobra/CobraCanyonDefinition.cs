@@ -516,12 +516,12 @@ public sealed class CobraCanyonDefinition
             new Vec3D(-1_701.0, 548.0, 5_021.0), 0.16),
         CobraCanyonObstacleDefinition.CapsuleSegment(
             "hazard.cobra-canyon.saddle-wire-low.v1",
-            new Vec3D(-3_600.0, 541.0, 3_010.0),
-            new Vec3D(-3_235.0, 541.0, 3_290.0), 0.20),
+            new Vec3D(-3_600.0, 552.0, 3_010.0),
+            new Vec3D(-3_235.0, 552.0, 3_290.0), 0.20),
         CobraCanyonObstacleDefinition.CapsuleSegment(
             "hazard.cobra-canyon.saddle-wire-high.v1",
-            new Vec3D(-3_598.0, 548.0, 3_007.0),
-            new Vec3D(-3_233.0, 548.0, 3_287.0), 0.20),
+            new Vec3D(-3_598.0, 559.0, 3_007.0),
+            new Vec3D(-3_233.0, 559.0, 3_287.0), 0.20),
         CobraCanyonObstacleDefinition.CapsuleSegment(
             "hazard.cobra-canyon.plantation-wire-one.v1",
             new Vec3D(565.0, 246.0, -3_620.0),
@@ -553,15 +553,15 @@ public sealed class CobraCanyonDefinition
         new CobraCanyonTerrainPatchDefinition(
             "cell.cobra-canyon.lower-gorge.v1",
             new Vec3D(-3_150.0, 112.0, -650.0),
-            980.0, 480.0, 8.0),
+            340.0, 250.0, 8.0),
         new CobraCanyonTerrainPatchDefinition(
             "cell.cobra-canyon.split-tooth-ridge.v1",
             new Vec3D(-3_850.0, 482.0, 2_050.0),
-            920.0, 420.0, 11.0),
+            560.0, 300.0, 11.0),
         new CobraCanyonTerrainPatchDefinition(
             "cell.cobra-canyon.red-earth-plantation.v1",
             new Vec3D(350.0, 224.0, -3_850.0),
-            1_050.0, 460.0, 6.0)
+            780.0, 380.0, 6.0)
     };
 }
 
@@ -618,30 +618,29 @@ public sealed class CobraCanyonTerrainSurface : ITerrainSurface
     {
         double radiusM = Math.Sqrt(eastM * eastM + northM * northM);
         double rim = SmoothStep(5_100.0, 10_600.0, radiusM);
+        RouteSample river = NearestRouteSample(_riverRoute, eastM, northM);
         double heightM = 248.0
             + 610.0 * rim * rim
-            + 78.0
+            + 52.0
                 * Math.Sin((eastM + northM * 0.37) / 1_430.0)
                 * Math.Cos((northM - eastM * 0.21) / 1_170.0)
-            + 31.0
+            + 26.0
                 * Math.Sin((eastM - northM) / 510.0)
-                * Math.Cos((eastM + northM) / 690.0);
+                * Math.Cos((eastM + northM) / 690.0)
+            + RidgeReliefM * (RidgeFold(eastM, northM, RidgeBearingRad, RidgeWavelengthM) - 0.5)
+            + CrossRidgeReliefM
+                * (RidgeFold(eastM, northM, CrossRidgeBearingRad, CrossRidgeWavelengthM) - 0.5)
+            + GorgeRimRiseM(river.DistanceM, river.SignedOffsetM);
 
-        // Order is authoritative and mirrors plan.terrainRibbons in cobra_canyon_plan.js.
+        // CARVE ORDER — mirrors cobra_canyon_plan.js: land corridors, then hero-cell shaping, then
+        // the river LAST. Water is a landscape's base level, so no road bench and no hero patch may
+        // lift the channel; where the ridge bench converges on the river near the objective,
+        // authored order used to let the bench win and the channel climbed 178 m uphill.
         foreach (CobraCanyonRouteDefinition route in _routes) {
-            (double distanceM, double pathAltitudeM) = NearestRouteSample(
-                route, eastM, northM);
-            (double halfWidthM, double blendWidthM, double bankRiseM) =
-                RibbonParameters(route.Choice);
-            double normalizedCrossing = Math.Clamp(distanceM / halfWidthM, 0.0, 1.0);
-            double targetElevationM = pathAltitudeM
-                + bankRiseM * normalizedCrossing * normalizedCrossing;
-            double blend = 1.0 - SmoothStep(
-                halfWidthM, halfWidthM + blendWidthM, distanceM);
-            heightM += (targetElevationM - heightM) * blend;
+            if (ReferenceEquals(route, _riverRoute)) continue;
+            heightM = CarveCorridor(route, eastM, northM, heightM);
         }
 
-        // Order is likewise authoritative and mirrors plan.cells in cobra_canyon_plan.js.
         foreach (CobraCanyonTerrainPatchDefinition patch in _terrainPatches) {
             double eastOffsetM = eastM - patch.CentreLocalM.X;
             double northOffsetM = northM - patch.CentreLocalM.Z;
@@ -658,9 +657,77 @@ public sealed class CobraCanyonTerrainSurface : ITerrainSurface
             double targetElevationM = patch.CentreLocalM.Y + localReliefM;
             heightM += (targetElevationM - heightM) * blend;
         }
+
+        heightM = CarveCorridor(_riverRoute, eastM, northM, heightM);
+
         if (!double.IsFinite(heightM))
             throw new InvalidOperationException("Cobra Canyon terrain sample was not finite.");
         return heightM;
+    }
+
+    double CarveCorridor(
+        CobraCanyonRouteDefinition route,
+        double eastM,
+        double northM,
+        double heightM)
+    {
+        RouteSample sample = NearestRouteSample(route, eastM, northM);
+        (double halfWidthM, double blendWidthM, double bankRiseM, double floorFraction) =
+            RibbonParameters(route.Choice);
+        // Flat floor first, then the bank: the climb is measured from the OUTER edge of the floor,
+        // not from the centreline, so the inner fraction of the corridor is level ground.
+        double floorEdgeM = halfWidthM * floorFraction;
+        double normalizedCrossing = halfWidthM > floorEdgeM
+            ? Math.Clamp((sample.DistanceM - floorEdgeM) / (halfWidthM - floorEdgeM), 0.0, 1.0)
+            : 1.0;
+        double targetElevationM = sample.PathAltitudeM
+            + bankRiseM * normalizedCrossing * normalizedCrossing;
+        double blend = 1.0 - SmoothStep(
+            halfWidthM, halfWidthM + blendWidthM, sample.DistanceM);
+        return heightM + (targetElevationM - heightM) * blend;
+    }
+
+    // Ridged relief: `1 - |sin|` cusps at its crest and rounds at its hollow, which is the shape a
+    // drainage-carved upland has. The macro/meso sine products can only make a smooth egg-carton,
+    // and an egg-carton is the "rolling farmland" read this world is not supposed to have. The
+    // wavelengths stay well clear of the browser's 100 m render grid so crests do not alias.
+    const double RidgeReliefM = 152.0;
+    const double RidgeWavelengthM = 2_350.0;
+    const double RidgeBearingRad = 0.66;
+    const double CrossRidgeReliefM = 82.0;
+    const double CrossRidgeWavelengthM = 1_450.0;
+    const double CrossRidgeBearingRad = -0.82;
+
+    // Gorge rim: a raised lip flanking the river, peaking at GorgeCrestM and decaying back toward
+    // the plain. A lip, not a plateau step — a step would lift the far half of the world and drown
+    // the road and ridge routes, whose authored altitudes are gameplay authority. Asymmetric,
+    // because a river undercuts one bank and terraces the other, and because this world wants a
+    // masking ridge on the north-west bank and an exposed plantation basin on the south-east.
+    const double GorgeInnerM = 180.0;
+    const double GorgeCrestM = 660.0;
+    const double GorgeFalloffM = 2_300.0;
+    const double GorgeFalloffRetain = 0.24;
+    const double GorgeLeftRiseM = 218.0;
+    const double GorgeRightRiseM = 92.0;
+    const double GorgeSideBlendM = 380.0;
+
+    static double RidgeFold(
+        double eastM, double northM, double bearingRad, double wavelengthM)
+    {
+        double along = (eastM * Math.Cos(bearingRad) + northM * Math.Sin(bearingRad))
+            / wavelengthM;
+        return 1.0 - Math.Abs(Math.Sin(along * Math.PI));
+    }
+
+    static double GorgeRimRiseM(double distanceM, double signedOffsetM)
+    {
+        double side = Math.Clamp(signedOffsetM / GorgeSideBlendM, -1.0, 1.0);
+        double riseM = GorgeRightRiseM
+            + (GorgeLeftRiseM - GorgeRightRiseM) * (side * 0.5 + 0.5);
+        double lip = SmoothStep(GorgeInnerM, GorgeCrestM, distanceM)
+            * (1.0 - SmoothStep(GorgeCrestM * 1.4, GorgeFalloffM, distanceM)
+                * (1.0 - GorgeFalloffRetain));
+        return riseM * lip;
     }
 
     double DistanceToRiverM(double eastM, double northM)
@@ -668,13 +735,21 @@ public sealed class CobraCanyonTerrainSurface : ITerrainSurface
         return NearestRouteSample(_riverRoute, eastM, northM).DistanceM;
     }
 
-    static (double DistanceM, double PathAltitudeM) NearestRouteSample(
+    readonly record struct RouteSample(
+        double DistanceM, double PathAltitudeM, double SignedOffsetM);
+
+    /// <summary>
+    /// Nearest point on a route centreline, with the signed lateral offset. Positive is the left
+    /// bank looking downstream — the polylines run south-west to north-east, so left is north-west.
+    /// </summary>
+    static RouteSample NearestRouteSample(
         CobraCanyonRouteDefinition route,
         double eastM,
         double northM)
     {
         double minimumSquaredM = double.MaxValue;
         double nearestAltitudeM = route.Points[0].PathAltitudeM;
+        double signedOffsetM = 0.0;
         IReadOnlyList<CobraCanyonRoutePoint> points = route.Points;
         for (int index = 1; index < points.Count; index++) {
             CobraCanyonRoutePoint first = points[index - 1];
@@ -695,15 +770,17 @@ public sealed class CobraCanyonTerrainSurface : ITerrainSurface
             minimumSquaredM = squaredM;
             nearestAltitudeM = Lerp(
                 first.PathAltitudeM, second.PathAltitudeM, fraction);
+            double lengthM = Math.Max(1e-9, Math.Sqrt(lengthSquaredM));
+            signedOffsetM = (offsetEastM * -deltaNorthM + offsetNorthM * deltaEastM) / lengthM;
         }
-        return (Math.Sqrt(minimumSquaredM), nearestAltitudeM);
+        return new RouteSample(Math.Sqrt(minimumSquaredM), nearestAltitudeM, signedOffsetM);
     }
 
-    static (double HalfWidthM, double BlendWidthM, double BankRiseM) RibbonParameters(
-        CobraCanyonRouteChoice choice) => choice switch {
-            CobraCanyonRouteChoice.RiverGorge => (155.0, 520.0, 38.0),
-            CobraCanyonRouteChoice.RidgeShadow => (205.0, 430.0, 54.0),
-            CobraCanyonRouteChoice.RoadPlantation => (235.0, 360.0, 24.0),
+    static (double HalfWidthM, double BlendWidthM, double BankRiseM, double FloorFraction)
+        RibbonParameters(CobraCanyonRouteChoice choice) => choice switch {
+            CobraCanyonRouteChoice.RiverGorge => (185.0, 190.0, 46.0, 0.66),
+            CobraCanyonRouteChoice.RidgeShadow => (205.0, 430.0, 54.0, 0.0),
+            CobraCanyonRouteChoice.RoadPlantation => (235.0, 470.0, 24.0, 0.34),
             _ => throw new ArgumentOutOfRangeException(nameof(choice))
         };
 
