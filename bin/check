@@ -55,6 +55,8 @@ node --check web/wwwroot/render/medevac/commander_view_model.js
 node --check web/wwwroot/api/telemetry.js
 node --check web/smoke/remote-smoke.mjs
 node --check web/smoke/remote-route-smoke.mjs
+node --check web/smoke/production-routes.mjs
+node --check web/smoke/prewarm-origin.mjs
 node --check web/smoke/cobra_authority.mjs
 # The AH-1G crew chain (designation -> consent -> rounds away) is syntax-checked here but NOT
 # executed by the gate: it needs a hostile the turret can physically reach, which Hold the Bridge

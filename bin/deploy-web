@@ -628,12 +628,41 @@ if [ "$target" = "--prod" ]; then
         exit 1
     fi
     "$vercel_cli" promote "$deployment_url" --yes
+
+    # A freshly promoted deployment has a completely cold edge cache. Build 265 promoted cleanly
+    # and then failed post-promotion verification because `cobra-lab` could not reach ready in
+    # 90 s -- not because it was broken (served from the same tree it is ready in 1.9 s) but
+    # because 58 of its 58 assets had to be pulled through a cold edge. Measured on 2026-08-06
+    # against a 20-hour-old production, the same route went 5404 ms (35 misses) -> 2530 ms
+    # (0 misses) on its second load.
+    #
+    # So warm each route once BEFORE asserting anything. This is not a raised ceiling: the
+    # readiness assertions keep their 90 s budget and their strictness, and a route that is
+    # genuinely broken still fails and still rolls back. It separates "is this route healthy"
+    # from "is the CDN warm", which are different questions that were being answered together.
+    #
+    # It also pays a cost that real users would otherwise pay. Every visitor arriving in the
+    # minutes after a promotion hits the same cold cache -- that is what made 264 look broken to
+    # the owner (43 s before app.js executed, 99.6 s to first frame, against 3 s warmed). Doing
+    # this here, once, means the first real visitor arrives to a warm edge instead.
+    warm_production_edge() {
+        echo "deploy-web: warming the production edge before asserting readiness"
+        node "$repo_dir/web/smoke/prewarm-origin.mjs" "https://guns-only.com" || {
+            echo "deploy-web: edge warm pass did not complete; continuing to verification" >&2
+        }
+    }
+
+    verify_promoted_production() {
+        verify_public "https://guns-only.com" "$release_revision" \
+            "$atlas_sha256" "$content_sha256" 1 "$candidate_deployment" || return 1
+        warm_production_edge
+        node "$repo_dir/web/smoke/remote-smoke.mjs" "https://guns-only.com" || return 1
+        node "$repo_dir/web/smoke/remote-route-smoke.mjs" "https://guns-only.com" || return 1
+    }
+
     # Verify the canonical production door, not the retired vercel.app alias (which only
     # worked via its 308 redirect after the Build 184 canonicalization).
-    if ! verify_public "https://guns-only.com" "$release_revision" \
-        "$atlas_sha256" "$content_sha256" 1 "$candidate_deployment" \
-        || ! node "$repo_dir/web/smoke/remote-smoke.mjs" "https://guns-only.com" \
-        || ! node "$repo_dir/web/smoke/remote-route-smoke.mjs" "https://guns-only.com"; then
+    if ! verify_promoted_production; then
         echo "deploy-web: live verification failed; checking alias ownership before rollback" >&2
         rollback_owner=$(inspect_public_deployment_id "https://guns-only.com" || true)
         if [ "$rollback_owner" != "$candidate_deployment" ]; then

@@ -99,6 +99,53 @@ bytes being shipped.
 A bare `pull_request` run is still **not** release provenance on its own: it is only usable as
 part of that chain, and the chain is unit-tested against every way it can be broken.
 
+## The cold edge (Build 265)
+
+265 promoted cleanly, then post-promotion verification failed: `cobra-lab` never reached
+`#status[data-ready=true]` inside 90 s, and production auto-rolled back to 264. That machinery
+worked exactly as designed. But the route was not broken — served from the exact deployed tree it
+was ready in 1.9 s. It was **cold**.
+
+Measured against production on 2026-08-06, same route, three consecutive loads on a *20-hour-old*
+deployment (so the popular shell assets were already hot):
+
+| load | requests | HIT | MISS | ready |
+| --- | --- | --- | --- | --- |
+| 1 | 58 | 23 | **35** | **5404 ms** |
+| 2 | 58 | 58 | 0 | 2530 ms |
+| 3 | 58 | 58 | 0 | 2567 ms |
+
+A 2.1x penalty from misses alone, on a deployment that was mostly warm. On a brand-new deployment
+all 58 are misses, and the 23 that were hits include the largest objects (three.module.js at
+1.27 MB, hud.js at 234 KB). The owner's cold session on newly deployed 264 took 43 s before
+`app.js` executed and 99.6 s to first frame, against 3 s warmed — the same mechanism, and the
+reason the site looked broken.
+
+`bin/deploy-web` now warms the edge immediately after promotion, before asserting anything:
+
+```
+promote → verify_public (alias converged, correct revision)
+        → prewarm-origin.mjs  (all routes, once, best-effort)
+        → remote-smoke.mjs + remote-route-smoke.mjs  (unchanged assertions)
+        → rollback on failure (unchanged)
+```
+
+**No assertion ceiling was raised.** `remote-route-smoke.mjs` keeps its 90 s readiness budget and
+its strictness; a test asserts that number has not grown. The warm pass has its own 180 s budget,
+sized from the owner's measured 99.6 s cold first-frame with headroom, and it asserts nothing — it
+cannot fail the deploy, and a route that will not warm is still judged by the assertion that
+follows. Both passes now report per-route edge-miss counts, which is the signal that was missing
+when 265 rolled back.
+
+`web/smoke/production-routes.mjs` holds the single route table both passes read, so a route can
+never be warmed but not asserted, or the reverse.
+
+**This is also a user-facing fix, not just a smoke fix.** Every visitor arriving in the minutes
+after a promotion paid the cold-cache cost. The warm pass now pays it once, first. One honest
+limit: Vercel's edge cache is per-PoP, so warming from the deploy machine warms the PoP nearest
+that machine with certainty; how much a distant visitor benefits depends on Vercel's regional
+caching and was not measured here.
+
 ## Wall clock
 
 | stage | before | after |
@@ -107,4 +154,4 @@ part of that chain, and the chain is unit-tested against every way it can be bro
 | CI Verify on the PR head | ~12 min | ~12 min |
 | second CI Verify on the merge commit | ~12 min | **0** (fast-forward-equivalent) |
 | local re-gate inside `bin/deploy-web` | 25-30 min | **0** (CI is the provenance) |
-| build, upload, verify, promote, live smokes | ~8 min | ~8 min |
+| build, upload, verify, promote, live smokes | ~8 min | ~8 min + ~20 s edge warm |

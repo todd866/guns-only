@@ -419,6 +419,18 @@ test("production deploy keeps every fail-closed guarantee after dropping the loc
   // The local gate is now opt-in, but the escape hatch and the mid-flight stability checks stay.
   assert.ok(source.includes('GUNS_DEPLOY_FULL_GATE:-0'),
     "GUNS_DEPLOY_FULL_GATE must still be able to force the full local gate");
+  // Build 265: a cold edge on a freshly promoted deployment failed the readiness assertion and
+  // correctly rolled back a route that was not broken. Warming must happen after promotion and
+  // before the assertions -- and must NOT be allowed to replace them.
+  const promote = source.indexOf('promote "$deployment_url"');
+  const warm = source.indexOf("web/smoke/prewarm-origin.mjs");
+  const shellSmoke = source.indexOf("web/smoke/remote-smoke.mjs");
+  const routeSmoke = source.indexOf("web/smoke/remote-route-smoke.mjs");
+  assert.notEqual(warm, -1, "deploy-web must warm the production edge after promotion");
+  assert.ok(promote < warm, "warming must happen after the promotion it is warming");
+  assert.ok(warm < shellSmoke && warm < routeSmoke,
+    "the edge must be warm before readiness is asserted");
+
   for (const guarantee of [
     "repository changed while the production gate was running",
     "repository changed while the deployment artifact was built",
@@ -431,5 +443,36 @@ test("production deploy keeps every fail-closed guarantee after dropping the loc
     "candidate immutable content identity mismatch",
   ]) {
     assert.ok(source.includes(guarantee), `deploy-web lost the guarantee: ${guarantee}`);
+  }
+});
+
+test("warming the edge did not weaken the readiness assertions", async () => {
+  const smoke = await readFile(new URL("../../../web/smoke/remote-route-smoke.mjs", import.meta.url),
+    "utf8");
+  const warm = await readFile(new URL("../../../web/smoke/prewarm-origin.mjs", import.meta.url),
+    "utf8");
+  const table = await readFile(new URL("../../../web/smoke/production-routes.mjs", import.meta.url),
+    "utf8");
+
+  // The Build 265 failure must not be "fixed" by giving the assertion a bigger number.
+  assert.match(smoke, /READY_TIMEOUT_MS = 90_000/,
+    "the readiness budget must stay at the 90 s it was before the cold-edge incident");
+  assert.ok(!/[12]\d\d_000/.test(smoke),
+    "remote-route-smoke must not carry a raised multi-minute readiness ceiling");
+
+  // The warm pass is allowed to be slow, and is allowed to fail, because it asserts nothing.
+  assert.match(warm, /WARM_BUDGET_MS = 180_000/);
+  assert.match(warm, /never throws|It never throws/,
+    "the warm pass must be documented as non-verifying");
+
+  // One route table, two consumers: a route added for warming but not for asserting (or the
+  // reverse) is exactly how this class of bug comes back.
+  for (const id of ["f22", "rapier-intercept", "cobra-lab", "weekend-ride"]) {
+    assert.ok(table.includes(`id: "${id}"`), `production-routes lost ${id}`);
+  }
+  for (const consumer of [smoke, warm]) {
+    assert.match(consumer, /from "\.\/production-routes\.mjs"/,
+      "both the warm pass and the assertion pass must share one route table");
+    assert.ok(!/id: "f22"/.test(consumer), "routes must not be redeclared outside the table");
   }
 });
