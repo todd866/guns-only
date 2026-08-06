@@ -18,6 +18,8 @@ public class GunConversionFunnelTests {
         foreach (PilotSkill tier in Tiers) {
             GunConversionFunnelResult result = GunConversionFunnel.MeasureEnemy(tier);
             _out.WriteLine(result.ToString());
+            _out.WriteLine(result.TriggerLine);
+            _out.WriteLine(GunConversionFunnel.RangeProfile(tier));
         }
     }
     // The airframe question, measured: does putting the SAME pilot in the uprated jet change the

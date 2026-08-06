@@ -126,15 +126,28 @@ public class BossBanditTests {
 
     [Fact]
     public void StalkingBossDeclinesTheMarginalShotAPlainAceTakes() {
-        // A marginal solution: nose error ~2.5 deg sits between the stalk gate (1.8 deg) and the
-        // Ace gate (3.5 deg) at a valid firing range. The approaching, fast, nose-on target
+        // A marginal solution: the post-step nose error (~3.25 deg) sits between the stalk gate
+        // (1.8 deg) and the Ace gate (3.5 deg) at a valid firing range. The approaching, fast, nose-on target
         // blocks every commit trigger, so only the quality bar separates the two bandits.
-        const double marginalRad = 2.5 * System.Math.PI / 180.0;
+        const double marginalRad = 1.6 * System.Math.PI / 180.0;
         const double rangeM = 500.0;
-        AircraftState start = State(0.0, 3000.0, 0.0, 240.0);
+        // CLOSURE IS PART OF THE GEOMETRY NOW. The Ace no longer spends a burst on the body gate
+        // where that gate DISAGREES with the ballistic solution (see
+        // BanditSkillProfile.FiresOnBodyGate), and the required lead is closure times the sine of
+        // the angle off. At the original 240 v 250 head-on, 490 m/s of closure put the solution
+        // 1.43 deg from the target and the plain Ace correctly declined the very shot this test
+        // needs it to take.
+        //
+        // 180 v 150 keeps the merge HEAD-ON — which is what holds the boss uncommitted, since a
+        // tail chase trips commit trigger (b) on the first tick — while dropping closure to
+        // 330 m/s. With the opening offset at 1.6 deg the required lead is 0.64 deg, comfortably
+        // inside the Ace's 1.25 deg discipline, and the shot is once again separated from the
+        // boss's only by the two pilots' quality bars. The target stays above the 140 m/s
+        // energy-collapse commit threshold.
+        AircraftState start = State(0.0, 3000.0, 0.0, 180.0);
         AircraftState targetState = State(
             rangeM * System.Math.Sin(marginalRad), 3000.0,
-            rangeM * System.Math.Cos(marginalRad), 250.0,
+            rangeM * System.Math.Cos(marginalRad), 150.0,
             chi: System.Math.PI);
 
         var ace = new ReactiveBandit(start, Air, PilotSkill.Ace);
