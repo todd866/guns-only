@@ -86,7 +86,7 @@ public class SnapshotHotFrameTests {
     static void AssertHotFrameMatchesJson(JsonElement root, double[] buffer) {
         using JsonDocument layoutDocument = JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
         JsonElement layout = layoutDocument.RootElement;
-        Assert.Equal(22, layout.GetProperty("layout_version").GetInt32());
+        Assert.Equal(23, layout.GetProperty("layout_version").GetInt32());
         Assert.Equal(SnapshotHotFrame.SlotCount, layout.GetProperty("slot_count").GetInt32());
         string[] names = layout.GetProperty("blocks")
             .EnumerateArray()
@@ -579,7 +579,7 @@ public class SnapshotHotFrameTests {
             using JsonDocument layoutDocument =
                 JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
             JsonElement layout = layoutDocument.RootElement;
-            Assert.Equal(22, layout.GetProperty("layout_version").GetInt32());
+            Assert.Equal(23, layout.GetProperty("layout_version").GetInt32());
             JsonElement[] slots = layout.GetProperty("blocks")
                 .EnumerateArray()
                 .SelectMany(block => block.GetProperty("slots").EnumerateArray())
@@ -591,6 +591,131 @@ public class SnapshotHotFrameTests {
             Assert.Equal(1.0, buffer[SlotIndex("hits")]);
             Assert.Equal(0.0, buffer[SlotIndex("selected_target_hits")]);
             Assert.Equal(1.0, buffer[SlotIndex("opponent_hits")]);
+            AssertHotFrameMatchesJson(root, buffer);
+        }
+    }
+
+    // Build 264 production evidence: opponent_rounds_fired froze at 7 for a whole engagement while
+    // four more tracer bursts flew with the wingman alive, because every opponent_* weapon field is
+    // the PRIMARY ship's gun and no w1_* gunnery field existed at all. "The bandit never shoots"
+    // was therefore a statement about the lead only. Pin per-ship attribution: a wingman that fires
+    // while the lead holds fire must be visible AS the wingman, in both wire formats.
+    [Fact]
+    public void WingmanGunneryIsAttributedPerShipWhileTheLeadHoldsFire() {
+        SimulationSession session = StartSession(7, null);
+        Assert.Single(session.Wingmen);
+
+        Wingman wingman = session.Wingmen[0];
+        var shooter = new AircraftState(
+            Vec3D.Zero, 0.0, 0.0, 0.0, 0.0,
+            FlightModel.Su27SPublicDataSurrogate.MassKg,
+            QuaternionD.Identity);
+        var offAxisPlayer = shooter with {
+            Position = new Vec3D(500.0, 0.0, 500.0)
+        };
+        wingman.TriggerDown = true;
+        wingman.Gun.Step(true, shooter, offAxisPlayer, 0.0);
+
+        Assert.Equal(1, wingman.Gun.RoundsFired);
+        Assert.Equal(0, session.OpponentGun.RoundsFired);
+        Assert.False(session.OpponentTriggerDown);
+
+        var (root, buffer, document) = Project(session);
+        using (document) {
+            Assert.Equal(1, root.GetProperty("w1_rounds_fired").GetInt32());
+            Assert.Equal(1, root.GetProperty("w1_trigger_down").GetInt32());
+            Assert.Equal(1, root.GetProperty("w1_gun_firing").GetInt32());
+            Assert.Equal(wingman.Gun.AmmoRemaining,
+                root.GetProperty("w1_ammo").GetInt32());
+            Assert.Equal(0, root.GetProperty("w1_hits").GetInt32());
+
+            // The lead-only aggregates must stay at zero: that divergence IS the finding.
+            Assert.Equal(0, root.GetProperty("opponent_rounds_fired").GetInt32());
+            Assert.False(root.GetProperty("opponent_trigger_down").GetBoolean());
+            Assert.False(root.GetProperty("opponent_gun_firing").GetBoolean());
+            // The honestly formation-wide fields must see it.
+            Assert.True(root.GetProperty("formation_gun_firing").GetBoolean());
+            Assert.Single(root.GetProperty("opponent_tracers").EnumerateArray());
+
+            // Unoccupied contact slots publish a neutral gunnery block, not a stale one.
+            foreach (string prefix in new[] { "w2", "w3" }) {
+                Assert.Equal(0, root.GetProperty($"{prefix}_present").GetInt32());
+                Assert.Equal(0, root.GetProperty($"{prefix}_rounds_fired").GetInt32());
+                Assert.Equal(0, root.GetProperty($"{prefix}_gun_firing").GetInt32());
+                Assert.Equal(0, root.GetProperty($"{prefix}_ammo").GetInt32());
+            }
+
+            using JsonDocument layoutDocument =
+                JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
+            JsonElement[] slots = layoutDocument.RootElement.GetProperty("blocks")
+                .EnumerateArray()
+                .SelectMany(block => block.GetProperty("slots").EnumerateArray())
+                .ToArray();
+            int SlotIndex(string name) => slots
+                .Single(slot => slot.GetProperty("name").GetString() == name)
+                .GetProperty("index").GetInt32();
+            Assert.Equal(1.0, buffer[SlotIndex("w1_rounds_fired")]);
+            Assert.Equal(1.0, buffer[SlotIndex("w1_gun_firing")]);
+            Assert.Equal(0.0, buffer[SlotIndex("opponent_rounds_fired")]);
+            Assert.Equal(1.0, buffer[SlotIndex("formation_gun_firing")]);
+            Assert.Equal(0.0, buffer[SlotIndex("w2_rounds_fired")]);
+            AssertHotFrameMatchesJson(root, buffer);
+        }
+    }
+
+    // The sortie ledgers are the answer to "a session max() over rounds_fired understates the
+    // total, because every per-engagement weapon graph resets". They must bank a wingman's fire
+    // that the lead-only counter never sees, and must be monotone across a stepped tick.
+    [Fact]
+    public void SortieLedgersBankFormationFireThatTheLeadCounterNeverSees() {
+        SimulationSession session = StartSession(7, null);
+        Wingman wingman = session.Wingmen[0];
+        var shooter = new AircraftState(
+            Vec3D.Zero, 0.0, 0.0, 0.0, 0.0,
+            FlightModel.Su27SPublicDataSurrogate.MassKg,
+            QuaternionD.Identity);
+        wingman.Gun.Step(true, shooter, shooter with {
+            Position = new Vec3D(500.0, 0.0, 500.0)
+        }, 0.0);
+        Assert.Equal(1, wingman.Gun.RoundsFired);
+
+        session.StepFixed();
+
+        var (root, buffer, document) = Project(session);
+        using (document) {
+            Assert.True(root.GetProperty("sortie_opponent_rounds_fired").GetInt32() >= 1,
+                "the sortie ledger missed a wingman round the lead counter cannot carry");
+            Assert.True(root.GetProperty("sortie_rounds_fired").GetInt32() >= 0);
+            Assert.True(root.GetProperty("sortie_hits").GetInt32() >= 0);
+            AssertHotFrameMatchesJson(root, buffer);
+        }
+    }
+
+    // service_life_max_g read 0 against an 11.91 G Build 264 sortie. Root cause: the service-life
+    // recorder only begins on a scripted-intercept (Rapier) mission and only publishes a record
+    // once one has been FINALIZED, so on an ordinary fighter beat the whole block is a zero
+    // default. Pin both halves — the honest zero and its explanation, and a live envelope that
+    // actually measures the jet that flew.
+    [Fact]
+    public void LoadFactorEnvelopeIsLiveWhereTheServiceLifeRecordIsRapierScoped() {
+        SimulationSession session = StartSession(7, null);
+        session.FeedKey(GKey.PullUp, true);
+        for (int tick = 0; tick < 3 * AircraftSim.TickHz; tick++)
+            session.StepFixed();
+
+        Assert.False(session.RapierMissionAvailable);
+        Assert.False(session.RapierServiceLife.Active);
+        Assert.True(session.SortiePeakLoadFactorG > 1.5,
+            $"the sortie never pulled G: peak {session.SortiePeakLoadFactorG:F3}");
+
+        var (root, buffer, document) = Project(session);
+        using (document) {
+            Assert.False(root.GetProperty("service_life_capture_active").GetBoolean());
+            Assert.False(root.GetProperty("service_life_record_available").GetBoolean());
+            Assert.Equal(0.0, root.GetProperty("service_life_max_g").GetDouble());
+            Assert.True(root.GetProperty("sortie_peak_g").GetDouble() > 1.5);
+            Assert.True(root.GetProperty("sortie_min_g").GetDouble()
+                <= root.GetProperty("sortie_peak_g").GetDouble());
             AssertHotFrameMatchesJson(root, buffer);
         }
     }
@@ -752,6 +877,11 @@ public class SnapshotHotFrameTests {
             Assert.True(root.GetProperty("formation_coordination_age_s").GetDouble()
                 > SimulationSession.FixedDeltaSeconds);
             Assert.False(root.GetProperty("formation_coordination_stale").GetBoolean());
+            // Two DISTINCT fields, and both must ride the wire. formation_coordination_stale keeps
+            // its Build-264 behavioural meaning so cross-build comparison stays honest; the health
+            // watchdog is a new field beside it rather than a redefinition of the old one.
+            Assert.False(
+                root.GetProperty("formation_coordination_health_stale").GetBoolean());
             AssertHotFrameMatchesJson(root, buffer);
         }
 
@@ -767,6 +897,9 @@ public class SnapshotHotFrameTests {
                 soloRoot.GetProperty("formation_coordination_age_s").ValueKind);
             Assert.False(
                 soloRoot.GetProperty("formation_coordination_stale").GetBoolean());
+            Assert.False(
+                soloRoot.GetProperty("formation_coordination_health_stale")
+                    .GetBoolean());
             AssertHotFrameMatchesJson(soloRoot, soloBuffer);
         }
     }

@@ -138,25 +138,31 @@ public class FormationCoordinationSessionTests {
             session.WingmanFormationRole(0));
     }
 
+    // Build 264 production evidence: formation_coordination_stale was true in 8% of 15,731 rows on
+    // a ~1.2 s period, which is exactly the delivery cadence — the sawtooth, not a fault. That
+    // field is the BEHAVIOURAL window and it KEEPS that meaning, so 264 and 265 tapes stay
+    // comparable; the separate health flag is what has to stay quiet through a healthy cycle.
     [Fact]
-    public void ProductionTickCadenceExposesAndRefreshesTheStaleWindow() {
+    public void ProductionTickCadenceCyclesTheBehaviourWindowWithoutRaisingTheHealthFlag() {
         var session = new SimulationSession(7);
         session.Begin();
-        bool observedStaleWindow = false;
+        bool observedFallbackWindow = false;
         bool observedRadioRefresh = false;
 
-        for (int tick = 0; tick < 260; tick++) {
+        for (int tick = 0;
+            tick < 3 * EnemyPairCoordinator.DeliveryPeriodTicks;
+            tick++) {
             session.StepFixed();
-            observedStaleWindow |= session.FormationCoordinationStale;
-            if (observedStaleWindow
+            Assert.False(session.FormationCoordinationHealthStale,
+                $"tick {tick}: the health flag fired inside a healthy refresh cycle");
+            observedFallbackWindow |= session.FormationCoordinationStale;
+            if (observedFallbackWindow
                 && !session.FormationCoordinationStale
-                && session.FormationCoordinationAgeSeconds is not null) {
+                && session.FormationCoordinationAgeSeconds is not null)
                 observedRadioRefresh = true;
-                break;
-            }
         }
 
-        Assert.True(observedStaleWindow,
+        Assert.True(observedFallbackWindow,
             "ordinary SimulationSession stepping never reached the conservative fallback");
         Assert.True(observedRadioRefresh,
             "the delayed collection did not restore a fresh shared picture");

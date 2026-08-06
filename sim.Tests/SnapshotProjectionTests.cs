@@ -244,6 +244,9 @@ public class SnapshotProjectionTests {
             || coordinationAge.GetDouble() >= 0.0);
         Assert.True(root.GetProperty("formation_coordination_stale").ValueKind
             is JsonValueKind.True or JsonValueKind.False);
+        Assert.True(
+            root.GetProperty("formation_coordination_health_stale").ValueKind
+                is JsonValueKind.True or JsonValueKind.False);
         Assert.True(root.TryGetProperty("time_compression_factor",
             out JsonElement timeCompressionFactor));
         Assert.InRange(timeCompressionFactor.GetInt32(), 1, 16);

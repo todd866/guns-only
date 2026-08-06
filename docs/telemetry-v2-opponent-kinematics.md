@@ -1,7 +1,151 @@
 # Telemetry v2 — closing the opponent-diagnosis gap
 
-Status: **specification, not implemented.** Written 2026-08-02 against Build 238
-(`e4c4c3fbc19705548619bb1829b148c4de521a37`).
+Status: **partly shipped.** Written 2026-08-02 against Build 238
+(`e4c4c3fbc19705548619bb1829b148c4de521a37`). Revised 2026-08-06 against Build 264 (`2694ac7`),
+which is when the **per-contact gunnery block below actually shipped**, taking hot
+`LayoutVersion` 22 → 23. Priority 1 (the bandit's own lead solution),
+priority 2 (bandit kinematics) and priority 3 (intent) remain SPECIFICATION ONLY.
+
+## Shipped 2026-08-06 — per-contact gunnery and scope honesty
+
+The Build 264 owner flight (session `web-1785933989000-15627`, 15,731 rows) proved the original
+premise of this document incomplete in a way that mattered more than the missing kinematics: the
+opponent weapon fields it lists as "already present" **are not one scope**. In engagement 3 the
+`opponent_rounds_fired` counter froze at 7 while four more tracer bursts (18 rounds airborne) flew
+with the wingman alive. Every historical "the bandit fired zero rounds" reading was a statement
+about the LEAD ONLY, because there were no wingman gunnery fields at all.
+
+### Scope table — every opponent weapon field, before and after
+
+| Field | Scope BEFORE | Scope AFTER | Note |
+| --- | --- | --- | --- |
+| `opponent_ammo` | primary ship's current gun | unchanged | documented at the source |
+| `opponent_rounds_fired` | primary ship's current gun | unchanged | resets at engagement boundary |
+| `opponent_trigger_down` | primary ship | unchanged | |
+| `opponent_gun_firing` | primary ship | unchanged | |
+| `opponent_hits` | SESSION-wide (`PlayerHitsTaken`) | unchanged | rounds the player took from anyone |
+| `opponent_tracers` | FORMATION-wide | unchanged | folds retired + relief-targeting guns |
+| `w1_/w2_/w3_ammo` | — | per contact | **new** |
+| `w1_/w2_/w3_rounds_fired` | — | per contact | **new** |
+| `w1_/w2_/w3_hits` | — | per contact | **new** — rounds THIS ship put into the player |
+| `w1_/w2_/w3_trigger_down` | — | per contact | **new**, 1/0 like `w1_alive` |
+| `w1_/w2_/w3_gun_firing` | — | per contact | **new**, 1/0 |
+| `formation_gun_firing` | — | FORMATION-wide | **new** — is ANY enemy ship shooting now |
+| `sortie_opponent_rounds_fired` | — | FORMATION-wide, SORTIE-cumulative | **new**, monotone |
+| `sortie_rounds_fired` / `sortie_hits` | — | player, SORTIE-cumulative | **new**, monotone |
+| `sortie_peak_g` / `sortie_min_g` | — | player, SORTIE-wide | **new**, always live |
+| `service_life_capture_active` | — | Rapier recorder state | **new** |
+
+No existing field was renamed or repurposed: archived sessions and every shipped decoder keep
+working unchanged. What changed is that the honest question now has an honest field.
+
+**`snapshot_schema_version` stays `1.26.0`, and the original plan to bump it was wrong.** That
+string is a CONTENT-PACK COMPATIBILITY HANDSHAKE, not a wire-shape stamp: `app.js`'s
+`activatePack` refuses any pack whose `compatibility.snapshotSchemaVersion` differs from the
+projected value and falls back to procedural presentation with only a `console.warn`. Bumping it
+therefore requires a coordinated edit of `content/packs/*/pack.json` AND its `web/wwwroot` mirror,
+and a returning browser holding a cached `pack.json` would lose its presentation pack until the
+cache turned over. This change is purely additive, so the wire-shape signals are
+`SnapshotHotFrame.LayoutVersion` (a single monotone integer, bumped by one on any slot-set change:
+22 → 23) and ordinary feature detection of the new keys in archived JSON rows.
+
+**Naming and encoding follow the existing per-contact convention.** The three fixed additional
+aircraft slots `w1`/`w2`/`w3` already carried `{p}_present`, `{p}x/y/z`, `{p}fx/fy/fz`,
+`{p}lx/ly/lz`, `{p}_alive` in both writers; the gunnery fields extend that same block with the
+same `{prefix}_` naming and the same raw-integer 1/0 flag encoding, so adding a fourth contact is
+one more entry in the `foreach (string prefix in ...)` loop in both writers. The primary opponent
+is contact slot 0 and keeps the `opponent_*` names it has always had.
+
+### Reset semantics, made discoverable
+
+Continuous combat stages a fresh `GunKill` for each successor aircraft, but the two replacement
+families inherit OPPOSITE counters, and the difference decides which raw fields need repair:
+
+| replacement | rounds | damage | used by |
+| --- | --- | --- | --- |
+| `CreateReplacementTarget` (`CreateForStagedNextTarget` / `CreateForRetargetedTarget`) | carried FORWARD | starts clean | the player's gun at every engagement boundary and every drone-raid target advance; opponent guns retargeted onto a relief fighter |
+| `CreateForFreshShooterAgainstTargets` | starts clean | carried FORWARD | a successor opponent's gun; the relief fighter's own gun |
+
+So:
+
+- **`rounds_fired` does NOT reset for the player.** `CreateReplacementTarget` copies `RoundsFired`
+  forward precisely so cumulative fire evidence stays continuous across a boundary. A `max()` over
+  the tape was already the honest sortie total, and `report.py` still uses it.
+- **`hits` DOES reset.** The staged successor's damage ledger starts clean, so `max(hits)` reported
+  only the last engagement of the sortie.
+- **`opponent_rounds_fired` is the PRIMARY ship's current gun only**, and the primary's gun IS a
+  fresh-shooter successor at every boundary, so it does reset.
+
+`sortie_rounds_fired`, `sortie_hits` and `sortie_opponent_rounds_fired` are monotone ledgers over
+the whole sortie, banked per gun identity. Because a replacement is a new object and therefore a
+new ledger key, each gun's baseline is `GunKill.InheritedRoundsFired` / `InheritedHitCount` — what
+that gun was BORN holding, which the weapon it succeeded already banked. Baselining rounds at zero
+instead re-banked the whole inherited running total at every re-stage; five 100-round engagements
+would have reported 1500. Baselining from the gun's LIVE counters at first sight would have been
+wrong the other way, silently swallowing rounds fired on the same tick the gun was staged.
+
+`tools/telemetry/report.py` semantics, identical on both wire vintages: `rounds` / `hits` / `kills`
+are the visitor's BEST SINGLE SORTIE, never a lifetime sum — all three underlying counters clear
+when a sortie is staged, which is what `max(kill_count)` has always meant there. It takes
+`max(rounds_fired)` unchanged, prefers `sortie_hits` where the tape carries it, and for older tapes
+reconstructs hits by summing each engagement's contribution within one sortie id.
+
+### Two instruments that were dead, and why
+
+**`service_life_max_g` read 0 against an 11.91 G sortie.** Not a plumbing fault. Every
+`service_life_*` field is read off `RapierServiceLife.LatestRecord`, and (a) capture only ever
+BEGINS when `RapierMissionAvailable` — that is, on a scripted-intercept (Rapier) mission — and
+(b) a record only exists once such a sortie has been FINALIZED. On an ordinary fighter beat the
+recorder is never started, so the whole block is a zero default no matter how hard the jet was
+flown. `service_life_capture_active` now makes that legible instead of silent, and
+`sortie_peak_g`/`sortie_min_g` give the airframe-agnostic, always-live load-factor envelope that
+the question actually wanted.
+
+**`formation_coordination_stale` alarms on every normal cycle** (true in 8% of Build 264 rows on
+a ~1.2 s period). It publishes `EnemyPairCoordinator.SharedContactStale`, whose threshold is
+`EvaluationIntervalTicks` — the BEHAVIOURAL fallback bound, the point past which each pilot flies
+on its own senses. A healthy coordinator samples every `EvaluationIntervalTicks` and then spends
+`MessageDelayTicks` in the radio path, so the picture age sawtooths to a full `DeliveryPeriodTicks`
+(222 ticks, ~1.23 s at 180 Hz) every cycle and crosses that bound by construction.
+
+**That field KEEPS its name and its meaning.** It is noisy but it is informative — it measures how
+much of the fight the two ships spent uncoordinated. Redefining it in place to a health threshold
+would have made a 264-vs-265 comparison read the resulting ~0% as a sim fix, which is the padlock
+defect relocated to the analysis layer. The fault signal is a NEW, separately named field:
+
+`formation_coordination_health_stale` publishes `SharedContactHealthStale`, thresholded at
+`SharedContactHealthStaleAfterTicks = DeliveryPeriodTicks + EvaluationIntervalTicks / 2`
+(312 ticks, ~1.73 s at 180 Hz). The arithmetic that fixes that number: a healthy cycle peaks at
+`DeliveryPeriodTicks` = 222, and ONE missed delivery peaks a further collection interval later at
+`DeliveryPeriodTicks + EvaluationIntervalTicks` = 402, so a watchdog that can actually detect a
+single missed delivery has to sit strictly inside (222, 402]. Half a collection interval of
+headroom above the healthy peak buys jitter tolerance while leaving 90 ticks of the missed-delivery
+gap above the line. `2 * DeliveryPeriodTicks` (444) was tried and rejected: it is ABOVE 402, so it
+could not have fired on a missed delivery at all and would only have caught the coordinator ceasing
+to be stepped — a noisy instrument swapped for a permanently quiet one. The behavioural threshold
+itself is untouched; changing it would change how the bandits fly.
+
+### Tests pinning the above
+
+- `SnapshotHotFrameTests.WingmanGunneryIsAttributedPerShipWhileTheLeadHoldsFire` — the wingman
+  fires and the lead does not; `w1_rounds_fired` is 1 while `opponent_rounds_fired` stays 0.
+- `SnapshotHotFrameTests.SortieLedgersBankFormationFireThatTheLeadCounterNeverSees`
+- `SnapshotHotFrameTests.LoadFactorEnvelopeIsLiveWhereTheServiceLifeRecordIsRapierScoped`
+- `FormationCoordinationTests.HealthStalenessIgnoresTheNormalSawtoothAndFiresOnAMissedDelivery`
+- `FormationCoordinationSessionTests.ProductionTickCadenceCyclesTheBehaviourWindowWithoutRaisingTheHealthFlag`
+- `SortieGunLedgerTests.PlayerRoundsLedgerTracksTheInheritedGunTotalAcrossAnEngagementBoundary` —
+  the ledger must AGREE with the player's gun across a boundary, because that counter already
+  carries forward. It read 129 against a gun total of 115 before the baseline was fixed.
+- `SortieGunLedgerTests.OpponentRoundsLedgerSurvivesTheReliefHandoffWithoutRebanking` — the same
+  defect on the opponent side, reached through `RetargetOpponentGun`.
+- `SortieGunLedgerTests.SortieLedgersAccrueOnASortieThatNeverStartsEngagementCounters` — pins
+  `AccumulateSortieLedgers()` in front of the engagement-active guard. A drone raid deliberately
+  never starts engagement counters, so behind the guard every raid reports zero rounds fired.
+- plus every existing hot/JSON parity test, which covers the new fields automatically.
+
+---
+
+## Original specification (priorities 1–3 still unbuilt)
 
 Motivating evidence: the Build 238 F-22 acceptance flight
 (session `web-1785627445839-631596`, 2026-08-02). In that sortie the bandit fired **99 rounds
@@ -107,8 +251,9 @@ across-beats theory may not exercise that.
 asserts that a mission with no opponent publishes no hidden actor. Every new field needs an
 explicit `opponentPresent ? … : neutral` guard, matching the existing style.
 
-**Schema version.** Bump `snapshot_schema_version` `1.26.0` → `1.27.0`
-(`web/SnapshotProjection.cs:1427`). Additive-only, so the decoder in
+**Schema version.** Superseded — see "`snapshot_schema_version` stays `1.26.0`" above. Bump the
+hot `LayoutVersion` (a single monotone integer, currently 23) instead, and touch
+`snapshot_schema_version` only as part of a coordinated content-pack release. Additive-only, so the decoder in
 `web/wwwroot/render/state/hot_snapshot.js` and the delta reader stay backward compatible with
 archived 1.26.0 sessions — but the offline decode tooling must not assume the new fields exist
 when reading anything recorded before this ships.
