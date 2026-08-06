@@ -89,7 +89,13 @@ export function wingmanPadlockPromotedToPrimary({
   const engagement = Number(state?.engagement_number);
   if (!Number.isFinite(engagement)
       || engagement !== Number(padlockEngagement)) return false;
-  if (state?.w1_present === 1 || state?.w1_alive === 1) return false;
+  // LIVENESS, not occupancy. The freed slot does not stay empty: the wire backfills it with the
+  // killed leader's still-falling wreck (present=1, alive=0) so the airframe the pilot just shot
+  // stays on the wire. Testing w1_present here reads that wreck as "my wingman is still in slot 1",
+  // declines the promotion, and hands app.js's kill-cam branch a padlock whose wingman target is
+  // invalid — a false SPLASH that tracks the DEAD leader's live falling coordinates while the
+  // promoted survivor flies off unlocked. Only a LIVING aircraft in w1 disproves promotion.
+  if (state?.w1_alive === 1) return false;
   if (state?.selected_player_gun_target_slot !== 0
       || state?.bandit_alive === false
       || state?.opponent_alive === false) return false;

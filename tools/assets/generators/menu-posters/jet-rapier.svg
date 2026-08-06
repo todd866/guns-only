@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1600" width="900" height="1600">
+  <!-- Rapier card: the fictional Mach-4 gun interceptor, and nothing like the F-22 card.
+       Seen from BELOW, climbing away across a dawn terminator at the top of the atmosphere, so
+       the ventral inlet, the single nozzle and the glowing stagnation edges - the three things
+       airframes/rapier.v2.json calls canonical - are the things you actually see.
+       Planform traced from that file's geometry.wing.halfStations and bodies[0].stations;
+       no canopy, no horizontal tail, one exhaust, per visualIdentity.prohibited. -->
+  <defs>
+    <linearGradient id="rsky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#06040f"/>
+      <stop offset="0.20" stop-color="#160e2c"/>
+      <stop offset="0.42" stop-color="#3a1a4c"/>
+      <stop offset="0.62" stop-color="#6d2a51"/>
+      <stop offset="0.775" stop-color="#a8404a"/>
+      <stop offset="0.865" stop-color="#d9713a"/>
+      <stop offset="0.915" stop-color="#f6b158"/>
+    </linearGradient>
+    <linearGradient id="plume" x1="1" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#fff3cd" stop-opacity="0.95"/>
+      <stop offset="0.22" stop-color="#ffb15c" stop-opacity="0.7"/>
+      <stop offset="0.6" stop-color="#e0623c" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#8e2f45" stop-opacity="0"/>
+    </linearGradient>
+    <radialGradient id="nozzleGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fffbe8"/>
+      <stop offset="0.45" stop-color="#ffc46a"/>
+      <stop offset="1" stop-color="#e0662f" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="900" height="1600" fill="url(#rsky)"/>
+
+  <!-- Thin high cirrus. Barely there: at 24 km there is almost nothing left above you. -->
+  <g opacity="0.09">
+    <path d="M0 280 L262 262 L392 270 L124 292 Z" fill="#e2d4f4"/>
+    <path d="M498 200 L806 186 L900 196 L586 214 Z" fill="#d8c8ee"/>
+    <path d="M268 430 L594 414 L700 424 L340 442 Z" fill="#e8dcf6"/>
+    <path d="M96 566 L386 554 L470 562 L156 576 Z" fill="#f0e2fa"/>
+  </g>
+
+  <!-- The limb of the Earth, seen from 24 km. Nearly straight, faintly curved, and the only
+       warm horizontal in the picture. -->
+  <path d="M-360 1450 Q450 1300 1260 1450 L1260 1600 L-360 1600 Z" fill="#8f4a35"/>
+  <path d="M-360 1470 Q450 1322 1260 1470 L1260 1600 L-360 1600 Z" fill="#5c3040"/>
+  <path d="M-360 1500 Q450 1358 1260 1500 L1260 1600 L-360 1600 Z" fill="#2d1f36"/>
+  <path d="M-360 1544 Q450 1408 1260 1544 L1260 1600 L-360 1600 Z" fill="#15121f"/>
+  <!-- The lit rim itself. -->
+  <path d="M-360 1446 Q450 1296 1260 1446 L1260 1456 Q450 1306 -360 1456 Z" fill="#ffd08a" opacity="0.85"/>
+
+  <!-- Exhaust plume, laid down before the aeroplane so the nozzle sits on top of it. It leaves
+       the single nozzle at (199, 998) and runs aft down the airframe axis, off the lower left. -->
+  <path d="M191.6 986.1 L206.4 1009.9 L-407 1459 L-482 1341 Z" fill="url(#plume)"/>
+  <path d="M195.8 993 L202.2 1003.1 L-228 1296 L-256 1252 Z" fill="#ffe6a8" opacity="0.5"/>
+  <!-- Shock diamonds: a Mach-4 tell for four polygons. -->
+  <g>
+    <path d="M148 1008 L170 1030 L148 1052 L126 1030 Z" fill="#fff6dd" opacity="0.9"/>
+    <path d="M80 1053 L99 1072 L80 1091 L61 1072 Z" fill="#ffeec4" opacity="0.72"/>
+    <path d="M4 1104 L20 1120 L4 1136 L-12 1120 Z" fill="#ffe2a8" opacity="0.52"/>
+    <path d="M-81 1160 L-68 1173 L-81 1186 L-94 1173 Z" fill="#ffd694" opacity="0.34"/>
+  </g>
+
+  <!-- The aeroplane, belly to the viewer. Local units are metres x 1 about the wing origin:
+       nose z=-6.5, tail z=+6.5, half-span 3.675 - straight out of the definition file. -->
+  <g transform="translate(452 840) rotate(58) scale(2.25 1.95)">
+
+    <!-- Cranked-delta wing, both halves. halfStations LE then TE, mirrored. -->
+    <path d="M0 -95 L18 -78 L26 -69.5 L87 -4 L91.9 1.25 L87 23 L26 11.5 L18 87.5 L0 101
+             L-18 87.5 L-26 11.5 L-87 23 L-91.9 1.25 L-87 -4 L-26 -69.5 L-18 -78 Z"
+          fill="#242a38"/>
+    <!-- Port half catches the dawn; starboard stays in its own shadow. Hard centreline edge. -->
+    <path d="M0 -95 L18 -78 L26 -69.5 L87 -4 L91.9 1.25 L87 23 L26 11.5 L18 87.5 L0 101 Z"
+          fill="#39415a"/>
+
+    <!-- Body loft, bodies[0].stations radiusX mirrored: long needle nose, no canopy, no spine. -->
+    <path d="M0 -162.5 L8.5 -141 L17.5 -90 L19.5 -15 L18.5 72.5 L12.5 139 L6 162.5
+             L-6 162.5 L-12.5 139 L-18.5 72.5 L-19.5 -15 L-17.5 -90 L-8.5 -141 Z"
+          fill="#2f374a"/>
+    <path d="M0 -162.5 L8.5 -141 L17.5 -90 L19.5 -15 L18.5 72.5 L12.5 139 L6 162.5 L0 162.5 Z"
+          fill="#454f68"/>
+
+    <!-- The single ventral propulsion tunnel: one blended inlet, one continuous duct, one nozzle. -->
+    <path d="M-15 -93 L15 -93 L18.5 -60 L18.5 140 L-18.5 140 L-18.5 -60 Z" fill="#171b26"/>
+    <path d="M-15 -93 L0 -93 L2 -60 L2 140 L-18.5 140 L-18.5 -60 Z" fill="#1f2532"/>
+    <!-- Inlet lip, hot. -->
+    <path d="M-15 -93 L15 -93 L17 -84 L-16.5 -84 Z" fill="#ff9a54"/>
+    <path d="M-13 -90 L13 -90 L14 -86 L-14 -86 Z" fill="#08090e"/>
+
+    <!-- Low close-coupled canted twin fins. From underneath they are edge-on slivers just
+         outboard of the body, per fins[0].sideXM 0.66 and outwardCantDeg 5. -->
+    <path d="M19 72 L27 104 L28 136 L21 136 L20 106 Z" fill="#1c2230"/>
+    <path d="M-19 72 L-27 104 L-28 136 L-21 136 L-20 106 Z" fill="#262e40"/>
+
+    <!-- Stagnation-hot leading edges. The thermal model says these are the hot zone at Mach 4,
+         so they are the brightest thing on the airframe and the card's whole colour idea. -->
+    <path d="M0 -162.5 L8.5 -141 L17.5 -90 L19.5 -15 L15 -15 L13.5 -88 L5.5 -138 L0 -155 Z" fill="#ffb268"/>
+    <path d="M0 -162.5 L-8.5 -141 L-17.5 -90 L-19.5 -15 L-15.5 -15 L-14 -88 L-6 -138 L0 -155 Z" fill="#c96b3f"/>
+    <path d="M0 -95 L18 -78 L26 -69.5 L87 -4 L91.9 1.25 L86 1 L24 -64 L16 -73 L0 -89 Z" fill="#ffc079"/>
+    <path d="M0 -95 L-18 -78 L-26 -69.5 L-87 -4 L-91.9 1.25 L-86 1 L-24 -64 L-16 -73 L0 -89 Z" fill="#a85a3c"/>
+
+    <!-- Flush gun aperture, port side, 5.55 m forward of the wing origin. -->
+    <path d="M-9 -128 L-4 -130 L-3 -118 L-8 -116 Z" fill="#0d1017"/>
+
+    <!-- One fixed circular nozzle. -->
+    <ellipse cx="0" cy="153" rx="11" ry="11" fill="#120e12"/>
+    <ellipse cx="0" cy="153" rx="9" ry="9" fill="#ffd98f"/>
+    <ellipse cx="0" cy="153" rx="5.5" ry="5.5" fill="#fffbef"/>
+  </g>
+
+  <!-- Nozzle bloom, in screen space so it is not squashed by the airframe transform. -->
+  <ellipse cx="199" cy="998" rx="92" ry="92" fill="url(#nozzleGlow)" opacity="0.8"/>
+</svg>

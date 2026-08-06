@@ -228,13 +228,19 @@ export function verticalSpeedText(value) {
 
 export function airdataReadout(state = {}) {
   const calibratedKts = finiteNumber(state.calibrated_airspeed_kts);
-  const measuredIndicatedKts = calibratedKts
+  const trueKts = finiteNumber(state.true_airspeed_kts);
+  const indicatedChainKts = calibratedKts
     ?? finiteNumber(state.indicated_airspeed_kts)
     ?? finiteNumber(state.speed_kts);
+  // Airframes without an indicated chain (rotorcraft authority states publish TAS
+  // only) fall back to true airspeed and say so on the unit label. Labeling raw TAS
+  // KIAS would invent a pitot correction that was never computed. Every fixed-wing
+  // snapshot carries calibrated_airspeed_kts, so this branch never fires for them.
+  const measuredIndicatedKts = indicatedChainKts ?? trueKts;
   const indicatedKts = measuredIndicatedKts === null
     ? null : Math.max(0, measuredIndicatedKts);
-  const speedUnit = calibratedKts === null ? "KIAS" : "KCAS";
-  const trueKts = finiteNumber(state.true_airspeed_kts);
+  const speedUnit = calibratedKts !== null ? "KCAS"
+    : indicatedChainKts !== null || trueKts === null ? "KIAS" : "KTAS";
   const groundKts = finiteNumber(state.ground_speed_kts)
     ?? finiteNumber(state.groundspeed_kts);
   const cornerKts = finiteNumber(state.corner_speed_kcas)

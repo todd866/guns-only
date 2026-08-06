@@ -31,6 +31,19 @@ public sealed class WingmanStaysInTheFightTests {
         };
     }
 
+    /// The same cold-visitor opening with the formation clamped to the primary alone. The 2v1
+    /// contract cannot judge the PRIMARY's gunnery — the wingman kills the fixture player around
+    /// t=50 s and ends the fight before a strayed lead gets back. Alone, the primary owns the
+    /// whole window, so whether the cold primary converts is answered unambiguously (measured:
+    /// it does — its post-pass separation peaks 6 m under the 3.5 km Return latch, so it stays
+    /// in ordinary BFM; the 2v1's Bracket leg is what pushes the lead past that latch).
+    static BeatSetup OneShipFixture() {
+        BeatSetup beat = Beats.ModernVisualMerge();
+        return beat with {
+            ContinuousCombat = beat.ContinuousCombat! with { MaximumFormationSize = 1 },
+        };
+    }
+
     sealed record Sample(
         double T, double PlayerToLead, double PlayerToWing, double LeadToWing,
         string WingTactic, string WingRole, bool PlayerAlive,
@@ -38,13 +51,29 @@ public sealed class WingmanStaysInTheFightTests {
         string LeadTactic, double LeadRadius, double WingRadius,
         int WingContactAgeTicks, double WingSpeed, double WingAltitude,
         PilotCommand WingCommand, double LeadSpeed, double PlayerSpeed,
-        bool LeadPresenting, bool WingPresenting, bool SessionActive);
+        bool LeadPresenting, bool WingPresenting, bool SessionActive,
+        int LeadRounds, int WingRounds, bool LeadTrigger, bool WingTrigger,
+        double LeadNoseErrDeg, double LeadLeadErrDeg, bool RoeHold,
+        double LeadAltitude, double LeadGammaDeg, PilotCommand LeadCommand);
+
+    /// The two-ship fixture with a player durable enough to be judged against BOTH opponents.
+    /// With the production 3-hit rule the wingman kills the fixture player at t≈50 s, which ends
+    /// the fight while a recovering lead is still 4-5 km out on a ~95 m/s stern-chase closure —
+    /// so a both-ships gunnery contract would always end before its second subject got measured.
+    /// Durability changes only how long the window lasts, never what the bandits are asked to do.
+    static BeatSetup DurablePlayerTwoShipFixture() {
+        BeatSetup beat = TwoShipFixture();
+        return beat with {
+            Combat = beat.CombatRules with { PlayerHitsToDefeat = 30 },
+        };
+    }
 
     static System.Collections.Generic.List<Sample> Fly(double seconds,
         double playerThrottle = 0.2, double playerRoll = 0.0,
-        double playerRollPulseSeconds = 0.0) {
+        double playerRollPulseSeconds = 0.0,
+        Func<BeatSetup>? fixture = null) {
         var session = new SimulationSession();
-        session.StartBeat(TwoShipFixture);
+        session.StartBeat(fixture ?? TwoShipFixture);
         var samples = new System.Collections.Generic.List<Sample>();
         const double Dt = 1.0 / 120.0;
         int ticks = (int)Math.Ceiling(seconds / Dt);
@@ -83,7 +112,10 @@ public sealed class WingmanStaysInTheFightTests {
             AircraftState lead = session.Bandit.State;
             AircraftState w = wing.Bandit.State;
             var reactive = wing.Bandit as ReactiveBandit;
-            var leadReactive = session.Bandit as ReactiveBandit;
+            // The primary in a ModernVisualMerge beat is a NeutralMergeBandit, not a
+            // ReactiveBandit — a direct cast reads "?" forever. The trace interface is the
+            // honest seam: it forwards to the post-pass fight once the merge gate opens.
+            var leadReactive = session.Bandit as IBanditDecisionTraceSource;
             samples.Add(new Sample(
                 tick * Dt,
                 Geometry.Range(p, lead), Geometry.Range(p, w), Geometry.Range(lead, w),
@@ -92,7 +124,9 @@ public sealed class WingmanStaysInTheFightTests {
                 // The wingman's gun target is the player, so this is "player still alive".
                 wing.Gun.TargetAlive,
                 wing.StillFighting, wing.TerminalState.ToString(), session.Wingmen.Count,
-                leadReactive?.Tactic.ToString() ?? "?",
+                leadReactive is not null
+                    ? $"{leadReactive.PolicyMemory.Tactic}/{leadReactive.PolicyMemory.FormationRole}"
+                    : "?",
                 HorizontalRange(lead.Position, leadSpawn),
                 HorizontalRange(w.Position, wingSpawn),
                 reactive?.PolicyMemory.FormationSharedContactAgeTicks ?? -1,
@@ -100,7 +134,17 @@ public sealed class WingmanStaysInTheFightTests {
                 reactive?.LastCommand ?? default,
                 lead.Speed, p.Speed,
                 session.Bandit.Presenting, wing.Bandit.Presenting,
-                session.Lifecycle == SimulationSession.LifecycleState.Active));
+                session.Lifecycle == SimulationSession.LifecycleState.Active,
+                session.OpponentPresent ? session.OpponentGun.RoundsFired : 0,
+                wing.Gun.RoundsFired,
+                session.OpponentTriggerDown, wing.TriggerDown,
+                BanditFireControl.NoseErrorRad(lead, ActorObservation.Capture(p, tick))
+                    * 180.0 / Math.PI,
+                BanditFireControl.LeadNoseErrorRad(lead, ActorObservation.Capture(p, tick))
+                    * 180.0 / Math.PI,
+                session.WeaponsInhibited,
+                lead.Position.Y, lead.Gamma * 180.0 / Math.PI,
+                leadReactive?.AppliedCommand ?? default));
         }
         return samples;
     }
@@ -114,18 +158,29 @@ public sealed class WingmanStaysInTheFightTests {
     public void ReportWingmanSeparationOverASortie() {
         var s = Fly(240.0);
         _output.WriteLine(
-            "   t(s)  p->lead  p->wing lead->wing  Lpres Wpres  live   Lrad  Wtactic   Wrole      "
-            + "  Wrad  age   Wspd   Walt   Lspd   Pspd    Wg  Wbank  Wthr");
+            "   t(s)  p->lead  p->wing lead->wing  Lpres Wpres  live  Ltactic/role           "
+            + "  Lrad  Wtactic   Wrole      "
+            + "  Wrad  age   Wspd   Walt   Lspd   Pspd    Wg  Wbank  Wthr  Lrnd  Wrnd  trig");
         foreach (var x in s) {
             _output.WriteLine(
                 $"{x.T,7:F0} {x.PlayerToLead,8:F0} {x.PlayerToWing,8:F0} {x.LeadToWing,10:F0}"
                 + $"  {(x.LeadPresenting ? "P" : "-"),5} {(x.WingPresenting ? "P" : "-"),5}"
                 + $" {(x.SessionActive ? "a" : "-")}{(x.PlayerAlive ? "p" : "-")}{(x.StillFighting ? "w" : "-")}"
+                + $"  {x.LeadTactic,-22}"
                 + $" {x.LeadRadius,6:F0}  {x.WingTactic,-8} {x.WingRole,-11}"
                 + $" {x.WingRadius,6:F0} {x.WingContactAgeTicks,4} {x.WingSpeed,6:F1} {x.WingAltitude,6:F0}"
                 + $" {x.LeadSpeed,6:F1} {x.PlayerSpeed,6:F1}"
-                + $" {x.WingCommand.GDemand,5:F1} {x.WingCommand.BankTarget,6:F2} {x.WingCommand.Throttle,5:F2}");
+                + $" {x.WingCommand.GDemand,5:F1} {x.WingCommand.BankTarget,6:F2} {x.WingCommand.Throttle,5:F2}"
+                + $" {x.LeadRounds,5} {x.WingRounds,5}  {(x.LeadTrigger ? "L" : "-")}{(x.WingTrigger ? "W" : "-")}"
+                + $" {x.LeadNoseErrDeg,6:F1} {x.LeadLeadErrDeg,6:F1} {(x.RoeHold ? "H" : "-")}"
+                + $" {x.LeadAltitude,6:F0} {x.LeadGammaDeg,5:F0}"
+                + $" {x.LeadCommand.GDemand,5:F1} {x.LeadCommand.BankTarget,6:F2} {x.LeadCommand.Throttle,5:F2}");
         }
+        double minutes = s[^1].T / 60.0;
+        _output.WriteLine(
+            $"TOTALS lead={s[^1].LeadRounds} rounds ({s[^1].LeadRounds / minutes:F1}/min)"
+            + $"  wing={s[^1].WingRounds} rounds ({s[^1].WingRounds / minutes:F1}/min)"
+            + $" over {s[^1].T:F0} s");
     }
 
     /// The contract. A wingman is part of a fight; it does not get to leave one that is still
@@ -184,5 +239,113 @@ public sealed class WingmanStaysInTheFightTests {
             $"the wingman was more than 10 km from the fight for {share:F0}% of the time the "
             + $"player was engaged ({abandoned.Count}/{engaged.Count} samples); "
             + $"worst separation {(abandoned.Count > 0 ? abandoned.Max(a => a.PlayerToWing) : 0):F0} m");
+    }
+
+    sealed record SoloSample(
+        double T, double Range, string Tactic, int Rounds, bool Trigger,
+        double NoseErrDeg, double AltM, double GammaDeg, PilotCommand Command,
+        bool PlayerAlive, bool SessionActive);
+
+    static System.Collections.Generic.List<SoloSample> FlySolo(double seconds) {
+        var session = new SimulationSession();
+        session.StartBeat(OneShipFixture);
+        var samples = new System.Collections.Generic.List<SoloSample>();
+        const double Dt = 1.0 / 120.0;
+        int ticks = (int)Math.Ceiling(seconds / Dt);
+        session.Begin();
+        session.SetAnalogThrottleControl(0.2);
+        for (int tick = 0; tick < ticks; tick++) {
+            session.Advance(Dt);
+            if (tick % 120 != 0) continue;
+            AircraftState p = session.Player.State;
+            AircraftState lead = session.Bandit.State;
+            var trace = session.Bandit as IBanditDecisionTraceSource;
+            samples.Add(new SoloSample(
+                tick * Dt,
+                Geometry.Range(p, lead),
+                trace?.PolicyMemory.Tactic.ToString() ?? "?",
+                session.OpponentPresent ? session.OpponentGun.RoundsFired : 0,
+                session.OpponentTriggerDown,
+                BanditFireControl.NoseErrorRad(lead, ActorObservation.Capture(p, tick))
+                    * 180.0 / Math.PI,
+                lead.Position.Y, lead.Gamma * 180.0 / Math.PI,
+                trace?.AppliedCommand ?? default,
+                session.PlayerAlive,
+                session.Lifecycle == SimulationSession.LifecycleState.Active));
+        }
+        return samples;
+    }
+
+    [Fact]
+    public void ReportColdPrimaryConversionOverASortie() {
+        var s = FlySolo(240.0);
+        _output.WriteLine("   t(s)    range  tactic    rnd trig  noseErr    alt  gamma     g   bank   thr");
+        foreach (var x in s) {
+            _output.WriteLine(
+                $"{x.T,7:F0} {x.Range,8:F0}  {x.Tactic,-8} {x.Rounds,4}  {(x.Trigger ? "T" : "-")} "
+                + $" {x.NoseErrDeg,7:F1} {x.AltM,6:F0} {x.GammaDeg,6:F0}"
+                + $" {x.Command.GDemand,5:F1} {x.Command.BankTarget,6:F2} {x.Command.Throttle,5:F2}");
+        }
+        _output.WriteLine($"TOTAL rounds={s[^1].Rounds} over {s[^1].T:F0} s");
+    }
+
+    /// THE CONTROL for the 2v1 zero below: alone, the SAME cold opening converts. The solo
+    /// primary's post-pass separation peaks at 3,494 m — six metres under the 3,500 m Return
+    /// latch — so it stays in ordinary BFM, turns through the reversal, and guns the fixture
+    /// player down (45 rounds by t≈68 s, measured). This is what proves the 2v1 lead's zero is
+    /// formation-induced (the Bracket leg pushes it past the latch) and not a gunnery defect:
+    /// same tier, same airframe, same player, one variable. If THIS test ever fails, the cold
+    /// opening broke at a layer below the formation — look at the merge/BFM path first.
+    [Fact]
+    public void TheColdPrimaryFiresOnTheOpeningEngagement() {
+        var s = FlySolo(180.0);
+        Assert.NotEmpty(s);
+        var alive = s.Where(x => x.SessionActive && x.PlayerAlive).ToList();
+        Assert.True(alive.Count >= 60,
+            $"the fixture only kept the session alive {alive.Count} sampled seconds — the "
+            + "contract judged nothing");
+        Assert.True(alive[^1].Rounds > 0,
+            $"the cold-start primary fired {alive[^1].Rounds} rounds in {alive[^1].T:F0} s of a "
+            + "live opening engagement — the bandit declined the fight (final range "
+            + $"{alive[^1].Range:F0} m, altitude {alive[^1].AltM:F0} m, tactic {alive[^1].Tactic})");
+    }
+
+    /// THE COLD OPENING MUST SHOOT BACK — BOTH OF THEM. Production Builds 260 and 263 (owner
+    /// flights, both cold page loads, ~110 s of real fight each): opponent_rounds_fired 0 and
+    /// opponent_gun_firing true in 0 of 4,383 snapshot rows, while the player scored 3 hits and
+    /// a kill. Two independent causes, one per ship:
+    ///
+    ///   WINGMAN — briefed Presenting and never graduated (fixed by pair graduation; the 2v1
+    ///   contract above pins it). PRIMARY — after the 9 km pass the Bracket leg carries it past
+    ///   the 3.5 km Return latch, and ReengageCommand's angle-proportional G at the 74-degree
+    ///   bank cap turned "re-engage" into a full-burner climbing spiral (measured: 3.7 km to
+    ///   8.5 km altitude, nose 54-95 degrees off, range pinned above the latch forever). The
+    ///   solo control above shows the same primary converting when the latch never captures it.
+    ///
+    /// Doctrine (owner, 2026-08-02): "bandits have to attack, otherwise what's the point." A
+    /// cold visitor's first fight is the product, and this is the shape every cold visitor
+    /// meets. Rounds fired is the production telemetry field that measured the defect
+    /// (opponent_rounds_fired / w1 gun state), so rounds fired is what the contract pins.
+    [Fact]
+    public void BothColdOpponentsFireWhileThePlayerIsAlive() {
+        var s = Fly(240.0, fixture: DurablePlayerTwoShipFixture);
+        Assert.NotEmpty(s);
+        var alive = s.Where(x => x.SessionActive && x.PlayerAlive).ToList();
+        Assert.True(alive.Count >= 30,
+            $"the fixture only kept the fight alive {alive.Count} sampled seconds — the "
+            + "contract judged nothing");
+        int leadRounds = alive[^1].LeadRounds;
+        int wingRounds = alive[^1].WingRounds;
+        _output.WriteLine(
+            $"cold 1v2, durable fixture: lead={leadRounds} rounds, wing={wingRounds} rounds "
+            + $"across {alive[^1].T:F0} s of live fight");
+        Assert.True(wingRounds > 0,
+            $"the wingman fired {wingRounds} rounds across {alive[^1].T:F0} s of live fight — "
+            + "the cold pair's second ship never attacked (production Builds 260/263 shape)");
+        Assert.True(leadRounds > 0,
+            $"the primary fired {leadRounds} rounds across {alive[^1].T:F0} s of live fight — "
+            + "the cold pair's lead never attacked (production Builds 260/263 shape; last "
+            + $"sample: range {alive[^1].PlayerToLead:F0} m, tactic {alive[^1].LeadTactic}, "
+            + $"altitude {alive[^1].LeadAltitude:F0} m)");
     }
 }

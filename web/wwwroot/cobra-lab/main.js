@@ -1,40 +1,49 @@
-import * as THREE from "../vendor/three.module.js?v=264";
+import * as THREE from "../vendor/three.module.js?v=265";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=264";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=264";
+} from "../render/cobra/cobra_canyon_plan.js?v=265";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=265";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=264";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=264";
-import { gunnerStatusText } from "../render/cobra/cobra_gunner_status.js?v=264";
-import { formatCobraRotorcraftStrip } from "../render/cobra/cobra_rotorcraft_hud.js?v=264";
+} from "../render/cobra/cobra_canyon_tour.js?v=265";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=265";
+import { createHud } from "../hud.js?v=265";
+import {
+  cobraHudState,
+  createCobraHudFrame,
+} from "../render/cobra/cobra_hud_adapter.js?v=265";
+import {
+  cobraRotorcraftHudModel,
+  drawCobraRotorcraftHud,
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=265";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=264";
+} from "../render/cobra/cobra_control_profile.js?v=265";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=264";
+} from "../render/cobra/cobra_pilot_input.js?v=265";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=264";
+} from "../render/cobra/ah1g_presence.js?v=265";
 import {
   COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD,
   clampInducedLookRotation,
   lookAnglesFromOffset,
   lookOffsetFromAngles,
-} from "../render/cobra/cobra_camera_bias.js?v=264";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=264";
+} from "../render/cobra/cobra_camera_bias.js?v=265";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=265";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=265";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=265";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -108,12 +117,6 @@ const killsMetric = document.querySelector("#kills");
 const balanceFill = document.querySelector("#balance-fill");
 const holdFill = document.querySelector("#hold-fill");
 const holdLabel = document.querySelector("#hold-label");
-const hudAmmo = document.querySelector("#hud-ammo");
-const hudFob = document.querySelector("#hud-fob");
-const hudKills = document.querySelector("#hud-kills");
-const hudTarget = document.querySelector("#hud-target");
-const hudGunner = document.querySelector("#hud-gunner");
-const hudRotor = document.querySelector("#hud-rotor");
 const objectiveLine = document.querySelector("#objective-line");
 const objectiveDetail = document.querySelector("#objective-detail");
 const debrief = document.querySelector("#debrief");
@@ -136,6 +139,28 @@ let lastTargetKey = null;
 // No target is cued before the pilot's first input: a cold-boot auto-selection used to swing
 // the camera toward a hostile before the player had touched anything.
 let playerHasInteracted = false;
+// Shared first-run controls overlay + contextual nudges (play shell only; created in boot).
+let onboarding = null;
+
+// Sim-derived nudge flags: authority truth, not DOM guesses. Grounded-idle means the ship is
+// on or near the deck with the collective untouched; hostile-idle means a hostile sits inside
+// the gun's 2 km solution envelope (CobraGunTargeting.MaximumSolutionRangeM) with no target cued.
+const NUDGE_HOSTILE_RANGE_M = 2_000;
+function onboardingNudgeState() {
+  if (!bridge || missionTerminal || tourInput?.checked) return {};
+  const clearanceM = authorityState?.route_guidance?.current_clearance_m;
+  const vehicle = authorityState?.vehicle;
+  const hostileInRange = vehicle != null
+    && (authorityState?.ground_war?.units ?? []).some((unit) => unit.alive
+      && unit.faction === "hostile"
+      && Math.hypot(unit.x_m - vehicle.x_m, unit.z_m - vehicle.z_m) <= NUDGE_HOSTILE_RANGE_M);
+  return {
+    groundedIdle: Number.isFinite(clearanceM)
+      && clearanceM <= 3
+      && !keys.has(cobraControlProfile.collective.pull.code),
+    hostileIdle: hostileInRange && !authorityState?.gunner?.selected_target_id,
+  };
+}
 const telemetrySession = `web-cobra-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const telemetryChannel = createCobraTelemetryChannel({
   session: telemetrySession,
@@ -164,28 +189,68 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.06;
 
+// Build 264 owner ruling: no cockpit, the STANDARD F-22 HUD instead, with
+// rotorcraft extras. One engine: this is the production hud.js instance fed by
+// the cobra adapter — never a fork. Audio stays off (gun/GCAS tones are jet
+// systems the Cobra does not carry).
+const hudCanvas = document.querySelector("#hud-canvas");
+const hud = createHud(hudCanvas);
+hud.setAudioEnabled(false);
+const hudPresentationCtx = hudCanvas.getContext("2d", { alpha: true });
+const hudFrameKit = createCobraHudFrame(THREE);
+const hudStateScratch = {};
+// Top inset clears the fixed mission header; the mission card lives bottom-left.
+const HUD_SAFE_INSETS = Object.freeze({ top: 40, right: 0, bottom: 0, left: 0 });
+const hudViewport = { width: 1, height: 1, pixelRatio: 1 };
+const projectionScratch = new THREE.Vector3();
+
+// One-sun doctrine for the canyon scene: the sky shader, the scene light rig, the fog and the
+// basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
+// terrain relief agree about the light. Import lives here to keep the whole scene-constants
+// block contiguous (top-level imports are hoisted regardless of position).
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=265";
+
+const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x6f8a7e);
-scene.fog = new THREE.FogExp2(0x8fa08f, 0.000038);
+scene.background = new THREE.Color(sceneProfile.fog.color);
+scene.fog = new THREE.FogExp2(sceneProfile.fog.color, sceneProfile.fog.density);
 
 const camera = new THREE.PerspectiveCamera(58, 1, 0.5, 32_000);
 camera.rotation.order = "YXZ";
-scene.add(new THREE.HemisphereLight(0xf0f4e6, 0x3a4a2e, 0.95));
-const sun = new THREE.DirectionalLight(0xffe2b8, 1.45);
-sun.position.set(-3_800, 7_600, 2_400);
+scene.add(new THREE.HemisphereLight(
+  sceneProfile.lighting.hemisphereSkyColor,
+  sceneProfile.lighting.hemisphereGroundColor,
+  sceneProfile.lighting.hemisphereIntensity,
+));
+const sunDirection = new THREE.Vector3(...sceneProfile.sunDirectionWorld);
+const sun = new THREE.DirectionalLight(
+  sceneProfile.lighting.sunColor,
+  sceneProfile.lighting.sunIntensity,
+);
+sun.position.copy(sunDirection).multiplyScalar(sceneProfile.lighting.sunDistanceM);
 scene.add(sun);
 
 const skyGeometry = new THREE.SphereGeometry(23_000, 32, 16);
+// THE F-22'S SKY. This is createDecisionSupportSky's cool (Korea) branch at zero altitude —
+// render/scene/scene_builders.js — reproduced here rather than imported, because that builder
+// lives inside a 2,600-line module with a configureSceneBuilders() runtime handshake and an
+// airframe/effects dependency chain this page must not pull in to draw a dome. The maths and the
+// constants are the same, and the constants themselves live in the shared visual profile. The
+// honest follow-up is extracting the sky into its own module both pages import.
 const skyMaterial = new THREE.ShaderMaterial({
   side: THREE.BackSide,
   depthWrite: false,
   fog: false,
   uniforms: {
-    topColor: { value: new THREE.Color(0x3f6a78) },
-    horizonColor: { value: new THREE.Color(0xc4c4a2) },
-    lowerHazeColor: { value: new THREE.Color(0x7a8f6e) },
-    sunColor: { value: new THREE.Color(0xffd59b) },
-    sunDirection: { value: new THREE.Vector3(-0.42, 0.54, -0.73).normalize() },
+    zenithColor: { value: new THREE.Vector3(...sceneProfile.sky.zenithColor) },
+    horizonColor: { value: new THREE.Vector3(...sceneProfile.sky.horizonColor) },
+    belowHorizonColor: { value: new THREE.Vector3(...sceneProfile.sky.belowHorizonColor) },
+    cloudColor: { value: new THREE.Vector3(...sceneProfile.sky.cloudColor) },
+    cloudShelf: { value: new THREE.Vector2(...sceneProfile.sky.cloudShelf) },
+    skyCurveExponent: { value: sceneProfile.sky.skyCurveExponent },
+    shoulderFalloff: { value: sceneProfile.sky.horizonShoulderFalloff },
+    shoulderWeight: { value: sceneProfile.sky.horizonShoulderWeight },
+    sunDirection: { value: sunDirection.clone() },
   },
   vertexShader: `
     varying vec3 vSkyDirection;
@@ -195,19 +260,38 @@ const skyMaterial = new THREE.ShaderMaterial({
     }
   `,
   fragmentShader: `
-    uniform vec3 topColor;
+    uniform vec3 zenithColor;
     uniform vec3 horizonColor;
-    uniform vec3 lowerHazeColor;
-    uniform vec3 sunColor;
+    uniform vec3 belowHorizonColor;
+    uniform vec3 cloudColor;
+    uniform vec2 cloudShelf;
+    uniform float skyCurveExponent;
+    uniform float shoulderFalloff;
+    uniform float shoulderWeight;
     uniform vec3 sunDirection;
     varying vec3 vSkyDirection;
     void main() {
-      float height = vSkyDirection.y;
-      vec3 colour = mix(lowerHazeColor, horizonColor, smoothstep(-0.14, 0.06, height));
-      colour = mix(colour, topColor, smoothstep(0.02, 0.72, height));
-      float sunGlow = pow(max(dot(vSkyDirection, sunDirection), 0.0), 18.0) * 0.26;
-      float sunCore = pow(max(dot(vSkyDirection, sunDirection), 0.0), 320.0) * 1.25;
-      gl_FragColor = vec4(colour + sunColor * (sunGlow + sunCore), 1.0);
+      vec3 direction = normalize(vSkyDirection);
+      float aboveHorizon = max(direction.y, 0.0);
+      float skyCurve = pow(aboveHorizon, skyCurveExponent);
+      vec3 colour = mix(horizonColor, zenithColor, skyCurve);
+      // Narrow non-luminous horizon shoulder: stays readable in unusual attitudes.
+      float horizonShoulder = exp(-abs(direction.y) * shoulderFalloff);
+      colour = mix(colour, horizonColor * 1.08, horizonShoulder * shoulderWeight);
+      // Painted cumulus band (the documented divergence: no tactical cloud field here).
+      float azimuth = atan(direction.z, direction.x);
+      float shelf = smoothstep(cloudShelf.x, cloudShelf.x + 0.035, direction.y)
+        * (1.0 - smoothstep(cloudShelf.y * 0.62, cloudShelf.y, direction.y));
+      float puff = 0.5 * sin(azimuth * 7.3 + 1.7)
+        + 0.34 * sin(azimuth * 16.7 - direction.y * 47.0 + 0.6)
+        + 0.22 * sin(azimuth * 29.3 + direction.y * 83.0);
+      colour = mix(colour, cloudColor, shelf * smoothstep(0.16, 0.68, puff) * 0.55);
+      if (direction.y < 0.0) {
+        colour = mix(belowHorizonColor, horizonColor, exp(direction.y * 16.0));
+      }
+      gl_FragColor = vec4(colour, 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
     }
   `,
 });
@@ -298,6 +382,10 @@ function sampleAuthorityState(nowMs, { force = false } = {}) {
   authorityState = JSON.parse(bridge.GetState());
   // QA seam: headless smoke scripts steer against authoritative truth, not DOM guesses.
   window.__gunsOnlyCobraAuthority = authorityState;
+  // Same contract for the one visual claim a screenshot cannot settle: first person must
+  // render ZERO airframe geometry, exterior/tour must render the silhouette. A distant
+  // ship on a tour rail is a handful of pixels either way, so this is measured, not eyed.
+  window.__gunsOnlyCobraAirframeVisible = () => ah1gPresence?.group?.visible === true;
   refreshGroundTargets();
   groundWarPresentation?.sync(authorityState.ground_war ?? null, targetSelect.value || null);
   recordTelemetry(nowMs);
@@ -329,6 +417,12 @@ function resize() {
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
+  // The HUD keeps device sharpness regardless of the scene quality tier — same
+  // doctrine as app.js: adaptive/scene resolution owns the 3D surface only.
+  hudViewport.width = width;
+  hudViewport.height = height;
+  hudViewport.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+  hud.resize(width, height, hudViewport.pixelRatio, HUD_SAFE_INSETS);
 }
 
 function routeById(routeId) {
@@ -774,18 +868,8 @@ function updateObjectiveHud(war) {
     : war.control <= (war.defeat_control_threshold ?? -0.75)
       ? `LOSING ${Math.round((war.defeat_hold_progress ?? 0) * 100)}%`
       : "HOLD —");
-  setText(hudAmmo, war.ammo_dry ? "AMMO DRY" : `AMMO ${war.ammo_remaining}`);
-  setText(hudFob, war.over_fob
-    ? "FOB PAD · REARM"
-    : `FOB ${(war.fob_range_m / 1_000).toFixed(1)} KM`);
-  setText(hudKills, `KILLS ${war.debrief?.hostile_kills ?? 0}`);
-  const selected = authorityState?.gunner?.selected_target_id;
-  setText(hudTarget, selected ? `TARGET ${selected.split(".").pop()}` : "TARGET —");
-  setText(hudGunner, gunnerStatusText(authorityState?.gunner, war));
-  setText(
-    hudRotor,
-    formatCobraRotorcraftStrip(authorityState?.vehicle, authorityState?.route_guidance),
-  );
+  // Ammo/FOB/kills/target/gunner/rotor truth moved from the DOM text strip into the
+  // canvas HUD (hud.js + drawCobraRotorcraftHud); the card keeps objective copy only.
   if (war.ammo_dry) {
     setText(objectiveLine, "BINGO / DRY · REARM AT CAMP EMBER");
     setText(objectiveDetail, "Put the skids on the Camp Ember pad, then return to the fight");
@@ -797,9 +881,9 @@ function updateObjectiveHud(war) {
     setText(objectiveDetail, "Keep tipping the fight — do not let hostiles claw it back");
   } else {
     setText(objectiveLine, "TIP CONTROL FRIENDLY · HOLD 45s");
-    // The collective is a lever, not a throttle: S pulls it up, W lowers it. Without this hint
-    // a pilot pressing W descends blind. The mapping itself is deliberate — do not "fix" it.
-    setText(objectiveDetail, "S collective up · W down · Tab target · hold F gunner");
+    // Owner ruling 2026-08-05: collective follows game convention — W raises, S lowers
+    // (the Builds 253-264 real-lever mapping with S=pull is overruled).
+    setText(objectiveDetail, "W collective up · S down · Tab target · hold F gunner");
   }
 }
 
@@ -856,7 +940,8 @@ function animate(timeMs) {
 
   if (tourInput.checked) updateTour(deltaSeconds);
   else updateManual(deltaSeconds);
-  const aglM = tourInput.checked ? tourCommandedAglM : cameraAglM();
+  applyParkedCamera();
+  const aglM = tourInput.checked && !parkedCamera ? tourCommandedAglM : cameraAglM();
   presentation.update({
     cameraPosition: camera.position,
     cameraAglM: aglM,
@@ -873,10 +958,101 @@ function animate(timeMs) {
     const pose = readVehiclePose();
     if (pose) updateAh1gPresence(ensureAh1gPresence(), pose, deltaSeconds);
   }
+  // The camera mode is the ONLY input that decides whether the airframe exists: first
+  // person renders zero cockpit geometry (Build 264 owner ruling), the tour camera looks
+  // AT the ship so the silhouette returns. Set unconditionally — the earlier per-branch
+  // version left the shell hidden whenever a terminal mission froze the tour branch.
+  if (ah1gPresence) ah1gPresence.setFirstPerson(!tourInput.checked);
   renderer.render(scene, camera);
+  drawHud(timeMs, deltaSeconds);
   recordFrameDuration(rawDeltaMs);
   updateMetrics(aglM);
+  onboarding?.advanceNudges(onboardingNudgeState(), deltaSeconds);
 }
+
+/**
+ * World + HUD, zero cockpit: the production hud.js pass over the rendered frame,
+ * then the rotorcraft extras in the same combiner language. Tour/preview is an
+ * exterior camera, so the combiner clears instead — as does a terminal sortie, whose
+ * card owns the frame and whose rotor truth stopped being true at the strike.
+ */
+function drawHud(timeMs, deltaSeconds) {
+  const pose = readVehiclePose();
+  const firstPerson = Boolean(bridge) && !tourInput.checked && !missionTerminal
+    && pose && authorityState;
+  if (!firstPerson) {
+    hudPresentationCtx.save();
+    hudPresentationCtx.setTransform(1, 0, 0, 1, 0, 0);
+    hudPresentationCtx.clearRect(0, 0, hudCanvas.width, hudCanvas.height);
+    hudPresentationCtx.restore();
+    return;
+  }
+  cobraHudState(authorityState, pose, hudStateScratch);
+  hud.draw(hudFrameKit.update({
+    camera,
+    pose,
+    state: hudStateScratch,
+    dt: deltaSeconds,
+    nowSeconds: timeMs / 1000,
+  }));
+  drawCobraRotorcraftHud(hudPresentationCtx, cobraRotorcraftHudModel(authorityState), {
+    width: hudViewport.width,
+    height: hudViewport.height,
+    pixelRatio: hudViewport.pixelRatio,
+    safeInsets: HUD_SAFE_INSETS,
+    projectWorldPoint: projectSimPointToScreen,
+  });
+}
+
+/**
+ * Sim-frame world point -> CSS pixels on the combiner, through the REAL render camera
+ * (so the designation bracket and hud.js symbology cannot disagree). Sim Z is north and
+ * the render frame flips it, exactly as the ground-war presentation places its units.
+ */
+function projectSimPointToScreen(xM, yM, zM) {
+  projectionScratch.set(Number(xM) || 0, Number(yM) || 0, -(Number(zM) || 0));
+  projectionScratch.project(camera);
+  const inFrame = projectionScratch.z < 1
+    && Math.abs(projectionScratch.x) <= 1 && Math.abs(projectionScratch.y) <= 1;
+  return {
+    x: (projectionScratch.x * 0.5 + 0.5) * hudViewport.width,
+    y: (0.5 - projectionScratch.y * 0.5) * hudViewport.height,
+    inFrame,
+  };
+}
+
+// QA seam, alongside __gunsOnlyCobraAuthority: headless visual review parks the PRODUCTION camera
+// at a named world pose so the same shot is comparable across builds. It overrides pose only —
+// after the tour/manual update and after presentation.update(), so streaming, ambient shedding,
+// budgets, shaders and the sim all still run their production path (one-engine doctrine). Visual
+// work on this scene has to be judged from rendered frames, and a reviewer who cannot return to
+// the same viewpoint is comparing two different pictures.
+let parkedCamera = null;
+function applyParkedCamera() {
+  if (!parkedCamera) return;
+  const groundM = groundAt(parkedCamera.eastM, parkedCamera.northM);
+  camera.position.set(parkedCamera.eastM, groundM + parkedCamera.aglM, -parkedCamera.northM);
+  camera.rotation.set(parkedCamera.pitchRad, parkedCamera.yawRad, 0);
+  if (camera.near !== 0.5) {
+    camera.near = 0.5;
+    camera.updateProjectionMatrix();
+  }
+}
+window.__gunsOnlyCobraLabCamera = Object.freeze({
+  park(eastM, northM, aglM, yawRad, pitchRad = 0) {
+    parkedCamera = {
+      eastM: Number(eastM),
+      northM: Number(northM),
+      aglM: Number(aglM),
+      yawRad: Number(yawRad),
+      pitchRad: Number(pitchRad),
+    };
+    return parkedCamera;
+  },
+  release() {
+    parkedCamera = null;
+  },
+});
 
 function isManualControl(code) {
   return code === "KeyW" || code === "KeyS" || code === "KeyA" || code === "KeyD"
@@ -1017,6 +1193,17 @@ async function boot() {
     setStatus(PLAY_MODE
       ? "HOLD THE BRIDGE · AH-1G ONLINE"
       : "AH-1G AUTHORITY ONLINE · LAB", "ready");
+    if (PLAY_MODE) {
+      onboarding = createControlsOnboarding({
+        modeId: COBRA_ONBOARDING_CONTENT.modeId,
+        content: COBRA_ONBOARDING_CONTENT,
+        nudges: [
+          { id: "lift", text: "HOLD W — COLLECTIVE UP", when: (s) => s.groundedIdle === true, afterSeconds: 3 },
+          { id: "engage", text: "TAB TO TARGET · HOLD F TO ENGAGE", when: (s) => s.hostileIdle === true, afterSeconds: 1.5 },
+        ],
+      });
+      onboarding.maybeShowFirstRun();
+    }
     lastTimeMs = performance.now();
     animationFrame = requestAnimationFrame(animate);
   } catch (error) {

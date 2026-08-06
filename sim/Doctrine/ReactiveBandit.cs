@@ -140,6 +140,20 @@ public static class BanditFireControl {
         return System.Math.Acos(System.Math.Clamp(dot, -1.0, 1.0));
     }
 
+    /// <summary>How much lead this shot actually REQUIRES: the angle between the line of sight to
+    /// the contact and the ballistic solution. It is a property of the geometry, not of the
+    /// shooter's tracking — near zero in a low-aspect tail chase, tens of degrees across a
+    /// crossing turn — and it is what decides whether pointing at the target is the same thing as
+    /// pointing at the solution.</summary>
+    public static double RequiredLeadAngleRad(
+        in AircraftState own, in ActorObservation player) {
+        Vec3D line = player.Position - own.Position;
+        double rangeM = line.Length;
+        if (!double.IsFinite(rangeM) || rangeM < 1e-9) return 0.0;
+        double dot = (line * (1.0 / rangeM)).Dot(LeadDirection(own, player));
+        return System.Math.Acos(System.Math.Clamp(dot, -1.0, 1.0));
+    }
+
     public static bool InLeadFiringEnvelope(
         in AircraftState own, in ActorObservation player, double leadErrorGateRad) {
         Vec3D line = player.Position - own.Position;
@@ -808,12 +822,20 @@ public sealed class ReactiveBandit :
         // A bandit that is setting the player up does not shoot them. Step's presenting gate
         // cannot cover this: the session asks the actor to fire on a separate path.
         if (Presenting) return false;
-        if (CatastrophicallyDamaged || _terrainRecoveryActive
-            || (!BanditFireControl.InFiringEnvelope(
-                    State, player, EffectiveFireConeRad)
-                && !BanditFireControl.InLeadFiringEnvelope(
-                    State, player, EffectiveLeadFireConeRad)))
-            return false;
+        if (CatastrophicallyDamaged || _terrainRecoveryActive) return false;
+        bool onSolution = BanditFireControl.InLeadFiringEnvelope(
+            State, player, EffectiveLeadFireConeRad);
+        // The body gate is not wrong everywhere — it is wrong exactly where it DISAGREES with the
+        // solution. In a low-aspect tail chase the required lead is a fraction of a degree, so the
+        // target IS the solution and pointing at it is correct airmanship; across a crossing turn
+        // the solution is 17 deg away and the same gate authorises a shot into empty sky. A pilot
+        // with solution discipline therefore keeps the wide gate only where the two agree, which
+        // is a geometric test on the shot, not a tracking test on the pilot.
+        bool onBody = (_profile.FiresOnBodyGate
+                || BanditFireControl.RequiredLeadAngleRad(State, player)
+                    <= EffectiveLeadFireConeRad)
+            && BanditFireControl.InFiringEnvelope(State, player, EffectiveFireConeRad);
+        if (!onSolution && !onBody) return false;
 
         // Start the burst when a usable opportunity actually appears. The historical absolute
         // engagement clock discarded short post-merge windows whenever they happened to arrive
@@ -1286,7 +1308,8 @@ public sealed class ReactiveBandit :
     PilotCommand GunTrackCommand(in ActorObservation player) {
         var own = State;
         var aim = BanditFireControl.LeadPoint(own, player);
-        double authority = System.Math.Clamp(_profile.MaxAcquireG / 5.5, 0.75, 2.0);
+        double authority = System.Math.Clamp(
+            _profile.EffectiveFineTrackAuthorityG / 5.5, 0.75, 2.0);
         double tau = 0.6 / authority;
         // LEAD THE LEAD POINT. A first-order law chasing a moving aim point settles a whole lag
         // behind it — aim rate times the loop's time constant, ~3-4 deg against a turning
@@ -1402,7 +1425,8 @@ public sealed class ReactiveBandit :
         // ManoeuvringFinisher=false is the frozen BfmDuel reference yardstick: it flies the same
         // Veteran planner but declines this law, so a tier ladder is measured against a ruler
         // that does not itself improve with the bandit build.
-        if (!_profile.ManoeuvringFinisher || _profile.MaxAcquireG > 5.5) {
+        if (!_profile.ManoeuvringFinisher
+            || _profile.MaxAcquireG > _profile.FineTrackMaxG) {
             _fineTrackLatched = false;
             return false;
         }
@@ -1862,22 +1886,37 @@ public sealed class ReactiveBandit :
         var own = State;
         var aim = KeepAimInFightVolume(player.Position);
         double floorHere = LocalFloorM(own.Position.X, own.Position.Z);
-        if (aim.Y < floorHere + 300.0) aim = aim with { Y = floorHere + 300.0 };
-        // Keep the aim point within a bounded vertical step of our own altitude. A target far below
-        // the flight path drives BankToPlaceLiftVectorOn toward +/-pi — the same ill-conditioned
-        // geometry the nose-high recovery hits — and the bank limit then turns the "descend and
-        // re-engage" into a 75-degree banked LEVEL turn that holds altitude indefinitely. Traced,
-        // that floated the bandit to 44,000 ft while nominally re-engaging a player at 15,000 ft.
-        // Walking the aim down in steps keeps the solution well conditioned and the descent honest.
-        aim = aim with {
-            Y = own.Position.Y + System.Math.Clamp(aim.Y - own.Position.Y, -900.0, 900.0)
-        };
-        // Clamping the vertical delta shortens the descent; it does NOT move the aim out of the
-        // vertical plane through the velocity vector, which is the actual singular geometry. A
-        // player dead ahead-and-below (or dead astern-and-below) still drives the bank solution to
-        // +/-pi, where the sign is rounding noise and the command chatters left/right every tick.
-        // Nudge the aim sideways — toward the side the player already lies on — so the solution is
-        // always well conditioned. The offset is small enough not to bend the intercept.
+        // ONE AIM VECTOR, RESOLVED BEFORE ANYTHING IS DECIDED ABOUT IT. The gate below and the
+        // command it selects must read the SAME aim: a predicate computed against a lower aim
+        // than the one actually flown can arm a slice for a depression the flown command has
+        // already clamped away. So every floor and conditioning correction that applies to both
+        // branches — the path floor, the sideways nudge — is applied here, up front. Only the
+        // walk-down clamp, which the dive form deliberately does not use, is left downstream.
+        //
+        // Sample the floor along the path we are about to fly, not just under our feet. Defend
+        // and Energy both do this; this command did not, so a re-engage toward a low player over
+        // rising ground cleared the aim point and flew the jet into the ridge in between.
+        double aheadFloorM = LocalFloorM(
+            own.Position.X + own.ForwardDir().X * 900.0,
+            own.Position.Z + own.ForwardDir().Z * 900.0);
+        double pathFloorM = System.Math.Max(floorHere, aheadFloorM);
+        // ARMS ONLY WHEN THE AIM IS GENUINELY THE PLAYER. With the player far outside the fight
+        // volume, KeepAimInFightVolume hands this command a spawn-adjacent phantom, and
+        // AngleTo(that phantom) can read as "reversal" while the nose sits dead ON the real
+        // player — probed in the arena-leash corridor, the slice then executed a
+        // max-performance turn ONTO the phantom (nose-to-player dot +1.00 to -0.98) and
+        // manufactured the 33 s nose-away leg it exists to prevent. This asks about
+        // KeepAimInFightVolume's displacement specifically, so it reads that function's output
+        // before the floor and conditioning corrections move the aim for other reasons.
+        bool aimIsThePlayer =
+            HorizontalDistance(aim, player.Position) < 200.0;
+        if (aim.Y < pathFloorM + 300.0) aim = aim with { Y = pathFloorM + 300.0 };
+        // The vertical clamps do NOT move the aim out of the vertical plane through the velocity
+        // vector, which is the actual singular geometry. A player dead ahead-and-below (or dead
+        // astern-and-below) drives the bank solution to +/-pi, where the sign is rounding noise
+        // and the command chatters left/right every tick. Nudge the aim sideways — toward the
+        // side the player already lies on — so the solution is always well conditioned. The
+        // offset is small enough not to bend the intercept.
         var flatToPlayer = new Vec3D(player.Position.X - own.Position.X, 0.0,
             player.Position.Z - own.Position.Z);
         if (flatToPlayer.Length < 400.0) {
@@ -1885,15 +1924,97 @@ public sealed class ReactiveBandit :
             if (wing.Length > 1e-6)
                 aim += wing.Normalized() * (400.0 * _breakSign);
         }
-        // Sample the floor along the path we are about to fly, not just under our feet. Defend and
-        // Energy both do this; this command did not, so a re-engage toward a low player over rising
-        // ground cleared the aim point and flew the jet into the ridge in between.
-        double aheadFloorM = LocalFloorM(
-            own.Position.X + own.ForwardDir().X * 900.0,
-            own.Position.Z + own.ForwardDir().Z * 900.0);
-        double pathFloorM = System.Math.Max(floorHere, aheadFloorM);
-        if (aim.Y < pathFloorM + 300.0) aim = aim with { Y = pathFloorM + 300.0 };
+        // NEVER CONVERT A RE-ENGAGE INTO A CLIMBING SPIRAL. Measured on the cold-opening 2v1
+        // (the production Build 260/263 zero-fire shape): a lead captured by the Return latch
+        // at 3.6 km and 140 degrees nose-off flew this command for 30 continuous seconds and
+        // CLIMBED from 3.7 km to 8.5 km at full burner, nose 54-95 deg off, range pinned above
+        // the 3.5 km release forever — zero rounds for the whole engagement. The mechanism is
+        // the G schedule below at the bank cap: 1.4 + angle*2.6 commands ~7 G at 74 deg of
+        // bank, whose vertical lift component is ~2 g — a self-sustaining climbing spiral that
+        // drops the target ever further below the cap-limited lift vector. The vertical
+        // walk-down clamp cannot help; it moves the AIM, not the lift vector.
+        //
+        // The signature, not a blanket "target below": (a) a genuine REVERSAL (past 90 deg of
+        // nose error — where any hard pull at capped bank is mostly lift-up), or (b) the target
+        // steeply below (the belly-side attractor that sustained the measured 54-95 deg orbit).
+        // A shallow 3-degree step-down at 4 NM is an ordinary chase and must keep the ordinary
+        // pursuit — an earlier gate on altitude alone put the arena-leash corridor's high
+        // runner chase on mil power and re-created the stern chase that test exists to prevent.
+        double altExcessM = own.Position.Y - aim.Y;
+        double horizontalToAimM = System.Math.Sqrt(
+            (aim.X - own.Position.X) * (aim.X - own.Position.X)
+            + (aim.Z - own.Position.Z) * (aim.Z - own.Position.Z));
+        bool steeplyBelow = altExcessM > 400.0
+            && altExcessM > 0.35 * System.Math.Max(1.0, horizontalToAimM);
+        bool reversal = AngleTo(aim) > 1.57;
+        // Below-aim only: climbing hard at a player ABOVE is correct pursuit — the arena-leash
+        // corridors chase a full-power runner holding altitude overhead, and routing their
+        // reversals through this branch (mil power, past-vertical bank) re-created the exact
+        // stern chase and Energy chatter those corridors forbid. The measured wallow only ever
+        // formed with the player inside the volume and the aim unclamped, so that is the only
+        // geometry this branch owns.
+        //
+        // AND ONLY WITH THE AIR TO COMPLETE IT. The slice rolls the lift vector PAST vertical and
+        // pulls — the same manoeuvre the nose-high recovery flies, which gates its identical
+        // 2.0 rad roll behind real clearance and real speed precisely because past vertical the
+        // nose comes down at the ground. This one points downhill by design, so it needs the gate
+        // at least as much; leaning on NeedsTerrainRecovery to catch it afterwards leans on a
+        // reflex that documents itself as wrong about a Split-S with air below. Clearance is
+        // measured against the PATH floor (the ridge ahead, not just the ground underfoot) since
+        // that is the surface the slice is turning toward. Below the gate the ordinary pursuit —
+        // 1.30 rad, walked-down aim, burner — still converts the geometry, just gently.
+        double sliceClearanceM = own.Position.Y - pathFloorM;
+        bool diveReengage = aimIsThePlayer
+            && altExcessM > 0.0
+            && (steeplyBelow || reversal)
+            && sliceClearanceM > 1500.0
+            && own.Speed > 135.0;
+        // Keep the aim point within a bounded vertical step of our own altitude. A target far below
+        // the flight path drives BankToPlaceLiftVectorOn toward +/-pi — the same ill-conditioned
+        // geometry the nose-high recovery hits — and the bank limit then turns the "descend and
+        // re-engage" into a 75-degree banked LEVEL turn that holds altitude indefinitely. Traced,
+        // that floated the bandit to 44,000 ft while nominally re-engaging a player at 15,000 ft.
+        // Walking the aim down in steps keeps the solution well conditioned and the descent honest.
+        // The dive form keeps the TRUE aim: its low-G banked pull is what makes the descent
+        // honest, and a walked-down aim would re-shallow the bank solution it depends on.
+        // Clamping the vertical delta shortens the descent, so the path floor is re-applied after
+        // it: the walk-down can otherwise step the aim back below the ridge in between.
+        if (!diveReengage) {
+            aim = aim with {
+                Y = own.Position.Y
+                    + System.Math.Clamp(aim.Y - own.Position.Y, -900.0, 900.0)
+            };
+            if (aim.Y < pathFloorM + 300.0) aim = aim with { Y = pathFloorM + 300.0 };
+        }
         double angle = AngleTo(aim);
+        if (diveReengage) {
+            // The SLICE, not the housekeeping dive. ReturnCommand's 3.8 G/77-degree form was
+            // tried here first and merely slowed the runaway (measured: the lead still topped
+            // out at 8.3 km and needed 19 more seconds to point in — g*cos(77 deg) is 0.83 g
+            // vertical, so a +19-degree flight path decays at ~0.2 deg/s, and 3.7 lateral g
+            // turns just 7 deg/s against a 140-degree reversal). What measurably converts this
+            // exact geometry is the solo control's planner command: lift vector rolled PAST
+            // vertical onto the target and a max-performance pull — 148 to 4 degrees of nose
+            // error in 13 s, descending. So: the true bank solution up to 115 degrees, the
+            // reversal G schedule below, and no afterburner — feeding speed into a reversal
+            // only grows the radius (the planner's own converting command held ~mil power).
+            // The moment the reversal completes (angle back under 90 deg, depression shallow)
+            // this branch stops selecting itself and the burner pursuit below resumes.
+            //
+            // Throttle discriminates the failure from the fight: burner only feeds the runaway
+            // while the PATH points up (the measured spiral held gamma +17..29 deg), so mil
+            // power applies exactly then. A reversal flown level or descending keeps burner —
+            // the arena-leash corridors chase a full-power runner through thin air at 11 km,
+            // and cutting their reversals to mil re-created the stern chase and an
+            // Energy-tactic chatter those corridors exist to forbid.
+            double sliceBank = LimitedBankTo(aim, 2.0);
+            double sliceG = System.Math.Min(1.4 + angle * 2.6,
+                System.Math.Max(1.05, AvailableAcquireG(safetyReserve: true)));
+            double sliceThrottle = own.Gamma > 0.05
+                ? System.Math.Min(_maximumThrottle, 1.05)
+                : _maximumThrottle;
+            return new PilotCommand(sliceG, sliceBank, sliceThrottle, 0.0);
+        }
         // Hard enough to actually convert the geometry, soft enough not to scrub to the corner and
         // arrive at the merge slow: past 90 degrees off it is a max-perform reversal, inside that
         // it tightens with the angle.
@@ -2579,10 +2700,29 @@ public sealed class ReactiveBandit :
             // Counting any nose-on sample below maximum range also rewarded geometry inside the
             // no-fire minimum range, so a close overshoot could outscore a genuinely usable
             // solution.
-            if (BanditFireControl.InFiringEnvelope(probeState, predictedPlayer)
-                || BanditFireControl.InLeadFiringEnvelope(
-                    probeState, predictedPlayer, _profile.LeadFireConeRad))
-                windowSeconds += dt;
+            //
+            // SCORE THE SOLUTION, NOT THE OPPORTUNITY. Adding the lead term as an OR alongside the
+            // body term left the EASIER term dominating: the body cone is satisfied by pure
+            // pursuit, which is precisely the geometry a gun cannot use, so the optimiser kept
+            // flying nose-on and the solution never arrived. Measured on GunConversionFunnel, the
+            // Ace's ballistic lead error at the trigger was p10 9.2 deg / median 17.3 deg against
+            // a 0.58 deg requirement, and its lead gate was met for 0.00 s of 62.1 s in range —
+            // its only near-solution moments were head-on merge passes, where crossing rate is low
+            // and the first-pass ROE forbids the shot anyway.
+            //
+            // For a pilot whose trigger is gated on the solution, the ROLLOUT must be too, or the
+            // BFM never produces the geometry the trigger is waiting for. The shaping cone stays
+            // at the 3 deg gun cone rather than the tier's much tighter TRIGGER cone: shaping on
+            // the trigger cone flattens the angle gradient to nothing over a short horizon and the
+            // controller orbits outside it, which is the same failure the body-cone comment above
+            // records.
+            bool scoredWindow = _profile.FiresOnBodyGate
+                ? BanditFireControl.InFiringEnvelope(probeState, predictedPlayer)
+                    || BanditFireControl.InLeadFiringEnvelope(
+                        probeState, predictedPlayer, _profile.LeadFireConeRad)
+                : BanditFireControl.InLeadFiringEnvelope(
+                    probeState, predictedPlayer, gunConeRad);
+            if (scoredWindow) windowSeconds += dt;
             // Score the same geometry from the attacker's side. The predicted player direction
             // and position come only from ActorObservation; the probe is this candidate's honest
             // kernel rollout. A projected player gun line should compete point-for-point with

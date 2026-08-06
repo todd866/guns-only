@@ -52,7 +52,10 @@ public static class GunneryPitchAssist {
         double rangeM,
         bool enabled,
         bool lateralRollEnabled = true,
-        double closureMps = 0.0) {
+        double closureMps = 0.0,
+        GunneryLeadRateEstimator? leadRate = null,
+        PilotLateralCommitmentState? lateralCommitment = null,
+        double deltaSeconds = 0.0) {
         ArgumentNullException.ThrowIfNull(atmosphere);
         GunneryPitchAssistResult inactive = new(pilotCommand,
             GunneryPitchAssistState.Inactive(pilotCommand.GDemand));
@@ -74,8 +77,10 @@ public static class GunneryPitchAssist {
             || !aircraft.BodyAttitude.IsFinite
             || aircraft.BodyAttitude.LengthSquared < 1e-12
             || !IsFinite(ballisticLeadDirection)
-            || ballisticLeadDirection.Length < 1e-9)
+            || ballisticLeadDirection.Length < 1e-9) {
+            leadRate?.Reset();
             return inactive;
+        }
 
         Vec3D lead = ballisticLeadDirection.Normalized();
         QuaternionD attitude = aircraft.BodyAttitude.Normalized();
@@ -90,8 +95,10 @@ public static class GunneryPitchAssist {
         double outerCaptureAngleRad = System.Math.Max(
             fullAuthorityCaptureAngleRad,
             SafePursuitOuterCaptureAngleRad);
-        if (forwardProjection <= 0.0 || totalError >= outerCaptureAngleRad)
+        if (forwardProjection <= 0.0 || totalError >= outerCaptureAngleRad) {
+            leadRate?.Reset();
             return inactive;
+        }
 
         double timeToPassS = closureMps > 50.0
             ? rangeM / closureMps : double.PositiveInfinity;
@@ -117,18 +124,30 @@ public static class GunneryPitchAssist {
                     / (SafePursuitFullTimeToPassSeconds
                         - SafePursuitFadeStartTimeToPassSeconds));
             shoulderAuthority = rangeAuthority * angleAuthority * pursuitAuthority;
-            if (shoulderAuthority <= 0.0)
+            if (shoulderAuthority <= 0.0) {
+                leadRate?.Reset();
                 return inactive;
+            }
         }
 
         // Removing the body-right component is implicit in atan2(up, forward): lateral miss angle
         // gates capture through totalError, but only the vertical component may alter the command.
         double pitchError = System.Math.Atan2(lead.Dot(bodyUp), forwardProjection);
-        double requestedPitchRate = System.Math.Clamp(
+        double measuredPitchRate = aircraft.BodyRates.Q;
+
+        // The reference is the lead line's OWN inertial pitch rate plus a bounded error-nulling
+        // term. Without the first half (Build 264 and earlier) the law referenced a stationary
+        // line: in any tracking turn the pilot's measured q already exceeds the whole capture
+        // rate, the residual goes negative, and the correction clamps to zero — the aid was
+        // structurally silent in exactly the window that converts. Re-basing leaves the declared
+        // capture rate as what it always was, a cap on the CORRECTION, not on the tracking task.
+        // Fail-closed: no estimator, or no valid history, gives exactly the old reference.
+        double leadRateFeedForward = leadRate?.Update(
+            pitchError, measuredPitchRate, deltaSeconds) ?? 0.0;
+        double requestedPitchRate = leadRateFeedForward + System.Math.Clamp(
             parameters.GunneryPitchAssistGainPerSecond * pitchError,
             -parameters.GunneryPitchAssistMaxRateRad,
             parameters.GunneryPitchAssistMaxRateRad);
-        double measuredPitchRate = aircraft.BodyRates.Q;
         double pitchRateError = requestedPitchRate - measuredPitchRate;
 
         // The production law has the incremental relation delta-q = delta-n * g / V. Subtract
@@ -184,6 +203,15 @@ public static class GunneryPitchAssist {
             parameters.GunneryLateralAssistYawGain * lateralError,
             -parameters.GunneryLateralAssistMaxYaw,
             parameters.GunneryLateralAssistMaxYaw);
+        // The lateral half carries up to half of full aileron with no pilot-input fade of its own,
+        // which is how it came to fight commanded reversals. Intent, not geometry, owns this axis:
+        // through a commanded reversal it is off entirely, and it may never push opposite a lateral
+        // input the pilot is actively holding. Pitch is untouched — a reversal is a roll, and the
+        // pull is what the pilot wants anyway.
+        if (lateralCommitment is { } commitment) {
+            rollAssist = commitment.Gate(rollAssist);
+            yawAssist = commitment.Gate(yawAssist);
+        }
         double assistedRoll = System.Math.Clamp(pilotCommand.RollControl + rollAssist, -1.0, 1.0);
         double assistedRudder = System.Math.Clamp(pilotCommand.Rudder + yawAssist, -1.0, 1.0);
 

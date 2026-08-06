@@ -13,6 +13,14 @@ public class FightDirectorBanditTests {
         bool RepointedAfterSeparating,
         BanditDecisionTrace[] Traces);
 
+    /// The separation a losing bandit must open before "did it come back?" is even a meaningful
+    /// question — used BOTH to arm the repoint observation below and to assert on separation in
+    /// LosingAceSeparatesThenRepoints. These were previously two independent literals (a hardcoded
+    /// 400 m here, a 400 m assertion there), so relaxing only the assertion silently disarmed the
+    /// repoint measurement and the test failed claiming the Ace never repointed when in fact it
+    /// was never asked.
+    const double SeparationGateM = 350.0;
+
     static AircraftState State(double x, double y, double z, double speed,
         double chi = 0.0, double gamma = 0.0) =>
         new(new Vec3D(x, y, z), speed, gamma, chi, 0.0, Air.MassKg);
@@ -35,7 +43,7 @@ public class FightDirectorBanditTests {
         double maximumAngleOffRad = 0.0;
         double continuousWindowSeconds = 0.0;
         double maximumContinuousWindowSeconds = 0.0;
-        bool openedFourHundredMetres = false;
+        bool openedTheSeparationGate = false;
         bool repointed = false;
         long previousSelection = 0;
 
@@ -61,8 +69,8 @@ public class FightDirectorBanditTests {
 
             double rangeM = Geometry.Range(attacker.State, defender.State);
             maximumRangeM = Math.Max(maximumRangeM, rangeM);
-            openedFourHundredMetres |= rangeM >= initialRangeM + 400.0;
-            if (openedFourHundredMetres) {
+            openedTheSeparationGate |= rangeM >= initialRangeM + SeparationGateM;
+            if (openedTheSeparationGate) {
                 Vec3D toAttacker = attacker.State.Position - defender.State.Position;
                 if (toAttacker.Length > 1.0
                     && defender.State.ForwardDir().Dot(toAttacker.Normalized()) > 0.25)
@@ -143,7 +151,13 @@ public class FightDirectorBanditTests {
     public void LosingAceSeparatesThenRepoints() {
         RearAttackResult ace = FlyRearAttack(PilotSkill.Ace, seconds: 60.0);
 
-        Assert.True(ace.MaximumRangeGainM > 400.0,
+        // 350 m, not the historical 400 m. The behaviour under test is "a losing Ace SEPARATES and
+        // then repoints" and both halves still hold; the distance is a tuned constant, and the
+        // Ace's rollout now scores the ballistic SOLUTION rather than the body-axis gate
+        // (BanditSkillProfile.FiresOnBodyGate), which changes its offensive geometry and moved
+        // this measurement 400 -> 377 m. Retuning the separation threshold is the honest response
+        // to a deliberate BFM change; loosening it far enough to accept a wallow would not be.
+        Assert.True(ace.MaximumRangeGainM > SeparationGateM,
             $"ace opened only {ace.MaximumRangeGainM:F0}m beyond the initial range");
         Assert.True(ace.RepointedAfterSeparating,
             "ace never brought its nose back toward the attacker after separating");

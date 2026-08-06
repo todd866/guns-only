@@ -287,6 +287,58 @@ public class FormationCoordinationTests {
             < fresh.SharedContact.Confidence);
     }
 
+    // The health signal published as telemetry's formation_coordination_health_stale. It must stay
+    // quiet across a full healthy delivery period — which the behavioural threshold provably does
+    // not, since the picture age sawtooths past it every cycle — and it must be able to fire on a
+    // SINGLE missed delivery, which is the only thing that makes it a usable watchdog.
+    [Fact]
+    public void HealthStalenessIgnoresTheNormalSawtoothAndFiresOnAMissedDelivery() {
+        // The threshold's whole justification, as arithmetic rather than as a comment. A healthy
+        // cycle peaks at DeliveryPeriodTicks; one missed delivery peaks a further collection
+        // interval later. The bound has to be strictly between the two or it is either noise or
+        // permanently silent — 2 * DeliveryPeriodTicks was the latter.
+        Assert.True(
+            EnemyPairCoordinator.SharedContactHealthStaleAfterTicks
+                > EnemyPairCoordinator.DeliveryPeriodTicks,
+            "the health bound is at or below the healthy sawtooth peak, so it is noise");
+        Assert.True(
+            EnemyPairCoordinator.SharedContactHealthStaleAfterTicks
+                < EnemyPairCoordinator.DeliveryPeriodTicks
+                    + EnemyPairCoordinator.EvaluationIntervalTicks,
+            "the health bound is above the peak age of a single missed delivery, so a missed "
+            + "delivery cannot raise it");
+
+        var coordinator = new EnemyPairCoordinator();
+        AircraftState primary = State(-350.0, -1_100.0, chi: 0.0);
+        AircraftState support = State(420.0, -1_250.0, chi: 0.0);
+        FormationCoordinationMember primaryMember = Primary(primary);
+        FormationCoordinationMember supportMember = Support(support);
+        bool observedBehaviourFallback = false;
+
+        for (long tick = 0;
+            tick <= EnemyPairCoordinator.DeliveryPeriodTicks;
+            tick++) {
+            coordinator.Step(tick, Contact(tick), primaryMember, supportMember);
+            observedBehaviourFallback |= coordinator.SharedContactStale;
+            Assert.False(coordinator.SharedContactHealthStale,
+                $"tick {tick}: health staleness fired inside one healthy delivery period");
+        }
+        Assert.True(observedBehaviourFallback,
+            "the behavioural fallback window was never entered, so the two thresholds "
+            + "were not actually distinguished");
+
+        // A genuinely missed delivery: the coordinator is not stepped for longer than two full
+        // delivery periods, so the picture it is still flying on has aged past the health bound.
+        var starved = new EnemyPairCoordinator();
+        starved.Step(tick: 0, Contact(0), primaryMember, supportMember);
+        long bound = EnemyPairCoordinator.SharedContactHealthStaleAfterTicks;
+        starved.Step(bound, Contact(bound), primaryMember, supportMember);
+        Assert.Equal((int)bound, starved.SharedContactAgeTicks);
+        Assert.False(starved.SharedContactHealthStale);
+        starved.Step(bound + 1L, Contact(bound + 1L), primaryMember, supportMember);
+        Assert.True(starved.SharedContactHealthStale);
+    }
+
     [Fact]
     public void OrdinaryTickCadenceFallsBackWhileTheNextRadioSampleIsInFlight() {
         var coordinator = new EnemyPairCoordinator();

@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=264";
+import { createHud } from "./hud.js?v=265";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=264";
+} from "./render/debrief/sortie_result.js?v=265";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -49,8 +49,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=264";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=264";
+} from "./render/release/release_identity.js?v=265";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=265";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -63,7 +63,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=264";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=265";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -72,10 +72,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=264";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=265";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=264";
+} from "./render/nav/carrier_sortie_touch_control.js?v=265";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -150,7 +150,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=264";
+} from "./render/telemetry/ai_frame_pressure.js?v=265";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -160,8 +160,14 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=264";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=264";
+} from "./render/telemetry/telemetry_batch.js?v=265";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=265";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=265";
+import {
+  createBootWatchdog,
+  resourceProgressCounter,
+} from "./render/shell/boot_watchdog.js?v=265";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=265";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -170,7 +176,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=264";
+} from "./render/settings/player_settings.js?v=265";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -216,13 +222,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=264";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=264";
+} from "./render/scene/scene_builders.js?v=265";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=265";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=264";
+} from "./render/audio/flight_audio.js?v=265";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -1318,7 +1324,95 @@ const shellHealth = createShellHealthBeacon({
   build: BUILD,
   revision: buildIdentity.telemetry?.revision ?? null,
 });
-shellHealth.mark("script_load");
+
+// --- Boot shell: in-app browsers, stalls, and the way out ------------------------------------
+// Every organic mobile arrival shell-health has recorded came through a social app's webview, and
+// each one died there: Threads sessions stuck at `script_load`, an Android tablet that could not
+// create a WebGL context at all, an Instagram session on Build 264 that never reached
+// `bridge_ready`. None of them saw a single word about it. This is the machinery that changes
+// that: classify the browser once, watch the boot for a stall that is a stall rather than a slow
+// phone, and put a real screen with a real escape route in front of anyone who is stranded.
+const embeddedBrowser = detectEmbeddedBrowser({
+  userAgent: navigator.userAgent,
+  maxTouchPoints: navigator.maxTouchPoints,
+});
+let bootFallbackShown = false;
+
+function showBootFallback(reason, detail = "") {
+  if (bootFallbackShown) return false;
+  const model = bootFallbackModel({
+    reason,
+    detection: embeddedBrowser,
+    url: location.href,
+    detail,
+  });
+  if (!mountBootFallback(document, model)) return false;
+  bootFallbackShown = true;
+  bootScreen?.classList.add("ready");
+  try {
+    shellHealth.note("fallback_shown", {
+      fallback_reason: reason,
+      in_app_app: embeddedBrowser.app,
+      milestone: bootWatchdog.milestone,
+    });
+  } catch {
+    // Telemetry must never be able to suppress the screen a stuck player needs.
+  }
+  return true;
+}
+
+const bootWatchdog = createBootWatchdog({
+  progress: resourceProgressCounter(),
+  // A backgrounded webview stops its timers; counting that as a stall would accuse every player
+  // who glanced at a notification mid-load.
+  isHidden: () => document.visibilityState === "hidden",
+  onState: (snapshot) => {
+    if (snapshot.state === "slow") {
+      // Slow is not broken. Say what is happening, keep the boot running, show no escape hatch.
+      if (bootScreen) bootScreen.dataset.progress = "slow";
+      shellHealth.note("boot_slow", {
+        milestone: snapshot.milestone,
+        active_ms: snapshot.active_ms,
+      });
+      return;
+    }
+    if (snapshot.state === "stalled") {
+      shellHealth.note("boot_stalled", {
+        milestone: snapshot.milestone,
+        active_ms: snapshot.active_ms,
+        since_progress_ms: snapshot.since_progress_ms,
+        in_app_app: embeddedBrowser.app,
+      });
+      showBootFallback("stalled");
+      return;
+    }
+    if (snapshot.state === "ready" && bootScreen) delete bootScreen.dataset.progress;
+  },
+});
+// A plain interval, deliberately: requestAnimationFrame is throttled or suspended in exactly the
+// webviews this watchdog exists to catch, so a rAF-driven watchdog would sleep through the stall.
+const bootWatchdogTimer = setInterval(() => {
+  const snapshot = bootWatchdog.tick();
+  if (snapshot.state === "ready") clearInterval(bootWatchdogTimer);
+}, 1_000);
+
+/** Single entry point for boot progress: the beacon and the watchdog must never disagree. */
+function markShellMilestone(milestone) {
+  shellHealth.mark(milestone);
+  bootWatchdog.mark(milestone);
+  if (milestone === "ready" || milestone === "active") clearInterval(bootWatchdogTimer);
+}
+
+markShellMilestone("script_load");
+
+// Did the escape route actually get used? Without this the fallback screen is unfalsifiable: we
+// would know we showed it and nothing about whether it rescued anybody.
+document.querySelector("#shell-fallback-open")?.addEventListener("click", () => {
+  shellHealth.note("fallback_escape", {
+    in_app_app: embeddedBrowser.app,
+    os: embeddedBrowser.os,
+  }, { immediate: true });
+});
 const BUILD_IDENTITY_REVALIDATE_MS = 60_000;
 let runningBuildInfo = null;
 let lastKnownBuildInfo = null;
@@ -5024,6 +5118,10 @@ function setBootStatus(message, phase = "") {
   if (phase) bootScreen.dataset.phase = phase;
 }
 
+// Polled on a timer, not requestAnimationFrame. rAF does not run in a hidden or heavily throttled
+// tab, and social-app webviews throttle aggressively — so an rAF-driven wait cannot even reach its
+// own timeout there. It just stops, which is precisely the "logged script_load and nothing else"
+// shape in the Threads and Instagram sessions. A timer keeps the deadline enforceable.
 function waitForGlobal(getter, timeoutMs = 15000) {
   const started = performance.now();
   return new Promise((resolve, reject) => {
@@ -5034,7 +5132,7 @@ function waitForGlobal(getter, timeoutMs = 15000) {
       } else if (performance.now() - started > timeoutMs) {
         reject(new Error("The .NET WebAssembly loader did not become available."));
       } else {
-        requestAnimationFrame(poll);
+        setTimeout(poll, 40);
       }
     }
     poll();
@@ -5043,12 +5141,28 @@ function waitForGlobal(getter, timeoutMs = 15000) {
 
 function showFatal(error) {
   console.error(error);
+  let classified = null;
   try {
-    shellHealth?.fatal?.(error);
+    classified = shellHealth?.fatal?.(error) ?? null;
   } catch {
     // Shell health must never block the fatal UI.
   }
+  bootWatchdog?.stop?.();
   bootScreen.classList.add("ready");
+
+  // "Error creating WebGL context." is a true sentence and a useless one to somebody who tapped a
+  // link inside Instagram. A refused GPU is not a crash to report, it is a browser to leave — so
+  // that class, and anything at all that happens inside a webview, gets the human screen with the
+  // escape route. The engineering console remains for everyone who can act on a stack trace.
+  const reason = classified?.reason ?? "unknown";
+  const humanReason = reason === "webgl" ? "webgl"
+    : reason === "module" || reason === "bridge" ? reason
+      : "unknown";
+  if (reason === "webgl" || embeddedBrowser.embedded) {
+    const detail = error instanceof Error ? error.message : String(error);
+    if (showBootFallback(humanReason, detail)) return;
+  }
+
   fatalMessage.textContent = error instanceof Error ? `${error.message}\n\n${error.stack ?? ""}` : String(error);
   fatalScreen.classList.add("visible");
 }
@@ -10615,7 +10729,7 @@ async function boot() {
   const assemblyExports = await getAssemblyExports("GunsOnly.Web");
   bridge = assemblyExports.GunsOnly.Web.WebBridge;
   bindMeshNdToolbar(bridge);
-  shellHealth.mark("bridge_ready");
+  markShellMilestone("bridge_ready");
   // Per-frame state now rides the kernel's numeric hot buffer; the full JSON snapshot is
   // re-fetched only when its cold_version slot bumps (or on the source's fallback interval).
   // The MemoryView is fetched once; copyTo re-derives the WASM view per call, so a persistent
@@ -10652,7 +10766,7 @@ async function boot() {
   setBootStatus("BUILDING FIRST FRAME…", "scene");
   const view = new FlightView();
   activeView = view;
-  shellHealth.mark("webgl_ok");
+  markShellMilestone("webgl_ok");
   applyPlayerSettings();
   multiplayer = new GlobalRoomClient({
     url: resolveGlobalRoomUrl(),
@@ -10884,10 +10998,10 @@ async function boot() {
         firstFrame = false;
         bootScreen.setAttribute("aria-busy", "false");
         bootScreen.classList.add("ready");
-        shellHealth.mark("ready");
+        markShellMilestone("ready");
       }
-      if (state?.session_phase === "ACTIVE") shellHealth.mark("active");
-      if (state?.session_phase === "READY") shellHealth.mark("ready");
+      if (state?.session_phase === "ACTIVE") markShellMilestone("active");
+      if (state?.session_phase === "READY") markShellMilestone("ready");
       requestAnimationFrame(tick);
     } catch (error) {
       showFatal(error);
@@ -10930,9 +11044,18 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=264")
+    navigator.serviceWorker.register("service-worker.js?v=265")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
+        // Ask for the worker script to be re-checked now, and again whenever the player returns to
+        // the tab. Without this the browser only revalidates the worker on a navigation, so a
+        // long-lived tab or an installed PWA can sit on a superseded release for as long as it
+        // stays open — which is the shape of the client that booted Build 220 against a live 245.
+        const checkForNewRelease = () => registration.update().catch(() => {});
+        void checkForNewRelease();
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") void checkForNewRelease();
+        });
         const result = await primeOfflineRuntime(registration);
         recorder.context("offline_runtime", result
           ? {

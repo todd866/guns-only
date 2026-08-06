@@ -51,6 +51,26 @@ public sealed class EnemyPairCoordinator {
     // a short, honest stale window before each refresh instead of making the stale fallback
     // reachable only by skipping hundreds of coordinator ticks in one call.
     public const int SharedContactStaleAfterTicks = EvaluationIntervalTicks;
+    // One healthy delivery period: a sample is taken every EvaluationIntervalTicks and then spends
+    // MessageDelayTicks in the radio path, so the picture age sawtooths up to exactly this value in
+    // completely normal operation.
+    public const int DeliveryPeriodTicks =
+        EvaluationIntervalTicks + MessageDelayTicks;
+    // Health-signal threshold, deliberately distinct from the BEHAVIOURAL
+    // SharedContactStaleAfterTicks above, which is a pilot-policy decision and not a fault report.
+    //
+    // The arithmetic that sets this number: a healthy cycle sawtooths the age from
+    // MessageDelayTicks (42) up to exactly DeliveryPeriodTicks (222), so anything at or below 222
+    // must stay quiet. Miss ONE scheduled delivery and the picture is not refreshed for another
+    // collection interval, peaking at DeliveryPeriodTicks + EvaluationIntervalTicks = 402. So a
+    // watchdog that actually detects a single missed delivery has to sit strictly inside (222, 402].
+    // Half a collection interval of headroom above the healthy peak buys jitter tolerance while
+    // still leaving 90 ticks (0.5 s) of the missed-delivery gap above the line.
+    //
+    // 2 * DeliveryPeriodTicks (444) was tried and rejected: it is ABOVE 402, so it could not fire
+    // on a missed delivery at all and would only have caught the coordinator ceasing to be stepped.
+    public const int SharedContactHealthStaleAfterTicks =
+        DeliveryPeriodTicks + EvaluationIntervalTicks / 2;
     public const double ExtendPairSeparationM = 850.0;
 
     readonly record struct PendingAssignment(
@@ -86,8 +106,16 @@ public sealed class EnemyPairCoordinator {
     public int SharedContactAgeTicks => Active
         ? AgeContact(_sharedContact, _lastTick).ObservationAgeTicks
         : 0;
+    /// Behavioural staleness: the pilot policy falls back to its own senses past this age.
+    /// True once per normal refresh cycle by construction — never publish it as a health signal.
     public bool SharedContactStale => Active
         && SharedContactAgeTicks > SharedContactStaleAfterTicks;
+    /// Health staleness: a scheduled delivery was genuinely missed. Published as the NEW
+    /// formation_coordination_health_stale — deliberately not as formation_coordination_stale,
+    /// which keeps meaning the behavioural window it has always meant so that a 264-vs-265
+    /// comparison of that field compares like with like.
+    public bool SharedContactHealthStale => Active
+        && SharedContactAgeTicks > SharedContactHealthStaleAfterTicks;
 
     public void Reset() {
         Active = false;

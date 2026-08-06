@@ -19,16 +19,19 @@ public sealed class YzfR1TireAndTipOverTests
         var accelerate = Command(throttle: 1.0);
         var turn = Command(throttle: 0.0) with { Steer = 1.0, RiderLateral = 1.0 };
 
-        // Rolling resistance and drag slow the slippery-surface launch; the tip-over gate
-        // only needs the bike inside the low-speed band when the excessive lean arrives.
-        Advance(bike, accelerate, slipperyRunway, startTick: 0, tickCount: 120 * 8);
+        // The tip-over gate only needs the bike inside the low-speed band when the excessive
+        // lean arrives; the launch runs until it clears 5 m/s so the raised tire µ (1.05 →
+        // 1.22 for reachable stoppies) does not push the sampled speed out of the band.
+        long tick = 0;
+        while (bike.Telemetry.SpeedMps < 5.0 && tick < 120 * 12)
+            bike.Advance(YzfR1TestInput.Of(tick++, accelerate, slipperyRunway));
         Assert.InRange(bike.Telemetry.SpeedMps, 4.5, 6.0);
-        Advance(bike, turn, slipperyRunway, startTick: 120 * 8, tickCount: 1);
+        Advance(bike, turn, slipperyRunway, startTick: tick, tickCount: 1);
 
         Assert.True(bike.Telemetry.IsTippedOver);
         Assert.False(bike.State.Flyable);
 
-        bike.Advance(YzfR1TestInput.Of(120 * 8 + 1, Command(throttle: 1.0)));
+        bike.Advance(YzfR1TestInput.Of(tick + 1, Command(throttle: 1.0)));
 
         Assert.True(bike.Telemetry.IsTippedOver);
         Assert.False(bike.State.Flyable);
@@ -39,12 +42,12 @@ public sealed class YzfR1TireAndTipOverTests
     {
         var coast = AtRest("coast");
         var brake = AtRest("brake");
-        var accelerate = Command(throttle: 1.0);
         var turn = Command(throttle: 0.0) with { Steer = 0.5, RiderLateral = 1.0 };
         var turnAndBrake = turn with { Brake = 0.9 };
 
-        Advance(coast, accelerate, startTick: 0, tickCount: 120 * 5);
-        Advance(brake, accelerate, startTick: 0, tickCount: 120 * 5);
+        // Ladder ramps: raw WOT would wheelie-loop under the wheel-lift dynamics.
+        YzfR1TestRider.ShortShiftAccelerateTicks(coast, 0, 120 * 5);
+        YzfR1TestRider.ShortShiftAccelerateTicks(brake, 0, 120 * 5);
         Advance(coast, turn, startTick: 120 * 5, tickCount: 1);
         Advance(brake, turnAndBrake, startTick: 120 * 5, tickCount: 1);
 
@@ -59,8 +62,8 @@ public sealed class YzfR1TireAndTipOverTests
     public void ResolvedLateralTireForceBoundsYawRateAtSpeed()
     {
         var bike = AtRest("force-authority");
-        var accelerate = Command(throttle: 1.0);
-        Advance(bike, accelerate, startTick: 0, tickCount: 120 * 8);
+        // Ladder ramp: raw WOT would wheelie-loop under the wheel-lift dynamics.
+        YzfR1TestRider.ShortShiftAccelerateTicks(bike, 0, 120 * 8);
         Assert.True(bike.Telemetry.SpeedMps > 25.0);
 
         PlayerVehicleEnvironmentSample lowGrip = new(

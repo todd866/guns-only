@@ -12,6 +12,7 @@ public sealed class RiderReflexAssistTests
         var nearBalance = RiderReflexAssists.Evaluate(
             frontNormalN: GrossNormalN * 0.04,
             rearNormalN: GrossNormalN * 0.96,
+            pitchRad: 0.0,
             pitchRateRadps: 0.5,
             leanRad: 0.0,
             riderLateral: 0.0,
@@ -20,6 +21,7 @@ public sealed class RiderReflexAssistTests
         var cruise = RiderReflexAssists.Evaluate(
             frontNormalN: GrossNormalN * 0.48,
             rearNormalN: GrossNormalN * 0.52,
+            pitchRad: 0.0,
             pitchRateRadps: 0.0,
             leanRad: 0.0,
             riderLateral: 0.0,
@@ -36,6 +38,7 @@ public sealed class RiderReflexAssistTests
         var pitchedUpright = RiderReflexAssists.Evaluate(
             frontNormalN: GrossNormalN * 0.02,
             rearNormalN: GrossNormalN * 0.98,
+            pitchRad: 0.0,
             pitchRateRadps: 1.2,
             leanRad: 0.0,
             riderLateral: 0.0,
@@ -44,6 +47,7 @@ public sealed class RiderReflexAssistTests
         var carved = RiderReflexAssists.Evaluate(
             frontNormalN: GrossNormalN * 0.45,
             rearNormalN: GrossNormalN * 0.55,
+            pitchRad: 0.0,
             pitchRateRadps: 0.0,
             leanRad: -0.45,
             riderLateral: 0.85,
@@ -52,6 +56,7 @@ public sealed class RiderReflexAssistTests
         var carvedWithoutKnee = RiderReflexAssists.Evaluate(
             frontNormalN: GrossNormalN * 0.45,
             rearNormalN: GrossNormalN * 0.55,
+            pitchRad: 0.0,
             pitchRateRadps: 0.0,
             leanRad: -0.45,
             riderLateral: 0.0,
@@ -69,6 +74,7 @@ public sealed class RiderReflexAssistTests
         var wheelieLatchAttempt = RiderReflexAssists.Evaluate(
             frontNormalN: GrossNormalN * 0.03,
             rearNormalN: GrossNormalN * 0.97,
+            pitchRad: 0.0,
             pitchRateRadps: 0.8,
             leanRad: 0.0,
             riderLateral: 0.0,
@@ -84,6 +90,7 @@ public sealed class RiderReflexAssistTests
         var carvedWheelie = RiderReflexAssists.Evaluate(
             frontNormalN: GrossNormalN * 0.03,
             rearNormalN: GrossNormalN * 0.97,
+            pitchRad: 0.0,
             pitchRateRadps: 0.8,
             leanRad: -0.45,
             riderLateral: 0.85,
@@ -100,6 +107,7 @@ public sealed class RiderReflexAssistTests
         var stoppie = RiderReflexAssists.Evaluate(
             frontNormalN: GrossNormalN * 0.92,
             rearNormalN: GrossNormalN * 0.08,
+            pitchRad: 0.0,
             pitchRateRadps: -0.4,
             leanRad: 0.0,
             riderLateral: 0.0,

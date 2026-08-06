@@ -1,18 +1,27 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=264";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=265";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=264";
+} from "./cobra_canyon_asset_kit.js?v=265";
+import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=265";
+import {
+  createCobraCanyonBasinMaterial,
+  createCobraCanyonRiverMaterial,
+} from "./cobra_canyon_terrain_material.js?v=265";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 
 export const COBRA_CANYON_PRESENTATION_SCHEMA =
   "guns-only.cobra-canyon-presentation.v1";
 
+// Basin grid resolution. Trimmed from 96/128/160 to fund canopy INSTANCES, which is the better
+// buy now the heightfield carries real relief: a 133 m quad on a 300 m gorge wall still reads as
+// that wall, whereas one more canopy stand is the difference between a bare hillside and jungle.
+// Every tier keeps its authored triangle ceiling; see COBRA_CANYON_RENDER_BUDGETS below.
 export const COBRA_CANYON_TERRAIN_SEGMENTS = Object.freeze({
-  mobile: 96,
-  balanced: 128,
-  desktop: 160,
+  mobile: 92,
+  balanced: 120,
+  desktop: 152,
 });
 
 // The core analytical terrain and authority cues occupy eight submissions (basin, river, roads,
@@ -21,23 +30,23 @@ export const COBRA_CANYON_TERRAIN_SEGMENTS = Object.freeze({
 export const COBRA_CANYON_RENDER_BUDGETS = Object.freeze({
   mobile: Object.freeze({
     maxDrawCalls: 15,
-    maxInstances: 384,
+    maxInstances: 640,
     maxTriangles: 45_000,
-    maxAssetInstances: 330,
+    maxAssetInstances: 580,
     nearRingMaximumAglM: 180,
   }),
   balanced: Object.freeze({
     maxDrawCalls: 15,
-    maxInstances: 640,
+    maxInstances: 890,
     maxTriangles: 75_000,
-    maxAssetInstances: 580,
+    maxAssetInstances: 812,
     nearRingMaximumAglM: 260,
   }),
   desktop: Object.freeze({
     maxDrawCalls: 15,
-    maxInstances: 896,
+    maxInstances: 1_440,
     maxTriangles: 120_000,
-    maxAssetInstances: 830,
+    maxAssetInstances: 1_330,
     nearRingMaximumAglM: 360,
   }),
 });
@@ -347,13 +356,16 @@ function appendRibbon(positions, points, widthM, yOffsetM) {
   }
 }
 
-function geometryFromPositions(THREE, positions, name, colors = null) {
+function geometryFromPositions(THREE, positions, name, vertexField = null) {
   if (!positions.length) return null;
   const geometry = new THREE.BufferGeometry();
   geometry.name = name;
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  if (colors?.length === positions.length) {
-    geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  if (vertexField && vertexField.values.length === positions.length / 3 * vertexField.itemSize) {
+    geometry.setAttribute(
+      vertexField.name,
+      new THREE.Float32BufferAttribute(vertexField.values, vertexField.itemSize),
+    );
   }
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
@@ -381,9 +393,14 @@ function tagObject(object, role, extra = {}) {
 }
 
 function materialFor(THREE, role) {
+  // The basin and the river run the painted-tactical surface shaders: hillshade, hue-separated
+  // key/fill, enclosure occlusion and banded aerial haze are computed per FRAGMENT, because the
+  // 100 m basin vertex spacing cannot carry a field edge, a canopy line or a 77 m shoreline —
+  // baking those into vertex colours interpolates them away, which is the Build 264 monotone and
+  // the sand-coloured river of the parked WIP. Scene lights deliberately do not touch either.
+  if (role === "basin") return createCobraCanyonBasinMaterial(THREE, COBRA_CANYON_VISUAL_PROFILE);
+  if (role === "river") return createCobraCanyonRiverMaterial(THREE, COBRA_CANYON_VISUAL_PROFILE);
   const parameters = {
-    basin: { color: 0xffffff, roughness: 1 },
-    river: { color: 0x3a8a92, emissive: 0x0a343c, roughness: 0.68 },
     roads: { color: 0xb0683c, emissive: 0x241008, roughness: 1 },
     heroCells: { color: 0x6a5030, roughness: 1 },
     landmarks: { color: 0xffffff, roughness: 0.95 },
@@ -395,11 +412,8 @@ function materialFor(THREE, role) {
   const material = new THREE.MeshLambertMaterial({
     color: parameters.color,
     emissive: parameters.emissive ?? 0x000000,
-    vertexColors: role === "basin",
-    flatShading: role !== "river" && role !== "heroCells",
-    side: role === "river" || role === "roads" || role === "basin"
-      ? THREE.DoubleSide
-      : THREE.FrontSide,
+    flatShading: role !== "heroCells",
+    side: role === "roads" ? THREE.DoubleSide : THREE.FrontSide,
   });
   if (role === "heroCells") {
     material.transparent = true;
@@ -409,7 +423,7 @@ function materialFor(THREE, role) {
     material.polygonOffsetFactor = -1;
     material.polygonOffsetUnits = -1;
   }
-  if (role === "river" || role === "roads") {
+  if (role === "roads") {
     material.polygonOffset = true;
     material.polygonOffsetFactor = -1;
     material.polygonOffsetUnits = -2;
@@ -527,71 +541,36 @@ function composeHazard(mesh, index, placement, work) {
   else composeBox(mesh, index, placement, work);
 }
 
-function pushTerrainVertex(positions, colors, eastM, elevationM, northM) {
-  positions.push(eastM, elevationM, -northM);
-  if (!colors) return;
-  const lowBlend = clamp((elevationM - 90) / 190, 0, 1);
-  const highBlend = clamp((elevationM - 280) / 600, 0, 1);
-  const lowR = 0.18 + (0.30 - 0.18) * lowBlend;
-  const lowG = 0.32 + (0.43 - 0.32) * lowBlend;
-  const lowB = 0.12 + (0.20 - 0.12) * lowBlend;
-  const broadVariation = Math.sin(eastM * 0.0021 + northM * 0.0017) * 0.026;
-  const localVariation = Math.sin(eastM * 0.0107 - northM * 0.0083)
-    * Math.cos(northM * 0.0129 + eastM * 0.0041) * 0.038;
-  const moisture = Math.sin((eastM + northM) * 0.0037) * 0.018;
-  colors.push(
-    clamp(lowR + (0.50 - lowR) * highBlend + broadVariation + localVariation, 0, 1),
-    clamp(lowG + (0.39 - lowG) * highBlend + broadVariation + localVariation + moisture, 0, 1),
-    clamp(lowB + (0.24 - lowB) * highBlend + broadVariation * 0.5 + moisture, 0, 1),
+/**
+ * The height a basin VERTEX is emitted at: the analytic sample, pulled down to the lowest analytic
+ * sample in the vertex's own half-cell.
+ *
+ * PRESENTATION MUST NOT OUTRUN THE KERNEL, and here it is the ground itself that was outrunning it.
+ * The gorge cross-section drops ~250 m across a 190 m blend; on a 133 m render grid a quad can span
+ * the whole convex rim, and the chord across a convex surface sits ABOVE it. Measured on the plain
+ * analytic sample the rendered basin stood up to 51 m (desktop) / 106 m (mobile) proud of the field
+ * `CobraCanyonTerrainSurface` flies the aircraft over — 20 m of that on the ridge-shadow route
+ * itself, which is half its recommended AGL band. The helicopter would fly into a hill the sim does
+ * not have. Biasing every vertex to its neighbourhood minimum makes the chord conservative: the
+ * drawn ground sits at or below simulated ground, so the error can only ever show the pilot MORE
+ * clearance than exists, never less. It costs five analytic samples per vertex at build time and
+ * not one triangle. Crests pay for it by shaving, which is the correct side to lose on.
+ */
+function basinVertexHeight(plan, eastM, northM, eastStepM, northStepM) {
+  const biasEastM = eastStepM * 0.42;
+  const biasNorthM = northStepM * 0.42;
+  return Math.min(
+    sampleCobraCanyonTerrain(plan, eastM, northM),
+    sampleCobraCanyonTerrain(plan, eastM - biasEastM, northM),
+    sampleCobraCanyonTerrain(plan, eastM + biasEastM, northM),
+    sampleCobraCanyonTerrain(plan, eastM, northM - biasNorthM),
+    sampleCobraCanyonTerrain(plan, eastM, northM + biasNorthM),
   );
-}
-
-function appendSampledTerrainGrid(
-  plan,
-  bounds,
-  eastSegments,
-  northSegments,
-  positions,
-  colors,
-  yOffsetM = 0,
-) {
-  const columnCount = eastSegments + 1;
-  const heights = new Float32Array(columnCount * (northSegments + 1));
-  const eastStepM = (bounds.maximumEastM - bounds.minimumEastM) / eastSegments;
-  const northStepM = (bounds.maximumNorthM - bounds.minimumNorthM) / northSegments;
-  for (let northIndex = 0; northIndex <= northSegments; northIndex++) {
-    const northM = bounds.minimumNorthM + northIndex * northStepM;
-    for (let eastIndex = 0; eastIndex <= eastSegments; eastIndex++) {
-      const eastM = bounds.minimumEastM + eastIndex * eastStepM;
-      heights[northIndex * columnCount + eastIndex] =
-        sampleCobraCanyonTerrain(plan, eastM, northM) + yOffsetM;
-    }
-  }
-  for (let northIndex = 0; northIndex < northSegments; northIndex++) {
-    const north0 = bounds.minimumNorthM + northIndex * northStepM;
-    const north1 = north0 + northStepM;
-    for (let eastIndex = 0; eastIndex < eastSegments; eastIndex++) {
-      const east0 = bounds.minimumEastM + eastIndex * eastStepM;
-      const east1 = east0 + eastStepM;
-      const row0 = northIndex * columnCount;
-      const row1 = (northIndex + 1) * columnCount;
-      const height00 = heights[row0 + eastIndex];
-      const height10 = heights[row0 + eastIndex + 1];
-      const height11 = heights[row1 + eastIndex + 1];
-      const height01 = heights[row1 + eastIndex];
-      pushTerrainVertex(positions, colors, east0, height00, north0);
-      pushTerrainVertex(positions, colors, east1, height10, north0);
-      pushTerrainVertex(positions, colors, east1, height11, north1);
-      pushTerrainVertex(positions, colors, east0, height00, north0);
-      pushTerrainVertex(positions, colors, east1, height11, north1);
-      pushTerrainVertex(positions, colors, east0, height01, north1);
-    }
-  }
 }
 
 function basinGeometry(THREE, plan, qualityTier) {
   const positions = [];
-  const colors = [];
+  const concavity = [];
   const indices = [];
   const bounds = boundsFrom(plan);
   if (!bounds) return null;
@@ -599,17 +578,45 @@ function basinGeometry(THREE, plan, qualityTier) {
   const columnCount = segments + 1;
   const eastStepM = (bounds.maximumEastM - bounds.minimumEastM) / segments;
   const northStepM = (bounds.maximumNorthM - bounds.minimumNorthM) / segments;
+  const heights = new Float32Array(columnCount * columnCount);
+  for (let northIndex = 0; northIndex <= segments; northIndex++) {
+    const northM = bounds.minimumNorthM + northIndex * northStepM;
+    for (let eastIndex = 0; eastIndex <= segments; eastIndex++) {
+      heights[northIndex * columnCount + eastIndex] = basinVertexHeight(
+        plan,
+        bounds.minimumEastM + eastIndex * eastStepM,
+        northM,
+        eastStepM,
+        northStepM,
+      );
+    }
+  }
+  const heightAt = (eastIndex, northIndex) => heights[
+    clamp(northIndex, 0, segments) * columnCount + clamp(eastIndex, 0, segments)
+  ];
+  const paint = COBRA_CANYON_VISUAL_PROFILE.terrainPaint;
   for (let northIndex = 0; northIndex <= segments; northIndex++) {
     const northM = bounds.minimumNorthM + northIndex * northStepM;
     for (let eastIndex = 0; eastIndex <= segments; eastIndex++) {
       const eastM = bounds.minimumEastM + eastIndex * eastStepM;
-      pushTerrainVertex(
-        positions,
-        colors,
-        eastM,
-        sampleCobraCanyonTerrain(plan, eastM, northM),
-        northM,
-      );
+      const elevationM = heights[northIndex * columnCount + eastIndex];
+      positions.push(eastM, elevationM, -northM);
+      // Enclosure term (korea_terrain's baked `concavity` attribute): a two-cell ring mean says
+      // whether this vertex sits below its neighbourhood — a valley to darken — or above it — a
+      // crest to let catch light. This is the one shading input a fragment cannot re-derive,
+      // because it needs the height field, not the surface point; everything else is per-pixel
+      // in cobra_canyon_terrain_material.js.
+      const ringMeanM = (
+        heightAt(eastIndex - 2, northIndex)
+        + heightAt(eastIndex + 2, northIndex)
+        + heightAt(eastIndex, northIndex - 2)
+        + heightAt(eastIndex, northIndex + 2)
+      ) * 0.25;
+      concavity.push(clamp(
+        0.5 + (elevationM - ringMeanM) / (2 * paint.concavityNormalizerM),
+        0,
+        1,
+      ));
     }
   }
   for (let northIndex = 0; northIndex < segments; northIndex++) {
@@ -624,7 +631,7 @@ function basinGeometry(THREE, plan, qualityTier) {
   const geometry = new THREE.BufferGeometry();
   geometry.name = "COBRA_CANYON_BASIN_GEOMETRY";
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  geometry.setAttribute("concavity", new THREE.Float32BufferAttribute(concavity, 1));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
@@ -708,14 +715,12 @@ export function sampleCobraCanyonRenderedBasinHeight(
   const north0 = bounds.minimumNorthM + northCell * northStepM;
   const eastBlend = clamp((east - east0) / eastStepM, 0, 1);
   const northBlend = clamp((north - north0) / northStepM, 0, 1);
-  const northWest = Math.fround(sampleCobraCanyonTerrain(plan, east0, north0));
-  const northEast = Math.fround(sampleCobraCanyonTerrain(plan, east0 + eastStepM, north0));
-  const southWest = Math.fround(sampleCobraCanyonTerrain(plan, east0, north0 + northStepM));
-  const southEast = Math.fround(sampleCobraCanyonTerrain(
-    plan,
-    east0 + eastStepM,
-    north0 + northStepM,
-  ));
+  const corner = (eastM, northM) =>
+    Math.fround(basinVertexHeight(plan, eastM, northM, eastStepM, northStepM));
+  const northWest = corner(east0, north0);
+  const northEast = corner(east0 + eastStepM, north0);
+  const southWest = corner(east0, north0 + northStepM);
+  const southEast = corner(east0 + eastStepM, north0 + northStepM);
   if (eastBlend >= northBlend) {
     return northWest
       + eastBlend * (northEast - northWest)
@@ -781,7 +786,15 @@ function clipPolygonToTriangle(polygon, triangle) {
   return Math.abs(doubledArea) > 1e-4 ? deduplicated : [];
 }
 
-function appendGridClippedPolygon(positions, plan, qualityTier, polygon, yOffsetM) {
+function appendGridClippedPolygon(
+  positions,
+  plan,
+  qualityTier,
+  polygon,
+  yOffsetM,
+  fieldValues,
+  fieldAt,
+) {
   const bounds = boundsFrom(plan);
   const segments = COBRA_CANYON_TERRAIN_SEGMENTS[qualityTier];
   const eastStepM = (bounds.maximumEastM - bounds.minimumEastM) / segments;
@@ -836,14 +849,100 @@ function appendGridClippedPolygon(positions, plan, qualityTier, polygon, yOffset
         }));
         for (let index = 1; index < rendered.length - 1; index++) {
           appendTriangle(positions, rendered[0], rendered[index], rendered[index + 1]);
+          if (!fieldValues || !fieldAt) continue;
+          for (const vertex of [rendered[0], rendered[index], rendered[index + 1]]) {
+            fieldValues.push(...fieldAt(vertex.x, -vertex.z));
+          }
         }
       }
     }
   }
 }
 
-function appendDrapedRibbon(positions, plan, qualityTier, points, widthM) {
-  const halfWidthM = Math.max(0.05, widthM * 0.5);
+/**
+ * Resamples an authored centreline into a meandering watercourse.
+ *
+ * The authored polyline is NAVIGATION authority — the route corridor, the bridge, the gorge wires
+ * and the terrain carve all key off it, so it may not move. What may move is the water inside the
+ * channel that polyline cut. A river drawn straight down its own corridor at one constant width
+ * is a canal, and that is what Build 264 renders: hard parallel edges from horizon to horizon.
+ *
+ * The lateral offset is two incommensurable harmonics of arclength (so the bends never repeat on
+ * a visible period) with a third, much longer wave modulating their amplitude, which is what makes
+ * some reaches straight and others tightly wound. It is clamped to `maximumOffsetM`, which the
+ * caller sets from the ribbon's FLAT FLOOR — `halfWidthM * floorFraction` — so the sheet can
+ * never climb a bank however the harmonics land. Width is a fourth wave in antiphase with the
+ * bend rate: real channels run wide and shallow on the straights and narrow into the bends, and
+ * the exposed floor either side of a narrow reach is read by the bank shader as a gravel bar.
+ */
+function meanderedCourse(points, maximumOffsetM, widthM) {
+  if (points.length < 2 || maximumOffsetM <= 0) {
+    return { points, widths: points.map(() => widthM) };
+  }
+  const spacingM = 115;
+  const resampled = [];
+  let travelledM = 0;
+  for (let index = 0; index < points.length - 1; index++) {
+    const from = points[index];
+    const to = points[index + 1];
+    const spanM = Math.hypot(to.x - from.x, to.z - from.z);
+    if (spanM < 1e-3) continue;
+    const steps = Math.max(1, Math.round(spanM / spacingM));
+    for (let step = 0; step < steps; step++) {
+      const blend = step / steps;
+      resampled.push({
+        x: from.x + (to.x - from.x) * blend,
+        y: from.y + (to.y - from.y) * blend,
+        z: from.z + (to.z - from.z) * blend,
+        s: travelledM + spanM * blend,
+      });
+    }
+    travelledM += spanM;
+  }
+  resampled.push({ ...points[points.length - 1], s: travelledM });
+
+  const offsets = resampled.map(({ s }) => {
+    const envelope = 0.42 + 0.58 * (0.5 + 0.5 * Math.sin(s / 2_050 - 0.9));
+    const wander = Math.sin(s / 545) * 0.68 + Math.sin(s / 331 + 2.2) * 0.32;
+    return clamp(wander * envelope, -1, 1) * maximumOffsetM;
+  });
+  const widths = resampled.map(({ s }) => widthM * (1.28 - 0.46 * Math.abs(
+    Math.sin(s / 545) * 0.68 + Math.sin(s / 331 + 2.2) * 0.32,
+  )));
+
+  // Displace along the local normal, then let the ribbon builder miter the result. Endpoints keep
+  // their authored position so the course still starts at Camp Ember and ends at the rally point.
+  const course = resampled.map((point, index) => {
+    const previous = resampled[Math.max(0, index - 1)];
+    const next = resampled[Math.min(resampled.length - 1, index + 1)];
+    const tangentX = next.x - previous.x;
+    const tangentZ = next.z - previous.z;
+    const lengthM = Math.max(1e-3, Math.hypot(tangentX, tangentZ));
+    const taper = clamp(Math.min(index, resampled.length - 1 - index) / 3, 0, 1);
+    const offsetM = offsets[index] * taper;
+    return {
+      x: point.x + (-tangentZ / lengthM) * offsetM,
+      y: point.y,
+      z: point.z + (tangentX / lengthM) * offsetM,
+    };
+  });
+  return { points: course, widths };
+}
+
+function appendDrapedRibbon(
+  positions,
+  plan,
+  qualityTier,
+  points,
+  widthM,
+  fieldValues,
+  fieldForSegment,
+  widths = null,
+) {
+  const halfWidthAt = (index) => Math.max(
+    0.05,
+    (widths ? widths[Math.min(widths.length - 1, index)] : widthM) * 0.5,
+  );
   const centres = points.map((point) => ({ eastM: point.x, northM: -point.z }));
   const normals = [];
   for (let index = 0; index < centres.length - 1; index++) {
@@ -868,6 +967,7 @@ function appendDrapedRibbon(positions, plan, qualityTier, points, widthM) {
     miterEastM /= miterLengthM;
     miterNorthM /= miterLengthM;
     const alignment = Math.max(0.5, miterEastM * next.eastM + miterNorthM * next.northM);
+    const halfWidthM = halfWidthAt(index);
     const distanceM = Math.min(halfWidthM * 2, halfWidthM / alignment);
     const offsetEastM = miterEastM * distanceM;
     const offsetNorthM = miterNorthM * distanceM;
@@ -887,12 +987,46 @@ function appendDrapedRibbon(positions, plan, qualityTier, points, widthM) {
       qualityTier,
       [left[index], right[index], right[index + 1], left[index + 1]],
       0.35,
+      fieldValues,
+      fieldForSegment?.(centres[index], centres[index + 1]),
     );
   }
 }
 
+/**
+ * The river carries its own CENTRELINE, not its own colour: a vec4 of
+ * `(anchorEast, anchorNorth, normalEast/halfWater, normalNorth/halfWater)` per vertex, constant
+ * across each ribbon segment, from which the shader recovers exact lateral distance per fragment
+ * — 1.0 is the waterline, so the channel gradient and the gravel bar are pixel-crisp.
+ *
+ * Two earlier shapes of this both failed the same way. Baking the COLOUR paints the whole river
+ * the colour of its own bank, and so does baking a lateral SCALAR: the ribbon has four vertices
+ * across its width and all four sit at the outer edge, so any per-vertex quantity is constant
+ * across the quad and the shoreline — which lives in the interior — cannot exist. An anchor and
+ * a scaled normal are constant across the segment by construction, so interpolation is exact and
+ * the geometry does not need lateral subdivision (or its triangle bill).
+ *
+ * Built per segment against that segment's infinite line. A global nearest-point-on-polyline
+ * distance is wrong here: at bends the miter pushes ribbon corners up to two half-widths out,
+ * which would put gravel lobes across the water at every curve.
+ */
+function riverFrameField(halfWaterM, from, to) {
+  const tangentEastM = to.eastM - from.eastM;
+  const tangentNorthM = to.northM - from.northM;
+  const lengthM = Math.max(0.001, Math.hypot(tangentEastM, tangentNorthM));
+  const scale = 1 / (lengthM * Math.max(1, halfWaterM));
+  const frame = [
+    from.eastM,
+    from.northM,
+    -tangentNorthM * scale,
+    tangentEastM * scale,
+  ];
+  return () => frame;
+}
+
 function ribbonGeometry(THREE, plan, role, qualityTier) {
   const positions = [];
+  const riverFrame = role === "river" ? [] : null;
   const records = role === "river"
     ? collection(
       plan,
@@ -916,12 +1050,47 @@ function ribbonGeometry(THREE, plan, role, qualityTier) {
         ? Math.min(90, Math.max(24, finite(record?.halfWidthM, 72) * 0.5))
         : 7,
     ));
-    appendDrapedRibbon(positions, plan, qualityTier, points, widthM);
+    // The gravel bar is carved OUT of the authored ribbon width rather than added outside it, so
+    // the river's triangle bill is exactly what it was before the bar existed and the balanced
+    // tier keeps its reserve. Only the waterline moves inward.
+    const bankWidthM = COBRA_CANYON_VISUAL_PROFILE.water.bankWidthM;
+    const waterWidthM = Math.max(24, widthM - 2 * bankWidthM);
+    // The sheet may wander only across the ribbon's authored FLAT FLOOR, and only by what the
+    // widest reach leaves over: floor half-width minus the widest half-width the course asks for.
+    // Beyond that the geometry would ride up the carved bank and the water would visibly climb.
+    const floorHalfWidthM = finite(record?.halfWidthM, 0) * finite(record?.floorFraction, 0);
+    const course = role === "river"
+      ? meanderedCourse(
+        points,
+        Math.max(0, floorHalfWidthM - widthM * 1.28 * 0.5),
+        widthM,
+      )
+      : { points, widths: null };
+    appendDrapedRibbon(
+      positions,
+      plan,
+      qualityTier,
+      course.points,
+      widthM,
+      riverFrame,
+      role === "river"
+        ? (from, to) => riverFrameField(waterWidthM * 0.5, from, to)
+        : null,
+      course.widths,
+    );
+  }
+  if (role !== "river") {
+    return geometryFromPositions(
+      THREE,
+      positions,
+      `COBRA_CANYON_${role.toUpperCase()}_GEOMETRY`,
+    );
   }
   return geometryFromPositions(
     THREE,
     positions,
-    `COBRA_CANYON_${role.toUpperCase()}_GEOMETRY`,
+    "COBRA_CANYON_RIVER_GEOMETRY",
+    { name: "riverFrame", itemSize: 4, values: riverFrame },
   );
 }
 
@@ -1078,7 +1247,7 @@ function landmarkColor(kind) {
   if (token === "ridge-gate") return [0.34, 0.34, 0.22];
   if (token === "hill-pagoda") return [0.78, 0.76, 0.63];
   if (token === "open-quarry") return [0.54, 0.27, 0.14];
-  if (token === "mill-chimney") return [0.22, 0.20, 0.16];
+  if (token === "mill-chimney") return [0.40, 0.34, 0.26];
   if (token === "signal-smoke") return [0.65, 0.42, 0.16];
   return [0.52, 0.46, 0.31];
 }

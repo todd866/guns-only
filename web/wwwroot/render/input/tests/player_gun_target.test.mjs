@@ -136,7 +136,9 @@ test("same-engagement w1 promotion rebinds the existing tally to primary", () =>
       engagement_number: 3,
       bandit_entity_id: "entity.bandit.8",
       selected_player_gun_target_slot: 0,
-      w1_present: 0,
+      // The wire state promotion ACTUALLY produces: the survivor left w1 for the primary slot and
+      // the freed slot backfilled with the killed leader's still-falling wreck (present, dead).
+      w1_present: 1,
       w1_alive: 0,
       bandit_alive: true,
       opponent_alive: true,
@@ -144,6 +146,10 @@ test("same-engagement w1 promotion rebinds the existing tally to primary", () =>
   };
 
   assert.equal(wingmanPadlockPromotedToPrimary(promotion), true);
+  assert.equal(wingmanPadlockPromotedToPrimary({
+    ...promotion,
+    state: { ...promotion.state, w1_present: 0 },
+  }), true, "a slot emptied outright is the same promotion");
   assert.equal(wingmanPadlockPromotedToPrimary({
     ...promotion,
     padlockEngagement: 2,
@@ -156,4 +162,40 @@ test("same-engagement w1 promotion rebinds the existing tally to primary", () =>
     ...promotion,
     state: { ...promotion.state, opponent_alive: false },
   }), false, "a dead target still gets the ordinary kill-cam path");
+});
+
+// REGRESSION: promotion frees the w1 slot and the wire immediately backfills it with the killed
+// leader's wreck (present=1, alive=0) so the falling airframe does not blink out of the sky. A
+// promotion test written against w1_present therefore reads "wingman still in slot 1", the
+// promotion branch declines, and app.js falls through to `padlock && !padlockTargetValid(...)` —
+// wingman validity needs present AND alive — which parks the pilot in a SPLASH kill cam tracking
+// the DEAD leader's live falling coordinates while the promoted survivor flies off unlocked.
+// Promotion is a question about LIVENESS in the slot, never about occupancy.
+test("promotion is detected when the freed w1 slot carries the leader's wreck", () => {
+  const wreckInSlot = {
+    padlock: true,
+    padlockTarget: "wingman",
+    padlockEntityId: "entity.bandit.7.wingman",
+    padlockEngagement: 3,
+    state: {
+      engagement_number: 3,
+      bandit_entity_id: "entity.bandit.8",
+      selected_player_gun_target_slot: 0,
+      w1_present: 1,
+      w1_alive: 0,
+      bandit_alive: true,
+      opponent_alive: true,
+    },
+  };
+
+  assert.equal(wingmanPadlockPromotedToPrimary(wreckInSlot), true,
+    "a wreck occupying w1 must not mask the promotion into a false kill cam");
+  assert.equal(wingmanPadlockPromotedToPrimary({
+    ...wreckInSlot,
+    state: { ...wreckInSlot.state, w1_alive: 1 },
+  }), false, "a LIVING wingman in w1 was not promoted");
+  assert.equal(wingmanPadlockPromotedToPrimary({
+    ...wreckInSlot,
+    padlockEntityId: "entity.bandit.8.wingman",
+  }), false, "the padlocked wingman of the CURRENT primary was not promoted");
 });

@@ -50,6 +50,27 @@ public sealed class MotorcycleRiderController
     const double MaximumAssistedLeanRad = 0.62;
     const double WheelieThrottleTrim = 0.45;
     const double StoppieBrakeTrim = 0.45;
+    // Honest-rider pitch management: a competent rider allows a deliberate wheelie (arrow
+    // back + throttle) up to a showy but recoverable pitch, chops throttle before loop-over,
+    // and releases the brake before an endo. The governor multiplies the rate-limited
+    // command (a panic chop is instant, unlike a progressive squeeze), so it caps pitch
+    // without deleting the phenomenon. Pitch rate is estimated by differencing feedback
+    // pitch because the mission runtime wires PitchRateRadPerSec as zero.
+    const double WheelieAllowedBaseRad = 0.06;
+    const double WheelieAllowedDeliberateRad = 0.29;
+    const double StoppieAllowedRad = 0.10;
+    const double PitchGovernorLookaheadSeconds = 0.25;
+    const double PitchGovernorGain = 6.0;
+    // The steer-to-lean plant gain G(v) = maxBar * v^2 / (effectiveWheelbase * g) grows with
+    // speed squared. Above the reference speed the lean-stabilizing bar correction is scaled
+    // by G_ref/G(v) so closed-loop lean stiffness and damping stay speed-invariant; with the
+    // fixed gain, the 3.0 units/s steer rate limit turned the loop into a limit-cycle
+    // oscillator — the sustained 150+ km/h weave (per-cycle amplitude ratio 1.5-1.7 in the
+    // straight-line probe). Real riders make proportionally smaller bar corrections at speed.
+    const double StabilizationReferenceSpeedMps = 60.0 / 3.6;
+    const double StandardGravityMps2 = 9.80665;
+    static readonly double EffectiveWheelbaseM = YzfR1Definition.WheelbaseM
+        + YzfR1Definition.TrailM / Math.Cos(YzfR1Definition.RakeRad);
 
     readonly double[] _turnDelay = new double[AssistedReactionDelayTicks];
     int _turnDelayIndex;
@@ -58,6 +79,8 @@ public sealed class MotorcycleRiderController
     double _riderForeAft;
     double _throttle;
     double _brake;
+    double _previousPitchRad;
+    bool _hasPreviousPitch;
 
     public void Reset()
     {
@@ -68,6 +91,8 @@ public sealed class MotorcycleRiderController
         _riderForeAft = 0.0;
         _throttle = 0.0;
         _brake = 0.0;
+        _previousPitchRad = 0.0;
+        _hasPreviousPitch = false;
     }
 
     public MotorcyclePilotCommand Step(
@@ -100,8 +125,12 @@ public sealed class MotorcycleRiderController
             1.0);
         double desiredLeanRad = -delayedTurn * MaximumAssistedLeanRad * speedAuthority;
         double leanErrorRad = desiredLeanRad - feedback.LeanRad;
+        double gainNormalization = Math.Min(
+            1.0,
+            SteerToLeanGain(StabilizationReferenceSpeedMps)
+                / Math.Max(SteerToLeanGain(Math.Abs(feedback.SpeedMps)), 1e-9));
         double stabilizingCorrection = Math.Clamp(
-            -leanErrorRad * 0.35 - feedback.LeanRateRadPerSec * 0.05,
+            (-leanErrorRad * 0.35 - feedback.LeanRateRadPerSec * 0.05) * gainNormalization,
             -0.20,
             0.20);
         double steerTarget = delayedTurn * (0.70 + 0.30 * speedAuthority)
@@ -138,7 +167,15 @@ public sealed class MotorcycleRiderController
             foreAftTarget,
             MaximumBodyRatePerSecond * FixedDeltaSeconds);
 
-        double throttle = intent.Throttle * (1.0 - WheelieThrottleTrim * wheelieAuthority);
+        double pitchRateEstimateRadPerSec = _hasPreviousPitch
+            ? (feedback.PitchRad - _previousPitchRad) / FixedDeltaSeconds
+            : 0.0;
+        _previousPitchRad = feedback.PitchRad;
+        _hasPreviousPitch = true;
+        double deliberateWheelie = Math.Clamp(-intent.BodyForeAftBias, 0.0, 1.0);
+
+        double throttle = intent.Throttle
+            * (1.0 - WheelieThrottleTrim * wheelieAuthority * (1.0 - deliberateWheelie));
         double brake = intent.Brake * (1.0 - StoppieBrakeTrim * stoppieAuthority);
         if (feedback.IsSliding)
         {
@@ -154,9 +191,24 @@ public sealed class MotorcycleRiderController
             Math.Clamp(brake, 0.0, 1.0),
             MaximumBrakeRatePerSecond * FixedDeltaSeconds);
 
+        double allowedWheelieRad = WheelieAllowedBaseRad
+            + WheelieAllowedDeliberateRad * deliberateWheelie;
+        double wheelieAheadRad = feedback.PitchRad
+            + Math.Max(0.0, pitchRateEstimateRadPerSec) * PitchGovernorLookaheadSeconds;
+        double wheelieGovernorScale = Math.Clamp(
+            1.0 - PitchGovernorGain * Math.Max(0.0, wheelieAheadRad - allowedWheelieRad),
+            0.0,
+            1.0);
+        double stoppieAheadRad = -(feedback.PitchRad
+            + Math.Min(0.0, pitchRateEstimateRadPerSec) * PitchGovernorLookaheadSeconds);
+        double stoppieGovernorScale = Math.Clamp(
+            1.0 - PitchGovernorGain * Math.Max(0.0, stoppieAheadRad - StoppieAllowedRad),
+            0.0,
+            1.0);
+
         return new MotorcyclePilotCommand(
-            _throttle,
-            _brake,
+            _throttle * wheelieGovernorScale,
+            _brake * stoppieGovernorScale,
             _steer,
             _riderLateral,
             _riderForeAft,
@@ -170,6 +222,10 @@ public sealed class MotorcycleRiderController
         double delta = Math.Clamp(target - current, -maximumDelta, maximumDelta);
         return current + delta;
     }
+
+    static double SteerToLeanGain(double speedMps) =>
+        YzfR1Dynamics.MaximumBarSteerRad * speedMps * speedMps
+        / (EffectiveWheelbaseM * StandardGravityMps2);
 
     static void Validate(
         in MotorcycleRiderIntent intent,

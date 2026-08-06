@@ -1,13 +1,17 @@
 # Current product and verification status
 
-Updated: 2026-08-05
-Production: Build 263, revision `32ffd28188c8519119336507f9eeee4c03660d64`, deployment
-`dpl_4SaDXNZ9ZaupW6m88MLk1TZqtppt` (verified live via /api/build-info 2026-08-05). Builds
-253-262 shipped 2026-08-03..08-04 without this ledger being updated; the Build 248 stamp was
-reused and re-stamped as 249 — treat per-build claims in that range with care.
-Next candidate: Build 264 (branch `fix/campaign-2026-08-05`) — wingman pair-graduation fix,
-approach-solve decimation + centreline groove, Cobra view/runtime/mission unbreak, Weekend Ride
-physics envelope + lappable circuit, shell-health and telemetry-transport fixes.
+Updated: 2026-08-06
+Production: Build 264, revision `2694ac768a9ed5568539d39be42f4eaecbfc73ef`, deployment
+`dpl_6JmVziaGpgv8nyfSpKVJ4Xhx35F8` (verified live via /api/build-info 2026-08-05, all four
+routes remote-smoke verified). Builds 253-262 shipped 2026-08-03..08-04 without this ledger
+being updated; the Build 248 stamp was reused and re-stamped as 249 — treat per-build claims in
+that range with care.
+Next candidate: Build 265 (branch `fix/campaign-265`) — both sides of the gun problem (the Ace
+now fires on the ballistic solution instead of a nose-pointing gate, 0% → 28% hits; the player's
+roll assist stops seizing the axis during reversals, 63% → 0%, and finally helps in the tracking
+window), bike wobble damping + wheelie/stoppie dynamics, the Cobra gorge world model and its
+no-cockpit F-22 HUD, W-up collective, first-run controls onboarding, mobile in-app-browser
+rescue, per-contact gunnery telemetry, near-field terrain detail, and new menu posters.
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
 evidence for the build and commit they name, but they do not override this page or the executable

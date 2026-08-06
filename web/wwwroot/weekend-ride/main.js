@@ -1,12 +1,15 @@
-import * as THREE from "../vendor/three.module.js?v=264";
-import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=264";
+import * as THREE from "../vendor/three.module.js?v=265";
+import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=265";
 import {
   dominantSignedAxis,
   gamepadRiderAxes,
-} from "../render/motorcycle/rider_input.js?v=264";
+} from "../render/motorcycle/rider_input.js?v=265";
 import {
   createRapierTrackDayPresentation,
-} from "../render/motorcycle/track_day_presentation.js?v=264";
+} from "../render/motorcycle/track_day_presentation.js?v=265";
+import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=265";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=265";
+import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=265";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
@@ -28,6 +31,8 @@ const renderer = new THREE.WebGLRenderer({
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.04;
+// QA seam: perf audits read draw calls / triangles from the live renderer.
+window.__gunsOnlyWeekendRenderInfo = renderer.info;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x78919a);
@@ -100,6 +105,15 @@ let rawPhysics = false;
 let trackDayPresentation = null;
 let animationFrame = 0;
 let lastTimeMs = performance.now();
+// Shared first-run controls overlay + standstill nudge (created in boot).
+let onboarding = null;
+
+// Standstill means the bike is stopped with the throttle untouched — sim truth, not DOM.
+function onboardingNudgeState(state) {
+  if (!state || paused || state.phase === "finished") return {};
+  const speedMps = Math.hypot(state.vx ?? 0, state.vy ?? 0, state.vz ?? 0);
+  return { standstill: speedMps < 0.5 && !keys.has("KeyW") };
+}
 
 const keys = new Set();
 const simQuat = new THREE.Quaternion();
@@ -130,7 +144,11 @@ function simToScenePosition(px, py, pz, target) {
   return target.set(px, py + EYE_HEIGHT_M, -pz);
 }
 
-/** Apply sim view quaternion with Z-flip only — no extra JS roll. */
+/**
+ * Apply sim view quaternion with Z-flip only — no extra JS roll. The sim quaternion
+ * carries yaw + head-stabilized roll; wheelie/stoppie pitch arrives separately as
+ * pitch_rad and tilts the helmet about its own right axis (positive = nose up).
+ */
 function applyViewAttitude(cameraObject, state) {
   simQuat.set(state.view_qx, state.view_qy, state.view_qz, state.view_qw);
   basisRight.set(1, 0, 0).applyQuaternion(simQuat);
@@ -143,6 +161,8 @@ function applyViewAttitude(cameraObject, state) {
   basisRight.copy(basisUp).cross(cameraZAxis).normalize();
   cameraMatrix.makeBasis(basisRight, basisUp, cameraZAxis);
   cameraObject.quaternion.setFromRotationMatrix(cameraMatrix).normalize();
+  const pitchRad = viewPitchRad(state);
+  if (pitchRad !== 0) cameraObject.rotateX(pitchRad);
 }
 
 function buildTrackDayPresentation(circuit) {
@@ -212,6 +232,7 @@ function animate(timeMs) {
   syncCamera(state);
   renderer.render(scene, camera);
   helmetHud.draw(state);
+  onboarding?.advanceNudges(onboardingNudgeState(state), deltaSeconds);
 
   if (state.phase === "finished") {
     setStatus("RIDE FINISHED", "error");
@@ -333,6 +354,14 @@ async function boot() {
     buildTrackDayPresentation(JSON.parse(bridge.GetCircuit()));
     manualClutch = snapshot.clutch_mode === "manual";
     setStatus("RAPIER TRACK DAY · RIDER REFLEX ASSIST", "ready");
+    onboarding = createControlsOnboarding({
+      modeId: WEEKEND_RIDE_ONBOARDING_CONTENT.modeId,
+      content: WEEKEND_RIDE_ONBOARDING_CONTENT,
+      nudges: [
+        { id: "ride", text: "HOLD W — THROTTLE TO RIDE", when: (s) => s.standstill === true, afterSeconds: 3 },
+      ],
+    });
+    onboarding.maybeShowFirstRun();
     lastTimeMs = performance.now();
     animationFrame = requestAnimationFrame(animate);
   } catch (error) {

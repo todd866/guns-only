@@ -68,7 +68,12 @@ public sealed class PadlockRollAssist {
     public const double FullPilotOverrideRollControl = 0.30;
 
     const double DesiredRollRateGainPerSecond = 1.5;
-    const double TargetPlaneFeedForward = 0.5;
+    // Full feed-forward on the target's own plane rate. At 0.5 the trim structurally under-matched
+    // the rate it was supposed to hold, so it lagged the plane it had captured and returned little
+    // for the authority it took. Matching the rate is what a good pilot's hands do; the 0.18
+    // authority cap is unchanged, so this buys accuracy inside the window rather than strength
+    // everywhere (which is how the law became annoying in the first place).
+    const double TargetPlaneFeedForward = 1.0;
     const double RollRateErrorGainSeconds = 0.45;
     const double TargetPlaneRateFilterSeconds = 0.20;
     const double AssistSlewPerSecond = 0.90;
@@ -110,7 +115,8 @@ public sealed class PadlockRollAssist {
         double rawPilotRollControl,
         double deltaSeconds,
         PadlockRollAssistEnergy? energy = null,
-        double? captureRangeLimitM = null) {
+        double? captureRangeLimitM = null,
+        PilotLateralCommitmentState? lateralCommitment = null) {
         double dt = System.Math.Clamp(
             double.IsFinite(deltaSeconds) ? deltaSeconds : 0.0, 0.0, 0.05);
         if (!selected || dt <= 0.0
@@ -269,6 +275,32 @@ public sealed class PadlockRollAssist {
                 SasRollControl: 0.0);
             return new PadlockRollAssistResult(command, State);
         }
+        // Owner, 2026-08-06, flying Build 264: "it tries to turn early on reversals." Capture was
+        // purely geometric, and a reversal SWEEPS the target across the canopy — so the gate is
+        // satisfied transiently mid-sweep and the trim takes the ailerons for the plane the pilot
+        // is in the act of leaving. Commitment is intent, not geometry: through a commanded
+        // reversal this law is off the axis entirely, and it cannot latch a capture to carry into
+        // the far side of the roll.
+        if (lateralCommitment is { Reversing: true }) {
+            ClearAssistLatches();
+            State = new PadlockRollAssistState(
+                Selected: true,
+                GeometryValid: true,
+                Captured: false,
+                Active: false,
+                AnyPlane: false,
+                PreferredPlaneValid: false,
+                PreferredPlaneRad: 0.0,
+                TargetSpawnSequence: targetSpawnSequence,
+                PlaneMagnitude: planeMagnitude,
+                RollErrorRad: rollError,
+                DesiredRollRateRadPerSecond: 0.0,
+                MeasuredRollRateRadPerSecond: aircraft.BodyRates.P,
+                EstimatedTargetPlaneRateRadPerSecond: 0.0,
+                SasRollControl: 0.0);
+            return new PadlockRollAssistResult(command, State);
+        }
+
         double absoluteError = System.Math.Abs(rollError);
         if (_captured && absoluteError > CaptureReleaseRad) {
             _captured = false;
@@ -366,13 +398,18 @@ public sealed class PadlockRollAssist {
                 command.RollControl + command.SasRollControl, -1.0, 1.0);
             contribution = System.Math.Clamp(_sasRollControl,
                 -1.0 - baseAileron, 1.0 - baseAileron);
+            // Never push back against a lateral input the pilot is holding, and blend back in
+            // after a reversal rather than snapping.
+            if (lateralCommitment is { } commitment)
+                contribution = commitment.Gate(contribution);
         } else {
             _sasRollControl = 0.0;
             _hasPreviousError = false;
             _estimatedTargetPlaneRateRadPerSecond = 0.0;
         }
 
-        bool active = _captured && pilotBlend > 0.0 && planeBlend > 0.0;
+        bool active = _captured && pilotBlend > 0.0 && planeBlend > 0.0
+            && contribution != 0.0;
         PilotCommand assisted = contribution == 0.0 ? command : command with {
             SasRollControl = System.Math.Clamp(
                 command.SasRollControl + contribution, -1.0, 1.0)

@@ -363,7 +363,14 @@ public class ReactiveBanditTests {
             BodyAttitude = PointBodyAt(
                 BanditFireControl.LeadDirection(own, observation))
         };
-        var bandit = new ReactiveBandit(own, air, PilotSkill.Ace);
+        // Ask explicitly for the ROLLOUT. This test is about the rollout's reward shaping, and the
+        // Ace now runs the closed-loop finisher against a manoeuvring target too (it is no longer
+        // excluded by the finisher's G ceiling — see BanditSkillProfile.FineTrackMaxG). With the
+        // nose already parked on the lead direction the finisher latches immediately and collapses
+        // the trace to a single candidate, which is correct behaviour and not what is under test.
+        var bandit = new ReactiveBandit(own, air, PilotSkill.Ace,
+            profile: BanditSkillProfile.For(PilotSkill.Ace)
+                with { ManoeuvringFinisher = false });
 
         bandit.Step(observation, Dt);
 

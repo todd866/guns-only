@@ -153,6 +153,14 @@ public sealed class GunKill {
     public bool HasInfiniteAmmo => _heatConfig is not null;
     public int AmmoRemaining { get; private set; }
     public int RoundsFired { get; private set; }
+    /// How much of RoundsFired / TotalHitCount this gun was BORN holding, because a replacement
+    /// inherited it from the weapon it succeeded. The two replacement families inherit opposite
+    /// counters — CreateReplacementTarget carries rounds forward and starts damage clean, while
+    /// CreateForFreshShooterAgainstTargets starts rounds clean and carries damage forward — so a
+    /// cumulative accumulator that keys on the gun object needs to know which, or it counts the
+    /// inherited total a second time. Both are zero on a gun that succeeded nothing.
+    public int InheritedRoundsFired { get; private set; }
+    public int InheritedHitCount { get; private set; }
     public bool FiredThisStep { get; private set; }
     public double BarrelHeat { get; private set; }
     public bool BarrelOverheated { get; private set; }
@@ -311,6 +319,7 @@ public sealed class GunKill {
             inherited.HitsThisStep = 0;
             inherited.Outcome = source.Outcome;
         }
+        next.InheritedHitCount = next.TotalHitCount;
         next.SelectTarget(selectedTargetId);
         return next;
     }
@@ -319,6 +328,7 @@ public sealed class GunKill {
         var next = new GunKill(
             AmmoRemaining, _hitsToKill, _hitRadiusM, _profile, _heatConfig) {
             RoundsFired = RoundsFired,
+            InheritedRoundsFired = RoundsFired,
             _triggerWasHeld = _triggerWasHeld,
             _secondsToNextShot = _secondsToNextShot,
             _nextRoundId = _nextRoundId,

@@ -162,6 +162,7 @@ public sealed class WeekendRideMissionRuntime
         _riderController.Reset();
         _circuitQueryState = default;
         _currentLapElapsedSeconds = 0.0;
+        _offTrackSeconds = 0.0;
         _lapTimingActive = false;
         _isOnTrack = true;
     }

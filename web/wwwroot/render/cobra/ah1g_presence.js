@@ -177,6 +177,17 @@ export function createAh1gPresence(THREE) {
   const scratchEye = new THREE.Vector3();
   const scratchLocal = new THREE.Vector3();
 
+  // Build 264 owner ruling: first person renders NO cockpit geometry at all — the
+  // whole silhouette (rotor included: its translucent paddles are exterior cues,
+  // not a first-person rotor-wash effect) exists only for exterior/tour framing.
+  // Kept as a mode on the presence rather than a caller-side visible toggle so the
+  // per-frame updateAh1gPresence -> setVisible(true) call cannot resurrect the shell.
+  let firstPerson = false;
+  let requestedVisible = true;
+  const applyVisibility = () => {
+    group.visible = requestedVisible && !firstPerson;
+  };
+
   return {
     schema: AH1G_PRESENCE_SCHEMA,
     group,
@@ -187,8 +198,13 @@ export function createAh1gPresence(THREE) {
     scratchQuat,
     scratchEye,
     scratchLocal,
+    setFirstPerson(enabled) {
+      firstPerson = enabled === true;
+      applyVisibility();
+    },
     setVisible(visible) {
-      group.visible = visible === true;
+      requestedVisible = visible === true;
+      applyVisibility();
     },
     dispose() {
       group.traverse((object) => {

@@ -34,6 +34,7 @@
     <Compile Include="..\web\SnapshotHotFrame.cs" Link="SnapshotHotFrame.cs" />
     <Compile Include="..\web\MeshSnapshot.cs" Link="MeshSnapshot.cs" />
     <Compile Include="..\web\MedevacSnapshotProjection.cs" Link="MedevacSnapshotProjection.cs" />
+    <Compile Include="..\web\MotorcycleSnapshotProjection.cs" Link="MotorcycleSnapshotProjection.cs" />
     <Compile Include="..\web\MedevacWebJsonContext.cs" Link="MedevacWebJsonContext.cs" />
     <Compile Include="..\web\KoreaTerrainTruth.cs" Link="KoreaTerrainTruth.cs" />
     <EmbeddedResource

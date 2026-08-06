@@ -8,21 +8,21 @@ import {
   resolveCobraControlProfile,
 } from "../cobra_control_profile.js";
 
-test("Cobra collective follows the pilot-facing pull convention", () => {
+test("Cobra collective follows the game convention: W raises, S lowers", () => {
   assert.deepEqual(COBRA_CONTROL_PROFILE.collective, {
-    pull: Object.freeze({ code: "KeyS", direction: 1, motion: "toward-pilot" }),
-    push: Object.freeze({ code: "KeyW", direction: -1, motion: "away-from-pilot" }),
+    pull: Object.freeze({ code: "KeyW", direction: 1, motion: "toward-pilot" }),
+    push: Object.freeze({ code: "KeyS", direction: -1, motion: "away-from-pilot" }),
   });
 
   assert.equal(
-    cobraKeyboardControlIntent(new Set(["KeyS"])).collectiveRate,
+    cobraKeyboardControlIntent(new Set(["KeyW"])).collectiveRate,
     1,
-    "holding S must pull the lever and increase collective",
+    "holding W must pull the lever and increase collective",
   );
   assert.equal(
-    cobraKeyboardControlIntent(new Set(["KeyW"])).collectiveRate,
+    cobraKeyboardControlIntent(new Set(["KeyS"])).collectiveRate,
     -1,
-    "holding W must push the lever and decrease collective",
+    "holding S must push the lever and decrease collective",
   );
   assert.equal(
     cobraKeyboardControlIntent(new Set(["KeyS", "KeyW"])).collectiveRate,
@@ -67,14 +67,14 @@ test("Cobra follows remapped player bindings while retaining pull-positive sense
     fire: "Space",
   });
 
-  assert.equal(profile.collective.pull.code, "KeyK");
-  assert.equal(profile.collective.push.code, "KeyI");
+  assert.equal(profile.collective.pull.code, "KeyI");
+  assert.equal(profile.collective.push.code, "KeyK");
   assert.equal(
-    cobraKeyboardControlIntent(new Set(["KeyK"]), profile).collectiveRate,
+    cobraKeyboardControlIntent(new Set(["KeyI"]), profile).collectiveRate,
     1,
   );
   assert.equal(
-    cobraKeyboardControlIntent(new Set(["KeyI"]), profile).collectiveRate,
+    cobraKeyboardControlIntent(new Set(["KeyK"]), profile).collectiveRate,
     -1,
   );
   assert.equal(
@@ -85,9 +85,9 @@ test("Cobra follows remapped player bindings while retaining pull-positive sense
 });
 
 test("held collective intent moves a persistent lever without commanding altitude", () => {
-  const pull = cobraKeyboardControlIntent(new Set(["KeyS"]));
+  const pull = cobraKeyboardControlIntent(new Set(["KeyW"]));
   const released = cobraKeyboardControlIntent(new Set());
-  const push = cobraKeyboardControlIntent(new Set(["KeyW"]));
+  const push = cobraKeyboardControlIntent(new Set(["KeyS"]));
 
   const afterFirstPull = advanceCobraCollectiveLever(0.45, pull, 0.25, 0.40);
   const afterSecondPull = advanceCobraCollectiveLever(afterFirstPull, pull, 0.25, 0.40);
@@ -108,7 +108,7 @@ test("held collective intent moves a persistent lever without commanding altitud
 });
 
 test("collective lever integration validates its explicit host rigging", () => {
-  const pull = cobraKeyboardControlIntent(new Set(["KeyS"]));
+  const pull = cobraKeyboardControlIntent(new Set(["KeyW"]));
   assert.equal(advanceCobraCollectiveLever(0.98, pull, 1.0, 0.40), 1.0);
   assert.throws(
     () => advanceCobraCollectiveLever(0.5, pull, 0.1, Number.NaN),

@@ -1,0 +1,196 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1600" width="900" height="1600">
+  <!-- Hold the Bridge card, composed against the owner's Battlefield Vietnam reference
+       (memory: bf-vietnam-graphics-reference). Four things carried over from it:
+         1. aerial perspective does the work - ridges recede by losing value, saturation and
+            contrast until they dissolve into the sky, rather than by losing detail;
+         2. warm khaki foreground against a cool blue-grey distance, which is the separation the
+            first pass at this card lacked when it was uniformly green;
+         3. big hazy sky with a bright sun glare, taking half the frame;
+         4. the aircraft read as a SILHOUETTE against that bright sky, rotor disc visible.
+       Palms and broadleaf crowns, not conifers. Saturation stays muted throughout. -->
+  <defs>
+    <linearGradient id="csky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8fa6b4"/>
+      <stop offset="0.18" stop-color="#a4b7c0"/>
+      <stop offset="0.36" stop-color="#c0cbc6"/>
+      <stop offset="0.50" stop-color="#d8dccb"/>
+      <stop offset="0.60" stop-color="#e6e5cf"/>
+    </linearGradient>
+    <radialGradient id="sunglare" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fbf6e0" stop-opacity="0.95"/>
+      <stop offset="0.45" stop-color="#f2ecd4" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#e8e2c8" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="haze" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#e2e2cc" stop-opacity="0"/>
+      <stop offset="1" stop-color="#e2e2cc" stop-opacity="0.62"/>
+    </linearGradient>
+    <linearGradient id="river" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9fada4"/>
+      <stop offset="1" stop-color="#6f8177"/>
+    </linearGradient>
+    <linearGradient id="disc" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#3a3c30" stop-opacity="0.06"/>
+      <stop offset="0.5" stop-color="#2e3026" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#3a3c30" stop-opacity="0.06"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="900" height="1600" fill="url(#csky)"/>
+  <!-- The sun, hazed out, high and to the right. Everything in the frame is backlit by it. -->
+  <ellipse cx="712" cy="430" rx="430" ry="380" fill="url(#sunglare)"/>
+
+  <!-- Cumulus. Muted, flat-bottomed, stacked; two tones only, and never white. -->
+  <g>
+    <path d="M74 336 L128 288 L206 276 L268 302 L330 292 L376 330 L372 350 L78 356 Z" fill="#e8e8d8"/>
+    <path d="M78 356 L372 350 L360 372 L92 376 Z" fill="#c8ccc4"/>
+    <path d="M472 224 L516 186 L580 178 L628 198 L682 192 L716 222 L714 240 L476 244 Z" fill="#eaeade"/>
+    <path d="M476 244 L714 240 L704 258 L488 260 Z" fill="#ccd0c8"/>
+    <path d="M258 500 L302 470 L364 464 L406 486 L456 482 L486 504 L484 518 L262 520 Z" fill="#e4e5da" opacity="0.8"/>
+    <path d="M262 520 L484 518 L476 532 L272 532 Z" fill="#cfd2ca" opacity="0.8"/>
+    <path d="M620 560 L664 538 L722 534 L764 552 L810 550 L836 566 L834 578 L624 578 Z" fill="#e2e3d8" opacity="0.65"/>
+  </g>
+
+  <!-- The AH-1G, silhouetted against the bright sky. Local units: 1 m = 10, nose at x=-74,
+       fin at x=+69, skid bottom y=+3. Almost no internal value range: that is the point. -->
+  <!-- Placed so the whole machine, rotor disc included, survives the 16:10 centre crop the phone
+       card takes out of this 9:16 master. The nose-down tilt is small for the same reason: a
+       steeper one lifts the far end of the disc out of the crop. -->
+  <g transform="translate(498 840) rotate(-6) scale(4.75)">
+    <ellipse cx="-4" cy="-58" rx="68" ry="4.6" fill="url(#disc)"/>
+    <path d="M-72 -59 L64 -57.4 L64 -55.8 L-72 -57.4 Z" fill="#33352a" opacity="0.72"/>
+
+    <path d="M-52 1 L14 1 L14 3.4 L-52 3.4 Z" fill="#22241c"/>
+    <path d="M-44 -12 L-38 1 L-42 1 L-49 -12 Z" fill="#22241c"/>
+    <path d="M-6 -12 L0 1 L-4 1 L-11 -12 Z" fill="#22241c"/>
+
+    <path d="M2 -34 L52 -28 L56 -20 L2 -12 Z" fill="#2b2d23"/>
+    <path d="M2 -34 L52 -28 L52 -25.6 L2 -31 Z" fill="#3d4032"/>
+
+    <path d="M46 -26 L62 -54 L69 -52 L68 -24 L57 -20 Z" fill="#282a20"/>
+    <path d="M46 -26 L62 -54 L65 -53 L51 -24 Z" fill="#3a3d2f"/>
+    <path d="M53 -20 L64 -21 L61 -6 L54 -8 Z" fill="#22241c"/>
+    <ellipse cx="61" cy="-40" rx="2.8" ry="15" fill="#4a4d3c" opacity="0.34"/>
+    <path d="M60.2 -55 L61.8 -55 L61.8 -25 L60.2 -25 Z" fill="#3a3d2f" opacity="0.8"/>
+
+    <path d="M-74 -21 L-66 -30 L-48 -34 L-46 -42 L-26 -45 L-14 -44 L-2 -39 L4 -34 L5 -19
+             L-10 -15 L-46 -12 L-68 -14 Z" fill="#2b2d23"/>
+    <!-- The one lit edge: a thin backlit rim along the top, which is all a silhouette gets. -->
+    <path d="M-74 -21 L-66 -30 L-48 -34 L-46 -42 L-26 -45 L-14 -44 L-2 -39 L4 -34 L4 -32
+             L-3 -37 L-14 -42 L-26 -43 L-45 -40 L-47 -32 L-65 -28 L-72 -20.4 Z" fill="#6e7156"/>
+    <path d="M-68 -14 L-46 -12 L-10 -15 L5 -19 L5 -16 L-10 -12 L-46 -9 L-70 -12 Z" fill="#1d1f18"/>
+
+    <path d="M-19 -45 L-8 -45 L-9 -51 L-18 -51 Z" fill="#282a20"/>
+    <path d="M-15.5 -51 L-11 -51 L-11 -57 L-15.5 -57 Z" fill="#22241c"/>
+    <path d="M-17.5 -60 L-9 -60 L-9.5 -56.5 L-17 -56.5 Z" fill="#1d1f18"/>
+
+    <!-- Tandem canopy: the step is the type's whole silhouette, so it survives being backlit. -->
+    <path d="M-68 -22 L-64 -29 L-50 -32 L-49 -14 L-67 -15 Z" fill="#191b16"/>
+    <path d="M-46 -32 L-44 -41 L-27 -44 L-25 -16 L-46 -15 Z" fill="#191b16"/>
+    <path d="M-66 -22 L-63 -27 L-56 -29 L-57 -15 L-66 -15 Z" fill="#7c8471" opacity="0.5"/>
+    <path d="M-44 -33 L-43 -39 L-35 -41 L-35 -15.5 L-44 -15 Z" fill="#7c8471" opacity="0.44"/>
+    <path d="M-49.6 -32 L-48.4 -32 L-48.4 -14 L-49.6 -14 Z" fill="#15170f"/>
+    <path d="M-34.6 -41.4 L-33.4 -41.6 L-33.4 -15.6 L-34.6 -15.6 Z" fill="#15170f"/>
+
+    <path d="M-27 -22 L-3 -22 L-1 -17 L-27 -17 Z" fill="#282a20"/>
+    <path d="M-25 -17 L-5 -17 L-4 -7 L-24 -7 Z" fill="#22241c"/>
+    <path d="M-24 -7 L-4 -7 L-4 -5.4 L-24 -5.4 Z" fill="#15170f"/>
+
+    <path d="M-71 -15 L-59 -15 L-58 -5 L-69 -4 Z" fill="#22241c"/>
+    <path d="M-68 -7 L-63 -7.4 L-75 3 L-79 0 Z" fill="#1b1d16"/>
+    <path d="M-76 0 L-80 4 L-88 3 L-81 -2 Z" fill="#ffeeb8" opacity="0.9"/>
+  </g>
+
+  <!-- Tracer from the chin turret down into the valley. -->
+  <g>
+    <path d="M118 890 L80 954 L72 948 L110 884 Z" fill="#ffe6a2" opacity="0.85"/>
+    <path d="M64 984 L32 1040 L25 1034 L57 978 Z" fill="#ffd274" opacity="0.6"/>
+    <path d="M16 1072 L-8 1114 L-14 1108 L10 1066 Z" fill="#ffbe52" opacity="0.36"/>
+  </g>
+
+  <!-- Ridgelines. Each band is lighter, cooler and lower-contrast than the one in front of it,
+       and the furthest is barely separable from the sky. This is the whole depth cue. -->
+  <path d="M0 958 L66 940 L142 908 L204 934 L268 948 L352 902 L410 930 L470 946 L556 916
+           L618 934 L700 900 L764 938 L838 918 L900 934 V1010 H0 Z" fill="#b3c0c0"/>
+  <path d="M0 1024 L88 986 L150 1004 L246 958 L302 1000 L392 1012 L474 966 L540 1004
+           L640 962 L716 1002 L800 976 L900 1006 V1060 H0 Z" fill="#9aabab"/>
+  <path d="M0 1060 L74 1046 L168 1000 L262 1052 L340 1030 L428 1004 L520 1058 L590 1030
+           L692 990 L790 1046 L862 1024 L900 1042 V1116 H0 Z" fill="#84979a"/>
+  <path d="M0 1132 L118 1074 L196 1108 L302 1062 L392 1116 L486 1058 L560 1098 L664 1052
+           L768 1110 L860 1072 L900 1090 V1190 H0 Z" fill="#6e8489"/>
+  <path d="M0 1188 L140 1130 L262 1168 L360 1122 L452 1180 L548 1118 L668 1170 L790 1120
+           L900 1158 V1270 H0 Z" fill="#5c7370"/>
+  <!-- Last cool band, cut by the valley the river runs down. -->
+  <path d="M0 1272 L166 1200 L300 1252 L368 1216 L392 1600 L0 1600 Z" fill="#556452"/>
+  <path d="M474 1224 L500 1600 L900 1600 L900 1214 L800 1246 L664 1192 L556 1246 Z" fill="#556452"/>
+
+  <!-- Humid haze, laid over the ridge stack so the far bands lift toward the sky. -->
+  <rect y="900" width="900" height="320" fill="url(#haze)"/>
+
+  <!-- The valley floor: river and the bridge that gives the mission its name, seen from above
+       and a long way off, desaturated by the same haze as everything else at that distance. -->
+  <path d="M368 1216 L474 1224 L512 1600 L336 1600 Z" fill="url(#river)"/>
+  <path d="M368 1216 L474 1224 L478 1252 L366 1244 Z" fill="#b0bcb0"/>
+  <path d="M352 1382 L512 1400 L516 1428 L354 1410 Z" fill="#8b9c92"/>
+  <!-- The bridge. Small, but the only man-made thing in the valley, so it holds the eye. -->
+  <path d="M312 1338 L536 1352 L536 1372 L312 1358 Z" fill="#4e5238"/>
+  <path d="M312 1358 L536 1372 L536 1380 L312 1366 Z" fill="#2c2f20"/>
+  <path d="M348 1372 L362 1373 L362 1420 L348 1418 Z" fill="#33372a"/>
+  <path d="M486 1381 L500 1382 L500 1426 L486 1424 Z" fill="#33372a"/>
+
+  <!-- Foreground. Warm khaki and brown, close, and in front of everything cool. -->
+  <path d="M0 1348 L142 1310 L244 1352 L336 1330 L336 1600 H0 Z" fill="#5c5a37"/>
+  <path d="M512 1330 L604 1298 L716 1344 L820 1310 L900 1338 V1600 H512 Z" fill="#5c5a37"/>
+  <path d="M0 1442 L246 1372 L486 1420 L722 1360 L900 1400 V1600 H0 Z" fill="#4a462a"/>
+  <path d="M0 1530 L268 1450 L540 1502 L790 1438 L900 1464 V1600 H0 Z" fill="#39331f"/>
+
+  <!-- Broadleaf canopy clustered on the near slopes: warm, dark, and lumpy along the ridge. -->
+  <g fill="#443e26">
+    <path d="M28 1352 Q56 1314 96 1322 Q126 1300 152 1336 Q182 1330 178 1364 L24 1382 Z"/>
+    <path d="M600 1330 Q628 1292 668 1302 Q696 1282 722 1316 Q752 1312 748 1346 L596 1362 Z"/>
+    <path d="M792 1330 Q814 1302 846 1310 Q868 1294 886 1322 L888 1350 L790 1356 Z"/>
+    <path d="M232 1372 Q252 1348 280 1354 Q300 1340 316 1364 L318 1388 L230 1394 Z"/>
+  </g>
+  <g fill="#3a3520">
+    <path d="M0 1470 Q52 1428 118 1440 Q166 1408 220 1446 Q276 1436 300 1472 L296 1516 L0 1546 Z"/>
+    <path d="M604 1452 Q660 1414 722 1428 Q772 1400 822 1436 Q872 1428 900 1458 L900 1520 L600 1500 Z"/>
+  </g>
+
+  <!-- Palms on the near rim: curved drooping fronds, which is what makes them palms and not
+       telegraph poles. Silhouette only - they are the closest thing in the frame. -->
+  <g fill="#2b271a">
+    <path d="M124 1600 L116 1408 L130 1408 L138 1600 Z"/>
+    <g transform="translate(123 1406)">
+      <path d="M0 0 Q-30 -14 -62 6 Q-36 -2 -4 12 Z"/>
+      <path d="M0 0 Q-26 4 -46 40 Q-24 12 -2 12 Z"/>
+      <path d="M0 0 Q30 -18 66 -2 Q34 -8 4 12 Z"/>
+      <path d="M0 0 Q30 6 52 38 Q28 12 4 12 Z"/>
+      <path d="M0 0 Q-6 -24 4 -44 Q10 -20 8 2 Z"/>
+    </g>
+
+    <path d="M714 1600 L706 1436 L720 1436 L728 1600 Z"/>
+    <g transform="translate(713 1434)">
+      <path d="M0 0 Q-26 -12 -56 6 Q-32 -2 -4 12 Z"/>
+      <path d="M0 0 Q-24 4 -42 36 Q-22 12 -2 12 Z"/>
+      <path d="M0 0 Q28 -16 60 -2 Q30 -8 4 12 Z"/>
+      <path d="M0 0 Q28 6 48 36 Q26 12 4 12 Z"/>
+      <path d="M0 0 Q-6 -22 4 -40 Q10 -18 8 2 Z"/>
+    </g>
+
+    <path d="M842 1600 L836 1470 L848 1470 L854 1600 Z"/>
+    <g transform="translate(843 1468)">
+      <path d="M0 0 Q-22 -10 -46 6 Q-26 -2 -3 10 Z"/>
+      <path d="M0 0 Q-20 4 -34 30 Q-18 10 -2 10 Z"/>
+      <path d="M0 0 Q24 -14 50 -2 Q26 -7 3 10 Z"/>
+      <path d="M0 0 Q24 6 40 30 Q22 10 3 10 Z"/>
+    </g>
+
+    <path d="M232 1600 L228 1490 L238 1490 L242 1600 Z"/>
+    <g transform="translate(233 1488)">
+      <path d="M0 0 Q-20 -9 -42 5 Q-24 -2 -3 9 Z"/>
+      <path d="M0 0 Q-18 4 -30 28 Q-16 9 -2 9 Z"/>
+      <path d="M0 0 Q22 -13 46 -2 Q24 -6 3 9 Z"/>
+      <path d="M0 0 Q22 5 36 28 Q20 9 3 9 Z"/>
+    </g>
+  </g>
+</svg>

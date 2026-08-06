@@ -94,6 +94,9 @@ public sealed class DetachedOpponentWreck {
     internal IBandit Actor { get; }
     public long SpawnSequence { get; }
     public AircraftState Aircraft => Actor.State;
+    /// The wreck's current lift direction, for snapshot projection: a detached airframe that
+    /// still occupies a formation wire slot must render with honest attitude, not a default up.
+    public Vec3D LiftDir => Actor.LiftDir;
     public AircraftTerminalState TerminalState { get; internal set; }
     public ImpactSurface ImpactSurface { get; internal set; }
 }
@@ -108,6 +111,8 @@ public sealed class SimulationSession {
 
     public const double FixedDeltaSeconds = 1.0 / AircraftSim.TickHz;
     public const int RecentEventCapacity = 64;
+    /// The formation aircraft slots both wire formats carry: w1, w2, w3.
+    public const int FormationWireSlotCount = 3;
     const int BuiltInCasevacBeatIndex = 13;
     // Terrain prediction is deliberately a flight-computer-rate task rather than a 120 Hz
     // actuator task. The held recovery command still reaches AircraftSim every fixed tick.
@@ -130,6 +135,27 @@ public sealed class SimulationSession {
     // which is re-elected from this list when it dies.
     readonly List<Wingman> _wingmen = new();
     readonly List<RetiredOpponentGun> _retiredOpponentGuns = new();
+    // Sortie-cumulative gunnery. Every individual GunKill is per-engagement: continuous combat
+    // stages a fresh weapon graph for each successor aircraft, so rounds_fired/hits RESET at every
+    // engagement boundary and a session-wide max() over the tape understates the sortie total.
+    // These ledgers bank each gun's delta so the sortie figure is monotone, keyed by gun identity
+    // so a retired or replaced weapon keeps the rounds it already put in the air.
+    readonly Dictionary<GunKill, GunLedgerBaseline> _sortieGunLedger = new();
+    int _sortiePlayerRoundsFired;
+    int _sortiePlayerHits;
+    int _sortieOpponentRoundsFired;
+    bool _sortieLoadFactorSeen;
+    double _sortiePeakLoadFactorG;
+    double _sortieMinimumLoadFactorG;
+
+    /// Last observed counters for one physical gun, so only the increment is banked. A replacement
+    /// is a new dictionary key, so both counters baseline at GunKill.InheritedRoundsFired /
+    /// InheritedHitCount — whatever the successor was born holding, which its predecessor has
+    /// already banked. Both are zero for a gun that succeeded nothing.
+    struct GunLedgerBaseline {
+        public int Rounds;
+        public int Hits;
+    }
     // A handoff never changes Wingman semantics: _wingmen remains the enemy formation. Friendly
     // relief and the enemy guns retargeted against it live in their own authority records.
     ReliefFighter? _reliefFighter;
@@ -173,6 +199,10 @@ public sealed class SimulationSession {
     GunneryPitchAssistState _gunneryPitchAssistState =
         GunneryPitchAssistState.Inactive();
     readonly PadlockRollAssist _padlockRollAssist = new();
+    readonly GunneryLeadRateEstimator _gunneryLeadRate = new();
+    readonly PilotLateralCommitment _pilotLateralCommitment = new();
+    PilotLateralCommitmentState _pilotLateralCommitmentState =
+        PilotLateralCommitmentState.Neutral;
     bool _playerGunTargetPadlockRollAssistSelected;
     long _playerGunTargetPadlockRollAssistTargetId;
     PilotCommand _pilotDelayedCommand;
@@ -289,6 +319,12 @@ public sealed class SimulationSession {
     double _nextOpponentSpawnAtMs = double.NegativeInfinity;
     readonly List<SessionEvent> _recentEvents = new(RecentEventCapacity);
     readonly List<DetachedOpponentWreck> _detachedOpponentWrecks = new();
+    /// The formation wire slot each still-existing detached wreck owns, keyed by the wreck OBJECT
+    /// so the mapping survives every mutation of the list around it. See
+    /// DetachedWreckForFormationSlot for why positional ordering is not an identity.
+    readonly Dictionary<DetachedOpponentWreck, int> _wreckFormationSlots =
+        new(ReferenceEqualityComparer.Instance);
+    readonly List<DetachedOpponentWreck> _wreckFormationSlotEvictions = new();
     readonly IncidentReplayRecorder _incidentReplay = new();
     readonly DecisionRecorder _decisionRecorder = new();
     readonly RapierServiceLifeRecorder _rapierServiceLifeRecorder;
@@ -568,6 +604,41 @@ public sealed class SimulationSession {
     }
     /// Opponents beyond the primary — the 1v2 and beyond.
     public IReadOnlyList<Wingman> Wingmen => _wingmen;
+    /// True while ANY opponent ship — primary, wingman, retired or retargeted — has its trigger
+    /// down with a usable gun. The primary-only OpponentTriggerDown answers a narrower question.
+    public bool FormationOpponentGunFiring {
+        get {
+            if (!OpponentPresent || !PlayerAlive) return false;
+            if (_opponentTriggerDown
+                && _opponentGun is not null
+                && _opponentGun.AmmoRemaining > 0
+                && _opponentTerminalState == AircraftTerminalState.Flying)
+                return true;
+            foreach (Wingman wingman in _wingmen)
+                if (wingman.TriggerDown
+                    && wingman.StillFighting
+                    && wingman.Gun.AmmoRemaining > 0)
+                    return true;
+            return false;
+        }
+    }
+    /// Rounds the PLAYER has fired across the whole sortie. Unlike `rounds_fired`, which is the
+    /// current engagement's weapon graph and resets at every engagement boundary, this is monotone.
+    public int SortiePlayerRoundsFired => _sortiePlayerRoundsFired;
+    /// Rounds the PLAYER has put into opponents across the whole sortie. Monotone; `hits` is not.
+    public int SortiePlayerHits => _sortiePlayerHits;
+    /// Rounds every opponent ship has fired across the whole sortie — primary, wingmen, retired
+    /// guns and retargeted relief guns. Monotone; `opponent_rounds_fired` is the PRIMARY'S current
+    /// gun only and resets at every engagement boundary.
+    public int SortieOpponentRoundsFired => _sortieOpponentRoundsFired;
+    /// Peak and trough normal load factor the player has flown this sortie. Airframe-agnostic and
+    /// always live — the RapierServiceLife record is captured only on scripted-intercept missions
+    /// and only exists once one has been finalized, which is why service_life_max_g reads 0 on an
+    /// ordinary fighter sortie no matter how hard it was flown.
+    public double SortiePeakLoadFactorG =>
+        _sortieLoadFactorSeen ? _sortiePeakLoadFactorG : 0.0;
+    public double SortieMinimumLoadFactorG =>
+        _sortieLoadFactorSeen ? _sortieMinimumLoadFactorG : 0.0;
     /// Formation slot selected for the player's gun sight: 0 is the primary and 1..N are the
     /// additional contacts in their stable browser/render order.
     public int SelectedPlayerGunTargetSlot {
@@ -731,9 +802,24 @@ public sealed class SimulationSession {
         _enemyPairCoordinator.Active
             ? _enemyPairCoordinator.SharedContactAgeTicks * FixedDeltaSeconds
             : null;
+    /// The BEHAVIOURAL fallback window, published as formation_coordination_stale: the shared
+    /// picture is older than the collection interval, so each pilot flies on its own senses until
+    /// the next delivery lands. Entered once per refresh cycle in completely normal operation —
+    /// true in 8% of the Build 264 rows on a ~1.2 s period, which is the sawtooth, not a fault.
+    ///
+    /// It keeps this name and this meaning ON PURPOSE. It is noisy but it is INFORMATIVE: it says
+    /// how much of the fight the two ships spent uncoordinated, and that is a real behavioural
+    /// measurement. Quietly redefining the field to a health threshold would have made a
+    /// 264-vs-265 comparison read the resulting ~0% as a sim fix. The fault signal is the separate
+    /// FormationCoordinationHealthStale below.
     public bool FormationCoordinationStale =>
         _enemyPairCoordinator.Active
         && _enemyPairCoordinator.SharedContactStale;
+    /// Genuine coordination staleness — a scheduled shared-picture delivery was MISSED — published
+    /// as the NEW formation_coordination_health_stale. This is the one to alarm on.
+    public bool FormationCoordinationHealthStale =>
+        _enemyPairCoordinator.Active
+        && _enemyPairCoordinator.SharedContactHealthStale;
     public int EngagementNumber => _engagementNumber;
     public EngagementReport? LastEngagementReport =>
         _engagementReports.Count == 0 ? null : _engagementReports[^1];
@@ -789,6 +875,68 @@ public sealed class SimulationSession {
         || (OpponentPresent
             && _opponentTerminalState != AircraftTerminalState.Flying);
     public IReadOnlyList<SessionEvent> RecentEvents => _recentEvents;
+    /// The detached opponent wreck that backs formation snapshot slot <paramref name="index"/>
+    /// once live wingmen run out. Production Build 260: the instant the player killed the
+    /// primary, promotion moved the surviving wingman into the opponent slot and detached the
+    /// dead airframe into a list neither wire format projected — so w1_present dropped to 0 at
+    /// exactly the kill tick and the falling jet blinked out of the world. Formation slots fill
+    /// with live wingmen first (their existing order, untouched), then with wrecks that still
+    /// physically exist in the air or tumbling on contact. Settled and simulation-bounded hulks
+    /// stay off the wire, which is the same quiet exit the pre-formation replacement flow
+    /// always had.
+    ///
+    /// SLOT OWNERSHIP FOLLOWS THE AIRFRAME, NEVER ITS LIST INDEX. The wreck list mutates
+    /// constantly under a live fight: an egressing wreck is removed mid-step, an overflowing
+    /// list evicts a settled hulk, and a wreck simply coming to rest drops out of the eligible
+    /// set. Every one of those shifts the positional offset of every LATER wreck, so a still
+    /// falling airframe would migrate w3 to w2 in a single tick — and since the renderer is keyed
+    /// by SLOT (app.js reads w1x/w2x/w3x) with no entity id projected for these slots, that
+    /// migration teleports the wreck across the sky with nothing able to detect the substitution.
+    /// A wreck therefore keeps the slot it was first granted for as long as it stays eligible and
+    /// a live wingman has not claimed that slot back.
+    public DetachedOpponentWreck? DetachedWreckForFormationSlot(int index) {
+        if (index < 0 || index >= FormationWireSlotCount) return null;
+        ReconcileWreckFormationSlots();
+        foreach (DetachedOpponentWreck wreck in _detachedOpponentWrecks)
+            if (_wreckFormationSlots.TryGetValue(wreck, out int slot) && slot == index)
+                return wreck;
+        return null;
+    }
+
+    /// Settled and simulation-bounded hulks stay off the wire, which is the same quiet exit the
+    /// pre-formation replacement flow always had.
+    static bool WreckOccupiesFormationSlot(DetachedOpponentWreck wreck) =>
+        wreck.TerminalState is not (AircraftTerminalState.Settled
+            or AircraftTerminalState.SimulationBounded);
+
+    /// Idempotent, and a pure function of the wreck list, the live wingman count and the slots
+    /// already granted — both wire writers call it every frame and must agree.
+    void ReconcileWreckFormationSlots() {
+        if (_wreckFormationSlots.Count > 0) {
+            _wreckFormationSlotEvictions.Clear();
+            foreach (KeyValuePair<DetachedOpponentWreck, int> held in _wreckFormationSlots) {
+                // A live wingman outranks a wreck for the low slots (their existing order is
+                // untouched), and a wreck that left the eligible set surrenders its slot.
+                if (held.Value >= _wingmen.Count
+                    && WreckOccupiesFormationSlot(held.Key)
+                    && _detachedOpponentWrecks.Contains(held.Key)) continue;
+                _wreckFormationSlotEvictions.Add(held.Key);
+            }
+            foreach (DetachedOpponentWreck evicted in _wreckFormationSlotEvictions)
+                _wreckFormationSlots.Remove(evicted);
+            _wreckFormationSlotEvictions.Clear();
+        }
+        foreach (DetachedOpponentWreck wreck in _detachedOpponentWrecks) {
+            if (!WreckOccupiesFormationSlot(wreck)
+                || _wreckFormationSlots.ContainsKey(wreck)) continue;
+            for (int slot = _wingmen.Count; slot < FormationWireSlotCount; slot++) {
+                if (_wreckFormationSlots.ContainsValue(slot)) continue;
+                _wreckFormationSlots[wreck] = slot;
+                break;
+            }
+        }
+    }
+
     public IReadOnlyList<DetachedOpponentWreck> DetachedOpponentWrecks =>
         _detachedOpponentWrecks;
     public IncidentReplayRecorder IncidentReplay => _incidentReplay;
@@ -3135,6 +3283,13 @@ public sealed class SimulationSession {
         _shotsTotal = 0;
         _shotsInWindow = 0;
         _killCount = 0;
+        _sortieGunLedger.Clear();
+        _sortiePlayerRoundsFired = 0;
+        _sortiePlayerHits = 0;
+        _sortieOpponentRoundsFired = 0;
+        _sortieLoadFactorSeen = false;
+        _sortiePeakLoadFactorG = 0.0;
+        _sortieMinimumLoadFactorG = 0.0;
         _combatHandoffPhase = SupportsCombatHandoff
             ? CombatHandoffPhase.Available
             : CombatHandoffPhase.Unavailable;
@@ -5308,6 +5463,12 @@ public sealed class SimulationSession {
     }
 
     void AccumulateEngagementCounters() {
+        // Deliberately before the engagement-active guard: the sortie ledgers span engagements and
+        // must keep counting between them, which is the whole point of having them. A drone raid
+        // never starts engagement counters at all, so behind the guard every raid would report
+        // zero rounds fired. Pinned by
+        // SortieGunLedgerTests.SortieLedgersAccrueOnASortieThatNeverStartsEngagementCounters.
+        AccumulateSortieLedgers();
         if (!_engagementCounters.Active) return;
         _engagementCounters.DurationSeconds += FixedDeltaSeconds;
         if ((_opponentTerminalState == AircraftTerminalState.Flying
@@ -5315,6 +5476,61 @@ public sealed class SimulationSession {
             || _wingmen.Any(static wingman =>
                 wingman.StillFighting && wingman.Gun.GunSolution))
             _engagementCounters.SolutionSecondsConceded += FixedDeltaSeconds;
+    }
+
+    /// Bank this tick's gunnery increments and the load-factor envelope. Called every stepped tick
+    /// on every sortie shape, including the ones that stage no opponent.
+    void AccumulateSortieLedgers() {
+        if (_playerTerminalState == AircraftTerminalState.Flying) {
+            double loadFactor = _player.LastNz;
+            if (double.IsFinite(loadFactor)) {
+                if (!_sortieLoadFactorSeen) {
+                    _sortieLoadFactorSeen = true;
+                    _sortiePeakLoadFactorG = loadFactor;
+                    _sortieMinimumLoadFactorG = loadFactor;
+                } else {
+                    if (loadFactor > _sortiePeakLoadFactorG)
+                        _sortiePeakLoadFactorG = loadFactor;
+                    if (loadFactor < _sortieMinimumLoadFactorG)
+                        _sortieMinimumLoadFactorG = loadFactor;
+                }
+            }
+        }
+        if (!OpponentPresent) return;
+        if (_gunKill is not null) {
+            (int rounds, int hits) = BankGun(_gunKill);
+            _sortiePlayerRoundsFired += rounds;
+            _sortiePlayerHits += hits;
+        }
+        if (_opponentGun is not null)
+            _sortieOpponentRoundsFired += BankGun(_opponentGun).Rounds;
+        foreach (Wingman wingman in _wingmen)
+            _sortieOpponentRoundsFired += BankGun(wingman.Gun).Rounds;
+        foreach (RetiredOpponentGun retired in _retiredOpponentGuns)
+            _sortieOpponentRoundsFired += BankGun(retired.Gun).Rounds;
+        foreach (ReliefTargetingOpponentGun relief in
+            _reliefTargetingOpponentGuns.Values)
+            _sortieOpponentRoundsFired += BankGun(relief.Gun).Rounds;
+    }
+
+    (int Rounds, int Hits) BankGun(GunKill gun) {
+        if (!_sortieGunLedger.TryGetValue(gun, out GunLedgerBaseline baseline)) {
+            // First sight of this gun: bank nothing it was BORN holding, because the weapon it
+            // succeeded already banked that. Deliberately the gun's own record of what it
+            // inherited rather than its current counters — a gun can fire on the same tick it is
+            // staged, and reading the live counters here would silently swallow those rounds.
+            baseline = new GunLedgerBaseline {
+                Rounds = gun.InheritedRoundsFired,
+                Hits = gun.InheritedHitCount
+            };
+        }
+        int rounds = Math.Max(0, gun.RoundsFired - baseline.Rounds);
+        int hits = Math.Max(0, gun.TotalHitCount - baseline.Hits);
+        _sortieGunLedger[gun] = new GunLedgerBaseline {
+            Rounds = gun.RoundsFired,
+            Hits = gun.TotalHitCount
+        };
+        return (rounds, hits);
     }
 
     void CompleteEngagementIfEnded() {
@@ -5911,6 +6127,17 @@ public sealed class SimulationSession {
             && !_autoGcasState.Active;
     }
 
+    /// <summary>
+    /// The one place that decides whether the human owns the lateral axis right now. Both roll-axis
+    /// assists read it; neither re-derives "the pilot is flying a reversal" from geometry.
+    /// </summary>
+    public PilotLateralCommitmentState PlayerLateralCommitment =>
+        _pilotLateralCommitmentState;
+
+    void UpdatePilotLateralCommitment(double rawPilotRollControl) =>
+        _pilotLateralCommitmentState = _pilotLateralCommitment.Step(
+            rawPilotRollControl, FixedDeltaSeconds);
+
     PilotCommand ApplyGunneryPitchAssist(in PilotCommand requestedPilotCommand) {
         AircraftState selectedTarget = SelectedOpponentState;
         bool enabled = !CardTwelveRequiresPilotGunTrigger
@@ -5948,7 +6175,10 @@ public sealed class SimulationSession {
             Geometry.Range(_player.State, selectedTarget),
             enabled,
             lateralRollEnabled: !padlockOwnsRollPlane,
-            closureMps: _closureKts / 1.94384);
+            closureMps: _closureKts / 1.94384,
+            leadRate: _gunneryLeadRate,
+            lateralCommitment: _pilotLateralCommitmentState,
+            deltaSeconds: FixedDeltaSeconds);
         _gunneryPitchAssistState = result.State;
         return result.Command;
     }
@@ -6050,7 +6280,8 @@ public sealed class SimulationSession {
             // the plane trim to fine-tune and it must not take the ailerons — see the capture gate
             // in PadlockRollAssist for the measured 20.7%-of-flight / 88%-out-of-range evidence.
             captureRangeLimitM: _beat.CombatRules.PlayerGunProfile.MuzzleVelocityMps
-                * _beat.CombatRules.PlayerGunProfile.MaximumFlightSeconds);
+                * _beat.CombatRules.PlayerGunProfile.MaximumFlightSeconds,
+            lateralCommitment: _pilotLateralCommitmentState);
         return result.Command;
     }
 
@@ -6570,6 +6801,7 @@ public sealed class SimulationSession {
             }
             _cue = _prompts.Cue(_advice, _detents.Command, _detents.Tier);
             PilotCommand directedCommand = RapierAutomationOr(_detents.Command);
+            UpdatePilotLateralCommitment(_detents.Command.RollControl);
             PilotCommand assistedCommand = ApplyGunneryPitchAssist(directedCommand);
             PilotCommand effectiveCommand = ApplyPilotPhysiology(assistedCommand);
             PilotCommand padlockAssistedCommand = ApplyPlayerGunTargetPadlockRollAssist(
@@ -7281,6 +7513,7 @@ public sealed class SimulationSession {
         AircraftState previousPlayerState = _player.State;
         AircraftState previousOpponentState = _bandit.State;
         PilotCommand directedCommand = RapierAutomationOr(_detents.Command);
+        UpdatePilotLateralCommitment(_detents.Command.RollControl);
         PilotCommand assistedCommand = ApplyGunneryPitchAssist(directedCommand);
         PilotCommand effectiveCommand = ApplyPilotPhysiology(assistedCommand);
         PilotCommand padlockAssistedCommand = ApplyPlayerGunTargetPadlockRollAssist(

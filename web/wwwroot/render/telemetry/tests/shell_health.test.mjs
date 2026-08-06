@@ -137,7 +137,10 @@ test("app wires shell health and keeps gameplay telemetry opt-in", async () => {
   const index = await readFile(new URL("../../../index.html", import.meta.url), "utf8");
   assert.match(app, /shell_health\.js/);
   assert.match(app, /createShellHealthBeacon/);
-  assert.match(app, /shellHealth\.mark\(["']script_load["']\)|mark\(["']script_load["']\)/);
+  // Milestones now go through markShellMilestone(), which fans the same edge out to the beacon
+  // and to the boot watchdog so the two can never disagree about how far the boot got.
+  assert.match(app, /markShellMilestone\(["']script_load["']\)/);
+  assert.match(app, /function markShellMilestone\(milestone\) \{\s*shellHealth\.mark\(milestone\)/);
   assert.match(app, /shellHealth\.fatal|shellHealth\?\.fatal/);
   assert.match(index, /shell-health|shell health|boot and fatal/i);
   assert.match(index, /Share detailed flight diagnostics/);

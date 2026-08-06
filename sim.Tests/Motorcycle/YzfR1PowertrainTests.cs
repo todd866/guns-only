@@ -12,12 +12,15 @@ public sealed class YzfR1PowertrainTests
             id: "r1",
             position: new Vec3D(0.0, RapierLaunchSite.OperatingSurfaceElevationM, 0.0),
             headingRad: -Math.PI / 2.0);
+        // 0.72 throttle with the rider on the tank stays under the wheelie threshold; the
+        // auto-shift point is coupled-rpm (speed) driven, so the schedule pin is unchanged.
+        // Raw WOT in 1st now loops the bike before 12,000 rpm.
         var throttle = new MotorcyclePilotCommand(
-            1.0, 0.0, 0.0, 0.0, 0.0, 0, 1.0, MotorcycleClutchMode.Auto);
+            0.72, 0.0, 0.0, 0.0, 1.0, 0, 1.0, MotorcycleClutchMode.Auto);
 
         double rpmBeforeShift = double.NaN;
         int gearBeforeShift = 1;
-        for (long tick = 0; tick < 120 * 12 && bike.Telemetry.Gear == 1; tick++)
+        for (long tick = 0; tick < 120 * 15 && bike.Telemetry.Gear == 1; tick++)
         {
             rpmBeforeShift = bike.Telemetry.Rpm;
             gearBeforeShift = bike.Telemetry.Gear;
@@ -74,17 +77,21 @@ public sealed class YzfR1PowertrainTests
             id: "r1",
             position: new Vec3D(0.0, RapierLaunchSite.OperatingSurfaceElevationM, 0.0),
             headingRad: -Math.PI / 2.0);
+        // Rider on the tank, shifting up every 1.25 s: the first shift leaves 1st before the
+        // WOT wheelie develops (holding 1st pinned now loops the bike, like the real R1).
         var throttle = new MotorcyclePilotCommand(
-            1.0, 0.0, 0.0, 0.0, 0.0, 0, 1.0, MotorcycleClutchMode.Auto);
+            1.0, 0.0, 0.0, 0.0, 1.0, 0, 1.0, MotorcycleClutchMode.Auto);
 
         for (long tick = 0; tick < 120 * 30; tick++)
         {
-            int targetGear = (int)(tick / (120 * 4)) + 1;
+            int targetGear = (int)(tick / 150) + 1;
             targetGear = Math.Min(targetGear, YzfR1Definition.GearCount);
             int shiftRequest = bike.Telemetry.Gear < targetGear ? 1 : 0;
             bike.Advance(YzfR1TestInput.Of(
                 tick,
                 throttle with { GearShiftRequest = shiftRequest }));
+            Assert.False(bike.Telemetry.IsTippedOver,
+                $"short-shifted WOT run must stay upright (tick {tick})");
         }
 
         Assert.Equal(YzfR1Definition.GearCount, bike.Telemetry.Gear);

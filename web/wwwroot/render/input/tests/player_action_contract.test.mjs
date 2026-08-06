@@ -267,8 +267,20 @@ test("every visible HTML button is wired through one auditable action surface", 
     ["nav-nd-proc-straight", /procButtons[\s\S]*?procStraight[\s\S]*?addEventListener\("click"/],
   ]);
 
+  // Wired by the classic inline bootstrap in index.html rather than by app.js, and deliberately:
+  // the boot-fallback card is shown in the cases where the module graph is what failed, so its
+  // one control cannot depend on app.js having loaded.
+  const inlineButtons = new Map([
+    ["shell-fallback-copy", /#shell-fallback-copy[\s\S]*?clipboard\?\.writeText/],
+  ]);
+
   for (const button of htmlButtons(indexSource)) {
     const attrs = button.attributes;
+    if (attrs.id && inlineButtons.has(attrs.id)) {
+      assert.match(indexSource, inlineButtons.get(attrs.id),
+        `${attrs.id}: missing inline click handler`);
+      continue;
+    }
     const hooks = [
       "data-test-action", "data-hold-key", "data-pulse-key", "data-mobile-action",
       "data-program-node", "data-deck-configuration",

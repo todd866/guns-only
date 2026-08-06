@@ -73,16 +73,16 @@ public class CobraCanyonDefinitionTests
     }
 
     [Theory]
-    [InlineData(-8_000.0, -8_000.0, 809.280430927485)]
-    [InlineData(-6_500.0, -6_200.0, 170.0)]
-    [InlineData(-2_750.0, -550.0, 118.932118704283)]
-    [InlineData(0.0, 0.0, 248.0)]
-    [InlineData(-4_380.0, 1_500.0, 476.021709282522)]
-    [InlineData(-3_500.0, 3_050.0, 494.218883043357)]
+    [InlineData(-8_000.0, -8_000.0, 813.692309476688)]
+    [InlineData(-6_500.0, -6_200.0, 162.0)]
+    [InlineData(-2_750.0, -550.0, 92.0)]
+    [InlineData(0.0, 0.0, 409.324006387496)]
+    [InlineData(-4_380.0, 1_500.0, 472.489522704925)]
+    [InlineData(-3_500.0, 3_050.0, 499.233412647825)]
     [InlineData(300.0, -3_920.0, 226.055006367471)]
-    [InlineData(2_720.0, -1_740.0, 244.520905709348)]
+    [InlineData(2_720.0, -1_740.0, 242.244823828551)]
     [InlineData(6_500.0, 5_600.0, 232.0)]
-    [InlineData(8_000.0, 8_000.0, 906.719569072515)]
+    [InlineData(8_000.0, 8_000.0, 900.147519676545)]
     public void TerrainHeightMatchesBrowserPlannerGoldenSamples(
         double eastM,
         double northM,

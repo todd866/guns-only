@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1067" width="1600" height="1067">
+  <!-- Loading cover / non-picker backdrop. This one is deliberately QUIET: type sits on it, and
+       index.html paints a fallback gradient underneath it so there is no visual event when the
+       image decodes. Its palette is therefore not free - it is the locked "golden-departure"
+       state from docs/art-direction/korea-1950s/engine-targets.json, the same values the CSS
+       fallback uses: sky #6F8492, cloudLight #F4E7C9, lightBreak #F3D08C, field #A89858,
+       ridge #394A3A. Warm ground, gold confined to the horizon break, cool sky above.
+       Composed in the same language as the four picker cards - value and saturation falloff
+       carrying depth, muted throughout - so the front door reads as one set. -->
+  <defs>
+    <linearGradient id="hsky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5c7484"/>
+      <stop offset="0.20" stop-color="#6f8492"/>
+      <stop offset="0.42" stop-color="#94a3a4"/>
+      <stop offset="0.60" stop-color="#c4c7b6"/>
+      <stop offset="0.72" stop-color="#f4e7c9"/>
+      <stop offset="0.80" stop-color="#f3d08c"/>
+    </linearGradient>
+    <radialGradient id="hbreak" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffeec0" stop-opacity="0.92"/>
+      <stop offset="0.5" stop-color="#f3d08c" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#f3d08c" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="hfield" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a89858"/>
+      <stop offset="1" stop-color="#6d6538"/>
+    </linearGradient>
+    <linearGradient id="hhaze" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#f4e7c9" stop-opacity="0"/>
+      <stop offset="1" stop-color="#f4e7c9" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="1067" fill="url(#hsky)"/>
+  <!-- The light break itself, low and to the right, off the centre where the type sits. -->
+  <ellipse cx="1128" cy="770" rx="620" ry="330" fill="url(#hbreak)"/>
+
+  <!-- Cloud decks. Flat-bottomed, two tones, cloudLight on top. -->
+  <g>
+    <path d="M96 262 L184 208 L318 194 L426 232 L540 220 L612 262 L606 288 L102 292 Z" fill="#f4e7c9" opacity="0.72"/>
+    <path d="M102 292 L606 288 L588 316 L124 318 Z" fill="#c9c9b6" opacity="0.6"/>
+    <path d="M948 176 L1030 132 L1148 122 L1240 152 L1348 144 L1408 178 L1404 200 L952 204 Z" fill="#f4e7c9" opacity="0.62"/>
+    <path d="M952 204 L1404 200 L1388 224 L972 226 Z" fill="#c9c9b6" opacity="0.5"/>
+    <path d="M420 424 L488 392 L588 384 L664 408 L748 402 L794 428 L790 444 L424 446 Z" fill="#f4e7c9" opacity="0.5"/>
+    <path d="M1160 400 L1216 374 L1300 368 L1362 388 L1432 384 L1470 406 L1466 420 L1164 422 Z" fill="#f4e7c9" opacity="0.4"/>
+  </g>
+
+  <!-- Ridgelines, cool and receding, resolving to the locked ridge value at the front. Each band
+       gets its own period and amplitude; four bands of the same zigzag reads as wallpaper. -->
+  <path d="M0 716 L96 700 L188 682 L262 706 L364 690 L436 712 L548 678 L642 704 L730 694
+           L828 674 L928 706 L1042 688 L1146 710 L1268 680 L1364 704 L1462 690 L1600 708
+           V764 H0 Z" fill="#8f9b95"/>
+  <path d="M0 768 L128 736 L206 762 L332 722 L440 754 L516 738 L636 712 L744 752 L868 726
+           L946 756 L1078 720 L1188 754 L1300 732 L1420 762 L1520 734 L1600 754 V806 H0 Z" fill="#71827c"/>
+  <path d="M0 800 L106 782 L224 754 L340 800 L442 776 L568 748 L672 794 L796 762 L900 800
+           L1030 766 L1140 802 L1268 764 L1388 800 L1502 772 L1600 794 V846 H0 Z" fill="#55665d"/>
+  <path d="M0 862 L142 812 L246 848 L392 796 L500 840 L624 800 L768 846 L884 806 L1016 848
+           L1160 802 L1288 844 L1412 804 L1536 846 L1600 826 V896 H0 Z" fill="#394a3a"/>
+
+  <!-- Humid haze lifting the far ridges toward the light break. -->
+  <rect y="660" width="1600" height="230" fill="url(#hhaze)"/>
+
+  <!-- Field. Warm, quiet, and the bottom third where the interface actually lives. -->
+  <rect y="866" width="1600" height="201" fill="url(#hfield)"/>
+  <path d="M0 902 L268 872 L560 900 L836 868 L1120 898 L1392 866 L1600 890 V934 H0 Z" fill="#9d8e51"/>
+  <path d="M0 966 L320 932 L640 962 L950 928 L1270 960 L1600 930 V1000 H0 Z" fill="#7d7342"/>
+  <path d="M0 1030 L360 996 L720 1024 L1080 992 L1440 1020 L1600 1006 V1067 H0 Z" fill="#5c5630"/>
+
+  <!-- A runway, read only as a paler band running away to the break. It is an aerodrome, and
+       that is all the picture needs to say while it is loading. -->
+  <path d="M604 872 L742 872 L1074 1067 L336 1067 Z" fill="#8b8558" opacity="0.55"/>
+  <path d="M666 874 L680 874 L734 1067 L688 1067 Z" fill="#cdc6a2" opacity="0.42"/>
+</svg>

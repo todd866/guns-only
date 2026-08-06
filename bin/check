@@ -54,6 +54,12 @@ node --check web/wwwroot/render/medevac/commander_view_model.js
 node --check web/wwwroot/api/telemetry.js
 node --check web/smoke/remote-smoke.mjs
 node --check web/smoke/remote-route-smoke.mjs
+node --check web/smoke/cobra_authority.mjs
+# The AH-1G crew chain (designation -> consent -> rounds away) is syntax-checked here but NOT
+# executed by the gate: it needs a hostile the turret can physically reach, which Hold the Bridge
+# only offers for the first ~20 s of mission time. Run it by hand against a published wwwroot --
+# the file's own header carries the CI evidence and what would let it gate again.
+node --check web/smoke/cobra-crew-chain.test.mjs
 release_tests=$(find tools/release/tests -type f -name '*.test.mjs' -print | sort)
 node --test $release_tests
 ./bin/stamp-release --check

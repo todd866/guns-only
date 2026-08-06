@@ -24,17 +24,19 @@ function control(code, direction, motion) {
 /**
  * Resolve the Cobra's physical control semantics from the shared remappable key bindings.
  *
- * The fixed-wing action names remain an input-storage detail. For the Cobra, the binding that is
- * normally "power down" is the pilot-facing collective pull: S by default, toward the pilot,
- * positive collective. The normal "power up" binding is the forward push and lowers collective.
+ * The fixed-wing action names remain an input-storage detail. Builds 253-264 mapped the
+ * "power down" binding (S) to the collective pull on real-lever semantics (the lever comes
+ * toward the pilot to raise it). On 2026-08-05 the owner overruled the lever semantics in
+ * favour of game convention: "power up" (W by default) is the pull and raises collective;
+ * "power down" (S) is the push and lowers it.
  */
 export function resolveCobraControlProfile(bindings = {}) {
   return Object.freeze({
     commandFamily: "vertical-lift-pilot",
     assistance: "none",
     collective: Object.freeze({
-      pull: control(binding(bindings, "powerDown"), 1, "toward-pilot"),
-      push: control(binding(bindings, "powerUp"), -1, "away-from-pilot"),
+      pull: control(binding(bindings, "powerUp"), 1, "toward-pilot"),
+      push: control(binding(bindings, "powerDown"), -1, "away-from-pilot"),
     }),
     cyclic: Object.freeze({
       forward: control(binding(bindings, "push"), 1, "forward"),
