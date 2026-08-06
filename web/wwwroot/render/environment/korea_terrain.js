@@ -60,6 +60,22 @@ const AMBIENT_SCENERY_HYSTERESIS = 0.12;
 const TERRAIN_DETAIL_FULL_AGL_M = 2_500;
 const TERRAIN_DETAIL_ZERO_AGL_M = 7_500;
 
+// Near-field ground grain, per visual tier. This is a pure fill-rate feature (three texture
+// fetches on ground fragments inside the fade window, zero geometry), so it degrades by SHEDDING VIEW DISTANCE first and
+// strength second — the same order the adaptive world radius uses — and switches off entirely on
+// mobile rather than shipping a blurry half-version of itself.
+export const SURFACE_DETAIL_STRENGTH = Object.freeze({
+  desktop: 1.0,
+  balanced: 0.72,
+  mobile: 0.0,
+});
+// [full-strength distance, zero-strength distance] in metres.
+export const SURFACE_DETAIL_FADE_M = Object.freeze({
+  desktop: [1_800, 6_500],
+  balanced: [1_100, 3_600],
+  mobile: [0, 0],
+});
+
 export function terrainDetail01(cameraAglM) {
   if (!Number.isFinite(cameraAglM)) return 1;
   const x = Math.max(0, Math.min(1,
@@ -392,6 +408,20 @@ uniform float uCloudShadowStrength;
 uniform vec2 uCloudShadowOffset;
 uniform sampler2D uRegionalPaintMap;
 uniform float uRegionalPaintMapEnabled;
+// NEAR-FIELD SURFACE DETAIL.
+//
+// The authored ground pigment was wired to the REGIONAL layer only — its weight is
+// (1.0 - uTerrainDetail01), so it reaches full strength at 7.5 km AGL and contributes exactly
+// nothing below 2.5 km. That is backwards for the thing a low-level flight sim most needs: at
+// 800 ft the ground was a smooth airbrushed gradient with no grain, no material separation and
+// no speed cue, because every surface term in this shader varies over hundreds of metres.
+//
+// This layer is the inverse: it fades IN as the camera descends and samples the SAME shipped
+// texture at three high world-space frequencies, so it costs no extra download. It supplies value
+// breakup (the "grain"), a little pigment variation, and a micro-occlusion term that reads as
+// surface relief without a normal map. Strength is a tier uniform so weak hardware pays nothing.
+uniform float uSurfaceDetailStrength;
+uniform vec2 uSurfaceDetailFadeM;
 
 // Value noise for wind-scrolled cloud shadows: the cumulus deck darkening the steppe is the
 // value structure this flat plain cannot get from relief alone.
@@ -423,6 +453,52 @@ varying vec2 vTerrainLandcover;
 #include <common>
 #include <logdepthbuf_pars_fragment>
 
+// Near-field grain, packed as (value multiplier, micro-occlusion, pigment shift).
+// Returns a neutral (1, 1, 0) when the layer is off or the fragment is far away, so every caller
+// can multiply unconditionally and the coherent branch below keeps distant ground free.
+vec3 terrainSurfaceDetail(vec3 worldPosition, float steepness, float detail01) {
+  if (uSurfaceDetailStrength <= 0.001 || uRegionalPaintMapEnabled <= 0.5) {
+    return vec3(1.0, 1.0, 0.0);
+  }
+  // The coarse octave gives the hundred-metre patchiness, the mid octave the metre-scale
+  // variation that carries apparent motion at 500 kt, and the fine octave the sub-metre tooth
+  // that says "ground" rather than "paint".
+  float viewDistance = distance(worldPosition.xz, cameraPosition.xz);
+  float nearFade = 1.0 - smoothstep(uSurfaceDetailFadeM.x, uSurfaceDetailFadeM.y, viewDistance);
+  // detail01 is the same hero-vs-regional fraction the far paint layer uses, so the two layers
+  // hand over continuously instead of overlapping into double-contrast at the crossover.
+  float weight = uSurfaceDetailStrength * nearFade * detail01;
+  if (weight <= 0.002) return vec3(1.0, 1.0, 0.0);
+  // Flat ground carries the most grain; near-vertical faces get less, because the world-space XZ
+  // projection stretches badly there and would smear the texture into vertical streaks.
+  weight *= 1.0 - 0.72 * smoothstep(0.10, 0.42, steepness);
+  // Three octaves roughly a decade apart. The source is a soft painted landscape map rather than
+  // a tiling detail texture, so the WEIGHT is pushed onto the two finer octaves: the coarse one
+  // alone reads as cloudy blotching, which is a different artefact from the smooth wash it
+  // replaces but no more like ground. Mirrored-repeat wrapping hides the tile at 4 m.
+  const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
+  float coarse = dot(texture2D(uRegionalPaintMap,
+    worldPosition.xz * (1.0 / 140.0)).rgb, LUMA);
+  float mid = dot(texture2D(uRegionalPaintMap,
+    worldPosition.xz * (1.0 / 21.0) + vec2(0.41, -0.23)).rgb, LUMA);
+  float fine = dot(texture2D(uRegionalPaintMap,
+    worldPosition.xz * (1.0 / 3.7) + vec2(-0.17, 0.62)).rgb, LUMA);
+  // Each octave dies at the range where its period approaches a pixel, finest first. Without this
+  // the 3.7 m octave becomes sub-pixel noise a kilometre out and boils as the aircraft moves —
+  // mipmapping alone cannot fix it because the fade window is chosen per tier, not per texel.
+  float fineFade = 1.0 - smoothstep(120.0, 460.0, viewDistance);
+  float midFade = 1.0 - smoothstep(700.0, 2200.0, viewDistance);
+  // Centre every octave on zero so the layer redistributes value rather than darkening the world.
+  float grain = (coarse - 0.5) * 0.26
+    + (mid - 0.5) * 0.36 * midFade
+    + (fine - 0.5) * 0.38 * fineFade;
+  float valueScale = 1.0 + grain * 1.05 * weight;
+  // Micro-occlusion: the darker half of the grain also shades, which is what makes the surface
+  // read as three-dimensional tooth instead of a decal. Only the dark side contributes.
+  float microOcclusion = 1.0 - max(0.0, -grain) * 0.85 * weight;
+  return vec3(valueScale, microOcclusion, weight);
+}
+
 void main() {
   vec3 normal = normalize(vTerrainNormal);
   float elevation = smoothstep(70.0, 1250.0, vTerrainHeight);
@@ -436,6 +512,10 @@ void main() {
   float slopeFace = smoothstep(0.035, 0.19, steepness);
   float exposedFace = smoothstep(0.10, 0.30, steepness)
     * (0.24 + 0.76 * smoothstep(420.0, 1050.0, vTerrainHeight));
+
+  // Evaluated once and shared by both era treatments below: the grain is a property of the
+  // ground surface, not of a period palette, so 1950s Korea and 2030s Ukraine get the same tooth.
+  vec3 surfaceDetail = terrainSurfaceDetail(vTerrainWorldPosition, steepness, uTerrainDetail01);
 
   #ifndef MODERN_SCENERY
   // This is an authored 1950s readability treatment, not a claim of per-pixel historical land
@@ -466,9 +546,11 @@ void main() {
       lowland * (0.22 + parcels * 0.24));
   }
 
+  albedo *= surfaceDetail.x;
+
   float diffuse = uShadowFloor
     + (1.0 - uShadowFloor) * max(dot(normal, normalize(uSunDirection)), 0.0);
-  vec3 lit = albedo * diffuse;
+  vec3 lit = albedo * diffuse * surfaceDetail.y;
 
   #else
   // 2030s stylized treatment (docs/art-direction.md / ADR-0003). Korea-modern keeps a harder
@@ -607,6 +689,7 @@ void main() {
   #endif
   sAlbedo = mix(sAlbedo, sRock, slopeFace * (0.20 + upperSlope * 0.48));
   sAlbedo = mix(sAlbedo, sRidge, max(highRidge * 0.55, exposedFace * 0.62));
+  sAlbedo *= surfaceDetail.x;
   float halfLambert = dot(normal, normalize(uSunDirection)) * 0.5 + 0.5;
   halfLambert *= halfLambert;
   #ifdef UKRAINE_SCENERY
@@ -652,7 +735,9 @@ void main() {
   stylizedLit *= regionalReliefLight;
   #endif
 
-  vec3 lit = stylizedLit;
+  // Micro-occlusion multiplies the LIT result, not the albedo, so the grain deepens in shadow
+  // and washes out in full sun exactly as real surface tooth does.
+  vec3 lit = stylizedLit * surfaceDetail.y;
   #endif
 
   #ifdef UKRAINE_SCENERY
@@ -1054,6 +1139,12 @@ export function createTerrainMaterial(THREE, options = {}) {
     regionalPaintMap.wrapS = THREE.MirroredRepeatWrapping;
     regionalPaintMap.wrapT = THREE.MirroredRepeatWrapping;
     regionalPaintMap.colorSpace = THREE.SRGBColorSpace;
+    // DO NOT mutate this texture's sampler state (anisotropy / minFilter / generateMipmaps) here.
+    // Measured 2026-08-06: assigning any of them after TextureLoader().load() has been issued
+    // leaves the texture incomplete on upload, every texture2D() fetch returns white, and the
+    // terrain blows out to a uniform pale wash under ACES — visually identical to the snow-squall
+    // whiteout, which is what makes it expensive to diagnose. The near-field grain layer below
+    // samples this map down to a 3.7 m period and is perfectly legible on the loader's defaults.
   }
   const material = new THREE.ShaderMaterial({
     name: "MAT_KOREA_CENTRAL_FRONT_TERRAIN",
@@ -1117,6 +1208,20 @@ export function createTerrainMaterial(THREE, options = {}) {
       uCloudShadowOffset: { value: new THREE.Vector2(0, 0) },
       uRegionalPaintMap: { value: regionalPaintMap },
       uRegionalPaintMapEnabled: regionalPaintEnabled,
+      // Near-field grain. Three extra texture fetches per GROUND fragment inside the fade window,
+      // and zero outside it — the branch is on view distance, which is coherent across the
+      // screen because ground fragments sort by depth from the horizon down. Mobile pays
+      // nothing: fill rate is the scarce resource there, and this layer is pure fill.
+      // Desktop gets the full effect; balanced gets a reduced one over a shorter window.
+      uSurfaceDetailStrength: {
+        value: finite(options.surfaceDetailStrength,
+          SURFACE_DETAIL_STRENGTH[options.qualityTier] ?? SURFACE_DETAIL_STRENGTH.balanced),
+      },
+      uSurfaceDetailFadeM: {
+        value: new THREE.Vector2(
+          ...(SURFACE_DETAIL_FADE_M[options.qualityTier] ?? SURFACE_DETAIL_FADE_M.balanced),
+        ),
+      },
       uHazeBands: { value: finite(options.hazeBands, ukraine ? 0 : 6) },
       uHazeBandBlend: { value: finite(options.hazeBandBlend, ukraine ? 0 : 0.65) },
       // Surface truth is opt-in and defaults to the existing snow-free presentation.
