@@ -47,6 +47,31 @@ test("legacy speed alias remains an indicated-airdata fallback", () => {
   assert.equal(airdataReadout({ speed_kts: 181 }).verticalText, "V/S --- FPM");
 });
 
+test("TAS-only airframes label the tape KTAS instead of lying about a pitot chain", () => {
+  // Rotorcraft (AH-1G) publish true airspeed only: no calibrated/indicated channel
+  // exists in their authority state, and labeling raw TAS "KIAS" would invent one.
+  const readout = airdataReadout({ true_airspeed_kts: 62.4, ground_speed_kts: 58.9 });
+  assert.equal(readout.indicatedKts, 62.4);
+  assert.equal(readout.primaryText, "62");
+  assert.equal(readout.speedUnit, "KTAS");
+  assert.equal(readout.unitText, "A/S KTAS");
+  assert.equal(readout.groundText, "G/S 59 KT");
+});
+
+test("any indicated-chain channel outranks the TAS fallback", () => {
+  // The fallback exists ONLY for airframes without an indicated chain. Every F-22
+  // snapshot carries calibrated_airspeed_kts, so its presentation is untouched.
+  const calibrated = airdataReadout({ calibrated_airspeed_kts: 196, true_airspeed_kts: 219 });
+  assert.equal(calibrated.indicatedKts, 196);
+  assert.equal(calibrated.speedUnit, "KCAS");
+  const indicated = airdataReadout({ indicated_airspeed_kts: 197, true_airspeed_kts: 219 });
+  assert.equal(indicated.indicatedKts, 197);
+  assert.equal(indicated.speedUnit, "KIAS");
+  const legacy = airdataReadout({ speed_kts: 181, true_airspeed_kts: 219 });
+  assert.equal(legacy.indicatedKts, 181);
+  assert.equal(legacy.speedUnit, "KIAS");
+});
+
 test("missing primary airdata fails visibly instead of becoming a plausible zero", () => {
   const readout = airdataReadout({});
   assert.equal(readout.indicatedKts, null);

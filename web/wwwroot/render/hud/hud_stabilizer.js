@@ -190,8 +190,11 @@ export class HudSignalStabilizer {
 
   update(state = {}, deltaSeconds = 0) {
     const entityId = `${String(state.player_entity_id ?? "legacy")}:${state.replay_external === true ? "replay" : "live"}`;
+    // Fallback order matches airdataReadout: calibrated > indicated > legacy alias,
+    // then true airspeed for airframes (rotorcraft) that publish no indicated chain.
     const indicatedTruth = finite(state.calibrated_airspeed_kts,
-      finite(state.indicated_airspeed_kts, finite(state.speed_kts)));
+      finite(state.indicated_airspeed_kts,
+        finite(state.speed_kts, finite(state.true_airspeed_kts))));
     const indicated = indicatedTruth === null ? null : Math.max(0, indicatedTruth);
     const groundTruth = finite(state.ground_speed_kts, finite(state.groundspeed_kts));
     const ground = groundTruth === null ? null : Math.max(0, groundTruth);
