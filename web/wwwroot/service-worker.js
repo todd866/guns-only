@@ -49,12 +49,71 @@ self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
 });
 
+// How long an already-open document gets to prove it is alive before this worker re-navigates it.
+// It only has to run one inline event listener, so this is generous; it is short enough that a
+// player who opened a stale PWA is not left staring at last month's build.
+const RELEASE_ACK_WINDOW_MS = 1_500;
+
+/**
+ * Break the stale-release loop.
+ *
+ * A client that is controlled by an OLD cache-first worker has its navigations answered out of
+ * Cache Storage, so it re-serves an old index.html — which contains an old preboot gate, which
+ * compares the page against its own build, finds nothing stale, and keeps the client pinned there.
+ * That is how a session booted Build 220 while 245 was live. Nothing in the old DOCUMENT can fix
+ * it, because the old document is the thing being served.
+ *
+ * The new WORKER can, and this is the only actor that can: the browser byte-compares the worker
+ * script on navigation regardless of what the page believes, so a new build always eventually
+ * installs here. skipWaiting + clients.claim make it the controller immediately; then every window
+ * client is asked whether it is running this build. Documents that answer are left alone — they are
+ * current, or at least alive and able to decide for themselves. Documents that do not answer are
+ * too old to know about the handshake, which is exactly the stale population, and they are
+ * re-navigated once so this worker's network-first navigation handler can hand them the new build.
+ *
+ * Loop safety: this runs only inside `activate`, only when a DIFFERENT build's cache bucket was
+ * just deleted (so never on a first install), and the resulting navigation registers the same
+ * script URL — which produces no new worker, so no second activation.
+ */
+async function reclaimStaleClients() {
+  const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  if (clients.length === 0) return;
+  const acked = new Set();
+  await Promise.all(clients.map((client) => new Promise((resolve) => {
+    const channel = new MessageChannel();
+    const timer = setTimeout(resolve, RELEASE_ACK_WINDOW_MS);
+    channel.port1.onmessage = (event) => {
+      if (event.data?.type === "guns-release-ack") acked.add(client.id);
+      clearTimeout(timer);
+      resolve();
+    };
+    try {
+      client.postMessage({ type: "guns-release-activated", build: RELEASE_BUILD }, [channel.port2]);
+    } catch {
+      clearTimeout(timer);
+      resolve();
+    }
+  })));
+  for (const client of clients) {
+    if (acked.has(client.id) || typeof client.navigate !== "function") continue;
+    try {
+      await client.navigate(client.url);
+    } catch {
+      // A cross-origin or non-navigable client simply keeps what it has.
+    }
+  }
+}
+
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
+    let replacedBuild = false;
     for (const name of await caches.keys()) {
-      if (name.startsWith("guns-only-") && name !== CACHE) await caches.delete(name);
+      if (!name.startsWith("guns-only-") || name === CACHE) continue;
+      replacedBuild = true;
+      await caches.delete(name);
     }
     await self.clients.claim();
+    if (replacedBuild) await reclaimStaleClients();
   })());
 });
 

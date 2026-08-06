@@ -820,6 +820,9 @@
       display: flex;
       align-items: center;
       gap: 10px;
+      /* The status line is invisible until a slow boot promotes it; once promoted it is real text
+         in a bottom-right anchored box, so it needs a ceiling or it runs off a 320 px screen. */
+      max-width: calc(100vw - var(--safe-left) - var(--safe-right) - 48px);
     }
 
     .boot-pulse {
@@ -2473,6 +2476,151 @@
     }
 
     /* ------------------------------------------------------------------------------------
+       BOOT FALLBACK
+       #fatal is an engineering console: a phosphor terminal printing an exception. It is right
+       for a desktop pilot who can act on "Error creating WebGL context." It is wrong for the
+       population shell-health actually measures -- somebody who tapped a link inside Threads or
+       Instagram, whose webview will not give the page a GPU, and who is looking at a painted sky
+       that never becomes an aeroplane. This screen is for them: it is the same warm paint as the
+       boot and the mission menu, it says what happened in English, and it gives them the one
+       thing that fixes it, which is a route into a real browser.
+       ------------------------------------------------------------------------------------ */
+    #shell-fallback {
+      position: fixed;
+      z-index: 40;
+      inset: 0;
+      display: none;
+      /* flex-start + `margin: auto` on the card is deliberate. Centring with align-items clips the
+         TOP of anything taller than the viewport, and it is unreachable — which on a 320x495 phone
+         means the headline explaining the failure is the first thing lost. Auto margins centre
+         when there is room and collapse to zero when there is not. */
+      align-items: flex-start;
+      justify-content: center;
+      box-sizing: border-box;
+      padding:
+        calc(var(--safe-top) + 16px) calc(var(--safe-right) + 16px)
+        calc(var(--safe-bottom) + 16px) calc(var(--safe-left) + 16px);
+      overflow-y: auto;
+      background:
+        radial-gradient(90% 55% at 68% 82%, rgba(222, 163, 79, .30), transparent 72%),
+        linear-gradient(180deg,
+          #C4CFD4 0%, #D8D8CC 30%, #EBE4CF 58%, #F4E7C9 80%, #E3D2A6 100%);
+    }
+
+    #shell-fallback.visible { display: flex; }
+
+    .shell-fallback-card {
+      width: min(460px, 100%);
+      margin: auto;
+      padding: 20px 18px 18px;
+      border-radius: 3px;
+      border-top: 3px solid #DEA34F;
+      background: rgba(255, 252, 244, .93);
+      box-shadow: 0 18px 60px rgba(57, 74, 58, .28);
+      color: #2B3031;
+      font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    #shell-fallback-title {
+      margin: 0 0 8px;
+      color: #394A3A;
+      font-size: 19px;
+      font-weight: 650;
+      letter-spacing: .01em;
+      line-height: 1.22;
+    }
+
+    #shell-fallback-body { margin: 0 0 12px; }
+
+    #shell-fallback-steps {
+      margin: 0 0 14px;
+      padding-left: 18px;
+      color: #4A5250;
+      font-size: 13px;
+    }
+
+    #shell-fallback-steps li { margin-bottom: 6px; }
+
+    /* An author `display: flex` beats the UA sheet's [hidden] rule, so without this the escape-route
+       row keeps its gap on a desktop card that has no escape route to offer. */
+    .shell-fallback-actions[hidden] { display: none; }
+
+    .shell-fallback-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    /* 48 px minimum: this screen exists for phones, and it is the one control a stuck player has. */
+    .shell-fallback-actions a,
+    .shell-fallback-actions button {
+      flex: 1 1 auto;
+      min-height: 48px;
+      padding: 11px 16px;
+      border: 1px solid #394A3A;
+      border-radius: 2px;
+      background: #394A3A;
+      color: #F4E7C9;
+      cursor: pointer;
+      font: inherit;
+      font-weight: 600;
+      text-align: center;
+      text-decoration: none;
+    }
+
+    .shell-fallback-actions .shell-fallback-secondary {
+      background: transparent;
+      color: #394A3A;
+    }
+
+    .shell-fallback-link {
+      display: block;
+      margin-bottom: 12px;
+      padding: 9px 11px;
+      border: 1px dashed rgba(57, 74, 58, .45);
+      border-radius: 2px;
+      background: rgba(244, 231, 201, .55);
+      color: #2B3031;
+      font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      overflow-wrap: anywhere;
+      user-select: all;
+      -webkit-user-select: all;
+    }
+
+    #shell-fallback-detail {
+      margin: 0;
+      color: #6A716E;
+      font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      overflow-wrap: anywhere;
+    }
+
+    /* The load pulse says "something is happening" and nothing more. Past ten seconds that is not
+       enough, so the sr-only status line is promoted onto the screen -- a slow boot on a phone is
+       a real thing that finishes, and the player deserves to be told it is still working rather
+       than left to guess whether to close the tab. */
+    #boot[data-progress="slow"] #boot-status {
+      position: static;
+      width: auto;
+      height: auto;
+      margin: 0;
+      /* A legible chip, not bare text. The painted floor under the bottom-right corner is dark and
+         busy; unbacked grey type on it is present in the DOM and unreadable on the screen, which is
+         the same as not telling the player anything. */
+      padding: 6px 9px;
+      border-radius: 2px;
+      background: rgba(255, 252, 244, .90);
+      box-shadow: 0 4px 14px rgba(57, 74, 58, .22);
+      clip: auto;
+      color: #2B3031;
+      font: 11px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+      letter-spacing: .06em;
+      text-align: right;
+      text-transform: uppercase;
+      white-space: normal;
+    }
+
+    /* ------------------------------------------------------------------------------------
        PICTORIAL MENU
        The mission menu is a painting with names on it. Everything below strips the avionics
        chrome the menu inherited from the HUD -- monospace, phosphor green, panel borders, chips,
@@ -3422,6 +3570,31 @@ Splash one bandit to qualify · H controls · R restarts</p>
     </div>
   </div>
 
+  <!--
+    The human-facing failure screen. Filled by render/shell/boot_fallback.js: the words depend on
+    whether WebGL was refused or the boot simply stopped, and on which app's webview the player is
+    trapped in. Markup lives here so it can be shown by the inline bootstrap below even when the
+    module graph itself is what failed to load.
+  -->
+  <div id="shell-fallback" role="alert" hidden>
+    <div class="shell-fallback-card">
+      <h2 id="shell-fallback-title">Guns Only could not start</h2>
+      <p id="shell-fallback-body"></p>
+      <ol id="shell-fallback-steps" hidden></ol>
+      <div class="shell-fallback-actions">
+        <a id="shell-fallback-open" href="#" hidden>Open in your browser</a>
+      </div>
+      <code id="shell-fallback-url" class="shell-fallback-link"></code>
+      <div class="shell-fallback-actions">
+        <button id="shell-fallback-copy" type="button" class="shell-fallback-secondary">
+          Copy link
+        </button>
+        <a id="shell-fallback-reload" class="shell-fallback-secondary" href=".">Try again</a>
+      </div>
+      <p id="shell-fallback-detail" hidden></p>
+    </div>
+  </div>
+
   <script>
     // The title card is deleted, so there is no per-sortie deck/title/detail to paint before
     // app.js arrives. The deep link still selects the sortie -- it is read by the module graph
@@ -3431,10 +3604,12 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // service worker. Purge that controller and its Cache Storage before Blazor requests the
     // unversioned boot manifest/WASM graph. Offline clients never see this newer document until a
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
+    // Derive from a normal stamped URL so this comparison cannot drift from the next release:
+    // tools/release/stamp-release.mjs rewrites every `?v=NNN`, and nothing else here.
+    const releaseBuild = new URL("./service-worker.js?v=264", location.href)
+      .searchParams.get("v");
+
     globalThis.__gunsPrebootReady = (async () => {
-      // Derive from a normal stamped URL so this comparison cannot drift from the next release.
-      const releaseBuild = new URL("./service-worker.js?v=264", location.href)
-        .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
       const registeredWorkers = registrations.flatMap((registration) => [
@@ -3458,6 +3633,58 @@ Splash one bandit to qualify · H controls · R restarts</p>
         );
       }
     })();
+
+    // RELEASE HANDSHAKE. The gate above only helps a document that was itself fetched from the
+    // network -- and the failure we actually saw in production was the opposite: a client booting
+    // Build 220 while 245 was live, because that client's old cache-first worker kept answering
+    // its navigations out of Cache Storage. Such a document contains an old gate that compares
+    // itself against its own build, finds nothing stale, and re-serves the old release forever.
+    //
+    // A new worker CAN break that loop, so it does (see service-worker.js): on activating a build
+    // upgrade it pings every window client and re-navigates the ones that do not answer. This
+    // reply is the answer. It runs in a classic inline script, before any module, so a document
+    // whose module graph is stalled still counts as alive and is not reloaded out from under a
+    // player who is merely on a slow connection.
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.addEventListener("message", (event) => {
+        if (event.data?.type !== "guns-release-activated") return;
+        const ack = { type: "guns-release-ack", build: releaseBuild };
+        event.source?.postMessage?.(ack);
+        event.ports?.[0]?.postMessage?.(ack);
+        // The worker that just activated carries a different build to this document: this page is
+        // the stale one, so take the new release at the next safe moment. The latch is a one-shot
+        // so a mis-ordered activation cannot produce a reload loop.
+        if (event.data.build && event.data.build !== releaseBuild
+          && !globalThis.__gunsReleaseReloadArmed) {
+          globalThis.__gunsReleaseReloadArmed = true;
+          location.reload();
+        }
+      });
+    }
+
+    // The fallback screen's copy control. Wired here, in a classic script, because the module
+    // graph is one of the things that can be broken when this screen is shown.
+    document.addEventListener("click", (event) => {
+      const button = event.target?.closest?.("#shell-fallback-copy");
+      if (!button) return;
+      const text = document.querySelector("#shell-fallback-url")?.textContent || location.href;
+      const done = () => { button.textContent = "Link copied"; };
+      try {
+        const written = navigator.clipboard?.writeText?.(text);
+        if (written?.then) { written.then(done, () => {}); return; }
+      } catch {
+        // Clipboard access is denied in several webviews. Fall through to selection.
+      }
+      // No clipboard permission: select the URL so one long-press "Copy" finishes the job.
+      const range = document.createRange();
+      const node = document.querySelector("#shell-fallback-url");
+      if (!node) return;
+      range.selectNodeContents(node);
+      const selection = getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      button.textContent = "Press and hold the link, then Copy";
+    });
   </script>
   <script type="module">
     // Static module tags start fetching and linking their complete dependency graph before the
@@ -3483,9 +3710,36 @@ Splash one bandit to qualify · H controls · R restarts</p>
     } catch (error) {
       console.error(error);
       document.querySelector("#boot")?.classList.add("ready");
-      const message = document.querySelector("#fatal-message");
-      if (message) message.textContent = error instanceof Error ? error.message : String(error);
-      document.querySelector("#fatal")?.classList.add("visible");
+      // Prefer the human screen. A failure here is usually a webview refusing to finish the module
+      // graph, and "Failed to load ./app.js" in a phosphor terminal helps nobody who arrived from
+      // a social post. These two modules are tiny, same-origin and dependency-free precisely so
+      // they can still load when the big graph did not; if even they fail, the engineering card
+      // below is the honest last resort.
+      let shown = false;
+      try {
+        const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
+          await Promise.all([
+            import("./render/shell/inapp_browser.js?v=264"),
+            import("./render/shell/boot_fallback.js?v=264"),
+          ]);
+        const detection = detectEmbeddedBrowser({
+          userAgent: navigator.userAgent,
+          maxTouchPoints: navigator.maxTouchPoints,
+        });
+        shown = mountBootFallback(document, bootFallbackModel({
+          reason: "module",
+          detection,
+          url: location.href,
+          detail: error instanceof Error ? error.message : String(error),
+        }));
+      } catch (fallbackError) {
+        console.error(fallbackError);
+      }
+      if (!shown) {
+        const message = document.querySelector("#fatal-message");
+        if (message) message.textContent = error instanceof Error ? error.message : String(error);
+        document.querySelector("#fatal")?.classList.add("visible");
+      }
     }
   </script>
 </body>

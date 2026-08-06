@@ -3,6 +3,8 @@
  * Does not carry stick inputs, aircraft state, or multiplayer identifiers.
  */
 
+import { detectEmbeddedBrowser } from "../shell/inapp_browser.js";
+
 export const SHELL_HEALTH_SCHEMA = "guns-only.shell-health.v1";
 
 export const SHELL_HEALTH_MILESTONES = Object.freeze([
@@ -18,8 +20,11 @@ const FATAL_CLASSES = Object.freeze(["webgl", "bridge", "module", "oom", "unknow
 /**
  * Coarse device classification from a user-agent string.
  */
-export function classifyShellDevice(userAgent = "", viewport = {}) {
+export function classifyShellDevice(userAgent = "", viewport = {}, { maxTouchPoints = 0 } = {}) {
   const ua = String(userAgent || "");
+  // One detector, shared with the fallback UI. If telemetry and the on-screen message disagreed
+  // about whether a session is inside a webview, the numbers would stop describing the screen.
+  const embedded = detectEmbeddedBrowser({ userAgent: ua, maxTouchPoints });
   const width = Math.max(1, Number(viewport.width) || 1);
   const height = Math.max(1, Number(viewport.height) || 1);
   const narrow = Math.min(width, height);
@@ -32,9 +37,7 @@ export function classifyShellDevice(userAgent = "", viewport = {}) {
   else if (/Windows|Macintosh|Linux|CrOS/i.test(ua)) platform = "desktop";
 
   let arrival = "other";
-  if (/Threads/i.test(ua)) arrival = "threads";
-  else if (/FBAN|FBAV|Facebook/i.test(ua)) arrival = "facebook";
-  else if (/Instagram/i.test(ua)) arrival = "instagram";
+  if (embedded.embedded) arrival = embedded.app;
   else if (/CriOS/i.test(ua)) arrival = "chrome-ios";
   else if (/FxiOS/i.test(ua)) arrival = "firefox-ios";
   else if (/Edg\//i.test(ua)) arrival = "edge";
@@ -43,7 +46,7 @@ export function classifyShellDevice(userAgent = "", viewport = {}) {
   else if (/Firefox\//i.test(ua)) arrival = "firefox";
 
   let browser = "unknown";
-  if (arrival === "threads" || arrival === "facebook" || arrival === "instagram") browser = "in-app";
+  if (embedded.embedded) browser = "in-app";
   else if (arrival.startsWith("chrome")) browser = "chrome";
   else if (arrival.includes("firefox")) browser = "firefox";
   else if (arrival === "safari") browser = "safari";
@@ -64,6 +67,11 @@ export function classifyShellDevice(userAgent = "", viewport = {}) {
     platform,
     browser,
     arrival,
+    // Separate from `arrival` on purpose: `in_app` answers "was this a webview at all" without
+    // needing the report to know every vendor slug, and `in_app_signal` records WHY we said so,
+    // so a structural catch of an app we have never named is still attributable.
+    in_app: embedded.embedded,
+    in_app_signal: embedded.confidence,
     viewport_bucket: viewportBucket,
     viewport_w: width,
     viewport_h: height,
@@ -113,6 +121,7 @@ export function createShellHealthBeacon({
   now = () => performance.now(),
   epochMs = () => Date.now(),
   userAgent = globalThis.navigator?.userAgent ?? "",
+  maxTouchPoints = globalThis.navigator?.maxTouchPoints ?? 0,
   viewport = () => ({
     width: globalThis.document?.documentElement?.clientWidth
       || globalThis.innerWidth
@@ -126,8 +135,13 @@ export function createShellHealthBeacon({
 } = {}) {
   const startedAt = epochMs();
   const session = `shell-${startedAt}-${Math.floor(Math.random() * 1e6)}`;
-  const device = classifyShellDevice(userAgent, viewport());
+  const device = classifyShellDevice(userAgent, viewport(), { maxTouchPoints });
   const reached = new Set();
+  // Boot-shell events that are neither a milestone nor a fatal: a stall verdict, a fallback screen
+  // being shown, a player taking the escape route. Bounded, because a stuck boot must not be able
+  // to turn a health beacon into a firehose.
+  const notes = [];
+  const MAX_NOTES = 12;
   let lastFatal = null;
   let flushChain = Promise.resolve();
   let stopped = false;
@@ -149,7 +163,7 @@ export function createShellHealthBeacon({
   }
 
   function rowsForFlush() {
-    const batchId = `shell-batch-${startedAt}-${reached.size}-${lastFatal ? 1 : 0}-${Math.floor(Math.random() * 1e9)}`
+    const batchId = `shell-batch-${startedAt}-${reached.size}-${notes.length}-${lastFatal ? 1 : 0}-${Math.floor(Math.random() * 1e9)}`
       .replace(/[^A-Za-z0-9._-]/g, "-")
       .slice(0, 128);
     const rows = [headerRow(batchId)];
@@ -163,6 +177,7 @@ export function createShellHealthBeacon({
         t: Math.round(now()),
       });
     }
+    for (const note of notes) rows.push({ ...note });
     if (lastFatal) {
       rows.push({
         k: "in",
@@ -199,7 +214,7 @@ export function createShellHealthBeacon({
 
   function flush({ keepalive = false, force = false } = {}) {
     if (stopped && !force) return flushChain;
-    if (reached.size === 0 && !lastFatal) return flushChain;
+    if (reached.size === 0 && notes.length === 0 && !lastFatal) return flushChain;
     if (flushTimer != null) {
       clearTimeout(flushTimer);
       flushTimer = null;
@@ -239,6 +254,33 @@ export function createShellHealthBeacon({
     },
     get lastFatal() {
       return lastFatal;
+    },
+    get notes() {
+      return notes.map((note) => ({ ...note }));
+    },
+    /**
+     * Record a boot-shell event. `code` is a short slug ("stall", "fallback_shown",
+     * "fallback_escape"); `fields` are flat scalars folded into the row.
+     */
+    note(code, fields = {}, { immediate = false } = {}) {
+      if (stopped) return false;
+      const slug = String(code || "").replace(/[^a-z0-9_]/gi, "_").slice(0, 32);
+      if (!slug) return false;
+      if (notes.length >= MAX_NOTES) return false;
+      const row = { k: "in", type: "shell_health", code: slug, t: Math.round(now()) };
+      for (const [key, value] of Object.entries(fields)) {
+        if (value == null) continue;
+        if (typeof value === "number" && !Number.isFinite(value)) continue;
+        row[key] = typeof value === "string" ? value.slice(0, 160) : value;
+      }
+      notes.push(row);
+      // `immediate` exists for notes recorded as the player leaves — tapping the escape route
+      // navigates away, and a 750 ms debounce would lose the one row that says it worked. The
+      // keepalive/sendBeacon decision stays inside this module: gameplay telemetry ships gzipped
+      // chunks that must never use keepalive, and that distinction should not leak into app.js.
+      if (immediate) void flush({ keepalive: true, force: true });
+      else scheduleFlush();
+      return true;
     },
     mark(milestone) {
       if (stopped) return false;
