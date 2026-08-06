@@ -29,15 +29,20 @@ public interface ITerrainSurface {
 
     /// <summary>
     /// Height alone, for callers that never look at the normal or the surface kind — line-of-sight
-    /// marches above all, which walk tens of points per ray and read nothing but HeightM.
+    /// and clearance marches above all, which walk tens or hundreds of points per path and read
+    /// nothing but HeightM.
     ///
-    /// This is not a micro-optimisation. An analytic terrain builds its normal by finite
-    /// difference, so a full TrySample costs FIVE height evaluations; the built-in Cobra Canyon
-    /// surface walks three route polylines and the patch list inside each one. Marching the
-    /// gunner's 2 km sight line through TrySample cost 41.6 ms of every 120 Hz authority tick.
+    /// This is not a micro-optimisation. Every grid in this file builds its normal from analytic
+    /// derivatives and then NORMALISES it — a divide and a square root per sample — and the packed
+    /// theatre grids additionally resolve the water sentinel at the nearest node. None of that is
+    /// read by a clearance march. An analytic surface is worse again: it builds its normal by
+    /// finite difference, so a full TrySample costs FIVE height evaluations, which is what made the
+    /// Cobra gunner's sight line 41.6 ms of every 120 Hz authority tick.
     ///
     /// The default implementation is the honest one — height from a full sample — so an
-    /// implementation only overrides this when it genuinely has a cheaper path.
+    /// implementation only overrides this when it genuinely has a cheaper path. Overrides MUST
+    /// return exactly TrySample's HeightM and success; <c>EnvironmentTruthTests</c> and
+    /// <c>UkraineTerrainTruthTests</c> pin that.
     /// </summary>
     bool TryHeightM(double eastM, double northM, out double heightM) {
         if (!TrySample(eastM, northM, out TerrainSample sample)) {
@@ -174,6 +179,33 @@ public sealed class BilinearHeightGrid : ITerrainSurface {
         return true;
     }
 
+    /// The same bilinear patch, without the two slope divisions and the normal's square root.
+    /// Pinned bit-identical to TrySample's HeightM by <c>EnvironmentTruthTests</c> and <c>UkraineTerrainTruthTests</c>.
+    public bool TryHeightM(double eastM, double northM, out double heightM) {
+        if (!Bounds.Contains(eastM, northM)) {
+            heightM = 0.0;
+            return false;
+        }
+
+        double eastGrid = (eastM - OriginEastM) / EastSpacingM;
+        double northGrid = (northM - OriginNorthM) / NorthSpacingM;
+        int eastCell = eastM == Bounds.MaximumEastM
+            ? EastPointCount - 2
+            : Math.Clamp((int)Math.Floor(eastGrid), 0, EastPointCount - 2);
+        int northCell = northM == Bounds.MaximumNorthM
+            ? NorthPointCount - 2
+            : Math.Clamp((int)Math.Floor(northGrid), 0, NorthPointCount - 2);
+        double eastFraction = Math.Clamp(eastGrid - eastCell, 0.0, 1.0);
+        double northFraction = Math.Clamp(northGrid - northCell, 0.0, 1.0);
+
+        double southHeight = Lerp(Height(eastCell, northCell),
+            Height(eastCell + 1, northCell), eastFraction);
+        double northHeight = Lerp(Height(eastCell, northCell + 1),
+            Height(eastCell + 1, northCell + 1), eastFraction);
+        heightM = Lerp(southHeight, northHeight, northFraction);
+        return true;
+    }
+
     public TerrainSample Sample(double eastM, double northM) {
         if (!TrySample(eastM, northM, out TerrainSample sample))
             throw new ArgumentOutOfRangeException(nameof(eastM),
@@ -199,9 +231,32 @@ public static class TerrainQueries {
     }
 
     /// <summary>
+    /// The most lookups one clearance march is ever allowed to make, whatever its length.
+    ///
+    /// Without a bound the cost of this query is unbounded in the DISTANCE BETWEEN TWO AIRCRAFT,
+    /// which no caller controls. Measured on beat 10 (Rapier intercept) with the production
+    /// Ukraine truth: the opposing formation is staged 360 km out, ReactiveBandit.TryLowAttackPlan
+    /// runs against it on every 120 Hz tick per bandit, and each call marched 43,917 samples —
+    /// 179,000 terrain lookups per tick, 2.3-3.1 ms of a 8.33 ms tick, in terrain alone.
+    ///
+    /// 256 is chosen from the geometry the callers actually need, not from a cost target. The
+    /// longest march any of them legitimately asks for is ~2 km (LowBlockPerchCommand clamps its
+    /// reach to 1,800 m; NeedsTerrainRecovery looks 2.5 s ahead; the merge-spawn sweep is 1,600 m;
+    /// a lookahead segment is metres). Over 2 km, 256 samples is 7.8 m spacing — at or finer than
+    /// the unbounded quarter-resolution step on every terrain in the game, so for every query in
+    /// that band this bound changes NOTHING and the march stays bit-identical. It engages only
+    /// past ~2 km, where the caller is asking a question about ground it cannot reach anyway.
+    /// </summary>
+    public const int MaximumPathSamples = 256;
+
+    /// <summary>
     /// Minimum vertical clearance along a straight sensor/flight segment. Sampling is no coarser
-    /// than one quarter of the terrain's declared resolution, bounding missed bilinear curvature;
-    /// callers can demand a still finer maximum step for close obstacle work.
+    /// than one quarter of the terrain's declared resolution, bounding missed bilinear curvature,
+    /// until <see cref="MaximumPathSamples"/> caps the march; callers can demand a still finer
+    /// maximum step for close obstacle work.
+    ///
+    /// Height only: this march reads no normal and no surface kind, so it goes through
+    /// ITerrainSurface.TryHeightM rather than paying for a normal it discards at every step.
     /// </summary>
     public static double MinimumClearanceM(ITerrainSurface terrain,
         in Vec3D startWorldM, in Vec3D endWorldM, double maximumHorizontalStepM = 25.0)
@@ -222,17 +277,17 @@ public static class TerrainQueries {
         if (!double.IsFinite(rawSteps) || rawSteps > int.MaxValue)
             throw new ArgumentOutOfRangeException(nameof(maximumHorizontalStepM),
                 "terrain path requires more samples than can be represented");
-        int steps = Math.Max(1, (int)rawSteps);
+        int steps = Math.Clamp((int)rawSteps, 1, MaximumPathSamples);
         double minimumClearanceM = double.MaxValue;
 
         for (int i = 0; i <= steps; i++) {
             double fraction = (double)i / steps;
             Vec3D position = startWorldM + delta * fraction;
-            if (!terrain.TrySample(position.X, position.Z, out TerrainSample sample))
+            if (!terrain.TryHeightM(position.X, position.Z, out double heightM))
                 throw new ArgumentOutOfRangeException(nameof(endWorldM),
                     "terrain path leaves the available truth bounds");
             minimumClearanceM = Math.Min(minimumClearanceM,
-                position.Y - sample.HeightM);
+                position.Y - heightM);
         }
         return minimumClearanceM;
     }

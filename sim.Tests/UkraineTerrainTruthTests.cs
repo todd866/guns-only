@@ -29,6 +29,54 @@ public class UkraineTerrainTruthTests {
         Assert.False(terrain.TrySample(41_216.0, 0.0, out _));
     }
 
+    /// TryHeightM is the path every clearance march now takes — Auto-GCAS, terrain recovery, the
+    /// low-block attack corridor, the merge-spawn sweep. The golden fixtures all pin TrySample, so
+    /// without this the height path could drift from the sampled truth and nothing would fail.
+    /// Pinned over the WHOLE production stack: the nested 32 m detail over the 256 m regional
+    /// atlas, wrapped in the apron the browser build wraps it in, and translated into a mission
+    /// frame — including the water sentinel, which is the one place the two paths could diverge.
+    [Fact]
+    public void HeightOnlySamplingIsTheSampledTruthAcrossTheProductionTerrainStack() {
+        ITerrainSurface nested = Assert.IsAssignableFrom<ITerrainSurface>(
+            UkraineTerrainTruth.Load());
+        var apron = new TrainingTerrainApronSurface(nested,
+            marginM: 400_000.0, flatHeightM: 78.0, transitionM: 8_000.0);
+        var placed = new TranslatedTerrainSurface(apron, -4_864.0, 12_800.0);
+
+        var random = new System.Random(20260806);
+        int land = 0, water = 0, outside = 0, apronBlend = 0;
+        foreach (ITerrainSurface surface in new ITerrainSurface[] { nested, apron, placed }) {
+            for (int i = 0; i < 40_000; i++) {
+                // Overshoot the nested bounds so the apron blend and the out-of-bounds contract
+                // are both exercised, on every layer.
+                double eastM = Lerp(nested.Bounds.MinimumEastM - 60_000.0,
+                    nested.Bounds.MaximumEastM + 60_000.0, random.NextDouble());
+                double northM = Lerp(nested.Bounds.MinimumNorthM - 60_000.0,
+                    nested.Bounds.MaximumNorthM + 60_000.0, random.NextDouble());
+                if (surface is TranslatedTerrainSurface) {
+                    eastM -= 4_864.0;
+                    northM += 12_800.0;
+                }
+                bool sampled = surface.TrySample(eastM, northM, out TerrainSample sample);
+                bool height = surface.TryHeightM(eastM, northM, out double heightM);
+                Assert.Equal(sampled, height);
+                if (!sampled) { Assert.Equal(0.0, heightM); outside++; continue; }
+                // Bit-for-bit. A tolerance here would let a rounding difference through, and the
+                // whole point is that these are two spellings of one arithmetic.
+                Assert.Equal(sample.HeightM, heightM);
+                if (sample.Kind == TerrainSurfaceKind.Water) water++;
+                else if (!nested.Bounds.Contains(eastM, northM)) apronBlend++;
+                else land++;
+            }
+        }
+        Assert.True(land > 10_000, $"only {land} land points were compared");
+        Assert.True(water > 100, $"only {water} water points were compared");
+        Assert.True(apronBlend > 100, $"only {apronBlend} apron-blend points were compared");
+        Assert.True(outside > 100, $"only {outside} out-of-bounds points were compared");
+    }
+
+    static double Lerp(double a, double b, double t) => a + (b - a) * t;
+
     [Fact]
     public void AtlasContainsEveryAuthoredRaidTrackWithTerrainClearance() {
         ITerrainSurface terrain = Assert.IsAssignableFrom<ITerrainSurface>(
