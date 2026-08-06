@@ -1862,7 +1862,44 @@ public sealed class ReactiveBandit :
         var own = State;
         var aim = KeepAimInFightVolume(player.Position);
         double floorHere = LocalFloorM(own.Position.X, own.Position.Z);
-        if (aim.Y < floorHere + 300.0) aim = aim with { Y = floorHere + 300.0 };
+        // ONE AIM VECTOR, RESOLVED BEFORE ANYTHING IS DECIDED ABOUT IT. The gate below and the
+        // command it selects must read the SAME aim: a predicate computed against a lower aim
+        // than the one actually flown can arm a slice for a depression the flown command has
+        // already clamped away. So every floor and conditioning correction that applies to both
+        // branches — the path floor, the sideways nudge — is applied here, up front. Only the
+        // walk-down clamp, which the dive form deliberately does not use, is left downstream.
+        //
+        // Sample the floor along the path we are about to fly, not just under our feet. Defend
+        // and Energy both do this; this command did not, so a re-engage toward a low player over
+        // rising ground cleared the aim point and flew the jet into the ridge in between.
+        double aheadFloorM = LocalFloorM(
+            own.Position.X + own.ForwardDir().X * 900.0,
+            own.Position.Z + own.ForwardDir().Z * 900.0);
+        double pathFloorM = System.Math.Max(floorHere, aheadFloorM);
+        // ARMS ONLY WHEN THE AIM IS GENUINELY THE PLAYER. With the player far outside the fight
+        // volume, KeepAimInFightVolume hands this command a spawn-adjacent phantom, and
+        // AngleTo(that phantom) can read as "reversal" while the nose sits dead ON the real
+        // player — probed in the arena-leash corridor, the slice then executed a
+        // max-performance turn ONTO the phantom (nose-to-player dot +1.00 to -0.98) and
+        // manufactured the 33 s nose-away leg it exists to prevent. This asks about
+        // KeepAimInFightVolume's displacement specifically, so it reads that function's output
+        // before the floor and conditioning corrections move the aim for other reasons.
+        bool aimIsThePlayer =
+            HorizontalDistance(aim, player.Position) < 200.0;
+        if (aim.Y < pathFloorM + 300.0) aim = aim with { Y = pathFloorM + 300.0 };
+        // The vertical clamps do NOT move the aim out of the vertical plane through the velocity
+        // vector, which is the actual singular geometry. A player dead ahead-and-below (or dead
+        // astern-and-below) drives the bank solution to +/-pi, where the sign is rounding noise
+        // and the command chatters left/right every tick. Nudge the aim sideways — toward the
+        // side the player already lies on — so the solution is always well conditioned. The
+        // offset is small enough not to bend the intercept.
+        var flatToPlayer = new Vec3D(player.Position.X - own.Position.X, 0.0,
+            player.Position.Z - own.Position.Z);
+        if (flatToPlayer.Length < 400.0) {
+            var wing = new Vec3D(0.0, 1.0, 0.0).Cross(own.ForwardDir());
+            if (wing.Length > 1e-6)
+                aim += wing.Normalized() * (400.0 * _breakSign);
+        }
         // NEVER CONVERT A RE-ENGAGE INTO A CLIMBING SPIRAL. Measured on the cold-opening 2v1
         // (the production Build 260/263 zero-fire shape): a lead captured by the Return latch
         // at 3.6 km and 140 degrees nose-off flew this command for 30 continuous seconds and
@@ -1886,25 +1923,28 @@ public sealed class ReactiveBandit :
         bool steeplyBelow = altExcessM > 400.0
             && altExcessM > 0.35 * System.Math.Max(1.0, horizontalToAimM);
         bool reversal = AngleTo(aim) > 1.57;
-        // ARMS ONLY WHEN THE AIM IS GENUINELY THE PLAYER, ON THE BELLY SIDE.
-        //
         // Below-aim only: climbing hard at a player ABOVE is correct pursuit — the arena-leash
         // corridors chase a full-power runner holding altitude overhead, and routing their
         // reversals through this branch (mil power, past-vertical bank) re-created the exact
-        // stern chase and Energy chatter those corridors forbid.
+        // stern chase and Energy chatter those corridors forbid. The measured wallow only ever
+        // formed with the player inside the volume and the aim unclamped, so that is the only
+        // geometry this branch owns.
         //
-        // Undisplaced-aim only: with the player far outside the fight volume,
-        // KeepAimInFightVolume hands this command a spawn-adjacent phantom, and AngleTo(that
-        // phantom) can read as "reversal" while the nose sits dead ON the real player — probed
-        // in the same corridor, the slice then executed a max-performance turn ONTO the
-        // phantom (nose-to-player dot +1.00 to -0.98) and manufactured the 33 s nose-away leg
-        // it exists to prevent. The measured wallow only ever formed with the player inside
-        // the volume and the aim unclamped, so that is the only geometry this branch owns.
-        bool aimIsThePlayer =
-            HorizontalDistance(aim, player.Position) < 200.0;
+        // AND ONLY WITH THE AIR TO COMPLETE IT. The slice rolls the lift vector PAST vertical and
+        // pulls — the same manoeuvre the nose-high recovery flies, which gates its identical
+        // 2.0 rad roll behind real clearance and real speed precisely because past vertical the
+        // nose comes down at the ground. This one points downhill by design, so it needs the gate
+        // at least as much; leaning on NeedsTerrainRecovery to catch it afterwards leans on a
+        // reflex that documents itself as wrong about a Split-S with air below. Clearance is
+        // measured against the PATH floor (the ridge ahead, not just the ground underfoot) since
+        // that is the surface the slice is turning toward. Below the gate the ordinary pursuit —
+        // 1.30 rad, walked-down aim, burner — still converts the geometry, just gently.
+        double sliceClearanceM = own.Position.Y - pathFloorM;
         bool diveReengage = aimIsThePlayer
             && altExcessM > 0.0
-            && (steeplyBelow || reversal);
+            && (steeplyBelow || reversal)
+            && sliceClearanceM > 1500.0
+            && own.Speed > 135.0;
         // Keep the aim point within a bounded vertical step of our own altitude. A target far below
         // the flight path drives BankToPlaceLiftVectorOn toward +/-pi — the same ill-conditioned
         // geometry the nose-high recovery hits — and the bank limit then turns the "descend and
@@ -1913,32 +1953,15 @@ public sealed class ReactiveBandit :
         // Walking the aim down in steps keeps the solution well conditioned and the descent honest.
         // The dive form keeps the TRUE aim: its low-G banked pull is what makes the descent
         // honest, and a walked-down aim would re-shallow the bank solution it depends on.
-        if (!diveReengage)
+        // Clamping the vertical delta shortens the descent, so the path floor is re-applied after
+        // it: the walk-down can otherwise step the aim back below the ridge in between.
+        if (!diveReengage) {
             aim = aim with {
                 Y = own.Position.Y
                     + System.Math.Clamp(aim.Y - own.Position.Y, -900.0, 900.0)
             };
-        // Clamping the vertical delta shortens the descent; it does NOT move the aim out of the
-        // vertical plane through the velocity vector, which is the actual singular geometry. A
-        // player dead ahead-and-below (or dead astern-and-below) still drives the bank solution to
-        // +/-pi, where the sign is rounding noise and the command chatters left/right every tick.
-        // Nudge the aim sideways — toward the side the player already lies on — so the solution is
-        // always well conditioned. The offset is small enough not to bend the intercept.
-        var flatToPlayer = new Vec3D(player.Position.X - own.Position.X, 0.0,
-            player.Position.Z - own.Position.Z);
-        if (flatToPlayer.Length < 400.0) {
-            var wing = new Vec3D(0.0, 1.0, 0.0).Cross(own.ForwardDir());
-            if (wing.Length > 1e-6)
-                aim += wing.Normalized() * (400.0 * _breakSign);
+            if (aim.Y < pathFloorM + 300.0) aim = aim with { Y = pathFloorM + 300.0 };
         }
-        // Sample the floor along the path we are about to fly, not just under our feet. Defend and
-        // Energy both do this; this command did not, so a re-engage toward a low player over rising
-        // ground cleared the aim point and flew the jet into the ridge in between.
-        double aheadFloorM = LocalFloorM(
-            own.Position.X + own.ForwardDir().X * 900.0,
-            own.Position.Z + own.ForwardDir().Z * 900.0);
-        double pathFloorM = System.Math.Max(floorHere, aheadFloorM);
-        if (aim.Y < pathFloorM + 300.0) aim = aim with { Y = pathFloorM + 300.0 };
         double angle = AngleTo(aim);
         if (diveReengage) {
             // The SLICE, not the housekeeping dive. ReturnCommand's 3.8 G/77-degree form was
