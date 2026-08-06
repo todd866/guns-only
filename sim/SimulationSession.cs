@@ -94,6 +94,9 @@ public sealed class DetachedOpponentWreck {
     internal IBandit Actor { get; }
     public long SpawnSequence { get; }
     public AircraftState Aircraft => Actor.State;
+    /// The wreck's current lift direction, for snapshot projection: a detached airframe that
+    /// still occupies a formation wire slot must render with honest attitude, not a default up.
+    public Vec3D LiftDir => Actor.LiftDir;
     public AircraftTerminalState TerminalState { get; internal set; }
     public ImpactSurface ImpactSurface { get; internal set; }
 }
@@ -108,6 +111,8 @@ public sealed class SimulationSession {
 
     public const double FixedDeltaSeconds = 1.0 / AircraftSim.TickHz;
     public const int RecentEventCapacity = 64;
+    /// The formation aircraft slots both wire formats carry: w1, w2, w3.
+    public const int FormationWireSlotCount = 3;
     const int BuiltInCasevacBeatIndex = 13;
     // Terrain prediction is deliberately a flight-computer-rate task rather than a 120 Hz
     // actuator task. The held recovery command still reaches AircraftSim every fixed tick.
@@ -289,6 +294,12 @@ public sealed class SimulationSession {
     double _nextOpponentSpawnAtMs = double.NegativeInfinity;
     readonly List<SessionEvent> _recentEvents = new(RecentEventCapacity);
     readonly List<DetachedOpponentWreck> _detachedOpponentWrecks = new();
+    /// The formation wire slot each still-existing detached wreck owns, keyed by the wreck OBJECT
+    /// so the mapping survives every mutation of the list around it. See
+    /// DetachedWreckForFormationSlot for why positional ordering is not an identity.
+    readonly Dictionary<DetachedOpponentWreck, int> _wreckFormationSlots =
+        new(ReferenceEqualityComparer.Instance);
+    readonly List<DetachedOpponentWreck> _wreckFormationSlotEvictions = new();
     readonly IncidentReplayRecorder _incidentReplay = new();
     readonly DecisionRecorder _decisionRecorder = new();
     readonly RapierServiceLifeRecorder _rapierServiceLifeRecorder;
@@ -789,6 +800,68 @@ public sealed class SimulationSession {
         || (OpponentPresent
             && _opponentTerminalState != AircraftTerminalState.Flying);
     public IReadOnlyList<SessionEvent> RecentEvents => _recentEvents;
+    /// The detached opponent wreck that backs formation snapshot slot <paramref name="index"/>
+    /// once live wingmen run out. Production Build 260: the instant the player killed the
+    /// primary, promotion moved the surviving wingman into the opponent slot and detached the
+    /// dead airframe into a list neither wire format projected — so w1_present dropped to 0 at
+    /// exactly the kill tick and the falling jet blinked out of the world. Formation slots fill
+    /// with live wingmen first (their existing order, untouched), then with wrecks that still
+    /// physically exist in the air or tumbling on contact. Settled and simulation-bounded hulks
+    /// stay off the wire, which is the same quiet exit the pre-formation replacement flow
+    /// always had.
+    ///
+    /// SLOT OWNERSHIP FOLLOWS THE AIRFRAME, NEVER ITS LIST INDEX. The wreck list mutates
+    /// constantly under a live fight: an egressing wreck is removed mid-step, an overflowing
+    /// list evicts a settled hulk, and a wreck simply coming to rest drops out of the eligible
+    /// set. Every one of those shifts the positional offset of every LATER wreck, so a still
+    /// falling airframe would migrate w3 to w2 in a single tick — and since the renderer is keyed
+    /// by SLOT (app.js reads w1x/w2x/w3x) with no entity id projected for these slots, that
+    /// migration teleports the wreck across the sky with nothing able to detect the substitution.
+    /// A wreck therefore keeps the slot it was first granted for as long as it stays eligible and
+    /// a live wingman has not claimed that slot back.
+    public DetachedOpponentWreck? DetachedWreckForFormationSlot(int index) {
+        if (index < 0 || index >= FormationWireSlotCount) return null;
+        ReconcileWreckFormationSlots();
+        foreach (DetachedOpponentWreck wreck in _detachedOpponentWrecks)
+            if (_wreckFormationSlots.TryGetValue(wreck, out int slot) && slot == index)
+                return wreck;
+        return null;
+    }
+
+    /// Settled and simulation-bounded hulks stay off the wire, which is the same quiet exit the
+    /// pre-formation replacement flow always had.
+    static bool WreckOccupiesFormationSlot(DetachedOpponentWreck wreck) =>
+        wreck.TerminalState is not (AircraftTerminalState.Settled
+            or AircraftTerminalState.SimulationBounded);
+
+    /// Idempotent, and a pure function of the wreck list, the live wingman count and the slots
+    /// already granted — both wire writers call it every frame and must agree.
+    void ReconcileWreckFormationSlots() {
+        if (_wreckFormationSlots.Count > 0) {
+            _wreckFormationSlotEvictions.Clear();
+            foreach (KeyValuePair<DetachedOpponentWreck, int> held in _wreckFormationSlots) {
+                // A live wingman outranks a wreck for the low slots (their existing order is
+                // untouched), and a wreck that left the eligible set surrenders its slot.
+                if (held.Value >= _wingmen.Count
+                    && WreckOccupiesFormationSlot(held.Key)
+                    && _detachedOpponentWrecks.Contains(held.Key)) continue;
+                _wreckFormationSlotEvictions.Add(held.Key);
+            }
+            foreach (DetachedOpponentWreck evicted in _wreckFormationSlotEvictions)
+                _wreckFormationSlots.Remove(evicted);
+            _wreckFormationSlotEvictions.Clear();
+        }
+        foreach (DetachedOpponentWreck wreck in _detachedOpponentWrecks) {
+            if (!WreckOccupiesFormationSlot(wreck)
+                || _wreckFormationSlots.ContainsKey(wreck)) continue;
+            for (int slot = _wingmen.Count; slot < FormationWireSlotCount; slot++) {
+                if (_wreckFormationSlots.ContainsValue(slot)) continue;
+                _wreckFormationSlots[wreck] = slot;
+                break;
+            }
+        }
+    }
+
     public IReadOnlyList<DetachedOpponentWreck> DetachedOpponentWrecks =>
         _detachedOpponentWrecks;
     public IncidentReplayRecorder IncidentReplay => _incidentReplay;

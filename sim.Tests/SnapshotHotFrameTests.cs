@@ -624,6 +624,107 @@ public class SnapshotHotFrameTests {
         }
     }
 
+    /// Production Build 260 (owner flight, cold 1v2): w1_present and w1_alive dropped to 0 at
+    /// EXACTLY the tick the PRIMARY died. Promotion is immediate by pinned contract
+    /// (ForcedLeaderDefeatPromotesSurvivorImmediatelyWithoutTerminalDelay): the survivor leaves
+    /// Wingmen[0] and becomes the opponent in the same tick — so the w1 slot emptied, and the
+    /// killed primary detached into _detachedOpponentWrecks, WHICH NEITHER WIRE FORMAT
+    /// PROJECTED. Net effect on the wire: an airframe the player is looking at blinks out of
+    /// existence at the kill instant. The formation slots must instead keep every airframe that
+    /// still physically exists: live wingmen first, then still-falling detached wrecks
+    /// (present=1, alive=0 — the exact encoding a shot-down but-still-listed wingman already
+    /// uses, so no consumer learns a new state).
+    [Fact]
+    public void PromotionKeepsEveryAirframeOnTheWire() {
+        SimulationSession session = StartSession(7, null);
+        Assert.Single(session.Wingmen);
+        IBandit survivor = session.Wingmen[0].Bandit;
+        Vec3D killPosition = session.Bandit.State.Position;
+
+        session.ForceOpponentDefeatForTest();
+        // The pinned promotion contract: the survivor is the opponent immediately.
+        Assert.Same(survivor, session.Bandit);
+        Assert.Empty(session.Wingmen);
+        session.StepFixed();
+
+        var (root, buffer, document) = Project(session);
+        using (document) {
+            // The living ship stays on the wire as the opponent.
+            Assert.True(root.GetProperty("opponent_present").GetBoolean());
+            Assert.Equal(
+                survivor.State.Position.X, root.GetProperty("bx").GetDouble(), 1);
+            // The airframe the player just killed keeps falling on the wire: the freed w1
+            // slot carries the detached wreck instead of despawning it mid-air.
+            Assert.Equal(1, root.GetProperty("w1_present").GetInt32());
+            Assert.Equal(0, root.GetProperty("w1_alive").GetInt32());
+            double wreckDriftM = Math.Sqrt(
+                Math.Pow(root.GetProperty("w1x").GetDouble() - killPosition.X, 2.0)
+                + Math.Pow(root.GetProperty("w1y").GetDouble() - killPosition.Y, 2.0)
+                + Math.Pow(root.GetProperty("w1z").GetDouble() - killPosition.Z, 2.0));
+            Assert.True(wreckDriftM < 60.0,
+                $"w1 should carry the falling ex-primary near its kill position; it is "
+                + $"{wreckDriftM:F0} m away");
+            AssertHotFrameMatchesJson(root, buffer);
+        }
+    }
+
+    /// The formation slot a falling wreck occupies is that airframe's identity on the wire: the
+    /// renderer is keyed by SLOT (app.js reads w1x/w2x/w3x) and no entity id is projected for
+    /// these slots, so a wreck that changes slot teleports across the sky with nothing able to
+    /// detect the substitution. The wreck list mutates constantly under a live fight — an egressed
+    /// wreck is REMOVED mid-step, an overflowing list evicts a settled hulk, and a wreck simply
+    /// settling drops out of the slot-eligible set — and every one of those shifts the positional
+    /// offset of every LATER wreck. Slot ownership must therefore follow the airframe, not its
+    /// index in a list that moves under it.
+    [Fact]
+    public void AFallingWreckKeepsItsFormationSlotWhenTheWreckListMutates() {
+        SimulationSession session = StartSession(7, null);
+        Assert.Single(session.Wingmen);
+
+        session.ForceOpponentDefeatForTest();
+        session.StepFixed();
+        // Kill the promoted survivor too, so two airframes are falling at once.
+        session.ForceOpponentDefeatForTest();
+        for (int tick = 0; tick < 3600 && session.DetachedOpponentWrecks.Count < 2; tick++)
+            session.StepFixed();
+        Assert.Equal(2, session.DetachedOpponentWrecks.Count);
+
+        DetachedOpponentWreck first = session.DetachedOpponentWrecks[0];
+        DetachedOpponentWreck second = session.DetachedOpponentWrecks[1];
+        int firstSlot = FormationSlotOf(session, first);
+        int secondSlot = FormationSlotOf(session, second);
+        Assert.InRange(firstSlot, 0, 2);
+        Assert.InRange(secondSlot, 0, 2);
+        Assert.NotEqual(firstSlot, secondSlot);
+
+        Vec3D secondPosition = second.Aircraft.Position;
+        // The earlier wreck comes to rest — an ordinary end for a falling airframe, and the same
+        // list edit an egress removal or an overflow eviction makes.
+        first.TerminalState = AircraftTerminalState.Settled;
+
+        Assert.Null(FormationSlotOfOrNull(session, first));
+        Assert.Equal(secondSlot, FormationSlotOf(session, second));
+        var (root, buffer, document) = Project(session);
+        using (document) {
+            string prefix = $"w{secondSlot + 1}";
+            Assert.Equal(1, root.GetProperty($"{prefix}_present").GetInt32());
+            Assert.Equal(0, root.GetProperty($"{prefix}_alive").GetInt32());
+            Assert.Equal(secondPosition.X, root.GetProperty($"{prefix}x").GetDouble(), 1);
+            Assert.Equal(secondPosition.Z, root.GetProperty($"{prefix}z").GetDouble(), 1);
+            AssertHotFrameMatchesJson(root, buffer);
+        }
+    }
+
+    static int? FormationSlotOfOrNull(SimulationSession session, DetachedOpponentWreck wreck) {
+        for (int slot = 0; slot < 3; slot++)
+            if (ReferenceEquals(session.DetachedWreckForFormationSlot(slot), wreck)) return slot;
+        return null;
+    }
+
+    static int FormationSlotOf(SimulationSession session, DetachedOpponentWreck wreck) =>
+        FormationSlotOfOrNull(session, wreck)
+            ?? throw new Xunit.Sdk.XunitException("the wreck occupies no formation slot");
+
     [Fact]
     public void FormationCoordinationProjectsColdRolesAndHotPictureAge() {
         SimulationSession coordinated = StartSession(7, null);

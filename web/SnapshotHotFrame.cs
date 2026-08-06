@@ -2062,6 +2062,26 @@ internal static class SnapshotHotFrame {
             writer.Num($"{prefix}_alive", 1, RawInteger);
             return;
         }
+        // Mirror of SnapshotProjection.WingmanJson: a freed slot keeps carrying a still-falling
+        // detached wreck (present=1, alive=0) so promotion never blinks an airframe off the wire.
+        if (wingman is null
+            && session.DetachedWreckForFormationSlot(index) is { } wreck) {
+            AircraftState wreckState = wreck.Aircraft;
+            Vec3D wreckForward = wreckState.ForwardDir();
+            Vec3D wreckLift = wreck.LiftDir;
+            writer.Num($"{prefix}_present", 1, RawInteger);
+            writer.Num($"{prefix}x", wreckState.Position.X, 3);
+            writer.Num($"{prefix}y", wreckState.Position.Y, 3);
+            writer.Num($"{prefix}z", wreckState.Position.Z, 3);
+            writer.Num($"{prefix}fx", wreckForward.X, 5);
+            writer.Num($"{prefix}fy", wreckForward.Y, 5);
+            writer.Num($"{prefix}fz", wreckForward.Z, 5);
+            writer.Num($"{prefix}lx", wreckLift.X, 5);
+            writer.Num($"{prefix}ly", wreckLift.Y, 5);
+            writer.Num($"{prefix}lz", wreckLift.Z, 5);
+            writer.Num($"{prefix}_alive", 0, RawInteger);
+            return;
+        }
         if (wingman is null) {
             writer.Num($"{prefix}_present", 0, RawInteger);
             writer.Num($"{prefix}x", 0.0, 3);

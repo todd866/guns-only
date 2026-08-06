@@ -215,4 +215,81 @@ public class BanditArenaLeashTests {
             $"extension ended slower ({speedAtExit:F0} < {startSpeed:F0} m/s) — "
             + "it traded speed for height, which is backwards");
     }
+
+    /// A RIDGE INSIDE THE PATH-FLOOR LOOKAHEAD IS PART OF THE RE-ENGAGE GEOMETRY, NOT A DETAIL
+    /// APPLIED AFTER THE DECISION.
+    ///
+    /// ReengageCommand resolves an aim point, gates the past-vertical dive slice on how far BELOW
+    /// that aim the bandit sits, and then flies a command built from the aim. The floor sampled
+    /// 900 m along the flight path re-raises the aim — so a gate computed before that raise can
+    /// arm a 115-degree slice for a depression the flown command has already clamped away, and
+    /// roll the jet past vertical at a ridge with the aim sitting 300 m above it. Predicate and
+    /// command must read the same aim vector.
+    [Fact]
+    public void ReengageDoesNotSliceAtADepressionThePathFloorHasAlreadyClamped() {
+        var bandit = new ReactiveBandit(
+            new AircraftState(new Vec3D(0.0, 4200.0, 0.0),
+                BeatSetup.CornerTrueAirspeedMps(BanditAir, 4200.0),
+                0.0, System.Math.PI / 2.0, 0.0, BanditAir.MassKg),
+            BanditAir, PilotSkill.Ace, new RidgeAhead());
+        // 5.5 km out — beyond the 3.5 km re-engage latch, opening, still inside the fight volume
+        // (so the aim is the player and not KeepAimInFightVolume's phantom), and 1,000 m over LOW
+        // ground of its own, so it is a legitimate re-engage target and not a low-block hunt.
+        var player = new AircraftState(new Vec3D(4500.0, 1000.0, 0.0), 300.0,
+            0.0, System.Math.PI / 2.0, 0.0, PlayerAir.MassKg);
+
+        bandit.Step(ActorObservation.Capture(player, 0), Dt);
+
+        Assert.Equal(BanditTactic.Return, bandit.Tactic);
+        // The ridge puts the path floor at 2,500 m, so the FLOWN aim is clamped to 2,800 m —
+        // 1,400 m under the bandit across 4.5 km, which is the shallow step-down the slice's own
+        // gate says must keep the ordinary pursuit. Read against the unclamped 1,000 m aim it is
+        // 3,200 m of depression and the gate armed: measured on the unfixed tree the command rolls
+        // to 2.000 rad (115 deg, past vertical, at a ridge) instead of the ordinary 1.30 cap.
+        Assert.True(System.Math.Abs(bandit.LastCommand.BankTarget) <= 1.30,
+            $"re-engage rolled to {bandit.LastCommand.BankTarget:F2} rad — past the ordinary "
+            + "1.30 cap, so the dive slice armed on a depression the path floor had removed");
+    }
+
+    /// THE DIVE SLICE IS A SPLIT-S, AND A SPLIT-S NEEDS AIR BELOW IT.
+    ///
+    /// The nose-high recovery slice gates its identical 2.0 rad (115 deg) roll behind real
+    /// clearance and real speed, for the reason it documents: rolling the lift vector past
+    /// vertical points the nose at the ground. The re-engage dive slice rolls exactly as far,
+    /// deliberately downhill, and had no such gate — it leant on the terrain-recovery reflex to
+    /// catch it afterwards, which is a reflex that documents itself as being wrong about a
+    /// Split-S with air below. A reversal flown 1,200 m over the deck keeps the ordinary pursuit.
+    [Fact]
+    public void ReengageWillNotSliceInvertedWithoutTheClearanceToCompleteIt() {
+        var bandit = new ReactiveBandit(
+            new AircraftState(new Vec3D(0.0, 1200.0, 0.0),
+                BeatSetup.CornerTrueAirspeedMps(BanditAir, 1200.0),
+                0.0, -System.Math.PI / 2.0, 0.0, BanditAir.MassKg),
+            BanditAir, PilotSkill.Ace);
+        // Nose cold — a past-90-degree reversal, which is the geometry the slice owns — with the
+        // player 4.5 km away, below, and still 500 m over the deck so this is no low-block hunt.
+        var player = new AircraftState(new Vec3D(4500.0, 500.0, 0.0), 300.0,
+            0.0, System.Math.PI / 2.0, 0.0, PlayerAir.MassKg);
+
+        bandit.Step(ActorObservation.Capture(player, 0), Dt);
+
+        Assert.Equal(BanditTactic.Return, bandit.Tactic);
+        Assert.True(System.Math.Abs(bandit.LastCommand.BankTarget) <= 1.30,
+            $"re-engage rolled to {bandit.LastCommand.BankTarget:F2} rad with only 1,200 m of "
+            + "air beneath it — that is a Split-S into the ground");
+    }
+
+    /// Flat ground everywhere except a ridge squarely inside the 900 m path-floor lookahead.
+    sealed class RidgeAhead : GunsOnly.Sim.Environment.ITerrainSurface {
+        public GunsOnly.Sim.Environment.TerrainBounds Bounds =>
+            new(-1_000_000.0, 1_000_000.0, -1_000_000.0, 1_000_000.0);
+        public double HorizontalResolutionM => 100.0;
+
+        public bool TrySample(double eastM, double northM,
+            out GunsOnly.Sim.Environment.TerrainSample sample) {
+            double heightM = eastM is > 500.0 and < 1_300.0 ? 2_500.0 : 0.0;
+            sample = new GunsOnly.Sim.Environment.TerrainSample(heightM, new Vec3D(0.0, 1.0, 0.0));
+            return true;
+        }
+    }
 }
