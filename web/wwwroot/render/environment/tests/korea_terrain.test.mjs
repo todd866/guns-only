@@ -10,6 +10,8 @@ import {
   loadKoreaTerrain,
   reconstructWaterHeights,
   selectTerrainLod,
+  SURFACE_DETAIL_FADE_M,
+  SURFACE_DETAIL_STRENGTH,
   terrainCurvatureDropM,
   TerrainBundleReader,
   ukraineTrainingApronHeightM,
@@ -2135,4 +2137,65 @@ test("terrain worker teardown terminates its workers", async () => {
   terrain.dispose();
   assert.ok(workers.created.every((worker) => worker.terminated),
     "disposing the terrain must not leak worker threads");
+});
+
+// --- Near-field surface detail (ground grain) ---------------------------------------------------
+
+test("near-field surface detail is tiered so mobile pays no fill for it", () => {
+  assert.equal(SURFACE_DETAIL_STRENGTH.mobile, 0,
+    "mobile is fill-rate bound; the grain layer must be off there, not merely weaker");
+  assert.ok(SURFACE_DETAIL_STRENGTH.balanced > 0
+    && SURFACE_DETAIL_STRENGTH.balanced < SURFACE_DETAIL_STRENGTH.desktop,
+    "balanced sits strictly between off and full strength");
+  // Degradation sheds view distance before it sheds the effect, per the adaptive-radius doctrine.
+  const [desktopFull, desktopZero] = SURFACE_DETAIL_FADE_M.desktop;
+  const [balancedFull, balancedZero] = SURFACE_DETAIL_FADE_M.balanced;
+  assert.ok(desktopFull < desktopZero && balancedFull < balancedZero,
+    "each tier's fade window must run from full strength out to zero");
+  assert.ok(balancedZero < desktopZero,
+    "the cheaper tier must shed the grain's VIEW DISTANCE first");
+});
+
+test("terrain material exposes the grain uniforms and honours the tier", () => {
+  for (const [tier, expected] of Object.entries(SURFACE_DETAIL_STRENGTH)) {
+    const material = createTerrainMaterial(THREE, {
+      sceneryEra: "ukraine-modern",
+      qualityTier: tier,
+      // Supplying the map keeps the test off the DOM TextureLoader path.
+      ukraineRegionalPaintMap: { isTexture: true },
+    });
+    assert.equal(material.uniforms.uSurfaceDetailStrength.value, expected,
+      `${tier} must receive its authored grain strength`);
+    const fade = material.uniforms.uSurfaceDetailFadeM.value;
+    assert.deepEqual([fade.x, fade.y], SURFACE_DETAIL_FADE_M[tier],
+      `${tier} must receive its authored grain fade window`);
+    material.dispose();
+  }
+});
+
+test("an unknown quality tier falls back to the balanced grain settings", () => {
+  const material = createTerrainMaterial(THREE, {
+    sceneryEra: "ukraine-modern",
+    qualityTier: "not-a-tier",
+    ukraineRegionalPaintMap: { isTexture: true },
+  });
+  assert.equal(material.uniforms.uSurfaceDetailStrength.value,
+    SURFACE_DETAIL_STRENGTH.balanced,
+    "an unrecognised tier must not silently disable or over-drive the layer");
+  material.dispose();
+});
+
+test("terrain shader source contains no GLSL-invalid numeric literals", async () => {
+  // A `2_200.0` underscore separator is valid JavaScript and invalid GLSL. It does not throw:
+  // the shader silently fails to COMPILE, the terrain stops drawing, and every ground pixel
+  // becomes the fog colour — which looks exactly like the winter snow-squall whiteout and cost a
+  // full debugging cycle on 2026-08-06. Node tests cannot compile GLSL, so pin the literal form.
+  const source = await readFile(new URL("../korea_terrain.js", import.meta.url), "utf8");
+  const shaderBlocks = [...source.matchAll(/const TERRAIN_(?:VERTEX|FRAGMENT) = \/\* glsl \*\/ `([\s\S]*?)`;/g)];
+  assert.equal(shaderBlocks.length, 2, "both terrain shader sources must be found");
+  for (const [, glsl] of shaderBlocks) {
+    const offender = glsl.match(/\b\d+_\d/);
+    assert.equal(offender, null,
+      `GLSL has no numeric separators; found "${offender?.[0]}" in a terrain shader`);
+  }
 });
