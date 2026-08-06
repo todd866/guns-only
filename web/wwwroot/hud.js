@@ -229,6 +229,30 @@ function padlockLooksOffAxis(frame) {
     || frame.manualLookActive === true;
 }
 
+// Where the ladder hangs, and what pitch it reads, when the ladder is referenced to the CAMERA
+// rather than to the airframe. Both come from the camera's own world matrix, so any sight bias,
+// gunner lean or look offset the camera carries is already included and needs no echo elsewhere.
+// Returns null when the camera cannot supply an honest attitude, which makes the caller fall
+// back to the airframe-conformal path rather than draw a made-up horizon.
+export function cameraPitchAnchor(camera, width, height) {
+  const world = camera?.matrixWorld?.elements;
+  const projection = camera?.projectionMatrix?.elements;
+  if (!world || !projection) return null;
+  // three.js cameras look down local -Z; the third basis column is that axis in world space.
+  const forwardY = -Number(world[9]);
+  if (!Number.isFinite(forwardY)) return null;
+  // The principal point is the centre only for an unskewed frustum; read it off the projection
+  // so an off-centre or windowed frustum still anchors where the optical axis actually lands.
+  const centerX = width * 0.5 * (1 + (Number(projection[8]) || 0));
+  const centerY = height * 0.5 * (1 - (Number(projection[9]) || 0));
+  if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) return null;
+  return {
+    centerX,
+    centerY,
+    pitchDeg: Math.asin(clamp(forwardY, -1, 1)) / DEG,
+  };
+}
+
 class CombatHud {
   constructor(canvas) {
     this.canvas = canvas;
@@ -513,26 +537,44 @@ class CombatHud {
     });
   }
 
-  drawPitchLadder(state, camera, boresightAnchor = null, compactMobile = false) {
+  drawPitchLadder(
+    state,
+    camera,
+    boresightAnchor = null,
+    compactMobile = false,
+    reference = "airframe",
+  ) {
     const ctx = this.ctx;
     const bank = -(Number(state.bank_deg) || 0) * DEG;
-    const pitch = Number(state.pitch_deg) || 0;
+    // An airframe-conformal ladder only tells the truth while the camera's optical axis lies
+    // along body-forward. The Cobra's rear seat holds a fixed +0.08 rad sight bias plus a
+    // <=0.05 rad gunner-target lean, so the anchor sits up to ~0.13 rad off axis and a gnomonic
+    // rung offset stops being a translation — the horizon rung drifted ~100 px below the visible
+    // horizon and read as a permanent nose-down attitude. hud.js already concedes the principle
+    // by suppressing this ladder in padlock. Camera reference anchors at the principal point and
+    // measures pitch off the camera itself, so the 0 rung lands exactly on the drawn horizon.
+    const cameraReferenced = reference === "camera";
+    const cameraAttitude = cameraReferenced ? cameraPitchAnchor(camera, this.width, this.height) : null;
+    const pitch = cameraAttitude ? cameraAttitude.pitchDeg : Number(state.pitch_deg) || 0;
     const radius = Math.max(120, this.height * 0.42);
     const projection = camera?.projectionMatrix?.elements;
     const matrixScaleY = Number(projection?.[5]);
     // The ladder is drawn with the SAME projection as the rendered world — no synthetic
     // pixels-per-degree fallback. Without a live camera matrix there is no honest ladder.
-    if (!Number.isFinite(matrixScaleY) || matrixScaleY <= 0
-      || !boresightAnchor || boresightAnchor.behind
-      || !Number.isFinite(boresightAnchor.x) || !Number.isFinite(boresightAnchor.y)) return;
+    if (!Number.isFinite(matrixScaleY) || matrixScaleY <= 0) return;
+    // Camera reference needs no boresight: its origin is the principal point, which exists in
+    // every forward view. Airframe reference still refuses to draw without an honest anchor.
+    if (!cameraAttitude
+      && (!boresightAnchor || boresightAnchor.behind
+        || !Number.isFinite(boresightAnchor.x) || !Number.isFinite(boresightAnchor.y))) return;
     const focalLengthY = this.height * 0.5 * matrixScaleY;
     // The ladder belongs to the AIRFRAME, not the pilot's eye line. Its local origin is therefore
     // the projected body-forward direction computed through the actual render camera. With a
     // forward view this is the PerspectiveCamera principal point; drag-look/two-finger-look moves
     // it by the gnomonic look offset (focal * tan(angle)), so the complete ladder slides toward and
     // then through the viewport edge with the waterline instead of remaining glued to the screen.
-    const projectionCenterX = boresightAnchor.x;
-    const projectionCenterY = boresightAnchor.y;
+    const projectionCenterX = cameraAttitude ? cameraAttitude.centerX : boresightAnchor.x;
+    const projectionCenterY = cameraAttitude ? cameraAttitude.centerY : boresightAnchor.y;
     const cosBank = Math.cos(bank);
     const sinBank = Math.sin(bank);
     const layout = this.getLayout();
@@ -5243,7 +5285,13 @@ class CombatHud {
     const mobileTactical = this.usesMobileTacticalProfile();
 
     if (!frame.padlock) {
-      this.drawPitchLadder(frame.state, frame.camera, noseAnchor, mobileTactical);
+      this.drawPitchLadder(
+        frame.state,
+        frame.camera,
+        noseAnchor,
+        mobileTactical,
+        frame.ladderReference,
+      );
     }
     this.drawAirframeSymbols(noseAnchor, frame.state, fpvAnchor);
     this.drawGunSight(frame, noseAnchor);

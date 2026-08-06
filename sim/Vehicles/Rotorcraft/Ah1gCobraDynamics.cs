@@ -21,6 +21,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
     double _inducedVelocityMps;
     double _mainRotorAngularSpeedRadPerSecond;
     double _engineShaftPowerW;
+    double _governorIntegralW;
     double _rotorAzimuthRad;
     double _previousRotorPowerW;
     bool _engineOperating = true;
@@ -318,12 +319,42 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             profilePowerW + inducedPowerW);
         double availablePowerW = AvailablePowerW(input.Environment.AirDensityKgM3);
         double currentRpm = AngularSpeedToRpm(_mainRotorAngularSpeedRadPerSecond);
-        double governorCorrectionW = (rotor.NominalRpm - currentRpm)
+        // A real rotor is self-limiting in autorotation: as Nr rises the inflow angle falls and
+        // the driving region of the blade shrinks toward nothing, which is what settles
+        // autorotative Nr at a steady value instead of running away. A static momentum model
+        // carries no such term, so windmilling power kept feeding the disc and every descent
+        // pinned the rotor against the numeric ceiling at 107.8% of nominal. Fade the
+        // autorotative drive out across nominal -> maximum autorotation rpm.
+        if (rotorPowerRequiredW < 0.0)
+        {
+            double autorotationOverspeedFraction = (currentRpm - rotor.NominalRpm)
+                / Math.Max(1.0, rotor.MaximumAutorotationRpm - rotor.NominalRpm);
+            rotorPowerRequiredW *= 1.0
+                - Math.Clamp(autorotationOverspeedFraction, 0.0, 1.0);
+        }
+        double rotorSpeedErrorRpm = rotor.NominalRpm - currentRpm;
+        double feedForwardPowerW = Math.Max(0.0, rotorPowerRequiredW);
+        double proportionalCorrectionW = rotorSpeedErrorRpm
             * _definition.Powerplant.GovernorProportionalGainWPerRpm;
+        double candidateIntegralW = _governorIntegralW
+            + rotorSpeedErrorRpm
+                * _definition.Powerplant.GovernorIntegralGainWPerRpmSecond
+                * dt;
+        double unclampedGovernorDemandW = feedForwardPowerW
+            + proportionalCorrectionW
+            + candidateIntegralW;
+        double clampedGovernorDemandW = Math.Clamp(
+            unclampedGovernorDemandW,
+            0.0,
+            availablePowerW);
+        // Back-calculation anti-windup: keep only the part of the integral the engine could
+        // actually deliver. Without it a sustained climb at the transmission limit banks integral
+        // it can never spend, and the rotor overspeeds the moment the load comes off.
+        _governorIntegralW = _engineOperating && controlsAvailable
+            ? candidateIntegralW - (unclampedGovernorDemandW - clampedGovernorDemandW)
+            : 0.0;
         double requestedEnginePowerW = _engineOperating && controlsAvailable
-            ? Math.Clamp(Math.Max(0.0, rotorPowerRequiredW) + governorCorrectionW,
-                0.0,
-                availablePowerW)
+            ? clampedGovernorDemandW
             : 0.0;
         double engineTau = requestedEnginePowerW >= _engineShaftPowerW
             ? _definition.Powerplant.EngineRiseTimeConstantSeconds
@@ -423,6 +454,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         {
             _engineOperating = false;
             _engineShaftPowerW = 0.0;
+            _governorIntegralW = 0.0;
         }
         bool flyable = !_hardImpactLatched && !_rotorStrikeLatched;
         Vec3D nextAirVelocity = nextVelocity - input.Environment.WindVelocityMps;

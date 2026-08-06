@@ -116,9 +116,17 @@ export function createCobraHudFrame(THREE) {
     flightPathPoint: null,
     // The rear-seat camera carries a fixed +0.08 rad sight bias and a clamped
     // (<=0.05 rad) gunner-target lean. HUD symbology projects world points through
-    // the REAL camera, so ladder/waterline/FPV stay airframe-true without echoing
-    // those offsets here; hud.js reads sensor/look only for padlock presentation,
-    // which the Cobra does not use.
+    // the REAL camera, so waterline/FPV stay airframe-true without echoing those
+    // offsets here; hud.js reads sensor/look only for padlock presentation, which
+    // the Cobra does not use.
+    //
+    // The pitch ladder is the exception. Those same offsets put the optical axis up
+    // to ~0.13 rad off body-forward, and an airframe-conformal ladder hung off that
+    // anchor drifted its horizon rung ~100 px below the drawn horizon — it read as a
+    // permanent nose-down attitude that had little to do with how the aircraft was
+    // moving. Reference the ladder to the camera so the 0 rung sits on the horizon
+    // the pilot can actually see.
+    ladderReference: "camera",
     sensorYaw: 0,
     sensorPitch: 0,
     lookYaw: 0,

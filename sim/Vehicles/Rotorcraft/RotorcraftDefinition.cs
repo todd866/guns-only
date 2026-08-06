@@ -43,6 +43,7 @@ public sealed record RotorcraftPowerplantDefinition(
     double EngineRiseTimeConstantSeconds,
     double EngineFallTimeConstantSeconds,
     double GovernorProportionalGainWPerRpm,
+    double GovernorIntegralGainWPerRpmSecond,
     double AccessoryPowerW,
     double TailRotorPowerFraction,
     double SeaLevelDensityKgM3,
@@ -171,6 +172,9 @@ public sealed record RotorcraftDefinition(
             nameof(Powerplant.EngineFallTimeConstantSeconds));
         Positive(Powerplant.GovernorProportionalGainWPerRpm,
             nameof(Powerplant.GovernorProportionalGainWPerRpm));
+        // Zero is legal and means a proportional-only governor, which droops under load.
+        NonNegative(Powerplant.GovernorIntegralGainWPerRpmSecond,
+            nameof(Powerplant.GovernorIntegralGainWPerRpmSecond));
         NonNegative(Powerplant.AccessoryPowerW, nameof(Powerplant.AccessoryPowerW));
         Unit(Powerplant.TailRotorPowerFraction, nameof(Powerplant.TailRotorPowerFraction));
         Positive(Powerplant.SeaLevelDensityKgM3, nameof(Powerplant.SeaLevelDensityKgM3));

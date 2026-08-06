@@ -786,7 +786,10 @@ function syncAuthorityCamera() {
   }
 
   camera.lookAt(lookTarget);
-  camera.rotation.z = Number(vehicle.roll_rad) || 0;
+  // Negated: three.js rolls the camera counter-clockwise for a positive rotation.z (right-hand
+  // rule about +Z, which points back out of the screen), so feeding a right bank straight in
+  // tilted the horizon the wrong way and a left cyclic input read as a roll to the right.
+  camera.rotation.z = -(Number(vehicle.roll_rad) || 0);
 }
 
 function recordFrameDuration(durationMs) {
