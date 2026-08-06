@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1600" width="900" height="1600">
+  <!-- F-22A card: clean, high, cold. Looking down on the planform from above and behind, so the
+       thing the eye reads first is stealth geometry - the diamond wing, the canted tails, the
+       chined nose - not a silhouette. Palette is the coldest of the four cards. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#040a1a"/>
+      <stop offset="0.14" stop-color="#0c1a39"/>
+      <stop offset="0.28" stop-color="#1c3866"/>
+      <stop offset="0.38" stop-color="#33628f"/>
+      <stop offset="0.455" stop-color="#6ea4c4"/>
+      <stop offset="0.5" stop-color="#c2dcea"/>
+    </linearGradient>
+    <linearGradient id="deck" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9dbdd4"/>
+      <stop offset="0.5" stop-color="#638bad"/>
+      <stop offset="1" stop-color="#2a4560"/>
+    </linearGradient>
+    <linearGradient id="trailA" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#eef6fb" stop-opacity="0"/>
+      <stop offset="0.55" stop-color="#eef6fb" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#eef6fb" stop-opacity="0.6"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="900" height="1600" fill="url(#sky)"/>
+  <rect y="800" width="900" height="800" fill="url(#deck)"/>
+
+  <!-- Cloud deck: flat planes, hard edges, receding to a high horizon at y=800. -->
+  <g>
+    <path d="M0 800 H900 V846 L742 828 L612 848 L470 826 L318 850 L168 830 L0 852 Z" fill="#d3e4ef"/>
+    <path d="M0 852 L168 830 L318 850 L470 826 L612 848 L742 828 L900 846 V908 L706 884 L520 912 L330 882 L142 910 L0 888 Z" fill="#bcd2e3"/>
+    <path d="M0 888 L142 910 L330 882 L520 912 L706 884 L900 908 V1010 L660 970 L400 1012 L180 968 L0 1004 Z" fill="#a8c3d8"/>
+    <path d="M0 1004 L180 968 L400 1012 L660 970 L900 1010 V1158 L612 1098 L292 1154 L0 1090 Z" fill="#92afc8"/>
+    <path d="M0 1090 L292 1154 L612 1098 L900 1158 V1352 L560 1268 L214 1348 L0 1296 Z" fill="#7a9bb8"/>
+    <path d="M0 1296 L214 1348 L560 1268 L900 1352 V1600 H0 Z" fill="#5e80a2"/>
+    <!-- Gaps in the deck: cold water a very long way down. -->
+    <path d="M186 1094 L268 1074 L370 1064 L436 1082 L466 1104 L392 1128 L306 1146 L236 1136 L198 1116 Z" fill="#2c4c66"/>
+    <path d="M508 1180 L560 1170 L588 1186 L536 1198 Z" fill="#2f4f69"/>
+    <path d="M598 1238 L692 1214 L806 1198 L872 1230 L860 1268 L742 1300 L646 1292 L594 1266 Z" fill="#23425c"/>
+    <path d="M72 1452 L168 1424 L298 1402 L378 1428 L400 1478 L292 1512 L192 1528 L112 1502 L64 1478 Z" fill="#1d3850"/>
+    <path d="M700 1424 L790 1408 L836 1430 L760 1450 Z" fill="#1f3a52"/>
+    <!-- Lit crests: one tone up along each ridge, sun from the upper left. -->
+    <path d="M0 852 L168 830 L318 850 L470 826 L612 848 L742 828 L900 846 V860 L742 842 L612 862 L470 840 L318 864 L168 844 L0 866 Z" fill="#edf5fa"/>
+    <path d="M0 1004 L180 968 L400 1012 L660 970 L900 1010 V1026 L660 988 L400 1028 L180 986 L0 1020 Z" fill="#cfe0ec"/>
+    <path d="M0 1296 L214 1348 L560 1268 L900 1352 V1372 L560 1290 L214 1370 L0 1318 Z" fill="#8fadc6"/>
+  </g>
+
+  <!-- Contrails, running back to the right edge. Two, because it has two engines. -->
+  <g>
+    <path d="M626 1010 L900 1120 L900 1150 L622 1030 Z" fill="url(#trailA)"/>
+    <path d="M662 980 L900 1076 L900 1100 L658 1000 Z" fill="url(#trailA)"/>
+  </g>
+
+  <!-- The aeroplane. Local space: centreline x=0, nose y=-110, nozzles y=110, half-span 72.
+       Rotated so the length lies across the card - a tall card crops the top and bottom on a
+       phone, and the nose is the last thing that may be allowed to go. -->
+  <g transform="translate(452 812) rotate(-72) scale(3.02 2.58)">
+    <!-- Far (upper) canted tail, behind the wing plate. -->
+    <path d="M-17 16 L-17 76 L-37 66 L-33 22 Z" fill="#2f3d51"/>
+
+    <!-- Wing: one flat diamond plate, drawn whole so the planform is unmistakable. -->
+    <path d="M-16 -42 L-72 24 L-72 32 L-18 62 L18 62 L72 32 L72 24 L16 -42 Z" fill="#7b8ba1"/>
+    <path d="M-16 -42 L-72 24 L-72 32 L-18 62 L0 62 L0 -42 Z" fill="#93a2b6"/>
+
+    <!-- Stabilators. -->
+    <path d="M-18 48 L-51 88 L-49 97 L-18 101 Z" fill="#8494a9"/>
+    <path d="M18 48 L51 88 L49 97 L18 101 Z" fill="#5c6b81"/>
+
+    <!-- Fuselage body over the wing root: the raised spine that makes it a solid, not a cut-out. -->
+    <path d="M0 -110 L-7 -96 L-11 -76 L-14 -54 L-17 -32 L-18 4 L-18 92 L-14 108 L14 108 L18 92 L18 4 L17 -32 L14 -54 L11 -76 L7 -96 Z" fill="#8090a6"/>
+    <path d="M0 -110 L-7 -96 L-11 -76 L-14 -54 L-17 -32 L-18 4 L-18 92 L-14 108 L0 108 Z" fill="#9dacc0"/>
+    <!-- Spine facet, a touch brighter still: three tones is all flat shading needs. -->
+    <path d="M0 -100 L-9 -66 L-10 4 L-10 96 L10 96 L10 4 L9 -66 Z" fill="#8b9ab0"/>
+    <path d="M0 -100 L-9 -66 L-10 4 L-10 96 L0 96 Z" fill="#adbccf"/>
+
+    <!-- Intake shoulders: the hard chine line that says "faceted", not "rounded". -->
+    <path d="M-17 -30 L-26 -8 L-26 46 L-18 46 L-18 -6 Z" fill="#6b7b92"/>
+    <path d="M17 -30 L26 -8 L26 46 L18 46 L18 -6 Z" fill="#55647a"/>
+
+    <!-- Near (lower) canted tail, in front of the wing plate. -->
+    <path d="M17 16 L17 76 L37 66 L33 22 Z" fill="#4a5970"/>
+    <path d="M17 16 L20 17 L20 74 L17 76 Z" fill="#66768d"/>
+
+    <!-- Leading-edge highlight. A cold high sun catching one facet is the only bright thing here. -->
+    <path d="M-16 -42 L-72 24 L-66 24 L-12 -40 L-6 -92 L0 -110 L-4 -94 Z" fill="#d5e4f0"/>
+    <path d="M16 -42 L72 24 L68 24 L14 -40 L8 -90 L0 -110 L4 -94 Z" fill="#8b9bb1"/>
+
+    <!-- Canopy. -->
+    <path d="M0 -90 L9 -72 L9 -44 L0 -34 L-9 -44 L-9 -72 Z" fill="#1f2c3c"/>
+    <path d="M-1 -86 L-8 -68 L-8 -48 L-2 -40 L-4 -60 Z" fill="#b6d2e3"/>
+    <path d="M3 -84 L7 -68 L7 -50 L3 -44 Z" fill="#5f7f97"/>
+
+    <!-- Nozzles. -->
+    <path d="M-16 96 L-4 96 L-4 110 L-14 110 Z" fill="#161e29"/>
+    <path d="M16 96 L4 96 L4 110 L14 110 Z" fill="#1d2734"/>
+    <path d="M-14 100 L-6 100 L-6 107 L-13 107 Z" fill="#3f4d5e"/>
+    <path d="M14 100 L6 100 L6 107 L13 107 Z" fill="#4a5869"/>
+  </g>
+</svg>

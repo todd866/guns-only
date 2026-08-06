@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1600" width="900" height="1600">
+  <!-- Weekend Ride card: the odd one out, and it should look it. Broad daylight, warm concrete,
+       a painted circuit on a disused runway, nothing hostile anywhere in the frame. This is the
+       only card with a person in it and the only card whose subject is at human scale. -->
+  <defs>
+    <linearGradient id="bsky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6ab3dd"/>
+      <stop offset="0.22" stop-color="#8ec8e6"/>
+      <stop offset="0.36" stop-color="#b4dcee"/>
+      <stop offset="0.44" stop-color="#e0edee"/>
+    </linearGradient>
+    <linearGradient id="tarmac" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8d8f8c"/>
+      <stop offset="0.28" stop-color="#75787a"/>
+      <stop offset="1" stop-color="#4c5158"/>
+    </linearGradient>
+    <linearGradient id="speed" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.5"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="900" height="1600" fill="url(#bsky)"/>
+
+  <!-- Fair-weather cumulus. Flat-topped stacks, no soft edges; a bright day, not a dramatic one. -->
+  <g fill="#ffffff" opacity="0.9">
+    <path d="M96 372 L150 330 L228 322 L286 348 L356 342 L392 372 Z"/>
+    <path d="M112 372 L392 372 L380 392 L124 392 Z" opacity="0.55"/>
+    <path d="M540 268 L586 232 L654 226 L700 250 L762 246 L792 268 Z"/>
+    <path d="M552 268 L792 268 L782 286 L562 286 Z" opacity="0.55"/>
+    <path d="M330 496 L368 470 L426 466 L462 486 L512 484 L536 496 Z" opacity="0.7"/>
+  </g>
+
+  <!-- Airfield edge: treeline, hangars, tower, windsock. All flat, all far away. -->
+  <path d="M0 646 L74 616 L138 646 L214 620 L292 648 L372 622 L456 650 L900 640 V700 H0 Z" fill="#54704a"/>
+  <path d="M62 596 L306 596 L306 648 L62 648 Z" fill="#7f8a90"/>
+  <path d="M62 596 L184 574 L306 596 Z" fill="#98a3a8"/>
+  <path d="M636 604 L788 604 L788 648 L636 648 Z" fill="#77828a"/>
+  <path d="M636 604 L712 586 L788 604 Z" fill="#909ba2"/>
+  <path d="M838 540 L862 540 L862 648 L838 648 Z" fill="#8a949a"/>
+  <path d="M830 528 L870 528 L870 552 L830 552 Z" fill="#b9c6cc"/>
+  <path d="M470 552 L476 552 L476 648 L470 648 Z" fill="#9aa4a8"/>
+  <path d="M476 556 L516 564 L512 582 L476 576 Z" fill="#e8763a"/>
+  <path d="M476 560 L500 565 L498 576 L476 573 Z" fill="#f2f2ee"/>
+
+  <!-- Grass, then the runway itself. -->
+  <path d="M0 690 L900 682 V782 H0 Z" fill="#8d9a54"/>
+  <path d="M0 736 L900 728 V782 H0 Z" fill="#7c8a48"/>
+  <rect y="778" width="900" height="822" fill="url(#tarmac)"/>
+
+  <!-- Slab joints and the painted circuit, converging on a vanishing point off to the right. -->
+  <g opacity="0.5">
+    <path d="M0 852 L900 828 L900 834 L0 858 Z" fill="#5e6367"/>
+    <path d="M0 960 L900 918 L900 928 L0 970 Z" fill="#5b6064"/>
+    <path d="M0 1132 L900 1064 L900 1080 L0 1148 Z" fill="#585d61"/>
+    <path d="M0 1414 L900 1300 L900 1324 L0 1438 Z" fill="#555a5e"/>
+  </g>
+  <path d="M0 806 L900 796 L900 812 L0 822 Z" fill="#e8ebe6" opacity="0.85"/>
+  <path d="M0 1240 L900 1152 L900 1196 L0 1284 Z" fill="#eceee9" opacity="0.9"/>
+
+  <!-- Curbing on the inside of the corner the rider has just left. -->
+  <g>
+    <path d="M0 1500 L900 1360 L900 1418 L0 1560 Z" fill="#e2e5e0"/>
+    <path d="M40 1494 L184 1471 L184 1529 L40 1554 Z" fill="#cf3f34"/>
+    <path d="M328 1449 L472 1426 L472 1484 L328 1507 Z" fill="#cf3f34"/>
+    <path d="M616 1404 L760 1381 L760 1439 L616 1462 Z" fill="#cf3f34"/>
+  </g>
+
+  <!-- Cones, one row, receding. -->
+  <g>
+    <path d="M108 1226 L126 1226 L119 1188 L115 1188 Z" fill="#e8702e"/>
+    <path d="M104 1226 L130 1226 L130 1234 L104 1234 Z" fill="#33302e"/>
+    <path d="M420 1188 L436 1188 L430 1154 L426 1154 Z" fill="#e8702e"/>
+    <path d="M416 1188 L440 1188 L440 1195 L416 1195 Z" fill="#33302e"/>
+    <path d="M712 1152 L726 1152 L721 1122 L717 1122 Z" fill="#e8702e"/>
+    <path d="M708 1152 L730 1152 L730 1158 L708 1158 Z" fill="#33302e"/>
+  </g>
+
+  <!-- Speed streaks. Flat elongated plates, the same trick the game uses for tracers. -->
+  <g opacity="0.5">
+    <path d="M560 730 L900 726 L900 736 L560 740 Z" fill="url(#speed)"/>
+    <path d="M640 1006 L900 998 L900 1012 L640 1020 Z" fill="url(#speed)"/>
+    <path d="M700 1320 L900 1298 L900 1320 L700 1342 Z" fill="url(#speed)"/>
+  </g>
+
+  <!-- Contact shadow, laid on the tarmac before the bike. -->
+  <ellipse cx="452" cy="1112" rx="256" ry="15" fill="#33383f" opacity="0.5"/>
+
+  <!-- The R1 and its rider. Local units: 1 m = 100, front contact patch at (0, 31),
+       wheelbase 140, so the machine is drawn at its real 1.4 m between the axles. -->
+  <g transform="translate(452 862) rotate(-3) scale(3.05) translate(-60 49.5)">
+
+    <!-- Wheels. The blur arcs are two flat rings, not a gradient. -->
+    <circle cx="0" cy="0" r="31" fill="#1f2227"/>
+    <circle cx="140" cy="0" r="31" fill="#1f2227"/>
+    <circle cx="0" cy="0" r="21" fill="#c3ccd4"/>
+    <circle cx="140" cy="0" r="21" fill="#c3ccd4"/>
+    <circle cx="0" cy="0" r="14" fill="#8f99a3"/>
+    <circle cx="140" cy="0" r="14" fill="#8f99a3"/>
+    <circle cx="0" cy="0" r="5" fill="#2b3037"/>
+    <circle cx="140" cy="0" r="5" fill="#2b3037"/>
+
+    <!-- Swingarm and chain run. -->
+    <path d="M74 -18 L142 -3 L142 3 L74 -10 Z" fill="#9aa3ab"/>
+    <path d="M72 -14 L140 -2 L140 1 L72 -11 Z" fill="#4c5158"/>
+
+    <!-- Exhaust can, low and short, under the tail. -->
+    <path d="M96 -12 L128 -8 L130 4 L98 2 Z" fill="#b0b7bd"/>
+    <path d="M96 -12 L112 -10 L113 3 L98 2 Z" fill="#cdd3d8"/>
+
+    <!-- Engine and frame. -->
+    <path d="M34 -46 L88 -46 L92 -22 L78 -8 L44 -10 L30 -26 Z" fill="#3b4148"/>
+    <path d="M34 -46 L60 -46 L62 -22 L44 -10 L30 -26 Z" fill="#4c535b"/>
+    <path d="M22 -58 L96 -58 L96 -44 L22 -44 Z" fill="#8e979f"/>
+    <!-- Radiator, right at the front where the air is. -->
+    <path d="M14 -56 L30 -54 L30 -26 L14 -30 Z" fill="#2c3138"/>
+    <!-- Lower fairing. Without a belly pan a sportbike reads as a naked, and the whole card
+         stops being about a track day. -->
+    <path d="M-14 -50 L20 -50 L74 -30 L86 -12 L48 -10 L4 -22 L-18 -34 Z" fill="#1d5fb4"/>
+    <path d="M-14 -50 L20 -50 L74 -30 L74 -24 L18 -42 L-16 -42 Z" fill="#2f79cf"/>
+    <path d="M4 -22 L48 -10 L86 -12 L86 -7 L46 -5 L2 -17 Z" fill="#eef2f5"/>
+
+    <!-- Forks and front end. -->
+    <path d="M-6 -2 L-19 -58 L-11 -60 L2 -4 Z" fill="#c6ced5"/>
+    <path d="M-13 -60 L-2 -62 L-2 -74 L-15 -72 Z" fill="#3a4048"/>
+    <!-- Front disc. -->
+    <circle cx="0" cy="0" r="17" fill="none" stroke="#6f7a84" stroke-width="3"/>
+
+    <!-- Bodywork. Blue over white with one red stripe: a paint scheme, not a livery claim. -->
+    <path d="M-24 -74 L-6 -84 L14 -84 L34 -76 L40 -62 L14 -56 L-16 -56 L-26 -62 Z" fill="#1d5fb4"/>
+    <path d="M-24 -74 L-6 -84 L14 -84 L18 -74 L-14 -68 L-26 -66 Z" fill="#2f79cf"/>
+    <path d="M-16 -56 L14 -56 L40 -62 L38 -54 L12 -48 L-14 -48 Z" fill="#eef2f5"/>
+    <path d="M-20 -66 L20 -70 L38 -64 L38 -60 L18 -66 L-20 -62 Z" fill="#d0342c"/>
+    <!-- Screen. -->
+    <path d="M-22 -78 L-8 -92 L8 -92 L10 -84 L-6 -84 Z" fill="#7fa8c4" opacity="0.72"/>
+    <!-- Headlight slot. -->
+    <path d="M-26 -70 L-18 -74 L-16 -66 L-25 -64 Z" fill="#1c2129"/>
+
+    <!-- Tank, seat, tail. -->
+    <path d="M22 -76 L58 -78 L70 -70 L70 -60 L22 -58 Z" fill="#1d5fb4"/>
+    <path d="M22 -76 L58 -78 L64 -72 L22 -68 Z" fill="#2f79cf"/>
+    <path d="M66 -74 L104 -74 L108 -66 L68 -62 Z" fill="#23262b"/>
+    <path d="M100 -78 L132 -74 L138 -63 L104 -64 Z" fill="#1d5fb4"/>
+    <path d="M100 -78 L132 -74 L134 -70 L102 -73 Z" fill="#2f79cf"/>
+    <path d="M132 -73 L139 -70 L139 -64 L133 -65 Z" fill="#d0342c"/>
+    <!-- Peg. -->
+    <path d="M86 -22 L100 -20 L100 -16 L86 -18 Z" fill="#8e979f"/>
+
+    <!-- The rider, tucked in behind the screen. Stylised to the same flat vocabulary as the
+         machine: leathers as a few planes, a helmet, a visor, and nothing else. Casualties are
+         abstract in this project; a rider on a track day is not one, and the mode needs a person
+         in it to say "no one is shooting at you". -->
+    <!-- Boot on the peg, drawn first so the leg overlaps it. -->
+    <path d="M84 -30 L100 -27 L101 -18 L85 -19 Z" fill="#1a1d23"/>
+    <!-- Shin and knee. -->
+    <path d="M70 -52 L84 -50 L92 -26 L80 -24 Z" fill="#22262e"/>
+    <!-- Thigh, folded up under the tank. -->
+    <path d="M92 -74 L104 -70 L88 -44 L70 -48 Z" fill="#2b3d63"/>
+    <path d="M92 -74 L104 -70 L96 -58 L84 -60 Z" fill="#3a5488"/>
+    <!-- Knee slider. -->
+    <path d="M68 -54 L80 -51 L80 -43 L67 -45 Z" fill="#e8c341"/>
+    <!-- Back and shoulders, tucked low over the tank. -->
+    <path d="M46 -84 L88 -78 L104 -66 L68 -62 L42 -72 Z" fill="#242830"/>
+    <path d="M40 -96 L70 -102 L94 -84 L92 -76 L48 -80 L36 -88 Z" fill="#2b3d63"/>
+    <path d="M40 -96 L70 -102 L84 -92 L44 -86 Z" fill="#3a5488"/>
+    <!-- Arm down to the clip-on. -->
+    <path d="M34 -92 L46 -90 L6 -68 L-2 -75 Z" fill="#2b3d63"/>
+    <path d="M34 -92 L46 -90 L28 -80 L20 -84 Z" fill="#3a5488"/>
+    <path d="M-4 -73 L8 -66 L0 -60 L-10 -67 Z" fill="#22262e"/>
+    <!-- Helmet, on a neck, sized to the shoulders. -->
+    <path d="M40 -96 L52 -94 L50 -86 L40 -88 Z" fill="#22262e"/>
+    <circle cx="34" cy="-105" r="13" fill="#eef2f5"/>
+    <path d="M22 -110 L34 -118 L46 -111 L47 -103 L23 -101 Z" fill="#1d5fb4"/>
+    <path d="M21 -107 L37 -113 L40 -103 L23 -100 Z" fill="#20242b"/>
+    <path d="M23 -106 L35 -110 L37 -104 L24 -102 Z" fill="#8fc0dd" opacity="0.85"/>
+  </g>
+
+  <!-- Warm low sun wash across the bottom of the frame. -->
+  <path d="M0 1560 L900 1418 L900 1600 L0 1600 Z" fill="#3f444c"/>
+</svg>
