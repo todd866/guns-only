@@ -15,6 +15,7 @@ import {
   sampleCobraCanyonRenderedBasinHeight,
 } from "../cobra_canyon_presentation.js";
 import { COBRA_CANYON_ASSET_ROLES } from "../cobra_canyon_asset_kit.js";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../cobra_canyon_visual_profile.js";
 import { RELEASE_BUILD } from "../../release/release_identity.js";
 
 const world = JSON.parse(await readFile(new URL(
@@ -185,8 +186,14 @@ test("builds the real analytical basin and stays inside every tier ceiling", () 
       COBRA_CANYON_TERRAIN_SEGMENTS[qualityTier] ** 2 * 2,
     );
     assert.ok(maximumY - minimumY > 500, `${qualityTier} needs visible basin/rim relief`);
-    assert.equal(basin.geometry.getAttribute("color").count, positions.count);
-    assert.equal(basin.material.flatShading, true);
+    // The basin runs the painted-tactical surface shader. Its ONE baked attribute is enclosure
+    // concavity — the only shading input a fragment cannot re-derive, because it needs the height
+    // neighbourhood rather than the surface point. Everything else is per fragment, because a
+    // 100 m vertex spacing cannot hold a field edge or a canopy line.
+    assert.equal(basin.geometry.getAttribute("concavity").count, positions.count);
+    assert.equal(basin.geometry.getAttribute("color"), undefined);
+    assert.equal(basin.material.isShaderMaterial, true);
+    assert.equal(basin.material.name, "COBRA_CANYON_BASIN_MATERIAL");
 
     for (const role of ["river", "roads"]) {
       const overlay = byRole(presentation.group, role);
@@ -537,4 +544,78 @@ test("disposes every owned resource exactly once and is idempotent", () => {
   assert.equal(diagnostics.instances, 0);
   assert.equal(diagnostics.triangles, 0);
   assert.equal(diagnostics.hazardsVisible, false);
+});
+
+test("basin carries the enclosure term the fragment shader cannot re-derive", () => {
+  const { plan, presentation } = create("balanced");
+  const basin = byRole(presentation.group, "basin");
+  const concavity = basin.geometry.getAttribute("concavity");
+  const positions = basin.geometry.getAttribute("position");
+  const columnCount = Math.sqrt(positions.count);
+  assert.equal(Number.isInteger(columnCount), true);
+
+  let minimum = Infinity;
+  let maximum = -Infinity;
+  let concaveBelowMean = 0;
+  let concaveSamples = 0;
+  let convexAboveMean = 0;
+  let convexSamples = 0;
+  for (let row = 2; row < columnCount - 2; row++) {
+    for (let column = 2; column < columnCount - 2; column++) {
+      const index = row * columnCount + column;
+      const value = concavity.getX(index);
+      minimum = Math.min(minimum, value);
+      maximum = Math.max(maximum, value);
+      const ringMeanM = (
+        positions.getY(index - 2) + positions.getY(index + 2)
+        + positions.getY(index - 2 * columnCount) + positions.getY(index + 2 * columnCount)
+      ) / 4;
+      const relief = positions.getY(index) - ringMeanM;
+      // The whole point of the term: below the neighbourhood is a valley to darken, above it is
+      // a crest to let catch light. A constant attribute would satisfy a range check alone.
+      if (relief < -3) {
+        concaveSamples += 1;
+        if (value < 0.5) concaveBelowMean += 1;
+      } else if (relief > 3) {
+        convexSamples += 1;
+        if (value > 0.5) convexAboveMean += 1;
+      }
+    }
+  }
+  assert.ok(minimum < 0.2 && maximum > 0.8,
+    `concavity must span the occlusion range, got ${minimum.toFixed(3)}..${maximum.toFixed(3)}`);
+  assert.ok(concaveSamples > 200 && convexSamples > 200,
+    "probe must find both valley and crest vertices");
+  assert.equal(concaveBelowMean, concaveSamples);
+  assert.equal(convexAboveMean, convexSamples);
+  assert.ok(plan);
+});
+
+test("river carries its centreline frame, so the shoreline can exist per fragment", () => {
+  const { presentation } = create("balanced");
+  const river = byRole(presentation.group, "river");
+  const frame = river.geometry.getAttribute("riverFrame");
+  const positions = river.geometry.getAttribute("position");
+  assert.equal(frame.itemSize, 4);
+  assert.equal(frame.count, positions.count);
+
+  let minimumLateral = Infinity;
+  let maximumLateral = -Infinity;
+  for (let index = 0; index < positions.count; index++) {
+    // The shader's own expression: world z is -north.
+    const lateral = Math.abs(
+      (positions.getX(index) - frame.getX(index)) * frame.getZ(index)
+      + (-positions.getZ(index) - frame.getY(index)) * frame.getW(index),
+    );
+    minimumLateral = Math.min(minimumLateral, lateral);
+    maximumLateral = Math.max(maximumLateral, lateral);
+  }
+  // 1.0 is the waterline. The ribbon must reach open water on one side of it and dry gravel on
+  // the other, or the river renders entirely as one or entirely as the other — the exact failure
+  // a baked per-vertex bank colour produced, because all four vertices across the ribbon sit at
+  // its outer edge and no per-vertex quantity can hold an edge in the interior.
+  assert.ok(minimumLateral < 0.3,
+    `river must reach its channel centre, closest lateral was ${minimumLateral.toFixed(3)}`);
+  assert.ok(maximumLateral > 1.05,
+    `river must carry gravel outside the waterline, widest lateral was ${maximumLateral.toFixed(3)}`);
 });
