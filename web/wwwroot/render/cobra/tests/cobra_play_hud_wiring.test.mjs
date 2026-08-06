@@ -21,6 +21,39 @@ test("Hold the Bridge play HUD surfaces gunner status through the canvas HUD", a
   assert.match(main, /cobraRotorcraftHudModel/);
   assert.match(main, /drawCobraRotorcraftHud/);
   assert.match(rotorcraftHud, /gunnerStatusText/);
+  // The designation bracket must project through the render camera the scene was drawn
+  // with, or the mark and the world disagree by exactly the camera's crew bias.
+  assert.match(main, /projectWorldPoint: projectSimPointToScreen/);
+  assert.match(main, /projectionScratch\.project\(camera\)/);
+});
+
+test("the airframe silhouette follows the camera mode from a single call site", async () => {
+  const main = await source("cobra-lab/main.js");
+  // Build 264 defect: the mode was set from inside the manual and tour branches, and a
+  // terminal mission freezes the tour branch — so a crash in first person left the shell
+  // hidden and the exterior camera framed empty sky. The camera mode is the only input
+  // that decides this, so exactly one unconditional call site may own it.
+  assert.equal((main.match(/setFirstPerson\(/g) ?? []).length, 1);
+  assert.match(main, /setFirstPerson\(!tourInput\.checked\)/);
+  const sync = main.match(/function syncAuthorityCamera\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.doesNotMatch(sync, /setFirstPerson/);
+});
+
+test("the combiner stands down once the mission is terminal", async () => {
+  const main = await source("cobra-lab/main.js");
+  // A terminal card ends the sortie. Painting NR 100% and a live gun line behind an
+  // AIRFRAME LOST card states rotor truth for a rotor that is gone.
+  const drawHud = main.match(/function drawHud\([\s\S]*?\n\}\n/)?.[0] ?? "";
+  assert.match(drawHud, /!missionTerminal/);
+});
+
+test("the combiner paints above the scene vignette instead of under it", async () => {
+  const css = await source("cobra-lab/styles.css");
+  // .viewport::after is a generated last child, so an auto-z HUD canvas is painted
+  // under the vignette and the tapes lose ~35% of their luminance at the frame edges,
+  // which is exactly where the speed and altitude tapes live.
+  const rule = css.match(/#hud-canvas \{[\s\S]*?\}/)?.[0] ?? "";
+  assert.match(rule, /z-index: 1/);
 });
 
 test("ground war presentation receives the selected target for the in-world highlight", async () => {
@@ -48,6 +81,9 @@ test("vestigial freelook cannot fight the authority camera once the bridge owns 
 test("play loop exposes the authoritative snapshot as a headless-QA steering seam", async () => {
   const main = await source("cobra-lab/main.js");
   assert.match(main, /window\.__gunsOnlyCobraAuthority = authorityState/);
+  // The zero-cockpit ruling is a rendering claim, and the exterior silhouette on a tour
+  // rail is a few pixels wide. Both directions get a measurable seam rather than a squint.
+  assert.match(main, /window\.__gunsOnlyCobraAirframeVisible = \(\) => ah1gPresence\?\.group\?\.visible === true/);
 });
 
 test("strike terminal states present a cause card, not the generic sortie-ended line", async () => {

@@ -114,6 +114,17 @@ test("rotorcraft HUD model reads NR and torque as percentages of authoritative l
   assert.equal(droopedModel.rotor.nrLevel, "warning");
   assert.equal(droopedModel.rotor.torqueLevel, "warning");
   assert.ok(droopedModel.warnings.some((w) => w.text === "LOW ROTOR" && w.level === "warning"));
+
+  // 100% is the AH-1G transmission limit (Ah1gCobraDefinition: TransmissionLimitW =
+  // 1100 shp), and a loaded Cobra hovers in the low nineties. A caution band that opens
+  // at 85% is amber in the hover, every sortie, which teaches the pilot to ignore amber.
+  // Caution means "about to spend the limit"; the limit itself is the warning.
+  const hoverPower = modelFixture();
+  hoverPower.vehicle.rotorcraft.transmission_limit_fraction = 0.93;
+  assert.equal(cobraRotorcraftHudModel(hoverPower).rotor.torqueLevel, "normal");
+  const nearLimit = modelFixture();
+  nearLimit.vehicle.rotorcraft.transmission_limit_fraction = 0.98;
+  assert.equal(cobraRotorcraftHudModel(nearLimit).rotor.torqueLevel, "caution");
 });
 
 test("hover emphasis engages below translational lift and grades the sink", () => {
@@ -156,12 +167,75 @@ test("gunner line carries the crew truth with target, ammo and FOB context", () 
   assert.equal(firingModel.gunner.line, "GUN FIRING");
   assert.equal(firingModel.gunner.level, "firing");
 
+  // Tracking is not readiness. GREEN must mean "hold F and it shoots"; a turret that is
+  // on the target but has no firing solution painted the same green, which told the pilot
+  // the gun was good when the only thing that was good was the tracker.
+  const noSolution = modelFixture();
+  noSolution.gunner = { ...noSolution.gunner, reason: "NoBallisticSolution" };
+  const noSolutionModel = cobraRotorcraftHudModel(noSolution);
+  assert.equal(noSolutionModel.gunner.line, "GUN NO SOLUTION");
+  assert.equal(noSolutionModel.gunner.level, "normal");
+  const slewing = modelFixture();
+  slewing.gunner = { ...slewing.gunner, reason: "SightNotCoincident" };
+  assert.equal(cobraRotorcraftHudModel(slewing).gunner.level, "normal");
+  const safe = modelFixture();
+  safe.gunner = { ...safe.gunner, reason: "WeaponsSafe" };
+  assert.equal(cobraRotorcraftHudModel(safe).gunner.level, "caution");
+
   const dry = modelFixture();
   dry.ground_war = { ...dry.ground_war, ammo_dry: true, over_fob: true };
   const dryModel = cobraRotorcraftHudModel(dry);
   assert.equal(dryModel.gunner.line, "GUN DRY");
   assert.equal(dryModel.gunner.level, "warning");
   assert.match(dryModel.gunner.detail, /FOB PAD · REARM/);
+});
+
+test("the gunner's mark becomes a designation the pilot can find in the world", () => {
+  // A crew line that says GUN ON TARGET while nothing is marked in the world leaves the
+  // pilot flying someone else's solution. The designation carries the target's authority
+  // position so the extras can bracket it through the real camera, plus slant range so an
+  // out-of-frame target is still quantified.
+  const fixture = modelFixture();
+  fixture.vehicle.x_m = 0;
+  fixture.vehicle.y_m = 120;
+  fixture.vehicle.z_m = 0;
+  fixture.ground_war.units = [
+    { id: "unit.hostile.recoilless.2", faction: "hostile", alive: true, x_m: 300, y_m: 40, z_m: 400 },
+    { id: "unit.hostile.recoilless.9", faction: "hostile", alive: true, x_m: 10, y_m: 0, z_m: 10 },
+  ];
+  const model = cobraRotorcraftHudModel(fixture);
+  assert.equal(model.designation.id, "unit.hostile.recoilless.2");
+  assert.equal(model.designation.label, "2");
+  assert.equal(model.designation.level, "ready");
+  assert.deepEqual(
+    [model.designation.worldX, model.designation.worldY, model.designation.worldZ],
+    [300, 40, 400],
+  );
+  // sqrt(300^2 + 80^2 + 400^2) = 506.36
+  assert.equal(Math.round(model.designation.rangeM), 506);
+  assert.match(model.gunner.detail, /506 M/);
+
+  const firing = cobraRotorcraftHudModel({
+    ...fixture,
+    gunner: { ...fixture.gunner, fire_authorized: true },
+  });
+  assert.equal(firing.designation.level, "firing");
+});
+
+test("a dead, absent or unselected target designates nothing at all", () => {
+  const dead = modelFixture();
+  dead.ground_war.units = [
+    { id: "unit.hostile.recoilless.2", faction: "hostile", alive: false, x_m: 1, y_m: 2, z_m: 3 },
+  ];
+  assert.equal(cobraRotorcraftHudModel(dead).designation, null);
+
+  const absent = modelFixture();
+  absent.ground_war.units = [];
+  assert.equal(cobraRotorcraftHudModel(absent).designation, null);
+
+  const unselected = modelFixture();
+  unselected.gunner = { selected_target_id: null, state: "awaitingtarget", reason: "NoTarget" };
+  assert.equal(cobraRotorcraftHudModel(unselected).designation, null);
 });
 
 test("warnings stay ranked and capped so the lane cannot bar-code", () => {

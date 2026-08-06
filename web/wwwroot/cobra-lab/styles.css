@@ -184,10 +184,14 @@ body[data-shell="play"] .objective-hud {
     linear-gradient(180deg, rgba(0, 0, 0, 0.18), transparent 22%, transparent 70%, rgba(0, 0, 0, 0.28));
 }
 
-/* Production hud.js combiner: over the world, under the DOM chrome. */
+/* Production hud.js combiner: over the world, under the DOM chrome. The z-index
+   lifts it clear of .viewport::after — that vignette is a generated last child, so an
+   auto-z canvas paints beneath it and loses a third of its luminance exactly where the
+   speed and altitude tapes sit. A combiner is emitted light, not a filmed subject. */
 #hud-canvas {
   position: absolute;
   inset: 0;
+  z-index: 1;
   pointer-events: none;
 }
 

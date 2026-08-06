@@ -178,6 +178,7 @@ const hudStateScratch = {};
 // Top inset clears the fixed mission header; the mission card lives bottom-left.
 const HUD_SAFE_INSETS = Object.freeze({ top: 40, right: 0, bottom: 0, left: 0 });
 const hudViewport = { width: 1, height: 1, pixelRatio: 1 };
+const projectionScratch = new THREE.Vector3();
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x6f8a7e);
@@ -313,6 +314,10 @@ function sampleAuthorityState(nowMs, { force = false } = {}) {
   authorityState = JSON.parse(bridge.GetState());
   // QA seam: headless smoke scripts steer against authoritative truth, not DOM guesses.
   window.__gunsOnlyCobraAuthority = authorityState;
+  // Same contract for the one visual claim a screenshot cannot settle: first person must
+  // render ZERO airframe geometry, exterior/tour must render the silhouette. A distant
+  // ship on a tour rail is a handful of pixels either way, so this is measured, not eyed.
+  window.__gunsOnlyCobraAirframeVisible = () => ah1gPresence?.group?.visible === true;
   refreshGroundTargets();
   groundWarPresentation?.sync(authorityState.ground_war ?? null, targetSelect.value || null);
   recordTelemetry(nowMs);
@@ -663,9 +668,6 @@ function syncAuthorityCamera() {
   const vehicle = readVehiclePose();
   if (!vehicle) return;
   const presence = ensureAh1gPresence();
-  // First person renders NO cockpit geometry (Build 264 owner ruling) — the
-  // silhouette exists only for exterior/tour framing.
-  presence.setFirstPerson(true);
   updateAh1gPresence(presence, vehicle, presenceDeltaSeconds);
   eyeWorldFromVehicle(THREE, vehicle, camera.position);
   if (camera.near !== 0.12) {
@@ -885,13 +887,13 @@ function animate(timeMs) {
     bridge.Advance(deltaSeconds);
     sampleAuthorityState(timeMs);
     const pose = readVehiclePose();
-    if (pose) {
-      const presence = ensureAh1gPresence();
-      // Exterior framing: the tour camera looks AT the ship, so the silhouette returns.
-      presence.setFirstPerson(false);
-      updateAh1gPresence(presence, pose, deltaSeconds);
-    }
+    if (pose) updateAh1gPresence(ensureAh1gPresence(), pose, deltaSeconds);
   }
+  // The camera mode is the ONLY input that decides whether the airframe exists: first
+  // person renders zero cockpit geometry (Build 264 owner ruling), the tour camera looks
+  // AT the ship so the silhouette returns. Set unconditionally — the earlier per-branch
+  // version left the shell hidden whenever a terminal mission froze the tour branch.
+  if (ah1gPresence) ah1gPresence.setFirstPerson(!tourInput.checked);
   renderer.render(scene, camera);
   drawHud(timeMs, deltaSeconds);
   recordFrameDuration(rawDeltaMs);
@@ -901,11 +903,13 @@ function animate(timeMs) {
 /**
  * World + HUD, zero cockpit: the production hud.js pass over the rendered frame,
  * then the rotorcraft extras in the same combiner language. Tour/preview is an
- * exterior camera, so the combiner clears instead.
+ * exterior camera, so the combiner clears instead — as does a terminal sortie, whose
+ * card owns the frame and whose rotor truth stopped being true at the strike.
  */
 function drawHud(timeMs, deltaSeconds) {
   const pose = readVehiclePose();
-  const firstPerson = Boolean(bridge) && !tourInput.checked && pose && authorityState;
+  const firstPerson = Boolean(bridge) && !tourInput.checked && !missionTerminal
+    && pose && authorityState;
   if (!firstPerson) {
     hudPresentationCtx.save();
     hudPresentationCtx.setTransform(1, 0, 0, 1, 0, 0);
@@ -926,7 +930,25 @@ function drawHud(timeMs, deltaSeconds) {
     height: hudViewport.height,
     pixelRatio: hudViewport.pixelRatio,
     safeInsets: HUD_SAFE_INSETS,
+    projectWorldPoint: projectSimPointToScreen,
   });
+}
+
+/**
+ * Sim-frame world point -> CSS pixels on the combiner, through the REAL render camera
+ * (so the designation bracket and hud.js symbology cannot disagree). Sim Z is north and
+ * the render frame flips it, exactly as the ground-war presentation places its units.
+ */
+function projectSimPointToScreen(xM, yM, zM) {
+  projectionScratch.set(Number(xM) || 0, Number(yM) || 0, -(Number(zM) || 0));
+  projectionScratch.project(camera);
+  const inFrame = projectionScratch.z < 1
+    && Math.abs(projectionScratch.x) <= 1 && Math.abs(projectionScratch.y) <= 1;
+  return {
+    x: (projectionScratch.x * 0.5 + 0.5) * hudViewport.width,
+    y: (0.5 - projectionScratch.y * 0.5) * hudViewport.height,
+    inFrame,
+  };
 }
 
 function isManualControl(code) {

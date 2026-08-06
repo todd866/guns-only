@@ -102,8 +102,11 @@ export function cobraRotorcraftHudModel(authorityState) {
   const nrLevel = nrPct < 90 || nrPct > 107 ? "warning"
     : nrPct < 97 || nrPct > 103 ? "caution" : "normal";
   const torquePct = finite(rotor.transmission_limit_fraction) * 100;
+  // 100% IS the transmission limit (Ah1gCobraDefinition: 1100 shp), and a loaded Cobra
+  // hovers in the low nineties. Caution opens only where the pilot is about to spend the
+  // limit; an 85% band would sit amber through every hover and teach him to ignore it.
   const torqueLevel = torquePct > 100 ? "warning"
-    : torquePct >= 85 ? "caution" : "normal";
+    : torquePct >= 97 ? "caution" : "normal";
 
   const gsKt = finite(vehicle.ground_speed_mps) * MPS_TO_KT;
   const vsiFpm = finite(vehicle.vertical_speed_mps) * MPS_TO_FPM;
@@ -132,14 +135,44 @@ export function cobraRotorcraftHudModel(authorityState) {
   const gunner = authorityState?.gunner ?? null;
   const war = authorityState?.ground_war ?? null;
   const line = gunnerStatusText(gunner, war);
+  // GREEN means "hold F and it shoots" — nothing weaker. A turret that is tracking but has
+  // no ballistic solution, or is still slewing onto the sight line, is not a ready gun; it
+  // stays in the dim normal treatment so the ready cue keeps its meaning.
   const gunnerLevel = war?.ammo_dry === true ? "warning"
     : gunner?.fire_authorized === true ? "firing"
-      : gunner?.state === "tracking" ? "ready"
+      : gunner?.state === "tracking" && gunner?.reason === "ConsentReleased" ? "ready"
         : gunner?.state === "masked" || gunner?.state === "outoflimits"
-          || gunner?.state === "inhibited" ? "caution" : "normal";
+          || gunner?.state === "inhibited" || gunner?.reason === "WeaponsSafe"
+          ? "caution" : "normal";
   const detailParts = [];
   const targetId = gunner?.selected_target_id;
+  // The gunner's mark, resolved to authority world truth so the extras can bracket it
+  // through the real camera. A dead or absent unit designates nothing: a bracket the
+  // turret is not actually on is worse than no bracket.
+  const unit = targetId
+    ? (war?.units ?? []).find((candidate) => candidate?.id === targetId && candidate.alive === true)
+    : null;
+  const designation = unit === undefined || unit === null ? null : {
+    id: unit.id,
+    label: String(unit.id).split(".").pop(),
+    level: gunnerLevel,
+    worldX: finite(unit.x_m),
+    worldY: finite(unit.y_m),
+    worldZ: finite(unit.z_m),
+    rangeM: Math.hypot(
+      finite(unit.x_m) - finite(vehicle.x_m),
+      finite(unit.y_m) - finite(vehicle.y_m),
+      finite(unit.z_m) - finite(vehicle.z_m),
+    ),
+  };
   if (targetId) detailParts.push(`TGT ${String(targetId).split(".").pop()}`);
+  // Slant range keeps an out-of-frame target quantified — the turret's arc is far wider
+  // than the combiner, so "on target" often means "off the glass".
+  if (designation) {
+    detailParts.push(designation.rangeM < 1_000
+      ? `${Math.round(designation.rangeM)} M`
+      : `${(designation.rangeM / 1_000).toFixed(1)} KM`);
+  }
   if (war) {
     detailParts.push(war.ammo_dry === true
       ? "AMMO DRY"
@@ -161,6 +194,7 @@ export function cobraRotorcraftHudModel(authorityState) {
     hover: { gsKt, vsiFpm, aglM, hoverEmphasis, sinkLevel },
     warnings,
     gunner: { line, level: gunnerLevel, detail: detailParts.join(" · ") },
+    designation,
   };
 }
 
@@ -200,6 +234,7 @@ export function drawCobraRotorcraftHud(ctx, model, {
   height,
   pixelRatio = 1,
   safeInsets = null,
+  projectWorldPoint = null,
 } = {}) {
   if (!model || !ctx) return;
   const layout = fighterHudLayout({ width, height, safeInsets: safeInsets ?? {} });
@@ -262,6 +297,39 @@ export function drawCobraRotorcraftHud(ctx, model, {
       x, panelTop + 45);
   }
 
+  // Turret designation: a bracket on the gunner's mark, projected through the SAME
+  // camera hud.js projects its own symbology through, so the mark and the world agree.
+  // Range-scaled and never clamped to the frame edge — a bracket parked on the bezel
+  // would claim the turret is looking somewhere it is not. The slant range on the crew
+  // line is what carries an off-glass target.
+  if (model.designation && typeof projectWorldPoint === "function") {
+    const point = projectWorldPoint(
+      model.designation.worldX, model.designation.worldY, model.designation.worldZ,
+    );
+    if (point && point.inFrame === true) {
+      const color = levelColor(model.designation.level);
+      // Grows as the target does, but never smaller than a bracket a pilot can find at a
+      // glance: at 6 km the honest angular size is a couple of pixels, which is a smudge.
+      const half = Math.max(10, Math.min(23, 14_000 / Math.max(300, model.designation.rangeM)));
+      const arm = half * 0.5;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = model.designation.level === "firing" ? 2.2 : 1.6;
+      ctx.beginPath();
+      for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        const cx = point.x + sx * half;
+        const cy = point.y + sy * half;
+        ctx.moveTo(cx - sx * arm, cy);
+        ctx.lineTo(cx, cy);
+        ctx.lineTo(cx, cy - sy * arm);
+      }
+      ctx.stroke();
+      ctx.textAlign = "left";
+      ctx.fillStyle = color;
+      ctx.font = `800 10px ${MONO}`;
+      ctx.fillText(model.designation.label, point.x + half + 5, point.y - half + 5);
+    }
+  }
+
   // Rotor-state annunciations in the F-22 warning lane (empty for the Cobra: no
   // GCAS/stall/gear chrome is armed by the adapter's snapshot).
   {
@@ -269,14 +337,18 @@ export function drawCobraRotorcraftHud(ctx, model, {
     ctx.textAlign = "center";
     for (const warning of model.warnings) {
       const color = warning.level === "warning" ? RED : AMBER;
+      ctx.font = `800 16px ${MONO}`;
+      // A backing plate, not just glow: the second annunciation row lands on the +20°
+      // ladder rung, and an unbacked LOW ROTOR read as struck through in flight test.
+      const plateWidth = ctx.measureText(warning.text).width + 22;
+      panel(ctx, (width - plateWidth) / 2, y - 11, plateWidth, 22, color);
       ctx.shadowColor = warning.level === "warning"
         ? "rgba(255, 70, 93, 0.62)" : "rgba(255, 176, 32, 0.5)";
       ctx.shadowBlur = 10;
       ctx.fillStyle = color;
-      ctx.font = `800 16px ${MONO}`;
       ctx.fillText(warning.text, width / 2, y);
       ctx.shadowBlur = 0;
-      y += 20;
+      y += 26;
     }
   }
 
@@ -286,7 +358,12 @@ export function drawCobraRotorcraftHud(ctx, model, {
   {
     const cardClearance = width < 720 ? 196 : 0;
     const bottom = height - Math.max(Number(safeInsets?.bottom) || 0, cardClearance);
-    const heroY = bottom - 46;
+    let heroY = bottom - 46;
+    // On a narrow shell the mission card pushes the crew line up into exactly the band the
+    // ROTOR and HOVER panels occupy, and the gun state ends up written across NR%. When the
+    // bottom anchor lands anywhere near that band, the line steps above the panels instead.
+    const panelBandFloor = panelTop + 56 + 40;
+    if (heroY < panelBandFloor) heroY = panelTop - 48;
     const color = levelColor(model.gunner.level, GREEN_DIM);
     ctx.font = `800 12px ${MONO}`;
     const heroWidth = Math.max(120, ctx.measureText(model.gunner.line).width + 26);
