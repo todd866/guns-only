@@ -1417,7 +1417,10 @@ internal static class SnapshotProjection {
                 + $"\"{prefix}lx\":{wreckLift.X.ToString("F5", wreckCulture)},"
                 + $"\"{prefix}ly\":{wreckLift.Y.ToString("F5", wreckCulture)},"
                 + $"\"{prefix}lz\":{wreckLift.Z.ToString("F5", wreckCulture)},"
-                + $"\"{prefix}_alive\":0,";
+                + $"\"{prefix}_alive\":0,"
+                // A wreck carries no fighting gun, but the block is fixed-width: omitting these
+                // shifts every later slot in the hot frame.
+                + NoWingmanGunneryJson(prefix);
         }
         if (wingman is null)
             return $"\"{prefix}_present\":0,\"{prefix}x\":0.000,"

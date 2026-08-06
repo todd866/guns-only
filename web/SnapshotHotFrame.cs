@@ -2110,6 +2110,9 @@ internal static class SnapshotHotFrame {
             writer.Num($"{prefix}ly", wreckLift.Y, 5);
             writer.Num($"{prefix}lz", wreckLift.Z, 5);
             writer.Num($"{prefix}_alive", 0, RawInteger);
+            // A wreck carries no fighting gun, but the block is fixed-width: omitting these
+            // shifts every later slot in the buffer.
+            WriteNoWingmanGunnery(ref writer, prefix);
             return;
         }
         if (wingman is null) {
