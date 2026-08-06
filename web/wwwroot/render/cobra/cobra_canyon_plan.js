@@ -342,6 +342,23 @@ export function validateCobraCanyonWorld(value) {
   requirePositive(terrainModel.rimRiseM, "terrain.model.rimRiseM");
   requireFinite(terrainModel.macroUndulationM, "terrain.model.macroUndulationM");
   requireFinite(terrainModel.mesoUndulationM, "terrain.model.mesoUndulationM");
+  requireFinite(terrainModel.ridgeReliefM, "terrain.model.ridgeReliefM");
+  requirePositive(terrainModel.ridgeWavelengthM, "terrain.model.ridgeWavelengthM");
+  requireFinite(terrainModel.ridgeBearingRad, "terrain.model.ridgeBearingRad");
+  requireFinite(terrainModel.crossRidgeReliefM, "terrain.model.crossRidgeReliefM");
+  requirePositive(terrainModel.crossRidgeWavelengthM, "terrain.model.crossRidgeWavelengthM");
+  requireFinite(terrainModel.crossRidgeBearingRad, "terrain.model.crossRidgeBearingRad");
+  const gorgeRim = requireRecord(terrainModel.gorgeRim, "terrain.model.gorgeRim");
+  requirePositive(gorgeRim.innerM, "terrain.model.gorgeRim.innerM");
+  requirePositive(gorgeRim.crestM, "terrain.model.gorgeRim.crestM");
+  requirePositive(gorgeRim.falloffM, "terrain.model.gorgeRim.falloffM");
+  requireFinite(gorgeRim.falloffRetain, "terrain.model.gorgeRim.falloffRetain");
+  requireFinite(gorgeRim.leftRiseM, "terrain.model.gorgeRim.leftRiseM");
+  requireFinite(gorgeRim.rightRiseM, "terrain.model.gorgeRim.rightRiseM");
+  requirePositive(gorgeRim.sideBlendM, "terrain.model.gorgeRim.sideBlendM");
+  if (gorgeRim.crestM <= gorgeRim.innerM || gorgeRim.falloffM <= gorgeRim.crestM) {
+    fail("terrain.model.gorgeRim", "must declare increasing inner/crest/falloff distances.");
+  }
   const terrainRibbons = requireArray(terrain.ribbons, "terrain.ribbons");
   const routeLanes = requireArray(input.routeLanes, "routeLanes");
   const heroCells = requireArray(input.heroCells, "heroCells");
@@ -403,6 +420,14 @@ export function validateCobraCanyonWorld(value) {
     requirePositive(ribbon.halfWidthM, `${label}.halfWidthM`);
     requirePositive(ribbon.blendWidthM, `${label}.blendWidthM`);
     requireFinite(ribbon.bankRiseM, `${label}.bankRiseM`);
+    // Fraction of the half-width that stays dead flat before the bank starts to climb. A gorge
+    // has a FLOOR; without one the cross-section is a parabola from the centreline out and the
+    // river reads as a drainage ditch in a bowl. It is also what lets the rendered water meander
+    // inside its own valley without climbing the bank.
+    const floorFraction = requireFinite(ribbon.floorFraction, `${label}.floorFraction`);
+    if (floorFraction < 0 || floorFraction >= 1) {
+      fail(`${label}.floorFraction`, "must lie in [0, 1).");
+    }
     assertPath(ribbon.pointsLocalM, bounds, `${label}.pointsLocalM`);
   });
 
@@ -735,8 +760,83 @@ function smoothstep(minimum, maximum, value) {
 }
 
 /**
+ * Ridged relief. `1 - |sin|` has a cusp where the sine crosses zero and a smooth minimum a
+ * quarter-period away, which is a crest line over a rounded hollow — the shape a drainage-carved
+ * upland actually has. A product of two sines (the macro/meso terms) can only make a smooth
+ * egg-carton, and an egg-carton at 78 m amplitude over a 1.4 km wavelength is exactly the
+ * "rolling English farmland" read. Wavelengths stay well above 2x the 100 m render grid so the
+ * crests survive sampling instead of aliasing into noise.
+ */
+function ridgeFold(eastM, northM, bearingRad, wavelengthM) {
+  const along = (eastM * Math.cos(bearingRad) + northM * Math.sin(bearingRad)) / wavelengthM;
+  return 1 - Math.abs(Math.sin(along * Math.PI));
+}
+
+/**
+ * Nearest point on a ribbon centreline, with the signed lateral offset. Positive is the left bank
+ * looking downstream (the polyline runs south-west to north-east, so left is north-west): the
+ * gorge is deliberately asymmetric, because a real river undercuts one bank and terraces the
+ * other, and because this world wants a masking ridge on one side and an exposed plantation
+ * basin on the other.
+ */
+function nearestRibbonSample(ribbon, east, north) {
+  let closestDistanceM = Infinity;
+  let closestElevationM = 0;
+  let signedOffsetM = 0;
+  for (let index = 1; index < ribbon.pointsLocalM.length; index++) {
+    const from = ribbon.pointsLocalM[index - 1];
+    const to = ribbon.pointsLocalM[index];
+    const segmentEast = to[0] - from[0];
+    const segmentNorth = to[2] - from[2];
+    const lengthSquared = segmentEast * segmentEast + segmentNorth * segmentNorth;
+    const segmentBlend = lengthSquared > 0
+      ? clamp(((east - from[0]) * segmentEast + (north - from[2]) * segmentNorth)
+        / lengthSquared, 0, 1)
+      : 0;
+    const closestEast = from[0] + segmentEast * segmentBlend;
+    const closestNorth = from[2] + segmentNorth * segmentBlend;
+    const distanceM = Math.hypot(east - closestEast, north - closestNorth);
+    if (distanceM >= closestDistanceM) continue;
+    closestDistanceM = distanceM;
+    closestElevationM = from[1] + (to[1] - from[1]) * segmentBlend;
+    const lengthM = Math.max(1e-9, Math.sqrt(lengthSquared));
+    signedOffsetM = ((east - closestEast) * -segmentNorth
+      + (north - closestNorth) * segmentEast) / lengthM;
+  }
+  return { closestDistanceM, closestElevationM, signedOffsetM };
+}
+
+/**
+ * The gorge rim: a raised lip flanking the river, peaking at `crestM` from the centreline and
+ * decaying back toward the plain beyond `falloffM`. It is a LIP, not a plateau step, on purpose —
+ * a step would lift the whole far half of the world and drown the road and ridge routes, whose
+ * authored altitudes are gameplay authority. The lip only reshapes the near field the helicopter
+ * is masked by, and leaves terrain two kilometres out within ~a quarter of its height.
+ */
+function gorgeRimRise(model, closestDistanceM, signedOffsetM) {
+  const rim = model.gorgeRim;
+  const side = clamp(signedOffsetM / rim.sideBlendM, -1, 1);
+  const riseM = rim.rightRiseM + (rim.leftRiseM - rim.rightRiseM) * (side * 0.5 + 0.5);
+  const lip = smoothstep(rim.innerM, rim.crestM, closestDistanceM)
+    * (1 - smoothstep(rim.crestM * 1.4, rim.falloffM, closestDistanceM)
+      * (1 - rim.falloffRetain));
+  return riseM * lip;
+}
+
+function riverRibbonOf(plan) {
+  return plan.terrainRibbons.find((ribbon) => String(ribbon.laneId ?? "").includes("river"))
+    ?? plan.terrainRibbons[0];
+}
+
+/**
  * Samples the deterministic analytical terrain used by the standalone lab camera and floor.
  * It is a presentation floor, not a replacement for simulation-owned collision truth.
+ *
+ * KERNEL MIRROR. `CobraCanyonTerrainSurface.HeightM` in sim/Cobra/CobraCanyonDefinition.cs is
+ * the simulation's copy of this function and must stay numerically identical — the ground war,
+ * the FOB, the turret line-of-sight checks and the helicopter's own ground clearance all read
+ * that one, and `CobraCanyonDefinitionTests.TerrainHeightMatchesBrowserPlannerGoldenSamples`
+ * pins the two together at ten sample points.
  */
 export function sampleCobraCanyonTerrain(plan, eastM, northM) {
   requireRecord(plan, "Cobra Canyon plan");
@@ -756,6 +856,7 @@ export function sampleCobraCanyonTerrain(plan, eastM, northM) {
   );
   const radius = Math.hypot(east, north);
   const rim = smoothstep(model.basinRadiusM, 10_600, radius);
+  const river = nearestRibbonSample(riverRibbonOf(plan), east, north);
   let heightM = model.baseElevationM
     + model.rimRiseM * rim * rim
     + model.macroUndulationM
@@ -763,29 +864,22 @@ export function sampleCobraCanyonTerrain(plan, eastM, northM) {
       * Math.cos((north - east * 0.21) / 1_170)
     + model.mesoUndulationM
       * Math.sin((east - north) / 510)
-      * Math.cos((east + north) / 690);
+      * Math.cos((east + north) / 690)
+    + model.ridgeReliefM
+      * (ridgeFold(east, north, model.ridgeBearingRad, model.ridgeWavelengthM) - 0.5)
+    + model.crossRidgeReliefM
+      * (ridgeFold(east, north, model.crossRidgeBearingRad, model.crossRidgeWavelengthM) - 0.5)
+    + gorgeRimRise(model, river.closestDistanceM, river.signedOffsetM);
 
-  for (const ribbon of plan.terrainRibbons) {
-    let closestDistanceM = Infinity;
-    let closestElevationM = 0;
-    for (let index = 1; index < ribbon.pointsLocalM.length; index++) {
-      const from = ribbon.pointsLocalM[index - 1];
-      const to = ribbon.pointsLocalM[index];
-      const segmentEast = to[0] - from[0];
-      const segmentNorth = to[2] - from[2];
-      const lengthSquared = segmentEast * segmentEast + segmentNorth * segmentNorth;
-      const segmentBlend = lengthSquared > 0
-        ? clamp(((east - from[0]) * segmentEast + (north - from[2]) * segmentNorth)
-          / lengthSquared, 0, 1)
-        : 0;
-      const closestEast = from[0] + segmentEast * segmentBlend;
-      const closestNorth = from[2] + segmentNorth * segmentBlend;
-      const distanceM = Math.hypot(east - closestEast, north - closestNorth);
-      if (distanceM >= closestDistanceM) continue;
-      closestDistanceM = distanceM;
-      closestElevationM = from[1] + (to[1] - from[1]) * segmentBlend;
-    }
-    const normalizedCrossing = clamp(closestDistanceM / ribbon.halfWidthM, 0, 1);
+  function carveCorridor(ribbon) {
+    const { closestDistanceM, closestElevationM } = nearestRibbonSample(ribbon, east, north);
+    // Flat floor first, then the bank. `normalizedCrossing` measures the climb from the OUTER
+    // edge of the floor, not from the centreline, so the inner `floorFraction` of the corridor
+    // is level ground the aircraft and the meandering water sheet both sit on.
+    const floorEdgeM = ribbon.halfWidthM * ribbon.floorFraction;
+    const normalizedCrossing = ribbon.halfWidthM > floorEdgeM
+      ? clamp((closestDistanceM - floorEdgeM) / (ribbon.halfWidthM - floorEdgeM), 0, 1)
+      : 1;
     const targetElevationM = closestElevationM
       + ribbon.bankRiseM * normalizedCrossing * normalizedCrossing;
     const ribbonBlend = 1 - smoothstep(
@@ -794,6 +888,16 @@ export function sampleCobraCanyonTerrain(plan, eastM, northM) {
       closestDistanceM,
     );
     heightM += (targetElevationM - heightM) * ribbonBlend;
+  }
+
+  // CARVE ORDER: land corridors, then hero-cell shaping, then the river LAST. Water is a
+  // landscape's base level — nothing crosses a river without a bridge — so no road bench and
+  // no hero patch may lift the channel. Authored order used to decide it, and where the ridge
+  // bench converges on the river near the objective the bench won: the rendered water sheet,
+  // which drapes on this field, climbed 178 m uphill over the last two kilometres.
+  const riverRibbon = riverRibbonOf(plan);
+  for (const ribbon of plan.terrainRibbons) {
+    if (ribbon !== riverRibbon) carveCorridor(ribbon);
   }
 
   for (const cell of plan.cells) {
@@ -811,6 +915,10 @@ export function sampleCobraCanyonTerrain(plan, eastM, northM) {
       * (Math.sin((east - centreEast) / 185) + Math.cos((north - centreNorth) / 225));
     heightM += (centreElevation + localRelief - heightM) * blend;
   }
+
+
+
+  carveCorridor(riverRibbon);
 
   if (!Number.isFinite(heightM)) {
     throw new RangeError("Cobra Canyon terrain sample was not finite.");

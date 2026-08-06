@@ -26,17 +26,33 @@
       "baseElevationM": 248,
       "basinRadiusM": 5100,
       "rimRiseM": 610,
-      "macroUndulationM": 78,
-      "mesoUndulationM": 31
+      "macroUndulationM": 52,
+      "mesoUndulationM": 26,
+      "ridgeReliefM": 152,
+      "ridgeWavelengthM": 2350,
+      "ridgeBearingRad": 0.66,
+      "crossRidgeReliefM": 82,
+      "crossRidgeWavelengthM": 1450,
+      "crossRidgeBearingRad": -0.82,
+      "gorgeRim": {
+        "innerM": 180,
+        "crestM": 660,
+        "falloffM": 2300,
+        "falloffRetain": 0.24,
+        "leftRiseM": 218,
+        "rightRiseM": 92,
+        "sideBlendM": 380
+      }
     },
     "ribbons": [
       {
         "id": "terrain-ribbon.cobra-canyon.river-gorge.v1",
         "laneId": "route.cobra-canyon.river-gorge.v1",
         "kind": "river-gorge",
-        "halfWidthM": 155,
-        "blendWidthM": 520,
-        "bankRiseM": 38,
+        "halfWidthM": 185,
+        "blendWidthM": 190,
+        "bankRiseM": 46,
+        "floorFraction": 0.66,
         "authority": {
           "role": "terrain-authority",
           "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"
@@ -64,6 +80,7 @@
         "halfWidthM": 205,
         "blendWidthM": 430,
         "bankRiseM": 54,
+        "floorFraction": 0,
         "authority": {
           "role": "terrain-authority",
           "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"
@@ -89,8 +106,9 @@
         "laneId": "route.cobra-canyon.road-plantation.v1",
         "kind": "road-and-plantation-bench",
         "halfWidthM": 235,
-        "blendWidthM": 360,
+        "blendWidthM": 470,
         "bankRiseM": 24,
+        "floorFraction": 0.34,
         "authority": {
           "role": "terrain-authority",
           "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"
@@ -239,8 +257,8 @@
       "boundsLocalM": [-4700, -2350, -1750, 1050],
       "terrainPatch": {
         "centerLocalM": [-3150, 112, -650],
-        "radiusM": 980,
-        "blendWidthM": 480,
+        "radiusM": 340,
+        "blendWidthM": 250,
         "undulationM": 8
       },
       "authority": {
@@ -256,8 +274,8 @@
       "boundsLocalM": [-5350, 350, -2450, 3750],
       "terrainPatch": {
         "centerLocalM": [-3850, 482, 2050],
-        "radiusM": 920,
-        "blendWidthM": 420,
+        "radiusM": 560,
+        "blendWidthM": 300,
         "undulationM": 11
       },
       "authority": {
@@ -273,8 +291,8 @@
       "boundsLocalM": [-1450, -5350, 2450, -2350],
       "terrainPatch": {
         "centerLocalM": [350, 224, -3850],
-        "radiusM": 1050,
-        "blendWidthM": 460,
+        "radiusM": 780,
+        "blendWidthM": 380,
         "undulationM": 6
       },
       "authority": {
@@ -485,7 +503,7 @@
       "id": "hazard.cobra-canyon.saddle-wire-low.v1",
       "kind": "power-wire",
       "visualBandId": "band.cobra-canyon.critical.v1",
-      "collision": {"shape": "capsuleSegment", "fromLocalM": [-3600, 541, 3010], "toLocalM": [-3235, 541, 3290], "radiusM": 0.2},
+      "collision": {"shape": "capsuleSegment", "fromLocalM": [-3600, 552, 3010], "toLocalM": [-3235, 552, 3290], "radiusM": 0.2},
       "authority": {"role": "collision-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
       "presentationOnly": false,
       "targetable": false
@@ -494,7 +512,7 @@
       "id": "hazard.cobra-canyon.saddle-wire-high.v1",
       "kind": "power-wire",
       "visualBandId": "band.cobra-canyon.critical.v1",
-      "collision": {"shape": "capsuleSegment", "fromLocalM": [-3598, 548, 3007], "toLocalM": [-3233, 548, 3287], "radiusM": 0.2},
+      "collision": {"shape": "capsuleSegment", "fromLocalM": [-3598, 559, 3007], "toLocalM": [-3233, 559, 3287], "radiusM": 0.2},
       "authority": {"role": "collision-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
       "presentationOnly": false,
       "targetable": false
@@ -570,10 +588,10 @@
       "id": "ambient.cobra-canyon.gorge-riparian.v1",
       "kind": "riparian-canopy",
       "archetype": "procedural://cobra-vietnam/riparian-stand",
-      "boundsLocalM": [-5000, -2500, 1500, 3300],
+      "boundsLocalM": [-6400, -6400, 6400, 6400],
       "visualBandId": "band.cobra-canyon.ambient.v1",
       "priority": 1,
-      "instancesByQuality": {"mobile": 54, "balanced": 100, "desktop": 180},
+      "instancesByQuality": {"mobile": 76, "balanced": 148, "desktop": 250},
       "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
       "presentationOnly": true,
       "targetable": false
@@ -597,7 +615,7 @@
       "boundsLocalM": [-1900, -5900, 3000, -2100],
       "visualBandId": "band.cobra-canyon.ambient.v1",
       "priority": 1,
-      "instancesByQuality": {"mobile": 60, "balanced": 120, "desktop": 240},
+      "instancesByQuality": {"mobile": 34, "balanced": 66, "desktop": 128},
       "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
       "presentationOnly": true,
       "targetable": false
@@ -606,10 +624,10 @@
       "id": "ambient.cobra-canyon.west-canopy-mass.v1",
       "kind": "highland-canopy",
       "archetype": "procedural://cobra-vietnam/canopy-mass",
-      "boundsLocalM": [-8000, -8000, -1800, 8000],
+      "boundsLocalM": [-8000, -8000, -900, 8000],
       "visualBandId": "band.cobra-canyon.ambient.v1",
       "priority": 2,
-      "instancesByQuality": {"mobile": 52, "balanced": 100, "desktop": 220},
+      "instancesByQuality": {"mobile": 92, "balanced": 178, "desktop": 352},
       "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
       "presentationOnly": true,
       "targetable": false
@@ -618,10 +636,10 @@
       "id": "ambient.cobra-canyon.east-canopy-mass.v1",
       "kind": "highland-canopy",
       "archetype": "procedural://cobra-vietnam/canopy-mass",
-      "boundsLocalM": [1800, -8000, 8000, 8000],
+      "boundsLocalM": [900, -8000, 8000, 8000],
       "visualBandId": "band.cobra-canyon.ambient.v1",
       "priority": 2,
-      "instancesByQuality": {"mobile": 52, "balanced": 100, "desktop": 220},
+      "instancesByQuality": {"mobile": 92, "balanced": 178, "desktop": 352},
       "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
       "presentationOnly": true,
       "targetable": false
@@ -693,7 +711,7 @@
       "boundsLocalM": [-4900, -2250, 1800, 3600],
       "visualBandId": "band.cobra-canyon.ambient.v1",
       "priority": 4,
-      "instancesByQuality": {"mobile": 0, "balanced": 0, "desktop": 36},
+      "instancesByQuality": {"mobile": 0, "balanced": 0, "desktop": 20},
       "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
       "presentationOnly": true,
       "targetable": false
@@ -718,7 +736,7 @@
         "id": "archetype.cobra-canyon.jungle-canopy.v1",
         "sourceKind": "procedural-modular",
         "renderRole": "jungle",
-        "paletteHex": ["#1D3420", "#2D4B28", "#46623A", "#6B7547"],
+        "paletteHex": ["#33512F", "#456539", "#5A7748", "#77855C"],
         "scaleM": {"width": 26, "height": 32, "depth": 22},
         "routeAffinity": [
           "route.cobra-canyon.river-gorge.v1",
@@ -732,7 +750,7 @@
         "id": "archetype.cobra-canyon.jungle-understory.v1",
         "sourceKind": "procedural-modular",
         "renderRole": "jungle",
-        "paletteHex": ["#273B24", "#3C5030", "#57623B"],
+        "paletteHex": ["#3A5433", "#4E6841", "#6A7550"],
         "scaleM": {"width": 9, "height": 6, "depth": 8},
         "routeAffinity": [
           "route.cobra-canyon.river-gorge.v1",
@@ -747,7 +765,7 @@
         "id": "archetype.cobra-canyon.plantation-row.v1",
         "sourceKind": "procedural-ribbon",
         "renderRole": "plantation",
-        "paletteHex": ["#243B24", "#355332", "#71543A"],
+        "paletteHex": ["#3A5334", "#4C6B45", "#8A6B4A"],
         "scaleM": {"width": 8, "height": 18, "depth": 120},
         "routeAffinity": ["route.cobra-canyon.road-plantation.v1"],
         "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
@@ -844,7 +862,7 @@
         "sourceKind": "shader-card",
         "renderRole": "mist",
         "paletteHex": ["#C6CEC4", "#E1E4D9"],
-        "scaleM": {"width": 46, "height": 8, "depth": 20},
+        "scaleM": {"width": 17, "height": 3.4, "depth": 9},
         "routeAffinity": ["route.cobra-canyon.river-gorge.v1"],
         "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
         "presentationOnly": true,
@@ -1211,7 +1229,7 @@
       "maxLandmarkArchetypes": 11,
       "maxSetPieceCells": 9,
       "maxAmbientBatches": 6,
-      "maxAmbientInstances": 320,
+      "maxAmbientInstances": 400,
       "maxDrawCalls": 24,
       "maxShadowCasters": 0
     },
@@ -1224,7 +1242,7 @@
       "maxLandmarkArchetypes": 11,
       "maxSetPieceCells": 9,
       "maxAmbientBatches": 9,
-      "maxAmbientInstances": 720,
+      "maxAmbientInstances": 860,
       "maxDrawCalls": 36,
       "maxShadowCasters": 96
     },
@@ -1237,7 +1255,7 @@
       "maxLandmarkArchetypes": 11,
       "maxSetPieceCells": 9,
       "maxAmbientBatches": 12,
-      "maxAmbientInstances": 1440,
+      "maxAmbientInstances": 1600,
       "maxDrawCalls": 52,
       "maxShadowCasters": 256
     }

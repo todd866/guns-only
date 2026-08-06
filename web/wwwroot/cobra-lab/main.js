@@ -900,7 +900,8 @@ function animate(timeMs) {
 
   if (tourInput.checked) updateTour(deltaSeconds);
   else updateManual(deltaSeconds);
-  const aglM = tourInput.checked ? tourCommandedAglM : cameraAglM();
+  applyParkedCamera();
+  const aglM = tourInput.checked && !parkedCamera ? tourCommandedAglM : cameraAglM();
   presentation.update({
     cameraPosition: camera.position,
     cameraAglM: aglM,
@@ -921,6 +922,39 @@ function animate(timeMs) {
   recordFrameDuration(rawDeltaMs);
   updateMetrics(aglM);
 }
+
+// QA seam, alongside __gunsOnlyCobraAuthority: headless visual review parks the PRODUCTION camera
+// at a named world pose so the same shot is comparable across builds. It overrides pose only —
+// after the tour/manual update and after presentation.update(), so streaming, ambient shedding,
+// budgets, shaders and the sim all still run their production path (one-engine doctrine). Visual
+// work on this scene has to be judged from rendered frames, and a reviewer who cannot return to
+// the same viewpoint is comparing two different pictures.
+let parkedCamera = null;
+function applyParkedCamera() {
+  if (!parkedCamera) return;
+  const groundM = groundAt(parkedCamera.eastM, parkedCamera.northM);
+  camera.position.set(parkedCamera.eastM, groundM + parkedCamera.aglM, -parkedCamera.northM);
+  camera.rotation.set(parkedCamera.pitchRad, parkedCamera.yawRad, 0);
+  if (camera.near !== 0.5) {
+    camera.near = 0.5;
+    camera.updateProjectionMatrix();
+  }
+}
+window.__gunsOnlyCobraLabCamera = Object.freeze({
+  park(eastM, northM, aglM, yawRad, pitchRad = 0) {
+    parkedCamera = {
+      eastM: Number(eastM),
+      northM: Number(northM),
+      aglM: Number(aglM),
+      yawRad: Number(yawRad),
+      pitchRad: Number(pitchRad),
+    };
+    return parkedCamera;
+  },
+  release() {
+    parkedCamera = null;
+  },
+});
 
 function isManualControl(code) {
   return code === "KeyW" || code === "KeyS" || code === "KeyA" || code === "KeyD"
