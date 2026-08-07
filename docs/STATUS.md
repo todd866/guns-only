@@ -1,11 +1,11 @@
 # Current product and verification status
 
 Updated: 2026-08-07
-Production: Build 268, revision `93ff754b67e63e8579226cf219851ce4c5d267fa`, deployment
-`dpl_8ULB5iXpoSTmkyXDnm5YWSz1SyS1` (verified live via /api/build-info 2026-08-07). Builds
-253-265 shipped without this ledger always being updated in lock-step; treat per-build claims in
+Production: Build 271, revision `686c894f31f1e91009c8b8a8687e438bedad5470`, deployment
+`dpl_Dafmx86L8KEowdYYN4THxfHtvCkj` (verified live via /api/build-info 2026-08-07). Builds
+253-270 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Next candidate: Build 271 (branch `fix/cobra-land-gun-harness`) — flared landings survive, standing seam auto-selected for fire, climb segment in the flight harness, hub-only rotor-strike latch.
+Next candidate: none stamped — owner verify Camp Ember flare landing, SEAM hold-F ammo, moderate climb NR on live 271.
 
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
@@ -35,7 +35,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | F9F-2 Panther off Essex (`korea-panther`) | **quarantined** | Preview acknowledgement only | Build 238 ownship-only kernel flies the production terrain catapult/route/return/groove to a physical W2 trap (100/100 focused); packaged route, touch-RTB, HUD, and barrier contracts passed silent-browser acceptance | Complete representative human desktop/touch flights and historical/presentation acceptance before any promotion |
 | MIDGE-03 Facility Nine (`indoor`) | **quarantined** | `/indoor/` preview acknowledgement | Candidate UI now enforces doctrine-safe controls and blocks premature return | Re-drive the default stealth route and representative touch/keyboard paths |
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
-| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge: AH-1G, sim-owned ground war, tip/hold win/lose, M134 + Camp Ember rearm, Tab/F gunner. Build 267 shipped camera-shared HUD, hover FM ~80% TQ, standing seam. Build 268 candidate: governor P-headroom, approach-relative seeds + Tab prefers seam, hub RALT, smoke cone, cursor/tip | Fresh representative human Hold-the-Bridge with rounds away on Build 268; p99 frame budget still diagnostic. Longer arc: DCS-BS1-grade flight dynamics |
+| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge: AH-1G, sim-owned ground war, tip/hold win/lose, M134 + Camp Ember rearm, Tab/F gunner. Build 270 restored FPV + aviation HUD units. Build 271: hub-only rotor-strike latch, sink-only hard impact, envelope-safe seam seed + auto-select, closed-loop landing + crew-chain flight harnesses | Owner verify flare landing at Camp Ember, SEAM hold-F ammo drop, moderate climb without stuck LOW ROTOR. Scenery/HUD clutter/p99 still open. Longer arc: DCS-BS1-grade flight dynamics |
 | Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load, lappable circuit from Build 264+. Build 267 adds ride telemetry (speed/gear/lean/lap/frame) | Fresh representative human lap on the fixed artifact; deeper instrumentation still provisional |
 
 ## Research-only packages
@@ -46,10 +46,10 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Live production is Build 267 (`f12fbf8`, `dpl_4PDzdUopFhcTf26NYML557bZeR28`). Shipped from
-  PR #29 with local `bin/check` green and fast-forward-equivalent Verify provenance on head
-  `8fed33f`. Do not treat the flaky `boot does not stutter` smoke as a frame-rate measurement —
-  see `docs/work-orders/2026-08-07-cobra-build-266-followups.md` item 7.
+- Live production is Build 271 (`686c894`, `dpl_Dafmx86L8KEowdYYN4THxfHtvCkj`). Shipped from
+  PR #35; Verify green after one documented re-run of flaky `boot does not stutter` smoke —
+  see `docs/work-orders/2026-08-07-cobra-build-266-followups.md` item 7. Do not treat that gate
+  as a frame-rate measurement.
 - A candidate is releasable only when its exact pushed SHA has a complete green gate, or the
   owner accepts a documented flaky-gate exception with live `/api/build-info` verification.
 - Production deployment fails closed unless it can pin the current public rollback identity.
