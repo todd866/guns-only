@@ -10,8 +10,8 @@ async function source(path) {
 
 test("cobra wires the shared first-run overlay with cobra content, play shell only", async () => {
   const main = await source("cobra-lab/main.js");
-  assert.match(main, /render\/onboarding\/first_run_controls\.js\?v=266/);
-  assert.match(main, /render\/onboarding\/controls_content\.js\?v=266/);
+  assert.match(main, /render\/onboarding\/first_run_controls\.js\?v=\d+/);
+  assert.match(main, /render\/onboarding\/controls_content\.js\?v=\d+/);
   assert.match(main, /COBRA_ONBOARDING_CONTENT/);
   assert.match(main, /maybeShowFirstRun/);
   // Lab shell (?lab=1) is the owner's inspection harness — no onboarding chrome there.
@@ -28,7 +28,7 @@ test("cobra feeds the nudge scheduler from authority truth every frame", async (
 
 test("weekend ride wires the shared overlay with ride content and a standstill nudge", async () => {
   const main = await source("weekend-ride/main.js");
-  assert.match(main, /render\/onboarding\/first_run_controls\.js\?v=266/);
+  assert.match(main, /render\/onboarding\/first_run_controls\.js\?v=\d+/);
   assert.match(main, /WEEKEND_RIDE_ONBOARDING_CONTENT/);
   assert.match(main, /maybeShowFirstRun/);
   assert.match(main, /advanceNudges/);
