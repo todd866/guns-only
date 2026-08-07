@@ -862,7 +862,7 @@
         "sourceKind": "shader-card",
         "renderRole": "mist",
         "paletteHex": ["#C6CEC4", "#E1E4D9"],
-        "scaleM": {"width": 17, "height": 3.4, "depth": 9},
+        "scaleM": {"width": 22, "height": 5.2, "depth": 12},
         "routeAffinity": ["route.cobra-canyon.river-gorge.v1"],
         "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
         "presentationOnly": true,
@@ -1027,6 +1027,7 @@
       "boundsLocalM": [-6900, -6600, -6100, -5800],
       "archetypeIds": [
         "archetype.cobra-canyon.landmark-camp.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
         "archetype.cobra-canyon.jungle-understory.v1",
         "archetype.cobra-canyon.river-mist.v1",
         "archetype.cobra-canyon.rock-scatter.v1"
@@ -1071,6 +1072,7 @@
       "boundsLocalM": [-3200, -950, -2200, 0],
       "archetypeIds": [
         "archetype.cobra-canyon.landmark-bridge.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
         "archetype.cobra-canyon.rock-scatter.v1",
         "archetype.cobra-canyon.water-riffle.v1",
         "archetype.cobra-canyon.river-mist.v1",

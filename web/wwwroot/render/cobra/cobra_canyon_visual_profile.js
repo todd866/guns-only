@@ -95,7 +95,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // so copying that bounce literally rendered every tree and hut as a black silhouette. The
     // bounce is lifted to stand in for the missing IBL; the sky term and key are untouched.
     hemisphereGroundColor: 0x2c3a33,
-    hemisphereIntensity: 0.9,
+    hemisphereIntensity: 0.96,
     sunColor: 0xffe2b4,
     sunIntensity: 2.65,
     sunDistanceM: 9_000,
@@ -167,7 +167,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // patchwork needs and which Korea gets from its own parcel tint instead.
     bands: Object.freeze({
       // Greener wild floor — the gorge corridor was reading too khaki against humid haze.
-      valleyFloor: Object.freeze([0.142, 0.188, 0.078]),
+      valleyFloor: Object.freeze([0.136, 0.196, 0.082]),
       cultivationGold: Object.freeze([0.210, 0.242, 0.175]),
       jungleMid: Object.freeze([0.046, 0.124, 0.052]),
       lateriteSlope: Object.freeze([0.310, 0.145, 0.055]),
