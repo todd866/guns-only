@@ -5,8 +5,9 @@ Production: Build 268, revision `93ff754b67e63e8579226cf219851ce4c5d267fa`, depl
 `dpl_8ULB5iXpoSTmkyXDnm5YWSz1SyS1` (verified live via /api/build-info 2026-08-07). Builds
 253-265 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Next candidate: none queued — Build 268 closed the owner Build 267 flight follow-ups (governor
-P-headroom, approach-relative seeds + seam-first Tab, hub RALT, smoke cone, cursor/tip).
+Next candidate: Build 270 (branch `fix/cobra-aviation-units`) — Cobra play HUD aviation
+units (RALT/AGL feet, gun range feet inside 1 NM, FOB/route NM) and FPV restored to
+velocity-through-camera (Build 267/268 had glued it to the ladder horizon).
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
 evidence for the build and commit they name, but they do not override this page or the executable

@@ -3,6 +3,24 @@ import { fighterHudLayout } from "../hud/fighter_layout.js";
 
 const MPS_TO_KT = 3600 / 1852;
 const MPS_TO_FPM = 196.850394;
+const M_TO_FT = 3.28084;
+const M_TO_NM = 1 / 1852;
+
+/** Player-facing slant range. Gun marks use feet inside 1 NM; nav/FOB always uses NM. */
+export function formatAviationRange(rangeM, { style = "tactical" } = {}) {
+  const meters = Number(rangeM);
+  if (!Number.isFinite(meters) || meters < 0) return "—";
+  const nm = meters * M_TO_NM;
+  if (style === "nav" || nm >= 1) return `${nm.toFixed(1)} NM`;
+  return `${Math.round(meters * M_TO_FT)} FT`;
+}
+
+/** Player-facing AGL / radar altitude in feet. */
+export function formatAviationAgl(aglM) {
+  const meters = Number(aglM);
+  if (!Number.isFinite(meters) || meters < 0) return null;
+  return Math.max(0, Math.round(meters * M_TO_FT));
+}
 
 /** Ah1gCobraDefinition.MainRotor.NominalRpm — the 100% NR reference. */
 export const AH1G_NOMINAL_ROTOR_RPM = 324;
@@ -67,9 +85,8 @@ export function formatCobraRotorcraftStrip(vehicle, routeGuidance = null) {
   const aglM = Number.isFinite(hubClearanceM) && hubClearanceM >= 0
     ? hubClearanceM
     : routeClearanceM;
-  const aglText = Number.isFinite(Number(aglM)) && Number(aglM) >= 0
-    ? `${Math.round(Number(aglM))}M`
-    : "—";
+  const aglFt = formatAviationAgl(aglM);
+  const aglText = aglFt === null ? "—" : `${aglFt}FT`;
   const warn = [];
   if (rotor.governor_saturated) warn.push("GOV");
   if (finite(rotor.vortex_ring_severity) >= 0.20) warn.push("VRS");
@@ -179,9 +196,8 @@ export function cobraRotorcraftHudModel(authorityState) {
   // Slant range keeps an out-of-frame target quantified — the turret's arc is far wider
   // than the combiner, so "on target" often means "off the glass".
   if (designation) {
-    detailParts.push(designation.rangeM < 1_000
-      ? `${Math.round(designation.rangeM)} M`
-      : `${(designation.rangeM / 1_000).toFixed(1)} KM`);
+    // Owner ruling: American/aviation units on the play HUD — feet inside 1 NM, else NM.
+    detailParts.push(formatAviationRange(designation.rangeM));
   }
   if (war) {
     detailParts.push(war.ammo_dry === true
@@ -189,7 +205,7 @@ export function cobraRotorcraftHudModel(authorityState) {
       : `AMMO ${Math.max(0, Math.floor(finite(war.ammo_remaining)))}`);
     detailParts.push(war.over_fob === true
       ? "FOB PAD · REARM"
-      : `FOB ${(finite(war.fob_range_m) / 1000).toFixed(1)} KM`);
+      : `FOB ${formatAviationRange(finite(war.fob_range_m), { style: "nav" })}`);
   }
 
   return {
@@ -201,7 +217,14 @@ export function cobraRotorcraftHudModel(authorityState) {
       regime: regimeToken(rotor.regime),
       governorSaturated: rotor.governor_saturated === true,
     },
-    hover: { gsKt, vsiFpm, aglM, hoverEmphasis, sinkLevel },
+    hover: {
+      gsKt,
+      vsiFpm,
+      aglM,
+      aglFt: formatAviationAgl(aglM),
+      hoverEmphasis,
+      sinkLevel,
+    },
     warnings,
     gunner: { line, level: gunnerLevel, detail: detailParts.join(" · ") },
     designation,
@@ -293,8 +316,8 @@ export function drawCobraRotorcraftHud(ctx, model, {
     ctx.textAlign = "center";
     ctx.fillStyle = model.hover.sinkLevel === "normal" ? GREEN : sinkColor;
     ctx.font = `800 15px ${MONO}`;
-    const agl = model.hover.aglM;
-    ctx.fillText(agl === null ? "RALT ---" : `RALT ${Math.max(0, Math.round(agl))} M`,
+    const aglFt = model.hover.aglFt;
+    ctx.fillText(aglFt === null ? "RALT ---" : `RALT ${aglFt} FT`,
       x, panelTop + 13);
     const vsi = model.hover.vsiFpm;
     const vsiText = `${vsi > 25 ? "↑" : vsi < -25 ? "↓" : "·"} ${Math.abs(Math.round(vsi / 50) * 50)} FPM`;

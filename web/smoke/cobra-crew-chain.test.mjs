@@ -170,7 +170,7 @@ test("the published Cobra route runs the AH-1G crew chain from designation to ro
         );
         held = await page.evaluate(async () => {
           const { cobraRotorcraftHudModel } =
-            await import("/render/cobra/cobra_rotorcraft_hud.js?v=268");
+            await import("/render/cobra/cobra_rotorcraft_hud.js?v=270");
           const state = window.__smokeFiringSnapshot;
           return {
             model: cobraRotorcraftHudModel(state),

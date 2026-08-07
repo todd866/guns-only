@@ -591,11 +591,10 @@ export const SCENARIOS = [
     state: { range_m: 950 },
   },
   {
-    // Cobra gorge forward view: camera-referenced ladder + waterline/FPV agreement under the
-    // rear-seat +0.08 rad (~4.6°) sight bias. Without this scenario the Build 266 ladder/waterline
-    // split shipped with no rendered frame to inspect.
+    // Cobra gorge forward view: camera-referenced ladder + waterline under the rear-seat
+    // +0.08 rad (~4.6°) sight bias; FPV remains velocity-through-camera.
     name: "cobra-forward-level",
-    about: "Cobra camera-referenced HUD: waterline, FPV and pitch-ladder 0 share the horizon under a +4.6° sight bias.",
+    about: "Cobra camera-referenced HUD: waterline and pitch-ladder 0 share the horizon under a +4.6° sight bias; FPV follows ground velocity.",
     player: { headingDeg: 0, pitchDeg: 0, bankDeg: 0, altFt: 400 },
     bandit: { azimuthDeg: 0, elevationDeg: -8, rangeM: 500 },
     lead: null,

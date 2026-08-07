@@ -115,9 +115,9 @@ export function createCobraHudFrame(THREE) {
     directorPoint: null,
     flightPathPoint: null,
     // The rear-seat camera carries a fixed +0.08 rad sight bias and a clamped
-    // (<=0.05 rad) gunner-target lean. Pitch ladder, waterline and FPV all reference
-    // that camera so they agree with the drawn horizon; the gun cross stays on
-    // body-forward (see hud.js cameraReferencedAirframeAnchors).
+    // (<=0.05 rad) gunner-target lean. Pitch ladder and waterline reference that
+    // camera so they agree with the drawn horizon. FPV stays velocity-through-camera
+    // (not glued to the ladder 0 rung). Gun cross stays on body-forward.
     ladderReference: "camera",
     sensorYaw: 0,
     sensorPitch: 0,
