@@ -59,7 +59,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     density: 0.000310,
     hazeBands: 6,
     // Stronger discrete aerial-perspective planes than korea's 0.65 default.
-    hazeBandBlend: 0.72,
+    hazeBandBlend: 0.78,
   }),
 
   // THE F-22'S SKY, in linear working space, lifted from createDecisionSupportSky's cool
@@ -168,8 +168,8 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     bands: Object.freeze({
       // Greener wild floor — the gorge corridor was reading too khaki against humid haze.
       valleyFloor: Object.freeze([0.136, 0.196, 0.082]),
-      cultivationGold: Object.freeze([0.210, 0.242, 0.175]),
-      jungleMid: Object.freeze([0.046, 0.124, 0.052]),
+      cultivationGold: Object.freeze([0.198, 0.236, 0.188]),
+      jungleMid: Object.freeze([0.042, 0.130, 0.055]),
       lateriteSlope: Object.freeze([0.310, 0.145, 0.055]),
       ridgeSage: Object.freeze([0.110, 0.168, 0.098]),
       rimRock: Object.freeze([0.335, 0.318, 0.255]),

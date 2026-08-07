@@ -38,6 +38,8 @@ Always dual-sync `content/.../cobra-canyon.world.json` ↔ `web/wwwroot/content/
 - [x] Stamp Build 286 for overnight pass 12; STATUS next-candidate in sync
 - [x] Pass 13: Canopy at Radio Mast + Mill Stack; mist opacity 0.42; deeper river + bankWidth 13; cloudShadow 0.62
 - [x] Stamp Build 287 for overnight pass 13; STATUS next-candidate in sync
+- [x] Pass 14: Canopy on plantation waterworks + Red Earth quarry (all 10 set-pieces); taller mist; hazeBandBlend 0.78; cooler/wetter cultivation
+- [x] Stamp Build 288 for overnight pass 14; STATUS next-candidate in sync
 - [ ] Do not deploy without owner OK
 
 ## Stop conditions
