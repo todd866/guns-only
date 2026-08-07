@@ -62,6 +62,9 @@ public static partial class CobraWebBridge
         // A restart must show the fresh spawn pose immediately, not one stale frame of the
         // previous sortie.
         FillHotPose(_runtime);
+        // Prefer the standing seam so Tab/F from spawn hits a shootable mark (owner flights
+        // spent ~87% of the sortie on OutOfLimits infantry).
+        _selectedTargetId = CobraGroundWarRuntime.GunnerySeamUnitId;
     }
 
     static CobraAiGunner CreateGunner() => new(new CobraAiGunnerDefinition(

@@ -680,8 +680,14 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         double rimVerticalDropM = _definition.MainRotor.RadiusM * Math.Sqrt(
             Math.Max(0.0, 1.0 - Math.Pow(
                 Math.Clamp(diskNormalWorld.Dot(WorldUp), -1.0, 1.0), 2.0)));
+        // Tip-path clearance is reported for instruments. Strike latch uses hub clearance only:
+        // a rigid-disk tip model "hits" during any nose-up flare long before the skids touch
+        // (owner landings were impossible). A flapping rotor would unload the tip; until that
+        // model exists, treating tip geometry as a hard kill is false precision.
         mainRotorClearanceM = hubWorld.Y - surface.HeightM - rimVerticalDropM;
-        if (mainRotorClearanceM <= 0.0) _rotorStrikeLatched = true;
+        double hubClearanceM = hubWorld.Y - surface.HeightM;
+        if (hubClearanceM <= 0.0)
+            _rotorStrikeLatched = true;
 
         if (minimumSkidHeightM > surface.HeightM || velocity.Y > 0.0)
         {
@@ -690,11 +696,10 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         }
 
         double normalImpactSpeedMps = Math.Max(0.0, -velocity.Y);
-        (double pitchRad, double rollRad, _) =
-            PlayerVehicleValidation.AttitudeAngles(attitude);
-        if (normalImpactSpeedMps > geometry.HardImpactNormalSpeedMps
-            || Math.Abs(rollRad) > geometry.MaximumLandingRollRad
-            || Math.Abs(pitchRad) > geometry.MaximumLandingPitchRad)
+        // Sink rate alone decides a hard impact. Folding pitch/roll into the kill switch made
+        // every flared landing a crash (owner: "landing is impossible") — a 15–25° nose-up
+        // attitude is normal short-final technique, not a wreck.
+        if (normalImpactSpeedMps > geometry.HardImpactNormalSpeedMps)
             _hardImpactLatched = true;
 
         position = new Vec3D(

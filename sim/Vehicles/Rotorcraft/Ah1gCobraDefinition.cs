@@ -103,10 +103,12 @@ public static class Ah1gCobraDefinition
                 AftSkidStationM: -1.65,
                 MainRotorHubOffsetBodyM: new Vec3D(0.0, 2.073, -0.155),
                 TailRotorHubOffsetBodyM: new Vec3D(0.386, 1.190, -8.300),
-                HardImpactNormalSpeedMps: 3.05,
+                // Owner landings flared at ~15–20° and ~400–600 fpm and always crashed: the old
+                // 10° pitch / 3.05 m/s (~600 fpm) box treated every flare as a hard impact.
+                HardImpactNormalSpeedMps: 6.5,
                 StableContactHorizontalSpeedMps: 0.45,
-                MaximumLandingRollRad: Degrees(12.0),
-                MaximumLandingPitchRad: Degrees(10.0)));
+                MaximumLandingRollRad: Degrees(22.0),
+                MaximumLandingPitchRad: Degrees(25.0)));
         definition.Validate();
         return definition;
     }

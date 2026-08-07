@@ -1,55 +1,55 @@
-import * as THREE from "../vendor/three.module.js?v=270";
+import * as THREE from "../vendor/three.module.js?v=271";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=270";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=270";
+} from "../render/cobra/cobra_canyon_plan.js?v=271";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=271";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=270";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=270";
-import { createHud } from "../hud.js?v=270";
+} from "../render/cobra/cobra_canyon_tour.js?v=271";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=271";
+import { createHud } from "../hud.js?v=271";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=270";
+} from "../render/cobra/cobra_hud_adapter.js?v=271";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=270";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=271";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=270";
+} from "../render/cobra/cobra_control_profile.js?v=271";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=270";
+} from "../render/cobra/cobra_pilot_input.js?v=271";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=270";
+} from "../render/cobra/ah1g_presence.js?v=271";
 import {
   COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD,
   clampInducedLookRotation,
   lookAnglesFromOffset,
   lookOffsetFromAngles,
-} from "../render/cobra/cobra_camera_bias.js?v=270";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=270";
+} from "../render/cobra/cobra_camera_bias.js?v=271";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=271";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=270";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=270";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=270";
+} from "../render/cobra/cobra_mission_exit.js?v=271";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=271";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=271";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -220,7 +220,7 @@ const projectionScratch = new THREE.Vector3();
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=270";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=271";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -681,7 +681,8 @@ function refreshGroundTargets() {
   for (const unit of units.filter((candidate) => candidate.alive)) {
     const option = document.createElement("option");
     option.value = unit.id;
-    option.textContent = `${unit.faction === "friendly" ? "FRI" : "HOS"} · ${unit.role} · ${unit.id.slice(-7)}`;
+    const tag = unit.id === SEAM_ID ? "SEAM" : unit.id.slice(-7);
+    option.textContent = `${unit.faction === "friendly" ? "FRI" : "HOS"} · ${unit.role} · ${tag}`;
     targetSelect.append(option);
   }
   if (previous && [...targetSelect.options].some((option) => option.value === previous))
@@ -689,6 +690,7 @@ function refreshGroundTargets() {
   else if (hostileTargetIds.length && playerHasInteracted) {
     // Auto-reselect keeps continuity after a kill, but never before the pilot's first input —
     // a cold-boot auto-selection dragged the camera toward a hostile on spawn.
+    // The WASM bridge still auto-assigns the seam for fire consent without moving the camera.
     hostileTargetIndex = 0;
     targetSelect.value = hostileTargetIds[0];
   }

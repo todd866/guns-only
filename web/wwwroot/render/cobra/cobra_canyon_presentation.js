@@ -1,13 +1,13 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=270";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=271";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=270";
-import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=270";
+} from "./cobra_canyon_asset_kit.js?v=271";
+import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=271";
 import {
   createCobraCanyonBasinMaterial,
   createCobraCanyonRiverMaterial,
-} from "./cobra_canyon_terrain_material.js?v=270";
+} from "./cobra_canyon_terrain_material.js?v=271";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 

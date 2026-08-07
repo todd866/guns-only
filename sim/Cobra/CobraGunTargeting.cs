@@ -20,7 +20,10 @@ public static class CobraGunTargeting
 {
     public const double TurretAzimuthLimitRad = 110.0 * Math.PI / 180.0;
     public const double TurretMaxElevationRad = 20.0 * Math.PI / 180.0;
-    public const double TurretMinElevationRad = -50.0 * Math.PI / 180.0;
+    // FM 1-40 cites −50°; gorge spawn look-down onto a floor seam needed a few more degrees
+    // or every mark read OUT OF LIMITS (owner Build 270). Keep the sourced floor as the
+    // design centre and allow a small playability skirt.
+    public const double TurretMinElevationRad = -55.0 * Math.PI / 180.0;
     public const double MinimumSolutionRangeM = 80.0;
     public const double MaximumSolutionRangeM = 2_000.0;
 
