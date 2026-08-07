@@ -12,6 +12,7 @@ import {
   readCobraHud,
   waitForCobraAuthority,
 } from "./cobra_authority.mjs";
+import { RELEASE_BUILD } from "../wwwroot/render/release/release_identity.js";
 
 // Boots the PUBLISHED web app (its wwwroot passed via SMOKE_WWWROOT) in headless Chromium and
 // requires it to reach a running flight kernel. Blazor loads the WASM sim, then app.js constructs
@@ -75,9 +76,13 @@ test("a network-fresh shell purges an older worker before linking standalone mod
         const pageErrors = [];
         page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
         await page.goto(`${site.url}missing-sw-seed.html`, { waitUntil: "load" });
-        await page.evaluate(async ({ registrationOnly }) => {
+        // Register an intentionally STALE worker (?v= older than RELEASE_BUILD). The stamp
+        // ritual must not rewrite this to the current build — otherwise the preboot "stale
+        // worker" check never fires and unregister is skipped (Build 267 gate miss).
+        const staleWorkerQuery = `v=${Math.max(1, Number(RELEASE_BUILD) - 1)}`;
+        await page.evaluate(async ({ registrationOnly, staleWorkerQuery }) => {
           const registration = await navigator.serviceWorker.register(
-            "/service-worker.js?v=267",
+            `/service-worker.js?${staleWorkerQuery}`,
             { scope: registrationOnly ? "/legacy-scope/" : "/" },
           );
           if (registrationOnly) {
@@ -122,7 +127,7 @@ test("a network-fresh shell purges an older worker before linking standalone mod
               headers: { "content-type": "text/javascript" },
             }),
           );
-        }, { registrationOnly });
+        }, { registrationOnly, staleWorkerQuery });
 
         await page.goto(`${site.url}${route}?audioQa=silent`, {
           waitUntil: "load",
