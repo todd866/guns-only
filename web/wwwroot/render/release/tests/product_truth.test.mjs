@@ -99,9 +99,9 @@ test("legacy Rapier v1 documents cannot claim production authority over v2", asy
 test("the evergreen status matrix covers the executable experience catalog", async () => {
   const status = await readFile(path.join(ROOT, "docs/STATUS.md"), "utf8");
   // Live production identity must name the currently shipped build; the candidate line names
-  // the next stamp. Do not pin an old Build N forever — that is how the ledger went stale.
+  // the next stamp or explicitly says none is queued. Do not pin an old Build N forever.
   assert.match(status, /Production: Build \d+, revision `[0-9a-f]{7}/);
-  assert.match(status, /Next candidate: Build 267/);
+  assert.match(status, /Next candidate: (?:none queued|Build \d+)/);
   assert.match(status, new RegExp(`RELEASE_BUILD|"${RELEASE_BUILD}"|Build ${RELEASE_BUILD}`));
   for (const experience of EXPERIENCE_CATALOG) {
     assert.equal(status.includes(`\`${experience.id}\``), true,
