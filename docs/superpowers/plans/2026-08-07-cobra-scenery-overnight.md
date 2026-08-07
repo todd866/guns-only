@@ -19,7 +19,7 @@ Always dual-sync `content/.../cobra-canyon.world.json` ↔ `web/wwwroot/content/
 - [x] Pass 2/3 early: Soften rock scatter + waterAccent quota bump
 - [ ] Pass 3: Sky horizon warm-up after silent screenshot
 - [ ] Pass 4: Silent browser stills at Camp Ember / mid-gorge / Iron Bell (`?audioQa=silent`) and adjust from evidence
-- [ ] Stamp Build 276+ when a coherent pass lands; keep STATUS next-candidate in sync
+- [x] Stamp Build 277 for overnight pass 2; STATUS next-candidate in sync
 - [ ] Do not deploy without owner OK
 
 ## Stop conditions
