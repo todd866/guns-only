@@ -336,10 +336,23 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         double feedForwardPowerW = Math.Max(0.0, rotorPowerRequiredW);
         double proportionalCorrectionW = rotorSpeedErrorRpm
             * _definition.Powerplant.GovernorProportionalGainWPerRpm;
+        // Cap P to the headroom above feed-forward before combining with I. Otherwise a large
+        // underspeed error makes P alone exceed availablePowerW, and classic back-calc then
+        // forces the integral to (available - FF - P) ≤ 0 every tick — bleeding I faster than
+        // Ki can rebuild it, so Nr parks below nominal with GOV LIMIT lit (Build 266/267 flight).
+        double proportionalHeadroomW = Math.Max(0.0, availablePowerW - feedForwardPowerW);
+        proportionalCorrectionW = Math.Clamp(
+            proportionalCorrectionW,
+            -feedForwardPowerW,
+            proportionalHeadroomW);
         double candidateIntegralW = _governorIntegralW
             + rotorSpeedErrorRpm
                 * _definition.Powerplant.GovernorIntegralGainWPerRpmSecond
                 * dt;
+        double integralHeadroomW = Math.Max(
+            0.0,
+            availablePowerW - feedForwardPowerW - Math.Max(0.0, proportionalCorrectionW));
+        candidateIntegralW = Math.Clamp(candidateIntegralW, 0.0, Math.Max(integralHeadroomW, 1.0));
         double unclampedGovernorDemandW = feedForwardPowerW
             + proportionalCorrectionW
             + candidateIntegralW;
@@ -347,12 +360,12 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             unclampedGovernorDemandW,
             0.0,
             availablePowerW);
-        // Back-calculation anti-windup: keep only the part of the integral the engine could
-        // actually deliver. Without it a sustained climb at the transmission limit banks integral
-        // it can never spend, and the rotor overspeeds the moment the load comes off.
+        // Back-calculation anti-windup on the residual after P was already headroom-capped —
+        // only I is trimmed when the combined demand still hits the transmission.
         _governorIntegralW = _engineOperating && controlsAvailable
             ? candidateIntegralW - (unclampedGovernorDemandW - clampedGovernorDemandW)
             : 0.0;
+        if (_governorIntegralW < 0.0) _governorIntegralW = 0.0;
         double requestedEnginePowerW = _engineOperating && controlsAvailable
             ? clampedGovernorDemandW
             : 0.0;

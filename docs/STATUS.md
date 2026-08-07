@@ -5,9 +5,10 @@ Production: Build 267, revision `f12fbf8a7162179cbbaa179f14aa064f27037853`, depl
 `dpl_4PDzdUopFhcTf26NYML557bZeR28` (verified live via /api/build-info 2026-08-07). Builds
 253-265 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Next candidate: none queued — Build 267 closed the Cobra 266 follow-ups (camera-shared HUD
-symbols, standing gunnery seam, hover FM ~80% TQ, governor cruise hold, Cobra+Weekend Ride
-telemetry, stamp ritual sweeps `web/smoke`, harness `cobra-forward-level`).
+Next candidate: Build 268 (branch `fix/build-268-flight-followups`) — owner Build 267 flight
+follow-ups: governor P-headroom so Nr recovers off the transmission limit, approach-relative
+hostile seeds + nearer gunnery seam + Tab prefers seam, RALT prefers hub clearance, signal-smoke
+cone toned down, play cursor hidden, tip copy tracks engagement.
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
 evidence for the build and commit they name, but they do not override this page or the executable
@@ -36,7 +37,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | F9F-2 Panther off Essex (`korea-panther`) | **quarantined** | Preview acknowledgement only | Build 238 ownship-only kernel flies the production terrain catapult/route/return/groove to a physical W2 trap (100/100 focused); packaged route, touch-RTB, HUD, and barrier contracts passed silent-browser acceptance | Complete representative human desktop/touch flights and historical/presentation acceptance before any promotion |
 | MIDGE-03 Facility Nine (`indoor`) | **quarantined** | `/indoor/` preview acknowledgement | Candidate UI now enforces doctrine-safe controls and blocks premature return | Re-drive the default stealth route and representative touch/keyboard paths |
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
-| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge: AH-1G, sim-owned ground war, tip/hold win/lose, M134 + Camp Ember rearm, Tab/F gunner. Build 267 ships camera-shared HUD waterline/FPV, standing gunnery seam, hover FM ~80% TQ, governor cruise Nr hold, Nr/TQ/attitude/frame telemetry, and harness `cobra-forward-level` | Fresh representative human Hold-the-Bridge sortie with rounds away; p99 frame budget still diagnostic (terrain chunk builds remain sync). Longer arc: DCS-BS1-grade flight dynamics |
+| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge: AH-1G, sim-owned ground war, tip/hold win/lose, M134 + Camp Ember rearm, Tab/F gunner. Build 267 shipped camera-shared HUD, hover FM ~80% TQ, standing seam. Build 268 candidate: governor P-headroom, approach-relative seeds + Tab prefers seam, hub RALT, smoke cone, cursor/tip | Fresh representative human Hold-the-Bridge with rounds away on Build 268; p99 frame budget still diagnostic. Longer arc: DCS-BS1-grade flight dynamics |
 | Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load, lappable circuit from Build 264+. Build 267 adds ride telemetry (speed/gear/lean/lap/frame) | Fresh representative human lap on the fixed artifact; deeper instrumentation still provisional |
 
 ## Research-only packages

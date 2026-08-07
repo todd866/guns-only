@@ -1,13 +1,13 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=267";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=268";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=267";
-import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=267";
+} from "./cobra_canyon_asset_kit.js?v=268";
+import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=268";
 import {
   createCobraCanyonBasinMaterial,
   createCobraCanyonRiverMaterial,
-} from "./cobra_canyon_terrain_material.js?v=267";
+} from "./cobra_canyon_terrain_material.js?v=268";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 
@@ -1231,7 +1231,9 @@ function landmarkPlacements(plan) {
       add(record, point, "mill", [-12, 0, 0], [34, 12, 26]);
       add(record, point, "stack", [18, 0, 0], [7, Math.max(42, authoredHeightM), 7]);
     } else if (kind === "signal-smoke") {
-      add(record, point, "smoke-column", [0, 0, 0], [7, Math.max(60, authoredHeightM), 7]);
+      // Cap the column: an authored top anchor far above terrain made a 60 m+ orange prism that
+      // read as a placeholder cone on the river bank (Build 267 owner flight).
+      add(record, point, "smoke-column", [0, 0, 0], [6, Math.min(28, Math.max(14, authoredHeightM * 0.35)), 6]);
     } else {
       add(record, point, "silhouette", [0, 0, 0], [12, 18, 12]);
     }
@@ -1248,7 +1250,8 @@ function landmarkColor(kind) {
   if (token === "hill-pagoda") return [0.78, 0.76, 0.63];
   if (token === "open-quarry") return [0.54, 0.27, 0.14];
   if (token === "mill-chimney") return [0.40, 0.34, 0.26];
-  if (token === "signal-smoke") return [0.65, 0.42, 0.16];
+  // Cool grey plume — warm orange read as an unfinished debug solid on the gorge bank.
+  if (token === "signal-smoke") return [0.62, 0.64, 0.66];
   return [0.52, 0.46, 0.31];
 }
 

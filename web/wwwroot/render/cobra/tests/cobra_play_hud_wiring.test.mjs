@@ -61,10 +61,11 @@ test("ground war presentation receives the selected target for the in-world high
   assert.match(main, /sync\(\s*authorityState(\?\.)?\.ground_war[\s\S]{0,120}?targetSelect\.value/);
 });
 
-test("target list rebuilds only when the living set changes and stays distance-ordered", async () => {
+test("target list rebuilds only when the living set changes and prefers the gunnery seam", async () => {
   const main = await source("cobra-lab/main.js");
   assert.match(main, /aliveKey/);
-  assert.match(main, /sort\(\(a, b\) => distanceToPlayer\(a\) - distanceToPlayer\(b\)\)/);
+  assert.match(main, /gunnery-seam\.000/);
+  assert.match(main, /distanceToPlayer\(a\) - distanceToPlayer\(b\)/);
 });
 
 test("bingo ammo raises a rearm cue before the magazine is dry", async () => {

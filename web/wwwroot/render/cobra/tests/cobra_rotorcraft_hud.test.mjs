@@ -70,7 +70,7 @@ test("rotorcraft strip publishes Nr, torque, collective, speeds, AGL, VSI, and r
   assert.match(line, /COL8\.0°/);
   assert.match(line, /TAS100/);
   assert.match(line, /GS90/);
-  assert.match(line, /AGL42M/);
+  assert.match(line, /AGL18M/);
   assert.match(line, /VSI\+500/);
   assert.match(line, /ETL/);
 });
@@ -131,7 +131,7 @@ test("hover emphasis engages below translational lift and grades the sink", () =
   const hover = cobraRotorcraftHudModel(modelFixture());
   assert.equal(hover.hover.hoverEmphasis, true, "4 m/s GS is a hover");
   assert.equal(hover.hover.sinkLevel, "normal");
-  assert.ok(Math.abs(hover.hover.aglM - 24.5) < 1e-9, "route guidance clearance is the AGL truth");
+  assert.ok(Math.abs(hover.hover.aglM - 22) < 1e-9, "hub clearance is the RALT truth when known");
 
   const settling = modelFixture();
   settling.vehicle.vertical_speed_mps = -2.8; // -551 fpm: caution sink, not yet the low-AGL warning

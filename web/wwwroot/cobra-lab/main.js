@@ -1,53 +1,53 @@
-import * as THREE from "../vendor/three.module.js?v=267";
+import * as THREE from "../vendor/three.module.js?v=268";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=267";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=267";
+} from "../render/cobra/cobra_canyon_plan.js?v=268";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=268";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=267";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=267";
-import { createHud } from "../hud.js?v=267";
+} from "../render/cobra/cobra_canyon_tour.js?v=268";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=268";
+import { createHud } from "../hud.js?v=268";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=267";
+} from "../render/cobra/cobra_hud_adapter.js?v=268";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=267";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=268";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=267";
+} from "../render/cobra/cobra_control_profile.js?v=268";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=267";
+} from "../render/cobra/cobra_pilot_input.js?v=268";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=267";
+} from "../render/cobra/ah1g_presence.js?v=268";
 import {
   COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD,
   clampInducedLookRotation,
   lookAnglesFromOffset,
   lookOffsetFromAngles,
-} from "../render/cobra/cobra_camera_bias.js?v=267";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=267";
+} from "../render/cobra/cobra_camera_bias.js?v=268";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=268";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=267";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=267";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=267";
+} from "../render/cobra/cobra_mission_exit.js?v=268";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=268";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=268";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -90,6 +90,12 @@ const AUTHORITY_STATE_SAMPLE_INTERVAL_MS = 1_000 / 30;
 const TELEMETRY_ROW_INTERVAL_MS = 100;
 const canvas = document.querySelector("#scene");
 const viewport = document.querySelector(".viewport");
+
+function setPlayCursorHidden(hidden) {
+  const value = hidden ? "none" : "";
+  document.body.style.cursor = value;
+  if (canvas) canvas.style.cursor = value;
+}
 const routeSelect = document.querySelector("#route");
 const qualitySelect = document.querySelector("#quality");
 const speedInput = document.querySelector("#speed");
@@ -212,7 +218,7 @@ const projectionScratch = new THREE.Vector3();
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=267";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=268";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -654,9 +660,16 @@ function refreshGroundTargets() {
   const distanceToPlayer = (unit) => vehicle
     ? Math.hypot(unit.x_m - vehicle.x_m, unit.z_m - vehicle.z_m)
     : 0;
+  // Gunnery seam first so Tab→F from spawn hits a shootable mark instead of the nearest
+  // OutOfLimits infantry (Build 267 flight: ON TARGET rare, OUT OF LIMITS dominant).
+  const SEAM_ID = "ground.hostile.gunnery-seam.000";
   hostileTargetIds = units
     .filter((unit) => unit.alive && unit.faction === "hostile")
-    .sort((a, b) => distanceToPlayer(a) - distanceToPlayer(b))
+    .sort((a, b) => {
+      if (a.id === SEAM_ID && b.id !== SEAM_ID) return -1;
+      if (b.id === SEAM_ID && a.id !== SEAM_ID) return 1;
+      return distanceToPlayer(a) - distanceToPlayer(b);
+    })
     .map((unit) => unit.id);
   const previous = targetSelect.value;
   targetSelect.replaceChildren();
@@ -682,7 +695,10 @@ function refreshGroundTargets() {
 
 function cycleHostileTarget() {
   if (!hostileTargetIds.length) return;
-  hostileTargetIndex = (hostileTargetIndex + 1) % hostileTargetIds.length;
+  // First Tab from idle jumps to the preferred (seam-first) mark instead of advancing
+  // past it when index was still -1.
+  if (hostileTargetIndex < 0) hostileTargetIndex = 0;
+  else hostileTargetIndex = (hostileTargetIndex + 1) % hostileTargetIds.length;
   targetSelect.value = hostileTargetIds[hostileTargetIndex];
   bridge?.SetGunnerTarget(targetSelect.value || null);
 }
@@ -927,6 +943,12 @@ function updateObjectiveHud(war) {
   } else if ((war.victory_hold_progress ?? 0) > 0) {
     setText(objectiveLine, `HOLDING FRIENDLY CONTROL · ${holdPct}%`);
     setText(objectiveDetail, "Keep tipping the fight — do not let hostiles claw it back");
+  } else if (authorityState?.gunner?.selected_target_id) {
+    setText(objectiveLine, "TIP CONTROL FRIENDLY · HOLD 45s");
+    setText(objectiveDetail, "Hold F when GUN ON TARGET — Tab cycles marks");
+  } else if (playerHasInteracted) {
+    setText(objectiveLine, "TIP CONTROL FRIENDLY · HOLD 45s");
+    setText(objectiveDetail, "Tab a hostile on the nose, then hold F");
   } else {
     setText(objectiveLine, "TIP CONTROL FRIENDLY · HOLD 45s");
     // Owner ruling 2026-08-05: collective follows game convention — W raises, S lowers
@@ -1231,6 +1253,7 @@ function teardownMission(reason) {
   pilotControls = releaseCobraPilotControls(pilotControls);
   onboarding?.dispose();
   onboarding = null;
+  setPlayCursorHidden(false);
   presentation?.dispose();
   groundWarPresentation?.dispose();
   if (ah1gPresence) {
@@ -1295,6 +1318,7 @@ async function boot() {
       ? "HOLD THE BRIDGE · AH-1G ONLINE"
       : "AH-1G AUTHORITY ONLINE · LAB", "ready");
     if (PLAY_MODE) {
+      setPlayCursorHidden(true);
       onboarding = createControlsOnboarding({
         modeId: COBRA_ONBOARDING_CONTENT.modeId,
         content: COBRA_ONBOARDING_CONTENT,

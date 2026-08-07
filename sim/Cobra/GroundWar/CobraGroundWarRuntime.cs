@@ -35,7 +35,10 @@ public sealed class CobraGroundWarRuntime
     /// hostile sits outside the 2 km gun window — which is why fire_authorized stayed at 0%.
     /// </summary>
     public const string GunnerySeamUnitId = "ground.hostile.gunnery-seam.000";
-    public const double GunnerySeamRangeM = 350.0;
+    // Mid-envelope (ballistic window 80–2000 m, turret ±110°). 350 m worked in unit tests but
+    // left a soft vehicle that Tab often skipped for nearer OOL infantry; 220 m keeps the seam
+    // first in nearest-hostile order from the River Gorge spawn hover.
+    public const double GunnerySeamRangeM = 220.0;
     public const double WreckRetainSeconds = 12.0;
     /// <summary>Small-arms chatter events per engaged unit per second (presentation only).</summary>
     public const double SmallArmsEventsPerSecond = 2.4;
@@ -476,14 +479,29 @@ public sealed class CobraGroundWarRuntime
 
             // No seeded hostile hard points: the attackers are the moving wave targets the
             // turret exists to kill; static hostile armor would outrange the garrison forever.
+            // Place hostiles on the basin-facing side of each site (±~35°) so a River Gorge
+            // spawn looking into the gorge has gun-reachable marks instead of permanent
+            // OutOfLimits flanks (Build 267 owner flight).
+            double yawTowardBasin = Math.Atan2(
+                -site.PositionWorldM.X, -site.PositionWorldM.Z);
             SpawnUnit(GroundFaction.Hostile, GroundUnitRole.InfantryClump, site,
-                GroundUnitIntent.EngageNearest, ringM: HostileSeedInfantryRingM, bearingRad: 4.4);
+                GroundUnitIntent.EngageNearest, ringM: HostileSeedInfantryRingM,
+                bearingRad: BearingFromAircraftYaw(yawTowardBasin + 0.55));
             SpawnUnit(GroundFaction.Hostile, GroundUnitRole.SoftVehicle, site,
-                GroundUnitIntent.EngageNearest, ringM: HostileSeedSoftVehicleRingM, bearingRad: 5.2);
+                GroundUnitIntent.EngageNearest, ringM: HostileSeedSoftVehicleRingM,
+                bearingRad: BearingFromAircraftYaw(yawTowardBasin - 0.55));
         }
         UpdateSiteControl();
         DriftBalance(PlayerVehicleContract.FixedDeltaSeconds);
     }
+
+    /// <summary>
+    /// SpawnUnit rings use math bearing (east = cos θ, north = sin θ). Aircraft yaw uses
+    /// aviation heading (east = sin ψ, north = cos ψ). Convert so approach-relative seeds
+    /// land on the nose of a spawn looking ψ.
+    /// </summary>
+    static double BearingFromAircraftYaw(double yawRad) =>
+        Math.Atan2(Math.Cos(yawRad), Math.Sin(yawRad));
 
     /// <summary>
     /// Places one soft vehicle on the aircraft nose inside the M28A1 envelope and ballistic
