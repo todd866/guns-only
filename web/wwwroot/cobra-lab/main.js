@@ -1,53 +1,55 @@
-import * as THREE from "../vendor/three.module.js?v=268";
+import * as THREE from "../vendor/three.module.js?v=269";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=268";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=268";
+} from "../render/cobra/cobra_canyon_plan.js?v=269";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=269";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=268";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=268";
-import { createHud } from "../hud.js?v=268";
+} from "../render/cobra/cobra_canyon_tour.js?v=269";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=269";
+import { createHud } from "../hud.js?v=269";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=268";
+} from "../render/cobra/cobra_hud_adapter.js?v=269";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=268";
+  formatAviationAgl,
+  formatAviationRange,
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=269";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=268";
+} from "../render/cobra/cobra_control_profile.js?v=269";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=268";
+} from "../render/cobra/cobra_pilot_input.js?v=269";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=268";
+} from "../render/cobra/ah1g_presence.js?v=269";
 import {
   COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD,
   clampInducedLookRotation,
   lookAnglesFromOffset,
   lookOffsetFromAngles,
-} from "../render/cobra/cobra_camera_bias.js?v=268";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=268";
+} from "../render/cobra/cobra_camera_bias.js?v=269";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=269";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=268";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=268";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=268";
+} from "../render/cobra/cobra_mission_exit.js?v=269";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=269";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=269";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -218,7 +220,7 @@ const projectionScratch = new THREE.Vector3();
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=268";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=269";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -494,9 +496,7 @@ function updateRouteCard() {
 }
 
 function formatRouteDistance(distanceM) {
-  return distanceM < 1_000
-    ? `${Math.max(0, Math.round(distanceM / 10) * 10)} m`
-    : `${(distanceM / 1_000).toFixed(1)} km`;
+  return formatAviationRange(distanceM, { style: "nav" });
 }
 
 function updateRouteProgress() {
@@ -515,11 +515,12 @@ function updateRouteProgress() {
     return;
   }
   if (tourInput.checked && routeTour.active) {
-    const offsetM = Math.abs(routeTour.lateralOffsetM);
-    const lateral = offsetM >= 0.5
-      ? ` · ${offsetM.toFixed(0)} M ${routeTour.lateralOffsetM > 0 ? "RIGHT" : "LEFT"}`
+    const offsetFt = Math.abs(routeTour.lateralOffsetM) * 3.28084;
+    const lateral = offsetFt >= 2
+      ? ` · ${Math.round(offsetFt)} FT ${routeTour.lateralOffsetM > 0 ? "RIGHT" : "LEFT"}`
       : "";
-    routeFeature.textContent = `${routeTour.cue} · ${tourCommandedAglM.toFixed(0)} M AGL${lateral}`;
+    const aglFt = formatAviationAgl(routeCommandedAglM);
+    routeFeature.textContent = `${routeTour.cue} · ${aglFt ?? "—"} FT AGL${lateral}`;
     return;
   }
   if (!activeSetPieces.length) {
@@ -967,9 +968,11 @@ function updateMetrics(aglM) {
   setText(hazardMetric, authorityState
     ? `${authorityState.masking.state} · ${authorityState.masking.observers_with_line_of_sight} LOS`
     : `${plan.counts.hazards} authority · ${diagnostics.hazardsVisible ? "visible" : "missing"}`);
-  setText(aglMetric, authorityState?.route_guidance?.current_clearance_m == null
-    ? `${Math.max(0, aglM).toFixed(1)} m`
-    : `${authorityState.route_guidance.current_clearance_m.toFixed(1)} m`);
+  const clearanceM = authorityState?.route_guidance?.current_clearance_m == null
+    ? Math.max(0, aglM)
+    : authorityState.route_guidance.current_clearance_m;
+  const aglFt = formatAviationAgl(clearanceM);
+  setText(aglMetric, aglFt === null ? "—" : `${aglFt} ft`);
   setText(powerMetric, authorityState
     ? `${(authorityState.vehicle.hover_power_margin * 100).toFixed(0)}% · ${authorityState.vehicle.power_assessment}`
     : "—");

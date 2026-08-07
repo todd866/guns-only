@@ -1,14 +1,13 @@
 # Current product and verification status
 
 Updated: 2026-08-07
-Production: Build 267, revision `f12fbf8a7162179cbbaa179f14aa064f27037853`, deployment
-`dpl_4PDzdUopFhcTf26NYML557bZeR28` (verified live via /api/build-info 2026-08-07). Builds
+Production: Build 268, revision `93ff754b67e63e8579226cf219851ce4c5d267fa`, deployment
+`dpl_8ULB5iXpoSTmkyXDnm5YWSz1SyS1` (verified live via /api/build-info 2026-08-07). Builds
 253-265 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Next candidate: Build 268 (branch `fix/build-268-flight-followups`) — owner Build 267 flight
-follow-ups: governor P-headroom so Nr recovers off the transmission limit, approach-relative
-hostile seeds + nearer gunnery seam + Tab prefers seam, RALT prefers hub clearance, signal-smoke
-cone toned down, play cursor hidden, tip copy tracks engagement.
+Next candidate: Build 269 (branch `fix/cobra-aviation-units`) — Cobra play HUD switches
+player-facing metres/kilometres to aviation units (RALT/AGL feet, gun range feet inside 1 NM,
+FOB/route NM).
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
 evidence for the build and commit they name, but they do not override this page or the executable

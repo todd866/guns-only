@@ -5,6 +5,8 @@ import test from "node:test";
 import {
   AH1G_NOMINAL_ROTOR_RPM,
   cobraRotorcraftHudModel,
+  formatAviationAgl,
+  formatAviationRange,
   formatCobraRotorcraftStrip,
 } from "../cobra_rotorcraft_hud.js";
 
@@ -47,6 +49,13 @@ function modelFixture(overrides = {}) {
   };
 }
 
+test("aviation range and AGL formatters use feet and nautical miles", () => {
+  assert.equal(formatAviationAgl(22), 72);
+  assert.equal(formatAviationRange(506), "1660 FT");
+  assert.equal(formatAviationRange(1_840, { style: "nav" }), "1.0 NM");
+  assert.equal(formatAviationRange(3_704), "2.0 NM");
+});
+
 test("rotorcraft strip publishes Nr, torque, collective, speeds, AGL, VSI, and regime", () => {
   const line = formatCobraRotorcraftStrip({
     true_airspeed_mps: 51.44,
@@ -70,7 +79,7 @@ test("rotorcraft strip publishes Nr, torque, collective, speeds, AGL, VSI, and r
   assert.match(line, /COL8\.0°/);
   assert.match(line, /TAS100/);
   assert.match(line, /GS90/);
-  assert.match(line, /AGL18M/);
+  assert.match(line, /AGL59FT/);
   assert.match(line, /VSI\+500/);
   assert.match(line, /ETL/);
 });
@@ -159,7 +168,7 @@ test("gunner line carries the crew truth with target, ammo and FOB context", () 
   assert.equal(model.gunner.level, "ready");
   assert.match(model.gunner.detail, /TGT 2\b/);
   assert.match(model.gunner.detail, /AMMO 410/);
-  assert.match(model.gunner.detail, /FOB 1\.8 KM/);
+  assert.match(model.gunner.detail, /FOB 1\.0 NM/);
 
   const firing = modelFixture();
   firing.gunner.fire_authorized = true;
@@ -211,9 +220,13 @@ test("the gunner's mark becomes a designation the pilot can find in the world", 
     [model.designation.worldX, model.designation.worldY, model.designation.worldZ],
     [300, 40, 400],
   );
-  // sqrt(300^2 + 80^2 + 400^2) = 506.36
+  // sqrt(300^2 + 80^2 + 400^2) = 506.36 → aviation feet on the crew line
   assert.equal(Math.round(model.designation.rangeM), 506);
-  assert.match(model.gunner.detail, /506 M/);
+  assert.equal(
+    model.gunner.detail.includes(formatAviationRange(model.designation.rangeM)),
+    true,
+    model.gunner.detail,
+  );
 
   const firing = cobraRotorcraftHudModel({
     ...fixture,
