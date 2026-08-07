@@ -69,9 +69,14 @@ test("target list rebuilds only when the living set changes and prefers the gunn
 });
 
 test("bingo ammo raises a rearm cue before the magazine is dry", async () => {
-  const main = await source("cobra-lab/main.js");
-  assert.match(main, /BINGO AMMO/);
+  const [main, objective] = await Promise.all([
+    source("cobra-lab/main.js"),
+    source("render/cobra/cobra_objective_copy.js"),
+  ]);
+  // Ember Run owns bingo copy in the objective strip helper; main still reads ammo_bingo.
+  assert.match(objective, /BINGO AMMO/);
   assert.match(main, /ammo_bingo/);
+  assert.match(main, /cobraObjectiveCopy/);
 });
 
 test("vestigial freelook cannot fight the authority camera once the bridge owns it", async () => {
