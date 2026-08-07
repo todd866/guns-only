@@ -22,6 +22,8 @@ Always dual-sync `content/.../cobra-canyon.world.json` ↔ `web/wwwroot/content/
 - [x] Stamp Build 278 for overnight pass 3; STATUS next-candidate in sync
 - [x] Pass 5: Parked camera skips vehicle eye + clears HUD; radio mast jungle/mist; soft village normals
 - [x] Stamp Build 279 for overnight pass 5; STATUS next-candidate in sync
+- [x] Pass 6: Mill village + plantation waterworks mist/jungle; fix setFirstPerson park contract
+- [x] Stamp Build 280 for overnight pass 6; STATUS next-candidate in sync
 - [ ] Do not deploy without owner OK
 
 ## Stop conditions

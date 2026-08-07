@@ -34,7 +34,8 @@ test("the airframe silhouette follows the camera mode from a single call site", 
   // hidden and the exterior camera framed empty sky. The camera mode is the only input
   // that decides this, so exactly one unconditional call site may own it.
   assert.equal((main.match(/setFirstPerson\(/g) ?? []).length, 1);
-  assert.match(main, /setFirstPerson\(!tourInput\.checked\)/);
+  // Parked visual-review stills also force exterior (no cockpit over scenery shots).
+  assert.match(main, /setFirstPerson\(!tourInput\.checked && !parkedCamera\)/);
   const sync = main.match(/function syncAuthorityCamera\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
   assert.doesNotMatch(sync, /setFirstPerson/);
 });

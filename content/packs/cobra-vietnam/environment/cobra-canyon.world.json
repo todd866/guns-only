@@ -1193,7 +1193,8 @@
         "archetype.cobra-canyon.plantation-row.v1",
         "archetype.cobra-canyon.paddy-mirror.v1",
         "archetype.cobra-canyon.paddy-berm.v1",
-        "archetype.cobra-canyon.village-hut.v1"
+        "archetype.cobra-canyon.village-hut.v1",
+        "archetype.cobra-canyon.river-mist.v1"
       ],
       "landmarkIds": ["landmark.cobra-canyon.plantation-water-tower.v1"],
       "hazardIds": [
@@ -1239,7 +1240,9 @@
         "archetype.cobra-canyon.landmark-mill-stack.v1",
         "archetype.cobra-canyon.village-compound.v1",
         "archetype.cobra-canyon.village-hut.v1",
-        "archetype.cobra-canyon.plantation-row.v1"
+        "archetype.cobra-canyon.plantation-row.v1",
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1"
       ],
       "landmarkIds": ["landmark.cobra-canyon.plantation-mill-stack.v1"],
       "hazardIds": [],
