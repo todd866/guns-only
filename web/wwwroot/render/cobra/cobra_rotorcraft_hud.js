@@ -62,7 +62,11 @@ export function formatCobraRotorcraftStrip(vehicle, routeGuidance = null) {
   const tasKt = finite(vehicle?.true_airspeed_mps) * MPS_TO_KT;
   const gsKt = finite(vehicle?.ground_speed_mps) * MPS_TO_KT;
   const vsiFpm = finite(vehicle?.vertical_speed_mps) * 196.8504;
-  const aglM = routeGuidance?.current_clearance_m ?? rotor.main_rotor_clearance_m;
+  const hubClearanceM = Number(rotor.main_rotor_clearance_m);
+  const routeClearanceM = Number(routeGuidance?.current_clearance_m);
+  const aglM = Number.isFinite(hubClearanceM) && hubClearanceM >= 0
+    ? hubClearanceM
+    : routeClearanceM;
   const aglText = Number.isFinite(Number(aglM)) && Number(aglM) >= 0
     ? `${Math.round(Number(aglM))}M`
     : "—";
@@ -110,8 +114,14 @@ export function cobraRotorcraftHudModel(authorityState) {
 
   const gsKt = finite(vehicle.ground_speed_mps) * MPS_TO_KT;
   const vsiFpm = finite(vehicle.vertical_speed_mps) * MPS_TO_FPM;
-  const aglM = finiteOrNull(authorityState?.route_guidance?.current_clearance_m)
-    ?? finiteOrNull(rotor.main_rotor_clearance_m);
+  // Prefer hub clearance (rotorcraft truth) over route guidance clearance. Guidance uses
+  // CG−terrain and can read 0–2 m while the eye is still high above the river; the hub
+  // sample matches the strike/contact path (Build 267 owner RALT complaint).
+  const hubClearanceM = finiteOrNull(rotor.main_rotor_clearance_m);
+  const routeClearanceM = finiteOrNull(authorityState?.route_guidance?.current_clearance_m);
+  const aglM = hubClearanceM !== null && hubClearanceM >= 0
+    ? hubClearanceM
+    : routeClearanceM;
   const vrs = finite(rotor.vortex_ring_severity);
   const rbs = finite(rotor.retreating_blade_stall_severity);
   const mast = finite(rotor.mast_bump_risk);

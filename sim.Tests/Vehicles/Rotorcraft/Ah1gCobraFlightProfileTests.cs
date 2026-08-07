@@ -81,7 +81,7 @@ public sealed class Ah1gCobraFlightProfileTests
         new Segment("accelerate", 900, 0.00, 0.35, 0.00, 0.0),
         // Cruise with power in hand: collective at hover trim, modest forward cyclic. Pins the
         // Build 266 gap where Nr parked at 96% while TQ still had ~20% margin.
-        new Segment("cruise", 900, 0.00, 0.22, 0.00, 0.0),
+        new Segment("cruise", 900, -0.02, 0.20, 0.00, 0.0),
         new Segment("climbing-turn", 900, 0.15, 0.10, 0.40, 0.0),
         new Segment("decelerate", 600, -0.05, -0.35, 0.00, 0.0),
         // Lower the collective AND fly forward. Recovering on collective alone descends the
