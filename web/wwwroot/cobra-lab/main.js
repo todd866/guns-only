@@ -1,53 +1,53 @@
-import * as THREE from "../vendor/three.module.js?v=266";
+import * as THREE from "../vendor/three.module.js?v=267";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=266";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=266";
+} from "../render/cobra/cobra_canyon_plan.js?v=267";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=267";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=266";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=266";
-import { createHud } from "../hud.js?v=266";
+} from "../render/cobra/cobra_canyon_tour.js?v=267";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=267";
+import { createHud } from "../hud.js?v=267";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=266";
+} from "../render/cobra/cobra_hud_adapter.js?v=267";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=266";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=267";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=266";
+} from "../render/cobra/cobra_control_profile.js?v=267";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=266";
+} from "../render/cobra/cobra_pilot_input.js?v=267";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=266";
+} from "../render/cobra/ah1g_presence.js?v=267";
 import {
   COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD,
   clampInducedLookRotation,
   lookAnglesFromOffset,
   lookOffsetFromAngles,
-} from "../render/cobra/cobra_camera_bias.js?v=266";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=266";
+} from "../render/cobra/cobra_camera_bias.js?v=267";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=267";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=266";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=266";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=266";
+} from "../render/cobra/cobra_mission_exit.js?v=267";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=267";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=267";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -212,7 +212,7 @@ const projectionScratch = new THREE.Vector3();
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=266";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=267";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -319,6 +319,8 @@ let frameSampleCursor = 0;
 let frameSampleSize = 0;
 let frameCounter = 0;
 let frameP95Ms = 0;
+let frameP99Ms = 0;
+let lastRawFrameMs = 0;
 let world = null;
 let plan = null;
 let presentation = null;
@@ -354,7 +356,7 @@ window.__gunsOnlyCobraFrameProfile = Object.freeze({
     const mean = Object.fromEntries(
       FRAME_PHASES.map((phase) => [phase, framePhaseTotals[phase] / frames]),
     );
-    return { frames: framePhaseSamples, meanMs: mean, p95Ms: frameP95Ms };
+    return { frames: framePhaseSamples, meanMs: mean, p95Ms: frameP95Ms, p99Ms: frameP99Ms };
   },
 });
 
@@ -368,6 +370,8 @@ function recordTelemetry(nowMs) {
   if (!authorityState) return;
   if (nowMs - telemetryRowRecordedAtMs < TELEMETRY_ROW_INTERVAL_MS) return;
   telemetryRowRecordedAtMs = nowMs;
+  const pose = vehiclePose?.x_m != null ? vehiclePose : null;
+  const rotor = authorityState.vehicle?.rotorcraft;
   telemetryChannel.record({
     k: "st",
     t: nowMs,
@@ -384,6 +388,11 @@ function recordTelemetry(nowMs) {
       cobra_vertical_speed_mps: authorityState.vehicle.vertical_speed_mps,
       cobra_collective: authorityState.vehicle.collective,
       cobra_power_margin: authorityState.vehicle.power_margin,
+      cobra_main_rotor_rpm: rotor?.main_rotor_rpm ?? pose?.main_rotor_rpm,
+      cobra_transmission_limit_fraction: rotor?.transmission_limit_fraction,
+      cobra_pitch_rad: pose?.pitch_rad ?? authorityState.vehicle.pitch_rad,
+      cobra_roll_rad: pose?.roll_rad ?? authorityState.vehicle.roll_rad,
+      cobra_frame_ms: lastRawFrameMs,
       cobra_route_remaining_m: authorityState.route_guidance.remaining_m,
       cobra_cross_track_m: authorityState.route_guidance.cross_track_m,
       cobra_inside_corridor: authorityState.route_guidance.inside_corridor,
@@ -625,6 +634,7 @@ function rebuildPresentation() {
   frameSampleSize = 0;
   frameCounter = 0;
   frameP95Ms = 0;
+  frameP99Ms = 0;
   lastTimeMs = performance.now();
   setStatus(`${plan.counts.landmarks} landmarks · ground war online`, "ready");
 }
@@ -826,6 +836,7 @@ function syncAuthorityCamera() {
 }
 
 function recordFrameDuration(durationMs) {
+  lastRawFrameMs = durationMs;
   frameSamples[frameSampleCursor] = durationMs;
   frameSampleCursor = (frameSampleCursor + 1) % FRAME_SAMPLE_COUNT;
   frameSampleSize = Math.min(FRAME_SAMPLE_COUNT, frameSampleSize + 1);
@@ -833,6 +844,7 @@ function recordFrameDuration(durationMs) {
   if (frameCounter % 15 !== 0 || frameSampleSize < 15) return;
   const ordered = Array.from(frameSamples.subarray(0, frameSampleSize)).sort((a, b) => a - b);
   frameP95Ms = ordered[Math.floor((ordered.length - 1) * 0.95)];
+  frameP99Ms = ordered[Math.floor((ordered.length - 1) * 0.99)];
 }
 
 function ambientBudgetLevel() {

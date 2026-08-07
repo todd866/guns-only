@@ -1,15 +1,17 @@
-import * as THREE from "../vendor/three.module.js?v=266";
-import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=266";
+import * as THREE from "../vendor/three.module.js?v=267";
+import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=267";
 import {
   dominantSignedAxis,
   gamepadRiderAxes,
-} from "../render/motorcycle/rider_input.js?v=266";
+} from "../render/motorcycle/rider_input.js?v=267";
 import {
   createRapierTrackDayPresentation,
-} from "../render/motorcycle/track_day_presentation.js?v=266";
-import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=266";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=266";
-import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=266";
+} from "../render/motorcycle/track_day_presentation.js?v=267";
+import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=267";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=267";
+import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=267";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=267";
+import { RELEASE_BUILD } from "../render/release/release_identity.js?v=267";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
@@ -107,6 +109,38 @@ let animationFrame = 0;
 let lastTimeMs = performance.now();
 // Shared first-run controls overlay + standstill nudge (created in boot).
 let onboarding = null;
+const telemetrySession = `web-ride-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+const telemetryChannel = createCobraTelemetryChannel({
+  session: telemetrySession,
+  build: RELEASE_BUILD,
+  userAgent: navigator.userAgent,
+});
+let telemetryRowRecordedAtMs = -Infinity;
+const TELEMETRY_ROW_INTERVAL_MS = 100;
+
+function recordRideTelemetry(nowMs, state, frameMs) {
+  if (!state) return;
+  if (nowMs - telemetryRowRecordedAtMs < TELEMETRY_ROW_INTERVAL_MS) return;
+  telemetryRowRecordedAtMs = nowMs;
+  telemetryChannel.record({
+    k: "st",
+    t: nowMs,
+    s: {
+      ride_phase: state.phase,
+      ride_speed_mps: Math.hypot(state.vx ?? 0, state.vy ?? 0, state.vz ?? 0),
+      ride_gear: state.gear,
+      ride_engine_rpm: state.engine_rpm,
+      ride_lean_rad: state.lean_rad,
+      ride_wheelie_rad: state.pitch_rad,
+      ride_throttle: state.throttle,
+      ride_brake: state.brake,
+      ride_on_track: state.on_track,
+      ride_lap: state.lap,
+      ride_frame_ms: frameMs,
+    },
+  });
+  telemetryChannel.flushIfDue(nowMs);
+}
 
 // Standstill means the bike is stopped with the throttle untouched — sim truth, not DOM.
 function onboardingNudgeState(state) {
@@ -221,6 +255,7 @@ function syncCamera(state) {
 function animate(timeMs) {
   animationFrame = requestAnimationFrame(animate);
   const deltaSeconds = Math.min(Math.max(0, timeMs - lastTimeMs) / 1_000, 0.05);
+  const rawFrameMs = timeMs - lastTimeMs;
   lastTimeMs = timeMs;
   if (!bridge) return;
 
@@ -233,6 +268,7 @@ function animate(timeMs) {
   renderer.render(scene, camera);
   helmetHud.draw(state);
   onboarding?.advanceNudges(onboardingNudgeState(state), deltaSeconds);
+  recordRideTelemetry(timeMs, state, rawFrameMs);
 
   if (state.phase === "finished") {
     setStatus("RIDE FINISHED", "error");
@@ -312,6 +348,7 @@ canvas.addEventListener("webglcontextlost", (event) => {
 
 window.addEventListener("pagehide", () => {
   cancelAnimationFrame(animationFrame);
+  telemetryChannel.flush({ pagehide: true });
   trackDayPresentation?.dispose();
   renderer.dispose();
 }, { once: true });

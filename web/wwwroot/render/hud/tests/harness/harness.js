@@ -255,6 +255,7 @@ export function buildFrame(scenario) {
     padlockTrackPrimed: view.primeTrack === true,
     periodGunsightVisible: false,
     triggerHeld: scenario.triggerHeld === true,
+    ladderReference: scenario.ladderReference === "camera" ? "camera" : "airframe",
     dt: FIXED_DT,
     now: 0,
   };
@@ -434,6 +435,7 @@ window.__debugScenario = async (name) => {
     probes: computeProbes(frame),
     presentationCaptureSequence: lastPresentationCaptureSequence,
     padlock: frame.padlock === true,
+    ladderReference: frame.ladderReference === "camera" ? "camera" : "airframe",
     padlockState: {
       phase: frame.padlockPhase,
       manualLookActive: frame.manualLookActive,

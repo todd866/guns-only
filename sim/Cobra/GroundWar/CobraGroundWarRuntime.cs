@@ -28,6 +28,14 @@ public sealed class CobraGroundWarRuntime
     public const double HostileSeedInfantryRingM = 170.0;
     public const double HostileSeedSoftVehicleRingM = 200.0;
     public const double HostileWaveRingM = 160.0;
+    /// <summary>
+    /// Standing gunnery seam placed on the aircraft nose at mission start so the crew chain
+    /// (Tab → acquire → hold F → rounds away) is reachable for the whole sortie. Site-seeded
+    /// hostiles at the departure pad live ~20 s before the garrison kills them, and every other
+    /// hostile sits outside the 2 km gun window — which is why fire_authorized stayed at 0%.
+    /// </summary>
+    public const string GunnerySeamUnitId = "ground.hostile.gunnery-seam.000";
+    public const double GunnerySeamRangeM = 350.0;
     public const double WreckRetainSeconds = 12.0;
     /// <summary>Small-arms chatter events per engaged unit per second (presentation only).</summary>
     public const double SmallArmsEventsPerSecond = 2.4;
@@ -306,6 +314,13 @@ public sealed class CobraGroundWarRuntime
             double amount = _damageScratch[index];
             if (amount <= 0.0) continue;
             GroundUnit unit = living[index];
+            // The standing gunnery seam is for the crew chain: friendlies must not erase it
+            // before the player can designate and fire. Player rounds still apply via TryFire.
+            if (IsGunnerySeam(unit) && amount > 0.0) {
+                // Zero out only the portion that came from friendlies by skipping all mutual
+                // damage to the seam — ground AI cannot clear the player's shootable mark.
+                continue;
+            }
             bool wasAlive = unit.IsAlive;
             unit.ApplyDamage(amount);
             if (wasAlive && !unit.IsAlive) {
@@ -469,6 +484,52 @@ public sealed class CobraGroundWarRuntime
         UpdateSiteControl();
         DriftBalance(PlayerVehicleContract.FixedDeltaSeconds);
     }
+
+    /// <summary>
+    /// Places one soft vehicle on the aircraft nose inside the M28A1 envelope and ballistic
+    /// window, immune to friendly mutual combat, so designation→fire is always possible from
+    /// the spawn hover. Called once from CobraMissionRuntime after the vehicle pose is known.
+    /// </summary>
+    public GroundUnit SeedStandingGunneryTarget(
+        in Vec3D aircraftPositionWorldM,
+        double aircraftYawRad)
+    {
+        if (!aircraftPositionWorldM.IsFinite)
+            throw new ArgumentOutOfRangeException(nameof(aircraftPositionWorldM));
+        if (!double.IsFinite(aircraftYawRad))
+            throw new ArgumentOutOfRangeException(nameof(aircraftYawRad));
+        if (_units.Any(unit => unit.Id == GunnerySeamUnitId))
+            return _units.First(unit => unit.Id == GunnerySeamUnitId);
+
+        double east = aircraftPositionWorldM.X + Math.Sin(aircraftYawRad) * GunnerySeamRangeM;
+        double north = aircraftPositionWorldM.Z + Math.Cos(aircraftYawRad) * GunnerySeamRangeM;
+        if (!_terrain.TrySample(east, north, out TerrainSample surface)) {
+            east = aircraftPositionWorldM.X;
+            north = aircraftPositionWorldM.Z + GunnerySeamRangeM;
+            if (!_terrain.TrySample(east, north, out surface))
+                throw new InvalidOperationException(
+                    "Gunnery seam has no terrain datum ahead of the aircraft.");
+        }
+
+        ContestedSite home = _sites
+            .OrderBy(site => HorizontalDistanceSquared(
+                site.PositionWorldM, new Vec3D(east, surface.HeightM, north)))
+            .First();
+        var unit = new GroundUnit(
+            GunnerySeamUnitId,
+            GroundFaction.Hostile,
+            GroundUnitRole.SoftVehicle,
+            maxHealth: 120.0,
+            new Vec3D(east, surface.HeightM + 1.2, north),
+            GroundUnitIntent.Hold,
+            home.Id);
+        _units.Add(unit);
+        PushEvent("spawn", unit.Id, home.Id, GroundFaction.Hostile, unit.PositionWorldM);
+        return unit;
+    }
+
+    static bool IsGunnerySeam(GroundUnit unit) =>
+        string.Equals(unit.Id, GunnerySeamUnitId, StringComparison.Ordinal);
 
     void SpawnUnit(
         GroundFaction faction,

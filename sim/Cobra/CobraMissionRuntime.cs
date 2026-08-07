@@ -400,6 +400,9 @@ public sealed class CobraMissionRuntime
             additivePayloadMassKg,
             Ah1gCobraDefinition.LateProduction);
         _groundWar = new CobraGroundWarRuntime(definition, terrain, groundWarSeed);
+        // Crew-chain seam: a standing hostile on the nose so fire_authorized is reachable from
+        // the spawn hover for the whole sortie (see CobraGroundWarRuntime.SeedStandingGunneryTarget).
+        _groundWar.SeedStandingGunneryTarget(resolvedSpawn.PositionWorldM, resolvedSpawn.YawRad);
         Status = CobraMissionStatus.Active;
         _cachedMaskingAssessment = AssessMaskingAt(_cobra.State.PositionWorldM);
         _maskingAssessmentAuthorityTicks = 0;
