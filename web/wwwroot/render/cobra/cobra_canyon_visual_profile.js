@@ -39,7 +39,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
   // of the flat overhead wash a high sun produces.
   sunDirectionWorld: normalized([0.50, 0.28, -0.82]),
 
-  toneMappingExposure: 1.06,
+  toneMappingExposure: 1.12,
 
   // THE F-22'S AIR. Colour is app.js fogLow (0x6f8790) and density is its clear-air setting;
   // the banding is korea_terrain's Korea-branch default (6 planes at 0.65 blend), which is the
@@ -75,10 +75,10 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     belowHorizonColor: Object.freeze([0.022, 0.075, 0.095]),
     skyCurveExponent: 0.42,
     horizonShoulderFalloff: 70,
-    horizonShoulderWeight: 0.38,
-    cloudColor: Object.freeze([0.62, 0.67, 0.72]),
+    horizonShoulderWeight: 0.48,
+    cloudColor: Object.freeze([0.64, 0.68, 0.72]),
     // Thicker monsoon shelf so the dome does not read as clear desert air from 30 m AGL.
-    cloudShelf: Object.freeze([0.035, 0.28]),
+    cloudShelf: Object.freeze([0.045, 0.32]),
   }),
 
   // THE F-22'S LIGHT RIG, verbatim from app.js: hemisphere 0xb5cad0 over 0x102229 at 0.78, and a
