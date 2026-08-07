@@ -55,7 +55,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // theatre. 2.3e-4 is the same 1.87/radius law (adaptive-world-radius doctrine) solved for an
     // ~8 km readable radius, which is tropical monsoon-season air rather than a Korean winter.
     // The colour warms and lightens with it: humid haze is pale blue-grey, not slate.
-    density: 0.00023,
+    density: 0.00028,
     hazeBands: 6,
     hazeBandBlend: 0.65,
   }),
@@ -76,8 +76,8 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     skyCurveExponent: 0.42,
     horizonShoulderFalloff: 70,
     horizonShoulderWeight: 0.38,
-    cloudColor: Object.freeze([0.62, 0.68, 0.72]),
-    cloudShelf: Object.freeze([0.015, 0.16]),
+    cloudColor: Object.freeze([0.58, 0.64, 0.70]),
+    cloudShelf: Object.freeze([0.02, 0.22]),
   }),
 
   // THE F-22'S LIGHT RIG, verbatim from app.js: hemisphere 0xb5cad0 over 0x102229 at 0.78, and a
@@ -136,7 +136,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // Korean heightfield is dissected enough not to need it. Above ~4 it prints as banding.
     reliefGain: 4.6,
     // korea_terrain's shipped uCloudShadowStrength.
-    cloudShadowStrength: 0.34,
+    cloudShadowStrength: 0.42,
     // Hue-separated painted light, verbatim from korea_terrain: cool fill from the sky,
     // warm key from the sun.
     skyFill: Object.freeze([0.62, 0.74, 1.0]),

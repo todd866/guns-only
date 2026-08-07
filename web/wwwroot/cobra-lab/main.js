@@ -24,6 +24,11 @@ import {
 } from "../render/cobra/cobra_rotorcraft_hud.js?v=271";
 import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=271";
 import {
+  emberActObjectiveOverlay,
+  emberPathGuidanceState,
+} from "../render/cobra/cobra_ember_path.js?v=271";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=271";
+import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
 } from "../render/cobra/cobra_control_profile.js?v=271";
@@ -144,6 +149,7 @@ let pilotControls = createCobraPilotControlState(0.5);
 let windowFocused = typeof document === "undefined" ? true : document.hasFocus();
 const cobraControlProfile = resolveCobraControlProfile();
 let groundWarPresentation = null;
+let emberGuidancePath = null;
 let ah1gPresence = null;
 let presenceDeltaSeconds = 0;
 let hostileTargetIds = [];
@@ -390,17 +396,20 @@ function recordTelemetry(nowMs) {
       cobra_route_id: authorityState.route_id,
       cobra_status: authorityState.status,
       cobra_authority_tick: authorityState.authority_tick,
-      cobra_x_m: authorityState.vehicle.x_m,
-      cobra_y_m: authorityState.vehicle.y_m,
-      cobra_z_m: authorityState.vehicle.z_m,
+      cobra_x_m: pose?.x_m ?? authorityState.vehicle.x_m,
+      cobra_y_m: pose?.y_m ?? authorityState.vehicle.y_m,
+      cobra_z_m: pose?.z_m ?? authorityState.vehicle.z_m,
       cobra_ground_speed_mps: authorityState.vehicle.ground_speed_mps,
       cobra_vertical_speed_mps: authorityState.vehicle.vertical_speed_mps,
       cobra_collective: authorityState.vehicle.collective,
       cobra_power_margin: authorityState.vehicle.power_margin,
       cobra_main_rotor_rpm: rotor?.main_rotor_rpm ?? pose?.main_rotor_rpm,
       cobra_transmission_limit_fraction: rotor?.transmission_limit_fraction,
+      // Prefer the per-frame hot pose: GetState is 30 Hz and a stale tab can pin spawn forever
+      // while the flying tab's camera still reads hot pose (owner 16:41 flight diagnosis).
       cobra_pitch_rad: pose?.pitch_rad ?? authorityState.vehicle.pitch_rad,
       cobra_roll_rad: pose?.roll_rad ?? authorityState.vehicle.roll_rad,
+      cobra_mission_act: authorityState.mission_act,
       cobra_frame_ms: lastRawFrameMs,
       cobra_route_remaining_m: authorityState.route_guidance.remaining_m,
       cobra_cross_track_m: authorityState.route_guidance.cross_track_m,
@@ -621,13 +630,16 @@ function rebuildPresentation() {
   if (!world) return;
   presentation?.dispose();
   groundWarPresentation?.dispose();
+  emberGuidancePath?.dispose();
   plan = planCobraCanyonWorld(world, { qualityTier: qualitySelect.value });
   presentation = createCobraCanyonPresentation(THREE, plan, {
     qualityTier: qualitySelect.value,
   });
   groundWarPresentation = createCobraGroundWarPresentation(THREE);
+  emberGuidancePath = createGuidancePath(THREE, { maxGates: 16 });
   scene.add(presentation.group);
   scene.add(groundWarPresentation.group);
+  scene.add(emberGuidancePath.object3d);
   // Presence is ownship, not canyon scenery — recreate after canyon rebuild so it stays on top.
   if (ah1gPresence) {
     scene.remove(ah1gPresence.group);
@@ -943,6 +955,7 @@ function updateObjectiveHud(war) {
   const copy = cobraObjectiveCopy(war, {
     selectedTargetId: authorityState?.gunner?.selected_target_id ?? null,
     playerHasInteracted,
+    actOverlay: emberActObjectiveOverlay(authorityState?.mission_act),
   });
   if (copy) {
     setText(objectiveLine, copy.line);
@@ -1014,6 +1027,9 @@ function animate(timeMs) {
     cameraAglM: aglM,
     ambientBudgetLevel: ambientBudgetLevel(),
   });
+  if (emberGuidancePath && authorityState) {
+    emberGuidancePath.update(emberPathGuidanceState(authorityState));
+  }
   recordPhase("presentation", presentationStartedAtMs);
   if (tourInput.checked && bridge && !missionTerminal) {
     // Keep the ground war alive during guided preview even when the camera is on rails.
@@ -1251,6 +1267,8 @@ function teardownMission(reason) {
   setPlayCursorHidden(false);
   presentation?.dispose();
   groundWarPresentation?.dispose();
+  emberGuidancePath?.dispose();
+  emberGuidancePath = null;
   if (ah1gPresence) {
     scene.remove(ah1gPresence.group);
     ah1gPresence.dispose();

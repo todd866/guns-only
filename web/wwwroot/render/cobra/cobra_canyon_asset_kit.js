@@ -827,14 +827,14 @@ function geometryForRole(THREE, role) {
     // down to ~0.15 linear, which is why stands read as black holes punched in the hillside
     // rather than as canopy catching light. Held near 1.0 with a modest crown-to-skirt gradient.
     const lobes = [
-      [0.00, 0.00, 0.40, 0.24, 1.00, [1.06, 1.10, 1.00]],
-      [-0.34, 0.20, 0.36, 0.20, 0.84, [0.94, 0.98, 0.90]],
-      [0.33, -0.20, 0.38, 0.18, 0.91, [1.12, 1.16, 1.06]],
-      [0.14, 0.36, 0.32, 0.14, 0.72, [0.86, 0.90, 0.83]],
-      [-0.16, -0.34, 0.34, 0.00, 0.58, [0.76, 0.80, 0.74]],
+      [0.00, 0.00, 0.42, 0.18, 1.00, [1.02, 1.08, 0.98]],
+      [-0.30, 0.18, 0.38, 0.14, 0.86, [0.96, 1.02, 0.94]],
+      [0.30, -0.18, 0.40, 0.14, 0.92, [1.04, 1.10, 1.00]],
+      [0.12, 0.32, 0.34, 0.10, 0.74, [0.92, 0.98, 0.90]],
+      [-0.14, -0.30, 0.36, 0.00, 0.62, [0.88, 0.94, 0.86]],
     ];
     for (const [x, z, radius, skirt, top, tint] of lobes) {
-      appendCanopy(positions, colors, x, z, radius, radius * 0.86, skirt, top, tint, 5);
+      appendCanopy(positions, colors, x, z, radius, radius * 0.9, skirt, top, tint, 6);
     }
   } else if (role === "plantation") {
     for (let index = 0; index < 5; index++) {

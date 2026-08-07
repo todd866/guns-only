@@ -327,11 +327,13 @@ public sealed class CobraMissionRuntime
     readonly IReadOnlyList<CobraResolvedObstacle> _resolvedObstacles;
     readonly IReadOnlyList<CobraResolvedThreatObserver> _resolvedThreatObservers;
     readonly CobraGroundWarRuntime _groundWar;
+    readonly Vec3D _bridgeCentreWorldM;
     CobraMaskingAssessment _cachedMaskingAssessment = null!;
     long _maskingAssessmentAuthorityTicks;
     long _nextAuthorityTick;
     string? _collisionObstacleId;
     double _groundWarAccumulatorSeconds;
+    CobraMissionAct _act = CobraMissionAct.Depart;
     // Diagnostics are read once per GetState (30 Hz), never once per tick. Building them eagerly
     // walked the route polyline and resampled terrain 120 times a second to throw 119 away.
     CobraMissionDiagnostics? _diagnostics;
@@ -400,12 +402,30 @@ public sealed class CobraMissionRuntime
             additivePayloadMassKg,
             Ah1gCobraDefinition.LateProduction);
         _groundWar = new CobraGroundWarRuntime(definition, terrain, groundWarSeed);
+        CobraCanyonLandmarkDefinition bridgeLandmark = definition.Landmarks.First(landmark =>
+            string.Equals(
+                landmark.Id,
+                "landmark.cobra-canyon.iron-bell-bridge.v1",
+                StringComparison.Ordinal));
+        if (!terrain.TrySample(bridgeLandmark.EastM, bridgeLandmark.NorthM, out TerrainSample bridgeSurface))
+            throw new InvalidOperationException("Iron Bell Bridge has no terrain datum.");
+        _bridgeCentreWorldM = new Vec3D(
+            bridgeLandmark.EastM,
+            bridgeSurface.HeightM,
+            bridgeLandmark.NorthM);
         // Crew-chain seam: a standing hostile on the nose so fire_authorized is reachable from
         // the spawn hover for the whole sortie (see CobraGroundWarRuntime.SeedStandingGunneryTarget).
         _groundWar.SeedStandingGunneryTarget(resolvedSpawn.PositionWorldM, resolvedSpawn.YawRad);
         Status = CobraMissionStatus.Active;
         _cachedMaskingAssessment = AssessMaskingAt(_cobra.State.PositionWorldM);
         _maskingAssessmentAuthorityTicks = 0;
+        RefreshAct(resolvedSpawn.PositionWorldM, clearanceM: resolvedSpawn.PositionWorldM.Y - (
+            terrain.TrySample(
+                resolvedSpawn.PositionWorldM.X,
+                resolvedSpawn.PositionWorldM.Z,
+                out TerrainSample spawnSurface)
+                ? spawnSurface.HeightM
+                : resolvedSpawn.PositionWorldM.Y));
     }
 
     public CobraCanyonDefinition Definition => _definition;
@@ -414,6 +434,12 @@ public sealed class CobraMissionRuntime
     public Ah1gCobraDynamics Cobra => _cobra;
     public IPlayerVehicleDynamics Vehicle => _cobra;
     public CobraGroundWarRuntime GroundWar => _groundWar;
+    public CobraMissionAct Act => _act;
+    public IReadOnlyList<CobraPathGate> PathGates => CobraMissionActProgress.BuildPathGates(
+        _act,
+        _selectedRoute,
+        _groundWar.Fob.CentreWorldM,
+        fobPathAltitudeM: _groundWar.Fob.CentreWorldM.Y + 30.0);
     public IReadOnlyList<CobraResolvedObstacle> ResolvedObstacles => _resolvedObstacles;
     public IReadOnlyList<CobraResolvedThreatObserver> ResolvedThreatObservers =>
         _resolvedThreatObservers;
@@ -491,8 +517,30 @@ public sealed class CobraMissionRuntime
             };
         }
 
+        double? clearanceM = null;
+        if (_terrain.TrySample(
+            currentPositionWorldM.X,
+            currentPositionWorldM.Z,
+            out TerrainSample currentSurface)) {
+            clearanceM = currentPositionWorldM.Y - currentSurface.HeightM;
+        }
+        RefreshAct(currentPositionWorldM, clearanceM);
+
         _diagnostics = null;
         return new CobraMissionAdvanceResult(vehicleResult, Diagnostics);
+    }
+
+    void RefreshAct(in Vec3D positionWorldM, double? clearanceM)
+    {
+        _act = CobraMissionActProgress.Next(
+            _act,
+            positionWorldM,
+            _groundWar.Fob.CentreWorldM,
+            _bridgeCentreWorldM,
+            _groundWar.VictoryHoldProgress,
+            _groundWar.MissionOutcome,
+            Status,
+            clearanceM);
     }
 
     /// <summary>

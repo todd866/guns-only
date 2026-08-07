@@ -63,6 +63,11 @@ export function cobraObjectiveCopy(war, options = {}) {
     };
   }
 
+  // Ember Run act spine outranks the generic tip once urgency/bingo are clear.
+  if (options.actOverlay?.line) {
+    return options.actOverlay;
+  }
+
   if ((war.victory_hold_progress ?? 0) > 0) {
     return {
       line: `HOLDING FRIENDLY CONTROL · ${holdPct}%`,

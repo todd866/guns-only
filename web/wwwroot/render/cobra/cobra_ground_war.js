@@ -7,7 +7,8 @@ export const COBRA_GROUND_WAR_PRESENTATION_SCHEMA =
   "guns-only.cobra-ground-war-presentation.v1";
 
 const FRIENDLY_COLOR = 0x6f8f4e;
-const HOSTILE_COLOR = 0x6a3a32;
+// Hotter hostile so a mark reads as "shoot me" at 400–800 ft (owner Ember Run ask).
+const HOSTILE_COLOR = 0xc44a32;
 const WRECK_COLOR = 0x3a342c;
 const SITE_NEUTRAL = 0xc2b280;
 const SITE_FRIENDLY = 0x8fbf5a;
@@ -20,6 +21,55 @@ function roleScale(role) {
   if (role === "soft-vehicle") return { width: 7.2, height: 3.2, depth: 3.4 };
   if (role === "hard-point") return { width: 4.4, height: 5.5, depth: 4.4 };
   return { width: 3.2, height: 2.4, depth: 3.2 };
+}
+
+/** Presentation-only silhouettes — sim still owns combat truth. */
+function roleGeometry(THREE, role) {
+  if (role === "soft-vehicle") {
+    const group = new THREE.Group();
+    const cab = new THREE.Mesh(
+      new THREE.BoxGeometry(2.8, 2.4, 2.6),
+      undefined,
+    );
+    cab.position.set(0, 1.4, 1.6);
+    const bed = new THREE.Mesh(
+      new THREE.BoxGeometry(3.2, 1.6, 4.8),
+      undefined,
+    );
+    bed.position.set(0, 1.0, -1.2);
+    group.add(cab, bed);
+    group.userData.composite = true;
+    return group;
+  }
+  if (role === "hard-point") {
+    const group = new THREE.Group();
+    const pit = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.2, 1.4, 8), undefined);
+    pit.position.y = 0.7;
+    const gun = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 4.2), undefined);
+    gun.position.set(0, 2.0, 1.2);
+    group.add(pit, gun);
+    group.userData.composite = true;
+    return group;
+  }
+  // Infantry clump: three low boxes.
+  const group = new THREE.Group();
+  for (const [x, z] of [[-1.1, 0.4], [0.2, -0.8], [1.0, 0.6]]) {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2.0, 0.9), undefined);
+    body.position.set(x, 1.0, z);
+    group.add(body);
+  }
+  group.userData.composite = true;
+  return group;
+}
+
+function applyUnitMaterial(root, mat) {
+  root.traverse((child) => {
+    if (child.isMesh) {
+      child.material = mat;
+      child.castShadow = false;
+      child.receiveShadow = false;
+    }
+  });
 }
 
 function siteControlColor(localControl) {
@@ -73,8 +123,6 @@ export function createCobraGroundWarPresentation(THREE) {
   function ensureUnit(unit) {
     let entry = unitMeshes.get(unit.id);
     if (entry) return entry;
-    const scale = roleScale(unit.role);
-    const geometry = new THREE.BoxGeometry(scale.width, scale.height, scale.depth);
     const mat = new THREE.MeshStandardMaterial({
       color: unit.alive
         ? (unit.faction === "friendly" ? FRIENDLY_COLOR : HOSTILE_COLOR)
@@ -82,10 +130,9 @@ export function createCobraGroundWarPresentation(THREE) {
       roughness: 0.86,
       metalness: 0.08,
     });
-    const mesh = new THREE.Mesh(geometry, mat);
+    const mesh = roleGeometry(THREE, unit.role);
+    applyUnitMaterial(mesh, mat);
     mesh.name = `GROUND_UNIT_${unit.id}`;
-    mesh.castShadow = false;
-    mesh.receiveShadow = false;
     unitRoot.add(mesh);
     entry = { mesh, mat };
     unitMeshes.set(unit.id, entry);

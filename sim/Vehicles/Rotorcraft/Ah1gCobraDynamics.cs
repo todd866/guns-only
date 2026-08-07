@@ -591,11 +591,13 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             targetYawRate -= Degrees(8.0) * controlEffectiveness;
 
         // Progressive 2/rev feedback is deterministic and small; it is evidence/cueing, not a
-        // canned roll departure. A future azimuth-resolved rotor must replace it.
+        // canned roll departure. Owner 16:41 stall-turn: full RBS + 4°/3° nudges felt like the
+        // airframe "jumped" — keep the cue, halve the shove so high-attitude complaints without
+        // looking broken.
         double twoPerRev = Math.Sin(2.0 * _rotorAzimuthRad);
-        targetRollRate += rbsSeverity * twoPerRev * Degrees(4.0);
+        targetRollRate += rbsSeverity * twoPerRev * Degrees(2.0);
         targetPitchRate += (rbsSeverity + 0.45 * vrsSeverity)
-            * Math.Cos(2.0 * _rotorAzimuthRad) * Degrees(3.0);
+            * Math.Cos(2.0 * _rotorAzimuthRad) * Degrees(1.5);
 
         return new BodyRates(
             FirstOrder(rates.P, targetRollRate,

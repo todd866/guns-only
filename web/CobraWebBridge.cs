@@ -174,6 +174,14 @@ public static partial class CobraWebBridge
             route_id = diagnostics.SelectedRouteId,
             status = StatusToken(diagnostics.Status),
             authority_tick = diagnostics.AuthorityTicksAdvanced,
+            mission_act = ActToken(runtime.Act),
+            path_gates = runtime.PathGates.Select(gate => new {
+                east_m = gate.EastM,
+                up_m = gate.UpM,
+                north_m = gate.NorthM,
+                half_m = gate.RadiusM,
+                active = gate.Active,
+            }).ToArray(),
             route_guidance = new {
                 next_point_id = guidance.NextPointId,
                 segment_index = guidance.SegmentIndex,
@@ -404,5 +412,15 @@ public static partial class CobraWebBridge
         CobraMissionStatus.Victory => "victory",
         CobraMissionStatus.Defeat => "defeat",
         _ => throw new ArgumentOutOfRangeException(nameof(status))
+    };
+
+    static string ActToken(CobraMissionAct act) => act switch {
+        CobraMissionAct.Depart => "depart",
+        CobraMissionAct.Ingress => "ingress",
+        CobraMissionAct.Engage => "engage",
+        CobraMissionAct.Hold => "hold",
+        CobraMissionAct.Rtb => "rtb",
+        CobraMissionAct.Complete => "complete",
+        _ => throw new ArgumentOutOfRangeException(nameof(act))
     };
 }
