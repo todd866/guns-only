@@ -63,13 +63,22 @@ function roleGeometry(THREE, role) {
 }
 
 function applyUnitMaterial(root, mat) {
-  root.traverse((child) => {
-    if (child.isMesh) {
-      child.material = mat;
-      child.castShadow = false;
-      child.receiveShadow = false;
+  // Walk children explicitly: test doubles and some composites may lack THREE.Object3D.traverse.
+  const stack = [root];
+  while (stack.length) {
+    const node = stack.pop();
+    if (!node) continue;
+    if (node.isMesh || (node.geometry && "material" in node)) {
+      node.material = mat;
+      node.castShadow = false;
+      node.receiveShadow = false;
     }
-  });
+    if (Array.isArray(node.children)) {
+      for (let index = 0; index < node.children.length; index++) {
+        stack.push(node.children[index]);
+      }
+    }
+  }
 }
 
 function siteControlColor(localControl) {
@@ -281,30 +290,40 @@ export function createCobraGroundWarPresentation(THREE) {
       spawnEffect(event);
   }
 
+  function disposeObject(object) {
+    if (!object) return;
+    if (Array.isArray(object.children)) {
+      for (const child of [...object.children]) disposeObject(child);
+    }
+    object.geometry?.dispose?.();
+    if (Array.isArray(object.material)) {
+      for (const material of object.material) material?.dispose?.();
+    } else {
+      object.material?.dispose?.();
+    }
+  }
+
   function dispose() {
     for (const entry of unitMeshes.values()) {
       unitRoot.remove(entry.mesh);
-      entry.mesh.geometry.dispose();
+      disposeObject(entry.mesh);
       entry.mat.dispose();
     }
     unitMeshes.clear();
     for (const entry of siteMeshes.values()) {
       siteRoot.remove(entry.mesh);
-      entry.mesh.geometry.dispose();
+      disposeObject(entry.mesh);
       entry.mat.dispose();
-      entry.flag.geometry.dispose();
-      entry.flag.material.dispose();
     }
     siteMeshes.clear();
     for (const effect of transientEffects) {
       effectRoot.remove(effect);
-      effect.geometry?.dispose?.();
-      effect.material?.dispose?.();
+      disposeObject(effect);
     }
     transientEffects.length = 0;
     effectRoot.remove(selection);
-    selection.geometry.dispose();
-    selection.material.dispose();
+    selection.geometry?.dispose?.();
+    selection.material?.dispose?.();
     group.removeFromParent();
   }
 
