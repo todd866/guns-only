@@ -137,7 +137,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // Korean heightfield is dissected enough not to need it. Above ~4 it prints as banding.
     reliefGain: 4.6,
     // korea_terrain's shipped uCloudShadowStrength.
-    cloudShadowStrength: 0.52,
+    cloudShadowStrength: 0.58,
     // Hue-separated painted light, verbatim from korea_terrain: cool fill from the sky,
     // warm key from the sun.
     skyFill: Object.freeze([0.62, 0.74, 1.0]),
@@ -182,10 +182,10 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
   // half the authored water width, so 1.0 is the waterline and the ribbon's extra rim is bank.
   water: Object.freeze({
     deepColor: Object.freeze([0.008, 0.034, 0.048]),
-    shallowColor: Object.freeze([0.032, 0.086, 0.094]),
-    bankColor: Object.freeze([0.128, 0.118, 0.072]),
-    shoreWindow: Object.freeze([0.86, 1.06]),
+    shallowColor: Object.freeze([0.028, 0.082, 0.088]),
+    bankColor: Object.freeze([0.118, 0.112, 0.068]),
+    shoreWindow: Object.freeze([0.84, 1.08]),
     // Gravel rim draped either side of the water sheet, metres.
-    bankWidthM: 11,
+    bankWidthM: 12,
   }),
 });

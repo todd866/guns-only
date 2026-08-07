@@ -1,17 +1,17 @@
-import * as THREE from "../vendor/three.module.js?v=281";
-import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=281";
+import * as THREE from "../vendor/three.module.js?v=282";
+import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=282";
 import {
   dominantSignedAxis,
   gamepadRiderAxes,
-} from "../render/motorcycle/rider_input.js?v=281";
+} from "../render/motorcycle/rider_input.js?v=282";
 import {
   createRapierTrackDayPresentation,
-} from "../render/motorcycle/track_day_presentation.js?v=281";
-import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=281";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=281";
-import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=281";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=281";
-import { RELEASE_BUILD } from "../render/release/release_identity.js?v=281";
+} from "../render/motorcycle/track_day_presentation.js?v=282";
+import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=282";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=282";
+import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=282";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=282";
+import { RELEASE_BUILD } from "../render/release/release_identity.js?v=282";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;

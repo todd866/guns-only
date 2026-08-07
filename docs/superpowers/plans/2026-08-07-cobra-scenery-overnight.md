@@ -26,6 +26,8 @@ Always dual-sync `content/.../cobra-canyon.world.json` ↔ `web/wwwroot/content/
 - [x] Stamp Build 280 for overnight pass 6; STATUS next-candidate in sync
 - [x] Pass 7: Red Earth quarry + White Pagoda mist; hotter laterite/rim rock bands
 - [x] Stamp Build 281 for overnight pass 7; STATUS next-candidate in sync
+- [x] Pass 8: Quieter river fresnel/specular; mist 0.38 / waterAccent 0.20; cloudShadow 0.58; bankWidth 12 m
+- [x] Stamp Build 282 for overnight pass 8; STATUS next-candidate in sync (silent stills deferred — preview publish stalled)
 - [ ] Do not deploy without owner OK
 
 ## Stop conditions
