@@ -24,35 +24,11 @@ import {
 // magazine, and releasing F disarms. That is the whole AH-1G crew contract and no other test in
 // the repo executes it.
 //
-// Why it cannot gate: it needs a hostile the M28A1 flexible turret can physically reach, and Hold
-// the Bridge only offers one for roughly the first 20 seconds of MISSION time. Measured against
-// the published build: two hostiles are seeded on the 170 m and 200 m rings at the spawn site (of
-// which only the 200 m soft vehicle is inside the +/-110 deg envelope, and only barely, at about
-// 107 deg), every other hostile stands 6.7-7.2 km away on the contested sites the assault waves
-// feed -- permanently outside the gun's 80-2000 m ballistic window -- and the friendly garrison
-// kills the near pair inside that first window. The published page advances the sim in real time,
-// so a machine that takes longer to get from page load to keystroke arrives after the only
-// engageable pair is dead.
-//
-// Two attempts to make that speed-invariant both passed locally and both failed on the CI runner:
-//   - run 31070089059: cycled 8 marks and found no qualified track ("no designated hostile ever
-//     produced a qualified track from the spawn hover").
-//   - run 31073497847: after re-spawning the sortie via the app's own restart to reset the mission
-//     clock, the restart wait itself timed out at 20 s wall with an empty predicate log.
-// Local slow-runner emulation could not reproduce either: Playwright CDP CPU throttling at 6x, 10x
-// and 20x combined with a 45-90 s cold-boot dwell passed every time (5/5, 3/3, 3/3), and the
-// instrumented restart fired in 1.3 s at 20x. That emulation is therefore NOT representative of
-// the runner -- notably, CPU starvation slows the sim clock too (45 s of wall dwell at 20x
-// advanced the mission only 10.6 s), so throttling makes the engagement window easier to hit, not
-// harder. Whatever the runner does differently, it is not something I could measure locally, and
-// each further guess costs a CI round trip on a release-blocking gate.
-//
-// To bring this back into the gate, the mission needs a seam that puts a reachable hostile in a
-// known place -- a QA scenario/spawn parameter on the Cobra route, or a seeded standing hostile
-// inside the turret envelope at the spawn hover that the ground war does not remove. Adding one is
-// a product change, not a test change, so it is not in scope here. Until then the gate holds the
-// boot/authority/designation half (see smoke.test.mjs), which is still strictly stronger than the
-// `/AMMO \d+/` textContent match it replaced, and this file holds the rest.
+// Why it was out of the gate before Build 267: Hold the Bridge only offered an engageable
+// hostile for ~20 s at spawn, and the garrison killed that pair before a slow CI runner could
+// designate. Build 267 seeds `ground.hostile.gunnery-seam.000` on the aircraft nose (immune to
+// friendly mutual combat), so the crew chain is reachable for the whole sortie. Re-admit this
+// file to the published-smoke gate once a Verify run proves the seam on the runner.
 
 const WWWROOT = process.env.SMOKE_WWWROOT;
 const TIMEOUT_SCALE = Math.max(1, Number(process.env.SMOKE_TIMEOUT_SCALE) || 1);
@@ -194,7 +170,7 @@ test("the published Cobra route runs the AH-1G crew chain from designation to ro
         );
         held = await page.evaluate(async () => {
           const { cobraRotorcraftHudModel } =
-            await import("/render/cobra/cobra_rotorcraft_hud.js?v=266");
+            await import("/render/cobra/cobra_rotorcraft_hud.js?v=267");
           const state = window.__smokeFiringSnapshot;
           return {
             model: cobraRotorcraftHudModel(state),

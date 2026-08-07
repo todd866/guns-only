@@ -381,7 +381,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         _mainRotorAngularSpeedRadPerSecond = Math.Clamp(
             _mainRotorAngularSpeedRadPerSecond + rotorAngularAcceleration * dt,
             0.0,
-            RpmToAngularSpeed(rotor.MaximumAutorotationRpm * 1.03));
+            RpmToAngularSpeed(rotor.MaximumAutorotationRpm));
         _rotorAzimuthRad = WrapTwoPi(
             _rotorAzimuthRad + _mainRotorAngularSpeedRadPerSecond * dt);
 

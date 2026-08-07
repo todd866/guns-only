@@ -81,6 +81,28 @@ function assertAirframeSymbols(data) {
   }
   if (!geometry.waterlinePx || !geometry.fpvPx) return;
 
+  // Cobra camera-referenced HUD: waterline/FPV share the ladder horizon, while the gun cross
+  // stays on body-forward. Do not demand waterline == nose projection.
+  if (data.ladderReference === "camera") {
+    const horizonRung = geometry.ladderRungs?.find((rung) => rung.deg === 0);
+    if (horizonRung) {
+      const horizonError = distance(geometry.waterlinePx, { x: horizonRung.cx, y: horizonRung.cy });
+      check(name, "camera waterline == ladder horizon rung",
+        horizonError <= 1.5, `error ${horizonError.toFixed(3)} px (tol 1.5)`);
+    }
+    const gunCrossError = geometry.gunCrossPx
+      ? distance(geometry.gunCrossPx, probes.waterline)
+      : Number.POSITIVE_INFINITY;
+    check(name, "gun cross remains on projected body-forward",
+      gunCrossError <= 1.5, `error ${gunCrossError.toFixed(3)} px (tol 1.5)`);
+    const dx = geometry.fpvPx.x - geometry.waterlinePx.x;
+    const dy = geometry.fpvPx.y - geometry.waterlinePx.y;
+    check(name, "camera fpv sits with waterline at zero alpha/beta",
+      Math.hypot(dx, dy) <= 1.5 || aoa !== 0 || beta !== 0,
+      `gap ${Math.hypot(dx, dy).toFixed(2)} px`);
+    return;
+  }
+
   // hud.js anchors match the independent probe projections.
   const waterlineError = distance(geometry.waterlinePx, probes.waterline);
   check(name, "waterline == projected body-forward",
@@ -134,15 +156,18 @@ function assertLadder(data) {
       `${geometry.ladderRungs.length} rungs recorded`);
     return;
   }
-  const lookingOffAxis = Math.abs(Number(look?.yawDeg) || 0) > 1e-9
-    || Math.abs(Number(look?.pitchDeg) || 0) > 1e-9;
+  const pitch = data.ladderReference === "camera"
+    ? (Number(look?.pitchDeg) || 0)
+    : (Number(state.pitch_deg) || 0);
+  const lookingOffAxis = data.ladderReference !== "camera"
+    && (Math.abs(Number(look?.yawDeg) || 0) > 1e-9
+      || Math.abs(Number(look?.pitchDeg) || 0) > 1e-9);
   if (lookingOffAxis && probes.waterline?.behind === true) {
     check(name, "off-axis ladder has no clamped ghosts",
       geometry.ladderRungs.length === 0,
       `${geometry.ladderRungs.length} rungs recorded`);
     return;
   }
-  const pitch = Number(state.pitch_deg) || 0;
   const rungs = new Map(geometry.ladderRungs.map((rung) => [rung.deg, rung]));
   check(name, "ladder rungs recorded", rungs.size > 0, `${rungs.size} rungs`);
   if (rungs.size === 0) return;

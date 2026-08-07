@@ -23,7 +23,7 @@ public static class Ah1gCobraDefinition
                 Solidity: 0.0651,
                 LinearTwistRad: Degrees(-10.0),
                 LiftCurveSlopePerRad: 5.73,
-                ProfileDragCoefficient: 0.0120,
+                ProfileDragCoefficient: 0.0088,
                 FlapInertiaPerBladeKgM2: 1_878.0,
                 PreconeRad: Degrees(2.75),
                 NominalRpm: 324.0,
@@ -32,7 +32,11 @@ public static class Ah1gCobraDefinition
                 MaximumAutorotationRpm: 339.0,
                 MinimumEffectiveRootPitchRad: Degrees(8.5),
                 MaximumEffectiveRootPitchRad: Degrees(20.5),
-                InducedPowerFactor: 1.15,
+                // Hover figure of merit was ~0.62 with kappa 1.15 / Cd0 0.012 (93% TQ at basic
+                // mission weight). A real AH-1G rotor sits near 0.70–0.72; bring kappa and profile
+                // drag down so OGE hover draws ~80% of the 1,100 shp transmission — do NOT raise
+                // engine rating to paper over a starved rotor.
+                InducedPowerFactor: 1.10,
                 DynamicInflowTimeConstantSeconds: 0.18),
             TailRotor: new TailRotorDefinition(
                 BladeCount: 2,
@@ -50,9 +54,9 @@ public static class Ah1gCobraDefinition
                 GovernorProportionalGainWPerRpm: 24_000.0,
                 // Proportional-only control needs a standing rpm error to hold a standing power
                 // correction, so the rotor sat near 85% Nr for whole sorties with LOW ROTOR RPM
-                // lit. Ki = Kp / 2 s resets that error over roughly two seconds, which is the
-                // order a real N2 governor takes to recover from a collective step.
-                GovernorIntegralGainWPerRpmSecond: 12_000.0,
+                // lit. Ki = Kp / 1.5 s closes a cruise-with-margin residual that Ki=Kp/2 left at
+                // ~96% Nr with torque still in hand (Build 266 gap).
+                GovernorIntegralGainWPerRpmSecond: 14_000.0,
                 AccessoryPowerW: 18_000.0,
                 TailRotorPowerFraction: 0.085,
                 SeaLevelDensityKgM3: 1.225,

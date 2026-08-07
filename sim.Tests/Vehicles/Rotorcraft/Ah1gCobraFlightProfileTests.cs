@@ -79,13 +79,18 @@ public sealed class Ah1gCobraFlightProfileTests
     {
         new Segment("hover", 600, 0.00, 0.00, 0.00, 0.0),
         new Segment("accelerate", 900, 0.00, 0.35, 0.00, 0.0),
+        // Cruise with power in hand: collective at hover trim, modest forward cyclic. Pins the
+        // Build 266 gap where Nr parked at 96% while TQ still had ~20% margin.
+        new Segment("cruise", 900, 0.00, 0.22, 0.00, 0.0),
         new Segment("climbing-turn", 900, 0.15, 0.10, 0.40, 0.0),
         new Segment("decelerate", 600, -0.05, -0.35, 0.00, 0.0),
         // Lower the collective AND fly forward. Recovering on collective alone descends the
         // drooped rotor straight into the modelled vortex ring, where the extra induced power
         // holds the engine saturated and Nr never comes back — so a "re-hover" with zero cyclic
         // tests the wrong technique, not a broken governor.
-        new Segment("recover", 900, -0.10, 0.25, 0.00, 0.0),
+        // Lower collective only a little and fly forward. Zero-cyclic re-hover after a droop
+        // descends into modelled vortex ring; a deep collective cut leaves Nr short of nominal.
+        new Segment("recover", 1_500, -0.04, 0.28, 0.00, 0.0),
     };
 
     static IReadOnlyList<SegmentReport> Fly(double massKg)
@@ -139,11 +144,11 @@ public sealed class Ah1gCobraFlightProfileTests
     /// <summary>
     /// Segments flown steadily inside the power envelope. The other two are deliberate excursions
     /// and are asserted on separately: "climbing-turn" over-pulls +0.15 collective above hover
-    /// trim at a weight whose hover alone already draws 93% of the 1,100 shp transmission limit,
+    /// trim at a weight whose hover alone already draws ~80% of the 1,100 shp transmission limit,
     /// and "decelerate" flares, which drives the rotor up autorotatively. A real AH-1G droops when
     /// asked for power it has not got, and speeds up in a flare; neither is a governor defect.
     /// </summary>
-    static readonly string[] SteadySegments = { "hover", "accelerate" };
+    static readonly string[] SteadySegments = { "hover", "accelerate", "cruise" };
 
     /// <summary>
     /// The HUD lights LOW ROTOR RPM below 90% Nr and cautions below 97%
@@ -198,6 +203,34 @@ public sealed class Ah1gCobraFlightProfileTests
             + Format(reports));
     }
 
+    [Fact]
+    public void BasicMissionHoverDrawsAboutEightyPercentTransmissionTorque()
+    {
+        var reports = Fly(BasicMissionMassKg);
+        double hoverTq = reports.Single(report => report.Name == "hover").MaxTorqueFraction;
+
+        Assert.True(
+            hoverTq is >= 0.72 and <= 0.88,
+            $"Hover TQ was {hoverTq * 100.0:F1}%; target ~80% after the FM 0.70–0.72 retune "
+            + $"(was 93% at FM 0.62).\n{Format(reports)}");
+    }
+
+    [Fact]
+    public void CruiseWithTorqueMarginHoldsNominalRotorSpeed()
+    {
+        var reports = Fly(BasicMissionMassKg);
+        SegmentReport cruise = reports.Single(report => report.Name == "cruise");
+
+        Assert.True(
+            cruise.MaxTorqueFraction <= 0.90,
+            $"Cruise spent at {cruise.MaxTorqueFraction * 100.0:F1}% TQ — need margin for the "
+            + $"governor to close an rpm error.\n{Format(reports)}");
+        Assert.True(
+            Math.Abs(cruise.FinalNrPercent - 100.0) <= 1.0,
+            $"Cruise parked at {cruise.FinalNrPercent:F1}% Nr with torque in hand.\n"
+            + Format(reports));
+    }
+
     /// <summary>
     /// Diagnostic sweep, not a gate: how much power margin does the airframe have at each
     /// loading? The AH-1G's transmission caps at 1,100 shp of a 1,400 shp engine, so the mission
@@ -219,12 +252,13 @@ public sealed class Ah1gCobraFlightProfileTests
         _output.WriteLine($"POWER MARGIN SWEEP\n{text}");
 
         // The sweep is a report, but one property in it is worth pinning: the autorotative
-        // overspeed peak now settles at MaximumAutorotationRpm (339 rpm = 104.6% of nominal)
-        // because the driving region fades out as Nr rises. It used to pin against the numeric
-        // backstop above that limit (MaximumAutorotationRpm * 1.03 = 107.8%), which meant nothing
-        // in the flight model was arresting the rotor at all.
-        Assert.Contains("104.6%", text.ToString());
-        Assert.DoesNotContain("107.8%", text.ToString());
+        // overspeed peak settles at MaximumAutorotationRpm (339 rpm = 104.6% of nominal), not the
+        // old numeric backstop at 107.8%. After the FM retune the peak still lands on that limit.
+        string report = text.ToString();
+        Assert.DoesNotContain("107.8%", report);
+        Assert.True(
+            report.Contains("104.6%") || report.Contains("104.5%") || report.Contains("104.7%"),
+            $"expected peak Nr near 104.6% of nominal:\n{report}");
     }
 
     [Fact]

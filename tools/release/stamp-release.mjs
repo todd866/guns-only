@@ -59,7 +59,7 @@ export function stampSource(relativePath, source, currentBuild, nextBuild) {
   return result;
 }
 
-async function sourceFiles(root, relativeDirectory, fileSystem) {
+async function sourceFiles(root, relativeDirectory, fileSystem, { includeTests = false } = {}) {
   const absoluteDirectory = path.join(root, relativeDirectory);
   const entries = await fileSystem.readdir(absoluteDirectory, { withFileTypes: true });
   const files = [];
@@ -67,14 +67,14 @@ async function sourceFiles(root, relativeDirectory, fileSystem) {
     const relative = path.join(relativeDirectory, entry.name);
     if (entry.isDirectory()) {
       if (!SKIPPED_DIRECTORIES.has(entry.name)) {
-        files.push(...await sourceFiles(root, relative, fileSystem));
+        files.push(...await sourceFiles(root, relative, fileSystem, { includeTests }));
       }
       continue;
     }
     if (
       entry.isFile()
       && SOURCE_EXTENSIONS.has(path.extname(entry.name))
-      && !entry.name.includes(".test.")
+      && (includeTests || !entry.name.includes(".test."))
     ) {
       files.push(relative.split(path.sep).join("/"));
     }
@@ -83,9 +83,11 @@ async function sourceFiles(root, relativeDirectory, fileSystem) {
 }
 
 async function releaseSourceFiles(root, fileSystem) {
+  // Stamp the whole release surface, including smoke *tests* that pin ?v= (Build 266 missed
+  // cobra-crew-chain.test.mjs because .test. files were skipped). wwwroot tests stay excluded.
   return [
     ...await sourceFiles(root, "web/wwwroot", fileSystem),
-    ...await sourceFiles(root, "web/smoke", fileSystem),
+    ...await sourceFiles(root, "web/smoke", fileSystem, { includeTests: true }),
   ].sort();
 }
 

@@ -72,3 +72,24 @@ test("the Cobra frame requests the camera-referenced ladder", () => {
   const { frame } = createCobraHudFrame(THREE);
   assert.equal(frame.ladderReference, "camera");
 });
+
+test("camera-referenced waterline and FPV share the ladder horizon anchor", async () => {
+  // Build 266 hung the ladder on the camera but left waterline/FPV on noseAnchor, so the
+  // symbols disagreed by the rear-seat sight bias (~50 px). When ladderReference is camera,
+  // draw() must park waterline on the same horizon the 0 rung uses.
+  const { cameraReferencedAirframeAnchors } = await import("../../../hud.js");
+  const camera = cameraPitchedBy(0.08);
+  const anchors = cameraReferencedAirframeAnchors(camera, WIDTH, HEIGHT, {
+    aoa_deg: 0,
+    beta_deg: 0,
+  });
+  assert.ok(anchors, "camera attitude must yield anchors");
+  const ladder = cameraPitchAnchor(camera, WIDTH, HEIGHT);
+  const focalY = HEIGHT * 0.5 * 2.14;
+  const horizonY = ladder.centerY + Math.tan(ladder.pitchDeg * Math.PI / 180) * focalY;
+  assert.ok(Math.abs(anchors.waterline.y - horizonY) < 1e-6,
+    `waterline y ${anchors.waterline.y} must match ladder horizon ${horizonY}`);
+  assert.ok(Math.abs(anchors.waterline.x - ladder.centerX) < 1e-6);
+  assert.ok(Math.abs(anchors.fpv.y - anchors.waterline.y) < 1e-6);
+  assert.ok(Math.abs(anchors.fpv.x - anchors.waterline.x) < 1e-6);
+});

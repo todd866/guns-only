@@ -77,7 +77,7 @@ test("a network-fresh shell purges an older worker before linking standalone mod
         await page.goto(`${site.url}missing-sw-seed.html`, { waitUntil: "load" });
         await page.evaluate(async ({ registrationOnly }) => {
           const registration = await navigator.serviceWorker.register(
-            "/service-worker.js?v=237",
+            "/service-worker.js?v=267",
             { scope: registrationOnly ? "/legacy-scope/" : "/" },
           );
           if (registrationOnly) {

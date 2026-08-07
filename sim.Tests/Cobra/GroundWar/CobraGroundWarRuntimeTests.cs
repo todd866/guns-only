@@ -220,6 +220,38 @@ public class CobraGroundWarRuntimeTests
     }
 
     [Fact]
+    public void StandingGunnerySeamSitsOnTheNoseInsideTheGunWindow()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        var aircraft = new Vec3D(0.0, 220.0, 0.0);
+        double yawRad = 0.0;
+        GroundUnit seam = war.SeedStandingGunneryTarget(aircraft, yawRad);
+
+        Assert.Equal(CobraGroundWarRuntime.GunnerySeamUnitId, seam.Id);
+        Assert.Equal(GroundFaction.Hostile, seam.Faction);
+        Assert.True(seam.IsAlive);
+        var assessment = CobraGunTargeting.Assess(aircraft, yawRad, seam.PositionWorldM);
+        Assert.True(assessment.WithinTurretEnvelope, $"az {assessment.AzimuthErrorRad} el {assessment.ElevationRad}");
+        Assert.True(assessment.HasBallisticSolution, $"range {assessment.RangeM}");
+        Assert.True(assessment.AzimuthErrorRad < 0.05);
+    }
+
+    [Fact]
+    public void StandingGunnerySeamSurvivesFriendlyMutualCombat()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        GroundUnit seam = war.SeedStandingGunneryTarget(new Vec3D(0.0, 220.0, 0.0), 0.0);
+        double healthBefore = seam.Health;
+        for (int tick = 0; tick < 120 * 30; tick++)
+            war.Advance(PlayerVehicleContract.FixedDeltaSeconds);
+
+        GroundUnit? still = war.FindUnit(CobraGroundWarRuntime.GunnerySeamUnitId);
+        Assert.NotNull(still);
+        Assert.True(still!.IsAlive);
+        Assert.Equal(healthBefore, still.Health, 3);
+    }
+
+    [Fact]
     public void HoldingFriendlyControlWinsHoldTheBridge()
     {
         CobraGroundWarRuntime war = CreateWar();
