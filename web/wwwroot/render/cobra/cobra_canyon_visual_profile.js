@@ -39,7 +39,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
   // of the flat overhead wash a high sun produces.
   sunDirectionWorld: normalized([0.50, 0.28, -0.82]),
 
-  toneMappingExposure: 1.12,
+  toneMappingExposure: 1.14,
 
   // THE F-22'S AIR. Colour is app.js fogLow (0x6f8790) and density is its clear-air setting;
   // the banding is korea_terrain's Korea-branch default (6 planes at 0.65 blend), which is the
@@ -129,7 +129,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // neighbourhood, so the whole channel took the deepest occlusion the ramp can give, stacked on
     // top of the shadow floor, and the near wall rendered near-black at 30 m AGL. 0.72 keeps the
     // valley-sinks-crests-catch reading without turning the corridor the player flies into a hole.
-    occlusionRange: Object.freeze([0.72, 1.10]),
+    occlusionRange: Object.freeze([0.76, 1.10]),
     // Height difference (m) against the ~200 m neighbourhood ring that saturates concavity.
     concavityNormalizerM: 22,
     // DELIBERATE DIVERGENCE, and the only one in the light model. korea_terrain applies this
@@ -177,7 +177,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // Valley cultivation parcels: world-space cell pitch of the patchwork tint.
     // Paddy-scale, not wheat-field scale. At 155x115 m the parcels read as European arable
     // quilting; a delta paddy is 60-110 m on a side and terraces smaller still.
-    parcelPitchM: Object.freeze([92, 68]),
+    parcelPitchM: Object.freeze([78, 58]),
   }),
 
   // Analytic river paint, linear working space. The gravel bank window is expressed in units of

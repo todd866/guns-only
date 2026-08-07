@@ -591,7 +591,7 @@
       "boundsLocalM": [-7000, -7000, 6400, 6400],
       "visualBandId": "band.cobra-canyon.ambient.v1",
       "priority": 1,
-      "instancesByQuality": {"mobile": 96, "balanced": 168, "desktop": 252},
+      "instancesByQuality": {"mobile": 114, "balanced": 168, "desktop": 252},
       "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
       "presentationOnly": true,
       "targetable": false
@@ -627,7 +627,7 @@
       "boundsLocalM": [-8000, -8000, -900, 8000],
       "visualBandId": "band.cobra-canyon.ambient.v1",
       "priority": 2,
-      "instancesByQuality": {"mobile": 92, "balanced": 194, "desktop": 352},
+      "instancesByQuality": {"mobile": 92, "balanced": 206, "desktop": 352},
       "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
       "presentationOnly": true,
       "targetable": false
