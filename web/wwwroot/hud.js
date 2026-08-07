@@ -259,16 +259,27 @@ export function cameraPitchAnchor(camera, width, height) {
  * 0 rung. FPV is *not* returned here — it must stay the velocity vector projected through the
  * camera (see draw()). Build 267/268 incorrectly synthesized FPV from aoa/beta off this horizon;
  * Cobra snapshots never carry aoa_deg, so FPV glued to the horizon in climb and dive.
+ *
+ * Bank must match drawPitchLadder's rotatePoint(0, localY): a level-only (cx, horizonY) anchor
+ * drifts off the 0 rung under roll — the stall-turn complaint that the waterline no longer
+ * sat on the drawn horizon.
  */
-export function cameraReferencedAirframeAnchors(camera, width, height, _state = {}) {
+export function cameraReferencedAirframeAnchors(camera, width, height, state = {}) {
   const attitude = cameraPitchAnchor(camera, width, height);
   const projection = camera?.projectionMatrix?.elements;
   const matrixScaleY = Number(projection?.[5]);
   if (!attitude || !Number.isFinite(matrixScaleY) || matrixScaleY <= 0) return null;
   const focalY = height * 0.5 * matrixScaleY;
-  const horizonY = attitude.centerY + Math.tan(attitude.pitchDeg * DEG) * focalY;
+  const localY = Math.tan(attitude.pitchDeg * DEG) * focalY;
+  const bank = -(Number(state.bank_deg) || 0) * DEG;
+  const cosBank = Math.cos(bank);
+  const sinBank = Math.sin(bank);
   return {
-    waterline: { x: attitude.centerX, y: horizonY, behind: false },
+    waterline: {
+      x: attitude.centerX - localY * sinBank,
+      y: attitude.centerY + localY * cosBank,
+      behind: false,
+    },
   };
 }
 
@@ -721,7 +732,7 @@ class CombatHud {
   // projected WORLD VELOCITY direction through the same camera: the alpha gap between the two is
   // therefore true by construction (focal * tan(aoa) along body-down), and sideslip shows up
   // laterally for free. No synthetic pixels-per-degree offset exists anywhere in this path.
-  drawAirframeSymbols(anchor, state, fpvAnchor = null) {
+  drawAirframeSymbols(anchor, state, fpvAnchor = null, { alignWaterlineToHorizon = false } = {}) {
     if (!anchor || anchor.behind || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return;
     const ctx = this.ctx;
 
@@ -731,9 +742,13 @@ class CombatHud {
     ctx.shadowBlur = 3;
 
     // WATERLINE / boresight (the nose = gun line). The gun window lives here, because the gun
-    // points along the body axis, not the flight path.
+    // points along the body axis, not the flight path. Camera-referenced waterline (Cobra) sits
+    // on the banked 0 rung — rotate the mark with bank so its wings lie on that horizon line.
     ctx.save();
     ctx.translate(anchor.x, anchor.y);
+    if (alignWaterlineToHorizon) {
+      ctx.rotate(-(Number(state.bank_deg) || 0) * DEG);
+    }
     ctx.beginPath();
     ctx.moveTo(-15, 0);
     ctx.lineTo(-6, 0);
@@ -5326,7 +5341,9 @@ class CombatHud {
         this._debug.fpvPx = { x: symbolFpv.x, y: symbolFpv.y };
       }
     }
-    this.drawAirframeSymbols(symbolAnchor, frame.state, symbolFpv);
+    this.drawAirframeSymbols(symbolAnchor, frame.state, symbolFpv, {
+      alignWaterlineToHorizon: Boolean(cameraSymbols),
+    });
     this.drawGunSight(frame, noseAnchor);
     this.drawAimPoint(frame, noseAnchor, directorAnchor);
     this.drawBandit(frame);

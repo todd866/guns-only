@@ -163,11 +163,11 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // wild ground toward green, worked ground toward gold — which is the separation the
     // patchwork needs and which Korea gets from its own parcel tint instead.
     bands: Object.freeze({
-      valleyFloor: Object.freeze([0.176, 0.186, 0.092]),
-      cultivationGold: Object.freeze([0.230, 0.245, 0.175]),
-      jungleMid: Object.freeze([0.072, 0.118, 0.055]),
+      valleyFloor: Object.freeze([0.168, 0.192, 0.088]),
+      cultivationGold: Object.freeze([0.220, 0.248, 0.168]),
+      jungleMid: Object.freeze([0.065, 0.128, 0.052]),
       lateriteSlope: Object.freeze([0.285, 0.150, 0.062]),
-      ridgeSage: Object.freeze([0.142, 0.162, 0.108]),
+      ridgeSage: Object.freeze([0.138, 0.168, 0.105]),
       rimRock: Object.freeze([0.320, 0.310, 0.260]),
     }),
     // Valley cultivation parcels: world-space cell pitch of the patchwork tint.
@@ -179,11 +179,11 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
   // Analytic river paint, linear working space. The gravel bank window is expressed in units of
   // half the authored water width, so 1.0 is the waterline and the ribbon's extra rim is bank.
   water: Object.freeze({
-    deepColor: Object.freeze([0.012, 0.040, 0.058]),
-    shallowColor: Object.freeze([0.040, 0.098, 0.105]),
-    bankColor: Object.freeze([0.150, 0.128, 0.084]),
-    shoreWindow: Object.freeze([0.90, 1.04]),
+    deepColor: Object.freeze([0.010, 0.038, 0.052]),
+    shallowColor: Object.freeze([0.036, 0.092, 0.098]),
+    bankColor: Object.freeze([0.142, 0.124, 0.078]),
+    shoreWindow: Object.freeze([0.88, 1.05]),
     // Gravel rim draped either side of the water sheet, metres.
-    bankWidthM: 7,
+    bankWidthM: 9,
   }),
 });

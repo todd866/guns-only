@@ -93,3 +93,25 @@ test("camera-referenced waterline shares the ladder horizon; FPV is not synthesi
   assert.ok(Math.abs(anchors.waterline.x - ladder.centerX) < 1e-6);
   assert.equal(anchors.fpv, undefined, "FPV must stay velocity-projected in draw(), not horizon-locked here");
 });
+
+test("camera-referenced waterline tracks the banked 0 rung, not the unreelled screen centre", async () => {
+  // Stall-turn / high-bank: ladder 0-rung uses rotatePoint(0, tan(pitch)*f); waterline used to
+  // stay at (cx, cy+localY) and float off the drawn horizon.
+  const { cameraReferencedAirframeAnchors } = await import("../../../hud.js");
+  const camera = cameraPitchedBy(0.08);
+  const bankDeg = 35;
+  const anchors = cameraReferencedAirframeAnchors(camera, WIDTH, HEIGHT, { bank_deg: bankDeg });
+  assert.ok(anchors);
+  const ladder = cameraPitchAnchor(camera, WIDTH, HEIGHT);
+  const focalY = HEIGHT * 0.5 * 2.14;
+  const localY = Math.tan(ladder.pitchDeg * Math.PI / 180) * focalY;
+  const bank = -bankDeg * Math.PI / 180;
+  const expectedX = ladder.centerX - localY * Math.sin(bank);
+  const expectedY = ladder.centerY + localY * Math.cos(bank);
+  assert.ok(Math.abs(anchors.waterline.x - expectedX) < 1e-6,
+    `waterline x ${anchors.waterline.x} must match banked 0-rung ${expectedX}`);
+  assert.ok(Math.abs(anchors.waterline.y - expectedY) < 1e-6,
+    `waterline y ${anchors.waterline.y} must match banked 0-rung ${expectedY}`);
+  assert.ok(Math.abs(anchors.waterline.x - ladder.centerX) > 1,
+    "under bank the waterline must leave the unreelled screen centre");
+});

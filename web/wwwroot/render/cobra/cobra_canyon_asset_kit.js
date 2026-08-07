@@ -484,7 +484,7 @@ function terrainAffinity(plan, role, eastM, northM) {
 function seatDrop(plan, role, eastM, northM, scale) {
   const footprintM = Math.max(scale.widthM, scale.depthM) * 0.5;
   const gradient = terrainGradient(plan, eastM, northM);
-  const bite = role === "jungle" || role === "rock" ? 0.85
+  const bite = role === "jungle" || role === "rock" ? 1.12
     : role === "paddy" || role === "plantation" || role === "village" ? 1
       : 0;
   return gradient * footprintM * bite;
@@ -540,16 +540,28 @@ function waterAccentPlacements(plan, qualityTier, descriptors) {
     const northM = from[2] + (to[2] - from[2]) * blend;
     const variation = (index % 5) / 4;
     const scale = roleScale("waterAccent", descriptor, variation);
+    // BANK SHEENS, NOT A DASHED CENTRELINE. Accents used to sit on the ribbon midline and read
+    // as highway markings down the gorge. Offset toward alternating banks and keep them short
+    // so the channel stays water, not a road.
+    const tangentEastM = to[0] - from[0];
+    const tangentNorthM = to[2] - from[2];
+    const lengthM = Math.max(0.001, Math.hypot(tangentEastM, tangentNorthM));
+    const normalEastM = -tangentNorthM / lengthM;
+    const normalNorthM = tangentEastM / lengthM;
+    const bankSide = index % 2 === 0 ? 1 : -1;
+    const lateralM = river.halfWidthM * (0.52 + variation * 0.28) * bankSide;
+    const accentEastM = eastM + normalEastM * lateralM;
+    const accentNorthM = northM + normalNorthM * lateralM;
     placements.push({
       id: `water-accent.${index}`,
       role: "waterAccent",
-      x: eastM,
-      y: sampleCobraCanyonTerrain(plan, eastM, northM) + 0.5,
-      z: -northM,
-      yaw: Math.atan2(to[0] - from[0], to[2] - from[2]),
-      widthM: Math.min(scale.widthM, river.halfWidthM * 0.48),
-      heightM: scale.heightM,
-      depthM: scale.depthM,
+      x: accentEastM,
+      y: sampleCobraCanyonTerrain(plan, accentEastM, accentNorthM) + 0.35,
+      z: -accentNorthM,
+      yaw: Math.atan2(tangentEastM, tangentNorthM),
+      widthM: Math.min(scale.widthM * 0.72, river.halfWidthM * 0.28),
+      heightM: scale.heightM * 0.55,
+      depthM: Math.min(scale.depthM * 1.4, river.halfWidthM * 0.55),
       variation,
       rank: (index + 0.5) / maximum,
       batchId: river.id,
@@ -813,28 +825,20 @@ function geometryForRole(THREE, role) {
   const positions = [];
   const colors = [];
   if (role === "jungle") {
-    // ONE INSTANCE IS A STAND OF CANOPY, NOT A TREE. The old shape was a trunk box plus five
-    // hexagonal puffs at a uniform 0.72-1.0 crown height: 72 triangles that read, at any distance,
-    // as the scattered dark cones the owner called out. Jungle reads as MASS, so the lobes now
-    // interlock — overlapping footprints, crowns staggered across a 0.58-1.0 band, and a low skirt
-    // lobe that closes the gap to the ground where the old trunk left daylight under every stand.
-    //
-    // Five-sided rings instead of six, and no trunk: 50 triangles against 72. That third is not
-    // a saving for its own sake — it is what buys the extra instances below, and density is what
-    // actually makes a canopy read. Silhouette loss is nil at 5 sides under flat shading.
-    // The tints are SHADING VARIATION, not albedo: the instance tint already carries the authored
-    // palette, and these multiply it. The old 0.33-0.56 values multiplied a dark canopy palette
-    // down to ~0.15 linear, which is why stands read as black holes punched in the hillside
-    // rather than as canopy catching light. Held near 1.0 with a modest crown-to-skirt gradient.
+    // ONE INSTANCE IS A STAND OF CANOPY, NOT A TREE. Soft Lambert (not flatShading) kills the
+    // "crystal shard" catch-light from faceted rings at nap-of-earth AGL — denser rings blow the
+    // presentation triangle budget, so silhouette still comes from interlocking lobes, not sides.
+    // Lobes overlap, crowns stagger across a 0.58-1.0 band, and a low skirt closes the daylight
+    // gap the old trunk left under every stand. Tints are SHADING VARIATION on the instance palette.
     const lobes = [
-      [0.00, 0.00, 0.42, 0.18, 1.00, [1.02, 1.08, 0.98]],
-      [-0.30, 0.18, 0.38, 0.14, 0.86, [0.96, 1.02, 0.94]],
-      [0.30, -0.18, 0.40, 0.14, 0.92, [1.04, 1.10, 1.00]],
-      [0.12, 0.32, 0.34, 0.10, 0.74, [0.92, 0.98, 0.90]],
-      [-0.14, -0.30, 0.36, 0.00, 0.62, [0.88, 0.94, 0.86]],
+      [0.00, 0.00, 0.44, 0.16, 1.00, [1.02, 1.08, 0.98]],
+      [-0.28, 0.16, 0.40, 0.12, 0.88, [0.97, 1.03, 0.95]],
+      [0.28, -0.16, 0.41, 0.12, 0.93, [1.04, 1.10, 1.00]],
+      [0.10, 0.30, 0.36, 0.08, 0.76, [0.94, 1.00, 0.92]],
+      [-0.12, -0.28, 0.38, 0.00, 0.62, [0.90, 0.96, 0.88]],
     ];
     for (const [x, z, radius, skirt, top, tint] of lobes) {
-      appendCanopy(positions, colors, x, z, radius, radius * 0.9, skirt, top, tint, 6);
+      appendCanopy(positions, colors, x, z, radius, radius * 0.96, skirt, top, tint, 5);
     }
   } else if (role === "plantation") {
     for (let index = 0; index < 5; index++) {
@@ -887,6 +891,10 @@ function geometryForRole(THREE, role) {
     pushTriangle(positions, colors, [-0.5, 0, 0], [0.5, 1, 0], [-0.5, 1, 0], [0.82, 0.90, 0.86]);
     pushTriangle(positions, colors, [0, 0, -0.5], [0, 0, 0.5], [0, 1, 0.5], [0.82, 0.90, 0.86]);
     pushTriangle(positions, colors, [0, 0, -0.5], [0, 1, 0.5], [0, 1, -0.5], [0.82, 0.90, 0.86]);
+  } else if (role === "waterAccent") {
+    // Soft bank sheen: a low elongated diamond parallel to the current, not a bright centreline tile.
+    pushTriangle(positions, colors, [-0.5, 0.02, 0], [0.5, 0.02, 0], [0, 0.02, 0.22], [0.72, 0.84, 0.80]);
+    pushTriangle(positions, colors, [-0.5, 0.02, 0], [0, 0.02, -0.22], [0.5, 0.02, 0], [0.68, 0.80, 0.76]);
   } else {
     pushTriangle(positions, colors, [-0.5, 0, -0.5], [0.5, 0, -0.5], [0.5, 0, 0.5], [0.70, 0.88, 0.84]);
     pushTriangle(positions, colors, [-0.5, 0, -0.5], [0.5, 0, 0.5], [-0.5, 0, 0.5], [0.70, 0.88, 0.84]);
@@ -900,7 +908,7 @@ function materialForRole(THREE, role) {
       color: 0xffffff,
       vertexColors: true,
       transparent: true,
-      opacity: role === "mist" ? 0.18 : 0.34,
+      opacity: role === "mist" ? 0.22 : 0.22,
       depthWrite: false,
       side: THREE.DoubleSide,
     });
@@ -910,7 +918,8 @@ function materialForRole(THREE, role) {
   const material = new THREE.MeshLambertMaterial({
     color: 0xffffff,
     vertexColors: true,
-    flatShading: role !== "paddy",
+    // Smooth normals on jungle kill the crystal-shard catch-light from flat ring facets.
+    flatShading: role !== "paddy" && role !== "jungle",
     side: THREE.FrontSide,
   });
   material.name = `COBRA_CANYON_ASSET_${role.toUpperCase()}_MATERIAL`;
