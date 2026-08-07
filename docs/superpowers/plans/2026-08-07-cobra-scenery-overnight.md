@@ -20,6 +20,8 @@ Always dual-sync `content/.../cobra-canyon.world.json` ↔ `web/wwwroot/content/
 - [x] Pass 3: Thicker monsoon cloud shelf + horizon shoulder; river mist on balanced; exposure 1.12 from dark stills
 - [x] Pass 4: Silent stills captured under /tmp/guns-only-scenery-overnight/stills (dismiss onboarding first); park() still shows Camp Ember mission strip — next tick harden parked camera vs vehicle eye
 - [x] Stamp Build 278 for overnight pass 3; STATUS next-candidate in sync
+- [x] Pass 5: Parked camera skips vehicle eye + clears HUD; radio mast jungle/mist; soft village normals
+- [x] Stamp Build 279 for overnight pass 5; STATUS next-candidate in sync
 - [ ] Do not deploy without owner OK
 
 ## Stop conditions

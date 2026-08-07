@@ -1,4 +1,4 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=278";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=279";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -921,8 +921,9 @@ function materialForRole(THREE, role) {
   const material = new THREE.MeshLambertMaterial({
     color: 0xffffff,
     vertexColors: true,
-    // Smooth normals on jungle/plantation/rock kill crystal-shard catch-lights from flat facets.
-    flatShading: role !== "paddy" && role !== "jungle" && role !== "plantation" && role !== "rock",
+    // Smooth normals on organic mass (jungle/plantation/rock/village) kill crystal-shard facets.
+    flatShading: role !== "paddy" && role !== "jungle" && role !== "plantation"
+      && role !== "rock" && role !== "village",
     side: THREE.FrontSide,
   });
   material.name = `COBRA_CANYON_ASSET_${role.toUpperCase()}_MATERIAL`;

@@ -1165,7 +1165,9 @@
       "boundsLocalM": [-2100, 4550, -1450, 5300],
       "archetypeIds": [
         "archetype.cobra-canyon.landmark-radio-mast.v1",
-        "archetype.cobra-canyon.rock-scatter.v1"
+        "archetype.cobra-canyon.rock-scatter.v1",
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1"
       ],
       "landmarkIds": ["landmark.cobra-canyon.ridge-radio-mast.v1"],
       "hazardIds": [

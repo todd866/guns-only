@@ -1,61 +1,61 @@
-import * as THREE from "../vendor/three.module.js?v=278";
+import * as THREE from "../vendor/three.module.js?v=279";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=278";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=278";
+} from "../render/cobra/cobra_canyon_plan.js?v=279";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=279";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=278";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=278";
-import { createHud } from "../hud.js?v=278";
+} from "../render/cobra/cobra_canyon_tour.js?v=279";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=279";
+import { createHud } from "../hud.js?v=279";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=278";
+} from "../render/cobra/cobra_hud_adapter.js?v=279";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=278";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=278";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=279";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=279";
 import {
   emberActObjectiveOverlay,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=278";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=278";
+} from "../render/cobra/cobra_ember_path.js?v=279";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=279";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=278";
+} from "../render/cobra/cobra_control_profile.js?v=279";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=278";
+} from "../render/cobra/cobra_pilot_input.js?v=279";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=278";
+} from "../render/cobra/ah1g_presence.js?v=279";
 import {
   COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD,
   clampInducedLookRotation,
   lookAnglesFromOffset,
   lookOffsetFromAngles,
-} from "../render/cobra/cobra_camera_bias.js?v=278";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=278";
+} from "../render/cobra/cobra_camera_bias.js?v=279";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=279";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=278";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=278";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=278";
+} from "../render/cobra/cobra_mission_exit.js?v=279";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=279";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=279";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -227,7 +227,7 @@ const projectionScratch = new THREE.Vector3();
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=278";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=279";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -725,7 +725,7 @@ function cycleHostileTarget() {
 }
 
 function updateTour(deltaSeconds) {
-  if (routeComplete) return;
+  if (parkedCamera || routeComplete) return;
   const routeEndM = Math.max(0, routeSampler.lengthM - ROUTE_END_LOOKAHEAD_M);
   routeDistanceM = Math.min(
     routeEndM,
@@ -736,6 +736,17 @@ function updateTour(deltaSeconds) {
 }
 
 function updateManual(deltaSeconds) {
+  // Visual-review park owns the camera: keep the sim alive, but do not overwrite the eye
+  // with the vehicle pose (that is what made overnight stills look like Camp Ember everywhere).
+  if (parkedCamera) {
+    if (bridge && !missionTerminal) {
+      const simStartedAtMs = performance.now();
+      bridge.Advance(deltaSeconds);
+      recordPhase("sim", simStartedAtMs);
+      sampleAuthorityState(lastTimeMs);
+    }
+    return;
+  }
   presenceDeltaSeconds = deltaSeconds;
   if (!bridge) {
     // Vestigial freelook: pre-authority camera control only.
@@ -1053,7 +1064,7 @@ function animate(timeMs) {
   // person renders zero cockpit geometry (Build 264 owner ruling), the tour camera looks
   // AT the ship so the silhouette returns. Set unconditionally — the earlier per-branch
   // version left the shell hidden whenever a terminal mission froze the tour branch.
-  if (ah1gPresence) ah1gPresence.setFirstPerson(!tourInput.checked);
+  if (ah1gPresence) ah1gPresence.setFirstPerson(!tourInput.checked && !parkedCamera);
   const renderStartedAtMs = performance.now();
   renderer.render(scene, camera);
   recordPhase("render", renderStartedAtMs);
@@ -1076,6 +1087,7 @@ function animate(timeMs) {
 function drawHud(timeMs, deltaSeconds) {
   const pose = readVehiclePose();
   const firstPerson = Boolean(bridge) && !tourInput.checked && !missionTerminal
+    && !parkedCamera
     && pose && authorityState;
   if (!firstPerson) {
     hudPresentationCtx.save();
@@ -1137,6 +1149,9 @@ function applyParkedCamera() {
 }
 window.__gunsOnlyCobraLabCamera = Object.freeze({
   park(eastM, northM, aglM, yawRad, pitchRad = 0) {
+    // Review stills are exterior scenery shots — leave first-person / tour rails.
+    if (tourInput) tourInput.checked = false;
+    onboarding?.dismiss?.();
     parkedCamera = {
       eastM: Number(eastM),
       northM: Number(northM),
@@ -1144,6 +1159,7 @@ window.__gunsOnlyCobraLabCamera = Object.freeze({
       yawRad: Number(yawRad),
       pitchRad: Number(pitchRad),
     };
+    applyParkedCamera();
     return parkedCamera;
   },
   release() {
