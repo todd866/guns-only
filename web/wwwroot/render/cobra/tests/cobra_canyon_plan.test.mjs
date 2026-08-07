@@ -131,7 +131,7 @@ test("keeps authority content invariant and sheds only ambient presentation by t
   assert.ok(balanced.counts.ambientInstances < desktop.counts.ambientInstances);
   assert.deepEqual(
     [mobile.counts.ambientInstances, balanced.counts.ambientInstances, desktop.counts.ambientInstances],
-    [350, 812, 1596],
+    [382, 848, 1600],
   );
   assert.throws(
     () => planCobraCanyonWorld(world, { qualityTier: "cinematic" }),

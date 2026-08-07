@@ -5,7 +5,7 @@ Production: Build 274, revision `0391eeb98c6cc245c9543b72380bb893d0e5db30`, depl
 `dpl_DRTzGJ2iqHuqxQtQBvZkGXkxRxJn` (verified live via /api/build-info 2026-08-07). Builds
 253-270 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Next candidate: Build 288 (branch `fix/ember-run-pass2`) — overnight pass 14: canopy on all set-pieces; taller mist; stronger haze bands; wetter cultivation.
+Next candidate: Build 289 (branch `fix/ember-run-pass2`) — overnight pass 15: denser riparian/bamboo/west canopy; stronger relief; greener bounce fill.
 
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful

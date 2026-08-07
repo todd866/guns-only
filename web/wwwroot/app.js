@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=288";
+import { createHud } from "./hud.js?v=289";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=288";
+} from "./render/debrief/sortie_result.js?v=289";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -49,8 +49,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=288";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=288";
+} from "./render/release/release_identity.js?v=289";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=289";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -63,7 +63,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=288";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=289";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -72,10 +72,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=288";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=289";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=288";
+} from "./render/nav/carrier_sortie_touch_control.js?v=289";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -150,7 +150,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=288";
+} from "./render/telemetry/ai_frame_pressure.js?v=289";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -160,14 +160,14 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=288";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=288";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=288";
+} from "./render/telemetry/telemetry_batch.js?v=289";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=289";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=289";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=288";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=288";
+} from "./render/shell/boot_watchdog.js?v=289";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=289";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -176,7 +176,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=288";
+} from "./render/settings/player_settings.js?v=289";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -222,13 +222,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=288";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=288";
+} from "./render/scene/scene_builders.js?v=289";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=289";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=288";
+} from "./render/audio/flight_audio.js?v=289";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -11044,7 +11044,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=288")
+    navigator.serviceWorker.register("service-worker.js?v=289")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

@@ -1,4 +1,4 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=288";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=289";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -911,7 +911,7 @@ function materialForRole(THREE, role) {
       color: 0xffffff,
       vertexColors: true,
       transparent: true,
-      opacity: role === "mist" ? 0.42 : 0.20,
+      opacity: role === "mist" ? 0.42 : 0.22,
       depthWrite: false,
       side: THREE.DoubleSide,
     });

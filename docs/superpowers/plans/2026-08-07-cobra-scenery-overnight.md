@@ -40,6 +40,8 @@ Always dual-sync `content/.../cobra-canyon.world.json` ↔ `web/wwwroot/content/
 - [x] Stamp Build 287 for overnight pass 13; STATUS next-candidate in sync
 - [x] Pass 14: Canopy on plantation waterworks + Red Earth quarry (all 10 set-pieces); taller mist; hazeBandBlend 0.78; cooler/wetter cultivation
 - [x] Stamp Build 288 for overnight pass 14; STATUS next-candidate in sync
+- [x] Pass 15: Ambient density bump (riparian/bamboo/west canopy/mist); reliefGain 4.75; greener hemisphere bounce; brighter bank sheens
+- [x] Stamp Build 289 for overnight pass 15; STATUS next-candidate in sync
 - [ ] Do not deploy without owner OK
 
 ## Stop conditions

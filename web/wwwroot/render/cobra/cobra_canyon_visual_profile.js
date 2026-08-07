@@ -94,7 +94,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // 0x102229 bounce is a floor, not the whole shadow side. This page has no environment map,
     // so copying that bounce literally rendered every tree and hut as a black silhouette. The
     // bounce is lifted to stand in for the missing IBL; the sky term and key are untouched.
-    hemisphereGroundColor: 0x2c3a33,
+    hemisphereGroundColor: 0x314338,
     hemisphereIntensity: 0.96,
     sunColor: 0xffe2b4,
     sunIntensity: 2.65,
@@ -137,7 +137,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // for exactly the reason it is needed here: half this basin sits under a 0.1 gradient, where
     // the Lambert term separates nothing and the bowl washes flat however the ramp is tuned. The
     // Korean heightfield is dissected enough not to need it. Above ~4 it prints as banding.
-    reliefGain: 4.6,
+    reliefGain: 4.75,
     // korea_terrain's shipped uCloudShadowStrength.
     cloudShadowStrength: 0.62,
     // Hue-separated painted light, verbatim from korea_terrain: cool fill from the sky,
