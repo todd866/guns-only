@@ -32,6 +32,8 @@ Always dual-sync `content/.../cobra-canyon.world.json` ↔ `web/wwwroot/content/
 - [x] Stamp Build 283 for overnight pass 9; STATUS next-candidate in sync
 - [x] Pass 10: Taller/wider mist cards; jungle canopy at Camp Ember + Iron Bell; greener valleyFloor; humid hemisphere fill
 - [x] Stamp Build 284 for overnight pass 10; STATUS next-candidate in sync
+- [x] Pass 11: Jungle canopy at Long Fang + Karst; thicker monsoon cloud shelf/shoulder; more bank waterAccent
+- [x] Stamp Build 285 for overnight pass 11; STATUS next-candidate in sync
 - [ ] Do not deploy without owner OK
 
 ## Stop conditions

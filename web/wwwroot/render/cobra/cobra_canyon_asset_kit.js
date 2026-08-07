@@ -1,4 +1,4 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=284";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=285";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -523,7 +523,7 @@ function allocateQuotas(batches, target) {
 }
 
 function waterAccentPlacements(plan, qualityTier, descriptors) {
-  const maximum = qualityTier === "mobile" ? 14 : qualityTier === "desktop" ? 28 : 22;
+  const maximum = qualityTier === "mobile" ? 16 : qualityTier === "desktop" ? 30 : 24;
   const river = plan.terrainRibbons.find((ribbon) => token(ribbon.kind).includes("river"));
   if (!river) return [];
   const descriptor = descriptors.descriptors.find(

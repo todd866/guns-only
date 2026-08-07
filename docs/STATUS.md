@@ -5,7 +5,7 @@ Production: Build 274, revision `0391eeb98c6cc245c9543b72380bb893d0e5db30`, depl
 `dpl_DRTzGJ2iqHuqxQtQBvZkGXkxRxJn` (verified live via /api/build-info 2026-08-07). Builds
 253-270 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Next candidate: Build 284 (branch `fix/ember-run-pass2`) — overnight pass 10: taller mist cards; canopy at Camp Ember/Iron Bell; greener valley + humid fill.
+Next candidate: Build 285 (branch `fix/ember-run-pass2`) — overnight pass 11: canopy at Long Fang/Karst; thicker monsoon shelf; denser bank sheens.
 
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
