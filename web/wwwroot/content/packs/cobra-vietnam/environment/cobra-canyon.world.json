@@ -1143,7 +1143,8 @@
       "archetypeIds": [
         "archetype.cobra-canyon.landmark-pagoda.v1",
         "archetype.cobra-canyon.rock-scatter.v1",
-        "archetype.cobra-canyon.jungle-understory.v1"
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1"
       ],
       "landmarkIds": ["landmark.cobra-canyon.white-pagoda.v1"],
       "hazardIds": [
@@ -1219,7 +1220,8 @@
       "archetypeIds": [
         "archetype.cobra-canyon.landmark-quarry.v1",
         "archetype.cobra-canyon.rock-scatter.v1",
-        "archetype.cobra-canyon.jungle-understory.v1"
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1"
       ],
       "landmarkIds": ["landmark.cobra-canyon.red-earth-quarry.v1"],
       "hazardIds": [],

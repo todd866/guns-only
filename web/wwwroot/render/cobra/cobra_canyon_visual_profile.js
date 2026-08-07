@@ -168,9 +168,9 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
       valleyFloor: Object.freeze([0.142, 0.188, 0.078]),
       cultivationGold: Object.freeze([0.210, 0.242, 0.175]),
       jungleMid: Object.freeze([0.052, 0.118, 0.048]),
-      lateriteSlope: Object.freeze([0.285, 0.150, 0.062]),
-      ridgeSage: Object.freeze([0.128, 0.162, 0.098]),
-      rimRock: Object.freeze([0.320, 0.310, 0.260]),
+      lateriteSlope: Object.freeze([0.310, 0.145, 0.055]),
+      ridgeSage: Object.freeze([0.122, 0.158, 0.095]),
+      rimRock: Object.freeze([0.335, 0.318, 0.255]),
     }),
     // Valley cultivation parcels: world-space cell pitch of the patchwork tint.
     // Paddy-scale, not wheat-field scale. At 155x115 m the parcels read as European arable
