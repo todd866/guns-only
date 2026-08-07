@@ -5,7 +5,7 @@ Production: Build 274, revision `0391eeb98c6cc245c9543b72380bb893d0e5db30`, depl
 `dpl_DRTzGJ2iqHuqxQtQBvZkGXkxRxJn` (verified live via /api/build-info 2026-08-07). Builds
 253-270 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Next candidate: Build 286 (branch `fix/ember-run-pass2`) — overnight pass 12: canopy at Split Tooth/Pagoda; more ambient river mist; greener ridge sage.
+Next candidate: Build 287 (branch `fix/ember-run-pass2`) — overnight pass 13: canopy at Radio Mast/Mill; denser mist; deeper river; stronger cloud shadow.
 
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
