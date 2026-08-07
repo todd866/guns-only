@@ -14,10 +14,10 @@ Always dual-sync `content/.../cobra-canyon.world.json` ↔ `web/wwwroot/content/
 
 ## Next ticks
 
-- [ ] Pass 2: Camp Ember pad dressing (jungle/mist around landmark approach) if a set-piece exists or via ambient bounds near FOB
-- [ ] Pass 2: Karst + Split Tooth mist/riffle density without blowing instance caps
-- [ ] Pass 3: Soften rock scatter silhouette; bank waterAccent quota bump on gorge route
-- [ ] Pass 3: Sky horizon warm-up / hazeBandBlend fine-tune after silent screenshot
+- [x] Pass 2: Camp Ember pad set-piece (jungle/mist/rock) + riparian bounds include FOB
+- [x] Pass 2: Karst understory + Split Tooth mist/rock
+- [x] Pass 2/3 early: Soften rock scatter + waterAccent quota bump
+- [ ] Pass 3: Sky horizon warm-up after silent screenshot
 - [ ] Pass 4: Silent browser stills at Camp Ember / mid-gorge / Iron Bell (`?audioQa=silent`) and adjust from evidence
 - [ ] Stamp Build 276+ when a coherent pass lands; keep STATUS next-candidate in sync
 - [ ] Do not deploy without owner OK

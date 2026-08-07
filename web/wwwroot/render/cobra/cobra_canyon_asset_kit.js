@@ -1,4 +1,4 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=276";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=277";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -523,7 +523,7 @@ function allocateQuotas(batches, target) {
 }
 
 function waterAccentPlacements(plan, qualityTier, descriptors) {
-  const maximum = qualityTier === "mobile" ? 12 : qualityTier === "desktop" ? 24 : 18;
+  const maximum = qualityTier === "mobile" ? 14 : qualityTier === "desktop" ? 28 : 22;
   const river = plan.terrainRibbons.find((ribbon) => token(ribbon.kind).includes("river"));
   if (!river) return [];
   const descriptor = descriptors.descriptors.find(
@@ -884,9 +884,11 @@ function geometryForRole(THREE, role) {
     appendBox(positions, colors, [-0.44, 0, -0.5], [0.44, 0.18, -0.44], [0.50, 0.40, 0.22]);
     appendBox(positions, colors, [-0.44, 0, 0.44], [0.44, 0.18, 0.5], [0.50, 0.40, 0.22]);
   } else if (role === "rock") {
-    appendPyramid(positions, colors, [-0.28, 0, 0.08], 0.28, 0.3, 0, 0.72, [0.58, 0.52, 0.38]);
-    appendPyramid(positions, colors, [0.16, 0, -0.1], 0.32, 0.28, 0, 1, [0.65, 0.59, 0.43]);
-    appendPyramid(positions, colors, [0.4, 0, 0.22], 0.2, 0.22, 0, 0.58, [0.50, 0.46, 0.34]);
+    // Softer stacked mounds — the old three-pyramid cluster read as crystal shards at nap AGL.
+    appendPyramid(positions, colors, [-0.22, 0, 0.06], 0.34, 0.36, 0, 0.58, [0.56, 0.50, 0.36]);
+    appendPyramid(positions, colors, [0.14, 0, -0.08], 0.38, 0.34, 0, 0.78, [0.62, 0.56, 0.40]);
+    appendPyramid(positions, colors, [0.32, 0, 0.18], 0.24, 0.26, 0, 0.48, [0.48, 0.44, 0.32]);
+    appendPyramid(positions, colors, [-0.06, 0, -0.24], 0.22, 0.24, 0, 0.42, [0.54, 0.48, 0.34]);
   } else if (role === "mist") {
     pushTriangle(positions, colors, [-0.5, 0, 0], [0.5, 0, 0], [0.5, 1, 0], [0.82, 0.90, 0.86]);
     pushTriangle(positions, colors, [-0.5, 0, 0], [0.5, 1, 0], [-0.5, 1, 0], [0.82, 0.90, 0.86]);
@@ -919,8 +921,8 @@ function materialForRole(THREE, role) {
   const material = new THREE.MeshLambertMaterial({
     color: 0xffffff,
     vertexColors: true,
-    // Smooth normals on jungle and plantation kill the crystal-shard catch-light from flat ring facets.
-    flatShading: role !== "paddy" && role !== "jungle" && role !== "plantation",
+    // Smooth normals on jungle/plantation/rock kill crystal-shard catch-lights from flat facets.
+    flatShading: role !== "paddy" && role !== "jungle" && role !== "plantation" && role !== "rock",
     side: THREE.FrontSide,
   });
   material.name = `COBRA_CANYON_ASSET_${role.toUpperCase()}_MATERIAL`;
