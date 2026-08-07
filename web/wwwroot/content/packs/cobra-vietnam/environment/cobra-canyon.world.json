@@ -711,7 +711,7 @@
       "boundsLocalM": [-7000, -6600, 1800, 3600],
       "visualBandId": "band.cobra-canyon.ambient.v1",
       "priority": 3,
-      "instancesByQuality": {"mobile": 0, "balanced": 14, "desktop": 28},
+      "instancesByQuality": {"mobile": 0, "balanced": 18, "desktop": 34},
       "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
       "presentationOnly": true,
       "targetable": false
@@ -1125,6 +1125,7 @@
       "archetypeIds": [
         "archetype.cobra-canyon.landmark-ridge-gate.v1",
         "archetype.cobra-canyon.karst-spire.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
         "archetype.cobra-canyon.jungle-understory.v1",
         "archetype.cobra-canyon.river-mist.v1",
         "archetype.cobra-canyon.rock-scatter.v1"
@@ -1146,6 +1147,7 @@
       "boundsLocalM": [-3900, 2600, -3150, 3450],
       "archetypeIds": [
         "archetype.cobra-canyon.landmark-pagoda.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
         "archetype.cobra-canyon.rock-scatter.v1",
         "archetype.cobra-canyon.jungle-understory.v1",
         "archetype.cobra-canyon.river-mist.v1"

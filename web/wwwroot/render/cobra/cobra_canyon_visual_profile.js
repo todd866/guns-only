@@ -171,7 +171,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
       cultivationGold: Object.freeze([0.210, 0.242, 0.175]),
       jungleMid: Object.freeze([0.046, 0.124, 0.052]),
       lateriteSlope: Object.freeze([0.310, 0.145, 0.055]),
-      ridgeSage: Object.freeze([0.122, 0.158, 0.095]),
+      ridgeSage: Object.freeze([0.110, 0.168, 0.098]),
       rimRock: Object.freeze([0.335, 0.318, 0.255]),
     }),
     // Valley cultivation parcels: world-space cell pitch of the patchwork tint.
