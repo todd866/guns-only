@@ -22,6 +22,7 @@ import {
   formatAviationAgl,
   formatAviationRange,
 } from "../render/cobra/cobra_rotorcraft_hud.js?v=271";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=271";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
@@ -937,26 +938,15 @@ function updateObjectiveHud(war) {
       : "HOLD —");
   // Ammo/FOB/kills/target/gunner/rotor truth moved from the DOM text strip into the
   // canvas HUD (hud.js + drawCobraRotorcraftHud); the card keeps objective copy only.
-  if (war.ammo_dry) {
-    setText(objectiveLine, "BINGO / DRY · REARM AT CAMP EMBER");
-    setText(objectiveDetail, "Put the skids on the Camp Ember pad, then return to the fight");
-  } else if (war.ammo_bingo) {
-    setText(objectiveLine, "BINGO AMMO · CAMP EMBER SOON");
-    setText(objectiveDetail, "Gun can under a fifth — break off for the pad before it runs dry");
-  } else if ((war.victory_hold_progress ?? 0) > 0) {
-    setText(objectiveLine, `HOLDING FRIENDLY CONTROL · ${holdPct}%`);
-    setText(objectiveDetail, "Keep tipping the fight — do not let hostiles claw it back");
-  } else if (authorityState?.gunner?.selected_target_id) {
-    setText(objectiveLine, "TIP CONTROL FRIENDLY · HOLD 45s");
-    setText(objectiveDetail, "Hold F when GUN ON TARGET — Tab cycles marks");
-  } else if (playerHasInteracted) {
-    setText(objectiveLine, "TIP CONTROL FRIENDLY · HOLD 45s");
-    setText(objectiveDetail, "Tab a hostile on the nose, then hold F");
-  } else {
-    setText(objectiveLine, "TIP CONTROL FRIENDLY · HOLD 45s");
-    // Owner ruling 2026-08-05: collective follows game convention — W raises, S lowers
-    // (the Builds 253-264 real-lever mapping with S=pull is overruled).
-    setText(objectiveDetail, "W collective up · S down · Tab target · hold F gunner");
+  // Owner sortie web-cobra-1786090836886-dc8wvig0: tip-friendly copy stayed up while the
+  // pilot idled on Camp Ember and control bled through −0.75 — losing must outrank tip.
+  const copy = cobraObjectiveCopy(war, {
+    selectedTargetId: authorityState?.gunner?.selected_target_id ?? null,
+    playerHasInteracted,
+  });
+  if (copy) {
+    setText(objectiveLine, copy.line);
+    setText(objectiveDetail, copy.detail);
   }
 }
 
@@ -989,7 +979,7 @@ function updateMetrics(aglM) {
       : `${war.ammo_remaining}/${war.ammo_capacity}${war.ammo_bingo ? " · BINGO" : ""}`);
     setText(fobMetric, war.over_fob
       ? "ON PAD · rearm"
-      : `${(war.fob_range_m / 1_000).toFixed(1)} km · ${(war.fob_bearing_rad * 180 / Math.PI + 360) % 360 | 0}°`);
+      : `${formatAviationRange(war.fob_range_m, { style: "nav" })} · ${(war.fob_bearing_rad * 180 / Math.PI + 360) % 360 | 0}°`);
     setText(killsMetric, `${war.debrief.hostile_kills} hos · ${war.debrief.friendly_kills} fri · ${war.debrief.fob_rearms} rearm`);
     updateObjectiveHud(war);
   } else {
