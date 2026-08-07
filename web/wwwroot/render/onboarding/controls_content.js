@@ -35,6 +35,7 @@ export const COBRA_ONBOARDING_CONTENT = Object.freeze({
       label: "SYSTEM",
       rows: Object.freeze([
         Object.freeze(["R", "Restart after the debrief"]),
+        Object.freeze(["Esc", "Leave the sortie · back to the menu"]),
         Object.freeze(["Gamepad", "Sticks fly · trigger consents the gunner"]),
       ]),
     }),

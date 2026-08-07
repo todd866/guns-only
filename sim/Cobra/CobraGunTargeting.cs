@@ -83,13 +83,18 @@ public static class CobraGunTargeting
         Vec3D delta = toWorldM - fromWorldM;
         double horizontalRangeM = Math.Sqrt(delta.X * delta.X + delta.Z * delta.Z);
         double sampleStepM = Math.Clamp(terrain.HorizontalResolutionM, 10.0, 50.0);
-        int steps = Math.Max(1, (int)Math.Ceiling(horizontalRangeM / sampleStepM));
+        int steps = Math.Clamp(
+            (int)Math.Ceiling(horizontalRangeM / sampleStepM),
+            1,
+            CobraMissionRuntime.MaximumLineOfSightSamples);
         for (int index = 1; index < steps; index++) {
             double fraction = (double)index / steps;
             Vec3D point = fromWorldM + delta * fraction;
-            if (!terrain.TrySample(point.X, point.Z, out TerrainSample sample))
+            // Height only — this march never reads the normal or the surface kind, and paying for
+            // a finite-difference normal at every step was 41.6 ms of every authority tick.
+            if (!terrain.TryHeightM(point.X, point.Z, out double heightM))
                 return false;
-            if (sample.HeightM + CobraMissionRuntime.LineOfSightTerrainClearanceM >= point.Y)
+            if (heightM + CobraMissionRuntime.LineOfSightTerrainClearanceM >= point.Y)
                 return false;
         }
 
@@ -105,7 +110,8 @@ public static class CobraGunTargeting
 
     /// <summary>
     /// One per-tick gunner picture for a present, live target: geometric assessment, sight-only
-    /// line of sight, and turret slew. HasLineOfSight reports sight alone, so a clear-sighted
+    /// line of sight (measured here, or supplied by a caller refreshing it on its own cadence),
+    /// and turret slew. HasLineOfSight reports sight alone, so a clear-sighted
     /// target outside the flexible envelope reads OUT OF LIMITS — not MASKED — in the crew
     /// reason chain. The servo slews only while the mount can both see and reach the aim point
     /// (envelope AND sight): a sighted but unreachable target must not drag the barrels onto the
@@ -120,12 +126,15 @@ public static class CobraGunTargeting
         bool friendly,
         in Vec3D targetPositionWorldM,
         CobraTurretServo turret,
-        double dtSeconds)
+        double dtSeconds,
+        bool? knownLineOfSight = null)
     {
         ArgumentNullException.ThrowIfNull(turret);
         CobraGunTargetAssessment assessment = Assess(
             aircraftPositionWorldM, aircraftYawRad, targetPositionWorldM);
-        bool hasLineOfSight = EvaluateLineOfSight(
+        // The caller may supply a sight verdict it is refreshing on its own cadence: line of sight
+        // is terrain geometry, not a control loop, and the servo below still slews every tick.
+        bool hasLineOfSight = knownLineOfSight ?? EvaluateLineOfSight(
             terrain, obstacles, aircraftPositionWorldM, targetPositionWorldM);
         if (assessment.WithinTurretEnvelope && hasLineOfSight)
             turret.Advance(dtSeconds, assessment.SignedAzimuthRad, assessment.ElevationRad);

@@ -29,11 +29,15 @@ public sealed class CobraGroundWarRuntime
     public const double HostileSeedSoftVehicleRingM = 200.0;
     public const double HostileWaveRingM = 160.0;
     public const double WreckRetainSeconds = 12.0;
+    /// <summary>Small-arms chatter events per engaged unit per second (presentation only).</summary>
+    public const double SmallArmsEventsPerSecond = 2.4;
     public const double PlayerRoundDamage = 0.55;
     public const double VictoryControlThreshold = 0.55;
     public const double VictoryHoldSeconds = 45.0;
     public const double DefeatControlThreshold = -0.75;
     public const double DefeatHoldSeconds = 30.0;
+    // The hold timers themselves are wall-clock (see EvaluateHoldTheBridge); these remain as the
+    // 120 Hz tick equivalents fixtures use to drive a hold at the airframe rate.
     public static readonly int VictoryHoldTicks =
         (int)Math.Round(VictoryHoldSeconds / PlayerVehicleContract.FixedDeltaSeconds);
     public static readonly int DefeatHoldTicks =
@@ -51,6 +55,15 @@ public sealed class CobraGroundWarRuntime
     readonly List<GroundUnit> _units = new();
     readonly Dictionary<string, double> _wreckAgeSeconds = new(StringComparer.Ordinal);
     readonly List<GroundWarEvent> _recentEvents = new();
+    // Per-step scratch, reused. Every phase below needs the living set in a stable order; building
+    // it with LivingUnits().OrderBy(...).ToArray() allocated an iterator, a buffer and a string
+    // sort on every step, and GoalFor re-enumerated it once per unit on top. At 120 Hz that
+    // allocation churn was most of the cost the WASM heap was paying for.
+    readonly List<GroundUnit> _livingScratch = new();
+    readonly List<double> _damageScratch = new();
+    readonly Dictionary<string, ContestedSite> _sitesById = new(StringComparer.Ordinal);
+    static readonly Comparison<GroundUnit> ByIdOrdinal =
+        (first, second) => string.CompareOrdinal(first.Id, second.Id);
     readonly ControlBalance _balance = new();
     readonly CobraTurretMagazine _magazine;
     readonly FobResupplyZone _fob;
@@ -63,8 +76,8 @@ public sealed class CobraGroundWarRuntime
     int _fobRearmCount;
     int _roundsExpended;
     long _authorityTick;
-    int _friendlyHoldTicks;
-    int _hostileHoldTicks;
+    double _friendlyHoldSeconds;
+    double _hostileHoldSeconds;
     HoldTheBridgeOutcome _missionOutcome = HoldTheBridgeOutcome.Pending;
     string _missionOutcomeReason = "";
     double? _forcedControlForTests;
@@ -80,6 +93,7 @@ public sealed class CobraGroundWarRuntime
         _magazine = magazine ?? new CobraTurretMagazine();
         _rng = new Random(seed ?? 19_680_701);
         _sites = BuildSites(definition, terrain);
+        foreach (ContestedSite site in _sites) _sitesById[site.Id] = site;
         CobraCanyonLandmarkDefinition fobLandmark = definition.Landmarks.First(landmark =>
             landmark.Kind == CobraCanyonLandmarkKind.ForwardOperatingBase);
         if (!terrain.TrySample(fobLandmark.EastM, fobLandmark.NorthM, out TerrainSample fobSurface))
@@ -102,9 +116,9 @@ public sealed class CobraGroundWarRuntime
     public HoldTheBridgeOutcome MissionOutcome => _missionOutcome;
     public string MissionOutcomeReason => _missionOutcomeReason;
     public double VictoryHoldProgress =>
-        Math.Clamp(_friendlyHoldTicks / (double)VictoryHoldTicks, 0.0, 1.0);
+        Math.Clamp(_friendlyHoldSeconds / VictoryHoldSeconds, 0.0, 1.0);
     public double DefeatHoldProgress =>
-        Math.Clamp(_hostileHoldTicks / (double)DefeatHoldTicks, 0.0, 1.0);
+        Math.Clamp(_hostileHoldSeconds / DefeatHoldSeconds, 0.0, 1.0);
 
     public GroundWarDebrief Debrief => new(
         _hostileKillsByPlayer,
@@ -122,6 +136,17 @@ public sealed class CobraGroundWarRuntime
         _units.FirstOrDefault(unit => string.Equals(unit.Id, unitId, StringComparison.Ordinal));
 
     public IEnumerable<GroundUnit> LivingUnits() => _units.Where(unit => unit.IsAlive);
+
+    /// <summary>Refill the reusable living-unit scratch in the stable ordinal-id order every
+    /// combat phase depends on. Allocation-free after the first few steps.</summary>
+    List<GroundUnit> RefreshLivingScratch()
+    {
+        _livingScratch.Clear();
+        foreach (GroundUnit unit in _units)
+            if (unit.IsAlive) _livingScratch.Add(unit);
+        _livingScratch.Sort(ByIdOrdinal);
+        return _livingScratch;
+    }
 
     /// <summary>Test/fixture helper for Hold the Bridge outcome timers. Sticky across Advance.</summary>
     public void OverrideControlForTests(double control)
@@ -151,21 +176,23 @@ public sealed class CobraGroundWarRuntime
         _authorityTick++;
     }
 
+    // Wall-clock, not a count of Advance calls: the mission runtime batches this runtime to a
+    // strategic cadence (CobraMissionRuntime.GroundWarStepHz), so a tick-counted 45 s hold would
+    // silently become a four-and-a-half-minute one.
     void EvaluateHoldTheBridge(double dtSeconds)
     {
-        _ = dtSeconds;
         if (_balance.Control >= VictoryControlThreshold) {
-            _friendlyHoldTicks++;
-            _hostileHoldTicks = 0;
+            _friendlyHoldSeconds += dtSeconds;
+            _hostileHoldSeconds = 0.0;
         } else if (_balance.Control <= DefeatControlThreshold) {
-            _hostileHoldTicks++;
-            _friendlyHoldTicks = 0;
+            _hostileHoldSeconds += dtSeconds;
+            _friendlyHoldSeconds = 0.0;
         } else {
-            _friendlyHoldTicks = 0;
-            _hostileHoldTicks = 0;
+            _friendlyHoldSeconds = 0.0;
+            _hostileHoldSeconds = 0.0;
         }
 
-        if (_friendlyHoldTicks >= VictoryHoldTicks) {
+        if (_friendlyHoldSeconds + 1e-9 >= VictoryHoldSeconds) {
             _missionOutcome = HoldTheBridgeOutcome.Victory;
             _missionOutcomeReason = "held-bridge";
             _recentEvents.Add(new GroundWarEvent(
@@ -175,7 +202,7 @@ public sealed class CobraGroundWarRuntime
                 null,
                 GroundFaction.Friendly,
                 _fob.CentreWorldM));
-        } else if (_hostileHoldTicks >= DefeatHoldTicks) {
+        } else if (_hostileHoldSeconds + 1e-9 >= DefeatHoldSeconds) {
             _missionOutcome = HoldTheBridgeOutcome.Defeat;
             _missionOutcomeReason = "lost-basin";
             _recentEvents.Add(new GroundWarEvent(
@@ -245,32 +272,40 @@ public sealed class CobraGroundWarRuntime
 
     void ResolveMutualCombat(double dtSeconds)
     {
-        // Snapshot living set so mutual damage is order-stable.
-        GroundUnit[] living = LivingUnits().OrderBy(unit => unit.Id, StringComparer.Ordinal).ToArray();
-        var damage = new Dictionary<string, double>(StringComparer.Ordinal);
-        foreach (GroundUnit attacker in living) {
-            GroundUnit? victim = null;
-            double bestRangeSq = double.PositiveInfinity;
-            foreach (GroundUnit candidate in living) {
+        // Snapshot living set so mutual damage is order-stable. Damage accumulates into a
+        // parallel index-aligned buffer rather than a per-step dictionary keyed on unit ids.
+        List<GroundUnit> living = RefreshLivingScratch();
+        _damageScratch.Clear();
+        for (int index = 0; index < living.Count; index++) _damageScratch.Add(0.0);
+
+        // Small-arms chatter is presentation, so its rate is per SECOND, not per step: at the old
+        // 120 Hz coupling a flat 0.02-per-step probability meant 2.4 events/s per engaged unit.
+        double smallArmsChance = Math.Min(1.0, SmallArmsEventsPerSecond * dtSeconds);
+        for (int attackerIndex = 0; attackerIndex < living.Count; attackerIndex++) {
+            GroundUnit attacker = living[attackerIndex];
+            int victimIndex = -1;
+            double bestRangeSq = attacker.EngagementRangeM * attacker.EngagementRangeM;
+            for (int candidateIndex = 0; candidateIndex < living.Count; candidateIndex++) {
+                GroundUnit candidate = living[candidateIndex];
                 if (candidate.Faction == attacker.Faction) continue;
                 double rangeSq = HorizontalDistanceSquared(
                     attacker.PositionWorldM, candidate.PositionWorldM);
-                if (rangeSq > attacker.EngagementRangeM * attacker.EngagementRangeM)
-                    continue;
-                if (rangeSq >= bestRangeSq) continue;
+                if (rangeSq > bestRangeSq) continue;
+                if (victimIndex >= 0 && rangeSq >= bestRangeSq) continue;
                 bestRangeSq = rangeSq;
-                victim = candidate;
+                victimIndex = candidateIndex;
             }
-            if (victim is null) continue;
-            damage[victim.Id] = damage.GetValueOrDefault(victim.Id)
-                + attacker.DamagePerSecond * dtSeconds;
-            if (_rng.NextDouble() < 0.02)
+            if (victimIndex < 0) continue;
+            _damageScratch[victimIndex] += attacker.DamagePerSecond * dtSeconds;
+            if (_rng.NextDouble() < smallArmsChance)
                 PushEvent("small-arms", attacker.Id, attacker.HomeSiteId, attacker.Faction,
                     attacker.PositionWorldM);
         }
 
-        foreach (GroundUnit unit in living) {
-            if (!damage.TryGetValue(unit.Id, out double amount)) continue;
+        for (int index = 0; index < living.Count; index++) {
+            double amount = _damageScratch[index];
+            if (amount <= 0.0) continue;
+            GroundUnit unit = living[index];
             bool wasAlive = unit.IsAlive;
             unit.ApplyDamage(amount);
             if (wasAlive && !unit.IsAlive) {
@@ -283,10 +318,11 @@ public sealed class CobraGroundWarRuntime
 
     void MoveUnits(double dtSeconds)
     {
-        foreach (GroundUnit unit in LivingUnits().OrderBy(candidate => candidate.Id, StringComparer.Ordinal)) {
+        List<GroundUnit> living = RefreshLivingScratch();
+        foreach (GroundUnit unit in living) {
             if (unit.MoveSpeedMps <= 1e-9) continue;
 
-            Vec3D goal = GoalFor(unit);
+            Vec3D goal = GoalFor(unit, living);
             Vec3D delta = goal - unit.PositionWorldM;
             double horizontal = Math.Sqrt(delta.X * delta.X + delta.Z * delta.Z);
             if (horizontal < 4.0) continue;
@@ -301,12 +337,12 @@ public sealed class CobraGroundWarRuntime
         }
     }
 
-    Vec3D GoalFor(GroundUnit unit)
+    Vec3D GoalFor(GroundUnit unit, List<GroundUnit> living)
     {
         // Prefer nearest living enemy; otherwise push along balance toward the next contested site.
         GroundUnit? enemy = null;
         double best = double.PositiveInfinity;
-        foreach (GroundUnit candidate in LivingUnits()) {
+        foreach (GroundUnit candidate in living) {
             if (candidate.Faction == unit.Faction) continue;
             double rangeSq = HorizontalDistanceSquared(unit.PositionWorldM, candidate.PositionWorldM);
             if (rangeSq >= best) continue;
@@ -317,7 +353,7 @@ public sealed class CobraGroundWarRuntime
             || best <= unit.EngagementRangeM * unit.EngagementRangeM * 2.25))
             return enemy.PositionWorldM;
 
-        ContestedSite home = _sites.First(site => site.Id == unit.HomeSiteId);
+        ContestedSite home = _sitesById[unit.HomeSiteId];
         if (unit.Intent is GroundUnitIntent.Hold or GroundUnitIntent.EngageNearest)
             return home.PositionWorldM;
 
@@ -339,10 +375,11 @@ public sealed class CobraGroundWarRuntime
 
     void UpdateSiteControl()
     {
+        List<GroundUnit> living = RefreshLivingScratch();
         foreach (ContestedSite site in _sites) {
             double friendly = 0.0;
             double hostile = 0.0;
-            foreach (GroundUnit unit in LivingUnits()) {
+            foreach (GroundUnit unit in living) {
                 if (HorizontalDistanceSquared(unit.PositionWorldM, site.PositionWorldM)
                     > site.CaptureRadiusM * site.CaptureRadiusM)
                     continue;
@@ -358,12 +395,13 @@ public sealed class CobraGroundWarRuntime
 
     void DriftBalance(double dtSeconds)
     {
-        double friendly = LivingUnits()
-            .Where(unit => unit.Faction == GroundFaction.Friendly)
-            .Sum(unit => unit.CombatPower);
-        double hostile = LivingUnits()
-            .Where(unit => unit.Faction == GroundFaction.Hostile)
-            .Sum(unit => unit.CombatPower);
+        double friendly = 0.0;
+        double hostile = 0.0;
+        foreach (GroundUnit unit in _units) {
+            if (!unit.IsAlive) continue;
+            if (unit.Faction == GroundFaction.Friendly) friendly += unit.CombatPower;
+            else hostile += unit.CombatPower;
+        }
         _balance.Drift(friendly, hostile, dtSeconds);
     }
 

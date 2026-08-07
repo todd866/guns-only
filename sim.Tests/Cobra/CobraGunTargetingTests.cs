@@ -371,4 +371,71 @@ public sealed class CobraTurretServoTests
         Assert.Equal(0.0, servo.AzimuthRad);
         Assert.Equal(0.0, servo.ElevationRad);
     }
+
+    /// <summary>
+    /// Performance invariant. The gunner's line of sight is a terrain march, and on the built-in
+    /// analytic canyon a single TrySample costs five height evaluations (centre plus four for a
+    /// finite-difference normal the march throws away). Marched at 25 m over the gun's 2 km
+    /// envelope that was 41.6 ms of EVERY 120 Hz authority tick once a target was cued and the
+    /// ship was high enough that terrain stopped occluding early — measured in the browser, and
+    /// the whole of the Build 265 "very laggy" report. The march must count height lookups, not
+    /// full surface samples.
+    /// </summary>
+    [Fact]
+    public void LineOfSightMarchesHeightsWithoutBuildingSurfaceNormals()
+    {
+        var terrain = new CountingTerrain();
+        int before = terrain.SampleCalls;
+        CobraGunTargeting.EvaluateLineOfSight(
+            terrain,
+            Array.Empty<CobraResolvedObstacle>(),
+            new Vec3D(0.0, 400.0, 0.0),
+            new Vec3D(1_800.0, 380.0, 0.0));
+
+        Assert.True(terrain.HeightCalls > 8, "the march must actually sample the terrain");
+        Assert.Equal(before + 2, terrain.SampleCalls);
+    }
+
+    /// <summary>
+    /// The march must also be bounded: an unbounded step count makes cost scale with range, and
+    /// the gun's envelope reaches 2 km.
+    /// </summary>
+    [Fact]
+    public void LineOfSightSampleCountIsBounded()
+    {
+        var terrain = new CountingTerrain();
+        CobraGunTargeting.EvaluateLineOfSight(
+            terrain,
+            Array.Empty<CobraResolvedObstacle>(),
+            new Vec3D(-7_000.0, 900.0, -7_000.0),
+            new Vec3D(7_000.0, 880.0, 7_000.0));
+
+        Assert.True(
+            terrain.HeightCalls <= CobraMissionRuntime.MaximumLineOfSightSamples + 4,
+            $"march took {terrain.HeightCalls} height lookups");
+    }
+
+    sealed class CountingTerrain : ITerrainSurface
+    {
+        public int SampleCalls;
+        public int HeightCalls;
+
+        public TerrainBounds Bounds => new(-12_000.0, 12_000.0, -12_000.0, 12_000.0);
+        public double HorizontalResolutionM => 25.0;
+
+        public bool TrySample(double eastM, double northM, out TerrainSample sample)
+        {
+            SampleCalls++;
+            HeightCalls++;
+            sample = new TerrainSample(100.0, new Vec3D(0.0, 1.0, 0.0));
+            return Bounds.Contains(eastM, northM);
+        }
+
+        public bool TryHeightM(double eastM, double northM, out double heightM)
+        {
+            HeightCalls++;
+            heightM = 100.0;
+            return Bounds.Contains(eastM, northM);
+        }
+    }
 }

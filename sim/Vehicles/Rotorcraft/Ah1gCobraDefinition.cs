@@ -48,6 +48,11 @@ public static class Ah1gCobraDefinition
                 EngineRiseTimeConstantSeconds: 1.33,
                 EngineFallTimeConstantSeconds: 0.40,
                 GovernorProportionalGainWPerRpm: 24_000.0,
+                // Proportional-only control needs a standing rpm error to hold a standing power
+                // correction, so the rotor sat near 85% Nr for whole sorties with LOW ROTOR RPM
+                // lit. Ki = Kp / 2 s resets that error over roughly two seconds, which is the
+                // order a real N2 governor takes to recover from a collective step.
+                GovernorIntegralGainWPerRpmSecond: 12_000.0,
                 AccessoryPowerW: 18_000.0,
                 TailRotorPowerFraction: 0.085,
                 SeaLevelDensityKgM3: 1.225,

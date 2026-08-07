@@ -26,6 +26,27 @@ public interface ITerrainSurface {
     TerrainBounds Bounds { get; }
     double HorizontalResolutionM { get; }
     bool TrySample(double eastM, double northM, out TerrainSample sample);
+
+    /// <summary>
+    /// Height alone, for callers that never look at the normal or the surface kind — line-of-sight
+    /// marches above all, which walk tens of points per ray and read nothing but HeightM.
+    ///
+    /// This is not a micro-optimisation. An analytic terrain builds its normal by finite
+    /// difference, so a full TrySample costs FIVE height evaluations; the built-in Cobra Canyon
+    /// surface walks three route polylines and the patch list inside each one. Marching the
+    /// gunner's 2 km sight line through TrySample cost 41.6 ms of every 120 Hz authority tick.
+    ///
+    /// The default implementation is the honest one — height from a full sample — so an
+    /// implementation only overrides this when it genuinely has a cheaper path.
+    /// </summary>
+    bool TryHeightM(double eastM, double northM, out double heightM) {
+        if (!TrySample(eastM, northM, out TerrainSample sample)) {
+            heightM = 0.0;
+            return false;
+        }
+        heightM = sample.HeightM;
+        return true;
+    }
 }
 
 /// <summary>
@@ -57,6 +78,9 @@ public sealed class TranslatedTerrainSurface : ITerrainSurface {
 
     public bool TrySample(double eastM, double northM, out TerrainSample sample) =>
         _source.TrySample(eastM - _eastOffsetM, northM - _northOffsetM, out sample);
+
+    public bool TryHeightM(double eastM, double northM, out double heightM) =>
+        _source.TryHeightM(eastM - _eastOffsetM, northM - _northOffsetM, out heightM);
 }
 
 /// <summary>Immutable regular grid with analytic bilinear height and normal interpolation.</summary>

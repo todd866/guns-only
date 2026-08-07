@@ -1,49 +1,53 @@
-import * as THREE from "../vendor/three.module.js?v=265";
+import * as THREE from "../vendor/three.module.js?v=266";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=265";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=265";
+} from "../render/cobra/cobra_canyon_plan.js?v=266";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=266";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=265";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=265";
-import { createHud } from "../hud.js?v=265";
+} from "../render/cobra/cobra_canyon_tour.js?v=266";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=266";
+import { createHud } from "../hud.js?v=266";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=265";
+} from "../render/cobra/cobra_hud_adapter.js?v=266";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=265";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=266";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=265";
+} from "../render/cobra/cobra_control_profile.js?v=266";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=265";
+} from "../render/cobra/cobra_pilot_input.js?v=266";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=265";
+} from "../render/cobra/ah1g_presence.js?v=266";
 import {
   COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD,
   clampInducedLookRotation,
   lookAnglesFromOffset,
   lookOffsetFromAngles,
-} from "../render/cobra/cobra_camera_bias.js?v=265";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=265";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=265";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=265";
+} from "../render/cobra/cobra_camera_bias.js?v=266";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=266";
+import {
+  MAIN_MENU_HREF,
+  resolveEscapeAction,
+} from "../render/cobra/cobra_mission_exit.js?v=266";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=266";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=266";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -208,7 +212,7 @@ const projectionScratch = new THREE.Vector3();
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=265";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=266";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -329,6 +333,31 @@ let pitch = 0.08;
 let lastTimeMs = performance.now();
 let animationFrame = 0;
 
+// Per-frame cost seam. Six performance.now() reads per frame (tens of nanoseconds each) buy the
+// only number that settles a "feels laggy" report: WHICH phase owns the frame. Weekend Ride
+// exposes renderer.info the same way; this page needs the phase split as well because it runs a
+// sim, a JSON snapshot, a canvas HUD and a three.js scene in the same callback.
+const FRAME_PHASES = Object.freeze(["sim", "state", "presentation", "render", "hud", "total"]);
+const framePhaseTotals = Object.fromEntries(FRAME_PHASES.map((phase) => [phase, 0]));
+let framePhaseSamples = 0;
+function recordPhase(phase, startedAtMs) {
+  framePhaseTotals[phase] += performance.now() - startedAtMs;
+}
+window.__gunsOnlyCobraRenderInfo = renderer.info;
+window.__gunsOnlyCobraFrameProfile = Object.freeze({
+  reset() {
+    for (const phase of FRAME_PHASES) framePhaseTotals[phase] = 0;
+    framePhaseSamples = 0;
+  },
+  read() {
+    const frames = Math.max(1, framePhaseSamples);
+    const mean = Object.fromEntries(
+      FRAME_PHASES.map((phase) => [phase, framePhaseTotals[phase] / frames]),
+    );
+    return { frames: framePhaseSamples, meanMs: mean, p95Ms: frameP95Ms };
+  },
+});
+
 function setStatus(message, state = "loading") {
   statusText.textContent = message;
   status.dataset.ready = state === "ready" ? "true" : "false";
@@ -379,6 +408,7 @@ function sampleAuthorityState(nowMs, { force = false } = {}) {
   if (!bridge) return;
   if (!force && nowMs - authorityStateSampledAtMs < AUTHORITY_STATE_SAMPLE_INTERVAL_MS) return;
   authorityStateSampledAtMs = nowMs;
+  const stateStartedAtMs = performance.now();
   authorityState = JSON.parse(bridge.GetState());
   // QA seam: headless smoke scripts steer against authoritative truth, not DOM guesses.
   window.__gunsOnlyCobraAuthority = authorityState;
@@ -389,6 +419,7 @@ function sampleAuthorityState(nowMs, { force = false } = {}) {
   refreshGroundTargets();
   groundWarPresentation?.sync(authorityState.ground_war ?? null, targetSelect.value || null);
   recordTelemetry(nowMs);
+  recordPhase("state", stateStartedAtMs);
 }
 
 function readVehiclePose() {
@@ -710,7 +741,9 @@ function updateManual(deltaSeconds) {
       bridge.SetGunnerTarget(targetSelect.value || null);
       bridge.SetEngagementConsent(keys.has(cobraControlProfile.fire.code));
       // Advance runs every rendered frame; the JSON snapshot is sampled at HUD rate.
+      const simStartedAtMs = performance.now();
       bridge.Advance(deltaSeconds);
+      recordPhase("sim", simStartedAtMs);
       sampleAuthorityState(lastTimeMs);
     }
     syncAuthorityCamera();
@@ -786,7 +819,10 @@ function syncAuthorityCamera() {
   }
 
   camera.lookAt(lookTarget);
-  camera.rotation.z = Number(vehicle.roll_rad) || 0;
+  // Negated: three.js rolls the camera counter-clockwise for a positive rotation.z (right-hand
+  // rule about +Z, which points back out of the screen), so feeding a right bank straight in
+  // tilted the horizon the wrong way and a left cyclic input read as a roll to the right.
+  camera.rotation.z = -(Number(vehicle.roll_rad) || 0);
 }
 
 function recordFrameDuration(durationMs) {
@@ -938,15 +974,18 @@ function animate(timeMs) {
   lastTimeMs = timeMs;
   if (!plan || !presentation) return;
 
+  const frameStartedAtMs = performance.now();
   if (tourInput.checked) updateTour(deltaSeconds);
   else updateManual(deltaSeconds);
   applyParkedCamera();
   const aglM = tourInput.checked && !parkedCamera ? tourCommandedAglM : cameraAglM();
+  const presentationStartedAtMs = performance.now();
   presentation.update({
     cameraPosition: camera.position,
     cameraAglM: aglM,
     ambientBudgetLevel: ambientBudgetLevel(),
   });
+  recordPhase("presentation", presentationStartedAtMs);
   if (tourInput.checked && bridge && !missionTerminal) {
     // Keep the ground war alive during guided preview even when the camera is on rails.
     pilotControls = releaseCobraPilotControls(pilotControls);
@@ -963,11 +1002,17 @@ function animate(timeMs) {
   // AT the ship so the silhouette returns. Set unconditionally — the earlier per-branch
   // version left the shell hidden whenever a terminal mission froze the tour branch.
   if (ah1gPresence) ah1gPresence.setFirstPerson(!tourInput.checked);
+  const renderStartedAtMs = performance.now();
   renderer.render(scene, camera);
+  recordPhase("render", renderStartedAtMs);
+  const hudStartedAtMs = performance.now();
   drawHud(timeMs, deltaSeconds);
+  recordPhase("hud", hudStartedAtMs);
   recordFrameDuration(rawDeltaMs);
   updateMetrics(aglM);
   onboarding?.advanceNudges(onboardingNudgeState(), deltaSeconds);
+  recordPhase("total", frameStartedAtMs);
+  framePhaseSamples += 1;
 }
 
 /**
@@ -1059,6 +1104,28 @@ function isManualControl(code) {
     || code === "KeyR" || code === "KeyC" || code === "KeyF" || code.startsWith("Arrow");
 }
 
+// Escape leaves the sortie for the menu (cobra_mission_exit.js documents why this page exits
+// rather than pausing). Two reasons this is its own listener, in CAPTURE phase on window:
+//  - the onboarding overlay dismisses on any key from a capture-phase listener on document, and
+//    document-capture runs before window-bubble. A bubble handler would always find the card
+//    already closed and quit the mission on the player's first-ever keypress;
+//  - the mission keydown handler below returns early for anything outside its manual-control
+//    allowlist, which is precisely why Build 265's Escape did nothing at all.
+window.addEventListener("keydown", (event) => {
+  if (event.code !== "Escape") return;
+  event.preventDefault();
+  const action = resolveEscapeAction({
+    onboardingOpen: onboarding?.isOpen() === true,
+    missionTerminal,
+  });
+  if (action === "dismiss-onboarding") {
+    event.stopPropagation();
+    onboarding.dismiss();
+    return;
+  }
+  leaveMissionForMenu();
+}, true);
+
 window.addEventListener("keydown", (event) => {
   // Terminal states freeze the sim; R is the keyboard path back into the fight (the debrief
   // card announces it). Guarded by missionTerminal so mid-sortie R keeps its freelook meaning.
@@ -1135,9 +1202,23 @@ canvas.addEventListener("webglcontextlost", (event) => {
   setStatus("WebGL context lost — reload the mission", "error");
 });
 
-window.addEventListener("pagehide", () => {
-  telemetryChannel.flush({ pagehide: true });
+/**
+ * Stop the sortie and give everything back: the frame loop, the telemetry tail, the scene's GPU
+ * resources, the held keys and the onboarding chrome (which lives on document.body and would
+ * otherwise outlive the page it belongs to). Idempotent — pagehide and an Escape exit can both
+ * reach it, and the second call must be a no-op rather than a double dispose.
+ */
+let missionTornDown = false;
+function teardownMission(reason) {
+  if (missionTornDown) return;
+  missionTornDown = true;
+  telemetryChannel.flush({ [reason]: true });
   cancelAnimationFrame(animationFrame);
+  animationFrame = 0;
+  keys.clear();
+  pilotControls = releaseCobraPilotControls(pilotControls);
+  onboarding?.dispose();
+  onboarding = null;
   presentation?.dispose();
   groundWarPresentation?.dispose();
   if (ah1gPresence) {
@@ -1146,7 +1227,15 @@ window.addEventListener("pagehide", () => {
     ah1gPresence = null;
   }
   renderer.dispose();
-}, { once: true });
+}
+
+/** Escape's exit: tear the mission down first, then hand the browser back to the sortie list. */
+function leaveMissionForMenu() {
+  teardownMission("exit");
+  window.location.href = MAIN_MENU_HREF;
+}
+
+window.addEventListener("pagehide", () => teardownMission("pagehide"), { once: true });
 
 async function boot() {
   resize();
