@@ -1173,11 +1173,13 @@ test("the published web app boots to a running flight kernel (no fatal render er
       globalThis.__gunsState?.session_phase === "ACTIVE"
         && !document.documentElement.classList.contains("run-paused"));
     if (!alreadyActive) await page.locator("#ready-start").click();
+    // 90 s: same SwiftShader patience as weapons_inhibited below. 45 s timed out on a green
+    // deterministic Build 274 Verify with no app regression (local reproduce reaches FLYING).
     await page.waitForFunction(() =>
       globalThis.__gunsState?.session_phase === "ACTIVE"
         && globalThis.__gunsState?.player_terminal_state === "FLYING"
         && !document.documentElement.classList.contains("run-paused"),
-    undefined, { polling: scaled(100), timeout: scaled(45000) });
+    undefined, { polling: scaled(100), timeout: scaled(90000) });
     await page.evaluate(() => globalThis.__gunsBridge.ReleaseWeaponsHold());
     // 45 s, was 5. This is a wall-clock wait for a flag that only reaches the snapshot on a
     // simulation tick, and this file already warns two hundred lines down that "SwiftShader can

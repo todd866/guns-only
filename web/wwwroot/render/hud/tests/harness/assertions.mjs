@@ -81,16 +81,13 @@ function assertAirframeSymbols(data) {
   }
   if (!geometry.waterlinePx || !geometry.fpvPx) return;
 
-  // Cobra camera-referenced HUD: waterline shares the ladder horizon; FPV stays the
-  // velocity projection through the camera (not glued to the 0 rung). Gun cross stays
-  // on body-forward. Do not demand waterline == nose projection.
+  // Cobra camera-referenced ladder: 0 rung is conformal through the eye. Classical
+  // waterline stays body-forward (same probe as F-22); gun cross shares that nose.
+  // Build 266 briefly glued waterline to the horizon — reversed for helo doctrine.
   if (data.ladderReference === "camera") {
-    const horizonRung = geometry.ladderRungs?.find((rung) => rung.deg === 0);
-    if (horizonRung) {
-      const horizonError = distance(geometry.waterlinePx, { x: horizonRung.cx, y: horizonRung.cy });
-      check(name, "camera waterline == ladder horizon rung",
-        horizonError <= 1.5, `error ${horizonError.toFixed(3)} px (tol 1.5)`);
-    }
+    const waterlineError = distance(geometry.waterlinePx, probes.waterline);
+    check(name, "camera-ladder waterline == projected body-forward",
+      waterlineError <= 1.5, `error ${waterlineError.toFixed(3)} px (tol 1.5)`);
     const gunCrossError = geometry.gunCrossPx
       ? distance(geometry.gunCrossPx, probes.waterline)
       : Number.POSITIVE_INFINITY;
