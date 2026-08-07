@@ -81,8 +81,9 @@ function assertAirframeSymbols(data) {
   }
   if (!geometry.waterlinePx || !geometry.fpvPx) return;
 
-  // Cobra camera-referenced HUD: waterline/FPV share the ladder horizon, while the gun cross
-  // stays on body-forward. Do not demand waterline == nose projection.
+  // Cobra camera-referenced HUD: waterline shares the ladder horizon; FPV stays the
+  // velocity projection through the camera (not glued to the 0 rung). Gun cross stays
+  // on body-forward. Do not demand waterline == nose projection.
   if (data.ladderReference === "camera") {
     const horizonRung = geometry.ladderRungs?.find((rung) => rung.deg === 0);
     if (horizonRung) {
@@ -95,11 +96,9 @@ function assertAirframeSymbols(data) {
       : Number.POSITIVE_INFINITY;
     check(name, "gun cross remains on projected body-forward",
       gunCrossError <= 1.5, `error ${gunCrossError.toFixed(3)} px (tol 1.5)`);
-    const dx = geometry.fpvPx.x - geometry.waterlinePx.x;
-    const dy = geometry.fpvPx.y - geometry.waterlinePx.y;
-    check(name, "camera fpv sits with waterline at zero alpha/beta",
-      Math.hypot(dx, dy) <= 1.5 || aoa !== 0 || beta !== 0,
-      `gap ${Math.hypot(dx, dy).toFixed(2)} px`);
+    const fpvError = distance(geometry.fpvPx, probes.fpv);
+    check(name, "camera fpv == projected world-velocity",
+      fpvError <= 1.5, `error ${fpvError.toFixed(3)} px (tol 1.5)`);
     return;
   }
 

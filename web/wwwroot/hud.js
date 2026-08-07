@@ -254,30 +254,21 @@ export function cameraPitchAnchor(camera, width, height) {
 }
 
 /**
- * Waterline + FPV anchors that share the camera-referenced pitch ladder's horizon. The Cobra
- * rear seat's sight bias put body-forward (noseAnchor) ~50 px off the ladder's 0 rung; these
- * anchors put the flight symbols on the same horizon the ladder already draws.
+ * Waterline on the camera-referenced pitch ladder's horizon. The Cobra rear seat's sight bias
+ * put body-forward (noseAnchor) ~50 px off the ladder's 0 rung; this parks waterline with the
+ * 0 rung. FPV is *not* returned here — it must stay the velocity vector projected through the
+ * camera (see draw()). Build 267/268 incorrectly synthesized FPV from aoa/beta off this horizon;
+ * Cobra snapshots never carry aoa_deg, so FPV glued to the horizon in climb and dive.
  */
-export function cameraReferencedAirframeAnchors(camera, width, height, state = {}) {
+export function cameraReferencedAirframeAnchors(camera, width, height, _state = {}) {
   const attitude = cameraPitchAnchor(camera, width, height);
   const projection = camera?.projectionMatrix?.elements;
   const matrixScaleY = Number(projection?.[5]);
-  const matrixScaleX = Number(projection?.[0]);
   if (!attitude || !Number.isFinite(matrixScaleY) || matrixScaleY <= 0) return null;
   const focalY = height * 0.5 * matrixScaleY;
-  const focalX = width * 0.5 * (Number.isFinite(matrixScaleX) && matrixScaleX > 0
-    ? matrixScaleX
-    : matrixScaleY);
   const horizonY = attitude.centerY + Math.tan(attitude.pitchDeg * DEG) * focalY;
-  const aoaRad = (Number(state.aoa_deg) || 0) * DEG;
-  const betaRad = (Number(state.beta_deg) || 0) * DEG;
   return {
     waterline: { x: attitude.centerX, y: horizonY, behind: false },
-    fpv: {
-      x: attitude.centerX + Math.tan(betaRad) * focalX,
-      y: horizonY + Math.tan(aoaRad) * focalY,
-      behind: false,
-    },
   };
 }
 
@@ -5321,16 +5312,19 @@ class CombatHud {
         frame.ladderReference,
       );
     }
-    // Camera-referenced ladder (Cobra): waterline/FPV must share that horizon. The gun cross
-    // stays on body-forward — the M134 still points along the airframe, not the eye line.
+    // Camera-referenced ladder (Cobra): waterline shares that horizon. FPV stays the
+    // velocity projection above — locking it to the ladder horizon (Build 267) made it
+    // ignore climb/dive. Gun cross stays on body-forward (M134 along the airframe).
     const cameraSymbols = frame.ladderReference === "camera"
       ? cameraReferencedAirframeAnchors(frame.camera, this.width, this.height, frame.state)
       : null;
     const symbolAnchor = cameraSymbols?.waterline ?? noseAnchor;
-    const symbolFpv = cameraSymbols?.fpv ?? fpvAnchor;
+    const symbolFpv = fpvAnchor;
     if (this._debug && cameraSymbols) {
       this._debug.waterlinePx = { x: symbolAnchor.x, y: symbolAnchor.y };
-      this._debug.fpvPx = { x: symbolFpv.x, y: symbolFpv.y };
+      if (symbolFpv && !symbolFpv.behind) {
+        this._debug.fpvPx = { x: symbolFpv.x, y: symbolFpv.y };
+      }
     }
     this.drawAirframeSymbols(symbolAnchor, frame.state, symbolFpv);
     this.drawGunSight(frame, noseAnchor);
