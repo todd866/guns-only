@@ -55,9 +55,11 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // theatre. 1.87/radius doctrine: ~6.4 km readable radius (still inside the 6–11 km tropical
     // band) so far ridges melt sooner without killing the 3 km gorge run. Colour stays the F-22
     // fogLow humidified 22% toward white (product_truth / scene profile wiring).
-    density: 0.000292,
+    // ~6.0 km readable radius — far ridgelines dissolve sooner; gorge run stays crisp.
+    density: 0.000310,
     hazeBands: 6,
-    hazeBandBlend: 0.65,
+    // Stronger discrete aerial-perspective planes than korea's 0.65 default.
+    hazeBandBlend: 0.72,
   }),
 
   // THE F-22'S SKY, in linear working space, lifted from createDecisionSupportSky's cool
@@ -167,7 +169,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
       // Greener wild floor — the gorge corridor was reading too khaki against humid haze.
       valleyFloor: Object.freeze([0.142, 0.188, 0.078]),
       cultivationGold: Object.freeze([0.210, 0.242, 0.175]),
-      jungleMid: Object.freeze([0.052, 0.118, 0.048]),
+      jungleMid: Object.freeze([0.046, 0.124, 0.052]),
       lateriteSlope: Object.freeze([0.310, 0.145, 0.055]),
       ridgeSage: Object.freeze([0.122, 0.158, 0.095]),
       rimRock: Object.freeze([0.335, 0.318, 0.255]),

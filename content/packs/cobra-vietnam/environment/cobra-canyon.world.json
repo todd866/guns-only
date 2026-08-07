@@ -1195,6 +1195,7 @@
         "archetype.cobra-canyon.paddy-mirror.v1",
         "archetype.cobra-canyon.paddy-berm.v1",
         "archetype.cobra-canyon.village-hut.v1",
+        "archetype.cobra-canyon.jungle-understory.v1",
         "archetype.cobra-canyon.river-mist.v1"
       ],
       "landmarkIds": ["landmark.cobra-canyon.plantation-water-tower.v1"],

@@ -5,7 +5,7 @@ Production: Build 274, revision `0391eeb98c6cc245c9543b72380bb893d0e5db30`, depl
 `dpl_DRTzGJ2iqHuqxQtQBvZkGXkxRxJn` (verified live via /api/build-info 2026-08-07). Builds
 253-270 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Next candidate: Build 282 (branch `fix/ember-run-pass2`) — overnight pass 8: quieter river fresnel; denser mist cards; stronger monsoon cloud shadow; wider gravel bank.
+Next candidate: Build 283 (branch `fix/ember-run-pass2`) — overnight pass 9: denser monsoon haze bands; greener jungle mid; plantation waterworks understory.
 
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
