@@ -1,5 +1,5 @@
 import * as THREE from "../../vendor/three.module.js";
-import { annotateProceduralFallback } from "./airframe_primitives.js?v=273";
+import { annotateProceduralFallback } from "./airframe_primitives.js?v=274";
 
 export const HIGH_ALTITUDE_BALLOON_PRESENTATION_ID =
   "presentation.vehicle.high-altitude-weather-balloon.target.v1";

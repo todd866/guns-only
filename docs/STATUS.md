@@ -5,8 +5,7 @@ Production: Build 271, revision `686c894f31f1e91009c8b8a8687e438bedad5470`, depl
 `dpl_Dafmx86L8KEowdYYN4THxfHtvCkj` (verified live via /api/build-info 2026-08-07). Builds
 253-270 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Next candidate: Build 273 (branch `fix/cobra-ember-run`) — Ember Run + classical helicopter HUD
-(body waterline, hover FPV stub, accel/regime/gun cues), corridor scenery pass.
+Next candidate: Build 274 (branch `fix/cobra-ember-run`) — Ember Run + classical helicopter HUD, corridor scenery, ground-war silhouette fix.
 
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful

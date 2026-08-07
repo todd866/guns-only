@@ -8,7 +8,7 @@
   <base href="/">
   <title>Medevac research prototype — Guns Only</title>
   <link rel="icon" type="image/png" href="/favicon.png">
-  <link rel="stylesheet" href="/medevac/styles.css?v=273">
+  <link rel="stylesheet" href="/medevac/styles.css?v=274">
 </head>
 <body data-phase="briefing" data-mission-type="medevac">
   <a class="skip-link" href="#command-rail">Skip to command decision</a>
@@ -396,7 +396,7 @@
     // unversioned ESM and WASM dependencies. Finish that controller/cache handoff before fetching
     // either the release gate, the Blazor loader, or the Medevac application graph.
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=273", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=274", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -423,20 +423,20 @@
     try {
       await globalThis.__gunsPrebootReady;
       const { renderExperienceGate } = await import(
-        "../render/release/quarantine_gate.js?v=273"
+        "../render/release/quarantine_gate.js?v=274"
       );
       const access = renderExperienceGate({ experienceId: "medevac-command" });
       if (access.allowed) {
         await new Promise((resolve, reject) => {
           const script = document.createElement("script");
-          script.src = "/_framework/blazor.webassembly.js?v=273";
+          script.src = "/_framework/blazor.webassembly.js?v=274";
           script.setAttribute("autostart", "false");
           script.addEventListener("load", resolve, { once: true });
           script.addEventListener("error", () => reject(
             new Error("Failed to load the WebAssembly runtime.")), { once: true });
           document.head.append(script);
         });
-        await import("/medevac/app.js?v=273");
+        await import("/medevac/app.js?v=274");
       }
     } catch (error) {
       console.error(error);
