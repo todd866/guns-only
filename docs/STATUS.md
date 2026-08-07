@@ -1,11 +1,11 @@
 # Current product and verification status
 
 Updated: 2026-08-07
-Production: Build 271, revision `686c894f31f1e91009c8b8a8687e438bedad5470`, deployment
-`dpl_Dafmx86L8KEowdYYN4THxfHtvCkj` (verified live via /api/build-info 2026-08-07). Builds
+Production: Build 274, revision `0391eeb98c6cc245c9543b72380bb893d0e5db30`, deployment
+`dpl_DRTzGJ2iqHuqxQtQBvZkGXkxRxJn` (verified live via /api/build-info 2026-08-07). Builds
 253-270 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Next candidate: Build 274 (branch `fix/cobra-ember-run`) — Ember Run + classical helicopter HUD, corridor scenery, ground-war silhouette fix.
+Next candidate: none queued — fly Ember Run / classical helo HUD on production and note follow-ups.
 
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
