@@ -519,26 +519,47 @@ public sealed class CobraGroundWarRuntime
         if (_units.Any(unit => unit.Id == GunnerySeamUnitId))
             return _units.First(unit => unit.Id == GunnerySeamUnitId);
 
-        double east = aircraftPositionWorldM.X + Math.Sin(aircraftYawRad) * GunnerySeamRangeM;
-        double north = aircraftPositionWorldM.Z + Math.Cos(aircraftYawRad) * GunnerySeamRangeM;
-        if (!_terrain.TrySample(east, north, out TerrainSample surface)) {
-            east = aircraftPositionWorldM.X;
-            north = aircraftPositionWorldM.Z + GunnerySeamRangeM;
-            if (!_terrain.TrySample(east, north, out surface))
-                throw new InvalidOperationException(
-                    "Gunnery seam has no terrain datum ahead of the aircraft.");
+        // Keep look-down inside the M28A1 envelope (−50°). A seam planted at fixed 220 m on a
+        // gorge floor under a high spawn reads OutOfLimits forever (owner Build 270: 87%).
+        double aircraftX = aircraftPositionWorldM.X;
+        double aircraftY = aircraftPositionWorldM.Y;
+        double aircraftZ = aircraftPositionWorldM.Z;
+        double rangeM = GunnerySeamRangeM;
+        TerrainSample surface = default;
+        double seamEast = 0.0;
+        double seamNorth = 0.0;
+        for (int attempt = 0; attempt < 8; attempt++) {
+            seamEast = aircraftX + Math.Sin(aircraftYawRad) * rangeM;
+            seamNorth = aircraftZ + Math.Cos(aircraftYawRad) * rangeM;
+            if (!_terrain.TrySample(seamEast, seamNorth, out surface)) {
+                seamEast = aircraftX;
+                seamNorth = aircraftZ + rangeM;
+                if (!_terrain.TrySample(seamEast, seamNorth, out surface))
+                    throw new InvalidOperationException(
+                        "Gunnery seam has no terrain datum ahead of the aircraft.");
+            }
+            var candidate = new Vec3D(seamEast, surface.HeightM + 1.2, seamNorth);
+            var assessment = CobraGunTargeting.Assess(
+                new Vec3D(aircraftX, aircraftY, aircraftZ),
+                aircraftYawRad,
+                candidate);
+            if (assessment.WithinTurretEnvelope && assessment.HasBallisticSolution)
+                break;
+            rangeM = Math.Min(
+                CobraGunTargeting.MaximumSolutionRangeM - 50.0,
+                Math.Max(rangeM * 1.35, assessment.RangeM + 40.0));
         }
 
         ContestedSite home = _sites
             .OrderBy(site => HorizontalDistanceSquared(
-                site.PositionWorldM, new Vec3D(east, surface.HeightM, north)))
+                site.PositionWorldM, new Vec3D(seamEast, surface.HeightM, seamNorth)))
             .First();
         var unit = new GroundUnit(
             GunnerySeamUnitId,
             GroundFaction.Hostile,
             GroundUnitRole.SoftVehicle,
             maxHealth: 120.0,
-            new Vec3D(east, surface.HeightM + 1.2, north),
+            new Vec3D(seamEast, surface.HeightM + 1.2, seamNorth),
             GroundUnitIntent.Hold,
             home.Id);
         _units.Add(unit);

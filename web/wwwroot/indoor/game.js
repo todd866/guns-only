@@ -7,11 +7,11 @@ import {
 } from "./sim.js";
 import { IndoorPresentation } from "./presentation.js";
 import { IndoorAudio, loadIndoorPreferences } from "./audio.js";
-import { RELEASE_BUILD } from "../render/release/release_identity.js?v=270";
+import { RELEASE_BUILD } from "../render/release/release_identity.js?v=271";
 import {
   indoorActionPolicy,
   indoorBlockedActionMessage,
-} from "../render/indoor/control_policy.js?v=270";
+} from "../render/indoor/control_policy.js?v=271";
 
 const FIXED_STEP = 1 / 60;
 const MAX_FRAME_SECONDS = 0.12;

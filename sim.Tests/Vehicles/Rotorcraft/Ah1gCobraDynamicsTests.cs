@@ -282,7 +282,7 @@ public sealed class Ah1gCobraDynamicsTests
         var stable = Create("stable", new Vec3D(0.0, 0.315, 0.0),
             new Vec3D(0.0, -0.25, 0.0));
         var hard = Create("hard", new Vec3D(0.0, 0.335, 0.0),
-            new Vec3D(0.0, -5.0, 0.0));
+            new Vec3D(0.0, -8.0, 0.0));
         var environment = new PlayerVehicleEnvironmentSample(
             1.225,
             Vec3D.Zero,
