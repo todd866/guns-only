@@ -1,55 +1,61 @@
-import * as THREE from "../vendor/three.module.js?v=271";
+import * as THREE from "../vendor/three.module.js?v=274";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=271";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=271";
+} from "../render/cobra/cobra_canyon_plan.js?v=274";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=274";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=271";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=271";
-import { createHud } from "../hud.js?v=271";
+} from "../render/cobra/cobra_canyon_tour.js?v=274";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=274";
+import { createHud } from "../hud.js?v=274";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=271";
+} from "../render/cobra/cobra_hud_adapter.js?v=274";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=271";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=274";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=274";
+import {
+  emberActObjectiveOverlay,
+  emberPathGuidanceState,
+} from "../render/cobra/cobra_ember_path.js?v=274";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=274";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=271";
+} from "../render/cobra/cobra_control_profile.js?v=274";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=271";
+} from "../render/cobra/cobra_pilot_input.js?v=274";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=271";
+} from "../render/cobra/ah1g_presence.js?v=274";
 import {
   COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD,
   clampInducedLookRotation,
   lookAnglesFromOffset,
   lookOffsetFromAngles,
-} from "../render/cobra/cobra_camera_bias.js?v=271";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=271";
+} from "../render/cobra/cobra_camera_bias.js?v=274";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=274";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=271";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=271";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=271";
+} from "../render/cobra/cobra_mission_exit.js?v=274";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=274";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=274";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -143,6 +149,7 @@ let pilotControls = createCobraPilotControlState(0.5);
 let windowFocused = typeof document === "undefined" ? true : document.hasFocus();
 const cobraControlProfile = resolveCobraControlProfile();
 let groundWarPresentation = null;
+let emberGuidancePath = null;
 let ah1gPresence = null;
 let presenceDeltaSeconds = 0;
 let hostileTargetIds = [];
@@ -220,7 +227,7 @@ const projectionScratch = new THREE.Vector3();
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=271";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=274";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -389,17 +396,20 @@ function recordTelemetry(nowMs) {
       cobra_route_id: authorityState.route_id,
       cobra_status: authorityState.status,
       cobra_authority_tick: authorityState.authority_tick,
-      cobra_x_m: authorityState.vehicle.x_m,
-      cobra_y_m: authorityState.vehicle.y_m,
-      cobra_z_m: authorityState.vehicle.z_m,
+      cobra_x_m: pose?.x_m ?? authorityState.vehicle.x_m,
+      cobra_y_m: pose?.y_m ?? authorityState.vehicle.y_m,
+      cobra_z_m: pose?.z_m ?? authorityState.vehicle.z_m,
       cobra_ground_speed_mps: authorityState.vehicle.ground_speed_mps,
       cobra_vertical_speed_mps: authorityState.vehicle.vertical_speed_mps,
       cobra_collective: authorityState.vehicle.collective,
       cobra_power_margin: authorityState.vehicle.power_margin,
       cobra_main_rotor_rpm: rotor?.main_rotor_rpm ?? pose?.main_rotor_rpm,
       cobra_transmission_limit_fraction: rotor?.transmission_limit_fraction,
+      // Prefer the per-frame hot pose: GetState is 30 Hz and a stale tab can pin spawn forever
+      // while the flying tab's camera still reads hot pose (owner 16:41 flight diagnosis).
       cobra_pitch_rad: pose?.pitch_rad ?? authorityState.vehicle.pitch_rad,
       cobra_roll_rad: pose?.roll_rad ?? authorityState.vehicle.roll_rad,
+      cobra_mission_act: authorityState.mission_act,
       cobra_frame_ms: lastRawFrameMs,
       cobra_route_remaining_m: authorityState.route_guidance.remaining_m,
       cobra_cross_track_m: authorityState.route_guidance.cross_track_m,
@@ -620,13 +630,16 @@ function rebuildPresentation() {
   if (!world) return;
   presentation?.dispose();
   groundWarPresentation?.dispose();
+  emberGuidancePath?.dispose();
   plan = planCobraCanyonWorld(world, { qualityTier: qualitySelect.value });
   presentation = createCobraCanyonPresentation(THREE, plan, {
     qualityTier: qualitySelect.value,
   });
   groundWarPresentation = createCobraGroundWarPresentation(THREE);
+  emberGuidancePath = createGuidancePath(THREE, { maxGates: 16 });
   scene.add(presentation.group);
   scene.add(groundWarPresentation.group);
+  scene.add(emberGuidancePath.object3d);
   // Presence is ownship, not canyon scenery — recreate after canyon rebuild so it stays on top.
   if (ah1gPresence) {
     scene.remove(ah1gPresence.group);
@@ -937,26 +950,16 @@ function updateObjectiveHud(war) {
       : "HOLD —");
   // Ammo/FOB/kills/target/gunner/rotor truth moved from the DOM text strip into the
   // canvas HUD (hud.js + drawCobraRotorcraftHud); the card keeps objective copy only.
-  if (war.ammo_dry) {
-    setText(objectiveLine, "BINGO / DRY · REARM AT CAMP EMBER");
-    setText(objectiveDetail, "Put the skids on the Camp Ember pad, then return to the fight");
-  } else if (war.ammo_bingo) {
-    setText(objectiveLine, "BINGO AMMO · CAMP EMBER SOON");
-    setText(objectiveDetail, "Gun can under a fifth — break off for the pad before it runs dry");
-  } else if ((war.victory_hold_progress ?? 0) > 0) {
-    setText(objectiveLine, `HOLDING FRIENDLY CONTROL · ${holdPct}%`);
-    setText(objectiveDetail, "Keep tipping the fight — do not let hostiles claw it back");
-  } else if (authorityState?.gunner?.selected_target_id) {
-    setText(objectiveLine, "TIP CONTROL FRIENDLY · HOLD 45s");
-    setText(objectiveDetail, "Hold F when GUN ON TARGET — Tab cycles marks");
-  } else if (playerHasInteracted) {
-    setText(objectiveLine, "TIP CONTROL FRIENDLY · HOLD 45s");
-    setText(objectiveDetail, "Tab a hostile on the nose, then hold F");
-  } else {
-    setText(objectiveLine, "TIP CONTROL FRIENDLY · HOLD 45s");
-    // Owner ruling 2026-08-05: collective follows game convention — W raises, S lowers
-    // (the Builds 253-264 real-lever mapping with S=pull is overruled).
-    setText(objectiveDetail, "W collective up · S down · Tab target · hold F gunner");
+  // Owner sortie web-cobra-1786090836886-dc8wvig0: tip-friendly copy stayed up while the
+  // pilot idled on Camp Ember and control bled through −0.75 — losing must outrank tip.
+  const copy = cobraObjectiveCopy(war, {
+    selectedTargetId: authorityState?.gunner?.selected_target_id ?? null,
+    playerHasInteracted,
+    actOverlay: emberActObjectiveOverlay(authorityState?.mission_act),
+  });
+  if (copy) {
+    setText(objectiveLine, copy.line);
+    setText(objectiveDetail, copy.detail);
   }
 }
 
@@ -989,7 +992,7 @@ function updateMetrics(aglM) {
       : `${war.ammo_remaining}/${war.ammo_capacity}${war.ammo_bingo ? " · BINGO" : ""}`);
     setText(fobMetric, war.over_fob
       ? "ON PAD · rearm"
-      : `${(war.fob_range_m / 1_000).toFixed(1)} km · ${(war.fob_bearing_rad * 180 / Math.PI + 360) % 360 | 0}°`);
+      : `${formatAviationRange(war.fob_range_m, { style: "nav" })} · ${(war.fob_bearing_rad * 180 / Math.PI + 360) % 360 | 0}°`);
     setText(killsMetric, `${war.debrief.hostile_kills} hos · ${war.debrief.friendly_kills} fri · ${war.debrief.fob_rearms} rearm`);
     updateObjectiveHud(war);
   } else {
@@ -1024,6 +1027,9 @@ function animate(timeMs) {
     cameraAglM: aglM,
     ambientBudgetLevel: ambientBudgetLevel(),
   });
+  if (emberGuidancePath && authorityState) {
+    emberGuidancePath.update(emberPathGuidanceState(authorityState));
+  }
   recordPhase("presentation", presentationStartedAtMs);
   if (tourInput.checked && bridge && !missionTerminal) {
     // Keep the ground war alive during guided preview even when the camera is on rails.
@@ -1261,6 +1267,8 @@ function teardownMission(reason) {
   setPlayCursorHidden(false);
   presentation?.dispose();
   groundWarPresentation?.dispose();
+  emberGuidancePath?.dispose();
+  emberGuidancePath = null;
   if (ah1gPresence) {
     scene.remove(ah1gPresence.group);
     ah1gPresence.dispose();

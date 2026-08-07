@@ -36,8 +36,6 @@ test("camera reference anchors the ladder at the principal point", () => {
 });
 
 test("ladder pitch is read off the camera, so a sight bias is included rather than ignored", () => {
-  // The Cobra rear seat holds a fixed +0.08 rad sight bias. An airframe-referenced ladder used
-  // the aircraft's own pitch and so disagreed with the drawn horizon by exactly this angle.
   const anchor = cameraPitchAnchor(cameraPitchedBy(0.08), WIDTH, HEIGHT);
   assert.ok(Math.abs(anchor.pitchDeg - 0.08 / DEG) < 1e-6);
 });
@@ -73,23 +71,37 @@ test("the Cobra frame requests the camera-referenced ladder", () => {
   assert.equal(frame.ladderReference, "camera");
 });
 
-test("camera-referenced waterline shares the ladder horizon; FPV is not synthesized there", async () => {
-  // Build 266 hung the ladder on the camera but left waterline on noseAnchor (~50 px off).
-  // Waterline must share the 0 rung. FPV must NOT be returned from this helper — draw()
-  // projects ground velocity through the camera. Synthesizing FPV from aoa/beta off the
-  // horizon glued it there on Cobra (no aoa_deg in snapshots; session aetc0p7m).
+test("camera-referenced horizon helper tracks the banked 0 rung (ladder math only)", async () => {
+  // Classical waterline is body-forward; this helper only describes the conformal horizon
+  // point the pitch ladder uses under bank.
   const { cameraReferencedAirframeAnchors } = await import("../../../hud.js");
   const camera = cameraPitchedBy(0.08);
-  const anchors = cameraReferencedAirframeAnchors(camera, WIDTH, HEIGHT, {
-    aoa_deg: 0,
-    beta_deg: 0,
-  });
-  assert.ok(anchors, "camera attitude must yield anchors");
+  const bankDeg = 35;
+  const anchors = cameraReferencedAirframeAnchors(camera, WIDTH, HEIGHT, { bank_deg: bankDeg });
+  assert.ok(anchors);
   const ladder = cameraPitchAnchor(camera, WIDTH, HEIGHT);
   const focalY = HEIGHT * 0.5 * 2.14;
-  const horizonY = ladder.centerY + Math.tan(ladder.pitchDeg * Math.PI / 180) * focalY;
-  assert.ok(Math.abs(anchors.waterline.y - horizonY) < 1e-6,
-    `waterline y ${anchors.waterline.y} must match ladder horizon ${horizonY}`);
-  assert.ok(Math.abs(anchors.waterline.x - ladder.centerX) < 1e-6);
-  assert.equal(anchors.fpv, undefined, "FPV must stay velocity-projected in draw(), not horizon-locked here");
+  const localY = Math.tan(ladder.pitchDeg * Math.PI / 180) * focalY;
+  const bank = -bankDeg * Math.PI / 180;
+  const expectedX = ladder.centerX - localY * Math.sin(bank);
+  const expectedY = ladder.centerY + localY * Math.cos(bank);
+  assert.ok(Math.abs(anchors.waterline.x - expectedX) < 1e-6);
+  assert.ok(Math.abs(anchors.waterline.y - expectedY) < 1e-6);
+});
+
+test("Cobra snapshot does not require waterline to share the ladder horizon", async () => {
+  // Reversal of Build 266: waterline = body axis; ladder 0 = world horizon through camera.
+  const { cobraHudState } = await import("../cobra_hud_adapter.js");
+  const state = cobraHudState({
+    vehicle: {
+      ground_speed_mps: 40,
+      velocity_x_mps: 20,
+      velocity_y_mps: 0,
+      velocity_z_mps: 0,
+      rotorcraft: { vortex_ring_severity: 0, retreating_blade_stall_severity: 0 },
+    },
+    gunner: { fire_authorized: false },
+  }, { pitch_rad: 0.08, roll_rad: 0, yaw_rad: 0, y_m: 100 });
+  assert.equal(state.heli_flight_path, true);
+  assert.equal(state.heli_fpv_mode, "cruise");
 });

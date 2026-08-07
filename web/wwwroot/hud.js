@@ -21,7 +21,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=271";
+} from "./render/hud/contact_visibility.js?v=274";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import {
   approachEnergyCue,
@@ -64,17 +64,22 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=271";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=274";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=271";
+} from "./render/mission/rapier_high_mach_instruments.js?v=274";
 import { limitsPanelPresentation } from "./render/hud/limits_panel.js";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
+  cobraAccelCaretPx,
+  cobraHoverStubPixels,
+  updateGroundspeedAccelEma,
+} from "./render/cobra/cobra_helicopter_fpv.js";
+import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=271";
+} from "./render/audio/flight_audio.js?v=274";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -254,21 +259,26 @@ export function cameraPitchAnchor(camera, width, height) {
 }
 
 /**
- * Waterline on the camera-referenced pitch ladder's horizon. The Cobra rear seat's sight bias
- * put body-forward (noseAnchor) ~50 px off the ladder's 0 rung; this parks waterline with the
- * 0 rung. FPV is *not* returned here — it must stay the velocity vector projected through the
- * camera (see draw()). Build 267/268 incorrectly synthesized FPV from aoa/beta off this horizon;
- * Cobra snapshots never carry aoa_deg, so FPV glued to the horizon in climb and dive.
+ * Banked ladder-horizon point (camera pitch × bank). Kept for conformal ladder math and
+ * tests. Classical helicopter waterline is body-forward (`noseAnchor`), not this point —
+ * Build 266 briefly glued the W here and that is reversed.
  */
-export function cameraReferencedAirframeAnchors(camera, width, height, _state = {}) {
+export function cameraReferencedAirframeAnchors(camera, width, height, state = {}) {
   const attitude = cameraPitchAnchor(camera, width, height);
   const projection = camera?.projectionMatrix?.elements;
   const matrixScaleY = Number(projection?.[5]);
   if (!attitude || !Number.isFinite(matrixScaleY) || matrixScaleY <= 0) return null;
   const focalY = height * 0.5 * matrixScaleY;
-  const horizonY = attitude.centerY + Math.tan(attitude.pitchDeg * DEG) * focalY;
+  const localY = Math.tan(attitude.pitchDeg * DEG) * focalY;
+  const bank = -(Number(state.bank_deg) || 0) * DEG;
+  const cosBank = Math.cos(bank);
+  const sinBank = Math.sin(bank);
   return {
-    waterline: { x: attitude.centerX, y: horizonY, behind: false },
+    waterline: {
+      x: attitude.centerX - localY * sinBank,
+      y: attitude.centerY + localY * cosBank,
+      behind: false,
+    },
   };
 }
 
@@ -309,6 +319,8 @@ class CombatHud {
     this._funnelTargetProj = { x: 0, y: 0, ndcX: 0, ndcY: 0, cameraX: 0, cameraY: 0, cameraZ: 0, behind: false };
     this._trajectoryProj = { x: 0, y: 0, ndcX: 0, ndcY: 0, cameraX: 0, cameraY: 0, cameraZ: 0, behind: false };
     this.velocityDirection = new THREE.Vector3();
+    this._heliAccelEmaKtPerSec = 0;
+    this._heliAccelSpeedMps = null;
     // Harness-only geometry record (window.__HUD_DEBUG__); null in production, so the hot draw
     // path pays a single boolean test per frame.
     this._debug = null;
@@ -715,23 +727,30 @@ class CombatHud {
     ctx.restore();
   }
 
-  // ONE projection pipeline for the airframe symbols. The camera is bolted to the body axis, so
-  // the WATERLINE is the projected body-forward direction (the nose anchor computed in draw()) and
-  // is drawn body-referenced — screen-aligned by construction, no bank decal. The FPV is the
-  // projected WORLD VELOCITY direction through the same camera: the alpha gap between the two is
-  // therefore true by construction (focal * tan(aoa) along body-down), and sideslip shows up
-  // laterally for free. No synthetic pixels-per-degree offset exists anywhere in this path.
-  drawAirframeSymbols(anchor, state, fpvAnchor = null) {
+  // ONE projection pipeline for the airframe symbols. The WATERLINE is the projected
+  // body-forward direction (nose anchor) — classical aircraft reference, screen-aligned.
+  // The FPV is world ground velocity through the same camera. When state.heli_flight_path
+  // is set (Cobra), conformal FPV blanks below cruise GS and a hover stub + cues take over.
+  drawAirframeSymbols(anchor, state, fpvAnchor = null, {
+    hoverStub = null,
+    accelCaretPx = 0,
+    dt = 0,
+  } = {}) {
     if (!anchor || anchor.behind || !Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) return;
     const ctx = this.ctx;
+    const heli = state?.heli_flight_path === true;
+    const level = heli ? String(state.heli_fpv_level || "normal") : "normal";
+    const pathColor = level === "warning" ? RED : level === "caution" ? AMBER : GREEN;
+    const pathColorDim = level === "warning" ? "rgba(255, 70, 93, 0.55)"
+      : level === "caution" ? "rgba(255, 176, 32, 0.55)"
+        : "rgba(77, 255, 136, 0.42)";
 
     ctx.save();
     this.setLine(GREEN, 1.15);
     ctx.shadowColor = "rgba(77, 255, 136, 0.3)";
     ctx.shadowBlur = 3;
 
-    // WATERLINE / boresight (the nose = gun line). The gun window lives here, because the gun
-    // points along the body axis, not the flight path.
+    // WATERLINE — body axis. Never bank-rotated onto the horizon (that was the Build 266 mistake).
     ctx.save();
     ctx.translate(anchor.x, anchor.y);
     ctx.beginPath();
@@ -743,15 +762,13 @@ class CombatHud {
     ctx.stroke();
     ctx.restore();
 
-    // FPV — the PRIMARY flight symbol: circle + wings + tail tick, projected from the actual
-    // velocity vector (deck-relative in the carrier groove, world ground velocity otherwise).
     const fpvVisible = fpvAnchor && !fpvAnchor.behind
       && Number.isFinite(fpvAnchor.x) && Number.isFinite(fpvAnchor.y);
     if (fpvVisible) {
       ctx.save();
       ctx.translate(fpvAnchor.x, fpvAnchor.y);
-      this.setLine(GREEN, 1.7);
-      ctx.shadowColor = "rgba(77, 255, 136, 0.42)";
+      this.setLine(pathColor, 1.7);
+      ctx.shadowColor = pathColorDim;
       ctx.shadowBlur = 5;
       ctx.beginPath();
       ctx.arc(0, 0, 7, 0, Math.PI * 2);
@@ -762,8 +779,62 @@ class CombatHud {
       ctx.moveTo(0, -7);
       ctx.lineTo(0, -14);
       ctx.stroke();
+      if (heli && state.heli_fpv_gun_ready === true) {
+        // Inboard gun-ready tick — only when Hold F actually fires.
+        ctx.beginPath();
+        ctx.moveTo(-4, 10);
+        ctx.lineTo(0, 16);
+        ctx.lineTo(4, 10);
+        ctx.stroke();
+      }
+      if (heli && Math.abs(accelCaretPx) >= 1) {
+        const tip = accelCaretPx > 0 ? -7 - Math.abs(accelCaretPx) : 7 + Math.abs(accelCaretPx);
+        const base = accelCaretPx > 0 ? -7 : 7;
+        ctx.beginPath();
+        ctx.moveTo(0, base);
+        ctx.lineTo(-4, tip);
+        ctx.lineTo(4, tip);
+        ctx.closePath();
+        ctx.stroke();
+      }
+      ctx.restore();
+    } else if (heli && hoverStub && hoverStub.lengthPx > 1) {
+      // Screen-fixed plan-view velocity stub from the waterline (hover / transition).
+      ctx.save();
+      ctx.translate(anchor.x, anchor.y);
+      this.setLine(pathColor, 1.55);
+      ctx.shadowColor = pathColorDim;
+      ctx.shadowBlur = 4;
+      ctx.beginPath();
+      ctx.arc(0, 0, 4, 0, Math.PI * 2);
+      ctx.moveTo(0, 0);
+      ctx.lineTo(hoverStub.dx, hoverStub.dy);
+      ctx.stroke();
+      if (Math.abs(accelCaretPx) >= 1) {
+        const len = hoverStub.lengthPx || 1;
+        const ux = hoverStub.dx / len;
+        const uy = hoverStub.dy / len;
+        const tipScale = accelCaretPx > 0 ? 1 : -1;
+        const tipX = hoverStub.dx + ux * tipScale * Math.abs(accelCaretPx);
+        const tipY = hoverStub.dy + uy * tipScale * Math.abs(accelCaretPx);
+        const px = -uy * 4;
+        const py = ux * 4;
+        ctx.beginPath();
+        ctx.moveTo(hoverStub.dx + px, hoverStub.dy + py);
+        ctx.lineTo(tipX, tipY);
+        ctx.lineTo(hoverStub.dx - px, hoverStub.dy - py);
+        ctx.stroke();
+      }
+      if (state.heli_fpv_gun_ready === true) {
+        ctx.beginPath();
+        ctx.moveTo(-4, 8);
+        ctx.lineTo(0, 14);
+        ctx.lineTo(4, 8);
+        ctx.stroke();
+      }
       ctx.restore();
     }
+    void dt;
     ctx.restore();
   }
 
@@ -5312,21 +5383,54 @@ class CombatHud {
         frame.ladderReference,
       );
     }
-    // Camera-referenced ladder (Cobra): waterline shares that horizon. FPV stays the
-    // velocity projection above — locking it to the ladder horizon (Build 267) made it
-    // ignore climb/dive. Gun cross stays on body-forward (M134 along the airframe).
-    const cameraSymbols = frame.ladderReference === "camera"
-      ? cameraReferencedAirframeAnchors(frame.camera, this.width, this.height, frame.state)
-      : null;
-    const symbolAnchor = cameraSymbols?.waterline ?? noseAnchor;
-    const symbolFpv = fpvAnchor;
-    if (this._debug && cameraSymbols) {
-      this._debug.waterlinePx = { x: symbolAnchor.x, y: symbolAnchor.y };
-      if (symbolFpv && !symbolFpv.behind) {
-        this._debug.fpvPx = { x: symbolFpv.x, y: symbolFpv.y };
+    // Camera-referenced ladder (Cobra): horizon stays conformal through the eye. Waterline
+    // is classical body-forward (noseAnchor). Helicopter snapshots gate cruise FPV / hover stub.
+    const heli = frame.state?.heli_flight_path === true;
+    const heliMode = heli ? String(frame.state.heli_fpv_mode || "cruise") : "cruise";
+    let symbolFpv = fpvAnchor;
+    let hoverStub = null;
+    let accelCaretPx = 0;
+    if (heli) {
+      const speedMps = Math.hypot(
+        Number(frame.state.vx) || 0,
+        Number(frame.state.vy) || 0,
+        Number(frame.state.vz) || 0,
+      );
+      const accel = updateGroundspeedAccelEma(
+        this._heliAccelEmaKtPerSec,
+        this._heliAccelSpeedMps,
+        speedMps,
+        frame.dt,
+      );
+      this._heliAccelEmaKtPerSec = accel.emaKtPerSec;
+      this._heliAccelSpeedMps = accel.speedMps;
+      accelCaretPx = cobraAccelCaretPx(accel.emaKtPerSec);
+      if (heliMode === "hover") {
+        symbolFpv = null;
+        hoverStub = cobraHoverStubPixels(
+          frame.state.heli_hover_east_kt,
+          frame.state.heli_hover_north_kt,
+        );
       }
     }
-    this.drawAirframeSymbols(symbolAnchor, frame.state, symbolFpv);
+    const symbolAnchor = noseAnchor;
+    if (this._debug) {
+      this._debug.waterlinePx = symbolAnchor && !symbolAnchor.behind
+        ? { x: symbolAnchor.x, y: symbolAnchor.y } : null;
+      if (symbolFpv && !symbolFpv.behind) {
+        this._debug.fpvPx = { x: symbolFpv.x, y: symbolFpv.y };
+      } else if (hoverStub) {
+        this._debug.fpvPx = {
+          x: symbolAnchor.x + hoverStub.dx,
+          y: symbolAnchor.y + hoverStub.dy,
+        };
+      }
+    }
+    this.drawAirframeSymbols(symbolAnchor, frame.state, symbolFpv, {
+      hoverStub,
+      accelCaretPx,
+      dt: frame.dt,
+    });
     this.drawGunSight(frame, noseAnchor);
     this.drawAimPoint(frame, noseAnchor, directorAnchor);
     this.drawBandit(frame);

@@ -55,7 +55,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // theatre. 2.3e-4 is the same 1.87/radius law (adaptive-world-radius doctrine) solved for an
     // ~8 km readable radius, which is tropical monsoon-season air rather than a Korean winter.
     // The colour warms and lightens with it: humid haze is pale blue-grey, not slate.
-    density: 0.00023,
+    density: 0.00028,
     hazeBands: 6,
     hazeBandBlend: 0.65,
   }),
@@ -76,8 +76,8 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     skyCurveExponent: 0.42,
     horizonShoulderFalloff: 70,
     horizonShoulderWeight: 0.38,
-    cloudColor: Object.freeze([0.62, 0.68, 0.72]),
-    cloudShelf: Object.freeze([0.015, 0.16]),
+    cloudColor: Object.freeze([0.58, 0.64, 0.70]),
+    cloudShelf: Object.freeze([0.02, 0.22]),
   }),
 
   // THE F-22'S LIGHT RIG, verbatim from app.js: hemisphere 0xb5cad0 over 0x102229 at 0.78, and a
@@ -136,7 +136,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // Korean heightfield is dissected enough not to need it. Above ~4 it prints as banding.
     reliefGain: 4.6,
     // korea_terrain's shipped uCloudShadowStrength.
-    cloudShadowStrength: 0.34,
+    cloudShadowStrength: 0.42,
     // Hue-separated painted light, verbatim from korea_terrain: cool fill from the sky,
     // warm key from the sun.
     skyFill: Object.freeze([0.62, 0.74, 1.0]),
@@ -163,11 +163,11 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // wild ground toward green, worked ground toward gold — which is the separation the
     // patchwork needs and which Korea gets from its own parcel tint instead.
     bands: Object.freeze({
-      valleyFloor: Object.freeze([0.176, 0.186, 0.092]),
-      cultivationGold: Object.freeze([0.230, 0.245, 0.175]),
-      jungleMid: Object.freeze([0.072, 0.118, 0.055]),
+      valleyFloor: Object.freeze([0.168, 0.192, 0.088]),
+      cultivationGold: Object.freeze([0.220, 0.248, 0.168]),
+      jungleMid: Object.freeze([0.065, 0.128, 0.052]),
       lateriteSlope: Object.freeze([0.285, 0.150, 0.062]),
-      ridgeSage: Object.freeze([0.142, 0.162, 0.108]),
+      ridgeSage: Object.freeze([0.138, 0.168, 0.105]),
       rimRock: Object.freeze([0.320, 0.310, 0.260]),
     }),
     // Valley cultivation parcels: world-space cell pitch of the patchwork tint.
@@ -179,11 +179,11 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
   // Analytic river paint, linear working space. The gravel bank window is expressed in units of
   // half the authored water width, so 1.0 is the waterline and the ribbon's extra rim is bank.
   water: Object.freeze({
-    deepColor: Object.freeze([0.012, 0.040, 0.058]),
-    shallowColor: Object.freeze([0.040, 0.098, 0.105]),
-    bankColor: Object.freeze([0.150, 0.128, 0.084]),
-    shoreWindow: Object.freeze([0.90, 1.04]),
+    deepColor: Object.freeze([0.010, 0.038, 0.052]),
+    shallowColor: Object.freeze([0.036, 0.092, 0.098]),
+    bankColor: Object.freeze([0.142, 0.124, 0.078]),
+    shoreWindow: Object.freeze([0.88, 1.05]),
     // Gravel rim draped either side of the water sheet, metres.
-    bankWidthM: 7,
+    bankWidthM: 9,
   }),
 });

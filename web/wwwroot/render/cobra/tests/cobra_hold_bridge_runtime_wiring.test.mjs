@@ -46,12 +46,15 @@ test("target cueing cannot swing the windshield and cold boot selects no target"
 });
 
 test("the tip strip teaches the collective lever: S pulls up, W lowers", async () => {
-  const [main, html] = await Promise.all([
+  const [main, html, objective] = await Promise.all([
     source("cobra-lab/main.js"),
     source("cobra-lab/index.html"),
+    source("render/cobra/cobra_objective_copy.js"),
   ]);
-  assert.match(main, /W collective up · S down/);
+  // Ember Run: default tip lives in objective_copy + the HTML seed line; main paints via helper.
+  assert.match(objective, /W collective up · S down/);
   assert.match(html, /W collective up · S down/);
+  assert.match(main, /cobraObjectiveCopy/);
 });
 
 test("cobra telemetry records the live power margin, not the dead hover constant", async () => {
