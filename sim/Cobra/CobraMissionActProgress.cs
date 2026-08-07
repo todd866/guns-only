@@ -61,7 +61,8 @@ public static class CobraMissionActProgress
         CobraMissionAct act,
         CobraCanyonRouteDefinition route,
         in Vec3D fobCentreWorldM,
-        double fobPathAltitudeM)
+        double fobPathAltitudeM,
+        Vec3D? aircraftWorldM = null)
     {
         if (act is CobraMissionAct.Rtb or CobraMissionAct.Complete) {
             return new[] {
@@ -75,11 +76,11 @@ public static class CobraMissionActProgress
         }
 
         IReadOnlyList<CobraCanyonRoutePoint> points = route.Points;
+        int bridgeIndex = FindBridgePointIndex(points);
         int activeIndex = act switch {
-            CobraMissionAct.Depart => 0,
-            CobraMissionAct.Ingress => Math.Min(2, points.Count - 1),
-            CobraMissionAct.Engage or CobraMissionAct.Hold =>
-                FindBridgePointIndex(points),
+            CobraMissionAct.Engage or CobraMissionAct.Hold => bridgeIndex,
+            CobraMissionAct.Depart or CobraMissionAct.Ingress =>
+                ResolveSoftPathActiveIndex(points, bridgeIndex, aircraftWorldM),
             _ => 0
         };
 
@@ -94,6 +95,34 @@ public static class CobraMissionActProgress
                 i == activeIndex);
         }
         return gates;
+    }
+
+    /// <summary>
+    /// Soft-path highlight: advance past any gate the aircraft has already flown through
+    /// (inside 0.72× corridor radius), otherwise aim at the nearest still-ahead gate. Caps at
+    /// the bridge so Ingress never steals the Engage set-piece cue.
+    /// </summary>
+    static int ResolveSoftPathActiveIndex(
+        IReadOnlyList<CobraCanyonRoutePoint> points,
+        int bridgeIndex,
+        Vec3D? aircraftWorldM)
+    {
+        if (points.Count == 0)
+            return 0;
+        int last = Math.Min(bridgeIndex, points.Count - 1);
+        if (aircraftWorldM is not { } aircraft)
+            return 0;
+
+        for (int i = 0; i <= last; i++) {
+            CobraCanyonRoutePoint point = points[i];
+            double passRadiusM = Math.Max(40.0, point.CorridorRadiusM * 0.72);
+            double distanceM = HorizontalDistanceM(
+                aircraft,
+                new Vec3D(point.EastM, point.PathAltitudeM, point.NorthM));
+            if (distanceM > passRadiusM)
+                return i;
+        }
+        return last;
     }
 
     static int FindBridgePointIndex(IReadOnlyList<CobraCanyonRoutePoint> points)

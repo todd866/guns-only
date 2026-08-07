@@ -1,13 +1,13 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=274";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=275";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=274";
-import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=274";
+} from "./cobra_canyon_asset_kit.js?v=275";
+import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=275";
 import {
   createCobraCanyonBasinMaterial,
   createCobraCanyonRiverMaterial,
-} from "./cobra_canyon_terrain_material.js?v=274";
+} from "./cobra_canyon_terrain_material.js?v=275";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 
@@ -317,12 +317,19 @@ function bridgeDeckTrussGeometry(THREE) {
   appendBoxPrism(positions, [-0.5, -0.5, -0.42], [0.5, -0.28, 0.42]);
   appendBoxPrism(positions, [-0.5, -0.5, -0.5], [0.5, 0.5, -0.42]);
   appendBoxPrism(positions, [-0.5, -0.5, 0.42], [0.5, 0.5, 0.5]);
+  // Cross-deck roadway lip so the span reads as a crossing, not two parallel walls.
+  appendBoxPrism(positions, [-0.5, -0.28, -0.42], [0.5, -0.18, 0.42]);
   for (const z of [-0.42, 0.42]) {
     appendBoxPrism(positions, [-0.5, 0.38, z - 0.04], [0.5, 0.5, z + 0.04]);
     appendBoxPrism(positions, [-0.5, -0.1, z - 0.03], [0.5, 0.02, z + 0.03]);
     for (const x of [-0.45, -0.15, 0.15, 0.45]) {
       appendBoxPrism(positions, [x - 0.03, -0.28, z - 0.04], [x + 0.03, 0.5, z + 0.04]);
     }
+  }
+  // Diagonal X-bracing on each face — cheap triangles, big silhouette change from a mile out.
+  for (const z of [-0.46, 0.46]) {
+    appendBoxPrism(positions, [-0.42, -0.22, z - 0.02], [-0.08, 0.36, z + 0.02]);
+    appendBoxPrism(positions, [0.08, -0.22, z - 0.02], [0.42, 0.36, z + 0.02]);
   }
   return geometryFromPositions(THREE, positions, "COBRA_CANYON_BRIDGE_DECK_TRUSS_GEOMETRY");
 }
@@ -405,8 +412,10 @@ function materialFor(THREE, role) {
     heroCells: { color: 0x6a5030, roughness: 1 },
     landmarks: { color: 0xffffff, roughness: 0.95 },
     hazards: { color: 0xe96a43, emissive: 0x411006, roughness: 0.8 },
-    "bridge-deck": { color: 0xd46a48, emissive: 0x3a1006, roughness: 0.88 },
-    "bridge-pier": { color: 0xb85a3c, emissive: 0x2c0c06, roughness: 0.9 },
+    // Weathered steel over jungle green — Iron Bell should read as the fight site, not an
+    // orange hazard box that matches every other collision marker.
+    "bridge-deck": { color: 0xc9b89a, emissive: 0x2a2214, roughness: 0.9 },
+    "bridge-pier": { color: 0x8f806c, emissive: 0x1a1610, roughness: 0.94 },
     vegetation: { color: 0xffffff, roughness: 1 },
   }[role];
   const material = new THREE.MeshLambertMaterial({

@@ -1050,7 +1050,9 @@
       "archetypeIds": [
         "archetype.cobra-canyon.landmark-bridge.v1",
         "archetype.cobra-canyon.rock-scatter.v1",
-        "archetype.cobra-canyon.water-riffle.v1"
+        "archetype.cobra-canyon.water-riffle.v1",
+        "archetype.cobra-canyon.river-mist.v1",
+        "archetype.cobra-canyon.jungle-understory.v1"
       ],
       "landmarkIds": ["landmark.cobra-canyon.iron-bell-bridge.v1"],
       "hazardIds": [

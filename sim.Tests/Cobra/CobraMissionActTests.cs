@@ -116,6 +116,27 @@ public class CobraMissionActTests
     }
 
     [Fact]
+    public void IngressPathAdvancesActiveGatePastFlownWaypoints()
+    {
+        CobraCanyonRouteDefinition route = CobraCanyonDefinition.Create()
+            .Route(CobraCanyonRouteChoice.RiverGorge);
+        CobraCanyonRoutePoint first = route.Points[0];
+        CobraCanyonRoutePoint second = route.Points[1];
+        // Park on the first gate so it counts as flown — next soft cue should be gate 1.
+        Vec3D onFirst = new(first.EastM, first.PathAltitudeM, first.NorthM);
+        IReadOnlyList<CobraPathGate> gates = CobraMissionActProgress.BuildPathGates(
+            CobraMissionAct.Ingress,
+            route,
+            Fob,
+            fobPathAltitudeM: 190.0,
+            aircraftWorldM: onFirst);
+        Assert.Equal(1, gates.Count(g => g.Active));
+        CobraPathGate active = gates.Single(g => g.Active);
+        Assert.Equal(second.EastM, active.EastM);
+        Assert.Equal(second.NorthM, active.NorthM);
+    }
+
+    [Fact]
     public void RtbPathIsASingleCampEmberGate()
     {
         CobraCanyonRouteDefinition route = CobraCanyonDefinition.Create()

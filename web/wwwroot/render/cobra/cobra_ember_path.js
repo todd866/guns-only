@@ -22,24 +22,52 @@ export function emberPathGuidanceState(authorityState) {
     && Number.isFinite(gate.up_m)
     && Number.isFinite(gate.north_m));
 
+  const activeIndex = mapped.findIndex((gate) => gate.active);
+  // Keep one spent gate for trail context, drop the rest so the gorge does not fill with haze.
+  const windowed = mapped
+    .map((gate, index) => {
+      if (activeIndex < 0) return gate;
+      if (index < activeIndex - 1) return null;
+      const half = gate.half_m;
+      if (gate.active) {
+        return { ...gate, half_m: half * 1.18 };
+      }
+      if (index < activeIndex) {
+        return { ...gate, half_m: half * 0.55 };
+      }
+      // Upcoming gates stay readable but quieter than the next cue.
+      return { ...gate, half_m: half * 0.78 };
+    })
+    .filter(Boolean);
+
   return {
-    approach_guidance_active: mapped.length > 0,
-    approach_gates: mapped,
-    approach_gate_count: mapped.length,
+    approach_guidance_active: windowed.length > 0,
+    approach_gates: windowed,
+    approach_gate_count: windowed.length,
   };
 }
 
-export function emberActObjectiveOverlay(act) {
+function formatRemainingKm(remainingM) {
+  const metres = Number(remainingM);
+  if (!Number.isFinite(metres) || metres < 0) return null;
+  if (metres < 1000) return `${Math.round(metres)} m`;
+  return `${(metres / 1000).toFixed(1)} km`;
+}
+
+export function emberActObjectiveOverlay(act, options = {}) {
+  const remaining = formatRemainingKm(options.remainingM);
   switch (String(act || "").toLowerCase()) {
     case "depart":
       return {
         line: "DEPART CAMP EMBER · FOLLOW THE PATH",
-        detail: "Lift off and fly the soft gates down the river gorge",
+        detail: "Lift off — the brighter gate is the next soft cue down the gorge",
       };
     case "ingress":
       return {
-        line: "INGRESS · FOLLOW THE GORGE TO THE BRIDGE",
-        detail: "Stay on the path — Iron Bell Bridge is the fight",
+        line: remaining
+          ? `INGRESS · ${remaining} TO THE BRIDGE`
+          : "INGRESS · FOLLOW THE GORGE TO THE BRIDGE",
+        detail: "Stay on the soft path — Iron Bell Bridge is the fight",
       };
     case "engage":
       return {
@@ -53,7 +81,9 @@ export function emberActObjectiveOverlay(act) {
       };
     case "rtb":
       return {
-        line: "RTB · CAMP EMBER PAD",
+        line: remaining
+          ? `RTB · ${remaining} TO CAMP EMBER`
+          : "RTB · CAMP EMBER PAD",
         detail: "Follow the path home and put the skids on the pad",
       };
     case "complete":

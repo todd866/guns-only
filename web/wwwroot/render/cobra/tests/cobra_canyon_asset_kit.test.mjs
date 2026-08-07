@@ -60,9 +60,9 @@ test("builds one bounded authored batch per visual role across every tier", () =
     assert.equal(kit.roleCounts.authoredSetPieceCells, 9);
     assert.equal(kit.roleCounts.authoredAmbientArchetypes, 11);
     assert.equal(kit.roleCounts.authoredLandmarkArchetypes, 11);
-    assert.equal(kit.roleCounts.authoredSetPieceArchetypeReferences, 33);
-    assert.equal(kit.roleCounts.authoredSetPieceAssetReferences, 25);
-    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, 25);
+    assert.equal(kit.roleCounts.authoredSetPieceArchetypeReferences, 35);
+    assert.equal(kit.roleCounts.authoredSetPieceAssetReferences, 27);
+    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, 27);
     assert.equal(
       kit.roleCounts.ambientBatchInstances
         + kit.roleCounts.renderedSetPieceAssetInstances
@@ -143,7 +143,7 @@ test("honours hard instance caps even below the authored reveal reserve", () => 
   for (const maximum of [0, 1, 10, 24]) {
     const { kit } = create("desktop", maximum);
     assert.ok(kit.builtMetrics.instances <= maximum);
-    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, Math.min(maximum, 25));
+    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, Math.min(maximum, 27));
     assert.equal(kit.roleCounts.ambientBatchInstances, 0);
     assert.equal(kit.roleCounts.renderedWaterAccentInstances, 0);
     kit.dispose();

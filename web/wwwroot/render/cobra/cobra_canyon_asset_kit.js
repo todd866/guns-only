@@ -1,4 +1,4 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=274";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=275";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -28,7 +28,8 @@ export const COBRA_CANYON_AMBIENT_BUDGETS = Object.freeze({
     village: 1,
     paddy: 0.65,
     rock: 1,
-    mist: 0,
+    // Keep a thinned mist band — shedding to 0 killed gorge atmosphere the moment FPS dipped.
+    mist: 0.55,
     waterAccent: 0.7,
   }),
   2: Object.freeze({
@@ -37,7 +38,7 @@ export const COBRA_CANYON_AMBIENT_BUDGETS = Object.freeze({
     village: 0.75,
     paddy: 0.35,
     rock: 0.8,
-    mist: 0,
+    mist: 0.28,
     waterAccent: 0.45,
   }),
 });
@@ -908,7 +909,7 @@ function materialForRole(THREE, role) {
       color: 0xffffff,
       vertexColors: true,
       transparent: true,
-      opacity: role === "mist" ? 0.22 : 0.22,
+      opacity: role === "mist" ? 0.30 : 0.22,
       depthWrite: false,
       side: THREE.DoubleSide,
     });
