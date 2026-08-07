@@ -1,13 +1,12 @@
 # Current product and verification status
 
 Updated: 2026-08-07
-Production: Build 268, revision `93ff754b67e63e8579226cf219851ce4c5d267fa`, deployment
-`dpl_8ULB5iXpoSTmkyXDnm5YWSz1SyS1` (verified live via /api/build-info 2026-08-07). Builds
+Production: Build 270, revision `c0f85e4be0a6e0c2309a684acc64ffce03660bc2`, deployment
+`dpl_9zsF4aupr8mhmqzD5awqVXvvJfk1` (verified live via /api/build-info 2026-08-07). Builds
 253-265 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Next candidate: Build 270 (branch `fix/cobra-aviation-units`) — Cobra play HUD aviation
-units (RALT/AGL feet, gun range feet inside 1 NM, FOB/route NM) and FPV restored to
-velocity-through-camera (Build 267/268 had glued it to the ladder horizon).
+Next candidate: none queued — Build 270 closed aviation units on the Cobra play HUD and restored
+FPV to velocity-through-camera (was glued to the ladder horizon since Build 267).
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
 evidence for the build and commit they name, but they do not override this page or the executable
@@ -47,9 +46,9 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Live production is Build 267 (`f12fbf8`, `dpl_4PDzdUopFhcTf26NYML557bZeR28`). Shipped from
-  PR #29 with local `bin/check` green and fast-forward-equivalent Verify provenance on head
-  `8fed33f`. Do not treat the flaky `boot does not stutter` smoke as a frame-rate measurement —
+- Live production is Build 270 (`c0f85e4`, `dpl_9zsF4aupr8mhmqzD5awqVXvvJfk1`). Shipped from
+  PR #33 with CI Verify green and fast-forward-equivalent deploy provenance on head
+  `3d773e7`. Do not treat the flaky `boot does not stutter` smoke as a frame-rate measurement —
   see `docs/work-orders/2026-08-07-cobra-build-266-followups.md` item 7.
 - A candidate is releasable only when its exact pushed SHA has a complete green gate, or the
   owner accepts a documented flaky-gate exception with live `/api/build-info` verification.
