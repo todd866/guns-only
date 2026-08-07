@@ -1,4 +1,4 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=275";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=276";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -354,9 +354,9 @@ function roleScale(role, descriptor, variation) {
   }
   if (role === "mist") {
     return {
-      widthM: read("width", 0, 65 + variation * 55),
-      heightM: read("height", 1, 10 + variation * 9),
-      depthM: read("depth", 2, 32 + variation * 35),
+      widthM: read("width", 0, 78 + variation * 62),
+      heightM: read("height", 1, 14 + variation * 12),
+      depthM: read("depth", 2, 38 + variation * 40),
     };
   }
   return {
@@ -909,7 +909,7 @@ function materialForRole(THREE, role) {
       color: 0xffffff,
       vertexColors: true,
       transparent: true,
-      opacity: role === "mist" ? 0.30 : 0.22,
+      opacity: role === "mist" ? 0.34 : 0.22,
       depthWrite: false,
       side: THREE.DoubleSide,
     });
@@ -919,8 +919,8 @@ function materialForRole(THREE, role) {
   const material = new THREE.MeshLambertMaterial({
     color: 0xffffff,
     vertexColors: true,
-    // Smooth normals on jungle kill the crystal-shard catch-light from flat ring facets.
-    flatShading: role !== "paddy" && role !== "jungle",
+    // Smooth normals on jungle and plantation kill the crystal-shard catch-light from flat ring facets.
+    flatShading: role !== "paddy" && role !== "jungle" && role !== "plantation",
     side: THREE.FrontSide,
   });
   material.name = `COBRA_CANYON_ASSET_${role.toUpperCase()}_MATERIAL`;

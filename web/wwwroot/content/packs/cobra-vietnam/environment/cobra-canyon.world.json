@@ -711,7 +711,7 @@
       "boundsLocalM": [-4900, -2250, 1800, 3600],
       "visualBandId": "band.cobra-canyon.ambient.v1",
       "priority": 4,
-      "instancesByQuality": {"mobile": 0, "balanced": 0, "desktop": 20},
+      "instancesByQuality": {"mobile": 0, "balanced": 14, "desktop": 28},
       "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
       "presentationOnly": true,
       "targetable": false
@@ -1030,7 +1030,8 @@
         "archetype.cobra-canyon.village-hut.v1",
         "archetype.cobra-canyon.paddy-mirror.v1",
         "archetype.cobra-canyon.paddy-berm.v1",
-        "archetype.cobra-canyon.river-mist.v1"
+        "archetype.cobra-canyon.river-mist.v1",
+        "archetype.cobra-canyon.jungle-understory.v1"
       ],
       "landmarkIds": ["landmark.cobra-canyon.long-fang-falls.v1"],
       "hazardIds": [],

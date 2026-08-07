@@ -250,7 +250,7 @@ void main() {
   water = mix(water, uShallowWater * 1.25, fresnel * 0.55);
   water *= 0.95 + ripple * 0.045;
   vec3 half3 = normalize(viewDirection + normalize(uSunDirection));
-  water += vec3(0.90, 0.84, 0.68) * pow(max(dot(normal, half3), 0.0), 96.0) * 0.12;
+  water += vec3(0.82, 0.78, 0.66) * pow(max(dot(normal, half3), 0.0), 110.0) * 0.07;
 
   float gravelGrain = cobraNoise(vWorldPosition.xz * 0.09) * 0.5
     + cobraNoise(vWorldPosition.xz * 0.34) * 0.5;
