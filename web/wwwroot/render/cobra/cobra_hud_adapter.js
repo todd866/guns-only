@@ -8,6 +8,10 @@
  * the snapshot's own capability flags (has_*, opponent_alive, fuel_lb absent),
  * never by forking the HUD.
  *
+ * Helicopter flight-path doctrine (2026-08-07): ladder is camera-conformal; waterline
+ * stays body-forward; FPV/hover stub + cues are gated by heli_flight_path on the
+ * snapshot (see docs/superpowers/specs/2026-08-07-cobra-helicopter-hud-design.md).
+ *
  * Deliberate omissions (each one is a decision, not a gap):
  *  - no calibrated/indicated airspeed: the rotorcraft authority publishes TAS only,
  *    so the tape runs on the KTAS fallback and says so on its unit label;
@@ -19,6 +23,7 @@
  */
 
 import { vehicleBodyQuaternion } from "./ah1g_presence.js";
+import { cobraFpvLevel, cobraFpvMode } from "./cobra_helicopter_fpv.js";
 
 export const COBRA_HUD_ENTITY_ID = "cobra.ah1g.hold-the-bridge";
 
@@ -92,6 +97,15 @@ export function cobraHudState(authorityState, pose, out = {}) {
   out.kill_count = Math.max(0,
     Math.floor(Number(authorityState?.ground_war?.debrief?.hostile_kills) || 0));
 
+  // Helicopter flight-path path in hud.js (absent on F-22 snapshots → jet path unchanged).
+  out.heli_flight_path = true;
+  out.heli_fpv_mode = cobraFpvMode(out.ground_speed_kts);
+  out.heli_fpv_level = cobraFpvLevel(rotorcraft);
+  out.heli_fpv_gun_ready = authorityState?.gunner?.fire_authorized === true;
+  // Plan-view hover stub: horizontal ground track in knots (sim: +x east, +z north).
+  out.heli_hover_east_kt = scaled(vehicle?.velocity_x_mps, MPS_TO_KT) ?? 0;
+  out.heli_hover_north_kt = scaled(vehicle?.velocity_z_mps, MPS_TO_KT) ?? 0;
+
   return out;
 }
 
@@ -114,10 +128,10 @@ export function createCobraHudFrame(THREE) {
     aimPoint: null,
     directorPoint: null,
     flightPathPoint: null,
-    // The rear-seat camera carries a fixed +0.08 rad sight bias and a clamped
-    // (<=0.05 rad) gunner-target lean. Pitch ladder and waterline reference that
-    // camera so they agree with the drawn horizon. FPV stays velocity-through-camera
-    // (not glued to the ladder 0 rung). Gun cross stays on body-forward.
+    // Rear-seat camera: +0.08 rad sight bias + clamped gunner lean. Pitch ladder is
+    // camera-referenced so the 0 rung is conformal to the drawn horizon. Waterline
+    // stays body-forward (classical aircraft reference) — the gap to ladder 0 is
+    // attitude + bias. FPV is velocity-through-camera in cruise; hover uses a stub.
     ladderReference: "camera",
     sensorYaw: 0,
     sensorPitch: 0,

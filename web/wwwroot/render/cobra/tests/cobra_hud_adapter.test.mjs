@@ -100,7 +100,16 @@ test("cobra snapshot speaks the production hud.js state contract", () => {
   // Sortie identity + kill tally reuse the F-22 presentation verbatim.
   assert.equal(state.player_entity_id, COBRA_HUD_ENTITY_ID);
   assert.equal(state.kill_count, 3);
+
+  // Classical helicopter flight-path path (absent on F-22 snapshots).
+  assert.equal(state.heli_flight_path, true);
+  assert.equal(state.heli_fpv_mode, "cruise"); // 30.4 m/s ≈ 59 KT
+  assert.equal(state.heli_fpv_level, "normal");
+  assert.equal(state.heli_fpv_gun_ready, false);
+  assert.ok(Math.abs(state.heli_hover_east_kt - 30.0 * MPS_TO_KT) < 1e-9);
+  assert.ok(Math.abs(state.heli_hover_north_kt - 4.2 * MPS_TO_KT) < 1e-9);
 });
+
 
 test("snapshot object is reused across frames without leaking stale fields", () => {
   const out = {};
