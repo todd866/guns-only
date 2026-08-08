@@ -108,9 +108,9 @@ test("builds one bounded authored batch per visual role across every tier", () =
       `jungle palms need crown masses (${crownApexes.length} apexes)`);
     assert.ok(frondTips.length >= 4,
       `jungle palms need drooping frond tips (${frondTips.length} tips)`);
-    assert.ok(triangleCount(jungleGeometry) >= 40,
+    assert.ok(triangleCount(jungleGeometry) >= 44,
       "palm clumps must stay solid enough to read as trunks + crowns");
-    assert.ok(triangleCount(jungleGeometry) <= 52,
+    assert.ok(triangleCount(jungleGeometry) <= 56,
       "palm clumps must stay near the old canopy budget so presentation ceilings hold");
     assert.ok(triangleCount(meshes.get("plantation").geometry) >= 100,
       "plantation rows need trunks and crowns instead of marker pyramids");

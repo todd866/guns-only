@@ -1,4 +1,4 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=296";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=297";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -850,29 +850,29 @@ function appendPalm(positions, colors, x, z, scale, trunkTint, leafTint) {
     colors,
     x,
     z,
-    0.28 * scale,
-    0.26 * scale,
-    trunkH * 0.72,
-    trunkH * 1.08,
+    0.38 * scale,
+    0.36 * scale,
+    trunkH * 0.66,
+    trunkH * 1.0,
     leafTint,
     4,
   );
   // Three drooping frond blades — silhouette spikes without the 6-tri pyramid tax.
   for (let index = 0; index < 3; index++) {
-    const angle = index / 3 * Math.PI * 2 + 0.35;
-    const reach = 0.42 * scale;
+    const angle = index / 3 * Math.PI * 2 + 0.28;
+    const reach = 0.50 * scale;
     const tipX = x + Math.cos(angle) * reach;
     const tipZ = z + Math.sin(angle) * reach;
-    const tipY = trunkH * 0.58;
-    const hingeY = trunkH * 0.92;
-    const side = 0.07 * scale;
+    const tipY = trunkH * 0.50;
+    const hingeY = trunkH * 0.86;
+    const side = 0.09 * scale;
     pushTriangle(
       positions,
       colors,
       [x + Math.cos(angle + 0.4) * side, hingeY, z + Math.sin(angle + 0.4) * side],
       [x + Math.cos(angle - 0.4) * side, hingeY, z + Math.sin(angle - 0.4) * side],
       [tipX, tipY, tipZ],
-      leafTint.map((c) => c * 0.92),
+      leafTint.map((c) => c * 0.9),
     );
   }
 }

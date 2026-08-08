@@ -51,6 +51,7 @@ Always dual-sync `content/.../cobra-canyon.world.json` ↔ `web/wwwroot/content/
 - [x] Pass 19: denser humid haze + greener valley/jungle bands + deeper river (owner scenery still-sucks)
 - [x] Pass 20: emptiness look-gate harness; palm-clump jungle (budget-safe); hard scrub islands on basin; park stills force desktop ambient; landmark-correct park poses — gate PASS
 - [x] Pass 21: crown-mass palms + drooping fronds; 3× set-piece jungle stands; hide AH-1G/chrome when parked; gate PASS
+- [x] Pass 22: kill gorge UFO (guidance visual half 22 m + landmark silhouette caps); terrain canopy crowns; noise clouds — gate PASS
 - [ ] Do not deploy without owner OK
 
 ## Stop conditions

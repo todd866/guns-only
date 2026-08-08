@@ -1,13 +1,13 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=296";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=297";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=296";
-import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=296";
+} from "./cobra_canyon_asset_kit.js?v=297";
+import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=297";
 import {
   createCobraCanyonBasinMaterial,
   createCobraCanyonRiverMaterial,
-} from "./cobra_canyon_terrain_material.js?v=296";
+} from "./cobra_canyon_terrain_material.js?v=297";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 
@@ -1218,23 +1218,31 @@ function landmarkPlacements(plan) {
     if (!point) continue;
     const kind = stableToken(record.kind);
     const groundY = sampleCobraCanyonTerrain(plan, point.x, -point.z);
-    const authoredHeightM = Math.max(4, point.y - groundY);
+    // Cap silhouette height. Authored top anchors on this heightfield can sit 100–300 m above
+    // terrain (karst needles 311 m); drawing that as a solid box paints a UFO on the horizon
+    // (owner 2026-08-08: "what's that giant thing").
+    const authoredHeightM = Math.min(
+      64,
+      Math.max(4, point.y - groundY),
+    );
     if (kind === "steel-truss-bridge" || kind === "radio-mast" || kind === "water-tower") {
       continue;
     }
     if (kind === "forward-operating-base") {
       add(record, point, "pad-west", [-24, 0, 0], [30, 1.2, 30]);
       add(record, point, "pad-centre", [12, 0, -18], [26, 1.2, 26]);
-      add(record, point, "signal-mast", [0, 0, 22], [2, Math.max(30, authoredHeightM), 2]);
+      add(record, point, "signal-mast", [0, 0, 22], [2, Math.min(28, Math.max(18, authoredHeightM)), 2]);
     } else if (kind === "waterfall") {
-      add(record, point, "water-ribbon", [0, 0, 0], [18, Math.max(90, authoredHeightM), 3]);
+      add(record, point, "water-ribbon", [0, 0, 0], [14, Math.min(48, Math.max(24, authoredHeightM * 0.4)), 3]);
     } else if (kind === "rock-spires") {
-      add(record, point, "spire-one", [-18, 0, 6], [14, authoredHeightM * 0.72, 16]);
-      add(record, point, "spire-two", [4, 0, -8], [17, authoredHeightM, 19]);
-      add(record, point, "spire-three", [26, 0, 10], [12, authoredHeightM * 0.61, 14]);
+      const spireH = Math.min(52, authoredHeightM);
+      add(record, point, "spire-one", [-18, 0, 6], [14, spireH * 0.72, 16]);
+      add(record, point, "spire-two", [4, 0, -8], [17, spireH, 19]);
+      add(record, point, "spire-three", [26, 0, 10], [12, spireH * 0.61, 14]);
     } else if (kind === "ridge-gate") {
-      add(record, point, "tooth-west", [-34, 0, 0], [42, authoredHeightM, 54]);
-      add(record, point, "tooth-east", [34, 0, 0], [38, authoredHeightM * 0.84, 48]);
+      const toothH = Math.min(58, authoredHeightM);
+      add(record, point, "tooth-west", [-34, 0, 0], [42, toothH, 54]);
+      add(record, point, "tooth-east", [34, 0, 0], [38, toothH * 0.84, 48]);
     } else if (kind === "hill-pagoda") {
       add(record, point, "base", [0, 0, 0], [26, authoredHeightM * 0.32, 22]);
       add(record, point, "roof-low", [0, 0, 0], [34, authoredHeightM * 0.52, 30]);
@@ -1244,7 +1252,7 @@ function landmarkPlacements(plan) {
       add(record, point, "quarry-cut", [0, -3, 0], [150, 6, 110]);
     } else if (kind === "mill-chimney") {
       add(record, point, "mill", [-12, 0, 0], [34, 12, 26]);
-      add(record, point, "stack", [18, 0, 0], [7, Math.max(42, authoredHeightM), 7]);
+      add(record, point, "stack", [18, 0, 0], [7, Math.min(48, Math.max(28, authoredHeightM)), 7]);
     } else if (kind === "signal-smoke") {
       // Cap the column: an authored top anchor far above terrain made a 60 m+ orange prism that
       // read as a placeholder cone on the river bank (Build 267 owner flight).

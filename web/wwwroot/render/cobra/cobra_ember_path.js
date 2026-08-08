@@ -1,6 +1,13 @@
 /**
  * Ember Run path: map sim path_gates onto the shared soft-gate guidance_path draw.
+ *
+ * VISUAL HALF ≠ KERNEL HALF. Authored gates are 90–155 m tolerance volumes. Drawing that as a
+ * plane scale paints a translucent diamond across the gorge (owner 2026-08-08). Keep a soft cue
+ * the pilot can fly through; never a landmark-sized UFO.
  */
+
+/** Soft-cue visual radius (m). Kernel half_m stays large for scoring; pixels stay small. */
+export const EMBER_GATE_VISUAL_HALF_M = 22;
 
 export function emberPathGuidanceState(authorityState) {
   const gates = Array.isArray(authorityState?.path_gates) ? authorityState.path_gates : [];
@@ -16,7 +23,8 @@ export function emberPathGuidanceState(authorityState) {
     east_m: Number(gate.east_m),
     up_m: Number(gate.up_m),
     north_m: Number(gate.north_m),
-    half_m: Math.max(40, Number(gate.half_m) || 90),
+    // Visual half only — guidance_path also clamps via maxVisualHalfM.
+    half_m: EMBER_GATE_VISUAL_HALF_M,
     active: gate.active === true,
   })).filter((gate) => Number.isFinite(gate.east_m)
     && Number.isFinite(gate.up_m)
@@ -28,15 +36,13 @@ export function emberPathGuidanceState(authorityState) {
     .map((gate, index) => {
       if (activeIndex < 0) return gate;
       if (index < activeIndex - 1) return null;
-      const half = gate.half_m;
       if (gate.active) {
-        return { ...gate, half_m: half * 1.18 };
+        return { ...gate, half_m: EMBER_GATE_VISUAL_HALF_M * 1.15 };
       }
       if (index < activeIndex) {
-        return { ...gate, half_m: half * 0.55 };
+        return { ...gate, half_m: EMBER_GATE_VISUAL_HALF_M * 0.55 };
       }
-      // Upcoming gates stay readable but quieter than the next cue.
-      return { ...gate, half_m: half * 0.78 };
+      return { ...gate, half_m: EMBER_GATE_VISUAL_HALF_M * 0.72 };
     })
     .filter(Boolean);
 
@@ -60,7 +66,7 @@ export function emberActObjectiveOverlay(act, options = {}) {
     case "depart":
       return {
         line: "DEPART CAMP EMBER · FOLLOW THE PATH",
-        detail: "Lift off — the brighter gate is the next soft cue down the gorge",
+        detail: "Lift off — the soft glow ahead is the next cue down the gorge",
       };
     case "ingress":
       return {

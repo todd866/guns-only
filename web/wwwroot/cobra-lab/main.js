@@ -1,60 +1,60 @@
-import * as THREE from "../vendor/three.module.js?v=296";
+import * as THREE from "../vendor/three.module.js?v=297";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=296";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=296";
+} from "../render/cobra/cobra_canyon_plan.js?v=297";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=297";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=296";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=296";
-import { createHud } from "../hud.js?v=296";
+} from "../render/cobra/cobra_canyon_tour.js?v=297";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=297";
+import { createHud } from "../hud.js?v=297";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=296";
+} from "../render/cobra/cobra_hud_adapter.js?v=297";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=296";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=296";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=297";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=297";
 import {
   emberActObjectiveOverlay,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=296";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=296";
+} from "../render/cobra/cobra_ember_path.js?v=297";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=297";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=296";
+} from "../render/cobra/cobra_control_profile.js?v=297";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=296";
+} from "../render/cobra/cobra_pilot_input.js?v=297";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=296";
+} from "../render/cobra/ah1g_presence.js?v=297";
 import {
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
   togglePadlockSelection,
-} from "../render/cobra/cobra_camera_bias.js?v=296";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=296";
+} from "../render/cobra/cobra_camera_bias.js?v=297";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=297";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=296";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=296";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=296";
+} from "../render/cobra/cobra_mission_exit.js?v=297";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=297";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=297";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -228,7 +228,7 @@ const projectionScratch = new THREE.Vector3();
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=296";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=297";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -298,14 +298,21 @@ const skyMaterial = new THREE.ShaderMaterial({
       // Narrow non-luminous horizon shoulder: stays readable in unusual attitudes.
       float horizonShoulder = exp(-abs(direction.y) * shoulderFalloff);
       colour = mix(colour, horizonColor * 1.08, horizonShoulder * shoulderWeight);
-      // Painted cumulus band (the documented divergence: no tactical cloud field here).
+      // Painted cumulus — irregular noise, not azimuth harmonics (those tiled into a block grid).
       float azimuth = atan(direction.z, direction.x);
       float shelf = smoothstep(cloudShelf.x, cloudShelf.x + 0.035, direction.y)
         * (1.0 - smoothstep(cloudShelf.y * 0.62, cloudShelf.y, direction.y));
-      float puff = 0.5 * sin(azimuth * 7.3 + 1.7)
-        + 0.34 * sin(azimuth * 16.7 - direction.y * 47.0 + 0.6)
-        + 0.22 * sin(azimuth * 29.3 + direction.y * 83.0);
-      colour = mix(colour, cloudColor, shelf * smoothstep(0.16, 0.68, puff) * 0.55);
+      vec2 cloudUv = vec2(azimuth * 0.72, direction.y * 2.8);
+      float h00 = fract(sin(dot(floor(cloudUv), vec2(127.1, 311.7))) * 43758.5453);
+      float h10 = fract(sin(dot(floor(cloudUv) + vec2(1.0, 0.0), vec2(127.1, 311.7))) * 43758.5453);
+      float h01 = fract(sin(dot(floor(cloudUv) + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
+      float h11 = fract(sin(dot(floor(cloudUv) + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
+      vec2 cf = fract(cloudUv);
+      vec2 cu = cf * cf * (3.0 - 2.0 * cf);
+      float puff = mix(mix(h00, h10, cu.x), mix(h01, h11, cu.x), cu.y);
+      float puffB = fract(sin(dot(cloudUv * 2.15 + 4.2, vec2(269.5, 183.3))) * 43758.5453);
+      puff = puff * 0.62 + puffB * 0.38;
+      colour = mix(colour, cloudColor, shelf * smoothstep(0.38, 0.78, puff) * 0.48);
       if (direction.y < 0.0) {
         colour = mix(belowHorizonColor, horizonColor, exp(direction.y * 16.0));
       }
@@ -640,9 +647,11 @@ function rebuildPresentation() {
   groundWarPresentation = createCobraGroundWarPresentation(THREE);
   emberGuidancePath = createGuidancePath(THREE, {
     maxGates: 16,
-    gateOpacity: 0.11,
-    activeOpacity: 0.42,
+    gateOpacity: 0.09,
+    activeOpacity: 0.18,
     activeColor: 0xffe8b8,
+    // Soft cue, not a gorge-spanning diamond (owner 2026-08-08).
+    maxVisualHalfM: 28,
   });
   scene.add(presentation.group);
   scene.add(groundWarPresentation.group);

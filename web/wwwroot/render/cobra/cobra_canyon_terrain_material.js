@@ -161,10 +161,24 @@ void main() {
   albedo = mix(albedo, uJungleMid * 0.42, step(0.52, scrub) * 0.58 * (1.0 - cultivation));
   albedo = mix(albedo, uValleyFloor * 1.35, step(0.68, scrubB) * 0.32 * flatGround * (1.0 - cultivation));
   albedo = mix(albedo, uLateriteSlope, step(0.74, scrubB) * 0.22 * flatGround);
+  // CANOPY CROWNS FROM ALTITUDE. BF Vietnam's distant hills are a dark green carpet of rounded
+  // tree tops, not mottled camouflage. Paint discrete crown discs on a 22–36 m lattice — free
+  // density the triangle budget cannot buy with mesh palms.
+  vec2 crownUv = groundUv / 28.0;
+  vec2 crownCell = floor(crownUv);
+  vec2 crownLocal = fract(crownUv) - 0.5;
+  float crownSeed = cobraHash(crownCell + vec2(3.1, 7.9));
+  float crownSeedB = cobraHash(crownCell + vec2(11.3, 2.4));
+  float crownRadius = 0.22 + crownSeed * 0.22;
+  float crownMask = (1.0 - cultivation) * (0.55 + 0.45 * flatGround)
+    * step(0.28, crownSeed) * (1.0 - smoothstep(crownRadius * 0.55, crownRadius, length(crownLocal)));
+  albedo = mix(albedo, uJungleMid * (0.48 + 0.22 * crownSeedB), crownMask * 0.82);
+  // Darker between crowns so the carpet reads as trees, not a green tarp.
+  albedo = mix(albedo, uJungleMid * 0.62, (1.0 - cultivation) * canopy * 0.22 * (1.0 - crownMask));
   float fleck = cobraNoise(groundUv * 1.35);
   albedo = mix(albedo, uJungleMid * 0.55, step(0.62, fleck) * 0.28 * (1.0 - cultivation));
   albedo *= 0.46 + 0.26 * micro + 0.30 * grain + 0.24 * grit + 0.18 * scrub
-    + 0.14 * scrubB + 0.12 * fleck;
+    + 0.14 * scrubB + 0.12 * fleck + 0.10 * crownMask;
 
   // PAINTED LIGHT IS COLOURED LIGHT, NOT DIMMED LIGHT (korea_terrain). A scalar tone cannot
   // shift hue, so every shadow comes out as a darker copy of the lit colour — the clearest tell

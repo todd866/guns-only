@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  EMBER_GATE_VISUAL_HALF_M,
   emberActObjectiveOverlay,
   emberPathGuidanceState,
 } from "../cobra_ember_path.js";
@@ -16,7 +17,9 @@ test("ember path maps sim gates into guidance_path approach samples", () => {
   assert.equal(state.approach_gate_count, 2);
   assert.equal(state.approach_gates[1].active, true);
   assert.equal(state.approach_gates[1].east_m, -2710);
-  assert.ok(state.approach_gates[0].half_m >= 40);
+  // Visual half is capped — authored 155 m must never reach the scene as a UFO diamond.
+  assert.ok(state.approach_gates[0].half_m <= EMBER_GATE_VISUAL_HALF_M);
+  assert.ok(state.approach_gates[1].half_m <= EMBER_GATE_VISUAL_HALF_M * 1.2);
   assert.ok(
     state.approach_gates[1].half_m > state.approach_gates[0].half_m,
     "active gate should read larger than spent trail gates",

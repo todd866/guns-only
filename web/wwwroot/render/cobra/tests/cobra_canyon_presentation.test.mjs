@@ -413,7 +413,8 @@ test("grounds landmark silhouettes on terrain while sizing toward authored top a
     }
     if (entry.kind === "rock-spires") tallestNeedleM = Math.max(tallestNeedleM, scale.y);
   }
-  assert.ok(tallestNeedleM > 280, "Karst Needles must preserve their authored tall silhouette");
+  assert.ok(tallestNeedleM > 40 && tallestNeedleM <= 64,
+    `Karst Needles must stay readable but capped (got ${tallestNeedleM}m) — uncapped authored tops painted UFOs`);
   presentation.dispose();
 });
 
