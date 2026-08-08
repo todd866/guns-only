@@ -6,16 +6,30 @@
 export const COBRA_GROUND_WAR_PRESENTATION_SCHEMA =
   "guns-only.cobra-ground-war-presentation.v1";
 
-const FRIENDLY_COLOR = 0x6f8f4e;
-// Hotter hostile so a mark reads as "shoot me" at 400–800 ft (owner Ember Run ask).
-const HOSTILE_COLOR = 0xc44a32;
-const WRECK_COLOR = 0x3a342c;
-const SITE_NEUTRAL = 0xc2b280;
-const SITE_FRIENDLY = 0x8fbf5a;
-const SITE_HOSTILE = 0xc45a45;
-const SMOKE_COLOR = 0xb8b0a0;
-const TRACER_FRIENDLY = 0xd4e89a;
-const TRACER_HOSTILE = 0xff8a5c;
+export const COBRA_GROUND_WAR_COLORS = Object.freeze({
+  friendly: 0x6f8f4e,
+  // Hotter hostile so a mark reads as "shoot me" at 400–800 ft under monsoon haze.
+  hostile: 0xe83c1a,
+  wreck: 0x3a342c,
+  siteNeutral: 0xc2b280,
+  siteFriendly: 0x8fbf5a,
+  siteHostile: 0xc45a45,
+  smoke: 0xb8b0a0,
+  tracerFriendly: 0xd4e89a,
+  tracerHostile: 0xff8a5c,
+  hostileEmissive: 0x5a1208,
+  friendlyEmissive: 0x142010,
+});
+
+const FRIENDLY_COLOR = COBRA_GROUND_WAR_COLORS.friendly;
+const HOSTILE_COLOR = COBRA_GROUND_WAR_COLORS.hostile;
+const WRECK_COLOR = COBRA_GROUND_WAR_COLORS.wreck;
+const SITE_NEUTRAL = COBRA_GROUND_WAR_COLORS.siteNeutral;
+const SITE_FRIENDLY = COBRA_GROUND_WAR_COLORS.siteFriendly;
+const SITE_HOSTILE = COBRA_GROUND_WAR_COLORS.siteHostile;
+const SMOKE_COLOR = COBRA_GROUND_WAR_COLORS.smoke;
+const TRACER_FRIENDLY = COBRA_GROUND_WAR_COLORS.tracerFriendly;
+const TRACER_HOSTILE = COBRA_GROUND_WAR_COLORS.tracerHostile;
 
 function roleScale(role) {
   if (role === "soft-vehicle") return { width: 7.2, height: 3.2, depth: 3.4 };
@@ -26,39 +40,44 @@ function roleScale(role) {
 /** Presentation-only silhouettes — sim still owns combat truth. */
 function roleGeometry(THREE, role) {
   if (role === "soft-vehicle") {
+    // Wedge truck: cab + bed + tarp ridge — readable as soft skin from nap AGL.
     const group = new THREE.Group();
-    const cab = new THREE.Mesh(
-      new THREE.BoxGeometry(2.8, 2.4, 2.6),
-      undefined,
-    );
-    cab.position.set(0, 1.4, 1.6);
-    const bed = new THREE.Mesh(
-      new THREE.BoxGeometry(3.2, 1.6, 4.8),
-      undefined,
-    );
-    bed.position.set(0, 1.0, -1.2);
-    group.add(cab, bed);
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(3.0, 2.6, 2.8), undefined);
+    cab.position.set(0, 1.5, 2.0);
+    const bed = new THREE.Mesh(new THREE.BoxGeometry(3.4, 1.5, 5.2), undefined);
+    bed.position.set(0, 0.95, -1.4);
+    const tarp = new THREE.Mesh(new THREE.BoxGeometry(3.1, 1.2, 3.6), undefined);
+    tarp.position.set(0, 2.2, -1.6);
+    group.add(cab, bed, tarp);
     group.userData.composite = true;
+    group.userData.role = "soft-vehicle";
     return group;
   }
   if (role === "hard-point") {
+    // Gun pit + barrel — distinct from infantry clumps at fight distance.
     const group = new THREE.Group();
-    const pit = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 3.2, 1.4, 8), undefined);
-    pit.position.y = 0.7;
-    const gun = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 4.2), undefined);
-    gun.position.set(0, 2.0, 1.2);
-    group.add(pit, gun);
+    const pit = new THREE.Mesh(new THREE.CylinderGeometry(2.8, 3.4, 1.6, 8), undefined);
+    pit.position.y = 0.8;
+    const shield = new THREE.Mesh(new THREE.BoxGeometry(3.2, 1.4, 0.4), undefined);
+    shield.position.set(0, 2.0, 0.6);
+    const gun = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.55, 5.4), undefined);
+    gun.position.set(0, 2.15, 2.0);
+    group.add(pit, shield, gun);
     group.userData.composite = true;
+    group.userData.role = "hard-point";
     return group;
   }
-  // Infantry clump: three low boxes.
+  // Infantry clump: three bodies + heads so they read as people, not crates.
   const group = new THREE.Group();
-  for (const [x, z] of [[-1.1, 0.4], [0.2, -0.8], [1.0, 0.6]]) {
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 2.0, 0.9), undefined);
-    body.position.set(x, 1.0, z);
-    group.add(body);
+  for (const [x, z] of [[-1.2, 0.5], [0.15, -0.9], [1.1, 0.55]]) {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.85, 2.1, 0.85), undefined);
+    body.position.set(x, 1.05, z);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.38, 6, 5), undefined);
+    head.position.set(x, 2.35, z);
+    group.add(body, head);
   }
   group.userData.composite = true;
+  group.userData.role = "infantry";
   return group;
 }
 
@@ -79,6 +98,22 @@ function applyUnitMaterial(root, mat) {
       }
     }
   }
+}
+
+function unitPaint(unit) {
+  if (!unit.alive) {
+    return { color: WRECK_COLOR, emissive: 0x000000 };
+  }
+  if (unit.faction === "friendly") {
+    return {
+      color: FRIENDLY_COLOR,
+      emissive: COBRA_GROUND_WAR_COLORS.friendlyEmissive,
+    };
+  }
+  return {
+    color: HOSTILE_COLOR,
+    emissive: COBRA_GROUND_WAR_COLORS.hostileEmissive,
+  };
 }
 
 function siteControlColor(localControl) {
@@ -132,10 +167,10 @@ export function createCobraGroundWarPresentation(THREE) {
   function ensureUnit(unit) {
     let entry = unitMeshes.get(unit.id);
     if (entry) return entry;
+    const paint = unitPaint(unit);
     const mat = new THREE.MeshStandardMaterial({
-      color: unit.alive
-        ? (unit.faction === "friendly" ? FRIENDLY_COLOR : HOSTILE_COLOR)
-        : WRECK_COLOR,
+      color: paint.color,
+      emissive: paint.emissive,
       roughness: 0.86,
       metalness: 0.08,
     });
@@ -250,11 +285,13 @@ export function createCobraGroundWarPresentation(THREE) {
       const entry = ensureUnit(unit);
       entry.mesh.position.set(unit.x_m, unit.y_m + 0.2, -unit.z_m);
       entry.mesh.visible = true;
-      entry.mat.color.setHex(
-        unit.alive
-          ? (unit.faction === "friendly" ? FRIENDLY_COLOR : HOSTILE_COLOR)
-          : WRECK_COLOR,
-      );
+      const paint = unitPaint(unit);
+      entry.mat.color.setHex(paint.color);
+      if (typeof entry.mat.emissive?.setHex === "function") {
+        entry.mat.emissive.setHex(paint.emissive);
+      } else {
+        entry.mat.emissive = paint.emissive;
+      }
       entry.mat.opacity = unit.alive ? 1 : 0.55;
       entry.mat.transparent = !unit.alive;
       const healthScale = unit.alive

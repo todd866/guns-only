@@ -127,10 +127,10 @@
 - Selection ring unchanged
 - Tracers/smoke keep event path
 
-- [ ] **Step 1:** Failing presentation test for hostile color / role geometry choice
-- [ ] **Step 2:** Implement silhouettes
-- [ ] **Step 3:** Run presentation tests
-- [ ] **Step 4:** Commit `feat(cobra): hostiles that look like they need shooting`
+- [x] **Step 1:** Failing presentation test for hostile color / role geometry choice
+- [x] **Step 2:** Implement silhouettes
+- [x] **Step 3:** Run presentation tests
+- [x] **Step 4:** Commit `feat(cobra): hostiles that look like they need shooting` (Build 292)
 
 ---
 

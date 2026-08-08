@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  COBRA_GROUND_WAR_COLORS,
   COBRA_GROUND_WAR_PRESENTATION_SCHEMA,
   createCobraGroundWarPresentation,
 } from "../cobra_ground_war.js";
@@ -75,6 +76,7 @@ function fakeThree() {
     constructor(params = {}) {
       Object.assign(this, params);
       this.color = new Color(params.color ?? 0xffffff);
+      this.emissive = new Color(params.emissive ?? 0x000000);
     }
     dispose() {}
   }
@@ -190,5 +192,66 @@ test("selection marker tracks the selected unit and clears when unselected", () 
 
   presentation.sync(war, "ground.hostile.infantryclump.999");
   assert.equal(selection.visible, false);
+  presentation.dispose();
+});
+
+test("hostiles use hotter paint and role-distinct silhouettes", () => {
+  assert.ok(COBRA_GROUND_WAR_COLORS.hostile > 0xe00000,
+    "hostile red must stay hot enough to read under monsoon haze");
+  const presentation = createCobraGroundWarPresentation(fakeThree());
+  presentation.sync({
+    control: -0.4,
+    sites: [],
+    events: [],
+    units: [{
+      id: "u.hostile.inf",
+      faction: "hostile",
+      role: "infantry",
+      alive: true,
+      health: 40,
+      max_health: 40,
+      x_m: 0,
+      y_m: 100,
+      z_m: 0,
+    }, {
+      id: "u.hostile.truck",
+      faction: "hostile",
+      role: "soft-vehicle",
+      alive: true,
+      health: 80,
+      max_health: 80,
+      x_m: 20,
+      y_m: 100,
+      z_m: 0,
+    }, {
+      id: "u.hostile.gun",
+      faction: "hostile",
+      role: "hard-point",
+      alive: true,
+      health: 60,
+      max_health: 60,
+      x_m: -20,
+      y_m: 100,
+      z_m: 0,
+    }],
+  });
+
+  const unitRoot = presentation.group.children.find((child) => child.name === "COBRA_GROUND_WAR_UNITS");
+  const infantry = unitRoot.children.find((mesh) => mesh.name.includes("u.hostile.inf"));
+  const truck = unitRoot.children.find((mesh) => mesh.name.includes("u.hostile.truck"));
+  const gun = unitRoot.children.find((mesh) => mesh.name.includes("u.hostile.gun"));
+  assert.ok(infantry && truck && gun);
+
+  assert.equal(infantry.userData.role, "infantry");
+  assert.equal(truck.userData.role, "soft-vehicle");
+  assert.equal(gun.userData.role, "hard-point");
+  assert.ok(infantry.children.length >= 6, "infantry needs bodies+heads");
+  assert.ok(truck.children.length >= 3, "soft-vehicle needs cab/bed/tarp");
+  assert.ok(gun.children.length >= 3, "hard-point needs pit/shield/barrel");
+
+  // Material lives on leaf meshes after applyUnitMaterial.
+  const hostileMat = infantry.children[0].material;
+  assert.equal(hostileMat.color.hex, COBRA_GROUND_WAR_COLORS.hostile);
+  assert.equal(hostileMat.emissive.hex, COBRA_GROUND_WAR_COLORS.hostileEmissive);
   presentation.dispose();
 });
