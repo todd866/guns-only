@@ -11,7 +11,7 @@
 // wwwroot/render/**/tests/** rule and must never ship.
 
 import * as THREE from "../../../../vendor/three.module.js";
-import { createHud } from "../../../../hud.js";
+import { createHud, cameraReferencedAirframeAnchors } from "../../../../hud.js";
 import {
   desiredPadlockAngles,
   targetLookAngles,
@@ -389,6 +389,9 @@ function computeProbes(frame) {
     nominalFocalYPx: HEIGHT * 0.5 / Math.tan(66 * DEG * 0.5),
     projectionCenter,
     lookBoresight,
+    cameraWaterline: cameraReferencedAirframeAnchors(
+      camera, WIDTH, HEIGHT, frame.state,
+    )?.waterline ?? null,
     waterline: projectProbe(camera, far(frame.playerForward)),
     fpv: projectProbe(camera, far(velocityDirection)),
     bandit: projectProbe(camera, frame.banditPosition),

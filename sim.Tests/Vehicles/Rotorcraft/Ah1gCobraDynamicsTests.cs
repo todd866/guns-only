@@ -181,6 +181,32 @@ public sealed class Ah1gCobraDynamicsTests
     }
 
     [Fact]
+    public void SoftRetreatingBladeEnvelopeBleedsADiveBeforeFullStallParks()
+    {
+        // Owner 2026-08-08: constant BLADE STALL is not a playable cruise state. Start above
+        // authored onset and confirm the soft drag wall bleeds speed so severity cannot sit
+        // near 1.0 under trim collective.
+        var diving = Create("rbs-envelope", velocity: new Vec3D(0.0, 0.0, 100.0));
+        double trim = diving.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        var command = new VerticalLiftPilotCommand(trim, 0.15, 0.0, 0.0);
+
+        diving.Advance(Input(0, command));
+        double entrySeverity = diving.Telemetry.RetreatingBladeStallSeverity;
+        Assert.True(entrySeverity > 0.35,
+            $"expected entry into RBS, got {entrySeverity:F3}");
+
+        for (long tick = 1; tick < 480; tick++)
+            diving.Advance(Input(tick, command));
+
+        double settledSpeed = diving.State.GroundVelocityMps.Length;
+        double settledSeverity = diving.Telemetry.RetreatingBladeStallSeverity;
+        Assert.True(settledSpeed < 85.0,
+            $"soft envelope should bleed the dive below ~165 KT; settled {settledSpeed:F1} m/s");
+        Assert.True(settledSeverity < entrySeverity - 0.10,
+            $"severity should fall as speed bleeds: entry {entrySeverity:F3} settled {settledSeverity:F3}");
+    }
+
+    [Fact]
     public void HighAdvanceRatioProducesProgressiveRetreatingBladeWarning()
     {
         var moderate = Create("moderate", velocity: new Vec3D(0.0, 0.0, 55.0));

@@ -126,9 +126,10 @@ available.
   using Johnson/Army-scaled entry and exit points. Developed VRS increases inflow lag/power and
   reduces delivered thrust; added collective increases the penalty. Translational escape fades it.
 - **Retreating-blade stall:** severity grows with advance ratio, rotor droop and loading. It reduces
-  disk thrust progressively and adds small deterministic 2/rev feedback. There is no canned sudden
-  roll because the AH-1G manual emphasizes increasing vertical vibration/control feedback for its
-  teetering rotor.
+  disk thrust progressively and adds small deterministic 2/rev feedback. A soft in-plane drag wall
+  and cyclic-authority fade engage before authored onset so sustained flight cannot park in
+  BLADE STALL (owner 2026-08-08). There is no canned sudden roll because the AH-1G manual
+  emphasizes increasing vertical vibration/control feedback for its teetering rotor.
 - **Low-g/mast bump:** the provider reports risk from rotor unloading, speed and forward cyclic. It
   does not yet integrate teeter angle or strike the mast; that requires the next rotor tier.
 

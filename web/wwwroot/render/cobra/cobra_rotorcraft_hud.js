@@ -152,8 +152,8 @@ export function cobraRotorcraftHudModel(authorityState) {
   if (vrs >= 0.35) warnings.push({ text: "VORTEX RING", level: "warning" });
   else if (vrs >= 0.2) warnings.push({ text: "SETTLING WITH POWER", level: "caution" });
   if (mast >= 0.35) warnings.push({ text: "MAST BUMP", level: "warning" });
-  if (rbs >= 0.6) warnings.push({ text: "BLADE STALL", level: "warning" });
-  else if (rbs >= 0.35) warnings.push({ text: "BLADE STALL", level: "caution" });
+  if (rbs >= 0.75) warnings.push({ text: "BLADE STALL", level: "warning" });
+  else if (rbs >= 0.55) warnings.push({ text: "BLADE STALL", level: "caution" });
   if (torquePct > 100) warnings.push({ text: "TORQUE LIMIT", level: "caution" });
   else if (rotor.governor_saturated === true) warnings.push({ text: "GOV LIMIT", level: "caution" });
   warnings.sort((a, b) => LEVEL_RANK[a.level] - LEVEL_RANK[b.level]);
@@ -363,25 +363,21 @@ export function drawCobraRotorcraftHud(ctx, model, {
     }
   }
 
-  // Rotor-state annunciations in the F-22 warning lane (empty for the Cobra: no
-  // GCAS/stall/gear chrome is armed by the adapter's snapshot).
+  // Rotor-state annunciations sit ABOVE the ROTOR panel (left tape lane) — never the centre
+  // warning lane. Owner: centre-screen BLADE STALL / VRS plates 24/7 are unusable chrome.
   {
-    let y = layout.warningY;
+    let y = panelTop - 14;
     ctx.textAlign = "center";
+    const x = Math.min(Math.max(layout.tapeInset, 52 + 4), width - 52 - 4);
     for (const warning of model.warnings) {
       const color = warning.level === "warning" ? RED : AMBER;
-      ctx.font = `800 16px ${MONO}`;
-      // A backing plate, not just glow: the second annunciation row lands on the +20°
-      // ladder rung, and an unbacked LOW ROTOR read as struck through in flight test.
-      const plateWidth = ctx.measureText(warning.text).width + 22;
-      panel(ctx, (width - plateWidth) / 2, y - 11, plateWidth, 22, color);
-      ctx.shadowColor = warning.level === "warning"
-        ? "rgba(255, 70, 93, 0.62)" : "rgba(255, 176, 32, 0.5)";
-      ctx.shadowBlur = 10;
+      ctx.font = `800 10px ${MONO}`;
+      const plateWidth = Math.min(112, ctx.measureText(warning.text).width + 14);
+      panel(ctx, x - plateWidth / 2, y - 9, plateWidth, 18, color);
       ctx.fillStyle = color;
-      ctx.fillText(warning.text, width / 2, y);
       ctx.shadowBlur = 0;
-      y += 26;
+      ctx.fillText(warning.text, x, y);
+      y -= 20;
     }
   }
 

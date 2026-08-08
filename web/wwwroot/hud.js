@@ -21,7 +21,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=293";
+} from "./render/hud/contact_visibility.js?v=294";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import {
   approachEnergyCue,
@@ -64,11 +64,11 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=293";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=294";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=293";
+} from "./render/mission/rapier_high_mach_instruments.js?v=294";
 import { limitsPanelPresentation } from "./render/hud/limits_panel.js";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
@@ -79,7 +79,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=293";
+} from "./render/audio/flight_audio.js?v=294";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -259,9 +259,9 @@ export function cameraPitchAnchor(camera, width, height) {
 }
 
 /**
- * Banked ladder-horizon point (camera pitch × bank). Kept for conformal ladder math and
- * tests. Classical helicopter waterline is body-forward (`noseAnchor`), not this point —
- * Build 266 briefly glued the W here and that is reversed.
+ * Banked ladder-horizon point (camera pitch × bank). When `ladderReference` is camera (Cobra),
+ * the waterline W parks here so it agrees with the conformal 0 rung through sight bias —
+ * owner ruling over the classical body-forward gap.
  */
 export function cameraReferencedAirframeAnchors(camera, width, height, state = {}) {
   const attitude = cameraPitchAnchor(camera, width, height);
@@ -3723,14 +3723,19 @@ class CombatHud {
       );
       const blink = Math.floor((Number(frame.now) || 0) * 5) % 2 === 0;
       const pitchDeg = Number(state.pitch_deg) || 0;
-      const radarAltFt = Number.isFinite(Number(state.radar_alt_ft))
-        ? Number(state.radar_alt_ft) : Number(state.alt_ft);
+      // Cobra deliberately omits radar_alt_ft (nap-of-earth would arm jet proximity forever).
+      // Never fall back to MSL alt_ft — that made GROUND·PULL UP flash on every slight nose-down
+      // in the gorge (owner 2026-08-08). Without true radar altitude, padlock groundDanger is off.
+      const radarAltFt = Number(state.radar_alt_ft);
       const sinkFpm = Number(state.vertical_speed_fpm);
-      const noseLow = pitchDeg < -2 || (Number.isFinite(sinkFpm) && sinkFpm < -1500);
+      const noseLow = pitchDeg < -5
+        || (Number.isFinite(sinkFpm) && sinkFpm < -1800);
       const groundDanger = Number.isFinite(radarAltFt) && radarAltFt < 2000 && noseLow;
       const centralPullUp = state.auto_gcas_active === true
         || state.auto_gcas_warning === true
         || (state.auto_gcas_available !== true
+          && Number.isFinite(radarAltFt)
+          && Number.isFinite(sinkFpm)
           && radarAltFt < 500 && sinkFpm < -1000);
 
       // Where is the bandit in this view. In padlock the sensor is slaved to it, so it usually sits
@@ -5384,7 +5389,8 @@ class CombatHud {
       );
     }
     // Camera-referenced ladder (Cobra): horizon stays conformal through the eye. Waterline
-    // is classical body-forward (noseAnchor). Helicopter snapshots gate cruise FPV / hover stub.
+    // shares that camera horizon when ladderReference is camera (owner: W must match camera).
+    // Helicopter snapshots gate cruise FPV / hover stub.
     const heli = frame.state?.heli_flight_path === true;
     const heliMode = heli ? String(frame.state.heli_fpv_mode || "cruise") : "cruise";
     let symbolFpv = fpvAnchor;
@@ -5413,7 +5419,12 @@ class CombatHud {
         );
       }
     }
-    const symbolAnchor = noseAnchor;
+    const cameraWaterline = frame.ladderReference === "camera"
+      ? cameraReferencedAirframeAnchors(
+        frame.camera, this.width, this.height, frame.state,
+      )?.waterline
+      : null;
+    const symbolAnchor = cameraWaterline ?? noseAnchor;
     if (this._debug) {
       this._debug.waterlinePx = symbolAnchor && !symbolAnchor.behind
         ? { x: symbolAnchor.x, y: symbolAnchor.y } : null;
