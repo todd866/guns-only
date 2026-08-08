@@ -1,4 +1,4 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=294";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=295";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -415,7 +415,7 @@ function nearestRoutePoint(plan, routeId, eastM, northM) {
 function outsideRotorCorridor(plan, cell, role, point, seed) {
   const clearanceM = role === "rock" ? 115
     : role === "village" ? 90
-      : role === "jungle" ? 78
+      : role === "jungle" ? 48
         : role === "plantation" || role === "paddy" ? 62
           : 0;
   if (!clearanceM) return point;
@@ -698,13 +698,11 @@ function planPlacements(plan, qualityTier, maximumInstances) {
       // is now per-instance rather than a flat multiplier: a stand of uniform size at uniform
       // spacing is the tell that gave the old canopy its wallpaper look.
       if (quota.role === "jungle") {
-        // A STAND, NOT A PANCAKE. Scaling only the footprint made 110 m stands 25 m tall, which
-        // from any angle above the treetops reads as a flat green plate laid on the hill. Height
-        // rides with bulk so the aspect ratio stays in the 2:1-3:1 band a real canopy block has.
-        const bulk = 1.22 + seededUnit(seed, 0x8f51a67b) * 0.86;
-        scale.widthM *= bulk;
-        scale.depthM *= bulk * (0.78 + seededUnit(seed, 0x1d2c9f43) * 0.5);
-        scale.heightM *= 0.86 + bulk * 0.28 + seededUnit(seed, 0x39aa5c11) * 0.4;
+        // Palm clumps need vertical presence more than pancake footprint.
+        const bulk = 1.15 + seededUnit(seed, 0x8f51a67b) * 0.65;
+        scale.widthM *= bulk * 0.85;
+        scale.depthM *= bulk * 0.85;
+        scale.heightM *= 1.55 + seededUnit(seed, 0x39aa5c11) * 0.65;
       }
       // BED THE STAND INTO THE SLOPE. Placement deliberately seeks steep ground, and a 50 m
       // footprint anchored at the centre sample cantilevers off a gorge wall — the stand visibly
@@ -822,24 +820,56 @@ function geometryFromSoup(THREE, name, positions, colors) {
   return geometry;
 }
 
+function appendPalm(positions, colors, x, z, scale, trunkTint, leafTint) {
+  const trunkW = 0.028 * scale;
+  const trunkH = 0.66 * scale;
+  appendBox(
+    positions,
+    colors,
+    [x - trunkW, 0, z - trunkW],
+    [x + trunkW, trunkH, z + trunkW],
+    trunkTint,
+  );
+  // Open frond star (4 tris, no base) — apex fans like a palm crown without the 6-tri pyramid tax.
+  const reach = 0.48 * scale;
+  const baseY = trunkH * 0.70;
+  const apex = [x, trunkH * 1.18, z];
+  for (let index = 0; index < 4; index++) {
+    const a0 = index / 4 * Math.PI * 2 + 0.12;
+    const a1 = (index + 1) / 4 * Math.PI * 2 + 0.12;
+    pushTriangle(
+      positions,
+      colors,
+      [x + Math.cos(a0) * reach, baseY, z + Math.sin(a0) * reach],
+      [x + Math.cos(a1) * reach, baseY, z + Math.sin(a1) * reach],
+      apex,
+      leafTint,
+    );
+  }
+}
+
 function geometryForRole(THREE, role) {
   const positions = [];
   const colors = [];
   if (role === "jungle") {
-    // ONE INSTANCE IS A STAND OF CANOPY, NOT A TREE. Soft Lambert (not flatShading) kills the
-    // "crystal shard" catch-light from faceted rings at nap-of-earth AGL — denser rings blow the
-    // presentation triangle budget, so silhouette still comes from interlocking lobes, not sides.
-    // Lobes overlap, crowns stagger across a 0.58-1.0 band, and a low skirt closes the daylight
-    // gap the old trunk left under every stand. Tints are SHADING VARIATION on the instance palette.
-    const lobes = [
-      [0.00, 0.00, 0.44, 0.16, 1.00, [1.02, 1.08, 0.98]],
-      [-0.28, 0.16, 0.40, 0.12, 0.88, [0.97, 1.03, 0.95]],
-      [0.28, -0.16, 0.41, 0.12, 0.93, [1.04, 1.10, 1.00]],
-      [0.10, 0.30, 0.36, 0.08, 0.76, [0.94, 1.00, 0.92]],
-      [-0.12, -0.28, 0.38, 0.00, 0.62, [0.90, 0.96, 0.88]],
+    // ONE INSTANCE = three palms. Trunks + open crowns beat a soft green loaf; stays near the
+    // old 50-tri lobe budget so presentation ceilings still hold (no skirt — that 8-tri pad
+    // pushed mobile past 45k).
+    const palms = [
+      [0.00, 0.00, 1.00],
+      [-0.26, 0.14, 0.84],
+      [0.24, -0.12, 0.90],
     ];
-    for (const [x, z, radius, skirt, top, tint] of lobes) {
-      appendCanopy(positions, colors, x, z, radius, radius * 0.96, skirt, top, tint, 5);
+    for (const [x, z, scale] of palms) {
+      appendPalm(
+        positions,
+        colors,
+        x,
+        z,
+        scale,
+        [0.42, 0.28, 0.14],
+        [0.18, 0.50, 0.20],
+      );
     }
   } else if (role === "plantation") {
     for (let index = 0; index < 5; index++) {
@@ -924,7 +954,8 @@ function materialForRole(THREE, role) {
     // Smooth normals on organic mass (jungle/plantation/rock/village) kill crystal-shard facets.
     flatShading: role !== "paddy" && role !== "jungle" && role !== "plantation"
       && role !== "rock" && role !== "village",
-    side: THREE.FrontSide,
+    // Open palm crowns are single-sided fans — DoubleSide keeps the silhouette from below/behind.
+    side: role === "jungle" ? THREE.DoubleSide : THREE.FrontSide,
   });
   material.name = `COBRA_CANYON_ASSET_${role.toUpperCase()}_MATERIAL`;
   return material;

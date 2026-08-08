@@ -87,11 +87,7 @@ test("builds one bounded authored batch per visual role across every tier", () =
       assert.equal(kit.roleCounts[`${role}Instances`], mesh.count);
       assert.ok(mesh.userData.cobraCanyonInstances.every((entry) => entry.archetypeId));
     }
-    // A CANOPY IS COUNTED IN LOBES, NOT IN TRIANGLES. This used to assert a 72-triangle floor,
-    // which pinned the exact shape rather than the property that matters and blocked the cheaper
-    // five-sided interlocking stand that buys the extra instances density actually needs. Each
-    // lobe contributes one crown apex shared by exactly `sides` fan triangles, so counting
-    // apexes measures the silhouette directly.
+    // Palm clumps: trunks + frond apexes. Pyramid tips sit high and fan ≥4 tris each.
     const jungleGeometry = meshes.get("jungle").geometry;
     const jungleVertices = jungleGeometry.getAttribute("position");
     const vertexUses = new Map();
@@ -103,12 +99,14 @@ test("builds one bounded authored batch per visual role across every tier", () =
       ].join(",");
       vertexUses.set(key, (vertexUses.get(key) ?? 0) + 1);
     }
-    const crownApexes = [...vertexUses].filter(([key, uses]) =>
-      uses >= 5 && Number(key.split(",")[1]) > 0.4);
-    assert.ok(crownApexes.length >= 5,
-      `jungle stands need a multi-lobed canopy silhouette (${crownApexes.length} crowns)`);
+    const frondTips = [...vertexUses].filter(([key, uses]) =>
+      uses >= 4 && Number(key.split(",")[1]) > 0.55);
+    assert.ok(frondTips.length >= 3,
+      `jungle palm clumps need radiating frond tips (${frondTips.length} tips)`);
     assert.ok(triangleCount(jungleGeometry) >= 40,
-      "jungle stands must stay solid enough to read as mass");
+      "palm clumps must stay solid enough to read as trunks + fronds");
+    assert.ok(triangleCount(jungleGeometry) <= 56,
+      "palm clumps must stay near the old canopy budget so presentation ceilings hold");
     assert.ok(triangleCount(meshes.get("plantation").geometry) >= 100,
       "plantation rows need trunks and crowns instead of marker pyramids");
     assert.deepEqual(visibleMetrics(kit.group), kit.builtMetrics);

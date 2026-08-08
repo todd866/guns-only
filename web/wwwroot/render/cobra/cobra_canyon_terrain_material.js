@@ -124,6 +124,7 @@ void main() {
   // only the coarse octave the near field renders as an untextured painted panel.
   float micro = cobraNoise(groundUv * 0.031);
   float grain = cobraNoise(groundUv * 0.125);
+  float grit = cobraNoise(groundUv * 0.42);
   float canopy = smoothstep(0.44, 0.70, macro * 0.62 + meso * 0.38);
 
   // Cultivation parcels: hard-edged cells on flat lowland only. Agriculture reads as rectangles,
@@ -150,8 +151,20 @@ void main() {
   // Scrub clumps: the near-field octave has to change HUE, not just value. A symmetric value
   // jitter averages out to the same smooth panel at any distance; discrete darker-green clumps
   // are what the eye reads as vegetation on the ground under the skids.
-  albedo = mix(albedo, uJungleMid, smoothstep(0.56, 0.86, grain) * 0.34 * (1.0 - cultivation));
-  albedo *= 0.70 + 0.34 * micro + 0.26 * grain + 0.14 * meso;
+  // Scrub clumps + metre grit: near-field must change hue AND value or 30 m AGL reads painted.
+  albedo = mix(albedo, uJungleMid, smoothstep(0.42, 0.72, grain) * 0.62 * (1.0 - cultivation));
+  albedo = mix(albedo, uLateriteSlope * 0.78, smoothstep(0.48, 0.82, grit) * 0.36 * flatGround);
+  // LARGE scrub islands (8–25 m). Micro flecks average out under humid haze and fail the
+  // emptiness spat/hetero floors; discrete dark/light patches are what a mid-gorge still needs.
+  float scrub = cobraFbm(groundUv * 0.055);
+  float scrubB = cobraNoise(groundUv * 0.11 + 4.7);
+  albedo = mix(albedo, uJungleMid * 0.42, step(0.52, scrub) * 0.58 * (1.0 - cultivation));
+  albedo = mix(albedo, uValleyFloor * 1.35, step(0.68, scrubB) * 0.32 * flatGround * (1.0 - cultivation));
+  albedo = mix(albedo, uLateriteSlope, step(0.74, scrubB) * 0.22 * flatGround);
+  float fleck = cobraNoise(groundUv * 1.35);
+  albedo = mix(albedo, uJungleMid * 0.55, step(0.62, fleck) * 0.28 * (1.0 - cultivation));
+  albedo *= 0.46 + 0.26 * micro + 0.30 * grain + 0.24 * grit + 0.18 * scrub
+    + 0.14 * scrubB + 0.12 * fleck;
 
   // PAINTED LIGHT IS COLOURED LIGHT, NOT DIMMED LIGHT (korea_terrain). A scalar tone cannot
   // shift hue, so every shadow comes out as a darker copy of the lit colour — the clearest tell

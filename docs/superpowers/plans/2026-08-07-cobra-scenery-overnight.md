@@ -49,6 +49,7 @@ Always dual-sync `content/.../cobra-canyon.world.json` ↔ `web/wwwroot/content/
 - [x] Pass 18: Readable hostile silhouettes — hotter red, role-distinct truck/gun/infantry meshes, haze emissive (Ember Run Task 5)
 - [x] Stamp Build 292 for overnight pass 18; STATUS next-candidate in sync
 - [x] Pass 19: denser humid haze + greener valley/jungle bands + deeper river (owner scenery still-sucks)
+- [x] Pass 20: emptiness look-gate harness; palm-clump jungle (budget-safe); hard scrub islands on basin; park stills force desktop ambient; landmark-correct park poses — gate PASS
 - [ ] Do not deploy without owner OK
 
 ## Stop conditions
