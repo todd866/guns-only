@@ -44,6 +44,8 @@ Always dual-sync `content/.../cobra-canyon.world.json` ↔ `web/wwwroot/content/
 - [x] Stamp Build 289 for overnight pass 15; STATUS next-candidate in sync
 - [x] Pass 16: Fill mobile/balanced ambient caps; soften gorge occlusion 0.76; tighter paddy parcels; exposure 1.14
 - [x] Stamp Build 290 for overnight pass 16; STATUS next-candidate in sync
+- [x] Pass 17: Soft-shade landmarks + Iron Bell deck/piers; cooler karst/ridge/waterfall/FOB landmark tints (ambient caps full — quality axis)
+- [x] Stamp Build 291 for overnight pass 17; STATUS next-candidate in sync
 - [ ] Do not deploy without owner OK
 
 ## Stop conditions

@@ -1,13 +1,13 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=290";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=291";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=290";
-import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=290";
+} from "./cobra_canyon_asset_kit.js?v=291";
+import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=291";
 import {
   createCobraCanyonBasinMaterial,
   createCobraCanyonRiverMaterial,
-} from "./cobra_canyon_terrain_material.js?v=290";
+} from "./cobra_canyon_terrain_material.js?v=291";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 
@@ -421,7 +421,13 @@ function materialFor(THREE, role) {
   const material = new THREE.MeshLambertMaterial({
     color: parameters.color,
     emissive: parameters.emissive ?? 0x000000,
-    flatShading: role !== "heroCells",
+    // Soft normals on landmarks/bridges/vegetation — flat boxes read as crystal shards at nap AGL.
+    // Hazards and roads keep hard facets so collision cues stay readable.
+    flatShading: role !== "heroCells"
+      && role !== "landmarks"
+      && role !== "vegetation"
+      && role !== "bridge-deck"
+      && role !== "bridge-pier",
     side: role === "roads" ? THREE.DoubleSide : THREE.FrontSide,
   });
   if (role === "heroCells") {
@@ -1252,13 +1258,13 @@ function landmarkPlacements(plan) {
 
 function landmarkColor(kind) {
   const token = stableToken(kind);
-  if (token === "forward-operating-base") return [0.52, 0.34, 0.18];
-  if (token === "waterfall") return [0.62, 0.76, 0.70];
-  if (token === "rock-spires") return [0.58, 0.55, 0.40];
-  if (token === "ridge-gate") return [0.34, 0.34, 0.22];
-  if (token === "hill-pagoda") return [0.78, 0.76, 0.63];
-  if (token === "open-quarry") return [0.54, 0.27, 0.14];
-  if (token === "mill-chimney") return [0.40, 0.34, 0.26];
+  if (token === "forward-operating-base") return [0.48, 0.36, 0.22];
+  if (token === "waterfall") return [0.55, 0.72, 0.74];
+  if (token === "rock-spires") return [0.50, 0.52, 0.44];
+  if (token === "ridge-gate") return [0.30, 0.36, 0.26];
+  if (token === "hill-pagoda") return [0.82, 0.78, 0.68];
+  if (token === "open-quarry") return [0.58, 0.28, 0.12];
+  if (token === "mill-chimney") return [0.38, 0.36, 0.30];
   // Cool grey plume — warm orange read as an unfinished debug solid on the gorge bank.
   if (token === "signal-smoke") return [0.62, 0.64, 0.66];
   return [0.52, 0.46, 0.31];

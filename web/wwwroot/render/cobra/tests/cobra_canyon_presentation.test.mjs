@@ -291,6 +291,18 @@ test("builds the real analytical basin and stays inside every tier ceiling", () 
   }
 });
 
+test("soft-shades landmarks and Iron Bell so nap-AGL boxes are not crystal shards", () => {
+  const { presentation } = create("balanced");
+  for (const role of ["landmarks", "bridge-deck", "bridge-pier"]) {
+    const mesh = byRole(presentation.group, role);
+    assert.ok(mesh, `${role} mesh must exist`);
+    assert.equal(mesh.material.flatShading, false, `${role} must use soft normals`);
+  }
+  const hazards = byRole(presentation.group, "hazards");
+  assert.equal(hazards.material.flatShading, true, "hazard cues keep hard facets");
+  presentation.dispose();
+});
+
 test("represents all fourteen authored hazards and never sheds them", () => {
   const { plan, presentation } = create("balanced", { nearRingRadiusM: 9_000 });
   const expectedIds = new Set(plan.hazards.map((hazard) => hazard.id));
