@@ -152,7 +152,16 @@ export function createCobraHudFrame(THREE) {
 
   return {
     frame,
-    update({ camera, pose, state, dt, nowSeconds }) {
+    update({
+      camera,
+      pose,
+      state,
+      dt,
+      nowSeconds,
+      padlockActive = false,
+      padlockTargetId = "",
+      padlockTargetUnit = null,
+    }) {
       frame.camera = camera;
       frame.state = state;
       frame.dt = Number.isFinite(dt) ? dt : 0;
@@ -167,6 +176,19 @@ export function createCobraHudFrame(THREE) {
         frame.playerForward.set(0, 0, -1).applyQuaternion(quaternion);
         frame.playerUp.set(0, 1, 0).applyQuaternion(quaternion);
         frame.playerRight.set(1, 0, 0).applyQuaternion(quaternion);
+      }
+      // F-22-shaped padlock fields so hud.js padlock SA can light when V is held on a mark.
+      const padlocked = padlockActive === true && padlockTargetUnit != null;
+      frame.padlock = padlocked;
+      frame.padlockTarget = padlocked ? "bandit" : null;
+      frame.padlockTargetEntityId = padlocked ? String(padlockTargetId || "") : "";
+      frame.padlockPhase = padlocked ? "TRACK" : "OFF";
+      if (padlocked) {
+        const x = Number(padlockTargetUnit.x_m) || 0;
+        const y = (Number(padlockTargetUnit.y_m) || 0) + 1.2;
+        const z = -(Number(padlockTargetUnit.z_m) || 0);
+        frame.padlockTargetPosition.set(x, y, z);
+        frame.banditPosition.set(x, y, z);
       }
       return frame;
     },

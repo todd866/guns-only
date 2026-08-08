@@ -1,61 +1,60 @@
-import * as THREE from "../vendor/three.module.js?v=292";
+import * as THREE from "../vendor/three.module.js?v=293";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=292";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=292";
+} from "../render/cobra/cobra_canyon_plan.js?v=293";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=293";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=292";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=292";
-import { createHud } from "../hud.js?v=292";
+} from "../render/cobra/cobra_canyon_tour.js?v=293";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=293";
+import { createHud } from "../hud.js?v=293";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=292";
+} from "../render/cobra/cobra_hud_adapter.js?v=293";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=292";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=292";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=293";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=293";
 import {
   emberActObjectiveOverlay,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=292";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=292";
+} from "../render/cobra/cobra_ember_path.js?v=293";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=293";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=292";
+} from "../render/cobra/cobra_control_profile.js?v=293";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=292";
+} from "../render/cobra/cobra_pilot_input.js?v=293";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=292";
+} from "../render/cobra/ah1g_presence.js?v=293";
 import {
-  COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD,
-  clampInducedLookRotation,
-  lookAnglesFromOffset,
-  lookOffsetFromAngles,
-} from "../render/cobra/cobra_camera_bias.js?v=292";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=292";
+  nextHostileTargetId,
+  resolveAuthorityLookAtPoint,
+  togglePadlockSelection,
+} from "../render/cobra/cobra_camera_bias.js?v=293";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=293";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=292";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=292";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=292";
+} from "../render/cobra/cobra_mission_exit.js?v=293";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=293";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=293";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -155,6 +154,8 @@ let presenceDeltaSeconds = 0;
 let hostileTargetIds = [];
 let hostileTargetIndex = -1;
 let lastTargetKey = null;
+// F-22 contract: Tab owns selection; V owns padlock view of that selection.
+let padlockActive = false;
 // No target is cued before the pilot's first input: a cold-boot auto-selection used to swing
 // the camera toward a hostile before the player had touched anything.
 let playerHasInteracted = false;
@@ -227,7 +228,7 @@ const projectionScratch = new THREE.Vector3();
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=292";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=293";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -597,6 +598,7 @@ function restartRoute() {
   if (!plan) return;
   lockPlayRoute();
   missionTerminal = false;
+  padlockActive = false;
   if (debrief) debrief.hidden = true;
   activeRoute = routeById(routeSelect.value);
   bridge?.StartRoute(routeSelect.selectedIndex);
@@ -703,25 +705,48 @@ function refreshGroundTargets() {
     option.textContent = `${unit.faction === "friendly" ? "FRI" : "HOS"} · ${unit.role} · ${tag}`;
     targetSelect.append(option);
   }
-  if (previous && [...targetSelect.options].some((option) => option.value === previous))
+  if (previous && [...targetSelect.options].some((option) => option.value === previous)) {
     targetSelect.value = previous;
-  else if (hostileTargetIds.length && playerHasInteracted) {
+    hostileTargetIndex = hostileTargetIds.indexOf(previous);
+  } else if (hostileTargetIds.length && playerHasInteracted) {
     // Auto-reselect keeps continuity after a kill, but never before the pilot's first input —
     // a cold-boot auto-selection dragged the camera toward a hostile on spawn.
     // The WASM bridge still auto-assigns the seam for fire consent without moving the camera.
     hostileTargetIndex = 0;
     targetSelect.value = hostileTargetIds[0];
+  } else {
+    hostileTargetIndex = -1;
+    if (padlockActive) padlockActive = false;
   }
 }
 
+function applyGunnerTarget(targetId) {
+  if (!targetSelect) return;
+  targetSelect.value = targetId || "";
+  hostileTargetIndex = targetId ? hostileTargetIds.indexOf(targetId) : -1;
+  bridge?.SetGunnerTarget(targetId || null);
+  groundWarPresentation?.sync(authorityState?.ground_war ?? null, targetId || null);
+}
+
 function cycleHostileTarget() {
-  if (!hostileTargetIds.length) return;
-  // First Tab from idle jumps to the preferred (seam-first) mark instead of advancing
-  // past it when index was still -1.
-  if (hostileTargetIndex < 0) hostileTargetIndex = 0;
-  else hostileTargetIndex = (hostileTargetIndex + 1) % hostileTargetIds.length;
-  targetSelect.value = hostileTargetIds[hostileTargetIndex];
-  bridge?.SetGunnerTarget(targetSelect.value || null);
+  const nextId = nextHostileTargetId(hostileTargetIds, targetSelect?.value || null);
+  if (!nextId) return;
+  applyGunnerTarget(nextId);
+}
+
+function togglePadlock() {
+  const next = togglePadlockSelection({
+    padlockActive,
+    selectedTargetId: targetSelect?.value || null,
+    hostileTargetIds,
+  });
+  padlockActive = next.padlockActive;
+  if (next.selectedTargetId && next.selectedTargetId !== (targetSelect?.value || null)) {
+    applyGunnerTarget(next.selectedTargetId);
+  }
+  if (!padlockActive) return;
+  // Keep the sim gunner assignment in lock-step when V adopts the preferred mark.
+  if (targetSelect?.value) bridge?.SetGunnerTarget(targetSelect.value);
 }
 
 function updateTour(deltaSeconds) {
@@ -837,49 +862,33 @@ function syncAuthorityCamera() {
   const lookDistanceM = 140;
   const bodyYaw = Number(vehicle.yaw_rad) || 0;
   const bodyPitch = Number(vehicle.pitch_rad) || 0;
-  // Fixed rear-seat look bias (slightly up through the glass) + gunner-target crew bias.
+  // Fixed rear-seat look bias (slightly up through the glass). Padlock replaces this with a
+  // true look-at — F-22 contract: forward is nose-forward, V is the view toggle.
   const lookYaw = bodyYaw;
   const lookPitch = bodyPitch + 0.08;
-  lookTarget.set(
-    camera.position.x + Math.sin(lookYaw) * lookDistanceM,
-    camera.position.y + Math.sin(lookPitch) * lookDistanceM,
-    camera.position.z - Math.cos(lookYaw) * lookDistanceM,
-  );
+  const forwardLook = {
+    x: camera.position.x + Math.sin(lookYaw) * lookDistanceM,
+    y: camera.position.y + Math.sin(lookPitch) * lookDistanceM,
+    z: camera.position.z - Math.cos(lookYaw) * lookDistanceM,
+  };
 
   const selectedId = targetSelect?.value || authorityState?.gunner?.selected_target_id;
   const units = authorityState?.ground_war?.units ?? [];
   const selected = selectedId ? units.find((unit) => unit.id === selectedId && unit.alive) : null;
-  if (selected) {
-    // Target cueing leans the view toward the gunner's mark, but the induced rotation is
-    // clamped to ±0.05 rad: the AH-1G's only clear glass is dead ahead, and the old unclamped
-    // lerp swung the sole windshield gap off-axis whenever a near hostile was selected.
-    const bias = 0.22;
-    const biasedX = THREE.MathUtils.lerp(lookTarget.x, selected.x_m, bias);
-    const biasedY = THREE.MathUtils.lerp(lookTarget.y, selected.y_m + 1.2, bias);
-    const biasedZ = THREE.MathUtils.lerp(lookTarget.z, -selected.z_m, bias);
-    const base = lookAnglesFromOffset(
-      lookTarget.x - camera.position.x,
-      lookTarget.y - camera.position.y,
-      lookTarget.z - camera.position.z,
-    );
-    const desired = lookAnglesFromOffset(
-      biasedX - camera.position.x,
-      biasedY - camera.position.y,
-      biasedZ - camera.position.z,
-    );
-    const clamped = clampInducedLookRotation(base, desired, COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD);
-    const offset = lookOffsetFromAngles(clamped.yawRad, clamped.pitchRad, lookDistanceM);
-    lookTarget.set(
-      camera.position.x + offset.x,
-      camera.position.y + offset.y,
-      camera.position.z + offset.z,
-    );
-  }
+  if (padlockActive && !selected) padlockActive = false;
+
+  const lookAt = resolveAuthorityLookAtPoint({
+    padlockActive,
+    selectedUnit: selected,
+    forwardLook,
+  });
+  lookTarget.set(lookAt.x, lookAt.y, lookAt.z);
 
   camera.lookAt(lookTarget);
   // Negated: three.js rolls the camera counter-clockwise for a positive rotation.z (right-hand
   // rule about +Z, which points back out of the screen), so feeding a right bank straight in
   // tilted the horizon the wrong way and a left cyclic input read as a roll to the right.
+  // Padlock still inherits body roll so the horizon stays aircraft-honest while the eye tracks.
   camera.rotation.z = -(Number(vehicle.roll_rad) || 0);
 }
 
@@ -1097,12 +1106,19 @@ function drawHud(timeMs, deltaSeconds) {
     return;
   }
   cobraHudState(authorityState, pose, hudStateScratch);
+  const selectedId = targetSelect?.value || authorityState?.gunner?.selected_target_id || "";
+  const selectedUnit = selectedId
+    ? (authorityState?.ground_war?.units ?? []).find((unit) => unit.id === selectedId && unit.alive)
+    : null;
   hud.draw(hudFrameKit.update({
     camera,
     pose,
     state: hudStateScratch,
     dt: deltaSeconds,
     nowSeconds: timeMs / 1000,
+    padlockActive,
+    padlockTargetId: selectedUnit ? selectedId : "",
+    padlockTargetUnit: selectedUnit,
   }));
   drawCobraRotorcraftHud(hudPresentationCtx, cobraRotorcraftHudModel(authorityState), {
     width: hudViewport.width,
@@ -1209,6 +1225,13 @@ window.addEventListener("keydown", (event) => {
     cycleHostileTarget();
     return;
   }
+  if (event.code === "KeyV") {
+    event.preventDefault();
+    playerHasInteracted = true;
+    if (tourInput) tourInput.checked = false;
+    togglePadlock();
+    return;
+  }
   if (!isManualControl(event.code) && event.code !== "ShiftLeft" && event.code !== "ShiftRight") return;
   event.preventDefault();
   playerHasInteracted = true;
@@ -1246,9 +1269,7 @@ resetButton?.addEventListener("click", restartRoute);
 debriefRestart?.addEventListener("click", restartRoute);
 targetSelect?.addEventListener("change", () => {
   playerHasInteracted = true;
-  bridge?.SetGunnerTarget(targetSelect.value || null);
-  // Refresh the in-world highlight immediately rather than waiting for the next 30 Hz sample.
-  groundWarPresentation?.sync(authorityState?.ground_war ?? null, targetSelect.value || null);
+  applyGunnerTarget(targetSelect.value || null);
 });
 speedInput?.addEventListener("input", () => {
   if (speedValue) speedValue.textContent = `${speedInput.value} m/s`;

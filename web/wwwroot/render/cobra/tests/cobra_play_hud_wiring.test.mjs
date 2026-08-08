@@ -59,7 +59,18 @@ test("the combiner paints above the scene vignette instead of under it", async (
 
 test("ground war presentation receives the selected target for the in-world highlight", async () => {
   const main = await source("cobra-lab/main.js");
-  assert.match(main, /sync\(\s*authorityState(\?\.)?\.ground_war[\s\S]{0,120}?targetSelect\.value/);
+  assert.match(main, /applyGunnerTarget/);
+  assert.match(main, /groundWarPresentation\?\.sync\(/);
+  assert.match(main, /targetId \|\| null/);
+});
+
+test("V and Tab share the F-22 padlock / gun-target split", async () => {
+  const main = await source("cobra-lab/main.js");
+  assert.match(main, /function togglePadlock\(/);
+  assert.match(main, /function cycleHostileTarget\(/);
+  assert.match(main, /event\.code === "KeyV"/);
+  assert.match(main, /padlockActive/);
+  assert.match(main, /resolveAuthorityLookAtPoint/);
 });
 
 test("target list rebuilds only when the living set changes and prefers the gunnery seam", async () => {
