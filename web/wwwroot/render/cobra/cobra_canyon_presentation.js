@@ -1,13 +1,13 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=297";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=298";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=297";
-import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=297";
+} from "./cobra_canyon_asset_kit.js?v=298";
+import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=298";
 import {
   createCobraCanyonBasinMaterial,
   createCobraCanyonRiverMaterial,
-} from "./cobra_canyon_terrain_material.js?v=297";
+} from "./cobra_canyon_terrain_material.js?v=298";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 
@@ -1526,6 +1526,7 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
   const assetKit = createCobraCanyonAssetKit(THREE, plan, {
     qualityTier,
     maxInstances: budget.maxAssetInstances,
+    foliageTextures: options.foliageTextures ?? null,
   });
   group.add(assetKit.group);
 

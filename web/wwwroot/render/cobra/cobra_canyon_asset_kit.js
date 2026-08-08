@@ -1,4 +1,9 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=297";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=298";
+import {
+  FOLIAGE_UV_PALM,
+  FOLIAGE_UV_UNDERSTORY,
+  createSyntheticFoliageAtlasTexture,
+} from "./cobra_canyon_foliage.js?v=298";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -755,9 +760,70 @@ function planPlacements(plan, qualityTier, maximumInstances) {
   };
 }
 
-function pushTriangle(positions, colors, a, b, c, color) {
+function pushTriangle(positions, colors, a, b, c, color, uvs = null, ua = null, ub = null, uc = null) {
   positions.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
   for (let index = 0; index < 3; index++) colors.push(color[0], color[1], color[2]);
+  if (uvs && ua && ub && uc) {
+    uvs.push(ua[0], ua[1], ub[0], ub[1], uc[0], uc[1]);
+  }
+}
+
+/** One double-sided billboard quad (two tris) with atlas UVs. */
+function pushTexturedQuad(positions, colors, uvs, bl, br, tr, tl, color, region) {
+  const uvBl = [region.u0, region.v0];
+  const uvBr = [region.u1, region.v0];
+  const uvTr = [region.u1, region.v1];
+  const uvTl = [region.u0, region.v1];
+  pushTriangle(positions, colors, bl, br, tr, color, uvs, uvBl, uvBr, uvTr);
+  pushTriangle(positions, colors, bl, tr, tl, color, uvs, uvBl, uvTr, uvTl);
+}
+
+/**
+ * Two crossed cards (four tris) — the BF:V near-tree read without Lambert lobe soup.
+ * yawRad rotates the pair in the XZ plane around the card centre.
+ */
+function appendCrossedFoliageCard(
+  positions,
+  colors,
+  uvs,
+  x,
+  z,
+  halfWidth,
+  bottomY,
+  topY,
+  color,
+  region,
+  yawRad = 0,
+) {
+  const cos = Math.cos(yawRad);
+  const sin = Math.sin(yawRad);
+  const offset = (ox, oz) => [x + ox * cos - oz * sin, z + ox * sin + oz * cos];
+  const [x0, z0] = offset(-halfWidth, 0);
+  const [x1, z1] = offset(halfWidth, 0);
+  pushTexturedQuad(
+    positions,
+    colors,
+    uvs,
+    [x0, bottomY, z0],
+    [x1, bottomY, z1],
+    [x1, topY, z1],
+    [x0, topY, z0],
+    color,
+    region,
+  );
+  const [x2, z2] = offset(0, -halfWidth);
+  const [x3, z3] = offset(0, halfWidth);
+  pushTexturedQuad(
+    positions,
+    colors,
+    uvs,
+    [x2, bottomY, z2],
+    [x3, bottomY, z3],
+    [x3, topY, z3],
+    [x2, topY, z2],
+    color,
+    region,
+  );
 }
 
 function appendBox(positions, colors, minimum, maximum, color) {
@@ -823,11 +889,14 @@ function appendCanopy(
   }
 }
 
-function geometryFromSoup(THREE, name, positions, colors) {
+function geometryFromSoup(THREE, name, positions, colors, uvs = null) {
   const geometry = new THREE.BufferGeometry();
   geometry.name = name;
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+  if (uvs?.length) {
+    geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  }
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
@@ -880,24 +949,21 @@ function appendPalm(positions, colors, x, z, scale, trunkTint, leafTint) {
 function geometryForRole(THREE, role) {
   const positions = [];
   const colors = [];
+  const uvs = role === "jungle" ? [] : null;
   if (role === "jungle") {
-    // ONE INSTANCE = two palms (trunk + crown mass + drooping fronds). Crown VOLUME beats
-    // diamond cones; stays near the old ~50-tri lobe budget so ceilings hold.
-    const palms = [
-      [0.00, 0.00, 1.00],
-      [-0.22, 0.16, 0.88],
-    ];
-    for (const [x, z, scale] of palms) {
-      appendPalm(
-        positions,
-        colors,
-        x,
-        z,
-        scale,
-        [0.38, 0.24, 0.12],
-        [0.14, 0.46, 0.18],
-      );
-    }
+    // ONE INSTANCE = two CC0 palm cards (crossed quads) + understory fern cards.
+    // Textured alpha cutouts beat Lambert lobes for BF:V legibility and cost ~12 tris.
+    const leafTint = [0.92, 0.98, 0.88];
+    const underTint = [0.78, 0.92, 0.72];
+    appendCrossedFoliageCard(
+      positions, colors, uvs, 0.02, -0.02, 0.42, 0.0, 1.0, leafTint, FOLIAGE_UV_PALM, 0.12,
+    );
+    appendCrossedFoliageCard(
+      positions, colors, uvs, -0.28, 0.18, 0.34, 0.0, 0.86, leafTint, FOLIAGE_UV_PALM, 0.71,
+    );
+    appendCrossedFoliageCard(
+      positions, colors, uvs, 0.18, 0.22, 0.28, 0.0, 0.38, underTint, FOLIAGE_UV_UNDERSTORY, 0.35,
+    );
   } else if (role === "plantation") {
     for (let index = 0; index < 5; index++) {
       const z = -0.4 + index * 0.2;
@@ -959,10 +1025,16 @@ function geometryForRole(THREE, role) {
     pushTriangle(positions, colors, [-0.5, 0, -0.5], [0.5, 0, -0.5], [0.5, 0, 0.5], [0.70, 0.88, 0.84]);
     pushTriangle(positions, colors, [-0.5, 0, -0.5], [0.5, 0, 0.5], [-0.5, 0, 0.5], [0.70, 0.88, 0.84]);
   }
-  return geometryFromSoup(THREE, `COBRA_CANYON_ASSET_${role.toUpperCase()}_GEOMETRY`, positions, colors);
+  return geometryFromSoup(
+    THREE,
+    `COBRA_CANYON_ASSET_${role.toUpperCase()}_GEOMETRY`,
+    positions,
+    colors,
+    uvs,
+  );
 }
 
-function materialForRole(THREE, role) {
+function materialForRole(THREE, role, foliageAtlas = null) {
   if (role === "mist" || role === "waterAccent") {
     const material = new THREE.MeshBasicMaterial({
       color: 0xffffff,
@@ -975,14 +1047,27 @@ function materialForRole(THREE, role) {
     material.name = `COBRA_CANYON_ASSET_${role.toUpperCase()}_MATERIAL`;
     return material;
   }
+  if (role === "jungle") {
+    // Unlit alpha cards — Lambert was crushing the CC0 atlas to black silhouettes under gorge light.
+    const material = new THREE.MeshBasicMaterial({
+      map: foliageAtlas,
+      color: 0xffffff,
+      vertexColors: true,
+      alphaTest: 0.48,
+      transparent: false,
+      depthWrite: true,
+      side: THREE.DoubleSide,
+    });
+    material.name = "COBRA_CANYON_ASSET_JUNGLE_MATERIAL";
+    return material;
+  }
   const material = new THREE.MeshLambertMaterial({
     color: 0xffffff,
     vertexColors: true,
-    // Smooth normals on organic mass (jungle/plantation/rock/village) kill crystal-shard facets.
-    flatShading: role !== "paddy" && role !== "jungle" && role !== "plantation"
+    // Smooth normals on organic mass (plantation/rock/village) kill crystal-shard facets.
+    flatShading: role !== "paddy" && role !== "plantation"
       && role !== "rock" && role !== "village",
-    // Open palm crowns are single-sided fans — DoubleSide keeps the silhouette from below/behind.
-    side: role === "jungle" ? THREE.DoubleSide : THREE.FrontSide,
+    side: THREE.FrontSide,
   });
   material.name = `COBRA_CANYON_ASSET_${role.toUpperCase()}_MATERIAL`;
   return material;
@@ -1041,10 +1126,10 @@ function tagObject(object, role, instanceCount = 0) {
   return object;
 }
 
-function createRoleMesh(THREE, group, role, placements, resources) {
+function createRoleMesh(THREE, group, role, placements, resources, foliageAtlas = null) {
   if (!placements.length) return null;
   const geometry = geometryForRole(THREE, role);
-  const material = materialForRole(THREE, role);
+  const material = materialForRole(THREE, role, foliageAtlas);
   const mesh = tagObject(
     new THREE.InstancedMesh(geometry, material, placements.length),
     role,
@@ -1103,6 +1188,7 @@ function disposeResources(resources) {
   }
   for (const geometry of resources.geometries) geometry.dispose();
   for (const material of resources.materials) material.dispose();
+  for (const texture of resources.textures ?? []) texture.dispose();
 }
 
 /**
@@ -1127,12 +1213,25 @@ export function createCobraCanyonAssetKit(THREE, plan, options = {}) {
     sourceSchema: plan.presentationKit?.schema ?? null,
     ...PRESENTATION_ONLY_TAG,
   });
-  const resources = { geometries: new Set(), materials: new Set(), meshes: [] };
+  const resources = { geometries: new Set(), materials: new Set(), meshes: [], textures: [] };
+  // CC0 atlas when the shell preloads it; synthetic fallback keeps the alpha-card path in tests.
+  let foliageAtlas = options.foliageTextures?.atlas ?? null;
+  if (!foliageAtlas) {
+    foliageAtlas = createSyntheticFoliageAtlasTexture(THREE);
+    resources.textures.push(foliageAtlas);
+  }
   const controllers = [];
   const rolePlacements = Object.fromEntries(COBRA_CANYON_ASSET_ROLES.map((role) => [role, []]));
   for (const placement of planned.placements) rolePlacements[placement.role].push(placement);
   for (const role of COBRA_CANYON_ASSET_ROLES) {
-    const controller = createRoleMesh(THREE, group, role, rolePlacements[role], resources);
+    const controller = createRoleMesh(
+      THREE,
+      group,
+      role,
+      rolePlacements[role],
+      resources,
+      role === "jungle" ? foliageAtlas : null,
+    );
     if (controller) controllers.push(controller);
   }
 

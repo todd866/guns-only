@@ -88,30 +88,20 @@ test("builds one bounded authored batch per visual role across every tier", () =
       assert.equal(kit.roleCounts[`${role}Instances`], mesh.count);
       assert.ok(mesh.userData.cobraCanyonInstances.every((entry) => entry.archetypeId));
     }
-    // Palm clumps: trunks + crown mass + drooping frond tips.
-    const jungleGeometry = meshes.get("jungle").geometry;
-    const jungleVertices = jungleGeometry.getAttribute("position");
-    const vertexUses = new Map();
-    for (let index = 0; index < jungleVertices.count; index++) {
-      const key = [
-        jungleVertices.getX(index),
-        jungleVertices.getY(index),
-        jungleVertices.getZ(index),
-      ].join(",");
-      vertexUses.set(key, (vertexUses.get(key) ?? 0) + 1);
-    }
-    const crownApexes = [...vertexUses].filter(([key, uses]) =>
-      uses >= 4 && Number(key.split(",")[1]) > 0.55);
-    const frondTips = [...vertexUses].filter(([key, uses]) =>
-      uses === 1 && Number(key.split(",")[1]) > 0.4 && Number(key.split(",")[1]) < 0.8);
-    assert.ok(crownApexes.length >= 2,
-      `jungle palms need crown masses (${crownApexes.length} apexes)`);
-    assert.ok(frondTips.length >= 4,
-      `jungle palms need drooping frond tips (${frondTips.length} tips)`);
-    assert.ok(triangleCount(jungleGeometry) >= 44,
-      "palm clumps must stay solid enough to read as trunks + crowns");
-    assert.ok(triangleCount(jungleGeometry) <= 56,
-      "palm clumps must stay near the old canopy budget so presentation ceilings hold");
+    // Near-field jungle is CC0 alpha cards (crossed quads + atlas), not Lambert lobes.
+    const jungleMesh = meshes.get("jungle");
+    const jungleGeometry = jungleMesh.geometry;
+    const jungleUv = jungleGeometry.getAttribute("uv");
+    assert.ok(jungleUv, "jungle cards need UVs for the foliage atlas");
+    assert.equal(jungleUv.count, jungleGeometry.getAttribute("position").count);
+    assert.ok(jungleMesh.material.map, "jungle material must sample the foliage atlas");
+    assert.ok(jungleMesh.material.alphaTest > 0.3,
+      "jungle cards must alpha-test cutouts (BF:V-style cards, not soft blend fog)");
+    assert.equal(jungleMesh.material.side, THREE.DoubleSide);
+    assert.ok(triangleCount(jungleGeometry) >= 10,
+      "jungle stand needs crossed palm cards plus understory");
+    assert.ok(triangleCount(jungleGeometry) <= 20,
+      "textured cards must stay far under the old ~50-tri lobe budget");
     assert.ok(triangleCount(meshes.get("plantation").geometry) >= 100,
       "plantation rows need trunks and crowns instead of marker pyramids");
     assert.deepEqual(visibleMetrics(kit.group), kit.builtMetrics);
