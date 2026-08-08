@@ -88,9 +88,9 @@ const VIEWS = Object.freeze([
     name: "camp-ember",
     eastM: -6_500,
     northM: -6_200,
-    aglM: 42,
-    yawRad: 0.65,
-    pitchRad: -0.20,
+    aglM: 38,
+    yawRad: 0.9,
+    pitchRad: -0.25,
   }),
   Object.freeze({
     name: "mid-gorge",

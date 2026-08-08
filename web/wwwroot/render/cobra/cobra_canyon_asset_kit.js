@@ -1,4 +1,4 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=295";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=296";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -415,7 +415,7 @@ function nearestRoutePoint(plan, routeId, eastM, northM) {
 function outsideRotorCorridor(plan, cell, role, point, seed) {
   const clearanceM = role === "rock" ? 115
     : role === "village" ? 90
-      : role === "jungle" ? 48
+      : role === "jungle" ? 36
         : role === "plantation" || role === "paddy" ? 62
           : 0;
   if (!clearanceM) return point;
@@ -584,42 +584,56 @@ function setPiecePlacements(plan, descriptors) {
       if (!role) continue;
       const anchor = cell.anchorLocalM ?? cell.approachLocalM;
       if (!Array.isArray(anchor)) continue;
-      const seed = hashString(`${cell.id}:${archetypeId}`);
-      const variation = seededUnit(seed, 0x27d4eb2f);
-      const scale = roleScale(role, descriptor, variation);
-      const angle = seededUnit(seed, 0x85ebca6b) * Math.PI * 2;
-      const offsetM = index === 0 ? 0 : Math.min(78, 16 + index * 13);
-      const candidate = outsideRotorCorridor(plan, cell, role, {
-        eastM: anchor[0] + Math.cos(angle) * offsetM,
-        northM: anchor[2] + Math.sin(angle) * offsetM,
-      }, seed);
-      const cellBounds = boundsFrom(cell);
-      const eastM = cellBounds
-        ? clamp(candidate.eastM, cellBounds.minimumEastM, cellBounds.maximumEastM)
-        : candidate.eastM;
-      const northM = cellBounds
-        ? clamp(candidate.northM, cellBounds.minimumNorthM, cellBounds.maximumNorthM)
-        : candidate.northM;
-      const nearest = nearestRoutePoint(plan, cell.routeId, eastM, northM);
-      const routeAligned = role === "plantation" || role === "paddy";
-      placements.push({
-        id: `${cell.id}.${archetypeId}`,
-        role,
-        x: eastM,
-        y: sampleCobraCanyonTerrain(plan, eastM, northM)
-          - seatDrop(plan, role, eastM, northM, scale),
-        z: -northM,
-        yaw: routeAligned && nearest
-          ? Math.atan2(nearest.tangentEastM, nearest.tangentNorthM)
-          : seededUnit(seed, 0xa511e9b3) * Math.PI * 2,
-        variation,
-        rank: 0,
-        batchId: cell.id,
-        setPieceId: cell.id,
-        archetypeId,
-        paletteHex: descriptor?.paletteHex ?? null,
-        ...scale,
-      });
+      // Jungle set-pieces need a CLUMP, not one lonely stand — BF Vietnam near-field is a wall
+      // of trunks. One authored archetype expands into several offset instances.
+      const standCount = role === "jungle" ? 3 : 1;
+      for (let stand = 0; stand < standCount; stand++) {
+        const seed = hashString(`${cell.id}:${archetypeId}:${stand}`);
+        const variation = seededUnit(seed, 0x27d4eb2f);
+        const scale = roleScale(role, descriptor, variation);
+        if (role === "jungle") {
+          const bulk = 1.2 + seededUnit(seed, 0x8f51a67b) * 0.7;
+          scale.widthM *= bulk * 0.9;
+          scale.depthM *= bulk * 0.9;
+          scale.heightM *= 1.6 + seededUnit(seed, 0x39aa5c11) * 0.7;
+        }
+        const angle = seededUnit(seed, 0x85ebca6b) * Math.PI * 2;
+        const ringM = stand === 0 ? 0 : 18 + stand * 14;
+        const offsetM = index === 0
+          ? ringM
+          : Math.min(92, 16 + index * 13 + ringM);
+        const candidate = outsideRotorCorridor(plan, cell, role, {
+          eastM: anchor[0] + Math.cos(angle) * offsetM,
+          northM: anchor[2] + Math.sin(angle) * offsetM,
+        }, seed);
+        const cellBounds = boundsFrom(cell);
+        const eastM = cellBounds
+          ? clamp(candidate.eastM, cellBounds.minimumEastM, cellBounds.maximumEastM)
+          : candidate.eastM;
+        const northM = cellBounds
+          ? clamp(candidate.northM, cellBounds.minimumNorthM, cellBounds.maximumNorthM)
+          : candidate.northM;
+        const nearest = nearestRoutePoint(plan, cell.routeId, eastM, northM);
+        const routeAligned = role === "plantation" || role === "paddy";
+        placements.push({
+          id: `${cell.id}.${archetypeId}.${stand}`,
+          role,
+          x: eastM,
+          y: sampleCobraCanyonTerrain(plan, eastM, northM)
+            - seatDrop(plan, role, eastM, northM, scale),
+          z: -northM,
+          yaw: routeAligned && nearest
+            ? Math.atan2(nearest.tangentEastM, nearest.tangentNorthM)
+            : seededUnit(seed, 0xa511e9b3) * Math.PI * 2,
+          variation,
+          rank: 0,
+          batchId: cell.id,
+          setPieceId: cell.id,
+          archetypeId,
+          paletteHex: descriptor?.paletteHex ?? null,
+          ...scale,
+        });
+      }
     }
   }
   return placements;
@@ -821,8 +835,8 @@ function geometryFromSoup(THREE, name, positions, colors) {
 }
 
 function appendPalm(positions, colors, x, z, scale, trunkTint, leafTint) {
-  const trunkW = 0.028 * scale;
-  const trunkH = 0.66 * scale;
+  const trunkW = 0.026 * scale;
+  const trunkH = 0.62 * scale;
   appendBox(
     positions,
     colors,
@@ -830,20 +844,35 @@ function appendPalm(positions, colors, x, z, scale, trunkTint, leafTint) {
     [x + trunkW, trunkH, z + trunkW],
     trunkTint,
   );
-  // Open frond star (4 tris, no base) — apex fans like a palm crown without the 6-tri pyramid tax.
-  const reach = 0.48 * scale;
-  const baseY = trunkH * 0.70;
-  const apex = [x, trunkH * 1.18, z];
-  for (let index = 0; index < 4; index++) {
-    const a0 = index / 4 * Math.PI * 2 + 0.12;
-    const a1 = (index + 1) / 4 * Math.PI * 2 + 0.12;
+  // Fat crown mass (BF Vietnam reads volume first, frond detail second).
+  appendCanopy(
+    positions,
+    colors,
+    x,
+    z,
+    0.28 * scale,
+    0.26 * scale,
+    trunkH * 0.72,
+    trunkH * 1.08,
+    leafTint,
+    4,
+  );
+  // Three drooping frond blades — silhouette spikes without the 6-tri pyramid tax.
+  for (let index = 0; index < 3; index++) {
+    const angle = index / 3 * Math.PI * 2 + 0.35;
+    const reach = 0.42 * scale;
+    const tipX = x + Math.cos(angle) * reach;
+    const tipZ = z + Math.sin(angle) * reach;
+    const tipY = trunkH * 0.58;
+    const hingeY = trunkH * 0.92;
+    const side = 0.07 * scale;
     pushTriangle(
       positions,
       colors,
-      [x + Math.cos(a0) * reach, baseY, z + Math.sin(a0) * reach],
-      [x + Math.cos(a1) * reach, baseY, z + Math.sin(a1) * reach],
-      apex,
-      leafTint,
+      [x + Math.cos(angle + 0.4) * side, hingeY, z + Math.sin(angle + 0.4) * side],
+      [x + Math.cos(angle - 0.4) * side, hingeY, z + Math.sin(angle - 0.4) * side],
+      [tipX, tipY, tipZ],
+      leafTint.map((c) => c * 0.92),
     );
   }
 }
@@ -852,13 +881,11 @@ function geometryForRole(THREE, role) {
   const positions = [];
   const colors = [];
   if (role === "jungle") {
-    // ONE INSTANCE = three palms. Trunks + open crowns beat a soft green loaf; stays near the
-    // old 50-tri lobe budget so presentation ceilings still hold (no skirt — that 8-tri pad
-    // pushed mobile past 45k).
+    // ONE INSTANCE = two palms (trunk + crown mass + drooping fronds). Crown VOLUME beats
+    // diamond cones; stays near the old ~50-tri lobe budget so ceilings hold.
     const palms = [
       [0.00, 0.00, 1.00],
-      [-0.26, 0.14, 0.84],
-      [0.24, -0.12, 0.90],
+      [-0.22, 0.16, 0.88],
     ];
     for (const [x, z, scale] of palms) {
       appendPalm(
@@ -867,8 +894,8 @@ function geometryForRole(THREE, role) {
         x,
         z,
         scale,
-        [0.42, 0.28, 0.14],
-        [0.18, 0.50, 0.20],
+        [0.38, 0.24, 0.12],
+        [0.14, 0.46, 0.18],
       );
     }
   } else if (role === "plantation") {

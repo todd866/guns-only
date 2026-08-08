@@ -1,60 +1,60 @@
-import * as THREE from "../vendor/three.module.js?v=295";
+import * as THREE from "../vendor/three.module.js?v=296";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=295";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=295";
+} from "../render/cobra/cobra_canyon_plan.js?v=296";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=296";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=295";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=295";
-import { createHud } from "../hud.js?v=295";
+} from "../render/cobra/cobra_canyon_tour.js?v=296";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=296";
+import { createHud } from "../hud.js?v=296";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=295";
+} from "../render/cobra/cobra_hud_adapter.js?v=296";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=295";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=295";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=296";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=296";
 import {
   emberActObjectiveOverlay,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=295";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=295";
+} from "../render/cobra/cobra_ember_path.js?v=296";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=296";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=295";
+} from "../render/cobra/cobra_control_profile.js?v=296";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=295";
+} from "../render/cobra/cobra_pilot_input.js?v=296";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=295";
+} from "../render/cobra/ah1g_presence.js?v=296";
 import {
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
   togglePadlockSelection,
-} from "../render/cobra/cobra_camera_bias.js?v=295";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=295";
+} from "../render/cobra/cobra_camera_bias.js?v=296";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=296";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=295";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=295";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=295";
+} from "../render/cobra/cobra_mission_exit.js?v=296";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=296";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=296";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -228,7 +228,7 @@ const projectionScratch = new THREE.Vector3();
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=295";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=296";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -1073,9 +1073,11 @@ function animate(timeMs) {
   }
   // The camera mode is the ONLY input that decides whether the airframe exists: first
   // person renders zero cockpit geometry (Build 264 owner ruling), the tour camera looks
-  // AT the ship so the silhouette returns. Set unconditionally — the earlier per-branch
-  // version left the shell hidden whenever a terminal mission froze the tour branch.
-  if (ah1gPresence) ah1gPresence.setFirstPerson(!tourInput.checked && !parkedCamera);
+  // AT the ship so the silhouette returns. Parked scenery stills also hide the ship —
+  // otherwise the AH-1G hull eats the near-field frame the emptiness gate scores.
+  if (ah1gPresence) {
+    ah1gPresence.setFirstPerson(!tourInput.checked || !!parkedCamera);
+  }
   const renderStartedAtMs = performance.now();
   renderer.render(scene, camera);
   recordPhase("render", renderStartedAtMs);
@@ -1174,6 +1176,9 @@ window.__gunsOnlyCobraLabCamera = Object.freeze({
       qualitySelect.dispatchEvent(new Event("change"));
     }
     onboarding?.dismiss?.();
+    // Strip mission chrome so park stills score the gorge, not the objective card.
+    document.querySelector("#play-chrome")?.setAttribute("data-parked", "true");
+    document.querySelector("#objective-hud")?.setAttribute("hidden", "");
     parkedCamera = {
       eastM: Number(eastM),
       northM: Number(northM),
@@ -1186,6 +1191,8 @@ window.__gunsOnlyCobraLabCamera = Object.freeze({
   },
   release() {
     parkedCamera = null;
+    document.querySelector("#play-chrome")?.removeAttribute("data-parked");
+    document.querySelector("#objective-hud")?.removeAttribute("hidden");
   },
 });
 

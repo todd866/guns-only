@@ -61,8 +61,9 @@ test("builds one bounded authored batch per visual role across every tier", () =
     assert.equal(kit.roleCounts.authoredAmbientArchetypes, 11);
     assert.equal(kit.roleCounts.authoredLandmarkArchetypes, 11);
     assert.equal(kit.roleCounts.authoredSetPieceArchetypeReferences, 61);
-    assert.equal(kit.roleCounts.authoredSetPieceAssetReferences, 52);
-    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, 52);
+    // Jungle set-piece archetypes expand to 3 stands each (near-field canopy walls).
+    assert.equal(kit.roleCounts.authoredSetPieceAssetReferences, 92);
+    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, 92);
     assert.equal(
       kit.roleCounts.ambientBatchInstances
         + kit.roleCounts.renderedSetPieceAssetInstances
@@ -87,7 +88,7 @@ test("builds one bounded authored batch per visual role across every tier", () =
       assert.equal(kit.roleCounts[`${role}Instances`], mesh.count);
       assert.ok(mesh.userData.cobraCanyonInstances.every((entry) => entry.archetypeId));
     }
-    // Palm clumps: trunks + frond apexes. Pyramid tips sit high and fan ≥4 tris each.
+    // Palm clumps: trunks + crown mass + drooping frond tips.
     const jungleGeometry = meshes.get("jungle").geometry;
     const jungleVertices = jungleGeometry.getAttribute("position");
     const vertexUses = new Map();
@@ -99,13 +100,17 @@ test("builds one bounded authored batch per visual role across every tier", () =
       ].join(",");
       vertexUses.set(key, (vertexUses.get(key) ?? 0) + 1);
     }
-    const frondTips = [...vertexUses].filter(([key, uses]) =>
+    const crownApexes = [...vertexUses].filter(([key, uses]) =>
       uses >= 4 && Number(key.split(",")[1]) > 0.55);
-    assert.ok(frondTips.length >= 3,
-      `jungle palm clumps need radiating frond tips (${frondTips.length} tips)`);
+    const frondTips = [...vertexUses].filter(([key, uses]) =>
+      uses === 1 && Number(key.split(",")[1]) > 0.4 && Number(key.split(",")[1]) < 0.8);
+    assert.ok(crownApexes.length >= 2,
+      `jungle palms need crown masses (${crownApexes.length} apexes)`);
+    assert.ok(frondTips.length >= 4,
+      `jungle palms need drooping frond tips (${frondTips.length} tips)`);
     assert.ok(triangleCount(jungleGeometry) >= 40,
-      "palm clumps must stay solid enough to read as trunks + fronds");
-    assert.ok(triangleCount(jungleGeometry) <= 56,
+      "palm clumps must stay solid enough to read as trunks + crowns");
+    assert.ok(triangleCount(jungleGeometry) <= 52,
       "palm clumps must stay near the old canopy budget so presentation ceilings hold");
     assert.ok(triangleCount(meshes.get("plantation").geometry) >= 100,
       "plantation rows need trunks and crowns instead of marker pyramids");
@@ -141,7 +146,7 @@ test("honours hard instance caps even below the authored reveal reserve", () => 
   for (const maximum of [0, 1, 10, 24]) {
     const { kit } = create("desktop", maximum);
     assert.ok(kit.builtMetrics.instances <= maximum);
-    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, Math.min(maximum, 52));
+    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, Math.min(maximum, 92));
     assert.equal(kit.roleCounts.ambientBatchInstances, 0);
     assert.equal(kit.roleCounts.renderedWaterAccentInstances, 0);
     kit.dispose();
