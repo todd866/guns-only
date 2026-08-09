@@ -67,6 +67,10 @@ jobs:
         working-directory: world-worker
         run: npm ci --ignore-scripts --no-audit --no-fund
 
+      - name: Install locked Cobra scenery gate toolchain
+        working-directory: tools/cobra-scenery-gate
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
       - name: Run deterministic repository checks
         env:
           GUNS_SKIP_SMOKE: "1"
