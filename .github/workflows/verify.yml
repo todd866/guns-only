@@ -70,6 +70,7 @@ jobs:
       - name: Run deterministic repository checks
         env:
           GUNS_SKIP_SMOKE: "1"
+          GUNS_TEST_IN_PROCESS: "1"
         run: ./bin/check
 
   browser-smoke:
