@@ -89,3 +89,11 @@ tmp/
 
 # Advisory inter-agent file claims (bin/claim) -- local coordination, not history.
 .agent-claims/
+
+# Unity standalone generated output. The project, packages and imported source assets are tracked;
+# local editor caches, player artifacts and user-specific layouts are not.
+artifacts/
+unity/GunsOnly.Unity/Library/
+unity/GunsOnly.Unity/Logs/
+unity/GunsOnly.Unity/Temp/
+unity/GunsOnly.Unity/UserSettings/

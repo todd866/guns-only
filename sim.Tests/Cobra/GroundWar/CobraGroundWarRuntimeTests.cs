@@ -31,6 +31,19 @@ public class CobraGroundWarRuntimeTests
         new(CobraCanyonDefinition.Create(), new FlatTerrain(), seed);
 
     [Fact]
+    public void CampEmberDepartPadHasNoSeededHostiles()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        ContestedSite camp = war.Sites.First(site => site.Label == "Camp Ember");
+        Assert.DoesNotContain(
+            war.LivingUnits().Where(unit => unit.Faction == GroundFaction.Hostile),
+            unit => unit.HomeSiteId == camp.Id);
+        Assert.Contains(
+            war.LivingUnits().Where(unit => unit.Faction == GroundFaction.Friendly),
+            unit => unit.HomeSiteId == camp.Id);
+    }
+
+    [Fact]
     public void SeedsContestedSitesWithBothFactionsUnderTheLivingBudget()
     {
         CobraGroundWarRuntime war = CreateWar();

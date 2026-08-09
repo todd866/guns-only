@@ -8,8 +8,9 @@
  * the snapshot's own capability flags (has_*, opponent_alive, fuel_lb absent),
  * never by forking the HUD.
  *
- * Helicopter flight-path doctrine (2026-08-07): ladder is camera-conformal; waterline
- * stays body-forward; FPV/hover stub + cues are gated by heli_flight_path on the
+ * Helicopter flight-path doctrine (2026-08-07, owner-corrected 2026-08-08): ladder AND
+ * waterline are camera-conformal when ladderReference is camera; gun cross stays
+ * body-forward; FPV/hover stub + cues are gated by heli_flight_path on the
  * snapshot (see docs/superpowers/specs/2026-08-07-cobra-helicopter-hud-design.md).
  *
  * Deliberate omissions (each one is a decision, not a gap):
@@ -128,10 +129,9 @@ export function createCobraHudFrame(THREE) {
     aimPoint: null,
     directorPoint: null,
     flightPathPoint: null,
-    // Rear-seat camera: +0.08 rad sight bias + clamped gunner lean. Pitch ladder is
-    // camera-referenced so the 0 rung is conformal to the drawn horizon. Waterline
-    // stays body-forward (classical aircraft reference) — the gap to ladder 0 is
-    // attitude + bias. FPV is velocity-through-camera in cruise; hover uses a stub.
+    // Rear-seat camera: +0.08 rad sight bias + clamped gunner lean. Pitch ladder and
+    // waterline are camera-referenced so W agrees with the conformal 0 rung. Gun cross
+    // stays body-forward. FPV is velocity-through-camera in cruise; hover uses a stub.
     ladderReference: "camera",
     sensorYaw: 0,
     sensorPitch: 0,
@@ -152,7 +152,16 @@ export function createCobraHudFrame(THREE) {
 
   return {
     frame,
-    update({ camera, pose, state, dt, nowSeconds }) {
+    update({
+      camera,
+      pose,
+      state,
+      dt,
+      nowSeconds,
+      padlockActive = false,
+      padlockTargetId = "",
+      padlockTargetUnit = null,
+    }) {
       frame.camera = camera;
       frame.state = state;
       frame.dt = Number.isFinite(dt) ? dt : 0;
@@ -167,6 +176,19 @@ export function createCobraHudFrame(THREE) {
         frame.playerForward.set(0, 0, -1).applyQuaternion(quaternion);
         frame.playerUp.set(0, 1, 0).applyQuaternion(quaternion);
         frame.playerRight.set(1, 0, 0).applyQuaternion(quaternion);
+      }
+      // F-22-shaped padlock fields so hud.js padlock SA can light when V is held on a mark.
+      const padlocked = padlockActive === true && padlockTargetUnit != null;
+      frame.padlock = padlocked;
+      frame.padlockTarget = padlocked ? "bandit" : null;
+      frame.padlockTargetEntityId = padlocked ? String(padlockTargetId || "") : "";
+      frame.padlockPhase = padlocked ? "TRACK" : "OFF";
+      if (padlocked) {
+        const x = Number(padlockTargetUnit.x_m) || 0;
+        const y = (Number(padlockTargetUnit.y_m) || 0) + 1.2;
+        const z = -(Number(padlockTargetUnit.z_m) || 0);
+        frame.padlockTargetPosition.set(x, y, z);
+        frame.banditPosition.set(x, y, z);
       }
       return frame;
     },

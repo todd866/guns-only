@@ -164,7 +164,25 @@ test("hud frame carries body axes and render-space position from the pose", () =
   assert.equal(frame.sensorYaw, 0);
   assert.equal(frame.sensorPitch, 0);
 
+  const padlocked = frameKit.update({
+    camera,
+    pose: poseFixture,
+    state,
+    dt: 1 / 60,
+    nowSeconds: 12.6,
+    padlockActive: true,
+    padlockTargetId: "ground.hostile.infantryclump.001",
+    padlockTargetUnit: { x_m: 10, y_m: 101, z_m: -20 },
+  });
+  assert.equal(padlocked, frame);
+  assert.equal(frame.padlock, true);
+  assert.equal(frame.padlockTarget, "bandit");
+  assert.equal(frame.padlockTargetEntityId, "ground.hostile.infantryclump.001");
+  assert.equal(frame.padlockPhase, "TRACK");
+  assert.ok(frame.padlockTargetPosition.equals(new THREE.Vector3(10, 102.2, 20)));
+
   // Same object frame-to-frame: the render loop must not allocate.
-  const again = frameKit.update({ camera, pose: poseFixture, state, dt: 1 / 60, nowSeconds: 12.6 });
+  const again = frameKit.update({ camera, pose: poseFixture, state, dt: 1 / 60, nowSeconds: 12.7 });
   assert.equal(again, frame);
+  assert.equal(frame.padlock, false);
 });

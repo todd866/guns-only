@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  CORE_HELMET_HUD_LAYERS,
+  DIAGNOSTIC_HELMET_HUD_LAYERS,
+  HelmetHud,
   formatLapTime,
   minimapDotPlacement,
   trackDayStatusLine,
@@ -60,4 +63,38 @@ test("minimap dot clamps to the widget frame and flags off-map riders", () => {
   const farWest = minimapDotPlacement(bounds, frame, -9_000, 0);
   assert.equal(farWest.clamped, true);
   assert.equal(farWest.x, frame.x + frame.inset);
+});
+
+test("engineering instruments stay opt-in while the riding HUD remains complete", () => {
+  const calls = [];
+  const hud = new HelmetHud({ getContext: () => ({ clearRect() {} }) });
+  hud.width = 1_280;
+  hud.height = 800;
+
+  const methods = new Map([
+    ["drawHorizonReticle", "horizon"],
+    ["drawSpeedBlock", "speed"],
+    ["drawRpmGear", "rpm-gear"],
+    ["drawMinimap", "minimap"],
+    ["drawKneeCue", "knee-cue"],
+    ["drawStatusStrip", "status"],
+    ["drawLeanBlock", "lean-pitch"],
+    ["drawInputBars", "inputs"],
+    ["drawClutchMode", "clutch"],
+    ["drawPitchBalanceTape", "balance"],
+    ["drawContactPatchInstrument", "contact-patch"],
+  ]);
+  for (const [method, layer] of methods) hud[method] = () => calls.push(layer);
+
+  hud.draw({});
+  assert.deepEqual(calls, CORE_HELMET_HUD_LAYERS);
+  for (const layer of DIAGNOSTIC_HELMET_HUD_LAYERS) {
+    assert.ok(!calls.includes(layer), `${layer} leaked into the default riding HUD`);
+  }
+
+  calls.length = 0;
+  hud.setDiagnosticsEnabled(true);
+  hud.draw({});
+  for (const layer of CORE_HELMET_HUD_LAYERS) assert.ok(calls.includes(layer));
+  for (const layer of DIAGNOSTIC_HELMET_HUD_LAYERS) assert.ok(calls.includes(layer));
 });

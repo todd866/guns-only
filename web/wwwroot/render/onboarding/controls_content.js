@@ -28,6 +28,7 @@ export const COBRA_ONBOARDING_CONTENT = Object.freeze({
       label: "FIGHT",
       rows: Object.freeze([
         Object.freeze(["Tab", "Cycle hostile target"]),
+        Object.freeze(["V", "Padlock on / off the selected mark"]),
         Object.freeze(["hold F", "Gunner engages the cued target"]),
       ]),
     }),
@@ -75,6 +76,7 @@ export const WEEKEND_RIDE_ONBOARDING_CONTENT = Object.freeze({
       label: "SYSTEM",
       rows: Object.freeze([
         Object.freeze(["T", "Rider reflex assist / raw physics"]),
+        Object.freeze(["I", "Detailed ride diagnostics"]),
         Object.freeze(["R", "Reset to grid"]),
         Object.freeze(["Esc", "Pause"]),
       ]),

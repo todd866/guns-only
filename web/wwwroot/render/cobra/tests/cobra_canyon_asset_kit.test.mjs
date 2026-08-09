@@ -13,6 +13,10 @@ const world = JSON.parse(await readFile(new URL(
   "../../../content/packs/cobra-vietnam/environment/cobra-canyon.world.json",
   import.meta.url,
 ), "utf8"));
+const visualContract = JSON.parse(await readFile(new URL(
+  "../../../content/packs/cobra-vietnam/environment/cobra-canyon-visual-contract.v1.json",
+  import.meta.url,
+), "utf8"));
 
 const MAXIMUM_INSTANCES = Object.freeze({ mobile: 330, balanced: 580, desktop: 830 });
 
@@ -57,12 +61,13 @@ test("builds one bounded authored batch per visual role across every tier", () =
     assert.ok(kit.builtMetrics.instances <= MAXIMUM_INSTANCES[qualityTier]);
     assert.equal(kit.roleCounts.assetInstances, kit.builtMetrics.instances);
     assert.equal(kit.roleCounts.authoredAmbientBatches, plan.ambientBatches.length);
-    assert.equal(kit.roleCounts.authoredSetPieceCells, 9);
+    assert.equal(kit.roleCounts.authoredSetPieceCells, 10);
     assert.equal(kit.roleCounts.authoredAmbientArchetypes, 11);
     assert.equal(kit.roleCounts.authoredLandmarkArchetypes, 11);
-    assert.equal(kit.roleCounts.authoredSetPieceArchetypeReferences, 33);
-    assert.equal(kit.roleCounts.authoredSetPieceAssetReferences, 25);
-    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, 25);
+    assert.equal(kit.roleCounts.authoredSetPieceArchetypeReferences, 61);
+    // Jungle set-piece archetypes expand to 3 stands each (near-field canopy walls).
+    assert.equal(kit.roleCounts.authoredSetPieceAssetReferences, 92);
+    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, 92);
     assert.equal(
       kit.roleCounts.ambientBatchInstances
         + kit.roleCounts.renderedSetPieceAssetInstances
@@ -87,28 +92,20 @@ test("builds one bounded authored batch per visual role across every tier", () =
       assert.equal(kit.roleCounts[`${role}Instances`], mesh.count);
       assert.ok(mesh.userData.cobraCanyonInstances.every((entry) => entry.archetypeId));
     }
-    // A CANOPY IS COUNTED IN LOBES, NOT IN TRIANGLES. This used to assert a 72-triangle floor,
-    // which pinned the exact shape rather than the property that matters and blocked the cheaper
-    // five-sided interlocking stand that buys the extra instances density actually needs. Each
-    // lobe contributes one crown apex shared by exactly `sides` fan triangles, so counting
-    // apexes measures the silhouette directly.
-    const jungleGeometry = meshes.get("jungle").geometry;
-    const jungleVertices = jungleGeometry.getAttribute("position");
-    const vertexUses = new Map();
-    for (let index = 0; index < jungleVertices.count; index++) {
-      const key = [
-        jungleVertices.getX(index),
-        jungleVertices.getY(index),
-        jungleVertices.getZ(index),
-      ].join(",");
-      vertexUses.set(key, (vertexUses.get(key) ?? 0) + 1);
-    }
-    const crownApexes = [...vertexUses].filter(([key, uses]) =>
-      uses >= 5 && Number(key.split(",")[1]) > 0.4);
-    assert.ok(crownApexes.length >= 5,
-      `jungle stands need a multi-lobed canopy silhouette (${crownApexes.length} crowns)`);
-    assert.ok(triangleCount(jungleGeometry) >= 40,
-      "jungle stands must stay solid enough to read as mass");
+    // Near-field jungle is CC0 alpha cards (crossed quads + atlas), not Lambert lobes.
+    const jungleMesh = meshes.get("jungle");
+    const jungleGeometry = jungleMesh.geometry;
+    const jungleUv = jungleGeometry.getAttribute("uv");
+    assert.ok(jungleUv, "jungle cards need UVs for the foliage atlas");
+    assert.equal(jungleUv.count, jungleGeometry.getAttribute("position").count);
+    assert.ok(jungleMesh.material.map, "jungle material must sample the foliage atlas");
+    assert.ok(jungleMesh.material.alphaTest > 0.3,
+      "jungle cards must alpha-test cutouts (BF:V-style cards, not soft blend fog)");
+    assert.equal(jungleMesh.material.side, THREE.DoubleSide);
+    assert.ok(triangleCount(jungleGeometry) >= 10,
+      "jungle stand needs crossed palm cards plus understory");
+    assert.ok(triangleCount(jungleGeometry) <= 24,
+      "six layered textured cards must stay under half the old ~50-tri lobe budget");
     assert.ok(triangleCount(meshes.get("plantation").geometry) >= 100,
       "plantation rows need trunks and crowns instead of marker pyramids");
     assert.deepEqual(visibleMetrics(kit.group), kit.builtMetrics);
@@ -139,11 +136,58 @@ test("consumes descriptor scale and authored palette instead of generic legacy v
   kit.dispose();
 });
 
+test("final foliage-card bounds stay inside the renderer-neutral metre targets", () => {
+  const { kit } = create("balanced");
+  const jungle = roleMeshes(kit.group).get("jungle");
+  jungle.geometry.computeBoundingBox();
+  const unitSize = new THREE.Vector3();
+  jungle.geometry.boundingBox.getSize(unitSize);
+
+  const matrix = new THREE.Matrix4();
+  const position = new THREE.Vector3();
+  const quaternion = new THREE.Quaternion();
+  const scale = new THREE.Vector3();
+  const extentsByTarget = new Map();
+  for (const entry of jungle.userData.cobraCanyonInstances) {
+    jungle.getMatrixAt(entry.instanceId, matrix);
+    matrix.decompose(position, quaternion, scale);
+    const placementKind = entry.setPieceId ? "setPiece" : "ambient";
+    const stratum = entry.archetypeId.includes("understory") ? "Understory" : "Canopy";
+    const targetId = `${placementKind}${stratum}`;
+    const extents = extentsByTarget.get(targetId) ?? [];
+    extents.push({
+      width: scale.x * unitSize.x,
+      height: scale.y * unitSize.y,
+      depth: scale.z * unitSize.z,
+    });
+    extentsByTarget.set(targetId, extents);
+  }
+
+  const targets = visualContract.foliageAtlas.visualExtentTargetsM;
+  for (const targetId of [
+    "ambientCanopy",
+    "setPieceCanopy",
+    "ambientUnderstory",
+    "setPieceUnderstory",
+  ]) {
+    const extents = extentsByTarget.get(targetId) ?? [];
+    assert.ok(extents.length > 0, `${targetId} needs at least one balanced-tier instance`);
+    for (const extent of extents) {
+      for (const axis of ["width", "height", "depth"]) {
+        const [minimum, maximum] = targets[targetId][axis];
+        assert.ok(extent[axis] >= minimum && extent[axis] <= maximum,
+          `${targetId} ${axis} ${extent[axis].toFixed(3)} m outside ${minimum}–${maximum} m`);
+      }
+    }
+  }
+  kit.dispose();
+});
+
 test("honours hard instance caps even below the authored reveal reserve", () => {
   for (const maximum of [0, 1, 10, 24]) {
     const { kit } = create("desktop", maximum);
     assert.ok(kit.builtMetrics.instances <= maximum);
-    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, Math.min(maximum, 25));
+    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, Math.min(maximum, 92));
     assert.equal(kit.roleCounts.ambientBatchInstances, 0);
     assert.equal(kit.roleCounts.renderedWaterAccentInstances, 0);
     kit.dispose();

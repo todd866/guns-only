@@ -1,4 +1,5 @@
 import * as THREE from "../../vendor/three.module.js";
+import { mergeGeometries } from "../../vendor/three/addons/utils/BufferGeometryUtils.js";
 import {
   TERRAIN_CURVATURE_START_M,
   TERRAIN_EARTH_RADIUS_M,
@@ -8,7 +9,7 @@ import {
   UKRAINE_SOFT_WORLD_HAZE_MIX,
   UKRAINE_SOFT_WORLD_HAZE_RGB,
 } from "../environment/soft_world_atmosphere.js";
-import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=274";
+import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=299";
 import {
   addSemanticSocket,
   annotateProceduralFallback,
@@ -17,8 +18,8 @@ import {
   createLoftGeometry,
   createPlanformGeometry,
   makeMaterial,
-} from "./airframe_primitives.js?v=274";
-import rapierV2Definition from "../../airframes/rapier_v2.embedded.js?v=274";
+} from "./airframe_primitives.js?v=299";
+import rapierV2Definition from "../../airframes/rapier_v2.embedded.js?v=299";
 import { createRapierLaunchFx } from "../effects/rapier_launch_fx.js";
 
 export {
@@ -95,6 +96,39 @@ export function box(group, size, position, material, rotation = null) {
   if (rotation) mesh.rotation.set(rotation.x, rotation.y, rotation.z);
   group.add(mesh);
   return mesh;
+}
+
+function mergeStaticBoxes(group, placements, material, options = {}) {
+  if (!Array.isArray(placements) || placements.length === 0) return null;
+  const transform = new THREE.Object3D();
+  const geometries = placements.map((placement) => {
+    const geometry = new THREE.BoxGeometry(
+      placement.size.x,
+      placement.size.y,
+      placement.size.z,
+    );
+    transform.position.copy(placement.position);
+    transform.rotation.set(
+      placement.rotation?.x ?? 0,
+      placement.rotation?.y ?? 0,
+      placement.rotation?.z ?? 0,
+    );
+    transform.updateMatrix();
+    geometry.applyMatrix4(transform.matrix);
+    return geometry;
+  });
+  const geometry = mergeGeometries(geometries, false);
+  for (const part of geometries) part.dispose();
+  if (!geometry) throw new Error("Failed to merge static Rapier strip boxes.");
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+
+  const batch = new THREE.Mesh(geometry, material);
+  batch.name = options.name ?? "STATIC_BOX_BATCH";
+  batch.userData.staticBoxCount = placements.length;
+  if (options.noShadow === true) batch.userData.noShadow = true;
+  group.add(batch);
+  return batch;
 }
 
 export function deckOverlayBox(group, size, position, material) {
@@ -906,12 +940,24 @@ export function createRapierDispersedStrip(context = {}) {
   const paint = depthBiasDeckMaterial(makeMaterial(0xd7c88e, 0.66, 0.03));
   const lamp = new THREE.MeshBasicMaterial({ color: 0xf0d38d, toneMapped: false });
 
-  box(group, { x: 72, y: 0.28, z: 1_200 }, new THREE.Vector3(0, -0.36, 0), shoulder);
-  box(group, { x: 48, y: 0.50, z: 1_200 }, new THREE.Vector3(0, -0.25, 0), concrete);
+  box(group, { x: 72, y: 0.28, z: 1_200 }, new THREE.Vector3(0, -0.36, 0), shoulder)
+    .userData.noShadow = true;
+  box(group, { x: 48, y: 0.50, z: 1_200 }, new THREE.Vector3(0, -0.25, 0), concrete)
+    .userData.noShadow = true;
   // Recovery centreline and threshold bars. The touchdown datum is 240 m behind local origin.
-  box(group, { x: 0.34, y: 0.035, z: 520 }, new THREE.Vector3(0, 0.04, 210), paint);
+  deckOverlayBox(
+    group,
+    { x: 0.34, y: 0.035, z: 520 },
+    new THREE.Vector3(0, 0.04, 210),
+    paint,
+  );
   for (const z of [112, 120, 128]) {
-    box(group, { x: 33, y: 0.045, z: 0.55 }, new THREE.Vector3(0, 0.05, z), paint);
+    deckOverlayBox(
+      group,
+      { x: 33, y: 0.045, z: 0.55 },
+      new THREE.Vector3(0, 0.05, z),
+      paint,
+    );
   }
   const recoveryWires = [];
   for (let wire = 1; wire <= 4; wire++) {
@@ -925,6 +971,7 @@ export function createRapierDispersedStrip(context = {}) {
       wireMaterial,
     );
     recoveryWire.name = `ARRESTING_WIRE_${wire}`;
+    recoveryWire.userData.noShadow = true;
     recoveryWires.push(recoveryWire);
   }
 
@@ -955,10 +1002,12 @@ export function createRapierDispersedStrip(context = {}) {
 
   // Flat section, then the arc as short chords so the rail reads as a curve rather than a kink.
   box(group, { x: 0.28, y: 0.10, z: flatLengthM },
-    new THREE.Vector3(catapultX, 0.10, railStartZ - flatLengthM / 2), rail);
+    new THREE.Vector3(catapultX, 0.10, railStartZ - flatLengthM / 2), rail)
+    .userData.noShadow = true;
   for (const side of [-1, 1]) {
     box(group, { x: 0.12, y: 0.12, z: flatLengthM },
-      new THREE.Vector3(catapultX + side * 0.42, 0.105, railStartZ - flatLengthM / 2), rail);
+      new THREE.Vector3(catapultX + side * 0.42, 0.105, railStartZ - flatLengthM / 2), rail)
+      .userData.noShadow = true;
   }
   const ARC_SEGMENTS = 12;
   const arcChordLength = 2 * arcRadiusM
@@ -1055,7 +1104,8 @@ export function createRapierDispersedStrip(context = {}) {
 
   // Floor slab — generous bore (14×8 m class) so the jet is not a pneumatic piston.
   box(gallery, { x: galleryHalfWidth * 2 + 1.2, y: 0.45, z: flatLengthM },
-    new THREE.Vector3(catapultX, 0.12, galleryMidZ), dampConcrete);
+    new THREE.Vector3(catapultX, 0.12, galleryMidZ), dampConcrete)
+    .userData.noShadow = true;
 
   for (const side of [-1, 1]) {
     // Springing walls under the vault.
@@ -1120,19 +1170,36 @@ export function createRapierDispersedStrip(context = {}) {
   ribLamps.userData.noShadow = true;
   gallery.add(ribs, ribLamps);
 
-  // Vent ducts — air relief for the displaced column (not decoration).
+  // Vent ducts — air relief for the displaced column (not decoration). They are static,
+  // same-material boxes and never cast useful shadows, so submit the complete vent run as two
+  // batches instead of forty individual meshes.
+  const ventLipBoxes = [];
+  const ventVoidBoxes = [];
   for (let z = railStartZ - 40; z > galleryEndZ; z -= 40) {
     for (const side of [-1, 1]) {
-      const lip = box(gallery, { x: 2.4, y: 1.5, z: 3.4 },
-        new THREE.Vector3(catapultX + side * (galleryHalfWidth + 1.1), galleryHeight - 1.5, z),
-        portalConcrete);
-      lip.name = "LAUNCH_GALLERY_VENT";
-      lip.userData.noShadow = true;
-      box(gallery, { x: 1.6, y: 1.1, z: 2.6 },
-        new THREE.Vector3(catapultX + side * (galleryHalfWidth + 0.55), galleryHeight - 1.5, z),
-        rail).userData.noShadow = true;
+      ventLipBoxes.push({
+        size: { x: 2.4, y: 1.5, z: 3.4 },
+        position: new THREE.Vector3(
+          catapultX + side * (galleryHalfWidth + 1.1), galleryHeight - 1.5, z),
+      });
+      ventVoidBoxes.push({
+        size: { x: 1.6, y: 1.1, z: 2.6 },
+        position: new THREE.Vector3(
+          catapultX + side * (galleryHalfWidth + 0.55), galleryHeight - 1.5, z),
+      });
     }
   }
+  const vents = new THREE.Group();
+  vents.name = "LAUNCH_GALLERY_VENTS";
+  mergeStaticBoxes(vents, ventLipBoxes, portalConcrete, {
+    name: "LAUNCH_GALLERY_VENT_LIPS",
+    noShadow: true,
+  });
+  mergeStaticBoxes(vents, ventVoidBoxes, rail, {
+    name: "LAUNCH_GALLERY_VENT_VOIDS",
+    noShadow: true,
+  });
+  gallery.add(vents);
 
   // Portal headwall — concrete wound in the berm where cover ends and the jump begins.
   const portal = new THREE.Group();
@@ -1186,22 +1253,29 @@ export function createRapierDispersedStrip(context = {}) {
   const weatheredPad = makeMaterial(0x4a4e4a, 0.9, 0.02, 0x010101,
     { grain: 0.14, grainScale: 0.55 });
 
+  const revetmentEarthBoxes = [];
+  const revetmentCapBoxes = [];
   const addBlastRevetment = (cx, cz, openTowardStrip) => {
-    const pocket = new THREE.Group();
-    pocket.name = "STRIP_REVETMENT";
     const open = openTowardStrip ? Math.sign(cx) || 1 : -Math.sign(cx) || -1;
     // Back wall away from strip; short wings form a shallow U facing the shoulder.
-    box(pocket, { x: 14, y: 3.2, z: 2.4 },
-      new THREE.Vector3(cx + open * 8, 1.5, cz), spoilEarth);
-    box(pocket, { x: 14, y: 0.35, z: 2.6 },
-      new THREE.Vector3(cx + open * 8, 3.25, cz), revetmentConcrete);
+    revetmentEarthBoxes.push({
+      size: { x: 14, y: 3.2, z: 2.4 },
+      position: new THREE.Vector3(cx + open * 8, 1.5, cz),
+    });
+    revetmentCapBoxes.push({
+      size: { x: 14, y: 0.35, z: 2.6 },
+      position: new THREE.Vector3(cx + open * 8, 3.25, cz),
+    });
     for (const wingZ of [-1, 1]) {
-      box(pocket, { x: 2.2, y: 2.8, z: 11 },
-        new THREE.Vector3(cx + open * 2.5, 1.3, cz + wingZ * 7), spoilEarth);
-      box(pocket, { x: 2.4, y: 0.3, z: 11 },
-        new THREE.Vector3(cx + open * 2.5, 2.85, cz + wingZ * 7), revetmentConcrete);
+      revetmentEarthBoxes.push({
+        size: { x: 2.2, y: 2.8, z: 11 },
+        position: new THREE.Vector3(cx + open * 2.5, 1.3, cz + wingZ * 7),
+      });
+      revetmentCapBoxes.push({
+        size: { x: 2.4, y: 0.3, z: 11 },
+        position: new THREE.Vector3(cx + open * 2.5, 2.85, cz + wingZ * 7),
+      });
     }
-    vicinity.add(pocket);
   };
   for (const [cx, cz] of [
     [48, 340], [-50, 310], [52, 210], [-46, 180],
@@ -1209,6 +1283,16 @@ export function createRapierDispersedStrip(context = {}) {
   ]) {
     addBlastRevetment(cx, cz, true);
   }
+  const revetments = new THREE.Group();
+  revetments.name = "STRIP_REVETMENT";
+  mergeStaticBoxes(revetments, revetmentEarthBoxes, spoilEarth, {
+    name: "STRIP_REVETMENT_EARTH_BATCH",
+  });
+  mergeStaticBoxes(revetments, revetmentCapBoxes, revetmentConcrete, {
+    name: "STRIP_REVETMENT_CAP_BATCH",
+    noShadow: true,
+  });
+  vicinity.add(revetments);
 
   // Cut-and-cover spoil dumps — irregular stacked mounds near gallery and shoulders.
   const spoilSites = [
@@ -1216,59 +1300,103 @@ export function createRapierDispersedStrip(context = {}) {
     [catapultX + 28, galleryEndZ + 18], [38, -380], [-42, -400],
     [44, 280], [-40, 260], [36, 100],
   ];
+  const spoilPileBoxes = [];
+  const bermPileBoxes = [];
   for (const [sx, sz] of spoilSites) {
-    const dump = new THREE.Group();
-    dump.name = "STRIP_SPOIL_PILE";
-    box(dump, { x: 9, y: 2.4, z: 11 }, new THREE.Vector3(sx, 1.0, sz), spoilEarth,
-      { x: 0.08, y: 0.35, z: -0.06 });
-    box(dump, { x: 6.5, y: 1.8, z: 7 }, new THREE.Vector3(sx + 2.2, 2.0, sz - 1.5), bermEarth,
-      { x: -0.12, y: -0.4, z: 0.1 });
-    box(dump, { x: 4, y: 1.2, z: 5 }, new THREE.Vector3(sx - 1.8, 2.4, sz + 1.2), spoilEarth,
-      { x: 0.15, y: 0.55, z: 0.05 });
-    vicinity.add(dump);
+    spoilPileBoxes.push(
+      {
+        size: { x: 9, y: 2.4, z: 11 },
+        position: new THREE.Vector3(sx, 1.0, sz),
+        rotation: { x: 0.08, y: 0.35, z: -0.06 },
+      },
+      {
+        size: { x: 4, y: 1.2, z: 5 },
+        position: new THREE.Vector3(sx - 1.8, 2.4, sz + 1.2),
+        rotation: { x: 0.15, y: 0.55, z: 0.05 },
+      },
+    );
+    bermPileBoxes.push({
+      size: { x: 6.5, y: 1.8, z: 7 },
+      position: new THREE.Vector3(sx + 2.2, 2.0, sz - 1.5),
+      rotation: { x: -0.12, y: -0.4, z: 0.1 },
+    });
   }
+  const spoilPiles = new THREE.Group();
+  spoilPiles.name = "STRIP_SPOIL_PILE";
+  mergeStaticBoxes(spoilPiles, spoilPileBoxes, spoilEarth, {
+    name: "STRIP_SPOIL_EARTH_BATCH",
+  });
+  mergeStaticBoxes(spoilPiles, bermPileBoxes, bermEarth, {
+    name: "STRIP_SPOIL_BERM_BATCH",
+  });
+  vicinity.add(spoilPiles);
 
   // Gravel access track: berm → strip shoulder (service path, not a taxiway system).
   const track = new THREE.Group();
   track.name = "STRIP_ACCESS_TRACK";
   const trackZ = galleryMidZ + 28;
+  const trackBoxes = [];
   for (let i = 0; i < 7; i++) {
     const t = i / 6;
     const x = catapultX + 16 + t * 28;
     const z = trackZ + Math.sin(t * Math.PI) * 6;
-    box(track, { x: 5.2, y: 0.09, z: 9.5 },
-      new THREE.Vector3(x, 0.02, z), gravel,
-      { x: 0, y: (0.18 - t * 0.05), z: 0 });
+    trackBoxes.push({
+      size: { x: 5.2, y: 0.09, z: 9.5 },
+      position: new THREE.Vector3(x, 0.02, z),
+      rotation: { x: 0, y: (0.18 - t * 0.05), z: 0 },
+    });
   }
   // Short spur toward recovery threshold shoulder.
   for (let i = 0; i < 4; i++) {
-    box(track, { x: 4.4, y: 0.08, z: 14 },
-      new THREE.Vector3(38, 0.02, 120 + i * 22), gravel);
+    trackBoxes.push({
+      size: { x: 4.4, y: 0.08, z: 14 },
+      position: new THREE.Vector3(38, 0.02, 120 + i * 22),
+    });
   }
+  mergeStaticBoxes(track, trackBoxes, gravel, {
+    name: "STRIP_ACCESS_TRACK_BATCH",
+    noShadow: true,
+  });
   vicinity.add(track);
 
   // Soft berm landscape outside the hard shoulder — ties gallery mound into the steppe.
+  const softBermBoxes = [];
   for (const side of [-1, 1]) {
     for (const [z, length, height] of [
       [300, 90, 2.2], [120, 70, 1.8], [-80, 100, 2.0], [-320, 80, 1.6],
     ]) {
-      box(vicinity, { x: 8, y: height, z: length },
-        new THREE.Vector3(side * 40, height * 0.42, z), bermEarth)
-        .name = "STRIP_SOFT_BERM";
+      softBermBoxes.push({
+        size: { x: 8, y: height, z: length },
+        position: new THREE.Vector3(side * 40, height * 0.42, z),
+      });
     }
   }
+  mergeStaticBoxes(vicinity, softBermBoxes, bermEarth, {
+    name: "STRIP_SOFT_BERM",
+  });
 
   // Weathered equipment pads (muted concrete — replaces former orange value blocks).
+  const equipmentPadBoxes = [];
+  const equipmentCabinetBoxes = [];
   for (const [px, pz, sx, sz] of [
     [34, 365, 8, 18], [-36, 350, 7, 14], [30, -420, 6, 12], [-32, -430, 5, 10],
   ]) {
-    box(vicinity, { x: sx, y: 0.22, z: sz },
-      new THREE.Vector3(px, 0.08, pz), weatheredPad)
-      .name = "STRIP_EQUIPMENT_PAD";
-    box(vicinity, { x: sx * 0.35, y: 1.4, z: sz * 0.22 },
-      new THREE.Vector3(px - sx * 0.2, 0.75, pz), revetmentConcrete)
-      .name = "STRIP_EQUIPMENT_CABINET";
+    equipmentPadBoxes.push({
+      size: { x: sx, y: 0.22, z: sz },
+      position: new THREE.Vector3(px, 0.08, pz),
+    });
+    equipmentCabinetBoxes.push({
+      size: { x: sx * 0.35, y: 1.4, z: sz * 0.22 },
+      position: new THREE.Vector3(px - sx * 0.2, 0.75, pz),
+    });
   }
+  mergeStaticBoxes(vicinity, equipmentPadBoxes, weatheredPad, {
+    name: "STRIP_EQUIPMENT_PAD",
+    noShadow: true,
+  });
+  mergeStaticBoxes(vicinity, equipmentCabinetBoxes, revetmentConcrete, {
+    name: "STRIP_EQUIPMENT_CABINET",
+  });
   group.add(vicinity);
 
   const edgeLampPositions = [];
@@ -2408,6 +2536,9 @@ export function createDecisionSupportSky() {
     uAltitude: { value: 0 },
     // 0 = cool decision-support blue (Korea / default). 1 = ADR-0003 warm Ukraine soft-world.
     uSoftWorld: { value: 0 },
+    // F-22 first-merge uses the same sourced terrain but needs more value separation than the
+    // humid period-Korea sky. This remains zero for Cobra and every historical/default route.
+    uModernCombat: { value: 0 },
     uSunDirection: { value: new THREE.Vector3(0.32, 0.78, -0.53).normalize() },
     // Below-horizon wash colour. These three are REPLACED BY REFERENCE with the terrain
     // material's own atmosphere uniforms (attachSoftWorldGroundHaze) so the sky beyond the
@@ -2437,6 +2568,7 @@ export function createDecisionSupportSky() {
       precision highp float;
       uniform float uAltitude;
       uniform float uSoftWorld;
+      uniform float uModernCombat;
       uniform vec3 uSunDirection;
       uniform vec3 uFogColor;
       uniform vec3 uAtmosphereHazeColor;
@@ -2447,8 +2579,19 @@ export function createDecisionSupportSky() {
         vec3 direction = normalize(vDirection);
         float aboveHorizon = max(direction.y, 0.0);
         float altitudeMix = smoothstep(2500.0, 18000.0, max(uAltitude, 0.0));
-        vec3 horizonCool = mix(vec3(0.34, 0.47, 0.52), vec3(0.18, 0.33, 0.50), altitudeMix);
-        vec3 zenithCool = mix(vec3(0.035, 0.16, 0.34), vec3(0.006, 0.025, 0.105), altitudeMix);
+        vec3 horizonCoolDefault = mix(
+          vec3(0.34, 0.47, 0.52), vec3(0.18, 0.33, 0.50), altitudeMix);
+        vec3 zenithCoolDefault = mix(
+          vec3(0.035, 0.16, 0.34), vec3(0.006, 0.025, 0.105), altitudeMix);
+        // ACES lifted the default humid horizon into the same pale range as the mint HUD during
+        // first merge. Author the modern-combat variant lower in linear space so ridges, air and
+        // symbology occupy distinct value bands without changing meteorological visibility.
+        vec3 horizonCoolCombat = mix(
+          vec3(0.18, 0.28, 0.34), vec3(0.10, 0.22, 0.36), altitudeMix);
+        vec3 zenithCoolCombat = mix(
+          vec3(0.018, 0.095, 0.25), vec3(0.004, 0.018, 0.075), altitudeMix);
+        vec3 horizonCool = mix(horizonCoolDefault, horizonCoolCombat, uModernCombat);
+        vec3 zenithCool = mix(zenithCoolDefault, zenithCoolCombat, uModernCombat);
         // Warm dusty horizon into a true cerulean zenith — Ghibli-adjacent soft world (ADR-0003).
         // The old zenith (0.32, 0.44, 0.56) survived ACES + sRGB as pale grey (188, 206, 217): a
         // washed-out overcast dome with no blue in it at any altitude. ACES compresses everything
@@ -2457,6 +2600,16 @@ export function createDecisionSupportSky() {
         // (90, 140, 205) at low level and (45, 85, 155) at Rapier altitude.
         vec3 horizonWarm = mix(vec3(0.94, 0.86, 0.70), vec3(0.76, 0.72, 0.60), altitudeMix);
         vec3 zenithWarm = mix(vec3(0.080, 0.170, 0.460), vec3(0.033, 0.072, 0.199), altitudeMix);
+        // First Merge shares the Ukraine theatre with Rapier, but the fast-jet view begins at
+        // 10,000 ft with a pale green HUD over a broad horizon. Keep the same weather/visibility
+        // authority while lowering only that route's authored sky radiance so terrain, cloud and
+        // symbology occupy separate value bands. Rapier retains the warmer soft-world palette.
+        vec3 horizonWarmCombat = mix(
+          vec3(0.12, 0.18, 0.20), vec3(0.055, 0.12, 0.21), altitudeMix);
+        vec3 zenithWarmCombat = mix(
+          vec3(0.026, 0.088, 0.30), vec3(0.014, 0.045, 0.15), altitudeMix);
+        horizonWarm = mix(horizonWarm, horizonWarmCombat, uModernCombat);
+        zenithWarm = mix(zenithWarm, zenithWarmCombat, uModernCombat);
         vec3 horizon = mix(horizonCool, horizonWarm, uSoftWorld);
         vec3 zenith = mix(zenithCool, zenithWarm, uSoftWorld);
         // Soft world confines the warm band close to the horizon. At the cool 0.42 exponent a ray
@@ -2484,7 +2637,9 @@ export function createDecisionSupportSky() {
           float sunHalo = pow(sunDot, 8.0);
           float above = smoothstep(-0.02, 0.08, direction.y);
           vec3 sunColor = mix(vec3(1.0, 0.82, 0.55), vec3(1.0, 0.94, 0.82), sunCore);
+          float sunPresentation = mix(1.0, 0.62, uModernCombat);
           color += sunColor * (sunCore * 1.35 + sunBloom * 0.55 + sunHalo * 0.12) * above
+            * sunPresentation
             * (1.0 - altitudeMix * 0.35);
         }
 
@@ -2494,6 +2649,7 @@ export function createDecisionSupportSky() {
           // and it must be the SAME colour the terrain shader buries to, or the disc edge prints
           // as a two-tone staircase from altitude. Shared by reference with the terrain material.
           vec3 belowWarm = mix(uFogColor, uAtmosphereHazeColor, uAtmosphereHazeMix);
+          belowWarm = mix(belowWarm, vec3(0.055, 0.105, 0.17), uModernCombat * 0.78);
           // Soft world converges faster: the 64 km disc edge is ~7 deg down at 7.8 km and ~19 deg
           // at 21.9 km, so the horizon tint must be spent well before it, or the sky above the
           // silhouette stays a different tan from the ground below it.

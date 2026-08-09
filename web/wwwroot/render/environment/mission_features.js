@@ -6,6 +6,14 @@ import {
   UKRAINE_SOFT_WORLD_HAZE_MIX,
   UKRAINE_SOFT_WORLD_HAZE_RGB,
 } from "./soft_world_atmosphere.js";
+import {
+  addSoftWorldCanopyWind,
+  acquireUkraineFoliageAtlas,
+  isUkraineFoliageAtlasReady,
+  UKRAINE_TEMPERATE_FOLIAGE_ALPHA_CUTOFF,
+  UKRAINE_TEMPERATE_FOLIAGE_REGIONS,
+  validateUkraineFoliageAtlas,
+} from "./korea_scenery.js";
 
 export const MISSION_FEATURE_RENDER_BUDGETS = Object.freeze({
   mobile: Object.freeze({
@@ -386,7 +394,37 @@ function createGableGeometry(THREE) {
   return geometry;
 }
 
-function createBatchGeometry(THREE, batchId) {
+function createUkraineShelterbeltCardGeometry(THREE) {
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+  const [uMin, vMin, uMax, vMax] = UKRAINE_TEMPERATE_FOLIAGE_REGIONS.poplarWindbreak;
+  const append = (yaw) => {
+    const base = positions.length / 3;
+    const tangentX = Math.cos(yaw) * 0.5;
+    const tangentZ = Math.sin(yaw) * 0.5;
+    positions.push(
+      -tangentX, -0.5, -tangentZ,
+      tangentX, -0.5, tangentZ,
+      -tangentX, 0.5, -tangentZ,
+      tangentX, 0.5, tangentZ,
+    );
+    uvs.push(uMin, vMax, uMax, vMax, uMin, vMin, uMax, vMin);
+    indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+  };
+  append(0);
+  append(Math.PI * 0.5);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+function createBatchGeometry(THREE, batchId, usesUkraineFoliage = false) {
   switch (batchId) {
     case "structures":
     case "segments":
@@ -396,7 +434,9 @@ function createBatchGeometry(THREE, batchId) {
     case "columns":
       return new THREE.CylinderGeometry(0.5, 0.5, 1, 8, 1, false);
     case "canopies":
-      return new THREE.SphereGeometry(0.5, 8, 5);
+      return usesUkraineFoliage
+        ? createUkraineShelterbeltCardGeometry(THREE)
+        : new THREE.SphereGeometry(0.5, 8, 5);
     case "markings":
       // One short arc instanced around the candidate circumference. A broken meadow ring reads as
       // an authored visual cue, not as a renderer-certified helipad, and costs the same draw call.
@@ -781,7 +821,9 @@ function appendBrokenMarking(THREE, placements, feature, qualityTier, position, 
   }
 }
 
-function appendShelterbeltPlacements(THREE, placements, feature, qualityTier, color) {
+function appendShelterbeltPlacements(
+  THREE, placements, feature, qualityTier, color, usesUkraineFoliage,
+) {
   const origin = positionFor(feature);
   const yaw = yawFor(feature);
   const dimensions = dimensionsFor(feature);
@@ -826,6 +868,24 @@ function appendShelterbeltPlacements(THREE, placements, feature, qualityTier, co
         0,
         forwardM,
       );
+    if (usesUkraineFoliage) {
+      const cardQuaternion = new THREE.Quaternion().setFromAxisAngle(
+        new THREE.Vector3(0, 1, 0),
+        yaw + Math.sin(stand * 1.73) * 0.18,
+      );
+      placements.canopies.push(placementRecord(
+        THREE,
+        feature,
+        "canopies",
+        [trunkBase[0], trunkBase[1] + standHeightM * 0.5, trunkBase[2]],
+        cardQuaternion,
+        [crownWidthM * 1.24, standHeightM, crownDepthM * 1.12],
+        new THREE.Color(0xffffff).lerp(color, 0.12),
+        "shelterbelt_atlas_windbreak",
+      ));
+      continue;
+    }
+
     placements.columns.push(placementRecord(
       THREE,
       feature,
@@ -884,7 +944,9 @@ function appendShelterbeltPlacements(THREE, placements, feature, qualityTier, co
   }
 }
 
-function appendFeaturePlacements(THREE, placements, feature, qualityTier) {
+function appendFeaturePlacements(
+  THREE, placements, feature, qualityTier, usesUkraineFoliage = false,
+) {
   const primitive = normalizedToken(feature.presentation?.primitive ?? feature.primitive);
   const kind = normalizedToken(feature.kind);
   const batchId = batchIdFor(feature);
@@ -952,6 +1014,7 @@ function appendFeaturePlacements(THREE, placements, feature, qualityTier) {
       feature,
       qualityTier,
       primaryColor,
+      usesUkraineFoliage,
     );
     return;
   }
@@ -1141,16 +1204,32 @@ function createSemanticNode(THREE, candidate, status = null) {
   return node;
 }
 
-function staticMaterial(THREE, batchId, atmosphereUniforms) {
+function staticMaterial(
+  THREE,
+  batchId,
+  atmosphereUniforms,
+  ukraineFoliageAtlas = null,
+  foliageWindUniforms = null,
+) {
+  const usesFoliageAtlas = batchId === "canopies" && ukraineFoliageAtlas !== null;
   const material = new THREE.MeshLambertMaterial({
     color: 0xffffff,
-    flatShading: batchId !== "markings",
-    side: batchId === "markings" ? THREE.DoubleSide : THREE.FrontSide,
+    flatShading: batchId !== "markings" && !usesFoliageAtlas,
+    side: batchId === "markings" || usesFoliageAtlas
+      ? THREE.DoubleSide
+      : THREE.FrontSide,
     transparent: batchId === "markings",
     opacity: batchId === "markings" ? 0.94 : 1,
     depthWrite: batchId !== "markings",
+    map: usesFoliageAtlas ? ukraineFoliageAtlas : null,
+    alphaTest: usesFoliageAtlas ? UKRAINE_TEMPERATE_FOLIAGE_ALPHA_CUTOFF : 0,
+    emissive: usesFoliageAtlas ? 0x3a6a38 : 0x000000,
+    emissiveIntensity: usesFoliageAtlas ? 0.16 : 1,
   });
   material.name = `MISSION_FEATURE_${batchId.toUpperCase()}_MATERIAL`;
+  if (usesFoliageAtlas && foliageWindUniforms) {
+    addSoftWorldCanopyWind(material, foliageWindUniforms);
+  }
   addUkraineSoftWorldFog(material, atmosphereUniforms);
   return material;
 }
@@ -1171,6 +1250,9 @@ export function createMissionFeaturePresentation(THREE, pack, options = {}) {
 
   const featurePackId = requireString(pack.featurePackId, "featurePackId");
   const packVersion = requireString(pack.packVersion, "packVersion");
+  const theatreId = pack.theatre?.theatreId ?? pack.theatre?.id ?? null;
+  const usesUkraineFoliage = typeof theatreId === "string"
+    && theatreId.startsWith("theatre.ukraine.");
   const qualityTier = options.qualityTier ?? "balanced";
   const budget = resolvedRenderBudget(pack, qualityTier);
   const semanticCaps = resolvedSemanticCaps(pack);
@@ -1185,6 +1267,15 @@ export function createMissionFeaturePresentation(THREE, pack, options = {}) {
       );
     }
     if (isLandingZoneFeature(feature)) assertUnassessedLandingZone(feature);
+    if (usesUkraineFoliage
+        && batchIdFor(feature) === "canopies"
+        && normalizedToken(feature.presentation?.primitive ?? feature.primitive)
+          !== "shelterbelt_canopy") {
+      throw new TypeError(
+        `Feature ${feature.id} must declare shelterbelt_canopy before entering the shared `
+          + "Ukraine foliage-card batch.",
+      );
+    }
   }
 
   const semanticFeatureCount = features.length + landingZones.length;
@@ -1209,6 +1300,7 @@ export function createMissionFeaturePresentation(THREE, pack, options = {}) {
     placements,
     feature,
     qualityTier,
+    usesUkraineFoliage,
   );
   for (const landingZone of landingZones) {
     if (!landingZoneHasAuthoredMarker(features, landingZone)) {
@@ -1225,7 +1317,7 @@ export function createMissionFeaturePresentation(THREE, pack, options = {}) {
   for (const batchId of FEATURE_BATCH_ORDER) {
     const batchPlacements = placements[batchId];
     if (!batchPlacements.length) continue;
-    const geometry = createBatchGeometry(THREE, batchId);
+    const geometry = createBatchGeometry(THREE, batchId, usesUkraineFoliage);
     const batchTriangles = geometryTriangleCount(geometry) * batchPlacements.length;
     geometries.set(batchId, geometry);
     mainPassDrawCalls += 1;
@@ -1275,7 +1367,7 @@ export function createMissionFeaturePresentation(THREE, pack, options = {}) {
     featurePackId,
     packVersion,
     qualityTier,
-    theatreId: pack.theatre?.theatreId ?? pack.theatre?.id ?? null,
+    theatreId,
     locationId: pack.theatre?.locationId ?? null,
     worldFrameId: pack.theatre?.worldFrameId ?? pack.coordinateFrame?.worldFrameId ?? null,
     contentHashSha256: pack.contentHashSha256 ?? pack.sha256 ?? null,
@@ -1303,14 +1395,35 @@ export function createMissionFeaturePresentation(THREE, pack, options = {}) {
     THREE,
     options.atmosphereUniforms,
   );
+  let ukraineFoliageAtlasLease = null;
+  let ukraineFoliageAtlas = options.ukraineFoliageAtlas ?? null;
+  if (usesUkraineFoliage && !ukraineFoliageAtlas) {
+    ukraineFoliageAtlasLease = acquireUkraineFoliageAtlas(THREE);
+    ukraineFoliageAtlas = ukraineFoliageAtlasLease.texture;
+  }
+  if (ukraineFoliageAtlas && !ukraineFoliageAtlasLease) {
+    validateUkraineFoliageAtlas(THREE, ukraineFoliageAtlas);
+  }
   const materials = [];
   const meshes = [];
   const matrix = new THREE.Matrix4();
+  const foliageWindUniforms = usesUkraineFoliage
+    ? {
+        time: { value: 0 },
+        wind: { value: new THREE.Vector2() },
+      }
+    : null;
   for (const batchId of FEATURE_BATCH_ORDER) {
     const batchPlacements = placements[batchId];
     if (!batchPlacements.length) continue;
     const geometry = geometries.get(batchId);
-    const material = staticMaterial(THREE, batchId, atmosphereUniforms);
+    const material = staticMaterial(
+      THREE,
+      batchId,
+      atmosphereUniforms,
+      usesUkraineFoliage ? ukraineFoliageAtlas : null,
+      foliageWindUniforms,
+    );
     const mesh = new THREE.InstancedMesh(geometry, material, batchPlacements.length);
     mesh.name = `MISSION_FEATURE_BATCH_${batchId.toUpperCase()}`;
     mesh.matrixAutoUpdate = false;
@@ -1370,6 +1483,17 @@ export function createMissionFeaturePresentation(THREE, pack, options = {}) {
     semanticFeatures: semanticFeatureCount,
     landingZones: landingZones.length,
     lzAssessmentStatus: LZ_STATUS_UNASSESSED,
+    foliageAtlasId: usesUkraineFoliage
+      ? "environment.foliage.ukraine-temperate.v1"
+      : null,
+    foliageAtlasSynthetic: ukraineFoliageAtlasLease?.synthetic ?? false,
+    get foliageAtlasReady() {
+      return ukraineFoliageAtlasLease?.ready
+        ?? isUkraineFoliageAtlasReady(ukraineFoliageAtlas);
+    },
+    get foliageAtlasError() {
+      return ukraineFoliageAtlasLease?.error ?? null;
+    },
     budget,
     disposed,
   });
@@ -1377,6 +1501,12 @@ export function createMissionFeaturePresentation(THREE, pack, options = {}) {
   return Object.freeze({
     group,
     diagnostics,
+    update({ elapsedSeconds, windX, windZ } = {}) {
+      if (!foliageWindUniforms || disposed) return;
+      if (Number.isFinite(elapsedSeconds)) foliageWindUniforms.time.value = elapsedSeconds;
+      if (Number.isFinite(windX)) foliageWindUniforms.wind.value.x = windX;
+      if (Number.isFinite(windZ)) foliageWindUniforms.wind.value.y = windZ;
+    },
     featureNode(featureId) {
       return semanticGroup.children.find(
         (child) => child.userData.missionFeature?.featureId === featureId,
@@ -1394,6 +1524,7 @@ export function createMissionFeaturePresentation(THREE, pack, options = {}) {
       semanticGroup.removeFromParent();
       for (const geometry of geometries.values()) geometry.dispose();
       for (const material of materials) material.dispose();
+      ukraineFoliageAtlasLease?.release();
       group.userData.missionFeatureDisposed = true;
     },
   });

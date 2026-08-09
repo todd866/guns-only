@@ -48,7 +48,15 @@ public readonly record struct WeekendRideSnapshot(
     double CogEnvelopeHalfAlongM = 0.0,
     double CogEnvelopeHalfLateralM = 0.0,
     bool CogInsideEnvelope = false,
-    double CerebellarAssistScale = 1.0)
+    double CerebellarAssistScale = 1.0,
+    double CircuitProgressM = 0.0,
+    double CircuitLengthM = 0.0,
+    int LastSectorIndex = -1,
+    int NextSectorIndex = 0,
+    string GoldenPathKind = "none",
+    string GoldenPathToken = "",
+    bool IsOnOpenRoad = false,
+    double OpenRoadDistanceM = 0.0)
 {
     /// <summary>
     /// Roll about the forward axis extracted from the head-stabilized view attitude.

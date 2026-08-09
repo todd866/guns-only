@@ -34,14 +34,31 @@ test("production admits only state-bearing environment visuals and event-bearing
     "decision-support sky must expose the Ukraine soft-world atmosphere switch");
   const skySource = await readFile(sceneBuildersUrl, "utf8");
   assert.match(skySource,
+    /horizonCoolCombat = mix\([\s\S]{0,80}?vec3\(0\.18, 0\.28, 0\.34\)/,
+    "the F-22 combat sky must retain value separation behind the HUD after ACES");
+  assert.match(source,
+    /uModernCombat\.value =[\s\S]{0,80}?isF22CanopyGlassAirframe\(state\) \? 1 : 0/,
+    "the F-22 route must select its darker combat-sky variant inside the shared Ukraine theatre");
+  assert.match(skySource,
+    /horizonWarmCombat = mix\([\s\S]{0,100}?vec3\(0\.12, 0\.18, 0\.20\)/,
+    "First Merge must lower the soft-world horizon without changing Rapier's default palette");
+  assert.match(skySource, /sunPresentation = mix\(1\.0, 0\.62, uModernCombat\)/,
+    "the F-22 view must keep the soft-world sun from veiling its HUD and cloud hierarchy");
+  assert.match(skySource,
     /vec3 belowWarm = mix\(uFogColor, uAtmosphereHazeColor, uAtmosphereHazeMix\)/,
     "the sky's below-horizon wash must resolve the terrain's haze mix, never its own literal");
+  assert.match(skySource,
+    /belowWarm = mix\(belowWarm, vec3\(0\.055, 0\.105, 0\.17\), uModernCombat \* 0\.78\)/,
+    "the F-22 below-horizon wash must match its scoped terrain haze after the shared resolve");
   assert.doesNotMatch(skySource, /vec3 belowWarm = vec3\(/,
     "a hardcoded below-horizon colour forks the horizon from the terrain again");
   assert.match(skySource, /UKRAINE_SOFT_WORLD_FOG_HEX/,
     "sky ground-haze defaults must come from the single soft-world atmosphere source");
   assert.match(source, /this\.sky\.uniforms\.uSoftWorld\.value = ukraineTheatre \? 1 : 0/,
     "Ukraine theatre must warm the production sky without enabling the Korea pack environment");
+  assert.match(source,
+    /combatPresentation: isF22CanopyGlassAirframe\(state\)/,
+    "the streamed terrain must receive the same F-22-only presentation selector as the sky");
   assert.match(source, /this\.sky\.uniforms\.uSunDirection\.value\.copy\(SUN_DIRECTION\)/,
     "soft-world sky sun bloom must follow the scene sun direction");
   // 2026-07-30: at 72,000 ft the 64 km streamed disc edge sits ~19 deg below the horizontal, so

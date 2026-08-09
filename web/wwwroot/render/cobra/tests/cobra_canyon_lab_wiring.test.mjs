@@ -37,6 +37,17 @@ test("Cobra Canyon lab consumes the authored planner and bounded presentation", 
   assert.match(main, /HOLD THE BRIDGE/);
 });
 
+test("visual-review park owns the camera over the vehicle eye", async () => {
+  const main = await source("cobra-lab/main.js");
+  assert.match(main, /__gunsOnlyCobraLabCamera/);
+  assert.match(main, /if \(parkedCamera\)/);
+  assert.match(main, /do not overwrite the eye/);
+  assert.match(main, /!parkedCamera/);
+  assert.match(main, /onboarding\?\.dismiss/);
+  assert.match(main, /emberGuidancePath && authorityState && !parkedCamera/);
+  assert.match(main, /applyAh1gCameraVisibility\(\);[\s\S]*?applyParkedCamera\(\)/);
+});
+
 test("Cobra Canyon loads Blazor from the site-root framework path", async () => {
   const [html, main] = await Promise.all([
     source("cobra-lab/index.html"),

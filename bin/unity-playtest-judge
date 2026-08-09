@@ -1,0 +1,255 @@
+#!/usr/bin/env python3
+"""Judge Unity QA artifacts: telemetry behavior + multi-frame visual playability."""
+from __future__ import annotations
+
+import json
+import struct
+import sys
+import zlib
+from pathlib import Path
+
+
+def read_png(path: Path):
+    data = path.read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError(f"not png: {path}")
+    pos = 8
+    width = height = color_type = None
+    idat = b""
+    while pos < len(data):
+        length = struct.unpack(">I", data[pos : pos + 4])[0]
+        ctype = data[pos + 4 : pos + 8]
+        chunk = data[pos + 8 : pos + 8 + length]
+        pos += 12 + length
+        if ctype == b"IHDR":
+            width, height, _bd, color_type = struct.unpack(">IIBB", chunk[:10])
+        elif ctype == b"IDAT":
+            idat += chunk
+        elif ctype == b"IEND":
+            break
+    raw = zlib.decompress(idat)
+    bpp = 4 if color_type == 6 else 3 if color_type == 2 else None
+    if bpp is None:
+        raise ValueError(f"unsupported color_type={color_type}")
+    stride = width * bpp
+    rows = []
+    i = 0
+    prev = bytearray(stride)
+    for _y in range(height):
+        filt = raw[i]
+        i += 1
+        row = bytearray(raw[i : i + stride])
+        i += stride
+        if filt == 1:
+            for x in range(stride):
+                left = row[x - bpp] if x >= bpp else 0
+                row[x] = (row[x] + left) & 255
+        elif filt == 2:
+            for x in range(stride):
+                row[x] = (row[x] + prev[x]) & 255
+        elif filt == 3:
+            for x in range(stride):
+                left = row[x - bpp] if x >= bpp else 0
+                row[x] = (row[x] + ((left + prev[x]) // 2)) & 255
+        elif filt == 4:
+
+            def paeth(a, b, c):
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                if pa <= pb and pa <= pc:
+                    return a
+                if pb <= pc:
+                    return b
+                return c
+
+            for x in range(stride):
+                a = row[x - bpp] if x >= bpp else 0
+                b = prev[x]
+                c = prev[x - bpp] if x >= bpp else 0
+                row[x] = (row[x] + paeth(a, b, c)) & 255
+        elif filt != 0:
+            raise ValueError(f"bad filter {filt}")
+        rows.append(bytes(row))
+        prev = row
+    return width, height, bpp, rows
+
+
+def sample_stats(path: Path) -> dict:
+    w, h, bpp, rows = read_png(path)
+    magenta = blue = green = orange = grey = dark = black = total = 0
+    step_y = max(1, h // 40)
+    step_x = max(1, w // 40)
+    # mean color for diversity
+    rs = gs = bs = 0
+    for y in range(h // 10, 9 * h // 10, step_y):
+        row = rows[y]
+        for x in range(w // 10, 9 * w // 10, step_x):
+            i = x * bpp
+            r, g, b = row[i], row[i + 1], row[i + 2]
+            total += 1
+            rs += r
+            gs += g
+            bs += b
+            if r < 12 and g < 12 and b < 12:
+                black += 1
+            if r > 180 and b > 180 and g < 100:
+                magenta += 1
+            # Bright sky OR cool Korea zenith (browser createDecisionSupportSky cool path).
+            if b > 140 and b > r + 20 and b > g + 10:
+                blue += 1
+            elif b > 55 and b >= g and b > r + 8 and (r + g + b) > 90:
+                blue += 1
+            if g > 70 and g >= r - 5 and r < 150:
+                green += 1
+            if r > 150 and r > b + 30 and g < 160:
+                orange += 1
+            # Mid-grey fighter skin (browser 0x667276) — exclude cool sky greys (blue-dominant).
+            if (
+                70 < r < 160
+                and 80 < g < 160
+                and 85 < b < 170
+                and abs(r - g) < 35
+                and abs(g - b) < 40
+                and b <= g + 12
+                and r + g > b + 30
+            ):
+                grey += 1
+            if r > 100 and r > g + 15 and r > b + 25 and g > 50 and g < 140:
+                orange += 1
+            # Dark fuselage / edge panels
+            if r < 80 and g < 90 and b < 100 and (r + g + b) > 30:
+                dark += 1
+            # Gunsight / padlock HUD greens and warm cues (OnGUI overlays).
+            if g > 180 and g > r + 40 and g > b + 20:
+                green += 1
+            if r > 180 and g > 80 and g < 180 and b < 100:
+                orange += 1
+    return {
+        "path": str(path),
+        "w": w,
+        "h": h,
+        "bytes": path.stat().st_size,
+        "magenta_pct": 100 * magenta / total,
+        "blue": blue,
+        "green": green,
+        "orange": orange,
+        "grey_ac": grey,
+        "dark_ac": dark,
+        "black_pct": 100 * black / total,
+        "mean": (rs / total, gs / total, bs / total),
+    }
+
+
+def mean_dist(a, b) -> float:
+    return abs(a[0] - b[0]) + abs(a[1] - b[1]) + abs(a[2] - b[2])
+
+
+def main() -> int:
+    if len(sys.argv) != 2:
+        print("usage: unity-playtest-judge <qa-dir>", file=sys.stderr)
+        return 2
+    qa = Path(sys.argv[1])
+    failures: list[str] = []
+
+    result_path = qa / "result.json"
+    if not result_path.is_file():
+        failures.append("missing result.json (QA pilot did not finish)")
+        print(json.dumps({"ok": False, "failures": failures}, indent=2))
+        return 17
+
+    result = json.loads(result_path.read_text())
+    if not result.get("ok"):
+        failures.extend(result.get("failures") or ["in-player QA reported ok=false"])
+
+    # Telemetry continuity
+    tel_path = qa / "telemetry.jsonl"
+    if not tel_path.is_file():
+        failures.append("missing telemetry.jsonl")
+    else:
+        lines = [json.loads(l) for l in tel_path.read_text().splitlines() if l.strip()]
+        if len(lines) < 30:
+            failures.append(f"telemetry too short ({len(lines)} lines)")
+        else:
+            ticks = [l["tick"] for l in lines]
+            if ticks[-1] <= ticks[0]:
+                failures.append("telemetry tick did not advance")
+            phases = {l["phase"] for l in lines}
+            for need in ("boot", "pull", "roll", "throttle", "guns", "settle"):
+                if need not in phases:
+                    failures.append(f"missing phase {need}")
+            if not any(l.get("opponent") for l in lines):
+                failures.append("telemetry never saw opponent=true")
+
+    frames = sorted(qa.glob("frame_*.png"))
+    if len(frames) < 4:
+        failures.append(f"need ≥4 QA frames, got {len(frames)}")
+
+    stats = []
+    for fr in frames:
+        try:
+            st = sample_stats(fr)
+        except Exception as ex:
+            failures.append(f"bad frame {fr.name}: {ex}")
+            continue
+        stats.append(st)
+        if st["bytes"] < 8_000:
+            failures.append(f"{fr.name} too small ({st['bytes']} bytes)")
+        if st["magenta_pct"] > 12:
+            failures.append(f"{fr.name} magenta-dominated ({st['magenta_pct']:.1f}%)")
+        if st["black_pct"] > 80:
+            failures.append(f"{fr.name} mostly black ({st['black_pct']:.1f}%) — not a playable view")
+        aircraft = st["grey_ac"] + st["orange"] + st.get("dark_ac", 0)
+        hud = st["orange"] + st["green"]
+        if st["blue"] < 5 and st["green"] < 5 and aircraft < 3:
+            failures.append(f"{fr.name} no sky/ground/aircraft color signal")
+        # Cockpit-eye live play hides ownship exterior — sky + HUD/padlock is the playable view.
+        # Fail only when there is sky with neither ground, HUD chrome, nor contact cue.
+        if st["blue"] > 40 and st["green"] < 3 and st["orange"] < 2 and st.get("dark_ac", 0) < 2:
+            if st["blue"] > (hud + st["grey_ac"] + 1) * 8:
+                failures.append(f"{fr.name} empty sky void (no HUD/contact) — not a playable view")
+
+    # Live browser first-merge is cockpit-eye: require sky + gunsight/padlock chrome, not ownship mesh.
+    if stats and max(s["blue"] for s in stats) < 20:
+        failures.append("no sky color across QA frames")
+    if stats and max(s["orange"] + s["green"] for s in stats) < 8:
+        failures.append("no gunsight/padlock HUD chrome across QA frames")
+    if stats:
+        boot = stats[0]
+        if boot["blue"] < 5 and boot["green"] < 5:
+            failures.append("boot frame missing sky/ground signal")
+
+    # Frames must change over the script (not a frozen still).
+    if len(stats) >= 3:
+        d01 = mean_dist(stats[0]["mean"], stats[1]["mean"])
+        d12 = mean_dist(stats[1]["mean"], stats[-1]["mean"])
+        if d01 + d12 < 6.5:
+            failures.append(
+                f"frames look frozen (mean RGB drift {d01:.1f}+{d12:.1f} < 6.5) — not playing"
+            )
+
+    ok = len(failures) == 0
+    out = {
+        "ok": ok,
+        "result": result,
+        "frames": [
+            {
+                "name": Path(s["path"]).name,
+                "magenta_pct": round(s["magenta_pct"], 2),
+                "black_pct": round(s["black_pct"], 2),
+                "blue": s["blue"],
+                "green": s["green"],
+                "orange": s["orange"],
+                "grey_ac": s["grey_ac"],
+                "dark_ac": s.get("dark_ac", 0),
+            }
+            for s in stats
+        ],
+        "failures": failures,
+    }
+    print(json.dumps(out, indent=2))
+    (qa / "judge.json").write_text(json.dumps(out, indent=2) + "\n")
+    return 0 if ok else 18
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

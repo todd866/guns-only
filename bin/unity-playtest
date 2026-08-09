@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# Fail-closed Unity playtest harness: launches the standalone player in QA mode,
+# lets QaPilot drive scripted inputs + dump frames, then judges playability.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"
+export PATH="$DOTNET_ROOT:$PATH"
+
+UNITY_APP="${ROOT}/artifacts/unity-mac/GunsOnly.app"
+HOST_BIN="${ROOT}/artifacts/unity-mac/host/GunsOnly.UnityHost"
+PLAYER_BIN="${UNITY_APP}/Contents/MacOS/GunsOnly"
+PLAYER_LOG="${HOME}/Library/Logs/GunsOnly/GunsOnly/Player.log"
+QA_SRC="${HOME}/Library/Application Support/GunsOnly/GunsOnly/qa"
+QA_OUT="${ROOT}/artifacts/unity-mac/qa"
+LOG="${ROOT}/artifacts/unity-mac/unity-playtest.log"
+
+if [[ ! -x "$PLAYER_BIN" || ! -x "$HOST_BIN" ]]; then
+  echo "==> artifacts missing — building"
+  "${ROOT}/bin/unity-build"
+fi
+
+"${ROOT}/bin/unity-check"
+
+pkill -f 'GunsOnly.app/Contents/MacOS' 2>/dev/null || true
+pkill -f 'GunsOnly.UnityHost' 2>/dev/null || true
+sleep 0.5
+
+rm -rf "$QA_SRC" "$QA_OUT"
+mkdir -p "$QA_OUT" "$(dirname "$PLAYER_LOG")"
+: > "$PLAYER_LOG"
+: > "$LOG"
+
+"$HOST_BIN" > /tmp/guns-only-unity-host.log 2>&1 &
+HOST_PID=$!
+echo "host pid=$HOST_PID"
+
+python3 - <<'PY'
+import time, sys
+deadline = time.time() + 15
+while time.time() < deadline:
+    try:
+        text = open("/tmp/guns-only-unity-host.log").read()
+    except FileNotFoundError:
+        text = ""
+    if "listening on" in text:
+        print("host listening")
+        sys.exit(0)
+    if "host fatal" in text:
+        print(text, file=sys.stderr); sys.exit(6)
+    time.sleep(0.05)
+print("host did not listen", file=sys.stderr); sys.exit(6)
+PY
+
+# Launch player binary directly so -gunsOnlyQa reaches it (open(1) drops argv).
+echo "==> launching QA player"
+"$PLAYER_BIN" -gunsOnlyQa >"$LOG" 2>&1 &
+PLAYER_PID=$!
+echo "player pid=$PLAYER_PID"
+
+# Wait for QaPilot to finish (PASS/FAIL file) or process exit.
+deadline=$((SECONDS + 90))
+while [[ $SECONDS -lt $deadline ]]; do
+  if [[ -f "$QA_SRC/PASS" || -f "$QA_SRC/FAIL" ]]; then
+    break
+  fi
+  if ! kill -0 "$PLAYER_PID" 2>/dev/null; then
+    break
+  fi
+  sleep 0.25
+done
+
+# Give filesystem a beat to flush.
+sleep 0.5
+
+if [[ ! -d "$QA_SRC" ]]; then
+  echo "QA dir missing: $QA_SRC" >&2
+  rg -n 'GunsOnly\.QA|error|Exception' "$PLAYER_LOG" "$LOG" | tail -40 >&2 || true
+  kill "$PLAYER_PID" 2>/dev/null || true
+  kill "$HOST_PID" 2>/dev/null || true
+  exit 20
+fi
+
+mkdir -p "$QA_OUT"
+cp -R "$QA_SRC/." "$QA_OUT/"
+cp /tmp/guns-only-accept.png "$QA_OUT/latest_mirror.png" 2>/dev/null || true
+
+echo "==> in-player result"
+if [[ -f "$QA_OUT/result.json" ]]; then
+  cat "$QA_OUT/result.json"
+else
+  echo "(no result.json)" >&2
+fi
+
+echo "==> judge"
+set +e
+python3 "${ROOT}/bin/unity-playtest-judge" "$QA_OUT"
+JUDGE_EC=$?
+set -e
+
+# Cleanup processes
+kill "$PLAYER_PID" 2>/dev/null || true
+kill "$HOST_PID" 2>/dev/null || true
+wait "$PLAYER_PID" 2>/dev/null || true
+wait "$HOST_PID" 2>/dev/null || true
+
+if [[ ! -f "$QA_OUT/PASS" ]]; then
+  echo "UNITY_PLAYTEST_FAIL: in-player QA did not PASS" >&2
+  rg -n 'GunsOnly\.QA|ReadPixels|FAIL' "$PLAYER_LOG" | tail -30 >&2 || true
+  exit 21
+fi
+
+if [[ "$JUDGE_EC" -ne 0 ]]; then
+  echo "UNITY_PLAYTEST_FAIL: judge exit $JUDGE_EC" >&2
+  exit "$JUDGE_EC"
+fi
+
+if rg -q 'ReadPixels was called to read pixels from system frame buffer, while not inside drawing frame' "$PLAYER_LOG"; then
+  echo "UNITY_PLAYTEST_FAIL: invalid ReadPixels in Player.log" >&2
+  exit 16
+fi
+
+echo "UNITY_PLAYTEST_OK"
+echo "artifacts: $QA_OUT"
+ls -la "$QA_OUT" | head -30

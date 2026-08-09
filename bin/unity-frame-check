@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+"""Fail-closed color check for an in-player ScreenCapture PNG."""
+from __future__ import annotations
+
+import struct
+import sys
+import zlib
+from pathlib import Path
+
+
+def read_png(path: Path):
+    data = path.read_bytes()
+    if data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise SystemExit(f"not a png: {path}")
+    pos = 8
+    width = height = color_type = None
+    idat = b""
+    while pos < len(data):
+        length = struct.unpack(">I", data[pos : pos + 4])[0]
+        ctype = data[pos + 4 : pos + 8]
+        chunk = data[pos + 8 : pos + 8 + length]
+        pos += 12 + length
+        if ctype == b"IHDR":
+            width, height, _bd, color_type = struct.unpack(">IIBB", chunk[:10])
+        elif ctype == b"IDAT":
+            idat += chunk
+        elif ctype == b"IEND":
+            break
+    raw = zlib.decompress(idat)
+    bpp = 4 if color_type == 6 else 3 if color_type == 2 else None
+    if bpp is None:
+        raise SystemExit(f"unsupported png color_type={color_type}")
+    stride = width * bpp
+    rows = []
+    i = 0
+    prev = bytearray(stride)
+    for _y in range(height):
+        filt = raw[i]
+        i += 1
+        row = bytearray(raw[i : i + stride])
+        i += stride
+        if filt == 1:
+            for x in range(stride):
+                left = row[x - bpp] if x >= bpp else 0
+                row[x] = (row[x] + left) & 255
+        elif filt == 2:
+            for x in range(stride):
+                row[x] = (row[x] + prev[x]) & 255
+        elif filt == 3:
+            for x in range(stride):
+                left = row[x - bpp] if x >= bpp else 0
+                row[x] = (row[x] + ((left + prev[x]) // 2)) & 255
+        elif filt == 4:
+
+            def paeth(a, b, c):
+                p = a + b - c
+                pa, pb, pc = abs(p - a), abs(p - b), abs(p - c)
+                if pa <= pb and pa <= pc:
+                    return a
+                if pb <= pc:
+                    return b
+                return c
+
+            for x in range(stride):
+                a = row[x - bpp] if x >= bpp else 0
+                b = prev[x]
+                c = prev[x - bpp] if x >= bpp else 0
+                row[x] = (row[x] + paeth(a, b, c)) & 255
+        elif filt != 0:
+            raise SystemExit(f"bad png filter {filt}")
+        rows.append(bytes(row))
+        prev = row
+    return width, height, bpp, rows
+
+
+def main() -> int:
+    if len(sys.argv) != 2:
+        print("usage: unity-frame-check <frame.png>", file=sys.stderr)
+        return 2
+    path = Path(sys.argv[1])
+    if not path.is_file() or path.stat().st_size < 5_000:
+        print(f"frame missing/too small: {path}", file=sys.stderr)
+        return 2
+    w, h, bpp, rows = read_png(path)
+    magenta = blue = greenish = orange = grey_ac = dark_ac = total = 0
+    step_y = max(1, h // 50)
+    step_x = max(1, w // 50)
+    for y in range(h // 8, 7 * h // 8, step_y):
+        row = rows[y]
+        for x in range(w // 8, 7 * w // 8, step_x):
+            i = x * bpp
+            r, g, b = row[i], row[i + 1], row[i + 2]
+            total += 1
+            if r > 180 and b > 180 and g < 100:
+                magenta += 1
+            # Bright sky OR cool Korea zenith.
+            if b > 140 and b > r + 20 and b > g + 10:
+                blue += 1
+            elif b > 55 and b >= g and b > r + 8 and (r + g + b) > 90:
+                blue += 1
+            if g > 70 and g >= r - 5 and r < 150:
+                greenish += 1
+            if g > 180 and g > r + 40 and g > b + 20:
+                greenish += 1
+            if r > 150 and r > b + 30 and g < 160:
+                orange += 1
+            if r > 100 and r > g + 15 and r > b + 25 and g > 50 and g < 140:
+                orange += 1
+            # createDrone skin 0x667276 / dark edge panels — exclude cool sky greys.
+            if (
+                70 < r < 160
+                and 80 < g < 160
+                and 85 < b < 170
+                and abs(r - g) < 35
+                and abs(g - b) < 40
+                and b <= g + 12
+                and r + g > b + 30
+            ):
+                grey_ac += 1
+            if r < 80 and g < 90 and b < 100 and (r + g + b) > 30:
+                dark_ac += 1
+    print(
+        f"frame {w}x{h} magenta={magenta}/{total} ({100 * magenta / total:.1f}%) "
+        f"blue={blue} green={greenish} orange={orange} grey={grey_ac} dark={dark_ac}"
+    )
+    if magenta / total > 0.12:
+        print("FAIL: magenta-dominated frame", file=sys.stderr)
+        return 12
+    aircraft = grey_ac + dark_ac + orange
+    if blue < 5 and greenish < 5 and aircraft < 3:
+        print("FAIL: frame has no sky/aircraft/ground color signal", file=sys.stderr)
+        return 12
+    # Cockpit-eye: ownship exterior is hidden; HUD amber/green + sky is acceptance.
+    if blue < 10 and orange < 2 and greenish < 5:
+        print("FAIL: no cockpit sky/HUD signal in frame", file=sys.stderr)
+        return 12
+    if orange < 2 and grey_ac + dark_ac < 3 and greenish < 8:
+        print("FAIL: no gunsight/contact/aircraft colors in frame", file=sys.stderr)
+        return 12
+    print("visual acceptance PASS")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,102 @@
+{
+  "$schema": "../../../../schemas/asset-license-set.schema.json",
+  "schemaVersion": "1.0.0",
+  "licenseSetId": "licenses.guns-only.cobra-vietnam.foliage.v1",
+  "template": false,
+  "entries": [
+    {
+      "licenseId": "license.oga-palm-plant-sprite.v1",
+      "appliesTo": [
+        "environment.foliage.palm-card.v1",
+        "environment.foliage.foliage-atlas.v1"
+      ],
+      "spdxExpression": "CC0-1.0",
+      "copyright": "Dedicated to the public domain under CC0 by qubodup / Yughues source textures",
+      "authors": [
+        "qubodup",
+        "Yughues"
+      ],
+      "sourceUri": "https://opengameart.org/content/palm-plant-sprite-1024x1024",
+      "redistribution": {
+        "allowed": true,
+        "commercialUseAllowed": true,
+        "modificationAllowed": true,
+        "shareAlikeRequired": false,
+        "notices": [
+          "CC0 — attribution not required; provenance retained in SOURCES.md."
+        ]
+      },
+      "attributionText": "Palm plant sprite (OpenGameArt), CC0 — qubodup / Yughues.",
+      "evidence": [
+        {
+          "type": "license_file",
+          "uri": "repo://content/packs/cobra-vietnam/environment/foliage/SOURCES.md"
+        }
+      ],
+      "notes": "Resized to 512² and packed into the left half of foliage-atlas.png."
+    },
+    {
+      "licenseId": "license.oga-vegetation-fern-01.v1",
+      "appliesTo": [
+        "environment.foliage.understory-card.v1",
+        "environment.foliage.foliage-atlas.v1"
+      ],
+      "spdxExpression": "CC0-1.0",
+      "copyright": "Dedicated to the public domain under CC0 by paramecij",
+      "authors": [
+        "paramecij"
+      ],
+      "sourceUri": "https://opengameart.org/content/paramecijs-vegetation-base-texture-pack",
+      "redistribution": {
+        "allowed": true,
+        "commercialUseAllowed": true,
+        "modificationAllowed": true,
+        "shareAlikeRequired": false,
+        "notices": [
+          "CC0 — attribution not required; provenance retained in SOURCES.md."
+        ]
+      },
+      "attributionText": "Vegetation fern cutout (OpenGameArt), CC0 — paramecij.",
+      "evidence": [
+        {
+          "type": "license_file",
+          "uri": "repo://content/packs/cobra-vietnam/environment/foliage/SOURCES.md"
+        }
+      ],
+      "notes": "Height-normalized and packed into the right half of foliage-atlas.png."
+    },
+    {
+      "licenseId": "license.guns-only-foliage-painted.v2",
+      "appliesTo": [
+        "environment.foliage.foliage-atlas-painted.v2"
+      ],
+      "spdxExpression": "MIT",
+      "copyright": "Copyright (c) 2026 Ian Todd",
+      "authors": [
+        "Ian Todd"
+      ],
+      "sourceUri": "repo://content/packs/cobra-vietnam/environment/foliage/foliage-art-manifest.v2.json",
+      "redistribution": {
+        "allowed": true,
+        "commercialUseAllowed": true,
+        "modificationAllowed": true,
+        "shareAlikeRequired": false,
+        "notices": [
+          "Include the repository MIT copyright and permission notice in copies or substantial portions."
+        ]
+      },
+      "attributionText": "Guns Only project-authored foliage atlas, Copyright (c) 2026 Ian Todd, licensed under MIT.",
+      "evidence": [
+        {
+          "type": "license_file",
+          "uri": "repo://LICENSE"
+        },
+        {
+          "type": "author_statement",
+          "uri": "repo://content/packs/cobra-vietnam/environment/foliage/foliage-art-manifest.v2.json"
+        }
+      ],
+      "notes": "OpenAI built-in image generation under human art direction; locally chroma-keyed, despilled, resized and packed for WebGL and Unity presentation."
+    }
+  ]
+}

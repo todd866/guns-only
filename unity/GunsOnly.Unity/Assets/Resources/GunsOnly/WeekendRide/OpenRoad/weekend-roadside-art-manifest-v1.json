@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "1.0.0",
+  "assetFamilyId": "art.weekend-ride.roadside-atlas.v1",
+  "authorship": {
+    "method": "OpenAI built-in image generation",
+    "generatedOn": "2026-08-09",
+    "humanDirection": "Weekend Ride circuit and open-road roadside ecology for exact Web/Unity reuse"
+  },
+  "assets": [
+    {
+      "id": "environment.foliage.weekend-roadside-atlas.v1",
+      "uri": "weekend-roadside-atlas-v1.png",
+      "role": "alpha-tested roadside foliage and rock billboard atlas",
+      "projection": "front-facing three-quarter 2x2 sprite atlas",
+      "regionsTopLeftClockwise": [
+        "eucalyptus tree cluster",
+        "dry roadside grass and reeds",
+        "sandstone boulder cluster",
+        "native scrub and low shrubs"
+      ],
+      "constraints": [
+        "presentation only; never collision, grip, route, landmark, or scoring authority",
+        "one isolated grounded cluster per quadrant",
+        "the same atlas regions and physical scale contract must be consumed by Web and Unity",
+        "sRGB color with alpha-tested foliage; mipmaps must not restore the blue source matte",
+        "no identifiable real-world location, sign, brand, person, or vehicle"
+      ],
+      "prompt": "Create a production-ready square 2x2 sprite atlas for a realistic Australian-style weekend motorcycle hinterland environment. Top-left: broad-canopy eucalyptus tree cluster with readable trunks and irregular crown. Top-right: tall dry roadside grass and reeds. Bottom-left: mixed native scrub and low shrubs. Bottom-right: weathered warm-grey sandstone boulder and small rock cluster with dry grass. Each subject is centered and grounded within its cell, isolated, naturally lit, and uses a coherent muted olive/ochre palette. The final source plate uses a perfectly flat pure blue chroma background, no grid, labels, borders, ground plane, cast shadows, or quadrant crossing.",
+      "source": {
+        "generatedPngSha256": "771cd27033c5529fe730eb9cdbd1b1aa56aa698c5d36f76fffc023a71157fdf6",
+        "generatedPngSizeBytes": 2395019,
+        "modelBackend": "OpenAI built-in image generation; exact backend and seed not exposed"
+      },
+      "processing": {
+        "command": "ffmpeg -i <generated.png> -vf colorkey=0x0000ff:0.30:0.04,despill=type=blue:mix=1:expand=0.35:red=0.15:green=0.15:blue=-1,scale=1024:1024:flags=lanczos,format=rgba -frames:v 1 weekend-roadside-atlas-v1.png",
+        "width": 1024,
+        "height": 1024,
+        "runtimeSha256": "f779abb10692e470381f0d909b61a0876dd91920fb4b86d6f71bbbc1a948abaf",
+        "runtimeSizeBytes": 1891651
+      }
+    }
+  ]
+}

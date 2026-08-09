@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import * as THREE from "../../../vendor/three.module.js";
@@ -12,8 +13,10 @@ import {
   selectTerrainLod,
   SURFACE_DETAIL_FADE_M,
   SURFACE_DETAIL_STRENGTH,
+  terrainDetail01,
   terrainCurvatureDropM,
   TerrainBundleReader,
+  UKRAINE_REGIONAL_PAINT_URL,
   ukraineTrainingApronHeightM,
   ukraineTrainingSourceHeightM,
   validateTerrainAtlasManifest,
@@ -34,6 +37,25 @@ const quantization = {
   metresPerUnit: 0.1,
   waterSentinel: -32768,
 };
+
+test("generated Ukraine terrain art is the staged v2 asset used by the renderer", async () => {
+  assert.ok(UKRAINE_REGIONAL_PAINT_URL.endsWith(
+    "/content/packs/ukraine-modern/environment/textures/ukraine-temperate-ground-v2.webp"),
+  "the runtime URL must not silently fall back to the washed v1 painting");
+  const relative = "content/packs/ukraine-modern/environment/textures/"
+    + "ukraine-temperate-ground-v2.webp";
+  const [canonical, staged] = await Promise.all([
+    readFile(new URL(`../../../../../${relative}`, import.meta.url)),
+    readFile(new URL(`../../../${relative}`, import.meta.url)),
+  ]);
+  assert.deepEqual(staged, canonical, "published Ukraine albedo must match source byte-for-byte");
+  const digest = createHash("sha256").update(canonical).digest("hex");
+  assert.equal(digest, "4c062b6923becc4492f78ae1588a394f941aeddb0a9b27f47d176b285c379c4d");
+  const firstMergeDetail = terrainDetail01(3_048);
+  assert.ok(firstMergeDetail > 0.96 && firstMergeDetail < 0.98);
+  assert.ok(firstMergeDetail * 0.72 > 0.69,
+    "the authored hero albedo must materially contribute at the 10,000 ft First Merge start");
+});
 
 function manifest() {
   return {
@@ -1083,6 +1105,15 @@ test("streams atlas pages around the aircraft and evicts pages behind it", async
   assert.equal(terrain.diagnostics().rangeSupportedPages, 1);
   assert.equal(terrain.diagnostics().completeBundleFallbackPages, 0);
   const westPresentation = terrain.pages.get("west").presentation;
+  terrain.update({
+    cameraPosition: new THREE.Vector3(1, 500, -4),
+    deltaSeconds: 1,
+    combatPresentation: true,
+  });
+  assert.equal(terrain.material.uniforms.uCombatPresentation.value, 1,
+    "the atlas must retain the F-22 presentation selector after updating child pages");
+  assert.strictEqual(westPresentation.material, terrain.material,
+    "atlas pages must continue sharing the one route-selected terrain material");
   assert.equal(settledDiagnostics.activeLoads, 0);
   assert.equal(settledDiagnostics.queuedLoads, 0);
   assert.equal(settledDiagnostics.queuedBuilds, 0);
@@ -1736,7 +1767,12 @@ test("boundary-normal reconciliation preserves partial mixed-size edge seams", a
 
 test("terrain shading consumes baked occlusion and opens the value range", () => {
   const period = createTerrainMaterial(THREE, { sceneryEra: "period", qualityTier: "desktop" });
-  const modern = createTerrainMaterial(THREE, { sceneryEra: "modern", qualityTier: "desktop" });
+  const koreaSurfaceMap = new THREE.Texture();
+  const modern = createTerrainMaterial(THREE, {
+    sceneryEra: "modern",
+    qualityTier: "desktop",
+    koreaSurfaceMap,
+  });
   const regionalPaintMap = new THREE.Texture();
   const ukraine = createTerrainMaterial(THREE, {
     sceneryEra: "ukraine-modern",
@@ -1789,6 +1825,23 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
     /float trackCue = \(1\.0 - smoothstep\(0\.06, 0\.18, fieldHistory\)\) \* openField;/,
     "worker-baked access tracks should provide structure without per-fragment procedural noise");
   assert.match(ukraine.fragmentShader,
+    /vTerrainWorldPosition\.xz \* \(1\.0 \/ 9200\.0\) \+ vec2\(-0\.27, 0\.18\)/,
+    "the generated theatre albedo must contribute visible meso structure at First Merge altitude");
+  assert.match(ukraine.fragmentShader,
+    /authoredHeroValue = clamp\(authoredHeroLuma \/ 0\.089, 0\.58, 1\.42\)/,
+    "hero sampling must preserve bounded authored value instead of reducing the asset to chroma");
+  assert.match(ukraine.fragmentShader,
+    /rewildFloor \* uTerrainDetail01 \* 0\.72/,
+    "authored hero pigment must hand off to the existing regional layer at combat altitude");
+  assert.match(ukraine.fragmentShader, /if \(uCombatPresentation > 0\.5\)/,
+    "First Merge must select its generated-art meso layer without changing Rapier");
+  assert.match(ukraine.fragmentShader,
+    /vTerrainWorldPosition\.xz \* \(1\.0 \/ 5200\.0\) \+ vec2\(0\.43, -0\.29\)/,
+    "First Merge must reuse the generated theatre art at a bounded meso scale");
+  assert.match(ukraine.fragmentShader,
+    /rewildFloor \* uTerrainDetail01 \* 0\.48/,
+    "the F-22 meso layer must stay bounded by ground category and hero-detail authority");
+  assert.match(ukraine.fragmentShader,
     /heroMix = rewildFloor[\s\S]{0,80}?\(0\.72 \+ \(1\.0 - ukraineElevationBand\) \* 0\.12\)[\s\S]{0,40}?\* uTerrainDetail01/,
     "rewild wash remains part of terrain albedo, faded by altitude so the hero/regional LOD"
     + " quilt cannot print at combat apex (2026-07-29)");
@@ -1799,6 +1852,35 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
     "painted macro structure must be world-space and broad enough to survive Rapier altitude");
   assert.equal(ukraine.uniforms.uRegionalPaintMap.value, regionalPaintMap);
   assert.equal(ukraine.uniforms.uRegionalPaintMapEnabled.value, 1);
+  assert.equal(ukraine.uniforms.uCombatPresentation.value, 0,
+    "Rapier/default Ukraine terrain must retain its established exposure");
+  const combatUkraine = createTerrainMaterial(THREE, {
+    sceneryEra: "ukraine-modern",
+    combatPresentation: true,
+    ukraineRegionalPaintMap: regionalPaintMap,
+  });
+  assert.equal(combatUkraine.uniforms.uCombatPresentation.value, 1);
+  assert.match(combatUkraine.fragmentShader,
+    /mix\(1\.0, 1\.30, uCombatPresentation\)/,
+    "First Merge must preserve more authored chroma without forking terrain authority");
+  assert.match(combatUkraine.fragmentShader,
+    /sAlbedo \*= mix\(1\.0, 0\.60, uCombatPresentation\)/,
+    "First Merge must reserve terrain value headroom behind the HUD");
+  assert.match(combatUkraine.fragmentShader,
+    /combatWater = mix\(vec3\(combatWaterLuma\), waterLit, 0\.68\) \* 0\.72/,
+    "First Merge water must read as embedded terrain rather than cyan map pixels");
+  assert.equal(modern.uniforms.uKoreaSurfaceMap.value, koreaSurfaceMap);
+  assert.equal(modern.uniforms.uKoreaSurfaceMapEnabled.value, 1);
+  assert.match(modern.fragmentShader, /const float KOREA_SURFACE_SCALE_M = 7200\.0;/,
+    "modern Korea should consume the authored highland pigment in world metres");
+  assert.match(modern.fragmentShader, /weights = pow\(abs\(normal\), vec3\(4\.0\)\)/,
+    "Korean material projection must be triplanar so ridge walls do not smear");
+  assert.match(modern.fragmentShader,
+    /float authoredValue = clamp\(authoredLuma \/ 0\.045, 0\.62, 1\.38\);/,
+    "authored pigment must retain bounded value structure around its measured mean");
+  assert.match(modern.fragmentShader,
+    /authoredChroma \* baseLuma \* mix\(1\.0, authoredValue, 0\.68\)/,
+    "authored chroma must remain anchored to the shader's terrain-lighting hierarchy");
   assert.ok(ukraine.uniforms.uTerrainDetail01,
     "altitude detail fraction must be a uniform the presentations drive from cameraAglM");
   assert.match(ukraine.fragmentShader, /reliefGain = mix\(2\.2, 7\.5, uTerrainDetail01\)/,
@@ -1832,6 +1914,12 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   assert.match(ukraine.fragmentShader,
     /mix\(uFogColor, uAtmosphereHazeColor, uAtmosphereHazeMix\)/,
     "terrain and scenery must share one naturalistic haze contract");
+  assert.match(ukraine.fragmentShader,
+    /uAtmosphereDensityScale[\s\S]{0,80}?mix\(1\.0, 0\.76, uCombatPresentation\)/,
+    "First Merge may open the useful foreground without disabling the shared world-edge bury");
+  assert.match(ukraine.fragmentShader,
+    /mix\(hazeColor, vec3\(0\.055, 0\.105, 0\.17\), uCombatPresentation \* 0\.78\)/,
+    "First Merge haze needs a scoped blue-grey value band behind its HUD");
   assert.equal(ukraine.uniforms.uAtmosphereDensityScale.value, 0.32);
   assert.deepEqual(ukraine.uniforms.uAtmosphereHazeColor.value.toArray(),
     [0.48, 0.59, 0.68]);
@@ -1846,8 +1934,11 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   assert.match(ukraine.fragmentShader, /float snowRetention =/,
     "snow cover must follow terrain slope rather than behave as a flat colour filter");
   assert.match(ukraine.fragmentShader,
-    /smoothstep\(uWorldEdgeM \* 0\.36, uWorldEdgeM \* 0\.72, distanceToCamera\)/,
-    "Ukraine soft-world must haze out the streamed disc so it never reads as a render-square");
+    /edgeHideStart = mix\(0\.36, 0\.48, uCombatPresentation\)/,
+    "First Merge must keep more useful mid-field before the shared edge bury begins");
+  assert.match(ukraine.fragmentShader,
+    /edgeHideEnd = mix\(0\.72, 0\.82, uCombatPresentation\)/,
+    "every Ukraine route must still reach opaque atmosphere before the streamed edge");
   assert.ok(
     modern.fragmentShader.indexOf("lit *= mix(uOcclusionRange.x")
       < modern.fragmentShader.indexOf("lit = mix(lit, waterLit, waterMask)"),
@@ -1857,7 +1948,9 @@ test("terrain shading consumes baked occlusion and opens the value range", () =>
   period.dispose();
   modern.dispose();
   ukraine.dispose();
+  combatUkraine.dispose();
   regionalPaintMap.dispose();
+  koreaSurfaceMap.dispose();
 });
 
 test("aerial perspective is banded so ridgelines separate in value", () => {
@@ -1994,6 +2087,24 @@ test("attaches one mission feature pack at the terrain root and reports its hash
   assert.equal(diagnostics.missionFeaturePackSha256, sha256);
   assert.equal(diagnostics.missionFeatures.lzAssessmentStatus, "unassessed");
   assert.ok(diagnostics.missionFeatures.drawCalls <= 6);
+
+  terrain.update({
+    cameraPosition: new THREE.Vector3(64, 120, -64),
+    streamPosition: new THREE.Vector3(64, 120, -64),
+    cameraAglM: 90,
+    elapsedSeconds: 7.25,
+    windX: 4,
+    windZ: -1.5,
+  });
+  const canopyBatch = featureRoot.getObjectByName("MISSION_FEATURE_BATCH_CANOPIES");
+  const canopyShader = {
+    uniforms: {},
+    vertexShader: "#include <common>\nvoid main(){\n#include <begin_vertex>\n}",
+  };
+  canopyBatch.material.onBeforeCompile(canopyShader);
+  assert.equal(canopyShader.uniforms.uSoftWorldTime.value, 7.25);
+  assert.deepEqual(canopyShader.uniforms.uSoftWorldWind.value.toArray(), [4, -1.5],
+    "terrain updates must drive authored and ambient foliage through one wind field");
 
   terrain.dispose();
   assert.equal(featureRoot.parent, null);

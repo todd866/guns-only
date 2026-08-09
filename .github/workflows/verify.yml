@@ -67,9 +67,18 @@ jobs:
         working-directory: world-worker
         run: npm ci --ignore-scripts --no-audit --no-fund
 
+      - name: Install locked Cobra scenery gate toolchain
+        working-directory: tools/cobra-scenery-gate
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install locked browser smoke toolchain for scene-gate tests
+        working-directory: web/smoke
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
       - name: Run deterministic repository checks
         env:
           GUNS_SKIP_SMOKE: "1"
+          GUNS_TEST_IN_PROCESS: "1"
         run: ./bin/check
 
   browser-smoke:
@@ -149,6 +158,15 @@ jobs:
           set -o pipefail
           node web/wwwroot/render/hud/tests/harness/assertions.mjs 2>&1 \
             | tee "$SMOKE_ARTIFACT_DIR/hud-geometry.log"
+
+      - name: Run First Merge published-pixel integrity gate
+        if: ${{ always() && steps.publish.outcome == 'success' && steps.smoke_deps.outcome == 'success' }}
+        env:
+          FIRST_MERGE_GATE_WWWROOT: ${{ runner.temp }}/guns-only-publish/wwwroot
+          FIRST_MERGE_GATE_OUT_DIR: ${{ runner.temp }}/guns-only-smoke-artifacts/first-merge-pixel-gate
+        run: |
+          mkdir -p "$FIRST_MERGE_GATE_OUT_DIR"
+          node tools/perf/f22_first_merge_pixel_gate.mjs
 
       - name: Upload browser diagnostics
         if: ${{ always() }}

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1.0.0",
+  "assetFamilyId": "art.korea-highland.ground-surface.v1",
+  "authorship": {
+    "method": "OpenAI built-in image generation",
+    "generatedOn": "2026-08-09",
+    "humanDirection": "Guns Only F-22 modern Korea in-world terrain material"
+  },
+  "assets": [
+    {
+      "id": "environment.texture.korea-highland-ground.v1",
+      "uri": "korea-highland-ground-v1.webp",
+      "role": "presentation-only triplanar terrain pigment",
+      "projection": "orthographic top-down fictional highland surface texture",
+      "constraints": [
+        "no identifiable real-world geography",
+        "no aircraft, vehicle, person, building, label or navigation authority",
+        "renderer supplies geometry, lighting, atmosphere, collision and target truth",
+        "sRGB albedo; world-space mirrored repeat; luma-matched before terrain lighting"
+      ],
+      "prompt": "Use case: stylized-concept. Asset type: production game terrain albedo texture for a modern Korean mountain-valley flight simulator, viewed from aircraft altitude and also usable as a large-scale ground macro map. Primary request: create a seamless square top-down terrain material showing humid Korean highland vegetation, dark forest masses, muted grass, exposed brown earth, subtle rocky drainage and irregular cultivated clearings. Style/medium: realistic painterly satellite-orthographic game texture, physically plausible natural surface, fine material detail but no identifiable buildings or roads. Composition/framing: exact orthographic top-down square; evenly distributed multi-scale detail; edges must tile seamlessly; no horizon and no perspective. Lighting/mood: diffuse overcast illumination baked as little as possible; no cast shadows and no directional sun. Color palette: deep olive and pine green, restrained moss, weathered umber earth, cool gray rock; avoid neon/lime greens. Materials/textures: vegetation canopies as broad natural masses, soil and stone breakup at medium scale, subtle near grain. Constraints: no aircraft, no vehicles, no people, no text, no watermark, no border, no labels, no rivers wider than a narrow drainage line; must not look like camouflage blotches or obvious procedural noise. Avoid: repeated stamps, hard rectangular fields, visible seams, dramatic shadows, aerial perspective, clouds, sky, glossy surfaces.",
+      "source": {
+        "generatedPngSha256": "2fc159844e9591258c2fd4c1002796942c626ade487afbb717f7e10cad836ef2",
+        "generatedPngSizeBytes": 3166765,
+        "modelBackend": "OpenAI built-in image generation; exact backend and seed not exposed"
+      },
+      "processing": {
+        "command": "cwebp -quiet -q 88 -resize 1024 1024 <generated.png> -o korea-highland-ground-v1.webp",
+        "width": 1024,
+        "height": 1024,
+        "runtimeSha256": "d8f31ec00b96f70eba87ad85eaba70820e730d4d4f9de20178a3c976a5af84f3",
+        "runtimeSizeBytes": 298372
+      }
+    }
+  ]
+}

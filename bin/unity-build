@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Build a playable Mac arm64 .app + self-contained sim host sidecar.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"
+export PATH="$DOTNET_ROOT:$PATH"
+
+UNITY="${UNITY:-/Applications/Unity/Hub/Editor/6000.0.81f1/Unity.app/Contents/MacOS/Unity}"
+OUT_DIR="${ROOT}/artifacts/unity-mac"
+APP="${OUT_DIR}/GunsOnly.app"
+HOST_OUT="${OUT_DIR}/host"
+LOG="${OUT_DIR}/unity-build.log"
+PROJECT="${ROOT}/unity/GunsOnly.Unity"
+
+mkdir -p "$OUT_DIR"
+rm -rf "$APP" "$HOST_OUT"
+rm -f "$LOG"
+
+echo "==> publish self-contained UnityHost (osx-arm64)"
+dotnet publish unity/GunsOnly.UnityHost/GunsOnly.UnityHost.csproj \
+  -c Release -r osx-arm64 --self-contained true \
+  -p:PublishSingleFile=true \
+  -o "$HOST_OUT"
+
+chmod +x "$HOST_OUT/GunsOnly.UnityHost"
+"$HOST_OUT/GunsOnly.UnityHost" --smoke --seconds 1
+
+# Editor cannot build while the same project is open in GUI — quit if needed.
+if pgrep -f "Unity.app/Contents/MacOS/Unity -projectPath ${PROJECT}" >/dev/null 2>&1; then
+  echo "==> quitting open Editor instance on this project (required for batch build)"
+  pkill -f "Unity.app/Contents/MacOS/Unity -projectPath ${PROJECT}" || true
+  sleep 3
+fi
+
+echo "==> clearing PlayerDataCache (shell-side; never from inside BuildPlayer)"
+rm -rf "$PROJECT/Library/PlayerDataCache" "$PROJECT/Library/Bee/PlayerDataCache" || true
+
+echo "==> Unity batchmode Mac player build"
+"$UNITY" -batchmode -nographics -quit \
+  -projectPath "$PROJECT" \
+  -executeMethod GunsOnly.UnityEditorTools.PlayerBuilder.BuildMacArm64 \
+  -gunsOnlyOutput="${OUT_DIR}/GunsOnly.app" \
+  -logFile "$LOG"
+UNITY_EC=$?
+
+if [[ "$UNITY_EC" -ne 0 ]]; then
+  echo "Unity exited $UNITY_EC — see $LOG"
+  rg -n "error CS|build failed|BuildFailedException|Assertion failed" "$LOG" | tail -40 || true
+  exit 4
+fi
+
+# Unity sometimes exits 0 even on script errors — inspect log.
+if rg -q "Mac player build failed|Scripts have compiler errors|error CS" "$LOG"; then
+  echo "Unity build log reported failure — see $LOG"
+  rg -n "error CS|build failed|BuildFailedException|Assertion failed" "$LOG" | tail -40
+  exit 4
+fi
+
+if [[ ! -d "$APP" ]]; then
+  echo "GunsOnly.app was not produced — see $LOG"
+  exit 5
+fi
+
+echo "==> gate"
+"${ROOT}/bin/unity-check"
+
+echo "Built: $APP"
+echo "Host:  $HOST_OUT/GunsOnly.UnityHost"
+echo "Play:  ${ROOT}/bin/play-unity"

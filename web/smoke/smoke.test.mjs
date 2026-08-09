@@ -669,10 +669,12 @@ test("the published Weekend Ride route boots and accepts throttle input", async 
     });
     const before = await page.evaluate(() => ({
       status: document.querySelector("#status span")?.textContent ?? "",
+      ready: document.querySelector("#status")?.dataset.ready === "true",
       phase: window.__gunsOnlyWeekendAuthority?.phase ?? "",
     }));
     const beforeSpeed = await groundSpeed();
-    assert.match(before.status, /YZF-R1 ACTIVE/i);
+    assert.equal(before.ready, true,
+      `Weekend Ride status is not ready: ${JSON.stringify(before)}`);
     assert.ok(before.phase === "ready" || before.phase === "active",
       `unexpected weekend-ride phase: ${JSON.stringify(before)}`);
 
@@ -1529,7 +1531,9 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
     }));
     // SwiftShader can render the full terrain at only a few frames per second on a loaded CI
     // worker. Hold each physical control until the authoritative fixed-tick state proves the
-    // response instead of assuming a wall-clock hold spans enough simulation ticks.
+    // response instead of assuming a wall-clock hold spans enough simulation ticks. Match the
+    // sibling F-22 control proof's 90 s patience: a loaded Build 299 run needed nearly ten minutes
+    // to boot and advanced too few ticks for the old 30 s forward-flight window.
     await page.keyboard.down("w");
     try {
       await page.waitForFunction(
@@ -1537,7 +1541,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
           Number(globalThis.__gunsState?.py) > startY + 0.2
             && Number(globalThis.__gunsState?.tick) > startTick,
         { startY: before.py, startTick: before.tick },
-        { timeout: scaled(30000) },
+        { timeout: scaled(90000) },
       );
     } finally {
       await page.keyboard.up("w");
@@ -1559,7 +1563,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
           pickupZ: before.pickupZ,
           startRange: pickupRangeBefore,
         },
-        { timeout: scaled(30000) },
+        { timeout: scaled(90000) },
       );
     } finally {
       await page.keyboard.up("ArrowUp");

@@ -3,12 +3,16 @@ import test from "node:test";
 import * as THREE from "../../../vendor/three.module.js";
 import {
   applyKoreaSceneryBudgetLevel,
+  configureUkraineFoliageAtlas,
   createKoreaSceneryRuntime,
   KOREA_TREE_STAND_SIZE,
   SOFT_WORLD_GRASS_BLADES_PER_PATCH,
   UKRAINE_NEAR_RING_STAND_SIZE,
   UKRAINE_NEAR_RING_VISIBLE_TRUNKS,
   UKRAINE_MID_RING_STAND_SIZE,
+  UKRAINE_TEMPERATE_FOLIAGE_ALPHA_CUTOFF,
+  UKRAINE_TEMPERATE_FOLIAGE_REGIONS,
+  UKRAINE_TEMPERATE_FOLIAGE_URL,
   KOREA_SCENERY_PROFILES,
   planKoreaScenery,
 } from "../korea_scenery.js";
@@ -344,8 +348,16 @@ test("Ukraine meadow clumps batch real blades and share the authoritative wind f
   );
   assert.ok(grass.geometry.attributes.position.count
     >= SOFT_WORLD_GRASS_BLADES_PER_PATCH * 5);
+  assert.equal(
+    grass.geometry.attributes.color.count,
+    grass.geometry.attributes.position.count,
+    "every grass vertex should carry the muted base-to-tip field palette",
+  );
   assert.equal(grass.material.type, "MeshBasicMaterial",
     "foreground grass should keep its authored palette without dark Lambert aliasing");
+  assert.equal(grass.material.vertexColors, true);
+  assert.equal(grass.material.color.getHex(), 0x626445,
+    "foreground grass must use the muted field palette rather than luminous yellow-green");
   assert.ok(grass.count > 0);
   assert.ok(grass.count <= KOREA_SCENERY_PROFILES["ukraine-modern"].localGrassUpdatesPerFrame,
     "the first visible frame must obey the camera-grass matrix update budget");
@@ -493,7 +505,7 @@ test("soft-world bending preserves authoritative world direction across yaw and 
   );
 });
 
-test("Ukraine soft-canopy stands use rounded crown geometry and Lambert lighting", () => {
+test("Ukraine near stands use the production foliage atlas in one bounded Lambert draw", () => {
   const runtime = createKoreaSceneryRuntime(THREE, {
     era: "ukraine-modern",
     qualityTier: "desktop",
@@ -503,19 +515,37 @@ test("Ukraine soft-canopy stands use rounded crown geometry and Lambert lighting
   const crowns = group.getObjectByName("PROCEDURAL_TREE_CROWNS");
   const trunks = group.getObjectByName("PROCEDURAL_TREE_TRUNKS");
   assert.ok(crowns?.isInstancedMesh);
-  assert.ok(trunks?.isInstancedMesh);
+  assert.equal(trunks, undefined,
+    "atlas trunks must not be duplicated by a second primitive draw");
   const crownTriangles = trianglesPerInstance(crowns);
-  const trunkTriangles = trianglesPerInstance(trunks);
-  assert.equal(crownTriangles, UKRAINE_NEAR_RING_STAND_SIZE * 24,
-    "all five six-sided smooth canopy lobes must survive the geometry reduction");
-  assert.equal(trunkTriangles, UKRAINE_NEAR_RING_VISIBLE_TRUNKS * 24,
-    "only one dominant trunk should remain under overlapping foliage");
-  assert.ok(crownTriangles + trunkTriangles <= 200,
-    "a complete Ukraine near stand must stay inside its 200-triangle ceiling");
-  assert.equal(crowns.geometry.getAttribute("color")?.itemSize, 3,
-    "painted lobe variation must live in the shared geometry instead of another draw");
+  assert.equal(crownTriangles, UKRAINE_NEAR_RING_STAND_SIZE * 4,
+    "each authored ecological role must use one crossed two-quad silhouette");
+  assert.equal(UKRAINE_NEAR_RING_VISIBLE_TRUNKS, 0);
+  assert.ok(crownTriangles <= 20,
+    "a complete atlas stand must remain cheaper than the former 120-triangle blob");
+  assert.equal(crowns.geometry.getAttribute("uv")?.itemSize, 2);
+  assert.equal(crowns.material.map?.name,
+    "TEX_UKRAINE_TEMPERATE_FOLIAGE_SYNTHETIC");
+  assert.equal(crowns.material.map?.flipY, false);
+  assert.equal(crowns.material.alphaTest, UKRAINE_TEMPERATE_FOLIAGE_ALPHA_CUTOFF);
+  assert.equal(crowns.material.transparent, false);
+  assert.equal(crowns.material.depthWrite, true);
+  assert.equal(crowns.material.side, THREE.DoubleSide);
+  assert.match(UKRAINE_TEMPERATE_FOLIAGE_URL,
+    /ukraine-temperate-foliage-v1\.png\?v=299$/);
+  assert.deepEqual(UKRAINE_TEMPERATE_FOLIAGE_REGIONS, {
+    matureWoodland: [0.02, 0.02, 0.48, 0.48],
+    poplarWindbreak: [0.52, 0.02, 0.98, 0.48],
+    mixedHedgerow: [0.02, 0.52, 0.48, 0.98],
+    meadowScrub: [0.52, 0.52, 0.98, 0.98],
+  });
   assert.equal(crowns.material.type, "MeshLambertMaterial",
-    "Ukraine soft-world crowns must not use hard toon posterization");
+    "Ukraine foliage must remain integrated with the world light rather than glow unlit");
+  assert.equal(group.userData.scenery.foliageAtlasId,
+    "environment.foliage.ukraine-temperate.v1");
+  assert.equal(group.userData.scenery.foliageAtlasReady, true);
+  assert.equal(group.userData.scenery.foliageAtlasSynthetic, true,
+    "Node has no Image loader, so structural tests must declare their synthetic texture");
   runtime.update({ elapsedSeconds: 8, windX: 5, windZ: 2 });
   const shader = {
     uniforms: {},
@@ -529,6 +559,37 @@ test("Ukraine soft-canopy stands use rounded crown geometry and Lambert lighting
   assert.doesNotMatch(shader.vertexShader, /0\.70710678/);
   runtime.disposeTile(group);
   runtime.dispose();
+});
+
+test("caller-owned Ukraine foliage atlases are validated without being mutated or disposed", () => {
+  const invalid = new THREE.Texture();
+  assert.throws(
+    () => createKoreaSceneryRuntime(THREE, {
+      era: "ukraine-modern",
+      ukraineFoliageAtlas: invalid,
+    }),
+    /must already satisfy the top-left sRGB clamp\/mipmap contract/,
+  );
+  assert.equal(invalid.flipY, true,
+    "the rejected caller texture must retain its original sampler state");
+
+  const atlas = configureUkraineFoliageAtlas(THREE, new THREE.Texture());
+  let atlasDisposals = 0;
+  atlas.addEventListener("dispose", () => atlasDisposals++);
+  const runtime = createKoreaSceneryRuntime(THREE, {
+    era: "ukraine-modern",
+    qualityTier: "desktop",
+    ukraineFoliageAtlas: atlas,
+  });
+  const group = runtime.createTile(chunkFixture(), flatDecodedFixture(), 0);
+  assert.equal(group.getObjectByName("PROCEDURAL_TREE_CROWNS").material.map, atlas);
+  assert.equal(group.userData.scenery.foliageAtlasReady, false,
+    "an injected sampler with no decoded image must not be reported ready");
+  runtime.disposeTile(group);
+  runtime.dispose();
+  assert.equal(atlasDisposals, 0,
+    "the runtime must never dispose a validated caller-owned atlas");
+  atlas.dispose();
 });
 
 test("all Ukraine scenery materials share the terrain atmosphere by identity", () => {
@@ -553,7 +614,7 @@ test("all Ukraine scenery materials share the terrain atmosphere by identity", (
     const childMaterials = Array.isArray(child.material) ? child.material : [child.material];
     for (const material of childMaterials) if (material) materials.add(material);
   });
-  assert.ok(materials.size > 5);
+  assert.ok(materials.size >= 4);
   for (const material of materials) {
     assert.equal(material.fog, false, `${material.name || material.type} must not double-fog`);
     assert.equal(material.userData.ukraineSoftWorldFog, true);
@@ -643,8 +704,13 @@ test("Ukraine mid-ring scenery uses thinner stands and lower density than the ne
   assert.ok(midCrowns.geometry.attributes.position.count
     < nearCrowns.geometry.attributes.position.count,
     "mid-ring stand geometry must be cheaper than the near-ring full stand");
-  assert.ok(trianglesPerInstance(midCrowns) <= 60,
-    "a Ukraine mid-ring tree mass must stay inside its 60-triangle ceiling");
+  assert.equal(trianglesPerInstance(midCrowns), UKRAINE_MID_RING_STAND_SIZE * 4,
+    "the mid ring must retain exactly one four-triangle crossed mature-woodland role");
+  assert.equal(midCrowns.material, nearCrowns.material,
+    "near and mid rings must share one atlas material instead of adding a distant draw variant");
+  assert.equal(midCrowns.material.map?.name,
+    "TEX_UKRAINE_TEMPERATE_FOLIAGE_SYNTHETIC");
+  assert.equal(midCrowns.material.alphaTest, UKRAINE_TEMPERATE_FOLIAGE_ALPHA_CUTOFF);
   assert.equal(midTrunks, undefined,
     "mid-ring canopy masses must not submit hidden trunk geometry");
   runtime.disposeTile(nearTile);
@@ -736,10 +802,11 @@ test("ambient budget rungs shed secondary detail and restore exact authored coun
   const grass = byName("PROCEDURAL_SOFT_WORLD_GRASS");
   const hiddenAtLevelOne = [
     grass,
-    byName("PROCEDURAL_TREE_TRUNKS"),
     byName("PROCEDURAL_ROAD_MARKINGS"),
     byName("PROCEDURAL_POWER_LINES"),
   ];
+  assert.equal(group.getObjectByName("PROCEDURAL_TREE_TRUNKS"), undefined,
+    "alpha-card foliage already authors visible trunks");
   const navigationCues = [
     byName("PROCEDURAL_UKRAINE-MODERN_BUILDINGS"),
     byName("PROCEDURAL_UKRAINE-MODERN_ROADS"),

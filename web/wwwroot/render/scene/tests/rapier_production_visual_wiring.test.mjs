@@ -53,3 +53,13 @@ test("Build 238 production wiring selects v2, the real balloon, and compact high
   assert.match(hud, /advanceRapierHighMachInstruments\(/);
   assert.match(hud, /drawRapierHighMachInstruments\(highMach\.presentation\)/);
 });
+
+test("live Rapier sensor view consumes the hidden exterior's canonical cockpit datum", () => {
+  const app = source("app.js");
+
+  assert.match(app,
+    /resolveRapierCockpitCameraAnchor\(\{[\s\S]*?playerPresentationId:[\s\S]*?playerExteriorSlot:[\s\S]*?semanticAnchor:/,
+    "live camera must resolve Rapier's canonical exterior socket when the authored cockpit is hidden");
+  assert.match(app, /this\.playerExteriorSlot\.root\.visible = false/,
+    "resolving Rapier's camera datum must not expose the ownship exterior in live flight");
+});

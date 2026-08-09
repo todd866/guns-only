@@ -3,18 +3,36 @@ using Xunit.Abstractions;
 using Xunit.Sdk;
 
 bool server = args.Contains("--server");
+bool unity = args.Contains("--unity");
+bool excludeLoopback = args.Contains("--exclude-loopback");
+if (server && unity)
+    throw new ArgumentException("Select only one of --server or --unity.");
+if (excludeLoopback && !unity)
+    throw new ArgumentException("--exclude-loopback is only valid with --unity.");
+
 var assembly = server
     ? typeof(GunsOnly.Server.Tests.PresenceProtocolTests).Assembly
-    : typeof(GunsOnly.Sim.Tests.ReactiveBanditTests).Assembly;
-var filters = args.Where(argument => argument != "--server").ToArray();
+    : unity
+        ? typeof(GunsOnly.UnityBridge.Tests.UnityCobraSessionTests).Assembly
+        : typeof(GunsOnly.Sim.Tests.ReactiveBanditTests).Assembly;
+var runnerSwitches = new HashSet<string>(StringComparer.Ordinal) {
+    "--server", "--unity", "--exclude-loopback",
+};
+var filters = args.Where(argument => !runnerSwitches.Contains(argument)).ToArray();
 using var framework = new XunitTestFramework(new NullMessageSink());
 using var discoverer = framework.GetDiscoverer(new ReflectionAssemblyInfo(assembly));
 var discovery = new DiscoverySink();
 discoverer.Find(false, discovery, new Options());
 discovery.Finished.WaitOne();
-var selected = discovery.Cases.Where(test =>
-    filters.Length == 0 || filters.Any(filter => test.DisplayName.Contains(
-        filter, StringComparison.OrdinalIgnoreCase))).ToArray();
+var selected = discovery.Cases.Where(test => {
+    if (excludeLoopback && test.DisplayName.Contains(
+        "WireLoopbackAcceptanceTests", StringComparison.OrdinalIgnoreCase))
+        return false;
+    return filters.Length == 0 || filters.Any(filter => test.DisplayName.Contains(
+        filter, StringComparison.OrdinalIgnoreCase));
+}).ToArray();
+if (excludeLoopback)
+    Console.WriteLine("Restricted host: excluding Unity TCP loopback acceptance; CI/unity-check runs it.");
 Console.WriteLine($"Discovered {discovery.Cases.Count} tests; running {selected.Length} in process.");
 using var executor = framework.GetExecutor(assembly.GetName());
 var execution = new ExecutionSink();

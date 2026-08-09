@@ -3,51 +3,88 @@ import assert from "node:assert/strict";
 import {
   COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD,
   clampInducedLookRotation,
-  lookAnglesFromOffset,
-  lookOffsetFromAngles,
+  nextHostileTargetId,
+  resolveAuthorityLookAtPoint,
+  togglePadlockSelection,
 } from "../cobra_camera_bias.js";
 
-test("the induced look rotation is capped at ±0.05 rad", () => {
+test("soft cueing stays inside the windshield bias cap", () => {
   assert.equal(COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD, 0.05);
   const clamped = clampInducedLookRotation(
-    { yawRad: 0.2, pitchRad: 0.08 },
-    { yawRad: 0.9, pitchRad: -0.4 },
+    { yawRad: 0, pitchRad: 0 },
+    { yawRad: 0.4, pitchRad: -0.3 },
   );
-  assert.ok(Math.abs(clamped.yawRad - 0.25) < 1e-12);
-  assert.ok(Math.abs(clamped.pitchRad - 0.03) < 1e-12);
+  assert.ok(Math.abs(clamped.yawRad) <= COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD + 1e-9);
+  assert.ok(Math.abs(clamped.pitchRad) <= COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD + 1e-9);
 });
 
-test("a small cue inside the cap passes through unchanged", () => {
+test("soft cueing takes the short yaw wrap across ±π", () => {
+  const baseYaw = Math.PI - 0.01;
   const clamped = clampInducedLookRotation(
-    { yawRad: -1.1, pitchRad: 0.08 },
-    { yawRad: -1.08, pitchRad: 0.09 },
+    { yawRad: baseYaw, pitchRad: 0 },
+    { yawRad: -Math.PI + 0.2, pitchRad: 0 },
   );
-  assert.ok(Math.abs(clamped.yawRad - -1.08) < 1e-12);
-  assert.ok(Math.abs(clamped.pitchRad - 0.09) < 1e-12);
+  const applied = Math.atan2(
+    Math.sin(clamped.yawRad - baseYaw),
+    Math.cos(clamped.yawRad - baseYaw),
+  );
+  assert.ok(applied > 0, "short-way wrap must advance toward -π from +π");
+  assert.ok(applied <= COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD + 1e-9);
 });
 
-test("yaw clamping is wrap-aware across ±π", () => {
+test("soft cueing is a no-op when already on the desired look", () => {
   const clamped = clampInducedLookRotation(
-    { yawRad: 3.1, pitchRad: 0.0 },
-    { yawRad: -3.1, pitchRad: 0.0 },
+    { yawRad: 0.1, pitchRad: -0.05 },
+    { yawRad: 0.1, pitchRad: -0.05 },
   );
-  // The short way from 3.1 to -3.1 is +0.083 rad through the wrap; the cap holds it to +0.05.
-  const expected = Math.atan2(Math.sin(3.15), Math.cos(3.15));
-  assert.ok(Math.abs(clamped.yawRad - expected) < 1e-9, `got ${clamped.yawRad}`);
+  assert.equal(clamped.yawRad, 0.1);
+  assert.equal(clamped.pitchRad, -0.05);
 });
 
-test("look angles and offsets round-trip in the scene frame (x east, z −north)", () => {
-  const angles = lookAnglesFromOffset(30.0, 12.0, -50.0);
-  const offset = lookOffsetFromAngles(angles.yawRad, angles.pitchRad, Math.hypot(30, 12, 50));
-  assert.ok(Math.abs(offset.x - 30) < 1e-9);
-  assert.ok(Math.abs(offset.y - 12) < 1e-9);
-  assert.ok(Math.abs(offset.z - -50) < 1e-9);
+test("Tab cycles hostiles like the F-22 gun-target list", () => {
+  const ids = ["seam", "near", "far"];
+  assert.equal(nextHostileTargetId(ids, null), "seam");
+  assert.equal(nextHostileTargetId(ids, "seam"), "near");
+  assert.equal(nextHostileTargetId(ids, "far"), "seam");
+  assert.equal(nextHostileTargetId([], "seam"), null);
 });
 
-test("yaw 0 looks toward −z with pitch rising on +y", () => {
-  const level = lookOffsetFromAngles(0, 0, 100);
-  assert.ok(Math.abs(level.x) < 1e-12 && Math.abs(level.y) < 1e-12);
-  assert.ok(Math.abs(level.z - -100) < 1e-12);
-  const up = lookAnglesFromOffset(0, 10, -100);
-  assert.ok(up.pitchRad > 0);
+test("V toggles padlock view without inventing a target when the list is empty", () => {
+  assert.deepEqual(
+    togglePadlockSelection({ padlockActive: false, selectedTargetId: null, hostileTargetIds: [] }),
+    { padlockActive: false, selectedTargetId: null },
+  );
+  assert.deepEqual(
+    togglePadlockSelection({
+      padlockActive: false,
+      selectedTargetId: null,
+      hostileTargetIds: ["seam", "near"],
+    }),
+    { padlockActive: true, selectedTargetId: "seam" },
+  );
+  assert.deepEqual(
+    togglePadlockSelection({
+      padlockActive: true,
+      selectedTargetId: "near",
+      hostileTargetIds: ["seam", "near"],
+    }),
+    { padlockActive: false, selectedTargetId: "near" },
+  );
+});
+
+test("padlock look-at owns the eye; forward view stays nose-forward", () => {
+  const forward = { x: 1, y: 2, z: 3 };
+  const unit = { x_m: 100, y_m: 40, z_m: -50 };
+  assert.deepEqual(
+    resolveAuthorityLookAtPoint({ padlockActive: false, selectedUnit: unit, forwardLook: forward }),
+    { x: 1, y: 2, z: 3, mode: "forward" },
+  );
+  assert.deepEqual(
+    resolveAuthorityLookAtPoint({ padlockActive: true, selectedUnit: unit, forwardLook: forward }),
+    { x: 100, y: 41.2, z: 50, mode: "padlock" },
+  );
+  assert.equal(
+    resolveAuthorityLookAtPoint({ padlockActive: true, selectedUnit: null, forwardLook: forward }).mode,
+    "forward",
+  );
 });

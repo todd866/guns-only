@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { cp, copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -96,10 +97,10 @@ test("canonical starter content passes strict validation", async () => {
     manifests: 4,
     packs: 1,
     profiles: 1,
-    assets: 12,
+    assets: 13,
     licenses: 2,
-    referencedFiles: 19,
-    referencedBytes: 18833851,
+    referencedFiles: 21,
+    referencedBytes: 19135168,
     modelTriangles: 20396,
   });
 });
@@ -131,14 +132,19 @@ test("asset-source closure bytes include every unique source without double coun
   assert.equal(report.summary.referencedBytes, expectedBytes);
 });
 
-test("canonical project-generated visual set remains placeholder until production art review", async () => {
+test("canonical project-generated visual set only promotes explicitly reviewed production art", async () => {
   const manifest = await readJson(path.join(
     REPOSITORY_ROOT,
     "content/packs/korea-1950s/asset-manifest.json",
   ));
+  const reviewedProductionAssets = new Set([
+    "environment.terrain.central-front.v2",
+    "environment.texture.korea-highland-ground.v1",
+  ]);
   assert.equal(manifest.assets.length > 0, true);
   assert.deepEqual(
     manifest.assets.filter((asset) => asset.licenseRef === "license.project-code.v1"
+      && !reviewedProductionAssets.has(asset.id)
       && asset.status !== "placeholder").map((asset) => ({
       id: asset.id,
       status: asset.status,
@@ -147,10 +153,49 @@ test("canonical project-generated visual set remains placeholder until productio
     "project-generated starter visuals must not claim production art maturity",
   );
   assert.deepEqual(
-    manifest.assets.filter((asset) => asset.status === "production").map((asset) => asset.id),
-    ["environment.terrain.central-front.v2"],
-    "the reviewed source-derived terrain is the only production asset",
+    manifest.assets.filter((asset) => asset.status === "production")
+      .map((asset) => asset.id).sort(),
+    [...reviewedProductionAssets].sort(),
+    "only the reviewed source-derived terrain and generated ground art are production assets",
   );
+});
+
+test("Korea generated ground provenance pins the exact promoted runtime bytes", async () => {
+  const packDirectory = path.join(REPOSITORY_ROOT, "content/packs/korea-1950s");
+  const [artManifest, assetManifest] = await Promise.all([
+    readJson(path.join(
+      packDirectory,
+      "environment/textures/korea-ground-art-manifest.v1.json",
+    )),
+    readJson(path.join(packDirectory, "asset-manifest.json")),
+  ]);
+  assert.equal(artManifest.schemaVersion, "1.0.0");
+  assert.equal(artManifest.assets.length, 1);
+  const art = artManifest.assets[0];
+  assert.equal(art.id, "environment.texture.korea-highland-ground.v1");
+  const runtimeBytes = await readFile(path.join(
+    packDirectory,
+    "environment/textures",
+    art.uri,
+  ));
+  const runtimeSha256 = createHash("sha256").update(runtimeBytes).digest("hex");
+  assert.equal(runtimeSha256, art.processing.runtimeSha256);
+  assert.equal(runtimeBytes.byteLength, art.processing.runtimeSizeBytes);
+
+  const promoted = assetManifest.assets.find((asset) => asset.id === art.id);
+  assert.ok(promoted, "Korea asset manifest omitted generated ground art");
+  assert.equal(promoted.status, "production");
+  const runtimeSource = promoted.sources.find((source) => source.uri.endsWith(`/${art.uri}`));
+  assert.ok(runtimeSource, "Korea asset manifest omitted generated runtime bytes");
+  assert.equal(runtimeSource.sha256, runtimeSha256);
+  assert.equal(runtimeSource.sizeBytes, runtimeBytes.byteLength);
+  const provenanceSource = promoted.sources.find((source) =>
+    source.uri.endsWith("/korea-ground-art-manifest.v1.json"));
+  assert.ok(provenanceSource, "Korea asset manifest omitted generated-art provenance");
+  const provenanceBytes = await readFile(path.join(packDirectory, provenanceSource.uri));
+  assert.equal(provenanceSource.sha256,
+    createHash("sha256").update(provenanceBytes).digest("hex"));
+  assert.equal(provenanceSource.sizeBytes, provenanceBytes.byteLength);
 });
 
 test("WebBridge Korea presentation constants match the canonical starter pack", async () => {

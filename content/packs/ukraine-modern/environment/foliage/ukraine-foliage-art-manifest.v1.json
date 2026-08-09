@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "1.0.0",
+  "assetFamilyId": "art.ukraine-modern.temperate-foliage.v1",
+  "authorship": {
+    "method": "OpenAI built-in image generation",
+    "generatedOn": "2026-08-09",
+    "humanDirection": "Low-altitude F-22 temperate woodland readability with exact Web and Unity reuse"
+  },
+  "assets": [
+    {
+      "id": "environment.foliage.ukraine-temperate.v1",
+      "uri": "ukraine-temperate-foliage-v1.png",
+      "role": "alpha-tested temperate woodland, windbreak, hedgerow and meadow-scrub atlas",
+      "projection": "orthographic side-view 2x2 sprite atlas",
+      "regionsTopLeftClockwise": [
+        "mature deciduous woodland clump",
+        "poplar windbreak cluster",
+        "low meadow scrub and wild grasses",
+        "mixed hedgerow and young woodland"
+      ],
+      "constraints": [
+        "presentation only; never terrain, collision, targeting, obstacle, route or visibility authority",
+        "the same atlas regions and physical scale contract must be consumed by Web and Unity",
+        "sRGB colour with ordinary mipmaps, straight alpha and alpha cutoff 0.38",
+        "authored UV origin is top-left with V increasing downward",
+        "no identifiable real-world location, sign, brand, person or vehicle"
+      ],
+      "prompt": "Create a production-ready square 2x2 foliage sprite atlas for a low-altitude flight simulator set in a fictional temperate Eastern European / Ukrainian countryside. Four isolated orthographic side-view assets: a mature deciduous woodland clump, a tall narrow poplar windbreak cluster, a dense mixed hedgerow and young woodland mass, and low meadow scrub with wild grasses and small bushes. Painterly-realistic game art, believable green/sage/olive/brown variation, readable branching and leaf masses, neutral overcast lighting, no cast shadow, ground plane, sky, horizon, buildings, people, vehicles, text, border or grid. Final source plate uses a perfectly flat pure-blue chroma background for deterministic alpha extraction.",
+      "source": {
+        "generatedPngSha256": "3e901c2f85495f3edf81ee967e081bc04507508b98624325d6a12ce8742658c0",
+        "generatedPngSizeBytes": 1670121,
+        "modelBackend": "OpenAI built-in image generation; exact backend and seed not exposed"
+      },
+      "processing": {
+        "command": "ffmpeg -i <generated.png> -vf colorkey=0x0000ff:0.30:0.04,despill=type=blue:mix=1:expand=0.35:red=0.15:green=0.15:blue=-1,scale=1024:1024:flags=lanczos,format=rgba -frames:v 1 ukraine-temperate-foliage-v1.png",
+        "width": 1024,
+        "height": 1024,
+        "runtimeSha256": "9172d362a64332cb87535359b2ed9553db28fb01628de909196446ff34ccfec4",
+        "runtimeSizeBytes": 1283185
+      }
+    }
+  ]
+}

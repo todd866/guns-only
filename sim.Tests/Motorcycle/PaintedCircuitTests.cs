@@ -1,28 +1,65 @@
 using GunsOnly.Sim.Motorcycle;
+using System.Text.Json;
 
 namespace GunsOnly.Sim.Tests.Motorcycle;
 
 public sealed class PaintedCircuitTests
 {
     [Fact]
-    public void RapierStripCircuitStaysOnPavedSurfaceAtStripElevation()
+    public void RendererNeutralRouteContractPinsTheSharedWebAndUnitySchema()
     {
-        var circuit = PaintedCircuit.RapierStripWeekend();
-        Assert.True(circuit.BoundingLengthM + circuit.TrackWidthM
-            <= PaintedCircuit.RapierRunwayLengthM);
+        var circuit = PaintedCircuit.WeekendTrackDay();
+        WeekendRouteContract route = WeekendRouteContract.FromCircuit(circuit);
+
+        Assert.Equal(WeekendRouteContract.CurrentSchema, route.Schema);
+        Assert.Equal(WeekendRouteContract.TrackDayMode, route.Mode);
+        Assert.Equal(WeekendRouteContract.ClosedCircuitRouteKind, route.RouteKind);
+        Assert.True(route.Closed);
+        Assert.Equal(circuit.Id, route.Id);
+        Assert.Equal(circuit.TrackWidthM, route.TrackWidthM);
+        Assert.Equal(circuit.PavementHalfWidthM, route.PavementHalfWidthM);
+        Assert.Equal(circuit.StartHeadingRad, route.Start.HeadingRad);
+        Assert.Equal(circuit.PaddockAccessPointWorldM.X, route.PaddockAccess.X);
+        Assert.Equal(circuit.PaddockAccessHeadingRad, route.PaddockAccess.HeadingRad);
+        Assert.NotEqual(route.Start, route.PaddockAccess);
+        Assert.Equal(circuit.Centreline.Count, route.Centreline.Count);
+
+        using JsonDocument document = JsonDocument.Parse(route.ToJson());
+        JsonElement root = document.RootElement;
+        Assert.Equal("closed-circuit", root.GetProperty("route_kind").GetString());
+        Assert.Equal(circuit.CircuitLengthM, root.GetProperty("circuit_length_m").GetDouble());
+        Assert.Equal(circuit.Centreline.Count, root.GetProperty("centreline").GetArrayLength());
+        Assert.Equal(circuit.StartHeadingRad,
+            root.GetProperty("start").GetProperty("heading_rad").GetDouble());
+        Assert.Equal(circuit.PaddockAccessPointWorldM.Z,
+            root.GetProperty("paddock_access").GetProperty("z").GetDouble());
+    }
+
+    [Fact]
+    public void WeekendTrackDayIsABroadPurposeBuiltClosedCircuit()
+    {
+        var circuit = PaintedCircuit.WeekendTrackDay();
+
+        Assert.Equal(PaintedCircuit.WeekendTrackDayCircuitId, circuit.Id);
+        Assert.InRange(circuit.CircuitLengthM, 3_000.0, 5_000.0);
+        Assert.InRange(circuit.BoundingLengthM, 650.0, 900.0);
+        Assert.InRange(circuit.BoundingWidthM, 1_300.0, 1_600.0);
+        Assert.True(circuit.BoundingWidthM / circuit.BoundingLengthM < 2.5);
+        Assert.Equal(PaintedCircuit.WeekendPavementHalfWidthM, circuit.PavementHalfWidthM);
         foreach (var p in circuit.Centreline)
-            Assert.InRange(p.Y, RapierLaunchSite.OperatingSurfaceElevationM - 0.01,
-                RapierLaunchSite.OperatingSurfaceElevationM + 0.01);
+            Assert.InRange(p.Y, circuit.SurfaceElevationM - 0.01,
+                circuit.SurfaceElevationM + 0.01);
         AssertCorridorIsPaved(circuit);
     }
 
     [Fact]
     public void PavementFollowsTheCircuitUnderHeadingAndOriginChange()
     {
-        var circuit = PaintedCircuit.RapierStripWeekend(
+        var circuit = PaintedCircuit.WeekendTrackDay(
             headingRad: 0.7,
-            originOverride: new Vec3D(350.0, RapierLaunchSite.OperatingSurfaceElevationM, -900.0));
+            originOverride: new Vec3D(350.0, 123.0, -900.0));
 
+        Assert.Equal(123.0, circuit.SurfaceElevationM);
         AssertCorridorIsPaved(circuit);
     }
 
@@ -30,7 +67,7 @@ public sealed class PaintedCircuitTests
     {
         IReadOnlyList<Vec3D> points = circuit.Centreline;
         int wrap = points.Count - 1;
-        double corridorHalfWidthM = circuit.TrackWidthM * 0.5 + 2.0;
+        double corridorHalfWidthM = circuit.PavementHalfWidthM - 1.0;
         for (int i = 0; i < wrap; i++)
         {
             Vec3D previous = points[(i - 1 + wrap) % wrap];
@@ -50,7 +87,7 @@ public sealed class PaintedCircuitTests
             }
         }
 
-        // Far off the corridor and outside the runway rectangle must NOT read as paved.
+        // Far off the corridor must NOT read as paved; there is no rectangular runway fallback.
         Vec3D apex = points[0];
         foreach (Vec3D point in points)
             if (Horizontal(point, points[0]) > Horizontal(apex, points[0]))
@@ -60,10 +97,10 @@ public sealed class PaintedCircuitTests
     }
 
     [Fact]
-    public void EveryCornerIsRideableAtHairpinEntrySpeeds()
+    public void EveryCornerHasRideableFiniteCurvature()
     {
-        // A competent rider braking to ~55-60 km/h at ~0.6 g lateral needs r >= 28 m.
-        var circuit = PaintedCircuit.RapierStripWeekend();
+        // A competent rider braking to club-circuit speeds at ~0.6 g lateral needs r >= 28 m.
+        var circuit = PaintedCircuit.WeekendTrackDay();
         (double minimumRadiusM, Vec3D tightestPoint) = MinimumCornerRadius(circuit);
 
         Assert.True(
@@ -139,9 +176,10 @@ public sealed class PaintedCircuitTests
     [Fact]
     public void ClosedCircuitHasPositiveLengthAndTrackWidth()
     {
-        var circuit = PaintedCircuit.RapierStripWeekend();
-        Assert.True(circuit.CircuitLengthM > 1500.0);
+        var circuit = PaintedCircuit.WeekendTrackDay();
+        Assert.True(circuit.CircuitLengthM > 3_000.0);
         Assert.InRange(circuit.TrackWidthM, 8.0, 20.0);
+        Assert.True(circuit.PavementHalfWidthM > circuit.TrackWidthM * 0.5);
         Assert.Equal(circuit.Centreline[0], circuit.Centreline[^1]);
         Assert.True(circuit.SectorGateProgressM.Count >= 3);
     }
@@ -149,7 +187,7 @@ public sealed class PaintedCircuitTests
     [Fact]
     public void CentrelineIsSampledWithContinuousFiniteCurvature()
     {
-        var circuit = PaintedCircuit.RapierStripWeekend();
+        var circuit = PaintedCircuit.WeekendTrackDay();
         Assert.True(circuit.Centreline.Count > 200);
 
         double maximumHeadingChangeRad = 0.0;
@@ -176,7 +214,7 @@ public sealed class PaintedCircuitTests
     [Fact]
     public void QueryReportsOnTrackNearCentrelineAndOffTrackFarAway()
     {
-        var circuit = PaintedCircuit.RapierStripWeekend();
+        var circuit = PaintedCircuit.WeekendTrackDay();
         Vec3D onCentre = circuit.Centreline[circuit.Centreline.Count / 2];
         var onTrack = circuit.Query(onCentre);
         Assert.True(onTrack.OnTrack);
@@ -189,7 +227,7 @@ public sealed class PaintedCircuitTests
     [Fact]
     public void ForwardOnTrackSamplesThroughEverySectorIncrementLapIndex()
     {
-        var circuit = PaintedCircuit.RapierStripWeekend();
+        var circuit = PaintedCircuit.WeekendTrackDay();
         var state = new PaintedCircuitQueryState();
 
         PaintedCircuitQueryResult lapCross = default;
@@ -204,7 +242,7 @@ public sealed class PaintedCircuitTests
     [Fact]
     public void JumpingAcrossStartFinishWithoutSectorsDoesNotCountALap()
     {
-        var circuit = PaintedCircuit.RapierStripWeekend();
+        var circuit = PaintedCircuit.WeekendTrackDay();
         var state = new PaintedCircuitQueryState();
         int closingSegment = circuit.Centreline.Count - 2;
 
@@ -218,7 +256,7 @@ public sealed class PaintedCircuitTests
     [Fact]
     public void LeavingThePaintedCourseInvalidatesTheCurrentLap()
     {
-        var circuit = PaintedCircuit.RapierStripWeekend();
+        var circuit = PaintedCircuit.WeekendTrackDay();
         var state = new PaintedCircuitQueryState();
         PaintedCircuitQueryResult result = default;
 
@@ -237,7 +275,7 @@ public sealed class PaintedCircuitTests
     [Fact]
     public void ReverseTraversalCannotArmSectorsOrCountALap()
     {
-        var circuit = PaintedCircuit.RapierStripWeekend();
+        var circuit = PaintedCircuit.WeekendTrackDay();
         var state = new PaintedCircuitQueryState();
         PaintedCircuitQueryResult result = circuit.Query(circuit.Centreline[0], ref state);
 

@@ -20,6 +20,8 @@ suite=sim
 for argument in "$@"; do
   if [ "$argument" = "--server" ]; then
     suite=server
+  elif [ "$argument" = "--unity" ]; then
+    suite=unity
   fi
 done
 
@@ -35,6 +37,12 @@ case "$suite" in
     product_assembly=GunsOnly.Server.dll
     authoritative_test="$repo_dir/server.Tests/bin/$configuration/$target_framework/$test_assembly"
     authoritative_product="$repo_dir/server/bin/$configuration/$target_framework/$product_assembly"
+    ;;
+  unity)
+    test_assembly=GunsOnly.UnityBridge.Tests.dll
+    product_assembly=GunsOnly.UnityBridge.dll
+    authoritative_test="$repo_dir/unity/GunsOnly.UnityBridge.Tests/bin/$configuration/$target_framework/$test_assembly"
+    authoritative_product="$repo_dir/unity/GunsOnly.UnityBridge/bin/$configuration/$target_framework/$product_assembly"
     ;;
 esac
 

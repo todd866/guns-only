@@ -23,8 +23,12 @@ const DEFAULT_MANIFEST_URL = new URL(
   "../../content/packs/korea-1950s/environment/terrain/central-front.manifest.json",
   import.meta.url,
 ).href;
-const UKRAINE_REGIONAL_PAINT_URL = new URL(
-  "../../content/packs/ukraine-modern/environment/textures/rapier-painted-ground-v1.webp",
+export const UKRAINE_REGIONAL_PAINT_URL = new URL(
+  "../../content/packs/ukraine-modern/environment/textures/ukraine-temperate-ground-v2.webp",
+  import.meta.url,
+).href;
+const KOREA_HIGHLAND_GROUND_URL = new URL(
+  "../../content/packs/korea-1950s/environment/textures/korea-highland-ground-v1.webp",
   import.meta.url,
 ).href;
 
@@ -396,6 +400,7 @@ uniform vec3 uAtmosphereHazeColor;
 uniform float uAtmosphereHazeMix;
 uniform float uWorldEdgeM;
 uniform float uModernScenery;
+uniform float uCombatPresentation;
 uniform float uParcelTint;
 uniform float uShadowFloor;
 // 1 = full hero detail (low level), 0 = regional convergence (high altitude). Driven from
@@ -408,6 +413,8 @@ uniform float uCloudShadowStrength;
 uniform vec2 uCloudShadowOffset;
 uniform sampler2D uRegionalPaintMap;
 uniform float uRegionalPaintMapEnabled;
+uniform sampler2D uKoreaSurfaceMap;
+uniform float uKoreaSurfaceMapEnabled;
 // NEAR-FIELD SURFACE DETAIL.
 //
 // The authored ground pigment was wired to the REGIONAL layer only — its weight is
@@ -614,6 +621,56 @@ void main() {
   float dryMeadow = smoothstep(0.68, 0.92, fieldHistory)
     * (1.0 - smoothstep(0.48, 0.68, succession));
   rewildCover = mix(rewildCover, vec3(0.58, 0.56, 0.30), dryMeadow * 0.34);
+  // The worker's two land-cover bytes decide broad ecological category, but on their own those
+  // categories become long interpolated stripes at a 10,000 ft merge. Carry the authored theatre
+  // albedo into the hero band as chroma/meso structure while matching its value to the category
+  // underneath. This is presentation only: the DEM, weather, obstacles and visibility remain the
+  // authoritative sources. One mirrored top-down sample is sufficient for Ukraine's low relief.
+  if (uRegionalPaintMapEnabled > 0.5) {
+    vec3 authoredHero = texture2D(
+      uRegionalPaintMap,
+      vTerrainWorldPosition.xz * (1.0 / 9200.0) + vec2(-0.27, 0.18)
+    ).rgb;
+    const vec3 HERO_LUMA = vec3(0.2126, 0.7152, 0.0722);
+    float authoredHeroLuma = dot(authoredHero, HERO_LUMA);
+    float categoryLuma = clamp(dot(rewildCover, HERO_LUMA), 0.075, 0.34);
+    // Preserve bounded authored value around the generated asset's measured linear mean. A
+    // per-texel luma replacement reduced the bitmap to chroma and recreated the smooth category
+    // wash it was meant to fix; mean anchoring keeps forest/stone separation while categoryLuma
+    // still prevents the material from becoming a second baked lighting solution.
+    vec3 authoredHeroChroma = authoredHero / max(authoredHeroLuma, 0.025);
+    float authoredHeroValue = clamp(authoredHeroLuma / 0.089, 0.58, 1.42);
+    vec3 authoredHeroMatched = authoredHeroChroma * categoryLuma
+      * mix(1.0, authoredHeroValue, 0.58);
+    authoredHeroMatched = clamp(authoredHeroMatched, vec3(0.018), vec3(0.58));
+    rewildCover = mix(
+      rewildCover,
+      authoredHeroMatched,
+      rewildFloor * uTerrainDetail01 * 0.72);
+    // First Merge spends most of its opening at roughly 3 km AGL, where one 9.2 km sample gives
+    // the theatre the right broad pigment but still resolves as a soft wash. Reuse the same
+    // generated production texture at a meso scale only for the F-22 presentation, luma-matched
+    // back into the existing ecological category so this adds material structure rather than a
+    // second lighting solution. Rapier remains on the established soft-world treatment.
+    if (uCombatPresentation > 0.5) {
+      vec3 combatMeso = texture2D(
+        uRegionalPaintMap,
+        vTerrainWorldPosition.xz * (1.0 / 5200.0) + vec2(0.43, -0.29)
+      ).rgb;
+      float combatMesoLuma = dot(combatMeso, HERO_LUMA);
+      float combatBaseLuma = max(dot(rewildCover, HERO_LUMA), 0.035);
+      vec3 combatMesoMatched = combatMeso
+        * (combatBaseLuma / max(combatMesoLuma, 0.025));
+      combatMesoMatched = clamp(
+        combatMesoMatched,
+        rewildCover * 0.45,
+        rewildCover * 1.65);
+      rewildCover = mix(
+        rewildCover,
+        combatMesoMatched,
+        rewildFloor * uTerrainDetail01 * 0.48);
+    }
+  }
   #else
   float patchwork = 0.5 + 0.5 * sin(vTerrainWorldPosition.x * 0.00023
     + sin(vTerrainWorldPosition.z * 0.00017) * 2.3);
@@ -684,12 +741,57 @@ void main() {
     mix(regionalAlbedo, rewildCover, heroMix),
     uTerrainDetail01);
   sAlbedo *= mix(1.06, 0.92, ukraineElevationBand);
+  // Same Ukraine weather, different presentation problem: the F-22 HUD needs ground value
+  // separation at the 10,000 ft merge, while Rapier's minimal sensor view retains the warmer
+  // soft-world exposure. This renderer-only scalar is driven from the staged player airframe.
+  float combatAlbedoLuma = dot(sAlbedo, TERRAIN_LUMA);
+  sAlbedo = mix(
+    vec3(combatAlbedoLuma),
+    sAlbedo,
+    mix(1.0, 1.30, uCombatPresentation));
+  sAlbedo *= mix(1.0, 0.60, uCombatPresentation);
   #else
   sAlbedo = mix(sAlbedo, cultivation, valleyFloor * (0.34 + patchwork * 0.30));
+  // Web-authored highland pigment. Geometry, clearance and landform remain the sourced DEM;
+  // this is a renderer-only material layer that replaces the synthetic camouflage impression
+  // with coherent forest/earth/rock structure. Triplanar world sampling keeps steep valley walls
+  // from stretching the top-down map into vertical streaks. Luma matching deliberately preserves
+  // the shader's height/slope value hierarchy instead of baking a second lighting solution into it.
+  if (uKoreaSurfaceMapEnabled > 0.5) {
+    vec3 weights = pow(abs(normal), vec3(4.0));
+    weights /= max(weights.x + weights.y + weights.z, 0.0001);
+    const float KOREA_SURFACE_SCALE_M = 7200.0;
+    vec3 authoredTop = texture2D(uKoreaSurfaceMap,
+      vTerrainWorldPosition.xz / KOREA_SURFACE_SCALE_M + vec2(0.17, -0.31)).rgb;
+    vec3 authoredEast = texture2D(uKoreaSurfaceMap,
+      vTerrainWorldPosition.zy / KOREA_SURFACE_SCALE_M + vec2(-0.23, 0.41)).rgb;
+    vec3 authoredNorth = texture2D(uKoreaSurfaceMap,
+      vTerrainWorldPosition.xy / KOREA_SURFACE_SCALE_M + vec2(0.37, 0.11)).rgb;
+    vec3 authoredSurface = authoredEast * weights.x
+      + authoredTop * weights.y
+      + authoredNorth * weights.z;
+    float authoredLuma = dot(authoredSurface, vec3(0.2126, 0.7152, 0.0722));
+    float baseLuma = dot(sAlbedo, vec3(0.2126, 0.7152, 0.0722));
+    vec3 authoredChroma = authoredSurface / max(authoredLuma, 0.025);
+    // The shipped texture's average sRGB luma is ~60/255 (about .045 linear). Normalize around
+    // that stable reference, not around each individual texel: per-texel luma matching erased the
+    // authored forest/earth value structure and left only blurry green chroma. Bounds retain the
+    // shader's authoritative slope hierarchy while letting the bitmap provide visible material.
+    float authoredValue = clamp(authoredLuma / 0.045, 0.62, 1.38);
+    vec3 lumaMatched = authoredChroma * baseLuma * mix(1.0, authoredValue, 0.68);
+    lumaMatched = clamp(lumaMatched, sAlbedo * 0.64, sAlbedo * 1.38);
+    sAlbedo = mix(sAlbedo, lumaMatched, 0.54);
+  }
   #endif
   sAlbedo = mix(sAlbedo, sRock, slopeFace * (0.20 + upperSlope * 0.48));
   sAlbedo = mix(sAlbedo, sRidge, max(highRidge * 0.55, exposedFace * 0.62));
   sAlbedo *= surfaceDetail.x;
+  #ifndef UKRAINE_SCENERY
+  // The warm/cool key plus ACES lifted every modern Korea terrain band into the same pale-green
+  // display range. Reserve real headroom for sun, haze and HUD contrast; the authored texture now
+  // carries the local forest/earth structure instead of relying on a bright procedural palette.
+  sAlbedo *= 0.72;
+  #endif
   float halfLambert = dot(normal, normalize(uSunDirection)) * 0.5 + 0.5;
   halfLambert *= halfLambert;
   #ifdef UKRAINE_SCENERY
@@ -815,6 +917,9 @@ void main() {
   waterLit *= 0.96 + waterRipple * 0.028;
   waterLit += vec3(0.90, 0.84, 0.68)
     * pow(max(dot(normal, waterHalf), 0.0), 72.0) * 0.28;
+  float combatWaterLuma = dot(waterLit, vec3(0.2126, 0.7152, 0.0722));
+  vec3 combatWater = mix(vec3(combatWaterLuma), waterLit, 0.68) * 0.72;
+  waterLit = mix(waterLit, combatWater, uCombatPresentation);
   #endif
   lit = mix(lit, waterLit, waterMask);
 
@@ -823,9 +928,14 @@ void main() {
   // blue-grey air aloft, so the painted surface has depth instead of becoming an ochre slab.
   #ifdef MODERN_SCENERY
   #ifdef UKRAINE_SCENERY
-  float fogDensity = uFogDensity * uAtmosphereDensityScale;
+  // Keep weather visibility authoritative while preventing First Merge's near/mid terrain from
+  // disappearing into the same pale value as its HUD. The world-edge bury below still reaches
+  // full opacity before geometry ends; this only opens the useful combat foreground.
+  float fogDensity = uFogDensity * uAtmosphereDensityScale
+    * mix(1.0, 0.76, uCombatPresentation);
   // Natural painted atmosphere: warm land underneath a cool high-altitude scattering layer.
   vec3 hazeColor = mix(uFogColor, uAtmosphereHazeColor, uAtmosphereHazeMix);
+  hazeColor = mix(hazeColor, vec3(0.055, 0.105, 0.17), uCombatPresentation * 0.78);
   #else
   float fogDensity = uFogDensity * 0.45;
   vec3 hazeColor = vec3(0.36, 0.52, 0.68);
@@ -844,7 +954,12 @@ void main() {
   if (uWorldEdgeM > 1.0) {
     // Start the bury early: at altitude the disc silhouette still reads square if haze only
     // thickens in the last 15% of the stream radius.
-    float edgeHide = smoothstep(uWorldEdgeM * 0.36, uWorldEdgeM * 0.72, distanceToCamera);
+    float edgeHideStart = mix(0.36, 0.48, uCombatPresentation);
+    float edgeHideEnd = mix(0.72, 0.82, uCombatPresentation);
+    float edgeHide = smoothstep(
+      uWorldEdgeM * edgeHideStart,
+      uWorldEdgeM * edgeHideEnd,
+      distanceToCamera);
     aerial = max(aerial, edgeHide);
   }
   #endif
@@ -1135,7 +1250,7 @@ export function createTerrainMaterial(THREE, options = {}) {
       UKRAINE_REGIONAL_PAINT_URL,
       () => { regionalPaintEnabled.value = 1; },
     );
-    regionalPaintMap.name = "TEX_RAPIER_PAINTED_GROUND_V1";
+    regionalPaintMap.name = "TEX_UKRAINE_TEMPERATE_GROUND_V2";
     regionalPaintMap.wrapS = THREE.MirroredRepeatWrapping;
     regionalPaintMap.wrapT = THREE.MirroredRepeatWrapping;
     regionalPaintMap.colorSpace = THREE.SRGBColorSpace;
@@ -1145,6 +1260,21 @@ export function createTerrainMaterial(THREE, options = {}) {
     // terrain blows out to a uniform pale wash under ACES — visually identical to the snow-squall
     // whiteout, which is what makes it expensive to diagnose. The near-field grain layer below
     // samples this map down to a 3.7 m period and is perfectly legible on the loader's defaults.
+  }
+  const koreaSurfaceEnabled = { value: 0 };
+  let koreaSurfaceMap = options.koreaSurfaceMap ?? null;
+  if (koreaSurfaceMap) {
+    koreaSurfaceEnabled.value = 1;
+  } else if (illustrative && !ukraine && typeof document !== "undefined"
+      && typeof THREE.TextureLoader === "function") {
+    koreaSurfaceMap = new THREE.TextureLoader().load(
+      KOREA_HIGHLAND_GROUND_URL,
+      () => { koreaSurfaceEnabled.value = 1; },
+    );
+    koreaSurfaceMap.name = "TEX_KOREA_HIGHLAND_GROUND_V1";
+    koreaSurfaceMap.wrapS = THREE.MirroredRepeatWrapping;
+    koreaSurfaceMap.wrapT = THREE.MirroredRepeatWrapping;
+    koreaSurfaceMap.colorSpace = THREE.SRGBColorSpace;
   }
   const material = new THREE.ShaderMaterial({
     name: "MAT_KOREA_CENTRAL_FRONT_TERRAIN",
@@ -1184,6 +1314,7 @@ export function createTerrainMaterial(THREE, options = {}) {
       // TERRAIN_DETAIL_FULL_AGL_M, seamless regional paint above TERRAIN_DETAIL_ZERO_AGL_M.
       uTerrainDetail01: { value: 1 },
       uModernScenery: { value: illustrative ? 1 : 0 },
+      uCombatPresentation: { value: options.combatPresentation ? 1 : 0 },
       // Full-detail parcel/cultivation tint only affects the period desktop treatment. Modern
       // shading discards periodLit, so skip its four otherwise invisible sin() calls there too.
       uParcelTint: {
@@ -1208,6 +1339,8 @@ export function createTerrainMaterial(THREE, options = {}) {
       uCloudShadowOffset: { value: new THREE.Vector2(0, 0) },
       uRegionalPaintMap: { value: regionalPaintMap },
       uRegionalPaintMapEnabled: regionalPaintEnabled,
+      uKoreaSurfaceMap: { value: koreaSurfaceMap },
+      uKoreaSurfaceMapEnabled: koreaSurfaceEnabled,
       // Near-field grain. Three extra texture fetches per GROUND fragment inside the fade window,
       // and zero outside it — the branch is on view distance, which is coherent across the
       // screen because ground fragments sort by depth from the horizon down. Mobile pays
@@ -2264,7 +2397,7 @@ class KoreaTerrainPresentation {
 
   update({ cameraPosition, streamPosition, elapsedSeconds, windX, windZ, fogColor, fogDensity,
     sunDirection, snowCover01, snowWetness01, glazeIce01,
-    cameraAglM, placementEastM, placementNorthM } = {}) {
+    combatPresentation, cameraAglM, placementEastM, placementNorthM } = {}) {
     if (this.disposed) return;
     if (placementEastM !== undefined || placementNorthM !== undefined) {
       this.setPlacement(placementEastM ?? this.worldEastM, placementNorthM ?? this.worldNorthM);
@@ -2280,7 +2413,9 @@ class KoreaTerrainPresentation {
         placementNorthM: this.worldNorthM,
       });
     }
+    this.missionFeaturePresentation?.update?.({ elapsedSeconds, windX, windZ });
     this.material.uniforms.uTerrainDetail01.value = terrainDetail01(cameraAglM);
+    this.material.uniforms.uCombatPresentation.value = combatPresentation ? 1 : 0;
     if (fogColor) this.material.uniforms.uFogColor.value.copy(fogColor);
     if (Number.isFinite(fogDensity)) this.material.uniforms.uFogDensity.value = fogDensity;
     if (Number.isFinite(this.visibleWorldRadiusM) && this.visibleWorldRadiusM > 0) {
@@ -2847,7 +2982,7 @@ class KoreaTerrainAtlasPresentation {
 
   update({ cameraPosition, streamPosition, deltaSeconds, elapsedSeconds, windX, windZ, fogColor,
     fogDensity, sunDirection, snowCover01, snowWetness01, glazeIce01,
-    cameraAglM, placementEastM, placementNorthM } = {}) {
+    combatPresentation, cameraAglM, placementEastM, placementNorthM } = {}) {
     if (this.disposed) return;
     if (placementEastM !== undefined || placementNorthM !== undefined) {
       this.setPlacement(placementEastM ?? this.worldEastM, placementNorthM ?? this.worldNorthM);
@@ -2861,7 +2996,9 @@ class KoreaTerrainAtlasPresentation {
       placementEastM: this.worldEastM,
       placementNorthM: this.worldNorthM,
     });
+    this.missionFeaturePresentation?.update?.({ elapsedSeconds, windX, windZ });
     this.material.uniforms.uTerrainDetail01.value = terrainDetail01(cameraAglM);
+    this.material.uniforms.uCombatPresentation.value = combatPresentation ? 1 : 0;
     if (fogColor) this.material.uniforms.uFogColor.value.copy(fogColor);
     if (Number.isFinite(fogDensity)) this.material.uniforms.uFogDensity.value = fogDensity;
     if (Number.isFinite(this.visibleWorldRadiusM) && this.visibleWorldRadiusM > 0) {
@@ -2910,6 +3047,10 @@ class KoreaTerrainAtlasPresentation {
       // Page presentations share this atlas's material; omitting cameraAglM here would make
       // their update stomp uTerrainDetail01 back to full detail every frame.
       cameraAglM,
+      // The page presentations share this material too. Omitting the route selector made every
+      // page update immediately reset uCombatPresentation to zero, so the F-22-only terrain art
+      // path existed in source/tests but never survived a production atlas frame.
+      combatPresentation,
       windX,
       windZ,
       fogColor,

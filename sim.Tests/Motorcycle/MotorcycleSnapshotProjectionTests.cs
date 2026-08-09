@@ -51,6 +51,16 @@ public sealed class MotorcycleSnapshotProjectionTests
         Assert.Equal(snapshot.ViewAttitude.W, root.GetProperty("view_qw").GetDouble());
         Assert.Equal(snapshot.WheelieBalance, root.GetProperty("wheelie_balance").GetDouble());
         Assert.Equal(snapshot.StoppieBalance, root.GetProperty("stoppie_balance").GetDouble());
+        Assert.Equal(snapshot.CircuitProgressM, root.GetProperty("circuit_progress_m").GetDouble());
+        Assert.Equal(snapshot.CircuitLengthM, root.GetProperty("circuit_length_m").GetDouble());
+        Assert.Equal(snapshot.LastSectorIndex, root.GetProperty("last_sector").GetInt32());
+        Assert.Equal(snapshot.NextSectorIndex, root.GetProperty("next_sector").GetInt32());
+        Assert.Equal(snapshot.GoldenPathKind, root.GetProperty("golden_path_kind").GetString());
+        Assert.Equal(snapshot.GoldenPathToken, root.GetProperty("golden_path_token").GetString());
+        Assert.Equal(snapshot.IsOnOpenRoad, root.GetProperty("on_open_road").GetBoolean());
+        Assert.Equal(
+            snapshot.OpenRoadDistanceM,
+            root.GetProperty("open_road_distance_m").GetDouble());
         Assert.Equal("raw", root.GetProperty("control_mode").GetString());
         Assert.Equal("auto", root.GetProperty("clutch_mode").GetString());
         Assert.Equal("active", root.GetProperty("phase").GetString());

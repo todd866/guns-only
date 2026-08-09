@@ -22,6 +22,7 @@ public sealed class Ah1gCobraFlightProfileTests
 
     const double BasicMissionMassKg = 4_051.0;
     const double NominalRotorRpm = 324.0;
+    const double MaximumAutorotationRpm = 339.0;
 
     /// <summary>One scripted segment of the profile: a control position held for a duration.</summary>
     readonly record struct Segment(
@@ -87,10 +88,6 @@ public sealed class Ah1gCobraFlightProfileTests
         new Segment("climb", 900, 0.08, 0.12, 0.00, 0.0),
         new Segment("climbing-turn", 900, 0.15, 0.10, 0.40, 0.0),
         new Segment("decelerate", 600, -0.05, -0.35, 0.00, 0.0),
-        // Lower the collective AND fly forward. Recovering on collective alone descends the
-        // drooped rotor straight into the modelled vortex ring, where the extra induced power
-        // holds the engine saturated and Nr never comes back — so a "re-hover" with zero cyclic
-        // tests the wrong technique, not a broken governor.
         // Lower collective only a little and fly forward. Zero-cyclic re-hover after a droop
         // descends into modelled vortex ring; a deep collective cut leaves Nr short of nominal.
         // Longer recover after the climb+climbing-turn pair so the governor can unload.
@@ -202,8 +199,9 @@ public sealed class Ah1gCobraFlightProfileTests
         double peakRpm = reports.Max(report => report.MaxRotorRpm);
 
         Assert.True(
-            peakRpm <= 339.0 + 1e-6,
-            $"Nr reached {peakRpm:F1} rpm, above the 339.0 rpm autorotation limit.\n"
+            peakRpm <= MaximumAutorotationRpm + 1e-6,
+            $"Nr reached {peakRpm:F1} rpm, above the {MaximumAutorotationRpm:F1} rpm "
+            + "autorotation limit.\n"
             + Format(reports));
     }
 
@@ -236,33 +234,40 @@ public sealed class Ah1gCobraFlightProfileTests
     }
 
     /// <summary>
-    /// Diagnostic sweep, not a gate: how much power margin does the airframe have at each
+    /// Diagnostic sweep: how much power margin does the airframe have at each
     /// loading? The AH-1G's transmission caps at 1,100 shp of a 1,400 shp engine, so the mission
-    /// weight decides whether a climb droops the rotor. Always passes; read its output.
+    /// weight decides whether a climb droops the rotor. The report varies, while its bounded
+    /// autorotative rise remains a safety invariant.
     /// </summary>
     [Fact]
     public void ReportPowerMarginAcrossMissionWeights()
     {
         var text = new StringBuilder();
+        var peakNrPercents = new List<double>();
         foreach (double massKg in new[] { 3_200.0, 3_600.0, 4_051.0, 4_300.0 })
         {
             var reports = Fly(massKg);
+            double peakNrPercent = reports.Max(r => r.MaxRotorRpm) / NominalRotorRpm * 100.0;
+            peakNrPercents.Add(peakNrPercent);
             text.AppendLine(
                 $"{massKg,6:F0} kg  worst Nr {reports.Min(r => r.MinNrPercent),5:F1}%  "
                 + $"hover TQ {reports[0].MaxTorqueFraction * 100.0,5:F1}%  "
-                + $"peak Nr {reports.Max(r => r.MaxRotorRpm) / NominalRotorRpm * 100.0,5:F1}%");
+                + $"peak Nr {peakNrPercent,5:F1}%");
         }
 
         _output.WriteLine($"POWER MARGIN SWEEP\n{text}");
 
-        // The sweep is a report, but one property in it is worth pinning: the autorotative
-        // overspeed peak settles at MaximumAutorotationRpm (339 rpm = 104.6% of nominal), not the
-        // old numeric backstop at 107.8%. After the FM retune the peak still lands on that limit.
+        // The sweep is a report, but its flare must still produce a bounded autorotative rise.
+        // Build 294's soft high-speed envelope changed the energy entering the flare, so requiring
+        // every weight to hit the 339 rpm safety ceiling made a safer 102% peak fail. Pin the
+        // physical behavior instead: Nr rises above nominal and never exceeds the declared limit.
         string report = text.ToString();
         Assert.DoesNotContain("107.8%", report);
-        Assert.True(
-            report.Contains("104.6%") || report.Contains("104.5%") || report.Contains("104.7%"),
-            $"expected peak Nr near 104.6% of nominal:\n{report}");
+        double maximumNrPercent = MaximumAutorotationRpm / NominalRotorRpm * 100.0;
+        Assert.All(peakNrPercents, peakNrPercent => Assert.InRange(
+            peakNrPercent,
+            100.5,
+            maximumNrPercent + 0.05));
     }
 
     [Fact]

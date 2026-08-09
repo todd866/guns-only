@@ -1,0 +1,88 @@
+{
+  "schemaVersion": "1.0.0",
+  "assetFamilyId": "art.weekend-ride.world-surfaces.v1",
+  "authorship": {
+    "method": "OpenAI built-in image generation",
+    "generatedOn": "2026-08-09",
+    "humanDirection": "Guns Only Weekend Ride circuit and open-road world materials"
+  },
+  "assets": [
+    {
+      "id": "environment.texture.weekend-track-asphalt.v1",
+      "uri": "track-asphalt-v1.webp",
+      "role": "presentation-only circuit asphalt albedo",
+      "projection": "orthographic top-down fictional closed-course surface texture",
+      "constraints": [
+        "no identifiable real-world circuit, branding, text, lane marking or object",
+        "renderer supplies geometry, lighting, collision, grip and motorcycle authority",
+        "sRGB albedo; repeated along the renderer-neutral circuit ribbon",
+        "no baked directional lighting or gameplay-significant surface cue"
+      ],
+      "prompt": "Create a square 1:1 orthographic top-down seamless material texture for a fictional closed-course motorcycle track asphalt surface. This is a production game albedo/diffuse asset, not concept art. Fine dark charcoal aggregate, subtle warm gray mineral variation, faint repaired seams and restrained rubber scuffing distributed evenly, sparse tiny pale stone flecks. No lane markings, no logos, no text, no tire silhouettes, no puddles, no objects, no borders, no horizon, no perspective, no directional lighting, no highlights, no baked shadows, no vignette. Uniform neutral exposure and low-to-medium contrast so a real-time renderer can provide lighting. Make opposite edges visually tileable and avoid any large unique feature that repeats obviously. Photoreal material scan aesthetic, crisp micro-detail, 1024x1024.",
+      "source": {
+        "generatedPngSha256": "38433296b9dea7b6f5b49c6d4093c886c515847278ee422d8ba86c6c03574916",
+        "generatedPngSizeBytes": 3488555,
+        "modelBackend": "OpenAI built-in image generation; exact backend and seed not exposed"
+      },
+      "processing": {
+        "command": "cwebp -quiet -q 88 -m 6 -resize 1024 1024 <generated.png> -o track-asphalt-v1.webp",
+        "width": 1024,
+        "height": 1024,
+        "runtimeSha256": "bb9a4033b80a0d7069cb987f73e0c325e10c64c9c1030b73e9b7f6a8819ec713",
+        "runtimeSizeBytes": 337532
+      }
+    },
+    {
+      "id": "environment.texture.weekend-hinterland-ground.v1",
+      "uri": "weekend-hinterland-ground-v1.webp",
+      "role": "presentation-only circuit surround and open-road terrain albedo",
+      "projection": "orthographic top-down fictional temperate hinterland surface texture",
+      "constraints": [
+        "no identifiable real-world geography, road, circuit, structure, vehicle, person or label",
+        "renderer and simulation supply roads, collision, grip, route, lighting and navigation truth",
+        "sRGB albedo; world-space mirrored repeat with renderer-authored macro scale",
+        "no baked directional lighting or gameplay-significant surface cue"
+      ],
+      "prompt": "Create a square 1:1 orthographic top-down seamless terrain albedo texture for a fictional temperate coastal-hinterland motorcycle world. This is a production game world-surface asset for a closed circuit and open-road riding environment, not concept art. Natural broad patches of muted dry grass, olive scrub, dark green low woodland, weathered ochre soil, subtle gray stone and sparse pale dusty clearings. Multi-scale landcover with broad ecological masses plus restrained close material detail. No roads, no racetrack, no buildings, no vehicles, no people, no text, no signs, no fences, no logos, no water, no horizon, no perspective, no directional lighting, no cast shadows, no highlights, no vignette. Even neutral exposure, realistic subdued colors, no neon greens, no camouflage-like repetitive blobs. Opposite edges should tile visually and there should be no singular landmark that repeats obviously. Photoreal/painterly satellite-orthographic game texture, crisp 1024x1024.",
+      "source": {
+        "generatedPngSha256": "8419b1f5e1164bf54420f0b0fcb90d36425a8c4236e5828e911236537e1d94c0",
+        "generatedPngSizeBytes": 3569417,
+        "modelBackend": "OpenAI built-in image generation; exact backend and seed not exposed"
+      },
+      "processing": {
+        "command": "cwebp -quiet -q 88 -m 6 -resize 1024 1024 <generated.png> -o weekend-hinterland-ground-v1.webp",
+        "width": 1024,
+        "height": 1024,
+        "runtimeSha256": "bb97d9528ad773891d6a704b6d01ab6b145eff451055c827d3a6c05be51641a1",
+        "runtimeSizeBytes": 402786
+      }
+    },
+    {
+      "id": "environment.texture.weekend-field-landcover.v1",
+      "uri": "weekend-field-landcover-v1.webp",
+      "role": "presentation-only macro field and hedgerow albedo",
+      "projection": "orthographic top-down fictional temperate field-landcover texture",
+      "constraints": [
+        "no identifiable real-world geography, road, circuit, structure, vehicle, person or label",
+        "renderer and simulation supply roads, collision, grip, route, lighting and navigation truth",
+        "sRGB albedo; metre-scaled mirrored repeat on large non-drivable field surfaces",
+        "no baked directional lighting or gameplay-significant surface cue"
+      ],
+      "prompt": "Use the existing Weekend hinterland ground texture only as a palette and natural-microtexture reference. Create a new square, orthographic, straight-down, edge-to-edge temperate countryside field-landcover texture suitable for mirrored world-space repetition. Broad irregular agricultural field parcels in muted moss-green pasture, olive scrub, pale dry grass and stubble, a little exposed warm soil, with narrow organic dark hedgerow seams and occasional small tree-cluster texture integrated into the albedo. Realistic game-ready PBR diffuse albedo with high-frequency ground detail nested inside strong low-frequency field shapes. Evenly lit overcast diffuse capture and balanced midtone exposure: no crushed blacks, glare, directional light, cast shadows or ambient-occlusion-looking borders. No central focal point, obvious grid, giant empty single-color region, road, racetrack, painted line, building, tent, vehicle, person, sky, horizon, perspective, label, logo, text, watermark or normal-map blue.",
+      "source": {
+        "generatedPngSha256": "39b5066e580041b72d4517e984895b487abd20068dc5ad3cc84f73982745bf46",
+        "generatedPngSizeBytes": 3104235,
+        "modelBackend": "OpenAI built-in image generation; exact backend and seed not exposed"
+      },
+      "processing": {
+        "command": "cwebp -quiet -q 88 -m 6 -resize 1024 1024 <generated.png> -o weekend-field-landcover-v1.webp",
+        "width": 1024,
+        "height": 1024,
+        "runtimeSha256": "9b6b3cb7ee30f81ea485dd2fa1f3b18d04a17e03285c284f27b3ec0538be542d",
+        "runtimeSizeBytes": 267664,
+        "unityPngSha256": "739ee3cf351024f9f01927d364341039f92af47e8f73be99460d03e74eb4b670",
+        "unityPngSizeBytes": 1765519
+      }
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>GunsOnly.UnityBridge</RootNamespace>
+    <Description>Native presentation facade over SimulationSession for the Unity F-22 fork.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\sim\GunsOnly.Sim.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      These two files are deliberately renderer-free. Unity compiles them from Assets while the
+      host/test projects compile the same bytes through links, so mission and presentation
+      constants cannot silently fork between the standalone player and its sidecar.
+    -->
+    <Compile Include="..\GunsOnly.Unity\Assets\Scripts\UnityMissionSelection.cs"
+             Link="UnityMissionSelection.cs" />
+    <Compile Include="..\GunsOnly.Unity\Assets\Scripts\F22PresentationContract.cs"
+             Link="F22PresentationContract.cs" />
+    <Compile Include="..\GunsOnly.Unity\Assets\Scripts\F22UkraineVisualContract.cs"
+             Link="F22UkraineVisualContract.cs" />
+    <Compile Include="..\GunsOnly.Unity\Assets\Scripts\CobraGoldenPath.cs"
+             Link="CobraGoldenPath.cs" />
+    <Compile Include="..\GunsOnly.Unity\Assets\Scripts\FirstMergeGoldenPath.cs"
+             Link="FirstMergeGoldenPath.cs" />
+    <Compile Include="..\GunsOnly.Unity\Assets\Scripts\RapierGoldenPath.cs"
+             Link="RapierGoldenPath.cs" />
+  </ItemGroup>
+
+</Project>

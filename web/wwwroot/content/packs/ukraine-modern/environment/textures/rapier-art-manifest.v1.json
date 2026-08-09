@@ -20,6 +20,23 @@
       "prompt": "Square hand-painted aerial surface texture for a fictional Eastern European steppe seen from 15–22 km altitude; broad organic forest, meadow and cool drainage masses; gouache/watercolor animation-background character; orthographic, seamless, no focal point or human-made features."
     },
     {
+      "id": "texture.ukraine-temperate-ground.v2",
+      "uri": "ukraine-temperate-ground-v2.webp",
+      "role": "multi-altitude terrain macro-albedo",
+      "projection": "orthographic fictional temperate highland material",
+      "generatedOn": "2026-08-09",
+      "sourceImageSha256": "582bb9159402095f764672d273a897cc0e851e0f1c8ba319dbedbef294e40457",
+      "runtimeSha256": "4c062b6923becc4492f78ae1588a394f941aeddb0a9b27f47d176b285c379c4d",
+      "runtimeEncoding": "1024x1024 WebP, cwebp quality 90 method 6",
+      "constraints": [
+        "no identifiable real-world geography",
+        "no roads, buildings, vehicles, regular farm grid, directional light, or baked shadows",
+        "mirrored world-space sampling; terrain geometry and visibility remain authoritative",
+        "renderer-neutral albedo source shared by Web and Unity"
+      ],
+      "prompt": "Create a square seamless tileable terrain albedo texture for an in-game 2030s fictional temperate Eastern European highland and steppe theatre viewed from above. Orthographic top-down material only: no horizon, no perspective, no directional lighting, no cast shadows, no clouds, no aircraft, no buildings, no roads, no text. Natural large-scale composition with muted cool olive grassland, subdued dry ochre meadows, deep desaturated green woodland masses, sparse dark scrub seams, subtle pale soil and stone patches, and softly meandering damp drainage swales. Avoid farm-grid rectangles, camouflage blotches, obvious repeated islands, thick painted outlines, rivers that look like blue paint, or highly saturated yellow-green. Use coherent multi-scale detail so it reads at both tactical altitude and near the ground: broad 200–500 m land-cover masses, 30–80 m broken edges, restrained 2–10 m surface grain. The texture must tile invisibly on all four edges and be evenly exposed, with no baked sun direction. Premium realistic-painterly game texture, restrained military aviation palette, physically plausible albedo, 1:1 square, edge-to-edge."
+    },
+    {
       "id": "texture.rapier-cloud-billows.v1",
       "uri": "rapier-cloud-billows-v1.webp",
       "role": "authoritative-weather impostor density art",

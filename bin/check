@@ -43,8 +43,19 @@ sh -n bin/test-in-process
 sh -n bin/deploy-web
 sh -n bin/stamp-release
 sh -n bin/worktree-prep
+bash -n bin/play-unity
+bash -n bin/unity-build
+bash -n bin/unity-check
+bash -n bin/unity-playtest
+python3 -c 'from pathlib import Path; p=Path("bin/unity-frame-check"); compile(p.read_text(), str(p), "exec")'
+python3 -c 'from pathlib import Path; p=Path("bin/unity-playtest-judge"); compile(p.read_text(), str(p), "exec")'
 node --check web/wwwroot/app.js
 node --check web/wwwroot/hud.js
+node --check web/wwwroot/weekend-ride/main.js
+node --check web/wwwroot/render/motorcycle/r1_first_person.js
+node --check web/wwwroot/render/motorcycle/track_day_presentation.js
+node --check web/wwwroot/render/motorcycle/weekend_open_road_presentation.js
+node --check web/wwwroot/render/motorcycle/weekend_visual_qa.js
 node --check web/wwwroot/multiplayer-config.js
 node --check web/wwwroot/indoor/audio.js
 node --check web/wwwroot/indoor/game.js
@@ -73,7 +84,8 @@ node --test $asset_tests
 content_tests=$(find tools/content -type f -name '*.test.mjs' -print | sort)
 node --test $content_tests
 node --test tools/telemetry/test/*.test.mjs
-node --test tools/perf/*.test.mjs
+perf_tests=$(find tools/perf -type f -name '*.test.mjs' -print | sort)
+node --test $perf_tests
 # Authored narrative sequences are a content contract with a schema and a validator; run it here
 # or the contract only holds for as long as someone remembers to run it by hand.
 narrative_tests=$(find docs/art-direction -type f -name '*.test.mjs' -print | sort)
@@ -86,6 +98,12 @@ python3 tools/terrain/test_hydrate_rapier_atlas.py
 node --test tools/audio/*.test.mjs
 # Format/unit smoke only — the live scenario matrix (--self-test) is still hardening.
 node --test tools/anca-audit/*.test.mjs
+renderer_unity_tests=$(find tools/cobra-unity tools/f22-low-altitude tools/rapier-unity tools/weekend-unity \
+  tools/weekend-circuit-parity tools/weekend-open-road tools/weekend-visual-gate \
+  -type f -name '*.test.mjs' -print | sort)
+if [ -n "$renderer_unity_tests" ]; then
+  node --test $renderer_unity_tests
+fi
 runtime_tests=$(find web/wwwroot/render -type f -path '*/tests/*.test.mjs' -print | sort)
 node --test $runtime_tests
 node --test web/wwwroot/*.test.js
@@ -131,6 +149,21 @@ if [ -d "$ukraine_texture_source" ]; then
   mkdir -p "$ukraine_texture_stage"
   cp -R "$ukraine_texture_source/." "$ukraine_texture_stage/"
 fi
+# Low-altitude foliage is generated production art with its own exact provenance manifest. Stage
+# the complete two-file family so neither the streamed world nor hero-cell consumer can resolve a
+# wwwroot-only atlas that canonical content and the actual publish do not carry.
+ukraine_foliage_source="$ukraine_env_dir/foliage"
+ukraine_foliage_stage="$ukraine_env_stage/foliage"
+test -d "$ukraine_foliage_source"
+mkdir -p "$ukraine_foliage_stage"
+cp -R "$ukraine_foliage_source/." "$ukraine_foliage_stage/"
+# Renderer-neutral Rapier and F-22 presentation exports are release-bearing source contracts.
+# Stage the whole family so Web and Unity cannot consume wwwroot-only generated geometry.
+ukraine_presentation_source="content/packs/ukraine-modern/presentation"
+ukraine_presentation_stage="$staged_content_dir/packs/ukraine-modern/presentation"
+test -d "$ukraine_presentation_source"
+mkdir -p "$ukraine_presentation_stage"
+cp -R "$ukraine_presentation_source/." "$ukraine_presentation_stage/"
 # Free-fly Mesh place catalog (authored destinations / landmarks for Open Segment).
 ukraine_mesh_source="content/packs/ukraine-modern/environment/mesh"
 ukraine_mesh_stage="$staged_content_dir/packs/ukraine-modern/environment/mesh"
@@ -145,6 +178,14 @@ cobra_stage="$staged_content_dir/packs/cobra-vietnam"
 test -f "$cobra_source/environment/cobra-canyon.world.json"
 mkdir -p "$cobra_stage"
 cp -R "$cobra_source/." "$cobra_stage/"
+# Weekend Ride now has a renderer-neutral first-person visual contract consumed by both Web and
+# Unity. Treat its canonical pack like every other release-bearing source so the staged browser
+# copy cannot drift independently.
+weekend_source="content/packs/weekend-ride"
+weekend_stage="$staged_content_dir/packs/weekend-ride"
+test -d "$weekend_source"
+mkdir -p "$weekend_stage"
+cp -R "$weekend_source/." "$weekend_stage/"
 # Rapier-range atlas (eastern corridor). Source of truth under content/; wwwroot is a staged copy.
 ukraine_atlas_source="content/packs/ukraine-modern/environment/terrain-atlas"
 ukraine_atlas_stage="$staged_content_dir/packs/ukraine-modern/environment/terrain-atlas"
@@ -172,6 +213,9 @@ if [ "${GUNS_TEST_IN_PROCESS:-0}" = "1" ]; then
   # same test failures without asking for network authority.
   GUNS_TEST_CONFIGURATION=Release "$repo_dir/bin/test-in-process"
   GUNS_TEST_CONFIGURATION=Release "$repo_dir/bin/test-in-process" --server
+  # The restricted fallback cannot bind the Unity host's loopback listener. Run every pure
+  # bridge/session/contract test here; normal CI and bin/unity-check retain the real TCP case.
+  GUNS_TEST_CONFIGURATION=Release "$repo_dir/bin/test-in-process" --unity --exclude-loopback
 else
   GUNS_REPO_ROOT="$repo_dir" "$dotnet_cli" test sim.Tests/GunsOnly.Sim.Tests.csproj \
     --configuration Release --no-build --nologo \
@@ -179,7 +223,19 @@ else
   GUNS_REPO_ROOT="$repo_dir" "$dotnet_cli" test server.Tests/GunsOnly.Server.Tests.csproj \
     --configuration Release --no-build --nologo \
     --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
+  GUNS_REPO_ROOT="$repo_dir" "$dotnet_cli" test \
+    unity/GunsOnly.UnityBridge.Tests/GunsOnly.UnityBridge.Tests.csproj \
+    --configuration Release --no-build --nologo \
+    --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
 fi
+
+# These generated contracts join simulation authority to the exact Web scene consumed by Unity.
+# Re-run both exporters in check mode so a copied, internally valid JSON file cannot outlive its
+# authoritative route or renderer source.
+"$dotnet_cli" run --project tools/weekend-open-road/WeekendOpenRoadExporter.csproj \
+  --configuration Release -v:q -- --check
+GUNS_DOTNET_CLI="$dotnet_cli" \
+  node tools/weekend-circuit-parity/export-weekend-circuit.mjs --check
 
 "$dotnet_cli" publish web/GunsOnly.Web.csproj \
   --configuration Release --no-restore --nologo --output "$publish_dir" \
@@ -195,9 +251,69 @@ test -f "$publish_dir/wwwroot/medevac/styles.css"
 test -f "$publish_dir/wwwroot/render/medevac/commander_view_model.js"
 test -f "$publish_dir/wwwroot/_framework/blazor.webassembly.js"
 test -f "$publish_dir/wwwroot/content/packs/korea-1950s/pack.json"
+# The Korea asset ledger now promotes generated highland ground art. Pin its payload and
+# provenance through the actual publish, not only through the source validator's counts.
+for korea_relative in \
+  asset-manifest.json \
+  licenses.json \
+  environment/textures/korea-ground-art-manifest.v1.json \
+  environment/textures/korea-highland-ground-v1.webp
+do
+  korea_canonical="content/packs/korea-1950s/$korea_relative"
+  korea_published="$publish_dir/wwwroot/content/packs/korea-1950s/$korea_relative"
+  test -f "$korea_published"
+  cmp -s "$korea_canonical" "$korea_published"
+done
 test -f "$publish_dir/wwwroot/content/packs/ukraine-modern/environment/terrain/soniachne-steppe.manifest.json"
 test -f "$publish_dir/wwwroot/content/packs/ukraine-modern/environment/terrain/soniachne-steppe.terrain"
+# The fixed 90 m Web plate depends on this exact generated foliage family. Its hardware-facing
+# aesthetic gate remains separate; publish closure here proves that its accepted source bytes and
+# provenance—not a stale staged copy—are what the candidate ships.
+for ukraine_foliage_relative in \
+  ukraine-foliage-art-manifest.v1.json \
+  ukraine-temperate-foliage-v1.png
+do
+  ukraine_foliage_canonical="content/packs/ukraine-modern/environment/foliage/$ukraine_foliage_relative"
+  ukraine_foliage_published="$publish_dir/wwwroot/content/packs/ukraine-modern/environment/foliage/$ukraine_foliage_relative"
+  test -f "$ukraine_foliage_published"
+  cmp -s "$ukraine_foliage_canonical" "$ukraine_foliage_published"
+done
+for ukraine_presentation_relative in \
+  f22-low-altitude-world.web-build-299.v1.json \
+  rapier-launch-tableau.web-build-299.v1.json
+do
+  ukraine_presentation_canonical="content/packs/ukraine-modern/presentation/$ukraine_presentation_relative"
+  ukraine_presentation_published="$publish_dir/wwwroot/content/packs/ukraine-modern/presentation/$ukraine_presentation_relative"
+  test -f "$ukraine_presentation_published"
+  cmp -s "$ukraine_presentation_canonical" "$ukraine_presentation_published"
+done
 test -f "$publish_dir/wwwroot/content/packs/cobra-vietnam/environment/cobra-canyon.world.json"
+# Weekend is not a loose source-only art drop: every route, generated surface/foliage asset, and
+# cross-renderer presentation contract must survive the actual Web publish byte-for-byte.
+for weekend_relative in \
+  environment/foliage/weekend-roadside-art-manifest.v1.json \
+  environment/foliage/weekend-roadside-atlas-v1.png \
+  environment/roads/weekend-hinterland-road-network.v1.json \
+  environment/textures/track-asphalt-v1.webp \
+  environment/textures/track-surface-art-manifest.v1.json \
+  environment/textures/weekend-field-landcover-v1.webp \
+  environment/textures/weekend-hinterland-ground-v1.webp \
+  presentation/r1-first-person-contract.v1.json \
+  presentation/weekend-track-day-presentation.v1.json \
+  qa/weekend-visual-acceptance.v1.json
+do
+  weekend_canonical="content/packs/weekend-ride/$weekend_relative"
+  weekend_published="$publish_dir/wwwroot/content/packs/weekend-ride/$weekend_relative"
+  test -f "$weekend_published"
+  cmp -s "$weekend_canonical" "$weekend_published"
+done
+test -f "$publish_dir/wwwroot/weekend-ride/index.html"
+test -f "$publish_dir/wwwroot/weekend-ride/main.js"
+test -f "$publish_dir/wwwroot/weekend-ride/styles.css"
+test -f "$publish_dir/wwwroot/render/motorcycle/r1_first_person.js"
+test -f "$publish_dir/wwwroot/render/motorcycle/track_day_presentation.js"
+test -f "$publish_dir/wwwroot/render/motorcycle/weekend_open_road_presentation.js"
+test -f "$publish_dir/wwwroot/render/motorcycle/weekend_visual_qa.js"
 python3 tools/terrain/hydrate_rapier_atlas.py verify \
   --atlas-dir "$publish_dir/wwwroot/content/packs/ukraine-modern/environment/terrain-atlas"
 test -f "$publish_dir/wwwroot/render/assets/asset_registry.js"
@@ -244,6 +360,13 @@ if [ -z "${GUNS_SKIP_SMOKE:-}" ]; then
   # (waterline/FPV alpha gap, ladder tan-projection spacing, funnel-on-trajectory, bandit
   # marker). Lives with the browser gates because it shares the web/smoke Playwright install.
   node web/wwwroot/render/hud/tests/harness/assertions.mjs
+  # First Merge published-pixel integrity: freeze the first active mission-7 frame, require the
+  # generated Ukraine v2 texture to be decoded and resident, then reject a blank/uniform ground
+  # ROI. This is silent candidate-asset/readiness coverage, not human art acceptance; source-only
+  # or stale previews cannot satisfy it.
+  FIRST_MERGE_GATE_WWWROOT="$publish_dir/wwwroot" \
+    FIRST_MERGE_GATE_OUT_DIR="$scratch_dir/first-merge-pixel-gate" \
+    node tools/perf/f22_first_merge_pixel_gate.mjs
 else
   echo "Skipping browser smoke test (GUNS_SKIP_SMOKE set)."
 fi

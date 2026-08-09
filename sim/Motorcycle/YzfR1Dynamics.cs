@@ -202,12 +202,20 @@ public sealed class YzfR1Dynamics : IPlayerVehicleDynamics
     public PlayerVehicleObservation Observation { get; private set; }
     public MotorcycleTelemetry Telemetry { get; private set; }
 
-    public static YzfR1Dynamics AtRestOnRunway(
+    public static YzfR1Dynamics AtRestOnSurface(
         string id,
         Vec3D position,
         double headingRad,
         double? rollInertiaKgM2 = null) =>
         new(id, position, headingRad, rollInertiaKgM2: rollInertiaKgM2);
+
+    /// <summary>Compatibility alias for existing planar-surface dynamics tests.</summary>
+    public static YzfR1Dynamics AtRestOnRunway(
+        string id,
+        Vec3D position,
+        double headingRad,
+        double? rollInertiaKgM2 = null) =>
+        AtRestOnSurface(id, position, headingRad, rollInertiaKgM2);
 
     /// <summary>
     /// Clears latched tip-over and re-initialises at-rest dynamics at a grid spawn. Used by
