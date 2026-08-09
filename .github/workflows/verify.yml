@@ -71,6 +71,10 @@ jobs:
         working-directory: tools/cobra-scenery-gate
         run: npm ci --ignore-scripts --no-audit --no-fund
 
+      - name: Install locked browser smoke toolchain for scene-gate tests
+        working-directory: web/smoke
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
       - name: Run deterministic repository checks
         env:
           GUNS_SKIP_SMOKE: "1"
