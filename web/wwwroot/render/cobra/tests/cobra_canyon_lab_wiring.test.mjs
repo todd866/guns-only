@@ -44,6 +44,8 @@ test("visual-review park owns the camera over the vehicle eye", async () => {
   assert.match(main, /do not overwrite the eye/);
   assert.match(main, /!parkedCamera/);
   assert.match(main, /onboarding\?\.dismiss/);
+  assert.match(main, /emberGuidancePath && authorityState && !parkedCamera/);
+  assert.match(main, /applyAh1gCameraVisibility\(\);[\s\S]*?applyParkedCamera\(\)/);
 });
 
 test("Cobra Canyon loads Blazor from the site-root framework path", async () => {

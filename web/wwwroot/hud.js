@@ -10,6 +10,7 @@ import {
   targetClosureReadout,
   targetRangeReadout,
   verticalSpeedText,
+  visualMergeGoldenPathCue,
   visualMergeWeaponsCue,
 } from "./render/hud/hud_readouts.js";
 import { targetDataLineOwner } from "./render/hud/target_data_line.js";
@@ -21,7 +22,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=298";
+} from "./render/hud/contact_visibility.js?v=299";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import {
   approachEnergyCue,
@@ -64,11 +65,11 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=298";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=299";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=298";
+} from "./render/mission/rapier_high_mach_instruments.js?v=299";
 import { limitsPanelPresentation } from "./render/hud/limits_panel.js";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
@@ -79,7 +80,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=298";
+} from "./render/audio/flight_audio.js?v=299";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -4749,6 +4750,32 @@ class CombatHud {
     }
   }
 
+  drawVisualMergeGoldenPathCue(frame) {
+    const cue = visualMergeGoldenPathCue(frame.state, { padlock: frame.padlock });
+    if (!cue) {
+      if (this._debug) this._debug.visualMergeGoldenPath = null;
+      return;
+    }
+
+    const ctx = this.ctx;
+    const accent = cue.level === "attack" ? AMBER : GREEN_DIM;
+    const y = this.height - this.safeInsets.bottom - (this.touchMode ? 110 : 21);
+    ctx.save();
+    ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const maximumWidth = Math.max(72,
+      this.width - this.safeInsets.left - this.safeInsets.right - 20);
+    const width = Math.min(maximumWidth,
+      Math.max(112, ctx.measureText(cue.text).width + 28));
+    const x = (this.width - width) / 2;
+    this.glassPanel(x, y - 13, width, 26, accent);
+    ctx.fillStyle = accent;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(this.fitText(cue.text, width - 18), this.width / 2, y);
+    ctx.restore();
+    if (this._debug) this._debug.visualMergeGoldenPath = { ...cue, x, y: y - 13, width };
+  }
+
   drawFooter(frame) {
     const state = frame.state;
     const mode = hudMode(state);
@@ -5531,6 +5558,7 @@ class CombatHud {
     this.drawPadlockSa(frame, systems, noseAnchor);
     if (!mobileTactical) this.drawSortieStatus(frame);
     this.drawVisualMergeWeaponsCue(frame);
+    this.drawVisualMergeGoldenPathCue(frame);
     this.drawFooter(frame);
     if (!mobileTactical) this.drawTimeCompression(frame);
     this.drawCarrierSortieGuidance(frame, { showModeLine: !mobileTactical });

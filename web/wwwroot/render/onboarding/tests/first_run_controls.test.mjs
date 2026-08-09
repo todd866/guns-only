@@ -120,6 +120,7 @@ test("weekend ride desktop content covers ride, gearbox and system", () => {
   assert.match(flat, /[Tt]hrottle/);
   assert.match(flat, /[Bb]rake/);
   assert.match(flat, /Q \/ E/);
+  assert.match(flat, /I Detailed ride diagnostics/);
   assert.match(flat, /Esc/);
 });
 

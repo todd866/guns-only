@@ -7,6 +7,10 @@ import {
   MISSION_FEATURE_RENDER_BUDGETS,
 } from "../mission_features.js";
 import {
+  UKRAINE_TEMPERATE_FOLIAGE_ALPHA_CUTOFF,
+  UKRAINE_TEMPERATE_FOLIAGE_REGIONS,
+} from "../korea_scenery.js";
+import {
   UKRAINE_SOFT_WORLD_ATMOSPHERE_UNIFORM_NAMES,
 } from "../soft_world_atmosphere.js";
 
@@ -65,22 +69,22 @@ test("builds the canonical clinic as one deterministic, tier-bounded static chil
     const diagnostics = first.diagnostics();
     const expectedMetrics = {
       mobile: {
-        instances: 284,
-        mainPassTriangles: 7_160,
+        instances: 224,
+        mainPassTriangles: 2_760,
         shadowTriangles: 0,
-        triangles: 7_160,
+        triangles: 2_760,
       },
       balanced: {
-        instances: 331,
-        mainPassTriangles: 8_436,
+        instances: 259,
+        mainPassTriangles: 3_156,
         shadowTriangles: 0,
-        triangles: 8_436,
+        triangles: 3_156,
       },
       desktop: {
-        instances: 390,
-        mainPassTriangles: 9_856,
-        shadowTriangles: 4_288,
-        triangles: 14_144,
+        instances: 306,
+        mainPassTriangles: 3_696,
+        shadowTriangles: 3_392,
+        triangles: 7_088,
       },
     }[qualityTier];
 
@@ -135,7 +139,7 @@ test("builds the canonical clinic as one deterministic, tier-bounded static chil
     if (qualityTier === "mobile") {
       assert.ok(diagnostics.instances <= 320,
         "village-edge cottages may densify the mobile hero cell without becoming a prop carpet");
-      assert.ok(diagnostics.triangles < 8_000,
+      assert.ok(diagnostics.triangles < 4_000,
         "mobile architectural character must stay geometry-cheap");
     }
     assert.equal(diagnostics.landingZones, 1);
@@ -201,26 +205,67 @@ test("builds the canonical clinic as one deterministic, tier-bounded static chil
       .map((entry, instanceId) => ({ ...entry, instanceId }))
       .filter((entry) =>
         entry.featureId === "feature.soniachne-clinic-a.shelterbelt-north.v1");
-    assert.equal(canopyInstances.length, expectedShelterbeltStands * 3,
-      "each shelterbelt stand must use three overlapping opaque crown lobes");
+    assert.equal(canopyInstances.length, expectedShelterbeltStands,
+      "each shelterbelt stand must use one atlas-backed crossed windbreak cluster");
+    assert.ok(canopyInstances.every((entry) =>
+      entry.primitiveRole === "shelterbelt_atlas_windbreak"));
+    assert.equal(canopyBatch.geometry.getAttribute("position").count, 8,
+      "one crossed card pair keeps each authored shelterbelt stand to four triangles");
+    assert.equal(canopyBatch.geometry.index.count, 12);
+    const [uMin, vMin, uMax, vMax] = UKRAINE_TEMPERATE_FOLIAGE_REGIONS.poplarWindbreak;
+    assert.deepEqual(Array.from(canopyBatch.geometry.getAttribute("uv").array.slice(0, 8)),
+      Array.from(new Float32Array([
+      uMin, vMax, uMax, vMax, uMin, vMin, uMax, vMin,
+      ])), "physical card bottoms must sample the authored top-left atlas region bottom");
+    assert.equal(canopyBatch.material.map?.name,
+      "TEX_UKRAINE_TEMPERATE_FOLIAGE_SYNTHETIC");
+    assert.equal(canopyBatch.material.alphaTest, UKRAINE_TEMPERATE_FOLIAGE_ALPHA_CUTOFF);
+    assert.equal(canopyBatch.material.transparent, false);
+    assert.equal(canopyBatch.material.depthWrite, true);
+    assert.equal(canopyBatch.material.side, THREE.DoubleSide);
+    assert.equal(canopyBatch.material.flatShading, false,
+      "authored windbreak cards must share the ambient foliage shading contract");
+    assert.equal(canopyBatch.material.emissive.getHex(), 0x3a6a38,
+      "the atlas shelterbelt keeps the same restrained sky fill as ambient Ukraine foliage");
+    assert.equal(canopyBatch.material.emissiveIntensity, 0.16);
+    first.update({ elapsedSeconds: 9.5, windX: 6, windZ: -2 });
+    const canopyShader = {
+      uniforms: {},
+      vertexShader: "#include <common>\nvoid main(){\n#include <begin_vertex>\n}",
+    };
+    canopyBatch.material.onBeforeCompile(canopyShader);
+    assert.equal(canopyShader.uniforms.uSoftWorldTime.value, 9.5);
+    assert.deepEqual(canopyShader.uniforms.uSoftWorldWind.value.toArray(), [6, -2]);
+    assert.match(canopyShader.vertexShader, /travellingWave/,
+      "authored windbreak cards must bend in the same world-anchored field as ambient foliage");
+    const repeatedCanopyBatch = repeated.group.getObjectByName(
+      "MISSION_FEATURE_BATCH_CANOPIES",
+    );
+    assert.equal(canopyBatch.material.map, repeatedCanopyBatch.material.map,
+      "parallel Ukraine presentations must share one reference-counted GPU atlas upload");
+    assert.equal(first.diagnostics().foliageAtlasId,
+      "environment.foliage.ukraine-temperate.v1");
+    assert.equal(first.diagnostics().foliageAtlasSynthetic, true);
+    assert.equal(first.diagnostics().foliageAtlasReady, true);
     const columnBatch = first.group.getObjectByName("MISSION_FEATURE_BATCH_COLUMNS");
     const trunkInstances = columnBatch.userData.missionFeatureBatch.semanticInstances
       .map((entry, instanceId) => ({ ...entry, instanceId }))
       .filter((entry) =>
         entry.primitiveRole === "shelterbelt_trunk"
         && entry.featureId === "feature.soniachne-clinic-a.shelterbelt-north.v1");
-    assert.equal(trunkInstances.length, expectedShelterbeltStands);
+    assert.equal(trunkInstances.length, 0,
+      "the atlas-authored trunks must not be duplicated as primitive cylinders");
     const shelterbelt = pack.features.find((feature) =>
       feature.id === "feature.soniachne-clinic-a.shelterbelt-north.v1");
-    for (let stand = 0; stand < trunkInstances.length; stand++) {
+    for (let stand = 0; stand < canopyInstances.length; stand++) {
       const profileIndex = Math.round(
-        stand / Math.max(1, trunkInstances.length - 1)
+        stand / Math.max(1, canopyInstances.length - 1)
           * (shelterbelt.pathLocalM.length - 1),
       );
       const [expectedEast, expectedUp, expectedNorth] = shelterbelt.pathLocalM[profileIndex];
       const matrix = new THREE.Matrix4().fromArray(
-        columnBatch.instanceMatrix.array,
-        trunkInstances[stand].instanceId * 16,
+        canopyBatch.instanceMatrix.array,
+        canopyInstances[stand].instanceId * 16,
       );
       const position = new THREE.Vector3();
       const scale = new THREE.Vector3();
@@ -228,24 +273,19 @@ test("builds the canonical clinic as one deterministic, tier-bounded static chil
       assert.ok(Math.abs(position.x - expectedEast) < 1e-4);
       assert.ok(Math.abs(position.z + expectedNorth) < 1e-4);
       assert.ok(Math.abs(position.y - scale.y * 0.5 - expectedUp) < 1e-4,
-        "every tier must plant each shelterbelt trunk on an authored LOD0 sample");
-      for (const crown of canopyInstances.slice(stand * 3, stand * 3 + 3)) {
-        const crownMatrix = new THREE.Matrix4().fromArray(
-          canopyBatch.instanceMatrix.array,
-          crown.instanceId * 16,
-        );
-        const crownPosition = new THREE.Vector3();
-        const crownScale = new THREE.Vector3();
-        crownMatrix.decompose(crownPosition, new THREE.Quaternion(), crownScale);
-        assert.ok(crownPosition.y - crownScale.y * 0.5 > expectedUp + 1,
-          "the crown must inherit the sampled stand base instead of remaining on a flat plane");
-      }
+        "every atlas card must inherit its authored LOD0 terrain base");
     }
     assert.equal(canopyBatch.castShadow, false,
       "the broad shelterbelt receives light but never doubles its fill in the shadow pass");
 
+    let atlasDisposals = 0;
+    canopyBatch.material.map.addEventListener("dispose", () => atlasDisposals++);
     first.dispose();
+    assert.equal(atlasDisposals, 0,
+      "disposing one presentation must not release an atlas still used by its sibling");
     repeated.dispose();
+    assert.equal(atlasDisposals, 1,
+      "the shared atlas must release exactly once after its last presentation owner");
   }
 });
 
@@ -373,6 +413,15 @@ test("rejects renderer-owned safety and medical claims on landing zones", async 
   assert.throws(
     () => createMissionFeaturePresentation(THREE, targetableDecoration),
     /must remain non-targetable presentation-only scenery/,
+  );
+
+  const ambiguousFoliage = structuredClone(pack);
+  ambiguousFoliage.features.find((feature) =>
+    feature.id === "feature.soniachne-clinic-a.shelterbelt-north.v1")
+    .presentation.primitive = "vegetation_clump";
+  assert.throws(
+    () => createMissionFeaturePresentation(THREE, ambiguousFoliage),
+    /must declare shelterbelt_canopy before entering the shared Ukraine foliage-card batch/,
   );
 });
 

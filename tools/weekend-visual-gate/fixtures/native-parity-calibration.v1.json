@@ -1,0 +1,111 @@
+{
+  "schema": "guns-only.weekend-native-parity-calibration.v1",
+  "acceptance_contract_sha256": "661d9a11b7663e16a61deaedff6fdef2f10b9f1e1f318d87624f8c13ebecb63a",
+  "thresholds": {
+    "minEdgeNcc": 0.995,
+    "maxTranslationPx": 1,
+    "minChiralityMargin": 0.5,
+    "maxLinearRgbMae": 0.001,
+    "maxLinearRgbRmse": 0.004,
+    "maxP95LumaError": 0.0025,
+    "minLuminanceSsim": 0.995,
+    "maxLowFrequencySrgbByteError": 25,
+    "maxLowFrequencySrgbFractionOver4": 0.015
+  },
+  "accepted": {
+    "id": "art6-signed-fog-factor",
+    "renderer": "Unity 6000.0.81f1 Metal 4x-MSAA versus Chromium ANGLE WebGL 4x-MSAA",
+    "web_capture_a_sha256": {
+      "grid-straight": "56ab1dd614d435dc58e3fb8025da91cf60809a4d407461dcdb4ddc2e671695d1",
+      "corner-context": "66c9d5f262d87c3aa765617ce476f3f93aac6da7a352a62aea8f9def92a46fc8",
+      "paddock-road-junction": "17b1303b2a0c777eb9b10fc2300ee5dae9a11e619ee3d8ed4f801a513c7622d9"
+    },
+    "web_capture_b_sha256": {
+      "grid-straight": "56ab1dd614d435dc58e3fb8025da91cf60809a4d407461dcdb4ddc2e671695d1",
+      "corner-context": "66c9d5f262d87c3aa765617ce476f3f93aac6da7a352a62aea8f9def92a46fc8",
+      "paddock-road-junction": "17b1303b2a0c777eb9b10fc2300ee5dae9a11e619ee3d8ed4f801a513c7622d9"
+    },
+    "unity_capture_a_sha256": {
+      "grid-straight": "cf533f62129d64c548377a55c45a64b2c3c5c79534120397dae7fbbe99b9a93a",
+      "corner-context": "1321a499fd7769464d3d12ed967b520e8682a655f8b35e20e0cd5a6302c46d2e",
+      "paddock-road-junction": "44d05ae621db08d03fbe03ca3af0a5e7b473205dfd19e13f177a14439eea18fe"
+    },
+    "unity_capture_b_sha256": {
+      "grid-straight": "cf533f62129d64c548377a55c45a64b2c3c5c79534120397dae7fbbe99b9a93a",
+      "corner-context": "1321a499fd7769464d3d12ed967b520e8682a655f8b35e20e0cd5a6302c46d2e",
+      "paddock-road-junction": "44d05ae621db08d03fbe03ca3af0a5e7b473205dfd19e13f177a14439eea18fe"
+    },
+    "views": [
+      {
+        "id": "grid-straight",
+        "edgeNcc": 0.998617238963014,
+        "translationPx": 0,
+        "chiralityMargin": 0.8196266145062112,
+        "linearRgbMae": 0.0008609694910751452,
+        "linearRgbRmse": 0.0038537997978777367,
+        "p95LinearLumaError": 0.0024715651665430105,
+        "luminanceSsim": 0.9995440369919107,
+        "lowFrequencySrgbMaxByteError": 18.66089965397924,
+        "lowFrequencySrgbFractionOver4": 0.0144225
+      },
+      {
+        "id": "corner-context",
+        "edgeNcc": 0.998923737817119,
+        "translationPx": 0,
+        "chiralityMargin": 0.6539907474637747,
+        "linearRgbMae": 0.00048537697536691097,
+        "linearRgbRmse": 0.0021171149427057535,
+        "p95LinearLumaError": 0.0011914923303796982,
+        "luminanceSsim": 0.9992898570091413,
+        "lowFrequencySrgbMaxByteError": 15.418685121107266,
+        "lowFrequencySrgbFractionOver4": 0.00204375
+      },
+      {
+        "id": "paddock-road-junction",
+        "edgeNcc": 0.9984970463671842,
+        "translationPx": 0,
+        "chiralityMargin": 0.5858525707433835,
+        "linearRgbMae": 0.0006550194509031658,
+        "linearRgbRmse": 0.0023775855597744943,
+        "p95LinearLumaError": 0.0020672188361816196,
+        "luminanceSsim": 0.9996389182851937,
+        "lowFrequencySrgbMaxByteError": 24.726643598615915,
+        "lowFrequencySrgbFractionOver4": 0.0069425
+      }
+    ]
+  },
+  "rejected": {
+    "id": "art5-missing-distance-fog",
+    "unity_plate_sha256": {
+      "grid-straight": "53adfdc78b5fc96df92c7d575b2b0359da6f1987ea836037cfad56fa5307ad9d",
+      "corner-context": "8c8c73770f87a72bc4aa8637c6a14c21d67c693292498baedae5404a4c068a68",
+      "paddock-road-junction": "5c174b3eb0add1bd5cfb1746aacfed92e1b7ca264c6edb56b77e35b5931328d8"
+    },
+    "views": [
+      {
+        "id": "grid-straight",
+        "edgeNcc": 0.9895820311578962,
+        "linearRgbMae": 0.0016531216853800975,
+        "linearRgbRmse": 0.00933864830637883,
+        "lowFrequencySrgbMaxByteError": 54.94117647058823,
+        "lowFrequencySrgbFractionOver4": 0.02867375
+      },
+      {
+        "id": "corner-context",
+        "edgeNcc": 0.9864211218733928,
+        "linearRgbMae": 0.001203165908846476,
+        "linearRgbRmse": 0.008073229087724332,
+        "lowFrequencySrgbMaxByteError": 51.155709342560556,
+        "lowFrequencySrgbFractionOver4": 0.021169375
+      },
+      {
+        "id": "paddock-road-junction",
+        "edgeNcc": 0.9921443110204821,
+        "linearRgbMae": 0.0010374416143841627,
+        "linearRgbRmse": 0.00599958029506663,
+        "lowFrequencySrgbMaxByteError": 44.567474048442904,
+        "lowFrequencySrgbFractionOver4": 0.017390625
+      }
+    ]
+  }
+}

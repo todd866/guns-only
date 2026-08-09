@@ -6,8 +6,10 @@
 //   GUNS_HERO_GATE_TIERS=mobile,balanced node tools/perf/ukraine_hero_gate.mjs
 //   GUNS_HERO_GATE_HEADLESS=1 node tools/perf/ukraine_hero_gate.mjs
 //   GUNS_HERO_GATE_BASE_URL=http://device-host:8080/ node tools/perf/ukraine_hero_gate.mjs
+//   GUNS_HERO_GATE_SCREENSHOT_DIR=/tmp/ukraine-low node tools/perf/ukraine_hero_gate.mjs
 
 import { createRequire } from "node:module";
+import { mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serveStatic } from "../../web/wwwroot/render/hud/tests/harness/static_server.mjs";
@@ -34,6 +36,10 @@ for (const tier of requestedTiers) {
 }
 
 const requestedBaseUrl = process.env.GUNS_HERO_GATE_BASE_URL?.trim();
+const screenshotDirectory = process.env.GUNS_HERO_GATE_SCREENSHOT_DIR?.trim()
+  ? resolve(process.env.GUNS_HERO_GATE_SCREENSHOT_DIR.trim())
+  : null;
+if (screenshotDirectory) await mkdir(screenshotDirectory, { recursive: true });
 const site = requestedBaseUrl
   ? {
       url: `${requestedBaseUrl.replace(/\/+$/, "")}/`,
@@ -58,6 +64,7 @@ try {
     const query = new URLSearchParams({
       site: "ukraine",
       "terrain-look": "1",
+      audioQa: "silent",
       quality: tier,
       altitude: "90",
       clouds: "1",
@@ -78,15 +85,42 @@ try {
       null,
       { timeout: 30_000 },
     );
+    await page.waitForFunction(
+      () => {
+        const foliage = window.__environmentLabDiagnostics
+          ?.snapshot().terrain?.missionFeatures;
+        return Boolean(foliage)
+          && (foliage.foliageAtlasReady === true || foliage.foliageAtlasError !== null);
+      },
+      null,
+      { timeout: 30_000 },
+    );
     const snapshot = await page.evaluate(
       () => window.__environmentLabDiagnostics.snapshot(),
     );
+    const screenshotPath = screenshotDirectory
+      ? resolve(screenshotDirectory, `ukraine-low-altitude-${tier}.png`)
+      : null;
+    if (screenshotPath) {
+      await page.locator("#scene").screenshot({
+        path: screenshotPath,
+        type: "png",
+        animations: "disabled",
+      });
+    }
     await page.close();
     if (pageErrors.length) {
       throw new Error(`${tier}: uncaught page errors:\n${pageErrors.join("\n")}`);
     }
     if (snapshot.performanceGate.pass !== true) {
       throw new Error(`${tier}: 60 fps gate failed: ${JSON.stringify(snapshot)}`);
+    }
+    const foliage = snapshot.terrain?.missionFeatures;
+    if (foliage?.foliageAtlasId !== "environment.foliage.ukraine-temperate.v1"
+        || foliage?.foliageAtlasReady !== true
+        || foliage?.foliageAtlasSynthetic !== false
+        || foliage?.foliageAtlasError !== null) {
+      throw new Error(`${tier}: production foliage atlas is not ready: ${JSON.stringify(foliage)}`);
     }
     const expectedShadowPass = tier === "desktop";
     const expectedAuthoredShadowDraws = expectedShadowPass ? 4 : 0;
@@ -113,6 +147,13 @@ try {
       shadows: snapshot.shadows,
       frameStats: snapshot.frameStats,
       gate: snapshot.performanceGate,
+      foliage: {
+        atlasId: foliage.foliageAtlasId,
+        ready: foliage.foliageAtlasReady,
+        synthetic: foliage.foliageAtlasSynthetic,
+        error: foliage.foliageAtlasError,
+      },
+      screenshotPath,
     });
     console.log(`ok  ${tier}: ${snapshot.frameStats.fps.toFixed(1)} fps; `
       + `p95 ${snapshot.frameStats.p95Ms.toFixed(1)} ms; `

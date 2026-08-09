@@ -8,7 +8,7 @@
   <base href="/">
   <title>Guns Only · YZF-R1 Weekend Ride</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/weekend-ride/styles.css?v=298">
+  <link rel="stylesheet" href="/weekend-ride/styles.css?v=299">
 </head>
 <body>
   <header class="topbar">
@@ -16,20 +16,21 @@
       <span class="brand">Guns Only</span>
       <h1>Weekend Ride</h1>
     </div>
-    <p id="status" aria-live="polite"><i></i><span>Loading YZF-R1 runtime…</span></p>
+    <div class="status-cluster">
+      <button
+        id="diagnostics-toggle"
+        type="button"
+        aria-label="Show detailed ride diagnostics"
+        aria-keyshortcuts="I"
+        aria-pressed="false"
+        title="Detailed ride diagnostics (I)"
+      >I</button>
+      <p id="status" aria-live="polite"><i></i><span>Loading YZF-R1 runtime…</span></p>
+    </div>
+    <span id="ride-announcer" class="sr-only" aria-live="polite"></span>
   </header>
 
   <main>
-    <aside aria-label="Weekend ride controls">
-      <section class="instructions">
-        <span class="eyebrow">Rapier airfield track day</span>
-        <h2>YZF-R1 · Painted circuit</h2>
-        <p><kbd>W</kbd>/<kbd>S</kbd> throttle/brake · <kbd>A</kbd>/<kbd>D</kbd> turn · arrows body bias · <kbd>Q</kbd>/<kbd>E</kbd> shift · <kbd>Shift</kbd> clutch (manual) · <kbd>C</kbd> auto/manual · <kbd>T</kbd> assisted/raw physics · <kbd>R</kbd> reset · <kbd>Esc</kbd> pause.</p>
-        <p>Gamepad: left stick turns, right stick biases the rider, triggers brake and accelerate.</p>
-        <p class="honesty">Curbs, cones, tyre walls, marshal posts and the paddock mark a temporary runway circuit. Assisted mode models the rider's delayed, rate-limited stabilizing reflexes; raw mode exposes the same tire-limited bike without intervention.</p>
-      </section>
-    </aside>
-
     <section class="viewport" aria-label="Helmet-mounted weekend ride">
       <canvas id="scene"></canvas>
       <canvas id="hud" aria-hidden="true"></canvas>
@@ -38,7 +39,7 @@
 
   <script>
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=298", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=299", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -68,7 +69,7 @@
         const script = document.createElement("script");
         // Loader from site root + <base href="/"> so boot resources resolve to /_framework/*,
         // not /weekend-ride/_framework/* (Medevac pattern).
-        script.src = "/_framework/blazor.webassembly.js?v=298";
+        script.src = "/_framework/blazor.webassembly.js?v=299";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load motorcycle runtime.")), {
@@ -77,10 +78,10 @@
         document.head.append(script);
       });
       const { renderExperienceGate } = await import(
-        "/render/release/quarantine_gate.js?v=298"
+        "/render/release/quarantine_gate.js?v=299"
       );
       const access = renderExperienceGate({ experienceId: "weekend-ride" });
-      if (access.allowed) await import("/weekend-ride/main.js?v=298");
+      if (access.allowed) await import("/weekend-ride/main.js?v=299");
     } catch (error) {
       console.error(error);
       const status = document.querySelector("#status");

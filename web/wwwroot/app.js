@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=298";
+import { createHud } from "./hud.js?v=299";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=298";
+} from "./render/debrief/sortie_result.js?v=299";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -49,8 +49,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=298";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=298";
+} from "./render/release/release_identity.js?v=299";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=299";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -63,7 +63,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=298";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=299";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -72,10 +72,13 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=298";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=299";
+import {
+  resolveRapierCockpitCameraAnchor,
+} from "./render/presentation/rapier_sensor_view.js?v=299";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=298";
+} from "./render/nav/carrier_sortie_touch_control.js?v=299";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -150,7 +153,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=298";
+} from "./render/telemetry/ai_frame_pressure.js?v=299";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -160,14 +163,14 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=298";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=298";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=298";
+} from "./render/telemetry/telemetry_batch.js?v=299";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=299";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=299";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=298";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=298";
+} from "./render/shell/boot_watchdog.js?v=299";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=299";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -176,7 +179,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=298";
+} from "./render/settings/player_settings.js?v=299";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -222,13 +225,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=298";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=298";
+} from "./render/scene/scene_builders.js?v=299";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=299";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=298";
+} from "./render/audio/flight_audio.js?v=299";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -7364,6 +7367,10 @@ class FlightView {
     if (this.sky?.uniforms?.uSoftWorld) {
       this.sky.uniforms.uSoftWorld.value = ukraineTheatre ? 1 : 0;
     }
+    if (this.sky?.uniforms?.uModernCombat) {
+      this.sky.uniforms.uModernCombat.value =
+        isF22CanopyGlassAirframe(state) ? 1 : 0;
+    }
     if (this.sky?.uniforms?.uSunDirection) {
       this.sky.uniforms.uSunDirection.value.copy(SUN_DIRECTION);
     }
@@ -8639,7 +8646,12 @@ class FlightView {
           this.presentationAssets.cockpitSlot,
           "camera.cockpit",
         )
-        : null;
+        : resolveRapierCockpitCameraAnchor({
+          playerPresentationId: this.presentationAssets.requested.playerPresentationId,
+          playerExteriorSlot: this.presentationAssets.playerExteriorSlot,
+          semanticAnchor: (slot, semanticId) =>
+            this.presentationAssets.semanticAnchor(slot, semanticId),
+        });
       if (cockpitCamera) {
         cockpitCamera.getWorldPosition(this.camera.position);
       } else {
@@ -8812,6 +8824,7 @@ class FlightView {
       fogColor: this.fogColor,
       fogDensity,
       sunDirection: SUN_DIRECTION,
+      combatPresentation: isF22CanopyGlassAirframe(state),
       snowCover01: terrainSnowCover01,
       snowWetness01: terrainSnowWetness01,
       glazeIce01: terrainGlazeIce01,
@@ -11044,7 +11057,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=298")
+    navigator.serviceWorker.register("service-worker.js?v=299")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

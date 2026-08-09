@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.0.0",
+  "assetFamilyId": "art.cobra-vietnam.foliage-painted.v2",
+  "authorship": {
+    "method": "OpenAI built-in image generation",
+    "generatedOn": "2026-08-08",
+    "humanDirection": "Cobra Canyon tropical foliage readability and WebGL/Unity reuse"
+  },
+  "assets": [
+    {
+      "id": "environment.foliage.foliage-atlas-painted.v2",
+      "uri": "foliage-atlas-painted-v2.png",
+      "role": "alpha-tested tropical foliage billboard atlas",
+      "projection": "orthographic side-on 2x2 sprite atlas",
+      "regions": ["palm", "hardwood canopy", "bamboo and banana", "fern and scrub"],
+      "constraints": [
+        "presentation only; never collision, terrain, or target authority",
+        "one isolated foliage cluster per quadrant",
+        "muted humid greens; no fluorescent cyan edge",
+        "flat chroma-key source removed locally to RGBA",
+        "one-pixel matte contraction and 12-pixel transparent-RGB dilation for mip safety"
+      ],
+      "prompt": "Create one square 2-by-2 sprite atlas containing four separate complete vegetation clusters: a mature coconut palm, a dense rounded tropical hardwood canopy, a bamboo-and-banana understory cluster, and a low fern-and-scrub cluster. High-quality hand-painted realistic game foliage, readable silhouettes, natural restrained greens, orthographic side-on billboard views, each subject centered wholly within its quadrant. Perfectly flat solid magenta chroma-key background; no landscape, sky, floor, text, watermark, shadows, reflections, neon colour, or quadrant crossing."
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "1.0.0",
+  "assetFamilyId": "art.cobra-vietnam.ground-macro.v1",
+  "authorship": {
+    "method": "OpenAI built-in image generation",
+    "generatedOn": "2026-08-08",
+    "humanDirection": "Cobra Canyon cross-renderer terrain material hierarchy"
+  },
+  "assets": [
+    {
+      "id": "environment.texture.cobra-ground-macro-painted.v1",
+      "uri": "cobra-ground-macro-painted-v1.png",
+      "role": "presentation-only reusable theatre macro and near-detail albedo",
+      "projection": "orthographic top-down fictional terrain texture",
+      "constraints": [
+        "no identifiable real-world geography",
+        "no river, road, building, vehicle or person",
+        "no height, collision, navigation or target authority",
+        "neutral diffuse colour; renderer supplies lighting and atmosphere"
+      ],
+      "prompt": "Square tileable orthographic top-down aerial ground surface for a low-altitude Vietnam gorge flight environment: broad organic dense tropical jungle, muted grass clearings, small irregular cultivated and paddy patches, damp soil, and restrained laterite scars. High-quality hand-painted realistic game terrain with natural scale hierarchy, neutral diffuse albedo, humid deep greens, olive and sage, muted ochre and red-brown. No river, road, buildings, vehicles, people, text, borders, horizon, perspective, recognizable geography, height shading, fluorescent colour, crushed black, farm carpet, hard shadows, or repeated stamps."
+    }
+  ]
+}

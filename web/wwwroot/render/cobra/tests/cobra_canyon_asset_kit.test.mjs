@@ -13,6 +13,10 @@ const world = JSON.parse(await readFile(new URL(
   "../../../content/packs/cobra-vietnam/environment/cobra-canyon.world.json",
   import.meta.url,
 ), "utf8"));
+const visualContract = JSON.parse(await readFile(new URL(
+  "../../../content/packs/cobra-vietnam/environment/cobra-canyon-visual-contract.v1.json",
+  import.meta.url,
+), "utf8"));
 
 const MAXIMUM_INSTANCES = Object.freeze({ mobile: 330, balanced: 580, desktop: 830 });
 
@@ -100,8 +104,8 @@ test("builds one bounded authored batch per visual role across every tier", () =
     assert.equal(jungleMesh.material.side, THREE.DoubleSide);
     assert.ok(triangleCount(jungleGeometry) >= 10,
       "jungle stand needs crossed palm cards plus understory");
-    assert.ok(triangleCount(jungleGeometry) <= 20,
-      "textured cards must stay far under the old ~50-tri lobe budget");
+    assert.ok(triangleCount(jungleGeometry) <= 24,
+      "six layered textured cards must stay under half the old ~50-tri lobe budget");
     assert.ok(triangleCount(meshes.get("plantation").geometry) >= 100,
       "plantation rows need trunks and crowns instead of marker pyramids");
     assert.deepEqual(visibleMetrics(kit.group), kit.builtMetrics);
@@ -129,6 +133,53 @@ test("consumes descriptor scale and authored palette instead of generic legacy v
   plantation.getColorAt(descriptorEntry.instanceId, color);
   assert.ok(color.r < 0.9 || color.g < 0.9 || color.b < 0.9,
     "authored plantation palette must tint the instance");
+  kit.dispose();
+});
+
+test("final foliage-card bounds stay inside the renderer-neutral metre targets", () => {
+  const { kit } = create("balanced");
+  const jungle = roleMeshes(kit.group).get("jungle");
+  jungle.geometry.computeBoundingBox();
+  const unitSize = new THREE.Vector3();
+  jungle.geometry.boundingBox.getSize(unitSize);
+
+  const matrix = new THREE.Matrix4();
+  const position = new THREE.Vector3();
+  const quaternion = new THREE.Quaternion();
+  const scale = new THREE.Vector3();
+  const extentsByTarget = new Map();
+  for (const entry of jungle.userData.cobraCanyonInstances) {
+    jungle.getMatrixAt(entry.instanceId, matrix);
+    matrix.decompose(position, quaternion, scale);
+    const placementKind = entry.setPieceId ? "setPiece" : "ambient";
+    const stratum = entry.archetypeId.includes("understory") ? "Understory" : "Canopy";
+    const targetId = `${placementKind}${stratum}`;
+    const extents = extentsByTarget.get(targetId) ?? [];
+    extents.push({
+      width: scale.x * unitSize.x,
+      height: scale.y * unitSize.y,
+      depth: scale.z * unitSize.z,
+    });
+    extentsByTarget.set(targetId, extents);
+  }
+
+  const targets = visualContract.foliageAtlas.visualExtentTargetsM;
+  for (const targetId of [
+    "ambientCanopy",
+    "setPieceCanopy",
+    "ambientUnderstory",
+    "setPieceUnderstory",
+  ]) {
+    const extents = extentsByTarget.get(targetId) ?? [];
+    assert.ok(extents.length > 0, `${targetId} needs at least one balanced-tier instance`);
+    for (const extent of extents) {
+      for (const axis of ["width", "height", "depth"]) {
+        const [minimum, maximum] = targets[targetId][axis];
+        assert.ok(extent[axis] >= minimum && extent[axis] <= maximum,
+          `${targetId} ${axis} ${extent[axis].toFixed(3)} m outside ${minimum}–${maximum} m`);
+      }
+    }
+  }
   kit.dispose();
 });
 

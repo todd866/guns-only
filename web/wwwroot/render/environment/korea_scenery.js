@@ -31,15 +31,29 @@ export {
 // geometry, so forest density costs vertices/fill on the under-drawn GPU instead of multiplying
 // the synchronous LOD0 planning and matrix-composition work that already hitches the main thread.
 export const KOREA_TREE_STAND_SIZE = 7;
-export const UKRAINE_NEAR_RING_STAND_SIZE = 5;
-// Mid-ring (terrain LOD1) Ukraine stands use one purpose-built asymmetric canopy hull. A single
-// broad mass reads more naturally than three octahedral "diamonds" and costs only 24 triangles.
+// Four authored ecological strata share one atlas-backed stand and one instanced draw. Each role
+// is crossed inside the unit geometry, so the diagnostic counts roles rather than individual
+// quads (which are only a renderer implementation detail).
+export const UKRAINE_NEAR_RING_STAND_SIZE = 4;
+// Mid-ring (terrain LOD1) Ukraine stands collapse to one crossed mature-woodland atlas role. It
+// preserves the authored silhouette with four triangles and drops the other three near strata
+// before their alpha coverage becomes sub-pixel.
 export const UKRAINE_MID_RING_STAND_SIZE = 1;
-// One dominant stem survives inside each five-lobe painted stand. At aircraft height the canopy
-// owns the silhouette; extra cylinders were invisible cost that is better spent rounding each
-// crown lobe away from the old diamond profile.
-export const UKRAINE_NEAR_RING_VISIBLE_TRUNKS = 1;
-export const SOFT_WORLD_GRASS_BLADES_PER_PATCH = 24;
+// Trunks are authored into the alpha cards, so a second cylinder submission would duplicate them.
+export const UKRAINE_NEAR_RING_VISIBLE_TRUNKS = 0;
+export const SOFT_WORLD_GRASS_BLADES_PER_PATCH = 36;
+export const UKRAINE_TEMPERATE_FOLIAGE_URL = new URL(
+  "../../content/packs/ukraine-modern/environment/foliage/ukraine-temperate-foliage-v1.png?v=299",
+  import.meta.url,
+).href;
+export const UKRAINE_TEMPERATE_FOLIAGE_ALPHA_CUTOFF = 0.38;
+
+export const UKRAINE_TEMPERATE_FOLIAGE_REGIONS = Object.freeze({
+  matureWoodland: Object.freeze([0.02, 0.02, 0.48, 0.48]),
+  poplarWindbreak: Object.freeze([0.52, 0.02, 0.98, 0.48]),
+  mixedHedgerow: Object.freeze([0.02, 0.52, 0.48, 0.98]),
+  meadowScrub: Object.freeze([0.52, 0.52, 0.98, 0.98]),
+});
 
 const TREE_STAND_LAYOUT = Object.freeze([
   Object.freeze({ x: 0, z: 0, height: 1, radius: 1, shade: 1.00 }),
@@ -54,13 +68,6 @@ const TREE_STAND_LAYOUT = Object.freeze([
 const UKRAINE_MID_RING_STAND_LAYOUT = Object.freeze(
   TREE_STAND_LAYOUT.slice(0, UKRAINE_MID_RING_STAND_SIZE),
 );
-const UKRAINE_NEAR_RING_STAND_LAYOUT = Object.freeze(
-  TREE_STAND_LAYOUT.slice(0, UKRAINE_NEAR_RING_STAND_SIZE),
-);
-const UKRAINE_NEAR_RING_TRUNK_LAYOUT = Object.freeze(
-  TREE_STAND_LAYOUT.slice(0, UKRAINE_NEAR_RING_VISIBLE_TRUNKS),
-);
-
 const SCENERY_BUDGET = Object.freeze({
   0: Object.freeze({ crownFraction: 1, fieldFraction: 1, hideSecondary: false }),
   1: Object.freeze({ crownFraction: 0.60, fieldFraction: 1, hideSecondary: true }),
@@ -366,49 +373,210 @@ function updateCameraGrassController(
   if (changed) controller.mesh.instanceMatrix.needsUpdate = true;
 }
 
-function createSoftWorldCanopyHull(THREE) {
-  const segments = 6;
-  const positions = [0.10, 1.0, -0.07];
-  const upperRadii = [0.90, 0.82, 0.96, 0.86, 0.98, 0.84];
-  const lowerRadii = [1.00, 0.92, 1.06, 0.90, 1.03, 0.95];
-  for (let index = 0; index < segments; index++) {
-    const angle = index / segments * Math.PI * 2;
-    positions.push(
-      Math.cos(angle) * upperRadii[index] + 0.05,
-      0.66 + (index % 2) * 0.035,
-      Math.sin(angle) * upperRadii[index] - 0.03,
-    );
-  }
-  for (let index = 0; index < segments; index++) {
-    const angle = index / segments * Math.PI * 2;
-    positions.push(
-      Math.cos(angle) * lowerRadii[index] - 0.04,
-      0.20 - (index % 3) * 0.018,
-      Math.sin(angle) * lowerRadii[index] + 0.04,
-    );
-  }
-  const bottomIndex = positions.length / 3;
-  positions.push(-0.08, -0.04, 0.06);
+function appendFoliageCard(positions, uvs, indices, {
+  region, centreX = 0, centreZ = 0, width = 1, height = 1, yaw = 0,
+}) {
+  const base = positions.length / 3;
+  const tangentX = Math.cos(yaw);
+  const tangentZ = Math.sin(yaw);
+  const halfWidth = width * 0.5;
+  const leftX = centreX - tangentX * halfWidth;
+  const leftZ = centreZ - tangentZ * halfWidth;
+  const rightX = centreX + tangentX * halfWidth;
+  const rightZ = centreZ + tangentZ * halfWidth;
+  positions.push(
+    leftX, 0, leftZ,
+    rightX, 0, rightZ,
+    leftX, height, leftZ,
+    rightX, height, rightZ,
+  );
+  const [uMin, vMin, uMax, vMax] = region;
+  // Authored atlas origin is top-left with V increasing down. TextureLoader flipY=false keeps
+  // that convention, so the physical base samples vMax and the physical crown samples vMin.
+  uvs.push(
+    uMin, vMax,
+    uMax, vMax,
+    uMin, vMin,
+    uMax, vMin,
+  );
+  indices.push(base, base + 1, base + 2, base + 1, base + 3, base + 2);
+}
+
+function createUkraineTemperateFoliageStandGeometry(THREE) {
+  const positions = [];
+  const uvs = [];
   const indices = [];
-  for (let index = 0; index < segments; index++) {
-    const next = (index + 1) % segments;
-    const upper = 1 + index;
-    const upperNext = 1 + next;
-    const lower = 1 + segments + index;
-    const lowerNext = 1 + segments + next;
-    indices.push(
-      0, upperNext, upper,
-      upper, lower, upperNext,
-      upperNext, lower, lowerNext,
-      bottomIndex, lower, lowerNext,
-    );
-  }
+  const crossed = (region, centreX, centreZ, width, height, yaw) => {
+    appendFoliageCard(positions, uvs, indices,
+      { region, centreX, centreZ, width, height, yaw });
+    appendFoliageCard(positions, uvs, indices,
+      { region, centreX, centreZ, width, height, yaw: yaw + Math.PI * 0.5 });
+  };
+  // One mature mass owns the silhouette; narrower poplars, hedgerow and scrub break the repeated
+  // topiary rhythm without multiplying placements or draw calls. All sizes are normalized and
+  // inherit the existing authoritative per-stand metre transform below.
+  crossed(UKRAINE_TEMPERATE_FOLIAGE_REGIONS.matureWoodland,
+    -0.10, 0.00, 2.18, 1.04, 0.00);
+  crossed(UKRAINE_TEMPERATE_FOLIAGE_REGIONS.poplarWindbreak,
+    0.76, 0.18, 1.08, 1.22, 0.52);
+  crossed(UKRAINE_TEMPERATE_FOLIAGE_REGIONS.mixedHedgerow,
+    -0.54, -0.38, 1.72, 0.58, -0.34);
+  crossed(UKRAINE_TEMPERATE_FOLIAGE_REGIONS.meadowScrub,
+    0.24, 0.62, 1.46, 0.34, 0.83);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
   return geometry;
+}
+
+function createUkraineTemperateFoliageMidGeometry(THREE) {
+  const positions = [];
+  const uvs = [];
+  const indices = [];
+  appendFoliageCard(positions, uvs, indices, {
+    region: UKRAINE_TEMPERATE_FOLIAGE_REGIONS.matureWoodland,
+    width: 2.02,
+    height: 1.02,
+    yaw: 0,
+  });
+  appendFoliageCard(positions, uvs, indices, {
+    region: UKRAINE_TEMPERATE_FOLIAGE_REGIONS.matureWoodland,
+    width: 2.02,
+    height: 1.02,
+    yaw: Math.PI * 0.5,
+  });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+export function createSyntheticFoliageAtlas(THREE) {
+  const texture = new THREE.DataTexture(
+    new Uint8Array([255, 255, 255, 255]),
+    1,
+    1,
+    THREE.RGBAFormat,
+    THREE.UnsignedByteType,
+  );
+  texture.name = "TEX_UKRAINE_TEMPERATE_FOLIAGE_SYNTHETIC";
+  texture.needsUpdate = true;
+  return texture;
+}
+
+export function configureUkraineFoliageAtlas(THREE, texture) {
+  texture.name = texture.name || "TEX_UKRAINE_TEMPERATE_FOLIAGE_V1";
+  texture.flipY = false;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.magFilter = THREE.LinearFilter;
+  texture.generateMipmaps = true;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+export function validateUkraineFoliageAtlas(THREE, texture) {
+  if (!texture
+      || texture.flipY !== false
+      || texture.wrapS !== THREE.ClampToEdgeWrapping
+      || texture.wrapT !== THREE.ClampToEdgeWrapping
+      || texture.minFilter !== THREE.LinearMipmapLinearFilter
+      || texture.magFilter !== THREE.LinearFilter
+      || texture.generateMipmaps !== true
+      || texture.colorSpace !== THREE.SRGBColorSpace) {
+    throw new TypeError(
+      "Injected Ukraine foliage atlas must already satisfy the top-left sRGB clamp/mipmap contract.",
+    );
+  }
+  return texture;
+}
+
+export function isUkraineFoliageAtlasReady(texture) {
+  const image = texture?.image;
+  if (!image) return false;
+  const width = Number(image.naturalWidth ?? image.videoWidth ?? image.width);
+  const height = Number(image.naturalHeight ?? image.videoHeight ?? image.height);
+  return Number.isFinite(width) && width > 0 && Number.isFinite(height) && height > 0;
+}
+
+// A theatre root owns both streamed ambient scenery and one authored mission-feature group. They
+// are created by separate renderer modules, but the 1024px atlas must still be one GPU texture.
+// Reference-count the default asset per THREE namespace so both consumers share the upload while
+// injected test/tool textures remain caller-owned.
+const UKRAINE_FOLIAGE_ATLAS_CACHE = new WeakMap();
+
+function disposeCachedUkraineFoliageAtlas(THREE, record) {
+  if (UKRAINE_FOLIAGE_ATLAS_CACHE.get(THREE) !== record) return;
+  record.texture?.dispose();
+  UKRAINE_FOLIAGE_ATLAS_CACHE.delete(THREE);
+}
+
+export function acquireUkraineFoliageAtlas(THREE) {
+  let record = UKRAINE_FOLIAGE_ATLAS_CACHE.get(THREE);
+  if (!record) {
+    record = {
+      texture: null,
+      references: 0,
+      ready: false,
+      synthetic: false,
+      error: null,
+      disposeWhenSettled: false,
+    };
+    UKRAINE_FOLIAGE_ATLAS_CACHE.set(THREE, record);
+    if (typeof globalThis.Image === "function") {
+      record.texture = new THREE.TextureLoader().load(
+        UKRAINE_TEMPERATE_FOLIAGE_URL,
+        () => {
+          record.ready = true;
+          if (record.references === 0 && record.disposeWhenSettled) {
+            disposeCachedUkraineFoliageAtlas(THREE, record);
+          }
+        },
+        undefined,
+        (error) => {
+          record.error = error?.message ?? "Ukraine foliage atlas failed to load.";
+          if (record.references === 0 && record.disposeWhenSettled) {
+            disposeCachedUkraineFoliageAtlas(THREE, record);
+          }
+        },
+      );
+    } else {
+      record.synthetic = true;
+      record.ready = true;
+      record.texture = createSyntheticFoliageAtlas(THREE);
+    }
+    configureUkraineFoliageAtlas(THREE, record.texture);
+  }
+  record.references++;
+  record.disposeWhenSettled = false;
+  let released = false;
+  return Object.freeze({
+    texture: record.texture,
+    get ready() { return record.ready; },
+    get synthetic() { return record.synthetic; },
+    get error() { return record.error; },
+    release() {
+      if (released) return;
+      released = true;
+      record.references = Math.max(0, record.references - 1);
+      if (record.references !== 0) return;
+      if (record.ready || record.synthetic || record.error) {
+        disposeCachedUkraineFoliageAtlas(THREE, record);
+      } else {
+        record.disposeWhenSettled = true;
+      }
+    },
+  });
 }
 
 function mergeLayout(baseGeometry, layout, transform) {
@@ -462,21 +630,28 @@ function createBuildingCompoundGeometry(buildingPrimitive) {
 
 function createSoftWorldGrassGeometry(THREE) {
   const positions = [];
+  const colors = [];
   const indices = [];
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   for (let blade = 0; blade < SOFT_WORLD_GRASS_BLADES_PER_PATCH; blade++) {
     const fraction = (blade + 0.5) / SOFT_WORLD_GRASS_BLADES_PER_PATCH;
     const angle = blade * goldenAngle;
-    const centreRadius = Math.sqrt(fraction) * 0.82;
+    // The patch matrix already carries a 4–10 m ecology footprint. Keep the visible blades in a
+    // dense inner tuft so a 90 m AGL view reads meadow mass rather than isolated bright pixels.
+    const centreRadius = Math.sqrt(fraction) * 0.42;
     const centreX = Math.cos(angle) * centreRadius;
     const centreZ = Math.sin(angle) * centreRadius;
     const facing = angle * 1.83 + 0.37;
     const tangentX = Math.cos(facing);
     const tangentZ = Math.sin(facing);
-    const width = 0.028 + (blade % 4) * 0.008;
+    const width = 0.009 + (blade % 4) * 0.0025;
     const height = 0.68 + (blade % 5) * 0.075;
     const shoulderHeight = height * 0.72;
     const shoulderWidth = width * 0.58;
+    const shade = 0.78 + (blade % 6) * 0.032;
+    const baseColor = [0.52 * shade, 0.55 * shade, 0.37 * shade];
+    const shoulderColor = [0.72 * shade, 0.76 * shade, 0.49 * shade];
+    const tipColor = [0.62 * shade, 0.66 * shade, 0.42 * shade];
     const base = positions.length / 3;
     positions.push(
       centreX - tangentX * width, 0, centreZ - tangentZ * width,
@@ -487,6 +662,11 @@ function createSoftWorldGrassGeometry(THREE) {
       centreZ + tangentZ * shoulderWidth,
       centreX, height, centreZ,
     );
+    colors.push(
+      ...baseColor, ...baseColor,
+      ...shoulderColor, ...shoulderColor,
+      ...tipColor,
+    );
     indices.push(
       base, base + 1, base + 2,
       base + 1, base + 3, base + 2,
@@ -495,6 +675,7 @@ function createSoftWorldGrassGeometry(THREE) {
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
@@ -506,8 +687,9 @@ function createSoftWorldGrassMaterial(THREE, uniforms) {
   // needles. A palette-lit basic material is both cheaper and closer to painted-cel foreground
   // colour; terrain fog and the shared wind shader still integrate it with the scene.
   const material = new THREE.MeshBasicMaterial({
-    color: 0xa4bf5e,
+    color: 0x626445,
     side: THREE.DoubleSide,
+    vertexColors: true,
   });
   material.name = "SOFT_WORLD_WIND_GRASS";
   material.onBeforeCompile = (shader) => {
@@ -559,7 +741,7 @@ function createSoftWorldGrassMaterial(THREE, uniforms) {
   return material;
 }
 
-function addSoftWorldCanopyWind(material, uniforms) {
+export function addSoftWorldCanopyWind(material, uniforms) {
   material.name = "SOFT_WORLD_WIND_CANOPY";
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uSoftWorldTime = uniforms.time;
@@ -686,58 +868,50 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   // Distant Ukraine structure comes from terrain colour/parcel shaping rather than sphere stands.
   const maximumSceneryLevel = qualityTier === "desktop" ? 0 : 1;
   const softCanopy = profile.crownShape === "soft-canopy";
-  // Ukraine soft-world: rounded canopy ellipsoids. Korea eras keep the cheap faceted cone stands.
-  // Six radial sides remove the square/diamond read of the old 4×3 primitive. One visible stem
-  // keeps a complete five-lobe near stand under 160 triangles; the mid ring uses one asymmetric
-  // 24-triangle shoulder hull and no invisible trunk geometry.
+  let foliageAtlasLease = null;
+  let foliageAtlas = options.ukraineFoliageAtlas ?? null;
+  if (softCanopy && !foliageAtlas) {
+    foliageAtlasLease = acquireUkraineFoliageAtlas(THREE);
+    foliageAtlas = foliageAtlasLease.texture;
+  }
+  if (foliageAtlas && !foliageAtlasLease) {
+    validateUkraineFoliageAtlas(THREE, foliageAtlas);
+  }
+
+  // Ukraine's LOD0 stand is a generated temperate atlas carried by crossed role cards. Korea
+  // eras keep the cheap faceted cone stands; Ukraine's LOD1 retains only one crossed mature-
+  // woodland role so the other three alpha strata disappear before becoming sub-pixel.
   const crownPrimitive = softCanopy
-    ? (() => {
-      const geometry = new THREE.SphereGeometry(1, 6, 3);
-      geometry.scale(1.05, 0.78, 1.05);
-      geometry.translate(0, 0.78, 0);
-      return geometry;
-    })()
+    ? createUkraineTemperateFoliageStandGeometry(THREE)
     : (() => {
       const geometry = new THREE.ConeGeometry(1, 1, 7, 1);
       geometry.translate(0, 0.5, 0);
       return geometry;
     })();
   const midCrownPrimitive = softCanopy
-    ? (() => {
-      const geometry = createSoftWorldCanopyHull(THREE);
-      geometry.scale(1.42, 1.18, 1.30);
-      geometry.translate(0, 0.10, 0);
-      return geometry;
-    })()
+    ? createUkraineTemperateFoliageMidGeometry(THREE)
     : crownPrimitive.clone();
-  const trunkPrimitive = new THREE.CylinderGeometry(
-    softCanopy ? 0.09 : 0.12,
-    softCanopy ? 0.14 : 0.18,
-    1,
-    softCanopy ? 6 : 5,
-    1,
-  );
-  trunkPrimitive.translate(0, 0.5, 0);
+  const trunkPrimitive = softCanopy ? null : new THREE.CylinderGeometry(0.12, 0.18, 1, 5, 1);
+  trunkPrimitive?.translate(0, 0.5, 0);
   const midTrunkPrimitive = softCanopy ? null : trunkPrimitive.clone();
-  const treeStandGeometry = createTreeStandGeometry(
-    crownPrimitive,
-    trunkPrimitive,
-    softCanopy ? UKRAINE_NEAR_RING_STAND_LAYOUT : TREE_STAND_LAYOUT,
-    softCanopy ? UKRAINE_NEAR_RING_TRUNK_LAYOUT : TREE_STAND_LAYOUT,
-  );
-  const midTreeStandGeometry = createTreeStandGeometry(
-    midCrownPrimitive,
-    midTrunkPrimitive,
-    UKRAINE_MID_RING_STAND_LAYOUT,
-    softCanopy ? [] : UKRAINE_MID_RING_STAND_LAYOUT,
-  );
+  const treeStandGeometry = softCanopy
+    ? { crowns: crownPrimitive, trunks: null }
+    : createTreeStandGeometry(crownPrimitive, trunkPrimitive);
+  const midTreeStandGeometry = softCanopy
+    ? { crowns: midCrownPrimitive, trunks: null }
+    : createTreeStandGeometry(
+      midCrownPrimitive,
+      midTrunkPrimitive,
+      UKRAINE_MID_RING_STAND_LAYOUT,
+      UKRAINE_MID_RING_STAND_LAYOUT,
+    );
   const crownGeometry = treeStandGeometry.crowns;
   const trunkGeometry = treeStandGeometry.trunks;
   const midCrownGeometry = midTreeStandGeometry.crowns;
   const midTrunkGeometry = midTreeStandGeometry.trunks;
-  crownPrimitive.dispose();
-  trunkPrimitive.dispose();
-  if (midCrownPrimitive !== crownPrimitive) midCrownPrimitive.dispose();
+  if (!softCanopy) crownPrimitive.dispose();
+  trunkPrimitive?.dispose();
+  if (!softCanopy && midCrownPrimitive !== crownPrimitive) midCrownPrimitive.dispose();
   if (midTrunkPrimitive && midTrunkPrimitive !== trunkPrimitive) midTrunkPrimitive.dispose();
   const buildingPrimitive = new THREE.BoxGeometry(1, 1, 1);
   buildingPrimitive.translate(0, 0.5, 0);
@@ -814,7 +988,15 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
     return material;
   };
   const crownMaterial = litMaterial(0xffffff, profile.crownColor);
-  crownMaterial.vertexColors = softCanopy;
+  crownMaterial.vertexColors = false;
+  if (softCanopy) {
+    crownMaterial.map = foliageAtlas;
+    crownMaterial.alphaTest = UKRAINE_TEMPERATE_FOLIAGE_ALPHA_CUTOFF;
+    crownMaterial.transparent = false;
+    crownMaterial.depthWrite = true;
+    crownMaterial.side = THREE.DoubleSide;
+  }
+  const midCrownMaterial = crownMaterial;
   const trunkMaterial = litMaterial(profile.trunkColor);
   const buildingMaterial = litMaterial(0xffffff, profile.buildingColor);
   const roofMaterial = litMaterial(0xffffff, profile.roofColor);
@@ -829,8 +1011,13 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
   const powerPoleMaterial = litMaterial(profile.powerPoleColor);
   const powerWireMaterial = new THREE.MeshBasicMaterial({ color: profile.powerWireColor });
   const grassMaterial = grassGeometry ? createSoftWorldGrassMaterial(THREE, grassUniforms) : null;
-  if (softCanopy) addSoftWorldCanopyWind(crownMaterial, grassUniforms);
+  if (softCanopy) {
+    addSoftWorldCanopyWind(crownMaterial, grassUniforms);
+  }
   const crownPalette = profile.crownColors.map((color) => new THREE.Color(color));
+  const crownInstancePalette = softCanopy
+    ? crownPalette.map((color) => new THREE.Color(0xffffff).lerp(color, 0.14))
+    : crownPalette;
   const buildingPalette = profile.buildingColors.map((color) => new THREE.Color(color));
   const roofPalette = profile.roofColors.map((color) => new THREE.Color(color));
   const fieldPalette = profile.fieldColors.map((color) => new THREE.Color(color));
@@ -839,11 +1026,12 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
     buildingGeometry, roofGeometry,
     surfaceGeometry, segmentGeometry, poleGeometry, grassGeometry,
   ].filter(Boolean);
-  const materials = [
-    crownMaterial, trunkMaterial, buildingMaterial, roofMaterial, fieldMaterial, fieldRowMaterial,
+  const materials = [...new Set([
+    crownMaterial, midCrownMaterial, trunkMaterial, buildingMaterial, roofMaterial,
+    fieldMaterial, fieldRowMaterial,
     roadMaterial, roadMarkingMaterial, railBedMaterial, railMaterial, runwayMaterial,
     powerPoleMaterial, powerWireMaterial, grassMaterial,
-  ].filter(Boolean);
+  ].filter(Boolean))];
   if (profile.theatre === "ukraine") {
     for (const material of materials) {
       addUkraineSoftWorldFog(material, atmosphereUniforms);
@@ -921,6 +1109,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
         ? reducedMidRing ? UKRAINE_MID_RING_STAND_SIZE : UKRAINE_NEAR_RING_STAND_SIZE
         : KOREA_TREE_STAND_SIZE;
       const activeCrownGeometry = reducedMidRing ? midCrownGeometry : crownGeometry;
+      const activeCrownMaterial = reducedMidRing ? midCrownMaterial : crownMaterial;
       const activeTrunkGeometry = reducedMidRing ? midTrunkGeometry : trunkGeometry;
       const preparedPlanMatches = preparedPlan?.era === era
         && preparedPlan?.qualityTier === qualityTier
@@ -964,7 +1153,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
       };
       if (plan.trees.length) {
         const crowns = new THREE.InstancedMesh(
-          activeCrownGeometry, crownMaterial, plan.trees.length,
+          activeCrownGeometry, activeCrownMaterial, plan.trees.length,
         );
         const trunks = activeTrunkGeometry
           ? new THREE.InstancedMesh(
@@ -984,7 +1173,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
             tree.heightM * (softCanopy ? 0.42 : 0.32),
           );
           setMatrix(THREE, crowns, index, position, quaternion, scale, matrix);
-          setPaletteColor(crownColors, index, crownPalette[tree.crownVariant]);
+          setPaletteColor(crownColors, index, crownInstancePalette[tree.crownVariant]);
         }
         // Compound crowns and trunks use the exact same stand transform. Copying the finished
         // matrix buffer avoids recomposing all 900 desktop transforms a second time.
@@ -1136,6 +1325,14 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
         seed: plan.seed,
         trees: plan.trees.length,
         treeSilhouettes: plan.trees.length * standSize,
+        foliageAtlasId: softCanopy ? "environment.foliage.ukraine-temperate.v1" : null,
+        foliageAtlasSynthetic: foliageAtlasLease?.synthetic ?? false,
+        get foliageAtlasReady() {
+          return foliageAtlasLease?.ready ?? isUkraineFoliageAtlasReady(foliageAtlas);
+        },
+        get foliageAtlasError() {
+          return foliageAtlasLease?.error ?? null;
+        },
         buildings: plan.buildings.length,
         buildingSilhouettes: plan.buildings.length * BUILDING_COMPOUND_LAYOUT.length,
         fields: plan.fields.length,
@@ -1163,6 +1360,7 @@ export function createKoreaSceneryRuntime(THREE, options = {}) {
       grassControllers.clear();
       for (const geometry of geometries) geometry.dispose();
       for (const material of materials) material.dispose();
+      foliageAtlasLease?.release();
       toonGradient?.dispose();
     },
   });

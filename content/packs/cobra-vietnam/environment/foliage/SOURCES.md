@@ -1,17 +1,33 @@
-# Cobra Vietnam foliage cards (CC0)
+# Cobra Vietnam foliage cards
 
-Crossed-quad / alpha-tested cards for near-field jungle. These are **imported OpenGameArt
-CC0 cutouts**, resized for web; not project-authored fiction.
+Crossed-quad / alpha-tested cards for near-field jungle. The active v2 atlas is project-authored
+generated art shared by the WebGL and Unity presentation tracks. The original OpenGameArt CC0
+cutouts remain in the pack as documented legacy sources but are no longer loaded at runtime.
 
 ## Atlas
 
 | File | Contents | Notes |
 | --- | --- | --- |
+| `foliage-atlas-painted-v2.png` | 1024×1024 RGBA | Active 2×2 palm · hardwood · bamboo/banana · fern/scrub atlas |
 | `foliage-atlas.png` | 1024×512 RGBA | Left 512: palm card · Right 512: understory fern |
 | `palm-card.png` | 512×512 RGBA | Source half before atlas pack |
 | `understory-card.png` | ~341×512 → padded in atlas | Source half before atlas pack |
 
-Runtime UVs: palm `u∈[0,0.5]`, understory `u∈[0.5,1]`.
+Runtime v2 UVs are recorded in `cobra-canyon-visual-contract.v1.json`.
+
+## Painted v2 atlas
+
+- **Method:** OpenAI built-in image generation followed by local chroma-key removal, despill,
+  one-pixel matte contraction, resize to 1024×1024, and 12-pixel transparent-RGB dilation for
+  mip-safe alpha-tested edges. Runtime cutoff is 0.38.
+- **Generated:** 2026-08-08.
+- **Human direction:** Guns Only Cobra Canyon tropical foliage readability and cross-renderer
+  reuse.
+- **Source record:** `foliage-art-manifest.v2.json` contains the full production prompt and
+  quadrant contract.
+- **Rights:** project-authored renderer asset; covered by the repository MIT licence.
+- **Runtime:** `foliage-atlas-painted-v2.png`; no generated image is used as simulation,
+  collision, or target authority.
 
 ## Provenance
 
@@ -42,7 +58,7 @@ Runtime UVs: palm `u∈[0,0.5]`, understory `u∈[0.5,1]`.
 - FabinhoSC stylized tropical leaves (`bigtropicalleaf.png`, etc.) — CC0; fern cutout won
   for understory silhouette density.
 
-## Rebuild
+## Legacy CC0 rebuild
 
 ```bash
 # From acquired originals in /tmp/guns-only-foliage-cc0/

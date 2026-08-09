@@ -1,6 +1,5 @@
 using System.Runtime.InteropServices.JavaScript;
 using System.Runtime.Versioning;
-using System.Text.Json;
 using GunsOnly.Sim;
 using GunsOnly.Sim.Motorcycle;
 using GunsOnly.Sim.Vehicles;
@@ -8,7 +7,7 @@ using GunsOnly.Sim.Vehicles;
 namespace GunsOnly.Web;
 
 /// <summary>
-/// Browser facade for the Rapier strip weekend motorcycle ride. Advances the authoritative
+/// Browser facade for the Weekend Track Day motorcycle ride. Advances the authoritative
 /// 120 Hz YZF-R1 runtime and serializes mission-owned snapshot JSON for the helmet HUD client.
 /// </summary>
 [SupportedOSPlatform("browser")]
@@ -130,16 +129,12 @@ public static partial class MotorcycleWebBridge
         MotorcycleSnapshotProjection.BuildStateJson(RequireRuntime(), _controlMode);
 
     /// <summary>
-    /// The immutable painted-circuit centreline, fetched once at boot. Kept out of the
-    /// per-frame snapshot: serializing ~1,700 points at 60 fps is pure marshalling waste.
+    /// Immutable renderer-neutral circuit contract, fetched once at boot. Kept out of the
+    /// per-frame snapshot: serializing the full centreline at 60 fps is pure marshalling waste.
     /// </summary>
     [JSExport]
-    public static string GetCircuit() => JsonSerializer.Serialize(
-        RequireRuntime().Circuit.Centreline.Select(point => new {
-            x = point.X,
-            y = point.Y,
-            z = point.Z,
-        }).ToArray());
+    public static string GetCircuit() =>
+        WeekendRouteContract.FromCircuit(RequireRuntime().Circuit).ToJson();
 
     static WeekendRideMissionRuntime RequireRuntime() =>
         _runtime ?? throw new InvalidOperationException("Weekend ride has not been started.");

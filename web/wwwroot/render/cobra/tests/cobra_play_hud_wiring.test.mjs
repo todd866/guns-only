@@ -34,8 +34,9 @@ test("the airframe silhouette follows the camera mode from a single call site", 
   // hidden and the exterior camera framed empty sky. The camera mode is the only input
   // that decides this, so exactly one unconditional call site may own it.
   assert.equal((main.match(/setFirstPerson\(/g) ?? []).length, 1);
-  // Parked visual-review stills also force exterior (no cockpit over scenery shots).
-  assert.match(main, /setFirstPerson\(!tourInput\.checked && !parkedCamera\)/);
+  // Parked visual-review stills hide the ship so the emptiness gate scores the gorge itself.
+  assert.match(main, /setFirstPerson\(!tourInput\.checked \|\| !!parkedCamera\)/);
+  assert.match(main, /park\([\s\S]*?applyAh1gCameraVisibility\(\);[\s\S]*?applyParkedCamera\(\)/);
   const sync = main.match(/function syncAuthorityCamera\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
   assert.doesNotMatch(sync, /setFirstPerson/);
 });

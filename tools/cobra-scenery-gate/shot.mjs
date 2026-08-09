@@ -15,7 +15,7 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import {
   COBRA_CHROMIUM_ARGS,
@@ -27,7 +27,17 @@ const { chromium } = require("playwright");
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_DIR = resolve(SCRIPT_DIR, "../..");
+const VISUAL_CONTRACT = JSON.parse(readFileSync(resolve(
+  REPO_DIR,
+  "content/packs/cobra-vietnam/environment/cobra-canyon-visual-contract.v1.json",
+), "utf8"));
 const OUT_DIR = resolve(process.env.COBRA_SCENERY_SHOT_DIR ?? join(SCRIPT_DIR, "shots"));
+const CAPTURE_WIDTH = 1600;
+const CAPTURE_HEIGHT = 1000;
+const HIDDEN_ROLES = String(process.env.COBRA_SCENERY_HIDE_ROLES ?? "")
+  .split(",")
+  .map((role) => role.trim())
+  .filter(Boolean);
 
 function resolveWwwroot() {
   const explicit = process.env.COBRA_SCENERY_WWWROOT || process.env.SMOKE_WWWROOT;
@@ -81,35 +91,84 @@ async function servePython(wwwroot) {
   };
 }
 
-// Exterior park poses — scenery only. eastM/northM match landmark.positionLocalM
-// [east, up, north] (camera z = -north). Overnight stills used wrong origin coords.
-const VIEWS = Object.freeze([
-  Object.freeze({
-    name: "camp-ember",
-    eastM: -6_500,
-    northM: -6_200,
-    aglM: 35,
-    yawRad: -0.3,
-    pitchRad: -0.28,
-  }),
-  Object.freeze({
-    name: "mid-gorge",
-    // Long Fang approach — looks across village/canopy rather than up a blank hillside.
-    eastM: -4_557,
-    northM: -3_661,
-    aglM: 50,
-    yawRad: -0.5,
-    pitchRad: -0.2,
-  }),
-  Object.freeze({
-    name: "iron-bell",
-    eastM: -2_710,
-    northM: -500,
-    aglM: 58,
-    yawRad: -0.55,
-    pitchRad: -0.14,
-  }),
-]);
+// Exterior scenery poses come from the same portable contract Unity consumes. This prevents a
+// renderer or QA script from quietly improving its score by moving a difficult camera.
+const VIEWS = Object.freeze(VISUAL_CONTRACT.acceptanceViews.map(({ id, ...view }) => Object.freeze({
+  name: id,
+  ...view,
+})));
+
+async function parkAndSettle(page, view) {
+  const hiddenRoleMatches = await page.evaluate(({ parkedView, hiddenRoles }) => {
+    window.__gunsOnlyCobraLabCamera.park(
+      parkedView.eastM,
+      parkedView.northM,
+      parkedView.aglM,
+      parkedView.yawRad,
+      parkedView.pitchRad,
+    );
+    const matches = {};
+    for (const role of hiddenRoles) {
+      matches[role] = window.__gunsOnlyCobraLabCamera.setPresentationRoleVisible(role, false);
+    }
+    return matches;
+  }, { parkedView: view, hiddenRoles: HIDDEN_ROLES });
+  for (const [role, matches] of Object.entries(hiddenRoleMatches)) {
+    if (!Number.isInteger(matches) || matches < 1) {
+      throw new Error(`QA role suppression matched no presentation object for ${role}`);
+    }
+  }
+
+  // Two actual renderer frames replace arbitrary sleeps: the first applies the parked pose and
+  // desktop rebuild, the second proves presentation LOD and the backing store have settled.
+  await page.evaluate(() => new Promise((resolveFrame) => {
+    requestAnimationFrame(() => requestAnimationFrame(resolveFrame));
+  }));
+
+  const diagnostics = await page.evaluate(() => {
+    const canvas = document.querySelector("#scene");
+    const rect = canvas?.getBoundingClientRect();
+    return {
+      presentation: window.__gunsOnlyCobraLabCamera?.presentationDiagnostics?.() ?? null,
+      frame: window.__gunsOnlyCobraFrameProfile?.read?.() ?? null,
+      airframeVisible: window.__gunsOnlyCobraAirframeVisible?.() ?? null,
+      canvas: canvas && rect ? {
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
+        backingWidth: canvas.width,
+        backingHeight: canvas.height,
+      } : null,
+      render: window.__gunsOnlyCobraRenderInfo
+        ? {
+          calls: window.__gunsOnlyCobraRenderInfo.render?.calls ?? null,
+          triangles: window.__gunsOnlyCobraRenderInfo.render?.triangles ?? null,
+        }
+        : null,
+    };
+  });
+  const presentation = diagnostics.presentation;
+  const canvas = diagnostics.canvas;
+  if (diagnostics.airframeVisible !== false) {
+    throw new Error(`parked capture still contains the AH-1G presence: ${JSON.stringify(diagnostics)}`);
+  }
+  if (presentation?.qualityTier !== "desktop"
+      || presentation?.ambientBudgetLevel !== 0
+      || presentation?.nearRingVisible !== true) {
+    throw new Error(`parked presentation did not settle: ${JSON.stringify(presentation)}`);
+  }
+  if (!canvas
+      || canvas.x !== 0
+      || canvas.y !== 0
+      || canvas.width !== CAPTURE_WIDTH
+      || canvas.height !== CAPTURE_HEIGHT
+      || canvas.backingWidth !== CAPTURE_WIDTH
+      || canvas.backingHeight !== CAPTURE_HEIGHT) {
+    throw new Error(`capture canvas is not exact ${CAPTURE_WIDTH}x${CAPTURE_HEIGHT}: ${JSON.stringify(canvas)}`);
+  }
+  return { ...diagnostics, hiddenRoleMatches };
+}
 
 async function main() {
   const wwwroot = resolveWwwroot();
@@ -121,15 +180,40 @@ async function main() {
     args: [...COBRA_CHROMIUM_ARGS],
   });
   try {
-    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    const page = await browser.newPage({
+      viewport: { width: CAPTURE_WIDTH, height: CAPTURE_HEIGHT },
+      deviceScaleFactor: 1,
+    });
     page.on("pageerror", (error) => console.error("pageerror:", error.message));
     await page.goto(`${site.url}/cobra-lab/index.html?audioQa=silent`, {
       waitUntil: "load",
       timeout: 180_000,
     });
+    // QA-only clean plates. Production menu/HUD CSS is untouched; park() still owns mission and
+    // 3D-state suppression while this session style removes DOM chrome and the filmed vignette.
+    await page.addStyleTag({ content: `
+      body > :not(.flight-stage):not(script) {
+        display: none !important;
+        visibility: hidden !important;
+      }
+      .viewport > :not(#scene) {
+        display: none !important;
+        visibility: hidden !important;
+      }
+      .viewport::after {
+        content: none !important;
+        display: none !important;
+        background: none !important;
+      }
+    ` });
     await waitForCobraAuthority(page, 240_000);
     await page.waitForFunction(
       () => typeof window.__gunsOnlyCobraLabCamera?.park === "function",
+      undefined,
+      { timeout: 60_000 },
+    );
+    await page.waitForFunction(
+      () => window.__gunsOnlyCobraLabCamera?.foliageAtlasReady?.() === true,
       undefined,
       { timeout: 60_000 },
     );
@@ -137,11 +221,6 @@ async function main() {
       document.querySelector("[data-onboarding-dismiss], #onboarding-dismiss, .onboarding button")
         ?.click();
     });
-    // First park may flip quality→desktop and rebuild presentation — wait for that to settle.
-    await page.evaluate((v) => {
-      window.__gunsOnlyCobraLabCamera.park(v.eastM, v.northM, v.aglM, v.yawRad, v.pitchRad);
-    }, VIEWS[0]);
-    await page.waitForTimeout(2500);
     await page.waitForFunction(
       () => window.__gunsOnlyCobraAuthority?.status === "active"
         && document.querySelector("#status")?.dataset.ready === "true",
@@ -151,13 +230,15 @@ async function main() {
 
     const meta = [];
     for (const view of VIEWS) {
-      await page.evaluate((v) => {
-        window.__gunsOnlyCobraLabCamera.park(v.eastM, v.northM, v.aglM, v.yawRad, v.pitchRad);
-      }, view);
-      await page.waitForTimeout(1200);
+      const diagnostics = await parkAndSettle(page, view);
       const path = join(OUT_DIR, `${view.name}.png`);
-      await page.screenshot({ path, type: "png" });
-      meta.push({ ...view, path });
+      await page.screenshot({
+        path,
+        type: "png",
+        scale: "css",
+        clip: { x: 0, y: 0, width: CAPTURE_WIDTH, height: CAPTURE_HEIGHT },
+      });
+      meta.push({ ...view, path, diagnostics });
       console.log(`wrote ${path}`);
     }
     await writeFile(join(OUT_DIR, "views.json"), `${JSON.stringify(meta, null, 2)}\n`);

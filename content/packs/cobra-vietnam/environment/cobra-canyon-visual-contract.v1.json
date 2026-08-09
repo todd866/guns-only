@@ -1,0 +1,223 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractId": "visual-contract.cobra-vietnam.cobra-canyon.v1",
+  "parity": {
+    "target": "fixed-camera scene parity",
+    "referenceRenderer": "web-build-299",
+    "qualityTier": "desktop",
+    "worldUri": "cobra-canyon.world.json",
+    "rule": "Unity and Web consume the same world, camera, lighting, material, atlas, scale and HUD hierarchy values; renderer adapters may only translate API and axis conventions"
+  },
+  "coordinateSystem": {
+    "name": "east-up-north-metres",
+    "handedness": "left-handed",
+    "unit": "metre",
+    "authorityAxes": {"x": "east", "y": "up", "z": "north"},
+    "rendererPositionMappings": {
+      "threeJs": "[eastM, upM, -northM]",
+      "unity": "[eastM, upM, -northM]"
+    }
+  },
+  "cameraConvention": {
+    "eulerOrder": "YXZ",
+    "height": "terrainHeightM(eastM,northM)+aglM",
+    "yawZeroForward": "+north",
+    "yawPositiveTurns": "toward-west",
+    "pitchPositiveTurns": "toward-up",
+    "forwardWorld": "[-sin(yawRad)*cos(pitchRad), sin(pitchRad), cos(yawRad)*cos(pitchRad)] as [east,up,north]",
+    "upWorld": "[sin(yawRad)*sin(pitchRad), cos(pitchRad), -cos(yawRad)*sin(pitchRad)] as [east,up,north]",
+    "rendererForwardMappings": {
+      "threeJs": "[east,up,-north]",
+      "unity": "[east,up,-north]"
+    }
+  },
+  "colourEncoding": {
+    "hexValues": "sRGB",
+    "paletteLinearRgb": "linear-sRGB",
+    "pngTextures": "sRGB",
+    "lightingAndBlending": "linear",
+    "transparentReferenceCompositing": {
+      "stage": "after per-object ACESFilm tone mapping, sRGB output encoding and scene fog",
+      "blend": "source-over in sRGB code values",
+      "unityAdapter": "destination-aware source reconstruction before linear framebuffer source-over",
+      "compensatedRoles": ["mist", "transparent-core"],
+      "compensationRule": "effectiveAlpha>0.006",
+      "minimumCompensatedAlpha": 0.006,
+      "subByteLinearRoles": ["waterAccent"]
+    },
+    "unityProjectColorSpace": "Linear",
+    "unityLightsUseLinearIntensity": true
+  },
+  "artDirection": {
+    "style": "humid-readable tactical naturalism",
+    "valueHierarchy": "mid-value terrain, dark vegetation masses, warm laterite accents, restrained water",
+    "detailRule": "large landcover masses carry distance; fine surface detail fades before it aliases",
+    "uiRule": "minimal-text mission menus remain unchanged"
+  },
+  "lighting": {
+    "sunDirectionAuthority": [0.4998, 0.279888, 0.819672],
+    "sunDirectionMeaning": "unit vector from a shaded surface toward the sun as [east,up,north] in authority axes",
+    "rendererDirectionMappings": {
+      "threeJs": "[east,up,-north]",
+      "unity": "[east,up,-north]"
+    },
+    "sunColorHex": "#ffe2b4",
+    "sunIntensity": 2.65,
+    "hemisphereSkyColorHex": "#b5cad0",
+    "hemisphereGroundColorHex": "#314338",
+    "hemisphereIntensity": 1.02,
+    "fogColorHex": "#8a9fa5",
+    "fogModel": "exp2",
+    "fogDensityPerM": 0.00019,
+    "transmittanceAtReadableRadius": 0.03,
+    "readableRadiusM": 9842,
+    "shadowFloor": 0.36
+  },
+  "outputTransform": {
+    "toneMapping": "ACESFilm",
+    "exposure": 1.12,
+    "outputColorSpace": "sRGB"
+  },
+  "sky": {
+    "zenithLinearRgb": [0.035, 0.16, 0.34],
+    "horizonLinearRgb": [0.34, 0.47, 0.52],
+    "belowHorizonLinearRgb": [0.022, 0.075, 0.095],
+    "skyCurveExponent": 0.42,
+    "horizonShoulderFalloff": 70,
+    "horizonShoulderWeight": 0.46,
+    "cloudLinearRgb": [0.62, 0.67, 0.69],
+    "cloudShelf": [0.045, 0.34]
+  },
+  "terrainMaterial": {
+    "toneRampGates": [0.26, 0.40, 0.42, 0.58, 0.76, 0.58],
+    "occlusionRange": [0.92, 1.06],
+    "concavityNormalizerM": 26,
+    "reliefGain": 0.18,
+    "cloudShadowStrength": 0.08,
+    "microNormalStrength": 0.12,
+    "skyFillLinearRgb": [0.70, 0.79, 0.92],
+    "sunKeyLinearRgb": [1.06, 1.01, 0.92],
+    "slopeFaceWindow": [0.035, 0.19],
+    "elevationBandsM": [150, 300, 600, 900],
+    "parcelPitchM": [118, 86]
+  },
+  "paletteLinearRgb": {
+    "valleyFloor": [0.145, 0.225, 0.09],
+    "cultivation": [0.205, 0.235, 0.155],
+    "jungle": [0.05, 0.185, 0.06],
+    "laterite": [0.3, 0.145, 0.055],
+    "ridge": [0.105, 0.195, 0.098],
+    "rimRock": [0.3, 0.285, 0.235],
+    "deepWater": [0.006, 0.032, 0.038],
+    "shallowWater": [0.024, 0.078, 0.078]
+  },
+  "groundMacro": {
+    "uri": "textures/cobra-ground-macro-painted-v1.png",
+    "sizePx": [1024, 1024],
+    "rendererSamplerMappings": {
+      "threeJs": "texture.flipY=false; sample authored [u,v] directly",
+      "unity": "standard TextureImporter bottom-left sampler; sample authored [u,1-v]"
+    },
+    "wrapMode": "mirrored-repeat",
+    "worldProjection": {
+      "canonicalAxes": "[eastM,southM] where southM=-northM",
+      "threeJs": "[worldPosition.x,worldPosition.z]",
+      "unity": "[worldPosition.x,worldPosition.z]",
+      "rotationConvention": "row-major matrix times a column vector in the canonical east/south plane"
+    },
+    "macroSample": {
+      "repeatM": 6200,
+      "phase": [0.17, -0.11]
+    },
+    "nearSample": {
+      "repeatM": 850,
+      "rotationRowMajor2x2": [0.866, -0.5, 0.5, 0.866],
+      "triplanarWeightExponent": 4,
+      "planes": {
+        "horizontal": "[eastM,southM] weighted by abs(upNormal)^4",
+        "eastFacing": "[southM,upM] weighted by abs(eastNormal)^4",
+        "northSouthFacing": "[eastM,upM] weighted by abs(southNormal)^4"
+      },
+      "phaseByPlane": {
+        "horizontal": [0.31, 0.23],
+        "eastFacing": [0.61, -0.17],
+        "northSouthFacing": [-0.23, 0.47]
+      }
+    },
+    "nearProjection": "triplanar slope-aware",
+    "role": "presentation-only macro albedo; never geometry or authority"
+  },
+  "foliageAtlas": {
+    "uri": "foliage/foliage-atlas-painted-v2.png",
+    "sizePx": [1024, 1024],
+    "alphaCutoff": 0.38,
+    "regionConvention": {
+      "tuple": "[uMin,vMin,uMax,vMax]",
+      "imagePixelOrigin": "top-left",
+      "uvOrigin": "top-left",
+      "uDirection": "right",
+      "vDirection": "down",
+      "importRule": "disable implicit vertical flipping so v=0 addresses the authored top row"
+    },
+    "rendererSamplerMappings": {
+      "threeJs": "texture.flipY=false; sample authored [u,v] directly",
+      "unity": "standard TextureImporter bottom-left sampler; sample authored [u,1-v]"
+    },
+    "cardUvMapping": {
+      "physicalBottom": "[u,vMax]",
+      "physicalTop": "[u,vMin]"
+    },
+    "rendererCardUvMappings": {
+      "threeJs": {"physicalBottom": "[u,vMax]", "physicalTop": "[u,vMin]"},
+      "unity": {"physicalBottom": "[u,1-vMax]", "physicalTop": "[u,1-vMin]"}
+    },
+    "regions": {
+      "palm": [0.0, 0.0, 0.5, 0.5],
+      "hardwood": [0.5, 0.0, 1.0, 0.5],
+      "bambooBanana": [0.0, 0.5, 0.5, 1.0],
+      "fernScrub": [0.5, 0.5, 1.0, 1.0]
+    },
+    "visualExtentTargetsM": {
+      "meaning": "final pre-yaw foliage-card bounds, not renderer matrix scale",
+      "ambientCanopy": {"width": [62, 81], "height": [28, 36], "depth": [36, 49]},
+      "setPieceCanopy": {"width": [42, 55], "height": [28, 35], "depth": [25, 34]},
+      "ambientUnderstory": {"width": [21, 28], "height": [5, 7], "depth": [13, 18]},
+      "setPieceUnderstory": {"width": [14, 19], "height": [5, 7], "depth": [9, 13]}
+    }
+  },
+  "ecology": {
+    "ambientCluster": {
+      "probability": 0.82,
+      "groupSize": 3,
+      "jitterShape": "axis-aligned square",
+      "jitterPerAxisM": [-27.5, 27.5]
+    },
+    "setPiecePolicy": "use exact authored world placements; do not apply ambient cluster jitter",
+    "rule": "overlapping canopy patches with explicit clearings; no even wallpaper scatter"
+  },
+  "heroSilhouettes": {
+    "ironBellBridge": {
+      "style": "rust-red open steel truss",
+      "collisionDeckHeightM": 8,
+      "presentationTotalHeightM": 16,
+      "rule": "open chords, posts and X bracing; never an opaque side slab"
+    }
+  },
+  "acceptanceProjection": {
+    "projection": "perspective",
+    "verticalFovDeg": 58,
+    "aspect": 1.6,
+    "nearClipM": 0.5,
+    "farClipM": 32000,
+    "unityPosition": "[eastM, terrainHeightM(eastM,northM)+aglM, -northM]",
+    "unityForward": "[-sin(yawRad)*cos(pitchRad), sin(pitchRad), -cos(yawRad)*cos(pitchRad)]",
+    "unityUp": "[sin(yawRad)*sin(pitchRad), cos(pitchRad), cos(yawRad)*sin(pitchRad)]",
+    "unityProjectionXSign": -1,
+    "unityInvertCulling": true
+  },
+  "acceptanceViews": [
+    {"id": "camp-ember", "eastM": -6500, "northM": -6200, "aglM": 35, "yawRad": -0.3, "pitchRad": -0.28},
+    {"id": "mid-gorge", "eastM": -4557, "northM": -3661, "aglM": 50, "yawRad": -0.5, "pitchRad": -0.2},
+    {"id": "iron-bell", "eastM": -2883, "northM": -746, "aglM": 35, "yawRad": -0.61, "pitchRad": 0.015}
+  ]
+}

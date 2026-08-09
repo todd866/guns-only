@@ -19,6 +19,12 @@ const POSTER_SOURCES = {
   "menu-hangar-small.webp": "menu-hangar.svg",
   "menu-hangar.webp": "menu-hangar.svg",
 };
+const CURRENT_PAINTED_POSTERS = [
+  "bike-yzf-r1-v2.webp",
+  "jet-cobra-v2.webp",
+  "jet-f22-v2.webp",
+  "jet-rapier-v2.webp",
+];
 
 test("every production shell painting has a hash-pinned fiction provenance card", async () => {
   const sources = await readFile(path.join(ART_ROOT, "SOURCES.md"), "utf8");
@@ -30,13 +36,14 @@ test("every production shell painting has a hash-pinned fiction provenance card"
     .filter((file) => file.endsWith(".webp"))
     .sort();
   assert.deepEqual(files, [
+    ...CURRENT_PAINTED_POSTERS,
     "bike-yzf-r1.webp",
     "jet-cobra.webp",
     "jet-f22.webp",
     "jet-rapier.webp",
     "menu-hangar-small.webp",
     "menu-hangar.webp",
-  ]);
+  ].sort());
 
   for (const file of files) {
     const bytes = await readFile(path.join(ART_ROOT, file));
@@ -50,9 +57,25 @@ test("every production shell painting has a hash-pinned fiction provenance card"
   }
 });
 
-// The v1/v2 records could not name their generator or quote their prompt. The current set closes
-// that gap by being reproducible from committed source instead, so the source has to be there.
-test("every current shell poster is reproducible from a committed SVG source", async () => {
+test("the wordless production picker consumes the current painted set", async () => {
+  const [index, sources] = await Promise.all([
+    readFile(new URL("../../../index.html", import.meta.url), "utf8"),
+    readFile(path.join(ART_ROOT, "SOURCES.md"), "utf8"),
+  ]);
+
+  for (const file of CURRENT_PAINTED_POSTERS) {
+    assert.match(index, new RegExp(`art/${file.replace(".", "\\.")}`),
+      `${file} must be wired into the production picker`);
+    assert.ok(sources.includes(`| \`${file}\``),
+      `${file} must have a provenance closure row`);
+  }
+  assert.doesNotMatch(index, /sortie-choice[^}]*jet-(?:f22|rapier|cobra)\.webp/,
+    "production picker must not silently fall back to the superseded vector aircraft posters");
+});
+
+// The retained v3 vector set claims deterministic reproduction from committed source. Its two
+// hangar fills remain current and its four superseded picker cards remain an auditable input to v4.
+test("every retained deterministic v3 poster is reproducible from committed SVG", async () => {
   const sources = await readFile(path.join(ART_ROOT, "SOURCES.md"), "utf8");
   assert.match(sources, /no image-generation model was used/i,
     "the current set claims a deterministic pipeline; that claim must be stated, not implied");

@@ -1,61 +1,61 @@
-import * as THREE from "../vendor/three.module.js?v=298";
+import * as THREE from "../vendor/three.module.js?v=299";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=298";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=298";
-import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=298";
+} from "../render/cobra/cobra_canyon_plan.js?v=299";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=299";
+import { resolveCobraVietnamVisualTextures } from "../render/cobra/cobra_canyon_foliage.js?v=299";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=298";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=298";
-import { createHud } from "../hud.js?v=298";
+} from "../render/cobra/cobra_canyon_tour.js?v=299";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=299";
+import { createHud } from "../hud.js?v=299";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=298";
+} from "../render/cobra/cobra_hud_adapter.js?v=299";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=298";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=298";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=299";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=299";
 import {
   emberActObjectiveOverlay,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=298";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=298";
+} from "../render/cobra/cobra_ember_path.js?v=299";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=299";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=298";
+} from "../render/cobra/cobra_control_profile.js?v=299";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=298";
+} from "../render/cobra/cobra_pilot_input.js?v=299";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=298";
+} from "../render/cobra/ah1g_presence.js?v=299";
 import {
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
   togglePadlockSelection,
-} from "../render/cobra/cobra_camera_bias.js?v=298";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=298";
+} from "../render/cobra/cobra_camera_bias.js?v=299";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=299";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=298";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=298";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=298";
+} from "../render/cobra/cobra_mission_exit.js?v=299";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=299";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=299";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -208,7 +208,7 @@ const renderer = new THREE.WebGLRenderer({
 });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.06;
+renderer.toneMappingExposure = COBRA_CANYON_VISUAL_PROFILE.toneMappingExposure;
 
 // Build 264 owner ruling: no cockpit, the STANDARD F-22 HUD instead, with
 // rotorcraft extras. One engine: this is the production hud.js instance fed by
@@ -229,7 +229,10 @@ const projectionScratch = new THREE.Vector3();
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=298";
+import {
+  COBRA_CANYON_VISUAL_PROFILE,
+  cobraAuthorityDirectionToThree,
+} from "../render/cobra/cobra_canyon_visual_profile.js?v=299";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -243,7 +246,9 @@ scene.add(new THREE.HemisphereLight(
   sceneProfile.lighting.hemisphereGroundColor,
   sceneProfile.lighting.hemisphereIntensity,
 ));
-const sunDirection = new THREE.Vector3(...sceneProfile.sunDirectionWorld);
+const sunDirection = new THREE.Vector3(
+  ...cobraAuthorityDirectionToThree(sceneProfile.sunDirectionAuthority),
+);
 const sun = new THREE.DirectionalLight(
   sceneProfile.lighting.sunColor,
   sceneProfile.lighting.sunIntensity,
@@ -291,6 +296,20 @@ const skyMaterial = new THREE.ShaderMaterial({
     uniform float shoulderWeight;
     uniform vec3 sunDirection;
     varying vec3 vSkyDirection;
+    float skyHash(vec2 p) {
+      vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+      p3 += dot(p3, p3.yzx + 33.33);
+      return fract((p3.x + p3.y) * p3.z);
+    }
+    float skyNoise(vec2 p) {
+      vec2 i = floor(p);
+      vec2 f = fract(p);
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      return mix(
+        mix(skyHash(i), skyHash(i + vec2(1.0, 0.0)), u.x),
+        mix(skyHash(i + vec2(0.0, 1.0)), skyHash(i + vec2(1.0, 1.0)), u.x),
+        u.y);
+    }
     void main() {
       vec3 direction = normalize(vSkyDirection);
       float aboveHorizon = max(direction.y, 0.0);
@@ -299,21 +318,19 @@ const skyMaterial = new THREE.ShaderMaterial({
       // Narrow non-luminous horizon shoulder: stays readable in unusual attitudes.
       float horizonShoulder = exp(-abs(direction.y) * shoulderFalloff);
       colour = mix(colour, horizonColor * 1.08, horizonShoulder * shoulderWeight);
-      // Painted cumulus — irregular noise, not azimuth harmonics (those tiled into a block grid).
+      // Broad, smoothly interpolated cumulus. A previous second octave hashed continuous UVs
+      // directly, which produced one random value per fragment and stippled the entire sky.
       float azimuth = atan(direction.z, direction.x);
       float shelf = smoothstep(cloudShelf.x, cloudShelf.x + 0.035, direction.y)
         * (1.0 - smoothstep(cloudShelf.y * 0.62, cloudShelf.y, direction.y));
-      vec2 cloudUv = vec2(azimuth * 0.72, direction.y * 2.8);
-      float h00 = fract(sin(dot(floor(cloudUv), vec2(127.1, 311.7))) * 43758.5453);
-      float h10 = fract(sin(dot(floor(cloudUv) + vec2(1.0, 0.0), vec2(127.1, 311.7))) * 43758.5453);
-      float h01 = fract(sin(dot(floor(cloudUv) + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
-      float h11 = fract(sin(dot(floor(cloudUv) + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
-      vec2 cf = fract(cloudUv);
-      vec2 cu = cf * cf * (3.0 - 2.0 * cf);
-      float puff = mix(mix(h00, h10, cu.x), mix(h01, h11, cu.x), cu.y);
-      float puffB = fract(sin(dot(cloudUv * 2.15 + 4.2, vec2(269.5, 183.3))) * 43758.5453);
-      puff = puff * 0.62 + puffB * 0.38;
-      colour = mix(colour, cloudColor, shelf * smoothstep(0.38, 0.78, puff) * 0.48);
+      vec2 cloudUv = vec2(azimuth * 0.88, direction.y * 4.2);
+      float puff = skyNoise(cloudUv) * 0.68
+        + skyNoise(cloudUv * 2.07 + vec2(7.4, -3.1)) * 0.32;
+      float cloudMask = shelf * smoothstep(0.43, 0.72, puff);
+      colour = mix(colour, cloudColor, cloudMask * 0.42);
+      float sunDot = max(dot(direction, normalize(sunDirection)), 0.0);
+      colour += vec3(1.0, 0.72, 0.42)
+        * (pow(sunDot, 20.0) * 0.055 + pow(sunDot, 420.0) * 0.48);
       if (direction.y < 0.0) {
         colour = mix(belowHorizonColor, horizonColor, exp(direction.y * 16.0));
       }
@@ -638,6 +655,11 @@ function ensureAh1gPresence() {
   return ah1gPresence;
 }
 
+function applyAh1gCameraVisibility() {
+  if (!ah1gPresence) return;
+  ah1gPresence.setFirstPerson(!tourInput.checked || !!parkedCamera);
+}
+
 function rebuildPresentation() {
   if (!world) return;
   presentation?.dispose();
@@ -647,6 +669,7 @@ function rebuildPresentation() {
   presentation = createCobraCanyonPresentation(THREE, plan, {
     qualityTier: qualitySelect.value,
     foliageTextures,
+    surfaceTextures: foliageTextures,
   });
   groundWarPresentation = createCobraGroundWarPresentation(THREE);
   emberGuidancePath = createGuidancePath(THREE, {
@@ -1069,7 +1092,11 @@ function animate(timeMs) {
     cameraAglM: aglM,
     ambientBudgetLevel: parkedCamera ? 0 : ambientBudgetLevel(),
   });
-  if (emberGuidancePath && authorityState) {
+  applyPresentationRoleVisibilityOverrides();
+  // Parked QA plates are scenery-only. update() intentionally re-enables the live guidance root,
+  // so skipping it here is the persistent counterpart to park()'s one-time hide. release()
+  // resumes the production cue on the next frame without changing the minimal in-game UI.
+  if (emberGuidancePath && authorityState && !parkedCamera) {
     emberGuidancePath.update(emberPathGuidanceState(authorityState));
   }
   recordPhase("presentation", presentationStartedAtMs);
@@ -1088,9 +1115,7 @@ function animate(timeMs) {
   // person renders zero cockpit geometry (Build 264 owner ruling), the tour camera looks
   // AT the ship so the silhouette returns. Parked scenery stills also hide the ship —
   // otherwise the AH-1G hull eats the near-field frame the emptiness gate scores.
-  if (ah1gPresence) {
-    ah1gPresence.setFirstPerson(!tourInput.checked || !!parkedCamera);
-  }
+  applyAh1gCameraVisibility();
   const renderStartedAtMs = performance.now();
   renderer.render(scene, camera);
   recordPhase("render", renderStartedAtMs);
@@ -1170,6 +1195,20 @@ function projectSimPointToScreen(xM, yM, zM) {
 // work on this scene has to be judged from rendered frames, and a reviewer who cannot return to
 // the same viewpoint is comparing two different pictures.
 let parkedCamera = null;
+const presentationRoleVisibilityOverrides = new Map();
+
+function applyPresentationRoleVisibilityOverrides(onlyRole = null) {
+  let matched = 0;
+  presentation?.group?.traverse?.((object) => {
+    const role = object.userData?.cobraCanyon?.role;
+    if (!role || (onlyRole !== null && role !== onlyRole)) return;
+    if (!presentationRoleVisibilityOverrides.has(role)) return;
+    object.visible = presentationRoleVisibilityOverrides.get(role);
+    matched += 1;
+  });
+  return matched;
+}
+
 function applyParkedCamera() {
   if (!parkedCamera) return;
   const groundM = groundAt(parkedCamera.eastM, parkedCamera.northM);
@@ -1181,6 +1220,20 @@ function applyParkedCamera() {
   }
 }
 window.__gunsOnlyCobraLabCamera = Object.freeze({
+  foliageAtlasReady() {
+    return foliageTextures?.atlas != null
+      && foliageTextures.synthetic === false
+      && foliageTextures?.ground != null
+      && foliageTextures.groundSynthetic === false;
+  },
+  presentationDiagnostics() {
+    return presentation?.diagnostics?.() ?? null;
+  },
+  setPresentationRoleVisible(role, visible) {
+    const resolvedRole = String(role);
+    presentationRoleVisibilityOverrides.set(resolvedRole, Boolean(visible));
+    return applyPresentationRoleVisibilityOverrides(resolvedRole);
+  },
   park(eastM, northM, aglM, yawRad, pitchRad = 0) {
     // Review stills are exterior scenery shots — leave first-person / tour rails.
     if (tourInput) tourInput.checked = false;
@@ -1192,6 +1245,8 @@ window.__gunsOnlyCobraLabCamera = Object.freeze({
     // Strip mission chrome so park stills score the gorge, not the objective card.
     document.querySelector("#play-chrome")?.setAttribute("data-parked", "true");
     document.querySelector("#objective-hud")?.setAttribute("hidden", "");
+    if (groundWarPresentation?.group) groundWarPresentation.group.visible = false;
+    if (emberGuidancePath?.object3d) emberGuidancePath.object3d.visible = false;
     parkedCamera = {
       eastM: Number(eastM),
       northM: Number(northM),
@@ -1199,13 +1254,20 @@ window.__gunsOnlyCobraLabCamera = Object.freeze({
       yawRad: Number(yawRad),
       pitchRad: Number(pitchRad),
     };
+    // Hide synchronously as well as in animate(). A desktop-quality rebuild can create the
+    // exterior presence during park(), and a two-frame QA settle must never photograph it.
+    applyAh1gCameraVisibility();
     applyParkedCamera();
     return parkedCamera;
   },
   release() {
     parkedCamera = null;
+    applyAh1gCameraVisibility();
+    presentationRoleVisibilityOverrides.clear();
     document.querySelector("#play-chrome")?.removeAttribute("data-parked");
     document.querySelector("#objective-hud")?.removeAttribute("hidden");
+    if (groundWarPresentation?.group) groundWarPresentation.group.visible = true;
+    if (emberGuidancePath?.object3d) emberGuidancePath.object3d.visible = true;
   },
 });
 
@@ -1387,7 +1449,7 @@ async function boot() {
     const assemblyExports = await getAssemblyExports("GunsOnly.Web");
     bridge = assemblyExports.GunsOnly.Web.CobraWebBridge;
     world = await loadCobraCanyonWorld();
-    foliageTextures = await resolveCobraVietnamFoliageTextures(THREE);
+    foliageTextures = await resolveCobraVietnamVisualTextures(THREE);
     lockPlayRoute();
     if (tourInput && PLAY_MODE) tourInput.checked = false;
     rebuildPresentation();

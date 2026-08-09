@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+# Launch the standalone Mac player (not the Unity Editor).
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+APP="${ROOT}/artifacts/unity-mac/GunsOnly.app"
+HOST="${ROOT}/artifacts/unity-mac/host/GunsOnly.UnityHost"
+# PlayerSettings.productName/companyName are both "GunsOnly".
+PLAYER_LOG="${HOME}/Library/Logs/GunsOnly/GunsOnly/Player.log"
+FRAME="${HOME}/Library/Application Support/GunsOnly/GunsOnly/guns-only-frame.png"
+
+if [[ ! -d "$APP" || ! -x "$HOST" ]]; then
+  echo "Standalone build missing. Building now…"
+  "${ROOT}/bin/unity-build"
+fi
+
+"${ROOT}/bin/unity-check"
+
+pkill -f 'GunsOnly.app/Contents/MacOS' 2>/dev/null || true
+pkill -f 'GunsOnly.UnityHost' 2>/dev/null || true
+sleep 0.5
+
+mkdir -p "$(dirname "$PLAYER_LOG")"
+mkdir -p "$(dirname "$FRAME")"
+: > "$PLAYER_LOG"
+rm -f "$FRAME" /tmp/guns-only-accept.png \
+  /tmp/guns-only-flight.jsonl \
+  "${APP}/Contents/MacOS/guns-only-frame.png" \
+  "$(dirname "$APP")/guns-only-frame.png"
+# Flight telemetry (20 Hz pose jsonl) is written by FlightTelemetry in the player.
+# Mirror: /tmp/guns-only-flight.jsonl
+# Canonical: ~/Library/Application Support/GunsOnly/GunsOnly/flight/telemetry.jsonl
+export GUNSONLY_FLIGHT_TELEMETRY="${GUNSONLY_FLIGHT_TELEMETRY:-1}"
+export GUNSONLY_FLIGHT_HZ="${GUNSONLY_FLIGHT_HZ:-20}"
+
+"$HOST" >/tmp/guns-only-unity-host.log 2>&1 &
+HOST_PID=$!
+echo "host pid=$HOST_PID (log /tmp/guns-only-unity-host.log)"
+
+export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"
+export PATH="$DOTNET_ROOT:$PATH"
+
+# Wait for listen line — do NOT Accept as a TCP client (that races the player).
+python3 - <<'PY'
+import time, sys
+deadline = time.time() + 15
+path = "/tmp/guns-only-unity-host.log"
+while time.time() < deadline:
+    try:
+        text = open(path).read()
+    except FileNotFoundError:
+        text = ""
+    if "listening on" in text:
+        print("host listening")
+        sys.exit(0)
+    if "host fatal" in text:
+        print(text, file=sys.stderr); sys.exit(6)
+    time.sleep(0.05)
+print("host did not listen", file=sys.stderr); sys.exit(6)
+PY
+
+open "$APP"
+# Activate immediately — before splash/load finishes. Waiting 6s first left the
+# unfocused player paused on "Made with Unity" whenever the human was elsewhere.
+osascript -e 'tell application "System Events" to set frontmost of every process whose name is "GunsOnly" to true' >/dev/null 2>&1 || true
+echo "Launched $APP — S collective up / W down · arrows cyclic · A/D yaw · F guns · V padlock · Tab target"
+
+sleep 6
+osascript -e 'tell application "System Events" to set frontmost of every process whose name is "GunsOnly" to true' >/dev/null 2>&1 || true
+if ! rg -q '\[GunsOnly\] connected' "$PLAYER_LOG"; then
+  echo "PLAYER_LOG missing connect line — see $PLAYER_LOG" >&2
+  sleep 3
+  osascript -e 'tell application "System Events" to set frontmost of every process whose name is "GunsOnly" to true' >/dev/null 2>&1 || true
+  if ! rg -q '\[GunsOnly\] connected' "$PLAYER_LOG"; then
+    exit 9
+  fi
+fi
+if rg -q 'switched active Input handling to Input System' "$PLAYER_LOG"; then
+  echo "PLAYER_LOG still has Input System exceptions — rebuild required" >&2
+  exit 10
+fi
+if rg -q 'no usable color shader found' "$PLAYER_LOG"; then
+  echo "PLAYER_LOG: color shaders missing in player" >&2
+  exit 11
+fi
+echo "player log healthy (connected, no Input System spam)"
+
+# Bring the window forward repeatedly while waiting for a valid end-of-frame dump.
+FOUND=""
+deadline=$((SECONDS + 30))
+while [[ $SECONDS -lt $deadline ]]; do
+  osascript -e 'tell application "System Events" to set frontmost of every process whose name is "GunsOnly" to true' >/dev/null 2>&1 || true
+  for candidate in \
+    "$FRAME" \
+    /tmp/guns-only-accept.png \
+    "${APP}/Contents/MacOS/guns-only-frame.png"
+  do
+    if [[ -f "$candidate" && -s "$candidate" ]] \
+       && rg -q 'wrote acceptance frame.*afterPose=True' "$PLAYER_LOG"; then
+      if rg -q 'ReadPixels was called to read pixels from system frame buffer, while not inside drawing frame' "$PLAYER_LOG"; then
+        echo "PLAYER_LOG still has invalid ReadPixels — rebuild required" >&2
+        exit 16
+      fi
+      FOUND="$candidate"
+      break 2
+    fi
+  done
+  sleep 0.3
+done
+
+if [[ -z "$FOUND" ]]; then
+  echo "acceptance frame missing/invalid — see $PLAYER_LOG" >&2
+  rg -n 'acceptance frame|ReadPixels|mats player|first pose|missing Resources' "$PLAYER_LOG" >&2 || true
+  exit 12
+fi
+
+cp "$FOUND" /tmp/guns-only-accept.png
+cp "$FOUND" "${ROOT}/artifacts/unity-mac/guns-only-frame.png"
+echo "acceptance frame: $FOUND"
+python3 "${ROOT}/bin/unity-frame-check" /tmp/guns-only-accept.png
+
+if ! rg -q '\[GunsOnly\] mats (player=|lit-terrain)' "$PLAYER_LOG"; then
+  echo "PLAYER_LOG missing material diagnostics" >&2
+  exit 13
+fi
+if rg -q 'null-shader|missing Resources|no usable color shader' "$PLAYER_LOG"; then
+  echo "PLAYER_LOG reports broken materials/shaders" >&2
+  exit 14
+fi
+if ! rg -q '\[GunsOnly\] first pose' "$PLAYER_LOG"; then
+  echo "PLAYER_LOG missing first pose — sim not driving the view" >&2
+  exit 15
+fi
+
+# Leave host + app running for the human. Do not kill.
+osascript -e 'tell application "System Events" to set frontmost of every process whose name is "GunsOnly" to true' >/dev/null 2>&1 || true
+echo "PLAY_UNITY_OK host_pid=$HOST_PID"
+echo "Window should be frontmost: GunsOnly 1600x1000 windowed"
+FLIGHT_TELEM="${HOME}/Library/Application Support/GunsOnly/GunsOnly/flight/telemetry.jsonl"
+echo "Flight telemetry: /tmp/guns-only-flight.jsonl"
+echo "                  $FLIGHT_TELEM"
+# Wait briefly for the hdr row so a stuck splash does not fake success.
+python3 - <<'PY'
+import os, time
+paths = [
+    "/tmp/guns-only-flight.jsonl",
+    os.path.expanduser("~/Library/Application Support/GunsOnly/GunsOnly/flight/telemetry.jsonl"),
+]
+deadline = time.time() + 12
+while time.time() < deadline:
+    for p in paths:
+        try:
+            text = open(p).read(200)
+        except FileNotFoundError:
+            continue
+        if '"k":"hdr"' in text or '"k":"pose"' in text:
+            print(f"flight telemetry live → {p}")
+            raise SystemExit(0)
+    time.sleep(0.25)
+print("NOTE: flight telemetry not seen yet (player may still be booting)")
+PY

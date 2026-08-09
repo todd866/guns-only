@@ -9,20 +9,36 @@ public sealed class WeekendRideMissionRuntimeTests
         new(0.35, 0.0, 0.0, 0.0, 0.0, 0, 1.0, MotorcycleClutchMode.Auto);
 
     [Fact]
-    public void CreateDefaultSpawnsOnGridNearEasternThreshold()
+    public void CreateDefaultSpawnsOnThePurposeBuiltCircuitGrid()
     {
         var runtime = WeekendRideMissionRuntime.CreateDefault();
 
         Assert.Equal(WeekendRidePhase.Ready, runtime.Phase);
+        Assert.Equal(PaintedCircuit.WeekendTrackDayCircuitId, runtime.Circuit.Id);
+        Assert.Equal(
+            runtime.Circuit.PaddockAccessPointWorldM,
+            runtime.Hinterland.CircuitAccessPointWorldM);
+        Assert.NotEqual(runtime.GridPosition, runtime.Hinterland.CircuitAccessPointWorldM);
+        Assert.True(runtime.Hinterland.IsOnPavement(runtime.Hinterland.CircuitAccessPointWorldM));
+        Vec3D accessOutward = new(
+            Math.Sin(runtime.Circuit.PaddockAccessHeadingRad),
+            0.0,
+            Math.Cos(runtime.Circuit.PaddockAccessHeadingRad));
+        Vec3D overlapPoint = runtime.Circuit.PaddockAccessPointWorldM - accessOutward * 4.0;
+        Assert.True(runtime.Circuit.IsOnPavement(overlapPoint));
+        Assert.True(runtime.Hinterland.IsOnPavement(overlapPoint));
         Assert.Equal(runtime.Circuit.StartFinishCentre, runtime.GridPosition);
         Assert.Equal(runtime.GridPosition, runtime.Bike.State.PositionWorldM);
-        Assert.True(runtime.GridPosition.X > 1_000.0,
-            "StartFinishCentre sits at alongM=-1380, i.e. the eastern threshold.");
+        Assert.True(runtime.Circuit.BoundingWidthM / runtime.Circuit.BoundingLengthM < 2.5);
         Assert.InRange(
             runtime.GridPosition.Y,
-            RapierLaunchSite.OperatingSurfaceElevationM - 0.01,
-            RapierLaunchSite.OperatingSurfaceElevationM + 0.01);
-        Assert.Equal(-Math.PI / 2.0, runtime.GridHeadingRad, precision: 6);
+            runtime.Circuit.SurfaceElevationM - 0.01,
+            runtime.Circuit.SurfaceElevationM + 0.01);
+        Vec3D forward = runtime.Circuit.Centreline[1] - runtime.Circuit.Centreline[0];
+        Assert.Equal(
+            Math.Atan2(forward.X, forward.Z),
+            runtime.GridHeadingRad,
+            precision: 6);
     }
 
     [Fact]
@@ -83,6 +99,8 @@ public sealed class WeekendRideMissionRuntimeTests
 
         Assert.Equal(1, runtime.LapCount);
         Assert.Equal(0.0, runtime.LapTimeSeconds);
+        Assert.Equal("lap", runtime.Snapshot().GoldenPathKind);
+        Assert.Equal("✓", runtime.Snapshot().GoldenPathToken);
     }
 
     [Fact]
@@ -119,20 +137,18 @@ public sealed class WeekendRideMissionRuntimeTests
     }
 
     [Fact]
-    public void StepFixedAccumulatesOffTrackTimeWhenOffCircuit()
+    public void StepFixedAccumulatesOffTrackTimeOutsideTheScoredRibbon()
     {
         var runtime = WeekendRideMissionRuntime.CreateDefault();
         runtime.Begin();
-        // Ride off the painted circuit without demanding a tip-over: sourced launch torque
-        // means a full-lock full-throttle launch now low-sides before leaving the paint.
-        var steerOff = SteadyThrottle with {
-            Throttle = 0.5,
-            Steer = 0.5,
-            RiderLateral = 0.5
-        };
+        int index = runtime.Circuit.Centreline.Count / 3;
+        Vec3D runoffPoint = runtime.Circuit.Centreline[index]
+            + CentrelineNormal(runtime.Circuit.Centreline, index)
+                * (runtime.Circuit.TrackWidthM * 0.5 + 2.0);
+        runtime.Bike.ResetTo(runoffPoint, runtime.GridHeadingRad);
 
-        for (int i = 0; i < 120 * 12; i++)
-            runtime.StepFixed(steerOff);
+        for (int i = 0; i < 120 * 2; i++)
+            runtime.StepFixed(SteadyThrottle);
 
         Assert.True(runtime.OffTrackSeconds > 0.0);
     }
@@ -143,10 +159,7 @@ public sealed class WeekendRideMissionRuntimeTests
         var runtime = WeekendRideMissionRuntime.CreateDefault();
         runtime.Begin();
         runtime.Bike.ResetTo(
-            new Vec3D(
-                0.0,
-                RapierLaunchSite.OperatingSurfaceElevationM,
-                PaintedCircuit.RapierRunwayWidthM),
+            FarOffCircuit(runtime),
             runtime.GridHeadingRad);
         for (int i = 0; i < 120 * 2; i++)
             runtime.StepFixed(SteadyThrottle);
@@ -181,16 +194,13 @@ public sealed class WeekendRideMissionRuntimeTests
         var runtime = WeekendRideMissionRuntime.CreateDefault();
         runtime.Begin();
         runtime.Bike.ResetTo(
-            new Vec3D(
-                0.0,
-                RapierLaunchSite.OperatingSurfaceElevationM,
-                PaintedCircuit.RapierRunwayWidthM),
+            FarOffCircuit(runtime),
             runtime.GridHeadingRad);
 
         for (int i = 0; i < 120 * 2; i++)
             runtime.StepFixed(SteadyThrottle);
 
-        Assert.Equal("rapier-strip.grass", runtime.Bike.State.Contact.SurfaceId);
+        Assert.Equal("weekend-track.grass", runtime.Bike.State.Contact.SurfaceId);
         Assert.False(runtime.IsOnTrack);
         Assert.True(runtime.Bike.State.PositionWorldM.IsFinite);
         Assert.True(runtime.Bike.State.GroundVelocityMps.IsFinite);
@@ -199,7 +209,7 @@ public sealed class WeekendRideMissionRuntimeTests
         runtime.ResetToGrid();
         runtime.StepFixed(SteadyThrottle);
 
-        Assert.Equal("rapier-strip.runway", runtime.Bike.State.Contact.SurfaceId);
+        Assert.Equal("weekend-track.asphalt", runtime.Bike.State.Contact.SurfaceId);
         Assert.True(runtime.IsOnTrack);
         Assert.True(runtime.Bike.State.Flyable);
     }
@@ -212,7 +222,7 @@ public sealed class WeekendRideMissionRuntimeTests
         paved.Begin();
         grass.Begin();
         grass.Bike.ResetTo(
-            new Vec3D(0.0, RapierLaunchSite.OperatingSurfaceElevationM, 120.0),
+            FarOffCircuit(grass),
             grass.GridHeadingRad);
         var fullThrottle = SteadyThrottle with { Throttle = 1.0 };
 
@@ -222,8 +232,8 @@ public sealed class WeekendRideMissionRuntimeTests
             grass.StepFixed(fullThrottle);
         }
 
-        Assert.Equal("rapier-strip.runway", paved.Bike.State.Contact.SurfaceId);
-        Assert.Equal("rapier-strip.grass", grass.Bike.State.Contact.SurfaceId);
+        Assert.Equal("weekend-track.asphalt", paved.Bike.State.Contact.SurfaceId);
+        Assert.Equal("weekend-track.grass", grass.Bike.State.Contact.SurfaceId);
         Assert.False(grass.Bike.Telemetry.IsTippedOver);
         Assert.True(
             grass.Bike.Telemetry.SpeedMps < paved.Bike.Telemetry.SpeedMps * 0.6,
@@ -232,18 +242,38 @@ public sealed class WeekendRideMissionRuntimeTests
     }
 
     [Fact]
-    public void HairpinApronsBeyondTheRunwayEdgeStayPaved()
+    public void PavedRunoffOutsideTheScoredTrackKeepsAsphaltGrip()
     {
         var runtime = WeekendRideMissionRuntime.CreateDefault();
         runtime.Begin();
-        Vec3D apronPoint = runtime.Circuit.Centreline.First(point =>
-            Math.Abs(point.Z) > PaintedCircuit.RapierRunwayWidthM * 0.5 + 5.0);
-        runtime.Bike.ResetTo(apronPoint, runtime.GridHeadingRad);
+        int index = runtime.Circuit.Centreline.Count / 3;
+        Vec3D runoffPoint = runtime.Circuit.Centreline[index]
+            + CentrelineNormal(runtime.Circuit.Centreline, index)
+                * (runtime.Circuit.TrackWidthM * 0.5 + 4.0);
+        runtime.Bike.ResetTo(runoffPoint, runtime.GridHeadingRad);
 
         runtime.StepFixed(SteadyThrottle);
 
-        Assert.Equal("rapier-strip.runway", runtime.Bike.State.Contact.SurfaceId);
-        Assert.True(runtime.IsOnTrack);
+        Assert.Equal("weekend-track.asphalt", runtime.Bike.State.Contact.SurfaceId);
+        Assert.False(runtime.IsOnTrack);
+    }
+
+    [Fact]
+    public void HinterlandRoadCentrelineKeepsAsphaltGripOutsideTheCircuit()
+    {
+        var runtime = WeekendRideMissionRuntime.CreateDefault();
+        runtime.Begin();
+        WeekendRoad scenicRoad = runtime.Hinterland.Roads.Single(
+            road => road.Id == "western-ridge-road");
+        Vec3D roadPoint = scenicRoad.Centreline[scenicRoad.Centreline.Count / 2];
+        Assert.False(runtime.Circuit.IsOnPavement(roadPoint));
+        runtime.Bike.ResetTo(roadPoint, runtime.GridHeadingRad);
+
+        runtime.StepFixed(SteadyThrottle);
+
+        Assert.Equal("weekend-hinterland.asphalt", runtime.Bike.State.Contact.SurfaceId);
+        Assert.False(runtime.IsOnTrack);
+        Assert.True(runtime.Bike.State.PositionWorldM.IsFinite);
     }
 
     [Fact]
@@ -254,7 +284,7 @@ public sealed class WeekendRideMissionRuntimeTests
         IReadOnlyList<Vec3D> centreline = runtime.Circuit.Centreline;
         int uniquePointCount = centreline.Count - 1;
         int waypointIndex = 1;
-        const int maximumTicks = 120 * 900;
+        const int maximumTicks = 120 * 600;
         string? firstOffTrack = null;
 
         for (int tick = 0; tick < maximumTicks && runtime.LapCount == 0; tick++)
@@ -273,9 +303,9 @@ public sealed class WeekendRideMissionRuntimeTests
                 }
             }
             waypointIndex = nearestForwardIndex;
-            while (HorizontalDistance(position, centreline[waypointIndex]) < 10.0)
+            while (HorizontalDistance(position, centreline[waypointIndex]) < 15.0)
                 waypointIndex = (waypointIndex + 1) % uniquePointCount;
-            Vec3D target = centreline[(waypointIndex + 10) % uniquePointCount];
+            Vec3D target = centreline[(waypointIndex + 3) % uniquePointCount];
             double desiredHeadingRad = Math.Atan2(
                 target.X - position.X,
                 target.Z - position.Z);
@@ -292,14 +322,14 @@ public sealed class WeekendRideMissionRuntimeTests
                 uniquePointCount);
             double previewTurnRad = Math.Abs(WrapPi(previewHeadingB - previewHeadingA));
             double targetSpeedMps = Math.Clamp(
-                13.0
-                    - Math.Abs(headingErrorRad) * 6.0
-                    - previewTurnRad * 8.0,
+                11.5
+                    - Math.Abs(headingErrorRad) * 7.0
+                    - previewTurnRad * 9.0,
                 4.0,
-                13.0);
+                11.5);
             double speedMps = runtime.Bike.Telemetry.SpeedMps;
             double throttle = speedMps < targetSpeedMps ? 0.70 : 0.0;
-            double brake = speedMps > targetSpeedMps + 1.0
+            double brake = speedMps > targetSpeedMps + 0.5
                 ? Math.Clamp((speedMps - targetSpeedMps) / 8.0, 0.0, 1.0)
                 : 0.0;
             var intent = new MotorcycleRiderIntent(
@@ -355,6 +385,12 @@ public sealed class WeekendRideMissionRuntimeTests
         Assert.True(snap.ViewAttitude.IsFinite);
         Assert.InRange(snap.PitchReflexAuthority, 0.0, 1.0);
         Assert.InRange(snap.LeanHoldAuthority, 0.0, 1.0);
+        Assert.Equal(runtime.Circuit.CircuitLengthM, snap.CircuitLengthM);
+        Assert.InRange(snap.CircuitProgressM, 0.0, snap.CircuitLengthM);
+        Assert.InRange(snap.LastSectorIndex, -1, 2);
+        Assert.InRange(snap.NextSectorIndex, 0, 3);
+        Assert.False(string.IsNullOrWhiteSpace(snap.GoldenPathKind));
+        Assert.True(double.IsFinite(snap.OpenRoadDistanceM));
     }
 
     static void ScoreOneLap(WeekendRideMissionRuntime runtime)
@@ -371,6 +407,23 @@ public sealed class WeekendRideMissionRuntimeTests
         double dx = a.X - b.X;
         double dz = a.Z - b.Z;
         return Math.Sqrt(dx * dx + dz * dz);
+    }
+
+    static Vec3D FarOffCircuit(WeekendRideMissionRuntime runtime) =>
+        runtime.GridPosition + new Vec3D(
+            9_000.0,
+            0.0,
+            9_000.0);
+
+    static Vec3D CentrelineNormal(IReadOnlyList<Vec3D> centreline, int index)
+    {
+        int wrap = centreline.Count - 1;
+        Vec3D previous = centreline[(index - 1 + wrap) % wrap];
+        Vec3D next = centreline[(index + 1) % wrap];
+        double dx = next.X - previous.X;
+        double dz = next.Z - previous.Z;
+        double length = Math.Sqrt(dx * dx + dz * dz);
+        return new Vec3D(-dz / length, 0.0, dx / length);
     }
 
     static double WrapPi(double angleRad) =>

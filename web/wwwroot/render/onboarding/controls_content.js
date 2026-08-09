@@ -76,6 +76,7 @@ export const WEEKEND_RIDE_ONBOARDING_CONTENT = Object.freeze({
       label: "SYSTEM",
       rows: Object.freeze([
         Object.freeze(["T", "Rider reflex assist / raw physics"]),
+        Object.freeze(["I", "Detailed ride diagnostics"]),
         Object.freeze(["R", "Reset to grid"]),
         Object.freeze(["Esc", "Pause"]),
       ]),

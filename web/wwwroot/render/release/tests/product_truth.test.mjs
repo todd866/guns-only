@@ -44,8 +44,10 @@ test("the browser and installed-app descriptions match the four production machi
   assert.match(catalogue, /YZF-R1 Weekend Ride/);
   assert.match(catalogue, /data-program-node="cobra-lab"/);
   assert.match(catalogue, /data-program-node="weekend-ride"/);
-  assert.match(catalogue, /art\/jet-cobra\.webp/);
-  assert.match(catalogue, /art\/bike-yzf-r1\.webp/);
+  assert.match(catalogue, /art\/jet-f22-v2\.webp/);
+  assert.match(catalogue, /art\/jet-rapier-v2\.webp/);
+  assert.match(catalogue, /art\/jet-cobra-v2\.webp/);
+  assert.match(catalogue, /art\/bike-yzf-r1-v2\.webp/);
   assert.match(manifest.description, /F-22 guns-only dogfighting/);
   assert.match(manifest.description, /Rapier high-altitude balloon intercept/);
   assert.match(manifest.description, /AH-1G Cobra Canyon/);

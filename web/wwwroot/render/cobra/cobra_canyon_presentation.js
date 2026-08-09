@@ -1,27 +1,26 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=298";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=299";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=298";
-import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=298";
+} from "./cobra_canyon_asset_kit.js?v=299";
+import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=299";
 import {
   createCobraCanyonBasinMaterial,
   createCobraCanyonRiverMaterial,
-} from "./cobra_canyon_terrain_material.js?v=298";
+} from "./cobra_canyon_terrain_material.js?v=299";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 
 export const COBRA_CANYON_PRESENTATION_SCHEMA =
   "guns-only.cobra-canyon-presentation.v1";
 
-// Basin grid resolution. Trimmed from 96/128/160 to fund canopy INSTANCES, which is the better
-// buy now the heightfield carries real relief: a 133 m quad on a 300 m gorge wall still reads as
-// that wall, whereas one more canopy stand is the difference between a bare hillside and jungle.
-// Every tier keeps its authored triangle ceiling; see COBRA_CANYON_RENDER_BUDGETS below.
+// Basin grid resolution. The foliage atlas pass freed enough triangle budget to restore the
+// landform itself: silhouette and bank shape matter more than another layer of albedo noise.
+// Every tier remains under the existing authored triangle ceilings below.
 export const COBRA_CANYON_TERRAIN_SEGMENTS = Object.freeze({
-  mobile: 92,
-  balanced: 120,
-  desktop: 152,
+  mobile: 104,
+  balanced: 144,
+  desktop: 184,
 });
 
 // The core analytical terrain and authority cues occupy eight submissions (basin, river, roads,
@@ -308,28 +307,62 @@ function appendBoxPrism(positions, minimum, maximum) {
   }
 }
 
+/** Thin rectangular prism following a line in the local X/Y plane. */
+function appendBeamPrism(positions, from, to, centreZ, thickness, depth) {
+  const dx = to[0] - from[0];
+  const dy = to[1] - from[1];
+  const length = Math.max(0.0001, Math.hypot(dx, dy));
+  const nx = -dy / length * thickness * 0.5;
+  const ny = dx / length * thickness * 0.5;
+  const z0 = centreZ - depth * 0.5;
+  const z1 = centreZ + depth * 0.5;
+  const corners = [
+    { x: from[0] + nx, y: from[1] + ny, z: z0 },
+    { x: from[0] - nx, y: from[1] - ny, z: z0 },
+    { x: to[0] - nx, y: to[1] - ny, z: z0 },
+    { x: to[0] + nx, y: to[1] + ny, z: z0 },
+    { x: from[0] + nx, y: from[1] + ny, z: z1 },
+    { x: from[0] - nx, y: from[1] - ny, z: z1 },
+    { x: to[0] - nx, y: to[1] - ny, z: z1 },
+    { x: to[0] + nx, y: to[1] + ny, z: z1 },
+  ];
+  for (const [a, b, c] of [
+    [0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7],
+    [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5],
+    [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7],
+  ]) appendTriangle(positions, corners[a], corners[b], corners[c]);
+}
+
 /**
- * Unit-normalized deck truss. Outer AABB is exactly [-0.5,0.5]^3 so composeBox preserves
- * authored collision bounds while the silhouette reads as a steel span, not a solid orange box.
+ * Deck plus presentation-only truss crown. X/Z and the deck underside preserve the authored
+ * collision envelope; Y reaches 1.5 so the 8 m collision deck carries a readable 16 m steel
+ * silhouette. The mesh remains explicitly non-authoritative and the collision source stays the
+ * world hazard, not these vertices.
  */
 function bridgeDeckTrussGeometry(THREE) {
   const positions = [];
   appendBoxPrism(positions, [-0.5, -0.5, -0.42], [0.5, -0.28, 0.42]);
-  appendBoxPrism(positions, [-0.5, -0.5, -0.5], [0.5, 0.5, -0.42]);
-  appendBoxPrism(positions, [-0.5, -0.5, 0.42], [0.5, 0.5, 0.5]);
   // Cross-deck roadway lip so the span reads as a crossing, not two parallel walls.
   appendBoxPrism(positions, [-0.5, -0.28, -0.42], [0.5, -0.18, 0.42]);
   for (const z of [-0.42, 0.42]) {
-    appendBoxPrism(positions, [-0.5, 0.38, z - 0.04], [0.5, 0.5, z + 0.04]);
-    appendBoxPrism(positions, [-0.5, -0.1, z - 0.03], [0.5, 0.02, z + 0.03]);
+    // Open chords/posts only. The old geometry began with two solid side slabs, so all the
+    // carefully-authored X bracing was coplanar with an opaque wall and Iron Bell rendered as a
+    // single rust bar. The underside and X/Z footprint still touch the collision AABB envelope;
+    // the upper chord is presentation-only and deliberately rises above it.
+    appendBoxPrism(positions, [-0.5, -0.5, z - 0.04], [0.5, -0.38, z + 0.04]);
+    appendBoxPrism(positions, [-0.5, 1.34, z - 0.04], [0.5, 1.5, z + 0.04]);
+    appendBoxPrism(positions, [-0.5, 0.42, z - 0.03], [0.5, 0.55, z + 0.03]);
     for (const x of [-0.45, -0.15, 0.15, 0.45]) {
-      appendBoxPrism(positions, [x - 0.03, -0.28, z - 0.04], [x + 0.03, 0.5, z + 0.04]);
+      appendBoxPrism(positions, [x - 0.036, -0.38, z - 0.04], [x + 0.036, 1.5, z + 0.04]);
     }
   }
-  // Diagonal X-bracing on each face — cheap triangles, big silhouette change from a mile out.
+  // Actual diagonal X-bracing on each face. Earlier "diagonals" were axis-aligned bounding boxes
+  // around these endpoints, producing two opaque slabs and hiding the truss opening.
   for (const z of [-0.46, 0.46]) {
-    appendBoxPrism(positions, [-0.42, -0.22, z - 0.02], [-0.08, 0.36, z + 0.02]);
-    appendBoxPrism(positions, [0.08, -0.22, z - 0.02], [0.42, 0.36, z + 0.02]);
+    appendBeamPrism(positions, [-0.46, -0.30], [-0.02, 1.30], z, 0.076, 0.080);
+    appendBeamPrism(positions, [-0.46, 1.30], [-0.02, -0.30], z, 0.076, 0.080);
+    appendBeamPrism(positions, [0.02, -0.30], [0.46, 1.30], z, 0.076, 0.080);
+    appendBeamPrism(positions, [0.02, 1.30], [0.46, -0.30], z, 0.076, 0.080);
   }
   return geometryFromPositions(THREE, positions, "COBRA_CANYON_BRIDGE_DECK_TRUSS_GEOMETRY");
 }
@@ -399,14 +432,22 @@ function tagObject(object, role, extra = {}) {
   return object;
 }
 
-function materialFor(THREE, role) {
+function materialFor(THREE, role, options = {}) {
   // The basin and the river run the painted-tactical surface shaders: hillshade, hue-separated
   // key/fill, enclosure occlusion and banded aerial haze are computed per FRAGMENT, because the
   // 100 m basin vertex spacing cannot carry a field edge, a canopy line or a 77 m shoreline —
   // baking those into vertex colours interpolates them away, which is the Build 264 monotone and
   // the sand-coloured river of the parked WIP. Scene lights deliberately do not touch either.
-  if (role === "basin") return createCobraCanyonBasinMaterial(THREE, COBRA_CANYON_VISUAL_PROFILE);
-  if (role === "river") return createCobraCanyonRiverMaterial(THREE, COBRA_CANYON_VISUAL_PROFILE);
+  if (role === "basin") {
+    return createCobraCanyonBasinMaterial(THREE, COBRA_CANYON_VISUAL_PROFILE, {
+      groundTexture: options.groundTexture ?? null,
+    });
+  }
+  if (role === "river") {
+    return createCobraCanyonRiverMaterial(THREE, COBRA_CANYON_VISUAL_PROFILE, {
+      groundTexture: options.groundTexture ?? null,
+    });
+  }
   const parameters = {
     roads: { color: 0xb0683c, emissive: 0x241008, roughness: 1 },
     heroCells: { color: 0x6a5030, roughness: 1 },
@@ -414,8 +455,8 @@ function materialFor(THREE, role) {
     hazards: { color: 0xe96a43, emissive: 0x411006, roughness: 0.8 },
     // Weathered steel over jungle green — Iron Bell should read as the fight site, not an
     // orange hazard box that matches every other collision marker.
-    "bridge-deck": { color: 0xc9b89a, emissive: 0x2a2214, roughness: 0.9 },
-    "bridge-pier": { color: 0x8f806c, emissive: 0x1a1610, roughness: 0.94 },
+    "bridge-deck": { color: 0xa95b42, emissive: 0x35130c, roughness: 0.9 },
+    "bridge-pier": { color: 0x8b8979, emissive: 0x24241d, roughness: 0.94 },
     vegetation: { color: 0xffffff, roughness: 1 },
   }[role];
   const material = new THREE.MeshLambertMaterial({
@@ -447,9 +488,9 @@ function materialFor(THREE, role) {
   return material;
 }
 
-function addStaticMesh(THREE, group, role, geometry, resources, metrics) {
+function addStaticMesh(THREE, group, role, geometry, resources, metrics, materialOptions = {}) {
   if (!geometry) return null;
-  const material = materialFor(THREE, role);
+  const material = materialFor(THREE, role, materialOptions);
   const mesh = tagObject(
     new THREE.Mesh(geometry, material),
     role,
@@ -488,6 +529,7 @@ function addInstancedMesh(
     {
       ambient: options.ambient === true,
       hazardCue: options.hazardCue === true,
+      visualExtendsCollisionY: options.visualExtendsCollisionY === true,
       instances: placements.length,
     },
   );
@@ -585,6 +627,7 @@ function basinVertexHeight(plan, eastM, northM, eastStepM, northStepM) {
 
 function basinGeometry(THREE, plan, qualityTier) {
   const positions = [];
+  const normals = [];
   const concavity = [];
   const indices = [];
   const bounds = boundsFrom(plan);
@@ -610,12 +653,26 @@ function basinGeometry(THREE, plan, qualityTier) {
     clamp(northIndex, 0, segments) * columnCount + clamp(eastIndex, 0, segments)
   ];
   const paint = COBRA_CANYON_VISUAL_PROFILE.terrainPaint;
+  // The conservative render grid is deliberately coarse enough to stay inside the flight budget.
+  // Averaging the two triangle-face normals printed the fixed diagonal across each 80–150 m cell.
+  // A central gradient from the already-built heightfield makes the quad shade as one surface and
+  // adds no terrain samples, authority changes, triangles, or boot-time work.
   for (let northIndex = 0; northIndex <= segments; northIndex++) {
     const northM = bounds.minimumNorthM + northIndex * northStepM;
     for (let eastIndex = 0; eastIndex <= segments; eastIndex++) {
       const eastM = bounds.minimumEastM + eastIndex * eastStepM;
       const elevationM = heights[northIndex * columnCount + eastIndex];
       positions.push(eastM, elevationM, -northM);
+      const eastBefore = Math.max(0, eastIndex - 1);
+      const eastAfter = Math.min(segments, eastIndex + 1);
+      const northBefore = Math.max(0, northIndex - 1);
+      const northAfter = Math.min(segments, northIndex + 1);
+      const slopeEast = (heightAt(eastAfter, northIndex) - heightAt(eastBefore, northIndex))
+        / Math.max(eastStepM, (eastAfter - eastBefore) * eastStepM);
+      const slopeNorth = (heightAt(eastIndex, northAfter) - heightAt(eastIndex, northBefore))
+        / Math.max(northStepM, (northAfter - northBefore) * northStepM);
+      const normalLength = Math.hypot(slopeEast, 1, slopeNorth);
+      normals.push(-slopeEast / normalLength, 1 / normalLength, slopeNorth / normalLength);
       // Enclosure term (korea_terrain's baked `concavity` attribute): a two-cell ring mean says
       // whether this vertex sits below its neighbourhood — a valley to darken — or above it — a
       // crest to let catch light. This is the one shading input a fragment cannot re-derive,
@@ -646,9 +703,9 @@ function basinGeometry(THREE, plan, qualityTier) {
   const geometry = new THREE.BufferGeometry();
   geometry.name = "COBRA_CANYON_BASIN_GEOMETRY";
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
   geometry.setAttribute("concavity", new THREE.Float32BufferAttribute(concavity, 1));
   geometry.setIndex(indices);
-  geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
   return geometry;
@@ -894,7 +951,7 @@ function meanderedCourse(points, maximumOffsetM, widthM) {
   if (points.length < 2 || maximumOffsetM <= 0) {
     return { points, widths: points.map(() => widthM) };
   }
-  const spacingM = 115;
+  const spacingM = 85;
   const resampled = [];
   let travelledM = 0;
   for (let index = 0; index < points.length - 1; index++) {
@@ -917,12 +974,13 @@ function meanderedCourse(points, maximumOffsetM, widthM) {
   resampled.push({ ...points[points.length - 1], s: travelledM });
 
   const offsets = resampled.map(({ s }) => {
-    const envelope = 0.42 + 0.58 * (0.5 + 0.5 * Math.sin(s / 2_050 - 0.9));
-    const wander = Math.sin(s / 545) * 0.68 + Math.sin(s / 331 + 2.2) * 0.32;
+    const envelope = 0.46 + 0.54 * (0.5 + 0.5 * Math.sin(s / 2_050 - 0.45));
+    const wander = Math.sin(s / 430 + 0.60) * 0.62
+      + Math.sin(s / 270 + 2.40) * 0.38;
     return clamp(wander * envelope, -1, 1) * maximumOffsetM;
   });
-  const widths = resampled.map(({ s }) => widthM * (1.28 - 0.46 * Math.abs(
-    Math.sin(s / 545) * 0.68 + Math.sin(s / 331 + 2.2) * 0.32,
+  const widths = resampled.map(({ s }) => widthM * (1.30 - 0.48 * Math.abs(
+    Math.sin(s / 430 + 0.60) * 0.62 + Math.sin(s / 270 + 2.40) * 0.38,
   )));
 
   // Displace along the local normal, then let the ribbon builder miter the result. Endpoints keep
@@ -933,7 +991,7 @@ function meanderedCourse(points, maximumOffsetM, widthM) {
     const tangentX = next.x - previous.x;
     const tangentZ = next.z - previous.z;
     const lengthM = Math.max(1e-3, Math.hypot(tangentX, tangentZ));
-    const taper = clamp(Math.min(index, resampled.length - 1 - index) / 3, 0, 1);
+    const taper = clamp(Math.min(index, resampled.length - 1 - index) / 1.2, 0, 1);
     const offsetM = offsets[index] * taper;
     return {
       x: point.x + (-tangentZ / lengthM) * offsetM,
@@ -1003,7 +1061,11 @@ function appendDrapedRibbon(
       [left[index], right[index], right[index + 1], left[index + 1]],
       0.35,
       fieldValues,
-      fieldForSegment?.(centres[index], centres[index + 1]),
+      fieldForSegment?.(
+        centres[index],
+        centres[index + 1],
+        halfWidthAt(index) + halfWidthAt(index + 1),
+      ),
     );
   }
 }
@@ -1062,14 +1124,13 @@ function ribbonGeometry(THREE, plan, role, qualityTier) {
     const widthM = Math.max(0.5, finite(
       record?.widthM ?? record?.width_m,
       role === "river"
-        ? Math.min(90, Math.max(24, finite(record?.halfWidthM, 72) * 0.5))
+        ? Math.min(78, Math.max(24, finite(record?.halfWidthM, 72) * 0.38))
         : 7,
     ));
     // The gravel bar is carved OUT of the authored ribbon width rather than added outside it, so
     // the river's triangle bill is exactly what it was before the bar existed and the balanced
     // tier keeps its reserve. Only the waterline moves inward.
     const bankWidthM = COBRA_CANYON_VISUAL_PROFILE.water.bankWidthM;
-    const waterWidthM = Math.max(24, widthM - 2 * bankWidthM);
     // The sheet may wander only across the ribbon's authored FLAT FLOOR, and only by what the
     // widest reach leaves over: floor half-width minus the widest half-width the course asks for.
     // Beyond that the geometry would ride up the carved bank and the water would visibly climb.
@@ -1077,7 +1138,7 @@ function ribbonGeometry(THREE, plan, role, qualityTier) {
     const course = role === "river"
       ? meanderedCourse(
         points,
-        Math.max(0, floorHalfWidthM - widthM * 1.28 * 0.5),
+        Math.max(0, floorHalfWidthM - widthM * 1.30 * 0.5),
         widthM,
       )
       : { points, widths: null };
@@ -1089,7 +1150,11 @@ function ribbonGeometry(THREE, plan, role, qualityTier) {
       widthM,
       riverFrame,
       role === "river"
-        ? (from, to) => riverFrameField(waterWidthM * 0.5, from, to)
+        ? (from, to, segmentWidthM) => riverFrameField(
+          Math.max(24, segmentWidthM - 2 * bankWidthM) * 0.5,
+          from,
+          to,
+        )
         : null,
       course.widths,
     );
@@ -1501,6 +1566,7 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
     basinGeometry(THREE, plan, qualityTier),
     resources,
     metrics,
+    { groundTexture: options.surfaceTextures?.ground ?? null },
   );
   addStaticMesh(
     THREE,
@@ -1509,6 +1575,7 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
     ribbonGeometry(THREE, plan, "river", qualityTier),
     resources,
     metrics,
+    { groundTexture: options.surfaceTextures?.ground ?? null },
   );
   addStaticMesh(
     THREE,
@@ -1527,6 +1594,14 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
     qualityTier,
     maxInstances: budget.maxAssetInstances,
     foliageTextures: options.foliageTextures ?? null,
+    // The rendered basin is a tier-specific triangulation of the analytic field. Seat props on
+    // that visible surface, not on the higher analytic sample, or cards hover over coarse slopes.
+    sampleGroundHeight: (eastM, northM) => sampleCobraCanyonRenderedBasinHeight(
+      plan,
+      qualityTier,
+      eastM,
+      northM,
+    ),
   });
   group.add(assetKit.group);
 
@@ -1560,7 +1635,7 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
     resources,
     metrics,
     composeBox,
-    { hazardCue: true },
+    { hazardCue: true, visualExtendsCollisionY: true },
   );
   const bridgePierMesh = addInstancedMesh(
     THREE,

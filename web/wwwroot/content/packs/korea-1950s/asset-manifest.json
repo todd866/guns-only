@@ -2,7 +2,7 @@
   "$schema": "../../schemas/asset-manifest.schema.json",
   "schemaVersion": "1.0.0",
   "manifestId": "manifest.korea-1950s.default.v1",
-  "manifestVersion": "0.4.0",
+  "manifestVersion": "0.5.0",
   "packId": "korea-1950s",
   "coordinateSystem": {
     "units": "metres",
@@ -520,6 +520,35 @@
       ],
       "fallbacks": [],
       "notes": "Terrain v3: range-addressable 64/128/256/512 m runtime LODs with the seeded connected flyable-scale valley carve applied to locked Copernicus GLO-30 elevation and water masks before quantization. The 128 m truth grid is generated from the same carved sampler and embedded by the web shell for authoritative clearance and surface contact."
+    },
+    {
+      "id": "environment.texture.korea-highland-ground.v1",
+      "kind": "texture",
+      "role": "environment.terrain-material",
+      "status": "production",
+      "licenseRef": "license.project-code.v1",
+      "sources": [
+        {
+          "uri": "environment/textures/korea-highland-ground-v1.webp",
+          "format": "webp",
+          "mediaType": "image/webp",
+          "sha256": "d8f31ec00b96f70eba87ad85eaba70820e730d4d4f9de20178a3c976a5af84f3",
+          "sizeBytes": 298372
+        },
+        {
+          "uri": "environment/textures/korea-ground-art-manifest.v1.json",
+          "format": "art-provenance-manifest",
+          "mediaType": "application/json",
+          "sha256": "086228093f672a4c290c50455aab65c4ae9348739c6cb9ac600c500101593ad6",
+          "sizeBytes": 2945
+        }
+      ],
+      "fallbacks": [],
+      "budgets": {
+        "textureMemoryMiB": 5.34,
+        "maxTextureDimension": 1024
+      },
+      "notes": "Project-authored generated presentation pigment only. Sourced DEM geometry and simulation truth remain authoritative."
     },
     {
       "id": "vfx.gun.fire.v1",

@@ -1,194 +1,376 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import * as THREE from "../../../vendor/three.module.js";
 import {
-  RAPIER_TRACK_DAY_SCHEMA,
-  planRapierTrackDay,
+  WEEKEND_FIELD_LANDCOVER_URL,
+  WEEKEND_HINTERLAND_GROUND_URL,
+  WEEKEND_ROUTE_SCHEMA,
+  WEEKEND_TRACK_DAY_SCHEMA,
+  WEEKEND_TRACK_SURFACE_URL,
+  createWeekendTrackDayPresentation,
+  planWeekendGoldenPathCue,
+  planWeekendTrackDay,
 } from "../track_day_presentation.js";
 
-// Mirrors the reshaped sim circuit: straights on the strip, wide hairpin aprons
-// (|z| up to 44 m) beyond the 48 m runway width at both thresholds.
-const circuit = [
-  { x: 1_300, y: 192, z: -14 },
-  { x: 0, y: 192, z: -14 },
-  { x: -1_300, y: 192, z: -14 },
-  { x: -1_360, y: 192, z: -44 },
-  { x: -1_482, y: 192, z: 0 },
-  { x: -1_360, y: 192, z: 44 },
-  { x: -1_300, y: 192, z: 14 },
-  { x: 0, y: 192, z: 14 },
-  { x: 1_300, y: 192, z: 14 },
-  { x: 1_360, y: 192, z: 44 },
-  { x: 1_482, y: 192, z: 0 },
-  { x: 1_360, y: 192, z: -44 },
-  { x: 1_300, y: 192, z: -14 },
+const centreline = [
+  { x: 0, y: 68, z: -320 },
+  { x: 350, y: 68, z: -320 },
+  { x: 590, y: 68, z: -220 },
+  { x: 720, y: 68, z: -40 },
+  { x: 680, y: 68, z: 160 },
+  { x: 520, y: 68, z: 310 },
+  { x: 300, y: 68, z: 390 },
+  { x: 80, y: 68, z: 310 },
+  { x: -140, y: 68, z: 430 },
+  { x: -400, y: 68, z: 400 },
+  { x: -620, y: 68, z: 280 },
+  { x: -730, y: 68, z: 80 },
+  { x: -680, y: 68, z: -120 },
+  { x: -500, y: 68, z: -250 },
+  { x: -300, y: 68, z: -320 },
+  { x: 0, y: 68, z: -320 },
 ];
 
-test("track-day plan carries unmistakable circuit and paddock cues", () => {
-  const plan = planRapierTrackDay(circuit);
+const route = Object.freeze({
+  schema: WEEKEND_ROUTE_SCHEMA,
+  id: "weekend-track-day.closed-circuit.v1",
+  mode: "track-day",
+  route_kind: "closed-circuit",
+  closed: true,
+  track_width_m: 18,
+  pavement_half_width_m: 22,
+  surface_elevation_m: 68,
+  circuit_length_m: 3_850,
+  sector_gate_progress: [0.25, 0.5, 0.75],
+  start: { x: 0, y: 68, z: -320, heading_rad: Math.PI / 2 },
+  paddock_access: { x: -80, y: 68, z: -345, heading_rad: Math.PI },
+  centreline,
+});
 
-  assert.equal(plan.schema, RAPIER_TRACK_DAY_SCHEMA);
-  assert.equal(plan.trackWidthM, 20);
-  assert.equal(plan.gantry.center.x, circuit[0].x);
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) =>
+      `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function distanceToCircuit(point) {
+  let minimumM = Infinity;
+  for (let index = 0; index < centreline.length - 1; index++) {
+    const start = centreline[index];
+    const end = centreline[index + 1];
+    const dx = end.x - start.x;
+    const dz = end.z - start.z;
+    const lengthSquared = dx * dx + dz * dz;
+    const t = Math.max(0, Math.min(
+      1,
+      ((point.x - start.x) * dx + (point.z - start.z) * dz) / lengthSquared,
+    ));
+    minimumM = Math.min(
+      minimumM,
+      Math.hypot(point.x - (start.x + dx * t), point.z - (start.z + dz * t)),
+    );
+  }
+  return minimumM;
+}
+
+test("route contract produces a broad purpose-built closed circuit", () => {
+  const plan = planWeekendTrackDay(route);
+
+  assert.equal(plan.schema, WEEKEND_TRACK_DAY_SCHEMA);
+  assert.equal(plan.circuitId, route.id);
+  assert.equal(plan.trackWidthM, route.track_width_m);
+  assert.equal(plan.pavementHalfWidthM, route.pavement_half_width_m);
+  assert.equal(plan.runoffWidthM, 13);
+  assert.ok(plan.bounds.maximumX - plan.bounds.minimumX > 1_300);
+  assert.ok(plan.bounds.maximumZ - plan.bounds.minimumZ > 650);
+  assert.equal(plan.gantry.center.x, centreline[0].x);
+  assert.equal(plan.paddockAccess.center.x, route.paddock_access.x);
+  assert.equal(plan.accessRoad.start.z, route.paddock_access.z);
   assert.equal(plan.marshalPosts.length, 3);
   assert.ok(plan.cones.length >= 16);
-  assert.ok(plan.tyreWalls.length >= 20);
-  assert.ok(plan.paddock.length >= 6);
+  assert.equal(plan.tyreWalls.length, 128);
+  assert.equal(plan.paddock.length, 6);
 });
 
-test("all authored cues stay inside the paved extents, hairpin aprons included", () => {
-  const plan = planRapierTrackDay(circuit);
-  const runwayAssets = [
-    plan.gantry,
-    ...plan.marshalPosts,
-    ...plan.cones,
-    ...plan.tyreWalls,
-  ];
+test("pavement, runoff, barriers, and facilities follow the circuit corridor", () => {
+  const plan = planWeekendTrackDay(route);
 
-  for (const asset of runwayAssets) {
-    assert.ok(Math.abs(asset.center.x) <= plan.pavedHalfLengthM);
-    assert.ok(Math.abs(asset.center.z) <= plan.pavedHalfWidthM);
+  for (const cone of plan.cones) {
+    assert.ok(distanceToCircuit(cone.center) <= plan.trackWidthM * 0.5 + 0.2);
   }
-  // Hairpin cones must NOT be squashed onto the 48 m runway rectangle.
-  assert.ok(plan.cones.some((cone) => Math.abs(cone.center.z) > 24));
-  // Tyre walls belong beyond the track's outer edge, never on the racing surface.
-  const apexOuterEdge = 1_482 + plan.trackWidthM * 0.5;
   for (const wall of plan.tyreWalls) {
     assert.ok(
-      Math.abs(wall.center.x) >= apexOuterEdge,
-      `tyre wall at x=${wall.center.x} sits on the track`,
+      distanceToCircuit(wall.center) >= plan.pavementHalfWidthM + 3,
+      `barrier at (${wall.center.x}, ${wall.center.z}) intrudes into paved runoff`,
     );
   }
-});
-
-test("plan grounds the off-track world and marks the strip from a distance", () => {
-  const plan = planRapierTrackDay(circuit);
-
-  assert.ok(plan.ground.sizeM >= 12_000, `ground ${plan.ground.sizeM} m is still a void`);
-  // Sim grants pavement grip 16 m either side of the centreline
-  // (PaintedCircuit.PavedApronHalfWidthM); the rendered shoulder must match.
-  assert.equal(plan.apronHalfWidthM, 16);
-  assert.ok(plan.beacons.length >= 4);
-  for (const beacon of plan.beacons) {
-    assert.ok(Math.abs(beacon.center.x) >= 1_000, "beacons belong at the thresholds");
-    assert.ok(beacon.heightM >= 20, "beacons must read from a kilometre away");
+  for (const asset of [...plan.paddock, plan.raceControl, plan.pitGarage]) {
+    assert.ok(distanceToCircuit(asset.center) > plan.pavementHalfWidthM);
   }
+  assert.ok(plan.raceControl.heightM >= 10);
+  assert.ok(plan.pitGarage.widthM >= 60);
 });
 
-test("horizon ring surrounds the world so deep off-track never reads as void", () => {
-  const plan = planRapierTrackDay(circuit);
+test("presentation has no rectangular facility slab, edge stripes, beacons, or airfield landmarks", () => {
+  const presentation = createWeekendTrackDayPresentation(THREE, route);
+  const names = [];
+  presentation.object3d.traverse((object) => names.push(object.name));
 
-  // Treeline/hill band: enough segments to encircle the rider, far enough to
-  // stay scenery, near enough to survive the fog (sky sphere 8 km, fog ~11.7 km).
+  assert.equal(presentation.object3d.name, "weekend-track-day");
+  assert.ok(presentation.object3d.getObjectByName("weekend-circuit-verge"));
+  assert.ok(presentation.object3d.getObjectByName("weekend-race-control"));
+  assert.ok(presentation.object3d.getObjectByName("weekend-pit-garage"));
+  assert.equal(names.some((name) => /runway|airfield|beacon|threshold/i.test(name)), false);
+  assert.equal("beacons" in presentation.plan, false);
+  assert.equal("pavedHalfLengthM" in presentation.plan, false);
+  assert.equal("pavedHalfWidthM" in presentation.plan, false);
+  assert.equal(
+    presentation.object3d.getObjectByName("weekend-circuit-verge").geometry.type,
+    "BufferGeometry",
+  );
+  presentation.dispose();
+});
+
+test("horizon, landcover, and midfield stay populated without crowding the route", () => {
+  const plan = planWeekendTrackDay(route);
+
+  assert.ok(plan.ground.sizeM >= 12_000);
   assert.ok(plan.horizon.segments.length >= 24);
   assert.ok(plan.horizon.radiusM >= 4_000 && plan.horizon.radiusM <= 7_500);
-  for (const segment of plan.horizon.segments) {
-    assert.ok(segment.heightM >= 30, "horizon band must read above the ground line");
-    assert.ok(Number.isFinite(segment.bearingRad));
-  }
-  // A few far building silhouettes so the ring is not a uniform hedge.
   assert.ok(plan.horizon.silhouettes.length >= 3);
-  for (const silhouette of plan.horizon.silhouettes) {
-    const rangeM = Math.hypot(silhouette.center.x, silhouette.center.z);
-    assert.ok(rangeM >= 2_500, "silhouettes belong on the horizon, not the infield");
-    assert.ok(silhouette.heightM >= 14);
-  }
-});
-
-test("airfield carries a tall landmark so the strip is findable from deep off-track", () => {
-  const plan = planRapierTrackDay(circuit);
-
-  assert.ok(plan.waterTower.heightM >= 30, "landmark must out-read the 30 m beacons");
-  assert.ok(
-    Math.abs(plan.waterTower.center.x) <= plan.pavedHalfLengthM,
-    "the water tower belongs to the airfield cluster",
-  );
-  assert.ok(Math.abs(plan.waterTower.center.z) <= 400);
-  // Hangar block: a wide slab that still reads where slim masts vanish.
-  assert.ok(plan.hangar.widthM >= 50);
-  assert.ok(plan.hangar.heightM >= 10);
-  assert.ok(Math.abs(plan.hangar.center.x) <= plan.pavedHalfLengthM);
-  assert.ok(Math.abs(plan.hangar.center.z) <= 400);
-  assert.ok(
-    Math.hypot(plan.hangar.center.x - plan.waterTower.center.x, plan.hangar.center.z - plan.waterTower.center.z) <= 300,
-    "hangar and tower form one airfield cluster",
-  );
-});
-
-test("ground variation breaks the uniform plane with painted bands and a road", () => {
-  const plan = planRapierTrackDay(circuit);
-
-  assert.ok(plan.fieldPatches.length >= 4, "need several mowed/unmowed tone bands");
-  for (const patch of plan.fieldPatches) {
-    assert.ok(patch.widthM > 100 && patch.depthM > 100, "patches are large-scale tone, not clutter");
-    assert.ok(
-      Math.abs(patch.center.x) + patch.widthM / 2 <= plan.ground.sizeM / 2
-        && Math.abs(patch.center.z) + patch.depthM / 2 <= plan.ground.sizeM / 2,
-    );
-  }
-  // Dirt access road: leaves the paddock side of the strip and runs into the field.
-  assert.ok(plan.accessRoad.lengthM >= 1_500);
-  assert.ok(plan.accessRoad.widthM >= 5 && plan.accessRoad.widthM <= 12);
-  assert.ok(plan.accessRoad.start.z > 24, "road starts on the paddock side of the runway");
-  // Hedgerows: kilometre-long field boundaries that survive eye-height
-  // compression, clear of the circuit and never growing across the road.
+  assert.ok(plan.fieldPatches.length >= 4);
   assert.ok(plan.hedgerows.length >= 4);
-  for (const row of plan.hedgerows) {
-    assert.ok(row.lengthM >= 1_500, "hedgerows are field boundaries, not shrubs");
-    assert.ok(row.heightM >= 2.5 && row.heightM <= 6);
-    assert.ok(Math.abs(row.center.z) >= 500, "hedgerows stay off the airfield");
-    assert.ok(
-      Math.abs(row.center.x) + row.lengthM / 2 <= plan.ground.sizeM / 2
-        && Math.abs(row.center.z) <= plan.ground.sizeM / 2,
-    );
-    if (row.center.z > 0) {
-      const roadX = plan.accessRoad.start.x
-        + Math.sin(plan.accessRoad.headingRad)
-          * ((row.center.z - plan.accessRoad.start.z) / Math.cos(plan.accessRoad.headingRad));
-      const nearEdge = Math.abs(roadX - row.center.x) - row.lengthM / 2;
-      assert.ok(nearEdge >= 20, "hedgerows on the road side keep a gap for the dirt road");
-    }
-  }
-});
-
-test("midfield verticals give the flat plane parallax without touching the circuit", () => {
-  const plan = planRapierTrackDay(circuit);
-
-  // Flat tone bands compress to a few pixels past ~300 m; trees and farm blocks
-  // are what actually read from a kilometre out.
-  assert.ok(plan.trees.length >= 80 && plan.trees.length <= 400);
+  assert.ok(plan.trees.length >= 700 && plan.trees.length <= 1_400);
   for (const tree of plan.trees) {
-    assert.ok(tree.heightM >= 4 && tree.heightM <= 20);
-    const nearCircuit =
-      Math.abs(tree.center.x) < plan.pavedHalfLengthM + 60
-      && Math.abs(tree.center.z) < 170;
-    assert.ok(!nearCircuit, `tree at (${tree.center.x}, ${tree.center.z}) crowds the circuit`);
     assert.ok(
-      Math.abs(tree.center.x) <= plan.ground.sizeM / 2
-        && Math.abs(tree.center.z) <= plan.ground.sizeM / 2,
+      distanceToCircuit(tree.center) >= plan.pavementHalfWidthM + 25,
+      `tree at (${tree.center.x}, ${tree.center.z}) crowds the circuit`,
     );
   }
   assert.ok(plan.farms.length >= 2);
-  for (const farm of plan.farms) {
-    const rangeM = Math.hypot(farm.center.x, farm.center.z);
-    assert.ok(rangeM >= 800 && rangeM <= 4_500, "farms live in the midfield");
-  }
 });
 
 test("dense authority geometry keeps ambient marker counts bounded", () => {
   const dense = Array.from({ length: 1_024 }, (_, index) => {
     const angle = index / 1_024 * Math.PI * 2;
-    return {
-      x: Math.cos(angle) * 1_400,
-      y: 192,
-      z: Math.sin(angle) * 14,
-    };
+    return { x: Math.cos(angle) * 700, y: 68, z: Math.sin(angle) * 420 };
   });
   dense.push(dense[0]);
 
-  const plan = planRapierTrackDay(dense);
+  const plan = planWeekendTrackDay({ ...route, centreline: dense });
 
   assert.ok(plan.cones.length <= 128);
-  assert.ok(plan.tyreWalls.length <= 32);
+  assert.equal(plan.tyreWalls.length, 128);
   assert.equal(plan.paddock.length, 6);
+});
+
+test("golden-path cues use authoritative progress, sector, route geometry, and lap state", () => {
+  const base = {
+    lap: 0,
+    vx: 0,
+    vy: 0,
+    vz: 0,
+    circuit_progress_m: 0,
+    circuit_length_m: route.circuit_length_m,
+    next_sector: 0,
+  };
+  const launch = planWeekendGoldenPathCue(route, base, {}, 1_000);
+  assert.deepEqual({ kind: launch.kind, token: launch.token }, { kind: "launch", token: "↑" });
+
+  const sector = planWeekendGoldenPathCue(route, {
+    ...base,
+    vx: 12,
+    circuit_progress_m: route.circuit_length_m * 0.25 - 100,
+  }, launch.state, 2_000);
+  assert.equal(sector.kind, "sector");
+  assert.match(sector.token, /^[↰↱] S1$/);
+
+  const finish = planWeekendGoldenPathCue(route, {
+    ...base,
+    vx: 14,
+    circuit_progress_m: route.circuit_length_m - 100,
+    next_sector: 3,
+  }, sector.state, 3_000);
+  assert.deepEqual({ kind: finish.kind, token: finish.token }, { kind: "finish", token: "◎" });
+
+  const lap = planWeekendGoldenPathCue(route, { ...base, lap: 1 }, finish.state, 4_000);
+  assert.deepEqual({ kind: lap.kind, token: lap.token }, { kind: "lap", token: "✓ LAP 1" });
+});
+
+test("generated asphalt, near ground, and field assets are hash-pinned and staged identically", async () => {
+  assert.equal(
+    WEEKEND_TRACK_SURFACE_URL,
+    "/content/packs/weekend-ride/environment/textures/track-asphalt-v1.webp?v=299",
+  );
+  assert.equal(
+    WEEKEND_HINTERLAND_GROUND_URL,
+    "/content/packs/weekend-ride/environment/textures/weekend-hinterland-ground-v1.webp?v=299",
+  );
+  assert.equal(
+    WEEKEND_FIELD_LANDCOVER_URL,
+    "/content/packs/weekend-ride/environment/textures/weekend-field-landcover-v1.webp?v=299",
+  );
+  const [
+    asphaltCanonical, asphaltStaged, groundCanonical, groundStaged,
+    fieldCanonical, fieldStaged,
+  ] = await Promise.all([
+    readFile(new URL("../../../../../content/packs/weekend-ride/environment/textures/track-asphalt-v1.webp", import.meta.url)),
+    readFile(new URL("../../../content/packs/weekend-ride/environment/textures/track-asphalt-v1.webp", import.meta.url)),
+    readFile(new URL("../../../../../content/packs/weekend-ride/environment/textures/weekend-hinterland-ground-v1.webp", import.meta.url)),
+    readFile(new URL("../../../content/packs/weekend-ride/environment/textures/weekend-hinterland-ground-v1.webp", import.meta.url)),
+    readFile(new URL("../../../../../content/packs/weekend-ride/environment/textures/weekend-field-landcover-v1.webp", import.meta.url)),
+    readFile(new URL("../../../content/packs/weekend-ride/environment/textures/weekend-field-landcover-v1.webp", import.meta.url)),
+  ]);
+  assert.deepEqual(asphaltStaged, asphaltCanonical);
+  assert.deepEqual(groundStaged, groundCanonical);
+  assert.deepEqual(fieldStaged, fieldCanonical);
+  assert.equal(
+    createHash("sha256").update(asphaltCanonical).digest("hex"),
+    "bb9a4033b80a0d7069cb987f73e0c325e10c64c9c1030b73e9b7f6a8819ec713",
+  );
+  assert.equal(
+    createHash("sha256").update(groundCanonical).digest("hex"),
+    "bb97d9528ad773891d6a704b6d01ab6b145eff451055c827d3a6c05be51641a1",
+  );
+  assert.equal(
+    createHash("sha256").update(fieldCanonical).digest("hex"),
+    "9b6b3cb7ee30f81ea485dd2fa1f3b18d04a17e03285c284f27b3ec0538be542d",
+  );
+});
+
+test("generated textures use metre-scaled UVs and mirrored sRGB landcover", () => {
+  const asphalt = new THREE.Texture();
+  const ground = new THREE.Texture();
+  const field = new THREE.Texture();
+  const atlas = new THREE.Texture();
+  const presentation = createWeekendTrackDayPresentation(THREE, route, {
+    surfaceTexture: asphalt,
+    groundTexture: ground,
+    fieldTexture: field,
+    roadsideAtlas: atlas,
+  });
+  const surface = presentation.object3d.getObjectByName("weekend-track-surface");
+  const shoulder = presentation.object3d.getObjectByName("weekend-paved-shoulder");
+  const hinterland = presentation.object3d.getObjectByName("weekend-hinterland-ground");
+  const verge = presentation.object3d.getObjectByName("weekend-circuit-verge");
+  const ecology = presentation.object3d.getObjectByName(
+    "weekend-midfield-trees-roadside-atlas",
+  );
+  assert.equal(surface.material.map, asphalt);
+  assert.equal(shoulder.material.map, asphalt);
+  assert.equal(hinterland.material.map, field);
+  assert.equal(ground.colorSpace, THREE.SRGBColorSpace);
+  assert.equal(ground.wrapS, THREE.MirroredRepeatWrapping);
+  assert.equal(ground.wrapT, THREE.MirroredRepeatWrapping);
+  assert.ok(field.repeat.x > 15 && field.repeat.x < 16);
+  assert.equal(field.colorSpace, THREE.SRGBColorSpace);
+  assert.notEqual(verge.material.map, ground, "verge owns a metre-mapped clone");
+  assert.equal(verge.material.map.source, ground.source);
+  assert.equal(verge.material.map.wrapS, THREE.MirroredRepeatWrapping);
+  assert.equal(ecology.material.map, atlas);
+  assert.equal(ecology.material.type, "MeshBasicMaterial");
+  assert.equal(ecology.material.vertexColors, true);
+  assert.equal(ecology.material.alphaTest, 0.28);
+  assert.equal(atlas.flipY, false);
+  assert.equal(atlas.wrapS, THREE.ClampToEdgeWrapping);
+  assert.equal(surface.geometry.getAttribute("uv").count, surface.geometry.getAttribute("position").count);
+  assert.ok(
+    surface.geometry.getAttribute("uv").getX(2) > 1,
+    "track UVs repeat at an authored metre scale instead of stretching around the circuit",
+  );
+  presentation.dispose();
+});
+
+test("canonical Web scene manifest is byte-identical for content, Web, and Unity", async () => {
+  const [canonical, staged, unity] = await Promise.all([
+    readFile(new URL("../../../../../content/packs/weekend-ride/presentation/weekend-track-day-presentation.v1.json", import.meta.url)),
+    readFile(new URL("../../../content/packs/weekend-ride/presentation/weekend-track-day-presentation.v1.json", import.meta.url)),
+    readFile(new URL("../../../../../unity/GunsOnly.Unity/Assets/Resources/GunsOnly/WeekendRide/Circuit/weekend-track-day-presentation-v1.json", import.meta.url)),
+  ]);
+  assert.deepEqual(staged, canonical);
+  assert.deepEqual(unity, canonical);
+  assert.equal(
+    createHash("sha256").update(canonical).digest("hex"),
+    "0b906b2e24616c3648d39626bb63f9391f2e423e44beef8a03f945609b952461",
+  );
+});
+
+test("retained manifest serializes actual Web leaves, transforms, instances, materials, and UVs", async () => {
+  const bytes = await readFile(new URL(
+    "../../../../../content/packs/weekend-ride/presentation/weekend-track-day-presentation.v1.json",
+    import.meta.url,
+  ));
+  const manifest = JSON.parse(bytes);
+  assert.equal(manifest.schema, "guns-only.weekend-track-day-scene.v1");
+  assert.equal(manifest.serialization, "canonical-json-v1");
+  const { semantic_sha256: semanticSha256, ...payload } = manifest;
+  assert.equal(
+    createHash("sha256").update(canonicalJson(payload)).digest("hex"),
+    semanticSha256,
+  );
+  assert.equal(semanticSha256, "325fa88219e8f3929a684be8d7090519ac94d94f979d982d428793fe7d5a0ad4");
+  assert.equal(manifest.route_authority.centreline.length, 577);
+  assert.equal(manifest.scene.leaf_count, 110);
+  assert.equal(manifest.scene.leaves.length, 110);
+  assert.equal(
+    manifest.scene.leaves.reduce((sum, leaf) => sum + leaf.instances.count, 0),
+    699,
+  );
+  assert.equal(JSON.stringify(manifest).includes("uuid"), false);
+
+  const required = [
+    "weekend-hinterland-ground", "weekend-circuit-verge", "weekend-field-patchwork",
+    "weekend-rolling-field-relief", "weekend-field-hedgerows", "weekend-horizon-ridge",
+    "weekend-horizon-silhouettes", "weekend-midfield-trees-roadside-atlas",
+    "weekend-paddock-access-road", "weekend-paddock-access-delineator",
+    "weekend-farm-buildings", "weekend-race-control",
+    "weekend-pit-garage", "weekend-paved-shoulder", "weekend-track-surface",
+    "weekend-track-curbs", "weekend-track-edge-lines", "weekend-runoff-edge-lines",
+    "weekend-start-finish-gantry", "weekend-course-cones",
+    "weekend-tyre-walls", "weekend-marshal-post", "weekend-paddock-canopy",
+    "weekend-service-vehicle",
+  ];
+  const paths = manifest.scene.leaves.map((leaf) => leaf.path).join("\n");
+  for (const token of required) assert.match(paths, new RegExp(token));
+  for (const leaf of manifest.scene.leaves) {
+    assert.equal(leaf.world_matrix.length, 16);
+    assert.equal(leaf.geometry.position.values.length, leaf.geometry.vertex_count * 3);
+    assert.equal(leaf.geometry.indices.length % 3, 0);
+    assert.ok(["mesh-basic", "mesh-standard"].includes(leaf.material.model));
+    if (leaf.kind === "instanced-mesh") {
+      assert.equal(leaf.instances.matrices.length, leaf.instances.count * 16);
+    }
+  }
+  const track = manifest.scene.leaves.find((leaf) => leaf.name === "weekend-track-surface");
+  const ground = manifest.scene.leaves.find((leaf) => leaf.name === "weekend-hinterland-ground");
+  assert.equal(track.material.map.id, "TEX_WEEKEND_TRACK_ASPHALT_V1");
+  assert.equal(ground.material.map.id, "TEX_WEEKEND_FIELD_LANDCOVER_V1");
+  assert.deepEqual(ground.material.map.repeat, [15.172413793103, 15.172413793103]);
+  assert.ok(Math.max(...track.geometry.uv.values) > 100);
+});
+
+test("manifest render profile remains identical to Weekend Web camera, sky, fog, light, and ACES", async () => {
+  const [manifestBytes, mainBytes] = await Promise.all([
+    readFile(new URL("../../../../../content/packs/weekend-ride/presentation/weekend-track-day-presentation.v1.json", import.meta.url)),
+    readFile(new URL("../../../weekend-ride/main.js", import.meta.url), "utf8"),
+  ]);
+  const profile = JSON.parse(manifestBytes).render_profile;
+  assert.deepEqual(profile.camera, { far_m: 24000, near_m: 0.25, vertical_fov_deg: 68 });
+  assert.equal(profile.tone_mapping, "three-r160-aces-filmic");
+  assert.equal(profile.tone_mapping_exposure, 1.04);
+  assert.match(mainBytes, /toneMapping\s*=\s*THREE\.ACESFilmicToneMapping/);
+  assert.match(mainBytes, /toneMappingExposure\s*=\s*1\.04/);
+  assert.match(mainBytes, /new THREE\.FogExp2\(0xa8b8b7, 0\.00016\)/);
+  assert.match(mainBytes, /HemisphereLight\(0xf4f8f4, 0x67745f, 1\.65\)/);
+  assert.match(mainBytes, /DirectionalLight\(0xffefd1, 2\.05\)/);
+  assert.match(mainBytes, /#include <tonemapping_fragment>[\s\S]*#include <colorspace_fragment>/);
+  assert.match(mainBytes, /new THREE\.PerspectiveCamera\(68, 1, 0\.25, 24_000\)/);
+  assert.match(mainBytes, /new THREE\.SphereGeometry\(8_000, 24, 12\)/);
+  assert.match(mainBytes, /sun\.position\.set\(-1_200, 2_400, 900\)/);
 });

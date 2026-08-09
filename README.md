@@ -8,17 +8,22 @@ renderer.
 
 ## What is live now
 
-The production front door offers two aircraft:
+The production front door offers four image-led experiences:
 
 - **F-22A surrogate — Guns Only:** an endless visual dogfight with ballistic guns, a real flight
   envelope, Auto-GCAS, padlock/target management, and a deterministic opponent.
 - **Rapier — Intercept:** climb onto the thin-air M4.2 shelf, make one finite-ammo gun pass on a
   high-altitude balloon, then re-enter and trap at the midpoint arrestor.
+- **AH-1G Cobra — Hold the Bridge:** fly a low-level river-gorge mission with a sim-owned ground
+  fight, crewed gun employment, rearm, landing, and a finite hold objective.
+- **YZF-R1 — Weekend Ride:** complete a circuit on deterministic motorcycle dynamics with lean,
+  tyre-load, powertrain, lap, and recovery state.
 
 Other mission code remains in the repository for development, but it is not silently presented as
 finished product. Preview and quarantined routes show their release boundary before they load and
-require an explicit `?preview=1` acknowledgement for deliberate testing. The authoritative matrix
-is [docs/STATUS.md](docs/STATUS.md).
+require an explicit `?preview=1` acknowledgement for deliberate testing. The image-only picker is
+intentional; the authoritative release matrix and experience names are
+[docs/STATUS.md](docs/STATUS.md).
 
 ## Controls
 
@@ -67,6 +72,7 @@ north star, not a claim that every planned discipline is already available.
 sim/           deterministic simulation kernel and mission authority
 sim.Tests/     physics, lifecycle, determinism, combat, recovery, and mission tests
 web/           WebAssembly bridge, snapshot projection, renderer, HUD, and browser shell
+unity/         native Unity presentation, host bridge, renderer contracts, and parity tests
 server/        local parity server for the multiplayer protocol
 world-worker/  Cloudflare Durable Object for persistent identities and sectors
 content/       schemas and versioned presentation packs
@@ -89,9 +95,11 @@ newer; using 24 locally keeps its real workerd startup test in the normal gate.
 ./bin/check
 ```
 
-The gate validates content and licences, runs JavaScript and .NET suites, builds the release,
-checks the publish closure, and drives silent browser smoke. GitHub Actions separates deterministic
-checks from browser acceptance so a browser failure cannot erase the unit/content signal.
+The gate validates content and licences, runs JavaScript, simulation, server, and Unity-bridge
+suites, builds the Web release, checks the publish closure, and drives silent browser smoke. GitHub
+Actions separates deterministic checks from browser acceptance so a browser failure cannot erase
+the unit/content signal. Native Unity player builds and fixed-camera Web/Unity image comparisons
+remain explicit platform acceptance steps.
 
 To serve a local release build manually:
 

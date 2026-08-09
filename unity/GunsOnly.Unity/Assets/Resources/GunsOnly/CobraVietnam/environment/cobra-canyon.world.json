@@ -1,0 +1,1308 @@
+{
+  "schema": "cobra.canyon.world.v1",
+  "worldId": "world.cobra-canyon.v1",
+  "contentVersion": "1.0.0",
+  "authoritySourceId": "authority.cobra-vietnam.cobra-canyon.v1",
+  "epistemic": "fiction",
+  "title": "Cobra Canyon",
+  "period": {
+    "label": "late-1960s-early-1970s",
+    "fictional": true,
+    "setting": "fictional tropical highland basin"
+  },
+  "coordinateFrame": {
+    "id": "frame.cobra-canyon.local-enu.v1",
+    "axes": ["eastM", "upM", "northM"],
+    "origin": "basin-centre"
+  },
+  "boundsLocalM": {
+    "minimumEastM": -8000,
+    "minimumNorthM": -8000,
+    "maximumEastM": 8000,
+    "maximumNorthM": 8000
+  },
+  "terrain": {
+    "model": {
+      "baseElevationM": 248,
+      "basinRadiusM": 5100,
+      "rimRiseM": 610,
+      "macroUndulationM": 52,
+      "mesoUndulationM": 26,
+      "ridgeReliefM": 152,
+      "ridgeWavelengthM": 2350,
+      "ridgeBearingRad": 0.66,
+      "crossRidgeReliefM": 82,
+      "crossRidgeWavelengthM": 1450,
+      "crossRidgeBearingRad": -0.82,
+      "gorgeRim": {
+        "innerM": 180,
+        "crestM": 660,
+        "falloffM": 2300,
+        "falloffRetain": 0.24,
+        "leftRiseM": 218,
+        "rightRiseM": 92,
+        "sideBlendM": 380
+      }
+    },
+    "ribbons": [
+      {
+        "id": "terrain-ribbon.cobra-canyon.river-gorge.v1",
+        "laneId": "route.cobra-canyon.river-gorge.v1",
+        "kind": "river-gorge",
+        "halfWidthM": 185,
+        "blendWidthM": 190,
+        "bankRiseM": 46,
+        "floorFraction": 0.66,
+        "authority": {
+          "role": "terrain-authority",
+          "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"
+        },
+        "presentationOnly": false,
+        "targetable": false,
+        "pointsLocalM": [
+          [-6500, 162, -6200],
+          [-5400, 147, -5050],
+          [-4550, 126, -3650],
+          [-3800, 108, -2100],
+          [-2750, 92, -550],
+          [-1450, 102, 1050],
+          [0, 126, 2700],
+          [1550, 151, 4100],
+          [3350, 178, 5200],
+          [5150, 210, 6020],
+          [6500, 232, 5600]
+        ]
+      },
+      {
+        "id": "terrain-ribbon.cobra-canyon.ridge-shadow.v1",
+        "laneId": "route.cobra-canyon.ridge-shadow.v1",
+        "kind": "ridge-shadow-bench",
+        "halfWidthM": 205,
+        "blendWidthM": 430,
+        "bankRiseM": 54,
+        "floorFraction": 0,
+        "authority": {
+          "role": "terrain-authority",
+          "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"
+        },
+        "presentationOnly": false,
+        "targetable": false,
+        "pointsLocalM": [
+          [-6500, 178, -6200],
+          [-6200, 258, -4500],
+          [-5700, 348, -2550],
+          [-5100, 423, -550],
+          [-4380, 472, 1500],
+          [-3300, 505, 3380],
+          [-1750, 526, 5000],
+          [250, 488, 6200],
+          [2450, 421, 6480],
+          [4400, 348, 6200],
+          [6500, 258, 5600]
+        ]
+      },
+      {
+        "id": "terrain-ribbon.cobra-canyon.road-plantation.v1",
+        "laneId": "route.cobra-canyon.road-plantation.v1",
+        "kind": "road-and-plantation-bench",
+        "halfWidthM": 235,
+        "blendWidthM": 470,
+        "bankRiseM": 24,
+        "floorFraction": 0.34,
+        "authority": {
+          "role": "terrain-authority",
+          "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"
+        },
+        "presentationOnly": false,
+        "targetable": false,
+        "pointsLocalM": [
+          [-6500, 170, -6200],
+          [-4450, 188, -5900],
+          [-2650, 203, -5220],
+          [-900, 214, -4350],
+          [950, 226, -3300],
+          [2750, 242, -1820],
+          [4100, 254, -50],
+          [5200, 250, 1970],
+          [5850, 241, 3920],
+          [6500, 232, 5600]
+        ]
+      }
+    ]
+  },
+  "routeLanes": [
+    {
+      "id": "route.cobra-canyon.river-gorge.v1",
+      "displayName": "River Gorge",
+      "flightVerb": "nap-of-earth river following and bridge underpass",
+      "recommendedAglBandM": [12, 48],
+      "authority": {
+        "role": "navigation-authority",
+        "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"
+      },
+      "presentationOnly": false,
+      "targetable": false,
+      "pathLocalM": [
+        [-6500, 162, -6200],
+        [-5400, 147, -5050],
+        [-4550, 126, -3650],
+        [-3800, 108, -2100],
+        [-2750, 92, -550],
+        [-1450, 102, 1050],
+        [0, 126, 2700],
+        [1550, 151, 4100],
+        [3350, 178, 5200],
+        [5150, 210, 6020],
+        [6500, 232, 5600]
+      ],
+      "heroCellIds": ["cell.cobra-canyon.lower-gorge.v1"],
+      "landmarkIds": [
+        "landmark.cobra-canyon.camp-ember.v1",
+        "landmark.cobra-canyon.long-fang-falls.v1",
+        "landmark.cobra-canyon.iron-bell-bridge.v1",
+        "landmark.cobra-canyon.karst-needles.v1",
+        "landmark.cobra-canyon.north-rally-smoke.v1"
+      ],
+      "hazardIds": [
+        "hazard.cobra-canyon.iron-bell-deck.v1",
+        "hazard.cobra-canyon.iron-bell-west-pier.v1",
+        "hazard.cobra-canyon.iron-bell-east-pier.v1",
+        "hazard.cobra-canyon.gorge-wire-low.v1",
+        "hazard.cobra-canyon.gorge-wire-high.v1"
+      ]
+    },
+    {
+      "id": "route.cobra-canyon.ridge-shadow.v1",
+      "displayName": "Ridge Shadow",
+      "flightVerb": "terrain masking, saddle crossing and ridge pop-up",
+      "recommendedAglBandM": [18, 62],
+      "authority": {
+        "role": "navigation-authority",
+        "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"
+      },
+      "presentationOnly": false,
+      "targetable": false,
+      "pathLocalM": [
+        [-6500, 178, -6200],
+        [-6200, 258, -4500],
+        [-5700, 348, -2550],
+        [-5100, 423, -550],
+        [-4380, 472, 1500],
+        [-3300, 505, 3380],
+        [-1750, 526, 5000],
+        [250, 488, 6200],
+        [2450, 421, 6480],
+        [4400, 348, 6200],
+        [6500, 258, 5600]
+      ],
+      "heroCellIds": ["cell.cobra-canyon.split-tooth-ridge.v1"],
+      "landmarkIds": [
+        "landmark.cobra-canyon.camp-ember.v1",
+        "landmark.cobra-canyon.split-tooth-ridge.v1",
+        "landmark.cobra-canyon.white-pagoda.v1",
+        "landmark.cobra-canyon.ridge-radio-mast.v1",
+        "landmark.cobra-canyon.north-rally-smoke.v1"
+      ],
+      "hazardIds": [
+        "hazard.cobra-canyon.ridge-radio-mast.v1",
+        "hazard.cobra-canyon.ridge-guy-west.v1",
+        "hazard.cobra-canyon.ridge-guy-east.v1",
+        "hazard.cobra-canyon.saddle-wire-low.v1",
+        "hazard.cobra-canyon.saddle-wire-high.v1"
+      ]
+    },
+    {
+      "id": "route.cobra-canyon.road-plantation.v1",
+      "displayName": "Road and Plantation",
+      "flightVerb": "road following, plantation masking and quarry break",
+      "recommendedAglBandM": [10, 44],
+      "authority": {
+        "role": "navigation-authority",
+        "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"
+      },
+      "presentationOnly": false,
+      "targetable": false,
+      "pathLocalM": [
+        [-6500, 170, -6200],
+        [-4450, 188, -5900],
+        [-2650, 203, -5220],
+        [-900, 214, -4350],
+        [950, 226, -3300],
+        [2750, 242, -1820],
+        [4100, 254, -50],
+        [5200, 250, 1970],
+        [5850, 241, 3920],
+        [6500, 232, 5600]
+      ],
+      "heroCellIds": ["cell.cobra-canyon.red-earth-plantation.v1"],
+      "landmarkIds": [
+        "landmark.cobra-canyon.camp-ember.v1",
+        "landmark.cobra-canyon.plantation-water-tower.v1",
+        "landmark.cobra-canyon.red-earth-quarry.v1",
+        "landmark.cobra-canyon.plantation-mill-stack.v1",
+        "landmark.cobra-canyon.north-rally-smoke.v1"
+      ],
+      "hazardIds": [
+        "hazard.cobra-canyon.plantation-wire-one.v1",
+        "hazard.cobra-canyon.plantation-wire-two.v1",
+        "hazard.cobra-canyon.plantation-wire-three.v1",
+        "hazard.cobra-canyon.plantation-water-tower.v1"
+      ]
+    }
+  ],
+  "heroCells": [
+    {
+      "id": "cell.cobra-canyon.lower-gorge.v1",
+      "displayName": "Lower Gorge and Iron Bell Crossing",
+      "boundsLocalM": [-4700, -2350, -1750, 1050],
+      "terrainPatch": {
+        "centerLocalM": [-3150, 112, -650],
+        "radiusM": 340,
+        "blendWidthM": 250,
+        "undulationM": 8
+      },
+      "authority": {
+        "role": "world-cell-authority",
+        "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"
+      },
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "cell.cobra-canyon.split-tooth-ridge.v1",
+      "displayName": "Split Tooth Ridge and White Pagoda",
+      "boundsLocalM": [-5350, 350, -2450, 3750],
+      "terrainPatch": {
+        "centerLocalM": [-3850, 482, 2050],
+        "radiusM": 560,
+        "blendWidthM": 300,
+        "undulationM": 11
+      },
+      "authority": {
+        "role": "world-cell-authority",
+        "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"
+      },
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "cell.cobra-canyon.red-earth-plantation.v1",
+      "displayName": "Red Earth Plantation and Quarry Road",
+      "boundsLocalM": [-1450, -5350, 2450, -2350],
+      "terrainPatch": {
+        "centerLocalM": [350, 224, -3850],
+        "radiusM": 780,
+        "blendWidthM": 380,
+        "undulationM": 6
+      },
+      "authority": {
+        "role": "world-cell-authority",
+        "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"
+      },
+      "presentationOnly": false,
+      "targetable": false
+    }
+  ],
+  "landmarks": [
+    {
+      "id": "landmark.cobra-canyon.camp-ember.v1",
+      "kind": "forward-operating-base",
+      "displayName": "Camp Ember",
+      "positionLocalM": [-6500, 190, -6200],
+      "silhouette": "three-pad red-earth spur with signal mast",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "authority": {"role": "navigation-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "landmark.cobra-canyon.long-fang-falls.v1",
+      "kind": "waterfall",
+      "displayName": "Long Fang Falls",
+      "positionLocalM": [-4450, 236, -3380],
+      "silhouette": "white water ribbon below a black basalt notch",
+      "visualBandId": "band.cobra-canyon.structural.v1",
+      "authority": {"role": "navigation-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "landmark.cobra-canyon.iron-bell-bridge.v1",
+      "kind": "steel-truss-bridge",
+      "displayName": "Iron Bell Bridge",
+      "positionLocalM": [-2710, 146, -500],
+      "silhouette": "rust-red single-span truss across the gorge",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "authority": {"role": "navigation-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "landmark.cobra-canyon.karst-needles.v1",
+      "kind": "rock-spires",
+      "displayName": "Karst Needles",
+      "positionLocalM": [180, 440, 2880],
+      "silhouette": "three pale limestone blades",
+      "visualBandId": "band.cobra-canyon.structural.v1",
+      "authority": {"role": "navigation-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "landmark.cobra-canyon.split-tooth-ridge.v1",
+      "kind": "ridge-gate",
+      "displayName": "Split Tooth",
+      "positionLocalM": [-4380, 626, 1530],
+      "silhouette": "forked ridge gate visible across the basin",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "authority": {"role": "navigation-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "landmark.cobra-canyon.white-pagoda.v1",
+      "kind": "hill-pagoda",
+      "displayName": "White Pagoda",
+      "positionLocalM": [-3500, 552, 3050],
+      "silhouette": "small white stepped roof on a dark saddle",
+      "visualBandId": "band.cobra-canyon.structural.v1",
+      "authority": {"role": "navigation-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "landmark.cobra-canyon.ridge-radio-mast.v1",
+      "kind": "radio-mast",
+      "displayName": "Ridge Radio Mast",
+      "positionLocalM": [-1760, 610, 4980],
+      "silhouette": "needle mast with three guy lines",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "authority": {"role": "navigation-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "landmark.cobra-canyon.plantation-water-tower.v1",
+      "kind": "water-tower",
+      "displayName": "Plantation Water Tower",
+      "positionLocalM": [300, 271, -3920],
+      "silhouette": "four-legged cylindrical tank above the canopy",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "authority": {"role": "navigation-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "landmark.cobra-canyon.red-earth-quarry.v1",
+      "kind": "open-quarry",
+      "displayName": "Red Earth Quarry",
+      "positionLocalM": [2720, 270, -1740],
+      "silhouette": "terraced vermilion bowl cut into green highland",
+      "visualBandId": "band.cobra-canyon.structural.v1",
+      "authority": {"role": "navigation-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "landmark.cobra-canyon.plantation-mill-stack.v1",
+      "kind": "mill-chimney",
+      "displayName": "Plantation Mill Stack",
+      "positionLocalM": [4120, 312, -120],
+      "silhouette": "single soot-dark chimney over low tin roofs",
+      "visualBandId": "band.cobra-canyon.structural.v1",
+      "authority": {"role": "navigation-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "landmark.cobra-canyon.north-rally-smoke.v1",
+      "kind": "signal-smoke",
+      "displayName": "North Rally Smoke",
+      "positionLocalM": [6500, 246, 5600],
+      "silhouette": "thin amber smoke above a river bend",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "authority": {"role": "navigation-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    }
+  ],
+  "hazards": [
+    {
+      "id": "hazard.cobra-canyon.iron-bell-deck.v1",
+      "kind": "bridge-deck",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {"shape": "aabb", "minimumLocalM": [-2775, 142, -516], "maximumLocalM": [-2645, 150, -484]},
+      "authority": {"role": "collision-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "hazard.cobra-canyon.iron-bell-west-pier.v1",
+      "kind": "bridge-pier",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {"shape": "aabb", "minimumLocalM": [-2771, 96, -515], "maximumLocalM": [-2757, 144, -485]},
+      "authority": {"role": "collision-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "hazard.cobra-canyon.iron-bell-east-pier.v1",
+      "kind": "bridge-pier",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {"shape": "aabb", "minimumLocalM": [-2663, 96, -515], "maximumLocalM": [-2649, 144, -485]},
+      "authority": {"role": "collision-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "hazard.cobra-canyon.gorge-wire-low.v1",
+      "kind": "power-wire",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {"shape": "capsuleSegment", "fromLocalM": [-1660, 139, 795], "toLocalM": [-1260, 139, 1115], "radiusM": 0.22},
+      "authority": {"role": "collision-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "hazard.cobra-canyon.gorge-wire-high.v1",
+      "kind": "power-wire",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {"shape": "capsuleSegment", "fromLocalM": [-1658, 145, 792], "toLocalM": [-1258, 145, 1112], "radiusM": 0.22},
+      "authority": {"role": "collision-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "hazard.cobra-canyon.ridge-radio-mast.v1",
+      "kind": "radio-mast",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {"shape": "capsuleSegment", "fromLocalM": [-1760, 548, 4980], "toLocalM": [-1760, 616, 4980], "radiusM": 0.65},
+      "authority": {"role": "collision-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "hazard.cobra-canyon.ridge-guy-west.v1",
+      "kind": "guy-wire",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {"shape": "capsuleSegment", "fromLocalM": [-1760, 606, 4980], "toLocalM": [-1818, 548, 4938], "radiusM": 0.16},
+      "authority": {"role": "collision-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "hazard.cobra-canyon.ridge-guy-east.v1",
+      "kind": "guy-wire",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {"shape": "capsuleSegment", "fromLocalM": [-1760, 606, 4980], "toLocalM": [-1701, 548, 5021], "radiusM": 0.16},
+      "authority": {"role": "collision-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "hazard.cobra-canyon.saddle-wire-low.v1",
+      "kind": "power-wire",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {"shape": "capsuleSegment", "fromLocalM": [-3600, 552, 3010], "toLocalM": [-3235, 552, 3290], "radiusM": 0.2},
+      "authority": {"role": "collision-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "hazard.cobra-canyon.saddle-wire-high.v1",
+      "kind": "power-wire",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {"shape": "capsuleSegment", "fromLocalM": [-3598, 559, 3007], "toLocalM": [-3233, 559, 3287], "radiusM": 0.2},
+      "authority": {"role": "collision-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "hazard.cobra-canyon.plantation-wire-one.v1",
+      "kind": "utility-wire",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {"shape": "capsuleSegment", "fromLocalM": [565, 246, -3620], "toLocalM": [850, 246, -3270], "radiusM": 0.18},
+      "authority": {"role": "collision-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "hazard.cobra-canyon.plantation-wire-two.v1",
+      "kind": "utility-wire",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {"shape": "capsuleSegment", "fromLocalM": [570, 251, -3624], "toLocalM": [855, 251, -3274], "radiusM": 0.18},
+      "authority": {"role": "collision-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "hazard.cobra-canyon.plantation-wire-three.v1",
+      "kind": "utility-wire",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {"shape": "capsuleSegment", "fromLocalM": [575, 256, -3628], "toLocalM": [860, 256, -3278], "radiusM": 0.18},
+      "authority": {"role": "collision-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "hazard.cobra-canyon.plantation-water-tower.v1",
+      "kind": "water-tower",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {"shape": "aabb", "minimumLocalM": [291, 224, -3929], "maximumLocalM": [309, 272, -3911]},
+      "authority": {"role": "collision-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    }
+  ],
+  "visualBands": [
+    {
+      "id": "band.cobra-canyon.critical.v1",
+      "kind": "critical",
+      "loadRangeM": 12000,
+      "shedRank": 0,
+      "authority": {"role": "streaming-policy-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "band.cobra-canyon.structural.v1",
+      "kind": "structural",
+      "loadRangeM": 7000,
+      "shedRank": 1,
+      "authority": {"role": "streaming-policy-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "band.cobra-canyon.ambient.v1",
+      "kind": "ambient",
+      "loadRangeM": 1800,
+      "shedRank": 3,
+      "authority": {"role": "streaming-policy-authority", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": false,
+      "targetable": false
+    }
+  ],
+  "ambientBatches": [
+    {
+      "id": "ambient.cobra-canyon.gorge-riparian.v1",
+      "kind": "riparian-canopy",
+      "archetype": "procedural://cobra-vietnam/riparian-stand",
+      "boundsLocalM": [-7000, -7000, 6400, 6400],
+      "visualBandId": "band.cobra-canyon.ambient.v1",
+      "priority": 1,
+      "instancesByQuality": {"mobile": 114, "balanced": 168, "desktop": 252},
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "ambient.cobra-canyon.ridge-bamboo.v1",
+      "kind": "bamboo-and-scrub",
+      "archetype": "procedural://cobra-vietnam/bamboo-clump",
+      "boundsLocalM": [-6500, -1000, -900, 6100],
+      "visualBandId": "band.cobra-canyon.ambient.v1",
+      "priority": 1,
+      "instancesByQuality": {"mobile": 48, "balanced": 72, "desktop": 150},
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "ambient.cobra-canyon.plantation-rows.v1",
+      "kind": "plantation-rows",
+      "archetype": "procedural://cobra-vietnam/plantation-row",
+      "boundsLocalM": [-1900, -5900, 3000, -2100],
+      "visualBandId": "band.cobra-canyon.ambient.v1",
+      "priority": 1,
+      "instancesByQuality": {"mobile": 34, "balanced": 66, "desktop": 128},
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "ambient.cobra-canyon.west-canopy-mass.v1",
+      "kind": "highland-canopy",
+      "archetype": "procedural://cobra-vietnam/canopy-mass",
+      "boundsLocalM": [-8000, -8000, -900, 8000],
+      "visualBandId": "band.cobra-canyon.ambient.v1",
+      "priority": 2,
+      "instancesByQuality": {"mobile": 92, "balanced": 206, "desktop": 352},
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "ambient.cobra-canyon.east-canopy-mass.v1",
+      "kind": "highland-canopy",
+      "archetype": "procedural://cobra-vietnam/canopy-mass",
+      "boundsLocalM": [900, -8000, 8000, 8000],
+      "visualBandId": "band.cobra-canyon.ambient.v1",
+      "priority": 2,
+      "instancesByQuality": {"mobile": 92, "balanced": 178, "desktop": 352},
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "ambient.cobra-canyon.gorge-village-compounds.v1",
+      "kind": "village-compounds",
+      "archetype": "procedural://cobra-vietnam/timber-tin-compound",
+      "boundsLocalM": [-4300, -2100, -1800, 750],
+      "visualBandId": "band.cobra-canyon.structural.v1",
+      "priority": 2,
+      "instancesByQuality": {"mobile": 20, "balanced": 36, "desktop": 64},
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "ambient.cobra-canyon.paddy-mirrors.v1",
+      "kind": "paddy-mirrors",
+      "archetype": "procedural://cobra-vietnam/paddy-strip",
+      "boundsLocalM": [-3600, -1200, 450, 2500],
+      "visualBandId": "band.cobra-canyon.ambient.v1",
+      "priority": 3,
+      "instancesByQuality": {"mobile": 0, "balanced": 48, "desktop": 80},
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "ambient.cobra-canyon.quarry-scrub.v1",
+      "kind": "quarry-scrub",
+      "archetype": "procedural://cobra-vietnam/red-earth-scrub",
+      "boundsLocalM": [1800, -2600, 3550, -800],
+      "visualBandId": "band.cobra-canyon.ambient.v1",
+      "priority": 3,
+      "instancesByQuality": {"mobile": 0, "balanced": 36, "desktop": 60},
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "ambient.cobra-canyon.road-verge.v1",
+      "kind": "road-verge-clutter",
+      "archetype": "procedural://cobra-vietnam/road-verge",
+      "boundsLocalM": [-4700, -6100, 6100, 4300],
+      "visualBandId": "band.cobra-canyon.ambient.v1",
+      "priority": 3,
+      "instancesByQuality": {"mobile": 0, "balanced": 32, "desktop": 54},
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "ambient.cobra-canyon.ridge-grass.v1",
+      "kind": "ridge-grass",
+      "archetype": "procedural://cobra-vietnam/ridge-grass-patch",
+      "boundsLocalM": [-6000, 500, 4700, 7100],
+      "visualBandId": "band.cobra-canyon.ambient.v1",
+      "priority": 4,
+      "instancesByQuality": {"mobile": 0, "balanced": 0, "desktop": 42},
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "ambient.cobra-canyon.river-mist.v1",
+      "kind": "river-mist",
+      "archetype": "procedural://cobra-vietnam/mist-card",
+      "boundsLocalM": [-7000, -6600, 1800, 3600],
+      "visualBandId": "band.cobra-canyon.ambient.v1",
+      "priority": 3,
+      "instancesByQuality": {"mobile": 0, "balanced": 18, "desktop": 36},
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "ambient.cobra-canyon.fence-and-cart-clutter.v1",
+      "kind": "village-clutter",
+      "archetype": "procedural://cobra-vietnam/fence-cart-cluster",
+      "boundsLocalM": [-4200, -2050, 4300, 700],
+      "visualBandId": "band.cobra-canyon.ambient.v1",
+      "priority": 4,
+      "instancesByQuality": {"mobile": 0, "balanced": 0, "desktop": 30},
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    }
+  ],
+  "presentationKit": {
+    "schema": "cobra.canyon.presentation-kit.v1",
+    "ambientArchetypes": [
+      {
+        "id": "archetype.cobra-canyon.jungle-canopy.v1",
+        "sourceKind": "procedural-modular",
+        "renderRole": "jungle",
+        "paletteHex": ["#33512F", "#456539", "#5A7748", "#77855C"],
+        "scaleM": {"width": 26, "height": 32, "depth": 22},
+        "routeAffinity": [
+          "route.cobra-canyon.river-gorge.v1",
+          "route.cobra-canyon.ridge-shadow.v1"
+        ],
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.jungle-understory.v1",
+        "sourceKind": "procedural-modular",
+        "renderRole": "jungle",
+        "paletteHex": ["#3A5433", "#4E6841", "#6A7550"],
+        "scaleM": {"width": 9, "height": 6, "depth": 8},
+        "routeAffinity": [
+          "route.cobra-canyon.river-gorge.v1",
+          "route.cobra-canyon.ridge-shadow.v1",
+          "route.cobra-canyon.road-plantation.v1"
+        ],
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.plantation-row.v1",
+        "sourceKind": "procedural-ribbon",
+        "renderRole": "plantation",
+        "paletteHex": ["#3A5334", "#4C6B45", "#8A6B4A"],
+        "scaleM": {"width": 8, "height": 18, "depth": 120},
+        "routeAffinity": ["route.cobra-canyon.road-plantation.v1"],
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.village-compound.v1",
+        "sourceKind": "procedural-modular",
+        "renderRole": "village",
+        "paletteHex": ["#806C50", "#A18C68", "#594C3C", "#A05A3F"],
+        "scaleM": {"width": 34, "height": 9, "depth": 28},
+        "routeAffinity": [
+          "route.cobra-canyon.river-gorge.v1",
+          "route.cobra-canyon.road-plantation.v1"
+        ],
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.village-hut.v1",
+        "sourceKind": "procedural-modular",
+        "renderRole": "village",
+        "paletteHex": ["#796649", "#9B835D", "#52473A", "#8B4D36"],
+        "scaleM": {"width": 9, "height": 6, "depth": 7},
+        "routeAffinity": [
+          "route.cobra-canyon.river-gorge.v1",
+          "route.cobra-canyon.road-plantation.v1"
+        ],
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.paddy-mirror.v1",
+        "sourceKind": "procedural-ribbon",
+        "renderRole": "paddy",
+        "paletteHex": ["#61766D", "#80958A", "#95845A"],
+        "scaleM": {"width": 80, "height": 0.15, "depth": 55},
+        "routeAffinity": [
+          "route.cobra-canyon.river-gorge.v1",
+          "route.cobra-canyon.road-plantation.v1"
+        ],
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.paddy-berm.v1",
+        "sourceKind": "procedural-ribbon",
+        "renderRole": "paddy",
+        "paletteHex": ["#63593A", "#7A7047", "#485235"],
+        "scaleM": {"width": 2, "height": 0.8, "depth": 24},
+        "routeAffinity": [
+          "route.cobra-canyon.river-gorge.v1",
+          "route.cobra-canyon.road-plantation.v1"
+        ],
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.karst-spire.v1",
+        "sourceKind": "procedural-modular",
+        "renderRole": "rock",
+        "paletteHex": ["#5E6154", "#74786B", "#929486", "#394333"],
+        "scaleM": {"width": 28, "height": 90, "depth": 24},
+        "routeAffinity": [
+          "route.cobra-canyon.river-gorge.v1",
+          "route.cobra-canyon.ridge-shadow.v1"
+        ],
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.rock-scatter.v1",
+        "sourceKind": "procedural-modular",
+        "renderRole": "rock",
+        "paletteHex": ["#56594F", "#6D6A5A", "#8A765F"],
+        "scaleM": {"width": 12, "height": 8, "depth": 10},
+        "routeAffinity": [
+          "route.cobra-canyon.river-gorge.v1",
+          "route.cobra-canyon.ridge-shadow.v1",
+          "route.cobra-canyon.road-plantation.v1"
+        ],
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.river-mist.v1",
+        "sourceKind": "shader-card",
+        "renderRole": "mist",
+        "paletteHex": ["#C6CEC4", "#E1E4D9"],
+        "scaleM": {"width": 24, "height": 6.0, "depth": 14},
+        "routeAffinity": ["route.cobra-canyon.river-gorge.v1"],
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.water-riffle.v1",
+        "sourceKind": "shader-accent",
+        "renderRole": "water-accent",
+        "paletteHex": ["#718A83", "#9BAFA6", "#D5D8C9"],
+        "scaleM": {"width": 40, "height": 0.05, "depth": 8},
+        "routeAffinity": ["route.cobra-canyon.river-gorge.v1"],
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      }
+    ],
+    "landmarkArchetypes": [
+      {
+        "id": "archetype.cobra-canyon.landmark-camp.v1",
+        "authoredKind": "forward-operating-base",
+        "sourceKind": "procedural-set-piece",
+        "renderRole": "camp",
+        "paletteHex": ["#8C5D3D", "#6B7351", "#A18A65"],
+        "scaleM": {"width": 180, "height": 16, "depth": 140},
+        "anchorMode": "base",
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.landmark-waterfall.v1",
+        "authoredKind": "waterfall",
+        "sourceKind": "shader-accent",
+        "renderRole": "waterfall",
+        "paletteHex": ["#DCE3D9", "#8EA7A0", "#303A35"],
+        "scaleM": {"width": 30, "height": 120, "depth": 10},
+        "anchorMode": "top",
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.landmark-bridge.v1",
+        "authoredKind": "steel-truss-bridge",
+        "sourceKind": "procedural-set-piece",
+        "renderRole": "bridge",
+        "paletteHex": ["#7B3F2E", "#4C4A42", "#9A7250"],
+        "scaleM": {"width": 130, "height": 24, "depth": 32},
+        "anchorMode": "centre",
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.landmark-karst.v1",
+        "authoredKind": "rock-spires",
+        "sourceKind": "procedural-set-piece",
+        "renderRole": "karst-gate",
+        "paletteHex": ["#676C60", "#898D80", "#394637"],
+        "scaleM": {"width": 150, "height": 210, "depth": 110},
+        "anchorMode": "top",
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.landmark-ridge-gate.v1",
+        "authoredKind": "ridge-gate",
+        "sourceKind": "procedural-set-piece",
+        "renderRole": "ridge-gate",
+        "paletteHex": ["#3D4939", "#5B5F4C", "#77715A"],
+        "scaleM": {"width": 360, "height": 150, "depth": 140},
+        "anchorMode": "top",
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.landmark-pagoda.v1",
+        "authoredKind": "hill-pagoda",
+        "sourceKind": "procedural-set-piece",
+        "renderRole": "pagoda",
+        "paletteHex": ["#D7D2BC", "#793F32", "#34382F"],
+        "scaleM": {"width": 24, "height": 24, "depth": 24},
+        "anchorMode": "top",
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.landmark-radio-mast.v1",
+        "authoredKind": "radio-mast",
+        "sourceKind": "procedural-set-piece",
+        "renderRole": "mast",
+        "paletteHex": ["#8A8A7A", "#C15B3B"],
+        "scaleM": {"width": 4, "height": 68, "depth": 4},
+        "anchorMode": "top",
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.landmark-water-tower.v1",
+        "authoredKind": "water-tower",
+        "sourceKind": "procedural-set-piece",
+        "renderRole": "water-tower",
+        "paletteHex": ["#6B765F", "#A57E55", "#4C5148"],
+        "scaleM": {"width": 18, "height": 48, "depth": 18},
+        "anchorMode": "top",
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.landmark-quarry.v1",
+        "authoredKind": "open-quarry",
+        "sourceKind": "procedural-set-piece",
+        "renderRole": "quarry",
+        "paletteHex": ["#9A5B3D", "#B16D46", "#755345"],
+        "scaleM": {"width": 520, "height": 80, "depth": 360},
+        "anchorMode": "centre",
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.landmark-mill-stack.v1",
+        "authoredKind": "mill-chimney",
+        "sourceKind": "procedural-set-piece",
+        "renderRole": "mill-stack",
+        "paletteHex": ["#4B443C", "#85705A", "#9A6548"],
+        "scaleM": {"width": 10, "height": 60, "depth": 10},
+        "anchorMode": "top",
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      },
+      {
+        "id": "archetype.cobra-canyon.landmark-signal-smoke.v1",
+        "authoredKind": "signal-smoke",
+        "sourceKind": "shader-card",
+        "renderRole": "signal-smoke",
+        "paletteHex": ["#C8843D", "#D7A861", "#5B5549"],
+        "scaleM": {"width": 20, "height": 120, "depth": 20},
+        "anchorMode": "base",
+        "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+        "presentationOnly": true,
+        "targetable": false
+      }
+    ]
+  },
+  "setPieceCells": [
+    {
+      "id": "set-piece.cobra-canyon.camp-ember-pad.v1",
+      "kind": "fob-pad-dressing",
+      "displayName": "Camp Ember pad",
+      "routeId": "route.cobra-canyon.river-gorge.v1",
+      "distanceAlongRouteM": 0,
+      "approachLocalM": [-6500, 162, -6200],
+      "anchorLocalM": [-6500, 190, -6200],
+      "boundsLocalM": [-6900, -6600, -6100, -5800],
+      "archetypeIds": [
+        "archetype.cobra-canyon.landmark-camp.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1",
+        "archetype.cobra-canyon.rock-scatter.v1"
+      ],
+      "landmarkIds": ["landmark.cobra-canyon.camp-ember.v1"],
+      "hazardIds": [],
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "set-piece.cobra-canyon.long-fang-village.v1",
+      "kind": "waterfall-village",
+      "displayName": "Long Fang terraces",
+      "routeId": "route.cobra-canyon.river-gorge.v1",
+      "distanceAlongRouteM": 3516,
+      "approachLocalM": [-4557, 126, -3661],
+      "anchorLocalM": [-4450, 236, -3380],
+      "boundsLocalM": [-4850, -3800, -4050, -2950],
+      "archetypeIds": [
+        "archetype.cobra-canyon.village-compound.v1",
+        "archetype.cobra-canyon.village-hut.v1",
+        "archetype.cobra-canyon.paddy-mirror.v1",
+        "archetype.cobra-canyon.paddy-berm.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
+        "archetype.cobra-canyon.river-mist.v1",
+        "archetype.cobra-canyon.jungle-understory.v1"
+      ],
+      "landmarkIds": ["landmark.cobra-canyon.long-fang-falls.v1"],
+      "hazardIds": [],
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "set-piece.cobra-canyon.iron-bell-crossing.v1",
+      "kind": "bridge-underpass",
+      "displayName": "Iron Bell crossing",
+      "routeId": "route.cobra-canyon.river-gorge.v1",
+      "distanceAlongRouteM": 6887,
+      "approachLocalM": [-2883, 94, -746],
+      "anchorLocalM": [-2710, 146, -500],
+      "boundsLocalM": [-3200, -950, -2200, 0],
+      "archetypeIds": [
+        "archetype.cobra-canyon.landmark-bridge.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
+        "archetype.cobra-canyon.rock-scatter.v1",
+        "archetype.cobra-canyon.water-riffle.v1",
+        "archetype.cobra-canyon.river-mist.v1",
+        "archetype.cobra-canyon.jungle-understory.v1"
+      ],
+      "landmarkIds": ["landmark.cobra-canyon.iron-bell-bridge.v1"],
+      "hazardIds": [
+        "hazard.cobra-canyon.iron-bell-deck.v1",
+        "hazard.cobra-canyon.iron-bell-west-pier.v1",
+        "hazard.cobra-canyon.iron-bell-east-pier.v1"
+      ],
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "set-piece.cobra-canyon.karst-riffle-gate.v1",
+      "kind": "karst-river-gate",
+      "displayName": "Karst Needle riffles",
+      "routeId": "route.cobra-canyon.river-gorge.v1",
+      "distanceAlongRouteM": 11336,
+      "approachLocalM": [-30, 126, 2666],
+      "anchorLocalM": [180, 440, 2880],
+      "boundsLocalM": [-400, 2400, 700, 3400],
+      "archetypeIds": [
+        "archetype.cobra-canyon.landmark-karst.v1",
+        "archetype.cobra-canyon.karst-spire.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
+        "archetype.cobra-canyon.rock-scatter.v1",
+        "archetype.cobra-canyon.river-mist.v1",
+        "archetype.cobra-canyon.water-riffle.v1",
+        "archetype.cobra-canyon.jungle-understory.v1"
+      ],
+      "landmarkIds": ["landmark.cobra-canyon.karst-needles.v1"],
+      "hazardIds": [],
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "set-piece.cobra-canyon.split-tooth-gate.v1",
+      "kind": "ridge-pop-up-gate",
+      "displayName": "Split Tooth gate",
+      "routeId": "route.cobra-canyon.ridge-shadow.v1",
+      "distanceAlongRouteM": 8026,
+      "approachLocalM": [-4471, 466, 1241],
+      "anchorLocalM": [-4380, 626, 1530],
+      "boundsLocalM": [-4750, 1100, -4000, 2000],
+      "archetypeIds": [
+        "archetype.cobra-canyon.landmark-ridge-gate.v1",
+        "archetype.cobra-canyon.karst-spire.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1",
+        "archetype.cobra-canyon.rock-scatter.v1"
+      ],
+      "landmarkIds": ["landmark.cobra-canyon.split-tooth-ridge.v1"],
+      "hazardIds": [],
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "set-piece.cobra-canyon.white-pagoda-saddle.v1",
+      "kind": "pagoda-wire-saddle",
+      "displayName": "White Pagoda saddle",
+      "routeId": "route.cobra-canyon.ridge-shadow.v1",
+      "distanceAlongRouteM": 9783,
+      "approachLocalM": [-3641, 495, 2786],
+      "anchorLocalM": [-3500, 552, 3050],
+      "boundsLocalM": [-3900, 2600, -3150, 3450],
+      "archetypeIds": [
+        "archetype.cobra-canyon.landmark-pagoda.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
+        "archetype.cobra-canyon.rock-scatter.v1",
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1"
+      ],
+      "landmarkIds": ["landmark.cobra-canyon.white-pagoda.v1"],
+      "hazardIds": [
+        "hazard.cobra-canyon.saddle-wire-low.v1",
+        "hazard.cobra-canyon.saddle-wire-high.v1"
+      ],
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "set-piece.cobra-canyon.radio-mast-spur.v1",
+      "kind": "guyed-mast-spur",
+      "displayName": "Radio Mast spur",
+      "routeId": "route.cobra-canyon.ridge-shadow.v1",
+      "distanceAlongRouteM": 12389,
+      "approachLocalM": [-1972, 523, 4768],
+      "anchorLocalM": [-1760, 610, 4980],
+      "boundsLocalM": [-2100, 4550, -1450, 5300],
+      "archetypeIds": [
+        "archetype.cobra-canyon.landmark-radio-mast.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
+        "archetype.cobra-canyon.rock-scatter.v1",
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1"
+      ],
+      "landmarkIds": ["landmark.cobra-canyon.ridge-radio-mast.v1"],
+      "hazardIds": [
+        "hazard.cobra-canyon.ridge-radio-mast.v1",
+        "hazard.cobra-canyon.ridge-guy-west.v1",
+        "hazard.cobra-canyon.ridge-guy-east.v1"
+      ],
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "set-piece.cobra-canyon.plantation-waterworks.v1",
+      "kind": "plantation-paddy-waterworks",
+      "displayName": "Plantation waterworks",
+      "routeId": "route.cobra-canyon.road-plantation.v1",
+      "distanceAlongRouteM": 7206,
+      "approachLocalM": [-69, 219, -3878],
+      "anchorLocalM": [300, 271, -3920],
+      "boundsLocalM": [-600, -4500, 1150, -3200],
+      "archetypeIds": [
+        "archetype.cobra-canyon.landmark-water-tower.v1",
+        "archetype.cobra-canyon.plantation-row.v1",
+        "archetype.cobra-canyon.paddy-mirror.v1",
+        "archetype.cobra-canyon.paddy-berm.v1",
+        "archetype.cobra-canyon.village-hut.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1"
+      ],
+      "landmarkIds": ["landmark.cobra-canyon.plantation-water-tower.v1"],
+      "hazardIds": [
+        "hazard.cobra-canyon.plantation-wire-one.v1",
+        "hazard.cobra-canyon.plantation-wire-two.v1",
+        "hazard.cobra-canyon.plantation-wire-three.v1",
+        "hazard.cobra-canyon.plantation-water-tower.v1"
+      ],
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "set-piece.cobra-canyon.red-earth-quarry.v1",
+      "kind": "quarry-break",
+      "displayName": "Red Earth quarry break",
+      "routeId": "route.cobra-canyon.road-plantation.v1",
+      "distanceAlongRouteM": 10453,
+      "approachLocalM": [2553, 240, -1982],
+      "anchorLocalM": [2720, 270, -1740],
+      "boundsLocalM": [2150, -2300, 3350, -1100],
+      "archetypeIds": [
+        "archetype.cobra-canyon.landmark-quarry.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
+        "archetype.cobra-canyon.rock-scatter.v1",
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1"
+      ],
+      "landmarkIds": ["landmark.cobra-canyon.red-earth-quarry.v1"],
+      "hazardIds": [],
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
+      "id": "set-piece.cobra-canyon.mill-village.v1",
+      "kind": "roadside-mill-village",
+      "displayName": "Mill Stack village",
+      "routeId": "route.cobra-canyon.road-plantation.v1",
+      "distanceAlongRouteM": 12590,
+      "approachLocalM": [3891, 252, -323],
+      "anchorLocalM": [4120, 312, -120],
+      "boundsLocalM": [3600, -650, 4600, 500],
+      "archetypeIds": [
+        "archetype.cobra-canyon.landmark-mill-stack.v1",
+        "archetype.cobra-canyon.village-compound.v1",
+        "archetype.cobra-canyon.village-hut.v1",
+        "archetype.cobra-canyon.plantation-row.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1"
+      ],
+      "landmarkIds": ["landmark.cobra-canyon.plantation-mill-stack.v1"],
+      "hazardIds": [],
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    }
+  ],
+  "qualityBudgets": {
+    "mobile": {
+      "maxTerrainRibbons": 3,
+      "maxCells": 3,
+      "maxLandmarks": 11,
+      "maxHazards": 14,
+      "maxAmbientArchetypes": 11,
+      "maxLandmarkArchetypes": 11,
+      "maxSetPieceCells": 10,
+      "maxAmbientBatches": 6,
+      "maxAmbientInstances": 400,
+      "maxDrawCalls": 24,
+      "maxShadowCasters": 0
+    },
+    "balanced": {
+      "maxTerrainRibbons": 3,
+      "maxCells": 3,
+      "maxLandmarks": 11,
+      "maxHazards": 14,
+      "maxAmbientArchetypes": 11,
+      "maxLandmarkArchetypes": 11,
+      "maxSetPieceCells": 10,
+      "maxAmbientBatches": 10,
+      "maxAmbientInstances": 860,
+      "maxDrawCalls": 36,
+      "maxShadowCasters": 96
+    },
+    "desktop": {
+      "maxTerrainRibbons": 3,
+      "maxCells": 3,
+      "maxLandmarks": 11,
+      "maxHazards": 14,
+      "maxAmbientArchetypes": 11,
+      "maxLandmarkArchetypes": 11,
+      "maxSetPieceCells": 10,
+      "maxAmbientBatches": 12,
+      "maxAmbientInstances": 1600,
+      "maxDrawCalls": 52,
+      "maxShadowCasters": 256
+    }
+  }
+}

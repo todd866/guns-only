@@ -150,6 +150,15 @@ jobs:
           node web/wwwroot/render/hud/tests/harness/assertions.mjs 2>&1 \
             | tee "$SMOKE_ARTIFACT_DIR/hud-geometry.log"
 
+      - name: Run First Merge published-pixel integrity gate
+        if: ${{ always() && steps.publish.outcome == 'success' && steps.smoke_deps.outcome == 'success' }}
+        env:
+          FIRST_MERGE_GATE_WWWROOT: ${{ runner.temp }}/guns-only-publish/wwwroot
+          FIRST_MERGE_GATE_OUT_DIR: ${{ runner.temp }}/guns-only-smoke-artifacts/first-merge-pixel-gate
+        run: |
+          mkdir -p "$FIRST_MERGE_GATE_OUT_DIR"
+          node tools/perf/f22_first_merge_pixel_gate.mjs
+
       - name: Upload browser diagnostics
         if: ${{ always() }}
         uses: actions/upload-artifact@v6

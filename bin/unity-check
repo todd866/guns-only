@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Fail-closed gate for the Unity fork. Exit ≠ 0 means do not ship / do not play.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.dotnet}"
+export PATH="$DOTNET_ROOT:$PATH"
+
+echo "==> unity-check: unit + wire loopback"
+dotnet test unity/GunsOnly.UnityBridge.Tests/GunsOnly.UnityBridge.Tests.csproj --nologo
+
+echo "==> unity-check: host smoke (cobra-vietnam River Gorge)"
+dotnet run --project unity/GunsOnly.UnityHost -c Release --no-launch-profile -- --smoke --seconds 2
+
+ARTIFACT_APP="${ROOT}/artifacts/unity-mac/GunsOnly.app"
+HOST_BIN="${ROOT}/artifacts/unity-mac/host/GunsOnly.UnityHost"
+
+if [[ ! -d "$ARTIFACT_APP" || ! -x "$HOST_BIN" ]]; then
+  echo "==> unity-check: standalone artifact missing — run bin/unity-build"
+  echo "UNITY_CHECK_INCOMPLETE: no Mac player artifact"
+  exit 2
+fi
+
+echo "==> unity-check: standalone host binary smoke"
+"$HOST_BIN" --smoke --seconds 2
+
+echo "==> unity-check: player bundle present"
+test -x "$ARTIFACT_APP/Contents/MacOS/GunsOnly" \
+  || test -x "$ARTIFACT_APP/Contents/MacOS/"* \
+  || { echo "missing player executable inside GunsOnly.app"; exit 3; }
+
+echo "UNITY_CHECK_OK"

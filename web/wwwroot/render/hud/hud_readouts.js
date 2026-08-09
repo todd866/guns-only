@@ -374,6 +374,27 @@ export function visualMergeWeaponsCue(state = {}) {
   return null;
 }
 
+// The visual merge already owns rich steering symbology once padlock is active. The missing
+// first-run bridge was smaller: tell a new pilot how to enter that view, then name the fire input
+// when the authoritative solution arrives. Retire the path after the first registered hit so it
+// never becomes permanent tutorial chrome.
+export function visualMergeGoldenPathCue(state = {}, view = {}) {
+  if (state.visual_merge_evaluation !== true
+      || state.terminal_phase_active === true || state.finished === true
+      || state.bandit_entity_id === null
+      || Number(state.selected_target_hits) > 0
+      || state.gun_firing === true
+      || visualMergeWeaponsCue(state) !== null) return null;
+  if (state.gun_solution === true) {
+    return { text: "HOLD F · GUNS", level: "attack", step: "fire" };
+  }
+  if (view.padlock !== true) {
+    return { text: "V · PADLOCK TARGET", level: "normal", step: "padlock" };
+  }
+  // Padlock's body-fixed roll/pull director owns the middle of the path without another card.
+  return null;
+}
+
 export function fuelReadout(state = {}) {
   const measuredFuelLb = finiteNumber(state.fuel_lb);
   const fuelLb = measuredFuelLb === null ? null : Math.max(0, measuredFuelLb);

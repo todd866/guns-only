@@ -110,6 +110,14 @@ function instanceWorldBounds(mesh, instanceId) {
   };
 }
 
+function instanceGeometryWorldBounds(mesh, instanceId) {
+  mesh.geometry.computeBoundingBox();
+  const matrix = new THREE.Matrix4();
+  mesh.getMatrixAt(instanceId, matrix);
+  const box = mesh.geometry.boundingBox.clone().applyMatrix4(matrix);
+  return { minimum: box.min, maximum: box.max };
+}
+
 function collisionToSceneBounds(minimumLocalM, maximumLocalM) {
   const [minEast, minUp, minNorth] = minimumLocalM;
   const [maxEast, maxUp, maxNorth] = maximumLocalM;
@@ -221,11 +229,18 @@ test("builds the real analytical basin and stays inside every tier ceiling", () 
       COBRA_CANYON_TERRAIN_SEGMENTS[qualityTier] ** 2 * 2,
     );
     assert.ok(maximumY - minimumY > 500, `${qualityTier} needs visible basin/rim relief`);
-    // The basin runs the painted-tactical surface shader. Its ONE baked attribute is enclosure
+    // The basin runs the humid-readable surface shader. Its ONE baked attribute is enclosure
     // concavity — the only shading input a fragment cannot re-derive, because it needs the height
     // neighbourhood rather than the surface point. Everything else is per fragment, because a
     // 100 m vertex spacing cannot hold a field edge or a canopy line.
     assert.equal(basin.geometry.getAttribute("concavity").count, positions.count);
+    const normals = basin.geometry.getAttribute("normal");
+    assert.equal(normals.count, positions.count);
+    for (let index = 0; index < normals.count; index += Math.max(1, Math.floor(normals.count / 97))) {
+      const length = Math.hypot(normals.getX(index), normals.getY(index), normals.getZ(index));
+      assert.ok(Math.abs(length - 1) < 1e-5, `${qualityTier} analytic normal must be unit length`);
+      assert.ok(normals.getY(index) > 0, `${qualityTier} analytic normal must face upward`);
+    }
     assert.equal(basin.geometry.getAttribute("color"), undefined);
     assert.equal(basin.material.isShaderMaterial, true);
     assert.equal(basin.material.name, "COBRA_CANYON_BASIN_MATERIAL");
@@ -338,11 +353,20 @@ test("represents all fourteen authored hazards and never sheds them", () => {
   presentation.dispose();
 });
 
-test("Iron Bell deck and piers keep visible bounds identical to collision AABBs", () => {
+test("Iron Bell keeps collision-footprint truth while its presentation truss stays readable", () => {
   const { plan, presentation } = create("balanced");
   const deckMesh = byRole(presentation.group, "bridge-deck");
   const pierMesh = byRole(presentation.group, "bridge-pier");
-  assertUnitEnvelope(deckMesh.geometry, "bridge-deck");
+  deckMesh.geometry.computeBoundingBox();
+  const deckBox = deckMesh.geometry.boundingBox;
+  assert.ok(Math.abs(deckBox.min.x + 0.5) < 1e-6);
+  assert.ok(Math.abs(deckBox.min.y + 0.5) < 1e-6);
+  assert.ok(Math.abs(deckBox.min.z + 0.5) < 1e-6);
+  assert.ok(Math.abs(deckBox.max.x - 0.5) < 1e-6);
+  assert.ok(Math.abs(deckBox.max.y - 1.5) < 1e-6);
+  assert.ok(Math.abs(deckBox.max.z - 0.5) < 1e-6);
+  assert.equal(deckMesh.userData.cobraCanyon.visualExtendsCollisionY, true);
+  assert.equal(deckMesh.userData.cobraCanyon.collisionSource, false);
   assertUnitEnvelope(pierMesh.geometry, "bridge-pier");
   assert.notEqual(deckMesh.geometry.uuid, pierMesh.geometry.uuid);
   assert.match(deckMesh.geometry.name, /TRUSS|DECK/i);
@@ -356,12 +380,16 @@ test("Iron Bell deck and piers keep visible bounds identical to collision AABBs"
       hazard.collision.minimumLocalM,
       hazard.collision.maximumLocalM,
     );
-    const bounds = instanceWorldBounds(deckMesh, entry.instanceId);
+    const bounds = instanceGeometryWorldBounds(deckMesh, entry.instanceId);
     assert.ok(Math.abs(bounds.minimum.x - expected.minimum.x) < 1e-6);
     assert.ok(Math.abs(bounds.minimum.y - expected.minimum.y) < 1e-6);
     assert.ok(Math.abs(bounds.minimum.z - expected.minimum.z) < 1e-6);
     assert.ok(Math.abs(bounds.maximum.x - expected.maximum.x) < 1e-6);
-    assert.ok(Math.abs(bounds.maximum.y - expected.maximum.y) < 1e-6);
+    const collisionHeightM = expected.maximum.y - expected.minimum.y;
+    assert.ok(
+      Math.abs(bounds.maximum.y - (expected.maximum.y + collisionHeightM)) < 1e-4,
+      `bridge crown max y ${bounds.maximum.y} vs ${expected.maximum.y + collisionHeightM}`,
+    );
     assert.ok(Math.abs(bounds.maximum.z - expected.maximum.z) < 1e-6);
   }
   for (const entry of pierMesh.userData.cobraCanyonInstances) {

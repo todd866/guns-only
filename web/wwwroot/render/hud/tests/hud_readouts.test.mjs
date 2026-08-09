@@ -13,6 +13,7 @@ import {
   targetClosureReadout,
   targetRangeReadout,
   verticalSpeedText,
+  visualMergeGoldenPathCue,
   visualMergeWeaponsCue,
 } from "../hud_readouts.js";
 
@@ -371,6 +372,32 @@ test("visual merge weapon safety stays visible only while it changes a pilot dec
     weapons_inhibited: true,
     terminal_phase_active: true,
   }), null);
+});
+
+test("visual merge golden path reaches first hit without becoming permanent HUD prose", () => {
+  const base = {
+    visual_merge_evaluation: true,
+    bandit_entity_id: "entity.bandit.1",
+    selected_target_hits: 0,
+  };
+  assert.deepEqual(visualMergeGoldenPathCue(base, { padlock: false }), {
+    text: "V · PADLOCK TARGET",
+    level: "normal",
+    step: "padlock",
+  });
+  assert.equal(visualMergeGoldenPathCue(base, { padlock: true }), null,
+    "the existing padlock roll/pull director owns the manoeuvre stage");
+  assert.deepEqual(visualMergeGoldenPathCue({ ...base, gun_solution: true }, { padlock: true }), {
+    text: "HOLD F · GUNS",
+    level: "attack",
+    step: "fire",
+  });
+  assert.equal(visualMergeGoldenPathCue({ ...base, selected_target_hits: 1 }), null);
+  assert.equal(visualMergeGoldenPathCue({ ...base, gun_firing: true }), null);
+  assert.equal(visualMergeGoldenPathCue({ ...base, weapons_inhibited: true }), null,
+    "the first-pass safety cue owns this stage");
+  assert.equal(visualMergeGoldenPathCue({ ...base, terminal_phase_active: true }), null);
+  assert.equal(visualMergeGoldenPathCue({ ...base, finished: true }), null);
 });
 
 test("powered fuel readout uses USAF pounds per hour and time to bingo", () => {

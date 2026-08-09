@@ -1,9 +1,11 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=298";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=299";
 import {
+  FOLIAGE_UV_BAMBOO,
+  FOLIAGE_UV_HARDWOOD,
   FOLIAGE_UV_PALM,
-  FOLIAGE_UV_UNDERSTORY,
+  FOLIAGE_UV_SCRUB,
   createSyntheticFoliageAtlasTexture,
-} from "./cobra_canyon_foliage.js?v=298";
+} from "./cobra_canyon_foliage.js?v=299";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -527,7 +529,7 @@ function allocateQuotas(batches, target) {
   return quotas;
 }
 
-function waterAccentPlacements(plan, qualityTier, descriptors) {
+function waterAccentPlacements(plan, qualityTier, descriptors, groundAt) {
   const maximum = qualityTier === "mobile" ? 16 : qualityTier === "desktop" ? 30 : 24;
   const river = plan.terrainRibbons.find((ribbon) => token(ribbon.kind).includes("river"));
   if (!river) return [];
@@ -562,7 +564,7 @@ function waterAccentPlacements(plan, qualityTier, descriptors) {
       id: `water-accent.${index}`,
       role: "waterAccent",
       x: accentEastM,
-      y: sampleCobraCanyonTerrain(plan, accentEastM, accentNorthM) + 0.35,
+      y: groundAt(accentEastM, accentNorthM) + 0.35,
       z: -accentNorthM,
       yaw: Math.atan2(tangentEastM, tangentNorthM),
       widthM: Math.min(scale.widthM * 0.72, river.halfWidthM * 0.28),
@@ -578,7 +580,7 @@ function waterAccentPlacements(plan, qualityTier, descriptors) {
   return placements;
 }
 
-function setPiecePlacements(plan, descriptors) {
+function setPiecePlacements(plan, descriptors, groundAt) {
   const placements = [];
   for (const cell of plan.setPieceCells ?? []) {
     const archetypes = cell.archetypeIds ?? [];
@@ -597,10 +599,10 @@ function setPiecePlacements(plan, descriptors) {
         const variation = seededUnit(seed, 0x27d4eb2f);
         const scale = roleScale(role, descriptor, variation);
         if (role === "jungle") {
-          const bulk = 1.2 + seededUnit(seed, 0x8f51a67b) * 0.7;
-          scale.widthM *= bulk * 0.9;
-          scale.depthM *= bulk * 0.9;
-          scale.heightM *= 1.6 + seededUnit(seed, 0x39aa5c11) * 0.7;
+          const spread = 1.12 + seededUnit(seed, 0x8f51a67b) * 0.34;
+          scale.widthM *= spread;
+          scale.depthM *= 1.08 + seededUnit(seed, 0x51633e2d) * 0.34;
+          scale.heightM *= 0.90 + seededUnit(seed, 0x39aa5c11) * 0.20;
         }
         const angle = seededUnit(seed, 0x85ebca6b) * Math.PI * 2;
         const ringM = stand === 0 ? 0 : 18 + stand * 14;
@@ -624,7 +626,7 @@ function setPiecePlacements(plan, descriptors) {
           id: `${cell.id}.${archetypeId}.${stand}`,
           role,
           x: eastM,
-          y: sampleCobraCanyonTerrain(plan, eastM, northM)
+          y: groundAt(eastM, northM)
             - seatDrop(plan, role, eastM, northM, scale),
           z: -northM,
           yaw: routeAligned && nearest
@@ -644,7 +646,7 @@ function setPiecePlacements(plan, descriptors) {
   return placements;
 }
 
-function planPlacements(plan, qualityTier, maximumInstances) {
+function planPlacements(plan, qualityTier, maximumInstances, groundAt) {
   const descriptors = descriptorIndex(plan);
   const batches = [];
   for (const batch of plan.ambientBatches ?? []) {
@@ -662,8 +664,13 @@ function planPlacements(plan, qualityTier, maximumInstances) {
       || finite(left.priority) - finite(right.priority)
       || left.id.localeCompare(right.id));
 
-  const authoredSetPieces = setPiecePlacements(plan, descriptors);
-  const generatedWaterAccents = waterAccentPlacements(plan, qualityTier, descriptors);
+  const authoredSetPieces = setPiecePlacements(plan, descriptors, groundAt);
+  const generatedWaterAccents = waterAccentPlacements(
+    plan,
+    qualityTier,
+    descriptors,
+    groundAt,
+  );
   const setPieces = authoredSetPieces.slice(0, maximumInstances);
   const waterAccents = generatedWaterAccents.slice(
     0,
@@ -688,11 +695,11 @@ function planPlacements(plan, qualityTier, maximumInstances) {
       // cell instead of its own, so stands grow into each other and leave real clearings between
       // them. An even scatter at any density reads as texture; clumping is what reads as jungle.
       const clusterSeed = mixedUint32(batchSeed ^ Math.imul(Math.floor(ordinal / 3) + 1, 0x9e3779b1));
-      const clustered = seededUnit(seed, 0x51633e2d) < 0.62
+      const clustered = seededUnit(seed, 0x51633e2d) < 0.82
         ? (() => {
           const anchor = routeBiasedPoint(plan, quota.role, quota, bounds, clusterSeed)
             ?? gridPoint(bounds, Math.floor(ordinal / 3) * 3, quota.count, clusterSeed);
-          const spreadM = quota.role === "jungle" ? 190 : 120;
+          const spreadM = quota.role === "jungle" ? 55 : 120;
           return {
             eastM: clamp(
               anchor.eastM + (seededUnit(seed, 0x7f4a7c15) - 0.5) * spreadM,
@@ -708,7 +715,7 @@ function planPlacements(plan, qualityTier, maximumInstances) {
           };
         })()
         : null;
-      const point = bestPlacement(plan, quota.role, [biased ?? grid, clustered, grid]);
+      const point = bestPlacement(plan, quota.role, [clustered, biased ?? grid, grid]);
       const variation = seededUnit(seed, 0xc2b2ae35);
       const scale = roleScale(quota.role, quota.descriptor, variation);
       // One jungle instance represents a stand of canopy, not one isolated tree. Expanding its
@@ -717,11 +724,13 @@ function planPlacements(plan, qualityTier, maximumInstances) {
       // is now per-instance rather than a flat multiplier: a stand of uniform size at uniform
       // spacing is the tell that gave the old canopy its wallpaper look.
       if (quota.role === "jungle") {
-        // Palm clumps need vertical presence more than pancake footprint.
-        const bulk = 1.15 + seededUnit(seed, 0x8f51a67b) * 0.65;
-        scale.widthM *= bulk * 0.85;
-        scale.depthM *= bulk * 0.85;
-        scale.heightM *= 1.55 + seededUnit(seed, 0x39aa5c11) * 0.65;
+        // Each draw instance is a canopy patch, not one tree. The 43–58 m matrix width multiplies
+        // the six-card unit's 1.4445-wide bounds into the contract's final 62–81 m pre-yaw canopy
+        // extent. Variation is intentionally broad so neighbouring patches do not share one
+        // outline while height remains in the authored 28–36 m visual envelope.
+        scale.widthM *= 1.65 + seededUnit(seed, 0x8f51a67b) * 0.50;
+        scale.depthM *= 1.55 + seededUnit(seed, 0x51633e2d) * 0.50;
+        scale.heightM *= 0.88 + seededUnit(seed, 0x39aa5c11) * 0.24;
       }
       // BED THE STAND INTO THE SLOPE. Placement deliberately seeks steep ground, and a 50 m
       // footprint anchored at the centre sample cantilevers off a gorge wall — the stand visibly
@@ -732,7 +741,7 @@ function planPlacements(plan, qualityTier, maximumInstances) {
         id: `${quota.id}.${ordinal}`,
         role: quota.role,
         x: point.eastM,
-        y: sampleCobraCanyonTerrain(plan, point.eastM, point.northM) - seatDropM,
+        y: groundAt(point.eastM, point.northM) - seatDropM,
         z: -point.northM,
         yaw: point.yaw ?? seededUnit(seed, 0x27d4eb2f) * Math.PI * 2,
         variation,
@@ -770,10 +779,12 @@ function pushTriangle(positions, colors, a, b, c, color, uvs = null, ua = null, 
 
 /** One double-sided billboard quad (two tris) with atlas UVs. */
 function pushTexturedQuad(positions, colors, uvs, bl, br, tr, tl, color, region) {
-  const uvBl = [region.u0, region.v0];
-  const uvBr = [region.u1, region.v0];
-  const uvTr = [region.u1, region.v1];
-  const uvTl = [region.u0, region.v1];
+  // Contract UVs originate at the authored image's top-left and increase downward. Textures are
+  // uploaded with flipY=false, so the physical card bottom takes vMax and its top takes vMin.
+  const uvBl = [region.u0, region.v1];
+  const uvBr = [region.u1, region.v1];
+  const uvTr = [region.u1, region.v0];
+  const uvTl = [region.u0, region.v0];
   pushTriangle(positions, colors, bl, br, tr, color, uvs, uvBl, uvBr, uvTr);
   pushTriangle(positions, colors, bl, tr, tl, color, uvs, uvBl, uvTr, uvTl);
 }
@@ -949,20 +960,37 @@ function appendPalm(positions, colors, x, z, scale, trunkTint, leafTint) {
 function geometryForRole(THREE, role) {
   const positions = [];
   const colors = [];
-  const uvs = role === "jungle" ? [] : null;
+  const uvs = role === "jungle" || role === "mist" ? [] : null;
   if (role === "jungle") {
-    // ONE INSTANCE = two CC0 palm cards (crossed quads) + understory fern cards.
-    // Textured alpha cutouts beat Lambert lobes for BF:V legibility and cost ~12 tris.
-    const leafTint = [0.92, 0.98, 0.88];
-    const underTint = [0.78, 0.92, 0.72];
+    // ONE INSTANCE = one ecologically layered stand: a vertical canopy/palm pair, bamboo in the
+    // middle storey and low scrub at the base. Six crossed cards cost 24 triangles and remove the
+    // repeated three-stamp silhouette that made the old gorge look like billboard wallpaper.
+    const canopyTint = [0.92, 0.95, 0.88];
+    const midTint = [0.86, 0.92, 0.80];
+    const underTint = [0.78, 0.88, 0.72];
     appendCrossedFoliageCard(
-      positions, colors, uvs, 0.02, -0.02, 0.42, 0.0, 1.0, leafTint, FOLIAGE_UV_PALM, 0.12,
+      positions, colors, uvs, -0.20, -0.02, 0.27, 0.0, 1.0,
+      canopyTint, FOLIAGE_UV_PALM, 0.10,
     );
     appendCrossedFoliageCard(
-      positions, colors, uvs, -0.28, 0.18, 0.34, 0.0, 0.86, leafTint, FOLIAGE_UV_PALM, 0.71,
+      positions, colors, uvs, 0.18, 0.08, 0.39, 0.0, 0.93,
+      canopyTint, FOLIAGE_UV_HARDWOOD, 0.67,
     );
     appendCrossedFoliageCard(
-      positions, colors, uvs, 0.18, 0.22, 0.28, 0.0, 0.38, underTint, FOLIAGE_UV_UNDERSTORY, 0.35,
+      positions, colors, uvs, -0.04, 0.20, 0.34, 0.0, 0.70,
+      midTint, FOLIAGE_UV_BAMBOO, 0.34,
+    );
+    appendCrossedFoliageCard(
+      positions, colors, uvs, 0.08, -0.24, 0.38, 0.0, 0.34,
+      underTint, FOLIAGE_UV_SCRUB, 0.92,
+    );
+    appendCrossedFoliageCard(
+      positions, colors, uvs, -0.43, 0.25, 0.30, 0.0, 0.78,
+      midTint, FOLIAGE_UV_HARDWOOD, 1.18,
+    );
+    appendCrossedFoliageCard(
+      positions, colors, uvs, 0.45, -0.19, 0.29, 0.0, 0.56,
+      underTint, FOLIAGE_UV_BAMBOO, 1.43,
     );
   } else if (role === "plantation") {
     for (let index = 0; index < 5; index++) {
@@ -1013,14 +1041,23 @@ function geometryForRole(THREE, role) {
     appendPyramid(positions, colors, [0.32, 0, 0.18], 0.24, 0.26, 0, 0.48, [0.48, 0.44, 0.32]);
     appendPyramid(positions, colors, [-0.06, 0, -0.24], 0.22, 0.24, 0, 0.42, [0.54, 0.48, 0.34]);
   } else if (role === "mist") {
-    pushTriangle(positions, colors, [-0.5, 0, 0], [0.5, 0, 0], [0.5, 1, 0], [0.82, 0.90, 0.86]);
-    pushTriangle(positions, colors, [-0.5, 0, 0], [0.5, 1, 0], [-0.5, 1, 0], [0.82, 0.90, 0.86]);
-    pushTriangle(positions, colors, [0, 0, -0.5], [0, 0, 0.5], [0, 1, 0.5], [0.82, 0.90, 0.86]);
-    pushTriangle(positions, colors, [0, 0, -0.5], [0, 1, 0.5], [0, 1, -0.5], [0.82, 0.90, 0.86]);
+    const full = { u0: 0, u1: 1, v0: 0, v1: 1 };
+    pushTexturedQuad(
+      positions,
+      colors,
+      uvs,
+      [-0.5, 0.06, -0.28],
+      [0.5, 0.06, -0.28],
+      [0.5, 0.06, 0.28],
+      [-0.5, 0.06, 0.28],
+      [0.82, 0.88, 0.86],
+      full,
+    );
   } else if (role === "waterAccent") {
-    // Soft bank sheen: a low elongated diamond parallel to the current, not a bright centreline tile.
-    pushTriangle(positions, colors, [-0.5, 0.02, 0], [0.5, 0.02, 0], [0, 0.02, 0.22], [0.72, 0.84, 0.80]);
-    pushTriangle(positions, colors, [-0.5, 0.02, 0], [0, 0.02, -0.22], [0.5, 0.02, 0], [0.68, 0.80, 0.76]);
+    // Narrow, low-energy bank glint. The broad white diamonds were the crossed marks visible in
+    // every screenshot and made the river read as a road with lane paint.
+    pushTriangle(positions, colors, [-0.5, 0.02, 0], [0.5, 0.02, 0], [0, 0.02, 0.055], [0.42, 0.58, 0.56]);
+    pushTriangle(positions, colors, [-0.5, 0.02, 0], [0, 0.02, -0.055], [0.5, 0.02, 0], [0.38, 0.54, 0.52]);
   } else {
     pushTriangle(positions, colors, [-0.5, 0, -0.5], [0.5, 0, -0.5], [0.5, 0, 0.5], [0.70, 0.88, 0.84]);
     pushTriangle(positions, colors, [-0.5, 0, -0.5], [0.5, 0, 0.5], [-0.5, 0, 0.5], [0.70, 0.88, 0.84]);
@@ -1034,13 +1071,43 @@ function geometryForRole(THREE, role) {
   );
 }
 
-function materialForRole(THREE, role, foliageAtlas = null) {
+function createMistTexture(THREE) {
+  const width = 64;
+  const height = 32;
+  const data = new Uint8Array(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const nx = (x + 0.5) / width * 2 - 1;
+      const ny = (y + 0.5) / height * 2 - 1;
+      const ellipse = Math.max(0, 1 - Math.hypot(nx * 0.86, ny * 1.34));
+      const edge = ellipse * ellipse * (3 - 2 * ellipse);
+      const breakup = 0.78 + 0.22 * Math.sin(x * 0.47 + Math.sin(y * 0.31) * 1.7);
+      const offset = (y * width + x) * 4;
+      data[offset] = 222;
+      data[offset + 1] = 232;
+      data[offset + 2] = 230;
+      data[offset + 3] = Math.round(255 * edge * breakup);
+    }
+  }
+  const texture = new THREE.DataTexture(data, width, height);
+  texture.name = "COBRA_CANYON_SOFT_MIST_MASK";
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+function materialForRole(THREE, role, textures = {}) {
   if (role === "mist" || role === "waterAccent") {
     const material = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
+      color: role === "mist" ? 0xd8e5e1 : 0x6c8c86,
       vertexColors: true,
       transparent: true,
-      opacity: role === "mist" ? 0.42 : 0.22,
+      opacity: role === "mist" ? 0.14 : 0.004,
+      map: role === "mist" ? textures.mistAtlas : null,
       depthWrite: false,
       side: THREE.DoubleSide,
     });
@@ -1048,12 +1115,14 @@ function materialForRole(THREE, role, foliageAtlas = null) {
     return material;
   }
   if (role === "jungle") {
-    // Unlit alpha cards — Lambert was crushing the CC0 atlas to black silhouettes under gorge light.
+    // The atlas carries its own soft painted modelling. Basic keeps that authored value range
+    // stable on both sides of a card; scene fog still supplies distance integration.
     const material = new THREE.MeshBasicMaterial({
-      map: foliageAtlas,
+      map: textures.foliageAtlas,
       color: 0xffffff,
       vertexColors: true,
-      alphaTest: 0.48,
+      alphaTest: 0.38,
+      alphaToCoverage: true,
       transparent: false,
       depthWrite: true,
       side: THREE.DoubleSide,
@@ -1093,6 +1162,11 @@ function paletteTint(paletteHex, variation) {
 
 function instanceTint(role, placement) {
   const authored = paletteTint(placement.paletteHex, placement.variation);
+  if (authored && role === "jungle") {
+    const variation = (placement.variation - 0.5) * 0.08;
+    return [0.76 + variation, 0.92 + variation, 0.70 + variation]
+      .map((channel) => clamp(channel, 0, 1));
+  }
   if (authored) return authored;
   const shade = (placement.variation - 0.5) * 0.14;
   const adjusted = (values) => values.map((channel) => clamp(channel, 0, 1));
@@ -1126,10 +1200,10 @@ function tagObject(object, role, instanceCount = 0) {
   return object;
 }
 
-function createRoleMesh(THREE, group, role, placements, resources, foliageAtlas = null) {
+function createRoleMesh(THREE, group, role, placements, resources, textures = {}) {
   if (!placements.length) return null;
   const geometry = geometryForRole(THREE, role);
-  const material = materialForRole(THREE, role, foliageAtlas);
+  const material = materialForRole(THREE, role, textures);
   const mesh = tagObject(
     new THREE.InstancedMesh(geometry, material, placements.length),
     role,
@@ -1204,7 +1278,10 @@ export function createCobraCanyonAssetKit(THREE, plan, options = {}) {
   }
   const qualityTier = options.qualityTier ?? plan.qualityTier ?? "balanced";
   const maximumInstances = Math.max(0, Math.trunc(finite(options.maxInstances, 0)));
-  const planned = planPlacements(plan, qualityTier, maximumInstances);
+  const groundAt = typeof options.sampleGroundHeight === "function"
+    ? options.sampleGroundHeight
+    : (eastM, northM) => sampleCobraCanyonTerrain(plan, eastM, northM);
+  const planned = planPlacements(plan, qualityTier, maximumInstances, groundAt);
   const group = tagObject(new THREE.Group(), "assetKit", planned.placements.length);
   group.name = "COBRA_CANYON_ASSET_KIT_PRESENTATION_ONLY";
   group.userData.cobraCanyonAssetKit = Object.freeze({
@@ -1214,12 +1291,16 @@ export function createCobraCanyonAssetKit(THREE, plan, options = {}) {
     ...PRESENTATION_ONLY_TAG,
   });
   const resources = { geometries: new Set(), materials: new Set(), meshes: [], textures: [] };
-  // CC0 atlas when the shell preloads it; synthetic fallback keeps the alpha-card path in tests.
+  // Project-authored v2 atlas when the shell preloads it; synthetic fallback keeps the card path
+  // executable in Node tests and is exposed in diagnostics so screenshot QA can fail closed.
   let foliageAtlas = options.foliageTextures?.atlas ?? null;
   if (!foliageAtlas) {
     foliageAtlas = createSyntheticFoliageAtlasTexture(THREE);
     resources.textures.push(foliageAtlas);
   }
+  const mistAtlas = createMistTexture(THREE);
+  resources.textures.push(mistAtlas);
+  const roleTextures = Object.freeze({ foliageAtlas, mistAtlas });
   const controllers = [];
   const rolePlacements = Object.fromEntries(COBRA_CANYON_ASSET_ROLES.map((role) => [role, []]));
   for (const placement of planned.placements) rolePlacements[placement.role].push(placement);
@@ -1230,7 +1311,7 @@ export function createCobraCanyonAssetKit(THREE, plan, options = {}) {
       role,
       rolePlacements[role],
       resources,
-      role === "jungle" ? foliageAtlas : null,
+      roleTextures,
     );
     if (controller) controllers.push(controller);
   }
@@ -1238,6 +1319,8 @@ export function createCobraCanyonAssetKit(THREE, plan, options = {}) {
   const batchSets = Object.fromEntries(COBRA_CANYON_ASSET_ROLES.map((role) => [role, new Set()]));
   for (const batch of planned.batches) batchSets[batch.role].add(batch.id);
   const roleCountsRecord = {
+    foliageAtlasSynthetic:
+      !options.foliageTextures?.atlas || options.foliageTextures?.synthetic === true,
     authoredAmbientBatches: plan.ambientBatches?.length ?? 0,
     authoredSetPieceCells: plan.setPieceCells?.length ?? 0,
     authoredAmbientArchetypes: planned.descriptors.descriptors.length,

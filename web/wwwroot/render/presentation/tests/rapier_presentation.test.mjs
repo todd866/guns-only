@@ -123,6 +123,44 @@ test("Rapier dispersed strip is a fixed 520 m launch and arresting platform, not
   assert.ok(vicinity.children.some((child) => child.name === "STRIP_SPOIL_PILE"),
     "spoil piles must present");
   assert.ok(vicinity.getObjectByName("STRIP_SOFT_BERM"), "soft berm landscape must present");
+
+  const expectedStaticBoxCounts = new Map([
+    ["LAUNCH_GALLERY_VENT_LIPS", 20],
+    ["LAUNCH_GALLERY_VENT_VOIDS", 20],
+    ["STRIP_REVETMENT_EARTH_BATCH", 24],
+    ["STRIP_REVETMENT_CAP_BATCH", 24],
+    ["STRIP_SPOIL_EARTH_BATCH", 16],
+    ["STRIP_SPOIL_BERM_BATCH", 8],
+    ["STRIP_ACCESS_TRACK_BATCH", 11],
+    ["STRIP_SOFT_BERM", 8],
+    ["STRIP_EQUIPMENT_PAD", 4],
+    ["STRIP_EQUIPMENT_CABINET", 4],
+  ]);
+  for (const [name, count] of expectedStaticBoxCounts) {
+    const batch = strip.getObjectByName(name);
+    assert.ok(batch?.isMesh, `${name} static batch must present`);
+    assert.equal(batch.userData.staticBoxCount, count,
+      `${name} must retain every authored static box`);
+  }
+
+  let renderedMeshes = 0;
+  let shadowCasters = 0;
+  let staticBoxBatches = 0;
+  strip.traverse((object) => {
+    if (!object.isMesh) return;
+    renderedMeshes += 1;
+    if (object.castShadow) shadowCasters += 1;
+    if (object.userData.staticBoxCount > 0) staticBoxBatches += 1;
+  });
+  assert.ok(staticBoxBatches >= 10,
+    `expected same-material strip boxes to stay batched, found ${staticBoxBatches} batches`);
+  assert.ok(renderedMeshes <= 48,
+    `Rapier strip exceeded its 48-render-submission budget (${renderedMeshes})`);
+  assert.ok(shadowCasters <= 20,
+    `Rapier strip exceeded its 20-shadow-caster budget (${shadowCasters})`);
+  for (const wire of recovery.wires) {
+    assert.equal(wire.castShadow, false, `${wire.name} must not submit a decorative shadow`);
+  }
   const lastRailMatrix = new THREE.Matrix4();
   centreArcRail.getMatrixAt(centreArcRail.count - 1, lastRailMatrix);
   const halfChord = centreArcRail.geometry.parameters.depth / 2;

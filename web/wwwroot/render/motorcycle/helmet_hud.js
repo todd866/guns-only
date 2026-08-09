@@ -3,6 +3,23 @@
 export const REDLINE_RPM = 14_500;
 export const IDLE_RPM = 2_000;
 
+export const CORE_HELMET_HUD_LAYERS = Object.freeze([
+  "horizon",
+  "speed",
+  "rpm-gear",
+  "minimap",
+  "knee-cue",
+  "status",
+]);
+
+export const DIAGNOSTIC_HELMET_HUD_LAYERS = Object.freeze([
+  "lean-pitch",
+  "inputs",
+  "clutch",
+  "balance",
+  "contact-patch",
+]);
+
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 function speedKmh(state) {
@@ -59,8 +76,13 @@ export class HelmetHud {
     this.dpr = 1;
     this.width = 0;
     this.height = 0;
+    this.diagnosticsEnabled = false;
     this._circuit = null;
     this._minimapBounds = { minX: 0, maxX: 1, minZ: 0, maxZ: 1 };
+  }
+
+  setDiagnosticsEnabled(enabled) {
+    this.diagnosticsEnabled = enabled === true;
   }
 
   /** Cache the immutable circuit polyline once; the per-frame snapshot no longer carries it. */
@@ -113,12 +135,14 @@ export class HelmetHud {
     this.drawHorizonReticle(ctx, w, h);
     this.drawSpeedBlock(ctx, w, h, state);
     this.drawRpmGear(ctx, w, h, state);
-    this.drawLeanBlock(ctx, w, h, state);
-    this.drawInputBars(ctx, w, h, state);
-    this.drawClutchMode(ctx, w, h, state);
     this.drawMinimap(ctx, w, h, state);
-    this.drawPitchBalanceTape(ctx, w, h, state);
-    this.drawContactPatchInstrument(ctx, w, h, state);
+    if (this.diagnosticsEnabled) {
+      this.drawLeanBlock(ctx, w, h, state);
+      this.drawInputBars(ctx, w, h, state);
+      this.drawClutchMode(ctx, w, h, state);
+      this.drawPitchBalanceTape(ctx, w, h, state);
+      this.drawContactPatchInstrument(ctx, w, h, state);
+    }
     this.drawKneeCue(ctx, w, h, state);
     this.drawStatusStrip(ctx, w, h, state);
   }

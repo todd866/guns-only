@@ -10,6 +10,7 @@
         "cockpit.player.sabre-fury.v1",
         "environment.ocean.deep.v1",
         "environment.sky.haze.v1",
+        "environment.texture.korea-highland-ground.v1",
         "platform.carrier.straight-deck.v1",
         "platform.escort.gun-destroyer.v1",
         "procedural://carrier/current",

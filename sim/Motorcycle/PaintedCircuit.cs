@@ -18,17 +18,17 @@ public struct PaintedCircuitQueryState
 }
 
 /// <summary>
-/// Painted centreline circuit on the Rapier fixed strip. Track paint is visual/scoring only;
-/// it does not alter runway surface friction in v1.
+/// Renderer-neutral closed-circuit authority. The sampled centreline owns lap/sector progress,
+/// while track width and paved-runoff width independently own scoring and surface grip.
 /// </summary>
 public sealed class PaintedCircuit
 {
-    public const double RapierRunwayLengthM = 3_048.0;
-    public const double RapierRunwayWidthM = 48.0;
-    /// <summary>Paved shoulder either side of the centreline: 10 m of track plus 6 m apron.</summary>
-    public const double PavedApronHalfWidthM = 16.0;
-    const double HairpinRadiusM = 44.0;
-    const double CornerBlendDistanceM = 30.0;
+    public const string WeekendTrackDayCircuitId = "weekend-track-day.closed-circuit.v1";
+    public const double WeekendTrackSurfaceElevationM = 68.0;
+    public const double WeekendTrackWidthM = 18.0;
+    /// <summary>Nine-metre road half-width plus thirteen metres of paved runoff.</summary>
+    public const double WeekendPavementHalfWidthM = 22.0;
+    const double CornerBlendDistanceM = 52.0;
     const double MaximumSampleSpacingM = 10.0;
     const double MaximumContinuousAdvanceM = 20.0;
 
@@ -36,30 +36,33 @@ public sealed class PaintedCircuit
     readonly double[] _segmentLengthM;
     readonly double[] _cumulativeLengthM;
     readonly double[] _sectorGateProgressM;
-    readonly Vec3D _runwayOrigin;
-    readonly Vec3D _runwayForward;
-    readonly Vec3D _runwayRight;
 
     PaintedCircuit(
+        string id,
         Vec3D[] centreline,
         double trackWidthM,
+        double pavementHalfWidthM,
+        double surfaceElevationM,
         double boundingLengthM,
         double boundingWidthM,
         Vec3D startFinishCentre,
+        double startHeadingRad,
+        Vec3D paddockAccessPointWorldM,
+        double paddockAccessHeadingRad,
         int startFinishSegmentIndex,
-        double[] sectorGateProgressM,
-        Vec3D runwayOrigin,
-        Vec3D runwayForward,
-        Vec3D runwayRight)
+        double[] sectorGateProgressM)
     {
+        Id = id;
         _centreline = centreline;
-        _runwayOrigin = runwayOrigin;
-        _runwayForward = runwayForward;
-        _runwayRight = runwayRight;
         TrackWidthM = trackWidthM;
+        PavementHalfWidthM = pavementHalfWidthM;
+        SurfaceElevationM = surfaceElevationM;
         BoundingLengthM = boundingLengthM;
         BoundingWidthM = boundingWidthM;
         StartFinishCentre = startFinishCentre;
+        StartHeadingRad = startHeadingRad;
+        PaddockAccessPointWorldM = paddockAccessPointWorldM;
+        PaddockAccessHeadingRad = paddockAccessHeadingRad;
         StartFinishSegmentIndex = startFinishSegmentIndex;
         _sectorGateProgressM = sectorGateProgressM;
         SectorGateProgressM = sectorGateProgressM;
@@ -78,75 +81,60 @@ public sealed class PaintedCircuit
         CircuitLengthM = totalLengthM;
     }
 
+    public string Id { get; }
     public IReadOnlyList<Vec3D> Centreline => _centreline;
     public double TrackWidthM { get; }
+    public double PavementHalfWidthM { get; }
+    public double SurfaceElevationM { get; }
     public double CircuitLengthM { get; }
     public double BoundingLengthM { get; }
     public double BoundingWidthM { get; }
     public Vec3D StartFinishCentre { get; }
+    public double StartHeadingRad { get; }
+    public Vec3D PaddockAccessPointWorldM { get; }
+    public double PaddockAccessHeadingRad { get; }
     public int StartFinishSegmentIndex { get; }
     public IReadOnlyList<double> SectorGateProgressM { get; }
 
-    public static PaintedCircuit RapierStripWeekend(
-        double headingRad = -Math.PI / 2.0,
+    /// <summary>
+    /// Purpose-built club circuit for Weekend Track Day: a long start straight, a broad first
+    /// complex, a direction-changing infield, and a separate return loop. It shares no runway,
+    /// launch-site, carrier, or renderer geometry.
+    /// </summary>
+    public static PaintedCircuit WeekendTrackDay(
+        double headingRad = 0.0,
         Vec3D? originOverride = null)
     {
-        const double trackWidthM = 20.0;
-        const double elevM = RapierLaunchSite.OperatingSurfaceElevationM;
-        Vec3D forward = RunwayForward(headingRad);
-        Vec3D right = RunwayRight(headingRad);
-        Vec3D origin = originOverride ?? new Vec3D(0.0, elevM, 0.0);
+        Vec3D forward = TrackForward(headingRad);
+        Vec3D right = TrackRight(headingRad);
+        Vec3D origin = originOverride
+            ?? new Vec3D(0.0, WeekendTrackSurfaceElevationM, 0.0);
 
-        // Closed loop anchored to the 3,048 m x 48 m strip: esses along the straights, a
-        // wide hairpin (r >= 28 m after corner rounding) on a paved apron at each threshold.
-        // alongM is positive toward the western threshold; crossM is positive toward runway right.
-        Vec3D At(double alongM, double crossM) =>
-            origin + forward * alongM + right * crossM;
-
-        // 180-degree hairpin around (centreAlongM, 0). The 0.35 corner-rounding blend tightens
-        // the apex of this 15-degree polygon below the authored radius: r=44 measures ~39 m
-        // minimum over a 6 m arc window (EveryCornerIsRideableAtHairpinEntrySpeeds guards >=28).
-        IEnumerable<Vec3D> Hairpin(double centreAlongM, double directionSign)
-        {
-            for (int step = 0; step <= 12; step++)
-            {
-                double angleRad = Math.PI * step / 12.0;
-                yield return At(
-                    centreAlongM + Math.Sign(centreAlongM) * HairpinRadiusM * Math.Sin(angleRad),
-                    -directionSign * HairpinRadiusM * Math.Cos(angleRad));
-            }
-        }
+        // Local east/north coordinates keep the authored shape readable. headingRad rotates the
+        // entire facility around its own origin without changing length, curvature, or pavement.
+        Vec3D At(double eastM, double northM) =>
+            origin + right * eastM + forward * northM;
 
         Vec3D[] controlPoints =
         [
-            At(-1_300.0, -14.0),
-            At(-900.0, -12.0),
-            At(-500.0, -8.0),
-            At(-100.0, -14.0),
-            At(300.0, -8.0),
-            At(700.0, -14.0),
-            At(1_050.0, -14.0),
-            At(1_200.0, -26.0),
-            At(1_300.0, -40.0),
-            At(1_360.0, -44.0),
-            .. Hairpin(1_438.0, 1.0),
-            At(1_360.0, 44.0),
-            At(1_300.0, 40.0),
-            At(1_200.0, 26.0),
-            At(1_050.0, 14.0),
-            At(700.0, 14.0),
-            At(300.0, 8.0),
-            At(-100.0, 14.0),
-            At(-500.0, 8.0),
-            At(-900.0, 12.0),
-            At(-1_050.0, 14.0),
-            At(-1_200.0, 26.0),
-            At(-1_300.0, 40.0),
-            At(-1_360.0, 44.0),
-            .. Hairpin(-1_438.0, -1.0),
-            At(-1_390.0, -43.0),
-            At(-1_340.0, -33.0),
-            At(-1_300.0, -14.0),
+            // Start/finish lies in the middle of a 700 m straight, not at a corner seam.
+            At(0.0, -320.0),
+            At(350.0, -320.0),
+            At(590.0, -220.0),
+            At(720.0, -40.0),
+            At(680.0, 160.0),
+            At(520.0, 310.0),
+            At(300.0, 390.0),
+            // Direction-changing infield: two broad, visibly distinct bends.
+            At(80.0, 310.0),
+            At(-140.0, 430.0),
+            At(-400.0, 400.0),
+            At(-620.0, 280.0),
+            At(-730.0, 80.0),
+            At(-680.0, -120.0),
+            At(-500.0, -250.0),
+            At(-300.0, -320.0),
+            At(0.0, -320.0),
         ];
         Vec3D[] centreline = BuildRoundedCentreline(controlPoints);
 
@@ -156,8 +144,8 @@ public sealed class PaintedCircuit
         double maxCrossM = double.NegativeInfinity;
         foreach (Vec3D point in centreline)
         {
-            double alongM = ProjectAlongRunway(origin, forward, point);
-            double crossM = ProjectCrossRunway(origin, right, point);
+            double alongM = ProjectAlongTrack(origin, forward, point);
+            double crossM = ProjectCrossTrack(origin, right, point);
             minAlongM = Math.Min(minAlongM, alongM);
             maxAlongM = Math.Max(maxAlongM, alongM);
             minCrossM = Math.Min(minCrossM, crossM);
@@ -168,36 +156,40 @@ public sealed class PaintedCircuit
         double boundingWidthM = maxCrossM - minCrossM;
         int startFinishSegmentIndex = centreline.Length - 2;
         Vec3D startFinishCentre = centreline[0];
+        Vec3D startDirection = HorizontalDirection(centreline[1] - centreline[0]);
+        double startHeadingRad = Math.Atan2(startDirection.X, startDirection.Z);
+        // The access-road centre starts just outside the circuit pavement, but its five-metre
+        // road half-width overlaps the 22 m runoff ribbon so grip has no grass seam. It is offset
+        // from start/finish along the straight and cannot be mistaken for the timing line.
+        Vec3D paddockOutward = new(startDirection.Z, 0.0, -startDirection.X);
+        Vec3D paddockAccessPoint = startFinishCentre
+            - startDirection * 80.0
+            + paddockOutward * (WeekendPavementHalfWidthM + 3.0);
+        double paddockAccessHeadingRad = Math.Atan2(paddockOutward.X, paddockOutward.Z);
         double[] sectorGateProgressM = [0.25, 0.50, 0.75];
 
         return new PaintedCircuit(
+            WeekendTrackDayCircuitId,
             centreline,
-            trackWidthM,
+            WeekendTrackWidthM,
+            WeekendPavementHalfWidthM,
+            origin.Y,
             boundingLengthM,
             boundingWidthM,
             startFinishCentre,
+            startHeadingRad,
+            paddockAccessPoint,
+            paddockAccessHeadingRad,
             startFinishSegmentIndex,
-            sectorGateProgressM,
-            origin,
-            forward,
-            right);
+            sectorGateProgressM);
     }
 
     /// <summary>
-    /// Authoritative paved-surface test: the runway rectangle plus the apron corridor that
-    /// follows the painted circuit, both expressed in the circuit's own runway frame so a
-    /// heading or origin change cannot desynchronise pavement from paint.
+    /// Authoritative paved-surface test. Only the purpose-built track and its paved runoff carry
+    /// asphalt grip; the infield and land outside the ribbon remain off-pavement.
     /// </summary>
-    public bool IsOnPavement(Vec3D positionWorld)
-    {
-        double alongM = ProjectAlongRunway(_runwayOrigin, _runwayForward, positionWorld);
-        double crossM = ProjectCrossRunway(_runwayOrigin, _runwayRight, positionWorld);
-        bool onRunway = Math.Abs(alongM) <= RapierRunwayLengthM * 0.5
-            && Math.Abs(crossM) <= RapierRunwayWidthM * 0.5;
-        if (onRunway)
-            return true;
-        return FindClosestSegment(positionWorld).LateralDistanceM <= PavedApronHalfWidthM;
-    }
+    public bool IsOnPavement(Vec3D positionWorld) =>
+        FindClosestSegment(positionWorld).LateralDistanceM <= PavementHalfWidthM;
 
     static Vec3D[] BuildRoundedCentreline(IReadOnlyList<Vec3D> closedControlPoints)
     {
@@ -406,19 +398,19 @@ public sealed class PaintedCircuit
     static Vec3D Lerp(Vec3D start, Vec3D end, double t) =>
         start + (end - start) * t;
 
-    static Vec3D RunwayForward(double headingRad) =>
+    static Vec3D TrackForward(double headingRad) =>
         new(Math.Sin(headingRad), 0.0, Math.Cos(headingRad));
 
-    static Vec3D RunwayRight(double headingRad) =>
+    static Vec3D TrackRight(double headingRad) =>
         new(Math.Cos(headingRad), 0.0, -Math.Sin(headingRad));
 
-    static double ProjectAlongRunway(Vec3D origin, Vec3D forward, Vec3D point)
+    static double ProjectAlongTrack(Vec3D origin, Vec3D forward, Vec3D point)
     {
         Vec3D offset = point - origin;
         return offset.X * forward.X + offset.Z * forward.Z;
     }
 
-    static double ProjectCrossRunway(Vec3D origin, Vec3D right, Vec3D point)
+    static double ProjectCrossTrack(Vec3D origin, Vec3D right, Vec3D point)
     {
         Vec3D offset = point - origin;
         return offset.X * right.X + offset.Z * right.Z;

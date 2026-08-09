@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Score cobra corridor stills for emptiness.
+ * Score Cobra corridor stills for coherent multi-scale structure and rendering artifacts.
  *
  *   node tools/cobra-scenery-gate/score.mjs --shots /tmp/guns-only-scenery-overnight/stills
  *   node tools/cobra-scenery-gate/score.mjs --shots DIR --mode fail
@@ -43,8 +43,10 @@ async function main() {
   const names = (await readdir(dir))
     .filter((n) => /^(camp-ember|mid-gorge|iron-bell)\.png$/.test(n))
     .sort();
-  if (names.length === 0) {
-    console.error(`no expected stills (camp-ember|mid-gorge|iron-bell).png in ${dir}`);
+  const expectedNames = ["camp-ember.png", "iron-bell.png", "mid-gorge.png"];
+  if (names.length !== expectedNames.length
+      || expectedNames.some((name, index) => names[index] !== name)) {
+    console.error(`need all canonical stills (${expectedNames.join(", ")}) in ${dir}`);
     process.exitCode = 1;
     return;
   }
@@ -53,8 +55,13 @@ async function main() {
     scores[name] = await scorePngFile(join(dir, name));
     const s = scores[name];
     console.log(
-      `${name}: edge=${s.groundEdgeEnergy.toFixed(2)} spat=${s.groundSpatialVariance.toFixed(1)} `
-      + `hetero=${s.groundHeterogeneity.toFixed(3)} ${s.pass ? "PASS" : "FAIL"}`,
+      `${name}: skyP90=${s.skyHighFrequencyP90.toFixed(2)} `
+      + `skyNoise=${s.skyHighFrequencyFraction.toFixed(3)} `
+      + `microOnly=${s.groundMicroDominantFraction.toFixed(3)} `
+      + `meso=${s.groundMesoTileFraction.toFixed(3)} `
+      + `shadow=${s.groundShadowFraction.toFixed(3)} `
+      + `pale=${s.groundPaleComponentFraction.toFixed(3)} `
+      + `${s.pass ? "PASS" : "FAIL"}`,
     );
   }
   const result = verdict(scores);
