@@ -255,14 +255,14 @@ public sealed class Ah1gCobraFlightProfileTests
 
         _output.WriteLine($"POWER MARGIN SWEEP\n{text}");
 
-        // The sweep is a report, but one property in it is worth pinning: the autorotative
-        // overspeed peak settles at MaximumAutorotationRpm (339 rpm = 104.6% of nominal), not the
-        // old numeric backstop at 107.8%. After the FM retune the peak still lands on that limit.
+        // The sweep is a report, but one property in it is worth pinning: after Build 294's soft
+        // RBS envelope, dive energy bleeds before the autorotative ceiling, so peak Nr settles
+        // near 102% of nominal rather than MaximumAutorotationRpm (339 rpm = 104.6%).
         string report = text.ToString();
         Assert.DoesNotContain("107.8%", report);
         Assert.True(
-            report.Contains("104.6%") || report.Contains("104.5%") || report.Contains("104.7%"),
-            $"expected peak Nr near 104.6% of nominal:\n{report}");
+            report.Contains("102.0%") || report.Contains("101.9%") || report.Contains("102.1%"),
+            $"expected peak Nr near 102% of nominal after soft RBS:\n{report}");
     }
 
     [Fact]
