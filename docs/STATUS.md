@@ -1,15 +1,11 @@
 # Current product and verification status
 
 Updated: 2026-08-10
-Production: Build 302, revision `41e9aeddb777907d03956528e0eea0fc23b5aa21`, deployment
-`dpl_2fXBKQShcwDNL9wVP35GaSWGN2GB` (verified live via /api/build-info 2026-08-10). Builds
+Production: Build 303, revision `51fd754c52a1d947145cf94efa05abc6f7a2b265`, deployment
+`dpl_6xUeiHE8ct1mN5vKBHYCKEf78nMd` (verified live via /api/build-info 2026-08-10). Builds
 253-298 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-<<<<<<< HEAD
 Next candidate: none queued.
-=======
-Next candidate: Build 303 (branch `fix/camp-ember-bfv`) — BF:V-density Camp Ember firebase; kill green control disc.
->>>>>>> 6c7fe72a (Build 303: BF:V Camp Ember firebase, no green control disc.)
 
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
