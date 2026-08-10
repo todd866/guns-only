@@ -68,3 +68,14 @@ test("cobra telemetry records the live power margin, not the dead hover constant
   const main = await source("cobra-lab/main.js");
   assert.match(main, /cobra_power_margin: authorityState\.vehicle\.power_margin/);
 });
+
+test("cobra telemetry records yaw residual and local wind for SCAS vs wind audits", async () => {
+  const main = await source("cobra-lab/main.js");
+  assert.match(main, /cobra_yaw_rad:/);
+  assert.match(main, /cobra_pedal:/);
+  assert.match(main, /cobra_yaw_residual_rad_s:/);
+  assert.match(main, /cobra_scas_yaw_rad_s:/);
+  assert.match(main, /cobra_wind_e_mps:/);
+  assert.match(main, /cobra_wind_n_mps:/);
+  assert.match(main, /cobra_advance_ratio:/);
+});

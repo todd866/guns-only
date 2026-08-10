@@ -323,7 +323,9 @@ public sealed class CobraMissionRuntime
     readonly double _recurringBaseMassKg;
     readonly double _additivePayloadMassKg;
     readonly double _airDensityKgM3;
-    readonly Vec3D _windVelocityMps;
+    readonly Vec3D _synopticWindMps;
+    readonly CobraCanyonWindField? _windField;
+    Vec3D _lastWindVelocityMps;
     readonly IReadOnlyList<CobraResolvedObstacle> _resolvedObstacles;
     readonly IReadOnlyList<CobraResolvedThreatObserver> _resolvedThreatObservers;
     readonly CobraGroundWarRuntime _groundWar;
@@ -346,6 +348,7 @@ public sealed class CobraMissionRuntime
         double additivePayloadMassKg = 0.0,
         double airDensityKgM3 = DefaultAirDensityKgM3,
         Vec3D? windVelocityMps = null,
+        bool enableTerrainWind = true,
         CobraMissionSpawn? spawn = null,
         int? groundWarSeed = null)
     {
@@ -365,9 +368,14 @@ public sealed class CobraMissionRuntime
         _recurringBaseMassKg = recurringBaseMassKg;
         _additivePayloadMassKg = additivePayloadMassKg;
         _airDensityKgM3 = airDensityKgM3;
-        _windVelocityMps = windVelocityMps ?? Vec3D.Zero;
-        if (!_windVelocityMps.IsFinite)
+        // Explicit Zero → still air (most unit tests). Production bridge passes DefaultSynoptic.
+        _synopticWindMps = windVelocityMps ?? Vec3D.Zero;
+        if (!_synopticWindMps.IsFinite)
             throw new ArgumentOutOfRangeException(nameof(windVelocityMps));
+        _windField = enableTerrainWind && _synopticWindMps.Length > 1e-9
+            ? new CobraCanyonWindField(_terrain, _synopticWindMps)
+            : null;
+        _lastWindVelocityMps = _synopticWindMps;
 
         _resolvedObstacles = Array.AsReadOnly(
             definition.Obstacles.Select(ResolveObstacle).ToArray());
@@ -449,6 +457,9 @@ public sealed class CobraMissionRuntime
     public ITerrainSurface Terrain => _terrain;
     public CobraCanyonRouteDefinition SelectedRoute => _selectedRoute;
     public Ah1gCobraDynamics Cobra => _cobra;
+    /// <summary>Most recent wind sample applied to the vehicle environment (m/s, E/U/N).</summary>
+    public Vec3D LastWindVelocityMps => _lastWindVelocityMps;
+    public Vec3D SynopticWindMps => _synopticWindMps;
     public IPlayerVehicleDynamics Vehicle => _cobra;
     public CobraGroundWarRuntime GroundWar => _groundWar;
     public CobraMissionAct Act => _act;
@@ -478,13 +489,17 @@ public sealed class CobraMissionRuntime
 
         Vec3D previousPositionWorldM = _cobra.State.PositionWorldM;
         VehicleSurfaceSample surface = SampleVehicleSurface(previousPositionWorldM);
+        Vec3D windVelocityMps = _windField is null
+            ? _synopticWindMps
+            : _windField.Sample(previousPositionWorldM);
+        _lastWindVelocityMps = windVelocityMps;
         PlayerVehicleAdvanceResult vehicleResult = _cobra.Advance(new PlayerVehicleAdvanceInput(
             Tick: _nextAuthorityTick,
             Command: PlayerVehicleCommand.FromVerticalLift(command),
             RecurringBaseMassKg: _recurringBaseMassKg,
             AdditivePayloadMassKg: _additivePayloadMassKg,
             Environment: new PlayerVehicleEnvironmentSample(
-                _airDensityKgM3, _windVelocityMps, surface),
+                _airDensityKgM3, windVelocityMps, surface),
             ExternalContact: VehicleContactState.Unknown,
             ProtectionIntervention: VehicleProtectionInterventionEvidence.None));
         _nextAuthorityTick++;

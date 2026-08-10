@@ -25,6 +25,9 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
     double _rotorAzimuthRad;
     double _previousRotorPowerW;
     double _scasYawRateRadPerSecond;
+    double _lastTorqueYawDemandRadPerSecond;
+    double _lastWeathervaneYawRadPerSecond;
+    double _lastYawResidualRadPerSecond;
     bool _engineOperating = true;
     bool _hardImpactLatched;
     bool _rotorStrikeLatched;
@@ -116,7 +119,13 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             SkidContactCount: 0,
             EngineOperating: true,
             GovernorSaturated: false,
-            RotorStrike: false);
+            RotorStrike: false,
+            AdvanceRatio: 0.0,
+            BodyYawRateRadPerSecond: 0.0,
+            TorqueYawDemandRadPerSecond: 0.0,
+            ScasYawRadPerSecond: 0.0,
+            WeathervaneYawRadPerSecond: 0.0,
+            YawResidualRadPerSecond: 0.0);
         Observation = CreateObservation(
             tick: -1,
             initialPositionWorldM,
@@ -423,6 +432,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             controlsAvailable,
             rpmRatio,
             rotorPowerRequiredW,
+            advanceRatio,
             rbsSeverity,
             vrsSeverity,
             dt);
@@ -556,7 +566,13 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             skidContactCount,
             _engineOperating,
             governorSaturated,
-            _rotorStrikeLatched);
+            _rotorStrikeLatched,
+            advanceRatio,
+            nextRates.R,
+            _lastTorqueYawDemandRadPerSecond,
+            _scasYawRateRadPerSecond,
+            _lastWeathervaneYawRadPerSecond,
+            _lastYawResidualRadPerSecond);
 
         EnsureFiniteOutcome();
         _previousRotorPowerW = rotorPowerRequiredW;
@@ -570,6 +586,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         bool controlsAvailable,
         double rpmRatio,
         double rotorPowerRequiredW,
+        double advanceRatio,
         double rbsSeverity,
         double vrsSeverity,
         double dt)
@@ -591,13 +608,14 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         // Main-rotor torque → fuselage yaw. US AH-1G (CCW rotor from above): reaction is
         // right-yaw; left pedal counters.
         //
-        // Build 306 (owner telemetry 2026-08-10): remove the Build 305 slow autotrim — high-TQ
-        // heading bias went ~0 deg/s and the bird felt too easy. Keep NASA CR-3144 SCAS only
-        // (±12.5%, 0.05 s). That is the realistic limited-authority channel; residual torque
-        // yaw past SCAS is the pilot's feet. Provisional torque→yaw gain (epistemic:
-        // provisional) sits hover TQ near SCAS with a mild residual — not 304's strong
-        // continuous pull, not 305's eventual perfect cancel.
-        const double TorqueYawAtTransmissionLimitRadPerSecond = 8.0 * Math.PI / 180.0;
+        // Build 307: raise provisional torque→yaw so hover needs pedal (owner: hover too
+        // stable). Keep NASA CR-3144 SCAS ±12.5%. Add speed-scheduled weathervane damping so
+        // cruise heading holds better without restoring Build 305 slow autotrim (owner:
+        // in-flight right yaw drift).
+        const double TorqueYawAtTransmissionLimitRadPerSecond = 11.0 * Math.PI / 180.0;
+        // At µ≈0.18 (~80 KT tip fraction) weathervane reaches full strength.
+        const double WeathervaneAdvanceRatioFull = 0.18;
+        const double WeathervaneYawDampingPerSecond = 2.4;
         double transmissionLimitW = Math.Max(1.0, _definition.Powerplant.TransmissionLimitW);
         double torqueLoadFraction = Math.Clamp(
             rotorPowerRequiredW / transmissionLimitW, 0.0, 1.35);
@@ -623,7 +641,20 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             _definition.Handling.StabilityAugmentationYawLagSeconds,
             dt);
 
-        targetYawRate += torqueYawDemandRadPerSecond + _scasYawRateRadPerSecond;
+        double yawResidualRadPerSecond =
+            torqueYawDemandRadPerSecond + _scasYawRateRadPerSecond;
+        double weathervaneSchedule = Math.Clamp(
+            advanceRatio / WeathervaneAdvanceRatioFull, 0.0, 1.35);
+        double weathervaneYawRadPerSecond = -rates.R
+            * WeathervaneYawDampingPerSecond
+            * weathervaneSchedule
+            * controlEffectiveness;
+
+        _lastTorqueYawDemandRadPerSecond = torqueYawDemandRadPerSecond;
+        _lastWeathervaneYawRadPerSecond = weathervaneYawRadPerSecond;
+        _lastYawResidualRadPerSecond = yawResidualRadPerSecond;
+
+        targetYawRate += yawResidualRadPerSecond + weathervaneYawRadPerSecond;
         if (!_engineOperating)
             targetYawRate -= Degrees(8.0) * controlEffectiveness;
 
@@ -1064,7 +1095,12 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             || !double.IsFinite(Telemetry.RotorPowerRequiredW)
             || !double.IsFinite(Telemetry.VortexRingSeverity)
             || !double.IsFinite(Telemetry.RetreatingBladeStallSeverity)
-            || !double.IsFinite(Telemetry.MainRotorClearanceM))
+            || !double.IsFinite(Telemetry.MainRotorClearanceM)
+            || !double.IsFinite(Telemetry.AdvanceRatio)
+            || !double.IsFinite(Telemetry.TorqueYawDemandRadPerSecond)
+            || !double.IsFinite(Telemetry.ScasYawRadPerSecond)
+            || !double.IsFinite(Telemetry.WeathervaneYawRadPerSecond)
+            || !double.IsFinite(Telemetry.YawResidualRadPerSecond))
             throw new InvalidOperationException("AH-1G dynamics produced a non-finite outcome.");
     }
 
