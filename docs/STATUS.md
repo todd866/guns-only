@@ -5,7 +5,8 @@ Production: Build 304, revision `acbce39e4e11031eebc1b0a6cd9f0772b0ceb0bd`, depl
 `dpl_BzJuyZXUTFRAafxutoMeHjXYdK9u` (verified live via /api/build-info 2026-08-10). Builds
 253-298 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Next candidate: none queued.
+Next candidate: Build 305 (branch `fix/ah1g-scas-settle`) — slow yaw autotrim after limited
+SCAS so continuous right pull settles; collective pulls still yaw before catch-up.
 
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful

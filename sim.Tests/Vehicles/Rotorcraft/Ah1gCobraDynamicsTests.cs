@@ -207,47 +207,60 @@ public sealed class Ah1gCobraDynamicsTests
     }
 
     [Fact]
-    public void FeetOffHoverCollectiveIsMostlyHeldByLimitedScas()
+    public void FeetOffHoverCollectiveSettlesInsideLimitedScas()
     {
-        // Mild / hover: ±12.5% SCAS should nearly cancel steady torque — autotrim, not magic-off.
+        // Owner 2026-08-10: continuous right pull must die out — slow autotrim + SCAS settle.
         var cobra = Create("scas-hover");
         double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
         var hover = new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0);
-        for (long tick = 0; tick < 360; tick++)
+        for (long tick = 0; tick < 720; tick++)
             cobra.Advance(Input(tick, hover));
 
         double yaw0 = cobra.Observation.YawRad;
-        for (long tick = 360; tick < 720; tick++)
+        for (long tick = 720; tick < 1080; tick++)
             cobra.Advance(Input(tick, hover));
 
         double driftRad = Math.Abs(cobra.Observation.YawRad - yaw0);
-        Assert.True(driftRad < 0.15,
-            $"Hover feet-off yaw drift {driftRad:F3} rad in 3 s — SCAS should mostly hold trim TQ.");
+        Assert.True(driftRad < 0.04,
+            $"Hover feet-off yaw drift {driftRad:F3} rad in 3 s — autotrim should have settled.");
     }
 
     [Fact]
-    public void FeetOffHardCollectiveLeavesResidualYawScasCannotCancel()
+    public void FeetOffHardCollectivePullYawsBeforeAutotrimCatches()
     {
-        // Owner 2026-08-10: perfect steady-torque trim made full collective a pure elevator.
-        // SCAS is ±12.5% authority — a hard pull must still need pedal.
+        // Not perfect magic: during a hard collective pull, yaw accumulates before the
+        // 1.5 s autotrim lag catches the residual SCAS cannot cancel.
         var cobra = Create("scas-hard");
         double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
         var hover = new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0);
-        for (long tick = 0; tick < 240; tick++)
+        for (long tick = 0; tick < 480; tick++)
             cobra.Advance(Input(tick, hover));
 
         double yaw0 = cobra.Observation.YawRad;
-        var pull = new VerticalLiftPilotCommand(1.0, 0.0, 0.0, 0.0);
-        for (long tick = 240; tick < 600; tick++)
-            cobra.Advance(Input(tick, pull));
+        const double CollectiveSlewPerSecond = 0.40;
+        for (long tick = 480; tick < 660; tick++)
+        {
+            double elapsed = (tick - 480) / 120.0;
+            double collective = Math.Min(1.0, trim + CollectiveSlewPerSecond * elapsed);
+            cobra.Advance(Input(tick, new VerticalLiftPilotCommand(collective, 0.0, 0.0, 0.0)));
+        }
 
-        double yawDeltaRad = cobra.Observation.YawRad - yaw0;
+        double yawDuringPull = cobra.Observation.YawRad - yaw0;
         Assert.True(cobra.State.GroundVelocityMps.Y > 0.5, "hard collective should climb");
-        Assert.True(Math.Abs(yawDeltaRad) > 0.20,
-            $"Expected residual yaw under feet-off full collective; Δyaw={yawDeltaRad:F3} rad.");
-        // Right-yaw reaction for CCW main rotor (positive Observation.YawRad).
-        Assert.True(yawDeltaRad > 0.0,
-            $"Torque reaction should yaw right without pedal; got Δyaw={yawDeltaRad:F3} rad.");
+        Assert.True(Math.Abs(yawDuringPull) > 0.08,
+            $"Expected yaw during feet-off collective pull; Δyaw={yawDuringPull:F3} rad in 1.5 s.");
+        Assert.True(yawDuringPull > 0.0,
+            $"Torque reaction should yaw right without pedal; got Δyaw={yawDuringPull:F3} rad.");
+
+        // Hold full collective; autotrim should arrest the continuous yaw rate.
+        double yawAtHold = cobra.Observation.YawRad;
+        var hold = new VerticalLiftPilotCommand(1.0, 0.0, 0.0, 0.0);
+        for (long tick = 660; tick < 1260; tick++)
+            cobra.Advance(Input(tick, hold));
+
+        double holdDriftRad = Math.Abs(cobra.Observation.YawRad - yawAtHold);
+        Assert.True(holdDriftRad < 0.08,
+            $"After autotrim catch-up, full-collective drift {holdDriftRad:F3} rad in 5 s.");
     }
 
     [Fact]
