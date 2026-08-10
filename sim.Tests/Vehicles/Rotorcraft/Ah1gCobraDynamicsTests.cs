@@ -207,6 +207,50 @@ public sealed class Ah1gCobraDynamicsTests
     }
 
     [Fact]
+    public void FeetOffHoverCollectiveIsMostlyHeldByLimitedScas()
+    {
+        // Mild / hover: ±12.5% SCAS should nearly cancel steady torque — autotrim, not magic-off.
+        var cobra = Create("scas-hover");
+        double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        var hover = new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0);
+        for (long tick = 0; tick < 360; tick++)
+            cobra.Advance(Input(tick, hover));
+
+        double yaw0 = cobra.Observation.YawRad;
+        for (long tick = 360; tick < 720; tick++)
+            cobra.Advance(Input(tick, hover));
+
+        double driftRad = Math.Abs(cobra.Observation.YawRad - yaw0);
+        Assert.True(driftRad < 0.15,
+            $"Hover feet-off yaw drift {driftRad:F3} rad in 3 s — SCAS should mostly hold trim TQ.");
+    }
+
+    [Fact]
+    public void FeetOffHardCollectiveLeavesResidualYawScasCannotCancel()
+    {
+        // Owner 2026-08-10: perfect steady-torque trim made full collective a pure elevator.
+        // SCAS is ±12.5% authority — a hard pull must still need pedal.
+        var cobra = Create("scas-hard");
+        double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        var hover = new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0);
+        for (long tick = 0; tick < 240; tick++)
+            cobra.Advance(Input(tick, hover));
+
+        double yaw0 = cobra.Observation.YawRad;
+        var pull = new VerticalLiftPilotCommand(1.0, 0.0, 0.0, 0.0);
+        for (long tick = 240; tick < 600; tick++)
+            cobra.Advance(Input(tick, pull));
+
+        double yawDeltaRad = cobra.Observation.YawRad - yaw0;
+        Assert.True(cobra.State.GroundVelocityMps.Y > 0.5, "hard collective should climb");
+        Assert.True(Math.Abs(yawDeltaRad) > 0.20,
+            $"Expected residual yaw under feet-off full collective; Δyaw={yawDeltaRad:F3} rad.");
+        // Right-yaw reaction for CCW main rotor (positive Observation.YawRad).
+        Assert.True(yawDeltaRad > 0.0,
+            $"Torque reaction should yaw right without pedal; got Δyaw={yawDeltaRad:F3} rad.");
+    }
+
+    [Fact]
     public void HighAdvanceRatioProducesProgressiveRetreatingBladeWarning()
     {
         var moderate = Create("moderate", velocity: new Vec3D(0.0, 0.0, 55.0));

@@ -155,11 +155,15 @@ The model must not be described as a finished high-fidelity Cobra because it doe
 - component damage, fuel, temperature, gearbox/oil systems, engine start/manual governor;
 - an articulated finite-ammunition AH-1G turret, ground targets, AI, mission, HUD, art or audio.
 
-The reduced-order attitude response is deterministic and source-bounded, but stronger than the
-real limited-authority SCAS. Its provisional 0.12-second whole-disk lag is deliberately separate
-from the measured 0.08/0.05-second cyclic/yaw SCAS actuator lags and ±12.5% authority, which are
-pinned in the definition for the later limited-authority SAS model. Any optional attitude/hover
-assistance must remain a separate assist, never be disguised as aircraft physics.
+Yaw rate from main-rotor torque is no longer cancelled by perfect steady trim. Build 304 applies
+NASA CR-3144 limited-authority SCAS on the yaw channel: first-order lag at
+`StabilityAugmentationYawLagSeconds` (0.05 s), hard-capped at
+`±StabilityAugmentationAuthorityFraction` (±12.5%) of pedal yaw authority. Hover / mild TQ stays
+mostly held; a hard collective pull saturates SCAS and leaves residual right-yaw the pilot must
+finish with left pedal. Engine-out retains its short left-yaw tendency. Cyclic/pitch still use the
+reduced-order whole-disk response — that provisional 0.12-second lag is deliberately separate
+from the measured SCAS actuator lags. Any optional attitude/hover assistance must remain a
+separate labeled assist, never be disguised as aircraft physics.
 
 ## Validation matrix
 

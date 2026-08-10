@@ -24,6 +24,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
     double _governorIntegralW;
     double _rotorAzimuthRad;
     double _previousRotorPowerW;
+    double _scasYawRateRadPerSecond;
     bool _engineOperating = true;
     bool _hardImpactLatched;
     bool _rotorStrikeLatched;
@@ -587,14 +588,42 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
                 * controlEffectiveness
             : 0.0;
 
-        // Tail-rotor trim removes steady main-rotor torque. Load transients retain the documented
-        // yaw kick, and engine-out retains a short left-yaw tendency.
+        // Main-rotor torque → fuselage yaw. US AH-1G (CCW rotor from above): reaction is
+        // right-yaw; left pedal counters. Steady cancel used to be perfect autotrim — that
+        // is not SCAS. SCAS can only fight with ±StabilityAugmentationAuthorityFraction of
+        // pedal authority (NASA CR-3144 ±12.5%), lagged by StabilityAugmentationYawLagSeconds.
+        //
+        // Torque→yaw gain is provisional for this reduced-order rate channel (epistemic:
+        // provisional). Tuned so hover TQ sits near SCAS saturation and a hard collective
+        // pull leaves a residual the pilot must finish with feet.
+        const double TorqueYawAtTransmissionLimitRadPerSecond = 9.5 * Math.PI / 180.0;
+        double transmissionLimitW = Math.Max(1.0, _definition.Powerplant.TransmissionLimitW);
+        double torqueLoadFraction = Math.Clamp(
+            rotorPowerRequiredW / transmissionLimitW, 0.0, 1.35);
         double torqueTransient = Math.Clamp(
             (rotorPowerRequiredW - _previousRotorPowerW)
-                / (0.30 * _definition.Powerplant.TransmissionLimitW),
+                / (0.30 * transmissionLimitW),
             -1.0,
             1.0);
-        targetYawRate += torqueTransient * Degrees(7.0);
+        double torqueYawDemandRadPerSecond = controlEffectiveness
+            * (torqueLoadFraction * TorqueYawAtTransmissionLimitRadPerSecond
+                + torqueTransient * Degrees(7.0));
+
+        double scasAuthorityRadPerSecond = _definition.Handling.StabilityAugmentationAuthorityFraction
+            * _definition.TailRotor.MaximumYawRateRadPerSecond
+            * controlEffectiveness;
+        // Oppose torque reaction; hard-cap at ±12.5% yaw authority.
+        double scasTargetRadPerSecond = Math.Clamp(
+            -torqueYawDemandRadPerSecond,
+            -scasAuthorityRadPerSecond,
+            scasAuthorityRadPerSecond);
+        _scasYawRateRadPerSecond = FirstOrder(
+            _scasYawRateRadPerSecond,
+            scasTargetRadPerSecond,
+            _definition.Handling.StabilityAugmentationYawLagSeconds,
+            dt);
+
+        targetYawRate += torqueYawDemandRadPerSecond + _scasYawRateRadPerSecond;
         if (!_engineOperating)
             targetYawRate -= Degrees(8.0) * controlEffectiveness;
 

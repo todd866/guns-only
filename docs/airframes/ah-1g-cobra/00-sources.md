@@ -97,7 +97,7 @@ the threat-mask observers use.
 | Main hub relative to Basic Mission CG | 0.155 m aft, 2.073 m above | CR-178201 p. 92 stations |
 | Tail hub relative to Basic Mission CG | ≈0.386 m right, 1.190 m above, 8.300 m aft | CR-178201 p. 92 stations |
 | Exposed stub-wing area / incidence | 1.63 m² / 14° | NASA TM-80112 Table I |
-| SCAS cyclic/yaw actuator lag / authority | 0.08 s / 0.05 s / ±12.5% travel | NASA CR-3144 AH-1G section; pinned independently of the reduced-order whole-disk response |
+| SCAS cyclic/yaw actuator lag / authority | 0.08 s / 0.05 s / ±12.5% travel | NASA CR-3144 AH-1G section; measured. Yaw channel is active in dynamics (Build 304); cyclic SCAS still deferred to a later limited-authority SAS model |
 
 The 1980 flight-test report NASA TM-81871 describes a modified test rotor (including 2,120
 kg·m² blade inertia and enlarged tail-rotor chord). Those values are useful for reproducing that
@@ -134,6 +134,7 @@ replaced before production-combat fidelity is claimed.
 | Stub-wing lift model | slope 4.25 rad⁻¹, CLmax 1.15, AR 3.4, e 0.72 | geometry is sourced; polar is provisional |
 | Whole-disk response | 0.12 s | provisional reduced-order rotor response; it is not the measured 0.08 s limited-authority SCAS actuator lag |
 | Maximum body rates / response lags | 60°/s roll, 42°/s pitch, 45°/s yaw | gameplay-safe reduced-order response; replace with source-derived 6-DOF moments/derivatives |
+| Torque→yaw gain at transmission limit | 9.5°/s body yaw | provisional reduced-order mapping from rotor power fraction to fuselage yaw rate; tuned so hover TQ sits near SCAS saturation and a hard collective pull leaves pedal work. Replace with hub/fin/tail-rotor moment closure |
 | Numerical main-rotor load guard | 3.7 × maximum-gross weight | nonphysical divergence guard set no lower than the highest cited clean-configuration load factor; replace with weight/store-specific structural and aerodynamic envelopes |
 | Skid stations/track and impact threshold | current definition | coarse four-point contact; replace from gear geometry and landing-drop evidence |
 | VRS loss amplitude / RBS onset blend | current model coefficients | continuous and dimensionless, but not flight-identified; replace with Johnson VRS and azimuth-resolved stalled-area loads |
