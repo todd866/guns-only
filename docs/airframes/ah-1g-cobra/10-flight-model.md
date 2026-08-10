@@ -155,15 +155,13 @@ The model must not be described as a finished high-fidelity Cobra because it doe
 - component damage, fuel, temperature, gearbox/oil systems, engine start/manual governor;
 - an articulated finite-ammunition AH-1G turret, ground targets, AI, mission, HUD, art or audio.
 
-Yaw rate from main-rotor torque is no longer cancelled by perfect steady trim. Build 304 applies
-NASA CR-3144 limited-authority SCAS on the yaw channel: first-order lag at
-`StabilityAugmentationYawLagSeconds` (0.05 s), hard-capped at
-`±StabilityAugmentationAuthorityFraction` (±12.5%) of pedal yaw authority. Hover / mild TQ stays
-mostly held; a hard collective pull saturates SCAS and leaves residual right-yaw the pilot must
-finish with left pedal. Engine-out retains its short left-yaw tendency. Cyclic/pitch still use the
-reduced-order whole-disk response — that provisional 0.12-second lag is deliberately separate
-from the measured SCAS actuator lags. Any optional attitude/hover assistance must remain a
-separate labeled assist, never be disguised as aircraft physics.
+Yaw rate from main-rotor torque is no longer cancelled by perfect instantaneous trim. Build 305
+stacks NASA CR-3144 limited-authority SCAS (±12.5%, 0.05 s) with a provisional ~1.5 s autotrim
+that finishes residual torque yaw so a fixed lever settles (owner flight 2026-08-10: continuous
+right pull must die out). Collective pulls still yaw before autotrim catches — not perfect magic.
+Engine-out retains its short left-yaw tendency. Cyclic/pitch still use the reduced-order
+whole-disk response. The slow autotrim is a provisional assist-shaped complement; a labeled
+player SAS/trim option must replace it before production SAS fidelity is claimed.
 
 ## Validation matrix
 
