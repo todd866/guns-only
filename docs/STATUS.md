@@ -1,12 +1,11 @@
 # Current product and verification status
 
 Updated: 2026-08-10
-Production: Build 304, revision `acbce39e4e11031eebc1b0a6cd9f0772b0ceb0bd`, deployment
-`dpl_BzJuyZXUTFRAafxutoMeHjXYdK9u` (verified live via /api/build-info 2026-08-10). Builds
+Production: Build 305, revision `055a259a6de60c02be3dd5ef9fc16ee80ce757dc`, deployment
+`dpl_ARvZieUHygiMhB5hw4wVu5x6YiRD` (verified live via /api/build-info 2026-08-10). Builds
 253-298 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Next candidate: Build 305 (branch `fix/ah1g-scas-settle`) — slow yaw autotrim after limited
-SCAS so continuous right pull settles; collective pulls still yaw before catch-up.
+Next candidate: none queued.
 
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
@@ -36,7 +35,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | F9F-2 Panther off Essex (`korea-panther`) | **quarantined** | Preview acknowledgement only | Build 238 ownship-only kernel flies the production terrain catapult/route/return/groove to a physical W2 trap (100/100 focused); packaged route, touch-RTB, HUD, and barrier contracts passed silent-browser acceptance | Complete representative human desktop/touch flights and historical/presentation acceptance before any promotion |
 | MIDGE-03 Facility Nine (`indoor`) | **quarantined** | `/indoor/` preview acknowledgement | Candidate UI now enforces doctrine-safe controls and blocks premature return | Re-drive the default stealth route and representative touch/keyboard paths |
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
-| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned ground war, tip/hold win/lose, M134 + Camp Ember rearm, Tab/F gunner. Build 301: land spur Camp Ember FOB, airborne soft gates, denser Iron Bell destroyables. Build 304: limited SCAS yaw (not perfect autotrim) | Owner verify land FOB + path + bridge fight; flare landing; feet-off hard collective needs pedal. Longer arc: DCS-BS1-grade flight dynamics |
+| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned ground war, tip/hold win/lose, M134 + Camp Ember rearm, Tab/F gunner. Build 301: land spur Camp Ember FOB, airborne soft gates, denser Iron Bell destroyables. Build 305: limited SCAS + slow autotrim settles right yaw | Owner verify land FOB + path + bridge fight; flare landing; feet-off hard collective needs pedal. Longer arc: DCS-BS1-grade flight dynamics |
 | Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load, lappable circuit from Build 264+. Build 267 adds ride telemetry (speed/gear/lean/lap/frame) | Fresh representative human lap on the fixed artifact; deeper instrumentation still provisional |
 
 ## Research-only packages
@@ -47,9 +46,9 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Live production is Build 304 (`acbce39e`, `dpl_BzJuyZXUTFRAafxutoMeHjXYdK9u`). Shipped from
-  PR #50; Verify green on the PR head; post-deploy `/api/build-info` and remote route smoke
-  verified. Do not treat the gate as a frame-rate measurement.
+- Live production is Build 305 (`055a259a6de60c02be3dd5ef9fc16ee80ce757dc`, `dpl_ARvZieUHygiMhB5hw4wVu5x6YiRD`). Shipped from
+  PR #52; Verify green after one documented re-run of flaky `boot does not stutter` smoke.
+  Do not treat that gate as a frame-rate measurement.
 - A candidate is releasable only when its exact pushed SHA has a complete green gate, or the
   owner accepts a documented flaky-gate exception with live `/api/build-info` verification.
 - Production deployment fails closed unless it can pin the current public rollback identity.
