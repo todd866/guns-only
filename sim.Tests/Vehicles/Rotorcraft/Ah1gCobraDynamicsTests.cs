@@ -207,22 +207,51 @@ public sealed class Ah1gCobraDynamicsTests
     }
 
     [Fact]
-    public void FeetOffHoverCollectiveIsMostlyHeldByLimitedScas()
+    public void FeetOffHoverCollectiveNeedsPedalPastLimitedScas()
     {
-        // Limited SCAS only — mild residual at hover is OK; not 305's perfect autotrim settle.
+        // Build 307: hover must leave clearer residual than Build 306's "mostly held".
         var cobra = Create("scas-hover");
         double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
         var hover = new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0);
         for (long tick = 0; tick < 480; tick++)
             cobra.Advance(Input(tick, hover));
 
+        Assert.True(Math.Abs(cobra.Telemetry.YawResidualRadPerSecond) > 0.02,
+            $"Hover residual too small: {cobra.Telemetry.YawResidualRadPerSecond:F4} rad/s");
+
         double yaw0 = cobra.Observation.YawRad;
         for (long tick = 480; tick < 840; tick++)
             cobra.Advance(Input(tick, hover));
 
-        double driftRad = Math.Abs(cobra.Observation.YawRad - yaw0);
-        Assert.True(driftRad < 0.10,
-            $"Hover feet-off yaw drift {driftRad:F3} rad in 3 s — SCAS should mostly hold.");
+        double driftRad = cobra.Observation.YawRad - yaw0;
+        Assert.True(driftRad > 0.12,
+            $"Hover feet-off should yaw right past SCAS; Δyaw={driftRad:F3} rad in 3 s.");
+    }
+
+    [Fact]
+    public void FeetOffCruiseWeathervaneHoldsHeadingBetterThanHoverResidualAlone()
+    {
+        // Forward flight: weathervane damping should arrest continuous right crawl.
+        var cruise = Create("scas-cruise", velocity: new Vec3D(0.0, 0.0, 45.0));
+        double trim = cruise.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        // Slight forward cyclic to hold speed; feet off.
+        var command = new VerticalLiftPilotCommand(trim, 0.12, 0.0, 0.0);
+        for (long tick = 0; tick < 480; tick++)
+            cruise.Advance(Input(tick, command));
+
+        Assert.True(cruise.Telemetry.AdvanceRatio > 0.10,
+            $"expected cruise µ, got {cruise.Telemetry.AdvanceRatio:F3}");
+        Assert.True(Math.Abs(cruise.Telemetry.WeathervaneYawRadPerSecond) > 1e-4
+            || Math.Abs(cruise.State.BodyRates.R) < 0.02,
+            "weathervane should engage or yaw rate already small in cruise");
+
+        double yaw0 = cruise.Observation.YawRad;
+        for (long tick = 480; tick < 840; tick++)
+            cruise.Advance(Input(tick, command));
+
+        double driftRad = Math.Abs(cruise.Observation.YawRad - yaw0);
+        Assert.True(driftRad < 0.18,
+            $"Cruise feet-off heading drift {driftRad:F3} rad in 3 s — weathervane should help.");
     }
 
     [Fact]

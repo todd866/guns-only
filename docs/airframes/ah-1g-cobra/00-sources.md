@@ -134,7 +134,9 @@ replaced before production-combat fidelity is claimed.
 | Stub-wing lift model | slope 4.25 rad⁻¹, CLmax 1.15, AR 3.4, e 0.72 | geometry is sourced; polar is provisional |
 | Whole-disk response | 0.12 s | provisional reduced-order rotor response; it is not the measured 0.08 s limited-authority SCAS actuator lag |
 | Maximum body rates / response lags | 60°/s roll, 42°/s pitch, 45°/s yaw | gameplay-safe reduced-order response; replace with source-derived 6-DOF moments/derivatives |
-| Torque→yaw gain at transmission limit | 8.0°/s body yaw | provisional reduced-order mapping; Build 306 removes slow autotrim (owner: 305 too easy). SCAS ±12.5% only — hover near saturation with mild residual, high TQ needs pedal. Replace with hub/fin/tail-rotor moment closure |
+| Torque→yaw gain at transmission limit | 11.0°/s body yaw | provisional reduced-order mapping; Build 307 raises residual so feet-off hover needs occasional left pedal. SCAS ±12.5% only (no 305 autotrim). Replace with hub/fin/tail-rotor moment closure |
+| Forward-flight weathervane yaw damping | μ/0.18 schedule × 2.4 /s on body yaw rate | provisional directional-stability stand-in (not a fin/BEMT model). Opposes yaw rate with advance ratio so cruise holds heading better than hover residual alone. Replace with source fin/weathervane derivatives |
+| Cobra canyon terrain wind field | synoptic (−4, 0, 0.5) m/s + height/slope channeling | provisional `IWindField`; ridge speed-up, lee soften, cut channeling. Not CFD. Still air = zero synoptic / disabled field (tests). Audit via wind_* telemetry vs yaw_residual |
 | Numerical main-rotor load guard | 3.7 × maximum-gross weight | nonphysical divergence guard set no lower than the highest cited clean-configuration load factor; replace with weight/store-specific structural and aerodynamic envelopes |
 | Skid stations/track and impact threshold | current definition | coarse four-point contact; replace from gear geometry and landing-drop evidence |
 | VRS loss amplitude / RBS onset blend | current model coefficients | continuous and dimensionless, but not flight-identified; replace with Johnson VRS and azimuth-resolved stalled-area loads |

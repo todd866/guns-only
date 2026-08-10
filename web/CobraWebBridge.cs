@@ -41,7 +41,9 @@ public static partial class CobraWebBridge
         _runtime = new CobraMissionRuntime(
             definition,
             definition.CreateTerrainSurface(),
-            _routeChoice);
+            _routeChoice,
+            windVelocityMps: CobraCanyonWindField.DefaultSynopticMps,
+            enableTerrainWind: true);
         _command = new VerticalLiftPilotCommand(
             _runtime.Cobra.EstimateHoverCollective(
                 _runtime.Cobra.State.GrossMassKg,
@@ -287,10 +289,15 @@ public static partial class CobraWebBridge
                 pitch_rad = observation.PitchRad,
                 roll_rad = observation.RollRad,
                 yaw_rad = observation.YawRad,
+                yaw_rate_rad_s = rotorcraft.BodyYawRateRadPerSecond,
                 collective = _command.Collective,
                 forward_cyclic = _command.ForwardCyclic,
                 right_cyclic = _command.RightCyclic,
                 yaw = _command.Yaw,
+                pedal = _command.Yaw,
+                wind_e_mps = observation.WindVelocityMps.X,
+                wind_u_mps = observation.WindVelocityMps.Y,
+                wind_n_mps = observation.WindVelocityMps.Z,
                 velocity_x_mps = velocity.X,
                 velocity_y_mps = velocity.Y,
                 velocity_z_mps = velocity.Z,
@@ -314,6 +321,12 @@ public static partial class CobraWebBridge
                     main_rotor_clearance_m = rotorcraft.MainRotorClearanceM,
                     ground_effect_factor = rotorcraft.GroundEffectFactor,
                     engine_operating = rotorcraft.EngineOperating,
+                    advance_ratio = rotorcraft.AdvanceRatio,
+                    body_yaw_rate_rad_s = rotorcraft.BodyYawRateRadPerSecond,
+                    torque_yaw_demand_rad_s = rotorcraft.TorqueYawDemandRadPerSecond,
+                    scas_yaw_rad_s = rotorcraft.ScasYawRadPerSecond,
+                    weathervane_yaw_rad_s = rotorcraft.WeathervaneYawRadPerSecond,
+                    yaw_residual_rad_s = rotorcraft.YawResidualRadPerSecond,
                 },
             },
             collision_obstacle_id = diagnostics.CollisionObstacleId,

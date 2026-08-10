@@ -156,11 +156,17 @@ The model must not be described as a finished high-fidelity Cobra because it doe
 - an articulated finite-ammunition AH-1G turret, ground targets, AI, mission, HUD, art or audio.
 
 Yaw rate from main-rotor torque uses NASA CR-3144 limited-authority SCAS only (±12.5%, 0.05 s).
-Build 305's slow autotrim is removed — owner telemetry showed high-TQ heading bias ≈0 deg/s and
-the aircraft felt too easy; limited SCAS with residual pedal work is the more realistic AH-1G
-channel. Provisional torque→yaw gain keeps hover near SCAS with a mild residual. Engine-out
-retains its short left-yaw tendency. Cyclic/pitch still use the reduced-order whole-disk
-response. Any friendlier heading/hover assist must be a separately labeled player option.
+Build 305's slow autotrim stays removed — owner telemetry showed high-TQ heading bias ≈0 deg/s
+and the aircraft felt too easy. Build 307 raises provisional torque→yaw gain so feet-off hover
+leaves a clearer right residual (occasional left pedal), and adds a provisional advance-ratio
+weathervane damper so cruise heading holds better without restoring autotrim. Telemetry
+publishes torque demand, SCAS, weathervane, and residual separately from local wind so TQ vs
+wind audits are possible offline. Engine-out retains its short left-yaw tendency. Cyclic/pitch
+still use the reduced-order whole-disk response. Any friendlier heading/hover assist must be a
+separately labeled player option.
+
+Canyon production missions sample a provisional terrain-modulated mean wind (`CobraCanyonWindField`)
+into the vehicle environment each authority tick; unit tests keep still air unless they opt in.
 
 ## Validation matrix
 

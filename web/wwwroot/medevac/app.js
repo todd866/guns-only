@@ -7,7 +7,7 @@ import {
   formatDuration,
   formatSignedDuration,
 } from "../render/medevac/commander_view_model.js";
-import { RELEASE_BUILD } from "../render/release/release_identity.js?v=306";
+import { RELEASE_BUILD } from "../render/release/release_identity.js?v=307";
 
 const $ = (selector) => document.querySelector(selector);
 const AUDIO_QA_SILENT = new URLSearchParams(globalThis.location?.search ?? "")
