@@ -44,6 +44,10 @@ export const GUIDANCE_PATH_DEFAULTS = Object.freeze({
   gateOpacity: 0.16,
   activeOpacity: 0.30,
   maxGates: 24,
+  // Authored half-widths run hundreds of metres (tolerance volumes). Drawing that as a plane
+  // scale makes a translucent UFO on the horizon — cap the *visual* radius; the kernel half
+  // stays authoritative for scoring, not for pixels.
+  maxVisualHalfM: Infinity,
 });
 
 const GATE_VERTEX = /* glsl */`
@@ -177,11 +181,12 @@ export function createGuidancePath(THREE, options = {}) {
         if (i >= drawn) { mesh.visible = false; continue; }
         const gate = ladder[i];
         const half = Math.max(1, Number(gate.halfM) || 1);
+        const visualHalf = Math.min(half, Math.max(1, Number(config.maxVisualHalfM) || half));
         mesh.position.copy(points[i]);
-        // The quad is 4 units wide for 2 units of radius, so the authored half-width maps to
-        // 1.0 in shader space: the cloud thins to nothing exactly at the tolerance the kernel
-        // holds, rather than at some tighter line invented by the renderer.
-        mesh.scale.setScalar(half);
+        // The quad is 4 units wide for 2 units of radius, so the visual half-width maps to
+        // 1.0 in shader space. Visual radius is capped so a 155 m tolerance does not paint a
+        // gorge-spanning diamond (owner 2026-08-08: "what's that giant thing").
+        mesh.scale.setScalar(visualHalf);
 
         // Face along the leg into the gate, so it is something flown THROUGH rather than a
         // billboard that turns to watch the pilot.

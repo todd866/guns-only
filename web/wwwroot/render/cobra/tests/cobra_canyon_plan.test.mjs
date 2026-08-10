@@ -113,7 +113,7 @@ test("keeps authority content invariant and sheds only ambient presentation by t
     assert.equal(plan.hazards.length, 14);
     assert.equal(plan.presentationKit.ambientArchetypes.length, 11);
     assert.equal(plan.presentationKit.landmarkArchetypes.length, 11);
-    assert.equal(plan.setPieceCells.length, 9);
+    assert.equal(plan.setPieceCells.length, 10);
     assert.ok(plan.counts.ambientArchetypes <= plan.budget.maxAmbientArchetypes);
     assert.ok(plan.counts.landmarkArchetypes <= plan.budget.maxLandmarkArchetypes);
     assert.ok(plan.counts.setPieceCells <= plan.budget.maxSetPieceCells);
@@ -131,7 +131,7 @@ test("keeps authority content invariant and sheds only ambient presentation by t
   assert.ok(balanced.counts.ambientInstances < desktop.counts.ambientInstances);
   assert.deepEqual(
     [mobile.counts.ambientInstances, balanced.counts.ambientInstances, desktop.counts.ambientInstances],
-    [350, 794, 1582],
+    [400, 860, 1600],
   );
   assert.throws(
     () => planCobraCanyonWorld(world, { qualityTier: "cinematic" }),
@@ -206,7 +206,9 @@ test("publishes a geometry-free visual kit and route-ordered authored reveals", 
 
   for (const route of plan.routeLanes) {
     const reveals = plan.setPieceCells.filter((cell) => cell.routeId === route.id);
-    assert.equal(reveals.length, 3);
+    // River gorge carries Camp Ember + Long Fang + Iron Bell + Karst; other routes keep three.
+    const expected = route.id.includes("river-gorge") ? 4 : 3;
+    assert.equal(reveals.length, expected);
     assert.ok(reveals.every((cell) => cell.displayName && cell.approachLocalM.length === 3));
     assert.deepEqual(
       reveals.map((cell) => cell.distanceAlongRouteM),
@@ -346,7 +348,8 @@ test("rejects authority, route-id, collision, and budget drift", async () => {
   assert.throws(() => validateCobraCanyonWorld(invalidPalette), /#RRGGBB/);
 
   const ambiguousReveal = structuredClone(original);
-  ambiguousReveal.setPieceCells[1].distanceAlongRouteM = 100;
+  // Cell[1] is Long Fang on the same river-gorge sequence as Camp Ember (cell[0] at 0).
+  ambiguousReveal.setPieceCells[1].distanceAlongRouteM = 0;
   assert.throws(() => validateCobraCanyonWorld(ambiguousReveal), /must increase within each route/);
 
   const unknownArchetype = structuredClone(original);

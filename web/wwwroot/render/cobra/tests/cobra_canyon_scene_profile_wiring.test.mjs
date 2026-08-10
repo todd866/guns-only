@@ -152,11 +152,12 @@ test("the canyon reads as the same product as the F-22: one sun, one air, one li
     "the enclosure term must still sink valleys without turning the gorge into a hole");
   assert.match(terrain, /finite\(options\.cloudShadowStrength, 0\.34\)/);
   // Ember Run: stronger cloud shadow than the F-22 korea default — humid theatre weather.
-  assert.equal(profile.terrainPaint.cloudShadowStrength, 0.42);
+  assert.equal(profile.terrainPaint.cloudShadowStrength, 0.62);
   assert.match(terrain, /finite\(options\.hazeBands, ukraine \? 0 : 6\)/);
   assert.equal(profile.fog.hazeBands, 6);
   assert.match(terrain, /finite\(options\.hazeBandBlend, ukraine \? 0 : 0\.65\)/);
-  assert.equal(profile.fog.hazeBandBlend, 0.65);
+  // Ember Run: stronger haze-band blend than korea's 0.65 — monsoon layered ridgelines.
+  assert.equal(profile.fog.hazeBandBlend, 0.82);
 
   // The two-softstep tone ramp, gate for gate, is what puts both worlds' terrain in the same
   // value structure under the same sun.

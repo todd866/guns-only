@@ -71,9 +71,8 @@ test("the Cobra frame requests the camera-referenced ladder", () => {
   assert.equal(frame.ladderReference, "camera");
 });
 
-test("camera-referenced horizon helper tracks the banked 0 rung (ladder math only)", async () => {
-  // Classical waterline is body-forward; this helper only describes the conformal horizon
-  // point the pitch ladder uses under bank.
+test("camera-referenced waterline tracks the banked ladder horizon", async () => {
+  // Owner ruling: waterline shares the conformal horizon the pitch ladder uses under bank.
   const { cameraReferencedAirframeAnchors } = await import("../../../hud.js");
   const camera = cameraPitchedBy(0.08);
   const bankDeg = 35;
@@ -89,8 +88,7 @@ test("camera-referenced horizon helper tracks the banked 0 rung (ladder math onl
   assert.ok(Math.abs(anchors.waterline.y - expectedY) < 1e-6);
 });
 
-test("Cobra snapshot does not require waterline to share the ladder horizon", async () => {
-  // Reversal of Build 266: waterline = body axis; ladder 0 = world horizon through camera.
+test("Cobra snapshot requests camera ladder (waterline follows in hud.js)", async () => {
   const { cobraHudState } = await import("../cobra_hud_adapter.js");
   const state = cobraHudState({
     vehicle: {

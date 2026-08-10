@@ -1,13 +1,13 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=274";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=299";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=274";
-import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=274";
+} from "./cobra_canyon_asset_kit.js?v=299";
+import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=299";
 import {
   createCobraCanyonBasinMaterial,
   createCobraCanyonRiverMaterial,
-} from "./cobra_canyon_terrain_material.js?v=274";
+} from "./cobra_canyon_terrain_material.js?v=299";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 
@@ -317,12 +317,19 @@ function bridgeDeckTrussGeometry(THREE) {
   appendBoxPrism(positions, [-0.5, -0.5, -0.42], [0.5, -0.28, 0.42]);
   appendBoxPrism(positions, [-0.5, -0.5, -0.5], [0.5, 0.5, -0.42]);
   appendBoxPrism(positions, [-0.5, -0.5, 0.42], [0.5, 0.5, 0.5]);
+  // Cross-deck roadway lip so the span reads as a crossing, not two parallel walls.
+  appendBoxPrism(positions, [-0.5, -0.28, -0.42], [0.5, -0.18, 0.42]);
   for (const z of [-0.42, 0.42]) {
     appendBoxPrism(positions, [-0.5, 0.38, z - 0.04], [0.5, 0.5, z + 0.04]);
     appendBoxPrism(positions, [-0.5, -0.1, z - 0.03], [0.5, 0.02, z + 0.03]);
     for (const x of [-0.45, -0.15, 0.15, 0.45]) {
       appendBoxPrism(positions, [x - 0.03, -0.28, z - 0.04], [x + 0.03, 0.5, z + 0.04]);
     }
+  }
+  // Diagonal X-bracing on each face — cheap triangles, big silhouette change from a mile out.
+  for (const z of [-0.46, 0.46]) {
+    appendBoxPrism(positions, [-0.42, -0.22, z - 0.02], [-0.08, 0.36, z + 0.02]);
+    appendBoxPrism(positions, [0.08, -0.22, z - 0.02], [0.42, 0.36, z + 0.02]);
   }
   return geometryFromPositions(THREE, positions, "COBRA_CANYON_BRIDGE_DECK_TRUSS_GEOMETRY");
 }
@@ -405,14 +412,22 @@ function materialFor(THREE, role) {
     heroCells: { color: 0x6a5030, roughness: 1 },
     landmarks: { color: 0xffffff, roughness: 0.95 },
     hazards: { color: 0xe96a43, emissive: 0x411006, roughness: 0.8 },
-    "bridge-deck": { color: 0xd46a48, emissive: 0x3a1006, roughness: 0.88 },
-    "bridge-pier": { color: 0xb85a3c, emissive: 0x2c0c06, roughness: 0.9 },
+    // Weathered steel over jungle green — Iron Bell should read as the fight site, not an
+    // orange hazard box that matches every other collision marker.
+    "bridge-deck": { color: 0xc9b89a, emissive: 0x2a2214, roughness: 0.9 },
+    "bridge-pier": { color: 0x8f806c, emissive: 0x1a1610, roughness: 0.94 },
     vegetation: { color: 0xffffff, roughness: 1 },
   }[role];
   const material = new THREE.MeshLambertMaterial({
     color: parameters.color,
     emissive: parameters.emissive ?? 0x000000,
-    flatShading: role !== "heroCells",
+    // Soft normals on landmarks/bridges/vegetation — flat boxes read as crystal shards at nap AGL.
+    // Hazards and roads keep hard facets so collision cues stay readable.
+    flatShading: role !== "heroCells"
+      && role !== "landmarks"
+      && role !== "vegetation"
+      && role !== "bridge-deck"
+      && role !== "bridge-pier",
     side: role === "roads" ? THREE.DoubleSide : THREE.FrontSide,
   });
   if (role === "heroCells") {
@@ -1203,23 +1218,31 @@ function landmarkPlacements(plan) {
     if (!point) continue;
     const kind = stableToken(record.kind);
     const groundY = sampleCobraCanyonTerrain(plan, point.x, -point.z);
-    const authoredHeightM = Math.max(4, point.y - groundY);
+    // Cap silhouette height. Authored top anchors on this heightfield can sit 100–300 m above
+    // terrain (karst needles 311 m); drawing that as a solid box paints a UFO on the horizon
+    // (owner 2026-08-08: "what's that giant thing").
+    const authoredHeightM = Math.min(
+      64,
+      Math.max(4, point.y - groundY),
+    );
     if (kind === "steel-truss-bridge" || kind === "radio-mast" || kind === "water-tower") {
       continue;
     }
     if (kind === "forward-operating-base") {
       add(record, point, "pad-west", [-24, 0, 0], [30, 1.2, 30]);
       add(record, point, "pad-centre", [12, 0, -18], [26, 1.2, 26]);
-      add(record, point, "signal-mast", [0, 0, 22], [2, Math.max(30, authoredHeightM), 2]);
+      add(record, point, "signal-mast", [0, 0, 22], [2, Math.min(28, Math.max(18, authoredHeightM)), 2]);
     } else if (kind === "waterfall") {
-      add(record, point, "water-ribbon", [0, 0, 0], [18, Math.max(90, authoredHeightM), 3]);
+      add(record, point, "water-ribbon", [0, 0, 0], [14, Math.min(48, Math.max(24, authoredHeightM * 0.4)), 3]);
     } else if (kind === "rock-spires") {
-      add(record, point, "spire-one", [-18, 0, 6], [14, authoredHeightM * 0.72, 16]);
-      add(record, point, "spire-two", [4, 0, -8], [17, authoredHeightM, 19]);
-      add(record, point, "spire-three", [26, 0, 10], [12, authoredHeightM * 0.61, 14]);
+      const spireH = Math.min(52, authoredHeightM);
+      add(record, point, "spire-one", [-18, 0, 6], [14, spireH * 0.72, 16]);
+      add(record, point, "spire-two", [4, 0, -8], [17, spireH, 19]);
+      add(record, point, "spire-three", [26, 0, 10], [12, spireH * 0.61, 14]);
     } else if (kind === "ridge-gate") {
-      add(record, point, "tooth-west", [-34, 0, 0], [42, authoredHeightM, 54]);
-      add(record, point, "tooth-east", [34, 0, 0], [38, authoredHeightM * 0.84, 48]);
+      const toothH = Math.min(58, authoredHeightM);
+      add(record, point, "tooth-west", [-34, 0, 0], [42, toothH, 54]);
+      add(record, point, "tooth-east", [34, 0, 0], [38, toothH * 0.84, 48]);
     } else if (kind === "hill-pagoda") {
       add(record, point, "base", [0, 0, 0], [26, authoredHeightM * 0.32, 22]);
       add(record, point, "roof-low", [0, 0, 0], [34, authoredHeightM * 0.52, 30]);
@@ -1229,7 +1252,7 @@ function landmarkPlacements(plan) {
       add(record, point, "quarry-cut", [0, -3, 0], [150, 6, 110]);
     } else if (kind === "mill-chimney") {
       add(record, point, "mill", [-12, 0, 0], [34, 12, 26]);
-      add(record, point, "stack", [18, 0, 0], [7, Math.max(42, authoredHeightM), 7]);
+      add(record, point, "stack", [18, 0, 0], [7, Math.min(48, Math.max(28, authoredHeightM)), 7]);
     } else if (kind === "signal-smoke") {
       // Cap the column: an authored top anchor far above terrain made a 60 m+ orange prism that
       // read as a placeholder cone on the river bank (Build 267 owner flight).
@@ -1243,13 +1266,13 @@ function landmarkPlacements(plan) {
 
 function landmarkColor(kind) {
   const token = stableToken(kind);
-  if (token === "forward-operating-base") return [0.52, 0.34, 0.18];
-  if (token === "waterfall") return [0.62, 0.76, 0.70];
-  if (token === "rock-spires") return [0.58, 0.55, 0.40];
-  if (token === "ridge-gate") return [0.34, 0.34, 0.22];
-  if (token === "hill-pagoda") return [0.78, 0.76, 0.63];
-  if (token === "open-quarry") return [0.54, 0.27, 0.14];
-  if (token === "mill-chimney") return [0.40, 0.34, 0.26];
+  if (token === "forward-operating-base") return [0.48, 0.36, 0.22];
+  if (token === "waterfall") return [0.55, 0.72, 0.74];
+  if (token === "rock-spires") return [0.50, 0.52, 0.44];
+  if (token === "ridge-gate") return [0.30, 0.36, 0.26];
+  if (token === "hill-pagoda") return [0.82, 0.78, 0.68];
+  if (token === "open-quarry") return [0.58, 0.28, 0.12];
+  if (token === "mill-chimney") return [0.38, 0.36, 0.30];
   // Cool grey plume — warm orange read as an unfinished debug solid on the gorge bank.
   if (token === "signal-smoke") return [0.62, 0.64, 0.66];
   return [0.52, 0.46, 0.31];
@@ -1503,6 +1526,7 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
   const assetKit = createCobraCanyonAssetKit(THREE, plan, {
     qualityTier,
     maxInstances: budget.maxAssetInstances,
+    foliageTextures: options.foliageTextures ?? null,
   });
   group.add(assetKit.group);
 

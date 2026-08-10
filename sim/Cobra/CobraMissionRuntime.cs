@@ -439,7 +439,8 @@ public sealed class CobraMissionRuntime
         _act,
         _selectedRoute,
         _groundWar.Fob.CentreWorldM,
-        fobPathAltitudeM: _groundWar.Fob.CentreWorldM.Y + 30.0);
+        fobPathAltitudeM: _groundWar.Fob.CentreWorldM.Y + 30.0,
+        aircraftWorldM: _cobra.State.PositionWorldM);
     public IReadOnlyList<CobraResolvedObstacle> ResolvedObstacles => _resolvedObstacles;
     public IReadOnlyList<CobraResolvedThreatObserver> ResolvedThreatObservers =>
         _resolvedThreatObservers;

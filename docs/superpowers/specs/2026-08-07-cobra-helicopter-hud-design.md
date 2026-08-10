@@ -1,19 +1,19 @@
-# Cobra Canyon — classical helicopter HUD symbology
+# Cobra Canyon — helicopter HUD symbology
 
-Date: 2026-08-07  
+Date: 2026-08-07 (owner-corrected 2026-08-08)  
 Status: approved for implementation  
 Base: Hold the Bridge / Ember Run, AH-1S M76 + DTIC ADA303212 doctrine  
-Owner ruling: classical three-symbol model + hover cue; FPV carries important cues
+Owner ruling: camera-shared waterline + ladder; FPV carries important cues
 
 ## Product
 
-The combiner must read as an attack-helicopter flight display, not a jet HUD with the
-waterline glued to the horizon.
+The combiner must read as an attack-helicopter flight display whose horizon symbols
+agree with the eye.
 
 | Symbol | Means | Stabilization |
 | --- | --- | --- |
 | Pitch ladder 0 / horizon | World horizontal | Camera-conformal (`ladderReference: "camera"`) through rear-seat sight bias |
-| Waterline W | Airframe longitudinal axis | Body-forward (`noseAnchor`); screen-aligned; **not** on the horizon when pitched |
+| Waterline W | Horizon reference through the eye | Same camera horizon as ladder 0 (bank-aware); **not** body-forward nose projection |
 | Gun cross | Fixed gun / body line | Body-forward |
 | Cruise FPV | Where you are going | Ground velocity through camera; shown when GS ≥ 40 KT |
 | Hover velocity stub | Plan-view ground track | Screen-fixed from the waterline when GS &lt; 40 KT; conformal FPV blanked |
@@ -25,11 +25,12 @@ waterline glued to the horizon.
    as the rotorcraft strip.
 3. **Gun-ready tick** — inboard tick only when `gunner.fire_authorized` (Hold F shoots).
 
-## Reversal
+## Reversal history
 
-Build 266 / its follow-up work-order parked the waterline on the camera horizon so it would
-“agree” with the ladder. That contradicts the waterline definition (body axis) and is reversed
-here. The gap between W and ladder 0 is attitude + sight bias — information, not a bug.
+Build 266 parked the waterline on the camera horizon. A later “classical body-forward”
+reversal put W back on the nose and disagreed with the ladder by the rear-seat sight bias.
+Owner flights (2026-08-07/08) rejected that gap: waterline must match the camera again.
+Gun cross remains body-forward.
 
 ## Non-goals
 

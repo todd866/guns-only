@@ -19,7 +19,10 @@ public sealed class CobraGroundWarRuntime
     // turret is killing pushers. The first wave lands early so friendly control never has a
     // hostile-free window in which it could self-climb toward the victory threshold.
     public const double HostileWaveIntervalSeconds = 15.0;
-    public const double FirstHostileWaveDelaySeconds = 5.0;
+    // Ember Run Depart is a friendly pad departure — do not open under fire. A short quiet
+    // window covers lift-off; longer delays let the garrison self-win before waves arrive
+    // (ZeroInputGroundWarLosesTheBasinWithoutFireSupport).
+    public const double FirstHostileWaveDelaySeconds = 22.0;
     public const int HostileWaveSoftVehicles = 1;
     public const int HostileWaveInfantryClumps = 2;
     // Hostile seed/wave rings stay outside the authored M134 min-solution window so an
@@ -29,16 +32,14 @@ public sealed class CobraGroundWarRuntime
     public const double HostileSeedSoftVehicleRingM = 200.0;
     public const double HostileWaveRingM = 160.0;
     /// <summary>
-    /// Standing gunnery seam placed on the aircraft nose at mission start so the crew chain
-    /// (Tab → acquire → hold F → rounds away) is reachable for the whole sortie. Site-seeded
-    /// hostiles at the departure pad live ~20 s before the garrison kills them, and every other
-    /// hostile sits outside the 2 km gun window — which is why fire_authorized stayed at 0%.
+    /// Standing gunnery seam down the departure heading so the crew chain
+    /// (Tab → acquire → hold F → rounds away) stays reachable after takeoff. It must NOT sit
+    /// in the pad ring — Camp Ember is a friendly Depart, not a knife-fight spawn.
     /// </summary>
     public const string GunnerySeamUnitId = "ground.hostile.gunnery-seam.000";
-    // Mid-envelope (ballistic window 80–2000 m, turret ±110°). 350 m worked in unit tests but
-    // left a soft vehicle that Tab often skipped for nearer OOL infantry; 220 m keeps the seam
-    // first in nearest-hostile order from the River Gorge spawn hover.
-    public const double GunnerySeamRangeM = 220.0;
+    // Mid/far envelope (ballistic window 80–2000 m). ~950 m is still Tab-reachable from the
+    // pad hover but reads as "down the gorge path", not "surrounded on the ramp".
+    public const double GunnerySeamRangeM = 950.0;
     public const double WreckRetainSeconds = 12.0;
     /// <summary>Small-arms chatter events per engaged unit per second (presentation only).</summary>
     public const double SmallArmsEventsPerSecond = 2.4;
@@ -477,10 +478,15 @@ public sealed class CobraGroundWarRuntime
             SpawnUnit(GroundFaction.Friendly, GroundUnitRole.SoftVehicle, site,
                 GroundUnitIntent.Advance, ringM: 48.0, bearingRad: 2.1);
 
+            // Camp Ember is the Depart pad: friendlies only. Hostiles open at the contested
+            // gorge sites (bridge / plantation / quarry) so the cold open is a takeoff, not a
+            // surround. The standing gunnery seam is planted down-route after spawn pose is known.
+            if (fob) continue;
+
             // No seeded hostile hard points: the attackers are the moving wave targets the
             // turret exists to kill; static hostile armor would outrange the garrison forever.
             // Place hostiles on the basin-facing side of each site (±~35°) so a River Gorge
-            // spawn looking into the gorge has gun-reachable marks instead of permanent
+            // approach looking into the gorge has gun-reachable marks instead of permanent
             // OutOfLimits flanks (Build 267 owner flight).
             double yawTowardBasin = Math.Atan2(
                 -site.PositionWorldM.X, -site.PositionWorldM.Z);
@@ -490,6 +496,11 @@ public sealed class CobraGroundWarRuntime
             SpawnUnit(GroundFaction.Hostile, GroundUnitRole.SoftVehicle, site,
                 GroundUnitIntent.EngageNearest, ringM: HostileSeedSoftVehicleRingM,
                 bearingRad: BearingFromAircraftYaw(yawTowardBasin - 0.55));
+            // Extra infantry on the far ring so removing Camp Ember hostiles does not let the
+            // garrison self-climb to victory before waves arrive.
+            SpawnUnit(GroundFaction.Hostile, GroundUnitRole.InfantryClump, site,
+                GroundUnitIntent.EngageNearest, ringM: HostileSeedInfantryRingM + 40.0,
+                bearingRad: BearingFromAircraftYaw(yawTowardBasin + 2.4));
         }
         UpdateSiteControl();
         DriftBalance(PlayerVehicleContract.FixedDeltaSeconds);
@@ -504,9 +515,9 @@ public sealed class CobraGroundWarRuntime
         Math.Atan2(Math.Cos(yawRad), Math.Sin(yawRad));
 
     /// <summary>
-    /// Places one soft vehicle on the aircraft nose inside the M28A1 envelope and ballistic
-    /// window, immune to friendly mutual combat, so designation→fire is always possible from
-    /// the spawn hover. Called once from CobraMissionRuntime after the vehicle pose is known.
+    /// Places one soft vehicle down the aircraft nose inside the M28A1 envelope and ballistic
+    /// window, immune to friendly mutual combat, so designation→fire stays reachable after
+    /// Depart. Range is intentionally past the pad ring (see GunnerySeamRangeM).
     /// </summary>
     public GroundUnit SeedStandingGunneryTarget(
         in Vec3D aircraftPositionWorldM,

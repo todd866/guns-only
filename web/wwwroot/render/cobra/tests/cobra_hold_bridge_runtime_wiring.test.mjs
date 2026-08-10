@@ -38,11 +38,18 @@ test("telemetry rides the bounded channel and keepalive exists only behind the p
   assert.doesNotMatch(main, /telemetryRows\.splice/);
 });
 
-test("target cueing cannot swing the windshield and cold boot selects no target", async () => {
+test("Tab selects and V padlocks like the F-22 gun-target / view contract", async () => {
   const main = await source("cobra-lab/main.js");
-  assert.match(main, /clampInducedLookRotation/);
+  assert.match(main, /nextHostileTargetId/);
+  assert.match(main, /togglePadlockSelection/);
+  assert.match(main, /resolveAuthorityLookAtPoint/);
+  assert.match(main, /event\.code === "KeyV"/);
+  assert.match(main, /event\.code === "Tab"/);
+  assert.match(main, /padlockActive/);
   assert.match(main, /playerHasInteracted/);
   assert.match(main, /hostileTargetIds\.length && playerHasInteracted/);
+  // Soft ±0.05 rad lean is no longer the padlock substitute.
+  assert.doesNotMatch(main, /clampInducedLookRotation/);
 });
 
 test("the tip strip teaches the collective lever: S pulls up, W lowers", async () => {

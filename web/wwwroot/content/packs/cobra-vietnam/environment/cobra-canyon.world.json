@@ -588,10 +588,10 @@
       "id": "ambient.cobra-canyon.gorge-riparian.v1",
       "kind": "riparian-canopy",
       "archetype": "procedural://cobra-vietnam/riparian-stand",
-      "boundsLocalM": [-6400, -6400, 6400, 6400],
+      "boundsLocalM": [-7000, -7000, 6400, 6400],
       "visualBandId": "band.cobra-canyon.ambient.v1",
       "priority": 1,
-      "instancesByQuality": {"mobile": 76, "balanced": 148, "desktop": 250},
+      "instancesByQuality": {"mobile": 114, "balanced": 168, "desktop": 252},
       "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
       "presentationOnly": true,
       "targetable": false
@@ -603,7 +603,7 @@
       "boundsLocalM": [-6500, -1000, -900, 6100],
       "visualBandId": "band.cobra-canyon.ambient.v1",
       "priority": 1,
-      "instancesByQuality": {"mobile": 36, "balanced": 72, "desktop": 150},
+      "instancesByQuality": {"mobile": 48, "balanced": 72, "desktop": 150},
       "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
       "presentationOnly": true,
       "targetable": false
@@ -627,7 +627,7 @@
       "boundsLocalM": [-8000, -8000, -900, 8000],
       "visualBandId": "band.cobra-canyon.ambient.v1",
       "priority": 2,
-      "instancesByQuality": {"mobile": 92, "balanced": 178, "desktop": 352},
+      "instancesByQuality": {"mobile": 92, "balanced": 206, "desktop": 352},
       "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
       "presentationOnly": true,
       "targetable": false
@@ -708,10 +708,10 @@
       "id": "ambient.cobra-canyon.river-mist.v1",
       "kind": "river-mist",
       "archetype": "procedural://cobra-vietnam/mist-card",
-      "boundsLocalM": [-4900, -2250, 1800, 3600],
+      "boundsLocalM": [-7000, -6600, 1800, 3600],
       "visualBandId": "band.cobra-canyon.ambient.v1",
-      "priority": 4,
-      "instancesByQuality": {"mobile": 0, "balanced": 0, "desktop": 20},
+      "priority": 3,
+      "instancesByQuality": {"mobile": 0, "balanced": 18, "desktop": 36},
       "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
       "presentationOnly": true,
       "targetable": false
@@ -862,7 +862,7 @@
         "sourceKind": "shader-card",
         "renderRole": "mist",
         "paletteHex": ["#C6CEC4", "#E1E4D9"],
-        "scaleM": {"width": 17, "height": 3.4, "depth": 9},
+        "scaleM": {"width": 24, "height": 6.0, "depth": 14},
         "routeAffinity": ["route.cobra-canyon.river-gorge.v1"],
         "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
         "presentationOnly": true,
@@ -1017,6 +1017,28 @@
   },
   "setPieceCells": [
     {
+      "id": "set-piece.cobra-canyon.camp-ember-pad.v1",
+      "kind": "fob-pad-dressing",
+      "displayName": "Camp Ember pad",
+      "routeId": "route.cobra-canyon.river-gorge.v1",
+      "distanceAlongRouteM": 0,
+      "approachLocalM": [-6500, 162, -6200],
+      "anchorLocalM": [-6500, 190, -6200],
+      "boundsLocalM": [-6900, -6600, -6100, -5800],
+      "archetypeIds": [
+        "archetype.cobra-canyon.landmark-camp.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1",
+        "archetype.cobra-canyon.rock-scatter.v1"
+      ],
+      "landmarkIds": ["landmark.cobra-canyon.camp-ember.v1"],
+      "hazardIds": [],
+      "authority": {"role": "presentation-only", "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"},
+      "presentationOnly": true,
+      "targetable": false
+    },
+    {
       "id": "set-piece.cobra-canyon.long-fang-village.v1",
       "kind": "waterfall-village",
       "displayName": "Long Fang terraces",
@@ -1030,7 +1052,9 @@
         "archetype.cobra-canyon.village-hut.v1",
         "archetype.cobra-canyon.paddy-mirror.v1",
         "archetype.cobra-canyon.paddy-berm.v1",
-        "archetype.cobra-canyon.river-mist.v1"
+        "archetype.cobra-canyon.jungle-canopy.v1",
+        "archetype.cobra-canyon.river-mist.v1",
+        "archetype.cobra-canyon.jungle-understory.v1"
       ],
       "landmarkIds": ["landmark.cobra-canyon.long-fang-falls.v1"],
       "hazardIds": [],
@@ -1049,8 +1073,11 @@
       "boundsLocalM": [-3200, -950, -2200, 0],
       "archetypeIds": [
         "archetype.cobra-canyon.landmark-bridge.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
         "archetype.cobra-canyon.rock-scatter.v1",
-        "archetype.cobra-canyon.water-riffle.v1"
+        "archetype.cobra-canyon.water-riffle.v1",
+        "archetype.cobra-canyon.river-mist.v1",
+        "archetype.cobra-canyon.jungle-understory.v1"
       ],
       "landmarkIds": ["landmark.cobra-canyon.iron-bell-bridge.v1"],
       "hazardIds": [
@@ -1074,9 +1101,11 @@
       "archetypeIds": [
         "archetype.cobra-canyon.landmark-karst.v1",
         "archetype.cobra-canyon.karst-spire.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
         "archetype.cobra-canyon.rock-scatter.v1",
         "archetype.cobra-canyon.river-mist.v1",
-        "archetype.cobra-canyon.water-riffle.v1"
+        "archetype.cobra-canyon.water-riffle.v1",
+        "archetype.cobra-canyon.jungle-understory.v1"
       ],
       "landmarkIds": ["landmark.cobra-canyon.karst-needles.v1"],
       "hazardIds": [],
@@ -1096,7 +1125,10 @@
       "archetypeIds": [
         "archetype.cobra-canyon.landmark-ridge-gate.v1",
         "archetype.cobra-canyon.karst-spire.v1",
-        "archetype.cobra-canyon.jungle-understory.v1"
+        "archetype.cobra-canyon.jungle-canopy.v1",
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1",
+        "archetype.cobra-canyon.rock-scatter.v1"
       ],
       "landmarkIds": ["landmark.cobra-canyon.split-tooth-ridge.v1"],
       "hazardIds": [],
@@ -1115,8 +1147,10 @@
       "boundsLocalM": [-3900, 2600, -3150, 3450],
       "archetypeIds": [
         "archetype.cobra-canyon.landmark-pagoda.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
         "archetype.cobra-canyon.rock-scatter.v1",
-        "archetype.cobra-canyon.jungle-understory.v1"
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1"
       ],
       "landmarkIds": ["landmark.cobra-canyon.white-pagoda.v1"],
       "hazardIds": [
@@ -1138,7 +1172,10 @@
       "boundsLocalM": [-2100, 4550, -1450, 5300],
       "archetypeIds": [
         "archetype.cobra-canyon.landmark-radio-mast.v1",
-        "archetype.cobra-canyon.rock-scatter.v1"
+        "archetype.cobra-canyon.jungle-canopy.v1",
+        "archetype.cobra-canyon.rock-scatter.v1",
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1"
       ],
       "landmarkIds": ["landmark.cobra-canyon.ridge-radio-mast.v1"],
       "hazardIds": [
@@ -1164,7 +1201,10 @@
         "archetype.cobra-canyon.plantation-row.v1",
         "archetype.cobra-canyon.paddy-mirror.v1",
         "archetype.cobra-canyon.paddy-berm.v1",
-        "archetype.cobra-canyon.village-hut.v1"
+        "archetype.cobra-canyon.village-hut.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1"
       ],
       "landmarkIds": ["landmark.cobra-canyon.plantation-water-tower.v1"],
       "hazardIds": [
@@ -1188,8 +1228,10 @@
       "boundsLocalM": [2150, -2300, 3350, -1100],
       "archetypeIds": [
         "archetype.cobra-canyon.landmark-quarry.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
         "archetype.cobra-canyon.rock-scatter.v1",
-        "archetype.cobra-canyon.jungle-understory.v1"
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1"
       ],
       "landmarkIds": ["landmark.cobra-canyon.red-earth-quarry.v1"],
       "hazardIds": [],
@@ -1210,7 +1252,10 @@
         "archetype.cobra-canyon.landmark-mill-stack.v1",
         "archetype.cobra-canyon.village-compound.v1",
         "archetype.cobra-canyon.village-hut.v1",
-        "archetype.cobra-canyon.plantation-row.v1"
+        "archetype.cobra-canyon.plantation-row.v1",
+        "archetype.cobra-canyon.jungle-canopy.v1",
+        "archetype.cobra-canyon.jungle-understory.v1",
+        "archetype.cobra-canyon.river-mist.v1"
       ],
       "landmarkIds": ["landmark.cobra-canyon.plantation-mill-stack.v1"],
       "hazardIds": [],
@@ -1227,7 +1272,7 @@
       "maxHazards": 14,
       "maxAmbientArchetypes": 11,
       "maxLandmarkArchetypes": 11,
-      "maxSetPieceCells": 9,
+      "maxSetPieceCells": 10,
       "maxAmbientBatches": 6,
       "maxAmbientInstances": 400,
       "maxDrawCalls": 24,
@@ -1240,8 +1285,8 @@
       "maxHazards": 14,
       "maxAmbientArchetypes": 11,
       "maxLandmarkArchetypes": 11,
-      "maxSetPieceCells": 9,
-      "maxAmbientBatches": 9,
+      "maxSetPieceCells": 10,
+      "maxAmbientBatches": 10,
       "maxAmbientInstances": 860,
       "maxDrawCalls": 36,
       "maxShadowCasters": 96
@@ -1253,7 +1298,7 @@
       "maxHazards": 14,
       "maxAmbientArchetypes": 11,
       "maxLandmarkArchetypes": 11,
-      "maxSetPieceCells": 9,
+      "maxSetPieceCells": 10,
       "maxAmbientBatches": 12,
       "maxAmbientInstances": 1600,
       "maxDrawCalls": 52,

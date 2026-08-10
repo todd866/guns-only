@@ -1,61 +1,61 @@
-import * as THREE from "../vendor/three.module.js?v=274";
+import * as THREE from "../vendor/three.module.js?v=299";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=274";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=274";
+} from "../render/cobra/cobra_canyon_plan.js?v=299";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=299";
+import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=299";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=274";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=274";
-import { createHud } from "../hud.js?v=274";
+} from "../render/cobra/cobra_canyon_tour.js?v=299";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=299";
+import { createHud } from "../hud.js?v=299";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=274";
+} from "../render/cobra/cobra_hud_adapter.js?v=299";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=274";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=274";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=299";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=299";
 import {
   emberActObjectiveOverlay,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=274";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=274";
+} from "../render/cobra/cobra_ember_path.js?v=299";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=299";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=274";
+} from "../render/cobra/cobra_control_profile.js?v=299";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=274";
+} from "../render/cobra/cobra_pilot_input.js?v=299";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=274";
+} from "../render/cobra/ah1g_presence.js?v=299";
 import {
-  COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD,
-  clampInducedLookRotation,
-  lookAnglesFromOffset,
-  lookOffsetFromAngles,
-} from "../render/cobra/cobra_camera_bias.js?v=274";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=274";
+  nextHostileTargetId,
+  resolveAuthorityLookAtPoint,
+  togglePadlockSelection,
+} from "../render/cobra/cobra_camera_bias.js?v=299";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=299";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=274";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=274";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=274";
+} from "../render/cobra/cobra_mission_exit.js?v=299";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=299";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=299";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -155,6 +155,8 @@ let presenceDeltaSeconds = 0;
 let hostileTargetIds = [];
 let hostileTargetIndex = -1;
 let lastTargetKey = null;
+// F-22 contract: Tab owns selection; V owns padlock view of that selection.
+let padlockActive = false;
 // No target is cued before the pilot's first input: a cold-boot auto-selection used to swing
 // the camera toward a hostile before the player had touched anything.
 let playerHasInteracted = false;
@@ -227,7 +229,7 @@ const projectionScratch = new THREE.Vector3();
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=274";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=299";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -297,14 +299,21 @@ const skyMaterial = new THREE.ShaderMaterial({
       // Narrow non-luminous horizon shoulder: stays readable in unusual attitudes.
       float horizonShoulder = exp(-abs(direction.y) * shoulderFalloff);
       colour = mix(colour, horizonColor * 1.08, horizonShoulder * shoulderWeight);
-      // Painted cumulus band (the documented divergence: no tactical cloud field here).
+      // Painted cumulus — irregular noise, not azimuth harmonics (those tiled into a block grid).
       float azimuth = atan(direction.z, direction.x);
       float shelf = smoothstep(cloudShelf.x, cloudShelf.x + 0.035, direction.y)
         * (1.0 - smoothstep(cloudShelf.y * 0.62, cloudShelf.y, direction.y));
-      float puff = 0.5 * sin(azimuth * 7.3 + 1.7)
-        + 0.34 * sin(azimuth * 16.7 - direction.y * 47.0 + 0.6)
-        + 0.22 * sin(azimuth * 29.3 + direction.y * 83.0);
-      colour = mix(colour, cloudColor, shelf * smoothstep(0.16, 0.68, puff) * 0.55);
+      vec2 cloudUv = vec2(azimuth * 0.72, direction.y * 2.8);
+      float h00 = fract(sin(dot(floor(cloudUv), vec2(127.1, 311.7))) * 43758.5453);
+      float h10 = fract(sin(dot(floor(cloudUv) + vec2(1.0, 0.0), vec2(127.1, 311.7))) * 43758.5453);
+      float h01 = fract(sin(dot(floor(cloudUv) + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
+      float h11 = fract(sin(dot(floor(cloudUv) + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
+      vec2 cf = fract(cloudUv);
+      vec2 cu = cf * cf * (3.0 - 2.0 * cf);
+      float puff = mix(mix(h00, h10, cu.x), mix(h01, h11, cu.x), cu.y);
+      float puffB = fract(sin(dot(cloudUv * 2.15 + 4.2, vec2(269.5, 183.3))) * 43758.5453);
+      puff = puff * 0.62 + puffB * 0.38;
+      colour = mix(colour, cloudColor, shelf * smoothstep(0.38, 0.78, puff) * 0.48);
       if (direction.y < 0.0) {
         colour = mix(belowHorizonColor, horizonColor, exp(direction.y * 16.0));
       }
@@ -339,6 +348,8 @@ let lastRawFrameMs = 0;
 let world = null;
 let plan = null;
 let presentation = null;
+/** @type {{ atlas: import("../vendor/three.module.js").Texture, synthetic?: boolean } | null} */
+let foliageTextures = null;
 let activeRoute = null;
 let routeSampler = null;
 let activeSetPieces = [];
@@ -597,6 +608,7 @@ function restartRoute() {
   if (!plan) return;
   lockPlayRoute();
   missionTerminal = false;
+  padlockActive = false;
   if (debrief) debrief.hidden = true;
   activeRoute = routeById(routeSelect.value);
   bridge?.StartRoute(routeSelect.selectedIndex);
@@ -634,9 +646,17 @@ function rebuildPresentation() {
   plan = planCobraCanyonWorld(world, { qualityTier: qualitySelect.value });
   presentation = createCobraCanyonPresentation(THREE, plan, {
     qualityTier: qualitySelect.value,
+    foliageTextures,
   });
   groundWarPresentation = createCobraGroundWarPresentation(THREE);
-  emberGuidancePath = createGuidancePath(THREE, { maxGates: 16 });
+  emberGuidancePath = createGuidancePath(THREE, {
+    maxGates: 16,
+    gateOpacity: 0.09,
+    activeOpacity: 0.18,
+    activeColor: 0xffe8b8,
+    // Soft cue, not a gorge-spanning diamond (owner 2026-08-08).
+    maxVisualHalfM: 28,
+  });
   scene.add(presentation.group);
   scene.add(groundWarPresentation.group);
   scene.add(emberGuidancePath.object3d);
@@ -698,29 +718,52 @@ function refreshGroundTargets() {
     option.textContent = `${unit.faction === "friendly" ? "FRI" : "HOS"} · ${unit.role} · ${tag}`;
     targetSelect.append(option);
   }
-  if (previous && [...targetSelect.options].some((option) => option.value === previous))
+  if (previous && [...targetSelect.options].some((option) => option.value === previous)) {
     targetSelect.value = previous;
-  else if (hostileTargetIds.length && playerHasInteracted) {
+    hostileTargetIndex = hostileTargetIds.indexOf(previous);
+  } else if (hostileTargetIds.length && playerHasInteracted) {
     // Auto-reselect keeps continuity after a kill, but never before the pilot's first input —
     // a cold-boot auto-selection dragged the camera toward a hostile on spawn.
     // The WASM bridge still auto-assigns the seam for fire consent without moving the camera.
     hostileTargetIndex = 0;
     targetSelect.value = hostileTargetIds[0];
+  } else {
+    hostileTargetIndex = -1;
+    if (padlockActive) padlockActive = false;
   }
 }
 
+function applyGunnerTarget(targetId) {
+  if (!targetSelect) return;
+  targetSelect.value = targetId || "";
+  hostileTargetIndex = targetId ? hostileTargetIds.indexOf(targetId) : -1;
+  bridge?.SetGunnerTarget(targetId || null);
+  groundWarPresentation?.sync(authorityState?.ground_war ?? null, targetId || null);
+}
+
 function cycleHostileTarget() {
-  if (!hostileTargetIds.length) return;
-  // First Tab from idle jumps to the preferred (seam-first) mark instead of advancing
-  // past it when index was still -1.
-  if (hostileTargetIndex < 0) hostileTargetIndex = 0;
-  else hostileTargetIndex = (hostileTargetIndex + 1) % hostileTargetIds.length;
-  targetSelect.value = hostileTargetIds[hostileTargetIndex];
-  bridge?.SetGunnerTarget(targetSelect.value || null);
+  const nextId = nextHostileTargetId(hostileTargetIds, targetSelect?.value || null);
+  if (!nextId) return;
+  applyGunnerTarget(nextId);
+}
+
+function togglePadlock() {
+  const next = togglePadlockSelection({
+    padlockActive,
+    selectedTargetId: targetSelect?.value || null,
+    hostileTargetIds,
+  });
+  padlockActive = next.padlockActive;
+  if (next.selectedTargetId && next.selectedTargetId !== (targetSelect?.value || null)) {
+    applyGunnerTarget(next.selectedTargetId);
+  }
+  if (!padlockActive) return;
+  // Keep the sim gunner assignment in lock-step when V adopts the preferred mark.
+  if (targetSelect?.value) bridge?.SetGunnerTarget(targetSelect.value);
 }
 
 function updateTour(deltaSeconds) {
-  if (routeComplete) return;
+  if (parkedCamera || routeComplete) return;
   const routeEndM = Math.max(0, routeSampler.lengthM - ROUTE_END_LOOKAHEAD_M);
   routeDistanceM = Math.min(
     routeEndM,
@@ -731,6 +774,17 @@ function updateTour(deltaSeconds) {
 }
 
 function updateManual(deltaSeconds) {
+  // Visual-review park owns the camera: keep the sim alive, but do not overwrite the eye
+  // with the vehicle pose (that is what made overnight stills look like Camp Ember everywhere).
+  if (parkedCamera) {
+    if (bridge && !missionTerminal) {
+      const simStartedAtMs = performance.now();
+      bridge.Advance(deltaSeconds);
+      recordPhase("sim", simStartedAtMs);
+      sampleAuthorityState(lastTimeMs);
+    }
+    return;
+  }
   presenceDeltaSeconds = deltaSeconds;
   if (!bridge) {
     // Vestigial freelook: pre-authority camera control only.
@@ -821,49 +875,33 @@ function syncAuthorityCamera() {
   const lookDistanceM = 140;
   const bodyYaw = Number(vehicle.yaw_rad) || 0;
   const bodyPitch = Number(vehicle.pitch_rad) || 0;
-  // Fixed rear-seat look bias (slightly up through the glass) + gunner-target crew bias.
+  // Fixed rear-seat look bias (slightly up through the glass). Padlock replaces this with a
+  // true look-at — F-22 contract: forward is nose-forward, V is the view toggle.
   const lookYaw = bodyYaw;
   const lookPitch = bodyPitch + 0.08;
-  lookTarget.set(
-    camera.position.x + Math.sin(lookYaw) * lookDistanceM,
-    camera.position.y + Math.sin(lookPitch) * lookDistanceM,
-    camera.position.z - Math.cos(lookYaw) * lookDistanceM,
-  );
+  const forwardLook = {
+    x: camera.position.x + Math.sin(lookYaw) * lookDistanceM,
+    y: camera.position.y + Math.sin(lookPitch) * lookDistanceM,
+    z: camera.position.z - Math.cos(lookYaw) * lookDistanceM,
+  };
 
   const selectedId = targetSelect?.value || authorityState?.gunner?.selected_target_id;
   const units = authorityState?.ground_war?.units ?? [];
   const selected = selectedId ? units.find((unit) => unit.id === selectedId && unit.alive) : null;
-  if (selected) {
-    // Target cueing leans the view toward the gunner's mark, but the induced rotation is
-    // clamped to ±0.05 rad: the AH-1G's only clear glass is dead ahead, and the old unclamped
-    // lerp swung the sole windshield gap off-axis whenever a near hostile was selected.
-    const bias = 0.22;
-    const biasedX = THREE.MathUtils.lerp(lookTarget.x, selected.x_m, bias);
-    const biasedY = THREE.MathUtils.lerp(lookTarget.y, selected.y_m + 1.2, bias);
-    const biasedZ = THREE.MathUtils.lerp(lookTarget.z, -selected.z_m, bias);
-    const base = lookAnglesFromOffset(
-      lookTarget.x - camera.position.x,
-      lookTarget.y - camera.position.y,
-      lookTarget.z - camera.position.z,
-    );
-    const desired = lookAnglesFromOffset(
-      biasedX - camera.position.x,
-      biasedY - camera.position.y,
-      biasedZ - camera.position.z,
-    );
-    const clamped = clampInducedLookRotation(base, desired, COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD);
-    const offset = lookOffsetFromAngles(clamped.yawRad, clamped.pitchRad, lookDistanceM);
-    lookTarget.set(
-      camera.position.x + offset.x,
-      camera.position.y + offset.y,
-      camera.position.z + offset.z,
-    );
-  }
+  if (padlockActive && !selected) padlockActive = false;
+
+  const lookAt = resolveAuthorityLookAtPoint({
+    padlockActive,
+    selectedUnit: selected,
+    forwardLook,
+  });
+  lookTarget.set(lookAt.x, lookAt.y, lookAt.z);
 
   camera.lookAt(lookTarget);
   // Negated: three.js rolls the camera counter-clockwise for a positive rotation.z (right-hand
   // rule about +Z, which points back out of the screen), so feeding a right bank straight in
   // tilted the horizon the wrong way and a left cyclic input read as a roll to the right.
+  // Padlock still inherits body roll so the horizon stays aircraft-honest while the eye tracks.
   camera.rotation.z = -(Number(vehicle.roll_rad) || 0);
 }
 
@@ -955,7 +993,9 @@ function updateObjectiveHud(war) {
   const copy = cobraObjectiveCopy(war, {
     selectedTargetId: authorityState?.gunner?.selected_target_id ?? null,
     playerHasInteracted,
-    actOverlay: emberActObjectiveOverlay(authorityState?.mission_act),
+    actOverlay: emberActObjectiveOverlay(authorityState?.mission_act, {
+      remainingM: authorityState?.route_guidance?.remaining_m,
+    }),
   });
   if (copy) {
     setText(objectiveLine, copy.line);
@@ -1022,10 +1062,12 @@ function animate(timeMs) {
   applyParkedCamera();
   const aglM = tourInput.checked && !parkedCamera ? tourCommandedAglM : cameraAglM();
   const presentationStartedAtMs = performance.now();
+  // Parked review stills must see the authored canopy, not the FPS shed path. Swiftshader /
+  // headless park shots otherwise trip ambientBudgetLevel 2 and judge an empty corridor.
   presentation.update({
     cameraPosition: camera.position,
     cameraAglM: aglM,
-    ambientBudgetLevel: ambientBudgetLevel(),
+    ambientBudgetLevel: parkedCamera ? 0 : ambientBudgetLevel(),
   });
   if (emberGuidancePath && authorityState) {
     emberGuidancePath.update(emberPathGuidanceState(authorityState));
@@ -1044,9 +1086,11 @@ function animate(timeMs) {
   }
   // The camera mode is the ONLY input that decides whether the airframe exists: first
   // person renders zero cockpit geometry (Build 264 owner ruling), the tour camera looks
-  // AT the ship so the silhouette returns. Set unconditionally — the earlier per-branch
-  // version left the shell hidden whenever a terminal mission froze the tour branch.
-  if (ah1gPresence) ah1gPresence.setFirstPerson(!tourInput.checked);
+  // AT the ship so the silhouette returns. Parked scenery stills also hide the ship —
+  // otherwise the AH-1G hull eats the near-field frame the emptiness gate scores.
+  if (ah1gPresence) {
+    ah1gPresence.setFirstPerson(!tourInput.checked || !!parkedCamera);
+  }
   const renderStartedAtMs = performance.now();
   renderer.render(scene, camera);
   recordPhase("render", renderStartedAtMs);
@@ -1069,6 +1113,7 @@ function animate(timeMs) {
 function drawHud(timeMs, deltaSeconds) {
   const pose = readVehiclePose();
   const firstPerson = Boolean(bridge) && !tourInput.checked && !missionTerminal
+    && !parkedCamera
     && pose && authorityState;
   if (!firstPerson) {
     hudPresentationCtx.save();
@@ -1078,12 +1123,19 @@ function drawHud(timeMs, deltaSeconds) {
     return;
   }
   cobraHudState(authorityState, pose, hudStateScratch);
+  const selectedId = targetSelect?.value || authorityState?.gunner?.selected_target_id || "";
+  const selectedUnit = selectedId
+    ? (authorityState?.ground_war?.units ?? []).find((unit) => unit.id === selectedId && unit.alive)
+    : null;
   hud.draw(hudFrameKit.update({
     camera,
     pose,
     state: hudStateScratch,
     dt: deltaSeconds,
     nowSeconds: timeMs / 1000,
+    padlockActive,
+    padlockTargetId: selectedUnit ? selectedId : "",
+    padlockTargetUnit: selectedUnit,
   }));
   drawCobraRotorcraftHud(hudPresentationCtx, cobraRotorcraftHudModel(authorityState), {
     width: hudViewport.width,
@@ -1130,6 +1182,16 @@ function applyParkedCamera() {
 }
 window.__gunsOnlyCobraLabCamera = Object.freeze({
   park(eastM, northM, aglM, yawRad, pitchRad = 0) {
+    // Review stills are exterior scenery shots — leave first-person / tour rails.
+    if (tourInput) tourInput.checked = false;
+    if (qualitySelect && qualitySelect.value !== "desktop") {
+      qualitySelect.value = "desktop";
+      qualitySelect.dispatchEvent(new Event("change"));
+    }
+    onboarding?.dismiss?.();
+    // Strip mission chrome so park stills score the gorge, not the objective card.
+    document.querySelector("#play-chrome")?.setAttribute("data-parked", "true");
+    document.querySelector("#objective-hud")?.setAttribute("hidden", "");
     parkedCamera = {
       eastM: Number(eastM),
       northM: Number(northM),
@@ -1137,10 +1199,13 @@ window.__gunsOnlyCobraLabCamera = Object.freeze({
       yawRad: Number(yawRad),
       pitchRad: Number(pitchRad),
     };
+    applyParkedCamera();
     return parkedCamera;
   },
   release() {
     parkedCamera = null;
+    document.querySelector("#play-chrome")?.removeAttribute("data-parked");
+    document.querySelector("#objective-hud")?.removeAttribute("hidden");
   },
 });
 
@@ -1186,6 +1251,13 @@ window.addEventListener("keydown", (event) => {
     cycleHostileTarget();
     return;
   }
+  if (event.code === "KeyV") {
+    event.preventDefault();
+    playerHasInteracted = true;
+    if (tourInput) tourInput.checked = false;
+    togglePadlock();
+    return;
+  }
   if (!isManualControl(event.code) && event.code !== "ShiftLeft" && event.code !== "ShiftRight") return;
   event.preventDefault();
   playerHasInteracted = true;
@@ -1223,9 +1295,7 @@ resetButton?.addEventListener("click", restartRoute);
 debriefRestart?.addEventListener("click", restartRoute);
 targetSelect?.addEventListener("change", () => {
   playerHasInteracted = true;
-  bridge?.SetGunnerTarget(targetSelect.value || null);
-  // Refresh the in-world highlight immediately rather than waiting for the next 30 Hz sample.
-  groundWarPresentation?.sync(authorityState?.ground_war ?? null, targetSelect.value || null);
+  applyGunnerTarget(targetSelect.value || null);
 });
 speedInput?.addEventListener("input", () => {
   if (speedValue) speedValue.textContent = `${speedInput.value} m/s`;
@@ -1317,6 +1387,7 @@ async function boot() {
     const assemblyExports = await getAssemblyExports("GunsOnly.Web");
     bridge = assemblyExports.GunsOnly.Web.CobraWebBridge;
     world = await loadCobraCanyonWorld();
+    foliageTextures = await resolveCobraVietnamFoliageTextures(THREE);
     lockPlayRoute();
     if (tourInput && PLAY_MODE) tourInput.checked = false;
     rebuildPresentation();

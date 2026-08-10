@@ -39,7 +39,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
   // of the flat overhead wash a high sun produces.
   sunDirectionWorld: normalized([0.50, 0.28, -0.82]),
 
-  toneMappingExposure: 1.06,
+  toneMappingExposure: 1.16,
 
   // THE F-22'S AIR. Colour is app.js fogLow (0x6f8790) and density is its clear-air setting;
   // the banding is korea_terrain's Korea-branch default (6 planes at 0.65 blend), which is the
@@ -48,16 +48,11 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
   // readable world, comfortably past this 16 km theatre's rim.
   fog: Object.freeze({
     color: 0x8a9fa5,
-    // HUMID AIR, NOT CLEAR AIR. The F-22's clear-air 5.5e-5 implies a ~34 km readable world; over
-    // a 16 km theatre nothing recedes, so every ridge rendered at full contrast to the world edge
-    // and depth had to come from geometry alone. Owner reference (Battlefield Vietnam, 2026-08-06)
-    // is layered ridgelines dissolving into sky — aerial perspective is the signature of the
-    // theatre. 2.3e-4 is the same 1.87/radius law (adaptive-world-radius doctrine) solved for an
-    // ~8 km readable radius, which is tropical monsoon-season air rather than a Korean winter.
-    // The colour warms and lightens with it: humid haze is pale blue-grey, not slate.
-    density: 0.00028,
+    // HUMID AIR. Stay inside the 6–11 km tropical-depth band (density = 1.87/radius).
+    // ~6.2 km readable — mid ridges dissolve harder; gorge run stays crisp.
+    density: 0.000302,
     hazeBands: 6,
-    hazeBandBlend: 0.65,
+    hazeBandBlend: 0.82,
   }),
 
   // THE F-22'S SKY, in linear working space, lifted from createDecisionSupportSky's cool
@@ -75,9 +70,10 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     belowHorizonColor: Object.freeze([0.022, 0.075, 0.095]),
     skyCurveExponent: 0.42,
     horizonShoulderFalloff: 70,
-    horizonShoulderWeight: 0.38,
-    cloudColor: Object.freeze([0.58, 0.64, 0.70]),
-    cloudShelf: Object.freeze([0.02, 0.22]),
+    horizonShoulderWeight: 0.54,
+    cloudColor: Object.freeze([0.64, 0.68, 0.72]),
+    // Thicker monsoon shelf so the dome does not read as clear desert air from 30 m AGL.
+    cloudShelf: Object.freeze([0.055, 0.38]),
   }),
 
   // THE F-22'S LIGHT RIG, verbatim from app.js: hemisphere 0xb5cad0 over 0x102229 at 0.78, and a
@@ -91,8 +87,8 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // 0x102229 bounce is a floor, not the whole shadow side. This page has no environment map,
     // so copying that bounce literally rendered every tree and hut as a black silhouette. The
     // bounce is lifted to stand in for the missing IBL; the sky term and key are untouched.
-    hemisphereGroundColor: 0x2c3a33,
-    hemisphereIntensity: 0.9,
+    hemisphereGroundColor: 0x314338,
+    hemisphereIntensity: 1.02,
     sunColor: 0xffe2b4,
     sunIntensity: 2.65,
     sunDistanceM: 9_000,
@@ -126,7 +122,7 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // neighbourhood, so the whole channel took the deepest occlusion the ramp can give, stacked on
     // top of the shadow floor, and the near wall rendered near-black at 30 m AGL. 0.72 keeps the
     // valley-sinks-crests-catch reading without turning the corridor the player flies into a hole.
-    occlusionRange: Object.freeze([0.72, 1.10]),
+    occlusionRange: Object.freeze([0.76, 1.10]),
     // Height difference (m) against the ~200 m neighbourhood ring that saturates concavity.
     concavityNormalizerM: 22,
     // DELIBERATE DIVERGENCE, and the only one in the light model. korea_terrain applies this
@@ -134,9 +130,9 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // for exactly the reason it is needed here: half this basin sits under a 0.1 gradient, where
     // the Lambert term separates nothing and the bowl washes flat however the ramp is tuned. The
     // Korean heightfield is dissected enough not to need it. Above ~4 it prints as banding.
-    reliefGain: 4.6,
+    reliefGain: 4.75,
     // korea_terrain's shipped uCloudShadowStrength.
-    cloudShadowStrength: 0.42,
+    cloudShadowStrength: 0.62,
     // Hue-separated painted light, verbatim from korea_terrain: cool fill from the sky,
     // warm key from the sun.
     skyFill: Object.freeze([0.62, 0.74, 1.0]),
@@ -163,27 +159,28 @@ export const COBRA_CANYON_VISUAL_PROFILE = Object.freeze({
     // wild ground toward green, worked ground toward gold — which is the separation the
     // patchwork needs and which Korea gets from its own parcel tint instead.
     bands: Object.freeze({
-      valleyFloor: Object.freeze([0.168, 0.192, 0.088]),
-      cultivationGold: Object.freeze([0.220, 0.248, 0.168]),
-      jungleMid: Object.freeze([0.065, 0.128, 0.052]),
-      lateriteSlope: Object.freeze([0.285, 0.150, 0.062]),
-      ridgeSage: Object.freeze([0.138, 0.168, 0.105]),
-      rimRock: Object.freeze([0.320, 0.310, 0.260]),
+      // Greener wild floor — owner still called the corridor khaki under humid haze.
+      valleyFloor: Object.freeze([0.118, 0.205, 0.078]),
+      cultivationGold: Object.freeze([0.188, 0.228, 0.172]),
+      jungleMid: Object.freeze([0.034, 0.142, 0.052]),
+      lateriteSlope: Object.freeze([0.295, 0.138, 0.052]),
+      ridgeSage: Object.freeze([0.095, 0.175, 0.092]),
+      rimRock: Object.freeze([0.318, 0.305, 0.248]),
     }),
     // Valley cultivation parcels: world-space cell pitch of the patchwork tint.
     // Paddy-scale, not wheat-field scale. At 155x115 m the parcels read as European arable
     // quilting; a delta paddy is 60-110 m on a side and terraces smaller still.
-    parcelPitchM: Object.freeze([92, 68]),
+    parcelPitchM: Object.freeze([78, 58]),
   }),
 
   // Analytic river paint, linear working space. The gravel bank window is expressed in units of
   // half the authored water width, so 1.0 is the waterline and the ribbon's extra rim is bank.
   water: Object.freeze({
-    deepColor: Object.freeze([0.010, 0.038, 0.052]),
-    shallowColor: Object.freeze([0.036, 0.092, 0.098]),
-    bankColor: Object.freeze([0.142, 0.124, 0.078]),
-    shoreWindow: Object.freeze([0.88, 1.05]),
+    deepColor: Object.freeze([0.004, 0.024, 0.038]),
+    shallowColor: Object.freeze([0.022, 0.072, 0.080]),
+    bankColor: Object.freeze([0.100, 0.102, 0.062]),
+    shoreWindow: Object.freeze([0.84, 1.08]),
     // Gravel rim draped either side of the water sheet, metres.
-    bankWidthM: 9,
+    bankWidthM: 14,
   }),
 });

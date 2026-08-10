@@ -432,11 +432,19 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             airVelocity,
             attitude,
             input.Environment.AirDensityKgM3);
+        // Soft retreating-blade wall: progressive in-plane drag from ~µ 0.28 (~124 KT) so a
+        // gorge dive cannot park past onset. Authored onset stays 0.34 @ 1 g; this is the
+        // playable envelope that keeps BLADE STALL from becoming the cruise state.
+        Vec3D rbsEnvelopeDrag = RetreatingBladeEnvelopeDrag(
+            inPlaneVelocity,
+            inPlaneSpeedMps,
+            advanceRatio,
+            input.Environment.AirDensityKgM3);
         Vec3D stubWingForce = StubWingForce(
             airVelocity,
             attitude,
             input.Environment.AirDensityKgM3);
-        Vec3D acceleration = (thrustForce + fuselageDrag + stubWingForce)
+        Vec3D acceleration = (thrustForce + fuselageDrag + rbsEnvelopeDrag + stubWingForce)
             * (1.0 / grossMassKg)
             + new Vec3D(0.0, -FlightModel.G0, 0.0);
         Vec3D nextVelocity = previousVelocity + acceleration * dt;
@@ -590,14 +598,19 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         if (!_engineOperating)
             targetYawRate -= Degrees(8.0) * controlEffectiveness;
 
+        // Soft envelope: as RBS builds, fade cyclic authority so the aircraft refuses to
+        // deepen the stall instead of living there with BLADE STALL lit (owner 2026-08-08).
+        double rbsAuthority = 1.0 - 0.70 * Math.Clamp(rbsSeverity, 0.0, 1.0);
+        targetRollRate *= rbsAuthority;
+        targetPitchRate *= rbsAuthority;
+
         // Progressive 2/rev feedback is deterministic and small; it is evidence/cueing, not a
-        // canned roll departure. Owner 16:41 stall-turn: full RBS + 4°/3° nudges felt like the
-        // airframe "jumped" — keep the cue, halve the shove so high-attitude complaints without
-        // looking broken.
+        // canned roll departure. Keep it quieter than the authority fade so the cue does not
+        // fight the soft wall.
         double twoPerRev = Math.Sin(2.0 * _rotorAzimuthRad);
-        targetRollRate += rbsSeverity * twoPerRev * Degrees(2.0);
+        targetRollRate += rbsSeverity * twoPerRev * Degrees(1.0);
         targetPitchRate += (rbsSeverity + 0.45 * vrsSeverity)
-            * Math.Cos(2.0 * _rotorAzimuthRad) * Degrees(1.5);
+            * Math.Cos(2.0 * _rotorAzimuthRad) * Degrees(0.75);
 
         return new BodyRates(
             FirstOrder(rates.P, targetRollRate,
@@ -620,6 +633,25 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             AxisDrag(bodyVelocity.Y, densityKgM3, airframe.VerticalDragAreaM2),
             AxisDrag(bodyVelocity.Z, densityKgM3, airframe.FrontalDragAreaM2));
         return attitude.Rotate(dragBody);
+    }
+
+    /// <summary>
+    /// Extra in-plane drag that rises before authored RBS onset so sustained flight cannot
+    /// live in BLADE STALL. Smooth from µ≈0.28 (~124 KT @ nominal tip) to µ≈0.38.
+    /// </summary>
+    Vec3D RetreatingBladeEnvelopeDrag(
+        in Vec3D inPlaneVelocity,
+        double inPlaneSpeedMps,
+        double advanceRatio,
+        double densityKgM3)
+    {
+        if (inPlaneSpeedMps < 1.0) return Vec3D.Zero;
+        double envelope = SmoothStep(0.28, 0.38, advanceRatio);
+        if (envelope <= 1e-6) return Vec3D.Zero;
+        // Scale like a growing frontal area — strong enough to bleed a dive, not a brick wall.
+        double dragAreaM2 = _definition.Airframe.FrontalDragAreaM2 * (2.8 * envelope * envelope);
+        double magnitude = 0.5 * densityKgM3 * dragAreaM2 * inPlaneSpeedMps * inPlaneSpeedMps;
+        return inPlaneVelocity * (-magnitude / inPlaneSpeedMps);
     }
 
     Vec3D StubWingForce(

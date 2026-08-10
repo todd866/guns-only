@@ -57,12 +57,13 @@ test("builds one bounded authored batch per visual role across every tier", () =
     assert.ok(kit.builtMetrics.instances <= MAXIMUM_INSTANCES[qualityTier]);
     assert.equal(kit.roleCounts.assetInstances, kit.builtMetrics.instances);
     assert.equal(kit.roleCounts.authoredAmbientBatches, plan.ambientBatches.length);
-    assert.equal(kit.roleCounts.authoredSetPieceCells, 9);
+    assert.equal(kit.roleCounts.authoredSetPieceCells, 10);
     assert.equal(kit.roleCounts.authoredAmbientArchetypes, 11);
     assert.equal(kit.roleCounts.authoredLandmarkArchetypes, 11);
-    assert.equal(kit.roleCounts.authoredSetPieceArchetypeReferences, 33);
-    assert.equal(kit.roleCounts.authoredSetPieceAssetReferences, 25);
-    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, 25);
+    assert.equal(kit.roleCounts.authoredSetPieceArchetypeReferences, 61);
+    // Jungle set-piece archetypes expand to 3 stands each (near-field canopy walls).
+    assert.equal(kit.roleCounts.authoredSetPieceAssetReferences, 92);
+    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, 92);
     assert.equal(
       kit.roleCounts.ambientBatchInstances
         + kit.roleCounts.renderedSetPieceAssetInstances
@@ -87,28 +88,20 @@ test("builds one bounded authored batch per visual role across every tier", () =
       assert.equal(kit.roleCounts[`${role}Instances`], mesh.count);
       assert.ok(mesh.userData.cobraCanyonInstances.every((entry) => entry.archetypeId));
     }
-    // A CANOPY IS COUNTED IN LOBES, NOT IN TRIANGLES. This used to assert a 72-triangle floor,
-    // which pinned the exact shape rather than the property that matters and blocked the cheaper
-    // five-sided interlocking stand that buys the extra instances density actually needs. Each
-    // lobe contributes one crown apex shared by exactly `sides` fan triangles, so counting
-    // apexes measures the silhouette directly.
-    const jungleGeometry = meshes.get("jungle").geometry;
-    const jungleVertices = jungleGeometry.getAttribute("position");
-    const vertexUses = new Map();
-    for (let index = 0; index < jungleVertices.count; index++) {
-      const key = [
-        jungleVertices.getX(index),
-        jungleVertices.getY(index),
-        jungleVertices.getZ(index),
-      ].join(",");
-      vertexUses.set(key, (vertexUses.get(key) ?? 0) + 1);
-    }
-    const crownApexes = [...vertexUses].filter(([key, uses]) =>
-      uses >= 5 && Number(key.split(",")[1]) > 0.4);
-    assert.ok(crownApexes.length >= 5,
-      `jungle stands need a multi-lobed canopy silhouette (${crownApexes.length} crowns)`);
-    assert.ok(triangleCount(jungleGeometry) >= 40,
-      "jungle stands must stay solid enough to read as mass");
+    // Near-field jungle is CC0 alpha cards (crossed quads + atlas), not Lambert lobes.
+    const jungleMesh = meshes.get("jungle");
+    const jungleGeometry = jungleMesh.geometry;
+    const jungleUv = jungleGeometry.getAttribute("uv");
+    assert.ok(jungleUv, "jungle cards need UVs for the foliage atlas");
+    assert.equal(jungleUv.count, jungleGeometry.getAttribute("position").count);
+    assert.ok(jungleMesh.material.map, "jungle material must sample the foliage atlas");
+    assert.ok(jungleMesh.material.alphaTest > 0.3,
+      "jungle cards must alpha-test cutouts (BF:V-style cards, not soft blend fog)");
+    assert.equal(jungleMesh.material.side, THREE.DoubleSide);
+    assert.ok(triangleCount(jungleGeometry) >= 10,
+      "jungle stand needs crossed palm cards plus understory");
+    assert.ok(triangleCount(jungleGeometry) <= 20,
+      "textured cards must stay far under the old ~50-tri lobe budget");
     assert.ok(triangleCount(meshes.get("plantation").geometry) >= 100,
       "plantation rows need trunks and crowns instead of marker pyramids");
     assert.deepEqual(visibleMetrics(kit.group), kit.builtMetrics);
@@ -143,7 +136,7 @@ test("honours hard instance caps even below the authored reveal reserve", () => 
   for (const maximum of [0, 1, 10, 24]) {
     const { kit } = create("desktop", maximum);
     assert.ok(kit.builtMetrics.instances <= maximum);
-    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, Math.min(maximum, 25));
+    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, Math.min(maximum, 92));
     assert.equal(kit.roleCounts.ambientBatchInstances, 0);
     assert.equal(kit.roleCounts.renderedWaterAccentInstances, 0);
     kit.dispose();
