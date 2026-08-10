@@ -1,9 +1,9 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=301";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=302";
 import {
   FOLIAGE_UV_PALM,
   FOLIAGE_UV_UNDERSTORY,
   createSyntheticFoliageAtlasTexture,
-} from "./cobra_canyon_foliage.js?v=301";
+} from "./cobra_canyon_foliage.js?v=302";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -47,6 +47,29 @@ export const COBRA_CANYON_AMBIENT_BUDGETS = Object.freeze({
     waterAccent: 0.45,
   }),
 });
+
+/** Keep the Camp Ember rear-seat eye clear of green mass / mist (Build 302). */
+export const CAMP_EMBER_LANDMARK_ID = "landmark.cobra-canyon.camp-ember.v1";
+export const CAMP_EMBER_CLEAR_RADIUS_M = 120;
+
+function campEmberPadCentre(plan) {
+  const landmark = (plan?.landmarks ?? []).find((entry) => entry?.id === CAMP_EMBER_LANDMARK_ID);
+  const point = landmark?.positionLocalM;
+  if (!Array.isArray(point) || point.length < 3) return null;
+  const eastM = Number(point[0]);
+  const northM = Number(point[2]);
+  if (!Number.isFinite(eastM) || !Number.isFinite(northM)) return null;
+  return { eastM, northM };
+}
+
+function insideCampEmberClearEye(plan, role, eastM, northM) {
+  if (role !== "jungle" && role !== "mist") return false;
+  const pad = campEmberPadCentre(plan);
+  if (!pad) return false;
+  const dx = eastM - pad.eastM;
+  const dz = northM - pad.northM;
+  return dx * dx + dz * dz < CAMP_EMBER_CLEAR_RADIUS_M * CAMP_EMBER_CLEAR_RADIUS_M;
+}
 
 const DEFAULT_ROLE_BY_KIND = Object.freeze({
   "riparian-canopy": "jungle",
@@ -618,6 +641,7 @@ function setPiecePlacements(plan, descriptors) {
         const northM = cellBounds
           ? clamp(candidate.northM, cellBounds.minimumNorthM, cellBounds.maximumNorthM)
           : candidate.northM;
+        if (insideCampEmberClearEye(plan, role, eastM, northM)) continue;
         const nearest = nearestRoutePoint(plan, cell.routeId, eastM, northM);
         const routeAligned = role === "plantation" || role === "paddy";
         placements.push({
@@ -709,6 +733,7 @@ function planPlacements(plan, qualityTier, maximumInstances) {
         })()
         : null;
       const point = bestPlacement(plan, quota.role, [biased ?? grid, clustered, grid]);
+      if (insideCampEmberClearEye(plan, quota.role, point.eastM, point.northM)) continue;
       const variation = seededUnit(seed, 0xc2b2ae35);
       const scale = roleScale(quota.role, quota.descriptor, variation);
       // One jungle instance represents a stand of canopy, not one isolated tree. Expanding its

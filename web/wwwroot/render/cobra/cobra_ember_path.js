@@ -9,6 +9,33 @@
 /** Soft-cue visual radius (m). Kernel half_m stays large for scoring; pixels stay a fly-through haze. */
 export const EMBER_GATE_VISUAL_HALF_M = 24;
 
+/** Match CobraMissionActProgress.DepartPadRadiusM — hide pad-centred volumes while skids are home. */
+export const EMBER_DEPART_PAD_RADIUS_M = 120;
+
+function horizontalDistanceM(eastA, northA, eastB, northB) {
+  const de = Number(eastA) - Number(eastB);
+  const dn = Number(northA) - Number(northB);
+  if (![de, dn].every(Number.isFinite)) return Infinity;
+  return Math.hypot(de, dn);
+}
+
+function padCentreFromAuthority(authorityState) {
+  const fob = authorityState?.ground_war?.fob;
+  const eastM = Number(fob?.x_m);
+  const northM = Number(fob?.z_m);
+  if (!Number.isFinite(eastM) || !Number.isFinite(northM)) return null;
+  return { eastM, northM };
+}
+
+function ownshipOnDepartPad(authorityState, pad) {
+  if (!pad) return false;
+  const vehicle = authorityState?.vehicle;
+  const eastM = Number(vehicle?.x_m);
+  const northM = Number(vehicle?.z_m);
+  if (!Number.isFinite(eastM) || !Number.isFinite(northM)) return false;
+  return horizontalDistanceM(eastM, northM, pad.eastM, pad.northM) <= EMBER_DEPART_PAD_RADIUS_M;
+}
+
 export function emberPathGuidanceState(authorityState) {
   const gates = Array.isArray(authorityState?.path_gates) ? authorityState.path_gates : [];
   if (!gates.length) {
@@ -18,6 +45,8 @@ export function emberPathGuidanceState(authorityState) {
       approach_gate_count: 0,
     };
   }
+  const pad = padCentreFromAuthority(authorityState);
+  const suppressPadVolumes = ownshipOnDepartPad(authorityState, pad);
   const mapped = gates.map((gate, index) => ({
     id: `ember-gate-${index}`,
     east_m: Number(gate.east_m),
@@ -28,7 +57,12 @@ export function emberPathGuidanceState(authorityState) {
     active: gate.active === true,
   })).filter((gate) => Number.isFinite(gate.east_m)
     && Number.isFinite(gate.up_m)
-    && Number.isFinite(gate.north_m));
+    && Number.isFinite(gate.north_m))
+    .filter((gate) => {
+      if (!suppressPadVolumes || !pad) return true;
+      return horizontalDistanceM(gate.east_m, gate.north_m, pad.eastM, pad.northM)
+        > EMBER_DEPART_PAD_RADIUS_M;
+    });
 
   const activeIndex = mapped.findIndex((gate) => gate.active);
   // Keep one spent gate for trail context, drop the rest so the gorge does not fill with haze.

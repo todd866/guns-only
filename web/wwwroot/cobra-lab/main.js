@@ -1,61 +1,62 @@
-import * as THREE from "../vendor/three.module.js?v=301";
+import * as THREE from "../vendor/three.module.js?v=302";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=301";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=301";
-import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=301";
+} from "../render/cobra/cobra_canyon_plan.js?v=302";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=302";
+import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=302";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=301";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=301";
-import { createHud } from "../hud.js?v=301";
+} from "../render/cobra/cobra_canyon_tour.js?v=302";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=302";
+import { createHud } from "../hud.js?v=302";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=301";
+} from "../render/cobra/cobra_hud_adapter.js?v=302";
 import {
-  cobraRotorcraftHudModel,
-  drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=301";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=301";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=302";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=302";
 import {
   emberActObjectiveOverlay,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=301";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=301";
+} from "../render/cobra/cobra_ember_path.js?v=302";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=302";
+import {
+  updateFlightAudio,
+} from "../render/audio/flight_audio.js?v=302";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=301";
+} from "../render/cobra/cobra_control_profile.js?v=302";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=301";
+} from "../render/cobra/cobra_pilot_input.js?v=302";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=301";
+} from "../render/cobra/ah1g_presence.js?v=302";
 import {
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
   togglePadlockSelection,
-} from "../render/cobra/cobra_camera_bias.js?v=301";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=301";
+} from "../render/cobra/cobra_camera_bias.js?v=302";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=302";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=301";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=301";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=301";
+} from "../render/cobra/cobra_mission_exit.js?v=302";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=302";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=302";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -210,26 +211,28 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.06;
 
-// Build 264 owner ruling: no cockpit, the STANDARD F-22 HUD instead, with
-// rotorcraft extras. One engine: this is the production hud.js instance fed by
-// the cobra adapter — never a fork. Audio stays off (gun/GCAS tones are jet
-// systems the Cobra does not carry).
+// Build 302 owner ruling: literally the F-22 HUD layout. One engine — production
+// hud.js via the cobra adapter. Rotorcraft glass panels and decorative DOM chrome
+// stay out of play mode. Shared flight audio bus mirrors the jet front door.
 const hudCanvas = document.querySelector("#hud-canvas");
 const hud = createHud(hudCanvas);
-hud.setAudioEnabled(false);
+hud.setAudioEnabled(true);
 const hudPresentationCtx = hudCanvas.getContext("2d", { alpha: true });
 const hudFrameKit = createCobraHudFrame(THREE);
 const hudStateScratch = {};
-// Top inset clears the fixed mission header; the mission card lives bottom-left.
-const HUD_SAFE_INSETS = Object.freeze({ top: 40, right: 0, bottom: 0, left: 0 });
+const HUD_SAFE_INSETS = Object.freeze({ top: 0, right: 0, bottom: 0, left: 0 });
 const hudViewport = { width: 1, height: 1, pixelRatio: 1 };
 const projectionScratch = new THREE.Vector3();
+
+const armAudioFromGesture = () => hud.armAudio();
+window.addEventListener("pointerdown", armAudioFromGesture, { capture: true, passive: true });
+window.addEventListener("keydown", armAudioFromGesture, { capture: true });
 
 // One-sun doctrine for the canyon scene: the sky shader, the scene light rig, the fog and the
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=301";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=302";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -988,7 +991,7 @@ function updateObjectiveHud(war) {
       ? `LOSING ${Math.round((war.defeat_hold_progress ?? 0) * 100)}%`
       : "HOLD —");
   // Ammo/FOB/kills/target/gunner/rotor truth moved from the DOM text strip into the
-  // canvas HUD (hud.js + drawCobraRotorcraftHud); the card keeps objective copy only.
+  // canvas HUD (production hud.js); the card keeps objective copy only for lab/metrics.
   // Owner sortie web-cobra-1786090836886-dc8wvig0: tip-friendly copy stayed up while the
   // pilot idled on Camp Ember and control bled through −0.75 — losing must outrank tip.
   const copy = cobraObjectiveCopy(war, {
@@ -1106,10 +1109,9 @@ function animate(timeMs) {
 }
 
 /**
- * World + HUD, zero cockpit: the production hud.js pass over the rendered frame,
- * then the rotorcraft extras in the same combiner language. Tour/preview is an
- * exterior camera, so the combiner clears instead — as does a terminal sortie, whose
- * card owns the frame and whose rotor truth stopped being true at the strike.
+ * World + HUD, zero cockpit: production hud.js only in play (Build 302 — literal
+ * F-22 layout). Tour/preview clears the combiner; a terminal sortie lets the
+ * debrief card own the frame.
  */
 function drawHud(timeMs, deltaSeconds) {
   const pose = readVehiclePose();
@@ -1121,6 +1123,11 @@ function drawHud(timeMs, deltaSeconds) {
     hudPresentationCtx.setTransform(1, 0, 0, 1, 0, 0);
     hudPresentationCtx.clearRect(0, 0, hudCanvas.width, hudCanvas.height);
     hudPresentationCtx.restore();
+    updateFlightAudio(hudStateScratch, {
+      muted: true,
+      triggerHeld: false,
+      nowSeconds: timeMs / 1000,
+    });
     return;
   }
   cobraHudState(authorityState, pose, hudStateScratch);
@@ -1138,12 +1145,11 @@ function drawHud(timeMs, deltaSeconds) {
     padlockTargetId: selectedUnit ? selectedId : "",
     padlockTargetUnit: selectedUnit,
   }));
-  drawCobraRotorcraftHud(hudPresentationCtx, cobraRotorcraftHudModel(authorityState), {
-    width: hudViewport.width,
-    height: hudViewport.height,
-    pixelRatio: hudViewport.pixelRatio,
-    safeInsets: HUD_SAFE_INSETS,
-    projectWorldPoint: projectSimPointToScreen,
+  // Jet gun reports stay off — Cobra tip fire is not the F-22 M61 voice.
+  updateFlightAudio(hudStateScratch, {
+    muted: missionTerminal || hud.audioEnabled === false,
+    triggerHeld: false,
+    nowSeconds: timeMs / 1000,
   });
 }
 

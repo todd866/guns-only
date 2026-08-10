@@ -280,11 +280,11 @@ test("Hold the Bridge mounts the production HUD with rotorcraft extras", async (
   assert.match(html, /id="hud-canvas"/);
   assert.doesNotMatch(html, /id="hud-rotor"/);
   // One engine: the REAL production HUD plus the cobra adapter, not a fork.
+  // Build 302: play mode is literal F-22 layout — no rotorcraft glass panels on the combiner.
   assert.match(main, /from "\.\.\/hud\.js\?v=\d+"/);
   assert.match(main, /createHud/);
   assert.match(main, /cobraHudState/);
-  assert.match(main, /cobraRotorcraftHudModel/);
-  assert.match(main, /drawCobraRotorcraftHud/);
+  assert.doesNotMatch(main, /drawCobraRotorcraftHud/);
   assert.match(bridge, /main_rotor_rpm/);
   assert.match(bridge, /vortex_ring_severity/);
   assert.match(bridge, /governor_saturated/);
