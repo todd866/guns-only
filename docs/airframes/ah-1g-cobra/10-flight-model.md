@@ -155,13 +155,12 @@ The model must not be described as a finished high-fidelity Cobra because it doe
 - component damage, fuel, temperature, gearbox/oil systems, engine start/manual governor;
 - an articulated finite-ammunition AH-1G turret, ground targets, AI, mission, HUD, art or audio.
 
-Yaw rate from main-rotor torque is no longer cancelled by perfect instantaneous trim. Build 305
-stacks NASA CR-3144 limited-authority SCAS (±12.5%, 0.05 s) with a provisional ~1.5 s autotrim
-that finishes residual torque yaw so a fixed lever settles (owner flight 2026-08-10: continuous
-right pull must die out). Collective pulls still yaw before autotrim catches — not perfect magic.
-Engine-out retains its short left-yaw tendency. Cyclic/pitch still use the reduced-order
-whole-disk response. The slow autotrim is a provisional assist-shaped complement; a labeled
-player SAS/trim option must replace it before production SAS fidelity is claimed.
+Yaw rate from main-rotor torque uses NASA CR-3144 limited-authority SCAS only (±12.5%, 0.05 s).
+Build 305's slow autotrim is removed — owner telemetry showed high-TQ heading bias ≈0 deg/s and
+the aircraft felt too easy; limited SCAS with residual pedal work is the more realistic AH-1G
+channel. Provisional torque→yaw gain keeps hover near SCAS with a mild residual. Engine-out
+retains its short left-yaw tendency. Cyclic/pitch still use the reduced-order whole-disk
+response. Any friendlier heading/hover assist must be a separately labeled player option.
 
 ## Validation matrix
 

@@ -134,8 +134,7 @@ replaced before production-combat fidelity is claimed.
 | Stub-wing lift model | slope 4.25 rad⁻¹, CLmax 1.15, AR 3.4, e 0.72 | geometry is sourced; polar is provisional |
 | Whole-disk response | 0.12 s | provisional reduced-order rotor response; it is not the measured 0.08 s limited-authority SCAS actuator lag |
 | Maximum body rates / response lags | 60°/s roll, 42°/s pitch, 45°/s yaw | gameplay-safe reduced-order response; replace with source-derived 6-DOF moments/derivatives |
-| Torque→yaw gain at transmission limit | 14.0°/s body yaw | provisional reduced-order mapping from rotor power to fuselage yaw; SCAS cancels ±12.5% quickly, slow autotrim (~1.5 s) finishes the residual so fixed-lever flight settles (owner 2026-08-10). Replace with hub/fin/tail-rotor moment closure |
-| Slow yaw autotrim lag | 1.5 s | provisional gameplay complement to limited SCAS — not NASA CR-3144. Must become a labeled player option before claiming production SAS fidelity |
+| Torque→yaw gain at transmission limit | 8.0°/s body yaw | provisional reduced-order mapping; Build 306 removes slow autotrim (owner: 305 too easy). SCAS ±12.5% only — hover near saturation with mild residual, high TQ needs pedal. Replace with hub/fin/tail-rotor moment closure |
 | Numerical main-rotor load guard | 3.7 × maximum-gross weight | nonphysical divergence guard set no lower than the highest cited clean-configuration load factor; replace with weight/store-specific structural and aerodynamic envelopes |
 | Skid stations/track and impact threshold | current definition | coarse four-point contact; replace from gear geometry and landing-drop evidence |
 | VRS loss amplitude / RBS onset blend | current model coefficients | continuous and dimensionless, but not flight-identified; replace with Johnson VRS and azimuth-resolved stalled-area loads |

@@ -3507,7 +3507,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
             <span aria-hidden="true">⤴</span> Full screen: Share → Add to Home Screen
           </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 305 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 306 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
           <div class="ready-telemetry-disclosure">
@@ -3611,7 +3611,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     // Derive from a normal stamped URL so this comparison cannot drift from the next release:
     // tools/release/stamp-release.mjs rewrites every `?v=NNN`, and nothing else here.
-    const releaseBuild = new URL("./service-worker.js?v=305", location.href)
+    const releaseBuild = new URL("./service-worker.js?v=306", location.href)
       .searchParams.get("v");
 
     globalThis.__gunsPrebootReady = (async () => {
@@ -3707,11 +3707,11 @@ Splash one bandit to qualify · H controls · R restarts</p>
         });
         document.head.append(script);
       });
-      await loadClassicScript("./multiplayer-config.js?v=305");
-      await loadClassicScript("./_framework/blazor.webassembly.js?v=305", {
+      await loadClassicScript("./multiplayer-config.js?v=306");
+      await loadClassicScript("./_framework/blazor.webassembly.js?v=306", {
         autostart: "false",
       });
-      await import("./app.js?v=305");
+      await import("./app.js?v=306");
     } catch (error) {
       console.error(error);
       document.querySelector("#boot")?.classList.add("ready");
@@ -3724,8 +3724,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       try {
         const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
           await Promise.all([
-            import("./render/shell/inapp_browser.js?v=305"),
-            import("./render/shell/boot_fallback.js?v=305"),
+            import("./render/shell/inapp_browser.js?v=306"),
+            import("./render/shell/boot_fallback.js?v=306"),
           ]);
         const detection = detectEmbeddedBrowser({
           userAgent: navigator.userAgent,
