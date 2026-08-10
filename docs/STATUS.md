@@ -1,11 +1,11 @@
 # Current product and verification status
 
 Updated: 2026-08-10
-Production: Build 301, revision `cc1a2437a591c360da95eca87045f67b44ea3401`, deployment
-`dpl_8NvBdbbXxYK3Q1ssKW5yxyDZoS17` (verified live via /api/build-info 2026-08-10). Builds
+Production: Build 302, revision `41e9aeddb777907d03956528e0eea0fc23b5aa21`, deployment
+`dpl_2fXBKQShcwDNL9wVP35GaSWGN2GB` (verified live via /api/build-info 2026-08-10). Builds
 253-298 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Next candidate: Build 302 (branch `fix/cobra-play-f22`) — F-22 play chrome on cobra-lab, flight audio on, Camp Ember pad eye cleared of green mass.
+Next candidate: none queued.
 
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
