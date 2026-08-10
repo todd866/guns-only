@@ -37,8 +37,8 @@ public sealed class CobraGroundWarRuntime
     /// in the pad ring — Camp Ember is a friendly Depart, not a knife-fight spawn.
     /// </summary>
     public const string GunnerySeamUnitId = "ground.hostile.gunnery-seam.000";
-    // Mid/far envelope (ballistic window 80–2000 m). ~950 m is still Tab-reachable from the
-    // pad hover but reads as "down the gorge path", not "surrounded on the ramp".
+    // Mid/far envelope (ballistic window 80–2000 m). Seeded on Ingress after the pad cold open
+    // so Tab→F stays reachable once the aircraft is flying the gorge, not on the ramp.
     public const double GunnerySeamRangeM = 950.0;
     public const double WreckRetainSeconds = 12.0;
     /// <summary>Small-arms chatter events per engaged unit per second (presentation only).</summary>

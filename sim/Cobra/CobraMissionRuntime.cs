@@ -379,8 +379,11 @@ public sealed class CobraMissionRuntime
             throw new InvalidOperationException("The route departure has no terrain truth.");
         CobraCanyonRoutePoint next = _selectedRoute.Points[1];
         double defaultYawRad = Math.Atan2(next.EastM - start.EastM, next.NorthM - start.NorthM);
+        // Ember Run cold open: skids on Camp Ember, not a 30 m hover over the river (owner
+        // 2026-08-10). TargetAglM stays route guidance; pad contact uses CG→skid geometry.
+        double padClearanceM = Ah1gCobraDefinition.LateProduction.Contact.CenterOfMassToSkidM;
         CobraMissionSpawn resolvedSpawn = spawn ?? new CobraMissionSpawn(
-            new Vec3D(start.EastM, startSurface.HeightM + start.TargetAglM, start.NorthM),
+            new Vec3D(start.EastM, startSurface.HeightM + padClearanceM, start.NorthM),
             Vec3D.Zero,
             defaultYawRad);
         if (!resolvedSpawn.PositionWorldM.IsFinite
@@ -413,9 +416,8 @@ public sealed class CobraMissionRuntime
             bridgeLandmark.EastM,
             bridgeSurface.HeightM,
             bridgeLandmark.NorthM);
-        // Crew-chain seam: a standing hostile on the nose so fire_authorized is reachable from
-        // the spawn hover for the whole sortie (see CobraGroundWarRuntime.SeedStandingGunneryTarget).
-        _groundWar.SeedStandingGunneryTarget(resolvedSpawn.PositionWorldM, resolvedSpawn.YawRad);
+        // Depart is a friendly pad open — no nose hostile until Ingress clears the pad ring.
+        // Crew-chain coverage seeds then (see EnsureGunnerySeamForIngress).
         Status = CobraMissionStatus.Active;
         _cachedMaskingAssessment = AssessMaskingAt(_cobra.State.PositionWorldM);
         _maskingAssessmentAuthorityTicks = 0;
@@ -533,6 +535,7 @@ public sealed class CobraMissionRuntime
 
     void RefreshAct(in Vec3D positionWorldM, double? clearanceM)
     {
+        CobraMissionAct previous = _act;
         _act = CobraMissionActProgress.Next(
             _act,
             positionWorldM,
@@ -542,6 +545,17 @@ public sealed class CobraMissionRuntime
             _groundWar.MissionOutcome,
             Status,
             clearanceM);
+        if (previous == CobraMissionAct.Depart && _act == CobraMissionAct.Ingress)
+            EnsureGunnerySeamForIngress(positionWorldM);
+    }
+
+    /// <summary>
+    /// Plant the standing Tab→F seam once the aircraft has left the pad. Idempotent.
+    /// </summary>
+    void EnsureGunnerySeamForIngress(in Vec3D positionWorldM)
+    {
+        double yawRad = PlayerVehicleValidation.AttitudeAngles(_cobra.State.BodyAttitude).Yaw;
+        _groundWar.SeedStandingGunneryTarget(positionWorldM, yawRad);
     }
 
     /// <summary>

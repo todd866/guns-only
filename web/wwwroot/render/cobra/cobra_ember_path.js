@@ -6,8 +6,8 @@
  * the pilot can fly through; never a landmark-sized UFO.
  */
 
-/** Soft-cue visual radius (m). Kernel half_m stays large for scoring; pixels stay small. */
-export const EMBER_GATE_VISUAL_HALF_M = 22;
+/** Soft-cue visual radius (m). Kernel half_m stays large for scoring; pixels stay readable. */
+export const EMBER_GATE_VISUAL_HALF_M = 38;
 
 export function emberPathGuidanceState(authorityState) {
   const gates = Array.isArray(authorityState?.path_gates) ? authorityState.path_gates : [];
