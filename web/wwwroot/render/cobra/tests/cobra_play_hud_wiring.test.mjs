@@ -8,23 +8,24 @@ async function source(path) {
   return readFile(new URL(path, root), "utf8");
 }
 
-test("Hold the Bridge play HUD surfaces gunner status through the canvas HUD", async () => {
-  const [html, main, rotorcraftHud] = await Promise.all([
+test("Hold the Bridge play HUD is the production F-22 combiner", async () => {
+  const [html, main, css] = await Promise.all([
     source("cobra-lab/index.html"),
     source("cobra-lab/main.js"),
-    source("render/cobra/cobra_rotorcraft_hud.js"),
+    source("cobra-lab/styles.css"),
   ]);
-  // Build 264: the DOM text strip is replaced by the production hud.js canvas plus
-  // the rotorcraft extras painter; the gunner truth flows through the extras model.
+  // Build 302: literal F-22 layout — hud.js only in play; no rotorcraft glass panels,
+  // no decorative play chrome / objective prose / always-on legend.
   assert.match(html, /id="hud-canvas"/);
   assert.doesNotMatch(html, /id="hud-gunner"/);
-  assert.match(main, /cobraRotorcraftHudModel/);
-  assert.match(main, /drawCobraRotorcraftHud/);
-  assert.match(rotorcraftHud, /gunnerStatusText/);
-  // The designation bracket must project through the render camera the scene was drawn
-  // with, or the mark and the world disagree by exactly the camera's crew bias.
-  assert.match(main, /projectWorldPoint: projectSimPointToScreen/);
-  assert.match(main, /projectionScratch\.project\(camera\)/);
+  assert.match(main, /createHud\(/);
+  assert.match(main, /updateFlightAudio/);
+  assert.match(main, /hud\.setAudioEnabled\(true\)/);
+  assert.match(main, /armAudioFromGesture/);
+  assert.doesNotMatch(main, /drawCobraRotorcraftHud/);
+  assert.match(css, /body\[data-shell="play"\] \.play-chrome \{[\s\S]*?display: none/);
+  assert.match(css, /body\[data-shell="play"\] \.objective-hud \{[\s\S]*?display: none/);
+  assert.match(css, /body\[data-shell="play"\] \.legend \{[\s\S]*?display: none/);
 });
 
 test("the airframe silhouette follows the camera mode from a single call site", async () => {

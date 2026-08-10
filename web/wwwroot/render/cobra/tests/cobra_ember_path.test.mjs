@@ -46,6 +46,20 @@ test("empty gates hide the path", () => {
   assert.equal(state.approach_gate_count, 0);
 });
 
+test("pad-centred gates stay dark while ownship is still on Camp Ember", () => {
+  const state = emberPathGuidanceState({
+    path_gates: [
+      { east_m: -6775, up_m: 246, north_m: -6200, half_m: 90, active: true },
+      { east_m: -6500, up_m: 190, north_m: -6200, half_m: 155, active: false },
+    ],
+    vehicle: { x_m: -6775, z_m: -6200 },
+    ground_war: { fob: { x_m: -6775, z_m: -6200 } },
+  });
+  assert.equal(state.approach_gate_count, 1);
+  assert.equal(state.approach_gates[0].east_m, -6500);
+  assert.equal(state.approach_gates[0].active, false);
+});
+
 test("act overlays cover the Ember Run spine", () => {
   assert.match(emberActObjectiveOverlay("depart").line, /DEPART CAMP EMBER/);
   assert.match(emberActObjectiveOverlay("ingress").line, /INGRESS/);

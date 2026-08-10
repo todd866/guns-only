@@ -60,11 +60,11 @@ test("builds one bounded authored batch per visual role across every tier", () =
     assert.equal(kit.roleCounts.authoredSetPieceCells, 10);
     assert.equal(kit.roleCounts.authoredAmbientArchetypes, 11);
     assert.equal(kit.roleCounts.authoredLandmarkArchetypes, 11);
-    assert.equal(kit.roleCounts.authoredSetPieceArchetypeReferences, 59);
+    assert.equal(kit.roleCounts.authoredSetPieceArchetypeReferences, 58);
     // Jungle set-piece archetypes expand to 3 stands each (near-field canopy walls).
-    // Camp Ember dressing drop (no pad-centre canopy/mist) trims two authored refs → 88 assets.
-    assert.equal(kit.roleCounts.authoredSetPieceAssetReferences, 88);
-    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, 88);
+    // Camp Ember dressing: no pad-centre canopy/mist/understory → 85 assets.
+    assert.equal(kit.roleCounts.authoredSetPieceAssetReferences, 85);
+    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, 85);
     assert.equal(
       kit.roleCounts.ambientBatchInstances
         + kit.roleCounts.renderedSetPieceAssetInstances
@@ -98,6 +98,20 @@ test("builds one bounded authored batch per visual role across every tier", () =
     assert.ok(jungleMesh.material.map, "jungle material must sample the foliage atlas");
     assert.ok(jungleMesh.material.alphaTest > 0.3,
       "jungle cards must alpha-test cutouts (BF:V-style cards, not soft blend fog)");
+    // Camp Ember rear-seat eye must stay free of jungle mass.
+    const pad = plan.landmarks.find((entry) => entry.id === "landmark.cobra-canyon.camp-ember.v1");
+    assert.ok(pad);
+    const [padEast, , padNorth] = pad.positionLocalM;
+    const jungleMatrix = new THREE.Matrix4();
+    const junglePosition = new THREE.Vector3();
+    for (let index = 0; index < jungleMesh.count; index++) {
+      jungleMesh.getMatrixAt(index, jungleMatrix);
+      junglePosition.setFromMatrixPosition(jungleMatrix);
+      const dx = junglePosition.x - padEast;
+      const dz = (-junglePosition.z) - padNorth;
+      assert.ok(dx * dx + dz * dz >= 120 * 120,
+        "jungle must stay outside the Camp Ember clear eye");
+    }
     assert.equal(jungleMesh.material.side, THREE.DoubleSide);
     assert.ok(triangleCount(jungleGeometry) >= 10,
       "jungle stand needs crossed palm cards plus understory");
@@ -137,7 +151,7 @@ test("honours hard instance caps even below the authored reveal reserve", () => 
   for (const maximum of [0, 1, 10, 24]) {
     const { kit } = create("desktop", maximum);
     assert.ok(kit.builtMetrics.instances <= maximum);
-    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, Math.min(maximum, 92));
+    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, Math.min(maximum, 85));
     assert.equal(kit.roleCounts.ambientBatchInstances, 0);
     assert.equal(kit.roleCounts.renderedWaterAccentInstances, 0);
     kit.dispose();

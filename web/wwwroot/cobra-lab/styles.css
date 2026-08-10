@@ -37,12 +37,11 @@ body[data-shell="play"] {
   display: block;
 }
 
+/* Build 302: play shell is HUD-only like the F-22 front door — decorative
+   brand / mission prose / faction legend stay out of the combiner. Lab (?lab=1)
+   still uses .play-chrome as its top bar. */
 body[data-shell="play"] .play-chrome {
-  position: fixed;
-  inset: 0 0 auto 0;
-  z-index: 4;
-  pointer-events: none;
-  padding: max(12px, env(safe-area-inset-top)) 18px 0;
+  display: none;
 }
 
 body[data-shell="play"] .play-top {
@@ -112,14 +111,13 @@ body[data-shell="play"] .play-top {
   pointer-events: none;
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
-/* Build 264: the F-22 HUD owns the upper combiner lanes; the mission card keeps
-   its content but stands down to the bottom-left corner of the play shell. */
+/* Build 302: no prose objective card in play — mission cues live in hud.js. */
 body[data-shell="play"] .objective-hud {
-  position: fixed;
-  left: 18px;
-  bottom: max(16px, env(safe-area-inset-bottom));
-  margin-top: 0;
-  width: min(380px, calc(100vw - 36px));
+  display: none;
+}
+
+body[data-shell="play"] .legend {
+  display: none;
 }
 .objective-copy { display: grid; gap: 4px; margin-bottom: 10px; }
 #objective-line {

@@ -2047,8 +2047,7 @@
       ],
       "archetypeIds": [
         "archetype.cobra-canyon.landmark-camp.v1",
-        "archetype.cobra-canyon.rock-scatter.v1",
-        "archetype.cobra-canyon.jungle-understory.v1"
+        "archetype.cobra-canyon.rock-scatter.v1"
       ],
       "landmarkIds": [
         "landmark.cobra-canyon.camp-ember.v1"
