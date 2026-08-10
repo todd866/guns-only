@@ -1,11 +1,11 @@
 # Current product and verification status
 
 Updated: 2026-08-10
-Production: Build 299, revision `7b886390eafb390518e2c03e83fee7bcb45809ab`, deployment
-`dpl_7tekQHug1ejvrsL9rf7qNpXMdixU` (verified live via /api/build-info 2026-08-10). Builds
+Production: Build 300, revision `cceadf45c160170d71639ce921ad1bd97741b28b`, deployment
+`dpl_8h7wobGUxu1VNCMuZvwSa6xPEFyF` (verified live via /api/build-info 2026-08-10). Builds
 253-298 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Next candidate: Build 300 (branch `fix/cobra-depart-golden-path`) — skids-on-pad Depart cold open, no nose hostile until Ingress, legible Ember golden path.
+Next candidate: none queued.
 
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
@@ -35,7 +35,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | F9F-2 Panther off Essex (`korea-panther`) | **quarantined** | Preview acknowledgement only | Build 238 ownship-only kernel flies the production terrain catapult/route/return/groove to a physical W2 trap (100/100 focused); packaged route, touch-RTB, HUD, and barrier contracts passed silent-browser acceptance | Complete representative human desktop/touch flights and historical/presentation acceptance before any promotion |
 | MIDGE-03 Facility Nine (`indoor`) | **quarantined** | `/indoor/` preview acknowledgement | Candidate UI now enforces doctrine-safe controls and blocks premature return | Re-drive the default stealth route and representative touch/keyboard paths |
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
-| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned ground war, tip/hold win/lose, M134 + Camp Ember rearm, Tab/F gunner. Build 299: soft RBS, humid corridor. Build 300 candidate: skids-on-pad Depart, deferred gunnery seam, brighter golden path | Owner verify pad cold open + path visibility; flare landing; SEAM after lift-off. Longer arc: DCS-BS1-grade flight dynamics |
+| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned ground war, tip/hold win/lose, M134 + Camp Ember rearm, Tab/F gunner. Build 300: skids-on-pad Depart cold open, deferred gunnery seam until Ingress, legible Ember golden path | Owner verify pad cold open + path visibility; flare landing; SEAM after lift-off. Longer arc: DCS-BS1-grade flight dynamics |
 | Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load, lappable circuit from Build 264+. Build 267 adds ride telemetry (speed/gear/lean/lap/frame) | Fresh representative human lap on the fixed artifact; deeper instrumentation still provisional |
 
 ## Research-only packages
@@ -46,8 +46,8 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Live production is Build 299 (`7b886390`, `dpl_7tekQHug1ejvrsL9rf7qNpXMdixU`). Shipped from
-  PR #39; Verify green on the merge SHA after one documented re-run of flaky
+- Live production is Build 300 (`cceadf45`, `dpl_8h7wobGUxu1VNCMuZvwSa6xPEFyF`). Shipped from
+  PR #42; Verify green on the merge SHA after one documented re-run of flaky
   `boot does not stutter` smoke. Do not treat that gate as a frame-rate measurement.
 - A candidate is releasable only when its exact pushed SHA has a complete green gate, or the
   owner accepts a documented flaky-gate exception with live `/api/build-info` verification.
