@@ -6,9 +6,6 @@ Production: Build 303, revision `51fd754c52a1d947145cf94efa05abc6f7a2b265`, depl
 253-298 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
 Next candidate: none queued.
-=======
-Next candidate: Build 303 (branch `fix/camp-ember-bfv`) — BF:V-density Camp Ember firebase; kill green control disc.
->>>>>>> 6c7fe72a (Build 303: BF:V Camp Ember firebase, no green control disc.)
 
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
