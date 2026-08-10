@@ -1,4 +1,5 @@
 using GunsOnly.Sim.Cobra;
+using GunsOnly.Sim.Cobra.GroundWar;
 using GunsOnly.Sim.Environment;
 using GunsOnly.Sim.Vehicles;
 
@@ -58,14 +59,51 @@ public class CobraMissionRuntimeTests
         Assert.Equal(CobraCanyonDefinition.RiverGorgeRouteId, river.SelectedRoute.Id);
         Assert.Equal(CobraCanyonDefinition.RidgeShadowRouteId, ridge.SelectedRoute.Id);
         Assert.Equal(CobraCanyonDefinition.RoadPlantationRouteId, road.SelectedRoute.Id);
-        Assert.Equal(30.0, river.Cobra.State.PositionWorldM.Y);
-        Assert.Equal(40.0, ridge.Cobra.State.PositionWorldM.Y);
-        Assert.Equal(27.0, road.Cobra.State.PositionWorldM.Y);
+        // Default spawn is skids-on-pad (CG → skid), not route TargetAglM hover.
+        double padClearanceM = Ah1gCobraDefinition.LateProduction.Contact.CenterOfMassToSkidM;
+        Assert.Equal(padClearanceM, river.Cobra.State.PositionWorldM.Y);
+        Assert.Equal(padClearanceM, ridge.Cobra.State.PositionWorldM.Y);
+        Assert.Equal(padClearanceM, road.Cobra.State.PositionWorldM.Y);
+        Assert.Equal(CobraMissionAct.Depart, river.Act);
+        Assert.DoesNotContain(
+            river.GroundWar.Units,
+            unit => unit.Id == CobraGroundWarRuntime.GunnerySeamUnitId);
         Assert.Equal(river.SelectedRoute.Id, river.Diagnostics.RouteGuidance.RouteId);
         Assert.Equal(ridge.SelectedRoute.Id, ridge.Diagnostics.RouteGuidance.RouteId);
         Assert.Equal(road.SelectedRoute.Id, road.Diagnostics.RouteGuidance.RouteId);
         Assert.Throws<ArgumentOutOfRangeException>(() => new CobraMissionRuntime(
             world, new FlatTerrain(), (CobraCanyonRouteChoice)999));
+    }
+
+    [Fact]
+    public void LeavingThePadSeedsTheGunnerySeamOnIngress()
+    {
+        CobraCanyonDefinition world = CobraCanyonDefinition.Create();
+        CobraCanyonRouteDefinition route = world.Routes.First(candidate =>
+            string.Equals(candidate.Id, CobraCanyonDefinition.RiverGorgeRouteId, StringComparison.Ordinal));
+        CobraCanyonRoutePoint start = route.Points[0];
+        CobraCanyonRoutePoint next = route.Points[1];
+        double yawRad = Math.Atan2(next.EastM - start.EastM, next.NorthM - start.NorthM);
+        double eastDeltaM = next.EastM - start.EastM;
+        double northDeltaM = next.NorthM - start.NorthM;
+        double lengthM = Math.Sqrt(eastDeltaM * eastDeltaM + northDeltaM * northDeltaM);
+        // Just past DepartPadRadiusM along the gorge heading — cold open stays on the pad;
+        // this fixture proves Ingress plants the seam without needing a crash-prone takeoff.
+        double offsetM = CobraMissionActProgress.DepartPadRadiusM + 40.0;
+        var pastPad = new Vec3D(
+            start.EastM + eastDeltaM / lengthM * offsetM,
+            120.0,
+            start.NorthM + northDeltaM / lengthM * offsetM);
+        var runtime = new CobraMissionRuntime(
+            world,
+            new FlatTerrain(80.0),
+            CobraCanyonRouteChoice.RiverGorge,
+            spawn: new CobraMissionSpawn(pastPad, Vec3D.Zero, yawRad));
+
+        Assert.Equal(CobraMissionAct.Ingress, runtime.Act);
+        Assert.Contains(
+            runtime.GroundWar.Units,
+            unit => unit.Id == CobraGroundWarRuntime.GunnerySeamUnitId && unit.IsAlive);
     }
 
     [Fact]
