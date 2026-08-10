@@ -5,7 +5,7 @@ Production: Build 307, revision `fb1f804d6565862e265523cfdc3305dac5104523`, depl
 `dpl_2yEDtXXaTzr4oMmSSQpueQjPPbG8` (verified live via /api/build-info 2026-08-10). Builds
 253-298 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Next candidate: none stamped.
+Next candidate: none queued.
 
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
