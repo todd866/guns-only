@@ -1,13 +1,14 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=302";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=303";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=302";
-import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=302";
+} from "./cobra_canyon_asset_kit.js?v=303";
+import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=303";
 import {
   createCobraCanyonBasinMaterial,
   createCobraCanyonRiverMaterial,
-} from "./cobra_canyon_terrain_material.js?v=302";
+} from "./cobra_canyon_terrain_material.js?v=303";
+import { createCampEmberFirebase } from "./cobra_camp_ember_firebase.js?v=303";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 
@@ -25,25 +26,26 @@ export const COBRA_CANYON_TERRAIN_SEGMENTS = Object.freeze({
 });
 
 // The core analytical terrain and authority cues occupy eight submissions (basin, river, roads,
-// hero cells, landmarks, non-bridge hazards, bridge decks, bridge piers). The asset kit adds at
-// most one instanced submission for each of its seven roles; none cast a second shadow pass.
+// hero cells, landmarks, non-bridge hazards, bridge decks, bridge piers). Camp Ember firebase is
+// one merged vertex-colored mesh (+1). The asset kit adds at most one instanced submission for
+// each of its seven roles; none cast a second shadow pass.
 export const COBRA_CANYON_RENDER_BUDGETS = Object.freeze({
   mobile: Object.freeze({
-    maxDrawCalls: 15,
+    maxDrawCalls: 16,
     maxInstances: 640,
     maxTriangles: 45_000,
     maxAssetInstances: 580,
     nearRingMaximumAglM: 180,
   }),
   balanced: Object.freeze({
-    maxDrawCalls: 15,
+    maxDrawCalls: 16,
     maxInstances: 890,
     maxTriangles: 75_000,
     maxAssetInstances: 812,
     nearRingMaximumAglM: 260,
   }),
   desktop: Object.freeze({
-    maxDrawCalls: 15,
+    maxDrawCalls: 16,
     maxInstances: 1_440,
     maxTriangles: 120_000,
     maxAssetInstances: 1_330,
@@ -1229,17 +1231,11 @@ function landmarkPlacements(plan) {
       continue;
     }
     if (kind === "forward-operating-base") {
-      // Vietnam-era land FOB: PSP pads, sandbag berms, revetment, fuel, thin mast.
-      // Keep the eye clear — no giant green mass / orange cone on the nose.
-      add(record, point, "pad-main", [0, 0, 0], [28, 0.45, 28]);
-      add(record, point, "pad-south", [0, 0, -34], [22, 0.4, 22]);
-      add(record, point, "berm-west", [-22, 0, 0], [4, 2.2, 36]);
-      add(record, point, "berm-east", [22, 0, -6], [4, 2.0, 28]);
-      add(record, point, "revetment", [-8, 0, 22], [14, 2.6, 8]);
-      add(record, point, "fuel-blivet", [14, 0, 18], [6, 2.4, 6]);
-      add(record, point, "sandbag-nest", [10, 0, -18], [5, 1.6, 5]);
-      add(record, point, "signal-mast", [-4, 0, 26], [0.7, 16, 0.7]);
-    } else if (kind === "waterfall") {
+      // Camp Ember is the dedicated BF:V firebase mesh (createCampEmberFirebase) — do not
+      // also emit stretched cylinder AABBs that read as debug placeholders.
+      continue;
+    }
+    if (kind === "waterfall") {
       add(record, point, "water-ribbon", [0, 0, 0], [14, Math.min(48, Math.max(24, authoredHeightM * 0.4)), 3]);
     } else if (kind === "rock-spires") {
       const spireH = Math.min(52, authoredHeightM);
@@ -1537,6 +1533,18 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
   });
   group.add(assetKit.group);
 
+  const campEmber = createCampEmberFirebase(THREE, plan);
+  if (campEmber) {
+    group.add(campEmber.group);
+    for (const geometry of campEmber.resources.geometries) resources.geometries.add(geometry);
+    for (const material of campEmber.resources.materials) resources.materials.add(material);
+    resources.meshes.push(...campEmber.resources.meshes);
+    // Static mesh: counts as a draw call + triangles, not an instance (matches basin/river).
+    metrics.drawCalls += campEmber.drawCalls;
+    metrics.triangles += campEmber.triangles;
+    metrics.roleTriangles["camp-ember-firebase"] = campEmber.triangles;
+  }
+
   const landmarkMesh = addInstancedMesh(
     THREE,
     group,
@@ -1668,6 +1676,8 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
     bridges: hazards.bridges.length,
     bridgeDecks: hazards.bridgeDecks.length,
     bridgePiers: hazards.bridgePiers.length,
+    campEmberFirebaseParts: campEmber?.partCount ?? 0,
+    campEmberFirebaseTriangles: campEmber?.triangles ?? 0,
     routeEnvelopeAdjustedInstances: routeEnvelopePlacements.filter(
       (placement) => placement.routeEnvelopeAdjusted,
     ).length,
