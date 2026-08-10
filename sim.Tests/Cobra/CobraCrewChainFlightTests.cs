@@ -6,9 +6,10 @@ using GunsOnly.Sim.Vehicles;
 namespace GunsOnly.Sim.Tests.Cobra;
 
 /// <summary>
-/// End-to-end crew chain: spawn on River Gorge, keep the standing seam inside the gun window,
-/// acquire, consent, and expend ammo. Owner Build 270 telemetry showed OutOfLimits ~87% of the
-/// sortie and zero rounds away — this harness fails closed on that regression.
+/// End-to-end crew chain: clear the Depart pad (Ingress seeds the standing seam), keep it inside
+/// the gun window, acquire, consent, and expend ammo. Owner Build 270 telemetry showed
+/// OutOfLimits ~87% of the sortie and zero rounds away — this harness fails closed on that
+/// regression. Build 300 moved the seam off the cold open so the pad is not a knife fight.
 /// </summary>
 public sealed class CobraCrewChainFlightTests
 {
@@ -17,18 +18,40 @@ public sealed class CobraCrewChainFlightTests
         ReacquisitionSeconds: 0.45,
         SightCoincidenceToleranceRad: 0.06));
 
+    static CobraMissionRuntime CreatePastPadRuntime()
+    {
+        CobraCanyonDefinition world = CobraCanyonDefinition.Create();
+        CobraCanyonRouteDefinition route = world.Routes.First(candidate =>
+            string.Equals(candidate.Id, CobraCanyonDefinition.RiverGorgeRouteId, StringComparison.Ordinal));
+        CobraCanyonRoutePoint start = route.Points[0];
+        CobraCanyonRoutePoint next = route.Points[1];
+        double yawRad = Math.Atan2(next.EastM - start.EastM, next.NorthM - start.NorthM);
+        double eastDeltaM = next.EastM - start.EastM;
+        double northDeltaM = next.NorthM - start.NorthM;
+        double lengthM = Math.Sqrt(eastDeltaM * eastDeltaM + northDeltaM * northDeltaM);
+        double offsetM = CobraMissionActProgress.DepartPadRadiusM + 40.0;
+        if (!world.CreateTerrainSurface().TrySample(start.EastM, start.NorthM, out TerrainSample surface))
+            throw new InvalidOperationException("Camp Ember has no terrain datum.");
+        var pastPad = new Vec3D(
+            start.EastM + eastDeltaM / lengthM * offsetM,
+            surface.HeightM + 40.0,
+            start.NorthM + northDeltaM / lengthM * offsetM);
+        return new CobraMissionRuntime(
+            world,
+            world.CreateTerrainSurface(),
+            CobraCanyonRouteChoice.RiverGorge,
+            spawn: new CobraMissionSpawn(pastPad, Vec3D.Zero, yawRad));
+    }
+
     [Fact]
     public void HoverFacingSeamHoldFExpendsAmmo()
     {
-        CobraCanyonDefinition world = CobraCanyonDefinition.Create();
-        var runtime = new CobraMissionRuntime(
-            world,
-            world.CreateTerrainSurface(),
-            CobraCanyonRouteChoice.RiverGorge);
+        var runtime = CreatePastPadRuntime();
+        Assert.Equal(CobraMissionAct.Ingress, runtime.Act);
         var gunner = CreateGunner();
         var turret = new CobraTurretServo();
         GroundUnit seam = runtime.GroundWar.FindUnit(CobraGroundWarRuntime.GunnerySeamUnitId)
-            ?? throw new InvalidOperationException("Standing gunnery seam missing at spawn.");
+            ?? throw new InvalidOperationException("Standing gunnery seam missing after Ingress.");
 
         // Hold the hover for one second so the pose is settled before we arm the gunner.
         double trim = runtime.Cobra.EstimateHoverCollective(
@@ -44,7 +67,7 @@ public sealed class CobraCrewChainFlightTests
             seam.PositionWorldM);
         Assert.True(
             assessment.WithinTurretEnvelope,
-            $"Seam outside envelope at spawn hover: az={assessment.AzimuthErrorRad * 180 / Math.PI:F1}° "
+            $"Seam outside envelope after Ingress: az={assessment.AzimuthErrorRad * 180 / Math.PI:F1}° "
             + $"el={assessment.ElevationRad * 180 / Math.PI:F1}° range={assessment.RangeM:F0}m "
             + $"(aircraft Y={runtime.Cobra.State.PositionWorldM.Y:F0}, seam Y={seam.PositionWorldM.Y:F0}).");
         Assert.True(assessment.HasBallisticSolution, $"range {assessment.RangeM:F0}m");
