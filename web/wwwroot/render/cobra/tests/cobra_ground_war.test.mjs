@@ -255,3 +255,41 @@ test("hostiles use hotter paint and role-distinct silhouettes", () => {
   assert.equal(hostileMat.emissive.hex, COBRA_GROUND_WAR_COLORS.hostileEmissive);
   presentation.dispose();
 });
+
+test("Camp Ember FOB site never gets the translucent control disc", () => {
+  const presentation = createCobraGroundWarPresentation(fakeThree());
+  presentation.sync({
+    control: 0.5,
+    sites: [{
+      id: "site.camp-ember.v1",
+      landmark_id: "landmark.cobra-canyon.camp-ember.v1",
+      label: "Camp Ember",
+      local_control: 0.9,
+      x_m: -6775,
+      y_m: 218,
+      z_m: -6200,
+      capture_radius_m: 120,
+    }, {
+      id: "site.iron-bell-bridge.v1",
+      landmark_id: "landmark.cobra-canyon.iron-bell-bridge.v1",
+      label: "Iron Bell Bridge",
+      local_control: 0.1,
+      x_m: 0,
+      y_m: 100,
+      z_m: 0,
+      capture_radius_m: 220,
+    }],
+    units: [],
+  });
+  const siteRoot = presentation.group.children.find((child) => child.name === "COBRA_GROUND_WAR_SITES");
+  assert.ok(siteRoot);
+  assert.equal(
+    siteRoot.children.some((mesh) => String(mesh.name).includes("camp-ember")),
+    false,
+  );
+  assert.equal(
+    siteRoot.children.some((mesh) => String(mesh.name).includes("iron-bell")),
+    true,
+  );
+  presentation.dispose();
+});

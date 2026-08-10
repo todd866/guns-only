@@ -3,6 +3,8 @@
  * Consumes authoritative ground_war snapshot fields; never invents combat truth.
  */
 
+import { isCampEmberGroundSite } from "./cobra_camp_ember_firebase.js?v=303";
+
 export const COBRA_GROUND_WAR_PRESENTATION_SCHEMA =
   "guns-only.cobra-ground-war-presentation.v1";
 
@@ -184,6 +186,8 @@ export function createCobraGroundWarPresentation(THREE) {
   }
 
   function ensureSite(site) {
+    // Camp Ember owns the BF:V firebase mesh — never paint the translucent control disc there.
+    if (isCampEmberGroundSite(site)) return null;
     let entry = siteMeshes.get(site.id);
     if (entry) return entry;
     const pad = new THREE.Mesh(
@@ -335,6 +339,7 @@ export function createCobraGroundWarPresentation(THREE) {
 
     for (const site of groundWar.sites ?? []) {
       const entry = ensureSite(site);
+      if (!entry) continue;
       entry.mesh.position.set(site.x_m, site.y_m + 0.6, -site.z_m);
       const color = siteControlColor(site.local_control);
       entry.mat.color.setHex(color);

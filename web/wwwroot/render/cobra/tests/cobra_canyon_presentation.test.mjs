@@ -190,12 +190,13 @@ test("builds the real analytical basin and stays inside every tier ceiling", () 
     assert.ok(actual.instances <= budget.maxInstances);
     assert.ok(actual.triangles <= budget.maxTriangles);
     assert.equal(diagnostics.withinBudget, true);
-    assert.equal(diagnostics.builtDrawCalls, 15);
-    assert.equal(diagnostics.roleCounts.coreRenderBatches, 8);
+    assert.equal(diagnostics.builtDrawCalls, 16);
+    assert.equal(diagnostics.roleCounts.coreRenderBatches, 9);
     assert.equal(diagnostics.roleCounts.assetRenderBatches, 7);
-    assert.equal(diagnostics.roleCounts.worldRenderBatches, 15);
+    assert.equal(diagnostics.roleCounts.worldRenderBatches, 16);
     assert.equal(diagnostics.roleCounts.heroCells, 3);
     assert.equal(diagnostics.roleCounts.landmarks, 11);
+    assert.ok(diagnostics.roleCounts.campEmberFirebaseParts >= 28);
     assert.equal(diagnostics.roleCounts.hazards, 14);
     assert.ok(
       diagnostics.roleCounts.assetInstances <= budget.maxAssetInstances,
@@ -411,10 +412,15 @@ test("grounds landmark silhouettes on terrain while sizing toward authored top a
       assert.ok(Math.abs(bottomDeltaM) < 0.05,
         `${entry.id} must start on terrain instead of floating`);
     }
+    assert.notEqual(entry.kind, "forward-operating-base",
+      "Camp Ember must not use the stretched landmark cylinder stack");
     if (entry.kind === "rock-spires") tallestNeedleM = Math.max(tallestNeedleM, scale.y);
   }
   assert.ok(tallestNeedleM > 40 && tallestNeedleM <= 64,
     `Karst Needles must stay readable but capped (got ${tallestNeedleM}m) — uncapped authored tops painted UFOs`);
+  const firebase = presentation.group.getObjectByName("CAMP_EMBER_FIREBASE");
+  assert.ok(firebase, "Camp Ember BF:V firebase mesh must be present");
+  assert.ok(presentation.diagnostics().roleCounts.campEmberFirebaseParts >= 28);
   presentation.dispose();
 });
 
