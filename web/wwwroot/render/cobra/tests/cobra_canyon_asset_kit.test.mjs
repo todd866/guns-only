@@ -60,10 +60,11 @@ test("builds one bounded authored batch per visual role across every tier", () =
     assert.equal(kit.roleCounts.authoredSetPieceCells, 10);
     assert.equal(kit.roleCounts.authoredAmbientArchetypes, 11);
     assert.equal(kit.roleCounts.authoredLandmarkArchetypes, 11);
-    assert.equal(kit.roleCounts.authoredSetPieceArchetypeReferences, 61);
+    assert.equal(kit.roleCounts.authoredSetPieceArchetypeReferences, 59);
     // Jungle set-piece archetypes expand to 3 stands each (near-field canopy walls).
-    assert.equal(kit.roleCounts.authoredSetPieceAssetReferences, 92);
-    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, 92);
+    // Camp Ember dressing drop (no pad-centre canopy/mist) trims two authored refs → 88 assets.
+    assert.equal(kit.roleCounts.authoredSetPieceAssetReferences, 88);
+    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, 88);
     assert.equal(
       kit.roleCounts.ambientBatchInstances
         + kit.roleCounts.renderedSetPieceAssetInstances

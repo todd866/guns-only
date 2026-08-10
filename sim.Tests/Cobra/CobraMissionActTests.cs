@@ -6,7 +6,7 @@ namespace GunsOnly.Sim.Tests.Cobra;
 
 public class CobraMissionActTests
 {
-    static readonly Vec3D Fob = new(-6_500.0, 160.0, -6_200.0);
+    static readonly Vec3D Fob = new(-6_775.0, 202.0, -6_200.0);
     static readonly Vec3D Bridge = new(-2_710.0, 146.0, -500.0);
 
     [Fact]
@@ -108,11 +108,31 @@ public class CobraMissionActTests
             CobraMissionAct.Engage,
             route,
             Fob,
-            fobPathAltitudeM: 190.0);
+            fobPathAltitudeM: 232.0);
         Assert.NotEmpty(gates);
         Assert.Equal(1, gates.Count(g => g.Active));
         CobraPathGate active = gates.Single(g => g.Active);
         Assert.InRange(active.EastM, Bridge.X - 80.0, Bridge.X + 80.0);
+    }
+
+    [Fact]
+    public void DepartPathGatesSitAtNapOfEarthNotCorridorFloor()
+    {
+        CobraCanyonRouteDefinition route = CobraCanyonDefinition.Create()
+            .Route(CobraCanyonRouteChoice.RiverGorge);
+        CobraCanyonRoutePoint first = route.Points[0];
+        IReadOnlyList<CobraPathGate> gates = CobraMissionActProgress.BuildPathGates(
+            CobraMissionAct.Depart,
+            route,
+            Fob,
+            fobPathAltitudeM: first.PathAltitudeM + first.TargetAglM);
+        CobraPathGate active = gates.Single(g => g.Active);
+        Assert.Equal(first.EastM, active.EastM);
+        Assert.Equal(first.NorthM, active.NorthM);
+        Assert.Equal(first.PathAltitudeM + first.TargetAglM, active.UpM, 6);
+        Assert.True(
+            active.UpM > first.PathAltitudeM + 10.0,
+            "soft gates must read as airborne volumes, not river-floor boxes");
     }
 
     [Fact]
@@ -128,7 +148,7 @@ public class CobraMissionActTests
             CobraMissionAct.Ingress,
             route,
             Fob,
-            fobPathAltitudeM: 190.0,
+            fobPathAltitudeM: 232.0,
             aircraftWorldM: onFirst);
         Assert.Equal(1, gates.Count(g => g.Active));
         CobraPathGate active = gates.Single(g => g.Active);
@@ -145,7 +165,7 @@ public class CobraMissionActTests
             CobraMissionAct.Rtb,
             route,
             Fob,
-            fobPathAltitudeM: 190.0);
+            fobPathAltitudeM: 232.0);
         Assert.Single(gates);
         Assert.True(gates[0].Active);
         Assert.Equal(Fob.X, gates[0].EastM);

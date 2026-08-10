@@ -86,11 +86,11 @@ async function servePython(wwwroot) {
 const VIEWS = Object.freeze([
   Object.freeze({
     name: "camp-ember",
-    eastM: -6_500,
+    eastM: -6_775,
     northM: -6_200,
-    aglM: 35,
-    yawRad: -0.3,
-    pitchRad: -0.28,
+    aglM: 28,
+    yawRad: 0.85,
+    pitchRad: -0.22,
   }),
   Object.freeze({
     name: "mid-gorge",

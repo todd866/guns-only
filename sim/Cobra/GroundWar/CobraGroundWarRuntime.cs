@@ -40,7 +40,7 @@ public sealed class CobraGroundWarRuntime
     // Mid/far envelope (ballistic window 80–2000 m). Seeded on Ingress after the pad cold open
     // so Tab→F stays reachable once the aircraft is flying the gorge, not on the ramp.
     public const double GunnerySeamRangeM = 950.0;
-    public const double WreckRetainSeconds = 12.0;
+    public const double WreckRetainSeconds = 28.0;
     /// <summary>Small-arms chatter events per engaged unit per second (presentation only).</summary>
     public const double SmallArmsEventsPerSecond = 2.4;
     public const double PlayerRoundDamage = 0.55;
@@ -483,8 +483,11 @@ public sealed class CobraGroundWarRuntime
             // surround. The standing gunnery seam is planted down-route after spawn pose is known.
             if (fob) continue;
 
-            // No seeded hostile hard points: the attackers are the moving wave targets the
-            // turret exists to kill; static hostile armor would outrange the garrison forever.
+            // No seeded hostile hard points at secondary sites: the attackers are the moving
+            // wave targets the turret exists to kill. Iron Bell is the authored fight — seed a
+            // denser destroyable set-piece there (hard point + extra soft skin) so arrival has
+            // something to shoot besides three markers.
+            bool ironBell = site.LandmarkId.Contains("iron-bell", StringComparison.Ordinal);
             // Place hostiles on the basin-facing side of each site (±~35°) so a River Gorge
             // approach looking into the gorge has gun-reachable marks instead of permanent
             // OutOfLimits flanks (Build 267 owner flight).
@@ -501,6 +504,17 @@ public sealed class CobraGroundWarRuntime
             SpawnUnit(GroundFaction.Hostile, GroundUnitRole.InfantryClump, site,
                 GroundUnitIntent.EngageNearest, ringM: HostileSeedInfantryRingM + 40.0,
                 bearingRad: BearingFromAircraftYaw(yawTowardBasin + 2.4));
+            if (ironBell) {
+                SpawnUnit(GroundFaction.Hostile, GroundUnitRole.HardPoint, site,
+                    GroundUnitIntent.Hold, ringM: HostileSeedSoftVehicleRingM + 25.0,
+                    bearingRad: BearingFromAircraftYaw(yawTowardBasin + 0.15));
+                SpawnUnit(GroundFaction.Hostile, GroundUnitRole.SoftVehicle, site,
+                    GroundUnitIntent.EngageNearest, ringM: HostileSeedSoftVehicleRingM + 55.0,
+                    bearingRad: BearingFromAircraftYaw(yawTowardBasin - 1.1));
+                SpawnUnit(GroundFaction.Hostile, GroundUnitRole.InfantryClump, site,
+                    GroundUnitIntent.EngageNearest, ringM: HostileSeedInfantryRingM + 70.0,
+                    bearingRad: BearingFromAircraftYaw(yawTowardBasin + 1.35));
+            }
         }
         UpdateSiteControl();
         DriftBalance(PlayerVehicleContract.FixedDeltaSeconds);

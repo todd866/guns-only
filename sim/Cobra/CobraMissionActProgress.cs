@@ -89,7 +89,10 @@ public static class CobraMissionActProgress
             CobraCanyonRoutePoint point = points[i];
             gates[i] = new CobraPathGate(
                 point.EastM,
-                point.PathAltitudeM,
+                // Soft cue altitude is nap-of-earth flight level, not the carved corridor floor.
+                // PathAltitudeM authors the gorge/spur datum; TargetAglM lifts the volume into air
+                // the pilot flies through (owner 2026-08-10: river-floor boxes were invisible).
+                point.PathAltitudeM + point.TargetAglM,
                 point.NorthM,
                 point.CorridorRadiusM,
                 i == activeIndex);

@@ -6,8 +6,8 @@
  * the pilot can fly through; never a landmark-sized UFO.
  */
 
-/** Soft-cue visual radius (m). Kernel half_m stays large for scoring; pixels stay readable. */
-export const EMBER_GATE_VISUAL_HALF_M = 38;
+/** Soft-cue visual radius (m). Kernel half_m stays large for scoring; pixels stay a fly-through haze. */
+export const EMBER_GATE_VISUAL_HALF_M = 24;
 
 export function emberPathGuidanceState(authorityState) {
   const gates = Array.isArray(authorityState?.path_gates) ? authorityState.path_gates : [];
@@ -66,7 +66,7 @@ export function emberActObjectiveOverlay(act, options = {}) {
     case "depart":
       return {
         line: "DEPART CAMP EMBER · FOLLOW THE PATH",
-        detail: "Lift off — the soft glow ahead is the next cue down the gorge",
+        detail: "Lift off — soft glow volumes ahead mark the nap-of-earth path down the gorge",
       };
     case "ingress":
       return {
