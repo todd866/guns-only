@@ -370,21 +370,22 @@ public sealed class CobraCanyonDefinition
                 CobraCanyonRouteExposure.Low,
                 "Nap-of-earth river following and bridge underpass with continuous terrain masking.",
                 "Bridge deck and piers, paired gorge wires and narrowing canyon walls",
-                new("point.river-gorge.00", -6_500.0, 162.0, -6_200.0, 30.0, 155.0,
+                new("point.river-gorge.00", -6_775.0, 202.0, -6_200.0, 28.0, 90.0,
                     "landmark.cobra-canyon.camp-ember.v1"),
-                new("point.river-gorge.01", -5_400.0, 147.0, -5_050.0, 30.0, 155.0),
-                new("point.river-gorge.02", -4_550.0, 126.0, -3_650.0, 30.0, 155.0,
+                new("point.river-gorge.01", -6_500.0, 162.0, -6_200.0, 30.0, 120.0),
+                new("point.river-gorge.02", -5_400.0, 147.0, -5_050.0, 30.0, 155.0),
+                new("point.river-gorge.03", -4_550.0, 126.0, -3_650.0, 30.0, 155.0,
                     "landmark.cobra-canyon.long-fang-falls.v1"),
-                new("point.river-gorge.03", -3_800.0, 108.0, -2_100.0, 30.0, 155.0),
-                new("point.river-gorge.04", -2_750.0, 92.0, -550.0, 30.0, 155.0,
+                new("point.river-gorge.04", -3_800.0, 108.0, -2_100.0, 30.0, 155.0),
+                new("point.river-gorge.05", -2_750.0, 92.0, -550.0, 30.0, 155.0,
                     "landmark.cobra-canyon.iron-bell-bridge.v1"),
-                new("point.river-gorge.05", -1_450.0, 102.0, 1_050.0, 30.0, 155.0),
-                new("point.river-gorge.06", 0.0, 126.0, 2_700.0, 30.0, 155.0,
+                new("point.river-gorge.06", -1_450.0, 102.0, 1_050.0, 30.0, 155.0),
+                new("point.river-gorge.07", 0.0, 126.0, 2_700.0, 30.0, 155.0,
                     "landmark.cobra-canyon.karst-needles.v1"),
-                new("point.river-gorge.07", 1_550.0, 151.0, 4_100.0, 30.0, 155.0),
-                new("point.river-gorge.08", 3_350.0, 178.0, 5_200.0, 30.0, 155.0),
-                new("point.river-gorge.09", 5_150.0, 210.0, 6_020.0, 30.0, 155.0),
-                new("point.river-gorge.10", 6_500.0, 232.0, 5_600.0, 30.0, 155.0,
+                new("point.river-gorge.08", 1_550.0, 151.0, 4_100.0, 30.0, 155.0),
+                new("point.river-gorge.09", 3_350.0, 178.0, 5_200.0, 30.0, 155.0),
+                new("point.river-gorge.10", 5_150.0, 210.0, 6_020.0, 30.0, 155.0),
+                new("point.river-gorge.11", 6_500.0, 232.0, 5_600.0, 30.0, 155.0,
                     "landmark.cobra-canyon.north-rally-smoke.v1")),
             new CobraCanyonRouteDefinition(
                 RidgeShadowRouteId,
@@ -393,7 +394,7 @@ public sealed class CobraCanyonDefinition
                 CobraCanyonRouteExposure.Medium,
                 "Terrain masking, saddle crossing and ridge pop-up along the lee bench.",
                 "Ridge crossings, radio mast guy wires and paired saddle wires",
-                new("point.ridge-shadow.00", -6_500.0, 178.0, -6_200.0, 40.0, 205.0,
+                new("point.ridge-shadow.00", -6_775.0, 202.0, -6_200.0, 40.0, 120.0,
                     "landmark.cobra-canyon.camp-ember.v1"),
                 new("point.ridge-shadow.01", -6_200.0, 258.0, -4_500.0, 40.0, 205.0),
                 new("point.ridge-shadow.02", -5_700.0, 348.0, -2_550.0, 40.0, 205.0),
@@ -416,7 +417,7 @@ public sealed class CobraCanyonDefinition
                 CobraCanyonRouteExposure.High,
                 "Road following, plantation masking and a quarry break through the open basin.",
                 "Long sight lines, three utility-wire levels and a water tower",
-                new("point.road-plantation.00", -6_500.0, 170.0, -6_200.0, 27.0, 235.0,
+                new("point.road-plantation.00", -6_775.0, 202.0, -6_200.0, 27.0, 120.0,
                     "landmark.cobra-canyon.camp-ember.v1"),
                 new("point.road-plantation.01", -4_450.0, 188.0, -5_900.0, 27.0, 235.0),
                 new("point.road-plantation.02", -2_650.0, 203.0, -5_220.0, 27.0, 235.0),
@@ -438,7 +439,10 @@ public sealed class CobraCanyonDefinition
         new CobraCanyonLandmarkDefinition(
             "landmark.cobra-canyon.camp-ember.v1", "Camp Ember",
             CobraCanyonLandmarkKind.ForwardOperatingBase,
-            new Vec3D(-6_500.0, 190.0, -6_200.0)),
+            // Land spur west of the river. Shared route departure lives here; TrySample forces
+            // Land inside the pad ring so the river polyline cannot classify the FOB as water
+            // (owner 2026-08-10 riverboat open).
+            new Vec3D(-6_775.0, 218.0, -6_200.0)),
         new CobraCanyonLandmarkDefinition(
             "landmark.cobra-canyon.long-fang-falls.v1", "Long Fang Falls",
             CobraCanyonLandmarkKind.Waterfall,
@@ -610,6 +614,10 @@ public sealed class CobraCanyonTerrainSurface : ITerrainSurface
         TerrainSurfaceKind kind = riverDistanceM <= 38.0
             ? TerrainSurfaceKind.Water
             : TerrainSurfaceKind.Land;
+        // Camp Ember is a land FOB spur. The river-gorge polyline starts there for shared
+        // departure validation, which would otherwise paint the pad as Water (owner 2026-08-10).
+        if (kind == TerrainSurfaceKind.Water && InsideCampEmberPad(eastM, northM))
+            kind = TerrainSurfaceKind.Land;
         sample = new TerrainSample(heightM, normal, kind);
         return true;
     }
@@ -744,6 +752,20 @@ public sealed class CobraCanyonTerrainSurface : ITerrainSurface
     double DistanceToRiverM(double eastM, double northM)
     {
         return NearestRouteSample(_riverRoute, eastM, northM).DistanceM;
+    }
+
+    /// <summary>
+    /// Pad ring around Camp Ember landmark — forced Land so the shared route departure on the
+    /// river polyline cannot classify the FOB as water.
+    /// </summary>
+    static bool InsideCampEmberPad(double eastM, double northM)
+    {
+        const double campEastM = -6_775.0;
+        const double campNorthM = -6_200.0;
+        const double padRadiusM = 110.0;
+        double east = eastM - campEastM;
+        double north = northM - campNorthM;
+        return east * east + north * north <= padRadiusM * padRadiusM;
     }
 
     readonly record struct RouteSample(

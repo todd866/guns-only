@@ -221,7 +221,7 @@ test("publishes a geometry-free visual kit and route-ordered authored reveals", 
 test("preserves route XYZ, terrain shaping, landmark anchors, and hazard authority byte-for-number", async () => {
   const world = await rawWorld();
   assert.equal(contentHash(world.routeLanes.map(({ id, pathLocalM }) => ({ id, pathLocalM }))),
-    "fb315c285edc1a4154cfa4ec96c5dd848b82f3333c971b5f3ded292c6b4e8bef");
+    "dde9f21713622bebc3f70a75fd5adc8642f6561f551fc81da88f2ce1a409426d");
   assert.equal(contentHash({
     model: world.terrain.model,
     ribbons: world.terrain.ribbons.map(({
@@ -239,7 +239,7 @@ test("preserves route XYZ, terrain shaping, landmark anchors, and hazard authori
   }), "3e2206463d46c59872d6e6e4060290d9d7754b3a90135205f6ff24569c6c297a");
   assert.equal(contentHash(
     world.landmarks.map(({ id, positionLocalM }) => ({ id, positionLocalM })),
-  ), "51a15145fef93e0011b70e9b218159dca5b2df9d2e21438902598242d5bb2be5");
+  ), "808816a6eafe0dac4571b42bf29643879167a0072d1741484dda5aee81323a67");
   assert.equal(world.hazards.length, 14);
   assert.equal(contentHash(world.hazards),
     "c4a0eb80e25575135def5a892bce61db27ebd64cd5ba1176877c64437370e640");

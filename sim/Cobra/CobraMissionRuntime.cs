@@ -374,16 +374,31 @@ public sealed class CobraMissionRuntime
         _resolvedThreatObservers = Array.AsReadOnly(
             definition.ThreatObservers.Select(ResolveThreatObserver).ToArray());
 
-        CobraCanyonRoutePoint start = _selectedRoute.Points[0];
-        if (!terrain.TrySample(start.EastM, start.NorthM, out TerrainSample startSurface))
-            throw new InvalidOperationException("The route departure has no terrain truth.");
-        CobraCanyonRoutePoint next = _selectedRoute.Points[1];
-        double defaultYawRad = Math.Atan2(next.EastM - start.EastM, next.NorthM - start.NorthM);
-        // Ember Run cold open: skids on Camp Ember, not a 30 m hover over the river (owner
-        // 2026-08-10). TargetAglM stays route guidance; pad contact uses CG→skid geometry.
+        CobraCanyonLandmarkDefinition campLandmark = definition.Landmarks.First(landmark =>
+            string.Equals(
+                landmark.Id,
+                "landmark.cobra-canyon.camp-ember.v1",
+                StringComparison.Ordinal));
+        if (!terrain.TrySample(campLandmark.EastM, campLandmark.NorthM, out TerrainSample padSurface))
+            throw new InvalidOperationException("Camp Ember has no terrain truth.");
+        CobraCanyonRoutePoint routeAim = _selectedRoute.Points[0];
+        double campToRouteM = Math.Sqrt(
+            Math.Pow(routeAim.EastM - campLandmark.EastM, 2.0)
+            + Math.Pow(routeAim.NorthM - campLandmark.NorthM, 2.0));
+        // Ridge/Road start on the pad; River Gorge aims at the river join off the spur.
+        if (campToRouteM < 40.0 && _selectedRoute.Points.Count > 1)
+            routeAim = _selectedRoute.Points[1];
+        double defaultYawRad = Math.Atan2(
+            routeAim.EastM - campLandmark.EastM,
+            routeAim.NorthM - campLandmark.NorthM);
+        // Ember Run cold open: skids on the land FOB spur, not the river corridor (owner
+        // 2026-08-10). River path carving stays on water; spawn uses Camp Ember landmark.
         double padClearanceM = Ah1gCobraDefinition.LateProduction.Contact.CenterOfMassToSkidM;
         CobraMissionSpawn resolvedSpawn = spawn ?? new CobraMissionSpawn(
-            new Vec3D(start.EastM, startSurface.HeightM + padClearanceM, start.NorthM),
+            new Vec3D(
+                campLandmark.EastM,
+                padSurface.HeightM + padClearanceM,
+                campLandmark.NorthM),
             Vec3D.Zero,
             defaultYawRad);
         if (!resolvedSpawn.PositionWorldM.IsFinite

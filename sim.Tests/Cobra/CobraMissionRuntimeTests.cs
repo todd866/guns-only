@@ -76,6 +76,25 @@ public class CobraMissionRuntimeTests
     }
 
     [Fact]
+    public void DefaultRiverGorgeSpawnIsSkidsOnLandCampEmber()
+    {
+        CobraCanyonDefinition world = CobraCanyonDefinition.Create();
+        CobraCanyonTerrainSurface terrain = world.CreateTerrainSurface();
+        var runtime = new CobraMissionRuntime(
+            world, terrain, CobraCanyonRouteChoice.RiverGorge);
+        Vec3D position = runtime.Cobra.State.PositionWorldM;
+
+        Assert.True(terrain.TrySample(position.X, position.Z, out TerrainSample surface));
+        Assert.Equal(TerrainSurfaceKind.Land, surface.Kind);
+        Assert.Equal(
+            surface.HeightM + Ah1gCobraDefinition.LateProduction.Contact.CenterOfMassToSkidM,
+            position.Y,
+            3);
+        Assert.Equal(CobraMissionAct.Depart, runtime.Act);
+        Assert.Equal(0.0, runtime.Cobra.State.GroundVelocityMps.Length, 3);
+    }
+
+    [Fact]
     public void LeavingThePadSeedsTheGunnerySeamOnIngress()
     {
         CobraCanyonDefinition world = CobraCanyonDefinition.Create();

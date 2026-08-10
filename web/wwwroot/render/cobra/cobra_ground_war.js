@@ -245,19 +245,37 @@ export function createCobraGroundWarPresentation(THREE) {
     }
 
     const smoke = new THREE.Mesh(
-      new THREE.SphereGeometry(6.5, 10, 8),
+      new THREE.SphereGeometry(9.5, 12, 10),
       new THREE.MeshStandardMaterial({
         color: SMOKE_COLOR,
         transparent: true,
-        opacity: 0.42,
+        opacity: 0.62,
         roughness: 1,
         metalness: 0,
       }),
     );
     smoke.position.set(event.x_m, (event.y_m ?? 0) + 8, -(event.z_m ?? 0));
-    smoke.userData.expiresAt = performance.now() + 2_800;
+    smoke.userData.expiresAt = performance.now() + 4_800;
     effectRoot.add(smoke);
     transientEffects.push(smoke);
+
+    // Hot flash so a gun-kill reads at nap AGL before the smoke blooms.
+    const flash = new THREE.Mesh(
+      new THREE.SphereGeometry(3.2, 8, 6),
+      new THREE.MeshStandardMaterial({
+        color: 0xff7a2a,
+        emissive: 0xff4a10,
+        emissiveIntensity: 1.4,
+        transparent: true,
+        opacity: 0.9,
+        roughness: 0.4,
+        metalness: 0.1,
+      }),
+    );
+    flash.position.set(event.x_m, (event.y_m ?? 0) + 3.5, -(event.z_m ?? 0));
+    flash.userData.expiresAt = performance.now() + 420;
+    effectRoot.add(flash);
+    transientEffects.push(flash);
   }
 
   function sync(groundWar, selectedTargetId = null) {

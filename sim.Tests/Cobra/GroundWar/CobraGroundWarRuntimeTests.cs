@@ -44,6 +44,23 @@ public class CobraGroundWarRuntimeTests
     }
 
     [Fact]
+    public void IronBellSeedsADestroyableHostileFight()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        ContestedSite bridge = war.Sites.First(site => site.Label == "Iron Bell Bridge");
+        GroundUnit[] hostiles = war.LivingUnits()
+            .Where(unit => unit.Faction == GroundFaction.Hostile && unit.HomeSiteId == bridge.Id)
+            .ToArray();
+
+        Assert.True(hostiles.Length >= 5, $"Iron Bell hostiles={hostiles.Length}, need a real fight");
+        Assert.Contains(hostiles, unit => unit.Role == GroundUnitRole.HardPoint);
+        Assert.True(
+            hostiles.Count(unit => unit.Role == GroundUnitRole.SoftVehicle) >= 2,
+            "need soft vehicles the M134 can wreck");
+        Assert.Contains(hostiles, unit => unit.Role == GroundUnitRole.InfantryClump);
+    }
+
+    [Fact]
     public void SeedsContestedSitesWithBothFactionsUnderTheLivingBudget()
     {
         CobraGroundWarRuntime war = CreateWar();

@@ -1,13 +1,13 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=300";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=301";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=300";
-import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=300";
+} from "./cobra_canyon_asset_kit.js?v=301";
+import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=301";
 import {
   createCobraCanyonBasinMaterial,
   createCobraCanyonRiverMaterial,
-} from "./cobra_canyon_terrain_material.js?v=300";
+} from "./cobra_canyon_terrain_material.js?v=301";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 
@@ -1229,9 +1229,16 @@ function landmarkPlacements(plan) {
       continue;
     }
     if (kind === "forward-operating-base") {
-      add(record, point, "pad-west", [-24, 0, 0], [30, 1.2, 30]);
-      add(record, point, "pad-centre", [12, 0, -18], [26, 1.2, 26]);
-      add(record, point, "signal-mast", [0, 0, 22], [2, Math.min(28, Math.max(18, authoredHeightM)), 2]);
+      // Vietnam-era land FOB: PSP pads, sandbag berms, revetment, fuel, thin mast.
+      // Keep the eye clear — no giant green mass / orange cone on the nose.
+      add(record, point, "pad-main", [0, 0, 0], [28, 0.45, 28]);
+      add(record, point, "pad-south", [0, 0, -34], [22, 0.4, 22]);
+      add(record, point, "berm-west", [-22, 0, 0], [4, 2.2, 36]);
+      add(record, point, "berm-east", [22, 0, -6], [4, 2.0, 28]);
+      add(record, point, "revetment", [-8, 0, 22], [14, 2.6, 8]);
+      add(record, point, "fuel-blivet", [14, 0, 18], [6, 2.4, 6]);
+      add(record, point, "sandbag-nest", [10, 0, -18], [5, 1.6, 5]);
+      add(record, point, "signal-mast", [-4, 0, 26], [0.7, 16, 0.7]);
     } else if (kind === "waterfall") {
       add(record, point, "water-ribbon", [0, 0, 0], [14, Math.min(48, Math.max(24, authoredHeightM * 0.4)), 3]);
     } else if (kind === "rock-spires") {
@@ -1266,7 +1273,7 @@ function landmarkPlacements(plan) {
 
 function landmarkColor(kind) {
   const token = stableToken(kind);
-  if (token === "forward-operating-base") return [0.48, 0.36, 0.22];
+  if (token === "forward-operating-base") return [0.52, 0.48, 0.40];
   if (token === "waterfall") return [0.55, 0.72, 0.74];
   if (token === "rock-spires") return [0.50, 0.52, 0.44];
   if (token === "ridge-gate") return [0.30, 0.36, 0.26];
