@@ -1,7 +1,7 @@
 # Current product and verification status
 
 Updated: 2026-08-10
-Production: Build 305, revision `055a259a` (merge of #52), deployment
+Production: Build 305, revision `055a259a6de60c02be3dd5ef9fc16ee80ce757dc`, deployment
 `dpl_ARvZieUHygiMhB5hw4wVu5x6YiRD` (verified live via /api/build-info 2026-08-10). Builds
 253-298 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
@@ -46,7 +46,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Live production is Build 305 (`055a259a`, `dpl_ARvZieUHygiMhB5hw4wVu5x6YiRD`). Shipped from
+- Live production is Build 305 (`055a259a6de60c02be3dd5ef9fc16ee80ce757dc`, `dpl_ARvZieUHygiMhB5hw4wVu5x6YiRD`). Shipped from
   PR #52; Verify green after one documented re-run of flaky `boot does not stutter` smoke.
   Do not treat that gate as a frame-rate measurement.
 - A candidate is releasable only when its exact pushed SHA has a complete green gate, or the
