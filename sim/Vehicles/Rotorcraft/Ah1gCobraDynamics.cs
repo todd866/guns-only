@@ -25,7 +25,6 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
     double _rotorAzimuthRad;
     double _previousRotorPowerW;
     double _scasYawRateRadPerSecond;
-    double _autotrimYawRateRadPerSecond;
     bool _engineOperating = true;
     bool _hardImpactLatched;
     bool _rotorStrikeLatched;
@@ -592,15 +591,13 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         // Main-rotor torque → fuselage yaw. US AH-1G (CCW rotor from above): reaction is
         // right-yaw; left pedal counters.
         //
-        // Layering (owner 2026-08-10):
-        //   1) Steady + transient torque yaw from rotor power (provisional gain).
-        //   2) NASA CR-3144 SCAS: ±12.5% authority, 0.05 s lag — fast, limited.
-        //   3) Slow autotrim: cancels whatever SCAS cannot, with ~1.5 s lag — not perfect
-        //      magic on a collective pull, but settles the continuous right pull at a fixed
-        //      lever. Friendlier than pure SCAS; keep labeled as provisional autotrim until
-        //      a player-option SAS/trim UI exists (see 10-flight-model.md).
-        const double TorqueYawAtTransmissionLimitRadPerSecond = 14.0 * Math.PI / 180.0;
-        const double AutotrimLagSeconds = 1.5;
+        // Build 306 (owner telemetry 2026-08-10): remove the Build 305 slow autotrim — high-TQ
+        // heading bias went ~0 deg/s and the bird felt too easy. Keep NASA CR-3144 SCAS only
+        // (±12.5%, 0.05 s). That is the realistic limited-authority channel; residual torque
+        // yaw past SCAS is the pilot's feet. Provisional torque→yaw gain (epistemic:
+        // provisional) sits hover TQ near SCAS with a mild residual — not 304's strong
+        // continuous pull, not 305's eventual perfect cancel.
+        const double TorqueYawAtTransmissionLimitRadPerSecond = 8.0 * Math.PI / 180.0;
         double transmissionLimitW = Math.Max(1.0, _definition.Powerplant.TransmissionLimitW);
         double torqueLoadFraction = Math.Clamp(
             rotorPowerRequiredW / transmissionLimitW, 0.0, 1.35);
@@ -626,16 +623,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             _definition.Handling.StabilityAugmentationYawLagSeconds,
             dt);
 
-        // Residual after limited SCAS — autotrim eats this slowly.
-        double residualAfterScasRadPerSecond =
-            torqueYawDemandRadPerSecond + _scasYawRateRadPerSecond;
-        _autotrimYawRateRadPerSecond = FirstOrder(
-            _autotrimYawRateRadPerSecond,
-            -residualAfterScasRadPerSecond,
-            AutotrimLagSeconds,
-            dt);
-
-        targetYawRate += residualAfterScasRadPerSecond + _autotrimYawRateRadPerSecond;
+        targetYawRate += torqueYawDemandRadPerSecond + _scasYawRateRadPerSecond;
         if (!_engineOperating)
             targetYawRate -= Degrees(8.0) * controlEffectiveness;
 

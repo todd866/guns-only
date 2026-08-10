@@ -207,29 +207,29 @@ public sealed class Ah1gCobraDynamicsTests
     }
 
     [Fact]
-    public void FeetOffHoverCollectiveSettlesInsideLimitedScas()
+    public void FeetOffHoverCollectiveIsMostlyHeldByLimitedScas()
     {
-        // Owner 2026-08-10: continuous right pull must die out — slow autotrim + SCAS settle.
+        // Limited SCAS only — mild residual at hover is OK; not 305's perfect autotrim settle.
         var cobra = Create("scas-hover");
         double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
         var hover = new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0);
-        for (long tick = 0; tick < 720; tick++)
+        for (long tick = 0; tick < 480; tick++)
             cobra.Advance(Input(tick, hover));
 
         double yaw0 = cobra.Observation.YawRad;
-        for (long tick = 720; tick < 1080; tick++)
+        for (long tick = 480; tick < 840; tick++)
             cobra.Advance(Input(tick, hover));
 
         double driftRad = Math.Abs(cobra.Observation.YawRad - yaw0);
-        Assert.True(driftRad < 0.04,
-            $"Hover feet-off yaw drift {driftRad:F3} rad in 3 s — autotrim should have settled.");
+        Assert.True(driftRad < 0.10,
+            $"Hover feet-off yaw drift {driftRad:F3} rad in 3 s — SCAS should mostly hold.");
     }
 
     [Fact]
-    public void FeetOffHardCollectivePullYawsBeforeAutotrimCatches()
+    public void FeetOffHardCollectiveLeavesPedalWorkAfterLimitedScas()
     {
-        // Not perfect magic: during a hard collective pull, yaw accumulates before the
-        // 1.5 s autotrim lag catches the residual SCAS cannot cancel.
+        // Owner 2026-08-10 Build 305 flight: slow autotrim zeroed high-TQ heading bias and
+        // felt too easy. SCAS-only must leave residual yaw at high collective.
         var cobra = Create("scas-hard");
         double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
         var hover = new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0);
@@ -247,20 +247,17 @@ public sealed class Ah1gCobraDynamicsTests
 
         double yawDuringPull = cobra.Observation.YawRad - yaw0;
         Assert.True(cobra.State.GroundVelocityMps.Y > 0.5, "hard collective should climb");
-        Assert.True(Math.Abs(yawDuringPull) > 0.08,
-            $"Expected yaw during feet-off collective pull; Δyaw={yawDuringPull:F3} rad in 1.5 s.");
-        Assert.True(yawDuringPull > 0.0,
-            $"Torque reaction should yaw right without pedal; got Δyaw={yawDuringPull:F3} rad.");
+        Assert.True(yawDuringPull > 0.08,
+            $"Expected right yaw during feet-off collective pull; Δyaw={yawDuringPull:F3} rad.");
 
-        // Hold full collective; autotrim should arrest the continuous yaw rate.
         double yawAtHold = cobra.Observation.YawRad;
         var hold = new VerticalLiftPilotCommand(1.0, 0.0, 0.0, 0.0);
         for (long tick = 660; tick < 1260; tick++)
             cobra.Advance(Input(tick, hold));
 
-        double holdDriftRad = Math.Abs(cobra.Observation.YawRad - yawAtHold);
-        Assert.True(holdDriftRad < 0.08,
-            $"After autotrim catch-up, full-collective drift {holdDriftRad:F3} rad in 5 s.");
+        double holdDriftRad = cobra.Observation.YawRad - yawAtHold;
+        Assert.True(holdDriftRad > 0.12,
+            $"Full-collective feet-off should keep yawing past SCAS; Δyaw={holdDriftRad:F3} rad in 5 s.");
     }
 
     [Fact]
