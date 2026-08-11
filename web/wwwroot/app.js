@@ -137,6 +137,11 @@ import {
   resolveGlobalRoomUrl,
 } from "./render/presence/global_room_client.js";
 import { applyStableWorldOrigin } from "./render/presence/world_origin_authority.js";
+import "./arena-config.js";
+import {
+  ArenaClient,
+  resolveArenaUrl,
+} from "./render/arena/arena_client.js";
 import {
   presenceStatusPresentation,
   presenceTelemetryContext,
@@ -2548,6 +2553,9 @@ async function reloadCurrentBuild() {
 // page becomes hidden gives it the best available head start without reintroducing keepalive's
 // 64 KB cap. The single-flight guard makes duplicate lifecycle events harmless.
 window.addEventListener("pagehide", () => {
+  if (arenaClient?.activeMatch) {
+    void arenaClient.completeFromState(latestState || {}, { earlyAbandon: true });
+  }
   recorder.endSortie("pagehide", latestState);
   recorder.flush({ force: true });
 });
@@ -2704,10 +2712,168 @@ let selectedDeckConfiguration = 1;
 // Null means no bridge authority has been staged in this page lifetime yet. Once staged, this is
 // the only browser-side identity consulted for restart/restage decisions.
 let stagedMissionAuthority = null;
+let stagedArenaLane = selectedProgramNodeId === "multiplayer"
+  && blockedProgramExperience === null;
 let resetFrameClock = () => {};
 let bridgePauseApplied = null;
 let testFlightActionController = null;
 let multiplayer = null;
+let arenaClient = null;
+let arenaMatchPromise = null;
+let arenaCompletionPromise = null;
+let arenaMatchGeneration = 0;
+let arenaMatchState = "idle";
+
+function isMultiplayerLane() {
+  return selectedProgramNodeId === "multiplayer" && blockedProgramExperience === null;
+}
+
+function arenaStatusText() {
+  switch (arenaMatchState) {
+    case "matching": return "Finding opponent…";
+    case "ready": return "Opponent ready";
+    case "completing": return "Recording result…";
+    case "unavailable": return "Matchmaking unavailable";
+    default: return "Opponent required";
+  }
+}
+
+function arenaMatchReady() {
+  return !isMultiplayerLane()
+    || (arenaMatchState === "ready"
+      && Boolean(arenaClient?.activeMatch)
+      && !arenaCompletionPromise);
+}
+
+function setArenaMatchState(state) {
+  arenaMatchState = state;
+  if (multiplayerStatus && isMultiplayerLane()) {
+    multiplayerStatus.dataset.arenaState = state;
+    multiplayerStatus.textContent = arenaStatusText();
+    multiplayerStatus.hidden = false;
+  }
+  renderPauseUi();
+}
+
+function syncArenaClientForLane() {
+  if (!isMultiplayerLane()) {
+    const previousClient = arenaClient;
+    const previousCompletion = arenaCompletionPromise;
+    arenaMatchGeneration += 1;
+    arenaClient = null;
+    arenaMatchPromise = null;
+    arenaCompletionPromise = null;
+    arenaMatchState = "idle";
+    if (previousClient?.activeMatch && !previousCompletion) {
+      // Leaving the lane abandons an open match quietly.
+      void previousClient.completeFromState(latestState || {}, { earlyAbandon: true })
+        .catch((error) => console.warn("multiplayer abandon failed", error));
+    }
+    bridge?.ClearArenaHandicap?.();
+    return;
+  }
+  if (!arenaClient) {
+    arenaMatchGeneration += 1;
+    arenaClient = new ArenaClient({
+      baseUrl: resolveArenaUrl({ forceSameOrigin: true }),
+    });
+    arenaMatchState = "idle";
+  }
+}
+
+async function ensureArenaMatch(activeBridge) {
+  const client = arenaClient;
+  const generation = arenaMatchGeneration;
+  if (!client || !activeBridge || !isMultiplayerLane()) return null;
+  if (arenaCompletionPromise) {
+    await arenaCompletionPromise;
+    if (client !== arenaClient || generation !== arenaMatchGeneration || !isMultiplayerLane()) {
+      return null;
+    }
+  }
+  if (client.activeMatch) {
+    if (!client.applyHandicapToBridge(activeBridge)) {
+      activeBridge.ClearArenaHandicap?.();
+      client.activeMatch = null;
+      setArenaMatchState("unavailable");
+      return null;
+    }
+    setArenaMatchState("ready");
+    return client.activeMatch;
+  }
+  if (!arenaMatchPromise) {
+    setArenaMatchState("matching");
+    const pending = client.requestMatch()
+      .then(async (match) => {
+        if (client !== arenaClient || generation !== arenaMatchGeneration || !isMultiplayerLane()) {
+          if (client.activeMatch) {
+            try {
+              await client.completeFromState(latestState || {}, { earlyAbandon: true });
+            } catch (error) {
+              console.warn("stale multiplayer match abandon failed", error);
+            }
+          }
+          return null;
+        }
+        if (!match || !client.applyHandicapToBridge(activeBridge)) {
+          throw new Error("arena handicap could not be applied");
+        }
+        setArenaMatchState("ready");
+        return match;
+      })
+      .catch(async (error) => {
+        console.warn("multiplayer matchmaker unavailable", error);
+        if (client === arenaClient && generation === arenaMatchGeneration) {
+          activeBridge.ClearArenaHandicap?.();
+          setArenaMatchState("unavailable");
+        }
+        if (client.activeMatch) {
+          try {
+            await client.completeFromState(latestState || {}, { earlyAbandon: true });
+          } catch (abandonError) {
+            console.warn("failed multiplayer match abandon failed", abandonError);
+          } finally {
+            client.activeMatch = null;
+          }
+        }
+        return null;
+      })
+      .finally(() => {
+        if (arenaMatchPromise === pending) arenaMatchPromise = null;
+      });
+    arenaMatchPromise = pending;
+  }
+  return arenaMatchPromise;
+}
+
+function observeArenaMatch(state) {
+  if (!arenaClient?.activeMatch || arenaCompletionPromise || !state) return;
+  const terminal = arenaClient.observe(state);
+  if (!terminal) return;
+  const client = arenaClient;
+  const generation = arenaMatchGeneration;
+  setArenaMatchState("completing");
+  const pending = client.completeFromState(terminal.state)
+    .then(() => {
+      if (client === arenaClient && generation === arenaMatchGeneration) {
+        bridge?.ClearArenaHandicap?.();
+        setArenaMatchState("idle");
+      }
+    })
+    .catch((error) => {
+      console.warn("multiplayer complete failed", error);
+      client.activeMatch = null;
+      if (client === arenaClient && generation === arenaMatchGeneration) {
+        bridge?.ClearArenaHandicap?.();
+        setArenaMatchState("unavailable");
+      }
+    })
+    .finally(() => {
+      if (arenaCompletionPromise === pending) arenaCompletionPromise = null;
+    });
+  arenaCompletionPromise = pending;
+}
+
 let incidentReplay = null;
 let appliedMultiplayerWorldOrigin = "";
 const pauseReasons = new Set(["ready"]);
@@ -2956,12 +3122,21 @@ function renderMultiplayerStatus(status) {
     ? status.spawnOrigin.join(",") : "";
   multiplayerStatus.dataset.callsign = presentation.callsign;
   multiplayerStatus.dataset.bogeys = String(presentation.bogeys);
-  multiplayerStatus.textContent = presentation.text;
-  multiplayerStatus.title = presentation.title;
-  // Initial connection is useful context; repeated reconnect/offline status is not a flight cue.
-  // Keep transport truth in diagnostics and telemetry without pinning failure noise over the HUD.
-  multiplayerStatus.hidden = presentation.phase !== "connecting";
-  multiplayerStatus.setAttribute("aria-live", multiplayerStatus.hidden ? "off" : "polite");
+  // Rated Multiplayer lane owns this strip ("Opponent ready"). Presence still records telemetry
+  // but must not overwrite or hide that cue with room-connect chrome.
+  if (isMultiplayerLane()) {
+    multiplayerStatus.dataset.arenaState = arenaMatchState;
+    multiplayerStatus.textContent = arenaStatusText();
+    multiplayerStatus.title = "Rated arena matchmaking";
+    multiplayerStatus.hidden = false;
+    multiplayerStatus.setAttribute("aria-live", "polite");
+  } else {
+    multiplayerStatus.textContent = presentation.text;
+    multiplayerStatus.title = presentation.title;
+    // Initial connection is useful context; repeated reconnect/offline status is not a flight cue.
+    multiplayerStatus.hidden = presentation.phase !== "connecting";
+    multiplayerStatus.setAttribute("aria-live", multiplayerStatus.hidden ? "off" : "polite");
+  }
   recorder.context("multiplayer", presenceTelemetryContext(status));
 }
 
@@ -3176,6 +3351,14 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
     brief: "You start at the merge, and the opening wave is a pair of Aces. Survive the first pass, fight into the rear quarter, and keep going. The director watches how you actually flew and answers in kind.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO hands the fight off and starts RTB · Space G limiter · H controls",
+  }),
+  "multiplayer": Object.freeze({
+    kicker: "1v1 · guns only",
+    title: "Multiplayer",
+    sortie: "F-22A · one opponent · guns only",
+    configuration: "F-22 public-data surrogate · 480 rounds · Auto-GCAS armed",
+    brief: "You drop straight into a one-versus-one guns fight. An opponent is already up. Fly again stays in this lane.",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSpace G limiter · H controls",
   }),
   "low-level-drone": Object.freeze({
     ...MISSION_BRIEFS[8],
@@ -4524,10 +4707,25 @@ function renderPauseUi(state = latestState) {
     reason !== "ready" && reason !== "finished"
       && reason !== "background" && reason !== "session");
   const comingSoon = ready && experienceComingSoon(selectedProgramNodeId);
+  const arenaAwaitingMatch = (ready || finished)
+    && isMultiplayerLane() && !arenaMatchReady();
+  const arenaRequestBusy = arenaMatchState === "matching"
+    || arenaMatchState === "completing";
   readyStart.disabled = buildIdentityBlocksSortie()
-    || routeBlocked || comingSoon || blockers.length > 0 || ((ready || finished) && background);
+    || routeBlocked || comingSoon || blockers.length > 0
+    || ((ready || finished) && background)
+    || (arenaAwaitingMatch && arenaRequestBusy);
   if (routeBlocked) readyStart.textContent = "Unavailable in this build";
   else if (comingSoon) readyStart.textContent = "Coming soon";
+  else if (arenaAwaitingMatch) {
+    readyStart.textContent = arenaMatchState === "unavailable"
+      ? "Retry matchmaking"
+      : arenaMatchState === "completing"
+        ? "Recording result…"
+        : arenaMatchState === "matching"
+          ? "Finding opponent…"
+          : finished ? "Find opponent & fly again" : "Find opponent & fly";
+  }
 
   if (showScreen && !settingsPaused && !wasScreenVisible) queueMicrotask(focusReadyScreen);
   else if (showScreen && !settingsPaused && startWasDisabled && !readyStart.disabled)
@@ -4611,6 +4809,9 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
       authorityRestaged: true,
     });
     refreshStagedMissionSnapshot();
+    syncArenaClientForLane();
+    if (arenaClient) void ensureArenaMatch(bridge);
+    stagedArenaLane = isMultiplayerLane();
   }
   if ([5, 6].includes(selectedBeat)) activeView?.clearRemotePlayers();
   bridgePauseApplied = true; // StartBeat is an authoritative transition to Ready.
@@ -4627,6 +4828,7 @@ function selectCampaignNode(nodeId, { focus = true } = {}) {
     const previous = selectedProgramNodeId;
     blockedProgramExperience = null;
     selectedProgramNodeId = standalone.id;
+    syncArenaClientForLane();
     const missionUrl = new URL(window.location.href);
     missionUrl.searchParams.delete("mission");
     missionUrl.searchParams.set("program", selectedProgramNodeId);
@@ -4656,6 +4858,7 @@ function selectCampaignNode(nodeId, { focus = true } = {}) {
     const previous = selectedProgramNodeId;
     blockedProgramExperience = null;
     selectedProgramNodeId = standalone.id;
+    syncArenaClientForLane();
     const missionUrl = new URL(window.location.href);
     missionUrl.searchParams.delete("mission");
     missionUrl.searchParams.set("program", selectedProgramNodeId);
@@ -4683,6 +4886,7 @@ function selectCampaignNode(nodeId, { focus = true } = {}) {
   const previous = selectedProgramNodeId;
   blockedProgramExperience = null;
   selectedProgramNodeId = node.id;
+  syncArenaClientForLane();
   selectedBeat = node.mission;
   selectedDeckConfiguration = selectedBeat === 5 ? 1 : selectedDeckConfiguration;
   const missionUrl = new URL(window.location.href);
@@ -4698,13 +4902,15 @@ function selectCampaignNode(nodeId, { focus = true } = {}) {
   // Ready interlock remains held so its authored route, terrain and vehicle facts are already the
   // ones on screen before the commander presses Fly.
   autoLaunchPending = false;
-  const authorityChanged = !sameMissionAuthority(
-    stagedMissionAuthority,
-    selectedProductionMissionAuthority(),
-  );
+  const authorityChanged = stagedArenaLane !== isMultiplayerLane()
+    || !sameMissionAuthority(
+      stagedMissionAuthority,
+      selectedProductionMissionAuthority(),
+    );
   if (bridge && pauseReasons.has("ready") && authorityChanged) {
     enterReady({ resetBridge: true, focus: false });
   } else {
+    if (bridge && isMultiplayerLane()) void ensureArenaMatch(bridge);
     renderPauseUi();
   }
   if (focus) queueMicrotask(focusReadyScreen);
@@ -4716,6 +4922,17 @@ function launchMission(index = selectedBeat) {
     || !experienceAccess(selectedProgramNodeId, window.location).allowed) return false;
   const standalone = experienceById(selectedProgramNodeId);
   if (experienceComingSoon(selectedProgramNodeId)) return false;
+  if (!arenaMatchReady()) {
+    if (!arenaMatchPromise && !arenaCompletionPromise && bridge) {
+      void ensureArenaMatch(bridge).then((match) => {
+        if (match && isMultiplayerLane()
+          && (pauseReasons.has("ready") || pauseReasons.has("finished"))) {
+          launchMission(selectedBeat);
+        }
+      });
+    }
+    return false;
+  }
   if (standalone?.mission == null && standalone.route) {
     window.location.assign(standalone.route);
     return true;
@@ -4781,6 +4998,7 @@ function returnToCatalogue() {
 function tryAutoLaunch() {
   if (blockedProgramExperience
     || !experienceAccess(selectedProgramNodeId, window.location).allowed
+    || !arenaMatchReady()
     || !autoLaunchPending || !bridge || !pauseReasons.has("ready")
     || buildIdentityBlocksSortie()) return false;
   const blockers = [...pauseReasons].filter((reason) => reason !== "ready");
@@ -5194,8 +5412,10 @@ function beginFlight() {
 function activateReadyAction() {
   if (buildIdentityBlocksSortie()) return false;
   if (pauseReasons.has("finished")) {
-    const nextNode = nextCampaignNode(campaignProfile, selectedProgramNodeId);
-    if (nextNode) selectCampaignNode(nextNode.id, { focus: false });
+    if (!isMultiplayerLane()) {
+      const nextNode = nextCampaignNode(campaignProfile, selectedProgramNodeId);
+      if (nextNode) selectCampaignNode(nextNode.id, { focus: false });
+    }
     return restartMissionNow();
   }
   if (pauseReasons.has("ready")) return launchMission(selectedBeat);
@@ -11077,6 +11297,8 @@ async function boot() {
   installInput(view);
   syncPadlockUi();
   installTestFlightConsole();
+  syncArenaClientForLane();
+  if (arenaClient) void ensureArenaMatch(bridge);
   renderPauseUi();
   let firstFrame = true;
 
@@ -11227,6 +11449,7 @@ async function boot() {
       });
       recorder.observeFramePhase("snap", performance.now() - afterSim);
       latestState = state;
+      observeArenaMatch(state);
       observePilotControlInterlock(state);
       // The kernel can retarget after a kill or promotion without a browser input edge. Reconcile
       // the cached request from the hot slot every frame; matching states do not cross the bridge.

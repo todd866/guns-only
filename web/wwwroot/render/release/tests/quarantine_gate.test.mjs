@@ -15,7 +15,8 @@ test("accepted production experiences launch without a preview acknowledgement",
 
 test("quarantined and preview routes fail closed by default", () => {
   for (const id of [
-    "medevac", "medevac-command", "korea-panther", "indoor", "rapier-circuits", "top-gun",
+    "multiplayer", "medevac", "medevac-command", "korea-panther", "indoor",
+    "rapier-circuits", "top-gun",
   ]) {
     const access = experienceAccess(id, {
       href: `https://guns-only.com/?program=${id}`,
@@ -36,7 +37,7 @@ test("the explicit preview query acknowledges but does not promote a quarantined
 });
 
 test("preview catalog entries launch only with explicit preview acknowledgement", () => {
-  for (const id of ["rapier-circuits", "top-gun"]) {
+  for (const id of ["multiplayer", "rapier-circuits", "top-gun"]) {
     const access = experienceAccess(id, {
       href: `https://guns-only.com/?program=${id}&preview=1`,
     });

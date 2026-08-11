@@ -101,6 +101,14 @@
     {
       "source": "/telemetry-admin",
       "destination": "/api/telemetry-admin"
+    },
+    {
+      "source": "/arena",
+      "destination": "/api/arena"
+    },
+    {
+      "source": "/arena/(.*)",
+      "destination": "/api/arena"
     }
   ]
 }
