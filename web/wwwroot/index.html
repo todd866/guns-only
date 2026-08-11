@@ -2879,7 +2879,7 @@
     #ready-screen[data-mode="program"] .ready-controls,
     #ready-screen[data-mode="program"] #ready-hint { display: none; }
 
-    /* The four posters sit side by side and own the screen. */
+    /* The four production posters plus the visible Top Gun preview sit side by side. */
     #ready-screen[data-mode="program"] .ready-layout {
       display: block;
       overflow: visible;
@@ -2887,7 +2887,7 @@
 
     #ready-screen[data-mode="program"] .ready-mission-groups {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: clamp(10px, 2vw, 26px);
       overflow: visible;
     }
@@ -3020,13 +3020,20 @@
       font-size: 11px;
     }
 
-    /* Portrait phones stack the two paintings; there is room for exactly this and nothing else. */
+    /* Portrait keeps the picker to one compact horizontal rail. The catalogue now has more than
+       two aircraft, so stacking every poster pushes the Fly gesture below the initial viewport. */
     @media (max-width: 620px) and (orientation: portrait) {
       #ready-screen[data-mode="program"] .ready-mission-groups {
-        grid-auto-flow: row;
-        grid-template-columns: minmax(0, 1fr);
+        grid-template-columns: none;
+        grid-auto-columns: minmax(136px, 42vw);
+        grid-auto-flow: column;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 1px 2px 7px;
+        overscroll-behavior-x: contain;
+        scroll-snap-type: x mandatory;
+        touch-action: pan-x pinch-zoom;
       }
-      #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] { aspect-ratio: 16 / 10; }
     }
 
     /* One picture per vehicle, and NOTHING behind them. The backdrop used to be a third
@@ -3470,8 +3477,9 @@
             <output id="ready-program-progress"></output>
           </div>
           <!--
-            An AIRCRAFT picker for the production machines. Quarantined and preview entries stay
-            hidden; deep links fail closed unless ?preview=1 is present.
+            An AIRCRAFT picker for the production machines plus visible preview teasers. Preview
+            entries remain disabled until ?preview=1 is explicitly acknowledged; quarantined
+            entries stay hidden.
           -->
           <div class="ready-mission-groups">
             <div class="sortie-option" data-selected="true" data-program-state="available">
