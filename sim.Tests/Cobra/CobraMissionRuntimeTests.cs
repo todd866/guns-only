@@ -161,6 +161,71 @@ public class CobraMissionRuntimeTests
     }
 
     [Fact]
+    public void TerrainWindPublishesDeterministicSpatialRotorAndTailAirflow()
+    {
+        CobraCanyonDefinition firstWorld = CobraCanyonDefinition.Create();
+        CobraCanyonDefinition replayWorld = CobraCanyonDefinition.Create();
+        var first = new CobraMissionRuntime(
+            firstWorld,
+            firstWorld.CreateTerrainSurface(),
+            CobraCanyonRouteChoice.RiverGorge,
+            windVelocityMps: CobraCanyonWindField.DefaultSynopticMps,
+            enableTerrainWind: true);
+        var replay = new CobraMissionRuntime(
+            replayWorld,
+            replayWorld.CreateTerrainSurface(),
+            CobraCanyonRouteChoice.RiverGorge,
+            windVelocityMps: CobraCanyonWindField.DefaultSynopticMps,
+            enableTerrainWind: true);
+        double trim = first.Cobra.EstimateHoverCollective(
+            first.Cobra.State.GrossMassKg,
+            CobraMissionRuntime.DefaultAirDensityKgM3);
+        var neutral = new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0);
+
+        first.Advance(neutral);
+        replay.Advance(neutral);
+
+        RotorcraftAirflowSample firstFlow = Assert.IsType<RotorcraftAirflowSample>(
+            first.LastRotorcraftAirflow);
+        RotorcraftAirflowSample replayFlow = Assert.IsType<RotorcraftAirflowSample>(
+            replay.LastRotorcraftAirflow);
+        Assert.Equal(firstFlow, replayFlow);
+        Assert.True(firstFlow.MainRotorForwardWindVelocityMps.IsFinite);
+        Assert.True(firstFlow.MainRotorAftWindVelocityMps.IsFinite);
+        Assert.True(firstFlow.MainRotorLeftWindVelocityMps.IsFinite);
+        Assert.True(firstFlow.MainRotorRightWindVelocityMps.IsFinite);
+        Assert.True(firstFlow.TailRotorWindVelocityMps.IsFinite);
+        double resolvedGradient =
+            (firstFlow.MainRotorForwardWindVelocityMps
+                - firstFlow.MainRotorAftWindVelocityMps).Length
+            + (firstFlow.MainRotorLeftWindVelocityMps
+                - firstFlow.MainRotorRightWindVelocityMps).Length
+            + (firstFlow.TailRotorWindVelocityMps - first.LastWindVelocityMps).Length;
+        Assert.True(resolvedGradient > 1e-6,
+            "terrain gust truth must not collapse every rotor station to the CG sample");
+    }
+
+    [Fact]
+    public void DisabledTerrainWindKeepsExplicitUniformFlowWithoutInventedGradients()
+    {
+        CobraCanyonDefinition world = CobraCanyonDefinition.Create();
+        var runtime = new CobraMissionRuntime(
+            world,
+            world.CreateTerrainSurface(),
+            CobraCanyonRouteChoice.RiverGorge,
+            windVelocityMps: CobraCanyonWindField.DefaultSynopticMps,
+            enableTerrainWind: false);
+        double trim = runtime.Cobra.EstimateHoverCollective(
+            runtime.Cobra.State.GrossMassKg,
+            CobraMissionRuntime.DefaultAirDensityKgM3);
+
+        runtime.Advance(new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0));
+
+        Assert.Null(runtime.LastRotorcraftAirflow);
+        Assert.Equal(CobraCanyonWindField.DefaultSynopticMps, runtime.LastWindVelocityMps);
+    }
+
+    [Fact]
     public void ExpensiveMaskingTruthRunsAtAStableTenHertzCadence()
     {
         var runtime = new CobraMissionRuntime(

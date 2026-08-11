@@ -522,12 +522,17 @@ function recordTelemetry(nowMs) {
       cobra_yaw_rate_rad_s: authorityState.vehicle.yaw_rate_rad_s,
       cobra_advance_ratio: rotor?.advance_ratio,
       cobra_torque_yaw_demand_rad_s: rotor?.torque_yaw_demand_rad_s,
+      cobra_scas_roll_rad_s: rotor?.scas_roll_rad_s,
+      cobra_scas_pitch_rad_s: rotor?.scas_pitch_rad_s,
       cobra_scas_yaw_rad_s: rotor?.scas_yaw_rad_s,
       cobra_weathervane_yaw_rad_s: rotor?.weathervane_yaw_rad_s,
       cobra_yaw_residual_rad_s: rotor?.yaw_residual_rad_s,
       cobra_wind_e_mps: authorityState.vehicle.wind_e_mps,
       cobra_wind_u_mps: authorityState.vehicle.wind_u_mps,
       cobra_wind_n_mps: authorityState.vehicle.wind_n_mps,
+      cobra_gust_pitch_moment_nm: rotor?.gust_pitch_moment_nm,
+      cobra_gust_yaw_moment_nm: rotor?.gust_yaw_moment_nm,
+      cobra_gust_roll_moment_nm: rotor?.gust_roll_moment_nm,
       cobra_mission_act: authorityState.mission_act,
       cobra_frame_ms: lastRawFrameMs,
       cobra_route_remaining_m: authorityState.route_guidance.remaining_m,
@@ -926,16 +931,11 @@ function updateManual(deltaSeconds) {
   }
   if (bridge) {
     const gamepad = Array.from(navigator.getGamepads?.() ?? []).find(Boolean);
-    // The hot-pose attitude feeds the idle-stick leveling assist: rate-command dynamics
-    // latch whatever attitude a keyboard tap leaves behind, so the released spring must
-    // centre onto a level-the-ship command, not bare neutral.
-    const pose = readVehiclePose();
+    // Authentic controls own only the pilot's physical inputs. Aircraft attitude never feeds
+    // back through this browser seam as an unlabeled hold or recovery command.
     pilotControls = advanceCobraPilotControls(pilotControls, {
       keyboardIntent: cobraKeyboardControlIntent(keys, cobraControlProfile),
       analogAxes: cobraGamepadControlAxes(gamepad),
-      attitude: pose
-        ? { pitchRad: pose.pitch_rad, rollRad: pose.roll_rad }
-        : null,
       deltaSeconds,
       focused: windowFocused,
     });

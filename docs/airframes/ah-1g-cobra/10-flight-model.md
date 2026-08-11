@@ -36,7 +36,9 @@ bindings. It emits raw collective-rate, cyclic and pedal intent with no filterin
 spring-center, analog gamepad/touch axes stay proportional, and focus loss releases every
 spring-centred command while leaving the collective lever where the pilot set it. The simulation
 integrates the lever and determines whether the aircraft climbs, settles, droops the rotor or
-enters an adverse regime.
+enters an adverse regime. As of 2026-08-11, measured attitude is deliberately absent from that
+input seam: released cyclic springs to physical neutral and cannot capture pitch/roll or manufacture
+a hidden recovery command.
 
 ## Production fidelity bar
 
@@ -162,11 +164,17 @@ leaves a clearer right residual (occasional left pedal), and adds a provisional 
 weathervane damper so cruise heading holds better without restoring autotrim. Telemetry
 publishes torque demand, SCAS, weathervane, and residual separately from local wind so TQ vs
 wind audits are possible offline. Engine-out retains its short left-yaw tendency. Cyclic/pitch
-still use the reduced-order whole-disk response. Any friendlier heading/hover assist must be a
-separately labeled player option.
+still use the reduced-order whole-disk response. Pilot-active axes retain the short authored
+response fit, while neutral axes use separate slower natural rate damping plus rate-only cyclic
+SCAS capped at the same 12.5% authority and 0.08 s lag. No attitude, heading, hover, or altitude
+state is held. Any friendlier assist must be a separately labeled player option.
 
-Canyon production missions sample a provisional terrain-modulated mean wind (`CobraCanyonWindField`)
-into the vehicle environment each authority tick; unit tests keep still air unless they opt in.
+Canyon production missions compose the provisional terrain-modulated mean wind with a fixed-seed,
+intermittent field advected by authority time. The runtime samples vehicle centre, four main-rotor
+stations at 70% radius, and the tail station. Differential vertical flow creates bounded main-rotor
+roll/pitch moments; tail-versus-disc lateral flow creates bounded yaw, all integrated through the
+mass-scaled published inertias. This remains a five-point reduced-order disturbance model—not CFD,
+blade-resolved loading, or physical tail-rotor BEMT. Unit tests keep still air unless they opt in.
 
 ## Validation matrix
 
@@ -181,6 +189,7 @@ into the vehicle environment each authority tick; unit tests keep still air unle
 | RBS/high speed | progressive advance-ratio severity | BHC-540 stalled-area/compressibility and 2/rev loads |
 | Autorotation | freewheel and collective/rotor-energy ordering | 60 KIAS minimum rate, 90/100 KIAS glide, 60–80 kt RPM peak |
 | Contact | four skid points, stable/hard distinction | slopes, gear geometry/drop tests, rotor/tail/object strike |
+| Canyon wind | timed deterministic mean+gust field, disc/tail gradients, moment caps | sourced Vietnam canyon statistics, distributed inflow and tail/fin closure |
 | Determinism | exact 120 Hz state/observation/telemetry equality | long-run state hash in replay and production smoke |
 | Level/climb performance | open | ≈149 KIAS clean level; Army mission climb/speed cards |
 
