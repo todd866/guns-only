@@ -47,6 +47,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
     bool _rotorStrikeLatched;
     bool _gearDamagedLatched;
     bool _airborneSinceLastContact = true;
+    bool _touchdownRecorded;
     VehicleContactFailureCause _contactFailureCause;
     ContactTouchdown _lastTouchdown;
     long? _lastTick;
@@ -1063,9 +1064,22 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
 
         if (minimumSkidHeightM > surface.HeightM || velocity.Y > 0.0)
         {
-            _airborneSinceLastContact = true;
+            // Re-arm touchdown capture only on REAL skid separation. A one-tick positive
+            // velocity while the skids still touch (the solver's own bounce) must not let
+            // the next settling tick overwrite the arrival of record with a soft tap.
+            if (minimumSkidHeightM > surface.HeightM + 0.05)
+                _airborneSinceLastContact = true;
             contact = VehicleContactState.Airborne;
             return;
+        }
+
+        if (surface.SubmergesSkids)
+        {
+            // A skid helicopter does not land on a river. Suitability is a surface fact the
+            // mission supplies; the dynamics only refuses to call floating "a landing".
+            _hardImpactLatched = true;
+            if (_contactFailureCause == VehicleContactFailureCause.None)
+                _contactFailureCause = VehicleContactFailureCause.WaterContact;
         }
 
         double normalImpactSpeedMps = Math.Max(0.0, -velocity.Y);
@@ -1082,13 +1096,25 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         // The envelope reads velocity/attitude BEFORE the solver bleeds them. Rollover needs
         // both bank past the authored landing limit AND real sideways drift, so a straight
         // nose-up flare and a banked-but-stationary settle both stay clean (attitude-blind
-        // rule for sink; drift is what digs a skid in).
-        Vec3D bodyVelocityAtContact = attitude.Conjugate().Rotate(velocity);
+        // rule for sink; drift is what digs a skid in). Drift means GROUND TRACK: only the
+        // world-horizontal velocity rotates into the body frame, otherwise a banked vertical
+        // settle reads its own sink as sideways motion and dies below the gear-damage limit.
+        Vec3D horizontalVelocityWorld = new(velocity.X, 0.0, velocity.Z);
+        Vec3D bodyVelocityAtContact = attitude.Conjugate().Rotate(horizontalVelocityWorld);
         double lateralSpeedMps = Math.Abs(bodyVelocityAtContact.X);
         if (_airborneSinceLastContact)
         {
-            _lastTouchdown = new ContactTouchdown(
-                normalImpactSpeedMps, lateralSpeedMps, Math.Abs(rates.R));
+            // The touchdown of record is the arrival that caused the failure (or, for a
+            // living airframe, the most recent arrival). A micro-bounce after a fatal hit
+            // must not overwrite the killing measurements with its soft second tap; an
+            // airborne rotor strike must still get its first ground contact recorded.
+            if (_contactFailureCause == VehicleContactFailureCause.None
+                || !_touchdownRecorded)
+            {
+                _lastTouchdown = new ContactTouchdown(
+                    normalImpactSpeedMps, lateralSpeedMps, Math.Abs(rates.R));
+                _touchdownRecorded = true;
+            }
             _airborneSinceLastContact = false;
         }
         if (normalImpactSpeedMps > geometry.GearDamageNormalSpeedMps)

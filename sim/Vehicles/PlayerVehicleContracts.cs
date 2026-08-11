@@ -47,7 +47,8 @@ public enum VehicleContactFailureCause {
     HardImpact,
     Rollover,
     SpinContact,
-    RotorStrike
+    RotorStrike,
+    WaterContact
 }
 
 /// <summary>
@@ -126,7 +127,8 @@ public readonly record struct VehicleSurfaceSample(
     string? SurfaceId,
     double HeightM,
     Vec3D UpNormal,
-    double FrictionPerSecond) {
+    double FrictionPerSecond,
+    bool SubmergesSkids = false) {
 
     public static VehicleSurfaceSample Unknown => new(
         false,

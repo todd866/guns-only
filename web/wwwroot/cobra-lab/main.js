@@ -516,6 +516,13 @@ function recordTelemetry(nowMs) {
       cobra_power_margin: authorityState.vehicle.power_margin,
       cobra_main_rotor_rpm: rotor?.main_rotor_rpm ?? pose?.main_rotor_rpm,
       cobra_transmission_limit_fraction: rotor?.transmission_limit_fraction,
+      // Contact-envelope evidence: without these the crash card can name a cause live
+      // while the uploaded owner-flight trace records none of it.
+      cobra_contact_failure_cause: authorityState.vehicle.contact_failure_cause,
+      cobra_gear_damaged: authorityState.vehicle.gear_damaged,
+      cobra_touchdown_sink_mps: authorityState.vehicle.touchdown_sink_mps,
+      cobra_touchdown_lateral_mps: authorityState.vehicle.touchdown_lateral_mps,
+      cobra_touchdown_yaw_rate_rad_s: authorityState.vehicle.touchdown_yaw_rate_rad_s,
       // Prefer the per-frame hot pose: GetState is 30 Hz and a stale tab can pin spawn forever
       // while the flying tab's camera still reads hot pose (owner 16:41 flight diagnosis).
       cobra_pitch_rad: pose?.pitch_rad ?? authorityState.vehicle.pitch_rad,

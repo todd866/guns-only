@@ -126,6 +126,7 @@ public static partial class CobraWebBridge
         VehicleContactFailureCause.Rollover => "rollover",
         VehicleContactFailureCause.SpinContact => "spin-contact",
         VehicleContactFailureCause.RotorStrike => "rotor-strike",
+        VehicleContactFailureCause.WaterContact => "water-contact",
         _ => "none",
     };
 

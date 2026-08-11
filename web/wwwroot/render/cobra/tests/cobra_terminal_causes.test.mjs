@@ -20,6 +20,10 @@ test("each contact failure cause maps to instrument-true card copy", () => {
     title: "ROTOR STRIKE",
     detail: "The main rotor met the ground.",
   });
+  assert.deepEqual(cobraTerminalCauseCopy("water-contact"), {
+    title: "INTO THE RIVER",
+    detail: "Skid helicopters do not land on water.",
+  });
 });
 
 test("none, unknown, and absent causes yield null so the generic card stands", () => {

@@ -435,7 +435,11 @@ function materialFor(THREE, role) {
   if (role === "basin") return createCobraCanyonBasinMaterial(THREE, COBRA_CANYON_VISUAL_PROFILE);
   if (role === "river") return createCobraCanyonRiverMaterial(THREE, COBRA_CANYON_VISUAL_PROFILE);
   const parameters = {
-    roads: { color: 0xb0683c, emissive: 0x241008, roughness: 1 },
+    // Laterite dirt, not warning tape: the road must read as ground the FOB's laterite
+    // apron belongs to (owner 2026-08-12: "what's this red line?"). No emissive — a road
+    // does not glow. The full width/texture/soft-edge treatment is the corridor-scenery
+    // slice; this keeps the ribbon honest until then.
+    roads: { color: 0x7d5638, roughness: 1 },
     heroCells: { color: 0x6a5030, roughness: 1 },
     landmarks: { color: 0xffffff, roughness: 0.95 },
     hazards: { color: 0xe96a43, emissive: 0x411006, roughness: 0.8 },

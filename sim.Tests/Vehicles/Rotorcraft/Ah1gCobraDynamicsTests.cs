@@ -800,6 +800,82 @@ public sealed class Ah1gCobraDynamicsTests
     }
 
     [Fact]
+    public void BankedDescentRecordsGroundTrackNotSinkAsLateral()
+    {
+        var cobra = Create("banked-settle",
+            new Vec3D(0.0, 1.815, 0.0),
+            new Vec3D(0.0, -3.0, 0.0));
+        double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        double contactRollRad = 0.0;
+        long tick = 0;
+        for (; tick < 240 && !Grounded(cobra); tick++)
+        {
+            // A late right-cyclic pulse banks the disk in the final half-second of a mostly
+            // vertical settle. The rollover predicate's lateral input must be GROUND TRACK:
+            // rotating the full velocity into the banked body frame leaks sink into "lateral"
+            // (here ~0.6 m/s of leak on top of ~0.6 m/s of true drift) and, at steeper banks
+            // and harder sinks, kills a driftless settle below the gear-damage limit.
+            cobra.Advance(Input(tick,
+                new VerticalLiftPilotCommand(trim - 0.15, 0.0, 1.0, 0.0),
+                PadEnvironment));
+            contactRollRad = cobra.Observation.RollRad;
+        }
+
+        Assert.True(Grounded(cobra), "The banked settle never contacted the pad.");
+        Assert.True(Math.Abs(contactRollRad) > 0.15,
+            $"The bank never developed: roll {contactRollRad:F3} rad at contact.");
+        Assert.InRange(cobra.LastTouchdown.SinkMps, 3.0, 5.0);
+        Assert.True(cobra.LastTouchdown.LateralMps < 0.8,
+            $"Touchdown lateral must be ground track, not sink leakage: recorded "
+            + $"{cobra.LastTouchdown.LateralMps:F2} m/s at roll {contactRollRad:F3} rad, "
+            + $"sink {cobra.LastTouchdown.SinkMps:F2} m/s.");
+        Assert.NotEqual(VehicleContactFailureCause.Rollover, cobra.LastContactFailureCause);
+    }
+
+    [Fact]
+    public void LevelHighSinkContactLatchesHardImpactSpecifically()
+    {
+        var cobra = Create("hard-drop",
+            new Vec3D(0.0, 0.365, 0.0),
+            new Vec3D(0.0, -7.5, 0.0));
+        var lowCollective = new VerticalLiftPilotCommand(0.2, 0.0, 0.0, 0.0);
+        for (long tick = 0; tick < 60 && !Grounded(cobra); tick++)
+            cobra.Advance(Input(tick, lowCollective, PadEnvironment));
+
+        Assert.True(Grounded(cobra), "The vertical drop never contacted the pad.");
+        Assert.Equal(VehicleContactFailureCause.HardImpact, cobra.LastContactFailureCause);
+        Assert.False(cobra.Observation.Flyable);
+        Assert.InRange(cobra.LastTouchdown.SinkMps, 7.2, 7.9);
+    }
+
+    [Fact]
+    public void GentleWaterTouchdownStillEndsTheSortie()
+    {
+        var cobra = Create("water-contact",
+            new Vec3D(0.0, 1.315, 0.0),
+            new Vec3D(0.0, -1.5, 0.0));
+        double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        var river = new PlayerVehicleEnvironmentSample(
+            1.225,
+            Vec3D.Zero,
+            new VehicleSurfaceSample(
+                IsKnown: true,
+                SurfaceId: "cobra-canyon.water",
+                HeightM: 0.0,
+                UpNormal: new Vec3D(0.0, 1.0, 0.0),
+                FrictionPerSecond: 4.0,
+                SubmergesSkids: true));
+        for (long tick = 0; tick < 240 && !Grounded(cobra); tick++)
+            cobra.Advance(Input(tick,
+                new VerticalLiftPilotCommand(trim - 0.10, 0.0, 0.0, 0.0), river));
+
+        Assert.True(Grounded(cobra), "The water descent never reached the surface.");
+        Assert.Equal(VehicleContactFailureCause.WaterContact, cobra.LastContactFailureCause);
+        Assert.False(cobra.Observation.Flyable,
+            "A perfectly gentle river touchdown is still the end of a skid helicopter.");
+    }
+
+    [Fact]
     public void NoFlareAutorotationEndsInAHardImpact()
     {
         var cobra = Create("auto-no-flare",

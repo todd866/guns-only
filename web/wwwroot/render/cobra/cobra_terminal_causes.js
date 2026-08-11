@@ -21,6 +21,10 @@ const CAUSE_COPY = Object.freeze({
     title: "ROTOR STRIKE",
     detail: "The main rotor met the ground.",
   }),
+  "water-contact": Object.freeze({
+    title: "INTO THE RIVER",
+    detail: "Skid helicopters do not land on water.",
+  }),
 });
 
 /**
