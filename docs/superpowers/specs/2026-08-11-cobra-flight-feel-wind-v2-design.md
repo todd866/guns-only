@@ -54,6 +54,12 @@ that authority error.
    explicit authority ceiling and lag; it cannot become an attitude hold.
 5. Every provisional gain and safety clamp is centralized, documented, observable, and covered by
    calm-air, gust-response, and determinism tests.
+6. Natural hands-off yaw damping is not a low-pass on main-rotor torque. Torque/limited-SCAS
+   response retains the authored pilot-axis response time while the released-pedal component
+   decays independently.
+7. Main-rotor thrust above hover trim acts through the authored longitudinal hub offset and
+   mass-scaled pitch inertia. The coupling is zero at trim and after rotor shutdown; it contains no
+   canned oscillation.
 
 ## Acceptance
 
@@ -63,6 +69,12 @@ that authority error.
 - a resolved vertical gust difference across the main rotor produces the correctly signed,
   finite roll or pitch response;
 - a resolved tail-flow difference produces a finite yaw response without bypassing pedal/SCAS;
+- a production-rate trim-to-full collective pull has bounded two-sided Nr, torque, load, P/Q/R
+  envelopes at 0.25, 0.5 and 1.0 seconds in a genuinely trimmed hover;
+- sustained hover at full collective requires finite cyclic and pedal correction from an
+  instrumented test pilot, while those corrections materially reduce open-loop pitch and yaw
+  error; forward-flight workload remains an owner-flight acceptance item until a sourced cruise
+  trim replaces the old constant-cyclic scripted case;
 - two complete runtimes with the same route, seed, controls, and ticks retain exact state,
   observation, telemetry, and airflow equality;
 - focused owner flight: quartering gusts require cyclic and pedal corrections without becoming
@@ -80,6 +92,9 @@ that authority error.
   deliberate control sluggish;
 - cyclic SCAS is rate-only, uses the existing 0.08 s lag, and cannot exceed 12.5% of axis rate
   authority.
+- gust gradients use the live disk load and the single BEMT tip-speed term. They do not multiply by
+  an additional `Nr²`, which previously made the same gust collapse approximately with `Nr³`
+  during a full-power pull.
 
 These are gameplay-safe reduced-order values, not measured AH-1G stability derivatives. Owner
 flight may move them only with before/after telemetry and the calm/gust/determinism gates intact.

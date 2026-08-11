@@ -38,6 +38,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
     double _scasRollRateRadPerSecond;
     double _scasPitchRateRadPerSecond;
     double _scasYawRateRadPerSecond;
+    double _torqueYawRateRadPerSecond;
     double _lastTorqueYawDemandRadPerSecond;
     double _lastWeathervaneYawRadPerSecond;
     double _lastYawResidualRadPerSecond;
@@ -194,6 +195,13 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
     /// Y is yaw-axis (up), and Z is roll-axis (forward), in newton-metres.
     /// </summary>
     public Vec3D LastGustMomentBodyNm { get; private set; }
+
+    /// <summary>
+    /// Last trim-balanced main-rotor hub moment in physical body axes. The current reduced-order
+    /// closure consumes its pitch-axis X component; Y/Z remain zero until the full hub/inertia
+    /// tensor model replaces the rate-fit control law.
+    /// </summary>
+    public Vec3D LastCollectiveHubMomentBodyNm { get; private set; }
 
     /// <summary>Last limited rate-only cyclic SCAS command, P/Q in radians per second.</summary>
     public BodyRates LastCyclicScasRateCommand { get; private set; }
@@ -448,11 +456,16 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             0.0,
             3.0 * hoverInducedVelocityMps);
 
+        BodyRates collectiveHubAngularAcceleration = CollectiveHubAngularAcceleration(
+            mainRotorThrustN,
+            grossMassKg,
+            out Vec3D collectiveHubMomentBodyNm);
+        LastCollectiveHubMomentBodyNm = collectiveHubMomentBodyNm;
         BodyRates gustAngularAcceleration = GustAngularAcceleration(
             input.Environment,
             attitude,
             grossMassKg,
-            rpmRatio,
+            mainRotorThrustN,
             out Vec3D gustMomentBodyNm);
         LastGustMomentBodyNm = gustMomentBodyNm;
         BodyRates nextRates = AdvanceBodyRates(
@@ -464,6 +477,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             advanceRatio,
             rbsSeverity,
             vrsSeverity,
+            collectiveHubAngularAcceleration,
             gustAngularAcceleration,
             dt);
         QuaternionD nextAttitude = IntegrateAttitude(attitude, nextRates, dt);
@@ -619,6 +633,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         double advanceRatio,
         double rbsSeverity,
         double vrsSeverity,
+        in BodyRates collectiveHubAngularAcceleration,
         in BodyRates gustAngularAcceleration,
         double dt)
     {
@@ -685,7 +700,17 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         _lastWeathervaneYawRadPerSecond = weathervaneYawRadPerSecond;
         _lastYawResidualRadPerSecond = yawResidualRadPerSecond;
 
-        targetYawRate += yawResidualRadPerSecond + weathervaneYawRadPerSecond;
+        // Keep the main-rotor torque/SCAS response separate from natural hands-off damping.
+        // Applying the 2.5 s decay time to their combined target made a collective pull wait on
+        // the same low-pass intended only for a released pedal. The torque component retains the
+        // authored 0.24 s yaw response while the non-torque component decays independently.
+        double currentNonTorqueYawRate = rates.R - _torqueYawRateRadPerSecond;
+        _torqueYawRateRadPerSecond = FirstOrder(
+            _torqueYawRateRadPerSecond,
+            yawResidualRadPerSecond,
+            _definition.Handling.YawResponseTimeConstantSeconds,
+            dt);
+        targetYawRate += weathervaneYawRadPerSecond;
         if (!_engineOperating)
             targetYawRate -= Degrees(8.0) * controlEffectiveness;
 
@@ -759,9 +784,11 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             + gustAngularAcceleration.P * dt;
         double nextPitchRate = FirstOrder(
             rates.Q, targetPitchRate, pitchTimeConstantSeconds, dt)
+            + collectiveHubAngularAcceleration.Q * dt
             + gustAngularAcceleration.Q * dt;
         double nextYawRate = FirstOrder(
-            rates.R, targetYawRate, yawTimeConstantSeconds, dt)
+            currentNonTorqueYawRate, targetYawRate, yawTimeConstantSeconds, dt)
+            + _torqueYawRateRadPerSecond
             + gustAngularAcceleration.R * dt;
 
         return new BodyRates(
@@ -780,7 +807,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         in PlayerVehicleEnvironmentSample environment,
         in QuaternionD attitude,
         double grossMassKg,
-        double rpmRatio,
+        double mainRotorThrustN,
         out Vec3D momentBodyNm)
     {
         momentBodyNm = Vec3D.Zero;
@@ -801,12 +828,18 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
 
         MainRotorDefinition mainRotor = _definition.MainRotor;
         RotorcraftAirframeDefinition airframe = _definition.Airframe;
-        double rotorEffectiveness = Math.Clamp(rpmRatio * rpmRatio, 0.0, 1.20);
+        double diskLoadFactor = Math.Clamp(
+            mainRotorThrustN / Math.Max(1.0, grossMassKg * FlightModel.G0),
+            0.35,
+            _definition.Handling.NumericalMainRotorLoadFactorGuard);
         double mainTipSpeedMps = _mainRotorAngularSpeedRadPerSecond * mainRotor.RadiusM;
         // Linearized BEMT derivative dT/dV through the disk. Half of the derivative belongs to
         // each sampled disk half; the reduced-order gain admits that these are point samples.
+        // Tip speed already supplies the BEMT omega term. The previous extra rpmRatio^2 made the
+        // disturbance collapse approximately with Nr^3 during a power pull. Live disk loading now
+        // carries the collective/load dependence instead.
         double mainRotorThrustGradientNPerMps = MainRotorGustResponseFraction
-            * rotorEffectiveness
+            * diskLoadFactor
             * mainRotor.Solidity
             * mainRotor.LiftCurveSlopePerRad
             * 0.25
@@ -836,8 +869,10 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         double tailTipSpeedMps = _mainRotorAngularSpeedRadPerSecond
             * tailRotor.MainToTailGearRatio
             * tailRotor.RadiusM;
+        // Main-disk loading is not a tail-rotor state. Keep the tail response tied to its
+        // geared tip speed and local cross-flow; otherwise pulling collective artificially
+        // changes tail gust sensitivity even when the tail flow itself is unchanged.
         double tailRotorForceGradientNPerMps = TailRotorGustResponseFraction
-            * rotorEffectiveness
             * tailRotorSolidity
             * mainRotor.LiftCurveSlopePerRad
             * 0.25
@@ -876,6 +911,35 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             -rollMomentBodyZNm / rollInertiaKgM2,
             -pitchMomentBodyXNm / pitchInertiaKgM2,
             yawMomentBodyYNm / yawInertiaKgM2);
+    }
+
+    BodyRates CollectiveHubAngularAcceleration(
+        double mainRotorThrustN,
+        double grossMassKg,
+        out Vec3D momentBodyNm)
+    {
+        // Hover trim already balances weight through the hub. Apply only thrust above that trim
+        // force so enabling the coupling cannot manufacture a standing pitch moment at the
+        // existing hover collective—or a fictitious opposite moment after the rotor stops. The
+        // authored 0.155 m longitudinal hub offset supplies the lever arm; no oscillation, phase,
+        // or random departure is injected.
+        double excessThrustN = Math.Max(
+            0.0,
+            mainRotorThrustN - grossMassKg * FlightModel.G0);
+        // The cyclic response is already represented by the sourced commanded-rate fit. Do
+        // not cross its tilted thrust vector with the 2.073 m vertical mast arm here: doing so
+        // would double-count cyclic and let cyclic cancel or reverse the collective workload.
+        // This reduced-order coupling deliberately retains only the authored 0.155 m
+        // longitudinal hub offset acting on excess axial thrust.
+        double pitchMomentBodyXNm = -_definition.Contact.MainRotorHubOffsetBodyM.Z
+            * excessThrustN;
+        momentBodyNm = new Vec3D(pitchMomentBodyXNm, 0.0, 0.0);
+
+        RotorcraftAirframeDefinition airframe = _definition.Airframe;
+        double inertiaScale = grossMassKg / airframe.InertiaReferenceMassKg;
+        double pitchInertiaKgM2 = airframe.PitchInertiaKgM2 * inertiaScale;
+        // Quaternion integration maps positive physical X moment to negative sim Q.
+        return new BodyRates(0.0, -momentBodyNm.X / pitchInertiaKgM2, 0.0);
     }
 
     Vec3D FuselageDragForce(
@@ -1288,6 +1352,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             || !State.BodyAttitude.IsFinite
             || !State.BodyRates.IsFinite
             || !LastGustMomentBodyNm.IsFinite
+            || !LastCollectiveHubMomentBodyNm.IsFinite
             || !LastCyclicScasRateCommand.IsFinite
             || !double.IsFinite(Telemetry.MainRotorRpm)
             || !double.IsFinite(Telemetry.MainRotorThrustN)

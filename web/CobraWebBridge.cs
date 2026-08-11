@@ -324,6 +324,8 @@ public static partial class CobraWebBridge
                     ground_effect_factor = rotorcraft.GroundEffectFactor,
                     engine_operating = rotorcraft.EngineOperating,
                     advance_ratio = rotorcraft.AdvanceRatio,
+                    body_roll_rate_rad_s = runtime.Cobra.State.BodyRates.P,
+                    body_pitch_rate_rad_s = runtime.Cobra.State.BodyRates.Q,
                     body_yaw_rate_rad_s = rotorcraft.BodyYawRateRadPerSecond,
                     torque_yaw_demand_rad_s = rotorcraft.TorqueYawDemandRadPerSecond,
                     scas_roll_rad_s = cyclicScas.P,
@@ -335,6 +337,8 @@ public static partial class CobraWebBridge
                     gust_pitch_moment_nm = gustMomentBodyNm.X,
                     gust_yaw_moment_nm = gustMomentBodyNm.Y,
                     gust_roll_moment_nm = gustMomentBodyNm.Z,
+                    collective_hub_pitch_moment_nm =
+                        runtime.Cobra.LastCollectiveHubMomentBodyNm.X,
                 },
             },
             collision_obstacle_id = diagnostics.CollisionObstacleId,

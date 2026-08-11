@@ -169,12 +169,22 @@ response fit, while neutral axes use separate slower natural rate damping plus r
 SCAS capped at the same 12.5% authority and 0.08 s lag. No attitude, heading, hover, or altitude
 state is held. Any friendlier assist must be a separately labeled player option.
 
+Natural yaw damping and main-rotor torque are separate state paths. A released pedal retains the
+2.5 s natural damping fit, but torque plus limited SCAS responds on the authored 0.24 s yaw axis;
+a collective pull therefore cannot wait on hands-off damping before creating pedal work. Main-rotor
+thrust above weight also acts through the authored 0.155 m longitudinal hub offset and the
+mass-scaled pitch inertia. Hover trim and a stopped rotor remain moment-free; there is no synthetic
+wobble or random departure.
+
 Canyon production missions compose the provisional terrain-modulated mean wind with a fixed-seed,
 intermittent field advected by authority time. The runtime samples vehicle centre, four main-rotor
 stations at 70% radius, and the tail station. Differential vertical flow creates bounded main-rotor
 roll/pitch moments; tail-versus-disc lateral flow creates bounded yaw, all integrated through the
 mass-scaled published inertias. This remains a five-point reduced-order disturbance model—not CFD,
 blade-resolved loading, or physical tail-rotor BEMT. Unit tests keep still air unless they opt in.
+The linearized gust derivative carries one physical tip-speed term plus live disk loading. An extra
+`Nr²` multiplier was removed because it made full-collective rotor droop suppress the same spatial
+gradient approximately with `Nr³`.
 
 ## Validation matrix
 
@@ -182,7 +192,7 @@ blade-resolved loading, or physical tail-rotor BEMT. Unit tests keep still air u
 |---|---|---|
 | Variant/geometry | exact constants, standard-vs-modified guard | source locators remain locked |
 | Hover trim | BEMT inverse and 10 s no-controller hold | Army IGE/OGE torque across mass, density and height |
-| Collective/governor | transient droop, power rise, climb | recover N2 within ±0.6% when unsaturated; measured torque trace |
+| Collective/governor | 0.25/0.5/1 s and sustained full-pull Nr/TQ/load/P/Q/R envelopes; measured cyclic/pedal correction workload | recover N2 within ±0.6% when unsaturated; measured torque and control-force traces |
 | ETL | forward inflow reduction is continuous | power curve through 12–24 kt, no discontinuity |
 | Ground effect | induced velocity/power fall near surface | multi-point disk samples and Army hover chart closure |
 | VRS | normalized entry, collective penalty, forward escape | Johnson transient plus Army sink/control cues |
