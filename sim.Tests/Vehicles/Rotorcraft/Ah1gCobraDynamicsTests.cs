@@ -800,6 +800,66 @@ public sealed class Ah1gCobraDynamicsTests
     }
 
     [Fact]
+    public void NoFlareAutorotationEndsInAHardImpact()
+    {
+        var cobra = Create("auto-no-flare",
+            new Vec3D(0.0, 150.315, 0.0),
+            new Vec3D(0.0, 0.0, 20.0));
+        double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        cobra.FailEngine();
+        // The frozen pilot: collective stays at trim, no flare, no cushion.
+        var frozen = new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.18);
+        long tick = 0;
+        for (; tick < 4800 && !Grounded(cobra); tick++)
+            cobra.Advance(Input(tick, frozen, PadEnvironment));
+
+        Assert.True(Grounded(cobra), "The no-flare descent never reached the ground.");
+        Assert.True(cobra.LastContactFailureCause
+                is VehicleContactFailureCause.HardImpact
+                or VehicleContactFailureCause.RotorStrike,
+            $"A no-flare auto must be a crash: cause {cobra.LastContactFailureCause}, "
+            + $"touchdown sink {cobra.LastTouchdown.SinkMps:F1} m/s.");
+        Assert.False(cobra.Observation.Flyable,
+            "Riding a dead engine into the ground without a flare must end the sortie.");
+    }
+
+    [Fact]
+    public void FlownAutorotationTouchesDownSurvivably()
+    {
+        var cobra = Create("auto-flown",
+            new Vec3D(0.0, 150.315, 0.0),
+            new Vec3D(0.0, 0.0, 20.0));
+        cobra.FailEngine();
+        double minimumRpm = double.MaxValue;
+        long tick = 0;
+        for (; tick < 4800 && !Grounded(cobra); tick++)
+        {
+            double heightAglM = cobra.State.PositionWorldM.Y - 0.315;
+            // Entry: dump collective to preserve Nr; glide. Flare: aft cyclic from 20 m to
+            // trade speed for lift. Cushion: pop the stored rotor energy from 8 m.
+            double collective = heightAglM > 8.0 ? 0.10 : 0.90;
+            double aftCyclic = heightAglM is < 20.0 and > 6.0 ? -0.45 : 0.0;
+            cobra.Advance(Input(tick,
+                new VerticalLiftPilotCommand(collective, aftCyclic, 0.0, 0.18),
+                PadEnvironment));
+            minimumRpm = Math.Min(minimumRpm, cobra.Telemetry.MainRotorRpm);
+        }
+
+        Assert.True(Grounded(cobra), "The flown auto never reached the ground.");
+        Assert.True(cobra.Observation.Flyable,
+            $"A flown autorotation must be survivable: cause "
+            + $"{cobra.LastContactFailureCause}, touchdown sink "
+            + $"{cobra.LastTouchdown.SinkMps:F2} m/s, lateral "
+            + $"{cobra.LastTouchdown.LateralMps:F2} m/s, yaw rate "
+            + $"{cobra.LastTouchdown.YawRateRadPerSecond:F2} rad/s, minimum Nr "
+            + $"{minimumRpm:F0} rpm.");
+        Assert.True(cobra.LastTouchdown.SinkMps
+                < cobra.Definition.Contact.HardImpactNormalSpeedMps,
+            $"Touchdown sink {cobra.LastTouchdown.SinkMps:F2} m/s exceeded the hard-impact "
+            + "limit despite the flare.");
+    }
+
+    [Fact]
     public void ForwardVelocityEscapesTheVortexRingEnvelope()
     {
         var settling = Create("settling", velocity: new Vec3D(0.0, -11.0, 0.0));
