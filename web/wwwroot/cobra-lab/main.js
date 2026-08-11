@@ -1,62 +1,65 @@
-import * as THREE from "../vendor/three.module.js?v=307";
+import * as THREE from "../vendor/three.module.js?v=308";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=307";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=307";
-import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=307";
+} from "../render/cobra/cobra_canyon_plan.js?v=308";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=308";
+import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=308";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=307";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=307";
-import { createHud } from "../hud.js?v=307";
+} from "../render/cobra/cobra_canyon_tour.js?v=308";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=308";
+import { createHud } from "../hud.js?v=308";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=307";
+} from "../render/cobra/cobra_hud_adapter.js?v=308";
 import {
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=307";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=307";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=308";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=308";
 import {
   emberActObjectiveOverlay,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=307";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=307";
+} from "../render/cobra/cobra_ember_path.js?v=308";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=308";
 import {
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=307";
+} from "../render/audio/flight_audio.js?v=308";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=307";
+} from "../render/cobra/cobra_control_profile.js?v=308";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=307";
+} from "../render/cobra/cobra_pilot_input.js?v=308";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=307";
+} from "../render/cobra/ah1g_presence.js?v=308";
 import {
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
   togglePadlockSelection,
-} from "../render/cobra/cobra_camera_bias.js?v=307";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=307";
+} from "../render/cobra/cobra_camera_bias.js?v=308";
+import {
+  applyTexelStabilizedDirectionalShadow,
+} from "../render/visual/shadow_stabilizer.js?v=308";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=308";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=307";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=307";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=307";
+} from "../render/cobra/cobra_mission_exit.js?v=308";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=308";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=308";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -74,6 +77,48 @@ const ROUTE_NOTES = Object.freeze({
 });
 
 const QUALITY_PIXEL_RATIOS = Object.freeze({ mobile: 1, balanced: 1.35, desktop: 1.75 });
+
+// CAST-SHADOW CASCADE, sized from this scene's geometry rather than copied from the F-22's.
+//
+// The sun sits at elevation asin(0.28) = 16.3 degrees (the shared house sun), so cot(16.3) = 3.42:
+// every metre of height lays 3.42 m of shadow across level ground. That single number sets the
+// extent, because a cascade that holds the RECEIVER but not the CASTER standing up-sun of it
+// produces no shadow at all — the failure mode that makes a too-small extent look like a bug
+// rather than a compromise.
+//
+//   caster                          height    shadow length
+//   gorge wall / ridge              ~300 m    ~1,025 m
+//   canopy stand (asset kit)          18 m       62 m
+//   AH-1G at its 30 m cruise AGL      30 m      103 m
+//
+// The receiver ring worth paying for is the near ring the asset kit already draws
+// (`nearRingMaximumAglM` 180 / 260 / 360 m in COBRA_CANYON_RENDER_BUDGETS). Add the up-sun ridge
+// that shadows it and the desktop volume wants ~1.1 km of half-extent; balanced trims to 800 m
+// and accepts that the far half of a ridge shadow falls outside the map, where the 8 km humid
+// haze (fog density 2.3e-4) has already taken most of its contrast anyway.
+//
+// The design doc proposed 600 m. That holds the near ring but CLIPS the ridge that casts into it,
+// which is the one shadow this canyon actually needs; the extra 500 m is bought at 2048 rather
+// than by dropping texel density, so the map stays near a metre per texel:
+//
+//   desktop  2048 over 2,200 m  = 1.07 m/texel   (a 60 m canopy shadow is ~56 texels)
+//   balanced 1024 over 1,600 m  = 1.56 m/texel
+//   mobile   off — the world file already budgets `maxShadowCasters: 0` there, so the mobile
+//            floor renders honestly without shadows instead of dropping frames for them.
+const COBRA_SHADOW_TIERS = Object.freeze({
+  mobile: Object.freeze({ mapSize: 0, halfExtentM: 0 }),
+  balanced: Object.freeze({ mapSize: 1_024, halfExtentM: 800 }),
+  desktop: Object.freeze({ mapSize: 2_048, halfExtentM: 1_100 }),
+});
+// Depth bias. `normalBias` is in world metres and must clear the depth slope of one shadow texel
+// on the shallowest lit slope; 1.6 m is ~1.5 desktop texels, which is what stops the 105 m-spaced
+// basin quads self-striping near the terminator without visibly detaching contact shadows (a
+// canopy stand is 18 m tall, so 1.6 m of peter-panning is under a tenth of its own shadow).
+const COBRA_SHADOW_NORMAL_BIAS_M = 1.6;
+const COBRA_SHADOW_DEPTH_BIAS = -0.00045;
+// Where the volume is centred: ahead of the camera along its own view direction, at ground level.
+// Centring on the camera itself spends half the map behind the pilot.
+const COBRA_SHADOW_LOOKAHEAD_FRACTION = 0.42;
 const ROUTE_ENTRY_OFFSETS_M = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": 5_800,
   "route.cobra-canyon.ridge-shadow.v1": 7_300,
@@ -232,7 +277,7 @@ window.addEventListener("keydown", armAudioFromGesture, { capture: true });
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=307";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=308";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -253,6 +298,55 @@ const sun = new THREE.DirectionalLight(
 );
 sun.position.copy(sunDirection).multiplyScalar(sceneProfile.lighting.sunDistanceM);
 scene.add(sun);
+scene.add(sun.target);
+// PCFSoft to match the production F-22 rig (app.js): one engine, one shadow filter. Whether the
+// map is actually drawn is decided per tier by applyShadowQuality() below.
+renderer.shadowMap.enabled = false;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+sun.shadow.bias = COBRA_SHADOW_DEPTH_BIAS;
+sun.shadow.normalBias = COBRA_SHADOW_NORMAL_BIAS_M;
+// The travel direction of the light, i.e. from sun toward ground. Handed to the stabiliser
+// explicitly so the frame never has to be re-derived from a position we are about to overwrite.
+const sunTravelDirection = sunDirection.clone().negate();
+const shadowFocus = new THREE.Vector3();
+const shadowForward = new THREE.Vector3();
+let shadowTier = COBRA_SHADOW_TIERS.balanced;
+
+/**
+ * Tier gate. A tier with `mapSize: 0` turns the whole pass off at the renderer, so the shadow
+ * chunks in the terrain shaders compile to `return 1.0` and the scene renders honestly without
+ * shadows rather than dropping frames for them.
+ */
+function applyShadowQuality() {
+  shadowTier = COBRA_SHADOW_TIERS[qualitySelect?.value] ?? COBRA_SHADOW_TIERS.balanced;
+  const enabled = shadowTier.mapSize > 0;
+  renderer.shadowMap.enabled = enabled;
+  sun.castShadow = enabled;
+  if (enabled && sun.shadow.mapSize.x !== shadowTier.mapSize) {
+    sun.shadow.mapSize.set(shadowTier.mapSize, shadowTier.mapSize);
+    sun.shadow.map?.dispose();
+    sun.shadow.map = null;
+  }
+  renderer.shadowMap.needsUpdate = true;
+}
+
+/** Texel-snapped so the projection does not crawl as the helicopter translates under it. */
+function updateShadowFrame() {
+  if (!sun.castShadow) return;
+  camera.getWorldDirection(shadowForward);
+  shadowForward.y = 0;
+  if (shadowForward.lengthSq() < 1e-6) shadowForward.set(0, 0, -1);
+  shadowForward.normalize();
+  shadowFocus.copy(camera.position)
+    .addScaledVector(shadowForward, shadowTier.halfExtentM * COBRA_SHADOW_LOOKAHEAD_FRACTION);
+  // World z is -north, matching groundAt()'s callers elsewhere in this file.
+  shadowFocus.y = plan ? groundAt(shadowFocus.x, -shadowFocus.z) : 0;
+  applyTexelStabilizedDirectionalShadow(sun, shadowFocus, {
+    direction: sunTravelDirection,
+    mapSize: shadowTier.mapSize,
+    halfExtent: shadowTier.halfExtentM,
+  });
+}
 
 const skyGeometry = new THREE.SphereGeometry(23_000, 32, 16);
 // THE F-22'S SKY. This is createDecisionSupportSky's cool (Korea) branch at zero altitude —
@@ -658,6 +752,9 @@ function rebuildPresentation() {
   groundWarPresentation?.dispose();
   emberGuidancePath?.dispose();
   plan = planCobraCanyonWorld(world, { qualityTier: qualitySelect.value });
+  // The world file's per-tier `maxShadowCasters` is the authority on whether this tier can afford
+  // the pass at all (mobile budgets 0); the renderer gate follows the same tier selection.
+  applyShadowQuality();
   presentation = createCobraCanyonPresentation(THREE, plan, {
     qualityTier: qualitySelect.value,
     foliageTextures,
@@ -1107,6 +1204,7 @@ function animate(timeMs) {
     ah1gPresence.setFirstPerson(!tourInput.checked || !!parkedCamera);
   }
   const renderStartedAtMs = performance.now();
+  updateShadowFrame();
   renderer.render(scene, camera);
   recordPhase("render", renderStartedAtMs);
   const hudStartedAtMs = performance.now();

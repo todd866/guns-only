@@ -1,9 +1,9 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=307";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=308";
 import {
   FOLIAGE_UV_PALM,
   FOLIAGE_UV_UNDERSTORY,
   createSyntheticFoliageAtlasTexture,
-} from "./cobra_canyon_foliage.js?v=307";
+} from "./cobra_canyon_foliage.js?v=308";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -1144,7 +1144,18 @@ function tagObject(object, role, instanceCount = 0) {
     instances: instanceCount,
     ...PRESENTATION_ONLY_TAG,
   });
-  object.castShadow = false;
+  // Render-architecture stage 0: the scenery that has vertical mass casts. A tree that lays a
+  // shadow on the ground is standing IN the world; the same tree with no shadow is a decal on it,
+  // and that is most of what "chopper graphics are terrible" was pointing at.
+  //
+  // `mist` and `waterAccent` are excluded in both directions — one is a translucent volume whose
+  // depth write would print a hard-edged rectangle into the shadow map, the other is a flat
+  // surface decal at water level. `paddy` is a flat field for the same reason it does not receive
+  // well: it has no height to cast with. Casting is per-batch, not per-instance: an InstancedMesh
+  // is one shadow submission, which is why the world's `maxShadowCasters` tier budget is spent on
+  // deciding WHICH batches cast rather than how many trees.
+  object.castShadow = role === "jungle" || role === "plantation"
+    || role === "village" || role === "rock";
   object.receiveShadow = role !== "mist" && role !== "waterAccent";
   object.matrixAutoUpdate = false;
   object.updateMatrix();

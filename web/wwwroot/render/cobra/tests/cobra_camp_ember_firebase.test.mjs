@@ -40,6 +40,8 @@ test("createCampEmberFirebase places one merged mesh on the landmark", () => {
   assert.ok(firebase.partCount >= 28);
   assert.equal(firebase.mesh.userData.cobraCanyon.landmarkId, CAMP_EMBER_LANDMARK_ID);
   assert.ok(firebase.mesh.material.vertexColors);
+  assert.equal(firebase.mesh.castShadow, true);
+  assert.equal(firebase.mesh.receiveShadow, true);
   const landmark = plan.landmarks.find((entry) => entry.id === CAMP_EMBER_LANDMARK_ID);
   assert.equal(firebase.mesh.position.x, landmark.positionLocalM[0]);
   assert.equal(firebase.mesh.position.z, -landmark.positionLocalM[2]);

@@ -61,10 +61,41 @@ test("production admits only state-bearing environment visuals and event-bearing
   assert.match(source, /createKoreaEffectsFactory\(THREE,[\s\S]*effectsFactory,/);
   assert.match(source, /manageFog: Boolean\(environmentFactory\)/);
   assert.match(source, /postStackFactory: createDecisionSupportPostStack/);
+  // REWRITTEN, render-architecture stage 1. The previous pair of assertions —
+  //   assert.doesNotMatch(source, /shadowModes:[^\n]*"combat"/)
+  // — pinned a CONCLUSION ("combat shadows are waste"), not an invariant. The conclusion was
+  // correct when it was written and became false the moment terrain and scenery started
+  // receiving, at which point the test's only remaining effect was to forbid the fix. What
+  // follows asserts the thing that must actually stay true: combat pays for the pass only where
+  // there are receivers to spend it on, and the mobile floor never pays.
   assert.match(source,
-    /shadowModes: detectedVisualTier === "mobile"\s*\?\s*\["carrier"\]\s*:\s*\["carrier", "replay"\]/,
-    "combat must not pay for a shadow pass without a visible ownship or shadow-receiving terrain");
-  assert.doesNotMatch(source, /shadowModes:[^\n]*"combat"/);
+    /shadowModes: detectedVisualTier === "mobile"\s*\?\s*\["carrier"\]\s*:\s*\["carrier", "combat", "replay"\]/,
+    "combat must take the shadow pass now that terrain and scenery receive it");
+  assert.doesNotMatch(source,
+    /shadowModes: detectedVisualTier === "mobile"\s*\?\s*\[[^\]]*"combat"/,
+    "the mobile floor must render without shadows rather than drop frames for them");
+  // A shadow pass with no receiver is the waste the old assertion was defending against, and the
+  // receivers live in another file — so the guard has to reach into that file rather than trust
+  // a comment here.
+  const terrainSource = await readFile(
+    new URL("../../environment/korea_terrain.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(terrainSource, /mesh\.receiveShadow = true;/,
+    "terrain chunks must receive, or the combat shadow pass is waste again");
+  assert.match(terrainSource, /mesh\.castShadow = true;/,
+    "terrain must cast: ridge-into-valley relief is the point of the pass");
+  assert.match(terrainSource, /lights: true,/,
+    "the terrain ShaderMaterial must opt into Three's light/shadow uniforms, or receiveShadow "
+    + "is a decorative flag that compiles to nothing");
+  assert.match(terrainSource, /getShadowMask\(\)/,
+    "the terrain fragment shader must consume the shadow mask");
+  // 44 m was a cockpit-sized cascade. Over terrain the caster is a ridge a kilometre away, so an
+  // extent that cannot reach it yields no shadow at all rather than a clipped one.
+  const combatExtent = source.match(/shadowHalfExtents: \{ combat: ([\d_]+),/);
+  assert.ok(combatExtent, "combat shadow half-extent must be declared explicitly");
+  assert.ok(Number(combatExtent[1].replaceAll("_", "")) >= 1_000,
+    "a flight-sim cascade must reach the ridge that casts into the valley below it");
   assert.match(source, /fogDensityForVisibility\(reportedVisibilityM\)/,
     "production visibility must come from the scenario weather projection");
   assert.match(source, /this\.tacticalClouds\.configureFromState\(state\)/,
@@ -594,7 +625,11 @@ test("packless modern flight owns adaptive 3D resolution and raw foreground fram
   assert.match(source,
     /const recoveryShadowRelevant = isRecoveryPlatform[\s\S]*?2_500 \*\* 2[\s\S]*?shadowMode = replayExternal \? "replay"/,
     "the fixed strip must stop submitting its shadow pass after departure");
-  assert.match(source, /this\.sun\.castShadow = mode === "carrier" \|\| mode === "replay"/);
+  // The direct path and VisualRuntime's shadowModes write the same light, so they must agree
+  // about combat — a disagreement makes the cascade depend on which ran last in the frame.
+  assert.match(source,
+    /this\.sun\.castShadow = VISUAL_QUALITY\.tier === "mobile"\s*\?\s*mode === "carrier"\s*:\s*mode === "carrier" \|\| mode === "replay" \|\| mode === "combat"/,
+    "the direct sun path must gate combat shadows on exactly the tier shadowModes does");
 });
 
 test("production keeps the rejected authored cockpit out of the pilot's SA view", async () => {

@@ -22,8 +22,15 @@ const MIME = {
   ".woff2": "font/woff2",
 };
 
-export async function serveStatic(root) {
+/**
+ * @param {string} root published wwwroot to serve
+ * @param {{ port?: number }} [options] fixed port for harnesses that must not collide with
+ *   another agent's server; 0 (the default) keeps the ephemeral-port behaviour every existing
+ *   caller relies on.
+ */
+export async function serveStatic(root, options = {}) {
   const rootNormal = normalize(root);
+  const listenPort = Number.isInteger(options.port) ? options.port : 0;
   const diagnostics = {
     fullFileBytesRead: 0,
     rangeBytesRead: 0,
@@ -110,7 +117,7 @@ export async function serveStatic(root) {
   await new Promise((resolvePromise, rejectPromise) => {
     const onError = (error) => rejectPromise(error);
     server.once("error", onError);
-    server.listen(0, "127.0.0.1", () => {
+    server.listen(listenPort, "127.0.0.1", () => {
       server.off("error", onError);
       resolvePromise();
     });

@@ -32,8 +32,11 @@ function box(THREE, name, size, position, material, rotation = null) {
   mesh.name = name;
   mesh.position.set(position[0], position[1], position[2]);
   if (rotation) mesh.rotation.set(rotation[0], rotation[1], rotation[2]);
-  mesh.castShadow = false;
-  mesh.receiveShadow = false;
+  // The airframe's own shadow tracking across the ground under it is the single strongest
+  // altitude and motion cue an exterior/tour view has. 19 boxes, one shadow submission each,
+  // and the presence rig is hidden entirely in first person so this costs nothing there.
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
   return mesh;
 }
 

@@ -32,4 +32,4 @@
 
 ### Task 3: Stamp + ship
 
-- [ ] Stamp 304, STATUS, PR, deploy after Verify
+- [x] Stamp 304, STATUS, PR (#50); deploy after Verify

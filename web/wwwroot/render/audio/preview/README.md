@@ -23,6 +23,15 @@ production `updateContactAcousticVoices` path; they do not synthesize a preview-
 geometry remains on one side of the aircraft—far ahead, abeam, then behind—so the lab also exercises
 the production canopy-attenuated stereo position and range-dependent atmospheric filter.
 
+Traffic geometry is one integrated constant-velocity straight line: range is `hypot(v t, miss)` and
+closure is its exact derivative, so radial velocity sweeps continuously through zero at closest
+approach. It used to be a range triangle with a square-wave closure that flipped sign in one frame,
+which hid the very Doppler sweep the production graph produces. The contact also publishes its own
+forward axis (`bfx/bfy/bfz`) on the reciprocal heading, so the fixture exercises the front/rear
+aspect split — inlet tone in, plume roar out — rather than only the range term. The Bear preset
+scales the simulated clock (`timeLapse`) so a transit that genuinely takes minutes can be auditioned
+in sixteen seconds without range and closure disagreeing with each other.
+
 The preview routes engine and event voices through the production-shaped dynamics stage
 (`-18 dB` threshold, `12 dB` knee, `4.5:1`, `5 ms` attack, `180 ms` release) and the engine's
 own master before the `0.55` preview output gain.

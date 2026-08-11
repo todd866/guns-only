@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=307";
+import { createHud } from "./hud.js?v=308";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=307";
+} from "./render/debrief/sortie_result.js?v=308";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -49,8 +49,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=307";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=307";
+} from "./render/release/release_identity.js?v=308";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=308";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -63,7 +63,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=307";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=308";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -72,10 +72,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=307";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=308";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=307";
+} from "./render/nav/carrier_sortie_touch_control.js?v=308";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -150,7 +150,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=307";
+} from "./render/telemetry/ai_frame_pressure.js?v=308";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -160,14 +160,14 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=307";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=307";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=307";
+} from "./render/telemetry/telemetry_batch.js?v=308";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=308";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=308";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=307";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=307";
+} from "./render/shell/boot_watchdog.js?v=308";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=308";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -176,7 +176,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=307";
+} from "./render/settings/player_settings.js?v=308";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -222,13 +222,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=307";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=307";
+} from "./render/scene/scene_builders.js?v=308";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=308";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=307";
+} from "./render/audio/flight_audio.js?v=308";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -7070,6 +7070,19 @@ class FlightView {
     this.renderer.setClearColor(0x020611, 1);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // QA seam, same idiom as weekend-ride's __gunsOnlyWeekendRenderInfo: a perf audit has to be
+    // able to read draw calls and the live shadow state back out of the running renderer. Without
+    // it, "the shadow pass added no draw calls" is indistinguishable from "the shadow pass is not
+    // running", which is exactly the question render-architecture stage 1 has to answer.
+    globalThis.__gunsRenderInfo = () => Object.freeze({
+      calls: this.renderer.info.render.calls,
+      triangles: this.renderer.info.render.triangles,
+      shadowMapEnabled: this.renderer.shadowMap.enabled,
+      sunCastsShadow: this.sun?.castShadow === true,
+      shadowMapSize: this.sun?.shadow?.mapSize?.x ?? 0,
+      shadowExtentM: this.shadowExtent ?? null,
+      shadowCasters: this.shadowCasterCount(),
+    });
 
     // The authored eye point sits inside a 1.5 m-wide cockpit, so the near plane must stay inside
     // the canopy rails and instrument coaming. Logarithmic depth keeps the ocean/apron horizon
@@ -7723,12 +7736,35 @@ class FlightView {
           postStackFactory: createDecisionSupportPostStack,
           manageRendererSize: false,
           minimumPixelRatio: mobileControls ? 1 : 0.5,
-          // The production cockpit and normal-flight ownship exterior are hidden, while terrain
-          // does not consume the directional shadow map. Preserve the pass where it has visible
-          // receivers (carrier work and desktop external replay) instead of paying for it in combat.
+          // RENDER-ARCHITECTURE STAGE 1 — the shadow deadlock, broken.
+          //
+          // `combat` was excluded here because the terrain consumed no shadow map, so the pass
+          // had no visible receiver and was pure waste. That was TRUE and is no longer: terrain
+          // chunks and procedural scenery now both cast and receive (korea_terrain.js build(),
+          // korea_scenery.js applyKoreaSceneryShadowPolicy), which is the whole visible world at
+          // low level. The three parts had to land together — receivers, this list, and the
+          // extent below — because any one of them alone leaves the deadlock standing.
+          //
+          // Mobile stays out. That tier already runs a 512 map and the least detail; it renders
+          // honestly without shadows rather than dropping frames for them
+          // ([[minimum-viable-hardware-project]]).
           shadowModes: detectedVisualTier === "mobile"
-            ? ["carrier"] : ["carrier", "replay"],
-          shadowHalfExtents: { combat: 44, carrier: 190, replay: 160 },
+            ? ["carrier"] : ["carrier", "combat", "replay"],
+          // COMBAT EXTENT: 44 m -> 1,200 m. 44 m is a COCKPIT radius, sized when the only
+          // receiver was deck and rail geometry a few metres from the camera; over terrain it
+          // holds nothing at all, because at 500 kt the aircraft crosses it in a sixth of a
+          // second and the ridge that shadows a valley is a kilometre away, not forty metres.
+          //
+          // 1,200 m is chosen from the terrain, not from taste. Korea's house sun sits at
+          // elevation 0.28 (16.3 degrees), so cot = 3.42 and a 300 m ridge — ordinary relief in
+          // the Iron Triangle, where the theatre tops out at 1,517 m — lays a 1,025 m shadow.
+          // A cascade shorter than that contains the receiving valley but CLIPS the ridge that
+          // casts into it, which produces no shadow rather than a short one. At the tiered map
+          // sizes that is 2,400/2048 = 1.17 m per texel on desktop and 2.34 m on balanced —
+          // coarse for an airframe's own shadow, correct for terrain relief, which is what this
+          // stage is for. The design doc's alternative (a 2-cascade CSM at ~250 m / ~2,500 m) is
+          // the right end state and is deliberately not stage 1: one cascade is one pass.
+          shadowHalfExtents: { combat: 1_200, carrier: 190, replay: 160 },
           onResolutionChange: (pixelRatio) => {
             this.applyRendererSurfacePixelRatio(pixelRatio);
           },
@@ -7783,8 +7819,20 @@ class FlightView {
     return frame;
   }
 
+  /** QA seam helper: how many objects in the live scene would submit to the shadow pass. */
+  shadowCasterCount() {
+    let casters = 0;
+    this.scene?.traverse?.((object) => {
+      if (object.castShadow === true && object.visible !== false) casters++;
+    });
+    return casters;
+  }
+
   updateSunAndShadows(mode, target) {
-    const extent = mode === "carrier" ? 190 : mode === "replay" ? 160 : 44;
+    // Must agree with the shadowHalfExtents handed to createVisualRuntime above: both this path
+    // and VisualRuntime's stabiliser write the same light, so a disagreement means the extent
+    // changes depending on which ran last in the frame.
+    const extent = mode === "carrier" ? 190 : mode === "replay" ? 160 : 1_200;
     const texelSize = extent * 2 / Math.max(1, VISUAL_QUALITY.shadowMapSize);
 
     // Snap the tracked volume in the sun's light-space plane. This keeps fine cockpit rails and
@@ -7806,12 +7854,22 @@ class FlightView {
       this.sun.shadow.camera.bottom = -extent;
       this.sun.shadow.camera.updateProjectionMatrix();
     }
-    // Match VisualRuntime: the production cockpit and normal ownship exterior are hidden, so the
-    // combat shadow pass has no useful receiver. Pay for it only near a recovery platform or in an
-    // external replay where the aircraft/deck can actually be seen.
-    this.sun.castShadow = mode === "carrier" || mode === "replay";
+    // Match VisualRuntime's shadowModes. Terrain and scenery are receivers as of
+    // render-architecture stage 1, so combat is in — except on mobile, which keeps the old
+    // carrier-only budget.
+    this.sun.castShadow = VISUAL_QUALITY.tier === "mobile"
+      ? mode === "carrier"
+      : mode === "carrier" || mode === "replay" || mode === "combat";
     this.sunTarget.position.copy(this.shadowTargetPosition);
-    this.sun.position.copy(this.shadowTargetPosition).addScaledVector(SUN_DIRECTION, 1600);
+    // The light has to stand off far enough to see over the relief it is shadowing THROUGH.
+    // 1,600 m was sized for a 44 m cockpit cascade; a 1,200 m terrain cascade over a theatre
+    // whose peaks reach 1,517 m needs the light outside the terrain, hence 2.5x the extent.
+    const standoffM = Math.max(1_600, extent * 2.5);
+    this.sun.position.copy(this.shadowTargetPosition).addScaledVector(SUN_DIRECTION, standoffM);
+    if (this.sun.shadow.camera.far < standoffM * 2) {
+      this.sun.shadow.camera.far = standoffM * 2;
+      this.sun.shadow.camera.updateProjectionMatrix();
+    }
     this.sunTarget.updateMatrixWorld();
   }
 
@@ -11044,7 +11102,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=307")
+    navigator.serviceWorker.register("service-worker.js?v=308")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

@@ -249,6 +249,13 @@ test("hostiles use hotter paint and role-distinct silhouettes", () => {
   assert.ok(truck.children.length >= 3, "soft-vehicle needs cab/bed/tarp");
   assert.ok(gun.children.length >= 3, "hard-point needs pit/shield/barrel");
 
+  for (const unit of [infantry, truck, gun]) {
+    assert.ok(unit.children.every((mesh) => mesh.castShadow === true),
+      `${unit.userData.role} leaf meshes must cast contact shadows`);
+    assert.ok(unit.children.every((mesh) => mesh.receiveShadow === true),
+      `${unit.userData.role} leaf meshes must receive world shadows`);
+  }
+
   // Material lives on leaf meshes after applyUnitMaterial.
   const hostileMat = infantry.children[0].material;
   assert.equal(hostileMat.color.hex, COBRA_GROUND_WAR_COLORS.hostile);

@@ -441,6 +441,41 @@ export function createEventVoices(audioContext, destination) {
   };
 }
 
+const KNOTS_TO_MPS = 0.514444;
+
+// --- Flyby physics constants -------------------------------------------------------------------
+// Sourced where a public number exists; every estimate is labelled as one.
+
+/// Near-field reference range for a fighter-sized contact, metres. Free-field sound pressure falls
+/// as 1/r, but only while the source is small compared with the distance. An F-22A is 18.92 m long
+/// with a 13.56 m span (USAF F-22 Raptor factsheet), so inside roughly six airframe lengths the
+/// plume stops behaving like a point source and the level stops climbing. Estimate for the exact
+/// crossover; the 1/r law outside it is not.
+const FIGHTER_NEAR_FIELD_M = 110;
+
+/// Range beyond which a fighter is treated as inaudible, metres. Atmospheric absorption is modelled
+/// spectrally by `contactAtmosphericCutoffHz`; this is the remaining broadband/terrain/ground-effect
+/// loss rolled into one horizon so the contact fades out instead of switching off. Estimate.
+const FIGHTER_AUDIBLE_HORIZON_M = 14_000;
+
+/// Plume broadband level in the forward arc as a fraction of the rear-arc level. Far-field jet noise
+/// is strongly rear-biased — convective amplification puts the peak near 30-45 deg from the
+/// downstream jet axis, and the forward arc is many dB quieter and carried by turbomachinery rather
+/// than plume mixing. This 0.34 (about -9 dB) is an estimate of that split, not a measured F119
+/// directivity polar, which is not public.
+const FIGHTER_FORWARD_ARC_PLUME = 0.34;
+
+/// Conversely, inlet-radiated fan tones dominate the forward arc; this is the fraction of that tone
+/// still heard from directly astern through the bypass duct and airframe. Estimate.
+const FIGHTER_REAR_ARC_FAN = 0.22;
+
+/// Fan/compressor blade-passing tone, Hz. Real F119 fan geometry is not public, so this is an
+/// estimate in the band where large military turbofan inlet tones sit: a first-stage rotor turning
+/// at the order of 10,000 rpm with roughly 20 blades puts the blade-passing frequency near 3 kHz.
+/// It is the pitch that sweeps through the pass, so it earns its place; the exact value does not
+/// claim to be an F-22 measurement.
+const FIGHTER_FAN_TONE_HZ = 2_900;
+
 /// Build the continuous acoustic presence of the other aircraft in the engagement. This graph is
 /// separate from ownship propulsion so callers can update/mute it independently in cockpit,
 /// external-camera, replay, and preview contexts.
@@ -451,10 +486,15 @@ export function createContactAcousticVoices(audioContext, destination) {
   contactAirFilter.type = "lowpass";
   contactAirFilter.frequency.value = 12_000;
   contactAirFilter.Q.value = 0.5;
+  // Canopy transmission is a shelf, not a brick wall. A two-pole lowpass keeps steepening at
+  // 12 dB/octave, so a 920 Hz corner buried a 5 kHz inlet tone 30 dB down and the cockpit heard
+  // no upper band from another aircraft at all. Panel transmission loss instead rises with
+  // frequency and then plateaus, which is what a high shelf does: a fixed penalty above the
+  // corner. The corner and the depth stay tuning knobs; the shape is the physics.
   const contactOcclusionFilter = audioContext.createBiquadFilter();
-  contactOcclusionFilter.type = "lowpass";
+  contactOcclusionFilter.type = "highshelf";
   contactOcclusionFilter.frequency.value = 1000;
-  contactOcclusionFilter.Q.value = 0.65;
+  contactOcclusionFilter.gain.value = 0;
   const contactPanner = typeof audioContext.createStereoPanner === "function"
     ? audioContext.createStereoPanner()
     : audioContext.createGain();
@@ -493,6 +533,25 @@ export function createContactAcousticVoices(audioContext, destination) {
   fighterBodyOsc.connect(fighterBodyFilter).connect(fighterBodyGain)
     .connect(contactAirFilter);
   fighterBodyOsc.start();
+
+  // Inlet-radiated fan tone. This is what makes an approaching jet a jet: the plume noise above is
+  // thrown backwards, so before the merge you hear turbomachinery, and the Doppler sweep on this
+  // tone is the whole "nnneee-yowww" of a pass. A sawtooth into a moderately narrow bandpass keeps
+  // a little of the second harmonic so it reads as a machine rather than a test sine.
+  const fighterFanOsc = audioContext.createOscillator();
+  fighterFanOsc.type = "sawtooth";
+  fighterFanOsc.frequency.value = FIGHTER_FAN_TONE_HZ;
+  const fighterFanFilter = audioContext.createBiquadFilter();
+  fighterFanFilter.type = "bandpass";
+  fighterFanFilter.frequency.value = FIGHTER_FAN_TONE_HZ;
+  // Low enough Q to let the second and third partials through: inlet tones are a comb, and a
+  // single clean partial reads as a test oscillator rather than a compressor face.
+  fighterFanFilter.Q.value = 2.2;
+  const fighterFanGain = audioContext.createGain();
+  fighterFanGain.gain.value = 0;
+  fighterFanOsc.connect(fighterFanFilter).connect(fighterFanGain)
+    .connect(contactAirFilter);
+  fighterFanOsc.start();
 
   // Heavy contra-prop: broad low-frequency wash plus blade-passing and interaction tones.
   const propSource = audioContext.createBufferSource();
@@ -549,6 +608,9 @@ export function createContactAcousticVoices(audioContext, destination) {
     fighterBodyOsc,
     fighterBodyFilter,
     fighterBodyGain,
+    fighterFanOsc,
+    fighterFanFilter,
+    fighterFanGain,
     propNoiseFilter,
     propNoiseGain,
     propBladeOsc,
@@ -565,6 +627,8 @@ export function createContactAcousticVoices(audioContext, destination) {
     passArmed: false,
     passCompleted: false,
     passTransientCount: 0,
+    approachClosureKts: 0,
+    approachDoppler: 1,
     acousticClass: "silent",
     contactVariation: 0,
     lastAlive: null,
@@ -609,6 +673,8 @@ export function updateContactAcousticVoices(
     voices.closestRangeM = Infinity;
     voices.passArmed = false;
     voices.passCompleted = false;
+    voices.approachClosureKts = 0;
+    voices.approachDoppler = 1;
     voices.contactVariation = stableContactVariation(contactId);
   } else if (alive && voices.lastAlive === false) {
     // A respawn/re-entry under the same content id is a new acoustic encounter.
@@ -617,6 +683,8 @@ export function updateContactAcousticVoices(
     voices.closestRangeM = Infinity;
     voices.passArmed = false;
     voices.passCompleted = false;
+    voices.approachClosureKts = 0;
+    voices.approachDoppler = 1;
   }
 
   const fighter = acousticClass === "fighter_jet";
@@ -624,6 +692,19 @@ export function updateContactAcousticVoices(
   const heavyProp = contra || acousticClass === "heavy_turboprop";
   const passRangeM = fighter ? 2800 : contra ? 8000 : 5000;
   if (live) voices.closestRangeM = Math.min(voices.closestRangeM, rangeM);
+  // A completed pass used to latch for the life of the contact, so in a guns-only fight only the
+  // very first merge ever cracked and every re-attack after it was silent. Re-arm once the
+  // encounter has genuinely opened back out, measured against the pass it just made: three times
+  // the achieved miss distance is unmistakably a separation and a new merge, while closure noise
+  // dithering around zero at roughly constant range never gets there. The floor keeps a very tight
+  // scissors from re-arming on a few tens of metres of breathing room.
+  if (voices.passCompleted
+    && rangeM > Math.max(passRangeM * 0.25, voices.closestRangeM * 3)) {
+    voices.passCompleted = false;
+    voices.closestRangeM = Infinity;
+    voices.approachClosureKts = 0;
+    voices.approachDoppler = 1;
+  }
 
   // Closure is positive while the contact is approaching in the combat snapshot. Require both
   // an approaching sign and non-increasing range before arming, then latch completion so closure
@@ -635,6 +716,7 @@ export function updateContactAcousticVoices(
     && rangeStillClosing
     && rangeM <= passRangeM * 1.25) {
     voices.passArmed = true;
+    voices.approachClosureKts = Math.max(voices.approachClosureKts, closureKts);
   }
   const closureCrossed = live
     && !voices.passCompleted
@@ -653,35 +735,55 @@ export function updateContactAcousticVoices(
   voices.lastAlive = alive;
 
   const soundSpeedMps = speedOfSoundMps(state);
-  // Treat closure as a radial-velocity proxy, not a license for a synthetic sonic boom. Limiting
-  // it to 38% of local sound speed keeps the tonal shift useful and finite when telemetry spikes.
-  const radialMps = clamp(closureKts * 0.514444, -0.38 * soundSpeedMps, 0.38 * soundSpeedMps);
-  const doppler = clamp(soundSpeedMps / (soundSpeedMps - radialMps), 0.72, 1.55);
+  const doppler = contactDopplerRatio(state, closureKts, soundSpeedMps);
   const airCutoffHz = contactAtmosphericCutoffHz(rangeM, acousticClass, state);
   voices.contactAirFilter.frequency.setTargetAtTime(airCutoffHz, now, 0.18);
   voices.contactAirFilter.Q.setTargetAtTime(0.5, now, 0.18);
   const perspectiveLevel = cockpitMode ? (f22Cockpit ? 0.78 : 0.9) : 1.35;
+  // Behind the listener the head, the seat and (in a cockpit) the headrest and airframe shadow the
+  // upper band, so a contact that has gone past sounds duller than the same contact ahead. The
+  // 35% corner drop through the rear hemisphere is an estimate; the sign and the geometry are not.
+  const foreAft = contactForeAftCosine(state);
+  const rearShade = 1 - 0.35 * clamp01(-foreAft);
   voices.contactOcclusionFilter.frequency.setTargetAtTime(
-    cockpitMode ? (f22Cockpit ? 920 : 1450) : 12_000,
+    (cockpitMode ? (f22Cockpit ? 920 : 1450) : 12_000) * rearShade,
     now,
     0.12,
   );
-  voices.contactOcclusionFilter.Q.setTargetAtTime(
-    cockpitMode ? 0.72 : 0.5,
-    now,
-    0.12,
-  );
+  // Depth of the canopy shelf, dB. The sealed F-22 keeps the deepest penalty; an exterior listener
+  // has no canopy at all and the shelf goes transparent. The extra rear-hemisphere term is the
+  // listener's own head and seat, applied in every perspective. All three are tuning estimates.
+  const occlusionDb = (cockpitMode ? (f22Cockpit ? -21 : -15) : 0)
+    - 4 * clamp01(-foreAft);
+  voices.contactOcclusionFilter.gain.setTargetAtTime(occlusionDb, now, 0.12);
   voices.contactOutput.gain.setTargetAtTime(live ? perspectiveLevel : 0, now, 0.08);
   const rawPan = contactRelativePan(state);
-  const pan = rawPan * (cockpitMode ? (f22Cockpit ? 0.28 : 0.38) : 0.78);
+  // The canopy attenuates level, not the localization cue. Crushing the image to +/-0.28 left a
+  // 140 m abeam pass barely off centre; a pilot who cannot hear which side the merge went is
+  // missing information the real cockpit gives him.
+  const pan = rawPan * (cockpitMode ? (f22Cockpit ? 0.5 : 0.62) : 0.92);
   if (voices.contactPanner?.pan) {
     voices.contactPanner.pan.setTargetAtTime(pan, now, 0.09);
   }
 
   const variation = voices.contactVariation;
   const fighterCharacter = 1 + variation * 0.065;
-  const fighterDistance = clamp01(1 - (rangeM - 80) / 2520);
-  const fighterPresence = live && fighter ? Math.pow(fighterDistance, 1.65) : 0;
+  // Free-field spherical spreading: sound pressure falls as 1/r, so nearly all of the level change
+  // in a pass lives in its last few hundred metres. The previous linear fade
+  // (`1 - (range - 80) / 2520`) put the dynamics in exactly the wrong place — a 40 dB cliff at
+  // 2.5 km where the jet is a dot, and about 3 dB across the whole merge from 520 m to 140 m,
+  // where physics says 11.5 dB. That is why the pass read as a drone with a pitch step in it.
+  const spreading = FIGHTER_NEAR_FIELD_M / Math.max(FIGHTER_NEAR_FIELD_M, rangeM);
+  const horizonFade = smoothstep(clamp01(1 - rangeM / FIGHTER_AUDIBLE_HORIZON_M));
+  const aspect = contactExhaustAspect(state, closureKts);
+  const rearArc = clamp01(0.5 + 0.5 * aspect);
+  const plumeAspect = FIGHTER_FORWARD_ARC_PLUME
+    + (1 - FIGHTER_FORWARD_ARC_PLUME) * smoothstep(rearArc);
+  const fanAspect = FIGHTER_REAR_ARC_FAN
+    + (1 - FIGHTER_REAR_ARC_FAN) * smoothstep(1 - rearArc);
+  const fighterRange = live && fighter ? spreading * horizonFade : 0;
+  const fighterPresence = fighterRange * plumeAspect;
+  const fanPresence = fighterRange * fanAspect;
   voices.fighterHp.frequency.setTargetAtTime(
     (70 + fighterPresence * 150) * doppler * fighterCharacter,
     now,
@@ -702,15 +804,23 @@ export function updateContactAcousticVoices(
     now,
     0.07,
   );
+  const fanHz = FIGHTER_FAN_TONE_HZ * doppler * fighterCharacter;
+  voices.fighterFanOsc.frequency.setTargetAtTime(fanHz, now, 0.05);
+  voices.fighterFanFilter.frequency.setTargetAtTime(fanHz, now, 0.05);
   voices.fighterGain.gain.setTargetAtTime(
-    0.16 * fighterPresence * (1 + variation * 0.04),
+    0.26 * fighterPresence * (1 + variation * 0.04),
     now,
     0.055,
   );
   voices.fighterBodyGain.gain.setTargetAtTime(
-    0.075 * fighterPresence * (1 - variation * 0.035),
+    0.12 * fighterPresence * (1 - variation * 0.035),
     now,
     0.055,
+  );
+  voices.fighterFanGain.gain.setTargetAtTime(
+    0.042 * fanPresence * (1 + variation * 0.05),
+    now,
+    0.05,
   );
 
   const maxPropRangeM = contra ? 80_000 : 32_000;
@@ -761,8 +871,24 @@ export function updateContactAcousticVoices(
   );
   voices.propPulseDepth.gain.setTargetAtTime(0.018 * propPresence, now, 0.1);
 
+  // The crossing frame is already receding, so the live ratio there is the DEPARTING one. Latch the
+  // approach ratio while the pass is still armed or the transient would be handed a value <= 1 and
+  // sweep nowhere.
+  if (voices.passArmed && doppler > voices.approachDoppler) {
+    voices.approachDoppler = doppler;
+  }
+
   if (crossedPass) {
-    const passScale = clamp01(1 - rangeM / passRangeM);
+    // Near-field spreading, not the old linear 1 - range/passRange: a 140 m crossing and a 2.4 km
+    // crossing are not one dB apart in the world and should not be here either.
+    const passScale = clamp01(
+      FIGHTER_NEAR_FIELD_M / Math.max(FIGHTER_NEAR_FIELD_M, voices.closestRangeM),
+    );
+    // How long the aircraft spends inside its own closest-approach region: roughly the time to
+    // fly two miss distances at the speed it arrived with. A fast, close merge is a crack; a slow
+    // distant crossing is a swell.
+    const approachMps = Math.max(30, Math.abs(voices.approachClosureKts) * KNOTS_TO_MPS);
+    const passSeconds = (2 * Math.min(voices.closestRangeM, passRangeM)) / approachMps;
     scheduleContactPass(
       audioContext,
       voices.contactAirFilter,
@@ -771,6 +897,7 @@ export function updateContactAcousticVoices(
       passScale,
       cockpitMode,
       variation,
+      { seconds: passSeconds, approachDoppler: voices.approachDoppler },
     );
     voices.passTransientCount += 1;
   }
@@ -789,10 +916,13 @@ export function updateContactAcousticVoices(
     closureKts,
     cockpit: cockpitMode,
     fighterPresence,
+    fanPresence,
     propPresence,
     doppler,
     airCutoffHz,
     pan,
+    exhaustAspect: aspect,
+    foreAft,
     passPhase,
     variation,
     crossedPass,
@@ -823,10 +953,19 @@ function scheduleContactPass(
   passScale,
   cockpit,
   variation,
+  { seconds = 0, approachDoppler = 1 } = {},
 ) {
   const scale = passScale * (cockpit ? 0.78 : 1.15);
-  const duration = fighter ? 0.68 : 1.35;
+  // Duration now follows the geometry that produced the pass rather than a fixed constant, so a
+  // 350 m/s merge at 140 m is a crack and a slow distant crossing is a swell.
+  const duration = fighter
+    ? clamp(seconds || 0.68, 0.3, 1.1)
+    : clamp((seconds || 1.35) * 1.5, 0.7, 2.0);
   const character = 1 + variation * 0.06;
+  // The transient starts where the approaching bed left off and lands where the receding bed
+  // arrives, so the crack is the continuation of the Doppler sweep and not a pasted-on whoosh.
+  const approach = clamp(approachDoppler, 1, 1.9);
+  const depart = 1 / approach;
   const noise = audioContext.createBufferSource();
   noise.buffer = shortNoiseBuffer(
     audioContext,
@@ -835,16 +974,16 @@ function scheduleContactPass(
   );
   const filter = audioContext.createBiquadFilter();
   filter.type = "bandpass";
-  filter.frequency.setValueAtTime((fighter ? 1850 : 520) * character, at);
+  filter.frequency.setValueAtTime((fighter ? 1850 : 520) * character * approach, at);
   filter.frequency.exponentialRampToValueAtTime(
-    (fighter ? 430 : 170) / character,
+    (fighter ? 430 : 170) / character * depart,
     at + duration * 0.78,
   );
   filter.Q.value = fighter ? 0.42 : 0.7;
   const env = audioContext.createGain();
   env.gain.setValueAtTime(0.0001, at);
   env.gain.exponentialRampToValueAtTime(
-    Math.max(0.0002, (fighter ? 0.24 : 0.15) * scale),
+    Math.max(0.0002, (fighter ? 0.3 : 0.15) * scale),
     at + (fighter ? 0.035 : 0.09),
   );
   env.gain.exponentialRampToValueAtTime(0.0001, at + duration * 0.95);
@@ -854,15 +993,15 @@ function scheduleContactPass(
 
   const body = audioContext.createOscillator();
   body.type = fighter ? "sawtooth" : "triangle";
-  body.frequency.setValueAtTime((fighter ? 155 : 72) * character, at);
+  body.frequency.setValueAtTime((fighter ? 155 : 72) * character * approach, at);
   body.frequency.exponentialRampToValueAtTime(
-    (fighter ? 58 : 42) / character,
+    (fighter ? 58 : 42) / character * depart,
     at + duration * 0.74,
   );
   const bodyEnv = audioContext.createGain();
   bodyEnv.gain.setValueAtTime(0.0001, at);
   bodyEnv.gain.exponentialRampToValueAtTime(
-    Math.max(0.0002, (fighter ? 0.085 : 0.065) * scale),
+    Math.max(0.0002, (fighter ? 0.11 : 0.065) * scale),
     at + (fighter ? 0.025 : 0.07),
   );
   bodyEnv.gain.exponentialRampToValueAtTime(0.0001, at + duration * 0.88);
@@ -1773,6 +1912,116 @@ function contactAtmosphericCutoffHz(rangeM, acousticClass, state) {
   return profile.floorHz
     + (profile.ceilingHz - profile.floorHz)
       / (1 + normalizedRange ** profile.exponent);
+}
+
+/// Where the listener sits in the contact's own radiation pattern.
+/// Returns -1 when the listener is dead ahead of the contact (nose-on: inlet arc, quiet plume) and
+/// +1 when the listener is dead astern of it (tail-on: looking up the tailpipe).
+///
+/// When the snapshot publishes the contact's forward axis (`bfx/bfy/bfz`) this is the real dot
+/// product, and every production contact graph forwards that axis when the kernel has one.
+///
+/// Otherwise it falls back to the sign of closure: a contact that is closing is, in a merge,
+/// broadly pointed at you. That fallback is an approximation and it is only right for the merge —
+/// in a tail chase you are also closing but you are looking straight up his tailpipes, and this
+/// will call that nose-on. It is the fallback, not the model; publish the axis and it is unused.
+function contactExhaustAspect(state, closureKts) {
+  const player = readFiniteVector(state, "px", "py", "pz");
+  const contact = readFiniteVector(state, "bx", "by", "bz");
+  const contactForward = readFiniteVector(state, "bfx", "bfy", "bfz");
+  if (player && contact && contactForward) {
+    const dx = player.x - contact.x;
+    const dy = player.y - contact.y;
+    const dz = player.z - contact.z;
+    const toListener = Math.hypot(dx, dy, dz);
+    const forwardLength = Math.hypot(contactForward.x, contactForward.y, contactForward.z);
+    if (toListener > 1e-3 && forwardLength > 1e-6) {
+      // Exhaust axis is -forward; the dot of it with the direction to the listener is the aspect.
+      return clamp(
+        -(dx * contactForward.x + dy * contactForward.y + dz * contactForward.z)
+          / (toListener * forwardLength),
+        -1,
+        1,
+      );
+    }
+  }
+  // 300 kt of closure is taken as fully nose-on. Estimate.
+  return clamp(-closureKts / 300, -1, 1);
+}
+
+/// +1 when the contact is dead ahead of the listener, -1 when it is dead astern, 0 when the
+/// geometry is unavailable (which leaves every downstream shading term neutral).
+function contactForeAftCosine(state) {
+  const player = readFiniteVector(state, "px", "py", "pz");
+  const contact = readFiniteVector(state, "bx", "by", "bz");
+  const forward = readFiniteVector(state, "pfx", "pfy", "pfz");
+  if (!player || !contact || !forward) return 0;
+  const dx = contact.x - player.x;
+  const dy = contact.y - player.y;
+  const dz = contact.z - player.z;
+  const distance = Math.hypot(dx, dy, dz);
+  const forwardLength = Math.hypot(forward.x, forward.y, forward.z);
+  if (distance < 1e-3 || forwardLength < 1e-6) return 0;
+  return clamp(
+    (dx * forward.x + dy * forward.y + dz * forward.z) / (distance * forwardLength),
+    -1,
+    1,
+  );
+}
+
+/// Doppler ratio for a moving source heard by a moving listener:
+///   f' = f (c + v_listener_toward_source) / (c - v_source_toward_listener)
+///
+/// `closure_kts` is the range rate, which is the SUM of both contributions. Treating all of it as
+/// source motion — as this did before — overstates the shift, because listener motion enters
+/// linearly and can never go singular while source motion can. In a head-on merge roughly half of
+/// a 900 kt closure belongs to each aircraft, which is a materially different number.
+///
+/// The listener's radial speed is estimated as ownship true airspeed projected onto the
+/// line of sight. That is an estimate: the snapshot publishes a forward axis and a speed, not a
+/// velocity vector, so it ignores sideslip and flight-path/body-axis difference. When the geometry
+/// or the speed is missing the split falls back to an even one, which is the merge case.
+function contactDopplerRatio(state, closureKts, soundSpeedMps) {
+  const closureMps = closureKts * KNOTS_TO_MPS;
+  const own = ownshipRadialMps(state);
+  const listenerMps = clamp(
+    own == null ? closureMps * 0.5 : own,
+    -0.9 * soundSpeedMps,
+    0.9 * soundSpeedMps,
+  );
+  // Keep the source term clear of the c singularity: a transonic closing contact is a shock
+  // problem, not a pitch-shift problem, and this graph does not model shocks.
+  const sourceMps = clamp(
+    closureMps - listenerMps,
+    -0.85 * soundSpeedMps,
+    0.72 * soundSpeedMps,
+  );
+  return clamp(
+    (soundSpeedMps + listenerMps) / (soundSpeedMps - sourceMps),
+    0.66,
+    1.85,
+  );
+}
+
+/// Ownship closing speed along the line of sight, m/s, or null when it cannot be derived.
+function ownshipRadialMps(state) {
+  const player = readFiniteVector(state, "px", "py", "pz");
+  const contact = readFiniteVector(state, "bx", "by", "bz");
+  const forward = readFiniteVector(state, "pfx", "pfy", "pfz");
+  const speedMps = finiteNumber(state?.true_airspeed_mps) != null
+    ? finiteNumber(state?.true_airspeed_mps)
+    : (finiteNumber(state?.true_airspeed_kts) ?? null) != null
+      ? finiteNumber(state?.true_airspeed_kts) * KNOTS_TO_MPS
+      : null;
+  if (!player || !contact || !forward || speedMps == null) return null;
+  const dx = contact.x - player.x;
+  const dy = contact.y - player.y;
+  const dz = contact.z - player.z;
+  const distance = Math.hypot(dx, dy, dz);
+  const forwardLength = Math.hypot(forward.x, forward.y, forward.z);
+  if (distance < 1e-3 || forwardLength < 1e-6) return null;
+  return speedMps
+    * ((dx * forward.x + dy * forward.y + dz * forward.z) / (distance * forwardLength));
 }
 
 function contactRelativePan(state) {

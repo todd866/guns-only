@@ -61,6 +61,8 @@ internal sealed class NestedTerrainSurface : ITerrainSurface {
             _overrides.Length == 0
                 ? _base.HorizontalResolutionM
                 : _overrides.Min(surface => surface.HorizontalResolutionM));
+        MaximumHeightM = _overrides.Aggregate(_base.MaximumHeightM,
+            static (ceiling, surface) => Math.Max(ceiling, surface.MaximumHeightM));
     }
 
     public bool TrySample(double eastM, double northM, out TerrainSample sample) {
@@ -70,6 +72,18 @@ internal sealed class NestedTerrainSurface : ITerrainSurface {
         }
         return _base.TrySample(eastM, northM, out sample);
     }
+
+    public bool TryHeightM(double eastM, double northM, out double heightM) {
+        for (int index = _overrides.Length - 1; index >= 0; index--) {
+            if (_overrides[index].TryHeightM(eastM, northM, out heightM)) return true;
+        }
+        return _base.TryHeightM(eastM, northM, out heightM);
+    }
+
+    /// An override can only ever be READ where it covers the base, so the composite's ceiling is
+    /// the highest ceiling any layer offers. If any layer does not know its own ceiling the
+    /// composite does not either — infinity propagates, and broad phases fall back to sampling.
+    public double MaximumHeightM { get; }
 }
 
 /// <summary>
@@ -124,6 +138,8 @@ internal static class PackedTerrainTruth {
 
         public TerrainBounds Bounds { get; }
         public double HorizontalResolutionM { get; }
+        /// Exact: the bilinear patch never exceeds its tallest corner node.
+        public double MaximumHeightM { get; }
 
         public QuantizedTerrainGrid(double originEastM, double originNorthM,
             double spacingM, int width, int height, double metresPerUnit,
@@ -136,6 +152,14 @@ internal static class PackedTerrainTruth {
             _metresPerUnit = metresPerUnit;
             _waterSentinel = waterSentinel;
             _samples = samples;
+            // Water collapses to 0.0 in Height(), so the sentinel is skipped rather than scaled.
+            double ceilingM = 0.0;
+            foreach (short raw in samples) {
+                if (raw == waterSentinel) continue;
+                double heightM = raw * metresPerUnit;
+                if (heightM > ceilingM) ceilingM = heightM;
+            }
+            MaximumHeightM = ceilingM;
             Bounds = new TerrainBounds(originEastM,
                 originEastM + (width - 1) * spacingM,
                 originNorthM,
@@ -172,6 +196,35 @@ internal static class PackedTerrainTruth {
             bool water = Raw(nearestEast, nearestNorth) == _waterSentinel;
             sample = new TerrainSample(water ? 0.0 : heightM, normal,
                 water ? TerrainSurfaceKind.Water : TerrainSurfaceKind.Land);
+            return true;
+        }
+
+        /// The same bilinear patch as TrySample, without the two slope divisions, the normal's
+        /// square root, or the nearest-node water lookup — none of which a clearance march reads.
+        /// Pinned bit-identical to TrySample's HeightM by <c>EnvironmentTruthTests</c> and <c>UkraineTerrainTruthTests</c>: the
+        /// water sentinel already collapses to 0.0 inside Height(), so a water cell interpolates
+        /// exactly as it does above.
+        public bool TryHeightM(double eastM, double northM, out double heightM) {
+            if (!Bounds.Contains(eastM, northM)) {
+                heightM = 0.0;
+                return false;
+            }
+            double eastGrid = (eastM - _originEastM) / HorizontalResolutionM;
+            double northGrid = (northM - _originNorthM) / HorizontalResolutionM;
+            int eastCell = eastM == Bounds.MaximumEastM
+                ? _width - 2 : Math.Clamp((int)Math.Floor(eastGrid), 0, _width - 2);
+            int northCell = northM == Bounds.MaximumNorthM
+                ? _height - 2 : Math.Clamp((int)Math.Floor(northGrid), 0, _height - 2);
+            double eastFraction = Math.Clamp(eastGrid - eastCell, 0.0, 1.0);
+            double northFraction = Math.Clamp(northGrid - northCell, 0.0, 1.0);
+            double southHeight = Lerp(Height(eastCell, northCell),
+                Height(eastCell + 1, northCell), eastFraction);
+            double northHeight = Lerp(Height(eastCell, northCell + 1),
+                Height(eastCell + 1, northCell + 1), eastFraction);
+            double interpolatedM = Lerp(southHeight, northHeight, northFraction);
+            int nearestEast = Math.Clamp((int)Math.Floor(eastGrid + 0.5), 0, _width - 1);
+            int nearestNorth = Math.Clamp((int)Math.Floor(northGrid + 0.5), 0, _height - 1);
+            heightM = Raw(nearestEast, nearestNorth) == _waterSentinel ? 0.0 : interpolatedM;
             return true;
         }
 
@@ -248,4 +301,36 @@ internal sealed class TrainingTerrainApronSurface : ITerrainSurface {
             TerrainSurfaceKind.Land);
         return true;
     }
+
+    /// The same apron, height only. Inside the source this is the source's own cheap height path;
+    /// outside it, the blend toward the flat datum uses exactly the expression above, so the two
+    /// agree bit-for-bit on both sides of the boundary.
+    public bool TryHeightM(double eastM, double northM, out double heightM) {
+        if (!Bounds.Contains(eastM, northM)) {
+            heightM = 0.0;
+            return false;
+        }
+        if (_source.TryHeightM(eastM, northM, out heightM)) return true;
+
+        double sourceEastM = Math.Clamp(eastM,
+            _source.Bounds.MinimumEastM, _source.Bounds.MaximumEastM);
+        double sourceNorthM = Math.Clamp(northM,
+            _source.Bounds.MinimumNorthM, _source.Bounds.MaximumNorthM);
+        if (!_source.TryHeightM(sourceEastM, sourceNorthM, out double edgeHeightM)) {
+            heightM = 0.0;
+            return false;
+        }
+        double eastOutsideM = eastM - sourceEastM;
+        double northOutsideM = northM - sourceNorthM;
+        double distanceOutsideM = Math.Sqrt(
+            eastOutsideM * eastOutsideM + northOutsideM * northOutsideM);
+        double fraction = Math.Clamp(distanceOutsideM / _transitionM, 0.0, 1.0);
+        fraction = fraction * fraction * (3.0 - 2.0 * fraction);
+        heightM = edgeHeightM + (_flatHeightM - edgeHeightM) * fraction;
+        return true;
+    }
+
+    /// Inside the source, the source's own ceiling; outside it, a linear blend between a source
+    /// edge height and the flat datum, which cannot exceed either end.
+    public double MaximumHeightM => Math.Max(_source.MaximumHeightM, _flatHeightM);
 }

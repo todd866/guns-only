@@ -17,6 +17,37 @@ if [ "$node_major" != "24" ]; then
     exit 1
 fi
 
+# Keep a bad test or exporter from exhausting the shared workstation. A 2026-08-11 test run
+# allowed three Node children to grow past 57 GiB apiece before macOS jetsam intervened. The heap
+# ceiling is inherited by Node children, and explicit test-file concurrency prevents independent
+# exporter suites from multiplying that ceiling. Either bound can be lowered for a constrained
+# host, but neither can be disabled or raised beyond the fail-safe maximum here.
+node_heap_mb=${GUNS_NODE_MAX_OLD_SPACE_MB:-1536}
+case "$node_heap_mb" in
+    ''|*[!0-9]*)
+        echo "check: GUNS_NODE_MAX_OLD_SPACE_MB must be an integer from 256 through 2048" >&2
+        exit 1
+        ;;
+esac
+if [ "$node_heap_mb" -lt 256 ] || [ "$node_heap_mb" -gt 2048 ]; then
+    echo "check: GUNS_NODE_MAX_OLD_SPACE_MB must be from 256 through 2048" >&2
+    exit 1
+fi
+NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--max-old-space-size=$node_heap_mb"
+export NODE_OPTIONS
+
+node_test_concurrency=${GUNS_NODE_TEST_CONCURRENCY:-1}
+case "$node_test_concurrency" in
+    1|2|3|4) ;;
+    *)
+        echo "check: GUNS_NODE_TEST_CONCURRENCY must be from 1 through 4" >&2
+        exit 1
+        ;;
+esac
+run_node_tests() {
+    node --test --test-concurrency="$node_test_concurrency" "$@"
+}
+
 # Serialize whole-repo gates across agents. Several agents share this workstation; parallel
 # gates (dotnet suites + six SwiftShader Chromiums each) starve one another's browser smoke
 # into false timeouts (2026-07-29: five deploy gates died at load average 70-85). One gate at
@@ -64,33 +95,33 @@ node --check web/smoke/cobra_authority.mjs
 # the file's own header carries the CI evidence and what would let it gate again.
 node --check web/smoke/cobra-crew-chain.test.mjs
 release_tests=$(find tools/release/tests -type f -name '*.test.mjs' -print | sort)
-node --test $release_tests
+run_node_tests $release_tests
 ./bin/stamp-release --check
 node tools/assets/validate-manifests.mjs --strict
 node tools/content/validate-governance.mjs --strict
 asset_tests=$(find tools/assets -type f -name '*.test.mjs' -print | sort)
-node --test $asset_tests
+run_node_tests $asset_tests
 content_tests=$(find tools/content -type f -name '*.test.mjs' -print | sort)
-node --test $content_tests
-node --test tools/telemetry/test/*.test.mjs
-node --test tools/perf/*.test.mjs
+run_node_tests $content_tests
+run_node_tests tools/telemetry/test/*.test.mjs
+run_node_tests tools/perf/*.test.mjs
 # Authored narrative sequences are a content contract with a schema and a validator; run it here
 # or the contract only holds for as long as someone remembers to run it by hand.
 narrative_tests=$(find docs/art-direction -type f -name '*.test.mjs' -print | sort)
 if [ -n "$narrative_tests" ]; then
-  node --test $narrative_tests
+  run_node_tests $narrative_tests
 fi
 python3 tools/audio/cockpit_palette.py self-test
 python3 -m unittest discover -s tools/audio -p 'test_*.py'
 python3 tools/terrain/test_hydrate_rapier_atlas.py
-node --test tools/audio/*.test.mjs
+run_node_tests tools/audio/*.test.mjs
 # Format/unit smoke only — the live scenario matrix (--self-test) is still hardening.
-node --test tools/anca-audit/*.test.mjs
+run_node_tests tools/anca-audit/*.test.mjs
 runtime_tests=$(find web/wwwroot/render -type f -path '*/tests/*.test.mjs' -print | sort)
-node --test $runtime_tests
-node --test web/wwwroot/*.test.js
-node --test web/wwwroot/api/*.test.js
-node --test world-worker/tests/*.test.mjs
+run_node_tests $runtime_tests
+run_node_tests web/wwwroot/*.test.js
+run_node_tests web/wwwroot/api/*.test.js
+run_node_tests world-worker/tests/*.test.mjs
 
 scratch_dir=$(mktemp -d)
 publish_dir="$scratch_dir/publish"
@@ -239,7 +270,8 @@ if [ -z "${GUNS_SKIP_SMOKE:-}" ]; then
   else
     (cd web/smoke && ./node_modules/.bin/playwright install chromium webkit)
   fi
-  SMOKE_WWWROOT="$publish_dir/wwwroot" node --test web/smoke/smoke.test.mjs
+  SMOKE_WWWROOT="$publish_dir/wwwroot" \
+    node --test --test-concurrency="$node_test_concurrency" web/smoke/smoke.test.mjs
   # HUD geometry contract: numeric assertions through the real hud.js in headless Chromium
   # (waterline/FPV alpha gap, ladder tan-projection spacing, funnel-on-trajectory, bandit
   # marker). Lives with the browser gates because it shares the web/smoke Playwright install.

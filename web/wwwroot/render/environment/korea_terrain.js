@@ -1,5 +1,6 @@
 import {
   applyKoreaSceneryBudgetLevel,
+  applyKoreaSceneryShadowPolicy,
   createKoreaSceneryRuntime,
   disposeKoreaSceneryTile,
 } from "./korea_scenery.js";
@@ -16,6 +17,12 @@ import {
   UKRAINE_SOFT_WORLD_HAZE_RGB,
 } from "./soft_world_atmosphere.js";
 import { createMissionFeaturePresentation } from "./mission_features.js";
+import {
+  TERRAIN_SHADOW_FRAGMENT_PARS,
+  TERRAIN_SHADOW_VERTEX_BODY,
+  TERRAIN_SHADOW_VERTEX_PARS,
+  withTerrainShadowUniforms,
+} from "./terrain_shadow_receive.js";
 
 const monotonicNowMs = () => globalThis.performance?.now?.() ?? Date.now();
 
@@ -295,6 +302,11 @@ function createUkraineTrainingHorizonApron(THREE,
       transitionMaterial,
     );
     mesh.name = `FICTIONAL_UKRAINE_TRANSITION_STRIP_${index + 1}`;
+    // DELIBERATE EXCEPTION, kept through render-architecture stage 1. These are the Ukraine
+    // presentation-only apron/transition strips: flat filler that exists to stop the world ending
+    // at the DEM edge, sitting hundreds of kilometres out and already forced to lose every depth
+    // tie. They are not ground the player flies over, and shadowing filler only draws attention
+    // to it. Real terrain chunks DO receive, in build() below.
     mesh.receiveShadow = false;
     mesh.userData.terrain = metadata;
     transition.add(mesh);
@@ -339,6 +351,11 @@ function createUkraineTrainingHorizonApron(THREE,
       UKRAINE_TRAINING_APRON_HEIGHT_M,
       -(minNorth + maxNorth) * 0.5,
     );
+    // DELIBERATE EXCEPTION, kept through render-architecture stage 1. These are the Ukraine
+    // presentation-only apron/transition strips: flat filler that exists to stop the world ending
+    // at the DEM edge, sitting hundreds of kilometres out and already forced to lose every depth
+    // tie. They are not ground the player flies over, and shadowing filler only draws attention
+    // to it. Real terrain chunks DO receive, in build() below.
     mesh.receiveShadow = false;
     mesh.userData.terrain = metadata;
     root.add(mesh);
@@ -364,6 +381,7 @@ attribute float concavity;
 varying float vConcavity;
 #include <common>
 #include <logdepthbuf_pars_vertex>
+${TERRAIN_SHADOW_VERTEX_PARS}
 
 void main() {
   vec4 world = modelMatrix * vec4(position, 1.0);
@@ -384,6 +402,11 @@ void main() {
   vConcavity = concavity;
   gl_Position = projectionMatrix * viewMatrix * world;
   #include <logdepthbuf_vertex>
+  // Shadow lookup rides the SAME displaced world position the fragment is shaded at, so the
+  // water lift and the earth-curvature bend above cannot slide the shadow off its receiver.
+  vec4 worldPosition = world;
+  vec3 transformedNormal = normalMatrix * normal;
+  ${TERRAIN_SHADOW_VERTEX_BODY}
 }
 `;
 
@@ -452,6 +475,7 @@ varying vec2 vTerrainLandcover;
 #endif
 #include <common>
 #include <logdepthbuf_pars_fragment>
+${TERRAIN_SHADOW_FRAGMENT_PARS}
 
 // Near-field grain, packed as (value multiplier, micro-occlusion, pigment shift).
 // Returns a neutral (1, 1, 0) when the layer is off or the fragment is far away, so every caller
@@ -550,6 +574,11 @@ void main() {
 
   float diffuse = uShadowFloor
     + (1.0 - uShadowFloor) * max(dot(normal, normalize(uSunDirection)), 0.0);
+  // CAST SHADOW enters the SAME ramp the normal drives, so an occluded fragment bottoms out at
+  // uShadowFloor -- the value a fully lee-facing slope already reaches -- and the aerial-haze
+  // lift then does to a distant shadow exactly what it does to a distant lee face. Compiles to a
+  // constant 1.0 when the renderer's shadow map is off, which is how the mobile tier pays nothing.
+  diffuse = mix(uShadowFloor, diffuse, getShadowMask());
   vec3 lit = albedo * diffuse * surfaceDetail.y;
 
   #else
@@ -704,6 +733,10 @@ void main() {
       + 0.58 * smoothstep(0.58, 0.76, halfLambert));
   vec3 rimTint = vec3(0.055, 0.075, 0.11);
   #endif
+  // Same treatment on the stylized branch, and it lands before the rim term on purpose: a rim
+  // light is grazing SKY, which a ridge standing between this fragment and the SUN does not
+  // occlude. Shadowing the rim as well flattens ridge edges into the shadow they sit inside.
+  toneRamp = mix(uShadowFloor, toneRamp, getShadowMask());
   vec3 viewDirection = normalize(cameraPosition - vTerrainWorldPosition);
   float rim = pow(1.0 - clamp(dot(normal, viewDirection), 0.0, 1.0), 3.0);
   // PAINTED LIGHT IS COLOURED LIGHT, NOT DIMMED LIGHT.
@@ -1154,11 +1187,16 @@ export function createTerrainMaterial(THREE, options = {}) {
     // comment above), so single-siding it halves the dominant terrain fragment cost. The seam
     // skirts keep their own double-sided material via a geometry group.
     side: THREE.FrontSide,
+    // Shadow RECEPTION only -- no scene light touches this material's colour, the tone ramp is
+    // still the entire light model. `lights: true` is what makes Three define USE_SHADOWMAP /
+    // NUM_DIR_LIGHT_SHADOWS and write the shadow map into this material's uniform object; see
+    // terrain_shadow_receive.js for why `receiveShadow` alone was a no-op on a ShaderMaterial.
+    lights: true,
     defines: {
       ...(illustrative ? { MODERN_SCENERY: 1 } : {}),
       ...(ukraine ? { UKRAINE_SCENERY: 1 } : {}),
     },
-    uniforms: {
+    uniforms: withTerrainShadowUniforms(THREE, {
       uEarthRadiusM: { value: TERRAIN_EARTH_RADIUS_M },
       uCurvatureStartM: { value: TERRAIN_CURVATURE_START_M },
       uSunDirection: {
@@ -1228,7 +1266,7 @@ export function createTerrainMaterial(THREE, options = {}) {
       uSnowCover01: { value: Math.max(0, Math.min(1, finite(options.snowCover01))) },
       uSnowWetness01: { value: Math.max(0, Math.min(1, finite(options.snowWetness01))) },
       uGlazeIce01: { value: Math.max(0, Math.min(1, finite(options.glazeIce01))) },
-    },
+    }),
   });
   // Non-Ukraine chunks skip the two-byte-per-vertex field entirely. A neutral default keeps
   // the shared shader valid if a presentation is restyled after its meshes are resident.
@@ -1248,6 +1286,7 @@ function createTerrainSkirtMaterial(THREE, surfaceMaterial) {
     vertexShader: TERRAIN_VERTEX,
     fragmentShader: TERRAIN_FRAGMENT,
     side: THREE.DoubleSide,
+    lights: true,
     defines: { ...surfaceMaterial.defines },
     uniforms: surfaceMaterial.uniforms,
   });
@@ -2077,11 +2116,27 @@ class KoreaTerrainPresentation {
         meshed?.sceneryPlan,
       );
       if (scenery) {
+        applyKoreaSceneryShadowPolicy(scenery);
         applyKoreaSceneryBudgetLevel(scenery, this.ambientSceneryBudgetLevel);
         scenery.visible = entry.sceneryDistance <= this.ambientSceneryRadiusM;
         mesh.add(scenery);
         mesh.userData.scenery = scenery.userData.scenery;
       }
+      // RENDER-ARCHITECTURE STAGE 1. `combat` was excluded from `shadowModes` because "no
+      // receivers exist, so the pass was pure waste" -- and that was true: terrain chunk meshes
+      // set neither flag, so both defaulted false and the entire visible world was
+      // shadow-invisible in both directions. Both flags land here together, because either one
+      // alone leaves the deadlock in place from the other side.
+      //
+      // CASTING is what makes relief readable: a ridge laying its own shadow into the next valley
+      // is the cue [[terrain-legibility-diagnosis]] named as missing, and no amount of per-normal
+      // shading can synthesise it. It costs one shadow-map submission per resident chunk inside
+      // the cascade -- a small number, because the cascade is ~1.2 km across and the chunks are
+      // 16 km apart -- and the depth pass draws undisplaced geometry, which differs from the
+      // shaded position only by the water lift (<=0.35 m) and the earth-curvature bend (exactly
+      // zero inside uCurvatureStartM, i.e. everywhere a shadow is drawn).
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
       mesh.frustumCulled = true;
       const previous = entry.mesh;
       entry.mesh = mesh;

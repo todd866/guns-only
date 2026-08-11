@@ -213,6 +213,133 @@ public class EnvironmentTruthTests {
             new Vec3D(100.0, 150.0, 100.0)));
     }
 
+    /// The clearance march reads only height, so it goes through TryHeightM — which means an
+    /// override that drifts from TrySample silently changes what the terrain IS for Auto-GCAS,
+    /// terrain recovery and every low-block attack corridor. Nothing else in the suite would
+    /// notice, because the golden fixtures all pin TrySample.
+    [Fact]
+    public void HeightOnlySamplingMatchesTheFullSampleEverywhereOnAGrid() {
+        var terrain = new BilinearHeightGrid(-40.0, 25.0, 10.0, 30.0,
+            new double[,]
+            {
+                { 12.0, 40.0, -3.0, 7.5 },
+                { 60.0, 0.0, 18.0, 22.25 },
+                { -9.0, 31.0, 55.0, 4.0 }
+            });
+        var random = new System.Random(20260806);
+        int inside = 0;
+        for (int i = 0; i < 20_000; i++) {
+            // Deliberately overshoot the bounds on both axes so the false/out-of-bounds contract
+            // is pinned as tightly as the interpolated one.
+            double eastM = -60.0 + random.NextDouble() * 90.0;
+            double northM = 5.0 + random.NextDouble() * 110.0;
+            bool sampled = terrain.TrySample(eastM, northM, out TerrainSample sample);
+            bool height = terrain.TryHeightM(eastM, northM, out double heightM);
+            Assert.Equal(sampled, height);
+            if (!sampled) {
+                Assert.Equal(0.0, heightM);
+                continue;
+            }
+            // Bit-for-bit, not to a tolerance: these must be the same arithmetic.
+            Assert.Equal(sample.HeightM, heightM);
+            inside++;
+        }
+        Assert.True(inside > 2_000, $"only {inside} of 20,000 probes landed inside the grid");
+
+        // The exact-maximum edge cases TrySample special-cases, and the default interface
+        // implementation on a surface that does not override the height path.
+        foreach (var corner in new[] {
+            new Vec3D(terrain.Bounds.MinimumEastM, 0.0, terrain.Bounds.MinimumNorthM),
+            new Vec3D(terrain.Bounds.MaximumEastM, 0.0, terrain.Bounds.MaximumNorthM),
+            new Vec3D(terrain.Bounds.MaximumEastM, 0.0, terrain.Bounds.MinimumNorthM),
+            new Vec3D(terrain.Bounds.MinimumEastM, 0.0, terrain.Bounds.MaximumNorthM) }) {
+            Assert.True(terrain.TrySample(corner.X, corner.Z, out TerrainSample sample));
+            Assert.True(terrain.TryHeightM(corner.X, corner.Z, out double heightM));
+            Assert.Equal(sample.HeightM, heightM);
+        }
+
+        var translated = new TranslatedTerrainSurface(terrain, 1_000.0, -2_500.0);
+        Assert.True(translated.TrySample(975.0, -2_450.0, out TerrainSample moved));
+        Assert.True(translated.TryHeightM(975.0, -2_450.0, out double movedHeightM));
+        Assert.Equal(moved.HeightM, movedHeightM);
+    }
+
+    /// A clearance march must not cost more the further apart two aircraft happen to be. Before
+    /// the bound, ReactiveBandit.TryLowAttackPlan marched 43,917 samples per call on beat 10 —
+    /// the opposing formation is staged 360 km out — 179,000 terrain lookups per 120 Hz tick.
+    ///
+    /// The bound is chosen so it cannot engage on the geometry the callers actually use: over the
+    /// ~2 km that is the longest march any of them asks for, 256 samples is finer than the
+    /// quarter-resolution step, so the result is bit-identical to the unbounded march.
+    [Fact]
+    public void ClearanceMarchIsBoundedWithoutChangingAnyQueryTheCallersActuallyMake() {
+        const int Cells = 129;
+        const double SpacingM = 32.0;
+        var heights = new double[Cells, Cells];
+        for (int north = 0; north < Cells; north++)
+        for (int east = 0; east < Cells; east++)
+            heights[north, east] = 300.0
+                + 220.0 * System.Math.Sin(east * 0.31) * System.Math.Cos(north * 0.19);
+        var terrain = new BilinearHeightGrid(0.0, 0.0, SpacingM, SpacingM, heights);
+        double extentM = (Cells - 1) * SpacingM;
+
+        // Quarter-resolution stepping over 2 km needs 250 samples, inside the bound: identical.
+        var start = new Vec3D(20.0, 900.0, 20.0);
+        var nearEnd = new Vec3D(20.0, 700.0, 20.0 + 1_990.0);
+        double unboundedNear = DenseMinimumClearanceM(terrain, start, nearEnd);
+        Assert.Equal(unboundedNear,
+            TerrainQueries.MinimumClearanceM(terrain, start, nearEnd, 60.0));
+
+        // Beyond that the bound engages and the march stops growing with the distance.
+        var counted = new CountingTerrain(terrain);
+        var farEnd = new Vec3D(20.0, 700.0, 20.0 + extentM - 40.0);
+        counted.Queries = 0;
+        double clearance = TerrainQueries.MinimumClearanceM(counted, start, farEnd, 60.0);
+        Assert.True(double.IsFinite(clearance));
+        Assert.Equal(TerrainQueries.MaximumPathSamples + 1, counted.Queries);
+        Assert.Equal(256, TerrainQueries.MaximumPathSamples);
+
+        // And the near march really is unbounded-equivalent: it spends fewer than the cap.
+        counted.Queries = 0;
+        TerrainQueries.MinimumClearanceM(counted, start, nearEnd, 60.0);
+        Assert.True(counted.Queries <= TerrainQueries.MaximumPathSamples,
+            $"the 2 km march spent {counted.Queries} lookups");
+    }
+
+    sealed class CountingTerrain : ITerrainSurface {
+        readonly ITerrainSurface _source;
+        public int Queries;
+        public CountingTerrain(ITerrainSurface source) => _source = source;
+        public TerrainBounds Bounds => _source.Bounds;
+        public double HorizontalResolutionM => _source.HorizontalResolutionM;
+        public bool TrySample(double eastM, double northM, out TerrainSample sample) {
+            Queries++;
+            return _source.TrySample(eastM, northM, out sample);
+        }
+        public bool TryHeightM(double eastM, double northM, out double heightM) {
+            Queries++;
+            return _source.TryHeightM(eastM, northM, out heightM);
+        }
+    }
+
+    /// The unbounded quarter-resolution march, kept here as the reference the bound is measured
+    /// against rather than as production code.
+    static double DenseMinimumClearanceM(ITerrainSurface terrain,
+        in Vec3D startWorldM, in Vec3D endWorldM) {
+        Vec3D delta = endWorldM - startWorldM;
+        double horizontalM = System.Math.Sqrt(delta.X * delta.X + delta.Z * delta.Z);
+        double stepM = System.Math.Min(60.0, terrain.HorizontalResolutionM * 0.25);
+        int steps = System.Math.Max(1,
+            (int)System.Math.Ceiling(horizontalM / stepM));
+        double minimum = double.MaxValue;
+        for (int i = 0; i <= steps; i++) {
+            Vec3D point = startWorldM + delta * ((double)i / steps);
+            Assert.True(terrain.TrySample(point.X, point.Z, out TerrainSample sample));
+            minimum = System.Math.Min(minimum, point.Y - sample.HeightM);
+        }
+        return minimum;
+    }
+
     [Fact]
     public void ClearDefaultsAddNoHazardsAndWeatherProfileInventsNoTerrain() {
         CloudSample clear = ClearCloudField.Instance.Sample(new Vec3D(0.0, 500.0, 0.0),

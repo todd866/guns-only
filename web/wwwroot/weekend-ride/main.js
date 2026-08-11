@@ -1,17 +1,20 @@
-import * as THREE from "../vendor/three.module.js?v=307";
-import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=307";
+import * as THREE from "../vendor/three.module.js?v=308";
+import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=308";
 import {
   dominantSignedAxis,
   gamepadRiderAxes,
-} from "../render/motorcycle/rider_input.js?v=307";
+} from "../render/motorcycle/rider_input.js?v=308";
 import {
   createRapierTrackDayPresentation,
-} from "../render/motorcycle/track_day_presentation.js?v=307";
-import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=307";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=307";
-import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=307";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=307";
-import { RELEASE_BUILD } from "../render/release/release_identity.js?v=307";
+} from "../render/motorcycle/track_day_presentation.js?v=308";
+import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=308";
+import {
+  applyTexelStabilizedDirectionalShadow,
+} from "../render/visual/shadow_stabilizer.js?v=308";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=308";
+import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=308";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=308";
+import { RELEASE_BUILD } from "../render/release/release_identity.js?v=308";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
@@ -24,6 +27,51 @@ const viewport = document.querySelector(".viewport");
 const status = document.querySelector("#status");
 const statusText = status.querySelector("span");
 
+// QUALITY TIER. This page had none — no budget, no tier, no shed path (render-architecture §5).
+// The three signals are the same ones app.js:1200-1227 reads, and the conservative reading is the
+// same: a coarse pointer is a phone unless BOTH memory and core count say otherwise, and missing
+// data (Safari does not publish deviceMemory) is not evidence of headroom.
+const coarsePointer = window.matchMedia?.("(pointer: coarse)")?.matches === true;
+const deviceMemoryGiB = Number.isFinite(navigator.deviceMemory) ? navigator.deviceMemory : null;
+const logicalCores = Number.isFinite(navigator.hardwareConcurrency)
+  ? navigator.hardwareConcurrency
+  : null;
+const constrainedDevice = (deviceMemoryGiB !== null && deviceMemoryGiB <= 4)
+  || (logicalCores !== null && logicalCores <= 4);
+const touchHeadroom = deviceMemoryGiB !== null && deviceMemoryGiB >= 8
+  && logicalCores !== null && logicalCores >= 8;
+const QUALITY_TIER = coarsePointer
+  ? (touchHeadroom ? "balanced" : "mobile")
+  : (constrainedDevice ? "balanced" : "desktop");
+
+// CAST-SHADOW CASCADE, sized from this scene rather than copied from a flight sim's.
+//
+// Weekend Ride's sun sits at atan(2400 / hypot(1200, 900)) = 58 degrees — nearly four times the
+// elevation of the F-22/Cobra house sun — so cot(58) = 0.62 and shadows here are SHORT: a 12 m
+// conifer lays 7.5 m, a 1.2 m cone lays 0.75 m, a marshal post lays about 1.4 m. Nothing in this
+// world casts far, so extent buys nothing past the near field and every metre of it costs texel
+// density on the things that matter (kerbs, cones, tyre walls, the bike's own contact shadow).
+//
+// The rider's near field at 80 m/s is the next ~4 seconds of track, so 300 m of half-extent
+// covers everything worth resolving and the 22 km ground plane beyond it is fogged out anyway
+// (density 1.6e-4 = a ~11.7 km readable radius by the 1.87/radius law).
+//
+//   desktop  2048 over 600 m = 0.29 m/texel  (a 1.2 m cone's shadow is ~2.5 texels — readable)
+//   balanced 1024 over 520 m = 0.51 m/texel
+//   mobile   off. This page's floor is a phone GPU with no budget system behind it; it renders
+//            without shadows honestly rather than dropping frames for them.
+const SHADOW_TIERS = Object.freeze({
+  mobile: Object.freeze({ mapSize: 0, halfExtentM: 0 }),
+  balanced: Object.freeze({ mapSize: 1_024, halfExtentM: 260 }),
+  desktop: Object.freeze({ mapSize: 2_048, halfExtentM: 300 }),
+});
+const shadowTier = SHADOW_TIERS[QUALITY_TIER];
+// Sub-texel normal offset at 0.29 m/texel; the ground here is a literal plane, so acne only
+// appears where the shoulder/track ribbons stack within a few centimetres of it.
+const SHADOW_NORMAL_BIAS_M = 0.5;
+const SHADOW_DEPTH_BIAS = -0.0004;
+const SHADOW_LOOKAHEAD_FRACTION = 0.45;
+
 const renderer = new THREE.WebGLRenderer({
   canvas,
   antialias: true,
@@ -33,22 +81,73 @@ const renderer = new THREE.WebGLRenderer({
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.04;
+// DEFECT 4 (render-architecture §1.2): every ground surface in track_day_presentation.js already
+// sets `receiveShadow = true`, but nothing ever enabled the pass or made a light cast — dead code
+// pretending to be a feature. PCFSoft matches the production F-22 filter: one engine, one look.
+renderer.shadowMap.enabled = shadowTier.mapSize > 0;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 // QA seam: perf audits read draw calls / triangles from the live renderer.
 window.__gunsOnlyWeekendRenderInfo = renderer.info;
+// QA seam: the shadow tier is a rendering decision a perf audit has to be able to read back.
+window.__gunsOnlyWeekendQuality = Object.freeze({
+  tier: QUALITY_TIER,
+  shadowMapSize: shadowTier.mapSize,
+  shadowHalfExtentM: shadowTier.halfExtentM,
+});
 
+// DEFECT 3: the horizon is drawn twice, in two different colours. `FogExp2(0x9da99d)` is the
+// colour geometry dissolves INTO; `background` is what fills the pixels past the geometry. They
+// were 0x9da99d and 0x78919a, so the ground plane faded to a pale green-grey and then met a
+// blue-grey sky at a visible seam. The sky dome (below) is what the player actually sees up
+// there, so the background is now simply the fog colour and the seam has nowhere to appear.
+const HORIZON_HAZE_COLOR = 0x9da99d;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x78919a);
+scene.background = new THREE.Color(HORIZON_HAZE_COLOR);
 // Fog and world radius are one knob (~1.87/radius): the 22 km track-day ground plane
 // must dissolve into haze before its edge instead of showing a hard rim against sky.
-scene.fog = new THREE.FogExp2(0x9da99d, 0.00016);
+scene.fog = new THREE.FogExp2(HORIZON_HAZE_COLOR, 0.00016);
 
-const camera = new THREE.PerspectiveCamera(68, 1, 0.25, 12_000);
+// DEFECT 2: far plane was 12 km against a 22 km ground plane, so the plane's corners (15.6 km
+// out) were clipped and the world ended in mid-air. 24 km clears the corners with margin and
+// still leaves the sky dome inside the frustum. Near stays 0.25 m — the depth ratio doubles to
+// 96,000:1, which this page can afford because nothing here is drawn at slant range: the only
+// coplanar surfaces (track, shoulder, kerbs, patchwork) are within 300 m and already carry
+// explicit polygonOffset.
+const camera = new THREE.PerspectiveCamera(68, 1, 0.25, 24_000);
 scene.add(new THREE.HemisphereLight(0xe8eee2, 0x3d4632, 0.78));
 const sun = new THREE.DirectionalLight(0xffdfb0, 1.18);
 sun.position.set(-1_200, 2_400, 900);
 scene.add(sun);
+scene.add(sun.target);
+sun.castShadow = shadowTier.mapSize > 0;
+if (sun.castShadow) sun.shadow.mapSize.set(shadowTier.mapSize, shadowTier.mapSize);
+sun.shadow.bias = SHADOW_DEPTH_BIAS;
+sun.shadow.normalBias = SHADOW_NORMAL_BIAS_M;
+const sunTravelDirection = sun.position.clone().negate().normalize();
+const shadowFocus = new THREE.Vector3();
+const shadowForward = new THREE.Vector3();
 
-const skyGeometry = new THREE.SphereGeometry(8_000, 24, 12);
+/** Texel-snapped so the projection does not crawl while the bike translates under it. */
+function updateShadowFrame() {
+  if (!sun.castShadow) return;
+  camera.getWorldDirection(shadowForward);
+  shadowForward.y = 0;
+  if (shadowForward.lengthSq() < 1e-6) shadowForward.set(0, 0, -1);
+  shadowForward.normalize();
+  shadowFocus.copy(camera.position)
+    .addScaledVector(shadowForward, shadowTier.halfExtentM * SHADOW_LOOKAHEAD_FRACTION);
+  shadowFocus.y = SURFACE_ELEV_M;
+  applyTexelStabilizedDirectionalShadow(sun, shadowFocus, {
+    direction: sunTravelDirection,
+    mapSize: shadowTier.mapSize,
+    halfExtent: shadowTier.halfExtentM,
+  });
+}
+
+// The sky dome has to sit outside the ground plane it is meant to back, and inside the far
+// plane. At 8 km it was INSIDE the 22 km ground (§1.2) and only render order was hiding it;
+// 18 km puts it beyond the plane's 15.6 km corners and 6 km short of the far plane.
+const skyGeometry = new THREE.SphereGeometry(18_000, 24, 12);
 const skyMaterial = new THREE.ShaderMaterial({
   side: THREE.BackSide,
   depthWrite: false,
@@ -83,10 +182,37 @@ sky.frustumCulled = false;
 sky.renderOrder = -500;
 scene.add(sky);
 
+// DEFECT 1: `scene.environment` was never set. Every surface in this scene is
+// `MeshStandardMaterial`, and a PBR material with no image-based light has nothing to reflect —
+// its whole indirect term collapses onto one hemisphere light, which is exactly the recipe for
+// plastic, and is why unlit props read as black silhouettes. The same diagnosis is already
+// written down in cobra_canyon_visual_profile.js, where the missing IBL forced the hemisphere
+// bounce colour to be lifted as a stand-in.
+//
+// The environment is a PMREM of THIS PAGE'S OWN SKY SHADER, not a stock studio HDRI: the sky is
+// the only light source in the world above the ground, so baking it is both free of new assets
+// and automatically consistent with the dome the rider is looking at. A 200 m proxy sphere is
+// used rather than the 18 km one so the bake camera's near/far stay sane; radius is irrelevant to
+// a directionless environment probe.
+{
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const skyProbeScene = new THREE.Scene();
+  const skyProbe = new THREE.Mesh(new THREE.SphereGeometry(200, 24, 12), skyMaterial);
+  skyProbe.frustumCulled = false;
+  skyProbeScene.add(skyProbe);
+  scene.environment = pmrem.fromScene(skyProbeScene, 0, 1, 1_000).texture;
+  skyProbe.geometry.dispose();
+  pmrem.dispose();
+}
+
 const runwayMaterial = new THREE.MeshStandardMaterial({
   color: 0x6f7d74,
   roughness: 0.92,
   metalness: 0.02,
+  // Same IBL fill fraction the track-day presentation gets in applySceneMaterialPolicy(); this
+  // one mesh is built here rather than there, and a different envMapIntensity would print the
+  // runway a different value from the shoulder it butts against.
+  envMapIntensity: 0.55,
 });
 const runway = new THREE.Mesh(
   new THREE.PlaneGeometry(RUNWAY_LENGTH_M, RUNWAY_WIDTH_M),
@@ -199,6 +325,36 @@ function applyViewAttitude(cameraObject, state) {
   if (pitchRad !== 0) cameraObject.rotateX(pitchRad);
 }
 
+// Which of the track-day meshes stand UP. The presentation already declares its ground surfaces
+// by setting `receiveShadow` on them (grass, verge, patchwork, shoulder, track) and leaves the
+// props alone, so that flag is a reliable "this is the floor" marker; the two `MeshBasicMaterial`
+// backdrops (the merged horizon ridge and the far building silhouettes) are unlit by design and
+// sit 8-11 km out, far outside any cascade worth drawing, so they are excluded by material type.
+//
+// Casting is decided per MESH, and the props are already instanced (cones, tyres, trees, farms,
+// beacons), so the entire prop population costs on the order of a dozen shadow submissions.
+function applySceneMaterialPolicy(root) {
+  root.traverse((object) => {
+    const materials = Array.isArray(object.material)
+      ? object.material
+      : object.material ? [object.material] : [];
+    for (const material of materials) {
+      // Three r160 has no `scene.environmentIntensity`, so the PMREM's contribution is dialled
+      // back per material instead. 0.55 keeps the sky as FILL — it lifts the shadow side off
+      // black and gives the asphalt and the tyre walls something to reflect — without letting
+      // it compete with the directional key that is doing the modelling.
+      if (material.isMeshStandardMaterial) material.envMapIntensity = 0.55;
+    }
+    if (!object.isMesh) return;
+    const unlitBackdrop = materials.some((material) => material.isMeshBasicMaterial);
+    object.castShadow = !object.receiveShadow && !unlitBackdrop;
+    // Everything lit also receives. The kerbs in particular: they stand 85 mm proud of the
+    // track, so they both cast a thin edge shadow onto it AND catch the shadow of the marshal
+    // post or tyre wall beside them, and half of that reads as a bug.
+    if (!unlitBackdrop) object.receiveShadow = true;
+  });
+}
+
 function buildTrackDayPresentation(circuit) {
   if (!Array.isArray(circuit) || circuit.length < 2) return;
   if (trackDayPresentation) {
@@ -209,6 +365,7 @@ function buildTrackDayPresentation(circuit) {
     surfaceElevationM: SURFACE_ELEV_M,
     trackWidthM: 20,
   });
+  applySceneMaterialPolicy(trackDayPresentation.object3d);
   scene.add(trackDayPresentation.object3d);
   helmetHud.setCircuit(circuit);
 }
@@ -265,6 +422,7 @@ function animate(timeMs) {
   if (!state) return;
 
   syncCamera(state);
+  updateShadowFrame();
   renderer.render(scene, camera);
   helmetHud.draw(state);
   onboarding?.advanceNudges(onboardingNudgeState(state), deltaSeconds);

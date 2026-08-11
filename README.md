@@ -8,17 +8,21 @@ renderer.
 
 ## What is live now
 
-The production front door offers two aircraft:
+The production catalogue exposes four accepted experiences:
 
 - **F-22A surrogate — Guns Only:** an endless visual dogfight with ballistic guns, a real flight
   envelope, Auto-GCAS, padlock/target management, and a deterministic opponent.
 - **Rapier — Intercept:** climb onto the thin-air M4.2 shelf, make one finite-ammo gun pass on a
   high-altitude balloon, then re-enter and trap at the midpoint arrestor.
+- **Cobra Canyon — Hold the Bridge / Ember Run:** fly the AH-1G through the River Gorge ground
+  war, work the AI gunner, rearm at Camp Ember, and hold Iron Bell.
+- **Weekend Ride:** take the YZF-R1 around the Rapier-strip circuit with authored motorcycle
+  dynamics, rider assists, lap timing, and a helmet HUD.
 
-Other mission code remains in the repository for development, but it is not silently presented as
-finished product. Preview and quarantined routes show their release boundary before they load and
-require an explicit `?preview=1` acknowledgement for deliberate testing. The authoritative matrix
-is [docs/STATUS.md](docs/STATUS.md).
+Additional mission code remains in the repository for development, but it is not silently
+presented as finished product. Preview and quarantined routes show their release boundary before
+they load and require an explicit `?preview=1` acknowledgement for deliberate testing. The
+authoritative matrix is [docs/STATUS.md](docs/STATUS.md).
 
 ## Controls
 

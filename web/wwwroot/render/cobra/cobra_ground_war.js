@@ -3,7 +3,7 @@
  * Consumes authoritative ground_war snapshot fields; never invents combat truth.
  */
 
-import { isCampEmberGroundSite } from "./cobra_camp_ember_firebase.js?v=307";
+import { isCampEmberGroundSite } from "./cobra_camp_ember_firebase.js?v=308";
 
 export const COBRA_GROUND_WAR_PRESENTATION_SCHEMA =
   "guns-only.cobra-ground-war-presentation.v1";
@@ -91,8 +91,11 @@ function applyUnitMaterial(root, mat) {
     if (!node) continue;
     if (node.isMesh || (node.geometry && "material" in node)) {
       node.material = mat;
-      node.castShadow = false;
-      node.receiveShadow = false;
+      // Build 307 replaced each old single-box unit with a small composite silhouette. Shadow
+      // policy therefore belongs on the leaf meshes that actually submit geometry, not on the
+      // root Group (whose castShadow flag has no renderer effect).
+      node.castShadow = true;
+      node.receiveShadow = true;
     }
     if (Array.isArray(node.children)) {
       for (let index = 0; index < node.children.length; index++) {

@@ -5,7 +5,7 @@
  * Replaces the old same-color AABB stack + green ground-war control disc.
  */
 
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=307";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=308";
 
 export const CAMP_EMBER_LANDMARK_ID = "landmark.cobra-canyon.camp-ember.v1";
 export const CAMP_EMBER_FIREBASE_SCHEMA = "guns-only.cobra-camp-ember-firebase.v1";
@@ -194,7 +194,9 @@ export function createCampEmberFirebase(THREE, plan) {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = "CAMP_EMBER_FIREBASE";
   mesh.position.set(anchor.eastM, anchor.groundY, -anchor.northM);
-  mesh.castShadow = false;
+  // One merged draw with real vertical mass: Camp Ember should sit on the basin under the same
+  // cast-shadow policy as the other landmark silhouettes.
+  mesh.castShadow = true;
   mesh.receiveShadow = true;
   const tag = Object.freeze({
     schema: CAMP_EMBER_FIREBASE_SCHEMA,

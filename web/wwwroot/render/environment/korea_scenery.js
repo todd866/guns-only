@@ -604,6 +604,34 @@ function addSoftWorldCanopyWind(material, uniforms) {
   return material;
 }
 
+// Scenery that lies FLAT ON the ground. Roads, rail beds, runways, field rows, land-use patches
+// and road markings are surface treatments a few centimetres proud of the terrain they sit on:
+// a cast shadow from one can only land on itself, and would print as acne. Grass is excluded for
+// a different reason — up to 900 blade instances per chunk whose shadows are sub-texel at any
+// cascade this product can afford, so the pass would be paid and not seen.
+const SCENERY_FLAT_NAME_PATTERN =
+  /(ROADS|ROAD_MARKINGS|RAIL_BEDS|RAILS|RUNWAYS|FIELD_ROWS|LAND_USE|GRASS)$/;
+
+/**
+ * Cast/receive policy for one scenery tile (render-architecture stage 1).
+ *
+ * Applied to the whole tile in one pass rather than at each of the ten-odd construction sites,
+ * because the property being asserted is about the SCENE — "things with height cast, ground
+ * treatments do not" — and splitting it across ten call sites is how it silently drifts. Every
+ * batch here is an InstancedMesh, so the entire scenery population of a chunk costs on the order
+ * of half a dozen shadow submissions regardless of instance count.
+ */
+export function applyKoreaSceneryShadowPolicy(group) {
+  if (!group || typeof group.traverse !== "function") return group;
+  group.traverse((child) => {
+    if (!child.isMesh && !child.isInstancedMesh) return;
+    const flat = SCENERY_FLAT_NAME_PATTERN.test(child.name ?? "");
+    child.castShadow = !flat;
+    child.receiveShadow = true;
+  });
+  return group;
+}
+
 /**
  * Apply one reversible ambient-scenery budget rung to a scenery tile.
  *
