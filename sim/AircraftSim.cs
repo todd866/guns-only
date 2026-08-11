@@ -331,6 +331,8 @@ public sealed class AircraftSim {
     }
 
     /// <summary>Coarse swing-wing surrogate: only WingSpanM changes; baseline params remain on _p.</summary>
+    public double EffectiveWingSpanM => _flightP.WingSpanM;
+
     public void SetEffectiveWingSpanM(double wingSpanM) =>
         _flightP = _p with { WingSpanM = wingSpanM };
 

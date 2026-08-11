@@ -267,6 +267,9 @@ public sealed class SimulationSession {
     double _rapierMissileImpactAtMs = double.PositiveInfinity;
     long _rapierMissileTargetSequence;
     TopGunFightRuntime? _topGunFightRuntime;
+    long _topGunAim9TargetSequence;
+    double? _playerF14WingSweepDegrees;
+    double? _opponentF14WingSweepDegrees;
     bool _rapierFormationSweepCommitted;
     bool _rapierFormationSweepRequested;
     RapierGunDrone? _rapierGunDrone;
@@ -442,6 +445,15 @@ public sealed class SimulationSession {
     public bool Aim9InFlight => _topGunFightRuntime?.Aim9InFlight ?? false;
     public Missiles.Aim9FlightState Aim9SeekerState =>
         _topGunFightRuntime?.Aim9Live.State ?? Missiles.Aim9FlightState.Safe;
+    public Missiles.Aim9Telemetry Aim9Telemetry =>
+        _topGunFightRuntime?.Aim9Live ?? default;
+    /// <summary>The exact sweep schedule applied to the current aerodynamic step/Ready pose.</summary>
+    public double? PlayerF14WingSweepDegrees => _playerF14WingSweepDegrees;
+    /// <summary>The exact opponent sweep schedule applied across neutral/reactive handoff.</summary>
+    public double? OpponentF14WingSweepDegrees => _opponentF14WingSweepDegrees;
+    public double PlayerEffectiveWingSpanM => _player.EffectiveWingSpanM;
+    public double OpponentEffectiveWingSpanM =>
+        OpponentPresent ? _bandit.EffectiveWingSpanM : double.NaN;
     public int RapierDogfightingDronesRemaining => _rapierDogfightingDronesRemaining;
     public bool RapierMissileInFlight => _rapierMissileInFlight;
     public double RapierMissileTimeToImpactSeconds => _rapierMissileInFlight
@@ -1165,6 +1177,17 @@ public sealed class SimulationSession {
         StartBeat(beatFactory);
     }
 
+    /// <summary>
+    /// Stage custom content, weather, and terrain as one authority boundary. Custom previews use
+    /// this overload so their physics cannot inherit a surface translated for a previous mission.
+    /// </summary>
+    public void StartBeatWithEnvironment(Func<BeatSetup> beatFactory,
+        WeatherProfile? weather, ITerrainSurface? terrain) {
+        _weatherProfile = weather;
+        _terrainSurface = terrain;
+        StartBeat(beatFactory);
+    }
+
     /// <summary>Rebuild the current beat and return to Ready without resetting session progression.</summary>
     public void Restart() => StageBeat(_beatFactory());
 
@@ -1614,6 +1637,7 @@ public sealed class SimulationSession {
         if (!_topGunFightRuntime.TryLaunchFoxTwo(shooter, target, _simTimeMs))
             return false;
 
+        _topGunAim9TargetSequence = _banditSpawnSequence;
         ShowTransition(
             $"FOX TWO · {_topGunFightRuntime.Aim9Remaining} REMAIN",
             1800.0);
@@ -2259,28 +2283,83 @@ public sealed class SimulationSession {
     }
 
     void StepTopGunFightRuntime() {
-        if (_topGunFightRuntime is null) {
-            _player?.ResetFlightParams();
-            return;
-        }
-        if (_playerTerminalState != AircraftTerminalState.Flying
-            || _opponentTerminalState != AircraftTerminalState.Flying) {
-            _player.ResetFlightParams();
-            return;
-        }
-        if (_beat.PlayerAircraft.Id == AircraftCapability.F14ASurrogate.Id) {
-            var air = _player.AtmosphereModel.Sample(_player.State.Position.Y);
-            double mach = _player.AirspeedMps / Math.Max(air.SpeedOfSoundMps, 1e-6);
-            double casKts = _player.IndicatedAirspeedMps * AirData.MpsToKnots;
-            _player.SetEffectiveWingSpanM(
-                TopGunFightRuntime.EffectiveTomcatWingSpanM(mach, casKts, _beat.PlayerAir.WingSpanM));
-        } else {
-            _player.ResetFlightParams();
-        }
+        ApplyTopGunF14WingSweepAuthority();
+        if (_topGunFightRuntime is null) return;
+
         var target = new Missiles.Aim9Pose(
             _bandit.State.Position,
             _bandit.State.VelocityVector());
         _topGunFightRuntime.Step(FixedDeltaSeconds, target);
+        if (!_topGunFightRuntime.ConsumeDetonation()) return;
+
+        bool hitLiveTarget = _topGunAim9TargetSequence == _banditSpawnSequence
+            && _opponentTerminalState == AircraftTerminalState.Flying
+            && _gunKill.ApplyExternalDestruction(_primaryOpponentGunTargetId);
+        _topGunAim9TargetSequence = 0;
+        if (!hitLiveTarget) {
+            ShowTransition("FOX TWO · NO LIVE TARGET", 1800.0);
+            return;
+        }
+        EmitEvent(SessionEventType.Hit,
+            CombatRole.Player, CombatRole.Opponent, count: 1,
+            entitySequence: _banditSpawnSequence,
+            kinematics: _bandit.State);
+        ShowTransition("MISSILE HIT · SPLASH", 2200.0);
+        // Finalize the standard damage ledger at the physical detonation boundary. Deferring
+        // this to StepCore would let a lethally struck opponent run one ordinary AI/weapons step
+        // and would project HIT from the pre-step pose but DESTROYED from the post-step pose.
+        ObserveCombatDamage();
+    }
+
+    internal void SeedActiveAim9ForProximityHitForTest() {
+        if (_topGunFightRuntime is null || !Aim9InFlight)
+            throw new InvalidOperationException("a Top Gun AIM-9 must be in flight");
+        _topGunFightRuntime.SeedActiveMissileForProximityHit(new Missiles.Aim9Pose(
+            _bandit.State.Position,
+            _bandit.State.VelocityVector()));
+    }
+
+    static double F14WingSweepDegrees(in AircraftState state,
+        IAtmosphereModel atmosphere, GunsOnly.Sim.Turbulence.IWindField? wind) {
+        Vec3D airVelocity = state.VelocityVector()
+            - (wind?.Sample(state.Position) ?? Vec3D.Zero);
+        double trueAirspeedMps = airVelocity.Length;
+        double mach = AirData.MachNumber(trueAirspeedMps, state.Position.Y, atmosphere);
+        double casKts = AirData.IndicatedAirspeedMps(
+            trueAirspeedMps, state.Position.Y, atmosphere) * AirData.MpsToKnots;
+        return F14WingSweep.DegreesFor(mach, casKts);
+    }
+
+    void ApplyTopGunF14WingSweepAuthority() {
+        bool topGun = _topGunFightRuntime is not null;
+        if (topGun
+            && _playerTerminalState == AircraftTerminalState.Flying
+            && _beat.PlayerAircraft.Id == AircraftCapability.F14ASurrogate.Id) {
+            double sweep = F14WingSweepDegrees(
+                _player.State, _player.AtmosphereModel, _player.Wind);
+            _playerF14WingSweepDegrees = sweep;
+            _player.SetEffectiveWingSpanM(
+                TopGunFightRuntime.EffectiveTomcatWingSpanMForSweep(
+                    sweep, _beat.PlayerAir.WingSpanM));
+        } else {
+            _playerF14WingSweepDegrees = null;
+            _player?.ResetFlightParams();
+        }
+
+        if (topGun
+            && OpponentPresent
+            && _opponentTerminalState == AircraftTerminalState.Flying
+            && _beat.BanditAircraft.Id == AircraftCapability.F14ASurrogate.Id) {
+            double sweep = F14WingSweepDegrees(
+                _bandit.State, _bandit.Atmosphere, _bandit.Wind);
+            _opponentF14WingSweepDegrees = sweep;
+            _bandit.SetEffectiveWingSpanM(
+                TopGunFightRuntime.EffectiveTomcatWingSpanMForSweep(
+                    sweep, _beat.BanditAir.WingSpanM));
+        } else {
+            _opponentF14WingSweepDegrees = null;
+            _bandit?.ResetFlightParams();
+        }
     }
 
     void StepRapierMissile() {
@@ -3395,6 +3474,10 @@ public sealed class SimulationSession {
         _topGunFightRuntime = TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)
             ? new TopGunFightRuntime()
             : null;
+        _topGunAim9TargetSequence = 0;
+        // Ready is a real authoritative pose. Apply the same schedule used at the next fixed tick
+        // now, so snapshot sweep degrees and the effective span never describe different wings.
+        ApplyTopGunF14WingSweepAuthority();
         _rapierMissileInFlight = false;
         _rapierMissileImpactAtMs = double.PositiveInfinity;
         _rapierMissileTargetSequence = 0;

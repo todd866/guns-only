@@ -21,9 +21,20 @@ import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
 } from "./render/top-gun/theme.js";
+import { createAim9Presentation } from "./render/top-gun/aim9_presentation.js";
+import {
+  foxTwoLaunchEligible,
+  MISSION_AUTHORITY_KIND,
+  productionMissionAuthority,
+  resolveInitialProgramSelection,
+  sameMissionAuthority,
+  topGunOwnsFoxTwoInput as missionAuthorityOwnsFoxTwoInput,
+  topGunMissionAuthority,
+} from "./render/top-gun/mission_authority.js";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
+import { resolveTerrainPresentationRoute } from "./render/environment/terrain_presentation_route.js";
 import { loadKoreaTerrain } from "./render/environment/korea_terrain.js";
 import { attachSoftWorldGroundHaze } from "./render/environment/soft_world_atmosphere.js";
 import { createWinterPrecipitation } from "./render/environment/winter_precipitation.js";
@@ -125,6 +136,7 @@ import {
   GlobalRoomClient,
   resolveGlobalRoomUrl,
 } from "./render/presence/global_room_client.js";
+import { applyStableWorldOrigin } from "./render/presence/world_origin_authority.js";
 import {
   presenceStatusPresentation,
   presenceTelemetryContext,
@@ -2666,30 +2678,32 @@ const requestedExperience = requestedProgramNode
   ? experienceById(requestedProgramNode.id) : null;
 const requestedExperienceAccess = requestedExperience
   ? experienceAccess(requestedExperience.id, window.location) : null;
-const blockedRequestedExperience = requestedExperienceAccess
-  && !requestedExperienceAccess.allowed ? requestedExperience : null;
 const defaultProgramNode = recommendedCampaignNode(campaignProfile);
-const initialProgramNode = requestedProgramNode
-  && requestedExperienceAccess?.allowed
-  ? requestedProgramNode : defaultProgramNode;
+const initialProgramSelection = resolveInitialProgramSelection({
+  requestedProgramNode,
+  requestedExperience,
+  requestedAccess: requestedExperienceAccess,
+  defaultProgramNode,
+});
+const initialProgramNode = initialProgramSelection.selectedProgramNode;
 // A recognised preview/quarantined deep link remains represented in the Ready UI instead of
-// silently launching the recommended production mission. The bridge may stage its harmless
-// production default behind that screen, but this selection cannot reach StartBeat or Begin.
-let blockedProgramExperience = blockedRequestedExperience;
-let selectedProgramNodeId = blockedProgramExperience?.id ?? initialProgramNode.id;
+// silently dismissing its release blocker. It is never the selected mission authority: the shell
+// keeps the recommended production mission selected/staged behind the disabled Ready action.
+let blockedProgramExperience = initialProgramSelection.blockedExperience;
+let selectedProgramNodeId = initialProgramNode.id;
 // The recommended front door remains the mission-7 infinite gauntlet, while an allowed explicit
 // programme deep link must launch the card it highlights rather than staging a different mission.
 // Standalone selections keep the last shell beat staged behind Ready until Fly navigates away.
 let selectedBeat = Number.isInteger(initialProgramNode.mission)
   ? initialProgramNode.mission
   : defaultProgramNode.mission;
-let stagedBeat = selectedBeat;
 const TOP_GUN_PROGRAM_ID = "top-gun";
 const TOP_GUN_SEAT = Object.freeze({ F14A: 0, MIG28: 1 });
 let selectedTopGunSeat = TOP_GUN_SEAT.F14A;
-let stagedTopGunSeat = TOP_GUN_SEAT.F14A;
 let selectedDeckConfiguration = 1;
-let stagedDeckConfiguration = selectedDeckConfiguration;
+// Null means no bridge authority has been staged in this page lifetime yet. Once staged, this is
+// the only browser-side identity consulted for restart/restage decisions.
+let stagedMissionAuthority = null;
 let resetFrameClock = () => {};
 let bridgePauseApplied = null;
 let testFlightActionController = null;
@@ -2917,16 +2931,18 @@ renderBuildIdentity();
 recorder.context("build_identity", buildIdentity.telemetry);
 queueMicrotask(() => void resolveBuildIdentity());
 
-function applyMultiplayerWorldOrigin(status) {
-  if (!status) return;
-  if (status.phase === "online" && Array.isArray(status.spawnOrigin)
-    && status.spawnOrigin.length === 3 && status.spawnOrigin.every(Number.isFinite)) {
-    const originKey = `${status.worldEpoch || "world.unknown"}|${status.spawnOrigin.join(",")}`;
-    if (bridge && originKey !== appliedMultiplayerWorldOrigin
-      && bridge.SetWorldOrigin(status.spawnOrigin[0], status.spawnOrigin[2]) === true) {
-      appliedMultiplayerWorldOrigin = originKey;
-    }
-  }
+function applyMultiplayerWorldOrigin(status, { authorityRestaged = false } = {}) {
+  const result = applyStableWorldOrigin({
+    status,
+    setWorldOrigin: bridge?.SetWorldOrigin
+      ? (eastM, northM) => bridge.SetWorldOrigin(eastM, northM)
+      : null,
+    // StartBeat/StartTopGun replaces the terrain authority even when the room welcome is
+    // unchanged. Force that stable origin through the newly staged contract once more.
+    appliedKey: authorityRestaged ? "" : appliedMultiplayerWorldOrigin,
+  });
+  appliedMultiplayerWorldOrigin = result.appliedKey;
+  return result.applied;
 }
 
 function renderMultiplayerStatus(status) {
@@ -3265,10 +3281,28 @@ function isTopGunBeatStaged(state = latestState) {
     || state?.presentation_theme === "top-gun-anime-1986";
 }
 
+function selectedProductionMissionAuthority() {
+  return productionMissionAuthority(selectedBeat, selectedDeckConfiguration);
+}
+
 function tryLaunchFoxTwo() {
-  if (!bridge?.LaunchFoxTwo || !isTopGunBeatStaged(latestState)) return false;
-  if (pauseReasons.size > 0 || frozen || latestState?.session_phase !== "ACTIVE") return false;
+  if (!foxTwoLaunchEligible({
+    bridgeAvailable: typeof bridge?.LaunchFoxTwo === "function",
+    snapshotIsTopGun: isTopGunBeatStaged(latestState),
+    pauseCount: pauseReasons.size,
+    snapshotFrozen: latestState?.frozen === true,
+    replayActive: incidentReplay?.active === true,
+    sessionPhase: latestState?.session_phase,
+  })) return false;
   return bridge.LaunchFoxTwo() === true;
+}
+
+function topGunOwnsFoxTwoInput() {
+  return missionAuthorityOwnsFoxTwoInput({
+    selectedProgramId: selectedProgramNodeId,
+    topGunProgramId: TOP_GUN_PROGRAM_ID,
+    stagedAuthority: stagedMissionAuthority,
+  });
 }
 
 function updateTopGunPickerArt() {
@@ -3277,13 +3311,18 @@ function updateTopGunPickerArt() {
 }
 
 function stageTopGunOnBridge() {
-  const sameSeat = stagedTopGunSeat === selectedTopGunSeat && isTopGunBeatStaged();
+  if (!bridge?.StartTopGun || !isTopGunProgram()
+    || !experienceAccess(TOP_GUN_PROGRAM_ID, window.location).allowed) return false;
+  const desiredAuthority = topGunMissionAuthority(selectedTopGunSeat);
+  const sameSeat = sameMissionAuthority(stagedMissionAuthority, desiredAuthority)
+    && isTopGunBeatStaged();
   const restarted = sameSeat && bridge.RestartSortie?.(0);
   if (!restarted) {
     bridge.StartTopGun(selectedTopGunSeat);
     restoreDirectorState();
   }
-  stagedTopGunSeat = selectedTopGunSeat;
+  stagedMissionAuthority = desiredAuthority;
+  return true;
 }
 
 // Codes whose bridge DOWN edge used the source-aware direct throttle path. Their matching UP edge
@@ -4541,20 +4580,20 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
       && bridge.GetDeckConfiguration() !== selectedDeckConfiguration) {
       bridge.SetDeckConfiguration(selectedDeckConfiguration);
     }
-    if (isTopGunProgram()) {
-      stageTopGunOnBridge();
+    const topGunAllowed = isTopGunProgram()
+      && experienceAccess(TOP_GUN_PROGRAM_ID, window.location).allowed;
+    if (topGunAllowed && stageTopGunOnBridge()) {
       recorder.event("lifecycle", "sortie_staged", {
         program: TOP_GUN_PROGRAM_ID,
         top_gun_seat: topGunSeatLabel(selectedTopGunSeat),
       });
-      refreshStagedMissionSnapshot();
     } else {
       // Respawning into the SAME gauntlet keeps the fight director's pacing memory: a pilot who
       // fought their way up to Ace and died must not be sent back to the Novice warm-up. StartBeat
       // resets that memory (correct when picking a mission), so prefer RestartSortie when the staged
       // mission is unchanged and fall back only when it actually differs.
-      const sameSortie = stagedBeat === selectedBeat
-        && stagedDeckConfiguration === selectedDeckConfiguration
+      const desiredAuthority = selectedProductionMissionAuthority();
+      const sameSortie = sameMissionAuthority(stagedMissionAuthority, desiredAuthority)
         && bridge.RestartSortie?.(selectedBeat);
       if (!sameSortie) {
         bridge.StartBeat(selectedBeat);
@@ -4562,14 +4601,16 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
         // persisted estimate has to be reapplied AFTER it.
         restoreDirectorState();
       }
-      stagedBeat = selectedBeat;
-      stagedDeckConfiguration = selectedDeckConfiguration;
+      stagedMissionAuthority = desiredAuthority;
       recorder.event("lifecycle", "sortie_staged", {
         mission: selectedBeat,
         deck_configuration: selectedDeckConfiguration === 1 ? "ANGLED" : "AXIAL",
       });
-      refreshStagedMissionSnapshot();
     }
+    applyMultiplayerWorldOrigin(multiplayer?.diagnostics?.(), {
+      authorityRestaged: true,
+    });
+    refreshStagedMissionSnapshot();
   }
   if ([5, 6].includes(selectedBeat)) activeView?.clearRemotePlayers();
   bridgePauseApplied = true; // StartBeat is an authoritative transition to Ready.
@@ -4597,7 +4638,10 @@ function selectCampaignNode(nodeId, { focus = true } = {}) {
       previous_node: previous,
     });
     autoLaunchPending = false;
-    const authorityChanged = stagedTopGunSeat !== selectedTopGunSeat
+    const authorityChanged = !sameMissionAuthority(
+      stagedMissionAuthority,
+      topGunMissionAuthority(selectedTopGunSeat),
+    )
       || !isTopGunBeatStaged();
     if (bridge && pauseReasons.has("ready") && authorityChanged) {
       enterReady({ resetBridge: true, focus: false });
@@ -4623,8 +4667,14 @@ function selectCampaignNode(nodeId, { focus = true } = {}) {
       previous_node: previous,
     });
     autoLaunchPending = false;
-    // Keep the last shell beat staged behind Ready; Fly navigates to the owned surface.
-    renderPauseUi();
+    // A dedicated route still navigates on Fly, but it may not leave Top Gun authority resident
+    // behind its Ready card. Re-stage the last production shell beat before showing the route.
+    if (bridge && pauseReasons.has("ready")
+      && stagedMissionAuthority?.kind === MISSION_AUTHORITY_KIND.TOP_GUN) {
+      enterReady({ resetBridge: true, focus: false });
+    } else {
+      renderPauseUi();
+    }
     if (focus) queueMicrotask(focusReadyScreen);
     return true;
   }
@@ -4648,9 +4698,10 @@ function selectCampaignNode(nodeId, { focus = true } = {}) {
   // Ready interlock remains held so its authored route, terrain and vehicle facts are already the
   // ones on screen before the commander presses Fly.
   autoLaunchPending = false;
-  const authorityChanged = stagedBeat !== selectedBeat
-    || ([5, 6].includes(selectedBeat)
-      && stagedDeckConfiguration !== selectedDeckConfiguration);
+  const authorityChanged = !sameMissionAuthority(
+    stagedMissionAuthority,
+    selectedProductionMissionAuthority(),
+  );
   if (bridge && pauseReasons.has("ready") && authorityChanged) {
     enterReady({ resetBridge: true, focus: false });
   } else {
@@ -4670,9 +4721,12 @@ function launchMission(index = selectedBeat) {
     return true;
   }
   if (isTopGunProgram()) {
-    const seatChanged = stagedTopGunSeat !== selectedTopGunSeat;
+    const authorityChanged = !sameMissionAuthority(
+      stagedMissionAuthority,
+      topGunMissionAuthority(selectedTopGunSeat),
+    );
     let stagedState;
-    if (!pauseReasons.has("ready") || seatChanged || !isTopGunBeatStaged()) {
+    if (!pauseReasons.has("ready") || authorityChanged || !isTopGunBeatStaged()) {
       stagedState = enterReady({ resetBridge: true, focus: false });
     } else {
       stagedState = refreshStagedMissionSnapshot();
@@ -4684,10 +4738,12 @@ function launchMission(index = selectedBeat) {
     return beginFlight();
   }
   if (Number(index) !== selectedBeat) return false;
-  const deckChanged = [5, 6].includes(selectedBeat)
-    && stagedDeckConfiguration !== selectedDeckConfiguration;
+  const authorityChanged = !sameMissionAuthority(
+    stagedMissionAuthority,
+    selectedProductionMissionAuthority(),
+  );
   let stagedState;
-  if (!pauseReasons.has("ready") || stagedBeat !== selectedBeat || deckChanged) {
+  if (!pauseReasons.has("ready") || authorityChanged) {
     stagedState = enterReady({ resetBridge: true, focus: false });
   } else {
     // Even the already-selected path refreshes synchronously: launch may be invoked before the
@@ -5074,7 +5130,10 @@ function selectTopGunSeat(value) {
     program: TOP_GUN_PROGRAM_ID,
     top_gun_seat: topGunSeatLabel(seat),
   });
-  if (bridge && stagedTopGunSeat !== selectedTopGunSeat) {
+  if (bridge && !sameMissionAuthority(
+    stagedMissionAuthority,
+    topGunMissionAuthority(selectedTopGunSeat),
+  )) {
     enterReady({ resetBridge: true, focus: false });
   } else {
     renderPauseUi();
@@ -7356,6 +7415,7 @@ class FlightView {
     );
     this.banditDestruction = createBanditDestruction();
     this.gunEffects = createGunEffects();
+    this.aim9Presentation = createAim9Presentation(THREE);
     this.playerDamageSmoke = createDamageSmokeTrail(THREE, {
       name: "PLAYER_DAMAGE_SMOKE",
       capacity: VISUAL_QUALITY.tier === "mobile" ? 32 : 56,
@@ -7369,6 +7429,7 @@ class FlightView {
     this.scene.add(
       this.banditDestruction,
       this.gunEffects,
+      this.aim9Presentation.group,
       this.playerDamageSmoke.points,
       this.banditDamageSmoke.points,
     );
@@ -7520,7 +7581,15 @@ class FlightView {
 
   ensureTerrainPresentation(state = null) {
     this.configureTerrainMission(state);
-    const ukraineTheatre = state?.terrain_profile_id === UKRAINE_2030S_TERRAIN_ID;
+    const terrainPackId = this.presentationAssets.requested.packId
+      || this.presentationAssets.activePack?.id || "korea-1950s";
+    const terrainRoute = resolveTerrainPresentationRoute({
+      state,
+      ukraineTerrainId: UKRAINE_2030S_TERRAIN_ID,
+      terrainPackId,
+      selectedBeat,
+    });
+    const { ukraineTheatre, sceneryEra } = terrainRoute;
     // ADR-0003 soft world: warm dusty atmosphere for the Ukraine theatre without flipping the
     // Korea pack-environment kill switch. Decision-support sky stays the production path.
     if (this.sky?.uniforms?.uSoftWorld) {
@@ -7569,16 +7638,7 @@ class FlightView {
       this.renderer.toneMappingExposure = 1.02;
       if (this.sea?.mesh) this.sea.mesh.visible = true;
     }
-    const terrainPackId = this.presentationAssets.requested.packId
-      || this.presentationAssets.activePack?.id || "korea-1950s";
-    const sceneryEra = ukraineTheatre
-      ? (state?.terrain_scenery_profile || "ukraine-modern")
-      : (state?.terrain_scenery_profile
-        || (terrainPackId.includes("modern") || selectedBeat === 7 || selectedBeat === 9
-          || selectedBeat === 10 || selectedBeat === 12 ? "modern" : "1950s"));
-    const terrainKey = ukraineTheatre
-      ? `${UKRAINE_2030S_TERRAIN_ID}|${missionFeaturePackCacheIdentity(state)}`
-      : `terrain.korea.central-front.v2|${missionFeaturePackCacheIdentity(state)}`;
+    const terrainKey = `${terrainRoute.terrainId}|${missionFeaturePackCacheIdentity(state)}`;
     const manifestUrl = ukraineTheatre
       ? UKRAINE_TRAINING_TERRAIN_MANIFEST_URL
       : DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL;
@@ -8755,6 +8815,7 @@ class FlightView {
       && Number.isFinite(state.lead_y) && Number.isFinite(state.lead_z)) {
       this.leadPipper.set(state.lead_x, state.lead_y, -state.lead_z);
     }
+    this.aim9Presentation.update(state);
     if (opponentPresent) {
       this.combatPresentationSuppressed = false;
       this.gunEffects.visible = true;
@@ -9363,6 +9424,7 @@ class FlightView {
     this.sea.mesh.removeFromParent();
     this.banditDestruction.removeFromParent();
     this.gunEffects.removeFromParent();
+    this.aim9Presentation.dispose();
     disposeSceneResources(this.sky.mesh);
     disposeSceneResources(this.sea.mesh);
     disposeSceneResources(this.banditDestruction);
@@ -10767,8 +10829,12 @@ function installInput(view) {
     }
 
     if (event.code === "KeyR") {
-      if (tryLaunchFoxTwo()) {
-        view.hud.armAudio?.();
+      // Whenever Top Gun owns the staged authority, R belongs exclusively to Fox Two. A rejected
+      // launch (empty magazine, missile already live, Ready/pause/frozen edge, terminal state, or
+      // invalid envelope) is still a consumed weapon command and must never fall through into an
+      // unrelated sortie restart. Fly/Fly Again remains the explicit restart action.
+      if (topGunOwnsFoxTwoInput()) {
+        if (tryLaunchFoxTwo()) view.hud.armAudio?.();
         return;
       }
       restartMissionNow();
@@ -10969,8 +11035,16 @@ async function boot() {
     configurable: true,
     value: Object.freeze({ diagnostics: () => snapshotSource.diagnostics() }),
   });
-  bridge.StartBeat(isTopGunProgram() ? defaultProgramNode.mission : selectedBeat);
-  if (isTopGunProgram()) stageTopGunOnBridge();
+  // Boot always establishes a production authority first. A blocked Top Gun deep link never
+  // becomes selected, and even an acknowledged preview crosses StartTopGun only after this
+  // harmless default exists behind the Ready interlock.
+  bridge.StartBeat(selectedBeat);
+  stagedMissionAuthority = selectedProductionMissionAuthority();
+  if (isTopGunProgram()
+    && !blockedProgramExperience
+    && experienceAccess(TOP_GUN_PROGRAM_ID, window.location).allowed) {
+    stageTopGunOnBridge();
+  }
   refreshStagedMissionSnapshot();
   syncPlayerGunTarget();
   bridgePauseApplied = true;
@@ -11009,9 +11083,16 @@ async function boot() {
   globalThis.__gunsLifecycle = {
     get reasons() { return [...pauseReasons]; },
     get selectedBeat() { return selectedBeat; },
-    get stagedBeat() { return stagedBeat; },
+    get stagedBeat() {
+      return stagedMissionAuthority?.kind === MISSION_AUTHORITY_KIND.PRODUCTION
+        ? stagedMissionAuthority.beat : null;
+    },
     get selectedTopGunSeat() { return selectedTopGunSeat; },
-    get stagedTopGunSeat() { return stagedTopGunSeat; },
+    get stagedTopGunSeat() {
+      return stagedMissionAuthority?.kind === MISSION_AUTHORITY_KIND.TOP_GUN
+        ? stagedMissionAuthority.seat : null;
+    },
+    get stagedMissionAuthority() { return stagedMissionAuthority; },
     begin: launchMission,
     restart: restartMission,
   };

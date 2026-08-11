@@ -3,6 +3,7 @@ using System.Text.Json;
 using GunsOnly.Sim.Casevac;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
+using GunsOnly.Sim.Missiles;
 using GunsOnly.Web;
 
 namespace GunsOnly.Sim.Tests;
@@ -86,7 +87,7 @@ public class SnapshotHotFrameTests {
     static void AssertHotFrameMatchesJson(JsonElement root, double[] buffer) {
         using JsonDocument layoutDocument = JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
         JsonElement layout = layoutDocument.RootElement;
-        Assert.Equal(23, layout.GetProperty("layout_version").GetInt32());
+        Assert.Equal(24, layout.GetProperty("layout_version").GetInt32());
         Assert.Equal(SnapshotHotFrame.SlotCount, layout.GetProperty("slot_count").GetInt32());
         string[] names = layout.GetProperty("blocks")
             .EnumerateArray()
@@ -97,6 +98,9 @@ public class SnapshotHotFrameTests {
         Assert.Contains("padlock_preferred_plane_deg", names);
         Assert.Contains("rapier_target_gamma_deg", names);
         Assert.Contains("rapier_relight_dynamic_pressure_kpa", names);
+        Assert.Contains("opponent_wing_sweep_deg", names);
+        Assert.Contains("aim9_state_code", names);
+        Assert.Contains("aim9_vz", names);
 
         bool casevac = root.TryGetProperty("casevac_mission", out JsonElement casevacMission)
             && casevacMission.GetBoolean();
@@ -579,7 +583,7 @@ public class SnapshotHotFrameTests {
             using JsonDocument layoutDocument =
                 JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
             JsonElement layout = layoutDocument.RootElement;
-            Assert.Equal(23, layout.GetProperty("layout_version").GetInt32());
+            Assert.Equal(24, layout.GetProperty("layout_version").GetInt32());
             JsonElement[] slots = layout.GetProperty("blocks")
                 .EnumerateArray()
                 .SelectMany(block => block.GetProperty("slots").EnumerateArray())
@@ -979,6 +983,51 @@ public class SnapshotHotFrameTests {
         SnapshotHotFrame.Fill(buffer, session, 100.0, 0.0, true);
         Assert.True(buffer[SnapshotHotFrame.ColdVersionIndex] > afterPause + 1,
             "world-origin change did not bump cold_version");
+    }
+
+    [Fact]
+    public void TopGunAim9PoseRidesHotPathAndSeekerNamesRefreshOnEveryStateEdge() {
+        var session = new SimulationSession();
+        session.StartBeat(() => Beats.TopGunAcm(TopGunSeat.F14A));
+        session.Begin();
+        var buffer = new double[SnapshotHotFrame.SlotCount];
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        double safeVersion = buffer[SnapshotHotFrame.ColdVersionIndex];
+
+        Assert.True(session.LaunchFoxTwo());
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        double seekingVersion = buffer[SnapshotHotFrame.ColdVersionIndex];
+        Assert.True(seekingVersion > safeVersion,
+            "SAFE -> SEEKING did not refresh the cold seeker-state string");
+
+        session.SeedActiveAim9ForProximityHitForTest();
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        double trackingVersion = buffer[SnapshotHotFrame.ColdVersionIndex];
+        Assert.True(trackingVersion > seekingVersion,
+            "SEEKING -> TRACKING did not refresh the cold seeker-state string");
+        var (trackingRoot, trackingBuffer, trackingDocument) = Project(session);
+        using (trackingDocument) {
+            Assert.Equal("TRACKING",
+                trackingRoot.GetProperty("aim9_seeker_state").GetString());
+            Assert.Equal((int)Aim9FlightState.Tracking,
+                trackingRoot.GetProperty("aim9_state_code").GetInt32());
+            Assert.True(trackingRoot.GetProperty("aim9_pose_valid").GetBoolean());
+            AssertHotFrameMatchesJson(trackingRoot, trackingBuffer);
+        }
+
+        session.StepFixed();
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        Assert.True(buffer[SnapshotHotFrame.ColdVersionIndex] > trackingVersion,
+            "TRACKING -> DETONATED did not refresh the cold seeker-state string");
+        var (detonatedRoot, detonatedBuffer, detonatedDocument) = Project(session);
+        using (detonatedDocument) {
+            Assert.Equal("DETONATED",
+                detonatedRoot.GetProperty("aim9_seeker_state").GetString());
+            Assert.Equal((int)Aim9FlightState.Detonated,
+                detonatedRoot.GetProperty("aim9_state_code").GetInt32());
+            AssertHotFrameMatchesJson(detonatedRoot, detonatedBuffer);
+        }
     }
 
     [Fact]

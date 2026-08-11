@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900" width="900" height="900">
+  <!-- Top Gun MiG-28 aggressor replacement, authored as deterministic vector source on
+       2026-08-11. The aircraft is an F-5-class fictional silhouette, not a film asset. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#172b4c"/>
+      <stop offset="0.5" stop-color="#b84d54"/>
+      <stop offset="1" stop-color="#f29a5d"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffe9b0" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#ffc77a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="900" height="900" fill="url(#sky)"/>
+  <ellipse cx="676" cy="238" rx="238" ry="214" fill="url(#glow)"/>
+  <circle cx="676" cy="238" r="46" fill="#ffe5a8" opacity="0.82"/>
+  <path d="M0 638 L150 598 L270 632 L398 584 L516 620 L662 570 L788 606 L900 582 V900 H0 Z"
+        fill="#423849" opacity="0.7"/>
+  <path d="M0 730 L134 682 L268 714 L416 652 L558 700 L716 650 L900 696 V900 H0 Z"
+        fill="#202630"/>
+
+  <!-- Compact aggressor planform: straight clipped wings and single vertical tail distinguish it
+       from the Tomcat card at picker size. -->
+  <g transform="translate(438 438) rotate(-58) scale(2.3)">
+    <path d="M0 -116 L-11 -92 L-15 -46 L-14 80 L-8 107 L8 107 L14 80 L15 -46 L11 -92 Z"
+          fill="#30343b"/>
+    <path d="M0 -116 L-11 -92 L-15 -46 L-14 80 L0 98 Z" fill="#494d53"/>
+    <path d="M-13 -21 L-86 16 L-82 39 L-14 39 Z" fill="#3e4248"/>
+    <path d="M13 -21 L86 16 L82 39 L14 39 Z" fill="#262a31"/>
+    <path d="M-12 57 L-51 90 L-45 103 L-10 83 Z" fill="#393d43"/>
+    <path d="M12 57 L51 90 L45 103 L10 83 Z" fill="#23272e"/>
+    <path d="M-4 44 L0 -8 L8 44 L22 82 L4 78 Z" fill="#1b2027"/>
+    <path d="M0 -82 L8 -62 L7 -39 L0 -30 L-7 -39 L-8 -62 Z" fill="#79949b"/>
+    <path d="M-25 -22 L-14 -39 L-14 50 L-27 39 Z" fill="#22262d"/>
+    <path d="M25 -22 L14 -39 L14 50 L27 39 Z" fill="#191d24"/>
+    <path d="M-8 99 L-2 99 L-2 111 L-9 111 Z" fill="#0e1217"/>
+    <path d="M8 99 L2 99 L2 111 L9 111 Z" fill="#0e1217"/>
+    <path d="M-84 16 L-14 -21 L-13 -14 L-78 23 Z" fill="#7a7378" opacity="0.6"/>
+  </g>
+
+  <path d="M784 900 L768 748 L776 748 L804 900 Z" fill="#141a20"/>
+  <circle cx="772" cy="742" r="9" fill="#8ef28a"/>
+  <circle cx="772" cy="742" r="26" fill="#79e886" opacity="0.17"/>
+</svg>

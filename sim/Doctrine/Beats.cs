@@ -1610,7 +1610,8 @@ public static class Beats {
             BanditCapability: banditCapability,
             VisualMergeEvaluation: new VisualMergeEvaluationConfig(HoldFireThroughFirstPass: false),
             PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
-            BanditSkill: PilotSkill.Competent);
+            BanditSkill: PilotSkill.Competent,
+            Environment: TopGunEnvironment.Contract);
     }
 
     /// <summary>

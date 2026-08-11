@@ -82,6 +82,58 @@ public sealed class TopGunDogfightAutomationTests
     }
 
     [Fact]
+    public void ProximityDetonationOwnsOneDeterministicGameplayKillEdge()
+    {
+        var session = StartTomcatSession();
+        int gunHitsBefore = session.PlayerGun.TotalHitCount;
+        int opponentRoundsBefore = session.OpponentGun.RoundsFired;
+        long targetSequence = session.BanditSpawnSequence;
+
+        Assert.True(session.LaunchFoxTwo());
+        session.SeedActiveAim9ForProximityHitForTest();
+        session.StepFixed();
+
+        Assert.Equal(Aim9FlightState.Detonated, session.Aim9SeekerState);
+        Assert.False(session.Aim9InFlight);
+        Assert.False(session.PrimaryOpponentAlive);
+        Assert.Equal(0.0, session.PrimaryOpponentHealth);
+        Assert.Equal(AircraftTerminalState.DestroyedAirborne, session.OpponentTerminalState);
+        Assert.Equal(1, session.KillCount);
+        Assert.Equal(gunHitsBefore, session.PlayerGun.TotalHitCount);
+        Assert.Equal(opponentRoundsBefore, session.OpponentGun.RoundsFired);
+
+        SessionEvent[] combatEvents = session.RecentEvents
+            .Where(item => item.Type is SessionEventType.Hit or SessionEventType.Destroyed)
+            .ToArray();
+        Assert.Equal([SessionEventType.Hit, SessionEventType.Destroyed],
+            combatEvents.Select(item => item.Type).ToArray());
+        Assert.All(combatEvents, item =>
+        {
+            Assert.Equal(targetSequence, item.EntitySequence);
+            Assert.True(item.HasKinematics);
+            Assert.Equal(CombatRole.Player, item.Source);
+            Assert.Equal(CombatRole.Opponent, item.Target);
+        });
+        Assert.Equal(combatEvents[0].Tick, combatEvents[1].Tick);
+        Assert.Equal(combatEvents[0].Position, combatEvents[1].Position);
+        Assert.Equal(combatEvents[0].Velocity, combatEvents[1].Velocity);
+
+        long eventSequence = combatEvents[^1].Sequence;
+        session.StepFixed();
+        Assert.Equal(1, session.KillCount);
+        Assert.DoesNotContain(session.RecentEvents,
+            item => item.Sequence > eventSequence
+                && item.Type is SessionEventType.Hit or SessionEventType.Destroyed);
+
+        session.Restart();
+        Assert.Equal(Aim9FlightState.Safe, session.Aim9SeekerState);
+        Assert.False(session.Aim9InFlight);
+        Assert.Equal(TopGunFightRuntime.DefaultMagazine, session.Aim9Remaining);
+        Assert.Equal(0, session.KillCount);
+        Assert.True(session.PrimaryOpponentAlive);
+    }
+
+    [Fact]
     public void Mig28SeatBootsAndStepsWithoutThrow()
     {
         var session = StartMigSession();

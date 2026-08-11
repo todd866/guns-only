@@ -39,7 +39,11 @@ public static partial class WebBridge {
     [JSExport]
     public static void StartTopGun(int seat) {
         TopGunSeat topGunSeat = seat == 1 ? TopGunSeat.Mig28 : TopGunSeat.F14A;
-        Session.StartBeat(() => Beats.TopGunAcm(topGunSeat));
+        MissionEnvironmentContract environment = TopGunEnvironment.Contract;
+        Session.StartBeatWithEnvironment(
+            () => Beats.TopGunAcm(topGunSeat),
+            TopGunEnvironment.Weather,
+            TerrainForEnvironment(environment));
     }
 
     /// <summary>
@@ -81,6 +85,11 @@ public static partial class WebBridge {
     /// </summary>
     [JSExport]
     public static bool SetWorldOrigin(double eastM, double northM) {
+        MissionEnvironmentContract environment = Session.Beat.EnvironmentIdentity;
+        // Persistent-room origins only apply to contracts that explicitly share that frame. In
+        // particular, custom beats all use BeatIndex=0; rebuilding their terrain from integer 0
+        // would silently replace their authored surface with BuiltIn(0)'s Ukraine placement.
+        if (!environment.MultiplayerTerrainShared) return false;
         if (!double.IsFinite(eastM) || !double.IsFinite(northM)
             || Math.Abs(eastM) > MaximumWorldOriginMagnitudeM
             || Math.Abs(northM) > MaximumWorldOriginMagnitudeM)
@@ -88,7 +97,7 @@ public static partial class WebBridge {
         _worldOriginEastM = eastM;
         _worldOriginNorthM = northM;
         _worldOriginConfigured = true;
-        Session.SetTerrainSurface(TerrainForBeat(Session.BeatIndex));
+        Session.SetTerrainSurface(TerrainForEnvironment(environment));
         return true;
     }
 
@@ -295,32 +304,39 @@ public static partial class WebBridge {
     [JSExport]
     public static string GetState() => SnapshotProjection.BuildState(
         Session, _deckConfiguration, _worldOriginEastM, _worldOriginNorthM,
-        _worldOriginConfigured, BaseTerrainForBeat(Session.BeatIndex));
+        _worldOriginConfigured, BaseTerrainForEnvironment(Session.Beat.EnvironmentIdentity));
 
     static MissionEnvironmentContract EnvironmentForBeat(int index) =>
         Beats.BuiltIn(index, _deckConfiguration).EnvironmentIdentity;
 
-    static double TerrainPlacementEastM(int index) {
-        MissionEnvironmentContract environment = EnvironmentForBeat(index);
+    static double TerrainPlacementEastM(MissionEnvironmentContract environment) {
         return environment.MultiplayerTerrainShared
             ? -_worldOriginEastM
             : -environment.TerrainSourceAnchorEastM;
     }
 
-    static double TerrainPlacementNorthM(int index) {
-        MissionEnvironmentContract environment = EnvironmentForBeat(index);
+    static double TerrainPlacementNorthM(MissionEnvironmentContract environment) {
         return environment.MultiplayerTerrainShared
             ? -_worldOriginNorthM
             : -environment.TerrainSourceAnchorNorthM;
     }
 
-    static ITerrainSurface? BaseTerrainForBeat(int index) => UkraineTheatreTerrain;
+    static ITerrainSurface? BaseTerrainForEnvironment(MissionEnvironmentContract environment) =>
+        StringComparer.Ordinal.Equals(
+            environment.TerrainProfileId,
+            Ukraine2030sTheatre.TerrainProfileId)
+            ? UkraineTheatreTerrain
+            : null;
 
     // Null only when a constrained build explicitly opts out of the selected embedded terrain.
     // The session and projection treat that as sea level; the browser then skips the visual
     // terrain fetch because the snapshot reports terrain_present=false.
-    static ITerrainSurface? TerrainForBeat(int index) => BaseTerrainForBeat(index) is { } terrain
+    static ITerrainSurface? TerrainForEnvironment(MissionEnvironmentContract environment) =>
+        BaseTerrainForEnvironment(environment) is { } terrain
         ? new TranslatedTerrainSurface(terrain,
-            TerrainPlacementEastM(index), TerrainPlacementNorthM(index))
+            TerrainPlacementEastM(environment), TerrainPlacementNorthM(environment))
         : null;
+
+    static ITerrainSurface? TerrainForBeat(int index) =>
+        TerrainForEnvironment(EnvironmentForBeat(index));
 }

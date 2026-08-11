@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900" width="900" height="900">
+  <!-- Top Gun F-14A card replacement, authored as deterministic vector source on 2026-08-11.
+       Fictional late-day training range; no film still, photograph, logo, or livery was traced. -->
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#24345c"/>
+      <stop offset="0.48" stop-color="#e06f54"/>
+      <stop offset="1" stop-color="#f6b75f"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#fff3c6"/>
+      <stop offset="1" stop-color="#ffd98d" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="900" height="900" fill="url(#sky)"/>
+  <circle cx="706" cy="222" r="184" fill="url(#sun)"/>
+  <circle cx="706" cy="222" r="58" fill="#ffedbd" opacity="0.86"/>
+  <path d="M0 650 L112 604 L236 622 L356 574 L490 610 L626 552 L760 586 L900 532 V900 H0 Z"
+        fill="#3f4052" opacity="0.64"/>
+  <path d="M0 724 L164 666 L302 700 L452 642 L604 690 L744 646 L900 672 V900 H0 Z"
+        fill="#242a38"/>
+
+  <!-- Readable fictional Tomcat planform, viewed from above and behind. -->
+  <g transform="translate(444 430) rotate(-68) scale(2.25)">
+    <path d="M-14 12 L-45 80 L-26 76 L-9 38 Z" fill="#31343e"/>
+    <path d="M14 12 L45 80 L26 76 L9 38 Z" fill="#242733"/>
+    <path d="M-16 -8 L-104 36 L-88 54 L-18 50 Z" fill="#515664"/>
+    <path d="M16 -8 L104 36 L88 54 L18 50 Z" fill="#3b404d"/>
+    <path d="M-20 44 L-65 89 L-54 101 L-14 76 Z" fill="#444955"/>
+    <path d="M20 44 L65 89 L54 101 L14 76 Z" fill="#303440"/>
+    <path d="M0 -118 L-12 -94 L-18 -52 L-19 68 L-12 106 L12 106 L19 68 L18 -52 L12 -94 Z"
+          fill="#4b505d"/>
+    <path d="M0 -118 L-12 -94 L-18 -52 L-19 68 L0 92 Z" fill="#626875"/>
+    <path d="M-32 -26 L-18 -54 L-18 70 L-34 54 Z" fill="#353945"/>
+    <path d="M32 -26 L18 -54 L18 70 L34 54 Z" fill="#272b36"/>
+    <path d="M-23 31 L-39 4 L-34 -29 L-19 -21 L-18 46 Z" fill="#20242d"/>
+    <path d="M23 31 L39 4 L34 -29 L19 -21 L18 46 Z" fill="#181c25"/>
+    <path d="M0 -87 L10 -64 L9 -35 L0 -24 L-9 -35 L-10 -64 Z" fill="#89a7b0"/>
+    <path d="M-13 98 L-3 98 L-3 111 L-14 111 Z" fill="#11151b"/>
+    <path d="M13 98 L3 98 L3 111 L14 111 Z" fill="#11151b"/>
+    <path d="M-100 36 L-18 -8 L-16 -1 L-91 43 Z" fill="#8a8790" opacity="0.62"/>
+  </g>
+
+  <!-- Sparse deck-lamp motif shared with the picker family. -->
+  <path d="M94 900 L112 742 L120 742 L136 900 Z" fill="#151b22"/>
+  <circle cx="116" cy="736" r="9" fill="#8ef28a"/>
+  <circle cx="116" cy="736" r="26" fill="#79e886" opacity="0.17"/>
+</svg>
