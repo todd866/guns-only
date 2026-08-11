@@ -24,7 +24,11 @@
  */
 
 import { vehicleBodyQuaternion } from "./ah1g_presence.js";
-import { cobraFpvLevel, cobraFpvMode } from "./cobra_helicopter_fpv.js";
+import {
+  cobraFpvLevel,
+  cobraFpvMode,
+  cobraHeadingRelativeGroundTrack,
+} from "./cobra_helicopter_fpv.js";
 
 export const COBRA_HUD_ENTITY_ID = "cobra.ah1g.hold-the-bridge";
 
@@ -103,9 +107,16 @@ export function cobraHudState(authorityState, pose, out = {}) {
   out.heli_fpv_mode = cobraFpvMode(out.ground_speed_kts);
   out.heli_fpv_level = cobraFpvLevel(rotorcraft);
   out.heli_fpv_gun_ready = authorityState?.gunner?.fire_authorized === true;
-  // Plan-view hover stub: horizontal ground track in knots (sim: +x east, +z north).
-  out.heli_hover_east_kt = scaled(vehicle?.velocity_x_mps, MPS_TO_KT) ?? 0;
-  out.heli_hover_north_kt = scaled(vehicle?.velocity_z_mps, MPS_TO_KT) ?? 0;
+  // Plan-view hover stub: rotate sim-world ground track (+x east, +z north) through the live
+  // heading before it reaches the screen. At the production 90° spawn, east is forward — it must
+  // draw up, not right. Pitch/bank do not contaminate this plan-view instrument.
+  const hoverTrack = cobraHeadingRelativeGroundTrack(
+    vehicle?.velocity_x_mps,
+    vehicle?.velocity_z_mps,
+    attitude?.yaw_rad,
+  );
+  out.heli_hover_right_kt = hoverTrack.rightMps * MPS_TO_KT;
+  out.heli_hover_forward_kt = hoverTrack.forwardMps * MPS_TO_KT;
 
   return out;
 }
@@ -129,9 +140,9 @@ export function createCobraHudFrame(THREE) {
     aimPoint: null,
     directorPoint: null,
     flightPathPoint: null,
-    // Rear-seat camera: +0.08 rad sight bias + clamped gunner lean. Pitch ladder stays
-    // camera/world referenced; W and the gun cross stay body-forward. FPV is
-    // velocity-through-camera in cruise; hover uses a stub.
+    // Forward camera is body-aligned. The pitch ladder stays camera/world referenced; W and the
+    // gun cross stay body-forward at the optical centre. FPV is velocity-through-camera in
+    // cruise; hover uses a heading-relative plan-view stub.
     ladderReference: "camera",
     sensorYaw: 0,
     sensorPitch: 0,

@@ -17,6 +17,10 @@
 
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import {
+  COBRA_HOVER_FULL_SCALE_KT,
+  COBRA_HOVER_STUB_MAX_PX,
+} from "../../../cobra/cobra_helicopter_fpv.js";
 import { serveStatic } from "./static_server.mjs";
 
 const require = createRequire(
@@ -81,26 +85,61 @@ function assertAirframeSymbols(data) {
   }
   if (!geometry.waterlinePx || !geometry.fpvPx) return;
 
-  // Cobra's ladder remains camera/world referenced, while W is the stable aircraft body cue.
+  // Cobra's forward camera is body-aligned: W must independently land on the principal point.
+  // The ladder remains camera/world referenced and its 0 rung moves with the true horizon.
   if (data.ladderReference === "camera") {
     const waterlineError = distance(geometry.waterlinePx, probes.waterline);
     check(name, "Cobra waterline == projected body-forward",
       waterlineError <= 1.5, `error ${waterlineError.toFixed(3)} px (tol 1.5)`);
+    const principalPointError = distance(geometry.waterlinePx, probes.projectionCenter);
+    check(name, "body-aligned Cobra waterline == camera principal point",
+      principalPointError <= 0.05,
+      `error ${principalPointError.toFixed(3)} px (tol 0.05)`);
     if (geometry.gunCrossPx) {
       const gunCrossError = distance(geometry.gunCrossPx, probes.waterline);
       check(name, "gun cross remains on projected body-forward",
         gunCrossError <= 1.5, `error ${gunCrossError.toFixed(3)} px (tol 1.5)`);
     }
-    const expectedSeparation = probes.cameraWaterline
-      ? distance(probes.waterline, probes.cameraWaterline) : 0;
+    const expectedSeparation = probes.cameraHorizon
+      ? distance(probes.waterline, probes.cameraHorizon) : 0;
     if (expectedSeparation >= 20) {
-      const separation = distance(geometry.waterlinePx, probes.cameraWaterline);
+      const separation = distance(geometry.waterlinePx, probes.cameraHorizon);
       check(name, "pitched Cobra W stays separate from ladder horizon",
         separation >= 20, `separation ${separation.toFixed(3)} px (min 20)`);
+    }
+    if (state.heli_fpv_mode === "hover") {
+      const rightKt = Number(state.heli_hover_right_kt) || 0;
+      const forwardKt = Number(state.heli_hover_forward_kt) || 0;
+      const speedKt = Math.hypot(rightKt, forwardKt);
+      const lengthPx = Math.min(
+        COBRA_HOVER_STUB_MAX_PX,
+        speedKt / COBRA_HOVER_FULL_SCALE_KT * COBRA_HOVER_STUB_MAX_PX,
+      );
+      const scale = speedKt > 0.05 ? lengthPx / speedKt : 0;
+      const expectedHover = {
+        x: geometry.waterlinePx.x + rightKt * scale,
+        y: geometry.waterlinePx.y - forwardKt * scale,
+      };
+      const hoverError = distance(geometry.fpvPx, expectedHover);
+      check(name, "heading-relative hover cue matches independent body-plan projection",
+        hoverError <= 1.5, `error ${hoverError.toFixed(3)} px (tol 1.5)`);
+      check(name, "heading-90 hover drift points up-left, never raw east/north",
+        geometry.fpvPx.x < geometry.waterlinePx.x
+          && geometry.fpvPx.y < geometry.waterlinePx.y,
+        `delta ${geometry.fpvPx.x - geometry.waterlinePx.x},`
+          + `${geometry.fpvPx.y - geometry.waterlinePx.y}`);
+      return;
     }
     const fpvError = distance(geometry.fpvPx, probes.fpv);
     check(name, "camera fpv == projected world-velocity",
       fpvError <= 1.5, `error ${fpvError.toFixed(3)} px (tol 1.5)`);
+    if (name === "cobra-forward-level") {
+      check(name, "cruise FPV independently projects down-right from body centre",
+        geometry.fpvPx.x > geometry.waterlinePx.x
+          && geometry.fpvPx.y > geometry.waterlinePx.y,
+        `delta ${geometry.fpvPx.x - geometry.waterlinePx.x},`
+          + `${geometry.fpvPx.y - geometry.waterlinePx.y}`);
+    }
     return;
   }
 
@@ -911,7 +950,7 @@ function assertMobileTacticalHierarchy(data) {
 // landscape pass to bound gate time.
 const PORTRAIT_SCENARIOS = new Set([
   "assisted-corner-hold",
-  "cobra-forward-level", "cobra-forward-pitched",
+  "cobra-forward-level", "cobra-forward-pitched", "cobra-hover-heading-east",
   "forward-level", "forward-bandit-near-edge", "forward-bandit-offscreen",
   "forward-target-two-offscreen",
   "gun-overheat-latched", "gcas-bottom-out-release",
@@ -926,6 +965,7 @@ const MOBILE_SCENARIOS = new Set([
   "assisted-corner-hold",
   "cobra-forward-level",
   "cobra-forward-pitched",
+  "cobra-hover-heading-east",
   "forward-level",
   "gun-overheat-latched",
   "padlock-ground-warning",

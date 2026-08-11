@@ -106,8 +106,22 @@ test("cobra snapshot speaks the production hud.js state contract", () => {
   assert.equal(state.heli_fpv_mode, "cruise"); // 30.4 m/s ≈ 59 KT
   assert.equal(state.heli_fpv_level, "normal");
   assert.equal(state.heli_fpv_gun_ready, false);
-  assert.ok(Math.abs(state.heli_hover_east_kt - 30.0 * MPS_TO_KT) < 1e-9);
-  assert.ok(Math.abs(state.heli_hover_north_kt - 4.2 * MPS_TO_KT) < 1e-9);
+  const heading = poseFixture.yaw_rad;
+  const expectedRightMps = 30.0 * Math.cos(heading) - 4.2 * Math.sin(heading);
+  const expectedForwardMps = 30.0 * Math.sin(heading) + 4.2 * Math.cos(heading);
+  assert.ok(Math.abs(state.heli_hover_right_kt - expectedRightMps * MPS_TO_KT) < 1e-9);
+  assert.ok(Math.abs(state.heli_hover_forward_kt - expectedForwardMps * MPS_TO_KT) < 1e-9);
+});
+
+test("production heading 90 publishes east motion as forward hover drift", () => {
+  const authority = authorityFixture();
+  authority.vehicle.velocity_x_mps = 6;
+  authority.vehicle.velocity_z_mps = 0;
+  authority.vehicle.ground_speed_mps = 6;
+  const pose = { ...poseFixture, yaw_rad: Math.PI / 2 };
+  const state = cobraHudState(authority, pose);
+  assert.ok(Math.abs(state.heli_hover_right_kt) < 1e-9);
+  assert.ok(Math.abs(state.heli_hover_forward_kt - 6 * MPS_TO_KT) < 1e-9);
 });
 
 

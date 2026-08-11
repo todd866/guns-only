@@ -351,7 +351,11 @@ function computeProbes(frame) {
     }
     : null;
   const position = frame.playerPosition;
-  const far = (direction) => position.clone().addScaledVector(direction, 10000);
+  // Cobra direction symbols originate at the pilot eye in production so a body-aligned ray lands
+  // exactly on the principal point. The generic/F-22 contract retains its historical CG origin.
+  const directionOrigin = frame.state.heli_flight_path === true
+    ? camera.position : position;
+  const far = (direction) => directionOrigin.clone().addScaledVector(direction, 10000);
   const velocityDirection = frame.playerVelocity.clone().normalize();
   const targetDirection = frame.padlockTargetPosition.clone()
     .sub(frame.playerPosition).normalize();
@@ -394,9 +398,9 @@ function computeProbes(frame) {
     nominalFocalYPx: HEIGHT * 0.5 / Math.tan(camera.fov * DEG * 0.5),
     projectionCenter,
     lookBoresight,
-    cameraWaterline: cameraReferencedAirframeAnchors(
+    cameraHorizon: cameraReferencedAirframeAnchors(
       camera, WIDTH, HEIGHT, frame.state,
-    )?.waterline ?? null,
+    )?.horizon ?? null,
     waterline: projectProbe(camera, far(frame.playerForward)),
     fpv: projectProbe(camera, far(velocityDirection)),
     bandit: projectProbe(camera, frame.banditPosition),
@@ -493,6 +497,10 @@ window.__debugScenario = async (name) => {
       true_airspeed_kts: frame.state.true_airspeed_kts,
       ground_speed_kts: frame.state.ground_speed_kts,
       heli_flight_path: frame.state.heli_flight_path,
+      heli_fpv_mode: frame.state.heli_fpv_mode,
+      heli_hover_right_kt: frame.state.heli_hover_right_kt,
+      heli_hover_forward_kt: frame.state.heli_hover_forward_kt,
+      heading_deg: frame.state.heading_deg,
       vx: frame.state.vx,
       vz: frame.state.vz,
       padlock_preferred_plane_valid: frame.state.padlock_preferred_plane_valid,

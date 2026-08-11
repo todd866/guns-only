@@ -100,7 +100,7 @@ export function createAh1gPresence(THREE) {
   const bladeMat = skinMaterial(THREE, 0x23291f, { opacity: 0.72, depthWrite: false, emissive: 0x181d15 });
 
   // Frame members must stay out of the rear-seat forward frustum (eye at
-  // REAR_SEAT_EYE_LOCAL_M, fov 58, +0.08 pitch bias): sills stay below the
+  // REAR_SEAT_EYE_LOCAL_M, production fov 58, body-aligned optical axis): sills stay below the
   // eyeline, the front bow splits around the gunsight, pillars hug the corners.
   // The frame must also read CONNECTED: pillars run down into the console/sill
   // line (consoles below overlap the pillar plane), no member floats in air.

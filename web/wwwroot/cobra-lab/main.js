@@ -46,6 +46,7 @@ import {
   updateAh1gPresence,
 } from "../render/cobra/ah1g_presence.js?v=310";
 import {
+  lookOffsetFromAngles,
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
   togglePadlockSelection,
@@ -454,7 +455,7 @@ let routeDistanceM = 0;
 let routeComplete = false;
 let tourCommandedAglM = COBRA_CANYON_TOUR_BASE_AGL_M;
 let yaw = 0;
-let pitch = 0.08;
+let pitch = 0;
 let lastTimeMs = performance.now();
 let animationFrame = 0;
 
@@ -987,14 +988,14 @@ function syncAuthorityCamera() {
   const lookDistanceM = 140;
   const bodyYaw = Number(vehicle.yaw_rad) || 0;
   const bodyPitch = Number(vehicle.pitch_rad) || 0;
-  // Fixed rear-seat look bias (slightly up through the glass). Padlock replaces this with a
-  // true look-at — F-22 contract: forward is nose-forward, V is the view toggle.
-  const lookYaw = bodyYaw;
-  const lookPitch = bodyPitch + 0.08;
+  // Forward view is exactly body-aligned: body-forward projects to the camera principal point,
+  // so the waterline is an honest optical-centre reference. Padlock alone may take the eye off
+  // axis — F-22 contract: forward is nose-forward, V is the view toggle.
+  const bodyLookOffset = lookOffsetFromAngles(bodyYaw, bodyPitch, lookDistanceM);
   const forwardLook = {
-    x: camera.position.x + Math.sin(lookYaw) * lookDistanceM,
-    y: camera.position.y + Math.sin(lookPitch) * lookDistanceM,
-    z: camera.position.z - Math.cos(lookYaw) * lookDistanceM,
+    x: camera.position.x + bodyLookOffset.x,
+    y: camera.position.y + bodyLookOffset.y,
+    z: camera.position.z + bodyLookOffset.z,
   };
 
   const selectedId = targetSelect?.value || authorityState?.gunner?.selected_target_id;
