@@ -1,6 +1,7 @@
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
+using GunsOnly.Sim.Missiles;
 using GunsOnly.Sim.Propulsion;
 using GunsOnly.Sim.Recovery;
 using GunsOnly.Sim.Turbulence;
@@ -963,6 +964,7 @@ internal static class SnapshotProjection {
             + $"\"utility_hydraulic_nominal_psi\":{_systems.Profile.UtilityHydraulicNominalPsi:F1},"
             + MaintenanceScenarioJson()
             + VisualMergeEvaluationJson()
+            + TopGunExperienceJson()
             + DroneRaidEvaluationJson()
             + $"\"approach\":{(_detents.ApproachMode ? "true" : "false")},"
             + $"\"mode\":\"{mode}\",\"wave_off\":{(waveOff ? "true" : "false")},"
@@ -1334,6 +1336,62 @@ internal static class SnapshotProjection {
             + $"\"evaluated_projectile_rounds\":{evaluation.ProjectileRoundsFired},"
             + $"\"evaluated_projectile_hits\":{evaluation.ProjectileHits},";
     }
+
+    static string TopGunExperienceJson() {
+        if (!TopGunFightRuntime.IsTopGunMission(Session.Beat.MissionIdentity.Id))
+            return "\"top_gun_seat\":null,"
+                + "\"wing_sweep_deg\":null,"
+                + "\"opponent_wing_sweep_deg\":null,"
+                + "\"aim9_remaining\":null,"
+                + $"\"aim9_in_flight\":{(Session.Aim9InFlight ? "true" : "false")},"
+                + "\"aim9_pose_valid\":false,"
+                + "\"aim9_state_code\":0,"
+                + "\"aim9_x\":null,\"aim9_y\":null,\"aim9_z\":null,"
+                + "\"aim9_vx\":null,\"aim9_vy\":null,\"aim9_vz\":null,"
+                + "\"aim9_seeker_state\":null,"
+                + "\"opponent_callsign\":null,"
+                + "\"presentation_theme\":null,";
+
+        bool playerIsTomcat =
+            Session.Beat.PlayerAircraft.Id == AircraftCapability.F14ASurrogate.Id;
+        string seatJson = playerIsTomcat ? "\"F-14A\"" : "\"MiG-28\"";
+        string opponentJson = playerIsTomcat ? "\"MiG-28\"" : "\"F-14A\"";
+        Aim9Telemetry missile = Session.Aim9Telemetry;
+        bool poseValid = missile.State != Aim9FlightState.Safe;
+        string SweepNumber(double? value) => value is { } finite && double.IsFinite(finite)
+            ? finite.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)
+            : "null";
+        string wingSweepJson = SweepNumber(Session.PlayerF14WingSweepDegrees);
+        string opponentWingSweepJson = SweepNumber(Session.OpponentF14WingSweepDegrees);
+        string MissileNumber(double value) => poseValid
+            ? value.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)
+            : "null";
+        return $"\"top_gun_seat\":{seatJson},"
+            + $"\"wing_sweep_deg\":{wingSweepJson},"
+            + $"\"opponent_wing_sweep_deg\":{opponentWingSweepJson},"
+            + $"\"aim9_remaining\":{Session.Aim9Remaining},"
+            + $"\"aim9_in_flight\":{(Session.Aim9InFlight ? "true" : "false")},"
+            + $"\"aim9_pose_valid\":{(poseValid ? "true" : "false")},"
+            + $"\"aim9_state_code\":{(int)missile.State},"
+            + $"\"aim9_x\":{MissileNumber(missile.Position.X)},"
+            + $"\"aim9_y\":{MissileNumber(missile.Position.Y)},"
+            + $"\"aim9_z\":{MissileNumber(missile.Position.Z)},"
+            + $"\"aim9_vx\":{MissileNumber(missile.Velocity.X)},"
+            + $"\"aim9_vy\":{MissileNumber(missile.Velocity.Y)},"
+            + $"\"aim9_vz\":{MissileNumber(missile.Velocity.Z)},"
+            + $"\"aim9_seeker_state\":{Aim9SeekerStateJson(Session.Aim9SeekerState)},"
+            + $"\"opponent_callsign\":{opponentJson},"
+            + "\"presentation_theme\":\"top-gun-anime-1986\",";
+    }
+
+    static string Aim9SeekerStateJson(Aim9FlightState state) => state switch {
+        Aim9FlightState.Seeking => "\"SEEKING\"",
+        Aim9FlightState.Tracking => "\"TRACKING\"",
+        Aim9FlightState.Lost => "\"LOST\"",
+        Aim9FlightState.Detonated => "\"DETONATED\"",
+        Aim9FlightState.Expired => "\"EXPIRED\"",
+        _ => "\"SAFE\"",
+    };
 
     static string DroneRaidEvaluationJson() {
         DroneRaidEvaluation? evaluation = Session.DroneRaidEvaluation;

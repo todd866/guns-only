@@ -16,17 +16,19 @@
 
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-
-const require = createRequire("/Users/iantodd/Projects/guns-only/web/smoke/package.json");
-const { chromium } = require("playwright");
+import { encodePngRgba } from "../png.mjs";
+import { renderSvgRgba } from "./svg_raster.mjs";
 
 const HERE = fileURLToPath(new URL("./", import.meta.url));
 const ART_DIR = fileURLToPath(new URL("../../../../web/wwwroot/art/", import.meta.url));
+const WEB_SMOKE_PACKAGE = fileURLToPath(
+  new URL("../../../../web/smoke/package.json", import.meta.url));
+const requireFromSmoke = createRequire(WEB_SMOKE_PACKAGE);
 
 // name -> { w, h, q, src? }. Picker cards are 9:16 because the desktop card is a tall poster
 // (height min(58vh,46vw) over a quarter-width column) while the phone card is 16:10; a 9:16
@@ -40,6 +42,10 @@ const POSTERS = {
   "bike-yzf-r1": { w: 900, h: 1600, q: 82 },
   "menu-hangar": { w: 1600, h: 1067, q: 82 },
   "menu-hangar-small": { w: 900, h: 600, q: 80, src: "menu-hangar" },
+  // Top Gun's replacement sources use the repo's bounded deterministic SVG-subset rasterizer.
+  // Keeping that path browser-free makes these two cards reproducible during headless release QA.
+  "jet-f14": { w: 900, h: 900, q: 82, rasterizer: "deterministic-svg" },
+  "jet-mig-28": { w: 900, h: 900, q: 82, rasterizer: "deterministic-svg" },
 };
 
 const wanted = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(POSTERS);
@@ -53,22 +59,36 @@ if (missing.length)
   throw new Error(`missing source SVG(s): ${missing.map(sourceOf).join(", ")}`);
 
 const scratch = await mkdtemp(path.join(tmpdir(), "menu-posters-"));
-const browser = await chromium.launch();
+let browser = null;
+const playwrightBrowser = async () => {
+  if (browser) return browser;
+  const { chromium } = requireFromSmoke("playwright");
+  browser = await chromium.launch();
+  return browser;
+};
 try {
   for (const name of wanted) {
-    const { w: width, h: height, q: quality } = POSTERS[name];
-    const svg = await readFile(path.join(HERE, `${sourceOf(name)}.svg`), "utf8");
-    const page = await browser.newPage({
-      viewport: { width, height },
-      deviceScaleFactor: 2,
-    });
-    await page.setContent(
-      `<style>html,body{margin:0;padding:0;background:#000;overflow:hidden}` +
-      `svg{display:block;width:${width}px;height:${height}px}</style>${svg}`,
-      { waitUntil: "load" });
+    const { w: width, h: height, q: quality, rasterizer } = POSTERS[name];
+    const svgPath = path.join(HERE, `${sourceOf(name)}.svg`);
     const png = path.join(scratch, `${name}.png`);
-    await page.screenshot({ path: png, type: "png" });
-    await page.close();
+    if (rasterizer === "deterministic-svg") {
+      const svg = await readFile(svgPath, "utf8");
+      const rgba = renderSvgRgba(svg, width * 2, height * 2);
+      await writeFile(png, encodePngRgba(width * 2, height * 2, rgba));
+    } else {
+      const svg = await readFile(svgPath, "utf8");
+      const activeBrowser = await playwrightBrowser();
+      const page = await activeBrowser.newPage({
+        viewport: { width, height },
+        deviceScaleFactor: 2,
+      });
+      await page.setContent(
+        `<style>html,body{margin:0;padding:0;background:#000;overflow:hidden}` +
+        `svg{display:block;width:${width}px;height:${height}px}</style>${svg}`,
+        { waitUntil: "load" });
+      await page.screenshot({ path: png, type: "png" });
+      await page.close();
+    }
 
     const webp = path.join(ART_DIR, `${name}.webp`);
     // -resize back to the master size: the 2x capture is supersampling, which is how flat-shaded
@@ -82,6 +102,6 @@ try {
     console.log(`${name}.webp  ${width}x${height}  ${(size / 1024).toFixed(1)} KiB  ${digest}`);
   }
 } finally {
-  await browser.close();
+  await browser?.close();
   await rm(scratch, { recursive: true, force: true });
 }

@@ -6,6 +6,13 @@ namespace GunsOnly.Sim.Doctrine;
 public interface IBandit {
     AircraftState State { get; }
     Vec3D LiftDir { get; }
+    /// Current physical span used by the actor's flight integrator. NaN means this controller does
+    /// not expose a mutable-airframe seam; ordinary fixed-wing actors override it.
+    double EffectiveWingSpanM => double.NaN;
+    /// Optional variable-geometry seam. The default is intentionally inert for controllers which
+    /// do not wrap AircraftSim; mission code must still gate it on the matching airframe identity.
+    void SetEffectiveWingSpanM(double wingSpanM) { }
+    void ResetFlightParams() { }
     GunsOnly.Sim.Turbulence.IWindField? Wind { get; set; }
     IAtmosphereModel Atmosphere { get; set; }
     double T { get; }
@@ -292,6 +299,7 @@ public sealed class ReactiveBandit :
     GunsOnly.Sim.Environment.ITerrainSurface? _lookaheadPlanTerrain;
     IAtmosphereModel? _lookaheadPlanAtmosphere;
     GunsOnly.Sim.Turbulence.IWindField? _lookaheadPlanWind;
+    double _lookaheadPlanEffectiveWingSpanM;
     double _lookaheadPlanThrustFraction;
     bool _lookaheadPlanBossCommitted;
     int _lookaheadPlanPredictionSubstepTicks;
@@ -304,9 +312,16 @@ public sealed class ReactiveBandit :
     long _candidateEvaluations;
     long _forecastSteps;
     long _terrainSweeps;
+    double _lastLookaheadProbeEffectiveWingSpanM = double.NaN;
 
     public PilotSkill Skill { get; }
     public AircraftParams AircraftParameters => _parameters;
+    public double EffectiveWingSpanM => _sim.EffectiveWingSpanM;
+    public void SetEffectiveWingSpanM(double wingSpanM) =>
+        _sim.SetEffectiveWingSpanM(wingSpanM);
+    public void ResetFlightParams() => _sim.ResetFlightParams();
+    internal double LastLookaheadProbeEffectiveWingSpanMForTest =>
+        _lastLookaheadProbeEffectiveWingSpanM;
     internal int? LookaheadCadencePhase => _absoluteLookaheadCadencePhase;
     public AiComputeLevel ComputeLevel => _computeLevel;
     public AiWorkloadCounters AiWorkload => new(
@@ -2193,6 +2208,7 @@ public sealed class ReactiveBandit :
         _lookaheadPlanTerrain = _terrain;
         _lookaheadPlanAtmosphere = _sim.AtmosphereModel;
         _lookaheadPlanWind = _sim.Wind;
+        _lookaheadPlanEffectiveWingSpanM = _sim.EffectiveWingSpanM;
         _lookaheadPlanThrustFraction = _sim.ThrustFraction;
         _lookaheadPlanBossCommitted = BossCommitted;
         _lookaheadPlanPredictionSubstepTicks = _incrementalAiPlanning
@@ -2335,6 +2351,7 @@ public sealed class ReactiveBandit :
                 _lookaheadPlanTerrain,
                 _lookaheadPlanAtmosphere!,
                 _lookaheadPlanWind,
+                _lookaheadPlanEffectiveWingSpanM,
                 _lookaheadPlanThrustFraction,
                 _lookaheadPlanBossCommitted,
                 _lookaheadPlanPredictionSubstepTicks,
@@ -2599,6 +2616,7 @@ public sealed class ReactiveBandit :
         GunsOnly.Sim.Environment.ITerrainSurface? terrain,
         IAtmosphereModel atmosphere,
         GunsOnly.Sim.Turbulence.IWindField? wind,
+        double effectiveWingSpanM,
         double thrustFraction,
         bool bossCommitted,
         int predictionSubstepTicks,
@@ -2616,6 +2634,18 @@ public sealed class ReactiveBandit :
         // gradient and the controller goes back to orbiting outside the gate).
         const double gunConeRad = BanditFireControl.MaximumNoseErrorRad;
         var probe = new AircraftSim(own, _parameters, atmosphere) { Wind = wind };
+        if (!double.IsFinite(effectiveWingSpanM))
+            throw new InvalidOperationException(
+                "lookahead requires a finite wing-span value");
+        bool frozenSpanMatchesBaseline = BitConverter.DoubleToInt64Bits(effectiveWingSpanM)
+            == BitConverter.DoubleToInt64Bits(_parameters.WingSpanM);
+        if (!frozenSpanMatchesBaseline) {
+            if (effectiveWingSpanM <= 0.0)
+                throw new InvalidOperationException(
+                    "lookahead wing-span override must be positive");
+            probe.SetEffectiveWingSpanM(effectiveWingSpanM);
+        }
+        _lastLookaheadProbeEffectiveWingSpanM = probe.EffectiveWingSpanM;
         probe.SeedEnginePowerFraction(thrustFraction);
 
         // Belief-limited player prediction: a coordinated turn extrapolated from the OBSERVED state

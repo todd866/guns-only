@@ -2412,6 +2412,75 @@
     }
 
     .high-contrast #hud { filter: contrast(1.32) brightness(1.14); }
+
+    /* Top Gun · anime-1986 experience skin (Ready + in-flight only; see theme.js). */
+    html.top-gun-anime-1986 {
+      --tg-sky-top: #ff5c30;
+      --tg-sky-mid: #ffb048;
+      --tg-sky-horizon: #ffd996;
+      --tg-sea: #122444;
+      --tg-tape: rgba(255, 232, 180, .78);
+      --tg-tape-edge: rgba(18, 28, 52, .92);
+      --tg-lamp: #60e292;
+    }
+
+    html.top-gun-anime-1986,
+    html.top-gun-anime-1986 body {
+      background: linear-gradient(
+        180deg,
+        var(--tg-sky-top) 0%,
+        var(--tg-sky-mid) 46%,
+        var(--tg-sky-horizon) 68%,
+        var(--tg-sea) 70%,
+        #040a14 100%
+      );
+    }
+
+    html.top-gun-anime-1986:not(.run-paused) #scene {
+      filter: saturate(1.28) contrast(1.06) brightness(1.04);
+    }
+
+    html.top-gun-anime-1986 #hud {
+      filter: saturate(1.42) contrast(1.12);
+    }
+
+    html.top-gun-anime-1986 #hud text,
+    html.top-gun-anime-1986 #hud tspan {
+      paint-order: stroke fill;
+      stroke: rgba(8, 12, 24, .72);
+      stroke-width: 2.5px;
+    }
+
+    html.top-gun-anime-1986.run-paused #ready-screen {
+      background:
+        radial-gradient(120% 80% at 50% 18%, rgba(255, 196, 96, .28), transparent 62%),
+        linear-gradient(180deg, rgba(255, 120, 48, .22) 0%, rgba(4, 10, 20, .88) 72%);
+    }
+
+    html.top-gun-anime-1986.run-paused #ready-screen .ready-card {
+      border: 2px solid var(--tg-tape);
+      border-radius: 2px;
+      box-shadow:
+        inset 0 0 0 1px var(--tg-tape-edge),
+        0 0 36px rgba(255, 160, 64, .18);
+      background: rgba(8, 14, 28, .82);
+    }
+
+    html.top-gun-anime-1986.run-paused #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft] {
+      border-color: var(--tg-lamp);
+      box-shadow: 0 0 0 1px rgba(96, 226, 146, .36), 0 0 44px rgba(96, 226, 146, .34);
+    }
+
+    html.top-gun-anime-1986.run-paused #ready-screen #ready-start {
+      border: 2px solid var(--tg-tape);
+      background: rgba(255, 196, 96, .18);
+      box-shadow: inset 0 0 0 1px var(--tg-tape-edge), 0 0 30px rgba(255, 160, 64, .22);
+    }
+
+    html.top-gun-anime-1986.run-paused #ready-screen #ready-start::after {
+      border-color: var(--tg-lamp);
+    }
+
     .high-contrast .ready-card,
     .high-contrast .settings-card { border-color: rgba(141, 255, 179, .72); background: rgba(0, 9, 14, .985); }
     .large-interface-text .ready-card,
@@ -2810,7 +2879,7 @@
     #ready-screen[data-mode="program"] .ready-controls,
     #ready-screen[data-mode="program"] #ready-hint { display: none; }
 
-    /* The four posters sit side by side and own the screen. */
+    /* The four production posters plus the visible Top Gun preview sit side by side. */
     #ready-screen[data-mode="program"] .ready-layout {
       display: block;
       overflow: visible;
@@ -2818,7 +2887,7 @@
 
     #ready-screen[data-mode="program"] .ready-mission-groups {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: clamp(10px, 2vw, 26px);
       overflow: visible;
     }
@@ -2860,6 +2929,14 @@
 
     #ready-screen .sortie-choice[data-aircraft="bike"] {
       background-image: image-set(url("./art/bike-yzf-r1.webp") type("image/webp"));
+    }
+
+    #ready-screen .sortie-choice[data-aircraft="f14"] {
+      background-image: image-set(url("./art/jet-f14.webp") type("image/webp"));
+    }
+
+    #ready-screen .sortie-choice[data-aircraft="mig-28"] {
+      background-image: image-set(url("./art/jet-mig-28.webp") type("image/webp"));
     }
 
     #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]:hover { filter: brightness(.9) saturate(.95); }
@@ -2943,13 +3020,20 @@
       font-size: 11px;
     }
 
-    /* Portrait phones stack the two paintings; there is room for exactly this and nothing else. */
+    /* Portrait keeps the picker to one compact horizontal rail. The catalogue now has more than
+       two aircraft, so stacking every poster pushes the Fly gesture below the initial viewport. */
     @media (max-width: 620px) and (orientation: portrait) {
       #ready-screen[data-mode="program"] .ready-mission-groups {
-        grid-auto-flow: row;
-        grid-template-columns: minmax(0, 1fr);
+        grid-template-columns: none;
+        grid-auto-columns: minmax(136px, 42vw);
+        grid-auto-flow: column;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 1px 2px 7px;
+        overscroll-behavior-x: contain;
+        scroll-snap-type: x mandatory;
+        touch-action: pan-x pinch-zoom;
       }
-      #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] { aspect-ratio: 16 / 10; }
     }
 
     /* One picture per vehicle, and NOTHING behind them. The backdrop used to be a third
@@ -3393,8 +3477,9 @@
             <output id="ready-program-progress"></output>
           </div>
           <!--
-            An AIRCRAFT picker for the production machines. Quarantined and preview entries stay
-            hidden; deep links fail closed unless ?preview=1 is present.
+            An AIRCRAFT picker for the production machines plus visible preview teasers. Preview
+            entries remain disabled until ?preview=1 is explicitly acknowledged; quarantined
+            entries stay hidden.
           -->
           <div class="ready-mission-groups">
             <div class="sortie-option" data-selected="true" data-program-state="available">
@@ -3419,6 +3504,12 @@
               <button type="button" class="sortie-choice" data-aircraft="bike" data-program-node="weekend-ride" aria-pressed="false">
                 <span class="sortie-number">WEEKEND RIDE <b data-program-status="weekend-ride"></b></span>
                 <strong>YZF-R1</strong>
+              </button>
+            </div>
+            <div class="sortie-option" data-selected="false" data-program-state="available">
+              <button type="button" class="sortie-choice" data-aircraft="f14" data-program-node="top-gun" aria-pressed="false">
+                <span class="sortie-number">TOP GUN <b data-program-status="top-gun"></b></span>
+                <strong>F-14A</strong>
               </button>
             </div>
             <div class="sortie-option" data-selected="false" data-program-state="available" hidden>
@@ -3471,6 +3562,14 @@
             </div>
             <p>This changes the complete landing centreline, wire, rollout, and starting geometry.</p>
           </div>
+          <div id="ready-top-gun-seat" class="ready-deck-config" hidden>
+            <span class="ready-deck-label">Your aircraft</span>
+            <div class="ready-deck-options" role="group" aria-label="Top Gun seat">
+              <button type="button" data-top-gun-seat="0" aria-pressed="true">F-14A</button>
+              <button type="button" data-top-gun-seat="1" aria-pressed="false">MiG-28</button>
+            </div>
+            <p>Tomcat or aggressor MiG-28 — guns and Sidewinders, one-on-one ACM.</p>
+          </div>
           <details id="ready-circuits-preflight" class="ready-circuits-preflight" hidden>
             <summary>Preflight · pattern</summary>
             <div class="ready-circuits-body">
@@ -3507,7 +3606,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
             <span aria-hidden="true">⤴</span> Full screen: Share → Add to Home Screen
           </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 308 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 309 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
           <div class="ready-telemetry-disclosure">
@@ -3611,7 +3710,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     // Derive from a normal stamped URL so this comparison cannot drift from the next release:
     // tools/release/stamp-release.mjs rewrites every `?v=NNN`, and nothing else here.
-    const releaseBuild = new URL("./service-worker.js?v=308", location.href)
+    const releaseBuild = new URL("./service-worker.js?v=309", location.href)
       .searchParams.get("v");
 
     globalThis.__gunsPrebootReady = (async () => {
@@ -3707,11 +3806,11 @@ Splash one bandit to qualify · H controls · R restarts</p>
         });
         document.head.append(script);
       });
-      await loadClassicScript("./multiplayer-config.js?v=308");
-      await loadClassicScript("./_framework/blazor.webassembly.js?v=308", {
+      await loadClassicScript("./multiplayer-config.js?v=309");
+      await loadClassicScript("./_framework/blazor.webassembly.js?v=309", {
         autostart: "false",
       });
-      await import("./app.js?v=308");
+      await import("./app.js?v=309");
     } catch (error) {
       console.error(error);
       document.querySelector("#boot")?.classList.add("ready");
@@ -3724,8 +3823,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       try {
         const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
           await Promise.all([
-            import("./render/shell/inapp_browser.js?v=308"),
-            import("./render/shell/boot_fallback.js?v=308"),
+            import("./render/shell/inapp_browser.js?v=309"),
+            import("./render/shell/boot_fallback.js?v=309"),
           ]);
         const detection = detectEmbeddedBrowser({
           userAgent: navigator.userAgent,

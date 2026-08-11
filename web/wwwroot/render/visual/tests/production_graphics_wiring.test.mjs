@@ -187,10 +187,10 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /const UKRAINE_2030S_TERRAIN_ID = "terrain\.ukraine\.rapier-range\.atlas\.v1"/,
     "all 2030s Ukraine missions must select one stable theatre substrate");
   assert.match(source,
-    /const ukraineTheatre = state\?\.terrain_profile_id === UKRAINE_2030S_TERRAIN_ID/);
+    /resolveTerrainPresentationRoute\(\{[\s\S]*?state,[\s\S]*?ukraineTerrainId: UKRAINE_2030S_TERRAIN_ID[\s\S]*?const \{ ukraineTheatre, sceneryEra \} = terrainRoute/);
   assert.match(source,
-    /const sceneryEra = ukraineTheatre[\s\S]*?state\?\.terrain_scenery_profile \|\| "ukraine-modern"/,
-    "the shared theatre must retain its regional stylized scenery profile");
+    /const terrainKey = `\$\{terrainRoute\.terrainId\}\|\$\{missionFeaturePackCacheIdentity\(state\)\}`/,
+    "terrain cache identity must use the same resolved product as the loader");
   assert.match(source,
     /const UKRAINE_TRAINING_TERRAIN_MANIFEST_URL = new URL\([\s\S]*?rapier-range\.atlas\.manifest\.json/);
   assert.match(source,
@@ -201,13 +201,10 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
   assert.match(source,
     /const UKRAINE_SONIACHNE_MISSION_FEATURE_PACK_URL = new URL\([\s\S]*?hero-cells\/[\s\S]*?soniachne-clinic-a\.feature-pack\.json/);
   assert.match(source,
-    /const terrainKey = ukraineTheatre[\s\S]*?UKRAINE_2030S_TERRAIN_ID/,
-    "all Ukraine fidelity bands must retain the same theatre terrain identity");
-  assert.match(source,
     /function missionFeaturePackCacheIdentity\(state = null\)[\s\S]*?mission_feature_pack_id[\s\S]*?mission_feature_pack_sha256[\s\S]*?encodeURIComponent/,
     "terrain reuse must be scoped to the snapshot's selected feature-pack ID and hash");
   assert.match(source,
-    /const terrainKey = ukraineTheatre[\s\S]*?missionFeaturePackCacheIdentity\(state\)/,
+    /const terrainKey = `\$\{terrainRoute\.terrainId\}\|\$\{missionFeaturePackCacheIdentity\(state\)\}`/,
     "switching mission feature packs must rebuild rather than reuse stale terrain");
   assert.match(source,
     /loadMissionFeaturePack\(featurePackRequest, fetchWithAbort\)[\s\S]*?loadKoreaTerrain\(THREE,[\s\S]*?missionFeaturePack,[\s\S]*?missionFeaturePackSha256: featurePackRequest\.sha256/,
@@ -348,8 +345,11 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /function createDecisionSupportSea\(\)[\s\S]*TERRAIN_CURVATURE_START_M\.toFixed\(1\)[\s\S]*2 \* TERRAIN_EARTH_RADIUS_M/,
     "active ocean and terrain must use one curvature start/radius contract");
   assert.match(source,
-    /bridge\.SetWorldOrigin\(status\.spawnOrigin\[0\], status\.spawnOrigin\[2\]\)/,
-    "the room welcome must anchor simulation terrain to the browser's assigned world origin");
+    /applyStableWorldOrigin\(\{[\s\S]*?setWorldOrigin:[\s\S]*?bridge\.SetWorldOrigin\(eastM, northM\)[\s\S]*?authorityRestaged \? "" : appliedMultiplayerWorldOrigin/,
+    "the stable room welcome must anchor every newly staged compatible terrain authority");
+  assert.match(source,
+    /applyMultiplayerWorldOrigin\(multiplayer\?\.diagnostics\?\.\(\), \{[\s\S]*?authorityRestaged: true/,
+    "mission restaging must retry an already-known room origin without waiting for reconnect");
   assert.match(source,
     /placementEastM: Number\.isFinite\(terrainPlacementEastM\)[\s\S]*placementNorthM: Number\.isFinite\(terrainPlacementNorthM\)/,
     "presentation must consume the bridge's terrain transform rather than inventing its own");
@@ -357,8 +357,11 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /placementEastM: state\.carrier === true \? 100_000 : 0/,
     "the old mission-local placement would disagree with shared-world coordinates");
   assert.match(bridgeSource,
-    /TerrainPlacementEastM\(int index\)[\s\S]*?environment\.MultiplayerTerrainShared[\s\S]*?-_worldOriginEastM[\s\S]*?-environment\.TerrainSourceAnchorEastM/,
+    /TerrainPlacementEastM\(MissionEnvironmentContract environment\)[\s\S]*?environment\.MultiplayerTerrainShared[\s\S]*?-_worldOriginEastM[\s\S]*?-environment\.TerrainSourceAnchorEastM/,
     "shared sorties must use the inverse room origin while local fidelity cells use source anchors");
+  assert.match(bridgeSource,
+    /MissionEnvironmentContract environment = Session\.Beat\.EnvironmentIdentity;[\s\S]*?if \(!environment\.MultiplayerTerrainShared\) return false;[\s\S]*?TerrainForEnvironment\(environment\)/,
+    "custom BeatIndex=0 content must never be reconstructed through BuiltIn(0) on origin updates");
   assert.match(bridgeSource,
     /FixedStripPresentationId[\s\S]*presentation\.platform\.rapier-dispersed-strip\.v1[\s\S]*Session\.Carrier\?\.IsMaritime == true[\s\S]*CarrierPresentationId : FixedStripPresentationId/,
     "non-maritime recovery must project the fixed-strip presentation rather than a carrier");

@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=308";
+import { createHud } from "./hud.js?v=309";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,10 +16,25 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=308";
+} from "./render/debrief/sortie_result.js?v=309";
+import {
+  applyTopGunAnime1986,
+  topGunAnime1986ThemeActive,
+} from "./render/top-gun/theme.js";
+import { createAim9Presentation } from "./render/top-gun/aim9_presentation.js";
+import {
+  foxTwoLaunchEligible,
+  MISSION_AUTHORITY_KIND,
+  productionMissionAuthority,
+  resolveInitialProgramSelection,
+  sameMissionAuthority,
+  topGunOwnsFoxTwoInput as missionAuthorityOwnsFoxTwoInput,
+  topGunMissionAuthority,
+} from "./render/top-gun/mission_authority.js";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
+import { resolveTerrainPresentationRoute } from "./render/environment/terrain_presentation_route.js";
 import { loadKoreaTerrain } from "./render/environment/korea_terrain.js";
 import { attachSoftWorldGroundHaze } from "./render/environment/soft_world_atmosphere.js";
 import { createWinterPrecipitation } from "./render/environment/winter_precipitation.js";
@@ -49,8 +64,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=308";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=308";
+} from "./render/release/release_identity.js?v=309";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=309";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -63,7 +78,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=308";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=309";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -72,10 +87,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=308";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=309";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=308";
+} from "./render/nav/carrier_sortie_touch_control.js?v=309";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -121,6 +136,7 @@ import {
   GlobalRoomClient,
   resolveGlobalRoomUrl,
 } from "./render/presence/global_room_client.js";
+import { applyStableWorldOrigin } from "./render/presence/world_origin_authority.js";
 import {
   presenceStatusPresentation,
   presenceTelemetryContext,
@@ -150,7 +166,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=308";
+} from "./render/telemetry/ai_frame_pressure.js?v=309";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -160,14 +176,14 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=308";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=308";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=308";
+} from "./render/telemetry/telemetry_batch.js?v=309";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=309";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=309";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=308";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=308";
+} from "./render/shell/boot_watchdog.js?v=309";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=309";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -176,7 +192,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=308";
+} from "./render/settings/player_settings.js?v=309";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -222,13 +238,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=308";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=308";
+} from "./render/scene/scene_builders.js?v=309";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=309";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=308";
+} from "./render/audio/flight_audio.js?v=309";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -471,6 +487,9 @@ const readyConfigLabel = document.querySelector("#ready-config-label");
 const readyControls = document.querySelector("#ready-controls");
 const readyDeckConfig = document.querySelector("#ready-deck-config");
 const readyDeckButtons = [...document.querySelectorAll("[data-deck-configuration]")];
+const readyTopGunSeat = document.querySelector("#ready-top-gun-seat");
+const readyTopGunSeatButtons = [...document.querySelectorAll("[data-top-gun-seat]")];
+const readyTopGunPicker = document.querySelector('[data-program-node="top-gun"]');
 const readyCircuitsPreflight = document.querySelector("#ready-circuits-preflight");
 const readyCircuitsLegs = document.querySelector("#ready-circuits-legs");
 const readyCircuitsCue = document.querySelector("#ready-circuits-cue");
@@ -2659,26 +2678,32 @@ const requestedExperience = requestedProgramNode
   ? experienceById(requestedProgramNode.id) : null;
 const requestedExperienceAccess = requestedExperience
   ? experienceAccess(requestedExperience.id, window.location) : null;
-const blockedRequestedExperience = requestedExperienceAccess
-  && !requestedExperienceAccess.allowed ? requestedExperience : null;
 const defaultProgramNode = recommendedCampaignNode(campaignProfile);
-const initialProgramNode = requestedProgramNode
-  && requestedExperienceAccess?.allowed
-  ? requestedProgramNode : defaultProgramNode;
+const initialProgramSelection = resolveInitialProgramSelection({
+  requestedProgramNode,
+  requestedExperience,
+  requestedAccess: requestedExperienceAccess,
+  defaultProgramNode,
+});
+const initialProgramNode = initialProgramSelection.selectedProgramNode;
 // A recognised preview/quarantined deep link remains represented in the Ready UI instead of
-// silently launching the recommended production mission. The bridge may stage its harmless
-// production default behind that screen, but this selection cannot reach StartBeat or Begin.
-let blockedProgramExperience = blockedRequestedExperience;
-let selectedProgramNodeId = blockedProgramExperience?.id ?? initialProgramNode.id;
+// silently dismissing its release blocker. It is never the selected mission authority: the shell
+// keeps the recommended production mission selected/staged behind the disabled Ready action.
+let blockedProgramExperience = initialProgramSelection.blockedExperience;
+let selectedProgramNodeId = initialProgramNode.id;
 // The recommended front door remains the mission-7 infinite gauntlet, while an allowed explicit
 // programme deep link must launch the card it highlights rather than staging a different mission.
 // Standalone selections keep the last shell beat staged behind Ready until Fly navigates away.
 let selectedBeat = Number.isInteger(initialProgramNode.mission)
   ? initialProgramNode.mission
   : defaultProgramNode.mission;
-let stagedBeat = selectedBeat;
+const TOP_GUN_PROGRAM_ID = "top-gun";
+const TOP_GUN_SEAT = Object.freeze({ F14A: 0, MIG28: 1 });
+let selectedTopGunSeat = TOP_GUN_SEAT.F14A;
 let selectedDeckConfiguration = 1;
-let stagedDeckConfiguration = selectedDeckConfiguration;
+// Null means no bridge authority has been staged in this page lifetime yet. Once staged, this is
+// the only browser-side identity consulted for restart/restage decisions.
+let stagedMissionAuthority = null;
 let resetFrameClock = () => {};
 let bridgePauseApplied = null;
 let testFlightActionController = null;
@@ -2906,16 +2931,18 @@ renderBuildIdentity();
 recorder.context("build_identity", buildIdentity.telemetry);
 queueMicrotask(() => void resolveBuildIdentity());
 
-function applyMultiplayerWorldOrigin(status) {
-  if (!status) return;
-  if (status.phase === "online" && Array.isArray(status.spawnOrigin)
-    && status.spawnOrigin.length === 3 && status.spawnOrigin.every(Number.isFinite)) {
-    const originKey = `${status.worldEpoch || "world.unknown"}|${status.spawnOrigin.join(",")}`;
-    if (bridge && originKey !== appliedMultiplayerWorldOrigin
-      && bridge.SetWorldOrigin(status.spawnOrigin[0], status.spawnOrigin[2]) === true) {
-      appliedMultiplayerWorldOrigin = originKey;
-    }
-  }
+function applyMultiplayerWorldOrigin(status, { authorityRestaged = false } = {}) {
+  const result = applyStableWorldOrigin({
+    status,
+    setWorldOrigin: bridge?.SetWorldOrigin
+      ? (eastM, northM) => bridge.SetWorldOrigin(eastM, northM)
+      : null,
+    // StartBeat/StartTopGun replaces the terrain authority even when the room welcome is
+    // unchanged. Force that stable origin through the newly staged contract once more.
+    appliedKey: authorityRestaged ? "" : appliedMultiplayerWorldOrigin,
+  });
+  appliedMultiplayerWorldOrigin = result.appliedKey;
+  return result.applied;
 }
 
 function renderMultiplayerStatus(status) {
@@ -3219,6 +3246,14 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     brief: "Fighter pilots ride on weekends. The Rapier strip becomes a painted circuit for a liter-bike free ride—split authority for throttle, brake, steer, and rider weight. Fly opens the dedicated Weekend Ride surface.",
     controls: "W/S throttle/brake · A/D steer · arrows rider weight · Q/E gears · C auto/manual clutch · R reset",
   }),
+  "top-gun": Object.freeze({
+    kicker: "1986 · training range",
+    title: "Top Gun",
+    sortie: "F-14A vs MiG-28 · guns and Sidewinders · DACT arena",
+    configuration: "F-14A or MiG-28 seat · M61 + AIM-9 · anime-1986 presentation · preview with ?preview=1",
+    brief: "Tomcat or aggressor MiG-28 over a Miramar-class training range—guns and heaters, one-on-one ACM. Preview flyable: acknowledge preview, pick your seat, then fight.",
+    controls: "Arrows fly · W/S power · F guns · R fox-two · V padlock · Tab target",
+  }),
   "ace-duel": Object.freeze({
     kicker: "Raptor programme · final exam",
     title: "Ace Duel",
@@ -3228,6 +3263,67 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nSplash the ace to complete the programme · Space releases the G limiter",
   }),
 });
+
+function isTopGunProgram(programId = selectedProgramNodeId) {
+  return programId === TOP_GUN_PROGRAM_ID;
+}
+
+function topGunSeatLabel(seat = selectedTopGunSeat) {
+  return seat === TOP_GUN_SEAT.MIG28 ? "MiG-28" : "F-14A";
+}
+
+function topGunSeatAircraftArt(seat = selectedTopGunSeat) {
+  return seat === TOP_GUN_SEAT.MIG28 ? "mig-28" : "f14";
+}
+
+function isTopGunBeatStaged(state = latestState) {
+  return String(state?.mission_definition_id || "").includes("top-gun")
+    || state?.presentation_theme === "top-gun-anime-1986";
+}
+
+function selectedProductionMissionAuthority() {
+  return productionMissionAuthority(selectedBeat, selectedDeckConfiguration);
+}
+
+function tryLaunchFoxTwo() {
+  if (!foxTwoLaunchEligible({
+    bridgeAvailable: typeof bridge?.LaunchFoxTwo === "function",
+    snapshotIsTopGun: isTopGunBeatStaged(latestState),
+    pauseCount: pauseReasons.size,
+    snapshotFrozen: latestState?.frozen === true,
+    replayActive: incidentReplay?.active === true,
+    sessionPhase: latestState?.session_phase,
+  })) return false;
+  return bridge.LaunchFoxTwo() === true;
+}
+
+function topGunOwnsFoxTwoInput() {
+  return missionAuthorityOwnsFoxTwoInput({
+    selectedProgramId: selectedProgramNodeId,
+    topGunProgramId: TOP_GUN_PROGRAM_ID,
+    stagedAuthority: stagedMissionAuthority,
+  });
+}
+
+function updateTopGunPickerArt() {
+  if (!readyTopGunPicker) return;
+  readyTopGunPicker.dataset.aircraft = topGunSeatAircraftArt();
+}
+
+function stageTopGunOnBridge() {
+  if (!bridge?.StartTopGun || !isTopGunProgram()
+    || !experienceAccess(TOP_GUN_PROGRAM_ID, window.location).allowed) return false;
+  const desiredAuthority = topGunMissionAuthority(selectedTopGunSeat);
+  const sameSeat = sameMissionAuthority(stagedMissionAuthority, desiredAuthority)
+    && isTopGunBeatStaged();
+  const restarted = sameSeat && bridge.RestartSortie?.(0);
+  if (!restarted) {
+    bridge.StartTopGun(selectedTopGunSeat);
+    restoreDirectorState();
+  }
+  stagedMissionAuthority = desiredAuthority;
+  return true;
+}
 
 // Codes whose bridge DOWN edge used the source-aware direct throttle path. Their matching UP edge
 // must use the same path so the simulation grammar never classifies a rocker hold as a keyboard
@@ -3997,6 +4093,13 @@ function renderCampaignProgress() {
       ? "" : experienceById(nodeId)?.releaseState ?? "unavailable";
   }
   if (readyDeckConfig) readyDeckConfig.hidden = true;
+  if (readyTopGunSeat) readyTopGunSeat.hidden = !(selectedProgramNodeId === TOP_GUN_PROGRAM_ID);
+  for (const button of readyTopGunSeatButtons) {
+    button.setAttribute("aria-pressed", String(
+      Number(button.dataset.topGunSeat) === selectedTopGunSeat,
+    ));
+  }
+  updateTopGunPickerArt();
   renderCircuitsPreflight(missionBrief());
   for (const button of readyDeckButtons) {
     button.setAttribute("aria-pressed", String(
@@ -4107,6 +4210,15 @@ function isCarrierQualificationState(state) {
     ].includes(String(state?.mission_definition_id || "").toLowerCase());
 }
 
+function renderTopGunPresentationTheme(state = latestState) {
+  const readyVisible = pauseReasons.has("ready");
+  applyTopGunAnime1986(document.documentElement, topGunAnime1986ThemeActive({
+    programNodeId: selectedProgramNodeId,
+    presentationTheme: state?.presentation_theme,
+    readyVisible,
+  }));
+}
+
 function renderPauseUi(state = latestState) {
   const ready = pauseReasons.has("ready");
   const finished = pauseReasons.has("finished");
@@ -4168,6 +4280,7 @@ function renderPauseUi(state = latestState) {
   }
   if (readySelector) readySelector.hidden = !ready;
   if (readyDeckConfig && !ready) readyDeckConfig.hidden = true;
+  if (readyTopGunSeat && !ready) readyTopGunSeat.hidden = true;
   if (readyCircuitsPreflight && !ready) readyCircuitsPreflight.hidden = true;
   if (ready) renderCampaignProgress();
   readyCasevacRouteBriefing.update({
@@ -4337,7 +4450,9 @@ function renderPauseUi(state = latestState) {
     readyTitle.textContent = brief.title;
     readyBrief.textContent = brief.brief;
     readySortie.textContent = brief.sortie;
-    readyConfig.textContent = selectedBeat === 5
+    readyConfig.textContent = isTopGunProgram()
+      ? `${topGunSeatLabel()} · M61 + AIM-9 · anime-1986 presentation`
+      : selectedBeat === 5
       ? "F-35C reduced-order public-data surrogate · recovery only · angled deck"
       : selectedBeat === 6
         ? "Maintenance profile · axial deck"
@@ -4419,6 +4534,7 @@ function renderPauseUi(state = latestState) {
     queueMicrotask(focusReadyScreen);
   else if (showScreen && !settingsPaused && !readyScreen.contains(document.activeElement))
     queueMicrotask(focusReadyScreen);
+  renderTopGunPresentationTheme(state);
 }
 
 function applyBridgePause() {
@@ -4464,24 +4580,35 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
       && bridge.GetDeckConfiguration() !== selectedDeckConfiguration) {
       bridge.SetDeckConfiguration(selectedDeckConfiguration);
     }
-    // Respawning into the SAME gauntlet keeps the fight director's pacing memory: a pilot who
-    // fought their way up to Ace and died must not be sent back to the Novice warm-up. StartBeat
-    // resets that memory (correct when picking a mission), so prefer RestartSortie when the staged
-    // mission is unchanged and fall back only when it actually differs.
-    const sameSortie = stagedBeat === selectedBeat
-      && stagedDeckConfiguration === selectedDeckConfiguration
-      && bridge.RestartSortie?.(selectedBeat);
-    if (!sameSortie) {
-      bridge.StartBeat(selectedBeat);
-      // StartBeat resets the director by design (picking a mission is not a respawn), so the
-      // persisted estimate has to be reapplied AFTER it.
-      restoreDirectorState();
+    const topGunAllowed = isTopGunProgram()
+      && experienceAccess(TOP_GUN_PROGRAM_ID, window.location).allowed;
+    if (topGunAllowed && stageTopGunOnBridge()) {
+      recorder.event("lifecycle", "sortie_staged", {
+        program: TOP_GUN_PROGRAM_ID,
+        top_gun_seat: topGunSeatLabel(selectedTopGunSeat),
+      });
+    } else {
+      // Respawning into the SAME gauntlet keeps the fight director's pacing memory: a pilot who
+      // fought their way up to Ace and died must not be sent back to the Novice warm-up. StartBeat
+      // resets that memory (correct when picking a mission), so prefer RestartSortie when the staged
+      // mission is unchanged and fall back only when it actually differs.
+      const desiredAuthority = selectedProductionMissionAuthority();
+      const sameSortie = sameMissionAuthority(stagedMissionAuthority, desiredAuthority)
+        && bridge.RestartSortie?.(selectedBeat);
+      if (!sameSortie) {
+        bridge.StartBeat(selectedBeat);
+        // StartBeat resets the director by design (picking a mission is not a respawn), so the
+        // persisted estimate has to be reapplied AFTER it.
+        restoreDirectorState();
+      }
+      stagedMissionAuthority = desiredAuthority;
+      recorder.event("lifecycle", "sortie_staged", {
+        mission: selectedBeat,
+        deck_configuration: selectedDeckConfiguration === 1 ? "ANGLED" : "AXIAL",
+      });
     }
-    stagedBeat = selectedBeat;
-    stagedDeckConfiguration = selectedDeckConfiguration;
-    recorder.event("lifecycle", "sortie_staged", {
-      mission: selectedBeat,
-      deck_configuration: selectedDeckConfiguration === 1 ? "ANGLED" : "AXIAL",
+    applyMultiplayerWorldOrigin(multiplayer?.diagnostics?.(), {
+      authorityRestaged: true,
     });
     refreshStagedMissionSnapshot();
   }
@@ -4495,6 +4622,35 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
 
 function selectCampaignNode(nodeId, { focus = true } = {}) {
   const standalone = experienceById(nodeId);
+  if (standalone?.id === TOP_GUN_PROGRAM_ID) {
+    if (!experienceAccess(standalone.id, window.location).allowed) return false;
+    const previous = selectedProgramNodeId;
+    blockedProgramExperience = null;
+    selectedProgramNodeId = standalone.id;
+    const missionUrl = new URL(window.location.href);
+    missionUrl.searchParams.delete("mission");
+    missionUrl.searchParams.set("program", selectedProgramNodeId);
+    window.history.replaceState(window.history.state, "", missionUrl);
+    recorder.event("ui", "program_node_previewed", {
+      node: selectedProgramNodeId,
+      mission: null,
+      top_gun_seat: topGunSeatLabel(selectedTopGunSeat),
+      previous_node: previous,
+    });
+    autoLaunchPending = false;
+    const authorityChanged = !sameMissionAuthority(
+      stagedMissionAuthority,
+      topGunMissionAuthority(selectedTopGunSeat),
+    )
+      || !isTopGunBeatStaged();
+    if (bridge && pauseReasons.has("ready") && authorityChanged) {
+      enterReady({ resetBridge: true, focus: false });
+    } else {
+      renderPauseUi();
+    }
+    if (focus) queueMicrotask(focusReadyScreen);
+    return true;
+  }
   if (standalone?.mission == null) {
     if (!standalone || !experienceAccess(standalone.id, window.location).allowed) return false;
     const previous = selectedProgramNodeId;
@@ -4511,8 +4667,14 @@ function selectCampaignNode(nodeId, { focus = true } = {}) {
       previous_node: previous,
     });
     autoLaunchPending = false;
-    // Keep the last shell beat staged behind Ready; Fly navigates to the owned surface.
-    renderPauseUi();
+    // A dedicated route still navigates on Fly, but it may not leave Top Gun authority resident
+    // behind its Ready card. Re-stage the last production shell beat before showing the route.
+    if (bridge && pauseReasons.has("ready")
+      && stagedMissionAuthority?.kind === MISSION_AUTHORITY_KIND.TOP_GUN) {
+      enterReady({ resetBridge: true, focus: false });
+    } else {
+      renderPauseUi();
+    }
     if (focus) queueMicrotask(focusReadyScreen);
     return true;
   }
@@ -4536,9 +4698,10 @@ function selectCampaignNode(nodeId, { focus = true } = {}) {
   // Ready interlock remains held so its authored route, terrain and vehicle facts are already the
   // ones on screen before the commander presses Fly.
   autoLaunchPending = false;
-  const authorityChanged = stagedBeat !== selectedBeat
-    || ([5, 6].includes(selectedBeat)
-      && stagedDeckConfiguration !== selectedDeckConfiguration);
+  const authorityChanged = !sameMissionAuthority(
+    stagedMissionAuthority,
+    selectedProductionMissionAuthority(),
+  );
   if (bridge && pauseReasons.has("ready") && authorityChanged) {
     enterReady({ resetBridge: true, focus: false });
   } else {
@@ -4557,11 +4720,30 @@ function launchMission(index = selectedBeat) {
     window.location.assign(standalone.route);
     return true;
   }
+  if (isTopGunProgram()) {
+    const authorityChanged = !sameMissionAuthority(
+      stagedMissionAuthority,
+      topGunMissionAuthority(selectedTopGunSeat),
+    );
+    let stagedState;
+    if (!pauseReasons.has("ready") || authorityChanged || !isTopGunBeatStaged()) {
+      stagedState = enterReady({ resetBridge: true, focus: false });
+    } else {
+      stagedState = refreshStagedMissionSnapshot();
+    }
+    if (prepareMissionTerrain(TOP_GUN_PROGRAM_ID, stagedState)) {
+      autoLaunchPending = true;
+      return false;
+    }
+    return beginFlight();
+  }
   if (Number(index) !== selectedBeat) return false;
-  const deckChanged = [5, 6].includes(selectedBeat)
-    && stagedDeckConfiguration !== selectedDeckConfiguration;
+  const authorityChanged = !sameMissionAuthority(
+    stagedMissionAuthority,
+    selectedProductionMissionAuthority(),
+  );
   let stagedState;
-  if (!pauseReasons.has("ready") || stagedBeat !== selectedBeat || deckChanged) {
+  if (!pauseReasons.has("ready") || authorityChanged) {
     stagedState = enterReady({ resetBridge: true, focus: false });
   } else {
     // Even the already-selected path refreshes synchronously: launch may be invoked before the
@@ -4938,6 +5120,27 @@ function selectDeckConfiguration(value) {
   return true;
 }
 
+function selectTopGunSeat(value) {
+  if (!isTopGunProgram() || !pauseReasons.has("ready")) return false;
+  const seat = Number(value) === TOP_GUN_SEAT.MIG28
+    ? TOP_GUN_SEAT.MIG28 : TOP_GUN_SEAT.F14A;
+  if (seat === selectedTopGunSeat) return false;
+  selectedTopGunSeat = seat;
+  recorder.event("ui", "top_gun_seat_previewed", {
+    program: TOP_GUN_PROGRAM_ID,
+    top_gun_seat: topGunSeatLabel(seat),
+  });
+  if (bridge && !sameMissionAuthority(
+    stagedMissionAuthority,
+    topGunMissionAuthority(selectedTopGunSeat),
+  )) {
+    enterReady({ resetBridge: true, focus: false });
+  } else {
+    renderPauseUi();
+  }
+  return true;
+}
+
 function toggleDeckAndReady() {
   selectDeckConfiguration(selectedDeckConfiguration === 1 ? 0 : 1);
 }
@@ -5051,6 +5254,11 @@ readySelector?.addEventListener("click", (event) => {
 readyDeckConfig?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-deck-configuration]");
   if (button) selectDeckConfiguration(Number(button.dataset.deckConfiguration));
+});
+
+readyTopGunSeat?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-top-gun-seat]");
+  if (button) selectTopGunSeat(Number(button.dataset.topGunSeat));
 });
 
 readyCircuitsPreflight?.addEventListener("toggle", () => {
@@ -7207,6 +7415,7 @@ class FlightView {
     );
     this.banditDestruction = createBanditDestruction();
     this.gunEffects = createGunEffects();
+    this.aim9Presentation = createAim9Presentation(THREE);
     this.playerDamageSmoke = createDamageSmokeTrail(THREE, {
       name: "PLAYER_DAMAGE_SMOKE",
       capacity: VISUAL_QUALITY.tier === "mobile" ? 32 : 56,
@@ -7220,6 +7429,7 @@ class FlightView {
     this.scene.add(
       this.banditDestruction,
       this.gunEffects,
+      this.aim9Presentation.group,
       this.playerDamageSmoke.points,
       this.banditDamageSmoke.points,
     );
@@ -7371,7 +7581,15 @@ class FlightView {
 
   ensureTerrainPresentation(state = null) {
     this.configureTerrainMission(state);
-    const ukraineTheatre = state?.terrain_profile_id === UKRAINE_2030S_TERRAIN_ID;
+    const terrainPackId = this.presentationAssets.requested.packId
+      || this.presentationAssets.activePack?.id || "korea-1950s";
+    const terrainRoute = resolveTerrainPresentationRoute({
+      state,
+      ukraineTerrainId: UKRAINE_2030S_TERRAIN_ID,
+      terrainPackId,
+      selectedBeat,
+    });
+    const { ukraineTheatre, sceneryEra } = terrainRoute;
     // ADR-0003 soft world: warm dusty atmosphere for the Ukraine theatre without flipping the
     // Korea pack-environment kill switch. Decision-support sky stays the production path.
     if (this.sky?.uniforms?.uSoftWorld) {
@@ -7420,16 +7638,7 @@ class FlightView {
       this.renderer.toneMappingExposure = 1.02;
       if (this.sea?.mesh) this.sea.mesh.visible = true;
     }
-    const terrainPackId = this.presentationAssets.requested.packId
-      || this.presentationAssets.activePack?.id || "korea-1950s";
-    const sceneryEra = ukraineTheatre
-      ? (state?.terrain_scenery_profile || "ukraine-modern")
-      : (state?.terrain_scenery_profile
-        || (terrainPackId.includes("modern") || selectedBeat === 7 || selectedBeat === 9
-          || selectedBeat === 10 || selectedBeat === 12 ? "modern" : "1950s"));
-    const terrainKey = ukraineTheatre
-      ? `${UKRAINE_2030S_TERRAIN_ID}|${missionFeaturePackCacheIdentity(state)}`
-      : `terrain.korea.central-front.v2|${missionFeaturePackCacheIdentity(state)}`;
+    const terrainKey = `${terrainRoute.terrainId}|${missionFeaturePackCacheIdentity(state)}`;
     const manifestUrl = ukraineTheatre
       ? UKRAINE_TRAINING_TERRAIN_MANIFEST_URL
       : DEVELOPMENT_KOREA_ATLAS_MANIFEST_URL;
@@ -8606,6 +8815,7 @@ class FlightView {
       && Number.isFinite(state.lead_y) && Number.isFinite(state.lead_z)) {
       this.leadPipper.set(state.lead_x, state.lead_y, -state.lead_z);
     }
+    this.aim9Presentation.update(state);
     if (opponentPresent) {
       this.combatPresentationSuppressed = false;
       this.gunEffects.visible = true;
@@ -9214,6 +9424,7 @@ class FlightView {
     this.sea.mesh.removeFromParent();
     this.banditDestruction.removeFromParent();
     this.gunEffects.removeFromParent();
+    this.aim9Presentation.dispose();
     disposeSceneResources(this.sky.mesh);
     disposeSceneResources(this.sea.mesh);
     disposeSceneResources(this.banditDestruction);
@@ -10618,6 +10829,14 @@ function installInput(view) {
     }
 
     if (event.code === "KeyR") {
+      // Whenever Top Gun owns the staged authority, R belongs exclusively to Fox Two. A rejected
+      // launch (empty magazine, missile already live, Ready/pause/frozen edge, terminal state, or
+      // invalid envelope) is still a consumed weapon command and must never fall through into an
+      // unrelated sortie restart. Fly/Fly Again remains the explicit restart action.
+      if (topGunOwnsFoxTwoInput()) {
+        if (tryLaunchFoxTwo()) view.hud.armAudio?.();
+        return;
+      }
       restartMissionNow();
       return;
     }
@@ -10816,7 +11035,16 @@ async function boot() {
     configurable: true,
     value: Object.freeze({ diagnostics: () => snapshotSource.diagnostics() }),
   });
-  bridge.StartBeat(selectedBeat);   // initialise the sortie; Begin is the explicit clock release
+  // Boot always establishes a production authority first. A blocked Top Gun deep link never
+  // becomes selected, and even an acknowledged preview crosses StartTopGun only after this
+  // harmless default exists behind the Ready interlock.
+  bridge.StartBeat(selectedBeat);
+  stagedMissionAuthority = selectedProductionMissionAuthority();
+  if (isTopGunProgram()
+    && !blockedProgramExperience
+    && experienceAccess(TOP_GUN_PROGRAM_ID, window.location).allowed) {
+    stageTopGunOnBridge();
+  }
   refreshStagedMissionSnapshot();
   syncPlayerGunTarget();
   bridgePauseApplied = true;
@@ -10855,7 +11083,16 @@ async function boot() {
   globalThis.__gunsLifecycle = {
     get reasons() { return [...pauseReasons]; },
     get selectedBeat() { return selectedBeat; },
-    get stagedBeat() { return stagedBeat; },
+    get stagedBeat() {
+      return stagedMissionAuthority?.kind === MISSION_AUTHORITY_KIND.PRODUCTION
+        ? stagedMissionAuthority.beat : null;
+    },
+    get selectedTopGunSeat() { return selectedTopGunSeat; },
+    get stagedTopGunSeat() {
+      return stagedMissionAuthority?.kind === MISSION_AUTHORITY_KIND.TOP_GUN
+        ? stagedMissionAuthority.seat : null;
+    },
+    get stagedMissionAuthority() { return stagedMissionAuthority; },
     begin: launchMission,
     restart: restartMission,
   };
@@ -11102,7 +11339,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=308")
+    navigator.serviceWorker.register("service-worker.js?v=309")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

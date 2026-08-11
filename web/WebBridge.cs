@@ -33,6 +33,20 @@ public static partial class WebBridge {
         index, KoreaWeatherPresets.ForBeat(index), TerrainForBeat(index), _deckConfiguration);
 
     /// <summary>
+    /// Stage the Top Gun ACM beat for the chosen seat. Custom factory beats use index 0; the browser
+    /// tracks seat separately from built-in mission indices.
+    /// </summary>
+    [JSExport]
+    public static void StartTopGun(int seat) {
+        TopGunSeat topGunSeat = seat == 1 ? TopGunSeat.Mig28 : TopGunSeat.F14A;
+        MissionEnvironmentContract environment = TopGunEnvironment.Contract;
+        Session.StartBeatWithEnvironment(
+            () => Beats.TopGunAcm(topGunSeat),
+            TopGunEnvironment.Weather,
+            TerrainForEnvironment(environment));
+    }
+
+    /// <summary>
     /// Fly again after dying WITHOUT throwing away the gauntlet's pacing memory. StartBeat resets
     /// the FightDirector — correct when the pilot picks a mission, wrong when they are respawning
     /// into the same infinite duel, because it sends a player who had fought their way up to Ace
@@ -71,6 +85,11 @@ public static partial class WebBridge {
     /// </summary>
     [JSExport]
     public static bool SetWorldOrigin(double eastM, double northM) {
+        MissionEnvironmentContract environment = Session.Beat.EnvironmentIdentity;
+        // Persistent-room origins only apply to contracts that explicitly share that frame. In
+        // particular, custom beats all use BeatIndex=0; rebuilding their terrain from integer 0
+        // would silently replace their authored surface with BuiltIn(0)'s Ukraine placement.
+        if (!environment.MultiplayerTerrainShared) return false;
         if (!double.IsFinite(eastM) || !double.IsFinite(northM)
             || Math.Abs(eastM) > MaximumWorldOriginMagnitudeM
             || Math.Abs(northM) > MaximumWorldOriginMagnitudeM)
@@ -78,7 +97,7 @@ public static partial class WebBridge {
         _worldOriginEastM = eastM;
         _worldOriginNorthM = northM;
         _worldOriginConfigured = true;
-        Session.SetTerrainSurface(TerrainForBeat(Session.BeatIndex));
+        Session.SetTerrainSurface(TerrainForEnvironment(environment));
         return true;
     }
 
@@ -118,6 +137,10 @@ public static partial class WebBridge {
     [JSExport]
     public static bool LaunchRapierShortRangeMissile() =>
         Session.LaunchRapierShortRangeMissile();
+
+    /// <summary>Top Gun AIM-9 launch — returns false on every other beat (including first-merge).</summary>
+    [JSExport]
+    public static bool LaunchFoxTwo() => Session.LaunchFoxTwo();
 
     [JSExport]
     public static void NudgeAssistedSpeed(int direction) =>
@@ -281,32 +304,39 @@ public static partial class WebBridge {
     [JSExport]
     public static string GetState() => SnapshotProjection.BuildState(
         Session, _deckConfiguration, _worldOriginEastM, _worldOriginNorthM,
-        _worldOriginConfigured, BaseTerrainForBeat(Session.BeatIndex));
+        _worldOriginConfigured, BaseTerrainForEnvironment(Session.Beat.EnvironmentIdentity));
 
     static MissionEnvironmentContract EnvironmentForBeat(int index) =>
         Beats.BuiltIn(index, _deckConfiguration).EnvironmentIdentity;
 
-    static double TerrainPlacementEastM(int index) {
-        MissionEnvironmentContract environment = EnvironmentForBeat(index);
+    static double TerrainPlacementEastM(MissionEnvironmentContract environment) {
         return environment.MultiplayerTerrainShared
             ? -_worldOriginEastM
             : -environment.TerrainSourceAnchorEastM;
     }
 
-    static double TerrainPlacementNorthM(int index) {
-        MissionEnvironmentContract environment = EnvironmentForBeat(index);
+    static double TerrainPlacementNorthM(MissionEnvironmentContract environment) {
         return environment.MultiplayerTerrainShared
             ? -_worldOriginNorthM
             : -environment.TerrainSourceAnchorNorthM;
     }
 
-    static ITerrainSurface? BaseTerrainForBeat(int index) => UkraineTheatreTerrain;
+    static ITerrainSurface? BaseTerrainForEnvironment(MissionEnvironmentContract environment) =>
+        StringComparer.Ordinal.Equals(
+            environment.TerrainProfileId,
+            Ukraine2030sTheatre.TerrainProfileId)
+            ? UkraineTheatreTerrain
+            : null;
 
     // Null only when a constrained build explicitly opts out of the selected embedded terrain.
     // The session and projection treat that as sea level; the browser then skips the visual
     // terrain fetch because the snapshot reports terrain_present=false.
-    static ITerrainSurface? TerrainForBeat(int index) => BaseTerrainForBeat(index) is { } terrain
+    static ITerrainSurface? TerrainForEnvironment(MissionEnvironmentContract environment) =>
+        BaseTerrainForEnvironment(environment) is { } terrain
         ? new TranslatedTerrainSurface(terrain,
-            TerrainPlacementEastM(index), TerrainPlacementNorthM(index))
+            TerrainPlacementEastM(environment), TerrainPlacementNorthM(environment))
         : null;
+
+    static ITerrainSurface? TerrainForBeat(int index) =>
+        TerrainForEnvironment(EnvironmentForBeat(index));
 }

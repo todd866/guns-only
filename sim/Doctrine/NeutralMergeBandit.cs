@@ -68,6 +68,16 @@ public sealed class NeutralMergeBandit :
 
     public AircraftState State => _fight?.State ?? _mergeSim.State;
     public Vec3D LiftDir => _fight?.LiftDir ?? _mergeSim.LiftDir;
+    public double EffectiveWingSpanM =>
+        _fight?.EffectiveWingSpanM ?? _mergeSim.EffectiveWingSpanM;
+    public void SetEffectiveWingSpanM(double wingSpanM) {
+        _mergeSim.SetEffectiveWingSpanM(wingSpanM);
+        _fight?.SetEffectiveWingSpanM(wingSpanM);
+    }
+    public void ResetFlightParams() {
+        _mergeSim.ResetFlightParams();
+        _fight?.ResetFlightParams();
+    }
     public IWindField? Wind {
         get => _wind;
         set {
@@ -212,6 +222,10 @@ public sealed class NeutralMergeBandit :
         };
         if (_lookaheadCadencePhase is int phase)
             fight.ConfigureLookaheadCadencePhase(phase);
+        // Preserve the physical wing configuration on the exact tick that opens the merge gate.
+        // Without this transfer an F-14 opponent briefly reverted to its unswept baseline span
+        // while its snapshot still advertised the applied sweep schedule.
+        fight.SetEffectiveWingSpanM(_mergeSim.EffectiveWingSpanM);
         fight.ConfigureAiPlanning(_computeLevel, _incrementalAiPlanning);
         fight.SeedEnginePowerFraction(_mergeSim.ThrustFraction);
         fight.SeedHeldCommand(

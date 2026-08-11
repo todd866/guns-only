@@ -1063,6 +1063,79 @@ public static class FlightModel {
             RollHoldRateGainNms = 2_500_000.0
         };
 
+    /// F-14A PUBLIC-DATA SURROGATE for Top Gun visual merge. Measured anchors: 40,100 lb empty
+    /// (Navy museum primary; Western Museum of Flight lists 40,104 lb — canonical empty mass uses
+    /// the museum figure), 565 ft² wing, 20,900 lbf static afterburner per TF30-P-412A/-414A.
+    /// Aero/control/inertia coefficients are rounded mission surrogates. Static mid-sweep span
+    /// stands in until Task 6 binds a Mach/CAS WingSweepSchedule; no AWG-9/RIO simulation.
+    /// https://www.history.navy.mil/content/history/museums/nnam/explore/collections/aircraft/f/f-14a-tomcat.html
+    public static readonly AircraftParams F14APublicDataSurrogate = new(
+        MassKg: 24000.0, // representative visual-merge weight; empty anchor 18,186 kg
+        WingAreaM2: 52.49, // 565 sq ft (measured)
+        ThrustMaxN: 185_934.0, // 2 × 20,900 lbf SLS afterburning (measured)
+        CD0: 0.020, InducedK: 0.048, CLMax: 1.45, CLMin: -0.70, // SURROGATE polar fit
+        RollRateMaxRad: 2.2, BankTau: 0.26,
+        MCrit: 0.92, WaveDragK: 75.0,
+        SpoolUpTau: 1.6, SpoolDownTau: 0.9,
+        CLAlpha: 4.6,
+        IxxKgM2: 75_000.0, IyyKgM2: 295_000.0, IzzKgM2: 345_000.0, // SURROGATE inertias
+        RollStiffnessNmRad: 1_050_000.0, PitchStiffnessNmRad: 2_750_000.0,
+        YawStiffnessNmRad: 880_000.0,
+        RollDampingNms: 380_000.0, PitchDampingNms: 1_150_000.0, YawDampingNms: 530_000.0,
+        RollMomentMaxNm: 1_250_000.0, PitchMomentMaxNm: 3_100_000.0, YawMomentMaxNm: 1_150_000.0,
+        ClBeta: -0.058, ClP: -0.49, ClR: 0.10,
+        ClDeltaA: 0.095, ClDeltaR: 0.031,
+        LateralDerivativeProfileId: "f14a-public-data-surrogate-v1",
+        ManualPitchRateMaxRad: 0.78,
+        FightRollRateMaxRad: 2.2,
+        CompatibilityRollRateMaxRad: 2.2, CompatibilityBankTau: 0.26,
+        YawBetaStiffnessNmRad: 800_000.0, RollHoldDampingNms: 0.0,
+        PositiveStructuralLimitG: 7.5, MaxPerformFraction: 1.0, // SURROGATE envelope
+        MaxThrustFraction: 1.0,
+        HighLiftDragOnsetFraction: 0.90, HighLiftDragK: 3.0,
+        WingSpanM: 15.5, // static mid-sweep placeholder; Task 6 owns dynamic sweep schedule
+        PropulsionModel: PropulsionModelKind.AfterburningTurbofanPublicDataSurrogate,
+        FuelFreeMassKg: 18_186.0, // 40,100 lb empty (measured, Navy museum canonical)
+        GenericIdleFuelFlowLbPerMinute: 35.0,
+        GenericMilitaryFuelFlowLbPerMinute: 260.0,
+        GenericAfterburnerFuelFlowLbPerMinute: 720.0);
+
+    /// MIG-28 F-5E-CLASS FICTION SURROGATE. Display identity is fiction (Top Gun 1986); every
+    /// flight number traces to open F-5E Tiger II data, not a Soviet handbook. Measured anchors:
+    /// 9,558 lb empty, 186 ft² wing, 5,000 lbf afterburning per J85-GE-21B. Aero/control/inertia
+    /// are provisional surrogates scaled from Sabre/F9F-class neighbours — not F-22 inertias.
+    /// https://www.hickoryaviationmuseum.org/aircraft/northrop-f-5-tiger-ii/
+    public static readonly AircraftParams Mig28F5EClassSurrogate = new(
+        MassKg: 6800.0, // clean combat: empty 4,349 kg + fuel/pilot/stores (SURROGATE)
+        WingAreaM2: 17.28, // 186 sq ft (measured)
+        ThrustMaxN: 44_482.0, // 2 × 5,000 lbf SLS afterburning (measured)
+        CD0: 0.022, InducedK: 0.042, CLMax: 1.25, CLMin: -0.60, // SURROGATE polar fit
+        RollRateMaxRad: 1.8, BankTau: 0.32,
+        MCrit: 0.88, WaveDragK: 120.0,
+        SpoolUpTau: 2.0, SpoolDownTau: 1.1,
+        CLAlpha: 4.8,
+        IxxKgM2: 6_500.0, IyyKgM2: 32_000.0, IzzKgM2: 37_000.0, // SURROGATE: F9F/Sabre scale
+        RollStiffnessNmRad: 95_000.0, PitchStiffnessNmRad: 420_000.0,
+        YawStiffnessNmRad: 95_000.0,
+        RollDampingNms: 45_000.0, PitchDampingNms: 180_000.0, YawDampingNms: 95_000.0,
+        RollMomentMaxNm: 120_000.0, PitchMomentMaxNm: 280_000.0, YawMomentMaxNm: 110_000.0,
+        ClBeta: -0.042, ClP: -0.44, ClR: 0.085,
+        ClDeltaA: 0.090, ClDeltaR: 0.028,
+        LateralDerivativeProfileId: "mig28-f5e-class-fiction-surrogate-v1",
+        ManualPitchRateMaxRad: 0.70,
+        FightRollRateMaxRad: 2.0,
+        CompatibilityRollRateMaxRad: 1.8, CompatibilityBankTau: 0.30,
+        YawBetaStiffnessNmRad: 150_000.0, RollHoldDampingNms: 0.0,
+        PositiveStructuralLimitG: 7.0, MaxPerformFraction: 1.0, // SURROGATE envelope
+        MaxThrustFraction: 1.0,
+        HighLiftDragOnsetFraction: 0.90, HighLiftDragK: 8.0,
+        WingSpanM: 8.13, // 26 ft 8 in (measured F-5E span)
+        PropulsionModel: PropulsionModelKind.AfterburningTurbofanPublicDataSurrogate,
+        FuelFreeMassKg: 4349.0, // 9,558 lb empty (measured)
+        GenericIdleFuelFlowLbPerMinute: 18.0,
+        GenericMilitaryFuelFlowLbPerMinute: 95.0,
+        GenericAfterburnerFuelFlowLbPerMinute: 220.0);
+
     public static double NzAeroMax(in AircraftState s, in AircraftParams p) {
         return NzAeroMax(s, p, s.Speed);
     }

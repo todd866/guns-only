@@ -12,7 +12,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.
 
 const [appSource, hudSource, indexSource, keyGrammarSource, detentSource,
   sessionSource, webBridgeSource, progressionSource, projectionSource,
-  playerGunTargetSource] = await Promise.all([
+  playerGunTargetSource, missionAuthoritySource] = await Promise.all([
   "web/wwwroot/app.js",
   "web/wwwroot/hud.js",
   "web/wwwroot/index.html",
@@ -23,6 +23,7 @@ const [appSource, hudSource, indexSource, keyGrammarSource, detentSource,
   "web/wwwroot/render/progression/campaign_progression.js",
   "web/SnapshotProjection.cs",
   "web/wwwroot/render/input/player_gun_target.js",
+  "web/wwwroot/render/top-gun/mission_authority.js",
 ].map((relativePath) => readFile(path.join(ROOT, relativePath), "utf8")));
 
 // The flat-snapshot projection moved from the browser-only WebBridge into the plain, linkable
@@ -283,7 +284,7 @@ test("every visible HTML button is wired through one auditable action surface", 
     }
     const hooks = [
       "data-test-action", "data-hold-key", "data-pulse-key", "data-mobile-action",
-      "data-program-node", "data-deck-configuration",
+      "data-program-node", "data-deck-configuration", "data-top-gun-seat",
       // Build 75 portrait-assist speed nudges; wired in app.js via [data-assist-nudge].
       "data-assist-nudge",
       // Circuits OFT harness actions; wired in app.js via [data-circuits-action].
@@ -323,6 +324,11 @@ test("every visible HTML button is wired through one auditable action surface", 
       assert.match(appSource,
         /readyDeckConfig\?\.addEventListener\("click"[\s\S]*?selectDeckConfiguration\(Number\(button\.dataset\.deckConfiguration\)\)/,
         `${button.text}: deck configuration has no delegated selection handler`);
+    }
+    if (attrs["data-top-gun-seat"] !== undefined) {
+      assert.match(appSource,
+        /readyTopGunSeat\?\.addEventListener\("click"[\s\S]*?selectTopGunSeat\(Number\(button\.dataset\.topGunSeat\)\)/,
+        `${button.text}: Top Gun seat has no delegated selection handler`);
     }
   }
 });
@@ -613,7 +619,10 @@ test("screen chrome never covers a flight instrument or another tap target", () 
 
 test("every platform sees the aircraft picker and Fly remains a real gesture", () => {
   assert.match(appSource,
-    /initialProgramNode = requestedProgramNode[\s\S]*?defaultProgramNode/);
+    /initialProgramSelection = resolveInitialProgramSelection\([\s\S]*?initialProgramNode = initialProgramSelection\.selectedProgramNode/);
+  assert.match(missionAuthoritySource,
+    /allowedRequest = requestedProgramNode[\s\S]*?selectedProgramNode: allowedRequest \? requestedProgramNode : defaultProgramNode/,
+    "blocked programme links must keep the production programme selected behind Ready");
   assert.match(appSource,
     /let selectedBeat = Number\.isInteger\(initialProgramNode\.mission\)[\s\S]*?defaultProgramNode\.mission/,
     "shell missions stage their beat; standalone cards keep the default shell beat until Fly navigates");
@@ -681,13 +690,16 @@ test("release state gates routes while the production aircraft remain qualificat
     /standalone\?\.mission == null[\s\S]*?window\.location\.assign\(standalone\.route\)/,
     "production standalone cards (Cobra) must navigate to their owned surface on Fly");
   assert.match(appSource,
-    /requestedExperience = requestedProgramNode[\s\S]*?experienceById\(requestedProgramNode\.id\)[\s\S]*?requestedExperienceAccess[\s\S]*?experienceAccess\(requestedExperience\.id, window\.location\)[\s\S]*?blockedRequestedExperience[\s\S]*?!requestedExperienceAccess\.allowed[\s\S]*?blockedProgramExperience/,
-    "a recognised non-production deep link must remain an honest unavailable selection");
+    /requestedExperience = requestedProgramNode[\s\S]*?experienceById\(requestedProgramNode\.id\)[\s\S]*?requestedExperienceAccess[\s\S]*?experienceAccess\(requestedExperience\.id, window\.location\)[\s\S]*?blockedProgramExperience = initialProgramSelection\.blockedExperience/,
+    "a recognised non-production deep link must retain its honest unavailable notice");
+  assert.match(missionAuthoritySource,
+    /blockedExperience: requestedExperience && requestedAccess\?\.allowed === false[\s\S]*?requestedExperience[\s\S]*?: null/,
+    "the unavailable notice must not also make the preview mission authoritative");
   assert.match(appSource,
     /function launchMission[\s\S]*?blockedProgramExperience[\s\S]*?!experienceAccess\(selectedProgramNodeId, window\.location\)\.allowed[\s\S]*?return false/,
     "a quarantined route must not stage or begin through the shared launch path");
   assert.match(appSource,
-    /requestedExperienceAccess\?\.allowed[\s\S]*?initialProgramNode/,
+    /requestedAccess: requestedExperienceAccess[\s\S]*?initialProgramNode = initialProgramSelection\.selectedProgramNode/,
     "the explicit preview acknowledgement must retain the experimental node without promoting it");
   assert.match(indexSource, /id="ready-route-notice"[^>]*role="status"[^>]*hidden/,
     "blocked deep links need a visible, accessible reason and a path back to production aircraft");

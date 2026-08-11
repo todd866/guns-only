@@ -5,6 +5,7 @@ using GunsOnly.Sim;
 using GunsOnly.Sim.Casevac;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
+using GunsOnly.Sim.Missiles;
 using GunsOnly.Sim.Propulsion;
 using GunsOnly.Sim.Recovery;
 using GunsOnly.Sim.Turbulence;
@@ -43,7 +44,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 23;
+    public const int LayoutVersion = 24;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -230,6 +231,16 @@ internal static class SnapshotHotFrame {
         Num("bx", 3); Num("by", 3); Num("bz", 3);
         Num("bfx", 5); Num("bfy", 5); Num("bfz", 5);
         Num("blx", 5); Num("bly", 5); Num("blz", 5);
+        // Top Gun's missile pose is fixed-tick authority and therefore belongs on the hot path;
+        // leaving it in the five-second JSON fallback made a launched round appear stationary.
+        Nul("wing_sweep_deg", 1);
+        Nul("opponent_wing_sweep_deg", 1);
+        Nul("aim9_remaining", RawInteger);
+        Bool("aim9_in_flight");
+        Bool("aim9_pose_valid");
+        Num("aim9_state_code", RawInteger);
+        Nul("aim9_x", 3); Nul("aim9_y", 3); Nul("aim9_z", 3);
+        Nul("aim9_vx", 3); Nul("aim9_vy", 3); Nul("aim9_vz", 3);
         // Three fixed additional-aircraft blocks keep the hot path allocation-free while exposing
         // the complete four-ship formation authored for Rapier.
         foreach (string prefix in new[] { "w1", "w2", "w3" }) {
@@ -1172,6 +1183,22 @@ internal static class SnapshotHotFrame {
         w.Num("bx", b.Position.X, 3); w.Num("by", b.Position.Y, 3); w.Num("bz", b.Position.Z, 3);
         w.Num("bfx", bf.X, 5); w.Num("bfy", bf.Y, 5); w.Num("bfz", bf.Z, 5);
         w.Num("blx", bl.X, 5); w.Num("bly", bl.Y, 5); w.Num("blz", bl.Z, 5);
+        bool topGun = TopGunFightRuntime.IsTopGunMission(session.Beat.MissionIdentity.Id);
+        Aim9Telemetry aim9 = session.Aim9Telemetry;
+        bool aim9PoseValid = topGun && aim9.State != Aim9FlightState.Safe;
+        w.Nul("wing_sweep_deg", topGun ? session.PlayerF14WingSweepDegrees : null, 1);
+        w.Nul("opponent_wing_sweep_deg",
+            topGun ? session.OpponentF14WingSweepDegrees : null, 1);
+        w.Nul("aim9_remaining", topGun ? session.Aim9Remaining : null, RawInteger);
+        w.Bool("aim9_in_flight", session.Aim9InFlight);
+        w.Bool("aim9_pose_valid", aim9PoseValid);
+        w.Num("aim9_state_code", topGun ? (int)aim9.State : 0, RawInteger);
+        w.Nul("aim9_x", aim9PoseValid ? aim9.Position.X : null, 3);
+        w.Nul("aim9_y", aim9PoseValid ? aim9.Position.Y : null, 3);
+        w.Nul("aim9_z", aim9PoseValid ? aim9.Position.Z : null, 3);
+        w.Nul("aim9_vx", aim9PoseValid ? aim9.Velocity.X : null, 3);
+        w.Nul("aim9_vy", aim9PoseValid ? aim9.Velocity.Y : null, 3);
+        w.Nul("aim9_vz", aim9PoseValid ? aim9.Velocity.Z : null, 3);
         WriteWingman(ref w, session, 0, "w1");
         WriteWingman(ref w, session, 1, "w2");
         WriteWingman(ref w, session, 2, "w3");
@@ -2553,6 +2580,7 @@ internal static class SnapshotHotFrame {
         string? ConfigurationCue,
         string? AdviceContext,
         FightOutcome FightOutcome,
+        Aim9FlightState Aim9State,
         object? MaintenanceScenario,
         int MaintenanceSignature,
         object? MergeEvaluation,
@@ -2682,6 +2710,7 @@ internal static class SnapshotHotFrame {
                 session.OpponentPresent
                     ? session.PlayerGun.Outcome
                     : FightOutcome.Flying,
+                session.Aim9SeekerState,
                 maintenance,
                 maintenance is null ? 0
                     : System.HashCode.Combine((int)maintenance.State, maintenance.Score,

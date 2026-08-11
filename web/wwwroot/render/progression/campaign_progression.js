@@ -146,6 +146,18 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     visible: true,
     blocker: "",
   }),
+  experience({
+    id: "top-gun",
+    mission: null,
+    sequence: 11,
+    aircraft: "F-14A",
+    title: "Top Gun",
+    shortObjective: "1986 ACM — Tomcat or MiG-28, guns and Sidewinders.",
+    qualification: "",
+    releaseState: EXPERIENCE_RELEASE_STATE.PREVIEW,
+    visible: true,
+    blocker: "Dogfight automation is green; a representative human ACM flight is still outstanding.",
+  }),
 ]);
 
 export const CAMPAIGN_NODES = Object.freeze(

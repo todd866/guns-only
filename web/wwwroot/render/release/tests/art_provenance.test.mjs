@@ -14,7 +14,9 @@ const POSTER_SOURCE_ROOT = fileURLToPath(
 const POSTER_SOURCES = {
   "bike-yzf-r1.webp": "bike-yzf-r1.svg",
   "jet-cobra.webp": "jet-cobra.svg",
+  "jet-f14.webp": "jet-f14.svg",
   "jet-f22.webp": "jet-f22.svg",
+  "jet-mig-28.webp": "jet-mig-28.svg",
   "jet-rapier.webp": "jet-rapier.svg",
   "menu-hangar-small.webp": "menu-hangar.svg",
   "menu-hangar.webp": "menu-hangar.svg",
@@ -32,7 +34,9 @@ test("every production shell painting has a hash-pinned fiction provenance card"
   assert.deepEqual(files, [
     "bike-yzf-r1.webp",
     "jet-cobra.webp",
+    "jet-f14.webp",
     "jet-f22.webp",
+    "jet-mig-28.webp",
     "jet-rapier.webp",
     "menu-hangar-small.webp",
     "menu-hangar.webp",
@@ -59,10 +63,18 @@ test("every current shell poster is reproducible from a committed SVG source", a
 
   const svgs = new Set((await readdir(POSTER_SOURCE_ROOT)).filter((f) => f.endsWith(".svg")));
   const renderer = await readFile(path.join(POSTER_SOURCE_ROOT, "render.mjs"), "utf8");
+  const produced = (await readdir(ART_ROOT))
+    .filter((file) => file.endsWith(".webp"))
+    .sort();
+  assert.deepEqual(Object.keys(POSTER_SOURCES).sort(), produced,
+    "every shipped shell WebP must be bound to an exact committed source");
 
   for (const [webp, svg] of Object.entries(POSTER_SOURCES)) {
     assert.ok(svgs.has(svg), `${webp} must have its source ${svg} committed`);
     assert.ok(renderer.includes(`"${webp.replace(/\.webp$/, "")}"`),
       `${webp} must be listed in the poster renderer`);
   }
+  assert.match(renderer, /"jet-f14"[\s\S]*?rasterizer: "deterministic-svg"/);
+  assert.match(renderer, /"jet-mig-28"[\s\S]*?rasterizer: "deterministic-svg"/);
+  assert.match(sources, /replacement source-of-record, not a reconstruction/i);
 });

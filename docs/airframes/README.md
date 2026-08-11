@@ -8,6 +8,13 @@ must state that different chain explicitly and test every downstream copy.
 
 **The authority chain must be explicit, versioned, and mechanically consistent.**
 
+## Airframe dossiers
+
+| Airframe | Presentation role | Sources |
+| --- | --- | --- |
+| [F-14A Tomcat](f-14a/README.md) | Top Gun ownship (Tomcat) | [00-sources.md](f-14a/00-sources.md) |
+| [MiG-28](mig-28/README.md) | Top Gun aggressor (fiction / F-5E-class) | [00-sources.md](mig-28/00-sources.md) |
+
 ## Rapier version boundary
 
 The `docs/airframes/rapier/` bible and `airframes/rapier.v1.json` describe the superseded v1

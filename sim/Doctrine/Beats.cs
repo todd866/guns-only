@@ -54,6 +54,17 @@ public sealed record CombatConfig(
         OpponentHitsToDefeat: 3,
         PlayerGun: GunProfiles.M61A2PublicDataSurrogate,
         OpponentGun: GunProfiles.GSh301PublicDataSurrogate);
+    /// Top Gun 1v1 DACT: symmetric 480-round M61 magazines on both sides (Tomcat canonical;
+    /// MiG-28 fiction carries the same public-data gun surrogate until a dedicated F-5
+    /// installation profile lands).
+    public static CombatConfig TopGunAcm { get; } = new(
+        PlayerAmmo: 480,
+        OpponentAmmo: 480,
+        PlayerHitsToDefeat: 3,
+        OpponentHitsToDefeat: 3,
+        PlayerGun: GunProfiles.M61A2PublicDataSurrogate,
+        OpponentGun: GunProfiles.M61A2PublicDataSurrogate,
+        PlayerInfiniteAmmo: false);
     public static CombatConfig ModernDroneDefense { get; } = new(
         PlayerAmmo: 480,
         OpponentAmmo: 0,
@@ -199,6 +210,16 @@ public sealed record AircraftCapability(
         "aircraft.ucav-interceptor.prototype.v1", "UCAV interceptor prototype",
         "presentation.vehicle.one-way-attack-drone.prototype.v1",
         "systems.uncrewed-prototype.not-simulated.v1", false);
+    public static AircraftCapability F14ASurrogate { get; } = new(
+        "aircraft.f14a.public-data-surrogate.v1", "F-14A public-data surrogate",
+        "presentation.vehicle.f14a.public-data-surrogate.v1",
+        "systems.cold-war-fighter.not-simulated.v1", false, true,
+        "https://www.history.navy.mil/content/history/museums/nnam/explore/collections/aircraft/f/f-14a-tomcat.html");
+    public static AircraftCapability Mig28Surrogate { get; } = new(
+        "aircraft.mig-28.f5e-class-fiction.v1", "MiG-28 (F-5E-class fiction)",
+        "presentation.vehicle.mig-28.fiction.v1",
+        "systems.cold-war-fighter.not-simulated.v1", false, true,
+        "https://www.hickoryaviationmuseum.org/aircraft/northrop-f-5-tiger-ii/");
 }
 
 public enum MissionContentFamily {
@@ -1517,6 +1538,80 @@ public static class Beats {
             // interim ForEngagement ramp (1 Novice, 2 Competent, 3 Veteran, 4+ Ace). Continuous
             // successors escalate via ForEngagement at CreateNextBandit.
             BanditSkill: BanditSkillProfile.ForEngagement(1));
+    }
+
+    /// <summary>
+    /// TOP GUN 1v1 ACM — Tomcat vs MiG-28 (F-5E-class fiction) visual merge. No carrier, no
+    /// recovery ladder: one guns-free engagement at co-altitude inside the 3–8 nm separation band
+    /// used by <see cref="ModernVisualMerge"/>. Seat selects ownship; opponent is the other jet.
+    /// AIM-9 and wing-sweep hooks arrive in later Top Gun tasks; this beat owns spawn geometry,
+    /// airframe params, and guns-only ROE only.
+    /// </summary>
+    public static BeatSetup TopGunAcm(TopGunSeat playerSeat) {
+        // 10,000 ft co-altitude staging — same band as ModernVisualMerge, suitable for guns ACM.
+        const double AltitudeM = 3048.0;
+        // ~4.9 nm opening split along the merge axis (9 km): inside the brief's 3–8 nm class and
+        // copied from ModernVisualMerge spawn geometry so the run-in timing feels familiar.
+        const double PlayerX = 1280.0;
+        const double BanditX = 1520.0;
+        const double PlayerZ = -4500.0;
+        const double BanditZ = 4500.0;
+
+        bool playerIsTomcat = playerSeat == TopGunSeat.F14A;
+        AircraftCapability playerCapability = playerIsTomcat
+            ? AircraftCapability.F14ASurrogate
+            : AircraftCapability.Mig28Surrogate;
+        AircraftCapability banditCapability = playerIsTomcat
+            ? AircraftCapability.Mig28Surrogate
+            : AircraftCapability.F14ASurrogate;
+        AircraftParams playerParams = playerIsTomcat
+            ? FlightModel.F14APublicDataSurrogate
+            : FlightModel.Mig28F5EClassSurrogate;
+        AircraftParams banditParams = playerIsTomcat
+            ? FlightModel.Mig28F5EClassSurrogate
+            : FlightModel.F14APublicDataSurrogate;
+        string seatLabel = playerIsTomcat ? "F-14A" : "MiG-28";
+        string opponentLabel = playerIsTomcat ? "MiG-28" : "F-14A";
+
+        return new BeatSetup($"Top Gun — {seatLabel} vs {opponentLabel}",
+            Player: new AircraftState(
+                new Vec3D(PlayerX, AltitudeM, PlayerZ),
+                BeatSetup.CornerTrueAirspeedMps(playerParams, AltitudeM),
+                0.0, 0.0, 0.0,
+                playerParams.MassKg),
+            Bandit: new AircraftState(
+                new Vec3D(BanditX, AltitudeM + 60.0, BanditZ),
+                BeatSetup.CornerTrueAirspeedMps(banditParams, AltitudeM),
+                0.0, Math.PI, 0.0,
+                banditParams.MassKg),
+            Law: new PurePursuitLaw(),
+            BanditTimeline: new() {
+                (0.0, new PilotCommand(1.0, 0.0, 1.0, 0.0)),
+            },
+            PlayerParams: playerParams,
+            BanditParams: banditParams,
+            UsesNeutralMergeBandit: true,
+            Combat: CombatConfig.TopGunAcm,
+            Fuel: new FuelConfig(
+                CapacityLb: 16_000.0,
+                InitialFuelLb: 10_000.0,
+                BingoThresholdLb: 3_000.0,
+                ConsumesFuel: true),
+            InitialThrottle: 1.0,
+            StageAtTrimThrottle: true,
+            SystemsProfile: AirframeSystemsProfile.ModernConventionalGearSurrogate,
+            Mission: new MissionContract(
+                "mission.top-gun.acm.f14a-vs-mig28.v1",
+                MissionContentFamily.Custom,
+                PublicDataSurrogate: true,
+                RulesOfEngagement: "GUNS_ONLY_GUNS_FREE",
+                Era: "TOP_GUN_1986_EXERCISE"),
+            PlayerCapability: playerCapability,
+            BanditCapability: banditCapability,
+            VisualMergeEvaluation: new VisualMergeEvaluationConfig(HoldFireThroughFirstPass: false),
+            PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
+            BanditSkill: PilotSkill.Competent,
+            Environment: TopGunEnvironment.Contract);
     }
 
     /// <summary>

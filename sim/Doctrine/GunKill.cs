@@ -170,7 +170,9 @@ public sealed class GunKill {
     public int HitCount => SelectedDamage.HitCount;
     public int HitsThisStep => _impactsThisStep.Count;
     public bool HitThisStep => HitsThisStep != 0;
-    public double KillProgress => System.Math.Clamp((double)HitCount / _hitsToKill, 0.0, 1.0);
+    public double KillProgress => Outcome == FightOutcome.Splash
+        ? 1.0
+        : System.Math.Clamp((double)HitCount / _hitsToKill, 0.0, 1.0);
     public double TargetHealth => 1.0 - KillProgress;
     public bool TargetAlive => SelectedDamage.Outcome == FightOutcome.Flying;
     // Compatibility aliases for the current flat web projection. The kernel itself now uses the
@@ -220,7 +222,21 @@ public sealed class GunKill {
 
     public double TargetHealthFor(long targetId) {
         GunTargetDamage damage = DamageFor(targetId);
-        return 1.0 - damage.KillProgress(_hitsToKill);
+        return damage.Outcome == FightOutcome.Splash
+            ? 0.0
+            : 1.0 - damage.KillProgress(_hitsToKill);
+    }
+
+    /// <summary>
+    /// Record a lethal hit resolved by another physical weapon without laundering it into the gun
+    /// hit counter. The shared target ledger owns health/outcome continuity; the caller remains
+    /// responsible for emitting the weapon's hit event and for the session destruction lifecycle.
+    /// </summary>
+    public bool ApplyExternalDestruction(long targetId) {
+        TargetDamageState damage = EnsureTarget(targetId);
+        if (damage.Outcome == FightOutcome.Splash) return false;
+        damage.Outcome = FightOutcome.Splash;
+        return true;
     }
 
     /// Continue this physical gun against a fresh target. Magazine state, rounds already in

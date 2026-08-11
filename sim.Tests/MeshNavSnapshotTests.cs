@@ -56,10 +56,11 @@ public sealed class MeshNavSnapshotTests {
     }
 
     [Fact]
-    public void HotFrameLayoutIncludesMeshCarrierAndApproachSlotsAtVersion23() {
+    public void HotFrameLayoutIncludesMeshCarrierApproachAndAim9SlotsAtVersion24() {
         string layoutJson = SnapshotHotFrame.LayoutJson();
         using JsonDocument document = JsonDocument.Parse(layoutJson);
-        Assert.Equal(23, document.RootElement.GetProperty("layout_version").GetInt32());
+        JsonElement root = document.RootElement;
+        Assert.Equal(24, root.GetProperty("layout_version").GetInt32());
         Assert.Contains(
             "mesh_fuel_to_dest_lb",
             layoutJson,
@@ -69,5 +70,36 @@ public sealed class MeshNavSnapshotTests {
             StringComparison.Ordinal);
         Assert.Contains("approach_guidance_active", layoutJson, StringComparison.Ordinal);
         Assert.Contains("opponent_present", layoutJson, StringComparison.Ordinal);
+
+        JsonElement core = root.GetProperty("blocks")
+            .EnumerateArray()
+            .Single(block => block.GetProperty("name").GetString() == "core");
+        JsonElement[] aim9Slots = core.GetProperty("slots")
+            .EnumerateArray()
+            .Where(slot => slot.GetProperty("name").GetString()!
+                .StartsWith("aim9_", StringComparison.Ordinal))
+            .ToArray();
+        Assert.Equal(new[] {
+            "aim9_remaining",
+            "aim9_in_flight",
+            "aim9_pose_valid",
+            "aim9_state_code",
+            "aim9_x",
+            "aim9_y",
+            "aim9_z",
+            "aim9_vx",
+            "aim9_vy",
+            "aim9_vz"
+        }, aim9Slots.Select(slot =>
+            slot.GetProperty("name").GetString()).ToArray());
+        Assert.Equal(new[] {
+            "nullable", "boolean", "boolean", "number", "nullable",
+            "nullable", "nullable", "nullable", "nullable", "nullable"
+        }, aim9Slots.Select(slot =>
+            slot.GetProperty("kind").GetString()).ToArray());
+        int firstAim9Index = aim9Slots[0].GetProperty("index").GetInt32();
+        Assert.Equal(
+            Enumerable.Range(firstAim9Index, aim9Slots.Length),
+            aim9Slots.Select(slot => slot.GetProperty("index").GetInt32()));
     }
 }
