@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import * as THREE from "../../../vendor/three.module.js";
 import {
+  COBRA_CANYON_CAMP_EMBER_APRON,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
 } from "../cobra_canyon_plan.js";
@@ -17,6 +18,7 @@ import {
 import { COBRA_CANYON_ASSET_ROLES } from "../cobra_canyon_asset_kit.js";
 import {
   CAMP_EMBER_DEPARTURE_YAW_RAD,
+  CAMP_EMBER_SPAWN_SAFETY_VOLUME,
   campEmberFirebaseParts,
 } from "../cobra_camp_ember_firebase.js";
 import { COBRA_CANYON_VISUAL_PROFILE } from "../cobra_canyon_visual_profile.js";
@@ -220,6 +222,57 @@ test("every rendered tier keeps the complete Camp Ember PSP apron flat at contac
   }
 });
 
+test("every rendered triangle plane is level under the full Camp Ember spawn safety volume", () => {
+  for (const qualityTier of QUALITY_TIERS) {
+    const plan = planCobraCanyonWorld(world, { qualityTier });
+    for (let localX = CAMP_EMBER_SPAWN_SAFETY_VOLUME.minimumX;
+      localX <= CAMP_EMBER_SPAWN_SAFETY_VOLUME.maximumX;
+      localX += 1) {
+      for (let localZ = CAMP_EMBER_SPAWN_SAFETY_VOLUME.minimumZ;
+        localZ <= CAMP_EMBER_SPAWN_SAFETY_VOLUME.maximumZ;
+        localZ += 1) {
+        // Firebase +90° yaw maps authored +Z to world east and +X to world north.
+        const eastM = COBRA_CANYON_CAMP_EMBER_APRON.eastM + localZ;
+        const northM = COBRA_CANYON_CAMP_EMBER_APRON.northM + localX;
+        const renderedM = sampleCobraCanyonRenderedBasinHeight(
+          plan,
+          qualityTier,
+          eastM,
+          northM,
+        );
+        assert.ok(Math.abs(renderedM - 202) < 1e-5,
+          `${qualityTier} spawn plane drifted ${(renderedM - 202).toFixed(4)} m`
+            + ` at local ${localX},${localZ}`);
+      }
+    }
+  }
+});
+
+test("Camp Ember's full 58 m level apron has no coarse-grid pits in any tier", () => {
+  for (const qualityTier of QUALITY_TIERS) {
+    const plan = planCobraCanyonWorld(world, { qualityTier });
+    let deepestM = 0;
+    let highestM = 0;
+    for (let eastOffsetM = -58; eastOffsetM <= 58; eastOffsetM += 1) {
+      for (let northOffsetM = -58; northOffsetM <= 58; northOffsetM += 1) {
+        if (Math.hypot(eastOffsetM, northOffsetM) > 58) continue;
+        const renderedM = sampleCobraCanyonRenderedBasinHeight(
+          plan,
+          qualityTier,
+          COBRA_CANYON_CAMP_EMBER_APRON.eastM + eastOffsetM,
+          COBRA_CANYON_CAMP_EMBER_APRON.northM + northOffsetM,
+        );
+        deepestM = Math.min(deepestM, renderedM - 202);
+        highestM = Math.max(highestM, renderedM - 202);
+      }
+    }
+    assert.ok(deepestM >= -0.3,
+      `${qualityTier} apron contains a ${deepestM.toFixed(3)} m rendered pit`);
+    assert.ok(highestM <= 0.05,
+      `${qualityTier} apron rises ${highestM.toFixed(3)} m above contact authority`);
+  }
+});
+
 test("builds the real analytical basin and stays inside every tier ceiling", () => {
   for (const qualityTier of QUALITY_TIERS) {
     const { plan, presentation } = create(qualityTier);
@@ -261,10 +314,10 @@ test("builds the real analytical basin and stays inside every tier ceiling", () 
       minimumY = Math.min(minimumY, positions.getY(index));
       maximumY = Math.max(maximumY, positions.getY(index));
     }
-    // Eleven Camp-local axes refine the otherwise 105–174 m grid around both PSP pads.
+    // Twenty-five Camp-local axes refine the otherwise 105–174 m grid around both PSP pads.
     // They are topology, not extra draw calls, and keep the PSP from spanning one coarse gorge
     // triangle while retaining the authored whole-world tier resolution everywhere else.
-    const refinedSegments = COBRA_CANYON_TERRAIN_SEGMENTS[qualityTier] + 11;
+    const refinedSegments = COBRA_CANYON_TERRAIN_SEGMENTS[qualityTier] + 25;
     assert.equal(positions.count, (refinedSegments + 1) ** 2);
     assert.equal(triangleCount(basin.geometry), refinedSegments ** 2 * 2);
     assert.ok(maximumY - minimumY > 500, `${qualityTier} needs visible basin/rim relief`);

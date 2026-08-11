@@ -6,6 +6,7 @@ import {
   CAMP_EMBER_COLORS,
   CAMP_EMBER_DEPARTURE_YAW_RAD,
   CAMP_EMBER_LANDMARK_ID,
+  CAMP_EMBER_SPAWN_SAFETY_VOLUME,
   campEmberFirebaseParts,
   createCampEmberFirebase,
   isCampEmberGroundSite,
@@ -17,11 +18,32 @@ const world = JSON.parse(await readFile(new URL(
   import.meta.url,
 ), "utf8"));
 
+function localBounds(part) {
+  const halfWidthM = Math.abs(Math.cos(part.yaw)) * part.widthM * 0.5
+    + Math.abs(Math.sin(part.yaw)) * part.depthM * 0.5;
+  const halfDepthM = Math.abs(Math.sin(part.yaw)) * part.widthM * 0.5
+    + Math.abs(Math.cos(part.yaw)) * part.depthM * 0.5;
+  return {
+    minimumX: part.x - halfWidthM,
+    maximumX: part.x + halfWidthM,
+    minimumY: part.centreY - part.heightM * 0.5,
+    maximumY: part.centreY + part.heightM * 0.5,
+    minimumZ: part.z - halfDepthM,
+    maximumZ: part.z + halfDepthM,
+  };
+}
+
+function overlaps(left, right) {
+  return left.minimumX < right.maximumX && left.maximumX > right.minimumX
+    && left.minimumY < right.maximumY && left.maximumY > right.minimumY
+    && left.minimumZ < right.maximumZ && left.maximumZ > right.minimumZ;
+}
+
 test("Camp Ember firebase parts cover BF:V families without control-green", () => {
   const parts = campEmberFirebaseParts();
   assert.ok(parts.length >= 28, "firebase needs enough clutter to read as a base");
   const families = new Set(parts.map((part) => part.family));
-  for (const family of ["psp", "sandbag", "tent", "fuel", "timber", "steel", "crate"]) {
+  for (const family of ["psp", "sandbag", "tent", "hooch", "fuel", "timber", "steel", "crate"]) {
     assert.ok(families.has(family), `missing family ${family}`);
   }
   for (const part of parts) {
@@ -31,6 +53,18 @@ test("Camp Ember firebase parts cover BF:V families without control-green", () =
       `${part.family} must not read as control-green`);
   }
   assert.ok(CAMP_EMBER_COLORS.psp[1] < 0.5);
+  assert.ok(new Set(parts.map((part) => part.color.join(","))).size >= 10,
+    "firebase needs coherent material variation, not one flat block colour");
+  assert.ok(parts.every((part) => Number.isFinite(part.centreY) && part.y === undefined),
+    "all authored vertical positions use explicit centre semantics");
+  assert.ok(parts.filter((part) => part.family === "tent" || part.family === "hooch")
+    .every((part) => part.shape === "tent"), "canvas shelters must have pitched silhouettes");
+  assert.ok(parts.filter((part) => part.family === "fuel")
+    .every((part) => part.shape === "cylinder"), "fuel stores must read as drums");
+  assert.ok(parts.filter((part) => part.family === "sandbag")
+    .every((part) => part.shape === "revetment"
+      && Math.max(part.widthM, part.depthM) <= 12),
+  "sandbags must be low modular revetments, not giant boxes");
 });
 
 test("createCampEmberFirebase places one merged mesh on the landmark", () => {
@@ -55,7 +89,7 @@ test("Camp Ember opens a rotor-clear eastbound departure lane", () => {
   const minimumHalfWidthM = 5.5;
   let checked = 0;
   for (const part of campEmberFirebaseParts()) {
-    if (part.y + part.heightM * 0.5 <= 0.5) continue; // apron paint is allowed under the aircraft
+    if (part.centreY + part.heightM * 0.5 <= 0.5) continue; // apron is allowed under aircraft
     const yaw = part.yaw + CAMP_EMBER_DEPARTURE_YAW_RAD;
     const centreForwardM = part.z;
     const centreLateralM = -part.x;
@@ -72,11 +106,55 @@ test("Camp Ember opens a rotor-clear eastbound departure lane", () => {
   assert.ok(checked >= 10, "the clearance contract must cover the forward firebase clutter");
 });
 
+test("Camp Ember keeps a no-geometry safety volume around spawn, eye, skids and departure", () => {
+  let minimumHorizontalClearanceM = Infinity;
+  let checked = 0;
+  for (const part of campEmberFirebaseParts()) {
+    const bounds = localBounds(part);
+    if (part.surface) {
+      assert.ok(bounds.maximumY <= CAMP_EMBER_SPAWN_SAFETY_VOLUME.minimumY,
+        `${part.id} surface rises into the spawn volume`);
+      continue;
+    }
+    if (bounds.maximumY <= CAMP_EMBER_SPAWN_SAFETY_VOLUME.minimumY
+      || bounds.minimumY >= CAMP_EMBER_SPAWN_SAFETY_VOLUME.maximumY) continue;
+    assert.equal(overlaps(bounds, CAMP_EMBER_SPAWN_SAFETY_VOLUME), false,
+      `${part.id} intersects the authored spawn/eye/skid safety volume`);
+    const gapX = Math.max(
+      CAMP_EMBER_SPAWN_SAFETY_VOLUME.minimumX - bounds.maximumX,
+      bounds.minimumX - CAMP_EMBER_SPAWN_SAFETY_VOLUME.maximumX,
+      0,
+    );
+    const gapZ = Math.max(
+      CAMP_EMBER_SPAWN_SAFETY_VOLUME.minimumZ - bounds.maximumZ,
+      bounds.minimumZ - CAMP_EMBER_SPAWN_SAFETY_VOLUME.maximumZ,
+      0,
+    );
+    minimumHorizontalClearanceM = Math.min(minimumHorizontalClearanceM, Math.hypot(gapX, gapZ));
+    checked += 1;
+  }
+  assert.ok(checked >= 30);
+  assert.ok(minimumHorizontalClearanceM >= 3.5,
+    `elevated scenery clears the safety volume by only ${minimumHorizontalClearanceM.toFixed(2)} m`);
+});
+
+test("authored ammo and supply crates never interpenetrate", () => {
+  const crates = campEmberFirebaseParts().filter((part) => part.family === "crate");
+  assert.ok(crates.length >= 7);
+  for (let left = 0; left < crates.length; left++) {
+    for (let right = left + 1; right < crates.length; right++) {
+      assert.equal(overlaps(localBounds(crates[left]), localBounds(crates[right])), false,
+        `${crates[left].id} intersects ${crates[right].id}`);
+    }
+  }
+});
+
 test("Camp Ember PSP is a terrain-seated plate, not a skid-swallowing slab", () => {
   const pads = campEmberFirebaseParts().filter((part) => part.family === "psp");
   assert.ok(pads.length >= 5);
-  const highestTopM = Math.max(...pads.map((part) => part.y + part.heightM * 0.5));
-  assert.ok(highestTopM <= 0.04, `PSP top ${highestTopM.toFixed(3)} m must stay at apron datum`);
+  const highestTopM = Math.max(...pads.map((part) => part.centreY + part.heightM * 0.5));
+  assert.ok(highestTopM <= 0.013 + 1e-9,
+    `PSP top ${highestTopM.toFixed(3)} m must stay at apron datum`);
 });
 
 test("merged firebase geometry keeps centre-authored pads, berms and mast on the ground", () => {
@@ -84,30 +162,27 @@ test("merged firebase geometry keeps centre-authored pads, berms and mast on the
   const firebase = createCampEmberFirebase(THREE, plan);
   const parts = campEmberFirebaseParts();
   const positions = firebase.mesh.geometry.getAttribute("position");
-  const verticesPerBox = 36;
-  assert.equal(positions.count, parts.length * verticesPerBox);
-  const yBoundsFor = (partIndex) => {
+  assert.equal(firebase.partVertexRanges.length, parts.length);
+  const yBoundsFor = (partId) => {
+    const range = firebase.partVertexRanges.find((entry) => entry.id === partId);
+    assert.ok(range, `missing vertex range for ${partId}`);
     let minimum = Infinity;
     let maximum = -Infinity;
-    for (let vertex = partIndex * verticesPerBox;
-      vertex < (partIndex + 1) * verticesPerBox;
-      vertex++) {
+    for (let vertex = range.start; vertex < range.start + range.count; vertex++) {
       minimum = Math.min(minimum, positions.getY(vertex));
       maximum = Math.max(maximum, positions.getY(vertex));
     }
     return { minimum, maximum };
   };
-  const primaryPad = yBoundsFor(0);
-  assert.ok(Math.abs(primaryPad.minimum + 0.06) < 1e-6);
-  assert.ok(Math.abs(primaryPad.maximum - 0.02) < 1e-6);
-  const bermIndex = parts.findIndex((part) => part.family === "sandbag" && part.heightM === 2.2);
-  const berm = yBoundsFor(bermIndex);
+  const primaryPad = yBoundsFor("psp-main-bed");
+  assert.ok(Math.abs(primaryPad.minimum + 0.02) < 1e-6);
+  assert.ok(Math.abs(primaryPad.maximum) < 1e-6);
+  const berm = yBoundsFor("revetment-main-0");
   assert.ok(Math.abs(berm.minimum) < 1e-6);
-  assert.ok(Math.abs(berm.maximum - 2.2) < 1e-6);
-  const mastIndex = parts.findIndex((part) => part.family === "steel" && part.heightM === 17);
-  const mast = yBoundsFor(mastIndex);
+  assert.ok(Math.abs(berm.maximum - 1.1) < 1e-6);
+  const mast = yBoundsFor("radio-mast");
   assert.ok(Math.abs(mast.minimum) < 1e-6);
-  assert.ok(Math.abs(mast.maximum - 17) < 1e-6);
+  assert.ok(Math.abs(mast.maximum - 15) < 1e-6);
 });
 
 test("Camp Ember ground sites are suppressed for the control disc", () => {

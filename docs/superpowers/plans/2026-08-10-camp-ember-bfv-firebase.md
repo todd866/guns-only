@@ -32,3 +32,14 @@
 ### Task 3: Stamp + ship
 
 - [ ] Stamp Build 303, STATUS next-candidate, PR, deploy after Verify
+
+### 2026-08-11 regression repair
+
+- [x] Move the render-only conservative terrain bias ahead of the shared Camp apron operation.
+- [x] Sample actual rendered triangle planes across mobile, balanced, and desktop tiers.
+- [x] Add and enforce an authored spawn/eye/skid/departure safety volume.
+- [x] Replace monolithic berm/tent/fuel boxes with one-draw procedural PSP ribs, short
+  revetments, pitched shelters, drums, separated crates, a legged tower, and an offset mast.
+- [x] Make every vertical part coordinate explicit centre-height semantics.
+- [x] Keep the presentation inside existing draw, instance, and triangle budgets.
+- [ ] Owner cold-open and departure visual acceptance in the real browser page.

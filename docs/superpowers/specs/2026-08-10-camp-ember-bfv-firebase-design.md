@@ -43,3 +43,24 @@ Dedicated presentation for Camp Ember (`forward-operating-base`):
 
 Owner cold-opens `/cobra-lab/`: skids on a readable Vietnam firebase, not a green
 disc or debug boxes.
+
+## Launch-surface repair (2026-08-11)
+
+The first clipping fix flattened analytical terrain but then fed that already-flat field through
+the render mesh's 0.42-cell neighbourhood minimum. Coarse mobile triangles consequently fell as
+much as 25.291 m below the 202 m contact apron inside the nominal 58 m level radius.
+
+The rendering contract is now:
+
+1. sample the pre-apron analytical field for the conservative neighbourhood minimum;
+2. apply the shared 58 m flat apron / 58–110 m blend as the final operation;
+3. refine Camp-local axes sufficiently that the complete 58 m rendered apron remains within
+   -0.300/+0.050 m of contact height at every tier;
+4. keep the full local `x=-8..8`, `z=-10..26`, `y=0.025..5.5` spawn/eye/skid/departure volume free
+   of elevated scenery. Thin PSP and laterite surfaces may exist only below its lower plane.
+
+Camp Ember uses one merged draw with individually ribbed PSP, low modular trapezoid revetments,
+pitched canvas tents/hooches, separated crates and drums, and a legged tower plus offset mast.
+Every part uses explicit centre-height semantics (`centreY`); no implicit base/centre `y` remains.
+The current 74-part, 992-triangle firebase leaves 6.0 m minimum horizontal clearance from the
+safety volume and remains inside all tier budgets.

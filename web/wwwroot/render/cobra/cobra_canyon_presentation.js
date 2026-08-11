@@ -1,6 +1,8 @@
 import {
+  applyCobraCanyonCampEmberApron,
   COBRA_CANYON_CAMP_EMBER_APRON,
   sampleCobraCanyonTerrain,
+  sampleCobraCanyonTerrainBeforeCampEmberApron,
 } from "./cobra_canyon_plan.js?v=310";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
@@ -594,20 +596,35 @@ function composeHazard(mesh, index, placement, work) {
  * not have. Biasing every vertex to its neighbourhood minimum makes the chord conservative: the
  * drawn ground sits at or below simulated ground, so the error can only ever show the pilot MORE
  * clearance than exists, never less. It costs five analytic samples per vertex at build time.
- * Camp Ember adds eleven local axes below because its 58 m apron cannot fit inside a 105–174 m
- * cell; the rest of the world retains the authored tier resolution. Crests pay for the minimum
- * bias by shaving, which is the correct side to lose on.
+ * Camp Ember adds twenty-five local axes below because its 58 m apron cannot fit inside a
+ * 105–174 m cell. The denser inner ring also keeps triangles which cross the circular blend edge
+ * within 0.3 m of contact height; the rest of the world retains its authored tier resolution.
+ * Crests pay for the minimum bias by shaving, which is the correct side to lose on.
  */
 const CAMP_EMBER_GRID_OFFSETS_M = Object.freeze([
   -COBRA_CANYON_CAMP_EMBER_APRON.blendRadiusM,
   -COBRA_CANYON_CAMP_EMBER_APRON.levelRadiusM,
+  -56,
+  -52,
   -48,
   -40,
+  -32,
+  -28,
+  -24,
   -20,
+  -16,
+  -8,
   0,
+  8,
+  16,
   20,
+  24,
+  28,
+  32,
   40,
   48,
+  52,
+  56,
   COBRA_CANYON_CAMP_EMBER_APRON.levelRadiusM,
   COBRA_CANYON_CAMP_EMBER_APRON.blendRadiusM,
 ]);
@@ -658,11 +675,6 @@ function basinGrid(plan, qualityTier) {
       segments,
       COBRA_CANYON_CAMP_EMBER_APRON.northM,
     ),
-    campElevationM: sampleCobraCanyonTerrain(
-      plan,
-      COBRA_CANYON_CAMP_EMBER_APRON.eastM,
-      COBRA_CANYON_CAMP_EMBER_APRON.northM,
-    ),
   });
   byTier.set(qualityTier, grid);
   return grid;
@@ -679,42 +691,31 @@ function basinAxisCell(axis, valueM) {
   return clamp(low, 0, axis.length - 2);
 }
 
-function campEmberRenderedVertexHeight(rawHeightM, eastM, northM, campElevationM) {
-  const distanceM = Math.hypot(
-    eastM - COBRA_CANYON_CAMP_EMBER_APRON.eastM,
-    northM - COBRA_CANYON_CAMP_EMBER_APRON.northM,
-  );
-  return distanceM <= COBRA_CANYON_CAMP_EMBER_APRON.levelRadiusM + 1e-6
-    ? campElevationM : rawHeightM;
-}
-
 function basinVertexHeight(
   plan,
   eastM,
   northM,
   eastStepM,
   northStepM,
-  campElevationM,
 ) {
   const biasEastM = eastStepM * 0.42;
   const biasNorthM = northStepM * 0.42;
   const conservativeHeightM = Math.min(
-    sampleCobraCanyonTerrain(plan, eastM, northM),
-    sampleCobraCanyonTerrain(plan, eastM - biasEastM, northM),
-    sampleCobraCanyonTerrain(plan, eastM + biasEastM, northM),
-    sampleCobraCanyonTerrain(plan, eastM, northM - biasNorthM),
-    sampleCobraCanyonTerrain(plan, eastM, northM + biasNorthM),
+    sampleCobraCanyonTerrainBeforeCampEmberApron(plan, eastM, northM),
+    sampleCobraCanyonTerrainBeforeCampEmberApron(plan, eastM - biasEastM, northM),
+    sampleCobraCanyonTerrainBeforeCampEmberApron(plan, eastM + biasEastM, northM),
+    sampleCobraCanyonTerrainBeforeCampEmberApron(plan, eastM, northM - biasNorthM),
+    sampleCobraCanyonTerrainBeforeCampEmberApron(plan, eastM, northM + biasNorthM),
   );
-  // The ordinary 105–174 m cells straddle the entire 58 m launch apron, so their conservative
-  // neighbourhood samples reach the river trench and interpolate a cliff through the PSP. The
-  // refined axes below put real vertices around Camp; restore only the analytically exact inner
-  // apron after the minimum bias. The 58–110 m transition retains the conservative minimum
-  // unchanged, so presentation cannot be raised above simulation terrain in the blend ring.
-  return campEmberRenderedVertexHeight(
-    conservativeHeightM,
+  // Camp flatten/blend MUST be last. Biasing samples which already contain the flat apron lets a
+  // 105–174 m half-cell reach across the blend and pull 8–25 m pits into rendered triangles at
+  // spawn. Applying the shared apron operation to the conservative PRE-apron field preserves the
+  // no-overshoot contract while emitting an actually flat contact surface in every tier.
+  return applyCobraCanyonCampEmberApron(
+    plan,
     eastM,
     northM,
-    campElevationM,
+    conservativeHeightM,
   );
 }
 
@@ -735,7 +736,6 @@ function basinGeometry(THREE, plan, qualityTier) {
         northM,
         grid.eastStepM,
         grid.northStepM,
-        grid.campElevationM,
       );
     }
   }
@@ -866,7 +866,6 @@ export function sampleCobraCanyonRenderedBasinHeight(
       northM,
       grid.eastStepM,
       grid.northStepM,
-      grid.campElevationM,
     ));
   const northWest = corner(east0, north0);
   const northEast = corner(east1, north0);

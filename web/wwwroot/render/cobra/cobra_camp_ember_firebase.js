@@ -13,16 +13,36 @@ export const CAMP_EMBER_FIREBASE_SCHEMA = "guns-only.cobra-camp-ember-firebase.v
 // rotate that gate onto render +X instead of pointing the helicopter into the east berm/tents.
 export const CAMP_EMBER_DEPARTURE_YAW_RAD = Math.PI / 2;
 
+/**
+ * No elevated presentation geometry may enter this local-pad volume. It contains the authority
+ * spawn, both skid stations, the rear-seat eye, the main-rotor disc's near field and 26 m of the
+ * eastbound departure. Thin PSP/laterite surfaces at or below `minimumY` are deliberately allowed.
+ */
+export const CAMP_EMBER_SPAWN_SAFETY_VOLUME = Object.freeze({
+  minimumX: -8,
+  maximumX: 8,
+  minimumY: 0.025,
+  maximumY: 5.5,
+  minimumZ: -10,
+  maximumZ: 26,
+});
+
 /** PSP plate / laterite / sandbag / olive / steel — never control-green. */
 export const CAMP_EMBER_COLORS = Object.freeze({
-  psp: [0.42, 0.44, 0.40],
-  laterite: [0.48, 0.34, 0.22],
-  sandbag: [0.62, 0.55, 0.38],
-  tent: [0.28, 0.34, 0.24],
-  timber: [0.36, 0.28, 0.18],
-  steel: [0.55, 0.56, 0.54],
-  fuel: [0.32, 0.30, 0.22],
-  crate: [0.40, 0.36, 0.26],
+  psp: [0.39, 0.41, 0.38],
+  pspLight: [0.50, 0.51, 0.46],
+  pspRust: [0.47, 0.34, 0.25],
+  laterite: [0.49, 0.30, 0.18],
+  lateriteDark: [0.39, 0.23, 0.14],
+  sandbag: [0.58, 0.50, 0.33],
+  sandbagShade: [0.46, 0.40, 0.27],
+  tent: [0.25, 0.30, 0.20],
+  canvas: [0.39, 0.40, 0.27],
+  timber: [0.31, 0.23, 0.14],
+  steel: [0.45, 0.46, 0.42],
+  rust: [0.42, 0.24, 0.14],
+  fuel: [0.28, 0.29, 0.20],
+  crate: [0.43, 0.35, 0.22],
 });
 
 function finite(value, fallback = 0) {
@@ -47,84 +67,199 @@ function campEmberAnchor(plan) {
  */
 export function campEmberFirebaseParts() {
   const parts = [];
-  const add = (family, color, x, z, y, w, h, d, yaw = 0) => {
+  const add = (id, family, shape, color, x, z, centreY, w, h, d, yaw = 0, surface = false) => {
     parts.push({
+      id,
       family,
+      shape,
       color,
       x,
-      y,
+      centreY,
       z,
       widthM: w,
       heightM: h,
       depthM: d,
       yaw,
+      surface,
     });
   };
 
-  // Dual PSP pads — ribbed by overlapping thin plates.
-  // Thin, terrain-seated plates: the simulation's skids contact the apron datum itself. The old
-  // 0.40 m visual slab swallowed the skids and amplified every terrain mismatch at cold open.
-  add("psp", CAMP_EMBER_COLORS.psp, 0, 0, -0.02, 26, 0.08, 26, 0);
-  add("psp", CAMP_EMBER_COLORS.psp, 0, 0, 0.026, 24, 0.01, 2.2, 0);
-  add("psp", CAMP_EMBER_COLORS.psp, 0, 0, 0.026, 2.2, 0.01, 24, 0);
-  add("psp", CAMP_EMBER_COLORS.psp, 0, -34, -0.015, 20, 0.07, 20, 0.15);
-  add("psp", CAMP_EMBER_COLORS.psp, 0, -34, 0.026, 18, 0.01, 1.8, 0.15);
-  add("laterite", CAMP_EMBER_COLORS.laterite, 0, -17, -0.01, 14, 0.06, 8, 0);
+  // A laterite skirt and individually ribbed PSP strips make two coherent landing surfaces. All
+  // metal tops stay at or below +0.013 m: visible over the terrain without becoming a collision-
+  // sized slab through the authority skids.
+  add("laterite-main", "laterite", "box", CAMP_EMBER_COLORS.laterite, 0, 0,
+    -0.015, 30, 0.02, 30, 0, true);
+  add("psp-main-bed", "psp", "box", CAMP_EMBER_COLORS.psp, 0, 0,
+    -0.01, 26, 0.02, 26, 0, true);
+  for (let index = -5; index <= 5; index++) {
+    const color = index % 3 === 0
+      ? CAMP_EMBER_COLORS.pspRust
+      : index % 2 === 0 ? CAMP_EMBER_COLORS.pspLight : CAMP_EMBER_COLORS.psp;
+    add(`psp-main-rib-${index + 5}`, "psp", "box", color, index * 2.08, 0,
+      0.007, 1.72, 0.012, 24, 0, true);
+  }
+  const secondaryYaw = 0.15;
+  add("laterite-secondary", "laterite", "box", CAMP_EMBER_COLORS.lateriteDark,
+    0, -34, -0.015, 23, 0.02, 23, secondaryYaw, true);
+  add("psp-secondary-bed", "psp", "box", CAMP_EMBER_COLORS.psp,
+    0, -34, -0.01, 20, 0.02, 20, secondaryYaw, true);
+  for (let index = -4; index <= 4; index++) {
+    const acrossM = index * 2.05;
+    add(`psp-secondary-rib-${index + 4}`, "psp", "box",
+      index % 2 === 0 ? CAMP_EMBER_COLORS.pspLight : CAMP_EMBER_COLORS.pspRust,
+      Math.cos(secondaryYaw) * acrossM,
+      -34 + Math.sin(secondaryYaw) * acrossM,
+      0.007, 1.68, 0.012, 18, secondaryYaw, true);
+  }
+  add("laterite-connector-a", "laterite", "box", CAMP_EMBER_COLORS.laterite,
+    0, -17, -0.009, 9, 0.018, 8, 0, true);
+  add("laterite-connector-b", "laterite", "box", CAMP_EMBER_COLORS.lateriteDark,
+    0, -25, -0.009, 8, 0.018, 8, 0, true);
 
-  // Sandbag berm ring — open toward gorge (+z / south approach stays lower).
-  add("sandbag", CAMP_EMBER_COLORS.sandbag, -24, -8, 1.1, 3.2, 2.2, 42, 0);
-  add("sandbag", CAMP_EMBER_COLORS.sandbag, 24, -10, 1.0, 3.2, 2.0, 38, 0);
-  add("sandbag", CAMP_EMBER_COLORS.sandbag, -6, -48, 1.0, 36, 2.0, 3.4, 0);
-  add("sandbag", CAMP_EMBER_COLORS.sandbag, -18, 18, 1.15, 22, 2.3, 3.6, 0.2);
-  add("sandbag", CAMP_EMBER_COLORS.sandbag, 16, 16, 1.05, 18, 2.1, 3.4, -0.25);
-  // Approach gap toward river join (positive z) — lower berm stubs only.
-  add("sandbag", CAMP_EMBER_COLORS.sandbag, -20, 8, 0.7, 8, 1.4, 3.0, 0.4);
-  add("sandbag", CAMP_EMBER_COLORS.sandbag, 18, 6, 0.7, 8, 1.4, 3.0, -0.35);
-
-  // Revetted ammo / fuel cluster (west-north of main pad, off the nose).
-  add("timber", CAMP_EMBER_COLORS.timber, -14, 20, 1.4, 12, 2.8, 7, 0.1);
-  add("fuel", CAMP_EMBER_COLORS.fuel, 12, 20, 1.3, 5.5, 2.6, 5.5, 0);
-  add("fuel", CAMP_EMBER_COLORS.fuel, 18, 18, 1.1, 4.2, 2.2, 4.2, 0.3);
-  add("crate", CAMP_EMBER_COLORS.crate, -10, 16, 0.7, 2.4, 1.4, 2.4, 0.2);
-  add("crate", CAMP_EMBER_COLORS.crate, -7, 17, 0.7, 2.2, 1.4, 2.2, -0.1);
-  add("crate", CAMP_EMBER_COLORS.crate, 8, -20, 0.65, 2.0, 1.3, 2.0, 0.4);
-  add("crate", CAMP_EMBER_COLORS.crate, 11, -18, 0.65, 2.0, 1.3, 2.0, -0.2);
-  add("crate", CAMP_EMBER_COLORS.crate, -16, -22, 0.6, 1.8, 1.2, 1.8, 0.1);
-
-  // GP tents / hooches along berms (olive).
-  const tents = [
-    [-20, -28, 0.15],
-    [-16, -32, -0.2],
-    [18, -26, 0.35],
-    [14, -30, -0.15],
-    [-22, 2, 0.5],
-    [20, -2, -0.4],
-  ];
-  for (const [tx, tz, yaw] of tents) {
-    add("tent", CAMP_EMBER_COLORS.tent, tx, tz, 1.5, 7.5, 3.0, 5.5, yaw);
-    add("tent", CAMP_EMBER_COLORS.tent, tx, tz, 2.7, 6.2, 1.2, 4.4, yaw); // ridge
+  // Low modular revetments. Short trapezoidal runs read as stacked sandbags instead of the old
+  // 38–42 m monolithic boxes, and leave the entire +Z departure mouth open.
+  let revetmentIndex = 0;
+  for (const x of [-18, 18]) {
+    for (const z of [-10, -2, 6, 14]) {
+      add(`revetment-main-${revetmentIndex++}`, "sandbag", "revetment",
+        revetmentIndex % 2 ? CAMP_EMBER_COLORS.sandbag : CAMP_EMBER_COLORS.sandbagShade,
+        x, z, 0.55, 2.8, 1.1, 6.4, 0);
+    }
+  }
+  for (const x of [-15, 15]) {
+    for (const z of [-39, -31]) {
+      add(`revetment-secondary-${revetmentIndex++}`, "sandbag", "revetment",
+        CAMP_EMBER_COLORS.sandbagShade, x, z, 0.55, 2.7, 1.1, 6.2, secondaryYaw);
+    }
+  }
+  for (const x of [-8, 0, 8]) {
+    add(`revetment-rear-${revetmentIndex++}`, "sandbag", "revetment",
+      CAMP_EMBER_COLORS.sandbag, x, -47, 0.5, 6.5, 1, 2.6, 0);
   }
 
-  // Watchtower (offset west) + thin radio mast (north berm — not in the cold-open nose).
-  add("timber", CAMP_EMBER_COLORS.timber, -28, -6, 4.5, 3.2, 9.0, 3.2, 0);
-  add("timber", CAMP_EMBER_COLORS.timber, -28, -6, 9.2, 5.5, 1.2, 5.5, 0);
-  add("steel", CAMP_EMBER_COLORS.steel, -28, -6, 11.0, 0.55, 3.5, 0.55, 0);
-  add("steel", CAMP_EMBER_COLORS.steel, -8, 24, 8.5, 0.45, 17, 0.45, 0);
-  add("steel", CAMP_EMBER_COLORS.steel, -8, 24, 17.2, 2.2, 0.35, 0.35, 0.6);
+  // GP tents and hooches live beyond the rotor/spawn volume. A pitched procedural prism replaces
+  // the previous overlapping body/ridge boxes, which read as oversized green blocks.
+  const tents = [
+    [-25, -25, 0.12, CAMP_EMBER_COLORS.tent],
+    [-25, -35, -0.08, CAMP_EMBER_COLORS.canvas],
+    [25, -25, -0.18, CAMP_EMBER_COLORS.tent],
+    [25, -35, 0.10, CAMP_EMBER_COLORS.canvas],
+    [-24, 7, 0.35, CAMP_EMBER_COLORS.canvas],
+    [24, 8, -0.30, CAMP_EMBER_COLORS.tent],
+  ];
+  tents.forEach(([x, z, yaw, color], index) => {
+    add(`tent-${index}`, "tent", "tent", color, x, z, 1.5, 7.2, 3, 5.4, yaw);
+  });
+  for (const [index, x] of [-28, 28].entries()) {
+    add(`hooch-${index}`, "hooch", "tent", CAMP_EMBER_COLORS.canvas,
+      x, 18, 1.65, 7.4, 3.3, 6, x < 0 ? 0.18 : -0.18);
+  }
 
-  // Sandbag fighting positions.
-  add("sandbag", CAMP_EMBER_COLORS.sandbag, 10, -16, 0.9, 5.5, 1.8, 5.5, 0.3);
-  add("sandbag", CAMP_EMBER_COLORS.sandbag, -12, -14, 0.85, 5.0, 1.7, 5.0, -0.2);
+  // Separate revetted ammo and fuel points. Crates and drums are individually authored with real
+  // gaps; the old west crate was guaranteed to penetrate the 12 x 7 m timber block.
+  add("ammo-revetment-west", "sandbag", "revetment", CAMP_EMBER_COLORS.sandbagShade,
+    -25, 18.5, 0.6, 2.4, 1.2, 9, 0);
+  add("ammo-revetment-north", "sandbag", "revetment", CAMP_EMBER_COLORS.sandbag,
+    -20, 23.2, 0.6, 12, 1.2, 2.4, 0);
+  const ammoCrates = [
+    [-21.5, 17, 0.08], [-18.5, 17, -0.06],
+    [-21.5, 20, -0.05], [-18.5, 20, 0.09],
+  ];
+  ammoCrates.forEach(([x, z, yaw], index) => {
+    add(`ammo-crate-${index}`, "crate", "box", CAMP_EMBER_COLORS.crate,
+      x, z, 0.65, 1.6, 1.3, 1.6, yaw);
+  });
+  add("fuel-revetment-east", "sandbag", "revetment", CAMP_EMBER_COLORS.sandbagShade,
+    25, 19.5, 0.6, 2.4, 1.2, 10, 0);
+  add("fuel-revetment-north", "sandbag", "revetment", CAMP_EMBER_COLORS.sandbag,
+    20, 24.7, 0.6, 12, 1.2, 2.4, 0);
+  const drums = [
+    [18, 18, CAMP_EMBER_COLORS.fuel], [20.2, 18, CAMP_EMBER_COLORS.rust],
+    [18, 20.2, CAMP_EMBER_COLORS.rust], [20.2, 20.2, CAMP_EMBER_COLORS.fuel],
+    [18, 22.4, CAMP_EMBER_COLORS.fuel], [20.2, 22.4, CAMP_EMBER_COLORS.rust],
+  ];
+  drums.forEach(([x, z, color], index) => {
+    add(`fuel-drum-${index}`, "fuel", "cylinder", color, x, z, 0.62, 0.92, 1.24, 0.92, 0);
+  });
+  [[13, -18, 0.12], [16, -18, -0.08], [-13, -20, 0.05]].forEach(
+    ([x, z, yaw], index) => add(`supply-crate-${index}`, "crate", "box",
+      CAMP_EMBER_COLORS.crate, x, z, 0.6, 1.5, 1.2, 1.5, yaw),
+  );
+
+  // A legged timber watchtower and a slender rust/steel mast provide vertical identity without
+  // putting a giant post in the pilot's cold-open sightline.
+  const towerX = -30;
+  const towerZ = -6;
+  [[-1.25, -1.25], [1.25, -1.25], [-1.25, 1.25], [1.25, 1.25]].forEach(
+    ([dx, dz], index) => add(`tower-leg-${index}`, "timber", "box", CAMP_EMBER_COLORS.timber,
+      towerX + dx, towerZ + dz, 3, 0.34, 6, 0.34, 0),
+  );
+  add("tower-platform", "timber", "box", CAMP_EMBER_COLORS.timber,
+    towerX, towerZ, 6.15, 4.2, 0.3, 4.2, 0);
+  add("tower-roof", "hooch", "tent", CAMP_EMBER_COLORS.canvas,
+    towerX, towerZ, 7.25, 4.8, 1.9, 4.8, 0);
+  add("radio-mast", "steel", "cylinder", CAMP_EMBER_COLORS.steel,
+    30, -32, 7.5, 0.38, 15, 0.38, 0);
+  add("radio-crossbar", "steel", "box", CAMP_EMBER_COLORS.rust,
+    30, -32, 15.05, 2.5, 0.22, 0.22, 0.45);
 
   return parts;
 }
 
-function boxGeometryWithColor(THREE, part) {
-  let geometry = new THREE.BoxGeometry(1, 1, 1);
+function triangularPrismGeometry(THREE) {
+  const positions = new Float32Array([
+    // front / back
+    -0.5, -0.5, -0.5, 0, 0.5, -0.5, 0.5, -0.5, -0.5,
+    0.5, -0.5, 0.5, 0, 0.5, 0.5, -0.5, -0.5, 0.5,
+    // floor
+    -0.5, -0.5, -0.5, 0.5, -0.5, -0.5, 0.5, -0.5, 0.5,
+    -0.5, -0.5, -0.5, 0.5, -0.5, 0.5, -0.5, -0.5, 0.5,
+    // left and right roof slopes
+    -0.5, -0.5, 0.5, 0, 0.5, 0.5, 0, 0.5, -0.5,
+    -0.5, -0.5, 0.5, 0, 0.5, -0.5, -0.5, -0.5, -0.5,
+    0.5, -0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5,
+    0.5, -0.5, -0.5, 0, 0.5, 0.5, 0.5, -0.5, 0.5,
+  ]);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function revetmentGeometry(THREE) {
+  const bottom = 0.5;
+  const topX = 0.36;
+  const topZ = 0.40;
+  const vertices = [
+    [-bottom, -0.5, -bottom], [bottom, -0.5, -bottom],
+    [bottom, -0.5, bottom], [-bottom, -0.5, bottom],
+    [-topX, 0.5, -topZ], [topX, 0.5, -topZ],
+    [topX, 0.5, topZ], [-topX, 0.5, topZ],
+  ];
+  const faces = [
+    [0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7],
+    [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5],
+    [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7],
+  ];
+  const positions = new Float32Array(faces.flatMap((face) => face.flatMap((index) => vertices[index])));
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function partGeometryWithColor(THREE, part) {
+  let geometry;
+  if (part.shape === "tent") geometry = triangularPrismGeometry(THREE);
+  else if (part.shape === "revetment") geometry = revetmentGeometry(THREE);
+  else if (part.shape === "cylinder") geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 8, 1);
+  else geometry = new THREE.BoxGeometry(1, 1, 1);
   if (typeof geometry.toNonIndexed === "function") {
-    const nonIndexed = geometry.toNonIndexed();
-    geometry.dispose?.();
-    geometry = nonIndexed;
+    if (geometry.index) {
+      const nonIndexed = geometry.toNonIndexed();
+      geometry.dispose?.();
+      geometry = nonIndexed;
+    }
   }
   const count = geometry.getAttribute("position").count;
   const colors = new Float32Array(count * 3);
@@ -134,12 +269,11 @@ function boxGeometryWithColor(THREE, part) {
     colors[index * 3 + 2] = part.color[2];
   }
   geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-  // Authored y values are centres (berm 1.1/2.2, tent 1.5/3, mast 8.5/17).
-  // The former base-anchor translation floated every prop by half its height and made the radio
-  // mast reach 25.5 m instead of 17 m. Keep the merged boxes on their authored centre planes.
+  // Every authored vertical value is explicitly `centreY`. The old implicit `y` mixed centre and
+  // base semantics, then a base-anchor translation floated props by half their height.
   geometry.scale(part.widthM, part.heightM, part.depthM);
   if (part.yaw) geometry.rotateY(part.yaw);
-  geometry.translate(part.x, part.y, part.z);
+  geometry.translate(part.x, part.centreY, part.z);
   return geometry;
 }
 
@@ -190,7 +324,18 @@ export function createCampEmberFirebase(THREE, plan) {
   const anchor = campEmberAnchor(plan);
   if (!anchor) return null;
   const parts = campEmberFirebaseParts();
-  const geometries = parts.map((part) => boxGeometryWithColor(THREE, part));
+  const geometries = parts.map((part) => partGeometryWithColor(THREE, part));
+  let rangeStart = 0;
+  const partVertexRanges = geometries.map((geometry, index) => {
+    const count = geometry.getAttribute("position").count;
+    const range = Object.freeze({
+      id: parts[index].id,
+      start: rangeStart,
+      count,
+    });
+    rangeStart += count;
+    return range;
+  });
   const geometry = mergeGeometries(THREE, geometries);
   const material = new THREE.MeshStandardMaterial({
     vertexColors: true,
@@ -230,6 +375,7 @@ export function createCampEmberFirebase(THREE, plan) {
     group,
     mesh,
     partCount: parts.length,
+    partVertexRanges: Object.freeze(partVertexRanges),
     families: [...new Set(parts.map((part) => part.family))],
     drawCalls: 1,
     triangles: Math.floor(positionCount / 3),

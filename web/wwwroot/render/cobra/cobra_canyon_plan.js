@@ -838,16 +838,12 @@ function riverRibbonOf(plan) {
 }
 
 /**
- * Samples the deterministic analytical terrain used by the standalone lab camera and floor.
- * It is a presentation floor, not a replacement for simulation-owned collision truth.
- *
- * KERNEL MIRROR. `CobraCanyonTerrainSurface.HeightM` in sim/Cobra/CobraCanyonDefinition.cs is
- * the simulation's copy of this function and must stay numerically identical — the ground war,
- * the FOB, the turret line-of-sight checks and the helicopter's own ground clearance all read
- * that one, and `CobraCanyonDefinitionTests.TerrainHeightMatchesBrowserPlannerGoldenSamples`
- * pins the two together at ten sample points.
+ * Samples the analytical field immediately before the final Camp Ember apron operation.
+ * Presentation terrain uses this seam to apply its conservative half-cell bias first; sampling
+ * the already-flattened apron would let a coarse neighbourhood minimum drag the 202 m pad down
+ * into the gorge. All ordinary callers must use `sampleCobraCanyonTerrain` below.
  */
-export function sampleCobraCanyonTerrain(plan, eastM, northM) {
+export function sampleCobraCanyonTerrainBeforeCampEmberApron(plan, eastM, northM) {
   requireRecord(plan, "Cobra Canyon plan");
   const bounds = requireRecord(plan.boundsLocalM, "plan.boundsLocalM");
   const model = requireRecord(plan.terrainModel, "plan.terrainModel");
@@ -929,11 +925,34 @@ export function sampleCobraCanyonTerrain(plan, eastM, northM) {
 
   carveCorridor(riverRibbon);
 
-  // Camp Ember used to be classified as land but retained the sloping river/ridge field beneath
-  // its flat PSP mesh. Across the 26 m launch pad the render ground moved by more than a metre,
-  // leaving one edge buried and the other floating while the simulation planted the skids at the
-  // centre sample. Level the authored firebase apron after every corridor/cell carve; C# mirrors
-  // this exact final operation so visual ground and contact authority cannot diverge at spawn.
+  if (!Number.isFinite(heightM)) {
+    throw new RangeError("Cobra Canyon pre-apron terrain sample was not finite.");
+  }
+  return heightM;
+}
+
+/**
+ * Applies the final Camp Ember apron to an arbitrary pre-apron terrain height.
+ *
+ * Keeping this operation separate is intentional: the render mesh feeds its neighbourhood-
+ * minimum height through here, while simulation/browser point samples feed the centre height
+ * through it. In both cases the flat 58 m contact apron and 58–110 m blend are the LAST terrain
+ * operation, so a coarse render sample cannot carve a pit through the launch surface.
+ */
+export function applyCobraCanyonCampEmberApron(plan, eastM, northM, heightM) {
+  requireRecord(plan, "Cobra Canyon plan");
+  const bounds = requireRecord(plan.boundsLocalM, "plan.boundsLocalM");
+  const east = clamp(
+    requireFinite(eastM, "eastM"),
+    requireFinite(bounds.minimumEastM, "plan.boundsLocalM.minimumEastM"),
+    requireFinite(bounds.maximumEastM, "plan.boundsLocalM.maximumEastM"),
+  );
+  const north = clamp(
+    requireFinite(northM, "northM"),
+    requireFinite(bounds.minimumNorthM, "plan.boundsLocalM.minimumNorthM"),
+    requireFinite(bounds.maximumNorthM, "plan.boundsLocalM.maximumNorthM"),
+  );
+  let adjustedHeightM = requireFinite(heightM, "heightM");
   const campDistanceM = Math.hypot(
     east - COBRA_CANYON_CAMP_EMBER_APRON.eastM,
     north - COBRA_CANYON_CAMP_EMBER_APRON.northM,
@@ -949,11 +968,30 @@ export function sampleCobraCanyonTerrain(plan, eastM, northM) {
     if (!Number.isFinite(campElevationM)) {
       throw new RangeError("Cobra Canyon Camp Ember elevation was not finite.");
     }
-    heightM += (campElevationM - heightM) * campBlend;
+    adjustedHeightM += (campElevationM - adjustedHeightM) * campBlend;
   }
 
-  if (!Number.isFinite(heightM)) {
+  if (!Number.isFinite(adjustedHeightM)) {
     throw new RangeError("Cobra Canyon terrain sample was not finite.");
   }
-  return heightM;
+  return adjustedHeightM;
+}
+
+/**
+ * Samples the deterministic analytical terrain used by the standalone lab camera and floor.
+ * It is a presentation floor, not a replacement for simulation-owned collision truth.
+ *
+ * KERNEL MIRROR. `CobraCanyonTerrainSurface.HeightM` in sim/Cobra/CobraCanyonDefinition.cs is
+ * the simulation's copy of this function and must stay numerically identical — the ground war,
+ * the FOB, the turret line-of-sight checks and the helicopter's own ground clearance all read
+ * that one, and `CobraCanyonDefinitionTests.TerrainHeightMatchesBrowserPlannerGoldenSamples`
+ * pins the two together at ten sample points.
+ */
+export function sampleCobraCanyonTerrain(plan, eastM, northM) {
+  return applyCobraCanyonCampEmberApron(
+    plan,
+    eastM,
+    northM,
+    sampleCobraCanyonTerrainBeforeCampEmberApron(plan, eastM, northM),
+  );
 }

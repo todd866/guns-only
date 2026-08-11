@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
+  applyCobraCanyonCampEmberApron,
   COBRA_CANYON_PLAN_SCHEMA,
   COBRA_CANYON_PRESENTATION_KIT_SCHEMA,
   COBRA_CANYON_WORLD_SCHEMA,
@@ -11,6 +12,7 @@ import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
+  sampleCobraCanyonTerrainBeforeCampEmberApron,
   validateCobraCanyonWorld,
 } from "../cobra_canyon_plan.js";
 
@@ -299,7 +301,19 @@ test("samples one deterministic finite relief surface for the lab camera and flo
   ));
   assert.ok(campPadSamples.every((heightM) => Math.abs(heightM - 202) <= 1e-9),
     `Camp Ember apron must be level at 202 m, got ${campPadSamples.join(", ")}`);
+  const preApronCentreM = sampleCobraCanyonTerrainBeforeCampEmberApron(plan, -6_775, -6_200);
+  assert.ok(Math.abs(preApronCentreM - 202) > 0.1,
+    "the pre-apron seam must expose the real field, not an already-flattened sample");
+  assert.equal(
+    applyCobraCanyonCampEmberApron(plan, -6_775, -6_200, preApronCentreM),
+    202,
+    "the shared final operation restores exact contact height",
+  );
   assert.throws(() => sampleCobraCanyonTerrain(plan, Number.NaN, 0), /eastM must be finite/);
+  assert.throws(
+    () => applyCobraCanyonCampEmberApron(plan, -6_775, -6_200, Number.NaN),
+    /heightM must be finite/,
+  );
 });
 
 test("loads through injected fetch in either supported argument order and validates failures", async () => {
