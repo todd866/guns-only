@@ -1,15 +1,17 @@
 # Current product and verification status
 
-Updated: 2026-08-10
+Updated: 2026-08-11
 Production: Build 307, revision `fb1f804d6565862e265523cfdc3305dac5104523`, deployment
 `dpl_2yEDtXXaTzr4oMmSSQpueQjPPbG8` (verified live via /api/build-info 2026-08-10). Builds
 253-298 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Next candidate: Build 308 (branch `agent/main-consolidation-2026-08-11`) — bounded long-range
+Consolidation candidate: Build 308 (branch `agent/main-consolidation-2026-08-11`) — bounded long-range
 terrain marches, Auto-GCAS broad-phase/lazy-path reductions, physical flyby acoustics, tiered cast
 shadows and terrain receivers, frame-attribution tools, and recovered architecture/research
 evidence.
-
+Next candidate: Build 309 (branch `agent/top-gun-main-integration`) layers the Top Gun ACM slice on
+that Build 308 base. Top Gun remains preview-only and fails closed unless `?preview=1` is explicitly
+acknowledged; representative human ACM acceptance and a complete green gate remain required.
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
 evidence for the build and commit they name, but they do not override this page or the executable
@@ -40,7 +42,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
 | Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned ground war, tip/hold win/lose, M134 + Camp Ember rearm, Tab/F gunner. Build 301: land spur Camp Ember FOB, airborne soft gates, denser Iron Bell destroyables. Build 306: limited SCAS only. Build 307: stronger hover TQ residual, cruise weathervane, terrain wind + yaw/wind telem. Build 308 candidate adds tier-bounded cast shadows and real terrain shadow receivers | Owner flight: hover feet-off needs left pedal; cruise holds better; gorge wind vs residual in traces. Longer arc: DCS-BS1-grade flight dynamics |
 | Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load, lappable circuit from Build 264+. Build 267 adds ride telemetry (speed/gear/lean/lap/frame). Build 308 candidate adds tiered shadows, sky-derived IBL, and horizon/far-plane corrections | Fresh representative human lap on the fixed artifact; deeper instrumentation still provisional |
-| Top Gun (`top-gun`) | **preview** | Preview acknowledgement only | Dogfight automation: Tomcat AIM-9 path, MiG-28 boot, gun firing, R fox-two browser bind, coarse Tomcat wing-sweep span | Representative human dogfight acceptance flight |
+| Top Gun (`top-gun`) | **preview** | Preview acknowledgement only | Build 309 candidate automation: Tomcat AIM-9 path, MiG-28 boot, gun firing, R fox-two browser bind, coarse Tomcat wing-sweep span | Complete green release gate and representative human ACM acceptance flight |
 
 ## Research-only packages
 
