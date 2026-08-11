@@ -127,6 +127,26 @@ public readonly record struct VehicleSurfaceSample(
 }
 
 /// <summary>
+/// Optional world-space wind truth at the rotor stations used by a vertical-lift provider.
+/// The legacy environment wind remains the sample at the vehicle reference point. These
+/// stations only describe spatial variation across the rotorcraft; callers should omit this
+/// sample when the wind is uniform.
+/// </summary>
+public readonly record struct RotorcraftAirflowSample(
+    Vec3D MainRotorForwardWindVelocityMps,
+    Vec3D MainRotorAftWindVelocityMps,
+    Vec3D MainRotorLeftWindVelocityMps,
+    Vec3D MainRotorRightWindVelocityMps,
+    Vec3D TailRotorWindVelocityMps) {
+
+    /// <summary>
+    /// Fore/aft/left/right stations lie this fraction of main-rotor radius from the hub.
+    /// Sampling owners and moment consumers share the value so their lever arms cannot drift.
+    /// </summary>
+    public const double MainRotorSampleRadiusFraction = 0.70;
+}
+
+/// <summary>
 /// Environment truth sampled for this authority tick. Fixed-wing AircraftSim continues to consume
 /// its own already-attached atmosphere/wind providers; the adapter derives its observation from
 /// that simulation so this sample cannot perturb legacy behavior.
@@ -134,7 +154,8 @@ public readonly record struct VehicleSurfaceSample(
 public readonly record struct PlayerVehicleEnvironmentSample(
     double AirDensityKgM3,
     Vec3D WindVelocityMps,
-    VehicleSurfaceSample Surface) {
+    VehicleSurfaceSample Surface,
+    RotorcraftAirflowSample? RotorcraftAirflow = null) {
 
     public static PlayerVehicleEnvironmentSample StandardStillAir => new(
         1.225,
@@ -323,6 +344,18 @@ internal static class PlayerVehicleValidation {
             nameof(environment.AirDensityKgM3));
         Finite(environment.WindVelocityMps,
             nameof(environment.WindVelocityMps));
+        if (environment.RotorcraftAirflow is { } rotorcraftAirflow) {
+            Finite(rotorcraftAirflow.MainRotorForwardWindVelocityMps,
+                nameof(rotorcraftAirflow.MainRotorForwardWindVelocityMps));
+            Finite(rotorcraftAirflow.MainRotorAftWindVelocityMps,
+                nameof(rotorcraftAirflow.MainRotorAftWindVelocityMps));
+            Finite(rotorcraftAirflow.MainRotorLeftWindVelocityMps,
+                nameof(rotorcraftAirflow.MainRotorLeftWindVelocityMps));
+            Finite(rotorcraftAirflow.MainRotorRightWindVelocityMps,
+                nameof(rotorcraftAirflow.MainRotorRightWindVelocityMps));
+            Finite(rotorcraftAirflow.TailRotorWindVelocityMps,
+                nameof(rotorcraftAirflow.TailRotorWindVelocityMps));
+        }
         VehicleSurfaceSample surface = environment.Surface;
         if (!surface.UpNormal.IsFinite || surface.UpNormal.Length < 1e-9)
             throw new ArgumentOutOfRangeException(nameof(environment),

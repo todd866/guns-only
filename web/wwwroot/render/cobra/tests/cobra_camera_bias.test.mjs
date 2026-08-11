@@ -3,10 +3,19 @@ import assert from "node:assert/strict";
 import {
   COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD,
   clampInducedLookRotation,
+  lookOffsetFromAngles,
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
   togglePadlockSelection,
 } from "../cobra_camera_bias.js";
+
+test("production east-heading forward look is exactly body-aligned", () => {
+  const distanceM = 140;
+  const offset = lookOffsetFromAngles(Math.PI / 2, 0, distanceM);
+  assert.ok(Math.abs(offset.x - distanceM) < 1e-9);
+  assert.ok(Math.abs(offset.y) < 1e-9);
+  assert.ok(Math.abs(offset.z) < 1e-9);
+});
 
 test("soft cueing stays inside the windshield bias cap", () => {
   assert.equal(COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD, 0.05);

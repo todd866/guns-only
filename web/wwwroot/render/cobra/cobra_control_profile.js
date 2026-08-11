@@ -33,6 +33,8 @@ function control(code, direction, motion) {
 export function resolveCobraControlProfile(bindings = {}) {
   return Object.freeze({
     commandFamily: "vertical-lift-pilot",
+    // Production is the authentic direct-input path: the profile must never advertise "none"
+    // while the pilot seam quietly captures attitude or manufactures a cyclic command.
     assistance: "none",
     collective: Object.freeze({
       pull: control(binding(bindings, "powerUp"), 1, "toward-pilot"),

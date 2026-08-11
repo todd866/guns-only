@@ -35,23 +35,42 @@ export function cobraFpvLevel(rotorcraft) {
 }
 
 /**
- * Horizontal ground-track stub in screen pixels (plan view: +x east on screen right-ish,
- * +north screen up). Caller supplies body-relative or world EN ground components in knots.
+ * Convert sim-world horizontal velocity into heading-relative ground track. The result ignores
+ * pitch and bank deliberately: the hover cue is a plan-view instrument, with right positive and
+ * forward positive regardless of where east/north happen to fall on this sortie.
+ *
+ * @returns {{ rightMps: number, forwardMps: number }}
+ */
+export function cobraHeadingRelativeGroundTrack(eastMps, northMps, headingRad) {
+  const east = Number(eastMps) || 0;
+  const north = Number(northMps) || 0;
+  const heading = Number(headingRad) || 0;
+  const sinHeading = Math.sin(heading);
+  const cosHeading = Math.cos(heading);
+  return {
+    rightMps: east * cosHeading - north * sinHeading,
+    forwardMps: east * sinHeading + north * cosHeading,
+  };
+}
+
+/**
+ * Heading-relative horizontal ground-track stub in screen pixels. Right motion draws right;
+ * forward motion draws up. The caller must supply body-plan components in knots.
  *
  * @returns {{ dx: number, dy: number, lengthPx: number }}
  */
-export function cobraHoverStubPixels(eastKt, northKt, {
+export function cobraHoverStubPixels(rightKt, forwardKt, {
   fullScaleKt = COBRA_HOVER_FULL_SCALE_KT,
   maxPx = COBRA_HOVER_STUB_MAX_PX,
 } = {}) {
-  const east = Number(eastKt) || 0;
-  const north = Number(northKt) || 0;
-  const speed = Math.hypot(east, north);
+  const right = Number(rightKt) || 0;
+  const forward = Number(forwardKt) || 0;
+  const speed = Math.hypot(right, forward);
   if (!(speed > 0.05)) return { dx: 0, dy: 0, lengthPx: 0 };
   const lengthPx = Math.min(maxPx, (speed / fullScaleKt) * maxPx);
   const scale = lengthPx / speed;
-  // Screen: +x right, +y down — north is up on the combiner, so negate north for dy.
-  return { dx: east * scale, dy: -north * scale, lengthPx };
+  // Screen: +x right, +y down — body-forward is up on the combiner.
+  return { dx: right * scale, dy: -forward * scale, lengthPx };
 }
 
 /**

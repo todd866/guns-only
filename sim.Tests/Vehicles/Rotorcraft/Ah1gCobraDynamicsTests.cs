@@ -30,6 +30,174 @@ public sealed class Ah1gCobraDynamicsTests
             VehicleContactState.Unknown,
             VehicleProtectionInterventionEvidence.None);
 
+    static double LoadFactor(Ah1gCobraDynamics cobra) =>
+        cobra.Telemetry.MainRotorThrustN / (BasicMissionMassKg * FlightModel.G0);
+
+    static double WrapPi(double angle)
+    {
+        while (angle > Math.PI) angle -= 2.0 * Math.PI;
+        while (angle < -Math.PI) angle += 2.0 * Math.PI;
+        return angle;
+    }
+
+    readonly record struct CollectivePullSample(
+        double MainRotorRpm,
+        double TorqueFraction,
+        double LoadFactor,
+        BodyRates ExcessRates);
+
+    sealed record CollectiveWorkloadReport(
+        double MinimumMainRotorRpm,
+        double MaximumTorqueFraction,
+        double MaximumLoadFactor,
+        double MaximumAbsRollRate,
+        double MaximumAbsPitchRate,
+        double MaximumAbsYawRate,
+        double OpenPeakPitchErrorRad,
+        double CorrectedPeakPitchErrorRad,
+        double OpenPeakYawErrorRad,
+        double CorrectedPeakYawErrorRad,
+        double MeanAbsCyclicCorrection,
+        double PeakAbsCyclicCorrection,
+        double MeanAbsPedalCorrection,
+        double PeakAbsPedalCorrection);
+
+    static CollectiveWorkloadReport FlyCollectiveWorkload(
+        in Vec3D initialVelocity,
+        double baselineForwardCyclic)
+    {
+        var reference = Create("collective-workload-reference", velocity: initialVelocity);
+        var open = Create("collective-workload-open", velocity: initialVelocity);
+        var corrected = Create("collective-workload-corrected", velocity: initialVelocity);
+        double trim = reference.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        var trimCommand = new VerticalLiftPilotCommand(
+            trim,
+            baselineForwardCyclic,
+            0.0,
+            0.0);
+        for (long tick = 0; tick < 480; tick++)
+        {
+            reference.Advance(Input(tick, trimCommand));
+            open.Advance(Input(tick, trimCommand));
+            corrected.Advance(Input(tick, trimCommand));
+        }
+
+        double minimumRpm = double.PositiveInfinity;
+        double maximumTorque = 0.0;
+        double maximumLoad = 0.0;
+        double maximumAbsP = 0.0;
+        double maximumAbsQ = 0.0;
+        double maximumAbsR = 0.0;
+        double openPeakPitchError = 0.0;
+        double correctedPeakPitchError = 0.0;
+        double openPeakYawError = 0.0;
+        double correctedPeakYawError = 0.0;
+        double cyclicWork = 0.0;
+        double pedalWork = 0.0;
+        double peakCyclic = 0.0;
+        double peakPedal = 0.0;
+        const int PullTicks = 780;
+        for (int step = 0; step < PullTicks; step++)
+        {
+            long tick = 480 + step;
+            double elapsedSeconds = step * PlayerVehicleContract.FixedDeltaSeconds;
+            double collective = Math.Min(1.0, trim + 0.40 * elapsedSeconds);
+            double pitchError = corrected.Observation.PitchRad
+                - reference.Observation.PitchRad;
+            double pitchRateError = corrected.State.BodyRates.Q
+                - reference.State.BodyRates.Q;
+            double yawError = WrapPi(corrected.Observation.YawRad
+                - reference.Observation.YawRad);
+            double yawRateError = corrected.State.BodyRates.R
+                - reference.State.BodyRates.R;
+            // This is an instrumented test pilot, not product assistance. Its required input is
+            // the workload metric, and the open-loop aircraft remains beside it as the authority.
+            double correctingCyclic = Math.Clamp(
+                baselineForwardCyclic + 4.0 * pitchError + 1.2 * pitchRateError,
+                -0.65,
+                0.65);
+            double correctingPedal = Math.Clamp(
+                -1.5 * yawError - 0.55 * yawRateError,
+                -0.65,
+                0.65);
+
+            reference.Advance(Input(tick, trimCommand));
+            open.Advance(Input(tick,
+                new VerticalLiftPilotCommand(
+                    collective,
+                    baselineForwardCyclic,
+                    0.0,
+                    0.0)));
+            corrected.Advance(Input(tick,
+                new VerticalLiftPilotCommand(
+                    collective,
+                    correctingCyclic,
+                    0.0,
+                    correctingPedal)));
+
+            BodyRates excessRates = new(
+                open.State.BodyRates.P - reference.State.BodyRates.P,
+                open.State.BodyRates.Q - reference.State.BodyRates.Q,
+                open.State.BodyRates.R - reference.State.BodyRates.R);
+            minimumRpm = Math.Min(minimumRpm, open.Telemetry.MainRotorRpm);
+            maximumTorque = Math.Max(maximumTorque,
+                open.Telemetry.TransmissionLimitFraction);
+            maximumLoad = Math.Max(maximumLoad, LoadFactor(open));
+            maximumAbsP = Math.Max(maximumAbsP, Math.Abs(excessRates.P));
+            maximumAbsQ = Math.Max(maximumAbsQ, Math.Abs(excessRates.Q));
+            maximumAbsR = Math.Max(maximumAbsR, Math.Abs(excessRates.R));
+            openPeakPitchError = Math.Max(openPeakPitchError,
+                Math.Abs(open.Observation.PitchRad - reference.Observation.PitchRad));
+            correctedPeakPitchError = Math.Max(correctedPeakPitchError,
+                Math.Abs(corrected.Observation.PitchRad - reference.Observation.PitchRad));
+            openPeakYawError = Math.Max(openPeakYawError,
+                Math.Abs(WrapPi(open.Observation.YawRad - reference.Observation.YawRad)));
+            correctedPeakYawError = Math.Max(correctedPeakYawError,
+                Math.Abs(WrapPi(corrected.Observation.YawRad - reference.Observation.YawRad)));
+            double cyclicCorrection = Math.Abs(correctingCyclic - baselineForwardCyclic);
+            double pedalCorrection = Math.Abs(correctingPedal);
+            cyclicWork += cyclicCorrection;
+            pedalWork += pedalCorrection;
+            peakCyclic = Math.Max(peakCyclic, cyclicCorrection);
+            peakPedal = Math.Max(peakPedal, pedalCorrection);
+        }
+
+        return new CollectiveWorkloadReport(
+            minimumRpm,
+            maximumTorque,
+            maximumLoad,
+            maximumAbsP,
+            maximumAbsQ,
+            maximumAbsR,
+            openPeakPitchError,
+            correctedPeakPitchError,
+            openPeakYawError,
+            correctedPeakYawError,
+            cyclicWork / PullTicks,
+            peakCyclic,
+            pedalWork / PullTicks,
+            peakPedal);
+    }
+
+    static PlayerVehicleEnvironmentSample BodyGradientEnvironment(
+        in QuaternionD attitude)
+    {
+        Vec3D upTwoWorld = attitude.Rotate(new Vec3D(0.0, 2.0, 0.0));
+        return new PlayerVehicleEnvironmentSample(
+            1.225,
+            Vec3D.Zero,
+            VehicleSurfaceSample.Unknown,
+            new RotorcraftAirflowSample(
+                MainRotorForwardWindVelocityMps: upTwoWorld,
+                MainRotorAftWindVelocityMps: upTwoWorld * -1.0,
+                MainRotorLeftWindVelocityMps: Vec3D.Zero,
+                MainRotorRightWindVelocityMps: Vec3D.Zero,
+                TailRotorWindVelocityMps: Vec3D.Zero));
+    }
+
+    static double Degrees(double value) => value * Math.PI / 180.0;
+    static double DegreesFromRadians(double value) => value * 180.0 / Math.PI;
+
     [Fact]
     public void ProviderExposesDirectCollectiveRotorcraftAuthority()
     {
@@ -83,10 +251,10 @@ public sealed class Ah1gCobraDynamicsTests
             minimumRpm = Math.Min(minimumRpm, cobra.Telemetry.MainRotorRpm);
         }
 
-        Assert.True(minimumRpm < 322.5,
-            $"Expected transient rotor droop, minimum was {minimumRpm:F2} rpm.");
+        Assert.InRange(minimumRpm, 240.0, 322.5);
         Assert.True(cobra.Telemetry.EngineShaftPowerW > beforePowerW + 25_000.0);
-        Assert.True(cobra.State.GroundVelocityMps.Y > 0.5);
+        Assert.InRange(cobra.Telemetry.TransmissionLimitFraction, 0.80, 1.001);
+        Assert.InRange(cobra.State.GroundVelocityMps.Y, 0.5, 20.0);
     }
 
     [Fact]
@@ -146,7 +314,201 @@ public sealed class Ah1gCobraDynamicsTests
     }
 
     [Fact]
-    public void MaximumCollectiveIsNotCappedAtTheOldOnePointFiveFiveGCeiling()
+    public void UniformRotorcraftAirflowPreservesTheThreeArgumentEnvironmentPathExactly()
+    {
+        var legacy = Create("uniform-airflow");
+        var sampled = Create("uniform-airflow");
+        double trim = legacy.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        var command = new VerticalLiftPilotCommand(trim, 0.18, -0.12, 0.05);
+        var uniformWind = new Vec3D(-4.0, 0.6, 1.2);
+        var legacyEnvironment = new PlayerVehicleEnvironmentSample(
+            1.225,
+            uniformWind,
+            VehicleSurfaceSample.Unknown);
+        var sampledEnvironment = new PlayerVehicleEnvironmentSample(
+            1.225,
+            uniformWind,
+            VehicleSurfaceSample.Unknown,
+            new RotorcraftAirflowSample(
+                uniformWind,
+                uniformWind,
+                uniformWind,
+                uniformWind,
+                uniformWind));
+
+        Assert.Null(legacyEnvironment.RotorcraftAirflow);
+        for (long tick = 0; tick < 240; tick++)
+        {
+            legacy.Advance(Input(tick, command, legacyEnvironment));
+            sampled.Advance(Input(tick, command, sampledEnvironment));
+        }
+
+        Assert.Equal(Vec3D.Zero, sampled.LastGustMomentBodyNm);
+        Assert.Equal(legacy.State, sampled.State);
+        Assert.Equal(legacy.Observation, sampled.Observation);
+        Assert.Equal(legacy.Telemetry, sampled.Telemetry);
+    }
+
+    [Fact]
+    public void RotorcraftAirflowRejectsANonFiniteStation()
+    {
+        var cobra = Create("bad-airflow");
+        var invalidEnvironment = new PlayerVehicleEnvironmentSample(
+            1.225,
+            Vec3D.Zero,
+            VehicleSurfaceSample.Unknown,
+            new RotorcraftAirflowSample(
+                Vec3D.Zero,
+                Vec3D.Zero,
+                Vec3D.Zero,
+                new Vec3D(double.NaN, 0.0, 0.0),
+                Vec3D.Zero));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => cobra.Advance(Input(
+            0,
+            new VerticalLiftPilotCommand(0.5, 0.0, 0.0, 0.0),
+            invalidEnvironment)));
+    }
+
+    [Fact]
+    public void RotorAndTailWindGradientsCreateAllThreeBodyRates()
+    {
+        var calm = Create("gradient-calm");
+        var gusting = Create("gradient-gusting");
+        double trim = calm.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        var command = new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0);
+        var gradientEnvironment = new PlayerVehicleEnvironmentSample(
+            1.225,
+            Vec3D.Zero,
+            VehicleSurfaceSample.Unknown,
+            new RotorcraftAirflowSample(
+                MainRotorForwardWindVelocityMps: new Vec3D(0.0, 2.0, 0.0),
+                MainRotorAftWindVelocityMps: new Vec3D(0.0, -2.0, 0.0),
+                MainRotorLeftWindVelocityMps: new Vec3D(0.0, -2.0, 0.0),
+                MainRotorRightWindVelocityMps: new Vec3D(0.0, 2.0, 0.0),
+                TailRotorWindVelocityMps: new Vec3D(5.0, 0.0, 0.0)));
+
+        calm.Advance(Input(0, command));
+        gusting.Advance(Input(0, command, gradientEnvironment));
+
+        Assert.True(Math.Abs(gusting.LastGustMomentBodyNm.X) > 1.0,
+            $"Pitch gust moment was {gusting.LastGustMomentBodyNm.X:F3} Nm.");
+        Assert.True(Math.Abs(gusting.LastGustMomentBodyNm.Y) > 1.0,
+            $"Yaw gust moment was {gusting.LastGustMomentBodyNm.Y:F3} Nm.");
+        Assert.True(Math.Abs(gusting.LastGustMomentBodyNm.Z) > 1.0,
+            $"Roll gust moment was {gusting.LastGustMomentBodyNm.Z:F3} Nm.");
+        Assert.True(gusting.LastGustMomentBodyNm.X < 0.0,
+            "Up-flow over the forward disk must pitch the nose up.");
+        Assert.True(gusting.LastGustMomentBodyNm.Y < 0.0,
+            "Rightward tail flow must yaw the tail right / nose left.");
+        Assert.True(gusting.LastGustMomentBodyNm.Z > 0.0,
+            "Up-flow over the right disk must roll the rotorcraft left.");
+        Assert.True(gusting.State.BodyRates.P < calm.State.BodyRates.P);
+        Assert.True(gusting.State.BodyRates.Q > calm.State.BodyRates.Q);
+        Assert.True(gusting.State.BodyRates.R < calm.State.BodyRates.R);
+    }
+
+    [Fact]
+    public void RotorcraftGustMomentsAreCappedThroughMassScaledPublishedInertias()
+    {
+        var cobra = Create("bounded-gradient");
+        double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        var extremeEnvironment = new PlayerVehicleEnvironmentSample(
+            1.225,
+            Vec3D.Zero,
+            VehicleSurfaceSample.Unknown,
+            new RotorcraftAirflowSample(
+                MainRotorForwardWindVelocityMps: new Vec3D(0.0, 10_000.0, 0.0),
+                MainRotorAftWindVelocityMps: new Vec3D(0.0, -10_000.0, 0.0),
+                MainRotorLeftWindVelocityMps: new Vec3D(0.0, -10_000.0, 0.0),
+                MainRotorRightWindVelocityMps: new Vec3D(0.0, 10_000.0, 0.0),
+                TailRotorWindVelocityMps: new Vec3D(10_000.0, 0.0, 0.0)));
+
+        cobra.Advance(Input(0,
+            new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0),
+            extremeEnvironment));
+
+        RotorcraftAirframeDefinition airframe = cobra.Definition.Airframe;
+        double inertiaScale = BasicMissionMassKg / airframe.InertiaReferenceMassKg;
+        double maximumPitchMomentNm = airframe.PitchInertiaKgM2 * inertiaScale
+            * Math.PI / 15.0;
+        double maximumYawMomentNm = airframe.YawInertiaKgM2 * inertiaScale
+            * 2.0 * Math.PI / 45.0;
+        double maximumRollMomentNm = airframe.RollInertiaKgM2 * inertiaScale
+            * Math.PI / 10.0;
+
+        Assert.Equal(maximumPitchMomentNm,
+            Math.Abs(cobra.LastGustMomentBodyNm.X), 8);
+        Assert.Equal(maximumYawMomentNm,
+            Math.Abs(cobra.LastGustMomentBodyNm.Y), 8);
+        Assert.Equal(maximumRollMomentNm,
+            Math.Abs(cobra.LastGustMomentBodyNm.Z), 8);
+        Assert.InRange(Math.Abs(cobra.State.BodyRates.P),
+            0.0, cobra.Definition.Handling.MaximumRollRateRadPerSecond);
+        Assert.InRange(Math.Abs(cobra.State.BodyRates.Q),
+            0.0, cobra.Definition.Handling.MaximumPitchRateRadPerSecond);
+        Assert.InRange(Math.Abs(cobra.State.BodyRates.R),
+            0.0, cobra.Definition.TailRotor.MaximumYawRateRadPerSecond);
+    }
+
+    [Fact]
+    public void HandsOffCyclicRatesDecayWithoutAOneSecondFreeze()
+    {
+        var roll = Create("rate-decay-roll");
+        var pitch = Create("rate-decay-pitch");
+        var pilotCounteredRoll = Create("rate-decay-pilot-counter");
+        double trim = roll.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        for (long tick = 0; tick < 90; tick++)
+        {
+            roll.Advance(Input(tick,
+                new VerticalLiftPilotCommand(trim, 0.0, 0.60, 0.0)));
+            pitch.Advance(Input(tick,
+                new VerticalLiftPilotCommand(trim, 0.60, 0.0, 0.0)));
+            pilotCounteredRoll.Advance(Input(tick,
+                new VerticalLiftPilotCommand(trim, 0.0, 0.60, 0.0)));
+        }
+
+        double rollRateAtRelease = roll.State.BodyRates.P;
+        double pitchRateAtRelease = pitch.State.BodyRates.Q;
+        var handsOff = new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0);
+        for (long tick = 90; tick < 210; tick++)
+        {
+            roll.Advance(Input(tick, handsOff));
+            pitch.Advance(Input(tick, handsOff));
+            pilotCounteredRoll.Advance(Input(tick,
+                new VerticalLiftPilotCommand(trim, 0.0, -0.60, 0.0)));
+        }
+
+        Assert.True(rollRateAtRelease > 0.10,
+            $"Right cyclic produced only {rollRateAtRelease:F3} rad/s P.");
+        Assert.True(pitchRateAtRelease < -0.10,
+            $"Forward cyclic produced only {pitchRateAtRelease:F3} rad/s Q.");
+        Assert.InRange(roll.State.BodyRates.P,
+            0.25 * rollRateAtRelease,
+            0.90 * rollRateAtRelease);
+        Assert.InRange(-pitch.State.BodyRates.Q,
+            0.25 * -pitchRateAtRelease,
+            0.90 * -pitchRateAtRelease);
+        Assert.True(pilotCounteredRoll.State.BodyRates.P
+            < roll.State.BodyRates.P - 0.20,
+            "Opposite pilot cyclic should answer much faster than natural hands-off damping.");
+
+        double maximumRollScasRadPerSecond = 0.125
+            * roll.Definition.Handling.MaximumRollRateRadPerSecond;
+        double maximumPitchScasRadPerSecond = 0.125
+            * pitch.Definition.Handling.MaximumPitchRateRadPerSecond;
+        Assert.InRange(Math.Abs(roll.LastCyclicScasRateCommand.P),
+            0.0, maximumRollScasRadPerSecond + 1e-12);
+        Assert.InRange(Math.Abs(pitch.LastCyclicScasRateCommand.Q),
+            0.0, maximumPitchScasRadPerSecond + 1e-12);
+        Assert.True(roll.LastCyclicScasRateCommand.P < 0.0,
+            "Roll-rate SCAS must oppose positive P without holding bank attitude.");
+        Assert.True(pitch.LastCyclicScasRateCommand.Q > 0.0,
+            "Pitch-rate SCAS must oppose negative Q without holding pitch attitude.");
+    }
+
+    [Fact]
+    public void MaximumCollectiveInitialLoadStaysInsideTheNumericalFlightEnvelope()
     {
         var cobra = Create("maneuver");
 
@@ -156,9 +518,157 @@ public sealed class Ah1gCobraDynamicsTests
         double oldCeilingN = cobra.Definition.Airframe.MaximumGrossMassKg
             * FlightModel.G0
             * 1.55;
-        Assert.True(cobra.Telemetry.MainRotorThrustN > oldCeilingN,
-            $"Maximum collective remained at {cobra.Telemetry.MainRotorThrustN:F0} N; "
-            + $"old ceiling was {oldCeilingN:F0} N.");
+        double numericalCeilingN = cobra.Definition.Airframe.MaximumGrossMassKg
+            * FlightModel.G0
+            * cobra.Definition.Handling.NumericalMainRotorLoadFactorGuard;
+        Assert.InRange(cobra.Telemetry.MainRotorThrustN, oldCeilingN, numericalCeilingN);
+        Assert.InRange(LoadFactor(cobra), 1.80, 2.60);
+    }
+
+    [Fact]
+    public void ProductionRateCollectivePullHasImmediateBoundedPitchAndYawResponse()
+    {
+        var reference = Create("collective-transient-reference");
+        var pulling = Create("collective-transient-pulling");
+        double trim = reference.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        var hover = new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0);
+        for (long tick = 0; tick < 480; tick++)
+        {
+            reference.Advance(Input(tick, hover));
+            pulling.Advance(Input(tick, hover));
+        }
+
+        var samples = new Dictionary<int, CollectivePullSample>();
+        for (int step = 0; step < 120; step++)
+        {
+            long tick = 480 + step;
+            double elapsedSeconds = step * PlayerVehicleContract.FixedDeltaSeconds;
+            double collective = Math.Min(1.0, trim + 0.40 * elapsedSeconds);
+            reference.Advance(Input(tick, hover));
+            pulling.Advance(Input(tick,
+                new VerticalLiftPilotCommand(collective, 0.0, 0.0, 0.0)));
+            if (step + 1 is 30 or 60 or 120)
+            {
+                samples[step + 1] = new CollectivePullSample(
+                    pulling.Telemetry.MainRotorRpm,
+                    pulling.Telemetry.TransmissionLimitFraction,
+                    LoadFactor(pulling),
+                    new BodyRates(
+                        pulling.State.BodyRates.P - reference.State.BodyRates.P,
+                        pulling.State.BodyRates.Q - reference.State.BodyRates.Q,
+                        pulling.State.BodyRates.R - reference.State.BodyRates.R));
+            }
+        }
+
+        CollectivePullSample quarterSecond = samples[30];
+        CollectivePullSample halfSecond = samples[60];
+        CollectivePullSample oneSecond = samples[120];
+
+        Assert.InRange(quarterSecond.MainRotorRpm, 315.0, 326.0);
+        Assert.InRange(halfSecond.MainRotorRpm, 305.0, 326.0);
+        Assert.InRange(oneSecond.MainRotorRpm, 285.0, 318.0);
+        Assert.InRange(quarterSecond.TorqueFraction, 0.75, 0.96);
+        Assert.InRange(halfSecond.TorqueFraction, 0.78, 1.001);
+        Assert.InRange(oneSecond.TorqueFraction, 0.82, 1.001);
+        Assert.InRange(quarterSecond.LoadFactor, 1.05, 1.45);
+        Assert.InRange(halfSecond.LoadFactor, 1.15, 1.65);
+        Assert.InRange(oneSecond.LoadFactor, 1.25, 1.85);
+
+        Assert.InRange(quarterSecond.ExcessRates.P, Degrees(-0.25), Degrees(0.25));
+        Assert.InRange(halfSecond.ExcessRates.P, Degrees(-0.25), Degrees(0.25));
+        Assert.InRange(oneSecond.ExcessRates.P, Degrees(-0.25), Degrees(0.25));
+        Assert.InRange(quarterSecond.ExcessRates.Q, Degrees(-1.5), Degrees(-0.10));
+        Assert.InRange(halfSecond.ExcessRates.Q, Degrees(-4.0), Degrees(-0.50));
+        Assert.InRange(oneSecond.ExcessRates.Q, Degrees(-10.0), Degrees(-2.0));
+        Assert.InRange(quarterSecond.ExcessRates.R, Degrees(0.20), Degrees(2.5));
+        Assert.InRange(halfSecond.ExcessRates.R, Degrees(1.0), Degrees(5.0));
+        Assert.InRange(oneSecond.ExcessRates.R, Degrees(3.0), Degrees(9.0));
+        Assert.True(pulling.LastCollectiveHubMomentBodyNm.X > 1.0);
+    }
+
+    [Fact]
+    public void SustainedHoverFullPullIsBoundedAndRequiresCyclicAndPedalWork()
+    {
+        CollectiveWorkloadReport report = FlyCollectiveWorkload(
+            Vec3D.Zero,
+            baselineForwardCyclic: 0.0);
+
+        Assert.InRange(report.MinimumMainRotorRpm, 235.0, 310.0);
+        Assert.InRange(report.MaximumTorqueFraction, 0.90, 1.001);
+        Assert.InRange(report.MaximumLoadFactor, 1.15, 2.00);
+        Assert.InRange(report.MaximumAbsRollRate, 0.0, Degrees(2.0));
+        Assert.InRange(report.MaximumAbsPitchRate, Degrees(1.0), Degrees(20.0));
+        Assert.InRange(report.MaximumAbsYawRate, Degrees(2.0), Degrees(15.0));
+
+        Assert.InRange(report.MeanAbsCyclicCorrection, 0.015, 0.20);
+        Assert.InRange(report.PeakAbsCyclicCorrection, 0.025, 0.35);
+        Assert.InRange(report.MeanAbsPedalCorrection, 0.015, 0.20);
+        Assert.InRange(report.PeakAbsPedalCorrection, 0.025, 0.35);
+        Assert.True(report.CorrectedPeakPitchErrorRad
+            < 0.60 * report.OpenPeakPitchErrorRad,
+            $"Cyclic correction did not reduce peak pitch error: open "
+            + $"{DegreesFromRadians(report.OpenPeakPitchErrorRad):F2}°, corrected "
+            + $"{DegreesFromRadians(report.CorrectedPeakPitchErrorRad):F2}°.");
+        Assert.True(report.CorrectedPeakYawErrorRad
+            < 0.65 * report.OpenPeakYawErrorRad,
+            $"Pedal correction did not reduce peak yaw error: open "
+            + $"{DegreesFromRadians(report.OpenPeakYawErrorRad):F2}°, corrected "
+            + $"{DegreesFromRadians(report.CorrectedPeakYawErrorRad):F2}°.");
+    }
+
+    [Fact]
+    public void TrimAndStoppedRotorDoNotManufactureACollectiveHubMoment()
+    {
+        var trimmed = Create("collective-hub-trim");
+        double trim = trimmed.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        trimmed.Advance(Input(0,
+            new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0)));
+
+        var stopped = Create("collective-hub-stopped");
+        for (long tick = 0; tick < 900; tick++)
+            stopped.Advance(Input(tick,
+                new VerticalLiftPilotCommand(0.0, 0.0, 0.0, 0.0)));
+
+        Assert.Equal(Vec3D.Zero, trimmed.LastCollectiveHubMomentBodyNm);
+        Assert.Equal(Vec3D.Zero, stopped.LastCollectiveHubMomentBodyNm);
+    }
+
+    [Fact]
+    public void LoadedRotorGustResponseDoesNotCollapseWithRpmCubedAtFullCollective()
+    {
+        var trimRotor = Create("loaded-gust-trim");
+        var fullRotor = Create("loaded-gust-full");
+        double trim = trimRotor.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        for (long tick = 0; tick < 600; tick++)
+        {
+            trimRotor.Advance(Input(tick,
+                new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0)));
+            fullRotor.Advance(Input(tick,
+                new VerticalLiftPilotCommand(1.0, 0.0, 0.0, 0.0)));
+        }
+
+        double trimRpm = trimRotor.Telemetry.MainRotorRpm;
+        double fullRpm = fullRotor.Telemetry.MainRotorRpm;
+        PlayerVehicleEnvironmentSample trimGradient = BodyGradientEnvironment(
+            trimRotor.State.BodyAttitude);
+        PlayerVehicleEnvironmentSample fullGradient = BodyGradientEnvironment(
+            fullRotor.State.BodyAttitude);
+
+        trimRotor.Advance(Input(600,
+            new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0),
+            trimGradient));
+        fullRotor.Advance(Input(600,
+            new VerticalLiftPilotCommand(1.0, 0.0, 0.0, 0.0),
+            fullGradient));
+
+        double responseRatio = Math.Abs(fullRotor.LastGustMomentBodyNm.X)
+            / Math.Abs(trimRotor.LastGustMomentBodyNm.X);
+        double oldRpmCubedRatio = Math.Pow(fullRpm / trimRpm, 3.0);
+        Assert.True(double.IsFinite(responseRatio));
+        Assert.InRange(responseRatio, 0.70, 1.35);
+        Assert.True(responseRatio > oldRpmCubedRatio + 0.10,
+            $"Loaded response {responseRatio:F3} still collapsed with Nr³ "
+            + $"({oldRpmCubedRatio:F3}).");
     }
 
     [Fact]
@@ -218,6 +728,9 @@ public sealed class Ah1gCobraDynamicsTests
 
         Assert.True(Math.Abs(cobra.Telemetry.YawResidualRadPerSecond) > 0.02,
             $"Hover residual too small: {cobra.Telemetry.YawResidualRadPerSecond:F4} rad/s");
+        Assert.InRange(Math.Abs(cobra.Telemetry.ScasYawRadPerSecond),
+            0.0,
+            0.125 * cobra.Definition.TailRotor.MaximumYawRateRadPerSecond + 1e-12);
 
         double yaw0 = cobra.Observation.YawRad;
         for (long tick = 480; tick < 840; tick++)
@@ -252,6 +765,46 @@ public sealed class Ah1gCobraDynamicsTests
         double driftRad = Math.Abs(cruise.Observation.YawRad - yaw0);
         Assert.True(driftRad < 0.18,
             $"Cruise feet-off heading drift {driftRad:F3} rad in 3 s — weathervane should help.");
+    }
+
+    [Fact]
+    public void CruiseWeathervaneDampsButDoesNotEraseYawRateInOneSecond()
+    {
+        var reference = Create("yaw-decay-reference", velocity: new Vec3D(0.0, 0.0, 45.0));
+        var disturbed = Create("yaw-decay-disturbed", velocity: new Vec3D(0.0, 0.0, 45.0));
+        double trim = reference.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        var cruise = new VerticalLiftPilotCommand(trim, 0.12, 0.0, 0.0);
+        for (long tick = 0; tick < 480; tick++)
+        {
+            reference.Advance(Input(tick, cruise));
+            disturbed.Advance(Input(tick, cruise));
+        }
+
+        var yawPulse = cruise with { Yaw = 0.60 };
+        for (long tick = 480; tick < 504; tick++)
+        {
+            reference.Advance(Input(tick, cruise));
+            disturbed.Advance(Input(tick, yawPulse));
+        }
+
+        double excessYawRateAtRelease = Math.Abs(
+            disturbed.State.BodyRates.R - reference.State.BodyRates.R);
+        for (long tick = 504; tick < 624; tick++)
+        {
+            reference.Advance(Input(tick, cruise));
+            disturbed.Advance(Input(tick, cruise));
+        }
+
+        double excessYawRateAfterOneSecond = Math.Abs(
+            disturbed.State.BodyRates.R - reference.State.BodyRates.R);
+        double retainedFraction = excessYawRateAfterOneSecond
+            / excessYawRateAtRelease;
+        Console.WriteLine(
+            $"Cruise excess yaw-rate retention after 1 s: {retainedFraction:P1} "
+            + $"({excessYawRateAtRelease:F4} -> {excessYawRateAfterOneSecond:F4} rad/s)");
+        Assert.True(excessYawRateAtRelease > 0.08,
+            $"Yaw pulse produced only {excessYawRateAtRelease:F4} rad/s excess R.");
+        Assert.InRange(retainedFraction, 0.12, 0.55);
     }
 
     [Fact]
@@ -421,13 +974,32 @@ public sealed class Ah1gCobraDynamicsTests
                 0.25 * Math.Sin(tick * 0.017),
                 0.20 * Math.Cos(tick * 0.013),
                 0.12 * Math.Sin(tick * 0.019));
-            first.Advance(Input(tick, command));
-            second.Advance(Input(tick, command));
+            var wind = new Vec3D(
+                -3.0 + 0.7 * Math.Sin(tick * 0.007),
+                0.4 * Math.Cos(tick * 0.009),
+                0.8 * Math.Sin(tick * 0.005));
+            var environment = new PlayerVehicleEnvironmentSample(
+                1.225,
+                wind,
+                VehicleSurfaceSample.Unknown,
+                new RotorcraftAirflowSample(
+                    wind + new Vec3D(0.0, 0.9, 0.0),
+                    wind + new Vec3D(0.0, -0.7, 0.0),
+                    wind + new Vec3D(0.0, -0.5, 0.0),
+                    wind + new Vec3D(0.0, 0.8, 0.0),
+                    wind + new Vec3D(1.2, 0.0, 0.0)));
+            first.Advance(Input(tick, command, environment));
+            second.Advance(Input(tick, command, environment));
         }
 
         Assert.Equal(first.State, second.State);
         Assert.Equal(first.Observation, second.Observation);
         Assert.Equal(first.Telemetry, second.Telemetry);
+        Assert.Equal(first.LastGustMomentBodyNm, second.LastGustMomentBodyNm);
+        Assert.Equal(first.LastCollectiveHubMomentBodyNm,
+            second.LastCollectiveHubMomentBodyNm);
+        Assert.Equal(first.LastCyclicScasRateCommand,
+            second.LastCyclicScasRateCommand);
         Assert.True(double.IsFinite(first.Telemetry.MainRotorClearanceM));
     }
 }

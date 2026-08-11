@@ -326,6 +326,7 @@ public sealed class CobraMissionRuntime
     readonly Vec3D _synopticWindMps;
     readonly CobraCanyonWindField? _windField;
     Vec3D _lastWindVelocityMps;
+    RotorcraftAirflowSample? _lastRotorcraftAirflow;
     readonly IReadOnlyList<CobraResolvedObstacle> _resolvedObstacles;
     readonly IReadOnlyList<CobraResolvedThreatObserver> _resolvedThreatObservers;
     readonly CobraGroundWarRuntime _groundWar;
@@ -376,6 +377,7 @@ public sealed class CobraMissionRuntime
             ? new CobraCanyonWindField(_terrain, _synopticWindMps)
             : null;
         _lastWindVelocityMps = _synopticWindMps;
+        _lastRotorcraftAirflow = null;
 
         _resolvedObstacles = Array.AsReadOnly(
             definition.Obstacles.Select(ResolveObstacle).ToArray());
@@ -459,6 +461,11 @@ public sealed class CobraMissionRuntime
     public Ah1gCobraDynamics Cobra => _cobra;
     /// <summary>Most recent wind sample applied to the vehicle environment (m/s, E/U/N).</summary>
     public Vec3D LastWindVelocityMps => _lastWindVelocityMps;
+    /// <summary>
+    /// Most recent spatial airflow truth across the main-rotor disc and tail. Null means the
+    /// runtime intentionally supplied uniform flow rather than silently inventing a gradient.
+    /// </summary>
+    public RotorcraftAirflowSample? LastRotorcraftAirflow => _lastRotorcraftAirflow;
     public Vec3D SynopticWindMps => _synopticWindMps;
     public IPlayerVehicleDynamics Vehicle => _cobra;
     public CobraGroundWarRuntime GroundWar => _groundWar;
@@ -489,17 +496,26 @@ public sealed class CobraMissionRuntime
 
         Vec3D previousPositionWorldM = _cobra.State.PositionWorldM;
         VehicleSurfaceSample surface = SampleVehicleSurface(previousPositionWorldM);
+        double simulationTimeSeconds = _nextAuthorityTick
+            * PlayerVehicleContract.FixedDeltaSeconds;
         Vec3D windVelocityMps = _windField is null
             ? _synopticWindMps
-            : _windField.Sample(previousPositionWorldM);
+            : _windField.Sample(previousPositionWorldM, simulationTimeSeconds);
+        RotorcraftAirflowSample? rotorcraftAirflow = _windField is null
+            ? null
+            : SampleRotorcraftAirflow(simulationTimeSeconds);
         _lastWindVelocityMps = windVelocityMps;
+        _lastRotorcraftAirflow = rotorcraftAirflow;
         PlayerVehicleAdvanceResult vehicleResult = _cobra.Advance(new PlayerVehicleAdvanceInput(
             Tick: _nextAuthorityTick,
             Command: PlayerVehicleCommand.FromVerticalLift(command),
             RecurringBaseMassKg: _recurringBaseMassKg,
             AdditivePayloadMassKg: _additivePayloadMassKg,
             Environment: new PlayerVehicleEnvironmentSample(
-                _airDensityKgM3, windVelocityMps, surface),
+                _airDensityKgM3,
+                windVelocityMps,
+                surface,
+                RotorcraftAirflow: rotorcraftAirflow),
             ExternalContact: VehicleContactState.Unknown,
             ProtectionIntervention: VehicleProtectionInterventionEvidence.None));
         _nextAuthorityTick++;
@@ -561,6 +577,44 @@ public sealed class CobraMissionRuntime
 
         _diagnostics = null;
         return new CobraMissionAdvanceResult(vehicleResult, Diagnostics);
+    }
+
+    RotorcraftAirflowSample SampleRotorcraftAirflow(double simulationTimeSeconds)
+    {
+        if (_windField is null)
+            throw new InvalidOperationException(
+                "Spatial rotorcraft airflow requires the terrain wind field.");
+
+        PlayerVehicleState state = _cobra.State;
+        QuaternionD attitude = state.BodyAttitude.Normalized();
+        RotorcraftDefinition definition = _cobra.Definition;
+        Vec3D mainHubWorldM = state.PositionWorldM
+            + attitude.Rotate(definition.Contact.MainRotorHubOffsetBodyM);
+        Vec3D bodyForwardWorld = attitude.Rotate(new Vec3D(0.0, 0.0, 1.0));
+        Vec3D bodyRightWorld = attitude.Rotate(new Vec3D(1.0, 0.0, 0.0));
+        // Seventy-percent radius captures the disc's lifting span without letting a single
+        // exact edge/cell crossing dominate the finite-difference gust moment.
+        double sampleRadiusM = RotorcraftAirflowSample.MainRotorSampleRadiusFraction
+            * definition.MainRotor.RadiusM;
+        Vec3D tailHubWorldM = state.PositionWorldM
+            + attitude.Rotate(definition.Contact.TailRotorHubOffsetBodyM);
+
+        return new RotorcraftAirflowSample(
+            MainRotorForwardWindVelocityMps: _windField.Sample(
+                mainHubWorldM + bodyForwardWorld * sampleRadiusM,
+                simulationTimeSeconds),
+            MainRotorAftWindVelocityMps: _windField.Sample(
+                mainHubWorldM - bodyForwardWorld * sampleRadiusM,
+                simulationTimeSeconds),
+            MainRotorLeftWindVelocityMps: _windField.Sample(
+                mainHubWorldM - bodyRightWorld * sampleRadiusM,
+                simulationTimeSeconds),
+            MainRotorRightWindVelocityMps: _windField.Sample(
+                mainHubWorldM + bodyRightWorld * sampleRadiusM,
+                simulationTimeSeconds),
+            TailRotorWindVelocityMps: _windField.Sample(
+                tailHubWorldM,
+                simulationTimeSeconds));
     }
 
     void RefreshAct(in Vec3D positionWorldM, double? clearanceM)

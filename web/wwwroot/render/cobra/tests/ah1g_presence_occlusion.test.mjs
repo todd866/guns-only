@@ -17,7 +17,7 @@ import {
  * tint they read as dirt on the lens under the new HUD, not as rotor wash.
  * Exterior/tour mode keeps the complete silhouette (Build 261 budgets).
  * Raycasts the forward frame exactly as cobra-lab/main.js syncAuthorityCamera
- * frames it (fov 58, near 0.12, +0.08 pitch bias).
+ * frames it (production fov 58, near 0.12, body-aligned optical axis).
  */
 const GRID_WIDTH = 96;
 const GRID_HEIGHT = 54;
@@ -36,7 +36,7 @@ function measureForwardOcclusion({ firstPerson }) {
   const camera = new THREE.PerspectiveCamera(58, 1440 / 900, 0.12, 32000);
   camera.rotation.order = "YXZ";
   eyeWorldFromVehicle(THREE, vehicle, camera.position);
-  const lookPitch = 0.08;
+  const lookPitch = 0;
   const lookDistanceM = 140;
   camera.lookAt(new THREE.Vector3(
     camera.position.x,

@@ -6,6 +6,7 @@ import {
   cobraAccelCaretPx,
   cobraFpvLevel,
   cobraFpvMode,
+  cobraHeadingRelativeGroundTrack,
   cobraHoverStubPixels,
   updateGroundspeedAccelEma,
 } from "../cobra_helicopter_fpv.js";
@@ -25,15 +26,39 @@ test("FPV regime level mirrors rotorcraft strip severity gates", () => {
   assert.equal(cobraFpvLevel({ retreating_blade_stall_severity: 0.7 }), "warning");
 });
 
-test("hover stub is a plan-view stick that grows with horizontal GS", () => {
+test("hover stub is a heading-relative plan-view stick that grows with horizontal GS", () => {
   const still = cobraHoverStubPixels(0, 0);
   assert.equal(still.lengthPx, 0);
-  const north = cobraHoverStubPixels(0, 6);
-  assert.ok(north.lengthPx > 20);
-  assert.ok(Math.abs(north.dx) < 1e-9);
-  assert.ok(north.dy < 0, "north must draw toward screen up (negative y)");
-  const east = cobraHoverStubPixels(6, 0);
-  assert.ok(east.dx > 0);
+  const forward = cobraHoverStubPixels(0, 6);
+  assert.ok(forward.lengthPx > 20);
+  assert.ok(Math.abs(forward.dx) < 1e-9);
+  assert.ok(forward.dy < 0, "body-forward motion must draw toward screen up");
+  const right = cobraHoverStubPixels(6, 0);
+  assert.ok(right.dx > 0, "rightward motion must draw right");
+});
+
+test("heading 90 rotates east-forward and north-left at the production spawn", () => {
+  const east = cobraHeadingRelativeGroundTrack(6, 0, Math.PI / 2);
+  assert.ok(Math.abs(east.rightMps) < 1e-9);
+  assert.ok(Math.abs(east.forwardMps - 6) < 1e-9);
+  const eastCue = cobraHoverStubPixels(east.rightMps, east.forwardMps);
+  assert.ok(Math.abs(eastCue.dx) < 1e-9);
+  assert.ok(eastCue.dy < 0, "east motion at east heading must cue forward, never right");
+
+  const north = cobraHeadingRelativeGroundTrack(0, 6, Math.PI / 2);
+  assert.ok(Math.abs(north.rightMps + 6) < 1e-9);
+  assert.ok(Math.abs(north.forwardMps) < 1e-9);
+  const northCue = cobraHoverStubPixels(north.rightMps, north.forwardMps);
+  assert.ok(northCue.dx < 0, "north motion at east heading must cue left");
+  assert.ok(Math.abs(northCue.dy) < 1e-9);
+});
+
+test("heading-relative hover cue is continuous across the ±pi wrap", () => {
+  const epsilon = 1e-7;
+  const before = cobraHeadingRelativeGroundTrack(3.5, -2.25, Math.PI - epsilon);
+  const after = cobraHeadingRelativeGroundTrack(3.5, -2.25, -Math.PI + epsilon);
+  assert.ok(Math.abs(before.rightMps - after.rightMps) < 1e-6);
+  assert.ok(Math.abs(before.forwardMps - after.forwardMps) < 1e-6);
 });
 
 test("accel EMA and caret respond to speed changes", () => {
@@ -60,8 +85,8 @@ test("cobraHudState publishes heli flight-path cue fields", () => {
   assert.equal(hover.heli_fpv_mode, "hover");
   assert.equal(hover.heli_fpv_level, "caution");
   assert.equal(hover.heli_fpv_gun_ready, true);
-  assert.ok(hover.heli_hover_east_kt > 0);
-  assert.ok(hover.heli_hover_north_kt > 0);
+  assert.ok(hover.heli_hover_right_kt > 0);
+  assert.ok(hover.heli_hover_forward_kt > 0);
 
   const cruise = cobraHudState({
     vehicle: {

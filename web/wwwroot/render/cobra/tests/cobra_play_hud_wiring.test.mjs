@@ -75,6 +75,14 @@ test("V and Tab share the F-22 padlock / gun-target split", async () => {
   assert.match(main, /resolveAuthorityLookAtPoint/);
 });
 
+test("forward authority camera is body-aligned with no hidden sight bias", async () => {
+  const main = await source("cobra-lab/main.js");
+  const sync = main.match(/function syncAuthorityCamera\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(sync, /lookOffsetFromAngles\(bodyYaw, bodyPitch, lookDistanceM\)/);
+  assert.doesNotMatch(sync, /bodyPitch\s*\+\s*0\.08/);
+  assert.doesNotMatch(sync, /lookPitch\s*=\s*bodyPitch\s*\+/);
+});
+
 test("target list rebuilds only when the living set changes and prefers the gunnery seam", async () => {
   const main = await source("cobra-lab/main.js");
   assert.match(main, /aliveKey/);

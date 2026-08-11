@@ -1,65 +1,66 @@
-import * as THREE from "../vendor/three.module.js?v=310";
+import * as THREE from "../vendor/three.module.js?v=311";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=310";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=310";
-import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=310";
+} from "../render/cobra/cobra_canyon_plan.js?v=311";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=311";
+import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=311";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=310";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=310";
-import { createHud } from "../hud.js?v=310";
+} from "../render/cobra/cobra_canyon_tour.js?v=311";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=311";
+import { createHud } from "../hud.js?v=311";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=310";
+} from "../render/cobra/cobra_hud_adapter.js?v=311";
 import {
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=310";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=310";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=311";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=311";
 import {
   emberActObjectiveOverlay,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=310";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=310";
+} from "../render/cobra/cobra_ember_path.js?v=311";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=311";
 import {
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=310";
+} from "../render/audio/flight_audio.js?v=311";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=310";
+} from "../render/cobra/cobra_control_profile.js?v=311";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=310";
+} from "../render/cobra/cobra_pilot_input.js?v=311";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=310";
+} from "../render/cobra/ah1g_presence.js?v=311";
 import {
+  lookOffsetFromAngles,
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
   togglePadlockSelection,
-} from "../render/cobra/cobra_camera_bias.js?v=310";
+} from "../render/cobra/cobra_camera_bias.js?v=311";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=310";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=310";
+} from "../render/visual/shadow_stabilizer.js?v=311";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=311";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=310";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=310";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=310";
+} from "../render/cobra/cobra_mission_exit.js?v=311";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=311";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=311";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -277,7 +278,7 @@ window.addEventListener("keydown", armAudioFromGesture, { capture: true });
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=310";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=311";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -454,7 +455,7 @@ let routeDistanceM = 0;
 let routeComplete = false;
 let tourCommandedAglM = COBRA_CANYON_TOUR_BASE_AGL_M;
 let yaw = 0;
-let pitch = 0.08;
+let pitch = 0;
 let lastTimeMs = performance.now();
 let animationFrame = 0;
 
@@ -522,12 +523,17 @@ function recordTelemetry(nowMs) {
       cobra_yaw_rate_rad_s: authorityState.vehicle.yaw_rate_rad_s,
       cobra_advance_ratio: rotor?.advance_ratio,
       cobra_torque_yaw_demand_rad_s: rotor?.torque_yaw_demand_rad_s,
+      cobra_scas_roll_rad_s: rotor?.scas_roll_rad_s,
+      cobra_scas_pitch_rad_s: rotor?.scas_pitch_rad_s,
       cobra_scas_yaw_rad_s: rotor?.scas_yaw_rad_s,
       cobra_weathervane_yaw_rad_s: rotor?.weathervane_yaw_rad_s,
       cobra_yaw_residual_rad_s: rotor?.yaw_residual_rad_s,
       cobra_wind_e_mps: authorityState.vehicle.wind_e_mps,
       cobra_wind_u_mps: authorityState.vehicle.wind_u_mps,
       cobra_wind_n_mps: authorityState.vehicle.wind_n_mps,
+      cobra_gust_pitch_moment_nm: rotor?.gust_pitch_moment_nm,
+      cobra_gust_yaw_moment_nm: rotor?.gust_yaw_moment_nm,
+      cobra_gust_roll_moment_nm: rotor?.gust_roll_moment_nm,
       cobra_mission_act: authorityState.mission_act,
       cobra_frame_ms: lastRawFrameMs,
       cobra_route_remaining_m: authorityState.route_guidance.remaining_m,
@@ -926,16 +932,11 @@ function updateManual(deltaSeconds) {
   }
   if (bridge) {
     const gamepad = Array.from(navigator.getGamepads?.() ?? []).find(Boolean);
-    // The hot-pose attitude feeds the idle-stick leveling assist: rate-command dynamics
-    // latch whatever attitude a keyboard tap leaves behind, so the released spring must
-    // centre onto a level-the-ship command, not bare neutral.
-    const pose = readVehiclePose();
+    // Authentic controls own only the pilot's physical inputs. Aircraft attitude never feeds
+    // back through this browser seam as an unlabeled hold or recovery command.
     pilotControls = advanceCobraPilotControls(pilotControls, {
       keyboardIntent: cobraKeyboardControlIntent(keys, cobraControlProfile),
       analogAxes: cobraGamepadControlAxes(gamepad),
-      attitude: pose
-        ? { pitchRad: pose.pitch_rad, rollRad: pose.roll_rad }
-        : null,
       deltaSeconds,
       focused: windowFocused,
     });
@@ -987,14 +988,14 @@ function syncAuthorityCamera() {
   const lookDistanceM = 140;
   const bodyYaw = Number(vehicle.yaw_rad) || 0;
   const bodyPitch = Number(vehicle.pitch_rad) || 0;
-  // Fixed rear-seat look bias (slightly up through the glass). Padlock replaces this with a
-  // true look-at — F-22 contract: forward is nose-forward, V is the view toggle.
-  const lookYaw = bodyYaw;
-  const lookPitch = bodyPitch + 0.08;
+  // Forward view is exactly body-aligned: body-forward projects to the camera principal point,
+  // so the waterline is an honest optical-centre reference. Padlock alone may take the eye off
+  // axis — F-22 contract: forward is nose-forward, V is the view toggle.
+  const bodyLookOffset = lookOffsetFromAngles(bodyYaw, bodyPitch, lookDistanceM);
   const forwardLook = {
-    x: camera.position.x + Math.sin(lookYaw) * lookDistanceM,
-    y: camera.position.y + Math.sin(lookPitch) * lookDistanceM,
-    z: camera.position.z - Math.cos(lookYaw) * lookDistanceM,
+    x: camera.position.x + bodyLookOffset.x,
+    y: camera.position.y + bodyLookOffset.y,
+    z: camera.position.z + bodyLookOffset.z,
   };
 
   const selectedId = targetSelect?.value || authorityState?.gunner?.selected_target_id;

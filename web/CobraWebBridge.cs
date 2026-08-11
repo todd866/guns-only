@@ -155,6 +155,8 @@ public static partial class CobraWebBridge
         CobraRouteGuidance guidance = diagnostics.RouteGuidance;
         PlayerVehicleObservation observation = runtime.Cobra.Observation;
         RotorcraftTelemetry rotorcraft = runtime.Cobra.Telemetry;
+        Vec3D gustMomentBodyNm = runtime.Cobra.LastGustMomentBodyNm;
+        BodyRates cyclicScas = runtime.Cobra.LastCyclicScasRateCommand;
         VehiclePowerObservation power = observation.Power;
         Vec3D position = observation.PositionWorldM;
         Vec3D velocity = observation.GroundVelocityMps;
@@ -322,11 +324,21 @@ public static partial class CobraWebBridge
                     ground_effect_factor = rotorcraft.GroundEffectFactor,
                     engine_operating = rotorcraft.EngineOperating,
                     advance_ratio = rotorcraft.AdvanceRatio,
+                    body_roll_rate_rad_s = runtime.Cobra.State.BodyRates.P,
+                    body_pitch_rate_rad_s = runtime.Cobra.State.BodyRates.Q,
                     body_yaw_rate_rad_s = rotorcraft.BodyYawRateRadPerSecond,
                     torque_yaw_demand_rad_s = rotorcraft.TorqueYawDemandRadPerSecond,
+                    scas_roll_rad_s = cyclicScas.P,
+                    scas_pitch_rad_s = cyclicScas.Q,
                     scas_yaw_rad_s = rotorcraft.ScasYawRadPerSecond,
                     weathervane_yaw_rad_s = rotorcraft.WeathervaneYawRadPerSecond,
                     yaw_residual_rad_s = rotorcraft.YawResidualRadPerSecond,
+                    // Physical body axes: X pitch/right, Y yaw/up, Z roll/forward.
+                    gust_pitch_moment_nm = gustMomentBodyNm.X,
+                    gust_yaw_moment_nm = gustMomentBodyNm.Y,
+                    gust_roll_moment_nm = gustMomentBodyNm.Z,
+                    collective_hub_pitch_moment_nm =
+                        runtime.Cobra.LastCollectiveHubMomentBodyNm.X,
                 },
             },
             collision_obstacle_id = diagnostics.CollisionObstacleId,

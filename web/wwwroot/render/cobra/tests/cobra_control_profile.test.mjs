@@ -8,6 +8,11 @@ import {
   resolveCobraControlProfile,
 } from "../cobra_control_profile.js";
 
+test("Cobra profile truthfully declares the authentic no-assistance path", () => {
+  assert.equal(COBRA_CONTROL_PROFILE.assistance, "none");
+  assert.equal(resolveCobraControlProfile().assistance, "none");
+});
+
 test("Cobra collective follows the game convention: W raises, S lowers", () => {
   assert.deepEqual(COBRA_CONTROL_PROFILE.collective, {
     pull: Object.freeze({ code: "KeyW", direction: 1, motion: "toward-pilot" }),

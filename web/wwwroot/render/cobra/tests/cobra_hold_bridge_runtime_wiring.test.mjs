@@ -26,6 +26,13 @@ test("authority JSON is sampled at HUD rate while the camera reads the per-frame
   assert.match(main, /bridge\.Advance\(deltaSeconds\)/);
 });
 
+test("authentic pilot input never feeds aircraft attitude back as a hidden hold", async () => {
+  const main = await source("cobra-lab/main.js");
+  assert.match(main, /advanceCobraPilotControls\(pilotControls/);
+  assert.doesNotMatch(main, /attitude:\s*pose/);
+  assert.doesNotMatch(main, /idle-stick leveling assist/);
+});
+
 test("telemetry rides the bounded channel and keepalive exists only behind the pagehide path", async () => {
   const main = await source("cobra-lab/main.js");
   assert.match(main, /createCobraTelemetryChannel/);
@@ -74,8 +81,13 @@ test("cobra telemetry records yaw residual and local wind for SCAS vs wind audit
   assert.match(main, /cobra_yaw_rad:/);
   assert.match(main, /cobra_pedal:/);
   assert.match(main, /cobra_yaw_residual_rad_s:/);
+  assert.match(main, /cobra_scas_roll_rad_s:/);
+  assert.match(main, /cobra_scas_pitch_rad_s:/);
   assert.match(main, /cobra_scas_yaw_rad_s:/);
   assert.match(main, /cobra_wind_e_mps:/);
   assert.match(main, /cobra_wind_n_mps:/);
+  assert.match(main, /cobra_gust_pitch_moment_nm:/);
+  assert.match(main, /cobra_gust_yaw_moment_nm:/);
+  assert.match(main, /cobra_gust_roll_moment_nm:/);
   assert.match(main, /cobra_advance_ratio:/);
 });

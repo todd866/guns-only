@@ -4,17 +4,44 @@ using GunsOnly.Sim.Turbulence;
 namespace GunsOnly.Sim.Cobra;
 
 /// <summary>
-/// Hyper-local canyon wind v1: synoptic mean modulated by terrain height and slope.
-/// Deterministic; not CFD. Epistemic: provisional channeling/ridge/lee factors.
+/// Hyper-local canyon wind v2: a terrain-shaped synoptic mean plus a deterministic frozen-eddy
+/// gust field advected by simulation time. Deterministic; not CFD. Epistemic: all channeling,
+/// ridge/lee and gust parameters below are provisional until a sourced canyon-weather data pack
+/// replaces them.
 /// </summary>
 public sealed class CobraCanyonWindField : IWindField
 {
     /// <summary>Default westbound canyon breeze when the mission does not pass an explicit synoptic.</summary>
     public static readonly Vec3D DefaultSynopticMps = new(-4.0, 0.0, 0.5);
 
+    // Wind-v2 tuning lives here rather than being scattered through Sample. TurbulenceField is
+    // calibrated to unit per-component RMS; LocalGustRmsMps supplies the terrain/AGL envelope.
+    // The absolute and local-sigma caps keep an intermittent tail from injecting an implausible
+    // one-frame velocity, while ScaleToMagnitude is continuous at the cap.
+    const ulong GustSeed = 0xC0B2_A11C_4EED_2026UL;
+    const int GustOctaves = 7;
+    const double GustOuterScaleM = 90.0;
+    const double GustHurst = 1.0 / 3.0;
+    const double GustIntermittency = 0.52;
+    const double GustRmsSynopticFraction = 0.22;
+    const double GustMaximumLocalRmsMps = 1.8;
+    const double GustMaximumMagnitudeMps = 4.8;
+    const double GustMaximumLocalSigma = 3.4;
+    const double GustVerticalScale = 0.72;
+    const double GustFullSlope = 0.35;
+    const double GustFullReliefM = 35.0;
+    const double GustSlopeGain = 0.50;
+    const double GustReliefGain = 0.25;
+    const double GustSurfaceIntensityFactor = 0.58;
+    const double GustSurfaceBlendHeightM = 22.0;
+    const double GustHighAltitudeStartM = 100.0;
+    const double GustHighAltitudeBlendM = 220.0;
+    const double GustHighAltitudeFactor = 0.68;
+
     readonly ITerrainSurface _terrain;
     readonly Vec3D _synopticMps;
     readonly double _sampleHalfStepM;
+    readonly TurbulenceField _gustTexture;
 
     public CobraCanyonWindField(
         ITerrainSurface terrain,
@@ -28,20 +55,64 @@ public sealed class CobraCanyonWindField : IWindField
         if (!double.IsFinite(sampleHalfStepM) || sampleHalfStepM < 5.0)
             throw new ArgumentOutOfRangeException(nameof(sampleHalfStepM));
         _sampleHalfStepM = sampleHalfStepM;
+        _gustTexture = new TurbulenceField(
+            octaves: GustOctaves,
+            outerScaleM: GustOuterScaleM,
+            hurst: GustHurst,
+            intermittency: GustIntermittency,
+            intensityMps: 1.0,
+            seed: GustSeed);
     }
 
     public Vec3D SynopticMps => _synopticMps;
 
-    public Vec3D Sample(Vec3D worldPos)
+    /// <summary>
+    /// The deterministic time-zero sample required by <see cref="IWindField"/>. Time-aware
+    /// simulation owners should call <see cref="Sample(Vec3D,double)"/> with authority time.
+    /// </summary>
+    public Vec3D Sample(Vec3D worldPos) => Sample(worldPos, 0.0);
+
+    /// <summary>
+    /// Samples the canyon wind at explicit simulation time. The turbulence texture is a frozen
+    /// world-space field translated with the synoptic velocity: v(x,t) = v0(x - U*t). No wall
+    /// clock or mutable random state participates, so replaying a position/time pair is exact.
+    /// </summary>
+    public Vec3D Sample(Vec3D worldPos, double simulationTimeSeconds)
     {
         if (!worldPos.IsFinite)
             throw new ArgumentOutOfRangeException(nameof(worldPos));
+        if (!double.IsFinite(simulationTimeSeconds) || simulationTimeSeconds < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(simulationTimeSeconds));
 
         if (_synopticMps.Length < 1e-6)
             return Vec3D.Zero;
 
+        Vec3D mean = SampleTerrainShapedMean(worldPos, out TerrainExposure exposure);
+        double localRmsMps = LocalGustRmsMps(exposure);
+        if (localRmsMps <= 1e-12)
+            return mean;
+
+        Vec3D advectedPosition = worldPos - (_synopticMps * simulationTimeSeconds);
+        Vec3D unitTexture = _gustTexture.Sample(advectedPosition);
+        Vec3D gust = new(
+            unitTexture.X * localRmsMps,
+            unitTexture.Y * localRmsMps * GustVerticalScale,
+            unitTexture.Z * localRmsMps);
+        double maximumMagnitudeMps = Math.Min(
+            GustMaximumMagnitudeMps,
+            localRmsMps * GustMaximumLocalSigma);
+        gust = ScaleToMagnitude(gust, maximumMagnitudeMps);
+        Vec3D result = mean + gust;
+        return result.IsFinite ? result : mean;
+    }
+
+    Vec3D SampleTerrainShapedMean(Vec3D worldPos, out TerrainExposure exposure)
+    {
         if (!_terrain.TrySample(worldPos.X, worldPos.Z, out TerrainSample here))
+        {
+            exposure = TerrainExposure.Unavailable;
             return _synopticMps;
+        }
 
         double eastMinus = Math.Max(_terrain.Bounds.MinimumEastM, worldPos.X - _sampleHalfStepM);
         double eastPlus = Math.Min(_terrain.Bounds.MaximumEastM, worldPos.X + _sampleHalfStepM);
@@ -100,12 +171,74 @@ public sealed class CobraCanyonWindField : IWindField
         double aglM = Math.Max(0.0, worldPos.Y - here.HeightM);
         double shear = Math.Clamp(aglM / 80.0, 0.35, 1.0);
 
+        exposure = new TerrainExposure(
+            HasTerrain: true,
+            SlopeMagnitude: slopeLen,
+            RelativeHeightM: relativeHeightM,
+            AboveGroundLevelM: aglM);
+
         return new Vec3D(
             horizontal.X * shear,
             (_synopticMps.Y + lift) * shear,
             horizontal.Z * shear);
     }
 
+    double LocalGustRmsMps(TerrainExposure exposure)
+    {
+        double baseRmsMps = _synopticMps.Length * GustRmsSynopticFraction;
+        if (!exposure.HasTerrain)
+            return Math.Min(baseRmsMps, GustMaximumLocalRmsMps);
+
+        double slope01 = Math.Clamp(exposure.SlopeMagnitude / GustFullSlope, 0.0, 1.0);
+        double relief01 = Math.Clamp(
+            Math.Abs(exposure.RelativeHeightM) / GustFullReliefM,
+            0.0,
+            1.0);
+        double terrainFactor = 1.0
+            + GustSlopeGain * slope01
+            + GustReliefGain * relief01;
+
+        // A smooth boundary-layer envelope: gusts are reduced at the actual surface, reach full
+        // strength through rotor-height/nap-of-earth flight, then relax above canyon influence.
+        double surfaceBlend01 = SmoothStep01(
+            exposure.AboveGroundLevelM / GustSurfaceBlendHeightM);
+        double aglFactor = Lerp(GustSurfaceIntensityFactor, 1.0, surfaceBlend01);
+        double highBlend01 = SmoothStep01(
+            (exposure.AboveGroundLevelM - GustHighAltitudeStartM)
+            / GustHighAltitudeBlendM);
+        aglFactor *= Lerp(1.0, GustHighAltitudeFactor, highBlend01);
+
+        return Math.Clamp(
+            baseRmsMps * terrainFactor * aglFactor,
+            0.0,
+            GustMaximumLocalRmsMps);
+    }
+
+    static Vec3D ScaleToMagnitude(Vec3D vector, double maximumMagnitude)
+    {
+        double length = vector.Length;
+        return length > maximumMagnitude && length > 1e-12
+            ? vector * (maximumMagnitude / length)
+            : vector;
+    }
+
+    static double SmoothStep01(double value)
+    {
+        double t = Math.Clamp(value, 0.0, 1.0);
+        return t * t * (3.0 - 2.0 * t);
+    }
+
+    static double Lerp(double a, double b, double t) => a + (b - a) * t;
+
     double HeightOr(double fallback, double eastM, double northM) =>
         _terrain.TrySample(eastM, northM, out TerrainSample sample) ? sample.HeightM : fallback;
+
+    readonly record struct TerrainExposure(
+        bool HasTerrain,
+        double SlopeMagnitude,
+        double RelativeHeightM,
+        double AboveGroundLevelM)
+    {
+        public static TerrainExposure Unavailable => new(false, 0.0, 0.0, 80.0);
+    }
 }

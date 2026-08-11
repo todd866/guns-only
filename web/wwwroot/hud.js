@@ -21,7 +21,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=310";
+} from "./render/hud/contact_visibility.js?v=311";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import {
   approachEnergyCue,
@@ -64,11 +64,11 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=310";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=311";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=310";
+} from "./render/mission/rapier_high_mach_instruments.js?v=311";
 import { limitsPanelPresentation } from "./render/hud/limits_panel.js";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
@@ -79,7 +79,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=310";
+} from "./render/audio/flight_audio.js?v=311";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -235,8 +235,8 @@ function padlockLooksOffAxis(frame) {
 }
 
 // Where the ladder hangs, and what pitch it reads, when the ladder is referenced to the CAMERA
-// rather than to the airframe. Both come from the camera's own world matrix, so any sight bias,
-// gunner lean or look offset the camera carries is already included and needs no echo elsewhere.
+// rather than to the airframe. Both come from the camera's own world matrix, so any padlock or
+// explicit look offset the camera carries is already included and needs no echo elsewhere.
 // Returns null when the camera cannot supply an honest attitude, which makes the caller fall
 // back to the airframe-conformal path rather than draw a made-up horizon.
 export function cameraPitchAnchor(camera, width, height) {
@@ -248,8 +248,8 @@ export function cameraPitchAnchor(camera, width, height) {
   if (!Number.isFinite(forwardY)) return null;
   // The principal point is the centre only for an unskewed frustum; read it off the projection
   // so an off-centre or windowed frustum still anchors where the optical axis actually lands.
-  const centerX = width * 0.5 * (1 + (Number(projection[8]) || 0));
-  const centerY = height * 0.5 * (1 - (Number(projection[9]) || 0));
+  const centerX = width * 0.5 * (1 - (Number(projection[8]) || 0));
+  const centerY = height * 0.5 * (1 + (Number(projection[9]) || 0));
   if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) return null;
   return {
     centerX,
@@ -258,11 +258,7 @@ export function cameraPitchAnchor(camera, width, height) {
   };
 }
 
-/**
- * Banked ladder-horizon point (camera pitch × bank). When `ladderReference` is camera (Cobra),
- * the waterline W parks here so it agrees with the conformal 0 rung through sight bias —
- * owner ruling over the classical body-forward gap.
- */
+/** Banked camera-horizon point used by the HUD geometry harness to verify the conformal ladder. */
 export function cameraReferencedAirframeAnchors(camera, width, height, state = {}) {
   const attitude = cameraPitchAnchor(camera, width, height);
   const projection = camera?.projectionMatrix?.elements;
@@ -274,7 +270,7 @@ export function cameraReferencedAirframeAnchors(camera, width, height, state = {
   const cosBank = Math.cos(bank);
   const sinBank = Math.sin(bank);
   return {
-    waterline: {
+    horizon: {
       x: attitude.centerX - localY * sinBank,
       y: attitude.centerY + localY * cosBank,
       behind: false,
@@ -577,13 +573,9 @@ class CombatHud {
   ) {
     const ctx = this.ctx;
     const bank = -(Number(state.bank_deg) || 0) * DEG;
-    // An airframe-conformal ladder only tells the truth while the camera's optical axis lies
-    // along body-forward. The Cobra's rear seat holds a fixed +0.08 rad sight bias plus a
-    // <=0.05 rad gunner-target lean, so the anchor sits up to ~0.13 rad off axis and a gnomonic
-    // rung offset stops being a translation — the horizon rung drifted ~100 px below the visible
-    // horizon and read as a permanent nose-down attitude. hud.js already concedes the principle
-    // by suppressing this ladder in padlock. Camera reference anchors at the principal point and
-    // measures pitch off the camera itself, so the 0 rung lands exactly on the drawn horizon.
+    // A camera-conformal ladder reads pitch from the camera and anchors at its principal point,
+    // so the 0 rung lands on the rendered world horizon. Cobra's normal forward eye is now exactly
+    // body-aligned; padlock remains the one mode allowed to move the optical axis off the nose.
     const cameraReferenced = reference === "camera";
     const cameraAttitude = cameraReferenced ? cameraPitchAnchor(camera, this.width, this.height) : null;
     const pitch = cameraAttitude ? cameraAttitude.pitchDeg : Number(state.pitch_deg) || 0;
@@ -5343,7 +5335,13 @@ class CombatHud {
       }
       : null;
 
-    this.worldPoint.copy(frame.playerPosition).addScaledVector(frame.playerForward, 10000);
+    const heli = frame.state?.heli_flight_path === true;
+    // Direction symbols originate at the pilot eye, not the vehicle CG. The metre-scale rear-seat
+    // offset otherwise leaves even a perfectly body-aligned Cobra W fractionally off the optical
+    // centre. Keep the legacy F-22 origin byte-stable; this correction is gated by the Cobra field.
+    const directionOrigin = heli && frame.camera?.position
+      ? frame.camera.position : frame.playerPosition;
+    this.worldPoint.copy(directionOrigin).addScaledVector(frame.playerForward, 10000);
     const noseAnchor = this.project(this.worldPoint, frame.camera, this.noseProjection);
     // FPV anchor: ONE projection pipeline for every mode. The carrier groove supplies the actual
     // deck-relative flight path point; everywhere else the world ground-velocity vector from the
@@ -5359,7 +5357,7 @@ class CombatHud {
       if (Number.isFinite(speed) && speed > 0.5) {
         // Snapshot velocity is sim-frame (Z north); render space flips Z, same as px/py/pz.
         this.velocityDirection.set(vx, vy, -vz).multiplyScalar(10000 / speed);
-        this.worldPoint.copy(frame.playerPosition).add(this.velocityDirection);
+        this.worldPoint.copy(directionOrigin).add(this.velocityDirection);
         fpvAnchor = this.project(this.worldPoint, frame.camera, this.projectionB);
       }
     }
@@ -5388,10 +5386,8 @@ class CombatHud {
         frame.ladderReference,
       );
     }
-    // Camera-referenced ladder (Cobra): horizon stays conformal through the eye. Waterline
-    // shares that camera horizon when ladderReference is camera (owner: W must match camera).
-    // Helicopter snapshots gate cruise FPV / hover stub.
-    const heli = frame.state?.heli_flight_path === true;
+    // Camera-referenced ladder (Cobra): horizon stays conformal through the eye. W stays on
+    // projected body-forward; helicopter snapshots gate cruise FPV / hover stub.
     const heliMode = heli ? String(frame.state.heli_fpv_mode || "cruise") : "cruise";
     let symbolFpv = fpvAnchor;
     let hoverStub = null;
@@ -5414,17 +5410,15 @@ class CombatHud {
       if (heliMode === "hover") {
         symbolFpv = null;
         hoverStub = cobraHoverStubPixels(
-          frame.state.heli_hover_east_kt,
-          frame.state.heli_hover_north_kt,
+          frame.state.heli_hover_right_kt,
+          frame.state.heli_hover_forward_kt,
         );
       }
     }
-    const cameraWaterline = frame.ladderReference === "camera"
-      ? cameraReferencedAirframeAnchors(
-        frame.camera, this.width, this.height, frame.state,
-      )?.waterline
-      : null;
-    const symbolAnchor = cameraWaterline ?? noseAnchor;
+    // W is the aircraft reference, not the world horizon. In Cobra's body-aligned forward view it
+    // sits at the optical centre; the flight-path symbol remains velocity-conformal and the ladder
+    // remains world-horizontal. They separate only when attitude or flight path actually differs.
+    const symbolAnchor = noseAnchor;
     if (this._debug) {
       this._debug.waterlinePx = symbolAnchor && !symbolAnchor.behind
         ? { x: symbolAnchor.x, y: symbolAnchor.y } : null;
