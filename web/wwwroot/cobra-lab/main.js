@@ -51,6 +51,7 @@ import {
   resolveAuthorityLookAtPoint,
   togglePadlockSelection,
 } from "../render/cobra/cobra_camera_bias.js?v=311";
+import { cobraTerminalCauseCopy } from "../render/cobra/cobra_terminal_causes.js?v=311";
 import {
   applyTexelStabilizedDirectionalShadow,
 } from "../render/visual/shadow_stabilizer.js?v=311";
@@ -1064,8 +1065,13 @@ function showMissionDebrief(war, status) {
       ? `Flew into ${String(obstacle).split(".").slice(-2).join(" ")}.`
       : "Flew into a canyon obstacle.";
   } else if (status === "vehicle-authority-lost") {
-    title = "AIRFRAME LOST";
-    reason = "Terrain strike — the impact took the rotor and the airframe with it.";
+    // The sim names WHICH envelope violation ended the airframe; fall back to the generic
+    // terrain-strike copy only when no specific cause was latched.
+    const cause = cobraTerminalCauseCopy(authorityState?.vehicle?.contact_failure_cause);
+    title = cause ? cause.title : "AIRFRAME LOST";
+    reason = cause
+      ? cause.detail
+      : "Terrain strike — the impact took the rotor and the airframe with it.";
   } else if (status === "terrain-unavailable") {
     title = "OFF THE MAP";
     reason = "You left surveyed terrain; the sortie cannot continue.";
