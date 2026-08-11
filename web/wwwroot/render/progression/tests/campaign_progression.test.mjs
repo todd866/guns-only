@@ -30,6 +30,7 @@ test("one catalog names every route and exposes only accepted production experie
     { id, mission, releaseState }
   )), [
     { id: "first-merge", mission: 7, releaseState: "production" },
+    { id: "multiplayer", mission: 7, releaseState: "preview" },
     { id: "low-level-drone", mission: 8, releaseState: "quarantined" },
     { id: "medevac", mission: 13, releaseState: "quarantined" },
     // Circuits sits before the intercept: the trap is the hardest thing the aircraft asks for and
@@ -52,9 +53,11 @@ test("one catalog names every route and exposes only accepted production experie
     "cobra-lab",
     "weekend-ride",
   ]);
+  assert.equal(experienceLaunchable("multiplayer"), false);
+  assert.match(experienceById("multiplayer").blocker, /matchmaking.*player path/i);
   assert.equal(experienceLaunchable("weekend-ride"), true);
   assert.equal(experienceComingSoon("weekend-ride"), false);
-  assert.equal(CAMPAIGN_NODES.length, 6,
+  assert.equal(CAMPAIGN_NODES.length, 7,
     "standalone research routes are not campaign beats");
 
   const fresh = createCampaignProfile();

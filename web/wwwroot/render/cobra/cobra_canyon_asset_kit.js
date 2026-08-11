@@ -1,9 +1,9 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=309";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=310";
 import {
   FOLIAGE_UV_PALM,
   FOLIAGE_UV_UNDERSTORY,
   createSyntheticFoliageAtlasTexture,
-} from "./cobra_canyon_foliage.js?v=309";
+} from "./cobra_canyon_foliage.js?v=310";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 

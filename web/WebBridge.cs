@@ -113,6 +113,21 @@ public static partial class WebBridge {
     public static void SetAssistedFlight(bool enabled) =>
         Session.SetAssistedFlight(enabled);
 
+    [JSExport]
+    public static bool ApplyArenaHandicap(string handicapJson, string skillToken) {
+        if (string.IsNullOrWhiteSpace(handicapJson)) return false;
+        try {
+            BanditSkillProfile profile = ArenaHandicap.ProfileFromJson(handicapJson);
+            PilotSkill skill = ArenaHandicap.SkillFromToken(skillToken);
+            return Session.SetArenaHandicap(profile, skill);
+        } catch (Exception) {
+            return false;
+        }
+    }
+
+    [JSExport]
+    public static void ClearArenaHandicap() => Session.ClearArenaHandicap();
+
     /// <summary>
     /// Browser frame-pressure input: 0 is full-fidelity forecast work and 3 is the emergency
     /// budget. Clamp untrusted JS values at the bridge; the kernel owns the meaning of each level.

@@ -38,9 +38,20 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     visible: true,
   }),
   experience({
+    id: "multiplayer",
+    mission: 7,
+    sequence: 2,
+    aircraft: "F-22A",
+    title: "Multiplayer",
+    shortObjective: "1v1 guns. An opponent is waiting.",
+    qualification: "",
+    releaseState: EXPERIENCE_RELEASE_STATE.PREVIEW,
+    blocker: "Rated arena matchmaking and the complete player path still require acceptance.",
+  }),
+  experience({
     id: "low-level-drone",
     mission: 8,
-    sequence: 2,
+    sequence: 3,
     aircraft: "F-22A",
     title: "Low-Level Drone Intercept",
     shortObjective: "Stop four low-flying raiders over a fictional Ukrainian training sector.",
@@ -51,7 +62,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
   experience({
     id: "medevac",
     mission: 13,
-    sequence: 3,
+    sequence: 4,
     aircraft: "Air Ambulance",
     title: "Medevac",
     shortObjective: "Fly low to one pickup, secure the capsule, and hand it over at the clinic.",
@@ -64,7 +75,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
   experience({
     id: "rapier-circuits",
     mission: 11,
-    sequence: 4,
+    sequence: 5,
     aircraft: "Rapier",
     title: "Rapier Circuits",
     shortObjective: "Launch west, fly the pattern, trap. Repeat until the hook is easy.",
@@ -75,7 +86,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
   experience({
     id: "rapier-intercept",
     mission: 12,
-    sequence: 5,
+    sequence: 6,
     aircraft: "Rapier",
     title: "Rapier Intercept",
     shortObjective: "Climb onto the thin-air M4.2 shelf, zoom for one gun pass on the high-altitude balloon, then re-enter and trap at the midpoint arrestor.",
@@ -89,7 +100,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
   experience({
     id: "korea-panther",
     mission: 14,
-    sequence: 6,
+    sequence: 7,
     aircraft: "F9F-2 Panther",
     title: "Korea — Panther off Essex",
     shortObjective: "Catshot off USS Essex, fly the sortie, and bring it back to the wires. Straight deck: there is no bolter.",
@@ -100,7 +111,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
   experience({
     id: "indoor",
     mission: null,
-    sequence: 7,
+    sequence: 8,
     aircraft: "MIDGE-03",
     title: "Facility Nine",
     shortObjective: "Fly the indoor reconnaissance exercise without breaking stealth.",
@@ -111,7 +122,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
   experience({
     id: "medevac-command",
     mission: null,
-    sequence: 8,
+    sequence: 9,
     route: "/medevac/",
     aircraft: "Command prototype",
     title: "Medevac command prototype",
@@ -123,7 +134,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
   experience({
     id: "cobra-lab",
     mission: null,
-    sequence: 9,
+    sequence: 10,
     route: "/cobra-lab/",
     aircraft: "AH-1G Cobra · Hold the Bridge",
     title: "Hold the Bridge",
@@ -136,7 +147,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
   experience({
     id: "weekend-ride",
     mission: null,
-    sequence: 10,
+    sequence: 11,
     route: "/weekend-ride/",
     aircraft: "YZF-R1",
     title: "Weekend Ride",

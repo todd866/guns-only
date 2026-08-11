@@ -131,6 +131,10 @@ public sealed class SimulationSession {
     DetentLayer _detents = null!;
     GunKill _gunKill = null!;
     GunKill _opponentGun = null!;
+    // Rated multiplayer lane: bot knobs only. Active while matchmaker handicap is applied.
+    BanditSkillProfile? _arenaHandicapProfile;
+    PilotSkill _arenaHandicapSkill = PilotSkill.Competent;
+    bool _arenaHandicapActive;
     // Opponents beyond the primary. Empty for a 1v1; the pilot's cues always track the primary,
     // which is re-elected from this list when it dies.
     readonly List<Wingman> _wingmen = new();
@@ -1555,6 +1559,62 @@ public sealed class SimulationSession {
     /// <summary>Enable or disable the pilot-selected assisted dogfighting command layer.</summary>
     public void SetAssistedFlight(bool enabled) =>
         _assistedFlight = enabled && OpponentPresent;
+
+    public bool SetArenaHandicap(BanditSkillProfile profile, PilotSkill skillLabel) {
+        _arenaHandicapProfile = profile;
+        _arenaHandicapSkill = skillLabel;
+        _arenaHandicapActive = true;
+        // StartBeat may have already staged a 1v2 before the matchmaker reply arrived. Multiplayer
+        // is always 1v1 — drop any wingmen when the handicap lands.
+        ClearWingmen();
+        return ApplyArenaHandicapToPrimaryBandit();
+    }
+
+    public void ClearArenaHandicap() {
+        _arenaHandicapProfile = null;
+        _arenaHandicapActive = false;
+        _arenaHandicapSkill = PilotSkill.Competent;
+    }
+
+    public bool ArenaHandicapActive => _arenaHandicapActive;
+
+    bool ApplyArenaHandicapToPrimaryBandit() {
+        if (!_arenaHandicapActive || _arenaHandicapProfile is not { } profile) return false;
+        if (!OpponentPresent) return false;
+        return _bandit switch {
+            ReactiveBandit reactive => ReplacePrimaryBandit(new ReactiveBandit(
+                reactive.State, reactive.AircraftParameters, _arenaHandicapSkill, _terrainSurface,
+                profile: profile) {
+                Wind = reactive.Wind,
+                Atmosphere = reactive.Atmosphere,
+            }),
+            NeutralMergeBandit merge => ReplacePrimaryBandit(new NeutralMergeBandit(
+                merge.State,
+                merge.FightAircraftParameters ?? merge.BriefedAircraftParameters,
+                _arenaHandicapSkill,
+                _terrainSurface,
+                profile: profile) {
+                Wind = merge.Wind,
+                Atmosphere = merge.Atmosphere,
+            }),
+            _ => false,
+        };
+    }
+
+    bool ReplacePrimaryBandit(IBandit next) {
+        switch (next) {
+            case ReactiveBandit reactive:
+                reactive.ConfigureAiPlanning(
+                    _aiComputeLevel, _incrementalAiPlanningEnabled);
+                break;
+            case NeutralMergeBandit merge:
+                merge.ConfigureAiPlanning(
+                    _aiComputeLevel, _incrementalAiPlanningEnabled);
+                break;
+        }
+        _bandit = next;
+        return true;
+    }
 
     // Card 12 teaches the body-fixed M61 problem. Its bounded mission director may steer toward
     // GunKill's authoritative lead, but the global dogfight magnet and assisted auto-trigger would
@@ -3315,12 +3375,14 @@ public sealed class SimulationSession {
         _retiredOpponentGuns.Clear();
         if (stagesOpponent) {
             _bandit = _beat.CreateBandit(_terrainSurface, openingSpawn);
+            ApplyArenaHandicapToPrimaryBandit();
             _primaryOpponentGunTargetId = AllocateOpponentGunTargetId();
             _selectedPlayerGunTargetId = _primaryOpponentGunTargetId;
             // The opening wave is a formation too — the pilot's own call: "first fight is 1v2 and
             // if I win that it stays that way." A cold start has no director decision yet, so ask
             // the director what an opening looks like rather than hard-coding a number here.
-            if (_beat.ContinuousCombat is not null)
+            // Multiplayer lane applies arena handicap and is always 1v1 (AI fill until humans).
+            if (_beat.ContinuousCombat is not null && !_arenaHandicapActive)
                 StageWingmen(openingSpawn ?? _fightDirector.NextSpawn(1), 1);
             else if (_beat.ScriptedIntercept is { FormationSize: > 1 } scriptedFormation)
                 StageScriptedFormation(scriptedFormation.FormationSize);
@@ -5541,9 +5603,11 @@ public sealed class SimulationSession {
         LastDirectorSpawn = directorSpawn;
         _bandit = _beat.CreateNextBandit(
             _player.State, nextEngagement, _terrainSurface, directorSpawn);
+        ApplyArenaHandicapToPrimaryBandit();
         _primaryOpponentGunTargetId = AllocateOpponentGunTargetId();
         _selectedPlayerGunTargetId = _primaryOpponentGunTargetId;
-        StageWingmen(directorSpawn, nextEngagement);
+        if (!_arenaHandicapActive)
+            StageWingmen(directorSpawn, nextEngagement);
         ConfigureFormationLookaheadCadence();
         // Spike opponents of either flavour (cat or machine) carry the report quarantine: an
         // expected loss to one must not crater the ordinary-fight skill estimate.
