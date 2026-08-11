@@ -45,6 +45,10 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
     bool _engineOperating = true;
     bool _hardImpactLatched;
     bool _rotorStrikeLatched;
+    bool _gearDamagedLatched;
+    bool _airborneSinceLastContact = true;
+    VehicleContactFailureCause _contactFailureCause;
+    ContactTouchdown _lastTouchdown;
     long? _lastTick;
 
     public Ah1gCobraDynamics(
@@ -205,6 +209,15 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
 
     /// <summary>Last limited rate-only cyclic SCAS command, P/Q in radians per second.</summary>
     public BodyRates LastCyclicScasRateCommand { get; private set; }
+
+    /// <summary>Which envelope violation ended authority; None while the airframe lives.</summary>
+    public VehicleContactFailureCause LastContactFailureCause => _contactFailureCause;
+
+    /// <summary>Latched when an arrival exceeded the gear's design sink without killing authority.</summary>
+    public bool GearDamaged => _gearDamagedLatched;
+
+    /// <summary>Sink/lateral/yaw measured at the most recent airborne-to-ground transition.</summary>
+    public ContactTouchdown LastTouchdown => _lastTouchdown;
 
     /// <summary>Injects an engine-out condition; the freewheel leaves the rotor authoritative.</summary>
     public void FailEngine() => _engineOperating = false;
@@ -1042,10 +1055,15 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         mainRotorClearanceM = hubWorld.Y - surface.HeightM - rimVerticalDropM;
         double hubClearanceM = hubWorld.Y - surface.HeightM;
         if (hubClearanceM <= 0.0)
+        {
             _rotorStrikeLatched = true;
+            if (_contactFailureCause == VehicleContactFailureCause.None)
+                _contactFailureCause = VehicleContactFailureCause.RotorStrike;
+        }
 
         if (minimumSkidHeightM > surface.HeightM || velocity.Y > 0.0)
         {
+            _airborneSinceLastContact = true;
             contact = VehicleContactState.Airborne;
             return;
         }
@@ -1055,7 +1073,40 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         // every flared landing a crash (owner: "landing is impossible") — a 15–25° nose-up
         // attitude is normal short-final technique, not a wreck.
         if (normalImpactSpeedMps > geometry.HardImpactNormalSpeedMps)
+        {
             _hardImpactLatched = true;
+            if (_contactFailureCause == VehicleContactFailureCause.None)
+                _contactFailureCause = VehicleContactFailureCause.HardImpact;
+        }
+
+        // The envelope reads velocity/attitude BEFORE the solver bleeds them. Rollover needs
+        // both bank past the authored landing limit AND real sideways drift, so a straight
+        // nose-up flare and a banked-but-stationary settle both stay clean (attitude-blind
+        // rule for sink; drift is what digs a skid in).
+        Vec3D bodyVelocityAtContact = attitude.Conjugate().Rotate(velocity);
+        double lateralSpeedMps = Math.Abs(bodyVelocityAtContact.X);
+        if (_airborneSinceLastContact)
+        {
+            _lastTouchdown = new ContactTouchdown(
+                normalImpactSpeedMps, lateralSpeedMps, Math.Abs(rates.R));
+            _airborneSinceLastContact = false;
+        }
+        if (normalImpactSpeedMps > geometry.GearDamageNormalSpeedMps)
+            _gearDamagedLatched = true;
+        (_, double contactRollRad, _) = PlayerVehicleValidation.AttitudeAngles(attitude);
+        if (Math.Abs(contactRollRad) > geometry.MaximumLandingRollRad
+            && lateralSpeedMps > geometry.RolloverLateralSpeedMps)
+        {
+            _hardImpactLatched = true;
+            if (_contactFailureCause == VehicleContactFailureCause.None)
+                _contactFailureCause = VehicleContactFailureCause.Rollover;
+        }
+        if (Math.Abs(rates.R) > geometry.SpinContactYawRateRadPerSecond)
+        {
+            _hardImpactLatched = true;
+            if (_contactFailureCause == VehicleContactFailureCause.None)
+                _contactFailureCause = VehicleContactFailureCause.SpinContact;
+        }
 
         position = new Vec3D(
             position.X,
