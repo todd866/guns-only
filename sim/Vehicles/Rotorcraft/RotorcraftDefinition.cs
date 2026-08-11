@@ -93,7 +93,10 @@ public sealed record RotorcraftContactDefinition(
     double HardImpactNormalSpeedMps,
     double StableContactHorizontalSpeedMps,
     double MaximumLandingRollRad,
-    double MaximumLandingPitchRad);
+    double MaximumLandingPitchRad,
+    double GearDamageNormalSpeedMps,
+    double RolloverLateralSpeedMps,
+    double SpinContactYawRateRadPerSecond);
 
 /// <summary>
 /// Immutable, variant-locked definition used by a rotorcraft dynamics provider.
@@ -254,6 +257,16 @@ public sealed record RotorcraftDefinition(
             nameof(Contact.StableContactHorizontalSpeedMps));
         Positive(Contact.MaximumLandingRollRad, nameof(Contact.MaximumLandingRollRad));
         Positive(Contact.MaximumLandingPitchRad, nameof(Contact.MaximumLandingPitchRad));
+        Positive(Contact.GearDamageNormalSpeedMps,
+            nameof(Contact.GearDamageNormalSpeedMps));
+        if (Contact.GearDamageNormalSpeedMps >= Contact.HardImpactNormalSpeedMps)
+            throw new ArgumentOutOfRangeException(
+                nameof(Contact.GearDamageNormalSpeedMps),
+                "Gear damage must trip below the hard-impact sink limit.");
+        Positive(Contact.RolloverLateralSpeedMps,
+            nameof(Contact.RolloverLateralSpeedMps));
+        Positive(Contact.SpinContactYawRateRadPerSecond,
+            nameof(Contact.SpinContactYawRateRadPerSecond));
     }
 
     static void Positive(int value, string name)

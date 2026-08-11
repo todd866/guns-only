@@ -672,6 +672,19 @@ public sealed class Ah1gCobraDynamicsTests
     }
 
     [Fact]
+    public void ContactEnvelopeThresholdsAreOrderedAndPositive()
+    {
+        RotorcraftContactDefinition contact = Create("contact-thresholds").Definition.Contact;
+        Assert.InRange(contact.GearDamageNormalSpeedMps, 2.0, 4.0);
+        Assert.True(contact.GearDamageNormalSpeedMps < contact.HardImpactNormalSpeedMps,
+            "Gear damage must trip before the hard-impact kill.");
+        // Rollover reuses the already-authored (previously unenforced) landing roll limit.
+        Assert.InRange(contact.MaximumLandingRollRad, 0.25, 0.50);
+        Assert.InRange(contact.RolloverLateralSpeedMps, 1.0, 2.5);
+        Assert.InRange(contact.SpinContactYawRateRadPerSecond, 0.35, 0.80);
+    }
+
+    [Fact]
     public void ForwardVelocityEscapesTheVortexRingEnvelope()
     {
         var settling = Create("settling", velocity: new Vec3D(0.0, -11.0, 0.0));

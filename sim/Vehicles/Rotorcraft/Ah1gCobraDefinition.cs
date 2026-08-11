@@ -108,7 +108,12 @@ public static class Ah1gCobraDefinition
                 HardImpactNormalSpeedMps: 6.5,
                 StableContactHorizontalSpeedMps: 0.45,
                 MaximumLandingRollRad: Degrees(22.0),
-                MaximumLandingPitchRad: Degrees(25.0)));
+                MaximumLandingPitchRad: Degrees(25.0),
+                // Skid design-sink territory: firm arrivals above this bend the gear without
+                // ending the sortie; the 6.5 m/s hard-impact limit above stays the kill.
+                GearDamageNormalSpeedMps: 3.0,
+                RolloverLateralSpeedMps: 1.5,
+                SpinContactYawRateRadPerSecond: 0.52));
         definition.Validate();
         return definition;
     }

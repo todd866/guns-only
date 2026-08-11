@@ -27,7 +27,7 @@
 - Test: `sim.Tests/Vehicles/Rotorcraft/Ah1gCobraDynamicsTests.cs`
 
 **Interfaces:**
-- Produces: `Contact.GearDamageNormalSpeedMps` (double, 3.0), `Contact.RolloverBankRad` (double, 0.35), `Contact.RolloverLateralSpeedMps` (double, 1.5), `Contact.SpinContactYawRateRadPerSecond` (double, 0.52). Tasks 2–4 read these via `cobra.Definition.Contact.*`.
+- Produces: `Contact.GearDamageNormalSpeedMps` (double, 3.0), `Contact.RolloverLateralSpeedMps` (double, 1.5), `Contact.SpinContactYawRateRadPerSecond` (double, 0.52). Rollover's bank component reuses the EXISTING `Contact.MaximumLandingRollRad` (Degrees(22.0)) — discovered authored-but-unenforced at execution time; `MaximumLandingPitchRad` stays unenforced and gets a disposition note in Task 5. Tasks 2–4 read these via `cobra.Definition.Contact.*`.
 
 - [ ] **Step 1: Write the failing test** (in `Ah1gCobraDynamicsTests`):
 
