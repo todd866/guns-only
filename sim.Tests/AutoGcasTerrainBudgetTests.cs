@@ -28,15 +28,21 @@ public class AutoGcasTerrainBudgetTests {
     public AutoGcasTerrainBudgetTests(ITestOutputHelper output) => _out = output;
 
     /// One increment per query the kernel actually issues, outside the mission-frame translation
-    /// and inside nothing. It forwards the ceiling, because a wrapper that quietly dropped it
-    /// would disarm the broad phase and make this test measure the wrong build.
+    /// and inside nothing. It normally forwards the ceiling so the budget measures the shipped
+    /// broad phase; an explicit reference mode hides only that ceiling to reproduce the old exact
+    /// sampling path on the same runtime and platform.
     sealed class CountingSurface : ITerrainSurface {
         readonly ITerrainSurface _source;
+        readonly bool _exposeMaximumHeight;
         public long Queries;
-        public CountingSurface(ITerrainSurface source) => _source = source;
+        public CountingSurface(ITerrainSurface source, bool exposeMaximumHeight) {
+            _source = source;
+            _exposeMaximumHeight = exposeMaximumHeight;
+        }
         public TerrainBounds Bounds => _source.Bounds;
         public double HorizontalResolutionM => _source.HorizontalResolutionM;
-        public double MaximumHeightM => _source.MaximumHeightM;
+        public double MaximumHeightM => _exposeMaximumHeight
+            ? _source.MaximumHeightM : double.PositiveInfinity;
         public bool TrySample(double eastM, double northM, out TerrainSample sample) {
             Queries++;
             return _source.TrySample(eastM, northM, out sample);
@@ -49,11 +55,13 @@ public class AutoGcasTerrainBudgetTests {
 
     readonly record struct Flight(long Queries, double Milliseconds, int Ticks, string Digest);
 
-    static SimulationSession Build(int beatIndex, out CountingSurface counting) {
+    static SimulationSession Build(int beatIndex, bool exposeTerrainCeiling,
+        out CountingSurface counting) {
         ITerrainSurface theatre = Assert.IsAssignableFrom<ITerrainSurface>(
             GunsOnly.Web.UkraineTerrainTruth.Load());
         counting = new CountingSurface(new GunsOnly.Web.TrainingTerrainApronSurface(
-            theatre, marginM: 400_000.0, flatHeightM: 78.0, transitionM: 8_000.0));
+            theatre, marginM: 400_000.0, flatHeightM: 78.0, transitionM: 8_000.0),
+            exposeTerrainCeiling);
         MissionEnvironmentContract environment =
             Beats.BuiltIn(beatIndex, Carrier.DeckConfiguration.Angled).EnvironmentIdentity;
         var placed = new TranslatedTerrainSurface(counting,
@@ -74,8 +82,10 @@ public class AutoGcasTerrainBudgetTests {
 
     /// A scripted pursuit pilot — the fight has to be a fight, or the predictor never sees the
     /// states that cost anything.
-    static Flight Fly(int beatIndex, bool autoGcasEnabled, int ticks) {
-        SimulationSession session = Build(beatIndex, out CountingSurface counting);
+    static Flight Fly(int beatIndex, bool autoGcasEnabled, int ticks,
+        bool exposeTerrainCeiling = true) {
+        SimulationSession session = Build(beatIndex, exposeTerrainCeiling,
+            out CountingSurface counting);
         session.SetAutoGcasEnabled(autoGcasEnabled);
         using var sha = System.Security.Cryptography.SHA256.Create();
         var stream = new System.IO.MemoryStream();
@@ -141,21 +151,31 @@ public class AutoGcasTerrainBudgetTests {
     }
 
     /// <summary>
-    /// Determinism. Every optimisation here is meant to be invisible to the flying, so the whole
+    /// Equivalence. Every optimisation here is meant to be invisible to the flying, so the whole
     /// fight — the player and every bandit, position, speed, heading, flight-path angle and bank,
-    /// on every one of 7,200 ticks — hashes to a fixed digest. These are the digests the
-    /// pre-optimisation controller produced on the same beats; they are pinned, not recomputed.
+    /// on every one of 7,200 ticks — must hash identically with the terrain ceiling exposed and
+    /// with that ceiling hidden to force the pre-optimisation exact-sampling path. Comparing both
+    /// paths inside one process proves equality without pretending raw floating-point sortie bytes
+    /// have one portable golden across macOS and Linux math libraries.
     ///
     /// Beat 7 is the valuable one: the fly-up genuinely fires there, so this digest covers the
     /// recovery itself and not merely a quiet cruise past an armed system.
     /// </summary>
     [Theory]
-    [InlineData(7, "6B3FD38293EDAD01")]
-    [InlineData(9, "56E51E9E91A129BE")]
-    [InlineData(1, "D0E9ED146822B2A4")]
-    public void MakingThePredictorCheapMovedNoAircraft(int beatIndex, string expectedDigest) {
-        Flight armed = Fly(beatIndex, autoGcasEnabled: true, ticks: 7_200);
-        _out.WriteLine($"beat {beatIndex}: {armed.Ticks} ticks, digest {armed.Digest[..16]}");
-        Assert.Equal(expectedDigest, armed.Digest[..16]);
+    [InlineData(7)]
+    [InlineData(9)]
+    public void MakingThePredictorCheapMovedNoAircraft(int beatIndex) {
+        Flight broadPhase = Fly(beatIndex, autoGcasEnabled: true, ticks: 7_200);
+        Flight exactSampling = Fly(beatIndex, autoGcasEnabled: true, ticks: 7_200,
+            exposeTerrainCeiling: false);
+        _out.WriteLine($"beat {beatIndex}: {broadPhase.Ticks} ticks, "
+            + $"digest {broadPhase.Digest[..16]}, "
+            + $"queries {broadPhase.Queries:N0} vs exact {exactSampling.Queries:N0}");
+
+        Assert.Equal(exactSampling.Ticks, broadPhase.Ticks);
+        Assert.Equal(exactSampling.Digest, broadPhase.Digest);
+        Assert.True(broadPhase.Queries < exactSampling.Queries,
+            $"beat {beatIndex} did not exercise the terrain-ceiling broad phase: "
+            + $"{broadPhase.Queries:N0} queries vs exact {exactSampling.Queries:N0}");
     }
 }
