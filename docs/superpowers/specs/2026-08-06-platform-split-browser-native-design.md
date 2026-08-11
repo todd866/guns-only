@@ -1,8 +1,8 @@
 # Platform decision: where the browser ends and native begins
 
-Status: proposed — decision document, no code  
-Date: 2026-08-06  
-Build target: post-265  
+Status: proposed — decision document, no code
+Date: 2026-08-06
+Build target: post-265
 Base: 8540ee4 (live Build 265)
 
 ## The question
@@ -1057,4 +1057,3 @@ real frame attribution and I must not be mistaken for having done so.
 
 Frame attribution (perf-attribution agent), render-architecture review, and the in-flight Cobra
 lag fix. Where this document needs their kind of evidence it says so and defers.
-
