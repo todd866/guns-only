@@ -577,6 +577,10 @@ public sealed class CobraCanyonDefinition
 public sealed class CobraCanyonTerrainSurface : ITerrainSurface
 {
     const double NormalDerivativeHalfStepM = 2.0;
+    const double CampEmberEastM = -6_775.0;
+    const double CampEmberNorthM = -6_200.0;
+    const double CampEmberLevelRadiusM = 58.0;
+    const double CampEmberBlendRadiusM = 110.0;
     readonly CobraCanyonDefinition _definition;
     readonly CobraCanyonRouteDefinition _riverRoute;
     readonly IReadOnlyList<CobraCanyonRouteDefinition> _routes;
@@ -679,6 +683,23 @@ public sealed class CobraCanyonTerrainSurface : ITerrainSurface
 
         heightM = CarveCorridor(_riverRoute, eastM, northM, heightM);
 
+        // The PSP launch pad is flat, but this used to leave the sloping analytical gorge under
+        // it. Across the pad that buried one edge and floated the other while contact authority
+        // sampled only the centre. Level the complete firebase apron last, then blend back to the
+        // authored terrain at the edge of the existing Camp Ember land ring. The browser planner
+        // mirrors this operation exactly.
+        double campDistanceM = Math.Sqrt(
+            Math.Pow(eastM - CampEmberEastM, 2.0)
+            + Math.Pow(northM - CampEmberNorthM, 2.0));
+        double campBlend = 1.0 - SmoothStep(
+            CampEmberLevelRadiusM,
+            CampEmberBlendRadiusM,
+            campDistanceM);
+        if (campBlend > 0.0) {
+            double campElevationM = _riverRoute.Points[0].PathAltitudeM;
+            heightM += (campElevationM - heightM) * campBlend;
+        }
+
         if (!double.IsFinite(heightM))
             throw new InvalidOperationException("Cobra Canyon terrain sample was not finite.");
         return heightM;
@@ -760,12 +781,9 @@ public sealed class CobraCanyonTerrainSurface : ITerrainSurface
     /// </summary>
     static bool InsideCampEmberPad(double eastM, double northM)
     {
-        const double campEastM = -6_775.0;
-        const double campNorthM = -6_200.0;
-        const double padRadiusM = 110.0;
-        double east = eastM - campEastM;
-        double north = northM - campNorthM;
-        return east * east + north * north <= padRadiusM * padRadiusM;
+        double east = eastM - CampEmberEastM;
+        double north = northM - CampEmberNorthM;
+        return east * east + north * north <= CampEmberBlendRadiusM * CampEmberBlendRadiusM;
     }
 
     readonly record struct RouteSample(

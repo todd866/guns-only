@@ -1,4 +1,7 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=310";
+import {
+  COBRA_CANYON_CAMP_EMBER_APRON,
+  sampleCobraCanyonTerrain,
+} from "./cobra_canyon_plan.js?v=310";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
@@ -590,18 +593,128 @@ function composeHazard(mesh, index, placement, work) {
  * itself, which is half its recommended AGL band. The helicopter would fly into a hill the sim does
  * not have. Biasing every vertex to its neighbourhood minimum makes the chord conservative: the
  * drawn ground sits at or below simulated ground, so the error can only ever show the pilot MORE
- * clearance than exists, never less. It costs five analytic samples per vertex at build time and
- * not one triangle. Crests pay for it by shaving, which is the correct side to lose on.
+ * clearance than exists, never less. It costs five analytic samples per vertex at build time.
+ * Camp Ember adds eleven local axes below because its 58 m apron cannot fit inside a 105–174 m
+ * cell; the rest of the world retains the authored tier resolution. Crests pay for the minimum
+ * bias by shaving, which is the correct side to lose on.
  */
-function basinVertexHeight(plan, eastM, northM, eastStepM, northStepM) {
+const CAMP_EMBER_GRID_OFFSETS_M = Object.freeze([
+  -COBRA_CANYON_CAMP_EMBER_APRON.blendRadiusM,
+  -COBRA_CANYON_CAMP_EMBER_APRON.levelRadiusM,
+  -48,
+  -40,
+  -20,
+  0,
+  20,
+  40,
+  48,
+  COBRA_CANYON_CAMP_EMBER_APRON.levelRadiusM,
+  COBRA_CANYON_CAMP_EMBER_APRON.blendRadiusM,
+]);
+const BASIN_GRID_CACHE = new WeakMap();
+
+function refinedBasinAxis(minimumM, maximumM, segments, focusM) {
+  const stepM = (maximumM - minimumM) / segments;
+  const values = Array.from(
+    { length: segments + 1 },
+    (_, index) => minimumM + index * stepM,
+  );
+  for (const offsetM of CAMP_EMBER_GRID_OFFSETS_M) {
+    const valueM = focusM + offsetM;
+    if (valueM > minimumM && valueM < maximumM) values.push(valueM);
+  }
+  values.sort((left, right) => left - right);
+  return Object.freeze(values.filter(
+    (value, index) => index === 0 || Math.abs(value - values[index - 1]) > 1e-6,
+  ));
+}
+
+function basinGrid(plan, qualityTier) {
+  let byTier = BASIN_GRID_CACHE.get(plan);
+  if (!byTier) {
+    byTier = new Map();
+    BASIN_GRID_CACHE.set(plan, byTier);
+  }
+  if (byTier.has(qualityTier)) return byTier.get(qualityTier);
+  const bounds = boundsFrom(plan);
+  const segments = COBRA_CANYON_TERRAIN_SEGMENTS[qualityTier];
+  if (!bounds || !segments) throw new TypeError(`Unknown Cobra Canyon quality tier: ${qualityTier}.`);
+  const eastStepM = (bounds.maximumEastM - bounds.minimumEastM) / segments;
+  const northStepM = (bounds.maximumNorthM - bounds.minimumNorthM) / segments;
+  const grid = Object.freeze({
+    bounds,
+    segments,
+    eastStepM,
+    northStepM,
+    eastAxis: refinedBasinAxis(
+      bounds.minimumEastM,
+      bounds.maximumEastM,
+      segments,
+      COBRA_CANYON_CAMP_EMBER_APRON.eastM,
+    ),
+    northAxis: refinedBasinAxis(
+      bounds.minimumNorthM,
+      bounds.maximumNorthM,
+      segments,
+      COBRA_CANYON_CAMP_EMBER_APRON.northM,
+    ),
+    campElevationM: sampleCobraCanyonTerrain(
+      plan,
+      COBRA_CANYON_CAMP_EMBER_APRON.eastM,
+      COBRA_CANYON_CAMP_EMBER_APRON.northM,
+    ),
+  });
+  byTier.set(qualityTier, grid);
+  return grid;
+}
+
+function basinAxisCell(axis, valueM) {
+  let low = 0;
+  let high = axis.length - 1;
+  while (low + 1 < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (axis[middle] <= valueM) low = middle;
+    else high = middle;
+  }
+  return clamp(low, 0, axis.length - 2);
+}
+
+function campEmberRenderedVertexHeight(rawHeightM, eastM, northM, campElevationM) {
+  const distanceM = Math.hypot(
+    eastM - COBRA_CANYON_CAMP_EMBER_APRON.eastM,
+    northM - COBRA_CANYON_CAMP_EMBER_APRON.northM,
+  );
+  return distanceM <= COBRA_CANYON_CAMP_EMBER_APRON.levelRadiusM + 1e-6
+    ? campElevationM : rawHeightM;
+}
+
+function basinVertexHeight(
+  plan,
+  eastM,
+  northM,
+  eastStepM,
+  northStepM,
+  campElevationM,
+) {
   const biasEastM = eastStepM * 0.42;
   const biasNorthM = northStepM * 0.42;
-  return Math.min(
+  const conservativeHeightM = Math.min(
     sampleCobraCanyonTerrain(plan, eastM, northM),
     sampleCobraCanyonTerrain(plan, eastM - biasEastM, northM),
     sampleCobraCanyonTerrain(plan, eastM + biasEastM, northM),
     sampleCobraCanyonTerrain(plan, eastM, northM - biasNorthM),
     sampleCobraCanyonTerrain(plan, eastM, northM + biasNorthM),
+  );
+  // The ordinary 105–174 m cells straddle the entire 58 m launch apron, so their conservative
+  // neighbourhood samples reach the river trench and interpolate a cliff through the PSP. The
+  // refined axes below put real vertices around Camp; restore only the analytically exact inner
+  // apron after the minimum bias. The 58–110 m transition retains the conservative minimum
+  // unchanged, so presentation cannot be raised above simulation terrain in the blend ring.
+  return campEmberRenderedVertexHeight(
+    conservativeHeightM,
+    eastM,
+    northM,
+    campElevationM,
   );
 }
 
@@ -609,33 +722,32 @@ function basinGeometry(THREE, plan, qualityTier) {
   const positions = [];
   const concavity = [];
   const indices = [];
-  const bounds = boundsFrom(plan);
-  if (!bounds) return null;
-  const segments = COBRA_CANYON_TERRAIN_SEGMENTS[qualityTier];
-  const columnCount = segments + 1;
-  const eastStepM = (bounds.maximumEastM - bounds.minimumEastM) / segments;
-  const northStepM = (bounds.maximumNorthM - bounds.minimumNorthM) / segments;
-  const heights = new Float32Array(columnCount * columnCount);
-  for (let northIndex = 0; northIndex <= segments; northIndex++) {
-    const northM = bounds.minimumNorthM + northIndex * northStepM;
-    for (let eastIndex = 0; eastIndex <= segments; eastIndex++) {
+  const grid = basinGrid(plan, qualityTier);
+  const columnCount = grid.eastAxis.length;
+  const rowCount = grid.northAxis.length;
+  const heights = new Float32Array(columnCount * rowCount);
+  for (let northIndex = 0; northIndex < rowCount; northIndex++) {
+    const northM = grid.northAxis[northIndex];
+    for (let eastIndex = 0; eastIndex < columnCount; eastIndex++) {
       heights[northIndex * columnCount + eastIndex] = basinVertexHeight(
         plan,
-        bounds.minimumEastM + eastIndex * eastStepM,
+        grid.eastAxis[eastIndex],
         northM,
-        eastStepM,
-        northStepM,
+        grid.eastStepM,
+        grid.northStepM,
+        grid.campElevationM,
       );
     }
   }
   const heightAt = (eastIndex, northIndex) => heights[
-    clamp(northIndex, 0, segments) * columnCount + clamp(eastIndex, 0, segments)
+    clamp(northIndex, 0, rowCount - 1) * columnCount
+      + clamp(eastIndex, 0, columnCount - 1)
   ];
   const paint = COBRA_CANYON_VISUAL_PROFILE.terrainPaint;
-  for (let northIndex = 0; northIndex <= segments; northIndex++) {
-    const northM = bounds.minimumNorthM + northIndex * northStepM;
-    for (let eastIndex = 0; eastIndex <= segments; eastIndex++) {
-      const eastM = bounds.minimumEastM + eastIndex * eastStepM;
+  for (let northIndex = 0; northIndex < rowCount; northIndex++) {
+    const northM = grid.northAxis[northIndex];
+    for (let eastIndex = 0; eastIndex < columnCount; eastIndex++) {
+      const eastM = grid.eastAxis[eastIndex];
       const elevationM = heights[northIndex * columnCount + eastIndex];
       positions.push(eastM, elevationM, -northM);
       // Enclosure term (korea_terrain's baked `concavity` attribute): a two-cell ring mean says
@@ -656,8 +768,8 @@ function basinGeometry(THREE, plan, qualityTier) {
       ));
     }
   }
-  for (let northIndex = 0; northIndex < segments; northIndex++) {
-    for (let eastIndex = 0; eastIndex < segments; eastIndex++) {
+  for (let northIndex = 0; northIndex < rowCount - 1; northIndex++) {
+    for (let eastIndex = 0; eastIndex < columnCount - 1; eastIndex++) {
       const northWest = northIndex * columnCount + eastIndex;
       const northEast = northWest + 1;
       const southWest = northWest + columnCount;
@@ -735,29 +847,31 @@ export function sampleCobraCanyonRenderedBasinHeight(
   eastM,
   northM,
 ) {
-  const bounds = boundsFrom(plan);
-  const segments = COBRA_CANYON_TERRAIN_SEGMENTS[qualityTier];
-  if (!bounds || !segments) throw new TypeError(`Unknown Cobra Canyon quality tier: ${qualityTier}.`);
+  const grid = basinGrid(plan, qualityTier);
+  const { bounds } = grid;
   const east = clamp(finite(eastM), bounds.minimumEastM, bounds.maximumEastM);
   const north = clamp(finite(northM), bounds.minimumNorthM, bounds.maximumNorthM);
-  const eastStepM = (bounds.maximumEastM - bounds.minimumEastM) / segments;
-  const northStepM = (bounds.maximumNorthM - bounds.minimumNorthM) / segments;
-  const eastCell = clamp(Math.floor((east - bounds.minimumEastM) / eastStepM), 0, segments - 1);
-  const northCell = clamp(
-    Math.floor((north - bounds.minimumNorthM) / northStepM),
-    0,
-    segments - 1,
-  );
-  const east0 = bounds.minimumEastM + eastCell * eastStepM;
-  const north0 = bounds.minimumNorthM + northCell * northStepM;
-  const eastBlend = clamp((east - east0) / eastStepM, 0, 1);
-  const northBlend = clamp((north - north0) / northStepM, 0, 1);
+  const eastCell = basinAxisCell(grid.eastAxis, east);
+  const northCell = basinAxisCell(grid.northAxis, north);
+  const east0 = grid.eastAxis[eastCell];
+  const east1 = grid.eastAxis[eastCell + 1];
+  const north0 = grid.northAxis[northCell];
+  const north1 = grid.northAxis[northCell + 1];
+  const eastBlend = clamp((east - east0) / (east1 - east0), 0, 1);
+  const northBlend = clamp((north - north0) / (north1 - north0), 0, 1);
   const corner = (eastM, northM) =>
-    Math.fround(basinVertexHeight(plan, eastM, northM, eastStepM, northStepM));
+    Math.fround(basinVertexHeight(
+      plan,
+      eastM,
+      northM,
+      grid.eastStepM,
+      grid.northStepM,
+      grid.campElevationM,
+    ));
   const northWest = corner(east0, north0);
-  const northEast = corner(east0 + eastStepM, north0);
-  const southWest = corner(east0, north0 + northStepM);
-  const southEast = corner(east0 + eastStepM, north0 + northStepM);
+  const northEast = corner(east1, north0);
+  const southWest = corner(east0, north1);
+  const southEast = corner(east1, north1);
   if (eastBlend >= northBlend) {
     return northWest
       + eastBlend * (northEast - northWest)
@@ -832,38 +946,19 @@ function appendGridClippedPolygon(
   fieldValues,
   fieldAt,
 ) {
-  const bounds = boundsFrom(plan);
-  const segments = COBRA_CANYON_TERRAIN_SEGMENTS[qualityTier];
-  const eastStepM = (bounds.maximumEastM - bounds.minimumEastM) / segments;
-  const northStepM = (bounds.maximumNorthM - bounds.minimumNorthM) / segments;
+  const grid = basinGrid(plan, qualityTier);
   const eastValues = polygon.map((point) => point.eastM);
   const northValues = polygon.map((point) => point.northM);
-  const minimumEastCell = clamp(
-    Math.floor((Math.min(...eastValues) - bounds.minimumEastM) / eastStepM),
-    0,
-    segments - 1,
-  );
-  const maximumEastCell = clamp(
-    Math.floor((Math.max(...eastValues) - bounds.minimumEastM) / eastStepM),
-    0,
-    segments - 1,
-  );
-  const minimumNorthCell = clamp(
-    Math.floor((Math.min(...northValues) - bounds.minimumNorthM) / northStepM),
-    0,
-    segments - 1,
-  );
-  const maximumNorthCell = clamp(
-    Math.floor((Math.max(...northValues) - bounds.minimumNorthM) / northStepM),
-    0,
-    segments - 1,
-  );
+  const minimumEastCell = basinAxisCell(grid.eastAxis, Math.min(...eastValues));
+  const maximumEastCell = basinAxisCell(grid.eastAxis, Math.max(...eastValues));
+  const minimumNorthCell = basinAxisCell(grid.northAxis, Math.min(...northValues));
+  const maximumNorthCell = basinAxisCell(grid.northAxis, Math.max(...northValues));
   for (let northCell = minimumNorthCell; northCell <= maximumNorthCell; northCell++) {
-    const north0 = bounds.minimumNorthM + northCell * northStepM;
-    const north1 = north0 + northStepM;
+    const north0 = grid.northAxis[northCell];
+    const north1 = grid.northAxis[northCell + 1];
     for (let eastCell = minimumEastCell; eastCell <= maximumEastCell; eastCell++) {
-      const east0 = bounds.minimumEastM + eastCell * eastStepM;
-      const east1 = east0 + eastStepM;
+      const east0 = grid.eastAxis[eastCell];
+      const east1 = grid.eastAxis[eastCell + 1];
       const northWest = { eastM: east0, northM: north0 };
       const northEast = { eastM: east1, northM: north0 };
       const southEast = { eastM: east1, northM: north1 };

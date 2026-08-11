@@ -248,8 +248,8 @@ export function cameraPitchAnchor(camera, width, height) {
   if (!Number.isFinite(forwardY)) return null;
   // The principal point is the centre only for an unskewed frustum; read it off the projection
   // so an off-centre or windowed frustum still anchors where the optical axis actually lands.
-  const centerX = width * 0.5 * (1 + (Number(projection[8]) || 0));
-  const centerY = height * 0.5 * (1 - (Number(projection[9]) || 0));
+  const centerX = width * 0.5 * (1 - (Number(projection[8]) || 0));
+  const centerY = height * 0.5 * (1 + (Number(projection[9]) || 0));
   if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) return null;
   return {
     centerX,
@@ -258,11 +258,7 @@ export function cameraPitchAnchor(camera, width, height) {
   };
 }
 
-/**
- * Banked ladder-horizon point (camera pitch × bank). When `ladderReference` is camera (Cobra),
- * the waterline W parks here so it agrees with the conformal 0 rung through sight bias —
- * owner ruling over the classical body-forward gap.
- */
+/** Banked camera-horizon point used by the HUD geometry harness to verify the conformal ladder. */
 export function cameraReferencedAirframeAnchors(camera, width, height, state = {}) {
   const attitude = cameraPitchAnchor(camera, width, height);
   const projection = camera?.projectionMatrix?.elements;
@@ -5388,9 +5384,8 @@ class CombatHud {
         frame.ladderReference,
       );
     }
-    // Camera-referenced ladder (Cobra): horizon stays conformal through the eye. Waterline
-    // shares that camera horizon when ladderReference is camera (owner: W must match camera).
-    // Helicopter snapshots gate cruise FPV / hover stub.
+    // Camera-referenced ladder (Cobra): horizon stays conformal through the eye. W stays on
+    // projected body-forward; helicopter snapshots gate cruise FPV / hover stub.
     const heli = frame.state?.heli_flight_path === true;
     const heliMode = heli ? String(frame.state.heli_fpv_mode || "cruise") : "cruise";
     let symbolFpv = fpvAnchor;
@@ -5419,12 +5414,11 @@ class CombatHud {
         );
       }
     }
-    const cameraWaterline = frame.ladderReference === "camera"
-      ? cameraReferencedAirframeAnchors(
-        frame.camera, this.width, this.height, frame.state,
-      )?.waterline
-      : null;
-    const symbolAnchor = cameraWaterline ?? noseAnchor;
+    // W is the aircraft reference, not the world horizon. Cobra keeps its ladder camera-conformal
+    // through the rear-seat sight bias, but parking W on that ladder's 0 rung sent the only stable
+    // body cue down into the terrain whenever the aircraft pitched. The flight-path symbol remains
+    // velocity-conformal and the ladder remains world-horizontal; only W returns to body-forward.
+    const symbolAnchor = noseAnchor;
     if (this._debug) {
       this._debug.waterlinePx = symbolAnchor && !symbolAnchor.behind
         ? { x: symbolAnchor.x, y: symbolAnchor.y } : null;

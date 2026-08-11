@@ -290,6 +290,15 @@ test("samples one deterministic finite relief surface for the lab camera and flo
     sampleCobraCanyonTerrain(plan, -8000, -8000),
     "sampling clamps to the authored world extent",
   );
+  const campPadSamples = [
+    [0, 0], [50, 0], [-50, 0], [0, 50], [0, -50], [35, 35], [-35, -35],
+  ].map(([eastOffsetM, northOffsetM]) => sampleCobraCanyonTerrain(
+    plan,
+    -6_775 + eastOffsetM,
+    -6_200 + northOffsetM,
+  ));
+  assert.ok(campPadSamples.every((heightM) => Math.abs(heightM - 202) <= 1e-9),
+    `Camp Ember apron must be level at 202 m, got ${campPadSamples.join(", ")}`);
   assert.throws(() => sampleCobraCanyonTerrain(plan, Number.NaN, 0), /eastM must be finite/);
 });
 

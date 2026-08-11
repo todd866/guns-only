@@ -31,6 +31,15 @@ const AMBIENT_RENDER_ROLES = Object.freeze([
   "water-accent",
 ]);
 const ANCHOR_MODES = Object.freeze(["base", "centre", "top"]);
+// The complete firebase (two PSP pads, berms and tents) fits inside this level apron. The blend
+// ends at the existing 110 m land ring, so the authored gorge resumes without a hard terrace.
+// Presentation imports this same record to refine the coarse basin grid around the launch pad.
+export const COBRA_CANYON_CAMP_EMBER_APRON = Object.freeze({
+  eastM: -6_775,
+  northM: -6_200,
+  levelRadiusM: 58,
+  blendRadiusM: 110,
+});
 const IMPORTANT_COLLECTIONS = Object.freeze([
   ["terrain.ribbons", "terrain-authority"],
   ["routeLanes", "navigation-authority"],
@@ -919,6 +928,29 @@ export function sampleCobraCanyonTerrain(plan, eastM, northM) {
 
 
   carveCorridor(riverRibbon);
+
+  // Camp Ember used to be classified as land but retained the sloping river/ridge field beneath
+  // its flat PSP mesh. Across the 26 m launch pad the render ground moved by more than a metre,
+  // leaving one edge buried and the other floating while the simulation planted the skids at the
+  // centre sample. Level the authored firebase apron after every corridor/cell carve; C# mirrors
+  // this exact final operation so visual ground and contact authority cannot diverge at spawn.
+  const campDistanceM = Math.hypot(
+    east - COBRA_CANYON_CAMP_EMBER_APRON.eastM,
+    north - COBRA_CANYON_CAMP_EMBER_APRON.northM,
+  );
+  const campBlend = 1 - smoothstep(
+    COBRA_CANYON_CAMP_EMBER_APRON.levelRadiusM,
+    COBRA_CANYON_CAMP_EMBER_APRON.blendRadiusM,
+    campDistanceM,
+  );
+  if (campBlend > 0) {
+    const riverRoute = plan.routeLanes.find((route) => String(route.id).includes("river-gorge"));
+    const campElevationM = Number(riverRoute?.pathLocalM?.[0]?.[1]);
+    if (!Number.isFinite(campElevationM)) {
+      throw new RangeError("Cobra Canyon Camp Ember elevation was not finite.");
+    }
+    heightM += (campElevationM - heightM) * campBlend;
+  }
 
   if (!Number.isFinite(heightM)) {
     throw new RangeError("Cobra Canyon terrain sample was not finite.");

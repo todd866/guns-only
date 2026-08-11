@@ -2,7 +2,8 @@
 //
 // Feeds hud.js the SAME frame contract app.js builds every render frame (see FlightView.hudFrame
 // and the this.hud.draw(hudFrame) call site in app.js), but from fixed synthetic scenarios instead
-// of a live kernel: a real THREE.PerspectiveCamera (66° vfov, matching app.js), body-axis player
+// of a live kernel: a real THREE.PerspectiveCamera (66° default, with scenario-specific production
+// FOV where required), body-axis player
 // vectors, world bandit/lead points, and the padlock sensor angles derived through the production
 // padlock_controller math. now defaults to 0 and dt is a fixed step, so renders are deterministic;
 // callers can request another explicit time to inspect animation phases.
@@ -102,6 +103,8 @@ const toRender = (v) => new THREE.Vector3(v.x, v.y, -v.z);
 export function buildFrame(scenario) {
   const state = buildScenarioState(scenario);
   const view = scenario.view ?? {};
+  const cameraFovDeg = Number.isFinite(Number(scenario.cameraFovDeg))
+    ? Number(scenario.cameraFovDeg) : 66;
   const quaternion = playerQuaternion(scenario.player);
   const playerForward = new THREE.Vector3(0, 0, -1).applyQuaternion(quaternion);
   const playerUp = new THREE.Vector3(0, 1, 0).applyQuaternion(quaternion);
@@ -201,7 +204,7 @@ export function buildFrame(scenario) {
       .applyQuaternion(quaternion.clone().invert());
     const desired = desiredPadlockAngles(targetLookAngles(localTarget, 0), {
       aspect: WIDTH / HEIGHT,
-      verticalFovRad: 66 * DEG,
+      verticalFovRad: cameraFovDeg * DEG,
     });
     sensorYaw = desired.yawRad;
     sensorPitch = desired.pitchRad;
@@ -212,7 +215,7 @@ export function buildFrame(scenario) {
 
   // Camera exactly as app.js builds it: the compatibility eye point bolted to the body axis, then
   // the sensor gimbal applied in the local frame (negative yaw sign matches app.js).
-  const camera = new THREE.PerspectiveCamera(66, WIDTH / HEIGHT, 0.06, 680000);
+  const camera = new THREE.PerspectiveCamera(cameraFovDeg, WIDTH / HEIGHT, 0.06, 680000);
   camera.position.copy(playerPosition)
     .addScaledVector(playerUp, 0.6)
     .addScaledVector(playerForward, 4.0);
@@ -329,6 +332,7 @@ function projectProbe(camera, world) {
 function computeProbes(frame) {
   const camera = frame.camera;
   const m = camera.projectionMatrix.elements;
+  const cameraForwardY = -Number(camera.matrixWorld.elements[9]);
   const focalXPx = WIDTH * 0.5 * m[0];
   const focalYPx = HEIGHT * 0.5 * m[5];
   const projectionCenter = {
@@ -386,7 +390,8 @@ function computeProbes(frame) {
   return {
     focalXPx,
     focalYPx,
-    nominalFocalYPx: HEIGHT * 0.5 / Math.tan(66 * DEG * 0.5),
+    cameraPitchDeg: Math.asin(Math.max(-1, Math.min(1, cameraForwardY))) / DEG,
+    nominalFocalYPx: HEIGHT * 0.5 / Math.tan(camera.fov * DEG * 0.5),
     projectionCenter,
     lookBoresight,
     cameraWaterline: cameraReferencedAirframeAnchors(
@@ -487,6 +492,7 @@ window.__debugScenario = async (name) => {
       fuel_flow_lb_min: frame.state.fuel_flow_lb_min,
       true_airspeed_kts: frame.state.true_airspeed_kts,
       ground_speed_kts: frame.state.ground_speed_kts,
+      heli_flight_path: frame.state.heli_flight_path,
       vx: frame.state.vx,
       vz: frame.state.vz,
       padlock_preferred_plane_valid: frame.state.padlock_preferred_plane_valid,

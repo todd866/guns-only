@@ -8,10 +8,10 @@
  * the snapshot's own capability flags (has_*, opponent_alive, fuel_lb absent),
  * never by forking the HUD.
  *
- * Helicopter flight-path doctrine (2026-08-07, owner-corrected 2026-08-08): ladder AND
- * waterline are camera-conformal when ladderReference is camera; gun cross stays
- * body-forward; FPV/hover stub + cues are gated by heli_flight_path on the
- * snapshot (see docs/superpowers/specs/2026-08-07-cobra-helicopter-hud-design.md).
+ * Helicopter flight-path doctrine (owner-corrected 2026-08-11): the ladder is camera/world
+ * conformal; W and the gun cross stay body-forward; FPV/hover stub + cues are gated by
+ * heli_flight_path on the snapshot (see
+ * docs/superpowers/specs/2026-08-07-cobra-helicopter-hud-design.md).
  *
  * Deliberate omissions (each one is a decision, not a gap):
  *  - no calibrated/indicated airspeed: the rotorcraft authority publishes TAS only,
@@ -129,9 +129,9 @@ export function createCobraHudFrame(THREE) {
     aimPoint: null,
     directorPoint: null,
     flightPathPoint: null,
-    // Rear-seat camera: +0.08 rad sight bias + clamped gunner lean. Pitch ladder and
-    // waterline are camera-referenced so W agrees with the conformal 0 rung. Gun cross
-    // stays body-forward. FPV is velocity-through-camera in cruise; hover uses a stub.
+    // Rear-seat camera: +0.08 rad sight bias + clamped gunner lean. Pitch ladder stays
+    // camera/world referenced; W and the gun cross stay body-forward. FPV is
+    // velocity-through-camera in cruise; hover uses a stub.
     ladderReference: "camera",
     sensorYaw: 0,
     sensorPitch: 0,

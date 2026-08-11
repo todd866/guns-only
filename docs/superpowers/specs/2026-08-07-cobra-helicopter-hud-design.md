@@ -1,9 +1,9 @@
 # Cobra Canyon — helicopter HUD symbology
 
-Date: 2026-08-07 (owner-corrected 2026-08-08)  
+Date: 2026-08-07 (owner-corrected 2026-08-11)
 Status: approved for implementation  
 Base: Hold the Bridge / Ember Run, AH-1S M76 + DTIC ADA303212 doctrine  
-Owner ruling: camera-shared waterline + ladder; FPV carries important cues
+Owner ruling: camera/world ladder; body-forward W; FPV carries important cues
 
 ## Product
 
@@ -13,7 +13,7 @@ agree with the eye.
 | Symbol | Means | Stabilization |
 | --- | --- | --- |
 | Pitch ladder 0 / horizon | World horizontal | Camera-conformal (`ladderReference: "camera"`) through rear-seat sight bias |
-| Waterline W | Horizon reference through the eye | Same camera horizon as ladder 0 (bank-aware); **not** body-forward nose projection |
+| Waterline W | Aircraft longitudinal reference | Body-forward projection; deliberately separates from ladder 0 when attitude/sight bias requires it |
 | Gun cross | Fixed gun / body line | Body-forward |
 | Cruise FPV | Where you are going | Ground velocity through camera; shown when GS ≥ 40 KT |
 | Hover velocity stub | Plan-view ground track | Screen-fixed from the waterline when GS &lt; 40 KT; conformal FPV blanked |
@@ -27,10 +27,11 @@ agree with the eye.
 
 ## Reversal history
 
-Build 266 parked the waterline on the camera horizon. A later “classical body-forward”
-reversal put W back on the nose and disagreed with the ladder by the rear-seat sight bias.
-Owner flights (2026-08-07/08) rejected that gap: waterline must match the camera again.
-Gun cross remains body-forward.
+Build 266 parked the waterline on the camera horizon. Build 294 restored that behavior after a
+brief body-forward reversal. Owner review on 2026-08-11 found the horizon-locked W disappearing
+into terrain in pitched Cobra frames, leaving no stable aircraft reference because production
+Cobra correctly suppresses the fighter gun cross. W therefore returns to projected body-forward;
+the pitch ladder 0 remains the honest camera-conformal world horizon and FPV remains velocity.
 
 ## Non-goals
 

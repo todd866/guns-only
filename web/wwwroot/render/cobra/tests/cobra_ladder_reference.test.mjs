@@ -46,8 +46,8 @@ test("an off-centre frustum anchors on the optical axis, not the canvas centre",
     WIDTH,
     HEIGHT,
   );
-  assert.equal(anchor.centerX, WIDTH * 0.5 * 1.25);
-  assert.equal(anchor.centerY, HEIGHT * 0.5 * 1.5);
+  assert.equal(anchor.centerX, WIDTH * 0.5 * 0.75);
+  assert.equal(anchor.centerY, HEIGHT * 0.5 * 0.5);
 });
 
 test("a camera without an honest matrix yields no anchor, so the ladder falls back", () => {
@@ -71,8 +71,7 @@ test("the Cobra frame requests the camera-referenced ladder", () => {
   assert.equal(frame.ladderReference, "camera");
 });
 
-test("camera-referenced waterline tracks the banked ladder horizon", async () => {
-  // Owner ruling: waterline shares the conformal horizon the pitch ladder uses under bank.
+test("camera-referenced ladder horizon remains bank-aware without owning the W symbol", async () => {
   const { cameraReferencedAirframeAnchors } = await import("../../../hud.js");
   const camera = cameraPitchedBy(0.08);
   const bankDeg = 35;
@@ -88,7 +87,7 @@ test("camera-referenced waterline tracks the banked ladder horizon", async () =>
   assert.ok(Math.abs(anchors.waterline.y - expectedY) < 1e-6);
 });
 
-test("Cobra snapshot requests camera ladder (waterline follows in hud.js)", async () => {
+test("Cobra snapshot requests the camera/world ladder while W remains body-forward", async () => {
   const { cobraHudState } = await import("../cobra_hud_adapter.js");
   const state = cobraHudState({
     vehicle: {

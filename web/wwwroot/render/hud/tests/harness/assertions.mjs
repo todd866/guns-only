@@ -81,23 +81,23 @@ function assertAirframeSymbols(data) {
   }
   if (!geometry.waterlinePx || !geometry.fpvPx) return;
 
-  // Cobra camera-referenced ladder: waterline shares the banked camera horizon; gun cross
-  // stays on projected body-forward (owner ruling).
+  // Cobra's ladder remains camera/world referenced, while W is the stable aircraft body cue.
   if (data.ladderReference === "camera") {
-    const expected = probes.cameraWaterline;
-    if (expected) {
-      const horizonError = distance(geometry.waterlinePx, expected);
-      check(name, "camera-ladder waterline == camera horizon",
-        horizonError <= 2.5, `error ${horizonError.toFixed(3)} px (tol 2.5)`);
-    } else {
-      check(name, "camera-ladder waterline recorded",
-        Boolean(geometry.waterlinePx), geometry.waterlinePx ? "present" : "absent");
+    const waterlineError = distance(geometry.waterlinePx, probes.waterline);
+    check(name, "Cobra waterline == projected body-forward",
+      waterlineError <= 1.5, `error ${waterlineError.toFixed(3)} px (tol 1.5)`);
+    if (geometry.gunCrossPx) {
+      const gunCrossError = distance(geometry.gunCrossPx, probes.waterline);
+      check(name, "gun cross remains on projected body-forward",
+        gunCrossError <= 1.5, `error ${gunCrossError.toFixed(3)} px (tol 1.5)`);
     }
-    const gunCrossError = geometry.gunCrossPx
-      ? distance(geometry.gunCrossPx, probes.waterline)
-      : Number.POSITIVE_INFINITY;
-    check(name, "gun cross remains on projected body-forward",
-      gunCrossError <= 1.5, `error ${gunCrossError.toFixed(3)} px (tol 1.5)`);
+    const expectedSeparation = probes.cameraWaterline
+      ? distance(probes.waterline, probes.cameraWaterline) : 0;
+    if (expectedSeparation >= 20) {
+      const separation = distance(geometry.waterlinePx, probes.cameraWaterline);
+      check(name, "pitched Cobra W stays separate from ladder horizon",
+        separation >= 20, `separation ${separation.toFixed(3)} px (min 20)`);
+    }
     const fpvError = distance(geometry.fpvPx, probes.fpv);
     check(name, "camera fpv == projected world-velocity",
       fpvError <= 1.5, `error ${fpvError.toFixed(3)} px (tol 1.5)`);
@@ -158,7 +158,7 @@ function assertLadder(data) {
     return;
   }
   const pitch = data.ladderReference === "camera"
-    ? (Number(look?.pitchDeg) || 0)
+    ? (Number(probes.cameraPitchDeg) || 0)
     : (Number(state.pitch_deg) || 0);
   const lookingOffAxis = data.ladderReference !== "camera"
     && (Math.abs(Number(look?.yawDeg) || 0) > 1e-9
@@ -498,13 +498,18 @@ function assertWarningLine(data) {
 }
 
 function assertBasicJobs(data) {
-  const { name, geometry, probes, look } = data;
+  const { name, geometry, probes, look, state } = data;
   const locator = geometry.banditLocator;
   const lookingOffAxis = Math.abs(Number(look?.yawDeg) || 0) > 1e-9
     || Math.abs(Number(look?.pitchDeg) || 0) > 1e-9;
-  if (lookingOffAxis) {
+  const selectedAlive = typeof state?.opponent_alive === "boolean"
+    ? state.opponent_alive : state?.bandit_alive === true;
+  if (lookingOffAxis && selectedAlive) {
     check(name, "look-offset target still has exactly one marker/locator job",
       Boolean(locator), locator ? "job recorded" : "missing");
+  } else if (lookingOffAxis) {
+    check(name, "look-offset frame without an opponent draws no ghost target job",
+      !locator, locator ? "unexpected job" : "absent");
   }
   if (locator) {
     check(name, "marker and locator arrow are mutually exclusive",
@@ -825,17 +830,23 @@ function assertMobileTacticalHierarchy(data) {
   const actualDrawn = drawnRows.actual ?? "";
   const contextDrawn = drawnRows.context ?? "";
   const directiveDrawn = drawnRows.directive ?? "";
+  const helicopter = data.state?.heli_flight_path === true;
   check(name, "mobile rail paints every critical row without ellipsis",
     rail.drawnRows?.length > 0
       && rail.drawnRows.every((row) => !row.text.includes("…")),
     JSON.stringify(rail.drawnRows));
   check(name, "mobile rail carries actual speed and vertical state",
-    /KCAS|KIAS/.test(actualDrawn)
-      && /(?:\d(?:\.\d)?K|FL\d{3})/.test(actualDrawn)
-      && /(?:V\/S|↑|↓)/.test(actualDrawn),
+    helicopter
+      ? /KIAS/.test(actualDrawn)
+        && /(?:H\d{3}|·\d{3}·)/.test(actualDrawn)
+        && /V\/S/.test(actualDrawn)
+      : /KCAS|KIAS/.test(actualDrawn)
+        && /(?:\d(?:\.\d)?K|FL\d{3})/.test(actualDrawn)
+        && /(?:V\/S|↑|↓)/.test(actualDrawn),
     actualDrawn);
   check(name, "mobile rail carries authoritative ammunition in combat",
-    !/forward-level|gun-overheat|padlock-ground-warning|rapier-mobile-climb-bvr/.test(name)
+    helicopter
+      || !/forward-level|gun-overheat|padlock-ground-warning|rapier-mobile-climb-bvr/.test(name)
       || /GUN\d+/.test(contextDrawn),
     contextDrawn);
   check(name, "mobile rail stays wholly on canvas",
@@ -900,6 +911,7 @@ function assertMobileTacticalHierarchy(data) {
 // landscape pass to bound gate time.
 const PORTRAIT_SCENARIOS = new Set([
   "assisted-corner-hold",
+  "cobra-forward-level", "cobra-forward-pitched",
   "forward-level", "forward-bandit-near-edge", "forward-bandit-offscreen",
   "forward-target-two-offscreen",
   "gun-overheat-latched", "gcas-bottom-out-release",
@@ -912,6 +924,8 @@ const PORTRAIT_SCENARIOS = new Set([
 
 const MOBILE_SCENARIOS = new Set([
   "assisted-corner-hold",
+  "cobra-forward-level",
+  "cobra-forward-pitched",
   "forward-level",
   "gun-overheat-latched",
   "padlock-ground-warning",

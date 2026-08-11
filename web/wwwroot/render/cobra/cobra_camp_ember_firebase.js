@@ -9,6 +9,9 @@ import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=310";
 
 export const CAMP_EMBER_LANDMARK_ID = "landmark.cobra-canyon.camp-ember.v1";
 export const CAMP_EMBER_FIREBASE_SCHEMA = "guns-only.cobra-camp-ember-firebase.v1";
+// The authored part list has its clear gate along local +Z. River Gorge launches due east, so
+// rotate that gate onto render +X instead of pointing the helicopter into the east berm/tents.
+export const CAMP_EMBER_DEPARTURE_YAW_RAD = Math.PI / 2;
 
 /** PSP plate / laterite / sandbag / olive / steel — never control-green. */
 export const CAMP_EMBER_COLORS = Object.freeze({
@@ -40,7 +43,7 @@ function campEmberAnchor(plan) {
 
 /**
  * Authored prop list in local pad frame: +x east, +z south (render z = -north).
- * Keep the rear-seat forward eye (+z toward gorge join) relatively open.
+ * The clear gate is authored along +z and rotated onto the eastbound launch heading at build.
  */
 export function campEmberFirebaseParts() {
   const parts = [];
@@ -59,12 +62,14 @@ export function campEmberFirebaseParts() {
   };
 
   // Dual PSP pads — ribbed by overlapping thin plates.
-  add("psp", CAMP_EMBER_COLORS.psp, 0, 0, 0.12, 26, 0.28, 26, 0);
-  add("psp", CAMP_EMBER_COLORS.psp, 0, 0, 0.18, 24, 0.12, 2.2, 0);
-  add("psp", CAMP_EMBER_COLORS.psp, 0, 0, 0.18, 2.2, 0.12, 24, 0);
-  add("psp", CAMP_EMBER_COLORS.psp, 0, -34, 0.12, 20, 0.26, 20, 0.15);
-  add("psp", CAMP_EMBER_COLORS.psp, 0, -34, 0.18, 18, 0.1, 1.8, 0.15);
-  add("laterite", CAMP_EMBER_COLORS.laterite, 0, -17, 0.08, 14, 0.16, 8, 0);
+  // Thin, terrain-seated plates: the simulation's skids contact the apron datum itself. The old
+  // 0.40 m visual slab swallowed the skids and amplified every terrain mismatch at cold open.
+  add("psp", CAMP_EMBER_COLORS.psp, 0, 0, -0.02, 26, 0.08, 26, 0);
+  add("psp", CAMP_EMBER_COLORS.psp, 0, 0, 0.026, 24, 0.01, 2.2, 0);
+  add("psp", CAMP_EMBER_COLORS.psp, 0, 0, 0.026, 2.2, 0.01, 24, 0);
+  add("psp", CAMP_EMBER_COLORS.psp, 0, -34, -0.015, 20, 0.07, 20, 0.15);
+  add("psp", CAMP_EMBER_COLORS.psp, 0, -34, 0.026, 18, 0.01, 1.8, 0.15);
+  add("laterite", CAMP_EMBER_COLORS.laterite, 0, -17, -0.01, 14, 0.06, 8, 0);
 
   // Sandbag berm ring — open toward gorge (+z / south approach stays lower).
   add("sandbag", CAMP_EMBER_COLORS.sandbag, -24, -8, 1.1, 3.2, 2.2, 42, 0);
@@ -129,7 +134,9 @@ function boxGeometryWithColor(THREE, part) {
     colors[index * 3 + 2] = part.color[2];
   }
   geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-  geometry.translate(0, 0.5, 0); // base-anchored
+  // Authored y values are centres (berm 1.1/2.2, tent 1.5/3, mast 8.5/17).
+  // The former base-anchor translation floated every prop by half its height and made the radio
+  // mast reach 25.5 m instead of 17 m. Keep the merged boxes on their authored centre planes.
   geometry.scale(part.widthM, part.heightM, part.depthM);
   if (part.yaw) geometry.rotateY(part.yaw);
   geometry.translate(part.x, part.y, part.z);
@@ -194,6 +201,7 @@ export function createCampEmberFirebase(THREE, plan) {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = "CAMP_EMBER_FIREBASE";
   mesh.position.set(anchor.eastM, anchor.groundY, -anchor.northM);
+  mesh.rotation.y = CAMP_EMBER_DEPARTURE_YAW_RAD;
   // One merged draw with real vertical mass: Camp Ember should sit on the basin under the same
   // cast-shadow policy as the other landmark silhouettes.
   mesh.castShadow = true;

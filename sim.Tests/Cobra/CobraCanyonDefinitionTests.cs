@@ -130,6 +130,29 @@ public class CobraCanyonDefinitionTests
     }
 
     [Fact]
+    public void CampEmberFirebaseApronIsLevelWithTheDepartureDatum()
+    {
+        CobraCanyonTerrainSurface terrain =
+            CobraCanyonDefinition.Create().CreateTerrainSurface();
+        (double EastOffsetM, double NorthOffsetM)[] offsets = {
+            (0.0, 0.0), (50.0, 0.0), (-50.0, 0.0),
+            (0.0, 50.0), (0.0, -50.0), (35.0, 35.0), (-35.0, -35.0)
+        };
+
+        foreach ((double eastOffsetM, double northOffsetM) in offsets) {
+            Assert.True(terrain.TrySample(
+                -6_775.0 + eastOffsetM,
+                -6_200.0 + northOffsetM,
+                out TerrainSample sample));
+            Assert.Equal(202.0, sample.HeightM, 9);
+            Assert.Equal(TerrainSurfaceKind.Land, sample.Kind);
+        }
+
+        Assert.True(terrain.TrySample(-6_775.0, -6_200.0, out TerrainSample centre));
+        Assert.InRange(centre.UpNormal.Y, 0.999_999, 1.000_001);
+    }
+
+    [Fact]
     public void CSharpNavigationAndCollisionAuthorityMatchesBrowserWorldJson()
     {
         CobraCanyonDefinition world = CobraCanyonDefinition.Create();
