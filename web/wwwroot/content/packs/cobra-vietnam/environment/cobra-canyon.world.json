@@ -1211,8 +1211,8 @@
       "priority": 1,
       "instancesByQuality": {
         "mobile": 114,
-        "balanced": 168,
-        "desktop": 252
+        "balanced": 504,
+        "desktop": 1008
       },
       "authority": {
         "role": "presentation-only",
@@ -1235,8 +1235,8 @@
       "priority": 1,
       "instancesByQuality": {
         "mobile": 48,
-        "balanced": 72,
-        "desktop": 150
+        "balanced": 216,
+        "desktop": 675
       },
       "authority": {
         "role": "presentation-only",
@@ -1259,8 +1259,8 @@
       "priority": 1,
       "instancesByQuality": {
         "mobile": 34,
-        "balanced": 66,
-        "desktop": 128
+        "balanced": 165,
+        "desktop": 384
       },
       "authority": {
         "role": "presentation-only",
@@ -1283,8 +1283,8 @@
       "priority": 2,
       "instancesByQuality": {
         "mobile": 92,
-        "balanced": 206,
-        "desktop": 352
+        "balanced": 618,
+        "desktop": 1760
       },
       "authority": {
         "role": "presentation-only",
@@ -1307,8 +1307,8 @@
       "priority": 2,
       "instancesByQuality": {
         "mobile": 92,
-        "balanced": 178,
-        "desktop": 352
+        "balanced": 534,
+        "desktop": 1760
       },
       "authority": {
         "role": "presentation-only",
@@ -1331,8 +1331,8 @@
       "priority": 2,
       "instancesByQuality": {
         "mobile": 20,
-        "balanced": 36,
-        "desktop": 64
+        "balanced": 54,
+        "desktop": 128
       },
       "authority": {
         "role": "presentation-only",
@@ -1355,8 +1355,8 @@
       "priority": 3,
       "instancesByQuality": {
         "mobile": 0,
-        "balanced": 48,
-        "desktop": 80
+        "balanced": 96,
+        "desktop": 200
       },
       "authority": {
         "role": "presentation-only",
@@ -1379,8 +1379,8 @@
       "priority": 3,
       "instancesByQuality": {
         "mobile": 0,
-        "balanced": 36,
-        "desktop": 60
+        "balanced": 90,
+        "desktop": 210
       },
       "authority": {
         "role": "presentation-only",
@@ -1403,8 +1403,8 @@
       "priority": 3,
       "instancesByQuality": {
         "mobile": 0,
-        "balanced": 32,
-        "desktop": 54
+        "balanced": 96,
+        "desktop": 216
       },
       "authority": {
         "role": "presentation-only",
@@ -1428,7 +1428,7 @@
       "instancesByQuality": {
         "mobile": 0,
         "balanced": 0,
-        "desktop": 42
+        "desktop": 336
       },
       "authority": {
         "role": "presentation-only",
@@ -1451,8 +1451,8 @@
       "priority": 3,
       "instancesByQuality": {
         "mobile": 0,
-        "balanced": 18,
-        "desktop": 36
+        "balanced": 27,
+        "desktop": 61
       },
       "authority": {
         "role": "presentation-only",
@@ -1476,7 +1476,7 @@
       "instancesByQuality": {
         "mobile": 0,
         "balanced": 0,
-        "desktop": 30
+        "desktop": 90
       },
       "authority": {
         "role": "presentation-only",
@@ -1729,7 +1729,7 @@
         ],
         "scaleM": {
           "width": 24,
-          "height": 6.0,
+          "height": 6,
           "depth": 14
         },
         "routeAffinity": [
@@ -2471,9 +2471,9 @@
       "maxLandmarkArchetypes": 11,
       "maxSetPieceCells": 10,
       "maxAmbientBatches": 10,
-      "maxAmbientInstances": 860,
+      "maxAmbientInstances": 2400,
       "maxDrawCalls": 36,
-      "maxShadowCasters": 96
+      "maxShadowCasters": 288
     },
     "desktop": {
       "maxTerrainRibbons": 3,
@@ -2484,9 +2484,9 @@
       "maxLandmarkArchetypes": 11,
       "maxSetPieceCells": 10,
       "maxAmbientBatches": 12,
-      "maxAmbientInstances": 1600,
+      "maxAmbientInstances": 6828,
       "maxDrawCalls": 52,
-      "maxShadowCasters": 256
+      "maxShadowCasters": 820
     }
   }
 }

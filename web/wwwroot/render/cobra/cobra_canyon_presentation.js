@@ -48,16 +48,22 @@ export const COBRA_CANYON_RENDER_BUDGETS = Object.freeze({
   }),
   balanced: Object.freeze({
     maxDrawCalls: 16,
-    maxInstances: 890,
-    maxTriangles: 75_000,
-    maxAssetInstances: 812,
+    maxInstances: 4_200,
+    maxTriangles: 380_000,
+    maxAssetInstances: 3_900,
     nearRingMaximumAglM: 260,
   }),
+  // DENSITY IS THE PICTURE. 1,330 ambient instances across a 6.9 km valley — jungle, village,
+  // paddy, rock and mist combined — is why the corridor read as empty hillsides with a few
+  // scattered trees. These are InstancedMeshes: one draw call per role regardless of count, so
+  // the real costs are vertex throughput, fill rate and shadow submissions, not draw calls.
+  // Build 312 production telemetry measured a locked 60 fps with view_ms ~1.2 and sim_ms ~3.4,
+  // i.e. a whole frame of headroom on desktop. Spend it on canopy.
   desktop: Object.freeze({
     maxDrawCalls: 16,
-    maxInstances: 1_440,
-    maxTriangles: 120_000,
-    maxAssetInstances: 1_330,
+    maxInstances: 9_600,
+    maxTriangles: 900_000,
+    maxAssetInstances: 9_000,
     nearRingMaximumAglM: 360,
   }),
 });
