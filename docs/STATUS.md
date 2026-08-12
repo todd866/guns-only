@@ -1,26 +1,23 @@
 # Current product and verification status
 
-Updated: 2026-08-11
-Production: Build 311, revision `408628ec85873b1e54a1fd664a1515de470ecdd0`, deployment
-`dpl_HEAQgifuMK5BXA1GMyGcXpV6kKa8` (verified live via /api/build-info 2026-08-12). Builds
+Updated: 2026-08-12
+Production: Build 313, revision `d6cf83ef5883bf26951b29e85859fee4a3d1bb0d0`, deployment
+`dpl_ride313` (verified live via /api/build-info 2026-08-12). Builds 312 (Cobra contact
+envelope) and 313 (Camp Ember firebase, ramp Cobras, bird swap) both shipped this day. Builds
 253-298 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
-Promoted with Build 311: Builds 308 (consolidation: bounded long-range terrain marches,
+Promoted with Build 311 and still live: Builds 308 (consolidation: bounded long-range terrain marches,
 Auto-GCAS reductions, flyby acoustics, tiered cast shadows, frame attribution), 309 (Top Gun ACM
 preview) and 310 (rated-arena Multiplayer preview) went live as part of the Build 311
 promotion. Top Gun and Multiplayer remain preview-only and fail closed unless `?preview=1` is
 explicitly acknowledged; their promotion to production routes still requires representative
 human ACM and multiplayer player-path acceptance.
-Next candidate: Build 313 (branch `feature/camp-ember-firebase`) — Camp Ember as a real
-firebase (`docs/superpowers/specs/2026-08-12-camp-ember-real-firebase-design.md`, photo dossier
-`docs/art-direction/vietnam-fob-battlefield-reference.md`): berm ring, rosettes, laterite scar,
-tracks, bunker mounds, and THREE Cobras on the ramp with an automatic bird swap when the player
-lands crippled inside the FOB (pool exhausted → FOB COMBAT INEFFECTIVE terminal). New
-static-scene flicker probe (`tools/cobra-scenery-gate/flicker.mjs`) plus polygonOffset decal
-bias on the merged firebase — the owner-reported shimmer is motion/GPU-dependent and headless
-probes cannot prove it fixed; owner flight remains the flicker gate. Builds 308-310 preview
-work went live with the Build 311 promotion; Top Gun and Multiplayer remain fail-closed
-previews behind `?preview=1`. Build 312 (contact envelope) is live.
+Next candidate: Build 314 (branch `feature/ride-lap-timing`) — Weekend Ride becomes a game
+(`docs/superpowers/specs/2026-08-12-weekend-ride-lap-timing-design.md`): the lap time now
+survives the finish line, four sector splits come from gates the circuit was already firing,
+a personal best refuses any lap ridden off-track or crashed, and a live delta chases that best
+at the same point on the circuit. The best persists across sessions and seeds the sim on boot,
+failing safe through every storage failure.
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
 evidence for the build and commit they name, but they do not override this page or the executable
@@ -50,8 +47,8 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | F9F-2 Panther off Essex (`korea-panther`) | **quarantined** | Preview acknowledgement only | Build 238 ownship-only kernel flies the production terrain catapult/route/return/groove to a physical W2 trap (100/100 focused); packaged route, touch-RTB, HUD, and barrier contracts passed silent-browser acceptance | Complete representative human desktop/touch flights and historical/presentation acceptance before any promotion |
 | MIDGE-03 Facility Nine (`indoor`) | **quarantined** | `/indoor/` preview acknowledgement | Candidate UI now enforces doctrine-safe controls and blocks premature return | Re-drive the default stealth route and representative touch/keyboard paths |
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
-| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned ground war, tip/hold win/lose, M134 + Camp Ember rearm, Tab/F gunner. Build 301: land spur Camp Ember FOB, airborne soft gates, denser Iron Bell destroyables. Build 306: limited SCAS only. Build 307: stronger hover TQ residual, cruise weathervane, terrain wind + yaw/wind telem. Build 308 candidate adds tier-bounded cast shadows and real terrain shadow receivers. Build 311: body-aligned HUD eye + heading-relative hover cue, collective hub moment + split torque yaw + loaded gust response, flattened rendered spawn apron + 74-part authored Camp Ember firebase. Build 312: contact envelope with gear-damage/rollover/spin/water tiers, cause cards, touchdown telemetry, autorotation audit. Build 313 candidate: FSB-read Camp Ember (dossier-derived), three ramp Cobras + bird swap, FOB INEFFECTIVE terminal, flicker probe + decal bias | Owner-reported flicker is motion/GPU-dependent — owner flight is the flicker gate. Next: AA threat + subsystem damage (Build 314). Longer arc: DCS-BS1-grade flight dynamics |
-| Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load, lappable circuit from Build 264+. Build 267 adds ride telemetry (speed/gear/lean/lap/frame). Build 308 candidate adds tiered shadows, sky-derived IBL, and horizon/far-plane corrections | Fresh representative human lap on the fixed artifact; deeper instrumentation still provisional |
+| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned ground war, tip/hold win/lose, M134 + Camp Ember rearm, Tab/F gunner. Build 301: land spur Camp Ember FOB, airborne soft gates, denser Iron Bell destroyables. Build 306: limited SCAS only. Build 307: stronger hover TQ residual, cruise weathervane, terrain wind + yaw/wind telem. Build 308 candidate adds tier-bounded cast shadows and real terrain shadow receivers. Build 311: body-aligned HUD eye + heading-relative hover cue, collective hub moment + split torque yaw + loaded gust response, flattened rendered spawn apron + 74-part authored Camp Ember firebase. Build 312: contact envelope with gear-damage/rollover/spin/water tiers, cause cards, touchdown telemetry, autorotation audit. Build 313: FSB-read Camp Ember (dossier-derived), three ramp Cobras + bird swap, FOB INEFFECTIVE terminal, flicker probe + decal bias | Owner flight is the flicker gate (Build 312 telemetry proved the shimmer is spatial z-fighting at 60 fps, not performance; 313 carries the decal fix). The mission itself is NOT yet a game: conquest points/tickets/map are designed and planned, not built. Longer arc: DCS-BS1-grade flight dynamics |
+| Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load, lappable circuit from Build 264+. Build 267 adds ride telemetry (speed/gear/lean/lap/frame). Build 308 adds tiered shadows, sky-derived IBL, and horizon/far-plane corrections. Build 314 candidate makes it a game: lap/last/best on the helmet HUD, four sector splits, a live delta to your best, an off-track lap refused as a record, and a best that persists across sessions | Owner ride on Build 314: is beating your own best worth trying for? Ghost bike deliberately cut from v1 |
 | Top Gun (`top-gun`) | **preview** | Preview acknowledgement only | Build 309 candidate automation, carried unchanged into Build 310: Tomcat AIM-9 path, MiG-28 boot, gun firing, R fox-two browser bind, coarse Tomcat wing-sweep span | Complete green release gate and representative human ACM acceptance flight |
 
 ## Research-only packages
@@ -62,8 +59,10 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Live production is Build 307 (`fb1f804d6565862e265523cfdc3305dac5104523`, `dpl_2yEDtXXaTzr4oMmSSQpueQjPPbG8`). Shipped from
-  PR #56; Verify green after one documented re-run of flaky `boot does not stutter` smoke.
+- Live production is Build 313, shipped from PR #63 with both CI contexts green. Local gate
+  runs on a loaded workstation produce false browser-smoke timeouts (2026-08-12: four smokes
+  timed out under an unrelated 200%+ CPU load and all passed in isolation and on CI); CI on
+  clean runners is the authoritative check.
   Do not treat that gate as a frame-rate measurement.
 - A candidate is releasable only when its exact pushed SHA has a complete green gate, or the
   owner accepts a documented flaky-gate exception with live `/api/build-info` verification.
