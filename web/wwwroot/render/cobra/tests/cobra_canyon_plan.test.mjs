@@ -131,9 +131,12 @@ test("keeps authority content invariant and sheds only ambient presentation by t
   assert.ok(mobile.counts.ambientBatches < desktop.counts.ambientBatches);
   assert.ok(mobile.counts.ambientInstances < balanced.counts.ambientInstances);
   assert.ok(balanced.counts.ambientInstances < desktop.counts.ambientInstances);
+  // Pinned to the authored population so a density change is a deliberate edit, never a
+  // silent drift. Raised 2026-08-13: 1,600 instances across a 6.9 km valley is what made the
+  // corridor read as bare hillsides. Mobile is unchanged — that tier is not the target.
   assert.deepEqual(
     [mobile.counts.ambientInstances, balanced.counts.ambientInstances, desktop.counts.ambientInstances],
-    [400, 860, 1600],
+    [400, 2400, 6828],
   );
   assert.throws(
     () => planCobraCanyonWorld(world, { qualityTier: "cinematic" }),
