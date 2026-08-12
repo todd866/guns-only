@@ -13,7 +13,7 @@ preview) and 310 (rated-arena Multiplayer preview) went live as part of the Buil
 promotion. Top Gun and Multiplayer remain preview-only and fail closed unless `?preview=1` is
 explicitly acknowledged; their promotion to production routes still requires representative
 human ACM and multiplayer player-path acceptance.
-Next candidate: Build 316 (branch `feature/structure-materials`) — the authored structures
+Next candidate: Build 317 (branch `feature/structure-materials`) — the authored structures
 stop being cardboard. Bridge deck, piers, roads, hero cells and landmarks now share a
 world-position procedural grain/wear/streak chunk reusing the terrain's precision-safe hash,
 so the biggest object on a nap-of-the-earth frame is no longer one flat fill sitting on a
