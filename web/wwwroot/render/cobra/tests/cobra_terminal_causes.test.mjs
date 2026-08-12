@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { cobraTerminalCauseCopy } from "../cobra_terminal_causes.js";
+import {
+  cobraMissionStatusCopy,
+  cobraTerminalCauseCopy,
+} from "../cobra_terminal_causes.js";
 
 test("each contact failure cause maps to instrument-true card copy", () => {
   assert.deepEqual(cobraTerminalCauseCopy("hard-impact"), {
@@ -24,6 +27,15 @@ test("each contact failure cause maps to instrument-true card copy", () => {
     title: "INTO THE RIVER",
     detail: "Skid helicopters do not land on water.",
   });
+});
+
+test("pool exhaustion gets its own mission card; other statuses fall through", () => {
+  assert.deepEqual(cobraMissionStatusCopy("fob-combat-ineffective"), {
+    title: "FOB COMBAT INEFFECTIVE",
+    detail: "Every Cobra on the ramp is bent or gone. Camp Ember has nothing left to fly.",
+  });
+  assert.equal(cobraMissionStatusCopy("victory"), null);
+  assert.equal(cobraMissionStatusCopy(undefined), null);
 });
 
 test("none, unknown, and absent causes yield null so the generic card stands", () => {

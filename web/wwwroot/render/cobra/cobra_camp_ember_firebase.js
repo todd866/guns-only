@@ -5,7 +5,7 @@
  * Replaces the old same-color AABB stack + green ground-war control disc.
  */
 
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=312";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=313";
 
 export const CAMP_EMBER_LANDMARK_ID = "landmark.cobra-canyon.camp-ember.v1";
 export const CAMP_EMBER_FIREBASE_SCHEMA = "guns-only.cobra-camp-ember-firebase.v1";
@@ -203,6 +203,115 @@ export function campEmberFirebaseParts() {
   add("radio-crossbar", "steel", "box", CAMP_EMBER_COLORS.rust,
     30, -32, 15.05, 2.5, 0.22, 0.22, 0.45);
 
+  // ---- The FSB read (docs/art-direction/vietnam-fob-battlefield-reference.md) ----
+  // Local frame: +x = north, +z = east (the group rotates by the departure yaw).
+  const addFan = (id, family, color, x, z, centreY, outline) => {
+    parts.push({
+      id, family, shape: "fan", color, x, z, centreY,
+      widthM: 1, heightM: 0.01, depthM: 1, yaw: 0, surface: true, outline,
+    });
+  };
+
+  // The scar is the base (Granite): an irregular laterite fan under everything, kept
+  // inside the 58 m flat contact apron so presentation never floats over the blend ring.
+  const scarOutline = [
+    [52, 4], [44, 22], [30, 40], [10, 50], [-12, 52], [-30, 43],
+    [-45, 27], [-53, 8], [-50, -12], [-40, -30], [-24, -44], [-4, -52],
+    [18, -49], [36, -37], [48, -18],
+  ];
+  // Brighter than the deep laterite so the scar survives the aerial haze — the scar IS
+  // the base from the air (Granite), not an accent.
+  addFan("scar-apron", "laterite", [0.55, 0.36, 0.22], 0, 0, -0.030, scarOutline);
+
+  // Berm ring with the eastbound departure mouth left open (Sedgwick).
+  let bermIndex = 0;
+  for (let i = 0; i < 22; i++) {
+    const angle = (i / 22) * Math.PI * 2;
+    const x = 41 * Math.cos(angle);
+    const z = 41 * Math.sin(angle);
+    if (z > 30 && Math.abs(x) < 14) continue; // departure mouth
+    add(`berm-${bermIndex++}`, "sandbag", "revetment",
+      i % 2 ? CAMP_EMBER_COLORS.sandbagShade : CAMP_EMBER_COLORS.lateriteDark,
+      x, z, 0.6, 3.2, 1.2, 11.5, -angle);
+  }
+
+  // Inner ring road + track spaghetti: worn laterite surfaces, never elevated.
+  for (let i = 0; i < 12; i++) {
+    const angle = (i / 12) * Math.PI * 2 + 0.13;
+    add(`ring-road-${i}`, "laterite", "box", CAMP_EMBER_COLORS.laterite,
+      33 * Math.cos(angle), 33 * Math.sin(angle), -0.018, 4.2, 0.012, 17.5, -angle, true);
+  }
+  add("track-0", "laterite", "box", CAMP_EMBER_COLORS.laterite,
+    0, 33, -0.013, 2.4, 0.012, 38, 0, true);
+  add("track-1", "laterite", "box", CAMP_EMBER_COLORS.lateriteDark,
+    14, -20, -0.013, 2.0, 0.012, 30, 0.65, true);
+  add("track-2", "laterite", "box", CAMP_EMBER_COLORS.laterite,
+    -22, 16, -0.013, 2.0, 0.012, 27, -0.85, true);
+  add("track-3", "laterite", "box", CAMP_EMBER_COLORS.lateriteDark,
+    -12, -30, -0.013, 1.8, 0.012, 24, 0.35, true);
+
+  // Two rosette positions: pit disc + radiating sandbag lobes (the aerial signature).
+  const rosettes = [[-38, 8], [36, 14]];
+  rosettes.forEach(([rx, rz], rosetteIndex) => {
+    const pitOutline = [];
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2;
+      pitOutline.push([4.6 * Math.cos(angle), 4.6 * Math.sin(angle)]);
+    }
+    addFan(`rosette-${rosetteIndex}-pit`, "laterite", CAMP_EMBER_COLORS.lateriteDark,
+      rx, rz, -0.026, pitOutline);
+    for (let lobe = 0; lobe < 6; lobe++) {
+      const angle = (lobe / 6) * Math.PI * 2 + rosetteIndex * 0.4;
+      add(`rosette-${rosetteIndex}-lobe-${lobe}`, "sandbag", "revetment",
+        lobe % 2 ? CAMP_EMBER_COLORS.sandbag : CAMP_EMBER_COLORS.sandbagShade,
+        rx + 5.6 * Math.cos(angle), rz + 5.6 * Math.sin(angle),
+        0.5, 2.2, 1.0, 4.4, -angle + Math.PI / 2);
+    }
+  });
+
+  // Burn scars (Granite's black blobs).
+  const burnOutline = (radiusM) => {
+    const outline = [];
+    for (let i = 0; i < 9; i++) {
+      const angle = (i / 9) * Math.PI * 2;
+      const wobble = 1 + 0.35 * Math.sin(angle * 3 + radiusM);
+      outline.push([radiusM * wobble * Math.cos(angle), radiusM * wobble * Math.sin(angle)]);
+    }
+    return outline;
+  };
+  addFan("burn-0", "burn", [0.09, 0.08, 0.07], 42, -18, -0.024, burnOutline(5.5));
+  addFan("burn-1", "burn", [0.11, 0.10, 0.08], -16, 43, -0.024, burnOutline(4.5));
+
+  // Bunker mounds on the berm's inner face: sandbag sides, glinting PSP roofs (A Shau).
+  const bunkers = [[26, -24, 0.3], [-27, -16, -0.2], [15, -39, 0.1]];
+  bunkers.forEach(([bx, bz, byaw], bunkerIndex) => {
+    add(`bunker-${bunkerIndex}`, "bunker", "box", CAMP_EMBER_COLORS.sandbagShade,
+      bx, bz, 0.7, 4.6, 1.4, 3.6, byaw);
+    add(`bunker-${bunkerIndex}-roof`, "bunker", "box", CAMP_EMBER_COLORS.pspLight,
+      bx, bz, 1.5, 5.2, 0.18, 4.2, byaw);
+  });
+
+  // Defoliated fringe accents: bare gray-brown poles where the jungle used to be.
+  const deadTrees = [[50, -6], [46, 20], [-49, -12], [-44, 26], [8, -50], [-30, -40]];
+  deadTrees.forEach(([tx, tz], treeIndex) => {
+    add(`deadtree-${treeIndex}`, "deadtree", "cylinder", [0.30, 0.27, 0.22],
+      tx, tz, 3.4, 0.4, 6.8, 0.4, 0);
+  });
+
+  // Bird revetments at the sim spare stations (CobraAirframePool: north ±30, east +6).
+  // Open toward +z (east) so the spares taxi out the departure mouth. The station id part
+  // is the parking surface itself; walls carry sub-ids.
+  for (const [stationIndex, stationX] of [30, -30].entries()) {
+    add(`bird-revetment-${stationIndex}`, "laterite", "box", CAMP_EMBER_COLORS.laterite,
+      stationX, 6, -0.020, 11, 0.014, 12, 0, true);
+    add(`bird-revetment-${stationIndex}-back`, "sandbag", "revetment",
+      CAMP_EMBER_COLORS.sandbagShade, stationX, -0.8, 0.65, 9.5, 1.3, 2.4, Math.PI / 2);
+    add(`bird-revetment-${stationIndex}-north`, "sandbag", "revetment",
+      CAMP_EMBER_COLORS.sandbag, stationX + 5.2, 6, 0.65, 2.4, 1.3, 11, 0);
+    add(`bird-revetment-${stationIndex}-south`, "sandbag", "revetment",
+      CAMP_EMBER_COLORS.sandbag, stationX - 5.2, 6, 0.65, 2.4, 1.3, 11, 0);
+  }
+
   return parts;
 }
 
@@ -248,11 +357,27 @@ function revetmentGeometry(THREE) {
   return geometry;
 }
 
+function fanGeometry(THREE, outline) {
+  // A flat, upward-facing triangle fan over an authored irregular outline, in metres.
+  // Surface parts only: the caller keeps these at or below the terrain-seated plates.
+  const positions = new Float32Array(outline.length * 9);
+  for (let index = 0; index < outline.length; index++) {
+    const [ax, az] = outline[index];
+    const [bx, bz] = outline[(index + 1) % outline.length];
+    positions.set([0, 0, 0, ax, 0, az, bx, 0, bz], index * 9);
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 function partGeometryWithColor(THREE, part) {
   let geometry;
   if (part.shape === "tent") geometry = triangularPrismGeometry(THREE);
   else if (part.shape === "revetment") geometry = revetmentGeometry(THREE);
   else if (part.shape === "cylinder") geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 8, 1);
+  else if (part.shape === "fan") geometry = fanGeometry(THREE, part.outline);
   else geometry = new THREE.BoxGeometry(1, 1, 1);
   if (typeof geometry.toNonIndexed === "function") {
     if (geometry.index) {
@@ -342,6 +467,14 @@ export function createCampEmberFirebase(THREE, plan) {
     roughness: 0.92,
     metalness: 0.06,
     flatShading: true,
+    // The terrain-seated plates live millimetres from the rendered basin; at a 32 km far
+    // plane a real GPU's depth buffer cannot separate them and the whole pad shimmers
+    // under a moving eye (owner: "super flickery"). The standard decal fix: bias the
+    // merged firebase toward the camera in depth. SwiftShader-based probes mask this
+    // artifact, so do not "prove" it fixed with a headless capture alone.
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -2,
   });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = "CAMP_EMBER_FIREBASE";

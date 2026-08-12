@@ -1,67 +1,74 @@
-import * as THREE from "../vendor/three.module.js?v=312";
+import * as THREE from "../vendor/three.module.js?v=313";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=312";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=312";
-import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=312";
+} from "../render/cobra/cobra_canyon_plan.js?v=313";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=313";
+import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=313";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=312";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=312";
-import { createHud } from "../hud.js?v=312";
+} from "../render/cobra/cobra_canyon_tour.js?v=313";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=313";
+import { createHud } from "../hud.js?v=313";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=312";
+} from "../render/cobra/cobra_hud_adapter.js?v=313";
 import {
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=312";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=312";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=313";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=313";
 import {
   emberActObjectiveOverlay,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=312";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=312";
+} from "../render/cobra/cobra_ember_path.js?v=313";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=313";
 import {
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=312";
+} from "../render/audio/flight_audio.js?v=313";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=312";
+} from "../render/cobra/cobra_control_profile.js?v=313";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=312";
+} from "../render/cobra/cobra_pilot_input.js?v=313";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=312";
+} from "../render/cobra/ah1g_presence.js?v=313";
 import {
   lookOffsetFromAngles,
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
   togglePadlockSelection,
-} from "../render/cobra/cobra_camera_bias.js?v=312";
-import { cobraTerminalCauseCopy } from "../render/cobra/cobra_terminal_causes.js?v=312";
+} from "../render/cobra/cobra_camera_bias.js?v=313";
+import {
+  cobraMissionStatusCopy,
+  cobraTerminalCauseCopy,
+} from "../render/cobra/cobra_terminal_causes.js?v=313";
+import {
+  createParkedCobra,
+  placeParkedCobra,
+} from "../render/cobra/cobra_parked_airframe.js?v=313";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=312";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=312";
+} from "../render/visual/shadow_stabilizer.js?v=313";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=313";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=312";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=312";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=312";
+} from "../render/cobra/cobra_mission_exit.js?v=313";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=313";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=313";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -279,7 +286,7 @@ window.addEventListener("keydown", armAudioFromGesture, { capture: true });
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=312";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=313";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -739,6 +746,12 @@ function restartRoute() {
   routeSampler = createCobraCanyonRouteSampler(activeRoute);
   routeDistanceM = ROUTE_ENTRY_OFFSETS_M[activeRoute.id] ?? 0;
   routeComplete = false;
+  // A restart is a fresh ramp: last mission's wrecks must not survive into it. The pool sync
+  // prunes by live slot id, but it returns early on any frame without a pool, so a stale
+  // wreck could otherwise linger in the scene.
+  for (const [, parked] of parkedPresences) scene.remove(parked.group);
+  parkedPresences.clear();
+  lastAirframeSwaps = 0;
   placeCameraOnRoute();
   updateRouteCard();
   lastTargetKey = null;
@@ -758,6 +771,39 @@ function ensureAh1gPresence() {
   ah1gPresence = createAh1gPresence(THREE);
   scene.add(ah1gPresence.group);
   return ah1gPresence;
+}
+
+// The ramp: every non-flying airframe in the pool renders as a parked presence at its
+// slot pose. A crippled bird lists visibly on its bent gear; a destroyed one lists harder.
+const parkedPresences = new Map();
+let lastAirframeSwaps = 0;
+function syncParkedAirframes() {
+  const swaps = authorityState?.airframe_swaps ?? 0;
+  if (swaps > lastAirframeSwaps && bridge) {
+    // The radio-shaped cue: the swap already happened sim-side; the page just says so.
+    setStatus("BIRD SWAP · SPARE'S YOURS — THE BENT ONE STAYS ON THE RAMP", "ready");
+  }
+  lastAirframeSwaps = swaps;
+  const pool = authorityState?.airframe_pool;
+  if (!Array.isArray(pool)) return;
+  const liveIds = new Set();
+  for (const slot of pool) {
+    if (!slot || slot.state === "player-flying") continue;
+    liveIds.add(slot.id);
+    let presence = parkedPresences.get(slot.id);
+    if (!presence) {
+      presence = createParkedCobra(THREE);
+      scene.add(presence.group);
+      parkedPresences.set(slot.id, presence);
+    }
+    const listRad = slot.state === "crippled" ? 0.26 : slot.state === "destroyed" ? 0.6 : 0;
+    placeParkedCobra(presence, slot, listRad);
+  }
+  for (const [id, presence] of parkedPresences) {
+    if (liveIds.has(id)) continue;
+    scene.remove(presence.group);
+    parkedPresences.delete(id);
+  }
 }
 
 function rebuildPresentation() {
@@ -964,6 +1010,7 @@ function updateManual(deltaSeconds) {
       sampleAuthorityState(lastTimeMs);
     }
     syncAuthorityCamera();
+    syncParkedAirframes();
   }
   const bounds = plan.boundsLocalM;
   camera.position.x = THREE.MathUtils.clamp(
@@ -1082,6 +1129,10 @@ function showMissionDebrief(war, status) {
   } else if (status === "terrain-unavailable") {
     title = "OFF THE MAP";
     reason = "You left surveyed terrain; the sortie cannot continue.";
+  } else if (cobraMissionStatusCopy(status)) {
+    const missionCopy = cobraMissionStatusCopy(status);
+    title = missionCopy.title;
+    reason = missionCopy.detail;
   } else {
     title = "SORTIE ENDED";
     reason = `Sortie ended: ${status.replaceAll("-", " ")}.`;
@@ -1089,7 +1140,7 @@ function showMissionDebrief(war, status) {
   setText(debriefTitle, title);
   setText(
     debriefBody,
-    `${reason} Hostiles down ${war?.debrief?.hostile_kills ?? 0} · rearms ${war?.debrief?.fob_rearms ?? 0} · ${(war?.debrief?.elapsed_s ?? 0).toFixed(0)}s airborne. R restarts.`,
+    `${reason} Hostiles down ${war?.debrief?.hostile_kills ?? 0} · rearms ${war?.debrief?.fob_rearms ?? 0} · bird swaps ${authorityState?.airframe_swaps ?? 0} · ${(war?.debrief?.elapsed_s ?? 0).toFixed(0)}s airborne. R restarts.`,
   );
   debrief.hidden = false;
   setStatus(

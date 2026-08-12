@@ -351,4 +351,154 @@ public class CobraMissionRuntimeTests
         Assert.Contains("does not model surveyed geography",
             first.Diagnostics.FidelityDisclosure, StringComparison.Ordinal);
     }
+
+    static CobraMissionRuntime CreateRealTerrainRuntime(out double padSurfaceHeightM)
+    {
+        CobraCanyonDefinition world = CobraCanyonDefinition.Create();
+        CobraCanyonTerrainSurface terrain = world.CreateTerrainSurface();
+        Assert.True(terrain.TrySample(-6_775.0, -6_200.0, out TerrainSample pad));
+        padSurfaceHeightM = pad.HeightM;
+        return new CobraMissionRuntime(world, terrain, CobraCanyonRouteChoice.RiverGorge);
+    }
+
+    /// <summary>
+    /// Climb straight up off the pad, chop the collective, arrive above the gear's design
+    /// sink: a deterministic gear-damaging (never hard-impact) cycle flown purely through
+    /// runtime controls. Returns once the aircraft reads stable surface contact again.
+    /// </summary>
+    static void FlyGearDamagingPadCycle(CobraMissionRuntime runtime)
+    {
+        double trim = runtime.Cobra.EstimateHoverCollective(
+            runtime.Cobra.State.GrossMassKg,
+            CobraMissionRuntime.DefaultAirDensityKgM3);
+        // Climb only ~1.3 m before the chop: a free drop from there arrives in the gear-damage
+        // band (3.0-6.5 m/s), never at the hard-impact kill.
+        double startAltitudeM = runtime.Cobra.State.PositionWorldM.Y;
+        for (int tick = 0;
+            tick < 1800
+                && runtime.Cobra.State.PositionWorldM.Y < startAltitudeM + 1.35
+                && runtime.Status == CobraMissionStatus.Active;
+            tick++)
+            runtime.Advance(new VerticalLiftPilotCommand(
+                Math.Min(1.0, trim + 0.10), 0.0, 0.0, 0.0));
+        for (int tick = 0; tick < 900 && runtime.Status == CobraMissionStatus.Active; tick++)
+        {
+            bool grounded = runtime.Cobra.Observation.Contact.Kind
+                is VehicleContactKind.SurfaceContact
+                or VehicleContactKind.StableSurfaceContact;
+            if (grounded && runtime.Cobra.GearDamaged) break;
+            runtime.Advance(new VerticalLiftPilotCommand(0.05, 0.0, 0.0, 0.0));
+        }
+        for (int tick = 0; tick < 360 && runtime.Status == CobraMissionStatus.Active; tick++)
+        {
+            if (runtime.Cobra.Observation.Contact.Kind
+                == VehicleContactKind.StableSurfaceContact) break;
+            runtime.Advance(new VerticalLiftPilotCommand(0.05, 0.0, 0.0, 0.0));
+        }
+        if (runtime.Status == CobraMissionStatus.Active)
+            runtime.Advance(new VerticalLiftPilotCommand(0.05, 0.0, 0.0, 0.0));
+    }
+
+    [Fact]
+    public void AirframePoolStartsWithThreeBirdsInsideTheFob()
+    {
+        CobraMissionRuntime runtime = CreateRealTerrainRuntime(out _);
+
+        Assert.Equal(3, runtime.AirframePool.Count);
+        Assert.Equal(1, runtime.AirframePool.Count(
+            slot => slot.State == CobraAirframeState.PlayerFlying));
+        Assert.Equal(2, runtime.AirframePool.Count(
+            slot => slot.State == CobraAirframeState.Ready));
+        foreach (CobraAirframeSlot slot in runtime.AirframePool)
+        {
+            if (slot.State != CobraAirframeState.Ready) continue;
+            double eastDeltaM = slot.ParkedPositionWorldM.X - (-6_775.0);
+            double northDeltaM = slot.ParkedPositionWorldM.Z - (-6_200.0);
+            double distanceM = Math.Sqrt(
+                eastDeltaM * eastDeltaM + northDeltaM * northDeltaM);
+            // Inside the level apron, clear of the spawn pad's safety footprint.
+            Assert.InRange(distanceM, 15.0, 58.0);
+        }
+    }
+
+    [Fact]
+    public void CrippledBirdOnThePadSwapsIntoAReadySpare()
+    {
+        CobraMissionRuntime runtime = CreateRealTerrainRuntime(out _);
+        Vec3D originalSpawn = runtime.Cobra.State.PositionWorldM;
+
+        FlyGearDamagingPadCycle(runtime);
+
+        Assert.Equal(CobraMissionStatus.Active, runtime.Status);
+        Assert.Equal(1, runtime.AirframeSwaps);
+        Assert.False(runtime.Cobra.GearDamaged,
+            "After the swap the player must be flying a healthy airframe.");
+        CobraAirframeSlot flying = Assert.Single(
+            runtime.AirframePool, slot => slot.State == CobraAirframeState.PlayerFlying);
+        CobraAirframeSlot crippled = Assert.Single(
+            runtime.AirframePool, slot => slot.State == CobraAirframeState.Crippled);
+        Assert.Equal(flying.ParkedPositionWorldM.X, runtime.Cobra.State.PositionWorldM.X, 3);
+        Assert.Equal(flying.ParkedPositionWorldM.Z, runtime.Cobra.State.PositionWorldM.Z, 3);
+        double crippledDriftM = Math.Sqrt(
+            Math.Pow(crippled.ParkedPositionWorldM.X - originalSpawn.X, 2.0)
+            + Math.Pow(crippled.ParkedPositionWorldM.Z - originalSpawn.Z, 2.0));
+        Assert.True(crippledDriftM < 60.0,
+            $"The crippled bird should rest where it landed, {crippledDriftM:F0} m off.");
+    }
+
+    [Fact]
+    public void WreckingOnThePadTakesASpareInsteadOfEndingTheSortie()
+    {
+        CobraMissionRuntime runtime = CreateRealTerrainRuntime(out _);
+        double trim = runtime.Cobra.EstimateHoverCollective(
+            runtime.Cobra.State.GrossMassKg,
+            CobraMissionRuntime.DefaultAirDensityKgM3);
+        double startAltitudeM = runtime.Cobra.State.PositionWorldM.Y;
+
+        // Climb high enough that a dead-collective drop arrives ABOVE the hard-impact limit,
+        // then ride it into the pad: a genuine wreck, inside the FOB.
+        for (int tick = 0;
+            tick < 3600
+                && runtime.Cobra.State.PositionWorldM.Y < startAltitudeM + 12.0
+                && runtime.Status == CobraMissionStatus.Active;
+            tick++)
+            runtime.Advance(new VerticalLiftPilotCommand(
+                Math.Min(1.0, trim + 0.25), 0.0, 0.0, 0.0));
+        for (int tick = 0; tick < 1800 && runtime.Status == CobraMissionStatus.Active; tick++)
+        {
+            runtime.Advance(new VerticalLiftPilotCommand(0.0, 0.0, 0.0, 0.0));
+            if (runtime.AirframeSwaps > 0) break;
+        }
+
+        Assert.Equal(CobraMissionStatus.Active, runtime.Status);
+        Assert.Equal(1, runtime.AirframeSwaps);
+        Assert.True(runtime.Cobra.State.Flyable, "The spare must be a healthy airframe.");
+        CobraAirframeSlot wreck = Assert.Single(
+            runtime.AirframePool,
+            slot => slot.State is CobraAirframeState.Destroyed or CobraAirframeState.Crippled);
+        CobraAirframeSlot flying = Assert.Single(
+            runtime.AirframePool, slot => slot.State == CobraAirframeState.PlayerFlying);
+        double gapM = Math.Sqrt(
+            Math.Pow(wreck.ParkedPositionWorldM.X - flying.ParkedPositionWorldM.X, 2.0)
+            + Math.Pow(wreck.ParkedPositionWorldM.Z - flying.ParkedPositionWorldM.Z, 2.0));
+        Assert.True(gapM >= CobraAirframePool.WreckClearanceFromStationM - 0.01,
+            $"The wreck must rest clear of the spare's station: {gapM:F1} m.");
+    }
+
+    [Fact]
+    public void ExhaustingTheAirframePoolEndsTheMission()
+    {
+        CobraMissionRuntime runtime = CreateRealTerrainRuntime(out _);
+
+        FlyGearDamagingPadCycle(runtime);
+        Assert.Equal(1, runtime.AirframeSwaps);
+        FlyGearDamagingPadCycle(runtime);
+        Assert.Equal(2, runtime.AirframeSwaps);
+        FlyGearDamagingPadCycle(runtime);
+
+        Assert.Equal(2, runtime.AirframeSwaps);
+        Assert.Equal(CobraMissionStatus.FobCombatIneffective, runtime.Status);
+        Assert.DoesNotContain(
+            runtime.AirframePool, slot => slot.State == CobraAirframeState.Ready);
+    }
 }

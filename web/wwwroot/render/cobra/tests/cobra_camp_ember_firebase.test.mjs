@@ -67,6 +67,61 @@ test("Camp Ember firebase parts cover BF:V families without control-green", () =
   "sandbags must be low modular revetments, not giant boxes");
 });
 
+test("the firebase reads as a real FSB: scar, berm ring, rosettes, tracks, burns, bird revetments", () => {
+  const parts = campEmberFirebaseParts();
+  const byId = new Map(parts.map((part) => [part.id, part]));
+
+  // The scar is the base (Granite): an irregular laterite fan under everything, inside
+  // the 58 m flat contact apron so presentation never floats above the blend ring.
+  const scar = byId.get("scar-apron");
+  assert.ok(scar, "the laterite scar apron is the ground truth of the base");
+  assert.equal(scar.shape, "fan");
+  assert.ok(scar.surface === true);
+  assert.ok(Array.isArray(scar.outline) && scar.outline.length >= 12,
+    "the scar outline must be irregular, not a disc");
+  for (const [x, z] of scar.outline) {
+    assert.ok(Math.hypot(x, z) <= 56.5, `scar vertex ${x},${z} escapes the flat apron`);
+  }
+
+  // Berm ring with a gap at the eastbound departure mouth (local +z = east).
+  const berm = parts.filter((part) => part.id.startsWith("berm-"));
+  assert.ok(berm.length >= 12, `a berm ring needs segments, got ${berm.length}`);
+  assert.ok(berm.every((part) => part.shape === "revetment"));
+  assert.ok(!berm.some((part) =>
+    part.z > 30 && Math.abs(part.x) < 12),
+    "the departure mouth through the berm must stay open");
+
+  // Two rosette positions (the FSB signature from the air): pit disc + radiating lobes.
+  for (const rosette of ["rosette-0", "rosette-1"]) {
+    const pit = byId.get(`${rosette}-pit`);
+    assert.ok(pit && pit.surface === true, `${rosette} needs its pit disc`);
+    const lobes = parts.filter((part) => part.id.startsWith(`${rosette}-lobe-`));
+    assert.ok(lobes.length >= 6, `${rosette} needs radiating sandbag lobes`);
+  }
+
+  // Track spaghetti and burn scars are surfaces, never elevated geometry.
+  assert.ok(parts.filter((part) => part.id.startsWith("track-")).length >= 3);
+  const burns = parts.filter((part) => part.id.startsWith("burn-"));
+  assert.ok(burns.length >= 2);
+  assert.ok(burns.every((part) => part.surface === true
+    && part.color[0] < 0.2 && part.color[1] < 0.2 && part.color[2] < 0.2));
+
+  // Bunker mounds carry glinting PSP roofs (A Shau read).
+  const bunkerRoofs = parts.filter((part) => part.id.startsWith("bunker-")
+    && part.id.endsWith("-roof"));
+  assert.ok(bunkerRoofs.length >= 3);
+
+  // Bird revetments sit at the sim's spare stations: local +x = north, +z = east,
+  // stations at north ±30 / east +6 (CobraAirframePool constants, pinned numerically).
+  const north = byId.get("bird-revetment-0");
+  const south = byId.get("bird-revetment-1");
+  assert.ok(north && south, "the two spare Cobras need revetments");
+  assert.equal(north.x, 30);
+  assert.equal(north.z, 6);
+  assert.equal(south.x, -30);
+  assert.equal(south.z, 6);
+});
+
 test("createCampEmberFirebase places one merged mesh on the landmark", () => {
   const plan = planCobraCanyonWorld(world, { qualityTier: "balanced" });
   const firebase = createCampEmberFirebase(THREE, plan);
