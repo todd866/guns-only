@@ -1,66 +1,67 @@
-import * as THREE from "../vendor/three.module.js?v=311";
+import * as THREE from "../vendor/three.module.js?v=312";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=311";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=311";
-import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=311";
+} from "../render/cobra/cobra_canyon_plan.js?v=312";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=312";
+import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=312";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=311";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=311";
-import { createHud } from "../hud.js?v=311";
+} from "../render/cobra/cobra_canyon_tour.js?v=312";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=312";
+import { createHud } from "../hud.js?v=312";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=311";
+} from "../render/cobra/cobra_hud_adapter.js?v=312";
 import {
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=311";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=311";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=312";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=312";
 import {
   emberActObjectiveOverlay,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=311";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=311";
+} from "../render/cobra/cobra_ember_path.js?v=312";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=312";
 import {
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=311";
+} from "../render/audio/flight_audio.js?v=312";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=311";
+} from "../render/cobra/cobra_control_profile.js?v=312";
 import {
   advanceCobraPilotControls,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=311";
+} from "../render/cobra/cobra_pilot_input.js?v=312";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=311";
+} from "../render/cobra/ah1g_presence.js?v=312";
 import {
   lookOffsetFromAngles,
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
   togglePadlockSelection,
-} from "../render/cobra/cobra_camera_bias.js?v=311";
+} from "../render/cobra/cobra_camera_bias.js?v=312";
+import { cobraTerminalCauseCopy } from "../render/cobra/cobra_terminal_causes.js?v=312";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=311";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=311";
+} from "../render/visual/shadow_stabilizer.js?v=312";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=312";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=311";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=311";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=311";
+} from "../render/cobra/cobra_mission_exit.js?v=312";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=312";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=312";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -278,7 +279,7 @@ window.addEventListener("keydown", armAudioFromGesture, { capture: true });
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=311";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=312";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -515,6 +516,13 @@ function recordTelemetry(nowMs) {
       cobra_power_margin: authorityState.vehicle.power_margin,
       cobra_main_rotor_rpm: rotor?.main_rotor_rpm ?? pose?.main_rotor_rpm,
       cobra_transmission_limit_fraction: rotor?.transmission_limit_fraction,
+      // Contact-envelope evidence: without these the crash card can name a cause live
+      // while the uploaded owner-flight trace records none of it.
+      cobra_contact_failure_cause: authorityState.vehicle.contact_failure_cause,
+      cobra_gear_damaged: authorityState.vehicle.gear_damaged,
+      cobra_touchdown_sink_mps: authorityState.vehicle.touchdown_sink_mps,
+      cobra_touchdown_lateral_mps: authorityState.vehicle.touchdown_lateral_mps,
+      cobra_touchdown_yaw_rate_rad_s: authorityState.vehicle.touchdown_yaw_rate_rad_s,
       // Prefer the per-frame hot pose: GetState is 30 Hz and a stale tab can pin spawn forever
       // while the flying tab's camera still reads hot pose (owner 16:41 flight diagnosis).
       cobra_pitch_rad: pose?.pitch_rad ?? authorityState.vehicle.pitch_rad,
@@ -1064,8 +1072,13 @@ function showMissionDebrief(war, status) {
       ? `Flew into ${String(obstacle).split(".").slice(-2).join(" ")}.`
       : "Flew into a canyon obstacle.";
   } else if (status === "vehicle-authority-lost") {
-    title = "AIRFRAME LOST";
-    reason = "Terrain strike — the impact took the rotor and the airframe with it.";
+    // The sim names WHICH envelope violation ended the airframe; fall back to the generic
+    // terrain-strike copy only when no specific cause was latched.
+    const cause = cobraTerminalCauseCopy(authorityState?.vehicle?.contact_failure_cause);
+    title = cause ? cause.title : "AIRFRAME LOST";
+    reason = cause
+      ? cause.detail
+      : "Terrain strike — the impact took the rotor and the airframe with it.";
   } else if (status === "terrain-unavailable") {
     title = "OFF THE MAP";
     reason = "You left surveyed terrain; the sortie cannot continue.";

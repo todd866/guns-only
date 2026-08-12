@@ -672,6 +672,270 @@ public sealed class Ah1gCobraDynamicsTests
     }
 
     [Fact]
+    public void ContactEnvelopeThresholdsAreOrderedAndPositive()
+    {
+        RotorcraftContactDefinition contact = Create("contact-thresholds").Definition.Contact;
+        Assert.InRange(contact.GearDamageNormalSpeedMps, 2.0, 4.0);
+        Assert.True(contact.GearDamageNormalSpeedMps < contact.HardImpactNormalSpeedMps,
+            "Gear damage must trip before the hard-impact kill.");
+        // Rollover reuses the already-authored (previously unenforced) landing roll limit.
+        Assert.InRange(contact.MaximumLandingRollRad, 0.25, 0.50);
+        Assert.InRange(contact.RolloverLateralSpeedMps, 1.0, 2.5);
+        Assert.InRange(contact.SpinContactYawRateRadPerSecond, 0.35, 0.80);
+    }
+
+    static readonly PlayerVehicleEnvironmentSample PadEnvironment = new(
+        1.225,
+        Vec3D.Zero,
+        VehicleSurfaceSample.Horizontal("pad", 0.0));
+
+    static bool Grounded(Ah1gCobraDynamics cobra) =>
+        cobra.Observation.Contact.Kind is VehicleContactKind.SurfaceContact
+            or VehicleContactKind.StableSurfaceContact
+            or VehicleContactKind.HardImpact;
+
+    [Fact]
+    public void FlaredTouchdownAtDesignSinkStaysCleanAndFlyable()
+    {
+        var cobra = Create("flare-clean",
+            new Vec3D(0.0, 6.315, 0.0),
+            new Vec3D(0.0, -2.0, 8.0));
+        double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        double contactPitchRad = 0.0;
+        long tick = 0;
+        for (; tick < 900 && !Grounded(cobra); tick++)
+        {
+            // Ground effect would float a trimmed descent, so carry a deficit through the
+            // cushion; a one-pulse aft-cyclic flare brings the nose up, wings level, no drift.
+            double aftCyclic = tick is >= 120 and < 200 ? -0.5 : 0.0;
+            cobra.Advance(Input(tick,
+                new VerticalLiftPilotCommand(trim - 0.05, aftCyclic, 0.0, 0.0),
+                PadEnvironment));
+            contactPitchRad = cobra.Observation.PitchRad;
+        }
+
+        Assert.True(Grounded(cobra), "Flared descent never reached the pad.");
+        Assert.True(contactPitchRad > 0.15,
+            $"The flare never developed: pitch {contactPitchRad:F3} rad at contact.");
+        Assert.NotEqual(VehicleContactKind.HardImpact, cobra.Observation.Contact.Kind);
+        Assert.Equal(VehicleContactFailureCause.None, cobra.LastContactFailureCause);
+        Assert.False(cobra.GearDamaged);
+        Assert.True(cobra.Observation.Flyable,
+            "A nose-up flare at design sink must never read as a crash (attitude-blind rule).");
+    }
+
+    [Fact]
+    public void FirmTouchdownAboveDesignSinkDamagesGearWithoutKillingAuthority()
+    {
+        var cobra = Create("gear-damage",
+            new Vec3D(0.0, 0.365, 0.0),
+            new Vec3D(0.0, -4.0, 0.0));
+        var lowCollective = new VerticalLiftPilotCommand(0.2, 0.0, 0.0, 0.0);
+        for (long tick = 0; tick < 60 && !Grounded(cobra); tick++)
+            cobra.Advance(Input(tick, lowCollective, PadEnvironment));
+
+        Assert.True(Grounded(cobra), "The firm arrival never contacted the pad.");
+        Assert.True(cobra.GearDamaged,
+            $"A {cobra.LastTouchdown.SinkMps:F2} m/s arrival should bend the gear.");
+        Assert.NotEqual(VehicleContactKind.HardImpact, cobra.Observation.Contact.Kind);
+        Assert.Equal(VehicleContactFailureCause.None, cobra.LastContactFailureCause);
+        Assert.True(cobra.Observation.Flyable,
+            "Gear damage is a consequence tier, not a kill.");
+        Assert.InRange(cobra.LastTouchdown.SinkMps, 3.8, 4.4);
+        Assert.InRange(cobra.LastTouchdown.LateralMps, 0.0, 0.5);
+        Assert.InRange(cobra.LastTouchdown.YawRateRadPerSecond, 0.0, 0.1);
+    }
+
+    [Fact]
+    public void BankedDriftingContactLatchesRollover()
+    {
+        var cobra = Create("rollover",
+            new Vec3D(0.0, 4.315, 0.0),
+            new Vec3D(0.0, -1.0, 0.0));
+        double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        double contactRollRad = 0.0;
+        double contactLateralMps = 0.0;
+        long tick = 0;
+        for (; tick < 900 && !Grounded(cobra); tick++)
+        {
+            // Held right cyclic: the banked disk both rolls the aircraft past the landing
+            // limit and accelerates it sideways — the classic dynamic-rollover arrival.
+            cobra.Advance(Input(tick,
+                new VerticalLiftPilotCommand(trim - 0.04, 0.0, 0.6, 0.0),
+                PadEnvironment));
+            contactRollRad = cobra.Observation.RollRad;
+            contactLateralMps = Math.Abs(
+                cobra.State.BodyAttitude.Conjugate().Rotate(cobra.State.GroundVelocityMps).X);
+        }
+
+        Assert.True(Grounded(cobra), "The banked descent never contacted the pad.");
+        Assert.Equal(VehicleContactFailureCause.Rollover, cobra.LastContactFailureCause);
+        Assert.False(cobra.Observation.Flyable,
+            $"Banked drifting contact (roll {contactRollRad:F3} rad, lateral "
+            + $"{contactLateralMps:F2} m/s) must end the sortie.");
+    }
+
+    [Fact]
+    public void SpinningContactLatchesSpinContact()
+    {
+        var cobra = Create("spin-contact",
+            new Vec3D(0.0, 2.315, 0.0),
+            new Vec3D(0.0, -1.0, 0.0));
+        double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        double contactYawRateRadPerSecond = 0.0;
+        long tick = 0;
+        for (; tick < 600 && !Grounded(cobra); tick++)
+        {
+            cobra.Advance(Input(tick,
+                new VerticalLiftPilotCommand(trim - 0.10, 0.0, 0.0, 1.0),
+                PadEnvironment));
+            contactYawRateRadPerSecond = Math.Abs(cobra.State.BodyRates.R);
+        }
+
+        Assert.True(Grounded(cobra), "The spinning descent never contacted the pad.");
+        Assert.Equal(VehicleContactFailureCause.SpinContact, cobra.LastContactFailureCause);
+        Assert.False(cobra.Observation.Flyable,
+            $"Touching down at {contactYawRateRadPerSecond:F2} rad/s of yaw must end the "
+            + "sortie.");
+    }
+
+    [Fact]
+    public void BankedDescentRecordsGroundTrackNotSinkAsLateral()
+    {
+        var cobra = Create("banked-settle",
+            new Vec3D(0.0, 1.815, 0.0),
+            new Vec3D(0.0, -3.0, 0.0));
+        double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        double contactRollRad = 0.0;
+        long tick = 0;
+        for (; tick < 240 && !Grounded(cobra); tick++)
+        {
+            // A late right-cyclic pulse banks the disk in the final half-second of a mostly
+            // vertical settle. The rollover predicate's lateral input must be GROUND TRACK:
+            // rotating the full velocity into the banked body frame leaks sink into "lateral"
+            // (here ~0.6 m/s of leak on top of ~0.6 m/s of true drift) and, at steeper banks
+            // and harder sinks, kills a driftless settle below the gear-damage limit.
+            cobra.Advance(Input(tick,
+                new VerticalLiftPilotCommand(trim - 0.15, 0.0, 1.0, 0.0),
+                PadEnvironment));
+            contactRollRad = cobra.Observation.RollRad;
+        }
+
+        Assert.True(Grounded(cobra), "The banked settle never contacted the pad.");
+        Assert.True(Math.Abs(contactRollRad) > 0.15,
+            $"The bank never developed: roll {contactRollRad:F3} rad at contact.");
+        Assert.InRange(cobra.LastTouchdown.SinkMps, 3.0, 5.0);
+        Assert.True(cobra.LastTouchdown.LateralMps < 0.8,
+            $"Touchdown lateral must be ground track, not sink leakage: recorded "
+            + $"{cobra.LastTouchdown.LateralMps:F2} m/s at roll {contactRollRad:F3} rad, "
+            + $"sink {cobra.LastTouchdown.SinkMps:F2} m/s.");
+        Assert.NotEqual(VehicleContactFailureCause.Rollover, cobra.LastContactFailureCause);
+    }
+
+    [Fact]
+    public void LevelHighSinkContactLatchesHardImpactSpecifically()
+    {
+        var cobra = Create("hard-drop",
+            new Vec3D(0.0, 0.365, 0.0),
+            new Vec3D(0.0, -7.5, 0.0));
+        var lowCollective = new VerticalLiftPilotCommand(0.2, 0.0, 0.0, 0.0);
+        for (long tick = 0; tick < 60 && !Grounded(cobra); tick++)
+            cobra.Advance(Input(tick, lowCollective, PadEnvironment));
+
+        Assert.True(Grounded(cobra), "The vertical drop never contacted the pad.");
+        Assert.Equal(VehicleContactFailureCause.HardImpact, cobra.LastContactFailureCause);
+        Assert.False(cobra.Observation.Flyable);
+        Assert.InRange(cobra.LastTouchdown.SinkMps, 7.2, 7.9);
+    }
+
+    [Fact]
+    public void GentleWaterTouchdownStillEndsTheSortie()
+    {
+        var cobra = Create("water-contact",
+            new Vec3D(0.0, 1.315, 0.0),
+            new Vec3D(0.0, -1.5, 0.0));
+        double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        var river = new PlayerVehicleEnvironmentSample(
+            1.225,
+            Vec3D.Zero,
+            new VehicleSurfaceSample(
+                IsKnown: true,
+                SurfaceId: "cobra-canyon.water",
+                HeightM: 0.0,
+                UpNormal: new Vec3D(0.0, 1.0, 0.0),
+                FrictionPerSecond: 4.0,
+                SubmergesSkids: true));
+        for (long tick = 0; tick < 240 && !Grounded(cobra); tick++)
+            cobra.Advance(Input(tick,
+                new VerticalLiftPilotCommand(trim - 0.10, 0.0, 0.0, 0.0), river));
+
+        Assert.True(Grounded(cobra), "The water descent never reached the surface.");
+        Assert.Equal(VehicleContactFailureCause.WaterContact, cobra.LastContactFailureCause);
+        Assert.False(cobra.Observation.Flyable,
+            "A perfectly gentle river touchdown is still the end of a skid helicopter.");
+    }
+
+    [Fact]
+    public void NoFlareAutorotationEndsInAHardImpact()
+    {
+        var cobra = Create("auto-no-flare",
+            new Vec3D(0.0, 150.315, 0.0),
+            new Vec3D(0.0, 0.0, 20.0));
+        double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        cobra.FailEngine();
+        // The frozen pilot: collective stays at trim, no flare, no cushion.
+        var frozen = new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.18);
+        long tick = 0;
+        for (; tick < 4800 && !Grounded(cobra); tick++)
+            cobra.Advance(Input(tick, frozen, PadEnvironment));
+
+        Assert.True(Grounded(cobra), "The no-flare descent never reached the ground.");
+        Assert.True(cobra.LastContactFailureCause
+                is VehicleContactFailureCause.HardImpact
+                or VehicleContactFailureCause.RotorStrike,
+            $"A no-flare auto must be a crash: cause {cobra.LastContactFailureCause}, "
+            + $"touchdown sink {cobra.LastTouchdown.SinkMps:F1} m/s.");
+        Assert.False(cobra.Observation.Flyable,
+            "Riding a dead engine into the ground without a flare must end the sortie.");
+    }
+
+    [Fact]
+    public void FlownAutorotationTouchesDownSurvivably()
+    {
+        var cobra = Create("auto-flown",
+            new Vec3D(0.0, 150.315, 0.0),
+            new Vec3D(0.0, 0.0, 20.0));
+        cobra.FailEngine();
+        double minimumRpm = double.MaxValue;
+        long tick = 0;
+        for (; tick < 4800 && !Grounded(cobra); tick++)
+        {
+            double heightAglM = cobra.State.PositionWorldM.Y - 0.315;
+            // Entry: dump collective to preserve Nr; glide. Flare: aft cyclic from 20 m to
+            // trade speed for lift. Cushion: pop the stored rotor energy from 8 m.
+            double collective = heightAglM > 8.0 ? 0.10 : 0.90;
+            double aftCyclic = heightAglM is < 20.0 and > 6.0 ? -0.45 : 0.0;
+            cobra.Advance(Input(tick,
+                new VerticalLiftPilotCommand(collective, aftCyclic, 0.0, 0.18),
+                PadEnvironment));
+            minimumRpm = Math.Min(minimumRpm, cobra.Telemetry.MainRotorRpm);
+        }
+
+        Assert.True(Grounded(cobra), "The flown auto never reached the ground.");
+        Assert.True(cobra.Observation.Flyable,
+            $"A flown autorotation must be survivable: cause "
+            + $"{cobra.LastContactFailureCause}, touchdown sink "
+            + $"{cobra.LastTouchdown.SinkMps:F2} m/s, lateral "
+            + $"{cobra.LastTouchdown.LateralMps:F2} m/s, yaw rate "
+            + $"{cobra.LastTouchdown.YawRateRadPerSecond:F2} rad/s, minimum Nr "
+            + $"{minimumRpm:F0} rpm.");
+        Assert.True(cobra.LastTouchdown.SinkMps
+                < cobra.Definition.Contact.HardImpactNormalSpeedMps,
+            $"Touchdown sink {cobra.LastTouchdown.SinkMps:F2} m/s exceeded the hard-impact "
+            + "limit despite the flare.");
+    }
+
+    [Fact]
     public void ForwardVelocityEscapesTheVortexRingEnvelope()
     {
         var settling = Create("settling", velocity: new Vec3D(0.0, -11.0, 0.0));

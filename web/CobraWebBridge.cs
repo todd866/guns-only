@@ -120,6 +120,16 @@ public static partial class CobraWebBridge
     [JSExport]
     public static string GetState() => JsonSerializer.Serialize(BuildState(RequireRuntime()));
 
+    static string ContactFailureCauseSlug(VehicleContactFailureCause cause) => cause switch
+    {
+        VehicleContactFailureCause.HardImpact => "hard-impact",
+        VehicleContactFailureCause.Rollover => "rollover",
+        VehicleContactFailureCause.SpinContact => "spin-contact",
+        VehicleContactFailureCause.RotorStrike => "rotor-strike",
+        VehicleContactFailureCause.WaterContact => "water-contact",
+        _ => "none",
+    };
+
     // Per-frame numeric pose projection — the Cobra-scale analogue of the F-22 SnapshotHotFrame.
     // The browser fetches the view once, then reads it via copyTo every rendered frame so the
     // camera and airframe presence stay at render rate while the full JSON snapshot is sampled
@@ -304,6 +314,12 @@ public static partial class CobraWebBridge
                 velocity_y_mps = velocity.Y,
                 velocity_z_mps = velocity.Z,
                 flyable = observation.Flyable,
+                contact_failure_cause = ContactFailureCauseSlug(
+                    runtime.Cobra.LastContactFailureCause),
+                gear_damaged = runtime.Cobra.GearDamaged,
+                touchdown_sink_mps = runtime.Cobra.LastTouchdown.SinkMps,
+                touchdown_lateral_mps = runtime.Cobra.LastTouchdown.LateralMps,
+                touchdown_yaw_rate_rad_s = runtime.Cobra.LastTouchdown.YawRateRadPerSecond,
                 power_assessment = power.Assessment.ToString().ToLowerInvariant(),
                 hover_power_margin = power.HoverPowerMarginFraction,
                 // Live headroom that follows the collective — hover_power_margin is a capability

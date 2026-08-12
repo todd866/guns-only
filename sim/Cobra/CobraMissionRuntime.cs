@@ -889,7 +889,8 @@ public sealed class CobraMissionRuntime
             UpNormal: sample.UpNormal,
             FrictionPerSecond: water
                 ? WaterSurfaceFrictionPerSecond
-                : LandSurfaceFrictionPerSecond);
+                : LandSurfaceFrictionPerSecond,
+            SubmergesSkids: water);
     }
 
     CobraMissionDiagnostics BuildDiagnostics()

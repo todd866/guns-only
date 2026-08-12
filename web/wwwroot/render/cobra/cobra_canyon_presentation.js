@@ -3,17 +3,17 @@ import {
   COBRA_CANYON_CAMP_EMBER_APRON,
   sampleCobraCanyonTerrain,
   sampleCobraCanyonTerrainBeforeCampEmberApron,
-} from "./cobra_canyon_plan.js?v=311";
+} from "./cobra_canyon_plan.js?v=312";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=311";
-import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=311";
+} from "./cobra_canyon_asset_kit.js?v=312";
+import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=312";
 import {
   createCobraCanyonBasinMaterial,
   createCobraCanyonRiverMaterial,
-} from "./cobra_canyon_terrain_material.js?v=311";
-import { createCampEmberFirebase } from "./cobra_camp_ember_firebase.js?v=311";
+} from "./cobra_canyon_terrain_material.js?v=312";
+import { createCampEmberFirebase } from "./cobra_camp_ember_firebase.js?v=312";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 
@@ -435,7 +435,11 @@ function materialFor(THREE, role) {
   if (role === "basin") return createCobraCanyonBasinMaterial(THREE, COBRA_CANYON_VISUAL_PROFILE);
   if (role === "river") return createCobraCanyonRiverMaterial(THREE, COBRA_CANYON_VISUAL_PROFILE);
   const parameters = {
-    roads: { color: 0xb0683c, emissive: 0x241008, roughness: 1 },
+    // Laterite dirt, not warning tape: the road must read as ground the FOB's laterite
+    // apron belongs to (owner 2026-08-12: "what's this red line?"). No emissive — a road
+    // does not glow. The full width/texture/soft-edge treatment is the corridor-scenery
+    // slice; this keeps the ribbon honest until then.
+    roads: { color: 0x7d5638, roughness: 1 },
     heroCells: { color: 0x6a5030, roughness: 1 },
     landmarks: { color: 0xffffff, roughness: 0.95 },
     hazards: { color: 0xe96a43, emissive: 0x411006, roughness: 0.8 },

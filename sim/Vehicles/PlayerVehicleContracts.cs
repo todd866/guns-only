@@ -38,6 +38,28 @@ public enum VehicleContactKind {
     HardImpact
 }
 
+/// <summary>
+/// Which envelope violation ended the airframe's authority. The first violation wins; a
+/// clean or merely gear-damaging arrival remains <see cref="None"/>.
+/// </summary>
+public enum VehicleContactFailureCause {
+    None,
+    HardImpact,
+    Rollover,
+    SpinContact,
+    RotorStrike,
+    WaterContact
+}
+
+/// <summary>
+/// Measurements captured at the airborne-to-ground transition, before the contact solver
+/// bleeds the state. Instrument truth for cause cards and telemetry, not a control input.
+/// </summary>
+public readonly record struct ContactTouchdown(
+    double SinkMps,
+    double LateralMps,
+    double YawRateRadPerSecond);
+
 public enum VehiclePowerAssessment {
     NotAssessed,
     Assessed
@@ -105,7 +127,8 @@ public readonly record struct VehicleSurfaceSample(
     string? SurfaceId,
     double HeightM,
     Vec3D UpNormal,
-    double FrictionPerSecond) {
+    double FrictionPerSecond,
+    bool SubmergesSkids = false) {
 
     public static VehicleSurfaceSample Unknown => new(
         false,
