@@ -1,7 +1,7 @@
 // Public, read-only release provenance. The browser uses this to detect a stale static shell and
 // telemetry uses it to distinguish deployments which share the same human-facing release number.
 
-const RELEASE_BUILD = "315";
+const RELEASE_BUILD = "316";
 
 function safeToken(value, maximumLength) {
   const token = String(value || "").trim();
