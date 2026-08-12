@@ -8,7 +8,10 @@ Intercept, then Korea Panther LSO grading). Scope of THIS spec is Weekend Ride o
 Weekend Ride is a lappable circuit **whose stopwatch nobody can read**.
 `sim/Motorcycle/WeekendRideMissionRuntime.cs` already tracks `LapTimeSeconds`, `LapCount`,
 `OffTrackSeconds` and `IsOnTrack` — but nothing keeps a completed lap, nothing knows your
-best, nothing survives a reload, and no path publishes any of it to the rider's HUD. So you
+best, nothing survives a reload, and no path publishes any of it to the rider's HUD. The
+defect is literally one line: at the finish line the runtime does
+`if (circuitSample.CrossedStartFinish) _currentLapElapsedSeconds = 0.0;` — **it computes
+your lap time and then throws it away.** So you
 ride a timed circuit where the time is invisible and forgotten the moment you stop. There
 is no reason to take the next corner better than the last one.
 
@@ -23,9 +26,11 @@ is no reason to take the next corner better than the last one.
   runtime already measures `OffTrackSeconds` and `IsOnTrack`), or if the bike tipped over
   and reset. Invalid laps still show their time; they never become the best. A lap set with
   two wheels in the dirt must not stand as a record.
-- **Sectors:** split the painted circuit into three sectors by arc-length fraction of the
-  lap distance. Record `SectorSeconds[3]` for the current lap and `BestSectorSeconds[3]`
-  (best per sector, independent of which lap they came from).
+- **Sectors already exist and are ignored.** `PaintedCircuit` authors sector gates at
+  progress fractions 0.25 / 0.50 / 0.75 and `PaintedCircuitQueryResult` already reports
+  `SectorCrossed` and `ProgressM`; `PaintedCircuitQueryState` tracks `NextSectorIndex`.
+  Four sectors, no new geometry. Record `SectorSeconds[4]` for the current lap and
+  `BestSectorSeconds[4]` (best per sector, independent of which lap each came from).
 
 ### The delta (the number that actually motivates)
 

@@ -62,13 +62,15 @@ Write `CompleteScriptedLap` as a real helper in the test file: step the runtime 
 
 **Interfaces:**
 - Consumes: Task 1's members.
-- Produces: `IReadOnlyList<double> SectorSeconds` (3, current lap, 0 until each sector closes), `IReadOnlyList<double?> BestSectorSeconds` (3), `double? DeltaToBestSeconds`, and internally a `BestLapSplitProfile` of `SplitSampleCount = 32` elapsed times at evenly spaced arc-length fractions of the lap.
+- Produces: `IReadOnlyList<double> SectorSeconds` (**4**, current lap, 0 until each sector closes), `IReadOnlyList<double?> BestSectorSeconds` (4), `double? DeltaToBestSeconds`, and internally a `BestLapSplitProfile` of `SplitSampleCount = 32` elapsed times at evenly spaced `ProgressM` fractions of the lap.
 
-Delta rule: at the rider's current lap arc-length fraction, linearly interpolate the best lap's split profile and subtract from the current lap elapsed. Null when no best exists.
+**Sectors are already authored — do not invent them.** `PaintedCircuit.Create` sets `sectorGateProgressM = [0.25, 0.50, 0.75]` (`PaintedCircuit.cs:172`), `PaintedCircuitQueryResult.SectorCrossed` already fires at each gate, and `ProgressM` gives lap position. Four sectors; the runtime simply ignores the signal today.
 
-- [ ] **Step 1: Write the failing test:** three sector times sum to the lap time within 0.05 s; a rider ahead of the best pace at the same circuit fraction yields a negative `DeltaToBestSeconds` and behind yields positive; delta is null before any best exists.
+Delta rule: at the rider's current `ProgressM` fraction, linearly interpolate the best lap's split profile and subtract from the current lap elapsed. Null when no best exists.
+
+- [ ] **Step 1: Write the failing test:** the four sector times sum to the lap time within 0.05 s; a rider ahead of the best pace at the same circuit fraction yields a negative `DeltaToBestSeconds` and behind yields positive; delta is null before any best exists.
 - [ ] **Step 2: Run — expect FAIL.**
-- [ ] **Step 3: Implement** sector boundaries by arc-length fraction, the 32-sample profile captured on a new best, and the interpolated delta.
+- [ ] **Step 3: Implement** sector accumulation driven by the existing `SectorCrossed`, the 32-sample profile captured on a new best, and the interpolated delta.
 - [ ] **Step 4: Run — PASS, plus the full WeekendRide filter.**
 - [ ] **Step 5: Commit** `Split the lap into sectors and publish a live delta to the best.`
 
