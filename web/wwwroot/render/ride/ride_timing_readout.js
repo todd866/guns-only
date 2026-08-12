@@ -30,6 +30,16 @@ function finite(value) {
 }
 
 /**
+ * A C# `double?` null crosses the bridge as 0, so "finite" is not enough to mean "present":
+ * a zero best would render a 0:00.00 record and a delta against nothing. Only a positive
+ * time counts as a real lap.
+ */
+function presentTime(value) {
+  const numeric = finite(value);
+  return numeric !== null && numeric > 0 ? numeric : null;
+}
+
+/**
  * @returns {{ lap: string, last: string, best: string,
  *   delta: { text: string, ahead: boolean } | null, invalid: boolean }}
  */
@@ -41,7 +51,7 @@ export function rideTimingReadout({
   lapValid = true,
 } = {}) {
   const delta = finite(deltaSeconds);
-  const best = finite(bestLapSeconds);
+  const best = presentTime(bestLapSeconds);
   return {
     lap: formatLapTime(lapSeconds),
     last: formatLapTime(lastLapSeconds),

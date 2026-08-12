@@ -37,6 +37,15 @@ test("a spoilt lap is marked so a dirty time is never read as a record", () => {
   assert.equal(rideTimingReadout({ lapSeconds: 10 }).invalid, false);
 });
 
+test("a zero best is absent, not a record: the bridge marshals C# null as 0", () => {
+  const readout = rideTimingReadout({
+    lapSeconds: 19.87, bestLapSeconds: 0, deltaSeconds: 0,
+  });
+
+  assert.equal(readout.best, BLANK_LAP_TIME);
+  assert.equal(readout.delta, null, "no best means nothing to be ahead of");
+});
+
 test("nonsense inputs degrade to dashes instead of throwing", () => {
   const readout = rideTimingReadout({
     lapSeconds: Number.NaN, bestLapSeconds: Infinity, deltaSeconds: Number.NaN,
