@@ -53,6 +53,10 @@ import {
 } from "../render/cobra/cobra_camera_bias.js?v=312";
 import { cobraTerminalCauseCopy } from "../render/cobra/cobra_terminal_causes.js?v=312";
 import {
+  createParkedCobra,
+  placeParkedCobra,
+} from "../render/cobra/cobra_parked_airframe.js?v=312";
+import {
   applyTexelStabilizedDirectionalShadow,
 } from "../render/visual/shadow_stabilizer.js?v=312";
 import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=312";
@@ -760,6 +764,32 @@ function ensureAh1gPresence() {
   return ah1gPresence;
 }
 
+// The ramp: every non-flying airframe in the pool renders as a parked presence at its
+// slot pose. A crippled bird lists visibly on its bent gear; a destroyed one lists harder.
+const parkedPresences = new Map();
+function syncParkedAirframes() {
+  const pool = authorityState?.airframe_pool;
+  if (!Array.isArray(pool)) return;
+  const liveIds = new Set();
+  for (const slot of pool) {
+    if (!slot || slot.state === "player-flying") continue;
+    liveIds.add(slot.id);
+    let presence = parkedPresences.get(slot.id);
+    if (!presence) {
+      presence = createParkedCobra(THREE);
+      scene.add(presence.group);
+      parkedPresences.set(slot.id, presence);
+    }
+    const listRad = slot.state === "crippled" ? 0.26 : slot.state === "destroyed" ? 0.6 : 0;
+    placeParkedCobra(presence, slot, listRad);
+  }
+  for (const [id, presence] of parkedPresences) {
+    if (liveIds.has(id)) continue;
+    scene.remove(presence.group);
+    parkedPresences.delete(id);
+  }
+}
+
 function rebuildPresentation() {
   if (!world) return;
   presentation?.dispose();
@@ -964,6 +994,7 @@ function updateManual(deltaSeconds) {
       sampleAuthorityState(lastTimeMs);
     }
     syncAuthorityCamera();
+    syncParkedAirframes();
   }
   const bounds = plan.boundsLocalM;
   camera.position.x = THREE.MathUtils.clamp(

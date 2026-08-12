@@ -120,6 +120,15 @@ public static partial class CobraWebBridge
     [JSExport]
     public static string GetState() => JsonSerializer.Serialize(BuildState(RequireRuntime()));
 
+    static string AirframeStateToken(CobraAirframeState state) => state switch
+    {
+        CobraAirframeState.Ready => "ready",
+        CobraAirframeState.PlayerFlying => "player-flying",
+        CobraAirframeState.Crippled => "crippled",
+        CobraAirframeState.Destroyed => "destroyed",
+        _ => throw new ArgumentOutOfRangeException(nameof(state)),
+    };
+
     static string ContactFailureCauseSlug(VehicleContactFailureCause cause) => cause switch
     {
         VehicleContactFailureCause.HardImpact => "hard-impact",
@@ -290,6 +299,15 @@ public static partial class CobraWebBridge
                     victory_hold_progress = debrief.VictoryHoldProgress,
                 },
             },
+            airframe_pool = runtime.AirframePool.Select(slot => new {
+                id = slot.Id,
+                state = AirframeStateToken(slot.State),
+                east_m = slot.ParkedPositionWorldM.X,
+                up_m = slot.ParkedPositionWorldM.Y,
+                north_m = slot.ParkedPositionWorldM.Z,
+                yaw_rad = slot.ParkedYawRad,
+            }).ToArray(),
+            airframe_swaps = runtime.AirframeSwaps,
             vehicle = new {
                 tick = observation.Tick,
                 x_m = position.X,

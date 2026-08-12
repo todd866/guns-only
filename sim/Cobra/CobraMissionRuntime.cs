@@ -444,8 +444,10 @@ public sealed class CobraMissionRuntime
             ("cobra-canyon.airframe-3", -CobraAirframePool.SpareStationOffsetNorthM),
         })
         {
+            double stationEastM =
+                campLandmark.EastM + CobraAirframePool.SpareStationOffsetEastM;
             if (!terrain.TrySample(
-                campLandmark.EastM,
+                stationEastM,
                 campLandmark.NorthM + northOffsetM,
                 out TerrainSample stationSurface))
                 throw new InvalidOperationException(
@@ -454,7 +456,7 @@ public sealed class CobraMissionRuntime
                 slotId,
                 CobraAirframeState.Ready,
                 new Vec3D(
-                    campLandmark.EastM,
+                    stationEastM,
                     stationSurface.HeightM + stationSkidM,
                     campLandmark.NorthM + northOffsetM),
                 CobraAirframePool.SpareStationYawRad));

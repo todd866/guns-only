@@ -31,5 +31,6 @@ public static class CobraAirframePool
     /// protects. Both face the departure heading.
     /// </summary>
     public const double SpareStationOffsetNorthM = 30.0;
+    public const double SpareStationOffsetEastM = 6.0;
     public const double SpareStationYawRad = Math.PI / 2.0;
 }
