@@ -1,0 +1,82 @@
+cursor-opinion: scoped 10 files (236808 bytes)
+cursor-opinion: still working (15s; last event tool_call/started; timeout 300s)...
+cursor-opinion: still working (30s; last event thinking/delta; timeout 300s)...
+cursor-opinion: still working (45s; last event tool_call/completed; timeout 300s)...
+cursor-opinion: still working (60s; last event tool_call/completed; timeout 300s)...
+cursor-opinion: still working (75s; last event thinking/delta; timeout 300s)...
+cursor-opinion: still working (90s; last event thinking/delta; timeout 300s)...
+cursor-opinion: still working (105s; last event thinking/delta; timeout 300s)...
+cursor-opinion: still working (120s; last event thinking/delta; timeout 300s)...
+cursor-opinion: still working (135s; last event thinking/delta; timeout 300s)...
+cursor-opinion: still working (150s; last event thinking/delta; timeout 300s)...
+cursor-opinion: still working (165s; last event thinking/delta; timeout 300s)...
+cursor-opinion: still working (180s; last event assistant; timeout 300s)...
+cursor-opinion: still working (195s; last event assistant; timeout 300s)...
+I'll review the Build 313 bundle as a read-only second opinion, starting with the adversarial-review skill and then `CURRENT.diff` / `SCOPE.txt`.`CURRENT.diff` is empty; reviewing the scoped current files for the five correctness hunts.## Verdict
+
+**Material correctness issues in the swap path and client restart hygiene.** `CURRENT.diff` is empty (0 bytes); review is against the scoped current files.
+
+---
+
+### 1. Bridge gunner / sight / tick state survives the bird swap (hunt 1) — **bug**
+
+**Fact:** `TrySwapAirframeAtFob` replaces only `_cobra` (`CobraMissionRuntime.cs` 954–963). `StartRoute` resets `_gunner`, `_turretServo`, and sight cache (`CobraWebBridge.cs` 56–62); the swap path does not.
+
+**Fact:** `AdvanceGunner` keys LoS refresh and `_gunner.Advance` on `runtime.Cobra.State.Tick` (`CobraWebBridge.cs` 405–441). Swap runs at the end of an authority `Advance`; the new dynamics is not advanced that tick, while `_nextAuthorityTick` keeps climbing (`CobraMissionRuntime.cs` 547–559, 600).
+
+**Inference:** Post-swap, tick likely jumps (constructor → continued authority tick). Cached LoS can stick for up to `GunnerSightIntervalTicks` (12) at the **new** pose, and gunner timers can see a discontinuous tick. Magazine on ground war correctly persists; SCAS/telemetry on the new dynamics correctly reset. Bridge does not hold a dynamics reference — it always uses `runtime.Cobra`.
+
+**Action:** On successful swap, reset gunner/sight/servo the same way `StartRoute` does (or force an immediate LoS re-evaluate and seed tick from `_nextAuthorityTick`).
+
+---
+
+### 2. Swap tick still drives Act/clearance from the **old** pad position (hunt 1) — **bug**
+
+**Fact:** `currentPositionWorldM` is captured before swap (`561`), then `TrySwap` teleports `_cobra` (`600`, `954–961`), then `RefreshAct` / clearance still use the pre-swap position (`609–616`). Diagnostics later read the new `_cobra` pose (`984`).
+
+**Action:** After a successful swap, refresh Act/clearance (and masking if needed) from `_cobra.State.PositionWorldM`.
+
+---
+
+### 3. `VehicleAuthorityLost` beats `FobCombatIneffective` (hunt 3) — **ordering hazard**
+
+**Fact:** `!vehicleResult.State.Flyable` sets `VehicleAuthorityLost` before any swap (`574–575`). `TrySwapAirframeAtFob` only runs while `Status == Active` (`597–600`). Exhausted-pool `FobCombatIneffective` is only reachable for a still-flyable cripple on the pad (`948–951`).
+
+**Inference:** If `IsCrippled && !Flyable` is possible on the FOB with no Ready spare, you get authority-lost, not combat-ineffective. Matches the “destroyed → authority-lost” comment (`923–924`) for hard kills; wrong if pool exhaustion should win whenever you’re on the pad unable to continue.
+
+**Action:** If pad + empty pool is the desired terminal, evaluate swap / `FobCombatIneffective` before or instead of authority-lost when `IsInsideFob` and crippled.
+
+---
+
+### 4. Repeated swap / spare–wreck overlap (hunt 2) — **no sim repeat-swap bug; visual hazard**
+
+**Fact:** Swap requires `_cobra.IsCrippled` (`928`); the new bird is a fresh `Ah1gCobraDynamics` with no cripple flag. Parked birds are client silhouettes only (`main.js` 770–800) — no sim collision with wrecks.
+
+**Inference:** Stable contact on the same tick sequence won’t multi-swap. If you stabilize on a Ready station, wreck pose and spare spawn share that point → overlapping ownship + listed wreck (presentation only).
+
+---
+
+### 5. Crippled parked Y / attitude on unlevel ground (hunt 4) — **presentation correctness**
+
+**Fact:** Ready slots store `HeightM + skid` (`CobraMissionRuntime.cs` 449–461). Crippled slots store live CoM (`942`). Client places with `up_m - 0.315` and rotation `(0, yaw, listRad)` only (`cobra_parked_airframe.js` 50–52) — no terrain pitch/roll.
+
+**Inference:** Off the flat apron (still inside FOB), skids can float/clip; list exaggerates it.
+
+**Action:** Snap parked Y to terrain+skid at stored XZ (and optionally align to surface normal) when writing the crippled slot.
+
+---
+
+### 6. `parkedPresences` / `lastAirframeSwaps` on R (hunt 5) — **fragile; happy path mostly OK**
+
+**Fact:** `restartRoute` (`main.js` 736–761) does not clear `parkedPresences` or `lastAirframeSwaps`. Sync prunes by live slot ids (`796–800`) but **returns early** if `airframe_pool` is missing (`781–782`), skipping prune.
+
+**Inference:** Normal R → `GetState` with pool → prune works. Early-return frames leave prior-mission wrecks in the scene. `lastAirframeSwaps` self-heals on first successful sync.
+
+**Action:** Clear the Map (and remove groups) + reset `lastAirframeSwaps` inside `restartRoute`.
+
+---
+
+### Missing tests
+
+No coverage that gunner/sight/tick stay coherent across swap; that Act/pose match post-swap; that R clears parked presences; or that `IsCrippled && !Flyable` on an empty pad yields the intended terminal status.
+cursor-opinion: complete in 191.934s · 57512 input / 10765 output tokens
