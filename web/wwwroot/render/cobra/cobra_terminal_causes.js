@@ -35,3 +35,16 @@ export function cobraTerminalCauseCopy(cause) {
   if (typeof cause !== "string") return null;
   return CAUSE_COPY[cause] ?? null;
 }
+
+const MISSION_STATUS_COPY = Object.freeze({
+  "fob-combat-ineffective": Object.freeze({
+    title: "FOB COMBAT INEFFECTIVE",
+    detail: "Every Cobra on the ramp is bent or gone. Camp Ember has nothing left to fly.",
+  }),
+});
+
+/** Mission-level terminal copy (the airframe pool, not a contact cause). */
+export function cobraMissionStatusCopy(status) {
+  if (typeof status !== "string") return null;
+  return MISSION_STATUS_COPY[status] ?? null;
+}

@@ -51,7 +51,10 @@ import {
   resolveAuthorityLookAtPoint,
   togglePadlockSelection,
 } from "../render/cobra/cobra_camera_bias.js?v=312";
-import { cobraTerminalCauseCopy } from "../render/cobra/cobra_terminal_causes.js?v=312";
+import {
+  cobraMissionStatusCopy,
+  cobraTerminalCauseCopy,
+} from "../render/cobra/cobra_terminal_causes.js?v=312";
 import {
   createParkedCobra,
   placeParkedCobra,
@@ -767,7 +770,14 @@ function ensureAh1gPresence() {
 // The ramp: every non-flying airframe in the pool renders as a parked presence at its
 // slot pose. A crippled bird lists visibly on its bent gear; a destroyed one lists harder.
 const parkedPresences = new Map();
+let lastAirframeSwaps = 0;
 function syncParkedAirframes() {
+  const swaps = authorityState?.airframe_swaps ?? 0;
+  if (swaps > lastAirframeSwaps && bridge) {
+    // The radio-shaped cue: the swap already happened sim-side; the page just says so.
+    setStatus("BIRD SWAP · SPARE'S YOURS — THE BENT ONE STAYS ON THE RAMP", "ready");
+  }
+  lastAirframeSwaps = swaps;
   const pool = authorityState?.airframe_pool;
   if (!Array.isArray(pool)) return;
   const liveIds = new Set();
@@ -1113,6 +1123,10 @@ function showMissionDebrief(war, status) {
   } else if (status === "terrain-unavailable") {
     title = "OFF THE MAP";
     reason = "You left surveyed terrain; the sortie cannot continue.";
+  } else if (cobraMissionStatusCopy(status)) {
+    const missionCopy = cobraMissionStatusCopy(status);
+    title = missionCopy.title;
+    reason = missionCopy.detail;
   } else {
     title = "SORTIE ENDED";
     reason = `Sortie ended: ${status.replaceAll("-", " ")}.`;
@@ -1120,7 +1134,7 @@ function showMissionDebrief(war, status) {
   setText(debriefTitle, title);
   setText(
     debriefBody,
-    `${reason} Hostiles down ${war?.debrief?.hostile_kills ?? 0} · rearms ${war?.debrief?.fob_rearms ?? 0} · ${(war?.debrief?.elapsed_s ?? 0).toFixed(0)}s airborne. R restarts.`,
+    `${reason} Hostiles down ${war?.debrief?.hostile_kills ?? 0} · rearms ${war?.debrief?.fob_rearms ?? 0} · bird swaps ${authorityState?.airframe_swaps ?? 0} · ${(war?.debrief?.elapsed_s ?? 0).toFixed(0)}s airborne. R restarts.`,
   );
   debrief.hidden = false;
   setStatus(

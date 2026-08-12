@@ -221,7 +221,7 @@ export function campEmberFirebaseParts() {
   ];
   // Brighter than the deep laterite so the scar survives the aerial haze — the scar IS
   // the base from the air (Granite), not an accent.
-  addFan("scar-apron", "laterite", [0.55, 0.36, 0.22], 0, 0, -0.022, scarOutline);
+  addFan("scar-apron", "laterite", [0.55, 0.36, 0.22], 0, 0, -0.030, scarOutline);
 
   // Berm ring with the eastbound departure mouth left open (Sedgwick).
   let bermIndex = 0;
@@ -239,16 +239,16 @@ export function campEmberFirebaseParts() {
   for (let i = 0; i < 12; i++) {
     const angle = (i / 12) * Math.PI * 2 + 0.13;
     add(`ring-road-${i}`, "laterite", "box", CAMP_EMBER_COLORS.laterite,
-      33 * Math.cos(angle), 33 * Math.sin(angle), -0.012, 4.2, 0.012, 17.5, -angle, true);
+      33 * Math.cos(angle), 33 * Math.sin(angle), -0.018, 4.2, 0.012, 17.5, -angle, true);
   }
   add("track-0", "laterite", "box", CAMP_EMBER_COLORS.laterite,
-    0, 33, -0.011, 2.4, 0.012, 38, 0, true);
+    0, 33, -0.013, 2.4, 0.012, 38, 0, true);
   add("track-1", "laterite", "box", CAMP_EMBER_COLORS.lateriteDark,
-    14, -20, -0.011, 2.0, 0.012, 30, 0.65, true);
+    14, -20, -0.013, 2.0, 0.012, 30, 0.65, true);
   add("track-2", "laterite", "box", CAMP_EMBER_COLORS.laterite,
-    -22, 16, -0.011, 2.0, 0.012, 27, -0.85, true);
+    -22, 16, -0.013, 2.0, 0.012, 27, -0.85, true);
   add("track-3", "laterite", "box", CAMP_EMBER_COLORS.lateriteDark,
-    -12, -30, -0.011, 1.8, 0.012, 24, 0.35, true);
+    -12, -30, -0.013, 1.8, 0.012, 24, 0.35, true);
 
   // Two rosette positions: pit disc + radiating sandbag lobes (the aerial signature).
   const rosettes = [[-38, 8], [36, 14]];
@@ -259,7 +259,7 @@ export function campEmberFirebaseParts() {
       pitOutline.push([4.6 * Math.cos(angle), 4.6 * Math.sin(angle)]);
     }
     addFan(`rosette-${rosetteIndex}-pit`, "laterite", CAMP_EMBER_COLORS.lateriteDark,
-      rx, rz, -0.014, pitOutline);
+      rx, rz, -0.026, pitOutline);
     for (let lobe = 0; lobe < 6; lobe++) {
       const angle = (lobe / 6) * Math.PI * 2 + rosetteIndex * 0.4;
       add(`rosette-${rosetteIndex}-lobe-${lobe}`, "sandbag", "revetment",
@@ -279,8 +279,8 @@ export function campEmberFirebaseParts() {
     }
     return outline;
   };
-  addFan("burn-0", "burn", [0.09, 0.08, 0.07], 42, -18, -0.013, burnOutline(5.5));
-  addFan("burn-1", "burn", [0.11, 0.10, 0.08], -16, 43, -0.013, burnOutline(4.5));
+  addFan("burn-0", "burn", [0.09, 0.08, 0.07], 42, -18, -0.024, burnOutline(5.5));
+  addFan("burn-1", "burn", [0.11, 0.10, 0.08], -16, 43, -0.024, burnOutline(4.5));
 
   // Bunker mounds on the berm's inner face: sandbag sides, glinting PSP roofs (A Shau).
   const bunkers = [[26, -24, 0.3], [-27, -16, -0.2], [15, -39, 0.1]];
@@ -303,7 +303,7 @@ export function campEmberFirebaseParts() {
   // is the parking surface itself; walls carry sub-ids.
   for (const [stationIndex, stationX] of [30, -30].entries()) {
     add(`bird-revetment-${stationIndex}`, "laterite", "box", CAMP_EMBER_COLORS.laterite,
-      stationX, 6, -0.01, 11, 0.014, 12, 0, true);
+      stationX, 6, -0.020, 11, 0.014, 12, 0, true);
     add(`bird-revetment-${stationIndex}-back`, "sandbag", "revetment",
       CAMP_EMBER_COLORS.sandbagShade, stationX, -0.8, 0.65, 9.5, 1.3, 2.4, Math.PI / 2);
     add(`bird-revetment-${stationIndex}-north`, "sandbag", "revetment",
@@ -467,6 +467,14 @@ export function createCampEmberFirebase(THREE, plan) {
     roughness: 0.92,
     metalness: 0.06,
     flatShading: true,
+    // The terrain-seated plates live millimetres from the rendered basin; at a 32 km far
+    // plane a real GPU's depth buffer cannot separate them and the whole pad shimmers
+    // under a moving eye (owner: "super flickery"). The standard decal fix: bias the
+    // merged firebase toward the camera in depth. SwiftShader-based probes mask this
+    // artifact, so do not "prove" it fixed with a headless capture alone.
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -2,
   });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = "CAMP_EMBER_FIREBASE";
