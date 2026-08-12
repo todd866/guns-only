@@ -220,6 +220,16 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
     /// <summary>Sink/lateral/yaw measured at the most recent airborne-to-ground transition.</summary>
     public ContactTouchdown LastTouchdown => _lastTouchdown;
 
+    /// <summary>
+    /// Damaged badly enough that the FOB ramp loop should offer a fresh airframe: any
+    /// latched envelope failure or bent gear. Distinct from Flyable, which only fatal
+    /// latches revoke.
+    /// </summary>
+    public bool IsCrippled => _gearDamagedLatched
+        || _hardImpactLatched
+        || _rotorStrikeLatched
+        || _contactFailureCause != VehicleContactFailureCause.None;
+
     /// <summary>Injects an engine-out condition; the freewheel leaves the rotor authoritative.</summary>
     public void FailEngine() => _engineOperating = false;
 

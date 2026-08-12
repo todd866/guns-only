@@ -258,6 +258,12 @@ public sealed class CobraGroundWarRuntime
         return true;
     }
 
+    /// <summary>The FOB zone test alone — shared by rearm and the airframe-swap loop.</summary>
+    public bool IsInsideFob(in Vec3D cobraPositionWorldM) =>
+        _terrain.TrySample(
+            cobraPositionWorldM.X, cobraPositionWorldM.Z, out TerrainSample fobSurface)
+        && _fob.Contains(cobraPositionWorldM, fobSurface.HeightM);
+
     public bool TryResupplyAtFob(in Vec3D cobraPositionWorldM)
     {
         if (!_terrain.TrySample(cobraPositionWorldM.X, cobraPositionWorldM.Z, out TerrainSample surface))

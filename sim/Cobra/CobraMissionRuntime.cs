@@ -12,7 +12,8 @@ public enum CobraMissionStatus
     TerrainUnavailable,
     VehicleAuthorityLost,
     Victory,
-    Defeat
+    Defeat,
+    FobCombatIneffective
 }
 
 public enum CobraMaskingState
@@ -319,7 +320,9 @@ public sealed class CobraMissionRuntime
     readonly CobraCanyonDefinition _definition;
     readonly ITerrainSurface _terrain;
     readonly CobraCanyonRouteDefinition _selectedRoute;
-    readonly Ah1gCobraDynamics _cobra;
+    Ah1gCobraDynamics _cobra;
+    readonly List<CobraAirframeSlot> _airframePool = new();
+    int _airframeSwaps;
     readonly double _recurringBaseMassKg;
     readonly double _additivePayloadMassKg;
     readonly double _airDensityKgM3;
@@ -429,6 +432,33 @@ public sealed class CobraMissionRuntime
             recurringBaseMassKg,
             additivePayloadMassKg,
             Ah1gCobraDefinition.LateProduction);
+        double stationSkidM = Ah1gCobraDefinition.LateProduction.Contact.CenterOfMassToSkidM;
+        _airframePool.Add(new CobraAirframeSlot(
+            "cobra-canyon.airframe-1",
+            CobraAirframeState.PlayerFlying,
+            resolvedSpawn.PositionWorldM,
+            resolvedSpawn.YawRad));
+        foreach ((string slotId, double northOffsetM) in new[]
+        {
+            ("cobra-canyon.airframe-2", CobraAirframePool.SpareStationOffsetNorthM),
+            ("cobra-canyon.airframe-3", -CobraAirframePool.SpareStationOffsetNorthM),
+        })
+        {
+            if (!terrain.TrySample(
+                campLandmark.EastM,
+                campLandmark.NorthM + northOffsetM,
+                out TerrainSample stationSurface))
+                throw new InvalidOperationException(
+                    "A spare airframe station has no terrain datum.");
+            _airframePool.Add(new CobraAirframeSlot(
+                slotId,
+                CobraAirframeState.Ready,
+                new Vec3D(
+                    campLandmark.EastM,
+                    stationSurface.HeightM + stationSkidM,
+                    campLandmark.NorthM + northOffsetM),
+                CobraAirframePool.SpareStationYawRad));
+        }
         _groundWar = new CobraGroundWarRuntime(definition, terrain, groundWarSeed);
         CobraCanyonLandmarkDefinition bridgeLandmark = definition.Landmarks.First(landmark =>
             string.Equals(
@@ -459,6 +489,12 @@ public sealed class CobraMissionRuntime
     public ITerrainSurface Terrain => _terrain;
     public CobraCanyonRouteDefinition SelectedRoute => _selectedRoute;
     public Ah1gCobraDynamics Cobra => _cobra;
+
+    /// <summary>Camp Ember's ramp: the player's bird plus the spares. The pool is the resource.</summary>
+    public IReadOnlyList<CobraAirframeSlot> AirframePool => _airframePool;
+
+    /// <summary>How many times the player has swapped into a spare this mission.</summary>
+    public int AirframeSwaps => _airframeSwaps;
     /// <summary>Most recent wind sample applied to the vehicle environment (m/s, E/U/N).</summary>
     public Vec3D LastWindVelocityMps => _lastWindVelocityMps;
     /// <summary>
@@ -558,6 +594,8 @@ public sealed class CobraMissionRuntime
         }
         if (Status == CobraMissionStatus.Active)
             _groundWar.TryResupplyAtFob(currentPositionWorldM);
+        if (Status == CobraMissionStatus.Active)
+            TrySwapAirframeAtFob(currentPositionWorldM);
         if (Status == CobraMissionStatus.Active) {
             Status = _groundWar.MissionOutcome switch {
                 HoldTheBridgeOutcome.Victory => CobraMissionStatus.Victory,
@@ -875,6 +913,52 @@ public sealed class CobraMissionRuntime
             if (obstacle.IntersectsSegment(observerWorldM, targetWorldM)) return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// The owner's ramp loop: land stable inside the FOB with a crippled bird and you swap
+    /// into a Ready spare where it is parked; the crippled bird stays where you left it.
+    /// With no spare left, the FOB is combat-ineffective and the mission says so. A bird
+    /// destroyed outright still ends the mission through the existing authority-lost path.
+    /// </summary>
+    void TrySwapAirframeAtFob(in Vec3D positionWorldM)
+    {
+        if (!_cobra.IsCrippled) return;
+        if (_cobra.Observation.Contact.Kind != VehicleContactKind.StableSurfaceContact)
+            return;
+        if (!_groundWar.IsInsideFob(positionWorldM)) return;
+
+        int flyingIndex = _airframePool.FindIndex(
+            slot => slot.State == CobraAirframeState.PlayerFlying);
+        if (flyingIndex >= 0)
+        {
+            _airframePool[flyingIndex] = _airframePool[flyingIndex] with
+            {
+                State = _cobra.State.Flyable
+                    ? CobraAirframeState.Crippled
+                    : CobraAirframeState.Destroyed,
+                ParkedPositionWorldM = positionWorldM,
+                ParkedYawRad = _cobra.Observation.YawRad,
+            };
+        }
+        int spareIndex = _airframePool.FindIndex(
+            slot => slot.State == CobraAirframeState.Ready);
+        if (spareIndex < 0)
+        {
+            Status = CobraMissionStatus.FobCombatIneffective;
+            return;
+        }
+        CobraAirframeSlot spare = _airframePool[spareIndex];
+        _cobra = new Ah1gCobraDynamics(
+            vehicleId: "cobra-canyon.player",
+            spare.ParkedPositionWorldM,
+            Vec3D.Zero,
+            spare.ParkedYawRad,
+            _recurringBaseMassKg,
+            _additivePayloadMassKg,
+            Ah1gCobraDefinition.LateProduction);
+        _airframePool[spareIndex] = spare with { State = CobraAirframeState.PlayerFlying };
+        _airframeSwaps++;
     }
 
     VehicleSurfaceSample SampleVehicleSurface(in Vec3D positionWorldM)

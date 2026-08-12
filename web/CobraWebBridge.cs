@@ -452,6 +452,7 @@ public static partial class CobraWebBridge
         CobraMissionStatus.VehicleAuthorityLost => "vehicle-authority-lost",
         CobraMissionStatus.Victory => "victory",
         CobraMissionStatus.Defeat => "defeat",
+        CobraMissionStatus.FobCombatIneffective => "fob-combat-ineffective",
         _ => throw new ArgumentOutOfRangeException(nameof(status))
     };
 
