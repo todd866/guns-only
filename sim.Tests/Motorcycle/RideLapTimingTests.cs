@@ -141,6 +141,88 @@ public sealed class RideLapTimingTests
         Assert.True(behind!.Value > 0.0, $"expected behind, got {behind!.Value:F2} s");
     }
 
+    /// <summary>
+    /// The REAL circuit wraps ProgressM to ~0 on the tick it reports CrossedStartFinish
+    /// (PaintedCircuit only crosses on wrappedForward). An earlier version of this fixture
+    /// passed progressM = lapLength at the line, which hid a profile-flattening bug: the
+    /// fill loop wrote the whole lap time into every slot, so the delta compared against
+    /// full lap time everywhere. Cross at ~0, like the circuit actually does.
+    /// </summary>
+    static void RideWrappingLap(RideLapTiming timing, double seconds, double lapLengthM)
+    {
+        int steps = (int)Math.Round(seconds / Dt);
+        int nextGate = 0;
+        for (int step = 0; step < steps; step++)
+        {
+            double fraction = (double)step / steps;
+            int sectorCrossed = -1;
+            if (nextGate < 3 && fraction >= 0.25 * (nextGate + 1))
+                sectorCrossed = nextGate++;
+            timing.Advance(
+                Sample(progressM: fraction * lapLengthM, sectorCrossed: sectorCrossed),
+                true, false, Dt, lapLengthM);
+        }
+        timing.Advance(
+            Sample(crossedStartFinish: true, progressM: 0.0), true, false, Dt, lapLengthM);
+    }
+
+    [Fact]
+    public void TheBestProfileSurvivesTheProgressWrapAtTheLine()
+    {
+        const double lapLengthM = 4_000.0;
+        var timing = new RideLapTiming();
+
+        RideWrappingLap(timing, 80.0, lapLengthM);
+
+        // Half a lap into the benchmark should read about half its time. A flattened profile
+        // reads the FULL lap time at every point, which makes every delta nonsense.
+        for (int step = 0; step < (int)Math.Round(40.0 / Dt); step++)
+            timing.Advance(Sample(progressM: 0.5 * lapLengthM), true, false, Dt, lapLengthM);
+        double? delta = timing.DeltaToBestSeconds(0.5 * lapLengthM, lapLengthM);
+
+        Assert.NotNull(delta);
+        Assert.True(Math.Abs(delta!.Value) < 3.0,
+            $"Even pace at half distance should be near the best pace; delta {delta.Value:F1} s "
+            + "means the best profile was flattened by the wrap at the line.");
+    }
+
+    [Fact]
+    public void AMissedOrRepeatedSectorGateDoesNotShiftTheOtherSectors()
+    {
+        const double lapLengthM = 4_000.0;
+        var timing = new RideLapTiming();
+        int steps = (int)Math.Round(80.0 / Dt);
+
+        for (int step = 0; step < steps; step++)
+        {
+            double fraction = (double)step / steps;
+            // Gate 0 fires twice, gate 1 is missed entirely, gate 2 fires normally.
+            int sectorCrossed = -1;
+            if (fraction >= 0.25 && fraction < 0.25 + Dt) sectorCrossed = 0;
+            else if (fraction >= 0.30 && fraction < 0.30 + Dt) sectorCrossed = 0;
+            else if (fraction >= 0.75 && fraction < 0.75 + Dt) sectorCrossed = 2;
+            timing.Advance(
+                Sample(progressM: fraction * lapLengthM, sectorCrossed: sectorCrossed),
+                true, false, Dt, lapLengthM);
+        }
+        timing.Advance(
+            Sample(crossedStartFinish: true, progressM: 0.0), true, false, Dt, lapLengthM);
+
+        // Sector 0 closes at 25%. The repeated gate 0 must be ignored rather than advance
+        // the index, and gate 2 arriving while we still await gate 1 must also be ignored —
+        // so the unclosed sector 1 absorbs the rest of the lap and sectors 2-3 stay empty.
+        Assert.Equal(20.0, timing.LastLapSectorSeconds[0], 0);
+        Assert.Equal(60.0, timing.LastLapSectorSeconds[1], 0);
+        Assert.Equal(0.0, timing.LastLapSectorSeconds[2], 6);
+        Assert.Equal(0.0, timing.LastLapSectorSeconds[3], 6);
+        double summed = 0.0;
+        foreach (double sector in timing.LastLapSectorSeconds) summed += sector;
+        Assert.Equal(timing.LastLapSeconds, summed, 2);
+        // A merged sector is not a sector time and must never be recorded as a best.
+        foreach (double? best in timing.BestSectorSeconds) Assert.Null(best);
+        Assert.NotNull(timing.BestLapSeconds);
+    }
+
     [Fact]
     public void TheSplitProfileSizeMatchesTheStoredRecordContract()
     {

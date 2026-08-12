@@ -231,6 +231,8 @@ const helmetHud = new HelmetHud(hudCanvas);
 
 let bridge = null;
 let persistedBestSeconds = null;
+/** Identity of the circuit a stored best belongs to; set once the circuit is known. */
+let rideCircuitIdentity = null;
 
 /** localStorage can throw outright (blocked cookies, private mode): never let that cost a ride. */
 function safeLocalStorage() {
@@ -252,7 +254,7 @@ function persistBestLapIfImproved(state) {
     bestLapSeconds: best,
     splitProfile: Array.from(profile),
     bestSectorSeconds: Array.from(state.best_sector_s ?? []),
-  })) {
+  }, rideCircuitIdentity)) {
     persistedBestSeconds = best;
   }
 }
@@ -576,14 +578,22 @@ async function boot() {
     bridge.Start();
     // Chase your real record, not just today's: a best carried over from a previous session
     // seeds the sim so the delta compares against it. A refused seed simply means no best.
-    const storedBest = loadRideBest(safeLocalStorage());
-    if (storedBest) {
-      bridge.SeedBestLap(storedBest.bestLapSeconds, storedBest.splitProfile);
+    const storedBest = loadRideBest(safeLocalStorage(), rideCircuitIdentity);
+    if (storedBest && bridge.SeedBestLap(
+      storedBest.bestLapSeconds, storedBest.splitProfile)) {
+      // Record what is already on disk, or the first frames would rewrite the same best —
+      // and if storage is throwing, retry that write on EVERY frame forever.
+      persistedBestSeconds = storedBest.bestLapSeconds;
     }
     snapshot = refreshSnapshot();
     // The centreline is immutable: fetch it once instead of re-marshalling ~1,700
     // points inside every per-frame GetState snapshot.
-    buildTrackDayPresentation(JSON.parse(bridge.GetCircuit()));
+    const circuitPoints = JSON.parse(bridge.GetCircuit());
+    rideCircuitIdentity = {
+      circuitId: "rapier-strip-weekend",
+      circuitLengthM: Number(snapshot?.circuit_length_m) || circuitPoints.length,
+    };
+    buildTrackDayPresentation(circuitPoints);
     manualClutch = snapshot.clutch_mode === "manual";
     setStatus("RAPIER TRACK DAY · RIDER REFLEX ASSIST", "ready");
     onboarding = createControlsOnboarding({

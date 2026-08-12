@@ -29,6 +29,7 @@ public sealed class RideLapTiming
     double _currentLapSeconds;
     double _sectorStartSeconds;
     int _sectorIndex;
+    int _profileHighWaterSlot;
     bool _currentLapValid = true;
 
     /// <summary>Elapsed time on the lap in progress, seconds.</summary>
@@ -95,15 +96,31 @@ public sealed class RideLapTiming
 
         // Sample the elapsed time along the lap so a future lap can be compared against this
         // one at the same place. Fixed-size: a split profile, never a position recording.
+        //
+        // The circuit reports CrossedStartFinish on the tick ProgressM has ALREADY wrapped to
+        // ~0, so trusting progress on that tick would back-fill the whole lap time across
+        // every slot and flatten the profile. On the line the lap is by definition complete:
+        // fill forward from the last slot only. Slots are also written forward-only from the
+        // furthest point reached, so a brief progress regress cannot rewrite earlier samples.
         if (lapLengthM > 0.0 && double.IsFinite(sample.ProgressM))
         {
-            double fraction = Math.Clamp(sample.ProgressM / lapLengthM, 0.0, 1.0);
-            int slot = (int)Math.Round(fraction * (SplitSampleCount - 1));
-            for (int index = slot; index < SplitSampleCount; index++)
-                _currentSplitProfile[index] = _currentLapSeconds;
+            int slot = sample.CrossedStartFinish
+                ? SplitSampleCount - 1
+                : (int)Math.Round(
+                    Math.Clamp(sample.ProgressM / lapLengthM, 0.0, 1.0)
+                        * (SplitSampleCount - 1));
+            if (slot >= _profileHighWaterSlot)
+            {
+                for (int index = slot; index < SplitSampleCount; index++)
+                    _currentSplitProfile[index] = _currentLapSeconds;
+                _profileHighWaterSlot = slot;
+            }
         }
 
-        if (sample.SectorCrossed >= 0 && _sectorIndex < SectorCount - 1)
+        // Only the gate we are actually waiting for closes a sector. A repeated fire (or a
+        // reverse re-cross) would otherwise advance the index and shift every later sector,
+        // and a missed gate must leave its sector at zero rather than absorb the next one.
+        if (sample.SectorCrossed == _sectorIndex && _sectorIndex < SectorCount - 1)
         {
             _currentSectorSeconds[_sectorIndex] = _currentLapSeconds - _sectorStartSeconds;
             _sectorStartSeconds = _currentLapSeconds;
@@ -118,7 +135,11 @@ public sealed class RideLapTiming
         LastLapSeconds = lapSeconds;
         _completedLapSeconds.Add(lapSeconds);
         Array.Copy(_currentSectorSeconds, _lastLapSectorSeconds, SectorCount);
-        if (_currentLapValid)
+        // A lap that missed a gate has a merged sector — two sectors' time in one slot. It
+        // is a real lap time, but its sector times are not real sector times and must never
+        // become records.
+        bool everySectorClosed = _sectorIndex == SectorCount - 1;
+        if (_currentLapValid && everySectorClosed)
         {
             for (int sector = 0; sector < SectorCount; sector++)
             {
@@ -128,6 +149,9 @@ public sealed class RideLapTiming
                     || sectorSeconds < _bestSectorSeconds[sector]!.Value)
                     _bestSectorSeconds[sector] = sectorSeconds;
             }
+        }
+        if (_currentLapValid)
+        {
             if (BestLapSeconds is null || lapSeconds < BestLapSeconds.Value)
             {
                 BestLapSeconds = lapSeconds;
@@ -146,6 +170,7 @@ public sealed class RideLapTiming
         _sectorIndex = 0;
         Array.Clear(_currentSectorSeconds);
         Array.Clear(_currentSplitProfile);
+        _profileHighWaterSlot = 0;
     }
 
     /// <summary>Clears the lap in progress without forgetting the best or the history.</summary>

@@ -67,6 +67,27 @@ test("absent, malformed and nonsense records load as no best", () => {
   assert.equal(loadRideBest(null), null);
 });
 
+test("a best from another circuit is refused rather than driving a wrong delta", () => {
+  const rapier = { circuitId: "rapier-strip-weekend", circuitLengthM: 4000 };
+  const elsewhere = { circuitId: "some-other-track", circuitLengthM: 4000 };
+  const retuned = { circuitId: "rapier-strip-weekend", circuitLengthM: 4600 };
+  const storage = memoryStorage();
+
+  assert.equal(saveRideBest(storage, RECORD, rapier), true);
+  assert.ok(loadRideBest(storage, rapier), "same circuit loads");
+  assert.equal(loadRideBest(storage, elsewhere), null);
+  assert.equal(loadRideBest(storage, retuned), null, "a retuned layout invalidates the best");
+  // A record written before circuit identity existed has no fingerprint and cannot be trusted.
+  const legacy = memoryStorage({
+    [RIDE_BEST_STORAGE_KEY]: JSON.stringify({
+      bestLapSeconds: 80,
+      splitProfile: RECORD.splitProfile,
+      bestSectorSeconds: [],
+    }),
+  });
+  assert.equal(loadRideBest(legacy, rapier), null);
+});
+
 test("a record with a non-finite time is refused rather than stored", () => {
   const storage = memoryStorage();
 

@@ -11,13 +11,27 @@ import { RIDE_SPLIT_SAMPLE_COUNT } from "./ride_timing_readout.js";
 
 export const RIDE_BEST_STORAGE_KEY = "guns-only.ride.best.v1";
 
+/**
+ * A split profile is only meaningful for the circuit that produced it. Without this, a best
+ * from another layout (or from before a circuit retune) would silently drive the live delta
+ * with total confidence. The lap length is the cheapest available fingerprint.
+ */
+function circuitMatches(record, circuit) {
+  if (!circuit) return true;
+  const storedLength = Number(record?.circuitLengthM);
+  const currentLength = Number(circuit.circuitLengthM);
+  if (!Number.isFinite(storedLength) || !Number.isFinite(currentLength)) return false;
+  if (record?.circuitId !== circuit.circuitId) return false;
+  return Math.abs(storedLength - currentLength) <= 1.0;
+}
+
 function finitePositive(value) {
   const numeric = Number(value);
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 }
 
 /** @returns {{bestLapSeconds: number, splitProfile: number[], bestSectorSeconds: number[]}|null} */
-export function loadRideBest(storage) {
+export function loadRideBest(storage, circuit = null) {
   let raw = null;
   try {
     raw = storage?.getItem?.(RIDE_BEST_STORAGE_KEY) ?? null;
@@ -34,6 +48,7 @@ export function loadRideBest(storage) {
   }
   if (!parsed || typeof parsed !== "object") return null;
 
+  if (!circuitMatches(parsed, circuit)) return null;
   const bestLapSeconds = finitePositive(parsed.bestLapSeconds);
   if (bestLapSeconds === null) return null;
   // A short or non-numeric profile cannot drive a delta; refuse it rather than interpolate
@@ -52,7 +67,7 @@ export function loadRideBest(storage) {
 }
 
 /** @returns {boolean} true when the record was written. */
-export function saveRideBest(storage, record) {
+export function saveRideBest(storage, record, circuit = null) {
   if (finitePositive(record?.bestLapSeconds) === null) return false;
   if (!Array.isArray(record?.splitProfile)
     || record.splitProfile.length !== RIDE_SPLIT_SAMPLE_COUNT
@@ -64,6 +79,8 @@ export function saveRideBest(storage, record) {
       bestSectorSeconds: Array.isArray(record.bestSectorSeconds)
         ? record.bestSectorSeconds
         : [],
+      circuitId: circuit?.circuitId ?? null,
+      circuitLengthM: Number(circuit?.circuitLengthM) || null,
     }));
     return true;
   } catch {
