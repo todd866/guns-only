@@ -1,5 +1,14 @@
 /** Helmet-mounted canvas HUD for the YZF-R1 weekend ride. No gun funnel / padlock. */
 
+import {
+  formatLapTime,
+  rideTimingReadout,
+} from "../ride/ride_timing_readout.js";
+
+// Re-exported: the formatter moved down to the pure ride module (it is shared with the lap
+// clock and must not be duplicated), but existing importers still expect it here.
+export { formatLapTime };
+
 export const REDLINE_RPM = 14_500;
 export const IDLE_RPM = 2_000;
 
@@ -10,14 +19,6 @@ function speedKmh(state) {
   return mps * 3.6;
 }
 
-export function formatLapTime(seconds) {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "—:——";
-  const centiseconds = Math.floor(seconds * 100 + 1e-6);
-  const minutes = Math.floor(centiseconds / 6_000);
-  const wholeSeconds = Math.floor((centiseconds % 6_000) / 100);
-  const hundredths = centiseconds % 100;
-  return `${minutes}:${String(wholeSeconds).padStart(2, "0")}.${String(hundredths).padStart(2, "0")}`;
-}
 
 /** Pure minimap placement: clamps the rider dot to the widget frame, flags off-map. */
 export function minimapDotPlacement(bounds, frame, px, pz) {
@@ -120,7 +121,58 @@ export class HelmetHud {
     this.drawPitchBalanceTape(ctx, w, h, state);
     this.drawContactPatchInstrument(ctx, w, h, state);
     this.drawKneeCue(ctx, w, h, state);
+    this.drawLapTiming(ctx, w, h, state);
     this.drawStatusStrip(ctx, w, h, state);
+  }
+
+  /**
+   * The lap clock. Delta is the largest number here on purpose: it is the one a rider
+   * chases corner to corner, where lap and best are only read on the straight.
+   */
+  drawLapTiming(ctx, w, h, state) {
+    const readout = rideTimingReadout({
+      lapSeconds: state.lap_time_s,
+      lastLapSeconds: state.last_lap_s,
+      bestLapSeconds: state.best_lap_s,
+      deltaSeconds: state.delta_s,
+      lapValid: state.lap_valid !== false,
+    });
+    const x = w * 0.72;
+    const y = h * 0.12;
+    ctx.save();
+    ctx.fillStyle = "rgba(8, 16, 13, 0.72)";
+    ctx.strokeStyle = "rgba(196, 210, 171, 0.28)";
+    ctx.lineWidth = 1;
+    roundRect(ctx, x - 10, y - 22, 176, readout.delta ? 96 : 76, 6);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#9ca997";
+    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, monospace";
+    ctx.fillText("LAP", x, y - 8);
+    ctx.fillStyle = readout.invalid ? "#c98a6a" : "#e9ede2";
+    ctx.font = "700 22px ui-monospace, SFMono-Regular, Menlo, monospace";
+    ctx.fillText(readout.lap, x, y + 14);
+    if (readout.invalid) {
+      ctx.fillStyle = "#c98a6a";
+      ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, monospace";
+      ctx.fillText("LAP SPOILT", x + 104, y - 8);
+    }
+
+    ctx.fillStyle = "#9ca997";
+    ctx.font = "600 10px ui-monospace, SFMono-Regular, Menlo, monospace";
+    ctx.fillText(`LAST ${readout.last}`, x, y + 32);
+    ctx.fillStyle = "#c7b78c";
+    ctx.fillText(`BEST ${readout.best}`, x, y + 46);
+
+    if (!readout.delta) {
+      ctx.restore();
+      return;
+    }
+    ctx.fillStyle = readout.delta.ahead ? "#8fd07a" : "#d98a7a";
+    ctx.font = "700 20px ui-monospace, SFMono-Regular, Menlo, monospace";
+    ctx.fillText(readout.delta.text, x, y + 70);
+    ctx.restore();
   }
 
   drawHorizonReticle(ctx, w, h) {

@@ -72,6 +72,14 @@ internal static class MotorcycleSnapshotProjection
             lean_hold = snap.LeanHoldAuthority,
             lap = snap.LapCount,
             lap_time_s = snap.LapTimeSeconds,
+            // The lap clock the rider can finally read: what the last one cost, the best
+            // ridden clean, and how this one compares at the same point on the circuit.
+            last_lap_s = runtime.LastLapSeconds,
+            best_lap_s = runtime.BestLapSeconds,
+            delta_s = runtime.DeltaToBestSeconds,
+            lap_valid = runtime.CurrentLapValid,
+            sector_s = runtime.SectorSeconds,
+            best_sector_s = runtime.BestSectorSeconds,
             off_track_s = snap.OffTrackSeconds,
             on_track = runtime.IsOnTrack,
             tipped = snap.IsTippedOver,

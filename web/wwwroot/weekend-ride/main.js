@@ -1,20 +1,24 @@
-import * as THREE from "../vendor/three.module.js?v=313";
-import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=313";
+import * as THREE from "../vendor/three.module.js?v=315";
+import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=315";
+import {
+  loadRideBest,
+  saveRideBest,
+} from "../render/ride/ride_best_lap_store.js?v=315";
 import {
   dominantSignedAxis,
   gamepadRiderAxes,
-} from "../render/motorcycle/rider_input.js?v=313";
+} from "../render/motorcycle/rider_input.js?v=315";
 import {
   createRapierTrackDayPresentation,
-} from "../render/motorcycle/track_day_presentation.js?v=313";
-import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=313";
+} from "../render/motorcycle/track_day_presentation.js?v=315";
+import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=315";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=313";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=313";
-import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=313";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=313";
-import { RELEASE_BUILD } from "../render/release/release_identity.js?v=313";
+} from "../render/visual/shadow_stabilizer.js?v=315";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=315";
+import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=315";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=315";
+import { RELEASE_BUILD } from "../render/release/release_identity.js?v=315";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
@@ -226,6 +230,34 @@ scene.add(runway);
 const helmetHud = new HelmetHud(hudCanvas);
 
 let bridge = null;
+let persistedBestSeconds = null;
+/** Identity of the circuit a stored best belongs to; set once the circuit is known. */
+let rideCircuitIdentity = null;
+
+/** localStorage can throw outright (blocked cookies, private mode): never let that cost a ride. */
+function safeLocalStorage() {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Writes a new best the moment the sim reports one, so a crash never loses the record. */
+function persistBestLapIfImproved(state) {
+  const best = Number(state?.best_lap_s);
+  if (!Number.isFinite(best) || best <= 0) return;
+  if (persistedBestSeconds !== null && best >= persistedBestSeconds) return;
+  const profile = bridge?.GetBestSplitProfile?.();
+  if (!profile || profile.length === 0) return;
+  if (saveRideBest(safeLocalStorage(), {
+    bestLapSeconds: best,
+    splitProfile: Array.from(profile),
+    bestSectorSeconds: Array.from(state.best_sector_s ?? []),
+  }, rideCircuitIdentity)) {
+    persistedBestSeconds = best;
+  }
+}
 let snapshot = null;
 let paused = false;
 let manualClutch = false;
@@ -425,6 +457,7 @@ function animate(timeMs) {
   updateShadowFrame();
   renderer.render(scene, camera);
   helmetHud.draw(state);
+  persistBestLapIfImproved(state);
   onboarding?.advanceNudges(onboardingNudgeState(state), deltaSeconds);
   recordRideTelemetry(timeMs, state, rawFrameMs);
 
@@ -543,10 +576,24 @@ async function boot() {
     const assemblyExports = await getAssemblyExports("GunsOnly.Web");
     bridge = assemblyExports.GunsOnly.Web.MotorcycleWebBridge;
     bridge.Start();
+    // Chase your real record, not just today's: a best carried over from a previous session
+    // seeds the sim so the delta compares against it. A refused seed simply means no best.
+    const storedBest = loadRideBest(safeLocalStorage(), rideCircuitIdentity);
+    if (storedBest && bridge.SeedBestLap(
+      storedBest.bestLapSeconds, storedBest.splitProfile)) {
+      // Record what is already on disk, or the first frames would rewrite the same best —
+      // and if storage is throwing, retry that write on EVERY frame forever.
+      persistedBestSeconds = storedBest.bestLapSeconds;
+    }
     snapshot = refreshSnapshot();
     // The centreline is immutable: fetch it once instead of re-marshalling ~1,700
     // points inside every per-frame GetState snapshot.
-    buildTrackDayPresentation(JSON.parse(bridge.GetCircuit()));
+    const circuitPoints = JSON.parse(bridge.GetCircuit());
+    rideCircuitIdentity = {
+      circuitId: "rapier-strip-weekend",
+      circuitLengthM: Number(snapshot?.circuit_length_m) || circuitPoints.length,
+    };
+    buildTrackDayPresentation(circuitPoints);
     manualClutch = snapshot.clutch_mode === "manual";
     setStatus("RAPIER TRACK DAY · RIDER REFLEX ASSIST", "ready");
     onboarding = createControlsOnboarding({

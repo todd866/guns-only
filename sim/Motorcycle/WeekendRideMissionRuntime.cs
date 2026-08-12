@@ -27,7 +27,9 @@ public sealed class WeekendRideMissionRuntime
     readonly MotorcycleRiderController _riderController = new();
     PaintedCircuitQueryState _circuitQueryState;
     long _authorityTick;
+    readonly RideLapTiming _lapTiming = new();
     double _currentLapElapsedSeconds;
+    double _lapProgressM;
     double _offTrackSeconds;
     double _tipRecoveryFlashSeconds;
     bool _lapTimingActive;
@@ -53,6 +55,28 @@ public sealed class WeekendRideMissionRuntime
     public Vec3D GridPosition { get; }
     public double GridHeadingRad => _gridHeadingRad;
     public double LapTimeSeconds => _currentLapElapsedSeconds;
+
+    /// <summary>The most recently completed lap, seconds; 0 before the first crossing.</summary>
+    public double LastLapSeconds => _lapTiming.LastLapSeconds;
+
+    /// <summary>Fastest lap ridden clean this session, or null.</summary>
+    public double? BestLapSeconds => _lapTiming.BestLapSeconds;
+
+    /// <summary>False once the lap in progress has been spoilt off-track or by a tip-over.</summary>
+    public bool CurrentLapValid => _lapTiming.CurrentLapValid;
+
+    /// <summary>Every completed lap in order, dirty ones included.</summary>
+    public IReadOnlyList<double> CompletedLapSeconds => _lapTiming.CompletedLapSeconds;
+
+    /// <summary>Sector times for the lap in progress; 0 for sectors not yet closed.</summary>
+    public IReadOnlyList<double> SectorSeconds => _lapTiming.SectorSeconds;
+
+    /// <summary>Best time per sector, each independent of the lap it came from.</summary>
+    public IReadOnlyList<double?> BestSectorSeconds => _lapTiming.BestSectorSeconds;
+
+    /// <summary>Seconds ahead (negative) or behind the best lap at this point on the circuit.</summary>
+    public double? DeltaToBestSeconds =>
+        _lapTiming.DeltaToBestSeconds(_lapProgressM, Circuit.CircuitLengthM);
     public int LapCount => _circuitQueryState.LapIndex;
     public double OffTrackSeconds => _offTrackSeconds;
     public bool IsOnTrack => _isOnTrack;
@@ -119,10 +143,17 @@ public sealed class WeekendRideMissionRuntime
             && circuitSample.OnTrack
             && Bike.Telemetry.SpeedMps >= LapTimingStartSpeedMps)
             _lapTimingActive = true;
-        if (_lapTimingActive)
-            _currentLapElapsedSeconds += FixedDeltaSeconds;
-        if (circuitSample.CrossedStartFinish)
-            _currentLapElapsedSeconds = 0.0;
+        // The lap now survives the finish line: RideLapTiming keeps it, judges whether it was
+        // clean, and remembers the best. It owns the elapsed clock; the legacy field mirrors
+        // it so existing readers of LapTimeSeconds keep working unchanged.
+        _lapTiming.Advance(
+            circuitSample,
+            _lapTimingActive,
+            Bike.Telemetry.IsTippedOver,
+            FixedDeltaSeconds,
+            Circuit.CircuitLengthM);
+        _lapProgressM = circuitSample.ProgressM;
+        _currentLapElapsedSeconds = _lapTiming.CurrentLapSeconds;
 
         if (Bike.Telemetry.IsTippedOver)
         {
@@ -161,6 +192,9 @@ public sealed class WeekendRideMissionRuntime
         Bike.ResetTo(GridPosition, _gridHeadingRad);
         _riderController.Reset();
         _circuitQueryState = default;
+        // A recovery drops the lap in progress but never the best or the history: you lose the
+        // lap you crashed on, not the session.
+        _lapTiming.AbandonCurrentLap();
         _currentLapElapsedSeconds = 0.0;
         _offTrackSeconds = 0.0;
         _lapTimingActive = false;
@@ -168,6 +202,13 @@ public sealed class WeekendRideMissionRuntime
     }
 
     public void DebugForceTipOver() => Bike.DebugForceTipOver();
+
+    /// <summary>Restores a best lap from a previous session; see RideLapTiming.SeedBest.</summary>
+    public bool SeedBestLap(double bestLapSeconds, IReadOnlyList<double> splitProfile) =>
+        _lapTiming.SeedBest(bestLapSeconds, splitProfile);
+
+    /// <summary>The best lap's split profile, for persisting.</summary>
+    public IReadOnlyList<double> BestSplitProfile => _lapTiming.BestSplitProfile;
 
     public WeekendRideSnapshot Snapshot()
     {
