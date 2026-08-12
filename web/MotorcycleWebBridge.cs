@@ -103,6 +103,19 @@ public static partial class MotorcycleWebBridge
         _accumulatorSeconds = 0.0;
     }
 
+    /// <summary>
+    /// Seeds a best lap persisted by the page. Returns false when the record is unusable, so
+    /// a corrupt save can never poison the delta the rider is chasing.
+    /// </summary>
+    [JSExport]
+    public static bool SeedBestLap(double bestLapSeconds, double[] splitProfile) =>
+        RequireRuntime().SeedBestLap(bestLapSeconds, splitProfile ?? []);
+
+    /// <summary>The best lap's split profile, for the page to persist.</summary>
+    [JSExport]
+    public static double[] GetBestSplitProfile() =>
+        RequireRuntime().BestSplitProfile.ToArray();
+
     [JSExport]
     public static int Advance(double deltaSeconds)
     {
