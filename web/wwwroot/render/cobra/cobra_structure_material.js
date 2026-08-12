@@ -43,13 +43,25 @@ const FALLBACK_SURFACE = Object.freeze({ grainMetres: 2.0, wear: 0.22, streak: 0
 const STRUCTURE_VERTEX_HOOK = /* glsl */ `
 #include <begin_vertex>
 vec4 cobraStructureLocal = vec4(transformed, 1.0);
-vec3 cobraStructureNormalLocal = normal;
 #ifdef USE_INSTANCING
   cobraStructureLocal = instanceMatrix * cobraStructureLocal;
-  cobraStructureNormalLocal = mat3(instanceMatrix) * cobraStructureNormalLocal;
 #endif
 vCobraStructureWorld = (modelMatrix * cobraStructureLocal).xyz;
-vCobraStructureNormal = normalize(mat3(modelMatrix) * cobraStructureNormalLocal);
+// Normals need the INVERSE-TRANSPOSE, not the matrix itself. composeBox authors independent
+// XYZ scales, and under non-uniform scale a plain mat3 skews the normal — which flips the
+// triplanar axis pick below and grains those faces along the wrong plane. Compensating by
+// squared column length is the inverse-transpose for a scale+rotation matrix and stays
+// WebGL1-safe (GLSL ES 1.0 has no inverse()).
+mat3 cobraStructureBasis = mat3(modelMatrix);
+#ifdef USE_INSTANCING
+  cobraStructureBasis = cobraStructureBasis * mat3(instanceMatrix);
+#endif
+vec3 cobraStructureInvScale = vec3(
+  1.0 / max(1e-8, dot(cobraStructureBasis[0], cobraStructureBasis[0])),
+  1.0 / max(1e-8, dot(cobraStructureBasis[1], cobraStructureBasis[1])),
+  1.0 / max(1e-8, dot(cobraStructureBasis[2], cobraStructureBasis[2])));
+vCobraStructureNormal =
+  normalize(cobraStructureBasis * (normal * cobraStructureInvScale));
 `;
 
 const STRUCTURE_FRAGMENT_DETAIL = /* glsl */ `
@@ -115,7 +127,10 @@ ${COBRA_NOISE_CHUNK}`,
       )
       .replace("#include <color_fragment>", STRUCTURE_FRAGMENT_DETAIL);
   };
-  // Materials with different shader source must not share a program.
-  material.customProgramCacheKey = () => `cobra-structure-${role}`;
+  // One key for every role: the injected GLSL is IDENTICAL across roles (only uniform values
+  // differ), so per-role keys would split the program cache for nothing. three appends this to
+  // its own key, which already separates flatShading/side/vertexColors variants — and this
+  // still keeps patched materials from sharing a program with unpatched Lamberts.
+  material.customProgramCacheKey = () => "cobra-structure";
   return material;
 }

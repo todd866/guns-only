@@ -85,7 +85,7 @@ test("detail survives a shader with no conditional worldpos chunk", () => {
   material.onBeforeCompile(shader);
 
   assert.match(shader.vertexShader, /vCobraStructureWorld = \(modelMatrix/);
-  assert.match(shader.vertexShader, /vCobraStructureNormal = normalize/);
+  assert.match(shader.vertexShader, /vCobraStructureNormal =\s*\n?\s*normalize/);
 });
 
 test("world position folds in the per-instance transform", () => {
@@ -102,6 +102,29 @@ test("world position folds in the per-instance transform", () => {
       < shader.vertexShader.indexOf("vCobraStructureWorld = (modelMatrix"),
     "the instance transform must be applied BEFORE the model matrix",
   );
+});
+
+test("normals use the inverse-transpose so non-uniform scale cannot skew them", () => {
+  // composeBox authors independent XYZ scales. A plain mat3(modelMatrix) skews the normal
+  // under non-uniform scale, which flips the triplanar axis pick and grains the face along
+  // the wrong plane — visible as stripes running the wrong way, not as a missing effect.
+  const shader = compiled(createCobraStructureMaterial(THREE, "landmarks", { color: 0xffffff }));
+
+  assert.match(shader.vertexShader, /cobraStructureInvScale/);
+  assert.match(shader.vertexShader, /dot\(cobraStructureBasis\[0\], cobraStructureBasis\[0\]\)/);
+  assert.doesNotMatch(
+    shader.vertexShader,
+    /normalize\(mat3\(modelMatrix\) \* /,
+    "the naive normal transform must be gone",
+  );
+});
+
+test("every role shares one program cache key", () => {
+  const deck = createCobraStructureMaterial(THREE, "bridge-deck", { color: 0x111111 });
+  const road = createCobraStructureMaterial(THREE, "roads", { color: 0x222222 });
+
+  assert.equal(deck.customProgramCacheKey(), road.customProgramCacheKey());
+  assert.equal(deck.customProgramCacheKey(), "cobra-structure");
 });
 
 test("an unknown role falls back rather than throwing mid-scene-build", () => {
