@@ -142,6 +142,15 @@ public sealed class RideLapTimingTests
     }
 
     [Fact]
+    public void TheSplitProfileSizeMatchesTheStoredRecordContract()
+    {
+        // web/wwwroot/render/ride/ride_timing_readout.js exports RIDE_SPLIT_SAMPLE_COUNT and
+        // ride_best_lap_store.js REJECTS any persisted profile of a different length. If this
+        // constant moves without that one, every saved best silently stops loading.
+        Assert.Equal(32, RideLapTiming.SplitSampleCount);
+    }
+
+    [Fact]
     public void TimeOnlyAccumulatesWhileTimingIsActive()
     {
         var timing = new RideLapTiming();

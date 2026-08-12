@@ -150,4 +150,28 @@ public sealed class RideLapTiming
 
     /// <summary>Clears the lap in progress without forgetting the best or the history.</summary>
     public void AbandonCurrentLap() => StartFreshLap();
+
+    /// <summary>
+    /// Restores a best carried over from a previous session so the delta chases the rider's
+    /// real record, not just today's. Refused unless the profile is the exact expected size —
+    /// a short profile would interpolate against garbage and show a confident wrong number.
+    /// </summary>
+    public bool SeedBest(double bestLapSeconds, IReadOnlyList<double> splitProfile)
+    {
+        if (!double.IsFinite(bestLapSeconds) || bestLapSeconds <= 0.0) return false;
+        if (splitProfile is null || splitProfile.Count != SplitSampleCount) return false;
+        foreach (double sample in splitProfile)
+            if (!double.IsFinite(sample)) return false;
+        if (BestLapSeconds is not null && BestLapSeconds.Value <= bestLapSeconds) return false;
+
+        BestLapSeconds = bestLapSeconds;
+        _bestSplitProfile ??= new double[SplitSampleCount];
+        for (int index = 0; index < SplitSampleCount; index++)
+            _bestSplitProfile[index] = splitProfile[index];
+        return true;
+    }
+
+    /// <summary>The best lap's split profile, for persisting; empty when there is no best.</summary>
+    public IReadOnlyList<double> BestSplitProfile =>
+        _bestSplitProfile ?? Array.Empty<double>();
 }

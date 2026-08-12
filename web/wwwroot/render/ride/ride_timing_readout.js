@@ -18,6 +18,9 @@ export function formatLapTime(seconds) {
   return `${minutes}:${String(wholeSeconds).padStart(2, "0")}.${String(hundredths).padStart(2, "0")}`;
 }
 
+/** Mirrors RideLapTiming.SplitSampleCount — the fixed size of a stored best-lap profile. */
+export const RIDE_SPLIT_SAMPLE_COUNT = 32;
+
 /** The ride HUD's blank, so a missing time reads the same everywhere. */
 export const BLANK_LAP_TIME = formatLapTime(Number.NaN);
 

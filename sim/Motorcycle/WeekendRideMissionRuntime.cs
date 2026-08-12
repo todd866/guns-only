@@ -203,6 +203,13 @@ public sealed class WeekendRideMissionRuntime
 
     public void DebugForceTipOver() => Bike.DebugForceTipOver();
 
+    /// <summary>Restores a best lap from a previous session; see RideLapTiming.SeedBest.</summary>
+    public bool SeedBestLap(double bestLapSeconds, IReadOnlyList<double> splitProfile) =>
+        _lapTiming.SeedBest(bestLapSeconds, splitProfile);
+
+    /// <summary>The best lap's split profile, for persisting.</summary>
+    public IReadOnlyList<double> BestSplitProfile => _lapTiming.BestSplitProfile;
+
     public WeekendRideSnapshot Snapshot()
     {
         MotorcycleTelemetry telemetry = Bike.Telemetry;
