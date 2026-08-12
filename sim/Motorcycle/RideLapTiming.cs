@@ -11,8 +11,24 @@ namespace GunsOnly.Sim.Motorcycle;
 /// </summary>
 public sealed class RideLapTiming
 {
+    /// <summary>
+    /// Four sectors, because PaintedCircuit already authors three gates at 0.25 / 0.50 / 0.75
+    /// and reports every crossing. This class consumes that signal; it does not invent one.
+    /// </summary>
+    public const int SectorCount = 4;
+
+    /// <summary>Elapsed samples kept for the best lap, used to interpolate the live delta.</summary>
+    public const int SplitSampleCount = 32;
+
     readonly List<double> _completedLapSeconds = new();
+    readonly double[] _currentSectorSeconds = new double[SectorCount];
+    readonly double[] _lastLapSectorSeconds = new double[SectorCount];
+    readonly double?[] _bestSectorSeconds = new double?[SectorCount];
+    readonly double[] _currentSplitProfile = new double[SplitSampleCount];
+    double[]? _bestSplitProfile;
     double _currentLapSeconds;
+    double _sectorStartSeconds;
+    int _sectorIndex;
     bool _currentLapValid = true;
 
     /// <summary>Elapsed time on the lap in progress, seconds.</summary>
@@ -30,6 +46,35 @@ public sealed class RideLapTiming
     /// <summary>Every completed lap in order, dirty ones included.</summary>
     public IReadOnlyList<double> CompletedLapSeconds => _completedLapSeconds;
 
+    /// <summary>Sector times for the lap in progress; 0 for sectors not yet closed.</summary>
+    public IReadOnlyList<double> SectorSeconds => _currentSectorSeconds;
+
+    /// <summary>Sector times from the most recently completed lap.</summary>
+    public IReadOnlyList<double> LastLapSectorSeconds => _lastLapSectorSeconds;
+
+    /// <summary>Best time per sector, each independent of the lap it came from.</summary>
+    public IReadOnlyList<double?> BestSectorSeconds => _bestSectorSeconds;
+
+    /// <summary>
+    /// Seconds ahead (negative) or behind (positive) the best lap AT THE SAME POINT on the
+    /// circuit — the number a rider actually chases. Null until a clean lap exists.
+    /// </summary>
+    public double? DeltaToBestSeconds(double progressM, double lapLengthM)
+    {
+        if (_bestSplitProfile is null) return null;
+        if (!double.IsFinite(progressM) || !double.IsFinite(lapLengthM) || lapLengthM <= 0.0)
+            return null;
+
+        double fraction = Math.Clamp(progressM / lapLengthM, 0.0, 1.0);
+        double scaled = fraction * (SplitSampleCount - 1);
+        int lower = (int)Math.Floor(scaled);
+        int upper = Math.Min(lower + 1, SplitSampleCount - 1);
+        double blend = scaled - lower;
+        double bestElapsed = _bestSplitProfile[lower] * (1.0 - blend)
+            + _bestSplitProfile[upper] * blend;
+        return _currentLapSeconds - bestElapsed;
+    }
+
     /// <param name="timingActive">
     /// The runtime's existing arm condition — on track and above the timing start speed.
     /// </param>
@@ -37,7 +82,8 @@ public sealed class RideLapTiming
         in PaintedCircuitQueryResult sample,
         bool timingActive,
         bool tippedOver,
-        double dtSeconds)
+        double dtSeconds,
+        double lapLengthM = 0.0)
     {
         if (!double.IsFinite(dtSeconds) || dtSeconds < 0.0)
             throw new ArgumentOutOfRangeException(nameof(dtSeconds));
@@ -46,22 +92,62 @@ public sealed class RideLapTiming
             _currentLapValid = false;
         if (timingActive)
             _currentLapSeconds += dtSeconds;
+
+        // Sample the elapsed time along the lap so a future lap can be compared against this
+        // one at the same place. Fixed-size: a split profile, never a position recording.
+        if (lapLengthM > 0.0 && double.IsFinite(sample.ProgressM))
+        {
+            double fraction = Math.Clamp(sample.ProgressM / lapLengthM, 0.0, 1.0);
+            int slot = (int)Math.Round(fraction * (SplitSampleCount - 1));
+            for (int index = slot; index < SplitSampleCount; index++)
+                _currentSplitProfile[index] = _currentLapSeconds;
+        }
+
+        if (sample.SectorCrossed >= 0 && _sectorIndex < SectorCount - 1)
+        {
+            _currentSectorSeconds[_sectorIndex] = _currentLapSeconds - _sectorStartSeconds;
+            _sectorStartSeconds = _currentLapSeconds;
+            _sectorIndex++;
+        }
+
         if (!sample.CrossedStartFinish)
             return;
 
         double lapSeconds = _currentLapSeconds;
+        _currentSectorSeconds[_sectorIndex] = lapSeconds - _sectorStartSeconds;
         LastLapSeconds = lapSeconds;
         _completedLapSeconds.Add(lapSeconds);
-        if (_currentLapValid && (BestLapSeconds is null || lapSeconds < BestLapSeconds.Value))
-            BestLapSeconds = lapSeconds;
-        _currentLapSeconds = 0.0;
-        _currentLapValid = true;
+        Array.Copy(_currentSectorSeconds, _lastLapSectorSeconds, SectorCount);
+        if (_currentLapValid)
+        {
+            for (int sector = 0; sector < SectorCount; sector++)
+            {
+                double sectorSeconds = _currentSectorSeconds[sector];
+                if (sectorSeconds <= 0.0) continue;
+                if (_bestSectorSeconds[sector] is null
+                    || sectorSeconds < _bestSectorSeconds[sector]!.Value)
+                    _bestSectorSeconds[sector] = sectorSeconds;
+            }
+            if (BestLapSeconds is null || lapSeconds < BestLapSeconds.Value)
+            {
+                BestLapSeconds = lapSeconds;
+                _bestSplitProfile ??= new double[SplitSampleCount];
+                Array.Copy(_currentSplitProfile, _bestSplitProfile, SplitSampleCount);
+            }
+        }
+        StartFreshLap();
     }
 
-    /// <summary>Clears the lap in progress without forgetting the best or the history.</summary>
-    public void AbandonCurrentLap()
+    void StartFreshLap()
     {
         _currentLapSeconds = 0.0;
         _currentLapValid = true;
+        _sectorStartSeconds = 0.0;
+        _sectorIndex = 0;
+        Array.Clear(_currentSectorSeconds);
+        Array.Clear(_currentSplitProfile);
     }
+
+    /// <summary>Clears the lap in progress without forgetting the best or the history.</summary>
+    public void AbandonCurrentLap() => StartFreshLap();
 }

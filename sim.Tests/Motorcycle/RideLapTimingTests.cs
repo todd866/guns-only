@@ -82,6 +82,65 @@ public sealed class RideLapTimingTests
         Assert.False(timing.CurrentLapValid);
     }
 
+    /// <summary>Rides a lap of `seconds`, crossing all four authored sector gates evenly.</summary>
+    static void RideSectoredLap(RideLapTiming timing, double seconds, double lapLengthM)
+    {
+        int steps = (int)Math.Round(seconds / Dt);
+        int nextGate = 0;
+        for (int step = 0; step < steps; step++)
+        {
+            double fraction = (double)step / steps;
+            double progressM = fraction * lapLengthM;
+            int sectorCrossed = -1;
+            if (nextGate < 3 && fraction >= 0.25 * (nextGate + 1))
+                sectorCrossed = nextGate++;
+            timing.Advance(
+                Sample(progressM: progressM, sectorCrossed: sectorCrossed),
+                true, false, Dt, lapLengthM);
+        }
+        timing.Advance(
+            Sample(crossedStartFinish: true, progressM: lapLengthM),
+            true, false, Dt, lapLengthM);
+    }
+
+    [Fact]
+    public void TheFourSectorTimesAccountForTheWholeLap()
+    {
+        const double lapLengthM = 4_000.0;
+        var timing = new RideLapTiming();
+
+        RideSectoredLap(timing, 80.0, lapLengthM);
+
+        Assert.Equal(RideLapTiming.SectorCount, timing.LastLapSectorSeconds.Count);
+        double summed = 0.0;
+        foreach (double sector in timing.LastLapSectorSeconds) summed += sector;
+        Assert.Equal(timing.LastLapSeconds, summed, 2);
+        foreach (double? best in timing.BestSectorSeconds) Assert.NotNull(best);
+    }
+
+    [Fact]
+    public void TheDeltaIsNegativeWhenAheadOfTheBestPaceAndNullWithoutOne()
+    {
+        const double lapLengthM = 4_000.0;
+        var timing = new RideLapTiming();
+        Assert.Null(timing.DeltaToBestSeconds(0.5 * lapLengthM, lapLengthM));
+
+        RideSectoredLap(timing, 80.0, lapLengthM);   // the benchmark: 80 s, even pace
+
+        // Half way round having spent only 30 s: comfortably ahead of a 40 s half-lap.
+        for (int step = 0; step < (int)Math.Round(30.0 / Dt); step++)
+            timing.Advance(Sample(progressM: 0.5 * lapLengthM), true, false, Dt, lapLengthM);
+        double? ahead = timing.DeltaToBestSeconds(0.5 * lapLengthM, lapLengthM);
+        Assert.NotNull(ahead);
+        Assert.True(ahead!.Value < 0.0, $"expected ahead, got {ahead.Value:F2} s");
+
+        // Same point, but 50 s spent: behind.
+        for (int step = 0; step < (int)Math.Round(20.0 / Dt); step++)
+            timing.Advance(Sample(progressM: 0.5 * lapLengthM), true, false, Dt, lapLengthM);
+        double? behind = timing.DeltaToBestSeconds(0.5 * lapLengthM, lapLengthM);
+        Assert.True(behind!.Value > 0.0, $"expected behind, got {behind!.Value:F2} s");
+    }
+
     [Fact]
     public void TimeOnlyAccumulatesWhileTimingIsActive()
     {

@@ -29,6 +29,7 @@ public sealed class WeekendRideMissionRuntime
     long _authorityTick;
     readonly RideLapTiming _lapTiming = new();
     double _currentLapElapsedSeconds;
+    double _lapProgressM;
     double _offTrackSeconds;
     double _tipRecoveryFlashSeconds;
     bool _lapTimingActive;
@@ -66,6 +67,16 @@ public sealed class WeekendRideMissionRuntime
 
     /// <summary>Every completed lap in order, dirty ones included.</summary>
     public IReadOnlyList<double> CompletedLapSeconds => _lapTiming.CompletedLapSeconds;
+
+    /// <summary>Sector times for the lap in progress; 0 for sectors not yet closed.</summary>
+    public IReadOnlyList<double> SectorSeconds => _lapTiming.SectorSeconds;
+
+    /// <summary>Best time per sector, each independent of the lap it came from.</summary>
+    public IReadOnlyList<double?> BestSectorSeconds => _lapTiming.BestSectorSeconds;
+
+    /// <summary>Seconds ahead (negative) or behind the best lap at this point on the circuit.</summary>
+    public double? DeltaToBestSeconds =>
+        _lapTiming.DeltaToBestSeconds(_lapProgressM, Circuit.CircuitLengthM);
     public int LapCount => _circuitQueryState.LapIndex;
     public double OffTrackSeconds => _offTrackSeconds;
     public bool IsOnTrack => _isOnTrack;
@@ -139,7 +150,9 @@ public sealed class WeekendRideMissionRuntime
             circuitSample,
             _lapTimingActive,
             Bike.Telemetry.IsTippedOver,
-            FixedDeltaSeconds);
+            FixedDeltaSeconds,
+            Circuit.CircuitLengthM);
+        _lapProgressM = circuitSample.ProgressM;
         _currentLapElapsedSeconds = _lapTiming.CurrentLapSeconds;
 
         if (Bike.Telemetry.IsTippedOver)
