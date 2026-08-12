@@ -56,7 +56,7 @@ void main() {
 `;
 
 /** Value noise shared by the basin and river shaders — no textures, no dependent fetches. */
-const NOISE_CHUNK = /* glsl */ `
+export const COBRA_NOISE_CHUNK = /* glsl */ `
 // PRECISION-SAFE HASH, NOT fract(sin(dot(p, k)) * 43758.5). korea_terrain can use the sin hash
 // because its cloud UV is world metres over 2600 — always a small number. Here the same hash is
 // asked for an 8 m grain over a 16 km world, so the sine argument reaches ~4e5, past float32
@@ -125,7 +125,7 @@ varying vec3 vTerrainNormal;
 varying float vConcavity;
 #include <common>
 ${TERRAIN_SHADOW_FRAGMENT_PARS}
-${NOISE_CHUNK}
+${COBRA_NOISE_CHUNK}
 ${HAZE_CHUNK}
 
 void main() {
@@ -280,7 +280,7 @@ varying vec3 vWorldPosition;
 varying vec4 vRiverFrame;
 #include <common>
 ${TERRAIN_SHADOW_FRAGMENT_PARS}
-${NOISE_CHUNK}
+${COBRA_NOISE_CHUNK}
 ${HAZE_CHUNK}
 
 void main() {

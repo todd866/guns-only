@@ -1,4 +1,8 @@
 import {
+  COBRA_STRUCTURE_SURFACES,
+  createCobraStructureMaterial,
+} from "./cobra_structure_material.js?v=313";
+import {
   applyCobraCanyonCampEmberApron,
   COBRA_CANYON_CAMP_EMBER_APRON,
   sampleCobraCanyonTerrain,
@@ -449,18 +453,30 @@ function materialFor(THREE, role) {
     "bridge-pier": { color: 0x8f806c, emissive: 0x1a1610, roughness: 0.94 },
     vegetation: { color: 0xffffff, roughness: 1 },
   }[role];
-  const material = new THREE.MeshLambertMaterial({
-    color: parameters.color,
-    emissive: parameters.emissive ?? 0x000000,
-    // Soft normals on landmarks/bridges/vegetation — flat boxes read as crystal shards at nap AGL.
-    // Hazards and roads keep hard facets so collision cues stay readable.
-    flatShading: role !== "heroCells"
-      && role !== "landmarks"
-      && role !== "vegetation"
-      && role !== "bridge-deck"
-      && role !== "bridge-pier",
-    side: role === "roads" ? THREE.DoubleSide : THREE.FrontSide,
-  });
+  // Soft normals on landmarks/bridges/vegetation — flat boxes read as crystal shards at nap AGL.
+  // Hazards and roads keep hard facets so collision cues stay readable.
+  const flatShading = role !== "heroCells"
+    && role !== "landmarks"
+    && role !== "vegetation"
+    && role !== "bridge-deck"
+    && role !== "bridge-pier";
+  const side = role === "roads" ? THREE.DoubleSide : THREE.FrontSide;
+  // Authored structures get procedural surface detail. Without it the bridge deck — most of
+  // the screen on a nap-of-the-earth pass — is one flat fill sitting on a five-octave
+  // terrain, which is the whole reason the corridor read as cardboard.
+  const material = role in COBRA_STRUCTURE_SURFACES
+    ? createCobraStructureMaterial(THREE, role, {
+      color: parameters.color,
+      emissive: parameters.emissive ?? 0x000000,
+      flatShading,
+      side,
+    })
+    : new THREE.MeshLambertMaterial({
+      color: parameters.color,
+      emissive: parameters.emissive ?? 0x000000,
+      flatShading,
+      side,
+    });
   if (role === "heroCells") {
     material.transparent = true;
     material.opacity = 0.16;
