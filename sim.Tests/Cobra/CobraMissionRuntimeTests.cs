@@ -447,6 +447,45 @@ public class CobraMissionRuntimeTests
     }
 
     [Fact]
+    public void WreckingOnThePadTakesASpareInsteadOfEndingTheSortie()
+    {
+        CobraMissionRuntime runtime = CreateRealTerrainRuntime(out _);
+        double trim = runtime.Cobra.EstimateHoverCollective(
+            runtime.Cobra.State.GrossMassKg,
+            CobraMissionRuntime.DefaultAirDensityKgM3);
+        double startAltitudeM = runtime.Cobra.State.PositionWorldM.Y;
+
+        // Climb high enough that a dead-collective drop arrives ABOVE the hard-impact limit,
+        // then ride it into the pad: a genuine wreck, inside the FOB.
+        for (int tick = 0;
+            tick < 3600
+                && runtime.Cobra.State.PositionWorldM.Y < startAltitudeM + 12.0
+                && runtime.Status == CobraMissionStatus.Active;
+            tick++)
+            runtime.Advance(new VerticalLiftPilotCommand(
+                Math.Min(1.0, trim + 0.25), 0.0, 0.0, 0.0));
+        for (int tick = 0; tick < 1800 && runtime.Status == CobraMissionStatus.Active; tick++)
+        {
+            runtime.Advance(new VerticalLiftPilotCommand(0.0, 0.0, 0.0, 0.0));
+            if (runtime.AirframeSwaps > 0) break;
+        }
+
+        Assert.Equal(CobraMissionStatus.Active, runtime.Status);
+        Assert.Equal(1, runtime.AirframeSwaps);
+        Assert.True(runtime.Cobra.State.Flyable, "The spare must be a healthy airframe.");
+        CobraAirframeSlot wreck = Assert.Single(
+            runtime.AirframePool,
+            slot => slot.State is CobraAirframeState.Destroyed or CobraAirframeState.Crippled);
+        CobraAirframeSlot flying = Assert.Single(
+            runtime.AirframePool, slot => slot.State == CobraAirframeState.PlayerFlying);
+        double gapM = Math.Sqrt(
+            Math.Pow(wreck.ParkedPositionWorldM.X - flying.ParkedPositionWorldM.X, 2.0)
+            + Math.Pow(wreck.ParkedPositionWorldM.Z - flying.ParkedPositionWorldM.Z, 2.0));
+        Assert.True(gapM >= CobraAirframePool.WreckClearanceFromStationM - 0.01,
+            $"The wreck must rest clear of the spare's station: {gapM:F1} m.");
+    }
+
+    [Fact]
     public void ExhaustingTheAirframePoolEndsTheMission()
     {
         CobraMissionRuntime runtime = CreateRealTerrainRuntime(out _);

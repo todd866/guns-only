@@ -572,7 +572,12 @@ public sealed class CobraMissionRuntime
             _collisionObstacleId = collision.Id;
             Status = CobraMissionStatus.ObstacleCollision;
         } else if (!vehicleResult.State.Flyable) {
-            Status = CobraMissionStatus.VehicleAuthorityLost;
+            // Wrecking INSIDE the FOB is not the end of the sortie while the ramp still has a
+            // bird: you walk away and take the spare. Only an empty ramp is terminal here, and
+            // it is terminal as FOB COMBAT INEFFECTIVE, not as a lost airframe.
+            TrySwapAirframeAtFob(currentPositionWorldM);
+            if (Status == CobraMissionStatus.Active && !_cobra.State.Flyable)
+                Status = CobraMissionStatus.VehicleAuthorityLost;
         }
         // Route end is guidance-only: ground war / FOB resupply needs an open sandbox, not a
         // terminal RouteComplete. Remaining distance stays on RouteGuidance.
@@ -926,25 +931,51 @@ public sealed class CobraMissionRuntime
     void TrySwapAirframeAtFob(in Vec3D positionWorldM)
     {
         if (!_cobra.IsCrippled) return;
-        if (_cobra.Observation.Contact.Kind != VehicleContactKind.StableSurfaceContact)
+        // Grounded, not necessarily gently: a wreck on the pad still gets you a spare.
+        if (_cobra.Observation.Contact.Kind is not (VehicleContactKind.StableSurfaceContact
+            or VehicleContactKind.SurfaceContact or VehicleContactKind.HardImpact))
             return;
         if (!_groundWar.IsInsideFob(positionWorldM)) return;
 
+        int spareIndex = _airframePool.FindIndex(
+            slot => slot.State == CobraAirframeState.Ready);
         int flyingIndex = _airframePool.FindIndex(
             slot => slot.State == CobraAirframeState.PlayerFlying);
         if (flyingIndex >= 0)
         {
+            // Rest the wreck ON the surface at its own XZ, not at the live CG: off the flat
+            // apron a stored centre-of-mass height floats or sinks the parked silhouette, and
+            // the presentation list angle exaggerates it. Nudge clear of the spare's station
+            // so the fresh bird does not spawn inside the wreck.
+            Vec3D restWorldM = positionWorldM;
+            if (spareIndex >= 0)
+            {
+                Vec3D station = _airframePool[spareIndex].ParkedPositionWorldM;
+                double eastGapM = restWorldM.X - station.X;
+                double northGapM = restWorldM.Z - station.Z;
+                double gapM = Math.Sqrt(eastGapM * eastGapM + northGapM * northGapM);
+                if (gapM < CobraAirframePool.WreckClearanceFromStationM)
+                {
+                    double bearing = gapM > 1e-6 ? Math.Atan2(eastGapM, northGapM) : 0.0;
+                    restWorldM = new Vec3D(
+                        station.X + Math.Sin(bearing) * CobraAirframePool.WreckClearanceFromStationM,
+                        restWorldM.Y,
+                        station.Z + Math.Cos(bearing) * CobraAirframePool.WreckClearanceFromStationM);
+                }
+            }
+            double restHeightM = restWorldM.Y;
+            if (_terrain.TrySample(restWorldM.X, restWorldM.Z, out TerrainSample restSurface))
+                restHeightM = restSurface.HeightM
+                    + Ah1gCobraDefinition.LateProduction.Contact.CenterOfMassToSkidM;
             _airframePool[flyingIndex] = _airframePool[flyingIndex] with
             {
                 State = _cobra.State.Flyable
                     ? CobraAirframeState.Crippled
                     : CobraAirframeState.Destroyed,
-                ParkedPositionWorldM = positionWorldM,
+                ParkedPositionWorldM = new Vec3D(restWorldM.X, restHeightM, restWorldM.Z),
                 ParkedYawRad = _cobra.Observation.YawRad,
             };
         }
-        int spareIndex = _airframePool.FindIndex(
-            slot => slot.State == CobraAirframeState.Ready);
         if (spareIndex < 0)
         {
             Status = CobraMissionStatus.FobCombatIneffective;

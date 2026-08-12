@@ -30,6 +30,8 @@ public static class CobraAirframePool
     /// spawn pad, and outside the eastbound departure lane the presentation safety volume
     /// protects. Both face the departure heading.
     /// </summary>
+    /// <summary>Minimum rest distance between a wreck and the spare's station, metres.</summary>
+    public const double WreckClearanceFromStationM = 14.0;
     public const double SpareStationOffsetNorthM = 30.0;
     public const double SpareStationOffsetEastM = 6.0;
     public const double SpareStationYawRad = Math.PI / 2.0;

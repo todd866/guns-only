@@ -746,6 +746,12 @@ function restartRoute() {
   routeSampler = createCobraCanyonRouteSampler(activeRoute);
   routeDistanceM = ROUTE_ENTRY_OFFSETS_M[activeRoute.id] ?? 0;
   routeComplete = false;
+  // A restart is a fresh ramp: last mission's wrecks must not survive into it. The pool sync
+  // prunes by live slot id, but it returns early on any frame without a pool, so a stale
+  // wreck could otherwise linger in the scene.
+  for (const [, parked] of parkedPresences) scene.remove(parked.group);
+  parkedPresences.clear();
+  lastAirframeSwaps = 0;
   placeCameraOnRoute();
   updateRouteCard();
   lastTargetKey = null;
