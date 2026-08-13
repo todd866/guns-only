@@ -44,6 +44,9 @@ public sealed class CobraGroundWarRuntime
     /// <summary>Small-arms chatter events per engaged unit per second (presentation only).</summary>
     public const double SmallArmsEventsPerSecond = 2.4;
     public const double PlayerRoundDamage = 0.55;
+    /// <summary>20 s to flip an uncontested point. The Cobra never captures — only ground units
+    /// occupy — so this is the clock the player's rounds buy time on.</summary>
+    public const double CaptureRatePerSecond = 1.0 / 20.0;
     public const double VictoryControlThreshold = 0.55;
     public const double VictoryHoldSeconds = 45.0;
     public const double DefeatControlThreshold = -0.75;
@@ -93,6 +96,8 @@ public sealed class CobraGroundWarRuntime
     HoldTheBridgeOutcome _missionOutcome = HoldTheBridgeOutcome.Pending;
     string _missionOutcomeReason = "";
     double? _forcedControlForTests;
+    readonly Dictionary<string, (int Friendly, int Hostile)> _forcedOccupancyForTests =
+        new(StringComparer.Ordinal);
 
     public CobraGroundWarRuntime(
         CobraCanyonDefinition definition,
@@ -179,6 +184,7 @@ public sealed class CobraGroundWarRuntime
             ResolveMutualCombat(dtSeconds);
             MoveUnits(dtSeconds);
             UpdateSiteControl();
+            UpdateSiteOwnership(dtSeconds);
             DriftBalance(dtSeconds);
             MaybeReinforce(dtSeconds);
             if (_forcedControlForTests is double forced)
@@ -416,6 +422,74 @@ public sealed class CobraGroundWarRuntime
             double total = friendly + hostile;
             site.SetLocalControl(total <= 1e-9 ? 0.0 : (friendly - hostile) / total);
         }
+    }
+
+    /// <summary>
+    /// Conquest ownership. The rule is deliberately narrow and has no special cases: a point moves
+    /// ONLY while exactly one faction stands inside its capture radius. Both factions present
+    /// (the garrison case) freezes progress; nobody present freezes progress. That is why a
+    /// hostile garrison stalls a friendly push, and why killing it — the only thing the Cobra can
+    /// do here — is what breaks the stall.
+    /// </summary>
+    void UpdateSiteOwnership(double dtSeconds)
+    {
+        List<GroundUnit> living = RefreshLivingScratch();
+        foreach (ContestedSite site in _sites) {
+            int friendly;
+            int hostile;
+            if (_forcedOccupancyForTests.TryGetValue(site.Id, out (int Friendly, int Hostile) pinned)) {
+                friendly = pinned.Friendly;
+                hostile = pinned.Hostile;
+            } else {
+                friendly = 0;
+                hostile = 0;
+                foreach (GroundUnit unit in living) {
+                    if (HorizontalDistanceSquared(unit.PositionWorldM, site.PositionWorldM)
+                        > site.CaptureRadiusM * site.CaptureRadiusM)
+                        continue;
+                    if (unit.Faction == GroundFaction.Friendly) friendly++;
+                    else hostile++;
+                }
+            }
+
+            bool contested = friendly > 0 && hostile > 0;
+            if (contested || (friendly == 0 && hostile == 0)) {
+                // Progress HOLDS. Ownership can never change with nobody standing in the point.
+                site.SetOwnership(site.Owner, site.CaptureProgress, contested);
+                continue;
+            }
+
+            GroundSiteOwner present = friendly > 0 ? GroundSiteOwner.Friendly : GroundSiteOwner.Hostile;
+            double step = CaptureRatePerSecond * dtSeconds;
+            if (present == site.Owner) {
+                // A defended point recovers toward zero.
+                site.SetOwnership(site.Owner, Math.Max(0.0, site.CaptureProgress - step), false);
+                continue;
+            }
+
+            double progress = site.CaptureProgress + step;
+            if (progress + 1e-12 >= 1.0) {
+                site.SetOwnership(present, 0.0, false);
+                PushEvent(
+                    "site-captured",
+                    null,
+                    site.Id,
+                    present == GroundSiteOwner.Friendly ? GroundFaction.Friendly : GroundFaction.Hostile,
+                    site.PositionWorldM);
+            } else {
+                site.SetOwnership(site.Owner, progress, false);
+            }
+        }
+    }
+
+    /// <summary>Test/fixture helper — pins occupancy counts for a site. Sticky across Advance.</summary>
+    public void OverrideSiteOccupancyForTests(string siteId, int friendly, int hostile)
+    {
+        if (string.IsNullOrWhiteSpace(siteId))
+            throw new ArgumentException("Site id is required.", nameof(siteId));
+        if (friendly < 0) throw new ArgumentOutOfRangeException(nameof(friendly));
+        if (hostile < 0) throw new ArgumentOutOfRangeException(nameof(hostile));
+        _forcedOccupancyForTests[siteId] = (friendly, hostile);
     }
 
     void DriftBalance(double dtSeconds)
@@ -671,9 +745,19 @@ public sealed class CobraGroundWarRuntime
                 landmark.Label,
                 new Vec3D(landmark.EastM, surface.HeightM, landmark.NorthM),
                 captureRadiusM: 220.0));
+            sites[^1].SetInitialOwner(InitialOwnerFor(siteId));
         }
         return sites;
     }
+
+    /// <summary>
+    /// Deterministic opening board: Camp Ember is the friendly FOB / departure pad; the three
+    /// gorge sites open in hostile hands, which is the whole point of the mission.
+    /// </summary>
+    static GroundSiteOwner InitialOwnerFor(string siteId) =>
+        string.Equals(siteId, "site.camp-ember.v1", StringComparison.Ordinal)
+            ? GroundSiteOwner.Friendly
+            : GroundSiteOwner.Hostile;
 
     static double HorizontalDistanceSquared(in Vec3D a, in Vec3D b)
     {

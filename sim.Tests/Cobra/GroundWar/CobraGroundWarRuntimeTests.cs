@@ -361,6 +361,63 @@ public class CobraGroundWarRuntimeTests
         Assert.True(war.Debrief.HostileKillsByPlayer > 0);
     }
 
+    /// <summary>
+    /// Conquest rule, not decoration: a point may only change hands while exactly one faction
+    /// stands in it. A contested point (both factions inside the radius) freezes — that freeze is
+    /// what makes a hostile garrison worth the player's rounds.
+    /// </summary>
+    [Fact]
+    public void ASiteFlipsOnlyWhileExactlyOneFactionStandsInIt()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        ContestedSite bridge = war.Sites.First(site => site.Id == "site.iron-bell-bridge.v1");
+        Assert.Equal(GroundSiteOwner.Hostile, bridge.Owner);
+
+        const double stepSeconds = 0.25;
+        war.OverrideSiteOccupancyForTests(bridge.Id, friendly: 1, hostile: 0);
+        for (int step = 0; step < (int)Math.Round(30.0 / stepSeconds); step++)
+            war.Advance(stepSeconds);
+        Assert.Equal(GroundSiteOwner.Friendly, bridge.Owner);
+
+        war.OverrideSiteOccupancyForTests(bridge.Id, friendly: 1, hostile: 1);
+        GroundSiteOwner ownerBefore = bridge.Owner;
+        double progressBefore = bridge.CaptureProgress;
+        for (int step = 0; step < (int)Math.Round(30.0 / stepSeconds); step++)
+            war.Advance(stepSeconds);
+
+        Assert.True(bridge.IsContested);
+        Assert.Equal(ownerBefore, bridge.Owner);
+        Assert.Equal(progressBefore, bridge.CaptureProgress, 6);
+    }
+
+    [Fact]
+    public void AnEmptySiteNeverChangesHands()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        ContestedSite quarry = war.Sites.First(site => site.Id == "site.red-earth-quarry.v1");
+        GroundSiteOwner ownerBefore = quarry.Owner;
+
+        war.OverrideSiteOccupancyForTests(quarry.Id, friendly: 0, hostile: 0);
+        const double stepSeconds = 0.25;
+        for (int step = 0; step < (int)Math.Round(120.0 / stepSeconds); step++)
+            war.Advance(stepSeconds);
+
+        Assert.False(quarry.IsContested);
+        Assert.Equal(ownerBefore, quarry.Owner);
+    }
+
+    [Fact]
+    public void CampEmberStartsFriendlyAndTheGorgeSitesStartHostile()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        Dictionary<string, ContestedSite> sites = war.Sites.ToDictionary(site => site.Id);
+
+        Assert.Equal(GroundSiteOwner.Friendly, sites["site.camp-ember.v1"].Owner);
+        Assert.Equal(GroundSiteOwner.Hostile, sites["site.iron-bell-bridge.v1"].Owner);
+        Assert.Equal(GroundSiteOwner.Hostile, sites["site.plantation-water-tower.v1"].Owner);
+        Assert.Equal(GroundSiteOwner.Hostile, sites["site.red-earth-quarry.v1"].Owner);
+    }
+
     [Fact]
     public void MissionRuntimeTerminalizesOnHoldTheBridgeVictory()
     {

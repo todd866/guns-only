@@ -22,6 +22,13 @@ public enum GroundUnitIntent
     EngageNearest
 }
 
+/// <summary>Which faction currently holds a contested site. Conquest ownership, not control drift.</summary>
+public enum GroundSiteOwner
+{
+    Friendly,
+    Hostile
+}
+
 public enum HoldTheBridgeOutcome
 {
     Pending,
@@ -155,11 +162,39 @@ public sealed class ContestedSite
     public double CaptureRadiusM { get; }
     public double LocalControl { get; private set; }
 
+    /// <summary>The faction currently holding the point. Conquest truth; LocalControl is a readout.</summary>
+    public GroundSiteOwner Owner { get; private set; }
+
+    /// <summary>0..1 — how far the faction that does NOT own this point has come toward flipping
+    /// it. Resets to 0 the instant ownership changes.</summary>
+    public double CaptureProgress { get; private set; }
+
+    /// <summary>True while living units of BOTH factions stand inside CaptureRadiusM.</summary>
+    public bool IsContested { get; private set; }
+
     public void SetLocalControl(double control)
     {
         if (!double.IsFinite(control))
             throw new ArgumentOutOfRangeException(nameof(control));
         LocalControl = Math.Clamp(control, -1.0, 1.0);
+    }
+
+    /// <summary>Assigns the starting owner at construction. Not a capture.</summary>
+    public void SetInitialOwner(GroundSiteOwner owner)
+    {
+        Owner = owner;
+        CaptureProgress = 0.0;
+        IsContested = false;
+    }
+
+    /// <summary>The single per-step ownership mutator the ground-war runtime calls.</summary>
+    public void SetOwnership(GroundSiteOwner owner, double progress, bool contested)
+    {
+        if (!double.IsFinite(progress))
+            throw new ArgumentOutOfRangeException(nameof(progress));
+        Owner = owner;
+        CaptureProgress = Math.Clamp(progress, 0.0, 1.0);
+        IsContested = contested;
     }
 }
 
