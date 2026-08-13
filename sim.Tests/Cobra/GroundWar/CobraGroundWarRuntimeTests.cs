@@ -34,7 +34,7 @@ public class CobraGroundWarRuntimeTests
     public void CampEmberDepartPadHasNoSeededHostiles()
     {
         CobraGroundWarRuntime war = CreateWar();
-        ContestedSite camp = war.Sites.First(site => site.Label == "Camp Ember");
+        ContestedSite camp = war.Sites.First(site => site.Id == "site.camp-ember.v1");
         Assert.DoesNotContain(
             war.LivingUnits().Where(unit => unit.Faction == GroundFaction.Hostile),
             unit => unit.HomeSiteId == camp.Id);
@@ -69,7 +69,7 @@ public class CobraGroundWarRuntimeTests
 
         Assert.Equal(4, war.Sites.Count);
         Assert.Contains(war.Sites, site => site.Id == "site.iron-bell-bridge.v1");
-        Assert.Contains(war.Sites, site => site.Label == "Camp Ember");
+        Assert.Contains(war.Sites, site => site.Id == "site.camp-ember.v1");
         Assert.True(war.LivingUnits().Count() >= 16);
         Assert.True(war.LivingUnits().Count() <= CobraGroundWarRuntime.MaxLivingUnits);
         Assert.Contains(war.LivingUnits(), unit => unit.Faction == GroundFaction.Friendly);
@@ -171,7 +171,7 @@ public class CobraGroundWarRuntimeTests
             war.ApplyAuthorizedFire(hostile.Id, PlayerVehicleContract.FixedDeltaSeconds);
 
         Assert.True(war.Magazine.IsDry);
-        ContestedSite camp = war.Sites.First(site => site.Label == "Camp Ember");
+        ContestedSite camp = war.Sites.First(site => site.Id == "site.camp-ember.v1");
         Vec3D onPad = new(
             camp.PositionWorldM.X,
             camp.PositionWorldM.Y + 2.0,
@@ -375,7 +375,7 @@ public class CobraGroundWarRuntimeTests
         // reached a garrison at all and never took a point. A gunner who only shoots what is
         // shooting back loses this mission; that is the intended lesson.
         CobraGroundWarRuntime war = CreateWar(seed: 42);
-        ContestedSite camp = war.Sites.First(site => site.Label == "Camp Ember");
+        ContestedSite camp = war.Sites.First(site => site.Id == "site.camp-ember.v1");
         Vec3D pad = new(
             camp.PositionWorldM.X,
             camp.PositionWorldM.Y + 2.0,

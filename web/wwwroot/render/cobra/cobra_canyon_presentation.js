@@ -1229,6 +1229,17 @@ function ribbonGeometry(THREE, plan, role, qualityTier) {
     const kind = stableToken(record?.kind ?? record?.type);
     if (role === "river" && kind && !kind.includes("river") && !kind.includes("water")) continue;
     if (role === "roads" && kind && !kind.includes("road") && !kind.includes("track")) continue;
+    // A BENCH is terrain, not a road. `road-and-plantation-bench` is a 235 m half-width shelf
+    // the landscape is graded along — the thing a road and a plantation would sit ON — and it
+    // carries `authority.role: "terrain-authority"` to say so. Because its kind contains the
+    // substring "road" it passed the filter above, took the 7 m default width (it authors
+    // none), and got drawn as a 7 m laterite stripe down a 13 km terrain contour: straight
+    // across the valley, straight across the river with no bridge, edge to edge of the map.
+    // That is the "random red line" reported three times. It was never navigation and never
+    // meant anything, which is exactly why it could not be read.
+    if (role === "roads"
+      && (kind?.includes("bench") || record?.authority?.role === "terrain-authority"))
+      continue;
     const points = pathFrom(record);
     if (points.length < 2) continue;
     const widthM = Math.max(0.5, finite(

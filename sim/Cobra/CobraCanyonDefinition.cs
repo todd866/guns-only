@@ -437,50 +437,50 @@ public sealed class CobraCanyonDefinition
 
     static CobraCanyonLandmarkDefinition[] CreateLandmarks() => new[] {
         new CobraCanyonLandmarkDefinition(
-            "landmark.cobra-canyon.camp-ember.v1", "Camp Ember",
+            "landmark.cobra-canyon.camp-ember.v1", "FSB Ember",
             CobraCanyonLandmarkKind.ForwardOperatingBase,
             // Land spur west of the river. Shared route departure lives here; TrySample forces
             // Land inside the pad ring so the river polyline cannot classify the FOB as water
             // (owner 2026-08-10 riverboat open).
             new Vec3D(-6_775.0, 218.0, -6_200.0)),
         new CobraCanyonLandmarkDefinition(
-            "landmark.cobra-canyon.long-fang-falls.v1", "Thac Nam Ngoi · THE STAIRS",
+            "landmark.cobra-canyon.long-fang-falls.v1", "Thac Nam Ngoi",
             CobraCanyonLandmarkKind.Waterfall,
             new Vec3D(-4_450.0, 236.0, -3_380.0)),
         new CobraCanyonLandmarkDefinition(
-            "landmark.cobra-canyon.iron-bell-bridge.v1", "Cau Song Ma · THE JAW",
+            "landmark.cobra-canyon.iron-bell-bridge.v1", "Cau Song Ma",
             CobraCanyonLandmarkKind.Bridge,
             new Vec3D(-2_710.0, 146.0, -500.0)),
         new CobraCanyonLandmarkDefinition(
-            "landmark.cobra-canyon.karst-needles.v1", "Karst Needles",
+            "landmark.cobra-canyon.karst-needles.v1", "Nui Da Voi",
             CobraCanyonLandmarkKind.RockSpires,
             new Vec3D(180.0, 440.0, 2_880.0)),
         new CobraCanyonLandmarkDefinition(
-            "landmark.cobra-canyon.split-tooth-ridge.v1", "Split Tooth",
+            "landmark.cobra-canyon.split-tooth-ridge.v1", "Deo Hai Rang",
             CobraCanyonLandmarkKind.RidgeGate,
             new Vec3D(-4_380.0, 626.0, 1_530.0)),
         new CobraCanyonLandmarkDefinition(
-            "landmark.cobra-canyon.white-pagoda.v1", "White Pagoda",
+            "landmark.cobra-canyon.white-pagoda.v1", "Chua Trang",
             CobraCanyonLandmarkKind.Pagoda,
             new Vec3D(-3_500.0, 552.0, 3_050.0)),
         new CobraCanyonLandmarkDefinition(
-            "landmark.cobra-canyon.ridge-radio-mast.v1", "Ridge Radio Mast",
+            "landmark.cobra-canyon.ridge-radio-mast.v1", "Hill 610 Relay",
             CobraCanyonLandmarkKind.RadioMast,
             new Vec3D(-1_760.0, 610.0, 4_980.0)),
         new CobraCanyonLandmarkDefinition(
-            "landmark.cobra-canyon.plantation-water-tower.v1", "Plantation Water Tower",
+            "landmark.cobra-canyon.plantation-water-tower.v1", "Phu Rieng Plantation",
             CobraCanyonLandmarkKind.WaterTower,
             new Vec3D(300.0, 271.0, -3_920.0)),
         new CobraCanyonLandmarkDefinition(
-            "landmark.cobra-canyon.red-earth-quarry.v1", "Red Earth Quarry",
+            "landmark.cobra-canyon.red-earth-quarry.v1", "Dat Do Quarry",
             CobraCanyonLandmarkKind.OpenQuarry,
             new Vec3D(2_720.0, 270.0, -1_740.0)),
         new CobraCanyonLandmarkDefinition(
-            "landmark.cobra-canyon.plantation-mill-stack.v1", "Plantation Mill Stack",
+            "landmark.cobra-canyon.plantation-mill-stack.v1", "Phu Rieng Mill",
             CobraCanyonLandmarkKind.MillStack,
             new Vec3D(4_120.0, 312.0, -120.0)),
         new CobraCanyonLandmarkDefinition(
-            "landmark.cobra-canyon.north-rally-smoke.v1", "North Rally Smoke",
+            "landmark.cobra-canyon.north-rally-smoke.v1", "Rally Point North",
             CobraCanyonLandmarkKind.SignalSmoke,
             new Vec3D(6_500.0, 246.0, 5_600.0))
     };

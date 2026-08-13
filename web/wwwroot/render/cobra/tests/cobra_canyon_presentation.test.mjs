@@ -378,7 +378,10 @@ test("builds the real analytical basin and stays inside every tier ceiling", () 
     assert.equal(basin.material.isShaderMaterial, true);
     assert.equal(basin.material.name, "COBRA_CANYON_BASIN_MATERIAL");
 
-    for (const role of ["river", "roads"]) {
+    // "roads" is deliberately absent: this world authors no road network, only terrain benches
+    // (see the terrain-authority guard in collectRibbonPlacements). Drawing one as a road put a
+    // 13 km laterite stripe across the valley.
+    for (const role of ["river"]) {
       const overlay = byRole(presentation.group, role);
       const overlayPositions = overlay.geometry.getAttribute("position");
       assert.ok(triangleCount(overlay.geometry) > 100,
@@ -853,4 +856,28 @@ test("river carries its centreline frame, so the shoreline can exist per fragmen
     `river must reach its channel centre, closest lateral was ${minimumLateral.toFixed(3)}`);
   assert.ok(maximumLateral > 1.05,
     `river must carry gravel outside the waterline, widest lateral was ${maximumLateral.toFixed(3)}`);
+});
+
+test("a terrain bench is never drawn as a road", () => {
+  // `road-and-plantation-bench` is a 235 m half-width SHELF the landscape is graded along —
+  // the thing a road would sit on — and it declares `authority.role: "terrain-authority"`.
+  // Its kind contains the substring "road", so it passed the road filter, took the 7 m default
+  // width it does not author, and was drawn as a 7 m laterite stripe down a 13 km contour:
+  // across the valley, across the river with no bridge, edge to edge of the map. Reported by
+  // the owner three times as "that random red line", and it never meant anything at all.
+  const benches = (world.terrain?.ribbons ?? []).filter((ribbon) => {
+    const kind = String(ribbon?.kind ?? "");
+    return kind.includes("road") || kind.includes("track");
+  });
+  assert.ok(benches.length > 0, "fixture must still contain a road-named terrain bench");
+  for (const bench of benches) {
+    assert.ok(
+      String(bench.kind).includes("bench") || bench.authority?.role === "terrain-authority",
+      `${bench.id} is road-named but carries no marker distinguishing it from a real road`,
+    );
+  }
+
+  const { presentation } = create("balanced");
+  const roads = presentation.group.children.find((child) => child.name?.includes("ROADS"));
+  assert.equal(roads, undefined, "a terrain bench must not produce a road overlay");
 });
