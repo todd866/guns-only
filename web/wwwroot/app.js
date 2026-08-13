@@ -3430,10 +3430,10 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   "cobra-lab": Object.freeze({
     kicker: "Cobra Canyon · Hold the Bridge",
     title: "Hold the Bridge",
-    sortie: "AH-1G · River Gorge ground war · tip control · hold 45s",
-    configuration: "AH-1G flight-foundation authority · living ground war · finite M134 · Camp Ember rearm · win/lose on basin control",
-    brief: "Tip the basin fight friendly and hold control for 45 seconds. Tab a hostile, hold F for the gunner, and rearm at Camp Ember when you go dry. Fly opens the dedicated Hold the Bridge surface.",
-    controls: "W/S collective · arrows cyclic · A/D yaw · Tab target · F gunner consent · Camp Ember pad to rearm",
+    sortie: "AH-1G · River Gorge conquest · four points · tickets",
+    configuration: "AH-1G flight-foundation authority · four capture points · dug-in garrisons · finite M134 · Camp Ember rearm · win/lose on tickets",
+    brief: "Four points hold the valley and you start with one. Each hostile point is held by a dug-in garrison that ground fire cannot touch — breaking it open is the only thing your gun can do that nobody else can, and friendly infantry take the point once it is clear. Holding more points than they do bleeds their tickets to zero. Press M for the map.",
+    controls: "W/S collective · arrows cyclic · A/D yaw · Tab target · F gunner consent · M tactical map · Camp Ember pad to rearm",
   }),
   "weekend-ride": Object.freeze({
     kicker: "Off duty · 10,000 ft runway",
