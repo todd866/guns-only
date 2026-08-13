@@ -1117,6 +1117,20 @@ if (isIosBrowserTab && mobileControls) {
   }
 }
 
+// Laptop-first doctrine: phones are a separate game we are not building, so below phone width
+// the shell recommends a laptop or desktop instead of gating anything. Visibility is owned by
+// CSS (a plain phone-width media query, independent of touch capability) so this runs
+// unconditionally; the JS here only owns the one-time dismissal, same idiom as the install hint.
+try {
+  if (localStorage.getItem("guns-laptop-hint-dismissed") === "1") {
+    document.documentElement.classList.add("laptop-hint-dismissed");
+  }
+} catch { /* private mode: just show it */ }
+document.getElementById("ready-laptop-hint")?.addEventListener("click", () => {
+  document.documentElement.classList.add("laptop-hint-dismissed");
+  try { localStorage.setItem("guns-laptop-hint-dismissed", "1"); } catch { /* ignore */ }
+});
+
 // Keep the phone controls in two shallow, thumb-sized edge groups. The page owns the base visual
 // treatment; this mobile-only override owns the live control geometry so the HUD can reserve a
 // matching clear strip without changing the desktop layout.
