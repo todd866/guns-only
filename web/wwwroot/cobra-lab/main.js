@@ -1,76 +1,84 @@
-import * as THREE from "../vendor/three.module.js?v=322";
+import * as THREE from "../vendor/three.module.js?v=323";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=322";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=322";
-import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=322";
+} from "../render/cobra/cobra_canyon_plan.js?v=323";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=323";
+import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=323";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=322";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=322";
-import { createHud } from "../hud.js?v=322";
+} from "../render/cobra/cobra_canyon_tour.js?v=323";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=323";
+import { createHud } from "../hud.js?v=323";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=322";
+} from "../render/cobra/cobra_hud_adapter.js?v=323";
 import {
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=322";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=322";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=323";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=323";
+import {
+  cobraTacticalMapBounds,
+  cobraTacticalMapModel,
+} from "../render/cobra/cobra_tactical_map.js?v=323";
+import {
+  COBRA_MAP_CAPTION_PX,
+  drawCobraTacticalMap,
+} from "../render/cobra/cobra_tactical_map_draw.js?v=323";
 import {
   emberActObjectiveOverlay,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=322";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=322";
+} from "../render/cobra/cobra_ember_path.js?v=323";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=323";
 import {
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=322";
+} from "../render/audio/flight_audio.js?v=323";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=322";
+} from "../render/cobra/cobra_control_profile.js?v=323";
 import {
   advanceCobraPilotControls,
   cobraCyclicCommand,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=322";
+} from "../render/cobra/cobra_pilot_input.js?v=323";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=322";
+} from "../render/cobra/ah1g_presence.js?v=323";
 import {
   lookOffsetFromAngles,
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
   togglePadlockSelection,
-} from "../render/cobra/cobra_camera_bias.js?v=322";
+} from "../render/cobra/cobra_camera_bias.js?v=323";
 import {
   cobraMissionStatusCopy,
   cobraTerminalCauseCopy,
-} from "../render/cobra/cobra_terminal_causes.js?v=322";
-import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=322";
+} from "../render/cobra/cobra_terminal_causes.js?v=323";
+import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=323";
 import {
   createParkedCobra,
   placeParkedCobra,
-} from "../render/cobra/cobra_parked_airframe.js?v=322";
+} from "../render/cobra/cobra_parked_airframe.js?v=323";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=322";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=322";
+} from "../render/visual/shadow_stabilizer.js?v=323";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=323";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=322";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=322";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=322";
+} from "../render/cobra/cobra_mission_exit.js?v=323";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=323";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=323";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -189,11 +197,25 @@ const controlMetric = document.querySelector("#control");
 const ammoMetric = document.querySelector("#ammo");
 const fobMetric = document.querySelector("#fob");
 const killsMetric = document.querySelector("#kills");
+// #balance-fill is now the points-held bar and #hold-fill the friendly ticket pool; the ids
+// are kept because main.js and the lab wiring test both query them by name.
 const balanceFill = document.querySelector("#balance-fill");
+const balanceLabel = document.querySelector("#balance-label");
 const holdFill = document.querySelector("#hold-fill");
+const hostileTicketFill = document.querySelector("#hostile-ticket-fill");
 const holdLabel = document.querySelector("#hold-label");
 const objectiveLine = document.querySelector("#objective-line");
 const objectiveDetail = document.querySelector("#objective-detail");
+// Conquest chart. Two canvases, one draw function: the minimap is always on, the full map is
+// the same picture at overlay size on M. Both are north-up.
+const minimapCanvas = document.querySelector("#minimap");
+const minimapCtx = minimapCanvas?.getContext("2d", { alpha: true }) ?? null;
+const tacticalMapCanvas = document.querySelector("#tactical-map");
+const tacticalMapCtx = tacticalMapCanvas?.getContext("2d", { alpha: true }) ?? null;
+let tacticalMapOpen = false;
+// Bounds are a MISSION constant, not a frame value: the sites do not move, and recomputing the
+// enclosing square every frame would also let the chart's scale breathe as sites are added.
+let tacticalMapBounds = null;
 const debrief = document.querySelector("#debrief");
 const debriefTitle = document.querySelector("#debrief-title");
 const debriefBody = document.querySelector("#debrief-body");
@@ -288,7 +310,7 @@ window.addEventListener("keydown", armAudioFromGesture, { capture: true });
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=322";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=323";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -624,6 +646,107 @@ function resize() {
   hudViewport.height = height;
   hudViewport.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
   hud.resize(width, height, hudViewport.pixelRatio, HUD_SAFE_INSETS);
+  sizeMapCanvas(minimapCanvas, minimapCtx);
+  sizeMapCanvas(tacticalMapCanvas, tacticalMapCtx);
+}
+
+/**
+ * Backing-store size for a map canvas, in device pixels, with the context scaled so the draw
+ * module can work in CSS pixels. Only reassigns width/height when the CSS box actually changed:
+ * writing canvas.width clears the surface AND resets the transform, so doing it per frame would
+ * cost a full reallocation every frame and drop the scale on the floor.
+ */
+function sizeMapCanvas(canvasEl, ctx) {
+  if (!canvasEl || !ctx) return null;
+  const width = Math.round(canvasEl.clientWidth);
+  const height = Math.round(canvasEl.clientHeight);
+  if (!(width > 0) || !(height > 0)) return null;
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  const backingWidth = Math.round(width * ratio);
+  const backingHeight = Math.round(height * ratio);
+  if (canvasEl.width !== backingWidth || canvasEl.height !== backingHeight) {
+    canvasEl.width = backingWidth;
+    canvasEl.height = backingHeight;
+  }
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  return { width, height };
+}
+
+/**
+ * Projects the CURRENT authority ground war into a pixel box. One engine: sites, ownership,
+ * capture progress, units and tickets are read from the snapshot and reprojected — nothing here
+ * infers any of them. Returns null before the first snapshot carries sites.
+ */
+function tacticalMapModelFor(widthPx, heightPx, showUnits) {
+  const war = authorityState?.ground_war;
+  const sites = war?.sites ?? [];
+  if (!sites.length) return null;
+  if (!tacticalMapBounds) tacticalMapBounds = cobraTacticalMapBounds(sites);
+  return cobraTacticalMapModel({
+    sites,
+    units: war.units ?? [],
+    tickets: war.tickets,
+    // Sim frame: x is east, z is north, yaw is the compass heading (0 = north), which is exactly
+    // the north-up chart convention — no flip, no offset.
+    player: {
+      eastM: vehiclePose.x_m,
+      northM: vehiclePose.z_m,
+      headingRad: vehiclePose.yaw_rad,
+    },
+    bounds: tacticalMapBounds,
+    widthPx,
+    heightPx,
+    showUnits,
+  });
+}
+
+/** Per-frame chart paint. The open full map replaces the minimap rather than stacking on it. */
+function drawTacticalMaps(timeMs) {
+  if (parkedCamera) return;
+  const nowSeconds = timeMs / 1_000;
+  // The objective rides on the chart because the prose card is play-hidden by Build 302
+  // (mission cues live on the instrument). Without this the conquest orders reach nobody who
+  // is actually flying — which is the exact complaint this whole change answers.
+  // The pose is not optional garnish: without it cobraObjectiveCopy falls back to snapshot
+  // order rather than range, so the caption can order the pilot to the FAR garrison while a
+  // nearer one is the actual job. In play this caption is the only order the pilot ever sees.
+  const caption = cobraObjectiveCopy(authorityState?.ground_war, {
+    selectedTargetId: targetSelect?.value || authorityState?.gunner?.selected_target_id || "",
+    playerHasInteracted,
+    player: { eastM: vehiclePose.x_m, northM: vehiclePose.z_m },
+    actOverlay: emberActObjectiveOverlay(authorityState?.mission_act, {
+      remainingM: authorityState?.route_guidance?.remaining_m,
+    }),
+  });
+  if (tacticalMapOpen) {
+    const box = sizeMapCanvas(tacticalMapCanvas, tacticalMapCtx);
+    const headerPx = COBRA_MAP_CAPTION_PX.full;
+    const model = box && tacticalMapModelFor(box.width, box.height - headerPx, true);
+    if (model) {
+      drawCobraTacticalMap(tacticalMapCtx, model, { full: true, nowSeconds, caption, headerPx });
+    }
+    return;
+  }
+  const box = sizeMapCanvas(minimapCanvas, minimapCtx);
+  const headerPx = COBRA_MAP_CAPTION_PX.mini;
+  // Units stay off the minimap: at 200 px the whole valley is ~30 px per kilometre and a dozen
+  // infantry markers would bury the four points the player is actually flying between.
+  const model = box && tacticalMapModelFor(box.width, box.height - headerPx, false);
+  if (model) {
+    drawCobraTacticalMap(minimapCtx, model, { full: false, nowSeconds, caption, headerPx });
+  }
+}
+
+/**
+ * M opens and closes the full map. It does NOT pause the sim — the fight continues while the
+ * player reads the chart, which is the whole tension of pulling it up.
+ */
+function setTacticalMapOpen(open) {
+  if (!tacticalMapCanvas) return;
+  tacticalMapOpen = Boolean(open);
+  tacticalMapCanvas.hidden = !tacticalMapOpen;
+  document.body.dataset.map = tacticalMapOpen ? "open" : "closed";
+  if (tacticalMapOpen) sizeMapCanvas(tacticalMapCanvas, tacticalMapCtx);
 }
 
 function routeById(routeId) {
@@ -746,6 +869,8 @@ function restartRoute() {
   bridge?.StartRoute(routeSelect.selectedIndex);
   authorityState = bridge ? JSON.parse(bridge.GetState()) : null;
   pilotControls = createCobraPilotControlState(authorityState?.vehicle?.collective ?? 0.5);
+  // A restart is a fresh mission, so the chart's enclosing square is recomputed once, here.
+  tacticalMapBounds = null;
   routeSampler = createCobraCanyonRouteSampler(activeRoute);
   routeDistanceM = ROUTE_ENTRY_OFFSETS_M[activeRoute.id] ?? 0;
   routeComplete = false;
@@ -1115,13 +1240,23 @@ function showMissionDebrief(war, status) {
   // HUD with no card reads as a crash of the game rather than of the helicopter.
   let title;
   let reason;
+  // Conquest outcomes. The sim decides both ends the same way — one side's ticket pool hits
+  // zero ("tickets-exhausted", CobraGroundWarRuntime.BleedTickets) — so the copy names the
+  // points that did the bleeding rather than the old control meter. The previous branch tested
+  // for "lost-basin", a reason the sim has not emitted since tickets landed, so every defeat
+  // fell through to the bare "The ground war is lost."
+  const friendlyPoints = (war?.sites ?? []).filter((site) => site?.owner === "friendly").length;
+  const heldPoints = (war?.sites ?? [])
+    .filter((site) => site?.owner === "friendly" || site?.owner === "hostile").length;
   if (victory) {
-    title = "BRIDGE HELD";
-    reason = "You held friendly control long enough to keep the basin.";
+    title = "VALLEY HELD";
+    reason = war?.outcome_reason === "tickets-exhausted"
+      ? `Hostile reinforcements ran out — you held ${friendlyPoints} of ${heldPoints} points long enough to bleed them dry.`
+      : "The hostile push is finished.";
   } else if (defeat) {
-    title = "BASIN LOST";
-    reason = war?.outcome_reason === "lost-basin"
-      ? "Hostile control locked the basin before you could tip it back."
+    title = "VALLEY LOST";
+    reason = war?.outcome_reason === "tickets-exhausted"
+      ? `Friendly reinforcements ran out while hostiles held the points — you finished on ${friendlyPoints} of ${heldPoints}.`
       : "The ground war is lost.";
   } else if (status === "obstacle-collision") {
     title = "OBSTACLE STRIKE";
@@ -1155,32 +1290,46 @@ function showMissionDebrief(war, status) {
   );
   debrief.hidden = false;
   setStatus(
-    victory ? "MISSION COMPLETE · BRIDGE HELD" : `MISSION ${status.replaceAll("-", " ").toUpperCase()} · R RESTARTS`,
+    victory ? "MISSION COMPLETE · VALLEY HELD" : `MISSION ${status.replaceAll("-", " ").toUpperCase()} · R RESTARTS`,
     victory ? "ready" : "error",
   );
 }
 
 function updateObjectiveHud(war) {
   if (!war) return;
-  const controlPct = ((war.control + 1) * 50);
-  if (balanceFill) balanceFill.style.left = `${controlPct.toFixed(0)}%`;
-  const holdPct = Math.round((war.victory_hold_progress ?? 0) * 100);
-  if (holdFill) {
-    holdFill.style.width = `${holdPct}%`;
-    holdFill.style.left = "0";
+  // Two tracks, both published truth: points held, then the ticket pools that decide the
+  // mission. The old control marker showed a hidden number that no longer settles anything.
+  const sites = Array.isArray(war.sites) ? war.sites.filter(Boolean) : [];
+  const heldSites = sites.filter((site) => site.owner === "friendly" || site.owner === "hostile");
+  const friendlyPoints = heldSites.filter((site) => site.owner === "friendly").length;
+  if (balanceFill) {
+    balanceFill.style.width = heldSites.length
+      ? `${((friendlyPoints / heldSites.length) * 100).toFixed(0)}%`
+      : "0%";
   }
-  setText(holdLabel, war.control >= (war.victory_control_threshold ?? 0.55)
-    ? `HOLD ${holdPct}%`
-    : war.control <= (war.defeat_control_threshold ?? -0.75)
-      ? `LOSING ${Math.round((war.defeat_hold_progress ?? 0) * 100)}%`
-      : "HOLD —");
+  setText(balanceLabel, heldSites.length
+    ? `${friendlyPoints} / ${heldSites.length} POINTS`
+    : "— POINTS");
+  const friendlyTickets = Number(war.tickets?.friendly);
+  const hostileTickets = Number(war.tickets?.hostile);
+  const hasTickets = Number.isFinite(friendlyTickets) && Number.isFinite(hostileTickets);
+  // Both pools share one scale so the two bars are directly comparable.
+  const ticketScale = hasTickets ? Math.max(friendlyTickets, hostileTickets, 1) : 1;
+  if (holdFill) {
+    holdFill.style.width = hasTickets ? `${(friendlyTickets / ticketScale) * 100}%` : "0%";
+  }
+  if (hostileTicketFill) {
+    hostileTicketFill.style.width = hasTickets ? `${(hostileTickets / ticketScale) * 100}%` : "0%";
+  }
+  setText(holdLabel, hasTickets
+    ? `TICKETS ${Math.round(friendlyTickets)} · ${Math.round(hostileTickets)}`
+    : "TICKETS — · —");
   // Ammo/FOB/kills/target/gunner/rotor truth moved from the DOM text strip into the
   // canvas HUD (production hud.js); the card keeps objective copy only for lab/metrics.
-  // Owner sortie web-cobra-1786090836886-dc8wvig0: tip-friendly copy stayed up while the
-  // pilot idled on Camp Ember and control bled through −0.75 — losing must outrank tip.
   const copy = cobraObjectiveCopy(war, {
     selectedTargetId: authorityState?.gunner?.selected_target_id ?? null,
     playerHasInteracted,
+    player: { eastM: vehiclePose.x_m, northM: vehiclePose.z_m },
     actOverlay: emberActObjectiveOverlay(authorityState?.mission_act, {
       remainingM: authorityState?.route_guidance?.remaining_m,
     }),
@@ -1285,6 +1434,7 @@ function animate(timeMs) {
   recordPhase("render", renderStartedAtMs);
   const hudStartedAtMs = performance.now();
   drawHud(timeMs, deltaSeconds);
+  drawTacticalMaps(timeMs);
   recordPhase("hud", hudStartedAtMs);
   recordFrameDuration(rawDeltaMs);
   updateMetrics(aglM);
@@ -1384,6 +1534,9 @@ window.__gunsOnlyCobraLabCamera = Object.freeze({
     // Strip mission chrome so park stills score the gorge, not the objective card.
     document.querySelector("#play-chrome")?.setAttribute("data-parked", "true");
     document.querySelector("#objective-hud")?.setAttribute("hidden", "");
+    // The chart is mission chrome too: a review still must score the gorge, not the map.
+    setTacticalMapOpen(false);
+    minimapCanvas?.setAttribute("hidden", "");
     parkedCamera = {
       eastM: Number(eastM),
       northM: Number(northM),
@@ -1398,6 +1551,7 @@ window.__gunsOnlyCobraLabCamera = Object.freeze({
     parkedCamera = null;
     document.querySelector("#play-chrome")?.removeAttribute("data-parked");
     document.querySelector("#objective-hud")?.removeAttribute("hidden");
+    minimapCanvas?.removeAttribute("hidden");
   },
 });
 
@@ -1425,6 +1579,15 @@ window.addEventListener("keydown", (event) => {
     onboarding.dismiss();
     return;
   }
+  // The full map is a layer over the sortie, so Escape must peel it before Escape leaves the
+  // sortie — otherwise the first instinct after reading the map (hit Escape to close it) quits
+  // the mission. This sits AFTER the onboarding branch on purpose: the onboarding card is the
+  // topmost layer and keeps first claim on the key.
+  if (tacticalMapOpen) {
+    event.stopPropagation();
+    setTacticalMapOpen(false);
+    return;
+  }
   leaveMissionForMenu();
 }, true);
 
@@ -1441,6 +1604,13 @@ window.addEventListener("keydown", (event) => {
     playerHasInteracted = true;
     if (tourInput) tourInput.checked = false;
     cycleHostileTarget();
+    return;
+  }
+  if (event.code === "KeyM") {
+    event.preventDefault();
+    playerHasInteracted = true;
+    if (tourInput) tourInput.checked = false;
+    setTacticalMapOpen(!tacticalMapOpen);
     return;
   }
   if (event.code === "KeyV") {

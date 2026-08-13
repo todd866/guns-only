@@ -128,7 +128,9 @@ body[data-shell="play"] .legend {
 }
 #objective-detail { color: var(--muted); font-size: 11px; }
 
-.balance-track, .hold-track {
+/* Points held (one bar) and the two ticket pools (stacked halves of one bar). The old
+   .balance-track marker read a hidden control number that no longer decides the mission. */
+.points-track, .ticket-track {
   position: relative;
   height: 8px;
   margin: 8px 0;
@@ -136,25 +138,23 @@ body[data-shell="play"] .legend {
   background: rgba(255, 255, 255, 0.08);
   overflow: hidden;
 }
-.balance-track i {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  left: 50%;
-  background: var(--friendly);
-  box-shadow: 0 0 10px rgba(143, 191, 90, 0.55);
-}
-.hold-track i {
+.points-track i {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
   width: 0;
   background: linear-gradient(90deg, rgba(143, 191, 90, 0.35), var(--friendly));
-  box-shadow: none;
 }
-.balance-track b, .hold-track span {
+.ticket-track i {
+  position: absolute;
+  left: 0;
+  height: 4px;
+  width: 0;
+}
+#hold-fill { top: 0; background: var(--friendly); }
+#hostile-ticket-fill { top: 4px; background: var(--hostile); }
+.points-track b, .ticket-track span {
   position: absolute;
   right: 8px;
   top: -16px;
@@ -193,6 +193,45 @@ body[data-shell="play"] .legend {
   pointer-events: none;
 }
 
+/* Conquest chart. The minimap sits in the bottom-right corner the F-22 shell leaves empty,
+   over the combiner but under the debrief card, and never takes pointer events — it is an
+   instrument, not a control. Chrome (glass + hairline) matches .objective-hud so the map reads
+   as part of the same panel family; the disc colours come from the legend keys below. */
+#minimap {
+  position: absolute;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  width: 200px;
+  height: 200px;
+  z-index: 2;
+  border: 1px solid var(--line);
+  background: var(--glass);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+/* Short shells (laptop landscape is the target, but a 600 px tall window still exists) keep
+   the chart from eating a third of the frame. */
+@media (max-height: 640px) {
+  #minimap { width: 148px; height: 148px; }
+}
+
+#tactical-map {
+  position: absolute;
+  inset: 0;
+  /* A canvas is a REPLACED element: with width/height auto it takes its intrinsic 300x150 and
+     `inset: 0` does not stretch it, so the full map drew into a 300x150 box in the corner with
+     the legend, labels and ticket bars piled on top of each other. The minimap escaped this
+     only because it happens to carry explicit dimensions. */
+  width: 100%;
+  height: 100%;
+  z-index: 4;
+  background: rgba(4, 8, 7, 0.82);
+  pointer-events: none;
+}
+#tactical-map[hidden] { display: none; }
+/* The full map is open over a LIVE sortie: the minimap would repeat it, so it stands down. */
+body[data-map="open"] #minimap { display: none; }
+
 .legend {
   position: absolute;
   right: 16px;
@@ -207,6 +246,8 @@ body[data-shell="play"] .legend {
   text-transform: uppercase;
   pointer-events: none;
 }
+/* Lab keeps the faction legend visible; the minimap now owns that corner, so lift it clear. */
+body[data-shell="lab"] .legend { bottom: 232px; }
 .legend span { display: flex; align-items: center; gap: 8px; }
 .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 .friendly-key { background: var(--friendly); }

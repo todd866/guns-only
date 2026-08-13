@@ -255,6 +255,9 @@ test("every visible HTML button is wired through one auditable action surface", 
     ["ready-build-reload", /readyBuildReload\?\.addEventListener\("click", reloadCurrentBuild\)/],
     // iOS-Safari-only Add-to-Home-Screen hint; dismissed for good on tap.
     ["ready-install-hint", /installHint\.addEventListener\("click"/],
+    // Phone-width "this wants a laptop" recommendation; dismissed for good on tap. It is a
+    // recommendation and never a gate, so it carries no action beyond its own dismissal.
+    ["ready-laptop-hint", /getElementById\("ready-laptop-hint"\)\?\.addEventListener\("click"/],
     ["settings-close", /\[settingsClose, settingsCloseBottom\][\s\S]*?addEventListener\("click", closeSettings\)/],
     ["settings-close-bottom", /\[settingsClose, settingsCloseBottom\][\s\S]*?addEventListener\("click", closeSettings\)/],
     ["settings-reset-bindings", /settingsResetBindings\?\.addEventListener\("click"/],

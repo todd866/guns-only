@@ -3108,6 +3108,30 @@
     html.install-hint-dismissed #ready-install-hint { display: none !important; }
     #ready-install-hint:hover { color: rgba(253, 246, 230, .9); }
 
+    /* Laptop-first is doctrine: phones are a separate game we are not building. Below phone
+       width the shell recommends a laptop or desktop instead of gating -- every experience still
+       launches on a phone. Same reveal/dismiss idiom as #ready-install-hint just above: hidden by
+       default, shown only inside the phone-width media query, dismissed for good on tap via a
+       single localStorage key so a returning phone visitor is not nagged twice. */
+    #ready-laptop-hint {
+      display: none;
+      margin: 14px auto 0;
+      padding: 7px 12px;
+      border: 0;
+      border-radius: 3px;
+      color: rgba(253, 246, 230, .62);
+      background: rgba(24, 34, 48, .34);
+      cursor: pointer;
+      font: 400 12px/1.2 "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      letter-spacing: .01em;
+      text-align: center;
+    }
+    @media (max-width: 760px) {
+      #ready-screen[data-mode="program"] #ready-laptop-hint { display: block; }
+    }
+    html.laptop-hint-dismissed #ready-laptop-hint { display: none !important; }
+    #ready-laptop-hint:hover { color: rgba(253, 246, 230, .9); }
+
     /* ---------------------------------------------------------------------------------------
        PAUSE SCREEN
        A clean, self-contained panel -- the SAME solid dark surface as the aircraft picker, which
@@ -3611,8 +3635,17 @@ Splash one bandit to qualify · H controls · R restarts</p>
           <button id="ready-install-hint" type="button" hidden>
             <span aria-hidden="true">⤴</span> Full screen: Share → Add to Home Screen
           </button>
+          <!--
+            Laptop-first doctrine, phone-width only: flight controls, the tactical map, and the
+            full instrument set need a keyboard and a real screen. This never gates launch -- it
+            is a plain button that dismisses itself, same as #ready-install-hint above. Hidden by
+            default; the phone-width media query and app.js's dismissed-flag check control it.
+          -->
+          <button id="ready-laptop-hint" type="button">
+            <span aria-hidden="true">⌨</span> Built for a laptop or desktop: flight controls, the tactical map, and the full instrument set need a keyboard and a real screen.
+          </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 322 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 323 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
           <div class="ready-telemetry-disclosure">
@@ -3716,7 +3749,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     // Derive from a normal stamped URL so this comparison cannot drift from the next release:
     // tools/release/stamp-release.mjs rewrites every `?v=NNN`, and nothing else here.
-    const releaseBuild = new URL("./service-worker.js?v=322", location.href)
+    const releaseBuild = new URL("./service-worker.js?v=323", location.href)
       .searchParams.get("v");
 
     globalThis.__gunsPrebootReady = (async () => {
@@ -3812,11 +3845,11 @@ Splash one bandit to qualify · H controls · R restarts</p>
         });
         document.head.append(script);
       });
-      await loadClassicScript("./multiplayer-config.js?v=322");
-      await loadClassicScript("./_framework/blazor.webassembly.js?v=322", {
+      await loadClassicScript("./multiplayer-config.js?v=323");
+      await loadClassicScript("./_framework/blazor.webassembly.js?v=323", {
         autostart: "false",
       });
-      await import("./app.js?v=322");
+      await import("./app.js?v=323");
     } catch (error) {
       console.error(error);
       document.querySelector("#boot")?.classList.add("ready");
@@ -3829,8 +3862,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       try {
         const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
           await Promise.all([
-            import("./render/shell/inapp_browser.js?v=322"),
-            import("./render/shell/boot_fallback.js?v=322"),
+            import("./render/shell/inapp_browser.js?v=323"),
+            import("./render/shell/boot_fallback.js?v=323"),
           ]);
         const detection = detectEmbeddedBrowser({
           userAgent: navigator.userAgent,

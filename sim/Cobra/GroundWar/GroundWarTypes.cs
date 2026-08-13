@@ -22,6 +22,13 @@ public enum GroundUnitIntent
     EngageNearest
 }
 
+/// <summary>Which faction currently holds a contested site. Conquest ownership, not control drift.</summary>
+public enum GroundSiteOwner
+{
+    Friendly,
+    Hostile
+}
+
 public enum HoldTheBridgeOutcome
 {
     Pending,
@@ -41,7 +48,8 @@ public sealed class GroundUnit
         double maxHealth,
         in Vec3D positionWorldM,
         GroundUnitIntent intent,
-        string homeSiteId)
+        string homeSiteId,
+        bool fortified = false)
     {
         if (string.IsNullOrWhiteSpace(id))
             throw new ArgumentException("Unit id is required.", nameof(id));
@@ -60,6 +68,7 @@ public sealed class GroundUnit
         PositionWorldM = positionWorldM;
         Intent = intent;
         HomeSiteId = homeSiteId;
+        IsFortified = fortified;
     }
 
     public string Id { get; }
@@ -72,6 +81,18 @@ public sealed class GroundUnit
     public string HomeSiteId { get; }
     public bool IsAlive => Health > 1e-9;
     public bool IsWreck => !IsAlive;
+
+    /// <summary>
+    /// Dug in: immune to ground-to-ground fire, killable only from the air. This is the
+    /// structural reason a conquest point needs the gunship. Without it the friendly units
+    /// already seeded at a site grind a 140 hp garrison down in 10-16 s on their own, and the
+    /// objective strip's promise ("kill the garrison and friendlies will take the point")
+    /// becomes a lie the player watches the AI fulfil. Player rounds arrive through
+    /// ApplyAuthorizedFire and are NOT scaled by this.
+    /// Deliberately not applied to the friendly hard points at Camp Ember: hostile waves must
+    /// still be able to break the FOB, or the mission has no losing side.
+    /// </summary>
+    public bool IsFortified { get; }
 
     public double CombatPower => Role switch {
         GroundUnitRole.InfantryClump => 1.0,
@@ -155,11 +176,39 @@ public sealed class ContestedSite
     public double CaptureRadiusM { get; }
     public double LocalControl { get; private set; }
 
+    /// <summary>The faction currently holding the point. Conquest truth; LocalControl is a readout.</summary>
+    public GroundSiteOwner Owner { get; private set; }
+
+    /// <summary>0..1 — how far the faction that does NOT own this point has come toward flipping
+    /// it. Resets to 0 the instant ownership changes.</summary>
+    public double CaptureProgress { get; private set; }
+
+    /// <summary>True while living units of BOTH factions stand inside CaptureRadiusM.</summary>
+    public bool IsContested { get; private set; }
+
     public void SetLocalControl(double control)
     {
         if (!double.IsFinite(control))
             throw new ArgumentOutOfRangeException(nameof(control));
         LocalControl = Math.Clamp(control, -1.0, 1.0);
+    }
+
+    /// <summary>Assigns the starting owner at construction. Not a capture.</summary>
+    public void SetInitialOwner(GroundSiteOwner owner)
+    {
+        Owner = owner;
+        CaptureProgress = 0.0;
+        IsContested = false;
+    }
+
+    /// <summary>The single per-step ownership mutator the ground-war runtime calls.</summary>
+    public void SetOwnership(GroundSiteOwner owner, double progress, bool contested)
+    {
+        if (!double.IsFinite(progress))
+            throw new ArgumentOutOfRangeException(nameof(progress));
+        Owner = owner;
+        CaptureProgress = Math.Clamp(progress, 0.0, 1.0);
+        IsContested = contested;
     }
 }
 

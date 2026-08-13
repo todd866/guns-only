@@ -33,7 +33,10 @@ test("Cobra Canyon lab consumes the authored planner and bounded presentation", 
   assert.match(main, /requestAnimationFrame/);
   assert.match(main, /PLAY_MODE/);
   assert.match(main, /showMissionDebrief/);
-  assert.match(main, /victory_hold_progress/);
+  // The mission is decided by tickets and points held, not by the old hold-progress meter,
+  // so the shell must read those out of the snapshot.
+  assert.match(main, /tickets/);
+  assert.match(main, /outcome_reason/);
   assert.match(main, /HOLD THE BRIDGE/);
 });
 

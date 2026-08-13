@@ -30,6 +30,7 @@ export const COBRA_ONBOARDING_CONTENT = Object.freeze({
         Object.freeze(["Tab", "Cycle hostile target"]),
         Object.freeze(["V", "Padlock on / off the selected mark"]),
         Object.freeze(["hold F", "Gunner engages the cued target"]),
+        Object.freeze(["M", "Full tactical map — the fight keeps running"]),
       ]),
     }),
     Object.freeze({

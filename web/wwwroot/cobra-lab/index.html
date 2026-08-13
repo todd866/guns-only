@@ -8,7 +8,7 @@
   <base href="/">
   <title>Guns Only · Hold the Bridge</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/cobra-lab/styles.css?v=322">
+  <link rel="stylesheet" href="/cobra-lab/styles.css?v=323">
 </head>
 <body data-shell="play">
   <a class="skip-link" href="#scene">Skip to flight</a>
@@ -28,13 +28,17 @@
         <span id="objective-line">TIP CONTROL FRIENDLY · HOLD 45s</span>
         <span id="objective-detail">W collective up · S down · Tab target · hold F gunner</span>
       </div>
-      <div class="balance-track" aria-hidden="true">
+      <!-- The mission is decided by points held and tickets, so those are the two tracks.
+           Ids are unchanged: #balance-fill / #hold-fill are queried by main.js and pinned by
+           the lab wiring test. -->
+      <div class="points-track" aria-hidden="true">
         <i id="balance-fill"></i>
-        <b id="balance-label">CONTROL</b>
+        <b id="balance-label">— POINTS</b>
       </div>
-      <div class="hold-track" aria-hidden="true">
+      <div class="ticket-track" aria-hidden="true">
         <i id="hold-fill"></i>
-        <span id="hold-label">HOLD 0%</span>
+        <i id="hostile-ticket-fill"></i>
+        <span id="hold-label">TICKETS — · —</span>
       </div>
     </div>
   </div>
@@ -92,6 +96,10 @@
       <!-- Production hud.js combiner (Build 264): world + HUD, zero cockpit. The old
            CSS reticle and DOM text strip are replaced by the real instrument. -->
       <canvas id="hud-canvas" aria-hidden="true"></canvas>
+      <!-- Conquest chart: north-up minimap always on, full map on M. Both are painted by
+           render/cobra/cobra_tactical_map_draw.js from the authority snapshot's ground_war. -->
+      <canvas id="minimap" aria-hidden="true"></canvas>
+      <canvas id="tactical-map" aria-hidden="true" hidden></canvas>
       <div class="legend" aria-hidden="true">
         <span><i class="friendly-key"></i> friendly</span>
         <span><i class="hostile-key"></i> hostile</span>
@@ -122,7 +130,7 @@
       const labPanel = document.getElementById("lab-panel");
       if (labPanel) labPanel.hidden = document.body.dataset.shell !== "lab";
 
-      const releaseBuild = new URL("../service-worker.js?v=322", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=323", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -150,7 +158,7 @@
       await globalThis.__gunsPrebootReady;
       await new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        script.src = "/_framework/blazor.webassembly.js?v=322";
+        script.src = "/_framework/blazor.webassembly.js?v=323";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load Cobra flight runtime.")), {
@@ -159,10 +167,10 @@
         document.head.append(script);
       });
       const { renderExperienceGate } = await import(
-        "/render/release/quarantine_gate.js?v=322"
+        "/render/release/quarantine_gate.js?v=323"
       );
       const access = renderExperienceGate({ experienceId: "cobra-lab" });
-      if (access.allowed) await import("/cobra-lab/main.js?v=322");
+      if (access.allowed) await import("/cobra-lab/main.js?v=323");
     } catch (error) {
       console.error(error);
       const status = document.querySelector("#status");
