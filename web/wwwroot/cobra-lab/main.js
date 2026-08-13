@@ -1528,6 +1528,15 @@ window.addEventListener("keydown", (event) => {
     onboarding.dismiss();
     return;
   }
+  // The full map is a layer over the sortie, so Escape must peel it before Escape leaves the
+  // sortie — otherwise the first instinct after reading the map (hit Escape to close it) quits
+  // the mission. This sits AFTER the onboarding branch on purpose: the onboarding card is the
+  // topmost layer and keeps first claim on the key.
+  if (tacticalMapOpen) {
+    event.stopPropagation();
+    setTacticalMapOpen(false);
+    return;
+  }
   leaveMissionForMenu();
 }, true);
 
@@ -1544,6 +1553,13 @@ window.addEventListener("keydown", (event) => {
     playerHasInteracted = true;
     if (tourInput) tourInput.checked = false;
     cycleHostileTarget();
+    return;
+  }
+  if (event.code === "KeyM") {
+    event.preventDefault();
+    playerHasInteracted = true;
+    if (tourInput) tourInput.checked = false;
+    setTacticalMapOpen(!tacticalMapOpen);
     return;
   }
   if (event.code === "KeyV") {
