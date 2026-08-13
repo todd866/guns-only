@@ -342,6 +342,11 @@ function gridPoint(bounds, ordinal, count, seed) {
  * authored descriptor id carries the distinction (`jungle-understory` vs `jungle-canopy`); this
  * is the only thing that reads it.
  */
+function isVillageClutter(descriptor) {
+  const id = String(descriptor?.id ?? descriptor?.descriptorId ?? "");
+  return id.includes("hut") || id.includes("clutter");
+}
+
 function isJungleUnderstory(descriptor) {
   const id = String(descriptor?.id ?? descriptor?.descriptorId ?? "");
   return id.includes("understory");
@@ -390,6 +395,16 @@ function roleScale(role, descriptor, variation) {
     };
   }
   if (role === "village") {
+    // Same split as jungle. `village-compounds` is a whole compound and 32 m across is right;
+    // `village-clutter` is the `fence-cart-cluster` archetype — fences and carts — and was
+    // taking the compound band, so a handcart was drawn 32 m wide and 10 m tall.
+    if (isVillageClutter(descriptor)) {
+      return {
+        widthM: read("width", 0, 4.5 + variation * 4),
+        heightM: read("height", 1, 2.4 + variation * 2.4),
+        depthM: read("depth", 2, 4.5 + variation * 4),
+      };
+    }
     return {
       widthM: read("width", 0, 32 + variation * 12),
       heightM: read("height", 1, 10 + variation * 5),
@@ -404,10 +419,16 @@ function roleScale(role, descriptor, variation) {
     };
   }
   if (role === "rock") {
+    // Boulder scatter, not cliffs. The only cell kind that reaches this role is `quarry-scrub`
+    // — archetype `red-earth-scrub`, i.e. low bushes on red soil — and it was being drawn
+    // 18-36 m across and 20-62 m TALL. Even read as its `rock-scatter` descriptor rather than
+    // as the vegetation its name and archetype both describe, a 62 m boulder is a cliff.
+    // NOTE: the kind, the archetype and the descriptor disagree about whether this is rock or
+    // scrub. Sizing it as scatter is the conservative fix; deciding what it IS needs the owner.
     return {
-      widthM: read("width", 0, 18 + variation * 18),
-      heightM: read("height", 1, 20 + variation * 42),
-      depthM: read("depth", 2, 18 + variation * 18),
+      widthM: read("width", 0, 3 + variation * 6),
+      heightM: read("height", 1, 2.5 + variation * 6),
+      depthM: read("depth", 2, 3 + variation * 6),
     };
   }
   if (role === "mist") {

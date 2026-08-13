@@ -261,3 +261,25 @@ test("an authored scaleM still wins over both bands", () => {
     { id: "archetype.cobra-canyon.jungle-understory.v1", scaleM: { height: 9 } }, 0.5);
   assert.equal(declared.heightM, 9);
 });
+
+test("every role band suits every cell kind that reaches it", () => {
+  // One sizing path serves several kinds of object, and for three of them it silently handed
+  // over the wrong band: ridge GRASS took the canopy band (16-30 m), a fence-and-cart cluster
+  // took the village-COMPOUND band (32 m wide), and red-earth SCRUB took a rock band that
+  // reached 62 m tall. Each descriptor already carried the distinction and none of them were
+  // read. This pins the sizes a human would recognise.
+  const band = (role, descriptorId) =>
+    cobraCanyonAssetRoleScaleForTests(role, { id: descriptorId }, 0.5);
+
+  const canopy = band("jungle", "archetype.cobra-canyon.jungle-canopy.v1");
+  const understory = band("jungle", "archetype.cobra-canyon.jungle-understory.v1");
+  const compound = band("village", "archetype.cobra-canyon.village-compound.v1");
+  const clutter = band("village", "archetype.cobra-canyon.village-hut.v1");
+  const scatter = band("rock", "archetype.cobra-canyon.rock-scatter.v1");
+
+  assert.ok(canopy.heightM >= 16, "tropical canopy really is 25-40 m");
+  assert.ok(understory.heightM <= 4, "grass and low scrub");
+  assert.ok(compound.widthM >= 25, "a compound is a cluster of buildings");
+  assert.ok(clutter.heightM <= 6 && clutter.widthM <= 10, "a cart is not a compound");
+  assert.ok(scatter.heightM <= 10, "boulder scatter, not a cliff face");
+});
