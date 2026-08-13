@@ -1,84 +1,89 @@
-import * as THREE from "../vendor/three.module.js?v=323";
+import * as THREE from "../vendor/three.module.js?v=325";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=323";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=323";
-import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=323";
+} from "../render/cobra/cobra_canyon_plan.js?v=325";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=325";
+import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=325";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=323";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=323";
-import { createHud } from "../hud.js?v=323";
+} from "../render/cobra/cobra_canyon_tour.js?v=325";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=325";
+import {
+  cobraGoldenPathState,
+  createCobraGoldenPath,
+} from "../render/cobra/cobra_golden_path.js?v=325";
+import { createHud } from "../hud.js?v=325";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=323";
+} from "../render/cobra/cobra_hud_adapter.js?v=325";
 import {
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=323";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=323";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=325";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=325";
 import {
   cobraTacticalMapBounds,
   cobraTacticalMapModel,
-} from "../render/cobra/cobra_tactical_map.js?v=323";
+} from "../render/cobra/cobra_tactical_map.js?v=325";
 import {
   COBRA_MAP_CAPTION_PX,
   drawCobraTacticalMap,
-} from "../render/cobra/cobra_tactical_map_draw.js?v=323";
+} from "../render/cobra/cobra_tactical_map_draw.js?v=325";
+import { bakeCobraTacticalRelief } from "../render/cobra/cobra_tactical_map_relief.js?v=325";
 import {
   emberActObjectiveOverlay,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=323";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=323";
+} from "../render/cobra/cobra_ember_path.js?v=325";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=325";
 import {
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=323";
+} from "../render/audio/flight_audio.js?v=325";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=323";
+} from "../render/cobra/cobra_control_profile.js?v=325";
 import {
   advanceCobraPilotControls,
   cobraCyclicCommand,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=323";
+} from "../render/cobra/cobra_pilot_input.js?v=325";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=323";
+} from "../render/cobra/ah1g_presence.js?v=325";
 import {
   lookOffsetFromAngles,
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
   togglePadlockSelection,
-} from "../render/cobra/cobra_camera_bias.js?v=323";
+} from "../render/cobra/cobra_camera_bias.js?v=325";
 import {
   cobraMissionStatusCopy,
   cobraTerminalCauseCopy,
-} from "../render/cobra/cobra_terminal_causes.js?v=323";
-import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=323";
+} from "../render/cobra/cobra_terminal_causes.js?v=325";
+import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=325";
 import {
   createParkedCobra,
   placeParkedCobra,
-} from "../render/cobra/cobra_parked_airframe.js?v=323";
+} from "../render/cobra/cobra_parked_airframe.js?v=325";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=323";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=323";
+} from "../render/visual/shadow_stabilizer.js?v=325";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=325";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=323";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=323";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=323";
+} from "../render/cobra/cobra_mission_exit.js?v=325";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=325";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=325";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -216,6 +221,11 @@ let tacticalMapOpen = false;
 // Bounds are a MISSION constant, not a frame value: the sites do not move, and recomputing the
 // enclosing square every frame would also let the chart's scale breathe as sites are added.
 let tacticalMapBounds = null;
+// Baked once per mission. The chart shipped as a dark box with four dots and the owner could
+// not tell where to go from it — a map with no LAND on it cannot be matched against the valley,
+// ridges and river actually visible out of the windscreen.
+let tacticalMapBackdrop = null;
+let tacticalMapRiver = null;
 const debrief = document.querySelector("#debrief");
 const debriefTitle = document.querySelector("#debrief-title");
 const debriefBody = document.querySelector("#debrief-body");
@@ -229,6 +239,7 @@ let windowFocused = typeof document === "undefined" ? true : document.hasFocus()
 const cobraControlProfile = resolveCobraControlProfile();
 let groundWarPresentation = null;
 let emberGuidancePath = null;
+let goldenPath = null;
 let ah1gPresence = null;
 let presenceDeltaSeconds = 0;
 let hostileTargetIds = [];
@@ -310,7 +321,7 @@ window.addEventListener("keydown", armAudioFromGesture, { capture: true });
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=323";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=325";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -677,13 +688,63 @@ function sizeMapCanvas(canvasEl, ctx) {
  * capture progress, units and tickets are read from the snapshot and reprojected — nothing here
  * infers any of them. Returns null before the first snapshot carries sites.
  */
+/**
+ * Bakes the shaded-relief chart backdrop once. It samples the SAME terrain the aircraft flies
+ * over (`groundAt`), so the chart and the world cannot disagree — one engine.
+ */
+function bakeTacticalMapBackdrop(bounds) {
+  if (!plan || typeof document === "undefined") return null;
+  try {
+    const relief = bakeCobraTacticalRelief({
+      sampleHeightM: (eastM, northM) => groundAt(eastM, northM),
+      bounds,
+      sizePx: 160,
+      waterHeightM: COBRA_CANYON_VISUAL_PROFILE.water?.surfaceHeightM ?? null,
+    });
+    const canvasEl = document.createElement("canvas");
+    canvasEl.width = relief.widthPx;
+    canvasEl.height = relief.heightPx;
+    const context = canvasEl.getContext("2d");
+    if (!context) return null;
+    const image = context.createImageData(relief.widthPx, relief.heightPx);
+    image.data.set(relief.rgba);
+    context.putImageData(image, 0, 0);
+    return canvasEl;
+  } catch (error) {
+    // A chart without relief is still a chart; never let the backdrop take the mission down.
+    console.warn("[cobra-lab] tactical relief bake failed", error);
+    return null;
+  }
+}
+
+/** The authored river polyline, in the chart's own {eastM, northM} terms. */
+function tacticalMapRiverCourse() {
+  const ribbon = (plan?.terrainRibbons ?? []).find((candidate) =>
+    String(candidate.laneId ?? candidate.kind ?? "").includes("river"));
+  const points = ribbon?.pointsLocalM ?? ribbon?.points ?? [];
+  return points
+    .map((point) => (Array.isArray(point)
+      ? { eastM: Number(point[0]), northM: Number(point[2]) }
+      : { eastM: Number(point?.eastM ?? point?.x), northM: Number(point?.northM ?? point?.z) }))
+    .filter((point) => Number.isFinite(point.eastM) && Number.isFinite(point.northM));
+}
+
+/** Chart scale, for the scale bar. Null before the bounds are known. */
+function tacticalMapMetresPerPixel(widthPx) {
+  if (!tacticalMapBounds || !(widthPx > 0)) return null;
+  return (tacticalMapBounds.maxEastM - tacticalMapBounds.minEastM) / widthPx;
+}
+
 function tacticalMapModelFor(widthPx, heightPx, showUnits) {
   const war = authorityState?.ground_war;
   const sites = war?.sites ?? [];
   if (!sites.length) return null;
   if (!tacticalMapBounds) tacticalMapBounds = cobraTacticalMapBounds(sites);
+  if (!tacticalMapBackdrop) tacticalMapBackdrop = bakeTacticalMapBackdrop(tacticalMapBounds);
+  if (!tacticalMapRiver) tacticalMapRiver = tacticalMapRiverCourse();
   return cobraTacticalMapModel({
     sites,
+    river: tacticalMapRiver,
     units: war.units ?? [],
     tickets: war.tickets,
     // Sim frame: x is east, z is north, yaw is the compass heading (0 = north), which is exactly
@@ -723,7 +784,11 @@ function drawTacticalMaps(timeMs) {
     const headerPx = COBRA_MAP_CAPTION_PX.full;
     const model = box && tacticalMapModelFor(box.width, box.height - headerPx, true);
     if (model) {
-      drawCobraTacticalMap(tacticalMapCtx, model, { full: true, nowSeconds, caption, headerPx });
+      drawCobraTacticalMap(tacticalMapCtx, model, {
+        full: true, nowSeconds, caption, headerPx,
+        backdrop: tacticalMapBackdrop,
+        metresPerPixel: tacticalMapMetresPerPixel(model.widthPx),
+      });
     }
     return;
   }
@@ -733,7 +798,11 @@ function drawTacticalMaps(timeMs) {
   // infantry markers would bury the four points the player is actually flying between.
   const model = box && tacticalMapModelFor(box.width, box.height - headerPx, false);
   if (model) {
-    drawCobraTacticalMap(minimapCtx, model, { full: false, nowSeconds, caption, headerPx });
+    drawCobraTacticalMap(minimapCtx, model, {
+      full: false, nowSeconds, caption, headerPx,
+      backdrop: tacticalMapBackdrop,
+      metresPerPixel: tacticalMapMetresPerPixel(model.widthPx),
+    });
   }
 }
 
@@ -871,6 +940,8 @@ function restartRoute() {
   pilotControls = createCobraPilotControlState(authorityState?.vehicle?.collective ?? 0.5);
   // A restart is a fresh mission, so the chart's enclosing square is recomputed once, here.
   tacticalMapBounds = null;
+  tacticalMapBackdrop = null;
+  tacticalMapRiver = null;
   routeSampler = createCobraCanyonRouteSampler(activeRoute);
   routeDistanceM = ROUTE_ENTRY_OFFSETS_M[activeRoute.id] ?? 0;
   routeComplete = false;
@@ -961,6 +1032,9 @@ function rebuildPresentation() {
   scene.add(presentation.group);
   scene.add(groundWarPresentation.group);
   scene.add(emberGuidancePath.object3d);
+  // The golden path is quality-tier independent (one 160-triangle ribbon), so it survives a canyon
+  // rebuild instead of being torn down and re-added with it.
+  if (!goldenPath) scene.add((goldenPath = createCobraGoldenPath(THREE)).group);
   // Presence is ownship, not canyon scenery — recreate after canyon rebuild so it stays on top.
   if (ah1gPresence) {
     scene.remove(ah1gPresence.group);
@@ -1409,6 +1483,15 @@ function animate(timeMs) {
   if (emberGuidancePath && authorityState) {
     emberGuidancePath.update(emberPathGuidanceState(authorityState));
   }
+  // "It is not obvious where I am supposed to fly." The ribbon of sunlit haze answers that through
+  // the windscreen; on the tour rails or a parked scenery still there is no pilot to answer.
+  goldenPath?.update(cobraGoldenPathState({
+    groundWar: authorityState?.ground_war,
+    pose: readVehiclePose(),
+    groundHeightAt: groundAt,
+    nowSeconds: timeMs / 1_000,
+    suppressed: tourInput.checked || Boolean(parkedCamera),
+  }));
   recordPhase("presentation", presentationStartedAtMs);
   if (tourInput.checked && bridge && !missionTerminal) {
     // Keep the ground war alive during guided preview even when the camera is on rails.

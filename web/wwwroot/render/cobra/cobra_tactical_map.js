@@ -68,6 +68,9 @@ export function cobraTacticalMapModel({
   units = [],
   tickets = { friendly: 0, hostile: 0 },
   player = { eastM: 0, northM: 0, headingRad: 0 },
+  // The river course, as [{ eastM, northM }]. It is the strongest landmark a pilot actually
+  // has out of the windscreen, so a chart that omits it gives them nothing to match against.
+  river = [],
   bounds,
   widthPx,
   heightPx,
@@ -128,6 +131,15 @@ export function cobraTacticalMapModel({
     offMap: playerProjection.offMap,
   };
 
+  const projectedRiver = [];
+  for (const point of river) {
+    const eastM = Number(point?.eastM);
+    const northM = Number(point?.northM);
+    if (!Number.isFinite(eastM) || !Number.isFinite(northM)) continue;
+    const { x, y } = project(eastM, northM, bounds, widthPx, heightPx);
+    projectedRiver.push({ x, y });
+  }
+
   let objective = null;
   let nearestRangeM = Infinity;
   for (const site of sites) {
@@ -153,6 +165,7 @@ export function cobraTacticalMapModel({
     heightPx,
     sites: projectedSites,
     units: projectedUnits,
+    river: projectedRiver,
     player: projectedPlayer,
     tickets: { friendly: tickets?.friendly ?? 0, hostile: tickets?.hostile ?? 0 },
     objective,

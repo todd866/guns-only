@@ -23,16 +23,22 @@ export const COBRA_MAP_COLORS = Object.freeze({
   objective: "rgba(212, 181, 106, 0.85)",
   label: "rgba(232, 230, 223, 0.88)",
   muted: "rgba(154, 163, 146, 0.9)",
+  river: "rgba(96, 152, 186, 0.85)",
+  objectiveRing: "rgba(240, 214, 138, 0.95)",
 });
 
 const MINIMAP = Object.freeze({
-  siteRadiusPx: 4.5,
-  contestedRingPx: 8,
-  progressRingPx: 7.5,
+  siteRadiusPx: 5,
+  contestedRingPx: 8.5,
+  progressRingPx: 8,
   unitRadiusPx: 1.6,
-  playerRadiusPx: 6,
-  objectiveLinePx: 22,
-  labelFont: "",
+  playerRadiusPx: 7,
+  objectiveLinePx: 34,
+  // Points ARE labelled on the minimap now. Unlabelled dots were the other half of "hard to
+  // figure out where to go": the caption named a point the chart could not identify.
+  labelFont: "600 8px ui-sans-serif, system-ui, sans-serif",
+  furnitureFont: "600 8px ui-sans-serif, system-ui, sans-serif",
+  furnitureInsetPx: 10,
 });
 
 const FULLMAP = Object.freeze({
@@ -43,6 +49,8 @@ const FULLMAP = Object.freeze({
   playerRadiusPx: 11,
   objectiveLinePx: 54,
   labelFont: "600 12px ui-sans-serif, system-ui, sans-serif",
+  furnitureFont: "600 11px ui-sans-serif, system-ui, sans-serif",
+  furnitureInsetPx: 18,
 });
 
 /**
@@ -110,6 +118,103 @@ function drawCaption(ctx, caption, { widthPx, headerPx, full }) {
   ctx.restore();
 }
 
+/**
+ * The terrain relief and the river, drawn UNDER the markers.
+ *
+ * This is the difference between a chart and a black box with dots on it. The owner's verdict
+ * on the first cut was "really hard to figure out where to go", and the reason is that a map
+ * with no land on it cannot be matched against anything visible out of the windscreen — the
+ * valley, the ridges and the river are the only references a pilot has. BF:Vietnam's minimap
+ * is readable for exactly this reason: terrain first, flags on top.
+ */
+function drawTerrain(ctx, model, backdrop) {
+  if (backdrop) {
+    // Baked once per mission; see cobra_tactical_map_relief.js.
+    ctx.drawImage(backdrop, 0, 0, model.widthPx, model.heightPx);
+  }
+  const river = model.river ?? [];
+  if (river.length < 2) return;
+  ctx.save();
+  ctx.strokeStyle = COBRA_MAP_COLORS.river;
+  ctx.lineWidth = Math.max(1.5, model.widthPx / 90);
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(river[0].x, river[0].y);
+  for (let index = 1; index < river.length; index++) ctx.lineTo(river[index].x, river[index].y);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * A ring and a range readout on the point you are being sent to.
+ *
+ * Four discs of similar size, one of which happens to be the objective, still makes the player
+ * work out WHICH one the caption is naming. BF marks the objective flag distinctly; this does
+ * the same, and prints the range so "am I supposed to fly that way" has a number attached.
+ */
+function drawObjectiveMarker(ctx, model, metrics) {
+  const objective = model.objective;
+  if (!objective) return;
+  const target = (model.sites ?? []).find((site) => site.id === objective.siteId);
+  if (!target) return;
+
+  ctx.save();
+  ctx.strokeStyle = COBRA_MAP_COLORS.objectiveRing;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(target.x, target.y, metrics.siteRadiusPx + 5, 0, Math.PI * 2);
+  ctx.stroke();
+
+  const rangeM = Number(objective.rangeM);
+  if (Number.isFinite(rangeM)) {
+    ctx.fillStyle = COBRA_MAP_COLORS.objectiveRing;
+    ctx.font = metrics.labelFont || "600 9px ui-sans-serif, system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    const text = rangeM < 1000 ? `${Math.round(rangeM)} m` : `${(rangeM / 1000).toFixed(1)} km`;
+    ctx.fillText(text, target.x, target.y - metrics.siteRadiusPx - 8);
+  }
+  ctx.restore();
+}
+
+/** North arrow and a scale bar — a chart without either is a picture. */
+function drawChartFurniture(ctx, model, metrics, metresPerPixel) {
+  ctx.save();
+  ctx.fillStyle = COBRA_MAP_COLORS.muted;
+  ctx.font = metrics.furnitureFont;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const inset = metrics.furnitureInsetPx;
+  ctx.fillText("N", model.widthPx - inset, inset + 7);
+  ctx.beginPath();
+  ctx.moveTo(model.widthPx - inset, inset + 1);
+  ctx.lineTo(model.widthPx - inset - 3.5, inset - 5);
+  ctx.lineTo(model.widthPx - inset + 3.5, inset - 5);
+  ctx.closePath();
+  ctx.fill();
+
+  if (Number.isFinite(metresPerPixel) && metresPerPixel > 0) {
+    // Round the bar to a whole kilometre so the number is readable at a glance.
+    const barMetres = metresPerPixel * (model.widthPx * 0.28) > 1500 ? 2000 : 1000;
+    const barPx = barMetres / metresPerPixel;
+    const y = model.heightPx - inset;
+    ctx.strokeStyle = COBRA_MAP_COLORS.muted;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(inset, y);
+    ctx.lineTo(inset + barPx, y);
+    ctx.moveTo(inset, y - 3);
+    ctx.lineTo(inset, y + 3);
+    ctx.moveTo(inset + barPx, y - 3);
+    ctx.lineTo(inset + barPx, y + 3);
+    ctx.stroke();
+    ctx.textAlign = "left";
+    ctx.fillText(`${barMetres / 1000} km`, inset + barPx + 5, y);
+  }
+  ctx.restore();
+}
+
 function factionColor(faction) {
   return faction === "hostile" ? COBRA_MAP_COLORS.hostile : COBRA_MAP_COLORS.friendly;
 }
@@ -170,7 +275,12 @@ function drawSites(ctx, model, metrics, { full, nowSeconds }) {
       ctx.stroke();
     }
 
-    if (full && site.label) {
+    // The full map names every point. The MINIMAP names only the one you are being sent to:
+    // four names at 200 px overran the chart edge and collided with each other, and the
+    // question a minimap has to answer is "which of these am I going to", not "what is
+    // everything called". The rest are identified by position, colour and the full map.
+    const naming = full || site.id === model.objective?.siteId;
+    if (site.label && metrics.labelFont && naming) {
       ctx.font = metrics.labelFont;
       ctx.fillStyle = COBRA_MAP_COLORS.label;
       // Points clamped to a map edge would otherwise have their names centred on the edge and
@@ -181,7 +291,12 @@ function drawSites(ctx, model, metrics, { full, nowSeconds }) {
         ? "right"
         : (site.x < edgePx ? "left" : "center");
       ctx.textBaseline = "top";
-      ctx.fillText(String(site.label).toUpperCase(), site.x, site.y + metrics.siteRadiusPx + 6);
+      // Trim to the chart, so a long name cannot be sliced by the canvas edge.
+      ctx.fillText(
+        fitText(ctx, String(site.label).toUpperCase(), model.widthPx * 0.62),
+        site.x,
+        site.y + metrics.siteRadiusPx + 6,
+      );
     }
   }
 }
@@ -291,7 +406,8 @@ function drawLegend(ctx, model) {
 export function drawCobraTacticalMap(
   ctx,
   model,
-  { full = false, nowSeconds = 0, caption = null, headerPx = 0 } = {},
+  { full = false, nowSeconds = 0, caption = null, headerPx = 0, backdrop = null,
+    metresPerPixel = null } = {},
 ) {
   if (!ctx || !model) return;
   const width = model.widthPx;
@@ -320,6 +436,10 @@ export function drawCobraTacticalMap(
   // 1. Backing and border, matching the shell's glass chrome.
   ctx.fillStyle = COBRA_MAP_COLORS.backing;
   ctx.fillRect(0, 0, width, height);
+
+  // 2. THE LAND, before any marker. See drawTerrain.
+  drawTerrain(ctx, model, backdrop);
+
   ctx.strokeStyle = COBRA_MAP_COLORS.border;
   ctx.lineWidth = 1;
   ctx.strokeRect(0.5, 0.5, width - 1, height - 1);
@@ -327,7 +447,9 @@ export function drawCobraTacticalMap(
   drawUnits(ctx, model, metrics);
   drawSites(ctx, model, metrics, { full, nowSeconds });
   drawObjectiveLine(ctx, model, metrics);
+  drawObjectiveMarker(ctx, model, metrics);
   drawPlayer(ctx, model, metrics);
+  drawChartFurniture(ctx, model, metrics, metresPerPixel);
   if (full) {
     drawTicketBars(ctx, model);
     drawLegend(ctx, model);

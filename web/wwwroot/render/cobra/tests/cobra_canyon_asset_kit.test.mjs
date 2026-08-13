@@ -6,6 +6,7 @@ import { planCobraCanyonWorld } from "../cobra_canyon_plan.js";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   COBRA_CANYON_ASSET_ROLES,
+  cobraCanyonAssetRoleScaleForTests,
   createCobraCanyonAssetKit,
 } from "../cobra_canyon_asset_kit.js";
 
@@ -54,8 +55,11 @@ test("builds one bounded authored batch per visual role across every tier", () =
     const meshes = roleMeshes(kit.group);
     assert.equal(meshes.size, COBRA_CANYON_ASSET_ROLES.length);
     assert.equal(kit.builtMetrics.drawCalls, COBRA_CANYON_ASSET_ROLES.length);
+    // `builtMetrics` is the ALLOCATION — the ceiling the near-field scatter will never exceed
+    // wherever the aircraft flies. `assetInstances` is what is resident right now, which depends
+    // on what the ground under the camera actually grows.
     assert.ok(kit.builtMetrics.instances <= MAXIMUM_INSTANCES[qualityTier]);
-    assert.equal(kit.roleCounts.assetInstances, kit.builtMetrics.instances);
+    assert.ok(kit.roleCounts.assetInstances <= kit.builtMetrics.instances);
     assert.equal(kit.roleCounts.authoredAmbientBatches, plan.ambientBatches.length);
     assert.equal(kit.roleCounts.authoredSetPieceCells, 10);
     assert.equal(kit.roleCounts.authoredAmbientArchetypes, 11);
@@ -89,8 +93,11 @@ test("builds one bounded authored batch per visual role across every tier", () =
         || role === "village" || role === "rock";
       assert.equal(mesh.castShadow, standsUp, `${role} cast-shadow policy regressed`);
       assert.equal(mesh.receiveShadow, role !== "mist" && role !== "waterAccent");
-      assert.equal(mesh.instanceMatrix.usage, THREE.StaticDrawUsage);
-      assert.equal(mesh.instanceColor.count, mesh.count);
+      // WAS StaticDrawUsage. The scatter is camera-following now: the resident set is rewritten
+      // as the aircraft moves, so the driver must be told the buffer is dynamic. Static usage
+      // here was a correct statement about a world-fixed scatter and a false one about this.
+      assert.equal(mesh.instanceMatrix.usage, THREE.DynamicDrawUsage);
+      assert.ok(mesh.instanceColor.count >= mesh.count);
       assert.equal(mesh.geometry.getAttribute("color").count,
         mesh.geometry.getAttribute("position").count);
       assert.equal(kit.roleCounts[`${role}RenderBatches`], 1);
@@ -127,7 +134,11 @@ test("builds one bounded authored batch per visual role across every tier", () =
       "textured cards must stay far under the old ~50-tri lobe budget");
     assert.ok(triangleCount(meshes.get("plantation").geometry) >= 100,
       "plantation rows need trunks and crowns instead of marker pyramids");
-    assert.deepEqual(visibleMetrics(kit.group), kit.builtMetrics);
+    assert.deepEqual(visibleMetrics(kit.group), {
+      drawCalls: kit.diagnostics().drawCalls,
+      instances: kit.diagnostics().instances,
+      triangles: kit.diagnostics().triangles,
+    });
     kit.dispose();
   }
 });
@@ -235,4 +246,68 @@ test("disposes every owned geometry and material exactly once", () => {
   assert.equal(kit.group.children.length, 0);
   for (const count of disposeCounts.values()) assert.equal(count, 1);
   assert.equal(kit.diagnostics().disposed, true);
+});
+
+test("understory is grass height, not canopy height", () => {
+  // Five cell kinds map to the single "jungle" role, and role-only sizing gave ridge GRASS the
+  // canopy band: 16-30 m tall, about twenty times life size. The owner's question — "how tall
+  // are those plants and what are they supposed to be" — was asked of a frame full of grass
+  // blades taller than the aircraft flying over them.
+  const canopy = cobraCanyonAssetRoleScaleForTests("jungle",
+    { id: "archetype.cobra-canyon.jungle-canopy.v1" }, 0.5);
+  const understory = cobraCanyonAssetRoleScaleForTests("jungle",
+    { id: "archetype.cobra-canyon.jungle-understory.v1" }, 0.5);
+
+  assert.ok(canopy.heightM >= 16 && canopy.heightM <= 30,
+    `canopy must stay canopy-sized, got ${canopy.heightM} m`);
+  assert.ok(understory.heightM <= 4,
+    `understory must be grass/scrub height, got ${understory.heightM} m`);
+  assert.ok(understory.heightM < canopy.heightM / 4,
+    "understory must be dramatically shorter than canopy, not a nudge");
+});
+
+test("an authored scaleM still wins over both bands", () => {
+  const declared = cobraCanyonAssetRoleScaleForTests("jungle",
+    { id: "archetype.cobra-canyon.jungle-understory.v1", scaleM: { height: 9 } }, 0.5);
+  assert.equal(declared.heightM, 9);
+});
+
+test("every role band suits every cell kind that reaches it", () => {
+  // One sizing path serves several kinds of object, and for three of them it silently handed
+  // over the wrong band: ridge GRASS took the canopy band (16-30 m), a fence-and-cart cluster
+  // took the village-COMPOUND band (32 m wide), and red-earth SCRUB took a rock band that
+  // reached 62 m tall. Each descriptor already carried the distinction and none of them were
+  // read. This pins the sizes a human would recognise.
+  const band = (role, descriptorId) =>
+    cobraCanyonAssetRoleScaleForTests(role, { id: descriptorId }, 0.5);
+
+  const canopy = band("jungle", "archetype.cobra-canyon.jungle-canopy.v1");
+  const understory = band("jungle", "archetype.cobra-canyon.jungle-understory.v1");
+  const compound = band("village", "archetype.cobra-canyon.village-compound.v1");
+  const clutter = band("village", "archetype.cobra-canyon.village-hut.v1");
+  const scatter = band("rock", "archetype.cobra-canyon.rock-scatter.v1");
+
+  assert.ok(canopy.heightM >= 16, "tropical canopy really is 25-40 m");
+  assert.ok(understory.heightM <= 4, "grass and low scrub");
+  assert.ok(compound.widthM >= 25, "a compound is a cluster of buildings");
+  assert.ok(clutter.heightM <= 6 && clutter.widthM <= 10, "a cart is not a compound");
+  assert.ok(scatter.heightM <= 10, "boulder scatter, not a cliff face");
+});
+
+test("mist and water accents are soft-edged, not translucent slabs", () => {
+  // They were untextured MeshBasicMaterial quads at 0.42 opacity, double-sided, so each card
+  // drew as a hard-edged grey rectangle hanging in the air — visible from the cockpit in
+  // rendered review as a slab across the sky. Mist has no edges.
+  const { kit } = create("desktop");
+  const misty = [];
+  kit.group.traverse((child) => {
+    const name = child.material?.name ?? "";
+    if (name.includes("MIST") || name.includes("WATERACCENT")) misty.push(child.material);
+  });
+  assert.ok(misty.length > 0, "no mist or water-accent material found");
+  for (const material of misty) {
+    assert.ok(material.map, `${material.name} must carry a falloff ramp, not a bare quad`);
+    assert.equal(material.transparent, true);
+    assert.equal(material.depthWrite, false);
+  }
 });

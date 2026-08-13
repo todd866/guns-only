@@ -36,6 +36,12 @@ public static class GunneryPitchAssist {
     // sat mostly 3.9-15.6 deg off, but the 1,000 m range gate kept the assist inactive. The earlier
     // close pass was radically different (0.7-2.2 s to pass) and must not be chased. Extend only a
     // soft acquisition shoulder, never the full-authority law or its existing caps.
+    /// <summary>
+    /// How much "ease off the pull" the aid may command once the nose has gone PAST the lead
+    /// line while the pilot is pulling. Deliberately smaller than the pull-side authority: the
+    /// aid should trim an overshoot, never take the aircraft off a target the pilot is chasing.
+    /// </summary>
+    const double PastLineEaseAuthorityG = 1.0;
     const double SafePursuitRangeMultiplier = 1.5;
     const double SafePursuitOuterCaptureAngleRad = 24.0 * System.Math.PI / 180.0;
     const double SafePursuitFadeStartTimeToPassSeconds = 2.5;
@@ -165,8 +171,28 @@ public static class GunneryPitchAssist {
         // residual was subtracting up to the full correction authority — "impossible to pull to
         // the shoot cue without spacebar" (Space disables the assist, which is why it 'fixed'
         // it). Hands-off, the full two-sided damping keeps the smooth capture.
-        double negativeAuthority = pilotCommand.GDemand >= 2.0
-            ? 0.0 : -parameters.GunneryPitchAssistMaxCorrectionG;
+        // ...but gate that on GEOMETRY, not on how hard the pilot is pulling. Keying it to
+        // `GDemand >= 2.0` made the aid one-sided through the entire tracking task: an owner
+        // flight on Build 323 (session web-1786607256301-334574) held a median 5.7 G and sat at
+        // the envelope cap 56% of the time, so the clamp was live for essentially every firing
+        // pass, and the assist could then only ever say "pull harder". The final degree of
+        // tracking almost always needs "ease" — inside 1° of lead, 71% of the required
+        // corrections were negative and the aid was silent for 66% of them. Measured in that
+        // same flight: lead error converged at −1.21°/s while the assist acted and DIVERGED at
+        // +1.62°/s while it was clamped (+2.22°/s inside 3°), leaving the pilot parked around 3°
+        // of error — 32 m of miss against a 7 m hit radius. 808 rounds, 6 hits.
+        //
+        // The original intent stands and is kept: never oppose a deliberate pull TOWARD the
+        // solution. `pitchError < 0` means the nose has gone PAST the lead line, which is the
+        // only case where easing is what the pilot is actually asking for. Hands-off (below the
+        // same 2 G) keeps the full two-sided damping that gives the smooth capture.
+        double easeAuthorityG = pilotCommand.GDemand < 2.0
+            ? parameters.GunneryPitchAssistMaxCorrectionG
+            : (pitchError < 0.0
+                ? System.Math.Min(
+                    parameters.GunneryPitchAssistMaxCorrectionG, PastLineEaseAuthorityG)
+                : 0.0);
+        double negativeAuthority = -easeAuthorityG;
         double correction = shoulderAuthority * System.Math.Clamp(rateCorrectionG,
             negativeAuthority,
             parameters.GunneryPitchAssistMaxCorrectionG);

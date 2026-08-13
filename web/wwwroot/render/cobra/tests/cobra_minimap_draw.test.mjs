@@ -143,12 +143,18 @@ test("capture_progress 0 draws no arc and 0.5 draws one", () => {
   const flat = SITES.map((site) => ({ ...site, capture_progress: 0, contested: false }));
   const zeroCtx = recordingContext();
   drawCobraTacticalMap(zeroCtx, model({ sites: flat }));
+  // The objective ring is also a stroked arc, so count only arcs stroked in a FACTION colour —
+  // those are the capture-progress rings this test is about.
   const strokedArcs = (calls) => {
     let count = 0;
     let lastArc = null;
     for (const call of calls) {
       if (call.name === "arc") lastArc = call;
-      if (call.name === "stroke" && lastArc) { count += 1; lastArc = null; }
+      if (call.name === "stroke" && lastArc) {
+        if (call.strokeStyle === COBRA_MAP_COLORS.friendly
+          || call.strokeStyle === COBRA_MAP_COLORS.hostile) count += 1;
+        lastArc = null;
+      }
       if (call.name === "fill") lastArc = null;
     }
     return count;
@@ -159,7 +165,19 @@ test("capture_progress 0 draws no arc and 0.5 draws one", () => {
   const half = flat.map((site) => (site.id === "ford" ? { ...site, capture_progress: 0.5 } : site));
   drawCobraTacticalMap(halfCtx, model({ sites: half }));
   assert.equal(strokedArcs(halfCtx.calls), 1);
-  const progressArc = halfCtx.calls.filter((call) => call.name === "arc").at(-1);
+  // The objective ring is an arc too, so pick the arc whose stroke was a faction colour.
+  const arcs = [];
+  let pendingArc = null;
+  for (const call of halfCtx.calls) {
+    if (call.name === "arc") pendingArc = call;
+    if (call.name === "stroke" && pendingArc) {
+      if (call.strokeStyle === COBRA_MAP_COLORS.friendly
+        || call.strokeStyle === COBRA_MAP_COLORS.hostile) arcs.push(pendingArc);
+      pendingArc = null;
+    }
+    if (call.name === "fill") pendingArc = null;
+  }
+  const progressArc = arcs.at(-1);
   // Half a capture is half a turn, opened from north.
   assert.ok(Math.abs((progressArc.args[4] - progressArc.args[3]) - Math.PI) < 1e-9);
 });
@@ -192,10 +210,24 @@ test("nothing is drawn outside the pixel box", () => {
   }
 });
 
-test("full: true draws site labels and ticket bars; full: false draws neither", () => {
+test("the minimap names only the objective; the full map names everything", () => {
+  // Four names on a 200 px chart overran the edge and collided. The question a minimap answers
+  // is "which of these am I going to", so it names that one and leaves the rest to position,
+  // colour and the full map.
   const minimapCtx = recordingContext();
-  drawCobraTacticalMap(minimapCtx, model(), { full: false });
-  assert.equal(minimapCtx.calls.filter((call) => call.name === "fillText").length, 0);
+  const miniModel = model();
+  drawCobraTacticalMap(minimapCtx, miniModel, { full: false });
+  const miniTexts = minimapCtx.calls
+    .filter((call) => call.name === "fillText")
+    .map((call) => String(call.args[0]));
+  const objectiveLabel = miniModel.sites
+    .find((site) => site.id === miniModel.objective.siteId).label.toUpperCase();
+  assert.ok(miniTexts.includes(objectiveLabel),
+    `objective must be named on the minimap: ${miniTexts.join(" | ")}`);
+  assert.ok(!miniTexts.includes("BRIDGE"),
+    "a non-objective point must not be named on the minimap");
+  assert.ok(!miniTexts.some((text) => /FRIENDLY 280|HOSTILE 190/.test(text)),
+    "ticket counts belong to the full map only");
 
   const fullCtx = recordingContext();
   const fullModel = model({ widthPx: 1_200, heightPx: 800, showUnits: true });
@@ -234,7 +266,7 @@ test("a short objective line runs from the player toward the nearest hostile poi
   assert.equal(to.name, "lineTo");
   const target = map.sites.find((site) => site.id === map.objective.siteId);
   const length = Math.hypot(to.args[0] - map.player.x, to.args[1] - map.player.y);
-  assert.ok(length > 0 && length <= 22.001, `objective line ${length}px is not a short cue`);
+  assert.ok(length > 0 && length <= 34.001, `objective line ${length}px is not a short cue`);
   // Pointing at the objective, not away from it.
   const dot = (to.args[0] - map.player.x) * (target.x - map.player.x)
     + (to.args[1] - map.player.y) * (target.y - map.player.y);
@@ -288,9 +320,14 @@ test("the objective caption reaches the minimap, above the chart", () => {
     headerPx: COBRA_MAP_CAPTION_PX.mini,
     caption: { line: "DESTROY GARRISON · LONG FANG", detail: "1.8 km" },
   });
+  // Two lines: the order, then the place. They are drawn in the BAND, before the chart is
+  // translated down, so they are the first text on the canvas — site labels and the scale bar
+  // follow underneath.
   const texts = ctx.calls.filter((call) => call.name === "fillText");
-  // Two lines: the order, then the place. See drawCaption.
-  assert.deepEqual(texts.map((call) => String(call.args[0])), ["DESTROY GARRISON", "LONG FANG"]);
+  assert.deepEqual(
+    texts.slice(0, 2).map((call) => String(call.args[0])),
+    ["DESTROY GARRISON", "LONG FANG"],
+  );
   // Drawn in the band, before the chart is translated into place.
   assert.ok(texts[0].args[2] < COBRA_MAP_CAPTION_PX.mini, "caption must sit inside its band");
   assert.ok(
@@ -317,7 +354,13 @@ test("no caption means no band and no translate", () => {
   const ctx = recordingContext();
   const model = cobraTacticalMapModel({ bounds: BOUNDS, widthPx: 200, heightPx: 200 });
   drawCobraTacticalMap(ctx, model, { headerPx: COBRA_MAP_CAPTION_PX.mini, caption: null });
-  assert.equal(ctx.calls.filter((call) => call.name === "fillText").length, 0);
+  // The chart furniture (north arrow, scale bar) is always drawn — what must be absent is the
+  // caption band itself and the translate that makes room for it.
+  const texts = ctx.calls
+    .filter((call) => call.name === "fillText")
+    .map((call) => String(call.args[0]));
+  assert.ok(!texts.some((text) => /GARRISON|LIFT|CLEAR|HOLDING/.test(text)),
+    `caption text drawn with no caption: ${texts.join(" | ")}`);
   assert.ok(!ctx.calls.some((call) => call.name === "translate" && call.args[1] === COBRA_MAP_CAPTION_PX.mini));
 });
 

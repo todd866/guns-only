@@ -308,7 +308,10 @@ test("authored jungle geometry splits into a hero batch and stays inside every t
       // The reserved slot is now spent: jungle renders as hero geometry PLUS a card field.
       assert.equal(diagnostics.roleCounts.jungleRenderBatches, 2,
         `${qualityTier} must split the jungle into hero and card batches`);
-      assert.equal(diagnostics.presentationDrawCallHeadroom, 0);
+      // One slot of headroom survives: the roads overlay this world no longer draws, because
+      // its only road-named record is a terrain bench (see "a terrain bench is never drawn as
+      // a road"). Spending it again needs a real road network, not another contour.
+      assert.equal(diagnostics.presentationDrawCallHeadroom, 1);
     } else {
       // Mobile is allowed no authored triangles at all, so it must ignore the mesh entirely.
       assert.equal(diagnostics.roleCounts.jungleRenderBatches, 1,
@@ -331,10 +334,13 @@ test("builds the real analytical basin and stays inside every tier ceiling", () 
     assert.ok(actual.instances <= budget.maxInstances);
     assert.ok(actual.triangles <= budget.maxTriangles);
     assert.equal(diagnostics.withinBudget, true);
-    assert.equal(diagnostics.builtDrawCalls, 16);
-    assert.equal(diagnostics.roleCounts.coreRenderBatches, 9);
+    // 15, not 16: the roads overlay is gone. This world authors no road network — the only
+    // road-named record is a terrain BENCH, and drawing it put a 13 km laterite stripe across
+    // the valley (see "a terrain bench is never drawn as a road").
+    assert.equal(diagnostics.builtDrawCalls, 15);
+    assert.equal(diagnostics.roleCounts.coreRenderBatches, 8);
     assert.equal(diagnostics.roleCounts.assetRenderBatches, 7);
-    assert.equal(diagnostics.roleCounts.worldRenderBatches, 16);
+    assert.equal(diagnostics.roleCounts.worldRenderBatches, 15);
     assert.equal(diagnostics.roleCounts.heroCells, 3);
     assert.equal(diagnostics.roleCounts.landmarks, 11);
     assert.ok(diagnostics.roleCounts.campEmberFirebaseParts >= 28);
@@ -343,11 +349,13 @@ test("builds the real analytical basin and stays inside every tier ceiling", () 
       diagnostics.roleCounts.assetInstances <= budget.maxAssetInstances,
       `${qualityTier} asset kit must respect its instance allocation`,
     );
-    // One draw call is RESERVED for the authored-geometry hero batch, which only exists once
-    // a glTF asset loads. Without one, every role renders as cards in a single batch and that
-    // slot stays free — so the reserve reads as headroom here, and is spent in the authored
-    // case below.
-    assert.equal(diagnostics.presentationDrawCallHeadroom, 1);
+    // Two draw calls of headroom now. One is RESERVED for the authored-geometry hero batch,
+    // which only exists once a glTF asset loads — without one, every role renders as cards in a
+    // single batch and that slot stays free, so the reserve reads as headroom here and is spent
+    // in the authored case below. The second is the roads overlay this world no longer draws:
+    // its only road-named record is a terrain bench, and drawing it laid a 13 km laterite stripe
+    // across the valley.
+    assert.equal(diagnostics.presentationDrawCallHeadroom, 2);
     assert.ok(diagnostics.presentationInstanceHeadroom >= 0);
     assert.ok(diagnostics.presentationTriangleHeadroom >= 512,
       `${qualityTier} must retain at least 512 presentation triangles of reserve`);
@@ -378,7 +386,10 @@ test("builds the real analytical basin and stays inside every tier ceiling", () 
     assert.equal(basin.material.isShaderMaterial, true);
     assert.equal(basin.material.name, "COBRA_CANYON_BASIN_MATERIAL");
 
-    for (const role of ["river", "roads"]) {
+    // "roads" is deliberately absent: this world authors no road network, only terrain benches
+    // (see the terrain-authority guard in collectRibbonPlacements). Drawing one as a road put a
+    // 13 km laterite stripe across the valley.
+    for (const role of ["river"]) {
       const overlay = byRole(presentation.group, role);
       const overlayPositions = overlay.geometry.getAttribute("position");
       assert.ok(triangleCount(overlay.geometry) > 100,
@@ -631,6 +642,9 @@ test("ambient rungs and AGL shed only deterministic asset prefixes", () => {
   const hazards = byRole(presentation.group, "hazards");
   const decks = byRole(presentation.group, "bridge-deck");
   const piers = byRole(presentation.group, "bridge-pier");
+  // Settle the camera before baselining: the scatter is camera-following, so occupancy is a
+  // property of where the aircraft is, and the kit boots at the Camp Ember spawn rather than here.
+  presentation.update({ ambientBudgetLevel: 0, cameraPosition: { x: 0, z: 0 }, cameraAglM: 40 });
   const baseCounts = new Map([...assets].map(([role, mesh]) => [role, mesh.count]));
   const baseHazardCount = hazards.count;
   const baseDeckCount = decks.count;
@@ -734,6 +748,10 @@ test("uses deterministic static matrices and cached frozen diagnostics", () => {
     }
   }
 
+  // The scatter is camera-following, so the resident set — and therefore the diagnostics — moves
+  // with the aircraft. What must stay true is that a frame which changes NOTHING allocates
+  // nothing: settle the camera first, then pin object identity across repeated identical frames.
+  first.update({ cameraPosition: { x: 0, z: 0 }, cameraAglM: 40, ambientBudgetLevel: 0 });
   const initial = first.diagnostics();
   assert.equal(Object.isFrozen(initial), true);
   assert.equal(Object.isFrozen(initial.roleCounts), true);
@@ -853,4 +871,28 @@ test("river carries its centreline frame, so the shoreline can exist per fragmen
     `river must reach its channel centre, closest lateral was ${minimumLateral.toFixed(3)}`);
   assert.ok(maximumLateral > 1.05,
     `river must carry gravel outside the waterline, widest lateral was ${maximumLateral.toFixed(3)}`);
+});
+
+test("a terrain bench is never drawn as a road", () => {
+  // `road-and-plantation-bench` is a 235 m half-width SHELF the landscape is graded along —
+  // the thing a road would sit on — and it declares `authority.role: "terrain-authority"`.
+  // Its kind contains the substring "road", so it passed the road filter, took the 7 m default
+  // width it does not author, and was drawn as a 7 m laterite stripe down a 13 km contour:
+  // across the valley, across the river with no bridge, edge to edge of the map. Reported by
+  // the owner three times as "that random red line", and it never meant anything at all.
+  const benches = (world.terrain?.ribbons ?? []).filter((ribbon) => {
+    const kind = String(ribbon?.kind ?? "");
+    return kind.includes("road") || kind.includes("track");
+  });
+  assert.ok(benches.length > 0, "fixture must still contain a road-named terrain bench");
+  for (const bench of benches) {
+    assert.ok(
+      String(bench.kind).includes("bench") || bench.authority?.role === "terrain-authority",
+      `${bench.id} is road-named but carries no marker distinguishing it from a real road`,
+    );
+  }
+
+  const { presentation } = create("balanced");
+  const roads = presentation.group.children.find((child) => child.name?.includes("ROADS"));
+  assert.equal(roads, undefined, "a terrain bench must not produce a road overlay");
 });
