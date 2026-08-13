@@ -48,7 +48,8 @@ public sealed class GroundUnit
         double maxHealth,
         in Vec3D positionWorldM,
         GroundUnitIntent intent,
-        string homeSiteId)
+        string homeSiteId,
+        bool fortified = false)
     {
         if (string.IsNullOrWhiteSpace(id))
             throw new ArgumentException("Unit id is required.", nameof(id));
@@ -67,6 +68,7 @@ public sealed class GroundUnit
         PositionWorldM = positionWorldM;
         Intent = intent;
         HomeSiteId = homeSiteId;
+        IsFortified = fortified;
     }
 
     public string Id { get; }
@@ -79,6 +81,18 @@ public sealed class GroundUnit
     public string HomeSiteId { get; }
     public bool IsAlive => Health > 1e-9;
     public bool IsWreck => !IsAlive;
+
+    /// <summary>
+    /// Dug in: immune to ground-to-ground fire, killable only from the air. This is the
+    /// structural reason a conquest point needs the gunship. Without it the friendly units
+    /// already seeded at a site grind a 140 hp garrison down in 10-16 s on their own, and the
+    /// objective strip's promise ("kill the garrison and friendlies will take the point")
+    /// becomes a lie the player watches the AI fulfil. Player rounds arrive through
+    /// ApplyAuthorizedFire and are NOT scaled by this.
+    /// Deliberately not applied to the friendly hard points at Camp Ember: hostile waves must
+    /// still be able to break the FOB, or the mission has no losing side.
+    /// </summary>
+    public bool IsFortified { get; }
 
     public double CombatPower => Role switch {
         GroundUnitRole.InfantryClump => 1.0,

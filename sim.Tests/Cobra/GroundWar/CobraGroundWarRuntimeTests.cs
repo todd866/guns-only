@@ -366,20 +366,33 @@ public class CobraGroundWarRuntimeTests
         // Simulated competent gunner at the sim API: every tick, kill the hostile push with
         // authorized turret fire and rearm at the Camp Ember pad on bingo. The player's fire
         // must be the difference between this Victory and the zero-input Defeat above.
+        //
+        // The target priority is garrison-first, and that is the whole conquest loop rather than
+        // a convenience: a dug-in garrison is immune to ground fire (GroundUnit.IsFortified), so
+        // it is the ONLY thing on the board that cannot be resolved without the turret. The
+        // previous policy here — first hostile by ordinal id — sorted every `ground.hostile.*`
+        // pusher ahead of every `site.*.garrison` and so, against a 15 s wave cadence, never
+        // reached a garrison at all and never took a point. A gunner who only shoots what is
+        // shooting back loses this mission; that is the intended lesson.
         CobraGroundWarRuntime war = CreateWar(seed: 42);
         ContestedSite camp = war.Sites.First(site => site.Label == "Camp Ember");
         Vec3D pad = new(
             camp.PositionWorldM.X,
             camp.PositionWorldM.Y + 2.0,
             camp.PositionWorldM.Z);
-        int ticks = (int)Math.Round(300.0 / PlayerVehicleContract.FixedDeltaSeconds);
+        // A conquest sortie is longer than a control-meter one: this policy reaches 3-1 at ~100 s
+        // and then bleeds 300 hostile tickets down at 1.0/s, landing Victory near 370 s. The
+        // window is deliberately generous of that so the gate measures "does competent fire win"
+        // rather than "does it win inside a stopwatch".
+        int ticks = (int)Math.Round(480.0 / PlayerVehicleContract.FixedDeltaSeconds);
 
         for (int tick = 0; tick < ticks && war.MissionOutcome == HoldTheBridgeOutcome.Pending; tick++) {
             if (war.Magazine.IsBingo)
                 war.TryResupplyAtFob(pad);
             GroundUnit? target = war.LivingUnits()
                 .Where(unit => unit.Faction == GroundFaction.Hostile)
-                .OrderBy(unit => unit.Id, StringComparer.Ordinal)
+                .OrderByDescending(unit => unit.IsFortified)
+                .ThenBy(unit => unit.Id, StringComparer.Ordinal)
                 .FirstOrDefault();
             if (target is not null)
                 war.ApplyAuthorizedFire(target.Id, PlayerVehicleContract.FixedDeltaSeconds);
@@ -483,6 +496,32 @@ public class CobraGroundWarRuntimeTests
         // The control variable: the turret never fired a round in this test.
         Assert.Equal(0, war.Debrief.RoundsExpended);
         Assert.Equal(GroundSiteOwner.Hostile, site.Owner);
+    }
+
+    /// <summary>
+    /// The garrison must be an AIR problem, not merely a slow ground problem. Before it was
+    /// fortified the friendly units already seeded at the site ground its 140 hp down in 10-16 s
+    /// with no player involvement — the stall above still passed (hostile waves re-contested the
+    /// point) but for the wrong reason, and the objective strip's promise to the player was a
+    /// lie the AI quietly fulfilled. Ground fire must achieve nothing at all against it.
+    /// </summary>
+    [Fact]
+    public void GroundFireAloneNeverBreaksAGarrison()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        GroundUnit? garrison = war.FindUnit(CobraGroundWarRuntime.GarrisonUnitId(GarrisonTestSiteId));
+        Assert.NotNull(garrison);
+        Assert.True(garrison!.IsFortified, "a conquest garrison must be dug in");
+
+        war.SeedFriendlyPushForTests(GarrisonTestSiteId, GarrisonTestPushClumps);
+        for (int step = 0; step < (int)Math.Round(240.0 / GarrisonTestStepSeconds); step++)
+            war.Advance(GarrisonTestStepSeconds);
+
+        Assert.Equal(0, war.Debrief.RoundsExpended);
+        Assert.True(
+            garrison.IsAlive,
+            "four minutes of massed ground fire must not scratch a dug-in garrison");
+        Assert.Equal(garrison.MaxHealth, garrison.Health, 6);
     }
 
     /// <summary>

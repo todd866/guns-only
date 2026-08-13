@@ -23,6 +23,10 @@ public sealed class CobraGroundWarRuntime
     // window covers lift-off; longer delays let the garrison self-win before waves arrive
     // (ZeroInputGroundWarLosesTheBasinWithoutFireSupport).
     public const double FirstHostileWaveDelaySeconds = 22.0;
+    // Slower than the hostile wave (15 s) and one clump per held point, so holding compounds
+    // without ever outrunning the pressure. See MaybeReinforceFriendly.
+    public const double FriendlyReinforceIntervalSeconds = 25.0;
+    public const double FriendlyReinforceRingM = 40.0;
     public const int HostileWaveSoftVehicles = 1;
     public const int HostileWaveInfantryClumps = 2;
     // Hostile seed/wave rings stay outside the authored M134 min-solution window so an
@@ -94,6 +98,7 @@ public sealed class CobraGroundWarRuntime
     readonly Random _rng;
     int _nextUnitSerial;
     double _reinforceAccumulatorSeconds;
+    double _friendlyReinforceAccumulatorSeconds;
     double _elapsedSeconds;
     int _hostileKillsByPlayer;
     int _friendlyKillsByPlayer;
@@ -204,6 +209,7 @@ public sealed class CobraGroundWarRuntime
             UpdateSiteOwnership(dtSeconds);
             DriftBalance(dtSeconds);
             MaybeReinforce(dtSeconds);
+            MaybeReinforceFriendly(dtSeconds);
             if (_forcedControlForTests is double forced)
                 _balance.OverrideControl(forced);
             BleedTickets(dtSeconds);
@@ -359,6 +365,9 @@ public sealed class CobraGroundWarRuntime
                 // damage to the seam — ground AI cannot clear the player's shootable mark.
                 continue;
             }
+            // A dug-in garrison is an air problem. Ground units shoot at it and achieve nothing;
+            // only the turret can break the point open. See GroundUnit.IsFortified.
+            if (unit.IsFortified) continue;
             bool wasAlive = unit.IsAlive;
             unit.ApplyDamage(amount);
             if (wasAlive && !unit.IsAlive) {
@@ -410,17 +419,21 @@ public sealed class CobraGroundWarRuntime
         if (unit.Intent is GroundUnitIntent.Hold or GroundUnitIntent.EngageNearest)
             return home.PositionWorldM;
 
-        // Advance toward a neighboring site in the direction favored by faction vs balance.
+        // Advance on the nearest point the OTHER side holds. Conquest gives "forward" a real
+        // definition, so the previous heuristic — score sites by `X + Z` and nudge by
+        // LocalControl — is now simply wrong: it expressed a fixed diagonal preference in world
+        // space, which meant a unit could walk away from the only contested point on the board.
+        // Iron Bell measurably never fell under a competent scripted gunner because of it.
+        GroundSiteOwner enemyOwner = unit.Faction == GroundFaction.Friendly
+            ? GroundSiteOwner.Hostile
+            : GroundSiteOwner.Friendly;
         ContestedSite? next = null;
-        double bestScore = double.NegativeInfinity;
+        double nearestSq = double.PositiveInfinity;
         foreach (ContestedSite site in _sites) {
-            if (site.Id == home.Id) continue;
-            double towardHostile = site.PositionWorldM.X + site.PositionWorldM.Z;
-            double score = unit.Faction == GroundFaction.Friendly
-                ? towardHostile + site.LocalControl * 100.0
-                : -towardHostile - site.LocalControl * 100.0;
-            if (score <= bestScore) continue;
-            bestScore = score;
+            if (site.Owner != enemyOwner) continue;
+            double rangeSq = HorizontalDistanceSquared(unit.PositionWorldM, site.PositionWorldM);
+            if (rangeSq >= nearestSq) continue;
+            nearestSq = rangeSq;
             next = site;
         }
         return next?.PositionWorldM ?? home.PositionWorldM;
@@ -541,10 +554,38 @@ public sealed class CobraGroundWarRuntime
         _balance.Drift(friendly, hostile, dtSeconds);
     }
 
+    /// <summary>
+    /// Conquest reinforcement: every point you hold pays you infantry, on a slower cadence than
+    /// the hostile wave. Without this the promise the objective strip makes to the player —
+    /// clear the garrison and friendlies will take the point — is unkeepable in the back half of
+    /// a sortie: the seeded friendly force is finite, falls from 12 bodies to 4 by t=200 s, and
+    /// then nobody is left to walk onto a point the player has just opened. Iron Bell measurably
+    /// stayed hostile forever under a competent scripted gunner for exactly that reason.
+    /// Holding is therefore compounding, which is what makes the tide legible on the map.
+    /// </summary>
+    void MaybeReinforceFriendly(double dtSeconds)
+    {
+        _friendlyReinforceAccumulatorSeconds += dtSeconds;
+        if (_friendlyReinforceAccumulatorSeconds < FriendlyReinforceIntervalSeconds)
+            return;
+        _friendlyReinforceAccumulatorSeconds = 0.0;
+
+        foreach (ContestedSite site in _sites) {
+            if (site.Owner != GroundSiteOwner.Friendly) continue;
+            if (LivingUnits().Count() >= MaxLivingUnits) return;
+            // Hold, not Advance. The corridor is kilometres wide — Iron Bell is ~4.5 km from the
+            // plantation — so a 2.4 m/s clump ordered to advance spends the whole sortie walking
+            // across open ground, arrives at nothing, and meanwhile vacates the point it was
+            // sent to consolidate. Reinforcements consolidate; the aircraft is what projects
+            // force across the valley. That asymmetry is the mission.
+            SpawnUnit(GroundFaction.Friendly, GroundUnitRole.InfantryClump, site,
+                GroundUnitIntent.Hold, ringM: FriendlyReinforceRingM, bearingRad: 0.9);
+        }
+    }
+
     void MaybeReinforce(double dtSeconds)
     {
-        // Hostile pressure only: the friendly garrison is finite (what you are defending);
-        // hostile assault waves keep coming.
+        // Hostile pressure: assault waves keep coming regardless of who holds what.
         _reinforceAccumulatorSeconds += dtSeconds;
         if (_reinforceAccumulatorSeconds < HostileWaveIntervalSeconds)
             return;
@@ -600,13 +641,15 @@ public sealed class CobraGroundWarRuntime
             // surround. The standing gunnery seam is planted down-route after spawn pose is known.
             if (fob) continue;
 
-            // The garrison: one hard point standing ON a hostile-held point. It is not a capture
-            // rule, it is a body — it keeps both factions inside the radius, so the point stays
-            // contested until the Cobra removes it. See UpdateSiteOwnership.
+            // The garrison: one dug-in hard point standing ON a hostile-held point. It is not a
+            // capture rule, it is a body — it keeps both factions inside the radius, so the point
+            // stays contested until the Cobra removes it. See UpdateSiteOwnership. Fortified
+            // because ground fire alone otherwise cracks it in ~15 s and the player's job
+            // evaporates; see GroundUnit.IsFortified.
             if (site.Owner == GroundSiteOwner.Hostile)
                 SpawnUnit(GroundFaction.Hostile, GroundUnitRole.HardPoint, site,
                     GroundUnitIntent.Hold, ringM: 0.0, bearingRad: 0.0,
-                    unitId: GarrisonUnitId(site.Id));
+                    unitId: GarrisonUnitId(site.Id), fortified: true);
 
             // No seeded hostile hard points at secondary sites: the attackers are the moving
             // wave targets the turret exists to kill. Iron Bell is the authored fight — seed a
@@ -727,7 +770,8 @@ public sealed class CobraGroundWarRuntime
         GroundUnitIntent intent,
         double ringM,
         double? bearingRad = null,
-        string? unitId = null)
+        string? unitId = null,
+        bool fortified = false)
     {
         if (LivingUnits().Count() >= MaxLivingUnits)
             return;
@@ -758,7 +802,8 @@ public sealed class CobraGroundWarRuntime
             maxHealth,
             new Vec3D(east, surface.HeightM + heightOffset, north),
             intent,
-            site.Id);
+            site.Id,
+            fortified);
         _units.Add(unit);
         PushEvent("spawn", unit.Id, site.Id, faction, unit.PositionWorldM);
     }
