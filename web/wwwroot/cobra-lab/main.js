@@ -55,6 +55,7 @@ import {
   cobraMissionStatusCopy,
   cobraTerminalCauseCopy,
 } from "../render/cobra/cobra_terminal_causes.js?v=318";
+import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=318";
 import {
   createParkedCobra,
   placeParkedCobra,
@@ -456,6 +457,7 @@ let plan = null;
 let presentation = null;
 /** @type {{ atlas: import("../vendor/three.module.js").Texture, synthetic?: boolean } | null} */
 let foliageTextures = null;
+let roleGeometries = null;
 let activeRoute = null;
 let routeSampler = null;
 let activeSetPieces = [];
@@ -818,6 +820,7 @@ function rebuildPresentation() {
   presentation = createCobraCanyonPresentation(THREE, plan, {
     qualityTier: qualitySelect.value,
     foliageTextures,
+    roleGeometries,
   });
   groundWarPresentation = createCobraGroundWarPresentation(THREE);
   emberGuidancePath = createGuidancePath(THREE, {
@@ -1571,6 +1574,9 @@ async function boot() {
     window.__gunsOnlyCobraBridge = bridge;
     world = await loadCobraCanyonWorld();
     foliageTextures = await resolveCobraVietnamFoliageTextures(THREE);
+    // Authored CC0 palms for the jungle role; null keeps the procedural cards.
+    const palm = await loadCobraVietnamPalmGeometry(THREE);
+    roleGeometries = palm ? { jungle: palm.geometry } : null;
     lockPlayRoute();
     if (tourInput && PLAY_MODE) tourInput.checked = false;
     rebuildPresentation();

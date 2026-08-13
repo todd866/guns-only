@@ -39,18 +39,24 @@ export const COBRA_CANYON_TERRAIN_SEGMENTS = Object.freeze({
 // one merged vertex-colored mesh (+1). The asset kit adds at most one instanced submission for
 // each of its seven roles; none cast a second shadow pass.
 export const COBRA_CANYON_RENDER_BUDGETS = Object.freeze({
+  // maxAuthoredTriangles is the slice of maxTriangles that authored glTF meshes may spend.
+  // An authored palm costs ~470 triangles against a crossed card's dozen, so without a
+  // ceiling the jungle role alone runs to millions and the budget check throws at boot. Mobile
+  // gets none: its whole scene fits in 45,000 triangles, which one hero batch would eat.
   mobile: Object.freeze({
-    maxDrawCalls: 16,
+    maxDrawCalls: 17,
     maxInstances: 640,
     maxTriangles: 45_000,
     maxAssetInstances: 580,
+    maxAuthoredTriangles: 0,
     nearRingMaximumAglM: 180,
   }),
   balanced: Object.freeze({
-    maxDrawCalls: 16,
+    maxDrawCalls: 17,
     maxInstances: 4_200,
     maxTriangles: 380_000,
     maxAssetInstances: 3_900,
+    maxAuthoredTriangles: 150_000,
     nearRingMaximumAglM: 260,
   }),
   // DENSITY IS THE PICTURE. 1,330 ambient instances across a 6.9 km valley — jungle, village,
@@ -60,10 +66,11 @@ export const COBRA_CANYON_RENDER_BUDGETS = Object.freeze({
   // Build 312 production telemetry measured a locked 60 fps with view_ms ~1.2 and sim_ms ~3.4,
   // i.e. a whole frame of headroom on desktop. Spend it on canopy.
   desktop: Object.freeze({
-    maxDrawCalls: 16,
+    maxDrawCalls: 17,
     maxInstances: 9_600,
     maxTriangles: 900_000,
     maxAssetInstances: 9_000,
+    maxAuthoredTriangles: 420_000,
     nearRingMaximumAglM: 360,
   }),
 });
@@ -1670,6 +1677,8 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
     qualityTier,
     maxInstances: budget.maxAssetInstances,
     foliageTextures: options.foliageTextures ?? null,
+    roleGeometries: options.roleGeometries ?? null,
+    authoredTriangleBudget: budget.maxAuthoredTriangles,
   });
   group.add(assetKit.group);
 

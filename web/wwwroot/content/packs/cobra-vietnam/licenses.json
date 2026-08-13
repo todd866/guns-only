@@ -1,0 +1,46 @@
+{
+  "$schema": "../../schemas/asset-license-set.schema.json",
+  "schemaVersion": "1.0.0",
+  "licenseSetId": "licenses.cobra-vietnam.vegetation.v1",
+  "template": false,
+  "entries": [
+    {
+      "licenseId": "license.quaternius-cc0.v1",
+      "appliesTo": [
+        "vegetation.jungle.palm-cluster.v1",
+        "vegetation.jungle.plant-clumps.v1",
+        "vegetation.jungle.flower-clumps.v1"
+      ],
+      "spdxExpression": "CC0-1.0",
+      "copyright": "No rights reserved (CC0 1.0 Universal public domain dedication)",
+      "authors": [
+        "Quaternius"
+      ],
+      "sourceUri": "https://quaternius.com/packs/ultimatestylizednature.html",
+      "redistribution": {
+        "allowed": true,
+        "commercialUseAllowed": true,
+        "modificationAllowed": true,
+        "shareAlikeRequired": false,
+        "notices": [
+          "Ultimate Stylized Nature Pack by Quaternius, dedicated to the public domain under CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/). CC0 requires no attribution; the author is recorded so the pack can be re-sourced or updated."
+        ]
+      },
+      "attributionText": "Ultimate Stylized Nature Pack by Quaternius, dedicated to the public domain under CC0 1.0 Universal; no attribution required, recorded for provenance",
+      "evidence": [
+        {
+          "type": "license_file",
+          "uri": "https://creativecommons.org/publicdomain/zero/1.0/"
+        },
+        {
+          "type": "source_page",
+          "uri": "https://quaternius.com/packs/ultimatestylizednature.html"
+        },
+        {
+          "type": "source_page",
+          "uri": "https://poly.pizza/bundle/Ultimate-Stylized-Nature-Pack-zyIyYd9yGr"
+        }
+      ]
+    }
+  ]
+}
