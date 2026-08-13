@@ -98,3 +98,39 @@ export async function resolveCobraVietnamFoliageTextures(THREE, options = {}) {
     });
   }
 }
+
+/**
+ * Soft falloff for the mist and water-accent cards.
+ *
+ * These were flat, UNTEXTURED `MeshBasicMaterial` quads at 0.42 opacity, double-sided — so every
+ * mist billboard drew as a hard-edged translucent grey rectangle hanging in the air, which is
+ * exactly what it looks like from the cockpit. Mist has no edges. A tiny radial alpha ramp is
+ * enough to make the card read as a drifting bank instead of a slab, and it costs one 32x32
+ * DataTexture for the whole role.
+ */
+export function createCobraSoftFalloffTexture(THREE) {
+  const size = 32;
+  const data = new Uint8Array(size * size * 4);
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = (y * size + x) * 4;
+      const nx = (x + 0.5) / size - 0.5;
+      const ny = (y + 0.5) / size - 0.5;
+      // Wider than tall: a mist bank lies along the ground rather than standing up in a column.
+      const radial = Math.sqrt((nx * nx) / 0.26 + (ny * ny) / 0.10);
+      const alpha = Math.max(0, 1 - radial);
+      data[i] = 255;
+      data[i + 1] = 255;
+      data[i + 2] = 255;
+      // Squared so the edge leaves gently instead of ending on a visible rim.
+      data[i + 3] = Math.round(255 * alpha * alpha);
+    }
+  }
+  const texture = new THREE.DataTexture(data, size, size);
+  texture.name = "COBRA_CANYON_SOFT_FALLOFF";
+  texture.needsUpdate = true;
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  if ("SRGBColorSpace" in THREE) texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}

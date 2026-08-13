@@ -81,6 +81,9 @@ export const COBRA_CANYON_RENDER_BUDGETS = Object.freeze({
 
 export const COBRA_CANYON_ROUTE_ENVELOPE_CLEARANCE_M = 9.706;
 
+/** Triangles every tier keeps unspent, so the ceiling stays a margin rather than a target. */
+const PRESENTATION_TRIANGLE_RESERVE = 2_048;
+
 const CONTAINER_KEYS = Object.freeze([
   "presentation",
   "authored",
@@ -1707,15 +1710,10 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
   const heroCells = plan.cells ?? plan.heroCells ?? [];
   const landmarks = landmarkPlacements(plan);
   const hazards = hazardPlacements(plan);
-  const assetKit = createCobraCanyonAssetKit(THREE, plan, {
-    qualityTier,
-    maxInstances: budget.maxAssetInstances,
-    foliageTextures: options.foliageTextures ?? null,
-    roleGeometries: options.roleGeometries ?? null,
-    authoredTriangleBudget: budget.maxAuthoredTriangles,
-  });
-  group.add(assetKit.group);
-
+  // The firebase is built BEFORE the asset kit so `metrics.triangles` is the complete static cost
+  // of the world by the time the kit is asked to size itself. The kit's allocation now varies with
+  // the local vegetation mix rather than with a fixed authored instance count, so it needs to be
+  // told what is actually left of the tier's triangle ceiling instead of assuming.
   const campEmber = createCampEmberFirebase(THREE, plan);
   if (campEmber) {
     group.add(campEmber.group);
@@ -1727,6 +1725,7 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
     metrics.triangles += campEmber.triangles;
     metrics.roleTriangles["camp-ember-firebase"] = campEmber.triangles;
   }
+
 
   const landmarkMesh = addInstancedMesh(
     THREE,
@@ -1824,6 +1823,23 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
       })),
     );
   }
+  // LAST, ON PURPOSE. Everything above is fixed geometry whose cost is known the moment it is
+  // built; the asset kit is the only part of the scene that sizes itself to what is left. Building
+  // it here means `metrics.triangles` is the complete static cost of the world — basin, river,
+  // firebase, landmarks, hazards and bridges — so the kit is told the truth about its ceiling
+  // rather than a figure that three later submissions will quietly spend.
+  const assetKit = createCobraCanyonAssetKit(THREE, plan, {
+    qualityTier,
+    maxInstances: budget.maxAssetInstances,
+    // Minus a reserve: a tier that lands EXACTLY on its ceiling has nothing left for the next
+    // authored hazard or landmark, and the ceiling contract is a working margin, not a target.
+    maxTriangles: budget.maxTriangles - metrics.triangles - PRESENTATION_TRIANGLE_RESERVE,
+    foliageTextures: options.foliageTextures ?? null,
+    roleGeometries: options.roleGeometries ?? null,
+    authoredTriangleBudget: budget.maxAuthoredTriangles,
+  });
+  group.add(assetKit.group);
+
   const builtMetrics = Object.freeze({
     drawCalls: metrics.drawCalls + assetKit.builtMetrics.drawCalls,
     instances: metrics.instances + assetKit.builtMetrics.instances,
@@ -1930,6 +1946,9 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
   let ambientBudgetLevel = 0;
   let nearRingVisible = true;
   let currentDiagnostics = snapshots[ambientBudgetLevel][1];
+  let currentAssetSnapshot = null;
+  let currentBaseSnapshot = null;
+  let assetKitCamera = null;
 
   function applyVisibility() {
     if (hazardMesh) {
@@ -1944,8 +1963,26 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
       bridgePierMesh.visible = true;
       bridgePierMesh.count = hazards.bridgePiers.length;
     }
-    assetKit.update({ ambientBudgetLevel, nearRingVisible });
-    currentDiagnostics = snapshots[ambientBudgetLevel][nearRingVisible ? 1 : 0];
+    assetKit.update({ ambientBudgetLevel, nearRingVisible, cameraPosition: assetKitCamera });
+    const base = snapshots[ambientBudgetLevel][nearRingVisible ? 1 : 0];
+    // The asset kit's occupancy follows the aircraft (near-field scatter), so the asset-derived
+    // fields cannot be baked at build time the way the static world's can. Rebuild them only when
+    // they actually move: `diagnostics()` must keep returning the SAME frozen object for repeated
+    // identical frames, which is what makes the update path allocation-free while parked.
+    const assetSnapshot = assetKit.diagnosticsFor(ambientBudgetLevel, nearRingVisible);
+    if (currentAssetSnapshot === assetSnapshot && currentBaseSnapshot === base) return;
+    currentAssetSnapshot = assetSnapshot;
+    currentBaseSnapshot = base;
+    currentDiagnostics = Object.freeze({
+      ...base,
+      drawCalls: metrics.drawCalls + assetSnapshot.drawCalls,
+      instances: metrics.instances + assetSnapshot.instances,
+      triangles: metrics.triangles + assetSnapshot.triangles,
+      visibleAmbientInstances: assetSnapshot.instances,
+      visibleAssetInstances: assetSnapshot.instances,
+      visibleAssetDrawCalls: assetSnapshot.drawCalls,
+      roleCounts: Object.freeze({ ...base.roleCounts, ...assetSnapshot.roleCounts }),
+    });
   }
 
   const nearRingMaximumAglM = Math.max(1, finite(
@@ -1976,6 +2013,9 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
           <= nearRingRadiusM * nearRingRadiusM;
       }
       nearRingVisible = cameraAglM <= nearRingMaximumAglM && insideWorldRing;
+      // The asset kit's near-field scatter follows the aircraft; it reads the same camera the
+      // near-ring shed reads, so there is exactly one notion of where the pilot is.
+      assetKitCamera = camera ?? null;
       applyVisibility();
     },
     diagnostics() {

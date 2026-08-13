@@ -55,8 +55,11 @@ test("builds one bounded authored batch per visual role across every tier", () =
     const meshes = roleMeshes(kit.group);
     assert.equal(meshes.size, COBRA_CANYON_ASSET_ROLES.length);
     assert.equal(kit.builtMetrics.drawCalls, COBRA_CANYON_ASSET_ROLES.length);
+    // `builtMetrics` is the ALLOCATION — the ceiling the near-field scatter will never exceed
+    // wherever the aircraft flies. `assetInstances` is what is resident right now, which depends
+    // on what the ground under the camera actually grows.
     assert.ok(kit.builtMetrics.instances <= MAXIMUM_INSTANCES[qualityTier]);
-    assert.equal(kit.roleCounts.assetInstances, kit.builtMetrics.instances);
+    assert.ok(kit.roleCounts.assetInstances <= kit.builtMetrics.instances);
     assert.equal(kit.roleCounts.authoredAmbientBatches, plan.ambientBatches.length);
     assert.equal(kit.roleCounts.authoredSetPieceCells, 10);
     assert.equal(kit.roleCounts.authoredAmbientArchetypes, 11);
@@ -90,8 +93,11 @@ test("builds one bounded authored batch per visual role across every tier", () =
         || role === "village" || role === "rock";
       assert.equal(mesh.castShadow, standsUp, `${role} cast-shadow policy regressed`);
       assert.equal(mesh.receiveShadow, role !== "mist" && role !== "waterAccent");
-      assert.equal(mesh.instanceMatrix.usage, THREE.StaticDrawUsage);
-      assert.equal(mesh.instanceColor.count, mesh.count);
+      // WAS StaticDrawUsage. The scatter is camera-following now: the resident set is rewritten
+      // as the aircraft moves, so the driver must be told the buffer is dynamic. Static usage
+      // here was a correct statement about a world-fixed scatter and a false one about this.
+      assert.equal(mesh.instanceMatrix.usage, THREE.DynamicDrawUsage);
+      assert.ok(mesh.instanceColor.count >= mesh.count);
       assert.equal(mesh.geometry.getAttribute("color").count,
         mesh.geometry.getAttribute("position").count);
       assert.equal(kit.roleCounts[`${role}RenderBatches`], 1);
@@ -128,7 +134,11 @@ test("builds one bounded authored batch per visual role across every tier", () =
       "textured cards must stay far under the old ~50-tri lobe budget");
     assert.ok(triangleCount(meshes.get("plantation").geometry) >= 100,
       "plantation rows need trunks and crowns instead of marker pyramids");
-    assert.deepEqual(visibleMetrics(kit.group), kit.builtMetrics);
+    assert.deepEqual(visibleMetrics(kit.group), {
+      drawCalls: kit.diagnostics().drawCalls,
+      instances: kit.diagnostics().instances,
+      triangles: kit.diagnostics().triangles,
+    });
     kit.dispose();
   }
 });
@@ -282,4 +292,22 @@ test("every role band suits every cell kind that reaches it", () => {
   assert.ok(compound.widthM >= 25, "a compound is a cluster of buildings");
   assert.ok(clutter.heightM <= 6 && clutter.widthM <= 10, "a cart is not a compound");
   assert.ok(scatter.heightM <= 10, "boulder scatter, not a cliff face");
+});
+
+test("mist and water accents are soft-edged, not translucent slabs", () => {
+  // They were untextured MeshBasicMaterial quads at 0.42 opacity, double-sided, so each card
+  // drew as a hard-edged grey rectangle hanging in the air — visible from the cockpit in
+  // rendered review as a slab across the sky. Mist has no edges.
+  const { kit } = create("desktop");
+  const misty = [];
+  kit.group.traverse((child) => {
+    const name = child.material?.name ?? "";
+    if (name.includes("MIST") || name.includes("WATERACCENT")) misty.push(child.material);
+  });
+  assert.ok(misty.length > 0, "no mist or water-accent material found");
+  for (const material of misty) {
+    assert.ok(material.map, `${material.name} must carry a falloff ramp, not a bare quad`);
+    assert.equal(material.transparent, true);
+    assert.equal(material.depthWrite, false);
+  }
 });

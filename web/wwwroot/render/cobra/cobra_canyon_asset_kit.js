@@ -2,6 +2,7 @@ import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=324";
 import {
   FOLIAGE_UV_PALM,
   FOLIAGE_UV_UNDERSTORY,
+  createCobraSoftFalloffTexture,
   createSyntheticFoliageAtlasTexture,
 } from "./cobra_canyon_foliage.js?v=324";
 
@@ -51,6 +52,71 @@ export const COBRA_CANYON_AMBIENT_BUDGETS = Object.freeze({
 /** Keep the Camp Ember rear-seat eye clear of green mass / mist (Build 302). */
 export const CAMP_EMBER_LANDMARK_ID = "landmark.cobra-canyon.camp-ember.v1";
 export const CAMP_EMBER_CLEAR_RADIUS_M = 120;
+
+/**
+ * NEAR-FIELD SCATTER — the architectural fix for "the scenery is holistically bad".
+ *
+ * The kit used to place its whole instance allowance ONCE, spread across the authored batch
+ * bounds, which span the full 16 x 16 km theatre. On desktop that is 6,828 ambient instances over
+ * 256 km²: twenty-seven props per km², one every 190 m. No amount of colour, material or prop
+ * sizing can make that read as cover, because at that spacing there is nothing between the props
+ * to see. Every previous pass moved numbers and not the picture for exactly this reason.
+ *
+ * The same budget spent inside a radius around the aircraft is a different world. Desktop's 8,885
+ * ambient instances inside a 1.4 km disc is ~1,440 per km² — one prop every 26 m, against canopy
+ * clumps 13-40 m across — which is continuous cover to the mid-ground. Past the radius the terrain
+ * shader and the haze carry the picture, which is what every open-world renderer does.
+ *
+ * The scatter is a pure function of world position, never of an instance index: a tile of the
+ * world always generates the same props at the same places, so flying a circuit re-enters the
+ * scene it left. What the camera changes is only WHICH tiles are resident.
+ */
+export const COBRA_CANYON_SCATTER_TILE_M = 160;
+
+/**
+ * Nominal near-field radius per tier. Density is `maxAssetInstances / (pi * radius^2)`, so this is
+ * the one knob that trades reach against thickness. Shrink it for more cover; never raise the cap.
+ */
+export const COBRA_CANYON_SCATTER_RADIUS_M = Object.freeze({
+  mobile: 340,
+  balanced: 900,
+  desktop: 1_400,
+});
+
+/**
+ * A role whose local mix is thinner than its capacity share keeps walking outward until it fills.
+ * The cap stops a role that simply is not present nearby (river mist on a dry ridge) from paying
+ * for a search across the whole theatre.
+ */
+const SCATTER_MAXIMUM_RADIUS_MULTIPLE = 1.6;
+
+/** Instances inside this fraction of a role's achieved radius are at full size. */
+const SCATTER_FULL_SCALE_FRACTION = 0.78;
+
+/** Camera travel that re-collects the resident set. Well under the fade band width. */
+const SCATTER_REBUILD_STEP_M = 48;
+
+/** Uncached tiles generated per update, so a fast transit costs several small frames, not one big one. */
+const SCATTER_TILE_BUILDS_PER_UPDATE = 4;
+
+/** Generated tile placements retained; a tile is ~40 placements, so this is a few thousand props. */
+const SCATTER_TILE_CACHE_LIMIT = 12_000;
+
+/** How far outside a ribbon's own half-width a batch still counts as "on the verge". */
+const ROUTE_CAPTURE_MARGIN_M = 260;
+
+const EMPTY_LIST = Object.freeze([]);
+
+/**
+ * How far each role's capacity leans toward its PEAK local mix rather than its mean. Zero spends
+ * the whole allowance the way the average square metre of valley wants it — which starves any
+ * role that only exists somewhere small. One would size every role for its best square metre and
+ * leave most of the allowance idle everywhere else.
+ */
+const SCATTER_PEAK_MIX_WEIGHT = 0.15;
+
+/** Fraction of a tile's instances that share a clump anchor — clearings come from clumping. */
+const SCATTER_CLUMP_SIZE = 5;
 
 function campEmberPadCentre(plan) {
   const landmark = (plan?.landmarks ?? []).find((entry) => entry?.id === CAMP_EMBER_LANDMARK_ID);
@@ -213,127 +279,114 @@ function roleForBatch(batch, descriptors) {
   };
 }
 
-function routeCandidates(plan, role, batch) {
-  const affinities = Array.isArray(batch.descriptor?.routeAffinity)
-    ? batch.descriptor.routeAffinity
-    : batch.descriptor?.routeAffinity
-      ? [batch.descriptor.routeAffinity]
-      : [];
-  let filtered = affinities.length
-    ? plan.terrainRibbons.filter((ribbon) => affinities.includes(ribbon.laneId))
-    : [];
-  const desired = role === "mist" || token(batch.kind).includes("riparian") ? "river"
-    : role === "plantation" || role === "paddy" || role === "village" ? "road"
-      : role === "rock" || token(batch.kind).includes("bamboo") ? "ridge"
-        : "";
-  if (filtered.length && desired) {
-    const refined = filtered.filter((ribbon) => token(ribbon.kind).includes(desired));
-    if (refined.length) filtered = refined;
-  } else if (!filtered.length) {
-    filtered = desired
-      ? plan.terrainRibbons.filter((ribbon) => token(ribbon.kind).includes(desired))
-      : plan.terrainRibbons;
-  }
-  return filtered.length ? filtered : plan.terrainRibbons;
+/**
+ * Which ribbon kind a batch wants to hug. The old world-wide scatter reached this through
+ * `routeCandidates`, which fell back to "any ribbon" for the roles with no declared affinity and
+ * therefore biased highland canopy toward whichever route the seed happened to draw. The
+ * near-field scatter answers the same question locally — is there a river/road/ridge close to
+ * THIS tile — so a batch with no route relationship simply gets none.
+ */
+function batchRouteKind(role, kind) {
+  const text = token(kind);
+  if (role === "mist" || text.includes("riparian")) return "river";
+  if (role === "plantation" || role === "paddy" || role === "village") return "road";
+  if (role === "rock" || text.includes("bamboo")) return "ridge";
+  if (text.includes("verge") || text.includes("road")) return "road";
+  return null;
 }
 
-function routeBiasedPoint(plan, role, batch, bounds, seed) {
-  const candidates = routeCandidates(plan, role, batch);
-  if (!candidates.length || seededUnit(seed, 0x93d765dd) > 0.92) return null;
-  const ribbon = candidates[Math.min(
-    candidates.length - 1,
-    Math.floor(seededUnit(seed, 0x6d2b79f5) * candidates.length),
-  )];
-  let segmentIndex = Math.min(
-    ribbon.pointsLocalM.length - 2,
-    Math.floor(seededUnit(seed, 0xb5297a4d) * (ribbon.pointsLocalM.length - 1)),
-  );
-  let blend = 0.05 + seededUnit(seed, 0x68e31da4) * 0.9;
-  const routeSetPieces = (plan.setPieceCells ?? []).filter(
-    (cell) => cell.routeId === ribbon.laneId && Array.isArray(cell.approachLocalM),
-  );
-  if (routeSetPieces.length && seededUnit(seed, 0xf1357aea) < 0.68) {
-    const focus = routeSetPieces[Math.min(
-      routeSetPieces.length - 1,
-      Math.floor(seededUnit(seed, 0x94d049bb) * routeSetPieces.length),
-    )].approachLocalM;
-    let nearestDistanceSquared = Infinity;
-    for (let index = 0; index < ribbon.pointsLocalM.length - 1; index++) {
-      const candidateFrom = ribbon.pointsLocalM[index];
-      const candidateTo = ribbon.pointsLocalM[index + 1];
-      const candidateEastM = candidateTo[0] - candidateFrom[0];
-      const candidateNorthM = candidateTo[2] - candidateFrom[2];
-      const candidateLengthSquared = candidateEastM * candidateEastM
-        + candidateNorthM * candidateNorthM;
-      const candidateBlend = candidateLengthSquared > 0
-        ? clamp(
-          ((focus[0] - candidateFrom[0]) * candidateEastM
-            + (focus[2] - candidateFrom[2]) * candidateNorthM) / candidateLengthSquared,
-          0,
-          1,
-        )
-        : 0;
-      const closestEastM = candidateFrom[0] + candidateEastM * candidateBlend;
-      const closestNorthM = candidateFrom[2] + candidateNorthM * candidateBlend;
-      const distanceSquared = (focus[0] - closestEastM) ** 2
-        + (focus[2] - closestNorthM) ** 2;
-      if (distanceSquared >= nearestDistanceSquared) continue;
-      nearestDistanceSquared = distanceSquared;
-      segmentIndex = index;
-      blend = clamp(
-        candidateBlend + (seededUnit(seed, 0x369dea0f) - 0.5) * 0.62,
-        0.03,
-        0.97,
-      );
-    }
-  }
-  const from = ribbon.pointsLocalM[segmentIndex];
-  const to = ribbon.pointsLocalM[segmentIndex + 1];
-  const deltaEastM = to[0] - from[0];
-  const deltaNorthM = to[2] - from[2];
-  const lengthM = Math.max(0.001, Math.hypot(deltaEastM, deltaNorthM));
-  const side = seededUnit(seed, 0x1b56c4e9) < 0.5 ? -1 : 1;
-  let clearanceM = 65;
-  if (role === "mist") clearanceM = 0;
-  else if (role === "paddy") clearanceM = 34;
-  else if (role === "plantation") clearanceM = 42;
-  else if (role === "village") clearanceM = 48;
-  else if (role === "rock") clearanceM = 72;
-  else if (token(batch.kind).includes("riparian")) {
-    clearanceM = 68;
-  }
-  const spreadM = role === "mist" ? 55
-    : role === "paddy" ? 80
-      : role === "plantation" ? 58
-        : role === "village" ? 82
-          : role === "rock" ? 120
-            : 88;
-  const lateralM = side * (clearanceM + seededUnit(seed, 0x85ebca6b) * spreadM);
-  const eastM = from[0] + deltaEastM * blend - deltaNorthM / lengthM * lateralM;
-  const northM = from[2] + deltaNorthM * blend + deltaEastM / lengthM * lateralM;
-  if (eastM < bounds.minimumEastM || eastM > bounds.maximumEastM
-      || northM < bounds.minimumNorthM || northM > bounds.maximumNorthM) {
-    return null;
-  }
-  return {
-    eastM,
-    northM,
-    yaw: Math.atan2(deltaEastM, deltaNorthM),
-  };
+/** Lateral standoff from a ribbon centreline, unchanged from the world-fixed placer. */
+function routeClearanceM(role, kind) {
+  if (role === "mist") return 0;
+  if (role === "paddy") return 34;
+  if (role === "plantation") return 42;
+  if (role === "village") return 48;
+  if (role === "rock") return 72;
+  if (token(kind).includes("riparian")) return 68;
+  return 65;
 }
 
-function gridPoint(bounds, ordinal, count, seed) {
-  const columns = Math.max(1, Math.ceil(Math.sqrt(count)));
-  const rows = Math.max(1, Math.ceil(count / columns));
-  const column = ordinal % columns;
-  const row = Math.floor(ordinal / columns);
-  const eastUnit = (column + 0.18 + seededUnit(seed, 0xa511e9b3) * 0.64) / columns;
-  const northUnit = (row + 0.18 + seededUnit(seed, 0x63d83595) * 0.64) / rows;
+function routeSpreadM(role) {
+  if (role === "mist") return 55;
+  if (role === "paddy") return 80;
+  if (role === "plantation") return 58;
+  if (role === "village") return 82;
+  if (role === "rock") return 120;
+  return 88;
+}
+
+function nearestPointOnRibbon(ribbon, eastM, northM) {
+  let nearest = null;
+  let nearestDistanceSquared = Infinity;
+  for (let index = 0; index < ribbon.pointsLocalM.length - 1; index++) {
+    const from = ribbon.pointsLocalM[index];
+    const to = ribbon.pointsLocalM[index + 1];
+    const deltaEastM = to[0] - from[0];
+    const deltaNorthM = to[2] - from[2];
+    const lengthSquared = deltaEastM * deltaEastM + deltaNorthM * deltaNorthM;
+    const blend = lengthSquared > 0
+      ? clamp(
+        ((eastM - from[0]) * deltaEastM + (northM - from[2]) * deltaNorthM) / lengthSquared,
+        0,
+        1,
+      )
+      : 0;
+    const routeEastM = from[0] + deltaEastM * blend;
+    const routeNorthM = from[2] + deltaNorthM * blend;
+    const offsetEastM = eastM - routeEastM;
+    const offsetNorthM = northM - routeNorthM;
+    const distanceSquared = offsetEastM * offsetEastM + offsetNorthM * offsetNorthM;
+    if (distanceSquared >= nearestDistanceSquared) continue;
+    nearestDistanceSquared = distanceSquared;
+    nearest = {
+      eastM: routeEastM,
+      northM: routeNorthM,
+      tangentEastM: deltaEastM,
+      tangentNorthM: deltaNorthM,
+      offsetEastM,
+      offsetNorthM,
+      distanceM: Math.sqrt(distanceSquared),
+      halfWidthM: finite(ribbon.halfWidthM, 0),
+    };
+  }
+  return nearest;
+}
+
+/**
+ * Pulls a candidate point onto the verge of the nearest ribbon of the wanted kind, keeping its
+ * position ALONG the route where the tile put it. The world-fixed placer picked a random point on
+ * a random route; here the route is whatever runs past this tile, which is what makes a verge read
+ * as a verge from the cockpit instead of as a line of props somewhere else in the valley.
+ */
+function routeVergePoint(context, entry, eastM, northM, seed) {
+  if (!entry.routeKind) return null;
+  const ribbons = context.ribbonsByKind.get(entry.routeKind);
+  if (!ribbons?.length) return null;
+  let nearest = null;
+  for (const ribbon of ribbons) {
+    const candidate = nearestPointOnRibbon(ribbon, eastM, northM);
+    if (!candidate) continue;
+    if (!nearest || candidate.distanceM < nearest.distanceM) nearest = candidate;
+  }
+  if (!nearest) return null;
+  const captureM = nearest.halfWidthM + ROUTE_CAPTURE_MARGIN_M;
+  if (nearest.distanceM > captureM) return null;
+  const tangentLengthM = Math.max(
+    0.001,
+    Math.hypot(nearest.tangentEastM, nearest.tangentNorthM),
+  );
+  const side = nearest.distanceM > 0.001
+    ? Math.sign(
+      nearest.offsetEastM * -nearest.tangentNorthM + nearest.offsetNorthM * nearest.tangentEastM,
+    ) || 1
+    : (seededUnit(seed, 0x1b56c4e9) < 0.5 ? -1 : 1);
+  const lateralM = side
+    * (routeClearanceM(entry.role, entry.kind)
+      + seededUnit(seed, 0x85ebca6b) * routeSpreadM(entry.role));
   return {
-    eastM: bounds.minimumEastM
-      + (bounds.maximumEastM - bounds.minimumEastM) * clamp(eastUnit, 0.03, 0.97),
-    northM: bounds.minimumNorthM
-      + (bounds.maximumNorthM - bounds.minimumNorthM) * clamp(northUnit, 0.03, 0.97),
+    eastM: nearest.eastM - nearest.tangentNorthM / tangentLengthM * lateralM,
+    northM: nearest.northM + nearest.tangentEastM / tangentLengthM * lateralM,
+    yaw: Math.atan2(nearest.tangentEastM, nearest.tangentNorthM),
   };
 }
 
@@ -519,14 +572,34 @@ function outsideRotorCorridor(plan, cell, role, point, seed) {
   };
 }
 
-/** Terrain gradient magnitude at a point, from the same analytic field everything else reads. */
-function terrainGradient(plan, eastM, northM) {
-  const stepM = 40;
-  const east = sampleCobraCanyonTerrain(plan, eastM + stepM, northM)
-    - sampleCobraCanyonTerrain(plan, eastM - stepM, northM);
-  const north = sampleCobraCanyonTerrain(plan, eastM, northM + stepM)
-    - sampleCobraCanyonTerrain(plan, eastM, northM - stepM);
-  return Math.hypot(east, north) / (2 * stepM);
+const GRADIENT_STEP_M = 40;
+
+/**
+ * Terrain gradient magnitude at a point, from the same analytic field everything else reads.
+ *
+ * Memoised on a `GRADIENT_STEP_M` lattice. The near-field scatter asks for this once per candidate
+ * per instance — twelve terrain samples per prop against a 3 microsecond sampler — and neighbours
+ * inside a tile land on the same lattice node repeatedly. The lattice is a property of the world,
+ * not of the camera, so the memo never makes placement depend on visit order.
+ */
+function terrainGradient(plan, eastM, northM, memo = null) {
+  const nodeEastM = Math.round(eastM / GRADIENT_STEP_M) * GRADIENT_STEP_M;
+  const nodeNorthM = Math.round(northM / GRADIENT_STEP_M) * GRADIENT_STEP_M;
+  const key = memo ? `${nodeEastM},${nodeNorthM}` : null;
+  if (memo) {
+    const cached = memo.get(key);
+    if (cached !== undefined) return cached;
+  }
+  const east = sampleCobraCanyonTerrain(plan, nodeEastM + GRADIENT_STEP_M, nodeNorthM)
+    - sampleCobraCanyonTerrain(plan, nodeEastM - GRADIENT_STEP_M, nodeNorthM);
+  const north = sampleCobraCanyonTerrain(plan, nodeEastM, nodeNorthM + GRADIENT_STEP_M)
+    - sampleCobraCanyonTerrain(plan, nodeEastM, nodeNorthM - GRADIENT_STEP_M);
+  const gradient = Math.hypot(east, north) / (2 * GRADIENT_STEP_M);
+  if (memo) {
+    if (memo.size > 32_000) memo.clear();
+    memo.set(key, gradient);
+  }
+  return gradient;
 }
 
 /**
@@ -540,8 +613,8 @@ function terrainGradient(plan, eastM, northM) {
  * `bestPlacement` uses them to pick between a handful of seeded candidates — a bias, never a
  * hard filter, so no authored batch bound is silently emptied.
  */
-function terrainAffinity(plan, role, eastM, northM) {
-  const gradient = terrainGradient(plan, eastM, northM);
+function terrainAffinity(plan, role, eastM, northM, memo = null) {
+  const gradient = terrainGradient(plan, eastM, northM, memo);
   if (role === "jungle") return clamp(gradient / 0.34, 0, 1) * 0.82 + 0.18;
   if (role === "paddy") return 1 - clamp(gradient / 0.09, 0, 1) * 0.94;
   if (role === "plantation" || role === "village") {
@@ -561,21 +634,23 @@ function terrainAffinity(plan, role, eastM, northM) {
  * actually looks like. Flat-ground roles get the same treatment for the cases where the affinity
  * search could not find level ground inside an authored batch bound.
  */
-function seatDrop(plan, role, eastM, northM, scale) {
+function seatDrop(plan, role, eastM, northM, scale, memo = null) {
   const footprintM = Math.max(scale.widthM, scale.depthM) * 0.5;
-  const gradient = terrainGradient(plan, eastM, northM);
+  const gradient = terrainGradient(plan, eastM, northM, memo);
   const bite = role === "jungle" || role === "rock" ? 1.12
     : role === "paddy" || role === "plantation" || role === "village" ? 1
       : 0;
-  return gradient * footprintM * bite;
+  // Never sink an instance deeper than its own footprint drop: the gradient is read off a 40 m
+  // lattice, and on a knife ridge the lattice value can exceed the slope under the prop itself.
+  return Math.min(gradient * bite, 1) * footprintM;
 }
 
-function bestPlacement(plan, role, candidates) {
+function bestPlacement(plan, role, candidates, memo = null) {
   let best = candidates[0];
   let bestScore = -Infinity;
   for (const candidate of candidates) {
     if (!candidate) continue;
-    const score = terrainAffinity(plan, role, candidate.eastM, candidate.northM);
+    const score = terrainAffinity(plan, role, candidate.eastM, candidate.northM, memo);
     if (score <= bestScore) continue;
     bestScore = score;
     best = candidate;
@@ -583,19 +658,22 @@ function bestPlacement(plan, role, candidates) {
   return best ?? candidates.find(Boolean);
 }
 
-function allocateQuotas(batches, target) {
-  const total = batches.reduce((sum, batch) => sum + batch.instanceCount, 0);
-  if (!target || !total) return batches.map((batch) => ({ ...batch, count: 0 }));
-  const quotas = batches.map((batch) => {
-    const exact = batch.instanceCount * target / total;
-    return { ...batch, count: Math.floor(exact), remainder: exact - Math.floor(exact) };
+/**
+ * Largest-remainder split of `target` across weighted entries. Deterministic: ties break on id.
+ */
+function allocateByWeight(entries, target) {
+  const total = entries.reduce((sum, entry) => sum + entry.weight, 0);
+  if (target <= 0 || total <= 0) return entries.map((entry) => ({ entry, count: 0 }));
+  const quotas = entries.map((entry) => {
+    const exact = entry.weight * target / total;
+    const count = Math.floor(exact);
+    return { entry, count, remainder: exact - count };
   });
   let assigned = quotas.reduce((sum, quota) => sum + quota.count, 0);
   const order = [...quotas].sort((left, right) =>
     right.remainder - left.remainder
-      || finite(left.priority) - finite(right.priority)
-      || left.id.localeCompare(right.id));
-  for (let index = 0; assigned < target; index++, assigned++) {
+      || left.entry.id.localeCompare(right.entry.id));
+  for (let index = 0; assigned < target && order.length; index++, assigned++) {
     order[index % order.length].count += 1;
   }
   return quotas;
@@ -719,24 +797,366 @@ function setPiecePlacements(plan, descriptors) {
   return placements;
 }
 
-function planPlacements(plan, qualityTier, maximumInstances) {
-  const descriptors = descriptorIndex(plan);
-  const batches = [];
+function insideBounds(bounds, eastM, northM) {
+  return eastM >= bounds.minimumEastM && eastM <= bounds.maximumEastM
+    && northM >= bounds.minimumNorthM && northM <= bounds.maximumNorthM;
+}
+
+function scatterEntries(plan, descriptors) {
+  const entries = [];
   for (const batch of plan.ambientBatches ?? []) {
     const resolved = roleForBatch(batch, descriptors);
     if (!resolved.role || !batch.instanceCount) continue;
-    batches.push({
-      ...batch,
-      descriptor: resolved.descriptor,
+    const bounds = boundsFrom(batch);
+    if (!bounds) continue;
+    const areaM2 = Math.max(
+      1,
+      (bounds.maximumEastM - bounds.minimumEastM) * (bounds.maximumNorthM - bounds.minimumNorthM),
+    );
+    const instanceCount = Math.max(0, Math.trunc(batch.instanceCount));
+    entries.push({
+      id: String(batch.id),
+      kind: batch.kind,
       role: resolved.role,
-      instanceCount: Math.max(0, Math.trunc(batch.instanceCount)),
+      descriptor: resolved.descriptor,
+      bounds,
+      instanceCount,
+      // An authored batch says "N of these over this box". The number was written for a
+      // world-wide one-shot scatter and is meaningless as an absolute now, but N/area still
+      // carries the authored intent that survives the change: the LOCAL MIX a pilot should see
+      // standing at any point in the valley. Absolute density is the budget's business.
+      weight: instanceCount / areaM2,
+      routeKind: batchRouteKind(resolved.role, batch.kind),
+      seed: hashString(String(batch.id)),
+      priority: finite(batch.priority),
     });
   }
-  batches.sort((left, right) =>
+  entries.sort((left, right) =>
     ROLE_ORDER[left.role] - ROLE_ORDER[right.role]
-      || finite(left.priority) - finite(right.priority)
+      || left.priority - right.priority
       || left.id.localeCompare(right.id));
+  return entries;
+}
 
+/**
+ * Per-role slice of the near-field allowance.
+ *
+ * An InstancedMesh has to be allocated once, so each role needs a fixed capacity, and the sum of
+ * those capacities is what the tier budget check measures. The split is the world-mean local mix:
+ * probe the valley on a coarse lattice, ask each probe which batches cover it and in what
+ * proportion, and average. A role that is locally thinner than its share simply reaches further
+ * out to fill; a role that is locally thicker fills up nearer. Nobody's allowance is stranded.
+ */
+function roleScatterCapacities(plan, entries, ambientBudget) {
+  const capacities = Object.fromEntries(COBRA_CANYON_ASSET_ROLES.map((role) => [role, 0]));
+  if (ambientBudget <= 0 || !entries.length) return capacities;
+  const bounds = plan.boundsLocalM;
+  const probeM = 400;
+  const mix = Object.fromEntries(COBRA_CANYON_ASSET_ROLES.map((role) => [role, 0]));
+  const peak = Object.fromEntries(COBRA_CANYON_ASSET_ROLES.map((role) => [role, 0]));
+  const local = Object.fromEntries(COBRA_CANYON_ASSET_ROLES.map((role) => [role, 0]));
+  let probes = 0;
+  for (let eastM = bounds.minimumEastM; eastM <= bounds.maximumEastM; eastM += probeM) {
+    for (let northM = bounds.minimumNorthM; northM <= bounds.maximumNorthM; northM += probeM) {
+      let total = 0;
+      for (const role of COBRA_CANYON_ASSET_ROLES) local[role] = 0;
+      for (const entry of entries) {
+        if (!insideBounds(entry.bounds, eastM, northM)) continue;
+        total += entry.weight;
+        local[entry.role] += entry.weight;
+      }
+      if (total <= 0) continue;
+      for (const role of COBRA_CANYON_ASSET_ROLES) {
+        const share = local[role] / total;
+        mix[role] += share;
+        if (share > peak[role]) peak[role] = share;
+      }
+      probes += 1;
+    }
+  }
+  if (!probes) return capacities;
+  // Mean mix alone starves a role that is RARE OVERALL but DOMINANT somewhere: the red-earth
+  // quarry is 1% of the valley and 74% of the mix inside its own 3 km² box, so a mean-derived
+  // allowance ran out after three tiles and left the quarry the thinnest ground in the world.
+  // Leaning a little toward each role's peak local mix costs the canopy some reach and buys every
+  // named place its own character. A floor keeps a rare-but-atmospheric role — river mist is 0.9%
+  // of the mean mix — from being rounded out of existence by a role that is 90% of it.
+  const shares = COBRA_CANYON_ASSET_ROLES
+    .filter((role) => mix[role] > 0)
+    .map((role) => ({
+      id: role,
+      weight: Math.max(mix[role] / probes + SCATTER_PEAK_MIX_WEIGHT * peak[role], 0.012),
+    }));
+  for (const quota of allocateByWeight(shares, ambientBudget)) {
+    capacities[quota.entry.id] = quota.count;
+  }
+  return capacities;
+}
+
+/**
+ * The camera-following scatter.
+ *
+ * `collect` walks tiles outward from the aircraft and fills each role's allowance nearest-first.
+ * Tile contents are a pure function of the tile's world coordinates, so a prop occupies the same
+ * place on every pass and generated tiles can be memoised; the camera decides only which tiles are
+ * resident. Generation is metered per update so a fast transit costs several small frames instead
+ * of one long stall.
+ */
+function createScatterField(plan, entries, capacities, options) {
+  const tileM = COBRA_CANYON_SCATTER_TILE_M;
+  const nominalRadiusM = options.radiusM;
+  const maximumRadiusM = nominalRadiusM * SCATTER_MAXIMUM_RADIUS_MULTIPLE;
+  const targetPerTileArea = options.ambientBudget / Math.max(1, Math.PI * nominalRadiusM ** 2);
+  const perTile = Math.max(1, Math.round(targetPerTileArea * tileM * tileM));
+  const worldBounds = plan.boundsLocalM;
+  const ribbonsByKind = new Map();
+  for (const ribbon of plan.terrainRibbons ?? []) {
+    const kind = token(ribbon.kind);
+    for (const wanted of ["river", "road", "ridge"]) {
+      if (!kind.includes(wanted)) continue;
+      if (!ribbonsByKind.has(wanted)) ribbonsByKind.set(wanted, []);
+      ribbonsByKind.get(wanted).push(ribbon);
+    }
+  }
+  const context = { ribbonsByKind };
+  const gradientMemo = new Map();
+  const quotaCache = new Map();
+  const tileCache = new Map();
+
+  const EMPTY_QUOTA = new Int32Array(entries.length);
+
+  /**
+   * How many instances of each authored batch this tile owes, as a count per `entries` index.
+   * Cheap and cached: it reads bounds and weights only, never the terrain.
+   */
+  function quotaFor(tileX, tileZ) {
+    const key = `${tileX}:${tileZ}`;
+    const cached = quotaCache.get(key);
+    if (cached) return cached;
+    const eastM = (tileX + 0.5) * tileM;
+    const northM = (tileZ + 0.5) * tileM;
+    const covering = [];
+    for (const entry of entries) {
+      if (insideBounds(entry.bounds, eastM, northM)) covering.push(entry);
+    }
+    let quota = EMPTY_QUOTA;
+    if (covering.length) {
+      quota = new Int32Array(entries.length);
+      for (const allocated of allocateByWeight(covering, perTile)) {
+        if (allocated.count > 0) quota[entries.indexOf(allocated.entry)] = allocated.count;
+      }
+    }
+    if (quotaCache.size > SCATTER_TILE_CACHE_LIMIT * 2) quotaCache.clear();
+    quotaCache.set(key, quota);
+    return quota;
+  }
+
+  function generate(entry, tileX, tileZ, count) {
+    const placements = [];
+    const originEastM = tileX * tileM;
+    const originNorthM = tileZ * tileM;
+    const tileSeed = mixedUint32(hashString(`${tileX}:${tileZ}`) ^ entry.seed);
+    const clumpSpreadM = entry.role === "jungle" ? 78 : 54;
+    const minimumEastM = Math.max(worldBounds.minimumEastM, entry.bounds.minimumEastM);
+    const maximumEastM = Math.min(worldBounds.maximumEastM, entry.bounds.maximumEastM);
+    const minimumNorthM = Math.max(worldBounds.minimumNorthM, entry.bounds.minimumNorthM);
+    const maximumNorthM = Math.min(worldBounds.maximumNorthM, entry.bounds.maximumNorthM);
+    if (minimumEastM > maximumEastM || minimumNorthM > maximumNorthM) return placements;
+    for (let ordinal = 0; ordinal < count; ordinal++) {
+      const seed = mixedUint32(tileSeed ^ Math.imul(ordinal + 1, 0x9e3779b1));
+      // CLUMPS, NOT A SCATTER. Instances share a clump anchor in groups, so stands grow into each
+      // other and leave real clearings between them. An even scatter at any density reads as
+      // texture; clumping is what reads as jungle.
+      const clumpSeed = mixedUint32(tileSeed ^ Math.imul(
+        Math.floor(ordinal / SCATTER_CLUMP_SIZE) + 1,
+        0x85ebca6b,
+      ));
+      const anchorEastM = originEastM + seededUnit(clumpSeed, 0xa511e9b3) * tileM;
+      const anchorNorthM = originNorthM + seededUnit(clumpSeed, 0x63d83595) * tileM;
+      const clumped = {
+        eastM: anchorEastM + (seededUnit(seed, 0x7f4a7c15) - 0.5) * clumpSpreadM,
+        northM: anchorNorthM + (seededUnit(seed, 0x2545f491) - 0.5) * clumpSpreadM,
+      };
+      const loose = {
+        eastM: originEastM + seededUnit(seed, 0x27d4eb2f) * tileM,
+        northM: originNorthM + seededUnit(seed, 0x165667b1) * tileM,
+      };
+      const verge = seededUnit(seed, 0x93d765dd) < 0.86
+        ? routeVergePoint(context, entry, clumped.eastM, clumped.northM, seed)
+        : null;
+      // River mist is a feature OF the river. Away from water it is not thinner, it is absent.
+      if (entry.role === "mist" && !verge) continue;
+      const point = bestPlacement(
+        plan,
+        entry.role,
+        verge ? [verge, clumped] : [clumped, loose],
+        gradientMemo,
+      );
+      const eastM = clamp(point.eastM, minimumEastM, maximumEastM);
+      const northM = clamp(point.northM, minimumNorthM, maximumNorthM);
+      if (insideCampEmberClearEye(plan, entry.role, eastM, northM)) continue;
+      const variation = seededUnit(seed, 0xc2b2ae35);
+      const scale = roleScale(entry.role, entry.descriptor, variation);
+      // One jungle instance represents a stand of canopy, not one isolated tree. The spread is
+      // per-instance: a stand of uniform size at uniform spacing is the tell that gave the old
+      // canopy its wallpaper look.
+      if (entry.role === "jungle") {
+        const bulk = 1.15 + seededUnit(seed, 0x8f51a67b) * 0.65;
+        scale.widthM *= bulk * 0.85;
+        scale.depthM *= bulk * 0.85;
+        scale.heightM *= 1.55 + seededUnit(seed, 0x39aa5c11) * 0.65;
+      }
+      // BED THE STAND INTO THE SLOPE. Placement deliberately seeks steep ground, and a footprint
+      // anchored at the centre sample cantilevers off a gorge wall — the stand visibly floats in
+      // mid-air on the downhill side. Sinking it by the drop across its own half-width buries the
+      // uphill skirt instead, which is what a canopy on a hillside actually looks like.
+      const seatDropM = seatDrop(plan, entry.role, eastM, northM, scale, gradientMemo);
+      placements.push({
+        id: `${entry.id}.${tileX}.${tileZ}.${ordinal}`,
+        role: entry.role,
+        x: eastM,
+        y: sampleCobraCanyonTerrain(plan, eastM, northM) - seatDropM,
+        z: -northM,
+        yaw: point.yaw ?? seededUnit(seed, 0x27d4eb2f) * Math.PI * 2,
+        eastM,
+        northM,
+        variation,
+        batchId: entry.id,
+        archetypeId: entry.descriptor?.id ?? null,
+        paletteHex: entry.descriptor?.paletteHex ?? null,
+        ...scale,
+      });
+    }
+    return placements;
+  }
+
+  function tilePlacements(entry, tileX, tileZ, count, work) {
+    const key = `${tileX}:${tileZ}:${entry.id}`;
+    const cached = tileCache.get(key);
+    if (cached) return cached;
+    if (work.remaining <= 0) {
+      work.pending = true;
+      return null;
+    }
+    const placements = generate(entry, tileX, tileZ, count);
+    work.remaining -= placements.length;
+    if (tileCache.size > SCATTER_TILE_CACHE_LIMIT) {
+      // Insertion-ordered eviction: the oldest quarter goes, which is the ground furthest behind.
+      let dropped = 0;
+      for (const staleKey of tileCache.keys()) {
+        tileCache.delete(staleKey);
+        if (++dropped >= SCATTER_TILE_CACHE_LIMIT / 4) break;
+      }
+    }
+    tileCache.set(key, placements);
+    return placements;
+  }
+
+  // Tile offsets from the camera's own tile, ordered nearest-first, built ONCE. Rebuilding this
+  // ring by ring on every collect cost more than generating the props: the ring walk was O(ring^2)
+  // per ring, and it ran every time the aircraft moved 48 m.
+  const maximumRing = Math.ceil(maximumRadiusM / tileM);
+  const tileOffsets = [];
+  for (let offsetX = -maximumRing; offsetX <= maximumRing; offsetX++) {
+    for (let offsetZ = -maximumRing; offsetZ <= maximumRing; offsetZ++) {
+      const distanceM = Math.hypot(offsetX, offsetZ) * tileM;
+      if (distanceM > maximumRadiusM + tileM) continue;
+      tileOffsets.push({ offsetX, offsetZ, distanceM });
+    }
+  }
+  tileOffsets.sort((left, right) => left.distanceM - right.distanceM
+    || left.offsetX - right.offsetX || left.offsetZ - right.offsetZ);
+
+  // Reused across collects: these grow to thousands of entries and are consumed synchronously.
+  const byRole = Object.fromEntries(COBRA_CANYON_ASSET_ROLES.map((role) => [role, []]));
+  const radiusByRole = Object.fromEntries(
+    COBRA_CANYON_ASSET_ROLES.map((role) => [role, nominalRadiusM]),
+  );
+  const remaining = Object.fromEntries(COBRA_CANYON_ASSET_ROLES.map((role) => [role, 0]));
+
+  function collect(cameraEastM, cameraNorthM, workBudget) {
+    for (const role of COBRA_CANYON_ASSET_ROLES) {
+      byRole[role].length = 0;
+      remaining[role] = capacities[role];
+    }
+    const work = { remaining: workBudget, pending: false };
+    const cameraTileX = Math.floor(cameraEastM / tileM);
+    const cameraTileZ = Math.floor(cameraNorthM / tileM);
+    let live = 0;
+    for (const role of COBRA_CANYON_ASSET_ROLES) if (remaining[role] > 0) live += 1;
+    for (const offset of tileOffsets) {
+      if (!live) break;
+      const tileX = cameraTileX + offset.offsetX;
+      const tileZ = cameraTileZ + offset.offsetZ;
+      const quota = quotaFor(tileX, tileZ);
+      if (quota === EMPTY_QUOTA) continue;
+      for (let index = 0; index < entries.length; index++) {
+        const count = quota[index];
+        if (!count) continue;
+        const entry = entries[index];
+        if (remaining[entry.role] <= 0) continue;
+        const placements = tilePlacements(entry, tileX, tileZ, count, work);
+        if (!placements) continue;
+        const bucket = byRole[entry.role];
+        for (const placement of placements) {
+          placement.distanceM = Math.hypot(
+            placement.eastM - cameraEastM,
+            placement.northM - cameraNorthM,
+          );
+          bucket.push(placement);
+          remaining[entry.role] -= 1;
+          if (remaining[entry.role] <= 0) {
+            live -= 1;
+            break;
+          }
+        }
+      }
+    }
+    for (const role of COBRA_CANYON_ASSET_ROLES) {
+      const placements = byRole[role];
+      // Tiles were walked nearest-first, so the list is already ordered by distance to within one
+      // tile — near enough for the ambient-rung prefix shed, which keeps the cover the pilot is
+      // inside and drops the far edge, and far cheaper than re-sorting 8,000 props every rebuild.
+      let farthestM = 0;
+      for (const placement of placements) {
+        if (placement.distanceM > farthestM) farthestM = placement.distanceM;
+      }
+      radiusByRole[role] = placements.length
+        ? Math.max(nominalRadiusM * 0.5, farthestM)
+        : nominalRadiusM;
+    }
+    return { byRole, radiusByRole, pending: work.pending };
+  }
+
+  return {
+    perTile,
+    tileM,
+    nominalRadiusM,
+    maximumRadiusM,
+    collect,
+    clear() {
+      quotaCache.clear();
+      tileCache.clear();
+      gradientMemo.clear();
+    },
+  };
+}
+
+/**
+ * Scale-in at the outer edge. An instance entering the resident set arrives at zero size and grows
+ * to full over the outer band of its role's achieved radius, so the boundary is a thickening of
+ * cover rather than a line of trees switching on — the same shed idiom as `ambientRungs`, read
+ * radially instead of by rung.
+ */
+function edgeFade(distanceM, radiusM) {
+  const fullM = radiusM * SCATTER_FULL_SCALE_FRACTION;
+  if (distanceM <= fullM) return 1;
+  if (distanceM >= radiusM) return 0;
+  const t = 1 - (distanceM - fullM) / Math.max(1e-6, radiusM - fullM);
+  return t * t * (3 - 2 * t);
+}
+
+function staticPlacements(plan, qualityTier, descriptors, maximumInstances) {
   const authoredSetPieces = setPiecePlacements(plan, descriptors);
   const generatedWaterAccents = waterAccentPlacements(plan, qualityTier, descriptors);
   const setPieces = authoredSetPieces.slice(0, maximumInstances);
@@ -744,96 +1164,7 @@ function planPlacements(plan, qualityTier, maximumInstances) {
     0,
     Math.max(0, maximumInstances - setPieces.length),
   );
-  const reserved = setPieces.length + waterAccents.length;
-  const ambientTarget = Math.min(
-    Math.max(0, maximumInstances - reserved),
-    batches.reduce((sum, batch) => sum + batch.instanceCount, 0),
-  );
-  const quotas = allocateQuotas(batches, ambientTarget);
-  const placements = [...setPieces];
-  for (const quota of quotas) {
-    const bounds = boundsFrom(quota);
-    if (!bounds) continue;
-    const batchSeed = hashString(quota.id);
-    for (let ordinal = 0; ordinal < quota.count; ordinal++) {
-      const seed = mixedUint32(batchSeed ^ Math.imul(ordinal + 1, 0x9e3779b1));
-      const grid = gridPoint(bounds, ordinal, quota.count, seed);
-      const biased = routeBiasedPoint(plan, quota.role, quota, bounds, seed);
-      // CLUSTERS, NOT A SCATTER. Every third instance is drawn tight to its predecessor's seed
-      // cell instead of its own, so stands grow into each other and leave real clearings between
-      // them. An even scatter at any density reads as texture; clumping is what reads as jungle.
-      const clusterSeed = mixedUint32(batchSeed ^ Math.imul(Math.floor(ordinal / 3) + 1, 0x9e3779b1));
-      const clustered = seededUnit(seed, 0x51633e2d) < 0.62
-        ? (() => {
-          const anchor = routeBiasedPoint(plan, quota.role, quota, bounds, clusterSeed)
-            ?? gridPoint(bounds, Math.floor(ordinal / 3) * 3, quota.count, clusterSeed);
-          const spreadM = quota.role === "jungle" ? 190 : 120;
-          return {
-            eastM: clamp(
-              anchor.eastM + (seededUnit(seed, 0x7f4a7c15) - 0.5) * spreadM,
-              bounds.minimumEastM,
-              bounds.maximumEastM,
-            ),
-            northM: clamp(
-              anchor.northM + (seededUnit(seed, 0x2545f491) - 0.5) * spreadM,
-              bounds.minimumNorthM,
-              bounds.maximumNorthM,
-            ),
-            yaw: anchor.yaw,
-          };
-        })()
-        : null;
-      const point = bestPlacement(plan, quota.role, [biased ?? grid, clustered, grid]);
-      if (insideCampEmberClearEye(plan, quota.role, point.eastM, point.northM)) continue;
-      const variation = seededUnit(seed, 0xc2b2ae35);
-      const scale = roleScale(quota.role, quota.descriptor, variation);
-      // One jungle instance represents a stand of canopy, not one isolated tree. Expanding its
-      // horizontal footprint turns a bounded instance count into readable valley walls while
-      // retaining authored tree height and every route-clearance placement decision. The spread
-      // is now per-instance rather than a flat multiplier: a stand of uniform size at uniform
-      // spacing is the tell that gave the old canopy its wallpaper look.
-      if (quota.role === "jungle") {
-        // Palm clumps need vertical presence more than pancake footprint.
-        const bulk = 1.15 + seededUnit(seed, 0x8f51a67b) * 0.65;
-        scale.widthM *= bulk * 0.85;
-        scale.depthM *= bulk * 0.85;
-        scale.heightM *= 1.55 + seededUnit(seed, 0x39aa5c11) * 0.65;
-      }
-      // BED THE STAND INTO THE SLOPE. Placement deliberately seeks steep ground, and a 50 m
-      // footprint anchored at the centre sample cantilevers off a gorge wall — the stand visibly
-      // floats in mid-air on the downhill side. Sinking it by the drop across its own half-width
-      // buries the uphill skirt instead, which is what a canopy on a hillside actually looks like.
-      const seatDropM = seatDrop(plan, quota.role, point.eastM, point.northM, scale);
-      placements.push({
-        id: `${quota.id}.${ordinal}`,
-        role: quota.role,
-        x: point.eastM,
-        y: sampleCobraCanyonTerrain(plan, point.eastM, point.northM) - seatDropM,
-        z: -point.northM,
-        yaw: point.yaw ?? seededUnit(seed, 0x27d4eb2f) * Math.PI * 2,
-        variation,
-        rank: (ordinal + 0.5) / Math.max(1, quota.count),
-        batchId: quota.id,
-        archetypeId: quota.descriptor?.id ?? null,
-        paletteHex: quota.descriptor?.paletteHex ?? null,
-        ...scale,
-      });
-    }
-  }
-  placements.push(...waterAccents);
-  placements.sort((left, right) =>
-    ROLE_ORDER[left.role] - ROLE_ORDER[right.role]
-      || left.rank - right.rank
-      || left.id.localeCompare(right.id));
-  return {
-    placements,
-    batches,
-    descriptors,
-    setPieces,
-    authoredSetPieces,
-    waterAccents,
-    generatedWaterAccents,
-  };
+  return { authoredSetPieces, generatedWaterAccents, setPieces, waterAccents };
 }
 
 function pushTriangle(positions, colors, a, b, c, color, uvs = null, ua = null, ub = null, uc = null) {
@@ -1110,9 +1441,10 @@ function geometryForRole(THREE, role) {
   );
 }
 
-function materialForRole(THREE, role, foliageAtlas = null) {
+function materialForRole(THREE, role, foliageAtlas = null, softFalloff = null) {
   if (role === "mist" || role === "waterAccent") {
     const material = new THREE.MeshBasicMaterial({
+      map: softFalloff,
       color: 0xffffff,
       vertexColors: true,
       transparent: true,
@@ -1234,82 +1566,151 @@ function authoredMeshMaterial(THREE, role) {
   return material;
 }
 
+/**
+ * One instanced submission for a role, allocated to a fixed CAPACITY and refilled in place.
+ *
+ * The near-field scatter changes which props are resident as the aircraft moves, so the mesh is
+ * allocated once at the capacity the tier budget granted and `fill` rewrites its matrices. Capacity
+ * — not the current occupancy — is what the budget ceiling measures, which is what keeps "spend the
+ * same allowance nearer the camera" an honest claim rather than a quietly raised cap.
+ */
 function createRoleMesh(
-  THREE, group, role, placements, resources, foliageAtlas = null,
-  authoredGeometry = null, nameSuffix = "",
+  THREE, group, role, capacity, resources, foliageAtlas = null, softFalloff = null,
+  authoredGeometry = null, nameSuffix = "", cardGeometry = null,
 ) {
-  if (!placements.length) return null;
+  if (capacity <= 0) return null;
   // An authored CC0 mesh wins over the procedural cards when one is supplied for this batch.
   // The cards stay as the declared fallback (asset-manifest.json), so a failed asset load
   // costs detail, never the scene.
-  const geometry = authoredGeometry ?? geometryForRole(THREE, role);
+  const geometry = authoredGeometry ?? cardGeometry ?? geometryForRole(THREE, role);
   // An authored mesh carries its OWN UVs. Handing it the foliage card atlas makes it sample
   // arbitrary regions of an unrelated texture, and with alphaTest 0.48 that punches holes clean
   // through the trunk and fronds — which is why the CC0 palms rendered as black spiky scraps
   // instead of trees. Authored geometry gets a lit, vertex-coloured material and no atlas.
   const material = authoredGeometry
     ? authoredMeshMaterial(THREE, role)
-    : materialForRole(THREE, role, foliageAtlas);
-  const mesh = tagObject(
-    new THREE.InstancedMesh(geometry, material, placements.length),
-    role,
-    placements.length,
-  );
+    : materialForRole(THREE, role, foliageAtlas, softFalloff);
+  const mesh = tagObject(new THREE.InstancedMesh(geometry, material, capacity), role, capacity);
   mesh.name = `COBRA_CANYON_ASSET_${role.toUpperCase()}${nameSuffix}`;
-  mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
-  const matrix = new THREE.Matrix4();
-  const position = new THREE.Vector3();
-  const quaternion = new THREE.Quaternion();
-  const scale = new THREE.Vector3();
-  const yAxis = new THREE.Vector3(0, 1, 0);
-  const instanceColors = new Float32Array(placements.length * 3);
-  for (let index = 0; index < placements.length; index++) {
-    const placement = placements[index];
-    position.set(placement.x, placement.y, placement.z);
-    quaternion.setFromAxisAngle(yAxis, placement.yaw);
-    // Card placements size a whole CLUMP — several notional trees on crossed quads. One
-    // authored palm standing at that size is a sixty-metre plant, which is what filled a third
-    // of the frame in the owner's Build 321 capture. Bring a real mesh back to single-tree
-    // scale; the field cards keep the clump size they were authored for.
-    if (authoredGeometry) {
-      scale.set(
-        placement.widthM * AUTHORED_MESH_CLUMP_SCALE,
-        placement.heightM * AUTHORED_MESH_CLUMP_SCALE,
-        placement.depthM * AUTHORED_MESH_CLUMP_SCALE,
-      );
-    } else {
-      scale.set(placement.widthM, placement.heightM, placement.depthM);
-    }
-    matrix.compose(position, quaternion, scale);
-    mesh.setMatrixAt(index, matrix);
-    const tint = instanceTint(role, placement);
-    instanceColors[index * 3] = tint[0];
-    instanceColors[index * 3 + 1] = tint[1];
-    instanceColors[index * 3 + 2] = tint[2];
-  }
+  // DynamicDrawUsage: the resident set is rewritten as the aircraft moves, not once at boot.
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  const instanceColors = new Float32Array(capacity * 3);
   mesh.instanceColor = new THREE.InstancedBufferAttribute(instanceColors, 3);
-  mesh.instanceMatrix.needsUpdate = true;
-  mesh.instanceColor.needsUpdate = true;
-  if (typeof mesh.computeBoundingSphere === "function") mesh.computeBoundingSphere();
-  mesh.userData.cobraCanyonInstances = Object.freeze(placements.map((placement, instanceId) =>
-    Object.freeze({
-      instanceId,
-      id: placement.id,
-      batchId: placement.batchId,
-      setPieceId: placement.setPieceId ?? null,
-      archetypeId: placement.archetypeId ?? null,
-      role,
-    })));
+  mesh.instanceColor.setUsage?.(THREE.DynamicDrawUsage);
+  const records = Array.from({ length: capacity }, (unused, instanceId) => ({
+    instanceId,
+    id: null,
+    batchId: null,
+    setPieceId: null,
+    archetypeId: null,
+    role,
+  }));
+  // Live view of the occupied slots only: an unfilled slot describes nothing and must not appear.
+  const live = [];
+  mesh.userData.cobraCanyonInstances = live;
   resources.geometries.add(geometry);
   resources.materials.add(material);
   resources.meshes.push(mesh);
   group.add(mesh);
-  return Object.freeze({
+
+  const matrices = mesh.instanceMatrix.array;
+  const unitScale = authoredGeometry ? AUTHORED_MESH_CLUMP_SCALE : 1;
+  const controller = {
     role,
     mesh,
-    baseCount: placements.length,
+    capacity,
+    baseCount: 0,
     unitTriangles: geometryTriangles(geometry),
-  });
+    /**
+     * Rewrites the resident set. `placements` may be given as two lists so the caller never has to
+     * concatenate 8,000 element arrays every time the aircraft moves 48 m.
+     *
+     * The matrix is written straight into the instance buffer rather than through
+     * Matrix4/Quaternion helpers: every prop stands upright, so its transform is a yaw rotation, a
+     * non-uniform scale and a translation, and composing that by hand is several times cheaper
+     * across a whole rebuild than `setFromAxisAngle` + `compose` + `setMatrixAt`.
+     */
+    fill(head, tail, radiusM, centreX = 0, centreY = 0, centreZ = 0) {
+      const total = head.length + tail.length;
+      const count = Math.min(capacity, total);
+      // Generous: the achieved radius plus the tallest thing that can stand at its edge.
+      const boundingRadiusM = radiusM + 400;
+      for (let index = 0; index < count; index++) {
+        const placement = index < head.length ? head[index] : tail[index - head.length];
+        const fade = placement.distanceM === undefined
+          ? 1
+          : edgeFade(placement.distanceM, radiusM);
+        // Card placements size a whole CLUMP — several notional trees on crossed quads. One
+        // authored palm standing at that size is a sixty-metre plant, which is what filled a
+        // third of the frame in the owner's Build 321 capture. Bring a real mesh back to
+        // single-tree scale; the field cards keep the clump size they were authored for.
+        const unit = unitScale * fade;
+        const scaleX = Math.max(1e-4, placement.widthM * unit);
+        const scaleY = Math.max(1e-4, placement.heightM * unit);
+        const scaleZ = Math.max(1e-4, placement.depthM * unit);
+        // Yaw sine/cosine are a property of the prop, so they are memoised on the placement.
+        let cos = placement.yawCos;
+        if (cos === undefined) {
+          cos = placement.yawCos = Math.cos(placement.yaw);
+          placement.yawSin = Math.sin(placement.yaw);
+        }
+        const sin = placement.yawSin;
+        const at = index * 16;
+        matrices[at] = cos * scaleX;
+        matrices[at + 1] = 0;
+        matrices[at + 2] = -sin * scaleX;
+        matrices[at + 3] = 0;
+        matrices[at + 4] = 0;
+        matrices[at + 5] = scaleY;
+        matrices[at + 6] = 0;
+        matrices[at + 7] = 0;
+        matrices[at + 8] = sin * scaleZ;
+        matrices[at + 9] = 0;
+        matrices[at + 10] = cos * scaleZ;
+        matrices[at + 11] = 0;
+        matrices[at + 12] = placement.x;
+        matrices[at + 13] = placement.y;
+        matrices[at + 14] = placement.z;
+        matrices[at + 15] = 1;
+        // Memoised on the placement: tints are a property of the prop, and a placement object
+        // survives in the tile cache, so a prop is tinted once ever rather than once per rebuild.
+        const tint = placement.tint ?? (placement.tint = instanceTint(role, placement));
+        instanceColors[index * 3] = tint[0];
+        instanceColors[index * 3 + 1] = tint[1];
+        instanceColors[index * 3 + 2] = tint[2];
+        const record = records[index];
+        record.id = placement.id;
+        record.batchId = placement.batchId ?? null;
+        record.setPieceId = placement.setPieceId ?? null;
+        record.archetypeId = placement.archetypeId ?? null;
+      }
+      // Retired slots collapse to a degenerate scale so a stale matrix can never draw. Only the
+      // slots that WERE occupied need clearing; the rest were cleared when they were retired.
+      for (let index = count; index < controller.baseCount; index++) {
+        const at = index * 16;
+        for (let element = 0; element < 16; element++) matrices[at + element] = 0;
+        matrices[at] = 1e-6;
+        matrices[at + 5] = 1e-6;
+        matrices[at + 10] = 1e-6;
+        matrices[at + 15] = 1;
+      }
+      live.length = count;
+      for (let index = 0; index < count; index++) live[index] = records[index];
+      controller.baseCount = count;
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.instanceColor.needsUpdate = true;
+      // A camera-centred sphere, not a scan of every instance: `computeBoundingSphere` walks the
+      // whole matrix buffer, and it would run on every rebuild for no gain — the resident set is
+      // by construction a disc around the aircraft.
+      if (mesh.boundingSphere && count > 0) {
+        mesh.boundingSphere.center.set(centreX, centreY, centreZ);
+        mesh.boundingSphere.radius = boundingRadiusM;
+      } else if (typeof mesh.computeBoundingSphere === "function") {
+        mesh.computeBoundingSphere();
+      }
+    },
+  };
+  return controller;
 }
 
 function disposeResources(resources) {
@@ -1336,8 +1737,26 @@ export function createCobraCanyonAssetKit(THREE, plan, options = {}) {
   }
   const qualityTier = options.qualityTier ?? plan.qualityTier ?? "balanced";
   const maximumInstances = Math.max(0, Math.trunc(finite(options.maxInstances, 0)));
-  const planned = planPlacements(plan, qualityTier, maximumInstances);
-  const group = tagObject(new THREE.Group(), "assetKit", planned.placements.length);
+  const descriptors = descriptorIndex(plan);
+  const entries = scatterEntries(plan, descriptors);
+  const statics = staticPlacements(plan, qualityTier, descriptors, maximumInstances);
+  // The authored world features — set-piece dressing and the river's bank sheens — stay world
+  // fixed and are always resident. Whatever the tier allows beyond them is the near-field
+  // allowance, and it is spent inside the scatter radius rather than smeared over 256 km².
+  const ambientBudget = Math.max(
+    0,
+    maximumInstances - statics.setPieces.length - statics.waterAccents.length,
+  );
+  const scatterCapacities = roleScatterCapacities(plan, entries, ambientBudget);
+  const scatterRadiusM = Math.max(1, finite(
+    options.scatterRadiusM,
+    COBRA_CANYON_SCATTER_RADIUS_M[qualityTier] ?? COBRA_CANYON_SCATTER_RADIUS_M.balanced,
+  ));
+  const scatter = createScatterField(plan, entries, scatterCapacities, {
+    radiusM: scatterRadiusM,
+    ambientBudget,
+  });
+  const group = tagObject(new THREE.Group(), "assetKit", maximumInstances);
   group.name = "COBRA_CANYON_ASSET_KIT_PRESENTATION_ONLY";
   group.userData.cobraCanyonAssetKit = Object.freeze({
     schema: COBRA_CANYON_ASSET_KIT_SCHEMA,
@@ -1352,143 +1771,268 @@ export function createCobraCanyonAssetKit(THREE, plan, options = {}) {
     foliageAtlas = createSyntheticFoliageAtlasTexture(THREE);
     resources.textures.push(foliageAtlas);
   }
+  // One 32x32 ramp for the whole mist/water-accent role: without it these cards draw as
+  // hard-edged translucent grey slabs, which is the "grey rectangle" visible from the cockpit.
+  const softFalloff = createCobraSoftFalloffTexture(THREE);
+  resources.textures.push(softFalloff);
   const controllers = [];
-  const rolePlacements = Object.fromEntries(COBRA_CANYON_ASSET_ROLES.map((role) => [role, []]));
-  for (const placement of planned.placements) rolePlacements[placement.role].push(placement);
+  const staticByRole = Object.fromEntries(COBRA_CANYON_ASSET_ROLES.map((role) => [role, []]));
+  for (const placement of statics.setPieces) staticByRole[placement.role].push(placement);
+  for (const placement of statics.waterAccents) staticByRole[placement.role].push(placement);
+  const roleCapacity = Object.fromEntries(COBRA_CANYON_ASSET_ROLES.map((role) => [
+    role,
+    staticByRole[role].length + scatterCapacities[role],
+  ]));
+
+  // A TIER HAS TWO CEILINGS AND THE MIX DECIDES WHICH ONE BINDS. A crossed-card jungle stand costs
+  // twelve triangles; a plantation row costs a hundred and fifty. The allowance is now split by
+  // the local vegetation mix rather than by a fixed authored instance count, so the same instance
+  // count can cost very different triangles — mobile blew its 45,000 ceiling by 433 the moment the
+  // quarry and the plantation were given a real share. Trim the SCATTER (never the authored world
+  // features) until it fits what the static world left behind.
+  const cardGeometries = Object.fromEntries(
+    COBRA_CANYON_ASSET_ROLES.map((role) => [role, geometryForRole(THREE, role)]),
+  );
+  const cardTriangles = Object.fromEntries(COBRA_CANYON_ASSET_ROLES.map((role) => [
+    role,
+    geometryTriangles(cardGeometries[role]),
+  ]));
+  const triangleCeiling = Math.max(0, Math.trunc(finite(options.maxTriangles, Infinity)));
+  if (Number.isFinite(triangleCeiling)) {
+    // The authored-mesh slice is reserved separately, and a hero instance REPLACES a card, so
+    // costing every slot as a card plus that reserve is a safe over-estimate.
+    const reserve = Math.max(0, Math.trunc(finite(options.authoredTriangleBudget, 0)));
+    let allowance = triangleCeiling - reserve;
+    for (const role of COBRA_CANYON_ASSET_ROLES) {
+      allowance -= staticByRole[role].length * cardTriangles[role];
+    }
+    let scatterCost = 0;
+    for (const role of COBRA_CANYON_ASSET_ROLES) {
+      scatterCost += scatterCapacities[role] * cardTriangles[role];
+    }
+    if (scatterCost > allowance && scatterCost > 0) {
+      const keep = Math.max(0, allowance / scatterCost);
+      for (const role of COBRA_CANYON_ASSET_ROLES) {
+        scatterCapacities[role] = Math.floor(scatterCapacities[role] * keep);
+        roleCapacity[role] = staticByRole[role].length + scatterCapacities[role];
+      }
+    }
+  }
+
   // An authored palm is ~470 triangles against a card's dozen, so it cannot go on every
   // placement: the whole jungle would cost millions of triangles and the tier budget throws.
-  // Spend a fixed triangle allowance on real palms and keep cards for the rest. The heroes are
-  // taken at a fixed stride so they scatter across the whole valley instead of clustering —
-  // real geometry everywhere, at whatever density the budget affords.
+  // Spend a fixed triangle allowance on real palms and keep cards for the rest. Hero membership
+  // is drawn from the instance's OWN seed rather than from its index in the resident list, so a
+  // given tree is authored geometry or a card as a property of where it stands — it cannot
+  // switch representation as the aircraft flies past it.
   const authoredTriangleBudget = Math.max(0, Math.trunc(finite(options.authoredTriangleBudget, 0)));
-  const heroSplits = new Map();
+  const heroPlans = new Map();
   for (const role of COBRA_CANYON_ASSET_ROLES) {
     const authored = options.roleGeometries?.[role] ?? null;
-    const placements = rolePlacements[role];
-    if (!authored || !placements.length || authoredTriangleBudget <= 0) continue;
+    const capacity = roleCapacity[role];
+    if (!authored || capacity <= 0 || authoredTriangleBudget <= 0) continue;
     const unitTriangles = Math.max(1, Math.trunc(authored.attributes.position.count / 3));
-    const affordable = Math.min(
-      placements.length,
-      Math.trunc(authoredTriangleBudget / unitTriangles),
-    );
+    const affordable = Math.min(capacity, Math.trunc(authoredTriangleBudget / unitTriangles));
     if (affordable <= 0) continue;
-    const stride = Math.max(1, Math.floor(placements.length / affordable));
-    const hero = [];
-    const field = [];
-    for (let index = 0; index < placements.length; index++) {
-      if (index % stride === 0 && hero.length < affordable) hero.push(placements[index]);
-      else field.push(placements[index]);
-    }
-    heroSplits.set(role, { authored, hero, field });
+    heroPlans.set(role, { authored, heroCapacity: affordable, fraction: affordable / capacity });
   }
 
+  const heroControllers = new Map();
+  const fieldControllers = new Map();
   for (const role of COBRA_CANYON_ASSET_ROLES) {
     const atlas = role === "jungle" ? foliageAtlas : null;
-    const split = heroSplits.get(role);
-    if (split) {
+    const heroPlan = heroPlans.get(role);
+    const capacity = roleCapacity[role];
+    if (heroPlan) {
       const heroController = createRoleMesh(
-        THREE, group, role, split.hero, resources, atlas, split.authored, "_HERO",
+        THREE, group, role, heroPlan.heroCapacity, resources, atlas, softFalloff,
+        heroPlan.authored, "_HERO",
       );
-      if (heroController) controllers.push(heroController);
+      if (heroController) {
+        heroControllers.set(role, heroController);
+        controllers.push(heroController);
+      }
       const fieldController = createRoleMesh(
-        THREE, group, role, split.field, resources, atlas, null, "",
+        THREE, group, role, capacity - heroPlan.heroCapacity, resources, atlas, softFalloff,
+        null, "", cardGeometries[role],
       );
-      if (fieldController) controllers.push(fieldController);
+      if (fieldController) {
+        fieldControllers.set(role, fieldController);
+        controllers.push(fieldController);
+      }
       continue;
     }
-    const controller = createRoleMesh(THREE, group, role, rolePlacements[role], resources, atlas);
-    if (controller) controllers.push(controller);
+    const controller = createRoleMesh(
+      THREE, group, role, capacity, resources, atlas, softFalloff, null, "", cardGeometries[role],
+    );
+    if (controller) {
+      fieldControllers.set(role, controller);
+      controllers.push(controller);
+    }
   }
 
+  // A role trimmed to zero capacity builds no mesh, so its card geometry has no owner: hand it to
+  // the resource set directly rather than leaking it.
+  for (const role of COBRA_CANYON_ASSET_ROLES) resources.geometries.add(cardGeometries[role]);
+
   const batchSets = Object.fromEntries(COBRA_CANYON_ASSET_ROLES.map((role) => [role, new Set()]));
-  for (const batch of planned.batches) batchSets[batch.role].add(batch.id);
+  for (const entry of entries) batchSets[entry.role].add(entry.id);
   const roleCountsRecord = {
     authoredAmbientBatches: plan.ambientBatches?.length ?? 0,
     authoredSetPieceCells: plan.setPieceCells?.length ?? 0,
-    authoredAmbientArchetypes: planned.descriptors.descriptors.length,
+    authoredAmbientArchetypes: descriptors.descriptors.length,
     authoredLandmarkArchetypes: plan.presentationKit?.landmarkArchetypes?.length ?? 0,
     authoredSetPieceArchetypeReferences: (plan.setPieceCells ?? []).reduce(
       (sum, cell) => sum + (cell.archetypeIds?.length ?? 0),
       0,
     ),
-    authoredSetPieceAssetReferences: planned.authoredSetPieces.length,
-    renderedSetPieceAssetInstances: planned.setPieces.length,
-    generatedWaterAccentInstances: planned.generatedWaterAccents.length,
-    renderedWaterAccentInstances: planned.waterAccents.length,
-    ambientBatchInstances:
-      planned.placements.length - planned.setPieces.length - planned.waterAccents.length,
+    authoredSetPieceAssetReferences: statics.authoredSetPieces.length,
+    renderedSetPieceAssetInstances: statics.setPieces.length,
+    generatedWaterAccentInstances: statics.generatedWaterAccents.length,
+    renderedWaterAccentInstances: statics.waterAccents.length,
+    ambientBatchInstances: 0,
     renderBatches: controllers.length,
-    assetInstances: planned.placements.length,
+    assetInstances: 0,
+    scatterRadiusM,
+    scatterTileM: scatter.tileM,
+    scatterInstancesPerTile: scatter.perTile,
+    scatterCapacity: COBRA_CANYON_ASSET_ROLES.reduce(
+      (sum, role) => sum + scatterCapacities[role],
+      0,
+    ),
   };
   for (const role of COBRA_CANYON_ASSET_ROLES) {
     // A role with an authored mesh renders as TWO batches (hero geometry + card field), so
     // count them rather than asking whether one exists.
     const roleControllers = controllers.filter((controller) => controller.role === role);
-    const setPieceCount = planned.setPieces.filter((placement) => placement.role === role).length;
     roleCountsRecord[`${role}AuthoredBatches`] = batchSets[role].size;
     roleCountsRecord[`${role}Batches`] = batchSets[role].size;
     roleCountsRecord[`${role}RenderBatches`] = roleControllers.length;
-    roleCountsRecord[`${role}SetPieceInstances`] = setPieceCount;
-    roleCountsRecord[`${role}Instances`] = rolePlacements[role].length;
+    roleCountsRecord[`${role}SetPieceInstances`] = staticByRole[role].filter(
+      (placement) => placement.setPieceId,
+    ).length;
+    roleCountsRecord[`${role}Instances`] = 0;
+    roleCountsRecord[`${role}ScatterCapacity`] = scatterCapacities[role];
+    roleCountsRecord[`${role}ScatterRadiusM`] = scatterRadiusM;
   }
-  const roleCounts = Object.freeze(roleCountsRecord);
+  let roleCounts = Object.freeze({ ...roleCountsRecord });
+
   const builtDrawCalls = controllers.length;
-  const builtInstances = controllers.reduce((sum, controller) => sum + controller.baseCount, 0);
+  const builtInstances = controllers.reduce((sum, controller) => sum + controller.capacity, 0);
   const builtTriangles = controllers.reduce(
-    (sum, controller) => sum + controller.baseCount * controller.unitTriangles,
+    (sum, controller) => sum + controller.capacity * controller.unitTriangles,
     0,
   );
+  // The CEILING is what the tier budget measures: the allocation this kit will never exceed no
+  // matter where the aircraft flies. Occupancy varies with the ground underneath; the allowance
+  // does not.
   const builtMetrics = Object.freeze({
     drawCalls: builtDrawCalls,
     instances: builtInstances,
     triangles: builtTriangles,
   });
 
-  const snapshots = Array.from({ length: 3 }, () => [null, null]);
-  for (let level = 0; level <= 2; level++) {
-    for (let nearIndex = 0; nearIndex <= 1; nearIndex++) {
-      const nearRingVisible = nearIndex === 1;
-      let drawCalls = 0;
-      let instances = 0;
-      let triangles = 0;
-      for (const controller of controllers) {
-        const survivesRing = nearRingVisible || STRUCTURAL_ROLES.has(controller.role);
-        const count = survivesRing
-          ? Math.ceil(controller.baseCount * COBRA_CANYON_AMBIENT_BUDGETS[level][controller.role])
-          : 0;
-        if (count > 0) drawCalls += 1;
-        instances += count;
-        triangles += count * controller.unitTriangles;
-      }
-      snapshots[level][nearIndex] = Object.freeze({
-        schema: COBRA_CANYON_ASSET_KIT_SCHEMA,
-        qualityTier,
-        ambientBudgetLevel: level,
-        nearRingVisible,
-        drawCalls,
-        instances,
-        triangles,
-        builtDrawCalls,
-        builtInstances,
-        builtTriangles,
-        roleCounts,
-        presentationOnly: true,
-        authoritative: false,
-        disposed: false,
-      });
-    }
-  }
-  const disposedDiagnostics = Object.freeze({
-    ...snapshots[0][0],
-    drawCalls: 0,
-    instances: 0,
-    triangles: 0,
-    disposed: true,
-  });
   let disposed = false;
   let ambientBudgetLevel = 0;
   let nearRingVisible = true;
-  let currentDiagnostics = snapshots[0][1];
+  let snapshots = null;
+  let currentDiagnostics = null;
+  let cameraEastM = null;
+  let cameraNorthM = null;
+  let refreshPending = false;
+  const roleRadiusM = Object.fromEntries(
+    COBRA_CANYON_ASSET_ROLES.map((role) => [role, scatterRadiusM]),
+  );
+
+  function rebuildSnapshots() {
+    const counts = { ...roleCountsRecord };
+    let assetInstances = 0;
+    for (const role of COBRA_CANYON_ASSET_ROLES) {
+      const occupancy = controllers
+        .filter((controller) => controller.role === role)
+        .reduce((sum, controller) => sum + controller.baseCount, 0);
+      counts[`${role}Instances`] = occupancy;
+      counts[`${role}ScatterRadiusM`] = Math.round(roleRadiusM[role]);
+      assetInstances += occupancy;
+    }
+    counts.assetInstances = assetInstances;
+    counts.ambientBatchInstances = assetInstances
+      - counts.renderedSetPieceAssetInstances
+      - counts.renderedWaterAccentInstances;
+    roleCounts = Object.freeze(counts);
+    const next = Array.from({ length: 3 }, () => [null, null]);
+    for (let level = 0; level <= 2; level++) {
+      for (let nearIndex = 0; nearIndex <= 1; nearIndex++) {
+        const near = nearIndex === 1;
+        let drawCalls = 0;
+        let instances = 0;
+        let triangles = 0;
+        for (const controller of controllers) {
+          const survivesRing = near || STRUCTURAL_ROLES.has(controller.role);
+          const count = survivesRing
+            ? Math.ceil(controller.baseCount * COBRA_CANYON_AMBIENT_BUDGETS[level][controller.role])
+            : 0;
+          if (count > 0) drawCalls += 1;
+          instances += count;
+          triangles += count * controller.unitTriangles;
+        }
+        next[level][nearIndex] = Object.freeze({
+          schema: COBRA_CANYON_ASSET_KIT_SCHEMA,
+          qualityTier,
+          ambientBudgetLevel: level,
+          nearRingVisible: near,
+          drawCalls,
+          instances,
+          triangles,
+          builtDrawCalls,
+          builtInstances,
+          builtTriangles,
+          roleCounts,
+          presentationOnly: true,
+          authoritative: false,
+          disposed: false,
+        });
+      }
+    }
+    snapshots = next;
+  }
+
+  /** Re-collects the resident set around the camera and refills every instanced submission. */
+  function refresh(workBudget) {
+    const collected = scatter.collect(cameraEastM, cameraNorthM, workBudget);
+    refreshPending = collected.pending;
+    for (const role of COBRA_CANYON_ASSET_ROLES) {
+      roleRadiusM[role] = collected.radiusByRole[role];
+      // Authored world features first: they are always resident and never fade, so they occupy
+      // the head of the list and survive the ambient-rung prefix shed.
+      const statics_ = staticByRole[role];
+      const scattered = collected.byRole[role];
+      const heroPlan = heroPlans.get(role);
+      const hero = heroControllers.get(role);
+      const field = fieldControllers.get(role);
+      if (heroPlan && hero && field) {
+        const heroList = [];
+        const fieldList = [];
+        for (const list of [statics_, scattered]) {
+          for (const placement of list) {
+            let pick = placement.heroPick;
+            if (pick === undefined) {
+              pick = placement.heroPick = seededUnit(hashString(placement.id), 0x1d2c9f31);
+            }
+            const target = pick < heroPlan.fraction && heroList.length < hero.capacity
+              ? heroList
+              : fieldList;
+            target.push(placement);
+          }
+        }
+        hero.fill(heroList, EMPTY_LIST, roleRadiusM[role], cameraEastM, 0, -cameraNorthM);
+        field.fill(fieldList, EMPTY_LIST, roleRadiusM[role], cameraEastM, 0, -cameraNorthM);
+      } else if (field) {
+        field.fill(statics_, scattered, roleRadiusM[role], cameraEastM, 0, -cameraNorthM);
+      }
+    }
+    rebuildSnapshots();
+  }
 
   function apply() {
     for (const controller of controllers) {
@@ -1504,10 +2048,31 @@ export function createCobraCanyonAssetKit(THREE, plan, options = {}) {
     currentDiagnostics = snapshots[ambientBudgetLevel][nearRingVisible ? 1 : 0];
   }
 
+  // Boot the scene where the aircraft starts. Camp Ember is the spawn, and building the first
+  // resident set anywhere else would show the pilot a bare valley for the first few seconds.
+  const spawn = campEmberPadCentre(plan);
+  cameraEastM = finite(options.cameraPosition?.x, spawn?.eastM ?? 0);
+  cameraNorthM = options.cameraPosition
+    ? -finite(options.cameraPosition.z, 0)
+    : (spawn?.northM ?? 0);
+  refresh(Infinity);
+  apply();
+
+  const disposedDiagnostics = Object.freeze({
+    ...snapshots[0][0],
+    drawCalls: 0,
+    instances: 0,
+    triangles: 0,
+    disposed: true,
+  });
+
   return Object.freeze({
     group,
-    roleCounts,
+    get roleCounts() {
+      return roleCounts;
+    },
     builtMetrics,
+    scatterRadiusM,
     diagnosticsFor(level = 0, near = true) {
       if (disposed) return disposedDiagnostics;
       const resolvedLevel = clamp(Math.trunc(finite(level)), 0, 2);
@@ -1520,6 +2085,23 @@ export function createCobraCanyonAssetKit(THREE, plan, options = {}) {
         ambientBudgetLevel,
       )), 0, 2);
       nearRingVisible = frame.nearRingVisible !== false;
+      const camera = frame.cameraPosition;
+      if (camera && Number.isFinite(Number(camera.x)) && Number.isFinite(Number(camera.z))) {
+        const nextEastM = Number(camera.x);
+        const nextNorthM = -Number(camera.z);
+        const travelledM = Math.hypot(nextEastM - cameraEastM, nextNorthM - cameraNorthM);
+        if (travelledM >= SCATTER_REBUILD_STEP_M || refreshPending) {
+          cameraEastM = nextEastM;
+          cameraNorthM = nextNorthM;
+          // A jump further than the scatter radius is a scene cut, not flight: nothing resident
+          // survives it, so metering the work would show the pilot a bare valley for half a
+          // second. Pay the whole rebuild on the frame that already changed everything.
+          const teleported = travelledM > scatterRadiusM;
+          refresh(teleported ? Infinity : SCATTER_TILE_BUILDS_PER_UPDATE * scatter.perTile);
+        }
+      } else if (refreshPending) {
+        refresh(SCATTER_TILE_BUILDS_PER_UPDATE * scatter.perTile);
+      }
       apply();
     },
     diagnostics() {
@@ -1530,6 +2112,7 @@ export function createCobraCanyonAssetKit(THREE, plan, options = {}) {
       disposed = true;
       group.removeFromParent();
       disposeResources(resources);
+      scatter.clear();
       group.clear();
       group.userData.cobraCanyonAssetKitDisposed = true;
       currentDiagnostics = disposedDiagnostics;

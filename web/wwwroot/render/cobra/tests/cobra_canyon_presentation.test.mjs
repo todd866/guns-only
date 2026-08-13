@@ -642,6 +642,9 @@ test("ambient rungs and AGL shed only deterministic asset prefixes", () => {
   const hazards = byRole(presentation.group, "hazards");
   const decks = byRole(presentation.group, "bridge-deck");
   const piers = byRole(presentation.group, "bridge-pier");
+  // Settle the camera before baselining: the scatter is camera-following, so occupancy is a
+  // property of where the aircraft is, and the kit boots at the Camp Ember spawn rather than here.
+  presentation.update({ ambientBudgetLevel: 0, cameraPosition: { x: 0, z: 0 }, cameraAglM: 40 });
   const baseCounts = new Map([...assets].map(([role, mesh]) => [role, mesh.count]));
   const baseHazardCount = hazards.count;
   const baseDeckCount = decks.count;
@@ -745,6 +748,10 @@ test("uses deterministic static matrices and cached frozen diagnostics", () => {
     }
   }
 
+  // The scatter is camera-following, so the resident set — and therefore the diagnostics — moves
+  // with the aircraft. What must stay true is that a frame which changes NOTHING allocates
+  // nothing: settle the camera first, then pin object identity across repeated identical frames.
+  first.update({ cameraPosition: { x: 0, z: 0 }, cameraAglM: 40, ambientBudgetLevel: 0 });
   const initial = first.diagnostics();
   assert.equal(Object.isFrozen(initial), true);
   assert.equal(Object.isFrozen(initial.roleCounts), true);
