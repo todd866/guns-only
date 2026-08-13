@@ -308,7 +308,10 @@ test("authored jungle geometry splits into a hero batch and stays inside every t
       // The reserved slot is now spent: jungle renders as hero geometry PLUS a card field.
       assert.equal(diagnostics.roleCounts.jungleRenderBatches, 2,
         `${qualityTier} must split the jungle into hero and card batches`);
-      assert.equal(diagnostics.presentationDrawCallHeadroom, 0);
+      // One slot of headroom survives: the roads overlay this world no longer draws, because
+      // its only road-named record is a terrain bench (see "a terrain bench is never drawn as
+      // a road"). Spending it again needs a real road network, not another contour.
+      assert.equal(diagnostics.presentationDrawCallHeadroom, 1);
     } else {
       // Mobile is allowed no authored triangles at all, so it must ignore the mesh entirely.
       assert.equal(diagnostics.roleCounts.jungleRenderBatches, 1,
@@ -331,10 +334,13 @@ test("builds the real analytical basin and stays inside every tier ceiling", () 
     assert.ok(actual.instances <= budget.maxInstances);
     assert.ok(actual.triangles <= budget.maxTriangles);
     assert.equal(diagnostics.withinBudget, true);
-    assert.equal(diagnostics.builtDrawCalls, 16);
-    assert.equal(diagnostics.roleCounts.coreRenderBatches, 9);
+    // 15, not 16: the roads overlay is gone. This world authors no road network — the only
+    // road-named record is a terrain BENCH, and drawing it put a 13 km laterite stripe across
+    // the valley (see "a terrain bench is never drawn as a road").
+    assert.equal(diagnostics.builtDrawCalls, 15);
+    assert.equal(diagnostics.roleCounts.coreRenderBatches, 8);
     assert.equal(diagnostics.roleCounts.assetRenderBatches, 7);
-    assert.equal(diagnostics.roleCounts.worldRenderBatches, 16);
+    assert.equal(diagnostics.roleCounts.worldRenderBatches, 15);
     assert.equal(diagnostics.roleCounts.heroCells, 3);
     assert.equal(diagnostics.roleCounts.landmarks, 11);
     assert.ok(diagnostics.roleCounts.campEmberFirebaseParts >= 28);
@@ -343,11 +349,13 @@ test("builds the real analytical basin and stays inside every tier ceiling", () 
       diagnostics.roleCounts.assetInstances <= budget.maxAssetInstances,
       `${qualityTier} asset kit must respect its instance allocation`,
     );
-    // One draw call is RESERVED for the authored-geometry hero batch, which only exists once
-    // a glTF asset loads. Without one, every role renders as cards in a single batch and that
-    // slot stays free — so the reserve reads as headroom here, and is spent in the authored
-    // case below.
-    assert.equal(diagnostics.presentationDrawCallHeadroom, 1);
+    // Two draw calls of headroom now. One is RESERVED for the authored-geometry hero batch,
+    // which only exists once a glTF asset loads — without one, every role renders as cards in a
+    // single batch and that slot stays free, so the reserve reads as headroom here and is spent
+    // in the authored case below. The second is the roads overlay this world no longer draws:
+    // its only road-named record is a terrain bench, and drawing it laid a 13 km laterite stripe
+    // across the valley.
+    assert.equal(diagnostics.presentationDrawCallHeadroom, 2);
     assert.ok(diagnostics.presentationInstanceHeadroom >= 0);
     assert.ok(diagnostics.presentationTriangleHeadroom >= 512,
       `${qualityTier} must retain at least 512 presentation triangles of reserve`);
