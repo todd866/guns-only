@@ -1,11 +1,13 @@
 # Current product and verification status
 
 Updated: 2026-08-13
-Production: Build 322, revision `b589d59092a8d5278b46041f50c6f32e10518b40` (verified live via
-/api/build-info 2026-08-13). Builds 312 (Cobra contact
-envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap timing),
-318 (authored structure materials), 320 (Top Gun 404 + cockpit depth near-plane), 321 (Camp
-Ember depth recess) and 322 (Cobra scenery pass) shipped in sequence. Builds
+Production: Build 323, revision `7caf763dbf2e12eb2420852ec39eb19ca261645e` (verified live via
+/api/build-info 2026-08-13, with remote route smokes on all four routes). Builds 312 (Cobra
+contact envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap
+timing), 318 (authored structure materials), 320 (Top Gun 404 + cockpit depth near-plane), 321
+(Camp Ember depth recess), 322 (Cobra scenery pass) and 323 (the Cobra conquest mission: owned
+capture points, dug-in garrisons, tickets, minimap and full tactical map) shipped in sequence.
+Builds
 253-298 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
 Promoted with Build 311 and still live: Builds 308 (consolidation: bounded long-range terrain marches,
@@ -14,37 +16,45 @@ preview) and 310 (rated-arena Multiplayer preview) went live as part of the Buil
 promotion. Top Gun and Multiplayer remain preview-only and fail closed unless `?preview=1` is
 explicitly acknowledged; their promotion to production routes still requires representative
 human ACM and multiplayer player-path acceptance.
-Next candidate: Build 323 (branch `feature/cobra-conquest`) — the Cobra mission becomes a
-conquest battle. This answers the owner's verdict on Build 322: "it's still not obvious where
-I'm supposed to fly or what I'm supposed to do when I get there, there's no minimap, it's not
-a game."
+Next candidate: Build 324 (branch `feature/cobra-conquest`) — the conquest mission from Build
+323 plus five owner findings from flying it.
 
-Four contested sites become capture points with a real owner and capture progress; Camp Ember
-opens friendly, the three gorge sites hostile. Ownership derives only from living GROUND units
-inside the capture radius — the Cobra never captures. Each hostile point carries a dug-in
-garrison that is immune to ground-to-ground fire and killable only from the air, which is the
-one thing on the board the player alone can resolve; killing it leaves friendlies alone in the
-radius and the point flips on the ordinary rule, with no special case. The hidden
-control-threshold win condition is replaced by tickets: holding fewer points than the other
-side bleeds you at 0.5/s per point of deficit, and zero ends it. A north-up minimap is always
-on and M pulls up the full corridor map; the objective rides on the chart as a caption, because
-the play shell hides the prose card by the Build 302 ruling.
+**The red line, finally identified.** Reported at least three times and never diagnosed; a prior
+pass recoloured the road material and cited the complaint in a comment, which made the artifact
+less alarming and no less meaningless. `road-and-plantation-bench` is TERRAIN data — a 235 m
+half-width shelf the landscape is graded along, carrying `authority.role: "terrain-authority"` —
+but the road-decal pass collects any record whose `kind` merely CONTAINS "road", so the bench
+passed, authored no width, took the 7 m default, and was drawn as a 7 m laterite stripe down a
+13 km contour: across the valley, across the river with no bridge, edge to edge of the map. It
+was never navigation. This world authors no road network at all, so the overlay is gone (built
+draw calls 16 → 15) and a test forbids a terrain bench from producing one.
 
-Three defects were found by measuring rather than by review. The garrison was NOT the player's
-job — friendly infantry ground it down in 10-16 s, and the stall test passed anyway because
-hostile waves re-contested the point, so a green gate was hiding it. The friendly force was
-finite and fell from 12 bodies to 4 by t=200 s, leaving nobody to walk onto a point the player
-had just opened; held points now pay one clump per 25 s. And advance goals scored sites by
-`X + Z`, a fixed diagonal preference in world space that could send a unit away from the only
-contested point on the board.
+**Names.** "Cau Song Ma · THE JAW" and "Thac Nam Ngoi · THE STAIRS" bolted invented all-caps
+callsigns onto real toponyms. Now transliterated Vietnamese in the form US 1:50,000 sheets
+carried, plus the real designator for a firebase: FSB Ember, Cau Song Ma, Thac Nam Ngoi, Nui Da
+Voi, Deo Hai Rang, Chua Trang, Hill 610 Relay, Phu Rieng Plantation and Mill, Dat Do Quarry.
 
-Three more were found only by looking at a rendered frame, all of them green in CI: the full
-map drew into a 300x150 box because a <canvas> is a replaced element and `inset: 0` does not
-stretch one; minimap captions ellipsised away the place name; and point labels on a clamped
-edge were sliced by the canvas.
+**The chart has land on it.** "Really hard to figure out where to go" was not a styling problem:
+the minimap was a dark box with four dots, and a map with no terrain cannot be matched against
+anything visible out of the windscreen. It now carries a shaded-relief backdrop baked once per
+mission from the SAME sampler the aircraft flies over, the river as a landmark, an objective ring
+with range, a north arrow and a scale bar — BF:Vietnam's ordering, terrain first and flags on
+top. Four names at 200 px overran the edge and collided, so the minimap names only the objective.
 
-Measured with a competent garrison-first gunner: 3-1 by t=100 s, Victory on tickets at ~370 s.
-Zero input still loses the basin, unchanged.
+**The golden path**, requested repeatedly and never built: a soft wind-drifted ribbon of haze
+flowing from ahead of the aircraft toward the objective, fading on arrival. One mesh, one draw
+call, additive and depth-tested, opacity pinned under a subtlety guard. The first cut was 76 m
+across at its far end and read as a flat sheet lying over the ground; it is a smoke trail now.
+
+**The F-22 gun aid could only ever say "pull harder."** Its ease-off authority was gated on
+`GDemand >= 2.0`, added for a real Build 80 complaint but keyed to how hard the pilot pulls
+rather than to geometry — so on a tracking pass (median 5.7 G, at the envelope cap 56% of the
+time) the clamp was live throughout and the correction was exactly 0.000 for 34.6% of nominally
+active samples. Inside 1° of lead, 71% of required corrections were the ones it was forbidden to
+make. Owner session `web-1786607256301-334574`: 808 rounds, 6 hits, 0.74%; lead error converged
+at −1.21°/s while the aid acted and DIVERGED at +1.62°/s while clamped. The gate is now
+geometric — ease only once the nose is PAST the lead line, bounded to 1 G — and the ballistics
+were verified correct, so this was the aid and not the gun.
 
 VERIFICATION CAVEAT (carried from Build 321, the Camp Ember depth recess, and still open):
 headless SwiftShader does not reproduce the symptom — the pad renders
