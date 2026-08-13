@@ -41,6 +41,62 @@ public class GunneryPitchAssistTests {
             aircraft.AirspeedMps, aircraft.AtmosphereModel,
             lead, hasLead, rangeM, enabled, closureMps: closureMps);
 
+    /// <summary>
+    /// The aid must be able to say "ease" once the nose is PAST the lead line, even while the
+    /// pilot is pulling hard.
+    ///
+    /// Gating the ease authority on `GDemand >= 2.0` made the assist one-sided for the whole
+    /// tracking task. Owner flight, Build 323 (session web-1786607256301-334574): median 5.7 G,
+    /// at the envelope cap 56% of the time, so the clamp was live on essentially every firing
+    /// pass. Lead error converged at -1.21 deg/s while the aid acted and DIVERGED at +1.62 deg/s
+    /// while it was clamped. 808 rounds fired, 6 hits. This is the control experiment for that:
+    /// it fails against the absolute-G clamp, because the correction there is exactly zero.
+    /// </summary>
+    [Fact]
+    public void EasesThePullOnceTheNoseHasGonePastTheLeadLine() {
+        AircraftSim aircraft = ModernAircraft();
+        // Nose above the lead line: the target is BELOW where we are pointing.
+        Vec3D lead = PitchLead(aircraft, -4.0);
+        var pulling = new PilotCommand(GDemand: 5.5, BankTarget: 0.0, Throttle: 1.0, Rudder: 0.0);
+
+        GunneryPitchAssistResult result = Apply(aircraft, pulling, lead);
+
+        Assert.True(result.State.Active, "the aid must be engaged for this geometry");
+        Assert.True(result.State.LoadFactorCorrectionG < 0.0,
+            $"past the lead line at {pulling.GDemand} G the aid must ease, got {result.State.LoadFactorCorrectionG:F3} G");
+    }
+
+    /// <summary>
+    /// The other half of the same rule, and the reason the absolute-G clamp existed at all: with
+    /// the target still ABOVE the nose, a deliberate pull toward it must never be opposed
+    /// ("impossible to pull to the shoot cue without spacebar", Build 80).
+    /// </summary>
+    [Fact]
+    public void NeverOpposesAPullThatIsStillChasingTheLeadLine() {
+        AircraftSim aircraft = ModernAircraft();
+        Vec3D lead = PitchLead(aircraft, 4.0);
+        var pulling = new PilotCommand(GDemand: 5.5, BankTarget: 0.0, Throttle: 1.0, Rudder: 0.0);
+
+        GunneryPitchAssistResult result = Apply(aircraft, pulling, lead);
+
+        Assert.True(result.State.LoadFactorCorrectionG >= 0.0,
+            $"the aid must not fight a pull toward the solution, got {result.State.LoadFactorCorrectionG:F3} G");
+    }
+
+    /// <summary>The ease is bounded well under the pull-side authority: trim an overshoot, never
+    /// take the aircraft off a target the pilot is chasing.</summary>
+    [Fact]
+    public void ThePastLineEaseIsBoundedWellUnderTheFullCorrectionAuthority() {
+        AircraftSim aircraft = ModernAircraft();
+        Vec3D lead = PitchLead(aircraft, -20.0);
+        var pulling = new PilotCommand(GDemand: 7.0, BankTarget: 0.0, Throttle: 1.0, Rudder: 0.0);
+
+        GunneryPitchAssistResult result = Apply(aircraft, pulling, lead);
+
+        Assert.True(result.State.LoadFactorCorrectionG >= -1.0001,
+            $"ease authority must stay bounded, got {result.State.LoadFactorCorrectionG:F3} G");
+    }
+
     [Fact]
     public void RequestsBoundedProtectedPitchRateTowardBallisticLead() {
         AircraftSim aircraft = ModernAircraft();
