@@ -37,6 +37,13 @@ public sealed class CobraGroundWarRuntime
     /// in the pad ring — Camp Ember is a friendly Depart, not a knife-fight spawn.
     /// </summary>
     public const string GunnerySeamUnitId = "ground.hostile.gunnery-seam.000";
+    /// <summary>
+    /// Every hostile-held point opens with one hard point standing ON the point. Nothing in the
+    /// ownership rule knows what a "garrison" is — it is simply a hostile body inside the capture
+    /// radius, which makes the point permanently contested until the gunship kills it.
+    /// </summary>
+    public const string GarrisonUnitIdSuffix = ".garrison";
+    public static string GarrisonUnitId(string siteId) => siteId + GarrisonUnitIdSuffix;
     // Mid/far envelope (ballistic window 80–2000 m). Seeded on Ingress after the pad cold open
     // so Tab→F stays reachable once the aircraft is flying the gorge, not on the ramp.
     public const double GunnerySeamRangeM = 950.0;
@@ -482,6 +489,21 @@ public sealed class CobraGroundWarRuntime
         }
     }
 
+    /// <summary>Test/fixture helper — seeds a friendly push into a site's capture radius.</summary>
+    public void SeedFriendlyPushForTests(string siteId, int infantryClumps)
+    {
+        if (!_sitesById.TryGetValue(siteId, out ContestedSite? site))
+            throw new ArgumentException($"Unknown site '{siteId}'.", nameof(siteId));
+        if (infantryClumps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(infantryClumps));
+
+        // Evenly spaced deterministic bearings — never the rng, which the seeded order depends on.
+        for (int index = 0; index < infantryClumps; index++)
+            SpawnUnit(GroundFaction.Friendly, GroundUnitRole.InfantryClump, site,
+                GroundUnitIntent.Advance, ringM: 60.0,
+                bearingRad: index * (Math.PI * 2.0 / infantryClumps));
+    }
+
     /// <summary>Test/fixture helper — pins occupancy counts for a site. Sticky across Advance.</summary>
     public void OverrideSiteOccupancyForTests(string siteId, int friendly, int hostile)
     {
@@ -562,6 +584,14 @@ public sealed class CobraGroundWarRuntime
             // gorge sites (bridge / plantation / quarry) so the cold open is a takeoff, not a
             // surround. The standing gunnery seam is planted down-route after spawn pose is known.
             if (fob) continue;
+
+            // The garrison: one hard point standing ON a hostile-held point. It is not a capture
+            // rule, it is a body — it keeps both factions inside the radius, so the point stays
+            // contested until the Cobra removes it. See UpdateSiteOwnership.
+            if (site.Owner == GroundSiteOwner.Hostile)
+                SpawnUnit(GroundFaction.Hostile, GroundUnitRole.HardPoint, site,
+                    GroundUnitIntent.Hold, ringM: 0.0, bearingRad: 0.0,
+                    unitId: GarrisonUnitId(site.Id));
 
             // No seeded hostile hard points at secondary sites: the attackers are the moving
             // wave targets the turret exists to kill. Iron Bell is the authored fight — seed a
@@ -681,7 +711,8 @@ public sealed class CobraGroundWarRuntime
         ContestedSite site,
         GroundUnitIntent intent,
         double ringM,
-        double? bearingRad = null)
+        double? bearingRad = null,
+        string? unitId = null)
     {
         if (LivingUnits().Count() >= MaxLivingUnits)
             return;
@@ -703,7 +734,8 @@ public sealed class CobraGroundWarRuntime
             _ => 40.0
         };
         double heightOffset = role == GroundUnitRole.SoftVehicle ? 1.2 : 0.4;
-        string id = $"ground.{faction.ToString().ToLowerInvariant()}.{role.ToString().ToLowerInvariant()}.{_nextUnitSerial++:D3}";
+        string id = unitId
+            ?? $"ground.{faction.ToString().ToLowerInvariant()}.{role.ToString().ToLowerInvariant()}.{_nextUnitSerial++:D3}";
         var unit = new GroundUnit(
             id,
             faction,

@@ -85,7 +85,12 @@ public class CobraGroundWarRuntimeTests
         Dictionary<string, ContestedSite> sites = war.Sites.ToDictionary(site => site.Id);
 
         foreach (GroundUnit hostile in war.LivingUnits()
-            .Where(unit => unit.Faction == GroundFaction.Hostile)) {
+            .Where(unit => unit.Faction == GroundFaction.Hostile
+                // The conquest garrison stands ON the point by contract — that is what makes the
+                // point contested. It is engaged from standoff, not from a hover overhead, so the
+                // site-centre proxy this test uses does not apply to it.
+                && !unit.Id.EndsWith(
+                    CobraGroundWarRuntime.GarrisonUnitIdSuffix, StringComparison.Ordinal))) {
             ContestedSite home = sites[hostile.HomeSiteId];
             double horizontalM = Math.Sqrt(
                 Math.Pow(hostile.PositionWorldM.X - home.PositionWorldM.X, 2.0)
@@ -416,6 +421,76 @@ public class CobraGroundWarRuntimeTests
         Assert.Equal(GroundSiteOwner.Hostile, sites["site.iron-bell-bridge.v1"].Owner);
         Assert.Equal(GroundSiteOwner.Hostile, sites["site.plantation-water-tower.v1"].Owner);
         Assert.Equal(GroundSiteOwner.Hostile, sites["site.red-earth-quarry.v1"].Owner);
+    }
+
+    const string GarrisonTestSiteId = "site.plantation-water-tower.v1";
+    const int GarrisonTestPushClumps = 6;
+    const double GarrisonTestStepSeconds = 0.25;
+    const double GarrisonTestPushSeconds = 60.0;
+
+    /// <summary>
+    /// The stall is EMERGENT, not special-cased: the garrison stands inside the capture radius, so
+    /// both factions are present, so the point is contested and cannot flip. This test and
+    /// <see cref="KillingTheGarrisonLetsTheSamePushTakeThePoint"/> are byte-identical apart from
+    /// the garrison kill — that difference alone must decide the point.
+    ///
+    /// Honest about what the garrison is: the friendly push does eventually grind it down on its
+    /// own (measured 10.25 s at this push size), so it is not an unbreakable block. What the
+    /// turret buys is those ten seconds, and with hostile waves re-entering the radius on a
+    /// cadence that head start is the difference between a point that flips and one that never
+    /// does — progress here stalls at 0.67 and never completes.
+    /// </summary>
+    [Fact]
+    public void AnIntactGarrisonStallsAFriendlyPush()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        ContestedSite site = war.Sites.First(candidate => candidate.Id == GarrisonTestSiteId);
+        Assert.Equal(GroundSiteOwner.Hostile, site.Owner);
+        GroundUnit? garrison = war.FindUnit(CobraGroundWarRuntime.GarrisonUnitId(GarrisonTestSiteId));
+        Assert.NotNull(garrison);
+        Assert.True(garrison!.IsAlive);
+
+        war.SeedFriendlyPushForTests(GarrisonTestSiteId, GarrisonTestPushClumps);
+        for (int step = 0;
+            step < (int)Math.Round(GarrisonTestPushSeconds / GarrisonTestStepSeconds);
+            step++)
+            war.Advance(GarrisonTestStepSeconds);
+
+        // The control variable: the turret never fired a round in this test.
+        Assert.Equal(0, war.Debrief.RoundsExpended);
+        Assert.Equal(GroundSiteOwner.Hostile, site.Owner);
+    }
+
+    /// <summary>
+    /// Identical to <see cref="AnIntactGarrisonStallsAFriendlyPush"/> except for the one marked
+    /// block below, which kills the garrison with authorized turret fire before the clock starts.
+    /// Same seed, same push, same duration, same step size.
+    /// </summary>
+    [Fact]
+    public void KillingTheGarrisonLetsTheSamePushTakeThePoint()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        ContestedSite site = war.Sites.First(candidate => candidate.Id == GarrisonTestSiteId);
+        Assert.Equal(GroundSiteOwner.Hostile, site.Owner);
+        GroundUnit? garrison = war.FindUnit(CobraGroundWarRuntime.GarrisonUnitId(GarrisonTestSiteId));
+        Assert.NotNull(garrison);
+        Assert.True(garrison!.IsAlive);
+
+        // --- THE ONLY DIFFERENCE FROM AnIntactGarrisonStallsAFriendlyPush ---
+        for (int shot = 0; shot < 2_000 && garrison.IsAlive; shot++)
+            war.ApplyAuthorizedFire(
+                CobraGroundWarRuntime.GarrisonUnitId(GarrisonTestSiteId),
+                PlayerVehicleContract.FixedDeltaSeconds);
+        Assert.False(garrison.IsAlive, "the player must be able to break the garrison");
+        // --- END OF THE ONLY DIFFERENCE ---
+
+        war.SeedFriendlyPushForTests(GarrisonTestSiteId, GarrisonTestPushClumps);
+        for (int step = 0;
+            step < (int)Math.Round(GarrisonTestPushSeconds / GarrisonTestStepSeconds);
+            step++)
+            war.Advance(GarrisonTestStepSeconds);
+
+        Assert.Equal(GroundSiteOwner.Friendly, site.Owner);
     }
 
     [Fact]
