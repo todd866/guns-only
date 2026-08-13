@@ -6,6 +6,7 @@ import {
   CAMP_EMBER_COLORS,
   CAMP_EMBER_DEPARTURE_YAW_RAD,
   CAMP_EMBER_LANDMARK_ID,
+  CAMP_EMBER_DRAWN_RECESS_M,
   CAMP_EMBER_SPAWN_SAFETY_VOLUME,
   campEmberFirebaseParts,
   createCampEmberFirebase,
@@ -167,8 +168,14 @@ test("Camp Ember keeps a no-geometry safety volume around spawn, eye, skids and 
   for (const part of campEmberFirebaseParts()) {
     const bounds = localBounds(part);
     if (part.surface) {
+      // The camp is anchored a recess BELOW simulated ground so its ground stack has real
+      // thickness to occupy (see CAMP_EMBER_DRAWN_RECESS_M); the contact datum the skids touch
+      // is therefore local +recess, not local 0. The guarantee is unchanged — a thin ground
+      // surface may not rise into the volume the aircraft occupies — only its datum moved.
       assert.ok(bounds.maximumY <= CAMP_EMBER_SPAWN_SAFETY_VOLUME.minimumY,
         `${part.id} surface rises into the spawn volume`);
+      assert.ok(bounds.maximumY <= CAMP_EMBER_DRAWN_RECESS_M + 0.025 + 1e-9,
+        `${part.id} surface stands ${(bounds.maximumY - CAMP_EMBER_DRAWN_RECESS_M).toFixed(3)} m proud of contact`);
       continue;
     }
     if (bounds.maximumY <= CAMP_EMBER_SPAWN_SAFETY_VOLUME.minimumY
@@ -208,8 +215,14 @@ test("Camp Ember PSP is a terrain-seated plate, not a skid-swallowing slab", () 
   const pads = campEmberFirebaseParts().filter((part) => part.family === "psp");
   assert.ok(pads.length >= 5);
   const highestTopM = Math.max(...pads.map((part) => part.centreY + part.heightM * 0.5));
-  assert.ok(highestTopM <= 0.013 + 1e-9,
-    `PSP top ${highestTopM.toFixed(3)} m must stay at apron datum`);
+  // Measured against the contact datum (local +recess), which is where the skids actually rest.
+  const proudOfContactM = highestTopM - CAMP_EMBER_DRAWN_RECESS_M;
+  assert.ok(proudOfContactM <= 0.020 + 1e-9,
+    `PSP top stands ${proudOfContactM.toFixed(3)} m proud of the apron datum`);
+  // And it must not become a pit either: a plate sunk far below contact would swallow the skids
+  // just as badly as a slab would trip them.
+  assert.ok(proudOfContactM >= -0.060,
+    `PSP top sits ${proudOfContactM.toFixed(3)} m below the apron datum`);
 });
 
 test("merged firebase geometry keeps centre-authored pads, berms and mast on the ground", () => {
@@ -229,9 +242,17 @@ test("merged firebase geometry keeps centre-authored pads, berms and mast on the
     }
     return { minimum, maximum };
   };
+  // The PSP plate is a 20 mm sheet whose TOP sits just under the contact datum (local +recess),
+  // because the camp is anchored a recess below simulated ground so its ground stack has somewhere
+  // to live. It is still a plate, not a slab, and it is still at the datum — only the datum moved.
   const primaryPad = yBoundsFor("psp-main-bed");
-  assert.ok(Math.abs(primaryPad.minimum + 0.02) < 1e-6);
-  assert.ok(Math.abs(primaryPad.maximum) < 1e-6);
+  assert.ok(Math.abs(primaryPad.maximum - (CAMP_EMBER_DRAWN_RECESS_M - 0.025)) < 1e-6,
+    `PSP top ${primaryPad.maximum.toFixed(3)} m is not 25 mm under the contact datum`);
+  assert.ok(Math.abs((primaryPad.maximum - primaryPad.minimum) - 0.02) < 1e-6,
+    "PSP must stay a 20 mm sheet");
+  // Vertical structures still base at local 0 — the floor of the recessed dish, which IS the
+  // drawn ground. They stand at grade beside the raised laterite pad, which is what a firebase
+  // built on cut-and-fill actually looks like.
   const berm = yBoundsFor("revetment-main-0");
   assert.ok(Math.abs(berm.minimum) < 1e-6);
   assert.ok(Math.abs(berm.maximum - 1.1) < 1e-6);

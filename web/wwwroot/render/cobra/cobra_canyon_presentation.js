@@ -5,6 +5,7 @@ import {
 import {
   applyCobraCanyonCampEmberApron,
   COBRA_CANYON_CAMP_EMBER_APRON,
+  smoothstep,
   sampleCobraCanyonTerrain,
   sampleCobraCanyonTerrainBeforeCampEmberApron,
 } from "./cobra_canyon_plan.js?v=320";
@@ -17,7 +18,10 @@ import {
   createCobraCanyonBasinMaterial,
   createCobraCanyonRiverMaterial,
 } from "./cobra_canyon_terrain_material.js?v=320";
-import { createCampEmberFirebase } from "./cobra_camp_ember_firebase.js?v=320";
+import {
+  CAMP_EMBER_DRAWN_RECESS_M,
+  createCampEmberFirebase,
+} from "./cobra_camp_ember_firebase.js?v=320";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 
@@ -724,6 +728,24 @@ function basinAxisCell(axis, valueM) {
   return clamp(low, 0, axis.length - 2);
 }
 
+/**
+ * Depth of the presentation-only dish cut under Camp Ember, feathered on the SAME ramp the
+ * apron flattens on so no step appears at the blend edge. See CAMP_EMBER_DRAWN_RECESS_M for
+ * why the camp's ground stack had to gain real thickness.
+ */
+function campEmberDrawnRecessM(eastM, northM) {
+  const distanceM = Math.hypot(
+    eastM - COBRA_CANYON_CAMP_EMBER_APRON.eastM,
+    northM - COBRA_CANYON_CAMP_EMBER_APRON.northM,
+  );
+  const blend = 1 - smoothstep(
+    COBRA_CANYON_CAMP_EMBER_APRON.levelRadiusM,
+    COBRA_CANYON_CAMP_EMBER_APRON.blendRadiusM,
+    distanceM,
+  );
+  return blend > 0 ? CAMP_EMBER_DRAWN_RECESS_M * blend : 0;
+}
+
 function basinVertexHeight(
   plan,
   eastM,
@@ -744,12 +766,13 @@ function basinVertexHeight(
   // 105–174 m half-cell reach across the blend and pull 8–25 m pits into rendered triangles at
   // spawn. Applying the shared apron operation to the conservative PRE-apron field preserves the
   // no-overshoot contract while emitting an actually flat contact surface in every tier.
-  return applyCobraCanyonCampEmberApron(
+  const apronHeightM = applyCobraCanyonCampEmberApron(
     plan,
     eastM,
     northM,
     conservativeHeightM,
   );
+  return apronHeightM - campEmberDrawnRecessM(eastM, northM);
 }
 
 function basinGeometry(THREE, plan, qualityTier) {

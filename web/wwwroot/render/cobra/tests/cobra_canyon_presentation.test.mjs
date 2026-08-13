@@ -18,6 +18,7 @@ import {
 import { COBRA_CANYON_ASSET_ROLES } from "../cobra_canyon_asset_kit.js";
 import {
   CAMP_EMBER_DEPARTURE_YAW_RAD,
+  CAMP_EMBER_DRAWN_RECESS_M,
   CAMP_EMBER_SPAWN_SAFETY_VOLUME,
   campEmberFirebaseParts,
 } from "../cobra_camp_ember_firebase.js";
@@ -213,8 +214,14 @@ test("every rendered tier keeps the complete Camp Ember PSP apron flat at contac
           );
           assert.ok(Math.abs(analyticM - 202) < 1e-9,
             `${qualityTier} analytic apron drifted at ${eastOffsetM},${northOffsetM}`);
-          assert.ok(Math.abs(renderedM - analyticM) < 1e-5,
-            `${qualityTier} rendered apron differs by ${(renderedM - analyticM).toFixed(6)} m`
+          // The drawn apron sits exactly one recess BELOW the analytic contact height: the camp
+          // needed real depth for its ground stack to stop sharing depth samples with the
+          // terrain. What matters here is unchanged — the drawn apron must be FLAT and must
+          // never rise above contact authority — so the target moves by the recess and the
+          // tolerance stays as tight as it was.
+          assert.ok(Math.abs(renderedM - (analyticM - CAMP_EMBER_DRAWN_RECESS_M)) < 1e-5,
+            `${qualityTier} rendered apron differs by `
+              + `${(renderedM - analyticM + CAMP_EMBER_DRAWN_RECESS_M).toFixed(6)} m`
               + ` at ${eastOffsetM},${northOffsetM}`);
         }
       }
@@ -240,8 +247,10 @@ test("every rendered triangle plane is level under the full Camp Ember spawn saf
           eastM,
           northM,
         );
-        assert.ok(Math.abs(renderedM - 202) < 1e-5,
-          `${qualityTier} spawn plane drifted ${(renderedM - 202).toFixed(4)} m`
+        // Still perfectly level under the whole spawn volume, just one recess lower.
+        assert.ok(Math.abs(renderedM - (202 - CAMP_EMBER_DRAWN_RECESS_M)) < 1e-5,
+          `${qualityTier} spawn plane drifted `
+            + `${(renderedM - 202 + CAMP_EMBER_DRAWN_RECESS_M).toFixed(4)} m`
             + ` at local ${localX},${localZ}`);
       }
     }
@@ -262,8 +271,10 @@ test("Camp Ember's full 58 m level apron has no coarse-grid pits in any tier", (
           COBRA_CANYON_CAMP_EMBER_APRON.eastM + eastOffsetM,
           COBRA_CANYON_CAMP_EMBER_APRON.northM + northOffsetM,
         );
-        deepestM = Math.min(deepestM, renderedM - 202);
-        highestM = Math.max(highestM, renderedM - 202);
+        // Measured against the recessed drawn apron, so a real pit still reads as a pit.
+        const datumM = 202 - CAMP_EMBER_DRAWN_RECESS_M;
+        deepestM = Math.min(deepestM, renderedM - datumM);
+        highestM = Math.max(highestM, renderedM - datumM);
       }
     }
     assert.ok(deepestM >= -0.3,

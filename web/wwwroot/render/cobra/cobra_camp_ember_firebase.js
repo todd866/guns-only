@@ -18,10 +18,30 @@ export const CAMP_EMBER_DEPARTURE_YAW_RAD = Math.PI / 2;
  * spawn, both skid stations, the rear-seat eye, the main-rotor disc's near field and 26 m of the
  * eastbound departure. Thin PSP/laterite surfaces at or below `minimumY` are deliberately allowed.
  */
+/**
+ * How far the DRAWN basin is recessed beneath the simulated apron under Camp Ember, and by the
+ * same token how far this mesh is anchored below simulated ground.
+ *
+ * The owner's long-running Camp Ember "flicker" was never performance — production telemetry
+ * measured a locked 60 fps there. It is depth precision. The apron flattens terrain to EXACTLY
+ * the camp elevation and this mesh anchored at that same height, so local Y = 0 WAS the drawn
+ * ground to the last float bit, and every pad, road and burn scar was authored within 30 mm of
+ * it. The cockpit depth quantum is ~5 mm at 100 m; the camp is 105 m across and the pilot sits
+ * inside it, so which surface wins flips as the eye moves.
+ *
+ * polygonOffset cannot solve it: all ~200 parts merge into ONE mesh with one material, so the
+ * bias moves the whole camp against the terrain and can never separate the camp's own layers
+ * from each other. The geometry has to move, and for it to move up without the pad standing
+ * proud of the valley, the drawn ground has to come down.
+ *
+ * PRESENTATION ONLY — the kernel's contact height is untouched.
+ */
+export const CAMP_EMBER_DRAWN_RECESS_M = 0.3;
+
 export const CAMP_EMBER_SPAWN_SAFETY_VOLUME = Object.freeze({
   minimumX: -8,
   maximumX: 8,
-  minimumY: 0.025,
+  minimumY: 0.325,
   maximumY: 5.5,
   minimumZ: -10,
   maximumZ: 26,
@@ -88,33 +108,33 @@ export function campEmberFirebaseParts() {
   // metal tops stay at or below +0.013 m: visible over the terrain without becoming a collision-
   // sized slab through the authority skids.
   add("laterite-main", "laterite", "box", CAMP_EMBER_COLORS.laterite, 0, 0,
-    -0.015, 30, 0.02, 30, 0, true);
+    0.220, 30, 0.02, 30, 0, true);
   add("psp-main-bed", "psp", "box", CAMP_EMBER_COLORS.psp, 0, 0,
-    -0.01, 26, 0.02, 26, 0, true);
+    0.265, 26, 0.02, 26, 0, true);
   for (let index = -5; index <= 5; index++) {
     const color = index % 3 === 0
       ? CAMP_EMBER_COLORS.pspRust
       : index % 2 === 0 ? CAMP_EMBER_COLORS.pspLight : CAMP_EMBER_COLORS.psp;
     add(`psp-main-rib-${index + 5}`, "psp", "box", color, index * 2.08, 0,
-      0.007, 1.72, 0.012, 24, 0, true);
+      0.314, 1.72, 0.012, 24, 0, true);
   }
   const secondaryYaw = 0.15;
   add("laterite-secondary", "laterite", "box", CAMP_EMBER_COLORS.lateriteDark,
-    0, -34, -0.015, 23, 0.02, 23, secondaryYaw, true);
+    0, -34, 0.220, 23, 0.02, 23, secondaryYaw, true);
   add("psp-secondary-bed", "psp", "box", CAMP_EMBER_COLORS.psp,
-    0, -34, -0.01, 20, 0.02, 20, secondaryYaw, true);
+    0, -34, 0.265, 20, 0.02, 20, secondaryYaw, true);
   for (let index = -4; index <= 4; index++) {
     const acrossM = index * 2.05;
     add(`psp-secondary-rib-${index + 4}`, "psp", "box",
       index % 2 === 0 ? CAMP_EMBER_COLORS.pspLight : CAMP_EMBER_COLORS.pspRust,
       Math.cos(secondaryYaw) * acrossM,
       -34 + Math.sin(secondaryYaw) * acrossM,
-      0.007, 1.68, 0.012, 18, secondaryYaw, true);
+      0.314, 1.68, 0.012, 18, secondaryYaw, true);
   }
   add("laterite-connector-a", "laterite", "box", CAMP_EMBER_COLORS.laterite,
-    0, -17, -0.009, 9, 0.018, 8, 0, true);
+    0, -17, 0.221, 9, 0.018, 8, 0, true);
   add("laterite-connector-b", "laterite", "box", CAMP_EMBER_COLORS.lateriteDark,
-    0, -25, -0.009, 8, 0.018, 8, 0, true);
+    0, -25, 0.221, 8, 0.018, 8, 0, true);
 
   // Low modular revetments. Short trapezoidal runs read as stacked sandbags instead of the old
   // 38–42 m monolithic boxes, and leave the entire +Z departure mouth open.
@@ -221,7 +241,7 @@ export function campEmberFirebaseParts() {
   ];
   // Brighter than the deep laterite so the scar survives the aerial haze — the scar IS
   // the base from the air (Granite), not an accent.
-  addFan("scar-apron", "laterite", [0.55, 0.36, 0.22], 0, 0, -0.030, scarOutline);
+  addFan("scar-apron", "laterite", [0.55, 0.36, 0.22], 0, 0, 0.050, scarOutline);
 
   // Berm ring with the eastbound departure mouth left open (Sedgwick).
   let bermIndex = 0;
@@ -239,16 +259,16 @@ export function campEmberFirebaseParts() {
   for (let i = 0; i < 12; i++) {
     const angle = (i / 12) * Math.PI * 2 + 0.13;
     add(`ring-road-${i}`, "laterite", "box", CAMP_EMBER_COLORS.laterite,
-      33 * Math.cos(angle), 33 * Math.sin(angle), -0.018, 4.2, 0.012, 17.5, -angle, true);
+      33 * Math.cos(angle), 33 * Math.sin(angle), 0.134, 4.2, 0.012, 17.5, -angle, true);
   }
   add("track-0", "laterite", "box", CAMP_EMBER_COLORS.laterite,
-    0, 33, -0.013, 2.4, 0.012, 38, 0, true);
+    0, 33, 0.179, 2.4, 0.012, 38, 0, true);
   add("track-1", "laterite", "box", CAMP_EMBER_COLORS.lateriteDark,
-    14, -20, -0.013, 2.0, 0.012, 30, 0.65, true);
+    14, -20, 0.179, 2.0, 0.012, 30, 0.65, true);
   add("track-2", "laterite", "box", CAMP_EMBER_COLORS.laterite,
-    -22, 16, -0.013, 2.0, 0.012, 27, -0.85, true);
+    -22, 16, 0.179, 2.0, 0.012, 27, -0.85, true);
   add("track-3", "laterite", "box", CAMP_EMBER_COLORS.lateriteDark,
-    -12, -30, -0.013, 1.8, 0.012, 24, 0.35, true);
+    -12, -30, 0.179, 1.8, 0.012, 24, 0.35, true);
 
   // Two rosette positions: pit disc + radiating sandbag lobes (the aerial signature).
   const rosettes = [[-38, 8], [36, 14]];
@@ -259,7 +279,7 @@ export function campEmberFirebaseParts() {
       pitOutline.push([4.6 * Math.cos(angle), 4.6 * Math.sin(angle)]);
     }
     addFan(`rosette-${rosetteIndex}-pit`, "laterite", CAMP_EMBER_COLORS.lateriteDark,
-      rx, rz, -0.026, pitOutline);
+      rx, rz, 0.095, pitOutline);
     for (let lobe = 0; lobe < 6; lobe++) {
       const angle = (lobe / 6) * Math.PI * 2 + rosetteIndex * 0.4;
       add(`rosette-${rosetteIndex}-lobe-${lobe}`, "sandbag", "revetment",
@@ -279,8 +299,8 @@ export function campEmberFirebaseParts() {
     }
     return outline;
   };
-  addFan("burn-0", "burn", [0.09, 0.08, 0.07], 42, -18, -0.024, burnOutline(5.5));
-  addFan("burn-1", "burn", [0.11, 0.10, 0.08], -16, 43, -0.024, burnOutline(4.5));
+  addFan("burn-0", "burn", [0.09, 0.08, 0.07], 42, -18, 0.095, burnOutline(5.5));
+  addFan("burn-1", "burn", [0.11, 0.10, 0.08], -16, 43, 0.095, burnOutline(4.5));
 
   // Bunker mounds on the berm's inner face: sandbag sides, glinting PSP roofs (A Shau).
   const bunkers = [[26, -24, 0.3], [-27, -16, -0.2], [15, -39, 0.1]];
@@ -303,7 +323,7 @@ export function campEmberFirebaseParts() {
   // is the parking surface itself; walls carry sub-ids.
   for (const [stationIndex, stationX] of [30, -30].entries()) {
     add(`bird-revetment-${stationIndex}`, "laterite", "box", CAMP_EMBER_COLORS.laterite,
-      stationX, 6, -0.020, 11, 0.014, 12, 0, true);
+      stationX, 6, 0.178, 11, 0.014, 12, 0, true);
     add(`bird-revetment-${stationIndex}-back`, "sandbag", "revetment",
       CAMP_EMBER_COLORS.sandbagShade, stationX, -0.8, 0.65, 9.5, 1.3, 2.4, Math.PI / 2);
     add(`bird-revetment-${stationIndex}-north`, "sandbag", "revetment",
@@ -478,7 +498,16 @@ export function createCampEmberFirebase(THREE, plan) {
   });
   const mesh = new THREE.Mesh(geometry, material);
   mesh.name = "CAMP_EMBER_FIREBASE";
-  mesh.position.set(anchor.eastM, anchor.groundY, -anchor.northM);
+  // Seat the camp on the RECESSED drawn ground, not the simulated apron. The stack above was
+  // re-authored with real thickness so its surfaces stop sharing depth samples; if the anchor
+  // stayed at simulated height that thickness would push the PSP plate 30 cm above where the
+  // skids touch and the aircraft would look sunk into its own pad. Anchor down by the recess,
+  // stack up by the recess: contact height is preserved exactly.
+  mesh.position.set(
+    anchor.eastM,
+    anchor.groundY - CAMP_EMBER_DRAWN_RECESS_M,
+    -anchor.northM,
+  );
   mesh.rotation.y = CAMP_EMBER_DEPARTURE_YAW_RAD;
   // One merged draw with real vertical mass: Camp Ember should sit on the basin under the same
   // cast-shadow policy as the other landmark silhouettes.
