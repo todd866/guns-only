@@ -14,16 +14,15 @@ preview) and 310 (rated-arena Multiplayer preview) went live as part of the Buil
 promotion. Top Gun and Multiplayer remain preview-only and fail closed unless `?preview=1` is
 explicitly acknowledged; their promotion to production routes still requires representative
 human ACM and multiplayer player-path acceptance.
-Next candidate: Build 321 (branch `fix/camp-ember-flicker`) — the Camp Ember flicker.
-Diagnosed as depth precision, not performance (production telemetry measured a locked 60 fps
-there). The apron flattens terrain to exactly the camp elevation and the firebase anchored at
-that same height, so every pad, road and burn scar was authored within 30 mm of the drawn
-ground while the cockpit depth quantum is ~5 mm at 100 m. `polygonOffset` could not fix it: all
-~200 parts merge into one mesh with one material, so it can never separate the camp's own
-layers. The drawn basin is now recessed 0.30 m under the camp, the firebase anchors 0.30 m
-lower to match, and the ground stack is re-authored upward through that depth in seven tiers
-45 mm apart. Contact height is preserved exactly; the kernel never sees it. Six invariants were
-restated, not weakened.
+Next candidate: Build 322 (branch `fix/cobra-scenery-pass`) — a scenery pass driven by frames
+pulled from the owner's Build 321 screen recording. The CC0 palms were being handed the foliage
+CARD ATLAS, whose UVs are unrelated to the mesh, so alphaTest punched holes through them and
+they rendered as black spiky scraps; authored geometry now gets its own lit material and no
+atlas. The same import inherited CLUMP dimensions (several notional trees) for a single mesh,
+which is why palms filled a third of the frame; authored meshes now scale to one tree. And the
+four radial laterite "tracks" — bright rectangles running out of the camp and stopping dead in
+open ground, reported repeatedly as "that random red line" — are removed, with a contract
+forbidding a surface strip that ends outside the scar apron. Verified by rendered frame.
 
 VERIFICATION CAVEAT: headless SwiftShader does not reproduce the symptom — the pad renders
 clean in BOTH the before and after builds, so the harness cannot demonstrate the improvement.
