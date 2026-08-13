@@ -273,6 +273,39 @@ test("Camp Ember's full 58 m level apron has no coarse-grid pits in any tier", (
   }
 });
 
+test("authored jungle geometry splits into a hero batch and stays inside every tier ceiling", () => {
+  // A stand-in for the CC0 palm: 480 triangles, the same order as the real 472-triangle
+  // variant. The point is the ACCOUNTING, not the shape.
+  const authoredTriangles = 480;
+  const palm = new THREE.BufferGeometry();
+  palm.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(new Float32Array(authoredTriangles * 9), 3),
+  );
+
+  for (const qualityTier of QUALITY_TIERS) {
+    const budget = COBRA_CANYON_RENDER_BUDGETS[qualityTier];
+    const { presentation } = create(qualityTier, { roleGeometries: { jungle: palm } });
+    const diagnostics = presentation.diagnostics();
+
+    assert.equal(diagnostics.withinBudget, true,
+      `${qualityTier} must stay inside its ceiling with authored geometry loaded`);
+    assert.ok(diagnostics.triangles <= budget.maxTriangles);
+    assert.ok(diagnostics.drawCalls <= budget.maxDrawCalls);
+
+    if (budget.maxAuthoredTriangles > 0) {
+      // The reserved slot is now spent: jungle renders as hero geometry PLUS a card field.
+      assert.equal(diagnostics.roleCounts.jungleRenderBatches, 2,
+        `${qualityTier} must split the jungle into hero and card batches`);
+      assert.equal(diagnostics.presentationDrawCallHeadroom, 0);
+    } else {
+      // Mobile is allowed no authored triangles at all, so it must ignore the mesh entirely.
+      assert.equal(diagnostics.roleCounts.jungleRenderBatches, 1,
+        "mobile must not spend triangles on authored geometry");
+    }
+  }
+});
+
 test("builds the real analytical basin and stays inside every tier ceiling", () => {
   for (const qualityTier of QUALITY_TIERS) {
     const { plan, presentation } = create(qualityTier);
@@ -299,7 +332,11 @@ test("builds the real analytical basin and stays inside every tier ceiling", () 
       diagnostics.roleCounts.assetInstances <= budget.maxAssetInstances,
       `${qualityTier} asset kit must respect its instance allocation`,
     );
-    assert.equal(diagnostics.presentationDrawCallHeadroom, 0);
+    // One draw call is RESERVED for the authored-geometry hero batch, which only exists once
+    // a glTF asset loads. Without one, every role renders as cards in a single batch and that
+    // slot stays free — so the reserve reads as headroom here, and is spent in the authored
+    // case below.
+    assert.equal(diagnostics.presentationDrawCallHeadroom, 1);
     assert.ok(diagnostics.presentationInstanceHeadroom >= 0);
     assert.ok(diagnostics.presentationTriangleHeadroom >= 512,
       `${qualityTier} must retain at least 512 presentation triangles of reserve`);
