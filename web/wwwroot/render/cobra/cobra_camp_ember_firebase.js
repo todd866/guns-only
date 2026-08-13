@@ -5,7 +5,7 @@
  * Replaces the old same-color AABB stack + green ground-war control disc.
  */
 
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=321";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=322";
 
 export const CAMP_EMBER_LANDMARK_ID = "landmark.cobra-canyon.camp-ember.v1";
 export const CAMP_EMBER_FIREBASE_SCHEMA = "guns-only.cobra-camp-ember-firebase.v1";
@@ -261,14 +261,15 @@ export function campEmberFirebaseParts() {
     add(`ring-road-${i}`, "laterite", "box", CAMP_EMBER_COLORS.laterite,
       33 * Math.cos(angle), 33 * Math.sin(angle), 0.134, 4.2, 0.012, 17.5, -angle, true);
   }
-  add("track-0", "laterite", "box", CAMP_EMBER_COLORS.laterite,
-    0, 33, 0.179, 2.4, 0.012, 38, 0, true);
-  add("track-1", "laterite", "box", CAMP_EMBER_COLORS.lateriteDark,
-    14, -20, 0.179, 2.0, 0.012, 30, 0.65, true);
-  add("track-2", "laterite", "box", CAMP_EMBER_COLORS.laterite,
-    -22, 16, 0.179, 2.0, 0.012, 27, -0.85, true);
-  add("track-3", "laterite", "box", CAMP_EMBER_COLORS.lateriteDark,
-    -12, -30, 0.179, 1.8, 0.012, 24, 0.35, true);
+  // The four radial "tracks" are GONE. They were 24-38 m bright-laterite rectangles running
+  // outward from the camp and stopping dead in open ground — from the cockpit, a hard-edged
+  // orange stripe leading nowhere, which is what the owner kept reporting as "that random red
+  // line". A track has to connect two places to read as a track; these connected the camp to
+  // nothing, so they read as a rendering artifact rather than terrain.
+  //
+  // The 12 ring-road segments above stay: they close a loop inside the camp, so they read as
+  // road. If radial tracks return they must run to something — the river ford, the treeline
+  // gap, the bridge approach — and taper rather than end square.
 
   // Two rosette positions: pit disc + radiating sandbag lobes (the aerial signature).
   const rosettes = [[-38, 8], [36, 14]];

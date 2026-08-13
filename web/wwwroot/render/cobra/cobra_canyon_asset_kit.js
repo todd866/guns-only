@@ -1,9 +1,9 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=321";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=322";
 import {
   FOLIAGE_UV_PALM,
   FOLIAGE_UV_UNDERSTORY,
   createSyntheticFoliageAtlasTexture,
-} from "./cobra_canyon_foliage.js?v=321";
+} from "./cobra_canyon_foliage.js?v=322";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -1162,6 +1162,27 @@ function tagObject(object, role, instanceCount = 0) {
   return object;
 }
 
+/**
+ * One authored palm replaces a CARD CLUMP, not a card. The clump dimensions describe several
+ * notional trees, so a single mesh inheriting them stands many times too tall.
+ */
+const AUTHORED_MESH_CLUMP_SCALE = 0.42;
+
+/**
+ * Material for authored glTF geometry. Unlike the crossed cards this has real volume and real
+ * normals, so it wants lighting — and it must NOT receive the card atlas, whose UV layout has
+ * nothing to do with the mesh's own.
+ */
+function authoredMeshMaterial(THREE, role) {
+  const material = new THREE.MeshLambertMaterial({
+    color: 0xffffff,
+    vertexColors: true,
+    side: THREE.DoubleSide,
+  });
+  material.name = `COBRA_CANYON_ASSET_${role.toUpperCase()}_AUTHORED_MATERIAL`;
+  return material;
+}
+
 function createRoleMesh(
   THREE, group, role, placements, resources, foliageAtlas = null,
   authoredGeometry = null, nameSuffix = "",
@@ -1171,7 +1192,13 @@ function createRoleMesh(
   // The cards stay as the declared fallback (asset-manifest.json), so a failed asset load
   // costs detail, never the scene.
   const geometry = authoredGeometry ?? geometryForRole(THREE, role);
-  const material = materialForRole(THREE, role, foliageAtlas);
+  // An authored mesh carries its OWN UVs. Handing it the foliage card atlas makes it sample
+  // arbitrary regions of an unrelated texture, and with alphaTest 0.48 that punches holes clean
+  // through the trunk and fronds — which is why the CC0 palms rendered as black spiky scraps
+  // instead of trees. Authored geometry gets a lit, vertex-coloured material and no atlas.
+  const material = authoredGeometry
+    ? authoredMeshMaterial(THREE, role)
+    : materialForRole(THREE, role, foliageAtlas);
   const mesh = tagObject(
     new THREE.InstancedMesh(geometry, material, placements.length),
     role,
@@ -1189,7 +1216,19 @@ function createRoleMesh(
     const placement = placements[index];
     position.set(placement.x, placement.y, placement.z);
     quaternion.setFromAxisAngle(yAxis, placement.yaw);
-    scale.set(placement.widthM, placement.heightM, placement.depthM);
+    // Card placements size a whole CLUMP — several notional trees on crossed quads. One
+    // authored palm standing at that size is a sixty-metre plant, which is what filled a third
+    // of the frame in the owner's Build 321 capture. Bring a real mesh back to single-tree
+    // scale; the field cards keep the clump size they were authored for.
+    if (authoredGeometry) {
+      scale.set(
+        placement.widthM * AUTHORED_MESH_CLUMP_SCALE,
+        placement.heightM * AUTHORED_MESH_CLUMP_SCALE,
+        placement.depthM * AUTHORED_MESH_CLUMP_SCALE,
+      );
+    } else {
+      scale.set(placement.widthM, placement.heightM, placement.depthM);
+    }
     matrix.compose(position, quaternion, scale);
     mesh.setMatrixAt(index, matrix);
     const tint = instanceTint(role, placement);

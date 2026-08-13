@@ -100,8 +100,20 @@ test("the firebase reads as a real FSB: scar, berm ring, rosettes, tracks, burns
     assert.ok(lobes.length >= 6, `${rosette} needs radiating sandbag lobes`);
   }
 
-  // Track spaghetti and burn scars are surfaces, never elevated geometry.
-  assert.ok(parts.filter((part) => part.id.startsWith("track-")).length >= 3);
+  // Radial tracks were REMOVED: bright laterite rectangles running out of the camp and stopping
+  // dead in open ground read from the cockpit as a hard orange stripe leading nowhere, not as
+  // terrain. The contract now forbids them coming back in that form — a track must connect the
+  // camp to something, and this test cannot see the wider world, so it simply requires that no
+  // surface strip ends outside the scar apron it belongs to.
+  const tracks = parts.filter((part) => part.id.startsWith("track-"));
+  for (const track of tracks) {
+    const reachM = Math.hypot(track.x, track.z) + Math.max(track.widthM, track.depthM) * 0.5;
+    assert.ok(reachM <= 56.5,
+      `${track.id} runs ${reachM.toFixed(1)} m out and ends in open ground`);
+  }
+  // The ring road stays: it closes a loop, so it reads as road rather than as an artifact.
+  assert.ok(parts.filter((part) => part.id.startsWith("ring-road-")).length >= 12,
+    "the camp still needs its closed ring road");
   const burns = parts.filter((part) => part.id.startsWith("burn-"));
   assert.ok(burns.length >= 2);
   assert.ok(burns.every((part) => part.surface === true
