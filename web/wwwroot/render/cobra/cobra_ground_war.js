@@ -3,7 +3,7 @@
  * Consumes authoritative ground_war snapshot fields; never invents combat truth.
  */
 
-import { isCampEmberGroundSite } from "./cobra_camp_ember_firebase.js?v=317";
+import { isCampEmberGroundSite } from "./cobra_camp_ember_firebase.js?v=318";
 
 export const COBRA_GROUND_WAR_PRESENTATION_SCHEMA =
   "guns-only.cobra-ground-war-presentation.v1";
