@@ -45,6 +45,39 @@ const FULLMAP = Object.freeze({
   labelFont: "600 12px ui-sans-serif, system-ui, sans-serif",
 });
 
+/**
+ * Height of the caption band above the chart, per size. The objective line has to reach the
+ * player in PLAY, and `body[data-shell="play"] .objective-hud { display: none }` (Build 302:
+ * mission cues live on the instrument, not in a prose card) means the DOM strip is lab-only.
+ * So the objective rides on the instrument — it is a chart caption, which is what a map legend
+ * has always been, rather than a reopening of that ruling.
+ */
+export const COBRA_MAP_CAPTION_PX = Object.freeze({ mini: 26, full: 44 });
+
+function drawCaption(ctx, caption, { widthPx, headerPx, full }) {
+  if (!caption?.line || !(headerPx > 0)) return;
+  ctx.save();
+  ctx.fillStyle = COBRA_MAP_COLORS.label;
+  ctx.font = full
+    ? "600 15px ui-sans-serif, system-ui, sans-serif"
+    : "600 10px ui-sans-serif, system-ui, sans-serif";
+  ctx.textBaseline = "middle";
+  const padPx = full ? 12 : 7;
+  ctx.fillText(caption.line, padPx, caption.detail && full ? headerPx * 0.34 : headerPx * 0.5);
+  if (caption.detail && full) {
+    ctx.fillStyle = COBRA_MAP_COLORS.muted;
+    ctx.font = "400 12px ui-sans-serif, system-ui, sans-serif";
+    ctx.fillText(caption.detail, padPx, headerPx * 0.72);
+  }
+  ctx.strokeStyle = COBRA_MAP_COLORS.border;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, headerPx - 0.5);
+  ctx.lineTo(widthPx, headerPx - 0.5);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function factionColor(faction) {
   return faction === "hostile" ? COBRA_MAP_COLORS.hostile : COBRA_MAP_COLORS.friendly;
 }
@@ -206,15 +239,28 @@ function drawLegend(ctx, model) {
  * @param {ReturnType<import("./cobra_tactical_map.js").cobraTacticalMapModel>} model
  * @param {{ full?: boolean, nowSeconds?: number }} [options]
  */
-export function drawCobraTacticalMap(ctx, model, { full = false, nowSeconds = 0 } = {}) {
+export function drawCobraTacticalMap(
+  ctx,
+  model,
+  { full = false, nowSeconds = 0, caption = null, headerPx = 0 } = {},
+) {
   if (!ctx || !model) return;
   const width = model.widthPx;
   const height = model.heightPx;
   if (!(width > 0) || !(height > 0)) return;
   const metrics = full ? FULLMAP : MINIMAP;
+  // The model was built for the CHART box; the caption band sits above it, so the panel is
+  // taller than the projection and everything below the band is drawn translated.
+  const band = caption?.line && headerPx > 0 ? headerPx : 0;
 
   ctx.save();
-  ctx.clearRect(0, 0, width, height);
+  ctx.clearRect(0, 0, width, height + band);
+  if (band > 0) {
+    ctx.fillStyle = COBRA_MAP_COLORS.backing;
+    ctx.fillRect(0, 0, width, band);
+    drawCaption(ctx, caption, { widthPx: width, headerPx: band, full });
+    ctx.translate(0, band);
+  }
   // Everything is clipped to the map box: a site clamped to the edge draws a disc whose rim
   // would otherwise bleed over the combiner, and a stray marker outside the frame reads as a
   // rendering fault rather than an off-map contact.

@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { cobraTacticalMapModel } from "../cobra_tactical_map.js";
-import { COBRA_MAP_COLORS, drawCobraTacticalMap } from "../cobra_tactical_map_draw.js";
+import {
+  COBRA_MAP_CAPTION_PX,
+  COBRA_MAP_COLORS,
+  drawCobraTacticalMap,
+} from "../cobra_tactical_map_draw.js";
 
 /**
  * Recording 2D-context double. Canvas does not exist headless, so the assertions are made
@@ -268,4 +272,58 @@ test("an empty ground war draws the chrome and does not throw", () => {
   const ctx = recordingContext();
   drawCobraTacticalMap(ctx, cobraTacticalMapModel({ bounds: BOUNDS, widthPx: 200, heightPx: 200 }));
   assert.ok(ctx.calls.some((call) => call.name === "strokeRect"));
+});
+
+/**
+ * The objective caption is not decoration: `body[data-shell="play"] .objective-hud` is
+ * display:none (Build 302 — mission cues live on the instrument, not in a prose card), so the
+ * chart caption is the ONLY path by which conquest orders reach a player who is flying. If
+ * these go quiet the mission silently stops telling anyone what to do, which is the exact
+ * defect this feature exists to fix.
+ */
+test("the objective caption reaches the minimap, above the chart", () => {
+  const ctx = recordingContext();
+  const model = cobraTacticalMapModel({ bounds: BOUNDS, widthPx: 200, heightPx: 174 });
+  drawCobraTacticalMap(ctx, model, {
+    headerPx: COBRA_MAP_CAPTION_PX.mini,
+    caption: { line: "DESTROY GARRISON · LONG FANG", detail: "1.8 km" },
+  });
+  const texts = ctx.calls.filter((call) => call.name === "fillText");
+  assert.deepEqual(texts.map((call) => String(call.args[0])), ["DESTROY GARRISON · LONG FANG"]);
+  // Drawn in the band, before the chart is translated into place.
+  assert.ok(texts[0].args[2] < COBRA_MAP_CAPTION_PX.mini, "caption must sit inside its band");
+  assert.ok(
+    ctx.calls.some((call) => call.name === "translate"
+      && call.args[1] === COBRA_MAP_CAPTION_PX.mini),
+    "the chart must be translated below the caption band",
+  );
+});
+
+test("the full map caption carries the detail line too", () => {
+  const ctx = recordingContext();
+  const model = cobraTacticalMapModel({ bounds: BOUNDS, widthPx: 900, heightPx: 700 });
+  drawCobraTacticalMap(ctx, model, {
+    full: true,
+    headerPx: COBRA_MAP_CAPTION_PX.full,
+    caption: { line: "DESTROY GARRISON · LONG FANG", detail: "1.8 km — kill the garrison" },
+  });
+  const texts = ctx.calls.filter((call) => call.name === "fillText").map((call) => String(call.args[0]));
+  assert.ok(texts.includes("DESTROY GARRISON · LONG FANG"));
+  assert.ok(texts.includes("1.8 km — kill the garrison"));
+});
+
+test("no caption means no band and no translate", () => {
+  const ctx = recordingContext();
+  const model = cobraTacticalMapModel({ bounds: BOUNDS, widthPx: 200, heightPx: 200 });
+  drawCobraTacticalMap(ctx, model, { headerPx: COBRA_MAP_CAPTION_PX.mini, caption: null });
+  assert.equal(ctx.calls.filter((call) => call.name === "fillText").length, 0);
+  assert.ok(!ctx.calls.some((call) => call.name === "translate" && call.args[1] === COBRA_MAP_CAPTION_PX.mini));
+});
+
+test("the lab wires the objective caption into both charts", async () => {
+  const main = await readFile(new URL("../../../cobra-lab/main.js", import.meta.url), "utf8");
+  const draw = main.match(/function drawTacticalMaps\(timeMs\) \{[\s\S]*?\n\}\n/)?.[0] ?? "";
+  assert.ok(draw.length > 0, "drawTacticalMaps not found");
+  assert.match(draw, /cobraObjectiveCopy\(/);
+  assert.equal((draw.match(/caption/g) ?? []).length >= 3, true);
 });

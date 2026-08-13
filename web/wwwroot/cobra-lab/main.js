@@ -26,7 +26,10 @@ import {
   cobraTacticalMapBounds,
   cobraTacticalMapModel,
 } from "../render/cobra/cobra_tactical_map.js?v=322";
-import { drawCobraTacticalMap } from "../render/cobra/cobra_tactical_map_draw.js?v=322";
+import {
+  COBRA_MAP_CAPTION_PX,
+  drawCobraTacticalMap,
+} from "../render/cobra/cobra_tactical_map_draw.js?v=322";
 import {
   emberActObjectiveOverlay,
   emberPathGuidanceState,
@@ -701,17 +704,30 @@ function tacticalMapModelFor(widthPx, heightPx, showUnits) {
 function drawTacticalMaps(timeMs) {
   if (parkedCamera) return;
   const nowSeconds = timeMs / 1_000;
+  // The objective rides on the chart because the prose card is play-hidden by Build 302
+  // (mission cues live on the instrument). Without this the conquest orders reach nobody who
+  // is actually flying — which is the exact complaint this whole change answers.
+  const caption = cobraObjectiveCopy(authorityState?.ground_war, {
+    selectedTargetId: targetSelect?.value || authorityState?.gunner?.selected_target_id || "",
+    playerHasInteracted,
+  });
   if (tacticalMapOpen) {
     const box = sizeMapCanvas(tacticalMapCanvas, tacticalMapCtx);
-    const model = box && tacticalMapModelFor(box.width, box.height, true);
-    if (model) drawCobraTacticalMap(tacticalMapCtx, model, { full: true, nowSeconds });
+    const headerPx = COBRA_MAP_CAPTION_PX.full;
+    const model = box && tacticalMapModelFor(box.width, box.height - headerPx, true);
+    if (model) {
+      drawCobraTacticalMap(tacticalMapCtx, model, { full: true, nowSeconds, caption, headerPx });
+    }
     return;
   }
   const box = sizeMapCanvas(minimapCanvas, minimapCtx);
+  const headerPx = COBRA_MAP_CAPTION_PX.mini;
   // Units stay off the minimap: at 200 px the whole valley is ~30 px per kilometre and a dozen
   // infantry markers would bury the four points the player is actually flying between.
-  const model = box && tacticalMapModelFor(box.width, box.height, false);
-  if (model) drawCobraTacticalMap(minimapCtx, model, { full: false, nowSeconds });
+  const model = box && tacticalMapModelFor(box.width, box.height - headerPx, false);
+  if (model) {
+    drawCobraTacticalMap(minimapCtx, model, { full: false, nowSeconds, caption, headerPx });
+  }
 }
 
 /**
