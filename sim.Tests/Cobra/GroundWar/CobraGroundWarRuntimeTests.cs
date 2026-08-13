@@ -47,7 +47,9 @@ public class CobraGroundWarRuntimeTests
     public void IronBellSeedsADestroyableHostileFight()
     {
         CobraGroundWarRuntime war = CreateWar();
-        ContestedSite bridge = war.Sites.First(site => site.Label == "Iron Bell Bridge");
+        // Key off the stable id, never the display label: labels are cosmetic and were renamed
+        // for era accuracy (2026-08-12), which broke this test for no behavioural reason.
+        ContestedSite bridge = war.Sites.First(site => site.Id == "site.iron-bell-bridge.v1");
         GroundUnit[] hostiles = war.LivingUnits()
             .Where(unit => unit.Faction == GroundFaction.Hostile && unit.HomeSiteId == bridge.Id)
             .ToArray();
@@ -66,7 +68,7 @@ public class CobraGroundWarRuntimeTests
         CobraGroundWarRuntime war = CreateWar();
 
         Assert.Equal(4, war.Sites.Count);
-        Assert.Contains(war.Sites, site => site.Label == "Iron Bell Bridge");
+        Assert.Contains(war.Sites, site => site.Id == "site.iron-bell-bridge.v1");
         Assert.Contains(war.Sites, site => site.Label == "Camp Ember");
         Assert.True(war.LivingUnits().Count() >= 16);
         Assert.True(war.LivingUnits().Count() <= CobraGroundWarRuntime.MaxLivingUnits);

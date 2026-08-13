@@ -1,9 +1,10 @@
 # Current product and verification status
 
-Updated: 2026-08-12
-Production: Build 313, revision `d6cf83ef5883bf26951b29e85859fee4a3d1bb0d0`, deployment
-`dpl_ride313` (verified live via /api/build-info 2026-08-12). Builds 312 (Cobra contact
-envelope) and 313 (Camp Ember firebase, ramp Cobras, bird swap) both shipped this day. Builds
+Updated: 2026-08-13
+Production: Build 315, revision `44bca02436c2b67a0573a4766876785e6d09841b`, deployment
+`dpl_GVeg4nRiDQUBEmuXFzBc1FSSd7Rg` (verified live via /api/build-info 2026-08-13, including a
+remote weekend-ride route smoke). Builds 312 (Cobra contact envelope), 313 (Camp Ember
+firebase, ramp Cobras, bird swap) and 315 (Weekend Ride lap timing) shipped in sequence. Builds
 253-298 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
 Promoted with Build 311 and still live: Builds 308 (consolidation: bounded long-range terrain marches,
@@ -12,12 +13,18 @@ preview) and 310 (rated-arena Multiplayer preview) went live as part of the Buil
 promotion. Top Gun and Multiplayer remain preview-only and fail closed unless `?preview=1` is
 explicitly acknowledged; their promotion to production routes still requires representative
 human ACM and multiplayer player-path acceptance.
-Next candidate: Build 315 (branch `feature/ride-lap-timing`) — Weekend Ride becomes a game
-(`docs/superpowers/specs/2026-08-12-weekend-ride-lap-timing-design.md`): the lap time now
-survives the finish line, four sector splits come from gates the circuit was already firing,
-a personal best refuses any lap ridden off-track or crashed, and a live delta chases that best
-at the same point on the circuit. The best persists across sessions and seeds the sim on boot,
-failing safe through every storage failure.
+Next candidate: Build 318 (branch `feature/structure-materials`) — the authored structures
+stop being cardboard. Bridge deck, piers, roads, hero cells and landmarks now share a
+world-position procedural grain/wear/streak chunk reusing the terrain's precision-safe hash,
+so the biggest object on a nap-of-the-earth frame is no longer one flat fill sitting on a
+five-octave world (`docs/art-direction/bfv-graphics-gap-2026-08-12.md`). Also retires the
+invented "Iron Bell": the bridge is Cau Song Ma, THE JAW on the radio, after Thanh Hoa's Ham
+Rong; the falls are Thac Nam Ngoi, THE STAIRS. Landmark ids are unchanged. And the corridor is no longer empty: the authored ambient
+population was 1,600 instances across 6.9 km, which is why the hillsides read as bare — now
+6,828 on desktop and 2,400 on balanced, with the pack's own budget contract raised to match.
+Mobile is deliberately unchanged. Perf on real hardware is UNPROVEN (SwiftShader frame times
+are meaningless); `cobra_frame_ms` from the next owner flight is the measurement, and the
+existing ambient governor still sheds density automatically if frames slip.
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
 evidence for the build and commit they name, but they do not override this page or the executable

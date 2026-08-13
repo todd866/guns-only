@@ -444,11 +444,11 @@ public sealed class CobraCanyonDefinition
             // (owner 2026-08-10 riverboat open).
             new Vec3D(-6_775.0, 218.0, -6_200.0)),
         new CobraCanyonLandmarkDefinition(
-            "landmark.cobra-canyon.long-fang-falls.v1", "Long Fang Falls",
+            "landmark.cobra-canyon.long-fang-falls.v1", "Thac Nam Ngoi · THE STAIRS",
             CobraCanyonLandmarkKind.Waterfall,
             new Vec3D(-4_450.0, 236.0, -3_380.0)),
         new CobraCanyonLandmarkDefinition(
-            "landmark.cobra-canyon.iron-bell-bridge.v1", "Iron Bell Bridge",
+            "landmark.cobra-canyon.iron-bell-bridge.v1", "Cau Song Ma · THE JAW",
             CobraCanyonLandmarkKind.Bridge,
             new Vec3D(-2_710.0, 146.0, -500.0)),
         new CobraCanyonLandmarkDefinition(

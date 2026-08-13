@@ -107,7 +107,7 @@ export function emberActObjectiveOverlay(act, options = {}) {
         line: remaining
           ? `INGRESS · ${remaining} TO THE BRIDGE`
           : "INGRESS · FOLLOW THE GORGE TO THE BRIDGE",
-        detail: "Stay on the soft path — Iron Bell Bridge is the fight",
+        detail: "Stay on the soft path — the Jaw is the fight",
       };
     case "engage":
       return {

@@ -43,6 +43,19 @@ standard, and their absence is why the picture reads a generation earlier than t
 4. **Ground clutter** in the near band only (grass/undergrowth cards), radius-limited.
 5. **Structure materials + damage states** for corridor buildings.
 
+## Attempted and REVERTED: scaling the jungle prop (2026-08-13)
+
+After the density raise, widening the per-instance jungle footprint (bulk 1.15-1.8 -> 1.25-2.7,
+height 1.55-2.2 -> 1.45-2.4) was tried to make neighbouring stands merge into continuous
+canopy. It does not work and was reverted. Scaling a fern/palm archetype produces a BIGGER
+FERN, not canopy: the near-field props read as oversized weeds and the valley walls stayed
+bare. The scenery gate passed throughout, which is worth noting — its edge/spatial/heterogeneity
+metrics do not capture "this looks silly".
+
+Canopy needs a canopy ARCHETYPE — a broad, low-relief mass whose silhouette is a treetop layer
+rather than a plant — plus a treeline/edge variant. That is authored content, not a parameter,
+and it is the honest next step for the jungle read.
+
 ## Constraints carried in
 
 - Keep the illustrative house style ([[art-direction-tf2]]) — texture the world, do not
