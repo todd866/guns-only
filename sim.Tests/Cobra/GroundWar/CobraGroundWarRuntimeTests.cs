@@ -234,26 +234,34 @@ public class CobraGroundWarRuntimeTests
     }
 
     /// <summary>
-    /// The Hold-the-Bridge timers must be wall-clock, not a count of Advance calls: once the
-    /// ground war steps at its own cadence, a tick-counted timer would stretch the 45 s hold to
-    /// four and a half minutes.
+    /// The ticket bleed must be wall-clock, not a count of Advance calls: the mission runtime
+    /// batches this runtime to its own strategic cadence, so a tick-counted bleed would run an
+    /// order of magnitude slow at 10 Hz and an order fast at 120 Hz. Same wall-clock window and
+    /// same board must spend the same tickets at any step rate. (Replaces the old
+    /// HoldTheBridgeTimersAreWallClockAtAnyStepRate, which pinned the same invariant on the
+    /// control-hold timers tickets have superseded.)
     /// </summary>
     [Theory]
     [InlineData(120.0)]
     [InlineData(20.0)]
     [InlineData(10.0)]
-    public void HoldTheBridgeTimersAreWallClockAtAnyStepRate(double stepHz)
+    public void TicketBleedIsWallClockAtAnyStepRate(double stepHz)
     {
         CobraGroundWarRuntime war = CreateWar();
+        foreach (ContestedSite site in war.Sites)
+            war.OverrideSiteOccupancyForTests(site.Id, friendly: 1, hostile: 0);
         double stepSeconds = 1.0 / stepHz;
-        int steps = (int)Math.Round(CobraGroundWarRuntime.VictoryHoldSeconds / stepSeconds);
-        for (int step = 0; step < steps; step++) {
-            war.OverrideControlForTests(CobraGroundWarRuntime.VictoryControlThreshold + 0.05);
+        for (int step = 0; step < (int)Math.Round(25.0 / stepSeconds); step++)
             war.Advance(stepSeconds);
-        }
+        Assert.Equal(4, war.FriendlyPointsHeld);
 
-        Assert.Equal(HoldTheBridgeOutcome.Victory, war.MissionOutcome);
-        Assert.Equal(1.0, war.VictoryHoldProgress, 3);
+        double hostileAtSplit = war.HostileTickets;
+        const double windowSeconds = 30.0;
+        for (int step = 0; step < (int)Math.Round(windowSeconds / stepSeconds); step++)
+            war.Advance(stepSeconds);
+
+        double expected = CobraGroundWarRuntime.TicketBleedPerSecondPerPoint * 4.0 * windowSeconds;
+        Assert.Equal(expected, hostileAtSplit - war.HostileTickets, 6);
     }
 
     [Fact]
@@ -288,33 +296,49 @@ public class CobraGroundWarRuntimeTests
         Assert.Equal(healthBefore, still.Health, 3);
     }
 
+    /// <summary>
+    /// The control number must no longer be able to decide anything. Pinning it past the old
+    /// victory threshold for far longer than the old 45 s hold must leave the mission Pending.
+    /// (Replaces HoldingFriendlyControlWinsHoldTheBridge, which asserted the opposite.)
+    /// </summary>
     [Fact]
-    public void HoldingFriendlyControlWinsHoldTheBridge()
+    public void PinnedControlNoLongerDecidesTheMission()
     {
         CobraGroundWarRuntime war = CreateWar();
         Assert.Equal(HoldTheBridgeOutcome.Pending, war.MissionOutcome);
 
-        for (int tick = 0; tick < CobraGroundWarRuntime.VictoryHoldTicks; tick++) {
+        const double stepSeconds = 0.25;
+        for (int step = 0; step < (int)Math.Round(120.0 / stepSeconds); step++) {
             war.OverrideControlForTests(CobraGroundWarRuntime.VictoryControlThreshold + 0.05);
-            war.Advance(PlayerVehicleContract.FixedDeltaSeconds);
+            war.Advance(stepSeconds);
         }
 
-        Assert.Equal(HoldTheBridgeOutcome.Victory, war.MissionOutcome);
-        Assert.Equal("held-bridge", war.MissionOutcomeReason);
-        Assert.Equal(1.0, war.VictoryHoldProgress, 3);
+        Assert.Equal(HoldTheBridgeOutcome.Pending, war.MissionOutcome);
+        Assert.True(war.Balance.Control >= CobraGroundWarRuntime.VictoryControlThreshold,
+            "control survives as a readout even though it decides nothing");
     }
 
+    /// <summary>
+    /// Losing the points loses the battle. (Replaces DeepHostileControlLosesHoldTheBridge, which
+    /// drove defeat through the control number.)
+    /// </summary>
     [Fact]
-    public void DeepHostileControlLosesHoldTheBridge()
+    public void LosingEveryPointExhaustsFriendlyTickets()
     {
         CobraGroundWarRuntime war = CreateWar();
-        for (int tick = 0; tick < CobraGroundWarRuntime.DefeatHoldTicks; tick++) {
-            war.OverrideControlForTests(CobraGroundWarRuntime.DefeatControlThreshold - 0.05);
-            war.Advance(PlayerVehicleContract.FixedDeltaSeconds);
-        }
+        foreach (ContestedSite site in war.Sites)
+            war.OverrideSiteOccupancyForTests(site.Id, friendly: 0, hostile: 1);
 
+        const double stepSeconds = 0.25;
+        int steps = (int)Math.Round(400.0 / stepSeconds);
+        for (int step = 0;
+            step < steps && war.MissionOutcome == HoldTheBridgeOutcome.Pending;
+            step++)
+            war.Advance(stepSeconds);
+
+        Assert.Equal(0, war.FriendlyPointsHeld);
         Assert.Equal(HoldTheBridgeOutcome.Defeat, war.MissionOutcome);
-        Assert.Equal("lost-basin", war.MissionOutcomeReason);
+        Assert.Equal("tickets-exhausted", war.MissionOutcomeReason);
     }
 
     [Fact]
@@ -493,6 +517,89 @@ public class CobraGroundWarRuntimeTests
         Assert.Equal(GroundSiteOwner.Friendly, site.Owner);
     }
 
+    /// <summary>
+    /// Pins occupancy and runs the board forward until the requested points have actually changed
+    /// hands, so a bleed assertion measures the split it means to measure and not the 20 s flip
+    /// window on the way there. Returns nothing — the caller reads the runtime.
+    /// </summary>
+    static void SettleOccupancy(CobraGroundWarRuntime war, double stepSeconds = 0.25)
+    {
+        for (int step = 0; step < (int)Math.Round(25.0 / stepSeconds); step++)
+            war.Advance(stepSeconds);
+    }
+
+    [Fact]
+    public void HoldingMorePointsBleedsTheOtherSide()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        war.OverrideSiteOccupancyForTests("site.camp-ember.v1", friendly: 1, hostile: 0);
+        war.OverrideSiteOccupancyForTests("site.iron-bell-bridge.v1", friendly: 1, hostile: 0);
+        war.OverrideSiteOccupancyForTests("site.plantation-water-tower.v1", friendly: 1, hostile: 0);
+        war.OverrideSiteOccupancyForTests("site.red-earth-quarry.v1", friendly: 0, hostile: 1);
+        SettleOccupancy(war);
+
+        Assert.Equal(3, war.FriendlyPointsHeld);
+        Assert.Equal(1, war.HostilePointsHeld);
+        // The board opens 1-3, so friendly bleeds during the flip window and only then stops. Both
+        // facts matter: measure from the settled split.
+        double friendlyAtSplit = war.FriendlyTickets;
+        double hostileAtSplit = war.HostileTickets;
+        Assert.True(
+            friendlyAtSplit < CobraGroundWarRuntime.StartingTickets,
+            "friendly must have bled while it was still the side down on points");
+
+        const double stepSeconds = 0.25;
+        for (int step = 0; step < (int)Math.Round(60.0 / stepSeconds); step++)
+            war.Advance(stepSeconds);
+
+        Assert.True(war.HostileTickets < hostileAtSplit - 50.0,
+            $"hostile tickets {war.HostileTickets:F1} must bleed at a 3-1 split");
+        Assert.Equal(friendlyAtSplit, war.FriendlyTickets, 6);
+    }
+
+    [Fact]
+    public void AnEvenSplitBleedsNeitherSide()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        war.OverrideSiteOccupancyForTests("site.camp-ember.v1", friendly: 1, hostile: 0);
+        war.OverrideSiteOccupancyForTests("site.iron-bell-bridge.v1", friendly: 1, hostile: 0);
+        war.OverrideSiteOccupancyForTests("site.plantation-water-tower.v1", friendly: 0, hostile: 1);
+        war.OverrideSiteOccupancyForTests("site.red-earth-quarry.v1", friendly: 0, hostile: 1);
+        SettleOccupancy(war);
+
+        Assert.Equal(2, war.FriendlyPointsHeld);
+        Assert.Equal(2, war.HostilePointsHeld);
+        double friendly = war.FriendlyTickets;
+        double hostile = war.HostileTickets;
+
+        const double stepSeconds = 0.25;
+        for (int step = 0; step < (int)Math.Round(60.0 / stepSeconds); step++)
+            war.Advance(stepSeconds);
+
+        Assert.Equal(friendly, war.FriendlyTickets, 6);
+        Assert.Equal(hostile, war.HostileTickets, 6);
+    }
+
+    [Fact]
+    public void TicketExhaustionEndsTheMission()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        foreach (ContestedSite site in war.Sites)
+            war.OverrideSiteOccupancyForTests(site.Id, friendly: 1, hostile: 0);
+
+        const double stepSeconds = 0.25;
+        int steps = (int)Math.Round(400.0 / stepSeconds);
+        for (int step = 0;
+            step < steps && war.MissionOutcome == HoldTheBridgeOutcome.Pending;
+            step++)
+            war.Advance(stepSeconds);
+
+        Assert.Equal(HoldTheBridgeOutcome.Victory, war.MissionOutcome);
+        Assert.Equal("tickets-exhausted", war.MissionOutcomeReason);
+        Assert.True(war.HostileTickets <= 0.0);
+        Assert.Equal(1.0, war.VictoryHoldProgress, 6);
+    }
+
     [Fact]
     public void MissionRuntimeTerminalizesOnHoldTheBridgeVictory()
     {
@@ -505,14 +612,16 @@ public class CobraGroundWarRuntimeTests
             runtime.Cobra.State.GrossMassKg,
             CobraMissionRuntime.DefaultAirDensityKgM3);
         var command = new VerticalLiftPilotCommand(collective, 0.0, 0.0, 0.0);
+        // Victory is now a ticket question: pin every point friendly and let the bleed run. The
+        // whole point of driving it through CobraMissionRuntime is that the ground war steps at
+        // its own strategic cadence — a tick-counted bleed would never terminalize here.
+        foreach (ContestedSite site in runtime.GroundWar.Sites)
+            runtime.GroundWar.OverrideSiteOccupancyForTests(site.Id, friendly: 1, hostile: 0);
+        int maxTicks = (int)Math.Round(400.0 / PlayerVehicleContract.FixedDeltaSeconds);
         for (int tick = 0;
-            tick < CobraGroundWarRuntime.VictoryHoldTicks
-                && runtime.Status == CobraMissionStatus.Active;
-            tick++) {
-            runtime.GroundWar.OverrideControlForTests(
-                CobraGroundWarRuntime.VictoryControlThreshold + 0.05);
+            tick < maxTicks && runtime.Status == CobraMissionStatus.Active;
+            tick++)
             runtime.Advance(command);
-        }
 
         Assert.Equal(CobraMissionStatus.Victory, runtime.Status);
         Assert.Equal(HoldTheBridgeOutcome.Victory, runtime.GroundWar.MissionOutcome);

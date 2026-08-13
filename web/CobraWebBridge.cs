@@ -252,11 +252,18 @@ public static partial class CobraWebBridge
                     landmark_id = site.LandmarkId,
                     label = site.Label,
                     local_control = site.LocalControl,
+                    owner = site.Owner.ToString().ToLowerInvariant(),
+                    capture_progress = site.CaptureProgress,
+                    contested = site.IsContested,
                     x_m = site.PositionWorldM.X,
                     y_m = site.PositionWorldM.Y,
                     z_m = site.PositionWorldM.Z,
                     capture_radius_m = site.CaptureRadiusM,
                 }).ToArray(),
+                tickets = new {
+                    friendly = groundWar.FriendlyTickets,
+                    hostile = groundWar.HostileTickets,
+                },
                 units = groundWar.Units.Select(unit => new {
                     id = unit.Id,
                     faction = unit.Faction.ToString().ToLowerInvariant(),

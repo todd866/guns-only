@@ -54,16 +54,18 @@ public sealed class CobraGroundWarRuntime
     /// <summary>20 s to flip an uncontested point. The Cobra never captures — only ground units
     /// occupy — so this is the clock the player's rounds buy time on.</summary>
     public const double CaptureRatePerSecond = 1.0 / 20.0;
+    /// <summary>
+    /// Conquest tickets. The battle is decided here, not by the control number: the side holding
+    /// fewer points bleeds in proportion to the deficit, so taking and keeping ground is the only
+    /// way to win. An even split bleeds nobody, which is what makes a stalemate a stalemate.
+    /// </summary>
+    public const double StartingTickets = 300.0;
+    public const double TicketBleedPerSecondPerPoint = 0.5;
+    // Control is now a derived READOUT only (HUD label, telemetry, debrief peaks). These
+    // thresholds survive because the bridge and the lab HUD publish them to colour that readout;
+    // nothing in this file gates an outcome on them any more.
     public const double VictoryControlThreshold = 0.55;
-    public const double VictoryHoldSeconds = 45.0;
     public const double DefeatControlThreshold = -0.75;
-    public const double DefeatHoldSeconds = 30.0;
-    // The hold timers themselves are wall-clock (see EvaluateHoldTheBridge); these remain as the
-    // 120 Hz tick equivalents fixtures use to drive a hold at the airframe rate.
-    public static readonly int VictoryHoldTicks =
-        (int)Math.Round(VictoryHoldSeconds / PlayerVehicleContract.FixedDeltaSeconds);
-    public static readonly int DefeatHoldTicks =
-        (int)Math.Round(DefeatHoldSeconds / PlayerVehicleContract.FixedDeltaSeconds);
 
     static readonly string[] ContestedLandmarkIds = {
         "landmark.cobra-canyon.iron-bell-bridge.v1",
@@ -98,8 +100,8 @@ public sealed class CobraGroundWarRuntime
     int _fobRearmCount;
     int _roundsExpended;
     long _authorityTick;
-    double _friendlyHoldSeconds;
-    double _hostileHoldSeconds;
+    double _friendlyTickets = StartingTickets;
+    double _hostileTickets = StartingTickets;
     HoldTheBridgeOutcome _missionOutcome = HoldTheBridgeOutcome.Pending;
     string _missionOutcomeReason = "";
     double? _forcedControlForTests;
@@ -139,10 +141,18 @@ public sealed class CobraGroundWarRuntime
     public IReadOnlyList<GroundWarEvent> RecentEvents => _recentEvents;
     public HoldTheBridgeOutcome MissionOutcome => _missionOutcome;
     public string MissionOutcomeReason => _missionOutcomeReason;
+    public double FriendlyTickets => _friendlyTickets;
+    public double HostileTickets => _hostileTickets;
+    public int FriendlyPointsHeld =>
+        _sites.Count(site => site.Owner == GroundSiteOwner.Friendly);
+    public int HostilePointsHeld =>
+        _sites.Count(site => site.Owner == GroundSiteOwner.Hostile);
+    // Kept as properties, redefined against tickets: the mission act ladder and the HUD both read
+    // these as "how close is this to being over", which is now a ticket question.
     public double VictoryHoldProgress =>
-        Math.Clamp(_friendlyHoldSeconds / VictoryHoldSeconds, 0.0, 1.0);
+        Math.Clamp(1.0 - _hostileTickets / StartingTickets, 0.0, 1.0);
     public double DefeatHoldProgress =>
-        Math.Clamp(_hostileHoldSeconds / DefeatHoldSeconds, 0.0, 1.0);
+        Math.Clamp(1.0 - _friendlyTickets / StartingTickets, 0.0, 1.0);
 
     public GroundWarDebrief Debrief => new(
         _hostileKillsByPlayer,
@@ -196,30 +206,35 @@ public sealed class CobraGroundWarRuntime
             MaybeReinforce(dtSeconds);
             if (_forcedControlForTests is double forced)
                 _balance.OverrideControl(forced);
-            EvaluateHoldTheBridge(dtSeconds);
+            BleedTickets(dtSeconds);
         }
         _authorityTick++;
     }
 
-    // Wall-clock, not a count of Advance calls: the mission runtime batches this runtime to a
-    // strategic cadence (CobraMissionRuntime.GroundWarStepHz), so a tick-counted 45 s hold would
-    // silently become a four-and-a-half-minute one.
-    void EvaluateHoldTheBridge(double dtSeconds)
+    /// <summary>
+    /// Wall-clock, not a count of Advance calls: the mission runtime batches this runtime to a
+    /// strategic cadence (CobraMissionRuntime.GroundWarStepHz), so a tick-counted bleed would run
+    /// an order of magnitude slow. The side down on points bleeds in proportion to the deficit;
+    /// an even split bleeds nobody.
+    /// </summary>
+    void BleedTickets(double dtSeconds)
     {
-        if (_balance.Control >= VictoryControlThreshold) {
-            _friendlyHoldSeconds += dtSeconds;
-            _hostileHoldSeconds = 0.0;
-        } else if (_balance.Control <= DefeatControlThreshold) {
-            _hostileHoldSeconds += dtSeconds;
-            _friendlyHoldSeconds = 0.0;
-        } else {
-            _friendlyHoldSeconds = 0.0;
-            _hostileHoldSeconds = 0.0;
-        }
+        int friendlyPoints = FriendlyPointsHeld;
+        int hostilePoints = HostilePointsHeld;
+        int friendlyDeficit = hostilePoints - friendlyPoints;
+        int hostileDeficit = friendlyPoints - hostilePoints;
+        if (friendlyDeficit > 0)
+            _friendlyTickets = Math.Max(
+                0.0,
+                _friendlyTickets - TicketBleedPerSecondPerPoint * friendlyDeficit * dtSeconds);
+        if (hostileDeficit > 0)
+            _hostileTickets = Math.Max(
+                0.0,
+                _hostileTickets - TicketBleedPerSecondPerPoint * hostileDeficit * dtSeconds);
 
-        if (_friendlyHoldSeconds + 1e-9 >= VictoryHoldSeconds) {
+        if (_hostileTickets <= 0.0) {
             _missionOutcome = HoldTheBridgeOutcome.Victory;
-            _missionOutcomeReason = "held-bridge";
+            _missionOutcomeReason = "tickets-exhausted";
             _recentEvents.Add(new GroundWarEvent(
                 _authorityTick,
                 "mission-victory",
@@ -227,9 +242,9 @@ public sealed class CobraGroundWarRuntime
                 null,
                 GroundFaction.Friendly,
                 _fob.CentreWorldM));
-        } else if (_hostileHoldSeconds + 1e-9 >= DefeatHoldSeconds) {
+        } else if (_friendlyTickets <= 0.0) {
             _missionOutcome = HoldTheBridgeOutcome.Defeat;
-            _missionOutcomeReason = "lost-basin";
+            _missionOutcomeReason = "tickets-exhausted";
             _recentEvents.Add(new GroundWarEvent(
                 _authorityTick,
                 "mission-defeat",
