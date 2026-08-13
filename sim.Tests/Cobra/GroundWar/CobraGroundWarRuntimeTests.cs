@@ -637,7 +637,7 @@ public class CobraGroundWarRuntimeTests
         const string siteId = GarrisonTestSiteId;
         ContestedSite site = war.Sites.First(candidate => candidate.Id == siteId);
         Assert.Equal(GroundSiteOwner.Hostile, site.Owner);
-        ContestedSite camp = war.Sites.First(candidate => candidate.Label == "Camp Ember");
+        ContestedSite camp = war.Sites.First(candidate => candidate.Id == "site.camp-ember.v1");
         Vec3D padWorldM = new(
             camp.PositionWorldM.X, camp.PositionWorldM.Y + 2.0, camp.PositionWorldM.Z);
 
