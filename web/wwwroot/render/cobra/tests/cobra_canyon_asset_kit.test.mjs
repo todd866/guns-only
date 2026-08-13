@@ -6,6 +6,7 @@ import { planCobraCanyonWorld } from "../cobra_canyon_plan.js";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   COBRA_CANYON_ASSET_ROLES,
+  cobraCanyonAssetRoleScaleForTests,
   createCobraCanyonAssetKit,
 } from "../cobra_canyon_asset_kit.js";
 
@@ -235,4 +236,28 @@ test("disposes every owned geometry and material exactly once", () => {
   assert.equal(kit.group.children.length, 0);
   for (const count of disposeCounts.values()) assert.equal(count, 1);
   assert.equal(kit.diagnostics().disposed, true);
+});
+
+test("understory is grass height, not canopy height", () => {
+  // Five cell kinds map to the single "jungle" role, and role-only sizing gave ridge GRASS the
+  // canopy band: 16-30 m tall, about twenty times life size. The owner's question — "how tall
+  // are those plants and what are they supposed to be" — was asked of a frame full of grass
+  // blades taller than the aircraft flying over them.
+  const canopy = cobraCanyonAssetRoleScaleForTests("jungle",
+    { id: "archetype.cobra-canyon.jungle-canopy.v1" }, 0.5);
+  const understory = cobraCanyonAssetRoleScaleForTests("jungle",
+    { id: "archetype.cobra-canyon.jungle-understory.v1" }, 0.5);
+
+  assert.ok(canopy.heightM >= 16 && canopy.heightM <= 30,
+    `canopy must stay canopy-sized, got ${canopy.heightM} m`);
+  assert.ok(understory.heightM <= 4,
+    `understory must be grass/scrub height, got ${understory.heightM} m`);
+  assert.ok(understory.heightM < canopy.heightM / 4,
+    "understory must be dramatically shorter than canopy, not a nudge");
+});
+
+test("an authored scaleM still wins over both bands", () => {
+  const declared = cobraCanyonAssetRoleScaleForTests("jungle",
+    { id: "archetype.cobra-canyon.jungle-understory.v1", scaleM: { height: 9 } }, 0.5);
+  assert.equal(declared.heightM, 9);
 });

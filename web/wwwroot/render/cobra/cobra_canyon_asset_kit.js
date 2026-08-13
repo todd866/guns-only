@@ -337,6 +337,21 @@ function gridPoint(bounds, ordinal, count, seed) {
   };
 }
 
+/**
+ * Understory is grass, verge clutter and low scrub — knee-to-head height, not canopy. The
+ * authored descriptor id carries the distinction (`jungle-understory` vs `jungle-canopy`); this
+ * is the only thing that reads it.
+ */
+function isJungleUnderstory(descriptor) {
+  const id = String(descriptor?.id ?? descriptor?.descriptorId ?? "");
+  return id.includes("understory");
+}
+
+/** Test seam for the role/descriptor size bands. Not used by the renderer. */
+export function cobraCanyonAssetRoleScaleForTests(role, descriptor, variation) {
+  return roleScale(role, descriptor, variation);
+}
+
 function roleScale(role, descriptor, variation) {
   const declared = descriptor?.scaleM ?? descriptor?.dimensionsM;
   const read = (key, index, fallback) => Math.max(0.1, finite(
@@ -346,6 +361,21 @@ function roleScale(role, descriptor, variation) {
     fallback,
   ));
   if (role === "jungle") {
+    // Canopy and understory are the SAME role but not the same plant. Five cell kinds map to
+    // "jungle" — riparian canopy, highland canopy, bamboo-and-scrub, road-verge clutter and
+    // ridge GRASS — and this function branched only on role, so every one of them took the
+    // canopy band. Neither the world cells nor the procedural archetypes declare a scaleM, so
+    // nothing downstream corrected it: ridge grass was drawn as a 16-30 m clump, roughly twenty
+    // times life size, which is why the frame filled with grass blades taller than the aircraft
+    // was flying. The descriptor already knew — `jungle-understory` vs `jungle-canopy` — it was
+    // simply never consulted.
+    if (isJungleUnderstory(descriptor)) {
+      return {
+        widthM: read("width", 0, 3.5 + variation * 3),
+        heightM: read("height", 1, 1.1 + variation * 2.6),
+        depthM: read("depth", 2, 3.5 + variation * 3),
+      };
+    }
     return {
       widthM: read("width", 0, 13 + variation * 8),
       heightM: read("height", 1, 16 + variation * 14),
