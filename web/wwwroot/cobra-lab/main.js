@@ -1041,8 +1041,13 @@ function syncAuthorityCamera() {
   const presence = ensureAh1gPresence();
   updateAh1gPresence(presence, vehicle, presenceDeltaSeconds);
   eyeWorldFromVehicle(THREE, vehicle, camera.position);
-  if (camera.near !== 0.12) {
-    camera.near = 0.12;
+  // 0.30, not 0.12. Depth precision goes as z²/(near·2²⁴), so the cockpit's old near plane cost
+  // 2.5× the resolution of the parked review camera's 0.5 — which is why review stills always
+  // understated the Camp Ember shimmer that play showed. The nearest cockpit geometry to the
+  // rear-seat eye is the canopy glass at ~0.38 m, so 0.30 clears it with margin while 0.5 would
+  // clip it.
+  if (camera.near !== 0.3) {
+    camera.near = 0.3;
     camera.updateProjectionMatrix();
   }
 

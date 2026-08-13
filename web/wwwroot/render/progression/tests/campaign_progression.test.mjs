@@ -44,7 +44,7 @@ test("one catalog names every route and exposes only accepted production experie
     { id: "medevac-command", mission: null, releaseState: "quarantined" },
     { id: "cobra-lab", mission: null, releaseState: "production" },
     { id: "weekend-ride", mission: null, releaseState: "production" },
-    { id: "top-gun", mission: null, releaseState: "production" },
+    { id: "top-gun", mission: null, releaseState: "preview" },
   ]);
 
   assert.deepEqual(productionExperiences().map(({ id }) => id), [
@@ -52,12 +52,14 @@ test("one catalog names every route and exposes only accepted production experie
     "rapier-intercept",
     "cobra-lab",
     "weekend-ride",
-    "top-gun",
   ]);
-  // Top Gun was promoted on owner acceptance 2026-08-13; it must now launch with no preview
-  // acknowledgement and carry no blocker, or the promotion is cosmetic.
-  assert.equal(experienceLaunchable("top-gun"), true);
-  assert.equal(experienceById("top-gun").blocker, "");
+  // Top Gun stays gated until it actually launches. The blocker must name the measured defect
+  // rather than an outstanding ceremony, so nobody promotes it again on a sign-off alone.
+  assert.equal(experienceLaunchable("top-gun"), false);
+  assert.match(experienceById("top-gun").blocker, /terrain warmup|autoLaunchPending/i);
+  // It must NOT carry a standalone route: there is no /top-gun/ page, and defaulting one makes
+  // the launch button navigate to a 404 the moment the gate opens.
+  assert.equal(experienceById("top-gun").route, null);
   assert.equal(experienceLaunchable("multiplayer"), false);
   assert.match(experienceById("multiplayer").blocker, /matchmaking.*player path/i);
   assert.equal(experienceLaunchable("weekend-ride"), true);
