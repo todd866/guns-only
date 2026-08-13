@@ -762,7 +762,9 @@ function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
-function smoothstep(minimum, maximum, value) {
+// Exported so the presentation's Camp Ember recess feathers on the EXACT ramp the apron
+// flattens on. Two copies of this curve would drift and leave a step at the blend edge.
+export function smoothstep(minimum, maximum, value) {
   if (maximum <= minimum) return value >= maximum ? 1 : 0;
   const unit = clamp((value - minimum) / (maximum - minimum), 0, 1);
   return unit * unit * (3 - 2 * unit);
