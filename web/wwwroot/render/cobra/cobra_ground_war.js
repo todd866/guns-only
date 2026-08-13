@@ -3,7 +3,7 @@
  * Consumes authoritative ground_war snapshot fields; never invents combat truth.
  */
 
-import { isCampEmberGroundSite } from "./cobra_camp_ember_firebase.js?v=318";
+import { isCampEmberGroundSite } from "./cobra_camp_ember_firebase.js?v=320";
 
 export const COBRA_GROUND_WAR_PRESENTATION_SCHEMA =
   "guns-only.cobra-ground-war-presentation.v1";
@@ -69,14 +69,48 @@ function roleGeometry(THREE, role) {
     group.userData.role = "hard-point";
     return group;
   }
-  // Infantry clump: three bodies + heads so they read as people, not crates.
+  // Infantry clump. The previous silhouette was a 0.85 m square, 2.1 m tall box under a 0.76 m
+  // sphere — a fridge wearing a beach ball, which is what "blocks with sphere-heads" was
+  // describing. Soldiers are NARROW and roughly 1.8 m: the cues that survive to a helicopter at
+  // nap-of-the-earth height are the upright proportion, the shoulder line, the helmet dome and
+  // a weapon breaking the vertical. Build those and drop the mass.
   const group = new THREE.Group();
-  for (const [x, z] of [[-1.2, 0.5], [0.15, -0.9], [1.1, 0.55]]) {
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.85, 2.1, 0.85), undefined);
-    body.position.set(x, 1.05, z);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.38, 6, 5), undefined);
-    head.position.set(x, 2.35, z);
-    group.add(body, head);
+  const figures = [
+    { x: -1.15, z: 0.45, yaw: 0.35 },
+    { x: 0.15, z: -0.85, yaw: -0.9 },
+    { x: 1.05, z: 0.6, yaw: 2.1 },
+  ];
+  for (const { x, z, yaw } of figures) {
+    // Yaw is applied to each part's OFFSET rather than via a per-figure pivot: the sim-side
+    // test doubles supply meshes with a position and nothing else, so leaning on Object3D
+    // rotation or scale here would make this module untestable off a real Three.js.
+    const cos = Math.cos(yaw);
+    const sin = Math.sin(yaw);
+    const place = (mesh, ox, y, oz) => {
+      mesh.position.set(x + ox * cos - oz * sin, y, z + ox * sin + oz * cos);
+      group.add(mesh);
+    };
+
+    // Legs: two thin uprights, not one block. The gap between them is most of what says
+    // "person" at distance.
+    for (const legX of [-0.13, 0.13]) {
+      place(new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.85, 0.19), undefined), legX, 0.43, 0);
+    }
+
+    // Torso: shoulders wider than deep, which is the proportion a single box never had.
+    place(new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.62, 0.27), undefined), 0, 1.16, 0);
+
+    // Webbing/pack, offset behind the torso — breaks the flat slab and gives the figure a
+    // facing, which is what makes a yaw spread visible at all.
+    place(new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.42, 0.16), undefined), 0, 1.2, -0.2);
+
+    // Helmet at a HUMAN scale: 0.26 m across, not the old 0.76 m beach ball, and seated on the
+    // shoulders with no neck gap.
+    place(new THREE.Mesh(new THREE.SphereGeometry(0.13, 6, 4), undefined), 0, 1.55, 0);
+
+    // Slung rifle: a horizontal bar across the vertical figure is the single most legible
+    // "armed" cue from nap-of-the-earth height, and it costs twelve triangles.
+    place(new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.09, 0.92), undefined), 0.2, 1.09, 0.1);
   }
   group.userData.composite = true;
   group.userData.role = "infantry";

@@ -53,6 +53,13 @@ test("one catalog names every route and exposes only accepted production experie
     "cobra-lab",
     "weekend-ride",
   ]);
+  // Top Gun stays gated until it actually launches. The blocker must name the measured defect
+  // rather than an outstanding ceremony, so nobody promotes it again on a sign-off alone.
+  assert.equal(experienceLaunchable("top-gun"), false);
+  assert.match(experienceById("top-gun").blocker, /terrain warmup|autoLaunchPending/i);
+  // It must NOT carry a standalone route: there is no /top-gun/ page, and defaulting one makes
+  // the launch button navigate to a 404 the moment the gate opens.
+  assert.equal(experienceById("top-gun").route, null);
   assert.equal(experienceLaunchable("multiplayer"), false);
   assert.match(experienceById("multiplayer").blocker, /matchmaking.*player path/i);
   assert.equal(experienceLaunchable("weekend-ride"), true);

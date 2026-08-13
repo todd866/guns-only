@@ -1,9 +1,9 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=318";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=320";
 import {
   FOLIAGE_UV_PALM,
   FOLIAGE_UV_UNDERSTORY,
   createSyntheticFoliageAtlasTexture,
-} from "./cobra_canyon_foliage.js?v=318";
+} from "./cobra_canyon_foliage.js?v=320";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -1162,16 +1162,22 @@ function tagObject(object, role, instanceCount = 0) {
   return object;
 }
 
-function createRoleMesh(THREE, group, role, placements, resources, foliageAtlas = null) {
+function createRoleMesh(
+  THREE, group, role, placements, resources, foliageAtlas = null,
+  authoredGeometry = null, nameSuffix = "",
+) {
   if (!placements.length) return null;
-  const geometry = geometryForRole(THREE, role);
+  // An authored CC0 mesh wins over the procedural cards when one is supplied for this batch.
+  // The cards stay as the declared fallback (asset-manifest.json), so a failed asset load
+  // costs detail, never the scene.
+  const geometry = authoredGeometry ?? geometryForRole(THREE, role);
   const material = materialForRole(THREE, role, foliageAtlas);
   const mesh = tagObject(
     new THREE.InstancedMesh(geometry, material, placements.length),
     role,
     placements.length,
   );
-  mesh.name = `COBRA_CANYON_ASSET_${role.toUpperCase()}`;
+  mesh.name = `COBRA_CANYON_ASSET_${role.toUpperCase()}${nameSuffix}`;
   mesh.instanceMatrix.setUsage(THREE.StaticDrawUsage);
   const matrix = new THREE.Matrix4();
   const position = new THREE.Vector3();
@@ -1259,15 +1265,48 @@ export function createCobraCanyonAssetKit(THREE, plan, options = {}) {
   const controllers = [];
   const rolePlacements = Object.fromEntries(COBRA_CANYON_ASSET_ROLES.map((role) => [role, []]));
   for (const placement of planned.placements) rolePlacements[placement.role].push(placement);
+  // An authored palm is ~470 triangles against a card's dozen, so it cannot go on every
+  // placement: the whole jungle would cost millions of triangles and the tier budget throws.
+  // Spend a fixed triangle allowance on real palms and keep cards for the rest. The heroes are
+  // taken at a fixed stride so they scatter across the whole valley instead of clustering —
+  // real geometry everywhere, at whatever density the budget affords.
+  const authoredTriangleBudget = Math.max(0, Math.trunc(finite(options.authoredTriangleBudget, 0)));
+  const heroSplits = new Map();
   for (const role of COBRA_CANYON_ASSET_ROLES) {
-    const controller = createRoleMesh(
-      THREE,
-      group,
-      role,
-      rolePlacements[role],
-      resources,
-      role === "jungle" ? foliageAtlas : null,
+    const authored = options.roleGeometries?.[role] ?? null;
+    const placements = rolePlacements[role];
+    if (!authored || !placements.length || authoredTriangleBudget <= 0) continue;
+    const unitTriangles = Math.max(1, Math.trunc(authored.attributes.position.count / 3));
+    const affordable = Math.min(
+      placements.length,
+      Math.trunc(authoredTriangleBudget / unitTriangles),
     );
+    if (affordable <= 0) continue;
+    const stride = Math.max(1, Math.floor(placements.length / affordable));
+    const hero = [];
+    const field = [];
+    for (let index = 0; index < placements.length; index++) {
+      if (index % stride === 0 && hero.length < affordable) hero.push(placements[index]);
+      else field.push(placements[index]);
+    }
+    heroSplits.set(role, { authored, hero, field });
+  }
+
+  for (const role of COBRA_CANYON_ASSET_ROLES) {
+    const atlas = role === "jungle" ? foliageAtlas : null;
+    const split = heroSplits.get(role);
+    if (split) {
+      const heroController = createRoleMesh(
+        THREE, group, role, split.hero, resources, atlas, split.authored, "_HERO",
+      );
+      if (heroController) controllers.push(heroController);
+      const fieldController = createRoleMesh(
+        THREE, group, role, split.field, resources, atlas, null, "",
+      );
+      if (fieldController) controllers.push(fieldController);
+      continue;
+    }
+    const controller = createRoleMesh(THREE, group, role, rolePlacements[role], resources, atlas);
     if (controller) controllers.push(controller);
   }
 
@@ -1292,11 +1331,13 @@ export function createCobraCanyonAssetKit(THREE, plan, options = {}) {
     assetInstances: planned.placements.length,
   };
   for (const role of COBRA_CANYON_ASSET_ROLES) {
-    const roleController = controllers.find((controller) => controller.role === role);
+    // A role with an authored mesh renders as TWO batches (hero geometry + card field), so
+    // count them rather than asking whether one exists.
+    const roleControllers = controllers.filter((controller) => controller.role === role);
     const setPieceCount = planned.setPieces.filter((placement) => placement.role === role).length;
     roleCountsRecord[`${role}AuthoredBatches`] = batchSets[role].size;
     roleCountsRecord[`${role}Batches`] = batchSets[role].size;
-    roleCountsRecord[`${role}RenderBatches`] = roleController ? 1 : 0;
+    roleCountsRecord[`${role}RenderBatches`] = roleControllers.length;
     roleCountsRecord[`${role}SetPieceInstances`] = setPieceCount;
     roleCountsRecord[`${role}Instances`] = rolePlacements[role].length;
   }

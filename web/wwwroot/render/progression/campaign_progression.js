@@ -160,6 +160,11 @@ export const EXPERIENCE_CATALOG = Object.freeze([
   experience({
     id: "top-gun",
     mission: null,
+    // Top Gun has NO standalone page: it stages onto the bridge inside the main shell, unlike
+    // cobra-lab or weekend-ride. Without this, experience() defaults a missionless entry's
+    // route to `/top-gun/`, launchMission takes the standalone branch, and the launch button
+    // navigates to a 404. The preview gate hid that for as long as the mode was unreachable.
+    route: null,
     sequence: 11,
     aircraft: "F-14A",
     title: "Top Gun",
@@ -167,7 +172,13 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     qualification: "",
     releaseState: EXPERIENCE_RELEASE_STATE.PREVIEW,
     visible: true,
-    blocker: "Dogfight automation is green; a representative human ACM flight is still outstanding.",
+    // Owner cleared the acceptance flight 2026-08-13, so promotion was attempted — and the
+    // attempt found the mode does not start. With the gate open and the /top-gun/ 404 fixed,
+    // Fly stages the mission, prepareMissionTerrain reports the terrain not ready, and launch
+    // parks in autoLaunchPending forever: three minutes, twice, on the Range-capable smoke
+    // server as well as a plain one, so it is not the documented Range-fallback stall.
+    // The gate stays shut until launch completes; the blocker is now a defect, not a ceremony.
+    blocker: "Terrain warmup never completes: Fly stages the mission and launch parks in autoLaunchPending.",
   }),
 ]);
 

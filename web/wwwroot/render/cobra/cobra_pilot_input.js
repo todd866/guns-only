@@ -5,6 +5,17 @@ const DEFAULT_CYCLIC_FULL_TRAVEL_PER_SECOND = 2.5;
 const DEFAULT_PEDAL_FULL_TRAVEL_PER_SECOND = 2.5;
 const DEFAULT_AXIS_DEADZONE = 0.12;
 
+/**
+ * Cyclic expo. A hover lives in roughly the inner fifth of cyclic travel, and a linear stick
+ * spends the same resolution there as it does at the stops — which is why holding a hover felt
+ * like the controls were too sensitive precisely where they had to be finest. This curve gives
+ * the centre band about a third of its linear command while leaving FULL authority at full
+ * deflection, so nothing the aircraft could previously do becomes unreachable.
+ *
+ * 0 is linear, 1 is pure cubic. 0.65 was chosen so |0.2| stick reads ~0.075 command.
+ */
+export const COBRA_CYCLIC_EXPO = 0.65;
+
 function finiteUnit(value, minimum = -1, maximum = 1) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return 0;
@@ -53,6 +64,23 @@ function freezeState(state) {
  * Persistent pilot lever and stick positions for the AH-1G production input path.
  * Collective is a held lever; cyclic and pedals are spring-centred sticks.
  */
+/**
+ * Shapes a cyclic STICK POSITION into the command sent to the flight model. Deliberately not
+ * folded into the control state: the state stays a truthful record of where the stick is, so
+ * slew, spring-centering and the on-screen readouts keep behaving linearly and the curve cannot
+ * compound frame over frame.
+ *
+ * @param {number} position stick position in [-1, 1]
+ * @returns {number} command in [-1, 1], same sign, never larger in magnitude
+ */
+export function cobraCyclicCommand(position, expo = COBRA_CYCLIC_EXPO) {
+  const value = finiteUnit(position);
+  const strength = Math.min(1, Math.max(0, Number(expo) || 0));
+  const magnitude = Math.abs(value);
+  const shaped = strength * magnitude * magnitude * magnitude + (1 - strength) * magnitude;
+  return value < 0 ? -shaped : shaped;
+}
+
 export function createCobraPilotControlState(collective = 0.5) {
   return freezeState({
     collective,

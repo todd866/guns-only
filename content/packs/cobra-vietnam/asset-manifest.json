@@ -1,0 +1,133 @@
+{
+  "$schema": "../../schemas/asset-manifest.schema.json",
+  "schemaVersion": "1.0.0",
+  "manifestId": "manifest.cobra-vietnam.vegetation.v1",
+  "assets": [
+    {
+      "id": "vegetation.jungle.palm-cluster.v1",
+      "kind": "model",
+      "role": "environment.vegetation",
+      "status": "production",
+      "licenseRef": "license.quaternius-cc0.v1",
+      "sources": [],
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": {
+            "uri": "assets/vegetation/palm-cluster.glb",
+            "format": "glb",
+            "mediaType": "model/gltf-binary",
+            "sha256": "70275b7159f1790e2997113ce1373a6abc93dd609a2fa778e6edd5c0d4ba2904",
+            "sizeBytes": 1120784
+          },
+          "budgets": {
+            "triangles": 1920,
+            "drawCalls": 10,
+            "materials": 2,
+            "textureMemoryMiB": 4,
+            "maxTextureDimension": 1024
+          }
+        }
+      ],
+      "fallbacks": [
+        {
+          "type": "procedural_factory",
+          "uri": "procedural://cobra-canyon/foliage-cards/current",
+          "parameters": {
+            "role": "jungle"
+          },
+          "notes": "The existing crossed foliage cards remain the far-field and low-tier stand-in; the authored CC0 mesh is the near-ring LOD."
+        }
+      ]
+    },
+    {
+      "id": "vegetation.jungle.plant-clumps.v1",
+      "kind": "model",
+      "role": "environment.vegetation",
+      "status": "production",
+      "licenseRef": "license.quaternius-cc0.v1",
+      "sources": [],
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": {
+            "uri": "assets/vegetation/plant-clumps.glb",
+            "format": "glb",
+            "mediaType": "model/gltf-binary",
+            "sha256": "71d438bf6693a76c6dc5e8d85417d9b738a7d85eb643358a8937c9ee872953b5",
+            "sizeBytes": 342312
+          },
+          "budgets": {
+            "triangles": 580,
+            "drawCalls": 3,
+            "materials": 1,
+            "textureMemoryMiB": 4,
+            "maxTextureDimension": 1024
+          }
+        }
+      ],
+      "fallbacks": [
+        {
+          "type": "procedural_factory",
+          "uri": "procedural://cobra-canyon/foliage-cards/current",
+          "parameters": {
+            "role": "jungle"
+          },
+          "notes": "The existing crossed foliage cards remain the far-field and low-tier stand-in; the authored CC0 mesh is the near-ring LOD."
+        }
+      ]
+    },
+    {
+      "id": "vegetation.jungle.flower-clumps.v1",
+      "kind": "model",
+      "role": "environment.vegetation",
+      "status": "production",
+      "licenseRef": "license.quaternius-cc0.v1",
+      "sources": [],
+      "lods": [
+        {
+          "level": 0,
+          "minProjectedPixels": 0,
+          "source": {
+            "uri": "assets/vegetation/flower-clumps.glb",
+            "format": "glb",
+            "mediaType": "model/gltf-binary",
+            "sha256": "e221f4204af6c1e76d8bd95f4fb4abd60ea55d401ab5f9d31726ae1feb1b21a1",
+            "sizeBytes": 372664
+          },
+          "budgets": {
+            "triangles": 1360,
+            "drawCalls": 7,
+            "materials": 1,
+            "textureMemoryMiB": 4,
+            "maxTextureDimension": 1024
+          }
+        }
+      ],
+      "fallbacks": [
+        {
+          "type": "procedural_factory",
+          "uri": "procedural://cobra-canyon/foliage-cards/current",
+          "parameters": {
+            "role": "jungle"
+          },
+          "notes": "The existing crossed foliage cards remain the far-field and low-tier stand-in; the authored CC0 mesh is the near-ring LOD."
+        }
+      ]
+    }
+  ],
+  "manifestVersion": "0.1.0",
+  "packId": "cobra-vietnam",
+  "coordinateSystem": {
+    "units": "metres",
+    "upAxis": "+y",
+    "forwardAxis": "-z",
+    "handedness": "right"
+  },
+  "defaultLicenseSet": {
+    "id": "licenses.cobra-vietnam.vegetation.v1",
+    "uri": "licenses.json"
+  }
+}
