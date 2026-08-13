@@ -165,9 +165,11 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     title: "Top Gun",
     shortObjective: "1986 ACM — Tomcat or MiG-28, guns and Sidewinders.",
     qualification: "",
-    releaseState: EXPERIENCE_RELEASE_STATE.PREVIEW,
+    // Promoted to production on owner acceptance (2026-08-13). The outstanding item was a
+    // representative human ACM flight, which is the owner's call to sign off, and they made it.
+    releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
     visible: true,
-    blocker: "Dogfight automation is green; a representative human ACM flight is still outstanding.",
+    blocker: "",
   }),
 ]);
 

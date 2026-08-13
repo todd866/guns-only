@@ -44,7 +44,7 @@ test("one catalog names every route and exposes only accepted production experie
     { id: "medevac-command", mission: null, releaseState: "quarantined" },
     { id: "cobra-lab", mission: null, releaseState: "production" },
     { id: "weekend-ride", mission: null, releaseState: "production" },
-    { id: "top-gun", mission: null, releaseState: "preview" },
+    { id: "top-gun", mission: null, releaseState: "production" },
   ]);
 
   assert.deepEqual(productionExperiences().map(({ id }) => id), [
@@ -52,7 +52,12 @@ test("one catalog names every route and exposes only accepted production experie
     "rapier-intercept",
     "cobra-lab",
     "weekend-ride",
+    "top-gun",
   ]);
+  // Top Gun was promoted on owner acceptance 2026-08-13; it must now launch with no preview
+  // acknowledgement and carry no blocker, or the promotion is cosmetic.
+  assert.equal(experienceLaunchable("top-gun"), true);
+  assert.equal(experienceById("top-gun").blocker, "");
   assert.equal(experienceLaunchable("multiplayer"), false);
   assert.match(experienceById("multiplayer").blocker, /matchmaking.*player path/i);
   assert.equal(experienceLaunchable("weekend-ride"), true);
