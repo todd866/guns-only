@@ -707,9 +707,16 @@ function drawTacticalMaps(timeMs) {
   // The objective rides on the chart because the prose card is play-hidden by Build 302
   // (mission cues live on the instrument). Without this the conquest orders reach nobody who
   // is actually flying — which is the exact complaint this whole change answers.
+  // The pose is not optional garnish: without it cobraObjectiveCopy falls back to snapshot
+  // order rather than range, so the caption can order the pilot to the FAR garrison while a
+  // nearer one is the actual job. In play this caption is the only order the pilot ever sees.
   const caption = cobraObjectiveCopy(authorityState?.ground_war, {
     selectedTargetId: targetSelect?.value || authorityState?.gunner?.selected_target_id || "",
     playerHasInteracted,
+    player: { eastM: vehiclePose.x_m, northM: vehiclePose.z_m },
+    actOverlay: emberActObjectiveOverlay(authorityState?.mission_act, {
+      remainingM: authorityState?.route_guidance?.remaining_m,
+    }),
   });
   if (tacticalMapOpen) {
     const box = sizeMapCanvas(tacticalMapCanvas, tacticalMapCtx);

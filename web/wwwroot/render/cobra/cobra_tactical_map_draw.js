@@ -158,7 +158,14 @@ function drawSites(ctx, model, metrics, { full, nowSeconds }) {
         -Math.PI / 2,
         -Math.PI / 2 + Math.PI * 2 * Math.min(1, progress),
       );
-      ctx.strokeStyle = COBRA_MAP_COLORS.friendly;
+      // The ring belongs to whoever is TAKING the point, which is the side that does not own
+      // it: the sim publishes capture_progress as progress toward the non-owner. Painting it
+      // friendly unconditionally drew a friendly ring on a friendly point being overrun — the
+      // map said you were winning a point you were losing, on the one instrument that exists
+      // to tell you otherwise.
+      ctx.strokeStyle = site.owner === "friendly"
+        ? COBRA_MAP_COLORS.hostile
+        : COBRA_MAP_COLORS.friendly;
       ctx.lineWidth = full ? 3 : 2;
       ctx.stroke();
     }

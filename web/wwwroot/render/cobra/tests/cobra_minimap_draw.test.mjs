@@ -360,3 +360,26 @@ test("both chart canvases carry explicit dimensions", async () => {
     assert.match(block, /(^|\s)height:/, `${id} must set an explicit height`);
   }
 });
+
+test("the capture ring belongs to the side taking the point, not always friendly", () => {
+  // capture_progress is published as progress toward the NON-owner. Painting it friendly
+  // unconditionally drew a friendly ring on a friendly point being overrun — the map claimed
+  // you were winning a point you were losing.
+  const ringStyle = (owner) => {
+    const ctx = recordingContext();
+    drawCobraTacticalMap(ctx, cobraTacticalMapModel({
+      sites: [{ id: "s", label: "S", x_m: 500, y_m: 0, z_m: 500, owner, capture_progress: 0.4, contested: false, capture_radius_m: 60 }],
+      player: { eastM: 0, northM: 0, headingRad: 0 },
+      bounds: BOUNDS, widthPx: 200, heightPx: 200, showUnits: false,
+    }));
+    let lastArc = null;
+    for (const call of ctx.calls) {
+      if (call.name === "arc") lastArc = call;
+      if (call.name === "stroke" && lastArc) return call.strokeStyle;
+      if (call.name === "fill") lastArc = null;
+    }
+    return null;
+  };
+  assert.equal(ringStyle("friendly"), COBRA_MAP_COLORS.hostile);
+  assert.equal(ringStyle("hostile"), COBRA_MAP_COLORS.friendly);
+});

@@ -38,6 +38,33 @@ function siteLabel(site) {
   return String(site?.label ?? site?.id ?? "THE POINT").toUpperCase();
 }
 
+/**
+ * Any living friendly ground unit inside the site's own published capture radius. Derived
+ * strictly from what the sim publishes — positions, factions and the radius are all snapshot
+ * fields — so this reads state rather than guessing at it.
+ */
+function unitsInsideSite(units, site, faction) {
+  const radiusM = Number(site?.capture_radius_m);
+  const east = Number(site?.x_m);
+  const north = Number(site?.z_m);
+  if (!Number.isFinite(radiusM) || !Number.isFinite(east) || !Number.isFinite(north)) return [];
+  return units.filter((unit) => unit
+    && unit.alive
+    && unit.faction === faction
+    && Number.isFinite(unit.x_m)
+    && Number.isFinite(unit.z_m)
+    && Math.hypot(unit.x_m - east, unit.z_m - north) <= radiusM);
+}
+
+function hasFriendlyPresence(units, site) {
+  return unitsInsideSite(units, site, "friendly").length > 0;
+}
+
+/** Any living hostile inside the radius — the sim will not insert onto a point that has one. */
+function hasHostilePresence(units, site) {
+  return unitsInsideSite(units, site, "hostile").length > 0;
+}
+
 function hasLivingGarrison(units, siteId) {
   const garrisonId = `${siteId}${GARRISON_ID_SUFFIX}`;
   return units.some((unit) => unit && unit.alive && unit.id === garrisonId);
@@ -181,12 +208,15 @@ export function cobraObjectiveCopy(war, options = {}) {
       hostileTickets,
     );
     if (friendlyTickets < startTickets * CRITICAL_TICKET_FRACTION) {
+      // TICKETS, not points. Points are the four sites on the map and there are never more
+      // than four of them; saying "down 240 points" to a pilot looking at a four-point chart
+      // is not a rounding error in the copy, it is a different quantity.
       const deficit = Math.max(0, Math.round(hostileTickets - friendlyTickets));
       return {
         line: "LOSING THE VALLEY",
         detail: deficit > 0
-          ? `Down ${deficit} points — take a hostile point back or the pool runs out`
-          : `${Math.round(friendlyTickets)} points left — take a hostile point back to stop the bleed`,
+          ? `Down ${deficit} tickets — take a hostile point back or the pool runs out`
+          : `${Math.round(friendlyTickets)} tickets left — take a hostile point back to stop the bleed`,
       };
     }
   }
@@ -216,6 +246,23 @@ export function cobraObjectiveCopy(war, options = {}) {
   if (capturing.length) {
     const { site } = capturing[0];
     const progressPct = Math.round(Math.min(1, Math.max(0, Number(site.capture_progress) || 0)) * 100);
+    // "Friendlies will take it" is only true if any friendly is actually standing in the
+    // radius. Reinforcements hold their own points rather than marching kilometres, so a
+    // cleared point far from the line can sit open with nobody near it — and the strip was
+    // promising a capture that could not happen while the pilot orbited waiting for it.
+    // Three distinct states once the garrison is down, and they ask for different flying.
+    if (hasHostilePresence(units, site)) {
+      return {
+        line: `CLEAR THE POINT · ${siteLabel(site)}`,
+        detail: "Hostiles still on it — nothing lands until the point is empty",
+      };
+    }
+    if (!hasFriendlyPresence(units, site)) {
+      return {
+        line: `LIFT INBOUND · ${siteLabel(site)}`,
+        detail: "Point clear — cover it until the squad is on the ground",
+      };
+    }
     return {
       line: `HOLDING ${siteLabel(site)} · ${progressPct}%`,
       detail: "Keep hostiles off it while friendlies take it",

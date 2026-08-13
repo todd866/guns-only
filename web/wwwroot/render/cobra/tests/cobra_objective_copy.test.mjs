@@ -23,6 +23,11 @@ function garrison(siteId, alive = true) {
   return { id: `${siteId}.garrison`, faction: "hostile", role: "garrison", alive, x_m: 0, y_m: 0, z_m: 0 };
 }
 
+/** A friendly clump standing inside a site, which is what makes a capture actually possible. */
+function friendlyAt(site) {
+  return { id: `fri.${site.id}`, faction: "friendly", role: "infantry", alive: true, x_m: site.x_m, y_m: 0, z_m: site.z_m };
+}
+
 function conquest(overrides = {}) {
   return {
     ammo_dry: false,
@@ -49,7 +54,7 @@ test("2. friendly tickets under a fifth of the start says the valley is being lo
     tickets: { friendly: 44, hostile: 260 },
   }), { player: PLAYER });
   assert.equal(copy.line, "LOSING THE VALLEY");
-  assert.match(copy.detail, /Down 216 points/);
+  assert.match(copy.detail, /Down 216 tickets/);
 });
 
 test("3. a hostile point with a living garrison is the core instruction, with range", () => {
@@ -78,12 +83,40 @@ test("3. a dead garrison does not keep the destroy order up", () => {
 });
 
 test("4. a hostile point with no living garrison becomes a hold order with progress", () => {
+  const ford = site("ford", "Ford", "hostile", { capture_progress: 0.42 });
   const copy = cobraObjectiveCopy(conquest({
-    sites: [site("bridge", "Bridge", "friendly"), site("ford", "Ford", "hostile", { capture_progress: 0.42 })],
-    units: [garrison("ford", false)],
+    sites: [site("bridge", "Bridge", "friendly"), ford],
+    units: [garrison("ford", false), friendlyAt(ford)],
   }), { player: PLAYER });
   assert.equal(copy.line, "HOLDING FORD · 42%");
   assert.match(copy.detail, /keep hostiles off it/i);
+});
+
+test("4b. a cleared point with no friendlies in it says the lift is coming, not that it is taken", () => {
+  // The sim lifts a squad onto a CLEAR point after AirMobileInsertionSeconds. Until it lands
+  // there is nobody to capture, so promising "friendlies will take it" parks the pilot in an
+  // orbit waiting for something that has not started.
+  const ford = site("ford", "Ford", "hostile", { capture_progress: 0 });
+  const copy = cobraObjectiveCopy(conquest({
+    sites: [site("bridge", "Bridge", "friendly"), ford],
+    units: [garrison("ford", false)],
+  }), { player: PLAYER });
+  assert.equal(copy.line, "LIFT INBOUND · FORD");
+  assert.match(copy.detail, /cover it/i);
+});
+
+test("4c. hostiles still on a cleared-garrison point ask for the point to be cleared", () => {
+  // Nothing lands while a hostile stands in the radius, so the order is to clear it — not to
+  // wait for a lift that the sim will not send.
+  const ford = site("ford", "Ford", "hostile", { capture_progress: 0 });
+  const copy = cobraObjectiveCopy(conquest({
+    sites: [site("bridge", "Bridge", "friendly"), ford],
+    units: [
+      garrison("ford", false),
+      { id: "hos.1", faction: "hostile", role: "infantry", alive: true, x_m: ford.x_m, y_m: 0, z_m: ford.z_m },
+    ],
+  }), { player: PLAYER });
+  assert.equal(copy.line, "CLEAR THE POINT · FORD");
 });
 
 test("5. bingo ammo shows once no hostile point is left to work", () => {

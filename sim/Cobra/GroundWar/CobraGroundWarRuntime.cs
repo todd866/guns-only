@@ -27,6 +27,28 @@ public sealed class CobraGroundWarRuntime
     // without ever outrunning the pressure. See MaybeReinforceFriendly.
     public const double FriendlyReinforceIntervalSeconds = 25.0;
     public const double FriendlyReinforceRingM = 40.0;
+    /// <summary>
+    /// Consolidation, not a garrison arms race. Reinforcement is uncapped in principle and
+    /// competes with hostile waves for the same MaxLivingUnits budget, so a player holding three
+    /// points measurably grew the friendly force to the global cap and starved the waves — the
+    /// mission got easier the better you were doing. Friendly bodies stop here; the remaining
+    /// headroom belongs to the pressure.
+    /// </summary>
+    public const int FriendlyReinforceMaxLiving = 18;
+    /// <summary>
+    /// Air-mobile insertion delay. The capture force is otherwise NOT renewable: the only
+    /// friendly units with Advance intent are seeded at startup, reinforcements Hold their own
+    /// points, and the corridor is far too wide to walk. So once the initial attackers at a
+    /// hostile site are dead, breaking its garrison leaves nobody inside the radius and the
+    /// empty-site rule freezes that point hostile forever — the player does the one job only
+    /// they can do and the point still never flips. A cleared point gets troops lifted in.
+    /// </summary>
+    public const double AirMobileInsertionSeconds = 20.0;
+    /// <summary>
+    /// A conquest board can sit even, and an even board bleeds nobody. Without a limit a stable
+    /// 2-2 runs forever. See the scoring in BleedTickets.
+    /// </summary>
+    public const double MissionTimeLimitSeconds = 600.0;
     public const int HostileWaveSoftVehicles = 1;
     public const int HostileWaveInfantryClumps = 2;
     // Hostile seed/wave rings stay outside the authored M134 min-solution window so an
@@ -96,9 +118,19 @@ public sealed class CobraGroundWarRuntime
     readonly CobraTurretMagazine _magazine;
     readonly FobResupplyZone _fob;
     readonly Random _rng;
+    /// <summary>
+    /// Presentation chatter draws from its OWN stream. Small-arms events are sampled once per
+    /// engaged attacker per Advance, so sharing `_rng` with hostile-wave bearings made the wave
+    /// RNG offset a function of STEP RATE: the same seed advanced to the same elapsed time at
+    /// 10 Hz and 20 Hz reached reinforcement with different offsets, spawning waves in different
+    /// places and changing engagements, capture timing, tickets and potentially the winner. A
+    /// cosmetic event must never be able to move the outcome.
+    /// </summary>
+    readonly Random _chatterRng;
     int _nextUnitSerial;
     double _reinforceAccumulatorSeconds;
     double _friendlyReinforceAccumulatorSeconds;
+    readonly Dictionary<string, double> _airMobileTimerSeconds = new(StringComparer.Ordinal);
     double _elapsedSeconds;
     int _hostileKillsByPlayer;
     int _friendlyKillsByPlayer;
@@ -123,6 +155,7 @@ public sealed class CobraGroundWarRuntime
         _terrain = terrain ?? throw new ArgumentNullException(nameof(terrain));
         _magazine = magazine ?? new CobraTurretMagazine();
         _rng = new Random(seed ?? 19_680_701);
+        _chatterRng = new Random((seed ?? 19_680_701) ^ 0x5f3a_1c07);
         _sites = BuildSites(definition, terrain);
         foreach (ContestedSite site in _sites) _sitesById[site.Id] = site;
         CobraCanyonLandmarkDefinition fobLandmark = definition.Landmarks.First(landmark =>
@@ -210,6 +243,7 @@ public sealed class CobraGroundWarRuntime
             DriftBalance(dtSeconds);
             MaybeReinforce(dtSeconds);
             MaybeReinforceFriendly(dtSeconds);
+            MaybeInsertAirMobile(dtSeconds);
             if (_forcedControlForTests is double forced)
                 _balance.OverrideControl(forced);
             BleedTickets(dtSeconds);
@@ -237,6 +271,26 @@ public sealed class CobraGroundWarRuntime
             _hostileTickets = Math.Max(
                 0.0,
                 _hostileTickets - TicketBleedPerSecondPerPoint * hostileDeficit * dtSeconds);
+
+        // A stalemate has to end. Bleed is driven purely by the point deficit, so an even split
+        // drains nobody and a stable 2-2 board runs forever — unwinnable and unlosable at the
+        // same time, which is the one outcome a conquest mission must not have. At the limit the
+        // board is scored: more points wins, then more tickets, and a dead heat is a Defeat
+        // because failing to break a stalemate is not winning.
+        if (_elapsedSeconds >= MissionTimeLimitSeconds) {
+            bool won = friendlyPoints > hostilePoints
+                || (friendlyPoints == hostilePoints && _friendlyTickets > _hostileTickets);
+            _missionOutcome = won ? HoldTheBridgeOutcome.Victory : HoldTheBridgeOutcome.Defeat;
+            _missionOutcomeReason = "time-limit";
+            _recentEvents.Add(new GroundWarEvent(
+                _authorityTick,
+                won ? "mission-victory" : "mission-defeat",
+                null,
+                null,
+                won ? GroundFaction.Friendly : GroundFaction.Hostile,
+                _fob.CentreWorldM));
+            return;
+        }
 
         if (_hostileTickets <= 0.0) {
             _missionOutcome = HoldTheBridgeOutcome.Victory;
@@ -349,7 +403,7 @@ public sealed class CobraGroundWarRuntime
             }
             if (victimIndex < 0) continue;
             _damageScratch[victimIndex] += attacker.DamagePerSecond * dtSeconds;
-            if (_rng.NextDouble() < smallArmsChance)
+            if (_chatterRng.NextDouble() < smallArmsChance)
                 PushEvent("small-arms", attacker.Id, attacker.HomeSiteId, attacker.Faction,
                     attacker.PositionWorldM);
         }
@@ -563,16 +617,79 @@ public sealed class CobraGroundWarRuntime
     /// stayed hostile forever under a competent scripted gunner for exactly that reason.
     /// Holding is therefore compounding, which is what makes the tide legible on the map.
     /// </summary>
+    /// <summary>
+    /// Lifts a rifle squad onto a hostile point the player has cleared — no living garrison and
+    /// no living friendly inside the radius — after <see cref="AirMobileInsertionSeconds"/>. The
+    /// timer is per site and resets the moment the point stops qualifying, so it cannot bank
+    /// progress across a re-garrisoned or re-contested point.
+    ///
+    /// This is what makes "kill the garrison and friendlies will take the point" a true
+    /// statement rather than an aspiration; without it a cleared point far from the line simply
+    /// froze hostile forever. Vietnam-correct too: you clear the LZ, then the slicks come in.
+    /// </summary>
+    void MaybeInsertAirMobile(double dtSeconds)
+    {
+        foreach (ContestedSite site in _sites) {
+            if (site.Owner != GroundSiteOwner.Hostile) {
+                _airMobileTimerSeconds.Remove(site.Id);
+                continue;
+            }
+            // The point must be CLEAR, not merely un-garrisoned. Seeded pushers sit well inside
+            // the 220 m capture radius, so lifting a squad onto a point that still has hostiles
+            // on it just re-contests it and freezes the capture again — the insertion has to
+            // wait for the same emptiness the ownership rule itself requires.
+            bool hostilePresent = false;
+            bool friendlyPresent = false;
+            double radiusSq = site.CaptureRadiusM * site.CaptureRadiusM;
+            foreach (GroundUnit unit in _units) {
+                if (!unit.IsAlive) continue;
+                if (HorizontalDistanceSquared(unit.PositionWorldM, site.PositionWorldM) > radiusSq)
+                    continue;
+                if (unit.Faction == GroundFaction.Friendly) friendlyPresent = true;
+                else hostilePresent = true;
+            }
+            if (hostilePresent || friendlyPresent) {
+                _airMobileTimerSeconds.Remove(site.Id);
+                continue;
+            }
+
+            double elapsed = _airMobileTimerSeconds.GetValueOrDefault(site.Id) + dtSeconds;
+            if (elapsed < AirMobileInsertionSeconds) {
+                _airMobileTimerSeconds[site.Id] = elapsed;
+                continue;
+            }
+            _airMobileTimerSeconds.Remove(site.Id);
+            if (LivingUnits().Count() >= MaxLivingUnits) continue;
+            SpawnUnit(GroundFaction.Friendly, GroundUnitRole.InfantryClump, site,
+                GroundUnitIntent.Hold, ringM: 24.0, bearingRad: 1.7);
+            PushEvent("air-mobile-insertion", null, site.Id, GroundFaction.Friendly,
+                site.PositionWorldM);
+        }
+    }
+
     void MaybeReinforceFriendly(double dtSeconds)
     {
         _friendlyReinforceAccumulatorSeconds += dtSeconds;
         if (_friendlyReinforceAccumulatorSeconds < FriendlyReinforceIntervalSeconds)
             return;
+
+        int livingFriendly = 0;
+        foreach (GroundUnit unit in _units)
+            if (unit.IsAlive && unit.Faction == GroundFaction.Friendly) livingFriendly++;
+
+        // Hold the accumulator when the board is full rather than clearing it. Resetting first
+        // discarded the entire reinforcement window whenever the cap happened to be saturated at
+        // the instant it came due, so a full board silently cost 25 s of consolidation and the
+        // loss depended on when the timer landed rather than on the conquest state.
+        if (livingFriendly >= FriendlyReinforceMaxLiving || LivingUnits().Count() >= MaxLivingUnits)
+            return;
         _friendlyReinforceAccumulatorSeconds = 0.0;
 
         foreach (ContestedSite site in _sites) {
             if (site.Owner != GroundSiteOwner.Friendly) continue;
+            if (livingFriendly >= FriendlyReinforceMaxLiving) return;
             if (LivingUnits().Count() >= MaxLivingUnits) return;
+            livingFriendly++;
             // Hold, not Advance. The corridor is kilometres wide — Iron Bell is ~4.5 km from the
             // plantation — so a 2.4 m/s clump ordered to advance spends the whole sortie walking
             // across open ground, arrives at nothing, and meanwhile vacates the point it was
