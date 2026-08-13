@@ -56,6 +56,35 @@ at −1.21°/s while the aid acted and DIVERGED at +1.62°/s while clamped. The 
 geometric — ease only once the nose is PAST the lead line, bounded to 1 G — and the ballistics
 were verified correct, so this was the aid and not the gun.
 
+**The scenery, systemically.** The owner's fourth report of bad scenery, after two colour-fitting
+passes and a prop-rescaling pass that all moved numbers without moving the picture. The cause was
+density and it was structural: the vegetation scatter was WORLD-FIXED at 9,000 instances (desktop)
+across a ~156 km² valley — one prop every 190 m, so the ground was bare by construction. The
+terrain shader was never at fault; it already runs five noise octaves, a cultivation grammar,
+drainage and slope faces under a scene with nothing standing on it.
+
+Placement is now a deterministic 160 m tiled scatter that follows the camera, spending the same
+per-tier allowance inside a radius. Positions derive from a spatial hash of world position, so a
+prop holds its place and cannot pop, swim or re-roll. Measured at the same caps: desktop 27
+props/km² → 1,273-1,459/km² within 500 m (~40-50×), balanced 15 → 787-1,500; draw calls unchanged
+at 7, triangles 232,858 against a 900,000 ceiling, frame cost mean 0.13 ms / p99 4.2 ms.
+
+Prop SIZES were wrong in three places, all the same defect — one sizing path serving several kinds
+of object and branching only on role, so the descriptor that already carried the distinction was
+never read. Ridge grass took the canopy band (16-30 m, ~20× life size); a fence-and-cart cluster
+took the village-compound band (32 m wide); red-earth scrub took a rock band reaching 62 m tall.
+Each now has its own band, pinned by a test that walks every role against the kinds that reach it.
+
+Mist and water accents were untextured MeshBasicMaterial quads at 0.42 opacity, double-sided —
+every card a hard-edged translucent grey slab. They now carry a radial falloff ramp.
+
+**Open, and NOT fixed:** a grey rectangle artifact remains visible in the upper field of view. It
+was hypothesised to be a mist card; that hypothesis was wrong (the mist defect above was real and
+separate) and the object is still unidentified. Also, at altitudes well above the mission band the
+valley sheds to bare ground via the pre-existing AGL shed — previously invisible because the scatter
+was sparse everywhere. And the vegetation is one repeated silhouette, so it reads as conifers
+rather than tropical jungle; density is fixed, variety is not.
+
 VERIFICATION CAVEAT (carried from Build 321, the Camp Ember depth recess, and still open):
 headless SwiftShader does not reproduce the symptom — the pad renders
 clean in BOTH the before and after builds, so the harness cannot demonstrate the improvement.
