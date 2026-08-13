@@ -28,13 +28,17 @@
         <span id="objective-line">TIP CONTROL FRIENDLY · HOLD 45s</span>
         <span id="objective-detail">W collective up · S down · Tab target · hold F gunner</span>
       </div>
-      <div class="balance-track" aria-hidden="true">
+      <!-- The mission is decided by points held and tickets, so those are the two tracks.
+           Ids are unchanged: #balance-fill / #hold-fill are queried by main.js and pinned by
+           the lab wiring test. -->
+      <div class="points-track" aria-hidden="true">
         <i id="balance-fill"></i>
-        <b id="balance-label">CONTROL</b>
+        <b id="balance-label">— POINTS</b>
       </div>
-      <div class="hold-track" aria-hidden="true">
+      <div class="ticket-track" aria-hidden="true">
         <i id="hold-fill"></i>
-        <span id="hold-label">HOLD 0%</span>
+        <i id="hostile-ticket-fill"></i>
+        <span id="hold-label">TICKETS — · —</span>
       </div>
     </div>
   </div>

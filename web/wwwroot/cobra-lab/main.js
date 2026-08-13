@@ -194,8 +194,12 @@ const controlMetric = document.querySelector("#control");
 const ammoMetric = document.querySelector("#ammo");
 const fobMetric = document.querySelector("#fob");
 const killsMetric = document.querySelector("#kills");
+// #balance-fill is now the points-held bar and #hold-fill the friendly ticket pool; the ids
+// are kept because main.js and the lab wiring test both query them by name.
 const balanceFill = document.querySelector("#balance-fill");
+const balanceLabel = document.querySelector("#balance-label");
 const holdFill = document.querySelector("#hold-fill");
+const hostileTicketFill = document.querySelector("#hostile-ticket-fill");
 const holdLabel = document.querySelector("#hold-label");
 const objectiveLine = document.querySelector("#objective-line");
 const objectiveDetail = document.querySelector("#objective-detail");
@@ -1213,13 +1217,23 @@ function showMissionDebrief(war, status) {
   // HUD with no card reads as a crash of the game rather than of the helicopter.
   let title;
   let reason;
+  // Conquest outcomes. The sim decides both ends the same way — one side's ticket pool hits
+  // zero ("tickets-exhausted", CobraGroundWarRuntime.BleedTickets) — so the copy names the
+  // points that did the bleeding rather than the old control meter. The previous branch tested
+  // for "lost-basin", a reason the sim has not emitted since tickets landed, so every defeat
+  // fell through to the bare "The ground war is lost."
+  const friendlyPoints = (war?.sites ?? []).filter((site) => site?.owner === "friendly").length;
+  const heldPoints = (war?.sites ?? [])
+    .filter((site) => site?.owner === "friendly" || site?.owner === "hostile").length;
   if (victory) {
-    title = "BRIDGE HELD";
-    reason = "You held friendly control long enough to keep the basin.";
+    title = "VALLEY HELD";
+    reason = war?.outcome_reason === "tickets-exhausted"
+      ? `Hostile reinforcements ran out — you held ${friendlyPoints} of ${heldPoints} points long enough to bleed them dry.`
+      : "The hostile push is finished.";
   } else if (defeat) {
-    title = "BASIN LOST";
-    reason = war?.outcome_reason === "lost-basin"
-      ? "Hostile control locked the basin before you could tip it back."
+    title = "VALLEY LOST";
+    reason = war?.outcome_reason === "tickets-exhausted"
+      ? `Friendly reinforcements ran out while hostiles held the points — you finished on ${friendlyPoints} of ${heldPoints}.`
       : "The ground war is lost.";
   } else if (status === "obstacle-collision") {
     title = "OBSTACLE STRIKE";
@@ -1253,32 +1267,46 @@ function showMissionDebrief(war, status) {
   );
   debrief.hidden = false;
   setStatus(
-    victory ? "MISSION COMPLETE · BRIDGE HELD" : `MISSION ${status.replaceAll("-", " ").toUpperCase()} · R RESTARTS`,
+    victory ? "MISSION COMPLETE · VALLEY HELD" : `MISSION ${status.replaceAll("-", " ").toUpperCase()} · R RESTARTS`,
     victory ? "ready" : "error",
   );
 }
 
 function updateObjectiveHud(war) {
   if (!war) return;
-  const controlPct = ((war.control + 1) * 50);
-  if (balanceFill) balanceFill.style.left = `${controlPct.toFixed(0)}%`;
-  const holdPct = Math.round((war.victory_hold_progress ?? 0) * 100);
-  if (holdFill) {
-    holdFill.style.width = `${holdPct}%`;
-    holdFill.style.left = "0";
+  // Two tracks, both published truth: points held, then the ticket pools that decide the
+  // mission. The old control marker showed a hidden number that no longer settles anything.
+  const sites = Array.isArray(war.sites) ? war.sites.filter(Boolean) : [];
+  const heldSites = sites.filter((site) => site.owner === "friendly" || site.owner === "hostile");
+  const friendlyPoints = heldSites.filter((site) => site.owner === "friendly").length;
+  if (balanceFill) {
+    balanceFill.style.width = heldSites.length
+      ? `${((friendlyPoints / heldSites.length) * 100).toFixed(0)}%`
+      : "0%";
   }
-  setText(holdLabel, war.control >= (war.victory_control_threshold ?? 0.55)
-    ? `HOLD ${holdPct}%`
-    : war.control <= (war.defeat_control_threshold ?? -0.75)
-      ? `LOSING ${Math.round((war.defeat_hold_progress ?? 0) * 100)}%`
-      : "HOLD —");
+  setText(balanceLabel, heldSites.length
+    ? `${friendlyPoints} / ${heldSites.length} POINTS`
+    : "— POINTS");
+  const friendlyTickets = Number(war.tickets?.friendly);
+  const hostileTickets = Number(war.tickets?.hostile);
+  const hasTickets = Number.isFinite(friendlyTickets) && Number.isFinite(hostileTickets);
+  // Both pools share one scale so the two bars are directly comparable.
+  const ticketScale = hasTickets ? Math.max(friendlyTickets, hostileTickets, 1) : 1;
+  if (holdFill) {
+    holdFill.style.width = hasTickets ? `${(friendlyTickets / ticketScale) * 100}%` : "0%";
+  }
+  if (hostileTicketFill) {
+    hostileTicketFill.style.width = hasTickets ? `${(hostileTickets / ticketScale) * 100}%` : "0%";
+  }
+  setText(holdLabel, hasTickets
+    ? `TICKETS ${Math.round(friendlyTickets)} · ${Math.round(hostileTickets)}`
+    : "TICKETS — · —");
   // Ammo/FOB/kills/target/gunner/rotor truth moved from the DOM text strip into the
   // canvas HUD (production hud.js); the card keeps objective copy only for lab/metrics.
-  // Owner sortie web-cobra-1786090836886-dc8wvig0: tip-friendly copy stayed up while the
-  // pilot idled on Camp Ember and control bled through −0.75 — losing must outrank tip.
   const copy = cobraObjectiveCopy(war, {
     selectedTargetId: authorityState?.gunner?.selected_target_id ?? null,
     playerHasInteracted,
+    player: { eastM: vehiclePose.x_m, northM: vehiclePose.z_m },
     actOverlay: emberActObjectiveOverlay(authorityState?.mission_act, {
       remainingM: authorityState?.route_guidance?.remaining_m,
     }),

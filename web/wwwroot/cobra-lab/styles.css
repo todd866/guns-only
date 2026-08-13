@@ -128,7 +128,9 @@ body[data-shell="play"] .legend {
 }
 #objective-detail { color: var(--muted); font-size: 11px; }
 
-.balance-track, .hold-track {
+/* Points held (one bar) and the two ticket pools (stacked halves of one bar). The old
+   .balance-track marker read a hidden control number that no longer decides the mission. */
+.points-track, .ticket-track {
   position: relative;
   height: 8px;
   margin: 8px 0;
@@ -136,25 +138,23 @@ body[data-shell="play"] .legend {
   background: rgba(255, 255, 255, 0.08);
   overflow: hidden;
 }
-.balance-track i {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  left: 50%;
-  background: var(--friendly);
-  box-shadow: 0 0 10px rgba(143, 191, 90, 0.55);
-}
-.hold-track i {
+.points-track i {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
   width: 0;
   background: linear-gradient(90deg, rgba(143, 191, 90, 0.35), var(--friendly));
-  box-shadow: none;
 }
-.balance-track b, .hold-track span {
+.ticket-track i {
+  position: absolute;
+  left: 0;
+  height: 4px;
+  width: 0;
+}
+#hold-fill { top: 0; background: var(--friendly); }
+#hostile-ticket-fill { top: 4px; background: var(--hostile); }
+.points-track b, .ticket-track span {
   position: absolute;
   right: 8px;
   top: -16px;
