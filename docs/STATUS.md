@@ -1,11 +1,11 @@
 # Current product and verification status
 
 Updated: 2026-08-13
-Production: Build 318, revision `e9f300720c95add40a52a294d2eb32d58f087816`, deployment
-`dpl_w7N1SwXVfabWeUtcrjfsvXFNiksD` (verified live via /api/build-info 2026-08-13, with remote
-route smokes on all four routes). Builds 312 (Cobra contact envelope), 313 (Camp Ember
-firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap timing) and 318 (authored structure
-materials) shipped in sequence. Builds
+Production: Build 322, revision `b589d59092a8d5278b46041f50c6f32e10518b40` (verified live via
+/api/build-info 2026-08-13). Builds 312 (Cobra contact
+envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap timing),
+318 (authored structure materials), 320 (Top Gun 404 + cockpit depth near-plane), 321 (Camp
+Ember depth recess) and 322 (Cobra scenery pass) shipped in sequence. Builds
 253-298 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
 Promoted with Build 311 and still live: Builds 308 (consolidation: bounded long-range terrain marches,
@@ -14,17 +14,40 @@ preview) and 310 (rated-arena Multiplayer preview) went live as part of the Buil
 promotion. Top Gun and Multiplayer remain preview-only and fail closed unless `?preview=1` is
 explicitly acknowledged; their promotion to production routes still requires representative
 human ACM and multiplayer player-path acceptance.
-Next candidate: Build 322 (branch `fix/cobra-scenery-pass`) — a scenery pass driven by frames
-pulled from the owner's Build 321 screen recording. The CC0 palms were being handed the foliage
-CARD ATLAS, whose UVs are unrelated to the mesh, so alphaTest punched holes through them and
-they rendered as black spiky scraps; authored geometry now gets its own lit material and no
-atlas. The same import inherited CLUMP dimensions (several notional trees) for a single mesh,
-which is why palms filled a third of the frame; authored meshes now scale to one tree. And the
-four radial laterite "tracks" — bright rectangles running out of the camp and stopping dead in
-open ground, reported repeatedly as "that random red line" — are removed, with a contract
-forbidding a surface strip that ends outside the scar apron. Verified by rendered frame.
+Next candidate: Build 323 (branch `feature/cobra-conquest`) — the Cobra mission becomes a
+conquest battle. This answers the owner's verdict on Build 322: "it's still not obvious where
+I'm supposed to fly or what I'm supposed to do when I get there, there's no minimap, it's not
+a game."
 
-VERIFICATION CAVEAT: headless SwiftShader does not reproduce the symptom — the pad renders
+Four contested sites become capture points with a real owner and capture progress; Camp Ember
+opens friendly, the three gorge sites hostile. Ownership derives only from living GROUND units
+inside the capture radius — the Cobra never captures. Each hostile point carries a dug-in
+garrison that is immune to ground-to-ground fire and killable only from the air, which is the
+one thing on the board the player alone can resolve; killing it leaves friendlies alone in the
+radius and the point flips on the ordinary rule, with no special case. The hidden
+control-threshold win condition is replaced by tickets: holding fewer points than the other
+side bleeds you at 0.5/s per point of deficit, and zero ends it. A north-up minimap is always
+on and M pulls up the full corridor map; the objective rides on the chart as a caption, because
+the play shell hides the prose card by the Build 302 ruling.
+
+Three defects were found by measuring rather than by review. The garrison was NOT the player's
+job — friendly infantry ground it down in 10-16 s, and the stall test passed anyway because
+hostile waves re-contested the point, so a green gate was hiding it. The friendly force was
+finite and fell from 12 bodies to 4 by t=200 s, leaving nobody to walk onto a point the player
+had just opened; held points now pay one clump per 25 s. And advance goals scored sites by
+`X + Z`, a fixed diagonal preference in world space that could send a unit away from the only
+contested point on the board.
+
+Three more were found only by looking at a rendered frame, all of them green in CI: the full
+map drew into a 300x150 box because a <canvas> is a replaced element and `inset: 0` does not
+stretch one; minimap captions ellipsised away the place name; and point labels on a clamped
+edge were sliced by the canvas.
+
+Measured with a competent garrison-first gunner: 3-1 by t=100 s, Victory on tickets at ~370 s.
+Zero input still loses the basin, unchanged.
+
+VERIFICATION CAVEAT (carried from Build 321, the Camp Ember depth recess, and still open):
+headless SwiftShader does not reproduce the symptom — the pad renders
 clean in BOTH the before and after builds, so the harness cannot demonstrate the improvement.
 Two speckle metrics were tried and both were shown to be measuring anti-aliased edges rather
 than depth flips (the fix adds a real 25 cm step edge, which is why their counts rose). What is
@@ -59,7 +82,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | F9F-2 Panther off Essex (`korea-panther`) | **quarantined** | Preview acknowledgement only | Build 238 ownship-only kernel flies the production terrain catapult/route/return/groove to a physical W2 trap (100/100 focused); packaged route, touch-RTB, HUD, and barrier contracts passed silent-browser acceptance | Complete representative human desktop/touch flights and historical/presentation acceptance before any promotion |
 | MIDGE-03 Facility Nine (`indoor`) | **quarantined** | `/indoor/` preview acknowledgement | Candidate UI now enforces doctrine-safe controls and blocks premature return | Re-drive the default stealth route and representative touch/keyboard paths |
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
-| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned ground war, tip/hold win/lose, M134 + Camp Ember rearm, Tab/F gunner. Build 301: land spur Camp Ember FOB, airborne soft gates, denser Iron Bell destroyables. Build 306: limited SCAS only. Build 307: stronger hover TQ residual, cruise weathervane, terrain wind + yaw/wind telem. Build 308 candidate adds tier-bounded cast shadows and real terrain shadow receivers. Build 311: body-aligned HUD eye + heading-relative hover cue, collective hub moment + split torque yaw + loaded gust response, flattened rendered spawn apron + 74-part authored Camp Ember firebase. Build 312: contact envelope with gear-damage/rollover/spin/water tiers, cause cards, touchdown telemetry, autorotation audit. Build 313: FSB-read Camp Ember (dossier-derived), three ramp Cobras + bird swap, FOB INEFFECTIVE terminal, flicker probe + decal bias | Owner flight is the flicker gate (Build 312 telemetry proved the shimmer is spatial z-fighting at 60 fps, not performance; 313 carries the decal fix). The mission itself is NOT yet a game: conquest points/tickets/map are designed and planned, not built. Longer arc: DCS-BS1-grade flight dynamics |
+| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned ground war, tip/hold win/lose, M134 + Camp Ember rearm, Tab/F gunner. Build 301: land spur Camp Ember FOB, airborne soft gates, denser Iron Bell destroyables. Build 306: limited SCAS only. Build 307: stronger hover TQ residual, cruise weathervane, terrain wind + yaw/wind telem. Build 308 candidate adds tier-bounded cast shadows and real terrain shadow receivers. Build 311: body-aligned HUD eye + heading-relative hover cue, collective hub moment + split torque yaw + loaded gust response, flattened rendered spawn apron + 74-part authored Camp Ember firebase. Build 312: contact envelope with gear-damage/rollover/spin/water tiers, cause cards, touchdown telemetry, autorotation audit. Build 313: FSB-read Camp Ember (dossier-derived), three ramp Cobras + bird swap, FOB INEFFECTIVE terminal, flicker probe + decal bias. Build 322: scenery pass (palm material/scale, tracks-to-nowhere removed). Build 323 candidate makes it a conquest game: four owned capture points, dug-in garrisons only the turret can break, tickets replacing the hidden control threshold, an always-on north-up minimap and a full corridor map on M with the objective as its caption | Owner flight is the gate on both the conquest loop and the Camp Ember flicker. Known open: frame pacing at Camp Ember measured p95 33.3 ms / max 50 ms on Build 321 production telemetry, unexplained. Longer arc: DCS-BS1-grade flight dynamics |
 | Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load, lappable circuit from Build 264+. Build 267 adds ride telemetry (speed/gear/lean/lap/frame). Build 308 adds tiered shadows, sky-derived IBL, and horizon/far-plane corrections. Build 315 candidate makes it a game: lap/last/best on the helmet HUD, four sector splits, a live delta to your best, an off-track lap refused as a record, and a best that persists across sessions | Owner ride on Build 315: is beating your own best worth trying for? Ghost bike deliberately cut from v1 |
 | Top Gun (`top-gun`) | **preview** | Preview acknowledgement only | Build 309 candidate automation, carried unchanged into Build 310: Tomcat AIM-9 path, MiG-28 boot, gun firing, R fox-two browser bind, coarse Tomcat wing-sweep span | Complete green release gate and representative human ACM acceptance flight |
 
