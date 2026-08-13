@@ -16,7 +16,7 @@ preview) and 310 (rated-arena Multiplayer preview) went live as part of the Buil
 promotion. Top Gun and Multiplayer remain preview-only and fail closed unless `?preview=1` is
 explicitly acknowledged; their promotion to production routes still requires representative
 human ACM and multiplayer player-path acceptance.
-Next candidate: Build 324 (branch `feature/cobra-conquest`) — the conquest mission from Build
+Next candidate: Build 325 (branch `feature/cobra-conquest`) — the conquest mission from Build
 323 plus five owner findings from flying it.
 
 **The red line, finally identified.** Reported at least three times and never diagnosed; a prior
