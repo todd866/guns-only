@@ -9,6 +9,7 @@ import {
 } from "../cobra_control_profile.js";
 import {
   advanceCobraPilotControls,
+  cobraCyclicCommand,
   cobraAnalogControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
@@ -232,4 +233,33 @@ test("Hold the Bridge consumes the production pilot input module", async () => {
     main,
     /\(keys\.has\("ArrowUp"\) \? 1 : 0\) \+ \(keys\.has\("ArrowDown"\) \? -1 : 0\)/,
   );
+});
+
+test("cyclic expo softens the hover band without costing authority", () => {
+  // Full deflection must still command full authority: expo may not take anything away from
+  // the aircraft, only redistribute resolution.
+  assert.equal(cobraCyclicCommand(1), 1);
+  assert.equal(cobraCyclicCommand(-1), -1);
+  assert.equal(cobraCyclicCommand(0), 0);
+
+  // The hover band is where the complaint lives. A fifth of stick must command markedly less
+  // than a fifth of authority, or the curve is not doing its job.
+  const smallStick = cobraCyclicCommand(0.2);
+  assert.ok(smallStick < 0.2 * 0.5,
+    `0.2 stick must command well under half its linear value, got ${smallStick}`);
+  assert.ok(smallStick > 0, "sign and non-zero response must survive the curve");
+
+  // Monotonic and odd: no dead spot, no reversal, and left mirrors right exactly.
+  let previous = -Infinity;
+  for (let stick = -1; stick <= 1.0001; stick += 0.05) {
+    const command = cobraCyclicCommand(stick);
+    assert.ok(command > previous, `command must rise with stick at ${stick}`);
+    assert.ok(Math.abs(command) <= Math.abs(stick) + 1e-9, "expo must never amplify");
+    assert.ok(Math.abs(command + cobraCyclicCommand(-stick)) < 1e-9, "curve must be odd");
+    previous = command;
+  }
+
+  // Expo 0 is the pre-change linear behaviour: this is the control that proves the curve, and
+  // not some other edit, is what changed the feel.
+  assert.ok(Math.abs(cobraCyclicCommand(0.2, 0) - 0.2) < 1e-9);
 });

@@ -36,6 +36,7 @@ import {
 } from "../render/cobra/cobra_control_profile.js?v=318";
 import {
   advanceCobraPilotControls,
+  cobraCyclicCommand,
   cobraGamepadControlAxes,
   createCobraPilotControlState,
   releaseCobraPilotControls,
@@ -998,10 +999,12 @@ function updateManual(deltaSeconds) {
       focused: windowFocused,
     });
     if (!missionTerminal) {
+      // Cyclic goes through the expo curve on its way to the flight model; the control state
+      // itself stays the raw stick position for the readouts and the slew maths.
       bridge.SetControls(
         pilotControls.collective,
-        pilotControls.forwardCyclic,
-        pilotControls.rightCyclic,
+        cobraCyclicCommand(pilotControls.forwardCyclic),
+        cobraCyclicCommand(pilotControls.rightCyclic),
         pilotControls.yaw,
       );
       bridge.SetGunnerTarget(targetSelect.value || null);
