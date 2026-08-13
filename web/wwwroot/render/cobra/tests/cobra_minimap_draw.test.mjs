@@ -289,7 +289,8 @@ test("the objective caption reaches the minimap, above the chart", () => {
     caption: { line: "DESTROY GARRISON · LONG FANG", detail: "1.8 km" },
   });
   const texts = ctx.calls.filter((call) => call.name === "fillText");
-  assert.deepEqual(texts.map((call) => String(call.args[0])), ["DESTROY GARRISON · LONG FANG"]);
+  // Two lines: the order, then the place. See drawCaption.
+  assert.deepEqual(texts.map((call) => String(call.args[0])), ["DESTROY GARRISON", "LONG FANG"]);
   // Drawn in the band, before the chart is translated into place.
   assert.ok(texts[0].args[2] < COBRA_MAP_CAPTION_PX.mini, "caption must sit inside its band");
   assert.ok(
@@ -326,4 +327,36 @@ test("the lab wires the objective caption into both charts", async () => {
   assert.ok(draw.length > 0, "drawTacticalMaps not found");
   assert.match(draw, /cobraObjectiveCopy\(/);
   assert.equal((draw.match(/caption/g) ?? []).length >= 3, true);
+});
+
+test("a caption too long for its band is ellipsised, not cut off by the canvas edge", () => {
+  const ctx = recordingContext();
+  // Approximate a real measureText: the double has none, so opt this context in.
+  ctx.measureText = (text) => ({ width: String(text).length * 6 });
+  const model = cobraTacticalMapModel({ bounds: BOUNDS, widthPx: 200, heightPx: 174 });
+  drawCobraTacticalMap(ctx, model, {
+    headerPx: COBRA_MAP_CAPTION_PX.mini,
+    caption: { line: "DESTROY GARRISON · CAU SONG MA · THE JAW AND THEN SOME MORE WORDS" },
+  });
+  const drawn = ctx.calls
+    .filter((call) => call.name === "fillText")
+    .map((call) => String(call.args[0]));
+  assert.equal(drawn[0], "DESTROY GARRISON", "the order is short enough to survive whole");
+  assert.ok(drawn[1].endsWith("…"), `expected an ellipsis, drew ${JSON.stringify(drawn[1])}`);
+  for (const line of drawn) {
+    assert.ok(line.length * 6 <= 200 - 14, `caption line overflows its band: ${line}`);
+  }
+});
+
+test("both chart canvases carry explicit dimensions", async () => {
+  // A <canvas> is a replaced element: `position: absolute; inset: 0` with width/height auto
+  // leaves it at its intrinsic 300x150. The full map shipped that way in review and drew the
+  // whole chart, legend and ticket bars into a 300x150 box in the top-left corner.
+  const css = await readFile(new URL("../../../cobra-lab/styles.css", import.meta.url), "utf8");
+  for (const id of ["#minimap", "#tactical-map"]) {
+    const block = css.match(new RegExp(`\\${id} \\{[^}]*\\}`))?.[0] ?? "";
+    assert.ok(block.length > 0, `${id} has no style block`);
+    assert.match(block, /(^|\s)width:/, `${id} must set an explicit width`);
+    assert.match(block, /(^|\s)height:/, `${id} must set an explicit height`);
+  }
 });

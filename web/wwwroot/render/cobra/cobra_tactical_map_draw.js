@@ -52,7 +52,23 @@ const FULLMAP = Object.freeze({
  * So the objective rides on the instrument — it is a chart caption, which is what a map legend
  * has always been, rather than a reopening of that ruling.
  */
-export const COBRA_MAP_CAPTION_PX = Object.freeze({ mini: 26, full: 44 });
+export const COBRA_MAP_CAPTION_PX = Object.freeze({ mini: 34, full: 44 });
+
+/**
+ * Trim to the band width with an ellipsis. Live orders run long — "DESTROY GARRISON · CAU SONG
+ * MA · THE JAW" is 40 characters against a 200 px minimap — and an untrimmed caption is simply
+ * cut off by the canvas edge mid-word, which reads as a rendering fault rather than a long name.
+ * Falls back to the whole string where the context cannot measure (headless doubles).
+ */
+function fitText(ctx, text, maxWidthPx) {
+  if (typeof ctx.measureText !== "function" || !(maxWidthPx > 0)) return text;
+  if (ctx.measureText(text).width <= maxWidthPx) return text;
+  let trimmed = text;
+  while (trimmed.length > 1 && ctx.measureText(`${trimmed}…`).width > maxWidthPx) {
+    trimmed = trimmed.slice(0, -1);
+  }
+  return `${trimmed.trimEnd()}…`;
+}
 
 function drawCaption(ctx, caption, { widthPx, headerPx, full }) {
   if (!caption?.line || !(headerPx > 0)) return;
@@ -63,11 +79,27 @@ function drawCaption(ctx, caption, { widthPx, headerPx, full }) {
     : "600 10px ui-sans-serif, system-ui, sans-serif";
   ctx.textBaseline = "middle";
   const padPx = full ? 12 : 7;
-  ctx.fillText(caption.line, padPx, caption.detail && full ? headerPx * 0.34 : headerPx * 0.5);
+  const roomPx = widthPx - padPx * 2;
+  if (!full) {
+    // Two lines on the minimap: the order, then the place. Real orders run to 40 characters
+    // ("DESTROY GARRISON · CAU SONG MA · THE JAW") and a single 200 px line ellipsises away
+    // exactly the half the player needs — which point to fly to.
+    const split = caption.line.indexOf(" · ");
+    const verb = split > 0 ? caption.line.slice(0, split) : caption.line;
+    const place = split > 0 ? caption.line.slice(split + 3) : "";
+    ctx.fillText(fitText(ctx, verb, roomPx), padPx, headerPx * 0.32);
+    if (place) {
+      ctx.fillStyle = COBRA_MAP_COLORS.muted;
+      ctx.font = "400 10px ui-sans-serif, system-ui, sans-serif";
+      ctx.fillText(fitText(ctx, place, roomPx), padPx, headerPx * 0.68);
+    }
+  } else {
+    ctx.fillText(fitText(ctx, caption.line, roomPx), padPx, headerPx * 0.34);
+  }
   if (caption.detail && full) {
     ctx.fillStyle = COBRA_MAP_COLORS.muted;
     ctx.font = "400 12px ui-sans-serif, system-ui, sans-serif";
-    ctx.fillText(caption.detail, padPx, headerPx * 0.72);
+    ctx.fillText(fitText(ctx, caption.detail, roomPx), padPx, headerPx * 0.72);
   }
   ctx.strokeStyle = COBRA_MAP_COLORS.border;
   ctx.lineWidth = 1;
@@ -134,7 +166,13 @@ function drawSites(ctx, model, metrics, { full, nowSeconds }) {
     if (full && site.label) {
       ctx.font = metrics.labelFont;
       ctx.fillStyle = COBRA_MAP_COLORS.label;
-      ctx.textAlign = "center";
+      // Points clamped to a map edge would otherwise have their names centred on the edge and
+      // sliced in half by the canvas — "RED EARTH QUARRY" lost its last four characters in
+      // review. Names near an edge hang inward instead.
+      const edgePx = model.widthPx * 0.18;
+      ctx.textAlign = site.x > model.widthPx - edgePx
+        ? "right"
+        : (site.x < edgePx ? "left" : "center");
       ctx.textBaseline = "top";
       ctx.fillText(String(site.label).toUpperCase(), site.x, site.y + metrics.siteRadiusPx + 6);
     }
@@ -215,20 +253,24 @@ function drawLegend(ctx, model) {
     { color: COBRA_MAP_COLORS.contested, text: "CONTESTED" },
     { color: COBRA_MAP_COLORS.player, text: "YOU" },
   ];
-  const left = 18;
-  let top = model.heightPx - 18 - entries.length * 18;
+  // Bottom RIGHT, which is the corner the minimap vacates when the full map opens. Bottom-left
+  // is the shell's own "H · CONTROLS" button and the legend was landing on top of it.
+  const swatchLeft = model.widthPx - 236;
+  let top = model.heightPx - 34 - entries.length * 18;
   ctx.font = "500 11px ui-sans-serif, system-ui, sans-serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
   for (const entry of entries) {
     ctx.fillStyle = entry.color;
-    ctx.fillRect(left, top, 10, 10);
+    ctx.fillRect(swatchLeft, top, 10, 10);
     ctx.fillStyle = COBRA_MAP_COLORS.muted;
-    ctx.fillText(entry.text, left + 18, top + 5);
+    ctx.fillText(entry.text, swatchLeft + 18, top + 5);
     top += 18;
   }
   ctx.fillStyle = COBRA_MAP_COLORS.muted;
-  ctx.fillText("M CLOSES THE MAP · THE FIGHT CONTINUES", left, model.heightPx - 8);
+  ctx.textAlign = "right";
+  ctx.fillText("M CLOSES THE MAP · THE FIGHT CONTINUES", model.widthPx - 18, model.heightPx - 18);
+  ctx.textAlign = "left";
 }
 
 /**

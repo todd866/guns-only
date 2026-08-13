@@ -218,6 +218,12 @@ body[data-shell="play"] .legend {
 #tactical-map {
   position: absolute;
   inset: 0;
+  /* A canvas is a REPLACED element: with width/height auto it takes its intrinsic 300x150 and
+     `inset: 0` does not stretch it, so the full map drew into a 300x150 box in the corner with
+     the legend, labels and ticket bars piled on top of each other. The minimap escaped this
+     only because it happens to carry explicit dimensions. */
+  width: 100%;
+  height: 100%;
   z-index: 4;
   background: rgba(4, 8, 7, 0.82);
   pointer-events: none;
