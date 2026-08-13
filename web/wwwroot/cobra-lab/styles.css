@@ -193,6 +193,39 @@ body[data-shell="play"] .legend {
   pointer-events: none;
 }
 
+/* Conquest chart. The minimap sits in the bottom-right corner the F-22 shell leaves empty,
+   over the combiner but under the debrief card, and never takes pointer events — it is an
+   instrument, not a control. Chrome (glass + hairline) matches .objective-hud so the map reads
+   as part of the same panel family; the disc colours come from the legend keys below. */
+#minimap {
+  position: absolute;
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  width: 200px;
+  height: 200px;
+  z-index: 2;
+  border: 1px solid var(--line);
+  background: var(--glass);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+/* Short shells (laptop landscape is the target, but a 600 px tall window still exists) keep
+   the chart from eating a third of the frame. */
+@media (max-height: 640px) {
+  #minimap { width: 148px; height: 148px; }
+}
+
+#tactical-map {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  background: rgba(4, 8, 7, 0.82);
+  pointer-events: none;
+}
+#tactical-map[hidden] { display: none; }
+/* The full map is open over a LIVE sortie: the minimap would repeat it, so it stands down. */
+body[data-map="open"] #minimap { display: none; }
+
 .legend {
   position: absolute;
   right: 16px;
@@ -207,6 +240,8 @@ body[data-shell="play"] .legend {
   text-transform: uppercase;
   pointer-events: none;
 }
+/* Lab keeps the faction legend visible; the minimap now owns that corner, so lift it clear. */
+body[data-shell="lab"] .legend { bottom: 232px; }
 .legend span { display: flex; align-items: center; gap: 8px; }
 .legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
 .friendly-key { background: var(--friendly); }

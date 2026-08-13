@@ -23,6 +23,11 @@ import {
 } from "../render/cobra/cobra_rotorcraft_hud.js?v=322";
 import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=322";
 import {
+  cobraTacticalMapBounds,
+  cobraTacticalMapModel,
+} from "../render/cobra/cobra_tactical_map.js?v=322";
+import { drawCobraTacticalMap } from "../render/cobra/cobra_tactical_map_draw.js?v=322";
+import {
   emberActObjectiveOverlay,
   emberPathGuidanceState,
 } from "../render/cobra/cobra_ember_path.js?v=322";
@@ -194,6 +199,16 @@ const holdFill = document.querySelector("#hold-fill");
 const holdLabel = document.querySelector("#hold-label");
 const objectiveLine = document.querySelector("#objective-line");
 const objectiveDetail = document.querySelector("#objective-detail");
+// Conquest chart. Two canvases, one draw function: the minimap is always on, the full map is
+// the same picture at overlay size on M. Both are north-up.
+const minimapCanvas = document.querySelector("#minimap");
+const minimapCtx = minimapCanvas?.getContext("2d", { alpha: true }) ?? null;
+const tacticalMapCanvas = document.querySelector("#tactical-map");
+const tacticalMapCtx = tacticalMapCanvas?.getContext("2d", { alpha: true }) ?? null;
+let tacticalMapOpen = false;
+// Bounds are a MISSION constant, not a frame value: the sites do not move, and recomputing the
+// enclosing square every frame would also let the chart's scale breathe as sites are added.
+let tacticalMapBounds = null;
 const debrief = document.querySelector("#debrief");
 const debriefTitle = document.querySelector("#debrief-title");
 const debriefBody = document.querySelector("#debrief-body");
@@ -624,6 +639,87 @@ function resize() {
   hudViewport.height = height;
   hudViewport.pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
   hud.resize(width, height, hudViewport.pixelRatio, HUD_SAFE_INSETS);
+  sizeMapCanvas(minimapCanvas, minimapCtx);
+  sizeMapCanvas(tacticalMapCanvas, tacticalMapCtx);
+}
+
+/**
+ * Backing-store size for a map canvas, in device pixels, with the context scaled so the draw
+ * module can work in CSS pixels. Only reassigns width/height when the CSS box actually changed:
+ * writing canvas.width clears the surface AND resets the transform, so doing it per frame would
+ * cost a full reallocation every frame and drop the scale on the floor.
+ */
+function sizeMapCanvas(canvasEl, ctx) {
+  if (!canvasEl || !ctx) return null;
+  const width = Math.round(canvasEl.clientWidth);
+  const height = Math.round(canvasEl.clientHeight);
+  if (!(width > 0) || !(height > 0)) return null;
+  const ratio = Math.min(window.devicePixelRatio || 1, 2);
+  const backingWidth = Math.round(width * ratio);
+  const backingHeight = Math.round(height * ratio);
+  if (canvasEl.width !== backingWidth || canvasEl.height !== backingHeight) {
+    canvasEl.width = backingWidth;
+    canvasEl.height = backingHeight;
+  }
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  return { width, height };
+}
+
+/**
+ * Projects the CURRENT authority ground war into a pixel box. One engine: sites, ownership,
+ * capture progress, units and tickets are read from the snapshot and reprojected — nothing here
+ * infers any of them. Returns null before the first snapshot carries sites.
+ */
+function tacticalMapModelFor(widthPx, heightPx, showUnits) {
+  const war = authorityState?.ground_war;
+  const sites = war?.sites ?? [];
+  if (!sites.length) return null;
+  if (!tacticalMapBounds) tacticalMapBounds = cobraTacticalMapBounds(sites);
+  return cobraTacticalMapModel({
+    sites,
+    units: war.units ?? [],
+    tickets: war.tickets,
+    // Sim frame: x is east, z is north, yaw is the compass heading (0 = north), which is exactly
+    // the north-up chart convention — no flip, no offset.
+    player: {
+      eastM: vehiclePose.x_m,
+      northM: vehiclePose.z_m,
+      headingRad: vehiclePose.yaw_rad,
+    },
+    bounds: tacticalMapBounds,
+    widthPx,
+    heightPx,
+    showUnits,
+  });
+}
+
+/** Per-frame chart paint. The open full map replaces the minimap rather than stacking on it. */
+function drawTacticalMaps(timeMs) {
+  if (parkedCamera) return;
+  const nowSeconds = timeMs / 1_000;
+  if (tacticalMapOpen) {
+    const box = sizeMapCanvas(tacticalMapCanvas, tacticalMapCtx);
+    const model = box && tacticalMapModelFor(box.width, box.height, true);
+    if (model) drawCobraTacticalMap(tacticalMapCtx, model, { full: true, nowSeconds });
+    return;
+  }
+  const box = sizeMapCanvas(minimapCanvas, minimapCtx);
+  // Units stay off the minimap: at 200 px the whole valley is ~30 px per kilometre and a dozen
+  // infantry markers would bury the four points the player is actually flying between.
+  const model = box && tacticalMapModelFor(box.width, box.height, false);
+  if (model) drawCobraTacticalMap(minimapCtx, model, { full: false, nowSeconds });
+}
+
+/**
+ * M opens and closes the full map. It does NOT pause the sim — the fight continues while the
+ * player reads the chart, which is the whole tension of pulling it up.
+ */
+function setTacticalMapOpen(open) {
+  if (!tacticalMapCanvas) return;
+  tacticalMapOpen = Boolean(open);
+  tacticalMapCanvas.hidden = !tacticalMapOpen;
+  document.body.dataset.map = tacticalMapOpen ? "open" : "closed";
+  if (tacticalMapOpen) sizeMapCanvas(tacticalMapCanvas, tacticalMapCtx);
 }
 
 function routeById(routeId) {
@@ -746,6 +842,8 @@ function restartRoute() {
   bridge?.StartRoute(routeSelect.selectedIndex);
   authorityState = bridge ? JSON.parse(bridge.GetState()) : null;
   pilotControls = createCobraPilotControlState(authorityState?.vehicle?.collective ?? 0.5);
+  // A restart is a fresh mission, so the chart's enclosing square is recomputed once, here.
+  tacticalMapBounds = null;
   routeSampler = createCobraCanyonRouteSampler(activeRoute);
   routeDistanceM = ROUTE_ENTRY_OFFSETS_M[activeRoute.id] ?? 0;
   routeComplete = false;
@@ -1285,6 +1383,7 @@ function animate(timeMs) {
   recordPhase("render", renderStartedAtMs);
   const hudStartedAtMs = performance.now();
   drawHud(timeMs, deltaSeconds);
+  drawTacticalMaps(timeMs);
   recordPhase("hud", hudStartedAtMs);
   recordFrameDuration(rawDeltaMs);
   updateMetrics(aglM);
@@ -1384,6 +1483,9 @@ window.__gunsOnlyCobraLabCamera = Object.freeze({
     // Strip mission chrome so park stills score the gorge, not the objective card.
     document.querySelector("#play-chrome")?.setAttribute("data-parked", "true");
     document.querySelector("#objective-hud")?.setAttribute("hidden", "");
+    // The chart is mission chrome too: a review still must score the gorge, not the map.
+    setTacticalMapOpen(false);
+    minimapCanvas?.setAttribute("hidden", "");
     parkedCamera = {
       eastM: Number(eastM),
       northM: Number(northM),
@@ -1398,6 +1500,7 @@ window.__gunsOnlyCobraLabCamera = Object.freeze({
     parkedCamera = null;
     document.querySelector("#play-chrome")?.removeAttribute("data-parked");
     document.querySelector("#objective-hud")?.removeAttribute("hidden");
+    minimapCanvas?.removeAttribute("hidden");
   },
 });
 

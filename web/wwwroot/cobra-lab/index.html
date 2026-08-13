@@ -92,6 +92,10 @@
       <!-- Production hud.js combiner (Build 264): world + HUD, zero cockpit. The old
            CSS reticle and DOM text strip are replaced by the real instrument. -->
       <canvas id="hud-canvas" aria-hidden="true"></canvas>
+      <!-- Conquest chart: north-up minimap always on, full map on M. Both are painted by
+           render/cobra/cobra_tactical_map_draw.js from the authority snapshot's ground_war. -->
+      <canvas id="minimap" aria-hidden="true"></canvas>
+      <canvas id="tactical-map" aria-hidden="true" hidden></canvas>
       <div class="legend" aria-hidden="true">
         <span><i class="friendly-key"></i> friendly</span>
         <span><i class="hostile-key"></i> hostile</span>
