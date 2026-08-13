@@ -13,13 +13,18 @@ preview) and 310 (rated-arena Multiplayer preview) went live as part of the Buil
 promotion. Top Gun and Multiplayer remain preview-only and fail closed unless `?preview=1` is
 explicitly acknowledged; their promotion to production routes still requires representative
 human ACM and multiplayer player-path acceptance.
-Next candidate: Build 317 (branch `feature/structure-materials`) — the authored structures
+Next candidate: Build 318 (branch `feature/structure-materials`) — the authored structures
 stop being cardboard. Bridge deck, piers, roads, hero cells and landmarks now share a
 world-position procedural grain/wear/streak chunk reusing the terrain's precision-safe hash,
 so the biggest object on a nap-of-the-earth frame is no longer one flat fill sitting on a
 five-octave world (`docs/art-direction/bfv-graphics-gap-2026-08-12.md`). Also retires the
 invented "Iron Bell": the bridge is Cau Song Ma, THE JAW on the radio, after Thanh Hoa's Ham
-Rong; the falls are Thac Nam Ngoi, THE STAIRS. Landmark ids are unchanged.
+Rong; the falls are Thac Nam Ngoi, THE STAIRS. Landmark ids are unchanged. And the corridor is no longer empty: the authored ambient
+population was 1,600 instances across 6.9 km, which is why the hillsides read as bare — now
+6,828 on desktop and 2,400 on balanced, with the pack's own budget contract raised to match.
+Mobile is deliberately unchanged. Perf on real hardware is UNPROVEN (SwiftShader frame times
+are meaningless); `cobra_frame_ms` from the next owner flight is the measurement, and the
+existing ambient governor still sheds density automatically if frames slip.
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
 evidence for the build and commit they name, but they do not override this page or the executable
