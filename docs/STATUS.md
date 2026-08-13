@@ -14,15 +14,27 @@ preview) and 310 (rated-arena Multiplayer preview) went live as part of the Buil
 promotion. Top Gun and Multiplayer remain preview-only and fail closed unless `?preview=1` is
 explicitly acknowledged; their promotion to production routes still requires representative
 human ACM and multiplayer player-path acceptance.
-Next candidate: Build 319 (branch `feature/cc0-vegetation`) — the jungle stops being
-cardboard. The canyon's foliage was crossed alpha cards typed into JavaScript while the repo
-carried an unused glTF pipeline; Build 319 imports the Quaternius Ultimate Stylized Nature
+Next candidate: Build 320 (branch `feature/cc0-vegetation`). The jungle stops being
+cardboard: the canyon's foliage was crossed alpha cards typed into JavaScript while the repo
+carried an unused glTF pipeline, and Build 320 imports the Quaternius Ultimate Stylized Nature
 palms (CC0-1.0, recorded in `licenses.json`) and instances real geometry for the jungle role.
 Roles with an authored mesh render as two batches — a hero batch sized by a per-tier
 `maxAuthoredTriangles` allowance and taken at a fixed stride, plus a card field for the rest —
-because one palm costs ~470 triangles against a card's dozen. Mobile's allowance is zero. Also
-puts an expo curve on the Cobra cyclic: the hover band had the same resolution as full
-deflection, which is why holding a hover felt impossibly twitchy.
+because one palm costs ~470 triangles against a card's dozen; mobile's allowance is zero.
+Also: an expo curve on the Cobra cyclic (the hover band had the same resolution as full
+deflection, which is why holding a hover was twitchy); infantry silhouettes rebuilt at human
+proportions instead of a box under a 0.76 m sphere; the Top Gun `/top-gun/` 404 fixed; and the
+cockpit near plane raised 0.12 -> 0.30 for 2.5x depth precision.
+
+Known and NOT fixed in 320: the Camp Ember flicker. Diagnosed conclusively — it is depth
+precision, not performance (production telemetry measured a locked 60 fps there). The apron
+flattens terrain to exactly the camp elevation and the firebase anchors at that same height, so
+essentially the entire ground dressing was authored between -30 mm and +13 mm of the drawn
+ground while the cockpit depth quantum is ~5 mm at 100 m. The merged single-material
+`polygonOffset` biases the whole camp against the terrain but can never separate the camp's own
+layers from each other, so the geometry has to move. A re-stack was attempted and reverted: it
+must also rework the six Camp Ember spawn-volume and contact-flatness invariants in the same
+change, and those are safety contracts that must not be weakened casually.
 
 This is the evergreen status page. Dated plans, browser-drive reports, and handoffs remain useful
 evidence for the build and commit they name, but they do not override this page or the executable
