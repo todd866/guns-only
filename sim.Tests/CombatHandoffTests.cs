@@ -239,6 +239,7 @@ public sealed class CombatHandoffTests {
         session.StepFixed();
         if (session.CombatHandoffPhase == CombatHandoffPhase.Requested)
             session.StepFixed();
+        session.StepFixed(12);
 
         Assert.Equal(bingo
             ? MissionRtbReason.BingoFuel

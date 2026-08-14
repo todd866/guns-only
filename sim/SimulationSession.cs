@@ -1507,10 +1507,14 @@ public sealed class SimulationSession {
                 return;
 
             case CombatHandoffPhase.PlayerRtb:
+                // A completed finite fight can enter RTB without ever spawning relief. Keep that
+                // honest no-relief route in PlayerRtb until the runway model records recovery;
+                // opponent absence alone cannot manufacture a relief-complete state or cue.
+                if (_reliefFighter is null) return;
                 if (LiveOpponentCount == 0) {
                     _combatHandoffPhase = CombatHandoffPhase.ReliefComplete;
                     ShowTransition("RELIEF COMPLETE · CONTINUE RTB", 2600.0);
-                } else if (_reliefFighter is null || !_reliefFighter.StillFighting) {
+                } else if (!_reliefFighter.StillFighting) {
                     _combatHandoffPhase = CombatHandoffPhase.ReliefLost;
                     ShowTransition("RELIEF LOST · CONTINUE RTB", 3000.0);
                 }
