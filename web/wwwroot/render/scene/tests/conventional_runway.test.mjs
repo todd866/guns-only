@@ -82,6 +82,26 @@ test("runway follows terrain horizon curvature and keeps its shoulder above the 
   assert.ok(shoulderTopM < runwayState().runway_threshold_y + 0.02);
 });
 
+test("every long-range airbase mesh and point field follows the runway horizon bend", () => {
+  const runway = createConventionalRunwayPresentation();
+  updateConventionalRunwayPresentation(runway, runwayState());
+
+  const curvedObjects = [];
+  runway.group.traverse((object) => {
+    if (!object.name.startsWith("AIRBASE_") || !object.material) return;
+    curvedObjects.push(object);
+    assert.equal(typeof object.material.onBeforeCompile, "function", object.name);
+    const shader = { vertexShader: "before\n#include <project_vertex>\nafter" };
+    object.material.onBeforeCompile(shader);
+    assert.match(shader.vertexShader, /runwayRadialM - 12000\.0/, object.name);
+    assert.match(shader.vertexShader, /\/ 12742000\.0/, object.name);
+    assert.doesNotMatch(shader.vertexShader, /#include <project_vertex>/, object.name);
+  });
+  assert.ok(curvedObjects.length >= 30, "full airbase curvature coverage should stay broad");
+  assert.ok(curvedObjects.some((object) => object.isPoints),
+    "fixed-pixel light fields must share the curvature shader");
+});
+
 test("conventional strip never creates carrier recovery hardware", () => {
   const runway = createConventionalRunwayPresentation();
   const names = [];

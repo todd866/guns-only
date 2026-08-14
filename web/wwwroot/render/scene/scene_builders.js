@@ -1367,7 +1367,7 @@ function createRunwayPointField(name, capacity, color, sizePx) {
     new Float32Array(capacity * 3), 3,
   ));
   geometry.setDrawRange(0, 0);
-  const material = new THREE.PointsMaterial({
+  const material = applyTerrainCurvatureToRunwayMaterial(new THREE.PointsMaterial({
     color,
     size: sizePx,
     sizeAttenuation: false,
@@ -1376,7 +1376,7 @@ function createRunwayPointField(name, capacity, color, sizePx) {
     depthTest: true,
     depthWrite: false,
     toneMapped: false,
-  });
+  }));
   const points = new THREE.Points(geometry, material);
   points.name = name;
   points.frustumCulled = false;
@@ -1442,28 +1442,28 @@ export function createConventionalRunwayPresentation() {
     polygonOffsetFactor: -3,
     polygonOffsetUnits: -3,
   }));
-  const hangarMaterial = new THREE.MeshStandardMaterial({
+  const hangarMaterial = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshStandardMaterial({
     color: 0x849092,
     roughness: 0.88,
     metalness: 0.08,
-  });
-  const hangarRoofMaterial = new THREE.MeshStandardMaterial({
+  }));
+  const hangarRoofMaterial = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshStandardMaterial({
     color: 0x405158,
     roughness: 0.82,
     metalness: 0.16,
-  });
-  const towerMaterial = new THREE.MeshStandardMaterial({
+  }));
+  const towerMaterial = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshStandardMaterial({
     color: 0x3d4748,
     roughness: 0.86,
     metalness: 0.05,
-  });
-  const towerGlassMaterial = new THREE.MeshStandardMaterial({
+  }));
+  const towerGlassMaterial = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshStandardMaterial({
     color: 0x78979a,
     emissive: 0x172c2c,
     emissiveIntensity: 0.7,
     roughness: 0.3,
     metalness: 0.08,
-  });
+  }));
   const approachPaint = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshBasicMaterial({
     color: 0xfff0bf,
     toneMapped: false,
