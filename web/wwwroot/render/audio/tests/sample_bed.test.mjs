@@ -10,6 +10,7 @@ import {
   loadSampleBed,
   validateSampleBedUrl,
 } from "../sample_bed.js";
+import { RELEASE_BUILD } from "../../release/release_identity.js";
 
 const ORIGIN = "https://guns-only.test";
 const DEFINITION = Object.freeze({
@@ -83,7 +84,7 @@ function response(bytes = new Uint8Array([1, 2, 3, 4]), url = DEFINITION.url) {
 }
 
 test("publishes honest same-origin build-stamped aircraft bed paths", () => {
-  assert.equal(SAMPLE_BED_BUILD, "329",
+  assert.equal(SAMPLE_BED_BUILD, RELEASE_BUILD,
     "aircraft sample beds must advance with the canonical release identity");
   const f14 = new URL(F14_COCKPIT_SAMPLE_BED.url);
   const cobra = new URL(COBRA_COCKPIT_SAMPLE_BED.url);

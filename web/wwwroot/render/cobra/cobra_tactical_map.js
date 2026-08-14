@@ -7,7 +7,7 @@
  * progress or unit positions, it only reprojects what the sim already published.
  */
 
-import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=329";
+import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=330";
 
 export const COBRA_TACTICAL_MAP_SCHEMA = "guns-only.cobra-tactical-map.v1";
 

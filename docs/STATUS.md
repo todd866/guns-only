@@ -1,8 +1,8 @@
 # Current product and verification status
 
 Updated: 2026-08-14
-Production: Build 328, revision `b13a9fc2f75be4d6d1e1c77ff9a41f9a13138fdb` (verified live via
-`/api/build-info` 2026-08-14, with the protected release pipeline complete). Builds 312 (Cobra
+Production: Build 329, revision `f4c423b384b3c64f93c8cdcd7acb44b417387fef` (verified live via
+`/api/build-info` 2026-08-15, with the protected release pipeline complete). Builds 312 (Cobra
 contact envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap
 timing), 318 (authored structure materials), 320 (Top Gun 404 + cockpit depth near-plane), 321
 (Camp Ember depth recess), 322 (Cobra scenery pass) and 323 (the Cobra conquest mission: owned
@@ -27,12 +27,17 @@ Ready dialog sideways; diagnostics consent, Fly and Settings remain visible and 
 Build 328 shipped the owner-flight response: Cobra scenery/HUD/gunner/collision/golden-route work;
 Top Gun protected 7.5/11 G controls, authoritative AUTO/MAN wing sweep and dedicated sound; F-22
 and Rapier RTB corridors; and the first provenance-recorded Cobra/F-14 surrogate sample beds.
-Next candidate: Build 329 (branch `fix/build-329-f14-regressions`) — the first Build 328 owner-flight
-hotfix. Top Gun gains a real conventional recovery authority, pilot `O` and automatic Bingo
+Build 329 shipped the first Build 328 owner-flight hotfix. Top Gun gained a real conventional
+recovery authority, pilot `O` and automatic Bingo
 ceasefire/relief handoff, the shared highway-in-the-sky corridor, and the FUEL/NM, LB/MIN and LB/NM
 navigation panel. Manual wing sweep now announces its forward/aft physical stop instead of looking
 dead at 20/68 degrees. Both the generic suit/harness G stack and the F-14-specific G-driven intake
 and structure layers are removed; measured buffet, airflow, engine and wing-actuator sound remain.
+Next candidate: Build 330 (branch `graphics/top-gun-recovery-base`) — a bounded graphics pass on
+the conventional recovery field. The physics-owned strip is unchanged; presentation adds a cut
+airfield footprint, a 900 m approach-light system, runway/threshold/end lights, parallel taxiway,
+connectors, apron stands, hangars, utility buildings and a control tower/beacon. Static layout is
+cached, short strips omit the full base set dressing, and only the tower spends shadow-map budget.
 
 Build 325 shipped the following owner-flight findings and remains the baseline for this candidate.
 
@@ -129,7 +134,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 | Experience | State | Public surface | Current evidence | Promotion blocker |
 | --- | --- | --- | --- | --- |
-| F-22A · Guns Only (`first-merge`) | **production** | Aircraft picker | Build 238 automation plus a recorded 2026-08-02 human acceptance flight (session `web-1785627445839-631596`). Build 264 graduated the sparring pair together; Build 265 aimed Ace fire at the ballistic solution. Build 308 bounds pathological terrain marches, reduces Auto-GCAS terrain work, and restores physical flyby acoustics and cast shadows. Build 328 candidate adds current-position Call It A Day/Bingo RTB and removes the unsourced G-only canopy/seal voice. | Fresh human flight on Build 328 to confirm the corridor, ceasefire and revised sound; w1 snapshot despawn; descent sim-step spike; lead/ballistics quality |
+| F-22A · Guns Only (`first-merge`) | **production** | Aircraft picker | Build 238 automation plus a recorded 2026-08-02 human acceptance flight (session `web-1785627445839-631596`). Build 264 graduated the sparring pair together; Build 265 aimed Ace fire at the ballistic solution. Build 308 bounds pathological terrain marches, reduces Auto-GCAS terrain work, and restores physical flyby acoustics and cast shadows. Builds 328-329 add current-position Call It A Day/Bingo RTB, remove the unsourced G-only canopy/seal voice and close conventional runway recovery. Build 330 candidate improves the shared recovery-field presentation without changing landing authority. | Fresh human flight on Build 330 to confirm the corridor, ceasefire, revised sound and airfield picture; w1 snapshot despawn; descent sim-step spike; lead/ballistics quality |
 | Rated arena (`multiplayer`) | **preview** | Preview acknowledgement only | Build 310 candidate adds same-origin matchmaking, shared human/bot Elo, bounded bot-only handicap profiles, outcome/fun reporting, and fail-closed launch/storage gates | Complete green gate; configured durable ladder storage; representative match, retry, abandon, and fly-again acceptance; multiplayer product acceptance before promotion |
 | Rapier · Intercept (`rapier-intercept`) | **production** | Aircraft picker | Build 238 automation earns the 24 km/M4.2 shelf, takes one physical M61 pass, then traps and stops at 2,520 s; the no-trigger mirror traps without firing and truthfully ends Draw. Build 328 candidate adds fitted recovery energy, shared current-position Call It A Day/Bingo RTB, and authoritative player/enemy ceasefire. | Fresh representative human launch/intercept/recovery flight on Build 328 |
 | Low-level drone intercept (`low-level-drone`) | **quarantined** | Preview acknowledgement only | Runtime and automated contracts exist | Ground-target/player-purpose closure and complete human flight |
@@ -140,7 +145,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
 | Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned four-point conquest, dug-in garrisons, tickets, M134 + Camp Ember rearm, Tab/F gunner, north-up minimap/full map and golden path. Build 326 adds grounded Ready/swap safety, warned ground fire and subsystem damage, cold-spare turnaround, sky/target graphics and procedural AH-1G audio. Build 328 candidate responds to the recorded owner flight with denser/clearer scenery, corrected HUD/range/ticket staging, an improved golden route, LOS-owned V selection with an F firing chain, fortified-garrison collision and a provenance-recorded UH-1H/T53 surrogate bed. | Fresh owner flight on Build 328. Known open: ground-fire lethality and turnaround timing are provisional gameplay closures, not production-combat fidelity. Longer arc: DCS-BS1-grade flight dynamics. |
 | Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load, lappable circuit from Build 264+. Build 267 adds ride telemetry (speed/gear/lean/lap/frame). Build 308 adds tiered shadows, sky-derived IBL, and horizon/far-plane corrections. Build 315 candidate makes it a game: lap/last/best on the helmet HUD, four sector splits, a live delta to your best, an off-track lap refused as a record, and a best that persists across sessions | Owner ride on Build 315: is beating your own best worth trying for? Ghost bike deliberately cut from v1 |
-| Top Gun (`top-gun`) | **production** | Aircraft picker / main shell | Build 309 automation covers Tomcat AIM-9, MiG-28 boot and gun fire. Build 326 repairs the programme-selector launch stall and promotes the mission. The owner flew Builds 327 and 328 on 2026-08-14. Build 328 fixed the 13.8 G overshoot and added authoritative indicated AUTO/MAN sweep, but its first owner flight exposed missing RTB/fuel navigation, ambiguous sweep-limit feedback and two remaining synthetic pull-G sound paths. Build 329 candidate adds the conventional home corridor, `O`/Bingo ceasefire, navigation-rate panel, sweep-stop annunciation and removes those G-driven sounds. | Owner ruling remains deploy first, then fly the exact public artifact; re-fly Build 329 for RTB, fuel awareness, sweep-limit and audible acceptance. |
+| Top Gun (`top-gun`) | **production** | Aircraft picker / main shell | Build 309 automation covers Tomcat AIM-9, MiG-28 boot and gun fire. Build 326 repairs the programme-selector launch stall and promotes the mission. The owner flew Builds 327 and 328 on 2026-08-14. Build 328 fixed the 13.8 G overshoot and added authoritative indicated AUTO/MAN sweep. Build 329 adds the conventional home corridor, `O`/Bingo ceasefire, navigation-rate panel, sweep-stop annunciation and removes the remaining G-driven sounds. Build 330 candidate turns the scored runway into a visually legible airbase and final-approach picture. | Owner ruling remains deploy first, then fly the exact public artifact; re-fly Build 330 for RTB, landing, fuel awareness, sweep-limit, audible and airfield-visual acceptance. |
 
 ## Research-only packages
 
@@ -150,8 +155,8 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Live production is Build 327, revision `15acf65ac3ae6939f90dfb493986406051b60ee0`, shipped from
-  PR #72 with both required Verify contexts green. Local gate
+- Live production is Build 329, revision `f4c423b384b3c64f93c8cdcd7acb44b417387fef`, shipped from
+  PR #74 with both required Verify contexts green. Local gate
   runs on a loaded workstation produce false browser-smoke timeouts (2026-08-12: four smokes
   timed out under an unrelated 200%+ CPU load and all passed in isolation and on CI); CI on
   clean runners is the authoritative check.
