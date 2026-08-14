@@ -28,10 +28,28 @@ public sealed class RecoveryProfileFlightTests(ITestOutputHelper output) {
             FlightModel.RapierPublicDataSurrogate,
             AirframeSystemsProfile.RapierSurrogate);
 
+    [Fact]
+    public void F14ProfileFliesFromStabilisedFinalToAFullStop() =>
+        FlyToStop(
+            "F-14A",
+            FlightModel.F14APublicDataSurrogate,
+            AirframeSystemsProfile.ModernConventionalGearSurrogate,
+            maximumTouchdownSpeedFactor: 1.30,
+            flareTrackM: 420.0);
+
+    [Fact]
+    public void Mig28ProfileFliesFromStabilisedFinalToAFullStop() =>
+        FlyToStop(
+            "MiG-28",
+            FlightModel.Mig28F5EClassSurrogate,
+            AirframeSystemsProfile.ModernConventionalGearSurrogate);
+
     void FlyToStop(
         string label,
         AircraftParams air,
-        AirframeSystemsProfile systems) {
+        AirframeSystemsProfile systems,
+        double maximumTouchdownSpeedFactor = 1.25,
+        double flareTrackM = 240.0) {
         var runway = new ConventionalRunway(
             $"runway.{label.ToLowerInvariant()}.flight-test.v1",
             $"{label} deterministic recovery card",
@@ -45,7 +63,7 @@ public sealed class RecoveryProfileFlightTests(ITestOutputHelper output) {
         var recovery = new ConventionalRunwayRecoveryModel(runway,
             new ConventionalLandingEnvelope(
                 MinimumAirspeedMps: 0.82 * onSpeedKcasMps,
-                MaximumAirspeedMps: 1.25 * onSpeedKcasMps));
+                MaximumAirspeedMps: maximumTouchdownSpeedFactor * onSpeedKcasMps));
 
         AirframeAerodynamicState landing = systems.FullLandingAerodynamicState;
         const double stabiliseDistanceM = 1_500.0;
@@ -143,7 +161,7 @@ public sealed class RecoveryProfileFlightTests(ITestOutputHelper output) {
 
             double desiredGamma = -GlideslopeRad
                 + Math.Clamp(heightErrorM / 250.0, -0.080, 0.080);
-            if (remainingM < 240.0)
+            if (remainingM < flareTrackM)
                 desiredGamma = -0.012 + Math.Clamp(heightErrorM / 180.0, -0.035, 0.055);
 
             AtmosphericState atmosphere = aircraft.AtmosphericState;
@@ -178,6 +196,7 @@ public sealed class RecoveryProfileFlightTests(ITestOutputHelper output) {
             + $"along {finalAirborneFrame.along:F0} m, height {finalAirborneFrame.height:F1} m, "
             + $"TAS {aircraft.AirspeedMps * AirData.MpsToKnots:F1} kt, "
             + $"gamma {aircraft.State.Gamma * 180.0 / Math.PI:F1} deg, "
+            + $"touchdown deviations {recovery.Touchdown.Deviations}, "
             + $"first surface crossing {firstSurfaceCrossAlongM:F0} m, "
             + $"peak path error {peakGlideErrorM:F1} m");
         Assert.True(recovery.Touchdown.Survivable,
@@ -185,7 +204,7 @@ public sealed class RecoveryProfileFlightTests(ITestOutputHelper output) {
         Assert.InRange(recovery.Touchdown.AlongM, 0.0, 1_200.0);
         Assert.InRange(recovery.Touchdown.SinkRateMps, 0.0, 4.0);
         Assert.InRange(recovery.Touchdown.AirspeedMps,
-            0.82 * onSpeedKcasMps, 1.25 * onSpeedKcasMps);
+            0.82 * onSpeedKcasMps, maximumTouchdownSpeedFactor * onSpeedKcasMps);
         Assert.InRange(peakGlideErrorM, 0.0, 25.0);
         Assert.InRange(peakSpeedErrorMps * AirData.MpsToKnots, 0.0, 20.0);
 

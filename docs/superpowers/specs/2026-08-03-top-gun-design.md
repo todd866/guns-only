@@ -95,8 +95,9 @@ Follow-up: induced-drag/wave coupling to sweep if preview dogfights need more en
 
 - Theatre: southern-California training range fiction (Miramar energy) — coastline + desert
   light, not USS Enterprise trap practice.
-- Lifecycle: Ready (Top Gun briefing chrome) → Active 1v1 ACM → kill / bingo / mutual disengage
-  soft end → debrief line.
+- Lifecycle: Ready (Top Gun briefing chrome) → Active 1v1 ACM → kill, or `O` / Bingo KNOCK IT OFF
+  → relief owns the opponent while the player follows a conventional home corridor → physical
+  runway recovery / debrief.
 - Soft outcomes acceptable in preview; production wants a clear win/lose from guns or heaters.
 
 Carrier catapult, flat spin lore beats, Viper as RIO, class montage, and beach sequences are
@@ -173,3 +174,5 @@ Production:
 - [ ] Representative human dogfight on the exact public artifact (post-deploy acceptance)
 - [x] STATUS/catalog aligned (`production`, Build 326 candidate)
 - [ ] Owner-telemetry not polluting “first Top Gun kill” celebrations (post-deploy review)
+- [x] Build 329 candidate publishes conventional RTB authority, shared fuel-navigation rates and
+  deterministic F-14/MiG-28 recovery flight cards after the Build 328 owner flight exposed the gap

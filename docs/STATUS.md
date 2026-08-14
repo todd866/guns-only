@@ -1,7 +1,7 @@
 # Current product and verification status
 
 Updated: 2026-08-14
-Production: Build 327, revision `15acf65ac3ae6939f90dfb493986406051b60ee0` (verified live via
+Production: Build 328, revision `b13a9fc2f75be4d6d1e1c77ff9a41f9a13138fdb` (verified live via
 `/api/build-info` 2026-08-14, with the protected release pipeline complete). Builds 312 (Cobra
 contact envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap
 timing), 318 (authored structure materials), 320 (Top Gun 404 + cockpit depth near-plane), 321
@@ -24,16 +24,15 @@ owner-directed production promotion.
 Build 327 shipped the iPhone/WebKit mission-picker hotfix. Deep-linked aircraft are centred inside
 the horizontal poster rail without allowing `scrollIntoView()` to shift the overflow-hidden outer
 Ready dialog sideways; diagnostics consent, Fly and Settings remain visible and tappable.
-Next candidate: Build 328 (branch `fix/cobra-topgun-polish`) — the owner-flight response release.
-Cobra gains denser and more legible canyon scenery, a readable mission HUD, LOS-owned selectable
-gunner targets, fortified-objective collision, improved conquest pacing/telemetry, and a rebuilt
-golden route presentation. Top Gun gains an immediate protected 7.5 G pull, an 11 G emergency
-override with cumulative provisional fatigue, authoritative AUTO/MAN 20–68° wing sweep with
-desktop/touch controls and an indicator, plus dedicated F-14 sound. F-22 removes the unsourced
-G-only canopy/seal noise. F-22 and Rapier share fitted recovery profiles, a live-position RTB
-corridor, pilot `O` / pause-screen Call It A Day, and automatic Bingo ceasefire. Dedicated Cobra
-and F-14 procedural voices now accept provenance-recorded public-domain surrogate sample beds;
-they remain explicitly surrogate, not type-authentic recordings.
+Build 328 shipped the owner-flight response: Cobra scenery/HUD/gunner/collision/golden-route work;
+Top Gun protected 7.5/11 G controls, authoritative AUTO/MAN wing sweep and dedicated sound; F-22
+and Rapier RTB corridors; and the first provenance-recorded Cobra/F-14 surrogate sample beds.
+Next candidate: Build 329 (branch `fix/build-329-f14-regressions`) — the first Build 328 owner-flight
+hotfix. Top Gun gains a real conventional recovery authority, pilot `O` and automatic Bingo
+ceasefire/relief handoff, the shared highway-in-the-sky corridor, and the FUEL/NM, LB/MIN and LB/NM
+navigation panel. Manual wing sweep now announces its forward/aft physical stop instead of looking
+dead at 20/68 degrees. Both the generic suit/harness G stack and the F-14-specific G-driven intake
+and structure layers are removed; measured buffet, airflow, engine and wing-actuator sound remain.
 
 Build 325 shipped the following owner-flight findings and remains the baseline for this candidate.
 
@@ -141,7 +140,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
 | Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned four-point conquest, dug-in garrisons, tickets, M134 + Camp Ember rearm, Tab/F gunner, north-up minimap/full map and golden path. Build 326 adds grounded Ready/swap safety, warned ground fire and subsystem damage, cold-spare turnaround, sky/target graphics and procedural AH-1G audio. Build 328 candidate responds to the recorded owner flight with denser/clearer scenery, corrected HUD/range/ticket staging, an improved golden route, LOS-owned V selection with an F firing chain, fortified-garrison collision and a provenance-recorded UH-1H/T53 surrogate bed. | Fresh owner flight on Build 328. Known open: ground-fire lethality and turnaround timing are provisional gameplay closures, not production-combat fidelity. Longer arc: DCS-BS1-grade flight dynamics. |
 | Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load, lappable circuit from Build 264+. Build 267 adds ride telemetry (speed/gear/lean/lap/frame). Build 308 adds tiered shadows, sky-derived IBL, and horizon/far-plane corrections. Build 315 candidate makes it a game: lap/last/best on the helmet HUD, four sector splits, a live delta to your best, an off-track lap refused as a record, and a best that persists across sessions | Owner ride on Build 315: is beating your own best worth trying for? Ghost bike deliberately cut from v1 |
-| Top Gun (`top-gun`) | **production** | Aircraft picker / main shell | Build 309 automation covers Tomcat AIM-9, MiG-28 boot and gun fire. Build 326 repairs the programme-selector launch stall and promotes the mission. The owner flew Build 327 on 2026-08-14; complete telemetry showed the original limiter/override overshot to 13.8 G, wing sweep lacked a mode/control contract, and sound remained unconvincing. Build 328 candidate answers those findings with protected 7.5/11 G controls, cumulative provisional fatigue, authoritative indicated AUTO/MAN sweep and a dedicated F/A-18-cockpit surrogate bed. | Owner ruling remains deploy first, then fly the exact public artifact; re-fly Build 328 for handling, sweep and audible acceptance. |
+| Top Gun (`top-gun`) | **production** | Aircraft picker / main shell | Build 309 automation covers Tomcat AIM-9, MiG-28 boot and gun fire. Build 326 repairs the programme-selector launch stall and promotes the mission. The owner flew Builds 327 and 328 on 2026-08-14. Build 328 fixed the 13.8 G overshoot and added authoritative indicated AUTO/MAN sweep, but its first owner flight exposed missing RTB/fuel navigation, ambiguous sweep-limit feedback and two remaining synthetic pull-G sound paths. Build 329 candidate adds the conventional home corridor, `O`/Bingo ceasefire, navigation-rate panel, sweep-stop annunciation and removes those G-driven sounds. | Owner ruling remains deploy first, then fly the exact public artifact; re-fly Build 329 for RTB, fuel awareness, sweep-limit and audible acceptance. |
 
 ## Research-only packages
 

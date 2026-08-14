@@ -1017,9 +1017,15 @@ export function updateBuffetVoice(voices, audioContext, state, { enabled = true 
 export function updateAirframeCueVoices(voices, audioContext, state, { enabled = true } = {}) {
   if (!voices || !audioContext) return;
   const now = audioContext.currentTime;
-  const f22 = isAgedF22(state);
+  const propulsionCharacter = resolvePropulsionCharacter(state);
+  const f22 = propulsionCharacter === "f22";
   const f22Cockpit = f22 && resolveCockpitPerspective(state);
-  const syntheticGCuesEnabled = enabled && !f22;
+  // Neither modern fighter has a sourced cockpit basis for the generic suit/harness/strain stack.
+  // Their aerodynamic buffet and aircraft-specific airflow graphs remain live; pulling G alone
+  // must not manufacture the conspicuous swoosh the F-14 shipped with in Build 328.
+  const syntheticGCuesEnabled = enabled
+    && propulsionCharacter !== "f22"
+    && propulsionCharacter !== "f14";
   const q01 = clamp01(dynamicPressureProxy(state));
   const qPa = dynamicPressurePa(state);
 

@@ -1541,11 +1541,9 @@ public static class Beats {
     }
 
     /// <summary>
-    /// TOP GUN 1v1 ACM — Tomcat vs MiG-28 (F-5E-class fiction) visual merge. No carrier, no
-    /// recovery ladder: one guns-free engagement at co-altitude inside the 3–8 nm separation band
-    /// used by <see cref="ModernVisualMerge"/>. Seat selects ownship; opponent is the other jet.
-    /// AIM-9 and wing-sweep hooks arrive in later Top Gun tasks; this beat owns spawn geometry,
-    /// airframe params, and guns-only ROE only.
+    /// TOP GUN 1v1 ACM — Tomcat vs MiG-28 (F-5E-class fiction) visual merge. The engagement begins
+    /// airborne, but a pilot KNOCK IT OFF or Bingo transition hands the fight to relief and opens a
+    /// conventional recovery corridor. Seat selects ownship; opponent is the other jet.
     /// </summary>
     public static BeatSetup TopGunAcm(TopGunSeat playerSeat) {
         // 10,000 ft co-altitude staging — same band as ModernVisualMerge, suitable for guns ACM.
@@ -1611,6 +1609,21 @@ public static class Beats {
             VisualMergeEvaluation: new VisualMergeEvaluationConfig(HoldFireThroughFirstPass: false),
             PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
             BanditSkill: PilotSkill.Competent,
+            // The Top Gun presentation reuses the shipped Ukraine terrain product under a clearly
+            // fictional range identity. Reuse the surveyed Soniachne-west pavement geometry too:
+            // it keeps the recovery surface above that same authority DEM and gives either seat a
+            // real runway/rollout model instead of a browser-only marker. The distinct ID and name
+            // avoid pretending the fictional exercise is physically at the F-22 programme site.
+            RecoveryPlan: new RecoveryPlan(
+                "recovery.top-gun.fightertown-runway.v1",
+                "Fightertown recovery runway",
+                new Vec3D(-61_652.0, 106.75, -56_576.0),
+                requiredLandingReserveLb: 2_000.0,
+                conventionalRunway: new ConventionalRunwayGeometry(
+                    thresholdPosition: new Vec3D(-61_952.0, 106.75, -56_576.0),
+                    landingHeadingRad: Math.PI / 2.0,
+                    lengthM: 3_000.0,
+                    widthM: 45.0)),
             Environment: TopGunEnvironment.Contract);
     }
 

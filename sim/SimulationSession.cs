@@ -803,7 +803,10 @@ public sealed class SimulationSession {
         _combatHandoffPhase == CombatHandoffPhase.Available
         && Lifecycle == LifecycleState.Active
         && _playerTerminalState == AircraftTerminalState.Flying
-        && (LiveOpponentCount > 0 || OpponentReplacementPending);
+        && (LiveOpponentCount > 0
+            || OpponentReplacementPending
+            || (TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)
+                && _beat.RecoveryPlan is not null));
     /// Latched from the accepted rising edge through recovery.
     public bool CombatHandoffRequested =>
         _combatHandoffPhase >= CombatHandoffPhase.Requested;
@@ -1390,9 +1393,14 @@ public sealed class SimulationSession {
         _padlockRollAssist.Reset();
         ClearFormationCoordination();
         CompleteInterruptedEngagementForHandoff();
-        ShowTransition(reason == MissionRtbReason.BingoFuel
-            ? "BINGO · KNOCK IT OFF · RELIEF INBOUND · RTB"
-            : "KNOCK IT OFF · RELIEF INBOUND · RTB", 3200.0);
+        bool reliefRequired = LiveOpponentCount > 0 || OpponentReplacementPending;
+        ShowTransition(reliefRequired
+            ? reason == MissionRtbReason.BingoFuel
+                ? "BINGO · KNOCK IT OFF · RELIEF INBOUND · RTB"
+                : "KNOCK IT OFF · RELIEF INBOUND · RTB"
+            : reason == MissionRtbReason.BingoFuel
+                ? "BINGO · FIGHT COMPLETE · FLY THE HOME CORRIDOR"
+                : "FIGHT COMPLETE · FLY THE HOME CORRIDOR", 3200.0);
         return true;
     }
 
@@ -1474,6 +1482,13 @@ public sealed class SimulationSession {
     void AdvanceCombatHandoffAtTickBoundary() {
         switch (_combatHandoffPhase) {
             case CombatHandoffPhase.Requested:
+                // A finite Top Gun fight can finish before the pilot calls RTB or reaches Bingo.
+                // There is then no opponent custody to transfer and no honest relief actor to
+                // announce; arm recovery directly while retaining the same RTB lifecycle.
+                if (LiveOpponentCount <= 0 && !OpponentReplacementPending) {
+                    _combatHandoffPhase = CombatHandoffPhase.PlayerRtb;
+                    return;
+                }
                 SpawnReliefAndRetargetOpponents();
                 _combatHandoffPhase = CombatHandoffPhase.Drain;
                 return;
@@ -4532,8 +4547,12 @@ public sealed class SimulationSession {
 
     bool SupportsCombatHandoff =>
         OpponentPresent
-        && _beat.ContinuousCombat is not null
-        && _beat.PlayerAircraft.Id == AircraftCapability.F22ASurrogate.Id;
+        && ((_beat.ContinuousCombat is not null
+                && _beat.PlayerAircraft.Id == AircraftCapability.F22ASurrogate.Id)
+            || (_beat.RecoveryPlan is not null
+                && _carrier is null
+                && !RapierMissionAvailable
+                && TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)));
 
     /// The throttle a sortie should open on. Beats that stage a deliberate fighting speed opt into
     /// arriving trimmed for it; everything else keeps its authored setting.

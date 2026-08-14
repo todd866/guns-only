@@ -198,6 +198,48 @@ test("signed G separates positive suit load from negative/unload straps", async 
   assert.equal(latest(voices.gUnloadGain.gain), 0);
 });
 
+test("F-14 pull-G and unload do not add synthetic suit, harness, strain, or swoosh", async () => {
+  const {
+    createEventVoices,
+    updateAirframeCueVoices,
+  } = await freshEventAudio("f14-no-synthetic-g");
+  const audio = new FakeAudioContext();
+  const voices = createEventVoices(audio, audio.destination);
+  const identity = {
+    player_aircraft_id: "aircraft.f14a.public-data-surrogate.v1",
+    audio_profile_id: "audio.f14a.tf30-twin.v1",
+  };
+
+  updateAirframeCueVoices(voices, audio, {
+    ...identity,
+    pilot_gz: 1,
+    pilot_gz_valid: true,
+  });
+  audio.currentTime = 0.2;
+  updateAirframeCueVoices(voices, audio, {
+    ...identity,
+    pilot_gz: 10.8,
+    pilot_gz_valid: true,
+    pilot_positive_onset_rate_g_per_second: 7,
+  });
+  assert.equal(latest(voices.gGain.gain), 0);
+  assert.equal(latest(voices.gSuitGain.gain), 0);
+  assert.equal(latest(voices.gHarnessGain.gain), 0);
+  assert.equal(latest(voices.gUnloadGain.gain), 0);
+
+  audio.currentTime = 0.4;
+  updateAirframeCueVoices(voices, audio, {
+    ...identity,
+    pilot_gz: -1.2,
+    pilot_gz_valid: true,
+    pilot_negative_onset_rate_g_per_second: 5,
+  });
+  assert.equal(latest(voices.gGain.gain), 0);
+  assert.equal(latest(voices.gSuitGain.gain), 0);
+  assert.equal(latest(voices.gHarnessGain.gain), 0);
+  assert.equal(latest(voices.gUnloadGain.gain), 0);
+});
+
 test("boolean buffet is a floor while angular disturbance supplies progression", async () => {
   const {
     createEventVoices,

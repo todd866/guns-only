@@ -21,7 +21,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=328";
+} from "./render/hud/contact_visibility.js?v=329";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import {
   approachEnergyCue,
@@ -64,11 +64,11 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=328";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=329";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=328";
+} from "./render/mission/rapier_high_mach_instruments.js?v=329";
 import {
   limitsPanelPresentation,
   navigationRateReadout,
@@ -82,7 +82,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=328";
+} from "./render/audio/flight_audio.js?v=329";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -2861,7 +2861,10 @@ class CombatHud {
     ctx.fillStyle = accent;
     const commandText = manual && command !== null && Math.abs(command - actual) >= 0.6
       ? ` → ${command.toFixed(0)}°` : "";
-    ctx.fillText(`${manual ? "MAN" : "AUTO"} · ${actual.toFixed(0)}°${commandText}`,
+    const limitText = manual && actual >= 67.95
+      ? " · AFT LIMIT"
+      : manual && actual <= 20.05 ? " · FWD LIMIT" : "";
+    ctx.fillText(`${manual ? "MAN" : "AUTO"} · ${actual.toFixed(0)}°${commandText}${limitText}`,
       x + width, y);
 
     ctx.strokeStyle = GREEN_DIM;

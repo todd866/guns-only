@@ -48,6 +48,9 @@ test("HUD keeps actual wing angle, mode, manual keys, and structural warning obs
   assert.match(hudSource,
     /drawF14WingSweep\(state\)[\s\S]*?wing_sweep_deg[\s\S]*?wing_sweep_mode_code[\s\S]*?WING SWEEP/);
   assert.match(hudSource,
+    /actual\s*>=\s*67\.95[\s\S]*?AFT LIMIT[\s\S]*?actual\s*<=\s*20\.05[\s\S]*?FWD LIMIT/,
+    "a stopped manual wing must say which physical limit owns it");
+  assert.match(hudSource,
     /binding\("wingSweepForward", "Comma"\)[\s\S]*?binding\("wingSweepAft", "Period"\)[\s\S]*?binding\("wingSweepAuto", "Slash"\)/);
   assert.match(hudSource, /state\.f14_over_g === true[\s\S]*?OVER-G/);
   assert.match(hudSource, /f14_structural_fatigue_01[\s\S]*?AIRFRAME STRAIN/);

@@ -125,7 +125,7 @@ public sealed class CombatHandoffTests {
     }
 
     [Fact]
-    public void OnlyContinuousF22AcceptsRisingEdgeAndQuarantinesReport() {
+    public void RecoveryCapableDogfightAcceptsRisingEdgeAndQuarantinesReport() {
         var unsupported = new SimulationSession(1);
         unsupported.Begin();
         unsupported.FeedKey(GKey.KnockItOff, true);
@@ -154,6 +154,105 @@ public sealed class CombatHandoffTests {
         Assert.Single(session.EngagementReports);
         Assert.Equal(shotsAtHandoff, session.ShotsTotal);
         Assert.False(session.TriggerDown);
+    }
+
+    [Theory]
+    [InlineData(TopGunSeat.F14A)]
+    [InlineData(TopGunSeat.Mig28)]
+    public void TopGunCallItADayCeasesPlayerCombatAndArmsTheHomeCorridor(
+        TopGunSeat seat) {
+        var session = new SimulationSession();
+        session.StartBeat(() => Beats.TopGunAcm(seat));
+        session.Begin();
+
+        Assert.NotNull(session.Beat.RecoveryPlan);
+        Assert.True(session.ReturnToBaseAvailable);
+        Assert.False(session.PlayerRtbActive);
+        Assert.False(session.ApproachGuidancePlan.GuidanceActive);
+
+        session.FeedKey(GKey.KnockItOff, true);
+        session.StepFixed();
+
+        Assert.Equal(MissionRtbReason.PilotKnockItOff,
+            session.ReturnToBaseReason);
+        Assert.True(session.CombatHandoffRequested);
+        Assert.True(session.PlayerRtbActive);
+        Assert.False(session.PlayerWeaponsAuthorized);
+        Assert.False(session.OpponentTriggerDown);
+        Assert.True(session.ApproachGuidancePlan.GuidanceActive);
+        Assert.True(session.ApproachGuidancePlan.Valid);
+        Assert.NotEmpty(session.ApproachGuidancePlan.Gates);
+        Assert.Contains("RTB", session.TransitionCue,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TopGunBingoAutomaticallyCeasesCombatAndArmsTheHomeCorridor() {
+        BeatSetup authored = Beats.TopGunAcm(TopGunSeat.F14A);
+        var session = new SimulationSession();
+        session.StartBeat(() => authored with {
+            Fuel = authored.FuelLoadout with {
+                InitialFuelLb = authored.FuelLoadout.BingoThresholdLb
+            }
+        });
+        session.Begin();
+
+        Assert.True(session.PlayerFuel.IsBingo);
+        session.StepFixed();
+
+        Assert.Equal(MissionRtbReason.BingoFuel, session.ReturnToBaseReason);
+        Assert.True(session.CombatHandoffRequested);
+        Assert.True(session.PlayerRtbActive);
+        Assert.False(session.PlayerWeaponsAuthorized);
+        Assert.False(session.OpponentTriggerDown);
+        Assert.True(session.ApproachGuidancePlan.GuidanceActive);
+        Assert.True(session.ApproachGuidancePlan.Valid);
+        Assert.Contains("BINGO", session.TransitionCue,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(TopGunSeat.F14A, false)]
+    [InlineData(TopGunSeat.Mig28, false)]
+    [InlineData(TopGunSeat.F14A, true)]
+    [InlineData(TopGunSeat.Mig28, true)]
+    public void TopGunCompletedFightStillAllowsPilotOrBingoRtbWithoutFakeRelief(
+        TopGunSeat seat,
+        bool bingo) {
+        BeatSetup authored = Beats.TopGunAcm(seat);
+        var session = new SimulationSession();
+        session.StartBeat(() => bingo
+            ? authored with {
+                Fuel = authored.FuelLoadout with {
+                    InitialFuelLb = authored.FuelLoadout.BingoThresholdLb
+                }
+            }
+            : authored);
+        session.Begin();
+        session.ForceOpponentDefeatForTest();
+
+        Assert.Equal(0, session.LiveOpponentCount);
+        Assert.True(session.ReturnToBaseAvailable);
+
+        if (!bingo)
+            session.FeedKey(GKey.KnockItOff, true);
+        session.StepFixed();
+        if (session.CombatHandoffPhase == CombatHandoffPhase.Requested)
+            session.StepFixed();
+
+        Assert.Equal(bingo
+            ? MissionRtbReason.BingoFuel
+            : MissionRtbReason.PilotKnockItOff,
+            session.ReturnToBaseReason);
+        Assert.True(session.PlayerRtbActive);
+        Assert.Equal(CombatHandoffPhase.PlayerRtb,
+            session.CombatHandoffPhase);
+        Assert.Null(session.Relief);
+        Assert.True(session.ApproachGuidancePlan.GuidanceActive);
+        Assert.DoesNotContain("RELIEF", session.TransitionCue,
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("HOME CORRIDOR", session.TransitionCue,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
