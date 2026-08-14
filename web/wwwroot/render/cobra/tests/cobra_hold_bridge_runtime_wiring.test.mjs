@@ -56,7 +56,9 @@ test("telemetry rides the bounded channel and keepalive exists only behind the p
 test("Tab selects and V padlocks like the F-22 gun-target / view contract", async () => {
   const main = await source("cobra-lab/main.js");
   assert.match(main, /nextHostileTargetId/);
-  assert.match(main, /togglePadlockSelection/);
+  assert.match(main, /acquireAuthorityVisualLockTarget/);
+  assert.match(main, /TrySetVisualLockTarget/);
+  assert.match(main, /advancePadlockLosGrace/);
   assert.match(main, /resolveAuthorityLookAtPoint/);
   assert.match(main, /event\.code === "KeyV"/);
   assert.match(main, /event\.code === "Tab"/);

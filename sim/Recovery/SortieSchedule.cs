@@ -62,7 +62,14 @@ public readonly record struct SortieReference(
     /// Drag-to-weight in the recovery configuration: how much energy a metre of track buys back.
     double DragToWeight,
     /// Engine spool-up time constant. This is what makes a late wave-off expensive.
-    double SpoolUpTauS);
+    double SpoolUpTauS,
+    /// Maximum local TAS for selecting the landing configuration. Recovery deceleration begins
+    /// here; higher transit energy must be removed before gear/flaps are treated as available.
+    double ConfigurationCeilingMps = double.PositiveInfinity,
+    /// Land-runway flare distance. Zero keeps carrier approaches on the unflared glideslope.
+    double FlareTrackM = 0.0,
+    /// True after this exact airframe/configuration schedule has completed its recovery cards.
+    bool RecoveryProfileFitted = false);
 
 /// <summary>
 /// What to do right now, and why.
@@ -102,6 +109,9 @@ public readonly record struct SortieScheduleState(
 /// Pure: no session, no I/O, no clock. Same inputs, same answer, forever.
 /// </summary>
 public static class SortieSchedule {
+    /// Compatibility value for airframes which have not yet received a reconciled landing polar
+    /// and closed-loop recovery card. It is not used by the fitted F-22 or Rapier profiles.
+    public const double LegacyUnfittedRecoveryDragToWeight = 0.12;
     /// Energy band over which the power command saturates, in metres of specific energy. Wide
     /// enough that ordinary turbulence does not slam the throttle, narrow enough to be a cue.
     private const double PowerBandM = 300.0;
@@ -110,6 +120,10 @@ public static class SortieSchedule {
     /// honest, simple answer to "how early must I decide", and it is airframe-derived: a
     /// centrifugal J42 at 4.5 s asks for nine seconds of foresight, an axial J47 half of it.
     private const double SpoolConstantsToAnswer = 2.0;
+    /// A theoretical idle descent has no allowance for actuator/spool lag, path corrections, or
+    /// imperfectly constant D/W. Give the pilot a modest track reserve rather than drawing the
+    /// exact mathematical minimum as though it were an operational gate.
+    private const double RecoveryDecelerationPlanningMargin = 1.25;
 
     /// <summary>
     /// On-speed for an aircraft at a given mass, in the landing configuration it actually lands in.
@@ -127,9 +141,108 @@ public static class SortieSchedule {
         return air.ApproachStallMargin * stallKias / AirData.MpsToKnots;
     }
 
+    /// <summary>
+    /// Calibrated/indicated on-speed expressed in m/s, using the physical landing configuration.
+    /// Prefer this overload in production; the two-argument method remains the airframe-only
+    /// compatibility seam for pure fixtures.
+    /// </summary>
+    public static double ApproachCalibratedAirspeedMps(
+        double massKg,
+        AircraftParams air,
+        AirframeSystemsProfile systemsProfile) {
+        ArgumentNullException.ThrowIfNull(air);
+        ArgumentNullException.ThrowIfNull(systemsProfile);
+        double liftIncrement = systemsProfile.RecoveryProfileFitted
+            ? systemsProfile.FullLandingAerodynamicState.LiftCoefficientIncrement
+            : air.ApproachFlapCLIncrement;
+        double stallKias = AirData.StallSpeedKias(
+            massKg,
+            air,
+            positiveLoadFactor: 1.0,
+            liftCoefficientIncrement: liftIncrement);
+        return air.ApproachStallMargin * stallKias / AirData.MpsToKnots;
+    }
+
+    /// <summary>Local TAS which puts the aircraft on its calibrated approach reference.</summary>
+    public static double ApproachTrueAirspeedMps(
+        double massKg,
+        AircraftParams air,
+        AirframeSystemsProfile systemsProfile,
+        double altitudeM,
+        IAtmosphereModel? atmosphere = null) =>
+        AirData.TrueAirspeedForCalibratedAirspeedMps(
+            ApproachCalibratedAirspeedMps(massKg, air, systemsProfile),
+            altitudeM,
+            atmosphere);
+
+    /// <summary>
+    /// Drag-to-weight at the airframe's on-speed condition in its actual full landing
+    /// configuration. The result is a reduced-order fitted profile, not handbook performance:
+    /// it evaluates the same polar and the same gear/flap increments used by the live force model
+    /// in the supplied local atmosphere. Expressing the fit as D/W keeps the energy scheduler
+    /// independent of aircraft mass while making a clean-ish F-22 and a dirty delta materially
+    /// different airplanes.
+    /// </summary>
+    public static double RecoveryDragToWeight(
+        double massKg,
+        AircraftParams air,
+        AirframeSystemsProfile systemsProfile,
+        double altitudeM = 0.0,
+        IAtmosphereModel? atmosphere = null) {
+        if (!double.IsFinite(massKg) || massKg <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(massKg));
+        ArgumentNullException.ThrowIfNull(air);
+        ArgumentNullException.ThrowIfNull(systemsProfile);
+        if (!systemsProfile.RecoveryProfileFitted)
+            return LegacyUnfittedRecoveryDragToWeight;
+
+        AirframeAerodynamicState configuration =
+            systemsProfile.FullLandingAerodynamicState;
+        IAtmosphereModel atmosphereModel = atmosphere ?? StandardAtmosphere1976.Instance;
+        AtmosphericState atmosphericState = atmosphereModel.Sample(altitudeM);
+        double speedMps = ApproachTrueAirspeedMps(
+            massKg, air, systemsProfile, altitudeM, atmosphereModel);
+        double dynamicPressurePa = 0.5 * atmosphericState.DensityKgM3
+            * speedMps * speedMps;
+        double weightN = massKg * FlightModel.G0;
+        double requiredTotalCl = weightN
+            / Math.Max(dynamicPressurePa * air.WingAreaM2, 1e-9);
+        double alphaRad = (requiredTotalCl - configuration.LiftCoefficientIncrement)
+            / Math.Max(air.CLAlpha, 1e-9);
+        alphaRad = Math.Clamp(alphaRad,
+            air.CLMin / Math.Max(air.CLAlpha, 1e-9),
+            air.CLMax / Math.Max(air.CLAlpha, 1e-9));
+        double mach = speedMps / Math.Max(atmosphericState.SpeedOfSoundMps, 1e-9);
+        double cd = FlightModel.ProfileDragCoefficient(alphaRad, mach, air)
+            + configuration.DragCoefficientIncrement;
+        return dynamicPressurePa * air.WingAreaM2 * cd / weightN;
+    }
+
     /// <summary>Specific energy: the height the aircraft would reach trading all its speed.</summary>
     public static double SpecificEnergyM(double heightM, double trueAirspeedMps) =>
         heightM + trueAirspeedMps * trueAirspeedMps / (2.0 * FlightModel.G0);
+
+    /// <summary>
+    /// Minimum straight track needed to bleed from transit to on-speed at the fitted landing D/W.
+    /// The old fixed 2 km deceleration segment was not merely generic; it was energetically
+    /// impossible for a fast jet. This is the same backwards energy solve used by Recovery.
+    /// </summary>
+    public static double RecoveryDecelerationTrackM(in SortieReference reference) {
+        double netEnergyLossPerTrackM = reference.DragToWeight
+            - Math.Tan(reference.GlideslopeRad);
+        if (!(netEnergyLossPerTrackM > 0.0)
+            || !double.IsFinite(netEnergyLossPerTrackM))
+            return double.PositiveInfinity;
+        double energyToLoseM = Math.Max(0.0,
+            SpecificEnergyM(0.0, RecoveryEntrySpeedMps(reference))
+                - SpecificEnergyM(0.0, reference.ApproachSpeedMps));
+        return RecoveryDecelerationPlanningMargin
+            * energyToLoseM / netEnergyLossPerTrackM;
+    }
+
+    /// <summary>Speed at which the dirty recovery profile may honestly begin.</summary>
+    public static double RecoveryEntrySpeedMps(in SortieReference reference) =>
+        Math.Min(reference.TransitSpeedMps, reference.ConfigurationCeilingMps);
 
     /// <summary>
     /// Solve the schedule for one instant.
@@ -217,17 +330,24 @@ public static class SortieSchedule {
         // track, never above the transit altitude.
         double targetHeight = Math.Min(
             r.TransitHeightM, r.StabiliseHeightM + distance * Math.Tan(r.GlideslopeRad));
-        // Speed bleeds from transit to on-speed over the last two kilometres. Arriving at the
-        // stabilisation point fast is the failure this schedule exists to prevent.
-        const double DecelerationTrackM = 2_000.0;
-        double bleed = Math.Clamp(distance / DecelerationTrackM, 0.0, 1.0);
+        // Speed bleeds over the distance this airframe's own fitted drag actually requires.
+        // Arriving at the stabilisation point fast is the failure this schedule exists to prevent;
+        // pretending every fast jet can discard that energy in two kilometres only hides it.
+        double decelerationTrackM = r.RecoveryProfileFitted
+            ? RecoveryDecelerationTrackM(r)
+            : 2_000.0;
+        double bleed = Math.Clamp(distance / Math.Max(decelerationTrackM, 1.0), 0.0, 1.0);
         double targetSpeed = r.ApproachSpeedMps
-            + bleed * Math.Max(0.0, r.TransitSpeedMps - r.ApproachSpeedMps);
+            + bleed * Math.Max(0.0, RecoveryEntrySpeedMps(r) - r.ApproachSpeedMps);
 
-        // What the aircraft may have here, if it is going to bleed to the stabilisation point on
-        // this drag: the stabilisation energy plus what the remaining track can absorb.
-        double scheduledEnergy = SpecificEnergyM(r.StabiliseHeightM, r.ApproachSpeedMps)
-            + r.DragToWeight * distance;
+        // Geometry and the airframe-derived speed schedule define one coherent energy target.
+        // The older expression independently added D/W*distance to stabilisation energy; once an
+        // operational track margin was added it could command ADD power while simultaneously
+        // commanding deceleration. One target state must produce one power error.
+        double scheduledEnergy = r.RecoveryProfileFitted
+            ? SpecificEnergyM(targetHeight, targetSpeed)
+            : SpecificEnergyM(r.StabiliseHeightM, r.ApproachSpeedMps)
+                + r.DragToWeight * distance;
         // NOT Math.Min'd. The sign carries the answer: negative means low and slow, and low and
         // slow on an approach wants power, which the older schedule could not say.
         double energyError = SpecificEnergyM(heightM, tasMps) - scheduledEnergy;
@@ -248,7 +368,17 @@ public static class SortieSchedule {
         double heightM, double tasMps, double distance, in SortieReference r) {
         // Height above the DECK on the slope, going to zero at the ramp — which is the whole
         // reason this is deck-relative and not MSL.
-        double targetHeight = distance * Math.Tan(r.GlideslopeRad);
+        double slope = Math.Tan(r.GlideslopeRad);
+        double targetHeight = distance * slope;
+        if (r.FlareTrackM > 1.0 && distance < r.FlareTrackM) {
+            // Cubic Hermite flare: joins the straight glideslope with matching height/slope at
+            // flare entry, reaches runway height at touchdown, and reduces slope continuously to
+            // zero. Carrier references publish zero and retain the no-flare deck approach.
+            double x = Math.Max(0.0, distance);
+            double length = r.FlareTrackM;
+            targetHeight = slope
+                * (2.0 * x * x / length - x * x * x / (length * length));
+        }
         double error = SpecificEnergyM(heightM, tasMps)
             - SpecificEnergyM(targetHeight, r.ApproachSpeedMps);
 

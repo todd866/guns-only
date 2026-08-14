@@ -107,6 +107,29 @@ export function formatCobraRotorcraftStrip(vehicle, routeGuidance = null) {
 
 const LEVEL_RANK = { warning: 0, caution: 1, normal: 2 };
 
+function groundFireWarning(battleDamage, vehicle) {
+  if (battleDamage?.receiving_fire !== true) return null;
+  const bursts = Array.isArray(battleDamage.recent_bursts) ? battleDamage.recent_bursts : [];
+  let source = null;
+  for (let index = bursts.length - 1; index >= 0; index -= 1) {
+    const candidate = bursts[index];
+    if (!candidate) continue;
+    if (battleDamage.active_observer_id
+      && candidate.observer_id !== battleDamage.active_observer_id) continue;
+    if (![candidate.source_x_m, candidate.source_z_m].map(Number).every(Number.isFinite)) continue;
+    source = candidate;
+    break;
+  }
+  if (!source) return "GROUND FIRE";
+  const sourceBearingRad = Math.atan2(
+    Number(source.source_x_m) - finite(vehicle?.x_m),
+    Number(source.source_z_m) - finite(vehicle?.z_m),
+  );
+  const relativeTurns = (sourceBearingRad - finite(vehicle?.yaw_rad)) / (Math.PI * 2);
+  const clockIndex = ((Math.round(relativeTurns * 12) % 12) + 12) % 12;
+  return `FIRE ${clockIndex === 0 ? 12 : clockIndex} O'CLOCK`;
+}
+
 /**
  * Rotorcraft extras model for the production F-22 HUD (Build 264 owner ruling:
  * "standard F-22 HUD plus extras to make it legible as an attack helicopter").
@@ -161,7 +184,8 @@ export function cobraRotorcraftHudModel(authorityState) {
   if (mast >= 0.35) warnings.push({ text: "MAST BUMP", level: "warning" });
   if (rbs >= 0.75) warnings.push({ text: "BLADE STALL", level: "warning" });
   if (battleDamage?.scas_damaged === true) warnings.push({ text: "SCAS OUT", level: "caution" });
-  if (battleDamage?.receiving_fire === true) warnings.push({ text: "GROUND FIRE", level: "caution" });
+  const fireWarning = groundFireWarning(battleDamage, vehicle);
+  if (fireWarning) warnings.push({ text: fireWarning, level: "caution" });
   if (vrs >= 0.2 && vrs < 0.35) warnings.push({ text: "SETTLING WITH POWER", level: "caution" });
   if (rbs >= 0.55 && rbs < 0.75) warnings.push({ text: "BLADE STALL", level: "caution" });
   if (torquePct > 100) warnings.push({ text: "TORQUE LIMIT", level: "caution" });

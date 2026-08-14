@@ -18,9 +18,30 @@ test("handoff presentation fails closed before the first simulation snapshot", (
       reliefKills: 0,
       occurred: false,
       available: false,
+      returnReason: "NONE",
+      automatic: false,
       status: "HANDOFF UNAVAILABLE",
     });
   }
+});
+
+test("call-it-a-day presentation covers Rapier and automatic Bingo RTB", () => {
+  const manual = combatHandoffPresentation({
+    rtb_available: true,
+    rtb_reason: "NONE",
+  });
+  assert.equal(manual.available, true);
+  assert.equal(manual.status, "CALL IT A DAY · RTB AVAILABLE");
+
+  const bingo = combatHandoffPresentation({
+    player_rtb_active: true,
+    rtb_reason: "BINGO_FUEL",
+    rtb_automatic: true,
+  });
+  assert.equal(bingo.playerRtbActive, true);
+  assert.equal(bingo.returnReason, "BINGO_FUEL");
+  assert.equal(bingo.automatic, true);
+  assert.equal(bingo.status, "BINGO · KNOCK IT OFF · RTB");
 });
 
 test("medevac handoff debrief uses custody and coordination evidence, never combat copy", () => {

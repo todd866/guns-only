@@ -129,15 +129,23 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     double RollHoldAttitudeGainNmRad = 0.0,
     // Airframe envelope limits. Defaults preserve the existing unmanned/afterburning aircraft;
     // the F-86 overrides these with its piloted structural limit and dry-thrust-only J47.
-    // The three control-law fields are explicit gameplay-surrogate policy, not hidden aircraft
+    // These control-law fields are explicit gameplay-surrogate policy, not hidden aircraft
     // data: NormalPullUsesMaxPerformance bypasses the teaching detent while retaining the ordinary
-    // structural/AoA protection; PositiveOverrideLimitG is the actuator-demand ceiling available
-    // only through the input layer's deliberate override (negative preserves the structural cap);
+    // structural/AoA protection; InstantMaxPerformanceKeyboardPull removes only the input-layer
+    // demand lag for airframes whose full back-stick is itself the ordinary protected command;
+    // PositiveOverrideLimitG is the actuator-demand ceiling available only through the input
+    // layer's deliberate override (negative preserves the structural cap);
     // DynamicPressureScheduledPostStallOverride makes that override a G release above corner and a
     // progressively deeper incidence release below corner instead of commanding one fixed alpha
     // at every speed.
     double PositiveStructuralLimitG = 12.0, double MaxPerformFraction = 0.92,
-    bool NormalPullUsesMaxPerformance = false, double PositiveOverrideLimitG = -1.0,
+    bool NormalPullUsesMaxPerformance = false,
+    bool InstantMaxPerformanceKeyboardPull = false,
+    double PositiveOverrideLimitG = -1.0,
+    // A finite value is a hard achieved aerodynamic-load guard. It exists for an airframe whose
+    // emergency override must never turn a transient incidence overshoot into healthy sustained
+    // 13+ G flight. Infinity preserves every existing force polar bit-for-bit.
+    double AbsolutePositiveLoadFactorG = double.PositiveInfinity,
     bool DynamicPressureScheduledPostStallOverride = false,
     double MaxThrustFraction = 1.35,
     // Sustained skin-temperature limit, kelvin. Zero means unlimited, which is right for every
@@ -823,7 +831,9 @@ public static class FlightModel {
         GenericAfterburnerFuelFlowLbPerMinute: RapierV2Design.AugmentedFuelFlowLbPerMinute,
         SupersonicLiftSlopeSchedule: true,
         AerodynamicModel: AerodynamicModelKind.RapierCrankedDeltaPublicDataSurrogate,
-        ApproachFlapCLIncrement: 0.18,
+        // Keep the scheduler on the same full-droop lift increment as AirframeSystemsProfile;
+        // the earlier 0.18 guidance-only value disagreed with the 0.26 force-model configuration.
+        ApproachFlapCLIncrement: 0.26,
         ApproachStallMargin: 1.18,
         AerothermalAdiabaticRiseFraction: RapierV2Design.BindingThermalRiseFraction);
 
@@ -1066,8 +1076,9 @@ public static class FlightModel {
     /// F-14A PUBLIC-DATA SURROGATE for Top Gun visual merge. Measured anchors: 40,100 lb empty
     /// (Navy museum primary; Western Museum of Flight lists 40,104 lb — canonical empty mass uses
     /// the museum figure), 565 ft² wing, 20,900 lbf static afterburner per TF30-P-412A/-414A.
-    /// Aero/control/inertia coefficients are rounded mission surrogates. Static mid-sweep span
-    /// stands in until Task 6 binds a Mach/CAS WingSweepSchedule; no AWG-9/RIO simulation.
+    /// Aero/control/inertia coefficients are rounded mission surrogates. The 7.5 G normal-law and
+    /// 11 G deliberate override are explicit provisional control-policy limits, not a claim about
+    /// a particular bureau-number airframe's tested ultimate strength. No AWG-9/RIO simulation.
     /// https://www.history.navy.mil/content/history/museums/nnam/explore/collections/aircraft/f/f-14a-tomcat.html
     public static readonly AircraftParams F14APublicDataSurrogate = new(
         MassKg: 24000.0, // representative visual-merge weight; empty anchor 18,186 kg
@@ -1091,9 +1102,13 @@ public static class FlightModel {
         CompatibilityRollRateMaxRad: 2.2, CompatibilityBankTau: 0.26,
         YawBetaStiffnessNmRad: 800_000.0, RollHoldDampingNms: 0.0,
         PositiveStructuralLimitG: 7.5, MaxPerformFraction: 1.0, // SURROGATE envelope
+        NormalPullUsesMaxPerformance: true,
+        InstantMaxPerformanceKeyboardPull: true,
+        PositiveOverrideLimitG: 11.0, // PROVISIONAL emergency over-G command; 13.8 G rejected
+        AbsolutePositiveLoadFactorG: 11.0, // PROVISIONAL achieved-load guard; structure still ages >7.5
         MaxThrustFraction: 1.0,
         HighLiftDragOnsetFraction: 0.90, HighLiftDragK: 3.0,
-        WingSpanM: 15.5, // static mid-sweep placeholder; Task 6 owns dynamic sweep schedule
+        WingSpanM: 15.5, // reference span; session authority applies the live 20-68 deg sweep
         PropulsionModel: PropulsionModelKind.AfterburningTurbofanPublicDataSurrogate,
         FuelFreeMassKg: 18_186.0, // 40,100 lb empty (measured, Navy museum canonical)
         GenericIdleFuelFlowLbPerMinute: 35.0,
@@ -1582,6 +1597,12 @@ public static class FlightModel {
                     + System.Math.Abs(effectiveRudderCommand) * 0.15 * p.CD0
                     + beta * beta * 0.08;
         double liftAccel = q * p.WingAreaM2 * cl / r.Mass;
+        if (double.IsFinite(p.AbsolutePositiveLoadFactorG)
+            && p.AbsolutePositiveLoadFactorG > 0.0) {
+            liftAccel = System.Math.Min(
+                liftAccel,
+                p.AbsolutePositiveLoadFactorG * G0);
+        }
         double dragAccel = q * p.WingAreaM2 * cd / r.Mass;
         double usableThrustN = System.Math.Max(0.0, netThrustN);
         double thrustAccel = usableThrustN / r.Mass;

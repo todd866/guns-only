@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import {
   COBRA_GOLDEN_PATH_DEFAULTS,
   COBRA_GOLDEN_PATH_SCHEMA,
@@ -88,6 +89,7 @@ function fakeThree() {
     ShaderMaterial,
     Color,
     AdditiveBlending: "additive",
+    NormalBlending: "normal",
     DoubleSide: "double",
     DynamicDrawUsage: "dynamic",
   };
@@ -133,7 +135,7 @@ test("golden path is hidden and builds no curve without an objective", () => {
   path.dispose();
 });
 
-test("the ribbon points at the objective and its drawn length is capped", () => {
+test("the chevron sequence points at the objective and its drawn length is capped", () => {
   const path = createCobraGoldenPath(fakeThree());
   // Objective 6 km away — far beyond the 1.5 km draw cap.
   path.update({
@@ -164,7 +166,7 @@ test("the ribbon points at the objective and its drawn length is capped", () => 
     `drawn length ${drawnM} must stay inside the ${COBRA_GOLDEN_PATH_DEFAULTS.maxLengthM} m cap`,
   );
   // It also must not start on top of the pilot.
-  assert.ok(spineStartNorthM > 50, "the ribbon starts ahead of the ship");
+  assert.ok(spineStartNorthM > 40, "the first open chevron starts ahead of the ship");
   path.dispose();
 });
 
@@ -191,7 +193,7 @@ test("every ribbon vertex clears a ridge fed to the terrain sampler", () => {
     if (groundM > 300) sawRidge = true;
     assert.ok(
       // 0.05 m of slack because positions live in a Float32Array, not because the margin is soft.
-      vertex.upM >= groundM + COBRA_GOLDEN_PATH_DEFAULTS.clearanceM - 0.05,
+      vertex.upM >= groundM + path.group.userData.clearanceM - 0.05,
       `vertex at north ${vertex.northM} sits ${vertex.upM - groundM} m over ${groundM} m ground`,
     );
   }
@@ -199,9 +201,20 @@ test("every ribbon vertex clears a ridge fed to the terrain sampler", () => {
   path.dispose();
 });
 
-test("clearance stays in the comfortable 60-90 m flying band", () => {
-  assert.ok(COBRA_GOLDEN_PATH_DEFAULTS.clearanceM >= 60);
-  assert.ok(COBRA_GOLDEN_PATH_DEFAULTS.clearanceM <= 90);
+test("corridor rides just below eye height within a safe nap-of-earth band", () => {
+  const path = createCobraGoldenPath(fakeThree());
+  path.update({
+    player: playerAt(0, 0, 142),
+    objective: { siteId: "site.a", eastM: 0, northM: 3_000 },
+    groundHeightAt: FLAT_GROUND,
+    nowSeconds: 0,
+    arrivedRadiusM: 75,
+  });
+  assert.equal(path.group.userData.clearanceM, 30,
+    "100 m terrain + 42 m eye AGL - 12 m bias puts the cues under the gunsight");
+  assert.ok(path.group.userData.clearanceM >= COBRA_GOLDEN_PATH_DEFAULTS.minClearanceM);
+  assert.ok(path.group.userData.clearanceM <= COBRA_GOLDEN_PATH_DEFAULTS.maxClearanceM);
+  path.dispose();
 });
 
 test("opacity reaches zero inside the arrival radius", () => {
@@ -233,18 +246,28 @@ test("opacity reaches zero inside the arrival radius", () => {
 test("the material never punches a hole in the world", () => {
   const path = createCobraGoldenPath(fakeThree());
   const material = path.group.children[0].material;
-  assert.equal(material.blending, "additive");
+  assert.equal(material.blending, "normal",
+    "normal alpha avoids the white additive bloom seen in the first visual pass");
   assert.equal(material.depthTest, true);
   assert.equal(material.depthWrite, false);
   assert.equal(material.transparent, true);
-  assert.ok(
-    COBRA_GOLDEN_PATH_DEFAULTS.peakOpacity <= 0.25,
-    "subtle sunlit mist, not a neon quest marker",
-  );
+  assert.ok(COBRA_GOLDEN_PATH_DEFAULTS.peakOpacity >= 0.75,
+    "the route must survive grass and haze instead of disappearing politely");
+  assert.ok(COBRA_GOLDEN_PATH_DEFAULTS.peakOpacity < 0.9,
+    "the route remains look-through rather than becoming an opaque wall");
   const mesh = path.group.children[0];
+  assert.equal(mesh.material.toneMapped, false, "gold stays legible under exposure changes");
   assert.equal(mesh.castShadow, false);
   assert.equal(mesh.receiveShadow, false);
   path.dispose();
+});
+
+test("markers cannot form a vertical light pillar", () => {
+  assert.equal("markerUprightHeightM" in COBRA_GOLDEN_PATH_DEFAULTS, false,
+    "the failed bright end ticks stay deleted");
+  assert.equal("markerTickHalfWidthM" in COBRA_GOLDEN_PATH_DEFAULTS, false);
+  assert.ok(COBRA_GOLDEN_PATH_DEFAULTS.markerHeightM <= 5,
+    "each separated V stays a compact flight-director cue, not a gate or pillar");
 });
 
 test("the flow offset is a pure function of nowSeconds", () => {
@@ -334,6 +357,129 @@ test("the objective is the same site the tactical map calls the objective", () =
   assert.equal(cobraGoldenPathObjective(null, player), null);
 });
 
+test("RTB path switches to Camp Ember and stays lit to pad range", () => {
+  const groundWar = {
+    fob: { x_m: -6_775, z_m: -6_200 },
+    sites: [{ id: "site.hostile", owner: "hostile", x_m: 0, z_m: 2_000 }],
+  };
+  const objective = cobraGoldenPathObjective(groundWar, playerAt(0, 0), "rtb");
+  assert.deepEqual(objective, {
+    siteId: "camp-ember-rtb",
+    eastM: -6_775,
+    northM: -6_200,
+    mode: "rtb",
+  });
+
+  const state = cobraGoldenPathState({
+    groundWar,
+    pose: { x_m: -6_600, y_m: 160, z_m: -6_200, yaw_rad: 0 },
+    groundHeightAt: FLAT_GROUND,
+    nowSeconds: 4,
+    missionAct: "rtb",
+  });
+  assert.equal(state.objective.siteId, "camp-ember-rtb");
+  assert.equal(state.arrivedRadiusM, COBRA_GOLDEN_PATH_DEFAULTS.rtbArrivedRadiusM);
+  assert.ok(state.arrivedRadiusM < 120, "return guidance remains visible inside the old 400 m cutoff");
+});
+
+test("depart and ingress follow the authority's active route gate before the combat objective", () => {
+  const state = cobraGoldenPathState({
+    groundWar: {
+      sites: [{ id: "site.hostile", owner: "hostile", x_m: 4_000, z_m: 6_000 }],
+    },
+    pathGates: [
+      { east_m: 400, north_m: 700, active: false },
+      { east_m: 900, north_m: 1_200, active: true },
+      { east_m: 1_500, north_m: 2_000, active: false },
+    ],
+    pose: { x_m: 0, y_m: 120, z_m: 0, yaw_rad: 0 },
+    groundHeightAt: FLAT_GROUND,
+    nowSeconds: 5,
+    missionAct: "ingress",
+  });
+
+  assert.deepEqual(state.objective, {
+    siteId: "ember-route-gate-1",
+    eastM: 900,
+    northM: 1_200,
+    mode: "route",
+  });
+});
+
+test("departure stays on the authority's active leg and uses a tight route arrival radius", () => {
+  const state = cobraGoldenPathState({
+    groundWar: null,
+    pathGates: [
+      { east_m: 275, north_m: 0, active: true },
+      { east_m: 850, north_m: 1_100, active: false },
+    ],
+    pose: { x_m: 0, y_m: 120, z_m: 0, yaw_rad: 0 },
+    groundHeightAt: FLAT_GROUND,
+    nowSeconds: 1,
+    missionAct: "depart",
+  });
+
+  assert.deepEqual(state.objective, {
+    siteId: "ember-route-gate-0",
+    eastM: 275,
+    northM: 0,
+    mode: "route",
+  });
+  assert.equal(state.arrivedRadiusM, COBRA_GOLDEN_PATH_DEFAULTS.routeArrivedRadiusM);
+  assert.ok(state.arrivedRadiusM < 100,
+    "the first 275 m departure leg remains fully readable from the pad");
+});
+
+test("short legs use three sparse cues instead of compressing the whole corridor into a stack", () => {
+  const path = createCobraGoldenPath(fakeThree());
+  path.update({
+    player: playerAt(0, 0, 120),
+    objective: { siteId: "ember-route-gate-0", eastM: 275, northM: 0, mode: "route" },
+    groundHeightAt: FLAT_GROUND,
+    nowSeconds: 0,
+    arrivedRadiusM: 75,
+  });
+  assert.equal(path.group.userData.activeMarkerCount, 3);
+  const positions = path.group.children[0].geometry.attributes.position.array;
+  const hiddenStart = 3 * 8 * 3;
+  for (let index = hiddenStart + 3; index < positions.length; index += 3) {
+    assert.equal(positions[index], positions[hiddenStart], "unused cue vertices are degenerate");
+    assert.equal(positions[index + 1], positions[hiddenStart + 1]);
+    assert.equal(positions[index + 2], positions[hiddenStart + 2]);
+  }
+  path.dispose();
+});
+
+test("depart and ingress hide instead of failing open to an enemy when route truth is unusable", () => {
+  const common = {
+    groundWar: {
+      sites: [{ id: "site.hostile", owner: "hostile", x_m: 1_000, z_m: 1_000 }],
+    },
+    pose: { x_m: 0, y_m: 120, z_m: 0, yaw_rad: 0 },
+    groundHeightAt: FLAT_GROUND,
+    nowSeconds: 1,
+  };
+  assert.equal(cobraGoldenPathState({
+    ...common,
+    missionAct: "depart",
+    pathGates: [],
+  }).objective, null);
+  assert.equal(cobraGoldenPathState({
+    ...common,
+    missionAct: "ingress",
+    pathGates: [{ east_m: Number.NaN, north_m: 50, active: true }],
+  }).objective, null);
+});
+
+test("production wiring passes authority path gates into the Cobra corridor", async () => {
+  const source = await readFile(
+    new URL("../../../cobra-lab/main.js", import.meta.url),
+    "utf8",
+  );
+  const call = source.match(/goldenPath\?\.update\(cobraGoldenPathState\(\{([\s\S]*?)\}\)\);/u)?.[1] ?? "";
+  assert.match(call, /pathGates:\s*authorityState\?\.path_gates/u);
+});
+
 test("frame state hides the path on the tour and parked cameras", () => {
   const groundWar = {
     sites: [{ id: "site.hostile", owner: "hostile", x_m: 0, z_m: 2_000 }],
@@ -371,13 +517,16 @@ test("frame state hides the path on the tour and parked cameras", () => {
   assert.equal(noPose.objective, null);
 });
 
-test("the ribbon is one mesh, one material, and a small triangle count", () => {
+test("open chevrons are one mesh, one material, and a small triangle count", () => {
   const path = createCobraGoldenPath(fakeThree());
   assert.equal(path.group.children.length, 1);
+  assert.equal(path.group.userData.style, "open-chevrons");
+  assert.equal(path.group.userData.markerCount, COBRA_GOLDEN_PATH_DEFAULTS.markerCount);
   const mesh = path.group.children[0];
   const triangles = mesh.geometry.index.array.length / 3;
-  assert.ok(triangles <= 256, `${triangles} triangles must stay a rounding error in the budget`);
-  assert.equal(mesh.geometry.attributes.position.array.length / 3, (COBRA_GOLDEN_PATH_DEFAULTS.segments + 1) * 4);
+  assert.ok(triangles <= 128, `${triangles} triangles must stay a rounding error in the budget`);
+  assert.equal(mesh.geometry.attributes.position.array.length / 3,
+    COBRA_GOLDEN_PATH_DEFAULTS.markerCount * 8);
 
   path.dispose();
   assert.equal(mesh.geometry.disposed, true);

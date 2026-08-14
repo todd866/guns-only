@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   arrivalFuelStatePresentation,
   limitsPanelPresentation,
+  navigationRateReadout,
   recoveryNavigationPresentation,
 } from "../limits_panel.js";
 
@@ -66,6 +67,30 @@ test("Rapier nav panel is FUEL · triad · ARR→next physical state", () => {
   assert.equal(panel.heroIndex, 4);
   assert.equal(panel.arrivalNextState, "min");
   assert.equal(panel.accent, "normal");
+});
+
+test("the Rapier rate triad is shared by F-22, F-14, and other recovery-capable aircraft", () => {
+  for (const aircraft of [
+    { player_aircraft_id: "f-22a", fuel_capacity_lb: 18_000 },
+    { player_aircraft_id: "f-14a", fuel_capacity_lb: 16_000 },
+    { player_aircraft_id: "f-86f", fuel_capacity_lb: 2_826 },
+  ]) {
+    const rate = navigationRateReadout({
+      ...aircraft,
+      recovery_point_known: true,
+      ground_speed_kts: 480,
+      fuel_flow_pph: 4_800,
+    });
+    assert.deepEqual(rate, {
+      nmPerMin: 8,
+      lbPerMin: 80,
+      lbPerNm: 10,
+      text: "NAV 8.0 NM/MIN · 80 LB/MIN · 10.00 LB/NM",
+      compactText: "8.0NM/MIN·80LB/MIN·10.0LB/NM",
+    }, aircraft.player_aircraft_id);
+  }
+  assert.equal(navigationRateReadout({ ground_speed_kts: 480, fuel_flow_pph: 4_800 }), null,
+    "no known recovery point means no invented navigation triad");
 });
 
 test("arrival hero flips MIN → EMER → DRY", () => {

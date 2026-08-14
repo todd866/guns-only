@@ -16,7 +16,14 @@ const DEFAULT_REPOSITORY_ROOT = path.resolve(TOOL_ROOT, "../..");
 const RELEASE_IDENTITY = "web/wwwroot/render/release/release_identity.js";
 const BUILD_INFO = "web/wwwroot/api/build-info.js";
 const SERVICE_WORKER = "web/wwwroot/service-worker.js";
+const SAMPLE_BED = "web/wwwroot/render/audio/sample_bed.js";
 const INDEX = "web/wwwroot/index.html";
+const BUILD_CONSTANTS = new Map([
+  [RELEASE_IDENTITY, "RELEASE_BUILD"],
+  [BUILD_INFO, "RELEASE_BUILD"],
+  [SERVICE_WORKER, "RELEASE_BUILD"],
+  [SAMPLE_BED, "SAMPLE_BED_BUILD"],
+]);
 const SOURCE_EXTENSIONS = new Set([".html", ".js", ".mjs"]);
 const SKIPPED_DIRECTORIES = new Set([
   "_framework",
@@ -41,9 +48,10 @@ export function stampSource(relativePath, source, currentBuild, nextBuild) {
   // also repairs a stale sub-app reference instead of carrying it into the next
   // release simply because it predates the current build.
   let result = source.replace(/\?v=\d+/g, `?v=${nextBuild}`);
-  if ([RELEASE_IDENTITY, BUILD_INFO, SERVICE_WORKER].includes(relativePath)) {
+  const buildConstant = BUILD_CONSTANTS.get(relativePath);
+  if (buildConstant) {
     result = result.replace(
-      new RegExp(`(RELEASE_BUILD\\s*=\\s*")${currentBuild}(";)`),
+      new RegExp(`(${buildConstant}\\s*=\\s*")${currentBuild}(";)`),
       `$1${nextBuild}$2`,
     );
   }
@@ -101,11 +109,12 @@ function verifyReleaseSources(sources, releaseFiles) {
   const identity = sources.get(RELEASE_IDENTITY);
   if (identity === undefined) throw new Error(`${RELEASE_IDENTITY} was not read`);
   const releaseBuild = releaseBuildFromIdentity(identity);
-  const canonicalFiles = [BUILD_INFO, SERVICE_WORKER];
-  for (const relative of canonicalFiles) {
+  for (const [relative, buildConstant] of BUILD_CONSTANTS) {
     const source = sources.get(relative);
     if (source === undefined) throw new Error(`${relative} was not read`);
-    const match = source.match(/(?:const|export const) RELEASE_BUILD = "(\d+)";/);
+    const match = source.match(new RegExp(
+      `(?:const|export const) ${buildConstant} = "(\\d+)";`,
+    ));
     if (!match || Number(match[1]) !== releaseBuild) {
       throw new Error(`${relative} does not match release Build ${releaseBuild}`);
     }
@@ -134,9 +143,7 @@ export async function verifyReleaseStamps(
   const releaseFiles = await releaseSourceFiles(root, fileSystem);
   const requiredFiles = new Set([
     ...releaseFiles,
-    RELEASE_IDENTITY,
-    BUILD_INFO,
-    SERVICE_WORKER,
+    ...BUILD_CONSTANTS.keys(),
   ]);
   const sources = new Map();
   for (const relative of [...requiredFiles].sort()) {
@@ -182,9 +189,7 @@ export async function stampRelease({
   const releaseFiles = await releaseSourceFiles(root, fileSystem);
   const candidates = new Set([
     ...releaseFiles,
-    RELEASE_IDENTITY,
-    BUILD_INFO,
-    SERVICE_WORKER,
+    ...BUILD_CONSTANTS.keys(),
     INDEX,
   ]);
   const preflight = [];

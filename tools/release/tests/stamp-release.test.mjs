@@ -16,6 +16,7 @@ const FIXTURE_FILES = Object.freeze({
   "web/smoke/smoke.mjs": 'const app = "/app.js?v=237";\n',
   "web/wwwroot/api/build-info.js": 'const RELEASE_BUILD = "237";\n',
   "web/wwwroot/app.js": 'import "./hud.js?v=237";\n',
+  "web/wwwroot/render/audio/sample_bed.js": 'export const SAMPLE_BED_BUILD = "237";\n',
   "web/wwwroot/index.html": [
     "Build 237 · verifying",
     'const releaseBuild = "237";',
@@ -86,6 +87,12 @@ test("canonical constants and visible shell identity advance together", () => {
     237,
     238,
   ), 'export const RELEASE_BUILD = "238";');
+  assert.equal(stampSource(
+    "web/wwwroot/render/audio/sample_bed.js",
+    'export const SAMPLE_BED_BUILD = "237";',
+    237,
+    238,
+  ), 'export const SAMPLE_BED_BUILD = "238";');
   const index = stampSource("web/wwwroot/index.html", [
     "Build 237 · verifying",
     "A network-fresh Build 237 document",

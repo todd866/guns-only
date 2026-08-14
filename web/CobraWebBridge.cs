@@ -108,6 +108,26 @@ public static partial class CobraWebBridge
     public static void SetGunnerTarget(string? targetId) =>
         _selectedTargetId = string.IsNullOrWhiteSpace(targetId) ? null : targetId;
 
+    /// <summary>
+    /// Atomically acquires a visual lock and assigns that exact living, visible hostile to the
+    /// AI gunner. The browser may cycle candidate IDs, but cannot manufacture LOS with a render
+    /// raycast or briefly padlock an occluded unit before authority catches up.
+    /// </summary>
+    [JSExport]
+    public static bool TrySetVisualLockTarget(string? targetId)
+    {
+        CobraMissionRuntime runtime = RequireRuntime();
+        if (!runtime.CanAcquireVisualLockTarget(targetId)) return false;
+        _selectedTargetId = targetId;
+        // The gate just measured the same authority sight used by AdvanceGunner. Publish/cache
+        // that fresh verdict immediately so the next snapshot cannot inherit this target's old
+        // masked value before the ordinary 10 Hz sight cadence resumes.
+        _gunnerSightTargetId = targetId;
+        _gunnerSightAuthorityTick = runtime.Cobra.State.Tick;
+        _gunnerSightHasLineOfSight = true;
+        return true;
+    }
+
     [JSExport]
     public static void SetEngagementConsent(bool consent) => _engagementConsent = consent;
 
@@ -247,6 +267,27 @@ public static partial class CobraWebBridge
         double fobNorth = fob.Z - position.Z;
         double fobRangeM = Math.Sqrt(fobEast * fobEast + fobNorth * fobNorth);
         double fobBearingRad = Math.Atan2(fobEast, fobNorth);
+        GroundUnit? selectedGunnerTarget = string.IsNullOrWhiteSpace(_selectedTargetId)
+            ? null
+            : groundWar.FindUnit(_selectedTargetId);
+        CobraGunTargetAssessment? gunnerAssessment = selectedGunnerTarget is { IsAlive: true }
+            ? CobraGunTargeting.Assess(
+                position,
+                observation.YawRad,
+                selectedGunnerTarget.PositionWorldM)
+            : null;
+        double? gunnerTargetRangeM = gunnerAssessment?.RangeM;
+        bool? gunnerTargetWithinRange = gunnerTargetRangeM.HasValue
+            ? gunnerTargetRangeM.Value is >= CobraGunTargeting.MinimumSolutionRangeM
+                and <= CobraGunTargeting.MaximumSolutionRangeM
+            : null;
+        bool? gunnerTargetHasLineOfSight = selectedGunnerTarget is not null
+            && string.Equals(
+                selectedGunnerTarget.Id,
+                _gunnerSightTargetId,
+                StringComparison.Ordinal)
+            ? _gunnerSightHasLineOfSight
+            : null;
         return new {
             world_id = diagnostics.WorldId,
             route = RouteToken(runtime.SelectedRoute.Choice),
@@ -333,6 +374,11 @@ public static partial class CobraWebBridge
                 qualified_track_seconds = _gunnerDecision.QualifiedTrackSeconds,
                 turret_azimuth_rad = _turretServo.AzimuthRad,
                 turret_elevation_rad = _turretServo.ElevationRad,
+                target_range_m = gunnerTargetRangeM,
+                target_within_range = gunnerTargetWithinRange,
+                target_has_line_of_sight = gunnerTargetHasLineOfSight,
+                target_within_turret_envelope = gunnerAssessment?.WithinTurretEnvelope,
+                target_has_ballistic_solution = gunnerAssessment?.HasBallisticSolution,
             },
             ground_war = new {
                 control = groundWar.Balance.Control,
@@ -390,6 +436,7 @@ public static partial class CobraWebBridge
                     z_m = evt.PositionWorldM.Z,
                 }).ToArray(),
                 mission = "hold-the-bridge",
+                combat_live = runtime.GroundWarCombatLive,
                 outcome = groundWar.MissionOutcome.ToString().ToLowerInvariant(),
                 outcome_reason = groundWar.MissionOutcomeReason,
                 victory_hold_progress = groundWar.VictoryHoldProgress,

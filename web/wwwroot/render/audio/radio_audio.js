@@ -7,8 +7,10 @@ import { resolveRadioEquipment } from "./radio_equipment_profiles.js";
 
 const MANIFEST_URL = new URL("./samples/radio/manifest.json", import.meta.url);
 const RADIO_SCENERY_LEVEL = 0.78;
-const ENGINE_NORMAL_LEVEL = 0.58;
-const ENGINE_RADIO_LEVEL = 0.52;
+const PROPULSION_NORMAL_MULTIPLIER = 1;
+// Preserve the established light 0.58 -> 0.52 duck, but express it as a multiplier on the one
+// shared downstream propulsion VCA. Aircraft graph trims remain free to update every frame.
+const PROPULSION_RADIO_MULTIPLIER = 0.52 / 0.58;
 
 function target(param, value, now, timeConstant = 0.02) {
   param.setTargetAtTime(value, now, timeConstant);
@@ -60,7 +62,7 @@ export async function loadRadioManifest(fetchImpl = globalThis.fetch) {
 }
 
 export function createRadioVoice(context, destination, {
-  engineMaster = null,
+  propulsionDuck = null,
   fetchImpl = globalThis.fetch,
 } = {}) {
   // The microphone/mask stage is separate from the receive-radio stage. Speech goes through
@@ -112,7 +114,7 @@ export function createRadioVoice(context, destination, {
     presence,
     compressor,
     output,
-    engineMaster,
+    propulsionDuck,
     fetchImpl,
     manifest: null,
     manifestPromise: null,
@@ -320,8 +322,9 @@ async function playTransmission(voice, context, state, generation, sequence) {
       context,
       equipmentFor(state, clip),
     );
-    if (voice.engineMaster?.gain)
-      target(voice.engineMaster.gain, ENGINE_RADIO_LEVEL, context.currentTime, 0.045);
+    if (voice.propulsionDuck?.gain)
+      target(voice.propulsionDuck.gain,
+        PROPULSION_RADIO_MULTIPLIER, context.currentTime, 0.045);
     playSquelch(voice, context, sequence);
     // Subtle station gain and rate drift keeps repeated takes alive without changing cadence.
     const level = equipment.receiveLevel
@@ -348,8 +351,9 @@ async function playTransmission(voice, context, state, generation, sequence) {
 }
 
 function restoreEngine(voice, context) {
-  if (voice.engineMaster?.gain)
-    target(voice.engineMaster.gain, ENGINE_NORMAL_LEVEL, context.currentTime, 0.11);
+  if (voice.propulsionDuck?.gain)
+    target(voice.propulsionDuck.gain,
+      PROPULSION_NORMAL_MULTIPLIER, context.currentTime, 0.11);
 }
 
 export function updateRadioVoice(voice, context, state, { enabled = true } = {}) {

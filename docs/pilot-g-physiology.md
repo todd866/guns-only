@@ -52,12 +52,17 @@ The current profiles are transparent public-data training surrogates:
 
 These are population/reference anchors, not a medical prediction for a particular person. The
 calibration and architecture draw on the FAA CAMI G-Effects Model, USAF centrifuge research, and
-published G-LOC incapacitation/recovery studies:
+published G-LOC incapacitation/recovery studies. In particular, Whinnery and Forster's analysis
+of 888 centrifuge-induced G-LOC episodes reported no loss of consciousness earlier than 5 seconds,
+a mean 9.10 seconds for onset rates at or above 1 G/s, and a mean 9.65 seconds for rapid-onset
+exposures at or above +7 Gz. Those population curves reinforce the model's onset-and-duration
+state: crossing a G threshold is not an instantaneous or guaranteed G-LOC event.
 
 - [FAA CAMI G-Effects Model technical report](https://www.faa.gov/sites/faa.gov/files/OAM202306.pdf)
 - [FAA CAMI model user guide](https://www.faa.gov/data_research/research/med_humanfacs/oamtechreports/media/OAM202305_0.pdf)
 - [USAF relaxed and straining +Gz tolerance](https://pubmed.ncbi.nlm.nih.gov/3355460/)
 - [Combined anti-G protection in experienced subjects](https://pubmed.ncbi.nlm.nih.gov/17484342/)
+- [The +Gz-induced loss of consciousness curve (888 centrifuge episodes)](https://link.springer.com/article/10.1186/2046-7648-2-19)
 - [G-LOC incapacitation duration](https://pubmed.ncbi.nlm.nih.gov/2357157/)
 - [Performance before and after G-LOC](https://pubmed.ncbi.nlm.nih.gov/16696261/)
 

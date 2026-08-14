@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=327";
+import { createHud } from "./hud.js?v=328";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=327";
+} from "./render/debrief/sortie_result.js?v=328";
 import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
@@ -69,8 +69,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=327";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=327";
+} from "./render/release/release_identity.js?v=328";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=328";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -83,7 +83,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=327";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=328";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -92,10 +92,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=327";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=328";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=327";
+} from "./render/nav/carrier_sortie_touch_control.js?v=328";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -176,7 +176,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=327";
+} from "./render/telemetry/ai_frame_pressure.js?v=328";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -186,14 +186,14 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=327";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=327";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=327";
+} from "./render/telemetry/telemetry_batch.js?v=328";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=328";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=328";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=327";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=327";
+} from "./render/shell/boot_watchdog.js?v=328";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=328";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -202,7 +202,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=327";
+} from "./render/settings/player_settings.js?v=328";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -238,6 +238,7 @@ import {
   createDecisionSupportSea,
   createDecisionSupportSky,
   createDrone,
+  createF14,
   createGlider,
   createGunEffects,
   createHiddenPresentation,
@@ -248,13 +249,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=327";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=327";
+} from "./render/scene/scene_builders.js?v=328";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=328";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=327";
+} from "./render/audio/flight_audio.js?v=328";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -469,6 +470,9 @@ const touchGearButton = document.querySelector("#touch-gear");
 const touchFlapUpButton = document.querySelector("#touch-flap-up");
 const touchFlapDownButton = document.querySelector("#touch-flap-down");
 const touchLimitOverride = document.querySelector("#touch-limit-override");
+const touchWingSweepForward = document.querySelector("#touch-wing-sweep-forward");
+const touchWingSweepAft = document.querySelector("#touch-wing-sweep-aft");
+const touchWingSweepAuto = document.querySelector("#touch-wing-sweep-auto");
 const touchTargetCycleButton = touchControls?.querySelector('[data-mobile-action="target-cycle"]')
   ?? null;
 const touchTargetLabel = document.querySelector("#touch-target-label");
@@ -3250,13 +3254,18 @@ function syncMobileControlProfile(state) {
     touchTargetCycleButton.hidden = casevac || !profile.padlock;
   }
   if (touchLimitOverride) touchLimitOverride.hidden = casevac || !profile.limitOverride;
+  const f14WingSweep = !casevac && state?.top_gun_seat === "F-14A";
+  if (touchWingSweepForward) touchWingSweepForward.hidden = !f14WingSweep;
+  if (touchWingSweepAft) touchWingSweepAft.hidden = !f14WingSweep;
+  if (touchWingSweepAuto) touchWingSweepAuto.hidden = !f14WingSweep;
   if (touchFireButton) touchFireButton.hidden = casevac || !profile.fire;
   if (touchGcasPaddle) {
     touchGcasPaddle.hidden = !profile.gcasOverride;
     if (casevac) touchGcasPaddle.hidden = true;
   }
   if (touchContextControls) {
-    touchContextControls.hidden = casevac || (!profile.gear && !profile.flaps);
+    touchContextControls.hidden = casevac
+      || (!profile.gear && !profile.flaps && !f14WingSweep);
   }
   syncPadlockUi();
   releaseHiddenMobileControls();
@@ -3330,7 +3339,7 @@ const MISSION_BRIEFS = Object.freeze({
     configuration: "F-22 public-data surrogate · 480 rounds across all fights · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
     card: "Splash successive Su-27 surrogates; each replacement enters through a fresh neutral merge.",
     brief: "Every splash stages another offset merge. Fuel, ammunition, ownship damage, and kill count persist, so mind your bursts. Fight for the rear quarter and keep your energy \u2014 9 G is there, but so is your vision.",
-    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO hands the fight off and starts RTB · Space G limiter · K Auto-GCAS paddle",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO calls it a day and starts RTB · Esc → Call It A Day button · Space G limiter · K Auto-GCAS paddle",
   },
   8: {
     activity: "defence",
@@ -3369,7 +3378,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     sortie: "F-22A vs escalating opposition · guns only · first pass safe",
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
     brief: "You start at the merge, and the opening wave is a pair of Aces. Survive the first pass, fight into the rear quarter, and keep going. The director watches how you actually flew and answers in kind.",
-    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO hands the fight off and starts RTB · Space G limiter · H controls",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO calls it a day and starts RTB · Esc → Call It A Day button · Space G limiter · H controls",
   }),
   "multiplayer": Object.freeze({
     kicker: "1v1 · guns only",
@@ -3399,7 +3408,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Endurance Merge",
     sortie: "Successive visual merges · persistent fuel, ammunition, and damage",
     brief: "Two splashes earn carrier conversion. Each replacement Su-27 enters through a fresh neutral merge while fuel, ammunition, damage, and your kill count persist. Burst discipline and G management now matter across the whole sortie, not just one fight.",
-    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO hands the fight off and starts RTB · splash two to qualify",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO calls it a day and starts RTB · Esc → Call It A Day button · splash two to qualify",
   }),
   "rapier-circuits": Object.freeze({
     kicker: "2030s Ukraine · overhead circuit practice",
@@ -3430,7 +3439,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     sortie: "High-altitude balloon · finite internal gun · one pass · re-entry · midpoint arrestor recovery",
     configuration: "Fictional TBCC Rapier · canonical full fuel · finite internal gun · no auxiliary drones",
     brief: "Catapult, ride the continuous 35 kPa climb through turbine-to-ram handover, make one balloon gun pass from the 24 km M4.2 shelf, then re-enter and recover. Watch Q, thrust minus drag, binding-panel heat, and home reserve.",
-    controls: "P mission automation · F internal gun · arrows/W/S pilot takeover\nT safe time compression · V padlock · Tab target · fly every recovery square · trap at the midpoint arrestor",
+    controls: "P mission automation · F internal gun · arrows/W/S pilot takeover\nO calls it a day and starts RTB · Esc → Call It A Day button · T safe time compression · fly every recovery square",
   }),
   "cobra-lab": Object.freeze({
     kicker: "Cobra Canyon · Hold the Bridge",
@@ -5353,7 +5362,7 @@ function requestCombatHandoffFromPause() {
     return false;
   }
   releaseMappedKey(code, "pause-handoff");
-  if (viewStatus) viewStatus.textContent = "Handoff requested · weapons safe · stand by relief";
+  if (viewStatus) viewStatus.textContent = "Knock it off · weapons safe · fly the home corridor";
   recorder.event("combat-handoff", "requested", {
     source: "pause-menu",
     code,
@@ -5982,6 +5991,7 @@ const COMPATIBILITY_PRESENTATION_FACTORIES = new Map([
   // visibility aid for a guns-only visual fight, not a claim to an F-22 or Su-27 exterior model.
   ["presentation.vehicle.f22a.public-data-surrogate.v1", createDrone],
   ["presentation.vehicle.su27s.public-data-surrogate.v1", createDrone],
+  ["presentation.vehicle.f14a.public-data-surrogate.v1", createF14],
   ["presentation.vehicle.one-way-attack-drone.prototype.v1", createOneWayAttackDrone],
   ["presentation.vehicle.rapier-gun-drone.prototype.v1", createRapierGunDrone],
   ["presentation.vehicle.rapier.public-data-surrogate.v1", createRapier],
@@ -8899,7 +8909,6 @@ class FlightView {
         surfaceContact: state?.casevac_surface_contact === true,
       }
       : { intensity01: 0, radiusM: 1 };
-    this.guidancePath?.update(state);
     this.casevacScenery?.update({
       elapsedSeconds: projectedFinite(state, "t") ?? 0,
       windX: projectedFinite(state, "casevac_wind_x_mps") ?? 0,
@@ -9024,6 +9033,11 @@ class FlightView {
     this.playerEntityId = nextPlayerEntityId;
 
     this.playerPosition.set(state.px, state.py, -state.pz);
+    // Recovery guidance is a shared flight-system presentation. This used to update only inside
+    // the CASEVAC branch, so every fixed-wing mission constructed a golden path that never
+    // received a frame. Keep the one authority-fed instance live for all missions; it selects
+    // detailed recovery gates first and the bounded RTB breadcrumb chain otherwise.
+    this.guidancePath?.update(state);
     this.playerForward.copy(playerFrame.forward);
     this.playerUp.copy(playerFrame.up);
     this.playerRight.copy(playerFrame.right);
@@ -9092,6 +9106,10 @@ class FlightView {
     const replayCamera = String(state.replay_camera || "CHASE");
     this.externalCameraActive = replayExternal && replayCamera !== "COCKPIT";
     this.presentationAssets.sync(state);
+    this.presentationAssets.playerExteriorSlot.object?.userData
+      ?.setWingSweepDegrees?.(state.wing_sweep_deg);
+    this.presentationAssets.targetSlot.object?.userData
+      ?.setWingSweepDegrees?.(state.opponent_wing_sweep_deg);
     const casevacPresentationActive = this.syncCasevacPresentation(state);
     if (casevacPresentationActive) {
       this.ancaPanel?.update(null);
@@ -9664,6 +9682,7 @@ class FlightView {
     this.f22CanopyGlass.group.removeFromParent();
     this.f22CanopyGlass.dispose();
     this.banditContact.dispose();
+    this.guidancePath?.dispose();
     await this.remoteAircraft.dispose();
     this.tacticalClouds.dispose();
     this.winterPrecipitation.dispose();
@@ -11597,7 +11616,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=327")
+    navigator.serviceWorker.register("service-worker.js?v=328")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

@@ -2,11 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD,
+  COBRA_PADLOCK_LOS_GRACE_MS,
+  acquireAuthorityVisualLockTarget,
+  advancePadlockLosGrace,
   clampInducedLookRotation,
   lookOffsetFromAngles,
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
-  togglePadlockSelection,
 } from "../cobra_camera_bias.js";
 
 test("production east-heading forward look is exactly body-aligned", () => {
@@ -58,27 +60,97 @@ test("Tab cycles hostiles like the F-22 gun-target list", () => {
   assert.equal(nextHostileTargetId([], "seam"), null);
 });
 
-test("V toggles padlock view without inventing a target when the list is empty", () => {
-  assert.deepEqual(
-    togglePadlockSelection({ padlockActive: false, selectedTargetId: null, hostileTargetIds: [] }),
-    { padlockActive: false, selectedTargetId: null },
-  );
-  assert.deepEqual(
-    togglePadlockSelection({
-      padlockActive: false,
-      selectedTargetId: null,
-      hostileTargetIds: ["seam", "near"],
-    }),
-    { padlockActive: true, selectedTargetId: "seam" },
-  );
-  assert.deepEqual(
-    togglePadlockSelection({
-      padlockActive: true,
-      selectedTargetId: "near",
-      hostileTargetIds: ["seam", "near"],
-    }),
-    { padlockActive: false, selectedTargetId: "near" },
-  );
+test("V skips an occluded mark and atomically assigns the first authority-visible hostile", () => {
+  const calls = [];
+  let gunnerTargetId = null;
+  const acquired = acquireAuthorityVisualLockTarget({
+    selectedTargetId: "masked",
+    hostileTargetIds: ["near", "masked", "visible"],
+    tryAcquire(targetId) {
+      calls.push(targetId);
+      if (targetId !== "visible") return false;
+      gunnerTargetId = targetId;
+      return true;
+    },
+  });
+
+  assert.equal(acquired, "visible");
+  assert.equal(gunnerTargetId, acquired, "visual lock and AI gunner must share one entity ID");
+  assert.deepEqual(calls, ["masked", "visible"]);
+});
+
+test("V cannot acquire an occluded, dead, or friendly candidate", () => {
+  const calls = [];
+  const acquired = acquireAuthorityVisualLockTarget({
+    selectedTargetId: "friendly-not-in-hostile-list",
+    // Production builds this list from living hostiles only; authority still fails closed.
+    hostileTargetIds: ["dead-stale", "occluded"],
+    tryAcquire(targetId) {
+      calls.push(targetId);
+      return false;
+    },
+  });
+
+  assert.equal(acquired, null);
+  assert.deepEqual(calls, ["dead-stale", "occluded"]);
+});
+
+test("a sustained authority LOS loss breaks padlock after the short grace", () => {
+  const maskedGunner = {
+    selected_target_id: "hostile-1",
+    state: "masked",
+    reason: "Masked",
+    target_has_line_of_sight: false,
+  };
+  const first = advancePadlockLosGrace({
+    padlockActive: true,
+    lockedTargetId: "hostile-1",
+    gunner: maskedGunner,
+    nowMs: 1_000,
+  });
+  assert.equal(first.padlockActive, true);
+  assert.equal(first.maskedSinceMs, 1_000);
+
+  const withinGrace = advancePadlockLosGrace({
+    padlockActive: true,
+    lockedTargetId: "hostile-1",
+    gunner: maskedGunner,
+    maskedSinceMs: first.maskedSinceMs,
+    nowMs: 1_000 + COBRA_PADLOCK_LOS_GRACE_MS - 1,
+  });
+  assert.equal(withinGrace.padlockActive, true);
+
+  const expired = advancePadlockLosGrace({
+    padlockActive: true,
+    lockedTargetId: "hostile-1",
+    gunner: maskedGunner,
+    maskedSinceMs: withinGrace.maskedSinceMs,
+    nowMs: 1_000 + COBRA_PADLOCK_LOS_GRACE_MS,
+  });
+  assert.deepEqual(expired, { padlockActive: false, maskedSinceMs: null });
+});
+
+test("clear LOS resets the grace and a stale pre-acquisition snapshot cannot break a new lock", () => {
+  const clear = advancePadlockLosGrace({
+    padlockActive: true,
+    lockedTargetId: "hostile-1",
+    gunner: {
+      selected_target_id: "hostile-1",
+      state: "tracking",
+      target_has_line_of_sight: true,
+    },
+    maskedSinceMs: 100,
+    nowMs: 300,
+  });
+  assert.deepEqual(clear, { padlockActive: true, maskedSinceMs: null });
+
+  const stale = advancePadlockLosGrace({
+    padlockActive: true,
+    lockedTargetId: "new-hostile",
+    gunner: { selected_target_id: "old-hostile", state: "masked" },
+    nowMs: 400,
+  });
+  assert.deepEqual(stale, { padlockActive: true, maskedSinceMs: null });
 });
 
 test("padlock look-at owns the eye; forward view stays nose-forward", () => {

@@ -43,6 +43,22 @@ public class SnapshotProjectionTests {
     }
 
     [Fact]
+    public void TopGunTomcatPublishesDedicatedTf30AudioProfile() {
+        var session = new SimulationSession();
+        session.StartBeat(() => Beats.TopGunAcm(TopGunSeat.F14A));
+        session.Begin();
+
+        using JsonDocument document = JsonDocument.Parse(
+            SnapshotProjection.BuildState(session, Carrier.DeckConfiguration.Angled,
+                0.0, 0.0, false, null));
+
+        Assert.Equal("aircraft.f14a.public-data-surrogate.v1",
+            document.RootElement.GetProperty("player_aircraft_id").GetString());
+        Assert.Equal("audio.f14a.tf30-twin.v1",
+            document.RootElement.GetProperty("audio_profile_id").GetString());
+    }
+
+    [Fact]
     public void PantherCarrierDayPublishesFiniteRouteRtbAndBarrierTruth() {
         var session = new SimulationSession();
         session.StartBeat(Beats.KoreaSortie);
@@ -95,12 +111,44 @@ public class SnapshotProjectionTests {
         Assert.True(returning.GetProperty(
             "carrier_sortie_route_rtb_requested").GetBoolean());
         Assert.True(returning.GetProperty("player_rtb_active").GetBoolean());
+        Assert.Equal("PILOT_KNOCK_IT_OFF",
+            returning.GetProperty("rtb_reason").GetString());
         Assert.True(double.IsFinite(returning.GetProperty(
             "carrier_sortie_route_target_bearing_deg").GetDouble()));
         Assert.True(double.IsFinite(returning.GetProperty(
             "carrier_sortie_route_target_turn_deg").GetDouble()));
         Assert.True(returning.GetProperty(
             "carrier_sortie_route_distance_m").GetDouble() > 0.0);
+    }
+
+    [Fact]
+    public void F22PublishesCallItADayAvailabilityAndBingoReason() {
+        BeatSetup authored = Beats.ModernVisualMerge();
+        var session = new SimulationSession();
+        session.StartBeat(() => authored with {
+            Fuel = authored.FuelLoadout with {
+                InitialFuelLb = authored.FuelLoadout.BingoThresholdLb
+            }
+        });
+        session.Begin();
+
+        using (JsonDocument beforeDocument = JsonDocument.Parse(
+            SnapshotProjection.BuildState(session, Carrier.DeckConfiguration.Angled,
+                0.0, 0.0, false, null))) {
+            JsonElement before = beforeDocument.RootElement;
+            Assert.True(before.GetProperty("rtb_available").GetBoolean());
+            Assert.Equal("NONE", before.GetProperty("rtb_reason").GetString());
+        }
+
+        session.StepFixed();
+        using JsonDocument afterDocument = JsonDocument.Parse(
+            SnapshotProjection.BuildState(session, Carrier.DeckConfiguration.Angled,
+                0.0, 0.0, false, null));
+        JsonElement after = afterDocument.RootElement;
+        Assert.False(after.GetProperty("rtb_available").GetBoolean());
+        Assert.True(after.GetProperty("player_rtb_active").GetBoolean());
+        Assert.Equal("BINGO_FUEL", after.GetProperty("rtb_reason").GetString());
+        Assert.True(after.GetProperty("rtb_automatic").GetBoolean());
     }
 
     [Fact]
@@ -486,7 +534,8 @@ public class SnapshotProjectionTests {
 
         session.FeedKey(GKey.KnockItOff, true);
         session.FeedKey(GKey.KnockItOff, false);
-        for (int tick = 0; tick < 4 && !session.PlayerRtbActive; tick++)
+        for (int tick = 0; tick < 4
+            && session.CombatHandoffPhase < CombatHandoffPhase.ReliefEngaged; tick++)
             session.StepFixed();
         Assert.True(session.PlayerRtbActive);
 

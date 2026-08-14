@@ -1,7 +1,7 @@
 import {
   buildTelemetryBatch,
   retainNewestTelemetryRows,
-} from "../telemetry/telemetry_batch.js?v=327";
+} from "../telemetry/telemetry_batch.js?v=328";
 
 /**
  * Bounded telemetry channel for the Cobra mission page.
@@ -20,9 +20,14 @@ import {
  */
 
 export const COBRA_TELEMETRY_BATCH_BYTE_LIMIT = 48 * 1024;
-// Rows arrive at ~10 Hz × ~0.8 KB ≈ 8 KB/s; a 5 s cadence drains up to 48 KiB per flush, so the
-// queue empties faster than it fills in steady state.
+// The cadence starts a bounded multi-request drain cycle; see MAX_DRAIN_BATCHES below.
 export const COBRA_TELEMETRY_FLUSH_INTERVAL_MS = 5_000;
+// A real Build 327 Cobra state row is ~3 KiB (ground-war units/events included), so a 48 KiB
+// request carries only ~16 rows while 50 arrive every five seconds. One request per cadence can
+// never catch up. Drain several bounded requests after each successful periodic send; eight is
+// >2.5x the measured arrival rate while still preventing an unbounded promise chain on a slow
+// connection. Pagehide remains exactly one keepalive request.
+export const COBRA_TELEMETRY_MAX_DRAIN_BATCHES = 8;
 // ≈4 minutes of rows at 10 Hz. Bounded memory outranks a perfect trace, as in the F-22 recorder.
 export const COBRA_TELEMETRY_BUFFER_ROW_LIMIT = 2_400;
 
@@ -40,6 +45,8 @@ export function createCobraTelemetryChannel({
   let rows = [];
   let pending = null;
   let sending = false;
+  let sendingOwner = 0;
+  let requestSequence = 0;
   let droppedRows = 0;
   let flushes = 0;
   let failures = 0;
@@ -91,16 +98,24 @@ export function createCobraTelemetryChannel({
     return pending;
   }
 
-  function flush({ pagehide = false } = {}) {
+  function sendBatch({ pagehide, drainBudget }) {
+    let ownsSingleFlight = false;
+    let requestId = 0;
     try {
       if (typeof fetchImpl !== "function") return null;
       // Single-flight for periodic flushes. Pagehide may overlap an in-flight attempt: the body
       // is idempotent per batch ID, and a last-gasp duplicate beats a lost sortie tail.
       if (sending && !pagehide) return null;
+      const overlapsExistingRequest = sending && pagehide;
       const batch = takeBatch();
       if (!batch) return null;
       lastAttemptMs = now();
-      sending = true;
+      requestId = ++requestSequence;
+      ownsSingleFlight = !overlapsExistingRequest;
+      if (ownsSingleFlight) {
+        sending = true;
+        sendingOwner = requestId;
+      }
       flushes += 1;
       const options = {
         method: "POST",
@@ -114,26 +129,54 @@ export function createCobraTelemetryChannel({
       return Promise.resolve(fetchImpl(endpoint, options))
         .then((response) => {
           if (response?.ok) {
-            pending = null;
-            return;
+            // A pagehide duplicate can settle after the periodic owner has already advanced to
+            // the next batch. Clear only the exact object this request sent; never erase that
+            // newer pending batch by observing a late success for the old idempotency key.
+            if (pending === batch) pending = null;
+            return true;
           }
           failures += 1;
           lastError = `HTTP ${response?.status ?? "unknown"}`;
+          return false;
         })
         .catch((error) => {
           // Transport failure: keep the immutable pending batch for an identical retry.
           failures += 1;
           lastError = String(error);
+          return false;
         })
-        .finally(() => {
-          sending = false;
+        .then((delivered) => {
+          // An overlapping pagehide request never owns the periodic single-flight latch. Its
+          // late completion must not make a recursively-started successor appear idle.
+          if (ownsSingleFlight && sendingOwner === requestId) {
+            sending = false;
+            sendingOwner = 0;
+          }
+          // A successful periodic attempt owns a bounded drain cycle. Awaiting the recursive
+          // send makes `await flush()` mean the cycle is complete, which keeps diagnostics and
+          // tests deterministic. A failure never spins; its immutable pending body waits for the
+          // next scheduled retry.
+          if (delivered && !pagehide && drainBudget > 1 && rows.length > 0) {
+            return sendBatch({ pagehide: false, drainBudget: drainBudget - 1 });
+          }
+          return undefined;
         });
     } catch (error) {
       failures += 1;
       lastError = String(error);
-      sending = false;
+      if (ownsSingleFlight && sendingOwner === requestId) {
+        sending = false;
+        sendingOwner = 0;
+      }
       return null;
     }
+  }
+
+  function flush({ pagehide = false } = {}) {
+    return sendBatch({
+      pagehide,
+      drainBudget: pagehide ? 1 : COBRA_TELEMETRY_MAX_DRAIN_BATCHES,
+    });
   }
 
   function flushIfDue(nowMs) {

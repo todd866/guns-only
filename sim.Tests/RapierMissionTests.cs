@@ -163,6 +163,69 @@ public class RapierMissionTests {
             StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(false, MissionRtbReason.PilotKnockItOff)]
+    [InlineData(true, MissionRtbReason.BingoFuel)]
+    public void PilotOrBingoCanEndRapierFightAndEnterSameRecoveryCorridor(
+        bool startAtBingo,
+        MissionRtbReason expectedReason) {
+        var session = new SimulationSession();
+        session.StartBeat(() => {
+            BeatSetup beat = AirborneAttackCard(formationSize: 2);
+            return startAtBingo
+                ? beat with {
+                    Fuel = beat.FuelLoadout with {
+                        InitialFuelLb = beat.FuelLoadout.BingoThresholdLb
+                    }
+                }
+                : beat;
+        });
+        session.Begin();
+
+        if (!startAtBingo) {
+            session.FeedKey(GKey.KnockItOff, true);
+            session.FeedKey(GKey.KnockItOff, false);
+        }
+        session.StepFixed();
+
+        Assert.Equal(expectedReason, session.ReturnToBaseReason);
+        Assert.True(session.PlayerRtbActive);
+        Assert.True(session.ApproachGuidancePlan.GuidanceActive);
+        Assert.True(session.ApproachGuidancePlan.Valid);
+        Assert.NotEmpty(session.ApproachGuidancePlan.Gates);
+        // A Bingo crossing is observed after the fuel-consuming physics tick. The corridor and
+        // ceasefire latch on that same boundary; the Rapier director consumes the new intent on
+        // its next ordinary guidance tick.
+        if (startAtBingo) session.StepFixed();
+        Assert.True(session.RapierPhase is RapierMissionPhase.ReturnToBase
+            or RapierMissionPhase.Recovery);
+        Assert.False(session.PlayerWeaponsAuthorized);
+        Assert.False(session.OpponentTriggerDown);
+        Assert.False(session.RapierPursuitActive);
+        Assert.False(session.ReturnToBaseAvailable);
+        Assert.False(session.CarrierSortieRtbRequested);
+
+        // The first accepted reason is authoritative. A second O edge during the return cannot
+        // fall through to a different route or turn an automatic Bingo into a manual request.
+        session.FeedKey(GKey.KnockItOff, true);
+        session.FeedKey(GKey.KnockItOff, false);
+        Assert.Equal(expectedReason, session.ReturnToBaseReason);
+        Assert.False(session.CarrierSortieRtbRequested);
+
+        int playerRoundsAtKnockItOff = session.SortiePlayerRoundsFired;
+        int opponentRoundsAtKnockItOff = session.SortieOpponentRoundsFired;
+        int shotsAtKnockItOff = session.ShotsTotal;
+        session.FeedKey(GKey.Trigger, true);
+        session.StepFixed(2 * (int)AircraftSim.TickHz);
+        session.FeedKey(GKey.Trigger, false);
+        Assert.False(session.TriggerDown);
+        Assert.Equal(playerRoundsAtKnockItOff, session.SortiePlayerRoundsFired);
+        Assert.Equal(opponentRoundsAtKnockItOff, session.SortieOpponentRoundsFired);
+        Assert.Equal(shotsAtKnockItOff, session.ShotsTotal);
+        Assert.Contains(startAtBingo ? "BINGO" : "KNOCK IT OFF",
+            session.TransitionCue, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public void AutomationCanFlyTheWholeAuthoredSortieButLeavesTheAttackDecisionToThePilot() {
         var session = new SimulationSession();

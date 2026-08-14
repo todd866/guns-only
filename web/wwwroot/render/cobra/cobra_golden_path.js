@@ -1,17 +1,16 @@
 /**
- * The golden path — a drifting ribbon of sunlit haze that leads the pilot to the objective.
+ * The golden path — sparse, terrain-conforming amber chevrons that lead the pilot to the
+ * objective or back to Camp Ember.
  *
  * The standing complaint is "it is not obvious where I am supposed to fly". A chart answers that
  * with a look DOWN; this answers it through the windscreen. The reference is the Hogwarts Legacy
- * guide wisp, but the honest local form over a Vietnamese valley is drifting marker smoke catching
- * a low sun — a thin, soft, wind-smeared band of pale haze. Four properties carry the whole idea:
+ * guide wisp, but the useful aviation/game pattern is a previewed sequence of open cues: enough
+ * path to read the next turn and altitude, not a solid tunnel painted over the world.
  *
- *   1. IT MOVES, away from the ship toward the target. A static line is decoration; a flowing one
- *      is an instruction. This is the single most important property — see the UV scroll below.
- *   2. IT IS SUBTLE. Additive, low peak alpha, no hard edge anywhere. If it ever reads as a neon
- *      quest marker it is wrong.
- *   3. IT IS DIEGETIC-ISH. It rides ~75 m over the terrain, so it drapes over ridges the way smoke
- *      would; it is not a screen-space arrow drawn on glass.
+ *   1. IT MOVES. One brighter leader travels away from the ship through the sequence.
+ *   2. IT IS OPEN. Small crow's-foot chevrons communicate direction while leaving almost all of
+ *      the terrain untouched. No rectangles, filled road, tunnel, or vertical light stack.
+ *   3. IT IS WORLD-REGISTERED. Every cue rides just below eye line and clears sampled terrain.
  *   4. IT ENDS. Inside the arrival radius the opacity reaches literal zero, so it never nags.
  *
  * ONE ENGINE. Nothing here invents an objective: the target is the nearest hostile-owned entry of
@@ -19,90 +18,75 @@
  * (the test asserts the two agree on a shared fixture). If the sim publishes no hostile site there
  * is no path.
  *
- * GUNSIGHT. The pilot aims through the middle of the screen, and when you are flying AT the target
- * the ribbon's vanishing point sits exactly there. That is why the far end fades out well before it
- * converges: the brightest part of the ribbon is its middle, off to the near-field floor of the
- * frame, and the part that would land on the reticle is already gone.
- *
- * COST. One Mesh, one ShaderMaterial, one static index buffer: 160 triangles, one draw call, no
- * shadow submission, no per-frame allocation. The spine is re-sampled only when the objective
- * changes or the ship has moved 25 m, not every frame.
+ * COST. One Mesh, one ShaderMaterial, one static index buffer: 32 triangles, one draw call, no
+ * shadow submission, no per-frame allocation. Geometry is re-sampled only on a meaningful move.
  */
 
 /** Presentation contract id, in the house `guns-only.<thing>.vN` form. */
-export const COBRA_GOLDEN_PATH_SCHEMA = "guns-only.cobra-golden-path.v1";
+import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=328";
+
+export const COBRA_GOLDEN_PATH_SCHEMA = "guns-only.cobra-golden-path.v2";
 
 export const COBRA_GOLDEN_PATH_DEFAULTS = Object.freeze({
-  /** Spine samples minus one. 40 segments over 1.5 km is a 37 m chord — smooth at flying speed. */
-  segments: 40,
-  /** Terrain clearance (m). The brief's comfortable band is 60-90; 75 is its middle. */
-  clearanceM: 75,
-  /** Drawn length cap (m). Beyond this it reads as a runway stripe to the horizon, not "this way". */
-  maxLengthM: 1_500,
-  /** The ribbon starts this far ahead of the ship so it never begins in the pilot's face. */
-  leadM: 140,
-  /** Ribbon half-width at the near end and at the far end (m). It opens with distance. */
-  // Narrow. At 13 m / 38 m half-width the ribbon was ~76 m across at its far end and, seen
-  // down its own length at a shallow angle, read as a flat sheet of haze lying over the terrain
-  // rather than a trail going somewhere. A guide should look like drifting marker smoke, not a
-  // road surface.
-  nearHalfWidthM: 6,
-  farHalfWidthM: 16,
-  /** The crossed vertical sheet is shorter than the horizontal one is wide — a smear, not a wall. */
-  verticalWidthRatio: 0.55,
-  /** Peak alpha. Deliberately low: sunlit mist, not a light bar. */
-  // Narrower needs a little more presence to survive against a bright jungle floor.
-  peakOpacity: 0.24,
-  /** Flow cycles per second of the scrolling haze bands. Slow — this is drifting smoke. */
+  /** Sparse preview: enough future information to read the route without forming a tunnel. */
+  markerCount: 8,
+  markerSpacingM: 90,
+  markerHalfWidthM: 7,
+  markerHeightM: 4,
+  markerThicknessM: 1.05,
+  /** Fallback and eye-following clearance limits (m AGL). */
+  clearanceM: 34,
+  minClearanceM: 14,
+  maxClearanceM: 55,
+  eyeLineOffsetM: -12,
+  /** Long enough for turn preview, short enough that cues do not carpet the valley. */
+  maxLengthM: 1_400,
+  leadM: 95,
+  /** Normal alpha keeps the amber legible without additive white bloom. */
+  peakOpacity: 0.82,
+  /** One leader traverses the marker sequence roughly every four seconds. */
   flowCyclesPerSecond: 0.24,
-  /** How many soft bands ride the drawn length. */
-  flowBands: 3.0,
   /** Ship must move this far before the spine is re-sampled. */
   rebuildDistanceM: 25,
   /** Fully transparent inside this range; it has finished its job. */
-  arrivedRadiusM: 400,
+  arrivedRadiusM: 260,
+  rtbArrivedRadiusM: 75,
+  routeArrivedRadiusM: 75,
   /**
    * Pale warm haze. Sits between the profile's sun (0xffe2b4) and its fog (0x8a9fa5), because that
    * is physically what lit mist is: sunlight scattered by the air the scene is already full of.
    * Additive over a grey-green monsoon sky it prints as a soft gold, never a saturated one.
    */
-  color: 0xd6c49a,
-  /** Rise limit per segment used to drape the spine over ridges (metres of fall per metre run). */
+  color: 0xffad3d,
+  /** Rise limit between cues used to keep a terrain step from becoming a vertical stack. */
   descentGradient: 0.12,
 });
 
 const VERTEX_SHADER = `
-varying vec2 vPathUv;
+varying vec2 vMarkerUv;
 void main() {
-  vPathUv = uv;
+  vMarkerUv = uv;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
 `;
 
-// The whole look lives here. Across the ribbon: a squared cosine, so there is no edge at all.
-// Along it: a near fade (nothing starts in the pilot's face), a far fade (nothing converges on the
-// gunsight), and the scrolling bands that make it read as flowing rather than painted.
+// UV.x is a marker's fixed route phase. UV.y runs across the thin arm/tick, softly trimming its
+// outer pixels. Distant cues recede gently and one traveling emphasis provides direction without
+// moving world geometry.
 const FRAGMENT_SHADER = `
 uniform vec3 uColor;
 uniform float uOpacity;
 uniform float uFlow;
-uniform float uBands;
-varying vec2 vPathUv;
+varying vec2 vMarkerUv;
 
 void main() {
-  float across = 1.0 - abs(vPathUv.y * 2.0 - 1.0);
-  float body = across * across;
-
-  float nearFade = smoothstep(0.0, 0.22, vPathUv.x);
-  float farFade = 1.0 - smoothstep(0.62, 1.0, vPathUv.x);
-
-  float band = fract(vPathUv.x * uBands - uFlow);
-  float pulse = smoothstep(0.0, 0.45, band) * (1.0 - smoothstep(0.55, 1.0, band));
-
-  float alpha = uOpacity * body * nearFade * farFade * (0.45 + 0.55 * pulse);
-  if (alpha <= 0.0) discard;
-  // AdditiveBlending is SrcAlpha/One, so the blender already multiplies rgb by alpha. Pre-scaling
-  // it here as well would square the fade and leave the ribbon all but invisible.
+  float edge = smoothstep(0.0, 0.22, vMarkerUv.y)
+    * (1.0 - smoothstep(0.78, 1.0, vMarkerUv.y));
+  float delta = abs(fract(vMarkerUv.x - uFlow + 0.5) - 0.5);
+  float leader = 1.0 - smoothstep(0.02, 0.14, delta);
+  float distanceFade = mix(1.0, 0.58, vMarkerUv.x);
+  float alpha = uOpacity * edge * distanceFade * (0.46 + 0.44 * leader);
+  if (alpha < 0.004) discard;
   gl_FragColor = vec4(uColor, alpha);
 }
 `;
@@ -121,30 +105,46 @@ export function cobraGoldenPathFlowOffset(nowSeconds, cyclesPerSecond = COBRA_GO
 }
 
 /**
- * The objective, resolved from authority alone: the nearest hostile-owned site. This mirrors
- * `cobraTacticalMapModel`'s objective rule exactly (nearest site whose `owner` is "hostile"), so
- * the ribbon in the windscreen and the arrow on the chart can never point at different places.
+ * The destination, resolved from authority alone. Combat uses the shared objective-site resolver;
+ * RTB uses the published Camp Ember FOB. The ribbon and tactical map therefore cannot disagree,
+ * and the return path cannot keep pointing at an enemy after the order says RTB.
  * @returns {{ siteId: string, eastM: number, northM: number } | null}
  */
-export function cobraGoldenPathObjective(groundWar, player) {
+export function cobraGoldenPathObjective(groundWar, player, missionAct = "") {
+  if (String(missionAct).toLowerCase() === "rtb") {
+    const eastM = Number(groundWar?.fob?.x_m);
+    const northM = Number(groundWar?.fob?.z_m);
+    if (!Number.isFinite(eastM) || !Number.isFinite(northM)) return null;
+    return { siteId: "camp-ember-rtb", eastM, northM, mode: "rtb" };
+  }
   const sites = Array.isArray(groundWar?.sites) ? groundWar.sites : null;
   if (!sites || sites.length === 0) return null;
   const playerEastM = Number(player?.eastM) || 0;
   const playerNorthM = Number(player?.northM) || 0;
-  let best = null;
-  let bestRangeM = Infinity;
-  for (const site of sites) {
-    if (!site) continue;
-    if (site.owner !== "hostile") continue;
-    const eastM = Number(site.x_m);
-    const northM = Number(site.z_m);
-    if (!Number.isFinite(eastM) || !Number.isFinite(northM)) continue;
-    const rangeM = Math.hypot(eastM - playerEastM, northM - playerNorthM);
-    if (rangeM >= bestRangeM) continue;
-    bestRangeM = rangeM;
-    best = { siteId: site.id, eastM, northM };
-  }
-  return best;
+  const siteId = cobraObjectiveSiteId({
+    sites,
+    units: groundWar?.units,
+    player: { eastM: playerEastM, northM: playerNorthM },
+  });
+  const site = sites.find((candidate) => candidate?.id === siteId) ?? null;
+  const eastM = Number(site?.x_m);
+  const northM = Number(site?.z_m);
+  return siteId && Number.isFinite(eastM) && Number.isFinite(northM)
+    ? { siteId, eastM, northM, mode: "objective" }
+    : null;
+}
+
+function cobraRouteGateObjective(pathGates, missionAct) {
+  const act = String(missionAct).toLowerCase();
+  if (act !== "depart" && act !== "ingress") return null;
+  const gates = Array.isArray(pathGates) ? pathGates : [];
+  const index = gates.findIndex((gate) => gate?.active === true);
+  const gate = gates[index];
+  const eastM = Number(gate?.east_m);
+  const northM = Number(gate?.north_m);
+  return index >= 0 && Number.isFinite(eastM) && Number.isFinite(northM)
+    ? { siteId: `ember-route-gate-${index}`, eastM, northM, mode: "route" }
+    : null;
 }
 
 // Reused so the frame loop allocates nothing. There is one golden path in a scene; if that ever
@@ -166,21 +166,38 @@ const frameStateScratch = {
  */
 export function cobraGoldenPathState({
   groundWar,
+  pathGates = null,
   pose,
   groundHeightAt,
   nowSeconds,
+  missionAct = "",
   suppressed = false,
-  arrivedRadiusM = COBRA_GOLDEN_PATH_DEFAULTS.arrivedRadiusM,
+  arrivedRadiusM = null,
 } = {}) {
   const player = frameStateScratch.player;
   player.eastM = Number(pose?.x_m) || 0;
   player.northM = Number(pose?.z_m) || 0;
   player.altitudeM = Number(pose?.y_m) || 0;
   player.headingRad = Number(pose?.yaw_rad) || 0;
-  frameStateScratch.objective = suppressed || !pose ? null : cobraGoldenPathObjective(groundWar, player);
+  const act = String(missionAct).toLowerCase();
+  const routeAct = act === "depart" || act === "ingress";
+  frameStateScratch.objective = suppressed || !pose
+    ? null
+    : routeAct
+      ? cobraRouteGateObjective(pathGates, act)
+      : cobraGoldenPathObjective(groundWar, player, act);
   frameStateScratch.groundHeightAt = groundHeightAt;
   frameStateScratch.nowSeconds = Number(nowSeconds) || 0;
-  frameStateScratch.arrivedRadiusM = arrivedRadiusM;
+  const explicitRadiusM = arrivedRadiusM === null || arrivedRadiusM === undefined
+    ? Number.NaN
+    : Number(arrivedRadiusM);
+  frameStateScratch.arrivedRadiusM = Number.isFinite(explicitRadiusM)
+    ? explicitRadiusM
+    : act === "rtb"
+      ? COBRA_GOLDEN_PATH_DEFAULTS.rtbArrivedRadiusM
+      : routeAct
+        ? COBRA_GOLDEN_PATH_DEFAULTS.routeArrivedRadiusM
+        : COBRA_GOLDEN_PATH_DEFAULTS.arrivedRadiusM;
   return frameStateScratch;
 }
 
@@ -194,36 +211,30 @@ export function cobraGoldenPathState({
  */
 export function createCobraGoldenPath(THREE, options = {}) {
   const config = { ...COBRA_GOLDEN_PATH_DEFAULTS, ...options };
-  const segments = Math.max(4, Math.floor(config.segments));
-  const samples = segments + 1;
-  // Two crossed sheets share one spine: a horizontal ribbon and a vertical one. A lone horizontal
-  // ribbon vanishes the moment the ship's eye height matches it, which in a helicopter is most of
-  // the time; the cross keeps it legible from every attitude for 80 more triangles.
-  const sheets = 2;
-  const vertexCount = samples * 2 * sheets;
-
+  const markerCount = Math.max(3, Math.floor(config.markerCount));
+  const quadsPerMarker = 2;
+  const verticesPerQuad = 4;
+  const verticesPerMarker = quadsPerMarker * verticesPerQuad;
+  const vertexCount = markerCount * verticesPerMarker;
   const positions = new Float32Array(vertexCount * 3);
   const uvs = new Float32Array(vertexCount * 2);
-  const indices = new Uint16Array(segments * 6 * sheets);
+  const indices = new Uint16Array(markerCount * quadsPerMarker * 6);
 
-  for (let sheet = 0; sheet < sheets; sheet += 1) {
-    const base = sheet * samples * 2;
-    for (let index = 0; index < samples; index += 1) {
-      const along = index / segments;
-      uvs[(base + index * 2) * 2] = along;
-      uvs[(base + index * 2) * 2 + 1] = 0;
-      uvs[(base + index * 2 + 1) * 2] = along;
-      uvs[(base + index * 2 + 1) * 2 + 1] = 1;
-    }
-    for (let segment = 0; segment < segments; segment += 1) {
-      const cursor = (sheet * segments + segment) * 6;
-      const a = base + segment * 2;
-      indices[cursor] = a;
-      indices[cursor + 1] = a + 1;
-      indices[cursor + 2] = a + 2;
-      indices[cursor + 3] = a + 1;
-      indices[cursor + 4] = a + 3;
-      indices[cursor + 5] = a + 2;
+  for (let marker = 0; marker < markerCount; marker += 1) {
+    const phase = marker / markerCount;
+    for (let quad = 0; quad < quadsPerMarker; quad += 1) {
+      const vertexBase = marker * verticesPerMarker + quad * verticesPerQuad;
+      for (let corner = 0; corner < verticesPerQuad; corner += 1) {
+        uvs[(vertexBase + corner) * 2] = phase;
+        uvs[(vertexBase + corner) * 2 + 1] = corner === 0 || corner === 3 ? 0 : 1;
+      }
+      const cursor = (marker * quadsPerMarker + quad) * 6;
+      indices[cursor] = vertexBase;
+      indices[cursor + 1] = vertexBase + 1;
+      indices[cursor + 2] = vertexBase + 2;
+      indices[cursor + 3] = vertexBase;
+      indices[cursor + 4] = vertexBase + 2;
+      indices[cursor + 5] = vertexBase + 3;
     }
   }
 
@@ -231,7 +242,9 @@ export function createCobraGoldenPath(THREE, options = {}) {
   const positionAttribute = new THREE.BufferAttribute(positions, 3);
   positionAttribute.setUsage?.(THREE.DynamicDrawUsage);
   geometry.setAttribute("position", positionAttribute);
-  geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+  const uvAttribute = new THREE.BufferAttribute(uvs, 2);
+  uvAttribute.setUsage?.(THREE.DynamicDrawUsage);
+  geometry.setAttribute("uv", uvAttribute);
   geometry.setIndex(new THREE.BufferAttribute(indices, 1));
 
   const material = new THREE.ShaderMaterial({
@@ -239,155 +252,209 @@ export function createCobraGoldenPath(THREE, options = {}) {
       uColor: { value: new THREE.Color(config.color) },
       uOpacity: { value: 0 },
       uFlow: { value: 0 },
-      uBands: { value: config.flowBands },
     },
     vertexShader: VERTEX_SHADER,
     fragmentShader: FRAGMENT_SHADER,
     transparent: true,
-    // Additive over the haze, depth-TESTED so a ridge in front still hides it, depth-WRITE off so
-    // it never punches a hole in the terrain behind it or draws a hard silhouette against the sky.
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending,
     depthTest: true,
     depthWrite: false,
     side: THREE.DoubleSide,
     fog: false,
+    toneMapped: false,
   });
-  // Mirrored onto the material itself so anything reading `material.opacity` — a debug overlay, a
-  // test, a future fade coordinator — sees the same number the shader is using.
   material.opacity = 0;
 
   const mesh = new THREE.Mesh(geometry, material);
-  mesh.name = "COBRA_GOLDEN_PATH_RIBBON";
+  mesh.name = "COBRA_GOLDEN_PATH_CHEVRONS";
   mesh.frustumCulled = false;
   mesh.castShadow = false;
   mesh.receiveShadow = false;
-  // Drawn after the opaque world so the additive pass lands on a finished frame.
   mesh.renderOrder = 6;
 
   const group = new THREE.Group();
   group.name = "COBRA_GOLDEN_PATH";
   group.userData.schema = COBRA_GOLDEN_PATH_SCHEMA;
+  group.userData.style = "open-chevrons";
+  group.userData.markerCount = markerCount;
+  group.userData.activeMarkerCount = 0;
   group.userData.rebuildCount = 0;
+  group.userData.clearanceM = config.clearanceM;
+  group.userData.mode = null;
   group.visible = false;
   group.add(mesh);
 
-  // Spine scratch, allocated once.
-  const spineEast = new Float64Array(samples);
-  const spineNorth = new Float64Array(samples);
-  const spineUp = new Float64Array(samples);
+  const spineEast = new Float64Array(markerCount);
+  const spineNorth = new Float64Array(markerCount);
+  const spineUp = new Float64Array(markerCount);
 
   let lastObjectiveId = null;
   let lastObjectiveEastM = Number.NaN;
   let lastObjectiveNorthM = Number.NaN;
   let lastPlayerEastM = Number.NaN;
   let lastPlayerNorthM = Number.NaN;
+  let lastPlayerAltitudeM = Number.NaN;
 
-  /** The ribbon opens with distance — narrow at the ship, wide where it is dissolving into haze. */
-  function halfWidthAt(index) {
-    const along = index / segments;
-    return config.nearHalfWidthM + (config.farHalfWidthM - config.nearHalfWidthM) * along;
+  function setVertex(index, x, y, z) {
+    const cursor = index * 3;
+    positions[cursor] = x;
+    positions[cursor + 1] = y;
+    positions[cursor + 2] = z;
   }
 
-  function needsRebuild(objective, playerEastM, playerNorthM) {
+  function writeQuad(vertexBase, a, b, c, d) {
+    setVertex(vertexBase, a.x, a.y, a.z);
+    setVertex(vertexBase + 1, b.x, b.y, b.z);
+    setVertex(vertexBase + 2, c.x, c.y, c.z);
+    setVertex(vertexBase + 3, d.x, d.y, d.z);
+  }
+
+  function writeArm(vertexBase, startX, startY, startZ, endX, endY, endZ, lateralX, lateralZ) {
+    const deltaX = endX - startX;
+    const deltaY = endY - startY;
+    const deltaZ = endZ - startZ;
+    const deltaLateral = deltaX * lateralX + deltaZ * lateralZ;
+    const length = Math.hypot(deltaLateral, deltaY) || 1;
+    const normalLateral = -deltaY / length;
+    const normalY = deltaLateral / length;
+    const normalX = lateralX * normalLateral;
+    const normalZ = lateralZ * normalLateral;
+    const half = config.markerThicknessM * 0.5;
+    writeQuad(
+      vertexBase,
+      { x: startX + normalX * half, y: startY + normalY * half, z: startZ + normalZ * half },
+      { x: startX - normalX * half, y: startY - normalY * half, z: startZ - normalZ * half },
+      { x: endX - normalX * half, y: endY - normalY * half, z: endZ - normalZ * half },
+      { x: endX + normalX * half, y: endY + normalY * half, z: endZ + normalZ * half },
+    );
+  }
+
+  function needsRebuild(objective, playerEastM, playerNorthM, playerAltitudeM) {
     if (objective.siteId !== lastObjectiveId) return true;
     if (!(Math.abs(objective.eastM - lastObjectiveEastM) < 1)) return true;
     if (!(Math.abs(objective.northM - lastObjectiveNorthM) < 1)) return true;
     if (!Number.isFinite(lastPlayerEastM)) return true;
     const movedM = Math.hypot(playerEastM - lastPlayerEastM, playerNorthM - lastPlayerNorthM);
-    return movedM >= config.rebuildDistanceM;
+    if (movedM >= config.rebuildDistanceM) return true;
+    return Number.isFinite(playerAltitudeM)
+      && (!Number.isFinite(lastPlayerAltitudeM)
+        || Math.abs(playerAltitudeM - lastPlayerAltitudeM) >= 12);
   }
 
-  function rebuild(objective, playerEastM, playerNorthM, groundHeightAt) {
+  function rebuild(objective, playerEastM, playerNorthM, playerAltitudeM, groundHeightAt) {
     const toEastM = objective.eastM - playerEastM;
     const toNorthM = objective.northM - playerNorthM;
     const rangeM = Math.hypot(toEastM, toNorthM);
     if (!(rangeM > 1e-3)) return false;
     const dirEast = toEastM / rangeM;
     const dirNorth = toNorthM / rangeM;
-
-    // Start ahead of the ship, along the bearing to the target, and never past the target itself.
     const leadM = Math.min(config.leadM, rangeM * 0.5);
-    const startEastM = playerEastM + dirEast * leadM;
-    const startNorthM = playerNorthM + dirNorth * leadM;
-    const drawnM = Math.min(config.maxLengthM, rangeM - leadM);
-    const segmentM = drawnM / segments;
-
+    const markerReachM = config.markerHalfWidthM;
+    const drawnM = Math.min(
+      Math.max(0, config.maxLengthM - markerReachM),
+      rangeM - leadM,
+    );
+    const activeMarkerCount = Math.min(
+      markerCount,
+      Math.max(3, Math.floor(drawnM / Math.max(1, config.markerSpacingM)) + 1),
+    );
+    const markerStepM = drawnM / Math.max(1, activeMarkerCount - 1);
     const sample = typeof groundHeightAt === "function" ? groundHeightAt : () => 0;
     const at = (eastM, northM) => {
       const groundM = Number(sample(eastM, northM));
       return Number.isFinite(groundM) ? groundM : 0;
     };
-    // The across-vector, in render space (x = east, z = -north): the travel direction is
-    // (dirEast, -dirNorth), so its horizontal normal is (-dirNorth, -dirEast). The ribbon is
-    // symmetric about its spine, so the sign of this normal is cosmetic.
-    const perpX = -dirNorth;
-    const perpZ = -dirEast;
-    // Same vector in sim axes, for terrain sampling at the ribbon's edges.
-    const perpEast = perpX;
-    const perpNorth = -perpZ;
+    const playerAglM = playerAltitudeM - at(playerEastM, playerNorthM);
+    const desiredClearanceM = Number.isFinite(playerAglM)
+      ? Math.min(config.maxClearanceM, Math.max(
+        config.minClearanceM,
+        playerAglM + config.eyeLineOffsetM,
+      ))
+      : config.clearanceM;
+    group.userData.clearanceM = desiredClearanceM;
+    group.userData.mode = objective.mode ?? "objective";
 
-    for (let index = 0; index < samples; index += 1) {
-      const distanceM = segmentM * index;
-      const eastM = startEastM + dirEast * distanceM;
-      const northM = startNorthM + dirNorth * distanceM;
-      spineEast[index] = eastM;
-      spineNorth[index] = northM;
-      // Clearance is owed by the ribbon's EDGES, not just its spine: a 38 m half-width laid across
-      // a valley wall would otherwise bury one side in the hillside. Sample the shoulders too.
-      const halfWidthM = halfWidthAt(index);
+    const perpEast = -dirNorth;
+    const perpNorth = dirEast;
+    for (let marker = 0; marker < activeMarkerCount; marker += 1) {
+      const distanceM = leadM + markerStepM * marker;
+      const eastM = playerEastM + dirEast * distanceM;
+      const northM = playerNorthM + dirNorth * distanceM;
+      spineEast[marker] = eastM;
+      spineNorth[marker] = northM;
       const groundM = Math.max(
         at(eastM, northM),
-        at(eastM + perpEast * halfWidthM, northM + perpNorth * halfWidthM),
-        at(eastM - perpEast * halfWidthM, northM - perpNorth * halfWidthM),
+        at(eastM + perpEast * config.markerHalfWidthM,
+          northM + perpNorth * config.markerHalfWidthM),
+        at(eastM - perpEast * config.markerHalfWidthM,
+          northM - perpNorth * config.markerHalfWidthM),
       );
-      spineUp[index] = groundM + config.clearanceM;
+      spineUp[marker] = groundM + desiredClearanceM + config.markerThicknessM * 0.5;
     }
 
-    // Drape the spine over ridges. Both passes only ever RAISE a sample, so the "every vertex
-    // clears the terrain by the clearance" invariant survives them by construction; what they add
-    // is that the ribbon climbs ahead of a ridge instead of clipping through its shoulder.
-    const maxDropM = Math.max(0, config.descentGradient) * segmentM;
-    for (let index = 1; index < samples; index += 1) {
-      spineUp[index] = Math.max(spineUp[index], spineUp[index - 1] - maxDropM);
+    const maxDropM = Math.max(0, config.descentGradient) * markerStepM;
+    for (let marker = 1; marker < activeMarkerCount; marker += 1) {
+      spineUp[marker] = Math.max(spineUp[marker], spineUp[marker - 1] - maxDropM);
     }
-    for (let index = samples - 2; index >= 0; index -= 1) {
-      spineUp[index] = Math.max(spineUp[index], spineUp[index + 1] - maxDropM);
+    for (let marker = activeMarkerCount - 2; marker >= 0; marker -= 1) {
+      spineUp[marker] = Math.max(spineUp[marker], spineUp[marker + 1] - maxDropM);
     }
 
-    for (let index = 0; index < samples; index += 1) {
-      const halfWidthM = halfWidthAt(index);
-      const halfHeightM = halfWidthM * config.verticalWidthRatio;
-      const x = spineEast[index];
-      // The vertical sheet hangs half its height BELOW the spine, so the spine is lifted by that
-      // much: it is the ribbon's lowest vertex, not its centre line, that owes the clearance.
-      const y = spineUp[index] + halfHeightM;
-      const z = -spineNorth[index];
-
-      const flat = index * 2 * 3;
-      positions[flat] = x + perpX * halfWidthM;
-      positions[flat + 1] = y;
-      positions[flat + 2] = z + perpZ * halfWidthM;
-      positions[flat + 3] = x - perpX * halfWidthM;
-      positions[flat + 4] = y;
-      positions[flat + 5] = z - perpZ * halfWidthM;
-
-      const upright = (samples * 2 + index * 2) * 3;
-      positions[upright] = x;
-      positions[upright + 1] = y + halfHeightM;
-      positions[upright + 2] = z;
-      positions[upright + 3] = x;
-      positions[upright + 4] = y - halfHeightM;
-      positions[upright + 5] = z;
+    const perpX = -dirNorth;
+    const perpZ = -dirEast;
+    for (let marker = 0; marker < markerCount; marker += 1) {
+      const activeMarker = Math.min(marker, activeMarkerCount - 1);
+      const phase = marker < activeMarkerCount ? marker / activeMarkerCount : 1;
+      for (let quad = 0; quad < quadsPerMarker; quad += 1) {
+        const uvBase = marker * verticesPerMarker + quad * verticesPerQuad;
+        for (let corner = 0; corner < verticesPerQuad; corner += 1) {
+          uvs[(uvBase + corner) * 2] = phase;
+        }
+      }
+      if (marker >= activeMarkerCount) {
+        const hiddenX = spineEast[activeMarker];
+        const hiddenY = spineUp[activeMarker];
+        const hiddenZ = -spineNorth[activeMarker];
+        const hiddenBase = marker * verticesPerMarker;
+        for (let vertex = 0; vertex < verticesPerMarker; vertex += 1) {
+          setVertex(hiddenBase + vertex, hiddenX, hiddenY, hiddenZ);
+        }
+        continue;
+      }
+      const centerX = spineEast[marker];
+      const centerZ = -spineNorth[marker];
+      const leftX = centerX + perpX * config.markerHalfWidthM;
+      const leftZ = centerZ + perpZ * config.markerHalfWidthM;
+      const rightX = centerX - perpX * config.markerHalfWidthM;
+      const rightZ = centerZ - perpZ * config.markerHalfWidthM;
+      const apexY = spineUp[marker];
+      const shoulderY = apexY + config.markerHeightM;
+      const vertexBase = marker * verticesPerMarker;
+      writeArm(
+        vertexBase,
+        leftX, shoulderY, leftZ,
+        centerX, apexY, centerZ,
+        perpX, perpZ,
+      );
+      writeArm(
+        vertexBase + 4,
+        rightX, shoulderY, rightZ,
+        centerX, apexY, centerZ,
+        perpX, perpZ,
+      );
     }
 
     positionAttribute.needsUpdate = true;
+    uvAttribute.needsUpdate = true;
     geometry.computeBoundingSphere?.();
     group.userData.rebuildCount += 1;
+    group.userData.activeMarkerCount = activeMarkerCount;
     lastObjectiveId = objective.siteId;
     lastObjectiveEastM = objective.eastM;
     lastObjectiveNorthM = objective.northM;
     lastPlayerEastM = playerEastM;
     lastPlayerNorthM = playerNorthM;
+    lastPlayerAltitudeM = playerAltitudeM;
     return true;
   }
 
@@ -405,6 +472,7 @@ export function createCobraGoldenPath(THREE, options = {}) {
     const objective = state?.objective;
     const playerEastM = Number(state?.player?.eastM);
     const playerNorthM = Number(state?.player?.northM);
+    const playerAltitudeM = Number(state?.player?.altitudeM);
     if (!objective
       || !Number.isFinite(playerEastM)
       || !Number.isFinite(playerNorthM)
@@ -419,20 +487,23 @@ export function createCobraGoldenPath(THREE, options = {}) {
       : config.arrivedRadiusM;
     const rangeM = Math.hypot(objective.eastM - playerEastM, objective.northM - playerNorthM);
     if (rangeM <= arrivedRadiusM) {
-      // ARRIVED. Zero, not "nearly zero": the cue has finished its job and must stop nagging.
       hide();
       return;
     }
 
-    if (needsRebuild(objective, playerEastM, playerNorthM)) {
-      if (!rebuild(objective, playerEastM, playerNorthM, state.groundHeightAt)) {
+    if (needsRebuild(objective, playerEastM, playerNorthM, playerAltitudeM)) {
+      if (!rebuild(
+        objective,
+        playerEastM,
+        playerNorthM,
+        playerAltitudeM,
+        state.groundHeightAt,
+      )) {
         hide();
         return;
       }
     }
 
-    // Fade back in over the second arrival radius, so walking off the target does not snap the
-    // ribbon on like a switch.
     const arrivalFade = Math.min(1, (rangeM - arrivedRadiusM) / Math.max(1, arrivedRadiusM));
     group.visible = true;
     setOpacity(config.peakOpacity * arrivalFade);

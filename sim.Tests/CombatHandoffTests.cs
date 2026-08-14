@@ -157,6 +157,34 @@ public sealed class CombatHandoffTests {
     }
 
     [Fact]
+    public void BingoAutomaticallyKnocksOffFightAndPublishesImmediateFlyHomeIntent() {
+        BeatSetup authored = Beats.ModernVisualMerge();
+        var session = new SimulationSession();
+        session.StartBeat(() => authored with {
+            Combat = authored.CombatRules with { OpponentAmmo = 40 },
+            Fuel = authored.FuelLoadout with {
+                InitialFuelLb = authored.FuelLoadout.BingoThresholdLb
+            }
+        });
+        session.Begin();
+
+        Assert.True(session.PlayerFuel.IsBingo);
+        Assert.False(session.PlayerRtbActive);
+        session.StepFixed();
+
+        Assert.Equal(MissionRtbReason.BingoFuel, session.ReturnToBaseReason);
+        Assert.Equal(CombatHandoffPhase.Requested, session.CombatHandoffPhase);
+        Assert.True(session.PlayerRtbActive);
+        Assert.False(session.PlayerWeaponsAuthorized);
+        Assert.False(session.OpponentTriggerDown);
+        Assert.True(session.ApproachGuidancePlan.GuidanceActive);
+        Assert.True(session.ApproachGuidancePlan.Valid);
+        Assert.NotEmpty(session.ApproachGuidancePlan.Gates);
+        Assert.Contains("BINGO", session.TransitionCue,
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void DrainPreservesOldRoundsThenAtomicallyTransfersPartialDamage() {
         SimulationSession session = StartHandoffFight(opponentAmmo: 10);
         GunKill playerGun = session.PlayerGun;

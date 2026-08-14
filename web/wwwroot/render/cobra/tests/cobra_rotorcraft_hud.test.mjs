@@ -211,7 +211,7 @@ test("gunner line carries the crew truth with target, ammo and FOB context", () 
   const noSolution = modelFixture();
   noSolution.gunner = { ...noSolution.gunner, reason: "NoBallisticSolution" };
   const noSolutionModel = cobraRotorcraftHudModel(noSolution);
-  assert.equal(noSolutionModel.gunner.line, "GUN NO SOLUTION");
+  assert.equal(noSolutionModel.gunner.line, "GUN NO BALLISTIC SOLUTION");
   assert.equal(noSolutionModel.gunner.level, "normal");
   const slewing = modelFixture();
   slewing.gunner = { ...slewing.gunner, reason: "SightNotCoincident" };
@@ -336,6 +336,26 @@ test("critical rotor warnings retain the lane ahead of amber damage awareness", 
   ]);
 });
 
+test("active ground fire names the source clock direction when burst truth is available", () => {
+  const fixture = modelFixture({
+    battle_damage: {
+      active_observer_id: "observer.east",
+      receiving_fire: true,
+      recent_bursts: [{
+        observer_id: "observer.east",
+        source_x_m: 1_000,
+        source_z_m: 0,
+      }],
+    },
+  });
+  fixture.vehicle.x_m = 0;
+  fixture.vehicle.z_m = 0;
+  fixture.vehicle.yaw_rad = 0; // north; east is three o'clock
+  assert.deepEqual(cobraRotorcraftHudModel(fixture).warnings, [
+    { text: "FIRE 3 O'CLOCK", level: "caution" },
+  ]);
+});
+
 test("damage annunciations draw in their warning and caution colors", () => {
   const model = cobraRotorcraftHudModel(modelFixture({
     battle_damage: { engine_damaged: true, scas_damaged: true, receiving_fire: false },
@@ -365,12 +385,17 @@ test("Hold the Bridge mounts the production HUD with rotorcraft extras", async (
   // strip (#hud-rotor et al.) is gone rather than lingering as a dead duplicate.
   assert.match(html, /id="hud-canvas"/);
   assert.doesNotMatch(html, /id="hud-rotor"/);
-  // One engine: the REAL production HUD plus the cobra adapter, not a fork.
-  // Build 302: play mode is literal F-22 layout — no rotorcraft glass panels on the combiner.
+  // One engine: the REAL production HUD plus authority-backed Cobra instruments on the same
+  // combiner, not a fork or a stale DOM strip.
   assert.match(main, /from "\.\.\/hud\.js\?v=\d+"/);
   assert.match(main, /createHud/);
   assert.match(main, /cobraHudState/);
-  assert.doesNotMatch(main, /drawCobraRotorcraftHud/);
+  assert.match(main, /cobraRotorcraftHudModel/);
+  assert.match(main, /drawCobraRotorcraftHud/);
+  assert.ok(
+    main.indexOf("hud.draw(") < main.indexOf("drawCobraRotorcraftHud("),
+    "rotorcraft instruments must paint after the shared HUD commits its combiner surface",
+  );
   assert.match(bridge, /main_rotor_rpm/);
   assert.match(bridge, /vortex_ring_severity/);
   assert.match(bridge, /governor_saturated/);

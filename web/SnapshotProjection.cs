@@ -51,6 +51,7 @@ internal static class SnapshotProjection {
     const string FixedWingAudioProfileId = "audio.fixed-wing.jet.v1";
     const string RapierAudioProfileId = "audio.rapier.turbo-ram.v1";
     const string F22AudioProfileId = "audio.f22a.aged-twin-fan.v1";
+    const string F14AudioProfileId = "audio.f14a.tf30-twin.v1";
     const string FixedWingEffectsProfileId = "effects.fixed-wing.guns.v1";
     const string PlayerPresentationId = "presentation.vehicle.player.v1";
     const string PlayerCockpitPresentationId = "presentation.cockpit.player.v1";
@@ -871,6 +872,9 @@ internal static class SnapshotProjection {
             + $"\"combat_handoff_requested\":{(Session.CombatHandoffRequested ? "true" : "false")},"
             + $"\"combat_handoff_active\":{(Session.CombatHandoffActive ? "true" : "false")},"
             + $"\"relief_kills\":{Session.ReliefKills},"
+            + $"\"rtb_available\":{(Session.ReturnToBaseAvailable ? "true" : "false")},"
+            + $"\"rtb_reason\":\"{MissionRtbReasonToken(Session.ReturnToBaseReason)}\","
+            + $"\"rtb_automatic\":{(Session.ReturnToBaseReason == MissionRtbReason.BingoFuel ? "true" : "false")},"
             + $"\"throttle\":{_detents.Throttle:F3},\"requested_throttle\":{requestedCommand.Throttle:F3},"
             + $"\"applied_throttle\":{appliedCommand.Throttle:F3},\"engine\":{_player.ThrustFraction:F3},"
             + $"\"engine_spool_fraction\":{_player.ThrustFraction:F4},"
@@ -1342,6 +1346,15 @@ internal static class SnapshotProjection {
             return "\"top_gun_seat\":null,"
                 + "\"wing_sweep_deg\":null,"
                 + "\"opponent_wing_sweep_deg\":null,"
+                + "\"wing_sweep_command_deg\":null,"
+                + "\"wing_sweep_mode\":null,"
+                + "\"wing_sweep_mode_code\":0,"
+                + "\"f14_g_limit_g\":null,"
+                + "\"f14_override_limit_g\":null,"
+                + "\"f14_over_g\":false,"
+                + "\"f14_over_g_seconds\":0.000,"
+                + "\"f14_structural_fatigue_01\":0.0000,"
+                + "\"f14_structural_failed\":false,"
                 + "\"aim9_remaining\":null,"
                 + $"\"aim9_in_flight\":{(Session.Aim9InFlight ? "true" : "false")},"
                 + "\"aim9_pose_valid\":false,"
@@ -1363,12 +1376,37 @@ internal static class SnapshotProjection {
             : "null";
         string wingSweepJson = SweepNumber(Session.PlayerF14WingSweepDegrees);
         string opponentWingSweepJson = SweepNumber(Session.OpponentF14WingSweepDegrees);
+        string wingSweepCommandJson = SweepNumber(Session.PlayerF14WingSweepCommandDegrees);
+        string wingSweepModeJson = playerIsTomcat
+            ? Session.PlayerF14WingSweepMode switch {
+                F14WingSweepMode.Manual => "\"MANUAL\"",
+                F14WingSweepMode.Auto => "\"AUTO\"",
+                _ => "null",
+            }
+            : "null";
+        string f14LimitJson = playerIsTomcat
+            ? TopGunFightRuntime.F14NormalLimitG.ToString("F1",
+                System.Globalization.CultureInfo.InvariantCulture)
+            : "null";
+        string f14OverrideLimitJson = playerIsTomcat
+            ? TopGunFightRuntime.F14OverrideCommandLimitG.ToString("F1",
+                System.Globalization.CultureInfo.InvariantCulture)
+            : "null";
         string MissileNumber(double value) => poseValid
             ? value.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)
             : "null";
         return $"\"top_gun_seat\":{seatJson},"
             + $"\"wing_sweep_deg\":{wingSweepJson},"
             + $"\"opponent_wing_sweep_deg\":{opponentWingSweepJson},"
+            + $"\"wing_sweep_command_deg\":{wingSweepCommandJson},"
+            + $"\"wing_sweep_mode\":{wingSweepModeJson},"
+            + $"\"wing_sweep_mode_code\":{(playerIsTomcat ? (int)Session.PlayerF14WingSweepMode : 0)},"
+            + $"\"f14_g_limit_g\":{f14LimitJson},"
+            + $"\"f14_override_limit_g\":{f14OverrideLimitJson},"
+            + $"\"f14_over_g\":{(playerIsTomcat && Session.PlayerF14OverLimit ? "true" : "false")},"
+            + $"\"f14_over_g_seconds\":{(playerIsTomcat ? Session.PlayerF14OverLimitSeconds : 0.0):F3},"
+            + $"\"f14_structural_fatigue_01\":{(playerIsTomcat ? Session.PlayerF14StructuralFatigue01 : 0.0):F4},"
+            + $"\"f14_structural_failed\":{(playerIsTomcat && Session.PlayerF14StructuralFailed ? "true" : "false")},"
             + $"\"aim9_remaining\":{Session.Aim9Remaining},"
             + $"\"aim9_in_flight\":{(Session.Aim9InFlight ? "true" : "false")},"
             + $"\"aim9_pose_valid\":{(poseValid ? "true" : "false")},"
@@ -1589,6 +1627,8 @@ internal static class SnapshotProjection {
                 ? $"\"{RapierAudioProfileId}\""
             : player.Id == AircraftCapability.F22ASurrogate.Id
                 ? $"\"{F22AudioProfileId}\""
+            : player.Id == AircraftCapability.F14ASurrogate.Id
+                ? $"\"{F14AudioProfileId}\""
             : modernSurrogate
                 ? $"\"{FixedWingAudioProfileId}\""
                 : $"\"{FixedWingAudioProfileId}\"";
@@ -1893,6 +1933,12 @@ internal static class SnapshotProjection {
         CombatHandoffPhase.ReliefLost => "RELIEF_LOST",
         CombatHandoffPhase.Recovered => "RECOVERED",
         _ => "UNAVAILABLE"
+    };
+
+    static string MissionRtbReasonToken(MissionRtbReason reason) => reason switch {
+        MissionRtbReason.PilotKnockItOff => "PILOT_KNOCK_IT_OFF",
+        MissionRtbReason.BingoFuel => "BINGO_FUEL",
+        _ => "NONE"
     };
 
     static string? CombatEntityKind(CombatRole role) => role switch {

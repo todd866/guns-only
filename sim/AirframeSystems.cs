@@ -128,7 +128,25 @@ public sealed record AirframeSystemsProfile(
     // Rapier publishes the pitch trim and remaining elevon travel consumed by landing droop.
     double FullFlapPitchMomentCoefficientIncrement = 0.0,
     double FullFlapRollAuthorityFraction = 1.0,
-    double FullFlapPitchAuthorityFraction = 1.0) {
+    double FullFlapPitchAuthorityFraction = 1.0,
+    // True only after the landing polar/configuration has been reconciled and flown through the
+    // production recovery schedule. False preserves the established legacy schedule.
+    bool RecoveryProfileFitted = false) {
+
+    /// <summary>
+    /// The physical gear/flap configuration used to fit a recovery profile. This is built from
+    /// the same increments the live actuator model publishes at full travel, so guidance cannot
+    /// quietly assume a different aeroplane from the force kernel.
+    /// </summary>
+    public AirframeAerodynamicState FullLandingAerodynamicState => new(
+        LiftCoefficientIncrement: FullFlapLiftCoefficientIncrement,
+        DragCoefficientIncrement:
+            FullGearDragCoefficientIncrement + FullFlapDragCoefficientIncrement,
+        PitchMomentCoefficientIncrement: FullFlapPitchMomentCoefficientIncrement,
+        LateralLiftCoefficientDifference: 0.0,
+        LandingGearFraction: 1.0,
+        RollControlAuthorityFraction: FullFlapRollAuthorityFraction,
+        PitchControlAuthorityFraction: FullFlapPitchAuthorityFraction);
 
     /// <summary>
     /// T.O. 1F-86F-1 basis. Gear times, limits, dependencies, warning logic, flap architecture, and
@@ -187,7 +205,8 @@ public sealed record AirframeSystemsProfile(
         ThrottleTriggeredGearWarning: false,
         EmergencyGearExtensionAvailable: false,
         UtilityHydraulicSystemSimulated: false,
-        ElectricalSystemSimulated: false);
+        ElectricalSystemSimulated: false,
+        RecoveryProfileFitted: true);
 
     /// <summary>
     /// Rapier surrogate. The limits are not a balance knob — they are forced by the launcher.
@@ -235,7 +254,8 @@ public sealed record AirframeSystemsProfile(
         // coefficients pending CFD/wind-tunnel data, deliberately isolated from the clean polar.
         FullFlapPitchMomentCoefficientIncrement: -0.055,
         FullFlapRollAuthorityFraction: 0.55,
-        FullFlapPitchAuthorityFraction: 0.68);
+        FullFlapPitchAuthorityFraction: 0.68,
+        RecoveryProfileFitted: true);
 }
 
 /// <summary>

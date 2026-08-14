@@ -1903,7 +1903,7 @@ test("external F-22 perspective drops cockpit beds and opens the propulsion spec
   }
 });
 
-test("speed brake, G-on, and aged canopy cues respond to snapshot", async () => {
+test("F-22 speed brake remains audible without invented pull-G or canopy cues", async () => {
   const previous = globalThis.AudioContext;
   try {
     FakeAudioContext.instances.length = 0;
@@ -1924,7 +1924,7 @@ test("speed brake, G-on, and aged canopy cues respond to snapshot", async () => 
       player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
     });
     assert.ok(latest(voices.brakeGain.gain) > 0.08, "boards out make roar");
-    assert.ok(latest(voices.canopyGain.gain) < 0.005, "canopy quiet at 1G");
+    assert.equal("canopyGain" in voices, false, "the speculative canopy graph was removed");
 
     audio.currentTime = 0.2;
     updateAirframeCueVoices(voices, audio, {
@@ -1936,8 +1936,12 @@ test("speed brake, G-on, and aged canopy cues respond to snapshot", async () => 
       player_aircraft_id: "aircraft.f22a.public-data-surrogate.v1",
     });
     assert.ok(latest(voices.brakeGain.gain) < 0.01, "boards in quiet");
-    assert.ok(latest(voices.gGain.gain) > 0.05, "G-on strain under load");
-    assert.ok(latest(voices.canopyGain.gain) > 0.015, "canopy seal whine under high G");
+    assert.equal(latest(voices.gGain.gain), 0, "F-22 adds no synthetic G-on strain");
+    assert.equal(latest(voices.gSuitGain.gain), 0, "F-22 adds no synthetic suit hiss");
+    assert.equal(latest(voices.gHarnessGain.gain), 0, "F-22 adds no synthetic harness noise");
+    assert.equal(latest(voices.gUnloadGain.gain), 0, "F-22 adds no synthetic unload noise");
+    assert.equal("canopyGain" in voices, false, "F-22 has no speculative canopy voice");
+    assert.equal("canopy2Gain" in voices, false, "F-22 has no second canopy partial");
 
     audio.currentTime = 0.4;
     updateAirframeCueVoices(voices, audio, {
@@ -1950,7 +1954,7 @@ test("speed brake, G-on, and aged canopy cues respond to snapshot", async () => 
     }, { enabled: false });
     assert.equal(latest(voices.brakeGain.gain), 0);
     assert.equal(latest(voices.gGain.gain), 0);
-    assert.equal(latest(voices.canopyGain.gain), 0);
+    assert.equal("canopyGain" in voices, false);
   } finally {
     globalThis.AudioContext = previous;
   }

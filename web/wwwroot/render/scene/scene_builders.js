@@ -8,7 +8,7 @@ import {
   UKRAINE_SOFT_WORLD_HAZE_MIX,
   UKRAINE_SOFT_WORLD_HAZE_RGB,
 } from "../environment/soft_world_atmosphere.js";
-import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=327";
+import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=328";
 import {
   addSemanticSocket,
   annotateProceduralFallback,
@@ -17,8 +17,8 @@ import {
   createLoftGeometry,
   createPlanformGeometry,
   makeMaterial,
-} from "./airframe_primitives.js?v=327";
-import rapierV2Definition from "../../airframes/rapier_v2.embedded.js?v=327";
+} from "./airframe_primitives.js?v=328";
+import rapierV2Definition from "../../airframes/rapier_v2.embedded.js?v=328";
 import { createRapierLaunchFx } from "../effects/rapier_launch_fx.js";
 
 export {
@@ -1571,6 +1571,7 @@ export function addFighterPanelLines(group, material) {
 export function createDrone(context = {}) {
   const group = new THREE.Group();
   const livery = context?.parameters?.livery;
+  const articulatedWing = context?.parameters?.articulatedWing === true;
   const navyLivery = livery === "navy-blue";
   const skin = makeMaterial(navyLivery ? 0x405a68 : 0x667276, 0.48, 0.075, 0x010202,
     { grain: 0.12, grainScale: 2.3, panels: 0.025, panelScale: 0.52, envMapIntensity: 0.92 });
@@ -1586,14 +1587,49 @@ export function createDrone(context = {}) {
 
   // The primary wing is a shallow beveled solid, so it catches a narrow leading-edge highlight
   // instead of disappearing as a two-sided card. Aircraft local -Z remains forward throughout.
-  const wingPoints = [
-    [0, -3.72], [-0.74, -3.36], [-2.05, -2.26], [-5.42, 0.18], [-5.18, 0.98],
-    [-2.05, 0.72], [-1.52, 3.48], [0, 3.88], [1.52, 3.48], [2.05, 0.72],
-    [5.18, 0.98], [5.42, 0.18], [2.05, -2.26], [0.74, -3.36],
-  ];
-  const wing = new THREE.Mesh(createPlanformGeometry(wingPoints, 0.18, 0.052), [skin, skinDark]);
-  wing.position.y = 0.03;
-  group.add(wing);
+  let wingSweepPivots = null;
+  if (articulatedWing) {
+    // F-14 surrogate: each panel rotates about its own shoulder. The simulation-published sweep
+    // angle is the only authority; this mesh holds no independent schedule or smoothing state.
+    const glovePoints = [
+      [0, -3.72], [-0.74, -3.36], [-2.05, -2.26], [-2.2, 0.88],
+      [0, 1.42], [2.2, 0.88], [2.05, -2.26], [0.74, -3.36],
+    ];
+    const glove = new THREE.Mesh(
+      createPlanformGeometry(glovePoints, 0.18, 0.052), [skin, skinDark],
+    );
+    glove.position.y = 0.03;
+    glove.name = "F14_WING_GLOVE";
+    group.add(glove);
+
+    const makePanel = (side) => {
+      const pivot = new THREE.Group();
+      pivot.name = side < 0 ? "F14_WING_PIVOT_LEFT" : "F14_WING_PIVOT_RIGHT";
+      pivot.position.set(side * 1.52, 0.03, -1.82);
+      const panelPoints = side < 0
+        ? [[0, -0.9], [-0.62, -0.82], [-3.9, 0.44], [-3.72, 1.17], [-0.55, 0.78], [0, 1.08]]
+        : [[0, -0.9], [0.62, -0.82], [3.9, 0.44], [3.72, 1.17], [0.55, 0.78], [0, 1.08]];
+      const panel = new THREE.Mesh(
+        createPlanformGeometry(panelPoints, 0.16, 0.048), [skin, skinDark],
+      );
+      panel.name = side < 0 ? "F14_WING_PANEL_LEFT" : "F14_WING_PANEL_RIGHT";
+      pivot.add(panel);
+      group.add(pivot);
+      return pivot;
+    };
+    wingSweepPivots = { left: makePanel(-1), right: makePanel(1) };
+  } else {
+    const wingPoints = [
+      [0, -3.72], [-0.74, -3.36], [-2.05, -2.26], [-5.42, 0.18], [-5.18, 0.98],
+      [-2.05, 0.72], [-1.52, 3.48], [0, 3.88], [1.52, 3.48], [2.05, 0.72],
+      [5.18, 0.98], [5.42, 0.18], [2.05, -2.26], [0.74, -3.36],
+    ];
+    const wing = new THREE.Mesh(
+      createPlanformGeometry(wingPoints, 0.18, 0.052), [skin, skinDark],
+    );
+    wing.position.y = 0.03;
+    group.add(wing);
+  }
 
   const tailPoints = [
     [0, 2.62], [-0.7, 2.72], [-3.0, 4.04], [-2.86, 4.62], [-0.72, 4.23],
@@ -1673,23 +1709,31 @@ export function createDrone(context = {}) {
     group.add(fin);
   }
 
-  addFighterPanelLines(group, new THREE.LineBasicMaterial({
-    // Glitch fix: transparent linework must not occlude later transparent combat effects.
-    color: 0x1b2529, transparent: true, opacity: 0.46, depthWrite: false,
-  }));
+  if (!articulatedWing) {
+    addFighterPanelLines(group, new THREE.LineBasicMaterial({
+      // Glitch fix: transparent linework must not occlude later transparent combat effects.
+      color: 0x1b2529, transparent: true, opacity: 0.46, depthWrite: false,
+    }));
+  }
 
   const leftLight = new THREE.Mesh(
     new THREE.SphereGeometry(0.09, 8, 6),
     new THREE.MeshBasicMaterial({ color: 0xff4b58, toneMapped: false }),
   );
-  leftLight.position.set(-5.28, 0.21, 0.55);
   leftLight.userData.noShadow = true;
-  group.add(leftLight);
   const rightLight = leftLight.clone();
   rightLight.material = new THREE.MeshBasicMaterial({ color: 0x62ffc0, toneMapped: false });
-  rightLight.position.x = 5.28;
   rightLight.userData.noShadow = true;
-  group.add(rightLight);
+  if (wingSweepPivots) {
+    leftLight.position.set(-3.75, 0.18, 0.78);
+    rightLight.position.set(3.75, 0.18, 0.78);
+    wingSweepPivots.left.add(leftLight);
+    wingSweepPivots.right.add(rightLight);
+  } else {
+    leftLight.position.set(-5.28, 0.21, 0.55);
+    rightLight.position.set(5.28, 0.21, 0.55);
+    group.add(leftLight, rightLight);
+  }
 
   const sockets = Object.freeze({
     cockpitCamera: addSemanticSocket(group, "SOCKET_CAMERA_COCKPIT", 0, 0.86, -2.48),
@@ -1703,8 +1747,33 @@ export function createDrone(context = {}) {
     object.receiveShadow = true;
   });
   group.userData.sockets = sockets;
+  if (wingSweepPivots) {
+    group.userData.setWingSweepDegrees = (degrees) => {
+      const value = Number(degrees);
+      if (!Number.isFinite(value)) return;
+      const clamped = THREE.MathUtils.clamp(value, 20, 68);
+      const delta = THREE.MathUtils.degToRad(clamped - 20);
+      wingSweepPivots.left.rotation.y = delta;
+      wingSweepPivots.right.rotation.y = -delta;
+      wingSweepPivots.left.updateMatrixWorld(true);
+      wingSweepPivots.right.updateMatrixWorld(true);
+      group.userData.wingSweepDegrees = clamped;
+    };
+    group.userData.setWingSweepDegrees(20);
+  }
   annotateProceduralFallback(group, context);
   return group;
+}
+
+export function createF14(context = {}) {
+  return createDrone({
+    ...context,
+    parameters: {
+      ...(context?.parameters ?? {}),
+      livery: context?.parameters?.livery ?? "navy-blue",
+      articulatedWing: true,
+    },
+  });
 }
 
 /// Shape-first production model for the fictional Rapier public-data surrogate. The embedded v2

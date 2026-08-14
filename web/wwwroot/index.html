@@ -2396,7 +2396,7 @@
 
     .settings-disclosure > summary::-webkit-details-marker { display: none; }
     .settings-disclosure > summary::after { content: "Hide"; font-size: 8px; opacity: .58; }
-    .settings-disclosure:not([open]) > summary::after { content: "15 bindings"; }
+    .settings-disclosure:not([open]) > summary::after { content: "18 bindings"; }
     .settings-binding-actions { display: flex; justify-content: flex-start; margin-top: 8px; }
 
     .visually-hidden {
@@ -3141,8 +3141,8 @@
        "854 KT CLOSING", the target brackets, TARGET 2) bled straight through a 58%-opaque wash
        and collided with the buttons, and the buttons were themselves translucent so the chaos
        showed through them too -- "ugly, offset, dumb". Solid backdrop, opaque buttons, one
-       centred column: Resume, then three small utilities. RTB HAND-OFF is gone (owner: remove it
-       until it works). Nothing from the frozen frame competes with it.
+       centred column: Resume, then the authoritative Call It A Day action and three small
+       utilities. Nothing from the frozen frame competes with it.
        --------------------------------------------------------------------------------------- */
     #ready-screen[data-mode="pause"] .ready-menu-header,
     #ready-screen[data-mode="pause"] #ready-kicker,
@@ -3444,6 +3444,9 @@
         <button id="touch-gear" class="touch-control touch-utility" type="button" data-pulse-key="KeyG" aria-label="Toggle landing gear" hidden>GEAR<br>G</button>
         <button id="touch-flap-up" class="touch-control touch-utility" type="button" data-hold-key="BracketLeft" aria-label="Hold wing flaps up" hidden>FLAP<br>UP</button>
         <button id="touch-flap-down" class="touch-control touch-utility" type="button" data-hold-key="BracketRight" aria-label="Hold wing flaps down" hidden>FLAP<br>DOWN</button>
+        <button id="touch-wing-sweep-forward" class="touch-control touch-utility" type="button" data-hold-key="Comma" aria-label="Hold to sweep F-14 wings forward" hidden>WING<br>FWD</button>
+        <button id="touch-wing-sweep-aft" class="touch-control touch-utility" type="button" data-hold-key="Period" aria-label="Hold to sweep F-14 wings aft" hidden>WING<br>AFT</button>
+        <button id="touch-wing-sweep-auto" class="touch-control touch-utility" type="button" data-pulse-key="Slash" aria-label="Return F-14 wing sweep to automatic" hidden>WING<br>AUTO</button>
       </div>
       <div class="touch-actions">
         <button id="touch-gcas-paddle" class="touch-control touch-wave" type="button" data-hold-key="KeyK" aria-label="Hold Auto-GCAS paddle override" hidden>GCAS<br>PADDLE</button>
@@ -3621,7 +3624,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
           <div id="ready-route-notice" class="ready-route-notice" role="status" hidden></div>
           <button id="ready-start" type="button">Fly First Merge</button>
           <button id="ready-replay" type="button" hidden>Replay incident again</button>
-          <button id="ready-handoff" type="button" hidden disabled>HAND OFF FIGHT &amp; RTB</button>
+          <button id="ready-handoff" type="button" hidden disabled>CALL IT A DAY · RTB</button>
           <div class="ready-secondary-actions">
             <button id="ready-settings" type="button">Settings</button>
             <button id="ready-restart" type="button" hidden>Restart sortie</button>
@@ -3647,7 +3650,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
             <span aria-hidden="true">⌨</span> Built for a laptop or desktop: flight controls, the tactical map, and the full instrument set need a keyboard and a real screen.
           </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 327 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 328 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
           <div class="ready-telemetry-disclosure">
@@ -3751,7 +3754,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     // Derive from a normal stamped URL so this comparison cannot drift from the next release:
     // tools/release/stamp-release.mjs rewrites every `?v=NNN`, and nothing else here.
-    const releaseBuild = new URL("./service-worker.js?v=327", location.href)
+    const releaseBuild = new URL("./service-worker.js?v=328", location.href)
       .searchParams.get("v");
 
     globalThis.__gunsPrebootReady = (async () => {
@@ -3847,11 +3850,11 @@ Splash one bandit to qualify · H controls · R restarts</p>
         });
         document.head.append(script);
       });
-      await loadClassicScript("./multiplayer-config.js?v=327");
-      await loadClassicScript("./_framework/blazor.webassembly.js?v=327", {
+      await loadClassicScript("./multiplayer-config.js?v=328");
+      await loadClassicScript("./_framework/blazor.webassembly.js?v=328", {
         autostart: "false",
       });
-      await import("./app.js?v=327");
+      await import("./app.js?v=328");
     } catch (error) {
       console.error(error);
       document.querySelector("#boot")?.classList.add("ready");
@@ -3864,8 +3867,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       try {
         const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
           await Promise.all([
-            import("./render/shell/inapp_browser.js?v=327"),
-            import("./render/shell/boot_fallback.js?v=327"),
+            import("./render/shell/inapp_browser.js?v=328"),
+            import("./render/shell/boot_fallback.js?v=328"),
           ]);
         const detection = detectEmbeddedBrowser({
           userAgent: navigator.userAgent,

@@ -73,7 +73,9 @@ public sealed class CobraCrewChainFlightTests
         Assert.True(assessment.HasBallisticSolution, $"range {assessment.RangeM:F0}m");
 
         int ammoBefore = runtime.GroundWar.Magazine.RoundsRemaining;
+        double healthBefore = seam.Health;
         bool sawFireAuthorized = false;
+        bool sawExactSelectedEntityFire = false;
         for (long tick = 0; tick < 120 * 6; tick++) {
             runtime.Advance(hover);
             GroundUnit? live = runtime.GroundWar.FindUnit(CobraGroundWarRuntime.GunnerySeamUnitId);
@@ -97,14 +99,24 @@ public sealed class CobraCrewChainFlightTests
                 SelectedTarget: observation));
             if (decision.FireAuthorized) {
                 sawFireAuthorized = true;
+                sawExactSelectedEntityFire |= string.Equals(
+                    decision.AssignedTargetId,
+                    live.Id,
+                    StringComparison.Ordinal);
                 runtime.ApplyAuthorizedGunfire(live.Id);
             }
         }
 
         Assert.True(sawFireAuthorized, "Gunner never authorized fire on the standing seam with F held.");
+        Assert.True(sawExactSelectedEntityFire,
+            "Hold F authorized a different entity than the selected visual/gunner target.");
         int ammoAfter = runtime.GroundWar.Magazine.RoundsRemaining;
         Assert.True(
             ammoAfter < ammoBefore,
             $"Ammo stayed at {ammoAfter} with fire authorized — ApplyAuthorizedGunfire did not drain.");
+        GroundUnit damaged = runtime.GroundWar.FindUnit(CobraGroundWarRuntime.GunnerySeamUnitId)
+            ?? throw new InvalidOperationException("Selected target disappeared from authority.");
+        Assert.True(damaged.Health < healthBefore,
+            $"Hold F spent rounds on {damaged.Id} but health stayed at {damaged.Health:F1}.");
     }
 }

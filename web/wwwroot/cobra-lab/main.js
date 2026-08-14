@@ -1,52 +1,55 @@
-import * as THREE from "../vendor/three.module.js?v=327";
+import * as THREE from "../vendor/three.module.js?v=328";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=327";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=327";
-import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=327";
+} from "../render/cobra/cobra_canyon_plan.js?v=328";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=328";
+import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=328";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=327";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=327";
+} from "../render/cobra/cobra_canyon_tour.js?v=328";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=328";
 import {
   cobraGoldenPathState,
   createCobraGoldenPath,
-} from "../render/cobra/cobra_golden_path.js?v=327";
-import { createHud } from "../hud.js?v=327";
+} from "../render/cobra/cobra_golden_path.js?v=328";
+import { createHud } from "../hud.js?v=328";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=327";
+} from "../render/cobra/cobra_hud_adapter.js?v=328";
 import {
+  cobraRotorcraftHudModel,
+  drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=327";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=327";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=328";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=328";
 import {
   cobraTacticalMapBounds,
   cobraTacticalMapModel,
-} from "../render/cobra/cobra_tactical_map.js?v=327";
+} from "../render/cobra/cobra_tactical_map.js?v=328";
 import {
   COBRA_MAP_CAPTION_PX,
   drawCobraTacticalMap,
-} from "../render/cobra/cobra_tactical_map_draw.js?v=327";
-import { bakeCobraTacticalRelief } from "../render/cobra/cobra_tactical_map_relief.js?v=327";
+} from "../render/cobra/cobra_tactical_map_draw.js?v=328";
+import { bakeCobraTacticalRelief } from "../render/cobra/cobra_tactical_map_relief.js?v=328";
 import {
   emberActObjectiveOverlay,
+  emberActRemainingM,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=327";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=327";
+} from "../render/cobra/cobra_ember_path.js?v=328";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=328";
 import {
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=327";
+} from "../render/audio/flight_audio.js?v=328";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=327";
+} from "../render/cobra/cobra_control_profile.js?v=328";
 import {
   advanceCobraPilotControls,
   cobraCyclicCommand,
@@ -54,47 +57,48 @@ import {
   createCobraGroundedPilotControlState,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=327";
+} from "../render/cobra/cobra_pilot_input.js?v=328";
 import {
   createCobraSortieReadyInterlock,
   hasDeliberateCobraCockpitInput,
-} from "../render/cobra/cobra_sortie_ready.js?v=327";
+} from "../render/cobra/cobra_sortie_ready.js?v=328";
 import {
   COBRA_TURNAROUND_ACTION_CODE,
   cobraTurnaroundActionHeld,
   cobraTurnaroundIsActive,
   cobraTurnaroundLocksFlightControls,
-} from "../render/cobra/cobra_turnaround.js?v=327";
+} from "../render/cobra/cobra_turnaround.js?v=328";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=327";
+} from "../render/cobra/ah1g_presence.js?v=328";
 import {
+  acquireAuthorityVisualLockTarget,
+  advancePadlockLosGrace,
   lookOffsetFromAngles,
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
-  togglePadlockSelection,
-} from "../render/cobra/cobra_camera_bias.js?v=327";
+} from "../render/cobra/cobra_camera_bias.js?v=328";
 import {
   cobraMissionStatusCopy,
   cobraTerminalCauseCopy,
-} from "../render/cobra/cobra_terminal_causes.js?v=327";
-import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=327";
+} from "../render/cobra/cobra_terminal_causes.js?v=328";
+import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=328";
 import {
   createParkedCobra,
   placeParkedCobra,
-} from "../render/cobra/cobra_parked_airframe.js?v=327";
+} from "../render/cobra/cobra_parked_airframe.js?v=328";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=327";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=327";
+} from "../render/visual/shadow_stabilizer.js?v=328";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=328";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=327";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=327";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=327";
+} from "../render/cobra/cobra_mission_exit.js?v=328";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=328";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=328";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -176,7 +180,8 @@ const SIM_MAX_FRAME_ADVANCE_SECONDS = 0.1;
 // waste. The camera and airframe presence read the 7-slot binary hot pose every frame instead
 // (the Cobra-scale analogue of the F-22 SnapshotHotFrame).
 const AUTHORITY_STATE_SAMPLE_INTERVAL_MS = 1_000 / 30;
-// Telemetry rows at ~10 Hz keep the channel's 5 s flush cadence draining faster than rows arrive.
+// State rows are sampled at 10 Hz; the telemetry channel drains several byte-bounded requests per
+// cadence because production rows include the complete ground-war evidence and are ~3 KiB each.
 const TELEMETRY_ROW_INTERVAL_MS = 100;
 const canvas = document.querySelector("#scene");
 const viewport = document.querySelector(".viewport");
@@ -267,8 +272,10 @@ let presenceDeltaSeconds = 0;
 let hostileTargetIds = [];
 let hostileTargetIndex = -1;
 let lastTargetKey = null;
-// F-22 contract: Tab owns selection; V owns padlock view of that selection.
+// Tab owns the persistent gunner mark; V owns an authority-LOS visual lock, preferring that mark
+// and cycling to the next visible living hostile when the mark is masked.
 let padlockActive = false;
+let padlockMaskedSinceMs = null;
 // No target is cued before the pilot's first input: a cold-boot auto-selection used to swing
 // the camera toward a hostile before the player had touched anything.
 let playerHasInteracted = false;
@@ -324,16 +331,17 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.06;
 
-// Build 302 owner ruling: literally the F-22 HUD layout. One engine — production
-// hud.js via the cobra adapter. Rotorcraft glass panels and decorative DOM chrome
-// stay out of play mode. Shared flight audio bus mirrors the jet front door.
+// One combiner: the shared flight HUD paints first, then the authority-backed AH-1G flight /
+// gunner strip paints into that same canvas. Build 302's literal jet-only layout hid Nr, torque,
+// radar altitude, sink rate, ammo and the crew's fire state during the owner's entire Build 327
+// sortie; those are flight instruments in a helicopter, not decorative lab chrome.
 const hudCanvas = document.querySelector("#hud-canvas");
 const hud = createHud(hudCanvas);
 hud.setAudioEnabled(true);
 const hudPresentationCtx = hudCanvas.getContext("2d", { alpha: true });
 const hudFrameKit = createCobraHudFrame(THREE);
 const hudStateScratch = {};
-const HUD_SAFE_INSETS = Object.freeze({ top: 0, right: 0, bottom: 0, left: 0 });
+const HUD_SAFE_INSETS = Object.freeze({ top: 10, right: 0, bottom: 0, left: 0 });
 const hudViewport = { width: 1, height: 1, pixelRatio: 1 };
 const projectionScratch = new THREE.Vector3();
 
@@ -345,7 +353,7 @@ window.addEventListener("keydown", armAudioFromGesture, { capture: true });
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=327";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=328";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -608,8 +616,10 @@ function recordTelemetry(nowMs) {
       cobra_gust_yaw_moment_nm: rotor?.gust_yaw_moment_nm,
       cobra_gust_roll_moment_nm: rotor?.gust_roll_moment_nm,
       cobra_mission_act: authorityState.mission_act,
+      cobra_combat_live: authorityState.ground_war?.combat_live ?? false,
       cobra_frame_ms: lastRawFrameMs,
       cobra_route_remaining_m: authorityState.route_guidance.remaining_m,
+      cobra_act_remaining_m: emberActRemainingM(authorityState, pose),
       cobra_cross_track_m: authorityState.route_guidance.cross_track_m,
       cobra_inside_corridor: authorityState.route_guidance.inside_corridor,
       cobra_masking: authorityState.masking.state,
@@ -635,6 +645,8 @@ function recordTelemetry(nowMs) {
       cobra_gunner_reason: authorityState.gunner.reason,
       cobra_fire_authorized: authorityState.gunner.fire_authorized,
       cobra_control: authorityState.ground_war?.control,
+      cobra_friendly_tickets: authorityState.ground_war?.tickets?.friendly,
+      cobra_hostile_tickets: authorityState.ground_war?.tickets?.hostile,
       cobra_ammo: authorityState.ground_war?.ammo_remaining,
       cobra_fob_range_m: authorityState.ground_war?.fob_range_m,
       cobra_hostile_kills: authorityState.ground_war?.debrief?.hostile_kills,
@@ -666,6 +678,15 @@ function sampleAuthorityState(nowMs, { force = false } = {}) {
   // ship on a tour rail is a handful of pixels either way, so this is measured, not eyed.
   window.__gunsOnlyCobraAirframeVisible = () => ah1gPresence?.group?.visible === true;
   refreshGroundTargets();
+  const padlockLos = advancePadlockLosGrace({
+    padlockActive,
+    lockedTargetId: targetSelect?.value || null,
+    gunner: authorityState.gunner,
+    maskedSinceMs: padlockMaskedSinceMs,
+    nowMs,
+  });
+  padlockActive = padlockLos.padlockActive;
+  padlockMaskedSinceMs = padlockLos.maskedSinceMs;
   groundWarPresentation?.sync(
     authorityState.ground_war ?? null,
     targetSelect.value || null,
@@ -818,6 +839,7 @@ function tacticalMapModelFor(widthPx, heightPx, showUnits) {
     river: tacticalMapRiver,
     units: war.units ?? [],
     tickets: war.tickets,
+    combatLive: war.combat_live,
     // Sim frame: x is east, z is north, yaw is the compass heading (0 = north), which is exactly
     // the north-up chart convention — no flip, no offset.
     player: {
@@ -847,7 +869,7 @@ function drawTacticalMaps(timeMs) {
     playerHasInteracted,
     player: { eastM: vehiclePose.x_m, northM: vehiclePose.z_m },
     actOverlay: emberActObjectiveOverlay(authorityState?.mission_act, {
-      remainingM: authorityState?.route_guidance?.remaining_m,
+      remainingM: emberActRemainingM(authorityState, vehiclePose),
     }),
     turnaround: authorityState?.turnaround,
   });
@@ -1007,6 +1029,7 @@ function restartRoute() {
   sortieReadiness.reset(!PLAY_MODE, { requireNeutral: requireNeutralEdge });
   missionTerminal = false;
   padlockActive = false;
+  padlockMaskedSinceMs = null;
   if (debrief) debrief.hidden = true;
   activeRoute = routeById(routeSelect.value);
   bridge?.StartRoute(routeSelect.selectedIndex);
@@ -1215,9 +1238,15 @@ function refreshGroundTargets() {
     // The WASM bridge still auto-assigns the seam for fire consent without moving the camera.
     hostileTargetIndex = 0;
     targetSelect.value = hostileTargetIds[0];
+    bridge?.SetGunnerTarget(targetSelect.value);
+    // If the old locked unit died, this continuity mark is only a Tab-style gunner selection.
+    // Never swing the eye to its replacement without a fresh V/authority LOS acquisition.
+    padlockActive = false;
+    padlockMaskedSinceMs = null;
   } else {
     hostileTargetIndex = -1;
-    if (padlockActive) padlockActive = false;
+    padlockActive = false;
+    padlockMaskedSinceMs = null;
   }
 }
 
@@ -1236,22 +1265,30 @@ function applyGunnerTarget(targetId) {
 function cycleHostileTarget() {
   const nextId = nextHostileTargetId(hostileTargetIds, targetSelect?.value || null);
   if (!nextId) return;
+  // Tab may select a masked mark for the gunner to report, but a visual lock cannot silently
+  // jump to it. The pilot must press V, which goes through authority LOS below.
+  padlockActive = false;
+  padlockMaskedSinceMs = null;
   applyGunnerTarget(nextId);
 }
 
 function togglePadlock() {
-  const next = togglePadlockSelection({
-    padlockActive,
+  if (padlockActive) {
+    padlockActive = false;
+    padlockMaskedSinceMs = null;
+    return;
+  }
+  const acquiredTargetId = acquireAuthorityVisualLockTarget({
     selectedTargetId: targetSelect?.value || null,
     hostileTargetIds,
+    // One synchronous authority call both checks living-hostile + terrain/obstacle LOS and
+    // assigns this exact ID to the AI gunner. No renderer raycast and no select-then-mask frame.
+    tryAcquire: (targetId) => bridge?.TrySetVisualLockTarget(targetId) === true,
   });
-  padlockActive = next.padlockActive;
-  if (next.selectedTargetId && next.selectedTargetId !== (targetSelect?.value || null)) {
-    applyGunnerTarget(next.selectedTargetId);
-  }
-  if (!padlockActive) return;
-  // Keep the sim gunner assignment in lock-step when V adopts the preferred mark.
-  if (targetSelect?.value) bridge?.SetGunnerTarget(targetSelect.value);
+  if (!acquiredTargetId) return;
+  applyGunnerTarget(acquiredTargetId);
+  padlockActive = true;
+  padlockMaskedSinceMs = null;
 }
 
 function updateTour(deltaSeconds) {
@@ -1416,7 +1453,10 @@ function syncAuthorityCamera() {
   const selectedId = targetSelect?.value || authorityState?.gunner?.selected_target_id;
   const units = authorityState?.ground_war?.units ?? [];
   const selected = selectedId ? units.find((unit) => unit.id === selectedId && unit.alive) : null;
-  if (padlockActive && !selected) padlockActive = false;
+  if (padlockActive && !selected) {
+    padlockActive = false;
+    padlockMaskedSinceMs = null;
+  }
 
   const lookAt = resolveAuthorityLookAtPoint({
     padlockActive,
@@ -1572,7 +1612,7 @@ function updateObjectiveHud(war) {
     playerHasInteracted,
     player: { eastM: vehiclePose.x_m, northM: vehiclePose.z_m },
     actOverlay: emberActObjectiveOverlay(authorityState?.mission_act, {
-      remainingM: authorityState?.route_guidance?.remaining_m,
+      remainingM: emberActRemainingM(authorityState, vehiclePose),
     }),
     turnaround: authorityState?.turnaround,
   });
@@ -1655,9 +1695,11 @@ function animate(timeMs) {
   // the windscreen; on the tour rails or a parked scenery still there is no pilot to answer.
   goldenPath?.update(cobraGoldenPathState({
     groundWar: authorityState?.ground_war,
+    pathGates: authorityState?.path_gates,
     pose: readVehiclePose(),
     groundHeightAt: groundAt,
     nowSeconds: timeMs / 1_000,
+    missionAct: authorityState?.mission_act,
     suppressed: tourInput.checked || Boolean(parkedCamera),
   }));
   recordPhase("presentation", presentationStartedAtMs);
@@ -1697,9 +1739,8 @@ function animate(timeMs) {
 }
 
 /**
- * World + HUD, zero cockpit: production hud.js only in play (Build 302 — literal
- * F-22 layout). Tour/preview clears the combiner; a terminal sortie lets the
- * debrief card own the frame.
+ * World + shared flight HUD + AH-1G authority instruments, zero cockpit. Tour/preview clears the
+ * combiner; a terminal sortie lets the debrief card own the frame.
  */
 function drawHud(timeMs, deltaSeconds) {
   const pose = readVehiclePose();
@@ -1733,6 +1774,17 @@ function drawHud(timeMs, deltaSeconds) {
     padlockTargetId: selectedUnit ? selectedId : "",
     padlockTargetUnit: selectedUnit,
   }));
+  drawCobraRotorcraftHud(
+    hudPresentationCtx,
+    cobraRotorcraftHudModel(authorityState),
+    {
+      width: hudViewport.width,
+      height: hudViewport.height,
+      pixelRatio: hudViewport.pixelRatio,
+      safeInsets: HUD_SAFE_INSETS,
+      projectWorldPoint: projectSimPointToScreen,
+    },
+  );
   // Jet gun reports stay off — Cobra tip fire is not the F-22 M61 voice.
   updateFlightAudio(hudStateScratch, {
     muted: missionTerminal || hud.audioEnabled === false,
@@ -1928,6 +1980,10 @@ targetSelect?.addEventListener("change", () => {
   if (!sortieReadiness.observeInput(true)) return;
   playerHasInteracted = true;
   onboarding?.dismiss();
+  // A manual mark may be masked. Keep it as a gunner selection, but never drag an existing
+  // visual lock to it without a fresh authority LOS acquisition.
+  padlockActive = false;
+  padlockMaskedSinceMs = null;
   applyGunnerTarget(targetSelect.value || null);
 });
 speedInput?.addEventListener("input", () => {
@@ -1938,6 +1994,10 @@ heightInput?.addEventListener("input", () => {
   if (!tourInput?.checked) placeCameraOnRoute();
 });
 tourInput?.addEventListener("change", () => {
+  if (tourInput.checked) {
+    padlockActive = false;
+    padlockMaskedSinceMs = null;
+  }
   if (tourInput.checked && routeComplete) restartRoute();
   else if (tourInput.checked) placeCameraOnRoute();
   else {

@@ -1,11 +1,21 @@
 namespace GunsOnly.Sim.Doctrine;
 
+public enum F14WingSweepMode {
+    None = 0,
+    Auto = 1,
+    Manual = 2,
+}
+
 /// F-14A swing-wing schedule surrogate. Epistemic: surrogate — open envelope anchors only
 /// (20° forward / 68° aft per Navy museum and Jane's summaries), not AWG-9 wing-sweep logic.
 public static class F14WingSweep
 {
     public const double MinSweepDeg = 20.0;
     public const double MaxSweepDeg = 68.0;
+    // PROVISIONAL cockpit-control feel: a held manual command traverses the 48 degree operating
+    // range in four seconds. It is a bounded presentation/aero authority rate, not an OEM actuator
+    // qualification claim.
+    public const double ManualRateDegPerSecond = 12.0;
 
     static readonly (double Mach, double SweepDeg)[] MachBreakpoints =
     {

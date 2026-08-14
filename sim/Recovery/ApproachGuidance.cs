@@ -42,7 +42,6 @@ public readonly record struct WorldApproachGate(
 
 /// Intent, solve, and materialize. Pure helpers; the session owns when to call.
 public static class ApproachGuidance {
-    public const double DefaultDragToWeight = 0.12;
     public const double DefaultStabiliseHeightAboveSurfaceM = 152.0;
     public const double DefaultGlideslopeRad = 3.5 * Math.PI / 180.0;
     public const double DefaultGrooveEntryTrackM = 1_200.0;

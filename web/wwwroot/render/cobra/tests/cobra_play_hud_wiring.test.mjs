@@ -8,21 +8,21 @@ async function source(path) {
   return readFile(new URL(path, root), "utf8");
 }
 
-test("Hold the Bridge play HUD is the production F-22 combiner", async () => {
+test("Hold the Bridge mounts Cobra flight/crew truth on the production combiner", async () => {
   const [html, main, css] = await Promise.all([
     source("cobra-lab/index.html"),
     source("cobra-lab/main.js"),
     source("cobra-lab/styles.css"),
   ]);
-  // Build 302: literal F-22 layout — hud.js only in play; no rotorcraft glass panels,
-  // no decorative play chrome / objective prose / always-on legend.
+  // The shared combiner remains the base. AH-1G-specific NR/TQ/RALT/gunner truth is drawn onto
+  // that same canvas, without restoring the old HTML systems chrome.
   assert.match(html, /id="hud-canvas"/);
   assert.doesNotMatch(html, /id="hud-gunner"/);
   assert.match(main, /createHud\(/);
   assert.match(main, /updateFlightAudio/);
   assert.match(main, /hud\.setAudioEnabled\(true\)/);
   assert.match(main, /armAudioFromGesture/);
-  assert.doesNotMatch(main, /drawCobraRotorcraftHud/);
+  assert.match(main, /drawCobraRotorcraftHud/);
   assert.match(css, /body\[data-shell="play"\] \.play-chrome \{[\s\S]*?display: none/);
   assert.match(css, /body\[data-shell="play"\] \.objective-hud \{[\s\S]*?display: none/);
   assert.match(css, /body\[data-shell="play"\] \.legend \{[\s\S]*?display: none/);
@@ -87,12 +87,22 @@ test("ground war presentation receives the selected target for the in-world high
 });
 
 test("V and Tab share the F-22 padlock / gun-target split", async () => {
-  const main = await source("cobra-lab/main.js");
+  const [main, bridge] = await Promise.all([
+    source("cobra-lab/main.js"),
+    readFile(new URL("../../../../CobraWebBridge.cs", import.meta.url), "utf8"),
+  ]);
   assert.match(main, /function togglePadlock\(/);
   assert.match(main, /function cycleHostileTarget\(/);
   assert.match(main, /event\.code === "KeyV"/);
   assert.match(main, /padlockActive/);
   assert.match(main, /resolveAuthorityLookAtPoint/);
+  assert.match(main, /bridge\?\.TrySetVisualLockTarget\(targetId\) === true/,
+    "V must acquire through authority rather than a renderer raycast");
+  assert.match(main, /advancePadlockLosGrace/,
+    "a sustained masked target must release the visual lock after grace");
+  assert.match(bridge, /CanAcquireVisualLockTarget\(targetId\)/);
+  assert.match(bridge, /_selectedTargetId = targetId/,
+    "the acquired visual-lock entity must be the AI gunner's selected entity");
 });
 
 test("forward authority camera is body-aligned with no hidden sight bias", async () => {
@@ -108,6 +118,8 @@ test("target list rebuilds only when the living set changes and prefers the gunn
   assert.match(main, /aliveKey/);
   assert.match(main, /gunnery-seam\.000/);
   assert.match(main, /distanceToPlayer\(a\) - distanceToPlayer\(b\)/);
+  assert.match(main, /targetSelect\.value = hostileTargetIds\[0\];[\s\S]*?bridge\?\.SetGunnerTarget\(targetSelect\.value\)/,
+    "post-kill continuity selection must reach the AI gunner immediately");
 });
 
 test("bingo ammo raises a rearm cue before the magazine is dry", async () => {

@@ -1,8 +1,149 @@
 {
   "schema_version": "guns-only.jet-audio-catalog.v1",
-  "updated_at": "2026-07-28",
+  "updated_at": "2026-08-14",
   "local_vault": "analysis/jet-audio-library",
   "sources": [
+    {
+      "id": "dvids.342602",
+      "title": "F/A-18 Cockpit B-Roll",
+      "provider": "dvids",
+      "provider_id": "342602",
+      "url": "https://www.dvidshub.net/video/342602/f-18-cockpit-b-roll",
+      "credit": {
+        "creator": "Cpl Anthony Rayis / AFN Iwakuni",
+        "footage_courtesy": "Maj Erik Sprague"
+      },
+      "date_taken": "2014-06-11",
+      "virin": "140611-M-ZP289-002",
+      "dod_id": "DOD_101732906",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page explicitly marks the work PUBLIC DOMAIN",
+        "disclaimer": "The appearance of U.S. Department of War (DoW) visual information does not imply or constitute DoW endorsement."
+      },
+      "source_media": {
+        "locator": "https://d34w7g4gy10iej.cloudfront.net/video/1406/DOD_101732906/DOD_101732906-720x406-800k.mp4",
+        "sha256": "71f280415131d3df76fdbdf0b9431dd62f78958951d6e5f9103c007e81e54e9a"
+      },
+      "subject": {
+        "aircraft": ["F/A-18"],
+        "propulsion": "twin_turbofan",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["cockpit", "f-a-18", "production-derivative", "f-14-surrogate", "audio-only"],
+      "priority": "production",
+      "annotation_status": "production_interval_locked",
+      "segments": [
+        {
+          "id": "dvids.342602.f14-surrogate-loop",
+          "start_s": 47.5,
+          "end_s": 58.5,
+          "states": {
+            "engine_power": "unknown",
+            "dynamic_pressure": "airborne",
+            "g_load": "unknown"
+          },
+          "events": [],
+          "evidence": {
+            "kind": "source_interval",
+            "confidence": 1.0
+          },
+          "contaminants": [],
+          "screening": "Silent-frame, waveform, and spectrum screening found no obvious speech or music; final human listen remains required."
+        }
+      ],
+      "production_derivatives": [
+        {
+          "path": "web/wwwroot/render/audio/samples/jet/fa18_cockpit_f14_surrogate_loop.wav",
+          "sha256": "4f6312519c9f78ef2896efe19b52fc1d68ec0bbb3caef14d9f22ea4bf939e659",
+          "bytes": 1048364,
+          "format": "WAV PCM16 mono",
+          "sample_rate_hz": 48000,
+          "duration_s": 10.92,
+          "mean_dbfs": -20.0,
+          "maximum_dbfs": -7.0,
+          "epistemic": "surrogate",
+          "identity_claim": "Audio-only F/A-18 cockpit source used as an F-14 gameplay surrogate; it is not an F-14 recording or an exact F-14 acoustic claim."
+        }
+      ],
+      "rights_notes": [
+        "No source visuals, logos, or marks are distributed in the audio-only derivative.",
+        "The source-derived WAV is not relicensed under the repository MIT license.",
+        "This is a reasonable safe-use assessment, not a legal warranty."
+      ]
+    },
+    {
+      "id": "dvids.71253",
+      "title": "Iraqi Air Force Helicopter Flight, Part 2",
+      "provider": "dvids",
+      "provider_id": "71253",
+      "url": "https://www.dvidshub.net/video/71253/iraqi-air-force-helicopter-flight-part-2",
+      "credit": {
+        "creator": "SrA Steven Conklin / U.S. Air Forces Central Baghdad Media Outreach Team"
+      },
+      "date_taken": "2009-10-10",
+      "virin": "091010-F-6972C-002",
+      "dod_id": "DOD_100055558",
+      "distribution": {
+        "tier": "redistributable_source",
+        "license_expression": "PD-USGov",
+        "license_url": "https://www.dvidshub.net/about/copyright",
+        "source_claim": "DVIDS page explicitly marks the work PUBLIC DOMAIN",
+        "disclaimer": "The appearance of U.S. Department of War (DoW) visual information does not imply or constitute DoW endorsement."
+      },
+      "source_media": {
+        "locator": "DOD_100055558-400x224-350k.m3u8 (muxed acquisition)",
+        "sha256": "478542e624bf6496f53123efe6b449b870cac5c744ec2226d13110a75f1ab0df"
+      },
+      "subject": {
+        "aircraft": ["UH-1H"],
+        "propulsion": "T53 turboshaft",
+        "perspective": "cockpit_airframe"
+      },
+      "tags": ["airborne-cabin", "uh-1h", "t53", "production-derivative", "ah-1g-surrogate", "audio-only"],
+      "priority": "production",
+      "annotation_status": "production_interval_locked",
+      "segments": [
+        {
+          "id": "dvids.71253.ah1g-surrogate-loop",
+          "start_s": 130.0,
+          "end_s": 141.0,
+          "states": {
+            "engine_power": "unknown",
+            "dynamic_pressure": "airborne",
+            "g_load": "unknown"
+          },
+          "events": [],
+          "evidence": {
+            "kind": "source_interval",
+            "confidence": 1.0
+          },
+          "contaminants": [],
+          "screening": "Silent-frame, waveform, and spectrum screening found no obvious speech or music; final human listen remains required."
+        }
+      ],
+      "production_derivatives": [
+        {
+          "path": "web/wwwroot/render/audio/samples/rotorcraft/uh1h_t53_ah1g_surrogate_loop.wav",
+          "sha256": "8f6f109ba68a0727c202f82de82852ee2c71d91bcbe1a9350e30c41a3017aed4",
+          "bytes": 485178,
+          "format": "WAV PCM16 mono",
+          "sample_rate_hz": 22050,
+          "duration_s": 11.0,
+          "mean_dbfs": -20.3,
+          "maximum_dbfs": -6.3,
+          "epistemic": "surrogate",
+          "identity_claim": "Audio-only UH-1H/T53 airborne-cabin source used as an AH-1G gameplay surrogate; it is not an AH-1G recording or an exact AH-1G acoustic claim."
+        }
+      ],
+      "rights_notes": [
+        "No source visuals, logos, or marks are distributed in the audio-only derivative.",
+        "The source-derived WAV is not relicensed under the repository MIT license.",
+        "This is a reasonable safe-use assessment, not a legal warranty."
+      ]
+    },
     {
       "id": "youtube.NWxtuDEyK9g",
       "title": "Exclusive cockpit view of F-22 Raptor Demo's First Ever Flare Show",

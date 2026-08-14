@@ -3,7 +3,8 @@
  *
  * F-22 contract (app.js / player_gun_target.js):
  *  - Tab changes the persistent weapon/gunner target selection.
- *  - V toggles the padlock *view* on that selection — it does not invent a target.
+ *  - V toggles a visual-lock view, preferring that selection and accepting only an authority-LOS
+ *    living hostile; the atomically accepted ID becomes the gunner target.
  *  - Forward view is nose-forward; padlock is a true look-at the selected mark.
  *
  * Soft bias (±COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD) remains available for optional cueing, but
@@ -12,6 +13,9 @@
  */
 
 export const COBRA_CAMERA_TARGET_BIAS_LIMIT_RAD = 0.05;
+// View-only grace: the authority sight refreshes at 10 Hz, so 350 ms tolerates two missed
+// samples/a momentary leaf-edge mask without letting V stare through a ridge indefinitely.
+export const COBRA_PADLOCK_LOS_GRACE_MS = 350;
 
 function wrapPi(angleRad) {
   return Math.atan2(Math.sin(angleRad), Math.cos(angleRad));
@@ -67,30 +71,68 @@ export function nextHostileTargetId(hostileTargetIds, currentId = null) {
 }
 
 /**
- * V: toggle padlock view. Turning ON without a selection adopts the preferred hostile
- * (same first mark Tab would pick). Turning OFF keeps the selection — V is a view toggle.
+ * Ask authority for a visual lock without ever first presenting an omniscient target. The
+ * current Tab mark gets first refusal; if it is masked, V walks the remaining living-hostile
+ * IDs in their established cycle order. `tryAcquire` must atomically validate LOS and assign the
+ * same ID to the gunner (CobraWebBridge.TrySetVisualLockTarget in production).
  */
-export function togglePadlockSelection({
-  padlockActive = false,
+export function acquireAuthorityVisualLockTarget({
   selectedTargetId = null,
   hostileTargetIds = [],
+  tryAcquire = null,
 } = {}) {
-  if (padlockActive) {
-    return Object.freeze({
-      padlockActive: false,
-      selectedTargetId: selectedTargetId || null,
-    });
+  if (typeof tryAcquire !== "function") return null;
+  const ids = [...new Set(
+    (Array.isArray(hostileTargetIds) ? hostileTargetIds : [])
+      .filter((id) => typeof id === "string" && id.length > 0),
+  )];
+  if (!ids.length) return null;
+  const selectedIndex = selectedTargetId ? ids.indexOf(selectedTargetId) : -1;
+  const ordered = selectedIndex < 0
+    ? ids
+    : [ids[selectedIndex], ...ids.slice(selectedIndex + 1), ...ids.slice(0, selectedIndex)];
+  for (const targetId of ordered) {
+    if (tryAcquire(targetId) === true) return targetId;
   }
-  const selected = selectedTargetId || nextHostileTargetId(hostileTargetIds, null);
-  if (!selected) {
-    return Object.freeze({
-      padlockActive: false,
-      selectedTargetId: null,
-    });
+  return null;
+}
+
+/**
+ * Preserve a visual track through a momentary authority LOS dropout, then return to the honest
+ * nose-forward view if the selected gunner target remains masked. Target selection itself stays
+ * intact, so the gunner HUD can continue to say MASKED and F remains safely inhibited.
+ */
+export function advancePadlockLosGrace({
+  padlockActive = false,
+  lockedTargetId = null,
+  gunner = null,
+  maskedSinceMs = null,
+  nowMs = 0,
+  graceMs = COBRA_PADLOCK_LOS_GRACE_MS,
+} = {}) {
+  const now = Number(nowMs);
+  const grace = Number(graceMs);
+  if (!padlockActive || !lockedTargetId || !Number.isFinite(now)
+    || !Number.isFinite(grace) || grace < 0) {
+    return Object.freeze({ padlockActive: false, maskedSinceMs: null });
   }
+  // A newly acquired bridge target can precede the next 30 Hz state snapshot. A mismatched
+  // snapshot is stale, not evidence that the new target is masked.
+  const sameAuthorityTarget = gunner?.selected_target_id === lockedTargetId;
+  const masked = sameAuthorityTarget && (
+    gunner?.state === "masked"
+    || gunner?.reason === "Masked"
+    || gunner?.target_has_line_of_sight === false
+  );
+  if (!masked) {
+    return Object.freeze({ padlockActive: true, maskedSinceMs: null });
+  }
+  const since = maskedSinceMs !== null && Number.isFinite(Number(maskedSinceMs))
+    ? Number(maskedSinceMs)
+    : now;
   return Object.freeze({
-    padlockActive: true,
-    selectedTargetId: selected,
+    padlockActive: now - since < grace,
+    maskedSinceMs: now - since < grace ? since : null,
   });
 }
 

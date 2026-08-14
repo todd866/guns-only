@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  EMBER_BRIDGE_LANDMARK_ID,
   EMBER_GATE_VISUAL_HALF_M,
   emberActObjectiveOverlay,
+  emberActRemainingM,
   emberPathGuidanceState,
 } from "../cobra_ember_path.js";
 
@@ -88,4 +90,32 @@ test("ingress and rtb overlays include remaining distance when known", () => {
     emberActObjectiveOverlay("rtb", { remainingM: 850 }).line,
     /850 m TO CAMP EMBER/,
   );
+});
+
+test("act distance names the bridge itself, never the longer route remainder", () => {
+  const state = {
+    mission_act: "ingress",
+    route_guidance: { remaining_m: 12_300 },
+    vehicle: { x_m: 0, z_m: 0 },
+    ground_war: {
+      sites: [{
+        landmark_id: EMBER_BRIDGE_LANDMARK_ID,
+        x_m: 300,
+        z_m: 400,
+      }],
+    },
+  };
+  assert.equal(emberActRemainingM(state), 500);
+  assert.match(
+    emberActObjectiveOverlay("ingress", { remainingM: emberActRemainingM(state) }).line,
+    /500 m TO THE BRIDGE/,
+  );
+});
+
+test("rtb act distance uses the authority FOB range", () => {
+  assert.equal(emberActRemainingM({
+    mission_act: "rtb",
+    route_guidance: { remaining_m: 18_000 },
+    ground_war: { fob_range_m: 725 },
+  }), 725);
 });

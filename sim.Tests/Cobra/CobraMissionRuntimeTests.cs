@@ -45,6 +45,35 @@ public class CobraMissionRuntimeTests
         }
     }
 
+    sealed class MidpointRidgeTerrain : ITerrainSurface
+    {
+        readonly double _ridgeEastM;
+        readonly double _ridgeNorthM;
+
+        public MidpointRidgeTerrain(in Vec3D firstWorldM, in Vec3D secondWorldM)
+        {
+            _ridgeEastM = (firstWorldM.X + secondWorldM.X) * 0.5;
+            _ridgeNorthM = (firstWorldM.Z + secondWorldM.Z) * 0.5;
+        }
+
+        public TerrainBounds Bounds => new(-8_000.0, 8_000.0, -8_000.0, 8_000.0);
+        public double HorizontalResolutionM => 10.0;
+
+        public bool TrySample(double eastM, double northM, out TerrainSample sample)
+        {
+            if (!Bounds.Contains(eastM, northM)) {
+                sample = default;
+                return false;
+            }
+            double ridgeDistanceM = Math.Sqrt(
+                Math.Pow(eastM - _ridgeEastM, 2.0)
+                + Math.Pow(northM - _ridgeNorthM, 2.0));
+            double heightM = ridgeDistanceM <= 45.0 ? 10_000.0 : 0.0;
+            sample = new TerrainSample(heightM, new Vec3D(0.0, 1.0, 0.0));
+            return true;
+        }
+    }
+
     [Fact]
     public void RouteChoiceIsExplicitAndChangesTheSelectedGuidanceContract()
     {
@@ -123,6 +152,37 @@ public class CobraMissionRuntimeTests
         Assert.Contains(
             runtime.GroundWar.Units,
             unit => unit.Id == CobraGroundWarRuntime.GunnerySeamUnitId && unit.IsAlive);
+    }
+
+    [Fact]
+    public void VisualLockAuthorityAcceptsOnlyLivingVisibleHostiles()
+    {
+        CobraCanyonDefinition world = CobraCanyonDefinition.Create();
+        var clear = new CobraMissionRuntime(
+            world, new FlatTerrain(), CobraCanyonRouteChoice.RiverGorge);
+        GroundUnit visibleHostile = clear.GroundWar.Units.First(unit =>
+            unit.Faction == GroundFaction.Hostile
+            && unit.IsAlive
+            && clear.CanAcquireVisualLockTarget(unit.Id));
+        GroundUnit friendly = clear.GroundWar.Units.First(unit =>
+            unit.Faction == GroundFaction.Friendly && unit.IsAlive);
+
+        Assert.True(clear.CanAcquireVisualLockTarget(visibleHostile.Id));
+        Assert.False(clear.CanAcquireVisualLockTarget(friendly.Id));
+        Assert.False(clear.CanAcquireVisualLockTarget("ground.hostile.missing"));
+        Assert.False(clear.CanAcquireVisualLockTarget(null));
+
+        Vec3D aircraftWorldM = clear.Cobra.State.PositionWorldM;
+        var masked = new CobraMissionRuntime(
+            world,
+            new MidpointRidgeTerrain(aircraftWorldM, visibleHostile.PositionWorldM),
+            CobraCanyonRouteChoice.RiverGorge);
+        Assert.False(masked.CanAcquireVisualLockTarget(visibleHostile.Id),
+            "terrain-masked target must be rejected before V changes the view");
+
+        visibleHostile.ApplyDamage(visibleHostile.MaxHealth);
+        Assert.False(clear.CanAcquireVisualLockTarget(visibleHostile.Id),
+            "a stale living-target list still fails closed in authority after the unit dies");
     }
 
     [Fact]
@@ -282,6 +342,63 @@ public class CobraMissionRuntimeTests
         Assert.False(collisionRuntime.MissionFlyable);
         Assert.Throws<InvalidOperationException>(() => collisionRuntime.Advance(
             new VerticalLiftPilotCommand(trimCollective, 0.0, 0.0, 0.0)));
+    }
+
+    [Fact]
+    public void SweptRotorEnvelopeCannotPassThroughALivingFortifiedGarrison()
+    {
+        CobraCanyonDefinition world = CobraCanyonDefinition.Create();
+        var probe = new CobraMissionRuntime(
+            world, new FlatTerrain(), CobraCanyonRouteChoice.RiverGorge);
+        GroundUnit garrison = probe.GroundWar.Units.First(unit =>
+            unit.Faction == GroundFaction.Hostile && unit.IsFortified && unit.IsAlive);
+        Vec3D collisionCentre = garrison.PositionWorldM
+            + new Vec3D(0.0, CobraMissionRuntime.GarrisonCollisionHeightM + 5.0, 0.0);
+        var collisionRuntime = new CobraMissionRuntime(
+            world,
+            new FlatTerrain(),
+            CobraCanyonRouteChoice.RiverGorge,
+            spawn: new CobraMissionSpawn(collisionCentre, Vec3D.Zero, 0.0));
+        double trim = collisionRuntime.Cobra.EstimateHoverCollective(
+            collisionRuntime.Cobra.State.GrossMassKg,
+            CobraMissionRuntime.DefaultAirDensityKgM3);
+
+        CobraMissionAdvanceResult result = collisionRuntime.Advance(
+            new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0));
+
+        Assert.Equal(CobraMissionStatus.ObstacleCollision, result.Diagnostics.Status);
+        Assert.Equal(garrison.Id, result.Diagnostics.CollisionObstacleId);
+        Assert.True(result.Diagnostics.ProviderFlyable,
+            "objective contact is mission collision truth, not invented provider damage");
+    }
+
+    [Fact]
+    public void DestroyedGarrisonNoLongerOwnsCollisionGeometry()
+    {
+        CobraCanyonDefinition world = CobraCanyonDefinition.Create();
+        var runtime = new CobraMissionRuntime(
+            world, new FlatTerrain(), CobraCanyonRouteChoice.RiverGorge);
+        GroundUnit garrison = runtime.GroundWar.Units.First(unit =>
+            unit.Faction == GroundFaction.Hostile && unit.IsFortified && unit.IsAlive);
+        garrison.ApplyDamage(garrison.MaxHealth);
+        Vec3D probe = garrison.PositionWorldM
+            + new Vec3D(0.0, CobraMissionRuntime.GarrisonCollisionHeightM + 5.0, 0.0);
+        var cleared = new CobraMissionRuntime(
+            world,
+            new FlatTerrain(),
+            CobraCanyonRouteChoice.RiverGorge,
+            spawn: new CobraMissionSpawn(probe, Vec3D.Zero, 0.0));
+        GroundUnit matching = cleared.GroundWar.FindUnit(garrison.Id)!;
+        matching.ApplyDamage(matching.MaxHealth);
+        double trim = cleared.Cobra.EstimateHoverCollective(
+            cleared.Cobra.State.GrossMassKg,
+            CobraMissionRuntime.DefaultAirDensityKgM3);
+
+        CobraMissionAdvanceResult result = cleared.Advance(
+            new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0));
+
+        Assert.Equal(CobraMissionStatus.Active, result.Diagnostics.Status);
+        Assert.Null(result.Diagnostics.CollisionObstacleId);
     }
 
     [Fact]
@@ -600,8 +717,9 @@ public class CobraMissionRuntimeTests
             runtime.Advance(new VerticalLiftPilotCommand(0.0, 0.0, 0.0, 0.0));
         Assert.Equal(0, runtime.AirframeSwaps);
         Assert.Equal(CobraTurnaroundPhase.ShutdownRequired, runtime.Turnaround.Phase);
-        Assert.True(runtime.GroundWar.AuthorityTick > groundWarTickBeforeService,
-            "The conquest clock must keep running while the crew services a bird.");
+        Assert.Equal(groundWarTickBeforeService, runtime.GroundWar.AuthorityTick);
+        Assert.False(runtime.GroundWarCombatLive,
+            "this fixture damages the bird before reaching the bridge, so combat is still staged");
 
         GroundUnit target = runtime.GroundWar.Units.First(unit =>
             unit.Faction == GroundFaction.Hostile && unit.IsAlive);

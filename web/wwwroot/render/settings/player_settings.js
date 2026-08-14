@@ -13,7 +13,7 @@ export const CONTROL_BINDINGS = Object.freeze([
   Object.freeze({ action: "padlock", label: "Padlock", defaultCode: "KeyV", gkey: 9 }),
   Object.freeze({
     action: "knockItOff",
-    label: "Hand off fight and RTB",
+    label: "Call it a day and RTB",
     defaultCode: "KeyO",
     gkey: 10,
   }),
@@ -22,6 +22,9 @@ export const CONTROL_BINDINGS = Object.freeze([
   Object.freeze({ action: "flapUp", label: "Flaps up", defaultCode: "BracketLeft", gkey: 14 }),
   Object.freeze({ action: "flapDown", label: "Flaps down", defaultCode: "BracketRight", gkey: 15 }),
   Object.freeze({ action: "gcasOverride", label: "Auto-GCAS paddle", defaultCode: "KeyK", gkey: 20 }),
+  Object.freeze({ action: "wingSweepForward", label: "Wing sweep forward", defaultCode: "Comma", gkey: 21 }),
+  Object.freeze({ action: "wingSweepAft", label: "Wing sweep aft", defaultCode: "Period", gkey: 22 }),
+  Object.freeze({ action: "wingSweepAuto", label: "Wing sweep auto", defaultCode: "Slash", gkey: 23 }),
 ]);
 
 const RESERVED_CODES = new Set([
@@ -155,6 +158,7 @@ export function controlCodeLabel(code) {
   const labels = {
     ArrowDown: "↓", ArrowUp: "↑", ArrowLeft: "←", ArrowRight: "→",
     Space: "Space", BracketLeft: "[", BracketRight: "]",
+    Comma: "<", Period: ">", Slash: "/",
   };
   if (labels[code]) return labels[code];
   if (/^Key[A-Z]$/.test(code)) return code.slice(3);

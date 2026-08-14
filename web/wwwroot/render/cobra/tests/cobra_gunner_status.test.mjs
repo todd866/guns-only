@@ -36,8 +36,27 @@ test("mount still converging reads slewing", () => {
 
 test("no ballistic solution reads no solution", () => {
   assert.equal(
-    gunnerStatusText({ selected_target_id: "u1", state: "tracking", reason: "NoBallisticSolution", fire_authorized: false }, {}),
-    "GUN NO SOLUTION",
+    gunnerStatusText({
+      selected_target_id: "u1",
+      state: "tracking",
+      reason: "NoBallisticSolution",
+      target_within_range: true,
+      fire_authorized: false,
+    }, {}),
+    "GUN NO BALLISTIC SOLUTION",
+  );
+});
+
+test("range failure is distinct from an in-range ballistic failure", () => {
+  assert.equal(
+    gunnerStatusText({
+      selected_target_id: "u1",
+      state: "tracking",
+      reason: "NoBallisticSolution",
+      target_within_range: false,
+      fire_authorized: false,
+    }, {}),
+    "GUN OUT OF RANGE",
   );
 });
 
@@ -51,14 +70,14 @@ test("crew still qualifying the track reads acquiring", () => {
 test("terrain or obstacle in the way reads masked", () => {
   assert.equal(
     gunnerStatusText({ selected_target_id: "u1", state: "masked", reason: "Masked" }, {}),
-    "GUN MASKED",
+    "GUN MASKED — NO LOS",
   );
 });
 
-test("outside the turret envelope reads out of limits", () => {
+test("outside the turret envelope tells the pilot the target is out of arc", () => {
   assert.equal(
     gunnerStatusText({ selected_target_id: "u1", state: "outoflimits", reason: "OutOfLimits" }, {}),
-    "GUN OUT OF LIMITS",
+    "GUN OUT OF ARC",
   );
 });
 
@@ -72,7 +91,7 @@ test("friendly target reads friendly", () => {
 test("a masked state with a non-masked reason surfaces the bridge reason, never a MASKED relabel", () => {
   assert.equal(
     gunnerStatusText({ selected_target_id: "u1", state: "masked", reason: "OutOfLimits" }, {}),
-    "GUN OUT OF LIMITS",
+    "GUN OUT OF ARC",
   );
 });
 

@@ -46,10 +46,11 @@
          publish boundary so no local QA artifact can become a public static asset. -->
     <Content Update="wwwroot/render/audio/preview/**/*" CopyToPublishDirectory="Never" />
     <!-- Raw hybrid extracts are also gitignored and can exist in an otherwise clean worktree.
-         Only the explicitly committed redistributable WAV loops may cross the publish boundary. -->
-    <Content Update="wwwroot/render/audio/samples/jet/_*.wav" CopyToPublishDirectory="Never" />
-    <Content Update="wwwroot/render/audio/samples/jet/_*.flac" CopyToPublishDirectory="Never" />
-    <Content Update="wwwroot/render/audio/samples/jet/*.flac" CopyToPublishDirectory="Never" />
+         Apply the fail-closed rule to every aircraft-family subtree; only explicitly reviewed,
+         named production WAV loops may cross the publish boundary. -->
+    <Content Update="wwwroot/render/audio/samples/**/_*.wav" CopyToPublishDirectory="Never" />
+    <Content Update="wwwroot/render/audio/samples/**/_*.flac" CopyToPublishDirectory="Never" />
+    <Content Update="wwwroot/render/audio/samples/**/*.flac" CopyToPublishDirectory="Never" />
     <!-- Standalone authoring/review labs remain available from the development host, but they are
          not experiences in the executable release catalog and have no production route gate.
          Exclude their entrypoints and local review assets from the public artifact. Cobra Lab is
