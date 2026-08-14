@@ -6,6 +6,12 @@ const DEFAULT_PEDAL_FULL_TRAVEL_PER_SECOND = 2.5;
 const DEFAULT_AXIS_DEADZONE = 0.12;
 
 /**
+ * Authored play-mode ramp position. Zero is the physical full-down stop, not hover trim; the
+ * pilot must deliberately pull collective before the AH-1G can leave its skids.
+ */
+export const COBRA_GROUNDED_COLLECTIVE = 0;
+
+/**
  * Cyclic expo. A hover lives in roughly the inner fifth of cyclic travel, and a linear stick
  * spends the same resolution there as it does at the stops — which is why holding a hover felt
  * like the controls were too sensitive precisely where they had to be finest. This curve gives
@@ -81,13 +87,22 @@ export function cobraCyclicCommand(position, expo = COBRA_CYCLIC_EXPO) {
   return value < 0 ? -shaped : shaped;
 }
 
-export function createCobraPilotControlState(collective = 0.5) {
+export function createCobraPilotControlState(collective = COBRA_GROUNDED_COLLECTIVE) {
   return freezeState({
     collective,
     forwardCyclic: 0,
     rightCyclic: 0,
     yaw: 0,
   });
+}
+
+/**
+ * Fresh production-sortie controls. The named constructor keeps the ramp-start contract explicit
+ * at play/restart/swap call sites: a playable aircraft never inherits hover collective from an
+ * authority snapshot or an earlier airframe.
+ */
+export function createCobraGroundedPilotControlState() {
+  return createCobraPilotControlState(COBRA_GROUNDED_COLLECTIVE);
 }
 
 /**
@@ -138,7 +153,7 @@ export function cobraGamepadControlAxes(gamepad, deadzone = DEFAULT_AXIS_DEADZON
  */
 export function releaseCobraPilotControls(state) {
   return freezeState({
-    collective: state?.collective ?? 0.5,
+    collective: state?.collective ?? COBRA_GROUNDED_COLLECTIVE,
     forwardCyclic: 0,
     rightCyclic: 0,
     yaw: 0,

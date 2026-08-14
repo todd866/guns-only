@@ -8,7 +8,7 @@ renderer.
 
 ## What is live now
 
-The production catalogue exposes four accepted experiences:
+The production catalogue exposes five accepted experiences:
 
 - **F-22A surrogate — Guns Only:** an endless visual dogfight with ballistic guns, a real flight
   envelope, Auto-GCAS, padlock/target management, and a deterministic opponent.
@@ -18,6 +18,8 @@ The production catalogue exposes four accepted experiences:
   war, work the AI gunner, rearm at Camp Ember, and hold Iron Bell.
 - **Weekend Ride:** take the YZF-R1 around the Rapier-strip circuit with authored motorcycle
   dynamics, rider assists, lap timing, and a helmet HUD.
+- **Top Gun:** choose the F-14A or MiG-28 seat for a one-on-one ACM fight with guns and two
+  Sidewinders in the anime-1986 presentation.
 
 Additional mission code remains in the repository for development, but it is not silently
 presented as finished product. Preview and quarantined routes show their release boundary before

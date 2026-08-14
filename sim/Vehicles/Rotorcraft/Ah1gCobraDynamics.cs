@@ -1,5 +1,12 @@
 namespace GunsOnly.Sim.Vehicles;
 
+/// <summary>Powerplant state at construction. Mission starts default hot; replacement birds may be cold.</summary>
+public enum Ah1gCobraInitialPowerplantState
+{
+    Running,
+    Cold
+}
+
 /// <summary>
 /// Deterministic AH-1G flight-foundation model. The rotor is blade-element/momentum based with
 /// finite inflow and rotor-energy states; the fuselage attitude response is a source-bounded
@@ -23,6 +30,10 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
     const double HandsOffRollRateTimeConstantSeconds = 3.0;
     const double HandsOffPitchRateTimeConstantSeconds = 3.2;
     const double HandsOffYawRateTimeConstantSeconds = 2.5;
+    // Deliberate pad shutdown includes the grounded drivetrain/rotor rundown that is absent from
+    // the airborne freewheel model. Kept provider-side so visible Nr, audio and transfer authority
+    // all follow the same energy state rather than a mission timer.
+    const double GroundedShutdownRotorRunDownTimeConstantSeconds = 3.2;
     static readonly Vec3D WorldUp = new(0.0, 1.0, 0.0);
 
     readonly RotorcraftDefinition _definition;
@@ -43,6 +54,8 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
     double _lastWeathervaneYawRadPerSecond;
     double _lastYawResidualRadPerSecond;
     bool _engineOperating = true;
+    bool _cockpitShutdown;
+    bool _scasOperating = true;
     bool _hardImpactLatched;
     bool _rotorStrikeLatched;
     bool _gearDamagedLatched;
@@ -59,7 +72,9 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         double initialYawRad,
         double initialRecurringBaseMassKg,
         double initialAdditivePayloadMassKg = 0.0,
-        RotorcraftDefinition? definition = null)
+        RotorcraftDefinition? definition = null,
+        Ah1gCobraInitialPowerplantState initialPowerplantState =
+            Ah1gCobraInitialPowerplantState.Running)
     {
         PlayerVehicleValidation.Required(vehicleId, nameof(vehicleId));
         PlayerVehicleValidation.Finite(initialPositionWorldM,
@@ -71,6 +86,8 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             nameof(initialRecurringBaseMassKg));
         PlayerVehicleValidation.NonNegative(initialAdditivePayloadMassKg,
             nameof(initialAdditivePayloadMassKg));
+        if (!Enum.IsDefined(initialPowerplantState))
+            throw new ArgumentOutOfRangeException(nameof(initialPowerplantState));
 
         _vehicleId = vehicleId;
         _definition = definition ?? Ah1gCobraDefinition.LateProduction;
@@ -79,19 +96,29 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
 
         double grossMassKg = initialRecurringBaseMassKg + initialAdditivePayloadMassKg;
         MainRotorDefinition rotor = _definition.MainRotor;
-        _mainRotorAngularSpeedRadPerSecond = rotor.NominalAngularSpeedRadPerSecond;
-        _inducedVelocityMps = HoverInducedVelocity(
-            grossMassKg * FlightModel.G0,
-            _definition.Powerplant.SeaLevelDensityKgM3,
-            rotor.DiskAreaM2);
-        double hoverProfilePowerW = ProfilePowerW(
-            _definition.Powerplant.SeaLevelDensityKgM3,
-            _mainRotorAngularSpeedRadPerSecond,
-            advanceRatio: 0.0);
-        double hoverInducedPowerW = rotor.InducedPowerFactor
-            * grossMassKg * FlightModel.G0 * _inducedVelocityMps;
-        _engineShaftPowerW = TotalRotorSystemPowerW(
-            hoverProfilePowerW + hoverInducedPowerW);
+        bool initiallyRunning = initialPowerplantState == Ah1gCobraInitialPowerplantState.Running;
+        _engineOperating = initiallyRunning;
+        _mainRotorAngularSpeedRadPerSecond = initiallyRunning
+            ? rotor.NominalAngularSpeedRadPerSecond
+            : 0.0;
+        _inducedVelocityMps = initiallyRunning
+            ? HoverInducedVelocity(
+                grossMassKg * FlightModel.G0,
+                _definition.Powerplant.SeaLevelDensityKgM3,
+                rotor.DiskAreaM2)
+            : 0.0;
+        double hoverProfilePowerW = initiallyRunning
+            ? ProfilePowerW(
+                _definition.Powerplant.SeaLevelDensityKgM3,
+                _mainRotorAngularSpeedRadPerSecond,
+                advanceRatio: 0.0)
+            : 0.0;
+        double hoverInducedPowerW = initiallyRunning
+            ? rotor.InducedPowerFactor * grossMassKg * FlightModel.G0 * _inducedVelocityMps
+            : 0.0;
+        _engineShaftPowerW = initiallyRunning
+            ? TotalRotorSystemPowerW(hoverProfilePowerW + hoverInducedPowerW)
+            : 0.0;
         _previousRotorPowerW = _engineShaftPowerW;
 
         QuaternionD initialAttitude = YawAttitude(initialYawRad);
@@ -110,23 +137,31 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             Flyable: true);
 
         double availablePowerW = AvailablePowerW(_definition.Powerplant.SeaLevelDensityKgM3);
-        double collective = EstimateHoverCollective(
-            grossMassKg,
-            _definition.Powerplant.SeaLevelDensityKgM3);
+        double collective = initiallyRunning
+            ? EstimateHoverCollective(
+                grossMassKg,
+                _definition.Powerplant.SeaLevelDensityKgM3)
+            : 0.0;
         double rootPitch = CollectiveRootPitchRad(collective);
         Telemetry = new RotorcraftTelemetry(
             Tick: -1,
-            Regime: RotorcraftFlightRegime.Normal,
-            MainRotorRpm: rotor.NominalRpm,
-            TailRotorRpm: rotor.NominalRpm * _definition.TailRotor.MainToTailGearRatio,
+            Regime: initiallyRunning
+                ? RotorcraftFlightRegime.Normal
+                : RotorcraftFlightRegime.Autorotation,
+            MainRotorRpm: initiallyRunning ? rotor.NominalRpm : 0.0,
+            TailRotorRpm: initiallyRunning
+                ? rotor.NominalRpm * _definition.TailRotor.MainToTailGearRatio
+                : 0.0,
             RotorAzimuthRad: 0.0,
             CollectiveRootPitchRad: rootPitch,
-            MainRotorThrustN: grossMassKg * FlightModel.G0,
+            MainRotorThrustN: initiallyRunning ? grossMassKg * FlightModel.G0 : 0.0,
             InducedVelocityMps: _inducedVelocityMps,
             EngineShaftPowerW: _engineShaftPowerW,
             RotorPowerRequiredW: _engineShaftPowerW,
             AvailableShaftPowerW: availablePowerW,
-            TransmissionTorqueNm: _engineShaftPowerW / _mainRotorAngularSpeedRadPerSecond,
+            TransmissionTorqueNm: initiallyRunning
+                ? _engineShaftPowerW / _mainRotorAngularSpeedRadPerSecond
+                : 0.0,
             TransmissionLimitFraction: _engineShaftPowerW
                 / _definition.Powerplant.TransmissionLimitW,
             EffectiveTranslationalLiftFactor: 0.0,
@@ -136,7 +171,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             MastBumpRisk: 0.0,
             MainRotorClearanceM: -1.0,
             SkidContactCount: 0,
-            EngineOperating: true,
+            EngineOperating: initiallyRunning,
             GovernorSaturated: false,
             RotorStrike: false,
             AdvanceRatio: 0.0,
@@ -194,6 +229,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
     public PlayerVehicleObservation Observation { get; private set; }
     public RotorcraftTelemetry Telemetry { get; private set; }
     public bool EngineOperating => _engineOperating;
+    public bool ScasOperating => _scasOperating;
 
     /// <summary>
     /// Last bounded airflow-gradient moment in physical body axes: X is pitch-axis (right),
@@ -231,7 +267,46 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         || _contactFailureCause != VehicleContactFailureCause.None;
 
     /// <summary>Injects an engine-out condition; the freewheel leaves the rotor authoritative.</summary>
-    public void FailEngine() => _engineOperating = false;
+    public void FailEngine()
+    {
+        _engineOperating = false;
+        _cockpitShutdown = false;
+    }
+
+    /// <summary>
+    /// Cockpit fuel-cutoff seam for a deliberate grounded shutdown. Damage injection remains
+    /// separate through <see cref="FailEngine"/> so mission evidence never calls a normal stop a hit.
+    /// </summary>
+    public void ShutdownEngine()
+    {
+        _engineOperating = false;
+        _cockpitShutdown = true;
+    }
+
+    /// <summary>
+    /// Restores powerplant/governor authority for a deliberate grounded start. Rotor acceleration
+    /// remains inside the ordinary energy model; this seam does not assign RPM or shaft power.
+    /// </summary>
+    public void StartEngine()
+    {
+        if (!State.Flyable)
+            throw new InvalidOperationException("A destroyed rotorcraft cannot start its engine.");
+        _engineOperating = true;
+        _cockpitShutdown = false;
+    }
+
+    /// <summary>
+    /// Removes all three stability-augmentation channels. Pilot controls remain mechanically
+    /// authoritative; only the limited series-actuator corrections disappear.
+    /// </summary>
+    public void FailScas()
+    {
+        _scasOperating = false;
+        _scasRollRateRadPerSecond = 0.0;
+        _scasPitchRateRadPerSecond = 0.0;
+        _scasYawRateRadPerSecond = 0.0;
+        LastCyclicScasRateCommand = default;
+    }
 
     /// <summary>
     /// Restores fuel/governor authority for test scenarios. This is not an airborne restart model.
@@ -240,7 +315,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
     {
         if (_hardImpactLatched || _rotorStrikeLatched)
             throw new InvalidOperationException("A destroyed rotorcraft cannot restore its engine.");
-        _engineOperating = true;
+        StartEngine();
     }
 
     /// <summary>
@@ -459,6 +534,12 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             _mainRotorAngularSpeedRadPerSecond + rotorAngularAcceleration * dt,
             0.0,
             RpmToAngularSpeed(rotor.MaximumAutorotationRpm));
+        if (_cockpitShutdown && State.Contact.IsInContact)
+            _mainRotorAngularSpeedRadPerSecond = FirstOrder(
+                _mainRotorAngularSpeedRadPerSecond,
+                0.0,
+                GroundedShutdownRotorRunDownTimeConstantSeconds,
+                dt);
         _rotorAzimuthRad = WrapTwoPi(
             _rotorAzimuthRad + _mainRotorAngularSpeedRadPerSecond * dt);
 
@@ -701,10 +782,12 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         double scasAuthorityRadPerSecond = _definition.Handling.StabilityAugmentationAuthorityFraction
             * _definition.TailRotor.MaximumYawRateRadPerSecond
             * controlEffectiveness;
-        double scasTargetRadPerSecond = Math.Clamp(
-            -torqueYawDemandRadPerSecond,
-            -scasAuthorityRadPerSecond,
-            scasAuthorityRadPerSecond);
+        double scasTargetRadPerSecond = _scasOperating && controlsAvailable
+            ? Math.Clamp(
+                -torqueYawDemandRadPerSecond,
+                -scasAuthorityRadPerSecond,
+                scasAuthorityRadPerSecond)
+            : 0.0;
         _scasYawRateRadPerSecond = FirstOrder(
             _scasYawRateRadPerSecond,
             scasTargetRadPerSecond,
@@ -763,12 +846,12 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         double pitchScasAuthorityRadPerSecond = cyclicScasFraction
             * _definition.Handling.MaximumPitchRateRadPerSecond
             * controlEffectiveness;
-        double rollScasTargetRadPerSecond = controlsAvailable
+        double rollScasTargetRadPerSecond = _scasOperating && controlsAvailable
             ? Math.Clamp(-rates.P,
                 -rollScasAuthorityRadPerSecond,
                 rollScasAuthorityRadPerSecond)
             : 0.0;
-        double pitchScasTargetRadPerSecond = controlsAvailable
+        double pitchScasTargetRadPerSecond = _scasOperating && controlsAvailable
             ? Math.Clamp(-rates.Q,
                 -pitchScasAuthorityRadPerSecond,
                 pitchScasAuthorityRadPerSecond)

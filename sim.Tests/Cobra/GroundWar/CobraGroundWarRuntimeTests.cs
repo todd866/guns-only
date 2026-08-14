@@ -30,6 +30,16 @@ public class CobraGroundWarRuntimeTests
     static CobraGroundWarRuntime CreateWar(int seed = 42) =>
         new(CobraCanyonDefinition.Create(), new FlatTerrain(), seed);
 
+    static double HorizontalDistanceSquared(in Vec3D first, in Vec3D second)
+    {
+        double east = first.X - second.X;
+        double north = first.Z - second.Z;
+        return east * east + north * north;
+    }
+
+    static double HorizontalDistance(in Vec3D first, in Vec3D second) =>
+        Math.Sqrt(HorizontalDistanceSquared(first, second));
+
     [Fact]
     public void CampEmberDepartPadHasNoSeededHostiles()
     {
@@ -76,6 +86,102 @@ public class CobraGroundWarRuntimeTests
         Assert.Contains(war.LivingUnits(), unit => unit.Faction == GroundFaction.Hostile);
         Assert.Contains(war.LivingUnits(), unit => unit.Role == GroundUnitRole.SoftVehicle);
         Assert.Contains(war.LivingUnits(), unit => unit.Role == GroundUnitRole.HardPoint);
+    }
+
+    [Fact]
+    public void AuthoredThreatObserversAreSelectableKillableDshkSites()
+    {
+        CobraCanyonDefinition definition = CobraCanyonDefinition.Create();
+        var war = new CobraGroundWarRuntime(definition, new FlatTerrain(), seed: 42);
+
+        foreach (CobraCanyonThreatObserverDefinition observer in definition.ThreatObservers)
+        {
+            GroundUnit site = Assert.Single(war.Units, unit => unit.Id == observer.Id);
+            Assert.Equal(GroundFaction.Hostile, site.Faction);
+            Assert.Equal(GroundUnitRole.DshkSite, site.Role);
+            Assert.Equal(observer.EastM, site.PositionWorldM.X);
+            Assert.Equal(observer.NorthM, site.PositionWorldM.Z);
+            Assert.Equal(200.0 + observer.ObserverHeightAglM, site.PositionWorldM.Y);
+            Assert.True(site.IsAlive);
+            Assert.False(site.ParticipatesInGroundCombat);
+        }
+
+        GroundUnit gun = war.Units.First(unit => unit.Role == GroundUnitRole.DshkSite);
+        for (int tick = 0; tick < 1_200 && gun.IsAlive; tick++) {
+            // Follow the live ordering: the strategic frame clears last-frame evidence, then
+            // authority gunfire publishes this frame's hit/kill. A fixture that fires hundreds
+            // of calls without Advance only fills the bounded presentation ring with gun-hit.
+            war.Advance(PlayerVehicleContract.FixedDeltaSeconds);
+            war.ApplyAuthorizedFire(gun.Id, PlayerVehicleContract.FixedDeltaSeconds);
+        }
+
+        Assert.False(gun.IsAlive);
+        Assert.Contains(war.RecentEvents, evidence =>
+            evidence.Kind == "gun-kill" && evidence.UnitId == gun.Id);
+    }
+
+    [Fact]
+    public void DshkSitesDoNotLureGroundUnitsTheyCannotFight()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        ContestedSite camp = war.Sites.First(site => site.Id == "site.camp-ember.v1");
+        GroundUnit mover = war.Units.First(unit =>
+            unit.Faction == GroundFaction.Friendly
+            && unit.Role == GroundUnitRole.SoftVehicle
+            && unit.HomeSiteId == camp.Id);
+        foreach (GroundUnit hostile in war.Units.Where(unit =>
+            unit.Faction == GroundFaction.Hostile && unit.ParticipatesInGroundCombat))
+            hostile.ApplyDamage(hostile.MaxHealth);
+
+        ContestedSite objective = war.Sites
+            .Where(site => site.Owner == GroundSiteOwner.Hostile)
+            .OrderBy(site => HorizontalDistanceSquared(mover.PositionWorldM, site.PositionWorldM))
+            .First();
+        Vec3D towardObjective = new Vec3D(
+            objective.PositionWorldM.X - mover.PositionWorldM.X,
+            0.0,
+            objective.PositionWorldM.Z - mover.PositionWorldM.Z).Normalized();
+        GroundUnit gun = war.Units.First(unit => unit.Role == GroundUnitRole.DshkSite);
+        gun.SetPosition(mover.PositionWorldM - towardObjective * 30.0);
+        double beforeM = HorizontalDistance(mover.PositionWorldM, gun.PositionWorldM);
+
+        war.Advance(1.0);
+
+        Assert.True(
+            HorizontalDistance(mover.PositionWorldM, gun.PositionWorldM) > beforeM,
+            "an advance unit must keep moving toward conquest ground, not an AA-only site");
+    }
+
+    [Fact]
+    public void DshkInsideAClearedPointDoesNotBlockAirMobileInsertion()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+        ContestedSite site = war.Sites.First(candidate =>
+            candidate.Id == "site.plantation-water-tower.v1");
+        bool InsideSite(GroundUnit unit) =>
+            HorizontalDistance(unit.PositionWorldM, site.PositionWorldM) <= site.CaptureRadiusM;
+
+        foreach (GroundUnit participant in war.Units.Where(unit =>
+            unit.ParticipatesInGroundCombat && InsideSite(unit)).ToArray())
+            participant.ApplyDamage(participant.MaxHealth);
+        GroundUnit gun = war.Units.First(unit => unit.Role == GroundUnitRole.DshkSite);
+        gun.SetPosition(new Vec3D(
+            site.PositionWorldM.X,
+            site.PositionWorldM.Y + 1.0,
+            site.PositionWorldM.Z));
+
+        const double stepSeconds = 0.25;
+        for (int step = 0;
+            step < (int)Math.Ceiling(
+                (CobraGroundWarRuntime.AirMobileInsertionSeconds + stepSeconds) / stepSeconds);
+            step++)
+            war.Advance(stepSeconds);
+
+        Assert.Contains(war.LivingUnits(), unit =>
+            unit.Faction == GroundFaction.Friendly
+            && unit.ParticipatesInGroundCombat
+            && InsideSite(unit));
+        Assert.True(gun.IsAlive, "the insertion must ignore, not silently delete, the AA site");
     }
 
     [Fact]

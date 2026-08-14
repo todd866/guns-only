@@ -138,7 +138,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     route: "/cobra-lab/",
     aircraft: "AH-1G Cobra · Hold the Bridge",
     title: "Hold the Bridge",
-    shortObjective: "Tip River Gorge control friendly and hold it for 45 seconds in the AH-1G.",
+    shortObjective: "Clear dug-in garrisons for friendly squads, capture the valley points, and bleed hostile tickets to zero in the AH-1G.",
     qualification: "",
     releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
     visible: true,
@@ -170,15 +170,13 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     title: "Top Gun",
     shortObjective: "1986 ACM — Tomcat or MiG-28, guns and Sidewinders.",
     qualification: "",
-    releaseState: EXPERIENCE_RELEASE_STATE.PREVIEW,
+    releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
     visible: true,
-    // Owner cleared the acceptance flight 2026-08-13, so promotion was attempted — and the
-    // attempt found the mode does not start. With the gate open and the /top-gun/ 404 fixed,
-    // Fly stages the mission, prepareMissionTerrain reports the terrain not ready, and launch
-    // parks in autoLaunchPending forever: three minutes, twice, on the Range-capable smoke
-    // server as well as a plain one, so it is not the documented Range-fallback stall.
-    // The gate stays shut until launch completes; the blocker is now a defect, not a ceremony.
-    blocker: "Terrain warmup never completes: Fly stages the mission and launch parks in autoLaunchPending.",
+    // Build 326 repairs the string-selector terrain-owner stall that invalidated the first
+    // promotion attempt. The owner explicitly ordered production promotion on 2026-08-14 after
+    // the corrected launch/authority path passed 108 focused checks. This is a transparent
+    // product decision, not a claim that a post-fix human ACM flight was recorded.
+    blocker: "",
   }),
 ]);
 

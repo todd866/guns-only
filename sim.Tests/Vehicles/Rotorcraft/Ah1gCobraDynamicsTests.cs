@@ -508,6 +508,34 @@ public sealed class Ah1gCobraDynamicsTests
     }
 
     [Fact]
+    public void FailedScasRemovesAllAugmentationWithoutRemovingPilotControls()
+    {
+        var cobra = Create("scas-failed");
+        double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        var maneuver = new VerticalLiftPilotCommand(trim, 0.45, 0.50, -0.35);
+
+        for (long tick = 0; tick < 90; tick++)
+            cobra.Advance(Input(tick, maneuver));
+
+        Assert.True(cobra.ScasOperating);
+        Assert.True(Math.Abs(cobra.LastCyclicScasRateCommand.P) > 1e-6
+            || Math.Abs(cobra.LastCyclicScasRateCommand.Q) > 1e-6);
+
+        cobra.FailScas();
+        cobra.Advance(Input(90, maneuver));
+
+        Assert.False(cobra.ScasOperating);
+        Assert.Equal(default, cobra.LastCyclicScasRateCommand);
+        Assert.Equal(0.0, cobra.Telemetry.ScasYawRadPerSecond);
+        Assert.True(Math.Abs(cobra.State.BodyRates.P) > 0.05,
+            "Right cyclic must remain authoritative with SCAS out.");
+        Assert.True(Math.Abs(cobra.State.BodyRates.Q) > 0.05,
+            "Forward cyclic must remain authoritative with SCAS out.");
+        Assert.True(Math.Abs(cobra.State.BodyRates.R) > 0.01,
+            "Pedal must remain authoritative with SCAS out.");
+    }
+
+    [Fact]
     public void MaximumCollectiveInitialLoadStaysInsideTheNumericalFlightEnvelope()
     {
         var cobra = Create("maneuver");
@@ -1162,6 +1190,54 @@ public sealed class Ah1gCobraDynamicsTests
         Assert.Equal(0.0, cobra.Telemetry.TransmissionTorqueNm, 9);
         Assert.Equal(0.0, cobra.Observation.Power.AppliedPowerW, 9);
         Assert.Equal(RotorcraftFlightRegime.Autorotation, cobra.Telemetry.Regime);
+    }
+
+    [Fact]
+    public void ColdInitialConditionStartsFromZeroAndSpoolsThroughLiveDynamics()
+    {
+        var cobra = new Ah1gCobraDynamics(
+            "cold-spare",
+            new Vec3D(0.0, 0.315, 0.0),
+            Vec3D.Zero,
+            initialYawRad: 0.0,
+            initialRecurringBaseMassKg: BasicMissionMassKg,
+            initialPowerplantState: Ah1gCobraInitialPowerplantState.Cold);
+        var down = new VerticalLiftPilotCommand(0.0, 0.0, 0.0, 0.0);
+
+        Assert.False(cobra.EngineOperating);
+        Assert.Equal(0.0, cobra.Telemetry.MainRotorRpm);
+        Assert.Equal(0.0, cobra.Telemetry.EngineShaftPowerW);
+
+        cobra.StartEngine();
+        for (long tick = 0;
+            tick < 12 * PlayerVehicleContract.FixedStepHz
+                && cobra.Telemetry.MainRotorRpm
+                    < Ah1gCobraDefinition.LateProduction.MainRotor.MinimumContinuousRpm;
+            tick++)
+            cobra.Advance(Input(tick, down, PadEnvironment));
+
+        Assert.True(cobra.EngineOperating);
+        Assert.True(cobra.Telemetry.EngineShaftPowerW > 0.0);
+        Assert.True(cobra.Telemetry.MainRotorRpm
+            >= Ah1gCobraDefinition.LateProduction.MainRotor.MinimumContinuousRpm,
+            $"Cold start stalled at {cobra.Telemetry.MainRotorRpm:F1} rpm.");
+        Assert.Equal(VehicleContactKind.StableSurfaceContact, cobra.State.Contact.Kind);
+    }
+
+    [Fact]
+    public void CockpitShutdownRunsTheGroundedRotorBelowTransferSpeed()
+    {
+        var cobra = Create("cockpit-shutdown", new Vec3D(0.0, 0.315, 0.0));
+        var down = new VerticalLiftPilotCommand(0.0, 0.0, 0.0, 0.0);
+
+        cobra.ShutdownEngine();
+        for (long tick = 0; tick < 8 * PlayerVehicleContract.FixedStepHz; tick++)
+            cobra.Advance(Input(tick, down, PadEnvironment));
+
+        Assert.False(cobra.EngineOperating);
+        Assert.True(cobra.Telemetry.EngineShaftPowerW
+            <= cobra.Telemetry.AvailableShaftPowerW * 0.05);
+        Assert.InRange(cobra.Telemetry.MainRotorRpm, 0.0, 50.0);
     }
 
     [Fact]

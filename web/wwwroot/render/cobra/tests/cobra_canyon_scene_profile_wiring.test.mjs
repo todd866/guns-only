@@ -190,6 +190,14 @@ test("the canyon sky is the decision-support sky's cool branch", async () => {
   assert.equal(sky.horizonShoulderFalloff, 70);
 });
 
+test("the canyon sky has no azimuth branch cut across the upper field of view", async () => {
+  const main = await source("cobra-lab/main.js");
+
+  // atan(z, x) jumps from +PI to -PI on one world meridian. Feeding that discontinuous value
+  // into non-periodic cloud noise printed a hard vertical edge through the otherwise smooth sky.
+  assert.doesNotMatch(main, /\batan\s*\(\s*direction\.z\s*,\s*direction\.x\s*\)/);
+});
+
 test("cobra lab scene constants consume the shared visual profile", async () => {
   const main = await source("cobra-lab/main.js");
   assert.match(main, /COBRA_CANYON_VISUAL_PROFILE/);

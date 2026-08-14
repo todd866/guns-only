@@ -111,13 +111,13 @@ export function emberActObjectiveOverlay(act, options = {}) {
       };
     case "engage":
       return {
-        line: "ENGAGE · TIP CONTROL FRIENDLY",
-        detail: "Tab a hostile, hold F when GUN ON TARGET",
+        line: "ENGAGE · BREAK HOSTILE POINTS",
+        detail: "Kill each garrison, clear the point, then cover the friendly lift",
       };
     case "hold":
       return {
-        line: "HOLD THE BRIDGE · KEEP PRESSURE",
-        detail: "Friendly control is holding — do not let hostiles claw it back",
+        line: "HOLD POINT MAJORITY",
+        detail: "Keep more points than the enemy and their tickets bleed",
       };
     case "rtb":
       return {

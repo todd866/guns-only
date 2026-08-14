@@ -51,9 +51,20 @@ import {
   advanceCobraPilotControls,
   cobraCyclicCommand,
   cobraGamepadControlAxes,
+  createCobraGroundedPilotControlState,
   createCobraPilotControlState,
   releaseCobraPilotControls,
 } from "../render/cobra/cobra_pilot_input.js?v=325";
+import {
+  createCobraSortieReadyInterlock,
+  hasDeliberateCobraCockpitInput,
+} from "../render/cobra/cobra_sortie_ready.js?v=325";
+import {
+  COBRA_TURNAROUND_ACTION_CODE,
+  cobraTurnaroundActionHeld,
+  cobraTurnaroundIsActive,
+  cobraTurnaroundLocksFlightControls,
+} from "../render/cobra/cobra_turnaround.js?v=325";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
@@ -151,8 +162,9 @@ const ROUTE_ENTRY_OFFSETS_M = Object.freeze({
 const FRAME_SAMPLE_COUNT = 180;
 const ROUTE_END_LOOKAHEAD_M = 40;
 const ROUTE_CAMERA_LOOKAHEAD_M = 180;
-// Real-time contract: the sim advances by real elapsed wall time every rendered frame. The only
-// cap is the bridge's own MaximumFrameDeltaSeconds (0.1 s = 12 fixed 120 Hz ticks) — the same
+// Real-time contract: after deliberate input arms the sortie, the sim advances by real elapsed
+// wall time every rendered frame. The only cap is the bridge's own MaximumFrameDeltaSeconds
+// (0.1 s = 12 fixed 120 Hz ticks) — the same
 // spiral-brake doctrine as the F-22 loop's SIM_CATCHUP_CAP_SECONDS: past the cap the mission
 // deliberately loses wall-clock time rather than chase a stall with ever-longer catch-up frames.
 // Low frame rate therefore NEVER means slow motion down to 10 fps; the slow-motion floor exists
@@ -231,10 +243,20 @@ const debriefTitle = document.querySelector("#debrief-title");
 const debriefBody = document.querySelector("#debrief-body");
 const debriefRestart = document.querySelector("#debrief-restart");
 const PLAY_MODE = document.body?.dataset?.shell !== "lab";
+// The lab remains a continuously running visualisation. A real sortie waits at Ready so the
+// first-run card cannot spend the pilot's survival window before they touch the cockpit.
+const sortieReadiness = createCobraSortieReadyInterlock({ ready: !PLAY_MODE });
 let bridge = null;
 let missionTerminal = false;
 let authorityState = null;
-let pilotControls = createCobraPilotControlState(0.5);
+// Presentation remembers only the last published phase so it can put a newly started spare back
+// behind the neutral Ready edge. Phase completion itself remains mission authority.
+let lastTurnaroundPhase = null;
+// Play opens at the physical full-down stop. The lab intentionally keeps its old neutral lever
+// only until bridge authority supplies the route's authored command below.
+let pilotControls = PLAY_MODE
+  ? createCobraGroundedPilotControlState()
+  : createCobraPilotControlState(0.5);
 let windowFocused = typeof document === "undefined" ? true : document.hasFocus();
 const cobraControlProfile = resolveCobraControlProfile();
 let groundWarPresentation = null;
@@ -265,11 +287,13 @@ function onboardingNudgeState() {
     && (authorityState?.ground_war?.units ?? []).some((unit) => unit.alive
       && unit.faction === "hostile"
       && Math.hypot(unit.x_m - vehicle.x_m, unit.z_m - vehicle.z_m) <= NUDGE_HOSTILE_RANGE_M);
+  const servicing = cobraTurnaroundIsActive(authorityState?.turnaround);
   return {
     groundedIdle: Number.isFinite(clearanceM)
       && clearanceM <= 3
+      && !servicing
       && !keys.has(cobraControlProfile.collective.pull.code),
-    hostileIdle: hostileInRange && !authorityState?.gunner?.selected_target_id,
+    hostileIdle: !servicing && hostileInRange && !authorityState?.gunner?.selected_target_id,
   };
 }
 const telemetrySession = `web-cobra-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -407,8 +431,6 @@ const skyMaterial = new THREE.ShaderMaterial({
     zenithColor: { value: new THREE.Vector3(...sceneProfile.sky.zenithColor) },
     horizonColor: { value: new THREE.Vector3(...sceneProfile.sky.horizonColor) },
     belowHorizonColor: { value: new THREE.Vector3(...sceneProfile.sky.belowHorizonColor) },
-    cloudColor: { value: new THREE.Vector3(...sceneProfile.sky.cloudColor) },
-    cloudShelf: { value: new THREE.Vector2(...sceneProfile.sky.cloudShelf) },
     skyCurveExponent: { value: sceneProfile.sky.skyCurveExponent },
     shoulderFalloff: { value: sceneProfile.sky.horizonShoulderFalloff },
     shoulderWeight: { value: sceneProfile.sky.horizonShoulderWeight },
@@ -425,8 +447,6 @@ const skyMaterial = new THREE.ShaderMaterial({
     uniform vec3 zenithColor;
     uniform vec3 horizonColor;
     uniform vec3 belowHorizonColor;
-    uniform vec3 cloudColor;
-    uniform vec2 cloudShelf;
     uniform float skyCurveExponent;
     uniform float shoulderFalloff;
     uniform float shoulderWeight;
@@ -440,21 +460,6 @@ const skyMaterial = new THREE.ShaderMaterial({
       // Narrow non-luminous horizon shoulder: stays readable in unusual attitudes.
       float horizonShoulder = exp(-abs(direction.y) * shoulderFalloff);
       colour = mix(colour, horizonColor * 1.08, horizonShoulder * shoulderWeight);
-      // Painted cumulus — irregular noise, not azimuth harmonics (those tiled into a block grid).
-      float azimuth = atan(direction.z, direction.x);
-      float shelf = smoothstep(cloudShelf.x, cloudShelf.x + 0.035, direction.y)
-        * (1.0 - smoothstep(cloudShelf.y * 0.62, cloudShelf.y, direction.y));
-      vec2 cloudUv = vec2(azimuth * 0.72, direction.y * 2.8);
-      float h00 = fract(sin(dot(floor(cloudUv), vec2(127.1, 311.7))) * 43758.5453);
-      float h10 = fract(sin(dot(floor(cloudUv) + vec2(1.0, 0.0), vec2(127.1, 311.7))) * 43758.5453);
-      float h01 = fract(sin(dot(floor(cloudUv) + vec2(0.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
-      float h11 = fract(sin(dot(floor(cloudUv) + vec2(1.0, 1.0), vec2(127.1, 311.7))) * 43758.5453);
-      vec2 cf = fract(cloudUv);
-      vec2 cu = cf * cf * (3.0 - 2.0 * cf);
-      float puff = mix(mix(h00, h10, cu.x), mix(h01, h11, cu.x), cu.y);
-      float puffB = fract(sin(dot(cloudUv * 2.15 + 4.2, vec2(269.5, 183.3))) * 43758.5453);
-      puff = puff * 0.62 + puffB * 0.38;
-      colour = mix(colour, cloudColor, shelf * smoothstep(0.38, 0.78, puff) * 0.48);
       if (direction.y < 0.0) {
         colour = mix(belowHorizonColor, horizonColor, exp(direction.y * 16.0));
       }
@@ -540,6 +545,14 @@ function recordTelemetry(nowMs) {
   telemetryRowRecordedAtMs = nowMs;
   const pose = vehiclePose?.x_m != null ? vehiclePose : null;
   const rotor = authorityState.vehicle?.rotorcraft;
+  const battleDamage = authorityState.battle_damage;
+  const turnaround = authorityState.turnaround;
+  const threatBursts = Array.isArray(battleDamage?.recent_bursts)
+    ? battleDamage.recent_bursts
+    : [];
+  const latestThreatBurst = threatBursts.length
+    ? threatBursts[threatBursts.length - 1]
+    : null;
   telemetryChannel.record({
     k: "st",
     t: nowMs,
@@ -559,6 +572,15 @@ function recordTelemetry(nowMs) {
       cobra_power_margin: authorityState.vehicle.power_margin,
       cobra_main_rotor_rpm: rotor?.main_rotor_rpm ?? pose?.main_rotor_rpm,
       cobra_transmission_limit_fraction: rotor?.transmission_limit_fraction,
+      cobra_engine_operating: rotor?.engine_operating,
+      cobra_engine_shaft_power_w: rotor?.engine_shaft_power_w,
+      cobra_engine_shaft_power_fraction: rotor?.engine_shaft_power_fraction,
+      cobra_turnaround_phase: turnaround?.phase,
+      cobra_turnaround_sequence: turnaround?.sequence,
+      cobra_turnaround_action: turnaround?.action,
+      cobra_turnaround_hold_progress: turnaround?.hold_progress,
+      cobra_turnaround_flight_controls_enabled: turnaround?.flight_controls_enabled,
+      cobra_turnaround_weapons_enabled: turnaround?.weapons_enabled,
       // Contact-envelope evidence: without these the crash card can name a cause live
       // while the uploaded owner-flight trace records none of it.
       cobra_contact_failure_cause: authorityState.vehicle.contact_failure_cause,
@@ -591,6 +613,24 @@ function recordTelemetry(nowMs) {
       cobra_cross_track_m: authorityState.route_guidance.cross_track_m,
       cobra_inside_corridor: authorityState.route_guidance.inside_corridor,
       cobra_masking: authorityState.masking.state,
+      // Hostile-fire evidence must survive the owner-flight upload. A live HUD warning without
+      // its acquisition, burst and named-subsystem truth is not diagnosable after the sortie.
+      cobra_ground_fire_active_observer_id: battleDamage?.active_observer_id ?? null,
+      cobra_ground_fire_acquisition_progress: battleDamage?.acquisition_progress ?? 0,
+      cobra_ground_fire_tracking_observers: battleDamage?.tracking_observers ?? 0,
+      cobra_ground_fire_threat_tracking: battleDamage?.threat_tracking ?? false,
+      cobra_ground_fire_receiving_fire: battleDamage?.receiving_fire ?? false,
+      cobra_ground_fire_bursts_fired: battleDamage?.bursts_fired ?? 0,
+      cobra_ground_fire_pending_bursts: battleDamage?.pending_bursts ?? 0,
+      cobra_ground_fire_damaging_hits: battleDamage?.damaging_hits ?? 0,
+      cobra_ground_fire_seconds_to_next_impact: battleDamage?.seconds_to_next_impact ?? null,
+      cobra_ground_fire_scas_damaged: battleDamage?.scas_damaged ?? false,
+      cobra_ground_fire_engine_damaged: battleDamage?.engine_damaged ?? false,
+      cobra_ground_fire_last_burst_sequence: latestThreatBurst?.sequence ?? null,
+      cobra_ground_fire_last_burst_observer_id: latestThreatBurst?.observer_id ?? null,
+      cobra_ground_fire_last_burst_will_hit: latestThreatBurst?.will_hit ?? null,
+      cobra_ground_fire_last_burst_subsystem: latestThreatBurst?.subsystem ?? null,
+      cobra_ground_fire_last_burst_has_impacted: latestThreatBurst?.has_impacted ?? null,
       cobra_gunner_state: authorityState.gunner.state,
       cobra_gunner_reason: authorityState.gunner.reason,
       cobra_fire_authorized: authorityState.gunner.fire_authorized,
@@ -613,6 +653,12 @@ function sampleAuthorityState(nowMs, { force = false } = {}) {
   authorityStateSampledAtMs = nowMs;
   const stateStartedAtMs = performance.now();
   authorityState = JSON.parse(bridge.GetState());
+  syncTurnaroundLifecycle();
+  // Swap acknowledgement belongs at the snapshot boundary: every advance path (manual, parked
+  // review, and guided lab tour) eventually samples here, and the sync itself never re-samples.
+  // That makes a newly observed authority generation reset/ground exactly once without leaving a
+  // camera-mode-specific path frozen on the bridge latch.
+  syncParkedAirframes();
   // QA seam: headless smoke scripts steer against authoritative truth, not DOM guesses.
   window.__gunsOnlyCobraAuthority = authorityState;
   // Same contract for the one visual claim a screenshot cannot settle: first person must
@@ -620,9 +666,34 @@ function sampleAuthorityState(nowMs, { force = false } = {}) {
   // ship on a tour rail is a handful of pixels either way, so this is measured, not eyed.
   window.__gunsOnlyCobraAirframeVisible = () => ah1gPresence?.group?.visible === true;
   refreshGroundTargets();
-  groundWarPresentation?.sync(authorityState.ground_war ?? null, targetSelect.value || null);
+  groundWarPresentation?.sync(
+    authorityState.ground_war ?? null,
+    targetSelect.value || null,
+    authorityState.battle_damage ?? null,
+  );
   recordTelemetry(nowMs);
   recordPhase("state", stateStartedAtMs);
+}
+
+/**
+ * A replacement reaches Operational only after authority has observed governed Nr continuously.
+ * Put play back at a neutral Ready edge at that exact published transition so W held through the
+ * assisted start cannot turn completion into an uncommanded lift. This does not time or complete
+ * the startup; it only gates the pilot's next control edge.
+ */
+function syncTurnaroundLifecycle() {
+  const phase = String(authorityState?.turnaround?.phase ?? "operational");
+  const turnaroundActive = cobraTurnaroundIsActive(authorityState?.turnaround);
+  const previousTurnaroundActive = lastTurnaroundPhase !== null
+    && cobraTurnaroundIsActive({ phase: lastTurnaroundPhase });
+  if (PLAY_MODE && previousTurnaroundActive && !turnaroundActive) {
+    sortieReadiness.reset(false, { requireNeutral: true });
+    pilotControls = createCobraGroundedPilotControlState();
+    bridge?.SetTurnaroundAction(false);
+    bridge?.SetControls(pilotControls.collective, 0, 0, 0);
+    setStatus("SPARE READY · CONTROLS NEUTRAL — HOLD W TO LIFT", "ready");
+  }
+  lastTurnaroundPhase = phase;
 }
 
 function readVehiclePose() {
@@ -778,6 +849,7 @@ function drawTacticalMaps(timeMs) {
     actOverlay: emberActObjectiveOverlay(authorityState?.mission_act, {
       remainingM: authorityState?.route_guidance?.remaining_m,
     }),
+    turnaround: authorityState?.turnaround,
   });
   if (tacticalMapOpen) {
     const box = sizeMapCanvas(tacticalMapCanvas, tacticalMapCtx);
@@ -931,13 +1003,28 @@ function lockPlayRoute() {
 function restartRoute() {
   if (!plan) return;
   lockPlayRoute();
+  const requireNeutralEdge = PLAY_MODE && authorityState !== null;
+  sortieReadiness.reset(!PLAY_MODE, { requireNeutral: requireNeutralEdge });
   missionTerminal = false;
   padlockActive = false;
   if (debrief) debrief.hidden = true;
   activeRoute = routeById(routeSelect.value);
   bridge?.StartRoute(routeSelect.selectedIndex);
   authorityState = bridge ? JSON.parse(bridge.GetState()) : null;
-  pilotControls = createCobraPilotControlState(authorityState?.vehicle?.collective ?? 0.5);
+  lastTurnaroundPhase = authorityState?.turnaround?.phase ?? null;
+  pilotControls = PLAY_MODE
+    ? createCobraGroundedPilotControlState()
+    : createCobraPilotControlState(bridge?.GetHoverCollective() ?? 0.5);
+  // Keep the browser and authority copies aligned synchronously, before a single Advance can run,
+  // so a Ready dismissal or cyclic/gunner input cannot launch the helicopter on inherited
+  // collective.
+  bridge?.SetControls(
+    pilotControls.collective,
+    pilotControls.forwardCyclic,
+    pilotControls.rightCyclic,
+    pilotControls.yaw,
+  );
+  bridge?.SetTurnaroundAction(false);
   // A restart is a fresh mission, so the chart's enclosing square is recomputed once, here.
   tacticalMapBounds = null;
   tacticalMapBackdrop = null;
@@ -951,11 +1038,18 @@ function restartRoute() {
   for (const [, parked] of parkedPresences) scene.remove(parked.group);
   parkedPresences.clear();
   lastAirframeSwaps = 0;
+  // Ready does not advance or poll authority. Populate the ramp immediately from StartRoute's
+  // direct snapshot so the two parked spares are present before the player's first input.
+  syncParkedAirframes();
   placeCameraOnRoute();
   updateRouteCard();
   lastTargetKey = null;
   refreshGroundTargets();
-  groundWarPresentation?.sync(authorityState?.ground_war ?? null, targetSelect.value || null);
+  groundWarPresentation?.sync(
+    authorityState?.ground_war ?? null,
+    targetSelect.value || null,
+    authorityState?.battle_damage ?? null,
+  );
   // Restart must clear the terminal banner, otherwise "MISSION VEHICLE AUTHORITY LOST"
   // and data-error stay stale above a live sortie.
   if (bridge) {
@@ -979,8 +1073,27 @@ let lastAirframeSwaps = 0;
 function syncParkedAirframes() {
   const swaps = authorityState?.airframe_swaps ?? 0;
   if (swaps > lastAirframeSwaps && bridge) {
-    // The radio-shaped cue: the swap already happened sim-side; the page just says so.
-    setStatus("BIRD SWAP · SPARE'S YOURS — THE BENT ONE STAYS ON THE RAMP", "ready");
+    const turnaroundActive = cobraTurnaroundIsActive(authorityState?.turnaround);
+    if (PLAY_MODE && !turnaroundActive) {
+      // A turnaround spare must keep authority advancing so its real turbine/rotor state can
+      // start. Ordinary/non-turnaround generation changes retain the old neutral Ready defence.
+      sortieReadiness.reset(false, { requireNeutral: true });
+    }
+    if (PLAY_MODE) {
+      pilotControls = createCobraGroundedPilotControlState();
+    } else {
+      // The lab intentionally remains a continuously-running visualization. Its explicit command
+      // is the provider's calculated hover trim, not play's cold-ramp doctrine or a guessed 0.5.
+      pilotControls = createCobraPilotControlState(bridge.GetHoverCollective());
+    }
+    // Never mark a generation consumed unless authority accepted that exact acknowledgement.
+    // A mismatch leaves lastAirframeSwaps unchanged so the next fresh snapshot retries while the
+    // bridge continues holding the spare cold.
+    if (!bridge.AcknowledgeAirframeSwap(swaps)) return;
+    bridge.SetControls(pilotControls.collective, 0, 0, 0);
+    setStatus(turnaroundActive
+      ? "SPARE COLD · RELEASE E, THEN HOLD E TO START"
+      : "BIRD SWAP · SPARE'S YOURS — THE BENT ONE STAYS ON THE RAMP", "ready");
   }
   lastAirframeSwaps = swaps;
   const pool = authorityState?.airframe_pool;
@@ -1113,7 +1226,11 @@ function applyGunnerTarget(targetId) {
   targetSelect.value = targetId || "";
   hostileTargetIndex = targetId ? hostileTargetIds.indexOf(targetId) : -1;
   bridge?.SetGunnerTarget(targetId || null);
-  groundWarPresentation?.sync(authorityState?.ground_war ?? null, targetId || null);
+  groundWarPresentation?.sync(
+    authorityState?.ground_war ?? null,
+    targetId || null,
+    authorityState?.battle_damage ?? null,
+  );
 }
 
 function cycleHostileTarget() {
@@ -1153,10 +1270,12 @@ function updateManual(deltaSeconds) {
   // with the vehicle pose (that is what made overnight stills look like Camp Ember everywhere).
   if (parkedCamera) {
     if (bridge && !missionTerminal) {
+      bridge.SetTurnaroundAction(false);
       const simStartedAtMs = performance.now();
-      bridge.Advance(deltaSeconds);
-      recordPhase("sim", simStartedAtMs);
-      sampleAuthorityState(lastTimeMs);
+      if (sortieReadiness.advance(deltaSeconds, (step) => bridge.Advance(step))) {
+        recordPhase("sim", simStartedAtMs);
+        sampleAuthorityState(lastTimeMs);
+      }
     }
     return;
   }
@@ -1189,14 +1308,43 @@ function updateManual(deltaSeconds) {
   }
   if (bridge) {
     const gamepad = Array.from(navigator.getGamepads?.() ?? []).find(Boolean);
-    // Authentic controls own only the pilot's physical inputs. Aircraft attitude never feeds
-    // back through this browser seam as an unlabeled hold or recovery command.
-    pilotControls = advanceCobraPilotControls(pilotControls, {
-      keyboardIntent: cobraKeyboardControlIntent(keys, cobraControlProfile),
-      analogAxes: cobraGamepadControlAxes(gamepad),
-      deltaSeconds,
-      focused: windowFocused,
+    const keyboardIntent = cobraKeyboardControlIntent(keys, cobraControlProfile);
+    const analogAxes = cobraGamepadControlAxes(gamepad);
+    // A connected controller can continue reporting held buttons after the page loses focus.
+    // Authority procedure holds count only while this cockpit owns focus, matching keyboard input.
+    const turnaroundActionHeld = windowFocused
+      && cobraTurnaroundActionHeld({ activeCodes: keys, gamepad });
+    const turnaroundActive = cobraTurnaroundIsActive(authorityState?.turnaround);
+    const turnaroundLocksControls = cobraTurnaroundLocksFlightControls(
+      authorityState?.turnaround,
+    );
+    const deliberateInput = hasDeliberateCobraCockpitInput({
+      keyboardIntent,
+      analogAxes,
+      turnaroundAction: turnaroundActive && turnaroundActionHeld,
     });
+    if (windowFocused
+      && sortieReadiness.observeInput(deliberateInput)
+      && deliberateInput) {
+      onboarding?.dismiss();
+    }
+    // A held input rejected by the restart edge gate must not silently preload collective/cyclic
+    // while authority is paused. The first accepted edge flips Ready above, then reaches this
+    // ordinary integrator on the same frame unchanged.
+    if (sortieReadiness.ready && !turnaroundLocksControls) {
+      // Authentic controls own only the pilot's physical inputs. Aircraft attitude never feeds
+      // back through this browser seam as an unlabeled hold or recovery command.
+      pilotControls = advanceCobraPilotControls(pilotControls, {
+        keyboardIntent,
+        analogAxes,
+        deltaSeconds,
+        focused: windowFocused,
+      });
+    } else if (turnaroundLocksControls) {
+      // Authority also substitutes a zero command. Mirroring it here keeps the visible/published
+      // lever honest and prevents held W from accumulating behind the lock.
+      pilotControls = createCobraGroundedPilotControlState();
+    }
     if (!missionTerminal) {
       // Cyclic goes through the expo curve on its way to the flight model; the control state
       // itself stays the raw stick position for the readouts and the slew maths.
@@ -1206,16 +1354,18 @@ function updateManual(deltaSeconds) {
         cobraCyclicCommand(pilotControls.rightCyclic),
         pilotControls.yaw,
       );
+      bridge.SetTurnaroundAction(turnaroundActionHeld);
       bridge.SetGunnerTarget(targetSelect.value || null);
-      bridge.SetEngagementConsent(keys.has(cobraControlProfile.fire.code));
-      // Advance runs every rendered frame; the JSON snapshot is sampled at HUD rate.
+      bridge.SetEngagementConsent(!turnaroundLocksControls
+        && keys.has(cobraControlProfile.fire.code));
+      // Rendering stays live at Ready, but authority time starts only after deliberate input.
       const simStartedAtMs = performance.now();
-      bridge.Advance(deltaSeconds);
-      recordPhase("sim", simStartedAtMs);
-      sampleAuthorityState(lastTimeMs);
+      if (sortieReadiness.advance(deltaSeconds, (step) => bridge.Advance(step))) {
+        recordPhase("sim", simStartedAtMs);
+        sampleAuthorityState(lastTimeMs);
+      }
     }
     syncAuthorityCamera();
-    syncParkedAirframes();
   }
   const bounds = plan.boundsLocalM;
   camera.position.x = THREE.MathUtils.clamp(
@@ -1305,6 +1455,22 @@ function setText(node, value) {
   if (node) node.textContent = value;
 }
 
+function groundFireDebriefDetail(battleDamage) {
+  const bursts = Math.max(0, Number(battleDamage?.bursts_fired) || 0);
+  const hits = Math.max(0, Number(battleDamage?.damaging_hits) || 0);
+  const systems = [];
+  if (battleDamage?.scas_damaged === true) systems.push("SCAS OUT");
+  if (battleDamage?.engine_damaged === true) systems.push("ENGINE OUT");
+  const recentBursts = Array.isArray(battleDamage?.recent_bursts)
+    ? battleDamage.recent_bursts
+    : [];
+  const latestDamage = [...recentBursts].reverse().find((burst) =>
+    burst?.has_impacted === true && burst?.will_hit === true);
+  const observerId = latestDamage?.observer_id ?? battleDamage?.active_observer_id ?? null;
+  const subsystemSummary = systems.length ? systems.join(" + ") : "NO SUBSYSTEM LOSS";
+  return `Ground fire: ${subsystemSummary} · ${hits} damaging ${hits === 1 ? "hit" : "hits"} / ${bursts} ${bursts === 1 ? "burst" : "bursts"}${observerId ? ` · source ${observerId}` : ""}.`;
+}
+
 function showMissionDebrief(war, status) {
   if (!debrief || missionTerminal) return;
   missionTerminal = true;
@@ -1358,9 +1524,10 @@ function showMissionDebrief(war, status) {
     reason = `Sortie ended: ${status.replaceAll("-", " ")}.`;
   }
   setText(debriefTitle, title);
+  const groundFireDetail = groundFireDebriefDetail(authorityState?.battle_damage);
   setText(
     debriefBody,
-    `${reason} Hostiles down ${war?.debrief?.hostile_kills ?? 0} · rearms ${war?.debrief?.fob_rearms ?? 0} · bird swaps ${authorityState?.airframe_swaps ?? 0} · ${(war?.debrief?.elapsed_s ?? 0).toFixed(0)}s airborne. R restarts.`,
+    `${reason} ${groundFireDetail} Hostiles down ${war?.debrief?.hostile_kills ?? 0} · rearms ${war?.debrief?.fob_rearms ?? 0} · bird swaps ${authorityState?.airframe_swaps ?? 0} · ${(war?.debrief?.elapsed_s ?? 0).toFixed(0)}s airborne. R restarts.`,
   );
   debrief.hidden = false;
   setStatus(
@@ -1407,6 +1574,7 @@ function updateObjectiveHud(war) {
     actOverlay: emberActObjectiveOverlay(authorityState?.mission_act, {
       remainingM: authorityState?.route_guidance?.remaining_m,
     }),
+    turnaround: authorityState?.turnaround,
   });
   if (copy) {
     setText(objectiveLine, copy.line);
@@ -1497,10 +1665,12 @@ function animate(timeMs) {
     // Keep the ground war alive during guided preview even when the camera is on rails.
     pilotControls = releaseCobraPilotControls(pilotControls);
     bridge.SetControls(pilotControls.collective, 0, 0, 0);
+    bridge.SetTurnaroundAction(false);
     bridge.SetGunnerTarget(null);
     bridge.SetEngagementConsent(false);
-    bridge.Advance(deltaSeconds);
-    sampleAuthorityState(timeMs);
+    if (sortieReadiness.advance(deltaSeconds, (step) => bridge.Advance(step))) {
+      sampleAuthorityState(timeMs);
+    }
     const pose = readVehiclePose();
     if (pose) updateAh1gPresence(ensureAh1gPresence(), pose, deltaSeconds);
   }
@@ -1640,7 +1810,8 @@ window.__gunsOnlyCobraLabCamera = Object.freeze({
 
 function isManualControl(code) {
   return code === "KeyW" || code === "KeyS" || code === "KeyA" || code === "KeyD"
-    || code === "KeyR" || code === "KeyC" || code === "KeyF" || code.startsWith("Arrow");
+    || code === "KeyR" || code === "KeyC" || code === "KeyE" || code === "KeyF"
+    || code.startsWith("Arrow");
 }
 
 // Escape leaves the sortie for the menu (cobra_mission_exit.js documents why this page exits
@@ -1684,21 +1855,27 @@ window.addEventListener("keydown", (event) => {
   }
   if (event.code === "Tab") {
     event.preventDefault();
+    if (!sortieReadiness.observeInput(true)) return;
     playerHasInteracted = true;
+    onboarding?.dismiss();
     if (tourInput) tourInput.checked = false;
     cycleHostileTarget();
     return;
   }
   if (event.code === "KeyM") {
     event.preventDefault();
+    if (!sortieReadiness.observeInput(true)) return;
     playerHasInteracted = true;
+    onboarding?.dismiss();
     if (tourInput) tourInput.checked = false;
     setTacticalMapOpen(!tacticalMapOpen);
     return;
   }
   if (event.code === "KeyV") {
     event.preventDefault();
+    if (!sortieReadiness.observeInput(true)) return;
     playerHasInteracted = true;
+    onboarding?.dismiss();
     if (tourInput) tourInput.checked = false;
     togglePadlock();
     return;
@@ -1707,11 +1884,19 @@ window.addEventListener("keydown", (event) => {
   event.preventDefault();
   playerHasInteracted = true;
   keys.add(event.code);
+  if (hasDeliberateCobraCockpitInput({
+    keyboardIntent: cobraKeyboardControlIntent(keys, cobraControlProfile),
+    turnaroundAction: event.code === COBRA_TURNAROUND_ACTION_CODE
+      && cobraTurnaroundIsActive(authorityState?.turnaround),
+  }) && sortieReadiness.observeInput(true)) {
+    onboarding?.dismiss();
+  }
   if (isManualControl(event.code) && tourInput) tourInput.checked = false;
 });
 window.addEventListener("keyup", (event) => keys.delete(event.code));
 window.addEventListener("blur", () => {
   keys.clear();
+  bridge?.SetTurnaroundAction(false);
   windowFocused = false;
   pilotControls = releaseCobraPilotControls(pilotControls);
 });
@@ -1721,6 +1906,7 @@ window.addEventListener("focus", () => {
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
     keys.clear();
+    bridge?.SetTurnaroundAction(false);
     windowFocused = false;
     pilotControls = releaseCobraPilotControls(pilotControls);
   } else {
@@ -1739,7 +1925,9 @@ qualitySelect?.addEventListener("change", rebuildPresentation);
 resetButton?.addEventListener("click", restartRoute);
 debriefRestart?.addEventListener("click", restartRoute);
 targetSelect?.addEventListener("change", () => {
+  if (!sortieReadiness.observeInput(true)) return;
   playerHasInteracted = true;
+  onboarding?.dismiss();
   applyGunnerTarget(targetSelect.value || null);
 });
 speedInput?.addEventListener("input", () => {
@@ -1776,6 +1964,7 @@ function teardownMission(reason) {
   cancelAnimationFrame(animationFrame);
   animationFrame = 0;
   keys.clear();
+  bridge?.SetTurnaroundAction(false);
   pilotControls = releaseCobraPilotControls(pilotControls);
   onboarding?.dispose();
   onboarding = null;
@@ -1844,9 +2033,23 @@ async function boot() {
     // Fetched once: StartRoute/Advance refill the same WASM buffer, read per frame via copyTo.
     vehiclePoseView = bridge.GetHotPose();
     authorityState = JSON.parse(bridge.GetState());
-    pilotControls = createCobraPilotControlState(authorityState.vehicle.collective);
+    syncParkedAirframes();
+    pilotControls = PLAY_MODE
+      ? createCobraGroundedPilotControlState()
+      : createCobraPilotControlState(bridge.GetHoverCollective());
+    bridge.SetControls(
+      pilotControls.collective,
+      pilotControls.forwardCyclic,
+      pilotControls.rightCyclic,
+      pilotControls.yaw,
+    );
+    bridge.SetTurnaroundAction(false);
     refreshGroundTargets();
-    groundWarPresentation?.sync(authorityState.ground_war);
+    groundWarPresentation?.sync(
+      authorityState.ground_war,
+      null,
+      authorityState.battle_damage ?? null,
+    );
     updateObjectiveHud(authorityState.ground_war);
     setStatus(PLAY_MODE
       ? "HOLD THE BRIDGE · AH-1G ONLINE"

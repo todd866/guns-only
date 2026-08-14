@@ -639,6 +639,55 @@ test("systems readout surfaces procedural failure cues without inventing absent 
     { text: "FLAP OVERSPEED", level: "warning" },
     { text: "PRIMARY BUS", level: "caution" },
   ]);
+  assert.equal(readout.panelSuppressed, false,
+    "ordinary fixed-wing systems warnings must retain their existing panel");
+});
+
+test("Cobra damage uses the production warning lane without exposing observer acquisition", () => {
+  const trackingOnly = systemsReadout({
+    has_engine: true,
+    engine_running: true,
+    cobra_threat_tracking: true,
+    cobra_acquisition_progress: 0.99,
+  });
+  assert.deepEqual(trackingOnly.warnings, [],
+    "an observer tracking the aircraft is not yet a player-facing fire warning");
+
+  const underFire = systemsReadout({
+    has_engine: true,
+    engine_running: true,
+    cobra_receiving_ground_fire: true,
+    suppress_systems_panel: true,
+  });
+  assert.deepEqual(underFire.warnings, [
+    { text: "GROUND FIRE", level: "caution" },
+  ]);
+  assert.equal(underFire.panelSuppressed, true,
+    "warning-only consumers must not wake the fixed-wing systems card");
+
+  const damaged = systemsReadout({
+    has_engine: true,
+    engine_running: false,
+    cobra_engine_damaged: true,
+    cobra_scas_damaged: true,
+    cobra_receiving_ground_fire: true,
+    suppress_systems_panel: true,
+  });
+  assert.deepEqual(damaged.warnings.slice(0, 3), [
+    { text: "ENGINE OUT", level: "warning" },
+    { text: "SCAS OUT", level: "caution" },
+    { text: "GROUND FIRE", level: "caution" },
+  ]);
+  assert.equal(damaged.panelSuppressed, true);
+
+  const intentionalShutdown = systemsReadout({
+    has_engine: true,
+    engine_running: false,
+    cobra_turnaround_active: true,
+    suppress_systems_panel: true,
+  });
+  assert.deepEqual(intentionalShutdown.warnings, [],
+    "an expected ramp shutdown must not masquerade as an engine failure");
 });
 
 test("normal systems stay latent while recovery, transitions, and failures surface them", () => {

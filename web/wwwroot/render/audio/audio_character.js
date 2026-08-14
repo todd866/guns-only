@@ -4,6 +4,7 @@
 const PROFILE_TO_CHARACTER = Object.freeze({
   "audio.rapier.turbo-ram.v1": "rapier",
   "audio.f22a.aged-twin-fan.v1": "f22",
+  "audio.ah1g.t53-b540.v1": "cobra",
   "audio.fixed-wing.jet.v1": "jet",
 });
 
@@ -14,6 +15,7 @@ export function resolvePropulsionCharacter(state) {
   const id = String(state?.player_aircraft_id ?? "").toLowerCase();
   if (id.includes("rapier")) return "rapier";
   if (id.includes("f22")) return "f22";
+  if (id.includes("ah-1g") || id.includes("ah1g")) return "cobra";
   return "jet";
 }
 

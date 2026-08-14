@@ -34,6 +34,11 @@ import {
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
+import {
+  terrainLaunchMissionIdentity,
+  terrainLaunchMissionSelector,
+  terrainLaunchOwnerMatches,
+} from "./render/environment/terrain_launch_owner.js";
 import { resolveTerrainPresentationRoute } from "./render/environment/terrain_presentation_route.js";
 import { loadKoreaTerrain } from "./render/environment/korea_terrain.js";
 import { attachSoftWorldGroundHaze } from "./render/environment/soft_world_atmosphere.js";
@@ -3447,8 +3452,8 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     kicker: "1986 · training range",
     title: "Top Gun",
     sortie: "F-14A vs MiG-28 · guns and Sidewinders · DACT arena",
-    configuration: "F-14A or MiG-28 seat · M61 + AIM-9 · anime-1986 presentation · preview with ?preview=1",
-    brief: "Tomcat or aggressor MiG-28 over a Miramar-class training range—guns and heaters, one-on-one ACM. Preview flyable: acknowledge preview, pick your seat, then fight.",
+    configuration: "F-14A or MiG-28 seat · M61 + AIM-9 · anime-1986 presentation",
+    brief: "Tomcat or aggressor MiG-28 over a Miramar-class training range—guns and heaters, one-on-one ACM. Pick your seat, launch, then fight.",
     controls: "Arrows fly · W/S power · F guns · R fox-two · V padlock · Tab target",
   }),
   "ace-duel": Object.freeze({
@@ -5035,16 +5040,8 @@ function terrainWarmupKey(state) {
   ].join(":");
 }
 
-function stagedMissionIdentity(index, state) {
-  return [
-    Number(index),
-    projectedId(state?.mission_definition_id, "unknown-mission"),
-    Number.isSafeInteger(Number(state?.casevac_mission_epoch_sequence))
-      ? `casevac-${Number(state.casevac_mission_epoch_sequence)}`
-      : Number.isSafeInteger(Number(state?.player_spawn_sequence))
-        ? `spawn-${Number(state.player_spawn_sequence)}`
-        : "unversioned",
-  ].join(":");
+function selectedTerrainMissionSelector() {
+  return isTopGunProgram() ? TOP_GUN_PROGRAM_ID : selectedBeat;
 }
 
 function terrainWarmupDeadlineMs(attempt, requiredFeaturePack) {
@@ -5153,7 +5150,8 @@ function prepareMissionTerrain(index, stagedState) {
     ? `${stagedState?.terrain_profile_id}|${missionFeaturePackCacheIdentity(stagedState)}`
     : null;
   const warmupKey = terrainWarmupKey(stagedState);
-  const missionIdentity = stagedMissionIdentity(index, stagedState);
+  const missionSelector = terrainLaunchMissionSelector(index);
+  const missionIdentity = terrainLaunchMissionIdentity(index, stagedState);
   const requiredFeaturePack = stagedState?.mission_feature_pack_required === true;
   activeView?.configureTerrainMission?.(stagedState);
   if (!terrainKey || missionTerrainReady(stagedState)) {
@@ -5202,7 +5200,7 @@ function prepareMissionTerrain(index, stagedState) {
   const warmupView = activeView;
   const owner = {
     generation: ++terrainLaunchWarmupGeneration,
-    index: Number(index),
+    missionSelector,
     missionIdentity,
     terrainKey,
     warmupKey,
@@ -5252,8 +5250,11 @@ function prepareMissionTerrain(index, stagedState) {
   }).finally(() => {
     if (owner.deadlineTimer) window.clearTimeout(owner.deadlineTimer);
     if (terrainLaunchWarmupOwner !== owner) return;
-    const ownsCurrentMission = selectedBeat === owner.index
-      && stagedMissionIdentity(selectedBeat, latestState) === owner.missionIdentity;
+    const ownsCurrentMission = terrainLaunchOwnerMatches(
+      owner,
+      selectedTerrainMissionSelector(),
+      latestState,
+    );
     terrainLaunchWarmupOwner = null;
     terrainLaunchWarmupPromise = null;
     if (ownsCurrentMission) {
@@ -5263,9 +5264,11 @@ function prepareMissionTerrain(index, stagedState) {
           window.clearTimeout(terrainLaunchWarmupRetryTimer);
         terrainLaunchWarmupRetryTimer = window.setTimeout(() => {
           terrainLaunchWarmupRetryTimer = 0;
-          const stillOwnsMission = selectedBeat === owner.index
-            && stagedMissionIdentity(selectedBeat, latestState) === owner.missionIdentity
-            && pauseReasons.has("ready");
+          const stillOwnsMission = terrainLaunchOwnerMatches(
+            owner,
+            selectedTerrainMissionSelector(),
+            latestState,
+          ) && pauseReasons.has("ready");
           if (!stillOwnsMission) {
             terrainLaunchWarmupStatus = "";
             terrainLaunchWarmupRetryAtMs = 0;

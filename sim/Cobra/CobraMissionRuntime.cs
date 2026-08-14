@@ -266,6 +266,7 @@ public sealed record CobraMissionDiagnostics(
     string? CollisionObstacleId,
     CobraRouteGuidance RouteGuidance,
     CobraMaskingAssessment Masking,
+    CobraBattleDamageState BattleDamage,
     long MaskingAssessmentAuthorityTicks,
     string FidelityDisclosure);
 
@@ -276,7 +277,9 @@ public readonly record struct CobraMissionAdvanceResult(
 /// <summary>
 /// Headless mission authority for the Cobra Canyon slice. Pilot commands go directly to the
 /// existing AH-1G provider; this class adds terrain sampling, authored obstacle collision, route
-/// guidance and terrain/obstacle masking without modifying or replacing flight dynamics.
+/// guidance, terrain/obstacle masking and mission-owned hostile-fire damage. Named SCAS and engine
+/// hits invoke explicit provider failure seams; every resulting force, moment and contact remains
+/// owned by the flight dynamics provider, and raw pilot commands are never rewritten here.
 /// </summary>
 public sealed class CobraMissionRuntime
 {
@@ -316,6 +319,7 @@ public sealed class CobraMissionRuntime
     /// </summary>
     public const double GroundWarStepHz = 20.0;
     const double GroundWarStepSeconds = 1.0 / GroundWarStepHz;
+    static readonly VerticalLiftPilotCommand GroundedCommand = new(0.0, 0.0, 0.0, 0.0);
 
     readonly CobraCanyonDefinition _definition;
     readonly ITerrainSurface _terrain;
@@ -333,6 +337,8 @@ public sealed class CobraMissionRuntime
     readonly IReadOnlyList<CobraResolvedObstacle> _resolvedObstacles;
     readonly IReadOnlyList<CobraResolvedThreatObserver> _resolvedThreatObservers;
     readonly CobraGroundWarRuntime _groundWar;
+    readonly CobraThreatFireRuntime _threatFire = new();
+    readonly CobraTurnaroundRuntime _turnaround = new();
     readonly Vec3D _bridgeCentreWorldM;
     CobraMaskingAssessment _cachedMaskingAssessment = null!;
     long _maskingAssessmentAuthorityTicks;
@@ -507,6 +513,9 @@ public sealed class CobraMissionRuntime
     public Vec3D SynopticWindMps => _synopticWindMps;
     public IPlayerVehicleDynamics Vehicle => _cobra;
     public CobraGroundWarRuntime GroundWar => _groundWar;
+    public CobraBattleDamageState BattleDamage => _threatFire.State;
+    public CobraTurnaroundRuntime Turnaround => _turnaround;
+    public IReadOnlyList<CobraThreatBurstEvent> RecentThreatBursts => _threatFire.RecentBursts;
     public CobraMissionAct Act => _act;
     public IReadOnlyList<CobraPathGate> PathGates => CobraMissionActProgress.BuildPathGates(
         _act,
@@ -519,14 +528,17 @@ public sealed class CobraMissionRuntime
         _resolvedThreatObservers;
     public double CollisionEnvelopeRadiusM => _cobra.Definition.MainRotor.RadiusM;
     public CobraMissionStatus Status { get; private set; }
-    public bool MissionFlyable => Status == CobraMissionStatus.Active && _cobra.State.Flyable;
+    public bool MissionFlyable => Status == CobraMissionStatus.Active
+        && (_cobra.State.Flyable || CanServiceCurrentAirframeAtFob());
     /// <summary>
     /// Authority diagnostics for the current tick, built on first read and cached until the next
     /// Advance. Consumers sample this at snapshot rate, not tick rate.
     /// </summary>
     public CobraMissionDiagnostics Diagnostics => _diagnostics ??= BuildDiagnostics();
 
-    public CobraMissionAdvanceResult Advance(in VerticalLiftPilotCommand command)
+    public CobraMissionAdvanceResult Advance(
+        in VerticalLiftPilotCommand command,
+        bool turnaroundActionHeld = false)
     {
         if (Status != CobraMissionStatus.Active)
             throw new InvalidOperationException(
@@ -544,9 +556,12 @@ public sealed class CobraMissionRuntime
             : SampleRotorcraftAirflow(simulationTimeSeconds);
         _lastWindVelocityMps = windVelocityMps;
         _lastRotorcraftAirflow = rotorcraftAirflow;
+        VerticalLiftPilotCommand authorityCommand = _turnaround.FlightControlsEnabled
+            ? command
+            : GroundedCommand;
         PlayerVehicleAdvanceResult vehicleResult = _cobra.Advance(new PlayerVehicleAdvanceInput(
             Tick: _nextAuthorityTick,
-            Command: PlayerVehicleCommand.FromVerticalLift(command),
+            Command: PlayerVehicleCommand.FromVerticalLift(authorityCommand),
             RecurringBaseMassKg: _recurringBaseMassKg,
             AdditivePayloadMassKg: _additivePayloadMassKg,
             Environment: new PlayerVehicleEnvironmentSample(
@@ -571,13 +586,11 @@ public sealed class CobraMissionRuntime
             out CobraResolvedObstacle collision)) {
             _collisionObstacleId = collision.Id;
             Status = CobraMissionStatus.ObstacleCollision;
-        } else if (!vehicleResult.State.Flyable) {
-            // Wrecking INSIDE the FOB is not the end of the sortie while the ramp still has a
-            // bird: you walk away and take the spare. Only an empty ramp is terminal here, and
-            // it is terminal as FOB COMBAT INEFFECTIVE, not as a lost airframe.
-            TrySwapAirframeAtFob(currentPositionWorldM);
-            if (Status == CobraMissionStatus.Active && !_cobra.State.Flyable)
-                Status = CobraMissionStatus.VehicleAuthorityLost;
+        } else if (!vehicleResult.State.Flyable
+            && !CanServiceCurrentAirframeAtFob()) {
+            // A pad wreck remains authority-owned long enough to secure it and cold-start a
+            // replacement. The same wreck anywhere else is still immediately terminal.
+            Status = CobraMissionStatus.VehicleAuthorityLost;
         }
         // Route end is guidance-only: ground war / FOB resupply needs an open sandbox, not a
         // terminal RouteComplete. Remaining distance stays on RouteGuidance.
@@ -587,6 +600,24 @@ public sealed class CobraMissionRuntime
                 >= MaskingAssessmentIntervalTicks) {
             _cachedMaskingAssessment = AssessMaskingAt(currentPositionWorldM);
             _maskingAssessmentAuthorityTicks = _nextAuthorityTick;
+        }
+
+        if (Status == CobraMissionStatus.Active)
+        {
+            bool scasWasDamaged = _threatFire.State.ScasDamaged;
+            bool engineWasDamaged = _threatFire.State.EngineDamaged;
+            _threatFire.Advance(
+                PlayerVehicleContract.FixedDeltaSeconds,
+                _cachedMaskingAssessment,
+                _resolvedThreatObservers,
+                _groundWar.Units,
+                new CobraThreatAirframeGeometry(
+                    currentPositionWorldM,
+                    _cobra.State.BodyAttitude));
+            if (!scasWasDamaged && _threatFire.State.ScasDamaged)
+                _cobra.FailScas();
+            if (!engineWasDamaged && _threatFire.State.EngineDamaged)
+                _cobra.FailEngine();
         }
 
         // Strategic cadence (see GroundWarStepHz): batch the airframe's fixed steps until a
@@ -602,7 +633,28 @@ public sealed class CobraMissionRuntime
         if (Status == CobraMissionStatus.Active)
             _groundWar.TryResupplyAtFob(currentPositionWorldM);
         if (Status == CobraMissionStatus.Active)
-            TrySwapAirframeAtFob(currentPositionWorldM);
+        {
+            CobraTurnaroundDirective turnaround = _turnaround.Advance(
+                PlayerVehicleContract.FixedDeltaSeconds,
+                BuildTurnaroundObservation(command.Collective, turnaroundActionHeld));
+            if (turnaround.ShutdownEngine)
+                _cobra.ShutdownEngine();
+            if (turnaround.TransferAirframe)
+            {
+                TransferAirframeAtFob(currentPositionWorldM);
+                currentPositionWorldM = _cobra.State.PositionWorldM;
+                vehicleResult = new PlayerVehicleAdvanceResult(_cobra.State, _cobra.Observation);
+                _cachedMaskingAssessment = AssessMaskingAt(currentPositionWorldM);
+                _maskingAssessmentAuthorityTicks = _nextAuthorityTick;
+            }
+            if (turnaround.StartEngine)
+                _cobra.StartEngine();
+            if (turnaround.EndMissionNoSpare)
+            {
+                SecureCurrentAirframe(currentPositionWorldM, spareIndex: -1);
+                Status = CobraMissionStatus.FobCombatIneffective;
+            }
+        }
         if (Status == CobraMissionStatus.Active) {
             Status = _groundWar.MissionOutcome switch {
                 HoldTheBridgeOutcome.Victory => CobraMissionStatus.Victory,
@@ -690,8 +742,13 @@ public sealed class CobraMissionRuntime
     /// <summary>
     /// Applies fire-authorized M134 damage to a ground-war unit and drains the magazine.
     /// </summary>
-    public bool ApplyAuthorizedGunfire(string? targetUnitId) =>
-        _groundWar.ApplyAuthorizedFire(targetUnitId, PlayerVehicleContract.FixedDeltaSeconds);
+    public bool ApplyAuthorizedGunfire(string? targetUnitId)
+    {
+        if (!_turnaround.WeaponsEnabled) return false;
+        return _groundWar.ApplyAuthorizedFire(
+            targetUnitId,
+            PlayerVehicleContract.FixedDeltaSeconds);
+    }
 
     public bool TryFindObstacleContact(
         in Vec3D centreWorldM,
@@ -733,6 +790,16 @@ public sealed class CobraMissionRuntime
         for (int index = 0; index < _resolvedThreatObservers.Count; index++) {
             CobraThreatLineOfSight assessment = AssessThreat(
                 _resolvedThreatObservers[index], targetWorldM);
+            // A destroyed emplacement is no longer exposure authority. Keep its geometric
+            // sample in the per-observer array for diagnostics, but remove it from the aggregate
+            // coverage/LOS counts and from acquisition.
+            if (!IsOperationalThreatObserver(assessment.ObserverId)) {
+                assessments[index] = assessment with {
+                    InAssessmentRange = false,
+                    HasLineOfSight = false,
+                };
+                continue;
+            }
             assessments[index] = assessment;
             if (!assessment.InAssessmentRange) continue;
             observersInRange++;
@@ -752,6 +819,16 @@ public sealed class CobraMissionRuntime
             observersInRange,
             observersWithLineOfSight,
             Array.AsReadOnly(assessments));
+    }
+
+    bool IsOperationalThreatObserver(string observerId)
+    {
+        GroundUnit? unit = _groundWar.FindUnit(observerId);
+        return unit is {
+            IsAlive: true,
+            Faction: GroundFaction.Hostile,
+            Role: GroundUnitRole.DshkSite,
+        };
     }
 
     public CobraRouteGuidance RouteGuidanceAt(in Vec3D positionWorldM)
@@ -922,23 +999,44 @@ public sealed class CobraMissionRuntime
         return false;
     }
 
-    /// <summary>
-    /// The owner's ramp loop: land stable inside the FOB with a crippled bird and you swap
-    /// into a Ready spare where it is parked; the crippled bird stays where you left it.
-    /// With no spare left, the FOB is combat-ineffective and the mission says so. A bird
-    /// destroyed outright still ends the mission through the existing authority-lost path.
-    /// </summary>
-    void TrySwapAirframeAtFob(in Vec3D positionWorldM)
-    {
-        if (!_cobra.IsCrippled) return;
-        // Grounded, not necessarily gently: a wreck on the pad still gets you a spare.
-        if (_cobra.Observation.Contact.Kind is not (VehicleContactKind.StableSurfaceContact
-            or VehicleContactKind.SurfaceContact or VehicleContactKind.HardImpact))
-            return;
-        if (!_groundWar.IsInsideFob(positionWorldM)) return;
+    bool RecoveryRequired() => _cobra.IsCrippled
+        || _threatFire.State.ScasDamaged
+        || _threatFire.State.EngineDamaged
+        || !_cobra.EngineOperating
+        || !_cobra.State.Flyable;
 
-        int spareIndex = _airframePool.FindIndex(
-            slot => slot.State == CobraAirframeState.Ready);
+    bool CanServiceCurrentAirframeAtFob() => RecoveryRequired()
+        && _cobra.Observation.Contact.Kind is VehicleContactKind.StableSurfaceContact
+            or VehicleContactKind.SurfaceContact
+            or VehicleContactKind.HardImpact
+        && _groundWar.IsInsideFob(_cobra.State.PositionWorldM);
+
+    CobraTurnaroundObservation BuildTurnaroundObservation(
+        double requestedCollective,
+        bool actionHeld)
+    {
+        RotorcraftTelemetry telemetry = _cobra.Telemetry;
+        double enginePowerFraction = telemetry.AvailableShaftPowerW > 1.0
+            ? Math.Max(0.0, telemetry.EngineShaftPowerW / telemetry.AvailableShaftPowerW)
+            : 0.0;
+        return new CobraTurnaroundObservation(
+            RecoveryRequired(),
+            _groundWar.IsInsideFob(_cobra.State.PositionWorldM),
+            _cobra.Observation.Contact.Kind,
+            requestedCollective,
+            _cobra.EngineOperating,
+            enginePowerFraction,
+            telemetry.MainRotorRpm,
+            _airframePool.Any(slot => slot.State == CobraAirframeState.Ready),
+            actionHeld);
+    }
+
+    /// <summary>
+    /// Secures the old aircraft where it came to rest. The spare index is used only to keep that
+    /// rest pose clear of the station the player is about to occupy.
+    /// </summary>
+    void SecureCurrentAirframe(in Vec3D positionWorldM, int spareIndex)
+    {
         int flyingIndex = _airframePool.FindIndex(
             slot => slot.State == CobraAirframeState.PlayerFlying);
         if (flyingIndex >= 0)
@@ -976,11 +1074,20 @@ public sealed class CobraMissionRuntime
                 ParkedYawRad = _cobra.Observation.YawRad,
             };
         }
+    }
+
+    /// <summary>
+    /// Consumes the first available ramp spare after the old bird is secured. The replacement is
+    /// genuinely cold; starting it remains a later turnaround-authority transition.
+    /// </summary>
+    void TransferAirframeAtFob(in Vec3D positionWorldM)
+    {
+        int spareIndex = _airframePool.FindIndex(
+            slot => slot.State == CobraAirframeState.Ready);
         if (spareIndex < 0)
-        {
-            Status = CobraMissionStatus.FobCombatIneffective;
-            return;
-        }
+            throw new InvalidOperationException("Turnaround requested a missing spare airframe.");
+
+        SecureCurrentAirframe(positionWorldM, spareIndex);
         CobraAirframeSlot spare = _airframePool[spareIndex];
         _cobra = new Ah1gCobraDynamics(
             vehicleId: "cobra-canyon.player",
@@ -989,7 +1096,9 @@ public sealed class CobraMissionRuntime
             spare.ParkedYawRad,
             _recurringBaseMassKg,
             _additivePayloadMassKg,
-            Ah1gCobraDefinition.LateProduction);
+            Ah1gCobraDefinition.LateProduction,
+            Ah1gCobraInitialPowerplantState.Cold);
+        _threatFire.ResetForFreshAirframe();
         _airframePool[spareIndex] = spare with { State = CobraAirframeState.PlayerFlying };
         _airframeSwaps++;
     }
@@ -1031,6 +1140,7 @@ public sealed class CobraMissionRuntime
             _collisionObstacleId,
             guidance,
             _cachedMaskingAssessment,
+            _threatFire.State,
             _maskingAssessmentAuthorityTicks,
             CobraCanyonDefinition.FidelityDisclosure);
     }

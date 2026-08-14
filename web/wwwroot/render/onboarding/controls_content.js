@@ -2,8 +2,9 @@
  * Per-mode onboarding content for the shared first-run controls overlay.
  *
  * One shared implementation (first_run_controls.js), per-mode data here — never forked DOM.
- * Grouping doctrine: FLY (or RIDE) first, FIGHT second, SYSTEM last; a brand-new player must
- * know what to press in the first ten seconds. Touch variants are honest: these mission pages
+ * Grouping doctrine: a compact MISSION truth can precede FLY when the rules are not inferable;
+ * otherwise FLY (or RIDE) comes first, FIGHT second, SYSTEM last. A brand-new player must know
+ * both why and what to press in the first ten seconds. Touch variants are honest: these pages
  * have no touch control surface today, so the glass says keyboard/gamepad instead of pretending
  * W is a button (touch-control-layout doctrine: never lie about the control surface).
  *
@@ -16,6 +17,15 @@ export const COBRA_ONBOARDING_CONTENT = Object.freeze({
   modeId: "cobra-hold-the-bridge",
   title: "AH-1G · HOLD THE BRIDGE",
   desktop: Object.freeze([
+    Object.freeze({
+      label: "MISSION",
+      rows: Object.freeze([
+        Object.freeze(["BREAK", "Kill the garrison and clear the point"]),
+        Object.freeze(["COVER", "Protect the inbound squad while it captures"]),
+        Object.freeze(["HOLD", "A point majority drains enemy tickets"]),
+        Object.freeze(["M · MAP", "Score and captures — the fight keeps running"]),
+      ]),
+    }),
     Object.freeze({
       label: "FLY",
       rows: Object.freeze([
@@ -30,12 +40,12 @@ export const COBRA_ONBOARDING_CONTENT = Object.freeze({
         Object.freeze(["Tab", "Cycle hostile target"]),
         Object.freeze(["V", "Padlock on / off the selected mark"]),
         Object.freeze(["hold F", "Gunner engages the cued target"]),
-        Object.freeze(["M", "Full tactical map — the fight keeps running"]),
       ]),
     }),
     Object.freeze({
       label: "SYSTEM",
       rows: Object.freeze([
+        Object.freeze(["E", "Shut down a damaged bird · start the spare"]),
         Object.freeze(["R", "Restart after the debrief"]),
         Object.freeze(["Esc", "Leave the sortie · back to the menu"]),
         Object.freeze(["Gamepad", "Sticks fly · trigger consents the gunner"]),

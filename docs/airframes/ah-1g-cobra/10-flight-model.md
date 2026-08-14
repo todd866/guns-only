@@ -154,7 +154,9 @@ The model must not be described as a finished high-fidelity Cobra because it doe
 - source-derived 6-DOF hub/component moments using the pinned inertia tensor;
 - horizontal tail/fin schedules, stores, asymmetric mass/drag, fuel/CG changes;
 - distributed terrain/wake, slopes, vegetation/water ground effect, rotor/obstacle collision;
-- component damage, fuel, temperature, gearbox/oil systems, engine start/manual governor;
+- source-derived component vulnerability, fuel, temperature and gearbox/oil systems; Build 326
+  has only provisional SCAS/engine burst failures plus an assisted ground stop/start, not a full
+  engine-start or manual-governor model;
 - an articulated finite-ammunition AH-1G turret, ground targets, AI, mission, HUD, art or audio.
 
 Yaw rate from main-rotor torque uses NASA CR-3144 limited-authority SCAS only (±12.5%, 0.05 s).
@@ -185,6 +187,14 @@ blade-resolved loading, or physical tail-rotor BEMT. Unit tests keep still air u
 The linearized gust derivative carries one physical tip-speed term plus live disk loading. An extra
 `Nr²` multiplier was removed because it made full-collective rotor droop suppress the same spatial
 gradient approximately with `Nr³`.
+
+Build 326's Camp Ember turnaround keeps dynamics ownership but compresses switchology. A damaged
+aircraft must settle on the pad with collective down; the mission requests cockpit shutdown, then
+observes live shaft power and Nr before transferring a cold spare. Starting re-enables the ordinary
+engine/governor path from zero power and zero rotor speed, while controls and weapons remain locked
+until Nr is stable. The interaction holds, 3.2 s grounded rundown fit, 50 rpm handoff and 294 rpm
+release threshold are explicitly provisional gameplay closures listed in `00-sources.md`; none is
+presented as measured AH-1G procedure timing.
 
 ## Validation matrix
 

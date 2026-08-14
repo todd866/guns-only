@@ -44,7 +44,7 @@ test("one catalog names every route and exposes only accepted production experie
     { id: "medevac-command", mission: null, releaseState: "quarantined" },
     { id: "cobra-lab", mission: null, releaseState: "production" },
     { id: "weekend-ride", mission: null, releaseState: "production" },
-    { id: "top-gun", mission: null, releaseState: "preview" },
+    { id: "top-gun", mission: null, releaseState: "production" },
   ]);
 
   assert.deepEqual(productionExperiences().map(({ id }) => id), [
@@ -52,11 +52,12 @@ test("one catalog names every route and exposes only accepted production experie
     "rapier-intercept",
     "cobra-lab",
     "weekend-ride",
+    "top-gun",
   ]);
-  // Top Gun stays gated until it actually launches. The blocker must name the measured defect
-  // rather than an outstanding ceremony, so nobody promotes it again on a sign-off alone.
-  assert.equal(experienceLaunchable("top-gun"), false);
-  assert.match(experienceById("top-gun").blocker, /terrain warmup|autoLaunchPending/i);
+  // The corrected string-selector launch path was explicitly promoted for Build 326. Production
+  // launchability is catalog authority; it must not depend on the retired preview query gate.
+  assert.equal(experienceLaunchable("top-gun"), true);
+  assert.equal(experienceById("top-gun").blocker, "");
   // It must NOT carry a standalone route: there is no /top-gun/ page, and defaulting one makes
   // the launch button navigate to a 404 the moment the gate opens.
   assert.equal(experienceById("top-gun").route, null);
@@ -64,6 +65,12 @@ test("one catalog names every route and exposes only accepted production experie
   assert.match(experienceById("multiplayer").blocker, /matchmaking.*player path/i);
   assert.equal(experienceLaunchable("weekend-ride"), true);
   assert.equal(experienceComingSoon("weekend-ride"), false);
+  const cobra = experienceById("cobra-lab");
+  assert.match(cobra.shortObjective, /garrison/i);
+  assert.match(cobra.shortObjective, /capture/i);
+  assert.match(cobra.shortObjective, /tickets/i);
+  assert.doesNotMatch(cobra.shortObjective, /45 seconds|tip .* control/i,
+    "the front door must brief the live conquest objective, not the retired control threshold");
   assert.equal(CAMPAIGN_NODES.length, 7,
     "standalone research routes are not campaign beats");
 

@@ -216,8 +216,10 @@ public sealed class CobraCanyonDefinition
     public const double DefaultStartAglM = 42.0;
     public const string FidelityDisclosure =
         "Authored renderer-neutral low-level navigation world with deterministic analytic terrain, "
-        + "collision volumes and observer masking. It does not model surveyed geography, weapons, "
-        + "threat fire, battle damage, AI behavior, cockpit presentation or visual asset quality.";
+        + "collision volumes and observer masking. Legacy observers are provisionally treated as "
+        + "DShK emplacements with deterministic warned bursts, travel, SCAS-out and engine-out "
+        + "effects. It does not model surveyed geography, sourced weapon ballistics, sourced AH-1G "
+        + "vulnerability, broader threat AI, cockpit presentation or visual asset quality.";
 
     readonly IReadOnlyList<CobraCanyonRouteDefinition> _routes;
     readonly IReadOnlyList<CobraCanyonLandmarkDefinition> _landmarks;

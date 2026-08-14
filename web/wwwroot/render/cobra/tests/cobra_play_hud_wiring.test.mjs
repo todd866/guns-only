@@ -28,6 +28,26 @@ test("Hold the Bridge play HUD is the production F-22 combiner", async () => {
   assert.match(css, /body\[data-shell="play"\] \.legend \{[\s\S]*?display: none/);
 });
 
+test("Cobra damage stays in the production warning lane without mounting systems chrome", async () => {
+  const [adapter, readouts, hud] = await Promise.all([
+    source("render/cobra/cobra_hud_adapter.js"),
+    source("render/hud/hud_readouts.js"),
+    source("hud.js"),
+  ]);
+  assert.match(adapter, /out\.suppress_systems_panel = true/,
+    "the Cobra adapter must declare warning-only systems presentation");
+  assert.match(readouts, /panelSuppressed: state\.suppress_systems_panel === true/,
+    "the shared readout must preserve panel suppression alongside its warnings");
+  const drawSystemsPanel = hud.match(
+    /drawSystemsPanel\(systems, state = null\) \{[\s\S]*?\n  \}/,
+  )?.[0] ?? "";
+  assert.match(drawSystemsPanel, /systems\.panelSuppressed/,
+    "production hud.js must skip the generic panel while drawWarnings still consumes warnings");
+  assert.match(hud,
+    /this\.drawWarnings\(frame, systems\);[\s\S]*?this\.drawSystemsPanel\(systems, frame\.state\)/,
+    "panel suppression must not bypass the production warning-lane draw");
+});
+
 test("the airframe silhouette follows the camera mode from a single call site", async () => {
   const main = await source("cobra-lab/main.js");
   // Build 264 defect: the mode was set from inside the manual and tour branches, and a

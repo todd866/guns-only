@@ -35,8 +35,11 @@ The existing action IDs remain stable:
 
 W/S must move blade collective pitch. It must not directly command thrust, vertical velocity or
 climb rate. In normal operation the twist grip is full open; the mechanical droop compensator and
-N2 governor schedule fuel to hold rotor speed. Engine start/stop, governor emergency/manual mode,
-and RPM trim belong to secondary controls later.
+N2 governor schedule fuel to hold rotor speed. Build 326 adds only a compressed, authority-owned
+ground turnaround: cockpit cutoff, real shaft/Nr rundown, a genuinely cold spare and an assisted
+restart through the ordinary governor energy model. It is not a literal checklist or a sourced
+start/coast timing model. Governor emergency/manual mode, RPM trim and full secondary controls
+remain later work.
 
 ## Fidelity statement
 

@@ -67,6 +67,18 @@ test("act overlays cover the Ember Run spine", () => {
   assert.match(emberActObjectiveOverlay("rtb").line, /RTB/);
 });
 
+test("engage and hold overlays explain the conquest that authority actually runs", () => {
+  const engage = emberActObjectiveOverlay("engage");
+  const hold = emberActObjectiveOverlay("hold");
+  assert.match(engage.line, /BREAK HOSTILE POINTS/);
+  assert.match(engage.detail, /garrison.*clear.*friendly lift/i);
+  assert.match(hold.line, /POINT MAJORITY/);
+  assert.match(hold.detail, /tickets bleed/i);
+  assert.doesNotMatch(`${engage.line} ${engage.detail} ${hold.line} ${hold.detail}`,
+    /tip control|hold 45/i,
+    "mission copy may not teach the retired hidden-control rule");
+});
+
 test("ingress and rtb overlays include remaining distance when known", () => {
   assert.match(
     emberActObjectiveOverlay("ingress", { remainingM: 4200 }).line,

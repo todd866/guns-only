@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import {
   COBRA_TELEMETRY_BATCH_BYTE_LIMIT,
   COBRA_TELEMETRY_BUFFER_ROW_LIMIT,
@@ -178,4 +179,52 @@ test("an empty channel never posts", async () => {
   await channel.flush();
   await channel.flush({ pagehide: true });
   assert.equal(calls.length, 0);
+});
+
+test("uploaded Cobra state rows preserve ground-fire and subsystem evidence", async () => {
+  const main = await readFile(new URL("../../../cobra-lab/main.js", import.meta.url), "utf8");
+  const recordTelemetry = main.match(/function recordTelemetry\(nowMs\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+
+  assert.match(recordTelemetry, /const battleDamage = authorityState\.battle_damage/);
+  assert.match(recordTelemetry, /latestThreatBurst/);
+  for (const field of [
+    "cobra_ground_fire_active_observer_id",
+    "cobra_ground_fire_acquisition_progress",
+    "cobra_ground_fire_tracking_observers",
+    "cobra_ground_fire_threat_tracking",
+    "cobra_ground_fire_receiving_fire",
+    "cobra_ground_fire_bursts_fired",
+    "cobra_ground_fire_pending_bursts",
+    "cobra_ground_fire_damaging_hits",
+    "cobra_ground_fire_seconds_to_next_impact",
+    "cobra_ground_fire_scas_damaged",
+    "cobra_ground_fire_engine_damaged",
+    "cobra_ground_fire_last_burst_sequence",
+    "cobra_ground_fire_last_burst_observer_id",
+    "cobra_ground_fire_last_burst_will_hit",
+    "cobra_ground_fire_last_burst_subsystem",
+    "cobra_ground_fire_last_burst_has_impacted",
+  ]) {
+    assert.match(recordTelemetry, new RegExp(`\\b${field}\\s*:`), `missing ${field}`);
+  }
+});
+
+test("uploaded Cobra state rows preserve the complete ramp-turnaround sequence", async () => {
+  const main = await readFile(new URL("../../../cobra-lab/main.js", import.meta.url), "utf8");
+  const recordTelemetry = main.match(/function recordTelemetry\(nowMs\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+
+  assert.match(recordTelemetry, /const turnaround = authorityState\.turnaround/);
+  for (const field of [
+    "cobra_turnaround_phase",
+    "cobra_turnaround_sequence",
+    "cobra_turnaround_action",
+    "cobra_turnaround_hold_progress",
+    "cobra_turnaround_flight_controls_enabled",
+    "cobra_turnaround_weapons_enabled",
+    "cobra_engine_operating",
+    "cobra_engine_shaft_power_w",
+    "cobra_engine_shaft_power_fraction",
+  ]) {
+    assert.match(recordTelemetry, new RegExp(`\\b${field}\\s*:`), `missing ${field}`);
+  }
 });

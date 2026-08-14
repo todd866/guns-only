@@ -1,23 +1,28 @@
 # Current product and verification status
 
-Updated: 2026-08-13
-Production: Build 323, revision `7caf763dbf2e12eb2420852ec39eb19ca261645e` (verified live via
-/api/build-info 2026-08-13, with remote route smokes on all four routes). Builds 312 (Cobra
+Updated: 2026-08-14
+Production: Build 325, revision `492f7a3239f51f79400c9e2ed3261206611f1bd0` (verified live via
+/api/build-info 2026-08-14, with the protected release pipeline complete). Builds 312 (Cobra
 contact envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap
 timing), 318 (authored structure materials), 320 (Top Gun 404 + cockpit depth near-plane), 321
 (Camp Ember depth recess), 322 (Cobra scenery pass) and 323 (the Cobra conquest mission: owned
 capture points, dug-in garrisons, tickets, minimap and full tactical map) shipped in sequence.
-Builds
+Build 325 (Cobra owner-flight scenery, navigation and gun-aid corrections) also shipped. Builds
 253-298 shipped without this ledger always being updated in lock-step; treat per-build claims in
 that range with care.
 Promoted with Build 311 and still live: Builds 308 (consolidation: bounded long-range terrain marches,
 Auto-GCAS reductions, flyby acoustics, tiered cast shadows, frame attribution), 309 (Top Gun ACM
 preview) and 310 (rated-arena Multiplayer preview) went live as part of the Build 311
-promotion. Top Gun and Multiplayer remain preview-only and fail closed unless `?preview=1` is
-explicitly acknowledged; their promotion to production routes still requires representative
-human ACM and multiplayer player-path acceptance.
-Next candidate: Build 325 (branch `feature/cobra-conquest`) — the conquest mission from Build
-323 plus five owner findings from flying it.
+promotion. Multiplayer remains preview-only and fails closed unless `?preview=1` is explicitly
+acknowledged. Top Gun is promoted in the Build 326 candidate by explicit owner direction after
+the corrected programme-selector launch path passed focused authority/browser checks; no post-fix
+human ACM flight is claimed.
+Next candidate: Build 326 (branch `fix/cobra-ready-sky`) — Cobra first-use/grounded-start safety,
+provisional warned ground fire and subsystem damage, mission-legibility and cold-spare turnaround,
+procedural AH-1G audio, the upper-sky seam removal and target-designation graphics; plus the Top Gun
+terrain-owner launch repair and owner-directed production promotion.
+
+Build 325 shipped the following owner-flight findings and remains the baseline for this candidate.
 
 **The red line, finally identified.** Reported at least three times and never diagnosed; a prior
 pass recoloured the road material and cited the complaint in a comment, which made the artifact
@@ -78,9 +83,9 @@ Each now has its own band, pinned by a test that walks every role against the ki
 Mist and water accents were untextured MeshBasicMaterial quads at 0.42 opacity, double-sided —
 every card a hard-edged translucent grey slab. They now carry a radial falloff ramp.
 
-**Open, and NOT fixed:** a grey rectangle artifact remains visible in the upper field of view. It
-was hypothesised to be a mist card; that hypothesis was wrong (the mist defect above was real and
-separate) and the object is still unidentified. Also, at altitudes well above the mission band the
+**Build 326 correction:** the upper-field grey rectangle was the painted-cumulus shader's
+non-periodic `atan` branch cut, not a mist card. The divergent cloud block is removed and the
+canonical smooth cool sky remains. At altitudes well above the mission band the
 valley sheds to bare ground via the pre-existing AGL shed — previously invisible because the scatter
 was sparse everywhere. And the vegetation is one repeated silhouette, so it reads as conifers
 rather than tropical jungle; density is fixed, variety is not.
@@ -121,9 +126,9 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | F9F-2 Panther off Essex (`korea-panther`) | **quarantined** | Preview acknowledgement only | Build 238 ownship-only kernel flies the production terrain catapult/route/return/groove to a physical W2 trap (100/100 focused); packaged route, touch-RTB, HUD, and barrier contracts passed silent-browser acceptance | Complete representative human desktop/touch flights and historical/presentation acceptance before any promotion |
 | MIDGE-03 Facility Nine (`indoor`) | **quarantined** | `/indoor/` preview acknowledgement | Candidate UI now enforces doctrine-safe controls and blocks premature return | Re-drive the default stealth route and representative touch/keyboard paths |
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
-| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned ground war, tip/hold win/lose, M134 + Camp Ember rearm, Tab/F gunner. Build 301: land spur Camp Ember FOB, airborne soft gates, denser Iron Bell destroyables. Build 306: limited SCAS only. Build 307: stronger hover TQ residual, cruise weathervane, terrain wind + yaw/wind telem. Build 308 candidate adds tier-bounded cast shadows and real terrain shadow receivers. Build 311: body-aligned HUD eye + heading-relative hover cue, collective hub moment + split torque yaw + loaded gust response, flattened rendered spawn apron + 74-part authored Camp Ember firebase. Build 312: contact envelope with gear-damage/rollover/spin/water tiers, cause cards, touchdown telemetry, autorotation audit. Build 313: FSB-read Camp Ember (dossier-derived), three ramp Cobras + bird swap, FOB INEFFECTIVE terminal, flicker probe + decal bias. Build 322: scenery pass (palm material/scale, tracks-to-nowhere removed). Build 323 candidate makes it a conquest game: four owned capture points, dug-in garrisons only the turret can break, tickets replacing the hidden control threshold, an always-on north-up minimap and a full corridor map on M with the objective as its caption | Owner flight is the gate on both the conquest loop and the Camp Ember flicker. Known open: frame pacing at Camp Ember measured p95 33.3 ms / max 50 ms on Build 321 production telemetry, unexplained. Longer arc: DCS-BS1-grade flight dynamics |
+| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned four-point conquest, dug-in garrisons, tickets, M134 + Camp Ember rearm, Tab/F gunner, north-up minimap/full map and golden path. Build 325 records the accepted conquest/scenery/navigation pass. Build 326 candidate adds a per-sortie Ready edge, grounded collective and exact swap latch; warned DShK bursts with live-position impact causality, SCAS/engine damage and HUD/tracer evidence; shared mission/map target resolution; cold shutdown/transfer/start authority with live Nr gates and procedural AH-1G audio; upper-sky seam removal and a lifted target-designation beacon. | Owner explicitly directed Build 326 production shipping. Known open: frame pacing at Camp Ember measured p95 33.3 ms / max 50 ms on Build 321 telemetry. Ground-fire lethality and turnaround timing are provisional gameplay closures, not production-combat fidelity. Longer arc: DCS-BS1-grade flight dynamics. |
 | Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load, lappable circuit from Build 264+. Build 267 adds ride telemetry (speed/gear/lean/lap/frame). Build 308 adds tiered shadows, sky-derived IBL, and horizon/far-plane corrections. Build 315 candidate makes it a game: lap/last/best on the helmet HUD, four sector splits, a live delta to your best, an off-track lap refused as a record, and a best that persists across sessions | Owner ride on Build 315: is beating your own best worth trying for? Ghost bike deliberately cut from v1 |
-| Top Gun (`top-gun`) | **preview** | Preview acknowledgement only | Build 309 candidate automation, carried unchanged into Build 310: Tomcat AIM-9 path, MiG-28 boot, gun firing, R fox-two browser bind, coarse Tomcat wing-sweep span | Complete green release gate and representative human ACM acceptance flight |
+| Top Gun (`top-gun`) | **production** | Aircraft picker / main shell | Build 309 automation covers Tomcat AIM-9, MiG-28 boot, gun fire, R fox-two and coarse wing sweep. Build 326 repairs the string programme-selector terrain owner that parked launch in `autoLaunchPending`; selector + mission definition + spawn generation now own completion/retry. Owner explicitly directed promotion on 2026-08-14 after 108 focused launch/authority checks; no post-fix human ACM flight is claimed. | Owner ruling: deploy first, then fly the exact public artifact. Fresh human ACM and telemetry review are the immediate post-deploy acceptance checks, not pre-deploy gates. |
 
 ## Research-only packages
 
@@ -133,7 +138,8 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Live production is Build 313, shipped from PR #63 with both CI contexts green. Local gate
+- Live production is Build 325, revision `492f7a3239f51f79400c9e2ed3261206611f1bd0`, shipped from
+  PR #70 with both required Verify contexts green. Local gate
   runs on a loaded workstation produce false browser-smoke timeouts (2026-08-12: four smokes
   timed out under an unrelated 200%+ CPU load and all passed in isolation and on CI); CI on
   clean runners is the authoritative check.

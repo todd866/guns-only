@@ -602,8 +602,20 @@ export function systemsReadout(state = {}) {
   const hydraulicAvailable = hasUtilityHydraulics && utilityHydraulicPressurePsi !== null;
 
   const warnings = [];
-  if (engineAvailable && engineRunning === false) {
-    warnings.push({ text: "ENGINE FLAMEOUT", level: "warning" });
+  if (engineAvailable && engineRunning === false && state.cobra_turnaround_active !== true) {
+    warnings.push({
+      text: state.cobra_engine_damaged === true ? "ENGINE OUT" : "ENGINE FLAMEOUT",
+      level: "warning",
+    });
+  }
+  // Cobra battle damage feeds the production annunciation lane rather than mounting a second
+  // rotorcraft panel. Only authority-confirmed fire/failures appear here; acquisition and future
+  // hit predictions remain intentionally absent from the player-facing state.
+  if (state.cobra_scas_damaged === true) {
+    warnings.push({ text: "SCAS OUT", level: "caution" });
+  }
+  if (state.cobra_receiving_ground_fire === true) {
+    warnings.push({ text: "GROUND FIRE", level: "caution" });
   }
   if (rapierPropulsion && inletRecovery !== null && inletRecovery < 0.65) {
     warnings.push({ text: "INLET DISTORTION", level: "warning" });
@@ -658,6 +670,7 @@ export function systemsReadout(state = {}) {
   return {
     available: gearAvailable || flapAvailable || engineAvailable || electricalAvailable || hydraulicAvailable,
     relevant,
+    panelSuppressed: state.suppress_systems_panel === true,
     gearAvailable,
     gearHandle,
     gear,

@@ -9,7 +9,8 @@ namespace GunsOnly.Sim.Cobra.GroundWar;
 /// </summary>
 public sealed class CobraGroundWarRuntime
 {
-    public const int MaxLivingUnits = 36;
+    // Thirty-six moving/capturing combatants plus the three authored, killable DShK sites.
+    public const int MaxLivingUnits = 39;
     // Provisional balance, not sourced doctrine: the ground war must NEED the Cobra. Hostile
     // assault waves land on a fixed cadence and the friendly garrison gets no automatic
     // reinforcements, so without effective fire support the basin tips hostile and the mission
@@ -168,6 +169,7 @@ public sealed class CobraGroundWarRuntime
             maxClearanceM: 9.0);
         _reinforceAccumulatorSeconds = HostileWaveIntervalSeconds - FirstHostileWaveDelaySeconds;
         SeedInitialForces();
+        SeedAirThreatSites(definition);
     }
 
     public IReadOnlyList<ContestedSite> Sites => _sites;
@@ -389,11 +391,13 @@ public sealed class CobraGroundWarRuntime
         double smallArmsChance = Math.Min(1.0, SmallArmsEventsPerSecond * dtSeconds);
         for (int attackerIndex = 0; attackerIndex < living.Count; attackerIndex++) {
             GroundUnit attacker = living[attackerIndex];
+            if (!attacker.ParticipatesInGroundCombat) continue;
             int victimIndex = -1;
             double bestRangeSq = attacker.EngagementRangeM * attacker.EngagementRangeM;
             for (int candidateIndex = 0; candidateIndex < living.Count; candidateIndex++) {
                 GroundUnit candidate = living[candidateIndex];
                 if (candidate.Faction == attacker.Faction) continue;
+                if (!candidate.ParticipatesInGroundCombat) continue;
                 double rangeSq = HorizontalDistanceSquared(
                     attacker.PositionWorldM, candidate.PositionWorldM);
                 if (rangeSq > bestRangeSq) continue;
@@ -460,6 +464,7 @@ public sealed class CobraGroundWarRuntime
         double best = double.PositiveInfinity;
         foreach (GroundUnit candidate in living) {
             if (candidate.Faction == unit.Faction) continue;
+            if (!candidate.ParticipatesInGroundCombat) continue;
             double rangeSq = HorizontalDistanceSquared(unit.PositionWorldM, candidate.PositionWorldM);
             if (rangeSq >= best) continue;
             best = rangeSq;
@@ -500,6 +505,7 @@ public sealed class CobraGroundWarRuntime
             double friendly = 0.0;
             double hostile = 0.0;
             foreach (GroundUnit unit in living) {
+                if (!unit.ParticipatesInGroundCombat) continue;
                 if (HorizontalDistanceSquared(unit.PositionWorldM, site.PositionWorldM)
                     > site.CaptureRadiusM * site.CaptureRadiusM)
                     continue;
@@ -533,6 +539,7 @@ public sealed class CobraGroundWarRuntime
                 friendly = 0;
                 hostile = 0;
                 foreach (GroundUnit unit in living) {
+                    if (!unit.ParticipatesInGroundCombat) continue;
                     if (HorizontalDistanceSquared(unit.PositionWorldM, site.PositionWorldM)
                         > site.CaptureRadiusM * site.CaptureRadiusM)
                         continue;
@@ -602,6 +609,7 @@ public sealed class CobraGroundWarRuntime
         double hostile = 0.0;
         foreach (GroundUnit unit in _units) {
             if (!unit.IsAlive) continue;
+            if (!unit.ParticipatesInGroundCombat) continue;
             if (unit.Faction == GroundFaction.Friendly) friendly += unit.CombatPower;
             else hostile += unit.CombatPower;
         }
@@ -643,6 +651,7 @@ public sealed class CobraGroundWarRuntime
             double radiusSq = site.CaptureRadiusM * site.CaptureRadiusM;
             foreach (GroundUnit unit in _units) {
                 if (!unit.IsAlive) continue;
+                if (!unit.ParticipatesInGroundCombat) continue;
                 if (HorizontalDistanceSquared(unit.PositionWorldM, site.PositionWorldM) > radiusSq)
                     continue;
                 if (unit.Faction == GroundFaction.Friendly) friendlyPresent = true;
@@ -806,6 +815,39 @@ public sealed class CobraGroundWarRuntime
     }
 
     /// <summary>
+    /// Turns each authored masking observer into a real, selectable battlefield gun. Observer
+    /// IDs stay identical across line-of-sight, firing evidence and ground-war selection, so a
+    /// player kill immediately suppresses that source without browser-side inference. These
+    /// emplacements are fortified against mutual ground combat but remain vulnerable to
+    /// ApplyAuthorizedFire.
+    /// </summary>
+    void SeedAirThreatSites(CobraCanyonDefinition definition)
+    {
+        foreach (CobraCanyonThreatObserverDefinition observer in definition.ThreatObservers) {
+            if (!_terrain.TrySample(observer.EastM, observer.NorthM, out TerrainSample surface))
+                throw new InvalidOperationException(
+                    $"Air-threat site '{observer.Id}' has no terrain datum.");
+            Vec3D positionWorldM = new(
+                observer.EastM,
+                surface.HeightM + observer.ObserverHeightAglM,
+                observer.NorthM);
+            ContestedSite home = _sites
+                .OrderBy(site => HorizontalDistanceSquared(site.PositionWorldM, positionWorldM))
+                .First();
+            _units.Add(new GroundUnit(
+                observer.Id,
+                GroundFaction.Hostile,
+                GroundUnitRole.DshkSite,
+                maxHealth: 105.0,
+                positionWorldM,
+                GroundUnitIntent.Hold,
+                home.Id,
+                fortified: true));
+            PushEvent("spawn", observer.Id, home.Id, GroundFaction.Hostile, positionWorldM);
+        }
+    }
+
+    /// <summary>
     /// SpawnUnit rings use math bearing (east = cos θ, north = sin θ). Aircraft yaw uses
     /// aviation heading (east = sin ψ, north = cos ψ). Convert so approach-relative seeds
     /// land on the nose of a spawn looking ψ.
@@ -907,9 +949,14 @@ public sealed class CobraGroundWarRuntime
             GroundUnitRole.InfantryClump => 40.0,
             GroundUnitRole.SoftVehicle => 90.0,
             GroundUnitRole.HardPoint => 140.0,
+            GroundUnitRole.DshkSite => 105.0,
             _ => 40.0
         };
-        double heightOffset = role == GroundUnitRole.SoftVehicle ? 1.2 : 0.4;
+        double heightOffset = role switch {
+            GroundUnitRole.SoftVehicle => 1.2,
+            GroundUnitRole.DshkSite => 1.0,
+            _ => 0.4,
+        };
         string id = unitId
             ?? $"ground.{faction.ToString().ToLowerInvariant()}.{role.ToString().ToLowerInvariant()}.{_nextUnitSerial++:D3}";
         var unit = new GroundUnit(

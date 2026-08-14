@@ -235,11 +235,11 @@ test("catalogue selection stages fresh Medevac authority without auto-departure"
   );
   assert.match(
     source,
-    /generation: \+\+terrainLaunchWarmupGeneration,[\s\S]*missionIdentity,[\s\S]*terrainLaunchWarmupOwner = owner/,
+    /generation: \+\+terrainLaunchWarmupGeneration,[\s\S]*missionSelector,[\s\S]*missionIdentity,[\s\S]*terrainLaunchWarmupOwner = owner/,
   );
   assert.match(
     source,
-    /terrainLaunchWarmupOwner !== owner[\s\S]*ownsCurrentMission[\s\S]*owner\.missionIdentity/,
+    /terrainLaunchWarmupOwner !== owner[\s\S]*ownsCurrentMission = terrainLaunchOwnerMatches\([\s\S]*owner,[\s\S]*selectedTerrainMissionSelector\(\),[\s\S]*latestState/,
   );
 });
 

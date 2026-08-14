@@ -8,7 +8,7 @@ async function source(path) {
   return readFile(new URL(path, root), "utf8");
 }
 
-test("the sim advances by real elapsed time; the only cap is the bridge's 0.1 s spiral brake", async () => {
+test("an armed sortie advances by real elapsed time; the only cap is the bridge's 0.1 s spiral brake", async () => {
   const main = await source("cobra-lab/main.js");
   assert.match(main, /SIM_MAX_FRAME_ADVANCE_SECONDS = 0\.1/);
   assert.match(main, /rawDeltaMs \/ 1_000, SIM_MAX_FRAME_ADVANCE_SECONDS/);
@@ -22,8 +22,13 @@ test("authority JSON is sampled at HUD rate while the camera reads the per-frame
   assert.match(main, /sampleAuthorityState/);
   assert.match(main, /GetHotPose/);
   assert.match(main, /copyTo/);
-  // Advance still runs every rendered frame in both manual and tour paths.
-  assert.match(main, /bridge\.Advance\(deltaSeconds\)/);
+  // Every rendered frame still reaches the authority path, but only through the per-sortie Ready
+  // interlock. Manual, parked-review, and tour code may not grow an unguarded bypass.
+  const guardedAdvances = main.match(
+    /sortieReadiness\.advance\(deltaSeconds, \(step\) => bridge\.Advance\(step\)\)/g,
+  ) ?? [];
+  assert.equal(guardedAdvances.length, 3);
+  assert.doesNotMatch(main, /bridge\.Advance\(deltaSeconds\)/);
 });
 
 test("authentic pilot input never feeds aircraft attitude back as a hidden hold", async () => {

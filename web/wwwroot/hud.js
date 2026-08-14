@@ -3486,7 +3486,9 @@ class CombatHud {
   }
 
   drawSystemsPanel(systems, state = null) {
-    if (!systems?.available || !systems.relevant) return;
+    // Warning-only consumers (currently Cobra) still feed drawWarnings from this same readout,
+    // but must not wake the fixed-wing gear/flap/hydraulic card just because a warning is active.
+    if (!systems?.available || !systems.relevant || systems.panelSuppressed) return;
     // Rapier Intercept: gear/systems chrome only in recovery — warnings still annunciate.
     const phaseHud = hudPhasePresentation(state ?? {});
     if (phaseHud.mission === "rapier_intercept" && !phaseHud.surfaces.systemsGear) return;

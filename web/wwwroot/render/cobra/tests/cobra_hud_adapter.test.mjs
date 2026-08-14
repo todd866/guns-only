@@ -27,6 +27,10 @@ function authorityFixture() {
       rotorcraft: {
         regime: "Normal",
         main_rotor_rpm: 320.8,
+        tail_rotor_rpm: 1_648.4,
+        engine_shaft_power_w: 625_000,
+        available_shaft_power_w: 930_000,
+        engine_shaft_power_fraction: 0.61,
         transmission_torque_nm: 9_800,
         transmission_limit_fraction: 0.87,
         governor_saturated: false,
@@ -42,6 +46,17 @@ function authorityFixture() {
     ground_war: {
       ammo_remaining: 350, ammo_capacity: 750, ammo_bingo: false, ammo_dry: false,
       fob_range_m: 2_150, debrief: { hostile_kills: 3 },
+    },
+    battle_damage: {
+      threat_tracking: false,
+      receiving_fire: false,
+      scas_damaged: false,
+      engine_damaged: false,
+    },
+    turnaround: {
+      phase: "operational",
+      sequence: 0,
+      flight_controls_enabled: true,
     },
   };
 }
@@ -73,7 +88,19 @@ test("cobra snapshot speaks the production hud.js state contract", () => {
   assert.equal(state.throttle, 0.62);
   assert.equal(state.engine_spool_fraction, 0.87);
   assert.equal(state.has_engine, true);
+  assert.equal(state.engine_running, true);
+  assert.equal(state.audio_profile_id, "audio.ah1g.t53-b540.v1");
+  assert.equal(state.cobra_main_rotor_rpm, 320.8);
+  assert.equal(state.cobra_tail_rotor_rpm, 1_648.4);
+  assert.equal(state.cobra_engine_operating, true);
+  assert.equal(state.cobra_engine_power_fraction, 0.61,
+    "the bridge's published shaft-power fraction wins over a recomputed fallback");
+  assert.equal(state.cobra_turnaround_phase, "operational");
+  assert.equal(state.cobra_turnaround_sequence, 0);
+  assert.equal(state.cobra_turnaround_active, false);
   assert.equal(state.has_afterburner, false);
+  assert.equal(state.suppress_systems_panel, true,
+    "Cobra warnings use the centre lane without waking fixed-wing systems chrome");
 
   // The rotorcraft has no indicated chain: the tape must label itself KTAS.
   assert.equal(state.calibrated_airspeed_kts, undefined);
@@ -137,6 +164,58 @@ test("snapshot object is reused across frames without leaking stale fields", () 
   noWar.ground_war = null;
   const third = cobraHudState(noWar, poseFixture, out);
   assert.equal(third.kill_count, 0, "stale kill tally must not survive a missing ground war");
+
+  const damaged = authorityFixture();
+  damaged.vehicle.rotorcraft.engine_operating = false;
+  damaged.battle_damage = {
+    threat_tracking: true,
+    receiving_fire: true,
+    scas_damaged: true,
+    engine_damaged: true,
+  };
+  const fourth = cobraHudState(damaged, poseFixture, out);
+  assert.equal(fourth.has_engine, true, "damage cannot erase installed engine capability");
+  assert.equal(fourth.engine_running, false);
+  assert.equal(fourth.cobra_engine_damaged, true);
+  assert.equal(fourth.cobra_scas_damaged, true);
+  assert.equal(fourth.cobra_receiving_ground_fire, true);
+
+  damaged.turnaround = {
+    phase: "rotor-coast",
+    sequence: 4,
+    flight_controls_enabled: false,
+  };
+  const servicing = cobraHudState(damaged, poseFixture, out);
+  assert.equal(servicing.cobra_turnaround_active, true);
+  assert.equal(servicing.cobra_turnaround_phase, "rotor-coast");
+  assert.equal(servicing.cobra_turnaround_sequence, 4);
+
+  const recovered = authorityFixture();
+  recovered.battle_damage = null;
+  const fifth = cobraHudState(recovered, poseFixture, out);
+  assert.equal(fifth.engine_running, true);
+  assert.equal(fifth.cobra_engine_damaged, false);
+  assert.equal(fifth.cobra_scas_damaged, false);
+  assert.equal(fifth.cobra_receiving_ground_fire, false,
+    "damage warnings must clear on a fresh airframe or missing damage projection");
+  assert.equal(fifth.cobra_turnaround_active, false,
+    "turnaround state must also clear instead of leaking across reused snapshots");
+});
+
+test("observer acquisition stays private until hostile rounds are in flight", () => {
+  const authority = authorityFixture();
+  authority.battle_damage = {
+    threat_tracking: true,
+    acquisition_progress: 0.95,
+    receiving_fire: false,
+    scas_damaged: false,
+    engine_damaged: false,
+  };
+
+  const state = cobraHudState(authority, poseFixture);
+  assert.equal(state.cobra_receiving_ground_fire, false);
+  assert.equal(state.cobra_threat_tracking, undefined);
+  assert.equal(state.cobra_acquisition_progress, undefined);
 });
 
 test("degraded authority states fail visible, not plausible", () => {
