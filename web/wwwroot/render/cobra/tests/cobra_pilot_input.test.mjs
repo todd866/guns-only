@@ -8,9 +8,11 @@ import {
   resolveCobraControlProfile,
 } from "../cobra_control_profile.js";
 import {
+  COBRA_GROUNDED_COLLECTIVE,
   advanceCobraPilotControls,
   cobraCyclicCommand,
   cobraAnalogControlAxes,
+  createCobraGroundedPilotControlState,
   createCobraPilotControlState,
   releaseCobraPilotControls,
 } from "../cobra_pilot_input.js";
@@ -19,6 +21,40 @@ const rates = Object.freeze({
   collectiveFullTravelPerSecond: 0.40,
   cyclicFullTravelPerSecond: 2.5,
   pedalFullTravelPerSecond: 2.5,
+});
+
+test("fresh play controls stay full down until deliberate collective-up input", () => {
+  let state = createCobraGroundedPilotControlState();
+  assert.equal(COBRA_GROUNDED_COLLECTIVE, 0);
+  assert.equal(state.collective, 0);
+  assert.equal(createCobraPilotControlState().collective, 0,
+    "missing-state fallback must be grounded, never a hidden half lever");
+  assert.equal(releaseCobraPilotControls(undefined).collective, 0);
+
+  // Cyclic, pedal, fire and neutral time may start other cockpit activity, but cannot pull the
+  // persistent lever. Model two minutes of frames to pin the indefinite grounded contract.
+  const nonLiftIntents = [
+    cobraKeyboardControlIntent(new Set()),
+    cobraKeyboardControlIntent(new Set(["ArrowUp"])),
+    cobraKeyboardControlIntent(new Set(["KeyD"])),
+    cobraKeyboardControlIntent(new Set(["KeyF"])),
+  ];
+  for (let frame = 0; frame < 1_200; frame += 1) {
+    state = advanceCobraPilotControls(state, {
+      keyboardIntent: nonLiftIntents[frame % nonLiftIntents.length],
+      deltaSeconds: 0.1,
+      ...rates,
+    });
+    assert.equal(state.collective, 0);
+  }
+
+  state = advanceCobraPilotControls(state, {
+    keyboardIntent: cobraKeyboardControlIntent(new Set(["KeyW"])),
+    deltaSeconds: 0.1,
+    ...rates,
+  });
+  assert.ok(state.collective > 0,
+    "the first deliberate collective-up frame must move the lever off its down stop");
 });
 
 test("digital cyclic and pedals slew toward demand instead of slamming full deflection", () => {

@@ -98,10 +98,16 @@ test("content selection returns the touch variant only for touch", () => {
   }
 });
 
-test("cobra desktop content teaches the whole ship in grouped clusters", () => {
+test("cobra desktop content teaches the mission loop before the controls", () => {
   const { groups } = selectControlsContent(COBRA_ONBOARDING_CONTENT, { touch: false });
   const labels = groups.map((group) => group.label);
-  assert.deepEqual(labels, ["FLY", "FIGHT", "SYSTEM"]);
+  assert.deepEqual(labels, ["MISSION", "FLY", "FIGHT", "SYSTEM"]);
+  assert.deepEqual(groups[0].rows, [
+    ["BREAK", "Kill the garrison and clear the point"],
+    ["COVER", "Protect the inbound squad while it captures"],
+    ["HOLD", "A point majority drains enemy tickets"],
+    ["M · MAP", "Score and captures — the fight keeps running"],
+  ]);
   const flat = groups.flatMap((group) => group.rows.map((row) => row.join(" "))).join("\n");
   // W collective up is the owner-ruled game convention (Build 264+).
   assert.match(flat, /W \/ S/);
@@ -110,6 +116,7 @@ test("cobra desktop content teaches the whole ship in grouped clusters", () => {
   assert.match(flat, /[Pp]edals/);
   assert.match(flat, /Tab/);
   assert.match(flat, /F/);
+  assert.match(flat, /E Shut down a damaged bird · start the spare/);
 });
 
 test("weekend ride desktop content covers ride, gearbox and system", () => {

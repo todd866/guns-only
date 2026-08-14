@@ -36,11 +36,11 @@ for (const viewport of ["desktop", "portrait"]) {
     });
   });
 
-  test(`${viewport}: acknowledged preview can stage Top Gun but leaving it forces production restage`, () => {
+  test(`${viewport}: production Top Gun can stage but leaving it forces ordinary mission restage`, () => {
     const resolved = resolveInitialProgramSelection({
       requestedProgramNode: topGun,
       requestedExperience: topGun,
-      requestedAccess: { allowed: true, preview: true },
+      requestedAccess: { allowed: true, preview: false },
       defaultProgramNode: firstMerge,
     });
     assert.equal(resolved.selectedProgramNode, topGun);

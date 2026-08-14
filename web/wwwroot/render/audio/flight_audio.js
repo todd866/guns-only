@@ -9,6 +9,10 @@ import {
   replaceJetSampleBeds,
   updateEngineVoices,
 } from "./engine_audio.js";
+import {
+  createCobraAudioVoices,
+  updateCobraAudioVoices,
+} from "./cobra_audio.js";
 import { resolvePropulsionCharacter } from "./audio_character.js";
 import { standardAtmosphereState } from "./atmosphere_audio.js";
 import {
@@ -32,6 +36,7 @@ let context = null;
 let master = null;
 let bus = null;
 let engineVoices = null;
+let cobraVoices = null;
 let eventVoices = null;
 let contactVoices = null;
 let formationContactVoices = [];
@@ -780,6 +785,20 @@ function isFlightAudioEnabledLocal() {
   return enabled;
 }
 
+/** Pure mutual-exclusion plan for the two ownship propulsion graphs. */
+export function flightPropulsionGraphGates(state, live) {
+  const propulsionCharacter = resolvePropulsionCharacter(state);
+  const cobraActive = propulsionCharacter === "cobra";
+  const audibleFrame = live === true;
+  return Object.freeze({
+    propulsionCharacter,
+    cobraActive,
+    jetMuted: !audibleFrame || cobraActive,
+    cobraMuted: !audibleFrame || !cobraActive,
+    radioEngine: cobraActive ? "cobra" : "jet",
+  });
+}
+
 /// Drive every continuous voice from the flat snapshot. `triggerHeld` gates gun reports.
 function updateFlightAudioLocal(state, {
   muted = false,
@@ -806,13 +825,29 @@ function updateFlightAudioLocal(state, {
     }
 
     const audioState = projectFlightAudioState(state);
+    const live = enabled && !muted && !backgrounded;
+    const propulsionGates = flightPropulsionGraphGates(audioState, live);
+    const { cobraActive } = propulsionGates;
+    // Cobra owns a small dedicated rotorcraft graph, allocated only on its first live frame.
+    // It still feeds the same compressor/master and therefore inherits preference mute,
+    // lifecycle suspension, and ?audioQa=silent without a second AudioContext or output path.
+    if (cobraActive && !cobraVoices)
+      cobraVoices = createCobraAudioVoices(context, bus);
     ensureJetSamples(audioState);
     synchronizeCombatLifecycle(audioState);
 
-    const live = enabled && !muted && !backgrounded;
     lastAudibleTarget = live;
     // Collapse continuous gains on mute/pause (view loop still ticks while paused).
-    updateEngineVoices(engineVoices, context, audioState, { muted: !live });
+    // Generic jet propulsion and Cobra propulsion are mutually exclusive. Combat events,
+    // warnings, contacts, and radio below remain shared and continue to receive the same frame.
+    updateEngineVoices(engineVoices, context, audioState, {
+      muted: propulsionGates.jetMuted,
+    });
+    if (cobraVoices) {
+      updateCobraAudioVoices(cobraVoices, context, audioState, {
+        muted: propulsionGates.cobraMuted,
+      });
+    }
     updateBuffetVoice(eventVoices, context, audioState, { enabled: live });
     updateAirframeCueVoices(eventVoices, context, audioState, { enabled: live });
     updateConfigurationVoices(eventVoices, context, audioState, { enabled: live });
@@ -832,6 +867,9 @@ function updateFlightAudioLocal(state, {
       enabled: live,
       nowSeconds,
     });
+    // Radio sidetone/ducking follows the propulsion graph actually in use. Leaving this pinned
+    // to the jet master lets an asynchronous radio restore briefly wake the muted jet on Cobra.
+    radioVoice.engineMaster = cobraActive ? cobraVoices?.master : engineVoices.master;
     updateRadioVoice(radioVoice, context, state, {
       enabled: live && radioVoiceEnabled,
     });

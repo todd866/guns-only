@@ -35,7 +35,7 @@ export async function waitForCobraAuthority(page, timeoutMs) {
 export function readCobraHud(page) {
   return page.evaluate(async () => {
     const { cobraRotorcraftHudModel } =
-      await import("/render/cobra/cobra_rotorcraft_hud.js?v=325");
+      await import("/render/cobra/cobra_rotorcraft_hud.js?v=326");
     const state = window.__gunsOnlyCobraAuthority ?? null;
     const canvas = document.querySelector("#hud-canvas");
     return {
@@ -67,7 +67,8 @@ export async function designateNextHostile(page, timeoutMs) {
     () => {
       const chosen = document.querySelector("#target")?.value ?? "";
       return chosen !== ""
-        && window.__gunsOnlyCobraAuthority?.gunner?.selected_target_id === chosen;
+        && window.__gunsOnlyCobraAuthority?.gunner?.selected_target_id === chosen
+        && Number(window.__gunsOnlyCobraAuthority?.vehicle?.tick) >= 0;
     },
     undefined,
     { timeout: timeoutMs },

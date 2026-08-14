@@ -8,15 +8,19 @@ import {
 } from "../quarantine_gate.js";
 
 test("accepted production experiences launch without a preview acknowledgement", () => {
-  const access = experienceAccess("first-merge", { href: "https://guns-only.com/" });
-  assert.equal(access.allowed, true);
-  assert.equal(access.preview, false);
+  for (const id of ["first-merge", "top-gun"]) {
+    const access = experienceAccess(id, {
+      href: `https://guns-only.com/?program=${id}`,
+    });
+    assert.equal(access.allowed, true, id);
+    assert.equal(access.preview, false, id);
+  }
 });
 
 test("quarantined and preview routes fail closed by default", () => {
   for (const id of [
     "multiplayer", "medevac", "medevac-command", "korea-panther", "indoor",
-    "rapier-circuits", "top-gun",
+    "rapier-circuits",
   ]) {
     const access = experienceAccess(id, {
       href: `https://guns-only.com/?program=${id}`,
@@ -37,7 +41,7 @@ test("the explicit preview query acknowledges but does not promote a quarantined
 });
 
 test("preview catalog entries launch only with explicit preview acknowledgement", () => {
-  for (const id of ["multiplayer", "rapier-circuits", "top-gun"]) {
+  for (const id of ["multiplayer", "rapier-circuits"]) {
     const access = experienceAccess(id, {
       href: `https://guns-only.com/?program=${id}&preview=1`,
     });

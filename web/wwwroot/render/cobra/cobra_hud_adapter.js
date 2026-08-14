@@ -29,6 +29,7 @@ import {
   cobraFpvMode,
   cobraHeadingRelativeGroundTrack,
 } from "./cobra_helicopter_fpv.js";
+import { cobraTurnaroundIsActive } from "./cobra_turnaround.js";
 
 export const COBRA_HUD_ENTITY_ID = "cobra.ah1g.hold-the-bridge";
 
@@ -63,6 +64,8 @@ export function cobraHudState(authorityState, pose, out = {}) {
 
   // Sortie identity + structural capability truth (constant, but cheap to restate).
   out.player_entity_id = COBRA_HUD_ENTITY_ID;
+  out.player_aircraft_id = "ah-1g-cobra";
+  out.audio_profile_id = "audio.ah1g.t53-b540.v1";
   out.opponent_alive = false;
   out.carrier = false;
   out.mode = "FREE";
@@ -72,6 +75,10 @@ export function cobraHudState(authorityState, pose, out = {}) {
   out.has_flaps = false;
   out.has_utility_hydraulics = false;
   out.has_electrical_system = false;
+  // Cobra uses the common centre annunciation lane, but it has no retractable-gear / flap /
+  // utility-systems panel to populate. Keep damage warnings available to hud.js without letting
+  // their relevance wake the fixed-wing systems card full of "GEAR —" placeholders.
+  out.suppress_systems_panel = true;
 
   // Attitude/heading/altitude from the per-frame hot pose (the 30 Hz JSON lags it).
   out.pitch_deg = scaled(attitude?.pitch_rad, RAD_TO_DEG);
@@ -96,7 +103,38 @@ export function cobraHudState(authorityState, pose, out = {}) {
   // Above 1.0 the rail's own amber over-limit treatment is physically honest.
   out.throttle = finite(vehicle?.collective);
   out.engine_spool_fraction = finite(rotorcraft?.transmission_limit_fraction);
-  out.has_engine = rotorcraft ? rotorcraft.engine_operating !== false : true;
+  // Capability and operation are separate truths. The AH-1G always has an engine; battle damage
+  // can stop it. Conflating those two fields made hud.js hide the very flameout warning the pilot
+  // needs after a hostile hit.
+  out.has_engine = true;
+  out.engine_running = rotorcraft
+    ? rotorcraft.engine_operating !== false
+    : undefined;
+  const availableShaftPowerW = finite(rotorcraft?.available_shaft_power_w);
+  const engineShaftPowerW = finite(rotorcraft?.engine_shaft_power_w);
+  const publishedEnginePowerFraction = finite(
+    rotorcraft?.engine_power_fraction ?? rotorcraft?.engine_shaft_power_fraction,
+  );
+  out.cobra_main_rotor_rpm = finite(rotorcraft?.main_rotor_rpm);
+  out.cobra_tail_rotor_rpm = finite(rotorcraft?.tail_rotor_rpm);
+  out.cobra_engine_operating = out.engine_running;
+  out.cobra_engine_power_fraction = publishedEnginePowerFraction === undefined
+    ? availableShaftPowerW !== undefined && availableShaftPowerW > 0
+      ? Math.max(0, Math.min(1, (engineShaftPowerW ?? 0) / availableShaftPowerW))
+      : undefined
+    : Math.max(0, Math.min(1, publishedEnginePowerFraction));
+  const turnaround = authorityState?.turnaround ?? null;
+  out.cobra_turnaround_phase = turnaround
+    ? String(turnaround.phase ?? "operational")
+    : "operational";
+  out.cobra_turnaround_sequence = finite(turnaround?.sequence);
+  out.cobra_turnaround_active = cobraTurnaroundIsActive(turnaround);
+  const battleDamage = authorityState?.battle_damage ?? null;
+  out.cobra_engine_damaged = battleDamage?.engine_damaged === true;
+  out.cobra_scas_damaged = battleDamage?.scas_damaged === true;
+  // Tracking is deliberately private. The combiner warns only after authority says rounds are
+  // actually in flight, never because an unseen observer has begun acquiring the aircraft.
+  out.cobra_receiving_ground_fire = battleDamage?.receiving_fire === true;
 
   // F-22 kill tally, fed by ground-war truth.
   out.kill_count = Math.max(0,

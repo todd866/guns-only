@@ -25,11 +25,13 @@ test("README describes the current production door, controls and telemetry bound
   assert.match(readme, /Hosted flight diagnostics are \*\*off by default\*\*/);
   assert.match(readme, /Node\.js 24, matching CI/);
   assert.match(readme, /docs\/STATUS\.md/);
+  assert.match(readme, /five accepted experiences/i);
+  assert.match(readme, /\*\*Top Gun:\*\*.*F-14A or MiG-28/s);
   assert.match(readme, /Rapier[\s\S]*thin-air M4\.2 shelf[\s\S]*high-altitude balloon/);
   assert.doesNotMatch(readme, /Rapier[^\n]*assigned contract/);
 });
 
-test("the browser and installed-app descriptions match the four production machines", async () => {
+test("the browser and installed-app descriptions match the five production experiences", async () => {
   const [catalogue, manifestText, cobraLab, weekendRide] = await Promise.all([
     readFile(path.join(ROOT, "web/wwwroot/index.html"), "utf8"),
     readFile(path.join(ROOT, "web/wwwroot/manifest.webmanifest"), "utf8"),
@@ -37,19 +39,23 @@ test("the browser and installed-app descriptions match the four production machi
     readFile(path.join(ROOT, "web/wwwroot/weekend-ride/index.html"), "utf8"),
   ]);
   const manifest = JSON.parse(manifestText);
-  assert.match(catalogue, /Four production machines/);
+  assert.match(catalogue, /Five production experiences/);
   assert.match(catalogue, /F-22 guns-only/);
   assert.match(catalogue, /Rapier intercept/);
   assert.match(catalogue, /AH-1G Cobra Canyon/);
   assert.match(catalogue, /YZF-R1 Weekend Ride/);
+  assert.match(catalogue, /Top Gun/);
   assert.match(catalogue, /data-program-node="cobra-lab"/);
   assert.match(catalogue, /data-program-node="weekend-ride"/);
+  assert.match(catalogue, /data-program-node="top-gun"/);
   assert.match(catalogue, /art\/jet-cobra\.webp/);
   assert.match(catalogue, /art\/bike-yzf-r1\.webp/);
+  assert.match(catalogue, /art\/jet-f14\.webp/);
   assert.match(manifest.description, /F-22 guns-only dogfighting/);
   assert.match(manifest.description, /Rapier high-altitude balloon intercept/);
   assert.match(manifest.description, /AH-1G Cobra Canyon/);
   assert.match(manifest.description, /YZF-R1 Weekend Ride/);
+  assert.match(manifest.description, /Top Gun ACM/);
   assert.doesNotMatch(catalogue, /Seven flight experiences/);
   // Subroute shells must not ask Blazor for /<route>/_framework/dotnet.js.
   // Medevac's <base href="/"> is what makes root-absolute blazor.webassembly.js also resolve
@@ -114,6 +120,7 @@ test("the evergreen status matrix covers the executable experience catalog", asy
     "rapier-intercept",
     "cobra-lab",
     "weekend-ride",
+    "top-gun",
   ]);
   assert.equal(EXPERIENCE_CATALOG.some(({ releaseState }) =>
     releaseState === EXPERIENCE_RELEASE_STATE.QUARANTINED), true);

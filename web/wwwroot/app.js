@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=325";
+import { createHud } from "./hud.js?v=326";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=325";
+} from "./render/debrief/sortie_result.js?v=326";
 import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
@@ -34,6 +34,11 @@ import {
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
+import {
+  terrainLaunchMissionIdentity,
+  terrainLaunchMissionSelector,
+  terrainLaunchOwnerMatches,
+} from "./render/environment/terrain_launch_owner.js";
 import { resolveTerrainPresentationRoute } from "./render/environment/terrain_presentation_route.js";
 import { loadKoreaTerrain } from "./render/environment/korea_terrain.js";
 import { attachSoftWorldGroundHaze } from "./render/environment/soft_world_atmosphere.js";
@@ -64,8 +69,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=325";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=325";
+} from "./render/release/release_identity.js?v=326";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=326";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -78,7 +83,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=325";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=326";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -87,10 +92,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=325";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=326";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=325";
+} from "./render/nav/carrier_sortie_touch_control.js?v=326";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -171,7 +176,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=325";
+} from "./render/telemetry/ai_frame_pressure.js?v=326";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -181,14 +186,14 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=325";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=325";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=325";
+} from "./render/telemetry/telemetry_batch.js?v=326";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=326";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=326";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=325";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=325";
+} from "./render/shell/boot_watchdog.js?v=326";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=326";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -197,7 +202,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=325";
+} from "./render/settings/player_settings.js?v=326";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -243,13 +248,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=325";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=325";
+} from "./render/scene/scene_builders.js?v=326";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=326";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=325";
+} from "./render/audio/flight_audio.js?v=326";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -3447,8 +3452,8 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     kicker: "1986 · training range",
     title: "Top Gun",
     sortie: "F-14A vs MiG-28 · guns and Sidewinders · DACT arena",
-    configuration: "F-14A or MiG-28 seat · M61 + AIM-9 · anime-1986 presentation · preview with ?preview=1",
-    brief: "Tomcat or aggressor MiG-28 over a Miramar-class training range—guns and heaters, one-on-one ACM. Preview flyable: acknowledge preview, pick your seat, then fight.",
+    configuration: "F-14A or MiG-28 seat · M61 + AIM-9 · anime-1986 presentation",
+    brief: "Tomcat or aggressor MiG-28 over a Miramar-class training range—guns and heaters, one-on-one ACM. Pick your seat, launch, then fight.",
     controls: "Arrows fly · W/S power · F guns · R fox-two · V padlock · Tab target",
   }),
   "ace-duel": Object.freeze({
@@ -5035,16 +5040,8 @@ function terrainWarmupKey(state) {
   ].join(":");
 }
 
-function stagedMissionIdentity(index, state) {
-  return [
-    Number(index),
-    projectedId(state?.mission_definition_id, "unknown-mission"),
-    Number.isSafeInteger(Number(state?.casevac_mission_epoch_sequence))
-      ? `casevac-${Number(state.casevac_mission_epoch_sequence)}`
-      : Number.isSafeInteger(Number(state?.player_spawn_sequence))
-        ? `spawn-${Number(state.player_spawn_sequence)}`
-        : "unversioned",
-  ].join(":");
+function selectedTerrainMissionSelector() {
+  return isTopGunProgram() ? TOP_GUN_PROGRAM_ID : selectedBeat;
 }
 
 function terrainWarmupDeadlineMs(attempt, requiredFeaturePack) {
@@ -5153,7 +5150,8 @@ function prepareMissionTerrain(index, stagedState) {
     ? `${stagedState?.terrain_profile_id}|${missionFeaturePackCacheIdentity(stagedState)}`
     : null;
   const warmupKey = terrainWarmupKey(stagedState);
-  const missionIdentity = stagedMissionIdentity(index, stagedState);
+  const missionSelector = terrainLaunchMissionSelector(index);
+  const missionIdentity = terrainLaunchMissionIdentity(index, stagedState);
   const requiredFeaturePack = stagedState?.mission_feature_pack_required === true;
   activeView?.configureTerrainMission?.(stagedState);
   if (!terrainKey || missionTerrainReady(stagedState)) {
@@ -5202,7 +5200,7 @@ function prepareMissionTerrain(index, stagedState) {
   const warmupView = activeView;
   const owner = {
     generation: ++terrainLaunchWarmupGeneration,
-    index: Number(index),
+    missionSelector,
     missionIdentity,
     terrainKey,
     warmupKey,
@@ -5252,8 +5250,11 @@ function prepareMissionTerrain(index, stagedState) {
   }).finally(() => {
     if (owner.deadlineTimer) window.clearTimeout(owner.deadlineTimer);
     if (terrainLaunchWarmupOwner !== owner) return;
-    const ownsCurrentMission = selectedBeat === owner.index
-      && stagedMissionIdentity(selectedBeat, latestState) === owner.missionIdentity;
+    const ownsCurrentMission = terrainLaunchOwnerMatches(
+      owner,
+      selectedTerrainMissionSelector(),
+      latestState,
+    );
     terrainLaunchWarmupOwner = null;
     terrainLaunchWarmupPromise = null;
     if (ownsCurrentMission) {
@@ -5263,9 +5264,11 @@ function prepareMissionTerrain(index, stagedState) {
           window.clearTimeout(terrainLaunchWarmupRetryTimer);
         terrainLaunchWarmupRetryTimer = window.setTimeout(() => {
           terrainLaunchWarmupRetryTimer = 0;
-          const stillOwnsMission = selectedBeat === owner.index
-            && stagedMissionIdentity(selectedBeat, latestState) === owner.missionIdentity
-            && pauseReasons.has("ready");
+          const stillOwnsMission = terrainLaunchOwnerMatches(
+            owner,
+            selectedTerrainMissionSelector(),
+            latestState,
+          ) && pauseReasons.has("ready");
           if (!stillOwnsMission) {
             terrainLaunchWarmupStatus = "";
             terrainLaunchWarmupRetryAtMs = 0;
@@ -11576,7 +11579,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=325")
+    navigator.serviceWorker.register("service-worker.js?v=326")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

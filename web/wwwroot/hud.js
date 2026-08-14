@@ -21,7 +21,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=325";
+} from "./render/hud/contact_visibility.js?v=326";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import {
   approachEnergyCue,
@@ -64,11 +64,11 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=325";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=326";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=325";
+} from "./render/mission/rapier_high_mach_instruments.js?v=326";
 import { limitsPanelPresentation } from "./render/hud/limits_panel.js";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
@@ -79,7 +79,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=325";
+} from "./render/audio/flight_audio.js?v=326";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -3486,7 +3486,9 @@ class CombatHud {
   }
 
   drawSystemsPanel(systems, state = null) {
-    if (!systems?.available || !systems.relevant) return;
+    // Warning-only consumers (currently Cobra) still feed drawWarnings from this same readout,
+    // but must not wake the fixed-wing gear/flap/hydraulic card just because a warning is active.
+    if (!systems?.available || !systems.relevant || systems.panelSuppressed) return;
     // Rapier Intercept: gear/systems chrome only in recovery — warnings still annunciate.
     const phaseHud = hudPhasePresentation(state ?? {});
     if (phaseHud.mission === "rapier_intercept" && !phaseHud.surfaces.systemsGear) return;

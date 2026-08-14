@@ -147,13 +147,23 @@ export function cobraRotorcraftHudModel(authorityState) {
   const sinkLevel = vrs >= 0.35 || (nearGround && aglM < 30 && vsiFpm < -700) ? "warning"
     : vrs >= 0.2 || (nearGround && aglM < 60 && vsiFpm < -500) ? "caution" : "normal";
 
+  const battleDamage = authorityState?.battle_damage ?? null;
   const warnings = [];
+  // Battle damage is authoritative and deliberately terse. ENGINE OUT is the only red
+  // damage plate; SCAS failure and fire currently striking the aircraft are amber. Never
+  // turn acquisition/tracking or a predicted impact into a cockpit warning: that would give
+  // the player information the crew does not have. Severity sorting keeps immediate rotor
+  // emergencies ahead of the amber plates, while insertion order gives damage the promised
+  // ENGINE > SCAS > active fire priority inside each level.
+  if (battleDamage?.engine_damaged === true) warnings.push({ text: "ENGINE OUT", level: "warning" });
   if (nrPct < 90) warnings.push({ text: "LOW ROTOR", level: "warning" });
   if (vrs >= 0.35) warnings.push({ text: "VORTEX RING", level: "warning" });
-  else if (vrs >= 0.2) warnings.push({ text: "SETTLING WITH POWER", level: "caution" });
   if (mast >= 0.35) warnings.push({ text: "MAST BUMP", level: "warning" });
   if (rbs >= 0.75) warnings.push({ text: "BLADE STALL", level: "warning" });
-  else if (rbs >= 0.55) warnings.push({ text: "BLADE STALL", level: "caution" });
+  if (battleDamage?.scas_damaged === true) warnings.push({ text: "SCAS OUT", level: "caution" });
+  if (battleDamage?.receiving_fire === true) warnings.push({ text: "GROUND FIRE", level: "caution" });
+  if (vrs >= 0.2 && vrs < 0.35) warnings.push({ text: "SETTLING WITH POWER", level: "caution" });
+  if (rbs >= 0.55 && rbs < 0.75) warnings.push({ text: "BLADE STALL", level: "caution" });
   if (torquePct > 100) warnings.push({ text: "TORQUE LIMIT", level: "caution" });
   else if (rotor.governor_saturated === true) warnings.push({ text: "GOV LIMIT", level: "caution" });
   warnings.sort((a, b) => LEVEL_RANK[a.level] - LEVEL_RANK[b.level]);

@@ -142,6 +142,12 @@ replaced before production-combat fidelity is claimed.
 | VRS loss amplitude / RBS onset blend | current model coefficients | continuous and dimensionless, but not flight-identified; replace with Johnson VRS and azimuth-resolved stalled-area loads |
 | Keyboard collective full-travel rate | 0.40 /s | matches the existing Hold the Bridge lever feel; identify against AH-1 collective travel times |
 | Keyboard cyclic/pedal full-travel rate | 2.5 /s | production digital slew/spring-center; not a measured stick force or damper rate |
+| DShK acquisition / burst cadence | 8.0 s / 5.0 s | provisional fairness timing. One nearest living `DshkSite` owns acquisition; masking or changing source resets it. Not a measured crew reaction or fire-control model. |
+| DShK projectile / dispersion closure | 850 m/s; 2.0 s base delay; 0.12–0.48 m dispersion; 6.5 km cap | provisional warned-burst gameplay ballistics. Replace with sourced 12.7×108 mm exterior ballistics, mount dispersion and range doctrine. |
+| Player vulnerability capsules | fuselage radius 1.35 m; tail-boom radius 0.58 m | provisional live-position intersection geometry, not armour/component vulnerability data. The first engagement burst is an authored 24 m near miss; later intersecting bursts can fail SCAS then engine. |
+| Turnaround action timing | 0.75 s pad dwell; 1.0 s shutdown/start holds | compressed interaction timing for a one-button assisted sequence, not an AH-1G checklist duration. Order follows the operator/checklist family; timing is gameplay. |
+| Grounded shutdown / spare handoff | 3.2 s rotor rundown time constant; ≤5% shaft power and ≤50 rpm | provisional safe-handoff presentation closure. It is not a measured BHC-540 coast-down curve or maintenance clearance criterion. |
+| Assisted-start flight release | ≥294 rpm continuously for 0.75 s | provisional control/weapon interlock at about 91% of the sourced 324 rpm nominal Nr. Replace with source-derived start/governor limits and dwell. |
 
 ## Performance facts reserved for validation
 

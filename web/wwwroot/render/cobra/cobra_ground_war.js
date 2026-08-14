@@ -1,12 +1,26 @@
 /**
  * Presentation-only ground-war markers for Cobra Canyon.
- * Consumes authoritative ground_war snapshot fields; never invents combat truth.
+ * Consumes authoritative ground_war and battle_damage snapshot fields; never invents combat truth.
  */
 
-import { isCampEmberGroundSite } from "./cobra_camp_ember_firebase.js?v=325";
+import { isCampEmberGroundSite } from "./cobra_camp_ember_firebase.js?v=326";
 
 export const COBRA_GROUND_WAR_PRESENTATION_SCHEMA =
   "guns-only.cobra-ground-war-presentation.v1";
+
+// A selected hostile is normally acquired around the 950 m gunnery seam. At that range a marker
+// sitting on the soil vanishes behind 1–4 m understory even though the target is valid and the
+// crew has it cued. Keep the terrain contact honest with an OPEN ring, then lift a compact mark
+// above the vegetation. Depth testing stays on: this is identification, not x-ray vision through
+// a ridge. The profile is exported because these dimensions are a readability contract, not
+// incidental mesh construction.
+export const COBRA_TARGET_DESIGNATION_PROFILE = Object.freeze({
+  groundOffsetM: 0.45,
+  ringInnerRadiusM: 8.2,
+  ringOuterRadiusM: 10.8,
+  beaconHeightM: 16,
+  beaconRadiusM: 2.4,
+});
 
 export const COBRA_GROUND_WAR_COLORS = Object.freeze({
   friendly: 0x6f8f4e,
@@ -19,6 +33,9 @@ export const COBRA_GROUND_WAR_COLORS = Object.freeze({
   smoke: 0xb8b0a0,
   tracerFriendly: 0xd4e89a,
   tracerHostile: 0xff8a5c,
+  threatTracer: 0xffb15a,
+  threatFlash: 0xffd08a,
+  threatImpact: 0xff8a3d,
   hostileEmissive: 0x5a1208,
   friendlyEmissive: 0x142010,
 });
@@ -32,10 +49,12 @@ const SITE_HOSTILE = COBRA_GROUND_WAR_COLORS.siteHostile;
 const SMOKE_COLOR = COBRA_GROUND_WAR_COLORS.smoke;
 const TRACER_FRIENDLY = COBRA_GROUND_WAR_COLORS.tracerFriendly;
 const TRACER_HOSTILE = COBRA_GROUND_WAR_COLORS.tracerHostile;
+const DESIGNATION_COLOR = 0xffd76a;
 
 function roleScale(role) {
   if (role === "soft-vehicle") return { width: 7.2, height: 3.2, depth: 3.4 };
   if (role === "hard-point") return { width: 4.4, height: 5.5, depth: 4.4 };
+  if (role === "dshk-site") return { width: 4.8, height: 3.6, depth: 6.2 };
   return { width: 3.2, height: 2.4, depth: 3.2 };
 }
 
@@ -67,6 +86,29 @@ function roleGeometry(THREE, role) {
     group.add(pit, shield, gun);
     group.userData.composite = true;
     group.userData.role = "hard-point";
+    return group;
+  }
+  if (role === "dshk-site") {
+    // Low AA tripod + shield + long elevated barrel. Its high, thin silhouette reads as a gun
+    // from the cockpit and remains visually distinct from the broad fortified ground pit.
+    const group = new THREE.Group();
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.2, 0.55, 8), undefined);
+    base.position.y = 0.28;
+    const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.7, 1.5), undefined);
+    receiver.position.set(0, 1.65, 0.35);
+    const shield = new THREE.Mesh(new THREE.BoxGeometry(2.8, 1.45, 0.26), undefined);
+    shield.position.set(0, 1.75, 0.95);
+    const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.24, 5.8), undefined);
+    barrel.position.set(0, 2.05, 3.15);
+    const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.8, 0.24), undefined);
+    leftLeg.position.set(-0.9, 0.9, -0.45);
+    leftLeg.rotation.z = -0.42;
+    const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.24, 1.8, 0.24), undefined);
+    rightLeg.position.set(0.9, 0.9, -0.45);
+    rightLeg.rotation.z = 0.42;
+    group.add(base, receiver, shield, barrel, leftLeg, rightLeg);
+    group.userData.composite = true;
+    group.userData.role = "dshk-site";
     return group;
   }
   // Infantry clump. The previous silhouette was a 0.85 m square, 2.1 m tall box under a 0.76 m
@@ -165,7 +207,7 @@ function siteControlColor(localControl) {
  * @param {typeof import("../../vendor/three.module.js")} THREE
  * @returns {{
  *   group: import("../../vendor/three.module.js").Group,
- *   sync(groundWar: object|null): void,
+ *   sync(groundWar: object|null, selectedTargetId?: string|null, battleDamage?: object|null): void,
  *   dispose(): void,
  * }}
  */
@@ -188,19 +230,71 @@ export function createCobraGroundWarPresentation(THREE) {
   const siteMeshes = new Map();
   /** @type {import("../../vendor/three.module.js").Object3D[]} */
   const transientEffects = [];
+  /** @type {Map<string, "fired"|"impacted-miss"|"impacted-hit">} */
+  const observedThreatBursts = new Map();
+  let highestThreatBurstSequence = null;
 
-  const selection = new THREE.Mesh(
-    new THREE.CylinderGeometry(11, 11, 0.7, 24),
-    new THREE.MeshStandardMaterial({
-      color: 0xffd76a,
-      roughness: 0.5,
-      metalness: 0.1,
+  // Ground contact + leader + lifted diamond. The old marker was an 11 m filled cylinder: in
+  // oblique flight it read as a gold terrain plate, yet its whole silhouette disappeared under
+  // foliage. This three-part designation preserves spatial contact without painting over the
+  // landscape and puts only the small airborne mark above grass height.
+  const selection = new THREE.Group();
+  const selectionRing = new THREE.Mesh(
+    new THREE.RingGeometry(
+      COBRA_TARGET_DESIGNATION_PROFILE.ringInnerRadiusM,
+      COBRA_TARGET_DESIGNATION_PROFILE.ringOuterRadiusM,
+      32,
+    ),
+    new THREE.MeshBasicMaterial({
+      color: DESIGNATION_COLOR,
       transparent: true,
-      opacity: 0.7,
+      opacity: 0.56,
+      side: THREE.DoubleSide,
+      depthTest: true,
+      depthWrite: false,
+      toneMapped: false,
     }),
   );
+  selectionRing.name = "COBRA_TARGET_GROUND_RING";
+  selectionRing.rotation.x = -Math.PI / 2;
+  selectionRing.position.y = 0.04;
+
+  const selectionStemGeometry = new THREE.BufferGeometry();
+  selectionStemGeometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array([
+    0, 1.0, 0,
+    0, COBRA_TARGET_DESIGNATION_PROFILE.beaconHeightM - 2.2, 0,
+  ]), 3));
+  const selectionStem = new THREE.Line(
+    selectionStemGeometry,
+    new THREE.LineBasicMaterial({
+      color: DESIGNATION_COLOR,
+      transparent: true,
+      opacity: 0.62,
+      depthTest: true,
+      depthWrite: false,
+      toneMapped: false,
+    }),
+  );
+  selectionStem.name = "COBRA_TARGET_BEACON_STEM";
+
+  const selectionBeacon = new THREE.Mesh(
+    new THREE.OctahedronGeometry(COBRA_TARGET_DESIGNATION_PROFILE.beaconRadiusM, 0),
+    new THREE.MeshBasicMaterial({
+      color: DESIGNATION_COLOR,
+      transparent: true,
+      opacity: 0.92,
+      depthTest: true,
+      depthWrite: false,
+      toneMapped: false,
+    }),
+  );
+  selectionBeacon.name = "COBRA_TARGET_BEACON";
+  selectionBeacon.position.y = COBRA_TARGET_DESIGNATION_PROFILE.beaconHeightM;
+
   selection.name = "COBRA_GROUND_WAR_SELECTION";
+  selection.userData.beaconHeightM = COBRA_TARGET_DESIGNATION_PROFILE.beaconHeightM;
   selection.visible = false;
+  selection.add(selectionRing, selectionStem, selectionBeacon);
   effectRoot.add(selection);
 
   function ensureUnit(unit) {
@@ -319,7 +413,185 @@ export function createCobraGroundWarPresentation(THREE) {
     transientEffects.push(flash);
   }
 
-  function sync(groundWar, selectedTargetId = null) {
+  function addTransientEffect(effect, lifetimeMs) {
+    while (transientEffects.length >= 40) {
+      const oldest = transientEffects.shift();
+      effectRoot.remove(oldest);
+      oldest.geometry?.dispose?.();
+      oldest.material?.dispose?.();
+    }
+    effect.userData.expiresAt = performance.now() + lifetimeMs;
+    effect.userData.cobraThreatEffect = true;
+    effectRoot.add(effect);
+    transientEffects.push(effect);
+  }
+
+  function threatPoint(burst, prefix, fallbackPrefix = null) {
+    const read = (axis) => Number(burst?.[`${prefix}_${axis}_m`]);
+    let x = read("x");
+    let y = read("y");
+    let z = read("z");
+    if ((!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) && fallbackPrefix) {
+      const fallback = (axis) => Number(burst?.[`${fallbackPrefix}_${axis}_m`]);
+      x = fallback("x");
+      y = fallback("y");
+      z = fallback("z");
+    }
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
+    return { x, y, z: -z };
+  }
+
+  function spawnThreatBurst(burst) {
+    const source = threatPoint(burst, "source");
+    const aim = threatPoint(burst, "impact", "target");
+    if (!source || !aim) return;
+
+    const flash = new THREE.Mesh(
+      new THREE.SphereGeometry(1.35, 8, 6),
+      new THREE.MeshBasicMaterial({
+        color: COBRA_GROUND_WAR_COLORS.threatFlash,
+        transparent: true,
+        opacity: 0.96,
+        depthTest: true,
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    );
+    flash.name = `COBRA_THREAT_MUZZLE_FLASH_${burst.sequence}`;
+    flash.position.set(source.x, source.y, source.z);
+    addTransientEffect(flash, 150);
+
+    // A broken line reads as a short burst rather than a laser. Both endpoints come from the
+    // authority event: presentation never extrapolates a shooter or predicts where the Cobra
+    // will be when the burst arrives.
+    const dashCount = 11;
+    const positions = new Float32Array(dashCount * 2 * 3);
+    for (let index = 0; index < dashCount; index += 1) {
+      const startT = index / dashCount;
+      const endT = index === dashCount - 1
+        ? 1
+        : Math.min(1, startT + 0.42 / dashCount);
+      for (const [offset, t] of [[0, startT], [3, endT]]) {
+        positions[index * 6 + offset] = source.x + (aim.x - source.x) * t;
+        positions[index * 6 + offset + 1] = source.y + (aim.y - source.y) * t;
+        positions[index * 6 + offset + 2] = source.z + (aim.z - source.z) * t;
+      }
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    const material = new THREE.LineBasicMaterial({
+      color: COBRA_GROUND_WAR_COLORS.threatTracer,
+      transparent: true,
+      opacity: 0.9,
+      depthTest: true,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    const tracer = new (THREE.LineSegments ?? THREE.Line)(geometry, material);
+    tracer.name = `COBRA_THREAT_TRACER_${burst.sequence}`;
+    tracer.userData.source = source;
+    tracer.userData.aim = aim;
+    addTransientEffect(tracer, 360);
+  }
+
+  function spawnThreatImpact(burst) {
+    const impact = threatPoint(burst, "impact", "target");
+    if (!impact) return;
+    const rayOffsets = [
+      [-3.4, 1.1, -1.2], [2.8, 1.8, 1.5], [-1.4, 3.2, 1.0],
+      [1.2, 2.6, -2.4], [3.2, 0.9, -0.4], [-2.2, 2.0, 2.5],
+    ];
+    const positions = new Float32Array(rayOffsets.length * 2 * 3);
+    for (let index = 0; index < rayOffsets.length; index += 1) {
+      const [dx, dy, dz] = rayOffsets[index];
+      positions.set([
+        impact.x, impact.y, impact.z,
+        impact.x + dx, impact.y + dy, impact.z + dz,
+      ], index * 6);
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    const material = new THREE.LineBasicMaterial({
+      color: COBRA_GROUND_WAR_COLORS.threatImpact,
+      transparent: true,
+      opacity: 0.95,
+      depthTest: true,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    const sparks = new (THREE.LineSegments ?? THREE.Line)(geometry, material);
+    sparks.name = `COBRA_THREAT_HIT_SPARKS_${burst.sequence}`;
+    addTransientEffect(sparks, 240);
+  }
+
+  function resetThreatEventMemory() {
+    observedThreatBursts.clear();
+    highestThreatBurstSequence = null;
+    for (let index = transientEffects.length - 1; index >= 0; index -= 1) {
+      const effect = transientEffects[index];
+      if (!effect.userData.cobraThreatEffect) continue;
+      effectRoot.remove(effect);
+      effect.geometry?.dispose?.();
+      effect.material?.dispose?.();
+      transientEffects.splice(index, 1);
+    }
+  }
+
+  function syncThreatBursts(battleDamage) {
+    if (!battleDamage) {
+      resetThreatEventMemory();
+      return;
+    }
+    const bursts = Array.isArray(battleDamage.recent_bursts)
+      ? battleDamage.recent_bursts
+      : [];
+    if (bursts.length === 0) {
+      resetThreatEventMemory();
+      return;
+    }
+
+    const sequences = bursts
+      .map((burst) => Number(burst?.sequence))
+      .filter(Number.isFinite);
+    const incomingHighest = sequences.length ? Math.max(...sequences) : null;
+    if (highestThreatBurstSequence != null
+        && incomingHighest != null
+        && incomingHighest < highestThreatBurstSequence) {
+      resetThreatEventMemory();
+    }
+
+    const present = new Set();
+    for (const burst of bursts) {
+      const numericSequence = Number(burst?.sequence);
+      if (!Number.isFinite(numericSequence)) continue;
+      const sequence = String(numericSequence);
+      present.add(sequence);
+      const impacted = burst.has_impacted === true;
+      const state = impacted
+        ? (burst.will_hit === true ? "impacted-hit" : "impacted-miss")
+        : "fired";
+      const previousState = observedThreatBursts.get(sequence);
+      if (previousState == null && state === "fired") {
+        spawnThreatBurst(burst);
+      } else if (previousState === "fired" && state === "impacted-hit") {
+        // will_hit is authoritative only once has_impacted arrives. Never foreshadow it from a
+        // pending burst and never spark for a miss.
+        spawnThreatImpact(burst);
+      }
+      observedThreatBursts.set(sequence, state);
+    }
+    for (const sequence of observedThreatBursts.keys()) {
+      if (!present.has(sequence)) observedThreatBursts.delete(sequence);
+    }
+    if (incomingHighest != null) {
+      highestThreatBurstSequence = Math.max(
+        highestThreatBurstSequence ?? incomingHighest,
+        incomingHighest,
+      );
+    }
+  }
+
+  function sync(groundWar, selectedTargetId = null, battleDamage = null) {
     const now = performance.now();
     for (let index = transientEffects.length - 1; index >= 0; index -= 1) {
       const effect = transientEffects[index];
@@ -336,6 +608,7 @@ export function createCobraGroundWarPresentation(THREE) {
       transientEffects.splice(index, 1);
     }
 
+    syncThreatBursts(battleDamage);
     if (!groundWar) return;
 
     const seenUnits = new Set();
@@ -368,8 +641,17 @@ export function createCobraGroundWarPresentation(THREE) {
       : null;
     if (selected) {
       selection.visible = true;
-      selection.position.set(selected.x_m, selected.y_m + 0.5, -selected.z_m);
-      selection.material.opacity = 0.5 + 0.25 * Math.sin(now / 170);
+      selection.position.set(
+        selected.x_m,
+        selected.y_m + COBRA_TARGET_DESIGNATION_PROFILE.groundOffsetM,
+        -selected.z_m,
+      );
+      const designationPulse = 0.5 + 0.5 * Math.sin(now / 170);
+      selectionRing.material.opacity = 0.38 + 0.2 * designationPulse;
+      selectionRing.scale.setScalar(0.96 + 0.08 * designationPulse);
+      selectionStem.material.opacity = 0.45 + 0.28 * designationPulse;
+      selectionBeacon.material.opacity = 0.78 + 0.18 * designationPulse;
+      selectionBeacon.scale.setScalar(0.9 + 0.18 * designationPulse);
     } else {
       selection.visible = false;
     }
@@ -418,9 +700,10 @@ export function createCobraGroundWarPresentation(THREE) {
       disposeObject(effect);
     }
     transientEffects.length = 0;
+    observedThreatBursts.clear();
+    highestThreatBurstSequence = null;
     effectRoot.remove(selection);
-    selection.geometry?.dispose?.();
-    selection.material?.dispose?.();
+    disposeObject(selection);
     group.removeFromParent();
   }
 

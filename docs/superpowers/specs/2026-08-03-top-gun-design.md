@@ -1,7 +1,7 @@
 # Top Gun (1986): F-14A vs MiG-28
 
 Date: 2026-08-03  
-Status: implementation underway; preview landed on branch `top-gun`. Plan:
+Status: Build 326 production candidate; exact public-artifact flight follows deployment. Plan:
 `docs/superpowers/plans/2026-08-03-top-gun.md`
 
 Related: [product north star](../../product-north-star.md),
@@ -119,7 +119,7 @@ Picker art: one Tomcat painting, one MiG-28 aggressor painting; title treatment 
 ```text
 id: top-gun
 title: Top Gun
-releaseState: preview   # promoted after automation gate; production blocked on human dogfight
+releaseState: production   # owner-directed Build 326 promotion; exact-artifact flight follows deploy
 ```
 
 STATUS matrix gets a row when the catalog entry lands. `hidden` HTML is never the release gate.
@@ -152,11 +152,14 @@ STATUS matrix gets a row when the catalog entry lands. `hidden` HTML is never th
 
 ## Implementation status
 
-Preview automation is green on branch `top-gun` (spawn, loadout, AIM-9 seeker-loss path,
-catalog `preview` gate). Representative human dogfight acceptance remains outstanding before
-production promotion.
+Build 326 repairs the programme-selector terrain owner that stalled the first production launch
+attempt in `autoLaunchPending`, and the owner explicitly ordered production promotion on
+2026-08-14 after the corrected launch/authority path passed focused automation. Owner workflow is
+deploy first, then fly the exact public artifact: the representative human dogfight and telemetry
+review are post-deploy acceptance checks, not pre-deploy gates. This records the sequence without
+claiming that the post-fix flight has already happened.
 
-## Success bar (preview → production)
+## Success bar (production rollout)
 
 Preview:
 
@@ -167,6 +170,6 @@ Preview:
 
 Production:
 
-- [ ] Representative human dogfight on the exact artifact
-- [x] STATUS/catalog aligned (`preview`)
-- [ ] Owner-telemetry not polluting “first Top Gun kill” celebrations
+- [ ] Representative human dogfight on the exact public artifact (post-deploy acceptance)
+- [x] STATUS/catalog aligned (`production`, Build 326 candidate)
+- [ ] Owner-telemetry not polluting “first Top Gun kill” celebrations (post-deploy review)

@@ -7,6 +7,8 @@
  * progress or unit positions, it only reprojects what the sim already published.
  */
 
+import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=326";
+
 export const COBRA_TACTICAL_MAP_SCHEMA = "guns-only.cobra-tactical-map.v1";
 
 function assertFiniteNumber(value, message) {
@@ -141,23 +143,21 @@ export function cobraTacticalMapModel({
   }
 
   let objective = null;
-  let nearestRangeM = Infinity;
-  for (const site of sites) {
-    if (!site) continue;
-    if (site.owner !== "hostile") continue;
-    if (!Number.isFinite(site.x_m) || !Number.isFinite(site.z_m)) continue;
+  const objectiveSiteId = cobraObjectiveSiteId({ sites, units, player });
+  const objectiveSite = sites.find((site) => site?.id === objectiveSiteId) ?? null;
+  if (objectiveSite
+    && Number.isFinite(objectiveSite.x_m)
+    && Number.isFinite(objectiveSite.z_m)) {
+    const site = objectiveSite;
     const deltaEast = site.x_m - playerEastM;
     const deltaNorth = site.z_m - playerNorthM;
     const rangeM = Math.hypot(deltaEast, deltaNorth);
-    if (rangeM < nearestRangeM) {
-      nearestRangeM = rangeM;
-      objective = {
-        siteId: site.id,
-        label: site.label,
-        bearingRad: Math.atan2(deltaEast, deltaNorth),
-        rangeM,
-      };
-    }
+    objective = {
+      siteId: site.id,
+      label: site.label,
+      bearingRad: Math.atan2(deltaEast, deltaNorth),
+      rangeM,
+    };
   }
 
   return {

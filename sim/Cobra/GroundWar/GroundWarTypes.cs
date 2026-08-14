@@ -12,7 +12,8 @@ public enum GroundUnitRole
 {
     InfantryClump,
     SoftVehicle,
-    HardPoint
+    HardPoint,
+    DshkSite
 }
 
 public enum GroundUnitIntent
@@ -98,13 +99,18 @@ public sealed class GroundUnit
         GroundUnitRole.InfantryClump => 1.0,
         GroundUnitRole.SoftVehicle => 2.2,
         GroundUnitRole.HardPoint => 3.0,
+        // An AA emplacement pressures the aircraft; it does not capture ground by itself.
+        GroundUnitRole.DshkSite => 0.0,
         _ => 1.0
     };
+
+    public bool ParticipatesInGroundCombat => Role != GroundUnitRole.DshkSite;
 
     public double EngagementRangeM => Role switch {
         GroundUnitRole.InfantryClump => 180.0,
         GroundUnitRole.SoftVehicle => 320.0,
         GroundUnitRole.HardPoint => 520.0,
+        GroundUnitRole.DshkSite => 0.0,
         _ => 180.0
     };
 
@@ -116,6 +122,7 @@ public sealed class GroundUnit
         GroundUnitRole.InfantryClump => 1.2,
         GroundUnitRole.SoftVehicle => 2.2,
         GroundUnitRole.HardPoint => 3.2,
+        GroundUnitRole.DshkSite => 0.0,
         _ => 1.2
     };
 
@@ -123,6 +130,7 @@ public sealed class GroundUnit
         GroundUnitRole.InfantryClump => 2.4,
         GroundUnitRole.SoftVehicle => 7.5,
         GroundUnitRole.HardPoint => 0.0,
+        GroundUnitRole.DshkSite => 0.0,
         _ => 2.0
     };
 
@@ -253,6 +261,7 @@ public sealed class ControlBalance
             GroundUnitRole.InfantryClump => 0.04,
             GroundUnitRole.SoftVehicle => 0.08,
             GroundUnitRole.HardPoint => 0.12,
+            GroundUnitRole.DshkSite => 0.10,
             _ => 0.04
         };
         // Killing hostiles tips toward friendly (+); killing friendlies tips toward hostile (-).

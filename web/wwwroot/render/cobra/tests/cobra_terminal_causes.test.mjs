@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -44,4 +45,28 @@ test("none, unknown, and absent causes yield null so the generic card stands", (
   assert.equal(cobraTerminalCauseCopy(undefined), null);
   assert.equal(cobraTerminalCauseCopy(null), null);
   assert.equal(cobraTerminalCauseCopy(42), null);
+});
+
+test("terminal debrief appends authoritative ground-fire subsystem context", async () => {
+  const main = await readFile(new URL("../../../cobra-lab/main.js", import.meta.url), "utf8");
+  const formatter = main.match(
+    /function groundFireDebriefDetail\(battleDamage\) \{[\s\S]*?\n\}/,
+  )?.[0] ?? "";
+  const debrief = main.match(/function showMissionDebrief\(war, status\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+
+  assert.match(formatter, /scas_damaged/);
+  assert.match(formatter, /engine_damaged/);
+  assert.match(formatter, /damaging_hits/);
+  assert.match(formatter, /bursts_fired/);
+  assert.match(formatter, /recent_bursts/);
+  assert.match(formatter, /has_impacted/);
+  assert.match(formatter, /will_hit/);
+  assert.match(formatter, /observer_id/);
+  assert.match(formatter, /SCAS OUT/);
+  assert.match(formatter, /ENGINE OUT/);
+  assert.match(formatter, /NO SUBSYSTEM LOSS/);
+  assert.match(debrief,
+    /groundFireDebriefDetail\(authorityState\?\.battle_damage\)/);
+  assert.match(debrief, /\$\{reason\} \$\{groundFireDetail\} Hostiles down/,
+    "ground-fire truth must appear in the terminal details without changing the outcome branch");
 });

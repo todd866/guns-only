@@ -5,10 +5,39 @@ import test from "node:test";
 import {
   AH1G_NOMINAL_ROTOR_RPM,
   cobraRotorcraftHudModel,
+  drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
   formatCobraRotorcraftStrip,
 } from "../cobra_rotorcraft_hud.js";
+
+function recordingHudContext() {
+  const textCalls = [];
+  let fillStyle = "";
+  return {
+    textCalls,
+    save() {},
+    restore() {},
+    setTransform() {},
+    beginPath() {},
+    closePath() {},
+    moveTo() {},
+    lineTo() {},
+    quadraticCurveTo() {},
+    fill() {},
+    stroke() {},
+    measureText(text) { return { width: String(text).length * 6 }; },
+    fillText(text, x, y) { textCalls.push({ text, x, y, fillStyle }); },
+    get fillStyle() { return fillStyle; },
+    set fillStyle(value) { fillStyle = value; },
+    strokeStyle: "",
+    lineWidth: 1,
+    font: "",
+    textAlign: "",
+    textBaseline: "",
+    shadowBlur: 0,
+  };
+}
 
 function modelFixture(overrides = {}) {
   const base = {
@@ -261,6 +290,63 @@ test("warnings stay ranked and capped so the lane cannot bar-code", () => {
   const model = cobraRotorcraftHudModel(chaos);
   assert.equal(model.warnings.length, 2);
   assert.ok(model.warnings.every((w) => w.level === "warning"));
+});
+
+test("battle damage warnings are persistent, honest, prioritized, and capped", () => {
+  const damaged = modelFixture({
+    battle_damage: {
+      engine_damaged: true,
+      scas_damaged: true,
+      receiving_fire: true,
+      threat_tracking: true,
+      acquisition_progress: 1,
+      tracking_observers: 4,
+      seconds_to_next_impact: 0.1,
+      recent_bursts: [{ will_hit: true }],
+    },
+  });
+  assert.deepEqual(cobraRotorcraftHudModel(damaged).warnings, [
+    { text: "ENGINE OUT", level: "warning" },
+    { text: "SCAS OUT", level: "caution" },
+  ]);
+
+  damaged.battle_damage.engine_damaged = false;
+  assert.deepEqual(cobraRotorcraftHudModel(damaged).warnings, [
+    { text: "SCAS OUT", level: "caution" },
+    { text: "GROUND FIRE", level: "caution" },
+  ]);
+
+  damaged.battle_damage.scas_damaged = false;
+  damaged.battle_damage.receiving_fire = false;
+  assert.deepEqual(
+    cobraRotorcraftHudModel(damaged).warnings,
+    [],
+    "tracking, acquisition, observers, predicted hits and impact timing are not pilot warnings",
+  );
+});
+
+test("critical rotor warnings retain the lane ahead of amber damage awareness", () => {
+  const damaged = modelFixture({
+    battle_damage: { engine_damaged: true, scas_damaged: true, receiving_fire: true },
+  });
+  damaged.vehicle.rotorcraft.main_rotor_rpm = 280;
+  assert.deepEqual(cobraRotorcraftHudModel(damaged).warnings, [
+    { text: "ENGINE OUT", level: "warning" },
+    { text: "LOW ROTOR", level: "warning" },
+  ]);
+});
+
+test("damage annunciations draw in their warning and caution colors", () => {
+  const model = cobraRotorcraftHudModel(modelFixture({
+    battle_damage: { engine_damaged: true, scas_damaged: true, receiving_fire: false },
+  }));
+  const ctx = recordingHudContext();
+  drawCobraRotorcraftHud(ctx, model, { width: 1280, height: 720 });
+
+  const engine = ctx.textCalls.find((call) => call.text === "ENGINE OUT");
+  const scas = ctx.textCalls.find((call) => call.text === "SCAS OUT");
+  assert.equal(engine?.fillStyle, "#ff465d");
+  assert.equal(scas?.fillStyle, "#ffb020");
 });
 
 test("model fails closed without vehicle truth", () => {

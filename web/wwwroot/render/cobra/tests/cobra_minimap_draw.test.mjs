@@ -216,7 +216,11 @@ test("the minimap names only the objective; the full map names everything", () =
   // colour and the full map.
   const minimapCtx = recordingContext();
   const miniModel = model();
-  drawCobraTacticalMap(minimapCtx, miniModel, { full: false });
+  drawCobraTacticalMap(minimapCtx, miniModel, {
+    full: false,
+    headerPx: COBRA_MAP_CAPTION_PX.mini,
+    caption: { line: "DESTROY GARRISON · FORD", detail: "Clear the point" },
+  });
   const miniTexts = minimapCtx.calls
     .filter((call) => call.name === "fillText")
     .map((call) => String(call.args[0]));
@@ -226,8 +230,10 @@ test("the minimap names only the objective; the full map names everything", () =
     `objective must be named on the minimap: ${miniTexts.join(" | ")}`);
   assert.ok(!miniTexts.includes("BRIDGE"),
     "a non-objective point must not be named on the minimap");
+  assert.ok(miniTexts.includes("PTS 1–1 · TKT 280–190 · STALEMATE"),
+    `compact score missing from minimap: ${miniTexts.join(" | ")}`);
   assert.ok(!miniTexts.some((text) => /FRIENDLY 280|HOSTILE 190/.test(text)),
-    "ticket counts belong to the full map only");
+    "expanded ticket labels belong to the full map only");
 
   const fullCtx = recordingContext();
   const fullModel = model({ widthPx: 1_200, heightPx: 800, showUnits: true });
@@ -237,6 +243,8 @@ test("the minimap names only the objective; the full map names everything", () =
   assert.ok(texts.includes("FORD"));
   assert.ok(texts.some((text) => /FRIENDLY 280/.test(text)), "friendly ticket count missing");
   assert.ok(texts.some((text) => /HOSTILE 190/.test(text)), "hostile ticket count missing");
+  assert.ok(!texts.some((text) => /^PTS /.test(text)),
+    "the full map keeps its expanded bars instead of repeating the compact score");
   // Ticket bars are the only filled rectangles besides the backing and the legend swatches.
   const bars = fullCtx.calls.filter((call) => call.name === "fillRect");
   assert.ok(bars.length >= 5, "ticket bars not drawn");
@@ -297,7 +305,7 @@ test("M toggles the full map, and Escape closes it before it quits the sortie", 
     new URL("../../onboarding/controls_content.js", import.meta.url),
     "utf8",
   );
-  assert.match(controls, /\["M", "Full tactical map/);
+  assert.match(controls, /\["M · MAP", "Score and captures — the fight keeps running"\]/);
 });
 
 test("an empty ground war draws the chrome and does not throw", () => {
@@ -315,21 +323,23 @@ test("an empty ground war draws the chrome and does not throw", () => {
  */
 test("the objective caption reaches the minimap, above the chart", () => {
   const ctx = recordingContext();
-  const model = cobraTacticalMapModel({ bounds: BOUNDS, widthPx: 200, heightPx: 174 });
-  drawCobraTacticalMap(ctx, model, {
+  const map = model({ heightPx: 154 });
+  drawCobraTacticalMap(ctx, map, {
     headerPx: COBRA_MAP_CAPTION_PX.mini,
     caption: { line: "DESTROY GARRISON · LONG FANG", detail: "1.8 km" },
   });
-  // Two lines: the order, then the place. They are drawn in the BAND, before the chart is
-  // translated down, so they are the first text on the canvas — site labels and the scale bar
-  // follow underneath.
+  // Three lines: order, place, then persistent conquest score. They are drawn in the BAND,
+  // before the chart is translated down; site labels and chart furniture follow underneath.
   const texts = ctx.calls.filter((call) => call.name === "fillText");
   assert.deepEqual(
-    texts.slice(0, 2).map((call) => String(call.args[0])),
-    ["DESTROY GARRISON", "LONG FANG"],
+    texts.slice(0, 3).map((call) => String(call.args[0])),
+    ["DESTROY GARRISON", "LONG FANG", "PTS 1–1 · TKT 280–190 · STALEMATE"],
   );
-  // Drawn in the band, before the chart is translated into place.
-  assert.ok(texts[0].args[2] < COBRA_MAP_CAPTION_PX.mini, "caption must sit inside its band");
+  const captionRowsY = texts.slice(0, 3).map((call) => call.args[2]);
+  assert.ok(captionRowsY[0] < captionRowsY[1] && captionRowsY[1] < captionRowsY[2],
+    `caption rows overlap or run out of order: ${captionRowsY.join(", ")}`);
+  assert.ok(captionRowsY.every((y) => y > 0 && y < COBRA_MAP_CAPTION_PX.mini),
+    "every caption row must sit inside its band");
   assert.ok(
     ctx.calls.some((call) => call.name === "translate"
       && call.args[1] === COBRA_MAP_CAPTION_PX.mini),
@@ -362,6 +372,21 @@ test("no caption means no band and no translate", () => {
   assert.ok(!texts.some((text) => /GARRISON|LIFT|CLEAR|HOLDING/.test(text)),
     `caption text drawn with no caption: ${texts.join(" | ")}`);
   assert.ok(!ctx.calls.some((call) => call.name === "translate" && call.args[1] === COBRA_MAP_CAPTION_PX.mini));
+});
+
+test("the conquest score remains visible when the combat order is temporarily absent", () => {
+  const ctx = recordingContext();
+  drawCobraTacticalMap(ctx, model({ heightPx: 154 }), {
+    headerPx: COBRA_MAP_CAPTION_PX.mini,
+    caption: null,
+  });
+  const texts = ctx.calls
+    .filter((call) => call.name === "fillText")
+    .map((call) => String(call.args[0]));
+  assert.equal(texts[0], "PTS 1–1 · TKT 280–190 · STALEMATE");
+  assert.ok(ctx.calls.some((call) => call.name === "translate"
+    && call.args[1] === COBRA_MAP_CAPTION_PX.mini),
+  "the chart must still make room for its persistent score band");
 });
 
 test("the lab wires the objective caption into both charts", async () => {

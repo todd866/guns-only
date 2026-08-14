@@ -240,6 +240,20 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
     /function prepareMissionTerrain\(index, stagedState\)[\s\S]*setPauseReason\("terrain", true\)[\s\S]*warmTerrainAroundReadyAircraft[\s\S]*setPauseReason\("terrain", requiredFeaturePack && !warmupReady\)/,
     "the low-level sortie must warm nearby terrain before releasing the flight clock");
   assert.match(source,
+    /function selectedTerrainMissionSelector\(\)[\s\S]*isTopGunProgram\(\) \? TOP_GUN_PROGRAM_ID : selectedBeat/,
+    "Top Gun terrain completion must retain programme authority instead of falling back to its numeric shell beat");
+  assert.match(source,
+    /function prepareMissionTerrain\(index, stagedState\)[\s\S]*const missionSelector = terrainLaunchMissionSelector\(index\);[\s\S]*const owner = \{[\s\S]*missionSelector,[\s\S]*missionIdentity,/,
+    "terrain warmup owners must preserve string programme selectors without numeric coercion");
+  assert.equal([
+    ...source.matchAll(
+      /terrainLaunchOwnerMatches\(\s*owner,\s*selectedTerrainMissionSelector\(\),\s*latestState/g,
+    ),
+  ].length, 2,
+  "completion and automatic retry must both verify the programme-aware warmup owner");
+  assert.doesNotMatch(source, /index: Number\(index\)/,
+    "string programme owners must never be collapsed to NaN");
+  assert.match(source,
     /terrainLaunchWarmupFailedKey === warmupKey[\s\S]*requiredFeaturePack[\s\S]*automatic retry scheduled[\s\S]*setPauseReason\("terrain", true\)/,
     "a required mission pack failure must keep Ready closed while truthfully announcing recovery");
   assert.match(source,

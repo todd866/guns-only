@@ -588,7 +588,20 @@ test("the published Cobra Hold the Bridge route boots authority and takes a Tab 
       waitUntil: "load",
       timeout: scaled(150000),
     });
-    await waitForCobraAuthority(page, scaled(150000));
+    try {
+      await waitForCobraAuthority(page, scaled(150000));
+    } catch (error) {
+      const boot = await page.evaluate(() => ({
+        documentReadyState: document.readyState,
+        status: document.querySelector("#status span")?.textContent ?? "",
+        statusReady: document.querySelector("#status")?.dataset.ready ?? null,
+        statusError: document.querySelector("#status")?.dataset.error ?? null,
+        authorityPresent: !!window.__gunsOnlyCobraAuthority,
+        authorityVehiclePresent: !!window.__gunsOnlyCobraAuthority?.vehicle,
+        bodyClass: document.body.className,
+      }));
+      throw new Error(`${error.message}\n${JSON.stringify({ boot, pageErrors })}`);
+    }
 
     const boot = await readCobraHud(page);
     assert.match(boot.status, /HOLD THE BRIDGE|AH-1G ONLINE/i);
@@ -605,7 +618,8 @@ test("the published Cobra Hold the Bridge route boots authority and takes a Tab 
     assert.equal(boot.model.gunner.line, "GUN —");
     assert.equal(boot.model.designation, null, "a fresh sortie must designate nothing");
     assert.ok(boot.hostiles >= 1, `Cobra boot found no living hostiles: ${JSON.stringify(boot)}`);
-    assert.ok(boot.tick >= 0, `Cobra authority never ticked: ${JSON.stringify(boot)}`);
+    assert.equal(boot.tick, -1,
+      `cold Ready must publish truth without advancing mission time: ${JSON.stringify(boot)}`);
 
     // Tab designates, and the designation is real all the way down: the authority holds the mark,
     // the production HUD model carries it onto the combiner, the designation bracket agrees with
@@ -631,6 +645,8 @@ test("the published Cobra Hold the Bridge route boots authority and takes a Tab 
     assert.ok(Number.isFinite(designated.model.designation?.rangeM)
       && designated.model.designation.rangeM > 0,
     `designation has no slant range: ${JSON.stringify(designated.model.designation)}`);
+    assert.ok(designated.tick >= 0,
+      `the deliberate Tab edge did not start authority: ${JSON.stringify(designated)}`);
     assert.deepEqual(pageErrors, [], `uncaught Cobra page errors:\n${pageErrors.join("\n")}`);
   } finally {
     await browser.close();

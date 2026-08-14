@@ -20,12 +20,13 @@ public static partial class CobraWebBridge
     const double MaximumFrameDeltaSeconds = 0.1;
     static CobraMissionRuntime? _runtime;
     static CobraCanyonRouteChoice _routeChoice;
-    static VerticalLiftPilotCommand _command = new(0.5, 0.0, 0.0, 0.0);
+    static CobraAirframeSwapControlLatch _controlLatch = new();
     static CobraAiGunner _gunner = CreateGunner();
     static readonly CobraTurretServo _turretServo = new();
     static CobraAiGunnerDecision _gunnerDecision;
     static string? _selectedTargetId;
     static bool _engagementConsent;
+    static bool _turnaroundActionHeld;
     static double _accumulatorSeconds;
 
     [JSExport]
@@ -44,15 +45,10 @@ public static partial class CobraWebBridge
             _routeChoice,
             windVelocityMps: CobraCanyonWindField.DefaultSynopticMps,
             enableTerrainWind: true);
-        _command = new VerticalLiftPilotCommand(
-            _runtime.Cobra.EstimateHoverCollective(
-                _runtime.Cobra.State.GrossMassKg,
-                CobraMissionRuntime.DefaultAirDensityKgM3),
-            0.0,
-            0.0,
-            0.0);
+        _controlLatch.Reset();
         _selectedTargetId = null;
         _engagementConsent = false;
+        _turnaroundActionHeld = false;
         _gunner = CreateGunner();
         _turretServo.Reset();
         _gunnerDecision = default;
@@ -74,6 +70,19 @@ public static partial class CobraWebBridge
         ReacquisitionSeconds: 0.45,
         SightCoincidenceToleranceRad: 0.06));
 
+    /// <summary>
+    /// Lab-only staging aid. Play deliberately leaves the lever at zero; the continuously-running
+    /// visual lab may explicitly request the provider's current hover estimate.
+    /// </summary>
+    [JSExport]
+    public static double GetHoverCollective()
+    {
+        CobraMissionRuntime runtime = RequireRuntime();
+        return runtime.Cobra.EstimateHoverCollective(
+            runtime.Cobra.State.GrossMassKg,
+            CobraMissionRuntime.DefaultAirDensityKgM3);
+    }
+
     [JSExport]
     public static void SetControls(
         double collective,
@@ -81,12 +90,19 @@ public static partial class CobraWebBridge
         double rightCyclic,
         double yaw)
     {
-        _command = new VerticalLiftPilotCommand(
+        _controlLatch.TrySetControls(new VerticalLiftPilotCommand(
             ClampFinite(collective, 0.0, 1.0, nameof(collective)),
             ClampFinite(forwardCyclic, -1.0, 1.0, nameof(forwardCyclic)),
             ClampFinite(rightCyclic, -1.0, 1.0, nameof(rightCyclic)),
-            ClampFinite(yaw, -1.0, 1.0, nameof(yaw)));
+            ClampFinite(yaw, -1.0, 1.0, nameof(yaw))));
     }
+
+    [JSExport]
+    public static bool AcknowledgeAirframeSwap(int swapGeneration) =>
+        _controlLatch.AcknowledgeAuthoritySwap(swapGeneration);
+
+    [JSExport]
+    public static void SetTurnaroundAction(bool held) => _turnaroundActionHeld = held;
 
     [JSExport]
     public static void SetGunnerTarget(string? targetId) =>
@@ -102,16 +118,31 @@ public static partial class CobraWebBridge
         if (!double.IsFinite(deltaSeconds) || deltaSeconds < 0.0)
             throw new ArgumentOutOfRangeException(nameof(deltaSeconds));
 
+        // Do not even accumulate paused wall time. The browser must first observe the fresh spare,
+        // reset Ready/neutral-edge state, and acknowledge its exact authority generation.
+        if (_controlLatch.AwaitingAcknowledgement) {
+            FillHotPose(runtime);
+            return checked((int)runtime.Cobra.State.Tick);
+        }
+
         _accumulatorSeconds += Math.Min(deltaSeconds, MaximumFrameDeltaSeconds);
         int ticks = 0;
         while (_accumulatorSeconds + 1e-12 >= FixedDeltaSeconds
             && ticks++ < 12
             && runtime.MissionFlyable) {
-            runtime.Advance(_command);
+            int airframeSwapsBeforeTick = runtime.AirframeSwaps;
+            runtime.Advance(_controlLatch.Command, _turnaroundActionHeld);
+            _accumulatorSeconds -= FixedDeltaSeconds;
+            if (runtime.AirframeSwaps > airframeSwapsBeforeTick) {
+                _controlLatch.ObserveAuthoritySwap(runtime.AirframeSwaps);
+                // Discard the rest of the old bird's render-frame budget. Otherwise it becomes an
+                // implicit catch-up impulse after the player deliberately starts the spare.
+                _accumulatorSeconds = 0.0;
+                break;
+            }
             AdvanceGunner(runtime);
             if (_gunnerDecision.FireAuthorized)
                 runtime.ApplyAuthorizedGunfire(_selectedTargetId);
-            _accumulatorSeconds -= FixedDeltaSeconds;
         }
         FillHotPose(runtime);
         return checked((int)runtime.Cobra.State.Tick);
@@ -137,6 +168,30 @@ public static partial class CobraWebBridge
         VehicleContactFailureCause.RotorStrike => "rotor-strike",
         VehicleContactFailureCause.WaterContact => "water-contact",
         _ => "none",
+    };
+
+    static string TurnaroundPhaseToken(CobraTurnaroundPhase phase) => phase switch
+    {
+        CobraTurnaroundPhase.Operational => "operational",
+        CobraTurnaroundPhase.ShutdownRequired => "shutdown-required",
+        CobraTurnaroundPhase.RotorCoast => "rotor-coast",
+        CobraTurnaroundPhase.AwaitStartRelease => "await-start-release",
+        CobraTurnaroundPhase.ColdAndDark => "cold-and-dark",
+        CobraTurnaroundPhase.Starting => "starting",
+        CobraTurnaroundPhase.Secured => "secured",
+        _ => throw new ArgumentOutOfRangeException(nameof(phase)),
+    };
+
+    static string TurnaroundActionToken(CobraTurnaroundAction action) => action switch
+    {
+        CobraTurnaroundAction.None => "none",
+        CobraTurnaroundAction.LowerCollective => "lower-collective",
+        CobraTurnaroundAction.Release => "release",
+        CobraTurnaroundAction.HoldShutdown => "hold-shutdown",
+        CobraTurnaroundAction.Coast => "coast",
+        CobraTurnaroundAction.HoldStart => "hold-start",
+        CobraTurnaroundAction.Starting => "starting",
+        _ => throw new ArgumentOutOfRangeException(nameof(action)),
     };
 
     // Per-frame numeric pose projection — the Cobra-scale analogue of the F-22 SnapshotHotFrame.
@@ -172,6 +227,7 @@ public static partial class CobraWebBridge
     {
         CobraMissionDiagnostics diagnostics = runtime.Diagnostics;
         CobraRouteGuidance guidance = diagnostics.RouteGuidance;
+        CobraBattleDamageState battleDamage = diagnostics.BattleDamage;
         PlayerVehicleObservation observation = runtime.Cobra.Observation;
         RotorcraftTelemetry rotorcraft = runtime.Cobra.Telemetry;
         Vec3D gustMomentBodyNm = runtime.Cobra.LastGustMomentBodyNm;
@@ -221,12 +277,59 @@ public static partial class CobraWebBridge
                 observers_in_range = diagnostics.Masking.ObserversInRange,
                 observers_with_line_of_sight = diagnostics.Masking.ObserversWithLineOfSight,
             },
+            battle_damage = new {
+                active_observer_id = battleDamage.ActiveObserverId,
+                continuous_exposure_seconds = battleDamage.ContinuousExposureSeconds,
+                acquisition_progress = battleDamage.AcquisitionProgress,
+                tracking_observers = battleDamage.TrackingObservers,
+                threat_tracking = battleDamage.ThreatTracking,
+                receiving_fire = battleDamage.ReceivingFire,
+                bursts_fired = battleDamage.BurstsFired,
+                pending_bursts = battleDamage.PendingBursts,
+                damaging_hits = battleDamage.DamagingHits,
+                seconds_to_next_impact = battleDamage.SecondsToNextImpact,
+                scas_damaged = battleDamage.ScasDamaged,
+                engine_damaged = battleDamage.EngineDamaged,
+                recent_bursts = runtime.RecentThreatBursts.Select(burst => new {
+                    sequence = burst.Sequence,
+                    observer_id = burst.ObserverId,
+                    source_x_m = burst.SourceWorldM.X,
+                    source_y_m = burst.SourceWorldM.Y,
+                    source_z_m = burst.SourceWorldM.Z,
+                    target_x_m = burst.TargetWorldM.X,
+                    target_y_m = burst.TargetWorldM.Y,
+                    target_z_m = burst.TargetWorldM.Z,
+                    impact_x_m = burst.ImpactWorldM.X,
+                    impact_y_m = burst.ImpactWorldM.Y,
+                    impact_z_m = burst.ImpactWorldM.Z,
+                    fired_at_s = burst.FiredAtSeconds,
+                    impact_at_s = burst.ImpactAtSeconds,
+                    will_hit = burst.WillHit,
+                    subsystem = burst.Subsystem.ToString().ToLowerInvariant(),
+                    has_impacted = burst.HasImpacted,
+                }).ToArray(),
+            },
+            turnaround = new {
+                phase = TurnaroundPhaseToken(runtime.Turnaround.Phase),
+                sequence = runtime.Turnaround.Sequence,
+                action = TurnaroundActionToken(runtime.Turnaround.Action),
+                hold_progress = runtime.Turnaround.HoldProgress,
+                flight_controls_enabled = runtime.Turnaround.FlightControlsEnabled,
+                weapons_enabled = runtime.Turnaround.WeaponsEnabled,
+                main_rotor_rpm = rotorcraft.MainRotorRpm,
+                main_rotor_fraction = rotorcraft.MainRotorRpm
+                    / Ah1gCobraDefinition.LateProduction.MainRotor.NominalRpm,
+                engine_power_fraction = rotorcraft.AvailableShaftPowerW > 1.0
+                    ? rotorcraft.EngineShaftPowerW / rotorcraft.AvailableShaftPowerW
+                    : 0.0,
+            },
             gunner = new {
                 selected_target_id = _selectedTargetId,
                 state = _gunnerDecision.State.ToString().ToLowerInvariant(),
                 reason = _gunnerDecision.Reason.ToString(),
                 track_requested = _gunnerDecision.TrackRequested,
-                fire_authorized = _gunnerDecision.FireAuthorized,
+                fire_authorized = _gunnerDecision.FireAuthorized
+                    && runtime.Turnaround.WeaponsEnabled,
                 qualified_track_seconds = _gunnerDecision.QualifiedTrackSeconds,
                 turret_azimuth_rad = _turretServo.AzimuthRad,
                 turret_elevation_rad = _turretServo.ElevationRad,
@@ -327,11 +430,11 @@ public static partial class CobraWebBridge
                 roll_rad = observation.RollRad,
                 yaw_rad = observation.YawRad,
                 yaw_rate_rad_s = rotorcraft.BodyYawRateRadPerSecond,
-                collective = _command.Collective,
-                forward_cyclic = _command.ForwardCyclic,
-                right_cyclic = _command.RightCyclic,
-                yaw = _command.Yaw,
-                pedal = _command.Yaw,
+                collective = _controlLatch.Command.Collective,
+                forward_cyclic = _controlLatch.Command.ForwardCyclic,
+                right_cyclic = _controlLatch.Command.RightCyclic,
+                yaw = _controlLatch.Command.Yaw,
+                pedal = _controlLatch.Command.Yaw,
                 wind_e_mps = observation.WindVelocityMps.X,
                 wind_u_mps = observation.WindVelocityMps.Y,
                 wind_n_mps = observation.WindVelocityMps.Z,
@@ -354,7 +457,14 @@ public static partial class CobraWebBridge
                     regime = rotorcraft.Regime.ToString(),
                     main_rotor_rpm = rotorcraft.MainRotorRpm,
                     tail_rotor_rpm = rotorcraft.TailRotorRpm,
+                    main_rotor_fraction = rotorcraft.MainRotorRpm
+                        / Ah1gCobraDefinition.LateProduction.MainRotor.NominalRpm,
                     collective_root_pitch_rad = rotorcraft.CollectiveRootPitchRad,
+                    engine_shaft_power_w = rotorcraft.EngineShaftPowerW,
+                    available_shaft_power_w = rotorcraft.AvailableShaftPowerW,
+                    engine_shaft_power_fraction = rotorcraft.AvailableShaftPowerW > 1.0
+                        ? rotorcraft.EngineShaftPowerW / rotorcraft.AvailableShaftPowerW
+                        : 0.0,
                     transmission_torque_nm = rotorcraft.TransmissionTorqueNm,
                     transmission_limit_fraction = rotorcraft.TransmissionLimitFraction,
                     governor_saturated = rotorcraft.GovernorSaturated,
@@ -443,7 +553,8 @@ public static partial class CobraWebBridge
             runtime.Cobra.State.Tick,
             _selectedTargetId,
             _engagementConsent,
-            WeaponsArmed: !runtime.GroundWar.Magazine.IsDry,
+            WeaponsArmed: runtime.Turnaround.WeaponsEnabled
+                && !runtime.GroundWar.Magazine.IsDry,
             TurretServiceable: true,
             target));
     }
@@ -459,6 +570,7 @@ public static partial class CobraWebBridge
         GroundUnitRole.InfantryClump => "infantry",
         GroundUnitRole.SoftVehicle => "soft-vehicle",
         GroundUnitRole.HardPoint => "hard-point",
+        GroundUnitRole.DshkSite => "dshk-site",
         _ => throw new ArgumentOutOfRangeException(nameof(role))
     };
 
