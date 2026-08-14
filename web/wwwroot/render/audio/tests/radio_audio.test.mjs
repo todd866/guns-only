@@ -312,10 +312,10 @@ test("a stale clip id with different words fails silent", async () => {
 test("new radio sequence opens squelch once and only lightly ducks propulsion", async () => {
   const { createRadioVoice, updateRadioVoice } = await import("../radio_audio.js?radio=sequence");
   const context = new Context();
-  const engineMaster = new Gain();
-  engineMaster.gain.value = 0.58;
+  const propulsionDuck = new Gain();
+  propulsionDuck.gain.value = 1;
   const voice = createRadioVoice(context, context.destination, {
-    engineMaster,
+    propulsionDuck,
     fetchImpl: authoredClip("tower-continue", "Continue.", "tower"),
   });
   const state = {
@@ -331,7 +331,7 @@ test("new radio sequence opens squelch once and only lightly ducks propulsion", 
   await new Promise((resolve) => setImmediate(resolve));
 
   assert.equal(voice.squelchCount, 1);
-  assert.equal(engineMaster.gain.targets.at(-1).value, 0.52);
+  assert.ok(Math.abs(propulsionDuck.gain.targets.at(-1).value - 0.52 / 0.58) < 1e-12);
   assert.equal(voice.highpass.type, "highpass");
   assert.equal(voice.lowpass.type, "lowpass");
   assert.equal("ground.controller.close-mic", voice.currentEquipment.talkerId);
@@ -344,9 +344,9 @@ test("new radio sequence opens squelch once and only lightly ducks propulsion", 
 test("mute stops a transmission and restores propulsion", async () => {
   const { createRadioVoice, updateRadioVoice } = await import("../radio_audio.js?radio=mute");
   const context = new Context();
-  const engineMaster = new Gain();
+  const propulsionDuck = new Gain();
   const voice = createRadioVoice(context, context.destination, {
-    engineMaster,
+    propulsionDuck,
     fetchImpl: authoredClip(
       "pilot-initial",
       "Ghost One One, initial.",
@@ -364,15 +364,15 @@ test("mute stops a transmission and restores propulsion", async () => {
   updateRadioVoice(voice, context, state, { enabled: false });
 
   assert.equal(voice.enabled, false);
-  assert.equal(engineMaster.gain.targets.at(-1).value, 0.58);
+  assert.equal(propulsionDuck.gain.targets.at(-1).value, 1);
 });
 
 test("mission reset lets sequence one play again", async () => {
   const { createRadioVoice, updateRadioVoice } = await import("../radio_audio.js?radio=reset");
   const context = new Context();
-  const engineMaster = new Gain();
+  const propulsionDuck = new Gain();
   const voice = createRadioVoice(context, context.destination, {
-    engineMaster,
+    propulsionDuck,
     fetchImpl: authoredClip(
       "pilot-initial",
       "Ghost One One, initial.",
@@ -418,9 +418,9 @@ test("tactical radio is not restricted to the Circuits mission", async () => {
 test("a missing authored clip fails silent instead of invoking device TTS", async () => {
   const { createRadioVoice, updateRadioVoice } = await import("../radio_audio.js?radio=missing");
   const context = new Context();
-  const engineMaster = new Gain();
+  const propulsionDuck = new Gain();
   const voice = createRadioVoice(context, context.destination, {
-    engineMaster,
+    propulsionDuck,
     fetchImpl: silentManifest,
   });
   let spoken = 0;
@@ -447,7 +447,7 @@ test("a missing authored clip fails silent instead of invoking device TTS", asyn
       radio_active: false,
       radio_sequence: 9,
     });
-    assert.equal(engineMaster.gain.targets.at(-1).value, 0.58);
+    assert.equal(propulsionDuck.gain.targets.at(-1).value, 1);
   } finally {
     if (previousSynth === undefined) delete globalThis.speechSynthesis;
     else globalThis.speechSynthesis = previousSynth;

@@ -40,6 +40,23 @@ test("player heading passes through unchanged and does not affect x/y", () => {
   assert.equal(b.player.headingRad, 2.4);
 });
 
+test("combat-live staging truth survives tactical-map projection", () => {
+  const staged = cobraTacticalMapModel({
+    combatLive: false,
+    bounds: BOUNDS,
+    widthPx: 200,
+    heightPx: 200,
+  });
+  const live = cobraTacticalMapModel({
+    combatLive: true,
+    bounds: BOUNDS,
+    widthPx: 200,
+    heightPx: 200,
+  });
+  assert.equal(staged.combat_live, false);
+  assert.equal(live.combat_live, true);
+});
+
 test("ownership and progress pass through unchanged for every site", () => {
   const model = cobraTacticalMapModel({
     sites: [

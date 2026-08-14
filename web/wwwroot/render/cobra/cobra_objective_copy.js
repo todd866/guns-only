@@ -23,7 +23,7 @@
 import {
   cobraObjectiveSiteId,
   cobraSiteHasLivingGarrison,
-} from "./cobra_objective_site.js?v=327";
+} from "./cobra_objective_site.js?v=328";
 
 // Mirrors CobraGroundWarRuntime.StartingTickets, used ONLY as a floor for the "critically low"
 // threshold when the snapshot does not publish a start value. Kept as a floor rather than a
@@ -222,6 +222,9 @@ export function cobraConquestScoreLine(authoritySnapshot) {
   const friendlyPoints = sites.filter((site) => site.owner === "friendly").length;
   const hostilePoints = sites.filter((site) => site.owner === "hostile").length;
   const pointMargin = friendlyPoints - hostilePoints;
+  if (war.combat_live === false) {
+    return `PTS ${friendlyPoints}–${hostilePoints} · TKT ${Math.round(friendlyTickets)}–${Math.round(hostileTickets)} · STAGED`;
+  }
   const publishedRate = finiteNumber(war.ticket_bleed_per_second_per_point);
   const perPointRate = Number.isFinite(publishedRate) && publishedRate >= 0
     ? publishedRate

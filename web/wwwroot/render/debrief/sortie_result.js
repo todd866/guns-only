@@ -70,11 +70,14 @@ export function combatHandoffPresentation(state = {}) {
   const requested = snapshot.combat_handoff_requested === true;
   const active = snapshot.combat_handoff_active === true;
   const playerRtbActive = snapshot.player_rtb_active === true;
+  const returnReason = token(snapshot.rtb_reason) || "NONE";
+  const automatic = snapshot.rtb_automatic === true
+    || returnReason === "BINGO_FUEL";
   const reliefKills = Math.max(0,
     Math.trunc(finiteNumber(snapshot.relief_kills) ?? 0));
   const phaseIndex = HANDOFF_PHASE_BY_ORDINAL.indexOf(phase);
   const occurred = requested || active || playerRtbActive || phaseIndex >= 2;
-  const available = phase === "AVAILABLE"
+  const available = (snapshot.rtb_available === true || phase === "AVAILABLE")
     && !requested && !active && !playerRtbActive;
 
   let status = "HANDOFF UNAVAILABLE";
@@ -94,6 +97,13 @@ export function combatHandoffPresentation(state = {}) {
   }
   if (playerRtbActive && !status.includes("RTB"))
     status = `${status} · PLAYER RTB`;
+  if (returnReason === "BINGO_FUEL" && playerRtbActive)
+    status = "BINGO · KNOCK IT OFF · RTB";
+  else if (returnReason === "PILOT_KNOCK_IT_OFF" && playerRtbActive
+      && phase === "UNAVAILABLE")
+    status = "KNOCK IT OFF · RTB";
+  else if (available && phase !== "AVAILABLE")
+    status = "CALL IT A DAY · RTB AVAILABLE";
 
   return Object.freeze({
     phase,
@@ -103,6 +113,8 @@ export function combatHandoffPresentation(state = {}) {
     reliefKills,
     occurred,
     available,
+    returnReason,
+    automatic,
     status,
   });
 }

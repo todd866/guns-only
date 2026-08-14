@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   createGuidancePath,
   gateToScenePosition,
   GUIDANCE_PATH_DEFAULTS,
+  rtbGuidanceGates,
 } from "../guidance_path.js";
 
 const approachGates = [
@@ -45,6 +47,7 @@ const THREE = {
   Color: class { constructor(c) { this.value = c; } set(c) { this.value = c; return this; } },
   Vector3: V3,
   AdditiveBlending: "additive",
+  NormalBlending: "normal",
   DoubleSide: "double",
 };
 
@@ -62,7 +65,7 @@ test("world north maps to scene -Z, matching the player transform", () => {
 
 test("the ladder is drawn, one soft volume per gate, scaled to authored tolerance", () => {
   const path = createGuidancePath(THREE);
-  const drawn = path.update({ recovery_gates_json: gatesJson });
+  const drawn = path.update({ recovery_gates_json: gatesJson, player_rtb_active: true });
   assert.equal(drawn, 2, "both gates must be drawn");
   assert.equal(path.object3d.visible, true);
 
@@ -77,7 +80,7 @@ test("the ladder is drawn, one soft volume per gate, scaled to authored toleranc
 
 test("guidance never occludes: additive, depth-tested, never depth-writing, well under opaque", () => {
   const path = createGuidancePath(THREE);
-  path.update({ recovery_gates_json: gatesJson });
+  path.update({ recovery_gates_json: gatesJson, player_rtb_active: true });
   const material = path.object3d.children[0].material;
   assert.equal(material.depthWrite, false, "guidance must never write depth");
   assert.equal(material.depthTest, true, "a gate behind a hill stays behind that hill");
@@ -87,7 +90,7 @@ test("guidance never occludes: additive, depth-tested, never depth-writing, well
   assert.ok(GUIDANCE_PATH_DEFAULTS.activeOpacity <= 0.45);
 });
 
-test("the whole ladder shares one shader program, so boot does not stutter", () => {
+test("procedure and RTB each share one shader program, so boot does not stutter", () => {
   const seen = new Set();
   const counting = {
     ...THREE,
@@ -96,20 +99,182 @@ test("the whole ladder shares one shader program, so boot does not stutter", () 
     },
   };
   const path = createGuidancePath(counting);
-  path.update({ recovery_gates_json: gatesJson });
-  // 24 materials meant 24 program compilations in the first frames after boot. One material is
-  // one compile; per-gate colour rides in as a uniform at draw time.
-  assert.equal(seen.size, 1,
-    `guidance must compile one shader program, not ${seen.size}`);
+  path.update({ recovery_gates_json: gatesJson, player_rtb_active: true });
+  // 24 materials meant 24 program compilations in the first frames after boot. One shared soft
+  // procedure shader plus one shared chevron shader is still exactly two bounded compiles.
+  assert.equal(seen.size, 2,
+    `guidance must compile two shared shader programs, not ${seen.size}`);
   const meshes = path.object3d.children;
   assert.equal(new Set(meshes.map((m) => m.material)).size, 1,
-    "every gate must share the one material instance");
+    "every currently drawn procedure gate shares the procedure material");
 });
 
 test("no recovery procedure means nothing is drawn at all", () => {
   const path = createGuidancePath(THREE);
   assert.equal(path.update({}), 0);
   assert.equal(path.object3d.visible, false);
+});
+
+test("an authored recovery ladder stays hidden until authority publishes recovery intent", () => {
+  const path = createGuidancePath(THREE);
+  assert.equal(path.update({ recovery_gates_json: gatesJson }), 0);
+  assert.equal(path.object3d.visible, false);
+
+  assert.equal(path.update({
+    recovery_gates_json: gatesJson,
+    player_rtb_active: true,
+  }), approachGates.length);
+  assert.equal(path.object3d.userData.mode, "procedure");
+});
+
+test("direct RTB builds a bounded golden breadcrumb corridor to published Home Plate", () => {
+  const state = {
+    px: 0,
+    py: 1_500,
+    pz: 0,
+    player_rtb_active: true,
+    rtb_steer: true,
+    recovery_point_known: true,
+    mesh_home_place_id: "home.runway",
+    mesh_home_east_m: 8_000,
+    mesh_home_north_m: 0,
+    golden_path_valid: true,
+    golden_path_target_alt_m: 500,
+  };
+  const gates = rtbGuidanceGates(state);
+  assert.ok(gates.length >= GUIDANCE_PATH_DEFAULTS.rtbMinGateCount);
+  assert.ok(gates.length <= GUIDANCE_PATH_DEFAULTS.rtbGateCount);
+  assert.equal(gates.length, 9,
+    "a 6 km preview stays sparse instead of filling all ten slots by default");
+  assert.equal(gates[0].active, true);
+  assert.equal(gates.every((gate) => gate.rtb === true), true);
+  assert.equal(gates[0].halfM, GUIDANCE_PATH_DEFAULTS.rtbVisualHalfM);
+  assert.equal(gates.at(-1).halfM, GUIDANCE_PATH_DEFAULTS.rtbFarVisualHalfM,
+    "far chevrons compensate for perspective without changing authority tolerances");
+  assert.ok(gates[0].eastM > state.px, "first cue starts ahead of ownship");
+  assert.ok(gates.at(-1).eastM <= GUIDANCE_PATH_DEFAULTS.rtbMaxDrawM
+    + GUIDANCE_PATH_DEFAULTS.rtbLeadM + 1);
+  assert.equal(gates[0].upM, state.py, "long transit starts level instead of inventing a dive");
+  assert.ok(gates.at(-1).upM < state.py, "far end blends toward the authority schedule");
+
+  const path = createGuidancePath(THREE);
+  assert.equal(path.update(state), gates.length);
+  assert.equal(path.object3d.visible, true);
+  assert.equal(path.object3d.userData.mode, "rtb");
+  const first = path.object3d.children[0];
+  first.onBeforeRender();
+  assert.equal(first.userData.guidanceStyle, "rtb-chevron");
+  assert.equal(first.material.blending, "normal",
+    "RTB chevrons use normal alpha instead of additive white bloom");
+  assert.match(first.material.fragmentShader, /stroke/u,
+    "RTB material is an open chevron, not the procedure's filled probability disc");
+  assert.equal(first.material.uniforms.uColor.value.value,
+    GUIDANCE_PATH_DEFAULTS.rtbActiveColor);
+  assert.equal(first.material.uniforms.uOpacity.value,
+    GUIDANCE_PATH_DEFAULTS.rtbActiveOpacity);
+});
+
+test("carrier return follows the authority's current route fix, not generic Home Plate", () => {
+  const gates = rtbGuidanceGates({
+    px: 1_000,
+    py: 1_200,
+    pz: 2_000,
+    player_rtb_active: true,
+    rtb_steer: true,
+    recovery_point_known: true,
+    mesh_home_east_m: -20_000,
+    mesh_home_north_m: -20_000,
+    carrier_sortie_route_active: true,
+    carrier_sortie_route_rtb_requested: true,
+    carrier_sortie_route_fix: "RETURN_INITIAL",
+    carrier_sortie_route_target_x: 4_000,
+    carrier_sortie_route_target_y: 900,
+    carrier_sortie_route_target_z: 2_000,
+  });
+  assert.ok(gates.length > 0);
+  assert.ok(gates.every((gate) => gate.eastM > 1_000 && gate.northM === 2_000));
+  assert.match(gates[0].id, /carrier-RETURN_INITIAL/);
+});
+
+test("carrier RTB fix outranks a stale land recovery ladder in the scene update", () => {
+  const path = createGuidancePath(THREE);
+  const drawn = path.update({
+    px: 1_000,
+    py: 1_200,
+    pz: 2_000,
+    recovery_gates_json: gatesJson,
+    recovery_point_known: true,
+    mesh_home_east_m: -20_000,
+    mesh_home_north_m: -20_000,
+    carrier_sortie_route_active: true,
+    carrier_sortie_route_rtb_requested: true,
+    carrier_sortie_route_fix: "RETURN_INITIAL",
+    carrier_sortie_route_target_x: 4_000,
+    carrier_sortie_route_target_y: 900,
+    carrier_sortie_route_target_z: 2_000,
+  });
+  assert.ok(drawn >= 3);
+  assert.equal(path.object3d.userData.mode, "rtb");
+  const first = path.object3d.children[0];
+  assert.ok(first.position.x > 1_000 && first.position.x < 4_000,
+    "the first cue leads toward the live carrier-route fix");
+  assert.equal(first.position.z, -2_000);
+});
+
+test("Rapier EGRESS and RECOVERY phases activate the shared RTB chevrons", () => {
+  const base = {
+    px: 0,
+    py: 12_000,
+    pz: 0,
+    rapier_mission_available: true,
+    recovery_point_known: true,
+    mesh_home_place_id: "rapier.dispersed-strip",
+    mesh_home_east_m: 40_000,
+    mesh_home_north_m: -20_000,
+  };
+  for (const phase of [11, 12, 13]) {
+    const gates = rtbGuidanceGates({ ...base, rapier_mission_phase: phase });
+    assert.ok(gates.length >= 3, `Rapier phase ${phase} must publish a transit corridor`);
+    assert.equal(gates.every((gate) => gate.rtb === true), true);
+  }
+  assert.deepEqual(rtbGuidanceGates({ ...base, rapier_mission_phase: 10 }), [],
+    "ATTACK is not RTB");
+  assert.deepEqual(rtbGuidanceGates({
+    ...base,
+    rapier_mission_phase: 13,
+    rapier_pattern_only: true,
+  }), [], "circuit school keeps its authored procedure instead of a coarse transit chain");
+});
+
+test("a requested carrier return with a malformed fix never falls through to land Home Plate", () => {
+  assert.deepEqual(rtbGuidanceGates({
+    px: 1_000,
+    py: 1_200,
+    pz: 2_000,
+    player_rtb_active: true,
+    recovery_point_known: true,
+    mesh_home_east_m: -20_000,
+    mesh_home_north_m: -20_000,
+    carrier_sortie_route_active: true,
+    carrier_sortie_route_rtb_requested: true,
+    carrier_sortie_route_target_x: null,
+    carrier_sortie_route_target_y: 900,
+    carrier_sortie_route_target_z: 2_000,
+  }), []);
+});
+
+test("RTB breadcrumbs fail closed without active intent or a finite destination", () => {
+  assert.deepEqual(rtbGuidanceGates({
+    px: 0, py: 1_000, pz: 0,
+    recovery_point_known: true,
+    mesh_home_east_m: 2_000,
+    mesh_home_north_m: 0,
+  }), []);
+  assert.deepEqual(rtbGuidanceGates({
+    px: 0, py: 1_000, pz: 0,
+    player_rtb_active: true,
+    recovery_point_known: true,
+  }), []);
 });
 
 test("active approach guidance prefers hot sample gates over the PROC ladder", () => {
@@ -124,6 +289,89 @@ test("active approach guidance prefers hot sample gates over the PROC ladder", (
   const meshes = path.object3d.children.filter((m) => m.visible);
   assert.equal(meshes[0].position.z, -200);
   assert.equal(meshes[1].scale.x, 800);
+  assert.equal(path.object3d.userData.mode, "procedure",
+    "authored approach gates replace the coarse RTB breadcrumb chain");
+});
+
+test("an active approach with an empty frame hides instead of flashing coarse RTB crumbs", () => {
+  const path = createGuidancePath(THREE);
+  assert.equal(path.update({
+    px: 0,
+    py: 1_000,
+    pz: 0,
+    approach_guidance_active: true,
+    approach_gate_count: 0,
+    approach_gates: [],
+    approach_gates_json: "[]",
+    player_rtb_active: true,
+    recovery_point_known: true,
+    mesh_home_east_m: 2_000,
+    mesh_home_north_m: 0,
+  }), 0);
+  assert.equal(path.object3d.visible, false);
+});
+
+test("approach ownership invalidates a same-bucket RTB breadcrumb cache", () => {
+  const path = createGuidancePath(THREE);
+  const rtb = {
+    px: 0,
+    py: 1_000,
+    pz: 0,
+    player_rtb_active: true,
+    recovery_point_known: true,
+    mesh_home_east_m: 5_000,
+    mesh_home_north_m: 0,
+  };
+  path.update(rtb);
+  const first = path.object3d.children[0];
+  const oldX = first.position.x;
+
+  assert.equal(path.update({
+    ...rtb,
+    approach_guidance_active: true,
+    approach_gates: [],
+    approach_gates_json: "[]",
+  }), 0);
+  path.update({ ...rtb, px: 40 });
+  assert.ok(first.position.x > oldX + 30,
+    "leaving approach must rebuild breadcrumbs even inside the 100 m motion bucket");
+});
+
+test("near-home crumbs persist through the former 80 metre blackout", () => {
+  const gates = rtbGuidanceGates({
+    px: 0,
+    py: 100,
+    pz: 0,
+    player_rtb_active: true,
+    recovery_point_known: true,
+    mesh_home_east_m: 60,
+    mesh_home_north_m: 0,
+  });
+  assert.equal(gates.length, 3);
+  assert.ok(gates.at(-1).eastM <= 60);
+});
+
+test("RTB breadcrumb cache follows authority altitude schedule changes without waiting for motion", () => {
+  const path = createGuidancePath(THREE);
+  const state = {
+    px: 0,
+    py: 1_500,
+    pz: 0,
+    player_rtb_active: true,
+    recovery_point_known: true,
+    mesh_home_east_m: 5_000,
+    mesh_home_north_m: 0,
+    golden_path_valid: true,
+    golden_path_target_alt_m: 500,
+  };
+  path.update(state);
+  const drawn = path.update(state);
+  const last = path.object3d.children[drawn - 1];
+  const firstAltitudeM = last.position.y;
+
+  path.update({ ...state, golden_path_target_alt_m: 900 });
+  assert.ok(last.position.y > firstAltitudeM,
+    "the same-position frame must consume the revised authority descent schedule");
 });
 
 test("hot approach gates update when only north or a non-active altitude changes", () => {
@@ -147,4 +395,18 @@ test("hot approach gates update when only north or a non-active altitude changes
 
   assert.equal(first.position.z, -325);
   assert.equal(first.position.y, 425);
+});
+
+test("production updates and disposes shared guidance outside the CASEVAC-only branch", () => {
+  const appSource = readFileSync(new URL("../../../app.js", import.meta.url), "utf8");
+  assert.equal((appSource.match(/this\.guidancePath\?\.update\(state\);/g) ?? []).length, 1,
+    "one shared world-guidance update owns every mission frame");
+  assert.match(appSource,
+    /this\.playerPosition\.set\(state\.px, state\.py, -state\.pz\);[\s\S]{0,700}?this\.guidancePath\?\.update\(state\);/,
+    "the update belongs to the common flight frame after ownship pose is projected");
+  const casevacBody = appSource.match(/syncCasevacPresentation\(state\) \{([\s\S]*?)\n  update\(state, dt,/)?.[1] ?? "";
+  assert.doesNotMatch(casevacBody, /guidancePath\?\.update/,
+    "fixed-wing guidance must never be trapped in CASEVAC again");
+  assert.match(appSource, /async dispose\(\) \{[\s\S]*?this\.guidancePath\?\.dispose\(\);/,
+    "the shared guidance graph is released with the scene");
 });

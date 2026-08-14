@@ -33,6 +33,7 @@ function authorityFixture() {
         engine_shaft_power_fraction: 0.61,
         transmission_torque_nm: 9_800,
         transmission_limit_fraction: 0.87,
+        advance_ratio: 0.24,
         governor_saturated: false,
         vortex_ring_severity: 0,
         retreating_blade_stall_severity: 0,
@@ -45,13 +46,21 @@ function authorityFixture() {
     gunner: { selected_target_id: null, state: "idle", reason: "NoTarget", fire_authorized: false },
     ground_war: {
       ammo_remaining: 350, ammo_capacity: 750, ammo_bingo: false, ammo_dry: false,
-      fob_range_m: 2_150, debrief: { hostile_kills: 3 },
+      fob_range_m: 2_150, debrief: { hostile_kills: 3, rounds_expended: 22 },
     },
     battle_damage: {
       threat_tracking: false,
       receiving_fire: false,
       scas_damaged: false,
       engine_damaged: false,
+      bursts_fired: 1,
+      damaging_hits: 0,
+      recent_bursts: [{
+        sequence: 7,
+        will_hit: false,
+        has_impacted: false,
+        subsystem: "none",
+      }],
     },
     turnaround: {
       phase: "operational",
@@ -92,6 +101,9 @@ test("cobra snapshot speaks the production hud.js state contract", () => {
   assert.equal(state.audio_profile_id, "audio.ah1g.t53-b540.v1");
   assert.equal(state.cobra_main_rotor_rpm, 320.8);
   assert.equal(state.cobra_tail_rotor_rpm, 1_648.4);
+  assert.equal(state.cobra_collective, 0.62);
+  assert.equal(state.cobra_advance_ratio, 0.24);
+  assert.equal(state.cobra_transmission_limit_fraction, 0.87);
   assert.equal(state.cobra_engine_operating, true);
   assert.equal(state.cobra_engine_power_fraction, 0.61,
     "the bridge's published shaft-power fraction wins over a recomputed fallback");
@@ -101,6 +113,20 @@ test("cobra snapshot speaks the production hud.js state contract", () => {
   assert.equal(state.has_afterburner, false);
   assert.equal(state.suppress_systems_panel, true,
     "Cobra warnings use the centre lane without waking fixed-wing systems chrome");
+  assert.equal(state.suppress_padlock_steering, true,
+    "Cobra crew/designation copy owns steering explanations instead of fixed-wing padlock copy");
+  assert.equal(state.cobra_ground_fire_last_burst_sequence, 7);
+  assert.equal(state.cobra_ground_fire_last_burst_will_hit, false);
+  assert.equal(state.cobra_ground_fire_last_burst_has_impacted, false);
+  assert.deepEqual(state.cobra_ground_fire_recent_bursts, [{
+    sequence: 7,
+    will_hit: false,
+    has_impacted: false,
+    subsystem: "none",
+  }], "audio receives actual bounded events, not only the newest-burst aliases");
+  assert.equal(state.cobra_fire_authorized, false);
+  assert.equal(state.cobra_ammo_remaining, 350);
+  assert.equal(state.cobra_rounds_expended, 22);
 
   // The rotorcraft has no indicated chain: the tape must label itself KTAS.
   assert.equal(state.calibrated_airspeed_kts, undefined);
@@ -179,6 +205,8 @@ test("snapshot object is reused across frames without leaking stale fields", () 
   assert.equal(fourth.cobra_engine_damaged, true);
   assert.equal(fourth.cobra_scas_damaged, true);
   assert.equal(fourth.cobra_receiving_ground_fire, true);
+  assert.deepEqual(fourth.cobra_ground_fire_recent_bursts, [],
+    "a reused HUD snapshot cannot retain the previous airframe's burst events");
 
   damaged.turnaround = {
     phase: "rotor-coast",
@@ -226,6 +254,9 @@ test("degraded authority states fail visible, not plausible", () => {
   assert.equal(degraded.alt_ft, undefined);
   assert.equal(degraded.heading_deg, undefined);
   assert.equal(degraded.throttle, undefined);
+  assert.equal(degraded.cobra_ground_fire_last_burst_sequence, undefined,
+    "missing threat authority cannot masquerade as sequence zero");
+  assert.deepEqual(degraded.cobra_ground_fire_recent_bursts, []);
   assert.equal(airdataReadout(degraded).primaryText, "---");
 });
 

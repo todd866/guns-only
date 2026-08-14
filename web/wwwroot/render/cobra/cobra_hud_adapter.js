@@ -39,6 +39,7 @@ const MPS_TO_FPM = 196.850394;
 const M_TO_FT = 3.28084;
 
 function finite(value) {
+  if (value == null || value === "") return undefined;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : undefined;
 }
@@ -79,6 +80,9 @@ export function cobraHudState(authorityState, pose, out = {}) {
   // utility-systems panel to populate. Keep damage warnings available to hud.js without letting
   // their relevance wake the fixed-wing systems card full of "GEAR —" placeholders.
   out.suppress_systems_panel = true;
+  // The generic padlock steering banner describes fixed-wing intercept geometry. Cobra's
+  // designation/crew panel owns the equivalent explanation.
+  out.suppress_padlock_steering = true;
 
   // Attitude/heading/altitude from the per-frame hot pose (the 30 Hz JSON lags it).
   out.pitch_deg = scaled(attitude?.pitch_rad, RAD_TO_DEG);
@@ -117,6 +121,9 @@ export function cobraHudState(authorityState, pose, out = {}) {
   );
   out.cobra_main_rotor_rpm = finite(rotorcraft?.main_rotor_rpm);
   out.cobra_tail_rotor_rpm = finite(rotorcraft?.tail_rotor_rpm);
+  out.cobra_collective = finite(vehicle?.collective);
+  out.cobra_advance_ratio = finite(rotorcraft?.advance_ratio);
+  out.cobra_transmission_limit_fraction = finite(rotorcraft?.transmission_limit_fraction);
   out.cobra_engine_operating = out.engine_running;
   out.cobra_engine_power_fraction = publishedEnginePowerFraction === undefined
     ? availableShaftPowerW !== undefined && availableShaftPowerW > 0
@@ -135,6 +142,26 @@ export function cobraHudState(authorityState, pose, out = {}) {
   // Tracking is deliberately private. The combiner warns only after authority says rounds are
   // actually in flight, never because an unseen observer has begun acquiring the aircraft.
   out.cobra_receiving_ground_fire = battleDamage?.receiving_fire === true;
+  const recentBursts = Array.isArray(battleDamage?.recent_bursts)
+    ? battleDamage.recent_bursts
+    : [];
+  const latestBurst = recentBursts.length ? recentBursts[recentBursts.length - 1] : null;
+  out.cobra_ground_fire_bursts_fired = finite(battleDamage?.bursts_fired);
+  out.cobra_ground_fire_damaging_hits = finite(battleDamage?.damaging_hits);
+  // Keep the bounded authority event list intact for presentation systems that must distinguish
+  // overlapping rounds-in-flight. A newest-only alias cannot tell that burst N impacted while
+  // newer burst N+1 is still travelling, and tying the damage counter to N+1 invents the wrong
+  // hit. This is a reference passthrough; the bridge already owns and bounds the array.
+  out.cobra_ground_fire_recent_bursts = recentBursts;
+  out.cobra_ground_fire_last_burst_sequence = finite(latestBurst?.sequence);
+  out.cobra_ground_fire_last_burst_will_hit = latestBurst?.will_hit === true;
+  out.cobra_ground_fire_last_burst_has_impacted = latestBurst?.has_impacted === true;
+  out.cobra_ground_fire_last_burst_subsystem = latestBurst
+    ? String(latestBurst.subsystem ?? "none")
+    : "none";
+  out.cobra_fire_authorized = authorityState?.gunner?.fire_authorized === true;
+  out.cobra_ammo_remaining = finite(authorityState?.ground_war?.ammo_remaining);
+  out.cobra_rounds_expended = finite(authorityState?.ground_war?.debrief?.rounds_expended);
 
   // F-22 kill tally, fed by ground-war truth.
   out.kill_count = Math.max(0,

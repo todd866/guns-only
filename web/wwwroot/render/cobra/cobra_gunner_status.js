@@ -16,12 +16,14 @@ export function gunnerStatusText(gunner, war) {
     case "acquiring":
       return "GUN ACQUIRING";
     case "masked":
+      if (reason === "OutOfLimits") return "GUN OUT OF ARC";
+      if (reason && reason !== "Masked") return `GUN ${reasonLabel(reason)}`;
+      return "GUN MASKED — NO LOS";
     case "outoflimits":
-      // Surface the bridge's own reason string. This HUD must never relabel an envelope or
-      // geometry problem as MASKED — the pilot's correction (turn/climb into limits versus
-      // waiting to unmask) depends on the real reason.
-      if (reason) return `GUN ${reasonLabel(reason)}`;
-      return gunner.state === "masked" ? "GUN MASKED" : "GUN OUT OF LIMITS";
+      // The M28A1 authority uses OutOfLimits for azimuth/elevation reach. Call the pilot's
+      // correction, not the implementation enum: turn/climb until the mark is back in arc.
+      if (!reason || reason === "OutOfLimits") return "GUN OUT OF ARC";
+      return `GUN ${reasonLabel(reason)}`;
     case "inhibited":
       if (reason === "FriendlyTarget") return "GUN FRIENDLY";
       if (reason === "TurretUnserviceable") return "GUN UNSERVICEABLE";
@@ -30,7 +32,13 @@ export function gunnerStatusText(gunner, war) {
       if (gunner.fire_authorized) return "GUN FIRING";
       if (reason === "ConsentReleased") return "GUN ON TARGET — HOLD F";
       if (reason === "WeaponsSafe") return "GUN SAFE";
-      if (reason === "NoBallisticSolution") return "GUN NO SOLUTION";
+      if (reason === "NoBallisticSolution") {
+        // Current authority's range gate is explicit. Keep the generic ballistic wording as a
+        // distinct fallback for a future solver failure inside that physical range.
+        return gunner.target_within_range === false
+          ? "GUN OUT OF RANGE"
+          : "GUN NO BALLISTIC SOLUTION";
+      }
       if (reason === "SightNotCoincident") return "GUN SLEWING";
       return "GUN TRACKING";
     default:

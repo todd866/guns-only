@@ -12,11 +12,40 @@ export const EMBER_GATE_VISUAL_HALF_M = 24;
 /** Match CobraMissionActProgress.DepartPadRadiusM — hide pad-centred volumes while skids are home. */
 export const EMBER_DEPART_PAD_RADIUS_M = 120;
 
+export const EMBER_BRIDGE_LANDMARK_ID = "landmark.cobra-canyon.iron-bell-bridge.v1";
+
 function horizontalDistanceM(eastA, northA, eastB, northB) {
   const de = Number(eastA) - Number(eastB);
   const dn = Number(northA) - Number(northB);
   if (![de, dn].every(Number.isFinite)) return Infinity;
   return Math.hypot(de, dn);
+}
+
+/**
+ * Distance for the act order, from the same authority positions drawn on the tactical map.
+ *
+ * `route_guidance.remaining_m` is distance to the END of the selected canyon route. During
+ * Ingress the order says "TO THE BRIDGE", which is an earlier point on that route; feeding the
+ * route remainder to that sentence made the HUD claim 12.3 km while the map's bridge objective
+ * was 544 m away in the owner's Build 327 flight. Resolve the named destination directly and
+ * fail closed rather than relabelling route distance as bridge distance again.
+ */
+export function emberActRemainingM(authorityState, pose = null) {
+  const act = String(authorityState?.mission_act ?? "").toLowerCase();
+  if (act === "rtb" || act === "complete") {
+    const fobRangeM = Number(authorityState?.ground_war?.fob_range_m);
+    return Number.isFinite(fobRangeM) && fobRangeM >= 0 ? fobRangeM : null;
+  }
+  if (act !== "ingress") return null;
+
+  const bridge = (authorityState?.ground_war?.sites ?? []).find((site) =>
+    site?.landmark_id === EMBER_BRIDGE_LANDMARK_ID);
+  const eastM = Number(pose?.x_m ?? authorityState?.vehicle?.x_m);
+  const northM = Number(pose?.z_m ?? authorityState?.vehicle?.z_m);
+  const bridgeEastM = Number(bridge?.x_m);
+  const bridgeNorthM = Number(bridge?.z_m);
+  if (![eastM, northM, bridgeEastM, bridgeNorthM].every(Number.isFinite)) return null;
+  return Math.hypot(bridgeEastM - eastM, bridgeNorthM - northM);
 }
 
 function padCentreFromAuthority(authorityState) {

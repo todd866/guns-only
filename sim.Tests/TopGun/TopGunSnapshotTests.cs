@@ -42,6 +42,16 @@ public sealed class TopGunSnapshotTests
             root.GetProperty("aim9_state_code").GetInt32());
         double sweep = root.GetProperty("wing_sweep_deg").GetDouble();
         Assert.InRange(sweep, F14WingSweep.MinSweepDeg, F14WingSweep.MaxSweepDeg);
+        Assert.Equal(sweep, root.GetProperty("wing_sweep_command_deg").GetDouble());
+        Assert.Equal("AUTO", root.GetProperty("wing_sweep_mode").GetString());
+        Assert.Equal((int)F14WingSweepMode.Auto,
+            root.GetProperty("wing_sweep_mode_code").GetInt32());
+        Assert.Equal(7.5, root.GetProperty("f14_g_limit_g").GetDouble());
+        Assert.Equal(11.0, root.GetProperty("f14_override_limit_g").GetDouble());
+        Assert.False(root.GetProperty("f14_over_g").GetBoolean());
+        Assert.Equal(0.0, root.GetProperty("f14_over_g_seconds").GetDouble());
+        Assert.Equal(0.0, root.GetProperty("f14_structural_fatigue_01").GetDouble());
+        Assert.False(root.GetProperty("f14_structural_failed").GetBoolean());
         Assert.Equal(JsonValueKind.Null,
             root.GetProperty("opponent_wing_sweep_deg").ValueKind);
     }
@@ -56,6 +66,13 @@ public sealed class TopGunSnapshotTests
         Assert.Equal("MiG-28", root.GetProperty("top_gun_seat").GetString());
         Assert.Equal("F-14A", root.GetProperty("opponent_callsign").GetString());
         Assert.Equal(JsonValueKind.Null, root.GetProperty("wing_sweep_deg").ValueKind);
+        Assert.Equal(JsonValueKind.Null,
+            root.GetProperty("wing_sweep_command_deg").ValueKind);
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("wing_sweep_mode").ValueKind);
+        Assert.Equal(0, root.GetProperty("wing_sweep_mode_code").GetInt32());
+        Assert.Equal(JsonValueKind.Null, root.GetProperty("f14_g_limit_g").ValueKind);
+        Assert.Equal(JsonValueKind.Null,
+            root.GetProperty("f14_override_limit_g").ValueKind);
         Assert.InRange(root.GetProperty("opponent_wing_sweep_deg").GetDouble(),
             F14WingSweep.MinSweepDeg, F14WingSweep.MaxSweepDeg);
     }

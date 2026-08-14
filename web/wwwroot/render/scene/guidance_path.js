@@ -43,12 +43,126 @@ export const GUIDANCE_PATH_DEFAULTS = Object.freeze({
   // Peak alpha at the cloud's core. Low on purpose: this is haze you fly through, not a wall.
   gateOpacity: 0.16,
   activeOpacity: 0.30,
+  // RTB transit is not a precision approach volume. It gets a narrower, brighter chain so the
+  // route survives terrain/haze until the authority's detailed recovery gates take over.
+  rtbColor: 0xffad3d,
+  rtbActiveColor: 0xffc26a,
+  rtbOpacity: 0.58,
+  rtbActiveOpacity: 0.86,
+  rtbVisualHalfM: 25,
+  // Perspective makes a constant-size 6 km chain collapse into specks. Grow only the drawn
+  // chevrons with distance so the route reads as a corridor; scoring and capture radii are not
+  // touched by this presentation-only half-width.
+  rtbFarVisualHalfM: 90,
+  rtbGateCount: 10,
+  rtbMinGateCount: 3,
+  rtbGateSpacingM: 750,
+  rtbMaxDrawM: 6_000,
+  rtbLeadM: 350,
   maxGates: 24,
   // Authored half-widths run hundreds of metres (tolerance volumes). Drawing that as a plane
   // scale makes a translucent UFO on the horizon — cap the *visual* radius; the kernel half
   // stays authoritative for scoring, not for pixels.
   maxVisualHalfM: Infinity,
 });
+
+function finiteNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function carrierRtbTarget(state) {
+  if (state?.carrier_sortie_route_active !== true
+      || state?.carrier_sortie_route_rtb_requested !== true) return null;
+  const eastM = finiteNumber(state.carrier_sortie_route_target_x);
+  const upM = finiteNumber(state.carrier_sortie_route_target_y);
+  const northM = finiteNumber(state.carrier_sortie_route_target_z);
+  return eastM === null || upM === null || northM === null
+    ? null
+    : { eastM, upM, northM, id: `carrier-${state.carrier_sortie_route_fix ?? "rtb"}` };
+}
+
+function rapierRtbIntent(state) {
+  if (state?.rapier_mission_available !== true || state?.rapier_pattern_only === true) return false;
+  const phase = Math.floor(Number(state?.rapier_mission_phase) || 0);
+  return phase >= 11 && phase <= 13;
+}
+
+function directRtbTarget(state, currentUpM) {
+  const active = state?.player_rtb_active === true
+    || (state?.rtb_steer === true && state?.recovery_point_known === true)
+    || rapierRtbIntent(state);
+  if (!active) return null;
+  const eastM = finiteNumber(state.mesh_home_east_m);
+  const northM = finiteNumber(state.mesh_home_north_m);
+  const scheduledUpM = state?.golden_path_valid === true
+    ? finiteNumber(state.golden_path_target_alt_m)
+    : null;
+  if (eastM === null || northM === null) return null;
+  return {
+    eastM,
+    northM,
+    upM: scheduledUpM ?? currentUpM,
+    id: `home-${state.mesh_home_place_id ?? "rtb"}`,
+  };
+}
+
+/**
+ * Build a bounded chain of directional RTB breadcrumbs from published ownship and recovery truth.
+ * These are explicitly transit cues, not a browser-authored landing procedure. As soon as the
+ * kernel publishes approach/recovery gates, `createGuidancePath` gives those authored gates
+ * priority and this chain disappears.
+ */
+export function rtbGuidanceGates(state = {}, options = {}) {
+  const config = { ...GUIDANCE_PATH_DEFAULTS, ...options };
+  const eastM = finiteNumber(state?.px);
+  const upM = finiteNumber(state?.py);
+  const northM = finiteNumber(state?.pz);
+  if (eastM === null || upM === null || northM === null) return [];
+  const carrierRequested = state?.carrier_sortie_route_active === true
+    && state?.carrier_sortie_route_rtb_requested === true;
+  // A requested carrier route owns destination truth. If its current fix is malformed, hide;
+  // falling through to a land Home Plate would draw a confident corridor to the wrong recovery.
+  const target = carrierRequested ? carrierRtbTarget(state) : directRtbTarget(state, upM);
+  if (!target) return [];
+
+  const deltaEastM = target.eastM - eastM;
+  const deltaNorthM = target.northM - northM;
+  const rangeM = Math.hypot(deltaEastM, deltaNorthM);
+  if (!(rangeM > 15)) return [];
+  const dirEast = deltaEastM / rangeM;
+  const dirNorth = deltaNorthM / rangeM;
+  const leadM = Math.min(config.rtbLeadM, rangeM * 0.30);
+  const drawnM = Math.max(0, Math.min(config.rtbMaxDrawM, rangeM - leadM));
+  if (!(drawnM > 1)) return [];
+  const minimumCount = Math.max(3, Math.floor(config.rtbMinGateCount));
+  const maximumCount = Math.max(minimumCount, Math.floor(config.rtbGateCount));
+  const densityCount = Math.floor(drawnM / Math.max(1, config.rtbGateSpacingM)) + 1;
+  const count = Math.min(maximumCount, Math.max(minimumCount, densityCount));
+  const gates = [];
+  for (let index = 0; index < count; index += 1) {
+    const along = index / Math.max(1, count - 1);
+    const distanceM = leadM + drawnM * along;
+    const targetFraction = Math.min(1, distanceM / rangeM);
+    // Hold current altitude through most of a long transit. The last quarter blends toward the
+    // authority's next-fix/schedule height; detailed approach gates supersede this before landing.
+    const descentBlend = Math.max(0, (targetFraction - 0.75) / 0.25);
+    const smoothBlend = descentBlend * descentBlend * (3 - 2 * descentBlend);
+    gates.push({
+      id: `rtb-${target.id}-${index}`,
+      eastM: eastM + dirEast * distanceM,
+      upM: upM + (target.upM - upM) * smoothBlend,
+      northM: northM + dirNorth * distanceM,
+      halfM: config.rtbVisualHalfM
+        + (config.rtbFarVisualHalfM - config.rtbVisualHalfM) * Math.sqrt(along),
+      active: index === 0,
+      dirty: false,
+      rtb: true,
+    });
+  }
+  return gates;
+}
 
 const GATE_VERTEX = /* glsl */`
   varying vec2 vLocal;
@@ -77,6 +191,26 @@ const GATE_FRAGMENT = /* glsl */`
   }
 `;
 
+// Transit guidance is a sparse sequence of open V cues, not a filled tunnel. The shape matches
+// Cobra's accepted crow's-foot language while retaining fixed-wing authority positions and
+// altitude schedules. Normal alpha avoids the white additive bloom of the old RTB discs.
+const RTB_FRAGMENT = /* glsl */`
+  precision mediump float;
+  uniform vec3 uColor;
+  uniform float uOpacity;
+  varying vec2 vLocal;
+  void main() {
+    float x = abs(vLocal.x);
+    float shoulder = clamp(x / 0.96, 0.0, 1.0);
+    float chevronY = mix(-0.40, 0.34, shoulder);
+    float stroke = 1.0 - smoothstep(0.055, 0.13, abs(vLocal.y - chevronY));
+    float ends = 1.0 - smoothstep(0.92, 1.02, x);
+    float alpha = stroke * ends * uOpacity;
+    if (alpha < 0.004) discard;
+    gl_FragColor = vec4(uColor, alpha);
+  }
+`;
+
 /**
  * Build the scene object for a recovery/circuit gate ladder: a chain of soft volumes marking
  * where the good paths live. Positions are authored truth; the fuzziness is entirely in the
@@ -87,6 +221,8 @@ export function createGuidancePath(THREE, options = {}) {
   const root = new THREE.Group();
   root.name = "GuidancePath";
   root.visible = false;
+  root.userData = root.userData ?? {};
+  root.userData.mode = null;
   // Drawn after the world so it reads through haze, but still depth-tested: a gate behind a hill
   // stays behind that hill rather than becoming a magic overlay.
   root.renderOrder = 12;
@@ -97,7 +233,7 @@ export function createGuidancePath(THREE, options = {}) {
   // exactly when the pilot is watching the world appear. Per-gate colour and density are pushed
   // as uniforms immediately before each mesh draws instead.
   const quad = new THREE.PlaneGeometry(4, 4);
-  const material = new THREE.ShaderMaterial({
+  const procedureMaterial = new THREE.ShaderMaterial({
     uniforms: {
       uColor: { value: new THREE.Color(config.gateColor) },
       uOpacity: { value: config.gateOpacity },
@@ -111,14 +247,30 @@ export function createGuidancePath(THREE, options = {}) {
     side: THREE.DoubleSide,
     toneMapped: false,
   });
+  const rtbMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+      uColor: { value: new THREE.Color(config.rtbColor) },
+      uOpacity: { value: config.rtbOpacity },
+    },
+    vertexShader: GATE_VERTEX,
+    fragmentShader: RTB_FRAGMENT,
+    transparent: true,
+    depthWrite: false,
+    depthTest: true,
+    blending: THREE.NormalBlending,
+    side: THREE.DoubleSide,
+    toneMapped: false,
+  });
   for (let i = 0; i < config.maxGates; i++) {
-    const mesh = new THREE.Mesh(quad, material);
+    const mesh = new THREE.Mesh(quad, procedureMaterial);
     mesh.frustumCulled = false;
     mesh.visible = false;
+    mesh.userData = mesh.userData ?? {};
+    mesh.userData.guidanceStyle = "procedure-volume";
     const tint = { color: config.gateColor, opacity: config.gateOpacity };
     mesh.onBeforeRender = () => {
-      material.uniforms.uColor.value.set(tint.color);
-      material.uniforms.uOpacity.value = tint.opacity;
+      mesh.material.uniforms.uColor.value.set(tint.color);
+      mesh.material.uniforms.uOpacity.value = tint.opacity;
     };
     gates.push({ mesh, tint });
     root.add(mesh);
@@ -130,6 +282,8 @@ export function createGuidancePath(THREE, options = {}) {
   // steady recovery costs one identity comparison per frame instead.
   let cachedRaw = null;
   let cachedLadder = [];
+  let cachedRtbKey = null;
+  let cachedRtbLadder = [];
   const forward = new THREE.Vector3();
   const lookTarget = new THREE.Vector3();
 
@@ -143,24 +297,92 @@ export function createGuidancePath(THREE, options = {}) {
     update(state) {
       if (disposed) return 0;
       const approachActive = state?.approach_guidance_active === true;
+      const carrierRtbRequested = state?.carrier_sortie_route_active === true
+        && state?.carrier_sortie_route_rtb_requested === true;
+      const recoveryIntent = approachActive
+        || state?.player_rtb_active === true
+        || (state?.rtb_steer === true && state?.recovery_point_known === true)
+        || rapierRtbIntent(state)
+        || carrierRtbRequested;
       const samples = state?.approach_gates;
       const hotApproach = approachActive && Array.isArray(samples);
       // Four numeric gates are cheaper to map than to fingerprint, and every coordinate matters
       // for a moving ship. JSON ladders remain cached because parsing those every frame did cause
       // visible stutter.
-      const raw = approachActive
-        ? `approach:${state?.approach_gates_json ?? ""}`
-        : (state?.recovery_gates_json ?? null);
+      const raw = recoveryIntent
+        ? (approachActive
+          ? `approach:${state?.approach_gates_json ?? ""}`
+          : carrierRtbRequested ? null : (state?.recovery_gates_json ?? null))
+        : null;
       if (hotApproach) {
         cachedRaw = null;
         cachedLadder = resolveGuidanceGates(state ?? {});
+        cachedRtbKey = null;
+        cachedRtbLadder = [];
+      } else if (!recoveryIntent) {
+        cachedRaw = null;
+        cachedLadder = [];
+        cachedRtbKey = null;
+        cachedRtbLadder = [];
+      } else if (carrierRtbRequested) {
+        // A moving carrier route owns transit destination truth. Generic land recovery ladders
+        // can remain populated in the snapshot, so they must not outrank the current route fix.
+        cachedRaw = null;
+        cachedLadder = [];
       } else if (raw !== cachedRaw) {
         cachedRaw = raw;
         cachedLadder = resolveGuidanceGates(state ?? {});
       }
-      const ladder = cachedLadder;
+      let ladder = cachedLadder;
+      let rtbMode = false;
+      if (ladder.length) {
+        // Procedure ownership is a lifecycle boundary. Do not replay ownship-relative transit
+        // breadcrumbs from before an approach if the renderer later returns to the same bucket.
+        cachedRtbKey = null;
+        cachedRtbLadder = [];
+      }
+      if (!ladder.length) {
+        // Once authority says approach guidance is active, coarse transit crumbs are stale. An
+        // empty/malformed gate frame must hide, never flash Home Plate through the final approach.
+        if (approachActive) {
+          root.visible = false;
+          root.userData.mode = null;
+          return 0;
+        }
+        const px = finiteNumber(state?.px);
+        const py = finiteNumber(state?.py);
+        const pz = finiteNumber(state?.pz);
+        const rtbKey = [
+          state?.player_rtb_active === true ? 1 : 0,
+          state?.rtb_steer === true ? 1 : 0,
+          state?.recovery_point_known === true ? 1 : 0,
+          state?.carrier_sortie_route_active === true ? 1 : 0,
+          state?.carrier_sortie_route_rtb_requested === true ? 1 : 0,
+          rapierRtbIntent(state) ? 1 : 0,
+          Math.floor(Number(state?.rapier_mission_phase) || 0),
+          state?.carrier_sortie_route_fix ?? "",
+          state?.mesh_home_place_id ?? "",
+          finiteNumber(state?.mesh_home_east_m) ?? "",
+          finiteNumber(state?.mesh_home_north_m) ?? "",
+          finiteNumber(state?.carrier_sortie_route_target_x) ?? "",
+          finiteNumber(state?.carrier_sortie_route_target_y) ?? "",
+          finiteNumber(state?.carrier_sortie_route_target_z) ?? "",
+          state?.golden_path_valid === true ? 1 : 0,
+          finiteNumber(state?.golden_path_target_alt_m) ?? "",
+          px === null ? "" : Math.round(px / 100),
+          py === null ? "" : Math.round(py / 50),
+          pz === null ? "" : Math.round(pz / 100),
+        ].join("|");
+        if (rtbKey !== cachedRtbKey) {
+          cachedRtbKey = rtbKey;
+          cachedRtbLadder = rtbGuidanceGates(state ?? {}, config);
+        }
+        ladder = cachedRtbLadder;
+        rtbMode = ladder.length > 0;
+      }
       if (!ladder.length) {
         root.visible = false;
+        root.userData.mode = null;
         return 0;
       }
 
@@ -172,6 +394,7 @@ export function createGuidancePath(THREE, options = {}) {
       }
       if (!points.length) {
         root.visible = false;
+        root.userData.mode = null;
         return 0;
       }
 
@@ -200,10 +423,19 @@ export function createGuidancePath(THREE, options = {}) {
           }
         }
 
-        if (gate.active) {
+        if (gate.rtb === true) {
+          mesh.material = rtbMaterial;
+          mesh.userData.guidanceStyle = "rtb-chevron";
+          tint.color = gate.active ? config.rtbActiveColor : config.rtbColor;
+          tint.opacity = gate.active ? config.rtbActiveOpacity : config.rtbOpacity;
+        } else if (gate.active) {
+          mesh.material = procedureMaterial;
+          mesh.userData.guidanceStyle = "procedure-volume";
           tint.color = config.activeColor;
           tint.opacity = config.activeOpacity;
         } else {
+          mesh.material = procedureMaterial;
+          mesh.userData.guidanceStyle = "procedure-volume";
           tint.color = gate.dirty ? config.dirtyColor : config.gateColor;
           tint.opacity = config.gateOpacity;
         }
@@ -211,6 +443,7 @@ export function createGuidancePath(THREE, options = {}) {
       }
 
       root.visible = true;
+      root.userData.mode = rtbMode ? "rtb" : "procedure";
       return drawn;
     },
 
@@ -219,7 +452,8 @@ export function createGuidancePath(THREE, options = {}) {
       disposed = true;
       root.removeFromParent();
       quad.dispose();
-      material.dispose();
+      procedureMaterial.dispose();
+      rtbMaterial.dispose();
     },
   };
 }

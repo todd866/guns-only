@@ -21,7 +21,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=327";
+} from "./render/hud/contact_visibility.js?v=328";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import {
   approachEnergyCue,
@@ -64,12 +64,15 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=327";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=328";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=327";
-import { limitsPanelPresentation } from "./render/hud/limits_panel.js";
+} from "./render/mission/rapier_high_mach_instruments.js?v=328";
+import {
+  limitsPanelPresentation,
+  navigationRateReadout,
+} from "./render/hud/limits_panel.js";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   cobraAccelCaretPx,
@@ -79,7 +82,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=327";
+} from "./render/audio/flight_audio.js?v=328";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -108,6 +111,7 @@ function controlBindingLabel(code, fallback) {
   const labels = {
     ArrowDown: "DOWN", ArrowUp: "UP", ArrowLeft: "LEFT", ArrowRight: "RIGHT",
     Space: "SPACE", BracketLeft: "[", BracketRight: "]",
+    Comma: "<", Period: ">", Slash: "/",
   };
   const value = String(code ?? fallback ?? "").trim();
   if (labels[value]) return labels[value];
@@ -2645,6 +2649,14 @@ class CombatHud {
             : GREEN_DIM,
       });
     }
+    const navigationRates = navigationRateReadout(state);
+    if (navigationRates) {
+      rows.push({
+        key: "navigation",
+        text: condensed ? navigationRates.compactText : navigationRates.text,
+        color: GREEN_DIM,
+      });
+    }
     if (directiveText) {
       rows.push({
         key: "directive",
@@ -2702,6 +2714,7 @@ class CombatHud {
         condensed,
         actualText: tactical.actualText,
         contextText: tactical.contextText,
+        navigationText: navigationRates?.text ?? "",
         directiveText,
         drawnRows,
         target: tactical.target,
@@ -2814,6 +2827,82 @@ class CombatHud {
     ctx.fill();
   }
 
+  drawF14WingSweep(state) {
+    const actual = finiteHudNumber(state?.wing_sweep_deg);
+    if (state?.top_gun_seat !== "F-14A" || actual === null) return;
+
+    const modeCode = Math.trunc(Number(state.wing_sweep_mode_code) || 0);
+    const manual = modeCode === 2 || state.wing_sweep_mode === "MANUAL";
+    const command = finiteHudNumber(state.wing_sweep_command_deg);
+    const ctx = this.ctx;
+    const layout = this.getLayout();
+    const x = this.safeInsets.left + 24;
+    const y = layout.secondaryBottom - 88;
+    const width = Math.min(166, Math.max(112, this.width * 0.18));
+    const railX = x + 7;
+    const railY = y + 29;
+    const railWidth = width - 14;
+    const fraction = clamp((actual - 20) / 48, 0, 1);
+    const accent = manual ? AMBER : GREEN;
+
+    ctx.save();
+    const wash = ctx.createLinearGradient(x - 6, 0, x + width + 6, 0);
+    wash.addColorStop(0, "rgba(1, 9, 14, 0.42)");
+    wash.addColorStop(0.72, "rgba(1, 9, 14, 0.20)");
+    wash.addColorStop(1, "rgba(1, 9, 14, 0)");
+    ctx.fillStyle = wash;
+    ctx.fillRect(x - 6, y - 9, width + 12, 53);
+    ctx.font = "700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = GREEN_DIM;
+    ctx.fillText("WING SWEEP", x, y);
+    ctx.textAlign = "right";
+    ctx.fillStyle = accent;
+    const commandText = manual && command !== null && Math.abs(command - actual) >= 0.6
+      ? ` → ${command.toFixed(0)}°` : "";
+    ctx.fillText(`${manual ? "MAN" : "AUTO"} · ${actual.toFixed(0)}°${commandText}`,
+      x + width, y);
+
+    ctx.strokeStyle = GREEN_DIM;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(railX, railY);
+    ctx.lineTo(railX + railWidth, railY);
+    ctx.stroke();
+    for (const [deg, label] of [[20, "20"], [68, "68"]]) {
+      const markerX = railX + ((deg - 20) / 48) * railWidth;
+      ctx.beginPath();
+      ctx.moveTo(markerX, railY - 3);
+      ctx.lineTo(markerX, railY + 3);
+      ctx.stroke();
+      ctx.textAlign = deg === 20 ? "left" : "right";
+      ctx.fillStyle = GREEN_DIM;
+      ctx.fillText(label, markerX, railY + 10);
+    }
+    const actualX = railX + fraction * railWidth;
+    ctx.fillStyle = accent;
+    ctx.beginPath();
+    ctx.moveTo(actualX, railY - 6);
+    ctx.lineTo(actualX - 4, railY - 12);
+    ctx.lineTo(actualX + 4, railY - 12);
+    ctx.closePath();
+    ctx.fill();
+    ctx.textAlign = "center";
+    ctx.fillStyle = manual ? AMBER : GREEN_DIM;
+    ctx.fillText(
+      `${controlBindingLabel(this.controlBindings?.wingSweepForward, "Comma")} / `
+        + `${controlBindingLabel(this.controlBindings?.wingSweepAft, "Period")} · `
+        + `${controlBindingLabel(this.controlBindings?.wingSweepAuto, "Slash")} AUTO`,
+      x + width / 2, y + 42,
+    );
+    if (this._debug) {
+      this._debug.wingSweep = { x: x - 6, y: y - 9, width: width + 12, height: 53,
+        actualDeg: actual, commandDeg: command, mode: manual ? "MANUAL" : "AUTO" };
+    }
+    ctx.restore();
+  }
+
   drawWarnings(frame, systems = null) {
     const { state, now } = frame;
     const ctx = this.ctx;
@@ -2888,14 +2977,42 @@ class CombatHud {
       if (this._debug) this._debug.warningLine = "GCAS STBY";
     }
 
-    if (state.tier === 3) {
+    if (state.f14_over_g === true && occupiedLines < maxWarningLines) {
+      const actualG = Number(state.g_actual) || 0;
+      const limitG = Number(state.f14_g_limit_g) || 7.5;
+      ctx.shadowColor = "rgba(255, 70, 93, 0.62)";
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = RED;
+      ctx.font = "800 16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(`OVER-G · ${actualG.toFixed(1)} / ${limitG.toFixed(1)}`,
+        this.width / 2, warningY + occupiedLines * 21);
+      ctx.shadowBlur = 0;
+      occupiedLines += 1;
+    }
+
+    const f14Fatigue = Number(state.f14_structural_fatigue_01) || 0;
+    if (f14Fatigue > 0.005 && occupiedLines < maxWarningLines) {
+      ctx.fillStyle = state.f14_structural_failed === true ? RED : AMBER;
+      ctx.font = "800 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.textAlign = "center";
+      const label = state.f14_structural_failed === true
+        ? "AIRFRAME FAILURE"
+        : `AIRFRAME STRAIN · ${Math.round(clamp(f14Fatigue, 0, 1) * 100)}%`;
+      ctx.fillText(label, this.width / 2, warningY + occupiedLines * 21);
+      occupiedLines += 1;
+    }
+
+    if (state.tier === 3 && occupiedLines < maxWarningLines) {
       const alphaOverride = Number.isFinite(state.requested_alpha_deg);
+      const f14Override = state.top_gun_seat === "F-14A" && !alphaOverride;
       ctx.shadowColor = "rgba(255, 176, 32, 0.58)";
       ctx.shadowBlur = 10;
       ctx.fillStyle = AMBER;
       ctx.font = "800 19px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = "center";
-      ctx.fillText(alphaOverride ? "AOA LIMIT OFF" : "G LIMIT OVERRIDE",
+      ctx.fillText(alphaOverride ? "AOA LIMIT OFF"
+        : f14Override ? "OVER-G OVERRIDE · 11.0 G MAX" : "G LIMIT OVERRIDE",
         this.width / 2, warningY + occupiedLines * 21);
       ctx.shadowBlur = 0;
       occupiedLines += 1;
@@ -3780,10 +3897,13 @@ class CombatHud {
         padlockCtx.restore();
       };
 
-      const steeringAvailable = isCombatPadlock && this._padlockTrackEstablished
+      const steeringSuppressed = state.suppress_padlock_steering === true;
+      const steeringAvailable = !steeringSuppressed
+        && isCombatPadlock && this._padlockTrackEstablished
         && !frame.manualLookActive && !groundDanger && !centralPullUp;
       if (!steeringAvailable) this._padlockLiftCaptured = false;
-      if (isBanditPadlock && !this._padlockTrackEstablished && !frame.manualLookActive
+      if (!steeringSuppressed && isBanditPadlock
+          && !this._padlockTrackEstablished && !frame.manualLookActive
           && !groundDanger && !centralPullUp) {
         statusDirective(patternOnly ? "ACQUIRING" : `ACQUIRING ${targetLabel}`, AMBER);
       }
@@ -5238,7 +5358,9 @@ class CombatHud {
     const panelWidth = Math.min(930, this.width - 34);
     const compact = this.width < 760;
     const gcasAvailable = frame.state.auto_gcas_available === true;
-    const panelHeight = compact ? (gcasAvailable ? 256 : 229) : (gcasAvailable ? 222 : 191);
+    const f14WingSweep = frame.state.top_gun_seat === "F-14A";
+    const panelHeight = (compact ? (gcasAvailable ? 256 : 229) : (gcasAvailable ? 222 : 191))
+      + (f14WingSweep ? (compact ? 27 : 31) : 0);
     const x = (this.width - panelWidth) / 2;
     const y = (this.height - panelHeight) / 2;
 
@@ -5274,6 +5396,10 @@ class CombatHud {
       `${binding("padlock", "KeyV")}  PADLOCK   ·   TAB  NEXT CONTACT   ·   R  RESTART   ·   \`  SYNC MARK   ·   H  HIDE`,
       "T  TIME COMPRESSION ON / OFF",
     ];
+    if (f14WingSweep) {
+      wideLines.push(`${binding("wingSweepForward", "Comma")} / ${binding("wingSweepAft", "Period")}  WING SWEEP FORWARD / AFT   ·   ${binding("wingSweepAuto", "Slash")}  WING SWEEP AUTO`);
+      compactLines.push(`${binding("wingSweepForward", "Comma")} / ${binding("wingSweepAft", "Period")}  WING SWEEP FORWARD / AFT   ·   ${binding("wingSweepAuto", "Slash")}  AUTO`);
+    }
     if (gcasAvailable) {
       wideLines.push(`${binding("gcasOverride", "KeyK")}  AGCAS PADDLE (HOLD TO OVERRIDE AN ACTIVE FLY-UP)`);
       compactLines.push(`${binding("gcasOverride", "KeyK")}  AGCAS PADDLE (HOLD TO OVERRIDE FLY-UP)`);
@@ -5491,6 +5617,7 @@ class CombatHud {
       // pilot holds for the entire sortie with no feedback at all.
       this.drawThrottle(frame.state);
       this.drawMobileTacticalState(frame, display);
+      this.drawF14WingSweep(frame.state);
     } else {
       if (this._debug) this._debug.desktopFlightChrome = true;
       const tapeInset = this.getLayout().tapeInset;
@@ -5514,7 +5641,10 @@ class CombatHud {
         step: frame.state.alt_ft > 10000 ? 1000 : 500,
         decimals: 0,
       });
-      if (isFightHudActive(frame.state)) this.drawGTape(frame.state);
+      if (isFightHudActive(frame.state)) {
+        this.drawGTape(frame.state);
+        this.drawF14WingSweep(frame.state);
+      }
       this.drawThrottle(frame.state);
       this.drawLimitsPanel(frame.state);
       this.drawRapierCycleTeach(frame.state);

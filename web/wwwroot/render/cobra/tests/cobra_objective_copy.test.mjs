@@ -323,6 +323,20 @@ test("compact score states the exact 1–3 ticket bleed", () => {
   assert.equal(score, "PTS 1–3 · TKT 296–300 · LOSING −1/S");
 });
 
+test("compact score says staged while ingress cannot spend tickets", () => {
+  const score = cobraConquestScoreLine({
+    combat_live: false,
+    sites: [
+      site("ember", "Ember", "friendly"),
+      site("bridge", "Bridge", "hostile"),
+      site("plantation", "Plantation", "hostile"),
+      site("quarry", "Quarry", "hostile"),
+    ],
+    tickets: { friendly: 300, hostile: 300 },
+  });
+  assert.equal(score, "PTS 1–3 · TKT 300–300 · STAGED");
+});
+
 test("compact score reports stalemate and winning margins from the sites", () => {
   const tickets = { friendly: 271, hostile: 184.4 };
   assert.equal(cobraConquestScoreLine({

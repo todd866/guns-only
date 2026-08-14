@@ -40,6 +40,25 @@ empty weights, or later AH-1S/F engines, rotors and weapon systems.
 9. U.S. Army FM 101-20 (1973), AH-1G characteristics and typical mission performance, pp. 1-21–22.
    [Archived PDF](https://www.bits.de/NRANEU/others/amd-us-archive/FM101-20%2873%29.pdf).
 
+## Production audio surrogate
+
+The production rotor/engine bed is not type-authentic AH-1G evidence. It is an audio-only
+derivative of the 130–141 second airborne-cabin interval in DVIDS
+[Iraqi Air Force Helicopter Flight, Part 2](https://www.dvidshub.net/video/71253/iraqi-air-force-helicopter-flight-part-2),
+credited to SrA Steven Conklin / U.S. Air Forces Central Baghdad Media Outreach Team (2009-10-10,
+VIRIN `091010-F-6972C-002`, DOD ID `DOD_100055558`). The source is a UH-1H/T53 recording used only
+as an AH-1G gameplay **surrogate**; it does not establish an exact AH-1G, T53-L-13B installation,
+or BHC-540 rotor acoustic model. Exact source and final-file hashes, conditioning metrics, rights
+boundary, and the required final human-listen gate are recorded in
+`web/wwwroot/render/audio/samples/rotorcraft/SOURCES.md` and `audio/jet-library/catalog.json`.
+
+The DVIDS page explicitly marks its source work **PUBLIC DOMAIN** subject to the
+[DVIDS copyright notice](https://www.dvidshub.net/about/copyright). The audio-only derivative
+contains no source visuals or marks and is not relicensed under the repository MIT license. This
+is a reasonable safe-use assessment, not a legal warranty.
+
+> The appearance of U.S. Department of War (DoW) visual information does not imply or constitute DoW endorsement.
+
 ### Armament references reserved for the gun lab
 
 - U.S. Army FM 1-40 (1973), Chapter 12, documents the M28A1 as a fully flexible gunner-controlled
@@ -145,6 +164,7 @@ replaced before production-combat fidelity is claimed.
 | DShK acquisition / burst cadence | 8.0 s / 5.0 s | provisional fairness timing. One nearest living `DshkSite` owns acquisition; masking or changing source resets it. Not a measured crew reaction or fire-control model. |
 | DShK projectile / dispersion closure | 850 m/s; 2.0 s base delay; 0.12–0.48 m dispersion; 6.5 km cap | provisional warned-burst gameplay ballistics. Replace with sourced 12.7×108 mm exterior ballistics, mount dispersion and range doctrine. |
 | Player vulnerability capsules | fuselage radius 1.35 m; tail-boom radius 0.58 m | provisional live-position intersection geometry, not armour/component vulnerability data. The first engagement burst is an authored 24 m near miss; later intersecting bursts can fail SCAS then engine. |
+| Fortified-garrison collision proxy | 2.4 m radius × 2.6 m vertical capsule, swept against the main-rotor envelope | provisional objective-scale gameplay geometry for the targetable dug-in hardpoint. It prevents flying through a living garrison; it is removed with that authority unit. It is not a surveyed bunker dimension and does not promote ambient foliage to collision truth. |
 | Turnaround action timing | 0.75 s pad dwell; 1.0 s shutdown/start holds | compressed interaction timing for a one-button assisted sequence, not an AH-1G checklist duration. Order follows the operator/checklist family; timing is gameplay. |
 | Grounded shutdown / spare handoff | 3.2 s rotor rundown time constant; ≤5% shaft power and ≤50 rpm | provisional safe-handoff presentation closure. It is not a measured BHC-540 coast-down curve or maintenance clearance criterion. |
 | Assisted-start flight release | ≥294 rpm continuously for 0.75 s | provisional control/weapon interlock at about 91% of the sourced 324 rpm nominal Nr. Replace with source-derived start/governor limits and dwell. |

@@ -102,13 +102,16 @@ const BRIDGE_ACTIONS = Object.freeze([
   // established, app.js sends a separate semantic transition to the fixed-tick roll augmentation;
   // it never turns camera pixels or RAF timing into aircraft input.
   { id: "padlock", bindingAction: "padlock", code: "KeyV", gkey: "Padlock", behavior: "momentary", help: "PADLOCK ON / OFF", uiConsumer: /contextualPadlockTarget\(latestState\)/, uiObservable: /hudFrame\.padlockTarget = padlockTarget/ },
-  { id: "knock-it-off", code: "KeyO", gkey: "KnockItOff", behavior: "momentary", help: "HAND OFF FIGHT & RTB", consumer: /key == GKey\.KnockItOff/, observable: /combat_handoff_phase/ },
+  { id: "knock-it-off", code: "KeyO", gkey: "KnockItOff", behavior: "momentary", help: "CALL IT A DAY · RTB", consumer: /key == GKey\.KnockItOff/, observable: /rtb_reason/ },
   { id: "restart", code: "KeyR", gkey: "Restart", behavior: "momentary", help: "R RESTART", consumer: /key == GKey\.Restart/, uiConsumer: /restartMission\(\)/ },
   { id: "limit-override", bindingAction: "limitOverride", code: "Space", gkey: "Override", behavior: "hold", help: "LIMIT OVERRIDE", consumer: /GKey\.Override/, observable: /requested_g_cmd/ },
   { id: "auto-gcas-paddle", bindingAction: "gcasOverride", code: "KeyK", gkey: "AutoGcasOverride", behavior: "hold", help: "AGCAS PADDLE", consumer: /GKey\.AutoGcasOverride/, observable: /auto_gcas_override_held/ },
   { id: "gear-toggle", bindingAction: "gearToggle", code: "KeyG", gkey: "GearToggle", behavior: "momentary", help: "GEAR", testAction: "gearToggle", consumer: /key == GKey\.GearToggle/, observable: /gear_handle/ },
   { id: "flaps-up", bindingAction: "flapUp", code: "BracketLeft", gkey: "FlapUp", behavior: "hold", help: "FLAPS UP / DOWN", testAction: "flapUp", consumer: /GKey\.FlapUp/, observable: /flap_lever/ },
   { id: "flaps-down", bindingAction: "flapDown", code: "BracketRight", gkey: "FlapDown", behavior: "hold", help: "FLAPS UP / DOWN", testAction: "flapDown", consumer: /GKey\.FlapDown/, observable: /flap_lever/ },
+  { id: "wing-sweep-forward", bindingAction: "wingSweepForward", code: "Comma", gkey: "WingSweepForward", behavior: "hold", help: "WING SWEEP FORWARD / AFT", consumer: /GKey\.WingSweepForward/, observable: /wing_sweep_command_deg/ },
+  { id: "wing-sweep-aft", bindingAction: "wingSweepAft", code: "Period", gkey: "WingSweepAft", behavior: "hold", help: "WING SWEEP FORWARD / AFT", consumer: /GKey\.WingSweepAft/, observable: /wing_sweep_command_deg/ },
+  { id: "wing-sweep-auto", bindingAction: "wingSweepAuto", code: "Slash", gkey: "WingSweepAuto", behavior: "momentary", help: "WING SWEEP AUTO", consumer: /GKey\.WingSweepAuto/, observable: /wing_sweep_mode_code/ },
   { id: "emergency-gear", code: "KeyE", gkey: "EmergencyGearRelease", behavior: "hold", help: "HOLD E", testAction: "emergencyGearRelease", consumer: /key == GKey\.EmergencyGearRelease/, observable: /gear_nose/ },
   { id: "horn-cutout", code: "TestFlightGearHornCutout", gkey: "GearHornCutout", behavior: "momentary", help: "GEAR HORN CUTOUT", testAction: "gearHornCutout", consumer: /GKey\.GearHornCutout/, observable: /gear_warning_horn/ },
   { id: "confirm-extension-failure", code: "KeyN", gkey: "ConfirmGearExtensionFailure", behavior: "momentary", help: "N · CONFIRM FAILED EXTENSION", testAction: "confirmGearFailure", consumer: /GKey\.ConfirmGearExtensionFailure/, observable: /MaintenanceScenarioJson\(\)/ },
@@ -336,7 +339,7 @@ test("every visible HTML button is wired through one auditable action surface", 
   }
 });
 
-test("pause-menu handoff is authoritative, deliberate, and shares the remappable GKey path", () => {
+test("pause-menu call-it-a-day is authoritative, deliberate, and shares the remappable GKey path", () => {
   assert.match(appSource,
     /const handoffActionAvailable = sessionPaused[\s\S]*?pauseReasons\.size === 1[\s\S]*?handoff\.available/,
     "the pause action must remain hidden unless the current authoritative phase is AVAILABLE");
@@ -347,7 +350,7 @@ test("pause-menu handoff is authoritative, deliberate, and shares the remappable
     /function requestCombatHandoffFromPause\(\)[\s\S]*?setPauseReason\("session", false\)[\s\S]*?pressMappedKey\(code, "pause-handoff", knockItOffControl\.gkey\)[\s\S]*?releaseMappedKey\(code, "pause-handoff"\)/,
     "a deliberate pause-menu request must resume authority, issue one down/up pulse, and use GKey 10");
   assert.match(indexSource,
-    /<button id="ready-handoff"[^>]*hidden[^>]*disabled[^>]*>HAND OFF FIGHT &amp; RTB<\/button>/,
+    /<button id="ready-handoff"[^>]*hidden[^>]*disabled[^>]*>CALL IT A DAY · RTB<\/button>/,
     "the mobile-safe pause action must start unavailable before authoritative state arrives");
 });
 
@@ -379,6 +382,12 @@ test("touch pilots retain system commands but the live surface makes them contex
     "one state-driven profile must own contextual phone-control visibility");
   assert.equal(buttons.some((button) => button.attributes["data-mobile-action"] === "restart"), false,
     "restart belongs to pause/debrief and the frozen whole-screen target, not the live HUD");
+  assert.ok(find("data-hold-key", "Comma"), "touch F-14 needs a held wing-forward control");
+  assert.ok(find("data-hold-key", "Period"), "touch F-14 needs a held wing-aft control");
+  assert.ok(find("data-pulse-key", "Slash"), "touch F-14 needs a return-to-auto control");
+  assert.match(appSource,
+    /const f14WingSweep = !casevac && state\?\.top_gun_seat === "F-14A";[\s\S]*?touchWingSweepForward\.hidden = !f14WingSweep[\s\S]*?touchWingSweepAft\.hidden = !f14WingSweep[\s\S]*?touchWingSweepAuto\.hidden = !f14WingSweep/,
+    "wing-sweep touch controls must appear only for the authoritative F-14 seat");
 
   assert.match(appSource,
     /querySelectorAll\("\[data-hold-key\]"\)[\s\S]*?addEventListener\("pointerdown"[\s\S]*?pressMappedKey\(code, source, gkey\)[\s\S]*?addEventListener\("pointerup", endControl\)[\s\S]*?addEventListener\("pointercancel", endControl\)[\s\S]*?addEventListener\("lostpointercapture", endControl\)/,
@@ -397,6 +406,33 @@ test("touch pilots retain system commands but the live surface makes them contex
     "a paused or rejected keyboard V press must not change presentation state");
 });
 
+test("Ready mission centering cannot horizontally strand Safari diagnostics controls", () => {
+  const centreFunction = appSource.match(
+    /function centerReadyMissionChoice\(selectedMission\) \{([\s\S]*?)\n\}/,
+  )?.[1] ?? "";
+  assert.ok(centreFunction, "Ready selection needs one auditable rail-centering function");
+  assert.doesNotMatch(centreFunction, /\.scrollIntoView\s*\(/,
+    "WebKit scrollIntoView must not walk and offset the outer Ready dialog");
+  assert.match(centreFunction,
+    /const rail = option\?\.closest\("\.ready-mission-groups"\)[\s\S]*?rail\.scrollLeft = Math\.max\(0, Math\.min\(maximum, centred\)\)[\s\S]*?card\.scrollLeft = 0/,
+    "only the mission rail may centre; the Ready card must remain at horizontal origin");
+  assert.match(indexSource,
+    /\.sortie-choice\[data-aircraft\]\s*\{[\s\S]*?position:\s*relative[\s\S]*?\.sortie-choice\[data-aircraft\] > \*\s*\{[\s\S]*?position:\s*absolute[\s\S]*?width:\s*1px[\s\S]*?height:\s*1px/,
+    "screen-reader-only poster labels must be contained by their positioned button");
+});
+
+test("rotorcraft padlock can suppress jet steering without suppressing its target locator", () => {
+  assert.match(hudSource,
+    /const steeringSuppressed = state\.suppress_padlock_steering === true;[\s\S]*?const steeringAvailable = !steeringSuppressed[\s\S]*?const steering = steeringAvailable/,
+    "the rotorcraft adapter flag must stop the fixed-wing steering calculation");
+  assert.match(hudSource,
+    /if \(!steering\?\.valid && steeringAvailable[\s\S]*?STEERING UNAVAILABLE/,
+    "STEERING UNAVAILABLE must remain behind the same suppression gate");
+  assert.match(hudSource,
+    /this\.drawPadlockLocatorInset\(frame, \{[\s\S]*?targetPosition: padlockTargetPosition/,
+    "suppression must retain the target locator/attitude presentation");
+});
+
 test("phone settings remain scrollable, zoomable, and collapse desktop-only binding density", () => {
   assert.match(indexSource,
     /\.settings-card\s*\{[\s\S]*?overflow:\s*auto[\s\S]*?touch-action:\s*pan-y pinch-zoom/);
@@ -408,7 +444,7 @@ test("phone settings remain scrollable, zoomable, and collapse desktop-only bind
   assert.match(indexSource,
     /<details id="settings-keyboard-bindings" class="settings-disclosure" open>/);
   assert.match(appSource, /settingsKeyboardBindings\?\.removeAttribute\("open"\)/,
-    "touch mode should collapse the fifteen keyboard binding buttons");
+    "touch mode should collapse the eighteen keyboard binding buttons");
   assert.match(appSource,
     /#ready-screen, #settings-screen, #incident-replay-overlay, #test-flight-console/,
     "touchmove protection must exempt every scrollable modal surface");

@@ -87,7 +87,7 @@ public class SnapshotHotFrameTests {
     static void AssertHotFrameMatchesJson(JsonElement root, double[] buffer) {
         using JsonDocument layoutDocument = JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
         JsonElement layout = layoutDocument.RootElement;
-        Assert.Equal(24, layout.GetProperty("layout_version").GetInt32());
+        Assert.Equal(25, layout.GetProperty("layout_version").GetInt32());
         Assert.Equal(SnapshotHotFrame.SlotCount, layout.GetProperty("slot_count").GetInt32());
         string[] names = layout.GetProperty("blocks")
             .EnumerateArray()
@@ -99,6 +99,8 @@ public class SnapshotHotFrameTests {
         Assert.Contains("rapier_target_gamma_deg", names);
         Assert.Contains("rapier_relight_dynamic_pressure_kpa", names);
         Assert.Contains("opponent_wing_sweep_deg", names);
+        Assert.Contains("wing_sweep_mode_code", names);
+        Assert.Contains("f14_structural_fatigue_01", names);
         Assert.Contains("aim9_state_code", names);
         Assert.Contains("aim9_vz", names);
 
@@ -583,7 +585,7 @@ public class SnapshotHotFrameTests {
             using JsonDocument layoutDocument =
                 JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
             JsonElement layout = layoutDocument.RootElement;
-            Assert.Equal(24, layout.GetProperty("layout_version").GetInt32());
+            Assert.Equal(25, layout.GetProperty("layout_version").GetInt32());
             JsonElement[] slots = layout.GetProperty("blocks")
                 .EnumerateArray()
                 .SelectMany(block => block.GetProperty("slots").EnumerateArray())
@@ -1157,6 +1159,33 @@ public class SnapshotHotFrameTests {
                 0.0, 0.0, false, null));
         Assert.Equal("DRAIN",
             document.RootElement.GetProperty("combat_handoff_phase_name").GetString());
+    }
+
+    [Fact]
+    public void ColdVersionBumpsImmediatelyWhenRapierPilotCallsItADay() {
+        BeatSetup baseline = Beats.RapierIntercept();
+        var session = new SimulationSession();
+        session.StartBeat(() => baseline with {
+            StartsOnCatapult = false,
+            Player = baseline.Player with {
+                Position = new Vec3D(0.0, 12_000.0, 300_000.0)
+            }
+        });
+        session.Begin();
+
+        var buffer = new double[SnapshotHotFrame.SlotCount];
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        double before = buffer[SnapshotHotFrame.ColdVersionIndex];
+
+        session.FeedKey(GKey.KnockItOff, true);
+        session.FeedKey(GKey.KnockItOff, false);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+
+        Assert.Equal(MissionRtbReason.PilotKnockItOff,
+            session.ReturnToBaseReason);
+        Assert.True(buffer[SnapshotHotFrame.ColdVersionIndex] > before,
+            "the same input boundary must invalidate rtb_reason/rtb_available cold truth");
     }
 
     [Fact]

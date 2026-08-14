@@ -1,10 +1,10 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=327";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=328";
 import {
   FOLIAGE_UV_PALM,
   FOLIAGE_UV_UNDERSTORY,
   createCobraSoftFalloffTexture,
   createSyntheticFoliageAtlasTexture,
-} from "./cobra_canyon_foliage.js?v=327";
+} from "./cobra_canyon_foliage.js?v=328";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -52,6 +52,12 @@ export const COBRA_CANYON_AMBIENT_BUDGETS = Object.freeze({
 /** Keep the Camp Ember rear-seat eye clear of green mass / mist (Build 302). */
 export const CAMP_EMBER_LANDMARK_ID = "landmark.cobra-canyon.camp-ember.v1";
 export const CAMP_EMBER_CLEAR_RADIUS_M = 120;
+export const COBRA_OBJECTIVE_CLEAR_RADIUS_M = 135;
+const COBRA_OBJECTIVE_LANDMARK_IDS = new Set([
+  "landmark.cobra-canyon.iron-bell-bridge.v1",
+  "landmark.cobra-canyon.plantation-water-tower.v1",
+  "landmark.cobra-canyon.red-earth-quarry.v1",
+]);
 
 /**
  * NEAR-FIELD SCATTER — the architectural fix for "the scenery is holistically bad".
@@ -135,6 +141,21 @@ function insideCampEmberClearEye(plan, role, eastM, northM) {
   const dx = eastM - pad.eastM;
   const dz = northM - pad.northM;
   return dx * dx + dz * dz < CAMP_EMBER_CLEAR_RADIUS_M * CAMP_EMBER_CLEAR_RADIUS_M;
+}
+
+function insideObjectiveClearEye(plan, role, eastM, northM) {
+  if (role !== "jungle" && role !== "plantation" && role !== "mist") return false;
+  for (const landmark of plan?.landmarks ?? []) {
+    if (!COBRA_OBJECTIVE_LANDMARK_IDS.has(landmark?.id)) continue;
+    const point = landmark.positionLocalM;
+    if (!Array.isArray(point) || point.length < 3) continue;
+    const dx = eastM - Number(point[0]);
+    const dz = northM - Number(point[2]);
+    if (!Number.isFinite(dx) || !Number.isFinite(dz)) continue;
+    if (dx * dx + dz * dz
+      < COBRA_OBJECTIVE_CLEAR_RADIUS_M * COBRA_OBJECTIVE_CLEAR_RADIUS_M) return true;
+  }
+  return false;
 }
 
 const DEFAULT_ROLE_BY_KIND = Object.freeze({
@@ -498,6 +519,33 @@ function roleScale(role, descriptor, variation) {
   };
 }
 
+function finishJungleClumpScale(scale, descriptor, widthVariation, heightVariation) {
+  const bulk = 1.15 + widthVariation * 0.65;
+  scale.widthM *= bulk * 0.85;
+  scale.depthM *= bulk * 0.85;
+  // roleScale already emits real-world vegetation heights. The old second multiplier made a
+  // 16-30 m canopy 25-66 m high, then its 0.38-height fern card became an aircraft-sized fern.
+  // Keep width clumping, but vary height inside a bounded biological band.
+  if (isJungleUnderstory(descriptor)) {
+    scale.heightM = Math.min(4, scale.heightM * (0.82 + heightVariation * 0.22));
+  } else {
+    scale.heightM = Math.min(34, scale.heightM * (0.88 + heightVariation * 0.28));
+  }
+  return scale;
+}
+
+/** Test seam pinning the final, post-clump vegetation height (not just roleScale's first pass). */
+export function cobraCanyonFinalJungleScaleForTests(
+  descriptor, variation, widthVariation = 0.5, heightVariation = 0.5,
+) {
+  return finishJungleClumpScale(
+    roleScale("jungle", descriptor, variation),
+    descriptor,
+    widthVariation,
+    heightVariation,
+  );
+}
+
 function resolvedRole(value) {
   const requestedRole = token(value).replaceAll("-", "");
   return COBRA_CANYON_ASSET_ROLES.find(
@@ -748,12 +796,12 @@ function setPiecePlacements(plan, descriptors) {
         const seed = hashString(`${cell.id}:${archetypeId}:${stand}`);
         const variation = seededUnit(seed, 0x27d4eb2f);
         const scale = roleScale(role, descriptor, variation);
-        if (role === "jungle") {
-          const bulk = 1.2 + seededUnit(seed, 0x8f51a67b) * 0.7;
-          scale.widthM *= bulk * 0.9;
-          scale.depthM *= bulk * 0.9;
-          scale.heightM *= 1.6 + seededUnit(seed, 0x39aa5c11) * 0.7;
-        }
+        if (role === "jungle") finishJungleClumpScale(
+          scale,
+          descriptor,
+          seededUnit(seed, 0x8f51a67b),
+          seededUnit(seed, 0x39aa5c11),
+        );
         const angle = seededUnit(seed, 0x85ebca6b) * Math.PI * 2;
         const ringM = stand === 0 ? 0 : 18 + stand * 14;
         const offsetM = index === 0
@@ -770,7 +818,8 @@ function setPiecePlacements(plan, descriptors) {
         const northM = cellBounds
           ? clamp(candidate.northM, cellBounds.minimumNorthM, cellBounds.maximumNorthM)
           : candidate.northM;
-        if (insideCampEmberClearEye(plan, role, eastM, northM)) continue;
+        if (insideCampEmberClearEye(plan, role, eastM, northM)
+          || insideObjectiveClearEye(plan, role, eastM, northM)) continue;
         const nearest = nearestRoutePoint(plan, cell.routeId, eastM, northM);
         const routeAligned = role === "plantation" || role === "paddy";
         placements.push({
@@ -994,18 +1043,19 @@ function createScatterField(plan, entries, capacities, options) {
       );
       const eastM = clamp(point.eastM, minimumEastM, maximumEastM);
       const northM = clamp(point.northM, minimumNorthM, maximumNorthM);
-      if (insideCampEmberClearEye(plan, entry.role, eastM, northM)) continue;
+      if (insideCampEmberClearEye(plan, entry.role, eastM, northM)
+        || insideObjectiveClearEye(plan, entry.role, eastM, northM)) continue;
       const variation = seededUnit(seed, 0xc2b2ae35);
       const scale = roleScale(entry.role, entry.descriptor, variation);
       // One jungle instance represents a stand of canopy, not one isolated tree. The spread is
       // per-instance: a stand of uniform size at uniform spacing is the tell that gave the old
       // canopy its wallpaper look.
-      if (entry.role === "jungle") {
-        const bulk = 1.15 + seededUnit(seed, 0x8f51a67b) * 0.65;
-        scale.widthM *= bulk * 0.85;
-        scale.depthM *= bulk * 0.85;
-        scale.heightM *= 1.55 + seededUnit(seed, 0x39aa5c11) * 0.65;
-      }
+      if (entry.role === "jungle") finishJungleClumpScale(
+        scale,
+        entry.descriptor,
+        seededUnit(seed, 0x8f51a67b),
+        seededUnit(seed, 0x39aa5c11),
+      );
       // BED THE STAND INTO THE SLOPE. Placement deliberately seeks steep ground, and a footprint
       // anchored at the centre sample cantilevers off a gorge wall — the stand visibly floats in
       // mid-air on the downhill side. Sinking it by the drop across its own half-width buries the
@@ -1369,7 +1419,7 @@ function geometryForRole(THREE, role) {
       positions, colors, uvs, -0.28, 0.18, 0.34, 0.0, 0.86, leafTint, FOLIAGE_UV_PALM, 0.71,
     );
     appendCrossedFoliageCard(
-      positions, colors, uvs, 0.18, 0.22, 0.28, 0.0, 0.38, underTint, FOLIAGE_UV_UNDERSTORY, 0.35,
+      positions, colors, uvs, 0.18, 0.22, 0.28, 0.0, 0.14, underTint, FOLIAGE_UV_UNDERSTORY, 0.35,
     );
   } else if (role === "plantation") {
     for (let index = 0; index < 5; index++) {

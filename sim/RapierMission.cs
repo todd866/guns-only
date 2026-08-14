@@ -1385,7 +1385,9 @@ public sealed class RapierMissionDirector {
         double noseOnVelocityErrorDeg = 0.0,
         double fuelLb = double.PositiveInfinity,
         double reserveFuelLb = 1_200.0,
-        double aircraftSupportReferenceHeightM = 0.0) {
+        double aircraftSupportReferenceHeightM = 0.0,
+        bool returnToBaseRequested = false,
+        MissionRtbReason returnToBaseReason = MissionRtbReason.None) {
         AtmosphericState air = atmosphere.Sample(player.Position.Y);
         double mach = trueAirspeedMps / Math.Max(1.0, air.SpeedOfSoundMps);
         double qPa = 0.5 * air.DensityKgM3 * trueAirspeedMps * trueAirspeedMps;
@@ -1432,6 +1434,13 @@ public sealed class RapierMissionDirector {
 
         if (recovered) {
             EnterPhase(RapierMissionPhase.Complete, "recovered");
+        } else if (returnToBaseRequested) {
+            EnterPhase(homeRangeM <= RecoveryEntryHomeRangeM
+                    ? RapierMissionPhase.Recovery
+                    : RapierMissionPhase.ReturnToBase,
+                returnToBaseReason == MissionRtbReason.BingoFuel
+                    ? "bingo_fuel_rtb"
+                    : "pilot_knock_it_off_rtb");
         } else if (pursuitActive) {
             EnterPhase(RapierMissionPhase.Escape, "pursuit_active");
         } else if (gunDroneEgress) {

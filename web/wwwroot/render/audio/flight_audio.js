@@ -13,6 +13,15 @@ import {
   createCobraAudioVoices,
   updateCobraAudioVoices,
 } from "./cobra_audio.js";
+import {
+  createF14AudioVoices,
+  updateF14AudioVoices,
+} from "./f14_audio.js";
+import {
+  COBRA_COCKPIT_SAMPLE_BED,
+  F14_COCKPIT_SAMPLE_BED,
+  ensureLoopingSampleBed,
+} from "./sample_bed.js?v=328";
 import { resolvePropulsionCharacter } from "./audio_character.js";
 import { standardAtmosphereState } from "./atmosphere_audio.js";
 import {
@@ -35,8 +44,10 @@ import { createRadioVoice, updateRadioVoice } from "./radio_audio.js";
 let context = null;
 let master = null;
 let bus = null;
+let propulsionDuck = null;
 let engineVoices = null;
 let cobraVoices = null;
+let f14Voices = null;
 let eventVoices = null;
 let contactVoices = null;
 let formationContactVoices = [];
@@ -267,9 +278,19 @@ function build() {
   compressor.connect(master);
   bus = compressor;
 
+  // One multiplicative propulsion duck sits downstream of every aircraft-specific graph and
+  // upstream of the shared compressor. Radio owns this gain while a transmission is live; frame
+  // updates only touch each graph's authored trim, so an async clip cannot be unducked by RAF.
+  propulsionDuck = context.createGain();
+  if (typeof propulsionDuck.gain.setValueAtTime === "function")
+    propulsionDuck.gain.setValueAtTime(1, context.currentTime);
+  else
+    propulsionDuck.gain.value = 1;
+  propulsionDuck.connect(bus);
+
   // Keep propulsion behind its authored trim before it reaches the shared compressor. Sample
   // beds otherwise hit the limiter directly and flatten the RPM/power/G distinctions.
-  engineVoices = createEngineVoices(context, bus, { includeMaster: true });
+  engineVoices = createEngineVoices(context, propulsionDuck, { includeMaster: true });
   eventVoices = createEventVoices(context, bus);
   contactVoices = createContactAcousticVoices(context, bus);
   // The authoritative target graph follows whichever formation slot owns the gun solution.
@@ -287,7 +308,7 @@ function build() {
   }));
   warningVoices = createWarningVoices(context, bus);
   radioVoice = createRadioVoice(context, bus, {
-    engineMaster: engineVoices.master,
+    propulsionDuck,
   });
   installFlightAudioLifecycle();
   publishFlightAudioRuntimeState();
@@ -339,6 +360,14 @@ function ensureJetSamples(state) {
     .finally(() => {
       if (sampleLoad?.promise === promise) sampleLoad = null;
     });
+}
+
+function ensureDedicatedAircraftSampleBed(active, voices, definition) {
+  // Selection is the load boundary: pilots who never enter Cobra or Top Gun never fetch these
+  // comparatively large recordings. Rejections stay fail-soft and the loader owns its bounded
+  // retry window; procedural audio is already live underneath throughout.
+  if (!active || !context || !voices?.decodedBedInput) return;
+  void ensureLoopingSampleBed(context, voices, definition).catch(() => {});
 }
 
 function finiteNumber(...values) {
@@ -785,17 +814,20 @@ function isFlightAudioEnabledLocal() {
   return enabled;
 }
 
-/** Pure mutual-exclusion plan for the two ownship propulsion graphs. */
+/** Pure mutual-exclusion plan for the ownship propulsion graphs. */
 export function flightPropulsionGraphGates(state, live) {
   const propulsionCharacter = resolvePropulsionCharacter(state);
   const cobraActive = propulsionCharacter === "cobra";
+  const f14Active = propulsionCharacter === "f14";
   const audibleFrame = live === true;
   return Object.freeze({
     propulsionCharacter,
     cobraActive,
-    jetMuted: !audibleFrame || cobraActive,
+    f14Active,
+    jetMuted: !audibleFrame || cobraActive || f14Active,
     cobraMuted: !audibleFrame || !cobraActive,
-    radioEngine: cobraActive ? "cobra" : "jet",
+    f14Muted: !audibleFrame || !f14Active,
+    radioEngine: cobraActive ? "cobra" : f14Active ? "f14" : "jet",
   });
 }
 
@@ -827,18 +859,24 @@ function updateFlightAudioLocal(state, {
     const audioState = projectFlightAudioState(state);
     const live = enabled && !muted && !backgrounded;
     const propulsionGates = flightPropulsionGraphGates(audioState, live);
-    const { cobraActive } = propulsionGates;
+    const { cobraActive, f14Active } = propulsionGates;
     // Cobra owns a small dedicated rotorcraft graph, allocated only on its first live frame.
     // It still feeds the same compressor/master and therefore inherits preference mute,
     // lifecycle suspension, and ?audioQa=silent without a second AudioContext or output path.
     if (cobraActive && !cobraVoices)
-      cobraVoices = createCobraAudioVoices(context, bus);
+      cobraVoices = createCobraAudioVoices(context, propulsionDuck);
+    // The Tomcat graph is likewise lazy and bus-owned. Its twin-engine/intake/wing-sweep identity
+    // must not leak into the generic fixed-wing graph used by the MiG-28 and older aircraft.
+    if (f14Active && !f14Voices)
+      f14Voices = createF14AudioVoices(context, propulsionDuck);
+    ensureDedicatedAircraftSampleBed(cobraActive, cobraVoices, COBRA_COCKPIT_SAMPLE_BED);
+    ensureDedicatedAircraftSampleBed(f14Active, f14Voices, F14_COCKPIT_SAMPLE_BED);
     ensureJetSamples(audioState);
     synchronizeCombatLifecycle(audioState);
 
     lastAudibleTarget = live;
     // Collapse continuous gains on mute/pause (view loop still ticks while paused).
-    // Generic jet propulsion and Cobra propulsion are mutually exclusive. Combat events,
+    // Generic jet, F-14, and Cobra propulsion are mutually exclusive. Combat events,
     // warnings, contacts, and radio below remain shared and continue to receive the same frame.
     updateEngineVoices(engineVoices, context, audioState, {
       muted: propulsionGates.jetMuted,
@@ -846,6 +884,11 @@ function updateFlightAudioLocal(state, {
     if (cobraVoices) {
       updateCobraAudioVoices(cobraVoices, context, audioState, {
         muted: propulsionGates.cobraMuted,
+      });
+    }
+    if (f14Voices) {
+      updateF14AudioVoices(f14Voices, context, audioState, {
+        muted: propulsionGates.f14Muted,
       });
     }
     updateBuffetVoice(eventVoices, context, audioState, { enabled: live });
@@ -867,9 +910,8 @@ function updateFlightAudioLocal(state, {
       enabled: live,
       nowSeconds,
     });
-    // Radio sidetone/ducking follows the propulsion graph actually in use. Leaving this pinned
-    // to the jet master lets an asynchronous radio restore briefly wake the muted jet on Cobra.
-    radioVoice.engineMaster = cobraActive ? cobraVoices?.master : engineVoices.master;
+    // Radio owns the shared downstream duck multiplier, independent of which mutually-exclusive
+    // aircraft graph is live. No per-frame graph trim can overwrite an async transmission duck.
     updateRadioVoice(radioVoice, context, state, {
       enabled: live && radioVoiceEnabled,
     });

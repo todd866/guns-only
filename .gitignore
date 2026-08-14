@@ -61,10 +61,11 @@ web/wwwroot/render/audio/preview/out/
 # Local reference cockpit pulls for A/B (not redistributed)
 web/wwwroot/render/audio/preview/ref/
 
-# Local hybrid sample beds — allow committed CC0 loops; ignore raw extracts only.
-web/wwwroot/render/audio/samples/jet/_*.wav
-web/wwwroot/render/audio/samples/jet/_*.flac
-web/wwwroot/render/audio/samples/jet/*.flac
+# Local hybrid sample beds — allow reviewed, explicitly named production WAVs; ignore raw
+# candidates in every aircraft family so a new samples/ subtree cannot bypass this boundary.
+web/wwwroot/render/audio/samples/**/_*.wav
+web/wwwroot/render/audio/samples/**/_*.flac
+web/wwwroot/render/audio/samples/**/*.flac
 !web/wwwroot/render/audio/samples/jet/SOURCES.md
 !web/wwwroot/render/audio/samples/jet/idle_loop.wav
 !web/wwwroot/render/audio/samples/jet/mil_loop.wav

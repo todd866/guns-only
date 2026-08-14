@@ -874,7 +874,10 @@ test("production HUD consumes stabilized KIAS plus physical corner and limits pa
     "padlock must retain the physical IAS/stall/corner tape instead of a duplicate card");
   assert.match(source, /fuelReadout\(state\)/);
   assert.match(source, /limitsPanelPresentation/);
+  assert.match(source, /navigationRateReadout/);
   assert.match(source, /this\.drawLimitsPanel\(frame\.state\)/);
+  assert.match(source, /key:\s*["']navigation["']/,
+    "mobile fixed-wing HUD gets the same NM\/MIN · LB\/MIN · LB\/NM triad");
   assert.match(source, /const compact = state\.rapier_mission_available === true/);
   assert.match(source, /GUN_HEAT_DISPLAY_THRESHOLD/);
   // The G tape is now ALWAYS drawn, so this no longer pins a 3.0 G visibility threshold. An

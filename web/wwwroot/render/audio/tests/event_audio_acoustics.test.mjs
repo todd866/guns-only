@@ -425,11 +425,11 @@ test("speedbrake roar follows dynamic pressure and edge mechanisms remain audibl
     "F-22 approach board lift does not alter another airframe's q response");
 });
 
-test("aged F-22 canopy flex cannot whistle on high TAS without dynamic pressure", async () => {
+test("F-22 pull-G and unload do not invent suit, harness, strain, or canopy sounds", async () => {
   const {
     createEventVoices,
     updateAirframeCueVoices,
-  } = await freshEventAudio("canopy-q-gate");
+  } = await freshEventAudio("f22-g-silence");
   const audio = new FakeAudioContext();
   const voices = createEventVoices(audio, audio.destination);
   const base = {
@@ -440,18 +440,28 @@ test("aged F-22 canopy flex cannot whistle on high TAS without dynamic pressure"
 
   updateAirframeCueVoices(voices, audio, {
     ...base,
-    air_density_kg_m3: 0.000274593,
+    air_density_kg_m3: 0.5,
   });
-  assert.equal(latest(voices.canopyGain.gain), 0);
-  assert.equal(latest(voices.canopy2Gain.gain), 0);
+  assert.equal(latest(voices.gGain.gain), 0);
+  assert.equal(latest(voices.gSuitGain.gain), 0);
+  assert.equal(latest(voices.gHarnessGain.gain), 0);
+  assert.equal(latest(voices.gUnloadGain.gain), 0);
+  assert.equal("canopyGain" in voices, false);
+  assert.equal("canopy2Gain" in voices, false);
 
   audio.currentTime = 0.1;
   updateAirframeCueVoices(voices, audio, {
     ...base,
+    pilot_gz: -1.3,
+    pilot_negative_onset_rate_g_per_second: 3.2,
     air_density_kg_m3: 0.5,
   });
-  assert.ok(latest(voices.canopyGain.gain) > 0.04);
-  assert.ok(latest(voices.canopy2Gain.gain) > 0.02);
+  assert.equal(latest(voices.gGain.gain), 0);
+  assert.equal(latest(voices.gSuitGain.gain), 0);
+  assert.equal(latest(voices.gHarnessGain.gain), 0);
+  assert.equal(latest(voices.gUnloadGain.gain), 0);
+  assert.equal("canopyGain" in voices, false);
+  assert.equal("canopy2Gain" in voices, false);
 });
 
 test("contact classifier recognizes fighter, AWACS, Tu-95, and silent airframes", async () => {

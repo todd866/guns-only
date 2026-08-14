@@ -902,6 +902,12 @@ function assertMobileTacticalHierarchy(data) {
     `desktop=${geometry.desktopFlightChrome}; limits=${Boolean(geometry.limitsPanel)}; `
       + `systems=${Boolean(geometry.systemsPanel)}; cycle=${Boolean(geometry.rapierCycleTeach)}; `
       + `mode=${Boolean(geometry.rapierModeLine)}`);
+  if (data.state?.recovery_point_known === true) {
+    const navDrawn = drawnRows.navigation ?? "";
+    check(name, "mobile recovery carries the shared NM/MIN · LB/MIN · LB/NM triad",
+      /NM\/MIN/.test(navDrawn) && /LB\/MIN/.test(navDrawn) && /LB\/NM/.test(navDrawn),
+      navDrawn || "missing navigation row");
+  }
   check(name, "mobile ladder contains 10-degree majors only",
     geometry.ladderRungs.every((rung) => rung.deg % 10 === 0),
     geometry.ladderRungs.map((rung) => rung.deg).join(","));

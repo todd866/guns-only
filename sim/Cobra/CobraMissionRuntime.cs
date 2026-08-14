@@ -318,6 +318,11 @@ public sealed class CobraMissionRuntime
     /// CobraGroundWarRuntime's header), and this is well inside its tolerance.
     /// </summary>
     public const double GroundWarStepHz = 20.0;
+    // Provisional gameplay collision proxy for the fortified garrison body rendered at each
+    // hostile objective. Ambient foliage remains presentation-only by doctrine; this is the
+    // targetable, authority-owned hardpoint itself. See ah-1g-cobra/00-sources.md.
+    public const double GarrisonCollisionRadiusM = 2.4;
+    public const double GarrisonCollisionHeightM = 2.6;
     const double GroundWarStepSeconds = 1.0 / GroundWarStepHz;
     static readonly VerticalLiftPilotCommand GroundedCommand = new(0.0, 0.0, 0.0, 0.0);
 
@@ -517,6 +522,13 @@ public sealed class CobraMissionRuntime
     public CobraTurnaroundRuntime Turnaround => _turnaround;
     public IReadOnlyList<CobraThreatBurstEvent> RecentThreatBursts => _threatFire.RecentBursts;
     public CobraMissionAct Act => _act;
+    /// <summary>
+    /// The basin clock starts when the aircraft reaches the bridge attack area. The authored
+    /// River Gorge ingress is longer than the original 300-ticket pool at the opening 1-3 split;
+    /// spending tickets on the ramp and route could leave less than a minute for the mission the
+    /// player was briefed to fly. Engage/Hold stays live through a later FOB turnaround.
+    /// </summary>
+    public bool GroundWarCombatLive => _act is CobraMissionAct.Engage or CobraMissionAct.Hold;
     public IReadOnlyList<CobraPathGate> PathGates => CobraMissionActProgress.BuildPathGates(
         _act,
         _selectedRoute,
@@ -535,6 +547,23 @@ public sealed class CobraMissionRuntime
     /// Advance. Consumers sample this at snapshot rate, not tick rate.
     /// </summary>
     public CobraMissionDiagnostics Diagnostics => _diagnostics ??= BuildDiagnostics();
+
+    /// <summary>
+    /// Authority gate for the pilot's visual lock. A renderer raycast cannot establish target
+    /// visibility because the rendered foliage/LOD scene is presentation-only; visual lock and
+    /// the AI gunner therefore share the same living-hostile and terrain/obstacle LOS facts.
+    /// </summary>
+    public bool CanAcquireVisualLockTarget(string? targetUnitId)
+    {
+        if (string.IsNullOrWhiteSpace(targetUnitId)) return false;
+        GroundUnit? target = _groundWar.FindUnit(targetUnitId);
+        return target is { IsAlive: true, Faction: GroundFaction.Hostile }
+            && CobraGunTargeting.EvaluateLineOfSight(
+                _terrain,
+                _resolvedObstacles,
+                _cobra.State.PositionWorldM,
+                target.PositionWorldM);
+    }
 
     public CobraMissionAdvanceResult Advance(
         in VerticalLiftPilotCommand command,
@@ -586,6 +615,13 @@ public sealed class CobraMissionRuntime
             out CobraResolvedObstacle collision)) {
             _collisionObstacleId = collision.Id;
             Status = CobraMissionStatus.ObstacleCollision;
+        } else if (TryFindSweptGarrisonContact(
+            previousPositionWorldM,
+            currentPositionWorldM,
+            CollisionEnvelopeRadiusM,
+            out string? garrisonId)) {
+            _collisionObstacleId = garrisonId;
+            Status = CobraMissionStatus.ObstacleCollision;
         } else if (!vehicleResult.State.Flyable
             && !CanServiceCurrentAirframeAtFob()) {
             // A pad wreck remains authority-owned long enough to secure it and cold-start a
@@ -624,11 +660,16 @@ public sealed class CobraMissionRuntime
         // ground-war step is due, then advance the basin fight by exactly the time that elapsed.
         // Rearm stays at authority rate — it is one terrain sample and the pilot must feel it
         // the instant the skids settle on the Camp Ember pad.
-        _groundWarAccumulatorSeconds += PlayerVehicleContract.FixedDeltaSeconds;
-        if (_groundWarAccumulatorSeconds + 1e-12 >= GroundWarStepSeconds) {
-            double groundWarDeltaSeconds = _groundWarAccumulatorSeconds;
+        if (GroundWarCombatLive) {
+            _groundWarAccumulatorSeconds += PlayerVehicleContract.FixedDeltaSeconds;
+            if (_groundWarAccumulatorSeconds + 1e-12 >= GroundWarStepSeconds) {
+                double groundWarDeltaSeconds = _groundWarAccumulatorSeconds;
+                _groundWarAccumulatorSeconds = 0.0;
+                _groundWar.Advance(groundWarDeltaSeconds);
+            }
+        } else {
+            // Never bank ramp/ingress time into a catch-up burst on the first combat frame.
             _groundWarAccumulatorSeconds = 0.0;
-            _groundWar.Advance(groundWarDeltaSeconds);
         }
         if (Status == CobraMissionStatus.Active)
             _groundWar.TryResupplyAtFob(currentPositionWorldM);
@@ -931,6 +972,32 @@ public sealed class CobraMissionRuntime
             return true;
         }
         collision = default;
+        return false;
+    }
+
+    bool TryFindSweptGarrisonContact(
+        in Vec3D startWorldM,
+        in Vec3D endWorldM,
+        double sphereRadiusM,
+        out string? collisionId)
+    {
+        foreach (GroundUnit unit in _groundWar.Units) {
+            if (!unit.IsAlive
+                || unit.Faction != GroundFaction.Hostile
+                || !unit.IsFortified)
+                continue;
+            Vec3D baseWorldM = unit.PositionWorldM;
+            var proxy = new CobraResolvedObstacle(
+                unit.Id,
+                CobraCanyonCollisionPrimitive.CapsuleSegment,
+                baseWorldM,
+                baseWorldM + new Vec3D(0.0, GarrisonCollisionHeightM, 0.0),
+                GarrisonCollisionRadiusM);
+            if (!proxy.IntersectsSweptSphere(startWorldM, endWorldM, sphereRadiusM)) continue;
+            collisionId = unit.Id;
+            return true;
+        }
+        collisionId = null;
         return false;
     }
 

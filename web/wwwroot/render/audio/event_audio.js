@@ -1,7 +1,7 @@
 // One-shot and pulsed combat / airframe events on a shared flight bus.
 // Gun reports are short cyclic bursts (not a continuous saw bed). Buffet is a low rumble bed
-// amplitude-modulated from snapshot buffet magnitude. Speed brake, G-on strain, and aged-canopy
-// seal whine live here so propulsion stays independent. Fail-silent: callers catch at the façade.
+// amplitude-modulated from snapshot buffet magnitude. Speed-brake and legacy generic-airframe
+// load cues live here so propulsion stays independent. Fail-silent: callers catch at the façade.
 
 import {
   F22_COCKPIT_DYNAMIC_PRESSURE_CEILING_PA,
@@ -151,28 +151,6 @@ export function createEventVoices(audioContext, destination) {
   gUnloadGain.gain.value = 0;
   gUnloadSource.connect(gUnloadFilter).connect(gUnloadGain).connect(destination);
   gUnloadSource.start();
-
-  // Late-2030s F-22 canopy seal whine — thin high whistle that grows with q.
-  const canopySource = audioContext.createBufferSource();
-  canopySource.buffer = whiteNoiseBuffer(audioContext, 0x5345414C);
-  canopySource.loop = true;
-  const canopyFilter = audioContext.createBiquadFilter();
-  canopyFilter.type = "bandpass";
-  canopyFilter.frequency.value = 4200;
-  canopyFilter.Q.value = 14;
-  const canopyGain = audioContext.createGain();
-  canopyGain.gain.value = 0;
-  canopySource.connect(canopyFilter).connect(canopyGain).connect(destination);
-  canopySource.start();
-
-  // Second seal leak — slightly detuned so it isn't a single synth line.
-  const canopy2Filter = audioContext.createBiquadFilter();
-  canopy2Filter.type = "bandpass";
-  canopy2Filter.frequency.value = 6100;
-  canopy2Filter.Q.value = 11;
-  const canopy2Gain = audioContext.createGain();
-  canopy2Gain.gain.value = 0;
-  canopySource.connect(canopy2Filter).connect(canopy2Gain).connect(destination);
 
   // Internal gun body. The continuous 15/25/100 Hz cyclic component carries actual gun cadence;
   // clustered one-shots below provide breech/body variation without allocating 100 source graphs/s.
@@ -379,10 +357,6 @@ export function createEventVoices(audioContext, destination) {
     gHarnessGain,
     gUnloadFilter,
     gUnloadGain,
-    canopyFilter,
-    canopyGain,
-    canopy2Filter,
-    canopy2Gain,
     gunBodyOsc,
     gunBodyFilter,
     gunBodyGain,
@@ -1037,15 +1011,17 @@ export function updateBuffetVoice(voices, audioContext, state, { enabled = true 
   );
 }
 
-/// Speed-brake roar + G-on strain + (F-22) canopy seal whine.
+/// Speed-brake roar plus legacy generic-airframe load cues.
+/// The F-22 deliberately excludes the authored G/suit/harness/unload stack: its load state is
+/// conveyed by aerodynamic buffet and airflow, not an unreferenced cockpit effect.
 export function updateAirframeCueVoices(voices, audioContext, state, { enabled = true } = {}) {
   if (!voices || !audioContext) return;
   const now = audioContext.currentTime;
-  const f22Cockpit = isAgedF22(state) && resolveCockpitPerspective(state);
+  const f22 = isAgedF22(state);
+  const f22Cockpit = f22 && resolveCockpitPerspective(state);
+  const syntheticGCuesEnabled = enabled && !f22;
   const q01 = clamp01(dynamicPressureProxy(state));
   const qPa = dynamicPressurePa(state);
-  const tas = Math.max(0, finiteNumber(state?.true_airspeed_kts) ?? 0);
-  const speed01 = clamp01((tas - 120) / 480);
 
   const hasBrake = state?.has_speed_brake === true
     || finiteNumber(state?.speed_brake) != null;
@@ -1102,7 +1078,7 @@ export function updateAirframeCueVoices(voices, audioContext, state, { enabled =
   const unloadOnset = clamp01(fallingRate / 7);
   voices.gFilter.frequency.setTargetAtTime(70 + positiveG * 160 + q01 * 40, now, 0.1);
   voices.gGain.gain.setTargetAtTime(
-    enabled ? 0.105 * Math.pow(positiveG, 1.2) : 0,
+    syntheticGCuesEnabled ? 0.105 * Math.pow(positiveG, 1.2) : 0,
     now,
     0.1,
   );
@@ -1112,7 +1088,9 @@ export function updateAirframeCueVoices(voices, audioContext, state, { enabled =
     0.08,
   );
   voices.gSuitGain.gain.setTargetAtTime(
-    enabled ? 0.075 * Math.pow(positiveG, 1.05) * (0.7 + 0.3 * positiveOnset) : 0,
+    syntheticGCuesEnabled
+      ? 0.075 * Math.pow(positiveG, 1.05) * (0.7 + 0.3 * positiveOnset)
+      : 0,
     now,
     0.08,
   );
@@ -1122,7 +1100,7 @@ export function updateAirframeCueVoices(voices, audioContext, state, { enabled =
     0.06,
   );
   voices.gHarnessGain.gain.setTargetAtTime(
-    enabled ? 0.038 * Math.max(positiveG * 0.55, positiveOnset) : 0,
+    syntheticGCuesEnabled ? 0.038 * Math.max(positiveG * 0.55, positiveOnset) : 0,
     now,
     0.055,
   );
@@ -1132,7 +1110,7 @@ export function updateAirframeCueVoices(voices, audioContext, state, { enabled =
     0.055,
   );
   voices.gUnloadGain.gain.setTargetAtTime(
-    enabled
+    syntheticGCuesEnabled
       ? 0.07 * Math.max(
         Math.pow(negativeG, 0.85),
         negativeOnset,
@@ -1141,28 +1119,6 @@ export function updateAirframeCueVoices(voices, audioContext, state, { enabled =
       : 0,
     now,
     0.045,
-  );
-
-  const aged = isAgedF22(state);
-  // Late-2030s canopy seals leak under aerodynamic load. TAS may color the whistle, but cannot
-  // keep it alive in near-vacuum when dynamic pressure has collapsed.
-  const canopyG = clamp01((Math.max(1, Math.abs(g)) - 2.1) / 4.8);
-  const canopyDrive = aged
-    ? canopyG * Math.pow(q01, 0.45)
-    : 0;
-  voices.canopyFilter.frequency.setTargetAtTime(
-    3600 + canopyG * 1800 + q01 * 1600 + speed01 * 600, now, 0.14);
-  voices.canopy2Filter.frequency.setTargetAtTime(
-    5200 + canopyG * 1600 + q01 * 1400 + speed01 * 700, now, 0.14);
-  voices.canopyGain.gain.setTargetAtTime(
-    enabled ? 0.045 * Math.pow(canopyDrive, 1.1) : 0,
-    now,
-    0.12,
-  );
-  voices.canopy2Gain.gain.setTargetAtTime(
-    enabled ? 0.028 * Math.pow(canopyDrive, 1.15) : 0,
-    now,
-    0.12,
   );
 }
 

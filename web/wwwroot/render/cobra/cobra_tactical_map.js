@@ -7,7 +7,7 @@
  * progress or unit positions, it only reprojects what the sim already published.
  */
 
-import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=327";
+import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=328";
 
 export const COBRA_TACTICAL_MAP_SCHEMA = "guns-only.cobra-tactical-map.v1";
 
@@ -58,6 +58,7 @@ function project(eastM, northM, bounds, widthPx, heightPx) {
  *   sites?: Array<object>,
  *   units?: Array<object>,
  *   tickets?: { friendly?: number, hostile?: number },
+ *   combatLive?: boolean,
  *   player?: { eastM?: number, northM?: number, headingRad?: number },
  *   bounds: { minEastM: number, maxEastM: number, minNorthM: number, maxNorthM: number },
  *   widthPx: number,
@@ -69,6 +70,7 @@ export function cobraTacticalMapModel({
   sites = [],
   units = [],
   tickets = { friendly: 0, hostile: 0 },
+  combatLive = true,
   player = { eastM: 0, northM: 0, headingRad: 0 },
   // The river course, as [{ eastM, northM }]. It is the strongest landmark a pilot actually
   // has out of the windscreen, so a chart that omits it gives them nothing to match against.
@@ -168,6 +170,7 @@ export function cobraTacticalMapModel({
     river: projectedRiver,
     player: projectedPlayer,
     tickets: { friendly: tickets?.friendly ?? 0, hostile: tickets?.hostile ?? 0 },
+    combat_live: combatLive !== false,
     objective,
   };
 }

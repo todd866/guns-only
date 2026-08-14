@@ -6,7 +6,9 @@ import { planCobraCanyonWorld } from "../cobra_canyon_plan.js";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   COBRA_CANYON_ASSET_ROLES,
+  COBRA_OBJECTIVE_CLEAR_RADIUS_M,
   cobraCanyonAssetRoleScaleForTests,
+  cobraCanyonFinalJungleScaleForTests,
   createCobraCanyonAssetKit,
 } from "../cobra_canyon_asset_kit.js";
 
@@ -65,10 +67,11 @@ test("builds one bounded authored batch per visual role across every tier", () =
     assert.equal(kit.roleCounts.authoredAmbientArchetypes, 11);
     assert.equal(kit.roleCounts.authoredLandmarkArchetypes, 11);
     assert.equal(kit.roleCounts.authoredSetPieceArchetypeReferences, 58);
-    // Jungle set-piece archetypes expand to 3 stands each (near-field canopy walls).
-    // Camp Ember dressing: no pad-centre canopy/mist/understory → 85 assets.
-    assert.equal(kit.roleCounts.authoredSetPieceAssetReferences, 85);
-    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, 85);
+    // Jungle set-piece archetypes expand to three stands, except inside the Camp Ember and
+    // capture-point clear eyes. Those 135 m objective windows keep the garrison/bridge readable
+    // while preserving the authored walls beyond the fight itself.
+    assert.equal(kit.roleCounts.authoredSetPieceAssetReferences, 63);
+    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, 63);
     assert.equal(
       kit.roleCounts.ambientBatchInstances
         + kit.roleCounts.renderedSetPieceAssetInstances
@@ -126,6 +129,28 @@ test("builds one bounded authored batch per visual role across every tier", () =
       const dz = (-junglePosition.z) - padNorth;
       assert.ok(dx * dx + dz * dz >= 120 * 120,
         "jungle must stay outside the Camp Ember clear eye");
+    }
+    const objectiveIds = new Set([
+      "landmark.cobra-canyon.iron-bell-bridge.v1",
+      "landmark.cobra-canyon.plantation-water-tower.v1",
+      "landmark.cobra-canyon.red-earth-quarry.v1",
+    ]);
+    const objectivePoints = plan.landmarks
+      .filter((entry) => objectiveIds.has(entry.id))
+      .map((entry) => entry.positionLocalM);
+    for (const role of ["jungle", "plantation"]) {
+      const mesh = meshes.get(role);
+      for (let index = 0; index < mesh.count; index++) {
+        mesh.getMatrixAt(index, jungleMatrix);
+        junglePosition.setFromMatrixPosition(jungleMatrix);
+        for (const [objectiveEast, , objectiveNorth] of objectivePoints) {
+          const dx = junglePosition.x - objectiveEast;
+          const dz = (-junglePosition.z) - objectiveNorth;
+          assert.ok(dx * dx + dz * dz
+            >= COBRA_OBJECTIVE_CLEAR_RADIUS_M * COBRA_OBJECTIVE_CLEAR_RADIUS_M,
+          `${role} must not bury a capture-point/garrison cue`);
+        }
+      }
     }
     assert.equal(jungleMesh.material.side, THREE.DoubleSide);
     assert.ok(triangleCount(jungleGeometry) >= 10,
@@ -264,6 +289,18 @@ test("understory is grass height, not canopy height", () => {
     `understory must be grass/scrub height, got ${understory.heightM} m`);
   assert.ok(understory.heightM < canopy.heightM / 4,
     "understory must be dramatically shorter than canopy, not a nudge");
+});
+
+test("post-clump jungle variation cannot turn canopy or ferns into flight-path walls", () => {
+  const canopy = cobraCanyonFinalJungleScaleForTests(
+    { id: "archetype.cobra-canyon.jungle-canopy.v1" }, 1, 1, 1,
+  );
+  const understory = cobraCanyonFinalJungleScaleForTests(
+    { id: "archetype.cobra-canyon.jungle-understory.v1" }, 1, 1, 1,
+  );
+  assert.ok(canopy.heightM <= 34, `final canopy height ${canopy.heightM} m exceeds its band`);
+  assert.ok(understory.heightM <= 4,
+    `final grass/scrub height ${understory.heightM} m exceeds its band`);
 });
 
 test("an authored scaleM still wins over both bands", () => {

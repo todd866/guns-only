@@ -75,6 +75,28 @@ export function recoveryNavigationPresentation(state = {}) {
   });
 }
 
+/** Shared fixed-wing navigation-rate triad. Rapier originated the presentation, but every
+ * recovery-capable aircraft publishes the same pounds, ground-speed, and home-point contract. */
+export function navigationRateReadout(state = {}) {
+  const navigation = recoveryNavigationPresentation(state);
+  if (!navigation.recoveryPointKnown) return null;
+  const nmPerMin = navigation.nmPerMin;
+  const lbPerMin = navigation.lbPerMin;
+  const lbPerNm = navigation.lbPerNm;
+  const nmText = nmPerMin !== null && nmPerMin > 0.01 ? nmPerMin.toFixed(1) : "--";
+  const burnText = lbPerMin !== null ? String(Math.round(lbPerMin)) : "--";
+  const economyText = lbPerNm !== null ? lbPerNm.toFixed(2) : "--";
+  return Object.freeze({
+    nmPerMin,
+    lbPerMin,
+    lbPerNm,
+    text: `NAV ${nmText} NM/MIN · ${burnText} LB/MIN · ${economyText} LB/NM`,
+    // Keep every unit legible in the 320 px / large-interface-text tactical rail. The desktop
+    // readout retains the two-decimal economy value above; one decimal is sufficient in motion.
+    compactText: `${nmText}NM/MIN·${burnText}LB/MIN·${lbPerNm === null ? "--" : lbPerNm.toFixed(1)}LB/NM`,
+  });
+}
+
 function thermalAccent(state, base) {
   if (state.rapier_mission_available !== true) return base;
   const marginC = finiteNumber(state.rapier_cmc_margin_c)

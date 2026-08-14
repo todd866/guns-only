@@ -44,6 +44,7 @@ public sealed class SortieScheduleSessionTests {
             heightAboveRunwayM: 60.0,
             trueAirspeedMps: 60.0);
         var session = new SimulationSession();
+        Assert.True(beat.SystemsProfile!.RecoveryProfileFitted);
         session.StartBeat(() => beat);
         Assert.True(session.TrySetRecoveryProcedure((int)RecoveryProcedureKind.StraightIn));
         session.SetAutoGcasEnabled(false);
@@ -58,9 +59,21 @@ public sealed class SortieScheduleSessionTests {
         Assert.True(session.SortiePlan.CommandedPower01 > 0.5,
             $"low and slow must ask for power, got {session.SortiePlan.CommandedPower01:F3}");
 
-        double approachMps = SortieSchedule.ApproachSpeedMps(
-            session.Player.State.Mass, beat.PlayerAir);
-        Assert.Equal(2.7 * approachMps, session.SortiePlan.TargetSpeedMps, 6);
+        double referenceAltitudeM = beat.RecoveryPlan!.ConventionalRunway!.ElevationM
+            + ApproachGuidance.DefaultStabiliseHeightAboveSurfaceM;
+        double approachMps = SortieSchedule.ApproachTrueAirspeedMps(
+            session.Player.State.Mass,
+            beat.PlayerAir,
+            beat.SystemsProfile!,
+            referenceAltitudeM);
+        double configurationCeilingTas = AirData.TrueAirspeedForCalibratedAirspeedMps(
+            beat.SystemsProfile!.GearAndFlapLimitKias / AirData.MpsToKnots,
+            referenceAltitudeM);
+        Assert.InRange(session.SortiePlan.TargetSpeedMps,
+            approachMps,
+            configurationCeilingTas);
+        Assert.True(session.SortiePlan.TargetSpeedMps < 2.7 * approachMps,
+            "inside the fitted deceleration track the schedule must already be below transit speed");
 
         using JsonDocument snapshot = JsonDocument.Parse(SnapshotProjection.BuildState(
             session, Carrier.DeckConfiguration.Angled, 0.0, 0.0, false, null));

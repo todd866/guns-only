@@ -8,9 +8,18 @@ public sealed class TopGunFightRuntime
 {
     public const string MissionId = "mission.top-gun.acm.f14a-vs-mig28.v1";
     public const int DefaultMagazine = 2;
+    public const double F14NormalLimitG = 7.5;
+    public const double F14OverrideCommandLimitG = 11.0;
+    // PROVISIONAL gameplay exposure budget, not an inference from the conventional 1.5x
+    // limit/ultimate-load relationship. Brief 1-2 second emergency pulls must be survivable;
+    // repeated or sustained maximum-severity abuse still has an irreversible consequence.
+    const double EquivalentMaximumExposureSeconds = 8.0;
 
     readonly Aim9Surrogate _aim9;
     bool _detonationPending;
+    double _f14OverLimitSeconds;
+    double _f14StructuralFatigue01;
+    bool _f14StructuralFailed;
 
     public TopGunFightRuntime(int rounds = DefaultMagazine) =>
         _aim9 = new Aim9Surrogate(rounds);
@@ -24,6 +33,42 @@ public sealed class TopGunFightRuntime
 
     public bool Aim9InFlight => _aim9.Live.State
         is Aim9FlightState.Seeking or Aim9FlightState.Tracking;
+
+    public bool F14OverLimit { get; private set; }
+    public double F14OverLimitSeconds => _f14OverLimitSeconds;
+    public double F14StructuralFatigue01 => _f14StructuralFatigue01;
+    public bool F14StructuralFailed => _f14StructuralFailed;
+
+    /// <summary>
+    /// Observe the ownship Tomcat's achieved load. Ordinary flight is protected at 7.5 G; Space
+    /// deliberately enters an over-limit region that accumulates irreversible fatigue. A brief
+    /// excursion is survivable; repeated or sustained over-G can exhaust the explicit mission
+    /// strain budget. This models no binary real-aircraft ultimate-load or pilot-physiology limit.
+    /// </summary>
+    public bool ObserveF14Load(double actualG, double dt)
+    {
+        if (_f14StructuralFailed) return false;
+        if (!double.IsFinite(actualG) || !double.IsFinite(dt) || dt <= 0.0) {
+            F14OverLimit = false;
+            return false;
+        }
+
+        F14OverLimit = actualG > F14NormalLimitG + 1e-6;
+        if (!F14OverLimit) return false;
+
+        _f14OverLimitSeconds += dt;
+        double span = Math.Max(F14OverrideCommandLimitG - F14NormalLimitG, 1e-9);
+        double severity = Math.Clamp((actualG - F14NormalLimitG) / span, 0.0, 1.0);
+        _f14StructuralFatigue01 = Math.Clamp(
+            _f14StructuralFatigue01
+                + dt * severity * severity * severity / EquivalentMaximumExposureSeconds,
+            0.0,
+            1.0);
+        if (_f14StructuralFatigue01 < 1.0) return false;
+
+        _f14StructuralFailed = true;
+        return true;
+    }
 
     public bool TryLaunchFoxTwo(in Aim9Pose shooter, in Aim9Pose target, double nowMs) =>
         _aim9.TryLaunch(shooter, target, nowMs);

@@ -5,6 +5,7 @@ import {
   COBRA_TELEMETRY_BATCH_BYTE_LIMIT,
   COBRA_TELEMETRY_BUFFER_ROW_LIMIT,
   COBRA_TELEMETRY_FLUSH_INTERVAL_MS,
+  COBRA_TELEMETRY_MAX_DRAIN_BATCHES,
   createCobraTelemetryChannel,
 } from "../cobra_telemetry.js";
 
@@ -41,23 +42,50 @@ function bodyRows(call) {
   return JSON.parse(call.body).rows;
 }
 
-test("periodic batches stay under the keepalive-safe byte cap and keep the remainder queued", async () => {
-  const { channel, calls } = channelWith([{ ok: true }]);
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((accept, decline) => {
+    resolve = accept;
+    reject = decline;
+  });
+  return { promise, resolve, reject };
+}
+
+test("periodic drain keeps every request under the byte cap and sends the queued prefix in order", async () => {
+  const { channel, calls } = channelWith([]);
   for (let index = 0; index < 200; index++) channel.record(fatRow(index));
 
   await channel.flush();
 
-  assert.equal(calls.length, 1);
-  const bytes = new TextEncoder().encode(calls[0].body).byteLength;
-  assert.ok(bytes <= COBRA_TELEMETRY_BATCH_BYTE_LIMIT,
-    `batch body ${bytes} B exceeds the ${COBRA_TELEMETRY_BATCH_BYTE_LIMIT} B cap`);
-  const rows = bodyRows(calls[0]);
-  const dataRows = rows.filter((row) => row.k !== "hdr");
+  assert.ok(calls.length > 1, "a capped remainder must drain without waiting another five seconds");
+  assert.ok(calls.length <= COBRA_TELEMETRY_MAX_DRAIN_BATCHES);
+  for (const call of calls) {
+    const bytes = new TextEncoder().encode(call.body).byteLength;
+    assert.ok(bytes <= COBRA_TELEMETRY_BATCH_BYTE_LIMIT,
+      `batch body ${bytes} B exceeds the ${COBRA_TELEMETRY_BATCH_BYTE_LIMIT} B cap`);
+  }
+  const delivered = calls.flatMap(bodyRows)
+    .filter((row) => row.k !== "hdr")
+    .map((row) => row.s.index);
   const diagnostics = channel.diagnostics();
-  assert.ok(dataRows.length > 0 && dataRows.length < 200, "cap must slice, not send everything");
-  assert.equal(dataRows.length + diagnostics.bufferedRows, 200,
-    "remainder rows must stay queued, not vanish");
+  assert.deepEqual(delivered, Array.from({ length: 200 }, (_, index) => index));
+  assert.equal(diagnostics.bufferedRows, 0);
   assert.equal(diagnostics.droppedRows, 0);
+});
+
+test("one cadence out-drains the measured 10 Hz stream of three-kilobyte Cobra states", async () => {
+  const { channel, calls } = channelWith([]);
+  for (let index = 0; index < 50; index++) {
+    channel.record({ k: "st", t: index * 100, s: { index, filler: "x".repeat(3_000) } });
+  }
+
+  await channel.flush();
+
+  assert.ok(calls.length >= 3, "measured rows should prove the old one-request cadence was too slow");
+  assert.ok(calls.length <= COBRA_TELEMETRY_MAX_DRAIN_BATCHES);
+  assert.equal(channel.diagnostics().bufferedRows, 0,
+    "a five-second / 50-row arrival window must be completely drained");
 });
 
 test("every batch leads with an hdr row carrying build and UA attribution", async () => {
@@ -136,6 +164,7 @@ test("the buffer is bounded and sheds oldest rows with an explicit counter", () 
 test("default buffer bound and flush interval are sane for a ~10 Hz row stream", () => {
   assert.ok(COBRA_TELEMETRY_BUFFER_ROW_LIMIT >= 1_000);
   assert.ok(COBRA_TELEMETRY_FLUSH_INTERVAL_MS <= 10_000);
+  assert.ok(COBRA_TELEMETRY_MAX_DRAIN_BATCHES >= 4);
 });
 
 test("flushIfDue posts only after the interval elapses", async () => {
@@ -172,6 +201,58 @@ test("a flush while one is in flight does not double-send", async () => {
   assert.equal(calls.length, 1);
   release();
   await first;
+});
+
+test("a late pagehide duplicate cannot erase or unlock the periodic successor batch", async () => {
+  const periodicA = deferred();
+  const pagehideA = deferred();
+  const periodicB = deferred();
+  const gates = [periodicA, pagehideA, periodicB];
+  const calls = [];
+  const channel = createCobraTelemetryChannel({
+    session: "race",
+    build: "327",
+    userAgent: "ua",
+    fetchImpl: (url, options) => {
+      calls.push({ url, options, body: options.body });
+      const gate = gates[calls.length - 1];
+      return gate ? gate.promise : Promise.resolve({ ok: true });
+    },
+    now: () => 0,
+  });
+  // More than one byte-capped request, so successful A immediately starts successor B.
+  for (let index = 0; index < 120; index++) channel.record(fatRow(index));
+
+  const periodicDrain = channel.flush();
+  const pagehideDuplicate = channel.flush({ pagehide: true });
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].body, calls[0].body, "pagehide must duplicate A's idempotent body");
+
+  periodicA.resolve({ ok: true });
+  // Let A's success clear itself, release its latch, and synchronously recurse into B.
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(calls.length, 3, "periodic A success should start successor B");
+  const successorBody = calls[2].body;
+  assert.notEqual(successorBody, calls[0].body);
+
+  pagehideA.resolve({ ok: true });
+  await pagehideDuplicate;
+  assert.ok(channel.diagnostics().pendingRows > 0,
+    "late pagehide(A) must not clear pending successor B");
+  channel.flush();
+  assert.equal(calls.length, 3,
+    "late pagehide(A) must not release B's single-flight latch");
+
+  periodicB.reject(new TypeError("successor transport failed"));
+  await periodicDrain;
+  assert.ok(channel.diagnostics().pendingRows > 0,
+    "failed successor B must remain pending for an identical retry");
+
+  await channel.flush();
+  assert.equal(calls[3].body, successorBody,
+    "retry must preserve successor B's exact idempotent payload");
 });
 
 test("an empty channel never posts", async () => {

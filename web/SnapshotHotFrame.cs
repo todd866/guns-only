@@ -44,7 +44,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 24;
+    public const int LayoutVersion = 25;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -235,6 +235,14 @@ internal static class SnapshotHotFrame {
         // leaving it in the five-second JSON fallback made a launched round appear stationary.
         Nul("wing_sweep_deg", 1);
         Nul("opponent_wing_sweep_deg", 1);
+        Nul("wing_sweep_command_deg", 1);
+        Num("wing_sweep_mode_code", RawInteger);
+        Nul("f14_g_limit_g", 1);
+        Nul("f14_override_limit_g", 1);
+        Bool("f14_over_g");
+        Num("f14_over_g_seconds", 3);
+        Num("f14_structural_fatigue_01", 4);
+        Bool("f14_structural_failed");
         Nul("aim9_remaining", RawInteger);
         Bool("aim9_in_flight");
         Bool("aim9_pose_valid");
@@ -1184,11 +1192,27 @@ internal static class SnapshotHotFrame {
         w.Num("bfx", bf.X, 5); w.Num("bfy", bf.Y, 5); w.Num("bfz", bf.Z, 5);
         w.Num("blx", bl.X, 5); w.Num("bly", bl.Y, 5); w.Num("blz", bl.Z, 5);
         bool topGun = TopGunFightRuntime.IsTopGunMission(session.Beat.MissionIdentity.Id);
+        bool playerTomcat = topGun
+            && session.Beat.PlayerAircraft.Id == AircraftCapability.F14ASurrogate.Id;
         Aim9Telemetry aim9 = session.Aim9Telemetry;
         bool aim9PoseValid = topGun && aim9.State != Aim9FlightState.Safe;
         w.Nul("wing_sweep_deg", topGun ? session.PlayerF14WingSweepDegrees : null, 1);
         w.Nul("opponent_wing_sweep_deg",
             topGun ? session.OpponentF14WingSweepDegrees : null, 1);
+        w.Nul("wing_sweep_command_deg",
+            playerTomcat ? session.PlayerF14WingSweepCommandDegrees : null, 1);
+        w.Num("wing_sweep_mode_code",
+            playerTomcat ? (int)session.PlayerF14WingSweepMode : 0, RawInteger);
+        w.Nul("f14_g_limit_g", playerTomcat ? TopGunFightRuntime.F14NormalLimitG : null, 1);
+        w.Nul("f14_override_limit_g",
+            playerTomcat ? TopGunFightRuntime.F14OverrideCommandLimitG : null, 1);
+        w.Bool("f14_over_g", playerTomcat && session.PlayerF14OverLimit);
+        w.Num("f14_over_g_seconds",
+            playerTomcat ? session.PlayerF14OverLimitSeconds : 0.0, 3);
+        w.Num("f14_structural_fatigue_01",
+            playerTomcat ? session.PlayerF14StructuralFatigue01 : 0.0, 4);
+        w.Bool("f14_structural_failed",
+            playerTomcat && session.PlayerF14StructuralFailed);
         w.Nul("aim9_remaining", topGun ? session.Aim9Remaining : null, RawInteger);
         w.Bool("aim9_in_flight", session.Aim9InFlight);
         w.Bool("aim9_pose_valid", aim9PoseValid);
@@ -2539,6 +2563,7 @@ internal static class SnapshotHotFrame {
         SortieOutcome Outcome,
         SortieOutcome PendingOutcome,
         CombatHandoffPhase CombatHandoffPhase,
+        MissionRtbReason ReturnToBaseReason,
         RunwayRecoveryPhase ConventionalRunwayPhase,
         bool TerminalPhaseActive,
         AircraftTerminalState PlayerTerminalState,
@@ -2664,6 +2689,7 @@ internal static class SnapshotHotFrame {
                 session.Outcome,
                 session.PendingOutcome,
                 session.CombatHandoffPhase,
+                session.ReturnToBaseReason,
                 session.ConventionalRunwayPhase,
                 session.TerminalPhaseActive,
                 session.PlayerTerminalState,

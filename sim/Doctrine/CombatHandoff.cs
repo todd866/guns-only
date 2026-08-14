@@ -17,3 +17,14 @@ public enum CombatHandoffPhase : byte {
     ReliefLost = 7,
     Recovered = 8,
 }
+
+/// <summary>
+/// Why the pilot's recovery corridor became authoritative. This is mission intent, not a fuel
+/// advisory: once non-None, the player has left combat and the reason remains stable through the
+/// landing/debrief boundary.
+/// </summary>
+public enum MissionRtbReason : byte {
+    None = 0,
+    PilotKnockItOff = 1,
+    BingoFuel = 2,
+}

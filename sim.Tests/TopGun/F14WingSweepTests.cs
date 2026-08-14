@@ -23,6 +23,69 @@ public sealed class F14WingSweepTests
         Assert.Equal(F14WingSweep.MaxSweepDeg, max);
     }
 
+    [Fact]
+    public void PlayerTomcatDefaultsAutoThenHeldManualAftAndAutoReturnOwnAppliedSpan()
+    {
+        var session = new SimulationSession();
+        session.StartBeat(() => Beats.TopGunAcm(TopGunSeat.F14A));
+        session.Begin();
+        double automatic = Assert.IsType<double>(session.PlayerF14WingSweepDegrees);
+        Assert.Equal(F14WingSweepMode.Auto, session.PlayerF14WingSweepMode);
+
+        session.FeedKey(GKey.WingSweepAft, true);
+        session.StepFixed((int)AircraftSim.TickHz);
+        double manual = Assert.IsType<double>(session.PlayerF14WingSweepDegrees);
+
+        Assert.Equal(F14WingSweepMode.Manual, session.PlayerF14WingSweepMode);
+        // The first active tick starts from that tick's freshly computed AUTO angle, not from the
+        // prior paused snapshot. The aircraft accelerates slightly over this second, so compare
+        // the authority rate with a narrow schedule-drift allowance.
+        Assert.InRange(manual - automatic,
+            F14WingSweep.ManualRateDegPerSecond - 0.2,
+            F14WingSweep.ManualRateDegPerSecond + 0.2);
+        Assert.Equal(manual, session.PlayerF14WingSweepCommandDegrees);
+        Assert.Equal(
+            TopGunFightRuntime.EffectiveTomcatWingSpanMForSweep(
+                manual, session.Beat.PlayerAir.WingSpanM),
+            session.PlayerEffectiveWingSpanM, precision: 10);
+
+        session.FeedKey(GKey.WingSweepAuto, true);
+        session.FeedKey(GKey.WingSweepAuto, false);
+        session.StepFixed();
+        double returned = Assert.IsType<double>(session.PlayerF14WingSweepDegrees);
+        double scheduled = F14WingSweep.DegreesFor(
+            AirData.MachNumber(session.Player.AirspeedMps,
+                session.Player.State.Position.Y, session.Player.AtmosphereModel),
+            session.Player.IndicatedAirspeedMps * AirData.MpsToKnots);
+
+        Assert.Equal(F14WingSweepMode.Auto, session.PlayerF14WingSweepMode);
+        Assert.InRange(Math.Abs(scheduled - returned), 0.0, 0.2);
+        Assert.Equal(returned, session.PlayerF14WingSweepCommandDegrees);
+
+        session.FeedKey(GKey.WingSweepAft, false);
+        session.StepFixed();
+        Assert.Equal(F14WingSweepMode.Auto, session.PlayerF14WingSweepMode);
+        session.FeedKey(GKey.WingSweepAft, true);
+        session.StepFixed();
+        Assert.Equal(F14WingSweepMode.Manual, session.PlayerF14WingSweepMode);
+        session.FeedKey(GKey.WingSweepAft, false);
+    }
+
+    [Fact]
+    public void PlayerMigCannotCommandOpponentTomcatWingAuthority()
+    {
+        var session = new SimulationSession();
+        session.StartBeat(() => Beats.TopGunAcm(TopGunSeat.Mig28));
+        session.Begin();
+        session.FeedKey(GKey.WingSweepAft, true);
+        session.StepFixed((int)AircraftSim.TickHz);
+
+        Assert.Equal(F14WingSweepMode.None, session.PlayerF14WingSweepMode);
+        Assert.Null(session.PlayerF14WingSweepDegrees);
+        Assert.Null(session.PlayerF14WingSweepCommandDegrees);
+        Assert.NotNull(session.OpponentF14WingSweepDegrees);
+    }
+
     [Theory]
     [InlineData(TopGunSeat.F14A)]
     [InlineData(TopGunSeat.Mig28)]

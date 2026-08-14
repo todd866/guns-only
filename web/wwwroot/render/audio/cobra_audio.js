@@ -45,6 +45,20 @@ function finite(value, fallback = 0) {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
+function optionalFinite(...values) {
+  for (const value of values) {
+    if (value == null || value === "") continue;
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) return numeric;
+  }
+  return null;
+}
+
+function smoothstep(value) {
+  const t = clamp(value);
+  return t * t * (3 - 2 * t);
+}
+
 function normalizedPhase(value) {
   return String(value ?? "none")
     .trim()
@@ -56,6 +70,32 @@ function normalizedSequence(value) {
   const numeric = Number(value);
   if (Number.isFinite(numeric)) return Math.max(0, Math.trunc(numeric));
   return String(value ?? "").trim();
+}
+
+function projectedThreatBursts(state) {
+  const published = Array.isArray(state?.cobra_ground_fire_recent_bursts)
+    ? state.cobra_ground_fire_recent_bursts
+    : null;
+  const legacySequence = optionalFinite(state?.cobra_ground_fire_last_burst_sequence);
+  const source = published ?? (legacySequence == null ? [] : [{
+    sequence: legacySequence,
+    will_hit: state?.cobra_ground_fire_last_burst_will_hit,
+    has_impacted: state?.cobra_ground_fire_last_burst_has_impacted,
+    subsystem: state?.cobra_ground_fire_last_burst_subsystem,
+  }]);
+  const bursts = [];
+  for (const burst of source) {
+    const sequence = optionalFinite(burst?.sequence);
+    if (sequence == null) continue;
+    bursts.push(Object.freeze({
+      sequence: Math.max(0, Math.trunc(sequence)),
+      willHit: burst?.will_hit === true,
+      hasImpacted: burst?.has_impacted === true,
+      subsystem: String(burst?.subsystem ?? "none"),
+    }));
+  }
+  bursts.sort((left, right) => left.sequence - right.sequence);
+  return Object.freeze(bursts);
 }
 
 export function rotorBladePassHz(rpm, bladeCount) {
@@ -76,6 +116,36 @@ export function projectCobraAudioState(state) {
     ? Math.max(0, publishedTailRpm)
     : mainRotorRpm * COBRA_MAIN_TO_TAIL_GEAR_RATIO;
   const phase = normalizedPhase(state?.cobra_turnaround_phase);
+  const collective01 = clamp(optionalFinite(state?.cobra_collective, state?.throttle) ?? 0);
+  const transmission01 = clamp(optionalFinite(
+    state?.cobra_transmission_limit_fraction,
+    state?.engine_spool_fraction,
+  ) ?? 0);
+  const trueAirspeedKts = Math.max(0, optionalFinite(
+    state?.true_airspeed_kts,
+    state?.ground_speed_kts,
+  ) ?? 0);
+  // The bridge publishes advance ratio. The speed fallback keeps older archived states useful,
+  // but it is presentation-only and never feeds the vehicle authority.
+  const advanceRatio = Math.max(0, optionalFinite(state?.cobra_advance_ratio)
+    ?? trueAirspeedKts / 220);
+  const enginePower01 = clamp(finite(state?.cobra_engine_power_fraction));
+  const rotorLoad01 = clamp(Math.max(
+    collective01 * 1.04,
+    transmission01,
+    enginePower01 * 0.92,
+  ));
+  const advanceDrive = 0.38 + 0.62 * smoothstep((advanceRatio - 0.06) / 0.34);
+  const bladeSlap01 = clamp(
+    Math.pow(rotorLoad01, 1.22)
+      * Math.pow(clamp(mainRotorRpm / COBRA_NOMINAL_MAIN_ROTOR_RPM, 0, 1.15), 0.7)
+      * advanceDrive,
+  );
+  // Actual bounded events own impact identity. The newest aliases remain below for diagnostics
+  // and compatibility with archived frames, but current production audio never binds an older
+  // impact to whichever newer burst happens to be last in the list.
+  const threatBursts = projectedThreatBursts(state);
+  const latestBurst = threatBursts.length ? threatBursts[threatBursts.length - 1] : null;
   return Object.freeze({
     active: resolvePropulsionCharacter(state) === "cobra",
     mainRotorRpm,
@@ -83,11 +153,143 @@ export function projectCobraAudioState(state) {
     mainBladePassHz: rotorBladePassHz(mainRotorRpm, COBRA_MAIN_ROTOR_BLADE_COUNT),
     tailBladePassHz: rotorBladePassHz(tailRotorRpm, COBRA_TAIL_ROTOR_BLADE_COUNT),
     engineOperating: state?.cobra_engine_operating === true,
-    enginePower01: clamp(finite(state?.cobra_engine_power_fraction)),
+    enginePower01,
+    collective01,
+    transmission01,
+    trueAirspeedKts,
+    advanceRatio,
+    rotorLoad01,
+    bladeSlap01,
+    fireAuthorized: state?.cobra_fire_authorized === true,
+    ammoRemaining: optionalFinite(state?.cobra_ammo_remaining),
+    roundsExpended: optionalFinite(state?.cobra_rounds_expended),
+    receivingGroundFire: state?.cobra_receiving_ground_fire === true,
+    threatBursts,
+    burstSequence: latestBurst?.sequence ?? null,
+    burstWillHit: latestBurst?.willHit ?? false,
+    burstHasImpacted: latestBurst?.hasImpacted ?? false,
+    burstSubsystem: latestBurst?.subsystem ?? "none",
+    burstsFired: optionalFinite(state?.cobra_ground_fire_bursts_fired),
+    damagingHits: Math.max(0,
+      Math.trunc(optionalFinite(state?.cobra_ground_fire_damaging_hits) ?? 0)),
     phase,
     sequence: normalizedSequence(state?.cobra_turnaround_sequence),
     starting: START_PHASES.has(phase),
     shuttingDown: SHUTDOWN_PHASES.has(phase),
+  });
+}
+
+/** Dedupe each bounded authority event independently from 60/120 Hz presentation frames. */
+export function advanceCobraCombatCueState(previous, sample) {
+  const first = previous?.initialized !== true;
+  const bursts = Array.isArray(sample?.threatBursts) ? sample.threatBursts : [];
+  const maximumSequence = bursts.reduce(
+    (maximum, burst) => Math.max(maximum, Math.max(0, finite(burst?.sequence))),
+    -1,
+  );
+  const previousMaximum = optionalFinite(previous?.lastBurstSequence);
+  const burstsFired = optionalFinite(sample?.burstsFired);
+  const previousBurstsFired = optionalFinite(previous?.burstsFired);
+  // Sequence rollback is a new airframe/sortie lifecycle. Baseline the already-present events;
+  // neither their muzzle reports nor impacts happened in this audio session.
+  const rollback = !first
+    && ((maximumSequence >= 0
+      && previousMaximum != null
+      && maximumSequence < previousMaximum)
+      || (burstsFired != null
+        && previousBurstsFired != null
+        && burstsFired < previousBurstsFired));
+  const baseline = first || rollback;
+  const priorImpacted = new Set(baseline
+    ? []
+    : Array.isArray(previous?.impactedBurstSequences)
+      ? previous.impactedBurstSequences
+      : []);
+  const seenBursts = new Set(baseline
+    ? []
+    : Array.isArray(previous?.seenBurstSequences)
+      ? previous.seenBurstSequences
+      : []);
+  const hostileBurstSequences = [];
+  const newlyImpactedSequences = [];
+  for (const burst of bursts) {
+    const sequence = Math.max(0, Math.trunc(finite(burst?.sequence)));
+    if (!baseline && !seenBursts.has(sequence))
+      hostileBurstSequences.push(sequence);
+    seenBursts.add(sequence);
+    if (!baseline
+      && burst?.willHit === true
+      && burst?.hasImpacted === true
+      && !priorImpacted.has(sequence)) {
+      newlyImpactedSequences.push(sequence);
+    }
+    if (burst?.willHit === true && burst?.hasImpacted === true)
+      priorImpacted.add(sequence);
+  }
+
+  const damagingHits = Math.max(0, sample?.damagingHits ?? 0);
+  const priorDamagingHits = Math.max(0, previous?.damagingHits ?? 0);
+  const damageDelta = baseline ? 0 : Math.max(0, damagingHits - priorDamagingHits);
+  let pendingSequencedDamageCredits = baseline
+    ? 0
+    : Math.max(0, Math.trunc(finite(previous?.pendingSequencedDamageCredits)));
+  let pendingUnsequencedImpactCredits = baseline
+      ? 0
+    : Math.max(0, Math.trunc(finite(previous?.pendingUnsequencedImpactCredits)));
+  const impactSequences = [];
+  let sameFrameDamageSlots = damageDelta;
+  for (const sequence of newlyImpactedSequences) {
+    if (sameFrameDamageSlots > 0) {
+      // Prefer an event that arrived with this counter edge. An older anonymous credit represents
+      // an already-heard trimmed hit and must not steal identity from a new same-frame impact.
+      sameFrameDamageSlots -= 1;
+      impactSequences.push(sequence);
+      pendingSequencedDamageCredits += 1;
+      continue;
+    }
+    // If the cumulative damage count arrived before (or instead of) its bounded event, that
+    // unsequenced fallback already spoke the hit. Consume its credit rather than replaying when
+    // the late event becomes identifiable.
+    if (pendingUnsequencedImpactCredits > 0) {
+      pendingUnsequencedImpactCredits -= 1;
+    } else {
+      impactSequences.push(sequence);
+      pendingSequencedDamageCredits += 1;
+    }
+  }
+  const coveredDamage = Math.min(damageDelta, pendingSequencedDamageCredits);
+  pendingSequencedDamageCredits -= coveredDamage;
+  // Any remaining counter delta is deliberately anonymous: it can represent an impacted event
+  // trimmed from the bounded window in the same authority tick. Play it once, but never bind it
+  // to a newer pending sequence. A later identifiable event consumes this credit without replay.
+  const unsequencedImpactCount = damageDelta - coveredDamage;
+  pendingUnsequencedImpactCredits += unsequencedImpactCount;
+  const roundsExpended = sample?.roundsExpended;
+  const gunRoundsAdvanced = !first
+    && roundsExpended != null
+    && previous.roundsExpended != null
+    && roundsExpended > previous.roundsExpended;
+  return Object.freeze({
+    state: Object.freeze({
+      initialized: true,
+      lastBurstSequence: maximumSequence >= 0 ? maximumSequence : (rollback ? null : previousMaximum),
+      impactedBurstSequences: Object.freeze([...priorImpacted].slice(-32)),
+      seenBurstSequences: Object.freeze([...seenBursts].slice(-32)),
+      burstsFired,
+      damagingHits,
+      pendingSequencedDamageCredits: Math.min(32, pendingSequencedDamageCredits),
+      pendingUnsequencedImpactCredits: Math.min(32, pendingUnsequencedImpactCredits),
+      fireAuthorized: sample?.fireAuthorized === true,
+      roundsExpended,
+    }),
+    cues: Object.freeze({
+      hostileBurst: hostileBurstSequences.length > 0,
+      impact: impactSequences.length > 0 || unsequencedImpactCount > 0,
+      gunRoundsAdvanced,
+      hostileBurstSequences: Object.freeze(hostileBurstSequences),
+      impactSequences: Object.freeze(impactSequences),
+      unsequencedImpactCount,
+    }),
   });
 }
 
@@ -205,6 +407,12 @@ export function createCobraAudioVoices(audioContext, destination) {
   const master = audioContext.createGain();
   master.gain.value = 0;
   master.connect(destination);
+  // Optional rights-cleared T53 rotorcraft cockpit surrogate. It stays inside this graph's mute
+  // and the caller-owned duck/compressor/master chain, so decoding never requires (or permits) a
+  // second AudioContext.
+  const decodedBedInput = audioContext.createGain();
+  decodedBedInput.gain.value = 0;
+  decodedBedInput.connect(master);
 
   const inverter = oscillator(audioContext, "sine", 400);
   const inverterFilter = audioContext.createBiquadFilter();
@@ -253,6 +461,24 @@ export function createCobraAudioVoices(audioContext, destination) {
   const gearboxGain = audioContext.createGain();
   gearboxGain.gain.value = 0;
   gearbox.connect(gearboxFilter).connect(gearboxGain).connect(master);
+  // The low gear mesh supplies structure; a narrow upper line makes the T53/gearbox stack read
+  // as machinery instead of one filtered oscillator.
+  const gearboxHigh = oscillator(audioContext, "triangle", 1_900);
+  const gearboxHighFilter = audioContext.createBiquadFilter();
+  gearboxHighFilter.type = "bandpass";
+  gearboxHighFilter.frequency.value = 1_900;
+  gearboxHighFilter.Q.value = 6.2;
+  const gearboxHighGain = audioContext.createGain();
+  gearboxHighGain.gain.value = 0;
+  gearboxHigh.connect(gearboxHighFilter).connect(gearboxHighGain).connect(master);
+  const turbineWhine = oscillator(audioContext, "sine", 2_300);
+  const turbineWhineFilter = audioContext.createBiquadFilter();
+  turbineWhineFilter.type = "bandpass";
+  turbineWhineFilter.frequency.value = 2_300;
+  turbineWhineFilter.Q.value = 4.8;
+  const turbineWhineGain = audioContext.createGain();
+  turbineWhineGain.gain.value = 0;
+  turbineWhine.connect(turbineWhineFilter).connect(turbineWhineGain).connect(master);
 
   // The two-blade main cadence is mostly felt as amplitude modulation of broadband structure,
   // not as a clean 10.8 Hz loudspeaker tone. A shallow low harmonic supplies the remaining thump.
@@ -281,6 +507,20 @@ export function createCobraAudioVoices(audioContext, destination) {
     .connect(mainRotorThumpGain)
     .connect(master);
 
+  // Loaded two-blade slap: broadband impulse body, amplitude-modulated at authoritative BPF.
+  const bladeSlapNoise = loopingNoise(audioContext);
+  const bladeSlapFilter = audioContext.createBiquadFilter();
+  bladeSlapFilter.type = "bandpass";
+  bladeSlapFilter.frequency.value = 310;
+  bladeSlapFilter.Q.value = 0.72;
+  const bladeSlapGain = audioContext.createGain();
+  bladeSlapGain.gain.value = 0;
+  bladeSlapNoise.connect(bladeSlapFilter).connect(bladeSlapGain).connect(master);
+  const bladeSlapMod = oscillator(audioContext, "square", 10.8);
+  const bladeSlapModDepth = audioContext.createGain();
+  bladeSlapModDepth.gain.value = 0;
+  bladeSlapMod.connect(bladeSlapModDepth).connect(bladeSlapGain.gain);
+
   const tailRotor = oscillator(audioContext, "sawtooth", 55.3);
   const tailRotorFilter = audioContext.createBiquadFilter();
   tailRotorFilter.type = "bandpass";
@@ -289,9 +529,48 @@ export function createCobraAudioVoices(audioContext, destination) {
   const tailRotorGain = audioContext.createGain();
   tailRotorGain.gain.value = 0;
   tailRotor.connect(tailRotorFilter).connect(tailRotorGain).connect(master);
+  const tailRotorHarmonic = oscillator(audioContext, "sawtooth", 332);
+  const tailRotorHarmonicFilter = audioContext.createBiquadFilter();
+  tailRotorHarmonicFilter.type = "bandpass";
+  tailRotorHarmonicFilter.frequency.value = 390;
+  tailRotorHarmonicFilter.Q.value = 1.8;
+  const tailRotorHarmonicGain = audioContext.createGain();
+  tailRotorHarmonicGain.gain.value = 0;
+  tailRotorHarmonic
+    .connect(tailRotorHarmonicFilter)
+    .connect(tailRotorHarmonicGain)
+    .connect(master);
+
+  const wind = loopingNoise(audioContext);
+  const windHighpass = audioContext.createBiquadFilter();
+  windHighpass.type = "highpass";
+  windHighpass.frequency.value = 180;
+  windHighpass.Q.value = 0.5;
+  const windLowpass = audioContext.createBiquadFilter();
+  windLowpass.type = "lowpass";
+  windLowpass.frequency.value = 2_400;
+  windLowpass.Q.value = 0.55;
+  const windGain = audioContext.createGain();
+  windGain.gain.value = 0;
+  wind.connect(windHighpass).connect(windLowpass).connect(windGain).connect(master);
+
+  // The chin turret is a high-rate mechanical chatter, not the fixed-wing M61 report path.
+  const gunNoise = loopingNoise(audioContext);
+  const gunFilter = audioContext.createBiquadFilter();
+  gunFilter.type = "bandpass";
+  gunFilter.frequency.value = 1_250;
+  gunFilter.Q.value = 0.7;
+  const gunGain = audioContext.createGain();
+  gunGain.gain.value = 0;
+  gunNoise.connect(gunFilter).connect(gunGain).connect(master);
+  const gunPulse = oscillator(audioContext, "square", 38);
+  const gunPulseDepth = audioContext.createGain();
+  gunPulseDepth.gain.value = 0;
+  gunPulse.connect(gunPulseDepth).connect(gunGain.gain);
 
   return {
     master,
+    decodedBedInput,
     inverterGain,
     starter,
     starterFilter,
@@ -305,17 +584,45 @@ export function createCobraAudioVoices(audioContext, destination) {
     gearbox,
     gearboxFilter,
     gearboxGain,
+    gearboxHigh,
+    gearboxHighFilter,
+    gearboxHighGain,
+    turbineWhine,
+    turbineWhineFilter,
+    turbineWhineGain,
     mainRotorFilter,
     mainRotorGain,
     mainRotorMod,
     mainRotorModDepth,
     mainRotorThump,
     mainRotorThumpGain,
+    bladeSlapFilter,
+    bladeSlapGain,
+    bladeSlapMod,
+    bladeSlapModDepth,
     tailRotor,
     tailRotorFilter,
     tailRotorGain,
+    tailRotorHarmonic,
+    tailRotorHarmonicFilter,
+    tailRotorHarmonicGain,
+    windHighpass,
+    windLowpass,
+    windGain,
+    gunFilter,
+    gunGain,
+    gunPulse,
+    gunPulseDepth,
     cueState: null,
-    cueCounts: { switch: 0, starter: 0, lightOff: 0 },
+    combatCueState: null,
+    lastGunEvidenceAt: null,
+    cueCounts: {
+      switch: 0,
+      starter: 0,
+      lightOff: 0,
+      hostileBurst: 0,
+      impact: 0,
+    },
     noiseBuffer: deterministicNoiseBuffer(audioContext),
   };
 }
@@ -326,8 +633,9 @@ function oneShotOscillator(voices, audioContext, {
   endHz,
   level,
   durationSeconds,
+  delaySeconds = 0,
 }) {
-  const now = audioContext.currentTime;
+  const now = audioContext.currentTime + Math.max(0, finite(delaySeconds));
   const source = audioContext.createOscillator();
   source.type = type;
   const gain = audioContext.createGain();
@@ -379,6 +687,51 @@ function playLightOffCue(voices, audioContext, delaySeconds = 0) {
   voices.cueCounts.lightOff += 1;
 }
 
+function playThreatBurstCue(voices, audioContext, delaySeconds = 0) {
+  const delay = Math.max(0, finite(delaySeconds));
+  const now = audioContext.currentTime + delay;
+  const source = audioContext.createBufferSource();
+  source.buffer = voices.noiseBuffer;
+  const filter = audioContext.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.value = 1_650;
+  filter.Q.value = 0.9;
+  const gain = audioContext.createGain();
+  setAt(gain.gain, 0.0001, now);
+  rampAt(gain.gain, 0.055, now + 0.012);
+  rampAt(gain.gain, 0.0001, now + 0.22);
+  source.connect(filter).connect(gain).connect(voices.master);
+  source.start(now);
+  source.stop?.(now + 0.24);
+  // A lower snap gives hostile fire a different silhouette from the continuous chin-turret buzz.
+  oneShotOscillator(voices, audioContext, {
+    type: "square",
+    startHz: 340,
+    endHz: 95,
+    level: 0.022,
+    durationSeconds: 0.085,
+    delaySeconds: delay,
+  });
+  voices.cueCounts.hostileBurst += 1;
+}
+
+function playImpactCue(voices, audioContext, delaySeconds = 0) {
+  const now = audioContext.currentTime + Math.max(0, finite(delaySeconds));
+  const source = audioContext.createBufferSource();
+  source.buffer = voices.noiseBuffer;
+  const filter = audioContext.createBiquadFilter();
+  filter.type = "lowpass";
+  filter.frequency.value = 520;
+  filter.Q.value = 1.25;
+  const gain = audioContext.createGain();
+  setAt(gain.gain, 0.13, now);
+  rampAt(gain.gain, 0.0001, now + 0.31);
+  source.connect(filter).connect(gain).connect(voices.master);
+  source.start(now);
+  source.stop?.(now + 0.33);
+  voices.cueCounts.impact += 1;
+}
+
 /** Drive a persistent voice graph from authoritative Cobra presentation fields. */
 export function updateCobraAudioVoices(voices, audioContext, state, { muted = false } = {}) {
   if (!voices || !audioContext) return null;
@@ -392,6 +745,20 @@ export function updateCobraAudioVoices(voices, audioContext, state, { muted = fa
   // A retained Cobra graph may see other programs on the singleton. Reset instead of silently
   // consuming sticky cobra_* phase fields while another propulsion character owns the bus.
   voices.cueState = sample.active ? edge.state : null;
+  const combatEdge = sample.active
+    ? advanceCobraCombatCueState(voices.combatCueState, sample)
+    : Object.freeze({
+      state: null,
+      cues: Object.freeze({
+        hostileBurst: false,
+        impact: false,
+        gunRoundsAdvanced: false,
+        hostileBurstSequences: Object.freeze([]),
+        impactSequences: Object.freeze([]),
+        unsequencedImpactCount: 0,
+      }),
+    });
+  voices.combatCueState = sample.active ? combatEdge.state : null;
   if (sample.active && !muted) {
     if (edge.cues.switch) playSwitchCue(voices, audioContext);
     if (edge.cues.starter) playStarterCue(voices, audioContext);
@@ -399,9 +766,17 @@ export function updateCobraAudioVoices(voices, audioContext, state, { muted = fa
     // scheduling light-off just behind the relay/starter edge instead of stacking all three at t0.
     if (edge.cues.lightOff)
       playLightOffCue(voices, audioContext, edge.cues.starter ? 0.30 : 0);
+    combatEdge.cues.hostileBurstSequences.forEach((_sequence, index) =>
+      playThreatBurstCue(voices, audioContext, index * 0.045));
+    combatEdge.cues.impactSequences.forEach((_sequence, index) =>
+      playImpactCue(voices, audioContext, index * 0.055));
+    for (let index = 0; index < combatEdge.cues.unsequencedImpactCount; index += 1)
+      playImpactCue(voices, audioContext,
+        (combatEdge.cues.impactSequences.length + index) * 0.055);
   }
 
   const now = audioContext.currentTime;
+  if (combatEdge.cues.gunRoundsAdvanced) voices.lastGunEvidenceAt = now;
   const live = sample.active && !muted;
   const main01 = clamp(sample.mainRotorRpm / COBRA_NOMINAL_MAIN_ROTOR_RPM, 0, 1.15);
   const tailNominalRpm = COBRA_NOMINAL_MAIN_ROTOR_RPM * COBRA_MAIN_TO_TAIL_GEAR_RATIO;
@@ -417,6 +792,16 @@ export function updateCobraAudioVoices(voices, audioContext, state, { muted = fa
     : 0;
 
   target(voices.master.gain, live ? 0.58 : 0, now, live ? 0.16 : 0.02);
+  // The source loop represents governed flight, not starter engagement or rotor coast-down. Two
+  // smooth shoulders keep it entirely inside a narrow Nr window without clicking at the bounds;
+  // the procedural graph remains audible everywhere and therefore owns start/stop transitions.
+  const governedNrPresence = sample.engineOperating && !sample.starting && !sample.shuttingDown
+    ? smoothstep((main01 - 0.90) / 0.075)
+      * smoothstep((1.08 - main01) / 0.055)
+    : 0;
+  target(voices.decodedBedInput.gain,
+    live ? 0.48 * governedNrPresence : 0,
+    now, live && governedNrPresence > 0 ? 0.26 : 0.035);
   target(voices.inverterGain.gain, electricalPresence * 0.004, now, 0.12);
   target(voices.starter.frequency, 150 + sample.enginePower01 * 760, now, 0.11);
   target(voices.starterFilter.frequency, 380 + sample.enginePower01 * 1_050, now, 0.12);
@@ -433,21 +818,67 @@ export function updateCobraAudioVoices(voices, audioContext, state, { muted = fa
   target(voices.gearboxFilter.frequency, 330 + main01 * 610, now, 0.14);
   target(voices.gearboxGain.gain,
     Math.pow(main01, 1.15) * (0.007 + sample.enginePower01 * 0.008), now, 0.16);
+  const upperGearHz = 1_150 + main01 * 1_850;
+  target(voices.gearboxHigh.frequency, upperGearHz, now, 0.13);
+  target(voices.gearboxHighFilter.frequency, upperGearHz, now, 0.13);
+  target(voices.gearboxHighGain.gain,
+    Math.pow(main01, 1.35) * (0.0025 + sample.rotorLoad01 * 0.004), now, 0.13);
+  const turbineWhineHz = 1_250 + enginePresence * 3_850;
+  target(voices.turbineWhine.frequency, turbineWhineHz, now, 0.12);
+  target(voices.turbineWhineFilter.frequency, turbineWhineHz, now, 0.12);
+  target(voices.turbineWhineGain.gain,
+    Math.pow(enginePresence, 1.3) * 0.0055, now, 0.12);
 
   const mainPresence = Math.pow(main01, 0.72);
   target(voices.mainRotorMod.frequency, Math.max(0.2, sample.mainBladePassHz), now, 0.12);
   target(voices.mainRotorFilter.frequency, 105 + main01 * 125, now, 0.15);
-  target(voices.mainRotorGain.gain, mainPresence * 0.052, now, 0.13);
-  target(voices.mainRotorModDepth.gain, mainPresence * 0.029, now, 0.13);
+  target(voices.mainRotorGain.gain,
+    mainPresence * (0.041 + sample.rotorLoad01 * 0.023), now, 0.13);
+  target(voices.mainRotorModDepth.gain,
+    mainPresence * (0.018 + sample.rotorLoad01 * 0.025), now, 0.13);
   target(voices.mainRotorThump.frequency,
     Math.max(0.4, sample.mainBladePassHz * 2), now, 0.12);
-  target(voices.mainRotorThumpGain.gain, mainPresence * 0.018, now, 0.12);
+  target(voices.mainRotorThumpGain.gain,
+    mainPresence * (0.011 + sample.rotorLoad01 * 0.016), now, 0.12);
+  target(voices.bladeSlapMod.frequency,
+    Math.max(0.2, sample.mainBladePassHz), now, 0.09);
+  target(voices.bladeSlapFilter.frequency,
+    185 + sample.bladeSlap01 * 430 + sample.advanceRatio * 160, now, 0.1);
+  target(voices.bladeSlapGain.gain, sample.bladeSlap01 * 0.044, now, 0.075);
+  target(voices.bladeSlapModDepth.gain,
+    sample.bladeSlap01 * 0.032, now, 0.075);
 
   const tailPresence = Math.pow(tail01, 0.82);
   target(voices.tailRotor.frequency, Math.max(0.5, sample.tailBladePassHz), now, 0.12);
   target(voices.tailRotorFilter.frequency,
     75 + sample.tailBladePassHz * 1.25, now, 0.13);
   target(voices.tailRotorGain.gain, tailPresence * 0.012, now, 0.13);
+  const tailHarmonicHz = Math.max(1, sample.tailBladePassHz * 6);
+  target(voices.tailRotorHarmonic.frequency, tailHarmonicHz, now, 0.1);
+  target(voices.tailRotorHarmonicFilter.frequency,
+    tailHarmonicHz * 1.08, now, 0.1);
+  target(voices.tailRotorHarmonicGain.gain,
+    tailPresence * (0.003 + sample.rotorLoad01 * 0.004), now, 0.1);
 
-  return Object.freeze({ sample, cues: edge.cues });
+  const speed01 = smoothstep((sample.trueAirspeedKts - 12) / 105);
+  target(voices.windHighpass.frequency, 145 + speed01 * 420, now, 0.12);
+  target(voices.windLowpass.frequency, 1_500 + speed01 * 2_500, now, 0.12);
+  target(voices.windGain.gain, 0.045 * speed01, now, 0.1);
+
+  const recentRoundEvidence = sample.roundsExpended != null
+    && voices.lastGunEvidenceAt != null
+    && now - voices.lastGunEvidenceAt <= 0.12;
+  const gunLive = sample.fireAuthorized
+    && recentRoundEvidence
+    && (sample.ammoRemaining == null || sample.ammoRemaining > 0);
+  target(voices.gunFilter.frequency,
+    1_050 + sample.rotorLoad01 * 460, now, 0.045);
+  target(voices.gunGain.gain, gunLive ? 0.075 : 0, now, gunLive ? 0.012 : 0.035);
+  target(voices.gunPulse.frequency, 36 + sample.rotorLoad01 * 8, now, 0.05);
+  target(voices.gunPulseDepth.gain, gunLive ? 0.052 : 0, now, 0.018);
+
+  return Object.freeze({
+    sample,
+    cues: Object.freeze({ ...edge.cues, ...combatEdge.cues }),
+  });
 }

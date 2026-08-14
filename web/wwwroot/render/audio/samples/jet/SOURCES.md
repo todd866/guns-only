@@ -23,6 +23,36 @@ hosted by DVIDS. No DVIDS PCM is shipped. The F-16 profile contributes pressuriz
 run for 18 seconds and keep authored amplitude movement deliberately restrained so a steady
 power setting does not pulse at the loop period.
 
+## F-14 cockpit bed — F/A-18 public-domain surrogate
+
+`fa18_cockpit_f14_surrogate_loop.wav` is an **audio-only gameplay surrogate** conditioned from
+an airborne cockpit interval in DVIDS
+[F-18 Cockpit B-Roll](https://www.dvidshub.net/video/342602/f-18-cockpit-b-roll).
+The recording is an F/A-18 source, not an F-14 recording, and the shipped loop makes no exact
+F-14 acoustic claim.
+
+- Creator: Cpl Anthony Rayis / AFN Iwakuni; footage courtesy of Maj Erik Sprague.
+- Taken: 2014-06-11; VIRIN `140611-M-ZP289-002`; DOD ID `DOD_101732906`.
+- Production interval: 47.5–58.5 seconds.
+- Acquired source object:
+  `https://d34w7g4gy10iej.cloudfront.net/video/1406/DOD_101732906/DOD_101732906-720x406-800k.mp4`
+- Acquired source SHA-256:
+  `71f280415131d3df76fdbdf0b9431dd62f78958951d6e5f9103c007e81e54e9a`.
+- Final WAV: 1,048,364 bytes; 48 kHz mono PCM16; 10.92 seconds; mean −20.0 dBFS,
+  maximum −7.0 dBFS; SHA-256
+  `4f6312519c9f78ef2896efe19b52fc1d68ec0bbb3caef14d9f22ea4bf939e659`.
+
+The DVIDS item page explicitly marks the work **PUBLIC DOMAIN**, subject to the
+[DVIDS copyright notice](https://www.dvidshub.net/about/copyright). The source-derived WAV is
+not relicensed under this repository's MIT license. No source visuals, logos, or marks are
+distributed. This is a reasonable safe-use assessment, not a legal warranty.
+
+> The appearance of U.S. Department of War (DoW) visual information does not imply or constitute DoW endorsement.
+
+Silent-frame, waveform, and spectrum screening found no obvious speech or music in the selected
+interval. That mechanical screening cannot establish semantic absence; a final human listen
+remains required before release acceptance.
+
 ## F-22 (cockpit) — License
 
 `f22_{idle,mil,grit}_loop.wav` are **original synthesized** mono 44.1 kHz loops.

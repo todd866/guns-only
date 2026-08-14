@@ -30,6 +30,30 @@ public class CobraGroundWarRuntimeTests
     static CobraGroundWarRuntime CreateWar(int seed = 42) =>
         new(CobraCanyonDefinition.Create(), new FlatTerrain(), seed);
 
+    static CobraMissionRuntime CreateEngagedMission(int seed = 5)
+    {
+        var runtime = new CobraMissionRuntime(
+            CobraCanyonDefinition.Create(),
+            new FlatTerrain(),
+            CobraCanyonRouteChoice.RiverGorge,
+            groundWarSeed: seed,
+            spawn: new CobraMissionSpawn(
+                new Vec3D(-2_710.0, 250.0, -500.0),
+                Vec3D.Zero,
+                0.0));
+        double collective = runtime.Cobra.EstimateHoverCollective(
+            runtime.Cobra.State.GrossMassKg,
+            CobraMissionRuntime.DefaultAirDensityKgM3);
+        foreach (GroundUnit unit in runtime.GroundWar.Units.Where(
+            unit => unit.Role == GroundUnitRole.DshkSite)) {
+            unit.ApplyDamage(unit.MaxHealth);
+        }
+        runtime.Advance(new VerticalLiftPilotCommand(collective, 0.0, 0.0, 0.0));
+        Assert.Equal(CobraMissionAct.Engage, runtime.Act);
+        Assert.True(runtime.GroundWarCombatLive);
+        return runtime;
+    }
+
     static double HorizontalDistanceSquared(in Vec3D first, in Vec3D second)
     {
         double east = first.X - second.X;
@@ -290,11 +314,7 @@ public class CobraGroundWarRuntimeTests
     [Fact]
     public void MissionRuntimeOwnsGroundWarAndKeepsFlyingPastRouteEnd()
     {
-        var runtime = new CobraMissionRuntime(
-            CobraCanyonDefinition.Create(),
-            new FlatTerrain(),
-            CobraCanyonRouteChoice.RiverGorge,
-            groundWarSeed: 5);
+        CobraMissionRuntime runtime = CreateEngagedMission();
         Assert.True(runtime.GroundWar.LivingUnits().Any());
         double collective = runtime.Cobra.EstimateHoverCollective(
             runtime.Cobra.State.GrossMassKg,
@@ -318,6 +338,27 @@ public class CobraGroundWarRuntimeTests
     [Fact]
     public void MissionRuntimeStepsGroundWarAtItsStrategicCadenceNotTheAirframeRate()
     {
+        CobraMissionRuntime runtime = CreateEngagedMission();
+        double collective = runtime.Cobra.EstimateHoverCollective(
+            runtime.Cobra.State.GrossMassKg,
+            CobraMissionRuntime.DefaultAirDensityKgM3);
+        var command = new VerticalLiftPilotCommand(collective, 0.0, 0.0, 0.0);
+
+        int airframeTicksPerSecond = (int)Math.Round(PlayerVehicleContract.FixedStepHz);
+        long groundWarTickBefore = runtime.GroundWar.AuthorityTick;
+        for (int tick = 0; tick < airframeTicksPerSecond; tick++)
+            runtime.Advance(command);
+
+        Assert.True(CobraMissionRuntime.GroundWarStepHz < PlayerVehicleContract.FixedStepHz,
+            "the ground war must be cheaper than the flight model, not tied to it");
+        Assert.Equal(
+            (long)Math.Round(CobraMissionRuntime.GroundWarStepHz),
+            runtime.GroundWar.AuthorityTick - groundWarTickBefore);
+    }
+
+    [Fact]
+    public void RampAndIngressDoNotSpendTheCombatTicketPool()
+    {
         var runtime = new CobraMissionRuntime(
             CobraCanyonDefinition.Create(),
             new FlatTerrain(),
@@ -327,16 +368,16 @@ public class CobraGroundWarRuntimeTests
             runtime.Cobra.State.GrossMassKg,
             CobraMissionRuntime.DefaultAirDensityKgM3);
         var command = new VerticalLiftPilotCommand(collective, 0.0, 0.0, 0.0);
+        double friendlyTickets = runtime.GroundWar.FriendlyTickets;
+        double hostileTickets = runtime.GroundWar.HostileTickets;
 
-        int airframeTicksPerSecond = (int)Math.Round(PlayerVehicleContract.FixedStepHz);
-        for (int tick = 0; tick < airframeTicksPerSecond; tick++)
+        for (int tick = 0; tick < PlayerVehicleContract.FixedStepHz * 30; tick++)
             runtime.Advance(command);
 
-        Assert.True(CobraMissionRuntime.GroundWarStepHz < PlayerVehicleContract.FixedStepHz,
-            "the ground war must be cheaper than the flight model, not tied to it");
-        Assert.Equal(
-            (long)Math.Round(CobraMissionRuntime.GroundWarStepHz),
-            runtime.GroundWar.AuthorityTick);
+        Assert.False(runtime.GroundWarCombatLive);
+        Assert.Equal(0, runtime.GroundWar.AuthorityTick);
+        Assert.Equal(friendlyTickets, runtime.GroundWar.FriendlyTickets);
+        Assert.Equal(hostileTickets, runtime.GroundWar.HostileTickets);
     }
 
     /// <summary>
@@ -885,11 +926,7 @@ public class CobraGroundWarRuntimeTests
     [Fact]
     public void MissionRuntimeTerminalizesOnHoldTheBridgeVictory()
     {
-        var runtime = new CobraMissionRuntime(
-            CobraCanyonDefinition.Create(),
-            new FlatTerrain(),
-            CobraCanyonRouteChoice.RiverGorge,
-            groundWarSeed: 9);
+        CobraMissionRuntime runtime = CreateEngagedMission(seed: 9);
         double collective = runtime.Cobra.EstimateHoverCollective(
             runtime.Cobra.State.GrossMassKg,
             CobraMissionRuntime.DefaultAirDensityKgM3);

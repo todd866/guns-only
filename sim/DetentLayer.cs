@@ -474,7 +474,15 @@ public sealed class DetentLayer {
             target = 1.0;
         }
         Tier = tier;
-        _gCmd += (target - _gCmd) * System.Math.Min(1.0, dt / Tau);
+        // A full keyboard pull in the Tomcat is a spring-loaded control demand, not a detent that
+        // should take another 70 ms to decide what the pilot asked for. This changes command onset
+        // only: the aerodynamic/moment model still owns how quickly actual G builds, and every
+        // other airframe retains the established filter exactly.
+        bool instantProtectedPull = p.InstantMaxPerformanceKeyboardPull
+            && pull != KeyPhase.Idle
+            && !HighAlphaRecoveryActive;
+        if (instantProtectedPull) _gCmd = target;
+        else _gCmd += (target - _gCmd) * System.Math.Min(1.0, dt / Tau);
         _pitchInputActiveLastTick = pitchInputActive;
 
         // FREE/FIGHT pitch stays a load-factor command. Do not turn it into a horizon-referenced
