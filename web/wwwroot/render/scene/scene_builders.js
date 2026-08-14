@@ -1323,10 +1323,10 @@ export function createRapierDispersedStrip(context = {}) {
 }
 
 /**
- * A deliberately bounded conventional runway presentation. The simulation owns the threshold,
- * heading, width and length; this layer only makes that finite collision surface legible. It does
- * not borrow the carrier recovery overlay, add arresting wires, or imply an airport beyond the
- * published strip.
+ * A deliberately bounded conventional airfield presentation. The simulation owns the threshold,
+ * heading, width and length; this layer makes that finite collision surface and its visual-only
+ * supporting base legible. It never borrows the carrier overlay, adds arresting wires, or expands
+ * the published collision surface to match the surrounding taxiway/apron scenery.
  */
 function applyTerrainCurvatureToRunwayMaterial(material) {
   material.onBeforeCompile = (shader) => {
@@ -1345,6 +1345,53 @@ function applyTerrainCurvatureToRunwayMaterial(material) {
   };
   material.customProgramCacheKey = () => "conventional-runway-terrain-curvature-v1";
   return material;
+}
+
+export const CONVENTIONAL_AIRBASE_VISUAL_PROFILE = Object.freeze({
+  taxiwayWidthM: 18,
+  taxiwayOffsetFromRunwayEdgeM: 42,
+  connectorFractions: Object.freeze([0.18, 0.48, 0.78]),
+  apronWidthM: 150,
+  apronLengthM: 280,
+  clearedVergeWidthM: 330,
+  edgeLightSpacingM: 75,
+  maxEdgeLightCount: 128,
+  approachLightCount: 15,
+  approachLightSpacingM: 60,
+  thresholdLightCount: 12,
+});
+
+function createRunwayPointField(name, capacity, color, sizePx) {
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(
+    new Float32Array(capacity * 3), 3,
+  ));
+  geometry.setDrawRange(0, 0);
+  const material = new THREE.PointsMaterial({
+    color,
+    size: sizePx,
+    sizeAttenuation: false,
+    transparent: true,
+    opacity: 0.96,
+    depthTest: true,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const points = new THREE.Points(geometry, material);
+  points.name = name;
+  points.frustumCulled = false;
+  points.userData.noShadow = true;
+  return points;
+}
+
+function updateRunwayPointField(points, positions) {
+  const attribute = points.geometry.getAttribute("position");
+  const count = Math.min(positions.length, attribute.count);
+  for (let index = 0; index < count; index++) {
+    attribute.setXYZ(index, positions[index][0], positions[index][1], positions[index][2]);
+  }
+  attribute.needsUpdate = true;
+  points.geometry.setDrawRange(0, count);
 }
 
 export function createConventionalRunwayPresentation() {
@@ -1370,6 +1417,61 @@ export function createConventionalRunwayPresentation() {
     polygonOffset: true,
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -2,
+  }));
+  const taxiwayMaterial = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshStandardMaterial({
+    color: 0x3d4547,
+    roughness: 0.98,
+    metalness: 0,
+  }));
+  const concreteMaterial = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshStandardMaterial({
+    color: 0x918d7a,
+    roughness: 1,
+    metalness: 0,
+  }));
+  const vergeMaterial = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshStandardMaterial({
+    color: 0x777a55,
+    roughness: 1,
+    metalness: 0,
+  }));
+  const taxiwayPaint = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshBasicMaterial({
+    color: 0xd6b85f,
+    toneMapped: false,
+    depthTest: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -3,
+  }));
+  const hangarMaterial = new THREE.MeshStandardMaterial({
+    color: 0x849092,
+    roughness: 0.88,
+    metalness: 0.08,
+  });
+  const hangarRoofMaterial = new THREE.MeshStandardMaterial({
+    color: 0x405158,
+    roughness: 0.82,
+    metalness: 0.16,
+  });
+  const towerMaterial = new THREE.MeshStandardMaterial({
+    color: 0x3d4748,
+    roughness: 0.86,
+    metalness: 0.05,
+  });
+  const towerGlassMaterial = new THREE.MeshStandardMaterial({
+    color: 0x78979a,
+    emissive: 0x172c2c,
+    emissiveIntensity: 0.7,
+    roughness: 0.3,
+    metalness: 0.08,
+  });
+  const approachPaint = applyTerrainCurvatureToRunwayMaterial(new THREE.MeshBasicMaterial({
+    color: 0xfff0bf,
+    toneMapped: false,
+    depthTest: true,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -3,
   }));
 
   const unitSlab = new THREE.BoxGeometry(1, 0.08, 1);
@@ -1407,6 +1509,107 @@ export function createConventionalRunwayPresentation() {
     addScaledMesh("RUNWAY_AIMING_POINT_RIGHT", unitMark, paint),
   ];
 
+  // Keep the scored strip pristine, then build the visual base beside it. These meshes provide
+  // scale, peripheral motion and a recognisable destination without claiming collision authority.
+  const clearedVerge = addScaledMesh("AIRBASE_CLEARED_VERGE", unitSlab, vergeMaterial);
+  const parallelTaxiway = addScaledMesh("AIRBASE_PARALLEL_TAXIWAY", unitSlab, taxiwayMaterial);
+  const taxiwayCentreline = addScaledMesh(
+    "AIRBASE_TAXIWAY_CENTRELINE", unitMark, taxiwayPaint,
+  );
+  const taxiwayConnectors = CONVENTIONAL_AIRBASE_VISUAL_PROFILE.connectorFractions.map(
+    (_, index) => addScaledMesh(`AIRBASE_TAXIWAY_CONNECTOR_${index + 1}`,
+      unitSlab, taxiwayMaterial),
+  );
+  const apron = addScaledMesh("AIRBASE_FLIGHTLINE_APRON", unitSlab, concreteMaterial);
+  const apronStandLines = Array.from({ length: 4 }, (_, index) =>
+    addScaledMesh(`AIRBASE_RAMP_STAND_${index + 1}`, unitMark, taxiwayPaint));
+  const overruns = [
+    addScaledMesh("AIRBASE_NEAR_OVERRUN", unitSlab, concreteMaterial),
+    addScaledMesh("AIRBASE_FAR_OVERRUN", unitSlab, concreteMaterial),
+  ];
+  const approachCrossbars = Array.from({ length: 3 }, (_, index) =>
+    addScaledMesh(`AIRBASE_APPROACH_CROSSBAR_${index + 1}`, unitMark, approachPaint));
+
+  const buildingUnit = new THREE.BoxGeometry(1, 1, 1);
+  const hangars = Array.from({ length: 4 }, (_, index) =>
+    addScaledMesh(`AIRBASE_HANGAR_${index + 1}`, buildingUnit, hangarMaterial));
+  for (const hangar of hangars) {
+    hangar.receiveShadow = true;
+    hangar.castShadow = false;
+    hangar.userData.noShadow = true;
+  }
+  const hangarRoofs = [];
+  for (let hangarIndex = 0; hangarIndex < hangars.length; hangarIndex++) {
+    for (let sideIndex = 0; sideIndex < 2; sideIndex++) {
+      const roof = addScaledMesh(
+        `AIRBASE_HANGAR_${hangarIndex + 1}_ROOF_${sideIndex + 1}`,
+        buildingUnit,
+        hangarRoofMaterial,
+      );
+      roof.receiveShadow = false;
+      roof.castShadow = false;
+      roof.userData.noShadow = true;
+      hangarRoofs.push(roof);
+    }
+  }
+  const controlTower = addScaledMesh("AIRBASE_CONTROL_TOWER", buildingUnit, towerMaterial);
+  const controlTowerCab = addScaledMesh(
+    "AIRBASE_CONTROL_TOWER_CAB", buildingUnit, towerGlassMaterial,
+  );
+  const controlTowerRoof = addScaledMesh(
+    "AIRBASE_CONTROL_TOWER_ROOF", buildingUnit, hangarRoofMaterial,
+  );
+  const utilityBuildings = Array.from({ length: 3 }, (_, index) =>
+    addScaledMesh(`AIRBASE_UTILITY_${index + 1}`, buildingUnit, towerMaterial));
+  for (const building of [controlTower, controlTowerCab, controlTowerRoof]) {
+    building.receiveShadow = true;
+    building.castShadow = true;
+    building.userData.noShadow = false;
+  }
+
+  const edgeLights = createRunwayPointField(
+    "AIRBASE_RUNWAY_EDGE_LIGHTS",
+    CONVENTIONAL_AIRBASE_VISUAL_PROFILE.maxEdgeLightCount,
+    0xe8f6ff,
+    4.5,
+  );
+  const approachLights = createRunwayPointField(
+    "AIRBASE_APPROACH_LIGHTS",
+    CONVENTIONAL_AIRBASE_VISUAL_PROFILE.approachLightCount,
+    0xfff0c2,
+    5.5,
+  );
+  const thresholdLights = createRunwayPointField(
+    "AIRBASE_THRESHOLD_LIGHTS",
+    CONVENTIONAL_AIRBASE_VISUAL_PROFILE.thresholdLightCount,
+    0xaefdc1,
+    5.5,
+  );
+  const runwayEndLights = createRunwayPointField(
+    "AIRBASE_RUNWAY_END_LIGHTS",
+    CONVENTIONAL_AIRBASE_VISUAL_PROFILE.thresholdLightCount,
+    0xff665a,
+    5.5,
+  );
+  const towerBeacon = createRunwayPointField("AIRBASE_TOWER_BEACON", 1, 0xff4e42, 7);
+  group.add(edgeLights, approachLights, thresholdLights, runwayEndLights, towerBeacon);
+  const airbaseDetails = [
+    clearedVerge,
+    parallelTaxiway,
+    taxiwayCentreline,
+    ...taxiwayConnectors,
+    apron,
+    ...apronStandLines,
+    ...overruns,
+    ...hangars,
+    ...hangarRoofs,
+    controlTower,
+    controlTowerCab,
+    controlTowerRoof,
+    ...utilityBuildings,
+    towerBeacon,
+  ];
+
   return {
     group,
     visualShoulder,
@@ -1417,6 +1620,27 @@ export function createConventionalRunwayPresentation() {
     centreDashes,
     touchdownBars,
     aimingBars,
+    clearedVerge,
+    parallelTaxiway,
+    taxiwayCentreline,
+    taxiwayConnectors,
+    apron,
+    apronStandLines,
+    overruns,
+    approachCrossbars,
+    hangars,
+    hangarRoofs,
+    controlTower,
+    controlTowerCab,
+    controlTowerRoof,
+    utilityBuildings,
+    edgeLights,
+    approachLights,
+    thresholdLights,
+    runwayEndLights,
+    towerBeacon,
+    airbaseDetails,
+    layoutKey: "",
   };
 }
 
@@ -1444,6 +1668,18 @@ export function updateConventionalRunwayPresentation(runway, state) {
   runway.group.position.set(thresholdX, thresholdY + 0.055, -thresholdZ);
   // Simulation +Z is north and renderer Z is mirrored. Local +Z runs threshold-to-far-end.
   runway.group.rotation.set(0, Math.PI - headingRad, 0);
+
+  const layoutKey = [
+    lengthM,
+    widthM,
+    thresholdX,
+    thresholdZ,
+    headingDeg,
+    state?.runway_touchdown_x,
+    state?.runway_touchdown_z,
+  ].join("|");
+  if (runway.layoutKey === layoutKey) return;
+  runway.layoutKey = layoutKey;
 
   runway.visualShoulder.position.set(0, -0.095, lengthM * 0.5);
   runway.visualShoulder.scale.set(widthM + 8, 1.25, lengthM + 12);
@@ -1517,6 +1753,107 @@ export function updateConventionalRunwayPresentation(runway, state) {
       0.024, clampedAimAlongM);
     bar.scale.set(Math.min(3.2, widthM * 0.075), 1, Math.min(48, lengthM * 0.025));
   }
+
+  const profile = CONVENTIONAL_AIRBASE_VISUAL_PROFILE;
+  const taxiwayX = widthM * 0.5 + profile.taxiwayOffsetFromRunwayEdgeM;
+  const apronX = taxiwayX + profile.apronWidthM * 0.5 - profile.taxiwayWidthM * 0.5;
+  const hangarX = apronX + profile.apronWidthM * 0.5 + 27;
+  const fieldLeftM = -widthM * 0.5 - 30;
+  const fieldRightM = hangarX + 48;
+  const clearedVergeWidthM = Math.max(profile.clearedVergeWidthM, fieldRightM - fieldLeftM);
+  runway.clearedVerge.position.set((fieldLeftM + fieldRightM) * 0.5,
+    -0.09, lengthM * 0.5);
+  runway.clearedVerge.scale.set(clearedVergeWidthM, 1, lengthM + 210);
+  runway.parallelTaxiway.position.set(taxiwayX, -0.045, lengthM * 0.5);
+  runway.parallelTaxiway.scale.set(profile.taxiwayWidthM, 1, Math.max(180, lengthM - 150));
+  runway.taxiwayCentreline.position.set(taxiwayX, 0.02, lengthM * 0.5);
+  runway.taxiwayCentreline.scale.set(0.32, 1, Math.max(180, lengthM - 170));
+
+  const connectorSpanM = taxiwayX - widthM * 0.5 + profile.taxiwayWidthM * 0.5;
+  for (let index = 0; index < runway.taxiwayConnectors.length; index++) {
+    const connector = runway.taxiwayConnectors[index];
+    connector.position.set(widthM * 0.5 + connectorSpanM * 0.5,
+      -0.038, lengthM * profile.connectorFractions[index]);
+    connector.scale.set(connectorSpanM, 1, 16);
+  }
+
+  const apronZ = Math.max(260, Math.min(lengthM - 260, lengthM * 0.19));
+  runway.apron.position.set(apronX, -0.052, apronZ);
+  runway.apron.scale.set(profile.apronWidthM, 1, profile.apronLengthM);
+  for (let index = 0; index < runway.apronStandLines.length; index++) {
+    const standLine = runway.apronStandLines[index];
+    standLine.position.set(apronX + 11, 0.024, apronZ - 120 + index * 80);
+    standLine.scale.set(profile.apronWidthM - 34, 1, 0.34);
+  }
+  for (let index = 0; index < runway.overruns.length; index++) {
+    const overrun = runway.overruns[index];
+    overrun.position.set(0, -0.065, index === 0 ? -34 : lengthM + 34);
+    overrun.scale.set(widthM + 5, 1, 62);
+  }
+
+  for (let index = 0; index < runway.approachCrossbars.length; index++) {
+    const crossbar = runway.approachCrossbars[index];
+    crossbar.position.set(0, 0.035, -(index + 1) * 300);
+    crossbar.scale.set(36 - index * 6, 1, 0.8);
+  }
+
+  for (let index = 0; index < runway.hangars.length; index++) {
+    const z = apronZ - 120 + index * 80;
+    const body = runway.hangars[index];
+    body.position.set(hangarX, 5.49, z);
+    body.scale.set(48, 11, 42);
+    for (let sideIndex = 0; sideIndex < 2; sideIndex++) {
+      const roof = runway.hangarRoofs[index * 2 + sideIndex];
+      const side = sideIndex === 0 ? -1 : 1;
+      roof.position.set(hangarX + side * 12, 12.59, z);
+      roof.rotation.set(0, 0, side * 0.24);
+      roof.scale.set(25, 1.1, 44);
+    }
+  }
+
+  const towerX = taxiwayX + 48;
+  const towerZ = apronZ - profile.apronLengthM * 0.5 - 55;
+  runway.controlTower.position.set(towerX, 10, towerZ);
+  runway.controlTower.scale.set(8, 20, 8);
+  runway.controlTowerCab.position.set(towerX, 22.5, towerZ);
+  runway.controlTowerCab.scale.set(16, 5, 13);
+  runway.controlTowerRoof.position.set(towerX, 25.5, towerZ);
+  runway.controlTowerRoof.scale.set(18, 0.8, 15);
+  for (let index = 0; index < runway.utilityBuildings.length; index++) {
+    const building = runway.utilityBuildings[index];
+    building.position.set(taxiwayX + 82 + index * 23, 3.2, apronZ + 172);
+    building.scale.set(17, 6.4, 25 + (index % 2) * 8);
+  }
+
+  const edgeLightPositions = [];
+  const edgeStations = Math.min(
+    Math.floor(profile.maxEdgeLightCount / 2),
+    Math.floor(lengthM / profile.edgeLightSpacingM) + 1,
+  );
+  for (let station = 0; station < edgeStations; station++) {
+    const alongM = Math.min(lengthM, station * profile.edgeLightSpacingM);
+    edgeLightPositions.push([-widthM * 0.5 - 0.8, 0.42, alongM]);
+    edgeLightPositions.push([widthM * 0.5 + 0.8, 0.42, alongM]);
+  }
+  updateRunwayPointField(runway.edgeLights, edgeLightPositions);
+
+  const approachLightPositions = Array.from({ length: profile.approachLightCount },
+    (_, index) => [0, 0.52, -(index + 1) * profile.approachLightSpacingM]);
+  updateRunwayPointField(runway.approachLights, approachLightPositions);
+
+  const thresholdLightPositions = [];
+  const runwayEndLightPositions = [];
+  for (let index = 0; index < profile.thresholdLightCount; index++) {
+    const x = -widthM * 0.5 + (index + 0.5) * widthM / profile.thresholdLightCount;
+    thresholdLightPositions.push([x, 0.5, 2.2]);
+    runwayEndLightPositions.push([x, 0.5, lengthM - 2.2]);
+  }
+  updateRunwayPointField(runway.thresholdLights, thresholdLightPositions);
+  updateRunwayPointField(runway.runwayEndLights, runwayEndLightPositions);
+  updateRunwayPointField(runway.towerBeacon, [[towerX, 27.2, towerZ]]);
+
+  const showFullAirbase = lengthM >= 1_200;
+  for (const object of runway.airbaseDetails) object.visible = showFullAirbase;
 }
 
 export function createCarrierRuntimePresentation() {
