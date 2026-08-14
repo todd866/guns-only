@@ -4316,15 +4316,33 @@ function readyScreenFocusables() {
   )].filter((element) => !element.closest("[hidden]"));
 }
 
+function centerReadyMissionChoice(selectedMission) {
+  const option = selectedMission?.closest(".sortie-option");
+  const rail = option?.closest(".ready-mission-groups");
+  if (!option || !rail) return;
+
+  // scrollIntoView() walks every scrollable ancestor. WebKit includes overflow-x:hidden ancestors
+  // in that walk, so centring a deep-linked poster also shifted the whole Ready card sideways on
+  // iPhone and left Fly/settings/consent controls off-screen. Own the one axis we actually mean:
+  // the compact aircraft rail. Keep the outer dialog at its only valid horizontal position too,
+  // which repairs a browser-restored offset from an older page before focus moves into the card.
+  const maximum = Math.max(0, rail.scrollWidth - rail.clientWidth);
+  const optionRect = option.getBoundingClientRect();
+  const railRect = rail.getBoundingClientRect();
+  const centred = rail.scrollLeft
+    + optionRect.left + optionRect.width / 2
+    - railRect.left - railRect.width / 2;
+  rail.scrollLeft = Math.max(0, Math.min(maximum, centred));
+  const card = readyScreen.querySelector(".ready-card");
+  if (card) card.scrollLeft = 0;
+}
+
 function focusReadyScreen() {
   if (readyScreen.inert || !readyScreen.classList.contains("visible")) return;
   const selectedMission = readyScreen.querySelector(
     `[data-program-node="${selectedProgramNodeId}"]`,
   );
-  selectedMission?.closest(".sortie-option")?.scrollIntoView({
-    block: "nearest",
-    inline: "center",
-  });
+  centerReadyMissionChoice(selectedMission);
   // Keep Enter-to-fly honest: when the primary action is available it owns initial focus. During
   // release verification or quarantine, focus a usable explanation/recovery action rather than a
   // disabled aircraft card.

@@ -378,6 +378,131 @@ test("the mobile loading cover is the painted sky and shows no title card", asyn
   }
 });
 
+test("iPhone selecting Top Gun and consent cannot scroll the Ready dialog sideways", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+
+  const site = await serveStatic(WWWROOT);
+  const browser = await webkit.launch({ headless: true });
+  const context = await browser.newContext({ ...devices["iPhone 13"] });
+  try {
+    const page = await context.newPage();
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
+    await page.goto(`${site.url}?audioQa=silent`, {
+      waitUntil: "load",
+      timeout: scaled(30000),
+    });
+    await page.locator("#ready-screen.visible").waitFor({
+      state: "visible",
+      timeout: scaled(45000),
+    });
+    await page.waitForFunction(() => {
+      const start = document.querySelector("#ready-start");
+      return start && !start.disabled && document.activeElement === start;
+    }, undefined, { timeout: scaled(45000) });
+    await page.waitForFunction(
+      () => getComputedStyle(document.querySelector("#boot")).visibility === "hidden",
+      undefined,
+      { timeout: scaled(5000) },
+    );
+    await page.locator('[data-program-node="top-gun"]').click();
+    await page.waitForFunction(() => {
+      const topGun = document.querySelector('[data-program-node="top-gun"]');
+      const start = document.querySelector("#ready-start");
+      return topGun?.getAttribute("aria-pressed") === "true"
+        && document.activeElement === start;
+    }, undefined, { timeout: scaled(10000) });
+
+    const layout = () => page.evaluate(() => {
+      const card = document.querySelector(".ready-card");
+      const rail = document.querySelector(".ready-mission-groups");
+      const selected = document.querySelector(
+        '[data-program-node="top-gun"]',
+      )?.closest(".sortie-option");
+      const selectors = [
+        "#ready-start",
+        "#ready-settings",
+        ".ready-telemetry-disclosure",
+        "#ready-telemetry-sharing",
+      ];
+      const bounds = Object.fromEntries(selectors.map((selector) => {
+        const element = document.querySelector(selector);
+        const rect = element.getBoundingClientRect();
+        const centre = document.elementFromPoint(
+          rect.left + rect.width / 2,
+          rect.top + rect.height / 2,
+        );
+        return [selector, {
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+          hitTestable: centre === element || element.contains(centre),
+          hitOwner: centre ? {
+            tag: centre.tagName,
+            id: centre.id,
+            className: String(centre.className || ""),
+          } : null,
+        }];
+      }));
+      const railRect = rail.getBoundingClientRect();
+      const selectedRect = selected.getBoundingClientRect();
+      return {
+        viewport: { width: innerWidth, height: innerHeight },
+        card: {
+          scrollLeft: card.scrollLeft,
+          scrollWidth: card.scrollWidth,
+          clientWidth: card.clientWidth,
+        },
+        rail: {
+          scrollLeft: rail.scrollLeft,
+          left: railRect.left,
+          right: railRect.right,
+        },
+        selected: { left: selectedRect.left, right: selectedRect.right },
+        bounds,
+      };
+    });
+
+    const assertReachable = (state, phase) => {
+      assert.equal(state.card.scrollLeft, 0,
+        `${phase}: WebKit shifted the outer Ready card sideways`);
+      assert.ok(state.card.scrollWidth <= state.card.clientWidth + 1,
+        `${phase}: hidden poster content widened the outer Ready card: ${JSON.stringify(state.card)}`);
+      assert.ok(state.rail.scrollLeft > 0,
+        `${phase}: deep-linked Top Gun was not brought into the aircraft rail`);
+      assert.ok(state.selected.right > state.rail.left
+        && state.selected.left < state.rail.right,
+      `${phase}: selected Top Gun card is outside the aircraft rail`);
+      for (const [selector, rect] of Object.entries(state.bounds)) {
+        assert.ok(rect.left >= 0 && rect.right <= state.viewport.width,
+          `${phase}: ${selector} escaped the phone viewport horizontally: ${JSON.stringify(rect)}`);
+        if (selector !== ".ready-telemetry-disclosure") {
+          assert.ok(rect.top >= 0 && rect.bottom <= state.viewport.height,
+            `${phase}: ${selector} escaped the phone viewport vertically: ${JSON.stringify(rect)}`);
+        }
+        assert.equal(rect.hitTestable, true,
+          `${phase}: ${selector} is visible but another layer owns its tap target: ${JSON.stringify(rect)}`);
+      }
+    };
+
+    assertReachable(await layout(), "after selecting Top Gun");
+    await page.locator("#ready-telemetry-sharing").click();
+    await page.waitForFunction(() => document.querySelector(
+      "#ready-telemetry-sharing-status",
+    )?.textContent.includes("Sharing is on"));
+    assertReachable(await layout(), "after diagnostics consent");
+    // This isolated smoke context must leave the privacy preference at its safer state too.
+    await page.locator("#ready-telemetry-sharing").click();
+    assert.deepEqual(pageErrors, [],
+      `iPhone Top Gun Ready page errors:\n${pageErrors.join("\n")}`);
+  } finally {
+    await context.close();
+    await browser.close();
+    await site.close();
+  }
+});
+
 test("the published Indoor route boots its Three.js facility and transitions optical to radio", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 
