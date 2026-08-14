@@ -1,7 +1,7 @@
 // Procedural F-14A / twin-TF30 ownship presentation on the shared flight-audio bus.
 //
 // No claim is made that the absolute timbre is a measured cockpit recording. The graph uses the
-// snapshot's actual engine delivery, dynamic pressure, pilot load, buffet, and authoritative wing
+// snapshot's actual engine delivery, dynamic pressure, buffet, and authoritative wing
 // sweep. Its job is the perceptual distinction the generic jet graph could not provide: two close
 // compressor lines, a broad low TF30 body, intake/airframe energy, a separate augmentor layer, and
 // a hydraulic wing-sweep cue. It never creates an AudioContext or reaches context.destination.
@@ -464,8 +464,7 @@ export function updateF14AudioVoices(voices, audioContext, state, { muted = fals
   const q = sample.dynamicPressure01;
   const augmentation = sample.augmentation01;
   const exterior = sample.externalPerspective;
-  const inletDistress = clamp(sample.buffet01 * 0.82
-    + Math.max(0, sample.pilotG - 5) / 12);
+  const inletDistress = clamp(sample.buffet01 * 0.82);
   const compressorHz = 620 + rpm * 2_580;
 
   target(voices.master.gain, live ? (exterior ? 0.66 : 0.62) : 0,
@@ -514,9 +513,9 @@ export function updateF14AudioVoices(voices, audioContext, state, { muted = fals
   target(voices.rushGain.gain,
     0.066 * Math.pow(q, 0.9) * (exterior ? 1.36 : 1), now, 0.11);
   target(voices.structureFilter.frequency,
-    95 + sample.gLoad01 * 120 + sample.buffet01 * 85, now, 0.08);
+    95 + sample.buffet01 * 85, now, 0.08);
   target(voices.structureGain.gain,
-    0.04 * Math.max(sample.gLoad01 * 0.8, sample.buffet01)
+    0.04 * sample.buffet01
       * (exterior ? 0.16 : 1), now, 0.075);
 
   const sweepDirection = Math.sign(edge.state?.sweepRateDegPerSecond ?? 0);

@@ -459,6 +459,79 @@ public sealed class ConventionalRunwayRecoveryTests {
             item.Type == SessionEventType.SortieFinished);
     }
 
+    [Theory]
+    [InlineData(TopGunSeat.F14A)]
+    [InlineData(TopGunSeat.Mig28)]
+    public void TopGunJetsMustTouchDownAndStopBeforeRtbFinishes(
+        TopGunSeat seat) {
+        SimulationSession session = StageRunwaySession(Beats.TopGunAcm(seat));
+        session.FeedKey(GKey.ThrottleDown, true);
+        session.StepFixed(3 * (int)AircraftSim.TickHz);
+        session.FeedKey(GKey.ThrottleDown, false);
+        Assert.Equal(0.0, session.Controls.Throttle, precision: 10);
+
+        session.ForceOpponentDefeatForTest();
+        session.FeedKey(GKey.KnockItOff, true);
+        session.FeedKey(GKey.KnockItOff, false);
+        for (int tick = 0;
+             tick < 8
+                && session.CombatHandoffPhase != CombatHandoffPhase.PlayerRtb;
+             tick++)
+            session.StepFixed();
+
+        Assert.Equal(CombatHandoffPhase.PlayerRtb,
+            session.CombatHandoffPhase);
+        Assert.Null(session.Relief);
+        Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
+
+        ConventionalRunwayRecoveryModel recovery = Assert.IsType<
+            ConventionalRunwayRecoveryModel>(session.ConventionalRunwayRecovery);
+        session.Player.AdoptExternalKinematics(ApproachStateFor(
+            recovery.Runway,
+            alongM: 430.0,
+            crossM: 0.5,
+            heightM: 0.05,
+            forwardMps: 74.0,
+            lateralMps: 0.2,
+            sinkMps: 2.2,
+            session.Player.State.Mass));
+
+        for (int tick = 0;
+             tick < 120
+                && session.ConventionalRunwayPhase
+                    == RunwayRecoveryPhase.Airborne
+                && session.Lifecycle
+                    == SimulationSession.LifecycleState.Active;
+             tick++)
+            session.StepFixed();
+
+        Assert.Equal(RunwayRecoveryPhase.Rollout,
+            session.ConventionalRunwayPhase);
+        Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
+        Assert.Equal(CombatHandoffPhase.PlayerRtb,
+            session.CombatHandoffPhase);
+
+        for (int tick = 0;
+             tick < 10_000
+                && session.Lifecycle
+                    == SimulationSession.LifecycleState.Active;
+             tick++)
+            session.StepFixed();
+
+        Assert.Equal(RunwayRecoveryPhase.Recovered,
+            session.ConventionalRunwayPhase);
+        Assert.Equal(CombatHandoffPhase.Recovered,
+            session.CombatHandoffPhase);
+        Assert.Equal(SimulationSession.LifecycleState.Finished,
+            session.Lifecycle);
+        Assert.Equal(SortieOutcome.Discontinued, session.Outcome);
+        Assert.Equal(AircraftTerminalState.Flying,
+            session.PlayerTerminalState);
+        Assert.Contains(session.RecentEvents, item =>
+            item.Type == SessionEventType.SortieFinished
+            && item.Outcome == SortieOutcome.Discontinued);
+    }
+
     static AircraftState ApproachState(
         double alongM,
         double crossM,

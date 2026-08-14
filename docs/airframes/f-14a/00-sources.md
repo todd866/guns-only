@@ -53,11 +53,18 @@ airframe.
 | Over-limit structural exposure | above 7.5 G; severity cubed over a 7.5–11.0 G span; 8 equivalent cumulative seconds at maximum | provisional consequence model | Brief 1–2 second emergency pulls survive; repeated or sustained abuse accumulates irreversible mission-local airframe strain and can reach failure. Eight seconds is a gameplay budget, not a fatigue-life or ultimate-load inference. Pilot G tolerance remains owned by the shared onset/exposure/AGSM physiology model; crossing 11 G does not itself guarantee G-LOC. |
 | Automatic sweep endpoints | 20–68 degrees | public-envelope surrogate | The open fact sheets establish a large variable-span range but do not provide the Mach Sweep Programmer law used here. Endpoints and interpolation remain clearly labelled surrogate. |
 | Manual sweep rate | 12 degrees/second | provisional control-feel value | A held command traverses the 48-degree operating range in four seconds; no OEM actuator-rate claim is made. |
+| Top Gun recovery site / runway | Fictional Fightertown identity; 3,000 m × 45 m surveyed theatre pavement | provisional mission contract | Reuses the already terrain-cleared Soniachne-west geometry under a distinct fictional name. It enables physical recovery and live fuel/range guidance; it is not a claim about Miramar, an F-14 field-length requirement, or a real-world procedure. |
+| Recovery flight card | 3.0° stabilised final, flare beginning 420 m before touchdown aim, 1.30 × computed on-speed upper acceptance | provisional deterministic validation | The production polar, landing-gear drag and runway-contact/rollout models fly from stabilised final to a survivable full stop. The longer flare reflects the current high-speed surrogate and is a game validation card, not NATOPS technique. |
 
 The wing angle in snapshots, HUD, effective-span aerodynamics, and exterior articulation is one
 authority-owned value. Automatic is the default; forward/aft inputs enter manual mode, and the
 dedicated AUTO input returns to the same provisional Mach/CAS schedule. Presentation code does not
 run a second sweep schedule.
+
+Build 329 also removes load-factor-driven sound from both the generic suit/harness cue stack and
+the dedicated F-14 intake/structure graph. This is an evidence correction: no timecoded source in
+the audio ledger supports a conspicuous sound merely because G increased. Engine, airflow,
+authoritative sweep-actuator sound and measured buffet remain separate live inputs.
 
 ## Known gaps (Task 2+)
 

@@ -232,7 +232,7 @@ class FakeAudioContext {
   }
 }
 
-test("wires a live F-14 graph to the shared bus and keeps q/G/sweep modulation alive behind mute", () => {
+test("wires a live F-14 graph to the shared bus and keeps q/buffet/sweep modulation alive behind mute", () => {
   const audio = new FakeAudioContext();
   const sharedBus = new FakeAudioNode("shared-compressor");
   sharedBus.gain.value = 0.52 / 0.58;
@@ -302,6 +302,33 @@ test("wires a live F-14 graph to the shared bus and keeps q/G/sweep modulation a
     "an in-flight cockpit surrogate cannot cover a future cold or sub-idle Tomcat state");
 });
 
+test("F-14 dedicated graph never turns pilot G into extra intake or structure noise", () => {
+  const baselineAudio = new FakeAudioContext();
+  const pullAudio = new FakeAudioContext();
+  const baseline = createF14AudioVoices(
+    baselineAudio, new FakeAudioNode("shared-compressor"));
+  const pull = createF14AudioVoices(
+    pullAudio, new FakeAudioNode("shared-compressor"));
+
+  updateF14AudioVoices(baseline, baselineAudio, {
+    ...F14_FRAME,
+    pilot_gz: 1,
+    buffet: false,
+  });
+  updateF14AudioVoices(pull, pullAudio, {
+    ...F14_FRAME,
+    pilot_gz: 10.8,
+    buffet: false,
+  });
+
+  assert.equal(pull.intakeGain.gain.value, baseline.intakeGain.gain.value,
+    "load factor cannot add a swoosh through inlet distress");
+  assert.equal(pull.structureGain.gain.value, baseline.structureGain.gain.value,
+    "load factor cannot add a synthetic airframe strain bed");
+  assert.equal(pull.structureGain.gain.value, 0,
+    "without measured buffet the cockpit structure bed stays silent");
+});
+
 test("F-14 replay perspective opens exterior exhaust while suppressing cockpit structure", () => {
   const cockpitAudio = new FakeAudioContext();
   const exteriorAudio = new FakeAudioContext();
@@ -328,7 +355,7 @@ test("F-14 replay perspective opens exterior exhaust while suppressing cockpit s
   assert.ok(exterior.augmentorGain.gain.value > cockpit.augmentorGain.gain.value);
   assert.ok(exterior.rushGain.gain.value > cockpit.rushGain.gain.value);
   assert.ok(exterior.structureGain.gain.value < cockpit.structureGain.gain.value,
-    "pilot-load/buffet structure belongs primarily inside the cockpit");
+    "measured buffet structure belongs primarily inside the cockpit");
   assert.ok(cockpit.decodedBedInput.gain.value > 0);
   assert.equal(exterior.decodedBedInput.gain.value, 0,
     "an F/A-18 cockpit surrogate must never impersonate F-14 exterior audio");
