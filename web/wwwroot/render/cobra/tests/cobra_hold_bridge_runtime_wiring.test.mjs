@@ -22,6 +22,9 @@ test("authority JSON is sampled at HUD rate while the camera reads the per-frame
   assert.match(main, /sampleAuthorityState/);
   assert.match(main, /GetHotPose/);
   assert.match(main, /copyTo/);
+  assert.match(main,
+    /authorityState = JSON\.parse\(bridge\.GetState\(\)\);[\s\S]*?syncParkedAirframes\(\);[\s\S]*?window\.__gunsOnlyCobraAuthority = authorityState;/,
+    "the cold Ready snapshot must be inspectable without advancing authority time");
   // Every rendered frame still reaches the authority path, but only through the per-sortie Ready
   // interlock. Manual, parked-review, and tour code may not grow an unguarded bypass.
   const guardedAdvances = main.match(
