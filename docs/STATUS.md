@@ -1,7 +1,7 @@
 # Current product and verification status
 
 Updated: 2026-08-14
-Production: Build 325, revision `492f7a3239f51f79400c9e2ed3261206611f1bd0` (verified live via
+Production: Build 326, revision `4b1e103aea31187bbbbc57d74b801677c9faa0e8` (verified live via
 /api/build-info 2026-08-14, with the protected release pipeline complete). Builds 312 (Cobra
 contact envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap
 timing), 318 (authored structure materials), 320 (Top Gun 404 + cockpit depth near-plane), 321
@@ -17,10 +17,14 @@ promotion. Multiplayer remains preview-only and fails closed unless `?preview=1`
 acknowledged. Top Gun is promoted in the Build 326 candidate by explicit owner direction after
 the corrected programme-selector launch path passed focused authority/browser checks; no post-fix
 human ACM flight is claimed.
-Next candidate: Build 326 (branch `fix/cobra-ready-sky`) — Cobra first-use/grounded-start safety,
-provisional warned ground fire and subsystem damage, mission-legibility and cold-spare turnaround,
-procedural AH-1G audio, the upper-sky seam removal and target-designation graphics; plus the Top Gun
-terrain-owner launch repair and owner-directed production promotion.
+Build 326 shipped Cobra first-use/grounded-start safety, provisional warned ground fire and subsystem
+damage, mission-legibility and cold-spare turnaround, procedural AH-1G audio, the upper-sky seam
+removal and target-designation graphics; plus the Top Gun terrain-owner launch repair and
+owner-directed production promotion.
+Next candidate: Build 327 (branch `fix/mobile-diagnostics-scroll`) — iPhone/WebKit mission-picker
+hotfix. Deep-linked aircraft are centred inside the horizontal poster rail without allowing
+`scrollIntoView()` to shift the overflow-hidden outer Ready dialog sideways; diagnostics consent,
+Fly and Settings remain visible and tappable.
 
 Build 325 shipped the following owner-flight findings and remains the baseline for this candidate.
 

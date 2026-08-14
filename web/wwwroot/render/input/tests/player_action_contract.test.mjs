@@ -666,14 +666,20 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
     /if \(mobileControls && readyTitle && readyStart\) readyTitle\.after\(readyStart\)/,
     "touch DOM order must put Fly where the phone layout shows it");
   assert.match(appSource,
-    /function focusReadyScreen\(\)[\s\S]*?scrollIntoView\(\{[\s\S]*?inline: "center"[\s\S]*?const target = !readyStart\.disabled[\s\S]*?readyRouteNotice\?\.querySelector\("a\[href\]"\) \?\? selectedMission/,
-    "deep-linked missions must scroll into view while focus lands on Fly or a usable recovery action");
+    /function centerReadyMissionChoice\(selectedMission\)[\s\S]*?option\.getBoundingClientRect\(\)[\s\S]*?rail\.getBoundingClientRect\(\)[\s\S]*?rail\.scrollLeft = Math\.max\(0, Math\.min\(maximum, centred\)\)[\s\S]*?card\.scrollLeft = 0[\s\S]*?function focusReadyScreen\(\)[\s\S]*?centerReadyMissionChoice\(selectedMission\)[\s\S]*?const target = !readyStart\.disabled[\s\S]*?readyRouteNotice\?\.querySelector\("a\[href\]"\) \?\? selectedMission/,
+    "deep-linked missions must centre only their rail while focus lands on Fly or a usable recovery action");
+  assert.doesNotMatch(appSource,
+    /selectedMission\?\.closest\("\.sortie-option"\)\?\.scrollIntoView/,
+    "WebKit scrollIntoView must not shift the overflow-hidden outer Ready card sideways");
   assert.match(appSource, /mobileControls \? "Tap Fly to launch" : "Press Enter to fly"/,
     "the touch briefing must name its real launch gesture");
   assert.match(indexSource, /\.sortie-choice\s*\{[\s\S]*?min-height:\s*78px/);
   assert.match(indexSource,
     /@media \(max-width: 760px\)[\s\S]*?\.ready-mission-groups\s*\{[\s\S]*?grid-auto-flow:\s*column[\s\S]*?overflow-x:\s*auto/,
     "portrait mission cards must become one compact horizontal chooser");
+  assert.match(indexSource,
+    /#ready-screen\[data-mode="program"\] \.sortie-choice\[data-aircraft\]\s*\{[\s\S]*?position:\s*relative[\s\S]*?\.sortie-choice\[data-aircraft\] > \*\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?inset:\s*0 auto auto 0/,
+    "screen-reader-only poster labels must be contained by their card instead of widening the outer dialog");
   assert.match(indexSource,
     /@media \(max-height: 500px\) and \(orientation: landscape\)[\s\S]*?#ready-screen\[data-mode="program"\] \.ready-layout\s*\{[\s\S]*?grid-template-columns:/,
     "short landscape screens need independent mission and briefing columns");
@@ -728,7 +734,7 @@ test("program modal behavior cannot leak into flight shortcuts", () => {
     "raw beat-number shortcuts must not bypass progression");
 
   assert.match(appSource,
-    /selectedMission\?\.closest\("\.sortie-option"\)\?\.scrollIntoView[\s\S]*?const target = !readyStart\.disabled[\s\S]*?readyRouteNotice\?\.querySelector\("a\[href\]"\) \?\? selectedMission/,
+    /centerReadyMissionChoice\(selectedMission\)[\s\S]*?const target = !readyStart\.disabled[\s\S]*?readyRouteNotice\?\.querySelector\("a\[href\]"\) \?\? selectedMission/,
     "focus must expose a deep-linked mission and land on either Fly or a usable recovery action");
   assert.match(appSource,
     /sceneCanvas\.inert = showScreen[\s\S]*?readyScreen\.contains\(document\.activeElement\)[\s\S]*?focusOwner\?\.focus[\s\S]*?readyScreen\.setAttribute\(\s*"aria-hidden"/,
