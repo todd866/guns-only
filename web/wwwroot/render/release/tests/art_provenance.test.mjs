@@ -21,6 +21,9 @@ const POSTER_SOURCES = {
   "menu-hangar-small.webp": "menu-hangar.svg",
   "menu-hangar.webp": "menu-hangar.svg",
 };
+const RASTER_POSTER_SOURCES = {
+  "aircraft-fireboss.webp": "sources/aircraft-fireboss.png",
+};
 
 test("every production shell painting has a hash-pinned fiction provenance card", async () => {
   const sources = await readFile(path.join(ART_ROOT, "SOURCES.md"), "utf8");
@@ -32,6 +35,7 @@ test("every production shell painting has a hash-pinned fiction provenance card"
     .filter((file) => file.endsWith(".webp"))
     .sort();
   assert.deepEqual(files, [
+    "aircraft-fireboss.webp",
     "bike-yzf-r1.webp",
     "jet-cobra.webp",
     "jet-f14.webp",
@@ -56,23 +60,31 @@ test("every production shell painting has a hash-pinned fiction provenance card"
 
 // The v1/v2 records could not name their generator or quote their prompt. The current set closes
 // that gap by being reproducible from committed source instead, so the source has to be there.
-test("every current shell poster is reproducible from a committed SVG source", async () => {
+test("every current shell poster is reproducible from a committed source", async () => {
   const sources = await readFile(path.join(ART_ROOT, "SOURCES.md"), "utf8");
   assert.match(sources, /no image-generation model was used/i,
-    "the current set claims a deterministic pipeline; that claim must be stated, not implied");
+    "the deterministic SVG set must retain its explicit pipeline claim");
 
   const svgs = new Set((await readdir(POSTER_SOURCE_ROOT)).filter((f) => f.endsWith(".svg")));
   const renderer = await readFile(path.join(POSTER_SOURCE_ROOT, "render.mjs"), "utf8");
   const produced = (await readdir(ART_ROOT))
     .filter((file) => file.endsWith(".webp"))
     .sort();
-  assert.deepEqual(Object.keys(POSTER_SOURCES).sort(), produced,
+  assert.deepEqual([...Object.keys(POSTER_SOURCES), ...Object.keys(RASTER_POSTER_SOURCES)].sort(), produced,
     "every shipped shell WebP must be bound to an exact committed source");
 
   for (const [webp, svg] of Object.entries(POSTER_SOURCES)) {
     assert.ok(svgs.has(svg), `${webp} must have its source ${svg} committed`);
     assert.ok(renderer.includes(`"${webp.replace(/\.webp$/, "")}"`),
       `${webp} must be listed in the poster renderer`);
+  }
+  for (const [webp, source] of Object.entries(RASTER_POSTER_SOURCES)) {
+    const sourceBytes = await readFile(path.join(POSTER_SOURCE_ROOT, source));
+    assert.ok(sourceBytes.length > 0, `${webp} must retain its selected source raster`);
+    assert.ok(renderer.includes(`"${webp.replace(/\.webp$/, "")}"`),
+      `${webp} must be listed in the poster renderer`);
+    assert.match(sources, new RegExp(createHash("sha256").update(sourceBytes).digest("hex")),
+      `${webp} source PNG must be hash-pinned in provenance`);
   }
   assert.match(renderer, /"jet-f14"[\s\S]*?rasterizer: "deterministic-svg"/);
   assert.match(renderer, /"jet-mig-28"[\s\S]*?rasterizer: "deterministic-svg"/);

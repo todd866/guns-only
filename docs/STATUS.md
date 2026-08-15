@@ -1,7 +1,7 @@
 # Current product and verification status
 
 Updated: 2026-08-15
-Production: Build 335, revision `367d2a8e11e3c111ac45a98b0de72ef85fa3f635` (verified live via
+Production: Build 336, revision `ed3f79989a5cf4596392f298a2fe4264c3b3f3e5` (verified live via
 `/api/build-info` 2026-08-15, with the protected release pipeline complete). Builds 312 (Cobra
 contact envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap
 timing), 318 (authored structure materials), 320 (Top Gun 404 + cockpit depth near-plane), 321
@@ -52,7 +52,7 @@ Top Gun numeric recovery lecture is removed; the F-14 sweep indicator is a recog
 Tomcat planform. Cold-launched combat missions now carry an executable one-minute intended-profile
 ingress acceptance standard.
 
-Next candidate: Build 336 (branch `fix/cobra-tactical-cues-336`) — turns Hold the Bridge into an
+Build 336 turns Hold the Bridge into an
 authored formation departure. The player launches as Dash 2 behind a visible Ember Lead, follows a
 dense world-registered climbing corridor through a deliberate dogleg, and receives concise calls
 explaining the DShK threat and route handoff. Gate altitude truth now reaches the renderer instead
@@ -64,6 +64,14 @@ phase. Cobra directional stability now uses actual sideslip to weathercock the f
 the relative-air track, with that aerodynamic authority fading at low translational speed so the
 tail rotor retains a decisive pedal turn; air track, exact body-frame sideslip, horizontal airspeed
 and fin-directional airspeed are recorded for owner-flight diagnosis.
+
+Next candidate: Build 337 (branch `feature/okanagan-fireboss-337`) — adds the Civilian aircraft
+domain and one shared AT-802F Fire Boss/Okanagan system with three sortie types: Water Circuits,
+Solo Initial Attack and Large Force Employment. It includes Kelowna departure/recovery, sourced
+NRCan CDEM terrain, an authored Okanagan Lake scoop lane, an evolving exercise fire, continuous
+world-space guidance, protected taxi/operational/final reserves, local diagnostic telemetry and a
+real pause menu. The extension adds Air Attack, bird dog and helicopter traffic to the solo systems
+rather than replacing them with a separate simulation.
 
 Build 325 shipped the following owner-flight findings and remains the baseline for this candidate.
 
@@ -172,6 +180,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned four-point conquest, dug-in garrisons, tickets, M134 + Camp Ember rearm, Tab/F gunner, north-up minimap/full map and golden path. Build 326 adds grounded Ready/swap safety, warned ground fire and subsystem damage, cold-spare turnaround, sky/target graphics and procedural AH-1G audio. Build 328 responds to the recorded owner flight with denser/clearer scenery, corrected HUD/range/ticket staging, an improved golden route, LOS-owned V selection with an F firing chain, fortified-garrison collision and a provenance-recorded UH-1H/T53 surrogate bed. Build 333 rebuilt Camp Ember operations, rearm/turnaround authority and ground-war integration. Build 334 candidate adds a broken monsoon sky, more readable jungle depth and a more detailed one-draw Camp Ember firebase. | Fresh owner flight on Build 334. Known open: ground-fire lethality and turnaround timing are provisional gameplay closures, not production-combat fidelity. Longer arc: DCS-BS1-grade flight dynamics. |
 | Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load, lappable circuit from Build 264+. Build 267 adds ride telemetry (speed/gear/lean/lap/frame). Build 308 adds tiered shadows, sky-derived IBL, and horizon/far-plane corrections. Build 315 candidate makes it a game: lap/last/best on the helmet HUD, four sector splits, a live delta to your best, an off-track lap refused as a record, and a best that persists across sessions | Owner ride on Build 315: is beating your own best worth trying for? Ghost bike deliberately cut from v1 |
 | Top Gun (`top-gun`) | **production** | Aircraft picker / main shell | Build 309 automation covers Tomcat AIM-9, MiG-28 boot and gun fire. Build 326 repairs the programme-selector launch stall and promotes the mission. The owner flew Builds 327 and 328 on 2026-08-14. Build 328 fixed the 13.8 G overshoot and added authoritative indicated AUTO/MAN sweep. Build 329 adds ceasefire/RTB authority, navigation-rate awareness, sweep-stop annunciation and removes the remaining G-driven sounds. Build 331 candidate makes the player F-14A-only, keeps successive MiG-28 aggressors spawning, exposes RTB TO CARRIER after a splash, and teaches a fixed conventional Case I recovery to the moving carrier. | Owner ruling remains deploy first, then fly the exact public artifact; re-fly Build 331 for continued combat, RTB selection, Case I leg guidance, arrestment, fuel awareness, sweep-limit and audible acceptance. |
+| Okanagan Fire Boss (`okanagan-fireboss`, `/okanagan/`) | **production** | Civilian aircraft picker + standalone route | Build 337 candidate adds an NRCan CDEM Okanagan world, Kelowna departure and recovery, live lake scooping, partial loads and water drops, fuel-protected RTB, a deterministic evolving exercise fire, and three shared-system sorties: Water Circuits, Solo Initial Attack and Large Force Employment. | Fresh owner flight of the deployed artifact; flight/fire models are declared training surrogates, not OEM or operational wildfire forecasts. |
 
 ## Research-only packages
 

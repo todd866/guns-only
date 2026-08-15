@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <base href="/">
+  <title>Guns Only · Okanagan Fire Boss</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/okanagan/styles.css?v=337">
+</head>
+<body class="paused">
+  <main class="viewport" aria-label="Okanagan Fire Boss simulator">
+    <canvas id="scene" tabindex="0" aria-label="Fire Boss flight view"></canvas>
+    <canvas id="hud" aria-hidden="true"></canvas>
+    <div id="radio" role="status" aria-live="polite"></div>
+    <div id="cue" role="status"></div>
+    <div id="mission-strip">
+      <span id="phase">PREFLIGHT</span>
+      <strong id="objective">Select a sortie</strong>
+    </div>
+    <div id="water-panel" class="instrument-panel">
+      <small>HOPPER</small><strong id="water-value">0 L</strong>
+      <div class="bar"><i id="water-bar"></i></div>
+      <span id="scoop-state">SCOOPS UP</span>
+    </div>
+    <div id="fuel-panel" class="instrument-panel">
+      <small>FUEL / MINIMUM</small><strong id="fuel-value">—</strong>
+      <div class="bar fuel"><i id="fuel-bar"></i><b id="fuel-minimum"></b></div>
+      <span id="fuel-state">PLAN LOADING</span>
+    </div>
+    <div id="fire-panel" class="instrument-panel" hidden>
+      <small>INCIDENT EFFECT</small><strong id="fire-value">—</strong>
+      <span id="population-value">—</span>
+    </div>
+    <canvas id="map" width="300" height="240" aria-label="North-up incident map"></canvas>
+    <div id="controls">
+      <button id="scoops" type="button" aria-pressed="false">SCOOPS<br><kbd>E</kbd></button>
+      <button id="drop" type="button">DROP<br><kbd>SPACE</kbd></button>
+    </div>
+    <button id="pause-button" type="button" aria-label="Pause">Ⅱ</button>
+    <output id="status">Loading Fire Boss runtime…</output>
+  </main>
+
+  <section id="sortie-menu" class="overlay visible" role="dialog" aria-modal="true" aria-labelledby="sortie-title">
+    <div class="menu-card">
+      <header><span>CIVILIAN · AIR TRACTOR</span><h1 id="sortie-title">AT-802F Fire Boss</h1><p>Okanagan Valley, British Columbia</p></header>
+      <div class="sortie-grid" role="radiogroup" aria-label="Fire Boss sorties">
+        <button class="sortie active" type="button" data-sortie="water-circuits" role="radio" aria-checked="true">
+          <small>01 · TRAINING</small><strong>Water Circuits</strong>
+          <span>Kelowna departure · live scoops · downwind training drops · fuel-planned RTB</span>
+        </button>
+        <button class="sortie" type="button" data-sortie="fire-attack" role="radio" aria-checked="false">
+          <small>02 · SOLO</small><strong>Initial Attack</strong>
+          <span>One Fire Boss · evolving west-side fire · choose and work the line</span>
+        </button>
+        <button class="sortie" type="button" data-sortie="large-force-employment" role="radio" aria-checked="false">
+          <small>03 · EXTENSION</small><strong>Large Force Employment</strong>
+          <span>Air Attack · bird dog · helicopters · holds · assigned divisions and traffic</span>
+        </button>
+      </div>
+      <section class="fuel-plan" aria-label="Dispatch fuel plan">
+        <h2>Dispatch fuel ladder</h2>
+        <dl>
+          <div><dt>Taxi out</dt><dd>18 kg</dd></div>
+          <div><dt>Outbound trip</dt><dd>82 kg</dd></div>
+          <div><dt>Working fuel</dt><dd id="plan-working">calculated</dd></div>
+          <div><dt>Return trip</dt><dd>live</dd></div>
+          <div><dt>Operational reserve</dt><dd>45 kg</dd></div>
+          <div><dt>Final fuel reserve</dt><dd>225 kg · 30 min day VFR</dd></div>
+          <div><dt>Taxi in</dt><dd>12 kg</dd></div>
+        </dl>
+        <p>Minimum fuel is return trip + operational reserve + final reserve + taxi-in. Working stops before those quantities are touched.</p>
+      </section>
+      <div class="menu-actions">
+        <a href="/">Back to aircraft</a>
+        <button id="start" type="button">Fly Water Circuits</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="pause-menu" class="overlay" role="dialog" aria-modal="true" aria-labelledby="pause-title" aria-hidden="true">
+    <div class="pause-card">
+      <small>SIMULATION PAUSED</small><h2 id="pause-title">Fire Boss</h2>
+      <button id="resume" type="button">Resume</button>
+      <button id="restart" type="button">Restart sortie</button>
+      <button id="choose-sortie" type="button">Choose sortie</button>
+      <a href="/">Return to aircraft</a>
+    </div>
+  </section>
+
+  <script>
+    globalThis.__gunsPrebootReady = (async () => {
+      const releaseBuild = new URL("../service-worker.js?v=337", location.href).searchParams.get("v");
+      const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
+      const workers = registrations.flatMap((registration) => [registration.active, registration.waiting, registration.installing]).filter(Boolean);
+      const stale = [navigator.serviceWorker?.controller, ...workers].filter(Boolean)
+        .find((worker) => new URL(worker.scriptURL, location.href).searchParams.get("v") !== releaseBuild);
+      if (!stale) return;
+      await Promise.all(registrations.map((registration) => registration.unregister()));
+      if ("caches" in globalThis) await Promise.all((await caches.keys()).filter((key) => key.startsWith("guns-only-")).map((key) => caches.delete(key)));
+    })();
+  </script>
+  <script type="module">
+    try {
+      await globalThis.__gunsPrebootReady;
+      await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "/_framework/blazor.webassembly.js?v=337";
+        script.setAttribute("autostart", "false");
+        script.addEventListener("load", resolve, { once: true });
+        script.addEventListener("error", () => reject(new Error("Failed to load Fire Boss runtime.")), { once: true });
+        document.head.append(script);
+      });
+      const { renderExperienceGate } = await import("/render/release/quarantine_gate.js?v=337");
+      const access = renderExperienceGate({ experienceId: "okanagan-fireboss" });
+      if (access.allowed) await import("/okanagan/main.js?v=337");
+    } catch (error) {
+      console.error(error);
+      document.querySelector("#status").textContent = error instanceof Error ? error.message : String(error);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+{
+  "schema": "guns-only.okanagan-world.v1",
+  "worldId": "world.canada.okanagan-central.fire.v1",
+  "anchor": { "latitude": 49.88, "longitude": -119.5 },
+  "lake": {
+    "name": "Okanagan Lake",
+    "surfaceElevationM": 342,
+    "shoreline": [
+      [-119.760, 49.680], [-119.748, 49.735], [-119.724, 49.785],
+      [-119.675, 49.835], [-119.612, 49.880], [-119.548, 49.925],
+      [-119.505, 49.975], [-119.487, 50.030], [-119.470, 50.080],
+      [-119.390, 50.080], [-119.405, 50.030], [-119.425, 49.975],
+      [-119.455, 49.925], [-119.493, 49.880], [-119.555, 49.835],
+      [-119.625, 49.785], [-119.690, 49.735], [-119.720, 49.680]
+    ],
+    "scoopLanes": [
+      {
+        "id": "lane.kelowna-west.01",
+        "name": "West Kelowna northbound",
+        "entry": [-119.580, 49.825],
+        "exit": [-119.555, 49.875],
+        "lengthM": 6800
+      }
+    ]
+  },
+  "airfields": [
+    {
+      "id": "cyLW",
+      "name": "Kelowna International",
+      "latitude": 49.9561,
+      "longitude": -119.3778,
+      "elevationM": 433,
+      "runwayHeadingDeg": 160,
+      "runwayLengthM": 2713
+    }
+  ],
+  "communities": [
+    {
+      "id": "kelowna",
+      "name": "Kelowna",
+      "latitude": 49.8880,
+      "longitude": -119.4960,
+      "population2021": 144576,
+      "occupiedDwellings2021": 62209
+    },
+    {
+      "id": "west-kelowna",
+      "name": "West Kelowna",
+      "latitude": 49.8625,
+      "longitude": -119.5833,
+      "population2021": 36078,
+      "occupiedDwellings2021": 13974
+    },
+    {
+      "id": "peachland",
+      "name": "Peachland",
+      "latitude": 49.7734,
+      "longitude": -119.7366,
+      "population2021": 5789,
+      "occupiedDwellings2021": 2689
+    },
+    {
+      "id": "lake-country",
+      "name": "Lake Country",
+      "latitude": 50.0549,
+      "longitude": -119.4140,
+      "population2021": 15817,
+      "occupiedDwellings2021": 6204
+    }
+  ],
+  "fire": {
+    "name": "Mount Boucherie Exercise Fire",
+    "latitude": 49.850,
+    "longitude": -119.655,
+    "gridCellM": 140,
+    "gridColumns": 44,
+    "gridRows": 44,
+    "windFromDeg": 205,
+    "windSpeedMps": 8.5,
+    "initialFuelMoisture": 0.19,
+    "fuelTypes": [
+      { "id": "C7", "label": "Ponderosa pine / Douglas-fir", "share": 0.58 },
+      { "id": "O1", "label": "Cured grass / open interface", "share": 0.24 },
+      { "id": "M1", "label": "Mixedwood draw", "share": 0.18 }
+    ]
+  },
+  "sources": {
+    "terrain": "Natural Resources Canada Canadian Digital Elevation Model",
+    "vegetation": "British Columbia Vegetation Resources Inventory; CWFIS FBP fuel classes",
+    "population": "Statistics Canada 2021 Census of Population",
+    "aircraft": "Air Tractor AT-802F Fire Boss; Wipaire 10000 amphibian scoop system"
+  }
+}

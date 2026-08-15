@@ -46,6 +46,11 @@ const POSTERS = {
   // Keeping that path browser-free makes these two cards reproducible during headless release QA.
   "jet-f14": { w: 900, h: 900, q: 82, rasterizer: "deterministic-svg" },
   "jet-mig-28": { w: 900, h: 900, q: 82, rasterizer: "deterministic-svg" },
+  // The owner-selected Fire Boss poster retains its exact project-generated ImageGen source.
+  // It is presentation fiction, not airframe evidence; the committed PNG makes the crop/encode
+  // reproducible without pretending a photoreal raster was hand-authored SVG.
+  "aircraft-fireboss": { w: 1200, h: 1200, q: 88,
+    rasterizer: "committed-raster", src: "sources/aircraft-fireboss" },
 };
 
 const wanted = process.argv.slice(2).length ? process.argv.slice(2) : Object.keys(POSTERS);
@@ -54,7 +59,8 @@ if (unknown.length) throw new Error(`unknown poster(s): ${unknown.join(", ")}`);
 
 const sourceOf = (name) => POSTERS[name].src ?? name;
 const available = new Set((await readdir(HERE)).filter((f) => f.endsWith(".svg")).map((f) => f.slice(0, -4)));
-const missing = wanted.filter((name) => !available.has(sourceOf(name)));
+const missing = wanted.filter((name) => POSTERS[name].rasterizer === "committed-raster"
+  ? false : !available.has(sourceOf(name)));
 if (missing.length)
   throw new Error(`missing source SVG(s): ${missing.map(sourceOf).join(", ")}`);
 
@@ -70,8 +76,11 @@ try {
   for (const name of wanted) {
     const { w: width, h: height, q: quality, rasterizer } = POSTERS[name];
     const svgPath = path.join(HERE, `${sourceOf(name)}.svg`);
-    const png = path.join(scratch, `${name}.png`);
-    if (rasterizer === "deterministic-svg") {
+    let png = path.join(scratch, `${name}.png`);
+    if (rasterizer === "committed-raster") {
+      png = path.join(HERE, `${sourceOf(name)}.png`);
+      await stat(png);
+    } else if (rasterizer === "deterministic-svg") {
       const svg = await readFile(svgPath, "utf8");
       const rgba = renderSvgRgba(svg, width * 2, height * 2);
       await writeFile(png, encodePngRgba(width * 2, height * 2, rgba));

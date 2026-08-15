@@ -2975,7 +2975,7 @@
     #ready-screen[data-mode="program"] .ready-controls,
     #ready-screen[data-mode="program"] #ready-hint { display: none; }
 
-    /* The five production posters sit side by side. */
+    /* Aircraft are filtered by operating domain before the sortie page chooses a mission. */
     #ready-screen[data-mode="program"] .ready-layout {
       display: block;
       overflow: visible;
@@ -2983,12 +2983,39 @@
 
     #ready-screen[data-mode="program"] .ready-mission-groups {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
       gap: clamp(10px, 2vw, 26px);
       overflow: visible;
     }
 
     #ready-screen[data-mode="program"] .sortie-option[hidden] { display: none; }
+
+    #ready-screen[data-mode="program"][data-domain="military"] .sortie-option[data-domain="civilian"],
+    #ready-screen[data-mode="program"][data-domain="civilian"] .sortie-option[data-domain="military"] { display: none; }
+
+    #ready-screen[data-mode="program"] .ready-domain-tabs {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin: 0 0 clamp(10px, 2vh, 18px);
+    }
+
+    #ready-screen[data-mode="program"] .ready-domain-tabs button {
+      min-width: 9rem;
+      min-height: 38px;
+      border: 1px solid rgba(253, 246, 230, .22);
+      border-radius: 2px;
+      color: rgba(253, 246, 230, .58);
+      background: transparent;
+      font: 700 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .14em;
+    }
+
+    #ready-screen[data-mode="program"] .ready-domain-tabs button[aria-pressed="true"] {
+      border-color: rgba(122, 240, 165, .68);
+      color: #9bf2b9;
+      background: rgba(96, 226, 146, .09);
+    }
 
     #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] {
       position: relative;
@@ -3030,6 +3057,10 @@
 
     #ready-screen .sortie-choice[data-aircraft="f14"] {
       background-image: image-set(url("./art/jet-f14.webp") type("image/webp"));
+    }
+
+    #ready-screen .sortie-choice[data-aircraft="fireboss"] {
+      background-image: image-set(url("./art/aircraft-fireboss.webp") type("image/webp"));
     }
 
     #ready-screen .sortie-choice[data-aircraft="mig-28"] {
@@ -3601,7 +3632,7 @@
     <div id="rotate-hint" hidden></div>
   </div>
 
-  <div id="ready-screen" role="dialog" aria-modal="true" aria-labelledby="ready-menu-title" aria-describedby="ready-menu-help" aria-hidden="true" data-mode="program">
+  <div id="ready-screen" role="dialog" aria-modal="true" aria-labelledby="ready-menu-title" aria-describedby="ready-menu-help" aria-hidden="true" data-mode="program" data-domain="military">
     <div class="ready-card">
       <header class="ready-menu-header">
         <div class="ready-menu-brand">Guns Only</div>
@@ -3613,10 +3644,14 @@
 
       <div class="ready-layout">
         <section id="ready-selector" class="ready-selector" aria-label="Mission selection">
+          <div class="ready-domain-tabs" aria-label="Operating domain">
+            <button type="button" data-domain-filter="military" aria-pressed="true">MILITARY</button>
+            <button type="button" data-domain-filter="civilian" aria-pressed="false">CIVILIAN</button>
+          </div>
           <div class="ready-group-heading ready-program-heading">
             <div>
               <h2>Missions</h2>
-              <p>Five production experiences—F-22 guns-only, Rapier intercept, AH-1G Cobra Canyon, YZF-R1 Weekend Ride, and Top Gun.</p>
+              <p>Choose a domain, then an aircraft. Aircraft with more than one sortie open a mission selector.</p>
             </div>
             <output id="ready-program-progress"></output>
           </div>
@@ -3626,37 +3661,43 @@
             entries stay hidden.
           -->
           <div class="ready-mission-groups">
-            <div class="sortie-option" data-selected="true" data-program-state="available">
+            <div class="sortie-option" data-domain="military" data-selected="true" data-program-state="available">
               <button type="button" class="sortie-choice" data-aircraft="f22" data-program-node="first-merge" aria-pressed="true">
                 <span class="sortie-number">GUNS ONLY <b data-program-status="first-merge"></b></span>
                 <strong>F-22A</strong>
               </button>
             </div>
-            <div class="sortie-option" data-selected="false" data-program-state="preview" hidden>
+            <div class="sortie-option" data-domain="military" data-selected="false" data-program-state="preview" hidden>
               <button type="button" class="sortie-choice" data-aircraft="f22" data-program-node="multiplayer" aria-pressed="false">
                 <span class="sortie-number">MULTIPLAYER <b data-program-status="multiplayer"></b></span>
                 <strong>F-22A</strong>
               </button>
             </div>
-            <div class="sortie-option" data-selected="false" data-program-state="available">
+            <div class="sortie-option" data-domain="military" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-aircraft="rapier" data-program-node="rapier-intercept" aria-pressed="false">
                 <span class="sortie-number">INTERCEPT <b data-program-status="rapier-intercept"></b></span>
                 <strong>Rapier</strong>
               </button>
             </div>
-            <div class="sortie-option" data-selected="false" data-program-state="available">
+            <div class="sortie-option" data-domain="military" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-aircraft="cobra" data-program-node="cobra-lab" aria-pressed="false">
                 <span class="sortie-number">COBRA CANYON <b data-program-status="cobra-lab"></b></span>
                 <strong>AH-1G</strong>
               </button>
             </div>
-            <div class="sortie-option" data-selected="false" data-program-state="available">
+            <div class="sortie-option" data-domain="civilian" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-aircraft="bike" data-program-node="weekend-ride" aria-pressed="false">
                 <span class="sortie-number">WEEKEND RIDE <b data-program-status="weekend-ride"></b></span>
                 <strong>YZF-R1</strong>
               </button>
             </div>
-            <div class="sortie-option" data-selected="false" data-program-state="available">
+            <div class="sortie-option" data-domain="civilian" data-selected="false" data-program-state="available">
+              <button type="button" class="sortie-choice" data-aircraft="fireboss" data-program-node="okanagan-fireboss" aria-pressed="false">
+                <span class="sortie-number">OKANAGAN FIRE <b data-program-status="okanagan-fireboss"></b></span>
+                <strong>AT-802F Fire Boss</strong>
+              </button>
+            </div>
+            <div class="sortie-option" data-domain="military" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-aircraft="f14" data-program-node="top-gun" aria-pressed="false">
                 <span class="sortie-number">TOP GUN <b data-program-status="top-gun"></b></span>
                 <strong>F-14A</strong>
@@ -3757,7 +3798,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
             <span aria-hidden="true">⌨</span> Built for a laptop or desktop: flight controls, the tactical map, and the full instrument set need a keyboard and a real screen.
           </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 336 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 337 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
           <div class="ready-telemetry-disclosure">
@@ -3861,7 +3902,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     // Derive from a normal stamped URL so this comparison cannot drift from the next release:
     // tools/release/stamp-release.mjs rewrites every `?v=NNN`, and nothing else here.
-    const releaseBuild = new URL("./service-worker.js?v=336", location.href)
+    const releaseBuild = new URL("./service-worker.js?v=337", location.href)
       .searchParams.get("v");
 
     globalThis.__gunsPrebootReady = (async () => {
@@ -3957,11 +3998,11 @@ Splash one bandit to qualify · H controls · R restarts</p>
         });
         document.head.append(script);
       });
-      await loadClassicScript("./multiplayer-config.js?v=336");
-      await loadClassicScript("./_framework/blazor.webassembly.js?v=336", {
+      await loadClassicScript("./multiplayer-config.js?v=337");
+      await loadClassicScript("./_framework/blazor.webassembly.js?v=337", {
         autostart: "false",
       });
-      await import("./app.js?v=336");
+      await import("./app.js?v=337");
     } catch (error) {
       console.error(error);
       document.querySelector("#boot")?.classList.add("ready");
@@ -3974,8 +4015,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       try {
         const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
           await Promise.all([
-            import("./render/shell/inapp_browser.js?v=336"),
-            import("./render/shell/boot_fallback.js?v=336"),
+            import("./render/shell/inapp_browser.js?v=337"),
+            import("./render/shell/boot_fallback.js?v=337"),
           ]);
         const detection = detectEmbeddedBrowser({
           userAgent: navigator.userAgent,

@@ -292,6 +292,7 @@ test("every visible HTML button is wired through one auditable action surface", 
     const hooks = [
       "data-test-action", "data-hold-key", "data-pulse-key", "data-mobile-action",
       "data-program-node", "data-deck-configuration",
+      "data-domain-filter",
       // Build 75 portrait-assist speed nudges; wired in app.js via [data-assist-nudge].
       "data-assist-nudge",
       // Circuits OFT harness actions; wired in app.js via [data-circuits-action].
