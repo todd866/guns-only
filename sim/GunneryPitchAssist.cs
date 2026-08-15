@@ -7,15 +7,38 @@ namespace GunsOnly.Sim;
 /// </summary>
 public readonly record struct GunneryPitchAssistState(
     bool Active,
+    string Status,
     double TotalLeadErrorRad,
     double PitchLeadErrorRad,
+    double LateralLeadErrorRad,
     double RequestedPitchRateRadPerSecond,
     double MeasuredPitchRateRadPerSecond,
     double PitchRateErrorRadPerSecond,
     double AssistedLoadFactorG,
-    double LoadFactorCorrectionG) {
-    public static GunneryPitchAssistState Inactive(double pilotLoadFactorG = 1.0) =>
-        new(false, 0.0, 0.0, 0.0, 0.0, 0.0, pilotLoadFactorG, 0.0);
+    double LoadFactorCorrectionG,
+    double Authority01,
+    double RollCorrection,
+    double YawCorrection,
+    double TimeToPassSeconds) {
+    public int StatusCode => Status switch {
+        "DISABLED" => 1,
+        "NO_LEAD" => 2,
+        "UNAVAILABLE" => 3,
+        "PILOT_OVERRIDE" => 4,
+        "OUT_OF_RANGE" => 5,
+        "INVALID_GEOMETRY" => 6,
+        "TARGET_BEHIND" => 7,
+        "OUTSIDE_CONE" => 8,
+        "UNSAFE_CLOSURE" => 9,
+        "ACTIVE_SHOULDER" => 10,
+        "ACTIVE_FULL" => 11,
+        _ => 0,
+    };
+    public static GunneryPitchAssistState Inactive(
+        double pilotLoadFactorG = 1.0,
+        string status = "INACTIVE") =>
+        new(false, status, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            pilotLoadFactorG, 0.0, 0.0, 0.0, 0.0, double.PositiveInfinity);
 }
 
 public readonly record struct GunneryPitchAssistResult(
@@ -63,29 +86,46 @@ public static class GunneryPitchAssist {
         PilotLateralCommitmentState? lateralCommitment = null,
         double deltaSeconds = 0.0) {
         ArgumentNullException.ThrowIfNull(atmosphere);
-        GunneryPitchAssistResult inactive = new(pilotCommand,
-            GunneryPitchAssistState.Inactive(pilotCommand.GDemand));
+        PilotCommand unchangedCommand = pilotCommand;
+        GunneryPitchAssistResult Inactive(string status) => new(unchangedCommand,
+            GunneryPitchAssistState.Inactive(unchangedCommand.GDemand, status));
 
-        if (!enabled || !hasBallisticLead
-            || parameters.GunneryPitchAssistMaxRateRad <= 0.0
+        if (!enabled) {
+            leadRate?.Reset();
+            return Inactive("DISABLED");
+        }
+        if (!hasBallisticLead) {
+            leadRate?.Reset();
+            return Inactive("NO_LEAD");
+        }
+        if (parameters.GunneryPitchAssistMaxRateRad <= 0.0
             || parameters.GunneryPitchAssistCaptureAngleRad <= 0.0
             || parameters.GunneryPitchAssistMaxRangeM <= 0.0
             || parameters.GunneryPitchAssistGainPerSecond <= 0.0
-            || parameters.GunneryPitchAssistMaxCorrectionG <= 0.0
-            || pilotCommand.EnvelopeOverride
+            || parameters.GunneryPitchAssistMaxCorrectionG <= 0.0) {
+            leadRate?.Reset();
+            return Inactive("UNAVAILABLE");
+        }
+        if (pilotCommand.EnvelopeOverride
             || double.IsFinite(pilotCommand.CommandedAlphaRad)
-            || double.IsFinite(pilotCommand.CommandedPitchRad)
-            || !double.IsFinite(rangeM) || rangeM <= 0.0
+            || double.IsFinite(pilotCommand.CommandedPitchRad)) {
+            leadRate?.Reset();
+            return Inactive("PILOT_OVERRIDE");
+        }
+        if (!double.IsFinite(rangeM) || rangeM <= 0.0
             || rangeM > parameters.GunneryPitchAssistMaxRangeM
-                * SafePursuitRangeMultiplier
-            || !double.IsFinite(airspeedMps) || airspeedMps <= 1.0
+                * SafePursuitRangeMultiplier) {
+            leadRate?.Reset();
+            return Inactive("OUT_OF_RANGE");
+        }
+        if (!double.IsFinite(airspeedMps) || airspeedMps <= 1.0
             || !aircraft.BodyRates.IsFinite
             || !aircraft.BodyAttitude.IsFinite
             || aircraft.BodyAttitude.LengthSquared < 1e-12
             || !IsFinite(ballisticLeadDirection)
             || ballisticLeadDirection.Length < 1e-9) {
             leadRate?.Reset();
-            return inactive;
+            return Inactive("INVALID_GEOMETRY");
         }
 
         Vec3D lead = ballisticLeadDirection.Normalized();
@@ -101,9 +141,13 @@ public static class GunneryPitchAssist {
         double outerCaptureAngleRad = System.Math.Max(
             fullAuthorityCaptureAngleRad,
             SafePursuitOuterCaptureAngleRad);
-        if (forwardProjection <= 0.0 || totalError >= outerCaptureAngleRad) {
+        if (forwardProjection <= 0.0) {
             leadRate?.Reset();
-            return inactive;
+            return Inactive("TARGET_BEHIND");
+        }
+        if (totalError >= outerCaptureAngleRad) {
+            leadRate?.Reset();
+            return Inactive("OUTSIDE_CONE");
         }
 
         double timeToPassS = closureMps > 50.0
@@ -132,7 +176,7 @@ public static class GunneryPitchAssist {
             shoulderAuthority = rangeAuthority * angleAuthority * pursuitAuthority;
             if (shoulderAuthority <= 0.0) {
                 leadRate?.Reset();
-                return inactive;
+                return Inactive("UNSAFE_CLOSURE");
             }
         }
 
@@ -243,13 +287,19 @@ public static class GunneryPitchAssist {
 
         var state = new GunneryPitchAssistState(
             Active: true,
+            Status: insideFullAuthorityGate ? "ACTIVE_FULL" : "ACTIVE_SHOULDER",
             TotalLeadErrorRad: totalError,
             PitchLeadErrorRad: pitchError,
+            LateralLeadErrorRad: lateralError,
             RequestedPitchRateRadPerSecond: requestedPitchRate,
             MeasuredPitchRateRadPerSecond: measuredPitchRate,
             PitchRateErrorRadPerSecond: pitchRateError,
             AssistedLoadFactorG: assistedLoadFactor,
-            LoadFactorCorrectionG: correction);
+            LoadFactorCorrectionG: correction,
+            Authority01: shoulderAuthority,
+            RollCorrection: assistedRoll - pilotCommand.RollControl,
+            YawCorrection: assistedRudder - pilotCommand.Rudder,
+            TimeToPassSeconds: timeToPassS);
         return new GunneryPitchAssistResult(
             pilotCommand with {
                 GDemand = assistedLoadFactor,

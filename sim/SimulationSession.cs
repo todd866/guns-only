@@ -6654,7 +6654,11 @@ public sealed class SimulationSession {
             && !_detents.ApproachMode
             && !_detents.HighAlphaRecoveryActive
             && !_pilotControlInterlocked;
-        bool padlockOwnsRollPlane = _playerGunTargetPadlockRollAssistSelected
+        // Selection is not ownership. The old gate disabled gunnery roll whenever padlock was
+        // selected, including the long periods where its capture-only controller was inactive.
+        // Build 331 owner flight: padlock selected but inactive while gunnery roll was suppressed,
+        // 310 rounds / 12 hits. Yield only while padlock is actually contributing on this target.
+        bool padlockOwnsRollPlane = _padlockRollAssist.State.Active
             && _playerGunTargetPadlockRollAssistTargetId == _selectedPlayerGunTargetId;
         // A wider capture cone and one extra protected G on touch: tilt input cannot hold the
         // funnel the way arrow keys can. Ballistics stay untouched — the assist magnetises the

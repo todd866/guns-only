@@ -207,7 +207,9 @@ public static class PlayerGunAssistHarness {
                 pilotCommand, playerState, playerAir, player.AirspeedMps,
                 player.AtmosphereModel, gun.LeadDirection, gun.HasLeadSolution,
                 rangeM, gunneryAssistEnabled,
-                lateralRollEnabled: !padlockSelected,
+                // Selection merely arms padlock. Until its capture-only controller is actually
+                // contributing, gunnery retains the roll axis (matching SimulationSession).
+                lateralRollEnabled: !padlock.State.Active,
                 closureMps: 0.0,
                 leadRate: leadFeedForward ? leadRate : null,
                 lateralCommitment: lateral,

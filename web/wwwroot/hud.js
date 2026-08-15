@@ -21,7 +21,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=331";
+} from "./render/hud/contact_visibility.js?v=332";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import {
   approachEnergyCue,
@@ -64,11 +64,11 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=331";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=332";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=331";
+} from "./render/mission/rapier_high_mach_instruments.js?v=332";
 import {
   limitsPanelPresentation,
   navigationRateReadout,
@@ -82,7 +82,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=331";
+} from "./render/audio/flight_audio.js?v=332";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -2839,10 +2839,6 @@ class CombatHud {
     const x = this.safeInsets.left + 24;
     const y = layout.secondaryBottom - 88;
     const width = Math.min(166, Math.max(112, this.width * 0.18));
-    const railX = x + 7;
-    const railY = y + 29;
-    const railWidth = width - 14;
-    const fraction = clamp((actual - 20) / 48, 0, 1);
     const accent = manual ? AMBER : GREEN;
 
     ctx.save();
@@ -2851,7 +2847,7 @@ class CombatHud {
     wash.addColorStop(0.72, "rgba(1, 9, 14, 0.20)");
     wash.addColorStop(1, "rgba(1, 9, 14, 0)");
     ctx.fillStyle = wash;
-    ctx.fillRect(x - 6, y - 9, width + 12, 53);
+    ctx.fillRect(x - 6, y - 9, width + 12, 82);
     ctx.font = "700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
@@ -2867,40 +2863,63 @@ class CombatHud {
     ctx.fillText(`${manual ? "MAN" : "AUTO"} · ${actual.toFixed(0)}°${commandText}${limitText}`,
       x + width, y);
 
-    ctx.strokeStyle = GREEN_DIM;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(railX, railY);
-    ctx.lineTo(railX + railWidth, railY);
-    ctx.stroke();
-    for (const [deg, label] of [[20, "20"], [68, "68"]]) {
-      const markerX = railX + ((deg - 20) / 48) * railWidth;
+    // Top-down Tomcat planform. Both wing tips are derived directly from the authoritative
+    // angle, so the instrument shows geometry rather than asking the pilot to decode a slider.
+    const aircraftX = x + width / 2;
+    const aircraftY = y + 38;
+    const sweepRad = clamp(actual, 20, 68) * DEG;
+    const halfSpan = Math.min(38, width * 0.30);
+    const tipOut = Math.cos(sweepRad) * halfSpan;
+    const tipAft = Math.sin(sweepRad) * halfSpan;
+    const pivotOut = 6;
+    const pivotY = -7;
+    ctx.save();
+    ctx.translate(aircraftX, aircraftY);
+    ctx.strokeStyle = accent;
+    ctx.fillStyle = manual ? "rgba(255, 176, 32, 0.16)" : "rgba(77, 255, 136, 0.14)";
+    ctx.lineWidth = 1.35;
+    for (const side of [-1, 1]) {
       ctx.beginPath();
-      ctx.moveTo(markerX, railY - 3);
-      ctx.lineTo(markerX, railY + 3);
+      ctx.moveTo(side * pivotOut, pivotY);
+      ctx.lineTo(side * (pivotOut + tipOut), pivotY + tipAft);
+      ctx.lineTo(side * (pivotOut + tipOut * 0.72), pivotY + tipAft + 5);
+      ctx.lineTo(side * 5, 1);
+      ctx.closePath();
+      ctx.fill();
       ctx.stroke();
-      ctx.textAlign = deg === 20 ? "left" : "right";
-      ctx.fillStyle = GREEN_DIM;
-      ctx.fillText(label, markerX, railY + 10);
     }
-    const actualX = railX + fraction * railWidth;
-    ctx.fillStyle = accent;
+    // Twin-tail / glove / fuselage outline keeps the symbol unmistakably F-14 at small scale.
     ctx.beginPath();
-    ctx.moveTo(actualX, railY - 6);
-    ctx.lineTo(actualX - 4, railY - 12);
-    ctx.lineTo(actualX + 4, railY - 12);
+    ctx.moveTo(0, -22);
+    ctx.lineTo(-4, -13);
+    ctx.lineTo(-7, 9);
+    ctx.lineTo(-12, 17);
+    ctx.lineTo(-7, 16);
+    ctx.lineTo(-4, 22);
+    ctx.lineTo(0, 19);
+    ctx.lineTo(4, 22);
+    ctx.lineTo(7, 16);
+    ctx.lineTo(12, 17);
+    ctx.lineTo(7, 9);
+    ctx.lineTo(4, -13);
     ctx.closePath();
     ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-5, 10); ctx.lineTo(-9, 2); ctx.lineTo(-7, 15);
+    ctx.moveTo(5, 10); ctx.lineTo(9, 2); ctx.lineTo(7, 15);
+    ctx.stroke();
+    ctx.restore();
     ctx.textAlign = "center";
     ctx.fillStyle = manual ? AMBER : GREEN_DIM;
     ctx.fillText(
       `${controlBindingLabel(this.controlBindings?.wingSweepForward, "Comma")} / `
         + `${controlBindingLabel(this.controlBindings?.wingSweepAft, "Period")} · `
         + `${controlBindingLabel(this.controlBindings?.wingSweepAuto, "Slash")} AUTO`,
-      x + width / 2, y + 42,
+      x + width / 2, y + 68,
     );
     if (this._debug) {
-      this._debug.wingSweep = { x: x - 6, y: y - 9, width: width + 12, height: 53,
+      this._debug.wingSweep = { x: x - 6, y: y - 9, width: width + 12, height: 82,
         actualDeg: actual, commandDeg: command, mode: manual ? "MANUAL" : "AUTO" };
     }
     ctx.restore();
@@ -5644,10 +5663,10 @@ class CombatHud {
         step: frame.state.alt_ft > 10000 ? 1000 : 500,
         decimals: 0,
       });
-      if (isFightHudActive(frame.state)) {
-        this.drawGTape(frame.state);
-        this.drawF14WingSweep(frame.state);
-      }
+      if (isFightHudActive(frame.state)) this.drawGTape(frame.state);
+      // Sweep remains a live aircraft system after the merge and through RTB. Gating it on the
+      // fight HUD made the indicator disappear precisely when the pilot climbed or recovered.
+      this.drawF14WingSweep(frame.state);
       this.drawThrottle(frame.state);
       this.drawLimitsPanel(frame.state);
       this.drawRapierCycleTeach(frame.state);

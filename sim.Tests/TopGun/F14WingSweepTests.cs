@@ -4,6 +4,9 @@ namespace GunsOnly.Sim.Tests.TopGun;
 
 public sealed class F14WingSweepTests
 {
+    const double FeetToMetres = 0.3048;
+    const double Dt = 1.0 / AircraftSim.TickHz;
+
     [Fact]
     public void SweepIncreasesWithMach()
     {
@@ -21,6 +24,81 @@ public sealed class F14WingSweepTests
         Assert.InRange(max, F14WingSweep.MinSweepDeg, F14WingSweep.MaxSweepDeg);
         Assert.Equal(F14WingSweep.MinSweepDeg, min);
         Assert.Equal(F14WingSweep.MaxSweepDeg, max);
+    }
+
+    [Fact]
+    public void PublishedSpanEndpointsDriveDistinctLiftDragAndRollConfigurations()
+    {
+        AircraftParams baseline = FlightModel.F14APublicDataSurrogate;
+        var state = new AircraftState(
+            new Vec3D(0.0, 12_000.0 * FeetToMetres, 0.0),
+            300.0, 0.0, 0.0, 0.0, baseline.MassKg);
+        var forward = new AircraftSim(state, baseline);
+        var aft = new AircraftSim(state, baseline);
+        forward.SetEffectiveWingSpanM(
+            TopGunFightRuntime.EffectiveTomcatWingSpanMForSweep(20.0, baseline.WingSpanM));
+        aft.SetEffectiveWingSpanM(
+            TopGunFightRuntime.EffectiveTomcatWingSpanMForSweep(68.0, baseline.WingSpanM));
+
+        AircraftParams forwardP = forward.EffectiveFlightParametersForTest;
+        AircraftParams aftP = aft.EffectiveFlightParametersForTest;
+        Assert.Equal(19.53, forwardP.WingSpanM, 2);
+        Assert.Equal(11.63, aftP.WingSpanM, 2);
+        Assert.True(forwardP.CLMax > aftP.CLMax);
+        Assert.True(forwardP.CLAlpha > aftP.CLAlpha);
+        Assert.True(forwardP.InducedK < aftP.InducedK);
+        Assert.True(forwardP.MCrit < aftP.MCrit);
+
+        double forwardTransonicCd = FlightModel.ProfileDragCoefficient(
+            alpha: 0.04, mach: 1.05, forwardP);
+        double aftTransonicCd = FlightModel.ProfileDragCoefficient(
+            alpha: 0.04, mach: 1.05, aftP);
+        Assert.True(aftTransonicCd < forwardTransonicCd,
+            $"aft sweep should reduce transonic drag: {aftTransonicCd:F4} vs {forwardTransonicCd:F4}");
+
+        double forwardRollAuthority = forwardP.ClDeltaA * forwardP.WingSpanM / forwardP.IxxKgM2;
+        double aftRollAuthority = aftP.ClDeltaA * aftP.WingSpanM / aftP.IxxKgM2;
+        Assert.True(aftRollAuthority > forwardRollAuthority * 1.25,
+            $"swept roll authority stayed sloppy: {aftRollAuthority:E3} vs {forwardRollAuthority:E3}");
+        Assert.True(Math.Abs(aftP.ClP) > Math.Abs(forwardP.ClP),
+            "aft sweep needs stronger roll-rate damping as well as quicker onset");
+    }
+
+    [Theory]
+    [InlineData(12_000.0, 1.40)]
+    [InlineData(34_000.0, 1.35)]
+    public void FullAfterburnerBreaksThroughFormerMachOnePointOneWall(
+        double altitudeFt, double minimumMach)
+    {
+        AircraftParams tomcat = FlightModel.F14APublicDataSurrogate;
+        double altitudeM = altitudeFt * FeetToMetres;
+        AtmosphericState air = StandardAtmosphere1976.Instance.Sample(altitudeM);
+        var state = new AircraftState(
+            new Vec3D(0.0, altitudeM, 0.0),
+            1.05 * air.SpeedOfSoundMps,
+            Gamma: 0.0, Chi: 0.0, Bank: 0.0, Mass: tomcat.MassKg);
+        var sim = new AircraftSim(state, tomcat, StandardAtmosphere1976.Instance);
+        sim.SeedEnginePowerFraction(tomcat.MaxThrustFraction);
+        var maxAfterburner = new PilotCommand(
+            GDemand: 1.0, BankTarget: 0.0,
+            Throttle: tomcat.MaxThrustFraction, Rudder: 0.0);
+
+        for (int tick = 0; tick < 120 * (int)AircraftSim.TickHz; tick++) {
+            double currentMach = sim.AirspeedMps
+                / sim.AtmosphereModel.Sample(sim.State.Position.Y).SpeedOfSoundMps;
+            double casKts = AirData.IndicatedAirspeedMps(
+                sim.AirspeedMps, sim.State.Position.Y, sim.AtmosphereModel)
+                * AirData.MpsToKnots;
+            double automaticSweep = F14WingSweep.DegreesFor(currentMach, casKts);
+            sim.SetEffectiveWingSpanM(
+                TopGunFightRuntime.EffectiveTomcatWingSpanMForSweep(
+                    automaticSweep, tomcat.WingSpanM));
+            sim.Step(maxAfterburner, Dt);
+        }
+
+        double mach = sim.AirspeedMps
+            / sim.AtmosphereModel.Sample(sim.State.Position.Y).SpeedOfSoundMps;
+        Assert.InRange(mach, minimumMach, 2.40);
     }
 
     [Fact]
@@ -148,6 +226,10 @@ public sealed class F14WingSweepTests
         Assert.Equal(sweptSpan,
             bandit.LastLookaheadProbeEffectiveWingSpanMForTest,
             precision: 10);
+        AircraftParams frozenPolar = Assert.IsType<AircraftParams>(
+            bandit.LastLookaheadProbeFlightParametersForTest);
+        Assert.Equal(0.98, frozenPolar.MCrit, 10);
+        Assert.Equal(0.170, frozenPolar.ClDeltaA, 10);
 
         long evaluationsBefore = bandit.AiWorkload.CandidateEvaluations;
         bandit.SetEffectiveWingSpanM(air.WingSpanM);

@@ -86,10 +86,26 @@ export function carrierRecoveryLesson(state = {}) {
 export function topGunNavDecision(state = {}) {
   const topGun = state?.presentation_theme === "top-gun-anime-1986"
     || String(state?.mission_definition_id || "").includes("top-gun");
-  const available = Number(state?.combat_handoff_phase) === 1
+  const available = (state?.rtb_available === true
+      || (topGun && Number(state?.combat_handoff_phase) === 1))
     && state?.combat_handoff_requested !== true
     && state?.player_rtb_active !== true;
-  if (!topGun || !available) return null;
+  if (!available) return null;
+
+  // One discoverable action across fixed-wing types. F-22 previously advertised recovery truth
+  // in the map but exposed the command only as an undocumented O key / pause-menu action, while
+  // Top Gun had a real button. The same navigation surface must initiate the same authority edge.
+  if (!topGun) {
+    const destination = String(state?.recovery_display_name
+      || state?.mesh_home_display_name || "HOME").trim();
+    return Object.freeze({
+      mode: "return",
+      kicker: "RECOVERY AVAILABLE",
+      title: "RETURN TO BASE",
+      detail: `Knock it off, safe the gun, and follow the world-space corridor to ${destination}.`,
+      action: state?.carrier === true ? "RTB TO CARRIER" : "RTB TO RUNWAY",
+    });
+  }
 
   const replacementPending = state?.opponent_replacement_pending === true;
   const seconds = Math.max(0, Number(state?.opponent_replacement_s) || 0);

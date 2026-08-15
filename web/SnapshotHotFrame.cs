@@ -44,7 +44,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 25;
+    public const int LayoutVersion = 26;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -398,13 +398,19 @@ internal static class SnapshotHotFrame {
         Num("pitch_thrust_vector_deg", 3);
         Num("pitch_thrust_vector_moment_nm", 1);
         Bool("gunnery_pitch_assist");
+        Num("gunnery_assist_status_code", RawInteger);
         Num("gunnery_pitch_error_deg", 3);
+        Num("gunnery_lateral_error_deg", 3);
         Num("gunnery_total_lead_error_deg", 3);
         Num("gunnery_pitch_rate_cmd_dps", 3);
         Num("gunnery_pitch_rate_measured_dps", 3);
         Num("gunnery_pitch_rate_error_dps", 3);
         Num("gunnery_pitch_assist_g", 3);
         Num("gunnery_pitch_assist_delta_g", 3);
+        Num("gunnery_assist_authority_01", 3);
+        Num("gunnery_roll_assist", 4);
+        Num("gunnery_yaw_assist", 4);
+        Nul("gunnery_time_to_pass_s", 3);
         Bool("padlock_roll_assist_selected");
         Bool("padlock_roll_assist_geometry_valid");
         Bool("padlock_roll_assist_captured");
@@ -508,6 +514,7 @@ internal static class SnapshotHotFrame {
         Bool("fuel_minimum");
         Bool("fuel_emergency");
         Bool("rtb");
+        Bool("rtb_available");
         Bool("rtb_steer");
         Num("rtb_bearing_deg", 2);
         Num("rtb_turn_deg", 2);
@@ -1391,7 +1398,9 @@ internal static class SnapshotHotFrame {
         w.Num("pitch_thrust_vector_deg", player.LastPitchThrustVectorAngleRad * 57.29577951308232, 3);
         w.Num("pitch_thrust_vector_moment_nm", player.LastPitchThrustVectorMomentNm, 1);
         w.Bool("gunnery_pitch_assist", pitchAssist.Active);
+        w.Num("gunnery_assist_status_code", pitchAssist.StatusCode, RawInteger);
         w.Num("gunnery_pitch_error_deg", pitchAssist.PitchLeadErrorRad * 57.29577951308232, 3);
+        w.Num("gunnery_lateral_error_deg", pitchAssist.LateralLeadErrorRad * 57.29577951308232, 3);
         w.Num("gunnery_total_lead_error_deg", pitchAssist.TotalLeadErrorRad * 57.29577951308232, 3);
         w.Num("gunnery_pitch_rate_cmd_dps",
             pitchAssist.RequestedPitchRateRadPerSecond * 57.29577951308232, 3);
@@ -1401,6 +1410,12 @@ internal static class SnapshotHotFrame {
             pitchAssist.PitchRateErrorRadPerSecond * 57.29577951308232, 3);
         w.Num("gunnery_pitch_assist_g", pitchAssist.AssistedLoadFactorG, 3);
         w.Num("gunnery_pitch_assist_delta_g", pitchAssist.LoadFactorCorrectionG, 3);
+        w.Num("gunnery_assist_authority_01", pitchAssist.Authority01, 3);
+        w.Num("gunnery_roll_assist", pitchAssist.RollCorrection, 4);
+        w.Num("gunnery_yaw_assist", pitchAssist.YawCorrection, 4);
+        w.Nul("gunnery_time_to_pass_s",
+            double.IsFinite(pitchAssist.TimeToPassSeconds)
+                ? pitchAssist.TimeToPassSeconds : null, 3);
         w.Bool("padlock_roll_assist_selected", padlockRollAssist.Selected);
         w.Bool("padlock_roll_assist_geometry_valid", padlockRollAssist.GeometryValid);
         w.Bool("padlock_roll_assist_captured", padlockRollAssist.Captured);
@@ -1530,6 +1545,7 @@ internal static class SnapshotHotFrame {
         w.Bool("fuel_minimum", fuel.IsMinimumFuel);
         w.Bool("fuel_emergency", fuel.IsEmergencyFuel);
         w.Bool("rtb", fuel.RtbAdvisory);
+        w.Bool("rtb_available", session.ReturnToBaseAvailable);
         w.Bool("rtb_steer", rtb.Active);
         w.Num("rtb_bearing_deg", rtb.BearingRad * 57.29577951308232, 2);
         w.Num("rtb_turn_deg", rtb.TurnRad * 57.29577951308232, 2);

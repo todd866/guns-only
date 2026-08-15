@@ -313,6 +313,7 @@ public sealed class ReactiveBandit :
     long _forecastSteps;
     long _terrainSweeps;
     double _lastLookaheadProbeEffectiveWingSpanM = double.NaN;
+    AircraftParams? _lastLookaheadProbeFlightParameters;
 
     public PilotSkill Skill { get; }
     public AircraftParams AircraftParameters => _parameters;
@@ -322,6 +323,8 @@ public sealed class ReactiveBandit :
     public void ResetFlightParams() => _sim.ResetFlightParams();
     internal double LastLookaheadProbeEffectiveWingSpanMForTest =>
         _lastLookaheadProbeEffectiveWingSpanM;
+    internal AircraftParams? LastLookaheadProbeFlightParametersForTest =>
+        _lastLookaheadProbeFlightParameters;
     internal int? LookaheadCadencePhase => _absoluteLookaheadCadencePhase;
     public AiComputeLevel ComputeLevel => _computeLevel;
     public AiWorkloadCounters AiWorkload => new(
@@ -2646,6 +2649,7 @@ public sealed class ReactiveBandit :
             probe.SetEffectiveWingSpanM(effectiveWingSpanM);
         }
         _lastLookaheadProbeEffectiveWingSpanM = probe.EffectiveWingSpanM;
+        _lastLookaheadProbeFlightParameters = probe.EffectiveFlightParametersForTest;
         probe.SeedEnginePowerFraction(thrustFraction);
 
         // Belief-limited player prediction: a coordinated turn extrapolated from the OBSERVED state

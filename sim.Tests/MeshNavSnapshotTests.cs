@@ -56,11 +56,11 @@ public sealed class MeshNavSnapshotTests {
     }
 
     [Fact]
-    public void HotFrameLayoutIncludesMeshCarrierApproachAndAim9SlotsAtVersion25() {
+    public void HotFrameLayoutIncludesMeshCarrierApproachAim9AndAssistDiagnosticsAtVersion26() {
         string layoutJson = SnapshotHotFrame.LayoutJson();
         using JsonDocument document = JsonDocument.Parse(layoutJson);
         JsonElement root = document.RootElement;
-        Assert.Equal(25, root.GetProperty("layout_version").GetInt32());
+        Assert.Equal(26, root.GetProperty("layout_version").GetInt32());
         Assert.Contains(
             "mesh_fuel_to_dest_lb",
             layoutJson,
@@ -70,6 +70,11 @@ public sealed class MeshNavSnapshotTests {
             StringComparison.Ordinal);
         Assert.Contains("approach_guidance_active", layoutJson, StringComparison.Ordinal);
         Assert.Contains("opponent_present", layoutJson, StringComparison.Ordinal);
+        Assert.Contains("gunnery_assist_status_code", layoutJson,
+            StringComparison.Ordinal);
+        Assert.Contains("gunnery_roll_assist", layoutJson,
+            StringComparison.Ordinal);
+        Assert.Contains("rtb_available", layoutJson, StringComparison.Ordinal);
 
         JsonElement core = root.GetProperty("blocks")
             .EnumerateArray()

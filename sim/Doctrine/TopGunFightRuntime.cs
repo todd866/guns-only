@@ -106,24 +106,25 @@ public sealed class TopGunFightRuntime
     }
 
     /// <summary>
-    /// SURROGATE coarse aero: shrink effective span from the static mid-sweep Tomcat placeholder
-    /// toward ~55% span at full sweep. Cosmetic schedule matches snapshot wing_sweep_deg.
+    /// SURROGATE geometry from the published wings-forward / fully-swept spans. AircraftSim uses
+    /// this same span to derive the live lift, induced-drag and transonic polar.
     /// </summary>
     public static double EffectiveTomcatWingSpanM(
-        double mach, double casKts, double midSpanM = 15.5)
+        double mach, double casKts, double forwardSpanM = 19.53)
     {
         return EffectiveTomcatWingSpanMForSweep(
-            F14WingSweep.DegreesFor(mach, casKts), midSpanM);
+            F14WingSweep.DegreesFor(mach, casKts), forwardSpanM);
     }
 
     public static double EffectiveTomcatWingSpanMForSweep(
-        double sweepDegrees, double midSpanM = 15.5)
+        double sweepDegrees, double forwardSpanM = 19.53)
     {
         double sweep = Math.Clamp(
             sweepDegrees, F14WingSweep.MinSweepDeg, F14WingSweep.MaxSweepDeg);
         double t = (sweep - F14WingSweep.MinSweepDeg)
             / Math.Max(F14WingSweep.MaxSweepDeg - F14WingSweep.MinSweepDeg, 1e-9);
-        const double MinSpanFraction = 0.55;
-        return midSpanM * (1.0 - t * (1.0 - MinSpanFraction));
+        const double FullySweptSpanM = 11.63; // 38 ft 2 in
+        double aftSpan = System.Math.Min(forwardSpanM, FullySweptSpanM);
+        return forwardSpanM + (aftSpan - forwardSpanM) * t;
     }
 }

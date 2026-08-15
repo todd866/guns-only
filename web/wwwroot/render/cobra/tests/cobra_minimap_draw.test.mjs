@@ -281,21 +281,22 @@ test("a short objective line runs from the player toward the nearest hostile poi
   assert.ok(dot > 0);
 });
 
-test("M toggles the full map, and Escape closes it before it quits the sortie", async () => {
+test("M toggles the full map, and Escape closes it before it pauses", async () => {
   const main = await readFile(new URL("../../../cobra-lab/main.js", import.meta.url), "utf8");
   assert.match(main, /event\.code === "KeyM"/);
   assert.match(main, /setTacticalMapOpen\(!tacticalMapOpen\)/);
   // Escape ordering is load-bearing: onboarding first (it is the topmost layer), then the map,
-  // then the exit. A map close that landed after leaveMissionForMenu would never run.
+  // then pause. A map close that landed after setMissionPaused would be hidden by the menu.
   const escapeHandler = main.match(/window\.addEventListener\("keydown", \(event\) => \{\n {2}if \(event\.code !== "Escape"\)[\s\S]*?\n\}, true\);/)?.[0] ?? "";
   assert.ok(escapeHandler.length > 0, "capture-phase Escape listener not found");
   assert.ok(
-    escapeHandler.indexOf("dismiss-onboarding") < escapeHandler.indexOf("tacticalMapOpen"),
+    escapeHandler.indexOf('action === "dismiss-onboarding"')
+      < escapeHandler.indexOf('action === "close-map"'),
     "the onboarding card must keep first claim on Escape",
   );
   assert.ok(
-    escapeHandler.indexOf("tacticalMapOpen") < escapeHandler.indexOf("leaveMissionForMenu"),
-    "Escape must close the map before it leaves the sortie",
+    escapeHandler.indexOf('action === "close-map"') < escapeHandler.indexOf("setMissionPaused"),
+    "Escape must close the map before it pauses the sortie",
   );
   // Opening the map must not pause the sim: no branch in the frame loop may gate on it.
   const animate = main.match(/function animate\(timeMs\) \{[\s\S]*?\n\}\n/)?.[0] ?? "";

@@ -164,6 +164,60 @@ export function rtbGuidanceGates(state = {}, options = {}) {
   return gates;
 }
 
+/**
+ * Conformal join chevrons from ownship to the active authored procedure gate. The procedure still
+ * owns every fix, altitude, capture radius and sequence; this only makes the path to that fix
+ * visible when it is kilometres away or outside the current windscreen.
+ */
+export function approachJoinGuidanceGates(state = {}, ladder = [], options = {}) {
+  const config = { ...GUIDANCE_PATH_DEFAULTS, ...options };
+  const eastM = finiteNumber(state?.px);
+  const upM = finiteNumber(state?.py);
+  const northM = finiteNumber(state?.pz);
+  if (eastM === null || upM === null || northM === null) return [];
+  const target = ladder.find((gate) => gate?.active === true) ?? ladder[0] ?? null;
+  const targetEastM = finiteNumber(target?.eastM);
+  const targetUpM = finiteNumber(target?.upM);
+  const targetNorthM = finiteNumber(target?.northM);
+  if (targetEastM === null || targetUpM === null || targetNorthM === null) return [];
+
+  const deltaEastM = targetEastM - eastM;
+  const deltaNorthM = targetNorthM - northM;
+  const rangeM = Math.hypot(deltaEastM, deltaNorthM);
+  const captureM = Math.max(80, finiteNumber(target?.halfM) ?? 80);
+  if (!(rangeM > Math.min(220, captureM * 0.65))) return [];
+  const dirEast = deltaEastM / rangeM;
+  const dirNorth = deltaNorthM / rangeM;
+  const leadM = Math.min(config.rtbLeadM, rangeM * 0.24);
+  const stopShortM = Math.min(120, captureM * 0.30);
+  const drawnM = Math.max(0, Math.min(config.rtbMaxDrawM, rangeM - leadM - stopShortM));
+  if (!(drawnM > 1)) return [];
+  const minimumCount = Math.max(3, Math.floor(config.rtbMinGateCount));
+  const maximumCount = Math.max(minimumCount, Math.floor(config.rtbGateCount));
+  const densityCount = Math.floor(drawnM / Math.max(1, config.rtbGateSpacingM)) + 1;
+  const count = Math.min(maximumCount, Math.max(minimumCount, densityCount));
+  const gates = [];
+  for (let index = 0; index < count; index += 1) {
+    const along = index / Math.max(1, count - 1);
+    const distanceM = leadM + drawnM * along;
+    const fraction = Math.min(1, distanceM / rangeM);
+    const smooth = fraction * fraction * (3 - 2 * fraction);
+    gates.push({
+      id: `join-${target.id ?? "procedure"}-${index}`,
+      eastM: eastM + dirEast * distanceM,
+      upM: upM + (targetUpM - upM) * smooth,
+      northM: northM + dirNorth * distanceM,
+      halfM: config.rtbVisualHalfM
+        + (config.rtbFarVisualHalfM - config.rtbVisualHalfM) * Math.sqrt(along),
+      active: index === 0,
+      dirty: false,
+      rtb: true,
+      join: true,
+    });
+  }
+  return gates;
+}
+
 const GATE_VERTEX = /* glsl */`
   varying vec2 vLocal;
   void main() {
@@ -223,6 +277,9 @@ export function createGuidancePath(THREE, options = {}) {
   root.visible = false;
   root.userData = root.userData ?? {};
   root.userData.mode = null;
+  root.userData.drawnGateCount = 0;
+  root.userData.joinGateCount = 0;
+  root.userData.suppressionReason = "no-intent";
   // Drawn after the world so it reads through haze, but still depth-tested: a gate behind a hill
   // stays behind that hill rather than becoming a magic overlay.
   root.renderOrder = 12;
@@ -335,6 +392,7 @@ export function createGuidancePath(THREE, options = {}) {
       }
       let ladder = cachedLadder;
       let rtbMode = false;
+      let approachJoinMode = false;
       if (ladder.length) {
         // Procedure ownership is a lifecycle boundary. Do not replay ownship-relative transit
         // breadcrumbs from before an approach if the renderer later returns to the same bucket.
@@ -347,6 +405,9 @@ export function createGuidancePath(THREE, options = {}) {
         if (approachActive) {
           root.visible = false;
           root.userData.mode = null;
+          root.userData.drawnGateCount = 0;
+          root.userData.joinGateCount = 0;
+          root.userData.suppressionReason = "approach-empty";
           return 0;
         }
         const px = finiteNumber(state?.px);
@@ -380,9 +441,26 @@ export function createGuidancePath(THREE, options = {}) {
         ladder = cachedRtbLadder;
         rtbMode = ladder.length > 0;
       }
+      if (approachActive && ladder.length) {
+        const join = approachJoinGuidanceGates(state ?? {}, ladder, config);
+        if (join.length) {
+          // Authored procedure volumes always win the fixed mesh budget. Join chevrons fill only
+          // spare slots; they must never push the final/capture gates out of the renderer.
+          const joinBudget = Math.max(0, config.maxGates - ladder.length);
+          const admittedJoin = join.slice(0, joinBudget);
+          if (admittedJoin.length) {
+            ladder = [...admittedJoin, ...ladder];
+            approachJoinMode = true;
+          }
+        }
+      }
       if (!ladder.length) {
         root.visible = false;
         root.userData.mode = null;
+        root.userData.drawnGateCount = 0;
+        root.userData.joinGateCount = 0;
+        root.userData.suppressionReason = recoveryIntent
+          ? "no-valid-target" : "no-intent";
         return 0;
       }
 
@@ -395,6 +473,9 @@ export function createGuidancePath(THREE, options = {}) {
       if (!points.length) {
         root.visible = false;
         root.userData.mode = null;
+        root.userData.drawnGateCount = 0;
+        root.userData.joinGateCount = 0;
+        root.userData.suppressionReason = "invalid-geometry";
         return 0;
       }
 
@@ -443,7 +524,11 @@ export function createGuidancePath(THREE, options = {}) {
       }
 
       root.visible = true;
-      root.userData.mode = rtbMode ? "rtb" : "procedure";
+      root.userData.mode = rtbMode ? "rtb" : approachJoinMode ? "approach-join" : "procedure";
+      root.userData.joinGateCount = approachJoinMode
+        ? ladder.filter((gate) => gate.join === true).length : 0;
+      root.userData.drawnGateCount = drawn;
+      root.userData.suppressionReason = null;
       return drawn;
     },
 

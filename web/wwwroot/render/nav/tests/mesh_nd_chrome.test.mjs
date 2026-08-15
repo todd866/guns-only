@@ -58,6 +58,18 @@ test("Top Gun carrier choice fails closed outside an available live handoff", ()
   }), null);
 });
 
+test("F-22 gets the same visible RTB button contract as Top Gun", () => {
+  const choice = topGunNavDecision({
+    mission_definition_id: "mission.modern.visual-merge.f22a-vs-su27s.public-data-surrogate.v1",
+    rtb_available: true,
+    recovery_display_name: "Soniachne west recovery runway",
+  });
+  assert.equal(choice.mode, "return");
+  assert.equal(choice.action, "RTB TO RUNWAY");
+  assert.match(choice.detail, /world-space corridor/i);
+  assert.match(choice.detail, /Soniachne west recovery runway/i);
+});
+
 test("procedureLabelFromState maps kind codes", () => {
   assert.equal(procedureLabelFromState({ recovery_procedure_kind: 3 }), "STRAIGHT-IN");
   assert.equal(procedureLabelFromState({ rapier_pattern_only: true }), "CIRCUITS · DEFAULT");

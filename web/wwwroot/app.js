@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=331";
+import { createHud } from "./hud.js?v=332";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=331";
+} from "./render/debrief/sortie_result.js?v=332";
 import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
@@ -69,8 +69,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=331";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=331";
+} from "./render/release/release_identity.js?v=332";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=332";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -83,7 +83,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=331";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=332";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -92,10 +92,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=331";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=332";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=331";
+} from "./render/nav/carrier_sortie_touch_control.js?v=332";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -178,7 +178,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=331";
+} from "./render/telemetry/ai_frame_pressure.js?v=332";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -188,14 +188,14 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=331";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=331";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=331";
+} from "./render/telemetry/telemetry_batch.js?v=332";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=332";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=332";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=331";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=331";
+} from "./render/shell/boot_watchdog.js?v=332";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=332";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -204,7 +204,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=331";
+} from "./render/settings/player_settings.js?v=332";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -251,13 +251,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=331";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=331";
+} from "./render/scene/scene_builders.js?v=332";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=332";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=331";
+} from "./render/audio/flight_audio.js?v=332";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -899,9 +899,13 @@ function requestCombatHandoffFromNav() {
   if (!pressMappedKey(code, "nav-rtb", knockItOffControl.gkey)) return false;
   releaseMappedKey(code, "nav-rtb");
   if (navUi?.rtbAction) navUi.rtbAction.disabled = true;
-  if (viewStatus) viewStatus.textContent = decision.mode === "post-kill"
-    ? "RTB selected · carrier approach loading"
-    : "RTB selected · relief inbound · carrier approach loading";
+  if (viewStatus) viewStatus.textContent = decision.action.includes("CARRIER")
+    ? decision.mode === "post-kill"
+      ? "RTB selected · carrier approach loading"
+      : "RTB selected · relief inbound · carrier approach loading"
+    : decision.mode === "return"
+      ? "RTB selected · runway corridor loading"
+      : "RTB selected · relief inbound · runway corridor loading";
   recorder.event("combat-handoff", "requested", { source: "navigation-button" });
   sceneCanvas.focus({ preventScroll: true });
   return true;
@@ -11564,7 +11568,24 @@ async function boot() {
       globalThis.__gunsBridge = bridge;
       setMobileFrozen(state.frozen || replayActive);
       const beforeTelemetry = performance.now();
-      recorder.sample(state);
+      // Record what the pilot was actually shown, not merely what authority intended. This is
+      // deliberately one rendered frame behind the state sample (normally <17 ms): it makes a
+      // missing RTB highway diagnosable as renderer suppression/zero drawn gates instead of
+      // forcing us to infer pixels from approach flags after the fact.
+      const guidanceHealth = activeView?.guidancePath?.object3d?.userData;
+      const telemetryState = guidanceHealth
+        ? {
+          ...state,
+          presentation_guidance_mode: guidanceHealth.mode ?? "NONE",
+          presentation_guidance_drawn_gates:
+            Number(guidanceHealth.drawnGateCount) || 0,
+          presentation_guidance_join_gates:
+            Number(guidanceHealth.joinGateCount) || 0,
+          presentation_guidance_suppression:
+            guidanceHealth.suppressionReason ?? "NONE",
+        }
+        : state;
+      recorder.sample(telemetryState);
       const afterTelemetry = performance.now();
       recorder.observeFramePhase("tele", afterTelemetry - beforeTelemetry);
       renderTestFlightConsole(state);
@@ -11636,7 +11657,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=331")
+    navigator.serviceWorker.register("service-worker.js?v=332")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

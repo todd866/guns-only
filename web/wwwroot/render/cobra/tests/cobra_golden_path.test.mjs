@@ -436,6 +436,10 @@ test("depart and ingress follow the authority's active route gate before the com
     eastM: 900,
     northM: 1_200,
     mode: "route",
+    routePoints: [
+      { eastM: 900, northM: 1_200 },
+      { eastM: 1_500, northM: 2_000 },
+    ],
   });
 });
 
@@ -457,6 +461,10 @@ test("departure stays on the authority's active leg and uses a tight route arriv
     eastM: 275,
     northM: 0,
     mode: "route",
+    routePoints: [
+      { eastM: 275, northM: 0 },
+      { eastM: 850, northM: 1_100 },
+    ],
   });
   assert.equal(state.arrivedRadiusM, COBRA_GOLDEN_PATH_DEFAULTS.routeArrivedRadiusM);
   assert.ok(state.arrivedRadiusM < 100,
@@ -480,6 +488,36 @@ test("short legs use three sparse cues instead of compressing the whole corridor
     assert.equal(positions[index + 1], positions[hiddenStart + 1]);
     assert.equal(positions[index + 2], positions[hiddenStart + 2]);
   }
+  path.dispose();
+});
+
+test("Cobra corridor previews bends through upcoming authority gates", () => {
+  const path = createCobraGoldenPath(fakeThree(), {
+    markerCount: 8,
+    markerSpacingM: 100,
+    maxLengthM: 900,
+  });
+  path.update({
+    player: playerAt(0, 0, 140),
+    objective: {
+      siteId: "ember-route-gate-0",
+      eastM: 0,
+      northM: 350,
+      mode: "route",
+      routePoints: [
+        { eastM: 0, northM: 350 },
+        { eastM: 450, northM: 350 },
+        { eastM: 650, northM: 700 },
+      ],
+    },
+    groundHeightAt: FLAT_GROUND,
+    nowSeconds: 0,
+    arrivedRadiusM: 75,
+  });
+  const vertices = ribbonVertices(path);
+  assert.ok(vertices.some((vertex) => vertex.northM > 300 && vertex.eastM > 100),
+    "future chevrons must turn onto the next published leg");
+  assert.ok(path.group.userData.routePointCount >= 2);
   path.dispose();
 });
 

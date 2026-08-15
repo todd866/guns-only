@@ -21,7 +21,7 @@ import {
   COBRA_COCKPIT_SAMPLE_BED,
   F14_COCKPIT_SAMPLE_BED,
   ensureLoopingSampleBed,
-} from "./sample_bed.js?v=331";
+} from "./sample_bed.js?v=332";
 import { resolvePropulsionCharacter } from "./audio_character.js";
 import { standardAtmosphereState } from "./atmosphere_audio.js";
 import {

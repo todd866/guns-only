@@ -15,6 +15,10 @@ Two tiers:
                    session and replays the state rows. Answers "did they fly, did
                    they shoot, did they hit anything". Costs real Blob egress.
 
+  --latest-owner   additionally replays only the most recent dev-Mac flight. This
+                   is the bounded owner-debug path: it never widens to all owner
+                   sessions and reports RTB/guidance and gun-assist evidence.
+
 Everything is cached under tmp/telemetry-cache/, so a second run is nearly free.
 """
 
@@ -249,18 +253,18 @@ def non_negative(value):
     return number if number >= 0 else None
 
 
-def deep_funnel(sessions, visitors, refresh):
-    """Download every visitor chunk and replay it. This is the billed path."""
+def deep_funnel(sessions, visitors, refresh, label="visitor"):
+    """Download every selected session chunk and replay it. This is the billed path."""
     chunk_dir = os.path.join(CACHE, "chunks")
     os.makedirs(chunk_dir, exist_ok=True)
     jobs = []
     for name in visitors:
-        for blob in sessions[name]:
+        for blob in sorted(sessions[name], key=lambda item: item["uploadedAt"]):
             out = os.path.join(chunk_dir, blob["pathname"].replace("/", "_"))
             if not os.path.exists(out) or refresh:
                 jobs.append((blob["url"], blob["size"], blob["etag"], out))
     if jobs:
-        print(f"  downloading {len(jobs)} visitor chunks…", file=sys.stderr)
+        print(f"  downloading {len(jobs)} {label} chunks…", file=sys.stderr)
         parallel(jobs)
 
     stats = collections.defaultdict(
@@ -294,7 +298,8 @@ def deep_funnel(sessions, visitors, refresh):
         # never crosses a sortie boundary (which would silently switch this metric to a lifetime
         # sum) and never restarts at a chunk boundary mid-sortie (which would double-count).
         hits_recon = collections.defaultdict(lambda: {"total": 0.0, "last": None})
-        for blob in sessions[name]:
+        entry, state = stats[name], None
+        for blob in sorted(sessions[name], key=lambda item: item["uploadedAt"]):
             path = os.path.join(chunk_dir, blob["pathname"].replace("/", "_"))
             if not os.path.exists(path):
                 continue
@@ -303,7 +308,6 @@ def deep_funnel(sessions, visitors, refresh):
                     rows = [json.loads(line) for line in fh if line.strip()]
             except (OSError, ValueError, EOFError):
                 continue
-            entry, state = stats[name], None
             for row in rows:
                 kind = row.get("k")
                 if kind == "in" and row.get("type") == "lifecycle" \
@@ -353,6 +357,145 @@ def deep_funnel(sessions, visitors, refresh):
                             recon["last"] = value
                             entry["hits"] = max(entry["hits"], recon["total"])
     return stats
+
+
+def latest_owner_diagnostics(sessions, name, refresh):
+    """Replay one owner flight and retain enough evidence to explain a bad sortie."""
+    deep_funnel(sessions, [name], refresh, label="latest-owner")
+    chunk_dir = os.path.join(CACHE, "chunks")
+    result = {
+        "session": name,
+        "samples": 0,
+        "mission_numbers": set(),
+        "airframes": set(),
+        "rounds": 0.0,
+        "hits": 0.0,
+        "assist_active_samples": 0,
+        "assist_status": collections.Counter(),
+        "assist_lead_error_sum": 0.0,
+        "assist_lead_error_samples": 0,
+        "assist_lead_error_max": 0.0,
+        "rtb_intent_samples": 0,
+        "approach_active_samples": 0,
+        "approach_with_gates_samples": 0,
+        "approach_gate_distance_min_m": None,
+        "approach_gate_distance_max_m": None,
+        "recovery_known_samples": 0,
+        "mesh_home_samples": 0,
+        "guidance_mode": collections.Counter(),
+        "guidance_suppression": collections.Counter(),
+    }
+    state = None
+    sortie_stats = {}
+    sortie_order = []
+    for blob in sorted(sessions[name], key=lambda item: item["uploadedAt"]):
+        path = os.path.join(chunk_dir, blob["pathname"].replace("/", "_"))
+        if not os.path.exists(path):
+            continue
+        try:
+            with gzip.open(path, "rt") as fh:
+                rows = [json.loads(line) for line in fh if line.strip()]
+        except (OSError, ValueError, EOFError):
+            continue
+        for row in rows:
+            if row.get("k") != "st":
+                continue
+            state = replay_state(row, state)
+            if not state:
+                continue
+            result["samples"] += 1
+            sortie_id = state.get("telemetry_sortie_id")
+            sortie = None
+            if sortie_id:
+                if sortie_id not in sortie_stats:
+                    sortie_order.append(sortie_id)
+                    sortie_stats[sortie_id] = {
+                        "id": sortie_id, "airframe": None, "samples": 0,
+                        "rounds": 0.0, "hits": 0.0, "assist_active_samples": 0,
+                        "rtb_intent_samples": 0, "approach_active_samples": 0,
+                    }
+                sortie = sortie_stats[sortie_id]
+                sortie["samples"] += 1
+            mission = state.get("mission_number")
+            if mission is not None:
+                result["mission_numbers"].add(str(mission))
+            airframe = state.get("player_aircraft_name") or state.get("player_aircraft_id")
+            if airframe:
+                result["airframes"].add(str(airframe))
+                if sortie is not None:
+                    sortie["airframe"] = str(airframe)
+            for key in ("rounds_fired", "sortie_hits"):
+                value = non_negative(state.get(key))
+                if value is not None:
+                    target = "rounds" if key == "rounds_fired" else "hits"
+                    result[target] = max(result[target], value)
+                    if sortie is not None:
+                        sortie[target] = max(sortie[target], value)
+            assist_active = state.get("gunnery_pitch_assist") is True
+            if assist_active:
+                result["assist_active_samples"] += 1
+                if sortie is not None:
+                    sortie["assist_active_samples"] += 1
+            status_code = state.get("gunnery_assist_status_code")
+            status = status_code if status_code is not None \
+                else state.get("gunnery_assist_status")
+            if status is not None:
+                result["assist_status"][str(status)] += 1
+            lead = non_negative(state.get("gunnery_total_lead_error_deg"))
+            if assist_active and lead is not None:
+                result["assist_lead_error_sum"] += lead
+                result["assist_lead_error_samples"] += 1
+                result["assist_lead_error_max"] = max(result["assist_lead_error_max"], lead)
+            rtb = state.get("player_rtb_active") is True \
+                or state.get("rtb_steer") is True \
+                or state.get("carrier_sortie_route_rtb_requested") is True
+            if rtb:
+                result["rtb_intent_samples"] += 1
+                if sortie is not None:
+                    sortie["rtb_intent_samples"] += 1
+            if state.get("approach_guidance_active") is True:
+                result["approach_active_samples"] += 1
+                if sortie is not None:
+                    sortie["approach_active_samples"] += 1
+                gates = state.get("approach_gates")
+                gate_count = int(non_negative(state.get("approach_gate_count")) or 0)
+                valid_gates = gates[:gate_count] if isinstance(gates, list) else []
+                if valid_gates:
+                    result["approach_with_gates_samples"] += 1
+                    px, pz = state.get("px"), state.get("pz")
+                    if isinstance(px, (int, float)) and isinstance(pz, (int, float)):
+                        for gate in valid_gates:
+                            east, north = gate.get("east_m"), gate.get("north_m")
+                            if isinstance(east, (int, float)) and isinstance(north, (int, float)):
+                                distance = ((east - px) ** 2 + (north - pz) ** 2) ** 0.5
+                                lo = result["approach_gate_distance_min_m"]
+                                hi = result["approach_gate_distance_max_m"]
+                                result["approach_gate_distance_min_m"] = distance \
+                                    if lo is None else min(lo, distance)
+                                result["approach_gate_distance_max_m"] = distance \
+                                    if hi is None else max(hi, distance)
+            if state.get("recovery_point_known") is True:
+                result["recovery_known_samples"] += 1
+            if isinstance(state.get("mesh_home_east_m"), (int, float)) \
+                    and isinstance(state.get("mesh_home_north_m"), (int, float)):
+                result["mesh_home_samples"] += 1
+            mode = state.get("presentation_guidance_mode")
+            if mode:
+                result["guidance_mode"][str(mode)] += 1
+            suppression = state.get("presentation_guidance_suppression")
+            if suppression:
+                result["guidance_suppression"][str(suppression)] += 1
+    result["mission_numbers"] = sorted(result["mission_numbers"])
+    result["airframes"] = sorted(result["airframes"])
+    result["assist_status"] = dict(result["assist_status"])
+    result["guidance_mode"] = dict(result["guidance_mode"])
+    result["guidance_suppression"] = dict(result["guidance_suppression"])
+    samples = result.pop("assist_lead_error_samples")
+    total = result.pop("assist_lead_error_sum")
+    result["assist_lead_error_avg"] = total / samples if samples else None
+    result["sorties"] = [sortie_stats[sortie_id] for sortie_id in sortie_order]
+    result["latest_sortie"] = result["sorties"][-1] if result["sorties"] else None
+    return result
 
 
 def shell_health_summary(sessions, shell_names, refresh):
@@ -422,6 +565,8 @@ def main():
     parser.add_argument("--days", type=int, default=7, help="window to report on (default 7)")
     parser.add_argument("--deep", action="store_true",
                         help="also replay visitor sessions for the combat funnel (billed)")
+    parser.add_argument("--latest-owner", action="store_true",
+                        help="replay only the latest dev-Mac flight for diagnostics (billed)")
     parser.add_argument("--refresh", action="store_true", help="ignore cached data")
     parser.add_argument("--json", help="also write the raw result to this path")
     args = parser.parse_args()
@@ -579,6 +724,41 @@ def main():
             "rounds": rounds, "hits": hits, "kills": kills,
         }
         payload["mobile_funnel"] = mobile_payload
+
+    if args.latest_owner and owner:
+        latest = max(owner, key=lambda name: int(name.split("-")[1]))
+        diag = latest_owner_diagnostics(sessions, latest, args.refresh)
+        payload["latest_owner"] = diag
+        print("\n" + line)
+        print("LATEST OWNER FLIGHT (bounded diagnostic replay)")
+        print(line)
+        print(f"  session                 {diag['session']}")
+        print(f"  samples                 {diag['samples']:>6}")
+        print(f"  missions                {', '.join(diag['mission_numbers']) or 'unknown'}")
+        print(f"  airframes               {', '.join(diag['airframes']) or 'unknown'}")
+        print(f"  rounds / hits           {int(diag['rounds'])} / {int(diag['hits'])}")
+        print(f"  assist active samples   {diag['assist_active_samples']:>6}")
+        print(f"  lead error avg / max    {diag['assist_lead_error_avg']} / "
+              f"{diag['assist_lead_error_max']}")
+        print(f"  assist status           {diag['assist_status']}")
+        print(f"  RTB intent samples      {diag['rtb_intent_samples']:>6}")
+        print(f"  approach active/gated   {diag['approach_active_samples']} / "
+              f"{diag['approach_with_gates_samples']}")
+        print(f"  approach gate distance  {diag['approach_gate_distance_min_m']} / "
+              f"{diag['approach_gate_distance_max_m']} m")
+        print(f"  recovery known/home     {diag['recovery_known_samples']} / "
+              f"{diag['mesh_home_samples']}")
+        print(f"  rendered guidance       {diag['guidance_mode']}")
+        print(f"  guidance suppression    {diag['guidance_suppression']}")
+        if diag["latest_sortie"]:
+            sortie = diag["latest_sortie"]
+            print("  latest sortie")
+            print(f"    id / airframe         {sortie['id']} / {sortie['airframe']}")
+            print(f"    samples               {sortie['samples']}")
+            print(f"    rounds / hits         {int(sortie['rounds'])} / {int(sortie['hits'])}")
+            print(f"    assist active         {sortie['assist_active_samples']}")
+            print(f"    RTB / approach        {sortie['rtb_intent_samples']} / "
+                  f"{sortie['approach_active_samples']}")
 
     if args.json:
         with open(args.json, "w") as fh:

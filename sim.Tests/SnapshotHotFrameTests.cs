@@ -87,7 +87,7 @@ public class SnapshotHotFrameTests {
     static void AssertHotFrameMatchesJson(JsonElement root, double[] buffer) {
         using JsonDocument layoutDocument = JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
         JsonElement layout = layoutDocument.RootElement;
-        Assert.Equal(25, layout.GetProperty("layout_version").GetInt32());
+        Assert.Equal(26, layout.GetProperty("layout_version").GetInt32());
         Assert.Equal(SnapshotHotFrame.SlotCount, layout.GetProperty("slot_count").GetInt32());
         string[] names = layout.GetProperty("blocks")
             .EnumerateArray()
@@ -96,6 +96,12 @@ public class SnapshotHotFrameTests {
             .ToArray();
         Assert.Contains("padlock_preferred_plane_valid", names);
         Assert.Contains("padlock_preferred_plane_deg", names);
+        Assert.Contains("gunnery_assist_status_code", names);
+        Assert.Contains("gunnery_lateral_error_deg", names);
+        Assert.Contains("gunnery_assist_authority_01", names);
+        Assert.Contains("gunnery_roll_assist", names);
+        Assert.Contains("gunnery_yaw_assist", names);
+        Assert.Contains("gunnery_time_to_pass_s", names);
         Assert.Contains("rapier_target_gamma_deg", names);
         Assert.Contains("rapier_relight_dynamic_pressure_kpa", names);
         Assert.Contains("opponent_wing_sweep_deg", names);
@@ -585,7 +591,7 @@ public class SnapshotHotFrameTests {
             using JsonDocument layoutDocument =
                 JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
             JsonElement layout = layoutDocument.RootElement;
-            Assert.Equal(25, layout.GetProperty("layout_version").GetInt32());
+            Assert.Equal(26, layout.GetProperty("layout_version").GetInt32());
             JsonElement[] slots = layout.GetProperty("blocks")
                 .EnumerateArray()
                 .SelectMany(block => block.GetProperty("slots").EnumerateArray())
