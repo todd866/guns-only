@@ -20,7 +20,7 @@ function hostileSite(id, label, xM) {
   };
 }
 
-test("objective copy and map both skip a near cleared point for a farther live garrison", () => {
+test("objective copy and map keep the first hostile point until it flips friendly", () => {
   const sites = [
     hostileSite("cleared", "Near Cleared", 200),
     hostileSite("garrisoned", "Far Garrison", 1_200),
@@ -47,9 +47,8 @@ test("objective copy and map both skip a near cleared point for a farther live g
     heightPx: 300,
   });
 
-  assert.equal(copy.line, "DESTROY GARRISON · FAR GARRISON");
-  assert.match(copy.detail, /^1\.2 km — /);
-  assert.equal(map.objective?.siteId, "garrisoned");
-  assert.equal(map.objective?.label.toUpperCase(), "FAR GARRISON");
-  assert.equal(map.objective?.rangeM, 1_200);
+  assert.equal(copy.line, "LIFT INBOUND · NEAR CLEARED");
+  assert.equal(map.objective?.siteId, "cleared");
+  assert.equal(map.objective?.label.toUpperCase(), "NEAR CLEARED");
+  assert.equal(map.objective?.rangeM, 200);
 });

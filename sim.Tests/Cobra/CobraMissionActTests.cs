@@ -125,12 +125,17 @@ public class CobraMissionActTests
             route,
             Fob,
             fobPathAltitudeM: Fob.Y + 30.0);
-        Assert.Equal(3, gates.Count);
+        Assert.Equal(6, gates.Count);
         CobraPathGate active = gates.Single(g => g.Active);
-        Vec3D first = CampEmberOperations.PointAlongFinal(180.0);
+        Vec3D first = CampEmberOperations.PointAlongFinal(140.0);
         Assert.Equal(first.X, active.EastM, 6);
         Assert.Equal(first.Z, active.NorthM, 6);
         Assert.True(active.UpM > CampEmberOperations.PadElevationM + 20.0);
+        CobraCanyonRoutePoint routeJoin = route.Points[3];
+        Assert.Equal(routeJoin.EastM, gates[^1].EastM, 6);
+        Assert.Equal(routeJoin.NorthM, gates[^1].NorthM, 6);
+        Assert.All(gates, gate =>
+            Assert.True(gate.UpM >= CampEmberOperations.PadElevationM + 42.0));
     }
 
     [Fact]

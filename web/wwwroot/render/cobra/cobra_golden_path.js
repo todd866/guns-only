@@ -23,28 +23,30 @@
  */
 
 /** Presentation contract id, in the house `guns-only.<thing>.vN` form. */
-import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=335";
-import { emberRtbVisualState } from "./cobra_ember_path.js?v=335";
+import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=336";
+import { emberRtbVisualState } from "./cobra_ember_path.js?v=336";
 
 export const COBRA_GOLDEN_PATH_SCHEMA = "guns-only.cobra-golden-path.v2";
 
 export const COBRA_GOLDEN_PATH_DEFAULTS = Object.freeze({
   /** Sparse preview: enough future information to read the route without forming a tunnel. */
-  markerCount: 8,
-  markerSpacingM: 90,
-  markerHalfWidthM: 7,
-  markerHeightM: 4,
-  markerThicknessM: 1.05,
+  markerCount: 18,
+  markerSpacingM: 50,
+  markerHalfWidthM: 10,
+  markerHeightM: 5,
+  markerThicknessM: 1.35,
   /** Fallback and eye-following clearance limits (m AGL). */
-  clearanceM: 34,
-  minClearanceM: 14,
-  maxClearanceM: 55,
-  eyeLineOffsetM: -12,
+  clearanceM: 38,
+  minClearanceM: 28,
+  maxClearanceM: 65,
+  /** A departure cue is a climb instruction, not merely a terrain-following trace. */
+  departureClearanceM: 42,
+  eyeLineOffsetM: -4,
   /** Long enough for turn preview, short enough that cues do not carpet the valley. */
-  maxLengthM: 1_400,
-  leadM: 95,
+  maxLengthM: 1_600,
+  leadM: 55,
   /** Normal alpha keeps the amber legible without additive white bloom. */
-  peakOpacity: 0.82,
+  peakOpacity: 0.89,
   /** One leader traverses the marker sequence roughly every four seconds. */
   flowCyclesPerSecond: 0.24,
   /** Ship must move this far before the spine is re-sampled. */
@@ -52,7 +54,7 @@ export const COBRA_GOLDEN_PATH_DEFAULTS = Object.freeze({
   /** Fully transparent inside this range; it has finished its job. */
   arrivedRadiusM: 260,
   rtbArrivedRadiusM: 75,
-  routeArrivedRadiusM: 75,
+  routeArrivedRadiusM: 24,
   /**
    * Pale warm haze. Sits between the profile's sun (0xffe2b4) and its fog (0x8a9fa5), because that
    * is physically what lit mist is: sunlight scattered by the air the scene is already full of.
@@ -86,8 +88,8 @@ void main() {
     * (1.0 - smoothstep(0.78, 1.0, vMarkerUv.y));
   float delta = abs(fract(vMarkerUv.x - uFlow + 0.5) - 0.5);
   float leader = 1.0 - smoothstep(0.02, 0.14, delta);
-  float distanceFade = mix(1.0, 0.58, vMarkerUv.x);
-  float alpha = uOpacity * edge * distanceFade * (0.46 + 0.44 * leader);
+  float distanceFade = mix(1.0, 0.74, vMarkerUv.x);
+  float alpha = uOpacity * edge * distanceFade * (0.58 + 0.38 * leader);
   if (alpha < 0.004) discard;
   gl_FragColor = vec4(uColor, alpha);
 }
@@ -144,12 +146,25 @@ function cobraRouteGateObjective(pathGates, missionAct) {
   const gate = gates[index];
   const eastM = Number(gate?.east_m);
   const northM = Number(gate?.north_m);
-  const routePoints = gates.slice(index, index + 4).map((candidate) => ({
-    eastM: Number(candidate?.east_m),
-    northM: Number(candidate?.north_m),
-  })).filter((point) => Number.isFinite(point.eastM) && Number.isFinite(point.northM));
+  const upM = Number(gate?.up_m);
+  const routePoints = gates.slice(index, index + 6).map((candidate) => {
+    const point = {
+      eastM: Number(candidate?.east_m),
+      northM: Number(candidate?.north_m),
+    };
+    const candidateUpM = Number(candidate?.up_m);
+    if (Number.isFinite(candidateUpM)) point.upM = candidateUpM;
+    return point;
+  }).filter((point) => Number.isFinite(point.eastM) && Number.isFinite(point.northM));
   return index >= 0 && Number.isFinite(eastM) && Number.isFinite(northM)
-    ? { siteId: `ember-route-gate-${index}`, eastM, northM, mode: "route", routePoints }
+    ? {
+      siteId: `ember-route-gate-${index}`,
+      eastM,
+      northM,
+      mode: act === "depart" ? "depart" : "route",
+      routePoints,
+      ...(Number.isFinite(upM) ? { upM } : {}),
+    }
     : null;
 }
 
@@ -367,14 +382,19 @@ export function createCobraGoldenPath(THREE, options = {}) {
     const authored = Array.isArray(objective.routePoints) && objective.routePoints.length
       ? objective.routePoints
       : [objective];
-    const points = [{ eastM: playerEastM, northM: playerNorthM }];
+    const points = [{ eastM: playerEastM, northM: playerNorthM, upM: playerAltitudeM }];
     for (const point of authored) {
       const eastM = Number(point?.eastM);
       const northM = Number(point?.northM);
+      const upM = Number(point?.upM);
       if (!Number.isFinite(eastM) || !Number.isFinite(northM)) continue;
       const previous = points[points.length - 1];
       if (Math.hypot(eastM - previous.eastM, northM - previous.northM) > 1)
-        points.push({ eastM, northM });
+        points.push({
+          eastM,
+          northM,
+          upM: Number.isFinite(upM) ? upM : undefined,
+        });
     }
     if (points.length < 2) return false;
     const segments = [];
@@ -392,6 +412,8 @@ export function createCobraGoldenPath(THREE, options = {}) {
         startM: rangeM,
         dirEast: deltaEast / lengthM,
         dirNorth: deltaNorth / lengthM,
+        fromUpM: Number(from.upM),
+        toUpM: Number(to.upM),
       });
       rangeM += lengthM;
     }
@@ -413,12 +435,14 @@ export function createCobraGoldenPath(THREE, options = {}) {
       return Number.isFinite(groundM) ? groundM : 0;
     };
     const playerAglM = playerAltitudeM - at(playerEastM, playerNorthM);
-    const desiredClearanceM = Number.isFinite(playerAglM)
+    let desiredClearanceM = Number.isFinite(playerAglM)
       ? Math.min(config.maxClearanceM, Math.max(
         config.minClearanceM,
         playerAglM + config.eyeLineOffsetM,
       ))
       : config.clearanceM;
+    if (objective.mode === "depart")
+      desiredClearanceM = Math.max(desiredClearanceM, config.departureClearanceM);
     group.userData.clearanceM = desiredClearanceM;
     group.userData.mode = objective.mode ?? "objective";
 
@@ -441,6 +465,10 @@ export function createCobraGoldenPath(THREE, options = {}) {
         northM: segment.from.northM + segment.dirNorth * alongM,
         dirEast: segment.dirEast,
         dirNorth: segment.dirNorth,
+        upM: Number.isFinite(segment.fromUpM) && Number.isFinite(segment.toUpM)
+          ? segment.fromUpM
+            + (segment.toUpM - segment.fromUpM) * (alongM / segment.lengthM)
+          : undefined,
       };
     };
     for (let marker = 0; marker < activeMarkerCount; marker += 1) {
@@ -460,12 +488,18 @@ export function createCobraGoldenPath(THREE, options = {}) {
         at(eastM - perpEast * markerHalfWidthM,
           northM - perpNorth * markerHalfWidthM),
       );
-      spineUp[marker] = groundM + desiredClearanceM + config.markerThicknessM * 0.5;
+      const terrainSafeUpM = groundM + desiredClearanceM + config.markerThicknessM * 0.5;
+      spineUp[marker] = Number.isFinite(route.upM)
+        ? Math.max(terrainSafeUpM, route.upM)
+        : terrainSafeUpM;
     }
 
     const maxDropM = Math.max(0, config.descentGradient) * markerStepM;
     for (let marker = 1; marker < activeMarkerCount; marker += 1) {
-      spineUp[marker] = Math.max(spineUp[marker], spineUp[marker - 1] - maxDropM);
+      spineUp[marker] = Math.max(
+        spineUp[marker],
+        objective.mode === "depart" ? spineUp[marker - 1] : spineUp[marker - 1] - maxDropM,
+      );
     }
     for (let marker = activeMarkerCount - 2; marker >= 0; marker -= 1) {
       spineUp[marker] = Math.max(spineUp[marker], spineUp[marker + 1] - maxDropM);

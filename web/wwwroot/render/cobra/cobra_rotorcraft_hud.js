@@ -1,4 +1,5 @@
 import { gunnerStatusText } from "./cobra_gunner_status.js";
+import { cobraObjectiveSiteId } from "./cobra_objective_site.js";
 import { fighterHudLayout } from "../hud/fighter_layout.js";
 
 const MPS_TO_KT = 3600 / 1852;
@@ -53,6 +54,49 @@ function targetRoleLabel(unit, war) {
   const home = (war?.sites ?? []).find((site) => site?.id === unit?.home_site_id);
   const siteLabel = String(home?.label ?? "").trim().toUpperCase();
   return siteLabel ? `${roleLabel} · ${siteLabel}` : roleLabel;
+}
+
+function wrapPi(angle) {
+  let wrapped = Number(angle) || 0;
+  while (wrapped > Math.PI) wrapped -= Math.PI * 2;
+  while (wrapped < -Math.PI) wrapped += Math.PI * 2;
+  return wrapped;
+}
+
+function tacticalPicture(authorityState, vehicle, war) {
+  const sites = Array.isArray(war?.sites) ? war.sites : [];
+  const units = Array.isArray(war?.units) ? war.units : [];
+  const siteId = cobraObjectiveSiteId({ sites, units, player: vehicle });
+  const site = sites.find((candidate) => candidate?.id === siteId) ?? null;
+  if (!site) return { objective: null, target: null, threats: [] };
+  const ownEast = finite(vehicle?.x_m);
+  const ownNorth = finite(vehicle?.z_m);
+  const ownUp = finite(vehicle?.y_m);
+  const ownHeading = finite(vehicle?.yaw_rad);
+  const symbol = (source, kind, label) => {
+    const east = finite(source?.x_m);
+    const north = finite(source?.z_m);
+    const up = finite(source?.y_m);
+    return {
+      id: source?.id ?? `${kind}.${siteId}`,
+      kind,
+      label,
+      worldX: east,
+      worldY: up,
+      worldZ: north,
+      rangeM: Math.hypot(east - ownEast, up - ownUp, north - ownNorth),
+      relativeBearingRad: wrapPi(Math.atan2(east - ownEast, north - ownNorth) - ownHeading),
+    };
+  };
+  const objective = symbol(site, "objective", String(site.label ?? "OBJECTIVE").toUpperCase());
+  const targetUnit = units.find((unit) => unit?.alive === true
+    && unit.home_site_id === siteId && String(unit.id ?? "").endsWith(".garrison")) ?? null;
+  const target = targetUnit ? symbol(targetUnit, "target", "GARRISON") : null;
+  const threats = units
+    .filter((unit) => unit?.alive === true && unit.faction === "hostile" && unit.role === "dshk-site")
+    .map((unit) => symbol(unit, "air-threat", "AA"))
+    .sort((a, b) => a.rangeM - b.rangeM);
+  return { objective, target, threats };
 }
 
 function regimeToken(regime) {
@@ -149,7 +193,7 @@ function groundFireWarning(battleDamage, vehicle) {
  * limits, hover-graded VSI/AGL, ranked rotor-state annunciations, and the gunner
  * crew line. Never invents Nr, torque, severity, or gunner state.
  */
-export function cobraRotorcraftHudModel(authorityState) {
+export function cobraRotorcraftHudModel(authorityState, formation = null) {
   const vehicle = authorityState?.vehicle;
   const rotor = vehicle?.rotorcraft;
   if (!vehicle || !rotor) return null;
@@ -254,6 +298,7 @@ export function cobraRotorcraftHudModel(authorityState) {
       ? "FOB PAD · REARM"
       : `FOB ${formatAviationRange(finite(war.fob_range_m), { style: "nav" })}`);
   }
+  const tactical = tacticalPicture(authorityState, vehicle, war);
 
   return {
     rotor: {
@@ -275,6 +320,11 @@ export function cobraRotorcraftHudModel(authorityState) {
     warnings,
     gunner: { line, level: gunnerLevel, detail: detailParts.join(" · ") },
     designation,
+    tactical,
+    formation: {
+      lead: formation?.lead ?? null,
+      radio: formation?.radio ?? null,
+    },
   };
 }
 
@@ -304,6 +354,107 @@ function panel(ctx, x, y, width, height, border) {
   ctx.stroke();
 }
 
+function drawTacticalAwareness(ctx, model, { width, projectWorldPoint }) {
+  const tactical = model.tactical;
+  if (!tactical?.objective) return;
+  const compassY = 148;
+  const spanPx = Math.min(390, width * 0.34);
+  const plotBearing = (symbol, color, shape) => {
+    const normalized = Math.max(-1, Math.min(1, symbol.relativeBearingRad / (Math.PI / 3)));
+    const x = width / 2 + normalized * spanPx;
+    ctx.save();
+    ctx.translate(x, compassY);
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    if (shape === "triangle") {
+      ctx.moveTo(0, -6);
+      ctx.lineTo(5, 4);
+      ctx.lineTo(-5, 4);
+      ctx.closePath();
+    } else {
+      ctx.moveTo(0, -6);
+      ctx.lineTo(6, 0);
+      ctx.lineTo(0, 6);
+      ctx.lineTo(-6, 0);
+      ctx.closePath();
+    }
+    ctx.stroke();
+    ctx.restore();
+  };
+  plotBearing(tactical.objective, AMBER, "diamond");
+  for (const threat of tactical.threats) plotBearing(threat, RED, "triangle");
+
+  const line = `◇ ${tactical.objective.label} ${formatAviationRange(tactical.objective.rangeM, { style: "nav" })}`
+    + `   △ AA ${tactical.threats.length}`;
+  ctx.fillStyle = AMBER;
+  ctx.font = `800 10px ${MONO}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(line, width / 2, compassY + 18);
+
+  if (typeof projectWorldPoint !== "function") return;
+  const primary = tactical.target && model.designation?.id === tactical.target.id
+    ? tactical.objective
+    : (tactical.target ?? tactical.objective);
+  const symbols = [primary, ...tactical.threats];
+  for (const symbol of symbols) {
+    const point = projectWorldPoint(
+      symbol.worldX,
+      symbol.worldY + (symbol.kind === "air-threat" ? 10 : 18),
+      symbol.worldZ,
+    );
+    if (!point?.inFrame) continue;
+    const threat = symbol.kind === "air-threat";
+    const color = threat ? RED : AMBER;
+    const half = threat ? 9 : 12;
+    ctx.save();
+    ctx.translate(point.x, point.y);
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    if (threat) {
+      ctx.moveTo(0, -half);
+      ctx.lineTo(half * 0.86, half * 0.7);
+      ctx.lineTo(-half * 0.86, half * 0.7);
+      ctx.closePath();
+    } else {
+      ctx.moveTo(0, -half);
+      ctx.lineTo(half, 0);
+      ctx.lineTo(0, half);
+      ctx.lineTo(-half, 0);
+      ctx.closePath();
+    }
+    ctx.stroke();
+    ctx.font = `800 9px ${MONO}`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(`${symbol.label} · ${formatAviationRange(symbol.rangeM, { style: "nav" })}`,
+      half + 5, 0);
+    ctx.restore();
+  }
+
+  const lead = model.formation?.lead;
+  if (lead && typeof projectWorldPoint === "function") {
+    const point = projectWorldPoint(lead.x_m, lead.y_m, lead.z_m);
+    if (point?.inFrame === true) {
+      ctx.save();
+      ctx.strokeStyle = GREEN;
+      ctx.fillStyle = GREEN;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 12, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.font = `800 9px ${MONO}`;
+      ctx.textAlign = "left";
+      ctx.fillText("EMBER 1 · LEAD", point.x + 17, point.y);
+      ctx.restore();
+    }
+  }
+}
+
 /**
  * Paint the rotorcraft extras onto the SAME combiner canvas hud.js just committed,
  * in the same layout lanes (fighterHudLayout) and visual language. Draw order in
@@ -325,6 +476,23 @@ export function drawCobraRotorcraftHud(ctx, model, {
   ctx.save();
   ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   ctx.textBaseline = "middle";
+
+  // Mission geometry first: a bearing rail plus world-registered target/threat shapes. This is
+  // the tactical picture the Build 335 recording lacked; it is not another prose instruction.
+  drawTacticalAwareness(ctx, model, { width, projectWorldPoint });
+
+  const radio = model.formation?.radio;
+  if (radio?.text) {
+    ctx.font = `800 11px ${MONO}`;
+    const text = `${radio.speaker || "R/T"}: ${radio.text}`;
+    const panelWidth = Math.min(width - 40, ctx.measureText(text).width + 28);
+    const x = (width - panelWidth) / 2;
+    const y = 176;
+    panel(ctx, x, y, panelWidth, 27, "rgba(77, 255, 136, 0.72)");
+    ctx.fillStyle = GREEN;
+    ctx.textAlign = "center";
+    ctx.fillText(text, width / 2, y + 14);
+  }
 
   // ROTOR panel under the speed tape: NR% is the rotorcraft's life instrument, TQ%
   // the limit the collective spends. Levels follow authoritative limits, not vibes.

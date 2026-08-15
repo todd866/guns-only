@@ -63,7 +63,10 @@ function model(overrides = {}) {
   return cobraTacticalMapModel({
     sites: SITES,
     units: [
-      { id: "bridge.garrison", faction: "hostile", alive: true, x_m: 810, y_m: 0, z_m: 210, role: "garrison" },
+      { id: "ford.garrison", faction: "hostile", alive: true, x_m: 810, y_m: 0, z_m: 210,
+        role: "hard-point", home_site_id: "ford" },
+      { id: "observer.ridge", faction: "hostile", alive: true, x_m: 700, y_m: 0, z_m: 350,
+        role: "dshk-site", home_site_id: "ford", air_threat_range_m: 5_500 },
       { id: "fri.1", faction: "friendly", alive: true, x_m: 250, y_m: 0, z_m: 760, role: "infantry" },
     ],
     tickets: { friendly: 280, hostile: 190 },
@@ -123,7 +126,10 @@ test("the player marker is drawn rotated by its heading, and is not a site disc"
   const rotate = ctx.calls.find((call) => call.name === "rotate");
   assert.ok(rotate, "player marker never rotated");
   assert.equal(rotate.args[0], 2.4);
-  const translate = ctx.calls.find((call) => call.name === "translate");
+  const translate = ctx.calls.find((call) => call.name === "translate"
+    && Math.abs(call.args[0] - map.player.x) < 1e-6
+    && Math.abs(call.args[1] - map.player.y) < 1e-6);
+  assert.ok(translate, "player marker was not translated to the player position");
   assert.deepEqual(translate.args, [map.player.x, map.player.y]);
   // Triangle, not a disc: a closed path of straight segments in the player's own colour.
   const closed = ctx.calls.filter((call) => call.name === "closePath");
@@ -230,8 +236,8 @@ test("the minimap names only the objective; the full map names everything", () =
     `objective must be named on the minimap: ${miniTexts.join(" | ")}`);
   assert.ok(!miniTexts.includes("BRIDGE"),
     "a non-objective point must not be named on the minimap");
-  assert.ok(miniTexts.includes("PTS 1–1 · TKT 280–190 · STALEMATE"),
-    `compact score missing from minimap: ${miniTexts.join(" | ")}`);
+  assert.ok(miniTexts.includes("◇ FORD · 1 TGT · △ 1 AA"),
+    `tactical summary missing from minimap: ${miniTexts.join(" | ")}`);
   assert.ok(!miniTexts.some((text) => /FRIENDLY 280|HOSTILE 190/.test(text)),
     "expanded ticket labels belong to the full map only");
 
@@ -329,12 +335,12 @@ test("the objective caption reaches the minimap, above the chart", () => {
     headerPx: COBRA_MAP_CAPTION_PX.mini,
     caption: { line: "DESTROY GARRISON · LONG FANG", detail: "1.8 km" },
   });
-  // Three lines: order, place, then persistent conquest score. They are drawn in the BAND,
+  // Three lines: order, place, then persistent target/threat summary. They are drawn in the BAND,
   // before the chart is translated down; site labels and chart furniture follow underneath.
   const texts = ctx.calls.filter((call) => call.name === "fillText");
   assert.deepEqual(
     texts.slice(0, 3).map((call) => String(call.args[0])),
-    ["DESTROY GARRISON", "LONG FANG", "PTS 1–1 · TKT 280–190 · STALEMATE"],
+    ["DESTROY GARRISON", "LONG FANG", "◇ FORD · 1 TGT · △ 1 AA"],
   );
   const captionRowsY = texts.slice(0, 3).map((call) => call.args[2]);
   assert.ok(captionRowsY[0] < captionRowsY[1] && captionRowsY[1] < captionRowsY[2],
@@ -375,7 +381,7 @@ test("no caption means no band and no translate", () => {
   assert.ok(!ctx.calls.some((call) => call.name === "translate" && call.args[1] === COBRA_MAP_CAPTION_PX.mini));
 });
 
-test("the conquest score remains visible when the combat order is temporarily absent", () => {
+test("the target and threat summary remains visible when the combat order is absent", () => {
   const ctx = recordingContext();
   drawCobraTacticalMap(ctx, model({ heightPx: 154 }), {
     headerPx: COBRA_MAP_CAPTION_PX.mini,
@@ -384,10 +390,10 @@ test("the conquest score remains visible when the combat order is temporarily ab
   const texts = ctx.calls
     .filter((call) => call.name === "fillText")
     .map((call) => String(call.args[0]));
-  assert.equal(texts[0], "PTS 1–1 · TKT 280–190 · STALEMATE");
+  assert.equal(texts[0], "◇ FORD · 1 TGT · △ 1 AA");
   assert.ok(ctx.calls.some((call) => call.name === "translate"
     && call.args[1] === COBRA_MAP_CAPTION_PX.mini),
-  "the chart must still make room for its persistent score band");
+  "the chart must still make room for its persistent tactical band");
 });
 
 test("the lab wires the objective caption into both charts", async () => {

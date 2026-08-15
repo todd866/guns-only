@@ -210,8 +210,8 @@ test("corridor rides just below eye height within a safe nap-of-earth band", () 
     nowSeconds: 0,
     arrivedRadiusM: 75,
   });
-  assert.equal(path.group.userData.clearanceM, 30,
-    "100 m terrain + 42 m eye AGL - 12 m bias puts the cues under the gunsight");
+  assert.equal(path.group.userData.clearanceM, 38,
+    "100 m terrain + 42 m eye AGL - 4 m bias keeps the cues above the canopy");
   assert.ok(path.group.userData.clearanceM >= COBRA_GOLDEN_PATH_DEFAULTS.minClearanceM);
   assert.ok(path.group.userData.clearanceM <= COBRA_GOLDEN_PATH_DEFAULTS.maxClearanceM);
   path.dispose();
@@ -350,7 +350,7 @@ test("the objective is the same site the tactical map calls the objective", () =
   });
   const mine = cobraGoldenPathObjective({ sites }, player);
   assert.equal(mine.siteId, model.objective.siteId);
-  assert.equal(mine.siteId, "site.near-hostile");
+  assert.equal(mine.siteId, "site.far-hostile");
 
   // No hostile site, no path.
   assert.equal(cobraGoldenPathObjective({ sites: [sites[0]] }, player), null);
@@ -460,7 +460,7 @@ test("departure stays on the authority's active leg and uses a tight route arriv
     siteId: "ember-route-gate-0",
     eastM: 275,
     northM: 0,
-    mode: "route",
+    mode: "depart",
     routePoints: [
       { eastM: 275, northM: 0 },
       { eastM: 850, northM: 1_100 },
@@ -471,7 +471,40 @@ test("departure stays on the authority's active leg and uses a tight route arriv
     "the first 275 m departure leg remains fully readable from the pad");
 });
 
-test("short legs use three sparse cues instead of compressing the whole corridor into a stack", () => {
+test("departure consumes authority altitude and never draws a descending cue", () => {
+  const path = createCobraGoldenPath(fakeThree(), {
+    markerCount: 8,
+    markerSpacingM: 50,
+    maxLengthM: 600,
+  });
+  path.update({
+    player: playerAt(0, 0, 102),
+    objective: {
+      siteId: "ember-route-gate-0",
+      eastM: 160,
+      northM: 0,
+      upM: 145,
+      mode: "depart",
+      routePoints: [
+        { eastM: 160, northM: 0, upM: 145 },
+        { eastM: 320, northM: 120, upM: 168 },
+      ],
+    },
+    groundHeightAt: () => 100,
+    nowSeconds: 0,
+    arrivedRadiusM: 24,
+  });
+  const positions = path.group.children[0].geometry.attributes.position.array;
+  const apexHeights = [];
+  for (let marker = 0; marker < path.group.userData.activeMarkerCount; marker += 1)
+    apexHeights.push(positions[(marker * 8 + 3) * 3 + 1]);
+  for (let index = 1; index < apexHeights.length; index += 1)
+    assert.ok(apexHeights[index] >= apexHeights[index - 1] - 1e-6);
+  assert.ok(Math.min(...apexHeights) >= 142,
+    "departure cue stays at least 42 m above the sampled forest");
+});
+
+test("short legs use a readable handful of cues instead of compressing into a stack", () => {
   const path = createCobraGoldenPath(fakeThree());
   path.update({
     player: playerAt(0, 0, 120),
@@ -480,9 +513,9 @@ test("short legs use three sparse cues instead of compressing the whole corridor
     nowSeconds: 0,
     arrivedRadiusM: 75,
   });
-  assert.equal(path.group.userData.activeMarkerCount, 3);
+  assert.equal(path.group.userData.activeMarkerCount, 5);
   const positions = path.group.children[0].geometry.attributes.position.array;
-  const hiddenStart = 3 * 8 * 3;
+  const hiddenStart = path.group.userData.activeMarkerCount * 8 * 3;
   for (let index = hiddenStart + 3; index < positions.length; index += 3) {
     assert.equal(positions[index], positions[hiddenStart], "unused cue vertices are degenerate");
     assert.equal(positions[index + 1], positions[hiddenStart + 1]);

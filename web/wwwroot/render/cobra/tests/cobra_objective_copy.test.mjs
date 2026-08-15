@@ -158,7 +158,7 @@ test("3. a hostile point with a living garrison is the core instruction, with ra
   assert.match(copy.detail, /^400 m — kill the garrison and friendlies will take the point$/);
 });
 
-test("3. the NEAREST garrisoned point wins, and kilometre ranges get one decimal", () => {
+test("3. the first hostile point stays locked even when another garrison is nearer", () => {
   const copy = cobraObjectiveCopy(conquest({
     sites: [
       site("ford", "Ford", "hostile", { x_m: 4_200 }),
@@ -166,8 +166,8 @@ test("3. the NEAREST garrisoned point wins, and kilometre ranges get one decimal
     ],
     units: [garrison("ford"), garrison("quarry")],
   }), { player: PLAYER });
-  assert.equal(copy.line, "DESTROY GARRISON · QUARRY");
-  assert.match(copy.detail, /^1\.5 km — /);
+  assert.equal(copy.line, "DESTROY GARRISON · FORD");
+  assert.match(copy.detail, /^4\.2 km — /);
 });
 
 test("3. a dead garrison does not keep the destroy order up", () => {
