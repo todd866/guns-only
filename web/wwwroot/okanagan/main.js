@@ -1,25 +1,49 @@
-import * as THREE from "../vendor/three.module.js?v=338";
-import { createOkanaganWorld } from "../render/okanagan/okanagan_world.js?v=338";
-import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=338";
-import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=338";
-import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=338";
+import * as THREE from "../vendor/three.module.js?v=339";
+import { createOkanaganWorld } from "../render/okanagan/okanagan_world.js?v=339";
+import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=339";
+import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=339";
+import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=339";
+import { createHud } from "../hud.js?v=339";
+import {
+  armFlightAudio,
+  flightAudioDiagnostics,
+  isFlightAudioEnabled,
+  setFlightAudioEnabled,
+  suspendFlightAudio,
+  updateFlightAudio,
+} from "../render/audio/flight_audio.js?v=339";
+import { standardGamepadState } from "../render/input/dual_stick_input.js?v=339";
+import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=339";
+import {
+  compactOkanaganCue,
+  okanaganFlightState,
+} from "../render/okanagan/okanagan_hud_adapter.js?v=339";
+import {
+  cycleOkanaganTarget,
+  okanaganTargets,
+  retainOkanaganTarget,
+} from "../render/okanagan/okanagan_targets.js?v=339";
 
 const SORTIES = Object.freeze({
-  "water-circuits": { index: 0, title: "Water Circuits", working: "197 kg planned" },
-  "fire-attack": { index: 1, title: "Solo Initial Attack", working: "347 kg planned" },
-  "large-force-employment": { index: 2, title: "Large Force Employment", working: "347 kg planned" },
+  "water-circuits": { index: 0, title: "Water Circuits", block: 610, working: "197 KG" },
+  "fire-attack": { index: 1, title: "Solo Initial Attack", block: 760, working: "347 KG" },
+  "large-force-employment": { index: 2, title: "Large Force Employment", block: 760, working: "347 KG" },
 });
 const canvas = document.querySelector("#scene");
 const hudCanvas = document.querySelector("#hud");
 const mapCanvas = document.querySelector("#map");
-const hud = hudCanvas.getContext("2d");
 const map = mapCanvas.getContext("2d");
+const flightHud = createHud(hudCanvas);
 const status = document.querySelector("#status");
 const menu = document.querySelector("#sortie-menu");
 const pauseMenu = document.querySelector("#pause-menu");
 const pauseButton = document.querySelector("#pause-button");
+const targetButton = document.querySelector("#target-button");
+const padlockButton = document.querySelector("#padlock-button");
 const scoopsButton = document.querySelector("#scoops");
 const dropButton = document.querySelector("#drop");
+const navButton = document.querySelector("#nav-button");
+const soundButton = document.querySelector("#sound");
 const keys = new Set();
 const coarse = matchMedia?.("(pointer: coarse)")?.matches === true;
 const constrained = (navigator.deviceMemory ?? 8) <= 4 || (navigator.hardwareConcurrency ?? 8) <= 4;
@@ -34,11 +58,19 @@ let paused = true;
 let scoops = false;
 let drop = false;
 let throttle = 0.65;
+let engineSpool = 0.65;
 let animationFrame = 0;
 let lastTime = performance.now();
 const telemetryFrames = [];
 let lastTelemetryMissionSecond = -Infinity;
 let lastTelemetryPhase = "";
+let gamepadState = Object.freeze({ connected: false, padlock: false });
+let leftStick = Object.freeze({ x: 0, y: 0 });
+let rightStick = Object.freeze({ x: 0, y: 0 });
+let lastRadio = "";
+let radioHideAt = 0;
+let selectedTargetId = "";
+let padlock = false;
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality !== "mobile", powerPreference: "high-performance" });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -52,6 +84,21 @@ scene.fog = new THREE.FogExp2(0x9eb2b7, quality === "mobile" ? 0.000095 : 0.0000
 const camera = new THREE.PerspectiveCamera(67, 1, 0.25, 65_000);
 camera.rotation.order = "YXZ";
 scene.add(camera);
+const hudFrame = {
+  state: null,
+  camera,
+  playerPosition: new THREE.Vector3(),
+  playerForward: new THREE.Vector3(),
+  banditPosition: new THREE.Vector3(),
+  wingmanPosition: new THREE.Vector3(),
+  padlock: false,
+  padlockTarget: null,
+  padlockTargetPosition: null,
+  triggerHeld: false,
+  civilianTargetPosition: new THREE.Vector3(),
+  dt: 0,
+  now: 0,
+};
 scene.add(new THREE.HemisphereLight(0xeaf3f5, 0x4d5135, 1.18));
 const sun = new THREE.DirectionalLight(0xffe4bd, 1.42);
 sun.position.set(-12_000, 18_000, 9_000);
@@ -87,6 +134,8 @@ window.__gunsOnlyOkanagan = Object.freeze({
   getRenderInfo: () => renderer.info,
   getTelemetry: () => telemetryFrames.map((frame) => ({ ...frame })),
   getLastTelemetry: () => telemetryFrames.at(-1) ?? null,
+  getAudioDiagnostics: () => flightAudioDiagnostics(),
+  getSelectedTarget: () => selectedTarget(),
   start: (sortie = currentSortie) => startSortie(sortie),
 });
 
@@ -150,6 +199,7 @@ function selectSortie(id) {
   });
   document.querySelector("#start").textContent = `Fly ${SORTIES[id].title}`;
   document.querySelector("#plan-working").textContent = SORTIES[id].working;
+  document.querySelector("#plan-block").textContent = `${SORTIES[id].block} KG`;
 }
 
 function startSortie(id) {
@@ -158,16 +208,20 @@ function startSortie(id) {
   bridge.Start(SORTIES[id].index);
   state = JSON.parse(bridge.GetState());
   throttle = 0.65;
+  engineSpool = 0.65;
   scoops = false;
   drop = false;
+  selectedTargetId = "";
+  padlock = false;
   running = true;
   telemetryFrames.length = 0;
   lastTelemetryMissionSecond = -Infinity;
   lastTelemetryPhase = "";
   setPaused(false);
   menu.classList.remove("visible");
-  document.querySelector("#fire-panel").hidden = id === "water-circuits";
-  status.textContent = "ARROWS fly · W/S power · E scoops · hold SPACE to drop · ESC pause";
+  document.querySelector("#plan-minimum").textContent = `${Math.round(state.fuel_plan.minimum_rtb_kg)} KG`;
+  status.textContent = "Flying";
+  armFlightAudio(okanaganFlightState(state));
   canvas.focus();
   return true;
 }
@@ -178,22 +232,73 @@ function setPaused(value) {
   pauseMenu.classList.toggle("visible", value && running && !menu.classList.contains("visible"));
   pauseMenu.setAttribute("aria-hidden", String(!(value && running)));
   document.body.classList.toggle("paused", value);
+  if (value) suspendFlightAudio("okanagan-paused");
+  else if (running) armFlightAudio(okanaganFlightState(state));
 }
 
 function controls(deltaSeconds) {
-  const pitch = (keys.has("ArrowDown") ? 1 : 0) - (keys.has("ArrowUp") ? 1 : 0);
-  const roll = (keys.has("ArrowRight") ? 1 : 0) - (keys.has("ArrowLeft") ? 1 : 0);
-  const yaw = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0);
-  throttle = THREE.MathUtils.clamp(throttle + ((keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0)) * deltaSeconds * 0.35, 0, 1);
+  const gamepad = Array.from(navigator.getGamepads?.() ?? []).find((pad) => pad?.connected && pad.mapping === "standard") ?? null;
+  const nextGamepad = standardGamepadState(gamepad, gamepadState);
+  if (nextGamepad.padlockPressed) togglePadlock();
+  gamepadState = nextGamepad;
+  const pitch = THREE.MathUtils.clamp(
+    (keys.has("ArrowDown") ? 1 : 0) - (keys.has("ArrowUp") ? 1 : 0)
+      + finiteControl(nextGamepad.pitch) + finiteControl(rightStick.y), -1, 1);
+  const roll = THREE.MathUtils.clamp(
+    (keys.has("ArrowRight") ? 1 : 0) - (keys.has("ArrowLeft") ? 1 : 0)
+      + finiteControl(nextGamepad.roll) + finiteControl(rightStick.x), -1, 1);
+  const yaw = THREE.MathUtils.clamp(
+    (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0)
+      + finiteControl(leftStick.x), -1, 1);
+  const throttleRate = (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0)
+    + (nextGamepad.throttleUp ? 1 : 0) - (nextGamepad.throttleDown ? 1 : 0)
+    - finiteControl(leftStick.y);
+  throttle = THREE.MathUtils.clamp(throttle + throttleRate * deltaSeconds * 0.35, 0, 1);
+  engineSpool += (throttle - engineSpool) * Math.min(1, deltaSeconds * (throttle > engineSpool ? 1.7 : 2.4));
   bridge.SetControls(pitch, roll, yaw, throttle, scoops, drop);
+}
+
+function finiteControl(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function selectedTarget() {
+  const targets = okanaganTargets(state);
+  const target = retainOkanaganTarget(targets, selectedTargetId);
+  selectedTargetId = target?.id ?? "";
+  return target;
+}
+
+function cycleTarget(direction = 1) {
+  const target = cycleOkanaganTarget(okanaganTargets(state), selectedTargetId, direction);
+  selectedTargetId = target?.id ?? "";
+  return target;
+}
+
+function togglePadlock() {
+  if (!running || paused) return false;
+  const target = selectedTarget();
+  if (!target) return false;
+  padlock = !padlock;
+  return padlock;
 }
 
 function updateView(current) {
   camera.position.set(current.position.x, current.position.y + 2.25, current.position.z);
   camera.rotation.set(current.pitch_rad, Math.PI + current.heading_rad, -current.roll_rad, "YXZ");
+  const bodyQuaternion = camera.quaternion.clone();
+  const target = selectedTarget();
+  if (padlock && target) {
+    camera.lookAt(target.position.x, target.position.y, target.position.z);
+    cockpit.group.quaternion.copy(camera.quaternion).invert().multiply(bodyQuaternion);
+  } else {
+    cockpit.group.quaternion.identity();
+  }
+  camera.updateMatrixWorld(true);
   sky.position.copy(camera.position);
   cockpit.update(current.mission_s, current.throttle);
-  highway.update(current.route, current.active_gate);
+  highway.update(current.route, current.active_gate, current.position);
   fireEffects.group.visible = current.sortie !== "water-circuits";
   fireEffects.update(current.fire_cells, current.mission_s);
   buildTraffic(current.traffic);
@@ -206,21 +311,26 @@ function updateView(current) {
 }
 
 function updateDom(current) {
-  document.querySelector("#phase").textContent = current.phase.replaceAll("-", " ").toUpperCase();
-  document.querySelector("#objective").textContent = current.objective;
-  document.querySelector("#radio").textContent = current.radio;
-  document.querySelector("#cue").textContent = current.cue;
+  const now = performance.now();
+  document.querySelector("#cue").textContent = compactOkanaganCue(current);
+  const radio = document.querySelector("#radio");
+  const transmission = String(current.radio ?? "").trim();
+  if (transmission && transmission !== lastRadio) {
+    lastRadio = transmission;
+    radio.textContent = transmission;
+    radioHideAt = now + 5_800;
+  }
+  radio.dataset.visible = String(Boolean(transmission) && now < radioHideAt);
   document.querySelector("#water-value").textContent = `${Math.round(current.water_kg).toLocaleString()} L`;
-  document.querySelector("#water-bar").style.width = `${100 * current.water_kg / current.water_capacity_kg}%`;
-  document.querySelector("#scoop-state").textContent = current.scoop_valid ? `FILLING · ${Math.round(current.scoop_rate_kgps)} L/S` : current.scoops_commanded ? "SCOOPS DOWN" : "SCOOPS UP";
+  const scoopState = document.querySelector("#scoop-state");
+  scoopState.textContent = current.scoop_fault || (current.scoop_valid
+    ? `FILLING · ${Math.round(current.scoop_rate_kgps)} L/S`
+    : current.scoops_commanded ? "SCOOPS DOWN" : "SCOOPS UP");
+  scoopState.dataset.level = current.scoop_fault ? "caution" : "normal";
   scoopsButton.setAttribute("aria-pressed", String(current.scoops_commanded));
-  const plan = current.fuel_plan;
-  document.querySelector("#fuel-value").textContent = `${Math.round(current.fuel_kg)} / ${Math.round(plan.minimum_rtb_kg)} KG`;
-  document.querySelector("#fuel-bar").style.width = `${Math.min(100, 100 * current.fuel_kg / plan.block_kg)}%`;
-  document.querySelector("#fuel-minimum").style.left = `${Math.min(100, 100 * plan.minimum_rtb_kg / plan.block_kg)}%`;
-  document.querySelector("#fuel-state").textContent = `${plan.state.toUpperCase()} · ${Math.max(0, Math.round(plan.endurance_min))} MIN`;
-  document.querySelector("#fire-value").textContent = `${current.burned_area_ha.toFixed(1)} HA · ${Math.round(current.effective_water_kg).toLocaleString()} L EFFECTIVE`;
-  document.querySelector("#population-value").textContent = `${current.population_exposed.toLocaleString()} PEOPLE IN EXPOSURE MODEL`;
+  padlockButton.setAttribute("aria-pressed", String(padlock));
+  soundButton.textContent = `Sound · ${isFlightAudioEnabled() ? "on" : "off"}`;
+  soundButton.setAttribute("aria-pressed", String(isFlightAudioEnabled()));
 }
 
 function recordTelemetry(current, inputDeltaSeconds) {
@@ -251,13 +361,18 @@ function recordTelemetry(current, inputDeltaSeconds) {
     fuel_kg: current.fuel_kg,
     fuel_above_minimum_kg: current.fuel_plan.above_minimum_kg,
     active_gate: gate?.id ?? null,
+    selected_target: selectedTargetId || null,
+    padlock,
     gate_range_m: gate ? Math.hypot(gateDx, gateDy, gateDz) : null,
     gate_altitude_error_m: gate ? gateDy : null,
     terrain_clearance_m: world ? current.position.y - world.sampleHeight(current.position.x, current.position.z) : null,
     input: {
-      pitch: (keys.has("ArrowDown") ? 1 : 0) - (keys.has("ArrowUp") ? 1 : 0),
-      roll: (keys.has("ArrowRight") ? 1 : 0) - (keys.has("ArrowLeft") ? 1 : 0),
-      yaw: (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0),
+      pitch: THREE.MathUtils.clamp((keys.has("ArrowDown") ? 1 : 0) - (keys.has("ArrowUp") ? 1 : 0)
+        + finiteControl(gamepadState.pitch) + finiteControl(rightStick.y), -1, 1),
+      roll: THREE.MathUtils.clamp((keys.has("ArrowRight") ? 1 : 0) - (keys.has("ArrowLeft") ? 1 : 0)
+        + finiteControl(gamepadState.roll) + finiteControl(rightStick.x), -1, 1),
+      yaw: THREE.MathUtils.clamp((keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0)
+        + finiteControl(leftStick.x), -1, 1),
       throttle,
       scoops,
       drop,
@@ -269,40 +384,27 @@ function recordTelemetry(current, inputDeltaSeconds) {
   lastTelemetryPhase = current.phase;
 }
 
-function drawHud(current) {
-  const width = hudCanvas.width;
-  const height = hudCanvas.height;
-  const scale = devicePixelRatio;
-  hud.clearRect(0, 0, width, height);
-  hud.save(); hud.scale(scale, scale);
-  const w = width / scale; const h = height / scale;
-  hud.strokeStyle = "#8ff6e8"; hud.fillStyle = "#8ff6e8"; hud.lineWidth = 2;
-  hud.font = "700 13px ui-monospace, monospace";
-  hud.textAlign = "left";
-  hud.fillText(`${Math.round(current.tas_mps * 1.94384)} KT`, 28, h * 0.48);
-  hud.textAlign = "right";
-  hud.fillText(`${Math.round(current.position.y * 3.28084)} FT`, w - 28, h * 0.48);
-  hud.textAlign = "center";
-  hud.fillText(`${String(Math.round((current.heading_rad * 180 / Math.PI + 360) % 360)).padStart(3, "0")}°`, w / 2, 32);
-  hud.fillText(`${Math.round(current.vertical_speed_mps * 196.85)} FPM`, w - 92, h * 0.48 + 22);
-  hud.save(); hud.translate(w / 2, h / 2); hud.rotate(current.roll_rad);
-  const pitchOffset = current.pitch_rad * 230;
-  hud.beginPath(); hud.moveTo(-90, pitchOffset); hud.lineTo(-24, pitchOffset); hud.moveTo(24, pitchOffset); hud.lineTo(90, pitchOffset); hud.stroke();
-  hud.beginPath(); hud.moveTo(-14, 0); hud.lineTo(0, 7); hud.lineTo(14, 0); hud.stroke();
-  hud.restore();
-  const gate = current.route?.[current.active_gate];
-  if (gate) {
-    const dx = gate.position.x - current.position.x;
-    const dz = gate.position.z - current.position.z;
-    const bearing = Math.atan2(dx, dz);
-    const error = Math.atan2(Math.sin(bearing - current.heading_rad), Math.cos(bearing - current.heading_rad));
-    const x = w / 2 + THREE.MathUtils.clamp(error / 0.75, -1, 1) * w * 0.32;
-    hud.strokeStyle = "#ffb84d"; hud.fillStyle = "#ffb84d";
-    hud.strokeRect(x - 13, h * 0.32 - 13, 26, 26);
-    const altitudeError = Math.round((gate.position.y - current.position.y) * 3.28084 / 100) * 100;
-    hud.fillText(`${gate.label} · ${Math.round(gate.target_speed_mps * 1.94384)} KT · ${altitudeError >= 0 ? "+" : ""}${altitudeError} FT`, x, h * 0.32 - 22);
-  }
-  hud.restore();
+function drawHud(current, deltaSeconds, nowSeconds) {
+  const target = selectedTarget();
+  const flightState = okanaganFlightState({ ...current, drop_active: drop });
+  flightState.engine = engineSpool;
+  flightState.engine_spool_fraction = engineSpool;
+  flightState.engine_rpm_pct = 58 + engineSpool * 42;
+  flightState.civilian_target_label = target?.label ?? "";
+  flightState.civilian_target_kind = target?.kind ?? "";
+  flightState.civilian_target_padlocked = padlock && Boolean(target);
+  hudFrame.state = flightState;
+  hudFrame.playerPosition.set(current.position.x, current.position.y, current.position.z);
+  hudFrame.playerForward.set(Math.sin(current.heading_rad) * Math.cos(current.pitch_rad),
+    Math.sin(current.pitch_rad), Math.cos(current.heading_rad) * Math.cos(current.pitch_rad));
+  if (target) hudFrame.civilianTargetPosition.set(target.position.x, target.position.y, target.position.z);
+  hudFrame.padlock = padlock && Boolean(target);
+  hudFrame.padlockTarget = hudFrame.padlock ? "civilian" : null;
+  hudFrame.padlockTargetPosition = hudFrame.padlock ? hudFrame.civilianTargetPosition : null;
+  hudFrame.dt = deltaSeconds;
+  hudFrame.now = nowSeconds;
+  flightHud.draw(hudFrame);
+  updateFlightAudio(flightState, { muted: paused, nowSeconds });
 }
 
 function drawMap(current) {
@@ -330,7 +432,12 @@ function resize() {
   const pixelRatio = Math.min(devicePixelRatio, quality === "mobile" ? 1.25 : 1.75);
   renderer.setPixelRatio(pixelRatio); renderer.setSize(innerWidth, innerHeight, false);
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
-  hudCanvas.width = Math.round(innerWidth * devicePixelRatio); hudCanvas.height = Math.round(innerHeight * devicePixelRatio);
+  flightHud.resize(innerWidth, innerHeight, Math.min(devicePixelRatio, 2), {
+    top: 0, right: 0, bottom: 0, left: 0,
+  });
+  flightHud.setTouchMode(coarse);
+  flightHud.setPresentationProfile(coarse ? "touch_dual_stick" : "civilian");
+  flightHud.setLegendVisible(false);
 }
 
 function animate(now) {
@@ -339,7 +446,8 @@ function animate(now) {
   if (running && !paused) {
     controls(delta); bridge.Advance(delta); state = JSON.parse(bridge.GetState());
     recordTelemetry(state, delta);
-    updateView(state); updateDom(state); drawHud(state); drawMap(state);
+    updateView(state); updateDom(state); drawHud(state, delta, state.mission_s);
+    if (!mapCanvas.hidden) drawMap(state);
     if (["complete", "failed"].includes(state.phase)) setPaused(true);
   }
   renderer.render(scene, camera);
@@ -351,20 +459,77 @@ document.querySelector("#resume").addEventListener("click", () => setPaused(fals
 document.querySelector("#restart").addEventListener("click", () => startSortie(currentSortie));
 document.querySelector("#choose-sortie").addEventListener("click", () => { setPaused(true); pauseMenu.classList.remove("visible"); menu.classList.add("visible"); });
 pauseButton.addEventListener("click", () => running && setPaused(!paused));
+targetButton.addEventListener("click", () => { if (running && !paused) cycleTarget(1); });
+padlockButton.addEventListener("click", () => togglePadlock());
 scoopsButton.addEventListener("click", () => { scoops = !scoops; scoopsButton.setAttribute("aria-pressed", String(scoops)); });
+navButton.addEventListener("click", () => {
+  mapCanvas.hidden = !mapCanvas.hidden;
+  document.body.classList.toggle("nav-open", !mapCanvas.hidden);
+  navButton.setAttribute("aria-pressed", String(!mapCanvas.hidden));
+  if (!mapCanvas.hidden && state) drawMap(state);
+});
+soundButton.addEventListener("click", () => {
+  setFlightAudioEnabled(!isFlightAudioEnabled());
+  if (isFlightAudioEnabled() && running) armFlightAudio(okanaganFlightState(state));
+  soundButton.textContent = `Sound · ${isFlightAudioEnabled() ? "on" : "off"}`;
+  soundButton.setAttribute("aria-pressed", String(isFlightAudioEnabled()));
+});
 for (const type of ["pointerdown", "touchstart"]) dropButton.addEventListener(type, (event) => { event.preventDefault(); drop = true; dropButton.classList.add("active"); }, { passive: false });
 for (const type of ["pointerup", "pointercancel", "touchend"]) dropButton.addEventListener(type, () => { drop = false; dropButton.classList.remove("active"); });
 window.addEventListener("keydown", (event) => {
-  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(event.code)) event.preventDefault();
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Tab"].includes(event.code)) event.preventDefault();
   if (event.code === "Escape") { event.preventDefault(); if (running) setPaused(!paused); return; }
+  if (event.code === "Tab" && !event.repeat && running) { cycleTarget(event.shiftKey ? -1 : 1); return; }
+  if (event.code === "KeyV" && !event.repeat) { togglePadlock(); return; }
+  if (event.code === "KeyM" && !event.repeat) {
+    setFlightAudioEnabled(!isFlightAudioEnabled());
+    if (isFlightAudioEnabled() && running) armFlightAudio(okanaganFlightState(state));
+    return;
+  }
+  if (event.code === "KeyR" && !event.repeat && running) { startSortie(currentSortie); return; }
   if (event.code === "KeyE" && !event.repeat) { scoops = !scoops; scoopsButton.setAttribute("aria-pressed", String(scoops)); }
   if (event.code === "Space") { drop = true; dropButton.classList.add("active"); }
+  if (running && !paused) armFlightAudio(okanaganFlightState(state));
   keys.add(event.code);
 });
 window.addEventListener("keyup", (event) => { keys.delete(event.code); if (event.code === "Space") { drop = false; dropButton.classList.remove("active"); } });
-window.addEventListener("blur", () => { keys.clear(); drop = false; });
+window.addEventListener("blur", () => { keys.clear(); drop = false; leftStick = { x: 0, y: 0 }; rightStick = { x: 0, y: 0 }; });
 window.addEventListener("resize", resize, { passive: true });
-window.addEventListener("pagehide", () => { cancelAnimationFrame(animationFrame); world?.dispose(); renderer.dispose(); }, { once: true });
+window.addEventListener("pagehide", () => { cancelAnimationFrame(animationFrame); suspendFlightAudio("okanagan-pagehide"); world?.dispose(); renderer.dispose(); }, { once: true });
+
+function bindFlightStick(element, update) {
+  let pointerId = null;
+  let previous = {};
+  const render = (value) => {
+    element.style.setProperty("--stick-x", `${value.x * 30}px`);
+    element.style.setProperty("--stick-y", `${value.y * 30}px`);
+    element.dataset.active = String(Math.hypot(value.x, value.y) > 0.01);
+  };
+  const move = (event) => {
+    if (event.pointerId !== pointerId) return;
+    const value = mobileVirtualStickState(event, element.getBoundingClientRect(), previous);
+    previous = value; update(value); render(value);
+  };
+  const release = (event) => {
+    if (pointerId === null || (event && event.pointerId !== pointerId)) return;
+    try { element.releasePointerCapture(pointerId); } catch {}
+    pointerId = null; previous = {}; const neutral = { x: 0, y: 0 }; update(neutral); render(neutral);
+  };
+  element.addEventListener("pointerdown", (event) => {
+    event.preventDefault();
+    pointerId = event.pointerId;
+    element.setPointerCapture(pointerId);
+    armFlightAudio(state ? okanaganFlightState(state) : null);
+    move(event);
+  });
+  element.addEventListener("pointermove", move);
+  element.addEventListener("pointerup", release);
+  element.addEventListener("pointercancel", release);
+  element.addEventListener("lostpointercapture", release);
+}
+
+bindFlightStick(document.querySelector("#left-stick"), (value) => { leftStick = value; });
+bindFlightStick(document.querySelector("#right-stick"), (value) => { rightStick = value; });
 
 async function boot() {
   resize();

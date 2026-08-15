@@ -3,6 +3,13 @@
 - Terrain grid: Natural Resources Canada, Canadian Digital Elevation Model, sampled through
   `https://geogratis.gc.ca/services/elevation/cdem/altitude` by
   `tools/terrain/fetch_okanagan_cdem.mjs`.
+- Okanagan Lake shoreline: British Columbia Freshwater Atlas `FWA_LAKES_POLY`, simplified to
+  simulation resolution and clipped to the committed terrain cell. The runtime polygon retains the
+  Kelowna waterfront, west-side bays, and the Lake Country reach instead of using a hand-drawn
+  valley strip.
+- Kelowna International Airport: City of Kelowna YLW published field elevation and Runway 16/34
+  dimensions. The parallel taxiway, terminal apron, and threshold layout are visual landmarks, not
+  a current aerodrome chart.
 - Forest composition: British Columbia Vegetation Resources Inventory, Forest Vegetation
   Composite Rank 1 layer. The first playable cell uses the observed interior stand vocabulary and
   the CWFIS C7/O1/M1 fuel-class mapping; it does not claim tree-by-tree survey accuracy.

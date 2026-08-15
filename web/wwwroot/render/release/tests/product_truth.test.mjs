@@ -74,6 +74,34 @@ test("the browser and installed-app descriptions match the six production experi
   }
 });
 
+test("every production flight route uses the shared HUD/input/audio language instead of permanent prose cards", async () => {
+  const [main, cobra, cobraCss, okanagan, okanaganHtml] = await Promise.all([
+    readFile(path.join(ROOT, "web/wwwroot/app.js"), "utf8"),
+    readFile(path.join(ROOT, "web/wwwroot/cobra-lab/main.js"), "utf8"),
+    readFile(path.join(ROOT, "web/wwwroot/cobra-lab/styles.css"), "utf8"),
+    readFile(path.join(ROOT, "web/wwwroot/okanagan/main.js"), "utf8"),
+    readFile(path.join(ROOT, "web/wwwroot/okanagan/index.html"), "utf8"),
+  ]);
+  for (const [label, source] of [["main", main], ["cobra", cobra], ["okanagan", okanagan]]) {
+    assert.match(source, /createHud/, `${label} must use the shared HUD renderer`);
+    assert.match(source, /updateFlightAudio/, `${label} must use the shared flight-audio facade`);
+  }
+  assert.match(cobraCss, /body\[data-shell="play"\] \.objective-hud\s*\{[\s\S]*?display:\s*none/,
+    "Cobra may retain lab diagnostics, but not a prose objective card in play");
+  assert.match(okanagan, /standardGamepadState/);
+  assert.match(okanagan, /mobileVirtualStickState/);
+  assert.match(okanagan, /event\.code === "Tab"[\s\S]*?cycleTarget/);
+  assert.match(okanagan, /event\.code === "KeyV"[\s\S]*?togglePadlock/);
+  assert.match(okanagan, /hudFrame\.padlock = padlock && Boolean\(target\)/,
+    "padlock camera motion must also switch the shared HUD into padlock presentation");
+  assert.match(okanagan, /if \(value\) suspendFlightAudio\("okanagan-paused"\)/,
+    "Escape/pause must stop the propulsion graph instead of freezing its last gain");
+  assert.match(okanaganHtml, /id="target-button"[\s\S]*?id="padlock-button"/,
+    "coarse-pointer pilots need target and padlock controls without a keyboard");
+  assert.doesNotMatch(okanaganHtml, /id="mission-strip"|id="objective"|class="instrument-panel"/,
+    "Fire Boss must not regress to a stack of text-only mission cards");
+});
+
 test("production Rapier copy describes the deterministic finite-ammo balloon sortie", async () => {
   const app = await readFile(path.join(ROOT, "web/wwwroot/app.js"), "utf8");
   const rapier = EXPERIENCE_CATALOG.find(({ id }) => id === "rapier-intercept");

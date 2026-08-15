@@ -67,8 +67,8 @@ public readonly record struct OkanaganMissionSnapshot(
 public sealed class OkanaganFireMission
 {
     static readonly Vec3D ScoopEntry = OkanaganGeo.ToWorld(49.815, -119.570, 520.0);
-    static readonly Vec3D ScoopTouchdown = OkanaganGeo.ToWorld(49.825, -119.580, 348.0);
-    static readonly Vec3D ScoopExit = OkanaganGeo.ToWorld(49.875, -119.555, 350.0);
+    static readonly Vec3D ScoopTouchdown = OkanaganGeo.ToWorld(49.825, -119.565, 348.0);
+    static readonly Vec3D ScoopExit = OkanaganGeo.ToWorld(49.875, -119.515, 350.0);
     static readonly Vec3D FireTarget = OkanaganGeo.ToWorld(49.850, -119.655, 810.0);
     static readonly Vec3D HoldingPoint = OkanaganGeo.ToWorld(49.900, -119.610, 1_180.0);
     static readonly Vec3D AirportDeparture = OkanaganGeo.ToWorld(49.935, -119.395, 780.0);
@@ -344,7 +344,7 @@ public sealed class OkanaganFireMission
     string AirAttackCall() => Phase switch {
         OkanaganMissionPhase.Depart when Sortie == OkanaganSortieType.LargeForceEmployment
             => "AIR ATTACK: Boss 21, depart Runway 16. Join west of the bridge.",
-        OkanaganMissionPhase.Depart => "INSTRUCTOR: Runway heading. The cyan rails bend west to the lake.",
+        OkanaganMissionPhase.Depart => "INSTRUCTOR: Runway heading. Turn west through the departure gates.",
         OkanaganMissionPhase.JoinScoop when Sortie == OkanaganSortieType.LargeForceEmployment
             => "AIR ATTACK: Boss 21, cleared onto the northbound scoop lane.",
         OkanaganMissionPhase.JoinScoop => "INSTRUCTOR: The gates bend north onto the scoop lane. Arrive wings-level at 85 knots.",

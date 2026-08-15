@@ -1,114 +1,55 @@
-import * as THREE from "../../vendor/three.module.js?v=338";
+import * as THREE from "../../vendor/three.module.js?v=339";
+import { createGuidancePath } from "../scene/guidance_path.js?v=339";
 
-const ACTIVE = 0xffbd54;
-const ROUTE = 0x59ebdf;
-
+/** Fire Boss adapter for the one shared Guns Only highway-in-the-sky renderer. */
 export function createOkanaganHighway(scene) {
-  const group = new THREE.Group();
-  group.name = "Fire Boss continuous highway in the sky";
-  scene.add(group);
-  let signature = "";
-
-  function clear() {
-    group.traverse((object) => {
-      object.geometry?.dispose?.();
-      if (Array.isArray(object.material)) object.material.forEach((material) => material.dispose?.());
-      else object.material?.dispose?.();
-    });
-    group.clear();
-  }
-
-  function rebuild(route = []) {
-    const next = route.map((gate) => `${gate.id}:${gate.position.x.toFixed(1)}:${gate.position.y.toFixed(1)}:${gate.position.z.toFixed(1)}`).join("|");
-    if (next === signature) return;
-    signature = next;
-    clear();
-    const positions = route.map((gate) => new THREE.Vector3(gate.position.x, gate.position.y, gate.position.z));
-    route.forEach((gate, index) => {
-      const node = createGate(gate, index, positions);
-      group.add(node);
-      if (index > 0) group.add(createCorridor(positions[index - 1], positions[index], index));
-    });
-  }
-
-  function update(route, activeGate) {
-    rebuild(route);
-    const last = Math.max(0, (route?.length ?? 1) - 1);
-    const active = Math.min(activeGate, last);
-    group.children.forEach((object) => {
-      const index = object.userData.gateIndex ?? object.userData.segmentEndIndex ?? 0;
-      const passed = index < active;
-      object.visible = !passed || index === Math.max(0, active - 1);
-      const isActive = object.userData.gateIndex === active;
-      object.traverse((child) => {
-        if (!child.material) return;
-        child.material.opacity = isActive ? 0.98 : passed ? 0.12 : 0.42;
-        if ("color" in child.material) child.material.color.setHex(isActive ? ACTIVE : ROUTE);
-      });
-      if (object.userData.gateIndex !== undefined) {
-        const pulse = isActive ? 1 + Math.sin(performance.now() * 0.006) * 0.06 : 1;
-        object.scale.setScalar(pulse);
-      }
+  const guidance = createGuidancePath(THREE, {
+    maxGates: 24,
+    maxVisualHalfM: 92,
+    gateColor: 0xf2d9a0,
+    activeColor: 0xfff1d6,
+    gateOpacity: 0.22,
+    activeOpacity: 0.38,
+    rtbVisualHalfM: 24,
+    rtbFarVisualHalfM: 72,
+  });
+  guidance.object3d.name = "Fire Boss shared guidance path";
+  scene.add(guidance.object3d);
+  function update(route = [], activeGate = 0, position = null) {
+    const active = route.length === 0 ? 0
+      : Math.max(0, Math.min(route.length - 1, Math.trunc(Number(activeGate) || 0)));
+    const upcoming = route.slice(active).map((gate, index) => ({
+      id: String(gate.id ?? `okanagan-${active + index}`),
+      label: String(gate.label ?? ""),
+      east_m: Number(gate.position?.x),
+      // Okanagan renders north as +Z; the shared scene renderer negates snapshot north.
+      north_m: -Number(gate.position?.z),
+      up_m: Number(gate.position?.y),
+      half_m: Math.max(38, Math.min(92, Number(gate.radius_m) * 0.12 || 60)),
+      target_ktas: Number(gate.target_speed_mps) * 1.9438444924406,
+      active: index === 0,
+      dirty: false,
+    })).filter((gate) => [gate.east_m, gate.north_m, gate.up_m, gate.half_m].every(Number.isFinite));
+    const continuityKey = okanaganGuidanceContinuityKey(route);
+    return guidance.update({
+      approach_guidance_active: upcoming.length > 0,
+      approach_gates: upcoming,
+      approach_gate_count: upcoming.length,
+      guidance_continuity_key: continuityKey,
+      px: Number(position?.x),
+      py: Number(position?.y),
+      pz: -Number(position?.z),
     });
   }
 
-  return { group, update, dispose: clear };
-}
-
-function createGate(gate, index, positions) {
-  const node = new THREE.Group();
-  node.name = `route-gate:${gate.id}`;
-  node.userData.gateIndex = index;
-  node.position.copy(positions[index]);
-  const direction = index < positions.length - 1
-    ? positions[index + 1].clone().sub(positions[index])
-    : index > 0 ? positions[index].clone().sub(positions[index - 1]) : new THREE.Vector3(0, 0, 1);
-  direction.normalize();
-  node.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
-  const height = Math.max(95, Math.min(190, gate.radius_m * 0.22));
-  const width = height * 1.72;
-  const material = () => new THREE.MeshBasicMaterial({ color: ROUTE, transparent: true, opacity: 0.42, depthWrite: false, side: THREE.DoubleSide });
-  const addBar = (x, y, w, h) => {
-    const bar = new THREE.Mesh(new THREE.PlaneGeometry(w, h), material());
-    bar.position.set(x, y, 0);
-    node.add(bar);
+  return {
+    group: guidance.object3d,
+    update,
+    dispose: () => guidance.dispose(),
   };
-  addBar(0, height * 0.5, width, 7);
-  addBar(-width * 0.5, 0, 7, height);
-  addBar(width * 0.5, 0, 7, height);
-  addBar(0, -height * 0.5, width * 0.34, 5);
-  const arrow = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(-width * 0.18, -height * 0.25, 1),
-    new THREE.Vector3(0, -height * 0.43, 1),
-    new THREE.Vector3(width * 0.18, -height * 0.25, 1),
-  ]), new THREE.LineBasicMaterial({ color: ROUTE, transparent: true, opacity: 0.42 }));
-  node.add(arrow);
-  return node;
 }
 
-function createCorridor(start, end, endIndex) {
-  const segment = new THREE.Group();
-  segment.name = `route-corridor:${endIndex - 1}-${endIndex}`;
-  segment.userData.segmentEndIndex = endIndex;
-  const delta = end.clone().sub(start);
-  const length = delta.length();
-  if (length < 1) return segment;
-  const direction = delta.clone().normalize();
-  const right = new THREE.Vector3(direction.z, 0, -direction.x).normalize();
-  const material = new THREE.LineBasicMaterial({ color: ROUTE, transparent: true, opacity: 0.34 });
-  for (const side of [-1, 1]) {
-    const offset = right.clone().multiplyScalar(side * 75);
-    segment.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
-      start.clone().add(offset), end.clone().add(offset),
-    ]), material.clone()));
-  }
-  const steps = Math.max(1, Math.floor(length / 700));
-  for (let step = 1; step < steps; step += 1) {
-    const centre = start.clone().lerp(end, step / steps);
-    const rung = new THREE.Line(new THREE.BufferGeometry().setFromPoints([
-      centre.clone().addScaledVector(right, -75), centre.clone().addScaledVector(right, 75),
-    ]), material.clone());
-    segment.add(rung);
-  }
-  return segment;
+/** Gate advancement must not reset a route's visual continuity. Only route identity belongs here. */
+export function okanaganGuidanceContinuityKey(route = []) {
+  return `okanagan:${route.map((gate) => String(gate?.id ?? "")).join("|")}`;
 }

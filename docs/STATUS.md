@@ -1,8 +1,8 @@
 # Current product and verification status
 
-Updated: 2026-08-15
-Production: Build 337, revision `85a5ab000d3b45a8b5572260cfdd3ab50438e909` (verified live via
-`/api/build-info` 2026-08-15, with the protected release pipeline complete). Builds 312 (Cobra
+Updated: 2026-08-16
+Production: Build 338, revision `7a4ba85d697f6b805367262c2a95bddcbbf10ec6` (verified live via
+`/api/build-info` 2026-08-16, with the protected release pipeline complete). Builds 312 (Cobra
 contact envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap
 timing), 318 (authored structure materials), 320 (Top Gun 404 + cockpit depth near-plane), 321
 (Camp Ember depth recess), 322 (Cobra scenery pass) and 323 (the Cobra conquest mission: owned
@@ -73,12 +73,20 @@ world-space guidance, protected taxi/operational/final reserves, local diagnosti
 real pause menu. The extension adds Air Attack, bird dog and helicopter traffic to the solo systems
 rather than replacing them with a separate simulation.
 
-Next candidate: Build 338 (branch `fix/codex-review-followups-338`) — closes the outstanding review
-findings from Builds 329–337 as one corrective release: one CDEM/shoreline truth for Okanagan
-rendering, collision, fire and traffic; terrain-cleared Cobra formation guidance through the real
-route join; persistent live-AA cues; mobile cloud-cost containment; terminal mission exit and
-sortie-wide telemetry ledgers; a Top Gun carrier recovery corridor that remains over authoritative
-water while the ship steams; and explicit provenance for the AH-1G and F-14 surrogate constants.
+Build 338 closed the outstanding review findings from Builds 329–337: one CDEM/shoreline truth for
+Okanagan rendering, collision, fire and traffic; terrain-cleared Cobra formation guidance through
+the real route join; persistent live-AA cues; mobile cloud-cost containment; terminal mission exit
+and sortie-wide telemetry ledgers; a Top Gun carrier recovery corridor that remains over
+authoritative water while the ship steams; and explicit provenance for the AH-1G and F-14
+surrogate constants.
+
+Next candidate: Build 339 (branch `fix/okanagan-coherence-339`) — makes Fire Boss one coherent Guns
+Only flight experience: the shared fixed-wing HUD, controls, target cycle, padlock, highway and
+pause semantics; procedural PT6A/propeller, scoop and water-drop audio; concise transient instructor
+calls; and an unobstructed outside-world view. The Okanagan scenery now uses the official BC
+Freshwater Atlas lake shoreline with real CDEM relief, corrected scoop-lane water geometry,
+recognisable YLW/Highway 97/bridge structure, population placement and elevation-aware dry
+ponderosa/Douglas-fir vegetation.
 
 Build 325 shipped the following owner-flight findings and remains the baseline for this candidate.
 
