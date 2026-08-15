@@ -23,7 +23,7 @@
 import {
   cobraObjectiveSiteId,
   cobraSiteHasLivingGarrison,
-} from "./cobra_objective_site.js?v=337";
+} from "./cobra_objective_site.js?v=338";
 
 // Mirrors CobraGroundWarRuntime.StartingTickets, used ONLY as a floor for the "critically low"
 // threshold when the snapshot does not publish a start value. Kept as a floor rather than a

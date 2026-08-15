@@ -137,9 +137,9 @@ public class CobraMissionRuntimeTests
         double eastDeltaM = next.EastM - start.EastM;
         double northDeltaM = next.NorthM - start.NorthM;
         double lengthM = Math.Sqrt(eastDeltaM * eastDeltaM + northDeltaM * northDeltaM);
-        // Just past DepartPadRadiusM along the selected-route join. Crossing the act boundary
-        // must not manufacture a target on the aircraft nose or anywhere inside the FOB's
-        // protected operating area.
+        // Just past the old radial-only DepartPadRadiusM threshold, but still short of the
+        // selected-route join. The departure dogleg must remain visible and must not manufacture
+        // a target on the aircraft nose or anywhere inside the FOB's protected operating area.
         double offsetM = CobraMissionActProgress.DepartPadRadiusM + 40.0;
         var pastPad = new Vec3D(
             start.EastM + eastDeltaM / lengthM * offsetM,
@@ -151,7 +151,7 @@ public class CobraMissionRuntimeTests
             CobraCanyonRouteChoice.RiverGorge,
             spawn: new CobraMissionSpawn(pastPad, Vec3D.Zero, yawRad));
 
-        Assert.Equal(CobraMissionAct.Ingress, runtime.Act);
+        Assert.Equal(CobraMissionAct.Depart, runtime.Act);
         Assert.DoesNotContain(
             runtime.GroundWar.LivingUnits().Where(unit => unit.Faction == GroundFaction.Hostile),
             unit => HorizontalDistanceM(

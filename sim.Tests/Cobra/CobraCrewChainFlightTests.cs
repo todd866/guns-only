@@ -42,7 +42,10 @@ public sealed class CobraCrewChainFlightTests
     public void HoverFacingIronBellGarrisonHoldFExpendsAmmo()
     {
         var runtime = CreateIronBellAttackRuntime();
-        Assert.Equal(CobraMissionAct.Ingress, runtime.Act);
+        // This harness deliberately stages inside the objective radius. A resumed or repositioned
+        // sortie there must enter Engage immediately rather than retain departure/ingress cues
+        // that point back behind the aircraft.
+        Assert.Equal(CobraMissionAct.Engage, runtime.Act);
         var gunner = CreateGunner();
         var turret = new CobraTurretServo();
         GroundUnit target = runtime.GroundWar.FindUnit(

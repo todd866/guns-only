@@ -23,6 +23,15 @@ test("a terminal debrief remains the top layer instead of opening a fake live pa
   assert.equal(resolveEscapeAction({ terminal: true }), "noop");
 });
 
+test("the terminal debrief retains explicit restart and exit actions", async () => {
+  const [main, html] = await Promise.all([
+    source("cobra-lab/main.js"),
+    source("cobra-lab/index.html"),
+  ]);
+  assert.match(html, /id="debrief"[\s\S]*id="debrief-restart"[\s\S]*id="debrief-exit"/u);
+  assert.match(main, /debriefExit\?\.addEventListener\("click", leaveMissionForMenu\)/u);
+});
+
 test("the Cobra shell owns a real pause dialog and freezes authority advance", async () => {
   const [main, html, styles] = await Promise.all([
     source("cobra-lab/main.js"),

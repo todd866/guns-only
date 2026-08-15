@@ -3184,7 +3184,10 @@ test("rotating to landscape actually resizes the drawn surface", async () => {
     const page = await context.newPage();
     await page.goto(`${site.url}?audioQa=silent`, { waitUntil: "load", timeout: scaled(90000) });
     await page.waitForFunction(
-      () => !document.querySelector("#ready-start")?.disabled,
+      () => {
+        const start = document.querySelector("#ready-start");
+        return start !== null && start.disabled === false;
+      },
       undefined, { timeout: scaled(120000) });
     await page.click("#ready-start");
     await page.waitForTimeout(scaled(4000));

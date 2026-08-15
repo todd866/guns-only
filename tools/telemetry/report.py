@@ -286,10 +286,9 @@ def deep_funnel(sessions, visitors, refresh, label="visitor"):
         # SINGLE SORTIE, never a lifetime sum. That is what max(kill_count) has always meant here,
         # and all three underlying counters are cleared when a sortie is staged.
         #
-        # rounds_fired needs no repair and gets none: continuous combat re-stages the player's gun
-        # through GunKill.CreateReplacementTarget, which carries RoundsFired FORWARD precisely so
-        # cumulative fire evidence stays continuous, so the raw field is already the running sortie
-        # total and max() over it is already the honest answer.
+        # Continuous combat can replace the weapon graph, so rounds_fired is engagement-local.
+        # Build 329+ publishes sortie_rounds_fired as the monotone sortie ledger. Older tapes fall
+        # back to the legacy field; they cannot reconstruct a reset that occurred between samples.
         #
         # `hits` is the one that genuinely resets — the staged successor's damage ledger starts
         # clean — so a plain max() reported only the LAST engagement of each sortie. Build 265+
@@ -339,7 +338,9 @@ def deep_funnel(sessions, visitors, refresh, label="visitor"):
                     value = non_negative(state.get("kill_count"))
                     if value is not None:
                         entry["kills"] = max(entry["kills"], value)
-                    value = non_negative(state.get("rounds_fired"))
+                    value = non_negative(state.get("sortie_rounds_fired"))
+                    if value is None:
+                        value = non_negative(state.get("rounds_fired"))
                     if value is not None:
                         entry["rounds"] = max(entry["rounds"], value)
                     ledger = non_negative(state.get("sortie_hits"))
@@ -424,10 +425,12 @@ def latest_owner_diagnostics(sessions, name, refresh):
                 result["airframes"].add(str(airframe))
                 if sortie is not None:
                     sortie["airframe"] = str(airframe)
-            for key in ("rounds_fired", "sortie_hits"):
+            for key in ("sortie_rounds_fired", "sortie_hits"):
                 value = non_negative(state.get(key))
+                if value is None and key == "sortie_rounds_fired":
+                    value = non_negative(state.get("rounds_fired"))
                 if value is not None:
-                    target = "rounds" if key == "rounds_fired" else "hits"
+                    target = "rounds" if key == "sortie_rounds_fired" else "hits"
                     result[target] = max(result[target], value)
                     if sortie is not None:
                         sortie[target] = max(sortie[target], value)

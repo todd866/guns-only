@@ -224,6 +224,16 @@ test("cobra lab scene constants consume the shared visual profile", async () => 
   assert.doesNotMatch(main, /0\.000038/);
 });
 
+test("mobile quality bypasses procedural cloud noise in the fragment hot path", async () => {
+  const main = await source("cobra-lab/main.js");
+  assert.match(main,
+    /proceduralCloudsEnabled:\s*\{ value: qualitySelect\?\.value === "mobile" \? 0 : 1 \}/u);
+  assert.match(main,
+    /if \(proceduralCloudsEnabled > 0\.5[\s\S]*cobraSkyNoise\(cloudPoint\)/u);
+  assert.match(main,
+    /proceduralCloudsEnabled\.value = qualitySelect\.value === "mobile" \? 0 : 1/u);
+});
+
 test("the basin and river surfaces run the shared painted recipe, per fragment", async () => {
   const presentation = await source("render/cobra/cobra_canyon_presentation.js");
   assert.match(presentation, /cobra_canyon_terrain_material\.js\?v=\d+/);

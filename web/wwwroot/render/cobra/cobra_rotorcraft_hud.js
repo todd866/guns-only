@@ -68,7 +68,6 @@ function tacticalPicture(authorityState, vehicle, war) {
   const units = Array.isArray(war?.units) ? war.units : [];
   const siteId = cobraObjectiveSiteId({ sites, units, player: vehicle });
   const site = sites.find((candidate) => candidate?.id === siteId) ?? null;
-  if (!site) return { objective: null, target: null, threats: [] };
   const ownEast = finite(vehicle?.x_m);
   const ownNorth = finite(vehicle?.z_m);
   const ownUp = finite(vehicle?.y_m);
@@ -78,7 +77,7 @@ function tacticalPicture(authorityState, vehicle, war) {
     const north = finite(source?.z_m);
     const up = finite(source?.y_m);
     return {
-      id: source?.id ?? `${kind}.${siteId}`,
+      id: source?.id ?? `${kind}.${siteId ?? "mission"}`,
       kind,
       label,
       worldX: east,
@@ -88,9 +87,11 @@ function tacticalPicture(authorityState, vehicle, war) {
       relativeBearingRad: wrapPi(Math.atan2(east - ownEast, north - ownNorth) - ownHeading),
     };
   };
-  const objective = symbol(site, "objective", String(site.label ?? "OBJECTIVE").toUpperCase());
-  const targetUnit = units.find((unit) => unit?.alive === true
-    && unit.home_site_id === siteId && String(unit.id ?? "").endsWith(".garrison")) ?? null;
+  const objective = site
+    ? symbol(site, "objective", String(site.label ?? "OBJECTIVE").toUpperCase())
+    : null;
+  const targetUnit = siteId ? units.find((unit) => unit?.alive === true
+    && unit.home_site_id === siteId && String(unit.id ?? "").endsWith(".garrison")) ?? null : null;
   const target = targetUnit ? symbol(targetUnit, "target", "GARRISON") : null;
   const threats = units
     .filter((unit) => unit?.alive === true && unit.faction === "hostile" && unit.role === "dshk-site")

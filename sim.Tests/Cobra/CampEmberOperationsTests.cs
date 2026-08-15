@@ -51,7 +51,8 @@ public class CampEmberOperationsTests
     public void DepartureShowsTheTurnToTheSelectedRouteFromThePad()
     {
         Vec3D join = new(-4_550.0, 156.0, -3_650.0);
-        IReadOnlyList<CobraPathGate> gates = CampEmberOperations.BuildDepartureGates(join);
+        CobraCanyonTerrainSurface terrain = CobraCanyonDefinition.Create().CreateTerrainSurface();
+        IReadOnlyList<CobraPathGate> gates = CampEmberOperations.BuildDepartureGates(join, terrain);
 
         Assert.Equal(6, gates.Count);
         Assert.Single(gates, gate => gate.Active);
@@ -84,8 +85,30 @@ public class CampEmberOperationsTests
 
         IReadOnlyList<CobraPathGate> advanced = CampEmberOperations.BuildDepartureGates(
             join,
+            terrain,
             new Vec3D(gates[1].EastM, gates[1].UpM, gates[1].NorthM));
         Assert.Equal(2, advanced.ToList().FindIndex(gate => gate.Active));
+    }
+
+    [Fact]
+    public void EveryRouteDepartureGateMaintainsRotorSafeTerrainClearance()
+    {
+        CobraCanyonDefinition definition = CobraCanyonDefinition.Create();
+        CobraCanyonTerrainSurface terrain = definition.CreateTerrainSurface();
+        foreach (CobraCanyonRouteDefinition route in definition.Routes) {
+            Vec3D join = CobraMissionActProgress.DepartureJoinWorldM(
+                route,
+                CampEmberOperations.CentreWorldM);
+            IReadOnlyList<CobraPathGate> gates = CampEmberOperations.BuildDepartureGates(
+                join,
+                terrain);
+            foreach (CobraPathGate gate in gates) {
+                Assert.True(terrain.TrySample(gate.EastM, gate.NorthM, out TerrainSample surface));
+                Assert.True(
+                    gate.UpM - surface.HeightM >= CampEmberOperations.DepartureCentreClearanceM - 1e-6,
+                    $"{route.Label} gate clearance was {gate.UpM - surface.HeightM:F1} m");
+            }
+        }
     }
 
     static double HorizontalDistance(CobraPathGate gate, in Vec3D point) =>

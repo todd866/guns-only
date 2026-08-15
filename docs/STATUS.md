@@ -1,7 +1,7 @@
 # Current product and verification status
 
 Updated: 2026-08-15
-Production: Build 336, revision `ed3f79989a5cf4596392f298a2fe4264c3b3f3e5` (verified live via
+Production: Build 337, revision `85a5ab000d3b45a8b5572260cfdd3ab50438e909` (verified live via
 `/api/build-info` 2026-08-15, with the protected release pipeline complete). Builds 312 (Cobra
 contact envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap
 timing), 318 (authored structure materials), 320 (Top Gun 404 + cockpit depth near-plane), 321
@@ -65,13 +65,20 @@ the relative-air track, with that aerodynamic authority fading at low translatio
 tail rotor retains a decisive pedal turn; air track, exact body-frame sideslip, horizontal airspeed
 and fin-directional airspeed are recorded for owner-flight diagnosis.
 
-Next candidate: Build 337 (branch `feature/okanagan-fireboss-337`) — adds the Civilian aircraft
-domain and one shared AT-802F Fire Boss/Okanagan system with three sortie types: Water Circuits,
+Build 337 added the Civilian aircraft domain and one shared AT-802F Fire Boss/Okanagan system with
+three sortie types: Water Circuits,
 Solo Initial Attack and Large Force Employment. It includes Kelowna departure/recovery, sourced
 NRCan CDEM terrain, an authored Okanagan Lake scoop lane, an evolving exercise fire, continuous
 world-space guidance, protected taxi/operational/final reserves, local diagnostic telemetry and a
 real pause menu. The extension adds Air Attack, bird dog and helicopter traffic to the solo systems
 rather than replacing them with a separate simulation.
+
+Next candidate: Build 338 (branch `fix/codex-review-followups-338`) — closes the outstanding review
+findings from Builds 329–337 as one corrective release: one CDEM/shoreline truth for Okanagan
+rendering, collision, fire and traffic; terrain-cleared Cobra formation guidance through the real
+route join; persistent live-AA cues; mobile cloud-cost containment; terminal mission exit and
+sortie-wide telemetry ledgers; a Top Gun carrier recovery corridor that remains over authoritative
+water while the ship steams; and explicit provenance for the AH-1G and F-14 surrogate constants.
 
 Build 325 shipped the following owner-flight findings and remains the baseline for this candidate.
 

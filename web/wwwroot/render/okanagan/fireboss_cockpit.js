@@ -1,4 +1,4 @@
-import * as THREE from "../../vendor/three.module.js?v=337";
+import * as THREE from "../../vendor/three.module.js?v=338";
 
 export function createFireBossCockpit(camera) {
   const group = new THREE.Group();

@@ -525,7 +525,8 @@ public sealed class CobraMissionRuntime
         _selectedRoute,
         _groundWar.Fob.CentreWorldM,
         fobPathAltitudeM: _groundWar.Fob.CentreWorldM.Y + 30.0,
-        aircraftWorldM: _cobra.State.PositionWorldM);
+        aircraftWorldM: _cobra.State.PositionWorldM,
+        terrain: _terrain);
     public IReadOnlyList<CobraResolvedObstacle> ResolvedObstacles => _resolvedObstacles;
     public IReadOnlyList<CobraResolvedThreatObserver> ResolvedThreatObservers =>
         _resolvedThreatObservers;
@@ -756,7 +757,10 @@ public sealed class CobraMissionRuntime
             _groundWar.VictoryHoldProgress,
             _groundWar.MissionOutcome,
             Status,
-            clearanceM);
+            clearanceM,
+            CobraMissionActProgress.DepartureJoinWorldM(
+                _selectedRoute,
+                _groundWar.Fob.CentreWorldM));
     }
 
     /// <summary>
