@@ -263,6 +263,13 @@ public static partial class CobraWebBridge
         VehiclePowerObservation power = observation.Power;
         Vec3D position = observation.PositionWorldM;
         Vec3D velocity = observation.GroundVelocityMps;
+        Vec3D relativeAirVelocity = velocity - observation.WindVelocityMps;
+        double horizontalAirSpeedMps = Math.Sqrt(
+            relativeAirVelocity.X * relativeAirVelocity.X
+            + relativeAirVelocity.Z * relativeAirVelocity.Z);
+        double airTrackRad = horizontalAirSpeedMps > 0.5
+            ? Math.Atan2(relativeAirVelocity.X, relativeAirVelocity.Z)
+            : observation.YawRad;
         CobraGroundWarRuntime groundWar = runtime.GroundWar;
         GroundWarDebrief debrief = groundWar.Debrief;
         bool overFob = groundWar.Fob.Contains(
@@ -275,6 +282,11 @@ public static partial class CobraWebBridge
         double fobNorth = fob.Z - position.Z;
         double fobRangeM = Math.Sqrt(fobEast * fobEast + fobNorth * fobNorth);
         double fobBearingRad = Math.Atan2(fobEast, fobNorth);
+        Dictionary<string, double> airThreatRangesM = runtime.ResolvedThreatObservers
+            .ToDictionary(
+                observer => observer.Id,
+                observer => observer.MaximumAssessmentRangeM,
+                StringComparer.Ordinal);
         GroundUnit? selectedGunnerTarget = string.IsNullOrWhiteSpace(_selectedTargetId)
             ? null
             : groundWar.FindUnit(_selectedTargetId);
@@ -421,17 +433,23 @@ public static partial class CobraWebBridge
                     friendly = groundWar.FriendlyTickets,
                     hostile = groundWar.HostileTickets,
                 },
-                units = groundWar.Units.Select(unit => new {
-                    id = unit.Id,
-                    faction = unit.Faction.ToString().ToLowerInvariant(),
-                    role = RoleToken(unit.Role),
-                    alive = unit.IsAlive,
-                    health = unit.Health,
-                    max_health = unit.MaxHealth,
-                    x_m = unit.PositionWorldM.X,
-                    y_m = unit.PositionWorldM.Y,
-                    z_m = unit.PositionWorldM.Z,
-                    home_site_id = unit.HomeSiteId,
+                units = groundWar.Units.Select(unit => {
+                    double? airThreatRangeM = airThreatRangesM.TryGetValue(unit.Id, out double rangeM)
+                        ? rangeM
+                        : null;
+                    return new {
+                        id = unit.Id,
+                        faction = unit.Faction.ToString().ToLowerInvariant(),
+                        role = RoleToken(unit.Role),
+                        alive = unit.IsAlive,
+                        health = unit.Health,
+                        max_health = unit.MaxHealth,
+                        x_m = unit.PositionWorldM.X,
+                        y_m = unit.PositionWorldM.Y,
+                        z_m = unit.PositionWorldM.Z,
+                        home_site_id = unit.HomeSiteId,
+                        air_threat_range_m = airThreatRangeM,
+                    };
                 }).ToArray(),
                 events = groundWar.RecentEvents.Select(evt => new {
                     tick = evt.AuthorityTick,
@@ -499,6 +517,10 @@ public static partial class CobraWebBridge
                 velocity_x_mps = velocity.X,
                 velocity_y_mps = velocity.Y,
                 velocity_z_mps = velocity.Z,
+                horizontal_air_speed_mps = horizontalAirSpeedMps,
+                directional_air_speed_mps = rotorcraft.DirectionalAirSpeedMps,
+                air_track_rad = airTrackRad,
+                sideslip_rad = rotorcraft.SideslipRad,
                 flyable = observation.Flyable,
                 contact_failure_cause = ContactFailureCauseSlug(
                     runtime.Cobra.LastContactFailureCause),

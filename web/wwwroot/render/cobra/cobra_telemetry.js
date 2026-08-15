@@ -1,7 +1,7 @@
 import {
   buildTelemetryBatch,
   retainNewestTelemetryRows,
-} from "../telemetry/telemetry_batch.js?v=335";
+} from "../telemetry/telemetry_batch.js?v=336";
 
 /**
  * Bounded telemetry channel for the Cobra mission page.

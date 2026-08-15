@@ -19,11 +19,15 @@ function recordingHudContext() {
     save() {},
     restore() {},
     setTransform() {},
+    translate() {},
+    rotate() {},
     beginPath() {},
     closePath() {},
     moveTo() {},
     lineTo() {},
     quadraticCurveTo() {},
+    arc() {},
+    strokeRect() {},
     fill() {},
     stroke() {},
     measureText(text) { return { width: String(text).length * 6 }; },
@@ -264,6 +268,41 @@ test("the gunner's mark becomes a designation the pilot can find in the world", 
     gunner: { ...fixture.gunner, fire_authorized: true },
   });
   assert.equal(firing.designation.level, "firing");
+});
+
+test("tactical picture locks an objective and separates the garrison from AA threats", () => {
+  const fixture = modelFixture();
+  fixture.vehicle.x_m = 0;
+  fixture.vehicle.y_m = 100;
+  fixture.vehicle.z_m = 0;
+  fixture.vehicle.yaw_rad = 0;
+  fixture.ground_war.sites = [
+    { id: "bridge", label: "Cau Song Ma", owner: "hostile", x_m: 0, y_m: 40, z_m: 2_000 },
+    { id: "nearer", label: "Phu Rieng", owner: "hostile", x_m: 200, y_m: 40, z_m: 300 },
+  ];
+  fixture.ground_war.units = [
+    { id: "bridge.garrison", faction: "hostile", role: "hard-point", alive: true,
+      home_site_id: "bridge", x_m: 0, y_m: 40, z_m: 2_000 },
+    { id: "observer.ridge", faction: "hostile", role: "dshk-site", alive: true,
+      home_site_id: "bridge", x_m: 500, y_m: 120, z_m: 1_200 },
+  ];
+  fixture.gunner.selected_target_id = null;
+  const model = cobraRotorcraftHudModel(fixture);
+  assert.equal(model.tactical.objective.label, "CAU SONG MA");
+  assert.equal(model.tactical.target.label, "GARRISON");
+  assert.equal(model.tactical.threats.length, 1);
+  assert.equal(model.tactical.threats[0].label, "AA");
+
+  const ctx = recordingHudContext();
+  drawCobraRotorcraftHud(ctx, model, {
+    width: 1280,
+    height: 720,
+    projectWorldPoint: () => ({ x: 640, y: 320, inFrame: true }),
+  });
+  const texts = ctx.textCalls.map((call) => call.text);
+  assert.ok(texts.some((text) => /◇ CAU SONG MA .*△ AA 1/.test(text)), texts.join(" | "));
+  assert.ok(texts.some((text) => /GARRISON/.test(text)));
+  assert.ok(texts.some((text) => /^AA · /.test(text)));
 });
 
 test("a dead, absent or unselected target designates nothing at all", () => {

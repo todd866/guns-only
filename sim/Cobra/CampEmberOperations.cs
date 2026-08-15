@@ -32,7 +32,7 @@ public static class CampEmberOperations
 
     static readonly double[] ArrivalDistanceM = { 2_400.0, 1_800.0, 1_200.0, 600.0, 180.0, 0.0 };
     static readonly double[] ArrivalRadiusM = { 95.0, 85.0, 72.0, 56.0, 38.0, 28.0 };
-    static readonly double[] DepartureDistanceM = { 180.0, 600.0, 1_200.0 };
+    static readonly double[] DepartureDistanceM = { 140.0, 320.0 };
 
     public static Vec3D CentreWorldM => new(CentreEastM, PadElevationM, CentreNorthM);
 
@@ -69,19 +69,61 @@ public static class CampEmberOperations
 
     public static IReadOnlyList<CobraPathGate> BuildDepartureGates(Vec3D? aircraftWorldM = null)
     {
-        double alongM = aircraftWorldM is { } aircraft
-            ? AlongFinalM(aircraft)
-            : 0.0;
-        int activeIndex = alongM > 640.0 ? 2 : alongM > 220.0 ? 1 : 0;
-        var gates = new CobraPathGate[DepartureDistanceM.Length];
-        for (int index = 0; index < gates.Length; index++) {
+        return BuildDepartureGates(PointAlongFinal(1_200.0), aircraftWorldM);
+    }
+
+    /// <summary>
+    /// A visible departure join rather than a straight line that changes direction after the
+    /// player has left the FOB. The first two gates remain inside the surveyed 300-degree lane;
+    /// the remaining four form a quadratic turn toward the selected route's nearest safe point.
+    /// Every gate stays above the pad while Depart is active, so the cue cannot teach a descent
+    /// into the forest immediately after lift-off.
+    /// </summary>
+    public static IReadOnlyList<CobraPathGate> BuildDepartureGates(
+        in Vec3D routeJoinWorldM,
+        Vec3D? aircraftWorldM = null)
+    {
+        var positions = new Vec3D[6];
+        for (int index = 0; index < DepartureDistanceM.Length; index++) {
             double distanceM = DepartureDistanceM[index];
             Vec3D horizontal = PointAlongFinal(distanceM);
-            gates[index] = new CobraPathGate(
+            positions[index] = new Vec3D(
                 horizontal.X,
-                PadElevationM + distanceM * ObstacleSurfaceRisePerM,
-                horizontal.Z,
-                index == 0 ? 38.0 : index == 1 ? 56.0 : 72.0,
+                PadElevationM + Math.Max(42.0, distanceM * ObstacleSurfaceRisePerM),
+                horizontal.Z);
+        }
+
+        Vec3D curveStart = positions[1];
+        Vec3D curveControl = PointAlongFinal(900.0);
+        Vec3D curveFinish = new(
+            routeJoinWorldM.X,
+            Math.Max(PadElevationM + 42.0, routeJoinWorldM.Y),
+            routeJoinWorldM.Z);
+        for (int index = 2; index < positions.Length; index++) {
+            double t = (index - 1.0) / (positions.Length - 2.0);
+            double oneMinusT = 1.0 - t;
+            positions[index] = new Vec3D(
+                oneMinusT * oneMinusT * curveStart.X
+                    + 2.0 * oneMinusT * t * curveControl.X
+                    + t * t * curveFinish.X,
+                Math.Max(
+                    PadElevationM + 42.0,
+                    oneMinusT * curveStart.Y + t * curveFinish.Y),
+                oneMinusT * oneMinusT * curveStart.Z
+                    + 2.0 * oneMinusT * t * curveControl.Z
+                    + t * t * curveFinish.Z);
+        }
+
+        int activeIndex = ResolveDepartureGateIndex(positions, aircraftWorldM);
+
+        var gates = new CobraPathGate[positions.Length];
+        for (int index = 0; index < gates.Length; index++) {
+            Vec3D position = positions[index];
+            gates[index] = new CobraPathGate(
+                position.X,
+                position.Y,
+                position.Z,
+                38.0 + index * 10.0,
                 index == activeIndex);
         }
         return gates;
@@ -108,10 +150,58 @@ public static class CampEmberOperations
         return ArrivalDistanceM.Length - 1;
     }
 
-    static double AlongFinalM(in Vec3D point)
+    static int ResolveDepartureGateIndex(
+        IReadOnlyList<Vec3D> gates,
+        Vec3D? aircraftWorldM)
     {
-        double east = point.X - CentreEastM;
-        double north = point.Z - CentreNorthM;
-        return east * Math.Sin(FinalHeadingRad) + north * Math.Cos(FinalHeadingRad);
+        if (aircraftWorldM is not { } aircraft)
+            return 0;
+
+        double nearestDistanceSquaredM = double.MaxValue;
+        double nearestAlongM = 0.0;
+        double accumulatedM = 0.0;
+        Vec3D from = CentreWorldM;
+        foreach (Vec3D to in gates) {
+            double eastM = to.X - from.X;
+            double northM = to.Z - from.Z;
+            double lengthSquaredM = eastM * eastM + northM * northM;
+            double lengthM = Math.Sqrt(lengthSquaredM);
+            if (lengthM > 1e-6) {
+                double fraction = Math.Clamp(
+                    ((aircraft.X - from.X) * eastM + (aircraft.Z - from.Z) * northM)
+                        / lengthSquaredM,
+                    0.0,
+                    1.0);
+                double projectedEastM = from.X + eastM * fraction;
+                double projectedNorthM = from.Z + northM * fraction;
+                double distanceSquaredM =
+                    (aircraft.X - projectedEastM) * (aircraft.X - projectedEastM)
+                    + (aircraft.Z - projectedNorthM) * (aircraft.Z - projectedNorthM);
+                if (distanceSquaredM < nearestDistanceSquaredM) {
+                    nearestDistanceSquaredM = distanceSquaredM;
+                    nearestAlongM = accumulatedM + lengthM * fraction;
+                }
+                accumulatedM += lengthM;
+            }
+            from = to;
+        }
+
+        accumulatedM = 0.0;
+        from = CentreWorldM;
+        for (int index = 0; index < gates.Count; index++) {
+            Vec3D to = gates[index];
+            accumulatedM += HorizontalDistanceM(from, to);
+            if (accumulatedM > nearestAlongM + 24.0)
+                return index;
+            from = to;
+        }
+        return gates.Count - 1;
+    }
+
+    static double HorizontalDistanceM(in Vec3D a, in Vec3D b)
+    {
+        double eastM = a.X - b.X;
+        double northM = a.Z - b.Z;
+        return Math.Sqrt(eastM * eastM + northM * northM);
     }
 }

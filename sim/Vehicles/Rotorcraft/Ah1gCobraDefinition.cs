@@ -48,8 +48,11 @@ public static class Ah1gCobraDefinition
                 MilitaryRatedPowerW: Horsepower(1_400.0),
                 NormalRatedPowerW: Horsepower(1_250.0),
                 TransmissionLimitW: Horsepower(1_100.0),
-                // A 1.33 s first-order rise takes about four seconds to reach 95%.
-                EngineRiseTimeConstantSeconds: 1.33,
+                // The T53 governor has to catch a normal collective pull before the low-inertia
+                // two-blade system advertises a false engine stumble. A 0.12 s first-order rise
+                // reaches 95% in about 0.36 s: still a finite turbine response, but quick enough
+                // that the playable 0.40/s lever produces only a sub-one-percent Nr transient.
+                EngineRiseTimeConstantSeconds: 0.12,
                 EngineFallTimeConstantSeconds: 0.40,
                 GovernorProportionalGainWPerRpm: 24_000.0,
                 // Proportional-only control needs a standing rpm error to hold a standing power

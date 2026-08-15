@@ -34,6 +34,7 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
     // the airborne freewheel model. Kept provider-side so visible Nr, audio and transfer authority
     // all follow the same energy state rather than a mission timer.
     const double GroundedShutdownRotorRunDownTimeConstantSeconds = 3.2;
+    const double WeathervaneAdvanceRatioFull = 0.18;
     static readonly Vec3D WorldUp = new(0.0, 1.0, 0.0);
 
     readonly RotorcraftDefinition _definition;
@@ -53,6 +54,8 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
     double _lastTorqueYawDemandRadPerSecond;
     double _lastWeathervaneYawRadPerSecond;
     double _lastYawResidualRadPerSecond;
+    double _lastDirectionalAirSpeedMps;
+    double _lastSideslipRad;
     bool _engineOperating = true;
     bool _cockpitShutdown;
     bool _scasOperating = true;
@@ -175,6 +178,8 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             GovernorSaturated: false,
             RotorStrike: false,
             AdvanceRatio: 0.0,
+            DirectionalAirSpeedMps: 0.0,
+            SideslipRad: 0.0,
             BodyYawRateRadPerSecond: 0.0,
             TorqueYawDemandRadPerSecond: 0.0,
             ScasYawRadPerSecond: 0.0,
@@ -577,6 +582,8 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             State.BodyRates,
             command,
             controlsAvailable,
+            attitude,
+            airVelocity,
             rpmRatio,
             rotorPowerRequiredW,
             advanceRatio,
@@ -717,6 +724,8 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             governorSaturated,
             _rotorStrikeLatched,
             advanceRatio,
+            _lastDirectionalAirSpeedMps,
+            _lastSideslipRad,
             nextRates.R,
             _lastTorqueYawDemandRadPerSecond,
             _scasYawRateRadPerSecond,
@@ -733,6 +742,8 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         in BodyRates rates,
         in VerticalLiftPilotCommand command,
         bool controlsAvailable,
+        in QuaternionD attitude,
+        in Vec3D airVelocityWorld,
         double rpmRatio,
         double rotorPowerRequiredW,
         double advanceRatio,
@@ -760,13 +771,14 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         // right-yaw; left pedal counters.
         //
         // Build 307: raise provisional torque→yaw so hover needs pedal (owner: hover too
-        // stable). Keep NASA CR-3144 SCAS ±12.5%. Add speed-scheduled weathervane damping so
-        // cruise heading holds better without restoring Build 305 slow autotrim (owner:
-        // in-flight right yaw drift).
+        // stable). Keep NASA CR-3144 SCAS ±12.5%. Build 336 adds the missing directional
+        // stability: the fin and fuselage now weathercock the nose toward the relative-air track,
+        // rather than merely damping an existing yaw rate.
         const double TorqueYawAtTransmissionLimitRadPerSecond = 11.0 * Math.PI / 180.0;
         // At µ≈0.18 (~80 KT tip fraction) weathervane reaches full strength.
-        const double WeathervaneAdvanceRatioFull = 0.18;
         const double WeathervaneYawDampingPerSecond = 2.4;
+        const double WeathervaneAlignmentGainPerSecond = 1.55;
+        const double WeathervaneMaximumAlignmentRateRadPerSecond = 36.0 * Math.PI / 180.0;
         double transmissionLimitW = Math.Max(1.0, _definition.Powerplant.TransmissionLimitW);
         double torqueLoadFraction = Math.Clamp(
             rotorPowerRequiredW / transmissionLimitW, 0.0, 1.35);
@@ -796,16 +808,47 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
 
         double yawResidualRadPerSecond =
             torqueYawDemandRadPerSecond + _scasYawRateRadPerSecond;
-        double weathervaneSchedule = Math.Clamp(
-            advanceRatio / WeathervaneAdvanceRatioFull, 0.0, 1.35);
-        double weathervaneYawRadPerSecond = -rates.R
-            * WeathervaneYawDampingPerSecond
-            * weathervaneSchedule
+        Vec3D bodyAirVelocity = attitude.Conjugate().Rotate(airVelocityWorld);
+        double directionalAirSpeedMps = Math.Sqrt(
+            bodyAirVelocity.X * bodyAirVelocity.X
+            + bodyAirVelocity.Z * bodyAirVelocity.Z);
+        double sideslipRad = directionalAirSpeedMps > 0.5
+            ? Math.Atan2(bodyAirVelocity.X, bodyAirVelocity.Z)
+            : 0.0;
+        // Airframe-horizontal relative airspeed drives fin authority. Advance ratio alone follows
+        // the rotor disc and can stay high through a steep pull-up after the fin has nearly stopped
+        // seeing translational flow. The low-speed fade leaves the tail rotor, not a synthetic fin
+        // moment, in charge at the apex of a pedal turn.
+        double directionalStabilitySchedule = SmoothStep(
+            15.0,
+            35.0,
+            directionalAirSpeedMps);
+        double alignmentAdvanceRatioSchedule = Math.Clamp(
+            advanceRatio / WeathervaneAdvanceRatioFull, 0.0, 1.0);
+        double alignmentSchedule = Math.Min(
+            directionalStabilitySchedule,
+            alignmentAdvanceRatioSchedule);
+        // Preserve the established rate-damping schedule independently. At approach speed it is
+        // already stabilising the torque residual before the fin has enough flow to create useful
+        // air-track alignment; tying both effects to the newer fin schedule allowed a slow yaw
+        // wander to turn forward speed into sideslip during the flare.
+        double dampingSchedule = WeathervaneDampingSchedule(
+            advanceRatio,
+            directionalAirSpeedMps);
+        double alignmentYawRadPerSecond = Math.Clamp(
+            sideslipRad * WeathervaneAlignmentGainPerSecond,
+            -WeathervaneMaximumAlignmentRateRadPerSecond,
+            WeathervaneMaximumAlignmentRateRadPerSecond);
+        double weathervaneYawRadPerSecond = (
+            alignmentYawRadPerSecond * alignmentSchedule
+            - rates.R * WeathervaneYawDampingPerSecond * dampingSchedule)
             * controlEffectiveness;
 
         _lastTorqueYawDemandRadPerSecond = torqueYawDemandRadPerSecond;
         _lastWeathervaneYawRadPerSecond = weathervaneYawRadPerSecond;
         _lastYawResidualRadPerSecond = yawResidualRadPerSecond;
+        _lastDirectionalAirSpeedMps = directionalAirSpeedMps;
+        _lastSideslipRad = sideslipRad;
 
         // Keep the main-rotor torque/SCAS response separate from natural hands-off damping.
         // Applying the 2.5 s decay time to their combined target made a collective pull wait on
@@ -1531,6 +1574,8 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
             || !double.IsFinite(Telemetry.RetreatingBladeStallSeverity)
             || !double.IsFinite(Telemetry.MainRotorClearanceM)
             || !double.IsFinite(Telemetry.AdvanceRatio)
+            || !double.IsFinite(Telemetry.DirectionalAirSpeedMps)
+            || !double.IsFinite(Telemetry.SideslipRad)
             || !double.IsFinite(Telemetry.TorqueYawDemandRadPerSecond)
             || !double.IsFinite(Telemetry.ScasYawRadPerSecond)
             || !double.IsFinite(Telemetry.WeathervaneYawRadPerSecond)
@@ -1556,5 +1601,19 @@ public sealed class Ah1gCobraDynamics : IPlayerVehicleDynamics
         if (edge0 == edge1) return value < edge0 ? 0.0 : 1.0;
         double t = Math.Clamp((value - edge0) / (edge1 - edge0), 0.0, 1.0);
         return t * t * (3.0 - 2.0 * t);
+    }
+
+    internal static double WeathervaneDampingSchedule(
+        double advanceRatio,
+        double directionalAirSpeedMps)
+    {
+        double rotorSchedule = Math.Clamp(
+            advanceRatio / WeathervaneAdvanceRatioFull,
+            0.0,
+            1.35);
+        // Keep the familiar stabilising damping through a 15 kt approach, but wash it out with
+        // the fin flow at the near-zero-speed apex even if disc-relative µ remains elevated.
+        double airframeFlowSchedule = SmoothStep(2.0, 7.0, directionalAirSpeedMps);
+        return rotorSchedule * airframeFlowSchedule;
     }
 }

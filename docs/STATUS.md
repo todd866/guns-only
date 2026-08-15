@@ -1,7 +1,7 @@
 # Current product and verification status
 
 Updated: 2026-08-15
-Production: Build 334, revision `0828426556e73ead343f8b8d87008f9c99b21642` (verified live via
+Production: Build 335, revision `367d2a8e11e3c111ac45a98b0de72ef85fa3f635` (verified live via
 `/api/build-info` 2026-08-15, with the protected release pipeline complete). Builds 312 (Cobra
 contact envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap
 timing), 318 (authored structure materials), 320 (Top Gun 404 + cockpit depth near-plane), 321
@@ -43,7 +43,7 @@ aureole, shadow-readable layered jungle, rotor-wash and pad-edge wear, support v
 camp silhouettes. Camp Ember remains one merged draw. The scenery comparison camera was corrected
 from a retired jungle coordinate to the authoritative firebase.
 
-Next candidate: Build 335 (branch `fix/cobra-tactical-layout-335`) — removes the synthetic Cobra
+Build 335 removed the synthetic Cobra
 departure-lane target and keeps every hostile outside Camp Ember's protected rear-area perimeter,
 including wave selection, movement and chase logic. The shared Cobra/F-14/F-22/Rapier world-space
 guidance renderer now retains a valid ladder through a transient empty frame but keys that continuity
@@ -51,6 +51,19 @@ to the sortie and procedure so stale routes cannot survive a restart or outbound
 Top Gun numeric recovery lecture is removed; the F-14 sweep indicator is a recognisable articulated
 Tomcat planform. Cold-launched combat missions now carry an executable one-minute intended-profile
 ingress acceptance standard.
+
+Next candidate: Build 336 (branch `fix/cobra-tactical-cues-336`) — turns Hold the Bridge into an
+authored formation departure. The player launches as Dash 2 behind a visible Ember Lead, follows a
+dense world-registered climbing corridor through a deliberate dogleg, and receives concise calls
+explaining the DShK threat and route handoff. Gate altitude truth now reaches the renderer instead
+of being replaced by generic terrain clearance, departure progress advances along the curved path,
+and the first hostile objective remains stable until captured. Target garrisons and AA sites have
+distinct HUD/map symbology and threat rings. A normal collective pull retains only a small governed
+Nr transient, and telemetry now records active-gate geometry, path error, Lead spacing and radio
+phase. Cobra directional stability now uses actual sideslip to weathercock the fin/fuselage toward
+the relative-air track, with that aerodynamic authority fading at low translational speed so the
+tail rotor retains a decisive pedal turn; air track, exact body-frame sideslip, horizontal airspeed
+and fin-directional airspeed are recorded for owner-flight diagnosis.
 
 Build 325 shipped the following owner-flight findings and remains the baseline for this candidate.
 

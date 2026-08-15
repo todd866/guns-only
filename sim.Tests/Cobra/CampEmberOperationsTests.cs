@@ -47,6 +47,47 @@ public class CampEmberOperationsTests
             precision: 6);
     }
 
+    [Fact]
+    public void DepartureShowsTheTurnToTheSelectedRouteFromThePad()
+    {
+        Vec3D join = new(-4_550.0, 156.0, -3_650.0);
+        IReadOnlyList<CobraPathGate> gates = CampEmberOperations.BuildDepartureGates(join);
+
+        Assert.Equal(6, gates.Count);
+        Assert.Single(gates, gate => gate.Active);
+        Assert.Equal(join.X, gates[^1].EastM, 9);
+        Assert.Equal(join.Z, gates[^1].NorthM, 9);
+        Assert.All(gates, gate =>
+            Assert.True(gate.UpM >= CampEmberOperations.PadElevationM + 42.0));
+
+        double previousRangeM = 0.0;
+        foreach (CobraPathGate gate in gates) {
+            double rangeM = HorizontalDistance(gate, CampEmberOperations.CentreWorldM);
+            Assert.True(rangeM > previousRangeM,
+                $"departure doubled back at {rangeM:F1} m after {previousRangeM:F1} m");
+            previousRangeM = rangeM;
+        }
+
+        double firstBearingRad = Math.Atan2(
+            gates[0].EastM - CampEmberOperations.CentreEastM,
+            gates[0].NorthM - CampEmberOperations.CentreNorthM);
+        Assert.Equal(0.0, Math.IEEERemainder(
+            firstBearingRad - CampEmberOperations.FinalHeadingRad,
+            Math.PI * 2.0), precision: 9);
+        double lastLegBearingRad = Math.Atan2(
+            gates[^1].EastM - gates[^2].EastM,
+            gates[^1].NorthM - gates[^2].NorthM);
+        Assert.True(Math.Abs(Math.IEEERemainder(
+            lastLegBearingRad - firstBearingRad,
+            Math.PI * 2.0)) > 0.1,
+            "the visible departure must contain a real turn before the route join");
+
+        IReadOnlyList<CobraPathGate> advanced = CampEmberOperations.BuildDepartureGates(
+            join,
+            new Vec3D(gates[1].EastM, gates[1].UpM, gates[1].NorthM));
+        Assert.Equal(2, advanced.ToList().FindIndex(gate => gate.Active));
+    }
+
     static double HorizontalDistance(CobraPathGate gate, in Vec3D point) =>
         Math.Sqrt(Math.Pow(gate.EastM - point.X, 2.0) + Math.Pow(gate.NorthM - point.Z, 2.0));
 }

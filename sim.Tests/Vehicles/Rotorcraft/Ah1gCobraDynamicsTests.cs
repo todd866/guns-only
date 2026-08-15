@@ -9,12 +9,13 @@ public sealed class Ah1gCobraDynamicsTests
     static Ah1gCobraDynamics Create(
         string id,
         Vec3D? position = null,
-        Vec3D? velocity = null) =>
+        Vec3D? velocity = null,
+        double initialYawRad = 0.0) =>
         new(
             id,
             position ?? new Vec3D(0.0, 500.0, 0.0),
             velocity ?? Vec3D.Zero,
-            initialYawRad: 0.0,
+            initialYawRad,
             initialRecurringBaseMassKg: BasicMissionMassKg);
 
     static PlayerVehicleAdvanceInput Input(
@@ -255,6 +256,33 @@ public sealed class Ah1gCobraDynamicsTests
         Assert.True(cobra.Telemetry.EngineShaftPowerW > beforePowerW + 25_000.0);
         Assert.InRange(cobra.Telemetry.TransmissionLimitFraction, 0.80, 1.001);
         Assert.InRange(cobra.State.GroundVelocityMps.Y, 0.5, 20.0);
+    }
+
+    [Fact]
+    public void DeliberateTakeoffPullDoesNotCreateAVisibleRotorRpmSag()
+    {
+        var cobra = Create("takeoff-governor");
+        var flatPitch = new VerticalLiftPilotCommand(0.0, 0.0, 0.0, 0.0);
+        // The playable Cobra sits at governed flight idle until the pilot deliberately raises
+        // the lever. This is the exact cold-open sequence, without relying on browser cadence.
+        for (long tick = 0; tick < 240; tick++) cobra.Advance(Input(tick, flatPitch));
+
+        double minimumRpm = cobra.Telemetry.MainRotorRpm;
+        double powerBeforePullW = cobra.Telemetry.EngineShaftPowerW;
+        const int PullTicks = 300;
+        for (int step = 0; step < PullTicks; step++)
+        {
+            double elapsedSeconds = step * PlayerVehicleContract.FixedDeltaSeconds;
+            double collective = Math.Min(0.72, 0.40 * elapsedSeconds);
+            cobra.Advance(Input(240 + step,
+                new VerticalLiftPilotCommand(collective, 0.0, 0.0, 0.0)));
+            minimumRpm = Math.Min(minimumRpm, cobra.Telemetry.MainRotorRpm);
+        }
+
+        Assert.True(minimumRpm >= 322.4,
+            $"a normal 0.40/s takeoff pull sagged Nr to {minimumRpm:F1} rpm");
+        Assert.True(cobra.Telemetry.EngineShaftPowerW > powerBeforePullW + 100_000.0,
+            "shaft power must lead the takeoff load instead of waiting for a visible Nr error");
     }
 
     [Fact]
@@ -1060,6 +1088,72 @@ public sealed class Ah1gCobraDynamicsTests
     }
 
     [Fact]
+    public void TranslationalFlowWeathervanesTheNoseTowardTheAirTrack()
+    {
+        const double InitialYawRad = Math.PI / 4.0;
+        var cobra = Create(
+            "weathervane-sideslip",
+            velocity: new Vec3D(0.0, 0.0, 45.0),
+            initialYawRad: InitialYawRad);
+        double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        var command = new VerticalLiftPilotCommand(trim, 0.10, 0.0, 0.0);
+        cobra.Advance(Input(0, command));
+        double initialSideslipRad = cobra.Telemetry.SideslipRad;
+        Assert.True(cobra.Telemetry.WeathervaneYawRadPerSecond < -Degrees(20.0),
+            $"initial left sideslip should command a strong left weathercock rate, got "
+            + $"{cobra.Telemetry.WeathervaneYawRadPerSecond * 180.0 / Math.PI:F1}°/s");
+
+        for (long tick = 1; tick < 360; tick++)
+            cobra.Advance(Input(tick, command));
+
+        double finalSideslipRad = cobra.Telemetry.SideslipRad;
+        Assert.True(Math.Abs(finalSideslipRad) < Math.Abs(initialSideslipRad) - Degrees(12.0),
+            $"fin should reduce sideslip: {initialSideslipRad * 180.0 / Math.PI:F1}° -> "
+            + $"{finalSideslipRad * 180.0 / Math.PI:F1}°");
+        Assert.True(cobra.Observation.YawRad < InitialYawRad - Degrees(10.0),
+            $"nose barely weathercocked: yaw "
+            + $"{cobra.Observation.YawRad * 180.0 / Math.PI:F1}°");
+    }
+
+    [Fact]
+    public void TailRotorCanPivotDecisivelyAtLowAirspeed()
+    {
+        var cobra = Create("stall-turn-pedal-authority");
+        double trim = cobra.EstimateHoverCollective(BasicMissionMassKg, 1.225);
+        var hover = new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0);
+        for (long tick = 0; tick < 240; tick++)
+            cobra.Advance(Input(tick, hover));
+
+        Assert.True(cobra.Telemetry.DirectionalAirSpeedMps < 2.0,
+            $"fixture did not settle at low airspeed: "
+            + $"{cobra.Telemetry.DirectionalAirSpeedMps:F2} m/s");
+        double yawAtPedalApplication = cobra.Observation.YawRad;
+        var fullRightPedal = hover with { Yaw = 1.0 };
+        for (long tick = 240; tick < 390; tick++)
+            cobra.Advance(Input(tick, fullRightPedal));
+
+        double yawChangeRad = WrapPi(cobra.Observation.YawRad - yawAtPedalApplication);
+        Assert.True(yawChangeRad > Degrees(30.0),
+            $"full pedal produced only {yawChangeRad * 180.0 / Math.PI:F1}° in 1.25 s");
+        Assert.True(cobra.State.BodyRates.R > Degrees(35.0),
+            $"tail rotor reached only "
+            + $"{cobra.State.BodyRates.R * 180.0 / Math.PI:F1}°/s");
+    }
+
+    [Fact]
+    public void WeathervaneDampingWashesOffAtTheApexEvenIfRotorAdvanceRatioStaysHigh()
+    {
+        const double HighDiscAdvanceRatio = 0.30;
+        Assert.Equal(0.0, Ah1gCobraDynamics.WeathervaneDampingSchedule(
+            HighDiscAdvanceRatio,
+            directionalAirSpeedMps: 0.5));
+        Assert.True(Ah1gCobraDynamics.WeathervaneDampingSchedule(
+            HighDiscAdvanceRatio,
+            directionalAirSpeedMps: 8.0) > 1.0,
+            "rate damping should remain available through a normal translational approach");
+    }
+
+    [Fact]
     public void CruiseWeathervaneDampsButDoesNotEraseYawRateInOneSecond()
     {
         var reference = Create("yaw-decay-reference", velocity: new Vec3D(0.0, 0.0, 45.0));
@@ -1096,7 +1190,7 @@ public sealed class Ah1gCobraDynamicsTests
             + $"({excessYawRateAtRelease:F4} -> {excessYawRateAfterOneSecond:F4} rad/s)");
         Assert.True(excessYawRateAtRelease > 0.08,
             $"Yaw pulse produced only {excessYawRateAtRelease:F4} rad/s excess R.");
-        Assert.InRange(retainedFraction, 0.12, 0.55);
+        Assert.InRange(retainedFraction, 0.05, 0.35);
     }
 
     [Fact]

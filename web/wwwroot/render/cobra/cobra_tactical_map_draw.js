@@ -11,7 +11,7 @@
  * rotates.
  */
 
-import { cobraConquestScoreLine } from "./cobra_objective_copy.js?v=335";
+import { cobraConquestScoreLine } from "./cobra_objective_copy.js?v=336";
 
 // Palette is the shell's own legend (cobra-lab/styles.css --friendly / --hostile /
 // .landmark-key / --warm), so the map cannot disagree with the legend swatches beside it.
@@ -27,6 +27,9 @@ export const COBRA_MAP_COLORS = Object.freeze({
   muted: "rgba(154, 163, 146, 0.9)",
   river: "rgba(96, 152, 186, 0.85)",
   objectiveRing: "rgba(240, 214, 138, 0.95)",
+  target: "#ffb020",
+  airThreat: "#ff465d",
+  threatCoverage: "rgba(255, 70, 93, 0.16)",
 });
 
 const MINIMAP = Object.freeze({
@@ -240,6 +243,70 @@ function drawUnits(ctx, model, metrics) {
   }
 }
 
+function drawThreatCoverage(ctx, model, { full, metresPerPixel }) {
+  if (!full || !(Number.isFinite(metresPerPixel) && metresPerPixel > 0)) return;
+  ctx.save();
+  for (const symbol of model.tacticalSymbols ?? []) {
+    if (symbol.kind !== "air-threat" || !(symbol.rangeM > 0)) continue;
+    ctx.beginPath();
+    ctx.arc(symbol.x, symbol.y, symbol.rangeM / metresPerPixel, 0, Math.PI * 2);
+    ctx.strokeStyle = COBRA_MAP_COLORS.threatCoverage;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawTacticalSymbols(ctx, model, metrics, { full }) {
+  for (const symbol of model.tacticalSymbols ?? []) {
+    const radius = full ? 8 : 5.5;
+    ctx.save();
+    ctx.translate(symbol.x, symbol.y);
+    ctx.globalAlpha = symbol.offMap ? 0.45 : 1;
+    if (symbol.kind === "air-threat") {
+      // Triangle is conventional threat language; it is deliberately unlike the round site
+      // ownership marks and the diamond target mark.
+      ctx.beginPath();
+      ctx.moveTo(0, -radius);
+      ctx.lineTo(radius * 0.9, radius * 0.75);
+      ctx.lineTo(-radius * 0.9, radius * 0.75);
+      ctx.closePath();
+      ctx.strokeStyle = COBRA_MAP_COLORS.airThreat;
+      ctx.lineWidth = full ? 2 : 1.5;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, radius * 0.12, full ? 1.8 : 1.2, 0, Math.PI * 2);
+      ctx.fillStyle = COBRA_MAP_COLORS.airThreat;
+      ctx.fill();
+      ctx.fillStyle = COBRA_MAP_COLORS.airThreat;
+      ctx.font = full
+        ? "800 10px ui-monospace, monospace"
+        : "800 7px ui-monospace, monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText("AA", 0, radius + 2);
+    } else {
+      ctx.strokeStyle = COBRA_MAP_COLORS.target;
+      ctx.lineWidth = full ? 2.5 : 2;
+      ctx.beginPath();
+      ctx.moveTo(0, -radius);
+      ctx.lineTo(radius, 0);
+      ctx.lineTo(0, radius);
+      ctx.lineTo(-radius, 0);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.fillStyle = COBRA_MAP_COLORS.target;
+      ctx.font = full
+        ? "800 10px ui-monospace, monospace"
+        : "800 7px ui-monospace, monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "top";
+      ctx.fillText("TGT", 0, radius + 3);
+    }
+    ctx.restore();
+  }
+}
+
 function drawSites(ctx, model, metrics, { full, nowSeconds }) {
   for (const site of model.sites ?? []) {
     // 2. The disc: who holds the point, in the legend's own two colours.
@@ -384,6 +451,8 @@ function drawLegend(ctx, model) {
     { color: COBRA_MAP_COLORS.hostile, text: "HOSTILE POINT" },
     { color: COBRA_MAP_COLORS.contested, text: "CONTESTED" },
     { color: COBRA_MAP_COLORS.player, text: "YOU" },
+    { color: COBRA_MAP_COLORS.target, text: "◇ TARGET" },
+    { color: COBRA_MAP_COLORS.airThreat, text: "△ AA THREAT / RANGE RING" },
   ];
   // Bottom RIGHT, which is the corner the minimap vacates when the full map opens. Bottom-left
   // is the shell's own "H · CONTROLS" button and the legend was landing on top of it.
@@ -425,6 +494,13 @@ export function drawCobraTacticalMap(
   if (!(width > 0) || !(height > 0)) return;
   const metrics = full ? FULLMAP : MINIMAP;
   const scoreLine = full ? null : cobraConquestScoreLine(model);
+  const threatCount = (model.tacticalSymbols ?? [])
+    .filter((symbol) => symbol.kind === "air-threat").length;
+  const targetCount = (model.tacticalSymbols ?? [])
+    .filter((symbol) => symbol.kind === "target").length;
+  const tacticalLine = model.objective
+    ? `◇ ${String(model.objective.label ?? "TARGET").toUpperCase()} · ${targetCount} TGT · △ ${threatCount} AA`
+    : scoreLine;
   // The model was built for the CHART box; the caption band sits above it, so the panel is
   // taller than the projection and everything below the band is drawn translated.
   const band = (caption?.line || scoreLine) && headerPx > 0 ? headerPx : 0;
@@ -434,7 +510,12 @@ export function drawCobraTacticalMap(
   if (band > 0) {
     ctx.fillStyle = COBRA_MAP_COLORS.backing;
     ctx.fillRect(0, 0, width, band);
-    drawCaption(ctx, caption, { widthPx: width, headerPx: band, full, scoreLine });
+    drawCaption(ctx, caption, {
+      widthPx: width,
+      headerPx: band,
+      full,
+      scoreLine: full ? scoreLine : tacticalLine,
+    });
     ctx.translate(0, band);
   }
   // Everything is clipped to the map box: a site clamped to the edge draws a disc whose rim
@@ -455,10 +536,12 @@ export function drawCobraTacticalMap(
   ctx.lineWidth = 1;
   ctx.strokeRect(0.5, 0.5, width - 1, height - 1);
 
+  drawThreatCoverage(ctx, model, { full, metresPerPixel });
   drawUnits(ctx, model, metrics);
   drawSites(ctx, model, metrics, { full, nowSeconds });
   drawObjectiveLine(ctx, model, metrics);
   drawObjectiveMarker(ctx, model, metrics);
+  drawTacticalSymbols(ctx, model, metrics, { full });
   drawPlayer(ctx, model, metrics);
   drawChartFurniture(ctx, model, metrics, metresPerPixel);
   if (full) {

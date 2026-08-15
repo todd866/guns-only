@@ -132,7 +132,7 @@ test("showUnits true returns only living units", () => {
   assert.equal(model.units[0].id, "u1");
 });
 
-test("objective picks the nearest hostile site by metres with correct bearing", () => {
+test("objective stays on the first hostile site with correct bearing", () => {
   const model = cobraTacticalMapModel({
     sites: [
       // Due east of the player (500,500), 100m away.
@@ -151,6 +151,31 @@ test("objective picks the nearest hostile site by metres with correct bearing", 
   assert.equal(model.objective.label, "Near");
   assert.ok(Math.abs(model.objective.bearingRad - Math.PI / 2) < 1e-9);
   assert.ok(Math.abs(model.objective.rangeM - 100) < 1e-9);
+});
+
+test("objective garrison and DShK threats survive minimap unit suppression as shaped symbols", () => {
+  const model = cobraTacticalMapModel({
+    sites: [
+      { id: "objective", label: "Objective", x_m: 600, y_m: 0, z_m: 500, owner: "hostile" },
+    ],
+    units: [
+      { id: "objective.garrison", faction: "hostile", role: "hard-point", alive: true,
+        home_site_id: "objective", x_m: 610, y_m: 0, z_m: 510 },
+      { id: "observer.ridge", faction: "hostile", role: "dshk-site", alive: true,
+        home_site_id: "objective", x_m: 700, y_m: 0, z_m: 700, air_threat_range_m: 5_500 },
+      { id: "ordinary", faction: "hostile", role: "infantry", alive: true,
+        home_site_id: "objective", x_m: 650, y_m: 0, z_m: 650 },
+    ],
+    player: { eastM: 500, northM: 500, headingRad: 0 },
+    bounds: BOUNDS,
+    widthPx: 200,
+    heightPx: 200,
+    showUnits: false,
+  });
+  assert.deepEqual(model.units, []);
+  assert.deepEqual(model.tacticalSymbols.map((symbol) => symbol.kind).sort(),
+    ["air-threat", "target"]);
+  assert.equal(model.tacticalSymbols.find((symbol) => symbol.kind === "air-threat").rangeM, 5_500);
 });
 
 test("objective is null when every site is friendly-owned", () => {

@@ -42,13 +42,17 @@ public readonly record struct RotorcraftTelemetry(
     bool RotorStrike,
     /// <summary>Main-rotor advance ratio µ = V_inplane / (ΩR).</summary>
     double AdvanceRatio,
+    /// <summary>Relative-air speed in the fuselage X/Z plane used by directional stability.</summary>
+    double DirectionalAirSpeedMps,
+    /// <summary>Body-frame sideslip used by directional stability (rad), positive flow from right.</summary>
+    double SideslipRad,
     /// <summary>Body yaw rate R (rad/s), positive right.</summary>
     double BodyYawRateRadPerSecond,
     /// <summary>Provisional torque→yaw demand before SCAS (rad/s).</summary>
     double TorqueYawDemandRadPerSecond,
     /// <summary>Limited-authority SCAS yaw rate command (rad/s), opposing torque.</summary>
     double ScasYawRadPerSecond,
-    /// <summary>Speed-scheduled weathervane / fin damping contribution (rad/s).</summary>
+    /// <summary>Speed-scheduled fin alignment and yaw-damping contribution (rad/s).</summary>
     double WeathervaneYawRadPerSecond,
     /// <summary>Torque + SCAS residual before weathervane (rad/s). Pedal work when this is nonzero.</summary>
     double YawResidualRadPerSecond);

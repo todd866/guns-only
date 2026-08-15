@@ -110,4 +110,7 @@ test("cobra telemetry records yaw residual and local wind for SCAS vs wind audit
   assert.match(main, /cobra_gust_yaw_moment_nm:/);
   assert.match(main, /cobra_gust_roll_moment_nm:/);
   assert.match(main, /cobra_advance_ratio:/);
+  assert.match(main, /cobra_directional_air_speed_mps:/);
+  assert.match(main, /cobra_air_track_rad:/);
+  assert.match(main, /cobra_sideslip_rad:/);
 });

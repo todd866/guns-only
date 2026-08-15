@@ -7,7 +7,7 @@
  * progress or unit positions, it only reprojects what the sim already published.
  */
 
-import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=335";
+import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=336";
 
 export const COBRA_TACTICAL_MAP_SCHEMA = "guns-only.cobra-tactical-map.v1";
 
@@ -108,6 +108,8 @@ export function cobraTacticalMapModel({
   }
 
   const projectedUnits = [];
+  const tacticalSymbols = [];
+  const objectiveSiteId = cobraObjectiveSiteId({ sites, units, player });
   if (showUnits) {
     for (const unit of units) {
       if (!unit) continue;
@@ -119,9 +121,37 @@ export function cobraTacticalMapModel({
         x,
         y,
         faction: unit.faction,
+        role: unit.role,
+        homeSiteId: unit.home_site_id,
         offMap,
       });
     }
+  }
+
+  // The minimap suppresses ordinary infantry clutter, but never suppresses the things a pilot
+  // must know before takeoff: the objective garrison and every gun that can shoot the aircraft.
+  // These are role-shaped symbols, not another set of identical red dots.
+  for (const unit of units) {
+    if (!unit?.alive || unit.faction !== "hostile") continue;
+    const role = String(unit.role ?? "").toLowerCase();
+    const isThreat = role === "dshk-site";
+    const isObjectiveTarget = unit.home_site_id === objectiveSiteId
+      && String(unit.id ?? "").endsWith(".garrison");
+    if (!isThreat && !isObjectiveTarget) continue;
+    if (!Number.isFinite(unit.x_m) || !Number.isFinite(unit.z_m)) continue;
+    const { x, y, offMap } = project(unit.x_m, unit.z_m, bounds, widthPx, heightPx);
+    tacticalSymbols.push({
+      id: unit.id,
+      kind: isThreat ? "air-threat" : "target",
+      role,
+      x,
+      y,
+      offMap,
+      homeSiteId: unit.home_site_id,
+      rangeM: Number.isFinite(Number(unit.air_threat_range_m))
+        ? Number(unit.air_threat_range_m)
+        : null,
+    });
   }
 
   const playerEastM = player?.eastM ?? 0;
@@ -145,7 +175,6 @@ export function cobraTacticalMapModel({
   }
 
   let objective = null;
-  const objectiveSiteId = cobraObjectiveSiteId({ sites, units, player });
   const objectiveSite = sites.find((site) => site?.id === objectiveSiteId) ?? null;
   if (objectiveSite
     && Number.isFinite(objectiveSite.x_m)
@@ -167,6 +196,7 @@ export function cobraTacticalMapModel({
     heightPx,
     sites: projectedSites,
     units: projectedUnits,
+    tacticalSymbols,
     river: projectedRiver,
     player: projectedPlayer,
     tickets: { friendly: tickets?.friendly ?? 0, hostile: tickets?.hostile ?? 0 },

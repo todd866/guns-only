@@ -66,12 +66,19 @@ public static class CobraMissionActProgress
     {
         if (act is CobraMissionAct.Rtb or CobraMissionAct.Complete)
             return CampEmberOperations.BuildArrivalGates(aircraftWorldM);
-        if (act == CobraMissionAct.Depart)
-            return CampEmberOperations.BuildDepartureGates(aircraftWorldM);
 
         IReadOnlyList<CobraCanyonRoutePoint> points = route.Points;
         int bridgeIndex = FindBridgePointIndex(points);
         int routeJoinIndex = FindNearestRoutePointIndex(points, fobCentreWorldM);
+        if (act == CobraMissionAct.Depart) {
+            CobraCanyonRoutePoint join = points[routeJoinIndex];
+            return CampEmberOperations.BuildDepartureGates(
+                new Vec3D(
+                    join.EastM,
+                    join.PathAltitudeM + join.TargetAglM,
+                    join.NorthM),
+                aircraftWorldM);
+        }
         int activeIndex = act switch {
             CobraMissionAct.Engage or CobraMissionAct.Hold => bridgeIndex,
             CobraMissionAct.Ingress =>
