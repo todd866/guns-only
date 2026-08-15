@@ -86,11 +86,14 @@ async function servePython(wwwroot) {
 const VIEWS = Object.freeze([
   Object.freeze({
     name: "camp-ember",
-    eastM: -6_775,
-    northM: -6_200,
-    aglM: 28,
-    yawRad: 0.85,
-    pitchRad: -0.22,
+    // Final-approach quarter, looking at the authoritative Camp Ember landmark at
+    // [-3800, 214, -4600]. The old -6775/-6200 pose was a retired world location and graded
+    // an anonymous wall of jungle while claiming it was the firebase.
+    eastM: -3_956,
+    northM: -4_510,
+    aglM: 34,
+    yawRad: -2.094,
+    pitchRad: -0.16,
   }),
   Object.freeze({
     name: "mid-gorge",

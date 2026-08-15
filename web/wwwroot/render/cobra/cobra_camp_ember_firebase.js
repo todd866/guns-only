@@ -8,7 +8,7 @@
 import {
   COBRA_CANYON_CAMP_EMBER_APRON,
   sampleCobraCanyonTerrain,
-} from "./cobra_canyon_plan.js?v=333";
+} from "./cobra_canyon_plan.js?v=334";
 
 export const CAMP_EMBER_LANDMARK_ID = "landmark.cobra-canyon.camp-ember.v1";
 export const CAMP_EMBER_FIREBASE_SCHEMA = "guns-only.cobra-camp-ember-firebase.v2";
@@ -80,6 +80,11 @@ export const CAMP_EMBER_COLORS = Object.freeze({
   aviationWhite: [0.83, 0.82, 0.68],
   signalYellow: [0.82, 0.62, 0.14],
   signalRed: [0.66, 0.16, 0.10],
+  tyre: [0.075, 0.07, 0.06],
+  rotorWash: [0.27, 0.22, 0.17],
+  fadedYellow: [0.64, 0.49, 0.16],
+  oliveDrab: [0.22, 0.28, 0.17],
+  oliveHighlight: [0.34, 0.38, 0.23],
 });
 
 function finite(value, fallback = 0) {
@@ -133,8 +138,11 @@ export function campEmberFirebaseParts() {
       + Math.cos(CAMP_EMBER_DEPARTURE_YAW_RAD) * -northM,
   });
   const addPad = (id, x, z, sizeM, yaw = 0, color = CAMP_EMBER_COLORS.psp) => {
+    // The main 28 m FATO needs stabilized earth under its outer ring and edge tabs. The previous
+    // size+12 bed ended at 21 m, leaving those marks visibly suspended above the recessed scar.
+    const lateriteSizeM = id === "main" ? 64 : sizeM + 12;
     add(`laterite-${id}`, "laterite", "box", CAMP_EMBER_COLORS.laterite, x, z,
-      0.220, sizeM + 12, 0.02, sizeM + 12, yaw, true);
+      0.220, lateriteSizeM, 0.02, lateriteSizeM, yaw, true);
     add(`psp-${id}-bed`, "psp", "box", color, x, z,
       0.265, sizeM, 0.02, sizeM, yaw, true);
     const ribCount = Math.floor(sizeM / 2.2);
@@ -180,6 +188,24 @@ export function campEmberFirebaseParts() {
     4.2, 0, 0.316, 1.25, 0.012, 11, 0, true);
   add("tlof-h-crossbar", "marking", "box", CAMP_EMBER_COLORS.aviationWhite,
     0, 0, 0.318, 8.4, 0.012, 1.25, 0, true);
+
+  // Rotor-wash polish, oil shadows and alternating edge tabs stop the central PSP from reading
+  // as one enormous flat polygon. Every mark remains part of the same merged firebase draw.
+  for (let segment = 0; segment < 20; segment++) {
+    const angle = segment / 20 * Math.PI * 2;
+    add(`tlof-wash-${segment}`, "wear", "box", CAMP_EMBER_COLORS.rotorWash,
+      8.8 * Math.cos(angle), 8.8 * Math.sin(angle), 0.319,
+      3.0, 0.008, 0.42, -angle, true);
+  }
+  for (let segment = 0; segment < 12; segment++) {
+    const angle = segment / 12 * Math.PI * 2 + Math.PI / 12;
+    add(`fato-edge-tab-${segment}`, "marking", "box",
+      segment % 2 ? CAMP_EMBER_COLORS.fadedYellow : CAMP_EMBER_COLORS.aviationWhite,
+      28.2 * Math.cos(angle), 28.2 * Math.sin(angle), 0.319,
+      4.8, 0.01, 0.5, -angle, true);
+  }
+  addFan("tlof-oil-shadow", "wear", CAMP_EMBER_COLORS.tyre,
+    5.5, 5.8, 0.319, [[-1.6, -0.8], [0.2, -1.2], [1.8, -0.4], [1.2, 0.9], [-0.7, 1.0]]);
 
   // Windsock and signal mast sit outside the rotor safety area and off the protected centreline.
   // The yellow horizontal sock is intentionally broad enough to read from the 600 m gate.
@@ -289,6 +315,40 @@ export function campEmberFirebaseParts() {
     142, 18, 9, 0.42, 18, 0.42, 0);
   add("radio-crossbar", "steel", "box", CAMP_EMBER_COLORS.rust,
     142, 18, 18.05, 3.2, 0.22, 0.22, 0.45);
+  // Cross-braces and aerials give the two tall landmarks a readable silhouette against haze.
+  for (const heightM of [3.0, 5.2]) {
+    add(`tower-brace-a-${heightM}`, "timber", "box", CAMP_EMBER_COLORS.timber,
+      towerX, towerZ - 1.3, heightM, 3.8, 0.18, 0.18, 0.72);
+    add(`tower-brace-b-${heightM}`, "timber", "box", CAMP_EMBER_COLORS.timber,
+      towerX, towerZ + 1.3, heightM, 3.8, 0.18, 0.18, -0.72);
+  }
+  [5.5, 10.5, 15.5].forEach((heightM, spreaderIndex) => {
+    add(`radio-spreader-${heightM}`, "steel", "box", CAMP_EMBER_COLORS.steel,
+      142, 18, heightM, 4.4, 0.12, 0.12, spreaderIndex % 2 ? -0.45 : 0.45);
+  });
+  add("radio-whip", "steel", "cylinder", CAMP_EMBER_COLORS.steel,
+    142, 18, 21.5, 0.14, 7, 0.14, 0);
+
+  // Three compact support vehicles create familiar scale around the maintenance and POL areas.
+  // Their simple sub-parts read as trucks from a helicopter but stay cheap in the merged mesh.
+  [[-78, 52, 0.08], [-112, 46, -0.12], [108, 72, 0.18]].forEach(
+    ([truckX, truckZ, truckYaw], truckIndex) => {
+      add(`truck-${truckIndex}-bed`, "vehicle", "box", CAMP_EMBER_COLORS.oliveDrab,
+        truckX, truckZ, 1.0, 5.8, 1.2, 2.35, truckYaw);
+      add(`truck-${truckIndex}-cab`, "vehicle", "box", CAMP_EMBER_COLORS.oliveHighlight,
+        truckX + Math.cos(truckYaw) * 2.2, truckZ + Math.sin(truckYaw) * 2.2,
+        1.35, 1.8, 1.9, 2.25, truckYaw);
+      for (const side of [-1, 1]) {
+        for (const axle of [-1.8, 1.8]) {
+          add(`truck-${truckIndex}-wheel-${side}-${axle}`, "vehicle", "box",
+            CAMP_EMBER_COLORS.tyre,
+            truckX + Math.cos(truckYaw) * axle - Math.sin(truckYaw) * side * 1.22,
+            truckZ + Math.sin(truckYaw) * axle + Math.cos(truckYaw) * side * 1.22,
+            0.48, 0.72, 0.72, 0.32, truckYaw);
+        }
+      }
+    },
+  );
 
   // Rosette fighting positions, bunker mounds and defoliated perimeter make the FSB readable
   // from altitude without encroaching on helicopter operating surfaces.
@@ -493,6 +553,10 @@ export function createCampEmberFirebase(THREE, plan) {
     vertexColors: true,
     roughness: 0.92,
     metalness: 0.06,
+    // The lab has no IBL. A tiny warm earth bounce keeps the one merged camp mesh readable when
+    // the shared low sun puts the whole firebase on its shadow side.
+    emissive: 0x080604,
+    emissiveIntensity: 0.42,
     flatShading: true,
     // The terrain-seated plates live millimetres from the rendered basin; at a 32 km far
     // plane a real GPU's depth buffer cannot separate them and the whole pad shimmers

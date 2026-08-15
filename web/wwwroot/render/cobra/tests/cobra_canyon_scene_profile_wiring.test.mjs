@@ -188,6 +188,8 @@ test("the canyon sky is the decision-support sky's cool branch", async () => {
   assert.equal(sky.skyCurveExponent, 0.42);
   assert.match(builders, /exp\(-abs\(direction\.y\) \* mix\(70\.0, 48\.0, uSoftWorld\)\)/);
   assert.equal(sky.horizonShoulderFalloff, 70);
+  assert.deepEqual([...sky.cloudColor], [0.64, 0.68, 0.72]);
+  assert.deepEqual([...sky.cloudShelf], [0.055, 0.38]);
 });
 
 test("the canyon sky has no azimuth branch cut across the upper field of view", async () => {
@@ -208,6 +210,10 @@ test("cobra lab scene constants consume the shared visual profile", async () => 
   assert.match(main, /sun\.position\.copy\(sunDirection\)/);
   assert.match(main, /sceneProfile\.sky\.zenithColor/);
   assert.match(main, /sceneProfile\.sky\.horizonColor/);
+  assert.match(main, /sceneProfile\.sky\.cloudColor/);
+  assert.match(main, /sceneProfile\.sky\.cloudShelf/);
+  assert.match(main, /float cloudMass/);
+  assert.match(main, /dot\(direction, normalize\(sunDirection\)\)/);
   // The lab sky runs the shared tone-map/encode tail, or its linear colours ship raw.
   assert.match(main, /#include <tonemapping_fragment>/);
   assert.match(main, /#include <colorspace_fragment>/);

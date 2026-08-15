@@ -1,55 +1,55 @@
-import * as THREE from "../vendor/three.module.js?v=333";
+import * as THREE from "../vendor/three.module.js?v=334";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=333";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=333";
-import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=333";
+} from "../render/cobra/cobra_canyon_plan.js?v=334";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=334";
+import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=334";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=333";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=333";
+} from "../render/cobra/cobra_canyon_tour.js?v=334";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=334";
 import {
   cobraGoldenPathState,
   createCobraGoldenPath,
-} from "../render/cobra/cobra_golden_path.js?v=333";
-import { createHud } from "../hud.js?v=333";
+} from "../render/cobra/cobra_golden_path.js?v=334";
+import { createHud } from "../hud.js?v=334";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=333";
+} from "../render/cobra/cobra_hud_adapter.js?v=334";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=333";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=333";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=334";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=334";
 import {
   cobraTacticalMapBounds,
   cobraTacticalMapModel,
-} from "../render/cobra/cobra_tactical_map.js?v=333";
+} from "../render/cobra/cobra_tactical_map.js?v=334";
 import {
   COBRA_MAP_CAPTION_PX,
   drawCobraTacticalMap,
-} from "../render/cobra/cobra_tactical_map_draw.js?v=333";
-import { bakeCobraTacticalRelief } from "../render/cobra/cobra_tactical_map_relief.js?v=333";
+} from "../render/cobra/cobra_tactical_map_draw.js?v=334";
+import { bakeCobraTacticalRelief } from "../render/cobra/cobra_tactical_map_relief.js?v=334";
 import {
   emberActObjectiveOverlay,
   emberActRemainingM,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=333";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=333";
+} from "../render/cobra/cobra_ember_path.js?v=334";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=334";
 import {
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=333";
+} from "../render/audio/flight_audio.js?v=334";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=333";
+} from "../render/cobra/cobra_control_profile.js?v=334";
 import {
   advanceCobraPilotControls,
   cobraCyclicCommand,
@@ -57,48 +57,48 @@ import {
   createCobraGroundedPilotControlState,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=333";
+} from "../render/cobra/cobra_pilot_input.js?v=334";
 import {
   createCobraSortieReadyInterlock,
   hasDeliberateCobraCockpitInput,
-} from "../render/cobra/cobra_sortie_ready.js?v=333";
+} from "../render/cobra/cobra_sortie_ready.js?v=334";
 import {
   COBRA_TURNAROUND_ACTION_CODE,
   cobraTurnaroundActionHeld,
   cobraTurnaroundIsActive,
   cobraTurnaroundLocksFlightControls,
-} from "../render/cobra/cobra_turnaround.js?v=333";
+} from "../render/cobra/cobra_turnaround.js?v=334";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=333";
+} from "../render/cobra/ah1g_presence.js?v=334";
 import {
   acquireAuthorityVisualLockTarget,
   advancePadlockLosGrace,
   lookOffsetFromAngles,
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
-} from "../render/cobra/cobra_camera_bias.js?v=333";
+} from "../render/cobra/cobra_camera_bias.js?v=334";
 import {
   cobraMissionStatusCopy,
   cobraTerminalCauseCopy,
-} from "../render/cobra/cobra_terminal_causes.js?v=333";
-import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=333";
+} from "../render/cobra/cobra_terminal_causes.js?v=334";
+import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=334";
 import {
   createParkedCobra,
   placeParkedCobra,
-} from "../render/cobra/cobra_parked_airframe.js?v=333";
+} from "../render/cobra/cobra_parked_airframe.js?v=334";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=333";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=333";
+} from "../render/visual/shadow_stabilizer.js?v=334";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=334";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=333";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=333";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=333";
+} from "../render/cobra/cobra_mission_exit.js?v=334";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=334";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=334";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -358,7 +358,7 @@ window.addEventListener("keydown", armAudioFromGesture, { capture: true });
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=333";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=334";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -447,6 +447,8 @@ const skyMaterial = new THREE.ShaderMaterial({
     skyCurveExponent: { value: sceneProfile.sky.skyCurveExponent },
     shoulderFalloff: { value: sceneProfile.sky.horizonShoulderFalloff },
     shoulderWeight: { value: sceneProfile.sky.horizonShoulderWeight },
+    cloudColor: { value: new THREE.Vector3(...sceneProfile.sky.cloudColor) },
+    cloudShelf: { value: new THREE.Vector2(...sceneProfile.sky.cloudShelf) },
     sunDirection: { value: sunDirection.clone() },
   },
   vertexShader: `
@@ -463,8 +465,31 @@ const skyMaterial = new THREE.ShaderMaterial({
     uniform float skyCurveExponent;
     uniform float shoulderFalloff;
     uniform float shoulderWeight;
+    uniform vec3 cloudColor;
+    uniform vec2 cloudShelf;
     uniform vec3 sunDirection;
     varying vec3 vSkyDirection;
+
+    float cobraSkyHash(vec3 cell) {
+      return fract(sin(dot(cell, vec3(127.1, 311.7, 74.7))) * 43758.5453);
+    }
+    float cobraSkyNoise(vec3 point) {
+      vec3 cell = floor(point);
+      vec3 local = fract(point);
+      local = local * local * (3.0 - 2.0 * local);
+      return mix(
+        mix(
+          mix(cobraSkyHash(cell + vec3(0.0, 0.0, 0.0)),
+              cobraSkyHash(cell + vec3(1.0, 0.0, 0.0)), local.x),
+          mix(cobraSkyHash(cell + vec3(0.0, 1.0, 0.0)),
+              cobraSkyHash(cell + vec3(1.0, 1.0, 0.0)), local.x), local.y),
+        mix(
+          mix(cobraSkyHash(cell + vec3(0.0, 0.0, 1.0)),
+              cobraSkyHash(cell + vec3(1.0, 0.0, 1.0)), local.x),
+          mix(cobraSkyHash(cell + vec3(0.0, 1.0, 1.0)),
+              cobraSkyHash(cell + vec3(1.0, 1.0, 1.0)), local.x), local.y),
+        local.z);
+    }
     void main() {
       vec3 direction = normalize(vSkyDirection);
       float aboveHorizon = max(direction.y, 0.0);
@@ -473,6 +498,32 @@ const skyMaterial = new THREE.ShaderMaterial({
       // Narrow non-luminous horizon shoulder: stays readable in unusual attitudes.
       float horizonShoulder = exp(-abs(direction.y) * shoulderFalloff);
       colour = mix(colour, horizonColor * 1.08, horizonShoulder * shoulderWeight);
+
+      // Broken monsoon cumulus shelf. This is direction-space paint rather than a texture or
+      // azimuth lookup: it cannot reveal a UV seam when the player rolls through the horizon,
+      // and it costs no additional draw call. Broad and fine waves overlap into recognisable
+      // cloud masses, while the vertical window keeps the zenith open and the terrain readable.
+      // Keep the expensive hashes inside the coherent shelf band. Most mobile sky fragments now
+      // execute no noise at all; the branch boundary is hidden by the same soft vertical window.
+      if (direction.y > cloudShelf.x && direction.y < cloudShelf.y) {
+        float shelfWindow = smoothstep(cloudShelf.x, cloudShelf.x + 0.035, direction.y)
+          * (1.0 - smoothstep(cloudShelf.y - 0.10, cloudShelf.y, direction.y));
+        vec3 cloudPoint = vec3(direction.x * 5.4, direction.y * 13.0, direction.z * 5.4);
+        float broadCloud = cobraSkyNoise(cloudPoint);
+        float cloudBreaks = cobraSkyNoise(cloudPoint * 2.15 + vec3(8.2, 2.7, -4.6));
+        float sculptedCloud = broadCloud * 0.70 + cloudBreaks * 0.30;
+        float cloudMass = smoothstep(0.51, 0.66, sculptedCloud) * shelfWindow;
+        float cloudTop = smoothstep(cloudShelf.x, cloudShelf.y, direction.y);
+        vec3 paintedCloud = mix(cloudColor * 0.72, cloudColor * 1.12, cloudTop);
+        colour = mix(colour, paintedCloud, cloudMass * 0.64);
+      }
+
+      // The same shared sun that lights the basin gives the dome a restrained warm aureole.
+      float sunFacing = max(dot(direction, normalize(sunDirection)), 0.0);
+      float sunHalo = smoothstep(0.86, 1.0, sunFacing);
+      float sunDisc = smoothstep(0.996, 0.9994, sunFacing);
+      colour += vec3(1.0, 0.72, 0.42) * sunHalo * sunHalo * 0.055;
+      colour += vec3(1.0, 0.86, 0.62) * sunDisc * 0.42;
       if (direction.y < 0.0) {
         colour = mix(belowHorizonColor, horizonColor, exp(direction.y * 16.0));
       }

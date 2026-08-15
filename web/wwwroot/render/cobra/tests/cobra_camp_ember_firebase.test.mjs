@@ -139,6 +139,12 @@ test("the firebase reads as a real FSB: scar, berm ring, rosettes, tracks, burns
   }
   assert.ok(byId.has("maintenance-hangar"));
   assert.ok(byId.has("psp-medevac-bed"));
+  assert.ok(byId.get("laterite-main").widthM >= CAMP_EMBER_OPERATIONS.fatoRadiusM * 2 + 4,
+    "the FATO ring and edge tabs need stabilized earth beneath them");
+  assert.ok(parts.filter((part) => part.id.startsWith("truck-")).length >= 18,
+    "maintenance and POL areas need support vehicles for human scale");
+  assert.ok(parts.filter((part) => part.id.startsWith("tower-brace-")).length >= 4,
+    "the watchtower needs a readable braced silhouette");
 });
 
 test("Camp Ember reads as a helicopter landing facility on stabilized final", () => {
@@ -157,6 +163,14 @@ test("Camp Ember reads as a helicopter landing facility on stabilized final", ()
   assert.ok(Math.abs(byId.get("windsock-mast").x) > CAMP_EMBER_OPERATIONS.safetyAreaRadiusM,
     "windsock must be visible without entering the rotor safety area");
   assert.ok(byId.has("final-ident-panel"));
+  assert.equal(parts.filter((part) => part.id.startsWith("tlof-wash-")).length, 20,
+    "rotor-wash wear must break up the flat central PSP bed");
+  assert.equal(parts.filter((part) => part.id.startsWith("fato-edge-tab-")).length, 12,
+    "alternating edge tabs must keep the pad readable in haze");
+  const radioSpreaders = parts.filter((part) => part.id.startsWith("radio-spreader-"));
+  assert.ok(radioSpreaders.some((part) => part.yaw > 0)
+    && radioSpreaders.some((part) => part.yaw < 0),
+  "radio spreaders must alternate for a readable lattice silhouette");
 });
 
 test("createCampEmberFirebase places one merged mesh on the landmark", () => {
