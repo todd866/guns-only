@@ -1,6 +1,6 @@
 # Current product and verification status
 
-Updated: 2026-08-14
+Updated: 2026-08-15
 Production: Build 329, revision `f4c423b384b3c64f93c8cdcd7acb44b417387fef` (verified live via
 `/api/build-info` 2026-08-15, with the protected release pipeline complete). Builds 312 (Cobra
 contact envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap
@@ -33,11 +33,13 @@ ceasefire/relief handoff, the shared highway-in-the-sky corridor, and the FUEL/N
 navigation panel. Manual wing sweep now announces its forward/aft physical stop instead of looking
 dead at 20/68 degrees. Both the generic suit/harness G stack and the F-14-specific G-driven intake
 and structure layers are removed; measured buffet, airflow, engine and wing-actuator sound remain.
-Next candidate: Build 331 (branch `fix/top-gun-conventional-rtb`) — combines the landed Build 330
-recovery-field graphics, rebuilt Camp Ember operations, and a conventional carrier recovery for
-Top Gun. The Top Gun player route is now F-14A-only; MiG-28s remain aggressors, successive opponents
-keep the range live after a splash, and the pilot can select RTB TO CARRIER and fly the taught Case I
-initial, break, downwind, approach turn, groove and arrestment against the moving ship.
+Next candidate: Build 332 (branch `fix/pause-cobra-highway`) — carries forward the Build 331
+recovery-field graphics, rebuilt Camp Ember operations, F-14A-only Top Gun player route, successive
+opponents and conventional Case I carrier recovery. It adds a real Escape pause menu, a longer
+look-ahead Cobra route ribbon, persistent authored recovery gates, and the same visible RTB authority
+for the F-22. F-14 wing sweep now changes lift, drag, inertia and roll authority, with a persistent
+top-down aircraft indicator and corrected supersonic drag schedule. Gun-assist and recovery telemetry
+now record the control-authority and presentation state needed to diagnose an owner sortie directly.
 
 Build 325 shipped the following owner-flight findings and remains the baseline for this candidate.
 
