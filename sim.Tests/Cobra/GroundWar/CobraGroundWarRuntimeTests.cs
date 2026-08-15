@@ -97,6 +97,24 @@ public class CobraGroundWarRuntimeTests
     }
 
     [Fact]
+    public void SmallArmsEvidenceNamesBothEndsOfTheActualGroundEngagement()
+    {
+        CobraMissionRuntime runtime = CreateEngagedMission(seed: 5);
+        GroundWarEvent? fire = null;
+        for (int frame = 0; frame < 240 && fire is null; frame++) {
+            runtime.GroundWar.Advance(0.1);
+            fire = runtime.GroundWar.RecentEvents
+                .Cast<GroundWarEvent?>()
+                .FirstOrDefault(evt => evt?.Kind == "small-arms");
+        }
+
+        GroundWarEvent shot = Assert.IsType<GroundWarEvent>(fire);
+        Assert.True(shot.PositionWorldM.IsFinite);
+        Assert.True(shot.TargetPositionWorldM is { } target && target.IsFinite);
+        Assert.NotEqual(shot.PositionWorldM, shot.TargetPositionWorldM);
+    }
+
+    [Fact]
     public void SeedsContestedSitesWithBothFactionsUnderTheLivingBudget()
     {
         CobraGroundWarRuntime war = CreateWar();

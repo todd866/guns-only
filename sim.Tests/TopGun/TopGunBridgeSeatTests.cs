@@ -5,9 +5,7 @@ using GunsOnly.Web;
 
 namespace GunsOnly.Sim.Tests.TopGun;
 
-/// <summary>
-/// Seat index contract for WebBridge.StartTopGun — mirrored in app.js TOP_GUN_SEAT.
-/// </summary>
+/// <summary>The player-facing Top Gun contract is Tomcat versus MiG-28 aggressors.</summary>
 [Collection("snapshot-projection-statics")]
 public sealed class TopGunBridgeSeatTests
 {
@@ -20,21 +18,15 @@ public sealed class TopGunBridgeSeatTests
         return document.RootElement.Clone();
     }
 
-    static TopGunSeat SeatFromBridgeIndex(int seatIndex) =>
-        seatIndex == 1 ? TopGunSeat.Mig28 : TopGunSeat.F14A;
-
-    [Theory]
-    [InlineData(0, "F-14A", "MiG-28")]
-    [InlineData(1, "MiG-28", "F-14A")]
-    public void BridgeSeatIndexStagesMatchingTopGunBeat(
-        int seatIndex, string expectedOwnship, string expectedOpponent)
+    [Fact]
+    public void PlayerFacingBeatIsTomcatVersusMig28()
     {
         var session = new SimulationSession();
-        session.StartBeat(() => Beats.TopGunAcm(SeatFromBridgeIndex(seatIndex)));
+        session.StartBeat(() => Beats.TopGunAcm(TopGunSeat.F14A));
         JsonElement root = ProjectBeat(session);
 
-        Assert.Equal(expectedOwnship, root.GetProperty("top_gun_seat").GetString());
-        Assert.Equal(expectedOpponent, root.GetProperty("opponent_callsign").GetString());
+        Assert.Equal("F-14A", root.GetProperty("top_gun_seat").GetString());
+        Assert.Equal("MiG-28", root.GetProperty("opponent_callsign").GetString());
         Assert.Equal("top-gun-anime-1986", root.GetProperty("presentation_theme").GetString());
     }
 }

@@ -1,7 +1,7 @@
 import {
   CARRIER_SORTIE_TOUCH_RTB_ACTION_TOKEN,
   carrierSortieRoutePresentation,
-} from "./carrier_sortie_route_presentation.js?v=330";
+} from "./carrier_sortie_route_presentation.js?v=331";
 
 /**
  * Synchronize the contextual touch RTB button from the validated carrier-route presentation.

@@ -11,7 +11,7 @@ public sealed class TopGunBeatTests
         Assert.Equal(AircraftCapability.F14ASurrogate.Id, beat.PlayerAircraft.Id);
         Assert.Equal(AircraftCapability.Mig28Surrogate.Id, beat.BanditAircraft.Id);
         Assert.True(beat.PlayerAircraft.SystemsSimulated);
-        Assert.Contains("conventional-gear", beat.PlayerAircraft.SystemsProfileId);
+        Assert.Contains("carrier-recovery", beat.PlayerAircraft.SystemsProfileId);
         Assert.False(beat.BanditAircraft.SystemsSimulated);
         Assert.Equal(480, beat.CombatRules.PlayerAmmo);
         Assert.Equal(480, beat.CombatRules.OpponentAmmo);
@@ -24,7 +24,7 @@ public sealed class TopGunBeatTests
         Assert.Equal(AircraftCapability.Mig28Surrogate.Id, beat.PlayerAircraft.Id);
         Assert.Equal(AircraftCapability.F14ASurrogate.Id, beat.BanditAircraft.Id);
         Assert.True(beat.PlayerAircraft.SystemsSimulated);
-        Assert.Contains("conventional-gear", beat.PlayerAircraft.SystemsProfileId);
+        Assert.Contains("carrier-recovery", beat.PlayerAircraft.SystemsProfileId);
         Assert.False(beat.BanditAircraft.SystemsSimulated);
     }
 }

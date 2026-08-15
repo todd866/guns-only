@@ -223,6 +223,16 @@ public sealed record AircraftCapability(
                 "systems.cold-war-conventional-gear.public-data-surrogate.v1",
             SystemsSimulated = true
         };
+
+    /// Top Gun's whole-sortie card needs a working undercarriage and hook to make its carrier
+    /// recovery playable. The aircraft identity and visual remain the sourced F-14A surrogate;
+    /// only the explicitly provisional recovery-system capability differs from the airborne-only
+    /// card above.
+    public static AircraftCapability F14ACarrierRecoverySurrogate { get; } =
+        F14ASurrogate with {
+            SystemsProfileId = "systems.f14a.carrier-recovery.provisional.v1",
+            SystemsSimulated = true,
+        };
     public static AircraftCapability Mig28Surrogate { get; } = new(
         "aircraft.mig-28.f5e-class-fiction.v1", "MiG-28 (F-5E-class fiction)",
         "presentation.vehicle.mig-28.fiction.v1",
@@ -234,6 +244,15 @@ public sealed record AircraftCapability(
             SystemsProfileId =
                 "systems.cold-war-conventional-gear.public-data-surrogate.v1",
             SystemsSimulated = true
+        };
+
+    /// Fictional carrier-recovery overlay retained for internal opponent/airframe regression
+    /// fixtures. The player-facing Top Gun route is F-14A-only; this does not claim that the
+    /// F-5E-class source airframe was carrier capable.
+    public static AircraftCapability Mig28CarrierRecoveryFiction { get; } =
+        Mig28Surrogate with {
+            SystemsProfileId = "systems.mig-28.carrier-recovery.fiction.v1",
+            SystemsSimulated = true,
         };
 }
 
@@ -1556,9 +1575,10 @@ public static class Beats {
     }
 
     /// <summary>
-    /// TOP GUN 1v1 ACM — Tomcat vs MiG-28 (F-5E-class fiction) visual merge. The engagement begins
-    /// airborne, but a pilot KNOCK IT OFF or Bingo transition hands the fight to relief and opens a
-    /// conventional recovery corridor. Seat selects ownship; opponent is the other jet.
+    /// TOP GUN ACM — Tomcat vs MiG-28 (F-5E-class fiction) visual merge. Successive opponents keep
+    /// the range alive until the pilot knocks it off, at which point relief takes the fight and a
+    /// moving angled-deck carrier plus conformal approach gates provide a complete RTB objective.
+    /// Seat selects ownship; opponent is the other jet.
     /// </summary>
     public static BeatSetup TopGunAcm(TopGunSeat playerSeat) {
         // 10,000 ft co-altitude staging — same band as ModernVisualMerge, suitable for guns ACM.
@@ -1572,19 +1592,31 @@ public static class Beats {
 
         bool playerIsTomcat = playerSeat == TopGunSeat.F14A;
         AircraftCapability playerCapability = playerIsTomcat
-            ? AircraftCapability.F14AConventionalRecoverySurrogate
-            : AircraftCapability.Mig28ConventionalRecoverySurrogate;
+             ? AircraftCapability.F14ACarrierRecoverySurrogate
+             : AircraftCapability.Mig28CarrierRecoveryFiction;
         AircraftCapability banditCapability = playerIsTomcat
             ? AircraftCapability.Mig28Surrogate
             : AircraftCapability.F14ASurrogate;
         AircraftParams playerParams = playerIsTomcat
             ? FlightModel.F14APublicDataSurrogate
             : FlightModel.Mig28F5EClassSurrogate;
+        playerParams = playerParams with { ApproachFlapCLIncrement = 0.50 };
         AircraftParams banditParams = playerIsTomcat
             ? FlightModel.Mig28F5EClassSurrogate
             : FlightModel.F14APublicDataSurrogate;
         string seatLabel = playerIsTomcat ? "F-14A" : "MiG-28";
         string opponentLabel = playerIsTomcat ? "MiG-28" : "F-14A";
+        // Fictional Pacific recovery location, well clear of the ACM merge. The renderer builds
+        // the visible ship and water patch from this authoritative platform; the conventional
+        // Case I pattern remains attached to it as the carrier steams north.
+        var carrier = new GunsOnly.Sim.Carrier(
+            deckCentre: new Vec3D(-24_000.0, 20.0, -28_000.0),
+            headingRad: 0.0,
+            speedMps: 12.0,
+            deckAltM: 20.0,
+            deckLengthM: 320.0,
+            deckWidthM: 76.0,
+            configuration: GunsOnly.Sim.Carrier.DeckConfiguration.Angled);
 
         return new BeatSetup($"Top Gun — {seatLabel} vs {opponentLabel}",
             Player: new AircraftState(
@@ -1603,6 +1635,7 @@ public static class Beats {
             },
             PlayerParams: playerParams,
             BanditParams: banditParams,
+            Carrier: carrier,
             UsesNeutralMergeBandit: true,
             Combat: CombatConfig.TopGunAcm,
             Fuel: new FuelConfig(
@@ -1612,7 +1645,7 @@ public static class Beats {
                 ConsumesFuel: true),
             InitialThrottle: 1.0,
             StageAtTrimThrottle: true,
-            SystemsProfile: AirframeSystemsProfile.ModernConventionalGearSurrogate,
+            SystemsProfile: AirframeSystemsProfile.CarrierJetRecoverySurrogate,
             Mission: new MissionContract(
                 "mission.top-gun.acm.f14a-vs-mig28.v1",
                 MissionContentFamily.Custom,
@@ -1623,23 +1656,17 @@ public static class Beats {
             BanditCapability: banditCapability,
             VisualMergeEvaluation: new VisualMergeEvaluationConfig(HoldFireThroughFirstPass: false),
             PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
-            BanditSkill: PilotSkill.Competent,
-            // The Top Gun presentation reuses the shipped Ukraine terrain product under a clearly
-            // fictional range identity. Reuse the surveyed Soniachne-west pavement geometry too:
-            // it keeps the recovery surface above that same authority DEM and gives either seat a
-            // real runway/rollout model instead of a browser-only marker. The distinct ID and name
-            // avoid pretending the fictional exercise is physically at the F-22 programme site.
+            RecoveryCompletesSortie: true,
+            ContinuousCombat: new ContinuousCombatConfig(
+                ReplacementDelaySeconds: 3.5,
+                MaximumFormationSize: 1),
+            BanditSkill: PilotSkill.Ace,
+            Environment: TopGunEnvironment.Contract,
             RecoveryPlan: new RecoveryPlan(
-                "recovery.top-gun.fightertown-runway.v1",
-                "Fightertown recovery runway",
-                new Vec3D(-61_652.0, 106.75, -56_576.0),
-                requiredLandingReserveLb: 2_000.0,
-                conventionalRunway: new ConventionalRunwayGeometry(
-                    thresholdPosition: new Vec3D(-61_952.0, 106.75, -56_576.0),
-                    landingHeadingRad: Math.PI / 2.0,
-                    lengthM: 3_000.0,
-                    widthM: 45.0)),
-            Environment: TopGunEnvironment.Contract);
+                "recovery.top-gun.pacific-carrier.fiction.v1",
+                "Top Gun carrier",
+                 carrier.Position,
+                 requiredLandingReserveLb: 2_000.0));
     }
 
     /// <summary>

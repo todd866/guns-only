@@ -23,7 +23,8 @@
  */
 
 /** Presentation contract id, in the house `guns-only.<thing>.vN` form. */
-import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=330";
+import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=331";
+import { emberRtbVisualState } from "./cobra_ember_path.js?v=331";
 
 export const COBRA_GOLDEN_PATH_SCHEMA = "guns-only.cobra-golden-path.v2";
 
@@ -58,6 +59,7 @@ export const COBRA_GOLDEN_PATH_DEFAULTS = Object.freeze({
    * Additive over a grey-green monsoon sky it prints as a soft gold, never a saturated one.
    */
   color: 0xffad3d,
+  correctionColor: 0xff613f,
   /** Rise limit between cues used to keep a terrain step from becoming a vertical stack. */
   descentGradient: 0.12,
 });
@@ -136,7 +138,7 @@ export function cobraGoldenPathObjective(groundWar, player, missionAct = "") {
 
 function cobraRouteGateObjective(pathGates, missionAct) {
   const act = String(missionAct).toLowerCase();
-  if (act !== "depart" && act !== "ingress") return null;
+  if (act !== "depart" && act !== "ingress" && act !== "rtb") return null;
   const gates = Array.isArray(pathGates) ? pathGates : [];
   const index = gates.findIndex((gate) => gate?.active === true);
   const gate = gates[index];
@@ -155,6 +157,7 @@ const frameStateScratch = {
   groundHeightAt: null,
   nowSeconds: 0,
   arrivedRadiusM: COBRA_GOLDEN_PATH_DEFAULTS.arrivedRadiusM,
+  recoveryVisual: null,
 };
 
 /**
@@ -171,6 +174,8 @@ export function cobraGoldenPathState({
   groundHeightAt,
   nowSeconds,
   missionAct = "",
+  speedKts = Number.NaN,
+  sinkFpm = Number.NaN,
   suppressed = false,
   arrivedRadiusM = null,
 } = {}) {
@@ -180,7 +185,8 @@ export function cobraGoldenPathState({
   player.altitudeM = Number(pose?.y_m) || 0;
   player.headingRad = Number(pose?.yaw_rad) || 0;
   const act = String(missionAct).toLowerCase();
-  const routeAct = act === "depart" || act === "ingress";
+  const routeAct = act === "depart" || act === "ingress"
+    || (act === "rtb" && Array.isArray(pathGates) && pathGates.length > 0);
   frameStateScratch.objective = suppressed || !pose
     ? null
     : routeAct
@@ -188,6 +194,14 @@ export function cobraGoldenPathState({
       : cobraGoldenPathObjective(groundWar, player, act);
   frameStateScratch.groundHeightAt = groundHeightAt;
   frameStateScratch.nowSeconds = Number(nowSeconds) || 0;
+  const fobEastM = Number(groundWar?.fob?.x_m);
+  const fobNorthM = Number(groundWar?.fob?.z_m);
+  const fobRangeM = Number.isFinite(fobEastM) && Number.isFinite(fobNorthM)
+    ? Math.hypot(fobEastM - player.eastM, fobNorthM - player.northM)
+    : Number.NaN;
+  frameStateScratch.recoveryVisual = act === "rtb"
+    ? emberRtbVisualState({ remainingM: fobRangeM, speedKts, sinkFpm })
+    : null;
   const explicitRadiusM = arrivedRadiusM === null || arrivedRadiusM === undefined
     ? Number.NaN
     : Number(arrivedRadiusM);
@@ -294,6 +308,7 @@ export function createCobraGoldenPath(THREE, options = {}) {
   let lastPlayerEastM = Number.NaN;
   let lastPlayerNorthM = Number.NaN;
   let lastPlayerAltitudeM = Number.NaN;
+  let lastRecoveryPhase = null;
 
   function setVertex(index, x, y, z) {
     const cursor = index * 3;
@@ -329,11 +344,12 @@ export function createCobraGoldenPath(THREE, options = {}) {
     );
   }
 
-  function needsRebuild(objective, playerEastM, playerNorthM, playerAltitudeM) {
+  function needsRebuild(objective, playerEastM, playerNorthM, playerAltitudeM, recoveryVisual) {
     if (objective.siteId !== lastObjectiveId) return true;
     if (!(Math.abs(objective.eastM - lastObjectiveEastM) < 1)) return true;
     if (!(Math.abs(objective.northM - lastObjectiveNorthM) < 1)) return true;
     if (!Number.isFinite(lastPlayerEastM)) return true;
+    if ((recoveryVisual?.phase ?? null) !== lastRecoveryPhase) return true;
     const movedM = Math.hypot(playerEastM - lastPlayerEastM, playerNorthM - lastPlayerNorthM);
     if (movedM >= config.rebuildDistanceM) return true;
     return Number.isFinite(playerAltitudeM)
@@ -341,7 +357,7 @@ export function createCobraGoldenPath(THREE, options = {}) {
         || Math.abs(playerAltitudeM - lastPlayerAltitudeM) >= 12);
   }
 
-  function rebuild(objective, playerEastM, playerNorthM, playerAltitudeM, groundHeightAt) {
+  function rebuild(objective, playerEastM, playerNorthM, playerAltitudeM, groundHeightAt, recoveryVisual) {
     const toEastM = objective.eastM - playerEastM;
     const toNorthM = objective.northM - playerNorthM;
     const rangeM = Math.hypot(toEastM, toNorthM);
@@ -374,6 +390,10 @@ export function createCobraGoldenPath(THREE, options = {}) {
     group.userData.clearanceM = desiredClearanceM;
     group.userData.mode = objective.mode ?? "objective";
 
+    const markerHalfWidthM = Number.isFinite(Number(recoveryVisual?.halfWidthM))
+      ? Number(recoveryVisual.halfWidthM)
+      : config.markerHalfWidthM;
+    group.userData.markerHalfWidthM = markerHalfWidthM;
     const perpEast = -dirNorth;
     const perpNorth = dirEast;
     for (let marker = 0; marker < activeMarkerCount; marker += 1) {
@@ -384,10 +404,10 @@ export function createCobraGoldenPath(THREE, options = {}) {
       spineNorth[marker] = northM;
       const groundM = Math.max(
         at(eastM, northM),
-        at(eastM + perpEast * config.markerHalfWidthM,
-          northM + perpNorth * config.markerHalfWidthM),
-        at(eastM - perpEast * config.markerHalfWidthM,
-          northM - perpNorth * config.markerHalfWidthM),
+        at(eastM + perpEast * markerHalfWidthM,
+          northM + perpNorth * markerHalfWidthM),
+        at(eastM - perpEast * markerHalfWidthM,
+          northM - perpNorth * markerHalfWidthM),
       );
       spineUp[marker] = groundM + desiredClearanceM + config.markerThicknessM * 0.5;
     }
@@ -423,10 +443,10 @@ export function createCobraGoldenPath(THREE, options = {}) {
       }
       const centerX = spineEast[marker];
       const centerZ = -spineNorth[marker];
-      const leftX = centerX + perpX * config.markerHalfWidthM;
-      const leftZ = centerZ + perpZ * config.markerHalfWidthM;
-      const rightX = centerX - perpX * config.markerHalfWidthM;
-      const rightZ = centerZ - perpZ * config.markerHalfWidthM;
+      const leftX = centerX + perpX * markerHalfWidthM;
+      const leftZ = centerZ + perpZ * markerHalfWidthM;
+      const rightX = centerX - perpX * markerHalfWidthM;
+      const rightZ = centerZ - perpZ * markerHalfWidthM;
       const apexY = spineUp[marker];
       const shoulderY = apexY + config.markerHeightM;
       const vertexBase = marker * verticesPerMarker;
@@ -455,6 +475,7 @@ export function createCobraGoldenPath(THREE, options = {}) {
     lastPlayerEastM = playerEastM;
     lastPlayerNorthM = playerNorthM;
     lastPlayerAltitudeM = playerAltitudeM;
+    lastRecoveryPhase = recoveryVisual?.phase ?? null;
     return true;
   }
 
@@ -491,13 +512,15 @@ export function createCobraGoldenPath(THREE, options = {}) {
       return;
     }
 
-    if (needsRebuild(objective, playerEastM, playerNorthM, playerAltitudeM)) {
+    const recoveryVisual = state?.recoveryVisual ?? null;
+    if (needsRebuild(objective, playerEastM, playerNorthM, playerAltitudeM, recoveryVisual)) {
       if (!rebuild(
         objective,
         playerEastM,
         playerNorthM,
         playerAltitudeM,
         state.groundHeightAt,
+        recoveryVisual,
       )) {
         hide();
         return;
@@ -506,7 +529,15 @@ export function createCobraGoldenPath(THREE, options = {}) {
 
     const arrivalFade = Math.min(1, (rangeM - arrivedRadiusM) / Math.max(1, arrivedRadiusM));
     group.visible = true;
-    setOpacity(config.peakOpacity * arrivalFade);
+    const correctionPulse = recoveryVisual?.alert
+      ? 0.72 + 0.28 * (0.5 + 0.5 * Math.sin((Number(state.nowSeconds) || 0) * Math.PI * 3))
+      : 1;
+    material.uniforms.uColor.value.setHex?.(
+      Number.isFinite(Number(recoveryVisual?.colorHex))
+        ? Number(recoveryVisual.colorHex)
+        : config.color,
+    );
+    setOpacity(config.peakOpacity * arrivalFade * correctionPulse);
     material.uniforms.uFlow.value = cobraGoldenPathFlowOffset(
       state.nowSeconds,
       config.flowCyclesPerSecond,

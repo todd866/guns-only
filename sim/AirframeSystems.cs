@@ -209,6 +209,33 @@ public sealed record AirframeSystemsProfile(
         RecoveryProfileFitted: true);
 
     /// <summary>
+    /// Provisional carrier-jet landing configuration for the Top Gun training card. It is kept
+    /// separate from the gear-only modern visual-merge surrogate: a taught carrier break must
+    /// produce the lift and drag change it tells the pilot to configure for.
+    /// </summary>
+    public static readonly AirframeSystemsProfile CarrierJetRecoverySurrogate = new(
+        Id: "carrier-jet-recovery-public-data-surrogate-v1",
+        GearExtensionSeconds: 6.0,
+        GearRetractionSeconds: 6.0,
+        EmergencyGearExtensionSeconds: 8.0,
+        GearDoorTravelSeconds: 1.0,
+        GearAndFlapLimitKias: 250.0,
+        EmergencyGearExtensionMaxKias: 200.0,
+        FullFlapDegrees: 35.0,
+        FullFlapTravelSeconds: 5.0,
+        GeneratorCutInRpmPercent: 45.0,
+        GearHornRpmPercent: 0.0,
+        UtilityHydraulicNominalPsi: 0.0,
+        FullGearDragCoefficientIncrement: 0.035,
+        FullFlapLiftCoefficientIncrement: 0.50,
+        FullFlapDragCoefficientIncrement: 0.085,
+        PilotOperatedFlaps: true,
+        ThrottleTriggeredGearWarning: false,
+        EmergencyGearExtensionAvailable: false,
+        UtilityHydraulicSystemSimulated: false,
+        ElectricalSystemSimulated: false);
+
+    /// <summary>
     /// Rapier surrogate. The limits are not a balance knob — they are forced by the launcher.
     ///
     /// The catapult releases at 120 m/s — about 233 KIAS — with the gear still down and the flaps

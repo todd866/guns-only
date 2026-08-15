@@ -7,7 +7,10 @@ namespace GunsOnly.Sim.Tests.Cobra;
 
 public sealed class CobraCanyonWindFieldTests
 {
-    static readonly Vec3D CampEmberHoverWorldM = new(-6_775.0, 230.0, -6_200.0);
+    static readonly Vec3D CampEmberHoverWorldM = new(
+        CampEmberOperations.CentreEastM,
+        CampEmberOperations.PadElevationM + 28.0,
+        CampEmberOperations.CentreNorthM);
 
     [Fact]
     public void StillSynopticYieldsZeroEverywhere()

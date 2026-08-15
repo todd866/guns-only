@@ -33,15 +33,14 @@ public static partial class WebBridge {
         index, KoreaWeatherPresets.ForBeat(index), TerrainForBeat(index), _deckConfiguration);
 
     /// <summary>
-    /// Stage the Top Gun ACM beat for the chosen seat. Custom factory beats use index 0; the browser
-    /// tracks seat separately from built-in mission indices.
+    /// Stage the Top Gun ACM beat. The legacy integer argument remains in the JS ABI, but the
+    /// player aircraft is deliberately fixed to the F-14A; the MiG-28 is an adversary only.
     /// </summary>
     [JSExport]
-    public static void StartTopGun(int seat) {
-        TopGunSeat topGunSeat = seat == 1 ? TopGunSeat.Mig28 : TopGunSeat.F14A;
+    public static void StartTopGun(int _seat) {
         MissionEnvironmentContract environment = TopGunEnvironment.Contract;
         Session.StartBeatWithEnvironment(
-            () => Beats.TopGunAcm(topGunSeat),
+            () => Beats.TopGunAcm(TopGunSeat.F14A),
             TopGunEnvironment.Weather,
             TerrainForEnvironment(environment));
     }

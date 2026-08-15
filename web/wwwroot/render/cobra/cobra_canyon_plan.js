@@ -31,14 +31,19 @@ const AMBIENT_RENDER_ROLES = Object.freeze([
   "water-accent",
 ]);
 const ANCHOR_MODES = Object.freeze(["base", "centre", "top"]);
-// The complete firebase (two PSP pads, berms and tents) fits inside this level apron. The blend
-// ends at the existing 110 m land ring, so the authored gorge resumes without a hard terrace.
-// Presentation imports this same record to refine the coarse basin grid around the launch pad.
+// Authority-mirrored medium helicopter FOB bench. The level area holds the FATO, revetted ramp,
+// POL/ammo separation and maintenance apron; the wider blend feathers cut-and-fill into the
+// surveyed upland site without inventing a collision shelf in presentation only.
 export const COBRA_CANYON_CAMP_EMBER_APRON = Object.freeze({
-  eastM: -6_775,
-  northM: -6_200,
-  levelRadiusM: 58,
-  blendRadiusM: 110,
+  eastM: -3_800,
+  northM: -4_600,
+  elevationM: 214,
+  levelRadiusM: 190,
+  blendRadiusM: 300,
+  finalHeadingDeg: 300,
+  protectedLengthM: 2_400,
+  protectedHalfWidthM: 120,
+  obstacleSurfaceRisePerM: 1 / 8,
 });
 const IMPORTANT_COLLECTIONS = Object.freeze([
   ["terrain.ribbons", "terrain-authority"],
@@ -842,7 +847,7 @@ function riverRibbonOf(plan) {
 /**
  * Samples the analytical field immediately before the final Camp Ember apron operation.
  * Presentation terrain uses this seam to apply its conservative half-cell bias first; sampling
- * the already-flattened apron would let a coarse neighbourhood minimum drag the 202 m pad down
+ * the already-flattened apron would let a coarse neighbourhood minimum drag the 214 m pad down
  * into the gorge. All ordinary callers must use `sampleCobraCanyonTerrain` below.
  */
 export function sampleCobraCanyonTerrainBeforeCampEmberApron(plan, eastM, northM) {
@@ -938,7 +943,7 @@ export function sampleCobraCanyonTerrainBeforeCampEmberApron(plan, eastM, northM
  *
  * Keeping this operation separate is intentional: the render mesh feeds its neighbourhood-
  * minimum height through here, while simulation/browser point samples feed the centre height
- * through it. In both cases the flat 58 m contact apron and 58–110 m blend are the LAST terrain
+ * through it. In both cases the flat 190 m contact apron and 190–300 m blend are the LAST terrain
  * operation, so a coarse render sample cannot carve a pit through the launch surface.
  */
 export function applyCobraCanyonCampEmberApron(plan, eastM, northM, heightM) {
@@ -955,9 +960,11 @@ export function applyCobraCanyonCampEmberApron(plan, eastM, northM, heightM) {
     requireFinite(bounds.maximumNorthM, "plan.boundsLocalM.maximumNorthM"),
   );
   let adjustedHeightM = requireFinite(heightM, "heightM");
-  const campDistanceM = Math.hypot(
-    east - COBRA_CANYON_CAMP_EMBER_APRON.eastM,
-    north - COBRA_CANYON_CAMP_EMBER_APRON.northM,
+  // Grid-aligned construction bench: the visible firebase remains irregular, while the contact
+  // surface under every pad and service area stays exactly planar across render tiers.
+  const campDistanceM = Math.max(
+    Math.abs(east - COBRA_CANYON_CAMP_EMBER_APRON.eastM),
+    Math.abs(north - COBRA_CANYON_CAMP_EMBER_APRON.northM),
   );
   const campBlend = 1 - smoothstep(
     COBRA_CANYON_CAMP_EMBER_APRON.levelRadiusM,
@@ -965,8 +972,7 @@ export function applyCobraCanyonCampEmberApron(plan, eastM, northM, heightM) {
     campDistanceM,
   );
   if (campBlend > 0) {
-    const riverRoute = plan.routeLanes.find((route) => String(route.id).includes("river-gorge"));
-    const campElevationM = Number(riverRoute?.pathLocalM?.[0]?.[1]);
+    const campElevationM = Number(COBRA_CANYON_CAMP_EMBER_APRON.elevationM);
     if (!Number.isFinite(campElevationM)) {
       throw new RangeError("Cobra Canyon Camp Ember elevation was not finite.");
     }

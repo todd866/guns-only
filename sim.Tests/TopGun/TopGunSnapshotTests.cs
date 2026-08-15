@@ -54,7 +54,7 @@ public sealed class TopGunSnapshotTests
         Assert.False(root.GetProperty("f14_structural_failed").GetBoolean());
         Assert.True(root.GetProperty("recovery_point_known").GetBoolean());
         Assert.True(root.GetProperty("rtb_available").GetBoolean());
-        Assert.Equal("recovery.top-gun.fightertown-runway.v1",
+        Assert.Equal("recovery.top-gun.pacific-carrier.fiction.v1",
             root.GetProperty("recovery_id").GetString());
         Assert.True(root.GetProperty("rtb_range_nm").GetDouble() > 1.0);
         Assert.True(root.GetProperty("ground_speed_kts").GetDouble() > 1.0);

@@ -1,10 +1,10 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=330";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=331";
 import {
   FOLIAGE_UV_PALM,
   FOLIAGE_UV_UNDERSTORY,
   createCobraSoftFalloffTexture,
   createSyntheticFoliageAtlasTexture,
-} from "./cobra_canyon_foliage.js?v=330";
+} from "./cobra_canyon_foliage.js?v=331";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -51,7 +51,7 @@ export const COBRA_CANYON_AMBIENT_BUDGETS = Object.freeze({
 
 /** Keep the Camp Ember rear-seat eye clear of green mass / mist (Build 302). */
 export const CAMP_EMBER_LANDMARK_ID = "landmark.cobra-canyon.camp-ember.v1";
-export const CAMP_EMBER_CLEAR_RADIUS_M = 120;
+export const CAMP_EMBER_CLEAR_RADIUS_M = 230;
 export const COBRA_OBJECTIVE_CLEAR_RADIUS_M = 135;
 const COBRA_OBJECTIVE_LANDMARK_IDS = new Set([
   "landmark.cobra-canyon.iron-bell-bridge.v1",

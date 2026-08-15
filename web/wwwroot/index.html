@@ -972,6 +972,7 @@
       font-weight: 650;
       letter-spacing: .14em;
     }
+    #nav-console .tf-title::after { content: "MAP · STEERING · RECOVERY"; }
 
     .tf-collapse-cue {
       color: rgba(219, 245, 239, .45);
@@ -1022,6 +1023,101 @@
       background: rgba(20, 48, 36, .85);
     }
     .nav-nd-sep { opacity: 0.35; font-size: 10px; }
+
+    .nav-decision {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 5px 10px;
+      align-items: center;
+      margin: 0 0 8px;
+      padding: 10px;
+      border: 1px solid rgba(255, 198, 92, .45);
+      border-radius: 5px;
+      background: linear-gradient(115deg, rgba(74, 47, 13, .72), rgba(15, 25, 27, .94));
+    }
+    .nav-decision[hidden] { display: none; }
+    .nav-decision-copy { min-width: 0; }
+    .nav-decision-kicker {
+      display: block;
+      color: rgba(255, 209, 123, .72);
+      font-size: 7px;
+      letter-spacing: .16em;
+    }
+    .nav-decision-title {
+      display: block;
+      margin-top: 2px;
+      color: #ffe1a6;
+      font: 850 12px/1.15 ui-sans-serif, system-ui, sans-serif;
+      letter-spacing: .04em;
+    }
+    .nav-decision-detail {
+      grid-column: 1 / -1;
+      margin: 0;
+      color: rgba(219, 245, 239, .63);
+      font: 600 8px/1.35 ui-sans-serif, system-ui, sans-serif;
+      letter-spacing: .02em;
+    }
+    .nav-decision-action {
+      appearance: none;
+      min-height: 38px;
+      padding: 7px 10px;
+      border: 1px solid rgba(255, 218, 142, .8);
+      border-radius: 4px;
+      color: #1c1305;
+      background: #f2c66d;
+      font: 850 9px/1.15 ui-sans-serif, system-ui, sans-serif;
+      letter-spacing: .055em;
+      cursor: pointer;
+    }
+    .nav-decision-action:hover,
+    .nav-decision-action:focus-visible { background: #ffe2a7; }
+    .nav-decision-action:disabled { opacity: .42; cursor: default; }
+
+    .nav-recovery-lesson {
+      margin: 0 0 8px;
+      padding: 10px;
+      border-left: 3px solid rgba(242, 198, 109, .88);
+      background: rgba(33, 30, 20, .72);
+    }
+    .nav-recovery-lesson[hidden] { display: none; }
+    .nav-recovery-step {
+      color: rgba(255, 209, 123, .72);
+      font-size: 7px;
+      letter-spacing: .15em;
+    }
+    .nav-recovery-title {
+      display: block;
+      margin-top: 3px;
+      color: #fff0cd;
+      font: 850 13px/1.15 ui-sans-serif, system-ui, sans-serif;
+    }
+    .nav-recovery-targets {
+      display: block;
+      margin-top: 5px;
+      color: #8ef5e7;
+      font: 750 9px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+    .nav-recovery-action {
+      margin: 6px 0 0;
+      color: rgba(231, 255, 250, .72);
+      font: 600 9px/1.4 ui-sans-serif, system-ui, sans-serif;
+    }
+
+    .nav-advanced {
+      margin-top: 8px;
+      border-top: 1px solid rgba(128, 225, 218, .12);
+    }
+    .nav-advanced > summary {
+      padding: 8px 2px 2px;
+      color: rgba(219, 245, 239, .48);
+      cursor: pointer;
+      list-style: none;
+      font-size: 8px;
+    }
+    .nav-advanced > summary::-webkit-details-marker { display: none; }
+    .nav-advanced > summary::after { content: " +"; }
+    .nav-advanced[open] > summary::after { content: " −"; }
+    .nav-advanced .nav-nd-toolbar { margin-top: 7px; }
 
 
     .tf-indications {
@@ -3354,22 +3450,24 @@
       <span class="tf-collapse-cue" aria-hidden="true"></span>
     </summary>
     <div class="tf-body nav-nd-body">
-      <div class="nav-nd-toolbar" role="toolbar" aria-label="Mesh ND tools">
-        <button type="button" id="nav-nd-follow" class="nav-nd-tool" data-active="true">FOLLOW</button>
-        <button type="button" id="nav-nd-free" class="nav-nd-tool">FREE</button>
-        <span class="nav-nd-sep" aria-hidden="true">·</span>
-        <button type="button" id="nav-nd-proc-none" class="nav-nd-tool" data-proc="0">PROC OFF</button>
-        <button type="button" id="nav-nd-proc-overhead" class="nav-nd-tool" data-proc="1">OVERHEAD</button>
-        <button type="button" id="nav-nd-proc-downwind" class="nav-nd-tool" data-proc="2">DOWNWIND</button>
-        <button type="button" id="nav-nd-proc-straight" class="nav-nd-tool" data-proc="3">STRAIGHT</button>
-        <span class="nav-nd-sep" aria-hidden="true">·</span>
-        <button type="button" id="nav-nd-tour-add" class="nav-nd-tool">TOUR+</button>
-        <button type="button" id="nav-nd-clear" class="nav-nd-tool">HOME</button>
-      </div>
+      <section id="nav-decision" class="nav-decision" aria-live="polite" hidden>
+        <div class="nav-decision-copy">
+          <span id="nav-decision-kicker" class="nav-decision-kicker"></span>
+          <strong id="nav-decision-title" class="nav-decision-title"></strong>
+        </div>
+        <button type="button" id="nav-rtb-action" class="nav-decision-action">RTB TO CARRIER</button>
+        <p id="nav-decision-detail" class="nav-decision-detail"></p>
+      </section>
+      <section id="nav-recovery-lesson" class="nav-recovery-lesson" aria-live="polite" hidden>
+        <span id="nav-recovery-step" class="nav-recovery-step"></span>
+        <strong id="nav-recovery-title" class="nav-recovery-title"></strong>
+        <output id="nav-recovery-targets" class="nav-recovery-targets"></output>
+        <p id="nav-recovery-action" class="nav-recovery-action"></p>
+      </section>
       <canvas id="nav-mesh-map" width="280" height="240"
         aria-label="Mesh navigation display"
         title="Pan/zoom in FREE · click Place/Free Fix · drag ActiveDest"></canvas>
-      <div class="tf-indications nav-nd-strip" aria-label="Mesh solution">
+      <div class="tf-indications nav-nd-strip" aria-label="Navigation solution">
         <div class="tf-indication wide">
           <span class="tf-label">Destination</span>
           <output id="nav-destination" class="tf-value" data-state="unknown">--</output>
@@ -3383,12 +3481,28 @@
           <output id="nav-range" class="tf-value" data-state="unknown">--</output>
         </div>
         <div class="tf-indication">
-          <span class="tf-label">ETA</span>
-          <output id="nav-eta" class="tf-value" data-state="unknown">--</output>
-        </div>
-        <div class="tf-indication">
           <span class="tf-label">Turn</span>
           <output id="nav-turn" class="tf-value" data-state="unknown">--</output>
+        </div>
+      </div>
+      <details class="nav-advanced">
+        <summary>FLIGHT PLAN &amp; FUEL</summary>
+        <div class="nav-nd-toolbar" role="toolbar" aria-label="Mesh ND tools">
+          <button type="button" id="nav-nd-follow" class="nav-nd-tool" data-active="true">FOLLOW</button>
+          <button type="button" id="nav-nd-free" class="nav-nd-tool">FREE</button>
+          <span class="nav-nd-sep" aria-hidden="true">·</span>
+          <button type="button" id="nav-nd-proc-none" class="nav-nd-tool" data-proc="0">PROC OFF</button>
+          <button type="button" id="nav-nd-proc-overhead" class="nav-nd-tool" data-proc="1">OVERHEAD</button>
+          <button type="button" id="nav-nd-proc-downwind" class="nav-nd-tool" data-proc="2">DOWNWIND</button>
+          <button type="button" id="nav-nd-proc-straight" class="nav-nd-tool" data-proc="3">STRAIGHT</button>
+          <span class="nav-nd-sep" aria-hidden="true">·</span>
+          <button type="button" id="nav-nd-tour-add" class="nav-nd-tool">TOUR+</button>
+          <button type="button" id="nav-nd-clear" class="nav-nd-tool">HOME</button>
+        </div>
+        <div class="tf-indications nav-nd-strip" aria-label="Fuel and procedure detail">
+        <div class="tf-indication">
+          <span class="tf-label">ETA</span>
+          <output id="nav-eta" class="tf-value" data-state="unknown">--</output>
         </div>
         <div class="tf-indication">
           <span class="tf-label">Fuel aboard</span>
@@ -3422,7 +3536,8 @@
           <span class="tf-label">Recovery procedure</span>
           <output id="nav-procedure" class="tf-value" data-state="unknown">--</output>
         </div>
-      </div>
+        </div>
+      </details>
     </div>
   </details>
 
@@ -3597,14 +3712,6 @@
             </div>
             <p>This changes the complete landing centreline, wire, rollout, and starting geometry.</p>
           </div>
-          <div id="ready-top-gun-seat" class="ready-deck-config" hidden>
-            <span class="ready-deck-label">Your aircraft</span>
-            <div class="ready-deck-options" role="group" aria-label="Top Gun seat">
-              <button type="button" data-top-gun-seat="0" aria-pressed="true">F-14A</button>
-              <button type="button" data-top-gun-seat="1" aria-pressed="false">MiG-28</button>
-            </div>
-            <p>Tomcat or aggressor MiG-28 — guns and Sidewinders, one-on-one ACM.</p>
-          </div>
           <details id="ready-circuits-preflight" class="ready-circuits-preflight" hidden>
             <summary>Preflight · pattern</summary>
             <div class="ready-circuits-body">
@@ -3650,7 +3757,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
             <span aria-hidden="true">⌨</span> Built for a laptop or desktop: flight controls, the tactical map, and the full instrument set need a keyboard and a real screen.
           </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 330 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 331 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
           <div class="ready-telemetry-disclosure">
@@ -3754,7 +3861,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     // Derive from a normal stamped URL so this comparison cannot drift from the next release:
     // tools/release/stamp-release.mjs rewrites every `?v=NNN`, and nothing else here.
-    const releaseBuild = new URL("./service-worker.js?v=330", location.href)
+    const releaseBuild = new URL("./service-worker.js?v=331", location.href)
       .searchParams.get("v");
 
     globalThis.__gunsPrebootReady = (async () => {
@@ -3850,11 +3957,11 @@ Splash one bandit to qualify · H controls · R restarts</p>
         });
         document.head.append(script);
       });
-      await loadClassicScript("./multiplayer-config.js?v=330");
-      await loadClassicScript("./_framework/blazor.webassembly.js?v=330", {
+      await loadClassicScript("./multiplayer-config.js?v=331");
+      await loadClassicScript("./_framework/blazor.webassembly.js?v=331", {
         autostart: "false",
       });
-      await import("./app.js?v=330");
+      await import("./app.js?v=331");
     } catch (error) {
       console.error(error);
       document.querySelector("#boot")?.classList.add("ready");
@@ -3867,8 +3974,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       try {
         const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
           await Promise.all([
-            import("./render/shell/inapp_browser.js?v=330"),
-            import("./render/shell/boot_fallback.js?v=330"),
+            import("./render/shell/inapp_browser.js?v=331"),
+            import("./render/shell/boot_fallback.js?v=331"),
           ]);
         const detection = detectEmbeddedBrowser({
           userAgent: navigator.userAgent,

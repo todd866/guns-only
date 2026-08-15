@@ -5,18 +5,32 @@
  * Replaces the old same-color AABB stack + green ground-war control disc.
  */
 
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=330";
+import {
+  COBRA_CANYON_CAMP_EMBER_APRON,
+  sampleCobraCanyonTerrain,
+} from "./cobra_canyon_plan.js?v=331";
 
 export const CAMP_EMBER_LANDMARK_ID = "landmark.cobra-canyon.camp-ember.v1";
-export const CAMP_EMBER_FIREBASE_SCHEMA = "guns-only.cobra-camp-ember-firebase.v1";
-// The authored part list has its clear gate along local +Z. River Gorge launches due east, so
-// rotate that gate onto render +X instead of pointing the helicopter into the east berm/tents.
-export const CAMP_EMBER_DEPARTURE_YAW_RAD = Math.PI / 2;
+export const CAMP_EMBER_FIREBASE_SCHEMA = "guns-only.cobra-camp-ember-firebase.v2";
+export const CAMP_EMBER_OPERATIONS = Object.freeze({
+  ...COBRA_CANYON_CAMP_EMBER_APRON,
+  tlofRadiusM: 12,
+  fatoRadiusM: 28,
+  safetyAreaRadiusM: 38,
+  compoundRadiusM: 175,
+  spareWorldOffsetsM: Object.freeze([
+    Object.freeze({ eastM: 20, northM: 65 }),
+    Object.freeze({ eastM: 20, northM: -65 }),
+  ]),
+});
+// Three.js uses render +Z = world south, so an aviation heading H is rendered at PI-H.
+export const CAMP_EMBER_DEPARTURE_YAW_RAD =
+  Math.PI - CAMP_EMBER_OPERATIONS.finalHeadingDeg * Math.PI / 180;
 
 /**
  * No elevated presentation geometry may enter this local-pad volume. It contains the authority
- * spawn, both skid stations, the rear-seat eye, the main-rotor disc's near field and 26 m of the
- * eastbound departure. Thin PSP/laterite surfaces at or below `minimumY` are deliberately allowed.
+ * spawn, rear-seat eye and the main-rotor disc's near field. Thin PSP/laterite surfaces at or
+ * below `minimumY` are deliberately allowed.
  */
 /**
  * How far the DRAWN basin is recessed beneath the simulated apron under Camp Ember, and by the
@@ -39,12 +53,12 @@ export const CAMP_EMBER_DEPARTURE_YAW_RAD = Math.PI / 2;
 export const CAMP_EMBER_DRAWN_RECESS_M = 0.3;
 
 export const CAMP_EMBER_SPAWN_SAFETY_VOLUME = Object.freeze({
-  minimumX: -8,
-  maximumX: 8,
+  minimumX: -CAMP_EMBER_OPERATIONS.safetyAreaRadiusM,
+  maximumX: CAMP_EMBER_OPERATIONS.safetyAreaRadiusM,
   minimumY: 0.325,
   maximumY: 5.5,
-  minimumZ: -10,
-  maximumZ: 26,
+  minimumZ: -CAMP_EMBER_OPERATIONS.safetyAreaRadiusM,
+  maximumZ: CAMP_EMBER_OPERATIONS.safetyAreaRadiusM,
 });
 
 /** PSP plate / laterite / sandbag / olive / steel — never control-green. */
@@ -63,6 +77,9 @@ export const CAMP_EMBER_COLORS = Object.freeze({
   rust: [0.42, 0.24, 0.14],
   fuel: [0.28, 0.29, 0.20],
   crate: [0.43, 0.35, 0.22],
+  aviationWhite: [0.83, 0.82, 0.68],
+  signalYellow: [0.82, 0.62, 0.14],
+  signalRed: [0.66, 0.16, 0.10],
 });
 
 function finite(value, fallback = 0) {
@@ -82,8 +99,8 @@ function campEmberAnchor(plan) {
 }
 
 /**
- * Authored prop list in local pad frame: +x east, +z south (render z = -north).
- * The clear gate is authored along +z and rotated onto the eastbound launch heading at build.
+ * Authored prop list in final-course frame. Local +Z is the 300-degree departure/go-around
+ * heading; local -Z is final approach. Both throats remain open through the perimeter.
  */
 export function campEmberFirebaseParts() {
   const parts = [];
@@ -103,113 +120,163 @@ export function campEmberFirebaseParts() {
       surface,
     });
   };
+  const addFan = (id, family, color, x, z, centreY, outline) => {
+    parts.push({
+      id, family, shape: "fan", color, x, z, centreY,
+      widthM: 1, heightM: 0.01, depthM: 1, yaw: 0, surface: true, outline,
+    });
+  };
+  const localFromWorldOffset = (eastM, northM) => ({
+    x: Math.cos(CAMP_EMBER_DEPARTURE_YAW_RAD) * eastM
+      - Math.sin(CAMP_EMBER_DEPARTURE_YAW_RAD) * -northM,
+    z: Math.sin(CAMP_EMBER_DEPARTURE_YAW_RAD) * eastM
+      + Math.cos(CAMP_EMBER_DEPARTURE_YAW_RAD) * -northM,
+  });
+  const addPad = (id, x, z, sizeM, yaw = 0, color = CAMP_EMBER_COLORS.psp) => {
+    add(`laterite-${id}`, "laterite", "box", CAMP_EMBER_COLORS.laterite, x, z,
+      0.220, sizeM + 12, 0.02, sizeM + 12, yaw, true);
+    add(`psp-${id}-bed`, "psp", "box", color, x, z,
+      0.265, sizeM, 0.02, sizeM, yaw, true);
+    const ribCount = Math.floor(sizeM / 2.2);
+    for (let rib = -Math.floor(ribCount / 2); rib <= Math.floor(ribCount / 2); rib++) {
+      const acrossM = rib * 2.08;
+      add(`psp-${id}-rib-${rib + 20}`, "psp", "box",
+        rib % 3 === 0 ? CAMP_EMBER_COLORS.pspRust
+          : rib % 2 === 0 ? CAMP_EMBER_COLORS.pspLight : color,
+        x + Math.cos(yaw) * acrossM, z + Math.sin(yaw) * acrossM,
+        0.314, 1.72, 0.012, sizeM - 2, yaw, true);
+    }
+  };
 
-  // A laterite skirt and individually ribbed PSP strips make two coherent landing surfaces. All
-  // metal tops stay at or below +0.013 m: visible over the terrain without becoming a collision-
-  // sized slab through the authority skids.
-  add("laterite-main", "laterite", "box", CAMP_EMBER_COLORS.laterite, 0, 0,
-    0.220, 30, 0.02, 30, 0, true);
-  add("psp-main-bed", "psp", "box", CAMP_EMBER_COLORS.psp, 0, 0,
-    0.265, 26, 0.02, 26, 0, true);
-  for (let index = -5; index <= 5; index++) {
-    const color = index % 3 === 0
-      ? CAMP_EMBER_COLORS.pspRust
-      : index % 2 === 0 ? CAMP_EMBER_COLORS.pspLight : CAMP_EMBER_COLORS.psp;
-    add(`psp-main-rib-${index + 5}`, "psp", "box", color, index * 2.08, 0,
-      0.314, 1.72, 0.012, 24, 0, true);
-  }
-  const secondaryYaw = 0.15;
-  add("laterite-secondary", "laterite", "box", CAMP_EMBER_COLORS.lateriteDark,
-    0, -34, 0.220, 23, 0.02, 23, secondaryYaw, true);
-  add("psp-secondary-bed", "psp", "box", CAMP_EMBER_COLORS.psp,
-    0, -34, 0.265, 20, 0.02, 20, secondaryYaw, true);
-  for (let index = -4; index <= 4; index++) {
-    const acrossM = index * 2.05;
-    add(`psp-secondary-rib-${index + 4}`, "psp", "box",
-      index % 2 === 0 ? CAMP_EMBER_COLORS.pspLight : CAMP_EMBER_COLORS.pspRust,
-      Math.cos(secondaryYaw) * acrossM,
-      -34 + Math.sin(secondaryYaw) * acrossM,
-      0.314, 1.68, 0.012, 18, secondaryYaw, true);
-  }
-  add("laterite-connector-a", "laterite", "box", CAMP_EMBER_COLORS.laterite,
-    0, -17, 0.221, 9, 0.018, 8, 0, true);
-  add("laterite-connector-b", "laterite", "box", CAMP_EMBER_COLORS.lateriteDark,
-    0, -25, 0.221, 8, 0.018, 8, 0, true);
+  // Central TLOF/FATO plus two authority-matched spare stations and a separate casualty/supply
+  // pad. The landing system is now readable as an aviation facility, not one postage stamp.
+  addPad("main", 0, 0, 30);
+  const sparePads = CAMP_EMBER_OPERATIONS.spareWorldOffsetsM
+    .map(({ eastM, northM }) => localFromWorldOffset(eastM, northM));
+  sparePads.forEach(({ x, z }, index) => addPad(`spare-${index}`, x, z, 26, index ? -0.08 : 0.08));
+  addPad("medevac", 102, 58, 24, -0.12, CAMP_EMBER_COLORS.pspLight);
 
-  // Low modular revetments. Short trapezoidal runs read as stacked sandbags instead of the old
-  // 38–42 m monolithic boxes, and leave the entire +Z departure mouth open.
-  let revetmentIndex = 0;
-  for (const x of [-18, 18]) {
-    for (const z of [-10, -2, 6, 14]) {
-      add(`revetment-main-${revetmentIndex++}`, "sandbag", "revetment",
-        revetmentIndex % 2 ? CAMP_EMBER_COLORS.sandbag : CAMP_EMBER_COLORS.sandbagShade,
-        x, z, 0.55, 2.8, 1.1, 6.4, 0);
+  // Final-course readability. Vietnam helicopter sites used panels, smoke and improvised visual
+  // aids rather than a runway; these painted PSP markers give the player the same operational
+  // information without turning a medium FOB into an airport. The paired panels narrow toward
+  // the FATO, the segmented ring identifies the landing surface, and the H survives grass/haze.
+  for (const [index, z] of [-150, -115, -80, -48].entries()) {
+    const halfWidthM = 29 - index * 2.5;
+    for (const side of [-1, 1]) {
+      add(`final-panel-${index}-${side < 0 ? "left" : "right"}`, "marking", "box",
+        index % 2 ? CAMP_EMBER_COLORS.aviationWhite : CAMP_EMBER_COLORS.signalYellow,
+        side * halfWidthM, z, 0.314, 5.5, 0.012, 2.2, 0, true);
     }
   }
-  for (const x of [-15, 15]) {
-    for (const z of [-39, -31]) {
-      add(`revetment-secondary-${revetmentIndex++}`, "sandbag", "revetment",
-        CAMP_EMBER_COLORS.sandbagShade, x, z, 0.55, 2.7, 1.1, 6.2, secondaryYaw);
-    }
+  for (let segment = 0; segment < 16; segment++) {
+    const angle = segment / 16 * Math.PI * 2;
+    add(`fato-ring-${segment}`, "marking", "box", CAMP_EMBER_COLORS.aviationWhite,
+      25 * Math.cos(angle), 25 * Math.sin(angle), 0.314,
+      6.2, 0.012, 0.72, -angle, true);
   }
-  for (const x of [-8, 0, 8]) {
-    add(`revetment-rear-${revetmentIndex++}`, "sandbag", "revetment",
-      CAMP_EMBER_COLORS.sandbag, x, -47, 0.5, 6.5, 1, 2.6, 0);
+  add("tlof-h-left", "marking", "box", CAMP_EMBER_COLORS.aviationWhite,
+    -4.2, 0, 0.316, 1.25, 0.012, 11, 0, true);
+  add("tlof-h-right", "marking", "box", CAMP_EMBER_COLORS.aviationWhite,
+    4.2, 0, 0.316, 1.25, 0.012, 11, 0, true);
+  add("tlof-h-crossbar", "marking", "box", CAMP_EMBER_COLORS.aviationWhite,
+    0, 0, 0.318, 8.4, 0.012, 1.25, 0, true);
+
+  // Windsock and signal mast sit outside the rotor safety area and off the protected centreline.
+  // The yellow horizontal sock is intentionally broad enough to read from the 600 m gate.
+  add("windsock-mast", "signal", "cylinder", CAMP_EMBER_COLORS.steel,
+    49, -72, 6, 0.34, 12, 0.34, 0);
+  add("windsock-arm", "signal", "box", CAMP_EMBER_COLORS.steel,
+    49, -72, 12.05, 5.2, 0.18, 0.18, 0);
+  add("windsock", "signal", "tent", CAMP_EMBER_COLORS.signalYellow,
+    52.4, -72, 11.7, 4.8, 1.35, 1.15, Math.PI / 2);
+  add("final-ident-panel", "signal", "box", CAMP_EMBER_COLORS.signalRed,
+    -48, -74, 2.2, 5.4, 4.4, 0.25, 0);
+
+  // Irregular 350 m laterite footprint: enough room for separated aviation functions while the
+  // protected final and departure centreline stays completely open.
+  const scarOutline = [
+    [166, 8], [158, 72], [122, 132], [62, 164], [-8, 171], [-78, 156],
+    [-136, 118], [-168, 56], [-171, -18], [-145, -92], [-92, -150],
+    [-22, -169], [54, -160], [120, -126], [158, -66],
+  ];
+  addFan("scar-apron", "laterite", [0.55, 0.36, 0.22], 0, 0, 0.050, scarOutline);
+
+  // Perimeter berm and service ring. Both ends of the final-course centreline are open: arrival
+  // through -Z, rejected landing/departure through +Z.
+  let bermIndex = 0;
+  for (let i = 0; i < 48; i++) {
+    const angle = (i / 48) * Math.PI * 2;
+    const x = 164 * Math.cos(angle);
+    const z = 164 * Math.sin(angle);
+    if (Math.abs(x) < 30 && Math.abs(z) > 145) continue;
+    add(`berm-${bermIndex++}`, "sandbag", "revetment",
+      i % 2 ? CAMP_EMBER_COLORS.sandbagShade : CAMP_EMBER_COLORS.lateriteDark,
+      x, z, 0.7, 3.4, 1.4, 12, -angle);
+  }
+  for (let i = 0; i < 24; i++) {
+    const angle = (i / 24) * Math.PI * 2 + 0.08;
+    add(`ring-road-${i}`, "laterite", "box", CAMP_EMBER_COLORS.laterite,
+      138 * Math.cos(angle), 138 * Math.sin(angle), 0.134, 5.5, 0.012, 36, -angle, true);
   }
 
-  // GP tents and hooches live beyond the rotor/spawn volume. A pitched procedural prism replaces
-  // the previous overlapping body/ridge boxes, which read as oversized green blocks.
+  // Eight open-front aircraft revetments give the ramp real capacity. Two align with the live
+  // spare-airframe stations; the others read as occupied/available dispersal rather than clutter.
+  const aircraftStations = [
+    ...sparePads,
+    { x: -112, z: 22 }, { x: -112, z: -28 }, { x: -88, z: 92 },
+    { x: 112, z: -20 }, { x: 112, z: -70 }, { x: 78, z: -112 },
+  ];
+  aircraftStations.forEach(({ x, z }, stationIndex) => {
+    if (stationIndex >= 2) addPad(`empty-${stationIndex}`, x, z, 22);
+    add(`bird-revetment-${stationIndex}-back`, "sandbag", "revetment",
+      CAMP_EMBER_COLORS.sandbagShade, x, z - 15, 0.7, 11, 1.4, 2.8, Math.PI / 2);
+    for (const side of [-1, 1]) {
+      for (const segment of [-1, 1]) {
+        add(`bird-revetment-${stationIndex}-${side < 0 ? "left" : "right"}-${segment < 0 ? "rear" : "front"}`,
+          "sandbag", "revetment", CAMP_EMBER_COLORS.sandbag,
+          x + side * 7, z - 3 + segment * 5.5, 0.7, 2.8, 1.4, 11, 0);
+      }
+    }
+  });
+
+  // Maintenance and living areas are separated from POL and ammunition. Their access tracks
+  // terminate at named operational areas, so none can read as the old random orange stripe.
+  add("maintenance-apron", "laterite", "box", CAMP_EMBER_COLORS.lateriteDark,
+    -92, 65, 0.16, 62, 0.014, 42, 0.08, true);
+  add("maintenance-hangar", "hooch", "tent", CAMP_EMBER_COLORS.canvas,
+    -103, 72, 4.5, 30, 9, 20, 0.08);
+  add("maintenance-shop", "hooch", "tent", CAMP_EMBER_COLORS.tent,
+    -72, 74, 2.8, 15, 5.6, 10, -0.05);
   const tents = [
-    [-25, -25, 0.12, CAMP_EMBER_COLORS.tent],
-    [-25, -35, -0.08, CAMP_EMBER_COLORS.canvas],
-    [25, -25, -0.18, CAMP_EMBER_COLORS.tent],
-    [25, -35, 0.10, CAMP_EMBER_COLORS.canvas],
-    [-24, 7, 0.35, CAMP_EMBER_COLORS.canvas],
-    [24, 8, -0.30, CAMP_EMBER_COLORS.tent],
+    [-118, -82, 0.12], [-96, -104, -0.08], [-66, -120, 0.08],
+    [70, 112, -0.16], [98, 94, 0.12], [124, 70, -0.10],
   ];
-  tents.forEach(([x, z, yaw, color], index) => {
-    add(`tent-${index}`, "tent", "tent", color, x, z, 1.5, 7.2, 3, 5.4, yaw);
-  });
-  for (const [index, x] of [-28, 28].entries()) {
-    add(`hooch-${index}`, "hooch", "tent", CAMP_EMBER_COLORS.canvas,
-      x, 18, 1.65, 7.4, 3.3, 6, x < 0 ? 0.18 : -0.18);
-  }
+  tents.forEach(([x, z, yaw], index) => add(`tent-${index}`, "tent", "tent",
+    index % 2 ? CAMP_EMBER_COLORS.canvas : CAMP_EMBER_COLORS.tent,
+    x, z, 2.1, 10, 4.2, 7.5, yaw));
 
-  // Separate revetted ammo and fuel points. Crates and drums are individually authored with real
-  // gaps; the old west crate was guaranteed to penetrate the 12 x 7 m timber block.
-  add("ammo-revetment-west", "sandbag", "revetment", CAMP_EMBER_COLORS.sandbagShade,
-    -25, 18.5, 0.6, 2.4, 1.2, 9, 0);
-  add("ammo-revetment-north", "sandbag", "revetment", CAMP_EMBER_COLORS.sandbag,
-    -20, 23.2, 0.6, 12, 1.2, 2.4, 0);
-  const ammoCrates = [
-    [-21.5, 17, 0.08], [-18.5, 17, -0.06],
-    [-21.5, 20, -0.05], [-18.5, 20, 0.09],
-  ];
-  ammoCrates.forEach(([x, z, yaw], index) => {
-    add(`ammo-crate-${index}`, "crate", "box", CAMP_EMBER_COLORS.crate,
-      x, z, 0.65, 1.6, 1.3, 1.6, yaw);
-  });
-  add("fuel-revetment-east", "sandbag", "revetment", CAMP_EMBER_COLORS.sandbagShade,
-    25, 19.5, 0.6, 2.4, 1.2, 10, 0);
-  add("fuel-revetment-north", "sandbag", "revetment", CAMP_EMBER_COLORS.sandbag,
-    20, 24.7, 0.6, 12, 1.2, 2.4, 0);
-  const drums = [
-    [18, 18, CAMP_EMBER_COLORS.fuel], [20.2, 18, CAMP_EMBER_COLORS.rust],
-    [18, 20.2, CAMP_EMBER_COLORS.rust], [20.2, 20.2, CAMP_EMBER_COLORS.fuel],
-    [18, 22.4, CAMP_EMBER_COLORS.fuel], [20.2, 22.4, CAMP_EMBER_COLORS.rust],
-  ];
-  drums.forEach(([x, z, color], index) => {
-    add(`fuel-drum-${index}`, "fuel", "cylinder", color, x, z, 0.62, 0.92, 1.24, 0.92, 0);
-  });
-  [[13, -18, 0.12], [16, -18, -0.08], [-13, -20, 0.05]].forEach(
-    ([x, z, yaw], index) => add(`supply-crate-${index}`, "crate", "box",
-      CAMP_EMBER_COLORS.crate, x, z, 0.6, 1.5, 1.2, 1.5, yaw),
+  // Revetted ammunition and POL live on opposite sides of the compound.
+  [[-126, -48], [-126, -68], [-111.5, -78], [-100.5, -78]].forEach(([x, z], index) =>
+    add(`ammo-revetment-${index}`, "sandbag", "revetment", CAMP_EMBER_COLORS.sandbagShade,
+      x, z, 0.7, index >= 2 ? 11 : 2.8, 1.4, index >= 2 ? 2.8 : 12, 0));
+  const ammoCrates = [[-122, -56], [-118, -56], [-122, -62], [-118, -62], [-114, -68]];
+  ammoCrates.forEach(([x, z], index) => add(`ammo-crate-${index}`, "crate", "box",
+    CAMP_EMBER_COLORS.crate, x, z, 0.65, 1.8, 1.3, 1.8, index * 0.04));
+  [[128, 16], [128, 38], [102.5, 48], [114, 48]].forEach(([x, z], index) =>
+    add(`fuel-revetment-${index}`, "sandbag", "revetment", CAMP_EMBER_COLORS.sandbag,
+      x, z, 0.7, index >= 2 ? 11 : 2.8, 1.4, index >= 2 ? 2.8 : 12, 0));
+  const drums = [[120, 25], [124, 25], [120, 30], [124, 30], [120, 35], [124, 35]];
+  drums.forEach(([x, z], index) => add(`fuel-drum-${index}`, "fuel", "cylinder",
+    index % 2 ? CAMP_EMBER_COLORS.rust : CAMP_EMBER_COLORS.fuel,
+    x, z, 0.62, 0.92, 1.24, 0.92));
+  [[86, 48], [91, 48], [96, 48], [86, 54], [91, 54], [96, 54]].forEach(
+    ([x, z], index) => add(`supply-crate-${index}`, "crate", "box",
+      CAMP_EMBER_COLORS.crate, x, z, 0.6, 1.8, 1.2, 1.8, index * 0.03),
   );
 
-  // A legged timber watchtower and a slender rust/steel mast provide vertical identity without
-  // putting a giant post in the pilot's cold-open sightline.
-  const towerX = -30;
-  const towerZ = -6;
+  // A legged timber watchtower and radio mast make Camp Ember identifiable on final.
+  const towerX = -142;
+  const towerZ = 18;
   [[-1.25, -1.25], [1.25, -1.25], [-1.25, 1.25], [1.25, 1.25]].forEach(
     ([dx, dz], index) => add(`tower-leg-${index}`, "timber", "box", CAMP_EMBER_COLORS.timber,
       towerX + dx, towerZ + dz, 3, 0.34, 6, 0.34, 0),
@@ -219,60 +286,13 @@ export function campEmberFirebaseParts() {
   add("tower-roof", "hooch", "tent", CAMP_EMBER_COLORS.canvas,
     towerX, towerZ, 7.25, 4.8, 1.9, 4.8, 0);
   add("radio-mast", "steel", "cylinder", CAMP_EMBER_COLORS.steel,
-    30, -32, 7.5, 0.38, 15, 0.38, 0);
+    142, 18, 9, 0.42, 18, 0.42, 0);
   add("radio-crossbar", "steel", "box", CAMP_EMBER_COLORS.rust,
-    30, -32, 15.05, 2.5, 0.22, 0.22, 0.45);
+    142, 18, 18.05, 3.2, 0.22, 0.22, 0.45);
 
-  // ---- The FSB read (docs/art-direction/vietnam-fob-battlefield-reference.md) ----
-  // Local frame: +x = north, +z = east (the group rotates by the departure yaw).
-  const addFan = (id, family, color, x, z, centreY, outline) => {
-    parts.push({
-      id, family, shape: "fan", color, x, z, centreY,
-      widthM: 1, heightM: 0.01, depthM: 1, yaw: 0, surface: true, outline,
-    });
-  };
-
-  // The scar is the base (Granite): an irregular laterite fan under everything, kept
-  // inside the 58 m flat contact apron so presentation never floats over the blend ring.
-  const scarOutline = [
-    [52, 4], [44, 22], [30, 40], [10, 50], [-12, 52], [-30, 43],
-    [-45, 27], [-53, 8], [-50, -12], [-40, -30], [-24, -44], [-4, -52],
-    [18, -49], [36, -37], [48, -18],
-  ];
-  // Brighter than the deep laterite so the scar survives the aerial haze — the scar IS
-  // the base from the air (Granite), not an accent.
-  addFan("scar-apron", "laterite", [0.55, 0.36, 0.22], 0, 0, 0.050, scarOutline);
-
-  // Berm ring with the eastbound departure mouth left open (Sedgwick).
-  let bermIndex = 0;
-  for (let i = 0; i < 22; i++) {
-    const angle = (i / 22) * Math.PI * 2;
-    const x = 41 * Math.cos(angle);
-    const z = 41 * Math.sin(angle);
-    if (z > 30 && Math.abs(x) < 14) continue; // departure mouth
-    add(`berm-${bermIndex++}`, "sandbag", "revetment",
-      i % 2 ? CAMP_EMBER_COLORS.sandbagShade : CAMP_EMBER_COLORS.lateriteDark,
-      x, z, 0.6, 3.2, 1.2, 11.5, -angle);
-  }
-
-  // Inner ring road + track spaghetti: worn laterite surfaces, never elevated.
-  for (let i = 0; i < 12; i++) {
-    const angle = (i / 12) * Math.PI * 2 + 0.13;
-    add(`ring-road-${i}`, "laterite", "box", CAMP_EMBER_COLORS.laterite,
-      33 * Math.cos(angle), 33 * Math.sin(angle), 0.134, 4.2, 0.012, 17.5, -angle, true);
-  }
-  // The four radial "tracks" are GONE. They were 24-38 m bright-laterite rectangles running
-  // outward from the camp and stopping dead in open ground — from the cockpit, a hard-edged
-  // orange stripe leading nowhere, which is what the owner kept reporting as "that random red
-  // line". A track has to connect two places to read as a track; these connected the camp to
-  // nothing, so they read as a rendering artifact rather than terrain.
-  //
-  // The 12 ring-road segments above stay: they close a loop inside the camp, so they read as
-  // road. If radial tracks return they must run to something — the river ford, the treeline
-  // gap, the bridge approach — and taper rather than end square.
-
-  // Two rosette positions: pit disc + radiating sandbag lobes (the aerial signature).
-  const rosettes = [[-38, 8], [36, 14]];
+  // Rosette fighting positions, bunker mounds and defoliated perimeter make the FSB readable
+  // from altitude without encroaching on helicopter operating surfaces.
+  const rosettes = [[-138, 88], [136, 92]];
   rosettes.forEach(([rx, rz], rosetteIndex) => {
     const pitOutline = [];
     for (let i = 0; i < 8; i++) {
@@ -300,11 +320,11 @@ export function campEmberFirebaseParts() {
     }
     return outline;
   };
-  addFan("burn-0", "burn", [0.09, 0.08, 0.07], 42, -18, 0.095, burnOutline(5.5));
-  addFan("burn-1", "burn", [0.11, 0.10, 0.08], -16, 43, 0.095, burnOutline(4.5));
+  addFan("burn-0", "burn", [0.09, 0.08, 0.07], 88, -142, 0.095, burnOutline(8));
+  addFan("burn-1", "burn", [0.11, 0.10, 0.08], -55, 132, 0.095, burnOutline(6));
 
   // Bunker mounds on the berm's inner face: sandbag sides, glinting PSP roofs (A Shau).
-  const bunkers = [[26, -24, 0.3], [-27, -16, -0.2], [15, -39, 0.1]];
+  const bunkers = [[112, 116, 0.3], [-118, 112, -0.2], [118, -116, 0.1], [-112, -118, -0.1]];
   bunkers.forEach(([bx, bz, byaw], bunkerIndex) => {
     add(`bunker-${bunkerIndex}`, "bunker", "box", CAMP_EMBER_COLORS.sandbagShade,
       bx, bz, 0.7, 4.6, 1.4, 3.6, byaw);
@@ -313,25 +333,11 @@ export function campEmberFirebaseParts() {
   });
 
   // Defoliated fringe accents: bare gray-brown poles where the jungle used to be.
-  const deadTrees = [[50, -6], [46, 20], [-49, -12], [-44, 26], [8, -50], [-30, -40]];
+  const deadTrees = [[172, -42], [168, 64], [-172, -54], [-164, 78], [66, -172], [-88, -158]];
   deadTrees.forEach(([tx, tz], treeIndex) => {
     add(`deadtree-${treeIndex}`, "deadtree", "cylinder", [0.30, 0.27, 0.22],
       tx, tz, 3.4, 0.4, 6.8, 0.4, 0);
   });
-
-  // Bird revetments at the sim spare stations (CobraAirframePool: north ±30, east +6).
-  // Open toward +z (east) so the spares taxi out the departure mouth. The station id part
-  // is the parking surface itself; walls carry sub-ids.
-  for (const [stationIndex, stationX] of [30, -30].entries()) {
-    add(`bird-revetment-${stationIndex}`, "laterite", "box", CAMP_EMBER_COLORS.laterite,
-      stationX, 6, 0.178, 11, 0.014, 12, 0, true);
-    add(`bird-revetment-${stationIndex}-back`, "sandbag", "revetment",
-      CAMP_EMBER_COLORS.sandbagShade, stationX, -0.8, 0.65, 9.5, 1.3, 2.4, Math.PI / 2);
-    add(`bird-revetment-${stationIndex}-north`, "sandbag", "revetment",
-      CAMP_EMBER_COLORS.sandbag, stationX + 5.2, 6, 0.65, 2.4, 1.3, 11, 0);
-    add(`bird-revetment-${stationIndex}-south`, "sandbag", "revetment",
-      CAMP_EMBER_COLORS.sandbag, stationX - 5.2, 6, 0.65, 2.4, 1.3, 11, 0);
-  }
 
   return parts;
 }

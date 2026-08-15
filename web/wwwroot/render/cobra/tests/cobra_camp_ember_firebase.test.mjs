@@ -7,6 +7,7 @@ import {
   CAMP_EMBER_DEPARTURE_YAW_RAD,
   CAMP_EMBER_LANDMARK_ID,
   CAMP_EMBER_DRAWN_RECESS_M,
+  CAMP_EMBER_OPERATIONS,
   CAMP_EMBER_SPAWN_SAFETY_VOLUME,
   campEmberFirebaseParts,
   createCampEmberFirebase,
@@ -72,8 +73,7 @@ test("the firebase reads as a real FSB: scar, berm ring, rosettes, tracks, burns
   const parts = campEmberFirebaseParts();
   const byId = new Map(parts.map((part) => [part.id, part]));
 
-  // The scar is the base (Granite): an irregular laterite fan under everything, inside
-  // the 58 m flat contact apron so presentation never floats above the blend ring.
+  // The scar is the base: an irregular laterite fan inside the medium FOB's flat bench.
   const scar = byId.get("scar-apron");
   assert.ok(scar, "the laterite scar apron is the ground truth of the base");
   assert.equal(scar.shape, "fan");
@@ -81,16 +81,17 @@ test("the firebase reads as a real FSB: scar, berm ring, rosettes, tracks, burns
   assert.ok(Array.isArray(scar.outline) && scar.outline.length >= 12,
     "the scar outline must be irregular, not a disc");
   for (const [x, z] of scar.outline) {
-    assert.ok(Math.hypot(x, z) <= 56.5, `scar vertex ${x},${z} escapes the flat apron`);
+    assert.ok(Math.hypot(x, z) <= CAMP_EMBER_OPERATIONS.levelRadiusM - 5,
+      `scar vertex ${x},${z} escapes the flat apron`);
   }
 
-  // Berm ring with a gap at the eastbound departure mouth (local +z = east).
+  // Berm ring with reciprocal approach/departure openings on local +/-Z.
   const berm = parts.filter((part) => part.id.startsWith("berm-"));
   assert.ok(berm.length >= 12, `a berm ring needs segments, got ${berm.length}`);
   assert.ok(berm.every((part) => part.shape === "revetment"));
   assert.ok(!berm.some((part) =>
-    part.z > 30 && Math.abs(part.x) < 12),
-    "the departure mouth through the berm must stay open");
+    Math.abs(part.z) > 145 && Math.abs(part.x) < 25),
+    "the approach and departure mouths through the berm must stay open");
 
   // Two rosette positions (the FSB signature from the air): pit disc + radiating lobes.
   for (const rosette of ["rosette-0", "rosette-1"]) {
@@ -108,7 +109,7 @@ test("the firebase reads as a real FSB: scar, berm ring, rosettes, tracks, burns
   const tracks = parts.filter((part) => part.id.startsWith("track-"));
   for (const track of tracks) {
     const reachM = Math.hypot(track.x, track.z) + Math.max(track.widthM, track.depthM) * 0.5;
-    assert.ok(reachM <= 56.5,
+    assert.ok(reachM <= CAMP_EMBER_OPERATIONS.levelRadiusM - 10,
       `${track.id} runs ${reachM.toFixed(1)} m out and ends in open ground`);
   }
   // The ring road stays: it closes a loop, so it reads as road rather than as an artifact.
@@ -124,15 +125,38 @@ test("the firebase reads as a real FSB: scar, berm ring, rosettes, tracks, burns
     && part.id.endsWith("-roof"));
   assert.ok(bunkerRoofs.length >= 3);
 
-  // Bird revetments sit at the sim's spare stations: local +x = north, +z = east,
-  // stations at north ±30 / east +6 (CobraAirframePool constants, pinned numerically).
-  const north = byId.get("bird-revetment-0");
-  const south = byId.get("bird-revetment-1");
-  assert.ok(north && south, "the two spare Cobras need revetments");
-  assert.equal(north.x, 30);
-  assert.equal(north.z, 6);
-  assert.equal(south.x, -30);
-  assert.equal(south.z, 6);
+  // Eight aircraft positions, with the first two aligned byte-for-number to authority offsets.
+  assert.ok(parts.filter((part) => /^bird-revetment-\d+-back$/.test(part.id)).length >= 8);
+  for (const [index, expected] of CAMP_EMBER_OPERATIONS.spareWorldOffsetsM.entries()) {
+    const pad = byId.get(`psp-spare-${index}-bed`);
+    assert.ok(pad, `spare ${index} needs a PSP station`);
+    const eastM = Math.cos(CAMP_EMBER_DEPARTURE_YAW_RAD) * pad.x
+      + Math.sin(CAMP_EMBER_DEPARTURE_YAW_RAD) * pad.z;
+    const northM = Math.sin(CAMP_EMBER_DEPARTURE_YAW_RAD) * pad.x
+      - Math.cos(CAMP_EMBER_DEPARTURE_YAW_RAD) * pad.z;
+    assert.ok(Math.abs(eastM - expected.eastM) < 1e-9);
+    assert.ok(Math.abs(northM - expected.northM) < 1e-9);
+  }
+  assert.ok(byId.has("maintenance-hangar"));
+  assert.ok(byId.has("psp-medevac-bed"));
+});
+
+test("Camp Ember reads as a helicopter landing facility on stabilized final", () => {
+  const parts = campEmberFirebaseParts();
+  const byId = new Map(parts.map((part) => [part.id, part]));
+  const panels = parts.filter((part) => part.id.startsWith("final-panel-"));
+  const ring = parts.filter((part) => part.id.startsWith("fato-ring-"));
+
+  assert.equal(panels.length, 8, "four paired panel stations must define the final");
+  assert.equal(ring.length, 16, "the FATO needs a continuous segmented read from the air");
+  assert.ok(panels.every((part) => part.surface && part.z <= -48),
+    "approach panels belong on the arrival side, not in the go-around throat");
+  assert.ok(byId.has("tlof-h-left") && byId.has("tlof-h-right")
+    && byId.has("tlof-h-crossbar"), "the centre TLOF needs an unambiguous H");
+  assert.ok(byId.get("windsock-mast").heightM >= 10);
+  assert.ok(Math.abs(byId.get("windsock-mast").x) > CAMP_EMBER_OPERATIONS.safetyAreaRadiusM,
+    "windsock must be visible without entering the rotor safety area");
+  assert.ok(byId.has("final-ident-panel"));
 });
 
 test("createCampEmberFirebase places one merged mesh on the landmark", () => {
@@ -151,7 +175,7 @@ test("createCampEmberFirebase places one merged mesh on the landmark", () => {
   assert.equal(firebase.mesh.rotation.y, CAMP_EMBER_DEPARTURE_YAW_RAD);
 });
 
-test("Camp Ember opens a rotor-clear eastbound departure lane", () => {
+test("Camp Ember opens a rotor-clear 300-degree departure and go-around lane", () => {
   // AH-1G rotor diameter is 13.4 m, but the launch lane is a fuselage/skid corridor: the rotor
   // disc rises above these sub-3 m props. Preserve at least 5.5 m each side of the centreline.
   const minimumHalfWidthM = 5.5;
@@ -168,7 +192,7 @@ test("Camp Ember opens a rotor-clear eastbound departure lane", () => {
       + Math.abs(Math.cos(yaw)) * part.depthM * 0.5;
     const clearHalfWidthM = Math.abs(centreLateralM) - lateralExtentM;
     assert.ok(clearHalfWidthM >= minimumHalfWidthM,
-      `${part.family} narrows the eastbound lane to ${clearHalfWidthM.toFixed(2)} m`);
+      `${part.family} narrows the 300-degree lane to ${clearHalfWidthM.toFixed(2)} m`);
     checked += 1;
   }
   assert.ok(checked >= 10, "the clearance contract must cover the forward firebase clutter");
@@ -265,12 +289,12 @@ test("merged firebase geometry keeps centre-authored pads, berms and mast on the
   // Vertical structures still base at local 0 — the floor of the recessed dish, which IS the
   // drawn ground. They stand at grade beside the raised laterite pad, which is what a firebase
   // built on cut-and-fill actually looks like.
-  const berm = yBoundsFor("revetment-main-0");
+  const berm = yBoundsFor("berm-0");
   assert.ok(Math.abs(berm.minimum) < 1e-6);
-  assert.ok(Math.abs(berm.maximum - 1.1) < 1e-6);
+  assert.ok(Math.abs(berm.maximum - 1.4) < 1e-6);
   const mast = yBoundsFor("radio-mast");
   assert.ok(Math.abs(mast.minimum) < 1e-6);
-  assert.ok(Math.abs(mast.maximum - 15) < 1e-6);
+  assert.ok(Math.abs(mast.maximum - 18) < 1e-6);
 });
 
 test("Camp Ember ground sites are suppressed for the control disc", () => {

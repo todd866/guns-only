@@ -18,14 +18,15 @@ function tripleFromMatch(match, offset) {
 }
 
 async function authoritySources() {
-  const [jsonText, csharp] = await Promise.all([
+  const [jsonText, csharp, campOperations] = await Promise.all([
     readFile(new URL(
       "web/wwwroot/content/packs/cobra-vietnam/environment/cobra-canyon.world.json",
       repositoryRoot,
     ), "utf8"),
     readFile(new URL("sim/Cobra/CobraCanyonDefinition.cs", repositoryRoot), "utf8"),
+    readFile(new URL("sim/Cobra/CampEmberOperations.cs", repositoryRoot), "utf8"),
   ]);
-  return { world: JSON.parse(jsonText), csharp };
+  return { world: JSON.parse(jsonText), csharp, campOperations };
 }
 
 function csharpRoutes(source) {
@@ -42,16 +43,37 @@ function csharpRoutes(source) {
   return routes;
 }
 
-function csharpLandmarks(source) {
+function csharpConstant(source, name) {
+  const match = source.match(new RegExp(`public const double ${name} = ${numberPattern}`));
+  assert.ok(match, `missing C# Camp Ember authority constant ${name}`);
+  return numberFromCSharp(match[1]);
+}
+
+function csharpLandmarks(source, campOperations) {
   const start = source.indexOf("static CobraCanyonLandmarkDefinition[] CreateLandmarks");
   const end = source.indexOf("static CobraCanyonObstacleDefinition[] CreateObstacles");
   assert.ok(start >= 0 && end > start, "C# landmark authority block must remain discoverable");
   const block = source.slice(start, end);
-  const expression = new RegExp(
-    String.raw`new CobraCanyonLandmarkDefinition\(\s*"([^"]+)"[\s\S]*?new Vec3D\(\s*${numberPattern},\s*${numberPattern},\s*${numberPattern}\)\)`,
-    "g",
-  );
-  return new Map([...block.matchAll(expression)].map((match) => [match[1], tripleFromMatch(match, 2)]));
+  const landmarks = new Map();
+  for (const constructor of block.split("new CobraCanyonLandmarkDefinition(").slice(1)) {
+    const id = constructor.match(/^\s*"([^"]+)"/)?.[1];
+    assert.ok(id, "every C# landmark constructor must have a literal authority ID");
+    if (id === "landmark.cobra-canyon.camp-ember.v1") continue;
+    const position = constructor.match(new RegExp(
+      String.raw`new Vec3D\(\s*${numberPattern},\s*${numberPattern},\s*${numberPattern}\)`,
+    ));
+    assert.ok(position, `${id} must have a literal C# position or an explicit shared-authority case`);
+    landmarks.set(id, tripleFromMatch(position, 1));
+  }
+  assert.match(block,
+    /"landmark\.cobra-canyon\.camp-ember\.v1"[\s\S]*?new Vec3D\(\s*CampEmberOperations\.CentreEastM,\s*CampEmberOperations\.PadElevationM,\s*CampEmberOperations\.CentreNorthM\s*\)/,
+    "Camp Ember landmark must consume the shared operations authority instead of copying literals");
+  landmarks.set("landmark.cobra-canyon.camp-ember.v1", [
+    csharpConstant(campOperations, "CentreEastM"),
+    csharpConstant(campOperations, "PadElevationM"),
+    csharpConstant(campOperations, "CentreNorthM"),
+  ]);
+  return landmarks;
 }
 
 function csharpHazards(source) {
@@ -94,8 +116,8 @@ test("browser and C# authority share exact world IDs and route XYZ control point
 });
 
 test("browser landmarks and C# landmarks occupy the same exact positions", async () => {
-  const { world, csharp } = await authoritySources();
-  const parsed = csharpLandmarks(csharp);
+  const { world, csharp, campOperations } = await authoritySources();
+  const parsed = csharpLandmarks(csharp, campOperations);
   assert.equal(parsed.size, world.landmarks.length);
   for (const landmark of world.landmarks) {
     assert.deepEqual(parsed.get(landmark.id), landmark.positionLocalM, landmark.id);

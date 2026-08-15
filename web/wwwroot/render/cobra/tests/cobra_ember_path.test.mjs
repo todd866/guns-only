@@ -6,6 +6,8 @@ import {
   emberActObjectiveOverlay,
   emberActRemainingM,
   emberPathGuidanceState,
+  emberRtbFlightCue,
+  emberRtbVisualState,
 } from "../cobra_ember_path.js";
 
 test("ember path maps sim gates into guidance_path approach samples", () => {
@@ -88,7 +90,7 @@ test("ingress and rtb overlays include remaining distance when known", () => {
   );
   assert.match(
     emberActObjectiveOverlay("rtb", { remainingM: 850 }).line,
-    /850 m TO CAMP EMBER/,
+    /RTB · 850 m · STABILIZE/,
   );
 });
 
@@ -118,4 +120,29 @@ test("rtb act distance uses the authority FOB range", () => {
     route_guidance: { remaining_m: 18_000 },
     ground_war: { fob_range_m: 725 },
   }), 725);
+});
+
+test("RTB coaching walks one stabilized helicopter task at a time", () => {
+  assert.match(emberRtbFlightCue({ remainingM: 2_000 }).line, /JOIN FINAL 300°/);
+  assert.match(emberRtbFlightCue({ remainingM: 1_000, speedKts: 72 }).line, /SLOW/);
+  assert.match(emberRtbFlightCue({ remainingM: 900, speedKts: 44 }).detail, /35–50 KT/);
+  assert.match(emberRtbFlightCue({ remainingM: 400, speedKts: 30, sinkFpm: 620 }).line,
+    /CHECK SINK/);
+  assert.match(emberRtbFlightCue({ remainingM: 400, speedKts: 28, sinkFpm: 250 }).detail,
+    /white H/i);
+  assert.match(emberRtbFlightCue({ remainingM: 120, speedKts: 29 }).line, /FLARE/);
+  assert.match(emberRtbFlightCue({ remainingM: 60, speedKts: 8 }).detail,
+    /both skids/i);
+});
+
+test("RTB windscreen language narrows the funnel and flags unstable energy without prose", () => {
+  assert.deepEqual(emberRtbVisualState({ remainingM: 2_000 }), {
+    phase: "join", halfWidthM: 18, alert: false, colorHex: 0xffad3d,
+  });
+  assert.equal(emberRtbVisualState({ remainingM: 900, speedKts: 72 }).alert, true);
+  assert.equal(emberRtbVisualState({ remainingM: 900, speedKts: 44 }).alert, false);
+  assert.equal(emberRtbVisualState({ remainingM: 400, sinkFpm: 620 }).colorHex, 0xff613f);
+  assert.equal(emberRtbVisualState({ remainingM: 400, sinkFpm: 250 }).halfWidthM, 10);
+  assert.equal(emberRtbVisualState({ remainingM: 60, speedKts: 8 }).phase, "hover");
+  assert.equal(emberRtbVisualState({ remainingM: 60, speedKts: 8 }).halfWidthM, 7);
 });

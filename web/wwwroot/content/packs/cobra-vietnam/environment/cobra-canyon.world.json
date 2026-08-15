@@ -616,11 +616,11 @@
       "kind": "forward-operating-base",
       "displayName": "Camp Ember",
       "positionLocalM": [
-        -6775,
-        218,
-        -6200
+        -3800,
+        214,
+        -4600
       ],
-      "silhouette": "red-earth spur FOB with PSP pads and sandbag berms",
+      "silhouette": "medium red-earth helicopter FOB with multiple PSP FATOs, revetted ramp and clear approach lanes",
       "visualBandId": "band.cobra-canyon.critical.v1",
       "authority": {
         "role": "navigation-authority",
@@ -2030,20 +2030,20 @@
       "routeId": "route.cobra-canyon.river-gorge.v1",
       "distanceAlongRouteM": 0,
       "approachLocalM": [
-        -6500,
-        162,
-        -6200
+        -3956,
+        236.5,
+        -4510
       ],
       "anchorLocalM": [
-        -6775,
-        218,
-        -6200
+        -3800,
+        214,
+        -4600
       ],
       "boundsLocalM": [
-        -7100,
-        -6600,
-        -6450,
-        -5800
+        -4150,
+        -4950,
+        -3450,
+        -4250
       ],
       "archetypeIds": [
         "archetype.cobra-canyon.landmark-camp.v1",

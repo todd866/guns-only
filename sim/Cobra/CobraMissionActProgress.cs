@@ -8,7 +8,7 @@ namespace GunsOnly.Sim.Cobra;
 /// </summary>
 public static class CobraMissionActProgress
 {
-    public const double DepartPadRadiusM = 120.0;
+    public const double DepartPadRadiusM = 700.0;
     public const double EngageBridgeRadiusM = 480.0;
     public const double RtbPadCompleteRadiusM = 70.0;
     public const double RtbPadCompleteClearanceM = 12.0;
@@ -64,24 +64,19 @@ public static class CobraMissionActProgress
         double fobPathAltitudeM,
         Vec3D? aircraftWorldM = null)
     {
-        if (act is CobraMissionAct.Rtb or CobraMissionAct.Complete) {
-            return new[] {
-                new CobraPathGate(
-                    fobCentreWorldM.X,
-                    fobPathAltitudeM,
-                    fobCentreWorldM.Z,
-                    90.0,
-                    true)
-            };
-        }
+        if (act is CobraMissionAct.Rtb or CobraMissionAct.Complete)
+            return CampEmberOperations.BuildArrivalGates(aircraftWorldM);
+        if (act == CobraMissionAct.Depart)
+            return CampEmberOperations.BuildDepartureGates(aircraftWorldM);
 
         IReadOnlyList<CobraCanyonRoutePoint> points = route.Points;
         int bridgeIndex = FindBridgePointIndex(points);
+        int routeJoinIndex = FindNearestRoutePointIndex(points, fobCentreWorldM);
         int activeIndex = act switch {
             CobraMissionAct.Engage or CobraMissionAct.Hold => bridgeIndex,
-            CobraMissionAct.Depart or CobraMissionAct.Ingress =>
-                ResolveSoftPathActiveIndex(points, bridgeIndex, aircraftWorldM),
-            _ => 0
+            CobraMissionAct.Ingress =>
+                ResolveSoftPathActiveIndex(points, routeJoinIndex, bridgeIndex, aircraftWorldM),
+            _ => routeJoinIndex
         };
 
         var gates = new CobraPathGate[points.Count];
@@ -107,16 +102,17 @@ public static class CobraMissionActProgress
     /// </summary>
     static int ResolveSoftPathActiveIndex(
         IReadOnlyList<CobraCanyonRoutePoint> points,
+        int first,
         int bridgeIndex,
         Vec3D? aircraftWorldM)
     {
         if (points.Count == 0)
-            return 0;
+            return first;
         int last = Math.Min(bridgeIndex, points.Count - 1);
         if (aircraftWorldM is not { } aircraft)
-            return 0;
+            return first;
 
-        for (int i = 0; i <= last; i++) {
+        for (int i = Math.Clamp(first, 0, last); i <= last; i++) {
             CobraCanyonRoutePoint point = points[i];
             double passRadiusM = Math.Max(40.0, point.CorridorRadiusM * 0.72);
             double distanceM = HorizontalDistanceM(
@@ -126,6 +122,23 @@ public static class CobraMissionActProgress
                 return i;
         }
         return last;
+    }
+
+    static int FindNearestRoutePointIndex(
+        IReadOnlyList<CobraCanyonRoutePoint> points,
+        in Vec3D fobCentreWorldM)
+    {
+        int bestIndex = 0;
+        double bestDistanceM = double.MaxValue;
+        for (int index = 0; index < points.Count; index++) {
+            double distanceM = HorizontalDistanceM(
+                new Vec3D(points[index].EastM, points[index].PathAltitudeM, points[index].NorthM),
+                fobCentreWorldM);
+            if (distanceM >= bestDistanceM) continue;
+            bestDistanceM = distanceM;
+            bestIndex = index;
+        }
+        return bestIndex;
     }
 
     static int FindBridgePointIndex(IReadOnlyList<CobraCanyonRoutePoint> points)

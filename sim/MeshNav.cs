@@ -113,6 +113,27 @@ public sealed class MeshNavDirector {
         ClearActiveDestToHome();
     }
 
+    /// <summary>Translate a moving HomePlate without clearing the pilot's route selection.</summary>
+    public void UpdateHomePlate(in MeshPlace homePlate) {
+        if (homePlate.Role != MeshPlaceRole.Home) return;
+        bool activeWasHome = _active is { IsPlace: true } active
+            && _homePlate is { } oldHome
+            && string.Equals(active.PlaceId, oldHome.PlaceId, StringComparison.Ordinal);
+        _homePlate = homePlate;
+        string homePlaceId = homePlate.PlaceId;
+        int catalogIndex = _catalog.FindIndex(place =>
+            string.Equals(place.PlaceId, homePlaceId, StringComparison.Ordinal));
+        if (catalogIndex >= 0) _catalog[catalogIndex] = homePlate;
+        else _catalog.Insert(0, homePlate);
+        if (activeWasHome) _active = ToActive(homePlate);
+        for (int i = 0; i < _tour.Count; i++) {
+            if (_tour[i].IsPlace
+                && string.Equals(_tour[i].PlaceId, homePlate.PlaceId,
+                    StringComparison.Ordinal))
+                _tour[i] = ToActive(homePlate);
+        }
+    }
+
     public bool TrySelectPlace(string placeId, bool phaseAllows) {
         if (string.IsNullOrWhiteSpace(placeId)) return false;
         foreach (MeshPlace place in _catalog) {

@@ -411,6 +411,57 @@ test("Camp Ember FOB site never gets the translucent control disc", () => {
   presentation.dispose();
 });
 
+test("ground battle tracers travel from an authoritative shooter to its authoritative opponent", () => {
+  const presentation = createCobraGroundWarPresentation(fakeThree());
+  const event = {
+    tick: 42,
+    kind: "small-arms",
+    unit_id: "ground.friendly.infantry.001",
+    site_id: "site.iron-bell-bridge.v1",
+    faction: "friendly",
+    x_m: 10,
+    y_m: 100,
+    z_m: -20,
+    target_x_m: 70,
+    target_y_m: 103,
+    target_z_m: 35,
+  };
+  const war = { sites: [], units: [], events: [event] };
+
+  presentation.sync(war);
+  presentation.sync(war);
+  const tracer = findByName(presentation.group,
+    "COBRA_BATTLE_TRACER_42_ground.friendly.infantry.001");
+  assert.ok(tracer);
+  assert.deepEqual(tracer.userData.source, { x: 10, y: 101.25, z: 20 });
+  assert.deepEqual(tracer.userData.target, { x: 70, y: 104, z: -35 });
+  assert.equal(tracer.geometry.attributes.position.array.length, 24,
+    "rifle fire must read as dashes across the actual engagement, not a vertical pole");
+  const effectRoot = findByName(presentation.group, "COBRA_GROUND_WAR_EFFECTS");
+  assert.equal(effectRoot.children.filter((child) => child.name === tracer.name).length, 1,
+    "a retained event snapshot must not replay the same burst");
+  presentation.dispose();
+});
+
+test("friendly air-mobile insertion paints a persistent landing-zone smoke cue once", () => {
+  const presentation = createCobraGroundWarPresentation(fakeThree());
+  const event = {
+    tick: 77,
+    kind: "air-mobile-insertion",
+    site_id: "site.red-earth-quarry.v1",
+    faction: "friendly",
+    x_m: 300,
+    y_m: 120,
+    z_m: -450,
+  };
+  presentation.sync({ sites: [], units: [], events: [event] });
+  presentation.sync({ sites: [], units: [], events: [event] });
+  const smoke = findByName(presentation.group, "COBRA_LIFT_INSERTION_SMOKE_77");
+  assert.ok(smoke, "the player needs to see where the supported squad just landed");
+  assert.equal(smoke.material.color.hex, COBRA_GROUND_WAR_COLORS.friendly);
+  presentation.dispose();
+});
+
 test("tracking authority alone produces no ground-fire visual", () => {
   const presentation = createCobraGroundWarPresentation(fakeThree());
   presentation.sync(EMPTY_GROUND_WAR, null, {

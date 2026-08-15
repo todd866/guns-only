@@ -25,14 +25,12 @@ public sealed record CobraAirframeSlot(
 public static class CobraAirframePool
 {
     /// <summary>
-    /// Revetment stations for the two spares, world metres: 30 m north and south of the
-    /// Camp Ember anchor — on the flat 58 m contact apron, at least 15 m clear of the
-    /// spawn pad, and outside the eastbound departure lane the presentation safety volume
-    /// protects. Both face the departure heading.
+    /// Revetment stations for the two spares on the medium FOB apron. They sit outside the
+    /// central FATO/safety area, with enough rotor-disc separation for independent servicing.
     /// </summary>
     /// <summary>Minimum rest distance between a wreck and the spare's station, metres.</summary>
     public const double WreckClearanceFromStationM = 14.0;
-    public const double SpareStationOffsetNorthM = 30.0;
-    public const double SpareStationOffsetEastM = 6.0;
-    public const double SpareStationYawRad = Math.PI / 2.0;
+    public const double SpareStationOffsetNorthM = 65.0;
+    public const double SpareStationOffsetEastM = 20.0;
+    public const double SpareStationYawRad = CampEmberOperations.FinalHeadingRad;
 }

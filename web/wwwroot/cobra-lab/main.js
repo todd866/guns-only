@@ -1,55 +1,55 @@
-import * as THREE from "../vendor/three.module.js?v=330";
+import * as THREE from "../vendor/three.module.js?v=331";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=330";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=330";
-import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=330";
+} from "../render/cobra/cobra_canyon_plan.js?v=331";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=331";
+import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=331";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=330";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=330";
+} from "../render/cobra/cobra_canyon_tour.js?v=331";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=331";
 import {
   cobraGoldenPathState,
   createCobraGoldenPath,
-} from "../render/cobra/cobra_golden_path.js?v=330";
-import { createHud } from "../hud.js?v=330";
+} from "../render/cobra/cobra_golden_path.js?v=331";
+import { createHud } from "../hud.js?v=331";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=330";
+} from "../render/cobra/cobra_hud_adapter.js?v=331";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=330";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=330";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=331";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=331";
 import {
   cobraTacticalMapBounds,
   cobraTacticalMapModel,
-} from "../render/cobra/cobra_tactical_map.js?v=330";
+} from "../render/cobra/cobra_tactical_map.js?v=331";
 import {
   COBRA_MAP_CAPTION_PX,
   drawCobraTacticalMap,
-} from "../render/cobra/cobra_tactical_map_draw.js?v=330";
-import { bakeCobraTacticalRelief } from "../render/cobra/cobra_tactical_map_relief.js?v=330";
+} from "../render/cobra/cobra_tactical_map_draw.js?v=331";
+import { bakeCobraTacticalRelief } from "../render/cobra/cobra_tactical_map_relief.js?v=331";
 import {
   emberActObjectiveOverlay,
   emberActRemainingM,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=330";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=330";
+} from "../render/cobra/cobra_ember_path.js?v=331";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=331";
 import {
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=330";
+} from "../render/audio/flight_audio.js?v=331";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=330";
+} from "../render/cobra/cobra_control_profile.js?v=331";
 import {
   advanceCobraPilotControls,
   cobraCyclicCommand,
@@ -57,48 +57,48 @@ import {
   createCobraGroundedPilotControlState,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=330";
+} from "../render/cobra/cobra_pilot_input.js?v=331";
 import {
   createCobraSortieReadyInterlock,
   hasDeliberateCobraCockpitInput,
-} from "../render/cobra/cobra_sortie_ready.js?v=330";
+} from "../render/cobra/cobra_sortie_ready.js?v=331";
 import {
   COBRA_TURNAROUND_ACTION_CODE,
   cobraTurnaroundActionHeld,
   cobraTurnaroundIsActive,
   cobraTurnaroundLocksFlightControls,
-} from "../render/cobra/cobra_turnaround.js?v=330";
+} from "../render/cobra/cobra_turnaround.js?v=331";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=330";
+} from "../render/cobra/ah1g_presence.js?v=331";
 import {
   acquireAuthorityVisualLockTarget,
   advancePadlockLosGrace,
   lookOffsetFromAngles,
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
-} from "../render/cobra/cobra_camera_bias.js?v=330";
+} from "../render/cobra/cobra_camera_bias.js?v=331";
 import {
   cobraMissionStatusCopy,
   cobraTerminalCauseCopy,
-} from "../render/cobra/cobra_terminal_causes.js?v=330";
-import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=330";
+} from "../render/cobra/cobra_terminal_causes.js?v=331";
+import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=331";
 import {
   createParkedCobra,
   placeParkedCobra,
-} from "../render/cobra/cobra_parked_airframe.js?v=330";
+} from "../render/cobra/cobra_parked_airframe.js?v=331";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=330";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=330";
+} from "../render/visual/shadow_stabilizer.js?v=331";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=331";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=330";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=330";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=330";
+} from "../render/cobra/cobra_mission_exit.js?v=331";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=331";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=331";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -353,7 +353,7 @@ window.addEventListener("keydown", armAudioFromGesture, { capture: true });
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=330";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=331";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -870,6 +870,8 @@ function drawTacticalMaps(timeMs) {
     player: { eastM: vehiclePose.x_m, northM: vehiclePose.z_m },
     actOverlay: emberActObjectiveOverlay(authorityState?.mission_act, {
       remainingM: emberActRemainingM(authorityState, vehiclePose),
+      speedKts: Number(vehiclePose.ground_speed_mps ?? authorityState?.vehicle?.ground_speed_mps) * 1.943844,
+      sinkFpm: Math.max(0, -Number(authorityState?.vehicle?.vertical_speed_mps ?? 0) * 196.850394),
     }),
     turnaround: authorityState?.turnaround,
   });
@@ -958,7 +960,7 @@ function updateRouteProgress() {
     const lateral = offsetFt >= 2
       ? ` · ${Math.round(offsetFt)} FT ${routeTour.lateralOffsetM > 0 ? "RIGHT" : "LEFT"}`
       : "";
-    const aglFt = formatAviationAgl(routeCommandedAglM);
+    const aglFt = formatAviationAgl(tourCommandedAglM);
     routeFeature.textContent = `${routeTour.cue} · ${aglFt ?? "—"} FT AGL${lateral}`;
     return;
   }
@@ -1032,7 +1034,7 @@ function restartRoute() {
   padlockMaskedSinceMs = null;
   if (debrief) debrief.hidden = true;
   activeRoute = routeById(routeSelect.value);
-  bridge?.StartRoute(routeSelect.selectedIndex);
+  bridge?.StartRoute(routeSelect.selectedIndex, !PLAY_MODE);
   authorityState = bridge ? JSON.parse(bridge.GetState()) : null;
   lastTurnaroundPhase = authorityState?.turnaround?.phase ?? null;
   pilotControls = PLAY_MODE
@@ -1613,6 +1615,8 @@ function updateObjectiveHud(war) {
     player: { eastM: vehiclePose.x_m, northM: vehiclePose.z_m },
     actOverlay: emberActObjectiveOverlay(authorityState?.mission_act, {
       remainingM: emberActRemainingM(authorityState, vehiclePose),
+      speedKts: Number(vehiclePose.ground_speed_mps ?? authorityState?.vehicle?.ground_speed_mps) * 1.943844,
+      sinkFpm: Math.max(0, -Number(authorityState?.vehicle?.vertical_speed_mps ?? 0) * 196.850394),
     }),
     turnaround: authorityState?.turnaround,
   });
@@ -1700,19 +1704,16 @@ function animate(timeMs) {
     groundHeightAt: groundAt,
     nowSeconds: timeMs / 1_000,
     missionAct: authorityState?.mission_act,
+    speedKts: Number(authorityState?.vehicle?.ground_speed_mps) * 1.943844,
+    sinkFpm: Math.max(0, -Number(authorityState?.vehicle?.vertical_speed_mps ?? 0) * 196.850394),
     suppressed: tourInput.checked || Boolean(parkedCamera),
   }));
   recordPhase("presentation", presentationStartedAtMs);
   if (tourInput.checked && bridge && !missionTerminal) {
-    // Keep the ground war alive during guided preview even when the camera is on rails.
-    pilotControls = releaseCobraPilotControls(pilotControls);
-    bridge.SetControls(pilotControls.collective, 0, 0, 0);
-    bridge.SetTurnaroundAction(false);
-    bridge.SetGunnerTarget(null);
-    bridge.SetEngagementConsent(false);
-    if (sortieReadiness.advance(deltaSeconds, (step) => bridge.Advance(step))) {
-      sampleAuthorityState(timeMs);
-    }
+    // A guided scenery camera has no pilot. Advancing the aircraft here used to relax the
+    // collective toward zero and crash an unseen Cobra while reviewers were looking elsewhere,
+    // eventually cold-swapping the bird and corrupting every later visual judgment. Freeze the
+    // authority snapshot; the route camera and all streamed presentation still update normally.
     const pose = readVehiclePose();
     if (pose) updateAh1gPresence(ensureAh1gPresence(), pose, deltaSeconds);
   }
@@ -1995,6 +1996,9 @@ heightInput?.addEventListener("input", () => {
 });
 tourInput?.addEventListener("change", () => {
   if (tourInput.checked) {
+    // The guided camera freezes flight authority. Release any action held on the last manual
+    // frame so returning to the cockpit cannot complete a shutdown/start hold off-screen.
+    bridge?.SetTurnaroundAction(false);
     padlockActive = false;
     padlockMaskedSinceMs = null;
   }

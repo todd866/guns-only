@@ -257,6 +257,8 @@ public sealed class SimulationSession {
     MeshNavSolution _meshNavSolution = default;
     readonly RecoveryProcedureDirector _recoveryProcedure = new();
     readonly CarrierSortieRouteDirector _carrierSortieRoute = new();
+    readonly GunsOnly.Sim.Recovery.ConventionalCarrierRecoveryDirector
+        _conventionalCarrierRecovery = new();
     // Pattern school starts with a serviceable aircraft. Attrition faults remain available from
     // the systems panel, but silently failing the utility hydraulics 90 seconds into every first
     // circuit left the gear at 91% and made the taught wire pass unrecoverable.
@@ -1383,6 +1385,9 @@ public sealed class SimulationSession {
 
         _returnToBaseReason = reason;
         _combatHandoffPhase = CombatHandoffPhase.Requested;
+        bool topGunArenaAlreadyClear =
+            TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)
+            && LiveOpponentCount == 0;
         // Successor suppression is authoritative on the input edge, before another fixed tick can
         // observe an expired replacement timer.
         _nextOpponentSpawnAtMs = double.NegativeInfinity;
@@ -1393,6 +1398,11 @@ public sealed class SimulationSession {
         _padlockRollAssist.Reset();
         ClearFormationCoordination();
         CompleteInterruptedEngagementForHandoff();
+        if (topGunArenaAlreadyClear) {
+            _combatHandoffPhase = CombatHandoffPhase.PlayerRtb;
+            ShowTransition("KNOCK IT OFF · RTB CARRIER", 2800.0);
+            return true;
+        }
         bool reliefRequired = LiveOpponentCount > 0 || OpponentReplacementPending;
         ShowTransition(reliefRequired
             ? reason == MissionRtbReason.BingoFuel
@@ -3089,7 +3099,17 @@ public sealed class SimulationSession {
     }
 
     void UpdateCarrierSortieRoute() {
-        if (_carrier is null || !_carrierSortieRoute.State.Active) return;
+        if (_carrier is null) return;
+        if (_carrier.IsMaritime && _beat.RecoveryPlan is { } recoveryPlan) {
+            _meshNav.UpdateHomePlate(new MeshPlace(
+                recoveryPlan.Id,
+                recoveryPlan.DisplayName,
+                _carrier.Position.X,
+                _carrier.Position.Z,
+                _carrier.Position.Y,
+                MeshPlaceRole.Home));
+        }
+        if (!_carrierSortieRoute.State.Active) return;
         _carrierSortieRoute.Step(
             _carrier,
             _player.State,
@@ -3464,9 +3484,16 @@ public sealed class SimulationSession {
         bool maintenanceRecovery = _beat.MaintenanceScenario
             == MaintenanceScenarioKind.F86EmergencyGearRecovery;
         bool patternOnly = _beat.ScriptedIntercept?.PatternOnly == true;
+        // Owning a recovery platform does not mean an airborne combat card starts on final. A
+        // continuous fight with a carrier over the horizon stages clean at its authored merge;
+        // configuration automation remains available and selects Recovery later in the slot.
+        bool stagesOnCarrierApproach = PlayerSystemsSimulated
+            && _carrier is not null
+            && !maintenanceRecovery
+            && !patternOnly
+            && _beat.ContinuousCombat is null;
         _systems = CreatePlayerSystems(
-            onApproach: PlayerSystemsSimulated && _carrier is not null
-                && !maintenanceRecovery && !patternOnly,
+            onApproach: stagesOnCarrierApproach,
             prechargeUtilityHydraulics: _prechargeSystemsOnStage && !maintenanceRecovery);
         _maintenanceScenario = maintenanceRecovery
             ? new F86EmergencyGearRecoveryScenario(_systems)
@@ -3482,9 +3509,9 @@ public sealed class SimulationSession {
             && _carrier is not null && !maintenanceRecovery;
         // Circuits starts clean (Combat). Carrier approach beats stage Recovery.
         _configurationTarget = _configurationAutomationEnabled
-            ? (patternOnly
-                ? FlightConfigurationTarget.Combat
-                : FlightConfigurationTarget.Recovery)
+            ? (stagesOnCarrierApproach
+                ? FlightConfigurationTarget.Recovery
+                : FlightConfigurationTarget.Combat)
             : FlightConfigurationTarget.Combat;
         _manualGearConfiguration = false;
         _manualFlapConfiguration = false;
@@ -3495,13 +3522,18 @@ public sealed class SimulationSession {
                 ? _recoveryProgress.PreviewNextAttempt()
                 : DifficultyModel.ForLevel(0);
             _carrier.ApplyDifficulty(_difficulty);
-            double configuredOnSpeedAoa = DetentLayer.OnSpeedAoARad
-                - PlayerAerodynamicConfiguration.LiftCoefficientIncrement
-                    / Math.Max(_beat.PlayerAir.CLAlpha, 1e-6);
-            _carrier.ApproachDirectorPitchOffsetRad = configuredOnSpeedAoa;
-            _beat = _beat with {
-                Player = _carrier.ToWorldStateFromAir(_beat.Player, configuredOnSpeedAoa)
-            };
+            // Every established carrier/strip recovery is transformed into the platform frame.
+            // Top Gun is the one exception: it owns a distant carrier but starts at an authored
+            // airborne ACM merge, not on that carrier's approach.
+            if (!TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)) {
+                double configuredOnSpeedAoa = DetentLayer.OnSpeedAoARad
+                    - PlayerAerodynamicConfiguration.LiftCoefficientIncrement
+                        / Math.Max(_beat.PlayerAir.CLAlpha, 1e-6);
+                _carrier.ApproachDirectorPitchOffsetRad = configuredOnSpeedAoa;
+                _beat = _beat with {
+                    Player = _carrier.ToWorldStateFromAir(_beat.Player, configuredOnSpeedAoa)
+                };
+            }
         }
 
         _recovery = Carrier.Recovery.Flying;
@@ -3713,6 +3745,7 @@ public sealed class SimulationSession {
         _missionChecklistDirector.Reset();
         _missionChecklist = MissionChecklistStatus.None;
         _recoveryProcedure.Reset();
+        _conventionalCarrierRecovery.Reset();
         ConfigureMeshNavFromBeat();
         _rapierAutomationEnabled =
             _beat.ScriptedIntercept?.AutomationDefaultEnabled ?? false;
@@ -4067,7 +4100,8 @@ public sealed class SimulationSession {
         // A launched carrier/strip sortie owns every leg from chocks to the ramp. Preserve that
         // path exactly: it also runs before an RTB procedure has been selected, which is why the
         // launch and climb cues exist at all.
-        if (ship is not null && _beat.StartsOnCatapult) {
+        if (ship is not null
+            && (_beat.StartsOnCatapult || (ship.IsMaritime && PlayerRtbActive))) {
             double heightAboveDeckM = ship.DeckFrame(Player.State.Position).height;
             Vec3D toShip = ship.Position - Player.State.Position;
             double rangeToShipM = System.Math.Sqrt(toShip.X * toShip.X + toShip.Z * toShip.Z);
@@ -4217,6 +4251,21 @@ public sealed class SimulationSession {
             return;
         if (intent) _approachSolveCount++;
 
+        double carrierApproachMps = GunsOnly.Sim.Recovery.SortieSchedule.ApproachSpeedMps(
+             Player.State.Mass, _beat.PlayerAir);
+        if (intent
+            && _carrier is { } patternCarrier
+            && TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)) {
+            _approachGuidance = _conventionalCarrierRecovery.Step(
+                active: true,
+                 patternCarrier,
+                 Player.State,
+                 Player.State.Speed,
+                 carrierApproachMps);
+            return;
+        }
+        if (_conventionalCarrierRecovery.Active)
+            _conventionalCarrierRecovery.Reset();
         // Carrier SortieSchedule uses a 110 m shelf; strip recoveries keep the classic 500 ft AGL.
         double stabiliseHeightAboveSurfaceM = _carrier is { IsMaritime: true }
             ? 110.0
@@ -4383,7 +4432,12 @@ public sealed class SimulationSession {
             _carrierSortieRoute.State.Active
             && _carrierSortieRoute.State.Phase is >= CarrierSortieRoutePhase.Recovery
                 and < CarrierSortieRoutePhase.Complete;
+        bool conventionalPatternConfiguration =
+            _conventionalCarrierRecovery.DirtyRequested
+            && _player.IndicatedAirspeedMps * AirData.MpsToKnots
+                <= PlayerSystemsProfile.GearAndFlapLimitKias;
         if (carrierRouteRecoveryConfiguration
+            || conventionalPatternConfiguration
             || (inSlot && !WaveOffActive
                 && _recovery != Carrier.Recovery.Bolter
                 && _detents.Throttle < 0.95)
@@ -4551,17 +4605,18 @@ public sealed class SimulationSession {
 
     bool SupportsCombatHandoff =>
         OpponentPresent
-        && ((_beat.ContinuousCombat is not null
-                && _beat.PlayerAircraft.Id == AircraftCapability.F22ASurrogate.Id)
-            || (_beat.RecoveryPlan is not null
-                && _carrier is null
-                && !RapierMissionAvailable
-                && TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)));
+        && _beat.ContinuousCombat is not null
+        && (_beat.PlayerAircraft.Id == AircraftCapability.F22ASurrogate.Id
+            || TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id));
 
     /// The throttle a sortie should open on. Beats that stage a deliberate fighting speed opt into
     /// arriving trimmed for it; everything else keeps its authored setting.
     double StagedThrottle() {
-        if (!_beat.StageAtTrimThrottle || _carrier is not null) return _beat.InitialThrottle;
+        bool airborneTopGunCarrier = _carrier is not null
+            && TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id);
+        if (!_beat.StageAtTrimThrottle
+            || (_carrier is not null && !airborneTopGunCarrier))
+            return _beat.InitialThrottle;
         double trim = DetentLayer.LevelFlightTrimThrottle(
             _player.State, _beat.PlayerAir, _player.AirspeedMps,
             PlayerAerodynamicConfiguration, _player.AtmosphereModel);

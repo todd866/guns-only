@@ -441,10 +441,14 @@ public sealed class CobraCanyonDefinition
         new CobraCanyonLandmarkDefinition(
             "landmark.cobra-canyon.camp-ember.v1", "FSB Ember",
             CobraCanyonLandmarkKind.ForwardOperatingBase,
-            // Land spur west of the river. Shared route departure lives here; TrySample forces
-            // Land inside the pad ring so the river polyline cannot classify the FOB as water
-            // (owner 2026-08-10 riverboat open).
-            new Vec3D(-6_775.0, 218.0, -6_200.0)),
+            // Broad upland bench surveyed for a protected 2.4 km final and reciprocal go-around.
+            // The old gorge-edge pad had only one usable escape heading and put the base against
+            // a cliff; Camp Ember now sits on the operationally viable bench south-west of Iron
+            // Bell, clear of the terrain-authority river ribbon.
+            new Vec3D(
+                CampEmberOperations.CentreEastM,
+                CampEmberOperations.PadElevationM,
+                CampEmberOperations.CentreNorthM)),
         new CobraCanyonLandmarkDefinition(
             "landmark.cobra-canyon.long-fang-falls.v1", "Thac Nam Ngoi",
             CobraCanyonLandmarkKind.Waterfall,
@@ -579,10 +583,10 @@ public sealed class CobraCanyonDefinition
 public sealed class CobraCanyonTerrainSurface : ITerrainSurface
 {
     const double NormalDerivativeHalfStepM = 2.0;
-    const double CampEmberEastM = -6_775.0;
-    const double CampEmberNorthM = -6_200.0;
-    const double CampEmberLevelRadiusM = 58.0;
-    const double CampEmberBlendRadiusM = 110.0;
+    const double CampEmberEastM = CampEmberOperations.CentreEastM;
+    const double CampEmberNorthM = CampEmberOperations.CentreNorthM;
+    const double CampEmberLevelRadiusM = CampEmberOperations.LevelApronRadiusM;
+    const double CampEmberBlendRadiusM = CampEmberOperations.ApronBlendRadiusM;
     readonly CobraCanyonDefinition _definition;
     readonly CobraCanyonRouteDefinition _riverRoute;
     readonly IReadOnlyList<CobraCanyonRouteDefinition> _routes;
@@ -620,8 +624,7 @@ public sealed class CobraCanyonTerrainSurface : ITerrainSurface
         TerrainSurfaceKind kind = riverDistanceM <= 38.0
             ? TerrainSurfaceKind.Water
             : TerrainSurfaceKind.Land;
-        // Camp Ember is a land FOB spur. The river-gorge polyline starts there for shared
-        // departure validation, which would otherwise paint the pad as Water (owner 2026-08-10).
+        // The complete Camp Ember cut-and-fill apron is an authority-owned land surface.
         if (kind == TerrainSurfaceKind.Water && InsideCampEmberPad(eastM, northM))
             kind = TerrainSurfaceKind.Land;
         sample = new TerrainSample(heightM, normal, kind);
@@ -685,20 +688,19 @@ public sealed class CobraCanyonTerrainSurface : ITerrainSurface
 
         heightM = CarveCorridor(_riverRoute, eastM, northM, heightM);
 
-        // The PSP launch pad is flat, but this used to leave the sloping analytical gorge under
-        // it. Across the pad that buried one edge and floated the other while contact authority
-        // sampled only the centre. Level the complete firebase apron last, then blend back to the
-        // authored terrain at the edge of the existing Camp Ember land ring. The browser planner
-        // mirrors this operation exactly.
-        double campDistanceM = Math.Sqrt(
-            Math.Pow(eastM - CampEmberEastM, 2.0)
-            + Math.Pow(northM - CampEmberNorthM, 2.0));
+        // Level the complete medium FOB last, then blend its cut-and-fill bench back into the
+        // authored terrain. The browser planner mirrors this operation exactly.
+        // A square construction bench aligns with the terrain grid and keeps every triangle under
+        // the operational compound exactly level; the irregular laterite scar hides its geometry.
+        double campDistanceM = Math.Max(
+            Math.Abs(eastM - CampEmberEastM),
+            Math.Abs(northM - CampEmberNorthM));
         double campBlend = 1.0 - SmoothStep(
             CampEmberLevelRadiusM,
             CampEmberBlendRadiusM,
             campDistanceM);
         if (campBlend > 0.0) {
-            double campElevationM = _riverRoute.Points[0].PathAltitudeM;
+            double campElevationM = CampEmberOperations.PadElevationM;
             heightM += (campElevationM - heightM) * campBlend;
         }
 
@@ -785,7 +787,7 @@ public sealed class CobraCanyonTerrainSurface : ITerrainSurface
     {
         double east = eastM - CampEmberEastM;
         double north = northM - CampEmberNorthM;
-        return east * east + north * north <= CampEmberBlendRadiusM * CampEmberBlendRadiusM;
+        return Math.Max(Math.Abs(east), Math.Abs(north)) <= CampEmberBlendRadiusM;
     }
 
     readonly record struct RouteSample(

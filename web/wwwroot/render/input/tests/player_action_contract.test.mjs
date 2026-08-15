@@ -268,6 +268,7 @@ test("every visible HTML button is wired through one auditable action surface", 
     ["nav-nd-free", /navUi\.free\?\.addEventListener\("click"/],
     ["nav-nd-tour-add", /navUi\.tourAdd\?\.addEventListener\("click"/],
     ["nav-nd-clear", /navUi\.clearDest\?\.addEventListener\("click"/],
+    ["nav-rtb-action", /navUi\?\.rtbAction\?\.addEventListener\("click", requestCombatHandoffFromNav\)/],
     ["nav-nd-proc-none", /procButtons[\s\S]*?procNone[\s\S]*?addEventListener\("click"/],
     ["nav-nd-proc-overhead", /procButtons[\s\S]*?procOverhead[\s\S]*?addEventListener\("click"/],
     ["nav-nd-proc-downwind", /procButtons[\s\S]*?procDownwind[\s\S]*?addEventListener\("click"/],
@@ -290,7 +291,7 @@ test("every visible HTML button is wired through one auditable action surface", 
     }
     const hooks = [
       "data-test-action", "data-hold-key", "data-pulse-key", "data-mobile-action",
-      "data-program-node", "data-deck-configuration", "data-top-gun-seat",
+      "data-program-node", "data-deck-configuration",
       // Build 75 portrait-assist speed nudges; wired in app.js via [data-assist-nudge].
       "data-assist-nudge",
       // Circuits OFT harness actions; wired in app.js via [data-circuits-action].
@@ -330,11 +331,6 @@ test("every visible HTML button is wired through one auditable action surface", 
       assert.match(appSource,
         /readyDeckConfig\?\.addEventListener\("click"[\s\S]*?selectDeckConfiguration\(Number\(button\.dataset\.deckConfiguration\)\)/,
         `${button.text}: deck configuration has no delegated selection handler`);
-    }
-    if (attrs["data-top-gun-seat"] !== undefined) {
-      assert.match(appSource,
-        /readyTopGunSeat\?\.addEventListener\("click"[\s\S]*?selectTopGunSeat\(Number\(button\.dataset\.topGunSeat\)\)/,
-        `${button.text}: Top Gun seat has no delegated selection handler`);
     }
   }
 });
