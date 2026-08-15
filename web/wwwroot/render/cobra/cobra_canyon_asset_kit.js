@@ -1,10 +1,10 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=333";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=334";
 import {
   FOLIAGE_UV_PALM,
   FOLIAGE_UV_UNDERSTORY,
   createCobraSoftFalloffTexture,
   createSyntheticFoliageAtlasTexture,
-} from "./cobra_canyon_foliage.js?v=333";
+} from "./cobra_canyon_foliage.js?v=334";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -1509,7 +1509,9 @@ function materialForRole(THREE, role, foliageAtlas = null, softFalloff = null) {
     // Unlit alpha cards — Lambert was crushing the CC0 atlas to black silhouettes under gorge light.
     const material = new THREE.MeshBasicMaterial({
       map: foliageAtlas,
-      color: 0xffffff,
+      // The source atlas is deliberately dense and dark. A modest linear-space lift restores
+      // leaf separation under humid haze without making the unlit cards fluorescent.
+      color: new THREE.Color(1.16, 1.22, 1.10),
       vertexColors: true,
       alphaTest: 0.48,
       transparent: false,
@@ -1551,7 +1553,20 @@ function paletteTint(paletteHex, variation) {
 
 function instanceTint(role, placement) {
   const authored = paletteTint(placement.paletteHex, placement.variation);
-  if (authored) return authored;
+  if (authored) {
+    if (role !== "jungle") return authored;
+    // Preserve the authored olive palette, but pull canopy cards apart in value and hue. In the
+    // low shared sun the previous tints converged into one dark wall even when individual palms
+    // were geometrically distinct. This small humid-green lift keeps shaded trunks dark while
+    // allowing crown, understory and distant canopy layers to remain legible.
+    const canopyLift = 0.12 + placement.variation * 0.10;
+    const humidGreen = [0.48, 0.70, 0.39];
+    return authored.map((channel, index) => clamp(
+      channel * (1 - canopyLift) + humidGreen[index] * canopyLift,
+      0,
+      1,
+    ));
+  }
   const shade = (placement.variation - 0.5) * 0.14;
   const adjusted = (values) => values.map((channel) => clamp(channel, 0, 1));
   if (role === "jungle") return adjusted([0.73 + shade, 0.92 + shade * 0.5, 0.68 + shade]);
@@ -1610,6 +1625,11 @@ function authoredMeshMaterial(THREE, role) {
   const material = new THREE.MeshLambertMaterial({
     color: 0xffffff,
     vertexColors: true,
+    // Authored palms have real normals and still take the key light, but the canyon page has no
+    // environment map. A very low forest-coloured emissive term stands in for humid sky bounce
+    // so backlit crowns retain form instead of collapsing to black cut-outs.
+    emissive: role === "jungle" ? 0x0a210e : 0x000000,
+    emissiveIntensity: role === "jungle" ? 0.92 : 1,
     side: THREE.DoubleSide,
   });
   material.name = `COBRA_CANYON_ASSET_${role.toUpperCase()}_AUTHORED_MATERIAL`;

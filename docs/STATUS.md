@@ -1,7 +1,7 @@
 # Current product and verification status
 
 Updated: 2026-08-15
-Production: Build 329, revision `f4c423b384b3c64f93c8cdcd7acb44b417387fef` (verified live via
+Production: Build 333, revision `f2c37d51e9735baf5f8164bd8fe2949117ac2d46` (verified live via
 `/api/build-info` 2026-08-15, with the protected release pipeline complete). Builds 312 (Cobra
 contact envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap
 timing), 318 (authored structure materials), 320 (Top Gun 404 + cockpit depth near-plane), 321
@@ -33,16 +33,15 @@ ceasefire/relief handoff, the shared highway-in-the-sky corridor, and the FUEL/N
 navigation panel. Manual wing sweep now announces its forward/aft physical stop instead of looking
 dead at 20/68 degrees. Both the generic suit/harness G stack and the F-14-specific G-driven intake
 and structure layers are removed; measured buffet, airflow, engine and wing-actuator sound remain.
-Next candidate: Build 333 (branch `fix/pause-cobra-highway`) — carries forward the Build 331
-recovery-field graphics, rebuilt Camp Ember operations, F-14A-only Top Gun player route, successive
-opponents and conventional Case I carrier recovery. It adds a real Escape pause menu, a longer
-look-ahead Cobra route ribbon, persistent authored recovery gates, and the same visible RTB authority
-for the F-22. F-14 wing sweep now changes lift, drag, inertia and roll authority, with a persistent
-top-down aircraft indicator and corrected supersonic drag schedule. Gun-assist and recovery telemetry
-now record the control-authority and presentation state needed to diagnose an owner sortie directly.
-The Rapier production card now stages three balloon mines 35 NM from the strip at 45,000 ft, draws
-the outbound high-speed intercept path, telemeters their lethal-drone reaction clock, disables time
-compression, and removes the buried launch-gallery presentation before the gated RTB.
+Build 333 shipped the recovery/flight-UX candidate: rebuilt Camp Ember operations, F-14A-only Top
+Gun route, successive opponents, conventional Case I carrier recovery, a real Escape pause menu,
+longer-look-ahead Cobra route ribbon, persistent recovery gates and equivalent F-22 RTB authority.
+It also shipped physical F-14 sweep effects and indicator, gun/recovery telemetry, and the 35 NM
+Rapier three-balloon-mine intercept at FL450 with no time compression and a guided RTB.
+Next candidate: Build 334 (branch `fix/cobra-graphics-334`) — improves Cobra's cockpit-visible scene:
+broken monsoon cloud shelves and a shared sun aureole, shadow-readable layered jungle, rotor-wash and
+pad-edge wear, support vehicles and braced camp silhouettes. Camp Ember remains one merged draw. The
+scenery comparison camera is corrected from a retired jungle coordinate to the authoritative firebase.
 
 Build 325 shipped the following owner-flight findings and remains the baseline for this candidate.
 
@@ -148,7 +147,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | F9F-2 Panther off Essex (`korea-panther`) | **quarantined** | Preview acknowledgement only | Build 238 ownship-only kernel flies the production terrain catapult/route/return/groove to a physical W2 trap (100/100 focused); packaged route, touch-RTB, HUD, and barrier contracts passed silent-browser acceptance | Complete representative human desktop/touch flights and historical/presentation acceptance before any promotion |
 | MIDGE-03 Facility Nine (`indoor`) | **quarantined** | `/indoor/` preview acknowledgement | Candidate UI now enforces doctrine-safe controls and blocks premature return | Re-drive the default stealth route and representative touch/keyboard paths |
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
-| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned four-point conquest, dug-in garrisons, tickets, M134 + Camp Ember rearm, Tab/F gunner, north-up minimap/full map and golden path. Build 326 adds grounded Ready/swap safety, warned ground fire and subsystem damage, cold-spare turnaround, sky/target graphics and procedural AH-1G audio. Build 328 responds to the recorded owner flight with denser/clearer scenery, corrected HUD/range/ticket staging, an improved golden route, LOS-owned V selection with an F firing chain, fortified-garrison collision and a provenance-recorded UH-1H/T53 surrogate bed. Build 331 candidate rebuilds Camp Ember operations, rearm/turnaround authority and its ground-war integration. | Fresh owner flight on Build 331. Known open: ground-fire lethality and turnaround timing are provisional gameplay closures, not production-combat fidelity. Longer arc: DCS-BS1-grade flight dynamics. |
+| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned four-point conquest, dug-in garrisons, tickets, M134 + Camp Ember rearm, Tab/F gunner, north-up minimap/full map and golden path. Build 326 adds grounded Ready/swap safety, warned ground fire and subsystem damage, cold-spare turnaround, sky/target graphics and procedural AH-1G audio. Build 328 responds to the recorded owner flight with denser/clearer scenery, corrected HUD/range/ticket staging, an improved golden route, LOS-owned V selection with an F firing chain, fortified-garrison collision and a provenance-recorded UH-1H/T53 surrogate bed. Build 333 rebuilt Camp Ember operations, rearm/turnaround authority and ground-war integration. Build 334 candidate adds a broken monsoon sky, more readable jungle depth and a more detailed one-draw Camp Ember firebase. | Fresh owner flight on Build 334. Known open: ground-fire lethality and turnaround timing are provisional gameplay closures, not production-combat fidelity. Longer arc: DCS-BS1-grade flight dynamics. |
 | Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load, lappable circuit from Build 264+. Build 267 adds ride telemetry (speed/gear/lean/lap/frame). Build 308 adds tiered shadows, sky-derived IBL, and horizon/far-plane corrections. Build 315 candidate makes it a game: lap/last/best on the helmet HUD, four sector splits, a live delta to your best, an off-track lap refused as a record, and a best that persists across sessions | Owner ride on Build 315: is beating your own best worth trying for? Ghost bike deliberately cut from v1 |
 | Top Gun (`top-gun`) | **production** | Aircraft picker / main shell | Build 309 automation covers Tomcat AIM-9, MiG-28 boot and gun fire. Build 326 repairs the programme-selector launch stall and promotes the mission. The owner flew Builds 327 and 328 on 2026-08-14. Build 328 fixed the 13.8 G overshoot and added authoritative indicated AUTO/MAN sweep. Build 329 adds ceasefire/RTB authority, navigation-rate awareness, sweep-stop annunciation and removes the remaining G-driven sounds. Build 331 candidate makes the player F-14A-only, keeps successive MiG-28 aggressors spawning, exposes RTB TO CARRIER after a splash, and teaches a fixed conventional Case I recovery to the moving carrier. | Owner ruling remains deploy first, then fly the exact public artifact; re-fly Build 331 for continued combat, RTB selection, Case I leg guidance, arrestment, fuel awareness, sweep-limit and audible acceptance. |
 
@@ -160,8 +159,8 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Live production is Build 329, revision `f4c423b384b3c64f93c8cdcd7acb44b417387fef`, shipped from
-  PR #74 with both required Verify contexts green. Local gate
+- Live production is Build 333, revision `f2c37d51e9735baf5f8164bd8fe2949117ac2d46`, shipped from
+  PR #77 with both required Verify contexts green. Local gate
   runs on a loaded workstation produce false browser-smoke timeouts (2026-08-12: four smokes
   timed out under an unrelated 200%+ CPU load and all passed in isolation and on CI); CI on
   clean runners is the authoritative check.
