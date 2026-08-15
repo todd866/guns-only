@@ -8,7 +8,7 @@ import {
   UKRAINE_SOFT_WORLD_HAZE_MIX,
   UKRAINE_SOFT_WORLD_HAZE_RGB,
 } from "../environment/soft_world_atmosphere.js";
-import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=331";
+import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=333";
 import {
   addSemanticSocket,
   annotateProceduralFallback,
@@ -17,8 +17,8 @@ import {
   createLoftGeometry,
   createPlanformGeometry,
   makeMaterial,
-} from "./airframe_primitives.js?v=331";
-import rapierV2Definition from "../../airframes/rapier_v2.embedded.js?v=331";
+} from "./airframe_primitives.js?v=333";
+import rapierV2Definition from "../../airframes/rapier_v2.embedded.js?v=333";
 import { createRapierLaunchFx } from "../effects/rapier_launch_fx.js";
 
 export {
@@ -1156,17 +1156,35 @@ export function createRapierDispersedStrip(context = {}) {
   gallery.add(portal);
   group.add(gallery);
 
+  // The buried-gallery concept read as a giant toy tunnel from the cockpit and obscured the
+  // actual launch direction. Retain the old group only as a named compatibility container while
+  // presenting the launcher as an open, dispersed rail: a low service apron, two short blast
+  // shoulders, then the visible ski-jump. Nothing roofs the aircraft or frames the horizon.
+  gallery.visible = false;
+  gallery.userData.retiredPresentation = true;
+  const openLaunch = new THREE.Group();
+  openLaunch.name = "OPEN_LAUNCH_APRON";
+  box(openLaunch, { x: 18, y: 0.28, z: flatLengthM },
+    new THREE.Vector3(catapultX, 0.08, galleryMidZ), dampConcrete)
+    .name = "OPEN_LAUNCH_SERVICE_SLAB";
+  for (const side of [-1, 1]) {
+    box(openLaunch, { x: 1.1, y: 1.25, z: 58 },
+      new THREE.Vector3(catapultX + side * 9.5, 0.625, railStartZ - 42), earth)
+      .name = "OPEN_LAUNCH_BLAST_SHOULDER";
+  }
+  group.add(openLaunch);
+
   const launchFx = createRapierLaunchFx({
     catapultX,
     railStartZ,
     flatLengthM,
     galleryEndZ,
-    galleryHalfWidth,
-    galleryHeight,
-    ribLamps,
+    galleryHalfWidth: 10,
+    galleryHeight: 1.8,
+    ribLamps: null,
     particleMultiplier: VISUAL_QUALITY?.particleMultiplier ?? 1,
   });
-  gallery.add(launchFx.group);
+  group.add(launchFx.group);
   group.userData.launchFx = launchFx;
 
   // INSTALLATION VICINITY (~300 m): lived-in defensive compound — spoil, revetments, gravel

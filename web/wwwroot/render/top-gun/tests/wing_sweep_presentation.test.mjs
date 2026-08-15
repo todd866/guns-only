@@ -54,4 +54,13 @@ test("HUD keeps actual wing angle, mode, manual keys, and structural warning obs
     /binding\("wingSweepForward", "Comma"\)[\s\S]*?binding\("wingSweepAft", "Period"\)[\s\S]*?binding\("wingSweepAuto", "Slash"\)/);
   assert.match(hudSource, /state\.f14_over_g === true[\s\S]*?OVER-G/);
   assert.match(hudSource, /f14_structural_fatigue_01[\s\S]*?AIRFRAME STRAIN/);
+  assert.match(hudSource,
+    /if \(isFightHudActive\(frame\.state\)\) this\.drawGTape\(frame\.state\);[\s\S]*?this\.drawF14WingSweep\(frame\.state\);/,
+    "desktop sweep indication must remain outside the fight-phase gate for climb and RTB");
+  assert.doesNotMatch(hudSource,
+    /if \(isFightHudActive\(frame\.state\)\) \{[\s\S]{0,180}?drawF14WingSweep/,
+    "ending the fight must not hide the still-live aircraft system");
+  assert.match(hudSource,
+    /const sweepRad = clamp\(actual, 20, 68\) \* DEG;[\s\S]*?Math\.cos\(sweepRad\)[\s\S]*?Math\.sin\(sweepRad\)[\s\S]*?Twin-tail/,
+    "the indicator must be an articulating top-down F-14, not a generic numeric rail");
 });

@@ -1,55 +1,55 @@
-import * as THREE from "../vendor/three.module.js?v=331";
+import * as THREE from "../vendor/three.module.js?v=333";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=331";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=331";
-import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=331";
+} from "../render/cobra/cobra_canyon_plan.js?v=333";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=333";
+import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=333";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=331";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=331";
+} from "../render/cobra/cobra_canyon_tour.js?v=333";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=333";
 import {
   cobraGoldenPathState,
   createCobraGoldenPath,
-} from "../render/cobra/cobra_golden_path.js?v=331";
-import { createHud } from "../hud.js?v=331";
+} from "../render/cobra/cobra_golden_path.js?v=333";
+import { createHud } from "../hud.js?v=333";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=331";
+} from "../render/cobra/cobra_hud_adapter.js?v=333";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=331";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=331";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=333";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=333";
 import {
   cobraTacticalMapBounds,
   cobraTacticalMapModel,
-} from "../render/cobra/cobra_tactical_map.js?v=331";
+} from "../render/cobra/cobra_tactical_map.js?v=333";
 import {
   COBRA_MAP_CAPTION_PX,
   drawCobraTacticalMap,
-} from "../render/cobra/cobra_tactical_map_draw.js?v=331";
-import { bakeCobraTacticalRelief } from "../render/cobra/cobra_tactical_map_relief.js?v=331";
+} from "../render/cobra/cobra_tactical_map_draw.js?v=333";
+import { bakeCobraTacticalRelief } from "../render/cobra/cobra_tactical_map_relief.js?v=333";
 import {
   emberActObjectiveOverlay,
   emberActRemainingM,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=331";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=331";
+} from "../render/cobra/cobra_ember_path.js?v=333";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=333";
 import {
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=331";
+} from "../render/audio/flight_audio.js?v=333";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=331";
+} from "../render/cobra/cobra_control_profile.js?v=333";
 import {
   advanceCobraPilotControls,
   cobraCyclicCommand,
@@ -57,48 +57,48 @@ import {
   createCobraGroundedPilotControlState,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=331";
+} from "../render/cobra/cobra_pilot_input.js?v=333";
 import {
   createCobraSortieReadyInterlock,
   hasDeliberateCobraCockpitInput,
-} from "../render/cobra/cobra_sortie_ready.js?v=331";
+} from "../render/cobra/cobra_sortie_ready.js?v=333";
 import {
   COBRA_TURNAROUND_ACTION_CODE,
   cobraTurnaroundActionHeld,
   cobraTurnaroundIsActive,
   cobraTurnaroundLocksFlightControls,
-} from "../render/cobra/cobra_turnaround.js?v=331";
+} from "../render/cobra/cobra_turnaround.js?v=333";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=331";
+} from "../render/cobra/ah1g_presence.js?v=333";
 import {
   acquireAuthorityVisualLockTarget,
   advancePadlockLosGrace,
   lookOffsetFromAngles,
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
-} from "../render/cobra/cobra_camera_bias.js?v=331";
+} from "../render/cobra/cobra_camera_bias.js?v=333";
 import {
   cobraMissionStatusCopy,
   cobraTerminalCauseCopy,
-} from "../render/cobra/cobra_terminal_causes.js?v=331";
-import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=331";
+} from "../render/cobra/cobra_terminal_causes.js?v=333";
+import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=333";
 import {
   createParkedCobra,
   placeParkedCobra,
-} from "../render/cobra/cobra_parked_airframe.js?v=331";
+} from "../render/cobra/cobra_parked_airframe.js?v=333";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=331";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=331";
+} from "../render/visual/shadow_stabilizer.js?v=333";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=333";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=331";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=331";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=331";
+} from "../render/cobra/cobra_mission_exit.js?v=333";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=333";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=333";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -247,12 +247,17 @@ const debrief = document.querySelector("#debrief");
 const debriefTitle = document.querySelector("#debrief-title");
 const debriefBody = document.querySelector("#debrief-body");
 const debriefRestart = document.querySelector("#debrief-restart");
+const pauseMenu = document.querySelector("#pause-menu");
+const pauseResume = document.querySelector("#pause-resume");
+const pauseRestart = document.querySelector("#pause-restart");
+const pauseExit = document.querySelector("#pause-exit");
 const PLAY_MODE = document.body?.dataset?.shell !== "lab";
 // The lab remains a continuously running visualisation. A real sortie waits at Ready so the
 // first-run card cannot spend the pilot's survival window before they touch the cockpit.
 const sortieReadiness = createCobraSortieReadyInterlock({ ready: !PLAY_MODE });
 let bridge = null;
 let missionTerminal = false;
+let missionPaused = false;
 let authorityState = null;
 // Presentation remembers only the last published phase so it can put a newly started spare back
 // behind the neutral Ready edge. Phase completion itself remains mission authority.
@@ -353,7 +358,7 @@ window.addEventListener("keydown", armAudioFromGesture, { capture: true });
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=331";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=333";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -1026,6 +1031,7 @@ function lockPlayRoute() {
 
 function restartRoute() {
   if (!plan) return;
+  setMissionPaused(false, { focus: false });
   lockPlayRoute();
   const requireNeutralEdge = PLAY_MODE && authorityState !== null;
   sortieReadiness.reset(!PLAY_MODE, { requireNeutral: requireNeutralEdge });
@@ -1305,6 +1311,9 @@ function updateTour(deltaSeconds) {
 }
 
 function updateManual(deltaSeconds) {
+  // Cobra pause is a browser-owned lifecycle hold: without an Advance call, deterministic
+  // authority time cannot move. Keep rendering the frozen sight picture but admit no controls.
+  if (missionPaused) return;
   // Visual-review park owns the camera: keep the sim alive, but do not overwrite the eye
   // with the vehicle pose (that is what made overnight stills look like Camp Ember everywhere).
   if (parkedCamera) {
@@ -1680,8 +1689,10 @@ function animate(timeMs) {
   if (!plan || !presentation) return;
 
   const frameStartedAtMs = performance.now();
-  if (tourInput.checked) updateTour(deltaSeconds);
-  else updateManual(deltaSeconds);
+  if (!missionPaused) {
+    if (tourInput.checked) updateTour(deltaSeconds);
+    else updateManual(deltaSeconds);
+  }
   applyParkedCamera();
   const aglM = tourInput.checked && !parkedCamera ? tourCommandedAglM : cameraAglM();
   const presentationStartedAtMs = performance.now();
@@ -1734,7 +1745,8 @@ function animate(timeMs) {
   recordPhase("hud", hudStartedAtMs);
   recordFrameDuration(rawDeltaMs);
   updateMetrics(aglM);
-  onboarding?.advanceNudges(onboardingNudgeState(), deltaSeconds);
+  onboarding?.advanceNudges(missionPaused ? {} : onboardingNudgeState(),
+    missionPaused ? 0 : deltaSeconds);
   recordPhase("total", frameStartedAtMs);
   framePhaseSamples += 1;
 }
@@ -1788,7 +1800,7 @@ function drawHud(timeMs, deltaSeconds) {
   );
   // Jet gun reports stay off — Cobra tip fire is not the F-22 M61 voice.
   updateFlightAudio(hudStateScratch, {
-    muted: missionTerminal || hud.audioEnabled === false,
+    muted: missionPaused || missionTerminal || hud.audioEnabled === false,
     triggerHeld: false,
     nowSeconds: timeMs / 1000,
   });
@@ -1867,38 +1879,78 @@ function isManualControl(code) {
     || code.startsWith("Arrow");
 }
 
-// Escape leaves the sortie for the menu (cobra_mission_exit.js documents why this page exits
-// rather than pausing). Two reasons this is its own listener, in CAPTURE phase on window:
-//  - the onboarding overlay dismisses on any key from a capture-phase listener on document, and
-//    document-capture runs before window-bubble. A bubble handler would always find the card
-//    already closed and quit the mission on the player's first-ever keypress;
-//  - the mission keydown handler below returns early for anything outside its manual-control
-//    allowlist, which is precisely why Build 265's Escape did nothing at all.
+function pauseMenuFocusables() {
+  return [pauseResume, pauseRestart, pauseExit].filter((node) => node && !node.disabled);
+}
+
+function setMissionPaused(paused, { focus = true } = {}) {
+  const next = paused === true;
+  if (missionPaused === next) return false;
+  missionPaused = next;
+  document.body.dataset.paused = String(next);
+  if (pauseMenu) pauseMenu.hidden = !next;
+  if (next) {
+    keys.clear();
+    pilotControls = releaseCobraPilotControls(pilotControls);
+    bridge?.SetControls(pilotControls.collective, 0, 0, 0);
+    padlockActive = false;
+    padlockMaskedSinceMs = null;
+    bridge?.SetTurnaroundAction(false);
+    bridge?.SetEngagementConsent(false);
+    setPlayCursorHidden(false);
+    if (focus) queueMicrotask(() => pauseResume?.focus({ preventScroll: true }));
+  } else {
+    // Do not feed the paused wall-clock gap into the first resumed fixed-step frame.
+    lastTimeMs = performance.now();
+    if (focus) canvas?.focus?.({ preventScroll: true });
+  }
+  return true;
+}
+
+// Escape peels the topmost layer, then toggles an in-mission pause. Capture ordering matters:
+// the onboarding card also listens during capture and must not dismiss and pause on one press.
 window.addEventListener("keydown", (event) => {
   if (event.code !== "Escape") return;
   event.preventDefault();
+  event.stopPropagation();
   const action = resolveEscapeAction({
     onboardingOpen: onboarding?.isOpen() === true,
-    missionTerminal,
+    tacticalMapOpen,
+    paused: missionPaused,
+    terminal: missionTerminal,
   });
   if (action === "dismiss-onboarding") {
-    event.stopPropagation();
     onboarding.dismiss();
     return;
   }
-  // The full map is a layer over the sortie, so Escape must peel it before Escape leaves the
-  // sortie — otherwise the first instinct after reading the map (hit Escape to close it) quits
-  // the mission. This sits AFTER the onboarding branch on purpose: the onboarding card is the
-  // topmost layer and keeps first claim on the key.
-  if (tacticalMapOpen) {
-    event.stopPropagation();
+  if (action === "close-map") {
     setTacticalMapOpen(false);
     return;
   }
-  leaveMissionForMenu();
+  if (action === "noop") return;
+  setMissionPaused(action === "pause");
 }, true);
 
+pauseMenu?.addEventListener("keydown", (event) => {
+  if (event.code !== "Tab") return;
+  const focusable = pauseMenuFocusables();
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus({ preventScroll: true });
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus({ preventScroll: true });
+  }
+});
+pauseResume?.addEventListener("click", () => setMissionPaused(false));
+pauseRestart?.addEventListener("click", restartRoute);
+pauseExit?.addEventListener("click", leaveMissionForMenu);
+
 window.addEventListener("keydown", (event) => {
+  if (missionPaused) return;
   // Terminal states freeze the sim; R is the keyboard path back into the fight (the debrief
   // card announces it). Guarded by missionTerminal so mid-sortie R keeps its freelook meaning.
   if (event.code === "KeyR" && missionTerminal) {

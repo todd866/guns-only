@@ -7,7 +7,7 @@ namespace GunsOnly.Sim.Tests;
 
 /// <summary>
 /// Production contract for catalogue card 12. The random RapierGoFly laboratory intentionally
-/// remains testable elsewhere; these tests pin the clean player-facing lesson and its one pass.
+/// remains testable elsewhere; these tests pin the clean player-facing gallery and recovery.
 /// </summary>
 public class RapierProductionBalloonMissionTests {
     const double BalloonAltitudeM = 33_500.0;
@@ -141,7 +141,7 @@ public class RapierProductionBalloonMissionTests {
     }
 
     [Fact]
-    public void CatalogueCardIsDeterministicSingleGenuineBalloon() {
+    public void CatalogueCardIsDeterministicThreeBalloonGallery() {
         BeatSetup first = Beats.BuiltIn(12);
         BeatSetup second = Beats.BuiltIn(12);
         ScriptedInterceptConfig mission = Assert.IsType<ScriptedInterceptConfig>(
@@ -149,40 +149,54 @@ public class RapierProductionBalloonMissionTests {
 
         Assert.Equal(first.Name, second.Name);
         Assert.Equal(first.Bandit, second.Bandit);
-        Assert.Equal("Rapier — high-altitude balloon intercept", first.Name);
+        Assert.Equal("Rapier — balloon gallery intercept", first.Name);
         Assert.Equal(RapierJobKind.Balloon, mission.Job);
-        Assert.Equal(1, mission.FormationSize);
+        Assert.Equal(3, mission.FormationSize);
         Assert.Equal(0, mission.ShortRangeMissiles);
         Assert.Equal(0, mission.DogfightingDrones);
-        Assert.Equal(0, mission.PursuerCount);
+        Assert.Equal(3, mission.PursuerCount);
+        Assert.Equal(12_000.0, mission.BalloonReactionRangeM);
+        Assert.Equal(45.0, mission.BalloonReactionDelaySeconds);
         Assert.False(mission.AutomationDefaultEnabled);
         Assert.True(mission.RecoveryRequired);
-        Assert.True(mission.ZoomLobProfile);
+        Assert.False(mission.ZoomLobProfile);
         Assert.False(mission.DeterministicSwarmWipe);
         Assert.Equal(RapierComputerFailure.None, mission.ComputerFailureAtZoomCoast);
         Assert.False(first.UsesReactiveBandit);
         Assert.False(first.OpenSegmentNav);
+        Assert.False(first.MissionIdentity.AllowsTimeCompression);
         Assert.Equal(first.PlayerAir.MaxThrustFraction, first.InitialThrottle, 6);
 
-        Assert.Equal(FlightModel.HighAltitudeBalloonPublicDataSurrogate,
+        Assert.Equal(FlightModel.RapierGalleryBalloonSurrogate,
             first.BanditAir);
         Assert.NotEqual(FlightModel.GliderStrike, first.BanditAir);
         Assert.Equal(AircraftCapability.HighAltitudeWeatherBalloonTarget,
             first.BanditAircraft);
         Assert.Contains("high-altitude-weather-balloon",
             first.BanditAircraft.PresentationId);
-        Assert.True(first.BanditAir.BuoyantVolumeM3 > 500_000.0);
+        Assert.InRange(first.BanditAir.BuoyantVolumeM3, 20_000.0, 30_000.0);
         Assert.Equal(0.0, first.BanditAir.ThrustMaxN);
-        Assert.InRange(first.Bandit.Position.Y,
-            100_000.0 * 0.3048, 110_000.0 * 0.3048);
-        Assert.Equal(-372_000.0, first.Bandit.Position.X, 6);
-        Assert.Equal(186_000.0, first.Bandit.Position.Z, 6);
+        Assert.Equal(45_000.0, first.Bandit.Position.Y / 0.3048, 3);
+        Assert.Equal(-65_000.0, first.Bandit.Position.X, 6);
+        Assert.Equal(0.0, first.Bandit.Position.Z, 6);
         Assert.InRange(first.Bandit.Speed, 0.0, 15.0);
+        Assert.InRange(Math.Sqrt(first.Bandit.Position.X * first.Bandit.Position.X
+                + first.Bandit.Position.Z * first.Bandit.Position.Z)
+            / 1852.0, 35.0, 35.2);
+        for (int index = 1; index < mission.FormationSize; index++) {
+            AircraftState member = first.CreateScriptedFormationBandit(index).State;
+            Assert.InRange(member.Position.Y / 0.3048, 44_000.0, 46_000.0);
+            Assert.InRange(Math.Sqrt(member.Position.X * member.Position.X
+                    + member.Position.Z * member.Position.Z) / 1852.0,
+                34.0, 36.5);
+            Assert.InRange((member.Position - first.Bandit.Position).Length,
+                1_000.0, 2_500.0);
+        }
 
         CombatConfig combat = first.CombatRules;
         Assert.Equal(0, combat.OpponentAmmo);
         Assert.Equal(1, combat.OpponentHitsToDefeat);
-        Assert.Equal(120, combat.PlayerAmmo);
+        Assert.Equal(360, combat.PlayerAmmo);
         Assert.Equal(56.0, combat.PlayerTargetHitRadiusM);
         Assert.False(combat.PlayerInfiniteAmmo);
         Assert.Equal(GunProfiles.M61A2PublicDataSurrogate, combat.PlayerGunProfile);
@@ -190,6 +204,82 @@ public class RapierProductionBalloonMissionTests {
         double canonicalFuelLb = RapierV2Design.FuelCapacityKg * 2.20462262;
         Assert.Equal(canonicalFuelLb, first.FuelLoadout.CapacityLb, 3);
         Assert.Equal(canonicalFuelLb, first.FuelLoadout.InitialFuelLb, 3);
+    }
+
+    [Fact]
+    public void ThreePhysicalTargetsPromoteInPlaceThenHandOffToRtb() {
+        var session = new SimulationSession(beatIndex: 12);
+        session.Begin();
+        Assert.Equal(3, session.LiveOpponentCount);
+        Assert.Equal(2, session.Wingmen.Count);
+
+        session.ForceOpponentDefeatForTest();
+        Assert.Equal(2, session.LiveOpponentCount);
+        session.ForceOpponentDefeatForTest();
+        Assert.Equal(1, session.LiveOpponentCount);
+        session.ForceOpponentDefeatForTest();
+        Assert.Equal(0, session.LiveOpponentCount);
+
+        session.StepFixed();
+        Assert.True(session.RapierPhase is RapierMissionPhase.ReturnToBase
+            or RapierMissionPhase.Recovery);
+        Assert.True(session.RapierMissionCue.Contains("HOME")
+            || session.RapierMissionCue.Contains("RECOVERY"));
+        Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
+    }
+
+    [Fact]
+    public void GalleryProfileCommandsAReachableLaneInsteadOfFlightLevel560() {
+        RapierMissionDirector director = new();
+        const double playerAltitudeM = 1_200.0;
+        AtmosphericState air = StandardAtmosphere1976.Instance.Sample(playerAltitudeM);
+        AircraftState player = PlayerState(playerAltitudeM, 0.62 * air.SpeedOfSoundMps,
+            gamma: 0.05, chi: -Math.PI / 2.0);
+        AircraftState balloon = Beats.BuiltIn(12).Bandit;
+        RapierMissionGuidance guidance = director.Step(
+            player,
+            balloon,
+            player.Speed,
+            StandardAtmosphere1976.Instance,
+            FlightModel.RapierPublicDataSurrogate,
+            catapultActive: false,
+            liveOpponentCount: 3,
+            pursuitActive: false,
+            pursuerCount: 0,
+            pursuitRangeM: 0.0,
+            home: new Vec3D(0.0, RapierLaunchSite.OperatingSurfaceElevationM, 0.0),
+            recoveryInitial: new Vec3D(-16_000.0, 1_200.0, 0.0),
+            recovered: false,
+            patternOnly: false,
+            zoomLobProfile: false,
+            gunDroneEgress: false,
+            job: RapierJobKind.Balloon,
+            fuelLb: 8_000.0,
+            reserveFuelLb: 1_200.0);
+
+        Assert.Equal(RapierMissionPhase.Climb, guidance.Phase);
+        Assert.InRange(guidance.TargetAltitudeFt, 42_000.0, 45_000.0);
+        Assert.InRange(guidance.AuthoredTargetMach, 1.75, 1.85);
+        Assert.InRange(guidance.TargetMach, 0.90, 1.00);
+        Assert.Contains("INTERCEPT PATH", guidance.Cue);
+        Assert.DoesNotContain("FL560", guidance.Cue);
+    }
+
+    [Fact]
+    public void GalleryBalloonHoldsTheAuthoredFlightLevelUnderPhysics() {
+        AircraftParams balloon = FlightModel.RapierGalleryBalloonSurrogate;
+        var sim = new AircraftSim(
+            new AircraftState(
+                new Vec3D(0.0, FlightModel.RapierGalleryBalloonFloatAltitudeM, 0.0),
+                Speed: 8.0, Gamma: 0.0, Chi: Math.PI / 2.0, Bank: 0.0,
+                Mass: balloon.MassKg),
+            balloon,
+            StandardAtmosphere1976.Instance);
+        var neutral = new PilotCommand(0.0, 0.0, 0.0, 0.0);
+        for (int tick = 0; tick < 4 * 60 * AircraftSim.TickHz; tick++)
+            sim.Step(neutral, 1.0 / AircraftSim.TickHz);
+
+        Assert.InRange(sim.State.Position.Y / 0.3048, 44_900.0, 45_100.0);
     }
 
     [Fact]
@@ -468,6 +558,135 @@ public class RapierProductionBalloonMissionTests {
     }
 
     [Fact]
+    public void AutomatedGalleryMeasuresTheThirtyFiveNauticalMileIntercept() {
+        var session = new SimulationSession(
+            beatIndex: 12,
+            weather: KoreaWeatherPresets.ForBeat(12));
+        session.DecisionCaptureEnabled = false;
+        session.Begin();
+        session.SetRapierAutomationEnabled(true);
+        double initialRangeNm = (session.Bandit.State.Position
+            - session.Player.State.Position).Length / 1852.0;
+        Vec3D initialDelta = session.Bandit.State.Position
+            - session.Player.State.Position;
+        double initialHorizontalRangeNm = Math.Sqrt(
+            initialDelta.X * initialDelta.X + initialDelta.Z * initialDelta.Z) / 1852.0;
+
+        double peakMach = 0.0;
+        double peakAltitudeFt = 0.0;
+        double attackMach = double.NaN;
+        double attackAltitudeFt = double.NaN;
+        double attackRangeNm = double.NaN;
+        double attackFuelLb = double.NaN;
+        double targetAltitudeFt = double.NaN;
+        double attackReactionSeconds = double.NaN;
+        const double maximumSeconds = 12.0 * 60.0;
+        while (session.TimeSeconds < maximumSeconds
+            && session.RapierPhase != RapierMissionPhase.Attack) {
+            session.StepFixed();
+            AtmosphericState air = StandardAtmosphere1976.Instance.Sample(
+                session.Player.State.Position.Y);
+            double mach = session.Player.AirspeedMps / air.SpeedOfSoundMps;
+            peakMach = Math.Max(peakMach, mach);
+            peakAltitudeFt = Math.Max(peakAltitudeFt,
+                session.Player.State.Position.Y / 0.3048);
+        }
+
+        if (session.RapierPhase == RapierMissionPhase.Attack) {
+            AtmosphericState attackAir = StandardAtmosphere1976.Instance.Sample(
+                session.Player.State.Position.Y);
+            attackMach = session.Player.AirspeedMps / attackAir.SpeedOfSoundMps;
+            attackAltitudeFt = session.Player.State.Position.Y / 0.3048;
+            attackRangeNm = (session.Bandit.State.Position
+                - session.Player.State.Position).Length / 1852.0;
+            attackFuelLb = session.PlayerFuel.FuelLb;
+            targetAltitudeFt = session.Bandit.State.Position.Y / 0.3048;
+            attackReactionSeconds = session.RapierBalloonReactionSecondsRemaining;
+        }
+
+        _output.WriteLine(
+            $"gallery intercept: start {initialHorizontalRangeNm:F2} NM ground/"
+            + $"{initialRangeNm:F2} NM slant, attack {session.TimeSeconds:F1}s, "
+            + $"M{attackMach:F2}, FL{attackAltitudeFt / 100.0:F0}, "
+            + $"target FL{targetAltitudeFt / 100.0:F0}, range {attackRangeNm:F2} NM, "
+            + $"mine arm {attackReactionSeconds:F1}s, fuel {attackFuelLb:F0} lb; "
+            + $"peak M{peakMach:F2}/"
+            + $"FL{peakAltitudeFt / 100.0:F0}");
+        Assert.Equal(RapierMissionPhase.Attack, session.RapierPhase);
+        Assert.InRange(initialHorizontalRangeNm, 35.0, 35.2);
+        Assert.InRange(initialRangeNm, 35.7, 36.0);
+        Assert.InRange(session.TimeSeconds, 60.0, 8.0 * 60.0);
+        Assert.InRange(attackAltitudeFt, 37_000.0, 47_000.0);
+        Assert.InRange(targetAltitudeFt, 44_000.0, 46_000.0);
+        Assert.InRange(attackMach, 1.25, 1.85);
+        Assert.InRange(attackRangeNm, 0.0, 3.25);
+        Assert.InRange(attackReactionSeconds, 20.0, 35.0);
+        Assert.False(session.TimeCompressionAvailable);
+        Assert.Equal(1, session.TimeCompressionFactor);
+    }
+
+    [Fact]
+    public void SlowUnarmedPassLetsTheLethalPayloadDeployAndForcesEscape() {
+        var session = new SimulationSession(beatIndex: 12);
+        session.DecisionCaptureEnabled = false;
+        session.Begin();
+        session.SetRapierAutomationEnabled(true);
+        while (session.TimeSeconds < 8.0 * 60.0
+            && session.RapierPhase != RapierMissionPhase.Attack)
+            session.StepFixed();
+        Assert.Equal(RapierMissionPhase.Attack, session.RapierPhase);
+
+        double firstAttackSeconds = session.TimeSeconds;
+        while (session.TimeSeconds < firstAttackSeconds + 90.0)
+            session.StepFixed();
+
+        Assert.Equal(0, session.PlayerGun.RoundsFired);
+        Assert.Equal(3, session.LiveOpponentCount);
+        Assert.True(session.RapierBalloonPayloadDeployed);
+        Assert.True(session.RapierPursuitActive);
+        Assert.Equal(3, session.RapierPursuerCount);
+        Assert.Equal(RapierMissionPhase.Escape, session.RapierPhase);
+        Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
+    }
+
+    [Fact]
+    public void ClearingAllThreeCarriersInsideTheLiveFuseHandsOffToRtb() {
+        var session = new SimulationSession(beatIndex: 12);
+        session.DecisionCaptureEnabled = false;
+        session.Begin();
+        session.SetRapierAutomationEnabled(true);
+        while (session.TimeSeconds < 8.0 * 60.0
+            && session.RapierPhase != RapierMissionPhase.Attack)
+            session.StepFixed();
+
+        Assert.Equal(RapierMissionPhase.Attack, session.RapierPhase);
+        Assert.True(session.RapierBalloonReactionActive);
+        double fuseAtFirstShot = session.RapierBalloonReactionSecondsRemaining;
+        Assert.InRange(fuseAtFirstShot, 20.0, 35.0);
+
+        for (int target = 0; target < 2; target++) {
+            session.ForceOpponentDefeatForTest();
+            session.StepFixed(2 * (int)AircraftSim.TickHz);
+            Assert.Equal(2 - target, session.LiveOpponentCount);
+        }
+        Assert.True(session.RapierBalloonReactionSecondsRemaining > 0.0);
+        Assert.True(session.RapierBalloonReactionSecondsRemaining
+            < fuseAtFirstShot);
+        session.ForceOpponentDefeatForTest();
+        session.StepFixed(2 * (int)AircraftSim.TickHz);
+        Assert.Equal(0, session.LiveOpponentCount);
+        session.StepFixed();
+
+        Assert.Equal(0.0, session.RapierBalloonReactionSecondsRemaining);
+        Assert.False(session.RapierBalloonPayloadDeployed);
+        Assert.False(session.RapierPursuitActive);
+        Assert.Equal(3, session.KillCount);
+        Assert.True(session.RapierPhase is RapierMissionPhase.ReturnToBase
+            or RapierMissionPhase.Recovery);
+        Assert.True(session.PlayerRtbActive);
+    }
+
+    [Fact(Skip = "Retired M4.2 production profile; the gallery has a measured intercept contract.")]
     public void OptionalAutomationDemoPhysicallyEarnsMachFourAndTheApexWindow() {
         var session = new SimulationSession(
             beatIndex: 12,
@@ -920,7 +1139,7 @@ public class RapierProductionBalloonMissionTests {
             serviceRecord.Consumables.RoundsExpended);
     }
 
-    [Fact]
+    [Fact(Skip = "Retired one-pass miss contract; the gallery remains live until all targets are cleared.")]
     public void SafeTrapAfterTheOnePassMissIsARecoveredDrawNotVictory() {
         var session = new SimulationSession(
             beatIndex: 12,

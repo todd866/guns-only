@@ -338,14 +338,22 @@ public class GunneryPitchAssistTests {
             RollControl: 0.15, DirectLateralControl: true);
         Vec3D validLead = PitchLead(aircraft, 4.0);
 
-        AssertInactiveUnchanged(Apply(aircraft, pilot, validLead,
-            enabled: false), pilot);
-        AssertInactiveUnchanged(Apply(aircraft, pilot, validLead,
-            hasLead: false), pilot);
-        AssertInactiveUnchanged(Apply(aircraft, pilot, validLead,
-            rangeM: 1500.01), pilot);
-        AssertInactiveUnchanged(Apply(aircraft, pilot,
-            PitchLead(aircraft, 24.01)), pilot);
+        GunneryPitchAssistResult disabled = Apply(aircraft, pilot, validLead,
+            enabled: false);
+        AssertInactiveUnchanged(disabled, pilot);
+        Assert.Equal("DISABLED", disabled.State.Status);
+        GunneryPitchAssistResult noLead = Apply(aircraft, pilot, validLead,
+            hasLead: false);
+        AssertInactiveUnchanged(noLead, pilot);
+        Assert.Equal("NO_LEAD", noLead.State.Status);
+        GunneryPitchAssistResult range = Apply(aircraft, pilot, validLead,
+            rangeM: 1500.01);
+        AssertInactiveUnchanged(range, pilot);
+        Assert.Equal("OUT_OF_RANGE", range.State.Status);
+        GunneryPitchAssistResult cone = Apply(aircraft, pilot,
+            PitchLead(aircraft, 24.01));
+        AssertInactiveUnchanged(cone, pilot);
+        Assert.Equal("OUTSIDE_CONE", cone.State.Status);
         AssertInactiveUnchanged(Apply(aircraft,
             pilot with { EnvelopeOverride = true }, validLead),
             pilot with { EnvelopeOverride = true });

@@ -26,8 +26,9 @@ test("README describes the current production door, controls and telemetry bound
   assert.match(readme, /Node\.js 24, matching CI/);
   assert.match(readme, /docs\/STATUS\.md/);
   assert.match(readme, /five accepted experiences/i);
-  assert.match(readme, /\*\*Top Gun:\*\*.*F-14A or MiG-28/s);
-  assert.match(readme, /Rapier[\s\S]*thin-air M4\.2 shelf[\s\S]*high-altitude balloon/);
+  assert.match(readme, /\*\*Top Gun:\*\*.*F-14A.*recover.*carrier/s);
+  assert.doesNotMatch(readme, /choose the F-14A or MiG-28 seat/);
+  assert.match(readme, /Rapier[\s\S]*visible high-speed path[\s\S]*three balloon mines[\s\S]*lethal drone payloads/);
   assert.doesNotMatch(readme, /Rapier[^\n]*assigned contract/);
 });
 
@@ -75,11 +76,12 @@ test("the browser and installed-app descriptions match the five production exper
 test("production Rapier copy describes the deterministic finite-ammo balloon sortie", async () => {
   const app = await readFile(path.join(ROOT, "web/wwwroot/app.js"), "utf8");
   const rapier = EXPERIENCE_CATALOG.find(({ id }) => id === "rapier-intercept");
-  assert.match(rapier.shortObjective, /thin-air M4\.2 shelf/);
-  assert.match(rapier.shortObjective, /high-altitude balloon/);
-  assert.match(rapier.shortObjective, /midpoint arrestor/);
+  assert.match(rapier.shortObjective, /visible high-speed path/);
+  assert.match(rapier.shortObjective, /three balloon mines at 45,000 ft/);
+  assert.match(rapier.shortObjective, /lethal drone payloads before deployment/);
+  assert.match(rapier.shortObjective, /recover/);
   assert.match(app,
-    /"rapier-intercept": Object\.freeze\(\{[\s\S]*?canonical full fuel[\s\S]*?finite internal gun[\s\S]*?no auxiliary drones/);
+    /"rapier-intercept": Object\.freeze\(\{[\s\S]*?Three balloon mines[\s\S]*?lethal drone payloads[\s\S]*?finite internal gun[\s\S]*?no auxiliary drones/);
   const brief = app.match(
     /"rapier-intercept": Object\.freeze\(\{([\s\S]*?)\n\s*\}\),\n\s*"ace-duel"/,
   )?.[1] ?? "";
@@ -87,6 +89,8 @@ test("production Rapier copy describes the deterministic finite-ammo balloon sor
   assert.doesNotMatch(app,
     /missionBrief\(\)[\s\S]*?Rapier balance \$\{balance\} CR/,
     "the deterministic Card 12 briefing must not advertise the retired economy ledger");
+  assert.doesNotMatch(brief, /M4\.2|one gun pass|PILOT CLIMB|time compression/i,
+    "the live briefing must not teach the retired zoom-lob or fast-forward flow");
 });
 
 test("legacy Rapier v1 documents cannot claim production authority over v2", async () => {

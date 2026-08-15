@@ -8,7 +8,7 @@
   <base href="/">
   <title>Guns Only · Hold the Bridge</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/cobra-lab/styles.css?v=331">
+  <link rel="stylesheet" href="/cobra-lab/styles.css?v=333">
 </head>
 <body data-shell="play">
   <a class="skip-link" href="#scene">Skip to flight</a>
@@ -105,6 +105,20 @@
         <span><i class="hostile-key"></i> hostile</span>
         <span><i class="landmark-key"></i> contested</span>
       </div>
+      <section id="pause-menu" class="pause-menu" role="dialog" aria-modal="true"
+        aria-labelledby="pause-title" aria-describedby="pause-detail" hidden>
+        <div class="pause-card">
+          <span class="pause-kicker">HOLD THE BRIDGE</span>
+          <h1 id="pause-title">Flight paused</h1>
+          <p id="pause-detail">The mission clock and flight controls are stopped.</p>
+          <button id="pause-resume" class="pause-primary" type="button">Resume</button>
+          <div class="pause-actions">
+            <button id="pause-restart" type="button">Restart sortie</button>
+            <button id="pause-exit" type="button">Exit mission</button>
+          </div>
+          <span class="pause-hint">Esc · resume</span>
+        </div>
+      </section>
       <div id="debrief" class="debrief" hidden>
         <p id="debrief-title">MISSION COMPLETE</p>
         <p id="debrief-body"></p>
@@ -130,7 +144,7 @@
       const labPanel = document.getElementById("lab-panel");
       if (labPanel) labPanel.hidden = document.body.dataset.shell !== "lab";
 
-      const releaseBuild = new URL("../service-worker.js?v=331", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=333", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -158,7 +172,7 @@
       await globalThis.__gunsPrebootReady;
       await new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        script.src = "/_framework/blazor.webassembly.js?v=331";
+        script.src = "/_framework/blazor.webassembly.js?v=333";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load Cobra flight runtime.")), {
@@ -167,10 +181,10 @@
         document.head.append(script);
       });
       const { renderExperienceGate } = await import(
-        "/render/release/quarantine_gate.js?v=331"
+        "/render/release/quarantine_gate.js?v=333"
       );
       const access = renderExperienceGate({ experienceId: "cobra-lab" });
-      if (access.allowed) await import("/cobra-lab/main.js?v=331");
+      if (access.allowed) await import("/cobra-lab/main.js?v=333");
     } catch (error) {
       console.error(error);
       const status = document.querySelector("#status");

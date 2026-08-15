@@ -71,7 +71,9 @@ public sealed class TopGunMissileWireTests
         double slow = TopGunFightRuntime.EffectiveTomcatWingSpanM(mach: 0.4, casKts: 200);
         double fast = TopGunFightRuntime.EffectiveTomcatWingSpanM(mach: 1.2, casKts: 500);
         Assert.True(fast < slow);
-        Assert.InRange(slow, 14.0, 16.0);
-        Assert.InRange(fast, 8.0, 11.0);
+        // Published 64 ft 1 in forward / 38 ft 2 in fully swept endpoints. The chosen schedule
+        // is slightly off each stop at these sample points (21.3° and 62° respectively).
+        Assert.InRange(slow, 19.0, 19.53);
+        Assert.InRange(fast, 12.0, 13.0);
     }
 }

@@ -288,6 +288,8 @@ public sealed class SimulationSession {
     bool _rapierGunDroneThreatReactive;
     bool _rapierPursuitActive;
     double _rapierPursuitRangeM = double.PositiveInfinity;
+    double _rapierBalloonReactionStartedAtMs = double.PositiveInfinity;
+    bool _rapierBalloonPayloadDeployed;
     // OFF until the pilot asks for it. Compression that engages by itself takes the aircraft away
     // without being asked, which reads as the sim jumping rather than the pilot skipping — the
     // pilot's words were "should be player-driven not auto fast forward". The eligibility rules
@@ -484,6 +486,21 @@ public sealed class SimulationSession {
         ? Math.Max(0, _beat.ScriptedIntercept?.PursuerCount ?? 0) : 0;
     public double RapierPursuitRangeM => double.IsFinite(_rapierPursuitRangeM)
         ? _rapierPursuitRangeM : 0.0;
+    public bool RapierBalloonReactionActive =>
+        double.IsFinite(_rapierBalloonReactionStartedAtMs)
+        && !_rapierBalloonPayloadDeployed
+        && LiveOpponentCount > 0;
+    public double RapierBalloonReactionSecondsRemaining {
+        get {
+            double delay = Math.Max(0.0,
+                _beat.ScriptedIntercept?.BalloonReactionDelaySeconds ?? 0.0);
+            return RapierBalloonReactionActive
+                ? Math.Max(0.0, delay
+                    - (_simTimeMs - _rapierBalloonReactionStartedAtMs) / 1000.0)
+                : 0.0;
+        }
+    }
+    public bool RapierBalloonPayloadDeployed => _rapierBalloonPayloadDeployed;
     public Vec3D RapierGuidanceWaypoint => _rapierMissionGuidance.Waypoint;
     public int RapierRecoveryGate => _rapierMissionGuidance.RecoveryGate;
     public bool RapierRecoveryConfigurationRequested =>
@@ -2763,6 +2780,38 @@ public sealed class SimulationSession {
             3500.0);
     }
 
+    void StepRapierBalloonReaction() {
+        ScriptedInterceptConfig? config = _beat.ScriptedIntercept;
+        if (config is not {
+                Job: RapierJobKind.Balloon,
+                ZoomLobProfile: false,
+                BalloonReactionRangeM: > 0.0,
+                BalloonReactionDelaySeconds: > 0.0
+            }
+            || _rapierBalloonPayloadDeployed
+            || LiveOpponentCount <= 0
+            || _catapult.IsActive)
+            return;
+
+        double rangeM = Geometry.Range(_player.State, SelectedOpponentState);
+        if (!double.IsFinite(_rapierBalloonReactionStartedAtMs)) {
+            if (rangeM > config.BalloonReactionRangeM) return;
+            _rapierBalloonReactionStartedAtMs = _simTimeMs;
+            ShowTransition(
+                $"BALLOON MINE DETECTED YOU · {config.BalloonReactionDelaySeconds:F0} SEC TO DRONE DEPLOYMENT",
+                3200.0);
+            return;
+        }
+        if (RapierBalloonReactionSecondsRemaining > 0.0) return;
+
+        _rapierBalloonPayloadDeployed = true;
+        _rapierPursuitActive = config.PursuerCount > 0;
+        _rapierPursuitRangeM = Math.Max(3_000.0, config.PursuitInitialRangeM);
+        ShowTransition(
+            $"LETHAL DRONES DEPLOYED · {config.PursuerCount} IN TRAIL · BREAK CONTACT",
+            5000.0);
+    }
+
     void UpdateRapierMissionGuidance() {
         if (_rapierMissionDirector is null || _carrier is null) return;
         // A 16 km initial on the 3.5-degree recovery plane. The old 2,500 m point demanded an
@@ -3030,6 +3079,7 @@ public sealed class SimulationSession {
         StepRapierMissile();
         StepTopGunFightRuntime();
         if (_playerTerminalState == AircraftTerminalState.Flying) {
+            StepRapierBalloonReaction();
             StepRapierPursuit();
             UpdateRapierMissionGuidance();
             MaybeInjectRapierComputerFailure();
@@ -3772,6 +3822,8 @@ public sealed class SimulationSession {
         _rapierGunDroneThreatReactive = false;
         _rapierPursuitActive = false;
         _rapierPursuitRangeM = double.PositiveInfinity;
+        _rapierBalloonReactionStartedAtMs = double.PositiveInfinity;
+        _rapierBalloonPayloadDeployed = false;
         _lastRange = stagesOpponent
             ? Geometry.Range(_player.State, SelectedOpponentState)
             : 0.0;
@@ -3880,6 +3932,8 @@ public sealed class SimulationSession {
         _rapierGunDrone = null;
         _rapierMissileInFlight = false;
         _rapierPursuitActive = false;
+        _rapierBalloonReactionStartedAtMs = double.PositiveInfinity;
+        _rapierBalloonPayloadDeployed = false;
         _circuitTraffic = Array.Empty<CircuitTrafficShip>();
         _circuitComms = "";
 
@@ -6237,15 +6291,25 @@ public sealed class SimulationSession {
     void FinishCarrierQualificationSortie(bool recovered) {
         if (!_beat.RecoveryCompletesSortie || Lifecycle != LifecycleState.Active) return;
         if (recovered) RecordStoppedTrap();
-        bool cardTwelveBalloonKillRequired = _beat.ScriptedIntercept is {
+        ScriptedInterceptConfig? intercept = _beat.ScriptedIntercept;
+        bool balloonKillRequired = intercept is {
             RecoveryRequired: true,
             Job: RapierJobKind.Balloon
         };
-        bool physicalBalloonKillEarned = !cardTwelveBalloonKillRequired
-            || (OpponentPresent && _gunKill.Outcome == FightOutcome.Splash);
-        // A safe recovery after missing the one balloon pass is good airmanship, but it did not
-        // complete Card 12. Keep generic carrier qualifications unchanged: only the balloon card
-        // combines a physical target kill and a stopped trap into one Victory transaction.
+        bool balloonGallery = intercept is {
+            Job: RapierJobKind.Balloon,
+            ZoomLobProfile: false,
+            FormationSize: > 1
+        };
+        bool physicalBalloonKillEarned = !balloonKillRequired
+            || (balloonGallery
+                ? LiveOpponentCount == 0
+                    && _killCount >= intercept!.FormationSize
+                    && !_rapierBalloonPayloadDeployed
+                : OpponentPresent && _gunKill.Outcome == FightOutcome.Splash);
+        // A safe recovery after an incomplete balloon task is good airmanship, but not mission
+        // success. The gallery requires every physical carrier destroyed before payload deployment;
+        // legacy one-balloon cards retain their own stopped-trap plus Splash transaction.
         _outcome = recovered && physicalBalloonKillEarned
             ? SortieOutcome.Victory
             : SortieOutcome.Draw;
@@ -6654,7 +6718,11 @@ public sealed class SimulationSession {
             && !_detents.ApproachMode
             && !_detents.HighAlphaRecoveryActive
             && !_pilotControlInterlocked;
-        bool padlockOwnsRollPlane = _playerGunTargetPadlockRollAssistSelected
+        // Selection is not ownership. The old gate disabled gunnery roll whenever padlock was
+        // selected, including the long periods where its capture-only controller was inactive.
+        // Build 331 owner flight: padlock selected but inactive while gunnery roll was suppressed,
+        // 310 rounds / 12 hits. Yield only while padlock is actually contributing on this target.
+        bool padlockOwnsRollPlane = _padlockRollAssist.State.Active
             && _playerGunTargetPadlockRollAssistTargetId == _selectedPlayerGunTargetId;
         // A wider capture cone and one extra protected G on touch: tilt input cannot hold the
         // funnel the way arrow keys can. Ballistics stay untouched — the assist magnetises the

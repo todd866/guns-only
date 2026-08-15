@@ -7,32 +7,46 @@ import { MAIN_MENU_HREF, resolveEscapeAction } from "../cobra_mission_exit.js";
 const root = new URL("../../../", import.meta.url);
 const source = (path) => readFile(new URL(path, root), "utf8");
 
-test("Escape leaves the sortie for the main menu", () => {
-  assert.equal(resolveEscapeAction({ onboardingOpen: false }), "leave-mission");
+test("Escape toggles a resumable pause instead of leaving the sortie", () => {
+  assert.equal(resolveEscapeAction(), "pause");
+  assert.equal(resolveEscapeAction({ paused: true }), "resume");
   assert.equal(MAIN_MENU_HREF, "/");
 });
 
-test("Escape dismisses the first-run controls card before it exits", () => {
-  // The onboarding overlay dismisses on ANY key, so without this ordering the very first Esc
-  // of a player's first sortie would both close the card and quit the mission.
-  assert.equal(resolveEscapeAction({ onboardingOpen: true }), "dismiss-onboarding");
+test("Escape peels onboarding and the tactical map before pause", () => {
+  assert.equal(resolveEscapeAction({ onboardingOpen: true, tacticalMapOpen: true }),
+    "dismiss-onboarding");
+  assert.equal(resolveEscapeAction({ tacticalMapOpen: true }), "close-map");
 });
 
-test("a terminal sortie still escapes to the menu", () => {
-  // A debrief card is not a reason to trap the player on the page.
-  assert.equal(
-    resolveEscapeAction({ onboardingOpen: false, missionTerminal: true }),
-    "leave-mission",
-  );
+test("a terminal debrief remains the top layer instead of opening a fake live pause", () => {
+  assert.equal(resolveEscapeAction({ terminal: true }), "noop");
 });
 
-test("the Cobra shell wires Escape to a teardown, not a bare navigation", async () => {
+test("the Cobra shell owns a real pause dialog and freezes authority advance", async () => {
+  const [main, html, styles] = await Promise.all([
+    source("cobra-lab/main.js"),
+    source("cobra-lab/index.html"),
+    source("cobra-lab/styles.css"),
+  ]);
+  assert.match(html, /id="pause-menu"[\s\S]*role="dialog"[\s\S]*aria-modal="true"/u);
+  for (const id of ["pause-resume", "pause-restart", "pause-exit"])
+    assert.match(html, new RegExp(`id="${id}"`));
+  assert.match(styles, /\.pause-menu\[hidden\]/u);
+  assert.match(main, /if \(missionPaused\) return;/u,
+    "the manual frame must return before bridge.Advance and control writes");
+  assert.match(main, /muted: missionPaused \|\| missionTerminal/u);
+  assert.match(main, /bridge\?\.SetEngagementConsent\(false\)/u);
+  assert.match(main, /pilotControls = releaseCobraPilotControls\(pilotControls\)[\s\S]*?bridge\?\.SetControls\(pilotControls\.collective, 0, 0, 0\)/u,
+    "pause must release spring-centred controls before the next resumed frame");
+  assert.match(main, /pauseResume\?\.focus/u);
+  assert.match(main, /pauseMenu\?\.addEventListener\("keydown"/u);
+});
+
+test("Exit Mission remains explicit and performs the existing complete teardown", async () => {
   const main = await source("cobra-lab/main.js");
-  assert.match(main, /resolveEscapeAction/, "Escape must route through the shared decision");
-  assert.match(main, /event\.code !== "Escape"/);
-  // Leaving must stop the frame loop, flush telemetry and release GPU/keyboard state, or the
-  // mission leaks a running rAF, an unsent telemetry tail and a live WebGL context.
-  assert.match(main, /function teardownMission\(/);
+  assert.match(main, /pauseExit\?\.addEventListener\("click", leaveMissionForMenu\)/u);
+  assert.match(main, /function teardownMission\(/u);
   for (const teardown of [
     /cancelAnimationFrame\(animationFrame\)/,
     /telemetryChannel\.flush\(/,
@@ -44,25 +58,7 @@ test("the Cobra shell wires Escape to a teardown, not a bare navigation", async 
   ]) assert.match(main, teardown, `teardown must run ${teardown}`);
 });
 
-test("the controls card teaches the exit", async () => {
-  // An exit nobody can discover is not an exit. The card is the only place this page states
-  // its keys, and Escape now does something, so it belongs in the SYSTEM group.
+test("the controls card teaches pause", async () => {
   const content = await source("render/onboarding/controls_content.js");
-  assert.match(content, /"Esc", "Leave the sortie · back to the menu"/);
-});
-
-test("Escape is handled before anything can swallow it", async () => {
-  const main = await source("cobra-lab/main.js");
-  const escapeIndex = main.indexOf('event.code !== "Escape"');
-  assert.ok(escapeIndex >= 0, "the shell must handle Escape at all");
-  assert.ok(
-    escapeIndex < main.indexOf("if (!isManualControl(event.code)"),
-    "Escape must be handled before the manual-control allowlist returns early",
-  );
-  // The onboarding overlay dismisses from a capture-phase listener on document, so the mission's
-  // Escape handler has to be capture-phase on window to see the key first. A bubble-phase
-  // listener always loses this race and quits the mission on the first-ever keypress.
-  const listener = main.slice(escapeIndex, main.indexOf("}, true);", escapeIndex));
-  assert.ok(listener.length > 0, "Escape must be registered with capture: true");
-  assert.match(listener, /onboarding\?\.isOpen\(\) === true/);
+  assert.match(content, /"Esc", "Pause · resume from the mission menu"/u);
 });

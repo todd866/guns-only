@@ -11,7 +11,9 @@ public sealed class RapierProductionSessionContractTests {
     public void ProductionSessionInstantiatesTheDeclaredFiniteM61Magazine() {
         var session = new SimulationSession(beatIndex: 12);
 
-        Assert.Equal(120, session.PlayerGun.AmmoRemaining);
+        Assert.Equal(360, session.Beat.CombatRules.PlayerAmmo);
+        Assert.Equal(session.Beat.CombatRules.PlayerAmmo,
+            session.PlayerGun.AmmoRemaining);
         Assert.False(session.PlayerGun.HasInfiniteAmmo);
         Assert.Null(session.PlayerGun.HeatConfig);
         Assert.Same(GunProfiles.M61A2PublicDataSurrogate, session.PlayerGun.Profile);

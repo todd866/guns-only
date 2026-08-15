@@ -86,8 +86,7 @@ test("Rapier dispersed strip is a fixed 520 m launch and arresting platform, not
   }
   assert.equal(strip.getObjectByName("CarrierRecoveryOverlay"), undefined,
     "the fixed strip must not embed a second carrier-scaled recovery overlay");
-  const ribLamps = strip.getObjectByName("LAUNCH_GALLERY_RIB_LAMPS");
-  const ribs = strip.getObjectByName("LAUNCH_GALLERY_RIBS");
+  const retiredGallery = strip.getObjectByName("LAUNCH_GALLERY");
   const edgeLamps = strip.getObjectByName("RAPIER_STRIP_EDGE_LAMPS");
   const centreArcRail = strip.getObjectByName("LAUNCH_ARC_CENTRE_RAIL");
   const sideArcRails = strip.getObjectByName("LAUNCH_ARC_SIDE_RAILS");
@@ -99,19 +98,19 @@ test("Rapier dispersed strip is a fixed 520 m launch and arresting platform, not
   assert.ok(Math.abs(strip.userData.launchRampRiseM - 10.6960) < 0.001);
   assert.equal(strip.userData.launchRailHeadHeightM, 0.15);
   assert.equal(strip.userData.aircraftSupportReferenceHeightM, 0.85);
-  const expectedRibs = Math.floor((flatLengthM - 10) / 10) + 1;
-  assert.ok(ribs?.isInstancedMesh);
-  assert.equal(ribs.count, expectedRibs);
-  assert.ok(ribLamps?.isInstancedMesh);
-  assert.equal(ribLamps.count, expectedRibs);
+  assert.equal(retiredGallery?.visible, false,
+    "the toy-like buried tunnel must not present in the production launch view");
+  assert.equal(retiredGallery?.userData.retiredPresentation, true);
+  assert.ok(strip.getObjectByName("OPEN_LAUNCH_APRON"),
+    "the live rail must present as an open dispersed launcher");
   assert.ok(edgeLamps?.isInstancedMesh);
   assert.equal(edgeLamps.count, 36);
   assert.ok(centreArcRail?.isInstancedMesh);
   assert.equal(centreArcRail.count, 12);
   assert.ok(sideArcRails?.isInstancedMesh);
   assert.equal(sideArcRails.count, 24);
-  assert.ok(strip.getObjectByName("LAUNCH_GALLERY_VAULT"), "arched vault must present");
-  assert.ok(strip.getObjectByName("LAUNCH_PORTAL"), "portal headwall must present");
+  assert.equal(strip.getObjectByName("LAUNCH_GALLERY_VAULT")?.visible, true,
+    "retired geometry remains inside its hidden compatibility group only");
   assert.ok(strip.getObjectByName("LAUNCH_FX"), "catshot FX group must present");
   assert.ok(strip.userData.launchFx?.update, "strip must expose launchFx.update");
   const vicinity = strip.getObjectByName("STRIP_VICINITY");

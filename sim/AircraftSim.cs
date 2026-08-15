@@ -330,11 +330,43 @@ public sealed class AircraftSim {
         LiftDir = ComputeLiftDir(vhat);
     }
 
-    /// <summary>Coarse swing-wing surrogate: only WingSpanM changes; baseline params remain on _p.</summary>
+    /// <summary>Authority-owned live span, including the Tomcat's derived swing-wing polar.</summary>
     public double EffectiveWingSpanM => _flightP.WingSpanM;
 
-    public void SetEffectiveWingSpanM(double wingSpanM) =>
-        _flightP = _p with { WingSpanM = wingSpanM };
+    internal AircraftParams EffectiveFlightParametersForTest => _flightP;
+
+    public void SetEffectiveWingSpanM(double wingSpanM) {
+        if (_p.LateralDerivativeProfileId != "f14a-public-data-surrogate-v1") {
+            _flightP = _p with { WingSpanM = wingSpanM };
+            return;
+        }
+
+        // The museum-published 64 ft 1 in / 38 ft 2 in spans give the geometric endpoints. The
+        // coefficients between them are a deliberately visible reduced-order surrogate: forward
+        // wings carry more lift with less induced drag; aft wings trade that turning performance
+        // for a later, smaller transonic drag rise. One span authority therefore drives exterior,
+        // HUD, player physics and AI lookahead instead of presentation running a second schedule.
+        const double fullySweptSpanM = 11.63;
+        double span = System.Math.Clamp(wingSpanM, fullySweptSpanM, _p.WingSpanM);
+        double swept01 = System.Math.Clamp(
+            (_p.WingSpanM - span) / (_p.WingSpanM - fullySweptSpanM), 0.0, 1.0);
+        static double Lerp(double forward, double aft, double t) =>
+            forward + (aft - forward) * t;
+        _flightP = _p with {
+            WingSpanM = span,
+            InducedK = Lerp(_p.InducedK, 0.066, swept01),
+            CLMax = Lerp(_p.CLMax, 1.24, swept01),
+            CLMin = Lerp(_p.CLMin, -0.58, swept01),
+            CLAlpha = Lerp(_p.CLAlpha, 4.05, swept01),
+            MCrit = Lerp(_p.MCrit, 0.98, swept01),
+            WaveDragK = Lerp(_p.WaveDragK, 18.0, swept01),
+            // Moving wing mass inboard lowers roll inertia. Spoiler/tail roll authority and
+            // damping compensate for the shorter moment arm so aft sweep feels crisp, not vague.
+            IxxKgM2 = Lerp(_p.IxxKgM2, 58_000.0, swept01),
+            ClDeltaA = Lerp(_p.ClDeltaA, 0.170, swept01),
+            ClP = Lerp(_p.ClP, -0.56, swept01),
+        };
+    }
 
     public void ResetFlightParams() => _flightP = _p;
 

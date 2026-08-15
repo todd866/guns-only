@@ -367,7 +367,7 @@ public class RapierTests {
     [Fact]
     public void TheMissionLaunchesOffTheCatapultAndClimbsAway() {
         var session = new SimulationSession(12);
-        Assert.Equal("Rapier — high-altitude balloon intercept", session.Beat.Name);
+        Assert.Equal("Rapier — balloon gallery intercept", session.Beat.Name);
         Assert.Same(FlightModel.RapierPublicDataSurrogate, session.Beat.PlayerAir);
         Assert.Equal(Carrier.PlatformKind.FixedArrestingStrip, session.Carrier!.Kind);
         Assert.False(session.Carrier.IsMaritime);

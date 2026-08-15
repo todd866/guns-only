@@ -485,6 +485,21 @@ public static class FlightModel {
         FuelFreeMassKg: HighAltitudeBalloonTotalMassKg,
         BuoyantVolumeM3: HighAltitudeBalloonVolumeM3);
 
+    public const double RapierGalleryBalloonFloatAltitudeM = 13_716.0;
+    public static double RapierGalleryBalloonVolumeM3 =>
+        HighAltitudeBalloonTotalMassKg
+        / StandardAtmosphere1976.Instance.Sample(
+            RapierGalleryBalloonFloatAltitudeM).DensityKgM3;
+    /// Same sourced envelope/target presentation, ballasted for the production training lane.
+    /// The previous card moved the 33.5 km float actor without changing its
+    /// buoyancy, so it immediately climbed back toward FL1100 and made the nominal 35 NM intercept
+    /// another long chase. This mission-specific surrogate is neutrally buoyant at the authored
+    /// 45,000 ft lane while retaining the same mass, drag, damage sphere and visual identity.
+    public static readonly AircraftParams RapierGalleryBalloonSurrogate =
+        HighAltitudeBalloonPublicDataSurrogate with {
+            BuoyantVolumeM3 = RapierGalleryBalloonVolumeM3
+        };
+
     /// The KJ-500-class AEW&C: how the PLA sees and coordinates. Enormous, slow, turboprop,
     /// structurally ~2.5G and it cannot dodge. Killing it blinds a strike package worth 100x
     /// the drone that got it — which is the entire cost-exchange thesis in one target.
@@ -1084,11 +1099,15 @@ public static class FlightModel {
         MassKg: 24000.0, // representative visual-merge weight; empty anchor 18,186 kg
         WingAreaM2: 52.49, // 565 sq ft (measured)
         ThrustMaxN: 185_934.0, // 2 × 20,900 lbf SLS afterburning (measured)
-        CD0: 0.020, InducedK: 0.048, CLMax: 1.45, CLMin: -0.70, // SURROGATE polar fit
+        // The checked-in baseline is wings-forward. AircraftSim derives the live polar from the
+        // authority-owned span: sweep reduces lift slope / CLmax, raises induced drag, and delays
+        // the transonic rise. These are explicit reduced-order handling effects, not an OEM deck.
+        CD0: 0.020, InducedK: 0.040, CLMax: 1.55, CLMin: -0.70, // SURROGATE polar fit
         RollRateMaxRad: 2.2, BankTau: 0.26,
-        MCrit: 0.92, WaveDragK: 75.0,
+        MCrit: 0.80, WaveDragK: 36.0, WaveDragPeakMach: 1.15,
+        HighMachDragOnset: 2.05, HighMachDragK: 2.4,
         SpoolUpTau: 1.6, SpoolDownTau: 0.9,
-        CLAlpha: 4.6,
+        CLAlpha: 5.2,
         IxxKgM2: 75_000.0, IyyKgM2: 295_000.0, IzzKgM2: 345_000.0, // SURROGATE inertias
         RollStiffnessNmRad: 1_050_000.0, PitchStiffnessNmRad: 2_750_000.0,
         YawStiffnessNmRad: 880_000.0,
@@ -1108,7 +1127,7 @@ public static class FlightModel {
         AbsolutePositiveLoadFactorG: 11.0, // PROVISIONAL achieved-load guard; structure still ages >7.5
         MaxThrustFraction: 1.0,
         HighLiftDragOnsetFraction: 0.90, HighLiftDragK: 3.0,
-        WingSpanM: 15.5, // reference span; session authority applies the live 20-68 deg sweep
+        WingSpanM: 19.53, // 64 ft 1 in wings-forward; live sweep reaches 38 ft 2 in
         PropulsionModel: PropulsionModelKind.AfterburningTurbofanPublicDataSurrogate,
         FuelFreeMassKg: 18_186.0, // 40,100 lb empty (measured, Navy museum canonical)
         GenericIdleFuelFlowLbPerMinute: 35.0,

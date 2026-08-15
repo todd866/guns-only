@@ -139,6 +139,10 @@ public sealed record ScriptedInterceptConfig(
     /// </summary>
     bool DeterministicSwarmWipe = false,
     RapierJobKind Job = RapierJobKind.FormationIntercept,
+    /// <summary>Range at which a balloon-mine payload detects the inbound interceptor.</summary>
+    double BalloonReactionRangeM = 0.0,
+    /// <summary>Time from detection to lethal payload deployment.</summary>
+    double BalloonReactionDelaySeconds = 0.0,
     /// <summary>
     /// Optional casualty injected on entry to the first ballistic coast. Mission-computer loss
     /// leaves the digital flight-control/RCS path intact for manual flight. Losing every
@@ -1401,6 +1405,7 @@ public sealed class RapierMissionDirector {
         double homeRangeM = (home - player.Position).Length;
         string jobToken = JobToken(job);
         bool balloonApexProfile = zoomLobProfile && job == RapierJobKind.Balloon;
+        bool balloonGalleryProfile = !zoomLobProfile && job == RapierJobKind.Balloon;
         GunBallisticSolution balloonGunSolution = balloonApexProfile
             ? GunKill.EvaluateBallisticLead(
                 player,
@@ -1484,6 +1489,17 @@ public sealed class RapierMissionDirector {
                 EnterPhase(RapierMissionPhase.ReturnToBase, "no_opponents_rtb");
         } else if (catapultActive) {
             EnterPhase(RapierMissionPhase.Launch, "catapult_active");
+        } else if (balloonGalleryProfile) {
+            // The production gallery is a conventional manually flown intercept, not the retired
+            // M4.2 zoom-lob demonstration. Establish a useful gun lane below the balloons, then
+            // hold the live contact as each surviving formation member is promoted.
+            double galleryAltitudeErrorM = contact.Position.Y - player.Position.Y;
+            if (galleryAltitudeErrorM > 600.0)
+                EnterPhase(RapierMissionPhase.Climb, "balloon_gallery_climb");
+            else if (contactRangeM <= 6_000.0)
+                EnterPhase(RapierMissionPhase.Attack, "balloon_gallery_gun_range");
+            else
+                EnterPhase(RapierMissionPhase.Intercept, "balloon_gallery_join");
         } else if ((int)_phase < (int)RapierMissionPhase.Attack) {
             bool inZoomPhases = (int)_phase >= (int)RapierMissionPhase.ZoomPull
                 && (int)_phase <= (int)RapierMissionPhase.DipRelight;
@@ -1594,12 +1610,16 @@ public sealed class RapierMissionDirector {
                         gateInVolume && gateEnergyOk ? "GATE OPEN"
                             : gateInVolume ? "GATE · ENERGY" : "LAUNCH");
                 } else {
-                    targetMach = 0.9;
-                    targetAltitudeFt = ClimbTopM * FeetPerMetre;
+                    targetMach = balloonGalleryProfile ? 1.80 : 0.9;
+                    targetAltitudeFt = balloonGalleryProfile
+                        ? Math.Max(home.Y + 1_500.0, contact.Position.Y - 150.0) * FeetPerMetre
+                        : ClimbTopM * FeetPerMetre;
                     targetGamma = player.Gamma;
-                    throttle = profileMaximumLever;
+                    throttle = balloonGalleryProfile ? 1.0 : profileMaximumLever;
                     waypoint = guidedContactWaypoint;
-                    cue = balloonApexProfile
+                    cue = balloonGalleryProfile
+                        ? "LAUNCH · FLY THE AMBER INTERCEPT PATH"
+                        : balloonApexProfile
                         ? "LAUNCH · FULL POWER · BUILD ENERGY"
                         : "AUTO LAUNCH · TRACK OWNS THE AIRCRAFT";
                 }
@@ -1645,6 +1665,23 @@ public sealed class RapierMissionDirector {
                         : departKtas < fdTargetKtas - 25.0 ? "ADD POWER" : "ON SPEED";
                     cue = PatternLegConfigCue(
                         "DEPART", fdTargetKtas, targetAltitudeFt, departSpeedCall);
+                } else if (balloonGalleryProfile) {
+                    double galleryLaneM = Math.Max(home.Y + 1_500.0,
+                        contact.Position.Y - 150.0);
+                    targetMach = 1.80;
+                    targetAltitudeFt = galleryLaneM * FeetPerMetre;
+                    targetGamma = AltitudeCaptureGamma(
+                        galleryLaneM,
+                        player,
+                        trueAirspeedMps,
+                        captureSeconds: 35.0,
+                        minimumGamma: -0.03,
+                        maximumGamma: 0.30);
+                    throttle = ThrottleForMach(targetMach, mach,
+                        trimLever: 0.84, gain: 0.90, maximumLever: 1.05);
+                    waypoint = guidedContactWaypoint;
+                    cue = $"INTERCEPT PATH · CLIMB FL{targetAltitudeFt / 100.0:F0} · "
+                        + $"{contactRangeM / 1852.0:F0} NM";
                 } else {
                     // The climb rides the same constant-q schedule the acceleration does, so the
                     // two are one continuous profile rather than a climb followed by a separate
@@ -1799,17 +1836,22 @@ public sealed class RapierMissionDirector {
                         + $"FL{player.Position.Y * FeetPerMetre / 100.0:F0}";
                 break;
             case RapierMissionPhase.Intercept:
-                targetMach = balloonApexProfile ? BalloonDesignDashMach : MeasuredDashMach;
-                double interceptAltitudeM = balloonApexProfile
-                    ? ReachFightDirector.BalloonDashAltitudeM : CruiseAltitudeM;
+                targetMach = balloonGalleryProfile ? 2.00
+                    : balloonApexProfile ? BalloonDesignDashMach : MeasuredDashMach;
+                double interceptAltitudeM = balloonGalleryProfile
+                    ? Math.Max(home.Y + 1_500.0, contact.Position.Y - 150.0)
+                    : balloonApexProfile
+                        ? ReachFightDirector.BalloonDashAltitudeM : CruiseAltitudeM;
                 targetAltitudeFt = interceptAltitudeM * FeetPerMetre;
                 targetGamma = AltitudeCaptureGamma(interceptAltitudeM, player,
                     trueAirspeedMps, captureSeconds: 120.0,
                     minimumGamma: -0.040, maximumGamma: 0.040);
                 throttle = ThrottleForMach(Math.Min(targetMach, envelopeMachLimit), mach,
-                    trimLever: balloonApexProfile ? BalloonRamTrimLever : 1.08,
-                    gain: balloonApexProfile ? BalloonRamMachGain : 0.42,
-                    maximumLever: profileMaximumLever);
+                    trimLever: balloonGalleryProfile ? 0.90
+                        : balloonApexProfile ? BalloonRamTrimLever : 1.08,
+                    gain: balloonGalleryProfile ? 0.80
+                        : balloonApexProfile ? BalloonRamMachGain : 0.42,
+                    maximumLever: balloonGalleryProfile ? 1.05 : profileMaximumLever);
                 waypoint = guidedContactWaypoint;
                 string eta = double.IsFinite(interceptEtaSeconds)
                     ? $"{Math.Floor(interceptEtaSeconds / 60.0):F0}:"
@@ -1819,7 +1861,10 @@ public sealed class RapierMissionDirector {
                 string thermalCap = envelopeMachLimit + 0.05 < targetMach
                     ? $" · {(structuralMachLimit < skinMachLimit ? "Q" : "THERM")} CAP M{envelopeMachLimit:F1}"
                     : "";
-                cue = balloonApexProfile
+                cue = balloonGalleryProfile
+                    ? $"BALLOON GALLERY · {liveOpponentCount} LEFT · "
+                        + $"{contactRangeM / 1852.0:F1} NM · FLY THE PATH"
+                    : balloonApexProfile
                     ? $"DASH M{BalloonDesignDashMach:F1} · 24 KM SHELF · "
                         + $"{qPa / 1000.0:F0} KPA · {contactRangeM / 1000.0:F0} KM"
                     : $"AUTO INTERCEPT · {contactRangeM / 1000.0:F0} KM · "
@@ -1851,15 +1896,23 @@ public sealed class RapierMissionDirector {
                     cue = $"SWARM RELEASE · {liveOpponentCount} CONTACTS · "
                         + "PRESS F · HIGH PASS · DO NOT FOLLOW DOWN";
                 } else if (job == RapierJobKind.Balloon) {
-                    targetMach = 0.0;
-                    targetAltitudeFt = contact.Position.Y * FeetPerMetre;
-                    targetGamma = AltitudeCaptureGamma(contact.Position.Y,
+                    double gunLaneM = balloonGalleryProfile
+                        ? contact.Position.Y - 150.0 : contact.Position.Y;
+                    targetMach = balloonGalleryProfile ? 1.50 : 0.0;
+                    targetAltitudeFt = gunLaneM * FeetPerMetre;
+                    targetGamma = AltitudeCaptureGamma(gunLaneM,
                         player, trueAirspeedMps, captureSeconds: 10.0,
                         minimumGamma: -0.20, maximumGamma: 0.20);
                     // The zoom already bought the closure. Adding power here only shortens the
                     // sight picture and encourages a chase after the finite apex pass.
-                    throttle = 0.0;
-                    cue = $"BALLOON · GUNS · ONE PASS · {contactRangeM / 1000.0:F1} KM";
+                    throttle = balloonGalleryProfile
+                        ? ThrottleForMach(targetMach, mach,
+                            trimLever: 0.80, gain: 0.75, maximumLever: 0.95)
+                        : 0.0;
+                    cue = balloonGalleryProfile
+                        ? $"BALLOON {Math.Max(1, liveOpponentCount)} · GUNS · "
+                            + $"{contactRangeM / 1852.0:F1} NM"
+                        : $"BALLOON · GUNS · ONE PASS · {contactRangeM / 1000.0:F1} KM";
                 } else {
                     targetMach = 3.2;
                     targetAltitudeFt = (contact.Position.Y + 600.0) * FeetPerMetre;
@@ -1887,6 +1940,9 @@ public sealed class RapierMissionDirector {
                 cue = _phaseReason == "gun_drone_away"
                     ? "GUN-DRONE AWAY · EGRESS HOME · "
                         + $"DASH M{Math.Min(MeasuredDashMach, skinMachLimit):F1}"
+                    : balloonGalleryProfile
+                    ? $"LETHAL DRONES DEPLOYED · BREAK CONTACT · {pursuerCount} IN TRAIL · "
+                        + $"{pursuitRangeM / 1000.0:F0} KM SEPARATION"
                     : $"FORMATION DESTROYED · EGRESS HOME · {pursuerCount} PURSUERS · "
                         + $"{pursuitRangeM / 1000.0:F0} KM SEPARATION · "
                         + $"DASH M{Math.Min(MeasuredDashMach, skinMachLimit):F1}";

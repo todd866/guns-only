@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  approachJoinGuidanceGates,
   createGuidancePath,
   gateToScenePosition,
   GUIDANCE_PATH_DEFAULTS,
@@ -161,6 +162,8 @@ test("direct RTB builds a bounded golden breadcrumb corridor to published Home P
   assert.equal(path.update(state), gates.length);
   assert.equal(path.object3d.visible, true);
   assert.equal(path.object3d.userData.mode, "rtb");
+  assert.equal(path.object3d.userData.drawnGateCount, gates.length);
+  assert.equal(path.object3d.userData.suppressionReason, null);
   const first = path.object3d.children[0];
   first.onBeforeRender();
   assert.equal(first.userData.guidanceStyle, "rtb-chevron");
@@ -172,6 +175,87 @@ test("direct RTB builds a bounded golden breadcrumb corridor to published Home P
     GUIDANCE_PATH_DEFAULTS.rtbActiveColor);
   assert.equal(first.material.uniforms.uOpacity.value,
     GUIDANCE_PATH_DEFAULTS.rtbActiveOpacity);
+});
+
+test("Rapier balloon gallery draws the outbound intercept highway before RTB", () => {
+  const state = {
+    px: 0,
+    py: 600,
+    pz: 0,
+    bandit_alive: true,
+    rapier_mission_available: true,
+    rapier_pattern_only: false,
+    rapier_job: "BALLOON",
+    rapier_zoom_lob: false,
+    rapier_mission_phase: 2,
+    rapier_guidance_x: -65_000,
+    rapier_guidance_y: 6_865,
+    rapier_guidance_z: 0,
+  };
+  const gates = rtbGuidanceGates(state);
+  assert.ok(gates.length >= 3);
+  assert.equal(gates.every((gate) => gate.intercept === true), true);
+  assert.ok(gates[0].eastM < 0, "the first chevron points west toward the gallery");
+
+  const path = createGuidancePath(THREE);
+  assert.equal(path.update(state), gates.length);
+  assert.equal(path.object3d.userData.mode, "intercept");
+  assert.equal(path.object3d.children[0].userData.guidanceStyle, "intercept-chevron");
+});
+
+test("an active Case I gate gets a visible conformal join corridor", () => {
+  const state = {
+    px: 0,
+    py: 1_200,
+    pz: 0,
+    approach_guidance_active: true,
+    approach_gate_count: 2,
+    approach_gates: approachGates,
+  };
+  const authored = [
+    { id: "initial", eastM: 5_500, northM: 800, upM: 244, halfM: 450, active: true },
+    { id: "break", eastM: 6_200, northM: 900, upM: 244, halfM: 350, active: false },
+  ];
+  const join = approachJoinGuidanceGates(state, authored);
+  assert.ok(join.length >= 3);
+  assert.equal(join.every((gate) => gate.rtb === true && gate.join === true), true);
+  assert.ok(join[0].eastM > state.px, "the first chevron starts ahead toward INITIAL");
+  assert.ok(join.at(-1).eastM < authored[0].eastM,
+    "the chevron chain hands off before the authored gate instead of duplicating it");
+
+  const path = createGuidancePath(THREE);
+  const drawn = path.update(state);
+  assert.ok(drawn > approachGates.length, "join chevrons and authored gates are both drawn");
+  assert.equal(path.object3d.userData.mode, "approach-join");
+  assert.equal(path.object3d.userData.drawnGateCount, drawn);
+  assert.ok(path.object3d.userData.joinGateCount >= 3);
+  assert.equal(path.object3d.children[0].userData.guidanceStyle, "rtb-chevron");
+});
+
+test("join chevrons never starve authored procedure gates from the mesh budget", () => {
+  const authored = Array.from({ length: 20 }, (_, index) => ({
+    east_m: 4_000 + index * 100,
+    north_m: 500 + index * 20,
+    up_m: 250 - index * 2,
+    half_m: 300,
+    target_ktas: 250 - index,
+    dirty: false,
+    active: index === 0,
+  }));
+  const path = createGuidancePath(THREE);
+  const drawn = path.update({
+    px: 0, py: 1_200, pz: 0,
+    approach_guidance_active: true,
+    approach_gate_count: authored.length,
+    approach_gates: authored,
+  });
+  assert.equal(drawn, GUIDANCE_PATH_DEFAULTS.maxGates);
+  assert.equal(path.object3d.userData.joinGateCount, 4,
+    "only spare slots may be used for join chevrons");
+  const visible = path.object3d.children.filter((mesh) => mesh.visible);
+  const finalAuthored = authored.at(-1);
+  assert.equal(visible.at(-1).position.x, finalAuthored.east_m);
+  assert.equal(visible.at(-1).position.z, -finalAuthored.north_m);
 });
 
 test("carrier return follows the authority's current route fix, not generic Home Plate", () => {
@@ -309,6 +393,8 @@ test("an active approach with an empty frame hides instead of flashing coarse RT
     mesh_home_north_m: 0,
   }), 0);
   assert.equal(path.object3d.visible, false);
+  assert.equal(path.object3d.userData.drawnGateCount, 0);
+  assert.equal(path.object3d.userData.suppressionReason, "approach-empty");
 });
 
 test("approach ownership invalidates a same-bucket RTB breadcrumb cache", () => {
@@ -409,4 +495,6 @@ test("production updates and disposes shared guidance outside the CASEVAC-only b
     "fixed-wing guidance must never be trapped in CASEVAC again");
   assert.match(appSource, /async dispose\(\) \{[\s\S]*?this\.guidancePath\?\.dispose\(\);/,
     "the shared guidance graph is released with the scene");
+  assert.match(appSource, /presentation_guidance_drawn_gates/,
+    "telemetry records what the scene actually drew, not only authority intent");
 });

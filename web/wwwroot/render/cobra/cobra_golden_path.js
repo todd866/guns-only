@@ -23,8 +23,8 @@
  */
 
 /** Presentation contract id, in the house `guns-only.<thing>.vN` form. */
-import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=331";
-import { emberRtbVisualState } from "./cobra_ember_path.js?v=331";
+import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=333";
+import { emberRtbVisualState } from "./cobra_ember_path.js?v=333";
 
 export const COBRA_GOLDEN_PATH_SCHEMA = "guns-only.cobra-golden-path.v2";
 
@@ -144,8 +144,12 @@ function cobraRouteGateObjective(pathGates, missionAct) {
   const gate = gates[index];
   const eastM = Number(gate?.east_m);
   const northM = Number(gate?.north_m);
+  const routePoints = gates.slice(index, index + 4).map((candidate) => ({
+    eastM: Number(candidate?.east_m),
+    northM: Number(candidate?.north_m),
+  })).filter((point) => Number.isFinite(point.eastM) && Number.isFinite(point.northM));
   return index >= 0 && Number.isFinite(eastM) && Number.isFinite(northM)
-    ? { siteId: `ember-route-gate-${index}`, eastM, northM, mode: "route" }
+    ? { siteId: `ember-route-gate-${index}`, eastM, northM, mode: "route", routePoints }
     : null;
 }
 
@@ -301,6 +305,8 @@ export function createCobraGoldenPath(THREE, options = {}) {
   const spineEast = new Float64Array(markerCount);
   const spineNorth = new Float64Array(markerCount);
   const spineUp = new Float64Array(markerCount);
+  const spineTangentEast = new Float64Array(markerCount);
+  const spineTangentNorth = new Float64Array(markerCount);
 
   let lastObjectiveId = null;
   let lastObjectiveEastM = Number.NaN;
@@ -358,12 +364,38 @@ export function createCobraGoldenPath(THREE, options = {}) {
   }
 
   function rebuild(objective, playerEastM, playerNorthM, playerAltitudeM, groundHeightAt, recoveryVisual) {
-    const toEastM = objective.eastM - playerEastM;
-    const toNorthM = objective.northM - playerNorthM;
-    const rangeM = Math.hypot(toEastM, toNorthM);
-    if (!(rangeM > 1e-3)) return false;
-    const dirEast = toEastM / rangeM;
-    const dirNorth = toNorthM / rangeM;
+    const authored = Array.isArray(objective.routePoints) && objective.routePoints.length
+      ? objective.routePoints
+      : [objective];
+    const points = [{ eastM: playerEastM, northM: playerNorthM }];
+    for (const point of authored) {
+      const eastM = Number(point?.eastM);
+      const northM = Number(point?.northM);
+      if (!Number.isFinite(eastM) || !Number.isFinite(northM)) continue;
+      const previous = points[points.length - 1];
+      if (Math.hypot(eastM - previous.eastM, northM - previous.northM) > 1)
+        points.push({ eastM, northM });
+    }
+    if (points.length < 2) return false;
+    const segments = [];
+    let rangeM = 0;
+    for (let index = 1; index < points.length; index += 1) {
+      const from = points[index - 1];
+      const to = points[index];
+      const deltaEast = to.eastM - from.eastM;
+      const deltaNorth = to.northM - from.northM;
+      const lengthM = Math.hypot(deltaEast, deltaNorth);
+      if (!(lengthM > 1e-3)) continue;
+      segments.push({
+        from,
+        lengthM,
+        startM: rangeM,
+        dirEast: deltaEast / lengthM,
+        dirNorth: deltaNorth / lengthM,
+      });
+      rangeM += lengthM;
+    }
+    if (!segments.length) return false;
     const leadM = Math.min(config.leadM, rangeM * 0.5);
     const markerReachM = config.markerHalfWidthM;
     const drawnM = Math.min(
@@ -394,14 +426,33 @@ export function createCobraGoldenPath(THREE, options = {}) {
       ? Number(recoveryVisual.halfWidthM)
       : config.markerHalfWidthM;
     group.userData.markerHalfWidthM = markerHalfWidthM;
-    const perpEast = -dirNorth;
-    const perpNorth = dirEast;
+    const sampleRoute = (distanceM) => {
+      const clamped = Math.max(0, Math.min(rangeM, distanceM));
+      let segment = segments[segments.length - 1];
+      for (const candidate of segments) {
+        if (clamped <= candidate.startM + candidate.lengthM) {
+          segment = candidate;
+          break;
+        }
+      }
+      const alongM = Math.max(0, Math.min(segment.lengthM, clamped - segment.startM));
+      return {
+        eastM: segment.from.eastM + segment.dirEast * alongM,
+        northM: segment.from.northM + segment.dirNorth * alongM,
+        dirEast: segment.dirEast,
+        dirNorth: segment.dirNorth,
+      };
+    };
     for (let marker = 0; marker < activeMarkerCount; marker += 1) {
       const distanceM = leadM + markerStepM * marker;
-      const eastM = playerEastM + dirEast * distanceM;
-      const northM = playerNorthM + dirNorth * distanceM;
+      const route = sampleRoute(distanceM);
+      const { eastM, northM } = route;
+      const perpEast = -route.dirNorth;
+      const perpNorth = route.dirEast;
       spineEast[marker] = eastM;
       spineNorth[marker] = northM;
+      spineTangentEast[marker] = route.dirEast;
+      spineTangentNorth[marker] = route.dirNorth;
       const groundM = Math.max(
         at(eastM, northM),
         at(eastM + perpEast * markerHalfWidthM,
@@ -420,8 +471,6 @@ export function createCobraGoldenPath(THREE, options = {}) {
       spineUp[marker] = Math.max(spineUp[marker], spineUp[marker + 1] - maxDropM);
     }
 
-    const perpX = -dirNorth;
-    const perpZ = -dirEast;
     for (let marker = 0; marker < markerCount; marker += 1) {
       const activeMarker = Math.min(marker, activeMarkerCount - 1);
       const phase = marker < activeMarkerCount ? marker / activeMarkerCount : 1;
@@ -443,6 +492,8 @@ export function createCobraGoldenPath(THREE, options = {}) {
       }
       const centerX = spineEast[marker];
       const centerZ = -spineNorth[marker];
+      const perpX = -spineTangentNorth[marker];
+      const perpZ = -spineTangentEast[marker];
       const leftX = centerX + perpX * markerHalfWidthM;
       const leftZ = centerZ + perpZ * markerHalfWidthM;
       const rightX = centerX - perpX * markerHalfWidthM;
@@ -469,6 +520,7 @@ export function createCobraGoldenPath(THREE, options = {}) {
     geometry.computeBoundingSphere?.();
     group.userData.rebuildCount += 1;
     group.userData.activeMarkerCount = activeMarkerCount;
+    group.userData.routePointCount = points.length - 1;
     lastObjectiveId = objective.siteId;
     lastObjectiveEastM = objective.eastM;
     lastObjectiveNorthM = objective.northM;
