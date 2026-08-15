@@ -252,7 +252,7 @@ public sealed class CombatHandoffTests {
         Assert.True(session.ApproachGuidancePlan.GuidanceActive);
         Assert.DoesNotContain("RELIEF", session.TransitionCue,
             StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("HOME CORRIDOR", session.TransitionCue,
+        Assert.Contains("RTB CARRIER", session.TransitionCue,
             StringComparison.OrdinalIgnoreCase);
     }
 

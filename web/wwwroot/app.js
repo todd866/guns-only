@@ -99,8 +99,10 @@ import {
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
+  carrierRecoveryLesson,
   formatWholeLb,
   procedureLabelFromState,
+  topGunNavDecision,
 } from "./render/nav/mesh_nd_chrome.js";
 import {
   applyLookDelta,
@@ -501,8 +503,6 @@ const readyConfigLabel = document.querySelector("#ready-config-label");
 const readyControls = document.querySelector("#ready-controls");
 const readyDeckConfig = document.querySelector("#ready-deck-config");
 const readyDeckButtons = [...document.querySelectorAll("[data-deck-configuration]")];
-const readyTopGunSeat = document.querySelector("#ready-top-gun-seat");
-const readyTopGunSeatButtons = [...document.querySelectorAll("[data-top-gun-seat]")];
 const readyTopGunPicker = document.querySelector('[data-program-node="top-gun"]');
 const readyCircuitsPreflight = document.querySelector("#ready-circuits-preflight");
 const readyCircuitsLegs = document.querySelector("#ready-circuits-legs");
@@ -575,6 +575,7 @@ const navUi = navConsole ? bindNavNdChrome(document) : null;
 let meshNavMap = null;
 let meshNdFollow = true;
 let meshNdTourArm = false;
+let topGunPostKillChoiceVisible = false;
 function ensureMeshNavMap(bridgeRef) {
   if (meshNavMap || !navMeshMapCanvas) return meshNavMap;
   meshNavMap = createMeshNavMap(navMeshMapCanvas, {
@@ -684,7 +685,9 @@ function updateNavConsole(state) {
   );
   const route = selected?.source === "route" ? selected.presentation : null;
   const selectedMesh = selected?.source === "mesh" ? selected.presentation : null;
-  const relevant = selected !== null;
+  const decision = topGunNavDecision(state);
+  const recoveryLesson = carrierRecoveryLesson(state);
+  const relevant = selected !== null || decision !== null || recoveryLesson !== null;
   navConsole.hidden = !relevant;
   if (!relevant) {
     if (navConsole.open) navConsole.open = false;
@@ -696,6 +699,30 @@ function updateNavConsole(state) {
     node.textContent = textValue;
     node.dataset.state = condition;
   };
+  if (navUi.decision) navUi.decision.hidden = decision === null;
+  if (navUi.recoveryLesson) navUi.recoveryLesson.hidden = recoveryLesson === null;
+  if (recoveryLesson) {
+    navUi.recoveryStep.textContent = recoveryLesson.step;
+    navUi.recoveryTitle.textContent = recoveryLesson.title;
+    navUi.recoveryTargets.textContent = recoveryLesson.targets;
+    navUi.recoveryAction.textContent = recoveryLesson.action;
+  }
+  if (decision) {
+    navUi.decision.dataset.mode = decision.mode;
+    navUi.decisionKicker.textContent = decision.kicker;
+    navUi.decisionTitle.textContent = decision.title;
+    navUi.decisionDetail.textContent = decision.detail;
+    navUi.rtbAction.textContent = decision.action;
+    navUi.rtbAction.disabled = pauseReasons.size > 0;
+    const postKillChoice = decision.mode === "post-kill";
+    if (postKillChoice && !topGunPostKillChoiceVisible) {
+      navConsole.open = true;
+      syncNavConsoleDisclosure();
+    }
+    topGunPostKillChoiceVisible = postKillChoice;
+  } else {
+    topGunPostKillChoiceVisible = false;
+  }
   const num = (key) => {
     const value = state?.[key];
     if (value === null || value === undefined || value === "") return null;
@@ -719,7 +746,9 @@ function updateNavConsole(state) {
     ? state.recovery_display_name.trim().toUpperCase()
     : state?.rapier_mission_available === true
       ? "DISPERSED STRIP · HOME" : "RECOVERY POINT · HOME";
-  const destinationName = route
+  const destinationName = recoveryLesson
+    ? `CASE I · ${recoveryLesson.shortLabel}`
+    : route
     ? (route.phaseLabel === route.fixLabel
       ? route.fixLabel : `${route.phaseLabel} · ${route.fixLabel}`)
     : selectedMesh
@@ -727,9 +756,25 @@ function updateNavConsole(state) {
     : (patternOnly && legLabel ? `CIRCUITS · ${legLabel}` : recoveryName);
   set(navUi.destination, destinationName, "nominal");
 
-  const bearingDeg = route?.bearingDeg ?? selectedMesh?.bearingDeg ?? home.bearingDeg;
-  const rangeNm = route?.rangeNm ?? selectedMesh?.rangeNm ?? home.rangeNm;
-  const turnDeg = route?.turnDeg ?? selectedMesh?.turnDeg ?? home.turnDeg;
+  const patternGate = recoveryLesson && Array.isArray(state?.approach_gates)
+    ? state.approach_gates[0] : null;
+  const patternEastM = Number(patternGate?.east_m);
+  const patternNorthM = Number(patternGate?.north_m);
+  const ownshipEastM = num("px") ?? 0;
+  const ownshipNorthM = num("pz") ?? 0;
+  const displayHeadingRad = num("heading") ?? ((num("hdg_deg") ?? 0) * Math.PI / 180);
+  const patternBearingRad = Number.isFinite(patternEastM) && Number.isFinite(patternNorthM)
+    ? Math.atan2(patternEastM - ownshipEastM, patternNorthM - ownshipNorthM) : null;
+  const patternBearingDeg = patternBearingRad === null ? null
+    : ((patternBearingRad * 180 / Math.PI) % 360 + 360) % 360;
+  const patternRangeNm = patternBearingRad === null ? null
+    : Math.hypot(patternEastM - ownshipEastM, patternNorthM - ownshipNorthM) / 1852;
+  const patternTurnDeg = patternBearingRad === null ? null
+    : Math.atan2(Math.sin(patternBearingRad - displayHeadingRad),
+      Math.cos(patternBearingRad - displayHeadingRad)) * 180 / Math.PI;
+  const bearingDeg = patternBearingDeg ?? route?.bearingDeg ?? selectedMesh?.bearingDeg ?? home.bearingDeg;
+  const rangeNm = patternRangeNm ?? route?.rangeNm ?? selectedMesh?.rangeNm ?? home.rangeNm;
+  const turnDeg = patternTurnDeg ?? route?.turnDeg ?? selectedMesh?.turnDeg ?? home.turnDeg;
   // No browser-side ETA is inferred for an authored carrier fix. Home/Mesh travel state belongs
   // to those sources and must not leak an ARRIVED/AWAY label under route-owned geometry.
   const etaMinutes = route ? null : selectedMesh?.etaMinutes ?? home.etaMinutes;
@@ -843,18 +888,42 @@ function updateNavConsole(state) {
       headingRad,
       places: parseMeshPlaceCatalog(state),
       activePlaceId: route ? null : selectedMesh?.placeId ?? null,
-      activeEastM: route?.target.eastM ?? num("mesh_active_east_m"),
-      activeNorthM: route?.target.northM ?? num("mesh_active_north_m"),
+      activeEastM: patternBearingRad !== null ? patternEastM : route?.target.eastM ?? num("mesh_active_east_m"),
+      activeNorthM: patternBearingRad !== null ? patternNorthM : route?.target.northM ?? num("mesh_active_north_m"),
       transitMode: selectedMesh?.transitMode
         ?? (typeof state?.mesh_transit_mode === "string" ? state.mesh_transit_mode : "mission_gated"),
       follow: meshNdFollow,
       tourStops: parseMeshTour(state),
-      procedureGates: parseRecoveryGates(state),
+      procedureGates: recoveryLesson && Array.isArray(state?.approach_gates)
+        ? state.approach_gates.filter((gate) => Number.isFinite(Number(gate?.east_m))
+          && Number.isFinite(Number(gate?.north_m))).map((gate) => ({
+            eastM: Number(gate.east_m),
+            northM: Number(gate.north_m),
+            active: gate.active === true,
+          }))
+        : parseRecoveryGates(state),
     });
   }
 
   navConsole.dataset.relevance = "navigation";
 }
+
+function requestCombatHandoffFromNav() {
+  const decision = topGunNavDecision(latestState);
+  if (!bridge || !knockItOffControl || !decision || pauseReasons.size > 0) return false;
+  const code = playerSettings.bindings.knockItOff || knockItOffControl.defaultCode;
+  if (!pressMappedKey(code, "nav-rtb", knockItOffControl.gkey)) return false;
+  releaseMappedKey(code, "nav-rtb");
+  if (navUi?.rtbAction) navUi.rtbAction.disabled = true;
+  if (viewStatus) viewStatus.textContent = decision.mode === "post-kill"
+    ? "RTB selected · carrier approach loading"
+    : "RTB selected · relief inbound · carrier approach loading";
+  recorder.event("combat-handoff", "requested", { source: "navigation-button" });
+  sceneCanvas.focus({ preventScroll: true });
+  return true;
+}
+
+navUi?.rtbAction?.addEventListener("click", requestCombatHandoffFromNav);
 
 
 function bindCircuitsSystemsActions() {
@@ -2729,8 +2798,8 @@ let selectedBeat = Number.isInteger(initialProgramNode.mission)
   ? initialProgramNode.mission
   : defaultProgramNode.mission;
 const TOP_GUN_PROGRAM_ID = "top-gun";
-const TOP_GUN_SEAT = Object.freeze({ F14A: 0, MIG28: 1 });
-let selectedTopGunSeat = TOP_GUN_SEAT.F14A;
+const TOP_GUN_SEAT = Object.freeze({ F14A: 0 });
+const selectedTopGunSeat = TOP_GUN_SEAT.F14A;
 let selectedDeckConfiguration = 1;
 // Null means no bridge authority has been staged in this page lifetime yet. Once staged, this is
 // the only browser-side identity consulted for restart/restage decisions.
@@ -3461,9 +3530,9 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     kicker: "1986 · training range",
     title: "Top Gun",
     sortie: "F-14A vs MiG-28 · guns and Sidewinders · DACT arena",
-    configuration: "F-14A or MiG-28 seat · M61 + AIM-9 · anime-1986 presentation",
-    brief: "Tomcat or aggressor MiG-28 over a Miramar-class training range—guns and heaters, one-on-one ACM. Pick your seat, launch, then fight.",
-    controls: "Arrows fly · W/S power · F guns · R fox-two · V padlock · Tab target",
+     configuration: "F-14A · M61 + AIM-9 · anime-1986 presentation · preview with ?preview=1",
+     brief: "Fly the Tomcat against MiG-28 aggressors over a Miramar-class training range—guns and heaters against an escalating stream. After a splash, stay for the next jet or choose RTB TO CARRIER, then fly the taught Case I pattern: initial, break, downwind, approach turn and groove.",
+     controls: "Arrows fly · W/S power · F guns · R fox-two · V padlock · Tab target\nNavigation opens after a splash with the carrier RTB choice",
   }),
   "ace-duel": Object.freeze({
     kicker: "Raptor programme · final exam",
@@ -3479,12 +3548,12 @@ function isTopGunProgram(programId = selectedProgramNodeId) {
   return programId === TOP_GUN_PROGRAM_ID;
 }
 
-function topGunSeatLabel(seat = selectedTopGunSeat) {
-  return seat === TOP_GUN_SEAT.MIG28 ? "MiG-28" : "F-14A";
+function topGunSeatLabel() {
+  return "F-14A";
 }
 
-function topGunSeatAircraftArt(seat = selectedTopGunSeat) {
-  return seat === TOP_GUN_SEAT.MIG28 ? "mig-28" : "f14";
+function topGunSeatAircraftArt() {
+  return "f14";
 }
 
 function isTopGunBeatStaged(state = latestState) {
@@ -4304,12 +4373,6 @@ function renderCampaignProgress() {
       ? "" : experienceById(nodeId)?.releaseState ?? "unavailable";
   }
   if (readyDeckConfig) readyDeckConfig.hidden = true;
-  if (readyTopGunSeat) readyTopGunSeat.hidden = !(selectedProgramNodeId === TOP_GUN_PROGRAM_ID);
-  for (const button of readyTopGunSeatButtons) {
-    button.setAttribute("aria-pressed", String(
-      Number(button.dataset.topGunSeat) === selectedTopGunSeat,
-    ));
-  }
   updateTopGunPickerArt();
   renderCircuitsPreflight(missionBrief());
   for (const button of readyDeckButtons) {
@@ -4509,7 +4572,6 @@ function renderPauseUi(state = latestState) {
   }
   if (readySelector) readySelector.hidden = !ready;
   if (readyDeckConfig && !ready) readyDeckConfig.hidden = true;
-  if (readyTopGunSeat && !ready) readyTopGunSeat.hidden = true;
   if (readyCircuitsPreflight && !ready) readyCircuitsPreflight.hidden = true;
   if (ready) renderCampaignProgress();
   readyCasevacRouteBriefing.update({
@@ -5382,27 +5444,6 @@ function selectDeckConfiguration(value) {
   return true;
 }
 
-function selectTopGunSeat(value) {
-  if (!isTopGunProgram() || !pauseReasons.has("ready")) return false;
-  const seat = Number(value) === TOP_GUN_SEAT.MIG28
-    ? TOP_GUN_SEAT.MIG28 : TOP_GUN_SEAT.F14A;
-  if (seat === selectedTopGunSeat) return false;
-  selectedTopGunSeat = seat;
-  recorder.event("ui", "top_gun_seat_previewed", {
-    program: TOP_GUN_PROGRAM_ID,
-    top_gun_seat: topGunSeatLabel(seat),
-  });
-  if (bridge && !sameMissionAuthority(
-    stagedMissionAuthority,
-    topGunMissionAuthority(selectedTopGunSeat),
-  )) {
-    enterReady({ resetBridge: true, focus: false });
-  } else {
-    renderPauseUi();
-  }
-  return true;
-}
-
 function toggleDeckAndReady() {
   selectDeckConfiguration(selectedDeckConfiguration === 1 ? 0 : 1);
 }
@@ -5518,11 +5559,6 @@ readySelector?.addEventListener("click", (event) => {
 readyDeckConfig?.addEventListener("click", (event) => {
   const button = event.target.closest("[data-deck-configuration]");
   if (button) selectDeckConfiguration(Number(button.dataset.deckConfiguration));
-});
-
-readyTopGunSeat?.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-top-gun-seat]");
-  if (button) selectTopGunSeat(Number(button.dataset.topGunSeat));
 });
 
 readyCircuitsPreflight?.addEventListener("toggle", () => {

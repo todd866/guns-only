@@ -168,7 +168,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     sequence: 11,
     aircraft: "F-14A",
     title: "Top Gun",
-    shortObjective: "1986 ACM — Tomcat or MiG-28, guns and Sidewinders.",
+    shortObjective: "1986 ACM — F-14A versus MiG-28 aggressors, guns and Sidewinders.",
     qualification: "",
     releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
     visible: true,
