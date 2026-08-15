@@ -45,6 +45,7 @@ test("one catalog names every route and exposes only accepted production experie
     { id: "cobra-lab", mission: null, releaseState: "production" },
     { id: "weekend-ride", mission: null, releaseState: "production" },
     { id: "top-gun", mission: null, releaseState: "production" },
+    { id: "okanagan-fireboss", mission: null, releaseState: "production" },
   ]);
 
   assert.deepEqual(productionExperiences().map(({ id }) => id), [
@@ -53,6 +54,7 @@ test("one catalog names every route and exposes only accepted production experie
     "cobra-lab",
     "weekend-ride",
     "top-gun",
+    "okanagan-fireboss",
   ]);
   // The corrected string-selector launch path was explicitly promoted for Build 326. Production
   // launchability is catalog authority; it must not depend on the retired preview query gate.
@@ -65,6 +67,7 @@ test("one catalog names every route and exposes only accepted production experie
   assert.match(experienceById("multiplayer").blocker, /matchmaking.*player path/i);
   assert.equal(experienceLaunchable("weekend-ride"), true);
   assert.equal(experienceComingSoon("weekend-ride"), false);
+  assert.equal(experienceById("okanagan-fireboss").route, "/okanagan/");
   const cobra = experienceById("cobra-lab");
   assert.match(cobra.shortObjective, /garrison/i);
   assert.match(cobra.shortObjective, /capture/i);

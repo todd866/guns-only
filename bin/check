@@ -82,6 +82,9 @@ node --check web/wwwroot/indoor/game.js
 node --check web/wwwroot/indoor/presentation.js
 node --check web/wwwroot/indoor/sim.js
 node --check web/wwwroot/medevac/app.js
+node --check web/wwwroot/okanagan/main.js
+node --check web/wwwroot/render/okanagan/okanagan_highway.js
+node --check web/wwwroot/render/okanagan/okanagan_world.js
 node --check web/wwwroot/render/medevac/commander_view_model.js
 node --check web/wwwroot/api/telemetry.js
 node --check web/smoke/remote-smoke.mjs
@@ -190,6 +193,15 @@ if [ -d "$ukraine_hero_source" ]; then
   mkdir -p "$ukraine_hero_stage"
   cp -R "$ukraine_hero_source/." "$ukraine_hero_stage/"
 fi
+# Okanagan Fire Boss terrain/world truth is source-owned under content/ and copied byte-for-byte
+# to the standalone production route. Keep the authoritative CDEM response and its provenance in
+# the same source-to-wwwroot closure as the older theatres.
+okanagan_source="content/packs/okanagan-fire"
+okanagan_stage="$staged_content_dir/packs/okanagan-fire"
+test -f "$okanagan_source/environment/okanagan-central.cdem.json"
+test -f "$okanagan_source/environment/okanagan-central.world.json"
+mkdir -p "$okanagan_stage"
+cp -R "$okanagan_source/." "$okanagan_stage/"
 diff -qr "$staged_content_dir" web/wwwroot/content
 
 "$dotnet_cli" restore GunsOnly.sln --nologo --ignore-failed-sources \
@@ -249,6 +261,11 @@ test ! -e "$publish_dir/wwwroot/present/rapier-design"
 test -f "$publish_dir/wwwroot/cobra-lab/index.html"
 test -f "$publish_dir/wwwroot/cobra-lab/main.js"
 test -f "$publish_dir/wwwroot/cobra-lab/styles.css"
+test -f "$publish_dir/wwwroot/okanagan/index.html"
+test -f "$publish_dir/wwwroot/okanagan/main.js"
+test -f "$publish_dir/wwwroot/okanagan/styles.css"
+test -f "$publish_dir/wwwroot/render/okanagan/okanagan_highway.js"
+test -f "$publish_dir/wwwroot/content/packs/okanagan-fire/environment/okanagan-central.cdem.json"
 test -f "$publish_dir/wwwroot/render/audio/samples/jet/f22_idle_loop.wav"
 test -f "$publish_dir/wwwroot/render/audio/samples/jet/rapier_idle_cockpit_loop.wav"
 test -z "$(find "$publish_dir/wwwroot/render/audio/samples/jet" -type f \

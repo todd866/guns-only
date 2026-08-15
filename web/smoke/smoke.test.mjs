@@ -838,6 +838,45 @@ test("the published Weekend Ride route boots and accepts throttle input", async 
   }
 });
 
+test("the published Okanagan route exposes three sorties, a continuous path and a real pause menu", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+  const site = await serveStatic(WWWROOT);
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+  });
+  try {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
+    await page.goto(`${site.url}okanagan/?audioQa=silent`, { waitUntil: "load", timeout: scaled(45000) });
+    await page.waitForFunction(
+      () => document.querySelector("#status")?.dataset.ready === "true"
+        && !!window.__gunsOnlyOkanagan,
+      undefined,
+      { timeout: scaled(60000) },
+    );
+    assert.equal(await page.locator(".sortie").count(), 3);
+    await page.locator('[data-sortie="large-force-employment"]').click();
+    await page.locator("#start").click();
+    await page.waitForFunction(() => window.__gunsOnlyOkanagan.getState()?.sortie === "large-force-employment"
+      && window.__gunsOnlyOkanagan.getTelemetry().length > 0);
+    const state = await page.evaluate(() => window.__gunsOnlyOkanagan.getState());
+    assert.equal(state.phase, "depart");
+    assert.ok(state.route.length >= 2, `departure path missing: ${JSON.stringify(state)}`);
+    assert.ok(state.traffic.length >= 2, `large-force traffic missing: ${JSON.stringify(state)}`);
+    const telemetry = await page.evaluate(() => window.__gunsOnlyOkanagan.getLastTelemetry());
+    assert.equal(telemetry.active_gate, "departure");
+    assert.ok(Number.isFinite(telemetry.terrain_clearance_m));
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => document.querySelector("#pause-menu")?.classList.contains("visible"));
+    assert.deepEqual(pageErrors, [], `uncaught Okanagan page errors:\n${pageErrors.join("\n")}`);
+  } finally {
+    await browser.close();
+    await site.close();
+  }
+});
+
 test("the published Medevac route resolves route hold, selective relay, and diversion branches", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 

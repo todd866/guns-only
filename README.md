@@ -8,7 +8,7 @@ renderer.
 
 ## What is live now
 
-The production catalogue exposes five accepted experiences:
+The production catalogue exposes six accepted experiences, split into military and civilian aircraft:
 
 - **F-22A surrogate — Guns Only:** an endless visual dogfight with ballistic guns, a real flight
   envelope, Auto-GCAS, padlock/target management, and a deterministic opponent.
@@ -21,6 +21,8 @@ The production catalogue exposes five accepted experiences:
   dynamics, rider assists, lap timing, and a helmet HUD.
 - **Top Gun:** fly the F-14A in an escalating ACM fight with guns and two Sidewinders, then recover
   conventionally to the carrier in the anime-1986 presentation.
+- **Okanagan Fire Boss:** take an AT-802F from Kelowna to Okanagan Lake for water circuits, a solo
+  initial attack, or a coordinated large-force extension with Air Attack and helicopter traffic.
 
 Additional mission code remains in the repository for development, but it is not silently
 presented as finished product. Preview and quarantined routes show their release boundary before

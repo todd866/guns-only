@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=336";
+import { createHud } from "./hud.js?v=337";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=336";
+} from "./render/debrief/sortie_result.js?v=337";
 import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
@@ -69,8 +69,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=336";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=336";
+} from "./render/release/release_identity.js?v=337";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=337";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -83,7 +83,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=336";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=337";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -92,10 +92,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=336";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=337";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=336";
+} from "./render/nav/carrier_sortie_touch_control.js?v=337";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -178,7 +178,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=336";
+} from "./render/telemetry/ai_frame_pressure.js?v=337";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -188,14 +188,14 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=336";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=336";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=336";
+} from "./render/telemetry/telemetry_batch.js?v=337";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=337";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=337";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=336";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=336";
+} from "./render/shell/boot_watchdog.js?v=337";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=337";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -204,7 +204,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=336";
+} from "./render/settings/player_settings.js?v=337";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -251,13 +251,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=336";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=336";
+} from "./render/scene/scene_builders.js?v=337";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=337";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=336";
+} from "./render/audio/flight_audio.js?v=337";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -514,6 +514,7 @@ const readyMenuHelp = document.querySelector("#ready-menu-help");
 const readySelector = document.querySelector("#ready-selector");
 const readyProgramButtons = [...document.querySelectorAll("[data-program-node]")];
 const readyProgramStatuses = [...document.querySelectorAll("[data-program-status]")];
+const readyDomainButtons = [...document.querySelectorAll("[data-domain-filter]")];
 const readyProgramProgress = document.querySelector("#ready-program-progress");
 const readyStart = document.querySelector("#ready-start");
 const readyReplay = document.querySelector("#ready-replay");
@@ -3437,6 +3438,14 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     brief: "You start at the merge, and the opening wave is a pair of Aces. Survive the first pass, fight into the rear quarter, and keep going. The director watches how you actually flew and answers in kind.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO calls it a day and starts RTB · Esc → Call It A Day button · Space G limiter · H controls",
   }),
+  "okanagan-fireboss": Object.freeze({
+    kicker: "Civilian · British Columbia · AT-802F Fire Boss",
+    title: "Okanagan Fire Boss",
+    sortie: "Water circuits · solo initial attack · large-force extension",
+    configuration: "Kelowna departure · Okanagan Lake scoop lane · 3,104 L hopper · fuel-protected RTB",
+    brief: "Take one Fire Boss from Kelowna to the lake. Learn the scoop circuit first, work the exercise fire alone, then add Air Attack, bird dog and helicopter traffic in the extension exercise.",
+    controls: "Arrows fly · W/S power · E scoops · hold Space to drop · Esc pauses",
+  }),
   "multiplayer": Object.freeze({
     kicker: "1v1 · guns only",
     title: "Multiplayer",
@@ -4361,6 +4370,12 @@ function renderCampaignProgress() {
       ? "" : experienceById(nodeId)?.releaseState ?? "unavailable";
   }
   if (readyDeckConfig) readyDeckConfig.hidden = true;
+  const selectedDomain = readyProgramButtons.find((button) => button.dataset.programNode === selectedProgramNodeId)
+    ?.closest(".sortie-option")?.dataset.domain ?? "military";
+  readyScreen.dataset.domain = selectedDomain;
+  for (const button of readyDomainButtons) {
+    button.setAttribute("aria-pressed", String(button.dataset.domainFilter === selectedDomain));
+  }
   updateTopGunPickerArt();
   renderCircuitsPreflight(missionBrief());
   for (const button of readyDeckButtons) {
@@ -5540,6 +5555,17 @@ readyStart.addEventListener("click", () => {
 });
 
 readySelector?.addEventListener("click", (event) => {
+  const domain = event.target.closest("[data-domain-filter]")?.dataset.domainFilter;
+  if (domain) {
+    readyScreen.dataset.domain = domain;
+    for (const button of readyDomainButtons) {
+      button.setAttribute("aria-pressed", String(button.dataset.domainFilter === domain));
+    }
+    const first = readyProgramButtons.find((button) =>
+      !button.disabled && button.closest(".sortie-option")?.dataset.domain === domain);
+    if (first) selectCampaignNode(first.dataset.programNode);
+    return;
+  }
   const select = event.target.closest("[data-program-node]");
   if (select) selectCampaignNode(select.dataset.programNode);
 });
@@ -11657,7 +11683,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=336")
+    navigator.serviceWorker.register("service-worker.js?v=337")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

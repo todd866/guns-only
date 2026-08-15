@@ -1,55 +1,55 @@
-import * as THREE from "../vendor/three.module.js?v=336";
+import * as THREE from "../vendor/three.module.js?v=337";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=336";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=336";
-import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=336";
+} from "../render/cobra/cobra_canyon_plan.js?v=337";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=337";
+import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=337";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=336";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=336";
+} from "../render/cobra/cobra_canyon_tour.js?v=337";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=337";
 import {
   cobraGoldenPathState,
   createCobraGoldenPath,
-} from "../render/cobra/cobra_golden_path.js?v=336";
-import { createHud } from "../hud.js?v=336";
+} from "../render/cobra/cobra_golden_path.js?v=337";
+import { createHud } from "../hud.js?v=337";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=336";
+} from "../render/cobra/cobra_hud_adapter.js?v=337";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=336";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=336";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=337";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=337";
 import {
   cobraTacticalMapBounds,
   cobraTacticalMapModel,
-} from "../render/cobra/cobra_tactical_map.js?v=336";
+} from "../render/cobra/cobra_tactical_map.js?v=337";
 import {
   COBRA_MAP_CAPTION_PX,
   drawCobraTacticalMap,
-} from "../render/cobra/cobra_tactical_map_draw.js?v=336";
-import { bakeCobraTacticalRelief } from "../render/cobra/cobra_tactical_map_relief.js?v=336";
+} from "../render/cobra/cobra_tactical_map_draw.js?v=337";
+import { bakeCobraTacticalRelief } from "../render/cobra/cobra_tactical_map_relief.js?v=337";
 import {
   emberActObjectiveOverlay,
   emberActRemainingM,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=336";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=336";
+} from "../render/cobra/cobra_ember_path.js?v=337";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=337";
 import {
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=336";
+} from "../render/audio/flight_audio.js?v=337";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=336";
+} from "../render/cobra/cobra_control_profile.js?v=337";
 import {
   advanceCobraPilotControls,
   cobraCyclicCommand,
@@ -57,53 +57,53 @@ import {
   createCobraGroundedPilotControlState,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=336";
+} from "../render/cobra/cobra_pilot_input.js?v=337";
 import {
   createCobraSortieReadyInterlock,
   hasDeliberateCobraCockpitInput,
-} from "../render/cobra/cobra_sortie_ready.js?v=336";
+} from "../render/cobra/cobra_sortie_ready.js?v=337";
 import {
   COBRA_TURNAROUND_ACTION_CODE,
   cobraTurnaroundActionHeld,
   cobraTurnaroundIsActive,
   cobraTurnaroundLocksFlightControls,
-} from "../render/cobra/cobra_turnaround.js?v=336";
+} from "../render/cobra/cobra_turnaround.js?v=337";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=336";
+} from "../render/cobra/ah1g_presence.js?v=337";
 import {
   acquireAuthorityVisualLockTarget,
   advancePadlockLosGrace,
   lookOffsetFromAngles,
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
-} from "../render/cobra/cobra_camera_bias.js?v=336";
+} from "../render/cobra/cobra_camera_bias.js?v=337";
 import {
   cobraMissionStatusCopy,
   cobraTerminalCauseCopy,
-} from "../render/cobra/cobra_terminal_causes.js?v=336";
-import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=336";
+} from "../render/cobra/cobra_terminal_causes.js?v=337";
+import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=337";
 import {
   createParkedCobra,
   placeParkedCobra,
-} from "../render/cobra/cobra_parked_airframe.js?v=336";
+} from "../render/cobra/cobra_parked_airframe.js?v=337";
 import {
   cobraFormationRadio,
   cobraFormationLeadPose,
   createCobraFormationLead,
-} from "../render/cobra/cobra_formation_lead.js?v=336";
+} from "../render/cobra/cobra_formation_lead.js?v=337";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=336";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=336";
+} from "../render/visual/shadow_stabilizer.js?v=337";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=337";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=336";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=336";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=336";
+} from "../render/cobra/cobra_mission_exit.js?v=337";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=337";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=337";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -366,7 +366,7 @@ window.addEventListener("keydown", armAudioFromGesture, { capture: true });
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=336";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=337";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();

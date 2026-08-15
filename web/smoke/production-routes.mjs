@@ -54,6 +54,17 @@ export const PRODUCTION_ROUTES = Object.freeze([
       assert.match(status, /YZF-R1 ACTIVE/i);
     },
   }),
+  Object.freeze({
+    id: "okanagan-fireboss",
+    path: "/okanagan/",
+    search: "?audioQa=silent",
+    isReady: () => document.querySelector("#status")?.dataset.ready === "true"
+      && !!window.__gunsOnlyOkanagan,
+    verify: async (page) => {
+      const status = await page.evaluate(() => document.querySelector("#status")?.textContent ?? "");
+      assert.match(status, /Ready.*choose a sortie/i);
+    },
+  }),
 ]);
 
 export const SWIFTSHADER_LAUNCH_ARGS = Object.freeze([

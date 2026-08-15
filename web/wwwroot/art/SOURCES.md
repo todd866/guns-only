@@ -107,7 +107,24 @@ These images are no longer in the tree; the filenames were reused by v3.
 - Design input: saturated late-day fictional training-range sky, readable flat-shaded aircraft,
   distant invented ridges, and the sparse green service-lamp motif. The F-14A and MiG-28 labels
   identify public-data / fictional silhouettes only; neither source is an engineering drawing,
-  film still, Paramount mark, or official livery.
+film still, Paramount mark, or official livery.
+
+### Okanagan Fire Boss picker — CURRENT
+
+- Created: 2026-08-15 with the built-in OpenAI ImageGen workflow, then visually rejected and
+  corrected once because the first pass resembled a vintage radial crop-duster.
+- Final request: a modern yellow AT-802F Fire Boss lifting from an Okanagan Lake scoop run, with
+  a long angular PT6 turboprop nose, five-blade propeller, straight high wing and twin amphibious
+  floats; preserve the lake, dry forested hills and restrained smoke haze; no text, logos,
+  weapons or military markings.
+- Exact selected source: `tools/assets/generators/menu-posters/sources/aircraft-fireboss.png`,
+  2,412,233 bytes, SHA-256
+  `e3541e7595a7253f98cd4066af27b075158b222cf8cf10d2e9fb81f17dfbfb03`.
+- Exact output recipe: `cwebp 1.6.0 -q 88 -m 6 -sharp_yuv -resize 1200 1200`; rerun with
+  `node tools/assets/generators/menu-posters/render.mjs aircraft-fireboss`.
+- Epistemic label: `fiction`. The poster is menu presentation, not an OEM photograph, dimensional
+  reference, terrain source or claim that the depicted livery/operator exists.
+- Rights status: project-generated; no third-party asset is known to be embedded.
 - Epistemic label: `fiction`.
 - Rights status: project-generated from the two exact committed vector inputs; no third-party
   asset is embedded.
@@ -146,6 +163,7 @@ table further down stays the single place a filename is bound to a hash.
 | bike-yzf-r1 | Disused runway circuit, broad daylight | Warm, human-scale, nobody shooting |
 | jet-f14 | Fictional training range, saturated late day | Big twin-tail fleet fighter, readable at picker scale |
 | jet-mig-28 | Fictional training range, saturated late day | Compact aggressor silhouette, visually distinct from the Tomcat |
+| aircraft-fireboss | Okanagan Lake, dry summer afternoon | Modern AT-802F Fire Boss lifting off the scoop lane |
 | menu-hangar | Aerodrome at golden departure | Quiet backdrop; type sits on it |
 
 ## File closure
@@ -158,5 +176,6 @@ table further down stays the single place a filename is bound to a hash.
 | `bike-yzf-r1.webp` | 900×1600 | 31680 | `a42fe42d802e3f3b1ae61fe5b70567226aab2ad28b84349d57c38d6fa4618869` | Weekend Ride picker poster |
 | `jet-f14.webp` | 900×900 | 14886 | `e67c8ed4413eabf7bca198847e1be0bb64f61270c6c0e90b158852f00251d85e` | Top Gun F-14A picker vector render |
 | `jet-mig-28.webp` | 900×900 | 13344 | `bc768c8e5aaee8437dd425879cc0d9d4b0f6a7dcfcc1fdc3a23c76db279d3212` | Top Gun MiG-28 aggressor vector render |
+| `aircraft-fireboss.webp` | 1200×1200 | 208924 | `9737e2ceb208145c86e142d3e12975549565d4acc672a7000380c26e9beef149` | Okanagan Fire Boss picker poster; project-generated with OpenAI ImageGen on 2026-08-15, then corrected to the modern five-blade turboprop configuration |
 | `menu-hangar-small.webp` | 900×600 | 8518 | `a17a868a3905c6fc9d8217ae156c7123228baaf1009dce7ef781e9e613ebde45` | Narrow/loading fallback |
 | `menu-hangar.webp` | 1600×1067 | 18382 | `2b0bd29b275e6993c0ad9f355dfc5c048b1e05abaf2cd60323784f881ff9f070` | Wide/loading background |
