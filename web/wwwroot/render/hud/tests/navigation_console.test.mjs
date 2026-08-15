@@ -12,13 +12,13 @@ const [appSource, indexSource, limitsSource] = await Promise.all([
 ]);
 
 const updateNavSource = appSource.match(
-  /function updateNavConsole\(state\) \{([\s\S]*?)\n}\n+function bindCircuitsSystemsActions/,
+  /function updateNavConsole\(state\) \{([\s\S]*?)\n}\n+function (?:requestCombatHandoffFromNav|bindCircuitsSystemsActions)/,
 )?.[1] ?? "";
 
 test("navigation console separates route geometry from recovery ETA and fuel truth", () => {
   assert.ok(updateNavSource, "updateNavConsole must remain inspectable");
   assert.match(updateNavSource,
-    /const mesh = meshNavPresentation\(state\);\s*const home = recoveryNavigationPresentation\(state\);\s*const selected = selectCarrierSortieNavigationPresentation\([\s\S]*?const relevant = selected !== null;/);
+    /const mesh = meshNavPresentation\(state\);\s*const home = recoveryNavigationPresentation\(state\);\s*const selected = selectCarrierSortieNavigationPresentation\([\s\S]*?const relevant = selected !== null \|\| decision !== null \|\| recoveryLesson !== null;/);
   assert.match(updateNavSource,
     /const bearingDeg = route\?\.bearingDeg \?\? selectedMesh\?\.bearingDeg \?\? home\.bearingDeg;/,
     "a validated carrier route owns the steering geometry");
