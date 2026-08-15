@@ -85,3 +85,51 @@ Aerial_view_of_Fire_Support_Base_Sedgwick.jpg; Aerial_view_of_Firebase_Granite.j
 1-502_infantry_Firebase_in_I_Corps_near_the_A_Shau_Valley_1969.jpg;
 [B-52_bomb_craters_near_Dak_To_1967.jpg](https://commons.wikimedia.org/wiki/File:B-52_bomb_craters_near_Dak_To_1967.jpg);
 plus Tess/Cork/Normandy/Black Hawk (unreviewed, listed above).
+
+## 2026-08-15 operations correction
+
+The photo read above is necessary but not sufficient: the old 105 m prop cluster was scenery,
+not an operable helicopter base. Camp Ember's new fictional layout is therefore designed from
+the aircraft movement outward:
+
+- a 24 m TLOF, 56 m FATO and 76 m safety area at the centre;
+- a roughly 350 m irregular compound on a 380 m level construction bench, with eight separated
+  aircraft revetments, maintenance apron/hangar, medevac/supply pad, and mutually separated POL
+  and ammunition areas;
+- a 2.4 km, 240 m-wide protected final/departure axis on heading 300 degrees, with an 8:1 obstacle
+  surface in both directions so a rejected landing continues into clear terrain rather than the
+  old cliff;
+- six authority-owned RTB gates descending from 300 m above pad elevation to the FATO. These are
+  gameplay guidance; they do not claim a historical instrument procedure.
+
+The exact dimensions are a documented gameplay synthesis, not a claim about one named Vietnam
+firebase. Period structure comes from U.S. Army histories: rotary-wing revetments, separated
+aircraft, maintenance facilities, POL/ammunition/resupply areas and dust-controlled landing
+surfaces. The overall FSB massing is checked against the U.S. Army Heritage Trail's representative
+~250 m firebase; Camp Ember is intentionally wider to protect a player-flown arrival and go-around.
+The TLOF/FATO/safety-area hierarchy, preference for two obstruction-aware approach/departure paths,
+and 8:1 surface come from FAA heliport design guidance and are used as conservative planning
+heuristics, not period-specific regulation.
+
+The RTB speed/sink coaching is also provisional gameplay doctrine rather than an AH-1G checklist
+claim: join the 300-degree final at 45–60 kt, stabilize at 35–50 kt outside 600 m, slow to 20–35 kt
+on short final, then flare to a walking-pace hover. The 600/400 fpm sink cues are simple guardrails
+for the current dynamics. They are paired with actual speed/sink telemetry, the authority-owned
+8:1 lane, a reciprocal missed-approach path, painted PSP final panels, a segmented FATO ring and a
+windsock so the instruction, collision truth and scenery tell one operational story.
+
+Battle assistance remains authority-led. Ground-combat events publish the actual shooter and
+opponent positions for visible tracer paths; air-mobile insertion events paint friendly LZ smoke;
+and selected marks identify the actual squad, supply truck, fortified gun pit or DShK site plus
+its home objective. Presentation adds no damage, targets, capture state or hidden battlefield AI.
+
+Primary references:
+
+- U.S. Army Center of Military History, [Base Development in South Vietnam,
+  1965–1970](https://history.army.mil/Portals/143/Images/Publications/Publication%20By%20Title%20Images/B%20pdf/CMH_Pub_90-6.pdf?ver=v358B6sRLnmttAbc6gxPAg%3D%3D).
+- U.S. Army Center of Military History, [Vietnam Studies: U.S. Army Engineers,
+  1965–1970](https://history.army.mil/portals/143/Images/Publications/catalog/90-21-1.pdf).
+- U.S. Army Heritage and Education Center, [Vietnam Fire Support Base
+  area](https://history.army.mil/Archives/Army-Heritage-Trail/VietnamArea/).
+- FAA, [AC 150/5390-2D Heliport Design](https://www.faa.gov/documentLibrary/media/Advisory_Circular/AC_150_5390_2D_Heliports.pdf)
+  and the explicit 8:1 geometry in [AC 150/5390-2C](https://www.faa.gov/documentLibrary/media/Advisory_Circular/150_5390_2c.pdf).

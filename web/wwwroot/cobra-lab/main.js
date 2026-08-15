@@ -870,6 +870,8 @@ function drawTacticalMaps(timeMs) {
     player: { eastM: vehiclePose.x_m, northM: vehiclePose.z_m },
     actOverlay: emberActObjectiveOverlay(authorityState?.mission_act, {
       remainingM: emberActRemainingM(authorityState, vehiclePose),
+      speedKts: Number(vehiclePose.ground_speed_mps ?? authorityState?.vehicle?.ground_speed_mps) * 1.943844,
+      sinkFpm: Math.max(0, -Number(authorityState?.vehicle?.vertical_speed_mps ?? 0) * 196.850394),
     }),
     turnaround: authorityState?.turnaround,
   });
@@ -958,7 +960,7 @@ function updateRouteProgress() {
     const lateral = offsetFt >= 2
       ? ` · ${Math.round(offsetFt)} FT ${routeTour.lateralOffsetM > 0 ? "RIGHT" : "LEFT"}`
       : "";
-    const aglFt = formatAviationAgl(routeCommandedAglM);
+    const aglFt = formatAviationAgl(tourCommandedAglM);
     routeFeature.textContent = `${routeTour.cue} · ${aglFt ?? "—"} FT AGL${lateral}`;
     return;
   }
@@ -1032,7 +1034,7 @@ function restartRoute() {
   padlockMaskedSinceMs = null;
   if (debrief) debrief.hidden = true;
   activeRoute = routeById(routeSelect.value);
-  bridge?.StartRoute(routeSelect.selectedIndex);
+  bridge?.StartRoute(routeSelect.selectedIndex, !PLAY_MODE);
   authorityState = bridge ? JSON.parse(bridge.GetState()) : null;
   lastTurnaroundPhase = authorityState?.turnaround?.phase ?? null;
   pilotControls = PLAY_MODE
@@ -1613,6 +1615,8 @@ function updateObjectiveHud(war) {
     player: { eastM: vehiclePose.x_m, northM: vehiclePose.z_m },
     actOverlay: emberActObjectiveOverlay(authorityState?.mission_act, {
       remainingM: emberActRemainingM(authorityState, vehiclePose),
+      speedKts: Number(vehiclePose.ground_speed_mps ?? authorityState?.vehicle?.ground_speed_mps) * 1.943844,
+      sinkFpm: Math.max(0, -Number(authorityState?.vehicle?.vertical_speed_mps ?? 0) * 196.850394),
     }),
     turnaround: authorityState?.turnaround,
   });
@@ -1700,19 +1704,16 @@ function animate(timeMs) {
     groundHeightAt: groundAt,
     nowSeconds: timeMs / 1_000,
     missionAct: authorityState?.mission_act,
+    speedKts: Number(authorityState?.vehicle?.ground_speed_mps) * 1.943844,
+    sinkFpm: Math.max(0, -Number(authorityState?.vehicle?.vertical_speed_mps ?? 0) * 196.850394),
     suppressed: tourInput.checked || Boolean(parkedCamera),
   }));
   recordPhase("presentation", presentationStartedAtMs);
   if (tourInput.checked && bridge && !missionTerminal) {
-    // Keep the ground war alive during guided preview even when the camera is on rails.
-    pilotControls = releaseCobraPilotControls(pilotControls);
-    bridge.SetControls(pilotControls.collective, 0, 0, 0);
-    bridge.SetTurnaroundAction(false);
-    bridge.SetGunnerTarget(null);
-    bridge.SetEngagementConsent(false);
-    if (sortieReadiness.advance(deltaSeconds, (step) => bridge.Advance(step))) {
-      sampleAuthorityState(timeMs);
-    }
+    // A guided scenery camera has no pilot. Advancing the aircraft here used to relax the
+    // collective toward zero and crash an unseen Cobra while reviewers were looking elsewhere,
+    // eventually cold-swapping the bird and corrupting every later visual judgment. Freeze the
+    // authority snapshot; the route camera and all streamed presentation still update normally.
     const pose = readVehiclePose();
     if (pose) updateAh1gPresence(ensureAh1gPresence(), pose, deltaSeconds);
   }
@@ -1995,6 +1996,9 @@ heightInput?.addEventListener("input", () => {
 });
 tourInput?.addEventListener("change", () => {
   if (tourInput.checked) {
+    // The guided camera freezes flight authority. Release any action held on the last manual
+    // frame so returning to the cockpit cannot complete a shutdown/start hold off-screen.
+    bridge?.SetTurnaroundAction(false);
     padlockActive = false;
     padlockMaskedSinceMs = null;
   }

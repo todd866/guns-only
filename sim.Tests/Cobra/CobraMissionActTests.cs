@@ -6,7 +6,7 @@ namespace GunsOnly.Sim.Tests.Cobra;
 
 public class CobraMissionActTests
 {
-    static readonly Vec3D Fob = new(-6_775.0, 202.0, -6_200.0);
+    static readonly Vec3D Fob = CampEmberOperations.CentreWorldM;
     static readonly Vec3D Bridge = new(-2_710.0, 146.0, -500.0);
 
     [Fact]
@@ -27,7 +27,7 @@ public class CobraMissionActTests
     [Fact]
     public void LeavingThePadArmsIngress()
     {
-        Vec3D away = new(Fob.X + 250.0, Fob.Y + 40.0, Fob.Z);
+        Vec3D away = new(Fob.X + 800.0, Fob.Y + 40.0, Fob.Z);
         CobraMissionAct next = CobraMissionActProgress.Next(
             CobraMissionAct.Depart,
             away,
@@ -116,23 +116,21 @@ public class CobraMissionActTests
     }
 
     [Fact]
-    public void DepartPathGatesSitAtNapOfEarthNotCorridorFloor()
+    public void DepartPathUsesTheProtectedGoAroundLane()
     {
         CobraCanyonRouteDefinition route = CobraCanyonDefinition.Create()
             .Route(CobraCanyonRouteChoice.RiverGorge);
-        CobraCanyonRoutePoint first = route.Points[0];
         IReadOnlyList<CobraPathGate> gates = CobraMissionActProgress.BuildPathGates(
             CobraMissionAct.Depart,
             route,
             Fob,
-            fobPathAltitudeM: first.PathAltitudeM + first.TargetAglM);
+            fobPathAltitudeM: Fob.Y + 30.0);
+        Assert.Equal(3, gates.Count);
         CobraPathGate active = gates.Single(g => g.Active);
-        Assert.Equal(first.EastM, active.EastM);
-        Assert.Equal(first.NorthM, active.NorthM);
-        Assert.Equal(first.PathAltitudeM + first.TargetAglM, active.UpM, 6);
-        Assert.True(
-            active.UpM > first.PathAltitudeM + 10.0,
-            "soft gates must read as airborne volumes, not river-floor boxes");
+        Vec3D first = CampEmberOperations.PointAlongFinal(180.0);
+        Assert.Equal(first.X, active.EastM, 6);
+        Assert.Equal(first.Z, active.NorthM, 6);
+        Assert.True(active.UpM > CampEmberOperations.PadElevationM + 20.0);
     }
 
     [Fact]
@@ -140,9 +138,10 @@ public class CobraMissionActTests
     {
         CobraCanyonRouteDefinition route = CobraCanyonDefinition.Create()
             .Route(CobraCanyonRouteChoice.RiverGorge);
-        CobraCanyonRoutePoint first = route.Points[0];
-        CobraCanyonRoutePoint second = route.Points[1];
-        // Park on the first gate so it counts as flown — next soft cue should be gate 1.
+        int joinIndex = 3;
+        CobraCanyonRoutePoint first = route.Points[joinIndex];
+        CobraCanyonRoutePoint second = route.Points[joinIndex + 1];
+        // Park on the nearest safe route join so the next cue advances toward the bridge.
         Vec3D onFirst = new(first.EastM, first.PathAltitudeM, first.NorthM);
         IReadOnlyList<CobraPathGate> gates = CobraMissionActProgress.BuildPathGates(
             CobraMissionAct.Ingress,
@@ -157,7 +156,7 @@ public class CobraMissionActTests
     }
 
     [Fact]
-    public void RtbPathIsASingleCampEmberGate()
+    public void RtbPathIsAStabilizedSixGateFinal()
     {
         CobraCanyonRouteDefinition route = CobraCanyonDefinition.Create()
             .Route(CobraCanyonRouteChoice.RiverGorge);
@@ -166,9 +165,10 @@ public class CobraMissionActTests
             route,
             Fob,
             fobPathAltitudeM: 232.0);
-        Assert.Single(gates);
-        Assert.True(gates[0].Active);
-        Assert.Equal(Fob.X, gates[0].EastM);
-        Assert.Equal(Fob.Z, gates[0].NorthM);
+        Assert.Equal(6, gates.Count);
+        Assert.Single(gates, gate => gate.Active);
+        Assert.Equal(Fob.X, gates[^1].EastM, 6);
+        Assert.Equal(Fob.Z, gates[^1].NorthM, 6);
+        Assert.True(gates[0].UpM > gates[^1].UpM + 250.0);
     }
 }

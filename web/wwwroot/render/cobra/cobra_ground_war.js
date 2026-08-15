@@ -233,6 +233,8 @@ export function createCobraGroundWarPresentation(THREE) {
   /** @type {Map<string, "fired"|"impacted-miss"|"impacted-hit">} */
   const observedThreatBursts = new Map();
   let highestThreatBurstSequence = null;
+  const observedGroundEvents = new Set();
+  let highestGroundEventTick = null;
 
   // Ground contact + leader + lifted diamond. The old marker was an 11 m filled cylinder: in
   // oblique flight it read as a gold terrain plate, yet its whole silhouette disappeared under
@@ -356,43 +358,80 @@ export function createCobraGroundWarPresentation(THREE) {
       oldest.material?.dispose?.();
     }
     const isTracer = event.kind === "small-arms" || event.kind === "gun-hit";
-    const isSmoke = event.kind === "unit-destroyed" || event.kind === "gun-kill";
+    const isSmoke = event.kind === "unit-destroyed" || event.kind === "gun-kill"
+      || event.kind === "air-mobile-insertion";
     if (!isTracer && !isSmoke) return;
 
     if (isTracer) {
       const geometry = new THREE.BufferGeometry();
-      const up = (event.y_m ?? 0) + 2;
-      const positions = new Float32Array([
-        event.x_m, up, -(event.z_m ?? 0),
-        event.x_m, up + 18, -(event.z_m ?? 0),
-      ]);
+      const source = {
+        x: Number(event.x_m),
+        y: Number(event.y_m) + 1.25,
+        z: -Number(event.z_m),
+      };
+      const hasTarget = [event.target_x_m, event.target_y_m, event.target_z_m]
+        .every((value) => Number.isFinite(Number(value)));
+      const target = hasTarget
+        ? {
+          x: Number(event.target_x_m),
+          y: Number(event.target_y_m) + 1.0,
+          z: -Number(event.target_z_m),
+        }
+        : { x: source.x, y: source.y + 18, z: source.z };
+      const dashCount = hasTarget ? 4 : 1;
+      const positions = new Float32Array(dashCount * 6);
+      for (let dash = 0; dash < dashCount; dash++) {
+        const startT = dash / dashCount;
+        const endT = Math.min(1, startT + 0.42 / dashCount);
+        positions.set([
+          source.x + (target.x - source.x) * startT,
+          source.y + (target.y - source.y) * startT,
+          source.z + (target.z - source.z) * startT,
+          source.x + (target.x - source.x) * endT,
+          source.y + (target.y - source.y) * endT,
+          source.z + (target.z - source.z) * endT,
+        ], dash * 6);
+      }
       geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
       const material = new THREE.LineBasicMaterial({
         color: event.faction === "friendly" ? TRACER_FRIENDLY : TRACER_HOSTILE,
         transparent: true,
         opacity: 0.85,
       });
-      const line = new THREE.Line(geometry, material);
+      const line = new (THREE.LineSegments ?? THREE.Line)(geometry, material);
+      line.name = `COBRA_BATTLE_TRACER_${event.tick ?? "event"}_${event.unit_id ?? "unit"}`;
+      line.userData.source = source;
+      line.userData.target = target;
       line.userData.expiresAt = performance.now() + 280;
       effectRoot.add(line);
       transientEffects.push(line);
       return;
     }
 
+    const insertion = event.kind === "air-mobile-insertion";
     const smoke = new THREE.Mesh(
       new THREE.SphereGeometry(9.5, 12, 10),
       new THREE.MeshStandardMaterial({
-        color: SMOKE_COLOR,
+        color: insertion ? COBRA_GROUND_WAR_COLORS.friendly : SMOKE_COLOR,
         transparent: true,
         opacity: 0.62,
         roughness: 1,
         metalness: 0,
       }),
     );
+    smoke.name = insertion
+      ? `COBRA_LIFT_INSERTION_SMOKE_${event.tick ?? "event"}`
+      : `COBRA_BATTLE_SMOKE_${event.tick ?? "event"}`;
     smoke.position.set(event.x_m, (event.y_m ?? 0) + 8, -(event.z_m ?? 0));
     smoke.userData.expiresAt = performance.now() + 4_800;
     effectRoot.add(smoke);
     transientEffects.push(smoke);
+
+    if (insertion) {
+      smoke.scale.setScalar?.(0.72);
+      smoke.userData.expiresAt = performance.now() + 7_500;
+      return;
+    }
 
     // Hot flash so a gun-kill reads at nap AGL before the smoke blooms.
     const flash = new THREE.Mesh(
@@ -665,8 +704,29 @@ export function createCobraGroundWarPresentation(THREE) {
       entry.flag.material.color.setHex(color);
     }
 
-    for (const event of groundWar.events ?? [])
+    const events = Array.isArray(groundWar.events) ? groundWar.events : [];
+    const eventTicks = events.map((event) => Number(event?.tick)).filter(Number.isFinite);
+    const incomingHighestTick = eventTicks.length ? Math.max(...eventTicks) : null;
+    if (highestGroundEventTick != null && incomingHighestTick != null
+      && incomingHighestTick < highestGroundEventTick) {
+      observedGroundEvents.clear();
+      highestGroundEventTick = null;
+    }
+    for (const event of events) {
+      const key = `${event.tick ?? "?"}|${event.kind ?? "?"}|${event.unit_id ?? "?"}|${event.site_id ?? "?"}`;
+      if (observedGroundEvents.has(key)) continue;
+      observedGroundEvents.add(key);
       spawnEffect(event);
+    }
+    if (incomingHighestTick != null) highestGroundEventTick = Math.max(
+      highestGroundEventTick ?? incomingHighestTick,
+      incomingHighestTick,
+    );
+    if (observedGroundEvents.size > 256) {
+      const keep = [...observedGroundEvents].slice(-128);
+      observedGroundEvents.clear();
+      for (const key of keep) observedGroundEvents.add(key);
+    }
   }
 
   function disposeObject(object) {
@@ -702,6 +762,8 @@ export function createCobraGroundWarPresentation(THREE) {
     transientEffects.length = 0;
     observedThreatBursts.clear();
     highestThreatBurstSequence = null;
+    observedGroundEvents.clear();
+    highestGroundEventTick = null;
     effectRoot.remove(selection);
     disposeObject(selection);
     group.removeFromParent();

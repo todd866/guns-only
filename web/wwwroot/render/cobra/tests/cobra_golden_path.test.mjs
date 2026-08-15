@@ -376,10 +376,43 @@ test("RTB path switches to Camp Ember and stays lit to pad range", () => {
     groundHeightAt: FLAT_GROUND,
     nowSeconds: 4,
     missionAct: "rtb",
+    speedKts: 29,
+    sinkFpm: 200,
   });
   assert.equal(state.objective.siteId, "camp-ember-rtb");
   assert.equal(state.arrivedRadiusM, COBRA_GOLDEN_PATH_DEFAULTS.rtbArrivedRadiusM);
   assert.ok(state.arrivedRadiusM < 120, "return guidance remains visible inside the old 400 m cutoff");
+  assert.equal(state.recoveryVisual.phase, "flare");
+  assert.equal(state.recoveryVisual.alert, true);
+});
+
+test("RTB corridor shows approach state by funnel width, colour and pulse", () => {
+  const path = createCobraGoldenPath(fakeThree());
+  const material = path.group.children[0].material;
+  const common = {
+    player: playerAt(0, 0, 140),
+    objective: { siteId: "ember-route-gate-0", eastM: 0, northM: 900, mode: "route" },
+    groundHeightAt: FLAT_GROUND,
+    arrivedRadiusM: 75,
+  };
+  path.update({
+    ...common,
+    nowSeconds: 0,
+    recoveryVisual: { phase: "stabilize", halfWidthM: 14, alert: false, colorHex: 0xffad3d },
+  });
+  assert.equal(path.group.userData.markerHalfWidthM, 14, "far-final gates read as a broad funnel");
+  assert.equal(material.uniforms.uColor.value.hex, 0xffad3d);
+
+  path.update({
+    ...common,
+    nowSeconds: 0.5,
+    recoveryVisual: { phase: "short-final", halfWidthM: 10, alert: true, colorHex: 0xff613f },
+  });
+  assert.equal(path.group.userData.markerHalfWidthM, 10, "short-final gates visibly tighten");
+  assert.equal(material.uniforms.uColor.value.hex, 0xff613f, "unstable energy turns the path coral");
+  assert.ok(material.opacity < COBRA_GOLDEN_PATH_DEFAULTS.peakOpacity,
+    "an unstable path pulses instead of adding another text panel");
+  path.dispose();
 });
 
 test("depart and ingress follow the authority's active route gate before the combat objective", () => {
@@ -478,6 +511,8 @@ test("production wiring passes authority path gates into the Cobra corridor", as
   );
   const call = source.match(/goldenPath\?\.update\(cobraGoldenPathState\(\{([\s\S]*?)\}\)\);/u)?.[1] ?? "";
   assert.match(call, /pathGates:\s*authorityState\?\.path_gates/u);
+  assert.match(call, /speedKts:/u);
+  assert.match(call, /sinkFpm:/u);
 });
 
 test("frame state hides the path on the tour and parked cameras", () => {

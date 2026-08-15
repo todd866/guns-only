@@ -25,13 +25,23 @@ test("authority JSON is sampled at HUD rate while the camera reads the per-frame
   assert.match(main,
     /authorityState = JSON\.parse\(bridge\.GetState\(\)\);[\s\S]*?syncParkedAirframes\(\);[\s\S]*?window\.__gunsOnlyCobraAuthority = authorityState;/,
     "the cold Ready snapshot must be inspectable without advancing authority time");
-  // Every rendered frame still reaches the authority path, but only through the per-sortie Ready
-  // interlock. Manual, parked-review, and tour code may not grow an unguarded bypass.
+  // Manual and parked-review frames reach authority only through the per-sortie Ready interlock.
+  // Guided tour deliberately freezes the unpiloted aircraft rather than crashing it off-camera.
   const guardedAdvances = main.match(
     /sortieReadiness\.advance\(deltaSeconds, \(step\) => bridge\.Advance\(step\)\)/g,
   ) ?? [];
-  assert.equal(guardedAdvances.length, 3);
+  assert.equal(guardedAdvances.length, 2);
   assert.doesNotMatch(main, /bridge\.Advance\(deltaSeconds\)/);
+  assert.match(main, /A guided scenery camera has no pilot/);
+  assert.match(main, /StartRoute\(routeSelect\.selectedIndex, !PLAY_MODE\)/,
+    "the visual lab must explicitly request the no-wind unattended-review contract");
+});
+
+test("a cold spare rebases the gunner onto the continuing mission tick line", async () => {
+  const bridge = await source("../CobraWebBridge.cs");
+  assert.match(bridge, /_gunnerNeedsAuthorityRebase = true/);
+  assert.match(bridge, /RebaseAuthorityTick\(runtime\.Cobra\.State\.Tick\)/);
+  assert.match(bridge, /enableTerrainWind: !visualLab/);
 });
 
 test("authentic pilot input never feeds aircraft attitude back as a hidden hold", async () => {

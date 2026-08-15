@@ -244,7 +244,7 @@ test("preserves route XYZ, terrain shaping, landmark anchors, and hazard authori
   }), "3e2206463d46c59872d6e6e4060290d9d7754b3a90135205f6ff24569c6c297a");
   assert.equal(contentHash(
     world.landmarks.map(({ id, positionLocalM }) => ({ id, positionLocalM })),
-  ), "808816a6eafe0dac4571b42bf29643879167a0072d1741484dda5aee81323a67");
+  ), "97a2ef5755a140b45e6f1522d3137b6399a455b1490ff505a23f8db052835819");
   assert.equal(world.hazards.length, 14);
   assert.equal(contentHash(world.hazards),
     "c4a0eb80e25575135def5a892bce61db27ebd64cd5ba1176877c64437370e640");
@@ -296,25 +296,25 @@ test("samples one deterministic finite relief surface for the lab camera and flo
     "sampling clamps to the authored world extent",
   );
   const campPadSamples = [
-    [0, 0], [50, 0], [-50, 0], [0, 50], [0, -50], [35, 35], [-35, -35],
+    [0, 0], [150, 0], [-150, 0], [0, 150], [0, -150], [100, 100], [-100, -100],
   ].map(([eastOffsetM, northOffsetM]) => sampleCobraCanyonTerrain(
     plan,
-    -6_775 + eastOffsetM,
-    -6_200 + northOffsetM,
+    -3_800 + eastOffsetM,
+    -4_600 + northOffsetM,
   ));
-  assert.ok(campPadSamples.every((heightM) => Math.abs(heightM - 202) <= 1e-9),
-    `Camp Ember apron must be level at 202 m, got ${campPadSamples.join(", ")}`);
-  const preApronCentreM = sampleCobraCanyonTerrainBeforeCampEmberApron(plan, -6_775, -6_200);
-  assert.ok(Math.abs(preApronCentreM - 202) > 0.1,
+  assert.ok(campPadSamples.every((heightM) => Math.abs(heightM - 214) <= 1e-9),
+    `Camp Ember apron must be level at 214 m, got ${campPadSamples.join(", ")}`);
+  const preApronCentreM = sampleCobraCanyonTerrainBeforeCampEmberApron(plan, -3_800, -4_600);
+  assert.ok(Math.abs(preApronCentreM - 214) > 0.1,
     "the pre-apron seam must expose the real field, not an already-flattened sample");
   assert.equal(
-    applyCobraCanyonCampEmberApron(plan, -6_775, -6_200, preApronCentreM),
-    202,
+    applyCobraCanyonCampEmberApron(plan, -3_800, -4_600, preApronCentreM),
+    214,
     "the shared final operation restores exact contact height",
   );
   assert.throws(() => sampleCobraCanyonTerrain(plan, Number.NaN, 0), /eastM must be finite/);
   assert.throws(
-    () => applyCobraCanyonCampEmberApron(plan, -6_775, -6_200, Number.NaN),
+    () => applyCobraCanyonCampEmberApron(plan, -3_800, -4_600, Number.NaN),
     /heightM must be finite/,
   );
 });

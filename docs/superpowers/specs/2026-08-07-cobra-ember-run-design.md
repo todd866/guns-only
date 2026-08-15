@@ -27,7 +27,12 @@ targets → hold 45 s or lose with clear copy → land Ember → debrief. No deb
 | **2 INGRESS** | “Follow the gorge to the bridge” | Soft gate volumes along river-gorge route points (reuse F-22 `guidance_path` grammar) |
 | **3 ENGAGE** | “Tip control friendly · Tab / hold F” | Path parks on the contested bridge site; hostiles are silhouette-readable |
 | **4 HOLD / REARM** | Meter + urgency | Existing win/lose timers; bingo → Ember pad; **losing on the pad screams leave** |
-| **5 RTB** | “Return to Camp Ember” | Path reverses / points home; skids on pad with mission complete or after lose → debrief |
+| **5 RTB** | “Return to Camp Ember” | Six-gate stabilized 300° final to the centre FATO; reciprocal path remains the go-around; skids on pad → debrief |
+
+Camp Ember is not a point target. Its operational authority is a medium helicopter FOB on a
+surveyed upland bench: protected approach/departure surfaces, central FATO, separated spare-bird
+revetments, maintenance, POL, ammunition and medevac/supply functions. Direct-to-centre RTB
+guidance is forbidden because it can produce an unsafe reciprocal arrival.
 
 Win/lose thresholds stay as Hold the Bridge: control ≥ +0.55 held 45 s; ≤ −0.75 for 30 s;
 wreck / dry without recovery ends the sortie.

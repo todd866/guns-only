@@ -232,6 +232,14 @@ test("5b. the act overlay sits directly above the all-held default", () => {
   assert.match(fighting.line, /DESTROY GARRISON/);
 });
 
+test("RTB flight coaching outranks stale battlefield work", () => {
+  const rtb = {
+    line: "CHECK SINK · 620 FPM",
+    detail: "Raise collective smoothly",
+  };
+  assert.deepEqual(cobraObjectiveCopy(conquest(), { player: PLAYER, actOverlay: rtb }), rtb);
+});
+
 test("6. every point friendly reports the hostile pool still to burn down", () => {
   const copy = cobraObjectiveCopy(conquest({
     tickets: { friendly: 280, hostile: 96.4 },

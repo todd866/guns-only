@@ -63,9 +63,15 @@ test("production page transports action, locks controls and safes weapons during
     "the gunner must fail safe throughout shutdown, transfer and startup");
   assert.match(main, /bridge\?\.SetTurnaroundAction\(false\)/,
     "restart/focus-loss paths must release a stuck procedure action");
-  assert.match(main,
-    /if \(tourInput\.checked && bridge && !missionTerminal\)[\s\S]{0,320}?bridge\.SetTurnaroundAction\(false\)/,
+  const tourChange = main.match(
+    /tourInput\?\.addEventListener\("change", \(\) => \{[\s\S]*?\n\}\);/,
+  )?.[0] ?? "";
+  assert.match(tourChange, /if \(tourInput\.checked\) \{/);
+  assert.match(tourChange, /bridge\?\.SetTurnaroundAction\(false\)/,
     "guided preview must not inherit a previously held manual turnaround action");
+  assert.doesNotMatch(main,
+    /if \(tourInput\.checked && bridge && !missionTerminal\)[\s\S]{0,500}?bridge\.Advance\(/,
+    "guided scenery review has no pilot and must freeze flight authority");
 });
 
 test("cold-spare transfer keeps authority running, then startup completion requires neutral", async () => {

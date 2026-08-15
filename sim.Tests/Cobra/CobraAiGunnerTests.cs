@@ -236,6 +236,21 @@ public class CobraAiGunnerTests
     }
 
     [Fact]
+    public void FreshAirframeCanJoinAnExistingMissionTickLineWithoutInheritingTrack()
+    {
+        CobraAiGunner gunner = Create(acquireSeconds: 0.0);
+        Assert.True(gunner.Advance(Input(0)).FireAuthorized);
+
+        gunner.RebaseAuthorityTick(1_954);
+        CobraAiGunnerDecision fresh = gunner.Advance(Input(1_954, consent: false));
+
+        Assert.Equal(1_954, fresh.AuthorityTick);
+        Assert.Equal(CobraAiGunnerState.Tracking, fresh.State);
+        Assert.False(fresh.FireAuthorized);
+        Assert.Throws<ArgumentOutOfRangeException>(() => gunner.RebaseAuthorityTick(-1));
+    }
+
+    [Fact]
     public void InvalidDefinitionsTicksAndObservationsAreRejected()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() =>

@@ -23,7 +23,7 @@ const world = JSON.parse(await readFile(new URL(
  * a lucky seed happened to cluster.
  */
 const SITES = Object.freeze([
-  ["camp ember", -6_775, -6_200],
+  ["camp ember", -3_800, -4_600],
   ["gorge middle", -3_000, -1_000],
   ["plantation", 550, -4_000],
   ["red earth quarry", 2_700, -1_700],

@@ -27,10 +27,11 @@ public static partial class CobraWebBridge
     static string? _selectedTargetId;
     static bool _engagementConsent;
     static bool _turnaroundActionHeld;
+    static bool _gunnerNeedsAuthorityRebase;
     static double _accumulatorSeconds;
 
     [JSExport]
-    public static void StartRoute(int routeChoice)
+    public static void StartRoute(int routeChoice, bool visualLab = false)
     {
         _routeChoice = routeChoice switch {
             0 => CobraCanyonRouteChoice.RiverGorge,
@@ -44,11 +45,14 @@ public static partial class CobraWebBridge
             definition.CreateTerrainSurface(),
             _routeChoice,
             windVelocityMps: CobraCanyonWindField.DefaultSynopticMps,
-            enableTerrainWind: true);
+            // Guided scenery review must not abandon an unpiloted helicopter to drift into a
+            // rollover while the camera is on rails. Play keeps the authored terrain wind.
+            enableTerrainWind: !visualLab);
         _controlLatch.Reset();
         _selectedTargetId = null;
         _engagementConsent = false;
         _turnaroundActionHeld = false;
+        _gunnerNeedsAuthorityRebase = false;
         _gunner = CreateGunner();
         _turretServo.Reset();
         _gunnerDecision = default;
@@ -155,6 +159,10 @@ public static partial class CobraWebBridge
             _accumulatorSeconds -= FixedDeltaSeconds;
             if (runtime.AirframeSwaps > airframeSwapsBeforeTick) {
                 _controlLatch.ObserveAuthoritySwap(runtime.AirframeSwaps);
+                // Mission time does not reset when the crew transfers to a cold spare. Rebase the
+                // newly-created crew track on the first tick of that airframe rather than feeding
+                // it a discontinuous mission tick and faulting every later frame.
+                _gunnerNeedsAuthorityRebase = true;
                 // Discard the rest of the old bird's render-frame budget. Otherwise it becomes an
                 // implicit catch-up impulse after the player deliberately starts the spare.
                 _accumulatorSeconds = 0.0;
@@ -434,6 +442,9 @@ public static partial class CobraWebBridge
                     x_m = evt.PositionWorldM.X,
                     y_m = evt.PositionWorldM.Y,
                     z_m = evt.PositionWorldM.Z,
+                    target_x_m = evt.TargetPositionWorldM?.X,
+                    target_y_m = evt.TargetPositionWorldM?.Y,
+                    target_z_m = evt.TargetPositionWorldM?.Z,
                 }).ToArray(),
                 mission = "hold-the-bridge",
                 combat_live = runtime.GroundWarCombatLive,
@@ -562,6 +573,16 @@ public static partial class CobraWebBridge
 
     static void AdvanceGunner(CobraMissionRuntime runtime)
     {
+        if (_gunnerNeedsAuthorityRebase) {
+            _gunner = CreateGunner();
+            _gunner.RebaseAuthorityTick(runtime.Cobra.State.Tick);
+            _turretServo.Reset();
+            _gunnerDecision = default;
+            _gunnerSightTargetId = null;
+            _gunnerSightAuthorityTick = long.MinValue;
+            _gunnerSightHasLineOfSight = false;
+            _gunnerNeedsAuthorityRebase = false;
+        }
         CobraGunnerTargetObservation? target = null;
         if (_selectedTargetId is not null) {
             GroundUnit? unit = runtime.GroundWar.FindUnit(_selectedTargetId);

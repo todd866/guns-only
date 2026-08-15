@@ -194,9 +194,14 @@ function turnaroundObjectiveCopy(turnaround) {
   }
 }
 
-function departureNavigationOverlay(actOverlay) {
+function flightNavigationOverlay(actOverlay) {
   const line = String(actOverlay?.line ?? "").toUpperCase();
-  return line.startsWith("DEPART") || line.startsWith("INGRESS") ? actOverlay : null;
+  return line.startsWith("DEPART") || line.startsWith("INGRESS")
+    || line.startsWith("RTB") || line.startsWith("SLOW")
+    || line.startsWith("CHECK SINK") || line.startsWith("FLARE")
+    || line.startsWith("HOVER") || line.startsWith("SORTIE COMPLETE")
+    ? actOverlay
+    : null;
 }
 
 function formatBleedRate(value) {
@@ -387,7 +392,7 @@ export function cobraObjectiveCopy(war, options = {}) {
 
   // On the ramp and along the ingress path, navigation is the achievable next action. Once the
   // Engage/Hold acts begin, conquest-specific garrison/clear/capture orders take precedence.
-  const navigation = departureNavigationOverlay(options.actOverlay);
+  const navigation = flightNavigationOverlay(options.actOverlay);
   if (navigation) return navigation;
 
   if (!war) return null;

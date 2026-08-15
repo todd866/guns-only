@@ -116,6 +116,22 @@ public sealed class CobraAiGunner
             ?? throw new ArgumentNullException(nameof(definition))).Validate();
     }
 
+    /// <summary>
+    /// Starts a fresh crew/airframe track at the mission authority's current tick line. Airframe
+    /// replacement deliberately preserves the mission clock while replacing the rotorcraft, so a
+    /// new gunner cannot assume that its first tick is zero.
+    /// </summary>
+    public void RebaseAuthorityTick(long nextAuthorityTick)
+    {
+        if (nextAuthorityTick < 0)
+            throw new ArgumentOutOfRangeException(nameof(nextAuthorityTick));
+        _nextAuthorityTick = nextAuthorityTick;
+        _assignedTargetId = null;
+        _qualifiedTrackSeconds = 0.0;
+        _requiresReacquisition = false;
+        _trackEverQualified = false;
+    }
+
     public CobraAiGunnerDecision Advance(in CobraAiGunnerInput input)
     {
         Validate(input);

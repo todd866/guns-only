@@ -165,7 +165,7 @@ public sealed class CobraGroundWarRuntime
             throw new InvalidOperationException("FOB has no terrain datum.");
         _fob = new FobResupplyZone(
             new Vec3D(fobLandmark.EastM, fobSurface.HeightM, fobLandmark.NorthM),
-            radiusM: 55.0,
+            radiusM: CampEmberOperations.ServiceZoneRadiusM,
             maxClearanceM: 9.0);
         _reinforceAccumulatorSeconds = HostileWaveIntervalSeconds - FirstHostileWaveDelaySeconds;
         SeedInitialForces();
@@ -409,7 +409,7 @@ public sealed class CobraGroundWarRuntime
             _damageScratch[victimIndex] += attacker.DamagePerSecond * dtSeconds;
             if (_chatterRng.NextDouble() < smallArmsChance)
                 PushEvent("small-arms", attacker.Id, attacker.HomeSiteId, attacker.Faction,
-                    attacker.PositionWorldM);
+                    attacker.PositionWorldM, living[victimIndex].PositionWorldM);
         }
 
         for (int index = 0; index < living.Count; index++) {
@@ -977,11 +977,13 @@ public sealed class CobraGroundWarRuntime
         string? unitId,
         string? siteId,
         GroundFaction? faction,
-        in Vec3D positionWorldM)
+        in Vec3D positionWorldM,
+        Vec3D? targetPositionWorldM = null)
     {
         if (_recentEvents.Count >= 24) return;
         _recentEvents.Add(new GroundWarEvent(
-            _authorityTick, kind, unitId, siteId, faction, positionWorldM));
+            _authorityTick, kind, unitId, siteId, faction, positionWorldM,
+            targetPositionWorldM));
     }
 
     static List<ContestedSite> BuildSites(

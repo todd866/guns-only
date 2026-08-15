@@ -149,12 +149,7 @@ export function emberActObjectiveOverlay(act, options = {}) {
         detail: "Keep more points than the enemy and their tickets bleed",
       };
     case "rtb":
-      return {
-        line: remaining
-          ? `RTB · ${remaining} TO CAMP EMBER`
-          : "RTB · CAMP EMBER PAD",
-        detail: "Follow the path home and put the skids on the pad",
-      };
+      return emberRtbFlightCue({ ...options, remaining });
     case "complete":
       return {
         line: "SORTIE COMPLETE",
@@ -163,4 +158,100 @@ export function emberActObjectiveOverlay(act, options = {}) {
     default:
       return null;
   }
+}
+
+/**
+ * A deliberately simple, gameplay-authored stabilized helicopter recovery card. It teaches one
+ * decision at a time from the same authority range/speed/sink facts the pilot is flying. These
+ * bands are operational coaching, not an AH-1G NATOPS claim.
+ */
+export function emberRtbFlightCue(options = {}) {
+  const rangeM = Number(options.remainingM);
+  const speedKts = Number(options.speedKts);
+  const sinkFpm = Math.max(0, Number(options.sinkFpm) || 0);
+  const visual = emberRtbVisualState({ remainingM: rangeM, speedKts, sinkFpm });
+  const remaining = options.remaining ?? formatRemainingKm(rangeM);
+  const linePrefix = remaining ? `RTB · ${remaining}` : "RTB · CAMP EMBER";
+
+  if (!Number.isFinite(rangeM) || rangeM > 1_200) {
+    return {
+      line: `${linePrefix} · JOIN FINAL 300°`,
+      detail: "45–60 KT · follow amber gates",
+      visual,
+    };
+  }
+  if (rangeM > 600) {
+    if (Number.isFinite(speedKts) && speedKts > 60) {
+      return {
+        line: `SLOW · ${Math.round(speedKts)} KT ON FINAL`,
+        detail: "35–50 KT",
+        visual,
+      };
+    }
+    return {
+      line: `${linePrefix} · STABILIZE`,
+      detail: "35–50 KT · ≤600 FPM",
+      visual,
+    };
+  }
+  if (rangeM > 180) {
+    if (sinkFpm > 450) {
+      return {
+        line: `CHECK SINK · ${Math.round(sinkFpm)} FPM`,
+        detail: "Raise collective smoothly",
+        visual,
+      };
+    }
+    return {
+      line: `${linePrefix} · SHORT FINAL`,
+      detail: "20–35 KT · ≤400 FPM · white H",
+      visual,
+    };
+  }
+  if (Number.isFinite(speedKts) && speedKts > 20) {
+    return {
+      line: `FLARE · SLOW FROM ${Math.round(speedKts)} KT`,
+      detail: "Ease aft cyclic · add collective",
+      visual,
+    };
+  }
+  return {
+    line: "HOVER TO THE WHITE H",
+    detail: "Settle vertically · both skids, then collective down",
+    visual,
+  };
+}
+
+/**
+ * Visual recovery language for the windscreen path. The funnel narrows as the ship approaches the
+ * FATO; unsafe speed or sink turns the complete path coral and pulses it. Text can therefore stay
+ * terse—the geometry shows where to be and the colour shows whether the approach is stable.
+ */
+const RTB_VISUAL = Object.freeze({
+  join: Object.freeze({ phase: "join", halfWidthM: 18, alert: false, colorHex: 0xffad3d }),
+  stabilize: Object.freeze({ phase: "stabilize", halfWidthM: 14, alert: false, colorHex: 0xffad3d }),
+  stabilizeAlert: Object.freeze({ phase: "stabilize", halfWidthM: 14, alert: true, colorHex: 0xff613f }),
+  shortFinal: Object.freeze({ phase: "short-final", halfWidthM: 10, alert: false, colorHex: 0xffc35a }),
+  shortFinalAlert: Object.freeze({ phase: "short-final", halfWidthM: 10, alert: true, colorHex: 0xff613f }),
+  flare: Object.freeze({ phase: "flare", halfWidthM: 7, alert: true, colorHex: 0xff613f }),
+  hover: Object.freeze({ phase: "hover", halfWidthM: 7, alert: false, colorHex: 0xffd982 }),
+});
+
+export function emberRtbVisualState(options = {}) {
+  const rangeM = Number(options.remainingM);
+  const speedKts = Number(options.speedKts);
+  const sinkFpm = Math.max(0, Number(options.sinkFpm) || 0);
+  if (!Number.isFinite(rangeM) || rangeM > 1_200) {
+    return RTB_VISUAL.join;
+  }
+  if (rangeM > 600) {
+    const alert = Number.isFinite(speedKts) && speedKts > 60;
+    return alert ? RTB_VISUAL.stabilizeAlert : RTB_VISUAL.stabilize;
+  }
+  if (rangeM > 180) {
+    const alert = sinkFpm > 450;
+    return alert ? RTB_VISUAL.shortFinalAlert : RTB_VISUAL.shortFinal;
+  }
+  const alert = Number.isFinite(speedKts) && speedKts > 20;
+  return alert ? RTB_VISUAL.flare : RTB_VISUAL.hover;
 }

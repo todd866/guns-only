@@ -111,7 +111,7 @@ public class CobraCanyonDefinitionTests
     }
 
     [Fact]
-    public void CampEmberSitsOnLandSpurNotRiverWater()
+    public void CampEmberSitsOnTheSurveyedUplandBench()
     {
         CobraCanyonDefinition world = CobraCanyonDefinition.Create();
         CobraCanyonLandmarkDefinition camp = world.Landmarks.First(landmark =>
@@ -120,13 +120,13 @@ public class CobraCanyonDefinitionTests
 
         Assert.True(terrain.TrySample(camp.EastM, camp.NorthM, out TerrainSample surface));
         Assert.Equal(TerrainSurfaceKind.Land, surface.Kind);
-        Assert.True(surface.HeightM >= 185.0, $"Camp Ember height {surface.HeightM:F1} m is still river-floor short.");
-        Assert.Equal(-6_775.0, camp.EastM);
-        Assert.Equal(-6_200.0, camp.NorthM);
-        // Shared departure is the land FOB; river join is the next gorge gate.
+        Assert.Equal(CampEmberOperations.PadElevationM, surface.HeightM, 9);
+        Assert.Equal(CampEmberOperations.CentreEastM, camp.EastM);
+        Assert.Equal(CampEmberOperations.CentreNorthM, camp.NorthM);
+        // Navigation joins the existing gorge after a protected departure; terrain authority's
+        // river ribbon stays where it was instead of being dragged through the new FOB.
         CobraCanyonRoutePoint riverStart = world.Route(CobraCanyonRouteChoice.RiverGorge).Points[0];
-        Assert.Equal(camp.EastM, riverStart.EastM);
-        Assert.Equal(camp.NorthM, riverStart.NorthM);
+        Assert.True(Math.Abs(camp.EastM - riverStart.EastM) > 1_000.0);
     }
 
     [Fact]
@@ -135,20 +135,23 @@ public class CobraCanyonDefinitionTests
         CobraCanyonTerrainSurface terrain =
             CobraCanyonDefinition.Create().CreateTerrainSurface();
         (double EastOffsetM, double NorthOffsetM)[] offsets = {
-            (0.0, 0.0), (50.0, 0.0), (-50.0, 0.0),
-            (0.0, 50.0), (0.0, -50.0), (35.0, 35.0), (-35.0, -35.0)
+            (0.0, 0.0), (150.0, 0.0), (-150.0, 0.0),
+            (0.0, 150.0), (0.0, -150.0), (100.0, 100.0), (-100.0, -100.0)
         };
 
         foreach ((double eastOffsetM, double northOffsetM) in offsets) {
             Assert.True(terrain.TrySample(
-                -6_775.0 + eastOffsetM,
-                -6_200.0 + northOffsetM,
+                CampEmberOperations.CentreEastM + eastOffsetM,
+                CampEmberOperations.CentreNorthM + northOffsetM,
                 out TerrainSample sample));
-            Assert.Equal(202.0, sample.HeightM, 9);
+            Assert.Equal(CampEmberOperations.PadElevationM, sample.HeightM, 9);
             Assert.Equal(TerrainSurfaceKind.Land, sample.Kind);
         }
 
-        Assert.True(terrain.TrySample(-6_775.0, -6_200.0, out TerrainSample centre));
+        Assert.True(terrain.TrySample(
+            CampEmberOperations.CentreEastM,
+            CampEmberOperations.CentreNorthM,
+            out TerrainSample centre));
         Assert.InRange(centre.UpNormal.Y, 0.999_999, 1.000_001);
     }
 

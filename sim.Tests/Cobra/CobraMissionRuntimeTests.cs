@@ -568,7 +568,10 @@ public class CobraMissionRuntimeTests
     {
         CobraCanyonDefinition world = CobraCanyonDefinition.Create();
         CobraCanyonTerrainSurface terrain = world.CreateTerrainSurface();
-        Assert.True(terrain.TrySample(-6_775.0, -6_200.0, out TerrainSample pad));
+        Assert.True(terrain.TrySample(
+            CampEmberOperations.CentreEastM,
+            CampEmberOperations.CentreNorthM,
+            out TerrainSample pad));
         padSurfaceHeightM = pad.HeightM;
         return new CobraMissionRuntime(world, terrain, CobraCanyonRouteChoice.RiverGorge);
     }
@@ -694,12 +697,14 @@ public class CobraMissionRuntimeTests
         foreach (CobraAirframeSlot slot in runtime.AirframePool)
         {
             if (slot.State != CobraAirframeState.Ready) continue;
-            double eastDeltaM = slot.ParkedPositionWorldM.X - (-6_775.0);
-            double northDeltaM = slot.ParkedPositionWorldM.Z - (-6_200.0);
+            double eastDeltaM = slot.ParkedPositionWorldM.X - CampEmberOperations.CentreEastM;
+            double northDeltaM = slot.ParkedPositionWorldM.Z - CampEmberOperations.CentreNorthM;
             double distanceM = Math.Sqrt(
                 eastDeltaM * eastDeltaM + northDeltaM * northDeltaM);
             // Inside the level apron, clear of the spawn pad's safety footprint.
-            Assert.InRange(distanceM, 15.0, 58.0);
+            Assert.InRange(distanceM,
+                CampEmberOperations.SafetyAreaRadiusM + 10.0,
+                CampEmberOperations.LevelApronRadiusM - 20.0);
         }
     }
 

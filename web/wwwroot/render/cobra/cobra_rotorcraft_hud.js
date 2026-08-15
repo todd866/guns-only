@@ -43,6 +43,18 @@ function finiteOrNull(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+function targetRoleLabel(unit, war) {
+  const role = String(unit?.role ?? "").toLowerCase();
+  const roleLabel = role === "infantry" ? "INFANTRY SQUAD"
+    : role === "soft-vehicle" ? "SUPPLY TRUCK"
+      : role === "hard-point" ? "FORTIFIED GUN PIT"
+        : role === "dshk-site" ? "DShK AA SITE"
+          : String(unit?.id ?? "TARGET").split(".").pop().toUpperCase();
+  const home = (war?.sites ?? []).find((site) => site?.id === unit?.home_site_id);
+  const siteLabel = String(home?.label ?? "").trim().toUpperCase();
+  return siteLabel ? `${roleLabel} · ${siteLabel}` : roleLabel;
+}
+
 function regimeToken(regime) {
   const raw = String(regime ?? "normal").toLowerCase();
   switch (raw) {
@@ -213,9 +225,10 @@ export function cobraRotorcraftHudModel(authorityState) {
   const unit = targetId
     ? (war?.units ?? []).find((candidate) => candidate?.id === targetId && candidate.alive === true)
     : null;
+  const targetLabel = unit ? targetRoleLabel(unit, war) : String(targetId ?? "").split(".").pop();
   const designation = unit === undefined || unit === null ? null : {
     id: unit.id,
-    label: String(unit.id).split(".").pop(),
+    label: targetLabel,
     level: gunnerLevel,
     worldX: finite(unit.x_m),
     worldY: finite(unit.y_m),
@@ -226,7 +239,7 @@ export function cobraRotorcraftHudModel(authorityState) {
       finite(unit.z_m) - finite(vehicle.z_m),
     ),
   };
-  if (targetId) detailParts.push(`TGT ${String(targetId).split(".").pop()}`);
+  if (targetId) detailParts.push(`TGT ${targetLabel}`);
   // Slant range keeps an out-of-frame target quantified — the turret's arc is far wider
   // than the combiner, so "on target" often means "off the glass".
   if (designation) {

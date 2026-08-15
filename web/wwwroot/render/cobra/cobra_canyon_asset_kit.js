@@ -51,7 +51,7 @@ export const COBRA_CANYON_AMBIENT_BUDGETS = Object.freeze({
 
 /** Keep the Camp Ember rear-seat eye clear of green mass / mist (Build 302). */
 export const CAMP_EMBER_LANDMARK_ID = "landmark.cobra-canyon.camp-ember.v1";
-export const CAMP_EMBER_CLEAR_RADIUS_M = 120;
+export const CAMP_EMBER_CLEAR_RADIUS_M = 230;
 export const COBRA_OBJECTIVE_CLEAR_RADIUS_M = 135;
 const COBRA_OBJECTIVE_LANDMARK_IDS = new Set([
   "landmark.cobra-canyon.iron-bell-bridge.v1",

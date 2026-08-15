@@ -390,4 +390,5 @@ public readonly record struct GroundWarEvent(
     string? UnitId,
     string? SiteId,
     GroundFaction? Faction,
-    Vec3D PositionWorldM);
+    Vec3D PositionWorldM,
+    Vec3D? TargetPositionWorldM = null);

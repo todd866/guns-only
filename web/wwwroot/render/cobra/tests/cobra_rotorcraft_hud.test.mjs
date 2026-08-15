@@ -238,12 +238,13 @@ test("the gunner's mark becomes a designation the pilot can find in the world", 
   fixture.vehicle.y_m = 120;
   fixture.vehicle.z_m = 0;
   fixture.ground_war.units = [
-    { id: "unit.hostile.recoilless.2", faction: "hostile", alive: true, x_m: 300, y_m: 40, z_m: 400 },
+    { id: "unit.hostile.recoilless.2", faction: "hostile", role: "hard-point", alive: true, x_m: 300, y_m: 40, z_m: 400, home_site_id: "site.iron-bell" },
     { id: "unit.hostile.recoilless.9", faction: "hostile", alive: true, x_m: 10, y_m: 0, z_m: 10 },
   ];
+  fixture.ground_war.sites = [{ id: "site.iron-bell", label: "Iron Bell" }];
   const model = cobraRotorcraftHudModel(fixture);
   assert.equal(model.designation.id, "unit.hostile.recoilless.2");
-  assert.equal(model.designation.label, "2");
+  assert.equal(model.designation.label, "FORTIFIED GUN PIT · IRON BELL");
   assert.equal(model.designation.level, "ready");
   assert.deepEqual(
     [model.designation.worldX, model.designation.worldY, model.designation.worldZ],
@@ -256,6 +257,7 @@ test("the gunner's mark becomes a designation the pilot can find in the world", 
     true,
     model.gunner.detail,
   );
+  assert.match(model.gunner.detail, /TGT FORTIFIED GUN PIT · IRON BELL/);
 
   const firing = cobraRotorcraftHudModel({
     ...fixture,

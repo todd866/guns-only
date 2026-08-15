@@ -636,36 +636,36 @@ function composeHazard(mesh, index, placement, work) {
  * not have. Biasing every vertex to its neighbourhood minimum makes the chord conservative: the
  * drawn ground sits at or below simulated ground, so the error can only ever show the pilot MORE
  * clearance than exists, never less. It costs five analytic samples per vertex at build time.
- * Camp Ember adds twenty-five local axes below because its 58 m apron cannot fit inside a
- * 105–174 m cell. The denser inner ring also keeps triangles which cross the circular blend edge
+ * Camp Ember adds dedicated local axes because its 380 m level bench and 600 m blend cannot fit
+ * inside a 105–174 m cell. The rings keep triangles which cross the circular blend edge
  * within 0.3 m of contact height; the rest of the world retains its authored tier resolution.
  * Crests pay for the minimum bias by shaving, which is the correct side to lose on.
  */
 const CAMP_EMBER_GRID_OFFSETS_M = Object.freeze([
   -COBRA_CANYON_CAMP_EMBER_APRON.blendRadiusM,
+  -260,
+  -220,
+  -200,
+  -194,
   -COBRA_CANYON_CAMP_EMBER_APRON.levelRadiusM,
-  -56,
-  -52,
-  -48,
+  -186,
+  -180,
+  -160,
+  -120,
+  -80,
   -40,
-  -32,
-  -28,
-  -24,
-  -20,
-  -16,
-  -8,
   0,
-  8,
-  16,
-  20,
-  24,
-  28,
-  32,
   40,
-  48,
-  52,
-  56,
+  80,
+  120,
+  160,
+  180,
+  186,
   COBRA_CANYON_CAMP_EMBER_APRON.levelRadiusM,
+  194,
+  200,
+  220,
+  260,
   COBRA_CANYON_CAMP_EMBER_APRON.blendRadiusM,
 ]);
 const BASIN_GRID_CACHE = new WeakMap();
