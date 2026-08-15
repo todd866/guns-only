@@ -89,7 +89,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     sequence: 6,
     aircraft: "Rapier",
     title: "Rapier Intercept",
-    shortObjective: "Climb onto the thin-air M4.2 shelf, zoom for one gun pass on the high-altitude balloon, then re-enter and trap at the midpoint arrestor.",
+    shortObjective: "Fly the visible high-speed path to three balloon mines at 45,000 ft, destroy their lethal drone payloads before deployment, then recover.",
     qualification: "",
     releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
     visible: true,

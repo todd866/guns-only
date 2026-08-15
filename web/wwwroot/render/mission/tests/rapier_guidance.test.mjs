@@ -82,6 +82,42 @@ test("Rapier guidance is a quiet mode line with authority and takeover", () => {
   assert.equal(cue.level, "active");
 });
 
+test("balloon-mine guidance replaces PILOT CLIMB with path and reaction authority", () => {
+  const inbound = rapierGuidancePresentation({
+    rapier_mission_available: true,
+    rapier_job: "BALLOON",
+    rapier_zoom_lob: false,
+    rapier_automation_enabled: false,
+    rapier_automation_active: false,
+    rapier_mission_phase: 2,
+    rapier_balloon_reaction_active: false,
+  });
+  assert.equal(inbound.text, "FLY PATH · CLIMB");
+
+  const detected = rapierGuidancePresentation({
+    rapier_mission_available: true,
+    rapier_job: "BALLOON",
+    rapier_zoom_lob: false,
+    rapier_automation_enabled: false,
+    rapier_automation_active: false,
+    rapier_mission_phase: 10,
+    rapier_balloon_reaction_active: true,
+    rapier_balloon_reaction_seconds: 18.2,
+  });
+  assert.equal(detected.text, "FLY PATH · MINE ARM · 19 SEC · GUNS · CLEAR ALL");
+
+  const deployed = rapierGuidancePresentation({
+    rapier_mission_available: true,
+    rapier_job: "BALLOON",
+    rapier_zoom_lob: false,
+    rapier_automation_enabled: false,
+    rapier_automation_active: false,
+    rapier_mission_phase: 11,
+    rapier_balloon_payload_deployed: true,
+  });
+  assert.equal(deployed.text, "FLY PATH · DRONES DEPLOYED");
+});
+
 test("attack guidance exposes swarm release without owning the centre", () => {
   const cue = rapierGuidancePresentation({
     rapier_mission_available: true,

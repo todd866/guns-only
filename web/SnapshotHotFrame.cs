@@ -158,6 +158,10 @@ internal static class SnapshotHotFrame {
         Bool("rapier_pursuit_active");
         Num("rapier_pursuer_count", RawInteger);
         Num("rapier_pursuit_range_m", 1);
+        Bool("rapier_balloon_reaction_active");
+        Num("rapier_balloon_reaction_seconds", 2);
+        Bool("rapier_balloon_payload_deployed");
+        Num("rapier_balloon_carriers_remaining", RawInteger);
         Num("rapier_guidance_x", 3);
         Num("rapier_guidance_y", 3);
         Num("rapier_guidance_z", 3);
@@ -1118,6 +1122,15 @@ internal static class SnapshotHotFrame {
         w.Bool("rapier_pursuit_active", session.RapierPursuitActive);
         w.Num("rapier_pursuer_count", session.RapierPursuerCount, RawInteger);
         w.Num("rapier_pursuit_range_m", session.RapierPursuitRangeM, 1);
+        w.Bool("rapier_balloon_reaction_active", session.RapierBalloonReactionActive);
+        w.Num("rapier_balloon_reaction_seconds",
+            session.RapierBalloonReactionSecondsRemaining, 2);
+        w.Bool("rapier_balloon_payload_deployed", session.RapierBalloonPayloadDeployed);
+        w.Num("rapier_balloon_carriers_remaining",
+            session.RapierMissionAvailable
+                && session.Beat.ScriptedIntercept?.Job == RapierJobKind.Balloon
+                    ? session.LiveOpponentCount : 0,
+            RawInteger);
         w.Num("rapier_guidance_x", session.RapierGuidanceWaypoint.X, 3);
         w.Num("rapier_guidance_y", session.RapierGuidanceWaypoint.Y, 3);
         w.Num("rapier_guidance_z", session.RapierGuidanceWaypoint.Z, 3);

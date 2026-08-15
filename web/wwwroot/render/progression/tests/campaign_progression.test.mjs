@@ -124,8 +124,8 @@ test("the missions are genuinely different fights and expose their aircraft hone
   assert.notEqual(guns.aircraft, rapier.aircraft);
   assert.match(medevac.shortObjective, /pickup.*capsule.*clinic/i);
   assert.match(rapier.shortObjective,
-    /thin-air M4\.2.*one gun pass.*high-altitude balloon.*re-enter.*midpoint arrestor/i,
-    "the Rapier card must declare the deterministic balloon energy lesson");
+    /visible high-speed path.*three balloon mines at 45,000 ft.*lethal drone payloads before deployment.*recover/i,
+    "the Rapier card must declare the time-critical balloon-mine intercept and recovery");
   // None advertises a qualification: there is nothing to earn.
   assert.equal(guns.qualification, "");
   assert.equal(drone.qualification, "");

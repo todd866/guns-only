@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=332";
+import { createHud } from "./hud.js?v=333";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=332";
+} from "./render/debrief/sortie_result.js?v=333";
 import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
@@ -69,8 +69,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=332";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=332";
+} from "./render/release/release_identity.js?v=333";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=333";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -83,7 +83,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=332";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=333";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -92,10 +92,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=332";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=333";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=332";
+} from "./render/nav/carrier_sortie_touch_control.js?v=333";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -178,7 +178,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=332";
+} from "./render/telemetry/ai_frame_pressure.js?v=333";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -188,14 +188,14 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=332";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=332";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=332";
+} from "./render/telemetry/telemetry_batch.js?v=333";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=333";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=333";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=332";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=332";
+} from "./render/shell/boot_watchdog.js?v=333";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=333";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -204,7 +204,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=332";
+} from "./render/settings/player_settings.js?v=333";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -251,13 +251,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=332";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=332";
+} from "./render/scene/scene_builders.js?v=333";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=333";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=332";
+} from "./render/audio/flight_audio.js?v=333";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -3493,10 +3493,10 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   "rapier-intercept": Object.freeze({
     kicker: "Eastern corridor · Rapier operations",
     title: "Rapier Intercept",
-    sortie: "High-altitude balloon · finite internal gun · one pass · re-entry · midpoint arrestor recovery",
+    sortie: "Three balloon mines · lethal drone payloads · finite internal gun · gated midpoint arrestor recovery",
     configuration: "Fictional TBCC Rapier · canonical full fuel · finite internal gun · no auxiliary drones",
-    brief: "Catapult, ride the continuous 35 kPa climb through turbine-to-ram handover, make one balloon gun pass from the 24 km M4.2 shelf, then re-enter and recover. Watch Q, thrust minus drag, binding-panel heat, and home reserve.",
-    controls: "P mission automation · F internal gun · arrows/W/S pilot takeover\nO calls it a day and starts RTB · Esc → Call It A Day button · T safe time compression · fly every recovery square",
+    brief: "Launch onto the visible high-speed intercept path and kill all three payload balloons at 45,000 ft before their lethal drones deploy. Once the minefield is clear, follow the amber recovery corridor home and trap at the midpoint arrestor.",
+    controls: "P optional mission demo · F internal gun · arrows/W/S pilot takeover\nInside detection range the MINE ARM clock is live: clear all three, then fly the amber RTB path · Esc pauses",
   }),
   "cobra-lab": Object.freeze({
     kicker: "Cobra Canyon · Hold the Bridge",
@@ -11657,7 +11657,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=332")
+    navigator.serviceWorker.register("service-worker.js?v=333")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

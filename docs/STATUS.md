@@ -33,13 +33,16 @@ ceasefire/relief handoff, the shared highway-in-the-sky corridor, and the FUEL/N
 navigation panel. Manual wing sweep now announces its forward/aft physical stop instead of looking
 dead at 20/68 degrees. Both the generic suit/harness G stack and the F-14-specific G-driven intake
 and structure layers are removed; measured buffet, airflow, engine and wing-actuator sound remain.
-Next candidate: Build 332 (branch `fix/pause-cobra-highway`) — carries forward the Build 331
+Next candidate: Build 333 (branch `fix/pause-cobra-highway`) — carries forward the Build 331
 recovery-field graphics, rebuilt Camp Ember operations, F-14A-only Top Gun player route, successive
 opponents and conventional Case I carrier recovery. It adds a real Escape pause menu, a longer
 look-ahead Cobra route ribbon, persistent authored recovery gates, and the same visible RTB authority
 for the F-22. F-14 wing sweep now changes lift, drag, inertia and roll authority, with a persistent
 top-down aircraft indicator and corrected supersonic drag schedule. Gun-assist and recovery telemetry
 now record the control-authority and presentation state needed to diagnose an owner sortie directly.
+The Rapier production card now stages three balloon mines 35 NM from the strip at 45,000 ft, draws
+the outbound high-speed intercept path, telemeters their lethal-drone reaction clock, disables time
+compression, and removes the buried launch-gallery presentation before the gated RTB.
 
 Build 325 shipped the following owner-flight findings and remains the baseline for this candidate.
 
@@ -138,7 +141,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | --- | --- | --- | --- | --- |
 | F-22A · Guns Only (`first-merge`) | **production** | Aircraft picker | Build 238 automation plus a recorded 2026-08-02 human acceptance flight (session `web-1785627445839-631596`). Build 264 graduated the sparring pair together; Build 265 aimed Ace fire at the ballistic solution. Build 308 bounds pathological terrain marches, reduces Auto-GCAS terrain work, and restores physical flyby acoustics and cast shadows. Builds 328-329 add current-position Call It A Day/Bingo RTB, remove the unsourced G-only canopy/seal voice and close conventional runway recovery. Build 330 candidate improves the shared recovery-field presentation without changing landing authority. | Fresh human flight on Build 330 to confirm the corridor, ceasefire, revised sound and airfield picture; w1 snapshot despawn; descent sim-step spike; lead/ballistics quality |
 | Rated arena (`multiplayer`) | **preview** | Preview acknowledgement only | Build 310 candidate adds same-origin matchmaking, shared human/bot Elo, bounded bot-only handicap profiles, outcome/fun reporting, and fail-closed launch/storage gates | Complete green gate; configured durable ladder storage; representative match, retry, abandon, and fly-again acceptance; multiplayer product acceptance before promotion |
-| Rapier · Intercept (`rapier-intercept`) | **production** | Aircraft picker | Build 238 automation earns the 24 km/M4.2 shelf, takes one physical M61 pass, then traps and stops at 2,520 s; the no-trigger mirror traps without firing and truthfully ends Draw. Build 328 candidate adds fitted recovery energy, shared current-position Call It A Day/Bingo RTB, and authoritative player/enemy ceasefire. | Fresh representative human launch/intercept/recovery flight on Build 328 |
+| Rapier · Intercept (`rapier-intercept`) | **production** | Aircraft picker | Build 333 stages three lethal-drone balloon mines 35 NM away at FL450, provides a visible outbound intercept path and 45-second reaction clock, disables time compression, then hands off to the shared amber RTB corridor and midpoint-arrestor recovery after all three kills. The measured automated handoff is 3:18 at M1.33/FL432 with 29 seconds left on the mine clock. | Fresh representative human launch/intercept/recovery flight on Build 333 |
 | Low-level drone intercept (`low-level-drone`) | **quarantined** | Preview acknowledgement only | Runtime and automated contracts exist | Ground-target/player-purpose closure and complete human flight |
 | CASEVAC flight course (`medevac`) | **quarantined** | Preview acknowledgement only | Candidate guidance follows the authored orchard-gap route and briefs 32–42 m AGL near the windbreak | End-to-end human pickup, handoff, safe-exit, and debrief flight |
 | Rapier circuits (`rapier-circuits`) | **preview** | Preview acknowledgement only | Circuit/recovery automation exists | Re-audit stale quarantines and record a complete representative circuit/trap |

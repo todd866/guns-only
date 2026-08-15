@@ -57,8 +57,8 @@ const LEGACY_DESIGN_DASH_MACH = 3.55;
 
 const JOB_BRIEFING = Object.freeze({
   BALLOON: Object.freeze({
-    label: "high-altitude balloon",
-    task: "Climb above it, preserve energy, and make the short firing pass.",
+    label: "balloon-mine gallery",
+    task: "Fly the visible intercept path and kill all three drone carriers before they deploy.",
   }),
   AWACS: Object.freeze({
     label: "airborne early-warning aircraft",
@@ -359,12 +359,21 @@ export function rapierGuidancePresentation(state) {
   }
 
   const job = typeof state.rapier_job === "string" ? state.rapier_job : "";
+  const balloonGallery = job === "BALLOON" && state.rapier_zoom_lob !== true;
+  const payloadDeployed = state.rapier_balloon_payload_deployed === true;
+  const reactionSeconds = finiteNumber(state.rapier_balloon_reaction_seconds);
+  if (balloonGallery && payloadDeployed) {
+    phaseText = "DRONES DEPLOYED";
+  } else if (balloonGallery && state.rapier_balloon_reaction_active === true
+      && reactionSeconds !== null) {
+    phaseText = `MINE ARM · ${Math.ceil(Math.max(0, reactionSeconds))} SEC`;
+  }
   const noseErr = finiteNumber(state.rapier_nose_on_v_err_deg);
   const weapon = phase === PHASE_ATTACK && !patternOnly
     ? (job === "TRANSPORT"
       ? " · GUNS · ONE PASS"
       : job === "BALLOON"
-        ? " · GUNS · ONE SLASH"
+        ? (balloonGallery ? " · GUNS · CLEAR ALL" : " · GUNS · ONE SLASH")
         : ` · F RELEASES SWARM · ${drones}`)
     : "";
   const coastAlign = !patternOnly && (phase === 6 || phase === 7) && noseErr !== null
@@ -372,7 +381,8 @@ export function rapierGuidancePresentation(state) {
     : "";
   const authority = patternOnly
     ? circuitsCoach(state)
-    : (active ? "AUTO" : enabled ? "AUTO STBY" : "PILOT");
+    : (active ? "AUTO" : enabled ? "AUTO STBY"
+      : balloonGallery ? "FLY PATH" : "PILOT");
   const skin = patternOnly ? null : skinFragment(state);
   const thermal = patternOnly ? null : thermalChannels(state);
 

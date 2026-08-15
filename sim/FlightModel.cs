@@ -485,6 +485,21 @@ public static class FlightModel {
         FuelFreeMassKg: HighAltitudeBalloonTotalMassKg,
         BuoyantVolumeM3: HighAltitudeBalloonVolumeM3);
 
+    public const double RapierGalleryBalloonFloatAltitudeM = 13_716.0;
+    public static double RapierGalleryBalloonVolumeM3 =>
+        HighAltitudeBalloonTotalMassKg
+        / StandardAtmosphere1976.Instance.Sample(
+            RapierGalleryBalloonFloatAltitudeM).DensityKgM3;
+    /// Same sourced envelope/target presentation, ballasted for the production training lane.
+    /// The previous card moved the 33.5 km float actor without changing its
+    /// buoyancy, so it immediately climbed back toward FL1100 and made the nominal 35 NM intercept
+    /// another long chase. This mission-specific surrogate is neutrally buoyant at the authored
+    /// 45,000 ft lane while retaining the same mass, drag, damage sphere and visual identity.
+    public static readonly AircraftParams RapierGalleryBalloonSurrogate =
+        HighAltitudeBalloonPublicDataSurrogate with {
+            BuoyantVolumeM3 = RapierGalleryBalloonVolumeM3
+        };
+
     /// The KJ-500-class AEW&C: how the PLA sees and coordinates. Enormous, slow, turboprop,
     /// structurally ~2.5G and it cannot dodge. Killing it blinds a strike package worth 100x
     /// the drone that got it — which is the entire cost-exchange thesis in one target.

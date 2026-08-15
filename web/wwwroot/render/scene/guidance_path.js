@@ -89,7 +89,23 @@ function rapierRtbIntent(state) {
   return phase >= 11 && phase <= 13;
 }
 
+function rapierBalloonInterceptIntent(state) {
+  if (state?.rapier_mission_available !== true
+      || state?.rapier_pattern_only === true
+      || String(state?.rapier_job ?? "").toUpperCase() !== "BALLOON"
+      || state?.rapier_zoom_lob === true) return false;
+  const phase = Math.floor(Number(state?.rapier_mission_phase) || 0);
+  return phase >= 1 && phase <= 10 && state?.bandit_alive !== false;
+}
+
 function directRtbTarget(state, currentUpM) {
+  if (rapierBalloonInterceptIntent(state)) {
+    const eastM = finiteNumber(state?.rapier_guidance_x);
+    const upM = finiteNumber(state?.rapier_guidance_y);
+    const northM = finiteNumber(state?.rapier_guidance_z);
+    if (eastM === null || upM === null || northM === null) return null;
+    return { eastM, upM, northM, id: "rapier-balloon-intercept" };
+  }
   const active = state?.player_rtb_active === true
     || (state?.rtb_steer === true && state?.recovery_point_known === true)
     || rapierRtbIntent(state);
@@ -159,6 +175,7 @@ export function rtbGuidanceGates(state = {}, options = {}) {
       active: index === 0,
       dirty: false,
       rtb: true,
+      intercept: target.id === "rapier-balloon-intercept",
     });
   }
   return gates;
@@ -360,6 +377,7 @@ export function createGuidancePath(THREE, options = {}) {
         || state?.player_rtb_active === true
         || (state?.rtb_steer === true && state?.recovery_point_known === true)
         || rapierRtbIntent(state)
+        || rapierBalloonInterceptIntent(state)
         || carrierRtbRequested;
       const samples = state?.approach_gates;
       const hotApproach = approachActive && Array.isArray(samples);
@@ -392,6 +410,7 @@ export function createGuidancePath(THREE, options = {}) {
       }
       let ladder = cachedLadder;
       let rtbMode = false;
+      let interceptMode = false;
       let approachJoinMode = false;
       if (ladder.length) {
         // Procedure ownership is a lifecycle boundary. Do not replay ownship-relative transit
@@ -420,6 +439,7 @@ export function createGuidancePath(THREE, options = {}) {
           state?.carrier_sortie_route_active === true ? 1 : 0,
           state?.carrier_sortie_route_rtb_requested === true ? 1 : 0,
           rapierRtbIntent(state) ? 1 : 0,
+          rapierBalloonInterceptIntent(state) ? 1 : 0,
           Math.floor(Number(state?.rapier_mission_phase) || 0),
           state?.carrier_sortie_route_fix ?? "",
           state?.mesh_home_place_id ?? "",
@@ -428,6 +448,9 @@ export function createGuidancePath(THREE, options = {}) {
           finiteNumber(state?.carrier_sortie_route_target_x) ?? "",
           finiteNumber(state?.carrier_sortie_route_target_y) ?? "",
           finiteNumber(state?.carrier_sortie_route_target_z) ?? "",
+          finiteNumber(state?.rapier_guidance_x) ?? "",
+          finiteNumber(state?.rapier_guidance_y) ?? "",
+          finiteNumber(state?.rapier_guidance_z) ?? "",
           state?.golden_path_valid === true ? 1 : 0,
           finiteNumber(state?.golden_path_target_alt_m) ?? "",
           px === null ? "" : Math.round(px / 100),
@@ -440,6 +463,7 @@ export function createGuidancePath(THREE, options = {}) {
         }
         ladder = cachedRtbLadder;
         rtbMode = ladder.length > 0;
+        interceptMode = ladder.some((gate) => gate.intercept === true);
       }
       if (approachActive && ladder.length) {
         const join = approachJoinGuidanceGates(state ?? {}, ladder, config);
@@ -506,7 +530,8 @@ export function createGuidancePath(THREE, options = {}) {
 
         if (gate.rtb === true) {
           mesh.material = rtbMaterial;
-          mesh.userData.guidanceStyle = "rtb-chevron";
+          mesh.userData.guidanceStyle = gate.intercept === true
+            ? "intercept-chevron" : "rtb-chevron";
           tint.color = gate.active ? config.rtbActiveColor : config.rtbColor;
           tint.opacity = gate.active ? config.rtbActiveOpacity : config.rtbOpacity;
         } else if (gate.active) {
@@ -524,7 +549,8 @@ export function createGuidancePath(THREE, options = {}) {
       }
 
       root.visible = true;
-      root.userData.mode = rtbMode ? "rtb" : approachJoinMode ? "approach-join" : "procedure";
+      root.userData.mode = interceptMode ? "intercept"
+        : rtbMode ? "rtb" : approachJoinMode ? "approach-join" : "procedure";
       root.userData.joinGateCount = approachJoinMode
         ? ladder.filter((gate) => gate.join === true).length : 0;
       root.userData.drawnGateCount = drawn;

@@ -177,6 +177,32 @@ test("direct RTB builds a bounded golden breadcrumb corridor to published Home P
     GUIDANCE_PATH_DEFAULTS.rtbActiveOpacity);
 });
 
+test("Rapier balloon gallery draws the outbound intercept highway before RTB", () => {
+  const state = {
+    px: 0,
+    py: 600,
+    pz: 0,
+    bandit_alive: true,
+    rapier_mission_available: true,
+    rapier_pattern_only: false,
+    rapier_job: "BALLOON",
+    rapier_zoom_lob: false,
+    rapier_mission_phase: 2,
+    rapier_guidance_x: -65_000,
+    rapier_guidance_y: 6_865,
+    rapier_guidance_z: 0,
+  };
+  const gates = rtbGuidanceGates(state);
+  assert.ok(gates.length >= 3);
+  assert.equal(gates.every((gate) => gate.intercept === true), true);
+  assert.ok(gates[0].eastM < 0, "the first chevron points west toward the gallery");
+
+  const path = createGuidancePath(THREE);
+  assert.equal(path.update(state), gates.length);
+  assert.equal(path.object3d.userData.mode, "intercept");
+  assert.equal(path.object3d.children[0].userData.guidanceStyle, "intercept-chevron");
+});
+
 test("an active Case I gate gets a visible conformal join corridor", () => {
   const state = {
     px: 0,

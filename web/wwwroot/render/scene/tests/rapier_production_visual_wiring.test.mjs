@@ -27,7 +27,7 @@ test("production Rapier renders the canonical v2 silhouette and installed inlet 
     `rendered inlet incidence ${intake.rotation.x * 180 / Math.PI} degrees`);
 });
 
-test("Build 238 production wiring selects v2, the real balloon, and compact high-Mach glass", () => {
+test("production wiring selects v2, the real balloon, and compact high-Mach glass", () => {
   const app = source("app.js");
   const hud = source("hud.js");
   const builders = source("render/scene/scene_builders.js");
@@ -44,8 +44,10 @@ test("Build 238 production wiring selects v2, the real balloon, and compact high
     new RegExp(`import \\{ createHighAltitudeBalloon \\} from "\\.\\/render\\/scene\\/high_altitude_balloon\\.js\\?v=${RELEASE_BUILD}"`));
   assert.match(app,
     /\["presentation\.vehicle\.high-altitude-weather-balloon\.target\.v1", createHighAltitudeBalloon\]/);
-  assert.match(app, /continuous 35 kPa climb/);
-  assert.match(app, /24 km M4\.2 shelf/);
+  assert.match(app, /Three balloon mines/);
+  assert.match(app, /45,000 ft before their lethal drones deploy/);
+  assert.match(app, /amber recovery corridor/);
+  assert.doesNotMatch(app, /continuous 35 kPa climb|24 km M4\.2 shelf/);
 
   assert.match(hud,
     new RegExp(`from "\\.\\/render\\/mission\\/rapier_high_mach_instruments\\.js\\?v=${RELEASE_BUILD}"`));

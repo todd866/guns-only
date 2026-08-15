@@ -12,14 +12,15 @@ The production catalogue exposes five accepted experiences:
 
 - **F-22A surrogate — Guns Only:** an endless visual dogfight with ballistic guns, a real flight
   envelope, Auto-GCAS, padlock/target management, and a deterministic opponent.
-- **Rapier — Intercept:** climb onto the thin-air M4.2 shelf, make one finite-ammo gun pass on a
-  high-altitude balloon, then re-enter and trap at the midpoint arrestor.
+- **Rapier — Intercept:** fly a visible high-speed path to three balloon mines at 45,000 ft,
+  destroy their lethal drone payloads before deployment, then follow the RTB corridor and trap at
+  the midpoint arrestor.
 - **Cobra Canyon — Hold the Bridge / Ember Run:** fly the AH-1G through the River Gorge ground
   war, work the AI gunner, rearm at Camp Ember, and hold Iron Bell.
 - **Weekend Ride:** take the YZF-R1 around the Rapier-strip circuit with authored motorcycle
   dynamics, rider assists, lap timing, and a helmet HUD.
-- **Top Gun:** choose the F-14A or MiG-28 seat for a one-on-one ACM fight with guns and two
-  Sidewinders in the anime-1986 presentation.
+- **Top Gun:** fly the F-14A in an escalating ACM fight with guns and two Sidewinders, then recover
+  conventionally to the carrier in the anime-1986 presentation.
 
 Additional mission code remains in the repository for development, but it is not silently
 presented as finished product. Preview and quarantined routes show their release boundary before

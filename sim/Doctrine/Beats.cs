@@ -72,10 +72,9 @@ public sealed record CombatConfig(
         OpponentHitsToDefeat: 1,
         PlayerGun: GunProfiles.M61A2PublicDataSurrogate);
     public static CombatConfig RapierBalloonIntercept { get; } = new(
-        // One short trigger opportunity, not a formation-clearing magazine. SimulationSession's
-        // weapon instance remains the ammunition authority; this card selects its finite magazine
-        // and the mission director permits only one apex pass.
-        PlayerAmmo: 120,
+        // Three visible balloons, with enough finite ammunition for deliberate corrections between
+        // targets. SimulationSession remains the ammunition authority.
+        PlayerAmmo: 360,
         OpponentAmmo: 0,
         PlayerHitsToDefeat: 3,
         OpponentHitsToDefeat: 1,
@@ -1199,40 +1198,30 @@ public static class Beats {
 
     /// <summary>
     /// RAPIER BALLOON INTERCEPT — the production statement of what the aircraft is for.
-    /// Launch from the dispersed strip, build Mach four in thin air, trade that energy for one
-    /// brief gun window against a stratospheric balloon, relight in the dip, and bring the same
-    /// aircraft back to the midpoint arrestor. There is no dealt job, escort formation, drone,
-    /// pursuer, economic layer, or injected failure on this card: the airframe physics are the
-    /// adversary and the player's own M61 trigger is the attack.
+    /// Launch from the dispersed strip, intercept a local three-balloon gallery, then bring the
+    /// same aircraft back through the authored recovery corridor to the midpoint arrestor.
     /// </summary>
     public static BeatSetup RapierBalloonIntercept(
         GunsOnly.Sim.Carrier.DeckConfiguration configuration =
             GunsOnly.Sim.Carrier.DeckConfiguration.Angled) {
         BeatSetup sortie = RapierIntercept(configuration);
-        // Published float point for the NASA 18.8-million-ft3 super-pressure balloon: 33.5 km,
-        // just under 110,000 ft and inside the authored high-altitude target band.
-        const double BalloonAltitudeM = 33_500.0;
+        // A loaded balloon-mine gallery at 45,000 ft, 35 NM west of the strip. The presentation
+        // still uses
+        // the sourced full-scale balloon actor, but the mission geometry gives a manually flown
+        // aircraft a readable intercept and more than one useful firing opportunity.
+        const double BalloonAltitudeM = FlightModel.RapierGalleryBalloonFloatAltitudeM;
         double canonicalFuelCapacityLb = RapierV2Design.FuelCapacityKg * 2.20462262;
         AircraftState balloon = new(
-            // The target sits on the long diagonal of the authored atlas rather than at the end
-            // of its short west edge. That leaves enough distance after the aircraft has actually
-            // crossed the 24 km / M4.2 gate for a finite stored-energy pull, deliberate idle/unstart,
-            // and a drag-predicted zero-lift coast instead of invented pitch or thrust authority.
-            // The balloon is 4.8 km inside the west edge and 10.6 km inside the north edge; the
-            // flown intercept remains farther inboard because its finite gun pass crosses below
-            // and southeast of the drifting envelope before the recovery turn.
-            // Eight metres per second is weather drift beside that closure, while the FlightModel
-            // actor's real buoyancy and drag — not a hidden rail — govern its vertical motion.
-            new Vec3D(-372_000.0, BalloonAltitudeM, 186_000.0),
+            new Vec3D(-65_000.0, BalloonAltitudeM, 0.0),
             Speed: 8.0,
             Gamma: 0.0,
             Chi: Math.PI / 2.0,
             Bank: 0.0,
-            Mass: FlightModel.HighAltitudeBalloonPublicDataSurrogate.MassKg);
+            Mass: FlightModel.RapierGalleryBalloonSurrogate.MassKg);
         return sortie with {
-            Name = "Rapier — high-altitude balloon intercept",
+            Name = "Rapier — balloon gallery intercept",
             Bandit = balloon,
-            BanditParams = FlightModel.HighAltitudeBalloonPublicDataSurrogate,
+            BanditParams = FlightModel.RapierGalleryBalloonSurrogate,
             BanditCapability = AircraftCapability.HighAltitudeWeatherBalloonTarget,
             BanditTimeline = new() {
                 (0.0, new PilotCommand(
@@ -1255,24 +1244,26 @@ public static class Beats {
                 InitialFuelLb = canonicalFuelCapacityLb
             },
             ScriptedIntercept = new ScriptedInterceptConfig(
-                FormationSize: 1,
+                FormationSize: 3,
                 ShortRangeMissiles: 0,
                 DogfightingDrones: 0,
-                PursuerCount: 0,
+                PursuerCount: 3,
                 AutomationDefaultEnabled: false,
                 RecoveryRequired: true,
-                ZoomLobProfile: true,
+                ZoomLobProfile: false,
                 DeterministicSwarmWipe: false,
                 Job: RapierJobKind.Balloon,
+                BalloonReactionRangeM: 12_000.0,
+                BalloonReactionDelaySeconds: 45.0,
                 ComputerFailureAtZoomCoast: RapierComputerFailure.None),
             Mission = new MissionContract(
                 "mission.modern.rapier-balloon-intercept.public-data-surrogate.v1",
                 MissionContentFamily.ModernPublicDataSurrogate,
                 PublicDataSurrogate: true,
-                RulesOfEngagement: "GUNS_ONLY_ONE_APEX_PASS",
+                RulesOfEngagement: "GUNS_ONLY_BALLOON_GALLERY",
                 Era: "MODERN_PUBLIC_DATA_EXERCISE",
                 EconomicMode: MissionEconomicMode.Arcade,
-                AllowsTimeCompression: true),
+                AllowsTimeCompression: false),
             // Golden-path navigation contains Home Plate only. Free fixes belong to the Go Fly
             // laboratory, not a lesson whose gates and return geometry are authored.
             OpenSegmentNav = false
