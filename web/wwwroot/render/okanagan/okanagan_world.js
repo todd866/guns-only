@@ -1,4 +1,4 @@
-import * as THREE from "../../vendor/three.module.js?v=337";
+import * as THREE from "../../vendor/three.module.js?v=338";
 
 const DEG_LAT_M = 111_320;
 const ANCHOR_LAT = 49.88;
@@ -18,12 +18,13 @@ export function createOkanaganWorld(scene, terrainData, worldData, quality = "de
   group.name = "okanagan-central-world";
   scene.add(group);
 
-  const terrain = createTerrain(terrainData);
+  const terrain = createTerrain(terrainData, worldData);
   group.add(terrain.mesh);
   group.add(createLake(worldData));
   group.add(createRunway(worldData, terrain.sampleHeight));
   group.add(createSettlements(worldData, terrain.sampleHeight, quality));
-  group.add(createForest(terrainData, worldData, terrain.sampleHeight, quality));
+  group.add(createForest(terrainData, worldData, terrain.sampleHeight, quality,
+    terrain.isOperationalSurface));
 
   return Object.freeze({
     group,
@@ -40,25 +41,36 @@ export function createOkanaganWorld(scene, terrainData, worldData, quality = "de
   });
 }
 
-function createTerrain(data) {
+function createTerrain(data, world) {
   const { rows, columns, bounds, elevationsM } = data;
-  const positions = new Float32Array(rows * columns * 3);
-  const colors = new Float32Array(rows * columns * 3);
+  // Four subdivisions per source interval keep the lake bank and the airport cut/fill from being
+  // represented by kilometre-wide triangles. Heights still come from the committed 33×33 CDEM.
+  const meshRows = (rows - 1) * 4 + 1;
+  const meshColumns = (columns - 1) * 4 + 1;
+  const positions = new Float32Array(meshRows * meshColumns * 3);
+  const colors = new Float32Array(meshRows * meshColumns * 3);
   const minimum = Math.min(...elevationsM.flat());
   const maximum = Math.max(...elevationsM.flat());
   const dryLow = new THREE.Color(0x776f45);
   const pineMid = new THREE.Color(0x52623c);
   const rockHigh = new THREE.Color(0x77756a);
+  const sampleHeight = createOkanaganSurfaceSampler(data, world);
+  const isOperationalSurface = (x, z) => {
+    const [longitude, latitude] = worldToGeographic(x, z);
+    return pointInPolygon(longitude, latitude, world.lake.shoreline)
+      || kelownaRunwayBlend(x, z) > 0.02;
+  };
   let cursor = 0;
-  for (let row = 0; row < rows; row += 1) {
-    const latitude = bounds.south + (bounds.north - bounds.south) * row / (rows - 1);
-    for (let column = 0; column < columns; column += 1) {
-      const longitude = bounds.west + (bounds.east - bounds.west) * column / (columns - 1);
-      const world = geographicToWorld(latitude, longitude, elevationsM[row][column]);
-      positions[cursor * 3] = world.x;
-      positions[cursor * 3 + 1] = world.y;
-      positions[cursor * 3 + 2] = world.z;
-      const elevationT = (world.y - minimum) / Math.max(1, maximum - minimum);
+  for (let row = 0; row < meshRows; row += 1) {
+    const latitude = bounds.south + (bounds.north - bounds.south) * row / (meshRows - 1);
+    for (let column = 0; column < meshColumns; column += 1) {
+      const longitude = bounds.west + (bounds.east - bounds.west) * column / (meshColumns - 1);
+      const point = geographicToWorld(latitude, longitude, 0);
+      point.y = sampleHeight(point.x, point.z);
+      positions[cursor * 3] = point.x;
+      positions[cursor * 3 + 1] = point.y;
+      positions[cursor * 3 + 2] = point.z;
+      const elevationT = (point.y - minimum) / Math.max(1, maximum - minimum);
       const color = elevationT < 0.52
         ? dryLow.clone().lerp(pineMid, elevationT / 0.52)
         : pineMid.clone().lerp(rockHigh, (elevationT - 0.52) / 0.48);
@@ -69,11 +81,11 @@ function createTerrain(data) {
     }
   }
   const indices = [];
-  for (let row = 0; row < rows - 1; row += 1) {
-    for (let column = 0; column < columns - 1; column += 1) {
-      const a = row * columns + column;
+  for (let row = 0; row < meshRows - 1; row += 1) {
+    for (let column = 0; column < meshColumns - 1; column += 1) {
+      const a = row * meshColumns + column;
       const b = a + 1;
-      const c = a + columns;
+      const c = a + meshColumns;
       const d = c + 1;
       indices.push(a, c, b, b, c, d);
     }
@@ -90,7 +102,12 @@ function createTerrain(data) {
   }));
   mesh.receiveShadow = true;
 
-  function sampleHeight(x, z) {
+  return { mesh, sampleHeight, isOperationalSurface };
+}
+
+function createRawCdemSampler(data) {
+  const { rows, columns, bounds, elevationsM } = data;
+  return function sampleRawHeight(x, z) {
     const longitude = ANCHOR_LON + x / DEG_LON_M;
     const latitude = ANCHOR_LAT + z / DEG_LAT_M;
     const columnF = (longitude - bounds.west) / (bounds.east - bounds.west) * (columns - 1);
@@ -104,8 +121,53 @@ function createTerrain(data) {
     const south = elevationsM[row0][column0] * (1 - tx) + elevationsM[row0][column1] * tx;
     const north = elevationsM[row1][column0] * (1 - tx) + elevationsM[row1][column1] * tx;
     return south * (1 - tz) + north * tz;
+  };
+}
+
+export function createOkanaganSurfaceSampler(terrainData, worldData) {
+  const rawHeight = createRawCdemSampler(terrainData);
+  return (x, z) => operationalSurfaceHeight(worldData, rawHeight, x, z);
+}
+
+function operationalSurfaceHeight(world, rawHeight, x, z) {
+  const [longitude, latitude] = worldToGeographic(x, z);
+  if (pointInPolygon(longitude, latitude, world.lake.shoreline))
+    return world.lake.surfaceElevationM;
+  const raw = rawHeight(x, z);
+  return THREE.MathUtils.lerp(raw, world.airfields[0].elevationM, kelownaRunwayBlend(x, z));
+}
+
+function worldToGeographic(x, z) {
+  return [ANCHOR_LON + x / DEG_LON_M, ANCHOR_LAT + z / DEG_LAT_M];
+}
+
+function pointInPolygon(longitude, latitude, shoreline) {
+  let inside = false;
+  for (let i = 0, j = shoreline.length - 1; i < shoreline.length; j = i++) {
+    const [xi, yi] = shoreline[i];
+    const [xj, yj] = shoreline[j];
+    const dx = xj - xi;
+    const dy = yj - yi;
+    const cross = (longitude - xi) * dy - (latitude - yi) * dx;
+    const dot = (longitude - xi) * dx + (latitude - yi) * dy;
+    if (Math.abs(cross) < 1e-10 && dot >= 0 && dot <= dx * dx + dy * dy) return true;
+    const crosses = ((yi > latitude) !== (yj > latitude))
+      && longitude < (xj - xi) * (latitude - yi) / (yj - yi) + xi;
+    if (crosses) inside = !inside;
   }
-  return { mesh, sampleHeight };
+  return inside;
+}
+
+function kelownaRunwayBlend(x, z) {
+  const north = geographicToWorld(49.9670, -119.3778, 433);
+  const south = geographicToWorld(49.9442, -119.3650, 433);
+  const dx = south.x - north.x;
+  const dz = south.z - north.z;
+  const alongRaw = ((x - north.x) * dx + (z - north.z) * dz) / (dx * dx + dz * dz);
+  if (alongRaw < -0.16 || alongRaw > 1.16) return 0;
+  const along = THREE.MathUtils.clamp(alongRaw, 0, 1);
+  const distance = Math.hypot(x - (north.x + dx * along), z - (north.z + dz * along));
+  return 1 - THREE.MathUtils.smoothstep(distance, 90, 560);
 }
 
 function createLake(world) {
@@ -193,7 +255,7 @@ function createSettlements(world, sampleHeight, quality) {
   return group;
 }
 
-function createForest(terrainData, world, sampleHeight, quality) {
+function createForest(terrainData, world, sampleHeight, quality, isOperationalSurface) {
   const count = quality === "mobile" ? 900 : quality === "balanced" ? 2_000 : 4_200;
   const group = new THREE.Group();
   group.name = "ponderosa-douglas-fir-stands";
@@ -208,6 +270,7 @@ function createForest(terrainData, world, sampleHeight, quality) {
     const latitude = bounds.south + (bounds.north - bounds.south) * hash01(attempt * 17 + 3);
     const longitude = bounds.west + (bounds.east - bounds.west) * hash01(attempt * 31 + 11);
     const point = geographicToWorld(latitude, longitude, 0);
+    if (isOperationalSurface(point.x, point.z)) continue;
     if (point.x > -5_500 && point.x < 1_800) continue;
     if (world.communities.some((community) => {
       const centre = geographicToWorld(community.latitude, community.longitude, 0);

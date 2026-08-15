@@ -21,7 +21,8 @@ public static class CobraMissionActProgress
         double victoryHoldProgress,
         HoldTheBridgeOutcome outcome,
         CobraMissionStatus status,
-        double? clearanceM)
+        double? clearanceM,
+        Vec3D? departureJoinWorldM = null)
     {
         if (current == CobraMissionAct.Complete)
             return CobraMissionAct.Complete;
@@ -38,7 +39,15 @@ public static class CobraMissionActProgress
 
         return current switch {
             CobraMissionAct.Depart =>
-                HorizontalDistanceM(positionWorldM, fobCentreWorldM) > DepartPadRadiusM
+                // The authored departure connector remains authoritative for normal flight,
+                // but a pilot who reaches the objective by another route must not be left
+                // flying departure cues behind the battle. This also keeps repositioned and
+                // resumed sorties coherent without weakening the dogleg handoff.
+                HorizontalDistanceM(positionWorldM, bridgeCentreWorldM) <= EngageBridgeRadiusM
+                    ? CobraMissionAct.Engage
+                    : (departureJoinWorldM is { } join
+                    ? HorizontalDistanceM(positionWorldM, join) <= DepartureJoinRadiusM
+                    : HorizontalDistanceM(positionWorldM, fobCentreWorldM) > DepartPadRadiusM)
                     ? CobraMissionAct.Ingress
                     : CobraMissionAct.Depart,
             CobraMissionAct.Ingress =>
@@ -62,7 +71,8 @@ public static class CobraMissionActProgress
         CobraCanyonRouteDefinition route,
         in Vec3D fobCentreWorldM,
         double fobPathAltitudeM,
-        Vec3D? aircraftWorldM = null)
+        Vec3D? aircraftWorldM = null,
+        ITerrainSurface? terrain = null)
     {
         if (act is CobraMissionAct.Rtb or CobraMissionAct.Complete)
             return CampEmberOperations.BuildArrivalGates(aircraftWorldM);
@@ -71,12 +81,14 @@ public static class CobraMissionActProgress
         int bridgeIndex = FindBridgePointIndex(points);
         int routeJoinIndex = FindNearestRoutePointIndex(points, fobCentreWorldM);
         if (act == CobraMissionAct.Depart) {
+            ArgumentNullException.ThrowIfNull(terrain);
             CobraCanyonRoutePoint join = points[routeJoinIndex];
             return CampEmberOperations.BuildDepartureGates(
                 new Vec3D(
                     join.EastM,
                     join.PathAltitudeM + join.TargetAglM,
                     join.NorthM),
+                terrain,
                 aircraftWorldM);
         }
         int activeIndex = act switch {
@@ -100,6 +112,17 @@ public static class CobraMissionActProgress
                 i == activeIndex);
         }
         return gates;
+    }
+
+    public const double DepartureJoinRadiusM = 120.0;
+
+    public static Vec3D DepartureJoinWorldM(
+        CobraCanyonRouteDefinition route,
+        in Vec3D fobCentreWorldM)
+    {
+        int index = FindNearestRoutePointIndex(route.Points, fobCentreWorldM);
+        CobraCanyonRoutePoint join = route.Points[index];
+        return new Vec3D(join.EastM, join.PathAltitudeM + join.TargetAglM, join.NorthM);
     }
 
     /// <summary>

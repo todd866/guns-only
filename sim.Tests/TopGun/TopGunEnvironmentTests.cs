@@ -42,6 +42,27 @@ public sealed class TopGunEnvironmentTests
     }
 
     [Fact]
+    public void TopGunCarrierSitsAboveAuthoritativeWaterWithRecoveryMargin()
+    {
+        ITerrainSurface terrain = Assert.IsAssignableFrom<ITerrainSurface>(
+            UkraineTerrainTruth.Load());
+        foreach (double elapsedSeconds in new[] { 0.0, 20.0 * 60.0 }) {
+            Carrier carrier = Assert.IsType<Carrier>(Beats.TopGunAcm(TopGunSeat.F14A).Carrier);
+            carrier.Step(elapsedSeconds);
+            Vec3D centre = carrier.Position;
+            for (double east = -768.0; east <= 768.0; east += 256.0)
+            for (double north = -768.0; north <= 768.0; north += 256.0) {
+                Assert.True(terrain.TrySample(
+                    centre.X + east,
+                    centre.Z + north,
+                    out TerrainSample sample));
+                Assert.Equal(TerrainSurfaceKind.Water, sample.Kind);
+                Assert.True(sample.HeightM < carrier.DeckAltM);
+            }
+        }
+    }
+
+    [Fact]
     public void TopGunStagingIsIndependentOfPriorMissionOrderAndHistory()
     {
         ITerrainSurface topGunTerrain = Terrain(126.0);

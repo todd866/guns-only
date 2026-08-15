@@ -41,6 +41,26 @@ public class CobraMissionActTests
     }
 
     [Fact]
+    public void DepartureDoesNotHandOffUntilTheAuthoredConnectorJoin()
+    {
+        CobraCanyonRouteDefinition route = CobraCanyonDefinition.Create()
+            .Route(CobraCanyonRouteChoice.RidgeShadow);
+        Vec3D join = CobraMissionActProgress.DepartureJoinWorldM(route, Fob);
+        Vec3D onlyPastOldThreshold = new(Fob.X + 800.0, Fob.Y + 40.0, Fob.Z);
+        Assert.True((join - onlyPastOldThreshold).Length > CobraMissionActProgress.DepartureJoinRadiusM);
+        Assert.Equal(
+            CobraMissionAct.Depart,
+            CobraMissionActProgress.Next(
+                CobraMissionAct.Depart, onlyPastOldThreshold, Fob, Bridge, 0.0,
+                HoldTheBridgeOutcome.Pending, CobraMissionStatus.Active, 40.0, join));
+        Assert.Equal(
+            CobraMissionAct.Ingress,
+            CobraMissionActProgress.Next(
+                CobraMissionAct.Depart, join, Fob, Bridge, 0.0,
+                HoldTheBridgeOutcome.Pending, CobraMissionStatus.Active, 40.0, join));
+    }
+
+    [Fact]
     public void NearIronBellBridgeArmsEngage()
     {
         Vec3D near = new(Bridge.X + 80.0, Bridge.Y + 40.0, Bridge.Z);
@@ -118,13 +138,14 @@ public class CobraMissionActTests
     [Fact]
     public void DepartPathUsesTheProtectedGoAroundLane()
     {
-        CobraCanyonRouteDefinition route = CobraCanyonDefinition.Create()
-            .Route(CobraCanyonRouteChoice.RiverGorge);
+        CobraCanyonDefinition definition = CobraCanyonDefinition.Create();
+        CobraCanyonRouteDefinition route = definition.Route(CobraCanyonRouteChoice.RiverGorge);
         IReadOnlyList<CobraPathGate> gates = CobraMissionActProgress.BuildPathGates(
             CobraMissionAct.Depart,
             route,
             Fob,
-            fobPathAltitudeM: Fob.Y + 30.0);
+            fobPathAltitudeM: Fob.Y + 30.0,
+            terrain: definition.CreateTerrainSurface());
         Assert.Equal(6, gates.Count);
         CobraPathGate active = gates.Single(g => g.Active);
         Vec3D first = CampEmberOperations.PointAlongFinal(140.0);

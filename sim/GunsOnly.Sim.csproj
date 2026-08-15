@@ -16,6 +16,15 @@
     <EmbeddedResource Include="../airframes/generated/rapier.v2.engineering.json"
                       Link="Airframes/rapier.v2.engineering.json"
                       LogicalName="GunsOnly.Sim.Airframes.rapier.v2.engineering.json" />
+    <!-- The Fire Boss simulation and browser render the same committed CDEM samples. Embedding
+         the browser pack here prevents collision/fire authority from drifting to a hand-made
+         terrain approximation. -->
+    <EmbeddedResource Include="../web/wwwroot/content/packs/okanagan-fire/environment/okanagan-central.cdem.json"
+                      Link="Okanagan/okanagan-central.cdem.json"
+                      LogicalName="GunsOnly.Sim.Data.OkanaganCentral.cdem.json" />
+    <EmbeddedResource Include="../web/wwwroot/content/packs/okanagan-fire/environment/okanagan-central.world.json"
+                      Link="Okanagan/okanagan-central.world.json"
+                      LogicalName="GunsOnly.Sim.Data.OkanaganCentral.world.json" />
   </ItemGroup>
 
 </Project>

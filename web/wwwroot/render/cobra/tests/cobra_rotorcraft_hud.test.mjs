@@ -305,6 +305,23 @@ test("tactical picture locks an objective and separates the garrison from AA thr
   assert.ok(texts.some((text) => /^AA · /.test(text)));
 });
 
+test("AA cues survive after the final objective flips while a gun is still alive", () => {
+  const fixture = modelFixture();
+  Object.assign(fixture.vehicle, { x_m: 0, y_m: 100, z_m: 0, yaw_rad: 0 });
+  fixture.ground_war.sites = [
+    { id: "bridge", label: "Cau Song Ma", owner: "friendly", x_m: 0, y_m: 40, z_m: 2_000 },
+  ];
+  fixture.ground_war.units = [
+    { id: "observer.ridge", faction: "hostile", role: "dshk-site", alive: true,
+      home_site_id: "bridge", x_m: 500, y_m: 120, z_m: 1_200 },
+  ];
+  const model = cobraRotorcraftHudModel(fixture);
+  assert.equal(model.tactical.objective, null);
+  assert.equal(model.tactical.target, null);
+  assert.equal(model.tactical.threats.length, 1);
+  assert.equal(model.tactical.threats[0].label, "AA");
+});
+
 test("a dead, absent or unselected target designates nothing at all", () => {
   const dead = modelFixture();
   dead.ground_war.units = [

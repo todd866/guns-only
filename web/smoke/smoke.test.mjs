@@ -403,7 +403,11 @@ test("iPhone selecting Top Gun and consent cannot scroll the Ready dialog sidewa
     await page.waitForFunction(
       () => getComputedStyle(document.querySelector("#boot")).visibility === "hidden",
       undefined,
-      { timeout: scaled(5000) },
+      // The Ready dialog can become interactive a few frames before the painted boot cover
+      // finishes its exit transition. Under CI WebKit + software rendering that short tail has
+      // exceeded five seconds without any application failure; use the suite's documented
+      // minimum patience for tick/frame-driven waits.
+      { timeout: scaled(20000) },
     );
     await page.locator('[data-program-node="top-gun"]').click();
     await page.waitForFunction(() => {
@@ -3184,7 +3188,10 @@ test("rotating to landscape actually resizes the drawn surface", async () => {
     const page = await context.newPage();
     await page.goto(`${site.url}?audioQa=silent`, { waitUntil: "load", timeout: scaled(90000) });
     await page.waitForFunction(
-      () => !document.querySelector("#ready-start")?.disabled,
+      () => {
+        const start = document.querySelector("#ready-start");
+        return start !== null && start.disabled === false;
+      },
       undefined, { timeout: scaled(120000) });
     await page.click("#ready-start");
     await page.waitForTimeout(scaled(4000));

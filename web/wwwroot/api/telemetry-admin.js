@@ -547,12 +547,15 @@ function applyStateToSortie(state, row, session, sorties) {
   if (stateTime !== null) {
     if (sortie.firstStateTime === null) {
       sortie.firstStateTime = stateTime;
-      sortie.timingEligible = sortie.started && (nonNegativeNumber(state.rounds_fired) ?? 0) === 0;
+      const initialRounds = nonNegativeNumber(state.sortie_rounds_fired)
+        ?? nonNegativeNumber(state.rounds_fired)
+        ?? 0;
+      sortie.timingEligible = sortie.started && initialRounds === 0;
     }
     sortie.lastStateTime = Math.max(sortie.lastStateTime ?? stateTime, stateTime);
   }
   const roundsBefore = sortie.roundsFired;
-  updateMax(sortie, "roundsFired", state.rounds_fired);
+  updateMax(sortie, "roundsFired", state.sortie_rounds_fired ?? state.rounds_fired);
   updateMax(sortie, "hits", state.hits);
   updateMax(sortie, "kills", state.kill_count);
   updateMax(sortie, "shotsTotal", state.shots_total);

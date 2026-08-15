@@ -1597,11 +1597,14 @@ public static class Beats {
             : FlightModel.F14APublicDataSurrogate;
         string seatLabel = playerIsTomcat ? "F-14A" : "MiG-28";
         string opponentLabel = playerIsTomcat ? "MiG-28" : "F-14A";
-        // Fictional Pacific recovery location, well clear of the ACM merge. The renderer builds
-        // the visible ship and water patch from this authoritative platform; the conventional
-        // Case I pattern remains attached to it as the carrier steams north.
+        // Fictional recovery location on a broad authoritative-water cell in the shipped terrain
+        // product. The previous (-24 km, -28 km) point was 219 m land: the ocean presentation
+        // hid the mismatch while natural-surface collision stopped every physical recovery.
+        // This coordinate lies in the atlas' broad eastern sea: the seven-node cross-track margin
+        // remains water for more than 190 km north, so a 12 m/s ship cannot steam off its collision
+        // surface during an ACM sortie and recovery.
         var carrier = new GunsOnly.Sim.Carrier(
-            deckCentre: new Vec3D(-24_000.0, 20.0, -28_000.0),
+            deckCentre: new Vec3D(30_464.0, 20.0, 0.0),
             headingRad: 0.0,
             speedMps: 12.0,
             deckAltM: 20.0,

@@ -11,7 +11,7 @@
  * rotates.
  */
 
-import { cobraConquestScoreLine } from "./cobra_objective_copy.js?v=337";
+import { cobraConquestScoreLine } from "./cobra_objective_copy.js?v=338";
 
 // Palette is the shell's own legend (cobra-lab/styles.css --friendly / --hostile /
 // .landmark-key / --warm), so the map cannot disagree with the legend swatches beside it.

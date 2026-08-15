@@ -1,4 +1,5 @@
 using GunsOnly.Sim.Vehicles;
+using GunsOnly.Sim.Environment;
 
 namespace GunsOnly.Sim.Cobra;
 
@@ -21,6 +22,7 @@ public static class CampEmberOperations
     public const double ProtectedLengthM = 2_400.0;
     public const double ProtectedHalfWidthM = 120.0;
     public const double ObstacleSurfaceRisePerM = 1.0 / 8.0;
+    public const double DepartureCentreClearanceM = 54.0;
 
     public const double TlofRadiusM = 12.0;
     public const double FatoRadiusM = 28.0;
@@ -69,7 +71,10 @@ public static class CampEmberOperations
 
     public static IReadOnlyList<CobraPathGate> BuildDepartureGates(Vec3D? aircraftWorldM = null)
     {
-        return BuildDepartureGates(PointAlongFinal(1_200.0), aircraftWorldM);
+        return BuildDepartureGates(
+            PointAlongFinal(1_200.0),
+            CobraCanyonDefinition.Create().CreateTerrainSurface(),
+            aircraftWorldM);
     }
 
     /// <summary>
@@ -81,8 +86,10 @@ public static class CampEmberOperations
     /// </summary>
     public static IReadOnlyList<CobraPathGate> BuildDepartureGates(
         in Vec3D routeJoinWorldM,
+        ITerrainSurface terrain,
         Vec3D? aircraftWorldM = null)
     {
+        ArgumentNullException.ThrowIfNull(terrain);
         var positions = new Vec3D[6];
         for (int index = 0; index < DepartureDistanceM.Length; index++) {
             double distanceM = DepartureDistanceM[index];
@@ -112,6 +119,18 @@ public static class CampEmberOperations
                 oneMinusT * oneMinusT * curveStart.Z
                     + 2.0 * oneMinusT * t * curveControl.Z
                     + t * t * curveFinish.Z);
+        }
+
+        // The connector crosses route-dependent ridges. Endpoint interpolation is not terrain
+        // clearance: sample each authored gate and keep the centre high enough that the visible
+        // volume and Ember Lead both remain rotor-clear of the authority surface.
+        for (int index = 0; index < positions.Length; index++) {
+            Vec3D position = positions[index];
+            if (!terrain.TrySample(position.X, position.Z, out TerrainSample surface))
+                throw new InvalidOperationException("Camp Ember departure gate has no terrain truth.");
+            positions[index] = position with {
+                Y = Math.Max(position.Y, surface.HeightM + DepartureCentreClearanceM)
+            };
         }
 
         int activeIndex = ResolveDepartureGateIndex(positions, aircraftWorldM);

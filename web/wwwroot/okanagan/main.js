@@ -1,8 +1,8 @@
-import * as THREE from "../vendor/three.module.js?v=337";
-import { createOkanaganWorld } from "../render/okanagan/okanagan_world.js?v=337";
-import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=337";
-import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=337";
-import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=337";
+import * as THREE from "../vendor/three.module.js?v=338";
+import { createOkanaganWorld } from "../render/okanagan/okanagan_world.js?v=338";
+import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=338";
+import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=338";
+import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=338";
 
 const SORTIES = Object.freeze({
   "water-circuits": { index: 0, title: "Water Circuits", working: "197 kg planned" },

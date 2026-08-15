@@ -39,6 +39,13 @@ public sealed class OkanaganFireMissionTests
         Assert.Empty(solo.Traffic);
         Assert.Contains(largeForce.Traffic, track => track.Kind == "AIR ATTACK");
         Assert.Contains(largeForce.Traffic, track => track.Kind == "HELICOPTER");
+        OkanaganTrafficTrack helicopter = Assert.Single(
+            largeForce.Traffic,
+            track => track.Kind == "HELICOPTER");
+        Assert.True(
+            helicopter.PositionWorldM.Y
+                - OkanaganCdem.SampleSurfaceHeightM(helicopter.PositionWorldM) >= 160.0,
+            "HELCO must orbit above the rendered incident terrain");
     }
 
     [Fact]
@@ -74,6 +81,23 @@ public sealed class OkanaganFireMissionTests
             OkanaganGeo.ToWorld(49.875, -119.555, 342.0)));
         Assert.False(OkanaganGeo.IsOverCentralLake(
             OkanaganGeo.ToWorld(49.850, -119.655, 810.0)));
+    }
+
+    [Fact]
+    public void OperationalLakeRunwayAndFireShareTheCommittedCdem()
+    {
+        Vec3D scoopExit = OkanaganGeo.ToWorld(49.875, -119.555, 0.0);
+        Assert.True(OkanaganCdem.SampleRawHeightM(scoopExit) > 400.0);
+        Assert.Equal(342.0, OkanaganCdem.SampleSurfaceHeightM(scoopExit), precision: 6);
+
+        Vec3D runwayThreshold = OkanaganGeo.ToWorld(49.9670, -119.3778, 0.0);
+        Assert.Equal(433.0, OkanaganCdem.SampleSurfaceHeightM(runwayThreshold), precision: 6);
+
+        var fire = new OkanaganFireGrid();
+        foreach (OkanaganFireCellSnapshot cell in fire.ActiveCells()) {
+            Vec3D point = new(cell.X, 0.0, cell.Z);
+            Assert.Equal(OkanaganCdem.SampleSurfaceHeightM(point), cell.Y, precision: 6);
+        }
     }
 
     [Fact]

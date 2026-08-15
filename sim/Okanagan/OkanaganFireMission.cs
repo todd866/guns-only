@@ -392,10 +392,13 @@ public sealed class OkanaganFireMission
             Math.Sin(t * 0.035) * 1_600.0,
             240.0,
             Math.Cos(t * 0.035) * 1_600.0);
-        Vec3D helicopter = FireTarget + new Vec3D(
+        Vec3D helicopterHorizontal = FireTarget + new Vec3D(
             Math.Sin(t * 0.08) * 950.0,
-            -420.0,
+            0.0,
             Math.Cos(t * 0.08) * 950.0);
+        Vec3D helicopter = helicopterHorizontal with {
+            Y = OkanaganGeo.RepresentativeTerrainHeightM(helicopterHorizontal) + 165.0
+        };
         return [
             new OkanaganTrafficTrack("BIRD DOG 4", "AIR ATTACK", lead,
                 t * 0.035 + Math.PI / 2.0, lead.Y, "ORBIT / SEQUENCE"),
