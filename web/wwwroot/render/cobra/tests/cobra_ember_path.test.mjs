@@ -50,6 +50,27 @@ test("empty gates hide the path", () => {
   assert.equal(state.approach_gate_count, 0);
 });
 
+test("a transient empty route frame retains shared-path ownership", () => {
+  const states = ["depart", "ingress", "rtb"].map((mission_act) =>
+    emberPathGuidanceState({
+      world_id: "cobra-canyon",
+      route_id: "river-gorge",
+      mission_act,
+      path_gates: [],
+    }));
+  for (const [index, mission_act] of ["depart", "ingress", "rtb"].entries()) {
+    const state = states[index];
+    assert.equal(state.approach_guidance_active, true, mission_act);
+    assert.deepEqual(state.approach_gates, []);
+  }
+  assert.equal(states[0].guidance_continuity_key, states[1].guidance_continuity_key,
+    "Depart and Ingress are one outbound procedure");
+  assert.notEqual(states[1].guidance_continuity_key, states[2].guidance_continuity_key,
+    "RTB must not inherit the outbound ladder");
+  assert.equal(emberPathGuidanceState({ mission_act: "hold", path_gates: [] })
+    .approach_guidance_active, false);
+});
+
 test("pad-centred gates stay dark while ownship is still on Camp Ember", () => {
   const state = emberPathGuidanceState({
     path_gates: [

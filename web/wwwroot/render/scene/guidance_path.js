@@ -356,6 +356,12 @@ export function createGuidancePath(THREE, options = {}) {
   // steady recovery costs one identity comparison per frame instead.
   let cachedRaw = null;
   let cachedLadder = [];
+  // Approach snapshots can cross an authority/projection boundary with one empty frame while the
+  // procedure remains active. That used to blank the entire highway. Keep the last complete
+  // authored ladder until approach ownership actually ends; never substitute coarse Home Plate
+  // breadcrumbs during the hold.
+  let cachedApproachLadder = [];
+  let cachedApproachKey = null;
   let cachedRtbKey = null;
   let cachedRtbLadder = [];
   const forward = new THREE.Vector3();
@@ -380,7 +386,14 @@ export function createGuidancePath(THREE, options = {}) {
         || rapierBalloonInterceptIntent(state)
         || carrierRtbRequested;
       const samples = state?.approach_gates;
-      const hotApproach = approachActive && Array.isArray(samples);
+      const explicitApproachKey = state?.guidance_continuity_key;
+      const sortieSequence = finiteNumber(state?.guidance_sortie_sequence);
+      const procedureKind = finiteNumber(state?.recovery_procedure_kind);
+      const approachKey = explicitApproachKey !== undefined && explicitApproachKey !== null
+        ? String(explicitApproachKey)
+        : sortieSequence !== null
+          ? `${sortieSequence}:${procedureKind ?? 0}`
+          : null;
       // Four numeric gates are cheaper to map than to fingerprint, and every coordinate matters
       // for a moving ship. JSON ladders remain cached because parsing those every frame did cause
       // visible stutter.
@@ -389,14 +402,23 @@ export function createGuidancePath(THREE, options = {}) {
           ? `approach:${state?.approach_gates_json ?? ""}`
           : carrierRtbRequested ? null : (state?.recovery_gates_json ?? null))
         : null;
-      if (hotApproach) {
+      if (approachActive) {
         cachedRaw = null;
-        cachedLadder = resolveGuidanceGates(state ?? {});
+        if (cachedApproachKey !== approachKey) cachedApproachLadder = [];
+        cachedApproachKey = approachKey;
+        const resolvedApproach = resolveGuidanceGates(state ?? {});
+        if (resolvedApproach.length) cachedApproachLadder = resolvedApproach;
+        cachedLadder = cachedApproachLadder;
+        root.userData.continuityHeld = resolvedApproach.length === 0
+          && cachedApproachLadder.length > 0;
         cachedRtbKey = null;
         cachedRtbLadder = [];
       } else if (!recoveryIntent) {
         cachedRaw = null;
         cachedLadder = [];
+        cachedApproachLadder = [];
+        cachedApproachKey = null;
+        root.userData.continuityHeld = false;
         cachedRtbKey = null;
         cachedRtbLadder = [];
       } else if (carrierRtbRequested) {
@@ -404,7 +426,13 @@ export function createGuidancePath(THREE, options = {}) {
         // can remain populated in the snapshot, so they must not outrank the current route fix.
         cachedRaw = null;
         cachedLadder = [];
+        cachedApproachLadder = [];
+        cachedApproachKey = null;
+        root.userData.continuityHeld = false;
       } else if (raw !== cachedRaw) {
+        cachedApproachLadder = [];
+        cachedApproachKey = null;
+        root.userData.continuityHeld = false;
         cachedRaw = raw;
         cachedLadder = resolveGuidanceGates(state ?? {});
       }
@@ -419,8 +447,8 @@ export function createGuidancePath(THREE, options = {}) {
         cachedRtbLadder = [];
       }
       if (!ladder.length) {
-        // Once authority says approach guidance is active, coarse transit crumbs are stale. An
-        // empty/malformed gate frame must hide, never flash Home Plate through the final approach.
+        // Once authority says approach guidance is active, coarse transit crumbs are stale. If
+        // there has not yet been one valid authored ladder, hide rather than pointing at Home.
         if (approachActive) {
           root.visible = false;
           root.userData.mode = null;

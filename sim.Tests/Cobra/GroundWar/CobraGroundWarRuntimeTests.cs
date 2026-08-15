@@ -65,7 +65,7 @@ public class CobraGroundWarRuntimeTests
         Math.Sqrt(HorizontalDistanceSquared(first, second));
 
     [Fact]
-    public void CampEmberDepartPadHasNoSeededHostiles()
+    public void CampEmberProtectedAreaStaysClearOfHostilesForTheWholeMission()
     {
         CobraGroundWarRuntime war = CreateWar();
         ContestedSite camp = war.Sites.First(site => site.Id == "site.camp-ember.v1");
@@ -75,6 +75,15 @@ public class CobraGroundWarRuntimeTests
         Assert.Contains(
             war.LivingUnits().Where(unit => unit.Faction == GroundFaction.Friendly),
             unit => unit.HomeSiteId == camp.Id);
+
+        for (int step = 0; step < 1_200; step++) {
+            war.Advance(0.5);
+            Assert.DoesNotContain(
+                war.LivingUnits().Where(unit => unit.Faction == GroundFaction.Hostile),
+                unit => unit.HomeSiteId == camp.Id
+                    || HorizontalDistance(unit.PositionWorldM, camp.PositionWorldM)
+                        < CobraGroundWarRuntime.FobEnemyExclusionRadiusM);
+        }
     }
 
     [Fact]
@@ -429,38 +438,6 @@ public class CobraGroundWarRuntimeTests
         Assert.Equal(expected, hostileAtSplit - war.HostileTickets, 6);
     }
 
-    [Fact]
-    public void StandingGunnerySeamSitsOnTheNoseInsideTheGunWindow()
-    {
-        CobraGroundWarRuntime war = CreateWar();
-        var aircraft = new Vec3D(0.0, 220.0, 0.0);
-        double yawRad = 0.0;
-        GroundUnit seam = war.SeedStandingGunneryTarget(aircraft, yawRad);
-
-        Assert.Equal(CobraGroundWarRuntime.GunnerySeamUnitId, seam.Id);
-        Assert.Equal(GroundFaction.Hostile, seam.Faction);
-        Assert.True(seam.IsAlive);
-        var assessment = CobraGunTargeting.Assess(aircraft, yawRad, seam.PositionWorldM);
-        Assert.True(assessment.WithinTurretEnvelope, $"az {assessment.AzimuthErrorRad} el {assessment.ElevationRad}");
-        Assert.True(assessment.HasBallisticSolution, $"range {assessment.RangeM}");
-        Assert.True(assessment.AzimuthErrorRad < 0.05);
-    }
-
-    [Fact]
-    public void StandingGunnerySeamSurvivesFriendlyMutualCombat()
-    {
-        CobraGroundWarRuntime war = CreateWar();
-        GroundUnit seam = war.SeedStandingGunneryTarget(new Vec3D(0.0, 220.0, 0.0), 0.0);
-        double healthBefore = seam.Health;
-        for (int tick = 0; tick < 120 * 30; tick++)
-            war.Advance(PlayerVehicleContract.FixedDeltaSeconds);
-
-        GroundUnit? still = war.FindUnit(CobraGroundWarRuntime.GunnerySeamUnitId);
-        Assert.NotNull(still);
-        Assert.True(still!.IsAlive);
-        Assert.Equal(healthBefore, still.Health, 3);
-    }
-
     /// <summary>
     /// The control number must no longer be able to decide anything. Pinning it past the old
     /// victory threshold for far longer than the old 45 s hold must leave the mission Pending.
@@ -509,16 +486,21 @@ public class CobraGroundWarRuntimeTests
     [Fact]
     public void ZeroInputGroundWarLosesTheBasinWithoutFireSupport()
     {
-        // The mission must NEED the player: with the turret silent the hostile waves must
-        // drown the garrison. A self-winning ground war (Build 261 production defect: victory
-        // at ~75 s with the Cobra still on the pad) is the failure this test pins.
+        // The mission must NEED the player: with the turret silent the friendly force must not
+        // win on its own, and the sortie must end in defeat by the authored ten-minute limit.
+        // A self-winning ground war (Build 261 production defect: victory at ~75 s with the Cobra
+        // still on the pad) is the failure this test pins. Hostiles no longer overrun Camp Ember;
+        // they fight for the forward objectives outside its protected area instead.
         CobraGroundWarRuntime war = CreateWar(seed: 42);
-        int ticks = (int)Math.Round(300.0 / PlayerVehicleContract.FixedDeltaSeconds);
+        int ticks = (int)Math.Ceiling(
+            (CobraGroundWarRuntime.MissionTimeLimitSeconds + PlayerVehicleContract.FixedDeltaSeconds)
+            / PlayerVehicleContract.FixedDeltaSeconds);
 
         for (int tick = 0; tick < ticks && war.MissionOutcome == HoldTheBridgeOutcome.Pending; tick++)
             war.Advance(PlayerVehicleContract.FixedDeltaSeconds);
 
         Assert.Equal(HoldTheBridgeOutcome.Defeat, war.MissionOutcome);
+        Assert.Contains(war.MissionOutcomeReason, new[] { "tickets-exhausted", "time-limit" });
         Assert.True(
             war.Debrief.PeakFriendlyControl < CobraGroundWarRuntime.VictoryControlThreshold,
             $"friendly control peaked at {war.Debrief.PeakFriendlyControl:F3} with zero input; "

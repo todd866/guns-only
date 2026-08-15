@@ -6,10 +6,10 @@ using GunsOnly.Sim.Vehicles;
 namespace GunsOnly.Sim.Tests.Cobra;
 
 /// <summary>
-/// End-to-end crew chain: clear the Depart pad (Ingress seeds the standing seam), keep it inside
-/// the gun window, acquire, consent, and expend ammo. Owner Build 270 telemetry showed
-/// OutOfLimits ~87% of the sortie and zero rounds away — this harness fails closed on that
-/// regression. Build 300 moved the seam off the cold open so the pad is not a knife fight.
+/// End-to-end crew chain against the real Iron Bell garrison: stage in the attack area, keep the
+/// objective inside the gun window, acquire, consent, and expend ammo. The harness deliberately
+/// uses an authored mission target rather than manufacturing a disposable hostile in Camp
+/// Ember's protected departure lane.
 /// </summary>
 public sealed class CobraCrewChainFlightTests
 {
@@ -18,40 +18,36 @@ public sealed class CobraCrewChainFlightTests
         ReacquisitionSeconds: 0.45,
         SightCoincidenceToleranceRad: 0.06));
 
-    static CobraMissionRuntime CreatePastPadRuntime()
+    static CobraMissionRuntime CreateIronBellAttackRuntime()
     {
         CobraCanyonDefinition world = CobraCanyonDefinition.Create();
-        CobraCanyonRouteDefinition route = world.Routes.First(candidate =>
-            string.Equals(candidate.Id, CobraCanyonDefinition.RiverGorgeRouteId, StringComparison.Ordinal));
-        CobraCanyonRoutePoint start = route.Points[0];
-        CobraCanyonRoutePoint next = route.Points[1];
-        double yawRad = Math.Atan2(next.EastM - start.EastM, next.NorthM - start.NorthM);
-        double eastDeltaM = next.EastM - start.EastM;
-        double northDeltaM = next.NorthM - start.NorthM;
-        double lengthM = Math.Sqrt(eastDeltaM * eastDeltaM + northDeltaM * northDeltaM);
-        double offsetM = CobraMissionActProgress.DepartPadRadiusM + 40.0;
-        if (!world.CreateTerrainSurface().TrySample(start.EastM, start.NorthM, out TerrainSample surface))
-            throw new InvalidOperationException("Camp Ember has no terrain datum.");
-        var pastPad = new Vec3D(
-            start.EastM + eastDeltaM / lengthM * offsetM,
-            surface.HeightM + 40.0,
-            start.NorthM + northDeltaM / lengthM * offsetM);
+        CobraCanyonLandmarkDefinition bridge = world.Landmarks.First(landmark =>
+            string.Equals(
+                landmark.Id,
+                "landmark.cobra-canyon.iron-bell-bridge.v1",
+                StringComparison.Ordinal));
+        CobraCanyonTerrainSurface terrain = world.CreateTerrainSurface();
+        double attackEastM = bridge.EastM;
+        double attackNorthM = bridge.NorthM - 420.0;
+        Assert.True(terrain.TrySample(attackEastM, attackNorthM, out TerrainSample surface));
+        var attackPosition = new Vec3D(attackEastM, surface.HeightM + 60.0, attackNorthM);
         return new CobraMissionRuntime(
             world,
-            world.CreateTerrainSurface(),
+            terrain,
             CobraCanyonRouteChoice.RiverGorge,
-            spawn: new CobraMissionSpawn(pastPad, Vec3D.Zero, yawRad));
+            spawn: new CobraMissionSpawn(attackPosition, Vec3D.Zero, YawRad: 0.0));
     }
 
     [Fact]
-    public void HoverFacingSeamHoldFExpendsAmmo()
+    public void HoverFacingIronBellGarrisonHoldFExpendsAmmo()
     {
-        var runtime = CreatePastPadRuntime();
+        var runtime = CreateIronBellAttackRuntime();
         Assert.Equal(CobraMissionAct.Ingress, runtime.Act);
         var gunner = CreateGunner();
         var turret = new CobraTurretServo();
-        GroundUnit seam = runtime.GroundWar.FindUnit(CobraGroundWarRuntime.GunnerySeamUnitId)
-            ?? throw new InvalidOperationException("Standing gunnery seam missing after Ingress.");
+        GroundUnit target = runtime.GroundWar.FindUnit(
+            CobraGroundWarRuntime.GarrisonUnitId("site.iron-bell-bridge.v1"))
+            ?? throw new InvalidOperationException("Iron Bell garrison missing from the objective.");
 
         // Hold the hover for one second so the pose is settled before we arm the gunner.
         double trim = runtime.Cobra.EstimateHoverCollective(
@@ -61,24 +57,25 @@ public sealed class CobraCrewChainFlightTests
         for (int i = 0; i < 120; i++)
             runtime.Advance(hover);
 
+        Assert.Equal(CobraMissionAct.Engage, runtime.Act);
         var assessment = CobraGunTargeting.Assess(
             runtime.Cobra.State.PositionWorldM,
             runtime.Cobra.Observation.YawRad,
-            seam.PositionWorldM);
+            target.PositionWorldM);
         Assert.True(
             assessment.WithinTurretEnvelope,
-            $"Seam outside envelope after Ingress: az={assessment.AzimuthErrorRad * 180 / Math.PI:F1}° "
+            $"Iron Bell outside envelope: az={assessment.AzimuthErrorRad * 180 / Math.PI:F1}° "
             + $"el={assessment.ElevationRad * 180 / Math.PI:F1}° range={assessment.RangeM:F0}m "
-            + $"(aircraft Y={runtime.Cobra.State.PositionWorldM.Y:F0}, seam Y={seam.PositionWorldM.Y:F0}).");
+            + $"(aircraft Y={runtime.Cobra.State.PositionWorldM.Y:F0}, target Y={target.PositionWorldM.Y:F0}).");
         Assert.True(assessment.HasBallisticSolution, $"range {assessment.RangeM:F0}m");
 
         int ammoBefore = runtime.GroundWar.Magazine.RoundsRemaining;
-        double healthBefore = seam.Health;
+        double healthBefore = target.Health;
         bool sawFireAuthorized = false;
         bool sawExactSelectedEntityFire = false;
         for (long tick = 0; tick < 120 * 6; tick++) {
             runtime.Advance(hover);
-            GroundUnit? live = runtime.GroundWar.FindUnit(CobraGroundWarRuntime.GunnerySeamUnitId);
+            GroundUnit? live = runtime.GroundWar.FindUnit(target.Id);
             Assert.NotNull(live);
             CobraGunnerTargetObservation observation = CobraGunTargeting.AdvanceGunnerObservation(
                 runtime.Terrain,
@@ -107,14 +104,14 @@ public sealed class CobraCrewChainFlightTests
             }
         }
 
-        Assert.True(sawFireAuthorized, "Gunner never authorized fire on the standing seam with F held.");
+        Assert.True(sawFireAuthorized, "Gunner never authorized fire on the Iron Bell garrison with F held.");
         Assert.True(sawExactSelectedEntityFire,
             "Hold F authorized a different entity than the selected visual/gunner target.");
         int ammoAfter = runtime.GroundWar.Magazine.RoundsRemaining;
         Assert.True(
             ammoAfter < ammoBefore,
             $"Ammo stayed at {ammoAfter} with fire authorized — ApplyAuthorizedGunfire did not drain.");
-        GroundUnit damaged = runtime.GroundWar.FindUnit(CobraGroundWarRuntime.GunnerySeamUnitId)
+        GroundUnit damaged = runtime.GroundWar.FindUnit(target.Id)
             ?? throw new InvalidOperationException("Selected target disappeared from authority.");
         Assert.True(damaged.Health < healthBefore,
             $"Hold F spent rounds on {damaged.Id} but health stayed at {damaged.Health:F1}.");

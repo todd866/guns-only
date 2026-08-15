@@ -63,4 +63,7 @@ test("HUD keeps actual wing angle, mode, manual keys, and structural warning obs
   assert.match(hudSource,
     /const sweepRad = clamp\(actual, 20, 68\) \* DEG;[\s\S]*?Math\.cos\(sweepRad\)[\s\S]*?Math\.sin\(sweepRad\)[\s\S]*?Twin-tail/,
     "the indicator must be an articulating top-down F-14, not a generic numeric rail");
+  assert.match(hudSource,
+    /Broad glove shoulders[\s\S]*?Separated engine nacelles and exhausts[\s\S]*?All-moving tailplanes[\s\S]*?Twin-tail footprints/,
+    "the planform must retain the Tomcat's identifying gloves, twin nacelles, tailplanes, and twin tails");
 });

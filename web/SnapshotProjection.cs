@@ -1033,6 +1033,9 @@ internal static class SnapshotProjection {
             + $"\"mesh_tour_count\":{Session.MeshNav.Tour.Count},"
             + $"\"mesh_tour_json\":{SnapshotJson.JsonString(MeshSnapshot.TourJson(Session))},"
             + $"\"mesh_place_catalog_json\":{SnapshotJson.JsonString(MeshSnapshot.CatalogJson(Session))},"
+            // Monotonic sortie identity lets the shared world-space renderer retain one missing
+            // gate frame inside a procedure without replaying the previous mission's ladder.
+            + $"\"guidance_sortie_sequence\":{Session.PlayerSpawnSequence},"
             + $"\"recovery_procedure_kind\":{(int)recovery.Kind},"
             + $"\"recovery_procedure_label\":{JsonString(MeshSnapshot.ProcedureKindLabel(recovery.Kind))},"
             + $"\"recovery_gate_active_index\":{recovery.ActiveIndex},"

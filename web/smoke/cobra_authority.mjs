@@ -1,7 +1,6 @@
-// Shared read seams for the published Cobra Hold the Bridge route, used by BOTH halves of the
-// Cobra smoke coverage: the boot/designation half that gates the release (smoke.test.mjs) and the
-// full crew-chain half that does not (cobra-crew-chain.test.mjs). One copy so the two can never
-// drift onto different surfaces or a different build query string.
+// Shared read seams for the published Cobra Hold the Bridge route. The release-gating smoke uses
+// these for boot/designation; the optional flown crew-chain probe uses the same authority surface,
+// so neither can drift onto a different contract or build query string.
 //
 // Build 265 replaced the Cobra's DOM text strip with the production F-22 combiner plus the
 // rotorcraft extras, both painted to #hud-canvas -- so ammo, target and gun status are pixels, not
@@ -35,7 +34,7 @@ export async function waitForCobraAuthority(page, timeoutMs) {
 export function readCobraHud(page) {
   return page.evaluate(async () => {
     const { cobraRotorcraftHudModel } =
-      await import("/render/cobra/cobra_rotorcraft_hud.js?v=334");
+      await import("/render/cobra/cobra_rotorcraft_hud.js?v=335");
     const state = window.__gunsOnlyCobraAuthority ?? null;
     const canvas = document.querySelector("#hud-canvas");
     return {

@@ -3,12 +3,12 @@
  * Consumes authoritative ground_war and battle_damage snapshot fields; never invents combat truth.
  */
 
-import { isCampEmberGroundSite } from "./cobra_camp_ember_firebase.js?v=334";
+import { isCampEmberGroundSite } from "./cobra_camp_ember_firebase.js?v=335";
 
 export const COBRA_GROUND_WAR_PRESENTATION_SCHEMA =
   "guns-only.cobra-ground-war-presentation.v1";
 
-// A selected hostile is normally acquired around the 950 m gunnery seam. At that range a marker
+// A selected hostile is acquired at an authored forward objective. At tactical range a marker
 // sitting on the soil vanishes behind 1–4 m understory even though the target is valid and the
 // crew has it cued. Keep the terrain contact honest with an OPEN ring, then lift a compact mark
 // above the vegetation. Depth testing stays on: this is identification, not x-ray vision through

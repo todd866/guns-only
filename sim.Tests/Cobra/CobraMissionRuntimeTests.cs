@@ -95,8 +95,10 @@ public class CobraMissionRuntimeTests
         Assert.Equal(padClearanceM, road.Cobra.State.PositionWorldM.Y);
         Assert.Equal(CobraMissionAct.Depart, river.Act);
         Assert.DoesNotContain(
-            river.GroundWar.Units,
-            unit => unit.Id == CobraGroundWarRuntime.GunnerySeamUnitId);
+            river.GroundWar.Units.Where(unit => unit.Faction == GroundFaction.Hostile),
+            unit => HorizontalDistanceM(
+                unit.PositionWorldM,
+                CampEmberOperations.CentreWorldM) < CobraGroundWarRuntime.FobEnemyExclusionRadiusM);
         Assert.Equal(river.SelectedRoute.Id, river.Diagnostics.RouteGuidance.RouteId);
         Assert.Equal(ridge.SelectedRoute.Id, ridge.Diagnostics.RouteGuidance.RouteId);
         Assert.Equal(road.SelectedRoute.Id, road.Diagnostics.RouteGuidance.RouteId);
@@ -124,7 +126,7 @@ public class CobraMissionRuntimeTests
     }
 
     [Fact]
-    public void LeavingThePadSeedsTheGunnerySeamOnIngress()
+    public void LeavingThePadDoesNotManufactureAHostileInTheDepartureLane()
     {
         CobraCanyonDefinition world = CobraCanyonDefinition.Create();
         CobraCanyonRouteDefinition route = world.Routes.First(candidate =>
@@ -135,8 +137,9 @@ public class CobraMissionRuntimeTests
         double eastDeltaM = next.EastM - start.EastM;
         double northDeltaM = next.NorthM - start.NorthM;
         double lengthM = Math.Sqrt(eastDeltaM * eastDeltaM + northDeltaM * northDeltaM);
-        // Just past DepartPadRadiusM along the gorge heading — cold open stays on the pad;
-        // this fixture proves Ingress plants the seam without needing a crash-prone takeoff.
+        // Just past DepartPadRadiusM along the selected-route join. Crossing the act boundary
+        // must not manufacture a target on the aircraft nose or anywhere inside the FOB's
+        // protected operating area.
         double offsetM = CobraMissionActProgress.DepartPadRadiusM + 40.0;
         var pastPad = new Vec3D(
             start.EastM + eastDeltaM / lengthM * offsetM,
@@ -149,9 +152,11 @@ public class CobraMissionRuntimeTests
             spawn: new CobraMissionSpawn(pastPad, Vec3D.Zero, yawRad));
 
         Assert.Equal(CobraMissionAct.Ingress, runtime.Act);
-        Assert.Contains(
-            runtime.GroundWar.Units,
-            unit => unit.Id == CobraGroundWarRuntime.GunnerySeamUnitId && unit.IsAlive);
+        Assert.DoesNotContain(
+            runtime.GroundWar.LivingUnits().Where(unit => unit.Faction == GroundFaction.Hostile),
+            unit => HorizontalDistanceM(
+                unit.PositionWorldM,
+                CampEmberOperations.CentreWorldM) < CobraGroundWarRuntime.FobEnemyExclusionRadiusM);
     }
 
     [Fact]
@@ -183,6 +188,13 @@ public class CobraMissionRuntimeTests
         visibleHostile.ApplyDamage(visibleHostile.MaxHealth);
         Assert.False(clear.CanAcquireVisualLockTarget(visibleHostile.Id),
             "a stale living-target list still fails closed in authority after the unit dies");
+    }
+
+    static double HorizontalDistanceM(in Vec3D first, in Vec3D second)
+    {
+        double east = first.X - second.X;
+        double north = first.Z - second.Z;
+        return Math.Sqrt(east * east + north * north);
     }
 
     [Fact]
