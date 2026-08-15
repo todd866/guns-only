@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=330";
+import { createHud } from "./hud.js?v=331";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=330";
+} from "./render/debrief/sortie_result.js?v=331";
 import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
@@ -69,8 +69,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=330";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=330";
+} from "./render/release/release_identity.js?v=331";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=331";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -83,7 +83,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=330";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=331";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -92,10 +92,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=330";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=331";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=330";
+} from "./render/nav/carrier_sortie_touch_control.js?v=331";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -178,7 +178,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=330";
+} from "./render/telemetry/ai_frame_pressure.js?v=331";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -188,14 +188,14 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=330";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=330";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=330";
+} from "./render/telemetry/telemetry_batch.js?v=331";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=331";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=331";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=330";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=330";
+} from "./render/shell/boot_watchdog.js?v=331";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=331";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -204,7 +204,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=330";
+} from "./render/settings/player_settings.js?v=331";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -251,13 +251,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=330";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=330";
+} from "./render/scene/scene_builders.js?v=331";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=331";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=330";
+} from "./render/audio/flight_audio.js?v=331";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -756,25 +756,9 @@ function updateNavConsole(state) {
     : (patternOnly && legLabel ? `CIRCUITS · ${legLabel}` : recoveryName);
   set(navUi.destination, destinationName, "nominal");
 
-  const patternGate = recoveryLesson && Array.isArray(state?.approach_gates)
-    ? state.approach_gates[0] : null;
-  const patternEastM = Number(patternGate?.east_m);
-  const patternNorthM = Number(patternGate?.north_m);
-  const ownshipEastM = num("px") ?? 0;
-  const ownshipNorthM = num("pz") ?? 0;
-  const displayHeadingRad = num("heading") ?? ((num("hdg_deg") ?? 0) * Math.PI / 180);
-  const patternBearingRad = Number.isFinite(patternEastM) && Number.isFinite(patternNorthM)
-    ? Math.atan2(patternEastM - ownshipEastM, patternNorthM - ownshipNorthM) : null;
-  const patternBearingDeg = patternBearingRad === null ? null
-    : ((patternBearingRad * 180 / Math.PI) % 360 + 360) % 360;
-  const patternRangeNm = patternBearingRad === null ? null
-    : Math.hypot(patternEastM - ownshipEastM, patternNorthM - ownshipNorthM) / 1852;
-  const patternTurnDeg = patternBearingRad === null ? null
-    : Math.atan2(Math.sin(patternBearingRad - displayHeadingRad),
-      Math.cos(patternBearingRad - displayHeadingRad)) * 180 / Math.PI;
-  const bearingDeg = patternBearingDeg ?? route?.bearingDeg ?? selectedMesh?.bearingDeg ?? home.bearingDeg;
-  const rangeNm = patternRangeNm ?? route?.rangeNm ?? selectedMesh?.rangeNm ?? home.rangeNm;
-  const turnDeg = patternTurnDeg ?? route?.turnDeg ?? selectedMesh?.turnDeg ?? home.turnDeg;
+  const bearingDeg = route?.bearingDeg ?? selectedMesh?.bearingDeg ?? home.bearingDeg;
+  const rangeNm = route?.rangeNm ?? selectedMesh?.rangeNm ?? home.rangeNm;
+  const turnDeg = route?.turnDeg ?? selectedMesh?.turnDeg ?? home.turnDeg;
   // No browser-side ETA is inferred for an authored carrier fix. Home/Mesh travel state belongs
   // to those sources and must not leak an ARRIVED/AWAY label under route-owned geometry.
   const etaMinutes = route ? null : selectedMesh?.etaMinutes ?? home.etaMinutes;
@@ -888,8 +872,8 @@ function updateNavConsole(state) {
       headingRad,
       places: parseMeshPlaceCatalog(state),
       activePlaceId: route ? null : selectedMesh?.placeId ?? null,
-      activeEastM: patternBearingRad !== null ? patternEastM : route?.target.eastM ?? num("mesh_active_east_m"),
-      activeNorthM: patternBearingRad !== null ? patternNorthM : route?.target.northM ?? num("mesh_active_north_m"),
+      activeEastM: route?.target.eastM ?? num("mesh_active_east_m"),
+      activeNorthM: route?.target.northM ?? num("mesh_active_north_m"),
       transitMode: selectedMesh?.transitMode
         ?? (typeof state?.mesh_transit_mode === "string" ? state.mesh_transit_mode : "mission_gated"),
       follow: meshNdFollow,
@@ -11652,7 +11636,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=330")
+    navigator.serviceWorker.register("service-worker.js?v=331")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to
