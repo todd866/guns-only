@@ -90,8 +90,9 @@ public sealed class GroundUnit
     /// objective strip's promise ("kill the garrison and friendlies will take the point")
     /// becomes a lie the player watches the AI fulfil. Player rounds arrive through
     /// ApplyAuthorizedFire and are NOT scaled by this.
-    /// Deliberately not applied to the friendly hard points at Camp Ember: hostile waves must
-    /// still be able to break the FOB, or the mission has no losing side.
+    /// Friendly hard points remain ordinary ground units. Camp Ember itself is rear-area and is
+    /// excluded from hostile wave spawning; the mission's losing side comes from losing the
+    /// forward points and bleeding tickets, not from attackers materialising beside the pad.
     /// </summary>
     public bool IsFortified { get; }
 

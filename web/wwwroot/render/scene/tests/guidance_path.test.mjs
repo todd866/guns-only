@@ -397,6 +397,60 @@ test("an active approach with an empty frame hides instead of flashing coarse RT
   assert.equal(path.object3d.userData.suppressionReason, "approach-empty");
 });
 
+test("one empty active-approach snapshot cannot blank an established highway", () => {
+  const path = createGuidancePath(THREE);
+  const valid = {
+    px: 0,
+    py: 1_000,
+    pz: 0,
+    approach_guidance_active: true,
+    approach_gate_count: approachGates.length,
+    approach_gates: approachGates,
+  };
+  const drawn = path.update(valid);
+  assert.ok(drawn > 0);
+  const firstX = path.object3d.children[0].position.x;
+
+  const held = path.update({
+    ...valid,
+    approach_gate_count: 0,
+    approach_gates: [],
+    approach_gates_json: "[]",
+  });
+  assert.equal(held, drawn);
+  assert.equal(path.object3d.visible, true);
+  assert.equal(path.object3d.children[0].position.x, firstX);
+  assert.equal(path.object3d.userData.continuityHeld, true);
+
+  path.update({ ...valid, approach_guidance_active: false, approach_gates: [] });
+  assert.equal(path.object3d.userData.continuityHeld, false,
+    "ending approach ownership releases the cached ladder");
+});
+
+test("an empty frame from a new sortie cannot replay the previous procedure", () => {
+  const path = createGuidancePath(THREE);
+  const drawn = path.update({
+    approach_guidance_active: true,
+    guidance_sortie_sequence: 41,
+    recovery_procedure_kind: 2,
+    approach_gate_count: approachGates.length,
+    approach_gates: approachGates,
+  });
+  assert.ok(drawn > 0);
+
+  const nextSortie = path.update({
+    approach_guidance_active: true,
+    guidance_sortie_sequence: 42,
+    recovery_procedure_kind: 2,
+    approach_gate_count: 0,
+    approach_gates: [],
+  });
+  assert.equal(nextSortie, 0);
+  assert.equal(path.object3d.visible, false);
+  assert.equal(path.object3d.userData.continuityHeld, false);
+  assert.equal(path.object3d.userData.suppressionReason, "approach-empty");
+});
+
 test("approach ownership invalidates a same-bucket RTB breadcrumb cache", () => {
   const path = createGuidancePath(THREE);
   const rtb = {

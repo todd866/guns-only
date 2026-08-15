@@ -67,9 +67,21 @@ function ownshipOnDepartPad(authorityState, pad) {
 
 export function emberPathGuidanceState(authorityState) {
   const gates = Array.isArray(authorityState?.path_gates) ? authorityState.path_gates : [];
+  const act = String(authorityState?.mission_act ?? "").toLowerCase();
+  const routeLeg = act === "rtb" ? "rtb" : "outbound";
+  const continuityKey = [
+    "cobra",
+    authorityState?.world_id ?? "world",
+    authorityState?.route_id ?? authorityState?.route ?? "route",
+    routeLeg,
+  ].join(":");
   if (!gates.length) {
+    const routeOwnsGuidance = act === "depart" || act === "ingress" || act === "rtb";
     return {
-      approach_guidance_active: false,
+      // Keep approach ownership through a transient empty projection so the shared renderer can
+      // retain its last complete ladder. A fresh mission with no prior ladder still fails closed.
+      approach_guidance_active: routeOwnsGuidance,
+      guidance_continuity_key: continuityKey,
       approach_gates: [],
       approach_gate_count: 0,
     };
@@ -111,6 +123,7 @@ export function emberPathGuidanceState(authorityState) {
 
   return {
     approach_guidance_active: windowed.length > 0,
+    guidance_continuity_key: continuityKey,
     approach_gates: windowed,
     approach_gate_count: windowed.length,
   };

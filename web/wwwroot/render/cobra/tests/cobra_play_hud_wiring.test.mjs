@@ -113,10 +113,10 @@ test("forward authority camera is body-aligned with no hidden sight bias", async
   assert.doesNotMatch(sync, /lookPitch\s*=\s*bodyPitch\s*\+/);
 });
 
-test("target list rebuilds only when the living set changes and prefers the gunnery seam", async () => {
+test("target list rebuilds only when the living set changes and never invents a departure target", async () => {
   const main = await source("cobra-lab/main.js");
   assert.match(main, /aliveKey/);
-  assert.match(main, /gunnery-seam\.000/);
+  assert.doesNotMatch(main, /gunnery-seam\.000/);
   assert.match(main, /distanceToPlayer\(a\) - distanceToPlayer\(b\)/);
   assert.match(main, /targetSelect\.value = hostileTargetIds\[0\];[\s\S]*?bridge\?\.SetGunnerTarget\(targetSelect\.value\)/,
     "post-kill continuity selection must reach the AI gunner immediately");

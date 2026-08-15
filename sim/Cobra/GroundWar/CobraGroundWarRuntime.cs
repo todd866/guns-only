@@ -59,11 +59,14 @@ public sealed class CobraGroundWarRuntime
     public const double HostileSeedSoftVehicleRingM = 200.0;
     public const double HostileWaveRingM = 160.0;
     /// <summary>
-    /// Standing gunnery seam down the departure heading so the crew chain
-    /// (Tab → acquire → hold F → rounds away) stays reachable after takeoff. It must NOT sit
-    /// in the pad ring — Camp Ember is a friendly Depart, not a knife-fight spawn.
+    /// Camp Ember is a rear-area operating base, not a conquest spawn. No authored or generated
+    /// hostile may appear inside its protected arrival/departure area. The old crew-chain helper
+    /// manufactured a soft-skin vehicle 950 m ahead of the aircraft as soon as Depart ended;
+    /// because the protected lane climbs across the north-west shoulder, that read as an enemy
+    /// deliberately emplaced on the ridge overlooking its own target. Real targets live at the
+    /// forward objectives.
     /// </summary>
-    public const string GunnerySeamUnitId = "ground.hostile.gunnery-seam.000";
+    public const double FobEnemyExclusionRadiusM = CampEmberOperations.ProtectedLengthM;
     /// <summary>
     /// Every hostile-held point opens with one hard point standing ON the point. Nothing in the
     /// ownership rule knows what a "garrison" is — it is simply a hostile body inside the capture
@@ -71,9 +74,6 @@ public sealed class CobraGroundWarRuntime
     /// </summary>
     public const string GarrisonUnitIdSuffix = ".garrison";
     public static string GarrisonUnitId(string siteId) => siteId + GarrisonUnitIdSuffix;
-    // Mid/far envelope (ballistic window 80–2000 m). Seeded on Ingress after the pad cold open
-    // so Tab→F stays reachable once the aircraft is flying the gorge, not on the ramp.
-    public const double GunnerySeamRangeM = 950.0;
     public const double WreckRetainSeconds = 28.0;
     /// <summary>Small-arms chatter events per engaged unit per second (presentation only).</summary>
     public const double SmallArmsEventsPerSecond = 2.4;
@@ -416,13 +416,6 @@ public sealed class CobraGroundWarRuntime
             double amount = _damageScratch[index];
             if (amount <= 0.0) continue;
             GroundUnit unit = living[index];
-            // The standing gunnery seam is for the crew chain: friendlies must not erase it
-            // before the player can designate and fire. Player rounds still apply via TryFire.
-            if (IsGunnerySeam(unit) && amount > 0.0) {
-                // Zero out only the portion that came from friendlies by skipping all mutual
-                // damage to the seam — ground AI cannot clear the player's shootable mark.
-                continue;
-            }
             // A dug-in garrison is an air problem. Ground units shoot at it and achieve nothing;
             // only the turret can break the point open. See GroundUnit.IsFortified.
             if (unit.IsFortified) continue;
@@ -450,6 +443,13 @@ public sealed class CobraGroundWarRuntime
             double step = Math.Min(unit.MoveSpeedMps * dtSeconds, horizontal);
             double east = unit.PositionWorldM.X + delta.X / horizontal * step;
             double north = unit.PositionWorldM.Z + delta.Z / horizontal * step;
+            if (unit.Faction == GroundFaction.Hostile
+                && InsideFobEnemyExclusion(east, north)) {
+                // Camp Ember is the protected rear-area base, not a fourth battlefield point.
+                // Even if every forward friendly dies, an EngageNearest mover must not follow a
+                // survivor back onto the departure ridge or march on the pad as a fallback goal.
+                continue;
+            }
             if (!_terrain.TrySample(east, north, out TerrainSample surface))
                 continue;
             double heightOffset = unit.Role == GroundUnitRole.SoftVehicle ? 1.2 : 0.4;
@@ -465,6 +465,16 @@ public sealed class CobraGroundWarRuntime
         foreach (GroundUnit candidate in living) {
             if (candidate.Faction == unit.Faction) continue;
             if (!candidate.ParticipatesInGroundCombat) continue;
+            if (unit.Faction == GroundFaction.Hostile
+                && candidate.Faction == GroundFaction.Friendly
+                && InsideFobEnemyExclusion(
+                    candidate.PositionWorldM.X,
+                    candidate.PositionWorldM.Z)) {
+                // Camp defenders do not become bait that pulls a surviving forward wave onto the
+                // perimeter after the battlefield collapses. The enemy fights for the three
+                // authored objectives; Camp Ember remains the rear-area launch/recovery base.
+                continue;
+            }
             double rangeSq = HorizontalDistanceSquared(unit.PositionWorldM, candidate.PositionWorldM);
             if (rangeSq >= best) continue;
             best = rangeSq;
@@ -490,6 +500,7 @@ public sealed class CobraGroundWarRuntime
         double nearestSq = double.PositiveInfinity;
         foreach (ContestedSite site in _sites) {
             if (site.Owner != enemyOwner) continue;
+            if (unit.Faction == GroundFaction.Hostile && IsCampEmberSite(site)) continue;
             double rangeSq = HorizontalDistanceSquared(unit.PositionWorldM, site.PositionWorldM);
             if (rangeSq >= nearestSq) continue;
             nearestSq = rangeSq;
@@ -720,13 +731,17 @@ public sealed class CobraGroundWarRuntime
         // Assault the weakest still-defended site so the wave always finds a fight; once every
         // garrison is gone any site will do (the basin is already falling).
         ContestedSite site = _sites
+            .Where(candidate => !IsCampEmberSite(candidate))
             .Where(candidate => LivingUnits().Any(unit =>
                 unit.Faction == GroundFaction.Friendly
                 && HorizontalDistanceSquared(unit.PositionWorldM, candidate.PositionWorldM)
                     <= candidate.CaptureRadiusM * candidate.CaptureRadiusM))
             .OrderBy(candidate => candidate.LocalControl)
             .FirstOrDefault()
-            ?? _sites.OrderBy(candidate => candidate.LocalControl).First();
+            ?? _sites
+                .Where(candidate => !IsCampEmberSite(candidate))
+                .OrderBy(candidate => candidate.LocalControl)
+                .First();
         int wave = 0;
         for (int index = 0; index < HostileWaveSoftVehicles && LivingUnits().Count() < MaxLivingUnits; index++)
             SpawnUnit(GroundFaction.Hostile, GroundUnitRole.SoftVehicle, site,
@@ -762,9 +777,9 @@ public sealed class CobraGroundWarRuntime
             SpawnUnit(GroundFaction.Friendly, GroundUnitRole.SoftVehicle, site,
                 GroundUnitIntent.Advance, ringM: 48.0, bearingRad: 2.1);
 
-            // Camp Ember is the Depart pad: friendlies only. Hostiles open at the contested
-            // gorge sites (bridge / plantation / quarry) so the cold open is a takeoff, not a
-            // surround. The standing gunnery seam is planted down-route after spawn pose is known.
+            // Camp Ember is the rear-area Depart pad: friendlies only. Hostiles open at the
+            // forward sites (bridge / plantation / quarry), so the cold open is a takeoff rather
+            // than an enemy firing position overlooking the ramp.
             if (fob) continue;
 
             // The garrison: one dug-in hard point standing ON a hostile-held point. It is not a
@@ -793,8 +808,7 @@ public sealed class CobraGroundWarRuntime
             SpawnUnit(GroundFaction.Hostile, GroundUnitRole.SoftVehicle, site,
                 GroundUnitIntent.EngageNearest, ringM: HostileSeedSoftVehicleRingM,
                 bearingRad: BearingFromAircraftYaw(yawTowardBasin - 0.55));
-            // Extra infantry on the far ring so removing Camp Ember hostiles does not let the
-            // garrison self-climb to victory before waves arrive.
+            // Extra infantry on the far ring keeps forward pressure alive before waves arrive.
             SpawnUnit(GroundFaction.Hostile, GroundUnitRole.InfantryClump, site,
                 GroundUnitIntent.EngageNearest, ringM: HostileSeedInfantryRingM + 40.0,
                 bearingRad: BearingFromAircraftYaw(yawTowardBasin + 2.4));
@@ -831,6 +845,11 @@ public sealed class CobraGroundWarRuntime
                 observer.EastM,
                 surface.HeightM + observer.ObserverHeightAglM,
                 observer.NorthM);
+            if (HorizontalDistanceSquared(positionWorldM, _fob.CentreWorldM)
+                < FobEnemyExclusionRadiusM * FobEnemyExclusionRadiusM) {
+                throw new InvalidOperationException(
+                    $"Air-threat site '{observer.Id}' violates Camp Ember's protected perimeter.");
+            }
             ContestedSite home = _sites
                 .OrderBy(site => HorizontalDistanceSquared(site.PositionWorldM, positionWorldM))
                 .First();
@@ -855,72 +874,10 @@ public sealed class CobraGroundWarRuntime
     static double BearingFromAircraftYaw(double yawRad) =>
         Math.Atan2(Math.Cos(yawRad), Math.Sin(yawRad));
 
-    /// <summary>
-    /// Places one soft vehicle down the aircraft nose inside the M28A1 envelope and ballistic
-    /// window, immune to friendly mutual combat, so designation→fire stays reachable after
-    /// Depart. Range is intentionally past the pad ring (see GunnerySeamRangeM).
-    /// </summary>
-    public GroundUnit SeedStandingGunneryTarget(
-        in Vec3D aircraftPositionWorldM,
-        double aircraftYawRad)
-    {
-        if (!aircraftPositionWorldM.IsFinite)
-            throw new ArgumentOutOfRangeException(nameof(aircraftPositionWorldM));
-        if (!double.IsFinite(aircraftYawRad))
-            throw new ArgumentOutOfRangeException(nameof(aircraftYawRad));
-        if (_units.Any(unit => unit.Id == GunnerySeamUnitId))
-            return _units.First(unit => unit.Id == GunnerySeamUnitId);
-
-        // Keep look-down inside the M28A1 envelope (−50°). A seam planted at fixed 220 m on a
-        // gorge floor under a high spawn reads OutOfLimits forever (owner Build 270: 87%).
-        double aircraftX = aircraftPositionWorldM.X;
-        double aircraftY = aircraftPositionWorldM.Y;
-        double aircraftZ = aircraftPositionWorldM.Z;
-        double rangeM = GunnerySeamRangeM;
-        TerrainSample surface = default;
-        double seamEast = 0.0;
-        double seamNorth = 0.0;
-        for (int attempt = 0; attempt < 8; attempt++) {
-            seamEast = aircraftX + Math.Sin(aircraftYawRad) * rangeM;
-            seamNorth = aircraftZ + Math.Cos(aircraftYawRad) * rangeM;
-            if (!_terrain.TrySample(seamEast, seamNorth, out surface)) {
-                seamEast = aircraftX;
-                seamNorth = aircraftZ + rangeM;
-                if (!_terrain.TrySample(seamEast, seamNorth, out surface))
-                    throw new InvalidOperationException(
-                        "Gunnery seam has no terrain datum ahead of the aircraft.");
-            }
-            var candidate = new Vec3D(seamEast, surface.HeightM + 1.2, seamNorth);
-            var assessment = CobraGunTargeting.Assess(
-                new Vec3D(aircraftX, aircraftY, aircraftZ),
-                aircraftYawRad,
-                candidate);
-            if (assessment.WithinTurretEnvelope && assessment.HasBallisticSolution)
-                break;
-            rangeM = Math.Min(
-                CobraGunTargeting.MaximumSolutionRangeM - 50.0,
-                Math.Max(rangeM * 1.35, assessment.RangeM + 40.0));
-        }
-
-        ContestedSite home = _sites
-            .OrderBy(site => HorizontalDistanceSquared(
-                site.PositionWorldM, new Vec3D(seamEast, surface.HeightM, seamNorth)))
-            .First();
-        var unit = new GroundUnit(
-            GunnerySeamUnitId,
-            GroundFaction.Hostile,
-            GroundUnitRole.SoftVehicle,
-            maxHealth: 120.0,
-            new Vec3D(seamEast, surface.HeightM + 1.2, seamNorth),
-            GroundUnitIntent.Hold,
-            home.Id);
-        _units.Add(unit);
-        PushEvent("spawn", unit.Id, home.Id, GroundFaction.Hostile, unit.PositionWorldM);
-        return unit;
-    }
-
-    static bool IsGunnerySeam(GroundUnit unit) =>
-        string.Equals(unit.Id, GunnerySeamUnitId, StringComparison.Ordinal);
+    bool InsideFobEnemyExclusion(double eastM, double northM) =>
+        HorizontalDistanceSquared(
+            new Vec3D(eastM, 0.0, northM),
+            _fob.CentreWorldM) < FobEnemyExclusionRadiusM * FobEnemyExclusionRadiusM;
 
     void SpawnUnit(
         GroundFaction faction,
@@ -938,6 +895,11 @@ public sealed class CobraGroundWarRuntime
         double bearing = bearingRad ?? _rng.NextDouble() * Math.PI * 2.0;
         double east = site.PositionWorldM.X + Math.Cos(bearing) * ringM;
         double north = site.PositionWorldM.Z + Math.Sin(bearing) * ringM;
+        if (faction == GroundFaction.Hostile && InsideFobEnemyExclusion(east, north)) {
+            // Fail closed. A future content edit that moves a forward site toward the FOB must
+            // not silently recreate the ridge-over-the-pad problem.
+            return;
+        }
         if (!_terrain.TrySample(east, north, out TerrainSample surface)) {
             east = site.PositionWorldM.X;
             north = site.PositionWorldM.Z;
@@ -1016,6 +978,9 @@ public sealed class CobraGroundWarRuntime
         string.Equals(siteId, "site.camp-ember.v1", StringComparison.Ordinal)
             ? GroundSiteOwner.Friendly
             : GroundSiteOwner.Hostile;
+
+    static bool IsCampEmberSite(ContestedSite site) =>
+        string.Equals(site.Id, "site.camp-ember.v1", StringComparison.Ordinal);
 
     static double HorizontalDistanceSquared(in Vec3D a, in Vec3D b)
     {

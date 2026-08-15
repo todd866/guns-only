@@ -683,18 +683,11 @@ test("the published Indoor route boots its Three.js facility and transitions opt
 // the authority agrees with. None of that depends on where the ground war has got to.
 //
 // The other half -- the full fire-authorisation chain (ConsentReleased -> hold F ->
-// fire_authorized with reason None -> rounds leave the magazine -> release disarms) -- lives in
-// cobra-crew-chain.test.mjs and is NOT in the gate. It needs a hostile the M28A1 turret can
-// actually reach, and Hold the Bridge only ever offers that for the first ~20 s of MISSION time:
-// two hostiles are seeded on the 170 m and 200 m rings at the spawn site, every other hostile
-// stands 6.7-7.2 km out on the contested sites the assault waves feed (permanently outside the
-// 2 km ballistic window), and the friendly garrison kills the near pair inside that window. Two
-// consecutive CI runs (31070089059, 31073497847) failed on that dependency where the same test
-// passed locally, and local slow-runner emulation up to 20x CPU throttling could not reproduce
-// either failure -- so the emulation is not representative of the runner and the crew chain is
-// not something this gate can honestly hold. Rather than let a test we added during this build
-// hold a green release hostage, the chain runs outside the gate until the mission grows a seam
-// that puts a reachable hostile in a known place. See the header of cobra-crew-chain.test.mjs.
+// fire_authorized with reason None -> rounds leave the magazine -> release disarms) -- now runs
+// deterministically in CobraCrewChainFlightTests against the real Iron Bell garrison. The browser
+// smoke does not fast-forward or manufacture a target beside Camp Ember: it proves the published
+// authority/presentation seam here, while the runtime test proves the complete crew chain at the
+// authored forward objective.
 test("the published Cobra Hold the Bridge route boots authority and takes a Tab designation", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 

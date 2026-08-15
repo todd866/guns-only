@@ -1,7 +1,7 @@
 # Current product and verification status
 
 Updated: 2026-08-15
-Production: Build 333, revision `f2c37d51e9735baf5f8164bd8fe2949117ac2d46` (verified live via
+Production: Build 334, revision `0828426556e73ead343f8b8d87008f9c99b21642` (verified live via
 `/api/build-info` 2026-08-15, with the protected release pipeline complete). Builds 312 (Cobra
 contact envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap
 timing), 318 (authored structure materials), 320 (Top Gun 404 + cockpit depth near-plane), 321
@@ -38,10 +38,19 @@ Gun route, successive opponents, conventional Case I carrier recovery, a real Es
 longer-look-ahead Cobra route ribbon, persistent recovery gates and equivalent F-22 RTB authority.
 It also shipped physical F-14 sweep effects and indicator, gun/recovery telemetry, and the 35 NM
 Rapier three-balloon-mine intercept at FL450 with no time compression and a guided RTB.
-Next candidate: Build 334 (branch `fix/cobra-graphics-334`) — improves Cobra's cockpit-visible scene:
-broken monsoon cloud shelves and a shared sun aureole, shadow-readable layered jungle, rotor-wash and
-pad-edge wear, support vehicles and braced camp silhouettes. Camp Ember remains one merged draw. The
-scenery comparison camera is corrected from a retired jungle coordinate to the authoritative firebase.
+Build 334 improved Cobra's cockpit-visible scene: broken monsoon cloud shelves and a shared sun
+aureole, shadow-readable layered jungle, rotor-wash and pad-edge wear, support vehicles and braced
+camp silhouettes. Camp Ember remains one merged draw. The scenery comparison camera was corrected
+from a retired jungle coordinate to the authoritative firebase.
+
+Next candidate: Build 335 (branch `fix/cobra-tactical-layout-335`) — removes the synthetic Cobra
+departure-lane target and keeps every hostile outside Camp Ember's protected rear-area perimeter,
+including wave selection, movement and chase logic. The shared Cobra/F-14/F-22/Rapier world-space
+guidance renderer now retains a valid ladder through a transient empty frame but keys that continuity
+to the sortie and procedure so stale routes cannot survive a restart or outbound-to-RTB handoff. The
+Top Gun numeric recovery lecture is removed; the F-14 sweep indicator is a recognisable articulated
+Tomcat planform. Cold-launched combat missions now carry an executable one-minute intended-profile
+ingress acceptance standard.
 
 Build 325 shipped the following owner-flight findings and remains the baseline for this candidate.
 

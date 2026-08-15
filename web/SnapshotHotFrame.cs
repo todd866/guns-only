@@ -44,7 +44,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 26;
+    public const int LayoutVersion = 27;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -599,6 +599,7 @@ internal static class SnapshotHotFrame {
         Nul("mesh_fuel_on_arrival_home_via_dest_lb", 2);
         Nul("mesh_reserve_margin_via_dest_lb", 2);
         Num("mesh_tour_count", RawInteger);
+        Num("guidance_sortie_sequence", RawInteger);
         Num("recovery_procedure_kind", RawInteger);
         Num("recovery_gate_active_index", RawInteger);
         Nul("recovery_gate_x", 2);
@@ -1663,6 +1664,7 @@ internal static class SnapshotHotFrame {
         RecoveryGate? recoveryGate = meshRecovery.ActiveGate;
         Vec3D recoveryFace = meshRecovery.ActiveGateFace;
         w.Num("mesh_tour_count", session.MeshNav.Tour.Count, RawInteger);
+        w.Num("guidance_sortie_sequence", session.PlayerSpawnSequence, RawInteger);
         w.Num("recovery_procedure_kind", (int)meshRecovery.Kind, RawInteger);
         w.Num("recovery_gate_active_index", meshRecovery.ActiveIndex, RawInteger);
         w.Nul("recovery_gate_x", recoveryGate?.EastM, 2);

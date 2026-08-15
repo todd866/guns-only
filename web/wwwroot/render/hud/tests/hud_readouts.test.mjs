@@ -922,6 +922,8 @@ test("production HUD consumes stabilized KIAS plus physical corner and limits pa
 
 test("production HUD gates recovery guidance on the shared platform contract", async () => {
   const source = await readFile(new URL("../../../hud.js", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /drawApproachEnergyCue/,
+    "world-space guidance owns recovery teaching; the HUD must not reinstate a prose number bar");
   assert.match(source,
     /if \(!recoveryPlatformAvailable\(state\)\) return false;[\s\S]*?mode === "APPROACH"/,
     "approach geometry must work for fixed strips and legacy carriers");

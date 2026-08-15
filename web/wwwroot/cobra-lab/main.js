@@ -1,55 +1,55 @@
-import * as THREE from "../vendor/three.module.js?v=334";
+import * as THREE from "../vendor/three.module.js?v=335";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=334";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=334";
-import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=334";
+} from "../render/cobra/cobra_canyon_plan.js?v=335";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=335";
+import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=335";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=334";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=334";
+} from "../render/cobra/cobra_canyon_tour.js?v=335";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=335";
 import {
   cobraGoldenPathState,
   createCobraGoldenPath,
-} from "../render/cobra/cobra_golden_path.js?v=334";
-import { createHud } from "../hud.js?v=334";
+} from "../render/cobra/cobra_golden_path.js?v=335";
+import { createHud } from "../hud.js?v=335";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=334";
+} from "../render/cobra/cobra_hud_adapter.js?v=335";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=334";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=334";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=335";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=335";
 import {
   cobraTacticalMapBounds,
   cobraTacticalMapModel,
-} from "../render/cobra/cobra_tactical_map.js?v=334";
+} from "../render/cobra/cobra_tactical_map.js?v=335";
 import {
   COBRA_MAP_CAPTION_PX,
   drawCobraTacticalMap,
-} from "../render/cobra/cobra_tactical_map_draw.js?v=334";
-import { bakeCobraTacticalRelief } from "../render/cobra/cobra_tactical_map_relief.js?v=334";
+} from "../render/cobra/cobra_tactical_map_draw.js?v=335";
+import { bakeCobraTacticalRelief } from "../render/cobra/cobra_tactical_map_relief.js?v=335";
 import {
   emberActObjectiveOverlay,
   emberActRemainingM,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=334";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=334";
+} from "../render/cobra/cobra_ember_path.js?v=335";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=335";
 import {
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=334";
+} from "../render/audio/flight_audio.js?v=335";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=334";
+} from "../render/cobra/cobra_control_profile.js?v=335";
 import {
   advanceCobraPilotControls,
   cobraCyclicCommand,
@@ -57,48 +57,48 @@ import {
   createCobraGroundedPilotControlState,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=334";
+} from "../render/cobra/cobra_pilot_input.js?v=335";
 import {
   createCobraSortieReadyInterlock,
   hasDeliberateCobraCockpitInput,
-} from "../render/cobra/cobra_sortie_ready.js?v=334";
+} from "../render/cobra/cobra_sortie_ready.js?v=335";
 import {
   COBRA_TURNAROUND_ACTION_CODE,
   cobraTurnaroundActionHeld,
   cobraTurnaroundIsActive,
   cobraTurnaroundLocksFlightControls,
-} from "../render/cobra/cobra_turnaround.js?v=334";
+} from "../render/cobra/cobra_turnaround.js?v=335";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=334";
+} from "../render/cobra/ah1g_presence.js?v=335";
 import {
   acquireAuthorityVisualLockTarget,
   advancePadlockLosGrace,
   lookOffsetFromAngles,
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
-} from "../render/cobra/cobra_camera_bias.js?v=334";
+} from "../render/cobra/cobra_camera_bias.js?v=335";
 import {
   cobraMissionStatusCopy,
   cobraTerminalCauseCopy,
-} from "../render/cobra/cobra_terminal_causes.js?v=334";
-import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=334";
+} from "../render/cobra/cobra_terminal_causes.js?v=335";
+import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=335";
 import {
   createParkedCobra,
   placeParkedCobra,
-} from "../render/cobra/cobra_parked_airframe.js?v=334";
+} from "../render/cobra/cobra_parked_airframe.js?v=335";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=334";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=334";
+} from "../render/visual/shadow_stabilizer.js?v=335";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=335";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=334";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=334";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=334";
+} from "../render/cobra/cobra_mission_exit.js?v=335";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=335";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=335";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -358,7 +358,7 @@ window.addEventListener("keydown", armAudioFromGesture, { capture: true });
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=334";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=335";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
@@ -1264,16 +1264,9 @@ function refreshGroundTargets() {
   const distanceToPlayer = (unit) => vehicle
     ? Math.hypot(unit.x_m - vehicle.x_m, unit.z_m - vehicle.z_m)
     : 0;
-  // Gunnery seam first so Tab→F from spawn hits a shootable mark instead of the nearest
-  // OutOfLimits infantry (Build 267 flight: ON TARGET rare, OUT OF LIMITS dominant).
-  const SEAM_ID = "ground.hostile.gunnery-seam.000";
   hostileTargetIds = units
     .filter((unit) => unit.alive && unit.faction === "hostile")
-    .sort((a, b) => {
-      if (a.id === SEAM_ID && b.id !== SEAM_ID) return -1;
-      if (b.id === SEAM_ID && a.id !== SEAM_ID) return 1;
-      return distanceToPlayer(a) - distanceToPlayer(b);
-    })
+    .sort((a, b) => distanceToPlayer(a) - distanceToPlayer(b))
     .map((unit) => unit.id);
   const previous = targetSelect.value;
   targetSelect.replaceChildren();
@@ -1284,8 +1277,7 @@ function refreshGroundTargets() {
   for (const unit of units.filter((candidate) => candidate.alive)) {
     const option = document.createElement("option");
     option.value = unit.id;
-    const tag = unit.id === SEAM_ID ? "SEAM" : unit.id.slice(-7);
-    option.textContent = `${unit.faction === "friendly" ? "FRI" : "HOS"} · ${unit.role} · ${tag}`;
+    option.textContent = `${unit.faction === "friendly" ? "FRI" : "HOS"} · ${unit.role} · ${unit.id.slice(-7)}`;
     targetSelect.append(option);
   }
   if (previous && [...targetSelect.options].some((option) => option.value === previous)) {
@@ -1294,7 +1286,6 @@ function refreshGroundTargets() {
   } else if (hostileTargetIds.length && playerHasInteracted) {
     // Auto-reselect keeps continuity after a kill, but never before the pilot's first input —
     // a cold-boot auto-selection dragged the camera toward a hostile on spawn.
-    // The WASM bridge still auto-assigns the seam for fire consent without moving the camera.
     hostileTargetIndex = 0;
     targetSelect.value = hostileTargetIds[0];
     bridge?.SetGunnerTarget(targetSelect.value);

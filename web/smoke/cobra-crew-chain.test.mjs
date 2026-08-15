@@ -24,11 +24,10 @@ import {
 // magazine, and releasing F disarms. That is the whole AH-1G crew contract and no other test in
 // the repo executes it.
 //
-// Why it was out of the gate before Build 267: Hold the Bridge only offered an engageable
-// hostile for ~20 s at spawn, and the garrison killed that pair before a slow CI runner could
-// designate. Build 267 seeds `ground.hostile.gunnery-seam.000` on the aircraft nose (immune to
-// friendly mutual combat), so the crew chain is reachable for the whole sortie. Re-admit this
-// file to the published-smoke gate once a Verify run proves the seam on the runner.
+// Why it remains out of the gate: the mission no longer manufactures a disposable hostile in
+// Camp Ember's protected departure lane. A browser-level crew-chain proof now has to fly the
+// actual ingress to Iron Bell; the deterministic runtime flight test stages at that authored
+// objective and covers designation → consent → rounds away meanwhile.
 
 const WWWROOT = process.env.SMOKE_WWWROOT;
 const TIMEOUT_SCALE = Math.max(1, Number(process.env.SMOKE_TIMEOUT_SCALE) || 1);
@@ -45,7 +44,7 @@ const WORKING_REASONS = new Set(["Acquiring", "SightNotCoincident", "ConsentRele
 // 0.75 s of acquisition plus under 1.4 s of turret slew (80 deg/s across the 110 deg envelope).
 const ENGAGEMENT_WINDOW_S = 14;
 
-test("the published Cobra route runs the AH-1G crew chain from designation to rounds away",
+test.skip("the published Cobra route flies to Iron Bell before running the AH-1G crew chain",
   async () => {
     assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 
@@ -61,8 +60,8 @@ test("the published Cobra route runs the AH-1G crew chain from designation to ro
       });
       await waitForCobraAuthority(page, scaled(150000));
 
-      // Clear the friendly Depart pad before designating. Build 300+ seeds the standing
-      // gunnery seam only after Ingress (pad radius cleared) so the cold open is not a knife fight.
+      // Clear the friendly Depart pad before beginning the real ingress. There is deliberately
+      // nothing to designate inside Camp Ember's protected operating area.
       const clearDepartPad = async () => {
         await page.evaluate(async () => {
           const bridge = window.__gunsOnlyCobraBridge;
@@ -192,7 +191,7 @@ test("the published Cobra route runs the AH-1G crew chain from designation to ro
         );
         held = await page.evaluate(async () => {
           const { cobraRotorcraftHudModel } =
-            await import("/render/cobra/cobra_rotorcraft_hud.js?v=334");
+            await import("/render/cobra/cobra_rotorcraft_hud.js?v=335");
           const state = window.__smokeFiringSnapshot;
           return {
             model: cobraRotorcraftHudModel(state),

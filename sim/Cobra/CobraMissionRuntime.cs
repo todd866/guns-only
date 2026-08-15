@@ -475,8 +475,8 @@ public sealed class CobraMissionRuntime
             bridgeLandmark.EastM,
             bridgeSurface.HeightM,
             bridgeLandmark.NorthM);
-        // Depart is a friendly pad open — no nose hostile until Ingress clears the pad ring.
-        // Crew-chain coverage seeds then (see EnsureGunnerySeamForIngress).
+        // Depart is a friendly rear-area pad. No target is manufactured in the protected lane;
+        // the first hostiles are the authored forward-objective forces.
         Status = CobraMissionStatus.Active;
         _cachedMaskingAssessment = AssessMaskingAt(_cobra.State.PositionWorldM);
         _maskingAssessmentAuthorityTicks = 0;
@@ -748,7 +748,6 @@ public sealed class CobraMissionRuntime
 
     void RefreshAct(in Vec3D positionWorldM, double? clearanceM)
     {
-        CobraMissionAct previous = _act;
         _act = CobraMissionActProgress.Next(
             _act,
             positionWorldM,
@@ -758,17 +757,6 @@ public sealed class CobraMissionRuntime
             _groundWar.MissionOutcome,
             Status,
             clearanceM);
-        if (previous == CobraMissionAct.Depart && _act == CobraMissionAct.Ingress)
-            EnsureGunnerySeamForIngress(positionWorldM);
-    }
-
-    /// <summary>
-    /// Plant the standing Tab→F seam once the aircraft has left the pad. Idempotent.
-    /// </summary>
-    void EnsureGunnerySeamForIngress(in Vec3D positionWorldM)
-    {
-        double yawRad = PlayerVehicleValidation.AttitudeAngles(_cobra.State.BodyAttitude).Yaw;
-        _groundWar.SeedStandingGunneryTarget(positionWorldM, yawRad);
     }
 
     /// <summary>

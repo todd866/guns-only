@@ -21,13 +21,8 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=334";
+} from "./render/hud/contact_visibility.js?v=335";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
-import {
-  approachEnergyCue,
-  approachEnergyPanelY,
-  formatApproachEnergyLine,
-} from "./render/hud/approach_energy.js";
 import {
   carrierAoARelevant,
   carrierConfigurationCue,
@@ -64,11 +59,11 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=334";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=335";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=334";
+} from "./render/mission/rapier_high_mach_instruments.js?v=335";
 import {
   limitsPanelPresentation,
   navigationRateReadout,
@@ -82,7 +77,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=334";
+} from "./render/audio/flight_audio.js?v=335";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -2151,47 +2146,6 @@ class CombatHud {
     ctx.restore();
   }
 
-  drawApproachEnergyCue(state) {
-    const cue = approachEnergyCue(state);
-    if (!cue) {
-      if (this._debug) this._debug.approachEnergyCue = null;
-      return;
-    }
-    const ctx = this.ctx;
-    const line = formatApproachEnergyLine(cue);
-    const width = Math.min(this.touchMode ? 300 : 380, this.width - 34);
-    const height = 28;
-    const x = (this.width - width) / 2;
-    const y = approachEnergyPanelY(this.getLayout(), height);
-    if (y === null) {
-      if (this._debug) this._debug.approachEnergyCue = {
-        drawn: false,
-        reason: "no-safe-lane",
-      };
-      return;
-    }
-
-    ctx.save();
-    this.glassPanel(x, y, width, height, "rgba(242, 217, 160, 0.85)");
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "rgba(242, 217, 160, 0.95)";
-    ctx.font = "750 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(line, this.width / 2, y + height / 2);
-    if (this._debug) {
-      this._debug.approachEnergyCue = {
-        drawn: true,
-        label: cue.label,
-        targetAltM: cue.targetAltM,
-        targetTasMps: cue.targetTasMps,
-        altErrorM: cue.altErrorM,
-        tasErrorMps: cue.tasErrorMps,
-        line,
-      };
-    }
-    ctx.restore();
-  }
-
   drawModeCue(frame) {
     const { state, now } = frame;
     const ctx = this.ctx;
@@ -2847,7 +2801,7 @@ class CombatHud {
     wash.addColorStop(0.72, "rgba(1, 9, 14, 0.20)");
     wash.addColorStop(1, "rgba(1, 9, 14, 0)");
     ctx.fillStyle = wash;
-    ctx.fillRect(x - 6, y - 9, width + 12, 82);
+    ctx.fillRect(x - 6, y - 9, width + 12, 96);
     ctx.font = "700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
@@ -2866,48 +2820,88 @@ class CombatHud {
     // Top-down Tomcat planform. Both wing tips are derived directly from the authoritative
     // angle, so the instrument shows geometry rather than asking the pilot to decode a slider.
     const aircraftX = x + width / 2;
-    const aircraftY = y + 38;
+    const aircraftY = y + 42;
     const sweepRad = clamp(actual, 20, 68) * DEG;
-    const halfSpan = Math.min(38, width * 0.30);
+    const halfSpan = Math.min(42, width * 0.31);
     const tipOut = Math.cos(sweepRad) * halfSpan;
     const tipAft = Math.sin(sweepRad) * halfSpan;
-    const pivotOut = 6;
-    const pivotY = -7;
+    const pivotOut = 9;
+    const pivotY = -6;
     ctx.save();
     ctx.translate(aircraftX, aircraftY);
     ctx.strokeStyle = accent;
     ctx.fillStyle = manual ? "rgba(255, 176, 32, 0.16)" : "rgba(77, 255, 136, 0.14)";
     ctx.lineWidth = 1.35;
+    ctx.lineJoin = "round";
+    // Broad glove shoulders are a Tomcat identifier in plan view; draw them separately so the
+    // variable panels visibly pivot out of a fixed airframe rather than a generic dart.
     for (const side of [-1, 1]) {
       ctx.beginPath();
-      ctx.moveTo(side * pivotOut, pivotY);
-      ctx.lineTo(side * (pivotOut + tipOut), pivotY + tipAft);
-      ctx.lineTo(side * (pivotOut + tipOut * 0.72), pivotY + tipAft + 5);
-      ctx.lineTo(side * 5, 1);
+      ctx.moveTo(side * 3.2, -15);
+      ctx.lineTo(side * 10.5, -7);
+      ctx.lineTo(side * 9.0, 7);
+      ctx.lineTo(side * 4.2, 2);
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
     }
-    // Twin-tail / glove / fuselage outline keeps the symbol unmistakably F-14 at small scale.
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(side * pivotOut, pivotY);
+      ctx.lineTo(side * (pivotOut + tipOut), pivotY + tipAft);
+      ctx.lineTo(side * (pivotOut + tipOut * 0.78), pivotY + tipAft + 5.5);
+      ctx.lineTo(side * 8.2, 6.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    // Long nose and cockpit spine.
     ctx.beginPath();
-    ctx.moveTo(0, -22);
-    ctx.lineTo(-4, -13);
-    ctx.lineTo(-7, 9);
-    ctx.lineTo(-12, 17);
-    ctx.lineTo(-7, 16);
-    ctx.lineTo(-4, 22);
-    ctx.lineTo(0, 19);
-    ctx.lineTo(4, 22);
-    ctx.lineTo(7, 16);
-    ctx.lineTo(12, 17);
-    ctx.lineTo(7, 9);
-    ctx.lineTo(4, -13);
+    ctx.moveTo(0, -31);
+    ctx.lineTo(-2.8, -23);
+    ctx.lineTo(-4.1, -10);
+    ctx.lineTo(-4.4, 18);
+    ctx.lineTo(0, 23);
+    ctx.lineTo(4.4, 18);
+    ctx.lineTo(4.1, -10);
+    ctx.lineTo(2.8, -23);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+    // Separated engine nacelles and exhausts—the feature the old single-body kite was missing.
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(side * 4.8, -1);
+      ctx.lineTo(side * 8.2, 2);
+      ctx.lineTo(side * 8.5, 21);
+      ctx.lineTo(side * 5.0, 24);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(side * 6.7, 24, 2.0, 1.15, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    // All-moving tailplanes sit low and wide behind the nacelles.
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(side * 5.5, 16);
+      ctx.lineTo(side * 17, 20);
+      ctx.lineTo(side * 15, 24);
+      ctx.lineTo(side * 5.2, 21);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    // Twin-tail footprints remain separated on the nacelles.
     ctx.beginPath();
-    ctx.moveTo(-5, 10); ctx.lineTo(-9, 2); ctx.lineTo(-7, 15);
-    ctx.moveTo(5, 10); ctx.lineTo(9, 2); ctx.lineTo(7, 15);
+    ctx.moveTo(-5.4, 17); ctx.lineTo(-8.8, 8); ctx.lineTo(-7.6, 21);
+    ctx.moveTo(5.4, 17); ctx.lineTo(8.8, 8); ctx.lineTo(7.6, 21);
+    ctx.stroke();
+    // Canopy break and centreline make the nose direction readable at a glance.
+    ctx.beginPath();
+    ctx.moveTo(0, -23); ctx.lineTo(0, -10);
+    ctx.moveTo(-2.4, -15); ctx.lineTo(2.4, -15);
     ctx.stroke();
     ctx.restore();
     ctx.textAlign = "center";
@@ -2916,10 +2910,10 @@ class CombatHud {
       `${controlBindingLabel(this.controlBindings?.wingSweepForward, "Comma")} / `
         + `${controlBindingLabel(this.controlBindings?.wingSweepAft, "Period")} · `
         + `${controlBindingLabel(this.controlBindings?.wingSweepAuto, "Slash")} AUTO`,
-      x + width / 2, y + 68,
+      x + width / 2, y + 82,
     );
     if (this._debug) {
-      this._debug.wingSweep = { x: x - 6, y: y - 9, width: width + 12, height: 82,
+      this._debug.wingSweep = { x: x - 6, y: y - 9, width: width + 12, height: 96,
         actualDeg: actual, commandDeg: command, mode: manual ? "MANUAL" : "AUTO" };
     }
     ctx.restore();
@@ -5598,7 +5592,6 @@ class CombatHud {
       });
     }
     this.drawRtbCue(frame.state);
-    this.drawApproachEnergyCue(frame.state);
 
     // Speed trend: a windowed presentation estimate projected ~6 s ahead. The rate estimator
     // deliberately ignores one-frame IAS reversals so the caret reports energy trend, not noise.
