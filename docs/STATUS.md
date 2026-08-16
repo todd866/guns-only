@@ -87,7 +87,7 @@ Freshwater Atlas lake shoreline with real CDEM relief, corrected scoop-lane wate
 recognisable YLW/Highway 97/bridge structure, population placement and elevation-aware dry
 ponderosa/Douglas-fir vegetation.
 
-Next candidate: Build 341 (branch `fix/fireboss-audio-341`) replaces the throttle-pitched
+Next candidate: Build 342 (branch `fix/fireboss-audio-341`) replaces the throttle-pitched
 sawtooth/triangle Fire Boss engine graph with a real, public-domain single-engine PT6 machinery
 bed plus a governed 1,700 RPM, five-blade pressure cadence; separate torque-driven prop wash,
 exhaust and reduction-gear broadband layers; an Ng-driven compressor feature; cockpit attenuation;
