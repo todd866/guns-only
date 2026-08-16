@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   createOkanaganSurfaceSampler,
   geographicToWorld,
+  isAgriculturePoint,
 } from "../okanagan_world.js";
 
 const pack = new URL("../../../content/packs/okanagan-fire/environment/", import.meta.url);
@@ -31,10 +32,27 @@ test("the scenery pack carries official shoreline resolution and recognizable va
   assert.deepEqual(world.agriculture.map((zone) => zone.id), [
     "ellison", "rutland", "east-kelowna", "west-bench",
   ]);
+  assert.ok(world.agriculture.every((zone) => zone.epistemic === "surrogate"));
   const highway = world.roads.find((road) => road.id === "highway-97");
   const waterPoints = highway.points.filter((point) => pointInPolygon(point, world.lake.shoreline));
   assert.deepEqual(waterPoints, [[-119.516, 49.8875]],
     "only the William R. Bennett Bridge span may cross open water");
+});
+
+test("agricultural scenery masks honour each authored rotation", () => {
+  const world = {
+    agriculture: [{
+      latitude: 49.88,
+      longitude: -119.50,
+      radiusXM: 2_000,
+      radiusZM: 500,
+      rotationDeg: 90,
+    }],
+  };
+  assert.equal(isAgriculturePoint(world, 0, 1_500), true,
+    "the long local-X axis must rotate onto world Z");
+  assert.equal(isAgriculturePoint(world, 1_500, 0), false,
+    "world X must use the rotated short axis");
 });
 
 function pointInPolygon([longitude, latitude], shoreline) {

@@ -31,6 +31,7 @@ export function okanaganFlightState(current = {}) {
   const fuelKg = Math.max(0, finite(current.fuel_kg));
   const blockFuelKg = Math.max(fuelKg, finite(current.fuel_plan?.block_kg, fuelKg));
   const minimumFuelKg = Math.max(0, finite(current.fuel_plan?.minimum_rtb_kg));
+  const waterReleasedKg = Math.max(0, finite(current.water_released_this_tick_kg));
   const burnKgPerSecond = 0.032 + 0.115 * throttle;
   const minutesToMinimum = Math.max(0, fuelKg - minimumFuelKg)
     / Math.max(0.001, burnKgPerSecond) / 60;
@@ -100,7 +101,8 @@ export function okanaganFlightState(current = {}) {
     fireboss_surface: String(current.surface ?? ""),
     fireboss_scoop_valid: current.scoop_valid === true,
     fireboss_scoops_commanded: current.scoops_commanded === true,
-    fireboss_drop_active: current.drop_active === true,
+    fireboss_water_release_kg: waterReleasedKg,
+    fireboss_drop_active: waterReleasedKg > 0,
   };
 }
 

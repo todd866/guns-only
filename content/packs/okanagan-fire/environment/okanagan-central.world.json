@@ -98,10 +98,10 @@
     }
   ],
   "agriculture": [
-    { "id": "ellison", "latitude": 49.995, "longitude": -119.365, "radiusXM": 3600, "radiusZM": 5000, "rotationDeg": 18 },
-    { "id": "rutland", "latitude": 49.910, "longitude": -119.365, "radiusXM": 3100, "radiusZM": 3900, "rotationDeg": 12 },
-    { "id": "east-kelowna", "latitude": 49.845, "longitude": -119.420, "radiusXM": 3500, "radiusZM": 3600, "rotationDeg": 25 },
-    { "id": "west-bench", "latitude": 49.835, "longitude": -119.625, "radiusXM": 3300, "radiusZM": 3000, "rotationDeg": -28 }
+    { "id": "ellison", "epistemic": "surrogate", "latitude": 49.995, "longitude": -119.365, "radiusXM": 3600, "radiusZM": 5000, "rotationDeg": 18 },
+    { "id": "rutland", "epistemic": "surrogate", "latitude": 49.910, "longitude": -119.365, "radiusXM": 3100, "radiusZM": 3900, "rotationDeg": 12 },
+    { "id": "east-kelowna", "epistemic": "surrogate", "latitude": 49.845, "longitude": -119.420, "radiusXM": 3500, "radiusZM": 3600, "rotationDeg": 25 },
+    { "id": "west-bench", "epistemic": "surrogate", "latitude": 49.835, "longitude": -119.625, "radiusXM": 3300, "radiusZM": 3000, "rotationDeg": -28 }
   ],
   "communities": [
     {
@@ -156,6 +156,7 @@
   "sources": {
     "terrain": "Natural Resources Canada Canadian Digital Elevation Model",
     "shoreline": "British Columbia Freshwater Atlas Lakes",
+    "agriculture": "Authored district-scale surrogate masks; not parcel geometry",
     "vegetation": "British Columbia Vegetation Resources Inventory; CWFIS FBP fuel classes",
     "population": "Statistics Canada 2021 Census of Population",
     "aircraft": "Air Tractor AT-802F Fire Boss; Wipaire 10000 amphibian scoop system"

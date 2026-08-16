@@ -302,7 +302,7 @@ function updateView(current) {
   fireEffects.group.visible = current.sortie !== "water-circuits";
   fireEffects.update(current.fire_cells, current.mission_s);
   buildTraffic(current.traffic);
-  dropTrail.update(current, drop && current.water_kg > 0);
+  dropTrail.update(current, current.water_released_this_tick_kg > 0);
   if (sun.castShadow) {
     sun.position.set(current.position.x - 12_000, current.position.y + 18_000, current.position.z + 9_000);
     sun.target.position.set(current.position.x, 500, current.position.z);
@@ -358,6 +358,7 @@ function recordTelemetry(current, inputDeltaSeconds) {
     scoop_valid: current.scoop_valid,
     scoop_fault: current.scoop_fault,
     water_kg: current.water_kg,
+    water_released_this_tick_kg: current.water_released_this_tick_kg,
     fuel_kg: current.fuel_kg,
     fuel_above_minimum_kg: current.fuel_plan.above_minimum_kg,
     active_gate: gate?.id ?? null,
@@ -386,7 +387,7 @@ function recordTelemetry(current, inputDeltaSeconds) {
 
 function drawHud(current, deltaSeconds, nowSeconds) {
   const target = selectedTarget();
-  const flightState = okanaganFlightState({ ...current, drop_active: drop });
+  const flightState = okanaganFlightState(current);
   flightState.engine = engineSpool;
   flightState.engine_spool_fraction = engineSpool;
   flightState.engine_rpm_pct = 58 + engineSpool * 42;

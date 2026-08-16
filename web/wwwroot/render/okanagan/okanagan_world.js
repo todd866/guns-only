@@ -382,11 +382,18 @@ function createTerrainRibbon(controlPoints, width, sampleHeight, world, offset, 
   return mesh;
 }
 
-function isAgriculturePoint(world, x, z, scale = 1) {
+export function isAgriculturePoint(world, x, z, scale = 1) {
   return (world.agriculture ?? []).some((zone) => {
     const centre = geographicToWorld(zone.latitude, zone.longitude);
-    return ((x - centre.x) / (zone.radiusXM * scale)) ** 2
-      + ((z - centre.z) / (zone.radiusZM * scale)) ** 2 < 1;
+    const angle = (Number(zone.rotationDeg) || 0) * Math.PI / 180;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const dx = x - centre.x;
+    const dz = z - centre.z;
+    const localX = dx * cos + dz * sin;
+    const localZ = -dx * sin + dz * cos;
+    return (localX / (zone.radiusXM * scale)) ** 2
+      + (localZ / (zone.radiusZM * scale)) ** 2 < 1;
   });
 }
 

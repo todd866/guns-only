@@ -10,6 +10,12 @@
 - Kelowna International Airport: City of Kelowna YLW published field elevation and Runway 16/34
   dimensions. The parallel taxiway, terminal apron, and threshold layout are visual landmarks, not
   a current aerodrome chart.
+- Agricultural footprints: authored **surrogate** scenery masks centred on the named Ellison,
+  Rutland, East Kelowna, and West Bench agricultural districts. Their radii and rotations express
+  the broad irrigated bench/valley-floor pattern at game scale; they are not parcel, cadastral, or
+  crop-boundary geometry. We rejected an axis-aligned generic valley ellipse because it erased the
+  districts' different orientations, and rejected parcel-level precision without an authoritative
+  redistribution-compatible parcel source.
 - Forest composition: British Columbia Vegetation Resources Inventory, Forest Vegetation
   Composite Rank 1 layer. The first playable cell uses the observed interior stand vocabulary and
   the CWFIS C7/O1/M1 fuel-class mapping; it does not claim tree-by-tree survey accuracy.

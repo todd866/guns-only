@@ -16,6 +16,7 @@ test("Fire Boss projects into the shared fixed-wing HUD and audio contract", () 
     gross_mass_kg: 7_000,
     water_kg: 2_100,
     water_capacity_kg: 3_104,
+    water_released_this_tick_kg: 18,
     fuel_plan: { block_kg: 925, minimum_rtb_kg: 310 },
   });
 
@@ -29,6 +30,14 @@ test("Fire Boss projects into the shared fixed-wing HUD and audio contract", () 
   assert.ok(state.calibrated_airspeed_kts > 79 && state.calibrated_airspeed_kts < 80);
   assert.ok(state.engine_rpm_pct > 88 && state.engine_rpm_pct < 89);
   assert.ok(state.stall_speed_kcas > 60);
+  assert.equal(state.fireboss_water_release_kg, 18);
+  assert.equal(state.fireboss_drop_active, true);
+});
+
+test("drop audio truth ignores an unproductive drop command", () => {
+  const state = okanaganFlightState({ drop_active: true, water_released_this_tick_kg: 0 });
+  assert.equal(state.fireboss_water_release_kg, 0);
+  assert.equal(state.fireboss_drop_active, false);
 });
 
 test("the one-line cue prefers an actionable scoop fault", () => {
