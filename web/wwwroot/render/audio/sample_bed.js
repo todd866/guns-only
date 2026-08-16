@@ -6,7 +6,7 @@
 // that aircraft graph's decodedBedInput. A missing or undecodable file is therefore silent and
 // recoverable rather than fatal to flight audio.
 
-export const SAMPLE_BED_BUILD = "341";
+export const SAMPLE_BED_BUILD = "342";
 export const SAMPLE_BED_RETRY_MS = 30_000;
 
 function stampedUrl(relativePath) {
