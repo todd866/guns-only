@@ -90,16 +90,16 @@ public sealed class FireBossDynamics
 
     public static FireBossDynamics OnScoopLane(double fuelKg = 610.0)
     {
-        Vec3D position = OkanaganGeo.ToWorld(49.825, -119.580,
+        Vec3D position = OkanaganGeo.ToWorld(49.825, -119.565,
             OkanaganGeo.LakeSurfaceElevationM);
-        return new FireBossDynamics(position, 44.0, 0.12,
+        return new FireBossDynamics(position, 44.0, 0.58,
             FireBossSurfaceMode.Water, fuelKg);
     }
 
     public static FireBossDynamics OnScoopApproach(double fuelKg = 610.0)
     {
-        Vec3D position = OkanaganGeo.ToWorld(49.820, -119.580, 360.0);
-        return new FireBossDynamics(position, 43.0, 0.04,
+        Vec3D position = OkanaganGeo.ToWorld(49.820, -119.568, 360.0);
+        return new FireBossDynamics(position, 43.0, 0.50,
             FireBossSurfaceMode.Airborne, fuelKg);
     }
 

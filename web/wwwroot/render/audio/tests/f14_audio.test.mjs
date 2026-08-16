@@ -386,9 +386,11 @@ test("flight facade gives F-14 exclusive propulsion while retaining shared event
     propulsionCharacter: "f14",
     cobraActive: false,
     f14Active: true,
+    turbopropActive: false,
     jetMuted: true,
     cobraMuted: true,
     f14Muted: false,
+    turbopropMuted: true,
     radioEngine: "f14",
   });
   assert.equal(flightPropulsionGraphGates(F14_FRAME, false).f14Muted, true);

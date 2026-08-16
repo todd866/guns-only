@@ -21,7 +21,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=338";
+} from "./render/hud/contact_visibility.js?v=340";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import {
   carrierAoARelevant,
@@ -59,15 +59,15 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=338";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=340";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=338";
+} from "./render/mission/rapier_high_mach_instruments.js?v=340";
 import {
   limitsPanelPresentation,
   navigationRateReadout,
-} from "./render/hud/limits_panel.js";
+} from "./render/hud/limits_panel.js?v=340";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   cobraAccelCaretPx,
@@ -77,7 +77,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=338";
+} from "./render/audio/flight_audio.js?v=340";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -1809,6 +1809,59 @@ class CombatHud {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(labelText, labelX, labelY);
+  }
+
+  drawCivilianTarget(frame) {
+    const label = String(frame.state?.civilian_target_label ?? "").trim();
+    const position = frame.civilianTargetPosition;
+    if (!label || !position || !frame.camera) return;
+    const projected = this.project(position, frame.camera, this.projectionA);
+    const margin = 44;
+    const behind = projected.behind === true;
+    const x = behind
+      ? (projected.cameraX < 0 ? margin : this.width - margin)
+      : clamp(projected.x, margin, this.width - margin);
+    const y = behind
+      ? this.height * 0.5
+      : clamp(projected.y, margin + this.safeInsets.top, this.height - margin - this.safeInsets.bottom);
+    const onScreen = !behind && projected.x >= margin && projected.x <= this.width - margin
+      && projected.y >= margin + this.safeInsets.top
+      && projected.y <= this.height - margin - this.safeInsets.bottom;
+    const padlocked = frame.state.civilian_target_padlocked === true;
+    const accent = padlocked ? AMBER : GREEN;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.strokeStyle = accent;
+    ctx.fillStyle = accent;
+    ctx.lineWidth = padlocked ? 2 : 1.4;
+    ctx.shadowColor = padlocked ? "rgba(255,176,32,.42)" : "rgba(77,255,136,.34)";
+    ctx.shadowBlur = 5;
+    if (onScreen) {
+      const size = padlocked ? 18 : 15;
+      const corner = 6;
+      for (const sx of [-1, 1]) for (const sy of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(x + sx * size, y + sy * (size - corner));
+        ctx.lineTo(x + sx * size, y + sy * size);
+        ctx.lineTo(x + sx * (size - corner), y + sy * size);
+        ctx.stroke();
+      }
+    } else {
+      const angle = Math.atan2(y - this.height / 2, x - this.width / 2);
+      ctx.translate(x, y);
+      ctx.rotate(angle + Math.PI / 2);
+      ctx.beginPath();
+      ctx.moveTo(0, -9); ctx.lineTo(7, 6); ctx.lineTo(0, 3); ctx.lineTo(-7, 6); ctx.closePath();
+      ctx.stroke();
+      ctx.setTransform(this.pixelRatio, 0, 0, this.pixelRatio, 0, 0);
+    }
+    ctx.shadowBlur = 0;
+    ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillText(this.fitText(label, 130), x, y + 23);
+    ctx.restore();
+    if (this._debug) this._debug.civilianTarget = { label, x, y, onScreen, padlocked };
   }
 
   banditAngles(frame) {
@@ -3731,6 +3784,15 @@ class CombatHud {
       this._padlockTrackEstablished = false;
       return;
     }
+    // Civilian procedure padlock uses the conformal civilian-target bracket and camera look only.
+    // It suppresses the body-referenced ladder, but must not inherit fighter TARGET 1 / gun SA.
+    if (frame.padlockTarget === "civilian") {
+      this._carrierPatternCue.reset();
+      this._padlockLiftCaptured = false;
+      this._padlockCaptureEntityId = "";
+      this._padlockTrackEstablished = false;
+      return;
+    }
     if (frame.padlockTarget === "carrier"
         && !recoveryPlatformAvailable(frame.state)) {
       this._carrierPatternCue.reset();
@@ -5584,6 +5646,7 @@ class CombatHud {
     this.drawAimPoint(frame, noseAnchor, directorAnchor);
     this.drawBandit(frame);
     this.drawWingman(frame);
+    this.drawCivilianTarget(frame);
     if (!mobileTactical) {
       this.drawHeadingTape(frame.state, {
         headingDeg: display.headingDeg,

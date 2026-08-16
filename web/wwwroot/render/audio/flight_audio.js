@@ -18,10 +18,14 @@ import {
   updateF14AudioVoices,
 } from "./f14_audio.js";
 import {
+  createTurbopropAudioVoices,
+  updateTurbopropAudioVoices,
+} from "./turboprop_audio.js";
+import {
   COBRA_COCKPIT_SAMPLE_BED,
   F14_COCKPIT_SAMPLE_BED,
   ensureLoopingSampleBed,
-} from "./sample_bed.js?v=338";
+} from "./sample_bed.js?v=340";
 import { resolvePropulsionCharacter } from "./audio_character.js";
 import { standardAtmosphereState } from "./atmosphere_audio.js";
 import {
@@ -48,6 +52,7 @@ let propulsionDuck = null;
 let engineVoices = null;
 let cobraVoices = null;
 let f14Voices = null;
+let turbopropVoices = null;
 let eventVoices = null;
 let contactVoices = null;
 let formationContactVoices = [];
@@ -819,15 +824,19 @@ export function flightPropulsionGraphGates(state, live) {
   const propulsionCharacter = resolvePropulsionCharacter(state);
   const cobraActive = propulsionCharacter === "cobra";
   const f14Active = propulsionCharacter === "f14";
+  const turbopropActive = propulsionCharacter === "turboprop";
   const audibleFrame = live === true;
   return Object.freeze({
     propulsionCharacter,
     cobraActive,
     f14Active,
-    jetMuted: !audibleFrame || cobraActive || f14Active,
+    turbopropActive,
+    jetMuted: !audibleFrame || cobraActive || f14Active || turbopropActive,
     cobraMuted: !audibleFrame || !cobraActive,
     f14Muted: !audibleFrame || !f14Active,
-    radioEngine: cobraActive ? "cobra" : f14Active ? "f14" : "jet",
+    turbopropMuted: !audibleFrame || !turbopropActive,
+    radioEngine: cobraActive ? "cobra" : f14Active ? "f14"
+      : turbopropActive ? "turboprop" : "jet",
   });
 }
 
@@ -859,7 +868,7 @@ function updateFlightAudioLocal(state, {
     const audioState = projectFlightAudioState(state);
     const live = enabled && !muted && !backgrounded;
     const propulsionGates = flightPropulsionGraphGates(audioState, live);
-    const { cobraActive, f14Active } = propulsionGates;
+    const { cobraActive, f14Active, turbopropActive } = propulsionGates;
     // Cobra owns a small dedicated rotorcraft graph, allocated only on its first live frame.
     // It still feeds the same compressor/master and therefore inherits preference mute,
     // lifecycle suspension, and ?audioQa=silent without a second AudioContext or output path.
@@ -869,6 +878,8 @@ function updateFlightAudioLocal(state, {
     // must not leak into the generic fixed-wing graph used by the MiG-28 and older aircraft.
     if (f14Active && !f14Voices)
       f14Voices = createF14AudioVoices(context, propulsionDuck);
+    if (turbopropActive && !turbopropVoices)
+      turbopropVoices = createTurbopropAudioVoices(context, propulsionDuck);
     ensureDedicatedAircraftSampleBed(cobraActive, cobraVoices, COBRA_COCKPIT_SAMPLE_BED);
     ensureDedicatedAircraftSampleBed(f14Active, f14Voices, F14_COCKPIT_SAMPLE_BED);
     ensureJetSamples(audioState);
@@ -889,6 +900,11 @@ function updateFlightAudioLocal(state, {
     if (f14Voices) {
       updateF14AudioVoices(f14Voices, context, audioState, {
         muted: propulsionGates.f14Muted,
+      });
+    }
+    if (turbopropVoices) {
+      updateTurbopropAudioVoices(turbopropVoices, context, audioState, {
+        muted: propulsionGates.turbopropMuted,
       });
     }
     updateBuffetVoice(eventVoices, context, audioState, { enabled: live });

@@ -510,9 +510,11 @@ test("flight facade selects one propulsion graph while retaining shared event sy
     propulsionCharacter: "cobra",
     cobraActive: true,
     f14Active: false,
+    turbopropActive: false,
     jetMuted: true,
     cobraMuted: false,
     f14Muted: true,
+    turbopropMuted: true,
     radioEngine: "cobra",
   });
   assert.deepEqual(flightPropulsionGraphGates({
@@ -521,9 +523,11 @@ test("flight facade selects one propulsion graph while retaining shared event sy
     propulsionCharacter: "jet",
     cobraActive: false,
     f14Active: false,
+    turbopropActive: false,
     jetMuted: false,
     cobraMuted: true,
     f14Muted: true,
+    turbopropMuted: true,
     radioEngine: "jet",
   });
   assert.equal(flightPropulsionGraphGates(COBRA_RUNNING, false).jetMuted, true);

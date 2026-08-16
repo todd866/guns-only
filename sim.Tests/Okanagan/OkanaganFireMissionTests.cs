@@ -76,9 +76,9 @@ public sealed class OkanaganFireMissionTests
     public void CollisionLakeMatchesTheAuthoredScoopAndKeepsTheFireOnLand()
     {
         Assert.True(OkanaganGeo.IsOverCentralLake(
-            OkanaganGeo.ToWorld(49.825, -119.580, 342.0)));
+            OkanaganGeo.ToWorld(49.825, -119.565, 342.0)));
         Assert.True(OkanaganGeo.IsOverCentralLake(
-            OkanaganGeo.ToWorld(49.875, -119.555, 342.0)));
+            OkanaganGeo.ToWorld(49.875, -119.515, 342.0)));
         Assert.False(OkanaganGeo.IsOverCentralLake(
             OkanaganGeo.ToWorld(49.850, -119.655, 810.0)));
     }
@@ -86,8 +86,8 @@ public sealed class OkanaganFireMissionTests
     [Fact]
     public void OperationalLakeRunwayAndFireShareTheCommittedCdem()
     {
-        Vec3D scoopExit = OkanaganGeo.ToWorld(49.875, -119.555, 0.0);
-        Assert.True(OkanaganCdem.SampleRawHeightM(scoopExit) > 400.0);
+        Vec3D scoopExit = OkanaganGeo.ToWorld(49.875, -119.515, 0.0);
+        Assert.InRange(OkanaganCdem.SampleRawHeightM(scoopExit), 300.0, 400.0);
         Assert.Equal(342.0, OkanaganCdem.SampleSurfaceHeightM(scoopExit), precision: 6);
 
         Vec3D runwayThreshold = OkanaganGeo.ToWorld(49.9670, -119.3778, 0.0);

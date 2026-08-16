@@ -31,6 +31,7 @@ public static class OkanaganSnapshotProjection
             throttle = aircraft.Throttle,
             water_kg = aircraft.WaterLoadKg,
             water_capacity_kg = FireBossDynamics.MaximumWaterKg,
+            water_released_this_tick_kg = aircraft.WaterReleasedThisTickKg,
             fuel_kg = aircraft.FuelKg,
             gross_mass_kg = aircraft.GrossMassKg,
             surface = Token(aircraft.SurfaceMode),
