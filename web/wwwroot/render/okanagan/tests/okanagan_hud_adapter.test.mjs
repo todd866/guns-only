@@ -12,6 +12,7 @@ test("Fire Boss projects into the shared fixed-wing HUD and audio contract", () 
     pitch_rad: 0.1,
     roll_rad: -0.2,
     throttle: 0.72,
+    engine_power_fraction: 0.66,
     fuel_kg: 500,
     gross_mass_kg: 7_000,
     water_kg: 2_100,
@@ -28,7 +29,13 @@ test("Fire Boss projects into the shared fixed-wing HUD and audio contract", () 
   assert.equal(state.vz, -40);
   assert.equal(state.heading_deg, 90);
   assert.ok(state.calibrated_airspeed_kts > 79 && state.calibrated_airspeed_kts < 80);
-  assert.ok(state.engine_rpm_pct > 88 && state.engine_rpm_pct < 89);
+  assert.equal(state.engine, 0.66);
+  assert.equal(state.engine_spool_fraction, 0.66);
+  assert.ok(state.engine_rpm_pct > 84 && state.engine_rpm_pct < 85);
+  assert.equal(state.propeller_rpm, 1_700);
+  assert.equal(state.propeller_blade_count, 5);
+  assert.equal(state.engine_torque_fraction, 0.66);
+  assert.ok(state.engine_ng_pct > 84 && state.engine_ng_pct < 85);
   assert.ok(state.stall_speed_kcas > 60);
   assert.equal(state.fireboss_water_release_kg, 18);
   assert.equal(state.fireboss_drop_active, true);
@@ -38,6 +45,22 @@ test("drop audio truth ignores an unproductive drop command", () => {
   const state = okanaganFlightState({ drop_active: true, water_released_this_tick_kg: 0 });
   assert.equal(state.fireboss_water_release_kg, 0);
   assert.equal(state.fireboss_drop_active, false);
+});
+
+test("fuel alone does not claim a governed propeller before power is delivered", () => {
+  const stopped = okanaganFlightState({
+    fuel_kg: 500,
+    throttle: 1,
+    engine_power_fraction: 0,
+  });
+  const running = okanaganFlightState({
+    fuel_kg: 500,
+    throttle: 0.65,
+    engine_power_fraction: 0.65,
+  });
+  assert.equal(stopped.propeller_rpm, 0);
+  assert.equal(stopped.engine_torque_fraction, 0);
+  assert.equal(running.propeller_rpm, 1_700);
 });
 
 test("the one-line cue prefers an actionable scoop fault", () => {

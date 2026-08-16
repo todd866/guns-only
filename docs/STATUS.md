@@ -1,7 +1,7 @@
 # Current product and verification status
 
 Updated: 2026-08-16
-Production: Build 338, revision `7a4ba85d697f6b805367262c2a95bddcbbf10ec6` (verified live via
+Production: Build 340, revision `8546ce89` (verified live via
 `/api/build-info` 2026-08-16, with the protected release pipeline complete). Builds 312 (Cobra
 contact envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap
 timing), 318 (authored structure materials), 320 (Top Gun 404 + cockpit depth near-plane), 321
@@ -80,13 +80,22 @@ and sortie-wide telemetry ledgers; a Top Gun carrier recovery corridor that rema
 authoritative water while the ship steams; and explicit provenance for the AH-1G and F-14
 surrogate constants.
 
-Next candidate: Build 340 (branch `fix/okanagan-coherence-339`) — makes Fire Boss one coherent Guns
-Only flight experience: the shared fixed-wing HUD, controls, target cycle, padlock, highway and
-pause semantics; procedural PT6A/propeller, scoop and water-drop audio; concise transient instructor
-calls; and an unobstructed outside-world view. The Okanagan scenery now uses the official BC
+Build 340 made Fire Boss one coherent Guns Only flight experience: the shared fixed-wing HUD,
+controls, target cycle, padlock, highway and pause semantics; scoop and water-drop audio; concise
+transient instructor calls; and an unobstructed outside-world view. The Okanagan scenery uses the official BC
 Freshwater Atlas lake shoreline with real CDEM relief, corrected scoop-lane water geometry,
 recognisable YLW/Highway 97/bridge structure, population placement and elevation-aware dry
 ponderosa/Douglas-fir vegetation.
+
+Next candidate: Build 341 (branch `fix/fireboss-audio-341`) replaces the throttle-pitched
+sawtooth/triangle Fire Boss engine graph with a real, public-domain single-engine PT6 machinery
+bed plus a governed 1,700 RPM, five-blade pressure cadence; separate torque-driven prop wash,
+exhaust and reduction-gear broadband layers; an Ng-driven compressor feature; cockpit attenuation;
+and unchanged water/scoop/drop effects. Np, torque and Ng are one simulation-owned set of explicit
+authorities. Silent OfflineAudioContext QA verifies the 141.7 Hz blade-pass feature, load response,
+recording decode/loop and clipping headroom. The former commanded-attitude toy is also replaced by
+coefficient-based angle-of-attack, lift/drag, flight-path, roll-rate, coordinated-turn, post-stall,
+power-spool and float-planing dynamics, with those states published to sortie telemetry.
 
 Build 325 shipped the following owner-flight findings and remains the baseline for this candidate.
 

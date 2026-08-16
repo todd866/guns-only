@@ -24,8 +24,9 @@ import {
 import {
   COBRA_COCKPIT_SAMPLE_BED,
   F14_COCKPIT_SAMPLE_BED,
+  FIRE_BOSS_COCKPIT_SAMPLE_BED,
   ensureLoopingSampleBed,
-} from "./sample_bed.js?v=340";
+} from "./sample_bed.js?v=341";
 import { resolvePropulsionCharacter } from "./audio_character.js";
 import { standardAtmosphereState } from "./atmosphere_audio.js";
 import {
@@ -882,6 +883,11 @@ function updateFlightAudioLocal(state, {
       turbopropVoices = createTurbopropAudioVoices(context, propulsionDuck);
     ensureDedicatedAircraftSampleBed(cobraActive, cobraVoices, COBRA_COCKPIT_SAMPLE_BED);
     ensureDedicatedAircraftSampleBed(f14Active, f14Voices, F14_COCKPIT_SAMPLE_BED);
+    ensureDedicatedAircraftSampleBed(
+      turbopropActive,
+      turbopropVoices,
+      FIRE_BOSS_COCKPIT_SAMPLE_BED,
+    );
     ensureJetSamples(audioState);
     synchronizeCombatLifecycle(audioState);
 
