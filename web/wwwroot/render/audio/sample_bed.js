@@ -6,7 +6,7 @@
 // that aircraft graph's decodedBedInput. A missing or undecodable file is therefore silent and
 // recoverable rather than fatal to flight audio.
 
-export const SAMPLE_BED_BUILD = "340";
+export const SAMPLE_BED_BUILD = "342";
 export const SAMPLE_BED_RETRY_MS = 30_000;
 
 function stampedUrl(relativePath) {
@@ -23,6 +23,11 @@ export const F14_COCKPIT_SAMPLE_BED = Object.freeze({
 export const COBRA_COCKPIT_SAMPLE_BED = Object.freeze({
   id: "cobra-uh1h-t53-surrogate",
   url: stampedUrl("./samples/rotorcraft/uh1h_t53_ah1g_surrogate_loop.wav"),
+});
+
+export const FIRE_BOSS_COCKPIT_SAMPLE_BED = Object.freeze({
+  id: "fireboss-single-pt6-public-domain-surrogate",
+  url: stampedUrl("./samples/turboprop/pt6_single_engine_public_domain_loop.wav"),
 });
 
 // AudioBuffer ownership and decode behavior vary by implementation, so buffers are deliberately

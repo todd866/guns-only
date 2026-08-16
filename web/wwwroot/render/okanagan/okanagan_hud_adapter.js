@@ -26,9 +26,13 @@ export function okanaganFlightState(current = {}) {
   const flightPathRad = speedMps > 0.5
     ? Math.asin(clamp(verticalMps / speedMps, -1, 1)) : 0;
   const throttle = clamp(finite(current.throttle), 0, 1);
+  const enginePower = clamp(finite(current.engine_power_fraction, throttle), 0, 1);
   const grossMassKg = Math.max(1, finite(current.gross_mass_kg, 5_470));
   const stallKts = 31.5 * Math.sqrt(grossMassKg / 5_470) * MPS_TO_KNOTS;
   const fuelKg = Math.max(0, finite(current.fuel_kg));
+  // Fire Boss sorties start hot and have no in-mission shutdown control. Flight idle is still
+  // an operating, governed PT6; only fuel exhaustion or a destroyed airframe stops the engine.
+  const engineRunning = fuelKg > 0 && String(current.surface ?? "") !== "destroyed";
   const blockFuelKg = Math.max(fuelKg, finite(current.fuel_plan?.block_kg, fuelKg));
   const minimumFuelKg = Math.max(0, finite(current.fuel_plan?.minimum_rtb_kg));
   const waterReleasedKg = Math.max(0, finite(current.water_released_this_tick_kg));
@@ -53,14 +57,26 @@ export function okanaganFlightState(current = {}) {
     heading_deg: ((finite(current.heading_rad) * 180 / Math.PI) % 360 + 360) % 360,
     pitch_deg: finite(current.pitch_rad) * 180 / Math.PI,
     bank_deg: finite(current.roll_rad) * 180 / Math.PI,
-    aoa_deg: (finite(current.pitch_rad) - flightPathRad) * 180 / Math.PI,
+    aoa_deg: finite(current.aoa_rad,
+      finite(current.pitch_rad) - flightPathRad) * 180 / Math.PI,
+    pitch_rate_dps: finite(current.pitch_rate_radps) * 180 / Math.PI,
+    roll_rate_dps: finite(current.roll_rate_radps) * 180 / Math.PI,
     mach: speedMps / 340.3,
     throttle,
     applied_throttle: throttle,
-    engine: throttle,
-    engine_spool_fraction: 0.58 + throttle * 0.42,
-    engine_rpm_pct: 58 + throttle * 42,
-    engine_running: fuelKg > 0,
+    engine: enginePower,
+    engine_spool_fraction: enginePower,
+    // This legacy RPM field is Ng, never propeller Np.
+    engine_rpm_pct: engineRunning ? 61 + enginePower * 36 : 0,
+    // AT-802F takeoff configuration: the propeller governor holds Np while the power lever
+    // changes torque. Keep those authorities separate so audio does not pitch-sweep with power.
+    propeller_rpm: engineRunning ? 1_700 : 0,
+    propeller_blade_count: 5,
+    engine_ng_pct: engineRunning ? 61 + enginePower * 36 : 0,
+    engine_torque_fraction: engineRunning
+      ? enginePower
+      : 0,
+    engine_running: engineRunning,
     has_engine: true,
     has_afterburner: false,
     max_thrust_fraction: 1,
@@ -93,8 +109,8 @@ export function okanaganFlightState(current = {}) {
     vx: finite(velocity.x),
     vy: finite(velocity.y, verticalMps),
     vz: -finite(velocity.z),
-    g_actual: 1,
-    pilot_gz: 1,
+    g_actual: finite(current.load_factor, 1),
+    pilot_gz: finite(current.load_factor, 1),
     pilot_gz_valid: true,
     water_load_kg: Math.max(0, finite(current.water_kg)),
     water_capacity_kg: Math.max(1, finite(current.water_capacity_kg, 3_104)),

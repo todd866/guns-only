@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
   COBRA_COCKPIT_SAMPLE_BED,
   F14_COCKPIT_SAMPLE_BED,
+  FIRE_BOSS_COCKPIT_SAMPLE_BED,
   SAMPLE_BED_BUILD,
   attachLoopingSampleBed,
   ensureLoopingSampleBed,
@@ -88,12 +91,16 @@ test("publishes honest same-origin build-stamped aircraft bed paths", () => {
     "aircraft sample beds must advance with the canonical release identity");
   const f14 = new URL(F14_COCKPIT_SAMPLE_BED.url);
   const cobra = new URL(COBRA_COCKPIT_SAMPLE_BED.url);
+  const fireBoss = new URL(FIRE_BOSS_COCKPIT_SAMPLE_BED.url);
   assert.equal(f14.pathname.endsWith(
     "/samples/jet/fa18_cockpit_f14_surrogate_loop.wav"), true);
   assert.equal(cobra.pathname.endsWith(
     "/samples/rotorcraft/uh1h_t53_ah1g_surrogate_loop.wav"), true);
+  assert.equal(fireBoss.pathname.endsWith(
+    "/samples/turboprop/pt6_single_engine_public_domain_loop.wav"), true);
   assert.equal(f14.search, `?v=${SAMPLE_BED_BUILD}`);
   assert.equal(cobra.search, `?v=${SAMPLE_BED_BUILD}`);
+  assert.equal(fireBoss.search, `?v=${SAMPLE_BED_BUILD}`);
 
   assert.equal(validateSampleBedUrl(DEFINITION.url, { origin: ORIGIN }).href, DEFINITION.url);
   assert.throws(() => validateSampleBedUrl(
@@ -104,6 +111,27 @@ test("publishes honest same-origin build-stamped aircraft bed paths", () => {
     `${ORIGIN}/render/audio/test.wav`,
     { origin: ORIGIN },
   ), /release stamp/);
+});
+
+test("the Fire Boss definition resolves to the reviewed PCM and provenance record", async () => {
+  const asset = await readFile(new URL(
+    "../samples/turboprop/pt6_single_engine_public_domain_loop.wav",
+    import.meta.url,
+  ));
+  const sources = await readFile(new URL(
+    "../samples/turboprop/SOURCES.md",
+    import.meta.url,
+  ), "utf8");
+  const digest = createHash("sha256").update(asset).digest("hex");
+
+  assert.equal(asset.subarray(0, 4).toString("ascii"), "RIFF");
+  assert.equal(asset.subarray(8, 12).toString("ascii"), "WAVE");
+  assert.equal(asset.byteLength, 403_278);
+  assert.equal(digest,
+    "1e1685e2b3c09fde200c4ada58741ae27be1676ec48b82da373d5a5995860507");
+  assert.match(sources, /DOD_109494649/);
+  assert.match(sources, /PUBLIC DOMAIN/);
+  assert.match(sources, new RegExp(digest));
 });
 
 test("shares one in-flight decode and caches success per AudioContext", async () => {

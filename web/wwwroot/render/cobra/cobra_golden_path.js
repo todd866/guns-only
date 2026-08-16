@@ -23,8 +23,8 @@
  */
 
 /** Presentation contract id, in the house `guns-only.<thing>.vN` form. */
-import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=340";
-import { emberRtbVisualState } from "./cobra_ember_path.js?v=340";
+import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=342";
+import { emberRtbVisualState } from "./cobra_ember_path.js?v=342";
 
 export const COBRA_GOLDEN_PATH_SCHEMA = "guns-only.cobra-golden-path.v2";
 

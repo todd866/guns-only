@@ -1,9 +1,9 @@
-import * as THREE from "../vendor/three.module.js?v=340";
-import { createOkanaganWorld } from "../render/okanagan/okanagan_world.js?v=340";
-import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=340";
-import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=340";
-import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=340";
-import { createHud } from "../hud.js?v=340";
+import * as THREE from "../vendor/three.module.js?v=342";
+import { createOkanaganWorld } from "../render/okanagan/okanagan_world.js?v=342";
+import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=342";
+import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=342";
+import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=342";
+import { createHud } from "../hud.js?v=342";
 import {
   armFlightAudio,
   flightAudioDiagnostics,
@@ -11,18 +11,18 @@ import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=340";
-import { standardGamepadState } from "../render/input/dual_stick_input.js?v=340";
-import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=340";
+} from "../render/audio/flight_audio.js?v=342";
+import { standardGamepadState } from "../render/input/dual_stick_input.js?v=342";
+import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=342";
 import {
   compactOkanaganCue,
   okanaganFlightState,
-} from "../render/okanagan/okanagan_hud_adapter.js?v=340";
+} from "../render/okanagan/okanagan_hud_adapter.js?v=342";
 import {
   cycleOkanaganTarget,
   okanaganTargets,
   retainOkanaganTarget,
-} from "../render/okanagan/okanagan_targets.js?v=340";
+} from "../render/okanagan/okanagan_targets.js?v=342";
 
 const SORTIES = Object.freeze({
   "water-circuits": { index: 0, title: "Water Circuits", block: 610, working: "197 KG" },
@@ -58,7 +58,6 @@ let paused = true;
 let scoops = false;
 let drop = false;
 let throttle = 0.65;
-let engineSpool = 0.65;
 let animationFrame = 0;
 let lastTime = performance.now();
 const telemetryFrames = [];
@@ -208,7 +207,6 @@ function startSortie(id) {
   bridge.Start(SORTIES[id].index);
   state = JSON.parse(bridge.GetState());
   throttle = 0.65;
-  engineSpool = 0.65;
   scoops = false;
   drop = false;
   selectedTargetId = "";
@@ -254,7 +252,6 @@ function controls(deltaSeconds) {
     + (nextGamepad.throttleUp ? 1 : 0) - (nextGamepad.throttleDown ? 1 : 0)
     - finiteControl(leftStick.y);
   throttle = THREE.MathUtils.clamp(throttle + throttleRate * deltaSeconds * 0.35, 0, 1);
-  engineSpool += (throttle - engineSpool) * Math.min(1, deltaSeconds * (throttle > engineSpool ? 1.7 : 2.4));
   bridge.SetControls(pitch, roll, yaw, throttle, scoops, drop);
 }
 
@@ -353,6 +350,11 @@ function recordTelemetry(current, inputDeltaSeconds) {
     heading_deg: (current.heading_rad * 180 / Math.PI + 360) % 360,
     pitch_deg: current.pitch_rad * 180 / Math.PI,
     roll_deg: current.roll_rad * 180 / Math.PI,
+    aoa_deg: current.aoa_rad * 180 / Math.PI,
+    pitch_rate_dps: current.pitch_rate_radps * 180 / Math.PI,
+    roll_rate_dps: current.roll_rate_radps * 180 / Math.PI,
+    load_factor: current.load_factor,
+    engine_power_fraction: current.engine_power_fraction,
     throttle: current.throttle,
     scoops_commanded: current.scoops_commanded,
     scoop_valid: current.scoop_valid,
@@ -388,9 +390,6 @@ function recordTelemetry(current, inputDeltaSeconds) {
 function drawHud(current, deltaSeconds, nowSeconds) {
   const target = selectedTarget();
   const flightState = okanaganFlightState(current);
-  flightState.engine = engineSpool;
-  flightState.engine_spool_fraction = engineSpool;
-  flightState.engine_rpm_pct = 58 + engineSpool * 42;
   flightState.civilian_target_label = target?.label ?? "";
   flightState.civilian_target_kind = target?.kind ?? "";
   flightState.civilian_target_padlocked = padlock && Boolean(target);

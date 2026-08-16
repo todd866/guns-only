@@ -5,6 +5,63 @@ namespace GunsOnly.Sim.Tests.Okanagan;
 public sealed class FireBossDynamicsTests
 {
     [Fact]
+    public void ElevatorChangesAngleOfAttackAndLoadBeforeItChangesTheFlightPath()
+    {
+        FireBossDynamics neutral = FireBossDynamics.OnScoopApproach();
+        FireBossDynamics pulling = FireBossDynamics.OnScoopApproach();
+        StepFor(neutral, 0.8, new FireBossPilotCommand(0, 0, 0, 0.65, false, false));
+        StepFor(pulling, 0.8, new FireBossPilotCommand(0.65, 0, 0, 0.65, false, false));
+
+        Assert.True(pulling.Telemetry.AngleOfAttackRad
+            > neutral.Telemetry.AngleOfAttackRad + 1.0 * Math.PI / 180.0);
+        Assert.True(pulling.Telemetry.LoadFactor > neutral.Telemetry.LoadFactor + 0.10);
+        Assert.True(pulling.Telemetry.PitchRateRadPerSecond > 0.0);
+        Assert.True(Math.Abs(pulling.Telemetry.PitchRad - pulling.Telemetry.AngleOfAttackRad
+            - Math.Asin(pulling.Telemetry.VerticalSpeedMps
+                / pulling.Telemetry.TrueAirspeedMps)) < 0.02,
+            "body pitch must emerge from flight path plus angle of attack");
+    }
+
+    [Fact]
+    public void AileronCommandsRollRateAndReleaseDoesNotSnapTheBankLevel()
+    {
+        FireBossDynamics aircraft = FireBossDynamics.OnScoopApproach();
+        StepFor(aircraft, 0.7, new FireBossPilotCommand(0, 0.8, 0, 0.65, false, false));
+        double bankAtRelease = aircraft.Telemetry.RollRad;
+        double rateAtRelease = aircraft.Telemetry.RollRateRadPerSecond;
+        StepFor(aircraft, 0.25, new FireBossPilotCommand(0, 0, 0, 0.65, false, false));
+
+        Assert.True(bankAtRelease > 8.0 * Math.PI / 180.0);
+        Assert.True(rateAtRelease > 0.0);
+        Assert.True(aircraft.Telemetry.RollRad > bankAtRelease * 0.85,
+            "neutral stick damps roll rate; it does not command wings level");
+        Assert.True(aircraft.Telemetry.RollRateRadPerSecond < rateAtRelease);
+    }
+
+    [Fact]
+    public void Pt6PowerHasSpoolInertiaInsteadOfFollowingTheLeverInstantly()
+    {
+        FireBossDynamics aircraft = FireBossDynamics.AtKelownaDeparture();
+        aircraft.Step(new FireBossPilotCommand(0, 0, 0, 1, false, false));
+        double firstTick = aircraft.Telemetry.EnginePowerFraction;
+        StepFor(aircraft, 1.0, new FireBossPilotCommand(0, 0, 0, 1, false, false));
+
+        Assert.InRange(firstTick, 0.65, 0.67);
+        Assert.InRange(aircraft.Telemetry.EnginePowerFraction, 0.95, 1.0);
+    }
+
+    [Fact]
+    public void FixedTrimChangeEstablishesAStableWaterApproachWithoutVerticalSpeedAutomation()
+    {
+        FireBossDynamics aircraft = FireBossDynamics.OnScoopApproach();
+        StepFor(aircraft, 4.0, new FireBossPilotCommand(-0.18, 0, 0, 0.48, false, false));
+        StepFor(aircraft, 30.0, new FireBossPilotCommand(0, 0, 0, 0.42, false, false));
+
+        Assert.True(aircraft.Telemetry.Flyable);
+        Assert.Equal(FireBossSurfaceMode.Water, aircraft.Telemetry.SurfaceMode);
+    }
+
+    [Fact]
     public void TwinScoopsFillPublishedLoadInTwelveToFifteenSecondBand()
     {
         FireBossDynamics aircraft = FireBossDynamics.OnScoopLane();
@@ -58,7 +115,8 @@ public sealed class FireBossDynamicsTests
         StepFor(empty, 4.0, accelerate);
         StepFor(loaded, 4.0, accelerate);
 
-        Assert.True(empty.Telemetry.TrueAirspeedMps > loaded.Telemetry.TrueAirspeedMps + 2.0);
+        Assert.True(empty.Telemetry.TrueAirspeedMps > loaded.Telemetry.TrueAirspeedMps + 2.0,
+            $"empty {empty.Telemetry.TrueAirspeedMps:F1} m/s, loaded {loaded.Telemetry.TrueAirspeedMps:F1} m/s");
         Assert.True(loaded.Telemetry.GrossMassKg > empty.Telemetry.GrossMassKg + 3_000.0);
     }
 
@@ -80,9 +138,11 @@ public sealed class FireBossDynamicsTests
     {
         FireBossDynamics aircraft = FireBossDynamics.AtKelownaDeparture(
             FireBossFuelPlan.FireAttackBlockFuelKg);
-        StepFor(aircraft, 30.0, new FireBossPilotCommand(0.42, 0, 0, 1.0, false, false));
+        StepFor(aircraft, 12.0, new FireBossPilotCommand(0.42, 0, 0, 1.0, false, false));
+        StepFor(aircraft, 18.0, new FireBossPilotCommand(0.06, 0, 0, 1.0, false, false));
 
-        Assert.True(aircraft.Telemetry.Flyable);
+        Assert.True(aircraft.Telemetry.Flyable,
+            $"surface {aircraft.Telemetry.SurfaceMode}, altitude {aircraft.Telemetry.PositionWorldM.Y:F1} m, speed {aircraft.Telemetry.TrueAirspeedMps:F1} m/s");
         Assert.Equal(FireBossSurfaceMode.Airborne, aircraft.Telemetry.SurfaceMode);
         Assert.True(aircraft.Telemetry.PositionWorldM.Y > 500.0);
         Assert.True(aircraft.Telemetry.TrueAirspeedMps > 45.0);
@@ -92,10 +152,12 @@ public sealed class FireBossDynamicsTests
     public void AuthoredScoopApproachLandsOnWaterRatherThanTerrain()
     {
         FireBossDynamics aircraft = FireBossDynamics.OnScoopApproach();
-        StepFor(aircraft, 12.0, new FireBossPilotCommand(-0.28, 0, 0, 0.48, false, false));
+        FlyApproachToSurface(aircraft, 30.0, 0.42, -1.25);
 
-        Assert.True(aircraft.Telemetry.Flyable);
-        Assert.Equal(FireBossSurfaceMode.Water, aircraft.Telemetry.SurfaceMode);
+        Assert.True(aircraft.Telemetry.Flyable,
+            $"surface {aircraft.Telemetry.SurfaceMode}, sink {aircraft.Telemetry.VerticalSpeedMps:F1} m/s, pitch {aircraft.Telemetry.PitchRad * 180 / Math.PI:F1} deg");
+        Assert.True(aircraft.Telemetry.SurfaceMode == FireBossSurfaceMode.Water,
+            $"surface {aircraft.Telemetry.SurfaceMode}, altitude {aircraft.Telemetry.PositionWorldM.Y:F1} m, sink {aircraft.Telemetry.VerticalSpeedMps:F1} m/s");
     }
 
     [Fact]
@@ -129,10 +191,12 @@ public sealed class FireBossDynamicsTests
     public void AuthoredRunwaySixteenFinalCanLandWithoutTerrainFalsePositive()
     {
         FireBossDynamics aircraft = FireBossDynamics.OnKelownaFinal();
-        StepFor(aircraft, 28.0, new FireBossPilotCommand(-0.32, 0, 0, 0.30, false, false));
+        FlyApproachToSurface(aircraft, 45.0, 0.30, -1.65);
 
-        Assert.True(aircraft.Telemetry.Flyable);
-        Assert.Equal(FireBossSurfaceMode.Runway, aircraft.Telemetry.SurfaceMode);
+        Assert.True(aircraft.Telemetry.Flyable,
+            $"surface {aircraft.Telemetry.SurfaceMode}, altitude {aircraft.Telemetry.PositionWorldM.Y:F1} m, sink {aircraft.Telemetry.VerticalSpeedMps:F1} m/s, speed {aircraft.Telemetry.TrueAirspeedMps:F1} m/s");
+        Assert.True(aircraft.Telemetry.SurfaceMode == FireBossSurfaceMode.Runway,
+            $"surface {aircraft.Telemetry.SurfaceMode}, altitude {aircraft.Telemetry.PositionWorldM.Y:F1} m, sink {aircraft.Telemetry.VerticalSpeedMps:F1} m/s");
     }
 
     static void StepFor(FireBossDynamics aircraft, double seconds,
@@ -140,5 +204,20 @@ public sealed class FireBossDynamicsTests
     {
         int ticks = (int)Math.Ceiling(seconds / FireBossDynamics.FixedDeltaSeconds);
         for (int tick = 0; tick < ticks; tick++) aircraft.Step(command);
+    }
+
+    static void FlyApproachToSurface(FireBossDynamics aircraft, double maximumSeconds,
+        double throttle, double targetVerticalSpeedMps)
+    {
+        int ticks = (int)Math.Ceiling(maximumSeconds / FireBossDynamics.FixedDeltaSeconds);
+        for (int tick = 0; tick < ticks
+            && aircraft.Telemetry.SurfaceMode == FireBossSurfaceMode.Airborne; tick++)
+        {
+            double pitchCommand = Math.Clamp(
+                (targetVerticalSpeedMps - aircraft.Telemetry.VerticalSpeedMps) * 0.08,
+                -0.24, 0.24);
+            aircraft.Step(new FireBossPilotCommand(
+                pitchCommand, 0, 0, throttle, false, false));
+        }
     }
 }
