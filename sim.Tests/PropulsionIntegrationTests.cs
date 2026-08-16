@@ -5,6 +5,53 @@ namespace GunsOnly.Sim.Tests;
 
 public sealed class PropulsionIntegrationTests {
     [Fact]
+    public void SharedKernelTurbopropIsShaftPowerLimitedInFlightAndStaticThrustLimitedOnStep() {
+        AircraftParams fireBoss = FlightModel.At802fFireBossPublicDataSurrogate;
+        var slow = new AircraftSim(
+            new AircraftState(new Vec3D(0.0, 342.0, 0.0), 20.0,
+                0.0, 0.0, 0.0, fireBoss.MassKg), fireBoss);
+        var fastInitial = new AircraftState(new Vec3D(0.0, 342.0, 0.0), 80.0,
+            0.0, 0.0, 0.0, fireBoss.MassKg);
+        var fast = new AircraftSim(fastInitial, fireBoss);
+        var unpoweredFast = new AircraftSim(fastInitial, fireBoss)
+        {
+            EngineFuelAvailable = false
+        };
+        var idle = new AircraftSim(fastInitial, fireBoss);
+
+        slow.SeedEnginePowerFraction(1.0);
+        fast.SeedEnginePowerFraction(1.0);
+        idle.SeedEnginePowerFraction(0.0);
+        fast.Step(new PilotCommand(1.0, 0.0, 1.0, 0.0), 1.0 / AircraftSim.TickHz);
+        unpoweredFast.Step(new PilotCommand(1.0, 0.0, 1.0, 0.0),
+            1.0 / AircraftSim.TickHz);
+
+        Assert.Equal(PropulsionModelKind.TurbopropShaftPowerPublicDataSurrogate,
+            fireBoss.PropulsionModel);
+        Assert.InRange(slow.LastEngineOperatingPoint.NetThrustN, 27_000.0, 30_000.0);
+        Assert.InRange(fast.LastEngineOperatingPoint.NetThrustN, 10_000.0, 14_000.0);
+        Assert.True(slow.LastEngineOperatingPoint.NetThrustN
+            > fast.LastEngineOperatingPoint.NetThrustN * 2.0);
+        Assert.Equal(19.445, fast.LastEngineOperatingPoint.FuelFlowLbPerMinute, 8);
+        Assert.Equal(4.232, idle.LastEngineOperatingPoint.FuelFlowLbPerMinute, 8);
+        Assert.True(fast.State.Speed > unpoweredFast.State.Speed,
+            "the turboprop operating point must enter the shared RK4 force path");
+    }
+
+    [Fact]
+    public void FireBossCamberUsesTheSameTotalLiftCoefficientForInducedDrag() {
+        AircraftParams p = FlightModel.At802fFireBossPublicDataSurrogate;
+        double alphaRad = 3.5 * Math.PI / 180.0;
+        double totalCl = p.ZeroLiftCoefficient + p.CLAlpha * alphaRad;
+        double expectedCd = p.CD0 + p.InducedK * totalCl * totalCl;
+
+        double actualCd = FlightModel.ProfileDragCoefficient(alphaRad, 0.15, p);
+
+        Assert.Equal(0.92, p.ZeroLiftCoefficient, 8);
+        Assert.Equal(expectedCd, actualCd, 10);
+    }
+
+    [Fact]
     public void ProductionSessionUsesJ47FlowAndFuelMassInOneConservationChain() {
         var session = new SimulationSession(1);
         double stagedFuel = session.PlayerFuel.FuelLb;
