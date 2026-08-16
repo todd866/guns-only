@@ -65,7 +65,6 @@ public sealed class FireBossDynamics
     public const string DynamicsProviderId = FixedWingAircraftVehicleAdapter.ProviderId;
 
     const double GravityMps2 = 9.80665;
-    const double CamberLiftCoefficient = 0.92;
     const double LakeHeightM = OkanaganGeo.LakeSurfaceElevationM;
     const double PoundToKg = 0.45359237;
 
@@ -92,14 +91,7 @@ public sealed class FireBossDynamics
         QuaternionD attitude = Attitude(headingRad, pitchRad, 0.0);
         var initial = new AircraftState(position, speedMps, gammaRad, headingRad, 0.0,
             massKg, attitude, default);
-        _aircraft = new AircraftSim(initial, FlightModel.At802fFireBossPublicDataSurrogate)
-        {
-            // The shared generic polar is zero-lift-at-zero-alpha. This constant configuration
-            // increment carries the cambered AT-802 wing's documented surrogate offset through
-            // the same force and protected-control path as flap/camber increments elsewhere.
-            AerodynamicConfiguration = new AirframeAerodynamicState(
-                CamberLiftCoefficient, 0.0, 0.0, 0.0)
-        };
+        _aircraft = new AircraftSim(initial, FlightModel.At802fFireBossPublicDataSurrogate);
         _aircraft.SeedEnginePowerFraction(
             surfaceMode == FireBossSurfaceMode.Destroyed ? 0.0 : 0.65);
         _adapter = new FixedWingAircraftVehicleAdapter(
@@ -277,7 +269,8 @@ public sealed class FireBossDynamics
         double takeoffSpeed = _surfaceMode == FireBossSurfaceMode.Water
             ? WaterTakeoffSpeedMps(grossMassKg) : StallSpeedMps(grossMassKg) * 1.03;
         double rotationPitch = _surfaceMode == FireBossSurfaceMode.Water ? 4.0 : 3.0;
-        double surfaceLiftCoefficient = Math.Clamp(CamberLiftCoefficient
+        double surfaceLiftCoefficient = Math.Clamp(
+            FlightModel.At802fFireBossPublicDataSurrogate.ZeroLiftCoefficient
             + FlightModel.At802fFireBossPublicDataSurrogate.CLAlpha * pitchRad,
             -0.72, 2.25);
         double surfaceLiftN = 0.5 * density * speedMps * speedMps
@@ -420,7 +413,8 @@ public sealed class FireBossDynamics
         double density = StandardAtmosphere1976.Instance.Sample(altitudeM).DensityKgM3;
         double q = 0.5 * density * speedMps * speedMps;
         double cl = massKg * GravityMps2 / Math.Max(q * WingAreaM2, 1.0);
-        return Math.Clamp((cl - CamberLiftCoefficient)
+        return Math.Clamp((cl
+            - FlightModel.At802fFireBossPublicDataSurrogate.ZeroLiftCoefficient)
             / FlightModel.At802fFireBossPublicDataSurrogate.CLAlpha,
             -5.0 * Math.PI / 180.0,
             16.0 * Math.PI / 180.0);

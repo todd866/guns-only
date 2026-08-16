@@ -10,11 +10,7 @@ public sealed class FireBossDynamicsTests
         FireBossDynamics aircraft = FireBossDynamics.OnScoopApproach();
         AircraftState initial = aircraft.SharedAircraft.State;
         var reference = new AircraftSim(initial,
-            FlightModel.At802fFireBossPublicDataSurrogate)
-        {
-            AerodynamicConfiguration = new AirframeAerodynamicState(
-                0.92, 0.0, 0.0, 0.0)
-        };
+            FlightModel.At802fFireBossPublicDataSurrogate);
         reference.SeedEnginePowerFraction(0.65);
         var fireBossCommand = new FireBossPilotCommand(
             0.28, 0.36, -0.12, 0.72, false, false);

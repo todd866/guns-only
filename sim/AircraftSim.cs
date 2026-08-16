@@ -229,7 +229,10 @@ public sealed class AircraftSim {
             double q = 0.5 * AtmosphereModel.Sample(initial.Position.Y).DensityKgM3
                 * initial.Speed * initial.Speed;
             double cl = initial.Mass * FlightModel.G0 / System.Math.Max(q * p.WingAreaM2, 1e-6);
-            double alpha = System.Math.Clamp(cl / p.CLAlpha, p.CLMin / p.CLAlpha, p.CLMax / p.CLAlpha);
+            double alpha = System.Math.Clamp(
+                (cl - p.ZeroLiftCoefficient) / p.CLAlpha,
+                FlightModel.AlphaAeroMin(p),
+                FlightModel.AlphaAeroMax(p));
             var f = initial.ForwardDir();
             var u = LiftDir;
             var bf = (f * System.Math.Cos(alpha) + u * System.Math.Sin(alpha)).Normalized();

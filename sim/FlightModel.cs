@@ -266,7 +266,11 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     /// propeller map; it is consumed only by TurbopropShaftPowerPublicDataSurrogate.
     double PropellerEfficiency = 0.82,
     /// Finite low-speed thrust limit for the power / airspeed relation.
-    double StaticPropellerThrustCapN = 0.0);
+    double StaticPropellerThrustCapN = 0.0,
+    /// Airframe lift coefficient at zero incidence. Zero preserves the historical symmetric polar;
+    /// a cambered wing declares its offset here so lift, induced drag, stall incidence and the
+    /// protected control law all consume one coefficient authority.
+    double ZeroLiftCoefficient = 0.0);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).
@@ -1108,9 +1112,7 @@ public static class FlightModel {
         MassKg: 5_345.0, // empty operating mass + representative launch fuel
         WingAreaM2: 37.25, // 401 sq ft (measured)
         ThrustMaxN: 30_000.0, // installed static-thrust cap (PROVISIONAL)
-        // AircraftSim's configuration increment supplies the wing's +0.92 camber offset. These
-        // residual limits therefore produce the previous total +2.25 / -0.72 coefficients.
-        CD0: 0.058, InducedK: 0.067, CLMax: 1.33, CLMin: -1.64,
+        CD0: 0.058, InducedK: 0.067, CLMax: 2.25, CLMin: -0.72,
         RollRateMaxRad: 1.30, BankTau: 0.48,
         MCrit: 0.55, WaveDragK: 120.0,
         SpoolUpTau: 1.35, SpoolDownTau: 0.90,
@@ -1135,11 +1137,14 @@ public static class FlightModel {
         WingSpanM: 18.06,
         PropulsionModel: PropulsionModelKind.TurbopropShaftPowerPublicDataSurrogate,
         FuelFreeMassKg: 4_420.0,
-        GenericIdleFuelFlowLbPerMinute: 2.4,
-        GenericMilitaryFuelFlowLbPerMinute: 13.0,
+        // Preserve the established mission fuel curve endpoints (0.032..0.147 kg/s). These are
+        // gameplay/fuel-plan calibration values, not a PT6A-67F engine-deck claim.
+        GenericIdleFuelFlowLbPerMinute: 4.232,
+        GenericMilitaryFuelFlowLbPerMinute: 19.445,
         MaximumShaftPowerW: 1_193_000.0,
         PropellerEfficiency: 0.82,
-        StaticPropellerThrustCapN: 30_000.0);
+        StaticPropellerThrustCapN: 30_000.0,
+        ZeroLiftCoefficient: 0.92);
 
     /// F-14A PUBLIC-DATA SURROGATE for Top Gun visual merge. Measured anchors: 40,100 lb empty
     /// (Navy museum primary; Western Museum of Flight lists 40,104 lb — canonical empty mass uses
@@ -1314,11 +1319,14 @@ public static class FlightModel {
     internal static bool UsesRapierAerodynamics(in AircraftParams p) =>
         p.AerodynamicModel == AerodynamicModelKind.RapierCrankedDeltaPublicDataSurrogate;
 
-    internal static double AlphaAeroMax(in AircraftParams p) => p.CLMax / p.CLAlpha;
-    internal static double AlphaAeroMin(in AircraftParams p) => p.CLMin / p.CLAlpha;
+    internal static double AlphaAeroMax(in AircraftParams p) =>
+        (p.CLMax - p.ZeroLiftCoefficient) / p.CLAlpha;
+    internal static double AlphaAeroMin(in AircraftParams p) =>
+        (p.CLMin - p.ZeroLiftCoefficient) / p.CLAlpha;
     internal static double AlphaAeroMax(in AircraftParams p,
         in AirframeAerodynamicState configuration) =>
-        (p.CLMax + configuration.LiftLimitCoefficientIncrement) / p.CLAlpha;
+        (p.CLMax + configuration.LiftLimitCoefficientIncrement
+            - p.ZeroLiftCoefficient) / p.CLAlpha;
     internal static double PositiveLiftCoefficientIncrement(
         in AirframeAerodynamicState configuration) =>
         configuration.PositiveLiftCoefficientIncrement;
@@ -1368,7 +1376,8 @@ public static class FlightModel {
     internal static double LiftCoefficient(double alpha, in AircraftParams p) {
         double positiveStall = AlphaAeroMax(p);
         double negativeStall = -AlphaAeroMin(p);
-        if (alpha >= -negativeStall && alpha <= positiveStall) return p.CLAlpha * alpha;
+        if (alpha >= -negativeStall && alpha <= positiveStall)
+            return p.ZeroLiftCoefficient + p.CLAlpha * alpha;
 
         if (p.HighAlphaModel == HighAlphaModelKind.F22PublicDataSurrogate
             && alpha > positiveStall) {
@@ -1400,7 +1409,8 @@ public static class FlightModel {
             return LiftCoefficient(alpha, p);
 
         double configuredStall = AlphaAeroMax(p, configuration);
-        if (alpha <= configuredStall) return p.CLAlpha * alpha;
+        if (alpha <= configuredStall)
+            return p.ZeroLiftCoefficient + p.CLAlpha * alpha;
 
         var (cn, ca) = F22BodyAxisCoefficients(alpha);
         double bodyAxisLift = cn * System.Math.Cos(alpha) - ca * System.Math.Sin(alpha);
@@ -2265,7 +2275,7 @@ public static class FlightModel {
         double nz = TargetNz(r, c, p, dynamicPressure, configuration, mach);
         double cl = nz * r.Mass * G0 / System.Math.Max(dynamicPressure * p.WingAreaM2, 1e-6);
         double protectedAlpha = System.Math.Clamp(
-            (cl - configuration.LiftCoefficientIncrement)
+            (cl - configuration.LiftCoefficientIncrement - p.ZeroLiftCoefficient)
                 / System.Math.Max(EffectiveClAlpha(p, mach), 1e-9),
             AlphaAeroMin(p), PositiveNormalLawAlphaMax(p, mach, configuration, r.Mass, dynamicPressure));
         if (!double.IsFinite(c.CommandedAlphaRad)) return protectedAlpha;
