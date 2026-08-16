@@ -680,6 +680,41 @@ public sealed class AircraftSim {
             return;
         }
 
+        if (_p.PropulsionModel == PropulsionModelKind.TurbopropShaftPowerPublicDataSurrogate) {
+            // A turboprop is power-limited once moving and thrust-limited near zero airspeed.
+            // Keeping this in AircraftSim means every fixed-wing airframe still uses the same
+            // engine/spool/force path; the aircraft definition supplies only the published shaft
+            // power and transparent propeller-fit constants.
+            double turbopropDensityRatio = atmosphericState.DensityKgM3
+                / AirData.SeaLevelDensityKgM3;
+            double availableShaftPowerW = _p.MaximumShaftPowerW
+                * System.Math.Pow(System.Math.Max(0.0, turbopropDensityRatio), 0.70);
+            double propulsivePowerW = availableShaftPowerW
+                * System.Math.Clamp(_p.PropellerEfficiency, 0.0, 1.0)
+                * System.Math.Clamp(_thrustFrac, 0.0, 1.0);
+            double powerLimitedThrustN = propulsivePowerW
+                / System.Math.Max(AirspeedMps, 24.0);
+            double staticCapN = _p.StaticPropellerThrustCapN > 0.0
+                ? _p.StaticPropellerThrustCapN * turbopropDensityRatio
+                : _p.ThrustMaxN * turbopropDensityRatio;
+            double turbopropThrustN = System.Math.Min(staticCapN, powerLimitedThrustN);
+            double turbopropCorePower = System.Math.Clamp(_thrustFrac, 0.0, 1.0);
+            double turbopropFuelFlow = _p.GenericIdleFuelFlowLbPerMinute
+                + (_p.GenericMilitaryFuelFlowLbPerMinute
+                    - _p.GenericIdleFuelFlowLbPerMinute) * turbopropCorePower;
+            LastEngineOperatingPoint = new EngineOperatingPoint(
+                Rpm: 100.0 * turbopropCorePower,
+                RpmPercent: 100.0 * turbopropCorePower,
+                NetThrustN: System.Math.Max(0.0, turbopropThrustN),
+                NetThrustLbf: System.Math.Max(0.0, turbopropThrustN)
+                    / J47PerformanceMap.NewtonsPerPoundForce,
+                FuelFlowLbPerMinute: System.Math.Max(0.0, turbopropFuelFlow),
+                Running: true,
+                TurbineFuelFlowLbPerMinute: System.Math.Max(0.0, turbopropFuelFlow),
+                RamjetFuelFlowLbPerMinute: 0.0);
+            return;
+        }
+
         if (_p.PropulsionModel == PropulsionModelKind.TurboRamjetPublicDataSurrogate) {
             EngineOperatingPoint point = TurboRamjetPerformanceMap.Evaluate(_thrustFrac,
                 _p.ThrustMaxN, mach, atmosphericState.TemperatureK, atmosphericState.DensityKgM3,

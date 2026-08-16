@@ -13,7 +13,11 @@ public enum PropulsionModelKind {
     /// Core-bypass turbo-ramjet. ThrustMaxN is SEA-LEVEL STATIC DRY thrust of the turbine core; the
     /// ram contribution grows continuously with Mach on top of it. See TurboRamjetPerformanceMap for
     /// why this is one curve rather than two engines and a handover.
-    TurboRamjetPublicDataSurrogate
+    TurboRamjetPublicDataSurrogate,
+    /// Constant-speed turboprop driven by published shaft power. Net thrust is derived inside the
+    /// shared propulsion kernel from shaft power, propeller efficiency and true airspeed, with a
+    /// finite static-thrust cap for the low-speed limit. Appended to preserve persisted enum ordinals.
+    TurbopropShaftPowerPublicDataSurrogate
 }
 
 public enum HighAlphaModelKind {
@@ -254,7 +258,15 @@ public record AircraftParams(double MassKg, double WingAreaM2, double ThrustMaxN
     /// from its canonical insulated warm-panel zone, so ceramic leading edges can survive while
     /// ordinary structure still sets a real M4 thermal clock.
     /// </summary>
-    double AerothermalAdiabaticRiseFraction = 1.0);
+    double AerothermalAdiabaticRiseFraction = 1.0,
+    /// Published shaft-power anchor for the shared turboprop propulsion surrogate. Zero disables
+    /// the model-specific calculation and preserves every existing aircraft definition.
+    double MaximumShaftPowerW = 0.0,
+    /// Effective installed propulsive efficiency. This is a transparent reduced-order fit, not a
+    /// propeller map; it is consumed only by TurbopropShaftPowerPublicDataSurrogate.
+    double PropellerEfficiency = 0.82,
+    /// Finite low-speed thrust limit for the power / airspeed relation.
+    double StaticPropellerThrustCapN = 0.0);
 
 /// Internal integration state: velocity is a Cartesian world vector, so vertical
 /// flight is not singular (no division by cos gamma anywhere).
@@ -1087,6 +1099,47 @@ public static class FlightModel {
             CompatibilityBankTau = 0.22,
             RollHoldRateGainNms = 2_500_000.0
         };
+
+    /// AT-802F FIRE BOSS PUBLIC-DATA SURROGATE. Measured anchors are the published 401 sq ft
+    /// wing and 1,600 shp PT6A-67F installation. The polar, inertias, control derivatives and
+    /// installed-propeller fit are provisional gameplay surrogates. Water is not baked into this
+    /// reference mass: the mission passes it through the shared fixed-wing adapter as live payload.
+    public static readonly AircraftParams At802fFireBossPublicDataSurrogate = new(
+        MassKg: 5_345.0, // empty operating mass + representative launch fuel
+        WingAreaM2: 37.25, // 401 sq ft (measured)
+        ThrustMaxN: 30_000.0, // installed static-thrust cap (PROVISIONAL)
+        // AircraftSim's configuration increment supplies the wing's +0.92 camber offset. These
+        // residual limits therefore produce the previous total +2.25 / -0.72 coefficients.
+        CD0: 0.058, InducedK: 0.067, CLMax: 1.33, CLMin: -1.64,
+        RollRateMaxRad: 1.30, BankTau: 0.48,
+        MCrit: 0.55, WaveDragK: 120.0,
+        SpoolUpTau: 1.35, SpoolDownTau: 0.90,
+        CLAlpha: 4.60,
+        IxxKgM2: 18_000.0, IyyKgM2: 38_000.0, IzzKgM2: 51_000.0,
+        RollStiffnessNmRad: 155_000.0, PitchStiffnessNmRad: 430_000.0,
+        YawStiffnessNmRad: 130_000.0,
+        RollDampingNms: 78_000.0, PitchDampingNms: 215_000.0,
+        YawDampingNms: 105_000.0,
+        RollMomentMaxNm: 145_000.0, PitchMomentMaxNm: 310_000.0,
+        YawMomentMaxNm: 120_000.0,
+        ClBeta: -0.050, ClP: -0.52, ClR: 0.075,
+        ClDeltaA: 0.082, ClDeltaR: 0.030,
+        LateralDerivativeProfileId: "at802f-fireboss-public-data-surrogate-v1",
+        ManualPitchRateMaxRad: 0.52,
+        FightRollRateMaxRad: 1.30,
+        CompatibilityRollRateMaxRad: 1.30, CompatibilityBankTau: 0.48,
+        YawBetaStiffnessNmRad: 145_000.0, RollHoldDampingNms: 0.0,
+        PositiveStructuralLimitG: 3.5, MaxPerformFraction: 1.0,
+        MaxThrustFraction: 1.0,
+        HighLiftDragOnsetFraction: 0.88, HighLiftDragK: 8.0,
+        WingSpanM: 18.06,
+        PropulsionModel: PropulsionModelKind.TurbopropShaftPowerPublicDataSurrogate,
+        FuelFreeMassKg: 4_420.0,
+        GenericIdleFuelFlowLbPerMinute: 2.4,
+        GenericMilitaryFuelFlowLbPerMinute: 13.0,
+        MaximumShaftPowerW: 1_193_000.0,
+        PropellerEfficiency: 0.82,
+        StaticPropellerThrustCapN: 30_000.0);
 
     /// F-14A PUBLIC-DATA SURROGATE for Top Gun visual merge. Measured anchors: 40,100 lb empty
     /// (Navy museum primary; Western Museum of Flight lists 40,104 lb — canonical empty mass uses

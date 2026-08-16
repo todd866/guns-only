@@ -16,11 +16,13 @@ The Okanagan mission starts with the aircraft running in takeoff configuration. 
 publishes governed Np throughout the flyable sortie. A future start, beta or shutdown sequence must
 publish its own Np authority; it must not infer prop RPM by pitch-bending throttle or Ng.
 
-## Reduced-order flight dynamics
+## Shared fixed-wing flight dynamics
 
 | Value | Production value | Epistemic | Source and interpretation |
 | --- | ---: | --- | --- |
 | Wing area | 37.25 m² | measured | Fire Boss specifications publish 401 ft²; converted to SI for dynamic-pressure forces. |
 | Maximum shaft power | 1,600 shp / 1.193 MW | measured/derived | Fire Boss publishes 1,600 shp; SI conversion drives the propulsive-power ceiling. |
-| Lift, drag, stability derivatives and control response | coefficient-based reduced-order model | provisional | Build 341 replaces commanded attitude with angle-of-attack, lift/drag, flight-path, roll-rate, coordinated-turn, trim and post-stall dynamics. Coefficients are acceptance-tested surrogates, not OEM tables. The airborne solver retains a 10 m/s numerical floor; deep-stall, spin and departure claims are out of scope. |
-| Float/water resistance | displacement-to-planing surrogate | provisional | Speed-dependent float resistance, scoop drag and gross-mass effects reproduce the operational sequence without claiming certified water-performance data. |
+| Airborne solver | production `AircraftSim` through `FixedWingAircraftVehicleAdapter` | implementation fact | Fire Boss owns no alternate airborne integrator. Position, attitude, body rates, angle of attack, lift, drag, stall response, wind response, engine lag and telemetry advance through the same 120 Hz RK4 rigid-body kernel as the other fixed-wing aircraft. |
+| Lift, drag, stability derivatives and control response | AT-802F parameter set in the shared coefficient model | provisional | The published wing anchors a cambered-wing surrogate with explicit polar, inertia and control derivatives. These are acceptance-tested gameplay values, not OEM tables or a certified training model. |
+| Turboprop thrust | shared shaft-power propulsion option | provisional | The shared propulsion kernel converts the published 1.193 MW through an explicit 0.82 installed-efficiency surrogate, a finite low-speed static-thrust cap and density lapse. It is not an OEM propeller map. |
+| Float/runway contact | external contact resolver | provisional | Wheels/floats constrain kinematics only while in contact. Speed-dependent float resistance, scoop drag and gross-mass effects reproduce the operational sequence; on lift-off, exactly one shared `AircraftSim` aerodynamic step owns motion. |
