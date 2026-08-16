@@ -47,10 +47,10 @@ test("drop audio truth ignores an unproductive drop command", () => {
   assert.equal(state.fireboss_drop_active, false);
 });
 
-test("fuel alone does not claim a governed propeller before power is delivered", () => {
-  const stopped = okanaganFlightState({
+test("the governed propeller remains live at flight idle and stops after destruction", () => {
+  const idle = okanaganFlightState({
     fuel_kg: 500,
-    throttle: 1,
+    throttle: 0,
     engine_power_fraction: 0,
   });
   const running = okanaganFlightState({
@@ -58,9 +58,19 @@ test("fuel alone does not claim a governed propeller before power is delivered",
     throttle: 0.65,
     engine_power_fraction: 0.65,
   });
-  assert.equal(stopped.propeller_rpm, 0);
-  assert.equal(stopped.engine_torque_fraction, 0);
+  const stopped = okanaganFlightState({
+    fuel_kg: 500,
+    throttle: 0,
+    engine_power_fraction: 0,
+    surface: "destroyed",
+  });
+  assert.equal(idle.engine_running, true);
+  assert.equal(idle.propeller_rpm, 1_700);
+  assert.equal(idle.engine_ng_pct, 61);
+  assert.equal(idle.engine_torque_fraction, 0);
   assert.equal(running.propeller_rpm, 1_700);
+  assert.equal(stopped.engine_running, false);
+  assert.equal(stopped.propeller_rpm, 0);
 });
 
 test("the one-line cue prefers an actionable scoop fault", () => {
