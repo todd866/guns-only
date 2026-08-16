@@ -8,7 +8,7 @@
 import {
   COBRA_CANYON_CAMP_EMBER_APRON,
   sampleCobraCanyonTerrain,
-} from "./cobra_canyon_plan.js?v=339";
+} from "./cobra_canyon_plan.js?v=340";
 
 export const CAMP_EMBER_LANDMARK_ID = "landmark.cobra-canyon.camp-ember.v1";
 export const CAMP_EMBER_FIREBASE_SCHEMA = "guns-only.cobra-camp-ember-firebase.v2";

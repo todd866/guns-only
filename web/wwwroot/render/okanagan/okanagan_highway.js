@@ -1,5 +1,5 @@
-import * as THREE from "../../vendor/three.module.js?v=339";
-import { createGuidancePath } from "../scene/guidance_path.js?v=339";
+import * as THREE from "../../vendor/three.module.js?v=340";
+import { createGuidancePath } from "../scene/guidance_path.js?v=340";
 
 /** Fire Boss adapter for the one shared Guns Only highway-in-the-sky renderer. */
 export function createOkanaganHighway(scene) {

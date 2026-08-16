@@ -80,7 +80,7 @@ and sortie-wide telemetry ledgers; a Top Gun carrier recovery corridor that rema
 authoritative water while the ship steams; and explicit provenance for the AH-1G and F-14
 surrogate constants.
 
-Next candidate: Build 339 (branch `fix/okanagan-coherence-339`) — makes Fire Boss one coherent Guns
+Next candidate: Build 340 (branch `fix/okanagan-coherence-339`) — makes Fire Boss one coherent Guns
 Only flight experience: the shared fixed-wing HUD, controls, target cycle, padlock, highway and
 pause semantics; procedural PT6A/propeller, scoop and water-drop audio; concise transient instructor
 calls; and an unobstructed outside-world view. The Okanagan scenery now uses the official BC
