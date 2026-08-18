@@ -8,7 +8,7 @@ import {
   UKRAINE_SOFT_WORLD_HAZE_MIX,
   UKRAINE_SOFT_WORLD_HAZE_RGB,
 } from "../environment/soft_world_atmosphere.js";
-import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=342";
+import { createAirframeFromDefinition } from "./airframe_from_definition.js?v=343";
 import {
   addSemanticSocket,
   annotateProceduralFallback,
@@ -17,8 +17,8 @@ import {
   createLoftGeometry,
   createPlanformGeometry,
   makeMaterial,
-} from "./airframe_primitives.js?v=342";
-import rapierV2Definition from "../../airframes/rapier_v2.embedded.js?v=342";
+} from "./airframe_primitives.js?v=343";
+import rapierV2Definition from "../../airframes/rapier_v2.embedded.js?v=343";
 import { createRapierLaunchFx } from "../effects/rapier_launch_fx.js";
 
 export {

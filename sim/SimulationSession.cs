@@ -274,6 +274,7 @@ public sealed class SimulationSession {
     double _rapierMissileImpactAtMs = double.PositiveInfinity;
     long _rapierMissileTargetSequence;
     TopGunFightRuntime? _topGunFightRuntime;
+    FirstRunValleyRuntime? _firstRunValleyRuntime;
     long _topGunAim9TargetSequence;
     double? _playerF14WingSweepDegrees;
     double? _opponentF14WingSweepDegrees;
@@ -453,12 +454,18 @@ public sealed class SimulationSession {
         && Lifecycle == LifecycleState.Active
         && _playerTerminalState == AircraftTerminalState.Flying;
     public int RapierMissilesRemaining => _rapierMissilesRemaining;
-    public int Aim9Remaining => _topGunFightRuntime?.Aim9Remaining ?? 0;
-    public bool Aim9InFlight => _topGunFightRuntime?.Aim9InFlight ?? false;
+    public int Aim9Remaining => _firstRunValleyRuntime?.Aim9Remaining
+        ?? _topGunFightRuntime?.Aim9Remaining ?? 0;
+    public bool Aim9InFlight => _firstRunValleyRuntime?.Aim9InFlight
+        ?? _topGunFightRuntime?.Aim9InFlight ?? false;
     public Missiles.Aim9FlightState Aim9SeekerState =>
-        _topGunFightRuntime?.Aim9Live.State ?? Missiles.Aim9FlightState.Safe;
+        _firstRunValleyRuntime?.Aim9Live.State
+        ?? _topGunFightRuntime?.Aim9Live.State
+        ?? Missiles.Aim9FlightState.Safe;
     public Missiles.Aim9Telemetry Aim9Telemetry =>
-        _topGunFightRuntime?.Aim9Live ?? default;
+        _firstRunValleyRuntime?.Aim9Live
+        ?? _topGunFightRuntime?.Aim9Live
+        ?? default;
     /// <summary>The exact sweep schedule applied to the current aerodynamic step/Ready pose.</summary>
     public double? PlayerF14WingSweepDegrees => _playerF14WingSweepDegrees;
     /// <summary>The exact opponent sweep schedule applied across neutral/reactive handoff.</summary>
@@ -1039,10 +1046,12 @@ public sealed class SimulationSession {
     public bool AssistedFlight => _assistedFlight;
     public int AssistedSpeedBiasKts => _assistedSpeedBiasIndex * 30;
     public bool WeaponsInhibited => !OpponentPresent
-        || (_visualMergeEvaluation?.WeaponsInhibited ?? false);
+        || (_visualMergeEvaluation?.WeaponsInhibited ?? false)
+        || (_firstRunValleyRuntime?.WeaponsCold ?? false);
     public bool PlayerWeaponsAuthorized =>
         OpponentPresent
         && (_visualMergeEvaluation?.PlayerWeaponsAuthorized ?? true)
+        && !(_firstRunValleyRuntime?.WeaponsCold ?? false)
         && !CombatHandoffRequested
         && !PlayerRtbActive
         && !_autoGcasState.Active
@@ -1298,6 +1307,8 @@ public sealed class SimulationSession {
             if (_detents.Throttle >= 0.995) ShowTransition("MIL SET · FIGHT", 1800.0);
             else if (_beat.StageAtTrimThrottle) ShowTransition("PWR SET · FIGHT", 1800.0);
         }
+        if (_firstRunValleyRuntime?.WeaponsCold == true)
+            ShowTransition("FOLLOW THE VALLEY", 2800.0);
         Lifecycle = LifecycleState.Active;
         BeginRapierServiceLifeCapture();
         UpdateTimeCompressionDecision();
@@ -1811,8 +1822,7 @@ public sealed class SimulationSession {
     }
 
     public bool LaunchFoxTwo() {
-        if (_topGunFightRuntime is null
-            || Lifecycle != LifecycleState.Active
+        if (Lifecycle != LifecycleState.Active
             || _playerTerminalState != AircraftTerminalState.Flying
             || _opponentTerminalState != AircraftTerminalState.Flying
             || !PlayerWeaponsAuthorized)
@@ -1821,9 +1831,23 @@ public sealed class SimulationSession {
         var shooter = new Missiles.Aim9Pose(
             _player.State.Position,
             _player.State.VelocityVector());
+        AircraftState selected = SelectedOpponentState;
         var target = new Missiles.Aim9Pose(
-            _bandit.State.Position,
-            _bandit.State.VelocityVector());
+            selected.Position,
+            selected.VelocityVector());
+
+        if (_firstRunValleyRuntime is { } firstRun) {
+            if (!firstRun.TryLaunchFoxTwo(shooter, target, _simTimeMs))
+                return false;
+            _topGunAim9TargetSequence = _banditSpawnSequence;
+            ShowTransition(
+                $"FOX TWO · {firstRun.Aim9Remaining} REMAIN",
+                1800.0);
+            return true;
+        }
+
+        if (_topGunFightRuntime is null)
+            return false;
         if (!_topGunFightRuntime.TryLaunchFoxTwo(shooter, target, _simTimeMs))
             return false;
 
@@ -2476,6 +2500,45 @@ public sealed class SimulationSession {
         return selectedFactor;
     }
 
+    void ObserveFirstRunValleyPopOut() {
+        if (_firstRunValleyRuntime is null
+            || _playerTerminalState != AircraftTerminalState.Flying)
+            return;
+        if (!_firstRunValleyRuntime.ObservePlayer(_player.State)) return;
+        if (_firstRunValleyRuntime.ConsumePopOutAnnouncement())
+            ShowTransition("WEAPONS HOT · FOX TWO", 2200.0);
+    }
+
+    void StepFirstRunValleyRuntime() {
+        if (_firstRunValleyRuntime is null || !OpponentPresent) return;
+        var target = new Missiles.Aim9Pose(
+            SelectedOpponentState.Position,
+            SelectedOpponentState.VelocityVector());
+        _firstRunValleyRuntime.Step(FixedDeltaSeconds, target);
+        if (!_firstRunValleyRuntime.ConsumeDetonation()) return;
+
+        bool hitLiveTarget = _topGunAim9TargetSequence == _banditSpawnSequence
+            && _opponentTerminalState == AircraftTerminalState.Flying
+            && _gunKill.ApplyExternalDestruction(_primaryOpponentGunTargetId);
+        _topGunAim9TargetSequence = 0;
+        if (!hitLiveTarget) {
+            ShowTransition("FOX TWO · NO LIVE TARGET", 1800.0);
+            return;
+        }
+        EmitEvent(SessionEventType.Hit,
+            CombatRole.Player, CombatRole.Opponent, count: 1,
+            entitySequence: _banditSpawnSequence,
+            kinematics: _bandit.State);
+        ShowTransition("MISSILE HIT · SPLASH", 2200.0);
+        ObserveCombatDamage();
+    }
+
+    void StepPrimaryOpponent(in ActorObservation observation, double dt) {
+        if (_firstRunValleyRuntime?.ParkOpponents == true) return;
+        if (_opponentTerminalState == AircraftTerminalState.SimulationBounded) return;
+        _bandit.Step(observation, dt);
+    }
+
     /// <summary>Run exactly one production tick when Active. Ready and Paused are stable holds.</summary>
     public void StepFixed() {
         if (Lifecycle == LifecycleState.Active) RunFixedTick();
@@ -3056,6 +3119,7 @@ public sealed class SimulationSession {
             return;
         }
         AdvanceCombatHandoffAtTickBoundary();
+        ObserveFirstRunValleyPopOut();
         // A sortie staged exactly at Bingo must safe the fight before this tick's weapon/AI
         // decisions. The second check after StepCore catches an in-tick fuel crossing.
         MaybeRequestBingoRtb();
@@ -3078,6 +3142,7 @@ public sealed class SimulationSession {
         StepDetachedOpponentWrecks();
         StepRapierMissile();
         StepTopGunFightRuntime();
+        StepFirstRunValleyRuntime();
         if (_playerTerminalState == AircraftTerminalState.Flying) {
             StepRapierBalloonReaction();
             StepRapierPursuit();
@@ -3804,6 +3869,9 @@ public sealed class SimulationSession {
             Math.Max(0, _beat.ScriptedIntercept?.ShortRangeMissiles ?? 0);
         _topGunFightRuntime = TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)
             ? new TopGunFightRuntime()
+            : null;
+        _firstRunValleyRuntime = _beat.FirstRunValley is { } firstRun
+            ? new FirstRunValleyRuntime(firstRun)
             : null;
         _topGunAim9TargetSequence = 0;
         _playerF14WingSweepMode = F14WingSweepMode.None;
@@ -4575,6 +4643,13 @@ public sealed class SimulationSession {
     void Trigger(bool down) {
         if (!OpponentPresent) down = false;
         if (down && (CombatHandoffRequested || PlayerRtbActive)) down = false;
+        if (_firstRunValleyRuntime is { } firstRun) {
+            if (firstRun.WeaponsCold) down = false;
+            else if (firstRun.Aim9Remaining > 0) {
+                if (down && !_triggerDown) LaunchFoxTwo();
+                down = false;
+            }
+        }
         if (down && !_triggerDown) {
             _shotsTotal++;
             AircraftState selectedTarget = SelectedOpponentState;
@@ -4701,17 +4776,11 @@ public sealed class SimulationSession {
         CombatConfig combat = _beat.CombatRules;
         AircraftParams air = _beat.BanditAirForMount(spec.Skill, spec.Mount);
         for (int index = 0; index < extra; index++) {
-            // Offset by engagement number AND wingman index so the pair never stacks, and so the
-            // whole staging stays a pure function of the engagement (the determinism contract).
-            //
-            // The leader's state is now passed as wingLead, which is what actually makes this a
-            // formation: SpawnForMerge places the wingman on the LEADER's 45 degree aft cone
-            // instead of giving it an unrelated player-relative merge slot. Without it the
-            // alternating `side` term put the pair on opposite sides of the player — two head-on
-            // contacts, not a pair to split.
-            IBandit wing = _beat.CreateNextBandit(
-                _player.State, engagementNumber + WingmanSpawnStride * (index + 1),
-                _terrainSurface, spec, wingLead: _bandit?.State);
+            IBandit wing = _beat.FirstRunValley is not null && _bandit is not null
+                ? CreateFirstRunValleyWingman(spec, air, index)
+                : _beat.CreateNextBandit(
+                    _player.State, engagementNumber + WingmanSpawnStride * (index + 1),
+                    _terrainSurface, spec, wingLead: _bandit?.State);
             wing.Wind = _player.Wind;
             wing.Atmosphere = _player.AtmosphereModel;
             var gun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
@@ -4719,6 +4788,37 @@ public sealed class SimulationSession {
             _wingmen.Add(new Wingman(
                 wing, gun, spec.Skill, AllocateOpponentGunTargetId()));
         }
+    }
+
+    /// The surveyed mouth pair is a co-altitude presenting formation. SpawnForMerge still lifts
+    /// replacements 600 m AGL so they clear ridges on a high merge; that put dash-2 500 m above
+    /// the parked leader and broke the pop-out picture.
+    IBandit CreateFirstRunValleyWingman(SpawnSpec spec, AircraftParams air, int index) {
+        AircraftState lead = _bandit.State;
+        const double FightingWingRangeM = 1_200.0;
+        const double FortyFiveDegreeComponent = 0.70710678118654752;
+        double side = (index & 1) == 0 ? 1.0 : -1.0;
+        double component = FightingWingRangeM * FortyFiveDegreeComponent;
+        var leadForward = new Vec3D(Math.Sin(lead.Chi), 0.0, Math.Cos(lead.Chi));
+        var leadRight = new Vec3D(Math.Cos(lead.Chi), 0.0, -Math.Sin(lead.Chi));
+        Vec3D position = lead.Position
+            - leadForward * component
+            + leadRight * (side * component);
+        position = position with { Y = lead.Position.Y };
+        var initial = new AircraftState(
+            position, lead.Speed, 0.0, lead.Chi, 0.0, air.MassKg);
+        return _beat.UsesNeutralMergeBandit
+            ? new NeutralMergeBandit(
+                initial, air, spec.Skill, _terrainSurface,
+                profile: spec.Boss ? BanditSkillProfile.Boss() : null,
+                doctrineIndex: spec.DoctrineIndex,
+                presenting: true)
+            : new ReactiveBandit(
+                initial, air, spec.Skill, _terrainSurface,
+                engagementNumber: 2 + index,
+                profile: spec.Boss ? BanditSkillProfile.Boss() : null,
+                doctrineIndex: spec.DoctrineIndex,
+                presenting: true);
     }
 
     void StageScriptedFormation(int formationSize) {
@@ -5006,6 +5106,7 @@ public sealed class SimulationSession {
     /// land in the SHARED pool (PlayerHitsTaken): two aircraft putting rounds into one pilot must
     /// kill them together, not each need a full magazine of their own.
     void StepWingmen(in AircraftState playerState) {
+        if (_firstRunValleyRuntime?.ParkOpponents == true) return;
         if (_wingmen.Count == 0) return;
         bool weaponsReleased = !WeaponsInhibited && !TerminalPhaseActive
             && _playerTerminalState == AircraftTerminalState.Flying
@@ -7394,7 +7495,7 @@ public sealed class SimulationSession {
             ForceTerminalLimit(CombatRole.Opponent, includeFlying: true);
         StepReliefFighter();
         if (_opponentTerminalState != AircraftTerminalState.SimulationBounded)
-            _bandit.Step(
+            StepPrimaryOpponent(
                 ThreatObservationFor(previousPlayer, previousOpponent),
                 FixedDeltaSeconds);
         StepWingmen(previousPlayer);
@@ -7577,7 +7678,7 @@ public sealed class SimulationSession {
             _opponentTerminalState == AircraftTerminalState.Flying);
         StepReliefFighter();
         if (_opponentTerminalState != AircraftTerminalState.SimulationBounded)
-            _bandit.Step(
+            StepPrimaryOpponent(
                 ThreatObservationFor(playerState, opponentState),
                 FixedDeltaSeconds);
         StepWingmen(playerState);
@@ -7955,7 +8056,7 @@ public sealed class SimulationSession {
             StepRapierGunDrone(opponentState,
                 _opponentTerminalState == AircraftTerminalState.Flying);
             StepReliefFighter();
-            _bandit.Step(
+            StepPrimaryOpponent(
                 ThreatObservationFor(catapultState, opponentState),
                 FixedDeltaSeconds);
             StepWingmen(catapultState);
@@ -8001,7 +8102,7 @@ public sealed class SimulationSession {
             StepRapierGunDrone(opponentState,
                 _opponentTerminalState == AircraftTerminalState.Flying);
             StepReliefFighter();
-            _bandit.Step(
+            StepPrimaryOpponent(
                 ThreatObservationFor(playerState, opponentState),
                 FixedDeltaSeconds);
             StepWingmen(playerState);
@@ -8112,7 +8213,7 @@ public sealed class SimulationSession {
         StepRapierGunDrone(previousOpponentState,
             _opponentTerminalState == AircraftTerminalState.Flying);
         StepReliefFighter();
-        _bandit.Step(
+        StepPrimaryOpponent(
             ThreatObservationFor(previousPlayerState, previousOpponentState),
             FixedDeltaSeconds);
         StepWingmen(previousPlayerState);

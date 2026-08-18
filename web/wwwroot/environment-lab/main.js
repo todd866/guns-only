@@ -2,9 +2,9 @@ import * as THREE from "../vendor/three.module.js";
 import { OrbitControls } from "../vendor/three/addons/controls/OrbitControls.js";
 import { loadKoreaEnvironment } from "../render/environment/korea_environment.js";
 import { attachSoftWorldGroundHaze } from "../render/environment/soft_world_atmosphere.js";
-import { createDecisionSupportSky } from "../render/scene/scene_builders.js?v=342";
+import { createDecisionSupportSky } from "../render/scene/scene_builders.js?v=343";
 import { loadKoreaTerrain } from "../render/environment/korea_terrain.js";
-import { createTacticalCloudField } from "../render/environment/tactical_clouds.js?v=342";
+import { createTacticalCloudField } from "../render/environment/tactical_clouds.js?v=343";
 import {
   evaluateForegroundFrameContract,
   FOREGROUND_FRAME_CONTRACT,

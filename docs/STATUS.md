@@ -1,6 +1,11 @@
 # Current product and verification status
 
-Updated: 2026-08-16
+Updated: 2026-08-18
+Build 343 candidate: first-visit Guns Only on-ramp. Skip the picker once, fly the
+Soniachne draw, dump two AIM-9s on Fire, then keep that same Fire control as guns.
+Return visits, `?menu=1`, and Playwright keep the six-tile picker; `?firstRun=1`
+replays the valley. The Guns Only tile still stages beat 7, guns-only.
+
 Production: Build 340, revision `8546ce89` (verified live via
 `/api/build-info` 2026-08-16, with the protected release pipeline complete). Builds 312 (Cobra
 contact envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap
@@ -192,7 +197,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 | Experience | State | Public surface | Current evidence | Promotion blocker |
 | --- | --- | --- | --- | --- |
-| F-22A · Guns Only (`first-merge`) | **production** | Aircraft picker | Build 238 automation plus a recorded 2026-08-02 human acceptance flight (session `web-1785627445839-631596`). Build 264 graduated the sparring pair together; Build 265 aimed Ace fire at the ballistic solution. Build 308 bounds pathological terrain marches, reduces Auto-GCAS terrain work, and restores physical flyby acoustics and cast shadows. Builds 328-329 add current-position Call It A Day/Bingo RTB, remove the unsourced G-only canopy/seal voice and close conventional runway recovery. Build 330 candidate improves the shared recovery-field presentation without changing landing authority. | Fresh human flight on Build 330 to confirm the corridor, ceasefire, revised sound and airfield picture; w1 snapshot despawn; descent sim-step spike; lead/ballistics quality |
+| F-22A · Guns Only (`first-merge`) | **production** | Aircraft picker; first visit auto-starts the Soniachne valley | Build 238 automation plus a recorded 2026-08-02 human acceptance flight (session `web-1785627445839-631596`). Build 264 graduated the sparring pair together; Build 265 aimed Ace fire at the ballistic solution. Build 308 bounds pathological terrain marches, reduces Auto-GCAS terrain work, and restores physical flyby acoustics and cast shadows. Builds 328-329 add current-position Call It A Day/Bingo RTB, remove the unsourced G-only canopy/seal voice and close conventional runway recovery. Build 343 adds the one-shot valley → two heaters → guns on-ramp; the picker tile remains beat 7 guns-only. | Fresh human first-visit and return-visit flights on Build 343; corridor/ceasefire/sound/airfield picture from Build 330 remain open |
 | Rated arena (`multiplayer`) | **preview** | Preview acknowledgement only | Build 310 candidate adds same-origin matchmaking, shared human/bot Elo, bounded bot-only handicap profiles, outcome/fun reporting, and fail-closed launch/storage gates | Complete green gate; configured durable ladder storage; representative match, retry, abandon, and fly-again acceptance; multiplayer product acceptance before promotion |
 | Rapier · Intercept (`rapier-intercept`) | **production** | Aircraft picker | Build 333 stages three lethal-drone balloon mines 35 NM away at FL450, provides a visible outbound intercept path and 45-second reaction clock, disables time compression, then hands off to the shared amber RTB corridor and midpoint-arrestor recovery after all three kills. The measured automated handoff is 3:18 at M1.33/FL432 with 29 seconds left on the mine clock. | Fresh representative human launch/intercept/recovery flight on Build 333 |
 | Low-level drone intercept (`low-level-drone`) | **quarantined** | Preview acknowledgement only | Runtime and automated contracts exist | Ground-target/player-purpose closure and complete human flight |
