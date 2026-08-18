@@ -59,6 +59,20 @@ public sealed class FirstRunValleySessionTests {
     }
 
     [Fact]
+    public void ValleyTeachesTheDrawAndParksACoAltitudeMouthPair() {
+        var session = Stage(Beats.ModernVisualMergeFirstRun());
+        Assert.Contains("FOLLOW THE VALLEY", session.TransitionCue);
+        Assert.Single(session.Wingmen);
+        AircraftState lead = session.Bandit.State;
+        AircraftState dash2 = session.Wingmen[0].Bandit.State;
+        Assert.Equal(FirstRunValleyRuntime.SpawnAltitudeM, lead.Position.Y, 1);
+        Assert.Equal(lead.Position.Y, dash2.Position.Y, 5);
+        double pairRangeM = (lead.Position - dash2.Position).Length;
+        Assert.InRange(pairRangeM, 800.0, 1_600.0);
+        Assert.Equal(lead.Chi, dash2.Chi, 3);
+    }
+
+    [Fact]
     public void ValleyHoldsFireAndParksTheOpeningPair() {
         var session = Stage(Beats.ModernVisualMergeFirstRun());
         Vec3D banditAtStart = session.Bandit.State.Position;

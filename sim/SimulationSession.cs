@@ -1307,6 +1307,8 @@ public sealed class SimulationSession {
             if (_detents.Throttle >= 0.995) ShowTransition("MIL SET · FIGHT", 1800.0);
             else if (_beat.StageAtTrimThrottle) ShowTransition("PWR SET · FIGHT", 1800.0);
         }
+        if (_firstRunValleyRuntime?.WeaponsCold == true)
+            ShowTransition("FOLLOW THE VALLEY", 2800.0);
         Lifecycle = LifecycleState.Active;
         BeginRapierServiceLifeCapture();
         UpdateTimeCompressionDecision();
@@ -4774,17 +4776,11 @@ public sealed class SimulationSession {
         CombatConfig combat = _beat.CombatRules;
         AircraftParams air = _beat.BanditAirForMount(spec.Skill, spec.Mount);
         for (int index = 0; index < extra; index++) {
-            // Offset by engagement number AND wingman index so the pair never stacks, and so the
-            // whole staging stays a pure function of the engagement (the determinism contract).
-            //
-            // The leader's state is now passed as wingLead, which is what actually makes this a
-            // formation: SpawnForMerge places the wingman on the LEADER's 45 degree aft cone
-            // instead of giving it an unrelated player-relative merge slot. Without it the
-            // alternating `side` term put the pair on opposite sides of the player — two head-on
-            // contacts, not a pair to split.
-            IBandit wing = _beat.CreateNextBandit(
-                _player.State, engagementNumber + WingmanSpawnStride * (index + 1),
-                _terrainSurface, spec, wingLead: _bandit?.State);
+            IBandit wing = _beat.FirstRunValley is not null && _bandit is not null
+                ? CreateFirstRunValleyWingman(spec, air, index)
+                : _beat.CreateNextBandit(
+                    _player.State, engagementNumber + WingmanSpawnStride * (index + 1),
+                    _terrainSurface, spec, wingLead: _bandit?.State);
             wing.Wind = _player.Wind;
             wing.Atmosphere = _player.AtmosphereModel;
             var gun = new GunKill(combat.OpponentAmmo, combat.PlayerHitsToDefeat,
@@ -4792,6 +4788,37 @@ public sealed class SimulationSession {
             _wingmen.Add(new Wingman(
                 wing, gun, spec.Skill, AllocateOpponentGunTargetId()));
         }
+    }
+
+    /// The surveyed mouth pair is a co-altitude presenting formation. SpawnForMerge still lifts
+    /// replacements 600 m AGL so they clear ridges on a high merge; that put dash-2 500 m above
+    /// the parked leader and broke the pop-out picture.
+    IBandit CreateFirstRunValleyWingman(SpawnSpec spec, AircraftParams air, int index) {
+        AircraftState lead = _bandit.State;
+        const double FightingWingRangeM = 1_200.0;
+        const double FortyFiveDegreeComponent = 0.70710678118654752;
+        double side = (index & 1) == 0 ? 1.0 : -1.0;
+        double component = FightingWingRangeM * FortyFiveDegreeComponent;
+        var leadForward = new Vec3D(Math.Sin(lead.Chi), 0.0, Math.Cos(lead.Chi));
+        var leadRight = new Vec3D(Math.Cos(lead.Chi), 0.0, -Math.Sin(lead.Chi));
+        Vec3D position = lead.Position
+            - leadForward * component
+            + leadRight * (side * component);
+        position = position with { Y = lead.Position.Y };
+        var initial = new AircraftState(
+            position, lead.Speed, 0.0, lead.Chi, 0.0, air.MassKg);
+        return _beat.UsesNeutralMergeBandit
+            ? new NeutralMergeBandit(
+                initial, air, spec.Skill, _terrainSurface,
+                profile: spec.Boss ? BanditSkillProfile.Boss() : null,
+                doctrineIndex: spec.DoctrineIndex,
+                presenting: true)
+            : new ReactiveBandit(
+                initial, air, spec.Skill, _terrainSurface,
+                engagementNumber: 2 + index,
+                profile: spec.Boss ? BanditSkillProfile.Boss() : null,
+                doctrineIndex: spec.DoctrineIndex,
+                presenting: true);
     }
 
     void StageScriptedFormation(int formationSize) {
