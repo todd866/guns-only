@@ -1356,7 +1356,34 @@ internal static class SnapshotProjection {
     }
 
     static string TopGunExperienceJson() {
-        if (!TopGunFightRuntime.IsTopGunMission(Session.Beat.MissionIdentity.Id))
+        if (!TopGunFightRuntime.IsTopGunMission(Session.Beat.MissionIdentity.Id)) {
+            bool firstRun = FirstRunValleyRuntime.IsFirstRunValleyMission(
+                Session.Beat.MissionIdentity.Id);
+            Aim9Telemetry firstRunMissile = Session.Aim9Telemetry;
+            bool firstRunPoseValid = firstRun
+                && firstRunMissile.State != Aim9FlightState.Safe;
+            string FirstRunMissileNumber(double value) => firstRunPoseValid
+                ? value.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)
+                : "null";
+            string aim9Json = firstRun
+                ? $"\"aim9_remaining\":{Session.Aim9Remaining},"
+                    + $"\"aim9_in_flight\":{(Session.Aim9InFlight ? "true" : "false")},"
+                    + $"\"aim9_pose_valid\":{(firstRunPoseValid ? "true" : "false")},"
+                    + $"\"aim9_state_code\":{(int)firstRunMissile.State},"
+                    + $"\"aim9_x\":{FirstRunMissileNumber(firstRunMissile.Position.X)},"
+                    + $"\"aim9_y\":{FirstRunMissileNumber(firstRunMissile.Position.Y)},"
+                    + $"\"aim9_z\":{FirstRunMissileNumber(firstRunMissile.Position.Z)},"
+                    + $"\"aim9_vx\":{FirstRunMissileNumber(firstRunMissile.Velocity.X)},"
+                    + $"\"aim9_vy\":{FirstRunMissileNumber(firstRunMissile.Velocity.Y)},"
+                    + $"\"aim9_vz\":{FirstRunMissileNumber(firstRunMissile.Velocity.Z)},"
+                    + $"\"aim9_seeker_state\":{Aim9SeekerStateJson(Session.Aim9SeekerState)},"
+                : "\"aim9_remaining\":null,"
+                    + $"\"aim9_in_flight\":{(Session.Aim9InFlight ? "true" : "false")},"
+                    + "\"aim9_pose_valid\":false,"
+                    + "\"aim9_state_code\":0,"
+                    + "\"aim9_x\":null,\"aim9_y\":null,\"aim9_z\":null,"
+                    + "\"aim9_vx\":null,\"aim9_vy\":null,\"aim9_vz\":null,"
+                    + "\"aim9_seeker_state\":null,";
             return "\"top_gun_seat\":null,"
                 + "\"wing_sweep_deg\":null,"
                 + "\"opponent_wing_sweep_deg\":null,"
@@ -1369,15 +1396,10 @@ internal static class SnapshotProjection {
                 + "\"f14_over_g_seconds\":0.000,"
                 + "\"f14_structural_fatigue_01\":0.0000,"
                 + "\"f14_structural_failed\":false,"
-                + "\"aim9_remaining\":null,"
-                + $"\"aim9_in_flight\":{(Session.Aim9InFlight ? "true" : "false")},"
-                + "\"aim9_pose_valid\":false,"
-                + "\"aim9_state_code\":0,"
-                + "\"aim9_x\":null,\"aim9_y\":null,\"aim9_z\":null,"
-                + "\"aim9_vx\":null,\"aim9_vy\":null,\"aim9_vz\":null,"
-                + "\"aim9_seeker_state\":null,"
+                + aim9Json
                 + "\"opponent_callsign\":null,"
                 + "\"presentation_theme\":null,";
+        }
 
         bool playerIsTomcat =
             Session.Beat.PlayerAircraft.Id == AircraftCapability.F14ASurrogate.Id;

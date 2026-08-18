@@ -1,7 +1,7 @@
 import {
   createAh1gPresence,
   updateAh1gPresence,
-} from "./ah1g_presence.js?v=342";
+} from "./ah1g_presence.js?v=343";
 
 export const COBRA_FORMATION_LEAD_SCHEMA = "guns-only.cobra-formation-lead.v1";
 export const COBRA_FORMATION_SPACING_M = 150;

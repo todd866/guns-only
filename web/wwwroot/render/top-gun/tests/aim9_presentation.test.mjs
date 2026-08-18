@@ -21,7 +21,7 @@ test("live AIM-9 authority pose is mirrored into the scene without inventing mot
   assert.deepEqual(pose.direction, { x: 0, y: 0, z: -1 });
 });
 
-test("safe, terminal, invalid, and non-Top-Gun snapshots cannot render a phantom missile", () => {
+test("safe, terminal, and invalid snapshots cannot render a phantom missile", () => {
   const base = {
     presentation_theme: "top-gun-anime-1986",
     aim9_pose_valid: true,
@@ -39,9 +39,32 @@ test("safe, terminal, invalid, and non-Top-Gun snapshots cannot render a phantom
   assert.equal(projectAim9Presentation({ ...base, aim9_state_code: 2, aim9_x: null }).visible,
     false);
   assert.equal(projectAim9Presentation({
-    ...base,
     presentation_theme: null,
     mission_definition_id: "mission.modern.visual-merge.v1",
+    aim9_pose_valid: false,
     aim9_state_code: 2,
-  }).visible, false);
+    aim9_x: 10,
+    aim9_y: 20,
+    aim9_z: 30,
+    aim9_vx: 0,
+    aim9_vy: 0,
+    aim9_vz: 400,
+  }).visible, false, "guns-only first-merge publishes no live AIM-9 pose");
+});
+
+test("first-run valley heaters draw from live pose without a Top Gun theme", () => {
+  const pose = projectAim9Presentation({
+    presentation_theme: null,
+    mission_definition_id: "mission.modern.visual-merge.first-run-valley.v1",
+    aim9_pose_valid: true,
+    aim9_state_code: 1,
+    aim9_x: 10,
+    aim9_y: 20,
+    aim9_z: 30,
+    aim9_vx: 0,
+    aim9_vy: 0,
+    aim9_vz: 400,
+  });
+  assert.equal(pose.visible, true);
+  assert.deepEqual(pose.position, { x: 10, y: 20, z: -30 });
 });

@@ -46,6 +46,18 @@ public static partial class WebBridge {
     }
 
     /// <summary>
+    /// First-visit Soniachne valley on-ramp. Not a BuiltIn index — beat 7 stays the high guns-only
+    /// merge when the picker launches Guns Only.
+    /// </summary>
+    [JSExport]
+    public static void StartFirstRunValley() {
+        Session.StartBeatWithEnvironment(
+            Beats.ModernVisualMergeFirstRun,
+            KoreaWeatherPresets.ForBeat(13),
+            TerrainForEnvironment(Ukraine2030sTheatre.HeroCell));
+    }
+
+    /// <summary>
     /// Fly again after dying WITHOUT throwing away the gauntlet's pacing memory. StartBeat resets
     /// the FightDirector — correct when the pilot picks a mission, wrong when they are respawning
     /// into the same infinite duel, because it sends a player who had fought their way up to Ace

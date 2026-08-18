@@ -1213,10 +1213,12 @@ internal static class SnapshotHotFrame {
         w.Num("bfx", bf.X, 5); w.Num("bfy", bf.Y, 5); w.Num("bfz", bf.Z, 5);
         w.Num("blx", bl.X, 5); w.Num("bly", bl.Y, 5); w.Num("blz", bl.Z, 5);
         bool topGun = TopGunFightRuntime.IsTopGunMission(session.Beat.MissionIdentity.Id);
+        bool aim9Mission = topGun
+            || FirstRunValleyRuntime.IsFirstRunValleyMission(session.Beat.MissionIdentity.Id);
         bool playerTomcat = topGun
             && session.Beat.PlayerAircraft.Id == AircraftCapability.F14ASurrogate.Id;
         Aim9Telemetry aim9 = session.Aim9Telemetry;
-        bool aim9PoseValid = topGun && aim9.State != Aim9FlightState.Safe;
+        bool aim9PoseValid = aim9Mission && aim9.State != Aim9FlightState.Safe;
         w.Nul("wing_sweep_deg", topGun ? session.PlayerF14WingSweepDegrees : null, 1);
         w.Nul("opponent_wing_sweep_deg",
             topGun ? session.OpponentF14WingSweepDegrees : null, 1);
@@ -1234,10 +1236,10 @@ internal static class SnapshotHotFrame {
             playerTomcat ? session.PlayerF14StructuralFatigue01 : 0.0, 4);
         w.Bool("f14_structural_failed",
             playerTomcat && session.PlayerF14StructuralFailed);
-        w.Nul("aim9_remaining", topGun ? session.Aim9Remaining : null, RawInteger);
+        w.Nul("aim9_remaining", aim9Mission ? session.Aim9Remaining : null, RawInteger);
         w.Bool("aim9_in_flight", session.Aim9InFlight);
         w.Bool("aim9_pose_valid", aim9PoseValid);
-        w.Num("aim9_state_code", topGun ? (int)aim9.State : 0, RawInteger);
+        w.Num("aim9_state_code", aim9Mission ? (int)aim9.State : 0, RawInteger);
         w.Nul("aim9_x", aim9PoseValid ? aim9.Position.X : null, 3);
         w.Nul("aim9_y", aim9PoseValid ? aim9.Position.Y : null, 3);
         w.Nul("aim9_z", aim9PoseValid ? aim9.Position.Z : null, 3);

@@ -517,7 +517,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     bool OpenSegmentNav = false,
     OpponentPresence OpponentPresence = OpponentPresence.Present,
     AircraftState? OpponentInitialState = null,
-    GunsOnly.Sim.Casevac.CasevacScenarioDefinition? Casevac = null) {
+    GunsOnly.Sim.Casevac.CasevacScenarioDefinition? Casevac = null,
+    FirstRunValleyConfig? FirstRunValley = null) {
     public AircraftParams PlayerAir => PlayerParams ?? FlightModel.Sabre;
     public AircraftParams BanditAir => BanditParams ?? FlightModel.Sabre;
     public CombatConfig CombatRules => Combat ?? CombatConfig.Fighter;
@@ -608,7 +609,7 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
                 mergeInitial, mergeAir, mergeSkill, terrain,
                 profile: spec is { Boss: true } ? BanditSkillProfile.Boss() : null,
                 doctrineIndex: spec?.DoctrineIndex,
-                presenting: spec?.Sparring == true);
+                presenting: spec?.Sparring == true || FirstRunValley is not null);
         }
         if (!UsesReactiveBandit)
             return new RailBandit(authoredBandit, BanditAir, BanditTimeline);
@@ -1563,6 +1564,49 @@ public static class Beats {
             // interim ForEngagement ramp (1 Novice, 2 Competent, 3 Veteran, 4+ Ace). Continuous
             // successors escalate via ForEngagement at CreateNextBandit.
             BanditSkill: BanditSkillProfile.ForEngagement(1));
+    }
+
+    /// <summary>
+    /// First-visit on-ramp onto the guns-only gauntlet: Soniachne draw, pop-out onto a parked
+    /// opening pair, two AIM-9s on Fire, then the same Fire button is guns. Beat 7 stays the
+    /// high merge with no heaters.
+    /// </summary>
+    public static BeatSetup ModernVisualMergeFirstRun() {
+        BeatSetup merge = ModernVisualMerge();
+        const double altitudeM = FirstRunValleyRuntime.SpawnAltitudeM;
+        double playerTas = BeatSetup.CornerTrueAirspeedMps(
+            FlightModel.F22APublicDataSurrogate, altitudeM);
+        double banditTas = BeatSetup.CornerTrueAirspeedMps(
+            FlightModel.Su27SPublicDataSurrogate, altitudeM);
+        return merge with {
+            Name = "First-run valley — F-22A surrogate vs opening pair",
+            Player = merge.Player with {
+                Position = new Vec3D(
+                    FirstRunValleyRuntime.ValleyEastM,
+                    altitudeM,
+                    FirstRunValleyRuntime.PlayerNorthM),
+                Speed = playerTas,
+                Chi = 0.0
+            },
+            Bandit = merge.Bandit with {
+                Position = new Vec3D(
+                    FirstRunValleyRuntime.ValleyEastM,
+                    altitudeM,
+                    FirstRunValleyRuntime.BanditNorthM),
+                Speed = banditTas,
+                Chi = 0.0
+            },
+            Environment = Ukraine2030sTheatre.HeroCell,
+            FirstRunValley = new FirstRunValleyConfig(
+                FirstRunValleyRuntime.PopOutNorthM,
+                FirstRunValleyRuntime.DefaultAim9Rounds),
+            Mission = new MissionContract(
+                FirstRunValleyRuntime.MissionId,
+                MissionContentFamily.ModernPublicDataSurrogate,
+                PublicDataSurrogate: true,
+                RulesOfEngagement: "HEATERS_THEN_GUNS_FREE",
+                Era: "MODERN_PUBLIC_DATA_EXERCISE")
+        };
     }
 
     /// <summary>

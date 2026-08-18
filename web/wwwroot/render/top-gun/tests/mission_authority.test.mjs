@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
+  firstRunValleyMissionAuthority,
   foxTwoLaunchEligible,
   MISSION_AUTHORITY_KIND,
   productionMissionAuthority,
@@ -50,6 +51,8 @@ for (const viewport of ["desktop", "portrait"]) {
     const selectedProduction = productionMissionAuthority(7, 1);
     assert.equal(sameMissionAuthority(staged, selectedProduction), false,
       "a production card must not reuse Top Gun authority even when its beat is the old default");
+    assert.equal(sameMissionAuthority(firstRunValleyMissionAuthority(), selectedProduction), false,
+      "first-run valley must not RestartSortie into the high guns-only merge");
     assert.equal(sameMissionAuthority(staged, topGunMissionAuthority(1)), true);
     assert.equal(sameMissionAuthority(staged, topGunMissionAuthority(0)), false);
   });
@@ -111,4 +114,12 @@ test("executable R route separates phase-independent ownership from launch eligi
     stagedAuthority: topGunMissionAuthority(0),
     snapshotIsTopGun: false,
   }), true, "a transient stale snapshot may reject launch but cannot reassign R to restart");
+});
+
+test("first-run valley is its own staging so Fly later cannot RestartSortie into beat 7", () => {
+  const valley = firstRunValleyMissionAuthority();
+  assert.equal(valley.kind, MISSION_AUTHORITY_KIND.FIRST_RUN_VALLEY);
+  assert.equal(sameMissionAuthority(valley, firstRunValleyMissionAuthority()), true);
+  assert.equal(sameMissionAuthority(valley, productionMissionAuthority(7, 1)), false);
+  assert.equal(sameMissionAuthority(valley, topGunMissionAuthority(0)), false);
 });
