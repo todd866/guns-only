@@ -249,8 +249,15 @@ let tacticalMapBounds = null;
 let tacticalMapBackdrop = null;
 let tacticalMapRiver = null;
 const debrief = document.querySelector("#debrief");
+const debriefKicker = document.querySelector("#debrief-kicker");
 const debriefTitle = document.querySelector("#debrief-title");
 const debriefBody = document.querySelector("#debrief-body");
+const debriefPoints = document.querySelector("#debrief-points");
+const debriefKills = document.querySelector("#debrief-kills");
+const debriefRearms = document.querySelector("#debrief-rearms");
+const debriefSwaps = document.querySelector("#debrief-swaps");
+const debriefBattleTime = document.querySelector("#debrief-battle-time");
+const debriefCorrection = document.querySelector("#debrief-correction");
 const debriefRestart = document.querySelector("#debrief-restart");
 const debriefExit = document.querySelector("#debrief-exit");
 const pauseMenu = document.querySelector("#pause-menu");
@@ -1197,6 +1204,7 @@ function restartRoute() {
       ? "HOLD THE BRIDGE · AH-1G ONLINE"
       : "AH-1G AUTHORITY ONLINE · LAB", "ready");
   }
+  canvas?.focus?.({ preventScroll: true });
 }
 
 function ensureAh1gPresence() {
@@ -1624,6 +1632,20 @@ function groundFireDebriefDetail(battleDamage) {
   return `Ground fire: ${subsystemSummary} · ${hits} damaging ${hits === 1 ? "hit" : "hits"} / ${bursts} ${bursts === 1 ? "burst" : "bursts"}${observerId ? ` · source ${observerId}` : ""}.`;
 }
 
+function cobraNextSortieCorrection({ victory, defeat, status, friendlyPoints, heldPoints }) {
+  if (defeat) {
+    return `Contest the majority earlier; friendly tickets expired at ${friendlyPoints} of ${heldPoints} points.`;
+  }
+  if (victory) {
+    return "Repeat the majority hold, preserve the aircraft, then recover cleanly to Camp Ember.";
+  }
+  if (status === "obstacle-collision")
+    return "Use the map and valley sightlines to keep a deliberate clearance margin.";
+  if (status === "vehicle-authority-lost")
+    return "Recover control and terrain clearance before recommitting to the ground fight.";
+  return "Review the terminal cause, then fly the same route with more clearance and reserve.";
+}
+
 function showMissionDebrief(war, status) {
   if (!debrief || missionTerminal) return;
   missionTerminal = true;
@@ -1676,13 +1698,21 @@ function showMissionDebrief(war, status) {
     title = "SORTIE ENDED";
     reason = `Sortie ended: ${status.replaceAll("-", " ")}.`;
   }
+  debrief.dataset.outcome = victory ? "victory" : defeat ? "defeat" : "failure";
+  setText(debriefKicker, victory || defeat ? "RECORDED MISSION RESULT" : "RECORDED SORTIE FAILURE");
   setText(debriefTitle, title);
   const groundFireDetail = groundFireDebriefDetail(authorityState?.battle_damage);
-  setText(
-    debriefBody,
-    `${reason} ${groundFireDetail} Hostiles down ${war?.debrief?.hostile_kills ?? 0} · rearms ${war?.debrief?.fob_rearms ?? 0} · bird swaps ${authorityState?.airframe_swaps ?? 0} · ${(war?.debrief?.elapsed_s ?? 0).toFixed(0)}s airborne. R restarts.`,
-  );
+  setText(debriefBody, `${reason} ${groundFireDetail}`);
+  setText(debriefPoints, `${friendlyPoints} / ${heldPoints}`);
+  setText(debriefKills, String(war?.debrief?.hostile_kills ?? 0));
+  setText(debriefRearms, String(war?.debrief?.fob_rearms ?? 0));
+  setText(debriefSwaps, String(authorityState?.airframe_swaps ?? 0));
+  setText(debriefBattleTime, `${(war?.debrief?.elapsed_s ?? 0).toFixed(0)} s`);
+  setText(debriefCorrection, cobraNextSortieCorrection({
+    victory, defeat, status, friendlyPoints, heldPoints,
+  }));
   debrief.hidden = false;
+  queueMicrotask(() => debriefRestart?.focus({ preventScroll: true }));
   setStatus(
     victory ? "MISSION COMPLETE · VALLEY HELD" : `MISSION ${status.replaceAll("-", " ").toUpperCase()} · R RESTARTS`,
     victory ? "ready" : "error",
@@ -1995,6 +2025,23 @@ function pauseMenuFocusables() {
   return [pauseResume, pauseRestart, pauseExit].filter((node) => node && !node.disabled);
 }
 
+function debriefFocusables() {
+  return [debriefRestart, debriefExit].filter((node) => node && !node.disabled);
+}
+
+function containDialogFocus(event, focusable) {
+  if (event.code !== "Tab" || !focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus({ preventScroll: true });
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus({ preventScroll: true });
+  }
+}
+
 function setMissionPaused(paused, { focus = true } = {}) {
   const next = paused === true;
   if (missionPaused === next) return false;
@@ -2044,18 +2091,10 @@ window.addEventListener("keydown", (event) => {
 }, true);
 
 pauseMenu?.addEventListener("keydown", (event) => {
-  if (event.code !== "Tab") return;
-  const focusable = pauseMenuFocusables();
-  if (!focusable.length) return;
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus({ preventScroll: true });
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus({ preventScroll: true });
-  }
+  containDialogFocus(event, pauseMenuFocusables());
+});
+debrief?.addEventListener("keydown", (event) => {
+  containDialogFocus(event, debriefFocusables());
 });
 pauseResume?.addEventListener("click", () => setMissionPaused(false));
 pauseRestart?.addEventListener("click", restartRoute);
@@ -2070,6 +2109,7 @@ window.addEventListener("keydown", (event) => {
     restartRoute();
     return;
   }
+  if (missionTerminal) return;
   if (event.code === "Tab") {
     event.preventDefault();
     if (!sortieReadiness.observeInput(true)) return;

@@ -59,14 +59,33 @@ test("the first successful beginFlight stamps seen so Fly again is guns-only fir
     "boot must not stamp seen before the valley actually launched");
 });
 
-test("the picker stays hidden during first-run warmup and the Guns Only tile copy stays guns-only", async () => {
-  const [app, index] = await Promise.all([source("app.js"), source("index.html")]);
+test("the picker stays hidden during warmup and first-run Fire visibly names its live weapon", async () => {
+  const [app, index, hud, readouts] = await Promise.all([
+    source("app.js"), source("index.html"), source("hud.js"), source("render/hud/hud_readouts.js"),
+  ]);
   assert.match(app,
     /function renderPauseUi\([\s\S]*firstRunAutostartPending[\s\S]*readyScreen\.classList\.toggle\("visible"/,
     "first visit must skip the six-tile picker while the valley is auto-launching");
   assert.match(app,
     /"first-merge": Object\.freeze\(\{[\s\S]*?sortie: "F-22A vs escalating opposition · guns only · first pass safe"/);
   assert.match(app, /touchFireAriaLabel/);
+  assert.match(app, /touchFireButton\.textContent = touchFireVisibleLabel\(state\)/,
+    "the same F control must visibly transition from FOX 2 to GUNS with authority");
   assert.match(index, /id="touch-fire"[^>]*>FIRE</,
-    "the visible touch label stays FIRE even while heaters are live");
+    "the static fallback remains FIRE until the first authoritative snapshot arrives");
+  assert.match(hud,
+    /firstRunValley[\s\S]*?FOX TWO → GUNS[\s\S]*?FOLLOW VALLEY · \$\{fireBinding\} FIRES TWO HEATERS, THEN GUNS/,
+    "desktop Quicklook must replace generic missile fiction with the remappable first-run Fire contract");
+  assert.match(readouts,
+    /FOLLOW VALLEY · WEAPONS SAFE[\s\S]*?FOX TWO ×\$\{aim9Remaining\} · FIRE[\s\S]*?GUNS · FIRE/,
+    "the live HUD must carry the complete first-run objective ladder after transient cues expire");
+});
+
+test("first-run Quicklook reuses the remappable Fire binding in every teaching line", async () => {
+  const hud = await readFile(new URL("../../../hud.js", import.meta.url), "utf8");
+  const quicklook = hud.match(/const firstRunValley[\s\S]*?if \(f14WingSweep\)/u)?.[0] ?? "";
+  assert.match(quicklook, /const fireBinding = binding\("fire", "KeyF"\)/u);
+  assert.match(quicklook, /\$\{fireBinding\} FIRES TWO HEATERS/u);
+  assert.match(quicklook, /\$\{fireBinding\}: TWO HEATERS → GUNS/u);
+  assert.doesNotMatch(quicklook, /(?:^|· )F(?: |:) (?:FIRES|TWO HEATERS)/u);
 });

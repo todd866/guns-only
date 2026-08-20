@@ -10,7 +10,7 @@ const source = (path) => readFile(new URL(path, root), "utf8");
 test("Escape toggles a resumable pause instead of leaving the sortie", () => {
   assert.equal(resolveEscapeAction(), "pause");
   assert.equal(resolveEscapeAction({ paused: true }), "resume");
-  assert.equal(MAIN_MENU_HREF, "/");
+  assert.equal(MAIN_MENU_HREF, "/?program=cobra-lab&menu=1");
 });
 
 test("Escape peels onboarding and the tactical map before pause", () => {
@@ -29,7 +29,18 @@ test("the terminal debrief retains explicit restart and exit actions", async () 
     source("cobra-lab/index.html"),
   ]);
   assert.match(html, /id="debrief"[\s\S]*id="debrief-restart"[\s\S]*id="debrief-exit"/u);
+  assert.match(html, /id="debrief"[^>]*role="dialog"[^>]*aria-modal="true"/u);
+  assert.match(html, /id="debrief-exit"[^>]*>Return to aircraft</u);
   assert.match(main, /debriefExit\?\.addEventListener\("click", leaveMissionForMenu\)/u);
+  assert.match(main, /debrief\.hidden = false;[\s\S]*?debriefRestart\?\.focus/u);
+  assert.match(main, /debrief\?\.addEventListener\("keydown"[\s\S]*?containDialogFocus/u);
+  assert.match(main, /if \(missionTerminal\) return;\s*if \(event\.code === "Tab"\)/u,
+    "terminal Tab must stay inside the debrief instead of cycling a combat target");
+  assert.match(html, /<canvas id="scene" tabindex="-1"><\/canvas>/u,
+    "the flight surface must accept programmatic focus after a modal closes");
+  const restart = main.match(/function restartRoute\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(restart, /canvas\?\.focus\?\.\(\{ preventScroll: true \}\)/u,
+    "Fly again must return focus to the live flight surface");
 });
 
 test("the Cobra shell owns a real pause dialog and freezes authority advance", async () => {
@@ -52,8 +63,12 @@ test("the Cobra shell owns a real pause dialog and freezes authority advance", a
   assert.match(main, /pauseMenu\?\.addEventListener\("keydown"/u);
 });
 
-test("Exit Mission remains explicit and performs the existing complete teardown", async () => {
-  const main = await source("cobra-lab/main.js");
+test("Return to aircraft remains explicit and performs the existing complete teardown", async () => {
+  const [main, html] = await Promise.all([
+    source("cobra-lab/main.js"),
+    source("cobra-lab/index.html"),
+  ]);
+  assert.match(html, /id="pause-exit"[^>]*>Return to aircraft</u);
   assert.match(main, /pauseExit\?\.addEventListener\("click", leaveMissionForMenu\)/u);
   assert.match(main, /function teardownMission\(/u);
   for (const teardown of [

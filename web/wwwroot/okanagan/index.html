@@ -35,7 +35,7 @@
     <output id="status">Loading Fire Boss runtime…</output>
   </main>
 
-  <section id="sortie-menu" class="overlay visible" role="dialog" aria-modal="true" aria-labelledby="sortie-title">
+  <section id="sortie-menu" class="overlay visible" role="dialog" aria-modal="true" aria-labelledby="sortie-title" aria-hidden="false">
     <div class="menu-card">
       <header><span>CIVILIAN · AIR TRACTOR</span><h1 id="sortie-title">AT-802F Fire Boss</h1><p>Okanagan Valley, British Columbia</p></header>
       <div class="sortie-grid" role="radiogroup" aria-label="Fire Boss sorties">
@@ -57,8 +57,9 @@
         <span>RTB MIN <strong id="plan-minimum">—</strong></span>
         <span>WORKING <strong id="plan-working">197 KG</strong></span>
       </section>
+      <p class="preflight-controls"><strong>FLIGHT CONTROLS</strong> ARROWS pitch / roll · A/D rudder · W/S power · E scoops · hold SPACE drop · TAB target · V padlock</p>
       <div class="menu-actions">
-        <a href="/">Back to aircraft</a>
+        <a href="/?program=okanagan-fireboss&amp;menu=1">Back to aircraft</a>
         <button id="start" type="button">Fly Water Circuits</button>
       </div>
     </div>
@@ -72,8 +73,24 @@
       <button id="choose-sortie" type="button">Choose sortie</button>
       <button id="sound" type="button" aria-pressed="true">Sound · on</button>
       <p class="control-legend">ARROWS PITCH / ROLL · A/D RUDDER · W/S POWER<br>TAB TARGET · V PADLOCK · E SCOOPS · HOLD SPACE DROP · M SOUND</p>
-      <a href="/">Return to aircraft</a>
+      <a href="/?program=okanagan-fireboss&amp;menu=1">Return to aircraft</a>
     </div>
+  </section>
+
+  <section id="mission-result" class="overlay mission-result" role="dialog" aria-modal="true"
+    aria-labelledby="mission-result-title" aria-describedby="mission-result-summary" aria-hidden="true">
+    <article class="mission-result__panel" data-outcome="complete">
+      <p id="mission-result-kicker" class="mission-result__kicker">RECORDED SORTIE RESULT</p>
+      <h2 id="mission-result-title" class="mission-result__title">Sortie complete</h2>
+      <p id="mission-result-summary" class="mission-result__summary"></p>
+      <dl id="mission-result-facts" class="mission-result__facts" aria-label="Recorded sortie evidence"></dl>
+      <p class="mission-result__correction"><strong>NEXT SORTIE</strong><span id="mission-result-correction"></span></p>
+      <div class="mission-result__actions" aria-label="Sortie result actions">
+        <button id="mission-result-restart" class="mission-action mission-action--primary" type="button">Fly again</button>
+        <button id="mission-result-choose" class="mission-action" type="button">Choose sortie</button>
+        <a class="mission-action mission-action--link" href="/?program=okanagan-fireboss&amp;menu=1">Return to aircraft</a>
+      </div>
+    </article>
   </section>
 
   <script>

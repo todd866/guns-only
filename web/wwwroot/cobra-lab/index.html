@@ -92,7 +92,7 @@
 
   <main class="flight-stage">
     <section class="viewport" aria-label="Hold the Bridge sortie">
-      <canvas id="scene"></canvas>
+      <canvas id="scene" tabindex="-1"></canvas>
       <!-- Production hud.js combiner (Build 264): world + HUD, zero cockpit. The old
            CSS reticle and DOM text strip are replaced by the real instrument. -->
       <canvas id="hud-canvas" aria-hidden="true"></canvas>
@@ -114,18 +114,31 @@
           <button id="pause-resume" class="pause-primary" type="button">Resume</button>
           <div class="pause-actions">
             <button id="pause-restart" type="button">Restart sortie</button>
-            <button id="pause-exit" type="button">Exit mission</button>
+            <button id="pause-exit" type="button">Return to aircraft</button>
           </div>
           <span class="pause-hint">Esc · resume</span>
         </div>
       </section>
-      <div id="debrief" class="debrief" hidden>
-        <p id="debrief-title">MISSION COMPLETE</p>
-        <p id="debrief-body"></p>
-        <div class="pause-actions">
-          <button id="debrief-restart" type="button">Fly again</button>
-          <button id="debrief-exit" type="button">Exit mission</button>
-        </div>
+      <div id="debrief" class="debrief" role="dialog" aria-modal="true"
+        aria-labelledby="debrief-title" aria-describedby="debrief-body" hidden>
+        <article class="debrief-card">
+          <span id="debrief-kicker" class="debrief-kicker">RECORDED MISSION RESULT</span>
+          <h2 id="debrief-title">MISSION COMPLETE</h2>
+          <p id="debrief-body"></p>
+          <dl class="debrief-facts" aria-label="Recorded mission evidence">
+            <div><dt>Points</dt><dd id="debrief-points">0 / 4</dd></div>
+            <div><dt>Hostiles</dt><dd id="debrief-kills">0</dd></div>
+            <div><dt>Rearms</dt><dd id="debrief-rearms">0</dd></div>
+            <div><dt>Bird swaps</dt><dd id="debrief-swaps">0</dd></div>
+            <div><dt>Battle time</dt><dd id="debrief-battle-time">0 s</dd></div>
+          </dl>
+          <p class="debrief-correction"><strong>NEXT SORTIE</strong><span id="debrief-correction"></span></p>
+          <div class="pause-actions">
+            <button id="debrief-restart" type="button">Fly again</button>
+            <button id="debrief-exit" type="button">Return to aircraft</button>
+          </div>
+          <span class="debrief-hint">R · fly again</span>
+        </article>
       </div>
     </section>
   </main>

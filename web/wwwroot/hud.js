@@ -5458,22 +5458,31 @@ class CombatHud {
     ctx.fillText("CONTROL QUICKLOOK", this.width / 2, y + 23);
 
     const binding = (action, fallback) => controlBindingLabel(this.controlBindings?.[action], fallback);
+    const firstRunValley = frame.state.mission_definition_id
+      === "mission.modern.visual-merge.first-run-valley.v1";
+    const fireBinding = binding("fire", "KeyF");
+    const fireQuicklook = firstRunValley
+      ? `${fireBinding}  FOX TWO → GUNS`
+      : `${fireBinding}  GUNS`;
 
     const wideLines = [
       `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL   ·   ${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
-      `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   ${binding("fire", "KeyF")}  GUNS   ·   ${binding("padlock", "KeyV")}  PADLOCK ON / OFF   ·   TAB  NEXT CONTACT   ·   DRAG LOOK`,
+      `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   ${fireQuicklook}   ·   ${binding("padlock", "KeyV")}  PADLOCK ON / OFF   ·   TAB  NEXT CONTACT   ·   DRAG LOOK`,
       `${binding("limitOverride", "Space")}  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA · REFUSES AUTO-GCAS — CAN DEPART)   ·   R  RESTART   ·   M  SOUND   ·   \`  SYNC MARK   ·   H  HIDE`,
       "T  TIME COMPRESSION ON / OFF",
-      "P  RAPIER MISSION AUTOMATION   ·   Z  SHORT-RANGE MISSILE",
+      firstRunValley
+        ? `FIRST RUN · FOLLOW VALLEY · ${fireBinding} FIRES TWO HEATERS, THEN GUNS`
+        : "P  RAPIER MISSION AUTOMATION   ·   Z  SHORT-RANGE MISSILE",
     ];
     const compactLines = [
       `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL`,
       `${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
       `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE = HOLD)`,
-      `${binding("limitOverride", "Space")}  LIMIT OVR (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   ${binding("fire", "KeyF")}  GUNS   ·   M  SOUND`,
+      `${binding("limitOverride", "Space")}  LIMIT OVR (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   ${fireQuicklook}   ·   M  SOUND`,
       `${binding("padlock", "KeyV")}  PADLOCK   ·   TAB  NEXT CONTACT   ·   R  RESTART   ·   \`  SYNC MARK   ·   H  HIDE`,
       "T  TIME COMPRESSION ON / OFF",
     ];
+    if (firstRunValley) compactLines.push(`FOLLOW VALLEY · ${fireBinding}: TWO HEATERS → GUNS`);
     if (f14WingSweep) {
       wideLines.push(`${binding("wingSweepForward", "Comma")} / ${binding("wingSweepAft", "Period")}  WING SWEEP FORWARD / AFT   ·   ${binding("wingSweepAuto", "Slash")}  WING SWEEP AUTO`);
       compactLines.push(`${binding("wingSweepForward", "Comma")} / ${binding("wingSweepAft", "Period")}  WING SWEEP FORWARD / AFT   ·   ${binding("wingSweepAuto", "Slash")}  AUTO`);

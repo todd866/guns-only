@@ -688,14 +688,6 @@ public sealed class CobraMissionRuntime
                 Status = CobraMissionStatus.FobCombatIneffective;
             }
         }
-        if (Status == CobraMissionStatus.Active) {
-            Status = _groundWar.MissionOutcome switch {
-                HoldTheBridgeOutcome.Victory => CobraMissionStatus.Victory,
-                HoldTheBridgeOutcome.Defeat => CobraMissionStatus.Defeat,
-                _ => Status
-            };
-        }
-
         double? clearanceM = null;
         if (_terrain.TrySample(
             currentPositionWorldM.X,
@@ -704,6 +696,18 @@ public sealed class CobraMissionRuntime
             clearanceM = currentPositionWorldM.Y - currentSurface.HeightM;
         }
         RefreshAct(currentPositionWorldM, clearanceM);
+        // Winning or losing the basin is the turn home, not the end of a flyable helicopter.
+        // GroundWarCombatLive falls false as soon as the act becomes Rtb, freezing the strategic
+        // outcome while flight authority, threat exposure and the authored arrival remain live.
+        // Only a stable Camp Ember recovery closes the sortie; an airframe loss above still wins
+        // this ordering and remains immediately terminal.
+        if (Status == CobraMissionStatus.Active && _act == CobraMissionAct.Complete) {
+            Status = _groundWar.MissionOutcome switch {
+                HoldTheBridgeOutcome.Victory => CobraMissionStatus.Victory,
+                HoldTheBridgeOutcome.Defeat => CobraMissionStatus.Defeat,
+                _ => Status
+            };
+        }
 
         _diagnostics = null;
         return new CobraMissionAdvanceResult(vehicleResult, Diagnostics);
@@ -760,8 +764,13 @@ public sealed class CobraMissionRuntime
             clearanceM,
             CobraMissionActProgress.DepartureJoinWorldM(
                 _selectedRoute,
-                _groundWar.Fob.CentreWorldM));
+                _groundWar.Fob.CentreWorldM),
+            stableRecoveryAtFob: HasStableCampEmberRecovery(positionWorldM));
     }
+
+    bool HasStableCampEmberRecovery(in Vec3D positionWorldM) =>
+        _cobra.Observation.Contact.Kind == VehicleContactKind.StableSurfaceContact
+        && _groundWar.IsInsideFob(positionWorldM);
 
     /// <summary>
     /// Applies fire-authorized M134 damage to a ground-war unit and drains the magazine.

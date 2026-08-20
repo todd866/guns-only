@@ -2143,7 +2143,7 @@
       .sortie-choice { min-height: 64px; padding: 8px 9px; }
       .sortie-choice strong { font-size: 12.5px; }
       .sortie-choice > span:not(.sortie-number),
-      .sortie-choice > small { display: none; }
+      .sortie-choice > small:not(.sortie-contract) { display: none; }
       .sortie-number { margin-bottom: 5px; font-size: 8px; }
       .ready-briefing { overflow: visible; padding: 15px 15px 16px; }
       .ready-activity-nav { margin-bottom: 13px; }
@@ -2194,7 +2194,7 @@
       }
       .touch-mode #ready-screen[data-mode="program"] .ready-program-heading p,
       .touch-mode #ready-screen[data-mode="program"] .sortie-choice > span:not(.sortie-number),
-      .touch-mode #ready-screen[data-mode="program"] .sortie-choice > small {
+      .touch-mode #ready-screen[data-mode="program"] .sortie-choice > small:not(.sortie-contract) {
         display: none;
       }
       .touch-mode #ready-screen[data-mode="program"] .sortie-option + .sortie-option {
@@ -2957,13 +2957,12 @@
     #ready-screen:not([data-mode="program"]) .ready-secondary-actions { width: min(24rem, 100%); }
 
     /* ------------------------------------------------------------------------------------
-       WORDLESS AIRCRAFT PICKER
-       "I really just wanna know what airplane am I flying today" -- so the menu is two paintings
-       of two aeroplanes, and you touch one. No heading, no aircraft names, no briefing, no
-       statistics, no keyboard legend, no hint line, no label on the button. Every one of those
-       is still in the DOM and still announced to screen readers; none of them is drawn.
-       Green survives exactly where the paintings put it -- the service lamps on the hangar wall --
-       and is used for one job only: showing which aeroplane is selected, and that it will go.
+       AIRCRAFT + MISSION PICKER
+       The paintings still make the first impression, but an aircraft is not the whole decision:
+       each programme has a different verb and a different ending. Hover, focus, or select a card
+       to reveal that compact contract. The full briefing stays out of this poster rail; the player
+       gets just enough truth to know whether they are choosing continuous combat, a finite
+       recovery, an open ride, or a multi-sortie civilian programme.
        ------------------------------------------------------------------------------------ */
 
     #ready-screen[data-mode="program"] .ready-menu-header,
@@ -3039,6 +3038,18 @@
       transition: filter .22s ease, border-color .22s ease, box-shadow .22s ease;
     }
 
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]::before {
+      position: absolute;
+      z-index: 1;
+      inset: 0;
+      border-radius: inherit;
+      content: "";
+      pointer-events: none;
+      opacity: 0;
+      background: linear-gradient(to bottom, transparent 42%, rgba(5, 8, 12, .3) 58%, rgba(5, 8, 12, .96) 100%);
+      transition: opacity .18s ease;
+    }
+
     #ready-screen .sortie-choice[data-aircraft="f22"] {
       background-image: image-set(url("./art/jet-f22.webp") type("image/webp"));
     }
@@ -3078,8 +3089,8 @@
       filter: none;
     }
 
-    /* Announced, never drawn: the aircraft's name and programme state stay in the accessible
-       name of the button that carries the painting. */
+    /* The default remains a clean poster and a compact accessible name. Selection, hover, or
+       keyboard focus reveals the same title plus the programme's verb-and-endpoint contract. */
     #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > * {
       position: absolute;
       inset: 0 auto auto 0;
@@ -3091,10 +3102,53 @@
       white-space: nowrap;
     }
 
-    /* Go. A chevron, lit like the lamps. Its accessible name is still "Fly <aircraft>". */
+    #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft]::before,
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]:hover::before,
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]:focus-visible::before { opacity: 1; }
+
+    #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft] > *,
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]:hover > *,
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]:focus-visible > * {
+      z-index: 2;
+      width: auto;
+      height: auto;
+      margin: 0;
+      overflow: visible;
+      clip: auto;
+      white-space: normal;
+      text-align: left;
+      pointer-events: none;
+    }
+
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-number {
+      inset: auto 12px 58px;
+      color: #9bf2b9;
+      font: 750 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .13em;
+    }
+
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > strong {
+      inset: auto 12px 31px;
+      color: #fff9ed;
+      font: 500 20px/1 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      letter-spacing: .01em;
+      text-shadow: 0 2px 10px #000;
+    }
+
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-contract {
+      display: block;
+      inset: auto 12px 11px;
+      color: rgba(253, 246, 230, .76);
+      font: 650 9px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+
+    /* Go. The authored Fly label is visible: different programmes have different commitments,
+       so the final gesture names the thing it will launch instead of relying on a bare chevron. */
     #ready-screen[data-mode="program"] #ready-start {
-      display: grid;
-      width: min(200px, 46vw);
+      display: flex;
+      width: min(310px, 76vw);
       max-width: none;
       min-height: 52px;
       margin: clamp(12px, 2.4vh, 26px) auto 0;
@@ -3102,8 +3156,13 @@
       border-radius: 3px;
       background: rgba(122, 240, 165, .16);
       box-shadow: inset 0 0 0 1px rgba(122, 240, 165, .5), 0 0 30px rgba(96, 226, 146, .18);
-      font-size: 0;
-      place-items: center;
+      color: #caffdc;
+      font: 750 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
       text-shadow: none;
     }
 
@@ -3162,6 +3221,31 @@
         overscroll-behavior-x: contain;
         scroll-snap-type: x mandatory;
         touch-action: pan-x pinch-zoom;
+      }
+      #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-number {
+        inset: auto 10px 72px;
+        font-size: 8px;
+      }
+      #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > strong {
+        inset: auto 10px 46px;
+        font-size: 17px;
+      }
+      #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-contract {
+        inset: auto 10px 10px;
+        max-height: 2.5em;
+        overflow: hidden;
+        font-size: 7px;
+        letter-spacing: .035em;
+      }
+    }
+
+    @media (max-height: 500px) and (orientation: landscape) {
+      .touch-mode #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-contract {
+        overflow: hidden;
+        font-size: 7px;
+        letter-spacing: .025em;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
     }
 
@@ -3665,42 +3749,49 @@
               <button type="button" class="sortie-choice" data-aircraft="f22" data-program-node="first-merge" aria-pressed="true">
                 <span class="sortie-number">GUNS ONLY <b data-program-status="first-merge"></b></span>
                 <strong>F-22A</strong>
+                <small class="sortie-contract">Continuous ACM · RTB on command</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="military" data-selected="false" data-program-state="preview" hidden>
               <button type="button" class="sortie-choice" data-aircraft="f22" data-program-node="multiplayer" aria-pressed="false">
                 <span class="sortie-number">MULTIPLAYER <b data-program-status="multiplayer"></b></span>
                 <strong>F-22A</strong>
+                <small class="sortie-contract">Rated arena · Match result</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="military" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-aircraft="rapier" data-program-node="rapier-intercept" aria-pressed="false">
                 <span class="sortie-number">INTERCEPT <b data-program-status="rapier-intercept"></b></span>
                 <strong>Rapier</strong>
+                <small class="sortie-contract">Three targets · Intercept + recover</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="military" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-aircraft="cobra" data-program-node="cobra-lab" aria-pressed="false">
                 <span class="sortie-number">COBRA CANYON <b data-program-status="cobra-lab"></b></span>
                 <strong>AH-1G</strong>
+                <small class="sortie-contract">Hold more points · Bleed tickets · RTB Ember</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="civilian" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-aircraft="bike" data-program-node="weekend-ride" aria-pressed="false">
                 <span class="sortie-number">WEEKEND RIDE <b data-program-status="weekend-ride"></b></span>
                 <strong>YZF-R1</strong>
+                <small class="sortie-contract">Open lapping · End ride when ready</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="civilian" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-aircraft="fireboss" data-program-node="okanagan-fireboss" aria-pressed="false">
                 <span class="sortie-number">OKANAGAN FIRE <b data-program-status="okanagan-fireboss"></b></span>
                 <strong>AT-802F Fire Boss</strong>
+                <small class="sortie-contract">Train · Attack · Coordinate · Recover</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="military" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-aircraft="f14" data-program-node="top-gun" aria-pressed="false">
                 <span class="sortie-number">TOP GUN <b data-program-status="top-gun"></b></span>
                 <strong>F-14A</strong>
+                <small class="sortie-contract">Repeated DACT · Case I recovery</small>
               </button>
             </div>
             <div class="sortie-option" data-selected="false" data-program-state="available" hidden>

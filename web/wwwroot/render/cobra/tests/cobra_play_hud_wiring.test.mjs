@@ -156,10 +156,21 @@ test("strike terminal states present a cause card, not the generic sortie-ended 
 });
 
 test("every terminal card announces and wires the R restart affordance", async () => {
-  const main = await source("cobra-lab/main.js");
-  const debriefFn = main.match(/function showMissionDebrief\([\s\S]*?\n\}/)?.[0] ?? "";
-  assert.match(debriefFn, /R restarts/);
+  const [main, html] = await Promise.all([
+    source("cobra-lab/main.js"), source("cobra-lab/index.html"),
+  ]);
+  assert.match(html, /class="debrief-hint">R · fly again</u);
   assert.match(main, /KeyR[\s\S]{0,200}?missionTerminal[\s\S]{0,120}?restartRoute\(\)/);
+});
+
+test("Cobra result follows the shared evidence, correction, and action hierarchy", async () => {
+  const [main, html] = await Promise.all([
+    source("cobra-lab/main.js"), source("cobra-lab/index.html"),
+  ]);
+  assert.match(html, /debrief-kicker[\s\S]*debrief-title[\s\S]*debrief-body[\s\S]*debrief-facts[\s\S]*debrief-correction[\s\S]*debrief-restart[\s\S]*debrief-exit/u);
+  assert.match(html, />Battle time<[\s\S]*id="debrief-battle-time"/u);
+  assert.doesNotMatch(html, />Airborne time</iu);
+  assert.match(main, /cobraNextSortieCorrection/u);
 });
 
 test("route restart clears the terminal banner back to the online status", async () => {

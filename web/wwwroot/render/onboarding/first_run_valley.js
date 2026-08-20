@@ -45,7 +45,7 @@ export function shouldAutoStartFirstRunValley({
   return firstRunPending === true;
 }
 
-/** Visible touch label stays FIRE. Aria names heaters only on this beat while they remain. */
+/** Aria names heaters only on this beat while they remain. */
 export function touchFireAriaLabel(state = {}) {
   const remaining = Number(state?.aim9_remaining);
   if (state?.mission_definition_id === FIRST_RUN_MISSION_ID
@@ -54,4 +54,13 @@ export function touchFireAriaLabel(state = {}) {
     return "Fire missile";
   }
   return "Fire guns";
+}
+
+/** The visible control must teach the same overloaded Fire contract as authority. */
+export function touchFireVisibleLabel(state = {}) {
+  const remaining = Number(state?.aim9_remaining);
+  if (state?.mission_definition_id === FIRST_RUN_MISSION_ID) {
+    return Number.isInteger(remaining) && remaining > 0 ? "FOX 2" : "GUNS";
+  }
+  return "FIRE";
 }

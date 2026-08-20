@@ -56,6 +56,9 @@ test("one catalog names every route and exposes only accepted production experie
     "top-gun",
     "okanagan-fireboss",
   ]);
+  const sequences = EXPERIENCE_CATALOG.map((entry) => entry.sequence);
+  assert.equal(new Set(sequences).size, sequences.length,
+    "experience ordering is product metadata and must not assign two programmes the same slot");
   // The corrected string-selector launch path was explicitly promoted for Build 326. Production
   // launchability is catalog authority; it must not depend on the retired preview query gate.
   assert.equal(experienceLaunchable("top-gun"), true);
@@ -67,6 +70,8 @@ test("one catalog names every route and exposes only accepted production experie
   assert.match(experienceById("multiplayer").blocker, /matchmaking.*player path/i);
   assert.equal(experienceLaunchable("weekend-ride"), true);
   assert.equal(experienceComingSoon("weekend-ride"), false);
+  assert.match(experienceById("weekend-ride").shortObjective, /end the ride/i,
+    "open lapping still needs an explicit player-owned ending");
   assert.equal(experienceById("okanagan-fireboss").route, "/okanagan/");
   const cobra = experienceById("cobra-lab");
   assert.match(cobra.shortObjective, /garrison/i);

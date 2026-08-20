@@ -151,7 +151,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     route: "/weekend-ride/",
     aircraft: "YZF-R1",
     title: "Weekend Ride",
-    shortObjective: "Helmet-view free ride of a sourced Yamaha YZF-R1 on the painted 10,000 ft Rapier-strip circuit.",
+    shortObjective: "Open helmet-view lapping on the painted 10,000 ft Rapier-strip circuit; end the ride when ready and review the session.",
     qualification: "",
     releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
     visible: true,
@@ -165,7 +165,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     // route to `/top-gun/`, launchMission takes the standalone branch, and the launch button
     // navigates to a 404. The preview gate hid that for as long as the mode was unreachable.
     route: null,
-    sequence: 11,
+    sequence: 12,
     aircraft: "F-14A",
     title: "Top Gun",
     shortObjective: "1986 ACM — F-14A versus MiG-28 aggressors, guns and Sidewinders.",
@@ -182,7 +182,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     id: "okanagan-fireboss",
     mission: null,
     route: "/okanagan/",
-    sequence: 12,
+    sequence: 13,
     aircraft: "AT-802F Fire Boss",
     title: "Okanagan Fire Boss",
     shortObjective: "Train water circuits, fly a solo initial attack, then add coordinated incident traffic in the large-force extension.",

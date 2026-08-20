@@ -92,7 +92,7 @@ public class CobraMissionActTests
     }
 
     [Fact]
-    public void VictoryOutcomeArmsRtbAndPadCompletes()
+    public void VictoryOutcomeArmsRtbAndOnlyStablePadRecoveryCompletes()
     {
         Assert.Equal(
             CobraMissionAct.Rtb,
@@ -106,17 +106,31 @@ public class CobraMissionActTests
                 CobraMissionStatus.Victory,
                 clearanceM: 40.0));
 
+        Vec3D overPad = new(Fob.X, Fob.Y + 2.0, Fob.Z);
         Assert.Equal(
-            CobraMissionAct.Complete,
+            CobraMissionAct.Rtb,
             CobraMissionActProgress.Next(
                 CobraMissionAct.Rtb,
-                new Vec3D(Fob.X, Fob.Y + 2.0, Fob.Z),
+                overPad,
                 Fob,
                 Bridge,
                 1.0,
                 HoldTheBridgeOutcome.Victory,
-                CobraMissionStatus.Victory,
+                CobraMissionStatus.Active,
                 clearanceM: 3.0));
+
+        Assert.Equal(
+            CobraMissionAct.Complete,
+            CobraMissionActProgress.Next(
+                CobraMissionAct.Rtb,
+                overPad,
+                Fob,
+                Bridge,
+                1.0,
+                HoldTheBridgeOutcome.Victory,
+                CobraMissionStatus.Active,
+                clearanceM: 3.0,
+                stableRecoveryAtFob: true));
     }
 
     [Fact]

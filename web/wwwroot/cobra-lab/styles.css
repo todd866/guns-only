@@ -315,37 +315,102 @@ body[data-shell="lab"] .legend { bottom: 232px; }
 
 .debrief {
   position: absolute;
-  inset: auto 50% 18% auto;
-  transform: translateX(50%);
-  min-width: min(420px, 92vw);
-  padding: 22px 24px;
-  border: 1px solid var(--line);
-  background: rgba(6, 10, 9, 0.92);
-  text-align: center;
-  z-index: 5;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 22px;
+  background: rgba(3, 7, 6, 0.86);
+  backdrop-filter: blur(8px);
+  z-index: 9;
 }
 .debrief[hidden] { display: none !important; }
+.debrief-card {
+  width: min(680px, 100%);
+  padding: 26px;
+  border: 1px solid rgba(212, 181, 106, 0.42);
+  background: linear-gradient(145deg, rgba(19, 27, 23, 0.98), rgba(7, 12, 10, 0.99));
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.68);
+  text-align: left;
+}
+.debrief-kicker,
+.debrief-hint,
+.debrief-correction strong {
+  color: var(--warm);
+  font: 750 10px/1.25 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.debrief[data-outcome="failure"] .debrief-kicker,
+.debrief[data-outcome="defeat"] .debrief-kicker { color: #e39979; }
 #debrief-title {
-  margin: 0 0 8px;
-  font-size: 20px;
-  letter-spacing: 0.04em;
+  margin: 7px 0 8px;
+  font-size: clamp(27px, 5vw, 42px);
+  font-weight: 650;
+  letter-spacing: -0.025em;
 }
 #debrief-body {
-  margin: 0 0 16px;
+  max-width: 68ch;
+  margin: 0 0 18px;
   color: var(--muted);
   font-size: 13px;
   font-family: ui-sans-serif, system-ui, sans-serif;
   line-height: 1.45;
 }
-#debrief-restart {
-  pointer-events: auto;
-  min-height: 40px;
-  padding: 0 18px;
-  border: 1px solid rgba(212, 181, 106, 0.45);
-  background: rgba(212, 181, 106, 0.12);
-  color: #f0e6c8;
-  font: inherit;
+.debrief-facts {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+  border: solid var(--line);
+  border-width: 1px 0 0 1px;
+}
+.debrief-facts div {
+  min-width: 0;
+  padding: 11px;
+  border: solid var(--line);
+  border-width: 0 1px 1px 0;
+}
+.debrief-facts dt {
+  color: var(--muted);
+  font: 750 9px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.debrief-facts dd {
+  margin: 7px 0 0;
+  color: #edf1e8;
+  font: 700 14px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.debrief-correction {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  margin: 17px 0 0;
+  padding: 12px 14px;
+  border-left: 2px solid var(--warm);
+  color: #cdd8c6;
+  background: rgba(212, 181, 106, 0.08);
+  font: 12px/1.45 ui-sans-serif, system-ui, sans-serif;
+}
+.debrief .pause-actions { margin-bottom: 10px; }
+.debrief .pause-actions button {
+  min-height: 46px;
   cursor: pointer;
+}
+#debrief-restart {
+  border: 1px solid rgba(212, 181, 106, 0.45);
+  background: linear-gradient(180deg, #fbe6b4, #e8c77c);
+  color: #20190d;
+  font-weight: 800;
+}
+.debrief button:focus-visible { outline: 2px solid #f0cf8b; outline-offset: 2px; }
+.debrief-hint { display: block; color: var(--muted); letter-spacing: 0.1em; text-align: center; }
+
+@media (max-width: 620px) {
+  .debrief { padding: 14px; }
+  .debrief-card { padding: 20px; }
+  .debrief-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .debrief-correction { grid-template-columns: 1fr; gap: 5px; }
 }
 
 /* —— Lab shell (?lab=1) —— */

@@ -23,6 +23,7 @@ export const COBRA_ONBOARDING_CONTENT = Object.freeze({
         Object.freeze(["BREAK", "Kill the garrison and clear the point"]),
         Object.freeze(["COVER", "Protect the inbound squad while it captures"]),
         Object.freeze(["HOLD", "A point majority drains enemy tickets"]),
+        Object.freeze(["RECOVER", "After the ticket result, land stable at Camp Ember"]),
         Object.freeze(["M · MAP", "Score and captures — the fight keeps running"]),
       ]),
     }),

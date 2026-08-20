@@ -67,6 +67,19 @@ test("terminal debrief appends authoritative ground-fire subsystem context", asy
   assert.match(formatter, /NO SUBSYSTEM LOSS/);
   assert.match(debrief,
     /groundFireDebriefDetail\(authorityState\?\.battle_damage\)/);
-  assert.match(debrief, /\$\{reason\} \$\{groundFireDetail\} Hostiles down/,
-    "ground-fire truth must appear in the terminal details without changing the outcome branch");
+  assert.match(debrief, /setText\(debriefBody, `\$\{reason\} \$\{groundFireDetail\}`\)/,
+    "ground-fire truth must remain in the result summary without swallowing structured evidence");
+  assert.match(debrief, /setText\(debriefBattleTime,[\s\S]*?elapsed_s/,
+    "the ground-war clock must be labelled as battle time, not total airborne time");
+});
+
+test("RTB stays in the live mission; debrief waits for a terminal authority status", async () => {
+  const main = await readFile(new URL("../../../cobra-lab/main.js", import.meta.url), "utf8");
+
+  assert.match(main,
+    /if \(authorityState && authorityState\.status !== "active"\) \{\s*showMissionDebrief\(war, authorityState\.status\);\s*\}/u,
+    "the browser must not treat the authored RTB act as a terminal outcome");
+  assert.doesNotMatch(main,
+    /mission_act\s*===\s*["']rtb["'][\s\S]{0,160}showMissionDebrief/u,
+    "RTB remains flyable until the runtime publishes victory or defeat after recovery");
 });

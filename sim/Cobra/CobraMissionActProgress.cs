@@ -22,7 +22,8 @@ public static class CobraMissionActProgress
         HoldTheBridgeOutcome outcome,
         CobraMissionStatus status,
         double? clearanceM,
-        Vec3D? departureJoinWorldM = null)
+        Vec3D? departureJoinWorldM = null,
+        bool stableRecoveryAtFob = false)
     {
         if (current == CobraMissionAct.Complete)
             return CobraMissionAct.Complete;
@@ -31,7 +32,8 @@ public static class CobraMissionActProgress
             || outcome is HoldTheBridgeOutcome.Victory or HoldTheBridgeOutcome.Defeat) {
             if (current == CobraMissionAct.Rtb
                 && HorizontalDistanceM(positionWorldM, fobCentreWorldM) <= RtbPadCompleteRadiusM
-                && clearanceM is <= RtbPadCompleteClearanceM) {
+                && clearanceM is <= RtbPadCompleteClearanceM
+                && stableRecoveryAtFob) {
                 return CobraMissionAct.Complete;
             }
             return CobraMissionAct.Rtb;
@@ -60,6 +62,7 @@ public static class CobraMissionActProgress
             CobraMissionAct.Rtb =>
                 HorizontalDistanceM(positionWorldM, fobCentreWorldM) <= RtbPadCompleteRadiusM
                 && clearanceM is <= RtbPadCompleteClearanceM
+                && stableRecoveryAtFob
                     ? CobraMissionAct.Complete
                     : CobraMissionAct.Rtb,
             _ => current

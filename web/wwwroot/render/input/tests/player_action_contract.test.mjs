@@ -689,8 +689,11 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
     /function shellProgramEntry[\s\S]*?if \(experience\s*&&\s*experience\.mission == null/,
     "a missing program query must not treat null experience as a standalone card");
   assert.match(appSource,
-    /"weekend-ride": Object\.freeze\([\s\S]*?Fly opens the dedicated Weekend Ride surface/,
-    "Weekend Ride briefing must send Fly to the owned surface");
+    /"weekend-ride": Object\.freeze\([\s\S]*?end the ride from pause[\s\S]*?Esc pauses \/ End Ride/,
+    "Weekend Ride briefing must explain both its open session and player-owned ending");
+  assert.match(appSource,
+    /"cobra-lab": Object\.freeze\([\s\S]*?ticket result · Camp Ember recovery[\s\S]*?settle on the pad to close the sortie[\s\S]*?Camp Ember pad to rearm and recover/,
+    "Cobra's Ready brief must teach that tickets decide the battle but stable Ember recovery closes the sortie");
   assert.equal(new Set(nodeIds).size, nodeIds.length, "no duplicate program nodes");
   assert.equal(buttons.filter((button) => button.attributes.id === "ready-start").length, 1);
   assert.match(indexSource, /role="dialog"[^>]*aria-modal="true"/);
@@ -713,6 +716,31 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
   assert.match(indexSource,
     /#ready-screen\[data-mode="program"\] \.sortie-choice\[data-aircraft\]\s*\{[\s\S]*?position:\s*relative[\s\S]*?\.sortie-choice\[data-aircraft\] > \*\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?inset:\s*0 auto auto 0/,
     "screen-reader-only poster labels must be contained by their card instead of widening the outer dialog");
+  const contracts = [...indexSource.matchAll(/<small class="sortie-contract">([^<]+)<\/small>/g)]
+    .map((match) => match[1]);
+  assert.equal(contracts.length, 7,
+    "every visible aircraft programme, including preview multiplayer, needs a concise mission contract");
+  assert.ok(contracts.every((contract) => contract.includes("·")),
+    "picker contracts should use the shared verb · endpoint language");
+  assert.ok(contracts.includes("Hold more points · Bleed tickets · RTB Ember"),
+    "Cobra's picker contract must describe its majority/ticket authority instead of requiring all four points");
+  assert.ok(contracts.includes("Train · Attack · Coordinate · Recover"),
+    "Fire Boss must advertise recovery as the endpoint shared by its three sortie curricula");
+  assert.match(indexSource,
+    /\.sortie-option\[data-selected="true"\] \.sortie-choice\[data-aircraft\] > \*[\s\S]*?clip:\s*auto/,
+    "the selected poster must reveal its aircraft and mission contract");
+  assert.match(indexSource,
+    /\.sortie-choice\[data-aircraft\] > \.sortie-contract\s*\{[\s\S]*?display:\s*block/,
+    "the mission contract must override the legacy phone rule that hid every small label");
+  assert.match(indexSource,
+    /@media \(max-width: 620px\) and \(orientation: portrait\)[\s\S]*?\.sortie-contract\s*\{[\s\S]*?max-height:\s*2\.5em/,
+    "portrait posters must reserve two compact lines for the contract instead of colliding with the aircraft name");
+  assert.match(indexSource,
+    /@media \(max-height: 500px\) and \(orientation: landscape\)[\s\S]*?\.sortie-contract\s*\{[\s\S]*?text-overflow:\s*ellipsis/,
+    "short landscape posters must keep a compact single-line mission contract");
+  assert.match(indexSource,
+    /#ready-screen\[data-mode="program"\] #ready-start\s*\{[\s\S]*?font:\s*750 11px/,
+    "the final launch gesture must visibly name the selected mission instead of drawing only a chevron");
   assert.match(indexSource,
     /@media \(max-height: 500px\) and \(orientation: landscape\)[\s\S]*?#ready-screen\[data-mode="program"\] \.ready-layout\s*\{[\s\S]*?grid-template-columns:/,
     "short landscape screens need independent mission and briefing columns");

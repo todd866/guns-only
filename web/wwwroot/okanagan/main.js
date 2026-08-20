@@ -23,6 +23,10 @@ import {
   okanaganTargets,
   retainOkanaganTarget,
 } from "../render/okanagan/okanagan_targets.js?v=343";
+import {
+  okanaganDebriefModel,
+  okanaganMissionTerminal,
+} from "../render/okanagan/okanagan_debrief.js?v=343";
 
 const SORTIES = Object.freeze({
   "water-circuits": { index: 0, title: "Water Circuits", block: 610, working: "197 KG" },
@@ -35,8 +39,19 @@ const mapCanvas = document.querySelector("#map");
 const map = mapCanvas.getContext("2d");
 const flightHud = createHud(hudCanvas);
 const status = document.querySelector("#status");
+const missionSurface = document.querySelector(".viewport");
 const menu = document.querySelector("#sortie-menu");
 const pauseMenu = document.querySelector("#pause-menu");
+const missionResult = document.querySelector("#mission-result");
+const missionResultPanel = missionResult.querySelector(".mission-result__panel");
+const missionResultKicker = document.querySelector("#mission-result-kicker");
+const missionResultTitle = document.querySelector("#mission-result-title");
+const missionResultSummary = document.querySelector("#mission-result-summary");
+const missionResultFacts = document.querySelector("#mission-result-facts");
+const missionResultCorrection = document.querySelector("#mission-result-correction");
+const missionResultRestart = document.querySelector("#mission-result-restart");
+const missionResultChoose = document.querySelector("#mission-result-choose");
+const pauseResume = document.querySelector("#resume");
 const pauseButton = document.querySelector("#pause-button");
 const targetButton = document.querySelector("#target-button");
 const padlockButton = document.querySelector("#padlock-button");
@@ -70,6 +85,9 @@ let lastRadio = "";
 let radioHideAt = 0;
 let selectedTargetId = "";
 let padlock = false;
+let missionTerminal = false;
+let missionResultModel = null;
+missionSurface.inert = true;
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality !== "mobile", powerPreference: "high-performance" });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -135,6 +153,7 @@ window.__gunsOnlyOkanagan = Object.freeze({
   getLastTelemetry: () => telemetryFrames.at(-1) ?? null,
   getAudioDiagnostics: () => flightAudioDiagnostics(),
   getSelectedTarget: () => selectedTarget(),
+  getDebrief: () => missionResultModel,
   start: (sortie = currentSortie) => startSortie(sortie),
 });
 
@@ -201,9 +220,120 @@ function selectSortie(id) {
   document.querySelector("#plan-block").textContent = `${SORTIES[id].block} KG`;
 }
 
+function releasePlayerInputs() {
+  keys.clear();
+  drop = false;
+  leftStick = Object.freeze({ x: 0, y: 0 });
+  rightStick = Object.freeze({ x: 0, y: 0 });
+  dropButton.classList.remove("active");
+}
+
+function setMissionSurfaceInert(inert) {
+  missionSurface.inert = inert === true;
+}
+
+function activeMissionDialog() {
+  if (missionResult.classList.contains("visible")) return missionResult;
+  if (pauseMenu.classList.contains("visible")) return pauseMenu;
+  if (menu.classList.contains("visible")) return menu;
+  return null;
+}
+
+function trapDialogTab(event) {
+  const dialog = activeMissionDialog();
+  if (!dialog) return false;
+  const focusable = Array.from(dialog.querySelectorAll(
+    'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+  ));
+  if (focusable.length === 0) return false;
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  const focusOutside = !dialog.contains(document.activeElement);
+  if (event.shiftKey && (focusOutside || document.activeElement === first)) {
+    event.preventDefault();
+    last.focus({ preventScroll: true });
+  } else if (!event.shiftKey && (focusOutside || document.activeElement === last)) {
+    event.preventDefault();
+    first.focus({ preventScroll: true });
+  }
+  return true;
+}
+
+function hideMissionResult() {
+  missionTerminal = false;
+  missionResultModel = null;
+  missionResult.classList.remove("visible");
+  missionResult.setAttribute("aria-hidden", "true");
+}
+
+function renderMissionResultFacts(facts) {
+  missionResultFacts.replaceChildren(...facts.map((item) => {
+    const row = document.createElement("div");
+    row.className = "mission-result__fact";
+    row.dataset.fact = item.id;
+    row.dataset.tone = item.tone;
+    const term = document.createElement("dt");
+    term.textContent = item.label;
+    const detail = document.createElement("dd");
+    detail.textContent = item.value;
+    row.append(term, detail);
+    return row;
+  }));
+}
+
+function showMissionResult(current) {
+  const model = okanaganDebriefModel(current);
+  if (!model || missionTerminal) return false;
+  missionTerminal = true;
+  missionResultModel = model;
+  paused = true;
+  running = false;
+  releasePlayerInputs();
+  pauseMenu.classList.remove("visible");
+  pauseMenu.setAttribute("aria-hidden", "true");
+  menu.classList.remove("visible");
+  menu.setAttribute("aria-hidden", "true");
+  missionResultPanel.dataset.outcome = model.outcome;
+  missionResultKicker.textContent = model.kicker;
+  missionResultTitle.textContent = model.title;
+  missionResultSummary.textContent = model.summary;
+  renderMissionResultFacts(model.facts);
+  missionResultCorrection.textContent = model.correction;
+  missionResult.classList.add("visible");
+  missionResult.setAttribute("aria-hidden", "false");
+  setMissionSurfaceInert(true);
+  document.body.classList.add("paused");
+  status.textContent = model.failed ? "Sortie failed · review result" : "Sortie complete · review result";
+  suspendFlightAudio("okanagan-result");
+  queueMicrotask(() => missionResultRestart.focus({ preventScroll: true }));
+  return true;
+}
+
+function openSortieMenu() {
+  if (running && !missionTerminal && !paused) bridge?.SetPaused(true);
+  paused = true;
+  running = false;
+  releasePlayerInputs();
+  hideMissionResult();
+  pauseMenu.classList.remove("visible");
+  pauseMenu.setAttribute("aria-hidden", "true");
+  menu.classList.add("visible");
+  menu.setAttribute("aria-hidden", "false");
+  setMissionSurfaceInert(true);
+  document.body.classList.add("paused");
+  status.textContent = "Ready · choose a sortie";
+  suspendFlightAudio("okanagan-dispatch");
+  queueMicrotask(() => document.querySelector(`.sortie[data-sortie="${currentSortie}"]`)?.focus({ preventScroll: true }));
+}
+
 function startSortie(id) {
   selectSortie(id);
   if (!bridge) return false;
+  hideMissionResult();
+  releasePlayerInputs();
+  menu.classList.remove("visible");
+  menu.setAttribute("aria-hidden", "true");
+  setMissionSurfaceInert(false);
   bridge.Start(SORTIES[id].index);
   state = JSON.parse(bridge.GetState());
   throttle = 0.65;
@@ -216,7 +346,6 @@ function startSortie(id) {
   lastTelemetryMissionSecond = -Infinity;
   lastTelemetryPhase = "";
   setPaused(false);
-  menu.classList.remove("visible");
   document.querySelector("#plan-minimum").textContent = `${Math.round(state.fuel_plan.minimum_rtb_kg)} KG`;
   status.textContent = "Flying";
   armFlightAudio(okanaganFlightState(state));
@@ -225,13 +354,22 @@ function startSortie(id) {
 }
 
 function setPaused(value) {
-  paused = value;
-  if (running) bridge?.SetPaused(value);
-  pauseMenu.classList.toggle("visible", value && running && !menu.classList.contains("visible"));
-  pauseMenu.setAttribute("aria-hidden", String(!(value && running)));
-  document.body.classList.toggle("paused", value);
+  if (missionTerminal) return false;
+  paused = value === true;
+  if (paused) releasePlayerInputs();
+  if (running) bridge?.SetPaused(paused);
+  const pauseVisible = paused && running && !menu.classList.contains("visible");
+  pauseMenu.classList.toggle("visible", pauseVisible);
+  pauseMenu.setAttribute("aria-hidden", String(!pauseVisible));
+  document.body.classList.toggle("paused", paused);
+  setMissionSurfaceInert(paused);
   if (value) suspendFlightAudio("okanagan-paused");
-  else if (running) armFlightAudio(okanaganFlightState(state));
+  if (pauseVisible) queueMicrotask(() => pauseResume?.focus({ preventScroll: true }));
+  else if (!paused && running) {
+    armFlightAudio(okanaganFlightState(state));
+    canvas.focus({ preventScroll: true });
+  }
+  return true;
 }
 
 function controls(deltaSeconds) {
@@ -448,17 +586,19 @@ function animate(now) {
     recordTelemetry(state, delta);
     updateView(state); updateDom(state); drawHud(state, delta, state.mission_s);
     if (!mapCanvas.hidden) drawMap(state);
-    if (["complete", "failed"].includes(state.phase)) setPaused(true);
+    if (okanaganMissionTerminal(state)) showMissionResult(state);
   }
   renderer.render(scene, camera);
 }
 
 document.querySelectorAll(".sortie").forEach((button) => button.addEventListener("click", () => selectSortie(button.dataset.sortie)));
 document.querySelector("#start").addEventListener("click", () => startSortie(currentSortie));
-document.querySelector("#resume").addEventListener("click", () => setPaused(false));
+pauseResume.addEventListener("click", () => setPaused(false));
 document.querySelector("#restart").addEventListener("click", () => startSortie(currentSortie));
-document.querySelector("#choose-sortie").addEventListener("click", () => { setPaused(true); pauseMenu.classList.remove("visible"); menu.classList.add("visible"); });
-pauseButton.addEventListener("click", () => running && setPaused(!paused));
+document.querySelector("#choose-sortie").addEventListener("click", openSortieMenu);
+missionResultRestart.addEventListener("click", () => startSortie(currentSortie));
+missionResultChoose.addEventListener("click", openSortieMenu);
+pauseButton.addEventListener("click", () => running && !missionTerminal && setPaused(!paused));
 targetButton.addEventListener("click", () => { if (running && !paused) cycleTarget(1); });
 padlockButton.addEventListener("click", () => togglePadlock());
 scoopsButton.addEventListener("click", () => { scoops = !scoops; scoopsButton.setAttribute("aria-pressed", String(scoops)); });
@@ -477,8 +617,21 @@ soundButton.addEventListener("click", () => {
 for (const type of ["pointerdown", "touchstart"]) dropButton.addEventListener(type, (event) => { event.preventDefault(); drop = true; dropButton.classList.add("active"); }, { passive: false });
 for (const type of ["pointerup", "pointercancel", "touchend"]) dropButton.addEventListener(type, () => { drop = false; dropButton.classList.remove("active"); });
 window.addEventListener("keydown", (event) => {
+  if (event.code === "Tab" && trapDialogTab(event)) return;
+  if (event.code === "Escape") {
+    if (missionTerminal) return;
+    if (running) {
+      event.preventDefault();
+      setPaused(!paused);
+    }
+    return;
+  }
+  if (event.code === "KeyR" && !event.repeat && (running || missionTerminal)) {
+    startSortie(currentSortie);
+    return;
+  }
+  if (missionTerminal || !running || paused) return;
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Tab"].includes(event.code)) event.preventDefault();
-  if (event.code === "Escape") { event.preventDefault(); if (running) setPaused(!paused); return; }
   if (event.code === "Tab" && !event.repeat && running) { cycleTarget(event.shiftKey ? -1 : 1); return; }
   if (event.code === "KeyV" && !event.repeat) { togglePadlock(); return; }
   if (event.code === "KeyM" && !event.repeat) {
@@ -486,7 +639,6 @@ window.addEventListener("keydown", (event) => {
     if (isFlightAudioEnabled() && running) armFlightAudio(okanaganFlightState(state));
     return;
   }
-  if (event.code === "KeyR" && !event.repeat && running) { startSortie(currentSortie); return; }
   if (event.code === "KeyE" && !event.repeat) { scoops = !scoops; scoopsButton.setAttribute("aria-pressed", String(scoops)); }
   if (event.code === "Space") { drop = true; dropButton.classList.add("active"); }
   if (running && !paused) armFlightAudio(okanaganFlightState(state));
@@ -548,6 +700,7 @@ async function boot() {
   status.dataset.ready = "true";
   const requested = new URLSearchParams(location.search).get("sortie");
   if (SORTIES[requested]) selectSortie(requested);
+  queueMicrotask(() => document.querySelector(`.sortie[data-sortie="${currentSortie}"]`)?.focus({ preventScroll: true }));
   lastTime = performance.now(); animationFrame = requestAnimationFrame(animate);
 }
 

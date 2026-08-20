@@ -106,6 +106,7 @@ test("cobra desktop content teaches the mission loop before the controls", () =>
     ["BREAK", "Kill the garrison and clear the point"],
     ["COVER", "Protect the inbound squad while it captures"],
     ["HOLD", "A point majority drains enemy tickets"],
+    ["RECOVER", "After the ticket result, land stable at Camp Ember"],
     ["M · MAP", "Score and captures — the fight keeps running"],
   ]);
   const flat = groups.flatMap((group) => group.rows.map((row) => row.join(" "))).join("\n");

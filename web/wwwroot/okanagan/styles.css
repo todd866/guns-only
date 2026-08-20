@@ -88,6 +88,11 @@ body.nav-open #mission-data { display:none; }
 .fuel-plan { display:flex; gap:1px; padding:1px; border:1px solid #263d42; background:#263d42; }
 .fuel-plan span { flex:1; display:flex; justify-content:space-between; gap:8px; padding:8px 10px; color:#809a98; background:#061116; font-size:9px; }
 .fuel-plan strong { color:white; }
+.preflight-controls {
+  margin:10px 0 0; padding:8px 10px; border-left:2px solid rgba(255,176,32,.72);
+  color:rgba(205,229,225,.72); background:rgba(3,14,18,.62); font-size:9px; line-height:1.55;
+}
+.preflight-controls strong { margin-right:8px; color:var(--amber); letter-spacing:.08em; }
 .menu-actions { display:flex; justify-content:space-between; align-items:center; margin-top:14px; }
 .menu-actions a, .pause-card a { color:#a8c8c3; }
 .menu-actions button, .pause-card button { padding:10px 16px; border:1px solid #a8ffc3; color:#07120b; background:var(--green); font-weight:900; cursor:pointer; }
@@ -95,6 +100,36 @@ body.nav-open #mission-data { display:none; }
 .pause-card h2 { margin:6px 0 14px; font-size:28px; }
 .pause-card button, .pause-card a { display:block; width:100%; margin:7px 0; text-align:center; }
 .control-legend { margin:12px 0; color:rgba(217,255,229,.58); font-size:8px; line-height:1.7; text-align:center; }
+
+.mission-result { z-index:22; background:rgba(2,9,13,.96); }
+.mission-result__panel {
+  width:min(760px,94vw); max-height:min(760px,92vh); overflow:auto; padding:22px;
+  border:1px solid rgba(77,255,136,.34); background:linear-gradient(150deg,#0b1d22,#061015 72%);
+  box-shadow:0 24px 90px #000, inset 0 0 0 1px rgba(255,255,255,.025);
+}
+.mission-result__panel[data-outcome="failed"] { border-color:rgba(255,176,32,.64); }
+.mission-result__kicker { margin:0; color:var(--green); font-size:10px; font-weight:800; letter-spacing:.16em; }
+.mission-result__panel[data-outcome="failed"] .mission-result__kicker { color:var(--amber); }
+.mission-result__title { margin:7px 0 8px; color:#f4faf8; font:750 clamp(28px,5vw,46px)/1 system-ui,sans-serif; }
+.mission-result__summary { max-width:68ch; margin:0 0 16px; color:#a8bfbc; font-size:11px; line-height:1.55; }
+.mission-result__facts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; margin:0; background:#294047; border:1px solid #294047; }
+.mission-result__fact { min-height:64px; padding:9px 10px; background:#061116; }
+.mission-result__fact dt { color:#718d89; font-size:8px; font-weight:800; letter-spacing:.08em; }
+.mission-result__fact dd { margin:8px 0 0; color:#e8f7f2; font-size:13px; font-weight:800; }
+.mission-result__fact[data-tone="caution"] dd { color:var(--amber); }
+.mission-result__correction {
+  display:grid; grid-template-columns:auto 1fr; gap:12px; margin:12px 0 0; padding:10px 11px;
+  border-left:2px solid var(--amber); color:#c9ddda; background:rgba(2,11,15,.72);
+  font-size:10px; line-height:1.45;
+}
+.mission-result__correction strong { color:var(--amber); font-size:9px; letter-spacing:.1em; }
+.mission-result__actions { display:grid; grid-template-columns:1.15fr 1fr 1fr; gap:8px; margin-top:16px; }
+.mission-action {
+  display:grid; min-height:42px; place-items:center; padding:9px 12px; border:1px solid #49635f;
+  color:#d5e8e4; background:#0a191d; text-align:center; text-decoration:none; font-weight:850; cursor:pointer;
+}
+.mission-action--primary { border-color:#a8ffc3; color:#07120b; background:var(--green); }
+.mission-action:focus-visible { outline:2px solid var(--amber); outline-offset:2px; }
 body.paused .viewport > :not(#scene):not(#hud):not(.overlay) { filter:saturate(.7); }
 
 @media (pointer:coarse) {
@@ -112,4 +147,8 @@ body.paused .viewport > :not(#scene):not(#hud):not(.overlay) { filter:saturate(.
   #map { width:170px; height:136px; }
   #cue { max-width:64vw; top:calc(env(safe-area-inset-top,0px) + 96px); }
   #mission-data { min-width:136px; font-size:8px; }
+  .preflight-controls { font-size:8px; }
+  .mission-result__facts { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .mission-result__correction { grid-template-columns:1fr; gap:4px; }
+  .mission-result__actions { grid-template-columns:1fr; }
 }

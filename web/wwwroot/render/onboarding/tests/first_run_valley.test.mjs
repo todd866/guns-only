@@ -7,6 +7,7 @@ import {
   markFirstRunValleySeen,
   shouldAutoStartFirstRunValley,
   touchFireAriaLabel,
+  touchFireVisibleLabel,
 } from "../first_run_valley.js";
 
 function memoryStorage(initial = {}) {
@@ -105,7 +106,7 @@ test("menu=1 wins over an unseen first visit, but firstRun=1 wins over menu", ()
   }), false, "explicit picker request is the stronger product door");
 });
 
-test("touch FIRE stays labelled FIRE; aria-label names heaters only while they remain", () => {
+test("touch Fire names the weapon that the overloaded control will actually release", () => {
   assert.equal(touchFireAriaLabel({
     mission_definition_id: "mission.modern.visual-merge.first-run-valley.v1",
     aim9_remaining: 2,
@@ -122,4 +123,16 @@ test("touch FIRE stays labelled FIRE; aria-label names heaters only while they r
     presentation_theme: "top-gun-anime-1986",
     aim9_remaining: 2,
   }), "Fire guns", "Top Gun keeps F/FIRE as guns; R is Fox-2");
+  assert.equal(touchFireVisibleLabel({
+    mission_definition_id: "mission.modern.visual-merge.first-run-valley.v1",
+    aim9_remaining: 2,
+  }), "FOX 2");
+  assert.equal(touchFireVisibleLabel({
+    mission_definition_id: "mission.modern.visual-merge.first-run-valley.v1",
+    aim9_remaining: 0,
+  }), "GUNS");
+  assert.equal(touchFireVisibleLabel({
+    mission_definition_id: "mission.top-gun.dact.v1",
+    aim9_remaining: 2,
+  }), "FIRE");
 });

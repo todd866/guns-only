@@ -78,6 +78,10 @@ public sealed class WeekendRideMissionRuntime
     public double? DeltaToBestSeconds =>
         _lapTiming.DeltaToBestSeconds(_lapProgressM, Circuit.CircuitLengthM);
     public int LapCount => _circuitQueryState.LapIndex;
+    /// <summary>
+    /// Session-cumulative seconds outside the painted circuit. Grid recovery abandons the
+    /// current lap but never erases this debrief evidence; only a new mission begins at zero.
+    /// </summary>
     public double OffTrackSeconds => _offTrackSeconds;
     public bool IsOnTrack => _isOnTrack;
 
@@ -193,10 +197,10 @@ public sealed class WeekendRideMissionRuntime
         _riderController.Reset();
         _circuitQueryState = default;
         // A recovery drops the lap in progress but never the best or the history: you lose the
-        // lap you crashed on, not the session.
+        // lap you crashed on, not the session. Off-track time is session evidence too and must
+        // survive the recovery so the debrief cannot claim a clean ride after a reset.
         _lapTiming.AbandonCurrentLap();
         _currentLapElapsedSeconds = 0.0;
-        _offTrackSeconds = 0.0;
         _lapTimingActive = false;
         _isOnTrack = true;
     }

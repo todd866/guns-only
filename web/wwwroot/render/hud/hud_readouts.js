@@ -362,6 +362,32 @@ export function targetRangeReadout(value) {
 export function visualMergeWeaponsCue(state = {}) {
   if (state.visual_merge_evaluation !== true
       || state.terminal_phase_active === true || state.finished === true) return null;
+  const firstRunValley = state.mission_definition_id
+    === "mission.modern.visual-merge.first-run-valley.v1";
+  if (firstRunValley) {
+    const aim9Remaining = Math.max(0, Math.trunc(finiteNumber(state.aim9_remaining) ?? 0));
+    if (state.player_rtb_active === true) {
+      return { text: "RTB · FOLLOW THE ROUTE", level: "normal" };
+    }
+    if (state.weapons_inhibited === true) {
+      return { text: "FOLLOW VALLEY · WEAPONS SAFE", level: "caution" };
+    }
+    if (aim9Remaining > 0) {
+      if (state.aim9_in_flight === true) {
+        return { text: "FOX TWO IN FLIGHT · TRACK", level: "normal" };
+      }
+      return {
+        text: `FOX TWO ×${aim9Remaining} · FIRE`,
+        level: "normal",
+      };
+    }
+    return {
+      text: state.rtb_available === true
+        ? "GUNS · FIRE / RTB · O"
+        : "GUNS · FIRE · SPLASH TARGET",
+      level: "normal",
+    };
+  }
   if (state.weapons_inhibited === true) {
     return { text: "GUNS SAFE · FIRST PASS", level: "caution" };
   }

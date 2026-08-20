@@ -4,6 +4,8 @@ import {
   loadRideBest,
   saveRideBest,
 } from "../render/ride/ride_best_lap_store.js?v=343";
+import { weekendRideResult } from "../render/ride/weekend_ride_result.js?v=343";
+import { weekendRideEscapeAction } from "../render/ride/weekend_ride_lifecycle.js?v=343";
 import {
   dominantSignedAxis,
   gamepadRiderAxes,
@@ -30,6 +32,30 @@ const hudCanvas = document.querySelector("#hud");
 const viewport = document.querySelector(".viewport");
 const status = document.querySelector("#status");
 const statusText = status.querySelector("span");
+const pauseButton = document.querySelector("#pause-button");
+const pauseMenu = document.querySelector("#pause-menu");
+const pauseResume = document.querySelector("#pause-resume");
+const pauseEnd = document.querySelector("#pause-end");
+const rideResult = document.querySelector("#ride-result");
+const resultTitle = document.querySelector("#result-title");
+const resultVerdict = document.querySelector("#result-verdict");
+const resultSummary = document.querySelector("#result-summary");
+const resultCorrection = document.querySelector("#result-correction");
+const resultRetry = document.querySelector("#result-retry");
+const resultMetricNodes = new Map([
+  ["LAPS", document.querySelector("#result-laps")],
+  ["LAST", document.querySelector("#result-last")],
+  ["RECORD", document.querySelector("#result-record")],
+  ["OPEN LAP", document.querySelector("#result-open-lap")],
+  ["OFF TRACK", document.querySelector("#result-off-track")],
+]);
+const resultSectorNodes = [1, 2, 3, 4]
+  .map((sector) => document.querySelector(`#result-sector-${sector}`));
+const missionBackground = [
+  document.querySelector(".topbar"),
+  document.querySelector("aside"),
+  viewport,
+].filter(Boolean);
 
 // QUALITY TIER. This page had none — no budget, no tier, no shed path (render-architecture §5).
 // The three signals are the same ones app.js:1200-1227 reads, and the conservative reading is the
@@ -231,6 +257,7 @@ const helmetHud = new HelmetHud(hudCanvas);
 
 let bridge = null;
 let persistedBestSeconds = null;
+let recordAtStartSeconds = null;
 /** Identity of the circuit a stored best belongs to; set once the circuit is known. */
 let rideCircuitIdentity = null;
 
@@ -260,6 +287,8 @@ function persistBestLapIfImproved(state) {
 }
 let snapshot = null;
 let paused = false;
+let terminal = false;
+let tornDown = false;
 let manualClutch = false;
 let rawPhysics = false;
 let trackDayPresentation = null;
@@ -319,6 +348,97 @@ function setStatus(message, state = "loading") {
   statusText.textContent = message;
   status.dataset.ready = state === "ready" ? "true" : "false";
   status.dataset.error = state === "error" ? "true" : "false";
+  status.dataset.result = state === "result" ? "true" : "false";
+}
+
+function releaseRideControls() {
+  keys.clear();
+  bridge?.SetControls(0, 0, 0, 0, 0, 1);
+}
+
+function setMissionBackgroundInert(inert) {
+  for (const node of missionBackground) node.inert = inert === true;
+}
+
+function setRidePaused(next, { focus = true } = {}) {
+  if (!bridge || terminal) return false;
+  const shouldPause = next === true;
+  if (paused === shouldPause) return false;
+  paused = shouldPause;
+  bridge.SetPaused(paused);
+  refreshSnapshot();
+  document.body.dataset.paused = String(paused);
+  pauseMenu.hidden = !paused;
+  setMissionBackgroundInert(paused);
+  pauseButton.setAttribute("aria-pressed", String(paused));
+  pauseButton.textContent = paused ? "Resume" : "Pause";
+  if (paused) {
+    releaseRideControls();
+    if (focus) queueMicrotask(() => pauseResume?.focus({ preventScroll: true }));
+  } else {
+    lastTimeMs = performance.now();
+    if (focus) canvas.focus?.({ preventScroll: true });
+  }
+  return true;
+}
+
+function showRideResult(state) {
+  if (!state || terminal) return false;
+  terminal = true;
+  paused = false;
+  releaseRideControls();
+  onboarding?.dismiss();
+  document.body.dataset.paused = "false";
+  document.body.dataset.terminal = "true";
+  setMissionBackgroundInert(true);
+  pauseMenu.hidden = true;
+  pauseButton.disabled = true;
+  pauseButton.setAttribute("aria-pressed", "false");
+  pauseButton.textContent = "Complete";
+
+  const result = weekendRideResult(state, { recordAtStartSeconds });
+  resultTitle.textContent = result.title;
+  resultVerdict.textContent = result.verdict;
+  resultSummary.textContent = result.summary;
+  resultCorrection.textContent = result.correction;
+  for (const metric of result.metrics) {
+    const node = resultMetricNodes.get(metric.label);
+    if (!node) continue;
+    node.textContent = metric.value;
+    if (metric.tone) node.dataset.tone = metric.tone;
+    else node.removeAttribute("data-tone");
+  }
+  result.sectors.forEach((value, index) => {
+    if (resultSectorNodes[index]) resultSectorNodes[index].textContent = value;
+  });
+  window.__gunsOnlyWeekendResult = result;
+  rideResult.hidden = false;
+  setStatus(result.title, "result");
+  queueMicrotask(() => resultRetry?.focus({ preventScroll: true }));
+  return true;
+}
+
+function endRide() {
+  if (!bridge || terminal) return false;
+  bridge.EndRide();
+  const state = refreshSnapshot();
+  persistBestLapIfImproved(state);
+  return showRideResult(state);
+}
+
+function trapDialogFocus(dialog, event) {
+  if (event.code !== "Tab") return;
+  const focusable = Array.from(dialog.querySelectorAll("button:not([disabled]), a[href]"));
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus({ preventScroll: true });
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus({ preventScroll: true });
+  }
 }
 
 function resize() {
@@ -407,7 +527,7 @@ function axisValue(positiveCode, negativeCode) {
 }
 
 function sendControls() {
-  if (!bridge || paused) return;
+  if (!bridge || paused || terminal) return;
   const gamepad = Array.from(navigator.getGamepads?.() ?? [])
     .find((candidate) => candidate?.connected);
   const analog = gamepadRiderAxes(gamepad);
@@ -449,7 +569,7 @@ function animate(timeMs) {
   if (!bridge) return;
 
   sendControls();
-  if (!paused) bridge.Advance(deltaSeconds);
+  if (!paused && !terminal) bridge.Advance(deltaSeconds);
   const state = refreshSnapshot();
   if (!state) return;
 
@@ -462,7 +582,7 @@ function animate(timeMs) {
   recordRideTelemetry(timeMs, state, rawFrameMs);
 
   if (state.phase === "finished") {
-    setStatus("RIDE FINISHED", "error");
+    showRideResult(state);
   } else if ((state.tip_recovery_flash_s ?? 0) > 0) {
     setStatus("TIP-OVER · RECOVERED", "error");
   } else if (paused) {
@@ -487,11 +607,21 @@ function isControlKey(code) {
 window.addEventListener("keydown", (event) => {
   if (event.code === "Escape") {
     event.preventDefault();
-    if (!bridge) return;
-    paused = !paused;
-    bridge.SetPaused(paused);
+    event.stopPropagation();
+    const action = weekendRideEscapeAction({
+      onboardingOpen: onboarding?.isOpen() === true,
+      paused,
+      terminal,
+    });
+    if (action === "dismiss-onboarding") {
+      onboarding.dismiss();
+      return;
+    }
+    if (!bridge || action === "noop") return;
+    setRidePaused(action === "pause");
     return;
   }
+  if (terminal || paused) return;
   if (event.code === "KeyR") {
     event.preventDefault();
     bridge?.ResetToGrid();
@@ -526,7 +656,35 @@ window.addEventListener("keydown", (event) => {
   if (!isControlKey(event.code)) return;
   event.preventDefault();
   keys.add(event.code);
-});
+}, true);
+
+pauseButton?.addEventListener("click", () => setRidePaused(!paused));
+pauseResume?.addEventListener("click", () => setRidePaused(false));
+pauseEnd?.addEventListener("click", endRide);
+pauseMenu?.addEventListener("keydown", (event) => trapDialogFocus(pauseMenu, event));
+rideResult?.addEventListener("keydown", (event) => trapDialogFocus(rideResult, event));
+
+function teardownRide(reason) {
+  if (tornDown) return;
+  tornDown = true;
+  cancelAnimationFrame(animationFrame);
+  animationFrame = 0;
+  setMissionBackgroundInert(false);
+  releaseRideControls();
+  telemetryChannel.flush({ [reason]: true });
+  onboarding?.dispose();
+  onboarding = null;
+  trackDayPresentation?.dispose();
+  trackDayPresentation = null;
+  renderer.dispose();
+}
+
+function rideAgain() {
+  teardownRide("ride_again");
+  window.location.reload();
+}
+
+resultRetry?.addEventListener("click", rideAgain);
 
 window.addEventListener("keyup", (event) => keys.delete(event.code));
 window.addEventListener("blur", () => keys.clear());
@@ -537,12 +695,7 @@ canvas.addEventListener("webglcontextlost", (event) => {
   setStatus("WebGL context lost — reload the ride", "error");
 });
 
-window.addEventListener("pagehide", () => {
-  cancelAnimationFrame(animationFrame);
-  telemetryChannel.flush({ pagehide: true });
-  trackDayPresentation?.dispose();
-  renderer.dispose();
-}, { once: true });
+window.addEventListener("pagehide", () => teardownRide("pagehide"), { once: true });
 
 async function boot() {
   resize();
@@ -576,15 +729,6 @@ async function boot() {
     const assemblyExports = await getAssemblyExports("GunsOnly.Web");
     bridge = assemblyExports.GunsOnly.Web.MotorcycleWebBridge;
     bridge.Start();
-    // Chase your real record, not just today's: a best carried over from a previous session
-    // seeds the sim so the delta compares against it. A refused seed simply means no best.
-    const storedBest = loadRideBest(safeLocalStorage(), rideCircuitIdentity);
-    if (storedBest && bridge.SeedBestLap(
-      storedBest.bestLapSeconds, storedBest.splitProfile)) {
-      // Record what is already on disk, or the first frames would rewrite the same best —
-      // and if storage is throwing, retry that write on EVERY frame forever.
-      persistedBestSeconds = storedBest.bestLapSeconds;
-    }
     snapshot = refreshSnapshot();
     // The centreline is immutable: fetch it once instead of re-marshalling ~1,700
     // points inside every per-frame GetState snapshot.
@@ -593,8 +737,24 @@ async function boot() {
       circuitId: "rapier-strip-weekend",
       circuitLengthM: Number(snapshot?.circuit_length_m) || circuitPoints.length,
     };
+    // Chase your real record, not just today's: a best carried over from a previous session
+    // seeds the sim so the delta compares against it. A refused seed simply means no best.
+    const storedBest = loadRideBest(safeLocalStorage(), rideCircuitIdentity);
+    if (storedBest && bridge.SeedBestLap(
+      storedBest.bestLapSeconds, storedBest.splitProfile)) {
+      // Record what is already on disk, or the first frames would rewrite the same best —
+      // and if storage is throwing, retry that write on EVERY frame forever.
+      persistedBestSeconds = storedBest.bestLapSeconds;
+      recordAtStartSeconds = storedBest.bestLapSeconds;
+    }
+    snapshot = refreshSnapshot();
     buildTrackDayPresentation(circuitPoints);
     manualClutch = snapshot.clutch_mode === "manual";
+    terminal = false;
+    paused = false;
+    document.body.dataset.paused = "false";
+    document.body.dataset.terminal = "false";
+    pauseButton.disabled = false;
     setStatus("RAPIER TRACK DAY · RIDER REFLEX ASSIST", "ready");
     onboarding = createControlsOnboarding({
       modeId: WEEKEND_RIDE_ONBOARDING_CONTENT.modeId,

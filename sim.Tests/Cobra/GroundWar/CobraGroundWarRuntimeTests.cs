@@ -923,26 +923,72 @@ public class CobraGroundWarRuntimeTests
         Assert.Equal(1.0, war.VictoryHoldProgress, 6);
     }
 
-    [Fact]
-    public void MissionRuntimeTerminalizesOnHoldTheBridgeVictory()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void StrategicOutcomeStaysFlyableThroughRtbUntilStableCampEmberRecovery(
+        bool victory)
     {
-        CobraMissionRuntime runtime = CreateEngagedMission(seed: 9);
-        double collective = runtime.Cobra.EstimateHoverCollective(
-            runtime.Cobra.State.GrossMassKg,
-            CobraMissionRuntime.DefaultAirDensityKgM3);
-        var command = new VerticalLiftPilotCommand(collective, 0.0, 0.0, 0.0);
-        // Victory is now a ticket question: pin every point friendly and let the bleed run. The
-        // whole point of driving it through CobraMissionRuntime is that the ground war steps at
-        // its own strategic cadence — a tick-counted bleed would never terminalize here.
-        foreach (ContestedSite site in runtime.GroundWar.Sites)
-            runtime.GroundWar.OverrideSiteOccupancyForTests(site.Id, friendly: 1, hostile: 0);
-        int maxTicks = (int)Math.Round(400.0 / PlayerVehicleContract.FixedDeltaSeconds);
-        for (int tick = 0;
-            tick < maxTicks && runtime.Status == CobraMissionStatus.Active;
-            tick++)
-            runtime.Advance(command);
+        var runtime = new CobraMissionRuntime(
+            CobraCanyonDefinition.Create(),
+            new FlatTerrain(),
+            CobraCanyonRouteChoice.RiverGorge,
+            groundWarSeed: 9);
+        foreach (ContestedSite site in runtime.GroundWar.Sites) {
+            bool campEmber = site.Id == "site.camp-ember.v1";
+            runtime.GroundWar.OverrideSiteOccupancyForTests(
+                site.Id,
+                friendly: victory || campEmber ? 1 : 0,
+                hostile: victory || campEmber ? 0 : 1);
+        }
 
-        Assert.Equal(CobraMissionStatus.Victory, runtime.Status);
-        Assert.Equal(HoldTheBridgeOutcome.Victory, runtime.GroundWar.MissionOutcome);
+        // Resolve the strategic fight directly while the aircraft is staged at Camp Ember. The
+        // mission runtime then owns the player-facing transition: outcome -> RTB -> recovery.
+        // Keeping the fixture on the pad lets the test prove the stable-contact gate without a
+        // test-only teleport seam in the flight provider.
+        HoldTheBridgeOutcome expectedOutcome = victory
+            ? HoldTheBridgeOutcome.Victory
+            : HoldTheBridgeOutcome.Defeat;
+        const double strategicStepSeconds = 0.25;
+        int maxSteps = (int)Math.Round(400.0 / strategicStepSeconds);
+        for (int step = 0;
+            step < maxSteps && runtime.GroundWar.MissionOutcome == HoldTheBridgeOutcome.Pending;
+            step++)
+            runtime.GroundWar.Advance(strategicStepSeconds);
+
+        Assert.Equal(expectedOutcome, runtime.GroundWar.MissionOutcome);
+        long frozenGroundWarTick = runtime.GroundWar.AuthorityTick;
+        var groundedCommand = new VerticalLiftPilotCommand(0.0, 0.0, 0.0, 0.0);
+
+        runtime.Advance(groundedCommand);
+
+        Assert.Equal(CobraMissionStatus.Active, runtime.Status);
+        Assert.Equal(CobraMissionAct.Rtb, runtime.Act);
+        Assert.True(runtime.MissionFlyable);
+        Assert.True(runtime.Diagnostics.MissionFlyable);
+        Assert.False(runtime.GroundWarCombatLive);
+        Assert.Equal(frozenGroundWarTick, runtime.GroundWar.AuthorityTick);
+
+        for (int tick = 0;
+            tick < 5 * PlayerVehicleContract.FixedStepHz
+                && runtime.Status == CobraMissionStatus.Active;
+            tick++) {
+            runtime.Advance(groundedCommand);
+            if (runtime.Status == CobraMissionStatus.Active) {
+                Assert.Equal(CobraMissionAct.Rtb, runtime.Act);
+                Assert.True(runtime.MissionFlyable);
+            }
+        }
+
+        Assert.Equal(
+            victory ? CobraMissionStatus.Victory : CobraMissionStatus.Defeat,
+            runtime.Status);
+        Assert.Equal(CobraMissionAct.Complete, runtime.Act);
+        Assert.Equal(
+            VehicleContactKind.StableSurfaceContact,
+            runtime.Cobra.Observation.Contact.Kind);
+        Assert.False(runtime.MissionFlyable);
+        Assert.False(runtime.Diagnostics.MissionFlyable);
+        Assert.Equal(frozenGroundWarTick, runtime.GroundWar.AuthorityTick);
     }
 }

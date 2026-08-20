@@ -37,6 +37,7 @@ import {
   markFirstRunValleySeen,
   shouldAutoStartFirstRunValley,
   touchFireAriaLabel,
+  touchFireVisibleLabel,
 } from "./render/onboarding/first_run_valley.js?v=343";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
@@ -3329,6 +3330,7 @@ function syncMobileControlProfile(state) {
   if (touchFireButton) {
     touchFireButton.hidden = casevac || !profile.fire;
     touchFireButton.setAttribute("aria-label", touchFireAriaLabel(state));
+    touchFireButton.textContent = touchFireVisibleLabel(state);
   }
   if (touchGcasPaddle) {
     touchGcasPaddle.hidden = !profile.gcasOverride;
@@ -3523,24 +3525,24 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   "cobra-lab": Object.freeze({
     kicker: "Cobra Canyon · Hold the Bridge",
     title: "Hold the Bridge",
-    sortie: "AH-1G · River Gorge conquest · four points · tickets",
-    configuration: "AH-1G flight-foundation authority · four capture points · dug-in garrisons · finite M134 · Camp Ember rearm · win/lose on tickets",
-    brief: "Four points hold the valley and you start with one. Each hostile point is held by a dug-in garrison that ground fire cannot touch — breaking it open is the only thing your gun can do that nobody else can, and friendly infantry take the point once it is clear. Holding more points than they do bleeds their tickets to zero. Press M for the map.",
-    controls: "W/S collective · arrows cyclic · A/D yaw · Tab target · F gunner consent · M tactical map · Camp Ember pad to rearm",
+    sortie: "AH-1G · River Gorge conquest · ticket result · Camp Ember recovery",
+    configuration: "AH-1G flight-foundation authority · four capture points · dug-in garrisons · finite M134 · Camp Ember rearm and stable recovery",
+    brief: "Four points hold the valley and you start with one. Each hostile point is held by a dug-in garrison that ground fire cannot touch — breaking it open is the only thing your gun can do that nobody else can, and friendly infantry take the point once it is clear. Holding more points than they do bleeds their tickets to zero and decides the battle. Then return to Camp Ember and settle on the pad to close the sortie. Press M for the map.",
+    controls: "W/S collective · arrows cyclic · A/D yaw · Tab target · F gunner consent · M tactical map · Camp Ember pad to rearm and recover",
   }),
   "weekend-ride": Object.freeze({
     kicker: "Off duty · 10,000 ft runway",
     title: "Weekend Ride",
-    sortie: "YZF-R1 · painted circuit · free drive",
+    sortie: "YZF-R1 · painted circuit · open lapping session",
     configuration: "Yamaha YZF-R1 · helmet view · sequential gearbox · no combat",
-    brief: "Fighter pilots ride on weekends. The Rapier strip becomes a painted circuit for a liter-bike free ride—split authority for throttle, brake, steer, and rider weight. Fly opens the dedicated Weekend Ride surface.",
-    controls: "W/S throttle/brake · A/D steer · arrows rider weight · Q/E gears · C auto/manual clutch · R reset",
+    brief: "Fighter pilots ride on weekends. The Rapier strip becomes a painted circuit for an open liter-bike session—split authority for throttle, brake, steer, and rider weight. Keep lapping or end the ride from pause when you are ready to review the session.",
+    controls: "W/S throttle/brake · A/D steer · arrows rider weight · Q/E gears · C auto/manual clutch · R reset · Esc pauses / End Ride",
   }),
   "top-gun": Object.freeze({
     kicker: "1986 · training range",
     title: "Top Gun",
     sortie: "F-14A vs MiG-28 · guns and Sidewinders · DACT arena",
-     configuration: "F-14A · M61 + AIM-9 · anime-1986 presentation · preview with ?preview=1",
+     configuration: "F-14A · M61 + AIM-9 · anime-1986 presentation · production programme",
      brief: "Fly the Tomcat against MiG-28 aggressors over a Miramar-class training range—guns and heaters against an escalating stream. After a splash, stay for the next jet or choose RTB TO CARRIER, then fly the taught Case I pattern: initial, break, downwind, approach turn and groove.",
      controls: "Arrows fly · W/S power · F guns · R fox-two · V padlock · Tab target\nNavigation opens after a splash with the carrier RTB choice",
   }),
