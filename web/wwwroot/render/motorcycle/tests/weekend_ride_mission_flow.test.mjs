@@ -79,3 +79,27 @@ test("dialogs make the background inert and restore focus to the ride surface", 
   assert.match(styles, /\.mission-overlay[\s\S]*?inset: 0;/u);
   assert.match(styles, /body\[data-terminal="true"\] #controls-onboarding-reopen/u);
 });
+
+test("Weekend Ride owns one shared audio lifecycle from gesture through debrief", async () => {
+  const [main, html] = await Promise.all([
+    source("weekend-ride/main.js"),
+    source("weekend-ride/index.html"),
+  ]);
+
+  assert.match(main,
+    /import \{[\s\S]*?armFlightAudio,[\s\S]*?setFlightAudioEnabled,[\s\S]*?suspendFlightAudio,[\s\S]*?updateFlightAudio,[\s\S]*?\} from "\.\.\/render\/audio\/flight_audio\.js\?v=344"/u);
+  assert.match(main, /audio_profile_id = "audio\.yzf-r1\.crossplane\.v1"/u);
+  assert.match(main, /updateFlightAudio\(state, \{[\s\S]*?muted: paused \|\| terminal \|\| !playerSettings\.audio/u);
+  assert.match(main, /pointerdown", armAudioFromGesture/u);
+  assert.match(main, /keydown", armAudioFromGesture/u);
+  assert.match(main, /suspendFlightAudio\("weekend-ride-paused"\)/u);
+  assert.match(main, /suspendFlightAudio\("weekend-ride-result"\)/u);
+  assert.match(main, /function teardownRide\(reason\)[\s\S]*?suspendFlightAudio\(reason\)/u);
+
+  assert.match(html, /id="sound-button"[^>]*aria-pressed="true"/u);
+  assert.match(main, /savePlayerSettings\([\s\S]*?audio: Boolean\(nextEnabled\)/u);
+  assert.match(main, /event\.code === "KeyM"[\s\S]*?setWeekendAudioEnabled/u);
+  assert.match(main, /ride_engine_rpm: state\.rpm/u,
+    "audio tuning telemetry must read the projected authority field");
+  assert.doesNotMatch(main, /ride_engine_rpm: state\.engine_rpm/u);
+});

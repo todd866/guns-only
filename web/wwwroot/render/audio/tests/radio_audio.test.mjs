@@ -309,13 +309,20 @@ test("a stale clip id with different words fails silent", async () => {
   assert.equal(voice.source, null);
 });
 
-test("new radio sequence opens squelch once and only lightly ducks propulsion", async () => {
-  const { createRadioVoice, updateRadioVoice } = await import("../radio_audio.js?radio=sequence");
+test("published radio priority owns bounded propulsion and world mix space", async () => {
+  const {
+    createRadioVoice,
+    radioPriorityMix,
+    updateRadioVoice,
+  } = await import("../radio_audio.js?radio=sequence");
   const context = new Context();
   const propulsionDuck = new Gain();
   propulsionDuck.gain.value = 1;
+  const worldDuck = new Gain();
+  worldDuck.gain.value = 1;
   const voice = createRadioVoice(context, context.destination, {
     propulsionDuck,
+    worldDuck,
     fetchImpl: authoredClip("tower-continue", "Continue.", "tower"),
   });
   const state = {
@@ -324,6 +331,7 @@ test("new radio sequence opens squelch once and only lightly ducks propulsion", 
     radio_id: "tower-continue",
     radio_text: "Continue.",
     radio_voice: "tower",
+    radio_priority: 2,
   };
 
   updateRadioVoice(voice, context, state);
@@ -331,7 +339,16 @@ test("new radio sequence opens squelch once and only lightly ducks propulsion", 
   await new Promise((resolve) => setImmediate(resolve));
 
   assert.equal(voice.squelchCount, 1);
-  assert.ok(Math.abs(propulsionDuck.gain.targets.at(-1).value - 0.52 / 0.58) < 1e-12);
+  const urgent = radioPriorityMix(state);
+  assert.equal(urgent.key, "urgent");
+  assert.ok(Math.abs(propulsionDuck.gain.targets.at(-1).value
+    - urgent.propulsionMultiplier) < 1e-12);
+  assert.ok(Math.abs(worldDuck.gain.targets.at(-1).value
+    - urgent.worldMultiplier) < 1e-12);
+  assert.ok(urgent.propulsionMultiplier < radioPriorityMix({ radio_priority: 1 })
+    .propulsionMultiplier);
+  assert.ok(radioPriorityMix({ radio_priority: 1 }).propulsionMultiplier
+    < radioPriorityMix({ radio_priority: 0 }).propulsionMultiplier);
   assert.equal(voice.highpass.type, "highpass");
   assert.equal(voice.lowpass.type, "lowpass");
   assert.equal("ground.controller.close-mic", voice.currentEquipment.talkerId);
@@ -345,8 +362,10 @@ test("mute stops a transmission and restores propulsion", async () => {
   const { createRadioVoice, updateRadioVoice } = await import("../radio_audio.js?radio=mute");
   const context = new Context();
   const propulsionDuck = new Gain();
+  const worldDuck = new Gain();
   const voice = createRadioVoice(context, context.destination, {
     propulsionDuck,
+    worldDuck,
     fetchImpl: authoredClip(
       "pilot-initial",
       "Ghost One One, initial.",
@@ -365,6 +384,7 @@ test("mute stops a transmission and restores propulsion", async () => {
 
   assert.equal(voice.enabled, false);
   assert.equal(propulsionDuck.gain.targets.at(-1).value, 1);
+  assert.equal(worldDuck.gain.targets.at(-1).value, 1);
 });
 
 test("mission reset lets sequence one play again", async () => {

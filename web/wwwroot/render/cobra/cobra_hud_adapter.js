@@ -124,6 +124,19 @@ export function cobraHudState(authorityState, pose, out = {}) {
   out.cobra_collective = finite(vehicle?.collective);
   out.cobra_advance_ratio = finite(rotorcraft?.advance_ratio);
   out.cobra_transmission_limit_fraction = finite(rotorcraft?.transmission_limit_fraction);
+  // Preserve the rotorcraft authority's causal envelope facts for the dedicated presentation
+  // graph. These are direct projections, not HUD-derived warnings: audio can therefore follow the
+  // continuous onset of disturbed inflow, blade stall, ground effect, and anti-torque workload.
+  out.cobra_vortex_ring_severity = finite(rotorcraft?.vortex_ring_severity);
+  out.cobra_retreating_blade_stall_severity = finite(
+    rotorcraft?.retreating_blade_stall_severity,
+  );
+  out.cobra_mast_bump_risk = finite(rotorcraft?.mast_bump_risk);
+  out.cobra_ground_effect_factor = finite(rotorcraft?.ground_effect_factor);
+  out.cobra_pedal = finite(vehicle?.pedal ?? vehicle?.yaw);
+  out.cobra_torque_yaw_demand_rad_s = finite(rotorcraft?.torque_yaw_demand_rad_s);
+  out.cobra_scas_yaw_rad_s = finite(rotorcraft?.scas_yaw_rad_s);
+  out.cobra_yaw_residual_rad_s = finite(rotorcraft?.yaw_residual_rad_s);
   out.cobra_engine_operating = out.engine_running;
   out.cobra_engine_power_fraction = publishedEnginePowerFraction === undefined
     ? availableShaftPowerW !== undefined && availableShaftPowerW > 0

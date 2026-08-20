@@ -1,4 +1,4 @@
-import * as THREE from "../../vendor/three.module.js?v=343";
+import * as THREE from "../../vendor/three.module.js?v=344";
 
 /** Outside-world view: no decorative cockpit frame or invented first-person aircraft mesh. */
 export function createFireBossCockpit(camera) {

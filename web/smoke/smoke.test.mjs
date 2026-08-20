@@ -826,6 +826,26 @@ test("the published Weekend Ride route boots and accepts throttle input", async 
     );
     await page.keyboard.up("w");
 
+    await page.waitForFunction(() => {
+      const root = document.documentElement.dataset;
+      const authority = window.__gunsOnlyWeekendAuthority;
+      return authority?.audio_profile_id === "audio.yzf-r1.crossplane.v1"
+        && root.audioController === "shared"
+        && root.audioContextState === "running"
+        && root.audioSignalActive === "true"
+        && root.audioQaSilent === "true"
+        && root.audioOutputGain === "0";
+    }, undefined, { timeout: scaled(10000) });
+
+    await page.keyboard.press("m");
+    await page.waitForFunction(() =>
+      document.documentElement.dataset.audioEnabled === "false"
+        && document.querySelector("#sound-button")?.getAttribute("aria-pressed") === "false");
+    await page.keyboard.press("m");
+    await page.waitForFunction(() =>
+      document.documentElement.dataset.audioEnabled === "true"
+        && document.querySelector("#sound-button")?.getAttribute("aria-pressed") === "true");
+
     const afterSpeed = await groundSpeed();
     const after = await page.evaluate(() => ({
       canvasWidth: document.querySelector("#scene")?.width ?? 0,

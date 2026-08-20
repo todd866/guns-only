@@ -8,6 +8,12 @@ function finite(value, fallback = 0) {
   return Number.isFinite(number) ? number : fallback;
 }
 
+function optionalFinite(value) {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
 }
@@ -35,7 +41,15 @@ export function okanaganFlightState(current = {}) {
   const engineRunning = fuelKg > 0 && String(current.surface ?? "") !== "destroyed";
   const blockFuelKg = Math.max(fuelKg, finite(current.fuel_plan?.block_kg, fuelKg));
   const minimumFuelKg = Math.max(0, finite(current.fuel_plan?.minimum_rtb_kg));
+  const publishedScoopRateKgps = optionalFinite(current.scoop_rate_kgps);
+  const scoopRateKgps = publishedScoopRateKgps == null
+    ? undefined
+    : Math.max(0, publishedScoopRateKgps);
   const waterReleasedKg = Math.max(0, finite(current.water_released_this_tick_kg));
+  const publishedWaterReleaseRateKgps = optionalFinite(current.water_release_rate_kgps);
+  const waterReleaseRateKgps = publishedWaterReleaseRateKgps == null
+    ? undefined
+    : Math.max(0, publishedWaterReleaseRateKgps);
   const burnKgPerSecond = 0.032 + 0.115 * throttle;
   const minutesToMinimum = Math.max(0, fuelKg - minimumFuelKg)
     / Math.max(0.001, burnKgPerSecond) / 60;
@@ -117,8 +131,12 @@ export function okanaganFlightState(current = {}) {
     fireboss_surface: String(current.surface ?? ""),
     fireboss_scoop_valid: current.scoop_valid === true,
     fireboss_scoops_commanded: current.scoops_commanded === true,
+    fireboss_scoop_rate_kgps: scoopRateKgps,
     fireboss_water_release_kg: waterReleasedKg,
-    fireboss_drop_active: waterReleasedKg > 0,
+    fireboss_water_release_rate_kgps: waterReleaseRateKgps,
+    fireboss_drop_active: waterReleaseRateKgps == null
+      ? waterReleasedKg > 0
+      : waterReleaseRateKgps > 0,
   };
 }
 

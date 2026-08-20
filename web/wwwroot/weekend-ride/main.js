@@ -1,26 +1,36 @@
-import * as THREE from "../vendor/three.module.js?v=343";
-import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=343";
+import * as THREE from "../vendor/three.module.js?v=344";
+import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=344";
 import {
   loadRideBest,
   saveRideBest,
-} from "../render/ride/ride_best_lap_store.js?v=343";
-import { weekendRideResult } from "../render/ride/weekend_ride_result.js?v=343";
-import { weekendRideEscapeAction } from "../render/ride/weekend_ride_lifecycle.js?v=343";
+} from "../render/ride/ride_best_lap_store.js?v=344";
+import { weekendRideResult } from "../render/ride/weekend_ride_result.js?v=344";
+import { weekendRideEscapeAction } from "../render/ride/weekend_ride_lifecycle.js?v=344";
 import {
   dominantSignedAxis,
   gamepadRiderAxes,
-} from "../render/motorcycle/rider_input.js?v=343";
+} from "../render/motorcycle/rider_input.js?v=344";
 import {
   createRapierTrackDayPresentation,
-} from "../render/motorcycle/track_day_presentation.js?v=343";
-import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=343";
+} from "../render/motorcycle/track_day_presentation.js?v=344";
+import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=344";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=343";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=343";
-import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=343";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=343";
-import { RELEASE_BUILD } from "../render/release/release_identity.js?v=343";
+} from "../render/visual/shadow_stabilizer.js?v=344";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=344";
+import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=344";
+import {
+  armFlightAudio,
+  setFlightAudioEnabled,
+  suspendFlightAudio,
+  updateFlightAudio,
+} from "../render/audio/flight_audio.js?v=344";
+import {
+  loadPlayerSettings,
+  savePlayerSettings,
+} from "../render/settings/player_settings.js?v=344";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=344";
+import { RELEASE_BUILD } from "../render/release/release_identity.js?v=344";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
@@ -33,6 +43,7 @@ const viewport = document.querySelector(".viewport");
 const status = document.querySelector("#status");
 const statusText = status.querySelector("span");
 const pauseButton = document.querySelector("#pause-button");
+const soundButton = document.querySelector("#sound-button");
 const pauseMenu = document.querySelector("#pause-menu");
 const pauseResume = document.querySelector("#pause-resume");
 const pauseEnd = document.querySelector("#pause-end");
@@ -286,6 +297,7 @@ function persistBestLapIfImproved(state) {
   }
 }
 let snapshot = null;
+let playerSettings = loadPlayerSettings(safeLocalStorage());
 let paused = false;
 let terminal = false;
 let tornDown = false;
@@ -316,7 +328,7 @@ function recordRideTelemetry(nowMs, state, frameMs) {
       ride_phase: state.phase,
       ride_speed_mps: Math.hypot(state.vx ?? 0, state.vy ?? 0, state.vz ?? 0),
       ride_gear: state.gear,
-      ride_engine_rpm: state.engine_rpm,
+      ride_engine_rpm: state.rpm,
       ride_lean_rad: state.lean_rad,
       ride_wheelie_rad: state.pitch_rad,
       ride_throttle: state.throttle,
@@ -351,6 +363,31 @@ function setStatus(message, state = "loading") {
   status.dataset.result = state === "result" ? "true" : "false";
 }
 
+function applyWeekendAudioIdentity(state) {
+  if (!state) return state;
+  state.audio_profile_id = "audio.yzf-r1.crossplane.v1";
+  state.player_aircraft_id = "vehicle.yzf-r1.track-day.v1";
+  return state;
+}
+
+function syncSoundControl() {
+  if (!soundButton) return;
+  soundButton.textContent = `Sound · ${playerSettings.audio ? "on" : "off"}`;
+  soundButton.setAttribute("aria-pressed", String(playerSettings.audio));
+}
+
+function setWeekendAudioEnabled(nextEnabled, { arm = false } = {}) {
+  playerSettings = savePlayerSettings({
+    ...playerSettings,
+    audio: Boolean(nextEnabled),
+  }, safeLocalStorage());
+  setFlightAudioEnabled(playerSettings.audio);
+  syncSoundControl();
+  if (arm && playerSettings.audio && snapshot)
+    armFlightAudio(applyWeekendAudioIdentity(snapshot));
+  return playerSettings.audio;
+}
+
 function releaseRideControls() {
   keys.clear();
   bridge?.SetControls(0, 0, 0, 0, 0, 1);
@@ -374,9 +411,11 @@ function setRidePaused(next, { focus = true } = {}) {
   pauseButton.textContent = paused ? "Resume" : "Pause";
   if (paused) {
     releaseRideControls();
+    suspendFlightAudio("weekend-ride-paused");
     if (focus) queueMicrotask(() => pauseResume?.focus({ preventScroll: true }));
   } else {
     lastTimeMs = performance.now();
+    if (playerSettings.audio) armFlightAudio(applyWeekendAudioIdentity(snapshot));
     if (focus) canvas.focus?.({ preventScroll: true });
   }
   return true;
@@ -387,6 +426,7 @@ function showRideResult(state) {
   terminal = true;
   paused = false;
   releaseRideControls();
+  suspendFlightAudio("weekend-ride-result");
   onboarding?.dismiss();
   document.body.dataset.paused = "false";
   document.body.dataset.terminal = "true";
@@ -550,7 +590,7 @@ function sendControls() {
 
 function refreshSnapshot() {
   if (!bridge) return null;
-  snapshot = JSON.parse(bridge.GetState());
+  snapshot = applyWeekendAudioIdentity(JSON.parse(bridge.GetState()));
   // QA seam: headless smoke scripts steer against authoritative truth, not DOM guesses.
   window.__gunsOnlyWeekendAuthority = snapshot;
   return snapshot;
@@ -572,6 +612,11 @@ function animate(timeMs) {
   if (!paused && !terminal) bridge.Advance(deltaSeconds);
   const state = refreshSnapshot();
   if (!state) return;
+
+  updateFlightAudio(state, {
+    muted: paused || terminal || !playerSettings.audio,
+    nowSeconds: timeMs / 1_000,
+  });
 
   syncCamera(state);
   updateShadowFrame();
@@ -621,6 +666,11 @@ window.addEventListener("keydown", (event) => {
     setRidePaused(action === "pause");
     return;
   }
+  if (event.code === "KeyM" && !event.repeat && !terminal && !paused) {
+    event.preventDefault();
+    setWeekendAudioEnabled(!playerSettings.audio, { arm: true });
+    return;
+  }
   if (terminal || paused) return;
   if (event.code === "KeyR") {
     event.preventDefault();
@@ -659,6 +709,8 @@ window.addEventListener("keydown", (event) => {
 }, true);
 
 pauseButton?.addEventListener("click", () => setRidePaused(!paused));
+soundButton?.addEventListener("click", () =>
+  setWeekendAudioEnabled(!playerSettings.audio, { arm: true }));
 pauseResume?.addEventListener("click", () => setRidePaused(false));
 pauseEnd?.addEventListener("click", endRide);
 pauseMenu?.addEventListener("keydown", (event) => trapDialogFocus(pauseMenu, event));
@@ -671,6 +723,7 @@ function teardownRide(reason) {
   animationFrame = 0;
   setMissionBackgroundInert(false);
   releaseRideControls();
+  suspendFlightAudio(reason);
   telemetryChannel.flush({ [reason]: true });
   onboarding?.dispose();
   onboarding = null;
@@ -755,6 +808,8 @@ async function boot() {
     document.body.dataset.paused = "false";
     document.body.dataset.terminal = "false";
     pauseButton.disabled = false;
+    soundButton.disabled = false;
+    setWeekendAudioEnabled(playerSettings.audio);
     setStatus("RAPIER TRACK DAY · RIDER REFLEX ASSIST", "ready");
     onboarding = createControlsOnboarding({
       modeId: WEEKEND_RIDE_ONBOARDING_CONTENT.modeId,
@@ -771,5 +826,12 @@ async function boot() {
     setStatus(`Weekend ride failed: ${error.message}`, "error");
   }
 }
+
+const armAudioFromGesture = () => {
+  if (playerSettings.audio && snapshot)
+    armFlightAudio(applyWeekendAudioIdentity(snapshot));
+};
+window.addEventListener("pointerdown", armAudioFromGesture, { capture: true, passive: true });
+window.addEventListener("keydown", armAudioFromGesture, { capture: true, passive: true });
 
 boot();

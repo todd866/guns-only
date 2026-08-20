@@ -8,7 +8,7 @@
   <base href="/">
   <title>Guns Only · YZF-R1 Weekend Ride</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/weekend-ride/styles.css?v=343">
+  <link rel="stylesheet" href="/weekend-ride/styles.css?v=344">
 </head>
 <body>
   <header class="topbar">
@@ -18,6 +18,8 @@
     </div>
     <div class="top-actions">
       <p id="status" aria-live="polite"><i></i><span>Loading YZF-R1 runtime…</span></p>
+      <button id="sound-button" class="mission-control" type="button" aria-pressed="true"
+        disabled>Sound · on</button>
       <button id="pause-button" class="mission-control" type="button" aria-pressed="false"
         aria-controls="pause-menu" disabled>Pause</button>
     </div>
@@ -28,7 +30,7 @@
       <section class="instructions">
         <span class="eyebrow">Rapier airfield track day</span>
         <h2>YZF-R1 · Painted circuit</h2>
-        <p><kbd>W</kbd>/<kbd>S</kbd> throttle/brake · <kbd>A</kbd>/<kbd>D</kbd> turn · arrows body bias · <kbd>Q</kbd>/<kbd>E</kbd> shift · <kbd>Shift</kbd> clutch (manual) · <kbd>C</kbd> auto/manual · <kbd>T</kbd> assisted/raw physics · <kbd>R</kbd> reset · <kbd>Esc</kbd> pause.</p>
+        <p><kbd>W</kbd>/<kbd>S</kbd> throttle/brake · <kbd>A</kbd>/<kbd>D</kbd> turn · arrows body bias · <kbd>Q</kbd>/<kbd>E</kbd> shift · <kbd>Shift</kbd> clutch (manual) · <kbd>C</kbd> auto/manual · <kbd>T</kbd> assisted/raw physics · <kbd>M</kbd> sound · <kbd>R</kbd> reset · <kbd>Esc</kbd> pause.</p>
         <p>Gamepad: left stick turns, right stick biases the rider, triggers brake and accelerate.</p>
         <p class="honesty">Curbs, cones, tyre walls, marshal posts and the paddock mark a temporary runway circuit. Assisted mode models the rider's delayed, rate-limited stabilizing reflexes; raw mode exposes the same tire-limited bike without intervention.</p>
       </section>
@@ -87,7 +89,7 @@
 
   <script>
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=343", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=344", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -117,7 +119,7 @@
         const script = document.createElement("script");
         // Loader from site root + <base href="/"> so boot resources resolve to /_framework/*,
         // not /weekend-ride/_framework/* (Medevac pattern).
-        script.src = "/_framework/blazor.webassembly.js?v=343";
+        script.src = "/_framework/blazor.webassembly.js?v=344";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load motorcycle runtime.")), {
@@ -126,10 +128,10 @@
         document.head.append(script);
       });
       const { renderExperienceGate } = await import(
-        "/render/release/quarantine_gate.js?v=343"
+        "/render/release/quarantine_gate.js?v=344"
       );
       const access = renderExperienceGate({ experienceId: "weekend-ride" });
-      if (access.allowed) await import("/weekend-ride/main.js?v=343");
+      if (access.allowed) await import("/weekend-ride/main.js?v=344");
     } catch (error) {
       console.error(error);
       const status = document.querySelector("#status");

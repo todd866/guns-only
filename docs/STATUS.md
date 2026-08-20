@@ -1,10 +1,19 @@
 # Current product and verification status
 
-Updated: 2026-08-18
-Build 343 candidate: first-visit Guns Only on-ramp. Skip the picker once, fly the
-Soniachne draw, dump two AIM-9s on Fire, then keep that same Fire control as guns.
-Return visits, `?menu=1`, and Playwright keep the six-tile picker; `?firstRun=1`
-replays the valley. The Guns Only tile still stages beat 7, guns-only.
+Updated: 2026-08-21
+Next candidate: Build 344. One explicit player lifecycle now spans the six production programmes.
+The aircraft picker names each programme's verb and endpoint; first-run Guns Only teaches its
+two-missile-to-guns handoff without contradicting remapped controls; Cobra resolves the ground war
+into a flyable RTB and only debriefs after stable Camp Ember recovery; Weekend Ride has an authored
+End Ride, result, coaching and return path; and every Okanagan sortie now owns dispatch, current
+objective, terminal result, correction, replay choice and aircraft-menu return.
+
+The same candidate replaces the undifferentiated sound stack with causal, profile-specific audio.
+YZF-R1 gets an authoritative crossplane engine, road, grass, tyre, brake and shift graph; Cobra rotor,
+ground-effect, anti-torque and damage textures follow projected flight truth; Fire Boss scoop and
+drop voices follow published water rates; and AIM-9 launch, radio-priority ducking and one bounded
+safety-warning arbiter make the important event audible without relying on limiter overload.
+All candidate audio acceptance is silent (`?audioQa=silent`).
 
 Production: Build 340, revision `8546ce89` (verified live via
 `/api/build-info` 2026-08-16, with the protected release pipeline complete). Builds 312 (Cobra
@@ -92,7 +101,7 @@ Freshwater Atlas lake shoreline with real CDEM relief, corrected scoop-lane wate
 recognisable YLW/Highway 97/bridge structure, population placement and elevation-aware dry
 ponderosa/Douglas-fir vegetation.
 
-Next candidate: Build 342 (branch `fix/fireboss-audio-341`) replaces the throttle-pitched
+Build 342 replaced the throttle-pitched
 sawtooth/triangle Fire Boss engine graph with a real, public-domain single-engine PT6 machinery
 bed plus a governed 1,700 RPM, five-blade pressure cadence; separate torque-driven prop wash,
 exhaust and reduction-gear broadband layers; an Ng-driven compressor feature; cockpit attenuation;

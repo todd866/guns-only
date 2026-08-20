@@ -13,6 +13,23 @@ export const COBRA_MAIN_ROTOR_BLADE_COUNT = 2;
 export const COBRA_TAIL_ROTOR_BLADE_COUNT = 2;
 export const COBRA_MAIN_TO_TAIL_GEAR_RATIO = 5.123;
 
+const COBRA_TORQUE_YAW_REFERENCE_RAD_S = 11 * Math.PI / 180;
+const COBRA_MAST_CUE_ON = 0.35;
+const COBRA_MAST_CUE_REARM = 0.18;
+const COBRA_NOISE_SEEDS = Object.freeze({
+  turbine: 0x54555242,
+  mainRotor: 0x4d41494e,
+  bladeSlap: 0x534c4150,
+  rotorRoughness: 0x56525352,
+  tailRotor: 0x5441494c,
+  wind: 0x57494e44,
+  gun: 0x47554e31,
+  lightOff: 0x4c495445,
+  hostileBurst: 0x484f5354,
+  impact: 0x494d5043,
+  structure: 0x4d415354,
+});
+
 const START_PHASES = new Set([
   "starting",
   "starter",
@@ -130,6 +147,39 @@ export function projectCobraAudioState(state) {
   const advanceRatio = Math.max(0, optionalFinite(state?.cobra_advance_ratio)
     ?? trueAirspeedKts / 220);
   const enginePower01 = clamp(finite(state?.cobra_engine_power_fraction));
+  const vortexRing01 = clamp(finite(state?.cobra_vortex_ring_severity));
+  const retreatingBladeStall01 = clamp(
+    finite(state?.cobra_retreating_blade_stall_severity),
+  );
+  const mastBump01 = clamp(finite(state?.cobra_mast_bump_risk));
+  // Authority publishes 1.0 out of ground effect and a bounded lift multiplier up to 1.30 in
+  // ground effect. Normalize only that documented physical interval; archived frames default OGE.
+  const groundEffectFactor = clamp(finite(state?.cobra_ground_effect_factor, 1), 1, 1.30);
+  const groundEffect01 = clamp((groundEffectFactor - 1) / 0.30);
+  const pedal = clamp(finite(state?.cobra_pedal), -1, 1);
+  const torqueYawDemandRadS = finite(state?.cobra_torque_yaw_demand_rad_s);
+  const scasYawRadS = finite(state?.cobra_scas_yaw_rad_s);
+  const yawResidualRadS = finite(state?.cobra_yaw_residual_rad_s);
+  const torqueYawDemand01 = clamp(
+    Math.abs(torqueYawDemandRadS) / COBRA_TORQUE_YAW_REFERENCE_RAD_S,
+  );
+  const scasAntiTorque01 = clamp(
+    Math.abs(scasYawRadS) / COBRA_TORQUE_YAW_REFERENCE_RAD_S,
+  );
+  const yawResidual01 = clamp(
+    Math.abs(yawResidualRadS) / COBRA_TORQUE_YAW_REFERENCE_RAD_S,
+  );
+  // Tail energy follows actual workload: main-rotor torque creates the demand, pedal and limited
+  // SCAS create anti-torque, and any residual makes the remaining yaw work audible without using
+  // body heading or a fabricated slip estimate.
+  const antiTorque01 = clamp(Math.max(Math.abs(pedal), scasAntiTorque01));
+  const tailLoad01 = clamp(
+    torqueYawDemand01 * 0.50 + antiTorque01 * 0.35 + yawResidual01 * 0.15,
+  );
+  const rotorRoughness01 = clamp(
+    Math.max(vortexRing01 * 0.95, retreatingBladeStall01 * 0.86)
+      + vortexRing01 * retreatingBladeStall01 * 0.18,
+  );
   const rotorLoad01 = clamp(Math.max(
     collective01 * 1.04,
     transmission01,
@@ -139,7 +189,9 @@ export function projectCobraAudioState(state) {
   const bladeSlap01 = clamp(
     Math.pow(rotorLoad01, 1.22)
       * Math.pow(clamp(mainRotorRpm / COBRA_NOMINAL_MAIN_ROTOR_RPM, 0, 1.15), 0.7)
-      * advanceDrive,
+      * advanceDrive
+      + retreatingBladeStall01 * 0.24
+      + groundEffect01 * 0.06,
   );
   // Actual bounded events own impact identity. The newest aliases remain below for diagnostics
   // and compatibility with archived frames, but current production audio never binds an older
@@ -160,6 +212,20 @@ export function projectCobraAudioState(state) {
     advanceRatio,
     rotorLoad01,
     bladeSlap01,
+    vortexRing01,
+    retreatingBladeStall01,
+    mastBump01,
+    groundEffectFactor,
+    groundEffect01,
+    pedal,
+    torqueYawDemandRadS,
+    scasYawRadS,
+    yawResidualRadS,
+    torqueYawDemand01,
+    antiTorque01,
+    yawResidual01,
+    tailLoad01,
+    rotorRoughness01,
     fireAuthorized: state?.cobra_fire_authorized === true,
     ammoRemaining: optionalFinite(state?.cobra_ammo_remaining),
     roundsExpended: optionalFinite(state?.cobra_rounds_expended),
@@ -346,18 +412,42 @@ export function advanceCobraTurnaroundCueState(previous, sample) {
   });
 }
 
-function deterministicNoiseBuffer(audioContext) {
-  const cached = noiseBuffers.get(audioContext);
+/** Hysteretic mast-risk edge: one structure report per excursion, never one per render frame. */
+export function advanceCobraStructureCueState(previous, sample) {
+  const first = previous?.initialized !== true;
+  const mastBump01 = clamp(finite(sample?.mastBump01));
+  const armed = first
+    ? mastBump01 < COBRA_MAST_CUE_REARM
+    : previous.armed === true || mastBump01 < COBRA_MAST_CUE_REARM;
+  const structure = !first && armed && mastBump01 >= COBRA_MAST_CUE_ON;
+  return Object.freeze({
+    state: Object.freeze({
+      initialized: true,
+      armed: structure ? false : armed,
+      mastBump01,
+    }),
+    cues: Object.freeze({ structure }),
+  });
+}
+
+function deterministicNoiseBuffer(audioContext, initialSeed = COBRA_NOISE_SEEDS.mainRotor) {
+  let buffers = noiseBuffers.get(audioContext);
+  if (!buffers) {
+    buffers = new Map();
+    noiseBuffers.set(audioContext, buffers);
+  }
+  const seedKey = initialSeed >>> 0;
+  const cached = buffers.get(seedKey);
   if (cached) return cached;
   const length = Math.max(1, Math.floor(audioContext.sampleRate * 2));
   const buffer = audioContext.createBuffer(1, length, audioContext.sampleRate);
   const data = buffer.getChannelData(0);
-  let seed = 0x41483147;
+  let seed = seedKey;
   for (let index = 0; index < data.length; index += 1) {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     data[index] = seed / 0xffffffff * 2 - 1;
   }
-  noiseBuffers.set(audioContext, buffer);
+  buffers.set(seedKey, buffer);
   return buffer;
 }
 
@@ -394,12 +484,48 @@ function oscillator(audioContext, type, frequencyHz) {
   return node;
 }
 
-function loopingNoise(audioContext) {
+function loopingNoise(audioContext, seed) {
   const source = audioContext.createBufferSource();
-  source.buffer = deterministicNoiseBuffer(audioContext);
+  source.buffer = deterministicNoiseBuffer(audioContext, seed);
   source.loop = true;
   source.start();
   return source;
+}
+
+function sequenceHash01(sequence, salt) {
+  let value = (Math.trunc(Math.abs(finite(sequence))) ^ Math.imul(salt, 0x9e3779b9)) >>> 0;
+  value = Math.imul(value ^ (value >>> 16), 0x7feb352d) >>> 0;
+  value = Math.imul(value ^ (value >>> 15), 0x846ca68b) >>> 0;
+  value ^= value >>> 16;
+  return (value >>> 0) / 0xffffffff;
+}
+
+/** Deterministic transient palette keyed only by the authority event identity. */
+export function cobraTransientProfile(kind, sequence) {
+  const impact = kind === "impact";
+  const a = sequenceHash01(sequence, impact ? 11 : 3);
+  const b = sequenceHash01(sequence, impact ? 17 : 5);
+  const c = sequenceHash01(sequence, impact ? 23 : 7);
+  const d = sequenceHash01(sequence, impact ? 29 : 9);
+  if (impact) {
+    return Object.freeze({
+      filterHz: 390 + a * 260,
+      filterQ: 0.90 + b * 0.55,
+      level: 0.10 + c * 0.045,
+      durationSeconds: 0.25 + d * 0.08,
+      noiseOffsetSeconds: 0.05 + sequenceHash01(sequence, 31) * 1.50,
+    });
+  }
+  return Object.freeze({
+    filterHz: 1_400 + a * 560,
+    filterQ: 0.72 + b * 0.42,
+    level: 0.046 + c * 0.016,
+    durationSeconds: 0.18 + d * 0.055,
+    noiseOffsetSeconds: 0.05 + sequenceHash01(sequence, 13) * 1.48,
+    snapStartHz: 285 + sequenceHash01(sequence, 19) * 130,
+    snapEndHz: 72 + sequenceHash01(sequence, 21) * 55,
+    snapLevel: 0.017 + sequenceHash01(sequence, 25) * 0.009,
+  });
 }
 
 /** Build persistent Cobra voices into the caller-owned shared compressor bus. */
@@ -444,7 +570,7 @@ export function createCobraAudioVoices(audioContext, destination) {
   turbineHarmonic.connect(turbineFilter);
   turbineFilter.connect(turbineGain).connect(master);
 
-  const turbineNoise = loopingNoise(audioContext);
+  const turbineNoise = loopingNoise(audioContext, COBRA_NOISE_SEEDS.turbine);
   const turbineNoiseFilter = audioContext.createBiquadFilter();
   turbineNoiseFilter.type = "bandpass";
   turbineNoiseFilter.frequency.value = 680;
@@ -482,7 +608,7 @@ export function createCobraAudioVoices(audioContext, destination) {
 
   // The two-blade main cadence is mostly felt as amplitude modulation of broadband structure,
   // not as a clean 10.8 Hz loudspeaker tone. A shallow low harmonic supplies the remaining thump.
-  const mainRotorNoise = loopingNoise(audioContext);
+  const mainRotorNoise = loopingNoise(audioContext, COBRA_NOISE_SEEDS.mainRotor);
   const mainRotorFilter = audioContext.createBiquadFilter();
   mainRotorFilter.type = "lowpass";
   mainRotorFilter.frequency.value = 190;
@@ -508,7 +634,7 @@ export function createCobraAudioVoices(audioContext, destination) {
     .connect(master);
 
   // Loaded two-blade slap: broadband impulse body, amplitude-modulated at authoritative BPF.
-  const bladeSlapNoise = loopingNoise(audioContext);
+  const bladeSlapNoise = loopingNoise(audioContext, COBRA_NOISE_SEEDS.bladeSlap);
   const bladeSlapFilter = audioContext.createBiquadFilter();
   bladeSlapFilter.type = "bandpass";
   bladeSlapFilter.frequency.value = 310;
@@ -520,6 +646,25 @@ export function createCobraAudioVoices(audioContext, destination) {
   const bladeSlapModDepth = audioContext.createGain();
   bladeSlapModDepth.gain.value = 0;
   bladeSlapMod.connect(bladeSlapModDepth).connect(bladeSlapGain.gain);
+
+  // Disturbed inflow is a separate, decorrelated texture rather than simply turning the normal
+  // slap louder. VRS supplies the low turbulent body; retreating-blade stall supplies stronger
+  // authoritative two-blade cadence through this branch's shallow BPF modulation.
+  const rotorRoughnessNoise = loopingNoise(audioContext, COBRA_NOISE_SEEDS.rotorRoughness);
+  const rotorRoughnessFilter = audioContext.createBiquadFilter();
+  rotorRoughnessFilter.type = "bandpass";
+  rotorRoughnessFilter.frequency.value = 280;
+  rotorRoughnessFilter.Q.value = 0.58;
+  const rotorRoughnessGain = audioContext.createGain();
+  rotorRoughnessGain.gain.value = 0;
+  rotorRoughnessNoise
+    .connect(rotorRoughnessFilter)
+    .connect(rotorRoughnessGain)
+    .connect(master);
+  const rotorRoughnessMod = oscillator(audioContext, "sine", 10.8);
+  const rotorRoughnessModDepth = audioContext.createGain();
+  rotorRoughnessModDepth.gain.value = 0;
+  rotorRoughnessMod.connect(rotorRoughnessModDepth).connect(rotorRoughnessGain.gain);
 
   const tailRotor = oscillator(audioContext, "sawtooth", 55.3);
   const tailRotorFilter = audioContext.createBiquadFilter();
@@ -541,7 +686,20 @@ export function createCobraAudioVoices(audioContext, destination) {
     .connect(tailRotorHarmonicGain)
     .connect(master);
 
-  const wind = loopingNoise(audioContext);
+  // Pedal/SCAS/torque workload should add broad tail-rotor air, not only raise two pure saw lines.
+  const tailRotorNoise = loopingNoise(audioContext, COBRA_NOISE_SEEDS.tailRotor);
+  const tailRotorNoiseFilter = audioContext.createBiquadFilter();
+  tailRotorNoiseFilter.type = "bandpass";
+  tailRotorNoiseFilter.frequency.value = 920;
+  tailRotorNoiseFilter.Q.value = 0.72;
+  const tailRotorNoiseGain = audioContext.createGain();
+  tailRotorNoiseGain.gain.value = 0;
+  tailRotorNoise
+    .connect(tailRotorNoiseFilter)
+    .connect(tailRotorNoiseGain)
+    .connect(master);
+
+  const wind = loopingNoise(audioContext, COBRA_NOISE_SEEDS.wind);
   const windHighpass = audioContext.createBiquadFilter();
   windHighpass.type = "highpass";
   windHighpass.frequency.value = 180;
@@ -555,7 +713,7 @@ export function createCobraAudioVoices(audioContext, destination) {
   wind.connect(windHighpass).connect(windLowpass).connect(windGain).connect(master);
 
   // The chin turret is a high-rate mechanical chatter, not the fixed-wing M61 report path.
-  const gunNoise = loopingNoise(audioContext);
+  const gunNoise = loopingNoise(audioContext, COBRA_NOISE_SEEDS.gun);
   const gunFilter = audioContext.createBiquadFilter();
   gunFilter.type = "bandpass";
   gunFilter.frequency.value = 1_250;
@@ -581,6 +739,7 @@ export function createCobraAudioVoices(audioContext, destination) {
     turbineGain,
     turbineNoiseFilter,
     turbineNoiseGain,
+    turbineNoise,
     gearbox,
     gearboxFilter,
     gearboxGain,
@@ -592,29 +751,42 @@ export function createCobraAudioVoices(audioContext, destination) {
     turbineWhineGain,
     mainRotorFilter,
     mainRotorGain,
+    mainRotorNoise,
     mainRotorMod,
     mainRotorModDepth,
     mainRotorThump,
     mainRotorThumpGain,
     bladeSlapFilter,
     bladeSlapGain,
+    bladeSlapNoise,
     bladeSlapMod,
     bladeSlapModDepth,
+    rotorRoughnessNoise,
+    rotorRoughnessFilter,
+    rotorRoughnessGain,
+    rotorRoughnessMod,
+    rotorRoughnessModDepth,
     tailRotor,
     tailRotorFilter,
     tailRotorGain,
     tailRotorHarmonic,
     tailRotorHarmonicFilter,
     tailRotorHarmonicGain,
+    tailRotorNoise,
+    tailRotorNoiseFilter,
+    tailRotorNoiseGain,
     windHighpass,
     windLowpass,
     windGain,
+    wind,
     gunFilter,
     gunGain,
     gunPulse,
     gunPulseDepth,
+    gunNoise,
     cueState: null,
     combatCueState: null,
+    structureCueState: null,
     lastGunEvidenceAt: null,
     cueCounts: {
       switch: 0,
@@ -622,8 +794,14 @@ export function createCobraAudioVoices(audioContext, destination) {
       lightOff: 0,
       hostileBurst: 0,
       impact: 0,
+      structure: 0,
     },
-    noiseBuffer: deterministicNoiseBuffer(audioContext),
+    noiseBuffer: deterministicNoiseBuffer(audioContext, COBRA_NOISE_SEEDS.lightOff),
+    threatNoiseBuffer: deterministicNoiseBuffer(audioContext, COBRA_NOISE_SEEDS.hostileBurst),
+    impactNoiseBuffer: deterministicNoiseBuffer(audioContext, COBRA_NOISE_SEEDS.impact),
+    structureNoiseBuffer: deterministicNoiseBuffer(audioContext, COBRA_NOISE_SEEDS.structure),
+    lastHostileProfile: null,
+    lastImpactProfile: null,
   };
 }
 
@@ -687,49 +865,78 @@ function playLightOffCue(voices, audioContext, delaySeconds = 0) {
   voices.cueCounts.lightOff += 1;
 }
 
-function playThreatBurstCue(voices, audioContext, delaySeconds = 0) {
+function playThreatBurstCue(voices, audioContext, sequence, delaySeconds = 0) {
   const delay = Math.max(0, finite(delaySeconds));
   const now = audioContext.currentTime + delay;
+  const profile = cobraTransientProfile("hostile-burst", sequence);
   const source = audioContext.createBufferSource();
-  source.buffer = voices.noiseBuffer;
+  source.buffer = voices.threatNoiseBuffer;
   const filter = audioContext.createBiquadFilter();
   filter.type = "bandpass";
-  filter.frequency.value = 1_650;
-  filter.Q.value = 0.9;
+  filter.frequency.value = profile.filterHz;
+  filter.Q.value = profile.filterQ;
   const gain = audioContext.createGain();
   setAt(gain.gain, 0.0001, now);
-  rampAt(gain.gain, 0.055, now + 0.012);
-  rampAt(gain.gain, 0.0001, now + 0.22);
+  rampAt(gain.gain, profile.level, now + 0.012);
+  rampAt(gain.gain, 0.0001, now + profile.durationSeconds);
   source.connect(filter).connect(gain).connect(voices.master);
-  source.start(now);
-  source.stop?.(now + 0.24);
+  source.start(now, profile.noiseOffsetSeconds);
+  source.stop?.(now + profile.durationSeconds + 0.02);
   // A lower snap gives hostile fire a different silhouette from the continuous chin-turret buzz.
   oneShotOscillator(voices, audioContext, {
     type: "square",
-    startHz: 340,
-    endHz: 95,
-    level: 0.022,
-    durationSeconds: 0.085,
+    startHz: profile.snapStartHz,
+    endHz: profile.snapEndHz,
+    level: profile.snapLevel,
+    durationSeconds: 0.075 + (profile.durationSeconds - 0.18) * 0.28,
     delaySeconds: delay,
   });
+  voices.lastHostileProfile = Object.freeze({ sequence, ...profile });
   voices.cueCounts.hostileBurst += 1;
 }
 
-function playImpactCue(voices, audioContext, delaySeconds = 0) {
+function playImpactCue(voices, audioContext, sequence, delaySeconds = 0) {
   const now = audioContext.currentTime + Math.max(0, finite(delaySeconds));
+  const profile = cobraTransientProfile("impact", sequence);
   const source = audioContext.createBufferSource();
-  source.buffer = voices.noiseBuffer;
+  source.buffer = voices.impactNoiseBuffer;
   const filter = audioContext.createBiquadFilter();
   filter.type = "lowpass";
-  filter.frequency.value = 520;
-  filter.Q.value = 1.25;
+  filter.frequency.value = profile.filterHz;
+  filter.Q.value = profile.filterQ;
   const gain = audioContext.createGain();
-  setAt(gain.gain, 0.13, now);
-  rampAt(gain.gain, 0.0001, now + 0.31);
+  setAt(gain.gain, profile.level, now);
+  rampAt(gain.gain, 0.0001, now + profile.durationSeconds);
   source.connect(filter).connect(gain).connect(voices.master);
-  source.start(now);
-  source.stop?.(now + 0.33);
+  source.start(now, profile.noiseOffsetSeconds);
+  source.stop?.(now + profile.durationSeconds + 0.02);
+  voices.lastImpactProfile = Object.freeze({ sequence, ...profile });
   voices.cueCounts.impact += 1;
+}
+
+function playStructureCue(voices, audioContext, mastBump01) {
+  const severity = clamp(finite(mastBump01));
+  const now = audioContext.currentTime;
+  const source = audioContext.createBufferSource();
+  source.buffer = voices.structureNoiseBuffer;
+  const filter = audioContext.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.value = 145 + severity * 210;
+  filter.Q.value = 0.82 + severity * 0.65;
+  const gain = audioContext.createGain();
+  setAt(gain.gain, 0.045 + severity * 0.042, now);
+  rampAt(gain.gain, 0.0001, now + 0.19);
+  source.connect(filter).connect(gain).connect(voices.master);
+  source.start(now, 0.31);
+  source.stop?.(now + 0.21);
+  oneShotOscillator(voices, audioContext, {
+    type: "triangle",
+    startHz: 128 + severity * 42,
+    endHz: 58 + severity * 20,
+    level: 0.016 + severity * 0.014,
+    durationSeconds: 0.11,
+  });
+  voices.cueCounts.structure += 1;
 }
 
 /** Drive a persistent voice graph from authoritative Cobra presentation fields. */
@@ -759,6 +966,13 @@ export function updateCobraAudioVoices(voices, audioContext, state, { muted = fa
       }),
     });
   voices.combatCueState = sample.active ? combatEdge.state : null;
+  const structureEdge = sample.active
+    ? advanceCobraStructureCueState(voices.structureCueState, sample)
+    : Object.freeze({
+      state: null,
+      cues: Object.freeze({ structure: false }),
+    });
+  voices.structureCueState = sample.active ? structureEdge.state : null;
   if (sample.active && !muted) {
     if (edge.cues.switch) playSwitchCue(voices, audioContext);
     if (edge.cues.starter) playStarterCue(voices, audioContext);
@@ -766,13 +980,21 @@ export function updateCobraAudioVoices(voices, audioContext, state, { muted = fa
     // scheduling light-off just behind the relay/starter edge instead of stacking all three at t0.
     if (edge.cues.lightOff)
       playLightOffCue(voices, audioContext, edge.cues.starter ? 0.30 : 0);
-    combatEdge.cues.hostileBurstSequences.forEach((_sequence, index) =>
-      playThreatBurstCue(voices, audioContext, index * 0.045));
-    combatEdge.cues.impactSequences.forEach((_sequence, index) =>
-      playImpactCue(voices, audioContext, index * 0.055));
-    for (let index = 0; index < combatEdge.cues.unsequencedImpactCount; index += 1)
-      playImpactCue(voices, audioContext,
+    combatEdge.cues.hostileBurstSequences.forEach((sequence, index) =>
+      playThreatBurstCue(voices, audioContext, sequence, index * 0.045));
+    combatEdge.cues.impactSequences.forEach((sequence, index) =>
+      playImpactCue(voices, audioContext, sequence, index * 0.055));
+    for (let index = 0; index < combatEdge.cues.unsequencedImpactCount; index += 1) {
+      // A trimmed event has no sequence, so key its deterministic fallback from the authority's
+      // cumulative damage count in a disjoint range. It remains stable without impersonating a
+      // later identifiable burst.
+      const fallbackIdentity = 0x40000000
+        + Math.max(0, sample.damagingHits - combatEdge.cues.unsequencedImpactCount + index + 1);
+      playImpactCue(voices, audioContext, fallbackIdentity,
         (combatEdge.cues.impactSequences.length + index) * 0.055);
+    }
+    if (structureEdge.cues.structure)
+      playStructureCue(voices, audioContext, sample.mastBump01);
   }
 
   const now = audioContext.currentTime;
@@ -833,13 +1055,17 @@ export function updateCobraAudioVoices(voices, audioContext, state, { muted = fa
   target(voices.mainRotorMod.frequency, Math.max(0.2, sample.mainBladePassHz), now, 0.12);
   target(voices.mainRotorFilter.frequency, 105 + main01 * 125, now, 0.15);
   target(voices.mainRotorGain.gain,
-    mainPresence * (0.041 + sample.rotorLoad01 * 0.023), now, 0.13);
+    mainPresence * (0.041 + sample.rotorLoad01 * 0.023
+      + sample.groundEffect01 * 0.006), now, 0.13);
   target(voices.mainRotorModDepth.gain,
-    mainPresence * (0.018 + sample.rotorLoad01 * 0.025), now, 0.13);
+    mainPresence * (0.018 + sample.rotorLoad01 * 0.025
+      + sample.rotorRoughness01 * 0.008), now, 0.13);
   target(voices.mainRotorThump.frequency,
     Math.max(0.4, sample.mainBladePassHz * 2), now, 0.12);
   target(voices.mainRotorThumpGain.gain,
-    mainPresence * (0.011 + sample.rotorLoad01 * 0.016), now, 0.12);
+    mainPresence * (0.011 + sample.rotorLoad01 * 0.016
+      + sample.groundEffect01 * 0.012
+      + sample.rotorRoughness01 * 0.006), now, 0.12);
   target(voices.bladeSlapMod.frequency,
     Math.max(0.2, sample.mainBladePassHz), now, 0.09);
   target(voices.bladeSlapFilter.frequency,
@@ -847,18 +1073,38 @@ export function updateCobraAudioVoices(voices, audioContext, state, { muted = fa
   target(voices.bladeSlapGain.gain, sample.bladeSlap01 * 0.044, now, 0.075);
   target(voices.bladeSlapModDepth.gain,
     sample.bladeSlap01 * 0.032, now, 0.075);
+  target(voices.rotorRoughnessMod.frequency,
+    Math.max(0.2, sample.mainBladePassHz), now, 0.08);
+  target(voices.rotorRoughnessFilter.frequency,
+    190 + sample.vortexRing01 * 250 + sample.retreatingBladeStall01 * 520,
+    now, 0.08);
+  const roughnessBase = mainPresence * sample.rotorRoughness01
+    * (0.016 + sample.rotorLoad01 * 0.026);
+  const roughnessRequestedDepth = mainPresence * sample.rotorRoughness01
+    * (0.008 + sample.retreatingBladeStall01 * 0.018);
+  target(voices.rotorRoughnessGain.gain, roughnessBase, now, 0.065);
+  // AudioParam modulation is summed with the intrinsic gain. Keep the bipolar sine safely below
+  // that base so a severe low-load RBS case cannot cross zero and invert/click each half-cycle.
+  target(voices.rotorRoughnessModDepth.gain,
+    Math.min(roughnessRequestedDepth, roughnessBase * 0.78), now, 0.06);
 
   const tailPresence = Math.pow(tail01, 0.82);
   target(voices.tailRotor.frequency, Math.max(0.5, sample.tailBladePassHz), now, 0.12);
   target(voices.tailRotorFilter.frequency,
     75 + sample.tailBladePassHz * 1.25, now, 0.13);
-  target(voices.tailRotorGain.gain, tailPresence * 0.012, now, 0.13);
+  target(voices.tailRotorGain.gain,
+    tailPresence * (0.009 + sample.tailLoad01 * 0.012), now, 0.11);
   const tailHarmonicHz = Math.max(1, sample.tailBladePassHz * 6);
   target(voices.tailRotorHarmonic.frequency, tailHarmonicHz, now, 0.1);
   target(voices.tailRotorHarmonicFilter.frequency,
     tailHarmonicHz * 1.08, now, 0.1);
   target(voices.tailRotorHarmonicGain.gain,
-    tailPresence * (0.003 + sample.rotorLoad01 * 0.004), now, 0.1);
+    tailPresence * (0.0025 + sample.rotorLoad01 * 0.002
+      + sample.tailLoad01 * 0.007), now, 0.09);
+  target(voices.tailRotorNoiseFilter.frequency,
+    520 + sample.tailBladePassHz * (6.5 + sample.tailLoad01 * 4.5), now, 0.09);
+  target(voices.tailRotorNoiseGain.gain,
+    tailPresence * (0.0015 + sample.tailLoad01 * 0.013), now, 0.08);
 
   const speed01 = smoothstep((sample.trueAirspeedKts - 12) / 105);
   target(voices.windHighpass.frequency, 145 + speed01 * 420, now, 0.12);
@@ -879,6 +1125,6 @@ export function updateCobraAudioVoices(voices, audioContext, state, { muted = fa
 
   return Object.freeze({
     sample,
-    cues: Object.freeze({ ...edge.cues, ...combatEdge.cues }),
+    cues: Object.freeze({ ...edge.cues, ...combatEdge.cues, ...structureEdge.cues }),
   });
 }

@@ -198,6 +198,120 @@ test("signed G separates positive suit load from negative/unload straps", async 
   assert.equal(latest(voices.gUnloadGain.gain), 0);
 });
 
+test("fighter equipment cues require a fixed-wing capability instead of leaking by default", async () => {
+  const {
+    createEventVoices,
+    updateAirframeCueVoices,
+  } = await freshEventAudio("g-equipment-capability");
+  const identities = [
+    ["audio.ah1g.t53-b540.v1", "aircraft.ah-1g.cobra.v1"],
+    ["audio.fireboss.pt6a-67f.v1", "aircraft.at-802f-fireboss.v1"],
+    ["audio.yzf-r1.crossplane.v1", "vehicle.yzf-r1.track-day.v1"],
+  ];
+  for (const [audioProfile, vehicleId] of identities) {
+    const audio = new FakeAudioContext();
+    const voices = createEventVoices(audio, audio.destination);
+    updateAirframeCueVoices(voices, audio, {
+      audio_profile_id: audioProfile,
+      player_aircraft_id: vehicleId,
+      pilot_gz: 7.5,
+      pilot_gz_valid: true,
+      pilot_positive_onset_rate_g_per_second: 6,
+    });
+    assert.equal(latest(voices.gGain.gain), 0, `${audioProfile} has no fighter strain bed`);
+    assert.equal(latest(voices.gSuitGain.gain), 0, `${audioProfile} has no fighter G-suit`);
+    assert.equal(latest(voices.gHarnessGain.gain), 0, `${audioProfile} has no fighter harness`);
+    assert.equal(latest(voices.gUnloadGain.gain), 0, `${audioProfile} has no fighter unload kit`);
+  }
+});
+
+test("AIM-9 authority edges fire one rail-and-ignition cue and muted launches are consumed", async () => {
+  const {
+    createEventVoices,
+    updateCombatCueVoices,
+  } = await freshEventAudio("aim9-launch");
+  const audio = new FakeAudioContext();
+  const voices = createEventVoices(audio, audio.destination);
+
+  updateCombatCueVoices(voices, audio, {
+    aim9_remaining: 2,
+    aim9_in_flight: false,
+    aim9_state_code: 0,
+  });
+  const beforeLaunchSources = audio.sources.length;
+  const beforeLaunchOscillators = audio.oscillators.length;
+  audio.currentTime = 0.1;
+  updateCombatCueVoices(voices, audio, {
+    // Retained/hot projections may expose seeker state one presentation frame before the
+    // magazine field. That is still one physical missile and must produce one onset.
+    aim9_remaining: 2,
+    aim9_in_flight: true,
+    aim9_state_code: 1,
+  });
+  assert.equal(voices.aim9LaunchCount, 1);
+  assert.ok(audio.sources.length > beforeLaunchSources, "ignition rush is scheduled");
+  assert.ok(audio.oscillators.length > beforeLaunchOscillators, "rail thump is scheduled");
+
+  const afterFirstLaunchSources = audio.sources.length;
+  audio.currentTime = 0.15;
+  updateCombatCueVoices(voices, audio, {
+    aim9_remaining: 1,
+    aim9_in_flight: true,
+    aim9_state_code: 1,
+  });
+  assert.equal(voices.aim9LaunchCount, 1,
+    "a later magazine decrement cannot double-trigger the same flight");
+  assert.equal(audio.sources.length, afterFirstLaunchSources,
+    "split seeker/magazine authority still schedules one onset");
+
+  audio.currentTime = 0.2;
+  updateCombatCueVoices(voices, audio, {
+    aim9_remaining: 1,
+    aim9_in_flight: true,
+    aim9_state_code: 2,
+  });
+  assert.equal(audio.sources.length, afterFirstLaunchSources, "tracking frames do not retrigger");
+
+  audio.currentTime = 1;
+  updateCombatCueVoices(voices, audio, {
+    aim9_remaining: 1,
+    aim9_in_flight: false,
+    aim9_state_code: 4,
+  });
+  audio.currentTime = 1.1;
+  updateCombatCueVoices(voices, audio, {
+    aim9_remaining: 0,
+    aim9_in_flight: true,
+    aim9_state_code: 1,
+  });
+  assert.equal(voices.aim9LaunchCount, 2,
+    "clearing in-flight authority rearms exactly one cue for the next missile");
+
+  const mutedAudio = new FakeAudioContext();
+  const mutedVoices = createEventVoices(mutedAudio, mutedAudio.destination);
+  updateCombatCueVoices(mutedVoices, mutedAudio, {
+    aim9_remaining: 1,
+    aim9_in_flight: false,
+    aim9_state_code: 0,
+  });
+  mutedAudio.currentTime = 0.1;
+  updateCombatCueVoices(mutedVoices, mutedAudio, {
+    aim9_remaining: 0,
+    aim9_in_flight: true,
+    aim9_state_code: 1,
+  }, { enabled: false });
+  assert.equal(mutedVoices.aim9LaunchCount, 0, "muted launch schedules no sound");
+  const afterMutedLaunchSources = mutedAudio.sources.length;
+  mutedAudio.currentTime = 0.2;
+  updateCombatCueVoices(mutedVoices, mutedAudio, {
+    aim9_remaining: 0,
+    aim9_in_flight: true,
+    aim9_state_code: 2,
+  });
+  assert.equal(mutedAudio.sources.length, afterMutedLaunchSources,
+    "unmuting does not replay a consumed launch");
+});
+
 test("F-14 pull-G and unload do not add synthetic suit, harness, strain, or swoosh", async () => {
   const {
     createEventVoices,

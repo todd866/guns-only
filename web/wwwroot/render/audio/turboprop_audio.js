@@ -1,11 +1,25 @@
 export const FIRE_BOSS_PROP_BLADE_COUNT = 5;
 export const FIRE_BOSS_GOVERNED_PROP_RPM = 1_700;
+export const FIRE_BOSS_REFERENCE_SCOOP_RATE_KGPS = 235;
+export const FIRE_BOSS_REFERENCE_DROP_RATE_KGPS = 1_450;
 
 const noiseBuffers = new WeakMap();
 const pulseBuffers = new WeakMap();
+const NOISE_PROFILES = Object.freeze({
+  machinery: Object.freeze({ seconds: 3.17, seed: 0x802f67 }),
+  hull: Object.freeze({ seconds: 4.61, seed: 0x48554c4c }),
+  scoop: Object.freeze({ seconds: 2.83, seed: 0x53434f50 }),
+  drop: Object.freeze({ seconds: 3.73, seed: 0x44524f50 }),
+  cue: Object.freeze({ seconds: 1.97, seed: 0x57415452 }),
+});
 
 function clamp(value, minimum = 0, maximum = 1) {
   return Math.max(minimum, Math.min(maximum, Number(value) || 0));
+}
+
+function smoothstep(value) {
+  const t = clamp(value);
+  return t * t * (3 - 2 * t);
 }
 
 function finite(...values) {
@@ -21,23 +35,51 @@ function smooth(param, value, now, timeConstant = 0.06) {
   param.setTargetAtTime(value, now, timeConstant);
 }
 
-function noiseBuffer(context) {
-  const cached = noiseBuffers.get(context);
+function setAt(param, value, at) {
+  if (typeof param?.setValueAtTime === "function") param.setValueAtTime(value, at);
+  else if (param) param.value = value;
+}
+
+function rampAt(param, value, at) {
+  if (typeof param?.exponentialRampToValueAtTime === "function" && value > 0)
+    param.exponentialRampToValueAtTime(value, at);
+  else if (typeof param?.linearRampToValueAtTime === "function")
+    param.linearRampToValueAtTime(value, at);
+  else if (param)
+    param.value = value;
+}
+
+function noiseBuffer(context, profileId = "machinery") {
+  let buffers = noiseBuffers.get(context);
+  if (!buffers) {
+    buffers = new Map();
+    noiseBuffers.set(context, buffers);
+  }
+  const cached = buffers.get(profileId);
   if (cached) return cached;
-  const length = Math.max(1, Math.floor(context.sampleRate * 3));
+  const profile = NOISE_PROFILES[profileId] ?? NOISE_PROFILES.machinery;
+  const length = Math.max(1, Math.floor(context.sampleRate * profile.seconds));
   const buffer = context.createBuffer(1, length, context.sampleRate);
   const data = buffer.getChannelData(0);
-  let seed = 0x802f67;
+  let seed = profile.seed;
   let brown = 0;
   for (let i = 0; i < length; i += 1) {
-    seed = (seed * 1664525 + 1013904223) >>> 0;
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     const white = (seed / 0xffffffff) * 2 - 1;
     // A little correlated energy stops every low-frequency branch sounding like filtered hiss.
     brown = brown * 0.985 + white * 0.015;
     data[i] = clamp((white * 0.58 + brown * 1.1) * 0.72, -1, 1);
   }
-  noiseBuffers.set(context, buffer);
+  buffers.set(profileId, buffer);
   return buffer;
+}
+
+function loopingNoise(context, profileId) {
+  const source = context.createBufferSource();
+  source.buffer = noiseBuffer(context, profileId);
+  source.loop = true;
+  source.start();
+  return source;
 }
 
 function pressurePulseBuffer(context) {
@@ -96,8 +138,18 @@ export function projectTurbopropAcoustics(state = {}) {
   const speedKts = Math.max(0, finite(state.true_airspeed_kts) ?? 0);
   const surface = String(state.fireboss_surface ?? "").toLowerCase();
   const onWater = surface === "water";
-  const scooping = state.fireboss_scoop_valid === true;
-  const dropping = state.fireboss_drop_active === true;
+  const publishedScoopRateKgps = finite(state.fireboss_scoop_rate_kgps);
+  const scoopRateKgps = Math.max(0, publishedScoopRateKgps != null
+    ? publishedScoopRateKgps
+    : state.fireboss_scoop_valid === true ? FIRE_BOSS_REFERENCE_SCOOP_RATE_KGPS : 0);
+  const scooping = scoopRateKgps > 0;
+  const waterReleaseKg = Math.max(0, finite(state.fireboss_water_release_kg) ?? 0);
+  const publishedDropRateKgps = finite(state.fireboss_water_release_rate_kgps);
+  const hasLegacyDropEvidence = state.fireboss_drop_active === true || waterReleaseKg > 0;
+  const dropRateKgps = Math.max(0, publishedDropRateKgps != null
+    ? publishedDropRateKgps
+    : hasLegacyDropEvidence ? FIRE_BOSS_REFERENCE_DROP_RATE_KGPS : 0);
+  const dropping = dropRateKgps > 0;
   const shaftHz = propRpm / 60;
   const bladePassHz = propellerBladePassHz(propRpm, bladeCount);
 
@@ -115,7 +167,14 @@ export function projectTurbopropAcoustics(state = {}) {
     compressorHz: 2_550 + ng01 * 1_850,
     speedKts,
     onWater,
+    waterSpeed01: onWater ? smoothstep(speedKts / 90) : 0,
+    scoopRateKgps,
+    scoopFlow01: clamp(scoopRateKgps / FIRE_BOSS_REFERENCE_SCOOP_RATE_KGPS),
     scooping,
+    waterReleaseKg,
+    dropRateKgps,
+    dropFlow01: clamp(dropRateKgps / FIRE_BOSS_REFERENCE_DROP_RATE_KGPS),
+    dropAirspeed01: smoothstep(speedKts / 140),
     dropping,
   });
 }
@@ -167,9 +226,7 @@ export function createTurbopropAudioVoices(context, destination) {
   shaft.connect(shaftGain).connect(cabin);
   shaft.start();
 
-  const source = context.createBufferSource();
-  source.buffer = noiseBuffer(context);
-  source.loop = true;
+  const source = loopingNoise(context, "machinery");
 
   // Broadband pressure noise is amplitude-modulated at blade-pass cadence. That preserves the
   // propeller's chopped-air texture without turning the whole engine into a pitched oscillator.
@@ -227,13 +284,43 @@ export function createTurbopropAudioVoices(context, destination) {
   airGain.gain.value = 0;
   source.connect(airFilter).connect(airGain).connect(cabin);
 
-  const waterFilter = context.createBiquadFilter();
-  waterFilter.type = "highpass";
-  waterFilter.frequency.value = 480;
-  const waterGain = context.createGain();
-  waterGain.gain.value = 0;
-  source.connect(waterFilter).connect(waterGain).connect(cabin);
-  source.start();
+  // Water operations are three different physical sources. Independent seeds and non-commensurate
+  // loop lengths keep hull spray, scoop ingestion and the airborne drop from collapsing into one
+  // correlated hiss. Their gains remain entirely authority-driven below.
+  const hullSource = loopingNoise(context, "hull");
+  const hullHighpass = context.createBiquadFilter();
+  hullHighpass.type = "highpass";
+  hullHighpass.frequency.value = 145;
+  hullHighpass.Q.value = 0.46;
+  const hullLowpass = context.createBiquadFilter();
+  hullLowpass.type = "lowpass";
+  hullLowpass.frequency.value = 2_100;
+  hullLowpass.Q.value = 0.55;
+  const hullGain = context.createGain();
+  hullGain.gain.value = 0;
+  hullSource.connect(hullHighpass).connect(hullLowpass).connect(hullGain).connect(cabin);
+
+  const scoopSource = loopingNoise(context, "scoop");
+  const scoopFilter = context.createBiquadFilter();
+  scoopFilter.type = "bandpass";
+  scoopFilter.frequency.value = 610;
+  scoopFilter.Q.value = 0.64;
+  const scoopGain = context.createGain();
+  scoopGain.gain.value = 0;
+  scoopSource.connect(scoopFilter).connect(scoopGain).connect(cabin);
+
+  const dropSource = loopingNoise(context, "drop");
+  const dropHighpass = context.createBiquadFilter();
+  dropHighpass.type = "highpass";
+  dropHighpass.frequency.value = 125;
+  dropHighpass.Q.value = 0.42;
+  const dropLowpass = context.createBiquadFilter();
+  dropLowpass.type = "lowpass";
+  dropLowpass.frequency.value = 3_100;
+  dropLowpass.Q.value = 0.56;
+  const dropGain = context.createGain();
+  dropGain.gain.value = 0;
+  dropSource.connect(dropHighpass).connect(dropLowpass).connect(dropGain).connect(cabin);
 
   return {
     master,
@@ -262,8 +349,66 @@ export function createTurbopropAudioVoices(context, destination) {
     compressorToneGain,
     airFilter,
     airGain,
-    waterGain,
+    hullSource,
+    hullHighpass,
+    hullLowpass,
+    hullGain,
+    scoopSource,
+    scoopFilter,
+    scoopGain,
+    dropSource,
+    dropHighpass,
+    dropLowpass,
+    dropGain,
+    waterCueBuffer: noiseBuffer(context, "cue"),
+    waterCueState: null,
+    cueCounts: {
+      scoopStart: 0,
+      scoopEnd: 0,
+      dropStart: 0,
+      dropEnd: 0,
+    },
   };
+}
+
+/** Edge-only water-operation cues. The first observed frame is a baseline, never a fake event. */
+export function advanceTurbopropWaterCueState(previous, acoustic) {
+  const initialized = previous?.initialized === true;
+  const scooping = acoustic?.scooping === true;
+  const dropping = acoustic?.dropping === true;
+  return Object.freeze({
+    state: Object.freeze({ initialized: true, scooping, dropping }),
+    cues: Object.freeze({
+      scoopStart: initialized && scooping && previous.scooping !== true,
+      scoopEnd: initialized && !scooping && previous.scooping === true,
+      dropStart: initialized && dropping && previous.dropping !== true,
+      dropEnd: initialized && !dropping && previous.dropping === true,
+    }),
+  });
+}
+
+function playWaterOperationCue(voices, context, cue) {
+  const now = context.currentTime;
+  const source = context.createBufferSource();
+  source.buffer = voices.waterCueBuffer;
+  const filter = context.createBiquadFilter();
+  const gain = context.createGain();
+  const config = {
+    scoopStart: { type: "bandpass", frequencyHz: 470, q: 0.82, level: 0.075, seconds: 0.18 },
+    scoopEnd: { type: "bandpass", frequencyHz: 330, q: 0.95, level: 0.050, seconds: 0.12 },
+    dropStart: { type: "lowpass", frequencyHz: 720, q: 0.72, level: 0.105, seconds: 0.24 },
+    dropEnd: { type: "lowpass", frequencyHz: 430, q: 0.88, level: 0.064, seconds: 0.16 },
+  }[cue];
+  if (!config) return;
+  filter.type = config.type;
+  filter.frequency.value = config.frequencyHz;
+  filter.Q.value = config.q;
+  setAt(gain.gain, Math.max(0.0001, config.level), now);
+  rampAt(gain.gain, 0.0001, now + config.seconds);
+  source.connect(filter).connect(gain).connect(voices.cabin);
+  source.start(now);
+  source.stop?.(now + config.seconds + 0.01);
+  voices.cueCounts[cue] += 1;
 }
 
 export function updateTurbopropAudioVoices(voices, context, state = {}, { muted = false } = {}) {
@@ -272,6 +417,13 @@ export function updateTurbopropAudioVoices(voices, context, state = {}, { muted 
   const acoustic = projectTurbopropAcoustics(state);
   const live = !muted && acoustic.engineRunning && acoustic.propRpm > 1;
   const propEnergy = 0.38 + acoustic.torque01 * 0.62;
+  const waterEdge = advanceTurbopropWaterCueState(voices.waterCueState, acoustic);
+  voices.waterCueState = waterEdge.state;
+  if (live) {
+    for (const [cue, shouldPlay] of Object.entries(waterEdge.cues)) {
+      if (shouldPlay) playWaterOperationCue(voices, context, cue);
+    }
+  }
 
   smooth(voices.master.gain, live ? 0.47 : 0, now, live ? 0.18 : 0.035);
   smooth(voices.decodedBedInput.gain,
@@ -304,10 +456,24 @@ export function updateTurbopropAudioVoices(voices, context, state = {}, { muted 
   smooth(voices.airFilter.frequency, 520 + Math.min(190, acoustic.speedKts) * 9, now, 0.1);
   smooth(voices.airGain.gain,
     live ? Math.pow(clamp(acoustic.speedKts / 150), 1.7) * 0.085 : 0, now, 0.1);
-  smooth(voices.waterGain.gain, live && (acoustic.onWater || acoustic.scooping || acoustic.dropping)
-    ? (acoustic.onWater ? 0.15 : 0)
-      + (acoustic.scooping ? 0.16 : 0)
-      + (acoustic.dropping ? 0.19 : 0)
-    : 0, now, acoustic.dropping ? 0.025 : 0.08);
+  smooth(voices.hullHighpass.frequency, 115 + acoustic.waterSpeed01 * 285, now, 0.08);
+  smooth(voices.hullLowpass.frequency, 1_250 + acoustic.waterSpeed01 * 2_450, now, 0.08);
+  smooth(voices.hullGain.gain,
+    live && acoustic.onWater ? Math.pow(acoustic.waterSpeed01, 1.28) * 0.15 : 0,
+    now, 0.055);
+  smooth(voices.scoopFilter.frequency,
+    420 + acoustic.scoopFlow01 * 390 + acoustic.waterSpeed01 * 250, now, 0.055);
+  smooth(voices.scoopGain.gain,
+    live && acoustic.scooping
+      ? acoustic.scoopFlow01 * (0.085 + acoustic.waterSpeed01 * 0.075)
+      : 0,
+    now, acoustic.scooping ? 0.028 : 0.09);
+  smooth(voices.dropHighpass.frequency, 90 + acoustic.dropAirspeed01 * 175, now, 0.05);
+  smooth(voices.dropLowpass.frequency, 1_850 + acoustic.dropAirspeed01 * 2_350, now, 0.05);
+  smooth(voices.dropGain.gain,
+    live && acoustic.dropping
+      ? acoustic.dropFlow01 * (0.105 + acoustic.dropAirspeed01 * 0.125)
+      : 0,
+    now, acoustic.dropping ? 0.025 : 0.11);
   return acoustic;
 }

@@ -17,7 +17,10 @@ test("Fire Boss projects into the shared fixed-wing HUD and audio contract", () 
     gross_mass_kg: 7_000,
     water_kg: 2_100,
     water_capacity_kg: 3_104,
+    scoop_valid: true,
+    scoop_rate_kgps: 117.5,
     water_released_this_tick_kg: 18,
+    water_release_rate_kgps: 1_450,
     fuel_plan: { block_kg: 925, minimum_rtb_kg: 310 },
   });
 
@@ -37,14 +40,33 @@ test("Fire Boss projects into the shared fixed-wing HUD and audio contract", () 
   assert.equal(state.engine_torque_fraction, 0.66);
   assert.ok(state.engine_ng_pct > 84 && state.engine_ng_pct < 85);
   assert.ok(state.stall_speed_kcas > 60);
+  assert.equal(state.fireboss_scoop_rate_kgps, 117.5);
   assert.equal(state.fireboss_water_release_kg, 18);
+  assert.equal(state.fireboss_water_release_rate_kgps, 1_450);
   assert.equal(state.fireboss_drop_active, true);
 });
 
 test("drop audio truth ignores an unproductive drop command", () => {
-  const state = okanaganFlightState({ drop_active: true, water_released_this_tick_kg: 0 });
+  const state = okanaganFlightState({
+    drop_active: true,
+    water_released_this_tick_kg: 0,
+    water_release_rate_kgps: 0,
+  });
   assert.equal(state.fireboss_water_release_kg, 0);
+  assert.equal(state.fireboss_water_release_rate_kgps, 0);
   assert.equal(state.fireboss_drop_active, false);
+});
+
+test("legacy tick-mass evidence remains distinguishable from an explicit zero rate", () => {
+  const legacy = okanaganFlightState({ water_released_this_tick_kg: 4 });
+  const stopped = okanaganFlightState({
+    water_released_this_tick_kg: 4,
+    water_release_rate_kgps: 0,
+  });
+  assert.equal(legacy.fireboss_water_release_rate_kgps, undefined);
+  assert.equal(legacy.fireboss_drop_active, true);
+  assert.equal(stopped.fireboss_water_release_rate_kgps, 0);
+  assert.equal(stopped.fireboss_drop_active, false);
 });
 
 test("the governed propeller remains live at flight idle and stops after destruction", () => {

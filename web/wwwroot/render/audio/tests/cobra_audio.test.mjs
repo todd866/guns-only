@@ -7,7 +7,9 @@ import { flightPropulsionGraphGates } from "../flight_audio.js";
 import {
   COBRA_MAIN_TO_TAIL_GEAR_RATIO,
   advanceCobraCombatCueState,
+  advanceCobraStructureCueState,
   advanceCobraTurnaroundCueState,
+  cobraTransientProfile,
   createCobraAudioVoices,
   projectCobraAudioState,
   rotorBladePassHz,
@@ -26,6 +28,14 @@ const COBRA_RUNNING = Object.freeze({
   cobra_collective: 0.72,
   cobra_transmission_limit_fraction: 0.84,
   cobra_advance_ratio: 0.26,
+  cobra_vortex_ring_severity: 0,
+  cobra_retreating_blade_stall_severity: 0,
+  cobra_mast_bump_risk: 0,
+  cobra_ground_effect_factor: 1,
+  cobra_pedal: -0.16,
+  cobra_torque_yaw_demand_rad_s: 0.11,
+  cobra_scas_yaw_rad_s: -0.024,
+  cobra_yaw_residual_rad_s: 0.086,
   true_airspeed_kts: 82,
   cobra_fire_authorized: false,
   cobra_ammo_remaining: 900,
@@ -48,6 +58,14 @@ test("projects authoritative rotor cadence and bounds partial turnaround state",
   const projected = projectCobraAudioState({
     ...COBRA_RUNNING,
     cobra_engine_power_fraction: 4,
+    cobra_vortex_ring_severity: 0.48,
+    cobra_retreating_blade_stall_severity: 0.62,
+    cobra_mast_bump_risk: 0.41,
+    cobra_ground_effect_factor: 1.18,
+    cobra_pedal: -0.60,
+    cobra_torque_yaw_demand_rad_s: 0.18,
+    cobra_scas_yaw_rad_s: -0.04,
+    cobra_yaw_residual_rad_s: 0.14,
     cobra_turnaround_phase: "ROTOR_SPINUP",
     cobra_turnaround_sequence: 7.9,
   });
@@ -62,6 +80,16 @@ test("projects authoritative rotor cadence and bounds partial turnaround state",
   assert.equal(projected.advanceRatio, 0.26);
   assert.equal(projected.rotorLoad01, 0.92);
   assert.ok(projected.bladeSlap01 > 0.5);
+  assert.equal(projected.vortexRing01, 0.48);
+  assert.equal(projected.retreatingBladeStall01, 0.62);
+  assert.equal(projected.mastBump01, 0.41);
+  assert.ok(Math.abs(projected.groundEffect01 - 0.6) < 1e-12);
+  assert.equal(projected.pedal, -0.60);
+  assert.equal(projected.torqueYawDemandRadS, 0.18);
+  assert.equal(projected.scasYawRadS, -0.04);
+  assert.equal(projected.yawResidualRadS, 0.14);
+  assert.ok(projected.rotorRoughness01 > 0.5);
+  assert.ok(projected.tailLoad01 > 0.5);
   assert.equal(projected.phase, "rotor-spinup");
   assert.equal(projected.sequence, 7);
   assert.equal(projected.starting, true);
@@ -257,6 +285,44 @@ test("deduplicates switch, starter, and light-off edges across high-rate frames"
     "joining a turnaround after light-off must not replay the whole start stack");
 });
 
+test("mast-risk structure cue uses a rearming hysteresis instead of render-frame repetition", () => {
+  const sample = (mastBump01) => ({ mastBump01 });
+  let edge = advanceCobraStructureCueState(null, sample(0.08));
+  assert.deepEqual(edge.cues, { structure: false });
+  edge = advanceCobraStructureCueState(edge.state, sample(0.42));
+  assert.deepEqual(edge.cues, { structure: true });
+  edge = advanceCobraStructureCueState(edge.state, sample(0.58));
+  assert.deepEqual(edge.cues, { structure: false },
+    "one high-risk excursion cannot clatter once per 120 Hz presentation frame");
+  edge = advanceCobraStructureCueState(edge.state, sample(0.24));
+  assert.deepEqual(edge.cues, { structure: false },
+    "risk must clear the lower threshold before another report is armed");
+  edge = advanceCobraStructureCueState(edge.state, sample(0.10));
+  edge = advanceCobraStructureCueState(edge.state, sample(0.36));
+  assert.deepEqual(edge.cues, { structure: true });
+
+  const joinedHigh = advanceCobraStructureCueState(null, sample(0.7));
+  assert.deepEqual(joinedHigh.cues, { structure: false },
+    "late audio enable cannot report a mast event that predates the graph");
+});
+
+test("hostile burst and impact palettes vary deterministically by authority sequence", () => {
+  const burst17 = cobraTransientProfile("hostile-burst", 17);
+  const burst17Replay = cobraTransientProfile("hostile-burst", 17);
+  const burst18 = cobraTransientProfile("hostile-burst", 18);
+  assert.deepEqual(burst17Replay, burst17);
+  assert.notDeepEqual(burst18, burst17);
+  assert.ok(burst17.filterHz >= 1_400 && burst17.filterHz <= 1_960);
+  assert.ok(burst17.noiseOffsetSeconds >= 0.05 && burst17.noiseOffsetSeconds < 1.55);
+
+  const impact17 = cobraTransientProfile("impact", 17);
+  const impact18 = cobraTransientProfile("impact", 18);
+  assert.notDeepEqual(impact17, impact18);
+  assert.notEqual(impact17.filterHz, burst17.filterHz,
+    "impact and hostile-fire families retain distinct silhouettes for one event id");
+  assert.ok(impact17.durationSeconds >= 0.25 && impact17.durationSeconds <= 0.33);
+});
+
 class FakeAudioParam {
   constructor(value = 0) {
     this.value = value;
@@ -345,6 +411,52 @@ test("wires into the caller bus, follows authoritative BPF, and applies positive
   assert.ok(voices.windGain.gain.value > 0);
   assert.ok(voices.decodedBedInput.gain.value > 0,
     "the governed-Nr frame admits the rotorcraft recording");
+  const continuousNoiseBuffers = [
+    voices.turbineNoise.buffer,
+    voices.mainRotorNoise.buffer,
+    voices.bladeSlapNoise.buffer,
+    voices.rotorRoughnessNoise.buffer,
+    voices.tailRotorNoise.buffer,
+    voices.wind.buffer,
+    voices.gunNoise.buffer,
+  ];
+  assert.equal(new Set(continuousNoiseBuffers).size, continuousNoiseBuffers.length,
+    "continuous branches use independent deterministic noise instead of one phase-locked loop");
+
+  const baselineTailNoise = voices.tailRotorNoiseGain.gain.value;
+  const baselineThump = voices.mainRotorThumpGain.gain.value;
+  updateCobraAudioVoices(voices, audio, {
+    ...COBRA_RUNNING,
+    cobra_vortex_ring_severity: 0.55,
+    cobra_retreating_blade_stall_severity: 0.68,
+    cobra_mast_bump_risk: 0.52,
+    cobra_ground_effect_factor: 1.25,
+    cobra_pedal: -0.82,
+    cobra_torque_yaw_demand_rad_s: 0.19,
+    cobra_scas_yaw_rad_s: -0.06,
+    cobra_yaw_residual_rad_s: 0.13,
+  });
+  assert.ok(voices.rotorRoughnessGain.gain.value > 0);
+  assert.ok(voices.rotorRoughnessModDepth.gain.value > 0);
+  assert.ok(voices.rotorRoughnessModDepth.gain.value
+    < voices.rotorRoughnessGain.gain.value,
+  "bipolar roughness modulation cannot cross zero and invert the noise branch");
+  assert.ok(voices.mainRotorThumpGain.gain.value > baselineThump,
+    "published ground effect and disturbed inflow add low rotor structure");
+  assert.ok(voices.tailRotorNoiseGain.gain.value > baselineTailNoise,
+    "published pedal and anti-torque workload add tail-rotor air");
+  assert.equal(voices.cueCounts.structure, 1);
+  const nodesAfterStructureCue = audio.created.length;
+  updateCobraAudioVoices(voices, audio, {
+    ...COBRA_RUNNING,
+    cobra_vortex_ring_severity: 0.55,
+    cobra_retreating_blade_stall_severity: 0.68,
+    cobra_mast_bump_risk: 0.52,
+  });
+  assert.equal(voices.cueCounts.structure, 1,
+    "sustained mast risk cannot allocate a new transient on every hot frame");
+  assert.equal(audio.created.length, nodesAfterStructureCue,
+    "steady hazard modulation remains allocation-free after the one causal edge");
 
   updateCobraAudioVoices(voices, audio, COBRA_RUNNING, { muted: true });
   assert.equal(voices.master.gain.value, 0,
@@ -406,14 +518,14 @@ test("fires each procedural turnaround edge exactly once in the live graph", () 
   updateCobraAudioVoices(voices, audio, frame("starting", false));
   updateCobraAudioVoices(voices, audio, frame("starting", false));
   assert.deepEqual(voices.cueCounts, {
-    switch: 1, starter: 1, lightOff: 0, hostileBurst: 0, impact: 0,
+    switch: 1, starter: 1, lightOff: 0, hostileBurst: 0, impact: 0, structure: 0,
   });
 
   updateCobraAudioVoices(voices, audio, frame("starting", true));
   updateCobraAudioVoices(voices, audio, frame("starting", true));
   updateCobraAudioVoices(voices, audio, frame("rotor-spinup", true, 10));
   assert.deepEqual(voices.cueCounts, {
-    switch: 1, starter: 1, lightOff: 1, hostileBurst: 0, impact: 0,
+    switch: 1, starter: 1, lightOff: 1, hostileBurst: 0, impact: 0, structure: 0,
   });
 });
 
@@ -440,8 +552,16 @@ test("renders dedicated chin-turret chatter and each hostile burst/impact once",
 
   updateCobraAudioVoices(voices, audio, combat(13));
   assert.equal(voices.cueCounts.hostileBurst, 1);
+  assert.equal(voices.lastHostileProfile.sequence, 13,
+    "the actual authority sequence keys hostile-fire variation");
+  assert.deepEqual(
+    { ...voices.lastHostileProfile, sequence: undefined },
+    { ...cobraTransientProfile("hostile-burst", 13), sequence: undefined },
+  );
   updateCobraAudioVoices(voices, audio, combat(13, true));
   assert.equal(voices.cueCounts.impact, 1);
+  assert.equal(voices.lastImpactProfile.sequence, 13,
+    "the same bounded event identity keys its eventual impact texture");
   updateCobraAudioVoices(voices, audio, combat(13, true));
   assert.equal(voices.cueCounts.hostileBurst, 1);
   assert.equal(voices.cueCounts.impact, 1);
@@ -463,6 +583,20 @@ test("renders dedicated chin-turret chatter and each hostile burst/impact once",
     "two impacts arriving in one authority frame each receive one scheduled cue");
   updateCobraAudioVoices(voices, audio, overlapping(true));
   assert.equal(voices.cueCounts.impact, 3);
+
+  const trimmedImpact = (damagingHits) => ({
+    ...COBRA_RUNNING,
+    cobra_ground_fire_recent_bursts: [],
+    cobra_ground_fire_damaging_hits: damagingHits,
+  });
+  updateCobraAudioVoices(voices, audio, trimmedImpact(4));
+  const firstFallbackIdentity = voices.lastImpactProfile.sequence;
+  updateCobraAudioVoices(voices, audio, trimmedImpact(5));
+  const secondFallbackIdentity = voices.lastImpactProfile.sequence;
+  assert.equal(firstFallbackIdentity, 0x40000004);
+  assert.equal(secondFallbackIdentity, 0x40000005);
+  assert.notEqual(firstFallbackIdentity, secondFallbackIdentity,
+    "trimmed authority hits retain stable distinct variation without borrowing a burst id");
 });
 
 test("muted turnaround edges remain silent and are not replayed after unmute", () => {
@@ -477,13 +611,21 @@ test("muted turnaround edges remain silent and are not replayed after unmute", (
   updateCobraAudioVoices(voices, audio, frame("awaiting-start"), { muted: true });
   updateCobraAudioVoices(voices, audio, frame("starting"), { muted: true });
   assert.deepEqual(voices.cueCounts, {
-    switch: 0, starter: 0, lightOff: 0, hostileBurst: 0, impact: 0,
+    switch: 0, starter: 0, lightOff: 0, hostileBurst: 0, impact: 0, structure: 0,
   });
   updateCobraAudioVoices(voices, audio, frame("starting"), { muted: false });
   assert.deepEqual(voices.cueCounts, {
-    switch: 0, starter: 0, lightOff: 0, hostileBurst: 0, impact: 0,
+    switch: 0, starter: 0, lightOff: 0, hostileBurst: 0, impact: 0, structure: 0,
   },
     "unmute must not replay a historical starter edge");
+  updateCobraAudioVoices(voices, audio, {
+    ...frame("ready"), cobra_mast_bump_risk: 0.52,
+  }, { muted: true });
+  updateCobraAudioVoices(voices, audio, {
+    ...frame("ready"), cobra_mast_bump_risk: 0.52,
+  }, { muted: false });
+  assert.equal(voices.cueCounts.structure, 0,
+    "a mast-risk edge consumed under mute cannot replay after unmute");
 });
 
 test("muted combat edges are consumed and cannot replay after unmute", () => {
@@ -511,10 +653,12 @@ test("flight facade selects one propulsion graph while retaining shared event sy
     cobraActive: true,
     f14Active: false,
     turbopropActive: false,
+    motorcycleActive: false,
     jetMuted: true,
     cobraMuted: false,
     f14Muted: true,
     turbopropMuted: true,
+    motorcycleMuted: true,
     radioEngine: "cobra",
   });
   assert.deepEqual(flightPropulsionGraphGates({
@@ -524,10 +668,12 @@ test("flight facade selects one propulsion graph while retaining shared event sy
     cobraActive: false,
     f14Active: false,
     turbopropActive: false,
+    motorcycleActive: false,
     jetMuted: false,
     cobraMuted: true,
     f14Muted: true,
     turbopropMuted: true,
+    motorcycleMuted: true,
     radioEngine: "jet",
   });
   assert.equal(flightPropulsionGraphGates(COBRA_RUNNING, false).jetMuted, true);
@@ -543,10 +689,10 @@ test("flight facade selects one propulsion graph while retaining shared event sy
   assert.match(flightAudioSource, /updateWarningVoices\(/);
   assert.match(flightAudioSource, /updateRadioVoice\(/);
   assert.match(flightAudioSource,
-    /propulsionDuck\.connect\(bus\)[\s\S]*?createCobraAudioVoices\(context, propulsionDuck\)/,
-    "Cobra reaches the shared compressor through the one radio-duck VCA");
+    /propulsionDuck\.connect\(actionDuck\)\.connect\(bus\)[\s\S]*?createCobraAudioVoices\(context, propulsionDuck\)/,
+    "Cobra reaches the shared compressor through independent radio and action ducks");
   assert.match(flightAudioSource,
-    /createRadioVoice\(context, bus, \{[\s\S]*?propulsionDuck,[\s\S]*?\}\)/,
+    /createRadioVoice\(context, radioBus, \{[\s\S]*?propulsionDuck,[\s\S]*?\}\)/,
     "radio ducking is a persistent shared multiplier rather than a graph-master write");
   assert.match(flightAudioSource,
     /ensureDedicatedAircraftSampleBed\(cobraActive, cobraVoices, COBRA_COCKPIT_SAMPLE_BED\)/,

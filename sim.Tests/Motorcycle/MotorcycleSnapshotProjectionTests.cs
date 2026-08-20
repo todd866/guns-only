@@ -54,6 +54,10 @@ public sealed class MotorcycleSnapshotProjectionTests
         Assert.Equal("raw", root.GetProperty("control_mode").GetString());
         Assert.Equal("auto", root.GetProperty("clutch_mode").GetString());
         Assert.Equal("active", root.GetProperty("phase").GetString());
+        Assert.Equal(YzfR1Definition.IdleRpm,
+            root.GetProperty("engine_idle_rpm").GetDouble());
+        Assert.Equal(YzfR1Definition.RedlineRpm,
+            root.GetProperty("engine_redline_rpm").GetDouble());
     }
 
     [Fact]

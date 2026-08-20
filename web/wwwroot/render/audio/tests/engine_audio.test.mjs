@@ -596,6 +596,7 @@ test("flight façade shares one compressor bus, honors mute, and schedules gun r
     FakeAudioContext.instances.length = 0;
     globalThis.AudioContext = FakeAudioContext;
     const {
+      FLIGHT_MIX_PROFILE,
       updateFlightAudio,
       setFlightAudioEnabled,
     } = await freshModule("../flight_audio.js", "facade");
@@ -615,10 +616,16 @@ test("flight façade shares one compressor bus, honors mute, and schedules gun r
     // One shared master-bus compressor, plus the radio voice's dedicated speech compressor
     // (comms audio is deliberately squashed harder than the flight mix).
     assert.equal(audio.compressors.length, 2);
+    assert.equal(audio.compressors[0].threshold.value,
+      FLIGHT_MIX_PROFILE.compressorThresholdDb);
+    assert.equal(audio.compressors[0].ratio.value,
+      FLIGHT_MIX_PROFILE.compressorRatio);
     const master = audio.gains[0].gain;
     assert.ok(latest(master) > 0);
     assert.ok(latest(audio.gains[1].gain) > 0,
-      "propulsion retains its authored submix trim ahead of the shared compressor");
+      "radio duck retains a separate propulsion multiplier");
+    assert.equal(latest(audio.gains[2].gain), FLIGHT_MIX_PROFILE.gunPropulsionDuck,
+      "gun salience comes from a bounded action duck instead of compressor overload");
 
     const oscillatorsBefore = audio.oscillators.length;
     audio.currentTime = 0.12;

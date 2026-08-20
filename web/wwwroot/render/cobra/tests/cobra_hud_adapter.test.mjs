@@ -21,6 +21,7 @@ function authorityFixture() {
       vertical_speed_mps: -1.6,
       pitch_rad: 0.05, roll_rad: -0.1, yaw_rad: Math.PI / 2,
       collective: 0.62,
+      pedal: -0.24,
       velocity_x_mps: 30.0, velocity_y_mps: -1.6, velocity_z_mps: 4.2,
       hover_power_margin: 0.18,
       power_margin: 0.24,
@@ -35,9 +36,13 @@ function authorityFixture() {
         transmission_limit_fraction: 0.87,
         advance_ratio: 0.24,
         governor_saturated: false,
-        vortex_ring_severity: 0,
-        retreating_blade_stall_severity: 0,
-        mast_bump_risk: 0,
+        vortex_ring_severity: 0.08,
+        retreating_blade_stall_severity: 0.12,
+        mast_bump_risk: 0.10,
+        ground_effect_factor: 1.12,
+        torque_yaw_demand_rad_s: 0.16,
+        scas_yaw_rad_s: -0.04,
+        yaw_residual_rad_s: 0.12,
         main_rotor_clearance_m: 41.2,
         engine_operating: true,
       },
@@ -104,6 +109,14 @@ test("cobra snapshot speaks the production hud.js state contract", () => {
   assert.equal(state.cobra_collective, 0.62);
   assert.equal(state.cobra_advance_ratio, 0.24);
   assert.equal(state.cobra_transmission_limit_fraction, 0.87);
+  assert.equal(state.cobra_vortex_ring_severity, 0.08);
+  assert.equal(state.cobra_retreating_blade_stall_severity, 0.12);
+  assert.equal(state.cobra_mast_bump_risk, 0.10);
+  assert.equal(state.cobra_ground_effect_factor, 1.12);
+  assert.equal(state.cobra_pedal, -0.24);
+  assert.equal(state.cobra_torque_yaw_demand_rad_s, 0.16);
+  assert.equal(state.cobra_scas_yaw_rad_s, -0.04);
+  assert.equal(state.cobra_yaw_residual_rad_s, 0.12);
   assert.equal(state.cobra_engine_operating, true);
   assert.equal(state.cobra_engine_power_fraction, 0.61,
     "the bridge's published shaft-power fraction wins over a recomputed fallback");
@@ -254,6 +267,14 @@ test("degraded authority states fail visible, not plausible", () => {
   assert.equal(degraded.alt_ft, undefined);
   assert.equal(degraded.heading_deg, undefined);
   assert.equal(degraded.throttle, undefined);
+  assert.equal(degraded.cobra_vortex_ring_severity, undefined);
+  assert.equal(degraded.cobra_retreating_blade_stall_severity, undefined);
+  assert.equal(degraded.cobra_mast_bump_risk, undefined);
+  assert.equal(degraded.cobra_ground_effect_factor, undefined);
+  assert.equal(degraded.cobra_pedal, undefined);
+  assert.equal(degraded.cobra_torque_yaw_demand_rad_s, undefined);
+  assert.equal(degraded.cobra_scas_yaw_rad_s, undefined);
+  assert.equal(degraded.cobra_yaw_residual_rad_s, undefined);
   assert.equal(degraded.cobra_ground_fire_last_burst_sequence, undefined,
     "missing threat authority cannot masquerade as sequence zero");
   assert.deepEqual(degraded.cobra_ground_fire_recent_bursts, []);

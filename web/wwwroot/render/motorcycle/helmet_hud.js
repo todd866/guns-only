@@ -219,12 +219,16 @@ export class HelmetHud {
 
   drawRpmGear(ctx, w, h, state) {
     const rpm = Number.isFinite(state.rpm) ? state.rpm : 0;
+    const idleRpm = Number.isFinite(state.engine_idle_rpm)
+      ? state.engine_idle_rpm : IDLE_RPM;
+    const redlineRpm = Number.isFinite(state.engine_redline_rpm)
+      ? state.engine_redline_rpm : REDLINE_RPM;
     const gear = Number.isFinite(state.gear) ? state.gear : 0;
     const x = w * 0.5 - 70;
     const y = h * 0.86;
     const barW = 140;
-    const fill = clamp((rpm - IDLE_RPM) / (REDLINE_RPM - IDLE_RPM), 0, 1);
-    const redStart = clamp((12_000 - IDLE_RPM) / (REDLINE_RPM - IDLE_RPM), 0, 1);
+    const fill = clamp((rpm - idleRpm) / Math.max(1, redlineRpm - idleRpm), 0, 1);
+    const redStart = clamp((12_000 - idleRpm) / Math.max(1, redlineRpm - idleRpm), 0, 1);
 
     ctx.save();
     ctx.fillStyle = "rgba(8, 16, 13, 0.72)";
