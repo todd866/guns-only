@@ -34,7 +34,7 @@ export async function waitForCobraAuthority(page, timeoutMs) {
 export function readCobraHud(page) {
   return page.evaluate(async () => {
     const { cobraRotorcraftHudModel } =
-      await import("/render/cobra/cobra_rotorcraft_hud.js?v=344");
+      await import("/render/cobra/cobra_rotorcraft_hud.js?v=345");
     const state = window.__gunsOnlyCobraAuthority ?? null;
     const canvas = document.querySelector("#hud-canvas");
     return {

@@ -18,7 +18,7 @@ test("WebBridge exports StartFirstRunValley as a factory overlay, not a new Buil
     "StartFirstRunValley must not silently stage beat 7");
 });
 
-test("the F-22 shell auto-starts the valley once, without bolting on first_run_controls", async () => {
+test("the F-22 shell stages the valley once, without bolting on first_run_controls", async () => {
   const app = await source("app.js");
   assert.match(app, /render\/onboarding\/first_run_valley\.js\?v=\d+/);
   assert.match(app, /shouldAutoStartFirstRunValley/);
@@ -59,13 +59,30 @@ test("the first successful beginFlight stamps seen so Fly again is guns-only fir
     "boot must not stamp seen before the valley actually launched");
 });
 
-test("the picker stays hidden during warmup and first-run Fire visibly names its live weapon", async () => {
+test("first run is a deliberate Ready interlock and Fire visibly names its live weapon", async () => {
   const [app, index, hud, readouts] = await Promise.all([
     source("app.js"), source("index.html"), source("hud.js"), source("render/hud/hud_readouts.js"),
   ]);
   assert.match(app,
-    /function renderPauseUi\([\s\S]*firstRunAutostartPending[\s\S]*readyScreen\.classList\.toggle\("visible"/,
-    "first visit must skip the six-tile picker while the valley is auto-launching");
+    /const firstRunReady = firstRunAutostartPending[\s\S]*readyScreen\.dataset\.mode = firstRunReady[\s\S]*?"intro"/,
+    "first visit must own a distinct Ready presentation instead of falling through to the picker");
+  assert.match(app,
+    /const firstRunReady = firstRunAutostartPending && ready && !finished;/,
+    "settings, help, and background holds must not relabel staged intro authority as the picker");
+  assert.match(app,
+    /else if \(firstRunReady\)[\s\S]*readyStart\.textContent = "Enter valley"/,
+    "the first aircraft clock must wait behind an explicit pilot action");
+  assert.doesNotMatch(app,
+    /firstRunAutostartPending = true;\s*autoLaunchPending = true/,
+    "staging the valley must never arm launch before the pilot consents");
+  assert.match(index, /id="ready-intro-replay"[^>]*>Replay valley intro</,
+    "returning pilots need a visible replay action in the mission programme");
+  assert.match(app,
+    /readyIntroReplay\?\.addEventListener\("click"[\s\S]*searchParams\.set\("firstRun", "1"\)[\s\S]*enterReady/,
+    "the replay action must restage the same authority through the explicit replay seam");
+  assert.match(app,
+    /if \(firstRunAutostartPending\)[\s\S]*dismissFirstRunValleyAutostart\(\);[\s\S]*clearFirstRunValleyReplayQuery\(\);[\s\S]*enterReady/,
+    "choosing the programme must remove an explicit replay query before a future reload");
   assert.match(app,
     /"first-merge": Object\.freeze\(\{[\s\S]*?sortie: "F-22A vs escalating opposition · guns only · first pass safe"/);
   assert.match(app, /touchFireAriaLabel/);

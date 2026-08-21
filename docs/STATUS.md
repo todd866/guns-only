@@ -1,14 +1,21 @@
 # Current product and verification status
 
 Updated: 2026-08-21
-Next candidate: Build 344. One explicit player lifecycle now spans the six production programmes.
-The aircraft picker names each programme's verb and endpoint; first-run Guns Only teaches its
-two-missile-to-guns handoff without contradicting remapped controls; Cobra resolves the ground war
-into a flyable RTB and only debriefs after stable Camp Ember recovery; Weekend Ride has an authored
-End Ride, result, coaching and return path; and every Okanagan sortie now owns dispatch, current
-objective, terminal result, correction, replay choice and aircraft-menu return.
+Next candidate: Build 345. The first-run Soniachne valley mission now stages behind a dedicated
+Ready interlock: the F-22 remains paused until the pilot deliberately chooses Enter valley, the card
+teaches the complete valley → two Fox Twos → guns contract using the live remapped Fire binding,
+and Choose another mission safely returns to the aircraft programme. Returning pilots get a visible
+Replay valley intro action on Guns Only; it restages the same authority once, clears the replay query,
+and leaves Fly again to hand off naturally into the full combat programme. Settings, help and
+background holds preserve the intro's semantic/modal identity instead of exposing the wrong picker.
 
-The same candidate replaces the undifferentiated sound stack with causal, profile-specific audio.
+Build 344 established one explicit player lifecycle across the six production programmes. The
+aircraft picker names each programme's verb and endpoint; Cobra resolves the ground war into a
+flyable RTB and only debriefs after stable Camp Ember recovery; Weekend Ride has an authored End
+Ride, result, coaching and return path; and every Okanagan sortie owns dispatch, current objective,
+terminal result, correction, replay choice and aircraft-menu return.
+
+Build 344 also replaced the undifferentiated sound stack with causal, profile-specific audio.
 YZF-R1 gets an authoritative crossplane engine, road, grass, tyre, brake and shift graph; Cobra rotor,
 ground-effect, anti-torque and damage textures follow projected flight truth; Fire Boss scoop and
 drop voices follow published water rates; and AIM-9 launch, radio-priority ducking and one bounded

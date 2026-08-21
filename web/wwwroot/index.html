@@ -2956,6 +2956,18 @@
     #ready-screen:not([data-mode="program"]) #ready-handoff,
     #ready-screen:not([data-mode="program"]) .ready-secondary-actions { width: min(24rem, 100%); }
 
+    /* The first visit uses the same warm briefing card as every result and pause surface, but it
+       is a real Ready interlock rather than a hidden auto-launch. Two decisions only: deliberately
+       enter the guided valley, or open the same mission programme returning pilots see. */
+    #ready-screen[data-mode="intro"] .ready-card {
+      height: 100%;
+      justify-content: center;
+    }
+
+    #ready-screen[data-mode="intro"] .ready-secondary-actions {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     /* ------------------------------------------------------------------------------------
        AIRCRAFT + MISSION PICKER
        The paintings still make the first impression, but an aircraft is not the whole decision:
@@ -3865,6 +3877,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
           <button id="ready-replay" type="button" hidden>Replay incident again</button>
           <button id="ready-handoff" type="button" hidden disabled>CALL IT A DAY · RTB</button>
           <div class="ready-secondary-actions">
+            <button id="ready-intro-replay" type="button" hidden>Replay valley intro</button>
             <button id="ready-settings" type="button">Settings</button>
             <button id="ready-restart" type="button" hidden>Restart sortie</button>
             <button id="ready-return" type="button" hidden>Mission program</button>
@@ -3889,7 +3902,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
             <span aria-hidden="true">⌨</span> Built for a laptop or desktop: flight controls, the tactical map, and the full instrument set need a keyboard and a real screen.
           </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 344 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 345 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
           <div class="ready-telemetry-disclosure">
@@ -3993,7 +4006,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     // Derive from a normal stamped URL so this comparison cannot drift from the next release:
     // tools/release/stamp-release.mjs rewrites every `?v=NNN`, and nothing else here.
-    const releaseBuild = new URL("./service-worker.js?v=344", location.href)
+    const releaseBuild = new URL("./service-worker.js?v=345", location.href)
       .searchParams.get("v");
 
     globalThis.__gunsPrebootReady = (async () => {
@@ -4089,11 +4102,11 @@ Splash one bandit to qualify · H controls · R restarts</p>
         });
         document.head.append(script);
       });
-      await loadClassicScript("./multiplayer-config.js?v=344");
-      await loadClassicScript("./_framework/blazor.webassembly.js?v=344", {
+      await loadClassicScript("./multiplayer-config.js?v=345");
+      await loadClassicScript("./_framework/blazor.webassembly.js?v=345", {
         autostart: "false",
       });
-      await import("./app.js?v=344");
+      await import("./app.js?v=345");
     } catch (error) {
       console.error(error);
       document.querySelector("#boot")?.classList.add("ready");
@@ -4106,8 +4119,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       try {
         const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
           await Promise.all([
-            import("./render/shell/inapp_browser.js?v=344"),
-            import("./render/shell/boot_fallback.js?v=344"),
+            import("./render/shell/inapp_browser.js?v=345"),
+            import("./render/shell/boot_fallback.js?v=345"),
           ]);
         const detection = detectEmbeddedBrowser({
           userAgent: navigator.userAgent,

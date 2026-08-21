@@ -1,9 +1,9 @@
-import * as THREE from "../vendor/three.module.js?v=344";
-import { createOkanaganWorld } from "../render/okanagan/okanagan_world.js?v=344";
-import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=344";
-import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=344";
-import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=344";
-import { createHud } from "../hud.js?v=344";
+import * as THREE from "../vendor/three.module.js?v=345";
+import { createOkanaganWorld } from "../render/okanagan/okanagan_world.js?v=345";
+import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=345";
+import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=345";
+import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=345";
+import { createHud } from "../hud.js?v=345";
 import {
   armFlightAudio,
   flightAudioDiagnostics,
@@ -11,22 +11,22 @@ import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=344";
-import { standardGamepadState } from "../render/input/dual_stick_input.js?v=344";
-import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=344";
+} from "../render/audio/flight_audio.js?v=345";
+import { standardGamepadState } from "../render/input/dual_stick_input.js?v=345";
+import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=345";
 import {
   compactOkanaganCue,
   okanaganFlightState,
-} from "../render/okanagan/okanagan_hud_adapter.js?v=344";
+} from "../render/okanagan/okanagan_hud_adapter.js?v=345";
 import {
   cycleOkanaganTarget,
   okanaganTargets,
   retainOkanaganTarget,
-} from "../render/okanagan/okanagan_targets.js?v=344";
+} from "../render/okanagan/okanagan_targets.js?v=345";
 import {
   okanaganDebriefModel,
   okanaganMissionTerminal,
-} from "../render/okanagan/okanagan_debrief.js?v=344";
+} from "../render/okanagan/okanagan_debrief.js?v=345";
 
 const SORTIES = Object.freeze({
   "water-circuits": { index: 0, title: "Water Circuits", block: 610, working: "197 KG" },

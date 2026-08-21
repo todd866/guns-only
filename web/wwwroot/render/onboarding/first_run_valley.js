@@ -26,7 +26,7 @@ export function markFirstRunValleySeen(storage) {
 }
 
 /**
- * First pending visit with no other programme query auto-starts the valley. Playwright
+ * First pending visit with no other programme query stages the valley Ready card. Playwright
  * (`navigator.webdriver`) keeps the six-tile picker unless `?firstRun=1`. `?menu=1` always
  * keeps the picker, including over a QA replay query.
  */

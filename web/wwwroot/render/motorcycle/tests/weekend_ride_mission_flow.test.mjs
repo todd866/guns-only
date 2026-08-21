@@ -87,7 +87,7 @@ test("Weekend Ride owns one shared audio lifecycle from gesture through debrief"
   ]);
 
   assert.match(main,
-    /import \{[\s\S]*?armFlightAudio,[\s\S]*?setFlightAudioEnabled,[\s\S]*?suspendFlightAudio,[\s\S]*?updateFlightAudio,[\s\S]*?\} from "\.\.\/render\/audio\/flight_audio\.js\?v=344"/u);
+    /import \{[\s\S]*?armFlightAudio,[\s\S]*?setFlightAudioEnabled,[\s\S]*?suspendFlightAudio,[\s\S]*?updateFlightAudio,[\s\S]*?\} from "\.\.\/render\/audio\/flight_audio\.js\?v=345"/u);
   assert.match(main, /audio_profile_id = "audio\.yzf-r1\.crossplane\.v1"/u);
   assert.match(main, /updateFlightAudio\(state, \{[\s\S]*?muted: paused \|\| terminal \|\| !playerSettings\.audio/u);
   assert.match(main, /pointerdown", armAudioFromGesture/u);

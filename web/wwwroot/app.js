@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=344";
+import { createHud } from "./hud.js?v=345";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -16,7 +16,7 @@ import {
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=344";
+} from "./render/debrief/sortie_result.js?v=345";
 import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
@@ -38,7 +38,7 @@ import {
   shouldAutoStartFirstRunValley,
   touchFireAriaLabel,
   touchFireVisibleLabel,
-} from "./render/onboarding/first_run_valley.js?v=344";
+} from "./render/onboarding/first_run_valley.js?v=345";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -77,8 +77,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=344";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=344";
+} from "./render/release/release_identity.js?v=345";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=345";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -91,7 +91,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=344";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=345";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -100,10 +100,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=344";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=345";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=344";
+} from "./render/nav/carrier_sortie_touch_control.js?v=345";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -186,7 +186,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=344";
+} from "./render/telemetry/ai_frame_pressure.js?v=345";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -196,14 +196,14 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=344";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=344";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=344";
+} from "./render/telemetry/telemetry_batch.js?v=345";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=345";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=345";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=344";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=344";
+} from "./render/shell/boot_watchdog.js?v=345";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=345";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -212,7 +212,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=344";
+} from "./render/settings/player_settings.js?v=345";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -259,13 +259,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=344";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=344";
+} from "./render/scene/scene_builders.js?v=345";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=345";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=344";
+} from "./render/audio/flight_audio.js?v=345";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -527,6 +527,7 @@ const readyProgramProgress = document.querySelector("#ready-program-progress");
 const readyStart = document.querySelector("#ready-start");
 const readyReplay = document.querySelector("#ready-replay");
 const readyHandoff = document.querySelector("#ready-handoff");
+const readyIntroReplay = document.querySelector("#ready-intro-replay");
 const readySettings = document.querySelector("#ready-settings");
 const readyRestart = document.querySelector("#ready-restart");
 const readyReturn = document.querySelector("#ready-return");
@@ -2966,10 +2967,11 @@ function observeArenaMatch(state) {
 let incidentReplay = null;
 let appliedMultiplayerWorldOrigin = "";
 const pauseReasons = new Set(["ready"]);
-// Every platform sees the same two-aircraft front door, except the one-shot first-run valley
-// on-ramp. `autoLaunchPending` is armed after a Fly gesture needs asynchronous terrain warmup, or
-// when that first visit skips Ready. Playwright (`navigator.webdriver`) keeps the picker unless
-// `?firstRun=1`. Catalogue clicks dismiss the on-ramp for the rest of the page lifetime.
+// Every platform sees the same aircraft front door, except the one-shot first-run valley on-ramp.
+// The on-ramp is staged behind its own Ready card: no aircraft clock moves until the pilot chooses
+// Enter valley. `autoLaunchPending` is armed only after that gesture needs asynchronous terrain
+// warmup. Playwright (`navigator.webdriver`) keeps the picker unless `?firstRun=1`. Catalogue
+// clicks dismiss the on-ramp for the rest of the page lifetime.
 let autoLaunchPending = false;
 let firstRunAutostartPending = false;
 let firstRunValleyDismissed = false;
@@ -3597,6 +3599,13 @@ function shouldStageFirstRunValley() {
 function dismissFirstRunValleyAutostart() {
   firstRunValleyDismissed = true;
   firstRunAutostartPending = false;
+}
+
+function clearFirstRunValleyReplayQuery() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("firstRun")) return;
+  url.searchParams.delete("firstRun");
+  window.history.replaceState(window.history.state, "", url);
 }
 
 function tryLaunchFoxTwo() {
@@ -4561,14 +4570,11 @@ function renderPauseUi(state = latestState) {
   const sessionPaused = pauseReasons.has("session");
   const settingsPaused = pauseReasons.has("settings");
   const richCasevacDebrief = finished && isCasevacState(state);
-  const hidingFirstRunPicker = firstRunAutostartPending
-    && ready
-    && !finished
-    && !help
-    && !sessionPaused
-    && !settingsPaused
-    && !background;
-  const showScreen = !hidingFirstRunPicker && !help && !calibrating
+  // Mission authority owns the card identity. Settings, help, blur/background and a redundant
+  // session hold may cover or inert this surface, but none of them may make staged valley
+  // authority masquerade as the normal six-aircraft programme underneath.
+  const firstRunReady = firstRunAutostartPending && ready && !finished;
+  const showScreen = !help && !calibrating
     && (ready || finished || background || sessionPaused || settingsPaused);
   const brief = missionBrief();
   const handoff = combatHandoffPresentation(state);
@@ -4579,12 +4585,13 @@ function renderPauseUi(state = latestState) {
   const wasScreenVisible = readyScreen.classList.contains("visible");
   const startWasDisabled = readyStart.disabled;
 
-  readyScreen.dataset.mode = ready ? "program" : finished ? "debrief" : "pause";
+  readyScreen.dataset.mode = firstRunReady
+    ? "intro" : ready ? "program" : finished ? "debrief" : "pause";
   readyScreen.dataset.richDebrief = String(richCasevacDebrief);
   // This must be a semantic visibility edge, not CSS alone. readyScreenFocusables deliberately
   // ignores descendants of [hidden]; without it the invisible consent checkbox becomes the
   // computed last item in pause/debrief and lets Tab escape the aria-modal dialog.
-  if (readyTelemetryDisclosure) readyTelemetryDisclosure.hidden = !ready;
+  if (readyTelemetryDisclosure) readyTelemetryDisclosure.hidden = !ready || firstRunReady;
   const routeBlocked = ready && blockedProgramExperience !== null;
   readyScreen.dataset.routeBlocked = String(routeBlocked);
   if (readyRouteNotice) {
@@ -4617,7 +4624,7 @@ function renderPauseUi(state = latestState) {
       }
     }
   }
-  if (readySelector) readySelector.hidden = !ready;
+  if (readySelector) readySelector.hidden = !ready || firstRunReady;
   if (readyDeckConfig && !ready) readyDeckConfig.hidden = true;
   if (readyCircuitsPreflight && !ready) readyCircuitsPreflight.hidden = true;
   if (ready) renderCampaignProgress();
@@ -4626,12 +4633,14 @@ function renderPauseUi(state = latestState) {
     routes: state?.casevac_routes,
   });
   if (readyMenuTitle) {
-    readyMenuTitle.textContent = ready
-      ? "Pick an aircraft" : finished ? "Sortie complete" : "Flight paused";
+    readyMenuTitle.textContent = firstRunReady
+      ? "Your first sortie" : ready
+        ? "Pick an aircraft" : finished ? "Sortie complete" : "Flight paused";
   }
   if (readyMenuHelp) {
-    readyMenuHelp.textContent = (ready
-      ? "Pick the aircraft you want to fly."
+    readyMenuHelp.textContent = (firstRunReady
+      ? "A short guided intercept before the full combat programme."
+      : ready ? "Pick the aircraft you want to fly."
       : finished
         ? "Review the result, or go again."
         : "The deterministic flight clock is stopped and all controls are neutralised.");
@@ -4667,6 +4676,12 @@ function renderPauseUi(state = latestState) {
     String(!showScreen || richCasevacDebrief),
   );
   if (readySettings) readySettings.hidden = !showScreen;
+  if (readyIntroReplay) {
+    readyIntroReplay.hidden = !(firstRunReady
+      || (ready && selectedProgramNodeId === "first-merge"));
+    readyIntroReplay.textContent = firstRunReady
+      ? "Choose another mission" : "Replay valley intro";
+  }
   if (readyRestart) {
     readyRestart.hidden = ready;
     readyRestart.textContent = finished ? "Fly again" : "Restart sortie";
@@ -4780,6 +4795,24 @@ function renderPauseUi(state = latestState) {
           ? "Tap Fly to fly the next contract"
           : "Press Enter to fly the next contract"}`
         : mobileControls ? "Tap Fly to launch again" : "Press Enter to fly again";
+  } else if (firstRunReady) {
+    const fireBinding = controlCodeLabel(playerSettings.bindings.fire);
+    const rtbBinding = controlCodeLabel(playerSettings.bindings.knockItOff);
+    if (readySortieLabel) readySortieLabel.textContent = "Flight path";
+    if (readyConfigLabel) readyConfigLabel.textContent = "Weapons";
+    readyReplay.hidden = true;
+    readyKicker.textContent = "Soniachne valley · guided first sortie";
+    readyTitle.textContent = "Enter the valley";
+    readyBrief.textContent = "Stay low and follow the valley north. At the pop-out gate, Fire launches two heat-seeking missiles one at a time; after both splashes, the same control becomes the gun trigger.";
+    readySortie.textContent = "Follow valley → pop out → splash two targets → guns";
+    readyConfig.textContent = `F-22A · two AIM-9 surrogates · 480 gun rounds · ${fireBinding} changes with the mission`;
+    if (readyControls) readyControls.textContent = mobileControls
+      ? "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll · FOX 2 launches missiles, then becomes GUNS\nThe objective strip always shows the next action"
+      : `ARROWS fly · W/S power · ${fireBinding} launches two missiles, then fires guns\nThe objective strip always shows the next action · ${rtbBinding} calls RTB when you are ready`;
+    readyStart.textContent = "Enter valley";
+    readyHint.textContent = background
+      ? "Return to the game to enter the valley"
+      : mobileControls ? "Tap Enter valley when ready" : "Press Enter when ready";
   } else if (ready) {
     if (readySortieLabel) readySortieLabel.textContent = "Sortie";
     if (readyConfigLabel) readyConfigLabel.textContent = "Configuration";
@@ -4944,7 +4977,7 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
       bridge.StartFirstRunValley();
       stagedMissionAuthority = firstRunValleyMissionAuthority();
       firstRunAutostartPending = true;
-      autoLaunchPending = true;
+      autoLaunchPending = false;
       recorder.event("lifecycle", "sortie_staged", {
         program: selectedProgramNodeId,
         first_run_valley: true,
@@ -4982,8 +5015,7 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
   bridgePauseApplied = true; // StartBeat is an authoritative transition to Ready.
   renderPauseUi();
   resetFrameClock();
-  if (firstRunAutostartPending) queueMicrotask(tryAutoLaunch);
-  else if (focus) queueMicrotask(focusReadyScreen);
+  if (focus) queueMicrotask(focusReadyScreen);
   return latestState;
 }
 
@@ -5683,6 +5715,26 @@ readyReplay?.addEventListener("click", () => {
 });
 
 readySettings?.addEventListener("click", openSettings);
+readyIntroReplay?.addEventListener("click", () => {
+  if (firstRunAutostartPending) {
+    dismissFirstRunValleyAutostart();
+    autoLaunchPending = false;
+    clearFirstRunValleyReplayQuery();
+    enterReady({ resetBridge: true });
+    return;
+  }
+  if (!pauseReasons.has("ready") || selectedProgramNodeId !== "first-merge") return;
+  firstRunValleyDismissed = false;
+  const replayUrl = new URL(window.location.href);
+  replayUrl.searchParams.set("program", "first-merge");
+  replayUrl.searchParams.set("firstRun", "1");
+  replayUrl.searchParams.delete("menu");
+  window.history.replaceState(window.history.state, "", replayUrl);
+  enterReady({ resetBridge: true });
+  // The query is an explicit boot seam, not sticky campaign state. Once authority is staged,
+  // remove it so Fly again naturally hands the pilot into the full Guns Only programme.
+  clearFirstRunValleyReplayQuery();
+});
 readyHandoff?.addEventListener("click", requestCombatHandoffFromPause);
 readyRestart?.addEventListener("click", restartMissionNow);
 readyReturn?.addEventListener("click", returnToCatalogue);
@@ -11444,7 +11496,7 @@ async function boot() {
     bridge.StartFirstRunValley();
     stagedMissionAuthority = firstRunValleyMissionAuthority();
     firstRunAutostartPending = true;
-    autoLaunchPending = true;
+    autoLaunchPending = false;
   } else {
     bridge.StartBeat(selectedBeat);
     stagedMissionAuthority = selectedProductionMissionAuthority();
@@ -11489,7 +11541,6 @@ async function boot() {
   syncArenaClientForLane();
   if (arenaClient) void ensureArenaMatch(bridge);
   renderPauseUi();
-  if (firstRunAutostartPending) queueMicrotask(tryAutoLaunch);
   let firstFrame = true;
 
   globalThis.__gunsLifecycle = {
@@ -11769,7 +11820,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=344")
+    navigator.serviceWorker.register("service-worker.js?v=345")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

@@ -43,7 +43,7 @@ test("a throwing storage never crashes and stays pending", () => {
   assert.doesNotThrow(() => markFirstRunValleySeen(null));
 });
 
-test("first pending visit with no other programme query auto-starts", () => {
+test("first pending visit with no other programme query stages the guided valley", () => {
   assert.equal(shouldAutoStartFirstRunValley({
     firstRunPending: true,
     programQuery: null,

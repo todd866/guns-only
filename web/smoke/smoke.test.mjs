@@ -1309,6 +1309,76 @@ test("the published Medevac route resolves route hold, selective relay, and dive
   }
 });
 
+test("first-run valley waits for consent and remains replayable from the programme", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+
+  const site = await serveStatic(WWWROOT);
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+  });
+  try {
+    const page = await browser.newPage();
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
+    await page.goto(`${site.url}?firstRun=1&audioQa=silent`, {
+      waitUntil: "load",
+      timeout: scaled(60000),
+    });
+    await page.waitForFunction(() =>
+      document.querySelector("#ready-screen")?.classList.contains("visible") === true
+        && document.querySelector("#ready-screen")?.dataset.mode === "intro"
+        && document.querySelector("#ready-start")?.disabled === false,
+    undefined, { polling: scaled(100), timeout: scaled(45000) });
+
+    assert.equal(await page.locator("#ready-start").innerText(), "Enter valley");
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "ready-start");
+    await page.waitForTimeout(scaled(1000));
+    assert.equal(await page.evaluate(() =>
+      document.querySelector("#ready-screen")?.dataset.mode), "intro",
+    "first-run authority must remain Ready until a deliberate pilot action");
+
+    await page.locator("#ready-settings").click();
+    await page.waitForFunction(() =>
+      document.querySelector("#settings-screen")?.getAttribute("aria-hidden") === "false",
+    undefined, { polling: scaled(100), timeout: scaled(20000) });
+    assert.equal(await page.evaluate(() =>
+      document.querySelector("#ready-screen")?.dataset.mode), "intro",
+    "Settings must not relabel staged valley authority as the aircraft programme");
+    assert.equal(await page.locator("#ready-selector").isHidden(), true);
+    await page.locator("#settings-close").click();
+
+    await page.locator("#ready-intro-replay").click();
+    await page.waitForFunction(() =>
+      document.querySelector("#ready-screen")?.dataset.mode === "program",
+    undefined, { polling: scaled(100), timeout: scaled(20000) });
+    assert.equal(await page.locator("#ready-intro-replay").innerText(), "Replay valley intro");
+    assert.equal(new URL(page.url()).searchParams.has("firstRun"), false,
+      "choosing another mission must not make a later reload restage the intro");
+
+    await page.locator("#ready-intro-replay").click();
+    await page.waitForFunction(() =>
+      document.querySelector("#ready-screen")?.dataset.mode === "intro",
+    undefined, { polling: scaled(100), timeout: scaled(20000) });
+    assert.equal(new URL(page.url()).searchParams.has("firstRun"), false,
+      "the visible replay action must not make the intro sticky for Fly again");
+
+    await page.locator("#ready-start").click();
+    await page.waitForFunction(() =>
+      globalThis.__gunsState?.session_phase === "ACTIVE"
+        && globalThis.__gunsState?.mission_definition_id
+          === "mission.modern.visual-merge.first-run-valley.v1"
+        && !document.querySelector("#ready-screen")?.classList.contains("visible"),
+    undefined, { polling: scaled(100), timeout: scaled(90000) });
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "scene");
+    assert.deepEqual(pageErrors, [],
+      `uncaught first-run page errors:\n${pageErrors.join("\n")}`);
+  } finally {
+    await browser.close();
+    await site.close();
+  }
+});
+
 test("the published web app boots to a running flight kernel (no fatal render error)", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 

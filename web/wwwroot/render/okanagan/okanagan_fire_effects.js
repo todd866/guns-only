@@ -1,4 +1,4 @@
-import * as THREE from "../../vendor/three.module.js?v=344";
+import * as THREE from "../../vendor/three.module.js?v=345";
 
 export function createOkanaganFireEffects(scene, capacity = 180) {
   const group = new THREE.Group();

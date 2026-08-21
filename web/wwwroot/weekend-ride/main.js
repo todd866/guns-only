@@ -1,36 +1,36 @@
-import * as THREE from "../vendor/three.module.js?v=344";
-import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=344";
+import * as THREE from "../vendor/three.module.js?v=345";
+import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=345";
 import {
   loadRideBest,
   saveRideBest,
-} from "../render/ride/ride_best_lap_store.js?v=344";
-import { weekendRideResult } from "../render/ride/weekend_ride_result.js?v=344";
-import { weekendRideEscapeAction } from "../render/ride/weekend_ride_lifecycle.js?v=344";
+} from "../render/ride/ride_best_lap_store.js?v=345";
+import { weekendRideResult } from "../render/ride/weekend_ride_result.js?v=345";
+import { weekendRideEscapeAction } from "../render/ride/weekend_ride_lifecycle.js?v=345";
 import {
   dominantSignedAxis,
   gamepadRiderAxes,
-} from "../render/motorcycle/rider_input.js?v=344";
+} from "../render/motorcycle/rider_input.js?v=345";
 import {
   createRapierTrackDayPresentation,
-} from "../render/motorcycle/track_day_presentation.js?v=344";
-import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=344";
+} from "../render/motorcycle/track_day_presentation.js?v=345";
+import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=345";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=344";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=344";
-import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=344";
+} from "../render/visual/shadow_stabilizer.js?v=345";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=345";
+import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=345";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=344";
+} from "../render/audio/flight_audio.js?v=345";
 import {
   loadPlayerSettings,
   savePlayerSettings,
-} from "../render/settings/player_settings.js?v=344";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=344";
-import { RELEASE_BUILD } from "../render/release/release_identity.js?v=344";
+} from "../render/settings/player_settings.js?v=345";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=345";
+import { RELEASE_BUILD } from "../render/release/release_identity.js?v=345";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
