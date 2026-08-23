@@ -90,3 +90,4 @@ tmp/
 
 # Advisory inter-agent file claims (bin/claim) -- local coordination, not history.
 .agent-claims/
+.agent-frames/

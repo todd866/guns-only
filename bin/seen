@@ -1,0 +1,354 @@
+#!/bin/sh
+# seen -- did that visual change actually reach a frame, or does it only exist in the diff?
+#
+# The recurring failure here is not a broken renderer. It is a green gate over a dead code path.
+# The cloud ramp, the film grain and the MSAA setting all landed, were all reported as done, and
+# none of them were ever seen in a frame; `composer` was constructed with samples:0, which made
+# the antialias branch unreachable. The inverse has cost just as much: "the sun leaks into the
+# bore" was chased for a round before two renders turned out to be byte-identical, so there had
+# never been a defect to chase. Both are the same missing step -- nobody compared the pixels.
+#
+#   bin/seen baseline --as ghibli-clouds --why "cloud ramp"   # snapshot the shots you have now
+#   bin/seen noise    --as ghibli-clouds                      # re-shoot WITHOUT editing: which views repeat?
+#   bin/seen verdict  --as ghibli-clouds                      # re-shoot AFTER editing: did pixels move?
+#   bin/seen substance                                        # is each view a picture of anything?
+#   bin/seen list
+#   bin/seen forget   --as ghibli-clouds
+#
+# Between each step you re-run the capture harness yourself:
+#
+#   node tools/terrain-look/shot.mjs
+#
+# `seen` never runs the game, never launches a browser and never writes to the shots directory.
+# It only hashes what the harness left behind. Whatever proved the pixels must not also be the
+# thing being proved.
+#
+# WHY `noise` EXISTS. shot.mjs prints "5 deterministic terrain PNGs". Measured 2026-08-23 on two
+# back-to-back runs at the same revision, two of the five were not byte-reproducible: high-oblique
+# and zoom-apex differed, and both grew (351,740 -> 360,430 and 278,387 -> 291,158 bytes). Their
+# residency diagnostics were identical, so it is not a missing terrain page; it is detail arriving
+# late that the counters do not track. On those two views "the pixels changed" proves nothing.
+#
+# The two directions are not symmetric, and that is the whole point:
+#
+#   pixels identical -> CHANGED NOTHING. Conclusive on ANY view. A view that cannot reproduce
+#                       itself just did, so your edit did not reach this frame.
+#   pixels differ    -> proof ONLY on a view `noise` showed repeats exactly. Otherwise the
+#                       difference is indistinguishable from the view's own churn.
+#
+# Provenance is checked before either: a capture taken at a different quality tier, governor
+# level, terrain id or viewport is not a comparison, and is refused rather than scored.
+#
+# A THIRD gate, `substance`, asks whether the frame is a picture at all. It exists because
+# combat-apex-72k -- 68% of its pixels one flat colour, the world erased by haze -- passed the
+# look gate at paletteDistance 1.264 against a 3.6 ceiling. An average is comfortable on an
+# empty frame. That view repeats perfectly, so it is a rock-solid measurement of almost nothing.
+#
+# Advisory, like bin/claim. It reports; it does not block a commit.
+set -eu
+
+repo_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+frames_dir="$repo_dir/.agent-frames"
+default_shots="$repo_dir/tools/terrain-look/shots"
+
+me=""
+why=""
+shots=""
+cmd=${1:-list}
+[ "$#" -gt 0 ] && shift
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --as) me=${2:-}; shift 2 ;;
+        --why) why=${2:-}; shift 2 ;;
+        --shots) shots=${2:-}; shift 2 ;;
+        -h|--help) sed -n '2,46p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "seen: unexpected argument '$1'" >&2; exit 2 ;;
+    esac
+done
+[ -n "$shots" ] || shots=${GUNS_SEEN_SHOTS:-$default_shots}
+
+slug() { printf '%s' "$1" | tr '/' '_' | tr -cd 'A-Za-z0-9._-'; }
+# Strip newlines and control characters: a value spanning lines would shift every later field.
+sanitise() { printf '%s' "$1" | tr -d '\n\r' | tr -cd '[:print:]'; }
+now() { date '+%Y-%m-%dT%H:%M:%S'; }
+revision() { git -C "$repo_dir" rev-parse --short HEAD 2>/dev/null || echo unknown; }
+
+need_id() { [ -n "$me" ] || { echo "seen: --as <claim-id> is required" >&2; exit 2; }; }
+
+# Emit one row per capture: <view> <png-sha256> <bytes> <provenance-sha>.
+#
+# The PNG is hashed from its own bytes, never from the `size` field views.json reports; a size is
+# not a fingerprint. The provenance hash deliberately excludes filePath, which changes with
+# TERRAIN_LOOK_DIR and says nothing about what was rendered.
+snapshot_rows() {
+    if [ ! -f "$1/views.json" ]; then
+        echo "seen: no views.json in $1" >&2
+        echo "seen: run the capture harness first -- node tools/terrain-look/shot.mjs" >&2
+        exit 2
+    fi
+    node -e '
+      const { readFileSync } = require("node:fs");
+      const { createHash } = require("node:crypto");
+      const { join, basename } = require("node:path");
+      const dir = process.argv[1];
+      const views = JSON.parse(readFileSync(join(dir, "views.json"), "utf8"));
+      const viewport = JSON.stringify(views.viewport ?? null);
+      for (const capture of views.captures ?? []) {
+        const png = join(dir, basename(capture.filePath ?? `${capture.name}.png`));
+        let digest = "missing";
+        let bytes = 0;
+        try {
+          const buf = readFileSync(png);
+          digest = createHash("sha256").update(buf).digest("hex");
+          bytes = buf.length;
+        } catch { /* reported as a missing capture, not a crash */ }
+        const provenance = createHash("sha256")
+          .update(viewport + JSON.stringify(capture.provenance ?? null))
+          .digest("hex")
+          .slice(0, 16);
+        console.log(`${capture.name} ${digest} ${bytes} ${provenance}`);
+      }
+    ' "$shots"
+}
+
+# Emit one row per capture: <view> <live-fraction> <dominant-share> <usable|thin>.
+#
+# Reproducibility says whether a difference is trustworthy. Substance says whether the frame is
+# a picture of anything in the first place. They are independent: combat-apex-72k repeats
+# perfectly AND is 68% one colour, so it is a rock-solid measurement of almost nothing.
+substance_rows() {
+    node --input-type=module -e '
+      import { readFileSync } from "node:fs";
+      import { join, basename } from "node:path";
+      import { frameSubstanceFromBuffer, proofSurface } from "'"$repo_dir"'/tools/look-gate/substance.mjs";
+      const dir = process.argv[1];
+      const views = JSON.parse(readFileSync(join(dir, "views.json"), "utf8"));
+      for (const capture of views.captures ?? []) {
+        const png = join(dir, basename(capture.filePath ?? `${capture.name}.png`));
+        try {
+          const s = frameSubstanceFromBuffer(readFileSync(png));
+          const verdict = proofSurface(s);
+          console.log(`${capture.name} ${s.liveFraction.toFixed(3)} ${s.dominantShare.toFixed(3)} ${verdict.usable ? "usable" : "thin"}`);
+        } catch {
+          console.log(`${capture.name} - - unreadable`);
+        }
+      }
+    ' "$1"
+}
+
+baseline_file() { echo "$frames_dir/$(slug "$1").baseline"; }
+noise_file() { echo "$frames_dir/$(slug "$1").noise"; }
+
+require_baseline() {
+    [ -f "$(baseline_file "$1")" ] || {
+        echo "seen: no baseline for '$1'. Take one first:" >&2
+        echo "  bin/seen baseline --as $1 --why \"what you are about to change\"" >&2
+        exit 2
+    }
+}
+
+# Field N of the row for view $1 in file $2. Fixed column order, plain text, never evaluated.
+row_field() { awk -v v="$1" -v n="$3" '$1 == v { print $n; exit }' "$2"; }
+
+case "$cmd" in
+-h|--help|help)
+    sed -n '2,46p' "$0" | sed 's/^# \{0,1\}//'
+    ;;
+
+list)
+    [ -d "$frames_dir" ] || { echo "no recorded baselines"; exit 0; }
+    files=$(find "$frames_dir" -mindepth 1 -maxdepth 1 -name '*.baseline' -print | LC_ALL=C sort)
+    [ -n "$files" ] || { echo "no recorded baselines"; exit 0; }
+    printf '%-24s %-20s %-10s %-7s %s\n' CLAIM TAKEN REVISION NOISE WHY
+    printf '%s\n' "$files" | while IFS= read -r f; do
+        b_id=$(sed -n '1p' "$f"); b_when=$(sed -n '2p' "$f")
+        b_rev=$(sed -n '3p' "$f"); b_why=$(sed -n '4p' "$f")
+        if [ -f "$frames_dir/$(slug "$b_id").noise" ]; then b_noise=measured; else b_noise="-"; fi
+        printf '%-24s %-20s %-10s %-7s %s\n' "$b_id" "$b_when" "$b_rev" "$b_noise" "$b_why"
+    done
+    ;;
+
+baseline)
+    need_id
+    mkdir -p "$frames_dir"
+    rows=$(snapshot_rows "$shots")
+    [ -n "$rows" ] || { echo "seen: views.json lists no captures" >&2; exit 2; }
+    f=$(baseline_file "$me")
+    # Four header lines in a fixed order, then one row per view. NEVER shell syntax: these files
+    # are written by one agent and read by every other, so anything eval-able here is code
+    # execution across the whole team.
+    {
+        printf '%s\n' "$(sanitise "$me")"
+        printf '%s\n' "$(now)"
+        printf '%s\n' "$(revision)"
+        printf '%s\n' "$(sanitise "$why")"
+        printf '%s\n' "$rows"
+    } > "$f"
+    rm -f "$(noise_file "$me")"
+    echo "baseline '$me' recorded at $(revision) from $shots"
+    printf '%s\n' "$rows" | while read -r v h n p; do
+        printf '  %-18s %s  %s bytes\n' "$v" "$(printf '%.12s' "$h")" "$n"
+    done
+    echo
+    echo "Next: re-run the harness WITHOUT editing anything, then: bin/seen noise --as $me"
+    ;;
+
+noise)
+    need_id
+    require_baseline "$me"
+    base=$(baseline_file "$me")
+    rows=$(snapshot_rows "$shots")
+    out=$(noise_file "$me")
+    : > "$out"
+    stable=0; unstable=0
+    printf '%s\n' "$rows" | while read -r v h n p; do
+        was=$(row_field "$v" "$base" 2)
+        if [ -z "$was" ]; then
+            printf '%s unknown\n' "$v" >> "$out"
+        elif [ "$was" = "$h" ]; then
+            printf '%s stable\n' "$v" >> "$out"
+        else
+            printf '%s unstable\n' "$v" >> "$out"
+        fi
+    done
+    stable=$(awk '$2 == "stable"' "$out" | wc -l | tr -d ' ')
+    unstable=$(awk '$2 == "unstable"' "$out" | wc -l | tr -d ' ')
+    echo "noise floor for '$me' (no code change between these two captures):"
+    while read -r v s; do
+        case "$s" in
+            stable) printf '  %-18s repeats exactly    -- a pixel difference here is proof\n' "$v" ;;
+            unstable) printf '  %-18s does NOT repeat    -- a pixel difference here proves nothing\n' "$v" ;;
+            *) printf '  %-18s absent from baseline\n' "$v" ;;
+        esac
+    done < "$out"
+    echo
+    echo "$stable view(s) can carry proof, $unstable cannot."
+    [ "$unstable" -eq 0 ] || echo "Do not read a verdict on an unstable view as evidence either way."
+    echo "Next: make your change, re-run the harness, then: bin/seen verdict --as $me"
+    ;;
+
+verdict)
+    need_id
+    require_baseline "$me"
+    base=$(baseline_file "$me")
+    noise=$(noise_file "$me")
+    rows=$(snapshot_rows "$shots")
+    b_rev=$(sed -n '3p' "$base")
+    echo "claim '$me'  baseline $(sed -n '2p' "$base") at $b_rev  now $(revision)"
+    [ -f "$noise" ] || echo "seen: no noise floor measured -- every difference below is UNVERIFIED"
+    echo
+
+    tmp=$(mktemp); sub=$(mktemp); trap 'rm -f "$tmp" "$sub"' EXIT
+    substance_rows "$shots" > "$sub" 2>/dev/null || : > "$sub"
+    printf '%s\n' "$rows" | while read -r v h n p; do
+        was_h=$(row_field "$v" "$base" 2)
+        was_p=$(row_field "$v" "$base" 4)
+        if [ -z "$was_h" ]; then
+            printf '  %-18s NEW           not in the baseline; nothing to compare\n' "$v"
+            printf 'new\n' >> "$tmp"
+        elif [ "$h" = "missing" ]; then
+            printf '  %-18s MISSING       capture absent from %s\n' "$v" "$shots"
+            printf 'missing\n' >> "$tmp"
+        elif [ "$was_p" != "$p" ]; then
+            printf '  %-18s INCOMPARABLE  quality tier, governor, terrain or viewport moved\n' "$v"
+            printf 'incomparable\n' >> "$tmp"
+        elif [ "$was_h" = "$h" ]; then
+            printf '  %-18s UNCHANGED     byte-identical -- your edit did not reach this frame\n' "$v"
+            printf 'unchanged\n' >> "$tmp"
+        else
+            s=""
+            [ -f "$noise" ] && s=$(awk -v v="$v" '$1 == v { print $2; exit }' "$noise")
+            case "$s" in
+                stable) case "$(awk -v v="$v" '$1 == v { print $4; exit }' "$sub")" in
+                            thin)
+                                printf '  %-18s CHANGED       pixels moved -- but this view is mostly one flat colour,\n' "$v"
+                                printf '  %-18s               so the difference is easy to make and hard to read\n' ""
+                                printf 'changed-thin\n' >> "$tmp" ;;
+                            usable)
+                                printf '  %-18s CHANGED       pixels moved on a view that repeats exactly\n' "$v"
+                                printf 'changed\n' >> "$tmp" ;;
+                            # No substance reading means the PNG would not decode. A capture that
+                            # cannot be read is not evidence, and must never reach a PROVEN line.
+                            *)
+                                printf '  %-18s CORRUPT       pixels differ but the PNG will not decode -- re-capture\n' "$v"
+                                printf 'corrupt\n' >> "$tmp" ;;
+                        esac ;;
+                unstable) printf '  %-18s INCONCLUSIVE  pixels moved, but this view never repeats itself\n' "$v"
+                        printf 'inconclusive\n' >> "$tmp" ;;
+                *) printf '  %-18s UNVERIFIED    pixels moved; reproducibility of this view unmeasured\n' "$v"
+                   printf 'unverified\n' >> "$tmp" ;;
+            esac
+        fi
+    done
+
+    changed=$(grep -c '^changed$' "$tmp" 2>/dev/null || true); changed=${changed:-0}
+    thin=$(grep -c '^changed-thin$' "$tmp" 2>/dev/null || true); thin=${thin:-0}
+    unchanged=$(grep -c '^unchanged$' "$tmp" 2>/dev/null || true); unchanged=${unchanged:-0}
+    total=$(wc -l < "$tmp" | tr -d ' ')
+    echo
+    corrupt=$(grep -c '^corrupt$' "$tmp" 2>/dev/null || true); corrupt=${corrupt:-0}
+    if [ "$corrupt" -gt 0 ]; then
+        echo "UNUSABLE: $corrupt capture(s) will not decode. Re-run the harness before reading"
+        echo "anything else here; a frame that cannot be opened cannot be evidence."
+        exit 3
+    fi
+    if [ "$changed" -eq 0 ] && [ "$thin" -gt 0 ]; then
+        echo "WEAK: pixels moved only in $thin view(s) that are mostly flat colour. Something"
+        echo "changed, but no view with a picture in it can say what. Add a camera that looks"
+        echo "at the thing you changed."
+        exit 3
+    fi
+    if [ "$changed" -gt 0 ]; then
+        [ "$thin" -eq 0 ] || echo "($thin further view(s) moved but are too empty to read.)"
+        echo "PROVEN: the change reached the frame in $changed view(s)."
+        echo "That is pixel_readback, not human_review. It says the pixels moved, not that they improved."
+        exit 0
+    fi
+    if [ "$unchanged" -eq "$total" ] && [ "$total" -gt 0 ]; then
+        echo "REFUTED: every comparable view is byte-identical. The code path is dead, or"
+        echo "the change is invisible from these cameras. Do not report this as done."
+        exit 1
+    fi
+    echo "NOT PROVEN: no view both repeats reliably and moved. Measure a noise floor, add a"
+    echo "camera that looks at the thing you changed, or say plainly that it is unproven."
+    exit 3
+    ;;
+
+substance)
+    rows=$(substance_rows "$shots")
+    echo "frame substance in $shots"
+    echo "  a view is 'thin' when too little of it is a picture for a pixel difference to mean much"
+    echo
+    printf '  %-18s %8s %10s  %s\n' VIEW LIVE DOMINANT ''
+    thin=0
+    printf '%s\n' "$rows" | while read -r v live dom state; do
+        case "$state" in
+            usable) note="usable" ;;
+            thin) note="THIN -- mostly one flat colour" ;;
+            *) note="unreadable" ;;
+        esac
+        printf '  %-18s %7s%% %9s%%  %s\n' "$v" \
+            "$(awk -v n="$live" 'BEGIN{ if (n=="-") print "-"; else printf "%.1f", n*100 }')" \
+            "$(awk -v n="$dom" 'BEGIN{ if (n=="-") print "-"; else printf "%.1f", n*100 }')" \
+            "$note"
+    done
+    thin=$(printf '%s\n' "$rows" | awk '$4 == "thin"' | wc -l | tr -d ' ')
+    echo
+    if [ "$thin" -gt 0 ]; then
+        echo "$thin view(s) are too empty to carry proof. That is a finding about the game,"
+        echo "not only about the harness: a frame nobody can measure is a frame nobody can see."
+        exit 1
+    fi
+    echo "every view carries enough picture to measure."
+    ;;
+
+forget)
+    need_id
+    rm -f "$(baseline_file "$me")" "$(noise_file "$me")"
+    echo "forgot $me"
+    ;;
+
+*)
+    echo "seen: unknown command '$cmd' (baseline|noise|verdict|substance|list|forget)" >&2; exit 2 ;;
+esac
