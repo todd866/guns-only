@@ -3,7 +3,7 @@
  * Consumes authoritative ground_war and battle_damage snapshot fields; never invents combat truth.
  */
 
-import { isCampEmberGroundSite } from "./cobra_camp_ember_firebase.js?v=348";
+import { isCampEmberGroundSite } from "./cobra_camp_ember_firebase.js?v=349";
 import { mergeGeometries } from "../../vendor/three/addons/utils/BufferGeometryUtils.js";
 
 export const COBRA_GROUND_WAR_PRESENTATION_SCHEMA =

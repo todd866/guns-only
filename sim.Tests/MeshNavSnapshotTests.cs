@@ -56,11 +56,13 @@ public sealed class MeshNavSnapshotTests {
     }
 
     [Fact]
-    public void HotFrameLayoutIncludesMeshCarrierApproachAim9AndAssistDiagnosticsAtVersion32() {
+    public void HotFrameLayoutIncludesMeshCarrierApproachAim9AndAssistDiagnosticsAtVersion33() {
         string layoutJson = SnapshotHotFrame.LayoutJson();
         using JsonDocument document = JsonDocument.Parse(layoutJson);
         JsonElement root = document.RootElement;
-        Assert.Equal(32, root.GetProperty("layout_version").GetInt32());
+        Assert.Equal(33, root.GetProperty("layout_version").GetInt32());
+        // Version 33 publishes the ungated lead solution beside the weapons-authorized flag.
+        Assert.Contains("lead_solution_valid", layoutJson, StringComparison.Ordinal);
         Assert.Contains(
             "mesh_fuel_to_dest_lb",
             layoutJson,

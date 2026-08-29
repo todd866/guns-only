@@ -6,11 +6,11 @@ import {
   createLoftGeometry,
   createPlanformGeometry,
   makeMaterial,
-} from "./airframe_primitives.js?v=348";
+} from "./airframe_primitives.js?v=349";
 import {
   adaptShapeFirstAirframeDefinition,
   isShapeFirstAirframeDefinition,
-} from "./shape_first_airframe_adapter.js?v=348";
+} from "./shape_first_airframe_adapter.js?v=349";
 
 function parseColor(value, fallback = 0x808080) {
   if (typeof value === "number" && Number.isFinite(value)) return value;

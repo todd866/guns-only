@@ -128,6 +128,41 @@ it has no tracked diff to check. **Not flown.** No Metal sortie, no republish, s
 are untouched and the release gate is unchanged. The next run should be a fresh silent Metal
 sortie whose tape is now required to be a contested one.
 
+## Known regressions on this branch — 2026-08-29
+
+The focused suites quoted above (`204/204`, `30/30`, `1/1`) are all that was ever run. The full
+repo gate, `bin/check`, had not been run against this change set. It fails.
+
+Three defects were mechanical and are fixed here:
+
+- `web/wwwroot/cobra-lab/main.js` imported the new `low_speed_lens.js` at `?v=349` while the
+  release identity was still Build 348. Production runtime changed without advancing the build, so
+  the release contract refused it. Stamped to Build 349 with `bin/stamp-release`.
+- `docs/STATUS.md` still named Build 348 as the candidate; the evergreen status matrix requires the
+  current build. Updated, with a Build 349 entry.
+- `MeshNavSnapshotTests` pinned hot-frame `layout_version` 32. Adding `lead_solution_valid` bumped
+  the layout to 33 and the test was not updated. Fixed, and it now asserts the new field.
+
+**Six behavioural failures remain, and they are regressions, not pre-existing.** All nine of these
+tests pass at `origin/main` (`50a2d022`), verified in a clean worktree:
+
+| Test | Symptom |
+| --- | --- |
+| `GunConversionContractTests.TheAceConvertsItsGunPositionIntoHitsAndKills` | Ace landed hits in 2/6 engagements; a majority is required |
+| `GunConversionContractTests.TheAceFiresAtTheBallisticSolutionRatherThanAtTheTarget` | 15.5% of trigger-down time on solution; 20% required |
+| `GunConversionContractTests.TheLadderKeepsItsTiersDistinct` | Veteran scored 0 hits from 58 rounds; Novice produced no trigger data at all |
+| `BanditArenaLeashTests.PlayerAboveTheFightCeilingCannotBeMadeToRunTheBanditDown` | leash |
+| `ReactiveBanditTests.ProductionAceSustainsAHighGDefenseWhileTheAttackerStaysOnItsSix` | sustained defence |
+| `SyntheticPilotDuelTests.BanditDoesNotRunFromAPlayerWhoSimplyClimbs` | bandit disengages from a climbing player |
+
+These are the production opponent, not the harness pilot. The last two touch the doctrine that a
+bandit must never flee nose-cold, and `TheLadderKeepsItsTiersDistinct` reports a Veteran that fires
+58 rounds for no hits — the difficulty ladder has collapsed. Diagnose against the sim, not by
+reasoning about the change set: trace a single engagement per tier.
+
+**Do not merge this branch to main until those six are resolved.** The branch is pushed so the work
+is not confined to one machine; CI will be red, accurately.
+
 Current validation: fixed-wing controller/harness `204/204`; camera and production-graphics
 `30/30`; focused inhibited physical-lead snapshot regression `1/1`; `git diff --check` clean.
 Evidence tapes are `/private/tmp/f22-ai-disciplined-495` through `-498`.

@@ -1,7 +1,24 @@
 # Current product and verification status
 
-Updated: 2026-08-27
-Next candidate: Build 348. The first sortie now takes place in Kestrel Gorge, a dedicated mountain
+Updated: 2026-08-29
+Next candidate: Build 349. Every mission family is now driven by an autonomous pilot that controls
+the production keyboard and gamepad path and keeps an authority tape. The old browser checks could
+report green while a route sat paused behind Ready, authority crawled, or a QA shortcut skipped the
+part a player actually flies; the new drivers fail closed on crashes, hidden pages, timeouts,
+skipped phases and missing terminal evidence. `mission_ai_suite.mjs` dispatches one driver per
+family — fixed-wing, Cobra, indoor, weekend, Okanagan and CASEVAC — and refuses unknown missions.
+
+The F-22 gate is not release-qualified, and the harness now says so honestly. Survival was being
+read as defensive quality: the two tapes that ran the full 180 seconds untouched both recorded zero
+opponent rounds, one of them before the defensive-power repair that appeared to explain it, while
+both fatal tapes recorded nine rounds and three hits. A sortie whose opponent never fired and was
+never killed is now an invalid defensive sample rather than a quiet pass. Two controller fixes go
+with it: ordinary maintenance of an already-captured gun plane no longer trips the tactical
+plane-change unload, and the forward-quarter pursuit cap no longer costs the aft quarter its turn
+authority, with a stateful handoff trim holding the narrower plane until the live pursuit side is
+physically captured. The AI still has never fired a production round; that remains the gate.
+
+Build 348 put the first sortie in Kestrel Gorge, a dedicated mountain
 cell with one authority-matched, collidable valley surface: steep asymmetric walls, a winding river
 and service road, a low-level ingress, and a visible opening into the missile arena. The same
 simulation-owned surface drives collision and presentation; it is not a decorative canyon placed
