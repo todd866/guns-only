@@ -442,6 +442,54 @@ probe, and a bandit which *passes* those touches the owner in 5% of his sorties 
 pressure section). Training on that reward converges faster onto the opponent that already exists.
 The owner-flight benchmark is the reward function, and it is the same work either way.
 
+### The owner-flight benchmark — 2026-08-29
+
+The reward gap, closed as far as the tapes allow. `tools/telemetry/owner_engagements.py` replays the
+owner's cached sorties and extracts every tick where a real engagement crossed inbound through
+2.5 km while genuinely closing, with both aircraft's measured states.
+`OwnerEngagementScenarios` stages those as `CombatTrainingScenario`s — the owner flies the F-22
+surrogate so he is the runner's reference actor and the opponent is the learning actor, the same
+role split the seeded factory uses.
+
+Two integrity filters, both earned rather than assumed:
+
+- **The published positions must describe the contact `range_m` is about.** On 204 of 225 candidates
+  they agree to a median of **0.03 m**, but a handful disagree by kilometres — a multi-contact sortie
+  where `bx/by/bz` is the selected bandit while `range_m` refers to another. Those would stage a
+  merge that never happened. Rejected: 225 -> 204.
+- **The opponent's velocity is finite-differenced from position, so it must be plausible.** A restage
+  between two samples moves the published position hundreds of metres in one 50 ms step, which
+  differences to a 4,060 m/s "velocity". Bounded to 60-600 m/s: 204 -> 158 staged.
+
+**Baseline, the shipped Ace over 158 real geometries:**
+
+| | |
+| --- | --- |
+| staged | 158 |
+| graded | 145 |
+| left the supported volume | **13** |
+| opponent rounds fired | 180 |
+| opponent hits | 50 |
+| opponent splashes | **11** |
+| rounds per engagement | 1.24 |
+
+Two things that baseline exposes, and neither should be smoothed over:
+
+1. **The runner cannot yet fly the owner's fights.** Thirteen of 158 left the supported flight
+   volume, because it has a 200 m floor and no out-of-bounds terminal — its own summary says so.
+   The owner fights lower than the scripted probe ever does. A benchmark that silently dropped those
+   would flatter the opponent by grading it only on the engagements it stayed high in, so they are
+   counted. Implementing crash/out-of-bounds terminals is a prerequisite for training on real
+   geometries, not an optional nicety.
+2. **The geometries are real; the defender still is not.** These episodes replay the owner's
+   starting geometry with a scripted Veteran flying his aircraft, so the benchmark grades the
+   opponent against real *setups*, not against the owner's actual flying. That is a genuine step up
+   from a scripted merge and it is not the whole distance. Replaying his recorded control inputs is
+   the next increment, and the tapes carry enough to attempt it.
+
+So the reward is no longer purely synthetic, and it is not yet the owner either. Treat 11 splashes
+in 145 as the number a learned policy has to beat, with both caveats attached.
+
 **Do not merge this branch to main until those six are resolved.** The branch is pushed so the work
 is not confined to one machine; CI will be red, accurately.
 
