@@ -179,6 +179,30 @@ public static class BanditFireControl {
 /// again for that instance.
 public enum BanditTactic { Acquire, Defend, Energy, Return, Present }
 
+/// WHICH LAW PRODUCED THIS TICK'S COMMAND. <see cref="BanditTactic"/> is an intent label, not a
+/// command owner: several branches set <c>Tactic = Return</c> while an entirely different law flies
+/// the aircraft, which is why a tape showing "Return" told three separate 2026-08-29 containment
+/// fixes nothing useful. This names the law itself.
+public enum BanditCommandOwner {
+    Unset,
+    TerrainRecovery,
+    TerminalUncontrolled,
+    HardCeilingRecovery,
+    CloseCeilingRecovery,
+    CompetentLowBlock,
+    Energy,
+    LowLevelHunt,
+    LookaheadLowAttack,
+    LowBlockPerch,
+    HighEnergyPostPassVerticalRecovery,
+    Reengage,
+    Return,
+    GunTrack,
+    Lookahead,
+    Defend,
+    Acquire,
+}
+
 /// Deterministic, deliberately beatable BFM opponent. It owns a normal AircraftSim and supplies
 /// only pilot controls: no kinematic shortcuts, wall clock, or random source enters the kernel.
 public sealed class ReactiveBandit :
@@ -810,6 +834,9 @@ public sealed class ReactiveBandit :
         _wreckMotion?.SurfaceChangedThisStep ?? false;
     public double ThrustFraction => _sim.ThrustFraction;
     public BanditTactic Tactic { get; private set; } = BanditTactic.Acquire;
+    /// The law that produced <see cref="LastCommand"/> on the tick that produced it. Published for
+    /// tapes and traces; nothing in the controller reads it back.
+    public BanditCommandOwner CommandOwner { get; private set; } = BanditCommandOwner.Unset;
 
     /// Two burst lengths of sustained tracking. FightDirector judges the reciprocal question about
     /// the bandit's own gun with WalkoverSolutionSecondsConceded = 0.75; this is the player-side
@@ -928,6 +955,7 @@ public sealed class ReactiveBandit :
         _lookaheadCommandValid = true;
         _lookaheadContextBound = true;
         LastCommand = command;
+        CommandOwner = BanditCommandOwner.Lookahead;
     }
 
     /// <summary>Stage a captured in-flight state without moving this instance's authored fight
@@ -1076,6 +1104,7 @@ public sealed class ReactiveBandit :
         if (CatastrophicallyDamaged) {
             CancelPendingLookaheadPlan();
             LastCommand = TerminalFlightDynamics.UncontrolledCommand(_sim.State);
+            CommandOwner = BanditCommandOwner.TerminalUncontrolled;
             TerminalFlightDynamics.Step(_sim, AirframeAerodynamicState.Clean,
                 _damageHandedness, dt);
             T += dt;
@@ -1169,6 +1198,7 @@ public sealed class ReactiveBandit :
                 _highEnergyPostPassRecommit = false;
                 CancelPendingLookaheadPlan();
                 LastCommand = CeilingRecoveryCommand(player, _hardCeilingRecoverySide);
+                CommandOwner = BanditCommandOwner.HardCeilingRecovery;
                 Tactic = BanditTactic.Return;
                 RecordSingleCandidateDecision(LastCommand);
                 _sim.Step(CommandForFlight(), dt);
@@ -1182,6 +1212,7 @@ public sealed class ReactiveBandit :
                 CancelPendingLookaheadPlan();
                 LastCommand = CompetentLowBlockCommand(
                     player, hasLowAttackPlan, lowAttackPlan);
+            CommandOwner = BanditCommandOwner.CompetentLowBlock;
                 Tactic = BanditTactic.Acquire;
                 RecordSingleCandidateDecision(LastCommand);
                 _sim.Step(CommandForFlight(), dt);
@@ -1199,6 +1230,7 @@ public sealed class ReactiveBandit :
                     _highEnergyPostPassRecommit = false;
                     CancelPendingLookaheadPlan();
                     LastCommand = EnergyCommand(player);
+                    CommandOwner = BanditCommandOwner.Energy;
                     RecordSingleCandidateDecision(LastCommand);
                     _sim.Step(CommandForFlight(), dt);
                     T += dt;
@@ -1264,6 +1296,7 @@ public sealed class ReactiveBandit :
                     if (_ceilingM < CombatCeilingM) {
                         LastCommand = CeilingRecoveryCommand(player,
                             _closeCeilingRecoverySide);
+                        CommandOwner = BanditCommandOwner.CloseCeilingRecovery;
                     } else {
                         // At the global family cap, retain the established energy-guard command:
                         // the predictive deep slice is specifically for lower authored fight
@@ -1282,6 +1315,7 @@ public sealed class ReactiveBandit :
                                     ceilingCommand.Throttle, 0.55)
                             }
                             : ceilingCommand;
+                        CommandOwner = BanditCommandOwner.CloseCeilingRecovery;
                     }
                     Tactic = BanditTactic.Acquire;
                     RecordSingleCandidateDecision(LastCommand);
@@ -1297,15 +1331,18 @@ public sealed class ReactiveBandit :
                 if (ownClearanceM <= LowBlockCaptureClearanceM) {
                     CancelPendingLookaheadPlan();
                     LastCommand = LowLevelHuntCommand(player, lowAttackPlan);
+                    CommandOwner = BanditCommandOwner.LowLevelHunt;
                     RecordSingleCandidateDecision(LastCommand);
                 } else {
                     LastCommand = LookaheadCommand(player, lowAttackPlan);
+                    CommandOwner = BanditCommandOwner.LookaheadLowAttack;
                 }
                 Tactic = BanditTactic.Acquire; // firing remains governed by BanditFireControl
             } else if (lowTarget) {
                 CancelPendingLookaheadPlan();
                 _lowAttackActive = false;
                 LastCommand = LowBlockPerchCommand(player);
+                CommandOwner = BanditCommandOwner.LowBlockPerch;
                 Tactic = BanditTactic.Return;
                 RecordSingleCandidateDecision(LastCommand);
             } else if (highEnergyPostPassRecommit
@@ -1359,15 +1396,22 @@ public sealed class ReactiveBandit :
                 // A fresh support order extends the ordinary abandon ceiling enough to recover
                 // the reproduced 13 NM mutual-support gap, but the separate finite support guard
                 // still rejects a coordinator that keeps refreshing while the player departs.
-                LastCommand = highEnergyPostPassRecommit
-                        && _highEnergyPostPassVerticalRecovery
-                    ? HighEnergyPostPassVerticalRecoveryCommand(player)
-                    : highEnergyPostPassRecommit
-                            || sharedFightSupport
-                            || (leashRangeM > ReengageRangeM
-                                && leashRangeM <= AbandonChaseRangeM)
-                        ? ReengageCommand(player, highEnergyPostPassRecommit)
-                        : ReturnCommand();
+                // Resolve the owner from the SAME predicates that choose the command, in one
+                // place, so a tape can never disagree with what flew.
+                bool verticalRecoveryOwns = highEnergyPostPassRecommit
+                    && _highEnergyPostPassVerticalRecovery;
+                bool reengageOwns = !verticalRecoveryOwns
+                    && (highEnergyPostPassRecommit
+                        || sharedFightSupport
+                        || (leashRangeM > ReengageRangeM
+                            && leashRangeM <= AbandonChaseRangeM));
+                (LastCommand, CommandOwner) = verticalRecoveryOwns
+                    ? (HighEnergyPostPassVerticalRecoveryCommand(player),
+                        BanditCommandOwner.HighEnergyPostPassVerticalRecovery)
+                    : reengageOwns
+                        ? (ReengageCommand(player, highEnergyPostPassRecommit),
+                            BanditCommandOwner.Reengage)
+                        : (ReturnCommand(), BanditCommandOwner.Return);
                 Tactic = BanditTactic.Return;
                 RecordSingleCandidateDecision(LastCommand);
             } else if (ShouldFineTrack(player)) {
@@ -1376,11 +1420,13 @@ public sealed class ReactiveBandit :
                 // the wide body gate and shoot at nothing.
                 CancelPendingLookaheadPlan();
                 LastCommand = GunTrackCommand(player);
+                CommandOwner = BanditCommandOwner.GunTrack;
                 Tactic = BanditTactic.Acquire;
                 RecordSingleCandidateDecision(LastCommand);
             } else {
                 bool defending = Tactic == BanditTactic.Defend;
                 LastCommand = LookaheadCommand(player);
+                CommandOwner = BanditCommandOwner.Lookahead;
                 Tactic = defending
                     ? BanditTactic.Defend
                     : BanditTactic.Acquire;
@@ -1392,17 +1438,18 @@ public sealed class ReactiveBandit :
 
         CancelPendingLookaheadPlan();
         SelectTactic(player);
-        LastCommand = Tactic switch {
-            BanditTactic.Defend => DefendCommand(),
-            BanditTactic.Energy => EnergyCommand(player),
+        (LastCommand, CommandOwner) = Tactic switch {
+            BanditTactic.Defend => (DefendCommand(), BanditCommandOwner.Defend),
+            BanditTactic.Energy => (EnergyCommand(player), BanditCommandOwner.Energy),
             BanditTactic.Return when (EffectiveFormationRole is
                 FormationTacticalRole.Bracket or FormationTacticalRole.Extend)
                 && Geometry.Range(State, player) <= FormationSupportAbandonChaseRangeM =>
-                    ReengageCommand(player),
-            BanditTactic.Return => ReturnCommand(),
+                    (ReengageCommand(player), BanditCommandOwner.Reengage),
+            BanditTactic.Return => (ReturnCommand(), BanditCommandOwner.Return),
             _ when _profile.LowBlockDoctrine == LowBlockDoctrine.BoomAndZoom && lowTarget
-                => CompetentLowBlockCommand(player, hasLowAttackPlan, lowAttackPlan),
-            _ => AcquireCommand(player)
+                => (CompetentLowBlockCommand(player, hasLowAttackPlan, lowAttackPlan),
+                    BanditCommandOwner.CompetentLowBlock),
+            _ => (AcquireCommand(player), BanditCommandOwner.Acquire)
         };
         RecordSingleCandidateDecision(LastCommand);
         _sim.Step(CommandForFlight(), dt);
@@ -1426,6 +1473,7 @@ public sealed class ReactiveBandit :
                 _lowSpeedMps, player.Speed + HighEnergyPostPassSpeedMarginMps);
         LastCommand = new PilotCommand(_profile.MaxAcquireG, 0.0,
             fastPostPassRecovery ? 0.0 : _maximumThrottle, 0.0);
+        CommandOwner = BanditCommandOwner.TerrainRecovery;
         Tactic = BanditTactic.Return; // never firing while recovering from the dirt
         RecordSingleCandidateDecision(LastCommand);
         _sim.Step(CommandForFlight(), dt);

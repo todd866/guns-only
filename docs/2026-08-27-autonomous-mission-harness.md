@@ -282,6 +282,46 @@ merge and what it should have done, and calibrate the contract against that inst
 probe. Without it there is no metric that would distinguish a better opponent from a worse one —
 which is also why reaching for a learned policy now would optimise against the wrong target.
 
+### The owner instrumentation, and what it found — 2026-08-29
+
+`ReactiveBandit.CommandOwner` now publishes the law that produced `LastCommand`, on the tick that
+produced it, at all fifteen assignment sites. `BanditCommandOwnerTests` guards it two ways: no tick
+may go unlabelled on any skill tier, and `Tactic == Return` must be observed naming more than one
+owner — if it ever named exactly one, the instrumentation would be unnecessary. Both pass, which is
+itself the confirmation that `Tactic` was never a command owner. It is behaviour-neutral: the same
+six tests fail, nothing else moved.
+
+Re-running the leash trace with the owner published resolves the whole engagement:
+
+| window | owner | what it does |
+| --- | --- | --- |
+| t=0-30 s | `Lookahead` | the merge; healthy, closes to 636 m |
+| t=32-72 s | `Reengage` | bank pinned at **-74.5 deg**, climbs 4,898 -> 9,577 m |
+| t=76-115 s | `Return` | bank alternating **+/-77.3 deg**, climbs on to 15,823 m |
+
+Counting the bank command per owner over the run:
+
+- `Reengage`: **136 of 173 ticks at +/-74.5 deg** — the 1.30 rad `LimitedBankTo` cap (79%).
+- `Return`: **72 of 79 ticks at +/-77.3 deg** — the 1.35 rad cap, and *alternating sign* (91%).
+
+So for roughly **70% of all post-merge ticks the bank command is pinned at its limiter**, in one
+owner as steady saturation and in the other as sign chatter. That is the known
+`BankToPlaceLiftVectorOn` degeneracy for a coplanar below-and-behind aim, and **both owners inherit
+it**.
+
+**This reframes the defect.** It is not a containment-policy problem. `Reengage` and `Return`
+disagree about where to go, but neither can express *any* answer, because the shared bank solver is
+degenerate for the geometry both of them hand it and `LimitedBankTo` then clamps the garbage to the
+cap. That is exactly why all three earlier fixes failed: moving the aim between owners cannot help
+when the owners share the broken solver, and it explains why fixing `Reengage`'s aim simply moved
+the failure into `Return`.
+
+The next work is the bank solver, not the containment policy: make `BankToPlaceLiftVectorOn`
+well-conditioned (or guard its degenerate cone) so a command that asks to point somewhere can
+actually be flown, then re-measure containment. `ReengageCannotSpiralTheFightThroughTheCombatCeiling`
+stays `Skip`-ped as the reproduction; the trace method is a scratch xunit driver printing
+`range / nose-dot / Tactic / CommandOwner / speed / alt / gamma / GDemand / BankTarget` per tick.
+
 **Do not merge this branch to main until those six are resolved.** The branch is pushed so the work
 is not confined to one machine; CI will be red, accurately.
 
