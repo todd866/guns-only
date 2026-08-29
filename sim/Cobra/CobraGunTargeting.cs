@@ -18,6 +18,11 @@ public readonly record struct CobraGunTargetAssessment(
 /// </summary>
 public static class CobraGunTargeting
 {
+    // GroundUnit.PositionWorldM is its contact/reference point, not the part of the target a
+    // gunner tries to see and hit. Looking at that point lets a raised road or a small terrain
+    // seam mask its own occupant at the last LOS sample. Use one explicit exposed aim point for
+    // visual lock, sight, turret geometry and the browser's gunner diagnostics.
+    public const double TargetAimHeightM = 2.2;
     public const double TurretAzimuthLimitRad = 110.0 * Math.PI / 180.0;
     public const double TurretMaxElevationRad = 20.0 * Math.PI / 180.0;
     // FM 1-40 cites −50°; gorge spawn look-down onto a floor seam needed a few more degrees
@@ -26,6 +31,13 @@ public static class CobraGunTargeting
     public const double TurretMinElevationRad = -55.0 * Math.PI / 180.0;
     public const double MinimumSolutionRangeM = 80.0;
     public const double MaximumSolutionRangeM = 2_000.0;
+
+    public static Vec3D AimPoint(in Vec3D targetPositionWorldM)
+    {
+        if (!targetPositionWorldM.IsFinite)
+            throw new ArgumentOutOfRangeException(nameof(targetPositionWorldM));
+        return targetPositionWorldM + new Vec3D(0.0, TargetAimHeightM, 0.0);
+    }
 
     public static CobraGunTargetAssessment Assess(
         in Vec3D aircraftPositionWorldM,
@@ -127,18 +139,22 @@ public static class CobraGunTargeting
         double aircraftYawRad,
         string targetId,
         bool friendly,
-        in Vec3D targetPositionWorldM,
+        in Vec3D targetReferenceWorldM,
         CobraTurretServo turret,
         double dtSeconds,
         bool? knownLineOfSight = null)
     {
         ArgumentNullException.ThrowIfNull(turret);
+        // Callers pass GroundUnit.PositionWorldM, the unit's ground/reference point. Resolve the
+        // shared aim point here so a future caller cannot accidentally give sight and servo two
+        // different endpoints.
+        Vec3D aimPointWorldM = AimPoint(targetReferenceWorldM);
         CobraGunTargetAssessment assessment = Assess(
-            aircraftPositionWorldM, aircraftYawRad, targetPositionWorldM);
+            aircraftPositionWorldM, aircraftYawRad, aimPointWorldM);
         // The caller may supply a sight verdict it is refreshing on its own cadence: line of sight
         // is terrain geometry, not a control loop, and the servo below still slews every tick.
         bool hasLineOfSight = knownLineOfSight ?? EvaluateLineOfSight(
-            terrain, obstacles, aircraftPositionWorldM, targetPositionWorldM);
+            terrain, obstacles, aircraftPositionWorldM, aimPointWorldM);
         if (assessment.WithinTurretEnvelope && hasLineOfSight)
             turret.Advance(dtSeconds, assessment.SignedAzimuthRad, assessment.ElevationRad);
         return new CobraGunnerTargetObservation(

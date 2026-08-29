@@ -16,13 +16,15 @@ test("Cobra bridge stages every route with the collective fully down", () => {
     /GroundedCommand = new\(0\.0, 0\.0, 0\.0, 0\.0\)/,
     "the authority latch owns the physical full-down and neutral ramp command");
   const startRoute = bridge.match(
-    /public static void StartRoute\(int routeChoice, bool visualLab = false\)[\s\S]*?\n    \}/,
+    /public static void StartRoute\([\s\S]*?bool battleReview = false\)[\s\S]*?\n    \}/,
   )?.[0] ?? "";
   assert.match(startRoute, /_controlLatch\.Reset\(\);/);
   assert.doesNotMatch(startRoute, /EstimateHoverCollective/,
     "route staging must not preload the authority command with hover trim");
-  assert.match(startRoute, /enableTerrainWind: !visualLab/,
-    "the continuously-running visual lab must not abandon an unpiloted ship to terrain wind");
+  assert.match(startRoute, /enableTerrainWind: !visualLab && !battleReview/,
+    "neither unattended visual mode may abandon an unpiloted ship to terrain wind");
+  assert.match(startRoute, /spawn: battleReview \? BattleReviewSpawn\(definition, terrain\) : null/,
+    "battle proof must use the mission runtime's explicit spawn seam, not fabricated combat");
   assert.match(bridge,
     /public static double GetHoverCollective\(\)[\s\S]*?EstimateHoverCollective/,
     "the continuously-running lab must retain an explicit provider-calculated trim seam");

@@ -261,6 +261,19 @@ function probeSource(countGl) {
     return exports;
   }
 
+  function cobraSnapshot() {
+    const state = globalThis.__gunsOnlyCobraAuthority;
+    return {
+      atMs: performance.now(),
+      status: state?.status ?? null,
+      tick: Number(state?.vehicle?.tick),
+      elapsedS: Number(state?.ground_war?.debrief?.elapsed_s),
+      combatLive: state?.ground_war?.combat_live === true,
+      missionAct: state?.mission_act ?? null,
+      render: globalThis.__gunsOnlyCobraLabCamera?.renderStats?.() ?? null,
+    };
+  }
+
   // JSON.parse cost of the state string, measured separately from the bridge call.
   const rawParse = JSON.parse;
   JSON.parse = function (text, ...rest) {
@@ -298,9 +311,15 @@ function probeSource(countGl) {
   } catch (e) { P.notes.push("accessor hook failed: " + e.message); }
 
   P.start = () => {
-    P.frames.length = 0; P.gpuSamples.length = 0; P.capturing = true;
+    P.frames.length = 0; P.gpuSamples.length = 0;
+    P.captureWindow = { start: cobraSnapshot(), end: null };
+    P.capturing = true;
   };
-  P.stop = () => { P.capturing = false; return P.summary(); };
+  P.stop = () => {
+    P.capturing = false;
+    P.captureWindow.end = cobraSnapshot();
+    return P.summary();
+  };
   P.summary = () => {
     const rows = P.frames.slice();
     const deltas = [];
@@ -319,6 +338,10 @@ function probeSource(countGl) {
       canvases2d: P.hud2d.length,
       glPerFrame: rows.length && rows.at(-1).gl ? rows.at(-1).gl : null,
       glMedian: medianCounters(rows),
+      captureWindow: P.captureWindow ?? null,
+      // Exact deltas let a route-specific acceptance contract apply the shared 18.5/22 ms tail
+      // rules without retaining thousands of heavyweight per-frame attribution rows.
+      frameDeltas: deltas,
       rows: rows.slice(0, 4000),
     };
   };

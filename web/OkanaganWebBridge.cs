@@ -16,16 +16,23 @@ public static partial class OkanaganWebBridge
     [JSExport]
     public static void Start(int sortie)
     {
-        OkanaganSortieType type = sortie switch {
+        _mission = OkanaganFireMission.Create(ResolveSortie(sortie));
+        _command = new FireBossPilotCommand(0.0, 0.0, 0.0, 0.65, false, false);
+        _accumulatorSeconds = 0.0;
+    }
+
+    [JSExport]
+    public static string PreviewPlan(int sortie) =>
+        OkanaganSnapshotProjection.BuildStateJson(
+            OkanaganFireMission.Create(ResolveSortie(sortie)));
+
+    static OkanaganSortieType ResolveSortie(int sortie) =>
+        sortie switch {
             0 => OkanaganSortieType.WaterCircuits,
             1 => OkanaganSortieType.FireAttack,
             2 => OkanaganSortieType.LargeForceEmployment,
             _ => throw new ArgumentOutOfRangeException(nameof(sortie)),
         };
-        _mission = OkanaganFireMission.Create(type);
-        _command = new FireBossPilotCommand(0.0, 0.0, 0.0, 0.65, false, false);
-        _accumulatorSeconds = 0.0;
-    }
 
     [JSExport]
     public static void SetControls(double pitch, double roll, double yaw, double throttle,

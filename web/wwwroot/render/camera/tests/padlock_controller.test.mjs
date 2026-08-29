@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import * as THREE from "../../../vendor/three.module.js";
 
 import {
   advanceForwardGimbal,
@@ -7,6 +8,7 @@ import {
   angleNearestReference,
   desiredPadlockAngles,
   PADLOCK_LIMITS,
+  padlockVisualRollCorrectionRad,
   padlockAttitudeModel,
   padlockLiftPlaneModel,
   padlockOrientationModel,
@@ -16,6 +18,69 @@ import {
 const DEG = Math.PI / 180;
 const close = (actual, expected, tolerance = 1e-9) =>
   assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} != ${expected}`);
+
+const cameraWorldUpAtRoll = (rollDeg, projection = 1) => ({
+  x: projection * Math.sin(rollDeg * DEG),
+  y: projection * Math.cos(rollDeg * DEG),
+  z: Math.sqrt(Math.max(0, 1 - projection * projection)),
+});
+
+test("combat padlock roll comfort compresses only the loaded-turn shoulder", () => {
+  const correctionDeg = (rollDeg, projection = 1) =>
+    padlockVisualRollCorrectionRad(cameraWorldUpAtRoll(rollDeg, projection)) / DEG;
+  close(correctionDeg(55), 0);
+  close(correctionDeg(65), -6.5);
+  close(correctionDeg(-65), 6.5);
+  close(correctionDeg(75), -13);
+  close(correctionDeg(-75), 13);
+  close(correctionDeg(80), -9.62962962962963);
+  close(correctionDeg(85), -3.37037037037037);
+  close(correctionDeg(90), 0);
+  close(correctionDeg(135), 0);
+  close(correctionDeg(179), 0);
+  assert.ok(Math.abs(correctionDeg(75 - 1e-6) - correctionDeg(75 + 1e-6)) < 2e-6);
+  assert.ok(Math.abs(correctionDeg(90 - 1e-6) - correctionDeg(90)) < 1e-6);
+});
+
+test("combat padlock roll comfort fails closed when the horizon is undefined", () => {
+  close(padlockVisualRollCorrectionRad({ x: Number.NaN, y: 1, z: 0 }), 0);
+  close(padlockVisualRollCorrectionRad({ x: 0, y: 0, z: 0 }), 0);
+  close(padlockVisualRollCorrectionRad(cameraWorldUpAtRoll(75, 0.035)), 0);
+  close(padlockVisualRollCorrectionRad(cameraWorldUpAtRoll(75, 0.0775)) / DEG, -6.5);
+  close(padlockVisualRollCorrectionRad(cameraWorldUpAtRoll(75, 0.12)) / DEG, -13);
+});
+
+test("combat padlock roll correction preserves the solved look direction", () => {
+  const xAxis = new THREE.Vector3(1, 0, 0);
+  const yAxis = new THREE.Vector3(0, 1, 0);
+  const zAxis = new THREE.Vector3(0, 0, 1);
+  const worldUp = new THREE.Vector3(0, 1, 0);
+  const localForward = new THREE.Vector3(0, 0, -1);
+  const correctedOpticalRollDeg = (quaternion) => {
+    const upCamera = worldUp.clone().applyQuaternion(quaternion.clone().invert());
+    const correction = padlockVisualRollCorrectionRad(upCamera);
+    const forwardBefore = localForward.clone().applyQuaternion(quaternion);
+    quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(zAxis, correction));
+    const forwardAfter = localForward.clone().applyQuaternion(quaternion);
+    assert.ok(forwardBefore.angleTo(forwardAfter) < 1e-12,
+      "a camera-roll comfort correction cannot move the tracked contact");
+    const correctedUpCamera = worldUp.clone().applyQuaternion(quaternion.clone().invert());
+    return Math.atan2(correctedUpCamera.x, correctedUpCamera.y) / DEG;
+  };
+
+  close(correctedOpticalRollDeg(
+    new THREE.Quaternion().setFromAxisAngle(zAxis, 75 * DEG),
+  ), 62, 1e-10);
+  close(correctedOpticalRollDeg(
+    new THREE.Quaternion().setFromAxisAngle(zAxis, -75 * DEG),
+  ), -62, 1e-10);
+
+  const offAxisCamera = new THREE.Quaternion()
+    .setFromAxisAngle(zAxis, 75 * DEG)
+    .multiply(new THREE.Quaternion().setFromAxisAngle(yAxis, -80 * DEG))
+    .multiply(new THREE.Quaternion().setFromAxisAngle(xAxis, 10 * DEG));
+  correctedOpticalRollDeg(offAxisCamera);
+});
 
 test("ownship-local cardinal target angles preserve render-frame signs", () => {
   close(targetLookAngles({ x: 0, y: 0, z: -1 }).yawRad, 0);

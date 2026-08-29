@@ -495,14 +495,37 @@ public sealed class CobraCanyonDefinition
         CobraCanyonObstacleDefinition.AxisAlignedBox(
             "hazard.cobra-canyon.iron-bell-deck.v1",
             new Vec3D(-2_775.0, 142.0, -516.0),
-            new Vec3D(-2_645.0, 150.0, -484.0)),
+            new Vec3D(-2_645.0, 160.0, -484.0)),
+        // The truss is one span in a complete crossing, not a disconnected obstacle floating
+        // over the gorge. These two raised approaches join the roadway to the high banks. Their
+        // conservative AABBs include the guardrails; the presentation draws the actual sloping
+        // road inside those envelopes.
+        CobraCanyonObstacleDefinition.AxisAlignedBox(
+            "hazard.cobra-canyon.iron-bell-west-approach.v1",
+            new Vec3D(-2_960.0, 136.0, -516.0),
+            new Vec3D(-2_775.0, 148.0, -484.0)),
+        CobraCanyonObstacleDefinition.AxisAlignedBox(
+            "hazard.cobra-canyon.iron-bell-east-approach.v1",
+            new Vec3D(-2_645.0, 136.0, -516.0),
+            new Vec3D(-2_460.0, 148.0, -484.0)),
+        // The river cell stays low beneath both long approaches. These intermediate piers are
+        // collision authority as well as presentation anchors, so the joined roadway has an
+        // honest ground-to-deck load path instead of floating on cosmetic legs.
+        CobraCanyonObstacleDefinition.AxisAlignedBox(
+            "hazard.cobra-canyon.iron-bell-west-approach-pier.v1",
+            new Vec3D(-2_874.0, 92.0, -515.0),
+            new Vec3D(-2_860.0, 142.0, -485.0)),
+        CobraCanyonObstacleDefinition.AxisAlignedBox(
+            "hazard.cobra-canyon.iron-bell-east-approach-pier.v1",
+            new Vec3D(-2_560.0, 92.0, -515.0),
+            new Vec3D(-2_546.0, 142.0, -485.0)),
         CobraCanyonObstacleDefinition.AxisAlignedBox(
             "hazard.cobra-canyon.iron-bell-west-pier.v1",
-            new Vec3D(-2_771.0, 96.0, -515.0),
+            new Vec3D(-2_771.0, 92.0, -515.0),
             new Vec3D(-2_757.0, 144.0, -485.0)),
         CobraCanyonObstacleDefinition.AxisAlignedBox(
             "hazard.cobra-canyon.iron-bell-east-pier.v1",
-            new Vec3D(-2_663.0, 96.0, -515.0),
+            new Vec3D(-2_663.0, 92.0, -515.0),
             new Vec3D(-2_649.0, 144.0, -485.0)),
         CobraCanyonObstacleDefinition.CapsuleSegment(
             "hazard.cobra-canyon.gorge-wire-low.v1",

@@ -18,6 +18,12 @@ test("Cobra bridge transports authority-owned turnaround input and snapshot trut
   assert.match(bridge, /engine_shaft_power_w\s*=/);
   assert.match(bridge, /available_shaft_power_w\s*=/);
   assert.match(bridge,
+    /contact_kind\s*=\s*ContactKindToken\(observation\.Contact\.Kind\)/,
+    "the vehicle snapshot must publish authority-owned skid contact, not infer it from AGL");
+  assert.match(bridge,
+    /VehicleContactKind\.StableSurfaceContact\s*=>\s*"stable-surface-contact"/,
+    "the landed-and-settled wire token must remain stable for turnaround automation");
+  assert.match(bridge,
     /fire_authorized\s*=\s*_gunnerDecision\.FireAuthorized[\s\S]*?runtime\.Turnaround\.WeaponsEnabled/);
   assert.match(bridge,
     /WeaponsArmed:\s*runtime\.Turnaround\.WeaponsEnabled[\s\S]*?!runtime\.GroundWar\.Magazine\.IsDry/);

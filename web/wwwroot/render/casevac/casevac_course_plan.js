@@ -31,18 +31,18 @@ export const CASEVAC_DEFAULT_ANCHORS = Object.freeze({
 
 export const CASEVAC_SCENERY_QUALITY = Object.freeze({
   mobile: Object.freeze({
-    pickupPeople: 3,
-    receiverPeople: 3,
+    pickupPeople: 5,
+    receiverPeople: 5,
     rainStreaksPerSite: 24,
   }),
   balanced: Object.freeze({
-    pickupPeople: 4,
-    receiverPeople: 4,
+    pickupPeople: 6,
+    receiverPeople: 6,
     rainStreaksPerSite: 48,
   }),
   desktop: Object.freeze({
-    pickupPeople: 5,
-    receiverPeople: 5,
+    pickupPeople: 8,
+    receiverPeople: 8,
     rainStreaksPerSite: 72,
   }),
 });
@@ -50,11 +50,11 @@ export const CASEVAC_SCENERY_QUALITY = Object.freeze({
 const SITE_ENVELOPES = Object.freeze({
   pickup: Object.freeze({
     minimum: Object.freeze({ x: -142, y: -1, z: -126 }),
-    maximum: Object.freeze({ x: 142, y: 35, z: 126 }),
+    maximum: Object.freeze({ x: 142, y: 66, z: 126 }),
   }),
   receiver: Object.freeze({
     minimum: Object.freeze({ x: -132, y: -1, z: -118 }),
-    maximum: Object.freeze({ x: 138, y: 35, z: 118 }),
+    maximum: Object.freeze({ x: 138, y: 66, z: 118 }),
   }),
 });
 
@@ -130,11 +130,29 @@ function pickupPlan(seed, quality) {
     pad: {
       id: "decor.casevac.pickup.pad",
       position: point(0, 0, 0),
-      sizeM: point(17, 0.16, 17),
+      sizeM: point(24, 0.16, 24),
       material: "compacted-orchard-hardstand",
       visualOnly: true,
     },
     capsuleStand: point(6.8, 0.55, 5.8),
+    signal: {
+      id: "decor.casevac.pickup.signal-smoke",
+      position: point(-15, 0, 13),
+      heightM: 54,
+      puffs: 14,
+      color: "amber-smoke",
+    },
+    responseVehicle: {
+      id: "decor.casevac.pickup.response-vehicle",
+      position: point(24, 0, 15),
+      yaw: -0.55,
+      kind: "FIELD_RESPONSE",
+      visualOnly: true,
+    },
+    landingLights: Array.from({ length: 16 }, (_, index) => {
+      const angle = index / 16 * Math.PI * 2;
+      return point(Math.cos(angle) * 13.6, 0.28, Math.sin(angle) * 13.6);
+    }),
     windsock: {
       id: "decor.casevac.pickup.windsock",
       position: point(23, 0, -20),
@@ -156,6 +174,9 @@ function pickupPlan(seed, quality) {
         [12, 3, -1.9],
         [-8, 10, 2.5],
         [-12, 4, 1.9],
+        [15, -5, -1.4],
+        [-15, -7, 1.2],
+        [1, 15, Math.PI],
       ],
     ),
     approachCue: {
@@ -194,11 +215,29 @@ function receiverPlan(seed, quality) {
     pad: {
       id: "decor.casevac.receiver.pad",
       position: point(0, 0, 0),
-      sizeM: point(18, 0.18, 18),
+      sizeM: point(26, 0.18, 26),
       material: "weathered-clinic-hardstand",
       visualOnly: true,
     },
     capsuleStand: point(-8, 0.55, 8),
+    signal: {
+      id: "decor.casevac.receiver.signal-smoke",
+      position: point(16, 0, 14),
+      heightM: 54,
+      puffs: 14,
+      color: "green-smoke",
+    },
+    responseVehicle: {
+      id: "decor.casevac.receiver.response-vehicle",
+      position: point(24, 0, 18),
+      yaw: -0.72,
+      kind: "CLINIC_RESPONSE",
+      visualOnly: true,
+    },
+    landingLights: Array.from({ length: 16 }, (_, index) => {
+      const angle = index / 16 * Math.PI * 2;
+      return point(Math.cos(angle) * 14.6, 0.3, Math.sin(angle) * 14.6);
+    }),
     windsock: {
       id: "decor.casevac.receiver.windsock",
       position: point(26, 0, -23),
@@ -218,6 +257,9 @@ function receiverPlan(seed, quality) {
         [-20, 8, -2.1],
         [9, 12, 2.7],
         [14, 7, 2.4],
+        [16, -6, -1.4],
+        [-17, -5, 1.2],
+        [1, 17, Math.PI],
       ],
     ),
     approachCue: {
@@ -272,6 +314,10 @@ export function planCasevacCourseScenery(options = {}) {
       utilityWires: pickup.wires.length + receiver.wires.length,
       fenceSegments: pickup.fences.length + receiver.fences.length,
       rainStreaks: pickup.rain.length + receiver.rain.length,
+      landingLights: pickup.landingLights.length
+        + receiver.landingLights.length,
+      signalPuffs: pickup.signal.puffs + receiver.signal.puffs,
+      responseVehicles: 2,
       pads: 2,
       windsocks: 2,
       capsules: 1,

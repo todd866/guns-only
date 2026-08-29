@@ -121,7 +121,8 @@ public readonly record struct CombatRewardComponents(
     int HitsScored,
     int HitsReceived,
     bool OpponentDestroyed,
-    bool OwnshipDestroyed) {
+    bool OwnshipDestroyed,
+    bool OwnshipOutOfBounds = false) {
 
     public bool IsFinite => double.IsFinite(ElapsedSeconds) && ElapsedSeconds >= 0.0
         && double.IsFinite(GeometryPotentialDelta)
@@ -197,6 +198,7 @@ public static class CombatRewardModel {
             + components.HitsReceived * selected.HitReceivedPenalty
             + (components.OpponentDestroyed ? selected.OpponentDestroyedReward : 0.0)
             + (components.OwnshipDestroyed ? selected.OwnshipDestroyedPenalty : 0.0)
+            + (components.OwnshipOutOfBounds ? selected.OwnshipDestroyedPenalty : 0.0)
             + components.ElapsedSeconds * selected.TimePenaltyPerSecond;
     }
 }
@@ -206,7 +208,14 @@ public enum CombatTerminalReason {
     OpponentDestroyed,
     OwnshipDestroyed,
     MutualDestruction,
-    TimeLimit
+    TimeLimit,
+    /// <summary>The learning fighter left the supported flight volume — the ground, or the top of
+    /// it. A loss, scored like being destroyed: a policy that discovered the floor was a cheap way
+    /// to end an engagement it was losing would otherwise learn to use it.</summary>
+    OwnshipOutOfBounds,
+    /// <summary>The reference fighter left the volume. Not a win: the learning fighter did not
+    /// cause it, so it is scored neutrally and the episode simply stops.</summary>
+    ReferenceOutOfBounds
 }
 
 /// <summary>One immutable (observation, action, reward, next observation, terminal) tuple.</summary>

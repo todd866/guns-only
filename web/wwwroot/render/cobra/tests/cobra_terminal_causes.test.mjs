@@ -10,30 +10,30 @@ import {
 test("each contact failure cause maps to instrument-true card copy", () => {
   assert.deepEqual(cobraTerminalCauseCopy("hard-impact"), {
     title: "HARD IMPACT",
-    detail: "Sink rate exceeded the gear's limits.",
+    detail: "Sink rate exceeded gear limits.",
   });
   assert.deepEqual(cobraTerminalCauseCopy("rollover"), {
     title: "ROLLOVER",
-    detail: "Banked, drifting contact dug in a skid.",
+    detail: "Banked, drifting touchdown caught a skid.",
   });
   assert.deepEqual(cobraTerminalCauseCopy("spin-contact"), {
     title: "SPIN CONTACT",
-    detail: "Touched down still yawing.",
+    detail: "Yaw remained at touchdown.",
   });
   assert.deepEqual(cobraTerminalCauseCopy("rotor-strike"), {
     title: "ROTOR STRIKE",
-    detail: "The main rotor met the ground.",
+    detail: "Main rotor struck terrain.",
   });
   assert.deepEqual(cobraTerminalCauseCopy("water-contact"), {
     title: "INTO THE RIVER",
-    detail: "Skid helicopters do not land on water.",
+    detail: "Water contact destroyed the aircraft.",
   });
 });
 
 test("pool exhaustion gets its own mission card; other statuses fall through", () => {
   assert.deepEqual(cobraMissionStatusCopy("fob-combat-ineffective"), {
-    title: "FOB COMBAT INEFFECTIVE",
-    detail: "Every Cobra on the ramp is bent or gone. Camp Ember has nothing left to fly.",
+    title: "NO COBRAS LEFT",
+    detail: "Camp Ember has no serviceable aircraft.",
   });
   assert.equal(cobraMissionStatusCopy("victory"), null);
   assert.equal(cobraMissionStatusCopy(undefined), null);
@@ -58,15 +58,27 @@ test("terminal debrief appends authoritative ground-fire subsystem context", asy
   assert.match(formatter, /engine_damaged/);
   assert.match(formatter, /damaging_hits/);
   assert.match(formatter, /bursts_fired/);
-  assert.match(formatter, /recent_bursts/);
-  assert.match(formatter, /has_impacted/);
-  assert.match(formatter, /will_hit/);
-  assert.match(formatter, /observer_id/);
+  assert.doesNotMatch(formatter, /recent_bursts|has_impacted|will_hit|observer_id/);
   assert.match(formatter, /SCAS OUT/);
   assert.match(formatter, /ENGINE OUT/);
-  assert.match(formatter, /NO SUBSYSTEM LOSS/);
+  assert.match(formatter, /hits === 0 && bursts === 0/,
+    "zero ground-fire evidence must disappear instead of becoming a sentence");
   assert.match(debrief,
     /groundFireDebriefDetail\(authorityState\?\.battle_damage\)/);
-  assert.match(debrief, /\$\{reason\} \$\{groundFireDetail\} Hostiles down/,
-    "ground-fire truth must appear in the terminal details without changing the outcome branch");
+  assert.match(debrief, /\[reason, groundFireDetail\]\.filter\(Boolean\)\.join\(" "\)/,
+    "ground-fire truth must remain in the result summary without swallowing structured evidence");
+  assert.match(debrief,
+    /setOptionalDebriefFact\([\s\S]*?debriefBattleTime[\s\S]*?evidence\.battleSeconds/,
+    "the card must use the pure evidence model's ground-war clock, not airborne time");
+});
+
+test("RTB stays in the live mission; debrief waits for a terminal authority status", async () => {
+  const main = await readFile(new URL("../../../cobra-lab/main.js", import.meta.url), "utf8");
+
+  assert.match(main,
+    /if \(authorityState && authorityState\.status !== "active"\) \{\s*showMissionDebrief\(war, authorityState\.status\);\s*\}/u,
+    "the browser must not treat the authored RTB act as a terminal outcome");
+  assert.doesNotMatch(main,
+    /mission_act\s*===\s*["']rtb["'][\s\S]{0,160}showMissionDebrief/u,
+    "RTB remains flyable until the runtime publishes victory or defeat after recovery");
 });

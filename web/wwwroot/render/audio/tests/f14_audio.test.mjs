@@ -387,23 +387,25 @@ test("flight facade gives F-14 exclusive propulsion while retaining shared event
     cobraActive: false,
     f14Active: true,
     turbopropActive: false,
+    motorcycleActive: false,
     jetMuted: true,
     cobraMuted: true,
     f14Muted: false,
     turbopropMuted: true,
+    motorcycleMuted: true,
     radioEngine: "f14",
   });
   assert.equal(flightPropulsionGraphGates(F14_FRAME, false).f14Muted, true);
   assert.match(flightSource,
-    /propulsionDuck\.connect\(bus\)[\s\S]*?createF14AudioVoices\(context, propulsionDuck\)/,
-    "F-14 must use the singleton's shared compressor bus through the radio-duck VCA");
+    /propulsionDuck\.connect\(actionDuck\)\.connect\(bus\)[\s\S]*?createF14AudioVoices\(context, propulsionDuck\)/,
+    "F-14 must use the singleton's shared bus through independent priority VCAs");
   assert.match(flightSource,
     /updateF14AudioVoices\(f14Voices, context, audioState, \{[\s\S]*?muted: propulsionGates\.f14Muted,[\s\S]*?\}\);/);
   assert.match(flightSource, /updateCombatCueVoices\(/);
   assert.match(flightSource, /updateWarningVoices\(/);
   assert.match(flightSource, /updateRadioVoice\(/);
   assert.match(flightSource,
-    /createRadioVoice\(context, bus, \{[\s\S]*?propulsionDuck,[\s\S]*?\}\)/,
+    /createRadioVoice\(context, radioBus, \{[\s\S]*?propulsionDuck,[\s\S]*?\}\)/,
     "radio owns one shared multiplier downstream of every propulsion graph");
   assert.match(flightSource,
     /ensureDedicatedAircraftSampleBed\(f14Active, f14Voices, F14_COCKPIT_SAMPLE_BED\)/,

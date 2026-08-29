@@ -8,9 +8,9 @@
   <base href="/">
   <title>Guns Only · Hold the Bridge</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/cobra-lab/styles.css?v=343">
+  <link rel="stylesheet" href="/cobra-lab/styles.css?v=349">
 </head>
-<body data-shell="play">
+<body data-shell="play" data-brief="true">
   <a class="skip-link" href="#scene">Skip to flight</a>
 
   <div id="play-chrome" class="play-chrome">
@@ -92,7 +92,7 @@
 
   <main class="flight-stage">
     <section class="viewport" aria-label="Hold the Bridge sortie">
-      <canvas id="scene"></canvas>
+      <canvas id="scene" tabindex="-1"></canvas>
       <!-- Production hud.js combiner (Build 264): world + HUD, zero cockpit. The old
            CSS reticle and DOM text strip are replaced by the real instrument. -->
       <canvas id="hud-canvas" aria-hidden="true"></canvas>
@@ -100,32 +100,89 @@
            render/cobra/cobra_tactical_map_draw.js from the authority snapshot's ground_war. -->
       <canvas id="minimap" aria-hidden="true"></canvas>
       <canvas id="tactical-map" aria-hidden="true" hidden></canvas>
+      <p class="device-advisory device-advisory--play" role="status">Keyboard for combat · landscape</p>
       <div class="legend" aria-hidden="true">
         <span><i class="friendly-key"></i> friendly</span>
         <span><i class="hostile-key"></i> hostile</span>
         <span><i class="landmark-key"></i> contested</span>
       </div>
-      <section id="pause-menu" class="pause-menu" role="dialog" aria-modal="true"
-        aria-labelledby="pause-title" aria-describedby="pause-detail" hidden>
-        <div class="pause-card">
-          <span class="pause-kicker">HOLD THE BRIDGE</span>
-          <h1 id="pause-title">Flight paused</h1>
-          <p id="pause-detail">The mission clock and flight controls are stopped.</p>
-          <button id="pause-resume" class="pause-primary" type="button">Resume</button>
-          <div class="pause-actions">
-            <button id="pause-restart" type="button">Restart sortie</button>
-            <button id="pause-exit" type="button">Exit mission</button>
+      <section id="mission-brief" class="mission-overlay mission-brief" role="dialog"
+        aria-modal="true" aria-labelledby="mission-brief-title"
+        aria-describedby="mission-brief-summary">
+        <article class="mission-card mission-card--brief">
+          <div class="mission-card-heading">
+            <span class="mission-kicker">CAMP EMBER · FLIGHT BRIEF</span>
+            <button id="mission-brief-sound" class="mission-sound" type="button" aria-pressed="true">Sound on</button>
           </div>
-          <span class="pause-hint">Esc · resume</span>
+          <h1 id="mission-brief-title">Hold the Bridge</h1>
+          <p id="mission-brief-summary" class="mission-summary">Take three of four points, drain hostile tickets, then land at Camp Ember. At 10:00, points decide; tickets break ties. A tie loses.</p>
+          <p class="device-advisory device-advisory--brief">Keyboard required for combat.</p>
+          <dl class="mission-brief-facts" aria-label="Sortie assignment">
+            <div><dt>Aircraft</dt><dd>AH-1G Cobra</dd></div>
+            <div><dt>Score</dt><dd>10:00 · points, then tickets</dd></div>
+            <div><dt>Crew contract</dt><dd>Tip gun · hold F</dd></div>
+          </dl>
+          <dl class="mission-brief-controls mission-brief-controls--desktop" aria-label="Essential keyboard controls">
+            <div><dt>Fly</dt><dd>W / S collective · arrows cyclic · A / D pedals</dd></div>
+            <div><dt>Fight</dt><dd>Tab selects · hold F engages</dd></div>
+            <div><dt>Reference</dt><dd>M map · H full controls · Esc pause</dd></div>
+          </dl>
+          <dl class="mission-brief-controls mission-brief-controls--touch" aria-label="Essential physical controls">
+            <div><dt>Keyboard</dt><dd>Required for combat · no touch controls</dd></div>
+            <div><dt>Gamepad</dt><dd>Flight controls only</dd></div>
+            <div><dt>Reference</dt><dd>H full controls · Esc pause</dd></div>
+          </dl>
+          <ol class="mission-flow" aria-label="Mission phases">
+            <li><strong>1 · INGRESS</strong><span>Follow Lead.</span></li>
+            <li><strong>2 · DESTROY</strong><span>Kill the gun pit.</span></li>
+            <li><strong>3 · CLEAR</strong><span>Cover the lift.</span></li>
+            <li><strong>4 · HOLD</strong><span>Keep the majority.</span></li>
+            <li><strong>5 · RTB</strong><span>Land at Ember.</span></li>
+          </ol>
+          <p class="mission-correction"><strong>FIRST MOVE</strong><span>Lift. Follow Lead.</span></p>
+          <div class="mission-actions">
+            <button id="mission-brief-start" class="mission-action mission-action--primary" type="button" disabled>Loading…</button>
+            <a id="mission-brief-exit" class="mission-action" href="/?program=cobra-lab&amp;menu=1">Aircraft</a>
+          </div>
+          <span class="mission-hint">Enter · start</span>
+        </article>
+      </section>
+      <section id="pause-menu" class="mission-overlay mission-pause pause-menu" role="dialog" aria-modal="true"
+        aria-labelledby="pause-title" aria-describedby="pause-detail" hidden>
+        <div class="mission-card mission-card--pause pause-card">
+          <span class="mission-kicker pause-kicker">HOLD THE BRIDGE</span>
+          <h1 id="pause-title">Flight paused</h1>
+          <p id="pause-detail" class="mission-summary">Controls and clock held.</p>
+          <button id="pause-resume" class="mission-action mission-action--primary pause-primary" type="button">Resume</button>
+          <button id="pause-sound" class="mission-action pause-sound" type="button" aria-pressed="true">Sound on</button>
+          <div class="mission-actions pause-actions">
+            <button id="pause-restart" class="mission-action" type="button">Restart</button>
+            <button id="pause-exit" class="mission-action" type="button">Aircraft</button>
+          </div>
+          <span class="mission-hint pause-hint">Esc · resume</span>
         </div>
       </section>
-      <div id="debrief" class="debrief" hidden>
-        <p id="debrief-title">MISSION COMPLETE</p>
-        <p id="debrief-body"></p>
-        <div class="pause-actions">
-          <button id="debrief-restart" type="button">Fly again</button>
-          <button id="debrief-exit" type="button">Exit mission</button>
-        </div>
+      <div id="debrief" class="mission-overlay mission-result debrief" role="dialog" aria-modal="true"
+        aria-labelledby="debrief-title" aria-describedby="debrief-body" hidden>
+        <article class="mission-card mission-card--result debrief-card">
+          <span id="debrief-kicker" class="mission-kicker debrief-kicker">MISSION RESULT</span>
+          <h2 id="debrief-title">MISSION COMPLETE</h2>
+          <p id="debrief-body" class="mission-summary"></p>
+          <dl class="mission-evidence debrief-facts" aria-label="Mission evidence">
+            <div><dt>Points</dt><dd id="debrief-points">0 / 4</dd></div>
+            <div><dt>Hostiles</dt><dd id="debrief-kills">0</dd></div>
+            <div><dt>Rounds</dt><dd id="debrief-rounds">0</dd></div>
+            <div><dt>Friendly kills</dt><dd id="debrief-friendly-kills">0</dd></div>
+            <div><dt>Rearms</dt><dd id="debrief-rearms">0</dd></div>
+            <div><dt>Bird swaps</dt><dd id="debrief-swaps">0</dd></div>
+            <div><dt>Battle time</dt><dd id="debrief-battle-time">0 s</dd></div>
+          </dl>
+          <p class="mission-correction debrief-correction"><strong>NEXT SORTIE</strong><span id="debrief-correction"></span></p>
+          <div class="mission-actions pause-actions">
+            <button id="debrief-restart" class="mission-action mission-action--primary" type="button" aria-keyshortcuts="R">Retry</button>
+            <button id="debrief-exit" class="mission-action" type="button">Aircraft</button>
+          </div>
+        </article>
       </div>
     </section>
   </main>
@@ -146,8 +203,12 @@
       document.body.dataset.shell = params.get("lab") === "1" ? "lab" : "play";
       const labPanel = document.getElementById("lab-panel");
       if (labPanel) labPanel.hidden = document.body.dataset.shell !== "lab";
+      const earlyBrief = document.getElementById("mission-brief");
+      const showEarlyBrief = document.body.dataset.shell === "play" && params.get("battleQa") !== "1";
+      if (earlyBrief) earlyBrief.hidden = !showEarlyBrief;
+      document.body.dataset.brief = String(showEarlyBrief);
 
-      const releaseBuild = new URL("../service-worker.js?v=343", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=349", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -175,7 +236,7 @@
       await globalThis.__gunsPrebootReady;
       await new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        script.src = "/_framework/blazor.webassembly.js?v=343";
+        script.src = "/_framework/blazor.webassembly.js?v=349";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load Cobra flight runtime.")), {
@@ -184,10 +245,10 @@
         document.head.append(script);
       });
       const { renderExperienceGate } = await import(
-        "/render/release/quarantine_gate.js?v=343"
+        "/render/release/quarantine_gate.js?v=349"
       );
       const access = renderExperienceGate({ experienceId: "cobra-lab" });
-      if (access.allowed) await import("/cobra-lab/main.js?v=343");
+      if (access.allowed) await import("/cobra-lab/main.js?v=349");
     } catch (error) {
       console.error(error);
       const status = document.querySelector("#status");

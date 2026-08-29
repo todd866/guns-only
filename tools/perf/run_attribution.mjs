@@ -2,11 +2,12 @@
 // Driver: boots each mode, captures parked + in-motion windows at DPR 1 and 2, and
 // (optionally) a GL-counting pass and a fill-scaling sweep.
 //
-// Usage: node tools/perf/run_attribution.mjs --mode cobra|f22|ride --dpr 1 --count --fill
+// Usage: node tools/perf/run_attribution.mjs --mode cobra|f22|first-run|ride --dpr 1 --count --fill
 
 import { writeFile, mkdir } from "node:fs/promises";
 import process from "node:process";
 import { launch, capture, BRIDGE_PROBE, PORT, OUT } from "./frame_attribution.mjs";
+import { evaluateCobraPlayerPath } from "./cobra_acceptance.mjs";
 
 const argv = process.argv.slice(2);
 const flag = (name, fallback) => {
@@ -19,7 +20,8 @@ const MODE = String(flag("mode", "cobra"));
 const DPR = Number(flag("dpr", 1));
 const COUNT = !!flag("count", false);
 const FILL = !!flag("fill", false);
-const WINDOW_MS = Number(flag("window", 8000));
+const GATE = !!flag("gate", false);
+const WINDOW_MS = Number(flag("window", GATE ? 12_000 : 8000));
 const WARMUP_MS = Number(flag("warmup", 6000));
 const BASE = `http://127.0.0.1:${PORT}/`;
 const VIEWPORT = {
@@ -39,8 +41,50 @@ const MODES = {
           && !!window.__gunsOnlyCobraAuthority?.vehicle,
         undefined, { timeout: 120_000 },
       );
+      const ready = await page.evaluate(() => ({
+        readyMs: performance.now(),
+        frame: Number(window.__gunsOnlyCobraLabCamera?.renderStats?.().frame) || 0,
+        loadEventMs: performance.getEntriesByType("navigation")[0]?.loadEventEnd ?? null,
+      }));
+      await page.waitForFunction(
+        (readyFrame) => Number(window.__gunsOnlyCobraLabCamera?.renderStats?.().frame) > readyFrame,
+        ready.frame,
+        { timeout: 10_000 },
+      );
+      const firstPostReadyPaintMs = await page.evaluate(() => performance.now());
+
+      // A performance run that leaves this visible measures a paused briefing card, not Cobra.
+      // Cross the same consent edge as a player, then dismiss only the optional controls teaching.
+      const start = page.locator("#mission-brief-start");
+      if (await start.isVisible()) await start.click();
+      await page.waitForFunction(
+        () => document.querySelector("#mission-brief")?.hidden === true,
+        undefined,
+        { timeout: 20_000 },
+      );
+      const teaching = page.locator("#controls-onboarding-dismiss");
+      if (await teaching.isVisible()) await teaching.click();
       await page.bringToFront();
       await page.locator("#scene").focus().catch(() => {});
+      const beforeInput = await page.evaluate(() => ({
+        atMs: performance.now(),
+        tick: Number(window.__gunsOnlyCobraAuthority?.vehicle?.tick) || -1,
+      }));
+      await page.keyboard.down("w");
+      await page.waitForFunction(
+        (beforeTick) => Number(window.__gunsOnlyCobraAuthority?.vehicle?.tick) > beforeTick,
+        beforeInput.tick,
+        { timeout: 10_000 },
+      );
+      await page.keyboard.up("w");
+      const acknowledgedAtMs = await page.evaluate(() => performance.now());
+      return {
+        readyMs: ready.readyMs,
+        loadEventMs: ready.loadEventMs,
+        firstPostReadyPaintMs,
+        postReadyPaintMs: firstPostReadyPaintMs - ready.readyMs,
+        inputToAuthorityMs: acknowledgedAtMs - beforeInput.atMs,
+      };
     },
     // "Parked": tour camera off, no control input, ship sitting.
     async park(page) {
@@ -51,9 +95,50 @@ const MODES = {
       await page.waitForTimeout(1500);
     },
     async move(page) {
+      if (GATE) {
+        // The normal departure is kilometres from the conquest workload. Stage the provider's
+        // explicit Iron Bell review spawn only after the real brief/input path has been proven,
+        // then let the ordinary RAF loop advance and render that real authority for the sample.
+        // This is the same production runtime and spawn contract used by the visual battle gate;
+        // it manufactures no events, ownership, casualties, or presentation effects.
+        await page.evaluate(() => {
+          const routeChoice = Number(document.querySelector("#route")?.value) || 0;
+          window.__gunsOnlyCobraBridge.StartRoute(routeChoice, false, true);
+        });
+        await page.waitForFunction(
+          () => window.__gunsOnlyCobraAuthority?.ground_war?.combat_live === true
+            && ["engage", "hold"].includes(
+              String(window.__gunsOnlyCobraAuthority?.mission_act ?? "").toLowerCase(),
+            ),
+          undefined,
+          { timeout: 10_000 },
+        );
+      }
       await page.keyboard.down("w");
       await page.keyboard.down("ShiftLeft");
-      await page.waitForTimeout(1200);
+      return {
+        battleStaged: GATE,
+      };
+    },
+    async prepareSample(page, leg) {
+      if (!GATE || leg !== "motion") return null;
+      // The scene is now resident at Iron Bell, but the first review authority has spent the
+      // streaming warmup under fire. Reset only the production battle authority at the same spawn
+      // so the 12-second sample measures a complete live window, not an aircraft already dying
+      // because the QA-only warmup extended its exposure.
+      await page.evaluate(() => {
+        const routeChoice = Number(document.querySelector("#route")?.value) || 0;
+        window.__gunsOnlyCobraBridge.StartRoute(routeChoice, false, true);
+      });
+      await page.waitForFunction(
+        () => window.__gunsOnlyCobraAuthority?.ground_war?.combat_live === true
+          && ["engage", "hold"].includes(
+            String(window.__gunsOnlyCobraAuthority?.mission_act ?? "").toLowerCase(),
+          ),
+        undefined,
+        { timeout: 10_000 },
+      );
+      return { battleAuthorityResetAfterStreamingWarmup: true };
     },
     async rest(page) {
       await page.keyboard.up("w").catch(() => {});
@@ -97,6 +182,13 @@ const MODES = {
       await page.keyboard.press("Escape");
       await page.waitForTimeout(1500);
     },
+    async rest() {},
+  },
+  "first-run": {
+    url: `${BASE}?firstRun=1&server=off&audioQa=silent`,
+    async boot(page) { await MODES.f22.boot(page); },
+    async park(page) { await MODES.f22.park(page); },
+    async move(page) { await MODES.f22.move(page); },
     async rest() {},
   },
   // Same boot as f22, but flown down to the low-altitude / high-triangle regime the production
@@ -144,16 +236,69 @@ const MODES = {
     async boot(page) {
       await page.waitForFunction(
         () => document.querySelector("#status")?.dataset.ready === "true"
-          && !!window.__gunsOnlyWeekendAuthority,
+          && document.querySelector("#ride-brief")?.hidden === false
+          && window.__gunsOnlyWeekendAuthority?.phase === "paused",
         undefined, { timeout: 120_000 },
       );
+      const ready = await page.evaluate(() => ({
+        readyMs: performance.now(),
+        loadEventMs: performance.getEntriesByType("navigation")[0]?.loadEventEnd ?? null,
+      }));
+
+      // Weekend Ride begins behind a real session brief. Sampling before this edge times a
+      // paused overlay: sendControls() rejects input and MotorcycleWebBridge advances no ticks.
+      await page.locator("#ride-brief-start").click();
+      await page.waitForFunction(
+        () => document.querySelector("#ride-brief")?.hidden === true
+          && window.__gunsOnlyWeekendAuthority?.phase === "active",
+        undefined,
+        { timeout: 20_000 },
+      );
+      const teaching = page.locator("#controls-onboarding-dismiss");
+      if (await teaching.isVisible()) await teaching.click();
       await page.bringToFront();
       await page.locator("#scene").focus().catch(() => {});
+      return ready;
     },
-    async park() {},
+    async park(page) {
+      const state = await page.evaluate(() => window.__gunsOnlyWeekendAuthority);
+      if (state?.phase !== "active") {
+        throw new Error(`Weekend Ride parked sample is not active: ${state?.phase ?? "missing"}`);
+      }
+      return { phase: state.phase };
+    },
     async move(page) {
+      const before = await page.evaluate(() => ({
+        x: Number(window.__gunsOnlyWeekendAuthority?.px) || 0,
+        z: Number(window.__gunsOnlyWeekendAuthority?.pz) || 0,
+        lapTimeS: Number(window.__gunsOnlyWeekendAuthority?.lap_time_s) || 0,
+      }));
       await page.keyboard.down("w");
-      await page.waitForTimeout(2500);
+      await page.waitForFunction(
+        (start) => {
+          const state = window.__gunsOnlyWeekendAuthority;
+          const speedMps = Math.hypot(Number(state?.vx) || 0, Number(state?.vz) || 0);
+          const travelM = Math.hypot(
+            (Number(state?.px) || 0) - start.x,
+            (Number(state?.pz) || 0) - start.z,
+          );
+          return state?.phase === "active"
+            && speedMps > 0.5
+            && travelM > 0.5
+            && Number(state?.lap_time_s) > start.lapTimeS;
+        },
+        before,
+        { timeout: 15_000 },
+      );
+      const after = await page.evaluate(() => ({
+        phase: window.__gunsOnlyWeekendAuthority?.phase ?? null,
+        speedMps: Math.hypot(
+          Number(window.__gunsOnlyWeekendAuthority?.vx) || 0,
+          Number(window.__gunsOnlyWeekendAuthority?.vz) || 0,
+        ),
+        lapTimeS: Number(window.__gunsOnlyWeekendAuthority?.lap_time_s) || 0,
+      }));
+      return { ...after, movementProved: true };
     },
     async rest(page) { await page.keyboard.up("w").catch(() => {}); },
   },
@@ -195,6 +340,10 @@ function delta(a, b, keys) {
 async function main() {
   const mode = MODES[MODE];
   if (!mode) throw new Error(`unknown mode ${MODE}`);
+  if (GATE && MODE !== "cobra") throw new Error("--gate currently qualifies only --mode cobra");
+  if (GATE && WINDOW_MS < 10_000) {
+    throw new Error("Cobra --gate requires --window of at least 10000 ms");
+  }
   const { browser, page } = await launch({
     deviceScaleFactor: DPR, viewport: VIEWPORT, countGl: COUNT,
   });
@@ -204,7 +353,7 @@ async function main() {
   try {
     log(`[${MODE} dpr=${DPR}] navigating…`);
     await page.goto(mode.url, { waitUntil: "load", timeout: 120_000 });
-    await mode.boot(page);
+    result.startup = await mode.boot(page) ?? null;
     log(`[${MODE} dpr=${DPR}] booted; warming ${WARMUP_MS} ms`);
     await page.waitForTimeout(WARMUP_MS);
 
@@ -215,16 +364,24 @@ async function main() {
       "RecalcStyleDuration", "V8CompileDuration"];
 
     for (const leg of ["parked", "motion"]) {
-      if (leg === "parked") await mode.park(page);
-      else { await mode.move(page); }
-      await page.waitForTimeout(1500);
+      const transition = leg === "parked" ? await mode.park(page) : await mode.move(page);
+      // The battle QA seam teleports from Camp Ember to Iron Bell. A player never sees that
+      // transition: the near-field scene streams continuously during the several-kilometre
+      // ingress. Do not grade the synthetic teleport's asset rebuild as live battle frame cost.
+      const transitionWarmupMs = GATE && MODE === "cobra" && leg === "motion"
+        ? WARMUP_MS
+        : 1500;
+      await page.waitForTimeout(transitionWarmupMs);
+      const samplePreparation = await mode.prepareSample?.(page, leg) ?? null;
+      const sampleSettleMs = samplePreparation ? 1000 : 0;
+      if (sampleSettleMs) await page.waitForTimeout(sampleSettleMs);
       const m0 = await metrics.read();
       const [summary, bridge] = await Promise.all([
         capture(page, WINDOW_MS),
         bridgePhases(page, WINDOW_MS),
       ]);
       const m1 = await metrics.read();
-      const context = await page.evaluate(() => {
+      const context = await page.evaluate((modeId) => {
         const s = globalThis.__gunsState;
         let framePerf = null;
         try { framePerf = JSON.parse(document.documentElement.dataset.framePerf ?? "null"); }
@@ -235,22 +392,68 @@ async function main() {
           radarAltFt: s ? Number(s.radar_alt_ft) : null,
           tasKts: s ? Number(s.true_airspeed_kts) : null,
           phase: s?.session_phase ?? null,
+          wallMs: performance.now(),
+          cobra: modeId === "cobra" ? {
+            status: window.__gunsOnlyCobraAuthority?.status ?? null,
+            tick: Number(window.__gunsOnlyCobraAuthority?.vehicle?.tick),
+            elapsedS: Number(window.__gunsOnlyCobraAuthority?.ground_war?.debrief?.elapsed_s),
+            combatLive: window.__gunsOnlyCobraAuthority?.ground_war?.combat_live === true,
+            missionAct: window.__gunsOnlyCobraAuthority?.mission_act ?? null,
+            render: window.__gunsOnlyCobraLabCamera?.renderStats?.() ?? null,
+            frameProfile: window.__gunsOnlyCobraFrameProfile?.read?.() ?? null,
+          } : null,
         };
-      });
+      }, MODE);
       result.legs[leg] = {
         context,
-        summary: { ...summary, rows: undefined },
+        transition,
+        transitionWarmupMs,
+        samplePreparation,
+        sampleSettleMs,
+        summary: { ...summary, rows: undefined, frameDeltas: undefined },
         rowsSample: summary.rows?.slice(0, 200),
         bridge,
         cdp: delta(m0, m1, cdpKeys),
         cdpWindowMs: WINDOW_MS,
         heapMB: +(m1.JSHeapUsedSize / 1e6).toFixed(1),
       };
+      if (GATE) {
+        const window = summary.captureWindow;
+        const assessment = evaluateCobraPlayerPath({
+          renderer: summary.renderer,
+          readyMs: result.startup?.readyMs,
+          postReadyPaintMs: result.startup?.postReadyPaintMs,
+          inputToAuthorityMs: result.startup?.inputToAuthorityMs,
+          sampleDurationMs: window.end.atMs - window.start.atMs,
+          frameDeltasMs: summary.frameDeltas,
+          simulationElapsedS: (window.end.tick - window.start.tick) / 120,
+          authorityTickDelta: window.end.tick - window.start.tick,
+          status: window.end.status,
+          combatLive: window.end.combatLive,
+          missionAct: window.end.missionAct,
+          requireCombat: leg === "motion",
+          expectedMissionActs: leg === "motion" ? ["engage", "hold"] : ["depart", "ingress"],
+          renderCalls: window.end.render?.calls,
+          renderTriangles: window.end.render?.triangles,
+        });
+        result.acceptance ??= {};
+        result.acceptance[leg === "motion" ? "battle" : "departure"] = assessment;
+      }
       log(`[${MODE} dpr=${DPR}] ${leg}: fps=${(1000 / summary.delta.p50).toFixed(1)} `
         + `delta p50=${summary.delta.p50.toFixed(2)} p95=${summary.delta.p95.toFixed(2)} `
         + `cb p50=${summary.callback.p50.toFixed(2)} mean=${summary.callback.mean.toFixed(2)} `
         + `gpu=${summary.gpu ? summary.gpu.p50.toFixed(2) : "n/a"}`);
       if (leg === "motion") await mode.rest(page);
+    }
+
+    if (GATE) {
+      result.acceptance.pass = result.acceptance.departure.pass
+        && result.acceptance.battle.pass;
+      if (!result.acceptance.pass) {
+        const failures = ["departure", "battle"].flatMap((leg) =>
+          result.acceptance[leg].failures.map((failure) => `${leg}: ${failure}`));
+        throw new Error(`Cobra player-path gate failed:\n- ${failures.join("\n- ")}`);
+      }
     }
 
     if (FILL) {

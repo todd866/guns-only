@@ -19,7 +19,9 @@ export function corpusDir(name = "soft-world") {
 }
 
 export async function loadCorpus(name = "soft-world", opts = {}) {
-  const dir = corpusDir(name);
+  // Unit tests inject a disposable corpus so scorer verification does not depend on ignored
+  // workstation artwork. Real scoring keeps the authored analysis corpus as its default.
+  const dir = opts.dir ? resolve(opts.dir) : corpusDir(name);
   const indexPath = join(dir, "index.json");
   const index = JSON.parse(await readFile(indexPath, "utf8"));
   const refs = [];

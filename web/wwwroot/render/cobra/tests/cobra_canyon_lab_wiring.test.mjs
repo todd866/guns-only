@@ -9,7 +9,10 @@ async function source(path) {
 }
 
 test("Cobra Canyon lab consumes the authored planner and bounded presentation", async () => {
-  const main = await source("cobra-lab/main.js");
+  const [main, debrief] = await Promise.all([
+    source("cobra-lab/main.js"),
+    source("render/cobra/cobra_debrief.js"),
+  ]);
   assert.match(main, /loadCobraCanyonWorld/);
   assert.match(main, /planCobraCanyonWorld/);
   assert.match(main, /sampleCobraCanyonTerrain/);
@@ -29,6 +32,17 @@ test("Cobra Canyon lab consumes the authored planner and bounded presentation", 
   assert.match(main, /bridge\.SetGunnerTarget/);
   assert.match(main, /createCobraGroundWarPresentation/);
   assert.match(main, /ground_war/);
+  assert.doesNotMatch(
+    main,
+    /GROUND BATTLE LIVE|BATTLE LIVE ·|GROUND FIRE ACTIVE|EXCHANGES ACTIVE/,
+  );
+  assert.match(main, /const caption = objectiveCaption/);
+  assert.match(main, /setText\(objectiveLine, copy\.line\)/);
+  assert.match(main, /setText\(objectiveDetail, copy\.detail\)/);
+  assert.doesNotMatch(main, /FRIENDLIES ENGAGED/,
+    "combat_live alone must not overclaim which faction fired the current exchange");
+  assert.match(main, /ground_war/,
+    "battle authority remains available to effects and telemetry without prose stacking");
   assert.match(main, /recordTelemetry/);
   assert.match(main, /requestAnimationFrame/);
   assert.match(main, /PLAY_MODE/);
@@ -36,7 +50,8 @@ test("Cobra Canyon lab consumes the authored planner and bounded presentation", 
   // The mission is decided by tickets and points held, not by the old hold-progress meter,
   // so the shell must read those out of the snapshot.
   assert.match(main, /tickets/);
-  assert.match(main, /outcome_reason/);
+  assert.match(main, /cobraDebriefPresentation/);
+  assert.match(debrief, /outcome_reason/);
   assert.match(main, /HOLD THE BRIDGE/);
 });
 
@@ -47,6 +62,29 @@ test("visual-review park owns the camera over the vehicle eye", async () => {
   assert.match(main, /do not overwrite the eye/);
   assert.match(main, /!parkedCamera/);
   assert.match(main, /onboarding\?\.dismiss/);
+  assert.match(main, /projectSimPointToScreen\(xM, yM, zM\)/,
+    "the screenshot gate needs a read-only production-camera projection seam");
+});
+
+test("battle review stages production authority at Iron Bell instead of faking effects", async () => {
+  const [main, css, bridge] = await Promise.all([
+    source("cobra-lab/main.js"),
+    source("cobra-lab/styles.css"),
+    readFile(new URL("../../../../CobraWebBridge.cs", import.meta.url), "utf8"),
+  ]);
+  assert.match(main, /BATTLE_REVIEW_MODE/);
+  assert.match(main, /battleQa/);
+  assert.match(main, /bridge\?\.StartRoute\(/);
+  assert.match(main, /BATTLE_REVIEW_MODE,\n\s*\);/);
+  assert.match(main, /DEFAULT_CAMERA_FOV_DEG/);
+  assert.match(main, /camera\.fov = parkedCamera\.fovDeg/);
+  assert.doesNotMatch(main, /qualitySelect\.value\s*=\s*["']desktop["']/,
+    "parking a proof camera must not rebuild the world or restart battle authority");
+  assert.doesNotMatch(main, /fakeBattle|syntheticCombat|manufactureBattle/);
+  assert.match(bridge, /CobraMissionActProgress\.EngageBridgeRadiusM/);
+  assert.match(bridge, /battle review spawn lies outside the real Engage radius/);
+  assert.doesNotMatch(css, /rgba\(0, 0, 0, 0\.35\)/);
+  assert.doesNotMatch(css, /rgba\(0, 0, 0, 0\.28\)/);
 });
 
 test("Cobra Canyon loads Blazor from the site-root framework path", async () => {

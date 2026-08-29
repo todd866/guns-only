@@ -174,7 +174,7 @@ test("formats the compact mission strip without inferring projected facts", () =
   assert.equal(strip.navigation.etaText, "01:37");
   assert.equal(
     strip.clock.combinedText,
-    "TIME SINCE CALL 04:37 · REQUESTED 08:00",
+    "CALL 04:37 · DUE 08:00",
   );
   assert.equal(
     strip.clock.windowText,
@@ -297,10 +297,10 @@ test("builds four separate assessment axes and one recorded correction", () => {
     debrief.axes.map((axis) => axis.status),
     ["CLEAR", "CONTROLLED", "MIXED", "WINDOW PASSED"],
   );
-  assert.match(debrief.axes[0].evidence, /Minimum clearance 44 m/);
-  assert.match(debrief.axes[1].evidence, /2 pickup approaches/);
-  assert.match(debrief.axes[2].evidence, /74% inside declared safe band/);
-  assert.match(debrief.axes[3].evidence, /Call to handoff 09:18/);
+  assert.equal(debrief.axes[0].evidence, "CLEARANCE 44 M · 0 CONTACTS");
+  assert.equal(debrief.axes[1].evidence, "3 APPROACHES · 2 INTERRUPTIONS");
+  assert.equal(debrief.axes[2].evidence, "74% SAFE · 01:32 EXPOSED");
+  assert.equal(debrief.axes[3].evidence, "TOTAL 09:18");
   assert.equal(debrief.correction.available, true);
   assert.equal(
     debrief.correction.summary,
@@ -314,6 +314,26 @@ test("builds four separate assessment axes and one recorded correction", () => {
   assert.doesNotMatch(
     JSON.stringify(debrief),
     /must not render|patient|victory|defeat|kill|diagnos|vital|survival/i,
+  );
+});
+
+test("retains published controlled evidence when sibling counts are absent", () => {
+  const debrief = casevacDebriefModel({
+    axes: {
+      controlled: {
+        status: "CONTROLLED",
+        pickupApproaches: 2,
+        handoffApproaches: null,
+        approachDiscontinuations: 1,
+        loadingInterruptions: null,
+        handoffInterruptions: null,
+      },
+    },
+  });
+
+  assert.equal(
+    debrief.axes.find((axis) => axis.id === "controlled").evidence,
+    "≥2 APPROACHES · ≥1 INTERRUPTIONS",
   );
 });
 
@@ -449,10 +469,10 @@ test("keeps nullable abort evidence unassessed instead of fabricating zero facts
   assert.deepEqual(
     debrief.axes.map((axis) => axis.evidence),
     [
-      "Safety evidence was not assessed.",
-      "Terminal-flight evidence was not assessed.",
-      "Masking evidence was not assessed.",
-      "Timing evidence was not assessed.",
+      "NOT ASSESSED",
+      "NOT ASSESSED",
+      "NOT ASSESSED",
+      "NOT ASSESSED",
     ],
   );
   assert.equal(debrief.correction.available, false);
@@ -497,6 +517,12 @@ test("creates accessible DOM and exposes the exact adapter-facing runtime API", 
   const view = presentation.update({ strip });
   assert.equal(view.strip.phase.text, "LOADING");
   assert.equal(presentation.element.hidden, false);
+  const missionStrip = oneByAttribute(
+    presentation.element,
+    "data-casevac-part",
+    "mission-strip",
+  );
+  assert.equal(missionStrip.getAttribute("data-terminal"), "true");
   assert.equal(
     oneByAttribute(presentation.element, "data-casevac-field", "phase")
       .textContent,
@@ -523,6 +549,36 @@ test("creates accessible DOM and exposes the exact adapter-facing runtime API", 
   assert.equal(progress.getAttribute("aria-valuenow"), "42");
   assert.equal(progress.getAttribute("aria-valuetext"), "LOADING 42%");
   presentation.dispose();
+});
+
+test("reflows non-terminal strips instead of leaving a dead gate column", () => {
+  const presentation = createCasevacMissionPresentation(new FakeDocument());
+  presentation.update({
+    strip: {
+      phase: "INGRESS",
+      targetSiteId: CASEVAC_COURSE_SITE_IDS.pickup,
+      occupancy: "EMPTY",
+    },
+  });
+
+  const strip = oneByAttribute(
+    presentation.element,
+    "data-casevac-part",
+    "mission-strip",
+  );
+  const gate = oneByAttribute(
+    presentation.element,
+    "data-casevac-field",
+    "gate",
+  );
+  assert.equal(strip.getAttribute("data-terminal"), "false");
+  assert.equal(gate.parentNode.hidden, true);
+  const style = presentation.element.children[0].textContent;
+  assert.match(style, /\.cv-strip-grid \{[\s\S]*grid-template-columns: \.85fr 1\.8fr 1fr \.82fr;/);
+  assert.match(style, /\[data-terminal="true"\] \.cv-strip-grid \{[\s\S]*1\.45fr;/);
+  assert.match(style,
+    /@media \(max-width: 680px\)[\s\S]*\[data-terminal="true"\] \.cv-strip-grid \{[\s\S]*repeat\(2, 1fr\)/,
+    "the terminal selector must not defeat the narrow two-column layout");
 });
 
 test("orders, deduplicates, bounds, and resets the sparse message queue", () => {
@@ -689,7 +745,16 @@ test("renders quiet and debrief states without taking completion authority", () 
     1,
   );
   assert.match(debrief.textContent, /HANDOFF 09:18 · REQUESTED 08:00/);
+  assert.match(debrief.textContent, /MEDEVAC DEBRIEF/);
+  assert.match(debrief.textContent, /CLEARANCE 44 M · 0 CONTACTS/);
+  assert.match(debrief.textContent, /NEXT FLIGHT/);
   assert.match(debrief.textContent, /Begin deceleration before the orchard/);
+  assert.doesNotMatch(debrief.textContent, /SEPARATE EVIDENCE AXES/);
+  assert.doesNotMatch(
+    debrief.textContent,
+    /Pickup terminal entry 04:37/,
+    "correction evidence stays in the safe model but does not add a second prose line",
+  );
   flyAgain.click();
   assert.equal(flyAgainRequests, 1);
 

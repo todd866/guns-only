@@ -8,6 +8,16 @@ public sealed class CobraGunTargetingTests
     static readonly Vec3D Aircraft = new(0.0, 100.0, 0.0);
 
     [Fact]
+    public void AimPointRaisesTheGroundReferenceToCenterMass()
+    {
+        var groundReference = new Vec3D(12.0, 104.0, -8.0);
+
+        Assert.Equal(
+            new Vec3D(12.0, 104.0 + CobraGunTargeting.TargetAimHeightM, -8.0),
+            CobraGunTargeting.AimPoint(groundReference));
+    }
+
+    [Fact]
     public void DeadAheadInRangeIsInsideEnvelopeWithSolution()
     {
         var assessment = CobraGunTargeting.Assess(Aircraft, aircraftYawRad: 0.0, new Vec3D(0.0, 100.0, 500.0));
@@ -147,6 +157,24 @@ public sealed class CobraGunLineOfSightTests
         }
     }
 
+    sealed class EndpointLipTerrain : ITerrainSurface
+    {
+        public TerrainBounds Bounds { get; } = new(-1_000.0, 1_000.0, -1_000.0, 1_000.0);
+        public double HorizontalResolutionM => 10.0;
+
+        public bool TrySample(double eastM, double northM, out TerrainSample sample)
+        {
+            if (!Bounds.Contains(eastM, northM)) {
+                sample = default;
+                return false;
+            }
+            sample = new TerrainSample(
+                eastM >= 85.0 ? 100.4 : 100.0,
+                new Vec3D(0.0, 1.0, 0.0));
+            return true;
+        }
+    }
+
     static CobraResolvedObstacle BoxBetween() => new(
         "test.box",
         CobraCanyonCollisionPrimitive.AxisAlignedBox,
@@ -217,6 +245,38 @@ public sealed class CobraGunLineOfSightTests
             new Vec3D(50.0, 150.0, 0.0));
 
         Assert.False(hasLos);
+    }
+
+    [Fact]
+    public void GroundReferenceCanSelfMaskWhileTheSharedTargetAimPointRemainsVisible()
+    {
+        var terrain = new EndpointLipTerrain();
+        var aircraft = new Vec3D(0.0, 103.0, 0.0);
+        var targetReference = new Vec3D(100.0, 100.4, 0.0);
+
+        Assert.False(CobraGunTargeting.EvaluateLineOfSight(
+            terrain,
+            Array.Empty<CobraResolvedObstacle>(),
+            aircraft,
+            targetReference));
+        Assert.True(CobraGunTargeting.EvaluateLineOfSight(
+            terrain,
+            Array.Empty<CobraResolvedObstacle>(),
+            aircraft,
+            CobraGunTargeting.AimPoint(targetReference)));
+
+        CobraGunnerTargetObservation observation = CobraGunTargeting.AdvanceGunnerObservation(
+            terrain,
+            Array.Empty<CobraResolvedObstacle>(),
+            aircraft,
+            aircraftYawRad: Math.PI / 2.0,
+            targetId: "raised-road-target",
+            friendly: false,
+            targetReference,
+            new CobraTurretServo(),
+            dtSeconds: 1.0 / 120.0);
+        Assert.True(observation.HasLineOfSight,
+            "gunner observation must resolve the reference point to the same raised sight point");
     }
 }
 

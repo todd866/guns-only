@@ -204,6 +204,11 @@ test("cobra lab scene constants consume the shared visual profile", async () => 
   const main = await source("cobra-lab/main.js");
   assert.match(main, /COBRA_CANYON_VISUAL_PROFILE/);
   assert.match(main, /cobra_canyon_visual_profile\.js\?v=\d+/);
+  assert.match(
+    main,
+    /renderer\.toneMappingExposure = COBRA_CANYON_VISUAL_PROFILE\.toneMappingExposure/,
+  );
+  assert.doesNotMatch(main, /renderer\.toneMappingExposure = 1\.06/);
   // Fog, background, hemisphere, sun and sky uniforms all read the profile.
   assert.match(main, /FogExp2\(sceneProfile\.fog\.color, sceneProfile\.fog\.density\)/);
   assert.match(main, /sceneProfile\.lighting\.hemisphereSkyColor/);
@@ -239,15 +244,24 @@ test("the basin and river surfaces run the shared painted recipe, per fragment",
   assert.match(presentation, /cobra_canyon_terrain_material\.js\?v=\d+/);
   assert.match(presentation, /createCobraCanyonBasinMaterial/);
   assert.match(presentation, /createCobraCanyonRiverMaterial/);
-  // Baked vertex colour was the Build 264 monotone's mechanism at this vertex spacing.
-  assert.doesNotMatch(presentation, /vertexColors/);
+  // Baked BASIN/RIVER vertex colour was the Build 264 monotone's mechanism at this spacing.
+  // Structures and hero-cell decals may carry local vertex colour without moving the two
+  // analytical surfaces off their per-fragment recipe.
+  const paintedSurfaceDispatch = presentation.match(
+    /if \(role === "basin"\)[\s\S]*?if \(role === "river"\)[^\n]*/,
+  )?.[0] ?? "";
+  assert.doesNotMatch(paintedSurfaceDispatch, /vertexColors/);
 
   const material = await source("render/cobra/cobra_canyon_terrain_material.js");
   assert.match(material, /halfLambert \*= halfLambert;/);
   assert.match(material, /uToneGateWeights\.x \* smoothstep\(uToneGateLow/);
   assert.match(material, /mix\(uSkyFill, uSunKey, toneRamp\) \* toneRamp/);
   assert.match(material, /mix\(uOcclusionRange\.x, uOcclusionRange\.y, clamp\(vConcavity/);
-  assert.match(material, /floor\(aerial \* bands\) \/ bands/);
+  assert.match(material, /float scaled = aerial \* bands/);
+  assert.match(
+    material,
+    /floor\(scaled\) \+ smoothstep\([^\n]+fract\(scaled\)\)\) \/ bands/,
+  );
   // The sin hash breaks down past ~1e5, which silenced the near-field octaves entirely.
   assert.doesNotMatch(material, /return fract\(sin\(dot\(/);
 });

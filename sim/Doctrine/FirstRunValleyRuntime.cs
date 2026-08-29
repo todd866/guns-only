@@ -7,15 +7,16 @@ public enum FirstRunValleyPhase {
     Armed,
 }
 
-/// First-visit Soniachne draw: weapons cold until the pop-out gate, then two AIM-9s on Fire
+/// First-visit Kestrel Gorge: weapons cold until the pop-out gate, then two AIM-9s on Fire
 /// before the same button becomes guns. Epistemic: AIM-9 is the existing public-data surrogate.
 public sealed class FirstRunValleyRuntime {
     public const string MissionId = "mission.modern.visual-merge.first-run-valley.v1";
-    public const double ValleyEastM = 2_400.0;
-    public const double PlayerNorthM = -5_500.0;
-    public const double PopOutNorthM = -2_000.0;
-    public const double BanditNorthM = -600.0;
-    public const double SpawnAltitudeM = 190.0;
+    public const double ValleyEastM = 0.0;
+    public const double PlayerNorthM = -19_200.0;
+    public const double PopOutNorthM = -1_200.0;
+    public const double BanditNorthM = 600.0;
+    public const double SpawnAltitudeM = 310.0;
+    public const double RouteCalibratedAirspeedKts = 420.0;
     public const int DefaultAim9Rounds = 2;
 
     readonly Aim9Surrogate _aim9;

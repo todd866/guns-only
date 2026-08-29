@@ -1,4 +1,5 @@
 import { recoveryPlatformAvailable } from "./carrier_sa.js";
+import { flightMissionGuidance } from "./mission_guidance.js";
 
 const DEFAULT_FUEL_CAPACITY_LB = 2826;
 const DEFAULT_BINGO_FUEL_LB = 800;
@@ -359,19 +360,11 @@ export function targetRangeReadout(value) {
 // SAFE and an outstanding release interlock remain visible; HOT is supplied only for the bounded
 // transition window owned by the simulation and then this returns null so the HUD gets its space
 // back. Terminal/debrief presentation never inherits a stale in-flight call.
-export function visualMergeWeaponsCue(state = {}) {
-  if (state.visual_merge_evaluation !== true
-      || state.terminal_phase_active === true || state.finished === true) return null;
-  if (state.weapons_inhibited === true) {
-    return { text: "GUNS SAFE · FIRST PASS", level: "caution" };
-  }
-  if (state.player_trigger_interlocked === true) {
-    return { text: "RELEASE TRIGGER TO ARM", level: "warning" };
-  }
-  if (state.weapons_hot_cue === true) {
-    return { text: "GUNS HOT", level: "normal" };
-  }
-  return null;
+export function visualMergeWeaponsCue(state = {}, options = {}) {
+  const presentation = flightMissionGuidance(state, options);
+  return presentation
+    ? { text: presentation.compactText, level: presentation.level }
+    : null;
 }
 
 export function fuelReadout(state = {}) {

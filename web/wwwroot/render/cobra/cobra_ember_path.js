@@ -75,12 +75,27 @@ export function emberPathGuidanceState(authorityState) {
     authorityState?.route_id ?? authorityState?.route ?? "route",
     routeLeg,
   ].join(":");
+  // Engage/Hold are owned by the objective golden path. Sim retains a bridge gate for authority
+  // diagnostics, but drawing it here contradicted the attack cue after Iron Bell changed hands.
+  if (act === "engage" || act === "hold" || act === "complete") {
+    return {
+      approach_guidance_active: false,
+      // Cobra publishes a complete world-space gate chain. The shared ownship-relative join
+      // chevrons rebuild from px/py/pz every frame and visibly slide across the terrain; never
+      // synthesize those moving cues on top of this authored ladder.
+      approach_join_guidance_active: false,
+      guidance_continuity_key: continuityKey,
+      approach_gates: [],
+      approach_gate_count: 0,
+    };
+  }
   if (!gates.length) {
     const routeOwnsGuidance = act === "depart" || act === "ingress" || act === "rtb";
     return {
       // Keep approach ownership through a transient empty projection so the shared renderer can
       // retain its last complete ladder. A fresh mission with no prior ladder still fails closed.
       approach_guidance_active: routeOwnsGuidance,
+      approach_join_guidance_active: false,
       guidance_continuity_key: continuityKey,
       approach_gates: [],
       approach_gate_count: 0,
@@ -123,6 +138,7 @@ export function emberPathGuidanceState(authorityState) {
 
   return {
     approach_guidance_active: windowed.length > 0,
+    approach_join_guidance_active: false,
     guidance_continuity_key: continuityKey,
     approach_gates: windowed,
     approach_gate_count: windowed.length,
@@ -142,19 +158,19 @@ export function emberActObjectiveOverlay(act, options = {}) {
     case "depart":
       return {
         line: "DEPART CAMP EMBER · FOLLOW THE PATH",
-        detail: "Lift off — soft glow volumes ahead mark the nap-of-earth path down the gorge",
+        detail: "Lift. Follow Lead.",
       };
     case "ingress":
       return {
         line: remaining
           ? `INGRESS · ${remaining} TO THE BRIDGE`
           : "INGRESS · FOLLOW THE GORGE TO THE BRIDGE",
-        detail: "Stay on the soft path — the Jaw is the fight",
+        detail: "Stay low. Iron Bell is the fight.",
       };
     case "engage":
       return {
         line: "ENGAGE · BREAK HOSTILE POINTS",
-        detail: "Kill each garrison, clear the point, then cover the friendly lift",
+        detail: "Destroy each gun pit, clear the point, then cover the friendly lift",
       };
     case "hold":
       return {

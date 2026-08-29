@@ -31,7 +31,10 @@ public static partial class CobraWebBridge
     static double _accumulatorSeconds;
 
     [JSExport]
-    public static void StartRoute(int routeChoice, bool visualLab = false)
+    public static void StartRoute(
+        int routeChoice,
+        bool visualLab = false,
+        bool battleReview = false)
     {
         _routeChoice = routeChoice switch {
             0 => CobraCanyonRouteChoice.RiverGorge,
@@ -40,14 +43,21 @@ public static partial class CobraWebBridge
             _ => throw new ArgumentOutOfRangeException(nameof(routeChoice))
         };
         CobraCanyonDefinition definition = CobraCanyonDefinition.Create();
+        CobraCanyonTerrainSurface terrain = definition.CreateTerrainSurface();
         _runtime = new CobraMissionRuntime(
             definition,
-            definition.CreateTerrainSurface(),
+            terrain,
             _routeChoice,
             windVelocityMps: CobraCanyonWindField.DefaultSynopticMps,
             // Guided scenery review must not abandon an unpiloted helicopter to drift into a
             // rollover while the camera is on rails. Play keeps the authored terrain wind.
-            enableTerrainWind: !visualLab);
+            enableTerrainWind: !visualLab && !battleReview,
+            // The visual gate must grade an actual running battle, not the cold Depart snapshot.
+            // This is still the production mission/runtime/ground-war authority: the only review
+            // aid is the constructor's existing explicit scenario spawn, placed inside the real
+            // Iron Bell engage radius. No event, casualty, ownership value or weapon effect is
+            // manufactured by the browser.
+            spawn: battleReview ? BattleReviewSpawn(definition, terrain) : null);
         _controlLatch.Reset();
         _selectedTargetId = null;
         _engagementConsent = false;
@@ -67,6 +77,42 @@ public static partial class CobraWebBridge
         // Depart is navigation, not a pop-up shooting gallery. The pilot designates an authored
         // forward-objective hostile once it is visually available.
         _selectedTargetId = null;
+    }
+
+    static CobraMissionSpawn BattleReviewSpawn(
+        CobraCanyonDefinition definition,
+        ITerrainSurface terrain)
+    {
+        CobraCanyonLandmarkDefinition bridge = definition.Landmarks.First(landmark =>
+            string.Equals(
+                landmark.Id,
+                "landmark.cobra-canyon.iron-bell-bridge.v1",
+                StringComparison.Ordinal));
+        // Player-eye battle review sits south of the crossing far enough to hold BOTH 520 m-apart
+        // bridgeheads inside the production horizontal FOV. The old 200 m stand-off proved only
+        // the hostile end, making reciprocal fire read as an isolated target marker.
+        double eastM = bridge.EastM;
+        double northM = bridge.NorthM - 360.0;
+        double bridgeDeltaEastM = bridge.EastM - eastM;
+        double bridgeDeltaNorthM = bridge.NorthM - northM;
+        double distanceToBridgeM = Math.Sqrt(
+            (bridgeDeltaEastM * bridgeDeltaEastM)
+            + (bridgeDeltaNorthM * bridgeDeltaNorthM));
+        if (distanceToBridgeM >= CobraMissionActProgress.EngageBridgeRadiusM)
+            throw new InvalidOperationException(
+                "Iron Bell battle review spawn lies outside the real Engage radius.");
+        if (!terrain.TrySample(eastM, northM, out TerrainSample surface))
+            throw new InvalidOperationException("Iron Bell battle review spawn has no terrain datum.");
+        // Look through the midpoint between the two hard points so bridge, attackers and target
+        // share one honest sight picture.
+        const double battleFocusEastM = -2_705.0;
+        double yawRad = Math.Atan2(
+            battleFocusEastM - eastM,
+            CobraGroundWarRuntime.IronBellBridgeheadNorthM - northM);
+        return new CobraMissionSpawn(
+            new Vec3D(eastM, surface.HeightM + 70.0, northM),
+            Vec3D.Zero,
+            yawRad);
     }
 
     static CobraAiGunner CreateGunner() => new(new CobraAiGunnerDefinition(
@@ -198,6 +244,15 @@ public static partial class CobraWebBridge
         _ => "none",
     };
 
+    static string ContactKindToken(VehicleContactKind kind) => kind switch
+    {
+        VehicleContactKind.Airborne => "airborne",
+        VehicleContactKind.SurfaceContact => "surface-contact",
+        VehicleContactKind.StableSurfaceContact => "stable-surface-contact",
+        VehicleContactKind.HardImpact => "hard-impact",
+        _ => "unknown",
+    };
+
     static string TurnaroundPhaseToken(CobraTurnaroundPhase phase) => phase switch
     {
         CobraTurnaroundPhase.Operational => "operational",
@@ -294,7 +349,7 @@ public static partial class CobraWebBridge
             ? CobraGunTargeting.Assess(
                 position,
                 observation.YawRad,
-                selectedGunnerTarget.PositionWorldM)
+                CobraGunTargeting.AimPoint(selectedGunnerTarget.PositionWorldM))
             : null;
         double? gunnerTargetRangeM = gunnerAssessment?.RangeM;
         bool? gunnerTargetWithinRange = gunnerTargetRangeM.HasValue
@@ -434,18 +489,33 @@ public static partial class CobraWebBridge
                     hostile = groundWar.HostileTickets,
                 },
                 units = groundWar.Units.Select(unit => {
+                    Vec3D targetAimPoint = CobraGunTargeting.AimPoint(unit.PositionWorldM);
                     double? airThreatRangeM = airThreatRangesM.TryGetValue(unit.Id, out double rangeM)
                         ? rangeM
                         : null;
+                    // `hard-point` is a silhouette/combat role, not the mission semantic. Iron
+                    // Bell deliberately contains a second ordinary hard point, while only the
+                    // fortified site garrison prevents the conquest point from flipping. Publish
+                    // both facts so Tab order and cockpit copy never have to infer the lock from
+                    // a shared renderer role.
+                    bool objectiveLock = unit.IsFortified
+                        && unit.Role == GroundUnitRole.HardPoint
+                        && string.Equals(
+                            unit.Id,
+                            CobraGroundWarRuntime.GarrisonUnitId(unit.HomeSiteId),
+                            StringComparison.Ordinal);
                     return new {
                         id = unit.Id,
                         faction = unit.Faction.ToString().ToLowerInvariant(),
                         role = RoleToken(unit.Role),
+                        fortified = unit.IsFortified,
+                        objective_lock = objectiveLock,
                         alive = unit.IsAlive,
                         health = unit.Health,
                         max_health = unit.MaxHealth,
                         x_m = unit.PositionWorldM.X,
                         y_m = unit.PositionWorldM.Y,
+                        aim_y_m = targetAimPoint.Y,
                         z_m = unit.PositionWorldM.Z,
                         home_site_id = unit.HomeSiteId,
                         air_threat_range_m = airThreatRangeM,
@@ -466,6 +536,8 @@ public static partial class CobraWebBridge
                 }).ToArray(),
                 mission = "hold-the-bridge",
                 combat_live = runtime.GroundWarCombatLive,
+                time_limit_s = CobraGroundWarRuntime.MissionTimeLimitSeconds,
+                time_remaining_s = groundWar.TimeRemainingSeconds,
                 outcome = groundWar.MissionOutcome.ToString().ToLowerInvariant(),
                 outcome_reason = groundWar.MissionOutcomeReason,
                 victory_hold_progress = groundWar.VictoryHoldProgress,
@@ -522,6 +594,7 @@ public static partial class CobraWebBridge
                 air_track_rad = airTrackRad,
                 sideslip_rad = rotorcraft.SideslipRad,
                 flyable = observation.Flyable,
+                contact_kind = ContactKindToken(observation.Contact.Kind),
                 contact_failure_cause = ContactFailureCauseSlug(
                     runtime.Cobra.LastContactFailureCause),
                 gear_damaged = runtime.Cobra.GearDamaged,
@@ -620,7 +693,7 @@ public static partial class CobraWebBridge
                         runtime.Terrain,
                         runtime.ResolvedObstacles,
                         runtime.Cobra.State.PositionWorldM,
-                        unit.PositionWorldM);
+                        CobraGunTargeting.AimPoint(unit.PositionWorldM));
                 }
                 // Sight and turret reachability are independent signals: HasLineOfSight means
                 // sight alone, WithinTurretEnvelope means the mount can reach it, and the servo

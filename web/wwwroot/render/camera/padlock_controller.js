@@ -9,6 +9,15 @@ export const PADLOCK_LIMITS = Object.freeze({
   returnPitchRateRadPerSecond: 420 * DEG,
 });
 
+export const PADLOCK_VISUAL_ROLL_PROFILE = Object.freeze({
+  onsetRad: 55 * DEG,
+  peakRad: 75 * DEG,
+  releaseRad: 90 * DEG,
+  beyondOnsetGain: 0.35,
+  minimumWorldUpProjection: 0.035,
+  fullWorldUpProjection: 0.12,
+});
+
 function finite(value, fallback = 0) {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -18,12 +27,60 @@ function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
 }
 
+function smoothstep(minimum, maximum, value) {
+  if (!(maximum > minimum)) return value >= maximum ? 1 : 0;
+  const t = clamp((value - minimum) / (maximum - minimum), 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
 export function wrapAngle(angle) {
   return Math.atan2(Math.sin(angle), Math.cos(angle));
 }
 
 export function angleNearestReference(angle, reference) {
   return reference + wrapAngle(angle - reference);
+}
+
+/**
+ * Return a camera-only local-Z correction for the visually awkward loaded-turn shoulder. Physical
+ * attitude, controls and the compact ADI remain untouched. The correction is fully released by
+ * knife-edge, and fades out when an almost-vertical look makes optical roll ill-defined.
+ */
+export function padlockVisualRollCorrectionRad(
+  worldUpCamera = {},
+  profile = PADLOCK_VISUAL_ROLL_PROFILE,
+) {
+  const x = Number(worldUpCamera?.x);
+  const y = Number(worldUpCamera?.y);
+  const z = Number(worldUpCamera?.z);
+  if (![x, y, z].every(Number.isFinite)) return 0;
+  const total = Math.hypot(x, y, z);
+  if (total < 1e-9) return 0;
+  const projected = Math.hypot(x, y) / total;
+  const visibility = smoothstep(
+    profile.minimumWorldUpProjection,
+    profile.fullWorldUpProjection,
+    projected,
+  );
+  if (visibility <= 0) return 0;
+
+  const opticalRollRad = Math.atan2(x, y);
+  const magnitudeRad = Math.abs(opticalRollRad);
+  if (magnitudeRad <= profile.onsetRad || magnitudeRad >= profile.releaseRad) return 0;
+  const maximumCorrectionRad = (profile.peakRad - profile.onsetRad)
+    * (1 - profile.beyondOnsetGain);
+  let correctionMagnitudeRad = Math.min(
+    (magnitudeRad - profile.onsetRad) * (1 - profile.beyondOnsetGain),
+    maximumCorrectionRad,
+  );
+  if (magnitudeRad > profile.peakRad) {
+    correctionMagnitudeRad *= 1 - smoothstep(
+      profile.peakRad,
+      profile.releaseRad,
+      magnitudeRad,
+    );
+  }
+  return -Math.sign(opticalRollRad) * correctionMagnitudeRad * visibility;
 }
 
 function moveBounded(current, desired, deltaSeconds, gain, maximumRate) {

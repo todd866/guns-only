@@ -2,8 +2,8 @@
  * First-run controls onboarding, shared across mission shells.
  *
  * One implementation, per-mode content (see controls_content.js): each mission page shows a
- * grouped controls card once on its first launch (per-mode localStorage flag), dismissable by
- * any key, click or tap plus an explicit "Got it" button, and re-openable forever from a small
+ * grouped controls card once on its first launch (per-mode localStorage flag), acknowledged by
+ * an explicit "Got it" action, and re-openable forever from a small
  * persistent chip (H, matching the F-22 shell's "H · CONTROLS" idiom). The F-22 shell itself
  * keeps its native ready-screen legend + CONTROL QUICKLOOK — this module deliberately does not
  * fork that; it exists for the mission pages that had only a one-line strip.
@@ -27,7 +27,7 @@ export function firstRunPending(storage, modeId) {
   }
 }
 
-/** Record that this mode's overlay has been shown. Never throws (Safari private mode). */
+/** Record that this mode's lesson was intentionally acknowledged/dismissed. Never throws. */
 export function markFirstRunSeen(storage, modeId) {
   try {
     storage?.setItem?.(onboardingStorageKey(modeId), "seen");
@@ -65,6 +65,26 @@ export function selectControlsContent(content, { touch }) {
     title: content.title,
     groups: touch === true ? content.touch : content.desktop,
   });
+}
+
+/**
+ * Pure keyboard ownership for the modal controls card. Vehicle keys are blocked—not repurposed as
+ * an implicit acknowledgement—so the first control input after onboarding is always deliberate.
+ */
+export function controlsOnboardingKeyAction({
+  open,
+  code,
+  onDismissAction = false,
+  reopenKeyCode = "KeyH",
+}) {
+  if (code === reopenKeyCode) return "toggle";
+  if (open !== true) return "ignore";
+  if (code === "Escape") return "dismiss";
+  if (code === "Tab") return "trap-focus";
+  if (onDismissAction === true && (code === "Enter" || code === "Space")) {
+    return "acknowledge";
+  }
+  return "block";
 }
 
 /**
@@ -204,6 +224,7 @@ const OVERLAY_CSS = `
   letter-spacing: 0.1em;
   cursor: pointer;
 }
+#controls-onboarding-reopen[hidden] { display: none !important; }
 #controls-onboarding-nudge {
   position: fixed;
   left: 50%;
@@ -221,6 +242,22 @@ const OVERLAY_CSS = `
   white-space: nowrap;
 }
 #controls-onboarding-nudge[hidden] { display: none !important; }
+@media (max-height: 500px) and (orientation: landscape) {
+  #controls-onboarding { padding: 8px; }
+  .controls-onboarding-card {
+    max-height: calc(100dvh - 16px);
+    padding: 14px 18px 12px;
+  }
+  .controls-onboarding-card h2 { margin-bottom: 9px; }
+  .controls-onboarding-group { margin-bottom: 9px; }
+  .controls-onboarding-foot {
+    position: sticky;
+    bottom: -12px;
+    margin: 8px -18px -12px;
+    padding: 9px 18px 12px;
+    background: rgba(6, 10, 9, 0.98);
+  }
+}
 `;
 
 function ensureStyles(doc) {
@@ -232,9 +269,9 @@ function ensureStyles(doc) {
 }
 
 /**
- * Build the overlay + persistent re-open chip and wire dismissal. The overlay never blocks the
- * mission's own key handling: dismissal listens in capture phase without preventDefault, so the
- * key that dismisses the card also acts in the cockpit — the fastest possible "got it".
+ * Build the overlay + persistent re-open chip and wire explicit acknowledgement. While open it
+ * owns focus and consumes vehicle input. That extra deliberate action is important: dismissing a
+ * lesson must never also add collective, throttle, cyclic, steering, or weapons input.
  */
 export function createControlsOnboarding({
   modeId,
@@ -243,7 +280,9 @@ export function createControlsOnboarding({
   doc = globalThis.document,
   touch = detectTouchEnvironment(),
   reopenKeyCode = "KeyH",
+  focusTarget = null,
   nudges = [],
+  canOpen = () => true,
 }) {
   ensureStyles(doc);
   const variant = selectControlsContent(content, { touch });
@@ -252,12 +291,15 @@ export function createControlsOnboarding({
   overlay.id = "controls-onboarding";
   overlay.hidden = true;
   overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-label", `${variant.title} controls`);
+  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("aria-hidden", "true");
 
   const card = doc.createElement("div");
   card.className = "controls-onboarding-card";
   const heading = doc.createElement("h2");
+  heading.id = "controls-onboarding-title";
   heading.textContent = variant.title;
+  overlay.setAttribute("aria-labelledby", heading.id);
   card.append(heading);
   for (const group of variant.groups) {
     const section = doc.createElement("div");
@@ -282,8 +324,8 @@ export function createControlsOnboarding({
   foot.className = "controls-onboarding-foot";
   const hint = doc.createElement("small");
   hint.textContent = touch
-    ? "Tap anywhere to dismiss"
-    : "Any key dismisses · H reopens";
+    ? "Tap Got it to continue"
+    : "Enter confirms · Esc closes · H reopens";
   const dismissButton = doc.createElement("button");
   dismissButton.id = "controls-onboarding-dismiss";
   dismissButton.type = "button";
@@ -307,42 +349,103 @@ export function createControlsOnboarding({
 
   const scheduler = createNudgeScheduler(nudges);
   let disposed = false;
+  let previousFocus = null;
+  const backgroundInert = new Map();
+
+  function referenceAvailable() {
+    try {
+      return typeof canOpen === "function" ? canOpen() !== false : canOpen !== false;
+    } catch {
+      return false;
+    }
+  }
+
+  function setBackgroundInert(inert) {
+    if (inert) {
+      backgroundInert.clear();
+      for (const child of doc.body.children) {
+        if (child === overlay || child === reopenChip || child === nudgeChip) continue;
+        backgroundInert.set(child, child.inert === true);
+        child.inert = true;
+      }
+      return;
+    }
+    for (const [child, wasInert] of backgroundInert) {
+      if (child.isConnected !== false) child.inert = wasInert;
+    }
+    backgroundInert.clear();
+  }
 
   function isOpen() { return !overlay.hidden; }
   function open() {
+    if (isOpen() || !referenceAvailable()) return false;
+    previousFocus = doc.activeElement;
+    setBackgroundInert(true);
     overlay.hidden = false;
+    overlay.setAttribute("aria-hidden", "false");
+    reopenChip.hidden = true;
     nudgeChip.hidden = true;
+    dismissButton.focus?.({ preventScroll: true });
+    return true;
   }
   function dismiss() {
+    if (!isOpen()) return;
     overlay.hidden = true;
+    overlay.setAttribute("aria-hidden", "true");
+    reopenChip.hidden = false;
+    setBackgroundInert(false);
     markFirstRunSeen(storage, modeId);
+    const explicitFocusTarget = typeof focusTarget === "function" ? focusTarget() : focusTarget;
+    const previousFocusUsable = previousFocus && previousFocus !== doc.body
+      && previousFocus.isConnected !== false
+      && previousFocus.disabled !== true
+      && !previousFocus.closest?.("[hidden], [inert]");
+    const focusOwner = previousFocusUsable ? previousFocus : explicitFocusTarget ?? reopenChip;
+    focusOwner.focus?.({ preventScroll: true });
+    previousFocus = null;
   }
   function maybeShowFirstRun() {
     if (!firstRunPending(storage, modeId)) return false;
-    // Marked at show time: whatever happens next, it never auto-shows again.
-    markFirstRunSeen(storage, modeId);
-    open();
-    return true;
+    // Opening is not acknowledgement. A reload, aborted boot, failed renderer, or pagehide while
+    // this card owns the screen must leave the lesson pending for the next successful launch.
+    return open();
   }
 
   function onKeyDown(event) {
-    if (event.code === reopenKeyCode) {
-      event.preventDefault();
+    const action = controlsOnboardingKeyAction({
+      open: isOpen(),
+      code: event.code,
+      onDismissAction: event.target === dismissButton,
+      reopenKeyCode,
+    });
+    if (action === "ignore") return;
+    // A route-owned dialog gets first refusal. When its lock is active the controls reference must
+    // neither open nor steal H from that owner; the persistent chip follows the same open() guard.
+    if (action === "toggle" && !isOpen() && !referenceAvailable()) return;
+    event.preventDefault();
+    event.stopImmediatePropagation?.();
+    if (action === "toggle") {
       if (isOpen()) dismiss(); else open();
-      return;
+    } else if (action === "dismiss" || action === "acknowledge") {
+      dismiss();
+    } else if (action === "trap-focus") {
+      dismissButton.focus?.({ preventScroll: true });
     }
-    // Any other key closes the card without stealing the input from the cockpit.
-    if (isOpen()) dismiss();
   }
-  function onOverlayPointerDown() { dismiss(); }
+  function onOverlayInteraction(event) { event.stopPropagation?.(); }
   function onChipClick(event) {
     event.stopPropagation();
     if (isOpen()) dismiss(); else open();
   }
+  function onDismissClick(event) {
+    event.stopPropagation();
+    dismiss();
+  }
 
   doc.addEventListener("keydown", onKeyDown, true);
-  overlay.addEventListener("pointerdown", onOverlayPointerDown);
-  dismissButton.addEventListener("click", dismiss);
+  overlay.addEventListener("pointerdown", onOverlayInteraction);
+  overlay.addEventListener("click", onOverlayInteraction);
+  dismissButton.addEventListener("click", onDismissClick);
   reopenChip.addEventListener("click", onChipClick);
 
   return {
@@ -354,7 +457,8 @@ export function createControlsOnboarding({
     /** Host calls once per frame with sim-derived flags; renders/clears the nudge chip. */
     advanceNudges(state, deltaSeconds) {
       if (disposed) return;
-      const active = isOpen() ? null : scheduler.advance(state, deltaSeconds);
+      const active = isOpen() || !referenceAvailable()
+        ? null : scheduler.advance(state, deltaSeconds);
       if (active) {
         if (nudgeChip.textContent !== active.text) nudgeChip.textContent = active.text;
         nudgeChip.hidden = false;
@@ -364,6 +468,10 @@ export function createControlsOnboarding({
     },
     dispose() {
       disposed = true;
+      if (isOpen()) {
+        overlay.hidden = true;
+        setBackgroundInert(false);
+      }
       doc.removeEventListener("keydown", onKeyDown, true);
       overlay.remove();
       reopenChip.remove();

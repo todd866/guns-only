@@ -1,0 +1,160 @@
+#!/bin/sh
+# look -- run every visual gate this repo owns, and refuse to call a gate that did not run green.
+#
+# On 2026-08-23 this repository contained four visual rigs: tools/terrain-look, tools/look-gate,
+# tools/cobra-scenery-gate and tools/anca-look. `grep` over bin/ and .github/ found zero
+# references to any of them. The look gate's own unit tests had never been run by bin/check.
+# tools/cobra-scenery-gate -- an emptiness veto written in August precisely because "overnight
+# scenery passes self-certified while mid-gorge stills were plastic green wash" -- had never had
+# its dependencies installed. Every one of them was built, and then nobody wired it to anything.
+#
+# That is the mechanism behind "it landed but was never seen in a frame". There was no automated
+# eye. This is the eye.
+#
+#   bin/look                       # every lane it can run
+#   bin/look --lane terrain        # just the Ukraine terrain lane
+#   bin/look --skip-capture        # score the stills already on disk
+#   bin/look --mode fail           # non-zero on a gate failure, not just on a lane that skipped
+#
+# THE RULE THIS TOOL EXISTS TO ENFORCE: a lane that cannot run reports NOT RUN and takes the
+# exit code with it. It is never silently dropped, and never counted as a pass. An orphaned gate
+# and a passing gate look identical in a summary that only prints failures, and that is exactly
+# how four of these ended up unrun for months.
+set -eu
+
+repo_dir=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
+cd "$repo_dir"
+
+lane=all
+mode=warn
+skip_capture=0
+shots=""
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --lane) lane=${2:-}; shift 2 ;;
+        --mode) mode=${2:-}; shift 2 ;;
+        --shots) shots=${2:-}; shift 2 ;;
+        --skip-capture) skip_capture=1; shift ;;
+        -h|--help) sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "look: unexpected argument '$1'" >&2; exit 2 ;;
+    esac
+done
+case "$lane" in all|terrain|cobra) ;; *) echo "look: --lane must be all, terrain or cobra" >&2; exit 2 ;; esac
+case "$mode" in warn|fail) ;; *) echo "look: --mode must be warn or fail" >&2; exit 2 ;; esac
+
+# CI and the release contract use Node 24; a different major here would score frames on a
+# different decoder than the one the gate is calibrated against.
+command -v node >/dev/null 2>&1 || { echo "look: Node.js 24 is required but node is unavailable" >&2; exit 1; }
+node_major=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || true)
+[ "$node_major" = "24" ] || { echo "look: Node.js 24 is required; found $(node --version 2>/dev/null || echo unknown)" >&2; exit 1; }
+
+results=$(mktemp); trap 'rm -f "$results"' EXIT
+# Fixed column order, plain text: <lane> <gate> <status> <detail...>
+record() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" >> "$results"; }
+
+# ---------------------------------------------------------------- terrain lane (Ukraine)
+run_terrain() {
+    dir=${shots:-$repo_dir/tools/terrain-look/shots}
+
+    if [ "$skip_capture" -eq 0 ]; then
+        if [ -n "$shots" ]; then
+            record terrain capture skipped "--shots given; scoring what is there"
+        elif ! TERRAIN_LOOK_DIR="$dir" node tools/terrain-look/shot.mjs >/dev/null 2>&1; then
+            record terrain capture NOT_RUN "shot.mjs failed -- try: cd web/smoke && npx playwright install chromium"
+            return
+        else
+            record terrain capture ok "captured into $dir"
+        fi
+    fi
+
+    if [ ! -f "$dir/views.json" ]; then
+        record terrain substance NOT_RUN "no views.json in $dir"
+        record terrain look-gate NOT_RUN "no views.json in $dir"
+        return
+    fi
+
+    if out=$(bin/seen substance --shots "$dir" 2>&1); then
+        record terrain substance pass "every view carries enough picture to measure"
+    else
+        thin=$(printf '%s\n' "$out" | awk '/THIN/ { n += 1 } END { print n + 0 }')
+        record terrain substance FAIL "$thin view(s) too empty to carry proof"
+    fi
+
+    if out=$(node tools/look-gate/compare.mjs --shots "$dir" --corpus soft-world --mode "$mode" 2>&1); then
+        warns=$(printf '%s\n' "$out" | awk '/warn/ { n += 1 } END { print n + 0 }')
+        record terrain look-gate pass "palette + structure within thresholds ($warns warn line(s))"
+    else
+        record terrain look-gate FAIL "palette or structure outside thresholds"
+    fi
+}
+
+# ---------------------------------------------------------------- cobra lane (corridor)
+#
+# This lane needs a *published* wwwroot: source web/wwwroot has no WASM publish, and its own
+# rig documents landing on the FLIGHT KERNEL OFFLINE shell instead of the mission without one.
+# Rather than fake a pass, say what is missing and how to supply it.
+run_cobra() {
+    dir=${COBRA_SCENERY_STILLS:-/tmp/guns-only-cobra-stills}
+
+    if [ ! -d tools/cobra-scenery-gate/node_modules ]; then
+        record cobra deps NOT_RUN "not installed -- run: (cd tools/cobra-scenery-gate && npm install)"
+        return
+    fi
+
+    if [ "$skip_capture" -eq 0 ]; then
+        if [ -z "${COBRA_SCENERY_WWWROOT:-}" ]; then
+            record cobra capture NOT_RUN "needs a published wwwroot -- OPEN=0 GUNS_PREVIEW_OUT=/tmp/guns-only-web bin/preview-web, then set COBRA_SCENERY_WWWROOT=/tmp/guns-only-web/wwwroot"
+            record cobra emptiness NOT_RUN "no stills to score"
+            return
+        fi
+        if ! COBRA_SCENERY_SHOT_DIR="$dir" node tools/cobra-scenery-gate/shot.mjs >/dev/null 2>&1; then
+            record cobra capture NOT_RUN "cobra shot.mjs failed against $COBRA_SCENERY_WWWROOT"
+            record cobra emptiness NOT_RUN "no stills to score"
+            return
+        fi
+        record cobra capture ok "captured into $dir"
+    fi
+
+    # Distinguish "the gate ran and did not like the picture" from "there was no picture".
+    # Only the first is a failure; the second is a gate nobody pointed at anything.
+    if [ ! -d "$dir" ]; then
+        record cobra emptiness NOT_RUN "no stills directory at $dir"
+        return
+    fi
+    if ! ls "$dir"/camp-ember.png "$dir"/cockpit-battle.png "$dir"/mid-gorge.png "$dir"/iron-bell.png "$dir"/plantation-fight.png >/dev/null 2>&1; then
+        record cobra emptiness NOT_RUN "no cockpit/camp-ember/mid-gorge/iron-bell/plantation-fight stills in $dir"
+        return
+    fi
+    if node tools/cobra-scenery-gate/score.mjs --shots "$dir" --mode "$mode" >/dev/null 2>&1; then
+        record cobra emptiness pass "ground band carries structure"
+    else
+        record cobra emptiness FAIL "ground band is a wash -- run score.mjs directly for detail"
+    fi
+}
+
+[ "$lane" = "cobra" ] || run_terrain
+[ "$lane" = "terrain" ] || run_cobra
+
+echo
+printf '%-9s %-11s %-8s %s\n' LANE GATE STATUS DETAIL
+while IFS="$(printf '\t')" read -r l g s d; do
+    printf '%-9s %-11s %-8s %s\n' "$l" "$g" "$s" "$d"
+done < "$results"
+
+failed=$(awk -F'\t' '$3 == "FAIL"' "$results" | wc -l | tr -d ' ')
+notrun=$(awk -F'\t' '$3 == "NOT_RUN"' "$results" | wc -l | tr -d ' ')
+echo
+if [ "$notrun" -gt 0 ]; then
+    echo "$notrun gate(s) DID NOT RUN. That is not a pass. Each line above says what it needs."
+fi
+if [ "$failed" -gt 0 ]; then
+    echo "$failed gate(s) FAILED."
+fi
+if [ "$failed" -eq 0 ] && [ "$notrun" -eq 0 ]; then
+    echo "every visual gate ran and passed."
+    exit 0
+fi
+# A skipped gate is a real result: it means nobody is looking at that part of the picture.
+[ "$failed" -eq 0 ] && [ "$mode" = "warn" ] && exit 3
+exit 1

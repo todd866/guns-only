@@ -43,6 +43,8 @@ internal static class MotorcycleSnapshotProjection
             clutch = snap.ClutchEngagement,
             clutch_engagement = snap.ClutchEngagement,
             rpm = snap.Rpm,
+            engine_idle_rpm = YzfR1Definition.IdleRpm,
+            engine_redline_rpm = YzfR1Definition.RedlineRpm,
             throttle = snap.Throttle,
             brake = snap.Brake,
             front_normal_n = snap.FrontNormalForceN,

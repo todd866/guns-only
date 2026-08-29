@@ -60,6 +60,33 @@ public sealed record ArrestmentCapabilityProfile {
         maximumWireDeflectionM: 3.0);
 
     /// <summary>
+    /// Public-data Mk 7 Mod 3 surrogate for the Top Gun carrier. NAVAIR's carrier-approach review
+    /// publishes 43.5 million ft-lb maximum absorption and 340 ft service runout for deck pendants
+    /// (NAWCADPAX/TR-2002/71, table 3):
+    /// https://rhef.net/docs/HQs/NAVAIR_2002_71.pdf
+    ///
+    /// The reduced-order arrestment model cannot reproduce the Mk 7's aircraft-weight setting or
+    /// constant-runout valve. Equal initial/peak/final force therefore uses the published energy
+    /// divided by published runout: a transparent constant-work surrogate, not an invented force
+    /// curve. Its TensionN is one effective aircraft-axis restraint force, not the tensile load in
+    /// an individual purchase cable or cross-deck pendant, so the report's cable breaking strengths
+    /// are deliberately not mapped onto MaximumLineLoadN. Peak position is immaterial for equal
+    /// forces; the matching reduced-order load ceiling avoids inventing an unverified safety factor.
+    /// Wire deflection retains the established presentation-only carrier value because the report
+    /// does not publish that visual geometry.
+    /// </summary>
+    public static ArrestmentCapabilityProfile Mk7Mod3PublicDataSurrogate { get; } = new(
+        id: "MK7_MOD3_PUBLIC_DATA_SURROGATE_V1",
+        runoutDistanceM: 103.632,
+        initialForceN: 569_110.706658329,
+        peakForceN: 569_110.706658329,
+        finalForceN: 569_110.706658329,
+        peakPayoutFraction: 0.5,
+        ratedEnergyJ: 58_978_080.752415918,
+        maximumLineLoadN: 569_110.706658329,
+        maximumWireDeflectionM: ProvisionalKoreaJet.MaximumWireDeflectionM);
+
+    /// <summary>
     /// Provisional high-energy gear for Rapier's purpose-built fixed arresting strip. The longer
     /// payout and heavier machinery are credible costs paid by the ground installation; they are
     /// not silently granted to the shorter carrier deck or inferred from the arriving aircraft.

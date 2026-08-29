@@ -54,5 +54,35 @@ public sealed class MotorcycleSnapshotProjectionTests
         Assert.Equal("raw", root.GetProperty("control_mode").GetString());
         Assert.Equal("auto", root.GetProperty("clutch_mode").GetString());
         Assert.Equal("active", root.GetProperty("phase").GetString());
+        Assert.Equal(YzfR1Definition.IdleRpm,
+            root.GetProperty("engine_idle_rpm").GetDouble());
+        Assert.Equal(YzfR1Definition.RedlineRpm,
+            root.GetProperty("engine_redline_rpm").GetDouble());
+    }
+
+    [Fact]
+    public void FinishedStateKeepsDebriefEvidenceAtTheBrowserBoundary()
+    {
+        var runtime = WeekendRideMissionRuntime.CreateDefault();
+        runtime.Begin();
+        for (int i = 0; i < 120; i++)
+            runtime.StepFixed(HardLaunch);
+        runtime.Finish();
+
+        using JsonDocument document = JsonDocument.Parse(
+            MotorcycleSnapshotProjection.BuildStateJson(
+                runtime, MotorcycleControlMode.Assisted));
+        JsonElement root = document.RootElement;
+
+        Assert.Equal("finished", root.GetProperty("phase").GetString());
+        Assert.True(root.TryGetProperty("lap", out _));
+        Assert.True(root.TryGetProperty("lap_time_s", out _));
+        Assert.True(root.TryGetProperty("last_lap_s", out _));
+        Assert.True(root.TryGetProperty("best_lap_s", out _));
+        Assert.True(root.TryGetProperty("best_sector_s", out JsonElement sectors));
+        Assert.Equal(JsonValueKind.Array, sectors.ValueKind);
+        Assert.True(root.TryGetProperty("lap_valid", out JsonElement validity));
+        Assert.Equal(JsonValueKind.True, validity.ValueKind);
+        Assert.True(root.TryGetProperty("off_track_s", out _));
     }
 }

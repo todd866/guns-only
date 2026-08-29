@@ -13,6 +13,7 @@ const webProjectUrl = new URL("../../../../GunsOnly.Web.csproj", import.meta.url
 const environmentLabUrl = new URL("../../../environment-lab/main.js", import.meta.url);
 const environmentLabIndexUrl = new URL("../../../environment-lab/index.html", import.meta.url);
 const environmentLabStylesUrl = new URL("../../../environment-lab/styles.css", import.meta.url);
+const firstRunValleyUrl = new URL("../../environment/first_run_valley.js", import.meta.url);
 const environmentLabGateUrl = new URL(
   "../../../../../tools/perf/ukraine_hero_gate.mjs",
   import.meta.url,
@@ -400,6 +401,33 @@ test("terrain ships by default, stays lazy through Ready, and shares the ocean c
   }
 });
 
+test("first-run valley is an authority-matched terrain surface in the production scene", async () => {
+  const [source, valleySource] = await Promise.all([
+    readFile(appUrl, "utf8"),
+    readFile(firstRunValleyUrl, "utf8"),
+  ]);
+  assert.match(source, /createFirstRunValleyPresentation/);
+  assert.match(source,
+    /firstRunValleyNorthSegments: detectedVisualTier === "mobile" \? 448 : 512[\s\S]*?firstRunValleyLateralSegments: detectedVisualTier === "mobile" \? 144 : 160[\s\S]*?firstRunValleyMeshRecessM: detectedVisualTier === "mobile"[\s\S]*?\? 6 : FIRST_RUN_VALLEY_MESH_RECESS_M/,
+    "mobile must spend fewer gorge triangles while adding the tested conservative recess");
+  assert.match(source,
+    /this\.firstRunValley\?\.update\([\s\S]*?state,[\s\S]*?this\.terrainPresentation\?\.material \?\? null,[\s\S]*?firstRunTerrainReady,[\s\S]*?\)/,
+    "the authored ridges must share the live terrain lifecycle and atmosphere");
+  assert.match(source,
+    /const firstRunCanyon = state\?\.first_run_valley_available === true[\s\S]*?this\.fogLow\.set\(0x9b6548\)[\s\S]*?this\.fogHigh\.set\(0x667984\)[\s\S]*?this\.ambient\.intensity = 0\.58[\s\S]*?this\.sun\.intensity = 3\.15[\s\S]*?this\.renderer\.toneMappingExposure = 0\.96/,
+    "the gorge needs a cool-distance, warm-key grade with directional rock contrast");
+  assert.match(source, /this\.firstRunValley\?\.dispose\(\)/);
+  assert.match(valleySource, /FIRST_RUN_VALLEY_MESH_RECESS_M = 15\.75/);
+  assert.match(valleySource, /flatShading: true/);
+  assert.match(valleySource, /polygonOffsetFactor: -1\.5/);
+  assert.match(valleySource, /terrainWater/);
+  assert.match(valleySource, /landcover/);
+  assert.match(valleySource, /concavity/);
+  assert.match(valleySource, /authorityMatched: true/);
+  assert.match(valleySource, /northSegments:[\s\S]*?lateralSegments:[\s\S]*?meshRecessM:/,
+    "browser diagnostics must expose the active gorge sampling budget");
+});
+
 test("environment lab exercises the production terrain manifest and exposes the look gate", async () => {
   const [source, index, styles, gateSource] = await Promise.all([
     readFile(environmentLabUrl, "utf8"),
@@ -669,6 +697,19 @@ test("F-22 canopy glass is aircraft-fixed and never admitted for Rapier or exter
   assert.match(source,
     /updateF22CanopyGlass\(this\.f22CanopyGlass,\s*\{[\s\S]*?position: this\.camera\.position,[\s\S]*?quaternion: this\.playerQuaternion,[\s\S]*?lookQuaternion: this\.camera\.quaternion/,
     "canopy must follow the aircraft eye/body pose rather than become camera-parented",
+  );
+});
+
+test("live F-22 combat padlock compresses only camera roll after the physical look solve", async () => {
+  const source = await readFile(appUrl, "utf8");
+  assert.match(source, /padlockVisualRollCorrectionRad/);
+  assert.match(source,
+    /this\.camera\.quaternion\.copy\(this\.playerQuaternion\)\.multiply\(this\.localGimbalQuaternion\);[\s\S]*?const combatPadlockRollComfortActive = padlock[\s\S]*?!manualLookActive\(\)[\s\S]*?isF22CanopyGlassAirframe\(state\)[\s\S]*?state\.rapier_pattern_only !== true[\s\S]*?padlockTarget === "bandit"[\s\S]*?padlockTarget === "wingman"/,
+    "camera comfort must follow the physical body-and-gimbal solve and stay combat-padlock-only",
+  );
+  assert.match(source,
+    /padlockVisualWorldUpCamera\.set\(0, 1, 0\)[\s\S]*?padlockVisualRollCorrectionRad\([\s\S]*?this\.camera\.quaternion\.multiply\(this\.padlockVisualRollQuaternion\)/,
+    "the correction must be derived from solved camera attitude and post-multiplied locally",
   );
 });
 

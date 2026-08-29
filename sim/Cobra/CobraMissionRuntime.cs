@@ -290,6 +290,15 @@ public sealed class CobraMissionRuntime
     public const double LineOfSightTerrainClearanceM = 0.5;
     public const int MaskingAssessmentIntervalTicks = 12;
     /// <summary>
+    /// Terrain-shaped wind and rotor-disc airflow cadence. The canyon field's 90 m outer scale
+    /// changes slowly relative to a 120 Hz flight-dynamics tick; sampling it at 10 Hz still
+    /// resolves less than ten metres of travel at the Cobra's normal low-level speed while
+    /// avoiding six fractal/terrain evaluations on every authority tick.
+    /// </summary>
+    public const int TerrainWindSampleIntervalTicks = 12;
+    public const double TerrainWindSampleHz =
+        PlayerVehicleContract.FixedStepHz / TerrainWindSampleIntervalTicks;
+    /// <summary>
     /// Hard ceiling on the number of terrain lookups a single line-of-sight ray may take.
     ///
     /// The march step is the terrain's own resolution (clamped to 10-50 m), so without a ceiling
@@ -339,6 +348,8 @@ public sealed class CobraMissionRuntime
     readonly CobraCanyonWindField? _windField;
     Vec3D _lastWindVelocityMps;
     RotorcraftAirflowSample? _lastRotorcraftAirflow;
+    long _nextTerrainWindSampleAuthorityTick;
+    long _terrainWindSamplesTaken;
     readonly IReadOnlyList<CobraResolvedObstacle> _resolvedObstacles;
     readonly IReadOnlyList<CobraResolvedThreatObserver> _resolvedThreatObservers;
     readonly CobraGroundWarRuntime _groundWar;
@@ -506,6 +517,8 @@ public sealed class CobraMissionRuntime
     /// runtime intentionally supplied uniform flow rather than silently inventing a gradient.
     /// </summary>
     public RotorcraftAirflowSample? LastRotorcraftAirflow => _lastRotorcraftAirflow;
+    /// <summary>Diagnostic count of terrain-wind refreshes, excluding explicit uniform flow.</summary>
+    internal long TerrainWindSamplesTaken => _terrainWindSamplesTaken;
     public Vec3D SynopticWindMps => _synopticWindMps;
     public IPlayerVehicleDynamics Vehicle => _cobra;
     public CobraGroundWarRuntime GroundWar => _groundWar;
@@ -554,7 +567,7 @@ public sealed class CobraMissionRuntime
                 _terrain,
                 _resolvedObstacles,
                 _cobra.State.PositionWorldM,
-                target.PositionWorldM);
+                CobraGunTargeting.AimPoint(target.PositionWorldM));
     }
 
     public CobraMissionAdvanceResult Advance(
@@ -569,14 +582,9 @@ public sealed class CobraMissionRuntime
         VehicleSurfaceSample surface = SampleVehicleSurface(previousPositionWorldM);
         double simulationTimeSeconds = _nextAuthorityTick
             * PlayerVehicleContract.FixedDeltaSeconds;
-        Vec3D windVelocityMps = _windField is null
-            ? _synopticWindMps
-            : _windField.Sample(previousPositionWorldM, simulationTimeSeconds);
-        RotorcraftAirflowSample? rotorcraftAirflow = _windField is null
-            ? null
-            : SampleRotorcraftAirflow(simulationTimeSeconds);
-        _lastWindVelocityMps = windVelocityMps;
-        _lastRotorcraftAirflow = rotorcraftAirflow;
+        RefreshTerrainWindTruthIfDue(previousPositionWorldM, simulationTimeSeconds);
+        Vec3D windVelocityMps = _lastWindVelocityMps;
+        RotorcraftAirflowSample? rotorcraftAirflow = _lastRotorcraftAirflow;
         VerticalLiftPilotCommand authorityCommand = _turnaround.FlightControlsEnabled
             ? command
             : GroundedCommand;
@@ -630,7 +638,10 @@ public sealed class CobraMissionRuntime
             _maskingAssessmentAuthorityTicks = _nextAuthorityTick;
         }
 
-        if (Status == CobraMissionStatus.Active)
+        // Camp Ember's departure is a protected launch, even when a distant DShK happens to have
+        // geometric line of sight over the ridge. Do not let acquisition time or pending bursts
+        // bank on the pad/connector. Ingress and every later flyable act retain live threat fire.
+        if (Status == CobraMissionStatus.Active && _act is not CobraMissionAct.Depart)
         {
             bool scasWasDamaged = _threatFire.State.ScasDamaged;
             bool engineWasDamaged = _threatFire.State.EngineDamaged;
@@ -688,14 +699,6 @@ public sealed class CobraMissionRuntime
                 Status = CobraMissionStatus.FobCombatIneffective;
             }
         }
-        if (Status == CobraMissionStatus.Active) {
-            Status = _groundWar.MissionOutcome switch {
-                HoldTheBridgeOutcome.Victory => CobraMissionStatus.Victory,
-                HoldTheBridgeOutcome.Defeat => CobraMissionStatus.Defeat,
-                _ => Status
-            };
-        }
-
         double? clearanceM = null;
         if (_terrain.TrySample(
             currentPositionWorldM.X,
@@ -704,6 +707,18 @@ public sealed class CobraMissionRuntime
             clearanceM = currentPositionWorldM.Y - currentSurface.HeightM;
         }
         RefreshAct(currentPositionWorldM, clearanceM);
+        // Winning or losing the basin is the turn home, not the end of a flyable helicopter.
+        // GroundWarCombatLive falls false as soon as the act becomes Rtb, freezing the strategic
+        // outcome while flight authority, threat exposure and the authored arrival remain live.
+        // Only a stable Camp Ember recovery closes the sortie; an airframe loss above still wins
+        // this ordering and remains immediately terminal.
+        if (Status == CobraMissionStatus.Active && _act == CobraMissionAct.Complete) {
+            Status = _groundWar.MissionOutcome switch {
+                HoldTheBridgeOutcome.Victory => CobraMissionStatus.Victory,
+                HoldTheBridgeOutcome.Defeat => CobraMissionStatus.Defeat,
+                _ => Status
+            };
+        }
 
         _diagnostics = null;
         return new CobraMissionAdvanceResult(vehicleResult, Diagnostics);
@@ -747,6 +762,23 @@ public sealed class CobraMissionRuntime
                 simulationTimeSeconds));
     }
 
+    void RefreshTerrainWindTruthIfDue(
+        in Vec3D positionWorldM,
+        double simulationTimeSeconds,
+        bool force = false)
+    {
+        if (_windField is null)
+            return;
+        if (!force && _nextAuthorityTick < _nextTerrainWindSampleAuthorityTick)
+            return;
+
+        _lastWindVelocityMps = _windField.Sample(positionWorldM, simulationTimeSeconds);
+        _lastRotorcraftAirflow = SampleRotorcraftAirflow(simulationTimeSeconds);
+        _terrainWindSamplesTaken++;
+        _nextTerrainWindSampleAuthorityTick =
+            _nextAuthorityTick + TerrainWindSampleIntervalTicks;
+    }
+
     void RefreshAct(in Vec3D positionWorldM, double? clearanceM)
     {
         _act = CobraMissionActProgress.Next(
@@ -760,8 +792,13 @@ public sealed class CobraMissionRuntime
             clearanceM,
             CobraMissionActProgress.DepartureJoinWorldM(
                 _selectedRoute,
-                _groundWar.Fob.CentreWorldM));
+                _groundWar.Fob.CentreWorldM),
+            stableRecoveryAtFob: HasStableCampEmberRecovery(positionWorldM));
     }
+
+    bool HasStableCampEmberRecovery(in Vec3D positionWorldM) =>
+        _cobra.Observation.Contact.Kind == VehicleContactKind.StableSurfaceContact
+        && _groundWar.IsInsideFob(positionWorldM);
 
     /// <summary>
     /// Applies fire-authorized M134 damage to a ground-war unit and drains the magazine.
@@ -1148,6 +1185,13 @@ public sealed class CobraMissionRuntime
             _additivePayloadMassKg,
             Ah1gCobraDefinition.LateProduction,
             Ah1gCobraInitialPowerplantState.Cold);
+        // A held sample belongs to the airframe pose at which it was measured. Refresh at the
+        // replacement's initial pose now, exactly where the old 120 Hz path would have sampled on
+        // its next authority tick, so a spatial gradient is never carried across an airframe swap.
+        RefreshTerrainWindTruthIfDue(
+            _cobra.State.PositionWorldM,
+            _nextAuthorityTick * PlayerVehicleContract.FixedDeltaSeconds,
+            force: true);
         _threatFire.ResetForFreshAirframe();
         _airframePool[spareIndex] = spare with { State = CobraAirframeState.PlayerFlying };
         _airframeSwaps++;

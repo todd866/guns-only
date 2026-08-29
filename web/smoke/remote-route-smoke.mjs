@@ -10,8 +10,9 @@ import { prewarmOrigin } from "./prewarm-origin.mjs";
 
 /**
  * Post-promotion / preview route matrix. Complements remote-smoke.mjs, which always rewrites its
- * target to `/` and therefore only proves the default F-22 shell. This script proves each
- * production standalone surface can boot under ?audioQa=silent without inventing combat outcomes.
+ * target to `/` and therefore only proves the default F-22 shell. This script proves every
+ * promoted player entry—including the guided first run, root-shell programmes, and standalone
+ * routes—can boot under ?audioQa=silent without inventing combat outcomes.
  *
  * The readiness budget below is deliberately UNCHANGED at 90 s. A route that cannot reach ready in
  * 90 s on a warm origin is a defect and must fail. `bin/deploy-web` warms the edge (see

@@ -78,8 +78,16 @@ test("builds the complete course as explicitly non-authoritative presentation", 
     "CASEVAC_RECEIVER_SITE_PRESENTATION",
     "CASEVAC_PICKUP_PAD_VISUAL",
     "CASEVAC_RECEIVER_PAD_VISUAL",
+    "CASEVAC_PAD_H_BAR",
+    "CASEVAC_LANDING_ZONE_LIGHTS",
+    "CASEVAC_SITE_SIGNAL_SMOKE",
+    "CASEVAC_SITE_SIGNAL_SMOKE_PUFFS",
     "CASEVAC_WINDSOCK",
     "CASEVAC_ANONYMOUS_STAFF",
+    "CASEVAC_STAFF_ARMS",
+    "CASEVAC_STAFF_LEGS",
+    "CASEVAC_RESPONSE_VEHICLE",
+    "CASEVAC_RESPONSE_VEHICLE_ROOF_MARK",
     "CASEVAC_APPROACH_CUE",
     "CASEVAC_ESCAPE_CUE",
     "CASEVAC_OPAQUE_CAPSULE",
@@ -134,7 +142,7 @@ test("batches repeated silhouettes and stays within a fixed draw-object budget",
     assert.ok(object.instanceMatrix.array.every(Number.isFinite));
   });
 
-  assert.ok(drawables <= 48,
+  assert.ok(drawables <= 52,
     `fixed course should remain compact, received ${drawables} drawables`);
   assert.ok(instancedCapacity >= scenery.plan.counts.people);
   assert.ok(instancedCapacity < 300);
@@ -149,6 +157,55 @@ test("batches repeated silhouettes and stays within a fixed draw-object budget",
   assert.equal(
     findByKind(scenery.group, "utility-poles").length,
     0,
+  );
+  scenery.dispose();
+});
+
+test("keeps response vehicles outside the pad and limits shadow casters", () => {
+  const scenery = createCasevacCourseScenery(THREE, {
+    qualityTier: "desktop",
+  });
+  scenery.group.updateMatrixWorld(true);
+
+  for (const siteId of Object.values(CASEVAC_COURSE_SITE_IDS)) {
+    const vehicle = findByKind(
+      scenery.group,
+      "response-vehicle-silhouette",
+      siteId,
+    )[0];
+    const pad = findByKind(scenery.group, "decorative-pad", siteId)[0];
+    assert.ok(vehicle, `${siteId} must have a response vehicle`);
+    assert.ok(pad, `${siteId} must have a marked landing pad`);
+    assert.equal(vehicle.userData.casevac.presentationOnly, true);
+    assert.equal(vehicle.userData.casevac.collisionSource, false);
+
+    const vehicleBounds = new THREE.Box3().setFromObject(vehicle);
+    const padBounds = new THREE.Box3().setFromObject(pad);
+    assert.equal(
+      vehicleBounds.intersectsBox(padBounds),
+      false,
+      `${siteId} response vehicle must leave the marked pad clear`,
+    );
+  }
+
+  const shadowCasters = [];
+  scenery.group.traverse((object) => {
+    if (object.castShadow) shadowCasters.push(object);
+  });
+  assert.ok(shadowCasters.length > 0, "staff and vehicles should ground the scene");
+  assert.ok(shadowCasters.length <= 15,
+    `site decor should keep a bounded caster set, received ${shadowCasters.length}`);
+  assert.equal(
+    findByKind(scenery.group, "landing-zone-lights")
+      .every((light) => light.castShadow === false),
+    true,
+    "emissive landing lights must not render shadow maps",
+  );
+  assert.equal(
+    findByKind(scenery.group, "pad-marking-visual")
+      .every((marking) => marking.castShadow === false),
+    true,
+    "painted pad markings must not render shadow maps",
   );
   scenery.dispose();
 });
@@ -194,6 +251,28 @@ test("projects wind, rain, flight cues, and rotor wash without becoming authorit
     "windsock-fabric",
     pickupId,
   )[0];
+  const pickupSignal = findByKind(
+    scenery.group,
+    "site-signal-smoke",
+    pickupId,
+  )[0];
+  const receiverSignal = findByKind(
+    scenery.group,
+    "site-signal-smoke",
+    CASEVAC_COURSE_SITE_IDS.receiver,
+  )[0];
+  const pickupPuffs = findByKind(
+    scenery.group,
+    "site-signal-smoke-puffs",
+    pickupId,
+  )[0];
+  const smokeBeforeWind = Array.from(pickupPuffs.instanceMatrix.array);
+  scenery.update({
+    activeSiteId: pickupId,
+    showApproachCue: false,
+  });
+  assert.equal(pickupSignal.visible, false,
+    "a navigation target alone must not invent a live ground signal");
   scenery.update({
     elapsedSeconds: 12.5,
     windX: 7,
@@ -220,6 +299,28 @@ test("projects wind, rain, flight cues, and rotor wash without becoming authorit
   assert.equal(pickupWash.visible, true);
   assert.equal(receiverWash.visible, false);
   assert.ok(pickupWash.material.opacity > 0);
+  assert.equal(pickupSignal.visible, true);
+  assert.equal(receiverSignal.visible, false);
+  assert.deepEqual(pickupSignal.scale.toArray(), [1, 1, 1]);
+  assert.deepEqual(pickupSignal.position.toArray(), [-15, 0, 13]);
+  assert.notDeepEqual(
+    Array.from(pickupPuffs.instanceMatrix.array),
+    smokeBeforeWind,
+    "wind should bend individual puffs without moving the site anchor",
+  );
+  const topMatrix = new THREE.Matrix4().fromArray(
+    pickupPuffs.instanceMatrix.array,
+    (pickupPuffs.count - 1) * 16,
+  );
+  const topPosition = new THREE.Vector3();
+  const topRotation = new THREE.Quaternion();
+  const topScale = new THREE.Vector3();
+  topMatrix.decompose(topPosition, topRotation, topScale);
+  assert.ok(topPosition.x > 2.75 && topPosition.x < 6.5);
+  assert.ok(topScale.x <= 1.85 && topScale.z <= 1.85);
+  assert.ok(topScale.y <= 2.5);
+  assert.equal(pickupPuffs.material.opacity <= 0.4, true);
+  assert.equal(pickupPuffs.frustumCulled, false);
 
   scenery.update({
     precipitation01: 0,
@@ -231,6 +332,43 @@ test("projects wind, rain, flight cues, and rotor wash without becoming authorit
   assert.equal(pickupApproach.visible, false);
   assert.equal(pickupEscape.visible, false);
   assert.equal(pickupWash.visible, false);
+  assert.equal(pickupSignal.visible, false);
+  scenery.dispose();
+});
+
+test("authors a high-contrast landing story without adding collision authority", () => {
+  const scenery = createCasevacCourseScenery(THREE, {
+    qualityTier: "desktop",
+  });
+  const lights = findByKind(scenery.group, "landing-zone-lights");
+  const signals = findByKind(scenery.group, "site-signal-smoke-puffs");
+  const markings = findByKind(scenery.group, "pad-marking-visual");
+  const staff = findByKind(scenery.group, "staff-bodies");
+  const staffArms = findByKind(scenery.group, "staff-arms");
+  const staffLegs = findByKind(scenery.group, "staff-legs");
+  const vehicles = findByKind(scenery.group, "response-vehicle-silhouette");
+  const vehicleMarks = findByKind(scenery.group, "response-vehicle-roof-mark");
+  assert.deepEqual(lights.map((mesh) => mesh.count), [16, 16]);
+  assert.deepEqual(signals.map((mesh) => mesh.count), [14, 14]);
+  assert.equal(markings.length, 6);
+  assert.deepEqual(staff.map((mesh) => mesh.count), [8, 8]);
+  assert.deepEqual(staffArms.map((mesh) => mesh.count), [8, 8]);
+  assert.deepEqual(staffLegs.map((mesh) => mesh.count), [16, 16]);
+  assert.equal(vehicles.length, 2);
+  assert.deepEqual(vehicleMarks.map((mesh) => mesh.count), [2, 2]);
+  for (const object of [
+    ...lights,
+    ...signals,
+    ...markings,
+    ...staff,
+    ...staffArms,
+    ...staffLegs,
+    ...vehicles,
+    ...vehicleMarks,
+  ]) {
+    assert.equal(object.userData.casevac.presentationOnly, true);
+    assert.equal(object.userData.casevac.collisionSource, false);
+  }
   scenery.dispose();
 });
 

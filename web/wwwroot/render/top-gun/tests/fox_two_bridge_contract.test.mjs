@@ -16,7 +16,7 @@ test("WebBridge exports LaunchFoxTwo and staged Top Gun consumes R without resta
   assert.match(app, /function tryLaunchFoxTwo\(\)/);
   assert.match(app, /bridge\.LaunchFoxTwo\(\)/);
   assert.match(app,
-    /if \(event\.code === "KeyR"\) \{[\s\S]*?if \(topGunOwnsFoxTwoInput\(\)\) \{[\s\S]*?if \(tryLaunchFoxTwo\(\)\) view\.hud\.armAudio\?\.\(\);[\s\S]*?return;[\s\S]*?\}[\s\S]*?restartMissionNow\(\)/,
+    /if \(event\.code === "KeyR"\) \{[\s\S]*?if \(topGunOwnsFoxTwoInput\(\)\) \{[\s\S]*?if \(tryLaunchFoxTwo\(\)\) view\.hud\.armAudio\?\.\(\);[\s\S]*?return;[\s\S]*?\}[\s\S]*?repeatSelectedSortieNow\(\)/,
     "Top Gun must return after a rejected or accepted Fox Two command before generic restart");
   const ownershipBody = app.match(
     /function topGunOwnsFoxTwoInput\(\) \{([\s\S]*?)\n\}/)?.[1] || "";

@@ -1,9 +1,8 @@
 // NO THREE IMPORT. This module only ever reads and writes .x/.y/.z on objects the caller already
-// owns, so importing Vector3 bought nothing and cost real bytes: the standalone pages load Three
-// as `three.module.js?v=NNN` while app.js loads it unsuffixed, and an ES module URL with a
-// different query string is a DIFFERENT module instance. Importing this file from cobra-lab would
-// otherwise have pulled a second ~1.2 MB copy of Three into that page just to run six lines of
-// vector arithmetic.
+// owns, so importing Vector3 bought nothing and cost real bytes. Three's canonical browser module
+// identity is the unsuffixed vendor URL on every shell; any query-string variant is a DIFFERENT
+// module instance and can pull a second ~1.2 MB copy into a standalone page just to run six lines
+// of vector arithmetic.
 
 const EPSILON = 1e-8;
 

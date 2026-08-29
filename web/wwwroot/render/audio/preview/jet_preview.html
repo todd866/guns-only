@@ -279,12 +279,23 @@
         previewMaster.connect(context.destination);
 
         previewCompressor = context.createDynamicsCompressor();
-        previewCompressor.threshold.value = -18;
-        previewCompressor.knee.value = 12;
-        previewCompressor.ratio.value = 4.5;
-        previewCompressor.attack.value = 0.005;
-        previewCompressor.release.value = 0.18;
-        previewCompressor.connect(previewMaster);
+        previewCompressor.threshold.value = -8;
+        previewCompressor.knee.value = 8;
+        previewCompressor.ratio.value = 2.25;
+        previewCompressor.attack.value = 0.012;
+        previewCompressor.release.value = 0.12;
+        const previewSubsonicCut = context.createBiquadFilter();
+        previewSubsonicCut.type = "highpass";
+        previewSubsonicCut.frequency.value = 24;
+        previewSubsonicCut.Q.value = 0.58;
+        const previewFatigueShelf = context.createBiquadFilter();
+        previewFatigueShelf.type = "highshelf";
+        previewFatigueShelf.frequency.value = 4200;
+        previewFatigueShelf.gain.value = -1.4;
+        previewCompressor
+          .connect(previewSubsonicCut)
+          .connect(previewFatigueShelf)
+          .connect(previewMaster);
         previewBus = previewCompressor;
 
         voices = createEngineVoices(context, previewBus, { includeMaster: true });

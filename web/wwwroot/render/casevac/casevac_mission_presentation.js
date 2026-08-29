@@ -98,15 +98,15 @@ const AXIS_STATUS_COPY = Object.freeze({
 const EVENT_COPY = Object.freeze({
   CASEVAC_TASK_STARTED: Object.freeze({
     channel: "DISPATCH",
-    text: "Medevac task. Orchard pickup, clinic handoff.",
+    text: "Orchard pickup. Clinic handoff.",
   }),
   PICKUP_APPROACH_ENTERED: Object.freeze({
     channel: "CREW",
-    text: "Pickup in sight. Set the approach.",
+    text: "Pickup in sight.",
   }),
   APPROACH_ATTEMPT_STARTED: Object.freeze({
     channel: "CREW",
-    text: "Approach started. Stable gate is live.",
+    text: "Stable gate live.",
   }),
   STABLE_CONTACT_ENTERED: Object.freeze({
     channel: "CREW",
@@ -114,7 +114,7 @@ const EVENT_COPY = Object.freeze({
   }),
   STABLE_CONTACT_EXITED: Object.freeze({
     channel: "CREW",
-    text: "Contact outside limits. Dwell paused.",
+    text: "Outside limits. Dwell paused.",
   }),
   LOADING_STARTED: Object.freeze({
     channel: "GROUND",
@@ -126,7 +126,7 @@ const EVENT_COPY = Object.freeze({
   }),
   LOADING_RESUMED: Object.freeze({
     channel: "CREW",
-    text: "Stable again. Loading resumed.",
+    text: "Loading resumed.",
   }),
   LOADING_RESET: Object.freeze({
     channel: "CREW",
@@ -138,12 +138,12 @@ const EVENT_COPY = Object.freeze({
   }),
   REQUESTED_HANDOFF_WINDOW_PASSED: Object.freeze({
     channel: "DISPATCH",
-    text: "Requested window passed. Complete if able.",
+    text: "Window passed. Complete if able.",
     emphasis: "notice",
   }),
   DROPOFF_APPROACH_ENTERED: Object.freeze({
     channel: "CREW",
-    text: "Receiver in sight. Set the handoff.",
+    text: "Clinic in sight.",
   }),
   APPROACH_DISCONTINUED: Object.freeze({
     channel: "CREW",
@@ -159,7 +159,7 @@ const EVENT_COPY = Object.freeze({
   }),
   HANDOFF_RESUMED: Object.freeze({
     channel: "RECEIVER",
-    text: "Stable again. Handoff resumed.",
+    text: "Handoff resumed.",
   }),
   HANDOFF_RESET: Object.freeze({
     channel: "CREW",
@@ -171,7 +171,7 @@ const EVENT_COPY = Object.freeze({
   }),
   ABORT_RETURN_STARTED: Object.freeze({
     channel: "DISPATCH",
-    text: "Abort return acknowledged. Fly the safe exit.",
+    text: "Abort. Fly the safe exit.",
   }),
   CASEVAC_ABORTED: Object.freeze({
     channel: "DISPATCH",
@@ -199,7 +199,7 @@ const PRESENTATION_CSS = `
   inset: 0;
   pointer-events: none;
   color: var(--cv-cold);
-  font: 700 10px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font: 700 11px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   letter-spacing: .055em;
   text-shadow: 0 1px 4px #000;
 }
@@ -214,7 +214,7 @@ const PRESENTATION_CSS = `
   position: absolute;
   top: max(12px, env(safe-area-inset-top));
   left: 50%;
-  width: min(840px, calc(100vw - 28px));
+  width: min(760px, calc(100vw - 28px));
   transform: translateX(-50%);
   border: 1px solid var(--cv-rule);
   border-left: 3px solid var(--cv-green);
@@ -224,12 +224,15 @@ const PRESENTATION_CSS = `
 }
 .cv-strip-grid {
   display: grid;
-  grid-template-columns: 1.2fr 1.8fr 1fr 1.05fr 2fr;
+  grid-template-columns: .85fr 1.8fr 1fr .82fr;
   align-items: stretch;
+}
+[data-casevac-part="mission-strip"][data-terminal="true"] .cv-strip-grid {
+  grid-template-columns: .85fr 1.8fr 1fr .82fr 1.45fr;
 }
 .cv-metric {
   min-width: 0;
-  padding: 7px 9px 6px;
+  padding: 7px 9px;
   border-right: 1px solid rgba(191, 233, 228, .13);
 }
 .cv-metric:last-child { border-right: 0; }
@@ -237,7 +240,7 @@ const PRESENTATION_CSS = `
   display: block;
   margin-bottom: 2px;
   color: var(--cv-cold-dim);
-  font-size: 7px;
+  font-size: 6px;
   letter-spacing: .16em;
 }
 .cv-value {
@@ -273,17 +276,17 @@ const PRESENTATION_CSS = `
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 5px 9px;
+  padding: 4px 9px;
   border-top: 1px solid rgba(191, 233, 228, .12);
   color: var(--cv-cold-dim);
-  font-size: 8px;
+  font-size: 7px;
 }
 [data-casevac-field="window"][data-state="PASSED"] { color: var(--cv-amber); }
 [data-casevac-part="radio"] {
   position: absolute;
-  top: max(98px, calc(env(safe-area-inset-top) + 84px));
+  top: max(84px, calc(env(safe-area-inset-top) + 72px));
   left: max(14px, env(safe-area-inset-left));
-  width: min(390px, calc(100vw - 28px));
+  width: min(320px, calc(100vw - 28px));
 }
 .cv-radio-list {
   display: flex;
@@ -296,7 +299,7 @@ const PRESENTATION_CSS = `
 .cv-radio-item {
   padding: 5px 8px;
   border-left: 2px solid rgba(191, 233, 228, .36);
-  background: rgba(5, 13, 16, .63);
+  background: rgba(5, 13, 16, .72);
   color: rgba(230, 247, 243, .84);
 }
 .cv-radio-item[data-emphasis="notice"] {
@@ -353,7 +356,7 @@ const PRESENTATION_CSS = `
   position: absolute;
   left: 50%;
   top: 50%;
-  width: min(860px, calc(100vw - 28px));
+  width: min(780px, calc(100vw - 28px));
   max-height: calc(100dvh - 34px);
   overflow: auto;
   transform: translate(-50%, -50%);
@@ -396,12 +399,12 @@ const PRESENTATION_CSS = `
   display: block;
   margin-top: 3px;
   color: #f0fbf8;
-  font-size: 10px;
+  font-size: 11px;
 }
 .cv-axis-evidence {
   margin: 7px 0 0;
   color: rgba(230, 247, 243, .7);
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 600;
   line-height: 1.45;
 }
@@ -420,12 +423,6 @@ const PRESENTATION_CSS = `
   margin: 4px 0 0;
   color: #f2ddb5;
   font-size: 10px;
-}
-.cv-correction-evidence {
-  margin: 5px 0 0;
-  color: rgba(230, 247, 243, .7);
-  font-size: 8px;
-  font-weight: 600;
 }
 .cv-debrief-actions {
   display: flex;
@@ -451,7 +448,10 @@ const PRESENTATION_CSS = `
   outline-offset: 3px;
 }
 @media (max-width: 680px) {
-  .cv-strip-grid { grid-template-columns: repeat(2, 1fr); }
+  .cv-strip-grid,
+  [data-casevac-part="mission-strip"][data-terminal="true"] .cv-strip-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
   .cv-metric { border-bottom: 1px solid rgba(191, 233, 228, .1); }
   .cv-metric:last-child { grid-column: 1 / -1; }
   .cv-axis-grid { grid-template-columns: repeat(2, 1fr); }
@@ -546,11 +546,6 @@ function countCopy(value, singular, plural = `${singular}s`) {
   return count === null ? null : `${count} ${count === 1 ? singular : plural}`;
 }
 
-function joinEvidence(parts, fallback = "No supporting evidence was published.") {
-  const available = parts.filter(Boolean);
-  return available.length ? available.join(" · ") : fallback;
-}
-
 /**
  * Normalize an observer-safe strip projection into concise visible copy.
  * Values are formatting inputs only; this function does not derive mission truth.
@@ -600,8 +595,8 @@ export function casevacMissionStripModel(projection = {}) {
       callAgeText: formatClock(projection?.callAgeSeconds),
       requestedText: formatClock(projection?.requestedHandoffAgeSeconds),
       combinedText: [
-        `TIME SINCE CALL ${formatClock(projection?.callAgeSeconds)}`,
-        `REQUESTED ${formatClock(projection?.requestedHandoffAgeSeconds)}`,
+        `CALL ${formatClock(projection?.callAgeSeconds)}`,
+        `DUE ${formatClock(projection?.requestedHandoffAgeSeconds)}`,
       ].join(" · "),
       windowState,
       windowText: WINDOW_COPY[windowState],
@@ -661,22 +656,19 @@ function safeAxis(axis) {
     ? statusToken
     : "NOT_ASSESSED";
   const minimumClearance = nonNegative(source.minimumClearanceM);
+  const contacts = boundedInteger(source.obstacleContacts);
   return {
     id: "safe",
     label: "SAFE",
     status: AXIS_STATUS_COPY.SAFE[status],
-    evidence: joinEvidence([
-      minimumClearance === null
-        ? null
-        : `Minimum clearance ${Math.round(minimumClearance)} m`,
-      countCopy(source.obstacleContacts, "obstacle contact"),
-      countCopy(
-        source.protectionInterventions,
-        "protection intervention",
-      ),
-    ], status === "NOT_ASSESSED"
-      ? "Safety evidence was not assessed."
-      : undefined),
+    evidence: status === "NOT_ASSESSED"
+      ? "NOT ASSESSED"
+      : [
+        minimumClearance === null
+          ? null
+          : `CLEARANCE ${Math.round(minimumClearance)} M`,
+        contacts === null ? null : `${contacts} CONTACTS`,
+      ].filter(Boolean).join(" · ") || "NO FACT PUBLISHED",
   };
 }
 
@@ -686,27 +678,38 @@ function controlledAxis(axis) {
   const status = AXIS_STATUS_COPY.CONTROLLED[statusToken]
     ? statusToken
     : "NOT_ASSESSED";
+  const approachCounts = [
+    boundedInteger(source.pickupApproaches),
+    boundedInteger(source.handoffApproaches),
+  ];
+  const interruptionCounts = [
+    boundedInteger(source.approachDiscontinuations),
+    boundedInteger(source.loadingInterruptions),
+    boundedInteger(source.handoffInterruptions),
+  ];
+  const boundedTotal = (values) => {
+    const published = values.filter((value) => value !== null);
+    if (published.length === 0) return null;
+    return {
+      value: published.reduce((total, value) => total + value, 0),
+      complete: published.length === values.length,
+    };
+  };
+  const approaches = boundedTotal(approachCounts);
+  const interruptions = boundedTotal(interruptionCounts);
+  const totalCopy = (total, label) => total === null
+    ? null
+    : `${total.complete ? "" : "≥"}${total.value} ${label}`;
   return {
     id: "controlled",
     label: "CONTROLLED",
     status: AXIS_STATUS_COPY.CONTROLLED[status],
-    evidence: joinEvidence([
-      countCopy(
-        source.pickupApproaches,
-        "pickup approach",
-        "pickup approaches",
-      ),
-      countCopy(
-        source.handoffApproaches,
-        "handoff approach",
-        "handoff approaches",
-      ),
-      countCopy(source.approachDiscontinuations, "discontinued approach"),
-      countCopy(source.loadingInterruptions, "loading interruption"),
-      countCopy(source.handoffInterruptions, "handoff interruption"),
-    ], status === "NOT_ASSESSED"
-      ? "Terminal-flight evidence was not assessed."
-      : undefined),
+    evidence: status === "NOT_ASSESSED"
+      ? "NOT ASSESSED"
+      : [
+        totalCopy(approaches, "APPROACHES"),
+        totalCopy(interruptions, "INTERRUPTIONS"),
+      ].filter(Boolean).join(" · ") || "NO FACT PUBLISHED",
   };
 }
 
@@ -722,16 +725,16 @@ function maskedAxis(axis) {
     id: "masked",
     label: "MASKED",
     status: AXIS_STATUS_COPY.MASKED[status],
-    evidence: joinEvidence([
-      safeBandPercent === null
-        ? null
-        : `${Math.round(clamp(safeBandPercent, 0, 100))}% inside declared safe band`,
-      exposedSeconds === null
-        ? null
-        : `Exposed ${formatInterval(exposedSeconds)}`,
-    ], status === "NOT_ASSESSED"
-      ? "Masking evidence was not assessed."
-      : undefined),
+    evidence: status === "NOT_ASSESSED"
+      ? "NOT ASSESSED"
+      : [
+        safeBandPercent === null
+          ? null
+          : `${Math.round(clamp(safeBandPercent, 0, 100))}% SAFE`,
+        exposedSeconds === null
+          ? null
+          : `${formatInterval(exposedSeconds).toUpperCase()} EXPOSED`,
+      ].filter(Boolean).join(" · ") || "NO FACT PUBLISHED",
   };
 }
 
@@ -748,19 +751,15 @@ function timelyAxis(axis) {
     id: "timely",
     label: "TIMELY",
     status: AXIS_STATUS_COPY.TIMELY[status],
-    evidence: joinEvidence([
-      callToPickup === null
-        ? null
-        : `Call to pickup ${formatClock(callToPickup)}`,
-      pickupToHandoff === null
-        ? null
-        : `Pickup to handoff ${formatClock(pickupToHandoff)}`,
-      total === null
-        ? null
-        : `Call to handoff ${formatClock(total)}`,
-    ], status === "NOT_ASSESSED"
-      ? "Timing evidence was not assessed."
-      : undefined),
+    evidence: status === "NOT_ASSESSED"
+      ? "NOT ASSESSED"
+      : total !== null
+        ? `TOTAL ${formatClock(total)}`
+        : callToPickup !== null
+          ? `PICKUP ${formatClock(callToPickup)}`
+          : pickupToHandoff !== null
+            ? `HANDOFF LEG ${formatClock(pickupToHandoff)}`
+            : "NO FACT PUBLISHED",
   };
 }
 
@@ -1040,10 +1039,10 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
     className: "cv-strip-grid",
   });
   const phaseMetric = metric(documentLike, "PHASE", "phase");
-  const targetMetric = metric(documentLike, "TARGET / SITE", "target");
-  const navMetric = metric(documentLike, "RANGE / ETA", "navigation");
-  const occupancyMetric = metric(documentLike, "CABIN", "occupancy");
-  const gateMetric = metric(documentLike, "STABLE-CONTACT GATE", "gate");
+  const targetMetric = metric(documentLike, "SITE", "target");
+  const navMetric = metric(documentLike, "NAV", "navigation");
+  const occupancyMetric = metric(documentLike, "LOAD", "occupancy");
+  const gateMetric = metric(documentLike, "GATE", "gate");
   gateMetric.value.setAttribute("role", "status");
   gateMetric.value.setAttribute("aria-live", "polite");
   append(
@@ -1140,7 +1139,7 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
   });
   const quietCopy = element(documentLike, "p", {
     className: "cv-quiet-copy",
-    text: "Transfer is complete. Flight controls remain live during the quiet interval.",
+    text: "Transfer complete. Controls remain live.",
   });
   const quietSkip = element(documentLike, "button", {
     className: "cv-quiet-skip",
@@ -1165,7 +1164,7 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
   debriefNode.hidden = true;
   const debriefKicker = element(documentLike, "p", {
     className: "cv-debrief-kicker",
-    text: "MEDEVAC DEBRIEF · SEPARATE EVIDENCE AXES",
+    text: "MEDEVAC DEBRIEF",
   });
   const debriefOutcome = element(documentLike, "h2", {
     className: "cv-debrief-outcome",
@@ -1212,13 +1211,10 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
   });
   const correctionLabel = element(documentLike, "span", {
     className: "cv-correction-label",
-    text: "ONE RECORDED CORRECTION",
+    text: "NEXT FLIGHT",
   });
   const correctionSummary = element(documentLike, "p", {
     className: "cv-correction-summary",
-  });
-  const correctionEvidence = element(documentLike, "p", {
-    className: "cv-correction-evidence",
   });
   const debriefActions = element(documentLike, "div", {
     className: "cv-debrief-actions",
@@ -1236,7 +1232,6 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
     correction,
     correctionLabel,
     correctionSummary,
-    correctionEvidence,
   );
   append(
     debriefNode,
@@ -1282,6 +1277,14 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
     );
     setText(gateMetric.value, stripState.gate.text);
     gateMetric.value.setAttribute("data-state", stripState.gate.state);
+    const terminal = [
+      "PICKUP_APPROACH",
+      "LOADING",
+      "DROPOFF_APPROACH",
+      "HANDOFF",
+    ].includes(stripState.phase.state);
+    stripNode.setAttribute("data-terminal", String(terminal));
+    gateMetric.container.hidden = !terminal;
     setText(clock, stripState.clock.combinedText);
     setText(window, stripState.clock.windowText);
     window.setAttribute("data-state", stripState.clock.windowState);
@@ -1384,7 +1387,6 @@ export function createCasevacMissionPresentation(documentLike, options = {}) {
       nodes.node.setAttribute("data-status", canonicalToken(axis.status));
     }
     setText(correctionSummary, debriefState.correction.summary);
-    setText(correctionEvidence, debriefState.correction.evidence);
     correction.setAttribute(
       "data-available",
       String(debriefState.correction.available),

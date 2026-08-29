@@ -11,7 +11,10 @@
  * rotates.
  */
 
-import { cobraConquestScoreLine } from "./cobra_objective_copy.js?v=343";
+import {
+  cobraConquestScoreLine,
+  cobraMissionCountdown,
+} from "./cobra_objective_copy.js?v=349";
 
 // Palette is the shell's own legend (cobra-lab/styles.css --friendly / --hostile /
 // .landmark-key / --warm), so the map cannot disagree with the legend swatches beside it.
@@ -68,7 +71,7 @@ const FULLMAP = Object.freeze({
 export const COBRA_MAP_CAPTION_PX = Object.freeze({ mini: 46, full: 44 });
 
 /**
- * Trim to the band width with an ellipsis. Live orders run long — "DESTROY GARRISON · CAU SONG
+ * Trim to the band width with an ellipsis. Live orders run long — "DESTROY GUN PIT · CAU SONG
  * MA · THE JAW" is 40 characters against a 200 px minimap — and an untrimmed caption is simply
  * cut off by the canvas edge mid-word, which reads as a rendering fault rather than a long name.
  * Falls back to the whole string where the context cannot measure (headless doubles).
@@ -83,8 +86,12 @@ function fitText(ctx, text, maxWidthPx) {
   return `${trimmed.trimEnd()}…`;
 }
 
-function drawCaption(ctx, caption, { widthPx, headerPx, full, scoreLine = null }) {
-  if ((!caption?.line && !(scoreLine && !full)) || !(headerPx > 0)) return;
+function drawCaption(
+  ctx,
+  caption,
+  { widthPx, headerPx, full, scoreLine = null, clockLine = null },
+) {
+  if ((!caption?.line && !(scoreLine && !full) && !clockLine) || !(headerPx > 0)) return;
   ctx.save();
   ctx.fillStyle = COBRA_MAP_COLORS.label;
   ctx.font = full
@@ -93,16 +100,28 @@ function drawCaption(ctx, caption, { widthPx, headerPx, full, scoreLine = null }
   ctx.textBaseline = "middle";
   const padPx = full ? 12 : 7;
   const roomPx = widthPx - padPx * 2;
+  let clockRoomPx = 0;
+  if (clockLine) {
+    ctx.font = full
+      ? "750 13px ui-monospace, SFMono-Regular, Menlo, monospace"
+      : "750 9px ui-monospace, SFMono-Regular, Menlo, monospace";
+    clockRoomPx = (typeof ctx.measureText === "function"
+      ? ctx.measureText(clockLine).width
+      : clockLine.length * (full ? 8 : 6)) + (full ? 18 : 9);
+  }
   if (!full) {
     // Three lines on the minimap: the order, the place, then the conquest score. Real orders
     // run to 40 characters
-    // ("DESTROY GARRISON · CAU SONG MA · THE JAW") and a single 200 px line ellipsises away
+    // ("DESTROY GUN PIT · CAU SONG MA · THE JAW") and a single 200 px line ellipsises away
     // exactly the half the player needs — which point to fly to.
     if (caption?.line) {
       const split = caption.line.indexOf(" · ");
       const verb = split > 0 ? caption.line.slice(0, split) : caption.line;
       const place = split > 0 ? caption.line.slice(split + 3) : "";
-      ctx.fillText(fitText(ctx, verb, roomPx), padPx, headerPx * 0.2);
+      ctx.fillStyle = COBRA_MAP_COLORS.label;
+      ctx.font = "600 10px ui-sans-serif, system-ui, sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText(fitText(ctx, verb, roomPx - clockRoomPx), padPx, headerPx * 0.2);
       if (place) {
         ctx.fillStyle = COBRA_MAP_COLORS.muted;
         ctx.font = "400 10px ui-sans-serif, system-ui, sans-serif";
@@ -115,12 +134,25 @@ function drawCaption(ctx, caption, { widthPx, headerPx, full, scoreLine = null }
       ctx.fillText(fitText(ctx, scoreLine, roomPx), padPx, headerPx * 0.8);
     }
   } else {
-    ctx.fillText(fitText(ctx, caption.line, roomPx), padPx, headerPx * 0.34);
+    ctx.fillStyle = COBRA_MAP_COLORS.label;
+    ctx.font = "600 15px ui-sans-serif, system-ui, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText(fitText(ctx, caption?.line ?? "", roomPx - clockRoomPx), padPx, headerPx * 0.34);
   }
   if (caption?.detail && full) {
     ctx.fillStyle = COBRA_MAP_COLORS.muted;
     ctx.font = "400 12px ui-sans-serif, system-ui, sans-serif";
     ctx.fillText(fitText(ctx, caption.detail, roomPx), padPx, headerPx * 0.72);
+  }
+  if (clockLine) {
+    // The clock owns the top-right edge independently of long objective copy, so an ellipsis can
+    // never hide the ten-minute verdict the way it hid inside the old combined score string.
+    ctx.fillStyle = clockLine === "FINAL" ? COBRA_MAP_COLORS.label : COBRA_MAP_COLORS.objectiveRing;
+    ctx.font = full
+      ? "750 13px ui-monospace, SFMono-Regular, Menlo, monospace"
+      : "750 9px ui-monospace, SFMono-Regular, Menlo, monospace";
+    ctx.textAlign = "right";
+    ctx.fillText(clockLine, widthPx - padPx, headerPx * (full ? 0.34 : 0.2));
   }
   ctx.strokeStyle = COBRA_MAP_COLORS.border;
   ctx.lineWidth = 1;
@@ -494,16 +526,10 @@ export function drawCobraTacticalMap(
   if (!(width > 0) || !(height > 0)) return;
   const metrics = full ? FULLMAP : MINIMAP;
   const scoreLine = full ? null : cobraConquestScoreLine(model);
-  const threatCount = (model.tacticalSymbols ?? [])
-    .filter((symbol) => symbol.kind === "air-threat").length;
-  const targetCount = (model.tacticalSymbols ?? [])
-    .filter((symbol) => symbol.kind === "target").length;
-  const tacticalLine = model.objective
-    ? `◇ ${String(model.objective.label ?? "TARGET").toUpperCase()} · ${targetCount} TGT · △ ${threatCount} AA`
-    : scoreLine;
+  const clockLine = cobraMissionCountdown(model);
   // The model was built for the CHART box; the caption band sits above it, so the panel is
   // taller than the projection and everything below the band is drawn translated.
-  const band = (caption?.line || scoreLine) && headerPx > 0 ? headerPx : 0;
+  const band = (caption?.line || scoreLine || clockLine) && headerPx > 0 ? headerPx : 0;
 
   ctx.save();
   ctx.clearRect(0, 0, width, height + band);
@@ -514,7 +540,11 @@ export function drawCobraTacticalMap(
       widthPx: width,
       headerPx: band,
       full,
-      scoreLine: full ? scoreLine : tacticalLine,
+      // The first two rows already carry the order and named objective, while the ring/diamond
+      // identify it on the chart. The third row therefore owns the missing mission truth: point
+      // margin, both ticket pools, and whether the valley is winning, losing or stalemated.
+      scoreLine,
+      clockLine,
     });
     ctx.translate(0, band);
   }

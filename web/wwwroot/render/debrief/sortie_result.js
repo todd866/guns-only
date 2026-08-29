@@ -9,26 +9,50 @@ function hasOpponentKill(state) {
       && token(event?.target) === "PLAYER");
 }
 
-function carrierLossBrief(state) {
+function carrierLossPresentation(state) {
   if (hasOpponentKill(state)) {
-    return "The opponent's gun solution was decisive. The damaged aircraft then continued through physical impact and wreck settling.";
+    return {
+      brief: "Bandit gunfire destroyed the aircraft.",
+      correction: "Break the gun solution earlier.",
+    };
   }
 
   switch (token(state?.player_impact_surface)) {
     case "FLIGHT_DECK":
-      return "The aircraft struck the flight deck. Review the recorded touchdown assessment and the first controllable deviation before the next pass.";
+      return {
+        brief: "Flight deck impact.",
+        correction: "Correct the first approach deviation.",
+      };
     case "CARRIER_STRUCTURE":
-      return "The aircraft struck carrier structure. Review approach geometry and the first controllable deviation before the next pass.";
+      return {
+        brief: "Carrier structure impact.",
+        correction: "Recheck approach geometry.",
+      };
     case "WATER":
-      return "The approach ended in the water. Review energy, flight path, and control state at the marked decision before the next pass.";
+      return {
+        brief: "Water impact.",
+        correction: "Fix energy and flight path before recommitting.",
+      };
     case "GROUND":
-      return "The aircraft struck terrain. Review terrain clearance, energy, and the first controllable flight-path deviation before the next sortie.";
+      return {
+        brief: "Terrain impact.",
+        correction: "Restore terrain clearance before re-engaging.",
+      };
     case "SIMULATION_BOUNDARY":
-      return "The numerical guard retained the last integrated state before physical rest. Treat the outcome as unresolved and review the final recorded trajectory.";
+      return {
+        brief: "Outcome unresolved.",
+        correction: "Review the final flight path.",
+      };
     default:
       return state?.carrier === true
-        ? "The aircraft was not recovered aboard. Review the recorded physical outcome and the first controllable deviation before the next pass."
-        : "The aircraft was lost. Review the recorded causal chain and first controllable deviation before the next sortie.";
+        ? {
+          brief: "Aircraft not recovered aboard.",
+          correction: "Review the first approach deviation.",
+        }
+        : {
+          brief: "Aircraft lost.",
+          correction: "Review the first controllable deviation.",
+        };
   }
 }
 
@@ -123,6 +147,13 @@ function formatG(value) {
   return Math.abs(value).toFixed(1);
 }
 
+function withFact(result, fact) {
+  return {
+    ...result,
+    facts: [...(Array.isArray(result.facts) ? result.facts : []), fact],
+  };
+}
+
 function withGToleranceLesson(result, state) {
   const gLocCount = Math.max(0, Math.trunc(finiteNumber(state?.pilot_g_loc_count) ?? 0));
   if (gLocCount === 0) {
@@ -132,19 +163,20 @@ function withGToleranceLesson(result, state) {
   const peakPositiveG = finiteNumber(state?.pilot_peak_positive_g);
   const peakNegativeG = finiteNumber(state?.pilot_peak_negative_g);
   const pushPullPenaltyG = finiteNumber(state?.pilot_push_pull_penalty_g);
-  const peakCopy = peakPositiveG === null
-    ? "sortie peak +G unavailable"
-    : `sortie peak +${formatG(Math.max(0, peakPositiveG))} G`;
-  const pushPullCopy = pushPullPenaltyG !== null && pushPullPenaltyG > 0.5
-    ? `; modeled push-pull penalty ${formatG(pushPullPenaltyG)} G${peakNegativeG !== null && peakNegativeG < 0
-      ? ` after a −${formatG(peakNegativeG)} G push`
-      : ""}`
-    : "";
-  const episodeCopy = `${gLocCount} ${gLocCount === 1 ? "episode" : "episodes"}`;
+  const parts = [`G-LOC ×${gLocCount}`];
+  if (peakPositiveG !== null)
+    parts.push(`peak +${formatG(Math.max(0, peakPositiveG))} G`);
+  if (pushPullPenaltyG !== null && pushPullPenaltyG > 0.5) {
+    parts.push(`push-pull ${formatG(pushPullPenaltyG)} G${
+      peakNegativeG !== null && peakNegativeG < 0
+        ? ` after −${formatG(peakNegativeG)} G`
+        : ""
+    }`);
+  }
 
   return {
-    ...result,
-    brief: `${result.brief} Pilot G-LOC: ${episodeCopy} (${peakCopy}${pushPullCopy}); review unload timing, G-onset rate, and cumulative exposure.`,
+    ...withFact(result, parts.join(" · ")),
+    safetyCorrection: "Ease G onset and unload earlier.",
   };
 }
 
@@ -155,13 +187,11 @@ function withAutoGcasLesson(result, state) {
 
   const overrides = Math.max(0,
     Math.trunc(finiteNumber(state?.auto_gcas_override_count) ?? 0));
-  const activationCopy = `${activations} ${activations === 1 ? "fly-up" : "fly-ups"}`;
-  const overrideCopy = overrides > 0
-    ? `; ${overrides} pilot ${overrides === 1 ? "paddle override" : "paddle overrides"}`
-    : "";
+  const fact = [`Auto-GCAS ×${activations}`];
+  if (overrides > 0) fact.push(`overrides ${overrides}`);
   return {
-    ...result,
-    brief: `${result.brief} Auto-GCAS: ${activationCopy}${overrideCopy}. Treat a valid or uncertain fly-up as a discontinue/RTB event; review terrain prediction, recovery G, system status, and control state before another sortie.`,
+    ...withFact(result, fact.join(" · ")),
+    safetyCorrection: "Discontinue after an Auto-GCAS fly-up.",
   };
 }
 
@@ -174,22 +204,19 @@ function withServiceLifeReview(result, state) {
   const overDynamicPressureSeconds = Math.max(0,
     finiteNumber(state?.service_life_over_dynamic_pressure_s) ?? 0);
   const maximumG = finiteNumber(state?.service_life_max_g);
-  const exposure = [];
+  const exposure = ["Airframe review"];
   if (overStructuralSeconds > 0) {
-    exposure.push(`${overStructuralSeconds.toFixed(1)} s above the structural limit${
-      maximumG === null ? "" : `, peak ${maximumG.toFixed(1)} G`
-    }`);
+    exposure.push(`structural +${overStructuralSeconds.toFixed(1)} s`);
+    if (maximumG !== null) exposure.push(`peak ${maximumG.toFixed(1)} G`);
   }
   if (overDynamicPressureSeconds > 0) {
-    exposure.push(`${overDynamicPressureSeconds.toFixed(1)} s above the q placard`);
+    exposure.push(`q +${overDynamicPressureSeconds.toFixed(1)} s`);
   }
-  const evidence = exposure.length > 0
-    ? exposure.join("; ")
-    : "a propulsion or thermal exceedance";
+  exposure.push("damage/cost not inferred");
 
   return {
-    ...result,
-    brief: `${result.brief} Airframe exposure: ${evidence}. Maintenance assessment pending; no damage or repair cost has been inferred.`,
+    ...withFact(result, exposure.join(" · ")),
+    safetyCorrection: "Hold the aircraft for maintenance review.",
     serviceLifeReviewRequired: true,
   };
 }
@@ -199,6 +226,59 @@ function withSortieLessons(result, state) {
     withAutoGcasLesson(withGToleranceLesson(result, state), state),
     state,
   );
+}
+
+/**
+ * Keep the visual-merge debrief to measured facts and the highest-priority correction. The
+ * snapshot remains the full evidence record; this projection is only the scan-first result card.
+ */
+export function visualMergeDebriefPresentation(state = {}) {
+  if (state?.visual_merge_evaluation !== true) return null;
+  const number = (key, fallback = 0) => finiteNumber(state?.[key]) ?? fallback;
+  const score = Math.max(0, Math.min(100, Math.round(number("visual_merge_score"))));
+  const dwell = Math.max(0, number("rear_quarter_dwell_s"));
+  const hits = Math.max(0, Math.round(number("evaluated_projectile_hits")));
+  const minimumEnergy = Math.max(0, number("minimum_energy_kias"));
+  const minimumPass = Math.max(0, number("minimum_merge_range_m"));
+  const peakClosure = Math.max(0, number("peak_closure_kts"));
+  const headOnPresses = Math.max(0, Math.round(number("head_on_trigger_violations")));
+  const highAspectPresses = Math.max(0, Math.round(number("high_aspect_trigger_violations")));
+  const overshoots = Math.max(0, Math.round(number("overshoot_count")));
+
+  const facts = [
+    `Score ${score}/100`,
+    `Rear ${dwell.toFixed(1)} s`,
+    `Hits ${hits}`,
+  ];
+  if (minimumPass > 0) facts.push(`Merge ${Math.round(minimumPass)} m`);
+  if (minimumEnergy > 0) facts.push(`Min ${Math.round(minimumEnergy)} KIAS`);
+  if (peakClosure > 0) facts.push(`Closure ${Math.round(peakClosure)} KT`);
+  if (overshoots > 0) facts.push(`Overshoots ${overshoots}`);
+
+  let correction;
+  if (headOnPresses > 0) {
+    correction = "Hold fire through the first pass.";
+  } else if (highAspectPresses > 0) {
+    correction = "Wait for rear-quarter geometry.";
+  } else if (minimumPass > 0 && minimumPass < 150) {
+    correction = "Open first-pass spacing to 150 m.";
+  } else if (minimumEnergy > 0 && minimumEnergy < 300) {
+    correction = "Keep 300 KIAS through the first turn.";
+  } else if (overshoots > 0 || peakClosure > 250) {
+    correction = "Settle closure below 250 KT.";
+  } else if (dwell < 5) {
+    correction = "Hold the rear quarter for 5.0 s.";
+  } else if (hits < 2) {
+    correction = "Turn the stable solution into two hits.";
+  } else {
+    correction = "Repeat the stable rear-quarter pass.";
+  }
+
+  return Object.freeze({
+    facts: Object.freeze(facts),
+    evidence: facts.join(" · "),
+    correction,
+  });
 }
 
 function readableToken(value, fallback = "Not recorded") {
@@ -213,16 +293,20 @@ function readableToken(value, fallback = "Not recorded") {
     .replaceAll("|", " · ");
 }
 
+export const TOP_GUN_MISSION_ID = "mission.top-gun.acm.f14a-vs-mig28.v1";
+const TOP_GUN_MISSION_TOKEN = token(TOP_GUN_MISSION_ID);
+
 function isCarrierQualification(state) {
   const mission = token(state?.mission_definition_id);
   return state?.carrier === true
     && [
       "MISSION.CARRIER-QUALIFICATION.V1",
       "MISSION.KOREA.PANTHER-SORTIE.V1",
+      TOP_GUN_MISSION_TOKEN,
     ].includes(mission);
 }
 
-function carrierQualificationCopy(state) {
+function carrierQualificationCoreCopy(state) {
   const recovery = token(state?.recovery);
   const barrier = state?.barrier_engagement === true
     || recovery.replaceAll("_", "").replaceAll(" ", "") === "BARRIERENGAGEMENT";
@@ -237,41 +321,46 @@ function carrierQualificationCopy(state) {
   );
 
   if (barrier) {
-    return withSortieLessons({
+    return {
       kicker: "Carrier qualification debrief",
       title: "Barrier · Missed wires",
       brief: `${grade}. The raised barrier retained the aircraft aboard after the arresting wires were missed; no wire was caught. Recorded deviations: ${deviations}. Primary correction: ${correction}.`,
-    }, state);
+    };
   }
   if (trapped) {
-    return withSortieLessons({
+    return {
       kicker: "Carrier qualification debrief",
       title: wire > 0 ? `Trapped · Wire ${wire}` : "Trapped",
       brief: `${grade}. Recorded deviations: ${deviations}. Primary correction: ${correction}.`,
-    }, state);
+    };
   }
   if (bolter) {
-    return withSortieLessons({
+    return {
       kicker: "Carrier qualification debrief",
       title: "Bolter · No wire",
       brief: `${grade}. No arresting wire was caught. Recorded deviations: ${deviations}. Primary correction: ${correction}.`,
-    }, state);
+    };
   }
   if (token(state?.sortie_outcome) === "DEFEAT") {
-    return withSortieLessons({
+    const loss = carrierLossPresentation(state);
+    return {
       kicker: "Carrier qualification debrief",
       title: "Aircraft Lost",
-      brief: carrierLossBrief(state),
-    }, state);
+      ...loss,
+    };
   }
-  return withSortieLessons({
+  return {
     kicker: "Carrier qualification debrief",
     title: "Recovery Incomplete",
     brief: `The aircraft was not recovered. Recorded deviations: ${deviations}. Primary correction: ${correction}.`,
-  }, state);
+  };
 }
 
-function combatHandoffCopy(state) {
+function carrierQualificationCopy(state) {
+  return withSortieLessons(carrierQualificationCoreCopy(state), state);
+}
+
+function combatHandoffCoreCopy(state) {
   const handoff = combatHandoffPresentation(state);
   if (!handoff.occurred) return null;
 
@@ -284,27 +373,76 @@ function combatHandoffCopy(state) {
   const lost = token(state?.sortie_outcome) === "DEFEAT";
   const recovered = handoff.phase === "RECOVERED";
 
-  const fuelCopy = reserveTargetLb === null || reserveMarginLb === null
-    ? "Recovery reserve result was unavailable."
-    : `${recoveryFuelLb === null ? "Recovery fuel unavailable" : `Recovery fuel ${Math.round(recoveryFuelLb)} LB`} against ${Math.round(reserveTargetLb)} LB protected reserve; ${
-      reserveMarginLb < 0
-        ? `short by ${Math.round(-reserveMarginLb)} LB`
-        : `${Math.round(reserveMarginLb)} LB above reserve`
-    }.`;
+  const facts = [
+    `Kills ${playerKills}`,
+    `Relief ${handoff.reliefKills} uncredited`,
+  ];
+  if (reserveTargetLb === null || reserveMarginLb === null) {
+    facts.push("Reserve unavailable");
+  } else {
+    facts.push(`${recoveryFuelLb === null
+      ? "Fuel unavailable"
+      : `Fuel ${Math.round(recoveryFuelLb)} LB`} · reserve ${reserveMarginLb < 0 ? "−" : "+"}${
+      Math.round(Math.abs(reserveMarginLb))
+    } LB`);
+  }
 
-  return withSortieLessons({
+  return {
     kicker: "Guns-only handoff debrief",
     title: lost
       ? "Aircraft Lost After Handoff"
       : recovered ? "Handoff Complete · Home"
         : handoff.active ? "Fight Handed Off" : "Handoff Requested",
-    brief: `Your credited kills: ${playerKills}. Relief kills: ${handoff.reliefKills} (tracked separately and not credited to you). ${fuelCopy}`,
+    brief: lost ? "Ownship lost after handoff." : "Combat passed to relief.",
+    facts,
+    correction: lost
+      ? "Review the first controllable deviation."
+      : reserveMarginLb !== null && reserveMarginLb < 0
+        ? "Protect the fuel reserve earlier."
+        : recovered
+          ? "Repeat the clean handoff and recovery."
+          : "Complete RTB and recovery.",
     handoff: true,
     handoffPhase: handoff.phase,
     playerKills,
     reliefKills: handoff.reliefKills,
     reserveTargetLb,
     reserveMarginLb,
+  };
+}
+
+function combatHandoffCopy(state) {
+  const result = combatHandoffCoreCopy(state);
+  return result ? withSortieLessons(result, state) : null;
+}
+
+/**
+ * Top Gun is both a continuing combat handoff and a physical carrier recovery. Neither axis may
+ * erase the other: combat custody owns kill/reserve accounting, while the carrier assessment owns
+ * wire, pass grade and the next correction.
+ */
+export function topGunCarrierDebriefCopy(state = {}) {
+  if (state?.carrier !== true || token(state?.mission_definition_id) !== TOP_GUN_MISSION_TOKEN)
+    return null;
+
+  const carrier = carrierQualificationCoreCopy(state);
+  const handoff = combatHandoffCoreCopy(state);
+  if (!handoff) {
+    return withSortieLessons({
+      ...carrier,
+      kicker: "Top Gun carrier debrief",
+      carrierRecovery: true,
+    }, state);
+  }
+
+  return withSortieLessons({
+    ...handoff,
+    kicker: "Top Gun combat + carrier debrief",
+    title: carrier.title,
+    brief: `${handoff.brief} Carrier recovery: ${carrier.title}. ${carrier.brief}`,
+    carrierRecovery: true,
+    carrierTitle: carrier.title,
+    carrierBrief: carrier.brief,
   }, state);
 }
 
@@ -374,7 +512,7 @@ function casevacResultCopy(state) {
 
 /**
  * Produce the concise result-card story from authoritative snapshot evidence.
- * Detailed replay analysis is appended separately when the recorded clip is available.
+ * Detailed incident analysis stays behind the optional Replay action.
  */
 export function sortieResultCopy(state) {
   if (state?.casevac_mission === true) return casevacResultCopy(state);
@@ -389,14 +527,25 @@ export function sortieResultCopy(state) {
     const leakers = Math.max(0, Math.round(Number(state.drone_raid_leakers) || 0));
     const ownshipLost = state.drone_raid_ownship_lost === true;
     const zeroLeakers = state.drone_raid_zero_leakers === true;
+    const roundsPerKill = finiteNumber(state.drone_raid_rounds_per_kill);
+    const facts = [`Score ${score}/${maximum}`, `Kills ${kills}/${total}`, `Leakers ${leakers}`];
+    if (ownshipLost) facts.push("Unresolved raiders score as leakers");
+    if (kills > 0 && roundsPerKill !== null)
+      facts.push(`${roundsPerKill.toFixed(1)} rounds/kill`);
     return withSortieLessons({
       kicker: "Air-defence debrief",
       title: ownshipLost ? "Ownship Lost" : zeroLeakers ? "Raid Defeated" : "Raid Penetrated",
       brief: ownshipLost
-        ? `Ownship was lost; every unresolved raider was scored as a penetration. ${kills}/${total} targets were neutralized before mission failure. Score ${score}/${maximum}.`
+        ? "Ownship lost."
         : zeroLeakers
-          ? `All ${total} staged raiders were neutralized by physical gunfire before the defended ring. Score ${score}/${maximum}.`
-          : `${leakers} of ${total} staged raiders crossed the defended ring; ${kills} were neutralized by physical gunfire. Score ${score}/${maximum}.`,
+          ? "All raiders destroyed."
+          : `${leakers} raider${leakers === 1 ? "" : "s"} penetrated.`,
+      facts,
+      correction: ownshipLost
+        ? "Review the first controllable deviation."
+        : zeroLeakers
+          ? "Repeat the clean intercept."
+          : "Engage the next leaker earlier.",
     }, state);
   }
 
@@ -409,15 +558,22 @@ export function sortieResultCopy(state) {
       : 100;
     const recovered = state.maintenance_recovered === true;
     const complete = state.maintenance_procedure_complete === true;
+    const demerits = Math.max(0, Math.round(Number(state.maintenance_demerits) || 0));
     return withSortieLessons({
       kicker: "Maintenance test-flight debrief",
       title: recovered ? complete ? "Recovery Complete" : "Procedure Incomplete" : "Aircraft Lost",
       brief: recovered
-        ? `Aircraft recovered aboard. Evidence-based procedure score ${score}/${maximum}.`
-        : `The aircraft was not recovered. Evidence-based procedure score ${score}/${maximum}.`,
+        ? "Aircraft recovered aboard."
+        : "Aircraft not recovered.",
+      facts: [`Procedure ${score}/${maximum}`, `Demerits ${demerits}`],
+      correction: recovered
+        ? complete ? "Repeat the recovery profile." : "Complete the procedure before recovery."
+        : "Review the first controllable deviation.",
     }, state);
   }
 
+  const topGunCarrier = topGunCarrierDebriefCopy(state);
+  if (topGunCarrier) return topGunCarrier;
   if (isCarrierQualification(state)) return carrierQualificationCopy(state);
   const handoff = combatHandoffCopy(state);
   if (handoff) return handoff;
@@ -427,31 +583,37 @@ export function sortieResultCopy(state) {
       return withSortieLessons({
         kicker: "Sortie complete",
         title: "Discontinued · Recovered",
-        brief: "The aircraft was recovered after the fight was discontinued. Review the landing fuel against the protected reserve before the next sortie.",
+        brief: "Aircraft recovered after knock-it-off.",
+        correction: "Check landing fuel against reserve.",
       }, state);
     case "VICTORY":
       return withSortieLessons({
         kicker: "Sortie complete",
         title: "Victory",
-        brief: "The opponent's damaged flight, physical impact, and wreck settling were simulated before debrief.",
+        brief: "Bandit destroyed.",
+        correction: "Repeat the winning pass.",
       }, state);
-    case "DEFEAT":
+    case "DEFEAT": {
+      const loss = carrierLossPresentation(state);
       return withSortieLessons({
         kicker: "Sortie complete",
         title: "Aircraft Lost",
-        brief: carrierLossBrief(state),
+        ...loss,
       }, state);
+    }
     case "DRAW":
       return withSortieLessons({
         kicker: "Sortie complete",
         title: "Mutual Kill",
-        brief: "Both damaged aircraft were carried through their physical terminal trajectories before debrief.",
+        brief: "Both aircraft lost.",
+        correction: "Disengage before the exchange.",
       }, state);
     default:
       return withSortieLessons({
         kicker: "Sortie complete",
         title: "Fight Complete",
-        brief: "The deterministic sortie clock stopped only after the terminal physical state resolved.",
+        brief: "Fight ended.",
+        correction: "Review the final exchange.",
       }, state);
   }
 }

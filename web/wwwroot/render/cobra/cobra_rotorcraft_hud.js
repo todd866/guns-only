@@ -44,16 +44,18 @@ function finiteOrNull(value) {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-function targetRoleLabel(unit, war) {
+function targetRoleLabel(unit) {
   const role = String(unit?.role ?? "").toLowerCase();
-  const roleLabel = role === "infantry" ? "INFANTRY SQUAD"
-    : role === "soft-vehicle" ? "SUPPLY TRUCK"
-      : role === "hard-point" ? "FORTIFIED GUN PIT"
-        : role === "dshk-site" ? "DShK AA SITE"
-          : String(unit?.id ?? "TARGET").split(".").pop().toUpperCase();
-  const home = (war?.sites ?? []).find((site) => site?.id === unit?.home_site_id);
-  const siteLabel = String(home?.label ?? "").trim().toUpperCase();
-  return siteLabel ? `${roleLabel} · ${siteLabel}` : roleLabel;
+  let roleLabel;
+  if (role === "infantry") roleLabel = "INFANTRY SQUAD";
+  else if (role === "soft-vehicle") roleLabel = "SUPPLY TRUCK";
+  else if (role === "hard-point") {
+    if (unit?.objective_lock === true) roleLabel = "FORTIFIED GUN PIT";
+    else if (unit?.fortified === true) roleLabel = "FORTIFIED POSITION";
+    else roleLabel = "GUN POSITION";
+  } else if (role === "dshk-site") roleLabel = "DShK AA SITE";
+  else roleLabel = "GROUND TARGET";
+  return roleLabel;
 }
 
 function wrapPi(angle) {
@@ -66,7 +68,12 @@ function wrapPi(angle) {
 function tacticalPicture(authorityState, vehicle, war) {
   const sites = Array.isArray(war?.sites) ? war.sites : [];
   const units = Array.isArray(war?.units) ? war.units : [];
-  const siteId = cobraObjectiveSiteId({ sites, units, player: vehicle });
+  const act = String(authorityState?.mission_act ?? "").toLowerCase();
+  const returningToBase = act === "rtb";
+  const missionComplete = act === "complete";
+  const siteId = returningToBase || missionComplete
+    ? null
+    : cobraObjectiveSiteId({ sites, units, player: vehicle });
   const site = sites.find((candidate) => candidate?.id === siteId) ?? null;
   const ownEast = finite(vehicle?.x_m);
   const ownNorth = finite(vehicle?.z_m);
@@ -87,12 +94,26 @@ function tacticalPicture(authorityState, vehicle, war) {
       relativeBearingRad: wrapPi(Math.atan2(east - ownEast, north - ownNorth) - ownHeading),
     };
   };
-  const objective = site
-    ? symbol(site, "objective", String(site.label ?? "OBJECTIVE").toUpperCase())
+  const fob = returningToBase
+    && [war?.fob?.x_m, war?.fob?.z_m].map(Number).every(Number.isFinite)
+    ? { ...war.fob, id: "camp-ember-rtb" }
+    : null;
+  const objectiveSource = returningToBase ? fob : missionComplete ? null : site;
+  const objective = objectiveSource
+    ? symbol(
+      objectiveSource,
+      returningToBase ? "recovery" : "objective",
+      returningToBase
+        ? "CAMP EMBER"
+        : String(objectiveSource.label ?? "OBJECTIVE").toUpperCase(),
+    )
     : null;
   const targetUnit = siteId ? units.find((unit) => unit?.alive === true
     && unit.home_site_id === siteId && String(unit.id ?? "").endsWith(".garrison")) ?? null : null;
-  const target = targetUnit ? symbol(targetUnit, "target", "GARRISON") : null;
+  // `.garrison` is the simulation's stable conquest id, not a thing a pilot can identify from
+  // the air. The visible/targetable role is a fortified gun pit, so label the mark by what is
+  // actually on the bridgehead.
+  const target = targetUnit ? symbol(targetUnit, "target", "GUN PIT") : null;
   const threats = units
     .filter((unit) => unit?.alive === true && unit.faction === "hostile" && unit.role === "dshk-site")
     .map((unit) => symbol(unit, "air-threat", "AA"))
@@ -270,21 +291,24 @@ export function cobraRotorcraftHudModel(authorityState, formation = null) {
   const unit = targetId
     ? (war?.units ?? []).find((candidate) => candidate?.id === targetId && candidate.alive === true)
     : null;
-  const targetLabel = unit ? targetRoleLabel(unit, war) : String(targetId ?? "").split(".").pop();
+  const targetLabel = unit ? targetRoleLabel(unit) : null;
+  const targetAimY = Number.isFinite(Number(unit?.aim_y_m))
+    ? Number(unit.aim_y_m)
+    : finite(unit?.y_m);
   const designation = unit === undefined || unit === null ? null : {
     id: unit.id,
     label: targetLabel,
     level: gunnerLevel,
     worldX: finite(unit.x_m),
-    worldY: finite(unit.y_m),
+    worldY: targetAimY,
     worldZ: finite(unit.z_m),
     rangeM: Math.hypot(
       finite(unit.x_m) - finite(vehicle.x_m),
-      finite(unit.y_m) - finite(vehicle.y_m),
+      targetAimY - finite(vehicle.y_m),
       finite(unit.z_m) - finite(vehicle.z_m),
     ),
   };
-  if (targetId) detailParts.push(`TGT ${targetLabel}`);
+  if (unit && targetLabel) detailParts.push(`TGT ${targetLabel}`);
   // Slant range keeps an out-of-frame target quantified — the turret's arc is far wider
   // than the combiner, so "on target" often means "off the glass".
   if (designation) {
@@ -294,7 +318,9 @@ export function cobraRotorcraftHudModel(authorityState, formation = null) {
   if (war) {
     detailParts.push(war.ammo_dry === true
       ? "AMMO DRY"
-      : `AMMO ${Math.max(0, Math.floor(finite(war.ammo_remaining)))}`);
+      : war.ammo_bingo === true
+        ? `AMMO BINGO ${Math.max(0, Math.floor(finite(war.ammo_remaining)))}`
+        : `AMMO ${Math.max(0, Math.floor(finite(war.ammo_remaining)))}`);
     detailParts.push(war.over_fob === true
       ? "FOB PAD · REARM"
       : `FOB ${formatAviationRange(finite(war.fob_range_m), { style: "nav" })}`);
@@ -319,7 +345,12 @@ export function cobraRotorcraftHudModel(authorityState, formation = null) {
       sinkLevel,
     },
     warnings,
-    gunner: { line, level: gunnerLevel, detail: detailParts.join(" · ") },
+    gunner: {
+      line,
+      level: gunnerLevel,
+      detail: detailParts.join(" · "),
+      ammoBingo: war?.ammo_bingo === true && war?.ammo_dry !== true,
+    },
     designation,
     tactical,
     formation: {
@@ -387,19 +418,13 @@ function drawTacticalAwareness(ctx, model, { width, projectWorldPoint }) {
   plotBearing(tactical.objective, AMBER, "diamond");
   for (const threat of tactical.threats) plotBearing(threat, RED, "triangle");
 
-  const line = `◇ ${tactical.objective.label} ${formatAviationRange(tactical.objective.rangeM, { style: "nav" })}`
-    + `   △ AA ${tactical.threats.length}`;
-  ctx.fillStyle = AMBER;
-  ctx.font = `800 10px ${MONO}`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(line, width / 2, compassY + 18);
-
   if (typeof projectWorldPoint !== "function") return;
   const primary = tactical.target && model.designation?.id === tactical.target.id
     ? tactical.objective
     : (tactical.target ?? tactical.objective);
-  const symbols = [primary, ...tactical.threats];
+  // The bearing rail already carries every AA threat. Label only the nearest one in the world;
+  // repeating every range/name over the shared target bracket buried the battle in HUD prose.
+  const symbols = [primary, ...tactical.threats.slice(0, 1)];
   for (const symbol of symbols) {
     const point = projectWorldPoint(
       symbol.worldX,
@@ -485,14 +510,15 @@ export function drawCobraRotorcraftHud(ctx, model, {
   const radio = model.formation?.radio;
   if (radio?.text) {
     ctx.font = `800 11px ${MONO}`;
-    const text = `${radio.speaker || "R/T"}: ${radio.text}`;
-    const panelWidth = Math.min(width - 40, ctx.measureText(text).width + 28);
-    const x = (width - panelWidth) / 2;
-    const y = 176;
+    const speaker = radio.speaker === "EMBER LEAD" ? "LEAD" : (radio.speaker || "R/T");
+    const text = `${speaker} · ${radio.text}`;
+    const panelWidth = Math.min(width - 36, ctx.measureText(text).width + 24);
+    const x = 18;
+    const y = 72;
     panel(ctx, x, y, panelWidth, 27, "rgba(77, 255, 136, 0.72)");
     ctx.fillStyle = GREEN;
-    ctx.textAlign = "center";
-    ctx.fillText(text, width / 2, y + 14);
+    ctx.textAlign = "left";
+    ctx.fillText(text, x + 12, y + 14);
   }
 
   // ROTOR panel under the speed tape: NR% is the rotorcraft's life instrument, TQ%
@@ -617,7 +643,9 @@ export function drawCobraRotorcraftHud(ctx, model, {
     ctx.fillStyle = color;
     ctx.fillText(model.gunner.line, width / 2, heroY);
     if (model.gunner.detail) {
-      ctx.fillStyle = GREEN_DIM;
+      // BINGO is advisory, not a replacement combat order. Keep the current gunner/order line
+      // intact and make its persistent ammo context amber until the crew rearms or runs dry.
+      ctx.fillStyle = model.gunner.ammoBingo ? AMBER : GREEN_DIM;
       ctx.font = `700 9px ${MONO}`;
       ctx.fillText(model.gunner.detail, width / 2, heroY + 21);
     }

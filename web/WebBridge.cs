@@ -54,7 +54,7 @@ public static partial class WebBridge {
         Session.StartBeatWithEnvironment(
             Beats.ModernVisualMergeFirstRun,
             KoreaWeatherPresets.ForBeat(13),
-            TerrainForEnvironment(Ukraine2030sTheatre.HeroCell));
+            TerrainForEnvironment(Ukraine2030sTheatre.FirstRunMountainValley));
     }
 
     /// <summary>

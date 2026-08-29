@@ -37,6 +37,11 @@ public static class OkanaganSnapshotProjection
             water_kg = aircraft.WaterLoadKg,
             water_capacity_kg = FireBossDynamics.MaximumWaterKg,
             water_released_this_tick_kg = aircraft.WaterReleasedThisTickKg,
+            // Browser presentation runs at the display cadence, not the 120 Hz authority cadence.
+            // Publish flow as well as the fixed-tick quantum so drop acoustics do not change when
+            // a shell advances a different number of authority ticks per rendered frame.
+            water_release_rate_kgps = aircraft.WaterReleasedThisTickKg
+                / FireBossDynamics.FixedDeltaSeconds,
             fuel_kg = aircraft.FuelKg,
             gross_mass_kg = aircraft.GrossMassKg,
             surface = Token(aircraft.SurfaceMode),

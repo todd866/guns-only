@@ -8,7 +8,7 @@
 import {
   COBRA_CANYON_CAMP_EMBER_APRON,
   sampleCobraCanyonTerrain,
-} from "./cobra_canyon_plan.js?v=343";
+} from "./cobra_canyon_plan.js?v=349";
 
 export const CAMP_EMBER_LANDMARK_ID = "landmark.cobra-canyon.camp-ember.v1";
 export const CAMP_EMBER_FIREBASE_SCHEMA = "guns-only.cobra-camp-ember-firebase.v2";
@@ -215,8 +215,11 @@ export function campEmberFirebaseParts() {
     49, -72, 12.05, 5.2, 0.18, 0.18, 0);
   add("windsock", "signal", "tent", CAMP_EMBER_COLORS.signalYellow,
     52.4, -72, 11.7, 4.8, 1.35, 1.15, Math.PI / 2);
+  // A low approach board replaces the old freestanding 5 x 4 m slab. From final that slab read as
+  // an unexplained brown cube; seating this signal at ground level keeps the cue without spending
+  // mobile's protected authored-geometry reserve on decorative posts or stripes.
   add("final-ident-panel", "signal", "box", CAMP_EMBER_COLORS.signalRed,
-    -48, -74, 2.2, 5.4, 4.4, 0.25, 0);
+    -48, -74, 0.725, 5.4, 1.45, 0.22, 0);
 
   // Irregular 350 m laterite footprint: enough room for separated aviation functions while the
   // protected final and departure centreline stays completely open.
@@ -280,6 +283,22 @@ export function campEmberFirebaseParts() {
   tents.forEach(([x, z, yaw], index) => add(`tent-${index}`, "tent", "tent",
     index % 2 ? CAMP_EMBER_COLORS.canvas : CAMP_EMBER_COLORS.tent,
     x, z, 2.1, 10, 4.2, 7.5, yaw));
+
+  // Larger functional clusters carry the firebase silhouette from stabilized final. Hundreds of
+  // PSP ribs and low berms read as ground texture at 18 m AGL; these off-axis pitched shelters
+  // make the place read as an occupied headquarters without entering either flight throat.
+  const supportShelters = [
+    ["ops-headquarters", "hooch", 58, 76, 0.08, 24, 7.2, 15],
+    ["crew-west", "tent", -76, -74, -0.10, 15, 5.4, 9.5],
+    ["crew-east", "tent", 76, -72, 0.11, 15, 5.4, 9.5],
+    ["mess", "hooch", 56, 118, -0.06, 21, 6.6, 14],
+    ["comms", "tent", -58, 118, 0.12, 16, 6.0, 10],
+    ["medevac-shelter", "hooch", 112, 82, -0.12, 18, 6.4, 12],
+  ];
+  supportShelters.forEach(([id, family, x, z, yaw, widthM, heightM, depthM], index) =>
+    add(id, family, "tent",
+      index % 2 ? CAMP_EMBER_COLORS.tent : CAMP_EMBER_COLORS.canvas,
+      x, z, heightM * 0.5, widthM, heightM, depthM, yaw));
 
   // Revetted ammunition and POL live on opposite sides of the compound.
   [[-126, -48], [-126, -68], [-111.5, -78], [-100.5, -78]].forEach(([x, z], index) =>
@@ -368,6 +387,18 @@ export function campEmberFirebaseParts() {
         rx + 5.6 * Math.cos(angle), rz + 5.6 * Math.sin(angle),
         0.5, 2.2, 1.0, 4.4, -angle + Math.PI / 2);
     }
+    // A rosette is a weapon position, not an abstract flower. One low mount, shield and long
+    // horizontal tube give each existing pit an unmistakable fire-support silhouette while the
+    // entire firebase still merges to one draw submission.
+    const gunYaw = rosetteIndex === 0 ? 0.42 : -0.38;
+    add(`rosette-${rosetteIndex}-gun-mount`, "artillery", "cylinder",
+      CAMP_EMBER_COLORS.steel, rx, rz, 0.9, 2.2, 1.8, 2.2, 0);
+    add(`rosette-${rosetteIndex}-gun-shield`, "artillery", "box",
+      CAMP_EMBER_COLORS.oliveDrab, rx, rz, 1.75, 3.8, 1.8, 0.32, gunYaw);
+    add(`rosette-${rosetteIndex}-gun-tube`, "artillery", "box",
+      CAMP_EMBER_COLORS.rust,
+      rx + Math.sin(gunYaw) * 2.6, rz + Math.cos(gunYaw) * 2.6,
+      2.25, 0.42, 0.42, 6.8, gunYaw);
   });
 
   // Burn scars (Granite's black blobs).
@@ -393,10 +424,20 @@ export function campEmberFirebaseParts() {
   });
 
   // Defoliated fringe accents: bare gray-brown poles where the jungle used to be.
-  const deadTrees = [[172, -42], [168, 64], [-172, -54], [-164, 78], [66, -172], [-88, -158]];
+  const deadTrees = [
+    [172, -42], [174, 8], [168, 64], [146, 112], [104, 151], [66, 172],
+    [8, 176], [-48, 171], [-98, 154], [-146, 112], [-172, 62], [-174, 2],
+    [-172, -54], [-148, -108], [-104, -152], [-52, -174], [18, -176], [76, -164],
+  ];
   deadTrees.forEach(([tx, tz], treeIndex) => {
+    const heightM = 5.8 + (treeIndex % 5) * 0.72;
     add(`deadtree-${treeIndex}`, "deadtree", "cylinder", [0.30, 0.27, 0.22],
-      tx, tz, 3.4, 0.4, 6.8, 0.4, 0);
+      tx, tz, heightM * 0.5, 0.34 + (treeIndex % 3) * 0.06, heightM, 0.34, 0);
+    if (treeIndex % 3 !== 2) {
+      add(`deadtree-${treeIndex}-branch`, "deadtree", "box", [0.32, 0.28, 0.22],
+        tx, tz, heightM * 0.68, 2.8 + (treeIndex % 4) * 0.55, 0.18, 0.22,
+        treeIndex * 0.47);
+    }
   });
 
   return parts;
@@ -451,7 +492,10 @@ function fanGeometry(THREE, outline) {
   for (let index = 0; index < outline.length; index++) {
     const [ax, az] = outline[index];
     const [bx, bz] = outline[(index + 1) % outline.length];
-    positions.set([0, 0, 0, ax, 0, az, bx, 0, bz], index * 9);
+    // The camp material is FrontSide and aircraft see these surfaces from above. The authored
+    // outline advances counter-clockwise in X/Z, so reverse each fan wedge to point +Y; the old
+    // centre→A→B order pointed -Y and silently culled the entire laterite apron and burn pattern.
+    positions.set([0, 0, 0, bx, 0, bz, ax, 0, az], index * 9);
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));

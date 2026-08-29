@@ -8,6 +8,14 @@ public sealed class DetentLayer {
     public PilotCommand Command { get; private set; } = new(1.0, 0.0, 0.85, 0.0);
     public double StickyOffsetG { get; private set; }
     public DemandTier Tier { get; private set; } = DemandTier.Baseline;
+    /// <summary>Raw stick-forward intent for aids that must yield before filtered G settles.</summary>
+    public bool PilotUnloadIntent { get; private set; }
+    /// <summary>
+    /// Raw near-stop analog pull intent for aids that must yield before the filtered protected-G
+    /// command catches up. Keyboard tracking retains the bounded past-line ease path; its digital
+    /// max-performance demand is already protected by the filtered ceiling guard.
+    /// </summary>
+    public bool PilotMaximumPullIntent { get; private set; }
     public double ValleyG { get; private set; } = 1.0;
     public double ValleyBank { get; private set; }
     public double Throttle { get; private set; } = 0.85;
@@ -273,7 +281,8 @@ public sealed class DetentLayer {
 
         var pull = keys.PhaseAt(GKey.PullUp, nowMs);
         var push = keys.PhaseAt(GKey.PushDown, nowMs);
-        bool pitchInputActive = pull != KeyPhase.Idle || push != KeyPhase.Idle;
+        bool pitchInputActive = pull != KeyPhase.Idle || push != KeyPhase.Idle
+            || (_analogPitchControlActive && System.Math.Abs(_analogPitchControl) > 0.001);
         FlightPathHoldActive = false;
         // Sticky clears on actual pull-release EVENTS, not sampled Idle — a release+re-press
         // batched between ticks must still reset (reviewer finding).
@@ -297,8 +306,13 @@ public sealed class DetentLayer {
         // actuator targets, never the keyboard/override flag itself.
         bool over = keys.PhaseAt(GKey.Override, nowMs) != KeyPhase.Idle;
         double cap = over ? overrideMax : maxPerform;
+        double overridePitchDemand = pull != KeyPhase.Idle
+            ? 1.0
+            : push != KeyPhase.Idle
+                ? -1.0
+                : _analogPitchControlActive ? _analogPitchControl : 0.0;
         bool overrideIncidenceActive = !ApproachMode && over
-            && (pull != KeyPhase.Idle || push != KeyPhase.Idle);
+            && System.Math.Abs(overridePitchDemand) > 0.001;
         if (_overrideIncidenceActiveLastTick && !over
             && p.DynamicPressureScheduledPostStallOverride
             && double.IsFinite(MeasuredAngleOfAttackRad)) {
@@ -313,7 +327,7 @@ public sealed class DetentLayer {
         // input boundary; a still-held Up key cannot immediately pin the jet back on the limiter.
         if (over) HighAlphaRecoveryActive = false;
         else if (HighAlphaRecoveryActive
-            && pull == KeyPhase.Idle && push == KeyPhase.Idle
+            && !pitchInputActive
             && double.IsFinite(MeasuredAngleOfAttackRad)) {
             double recoveryExitAlpha = 0.70 * (MeasuredAngleOfAttackRad >= 0.0
                 ? FlightModel.AlphaAeroMax(p, AerodynamicConfiguration)
@@ -322,6 +336,11 @@ public sealed class DetentLayer {
                 HighAlphaRecoveryActive = false;
         }
         _overrideIncidenceActiveLastTick = overrideIncidenceActive;
+        PilotUnloadIntent = HighAlphaRecoveryActive
+            || push != KeyPhase.Idle
+            || (_analogPitchControlActive && _analogPitchControl < -0.001);
+        PilotMaximumPullIntent = _analogPitchControlActive
+            && _analogPitchControl >= 0.90;
 
         if (ApproachMode) {
             _flightPathHoldCaptured = false;
@@ -370,12 +389,19 @@ public sealed class DetentLayer {
             // protected envelope. Capture a neutral load-factor command while the integrated
             // alpha/rate loop (including any configured thrust vectoring) drives through the break.
             // Push remains available as an explicit unload; held pull is ignored until re-armed.
+            // The same must be true for analog pitch. Analog+override can enter this recovery path,
+            // so ignoring a subsequent stick-forward command would leave gamepad/touch pilots with
+            // less recovery authority than the keyboard path that armed it.
             tier = DemandTier.Baseline;
             StickyOffsetG = 0.0;
             if (push != KeyPhase.Idle) {
                 double recoveryFloor = System.Math.Max(
                     FlightModel.NzAeroMin(s, p, AirspeedMps, AtmosphereModel), -1.5);
                 target = System.Math.Max(recoveryFloor, -1.0);
+            } else if (_analogPitchControlActive && _analogPitchControl < -0.001) {
+                double recoveryFloor = System.Math.Max(
+                    FlightModel.NzAeroMin(s, p, AirspeedMps, AtmosphereModel), -1.5);
+                target = 1.0 + (1.0 - recoveryFloor) * _analogPitchControl;
             } else target = 1.0;
         }
         else if (pull != KeyPhase.Idle) {
@@ -401,18 +427,23 @@ public sealed class DetentLayer {
         }
         else if (_analogPitchControlActive) {
             // A common semantic axis for touch and gamepad. In assisted flight the centred stick
-            // leaves the about-right baseline alone; pulling blends progressively to the protected
-            // limit and pushing blends to the ordinary bunt floor. In manual flight centre is 1 G.
+            // leaves the about-right baseline alone; pulling blends progressively to the selected
+            // protected/override limit and pushing blends to its matching bunt floor. In manual
+            // flight centre is 1 G. The limiter paddle therefore grants the same physical authority
+            // to an analog stick as Space+arrows, rather than merely tagging intent metadata.
             double neutral = AssistedFlight
                 ? AssistedBaselineTarget(s, maxPerform) : 1.0;
             double pushFloor = System.Math.Max(
-                FlightModel.NzAeroMin(s, p, AirspeedMps, AtmosphereModel), -1.0);
+                FlightModel.NzAeroMin(s, p, AirspeedMps, AtmosphereModel),
+                over ? -1.5 : -1.0);
+            double pullLimit = over ? cap : maxPerform;
             double pitch = _analogPitchControl;
             tier = System.Math.Abs(pitch) < 0.001
-                ? DemandTier.Baseline : DemandTier.Valley;
+                ? DemandTier.Baseline
+                : over ? DemandTier.OverDemand : DemandTier.Valley;
             StickyOffsetG = 0.0;
             target = pitch >= 0.0
-                ? neutral + (maxPerform - neutral) * pitch
+                ? neutral + (pullLimit - neutral) * pitch
                 : neutral + (neutral - pushFloor) * pitch;
         }
         else if (_waveOff) {
@@ -682,14 +713,14 @@ public sealed class DetentLayer {
         // two paths feel identical. Keys keep priority while held.
         if (_analogYawControlActive && rudder == 0.0) rudder = _analogYawControl * 0.6;
 
-        double commandedAlpha = !ApproachMode && over && pull != KeyPhase.Idle
-            ? OverridePullAlpha(s, p)
-            : !ApproachMode && over && push != KeyPhase.Idle
-                ? -0.70 * p.PostStallAlphaCommandRad
+        double commandedAlpha = !ApproachMode && over && overridePitchDemand > 0.001
+            ? OverridePullAlpha(s, p) * overridePitchDemand
+            : !ApproachMode && over && overridePitchDemand < -0.001
+                ? 0.70 * p.PostStallAlphaCommandRad * overridePitchDemand
                 : double.NaN;
         Command = new PilotCommand(_gCmd, _bankTarget, Throttle, rudder,
             ApproachMode ? _cmdPitch : double.NaN,
-            EnvelopeOverride: !ApproachMode && over && (pull != KeyPhase.Idle || push != KeyPhase.Idle),
+            EnvelopeOverride: !ApproachMode && over && pitchInputActive,
             RollControl: requestedRollControl * aileronAuthority,
             CommandedAlphaRad: commandedAlpha,
             SasRollControl: 0.0,

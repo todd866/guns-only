@@ -4,6 +4,7 @@ import {
   carrierRecoveryLesson,
   formatWholeLb,
   procedureLabelFromState,
+  TopGunRtbDisclosureLatch,
   topGunNavDecision,
 } from "../mesh_nd_chrome.js";
 
@@ -56,6 +57,28 @@ test("Top Gun carrier choice fails closed outside an available live handoff", ()
     presentation_theme: "another-theme",
     combat_handoff_phase: 1,
   }), null);
+});
+
+test("accepted Top Gun RTB opens navigation once and respects a manual close", () => {
+  const latch = new TopGunRtbDisclosureLatch();
+  const active = {
+    mission_definition_id: "mission.top-gun.acm.f14a-vs-mig28.v1",
+    player_rtb_active: true,
+  };
+
+  assert.equal(latch.update(active, { disclosureRelevant: false }), false,
+    "the edge waits until the console has route or recovery content");
+  assert.equal(latch.update(active, { disclosureRelevant: true }), true,
+    "the first useful accepted-RTB frame opens navigation");
+  assert.equal(latch.update(active, { disclosureRelevant: true }), false,
+    "closing navigation manually is respected while the same RTB remains active");
+  assert.equal(latch.update({ ...active, player_rtb_active: false }), false);
+  assert.equal(latch.update(active, { disclosureRelevant: true }), true,
+    "a later accepted RTB transition is a fresh disclosure edge");
+  assert.equal(latch.update({
+    mission_definition_id: "mission.modern.visual-merge.endurance.v1",
+    player_rtb_active: true,
+  }), false, "ordinary RTB does not trigger Top Gun onboarding");
 });
 
 test("F-22 gets the same visible RTB button contract as Top Gun", () => {

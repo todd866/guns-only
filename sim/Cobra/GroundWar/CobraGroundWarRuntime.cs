@@ -74,6 +74,25 @@ public sealed class CobraGroundWarRuntime
     /// </summary>
     public const string GarrisonUnitIdSuffix = ".garrison";
     public static string GarrisonUnitId(string siteId) => siteId + GarrisonUnitIdSuffix;
+    public const string IronBellSiteId = "site.iron-bell-bridge.v1";
+    // Iron Bell is a complete raised crossing. The terrain sampler correctly returns the river
+    // floor below it, so ground-war placement must use the roadway rather than pretending that
+    // terrain height is the top of the structure. These values mirror the authored deck and
+    // approach collision envelopes in CobraCanyonDefinition / cobra-canyon.world.json, plus the
+    // short dry bridgehead shoulders where troops can fight without occupying bridge geometry.
+    public const double IronBellRoadMinimumEastM = -2_970.0;
+    public const double IronBellDeckMinimumEastM = -2_775.0;
+    public const double IronBellDeckMaximumEastM = -2_645.0;
+    public const double IronBellRoadMaximumEastM = -2_420.0;
+    public const double IronBellRoadMinimumNorthM = -516.0;
+    public const double IronBellRoadMaximumNorthM = -484.0;
+    public const double IronBellWestRoadElevationM = 139.2;
+    public const double IronBellDeckRoadElevationM = 144.56;
+    public const double IronBellEastRoadElevationM = 139.2;
+    public const double IronBellCaptureRadiusM = 300.0;
+    public const double IronBellFriendlyBridgeheadEastM = -2_965.0;
+    public const double IronBellHostileBridgeheadEastM = -2_445.0;
+    public const double IronBellBridgeheadNorthM = -500.0;
     public const double WreckRetainSeconds = 28.0;
     /// <summary>Small-arms chatter events per engaged unit per second (presentation only).</summary>
     public const double SmallArmsEventsPerSecond = 2.4;
@@ -181,6 +200,11 @@ public sealed class CobraGroundWarRuntime
     public IReadOnlyList<GroundWarEvent> RecentEvents => _recentEvents;
     public HoldTheBridgeOutcome MissionOutcome => _missionOutcome;
     public string MissionOutcomeReason => _missionOutcomeReason;
+    /// <summary>Real strategic mission time advanced by authority, never browser wall time.</summary>
+    public double ElapsedSeconds => _elapsedSeconds;
+    /// <summary>Seconds until the ten-minute board/ticket verdict, clamped after expiry.</summary>
+    public double TimeRemainingSeconds =>
+        Math.Max(0.0, MissionTimeLimitSeconds - _elapsedSeconds);
     public double FriendlyTickets => _friendlyTickets;
     public double HostileTickets => _hostileTickets;
     public int FriendlyPointsHeld =>
@@ -450,7 +474,10 @@ public sealed class CobraGroundWarRuntime
                 // survivor back onto the departure ridge or march on the pad as a fallback goal.
                 continue;
             }
-            if (!_terrain.TrySample(east, north, out TerrainSample surface))
+            // Ground combatants may use Iron Bell's authored roadway, but never wade down the
+            // river just because the straight-line goal lies on the other bank. That former
+            // behaviour was why a visibly raised bridge could still host a battle underneath it.
+            if (!TrySampleGroundUnitSurface(east, north, out TerrainSample surface))
                 continue;
             double heightOffset = unit.Role == GroundUnitRole.SoftVehicle ? 1.2 : 0.4;
             unit.SetPosition(new Vec3D(east, surface.HeightM + heightOffset, north));
@@ -770,6 +797,11 @@ public sealed class CobraGroundWarRuntime
     {
         foreach (ContestedSite site in _sites) {
             bool fob = site.LandmarkId.Contains("camp-ember", StringComparison.Ordinal);
+            bool ironBell = string.Equals(site.Id, IronBellSiteId, StringComparison.Ordinal);
+            if (ironBell) {
+                SeedIronBellForces(site);
+                continue;
+            }
             SpawnUnit(GroundFaction.Friendly, GroundUnitRole.HardPoint, site,
                 GroundUnitIntent.Hold, ringM: fob ? 18.0 : 28.0, bearingRad: 0.4);
             SpawnUnit(GroundFaction.Friendly, GroundUnitRole.InfantryClump, site,
@@ -796,7 +828,6 @@ public sealed class CobraGroundWarRuntime
             // wave targets the turret exists to kill. Iron Bell is the authored fight — seed a
             // denser destroyable set-piece there (hard point + extra soft skin) so arrival has
             // something to shoot besides three markers.
-            bool ironBell = site.LandmarkId.Contains("iron-bell", StringComparison.Ordinal);
             // Place hostiles on the basin-facing side of each site (±~35°) so a River Gorge
             // approach looking into the gorge has gun-reachable marks instead of permanent
             // OutOfLimits flanks (Build 267 owner flight).
@@ -812,20 +843,43 @@ public sealed class CobraGroundWarRuntime
             SpawnUnit(GroundFaction.Hostile, GroundUnitRole.InfantryClump, site,
                 GroundUnitIntent.EngageNearest, ringM: HostileSeedInfantryRingM + 40.0,
                 bearingRad: BearingFromAircraftYaw(yawTowardBasin + 2.4));
-            if (ironBell) {
-                SpawnUnit(GroundFaction.Hostile, GroundUnitRole.HardPoint, site,
-                    GroundUnitIntent.Hold, ringM: HostileSeedSoftVehicleRingM + 25.0,
-                    bearingRad: BearingFromAircraftYaw(yawTowardBasin + 0.15));
-                SpawnUnit(GroundFaction.Hostile, GroundUnitRole.SoftVehicle, site,
-                    GroundUnitIntent.EngageNearest, ringM: HostileSeedSoftVehicleRingM + 55.0,
-                    bearingRad: BearingFromAircraftYaw(yawTowardBasin - 1.1));
-                SpawnUnit(GroundFaction.Hostile, GroundUnitRole.InfantryClump, site,
-                    GroundUnitIntent.EngageNearest, ringM: HostileSeedInfantryRingM + 70.0,
-                    bearingRad: BearingFromAircraftYaw(yawTowardBasin + 1.35));
-            }
         }
         UpdateSiteControl();
         DriftBalance(PlayerVehicleContract.FixedDeltaSeconds);
+    }
+
+    /// <summary>
+    /// The Iron Bell opening is a bridge fight, not a circular spawn around a point whose terrain
+    /// datum is the riverbed. Friendly and hostile elements occupy opposing raised approaches;
+    /// the two hard points and the soft vehicles open inside mutual weapon range, while infantry
+    /// advance along the same traversable roadway. Every position remains inside the crossing's
+    /// capture radius, so killing the fortified gun pit still unlocks the authored conquest loop.
+    /// </summary>
+    void SeedIronBellForces(ContestedSite site)
+    {
+        SpawnUnitAt(GroundFaction.Friendly, GroundUnitRole.HardPoint, site,
+            GroundUnitIntent.Hold, IronBellFriendlyBridgeheadEastM,
+            IronBellBridgeheadNorthM);
+        SpawnUnitAt(GroundFaction.Friendly, GroundUnitRole.InfantryClump, site,
+            GroundUnitIntent.Advance, -2_880.0, -500.0);
+        SpawnUnitAt(GroundFaction.Friendly, GroundUnitRole.SoftVehicle, site,
+            GroundUnitIntent.Advance, -2_845.0, -490.0);
+
+        SpawnUnitAt(GroundFaction.Hostile, GroundUnitRole.HardPoint, site,
+            GroundUnitIntent.Hold, IronBellHostileBridgeheadEastM, IronBellBridgeheadNorthM,
+            unitId: GarrisonUnitId(site.Id), fortified: true);
+        SpawnUnitAt(GroundFaction.Hostile, GroundUnitRole.InfantryClump, site,
+            GroundUnitIntent.EngageNearest, -2_520.0, -500.0);
+        SpawnUnitAt(GroundFaction.Hostile, GroundUnitRole.SoftVehicle, site,
+            GroundUnitIntent.EngageNearest, -2_560.0, -510.0);
+        SpawnUnitAt(GroundFaction.Hostile, GroundUnitRole.InfantryClump, site,
+            GroundUnitIntent.EngageNearest, -2_480.0, -515.0);
+        SpawnUnitAt(GroundFaction.Hostile, GroundUnitRole.HardPoint, site,
+            GroundUnitIntent.Hold, -2_495.0, -490.0);
+        SpawnUnitAt(GroundFaction.Hostile, GroundUnitRole.SoftVehicle, site,
+            GroundUnitIntent.EngageNearest, -2_420.0, -500.0);
+        SpawnUnitAt(GroundFaction.Hostile, GroundUnitRole.InfantryClump, site,
+            GroundUnitIntent.EngageNearest, -2_460.0, -485.0);
     }
 
     /// <summary>
@@ -893,19 +947,64 @@ public sealed class CobraGroundWarRuntime
             return;
 
         double bearing = bearingRad ?? _rng.NextDouble() * Math.PI * 2.0;
-        double east = site.PositionWorldM.X + Math.Cos(bearing) * ringM;
-        double north = site.PositionWorldM.Z + Math.Sin(bearing) * ringM;
+        // Search the requested ring deterministically when its first bearing lands in water.
+        // This matters for later reinforcement at Iron Bell as much as for the opening board.
+        // Alternating clockwise/counter-clockwise keeps a caller's authored bearing the centre of
+        // the search rather than silently imposing a new global direction preference.
+        for (int attempt = 0; attempt < 25; attempt++) {
+            int stepIndex = (attempt + 1) / 2;
+            double signedStep = attempt == 0
+                ? 0.0
+                : (attempt % 2 == 1 ? stepIndex : -stepIndex) * Math.PI / 12.0;
+            double candidateBearing = bearing + signedStep;
+            double east = site.PositionWorldM.X + Math.Cos(candidateBearing) * ringM;
+            double north = site.PositionWorldM.Z + Math.Sin(candidateBearing) * ringM;
+            if (TrySpawnUnitAt(faction, role, site, intent, east, north, unitId, fortified))
+                return;
+        }
+
+        // The site itself may be a raised structural surface (Iron Bell). It is safer to spawn on
+        // that known point than to fall through to the water datum or silently omit a wave.
+        TrySpawnUnitAt(faction, role, site, intent,
+            site.PositionWorldM.X, site.PositionWorldM.Z, unitId, fortified);
+    }
+
+    void SpawnUnitAt(
+        GroundFaction faction,
+        GroundUnitRole role,
+        ContestedSite site,
+        GroundUnitIntent intent,
+        double eastM,
+        double northM,
+        string? unitId = null,
+        bool fortified = false)
+    {
+        if (!TrySpawnUnitAt(
+            faction, role, site, intent, eastM, northM, unitId, fortified))
+            throw new InvalidOperationException(
+                $"Ground unit '{unitId ?? role.ToString()}' has no dry authored surface at "
+                + $"({eastM:F1}, {northM:F1}).");
+    }
+
+    bool TrySpawnUnitAt(
+        GroundFaction faction,
+        GroundUnitRole role,
+        ContestedSite site,
+        GroundUnitIntent intent,
+        double east,
+        double north,
+        string? unitId,
+        bool fortified)
+    {
+        if (LivingUnits().Count() >= MaxLivingUnits)
+            return true;
         if (faction == GroundFaction.Hostile && InsideFobEnemyExclusion(east, north)) {
             // Fail closed. A future content edit that moves a forward site toward the FOB must
             // not silently recreate the ridge-over-the-pad problem.
-            return;
+            return false;
         }
-        if (!_terrain.TrySample(east, north, out TerrainSample surface)) {
-            east = site.PositionWorldM.X;
-            north = site.PositionWorldM.Z;
-            if (!_terrain.TrySample(east, north, out surface))
-                return;
-        }
+        if (!TrySampleGroundUnitSurface(east, north, out TerrainSample surface))
+            return false;
 
         double maxHealth = role switch {
             GroundUnitRole.InfantryClump => 40.0,
@@ -932,6 +1031,46 @@ public sealed class CobraGroundWarRuntime
             fortified);
         _units.Add(unit);
         PushEvent("spawn", unit.Id, site.Id, faction, unit.PositionWorldM);
+        return true;
+    }
+
+    bool TrySampleGroundUnitSurface(
+        double eastM,
+        double northM,
+        out TerrainSample surface)
+    {
+        if (eastM >= IronBellRoadMinimumEastM
+            && eastM <= IronBellRoadMaximumEastM
+            && northM >= IronBellRoadMinimumNorthM
+            && northM <= IronBellRoadMaximumNorthM) {
+            double heightM;
+            double eastSlope;
+            if (eastM < IronBellDeckMinimumEastM) {
+                double spanM = IronBellDeckMinimumEastM - IronBellRoadMinimumEastM;
+                double blend = (eastM - IronBellRoadMinimumEastM) / spanM;
+                heightM = IronBellWestRoadElevationM
+                    + (IronBellDeckRoadElevationM - IronBellWestRoadElevationM) * blend;
+                eastSlope = (IronBellDeckRoadElevationM - IronBellWestRoadElevationM) / spanM;
+            } else if (eastM <= IronBellDeckMaximumEastM) {
+                heightM = IronBellDeckRoadElevationM;
+                eastSlope = 0.0;
+            } else {
+                double spanM = IronBellRoadMaximumEastM - IronBellDeckMaximumEastM;
+                double blend = (eastM - IronBellDeckMaximumEastM) / spanM;
+                heightM = IronBellDeckRoadElevationM
+                    + (IronBellEastRoadElevationM - IronBellDeckRoadElevationM) * blend;
+                eastSlope = (IronBellEastRoadElevationM - IronBellDeckRoadElevationM) / spanM;
+            }
+            surface = new TerrainSample(
+                heightM,
+                new Vec3D(-eastSlope, 1.0, 0.0).Normalized(),
+                TerrainSurfaceKind.Land);
+            return true;
+        }
+
+        if (!_terrain.TrySample(eastM, northM, out surface))
+            return false;
+        return surface.Kind != TerrainSurfaceKind.Water;
     }
 
     void PushEvent(
@@ -959,12 +1098,20 @@ public sealed class CobraGroundWarRuntime
             if (!terrain.TrySample(landmark.EastM, landmark.NorthM, out TerrainSample surface))
                 throw new InvalidOperationException($"Site '{landmarkId}' has no terrain.");
             string siteId = landmarkId.Replace("landmark.cobra-canyon.", "site.", StringComparison.Ordinal);
+            bool ironBell = string.Equals(
+                siteId, IronBellSiteId, StringComparison.Ordinal);
+            // The landmark sits at the bridge centre, while ordinary terrain at that X/Z is the
+            // river floor. Publish the actual roadway elevation so the objective marker and
+            // capture authority live on the crossing rather than 52 metres beneath it.
+            double siteElevationM = ironBell
+                ? IronBellDeckRoadElevationM
+                : surface.HeightM;
             sites.Add(new ContestedSite(
                 siteId,
                 landmark.Id,
                 landmark.Label,
-                new Vec3D(landmark.EastM, surface.HeightM, landmark.NorthM),
-                captureRadiusM: 220.0));
+                new Vec3D(landmark.EastM, siteElevationM, landmark.NorthM),
+                captureRadiusM: ironBell ? IronBellCaptureRadiusM : 220.0));
             sites[^1].SetInitialOwner(InitialOwnerFor(siteId));
         }
         return sites;

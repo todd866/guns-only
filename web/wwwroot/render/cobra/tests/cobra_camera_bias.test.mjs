@@ -155,14 +155,23 @@ test("clear LOS resets the grace and a stale pre-acquisition snapshot cannot bre
 
 test("padlock look-at owns the eye; forward view stays nose-forward", () => {
   const forward = { x: 1, y: 2, z: 3 };
-  const unit = { x_m: 100, y_m: 40, z_m: -50 };
+  const unit = { x_m: 100, y_m: 40, aim_y_m: 42.2, z_m: -50 };
   assert.deepEqual(
     resolveAuthorityLookAtPoint({ padlockActive: false, selectedUnit: unit, forwardLook: forward }),
     { x: 1, y: 2, z: 3, mode: "forward" },
   );
   assert.deepEqual(
     resolveAuthorityLookAtPoint({ padlockActive: true, selectedUnit: unit, forwardLook: forward }),
-    { x: 100, y: 41.2, z: 50, mode: "padlock" },
+    { x: 100, y: 42.2, z: 50, mode: "padlock" },
+  );
+  assert.equal(
+    resolveAuthorityLookAtPoint({
+      padlockActive: true,
+      selectedUnit: { x_m: 0, y_m: 40, z_m: 0 },
+      forwardLook: forward,
+    }).y,
+    41.2,
+    "legacy snapshots retain the old presentation-only fallback",
   );
   assert.equal(
     resolveAuthorityLookAtPoint({ padlockActive: true, selectedUnit: null, forwardLook: forward }).mode,

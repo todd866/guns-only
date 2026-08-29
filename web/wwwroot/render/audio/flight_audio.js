@@ -1,6 +1,6 @@
-// Presentation audio façade: one AudioContext, one master, one compressor bus.
-// Engine, buffet, airframe cues, gun reports, and GCAS all share mute. Fail-silent — never
-// throw into the flight kernel. Prefer this over updateEngineAudio in production.
+// Presentation audio façade: one AudioContext, one master, explicit priority lanes, and one
+// transparent safety compressor. Engine, buffet, airframe cues, gun reports, radio, and GCAS all
+// share mute. Fail-silent — never throw into the vehicle kernel.
 
 import {
   attachJetSampleBeds,
@@ -22,11 +22,15 @@ import {
   updateTurbopropAudioVoices,
 } from "./turboprop_audio.js";
 import {
+  createMotorcycleAudioVoices,
+  updateMotorcycleAudioVoices,
+} from "./motorcycle_audio.js";
+import {
   COBRA_COCKPIT_SAMPLE_BED,
   F14_COCKPIT_SAMPLE_BED,
   FIRE_BOSS_COCKPIT_SAMPLE_BED,
   ensureLoopingSampleBed,
-} from "./sample_bed.js?v=343";
+} from "./sample_bed.js?v=349";
 import { resolvePropulsionCharacter } from "./audio_character.js";
 import { standardAtmosphereState } from "./atmosphere_audio.js";
 import {
@@ -50,10 +54,17 @@ let context = null;
 let master = null;
 let bus = null;
 let propulsionDuck = null;
+let actionDuck = null;
+let eventBus = null;
+let contactBus = null;
+let worldDuck = null;
+let warningBus = null;
+let radioBus = null;
 let engineVoices = null;
 let cobraVoices = null;
 let f14Voices = null;
 let turbopropVoices = null;
+let motorcycleVoices = null;
 let eventVoices = null;
 let contactVoices = null;
 let formationContactVoices = [];
@@ -85,6 +96,23 @@ const sampleBedFailedAtMs = new Map();
 const MPS_TO_KNOTS = 1.9438444924406;
 const KNOTS_TO_MPS = 0.5144444444444;
 const SEA_LEVEL_DENSITY = 1.225;
+
+// One authored mix contract. Continuous lanes are trimmed before the safety stage so the final
+// compressor catches exceptional sums instead of pumping on ordinary engine flight. Gunfire gets
+// a bounded propulsion dip and can therefore read as a transient without being boosted until the
+// whole mix folds over.
+export const FLIGHT_MIX_PROFILE = Object.freeze({
+  compressorThresholdDb: -8,
+  compressorKneeDb: 8,
+  compressorRatio: 2.25,
+  compressorAttackSeconds: 0.012,
+  compressorReleaseSeconds: 0.12,
+  eventTrim: 0.9,
+  contactTrim: 0.82,
+  warningTrim: 0.88,
+  radioTrim: 1,
+  gunPropulsionDuck: 0.62,
+});
 
 function contextNeedsUserResume(audioContext) {
   return audioContext?.state === "suspended" || audioContext?.state === "interrupted";
@@ -276,12 +304,20 @@ function build() {
   master.connect(context.destination);
 
   const compressor = context.createDynamicsCompressor();
-  compressor.threshold.value = -18;
-  compressor.knee.value = 12;
-  compressor.ratio.value = 4.5;
-  compressor.attack.value = 0.005;
-  compressor.release.value = 0.18;
-  compressor.connect(master);
+  compressor.threshold.value = FLIGHT_MIX_PROFILE.compressorThresholdDb;
+  compressor.knee.value = FLIGHT_MIX_PROFILE.compressorKneeDb;
+  compressor.ratio.value = FLIGHT_MIX_PROFILE.compressorRatio;
+  compressor.attack.value = FLIGHT_MIX_PROFILE.compressorAttackSeconds;
+  compressor.release.value = FLIGHT_MIX_PROFILE.compressorReleaseSeconds;
+  const subsonicCut = context.createBiquadFilter();
+  subsonicCut.type = "highpass";
+  subsonicCut.frequency.value = 24;
+  subsonicCut.Q.value = 0.58;
+  const fatigueShelf = context.createBiquadFilter();
+  fatigueShelf.type = "highshelf";
+  fatigueShelf.frequency.value = 4_200;
+  fatigueShelf.gain.value = -1.4;
+  compressor.connect(subsonicCut).connect(fatigueShelf).connect(master);
   bus = compressor;
 
   // One multiplicative propulsion duck sits downstream of every aircraft-specific graph and
@@ -292,19 +328,39 @@ function build() {
     propulsionDuck.gain.setValueAtTime(1, context.currentTime);
   else
     propulsionDuck.gain.value = 1;
-  propulsionDuck.connect(bus);
+  actionDuck = context.createGain();
+  if (typeof actionDuck.gain.setValueAtTime === "function")
+    actionDuck.gain.setValueAtTime(1, context.currentTime);
+  else
+    actionDuck.gain.value = 1;
+  propulsionDuck.connect(actionDuck).connect(bus);
+
+  eventBus = context.createGain();
+  eventBus.gain.value = FLIGHT_MIX_PROFILE.eventTrim;
+  eventBus.connect(bus);
+  contactBus = context.createGain();
+  contactBus.gain.value = FLIGHT_MIX_PROFILE.contactTrim;
+  worldDuck = context.createGain();
+  worldDuck.gain.value = 1;
+  contactBus.connect(worldDuck).connect(bus);
+  warningBus = context.createGain();
+  warningBus.gain.value = FLIGHT_MIX_PROFILE.warningTrim;
+  warningBus.connect(bus);
+  radioBus = context.createGain();
+  radioBus.gain.value = FLIGHT_MIX_PROFILE.radioTrim;
+  radioBus.connect(bus);
 
   // Keep propulsion behind its authored trim before it reaches the shared compressor. Sample
   // beds otherwise hit the limiter directly and flatten the RPM/power/G distinctions.
   engineVoices = createEngineVoices(context, propulsionDuck, { includeMaster: true });
-  eventVoices = createEventVoices(context, bus);
-  contactVoices = createContactAcousticVoices(context, bus);
+  eventVoices = createEventVoices(context, eventBus);
+  contactVoices = createContactAcousticVoices(context, contactBus);
   // The authoritative target graph follows whichever formation slot owns the gun solution.
   // Three bounded supplemental graphs keep the other published w1..w3 aircraft audible without
   // constructing Web Audio nodes in the render loop.
   formationContactVoices = Array.from(
     { length: 3 },
-    () => createContactAcousticVoices(context, bus),
+    () => createContactAcousticVoices(context, contactBus),
   );
   formationContactTracks = formationContactVoices.map(() => ({
     identity: "",
@@ -312,9 +368,10 @@ function build() {
     closureKts: 0,
     at: null,
   }));
-  warningVoices = createWarningVoices(context, bus);
-  radioVoice = createRadioVoice(context, bus, {
+  warningVoices = createWarningVoices(context, warningBus);
+  radioVoice = createRadioVoice(context, radioBus, {
     propulsionDuck,
+    worldDuck,
   });
   installFlightAudioLifecycle();
   publishFlightAudioRuntimeState();
@@ -826,18 +883,44 @@ export function flightPropulsionGraphGates(state, live) {
   const cobraActive = propulsionCharacter === "cobra";
   const f14Active = propulsionCharacter === "f14";
   const turbopropActive = propulsionCharacter === "turboprop";
+  const motorcycleActive = propulsionCharacter === "motorcycle";
   const audibleFrame = live === true;
   return Object.freeze({
     propulsionCharacter,
     cobraActive,
     f14Active,
     turbopropActive,
-    jetMuted: !audibleFrame || cobraActive || f14Active || turbopropActive,
+    motorcycleActive,
+    jetMuted: !audibleFrame
+      || cobraActive || f14Active || turbopropActive || motorcycleActive,
     cobraMuted: !audibleFrame || !cobraActive,
     f14Muted: !audibleFrame || !f14Active,
     turbopropMuted: !audibleFrame || !turbopropActive,
+    motorcycleMuted: !audibleFrame || !motorcycleActive,
     radioEngine: cobraActive ? "cobra" : f14Active ? "f14"
-      : turbopropActive ? "turboprop" : "jet",
+      : turbopropActive ? "turboprop" : motorcycleActive ? "motorcycle" : "jet",
+  });
+}
+
+/** Pure salience plan for the shared weapon path and its bounded propulsion duck. */
+export function flightAudioPriorityPlan(state, {
+  live = false,
+  triggerHeld = false,
+} = {}) {
+  const character = resolvePropulsionCharacter(state);
+  const dedicatedGunGraph = character === "cobra";
+  const nonCombatVehicle = character === "motorcycle" || character === "turboprop";
+  const sharedGunEnabled = live === true && !dedicatedGunGraph && !nonCombatVehicle;
+  const sharedGunFiring = sharedGunEnabled
+    && triggerHeld === true
+    && state?.gun_firing === true
+    && state?.gun_overheat !== true;
+  return Object.freeze({
+    sharedGunEnabled,
+    sharedGunFiring,
+    propulsionMultiplier: sharedGunFiring
+      ? FLIGHT_MIX_PROFILE.gunPropulsionDuck
+      : 1,
   });
 }
 
@@ -869,7 +952,13 @@ function updateFlightAudioLocal(state, {
     const audioState = projectFlightAudioState(state);
     const live = enabled && !muted && !backgrounded;
     const propulsionGates = flightPropulsionGraphGates(audioState, live);
-    const { cobraActive, f14Active, turbopropActive } = propulsionGates;
+    const priority = flightAudioPriorityPlan(audioState, { live, triggerHeld });
+    const {
+      cobraActive,
+      f14Active,
+      turbopropActive,
+      motorcycleActive,
+    } = propulsionGates;
     // Cobra owns a small dedicated rotorcraft graph, allocated only on its first live frame.
     // It still feeds the same compressor/master and therefore inherits preference mute,
     // lifecycle suspension, and ?audioQa=silent without a second AudioContext or output path.
@@ -881,6 +970,8 @@ function updateFlightAudioLocal(state, {
       f14Voices = createF14AudioVoices(context, propulsionDuck);
     if (turbopropActive && !turbopropVoices)
       turbopropVoices = createTurbopropAudioVoices(context, propulsionDuck);
+    if (motorcycleActive && !motorcycleVoices)
+      motorcycleVoices = createMotorcycleAudioVoices(context, propulsionDuck);
     ensureDedicatedAircraftSampleBed(cobraActive, cobraVoices, COBRA_COCKPIT_SAMPLE_BED);
     ensureDedicatedAircraftSampleBed(f14Active, f14Voices, F14_COCKPIT_SAMPLE_BED);
     ensureDedicatedAircraftSampleBed(
@@ -890,6 +981,14 @@ function updateFlightAudioLocal(state, {
     );
     ensureJetSamples(audioState);
     synchronizeCombatLifecycle(audioState);
+
+    // Radio and high-salience actions own separate multiplicative VCAs. Their gains can overlap
+    // without either async transmission completion or the render frame overwriting the other.
+    actionDuck.gain.setTargetAtTime(
+      priority.propulsionMultiplier,
+      context.currentTime,
+      priority.sharedGunFiring ? 0.012 : 0.18,
+    );
 
     lastAudibleTarget = live;
     // Collapse continuous gains on mute/pause (view loop still ticks while paused).
@@ -913,6 +1012,11 @@ function updateFlightAudioLocal(state, {
         muted: propulsionGates.turbopropMuted,
       });
     }
+    if (motorcycleVoices) {
+      updateMotorcycleAudioVoices(motorcycleVoices, context, audioState, {
+        muted: propulsionGates.motorcycleMuted,
+      });
+    }
     updateBuffetVoice(eventVoices, context, audioState, { enabled: live });
     updateAirframeCueVoices(eventVoices, context, audioState, { enabled: live });
     updateConfigurationVoices(eventVoices, context, audioState, { enabled: live });
@@ -927,7 +1031,10 @@ function updateFlightAudioLocal(state, {
     updateRcsVoice(eventVoices, context, audioState, { enabled: live });
     updateTrapVoice(eventVoices, context, audioState, { enabled: live });
     updateCombatCueVoices(eventVoices, context, audioState, { enabled: live });
-    fireGunReports(eventVoices, context, audioState, { enabled: live, triggerHeld });
+    fireGunReports(eventVoices, context, audioState, {
+      enabled: priority.sharedGunEnabled,
+      triggerHeld,
+    });
     updateWarningVoices(warningVoices, context, audioState, {
       enabled: live,
       nowSeconds,

@@ -7,23 +7,23 @@
 const CAUSE_COPY = Object.freeze({
   "hard-impact": Object.freeze({
     title: "HARD IMPACT",
-    detail: "Sink rate exceeded the gear's limits.",
+    detail: "Sink rate exceeded gear limits.",
   }),
   rollover: Object.freeze({
     title: "ROLLOVER",
-    detail: "Banked, drifting contact dug in a skid.",
+    detail: "Banked, drifting touchdown caught a skid.",
   }),
   "spin-contact": Object.freeze({
     title: "SPIN CONTACT",
-    detail: "Touched down still yawing.",
+    detail: "Yaw remained at touchdown.",
   }),
   "rotor-strike": Object.freeze({
     title: "ROTOR STRIKE",
-    detail: "The main rotor met the ground.",
+    detail: "Main rotor struck terrain.",
   }),
   "water-contact": Object.freeze({
     title: "INTO THE RIVER",
-    detail: "Skid helicopters do not land on water.",
+    detail: "Water contact destroyed the aircraft.",
   }),
 });
 
@@ -38,8 +38,8 @@ export function cobraTerminalCauseCopy(cause) {
 
 const MISSION_STATUS_COPY = Object.freeze({
   "fob-combat-ineffective": Object.freeze({
-    title: "FOB COMBAT INEFFECTIVE",
-    detail: "Every Cobra on the ramp is bent or gone. Camp Ember has nothing left to fly.",
+    title: "NO COBRAS LEFT",
+    detail: "Camp Ember has no serviceable aircraft.",
   }),
 });
 

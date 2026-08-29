@@ -20,7 +20,8 @@ test("Hold the Bridge mounts Cobra flight/crew truth on the production combiner"
   assert.doesNotMatch(html, /id="hud-gunner"/);
   assert.match(main, /createHud\(/);
   assert.match(main, /updateFlightAudio/);
-  assert.match(main, /hud\.setAudioEnabled\(true\)/);
+  assert.match(main, /hud\.setAudioEnabled\(playerSettings\.audio\)/,
+    "Cobra must honor the persisted audio setting before gesture arming");
   assert.match(main, /armAudioFromGesture/);
   assert.match(main, /drawCobraRotorcraftHud/);
   assert.match(css, /body\[data-shell="play"\] \.play-chrome \{[\s\S]*?display: none/);
@@ -86,6 +87,18 @@ test("ground war presentation receives the selected target for the in-world high
   assert.match(main, /targetId \|\| null/);
 });
 
+test("combat stays unobstructed while lift teaching and the controls reference remain", async () => {
+  const main = await source("cobra-lab/main.js");
+  const onboarding = main.match(
+    /onboarding = createControlsOnboarding\(\{[\s\S]*?\n      \}\);/,
+  )?.[0] ?? "";
+  assert.match(onboarding, /id: "lift"[\s\S]*?HOLD W — COLLECTIVE UP/);
+  assert.doesNotMatch(onboarding, /id: "engage"|TAB TO TARGET|HOLD F TO ENGAGE/,
+    "combat guidance must not cover the pilot's sight picture");
+  assert.match(main, /\["controls-onboarding-reopen", "controls-onboarding-nudge"\]/,
+    "the persistent H-opened controls reference must remain mounted");
+});
+
 test("V and Tab share the F-22 padlock / gun-target split", async () => {
   const [main, bridge] = await Promise.all([
     source("cobra-lab/main.js"),
@@ -103,6 +116,13 @@ test("V and Tab share the F-22 padlock / gun-target split", async () => {
   assert.match(bridge, /CanAcquireVisualLockTarget\(targetId\)/);
   assert.match(bridge, /_selectedTargetId = targetId/,
     "the acquired visual-lock entity must be the AI gunner's selected entity");
+  assert.match(
+    bridge,
+    /_gunnerSightHasLineOfSight\s*=\s*CobraGunTargeting\.EvaluateLineOfSight\([\s\S]{0,320}?CobraGunTargeting\.AimPoint\(unit\.PositionWorldM\)\)/,
+    "the production 10 Hz sight cache must use the same published aim point as acquisition and servo",
+  );
+  assert.match(bridge, /aim_y_m\s*=\s*targetAimPoint\.Y/,
+    "the authority aim height must reach padlock and HUD presentation without JS duplication");
 });
 
 test("forward authority camera is body-aligned with no hidden sight bias", async () => {
@@ -117,20 +137,25 @@ test("target list rebuilds only when the living set changes and never invents a 
   const main = await source("cobra-lab/main.js");
   assert.match(main, /aliveKey/);
   assert.doesNotMatch(main, /gunnery-seam\.000/);
-  assert.match(main, /distanceToPlayer\(a\) - distanceToPlayer\(b\)/);
+  assert.match(main, /hostileTargetIds = cobraPrioritizedHostileTargetIds\(/,
+    "the live Tab list must use objective-lock priority, not raw range sorting");
   assert.match(main, /targetSelect\.value = hostileTargetIds\[0\];[\s\S]*?bridge\?\.SetGunnerTarget\(targetSelect\.value\)/,
     "post-kill continuity selection must reach the AI gunner immediately");
 });
 
-test("bingo ammo raises a rearm cue before the magazine is dry", async () => {
-  const [main, objective] = await Promise.all([
+test("bingo ammo stays on the combiner without replacing the combat order", async () => {
+  const [main, objective, rotorcraftHud] = await Promise.all([
     source("cobra-lab/main.js"),
     source("render/cobra/cobra_objective_copy.js"),
+    source("render/cobra/cobra_rotorcraft_hud.js"),
   ]);
-  // Ember Run owns bingo copy in the objective strip helper; main still reads ammo_bingo.
+  // The objective ladder retains its fallback rearm order, while the always-painted crew line
+  // keeps BINGO visible during a live point fight without displacing that fight's order.
   assert.match(objective, /BINGO AMMO/);
   assert.match(main, /ammo_bingo/);
   assert.match(main, /cobraObjectiveCopy/);
+  assert.match(rotorcraftHud, /AMMO BINGO/);
+  assert.match(rotorcraftHud, /ammoBingo/);
 });
 
 test("vestigial freelook cannot fight the authority camera once the bridge owns it", async () => {
@@ -156,10 +181,33 @@ test("strike terminal states present a cause card, not the generic sortie-ended 
 });
 
 test("every terminal card announces and wires the R restart affordance", async () => {
-  const main = await source("cobra-lab/main.js");
-  const debriefFn = main.match(/function showMissionDebrief\([\s\S]*?\n\}/)?.[0] ?? "";
-  assert.match(debriefFn, /R restarts/);
+  const [main, html] = await Promise.all([
+    source("cobra-lab/main.js"), source("cobra-lab/index.html"),
+  ]);
+  assert.match(html, /id="debrief-restart"[^>]*aria-keyshortcuts="R"[^>]*>Retry</u);
+  assert.doesNotMatch(html, /debrief-hint/u);
   assert.match(main, /KeyR[\s\S]{0,200}?missionTerminal[\s\S]{0,120}?restartRoute\(\)/);
+});
+
+test("Cobra result follows the shared evidence, correction, and action hierarchy", async () => {
+  const [main, html] = await Promise.all([
+    source("cobra-lab/main.js"), source("cobra-lab/index.html"),
+  ]);
+  assert.match(html, /debrief-kicker[\s\S]*debrief-title[\s\S]*debrief-body[\s\S]*debrief-facts[\s\S]*debrief-correction[\s\S]*debrief-restart[\s\S]*debrief-exit/u);
+  assert.match(html, />Rounds<[\s\S]*id="debrief-rounds"/u);
+  assert.match(html, />Friendly kills<[\s\S]*id="debrief-friendly-kills"/u);
+  assert.match(html, />Battle time<[\s\S]*id="debrief-battle-time"/u);
+  assert.doesNotMatch(html, />Airborne time</iu);
+  assert.match(main, /cobraDebriefPresentation/u);
+  assert.match(main, /cobraNextSortieCorrection/u);
+  const debriefFn = main.match(/function showMissionDebrief\([\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(debriefFn, /setOptionalDebriefFact\(\s*debriefKills/u);
+  assert.match(debriefFn, /setOptionalDebriefFact\(\s*debriefRounds/u);
+  assert.match(debriefFn, /setOptionalDebriefFact\(\s*debriefBattleTime/u);
+  const groundFireFn = main.match(
+    /function groundFireDebriefDetail\(battleDamage\) \{[\s\S]*?\n\}/,
+  )?.[0] ?? "";
+  assert.doesNotMatch(groundFireFn, /observer_id|active_observer_id/u);
 });
 
 test("route restart clears the terminal banner back to the online status", async () => {

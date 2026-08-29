@@ -92,6 +92,7 @@ node --check web/smoke/remote-route-smoke.mjs
 node --check web/smoke/production-routes.mjs
 node --check web/smoke/prewarm-origin.mjs
 node --check web/smoke/cobra_authority.mjs
+run_node_tests web/smoke/production-routes.test.mjs
 # The AH-1G crew chain (designation -> consent -> rounds away) is syntax-checked here but NOT
 # executed by the gate: it needs a hostile the turret can physically reach, which Hold the Bridge
 # only offers for the first ~20 s of mission time. Run it by hand against a published wwwroot --
@@ -108,6 +109,19 @@ content_tests=$(find tools/content -type f -name '*.test.mjs' -print | sort)
 run_node_tests $content_tests
 run_node_tests tools/telemetry/test/*.test.mjs
 run_node_tests tools/perf/*.test.mjs
+# Visual-gate scoring modules. Until 2026-08-23 NONE of these were run by this gate: the look
+# gate's tests existed but were never invoked, and tools/cobra-scenery-gate had never had its
+# dependencies installed at all. The gates that judge the pictures must themselves be judged.
+# This runs the scorers' unit tests only -- capturing frames needs a browser and a published
+# wwwroot, and lives in bin/look.
+for gate_dir in tools/look-gate tools/cobra-scenery-gate; do
+  (cd "$gate_dir" && npm ci --ignore-scripts --no-audit --no-fund --silent)
+done
+visual_gate_tests=$(find tools/look-gate/tests tools/cobra-scenery-gate/tests -type f -name '*.test.mjs' -print | sort)
+run_node_tests $visual_gate_tests
+# Say out loud what this gate did NOT do. These are the scorers' unit tests; no frame was
+# rendered or looked at here. Silence at this point is how a visual gate gets forgotten.
+echo "check: visual gate scorers tested; NO frames scored -- run bin/look for the pictures themselves"
 # Authored narrative sequences are a content contract with a schema and a validator; run it here
 # or the contract only holds for as long as someone remembers to run it by hand.
 narrative_tests=$(find docs/art-direction -type f -name '*.test.mjs' -print | sort)

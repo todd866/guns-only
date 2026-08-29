@@ -1,9 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  COBRA_BATTLEFIELD_PRESENTATION_PROFILE,
   COBRA_GROUND_WAR_COLORS,
   COBRA_GROUND_WAR_PRESENTATION_SCHEMA,
   COBRA_TARGET_DESIGNATION_PROFILE,
+  cobraThreatTracerBurstPlan,
   createCobraGroundWarPresentation,
 } from "../cobra_ground_war.js";
 
@@ -292,9 +294,9 @@ test("selected target designation clears vegetation instead of painting a filled
   presentation.dispose();
 });
 
-test("hostiles use hotter paint and role-distinct silhouettes", () => {
-  assert.ok(COBRA_GROUND_WAR_COLORS.hostile > 0xe00000,
-    "hostile red must stay hot enough to read under monsoon haze");
+test("units use physical body paint, hot faction cues, and role-distinct silhouettes", () => {
+  assert.ok(COBRA_GROUND_WAR_COLORS.hostileCue > 0xe00000,
+    "the hostile cue must stay hot enough to read under monsoon haze");
   const presentation = createCobraGroundWarPresentation(fakeThree());
   presentation.sync({
     control: -0.4,
@@ -370,6 +372,8 @@ test("hostiles use hotter paint and role-distinct silhouettes", () => {
   const hostileMat = infantry.children[0].material;
   assert.equal(hostileMat.color.hex, COBRA_GROUND_WAR_COLORS.hostile);
   assert.equal(hostileMat.emissive.hex, COBRA_GROUND_WAR_COLORS.hostileEmissive);
+  assert.notEqual(hostileMat.color.hex, COBRA_GROUND_WAR_COLORS.hostileCue,
+    "literal troops should use physical earth paint instead of toy-red whole bodies");
   presentation.dispose();
 });
 
@@ -408,6 +412,12 @@ test("Camp Ember FOB site never gets the translucent control disc", () => {
     siteRoot.children.some((mesh) => String(mesh.name).includes("iron-bell")),
     true,
   );
+  const bridgeSite = findByName(presentation.group,
+    "GROUND_SITE_site.iron-bell-bridge.v1");
+  assert.equal(findByName(bridgeSite,
+    "GROUND_SITE_CONTROL_RING_site.iron-bell-bridge.v1")?.geometry?.constructor?.name,
+  "RingGeometry",
+  "a control point should be an open ground-contact ring, not a filled gameplay puck");
   presentation.dispose();
 });
 
@@ -435,8 +445,40 @@ test("ground battle tracers travel from an authoritative shooter to its authorit
   assert.ok(tracer);
   assert.deepEqual(tracer.userData.source, { x: 10, y: 101.25, z: 20 });
   assert.deepEqual(tracer.userData.target, { x: 70, y: 104, z: -35 });
-  assert.equal(tracer.geometry.attributes.position.array.length, 24,
-    "rifle fire must read as dashes across the actual engagement, not a vertical pole");
+  assert.equal(
+    tracer.geometry.attributes.position.array.length,
+    COBRA_BATTLEFIELD_PRESENTATION_PROFILE.groundTracerDashCount
+      * COBRA_BATTLEFIELD_PRESENTATION_PROFILE.tracerVerticesPerDash * 3,
+    "rifle fire must read as thick crossed ribbons across the actual engagement",
+  );
+  assert.ok(tracer.userData.ribbonWidthM >= 0.5,
+    "the tracer must not collapse to a hardware-limited one-pixel line");
+  assert.equal(
+    tracer.userData.ribbonWidthM,
+    COBRA_BATTLEFIELD_PRESENTATION_PROFILE.groundTracerGlowWidthM,
+  );
+  assert.ok(tracer.userData.burstLengthM >= 8,
+    "the exact exchange needs enough luminous persistence to read from the cockpit");
+  const tracerCore = findByName(presentation.group,
+    "COBRA_BATTLE_CORE_TRACER_42_ground.friendly.infantry.001");
+  assert.ok(tracerCore, "a bright core must ride inside the broad translucent tracer sheath");
+  assert.equal(tracerCore.material.color.hex, 0xe3ffb0,
+    "friendly fire keeps a pale green-white core instead of becoming a neutral road reflector");
+  assert.ok(tracerCore.userData.ribbonWidthM < tracer.userData.ribbonWidthM);
+  assert.equal(
+    tracerCore.userData.ribbonWidthM,
+    COBRA_BATTLEFIELD_PRESENTATION_PROFILE.groundTracerCoreWidthM,
+  );
+  assert.ok(findByName(presentation.group,
+    "COBRA_BATTLE_MUZZLE_FLASH_42_ground.friendly.infantry.001"),
+  "an authoritative small-arms event must light its exact shooter position");
+  const rifleSmoke = findByName(presentation.group, "COBRA_BATTLE_MUZZLE_SMOKE_42_0");
+  assert.ok(rifleSmoke,
+    "an exact firing event should read as flash plus powder smoke, not a floating orange ball");
+  assert.ok(rifleSmoke.position.y <= 1,
+    "rifle powder should hug the muzzle instead of becoming a tall beige chimney");
+  assert.equal(findByName(presentation.group, "COBRA_BATTLE_MUZZLE_SMOKE_42_1"), null,
+    "rifle fire should use one low puff; multi-lobe smoke is reserved for heavy weapons");
   const effectRoot = findByName(presentation.group, "COBRA_GROUND_WAR_EFFECTS");
   assert.equal(effectRoot.children.filter((child) => child.name === tracer.name).length, 1,
     "a retained event snapshot must not replay the same burst");
@@ -458,7 +500,7 @@ test("friendly air-mobile insertion paints a persistent landing-zone smoke cue o
   presentation.sync({ sites: [], units: [], events: [event] });
   const smoke = findByName(presentation.group, "COBRA_LIFT_INSERTION_SMOKE_77");
   assert.ok(smoke, "the player needs to see where the supported squad just landed");
-  assert.equal(smoke.material.color.hex, COBRA_GROUND_WAR_COLORS.friendly);
+  assert.equal(smoke.material.color.hex, COBRA_GROUND_WAR_COLORS.insertionSmoke);
   presentation.dispose();
 });
 
@@ -478,7 +520,23 @@ test("tracking authority alone produces no ground-fire visual", () => {
   presentation.dispose();
 });
 
-test("a new authority burst draws one occludable muzzle flash and warm dashed tracer", () => {
+test("DShK packet plan leaves kilometer-range authority rails visually empty", () => {
+  const rangeM = 4_000;
+  const packet = cobraThreatTracerBurstPlan(rangeM);
+  const profile = COBRA_BATTLEFIELD_PRESENTATION_PROFILE;
+  const nominalPacketLengthM = profile.threatTracerDashCount
+    * profile.threatTracerNominalDashLengthM
+    + (profile.threatTracerDashCount - 1) * profile.threatTracerNominalGapM;
+  assert.equal(packet.dashLayout.length, profile.threatTracerDashCount);
+  assert.ok(Math.abs(packet.packetLengthM - nominalPacketLengthM) < 1e-9);
+  assert.ok(packet.packetLengthM < 100,
+    "a four-kilometre shot should show tens of metres of tracer, not kilometres of ribbon");
+  assert.ok(packet.dashLayout.at(-1).end - packet.dashLayout[0].start < 0.03,
+    "the visible packet must occupy under three percent of a tactical-range shot");
+  assert.equal(packet.travelFraction, profile.threatTracerTravelFraction);
+});
+
+test("a new authority burst draws one occludable muzzle flash and a compact moving packet", () => {
   const presentation = createCobraGroundWarPresentation(fakeThree());
   const burst = threatBurst();
   const damage = battleDamageWith(burst);
@@ -497,18 +555,65 @@ test("a new authority burst draws one occludable muzzle flash and warm dashed tr
     { x: burst.source_x_m, y: burst.source_y_m, z: -burst.source_z_m });
   assert.deepEqual(tracers[0].userData.aim,
     { x: burst.impact_x_m, y: burst.impact_y_m, z: -burst.impact_z_m });
+  const source = tracers[0].userData.source;
+  const aim = tracers[0].userData.aim;
+  const delta = {
+    x: aim.x - source.x,
+    y: aim.y - source.y,
+    z: aim.z - source.z,
+  };
+  const rangeM = Math.hypot(delta.x, delta.y, delta.z);
+  const packet = cobraThreatTracerBurstPlan(rangeM);
+  assert.deepEqual(tracers[0].userData.dashLayout, packet.dashLayout);
+  assert.ok(
+    tracers[0].userData.packetLengthM
+      <= rangeM * COBRA_BATTLEFIELD_PRESENTATION_PROFILE.threatTracerMaxPacketFraction + 1e-9,
+    "DShK streaks must occupy a short packet, never stripe the complete authority line",
+  );
+  assert.ok(tracers[0].userData.packetLengthM < rangeM * 0.25);
+  assert.deepEqual(tracers[0].userData.travel, {
+    x: delta.x * packet.travelFraction,
+    y: delta.y * packet.travelFraction,
+    z: delta.z * packet.travelFraction,
+  }, "packet motion must stay on the exact authoritative source-to-aim vector");
   const tracerPositions = tracers[0].geometry.attributes.position.array;
-  assert.ok(tracerPositions.length > 6,
-    "burst must read as separated tracer dashes, not a continuous laser");
-  assert.deepEqual(Array.from(tracerPositions.slice(0, 3)),
-    [burst.source_x_m, burst.source_y_m, -burst.source_z_m]);
-  assert.deepEqual(Array.from(tracerPositions.slice(-3)),
-    [burst.impact_x_m, burst.impact_y_m, -burst.impact_z_m]);
+  assert.equal(
+    tracerPositions.length,
+    COBRA_BATTLEFIELD_PRESENTATION_PROFILE.threatTracerDashCount
+      * COBRA_BATTLEFIELD_PRESENTATION_PROFILE.tracerVerticesPerDash * 3,
+    "burst must remain a small set of thick streaks rather than a dotted valley ruler",
+  );
+  assert.equal(
+    tracers[0].userData.ribbonWidthM,
+    COBRA_BATTLEFIELD_PRESENTATION_PROFILE.threatTracerGlowWidthM,
+  );
+  assert.ok(tracers[0].userData.ribbonWidthM >= 0.7,
+    "DShK fire must remain wider than hardware-limited LineBasicMaterial output");
   for (const effect of [...muzzle, ...tracers]) {
     assert.equal(effect.material.depthTest, true, "ground fire must disappear behind terrain");
     assert.equal(effect.material.depthWrite, false, "transient fire must not write an x-ray depth seam");
     assert.equal(effect.material.toneMapped, false, "warm burst color must survive scene grading");
   }
+
+  const beforeMove = { ...tracers[0].position };
+  const movedAt = performance.now();
+  tracers[0].userData.bornAt = movedAt
+    - COBRA_BATTLEFIELD_PRESENTATION_PROFILE.threatTracerLifetimeMs * 0.45;
+  tracers[0].userData.expiresAt = movedAt
+    + COBRA_BATTLEFIELD_PRESENTATION_PROFILE.threatTracerLifetimeMs * 0.55;
+  presentation.sync(EMPTY_GROUND_WAR, null, damage);
+  const movedM = Math.hypot(
+    tracers[0].position.x - beforeMove.x,
+    tracers[0].position.y - beforeMove.y,
+    tracers[0].position.z - beforeMove.z,
+  );
+  const fullTravelM = Math.hypot(
+    tracers[0].userData.travel.x,
+    tracers[0].userData.travel.y,
+    tracers[0].userData.travel.z,
+  );
+  assert.ok(movedM > fullTravelM * 0.4 && movedM < fullTravelM * 0.6,
+    "the compact packet must visibly advance along its authority rail over its lifetime");
 
   presentation.sync(EMPTY_GROUND_WAR, null, damage);
   assert.equal(namedThreatEffects(presentation, "COBRA_THREAT_MUZZLE_FLASH_").length, 1,

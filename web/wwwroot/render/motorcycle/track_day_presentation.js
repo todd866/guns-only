@@ -40,6 +40,56 @@ function offsetFromTrack(circuit, index, offsetM) {
   });
 }
 
+function sampleCircuitAtFraction(circuit, fraction) {
+  const clampedFraction = Math.max(0, Math.min(1, Number(fraction) || 0));
+  const segmentLengths = [];
+  let circuitLengthM = 0;
+  for (let index = 0; index < circuit.length - 1; index++) {
+    const start = circuit[index];
+    const end = circuit[index + 1];
+    const lengthM = Math.hypot(end.x - start.x, end.z - start.z);
+    segmentLengths.push(lengthM);
+    circuitLengthM += lengthM;
+  }
+
+  const targetM = circuitLengthM * clampedFraction;
+  let progressM = 0;
+  for (let index = 0; index < segmentLengths.length; index++) {
+    const lengthM = segmentLengths[index];
+    if (progressM + lengthM < targetM && index < segmentLengths.length - 1) {
+      progressM += lengthM;
+      continue;
+    }
+    const start = circuit[index];
+    const end = circuit[index + 1];
+    const interpolation = lengthM > 0 ? (targetM - progressM) / lengthM : 0;
+    const dx = end.x - start.x;
+    const dz = end.z - start.z;
+    const tangentLength = Math.hypot(dx, dz) || 1;
+    return Object.freeze({
+      center: Object.freeze({
+        x: start.x + dx * interpolation,
+        y: start.y + (end.y - start.y) * interpolation,
+        z: start.z + dz * interpolation,
+      }),
+      tangent: Object.freeze({ x: dx / tangentLength, z: dz / tangentLength }),
+    });
+  }
+
+  return Object.freeze({
+    center: circuit[0],
+    tangent: tangentAt(circuit, 0),
+  });
+}
+
+function offsetSample(sample, offsetM, forwardM = 0) {
+  return Object.freeze({
+    x: sample.center.x - sample.tangent.z * offsetM + sample.tangent.x * forwardM,
+    y: sample.center.y,
+    z: sample.center.z + sample.tangent.x * offsetM + sample.tangent.z * forwardM,
+  });
+}
+
 function freezeAssets(assets) {
   return Object.freeze(assets.map((asset) => Object.freeze(asset)));
 }
@@ -54,6 +104,7 @@ export function planRapierTrackDay(circuitInput, options = {}) {
   }
 
   const trackWidthM = Number(options.trackWidthM) || DEFAULT_TRACK_WIDTH_M;
+  const apronHalfWidthM = trackWidthM * 0.5 + 6;
   const uniqueCount = circuit.length - 1;
   const elevationM = Number(options.surfaceElevationM) || first.y;
 
@@ -69,9 +120,9 @@ export function planRapierTrackDay(circuitInput, options = {}) {
   // hairpin aprons, so hairpin-side cues are not squashed onto the 48 m strip.
   const pavedHalfLengthM = Math.max(
     RUNWAY_HALF_LENGTH_M,
-    Math.max(Math.abs(minimumX), Math.abs(maximumX)) + trackWidthM * 0.5,
+    Math.max(Math.abs(minimumX), Math.abs(maximumX)) + apronHalfWidthM,
   );
-  const pavedHalfWidthM = Math.max(RUNWAY_HALF_WIDTH_M, maximumAbsZ + trackWidthM * 0.5);
+  const pavedHalfWidthM = Math.max(RUNWAY_HALF_WIDTH_M, maximumAbsZ + apronHalfWidthM);
   const clampPaved = (point, insetM) =>
     clampPavedPoint(point, pavedHalfLengthM, pavedHalfWidthM, insetM);
 
@@ -108,16 +159,56 @@ export function planRapierTrackDay(circuitInput, options = {}) {
     }
   }
 
-  const marshalPosts = [0.25, 0.5, 0.75].map((fraction, sector) => {
-    const index = Math.min(uniqueCount - 1, Math.floor(uniqueCount * fraction));
+  // These fractions mirror PaintedCircuit.SectorGateProgressM. The presentation samples
+  // distance along the authored polyline rather than array index, so unequal tessellation at
+  // the hairpins cannot move a timing landmark away from its measured-lap gate.
+  const sectorGates = [0.25, 0.5, 0.75].map((fraction, sector) => {
+    const sample = sampleCircuitAtFraction(circuit, fraction);
+    const boardOffsetM = trackWidthM * 0.5 + 2.4;
+    const headingRad = Math.atan2(sample.tangent.x, sample.tangent.z);
+    return Object.freeze({
+      kind: "sector-gate",
+      sector: sector + 1,
+      fraction,
+      center: sample.center,
+      tangent: sample.tangent,
+      headingRad,
+      boards: freezeAssets([-1, 1].map((side) => ({
+        side,
+        // Three metres before the gate keeps the paired timing boards clear of the marshal post
+        // sitting on the gate itself while preserving an obvious checkpoint grouping.
+        center: clampPaved(offsetSample(sample, side * boardOffsetM, -3), 1.5),
+      }))),
+    });
+  });
+
+  const marshalPosts = sectorGates.map((gate, sector) => {
+    const sample = Object.freeze({ center: gate.center, tangent: gate.tangent });
     return {
       kind: "marshal-post",
       sector: sector + 1,
       center: clampPaved(
-        offsetFromTrack(circuit, index, (sector % 2 === 0 ? 1 : -1) * (trackWidthM * 0.5 + 2)),
+        offsetSample(sample, (sector % 2 === 0 ? 1 : -1) * (trackWidthM * 0.5 + 2)),
         1.5,
       ),
     };
+  });
+
+  // Four large, sparse arrows communicate the single lap direction without pretending to be
+  // dynamic racing-line authority. Each sits just beyond an authored timing gate so it reads
+  // on approach while leaving the start/checkpoint paint unobstructed.
+  const courseDirectionMarks = [0, 0.25, 0.5, 0.75].map((gateFraction, index) => {
+    const fraction = (gateFraction + 0.012) % 1;
+    const sample = sampleCircuitAtFraction(circuit, fraction);
+    return Object.freeze({
+      kind: "course-direction",
+      checkpoint: index === 0 ? "start-finish" : `sector-${index}`,
+      sector: index,
+      fraction,
+      center: sample.center,
+      tangent: sample.tangent,
+      headingRad: Math.atan2(sample.tangent.x, sample.tangent.z),
+    });
   });
 
   const startTangent = tangentAt(circuit, 0);
@@ -314,12 +405,14 @@ export function planRapierTrackDay(circuitInput, options = {}) {
     trackWidthM,
     elevationM,
     // Mirrors sim-side PaintedCircuit.PavedApronHalfWidthM (track half-width + 6 m shoulder).
-    apronHalfWidthM: trackWidthM * 0.5 + 6,
+    apronHalfWidthM,
     pavedHalfLengthM,
     pavedHalfWidthM,
     ground,
     circuit: Object.freeze(circuit),
     gantry,
+    sectorGates: Object.freeze(sectorGates),
+    courseDirectionMarks: Object.freeze(courseDirectionMarks),
     marshalPosts: freezeAssets(marshalPosts),
     cones: freezeAssets(cones),
     tyreWalls: freezeAssets(tyreWalls),
@@ -411,25 +504,39 @@ function buildEdgeGeometry(THREE, circuit, halfWidthM, stripWidthM, liftM) {
 
 function addStartFinish(THREE, root, plan) {
   const group = new THREE.Group();
+  group.name = "rapier-start-finish";
   group.position.copy(scenePoint(THREE, plan.gantry.center, 0.09));
   group.rotation.y = plan.gantry.headingRad;
-  const black = new THREE.MeshBasicMaterial({ color: 0x111513 });
-  const white = new THREE.MeshBasicMaterial({ color: 0xf1ead8 });
+  const black = new THREE.Color(0x111513);
+  const white = new THREE.Color(0xf1ead8);
+  const checkerMaterial = new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    side: THREE.DoubleSide,
+  });
   const squareWidthM = plan.trackWidthM / 10;
+  const squareGeometry = new THREE.PlaneGeometry(squareWidthM, 0.8);
+  const squares = new THREE.InstancedMesh(squareGeometry, checkerMaterial, 20);
+  const transform = new THREE.Object3D();
+  let squareIndex = 0;
   for (let column = 0; column < 10; column++) {
     for (let row = 0; row < 2; row++) {
-      const square = new THREE.Mesh(
-        new THREE.BoxGeometry(squareWidthM, 0.04, 0.8),
-        (column + row) % 2 === 0 ? white : black,
-      );
-      square.position.set(
+      transform.position.set(
         -plan.trackWidthM * 0.5 + squareWidthM * (column + 0.5),
         0,
         (row - 0.5) * 0.8,
       );
-      group.add(square);
+      transform.rotation.set(-Math.PI / 2, 0, 0);
+      transform.scale.set(1, 1, 1);
+      transform.updateMatrix();
+      squares.setMatrixAt(squareIndex, transform.matrix);
+      squares.setColorAt(squareIndex, (column + row) % 2 === 0 ? white : black);
+      squareIndex++;
     }
   }
+  squares.name = "start-finish-checker";
+  squares.instanceMatrix.needsUpdate = true;
+  if (squares.instanceColor) squares.instanceColor.needsUpdate = true;
+  group.add(squares);
 
   const gantryMaterial = new THREE.MeshStandardMaterial({
     color: 0xe46d24,
@@ -440,25 +547,176 @@ function addStartFinish(THREE, root, plan) {
     color: 0x1e2523,
     roughness: 0.65,
   });
+  const pylons = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(0.8, 6.8, 1.0),
+    gantryMaterial,
+    2,
+  );
   for (const side of [-1, 1]) {
-    const pylon = new THREE.Mesh(new THREE.BoxGeometry(0.65, 5.5, 0.8), gantryMaterial);
-    pylon.position.set(side * (plan.trackWidthM * 0.5 + 1.1), 2.7, 0);
-    group.add(pylon);
+    transform.position.set(side * (plan.trackWidthM * 0.5 + 1.15), 3.35, 0);
+    transform.rotation.set(0, 0, 0);
+    transform.updateMatrix();
+    pylons.setMatrixAt(side < 0 ? 0 : 1, transform.matrix);
   }
+  pylons.name = "start-finish-pylons";
+  pylons.instanceMatrix.needsUpdate = true;
+  group.add(pylons);
   const crossbar = new THREE.Mesh(
-    new THREE.BoxGeometry(plan.trackWidthM + 2.8, 0.8, 1.0),
+    new THREE.BoxGeometry(plan.trackWidthM + 3.1, 1.05, 1.1),
     darkMaterial,
   );
-  crossbar.position.y = 5.3;
+  crossbar.name = "start-finish-crossbar";
+  crossbar.position.y = 6.35;
   group.add(crossbar);
-  for (let index = 0; index < 9; index++) {
-    const panel = new THREE.Mesh(
-      new THREE.BoxGeometry(1.4, 0.42, 0.05),
-      index % 2 === 0 ? white : black,
-    );
-    panel.position.set((index - 4) * 1.65, 5.3, -0.53);
-    group.add(panel);
+
+  // Checkers on both faces keep the timing gate legible from the initial grid and after a lap.
+  // Planes replace the former 29 little boxes: stronger silhouette, 28 fewer submissions, and
+  // fewer triangles even with the second face included.
+  const panels = new THREE.InstancedMesh(
+    new THREE.PlaneGeometry(1.55, 0.58),
+    checkerMaterial,
+    18,
+  );
+  let panelIndex = 0;
+  for (const face of [-1, 1]) {
+    for (let index = 0; index < 9; index++) {
+      transform.position.set((index - 4) * 1.72, 6.35, face * 0.56);
+      transform.rotation.set(0, 0, 0);
+      transform.updateMatrix();
+      panels.setMatrixAt(panelIndex, transform.matrix);
+      panels.setColorAt(panelIndex, index % 2 === 0 ? white : black);
+      panelIndex++;
+    }
   }
+  panels.name = "start-finish-overhead-checker";
+  panels.instanceMatrix.needsUpdate = true;
+  if (panels.instanceColor) panels.instanceColor.needsUpdate = true;
+  group.add(panels);
+  root.add(group);
+}
+
+function addCourseIdentity(THREE, root, plan) {
+  const group = new THREE.Group();
+  group.name = "rapier-course-identity";
+  const sectorColours = [
+    new THREE.Color(0xe46d24),
+    new THREE.Color(0xe0c56a),
+    new THREE.Color(0x66aaa5),
+  ];
+  const boards = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(1, 1, 1),
+    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.72, metalness: 0.04 }),
+    plan.sectorGates.length * 2,
+  );
+  boards.name = "sector-timing-boards";
+  const glyphCount = plan.sectorGates.reduce((sum, gate) => sum + gate.sector * 2, 0);
+  const glyphs = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(0.3, 2.35, 0.36),
+    new THREE.MeshBasicMaterial({ color: 0x15201f }),
+    glyphCount,
+  );
+  glyphs.name = "sector-number-bars";
+  const transform = new THREE.Object3D();
+  let boardIndex = 0;
+  let glyphIndex = 0;
+  for (const gate of plan.sectorGates) {
+    const colour = sectorColours[(gate.sector - 1) % sectorColours.length];
+    for (const board of gate.boards) {
+      const position = scenePoint(THREE, board.center, 2.35);
+      transform.position.copy(position);
+      transform.rotation.set(0, gate.headingRad, 0);
+      transform.scale.set(2.8, 4.7, 0.28);
+      transform.updateMatrix();
+      boards.setMatrixAt(boardIndex, transform.matrix);
+      boards.setColorAt(boardIndex, colour);
+      boardIndex++;
+
+      // One, two, or three upright bars read as an unambiguous sector number from either side.
+      for (let bar = 0; bar < gate.sector; bar++) {
+        const localX = (bar - (gate.sector - 1) * 0.5) * 0.72;
+        transform.position.set(
+          position.x + Math.cos(gate.headingRad) * localX,
+          position.y,
+          position.z - Math.sin(gate.headingRad) * localX,
+        );
+        transform.rotation.set(0, gate.headingRad, 0);
+        transform.scale.set(1, 1, 1);
+        transform.updateMatrix();
+        glyphs.setMatrixAt(glyphIndex++, transform.matrix);
+      }
+    }
+  }
+  boards.instanceMatrix.needsUpdate = true;
+  if (boards.instanceColor) boards.instanceColor.needsUpdate = true;
+  glyphs.instanceMatrix.needsUpdate = true;
+  group.add(boards, glyphs);
+
+  // Sector brackets and direction arrows share one tiny vertex-coloured mesh. The arrows show
+  // course direction only; measured-lap validity remains entirely simulation-owned.
+  const positions = [];
+  const colours = [];
+  const indices = [];
+  let vertex = 0;
+  const pushPolygon = (marker, localPoints, triangles, colour) => {
+    const normal = { x: -marker.tangent.z, z: marker.tangent.x };
+    for (const [lateralM, forwardM] of localPoints) {
+      const x = marker.center.x + normal.x * lateralM + marker.tangent.x * forwardM;
+      const z = marker.center.z + normal.z * lateralM + marker.tangent.z * forwardM;
+      positions.push(x, plan.elevationM + 0.105, -z);
+      colours.push(colour.r, colour.g, colour.b);
+    }
+    for (const index of triangles) indices.push(vertex + index);
+    vertex += localPoints.length;
+  };
+  for (const gate of plan.sectorGates) {
+    const colour = sectorColours[(gate.sector - 1) % sectorColours.length];
+    for (const side of [-1, 1]) {
+      const centreM = side * (plan.trackWidthM * 0.5 - 1.25);
+      pushPolygon(
+        gate,
+        [
+          [centreM - 1.1, -0.65],
+          [centreM + 1.1, -0.65],
+          [centreM - 1.1, 0.65],
+          [centreM + 1.1, 0.65],
+        ],
+        [0, 2, 1, 1, 2, 3],
+        colour,
+      );
+    }
+  }
+  const arrowTriangles = [0, 1, 6, 1, 5, 6, 1, 2, 3, 1, 3, 5, 3, 4, 5];
+  const arrowPoints = [
+    [-1.15, -3.2],
+    [-1.15, 0.55],
+    [-3.0, 0.55],
+    [0, 4.0],
+    [3.0, 0.55],
+    [1.15, 0.55],
+    [1.15, -3.2],
+  ];
+  for (const mark of plan.courseDirectionMarks) {
+    const colour = mark.sector === 0
+      ? new THREE.Color(0xf1ead8)
+      : sectorColours[(mark.sector - 1) % sectorColours.length];
+    pushPolygon(mark, arrowPoints, arrowTriangles, colour);
+  }
+  const paintGeometry = new THREE.BufferGeometry();
+  paintGeometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  paintGeometry.setAttribute("color", new THREE.Float32BufferAttribute(colours, 3));
+  paintGeometry.setIndex(indices);
+  const paint = new THREE.Mesh(
+    paintGeometry,
+    new THREE.MeshBasicMaterial({
+      vertexColors: true,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+    }),
+  );
+  paint.name = "course-direction-paint";
+  group.add(paint);
   root.add(group);
 }
 
@@ -916,6 +1174,7 @@ export function createRapierTrackDayPresentation(THREE, circuit, options = {}) {
   );
   root.add(curbs);
 
+  addCourseIdentity(THREE, root, plan);
   addStartFinish(THREE, root, plan);
   addInstancedMarkers(THREE, root, plan);
   addMarshalPosts(THREE, root, plan);

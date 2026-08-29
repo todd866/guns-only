@@ -146,9 +146,12 @@ export function resolveAuthorityLookAtPoint({
   forwardLook = null,
 } = {}) {
   if (padlockActive && selectedUnit) {
+    const publishedAimY = Number(selectedUnit.aim_y_m);
     return Object.freeze({
       x: Number(selectedUnit.x_m) || 0,
-      y: (Number(selectedUnit.y_m) || 0) + 1.2,
+      y: Number.isFinite(publishedAimY)
+        ? publishedAimY
+        : (Number(selectedUnit.y_m) || 0) + 1.2,
       z: -(Number(selectedUnit.z_m) || 0),
       mode: "padlock",
     });

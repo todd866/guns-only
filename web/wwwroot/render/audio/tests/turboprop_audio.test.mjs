@@ -3,9 +3,12 @@ import assert from "node:assert/strict";
 import { resolvePropulsionCharacter } from "../audio_character.js";
 import { flightPropulsionGraphGates } from "../flight_audio.js";
 import {
+  advanceTurbopropWaterCueState,
   createTurbopropAudioVoices,
   FIRE_BOSS_GOVERNED_PROP_RPM,
   FIRE_BOSS_PROP_BLADE_COUNT,
+  FIRE_BOSS_REFERENCE_DROP_RATE_KGPS,
+  FIRE_BOSS_REFERENCE_SCOOP_RATE_KGPS,
   propellerBladePassHz,
   projectTurbopropAcoustics,
   updateTurbopropAudioVoices,
@@ -20,6 +23,18 @@ class FakeAudioParam {
     this.value = value;
     this.targets.push({ value, at, timeConstant });
   }
+  setValueAtTime(value, at) {
+    this.value = value;
+    this.targets.push({ value, at, kind: "set" });
+  }
+  exponentialRampToValueAtTime(value, at) {
+    this.value = value;
+    this.targets.push({ value, at, kind: "exponential" });
+  }
+  linearRampToValueAtTime(value, at) {
+    this.value = value;
+    this.targets.push({ value, at, kind: "linear" });
+  }
 }
 
 class FakeAudioNode {
@@ -31,12 +46,14 @@ class FakeAudioNode {
     this.Q = new FakeAudioParam();
     this.playbackRate = new FakeAudioParam(1);
     this.started = 0;
+    this.stopped = 0;
   }
   connect(destination) {
     this.connections.push(destination);
     return destination;
   }
   start() { this.started += 1; }
+  stop() { this.stopped += 1; }
 }
 
 class FakeAudioContext {
@@ -44,6 +61,7 @@ class FakeAudioContext {
     this.currentTime = 8;
     this.sampleRate = 48_000;
     this.created = [];
+    this.buffers = [];
   }
   node(kind) {
     const node = new FakeAudioNode(kind);
@@ -55,7 +73,9 @@ class FakeAudioContext {
   createOscillator() { return this.node("oscillator"); }
   createBufferSource() { return this.node("buffer-source"); }
   createBuffer(_channels, length) {
-    return { getChannelData: () => new Float32Array(length) };
+    const buffer = { length, getChannelData: () => new Float32Array(length) };
+    this.buffers.push(buffer);
+    return buffer;
   }
 }
 
@@ -67,10 +87,12 @@ test("Fire Boss selects the shared turboprop graph exclusively", () => {
     cobraActive: false,
     f14Active: false,
     turbopropActive: true,
+    motorcycleActive: false,
     jetMuted: true,
     cobraMuted: true,
     f14Muted: true,
     turbopropMuted: false,
+    motorcycleMuted: true,
     radioEngine: "turboprop",
   });
   assert.equal(flightPropulsionGraphGates(state, false).turbopropMuted, true);
@@ -140,6 +162,37 @@ test("legacy Fire Boss frames default to governed Np instead of coupling pitch t
   assert.equal(lowPower.bladePassHz, highPower.bladePassHz);
 });
 
+test("legacy boolean water evidence remains audible when rate fields are absent", () => {
+  const scoop = projectTurbopropAcoustics({
+    engine_running: true,
+    fireboss_scoop_valid: true,
+  });
+  const drop = projectTurbopropAcoustics({
+    engine_running: true,
+    fireboss_water_release_kg: 4,
+  });
+  assert.equal(scoop.scoopRateKgps, FIRE_BOSS_REFERENCE_SCOOP_RATE_KGPS);
+  assert.equal(drop.dropRateKgps, FIRE_BOSS_REFERENCE_DROP_RATE_KGPS);
+});
+
+test("an explicit zero flow rate wins over legacy boolean and tick-mass evidence", () => {
+  const scoop = projectTurbopropAcoustics({
+    engine_running: true,
+    fireboss_scoop_valid: true,
+    fireboss_scoop_rate_kgps: 0,
+  });
+  const drop = projectTurbopropAcoustics({
+    engine_running: true,
+    fireboss_drop_active: true,
+    fireboss_water_release_kg: 4,
+    fireboss_water_release_rate_kgps: 0,
+  });
+  assert.equal(scoop.scoopRateKgps, 0);
+  assert.equal(scoop.scooping, false);
+  assert.equal(drop.dropRateKgps, 0);
+  assert.equal(drop.dropping, false);
+});
+
 test("shutdown removes prop, compressor and torque authority", () => {
   assert.deepEqual(projectTurbopropAcoustics({
     engine_running: false,
@@ -160,9 +213,154 @@ test("shutdown removes prop, compressor and torque authority", () => {
     compressorHz: 2_550,
     speedKts: 0,
     onWater: false,
+    waterSpeed01: 0,
+    scoopRateKgps: 0,
+    scoopFlow01: 0,
     scooping: false,
+    waterReleaseKg: 0,
+    dropRateKgps: 0,
+    dropFlow01: 0,
+    dropAirspeed01: 0,
     dropping: false,
   });
+});
+
+test("water-operation edges baseline, deduplicate, and retain independent identities", () => {
+  const dry = projectTurbopropAcoustics({ engine_running: true });
+  const scoop = projectTurbopropAcoustics({
+    engine_running: true,
+    fireboss_scoop_valid: true,
+    fireboss_scoop_rate_kgps: FIRE_BOSS_REFERENCE_SCOOP_RATE_KGPS,
+  });
+  const drop = projectTurbopropAcoustics({
+    engine_running: true,
+    fireboss_water_release_rate_kgps: FIRE_BOSS_REFERENCE_DROP_RATE_KGPS,
+  });
+  let edge = advanceTurbopropWaterCueState(null, scoop);
+  assert.deepEqual(edge.cues, {
+    scoopStart: false, scoopEnd: false, dropStart: false, dropEnd: false,
+  }, "joining an active flow must not invent a historical start cue");
+  edge = advanceTurbopropWaterCueState(edge.state, scoop);
+  assert.equal(edge.cues.scoopStart, false);
+  edge = advanceTurbopropWaterCueState(edge.state, dry);
+  assert.equal(edge.cues.scoopEnd, true);
+  edge = advanceTurbopropWaterCueState(edge.state, drop);
+  assert.equal(edge.cues.dropStart, true);
+  edge = advanceTurbopropWaterCueState(edge.state, drop);
+  assert.equal(edge.cues.dropStart, false);
+  edge = advanceTurbopropWaterCueState(edge.state, dry);
+  assert.equal(edge.cues.dropEnd, true);
+});
+
+test("hull, scoop, and drop voices use independent authority-scaled flows", () => {
+  const audio = new FakeAudioContext();
+  const voices = createTurbopropAudioVoices(audio, new FakeAudioNode("shared-bus"));
+  const running = {
+    engine_running: true,
+    fuel_lb: 1_900,
+    propeller_rpm: 1_700,
+    propeller_blade_count: 5,
+    engine_ng_pct: 88,
+    engine_torque_fraction: 0.72,
+  };
+
+  assert.notStrictEqual(voices.hullSource.buffer, voices.scoopSource.buffer);
+  assert.notStrictEqual(voices.hullSource.buffer, voices.dropSource.buffer);
+  assert.notStrictEqual(voices.scoopSource.buffer, voices.dropSource.buffer);
+
+  updateTurbopropAudioVoices(voices, audio, {
+    ...running,
+    fireboss_surface: "water",
+    true_airspeed_kts: 0,
+  });
+  const governedPlaybackRate = voices.propPulse.playbackRate.value;
+  assert.equal(voices.hullGain.gain.value, 0,
+    "water contact at zero speed cannot produce a permanent spray hiss");
+
+  updateTurbopropAudioVoices(voices, audio, {
+    ...running,
+    fireboss_surface: "water",
+    true_airspeed_kts: 68,
+  });
+  assert.ok(voices.hullGain.gain.value > 0);
+
+  updateTurbopropAudioVoices(voices, audio, {
+    ...running,
+    fireboss_surface: "water",
+    true_airspeed_kts: 68,
+    fireboss_scoop_rate_kgps: FIRE_BOSS_REFERENCE_SCOOP_RATE_KGPS / 2,
+  });
+  const halfScoopGain = voices.scoopGain.gain.value;
+  assert.equal(voices.cueCounts.scoopStart, 1);
+  updateTurbopropAudioVoices(voices, audio, {
+    ...running,
+    fireboss_surface: "water",
+    true_airspeed_kts: 68,
+    fireboss_scoop_rate_kgps: FIRE_BOSS_REFERENCE_SCOOP_RATE_KGPS,
+  });
+  assert.ok(voices.scoopGain.gain.value > halfScoopGain);
+  assert.equal(voices.cueCounts.scoopStart, 1, "held flow cannot replay its start transient");
+
+  updateTurbopropAudioVoices(voices, audio, {
+    ...running,
+    fireboss_surface: "airborne",
+    true_airspeed_kts: 72,
+    fireboss_water_release_rate_kgps: FIRE_BOSS_REFERENCE_DROP_RATE_KGPS / 2,
+  });
+  const halfDropGain = voices.dropGain.gain.value;
+  assert.equal(voices.cueCounts.scoopEnd, 1);
+  assert.equal(voices.cueCounts.dropStart, 1);
+  updateTurbopropAudioVoices(voices, audio, {
+    ...running,
+    fireboss_surface: "airborne",
+    true_airspeed_kts: 72,
+    fireboss_water_release_rate_kgps: FIRE_BOSS_REFERENCE_DROP_RATE_KGPS,
+  });
+  const fullDropLowSpeedGain = voices.dropGain.gain.value;
+  assert.ok(fullDropLowSpeedGain > halfDropGain);
+  updateTurbopropAudioVoices(voices, audio, {
+    ...running,
+    fireboss_surface: "airborne",
+    true_airspeed_kts: 130,
+    fireboss_water_release_rate_kgps: FIRE_BOSS_REFERENCE_DROP_RATE_KGPS,
+  });
+  assert.ok(voices.dropGain.gain.value > fullDropLowSpeedGain,
+    "the same release flow must carry more airborne roar at higher TAS");
+  assert.equal(voices.cueCounts.dropStart, 1, "held drop cannot replay its start transient");
+
+  updateTurbopropAudioVoices(voices, audio, {
+    ...running,
+    fireboss_surface: "airborne",
+    true_airspeed_kts: 130,
+  });
+  assert.equal(voices.dropGain.gain.value, 0);
+  assert.equal(voices.cueCounts.dropEnd, 1);
+  assert.equal(voices.propPulse.playbackRate.value, governedPlaybackRate,
+    "water operations must not perturb governed prop cadence");
+});
+
+test("muted water edges are consumed and never replay after unmute", () => {
+  const audio = new FakeAudioContext();
+  const voices = createTurbopropAudioVoices(audio, new FakeAudioNode("shared-bus"));
+  const running = {
+    engine_running: true,
+    fuel_lb: 1_900,
+    propeller_rpm: 1_700,
+    true_airspeed_kts: 70,
+    fireboss_surface: "water",
+  };
+  updateTurbopropAudioVoices(voices, audio, running);
+  updateTurbopropAudioVoices(voices, audio, {
+    ...running,
+    fireboss_scoop_rate_kgps: FIRE_BOSS_REFERENCE_SCOOP_RATE_KGPS,
+  }, { muted: true });
+  updateTurbopropAudioVoices(voices, audio, {
+    ...running,
+    fireboss_scoop_rate_kgps: FIRE_BOSS_REFERENCE_SCOOP_RATE_KGPS,
+  });
+  assert.equal(voices.cueCounts.scoopStart, 0);
+  assert.ok(voices.scoopGain.gain.value > 0,
+    "unmute restores continuous authority without replaying the historical edge");
 });
 
 test("the live graph is broadband and keeps blade cadence independent from load", () => {

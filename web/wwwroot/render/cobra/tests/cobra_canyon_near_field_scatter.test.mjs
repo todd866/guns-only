@@ -20,14 +20,17 @@ const world = JSON.parse(await readFile(new URL(
  * Seven places a pilot actually flies. The world-fixed scatter this replaced put 6,828 ambient
  * instances across a 16 x 16 km theatre — one prop every 190 m — so wherever you stood, the ground
  * was bare. These sites are the check that the near field is populated EVERYWHERE, not just where
- * a lucky seed happened to cluster.
+ * a lucky seed happened to cluster. Authored battle bowls and water exclusions are intentionally
+ * open, so density probes sit on representative covered ground outside those volumes.
  */
 const SITES = Object.freeze([
   ["camp ember", -3_800, -4_600],
-  ["gorge middle", -3_000, -1_000],
+  // Stay outside Iron Bell's deliberately cleared battle bowl: that opening lets the player see
+  // troops and tracers instead of testing forest density where forest is intentionally absent.
+  ["gorge run", -3_600, -1_000],
   ["plantation", 550, -4_000],
   ["red earth quarry", 2_700, -1_700],
-  ["paddy flats", -1_500, 600],
+  ["paddy flats", -1_500, 500],
   ["north ridge", -1_760, 4_980],
   ["east highland", 5_000, 2_000],
 ]);
@@ -72,6 +75,7 @@ function residents(root) {
         y: position.y,
         widthM: scale.x,
         heightM: scale.y,
+        depthM: scale.z,
       });
     }
   }
@@ -114,7 +118,7 @@ test("spends the SAME allowance as a near-field disc, never a raised cap", () =>
   }
 });
 
-test("puts continuous cover under the aircraft everywhere in the valley", () => {
+test("puts continuous cover under the aircraft outside authored open ground", () => {
   const { kit } = create("desktop");
   const radiusM = 500;
   const areaKm2 = Math.PI * (radiusM / 1_000) ** 2;
@@ -206,6 +210,61 @@ test("keeps the Camp Ember eye clear and every prop on the ground, wherever the 
         `${name}: ${entry.role} is buried ${(groundM - entry.y).toFixed(1)} m into the hill`,
       );
     }
+  }
+  kit.dispose();
+});
+
+test("keeps land-asset centres and footprints out of the authored river flat floor", () => {
+  const { plan, kit } = create("desktop");
+  const rivers = plan.terrainRibbons.filter((ribbon) => String(ribbon.kind).includes("river"));
+  assert.ok(rivers.length > 0, "the invariant needs an authored river ribbon");
+  const landRoles = ["jungle", "plantation", "village", "paddy", "rock"];
+
+  const nearestOnRibbon = (ribbon, eastM, northM) => {
+    let nearestDistanceM = Infinity;
+    for (let index = 0; index < ribbon.pointsLocalM.length - 1; index++) {
+      const from = ribbon.pointsLocalM[index];
+      const to = ribbon.pointsLocalM[index + 1];
+      const deltaEastM = to[0] - from[0];
+      const deltaNorthM = to[2] - from[2];
+      const lengthSquared = deltaEastM ** 2 + deltaNorthM ** 2;
+      const blend = lengthSquared > 0
+        ? Math.max(0, Math.min(1,
+          ((eastM - from[0]) * deltaEastM + (northM - from[2]) * deltaNorthM)
+            / lengthSquared))
+        : 0;
+      const routeEastM = from[0] + deltaEastM * blend;
+      const routeNorthM = from[2] + deltaNorthM * blend;
+      nearestDistanceM = Math.min(
+        nearestDistanceM,
+        Math.hypot(eastM - routeEastM, northM - routeNorthM),
+      );
+    }
+    return nearestDistanceM;
+  };
+
+  const checked = Object.fromEntries(landRoles.map((role) => [role, { generated: 0, setPieces: 0 }]));
+  // The exact Iron Bell proof-camera pose is the regression site; the remaining named sites prove
+  // the same deterministic field invariant survives tile re-collection across the theatre.
+  for (const [name, eastM, northM] of [["iron bell", -2_879, -748], ...SITES]) {
+    for (const entry of park(kit, eastM, northM)
+      .filter((candidate) => landRoles.includes(candidate.role))) {
+      if (entry.setPieceId) checked[entry.role].setPieces += 1;
+      else checked[entry.role].generated += 1;
+      const footprintRadiusM = Math.hypot(entry.widthM, entry.depthM) * 0.5;
+      for (const river of rivers) {
+        const distanceM = nearestOnRibbon(river, entry.eastM, entry.northM);
+        const requiredM = river.halfWidthM * river.floorFraction + footprintRadiusM;
+        assert.ok(
+          distanceM + 1e-3 >= requiredM,
+          `${name}: ${entry.id} reaches the river floor (${distanceM.toFixed(2)} m < ${requiredM.toFixed(2)} m)`,
+        );
+      }
+    }
+  }
+  for (const role of landRoles) {
+    assert.ok(checked[role].generated > 0, `no generated ${role} asset exercised the invariant`);
+    assert.ok(checked[role].setPieces > 0, `no authored ${role} set-piece exercised the invariant`);
   }
   kit.dispose();
 });

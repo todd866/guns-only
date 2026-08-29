@@ -79,6 +79,21 @@ function model(overrides = {}) {
   });
 }
 
+test("RTB replaces the hostile objective ring with Camp Ember recovery", () => {
+  const rtb = model({
+    missionAct: "rtb",
+    fob: { x_m: 80, y_m: 20, z_m: 100, label: "Camp Ember" },
+  });
+  assert.equal(rtb.objective.siteId, "camp-ember-rtb");
+  assert.equal(rtb.objective.label, "Camp Ember");
+  assert.equal(rtb.objective.mode, "rtb");
+  assert.ok(rtb.sites.some((site) => site.id === "camp-ember-rtb" && site.recovery === true));
+  assert.equal(rtb.tacticalSymbols.filter((symbol) => symbol.kind === "target").length, 0,
+    "a completed fight must not keep ringing the old gun pit during recovery");
+  assert.equal(rtb.tacticalSymbols.filter((symbol) => symbol.kind === "air-threat").length, 1,
+    "living AA truth remains useful during the return leg");
+});
+
 function fillsAfterArcs(calls) {
   const fills = [];
   let lastArc = null;
@@ -225,7 +240,7 @@ test("the minimap names only the objective; the full map names everything", () =
   drawCobraTacticalMap(minimapCtx, miniModel, {
     full: false,
     headerPx: COBRA_MAP_CAPTION_PX.mini,
-    caption: { line: "DESTROY GARRISON · FORD", detail: "Clear the point" },
+    caption: { line: "DESTROY GUN PIT · FORD", detail: "Clear the point" },
   });
   const miniTexts = minimapCtx.calls
     .filter((call) => call.name === "fillText")
@@ -236,8 +251,10 @@ test("the minimap names only the objective; the full map names everything", () =
     `objective must be named on the minimap: ${miniTexts.join(" | ")}`);
   assert.ok(!miniTexts.includes("BRIDGE"),
     "a non-objective point must not be named on the minimap");
-  assert.ok(miniTexts.includes("◇ FORD · 1 TGT · △ 1 AA"),
-    `tactical summary missing from minimap: ${miniTexts.join(" | ")}`);
+  assert.ok(miniTexts.includes("PTS 1–1 · TKT 280–190 · STALEMATE"),
+    `conquest score and win-state missing from minimap: ${miniTexts.join(" | ")}`);
+  assert.ok(!miniTexts.some((text) => text.startsWith("◇ FORD")),
+    "the score row must not duplicate the already named/ringed objective");
   assert.ok(!miniTexts.some((text) => /FRIENDLY 280|HOSTILE 190/.test(text)),
     "expanded ticket labels belong to the full map only");
 
@@ -291,10 +308,11 @@ test("M toggles the full map, and Escape closes it before it pauses", async () =
   const main = await readFile(new URL("../../../cobra-lab/main.js", import.meta.url), "utf8");
   assert.match(main, /event\.code === "KeyM"/);
   assert.match(main, /setTacticalMapOpen\(!tacticalMapOpen\)/);
-  // Escape ordering is load-bearing: onboarding first (it is the topmost layer), then the map,
-  // then pause. A map close that landed after setMissionPaused would be hidden by the menu.
-  const escapeHandler = main.match(/window\.addEventListener\("keydown", \(event\) => \{\n {2}if \(event\.code !== "Escape"\)[\s\S]*?\n\}, true\);/)?.[0] ?? "";
-  assert.ok(escapeHandler.length > 0, "capture-phase Escape listener not found");
+  // Shared onboarding owns capture and stops the event while its modal is open. The route-owned
+  // bubble listener then orders its own layers: onboarding fallback, map, and finally pause. A map
+  // close that landed after setMissionPaused would be hidden by the menu.
+  const escapeHandler = main.match(/window\.addEventListener\("keydown", \(event\) => \{\n {2}if \(event\.code !== "Escape"\)[\s\S]*?\n\}\);/)?.[0] ?? "";
+  assert.ok(escapeHandler.length > 0, "route-owned Escape listener not found");
   assert.ok(
     escapeHandler.indexOf('action === "dismiss-onboarding"')
       < escapeHandler.indexOf('action === "close-map"'),
@@ -313,6 +331,14 @@ test("M toggles the full map, and Escape closes it before it pauses", async () =
     "utf8",
   );
   assert.match(controls, /\["M · MAP", "Score and captures — the fight keeps running"\]/);
+  const onboarding = await readFile(
+    new URL("../../onboarding/first_run_controls.js", import.meta.url),
+    "utf8",
+  );
+  assert.match(onboarding, /doc\.addEventListener\("keydown", onKeyDown, true\)/,
+    "the shared onboarding modal must retain first claim on keyboard capture");
+  assert.match(onboarding, /event\.stopImmediatePropagation\?\.\(\)/,
+    "an onboarding Escape must not leak into the route-owned bubble listener");
 });
 
 test("an empty ground war draws the chrome and does not throw", () => {
@@ -333,14 +359,14 @@ test("the objective caption reaches the minimap, above the chart", () => {
   const map = model({ heightPx: 154 });
   drawCobraTacticalMap(ctx, map, {
     headerPx: COBRA_MAP_CAPTION_PX.mini,
-    caption: { line: "DESTROY GARRISON · LONG FANG", detail: "1.8 km" },
+    caption: { line: "DESTROY GUN PIT · LONG FANG", detail: "1.8 km" },
   });
-  // Three lines: order, place, then persistent target/threat summary. They are drawn in the BAND,
+  // Three lines: order, place, then persistent points/tickets/win-state. They are drawn in the BAND,
   // before the chart is translated down; site labels and chart furniture follow underneath.
   const texts = ctx.calls.filter((call) => call.name === "fillText");
   assert.deepEqual(
     texts.slice(0, 3).map((call) => String(call.args[0])),
-    ["DESTROY GARRISON", "LONG FANG", "◇ FORD · 1 TGT · △ 1 AA"],
+    ["DESTROY GUN PIT", "LONG FANG", "PTS 1–1 · TKT 280–190 · STALEMATE"],
   );
   const captionRowsY = texts.slice(0, 3).map((call) => call.args[2]);
   assert.ok(captionRowsY[0] < captionRowsY[1] && captionRowsY[1] < captionRowsY[2],
@@ -360,11 +386,11 @@ test("the full map caption carries the detail line too", () => {
   drawCobraTacticalMap(ctx, model, {
     full: true,
     headerPx: COBRA_MAP_CAPTION_PX.full,
-    caption: { line: "DESTROY GARRISON · LONG FANG", detail: "1.8 km — kill the garrison" },
+    caption: { line: "DESTROY GUN PIT · LONG FANG", detail: "1.8 km — knock it out" },
   });
   const texts = ctx.calls.filter((call) => call.name === "fillText").map((call) => String(call.args[0]));
-  assert.ok(texts.includes("DESTROY GARRISON · LONG FANG"));
-  assert.ok(texts.includes("1.8 km — kill the garrison"));
+  assert.ok(texts.includes("DESTROY GUN PIT · LONG FANG"));
+  assert.ok(texts.includes("1.8 km — knock it out"));
 });
 
 test("no caption means no band and no translate", () => {
@@ -376,12 +402,12 @@ test("no caption means no band and no translate", () => {
   const texts = ctx.calls
     .filter((call) => call.name === "fillText")
     .map((call) => String(call.args[0]));
-  assert.ok(!texts.some((text) => /GARRISON|LIFT|CLEAR|HOLDING/.test(text)),
+  assert.ok(!texts.some((text) => /GUN PIT|LIFT|CLEAR|HOLDING/.test(text)),
     `caption text drawn with no caption: ${texts.join(" | ")}`);
   assert.ok(!ctx.calls.some((call) => call.name === "translate" && call.args[1] === COBRA_MAP_CAPTION_PX.mini));
 });
 
-test("the target and threat summary remains visible when the combat order is absent", () => {
+test("the points, tickets and win-state remain visible when the combat order is absent", () => {
   const ctx = recordingContext();
   drawCobraTacticalMap(ctx, model({ heightPx: 154 }), {
     headerPx: COBRA_MAP_CAPTION_PX.mini,
@@ -390,10 +416,46 @@ test("the target and threat summary remains visible when the combat order is abs
   const texts = ctx.calls
     .filter((call) => call.name === "fillText")
     .map((call) => String(call.args[0]));
-  assert.equal(texts[0], "◇ FORD · 1 TGT · △ 1 AA");
+  assert.equal(texts[0], "PTS 1–1 · TKT 280–190 · STALEMATE");
   assert.ok(ctx.calls.some((call) => call.name === "translate"
     && call.args[1] === COBRA_MAP_CAPTION_PX.mini),
-  "the chart must still make room for its persistent tactical band");
+  "the chart must still make room for its persistent conquest band");
+});
+
+test("the always-visible minimap states when the friendly side is winning", () => {
+  const winningSites = SITES.map((site) => ({ ...site, owner: "friendly", contested: false }));
+  const ctx = recordingContext();
+  drawCobraTacticalMap(ctx, model({ sites: winningSites, heightPx: 154 }), {
+    headerPx: COBRA_MAP_CAPTION_PX.mini,
+    caption: { line: "HOLD THE VALLEY" },
+  });
+  const texts = ctx.calls
+    .filter((call) => call.name === "fillText")
+    .map((call) => String(call.args[0]));
+  assert.ok(texts.includes("PTS 2–0 · TKT 280–190 · WINNING +1/S"), texts.join(" | "));
+});
+
+test("the authority countdown owns the minimap edge and cannot be ellipsised by the order", () => {
+  const ctx = recordingContext();
+  ctx.measureText = (text) => ({ width: String(text).length * 6 });
+  drawCobraTacticalMap(ctx, model({
+    heightPx: 154,
+    timeLimitSeconds: 600,
+    timeRemainingSeconds: 554.2,
+    outcome: "pending",
+  }), {
+    headerPx: COBRA_MAP_CAPTION_PX.mini,
+    caption: {
+      line: "LOSING THE VALLEY AND THIS ORDER IS DELIBERATELY TOO LONG · LONG FANG",
+    },
+  });
+
+  const clock = ctx.calls.find((call) => call.name === "fillText" && call.args[0] === "T−9:15");
+  assert.ok(clock, "the real authority countdown is missing");
+  assert.equal(clock.args[1], 200 - 7, "the clock must remain pinned to the right edge");
+  assert.equal(clock.args[2], COBRA_MAP_CAPTION_PX.mini * 0.2);
+  assert.ok(ctx.calls.some((call) => call.name === "fillText"
+    && String(call.args[0]).endsWith("…")), "the long order should ellipsise independently");
 });
 
 test("the lab wires the objective caption into both charts", async () => {
@@ -411,12 +473,12 @@ test("a caption too long for its band is ellipsised, not cut off by the canvas e
   const model = cobraTacticalMapModel({ bounds: BOUNDS, widthPx: 200, heightPx: 174 });
   drawCobraTacticalMap(ctx, model, {
     headerPx: COBRA_MAP_CAPTION_PX.mini,
-    caption: { line: "DESTROY GARRISON · CAU SONG MA · THE JAW AND THEN SOME MORE WORDS" },
+    caption: { line: "DESTROY GUN PIT · CAU SONG MA · THE JAW AND THEN SOME MORE WORDS" },
   });
   const drawn = ctx.calls
     .filter((call) => call.name === "fillText")
     .map((call) => String(call.args[0]));
-  assert.equal(drawn[0], "DESTROY GARRISON", "the order is short enough to survive whole");
+  assert.equal(drawn[0], "DESTROY GUN PIT", "the order is short enough to survive whole");
   assert.ok(drawn[1].endsWith("…"), `expected an ellipsis, drew ${JSON.stringify(drawn[1])}`);
   for (const line of drawn) {
     assert.ok(line.length * 6 <= 200 - 14, `caption line overflows its band: ${line}`);

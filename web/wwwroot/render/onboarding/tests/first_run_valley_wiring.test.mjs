@@ -18,7 +18,7 @@ test("WebBridge exports StartFirstRunValley as a factory overlay, not a new Buil
     "StartFirstRunValley must not silently stage beat 7");
 });
 
-test("the F-22 shell auto-starts the valley once, without bolting on first_run_controls", async () => {
+test("the F-22 shell stages the valley once, without bolting on first_run_controls", async () => {
   const app = await source("app.js");
   assert.match(app, /render\/onboarding\/first_run_valley\.js\?v=\d+/);
   assert.match(app, /shouldAutoStartFirstRunValley/);
@@ -59,14 +59,82 @@ test("the first successful beginFlight stamps seen so Fly again is guns-only fir
     "boot must not stamp seen before the valley actually launched");
 });
 
-test("the picker stays hidden during first-run warmup and the Guns Only tile copy stays guns-only", async () => {
-  const [app, index] = await Promise.all([source("app.js"), source("index.html")]);
+test("Repeat sortie restages a finished valley while Fly again keeps the programme handoff", async () => {
+  const app = await source("app.js");
   assert.match(app,
-    /function renderPauseUi\([\s\S]*firstRunAutostartPending[\s\S]*readyScreen\.classList\.toggle\("visible"/,
-    "first visit must skip the six-tile picker while the valley is auto-launching");
+    /function repeatSelectedSortieNow\(\)[\s\S]*?shouldRestageFirstRunValley\([\s\S]*?repeatRequested: true[\s\S]*?stagedMissionAuthority[\s\S]*?enterReady\(\{ forceFirstRunValley \}\)[\s\S]*?launchMission/,
+    "Restart and Repeat must preserve guided authority even after its seen flag is stamped");
   assert.match(app,
-    /"first-merge": Object\.freeze\(\{[\s\S]*?sortie: "F-22A vs escalating opposition · guns only · first pass safe"/);
+    /readyRestart\?\.addEventListener\("click", repeatSelectedSortieNow\)/,
+    "the secondary debrief action must own the repeat destination");
+  assert.match(app,
+    /if \(event\.code === "KeyR"\)[\s\S]*?if \(topGunOwnsFoxTwoInput\(\)\)[\s\S]*?return;[\s\S]*?repeatSelectedSortieNow\(\)/,
+    "the live restart shortcut must not swap Kestrel for the ordinary beat after launch");
+  const primary = app.match(/function activateReadyAction\(\)[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(primary, /pauseReasons\.has\("finished"\)[\s\S]*?restartMissionNow\(\)/,
+    "the primary Fly again action must continue into the normal programme");
+  assert.doesNotMatch(primary, /repeatSelectedSortieNow/);
+});
+
+test("first run is a deliberate Ready interlock and Fire visibly names its live weapon", async () => {
+  const [app, index, hud, guidance] = await Promise.all([
+    source("app.js"), source("index.html"), source("hud.js"),
+    source("render/hud/mission_guidance.js"),
+  ]);
+  assert.match(app,
+    /const firstRunReady = firstRunAutostartPending[\s\S]*readyScreen\.dataset\.mode = firstRunReady[\s\S]*?"intro"/,
+    "first visit must own a distinct Ready presentation instead of falling through to the picker");
+  assert.match(app,
+    /const firstRunReady = firstRunAutostartPending && ready && !finished;/,
+    "settings, help, and background holds must not relabel staged intro authority as the picker");
+  assert.match(app,
+    /else if \(firstRunReady\)[\s\S]*readyStart\.textContent = "Enter valley"/,
+    "the first aircraft clock must wait behind an explicit pilot action");
+  assert.doesNotMatch(app,
+    /firstRunAutostartPending = true;\s*autoLaunchPending = true/,
+    "staging the valley must never arm launch before the pilot consents");
+  assert.match(index, /id="ready-intro-replay"[^>]*>Replay valley intro</,
+    "returning pilots need a visible replay action in the mission programme");
+  assert.match(app,
+    /readyIntroReplay\?\.addEventListener\("click"[\s\S]*searchParams\.set\("firstRun", "1"\)[\s\S]*enterReady/,
+    "the replay action must restage the same authority through the explicit replay seam");
+  assert.match(app,
+    /if \(firstRunAutostartPending\)[\s\S]*dismissFirstRunValleyAutostart\(\);[\s\S]*clearFirstRunValleyReplayQuery\(\);[\s\S]*enterReady/,
+    "choosing the programme must remove an explicit replay query before a future reload");
+  const firstMergeBrief = app.match(
+    /"first-merge": Object\.freeze\(\{[\s\S]*?\n  \}\),/,
+  )?.[0] ?? "";
+  assert.match(firstMergeBrief,
+    /sortie: "F-22A vs escalating opposition · guns only · opening 1v2 guns hot"/,
+    "the programme brief must disclose that the opening pair is already guns hot");
+  assert.doesNotMatch(firstMergeBrief, /first pass safe/i,
+    "the production 1v2 opens guns-free and must not advertise a safe pass");
+  assert.match(index,
+    /id="ready-sortie">F-22A vs Su-27S · guns only · opening 1v2 guns hot</,
+    "the static Ready fallback must match the live guns-hot 1v2 contract");
   assert.match(app, /touchFireAriaLabel/);
+  assert.match(app, /touchFireButton\.textContent = touchFireVisibleLabel\(state\)/,
+    "the same F control must visibly transition from FOX 2 to GUNS with authority");
   assert.match(index, /id="touch-fire"[^>]*>FIRE</,
-    "the visible touch label stays FIRE even while heaters are live");
+    "the static fallback remains FIRE until the first authoritative snapshot arrives");
+  assert.match(hud,
+    /firstRunValley[\s\S]*?FOX TWO → GUNS[\s\S]*?FOLLOW VALLEY · \$\{fireBinding\} FIRES TWO HEATERS, THEN GUNS/,
+    "desktop Quicklook must replace generic missile fiction with the remappable first-run Fire contract");
+  assert.match(guidance,
+    /FOLLOW VALLEY NORTH[\s\S]*?FIRE MISSILE \$\{missileNumber\} OF 2[\s\S]*?FIRE GUNS/,
+    "the live HUD must carry one ordered valley → missile → guns action ladder");
+  assert.match(guidance,
+    /transition\.includes\("WEAPONS HOT"\)[\s\S]*?this\.actionable = true/,
+    "a loaded magazine must not displace FOLLOW VALLEY before authority announces the pop-out");
+  assert.match(hud, /this\._firstRunWeaponsLatch\.update\(frame\.state\)/,
+    "the shared HUD must retain the short authority release edge for the persistent strip");
+});
+
+test("first-run Quicklook reuses the remappable Fire binding in every teaching line", async () => {
+  const hud = await readFile(new URL("../../../hud.js", import.meta.url), "utf8");
+  const quicklook = hud.match(/const firstRunValley[\s\S]*?if \(f14WingSweep\)/u)?.[0] ?? "";
+  assert.match(quicklook, /const fireBinding = binding\("fire", "KeyF"\)/u);
+  assert.match(quicklook, /\$\{fireBinding\} FIRES TWO HEATERS/u);
+  assert.match(quicklook, /\$\{fireBinding\}: TWO HEATERS → GUNS/u);
+  assert.doesNotMatch(quicklook, /(?:^|· )F(?: |:) (?:FIRES|TWO HEATERS)/u);
 });

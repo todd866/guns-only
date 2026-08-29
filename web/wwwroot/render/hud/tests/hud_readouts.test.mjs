@@ -373,6 +373,70 @@ test("visual merge weapon safety stays visible only while it changes a pilot dec
   }), null);
 });
 
+test("first-run valley owns a persistent truthful objective ladder", () => {
+  const firstRun = {
+    visual_merge_evaluation: true,
+    mission_definition_id: "mission.modern.visual-merge.first-run-valley.v1",
+  };
+  assert.deepEqual(visualMergeWeaponsCue({
+    ...firstRun,
+    weapons_inhibited: false,
+    aim9_remaining: 2,
+  }), {
+    text: "FOLLOW VALLEY · WEAPONS SAFE",
+    level: "caution",
+  }, "a loaded magazine alone cannot promote the Enter-valley cue before the pop-out");
+  assert.deepEqual(visualMergeWeaponsCue({
+    ...firstRun,
+    weapons_inhibited: true,
+    aim9_remaining: 2,
+  }), {
+    text: "FOLLOW VALLEY · WEAPONS SAFE",
+    level: "caution",
+  });
+  assert.deepEqual(visualMergeWeaponsCue({
+    ...firstRun,
+    weapons_inhibited: false,
+    aim9_remaining: 2,
+  }, { firstRunWeaponsActionable: true }), {
+    text: "FOX TWO ×2 · FIRE",
+    level: "normal",
+  });
+  assert.deepEqual(visualMergeWeaponsCue({
+    ...firstRun,
+    weapons_inhibited: false,
+    aim9_remaining: 1,
+    aim9_in_flight: true,
+  }, { firstRunWeaponsActionable: true }), {
+    text: "FOX TWO IN FLIGHT · TRACK",
+    level: "normal",
+  });
+  assert.deepEqual(visualMergeWeaponsCue({
+    ...firstRun,
+    weapons_inhibited: false,
+    aim9_remaining: 0,
+  }, { firstRunWeaponsActionable: true }), {
+    text: "GUNS · FIRE · SPLASH TARGET",
+    level: "normal",
+  });
+  assert.deepEqual(visualMergeWeaponsCue({
+    ...firstRun,
+    weapons_inhibited: false,
+    aim9_remaining: 0,
+    rtb_available: true,
+  }, { firstRunWeaponsActionable: true }), {
+    text: "GUNS · FIRE / RTB · O",
+    level: "normal",
+  });
+  assert.deepEqual(visualMergeWeaponsCue({
+    ...firstRun,
+    player_rtb_active: true,
+  }), {
+    text: "RTB · FOLLOW THE ROUTE",
+    level: "normal",
+  });
+});
+
 test("powered fuel readout uses USAF pounds per hour and time to bingo", () => {
   const readout = fuelReadout({
     fuel_lb: 2825,
@@ -892,7 +956,9 @@ test("production HUD consumes stabilized KIAS plus physical corner and limits pa
   assert.match(source, /systemsReadout\(frame\.state\)/);
   assert.match(source, /speedBrakeReadout\(state\)/,
     "the idle-commanded speed brake annunciates on the unconditionally drawn PWR rail");
-  assert.match(source, /visualMergeWeaponsCue\(frame\.state\)/);
+  assert.match(source, /flightMissionGuidance\(frame\.state/);
+  assert.match(source, /missionGuidanceLayout\(\{/);
+  assert.match(source, /missionGuidanceActionText\(cue\.primaryAction/);
   assert.match(source, /this\.drawVisualMergeWeaponsCue\(frame\)/);
   assert.match(source, /state\.has_engine === false \|\| state\.fuel_consumes === false/);
   assert.match(source, /state\.engine_spool_fraction \?\? state\.engine/);

@@ -33,15 +33,16 @@ test("authority JSON is sampled at HUD rate while the camera reads the per-frame
   assert.equal(guardedAdvances.length, 2);
   assert.doesNotMatch(main, /bridge\.Advance\(deltaSeconds\)/);
   assert.match(main, /A guided scenery camera has no pilot/);
-  assert.match(main, /StartRoute\(routeSelect\.selectedIndex, !PLAY_MODE\)/,
-    "the visual lab must explicitly request the no-wind unattended-review contract");
+  assert.match(main,
+    /StartRoute\([\s\S]{0,120}?routeSelect\.selectedIndex,[\s\S]{0,80}?!PLAY_MODE \|\| BATTLE_REVIEW_MODE,[\s\S]{0,80}?BATTLE_REVIEW_MODE/,
+    "both unattended modes must request no wind while only battle review requests its spawn");
 });
 
 test("a cold spare rebases the gunner onto the continuing mission tick line", async () => {
   const bridge = await source("../CobraWebBridge.cs");
   assert.match(bridge, /_gunnerNeedsAuthorityRebase = true/);
   assert.match(bridge, /RebaseAuthorityTick\(runtime\.Cobra\.State\.Tick\)/);
-  assert.match(bridge, /enableTerrainWind: !visualLab/);
+  assert.match(bridge, /enableTerrainWind: !visualLab && !battleReview/);
 });
 
 test("authentic pilot input never feeds aircraft attitude back as a hidden hold", async () => {
@@ -79,14 +80,14 @@ test("Tab selects and V padlocks like the F-22 gun-target / view contract", asyn
   assert.doesNotMatch(main, /clampInducedLookRotation/);
 });
 
-test("the tip strip teaches the collective lever: S pulls up, W lowers", async () => {
+test("the tip strip teaches the collective lever: W raises, S lowers", async () => {
   const [main, html, objective] = await Promise.all([
     source("cobra-lab/main.js"),
     source("cobra-lab/index.html"),
     source("render/cobra/cobra_objective_copy.js"),
   ]);
   // Ember Run: default tip lives in objective_copy + the HTML seed line; main paints via helper.
-  assert.match(objective, /W collective up · S down/);
+  assert.match(objective, /W up \/ S down/);
   assert.match(html, /W collective up · S down/);
   assert.match(main, /cobraObjectiveCopy/);
 });

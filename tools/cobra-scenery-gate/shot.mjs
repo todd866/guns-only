@@ -21,6 +21,11 @@ import {
   COBRA_CHROMIUM_ARGS,
   waitForCobraAuthority,
 } from "../../web/smoke/cobra_authority.mjs";
+import {
+  COBRA_SCENERY_SCREENSHOT_TIMEOUT_MS,
+  COBRA_SCENERY_VIEWS,
+} from "./views.mjs";
+import { stageCobraBattleEvidence } from "./battle_capture.mjs";
 
 const require = createRequire(new URL("../../web/smoke/package.json", import.meta.url));
 const { chromium } = require("playwright");
@@ -81,39 +86,6 @@ async function servePython(wwwroot) {
   };
 }
 
-// Exterior park poses — scenery only. eastM/northM match landmark.positionLocalM
-// [east, up, north] (camera z = -north). Overnight stills used wrong origin coords.
-const VIEWS = Object.freeze([
-  Object.freeze({
-    name: "camp-ember",
-    // Final-approach quarter, looking at the authoritative Camp Ember landmark at
-    // [-3800, 214, -4600]. The old -6775/-6200 pose was a retired world location and graded
-    // an anonymous wall of jungle while claiming it was the firebase.
-    eastM: -3_956,
-    northM: -4_510,
-    aglM: 34,
-    yawRad: -2.094,
-    pitchRad: -0.16,
-  }),
-  Object.freeze({
-    name: "mid-gorge",
-    // Long Fang approach — looks across village/canopy rather than up a blank hillside.
-    eastM: -4_557,
-    northM: -3_661,
-    aglM: 50,
-    yawRad: -0.5,
-    pitchRad: -0.2,
-  }),
-  Object.freeze({
-    name: "iron-bell",
-    eastM: -2_710,
-    northM: -500,
-    aglM: 58,
-    yawRad: -0.55,
-    pitchRad: -0.14,
-  }),
-]);
-
 async function main() {
   const wwwroot = resolveWwwroot();
   console.log(`shot: wwwroot ${wwwroot}`);
@@ -126,7 +98,7 @@ async function main() {
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     page.on("pageerror", (error) => console.error("pageerror:", error.message));
-    await page.goto(`${site.url}/cobra-lab/index.html?audioQa=silent`, {
+    await page.goto(`${site.url}/cobra-lab/index.html?audioQa=silent&battleQa=1`, {
       waitUntil: "load",
       timeout: 180_000,
     });
@@ -140,27 +112,58 @@ async function main() {
       document.querySelector("[data-onboarding-dismiss], #onboarding-dismiss, .onboarding button")
         ?.click();
     });
-    // First park may flip quality→desktop and rebuild presentation — wait for that to settle.
-    await page.evaluate((v) => {
-      window.__gunsOnlyCobraLabCamera.park(v.eastM, v.northM, v.aglM, v.yawRad, v.pitchRad);
-    }, VIEWS[0]);
-    await page.waitForTimeout(2500);
-    await page.waitForFunction(
-      () => window.__gunsOnlyCobraAuthority?.status === "active"
-        && document.querySelector("#status")?.dataset.ready === "true",
-      undefined,
-      { timeout: 120_000 },
-    );
-
     const meta = [];
-    for (const view of VIEWS) {
+
+    // The detached scenery cameras prove geometry, but the user's actual complaint is whether
+    // the fight reads through the windscreen. Release the review camera, catch a fresh exact
+    // Iron Bell exchange, and retain HUD + player eye in a required acceptance frame.
+    await page.evaluate(() => window.__gunsOnlyCobraLabCamera.release());
+    const cockpitSiteId = COBRA_SCENERY_VIEWS[0].battleSiteId;
+    const cockpitEvidence = await stageCobraBattleEvidence(page, cockpitSiteId);
+    const cockpitPath = join(OUT_DIR, "cockpit-battle.png");
+    await page.screenshot({
+      path: cockpitPath,
+      type: "png",
+      timeout: COBRA_SCENERY_SCREENSHOT_TIMEOUT_MS,
+    });
+    meta.push({
+      name: "cockpit-battle",
+      view: "player-eye",
+      battleSiteId: cockpitSiteId,
+      path: cockpitPath,
+      battleEvidence: cockpitEvidence,
+      render: cockpitEvidence.render,
+    });
+    console.log(`wrote ${cockpitPath}`);
+
+    // Capture Plantation immediately after the cockpit while its opposing units are still spread
+    // across the objective. Iron Bell follows; non-battle scenery remains in authored list order.
+    const captureViews = [...COBRA_SCENERY_VIEWS].sort((left, right) => {
+      if (left.name === "plantation-fight") return -1;
+      if (right.name === "plantation-fight") return 1;
+      return COBRA_SCENERY_VIEWS.indexOf(left) - COBRA_SCENERY_VIEWS.indexOf(right);
+    });
+    for (const view of captureViews) {
       await page.evaluate((v) => {
-        window.__gunsOnlyCobraLabCamera.park(v.eastM, v.northM, v.aglM, v.yawRad, v.pitchRad);
+        window.__gunsOnlyCobraLabCamera.park(
+          v.eastM, v.northM, v.aglM, v.yawRad, v.pitchRad, v.fovDeg,
+        );
       }, view);
-      await page.waitForTimeout(1200);
+      let battleEvidence = null;
+      if (view.battleSiteId) {
+        battleEvidence = await stageCobraBattleEvidence(page, view.battleSiteId);
+      } else {
+        await page.waitForTimeout(1200);
+      }
       const path = join(OUT_DIR, `${view.name}.png`);
-      await page.screenshot({ path, type: "png" });
-      meta.push({ ...view, path });
+      await page.screenshot({
+        path,
+        type: "png",
+        timeout: COBRA_SCENERY_SCREENSHOT_TIMEOUT_MS,
+      });
+      const render = battleEvidence?.render
+        ?? await page.evaluate(() => window.__gunsOnlyCobraLabCamera.renderStats());
+      meta.push({ ...view, path, battleEvidence, render });
       console.log(`wrote ${path}`);
     }
     await writeFile(join(OUT_DIR, "views.json"), `${JSON.stringify(meta, null, 2)}\n`);

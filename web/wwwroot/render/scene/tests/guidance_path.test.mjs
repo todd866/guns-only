@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   approachJoinGuidanceGates,
   createGuidancePath,
+  firstRunIngressGuidanceGates,
   gateToScenePosition,
   GUIDANCE_PATH_DEFAULTS,
   rtbGuidanceGates,
@@ -59,6 +60,32 @@ const gatesJson = JSON.stringify([
     target_ktas: 200, dirty: true, active: true },
 ]);
 
+const firstRunState = Object.freeze({
+  mission_definition_id: "mission.modern.visual-merge.first-run-valley.v1",
+  first_run_weapons_cold: true,
+  first_run_valley_available: true,
+  first_run_valley_center_east_m: 0,
+  first_run_valley_entry_north_m: -6000,
+  first_run_valley_popout_north_m: -1200,
+  first_run_valley_route_alt_m: 240,
+  first_run_valley_floor_height_m: 155,
+  first_run_valley_floor_blend_drop_m: 110,
+  first_run_valley_floor_half_width_m: 430,
+  first_run_valley_crest_offset_m: 1250,
+  first_run_valley_outer_offset_m: 3400,
+  first_run_valley_west_ridge_rise_m: 760,
+  first_run_valley_east_ridge_rise_m: 660,
+  first_run_valley_curve_amplitude_m: 430,
+  first_run_valley_curve_wavelength_m: 4800,
+  first_run_valley_south_extent_north_m: -7600,
+  first_run_valley_south_full_north_m: -6800,
+  first_run_valley_popout_fade_start_north_m: -2600,
+  first_run_valley_north_extent_north_m: -750,
+  px: 0,
+  py: 260,
+  pz: -6000,
+});
+
 test("world north maps to scene -Z, matching the player transform", () => {
   const p = gateToScenePosition({ eastM: 100, northM: 200, upM: 300 });
   assert.deepEqual(p, { x: 100, y: 300, z: -200 });
@@ -77,6 +104,32 @@ test("the ladder is drawn, one soft volume per gate, scaled to authored toleranc
   assert.equal(meshes[0].scale.x, 400);
   assert.equal(meshes[1].scale.x, 800);
   assert.equal(meshes[0].position.z, -200, "north must be negated into the scene");
+});
+
+test("an authored ladder can forbid ownship-relative chevrons so world cues stay fixed", () => {
+  const path = createGuidancePath(THREE);
+  const first = {
+    approach_guidance_active: true,
+    approach_join_guidance_active: false,
+    approach_gates: approachGates,
+    approach_gate_count: approachGates.length,
+    px: -2_000,
+    py: 120,
+    pz: -2_000,
+  };
+  assert.equal(path.update(first), approachGates.length);
+  assert.equal(path.object3d.userData.mode, "procedure");
+  assert.equal(path.object3d.userData.joinGateCount, 0);
+  const before = path.object3d.children
+    .filter((mesh) => mesh.visible)
+    .map((mesh) => ({ x: mesh.position.x, y: mesh.position.y, z: mesh.position.z }));
+
+  assert.equal(path.update({ ...first, px: -500, py: 260, pz: -900 }), approachGates.length);
+  const after = path.object3d.children
+    .filter((mesh) => mesh.visible)
+    .map((mesh) => ({ x: mesh.position.x, y: mesh.position.y, z: mesh.position.z }));
+  assert.deepEqual(after, before,
+    "moving ownship must not move an explicitly world-locked guidance ladder");
 });
 
 test("guidance never occludes: additive, depth-tested, never depth-writing, well under opaque", () => {
@@ -114,6 +167,38 @@ test("no recovery procedure means nothing is drawn at all", () => {
   const path = createGuidancePath(THREE);
   assert.equal(path.update({}), 0);
   assert.equal(path.object3d.visible, false);
+});
+
+test("first flight gets a stable sage centreline through the valley to the real pop-out", () => {
+  const gates = firstRunIngressGuidanceGates(firstRunState);
+  assert.equal(gates.length, GUIDANCE_PATH_DEFAULTS.ingressGateCount);
+  assert.equal(gates.every((gate) => gate.ingress === true && gate.rtb === true), true);
+  assert.equal(gates.every((gate) => gate.upM === 240), true,
+    "the world path must use authority altitude rather than moving with live ownship py");
+  assert.equal(gates.at(-1).northM, firstRunState.first_run_valley_popout_north_m);
+  assert.notEqual(gates[1].eastM, gates.at(-2).eastM,
+    "the breadcrumbs should follow the published drainage meander");
+
+  const path = createGuidancePath(THREE);
+  assert.equal(path.update(firstRunState), gates.length);
+  assert.equal(path.object3d.userData.mode, "first-run-ingress");
+  const first = path.object3d.children[0];
+  first.onBeforeRender();
+  assert.equal(first.userData.guidanceStyle, "ingress-chevron");
+  assert.equal(first.material.uniforms.uColor.value.value,
+    GUIDANCE_PATH_DEFAULTS.ingressActiveColor);
+  assert.equal(first.position.y, 240);
+});
+
+test("valley route disappears immediately at weapons-hot and malformed geometry fails quiet", () => {
+  const path = createGuidancePath(THREE);
+  assert.ok(path.update(firstRunState) > 0);
+  assert.equal(path.update({ ...firstRunState, first_run_weapons_cold: false }), 0);
+  assert.equal(path.object3d.visible, false);
+  assert.equal(firstRunIngressGuidanceGates({
+    ...firstRunState,
+    first_run_valley_popout_north_m: null,
+  }).length, 0);
 });
 
 test("an authored recovery ladder stays hidden until authority publishes recovery intent", () => {
@@ -201,6 +286,12 @@ test("Rapier balloon gallery draws the outbound intercept highway before RTB", (
   assert.equal(path.update(state), gates.length);
   assert.equal(path.object3d.userData.mode, "intercept");
   assert.equal(path.object3d.children[0].userData.guidanceStyle, "intercept-chevron");
+  path.object3d.children[0].onBeforeRender();
+  assert.equal(path.object3d.children[0].material.uniforms.uColor.value.value,
+    GUIDANCE_PATH_DEFAULTS.interceptActiveColor);
+  assert.notEqual(GUIDANCE_PATH_DEFAULTS.interceptActiveColor,
+    GUIDANCE_PATH_DEFAULTS.rtbActiveColor,
+    "outbound intercept and recovery must not share the same amber semantic");
 });
 
 test("an active Case I gate gets a visible conformal join corridor", () => {

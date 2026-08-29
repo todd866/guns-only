@@ -12,6 +12,7 @@
 }
 
 * { box-sizing: border-box; }
+button, a { font: inherit; touch-action: manipulation; }
 
 html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 
@@ -36,6 +37,7 @@ body {
 }
 
 .title-lockup { display: flex; align-items: baseline; gap: 12px; }
+.top-actions { display: flex; align-items: center; gap: 14px; }
 .brand, .eyebrow {
   color: var(--warm);
   font-size: 10px;
@@ -60,8 +62,29 @@ h1 { font-size: 18px; letter-spacing: -0.025em; }
 #status i { width: 7px; height: 7px; border-radius: 50%; background: var(--warm); box-shadow: 0 0 12px currentColor; }
 #status[data-ready="true"] i { color: #8fba79; background: currentColor; }
 #status[data-error="true"] i { color: var(--hazard); background: currentColor; }
+#status[data-result="true"] i { color: var(--warm); background: currentColor; }
 
-main { min-height: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); }
+.mission-control {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid rgba(196, 210, 171, 0.26);
+  color: #cbd3c4;
+  background: rgba(13, 23, 20, 0.72);
+  font: 750 9px/1 ui-monospace, "SF Mono", Menlo, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.mission-control:hover { border-color: rgba(213, 181, 111, 0.55); color: #f0e6c8; }
+.mission-control:focus-visible { outline: 2px solid var(--warm); outline-offset: 2px; }
+.mission-control:disabled { opacity: 0.42; cursor: default; }
+
+main { position: relative; min-height: 0; display: grid; grid-template-columns: 240px minmax(0, 1fr); }
+
+/* The sidebar is a dispatch aid. Once the rider has reviewed it, give the track the whole frame;
+   H · CONTROLS remains the deliberate way to reopen the complete teaching card. */
+body[data-dispatch="false"] main { grid-template-columns: minmax(0, 1fr); }
+body[data-dispatch="false"] aside { display: none; }
 
 aside {
   position: relative;
@@ -118,19 +141,232 @@ kbd {
   pointer-events: none;
 }
 
+.mission-overlay {
+  position: fixed;
+  z-index: 20;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right))
+    max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  background:
+    linear-gradient(135deg, rgba(36, 48, 36, 0.12), transparent 45%),
+    rgba(3, 8, 7, 0.86);
+  backdrop-filter: blur(8px);
+}
+.mission-overlay[hidden] { display: none !important; }
+
+.mission-card {
+  width: min(660px, 100%);
+  max-height: calc(100dvh - max(36px, env(safe-area-inset-top)) - max(36px, env(safe-area-inset-bottom)));
+  overflow-y: auto;
+  padding: 28px;
+  border: 1px solid rgba(213, 181, 111, 0.38);
+  color: #e5eadc;
+  background:
+    linear-gradient(145deg, rgba(23, 34, 29, 0.98), rgba(8, 15, 13, 0.99));
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.65);
+}
+.mission-card--pause { width: min(390px, 100%); text-align: center; }
+.mission-card--brief { width: min(620px, 100%); }
+.mission-card h2 { margin: 7px 0 6px; font-size: 27px; font-weight: 650; letter-spacing: -0.025em; }
+.mission-card > p {
+  margin: 0 0 22px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.mission-kicker,
+.mission-hint,
+.mission-sectors > span {
+  color: var(--warm);
+  font: 750 10px/1.3 ui-monospace, "SF Mono", Menlo, monospace;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+.mission-hint { display: block; margin-top: 17px; color: var(--muted); letter-spacing: 0.1em; }
+
+.mission-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 20px; }
+.mission-actions--stacked { grid-template-columns: 1fr; margin-top: 9px; }
+.mission-action {
+  display: grid;
+  min-height: 46px;
+  place-items: center;
+  padding: 0 16px;
+  border: 1px solid rgba(196, 210, 171, 0.26);
+  color: #dce3d5;
+  background: rgba(18, 29, 25, 0.86);
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+.mission-action:hover { border-color: rgba(213, 181, 111, 0.55); color: #fff4d6; }
+.mission-action:focus-visible { outline: 2px solid var(--warm); outline-offset: 2px; }
+.mission-action--primary {
+  border-color: #e7c778;
+  color: #171309;
+  background: linear-gradient(180deg, #f5df9f, #d7b968);
+  font-weight: 800;
+}
+.mission-card--pause > .mission-action--primary { width: 100%; margin-top: 18px; }
+
+.mission-brief-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border: solid var(--line);
+  border-width: 1px 0 0 1px;
+}
+.mission-brief-facts div {
+  min-width: 0;
+  padding: 12px;
+  border: solid var(--line);
+  border-width: 0 1px 1px 0;
+}
+.mission-brief-facts dt {
+  color: var(--muted);
+  font: 750 9px/1.2 ui-monospace, "SF Mono", Menlo, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.mission-brief-facts dd {
+  margin: 7px 0 0;
+  color: #edf1e8;
+  font: 700 12px/1.3 ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+.mission-correction strong {
+  margin-right: 9px;
+  color: var(--warm);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+
+.device-advisory { display: none; }
+body[data-input="touch"] .device-advisory { display: block; }
+.mission-card > .device-advisory--brief {
+  margin: -8px 0 18px;
+  padding: 9px 11px;
+  border: 1px solid rgba(229, 121, 84, 0.36);
+  color: #e9c2ad;
+  background: rgba(97, 41, 27, 0.18);
+  font: 700 10px/1.45 ui-monospace, "SF Mono", Menlo, monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.device-advisory--play {
+  position: absolute;
+  z-index: 5;
+  top: max(10px, env(safe-area-inset-top));
+  left: 50%;
+  max-width: calc(100% - 24px);
+  margin: 0;
+  transform: translateX(-50%);
+  padding: 7px 10px;
+  border: 1px solid rgba(213, 181, 111, 0.42);
+  color: #f0dfb9;
+  background: rgba(8, 15, 13, 0.9);
+  font: 750 9px/1.3 ui-monospace, "SF Mono", Menlo, monospace;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+body[data-dispatch="true"] .device-advisory--play,
+body[data-paused="true"] .device-advisory--play,
+body[data-terminal="true"] .device-advisory--play { display: none; }
+body[data-dispatch="true"] #controls-onboarding-reopen,
+body[data-dispatch="true"] #controls-onboarding-nudge { display: none !important; }
+
+.mission-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 22px 0 0;
+  border: solid var(--line);
+  border-width: 1px 0 0 1px;
+}
+.mission-metrics div {
+  min-width: 0;
+  padding: 12px;
+  border: solid var(--line);
+  border-width: 0 1px 1px 0;
+}
+.mission-metrics dt {
+  color: var(--muted);
+  font: 750 9px/1.2 ui-monospace, "SF Mono", Menlo, monospace;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.mission-metrics dd {
+  overflow: hidden;
+  margin: 7px 0 0;
+  color: #edf1e8;
+  font: 700 14px/1.2 ui-monospace, "SF Mono", Menlo, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mission-metrics dd[data-tone="warning"] { color: var(--hazard); }
+
+.mission-sectors { margin-top: 17px; }
+.mission-sectors ol {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.mission-sectors li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font: 650 11px/1.2 ui-monospace, "SF Mono", Menlo, monospace;
+}
+.mission-sectors b { color: var(--green); font-size: 9px; letter-spacing: 0.1em; }
+.mission-sectors output { color: #dce3d5; }
+
+.mission-card > .mission-correction {
+  margin: 18px 0 0;
+  padding: 12px 14px;
+  border-left: 2px solid var(--green);
+  color: #cdd8c6;
+  background: rgba(145, 172, 120, 0.08);
+  font: 12px/1.45 ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+body[data-paused="true"] #hud,
+body[data-terminal="true"] #hud { opacity: 0.2; }
+body[data-paused="true"] #controls-onboarding-reopen,
+body[data-paused="true"] #controls-onboarding-nudge,
+body[data-terminal="true"] #controls-onboarding-reopen,
+body[data-terminal="true"] #controls-onboarding-nudge { display: none !important; }
+
 @media (max-width: 760px) {
   body { grid-template-rows: 48px minmax(0, 1fr); }
   .brand, .prototype { display: none; }
+  #status { display: none; }
   main { grid-template-columns: 1fr; }
-  aside {
-    position: absolute;
-    z-index: 5;
-    left: 8px;
-    bottom: 8px;
-    width: min(220px, calc(100vw - 16px));
-    max-height: 34vh;
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    opacity: 0.92;
-  }
+  aside { display: none; }
+  .mission-card { padding: 22px; }
+  .mission-brief-facts { grid-template-columns: 1fr; }
+  .mission-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mission-sectors ol { grid-template-columns: repeat(2, 1fr); }
+}
+
+body[data-input="touch"] main { grid-template-columns: 1fr; }
+body[data-input="touch"] aside { display: none; }
+
+@media (max-height: 520px) {
+  .mission-overlay { place-items: start center; padding-block: 10px; }
+  .mission-card { max-height: calc(100dvh - 20px); padding: 18px 20px; }
+  .mission-card h2 { font-size: 23px; }
+  .mission-card > p { margin-bottom: 14px; }
+  .mission-brief-facts div { padding: 8px 10px; }
+  .mission-card > .mission-correction { margin-top: 12px; padding: 9px 11px; }
+  .mission-actions { margin-top: 12px; }
 }

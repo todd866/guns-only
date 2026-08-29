@@ -18,6 +18,8 @@ test("ember path maps sim gates into guidance_path approach samples", () => {
     ],
   });
   assert.equal(state.approach_guidance_active, true);
+  assert.equal(state.approach_join_guidance_active, false,
+    "Cobra gates are authored world points; ownship-relative join chevrons would visibly slide");
   assert.equal(state.approach_gate_count, 2);
   assert.equal(state.approach_gates[1].active, true);
   assert.equal(state.approach_gates[1].east_m, -2710);
@@ -71,6 +73,21 @@ test("a transient empty route frame retains shared-path ownership", () => {
     .approach_guidance_active, false);
 });
 
+test("combat acts suppress stale bridge gates so the objective path owns guidance", () => {
+  for (const mission_act of ["engage", "hold"]) {
+    const state = emberPathGuidanceState({
+      mission_act,
+      path_gates: [
+        { east_m: 10, up_m: 140, north_m: 20, active: true },
+        { east_m: 30, up_m: 145, north_m: 40, active: false },
+      ],
+    });
+    assert.equal(state.approach_guidance_active, false);
+    assert.equal(state.approach_gate_count, 0);
+    assert.deepEqual(state.approach_gates, []);
+  }
+});
+
 test("pad-centred gates stay dark while ownship is still on Camp Ember", () => {
   const state = emberPathGuidanceState({
     path_gates: [
@@ -96,7 +113,7 @@ test("engage and hold overlays explain the conquest that authority actually runs
   const engage = emberActObjectiveOverlay("engage");
   const hold = emberActObjectiveOverlay("hold");
   assert.match(engage.line, /BREAK HOSTILE POINTS/);
-  assert.match(engage.detail, /garrison.*clear.*friendly lift/i);
+  assert.match(engage.detail, /gun pit.*clear.*friendly lift/i);
   assert.match(hold.line, /POINT MAJORITY/);
   assert.match(hold.detail, /tickets bleed/i);
   assert.doesNotMatch(`${engage.line} ${engage.detail} ${hold.line} ${hold.detail}`,

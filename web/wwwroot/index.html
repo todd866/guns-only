@@ -19,8 +19,32 @@
       --safe-right: env(safe-area-inset-right, 0px);
       --safe-bottom: env(safe-area-inset-bottom, 0px);
       --safe-left: env(safe-area-inset-left, 0px);
+      /* Shared mission-flow surfaces use one small vocabulary. The HUD keeps its own instrument
+         palette; these tokens belong only to the shell which surrounds a sortie. */
+      --flow-font-display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      --flow-font-data: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --flow-bg: #0b0d11;
+      --flow-panel: #12171f;
+      --flow-panel-raised: #181f29;
+      --flow-ink: #fdf6e6;
+      --flow-ink-muted: rgba(253, 246, 230, .68);
+      --flow-ink-faint: rgba(253, 246, 230, .44);
+      --flow-line: rgba(253, 246, 230, .18);
+      --flow-accent: #7af0a5;
+      --flow-accent-ink: #caffdc;
+      --flow-action-top: #fbe6b4;
+      --flow-action-bottom: #f0cf8b;
+      --flow-radius-sm: 3px;
+      --flow-radius-md: 6px;
+      --flow-space-1: 6px;
+      --flow-space-2: 10px;
+      --flow-space-3: 14px;
+      --flow-space-4: 20px;
+      --flow-space-5: 28px;
+      --flow-reading-width: 46ch;
+      --flow-shadow: 0 18px 60px rgba(0, 0, 0, .42);
       color-scheme: dark;
-      font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+      font-family: var(--flow-font-display);
       background: #030913;
     }
 
@@ -897,7 +921,7 @@
 
     .touch-mode #ready-screen { z-index: 13; }
     @media (max-width: 900px) {
-      #ready-screen {
+      :root #ready-screen {
         background-image:
           linear-gradient(to bottom,
             rgba(12, 14, 22, .30) 0%,
@@ -952,7 +976,8 @@
     #test-flight-console > summary::-webkit-details-marker,
     #nav-console > summary::-webkit-details-marker { display: none; }
 
-    #test-flight-console, #nav-console > summary:focus-visible {
+    #test-flight-console > summary:focus-visible,
+    #nav-console > summary:focus-visible {
       outline: 2px solid #8ef5e7;
       outline-offset: -2px;
     }
@@ -979,8 +1004,10 @@
       font-size: 8px;
     }
 
-    #test-flight-console, #nav-console[open] .tf-collapse-cue::before { content: "CLOSE ▲"; }
-    #test-flight-console, #nav-console:not([open]) .tf-collapse-cue::before { content: "OPEN ▼"; }
+    #test-flight-console[open] .tf-collapse-cue::before,
+    #nav-console[open] .tf-collapse-cue::before { content: "CLOSE ▲"; }
+    #test-flight-console:not([open]) .tf-collapse-cue::before,
+    #nav-console:not([open]) .tf-collapse-cue::before { content: "OPEN ▼"; }
 
     .tf-body {
       max-height: calc(100vh - var(--safe-top) - var(--safe-bottom) - 62px);
@@ -1315,7 +1342,8 @@
 
     @media (max-width: 620px) {
       #test-flight-console, #nav-console { width: min(292px, calc(100vw - 16px)); top: calc(var(--safe-top) + 32px); right: calc(var(--safe-right) + 8px); }
-      #test-flight-console, #nav-console > summary { min-height: 36px; padding-block: 7px; }
+      #test-flight-console > summary,
+      #nav-console > summary { min-height: 36px; padding-block: 7px; }
     }
 
     /* No card. The menu WAS an opaque phosphor-green terminal panel -- 98%-opaque near-black, a
@@ -1919,17 +1947,17 @@
       cursor: not-allowed;
     }
 
-    /* A compact, discoverable pause target. The full "Pause · Esc" label was permanent flight
-       chrome even though the keyboard binding is taught once in Controls. */
+    /* The desktop pause target teaches its own keyboard path. Touch retains the compact icon
+       because a key name is meaningless there and the 44 px target must stay clear of the HUD. */
     #pause-button {
       position: fixed;
       z-index: 9;
       top: calc(var(--safe-top) + 38px);
       left: calc(var(--safe-left) + 11px);
-      width: 44px;
+      width: auto;
       min-width: 44px;
       min-height: 44px;
-      padding: 0;
+      padding: 0 11px;
       border: 1px solid rgba(77, 255, 136, .35);
       border-radius: 4px;
       color: rgba(217, 255, 229, .76);
@@ -2143,7 +2171,7 @@
       .sortie-choice { min-height: 64px; padding: 8px 9px; }
       .sortie-choice strong { font-size: 12.5px; }
       .sortie-choice > span:not(.sortie-number),
-      .sortie-choice > small { display: none; }
+      .sortie-choice > small:not(.sortie-contract) { display: none; }
       .sortie-number { margin-bottom: 5px; font-size: 8px; }
       .ready-briefing { overflow: visible; padding: 15px 15px 16px; }
       .ready-activity-nav { margin-bottom: 13px; }
@@ -2194,7 +2222,7 @@
       }
       .touch-mode #ready-screen[data-mode="program"] .ready-program-heading p,
       .touch-mode #ready-screen[data-mode="program"] .sortie-choice > span:not(.sortie-number),
-      .touch-mode #ready-screen[data-mode="program"] .sortie-choice > small {
+      .touch-mode #ready-screen[data-mode="program"] .sortie-choice > small:not(.sortie-contract) {
         display: none;
       }
       .touch-mode #ready-screen[data-mode="program"] .sortie-option + .sortie-option {
@@ -2956,14 +2984,25 @@
     #ready-screen:not([data-mode="program"]) #ready-handoff,
     #ready-screen:not([data-mode="program"]) .ready-secondary-actions { width: min(24rem, 100%); }
 
+    /* The first visit uses the same warm briefing card as every result and pause surface, but it
+       is a real Ready interlock rather than a hidden auto-launch. Two decisions only: deliberately
+       enter the guided valley, or open the same mission programme returning pilots see. */
+    #ready-screen[data-mode="intro"] .ready-card {
+      height: 100%;
+      justify-content: center;
+    }
+
+    #ready-screen[data-mode="intro"] .ready-secondary-actions {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     /* ------------------------------------------------------------------------------------
-       WORDLESS AIRCRAFT PICKER
-       "I really just wanna know what airplane am I flying today" -- so the menu is two paintings
-       of two aeroplanes, and you touch one. No heading, no aircraft names, no briefing, no
-       statistics, no keyboard legend, no hint line, no label on the button. Every one of those
-       is still in the DOM and still announced to screen readers; none of them is drawn.
-       Green survives exactly where the paintings put it -- the service lamps on the hangar wall --
-       and is used for one job only: showing which aeroplane is selected, and that it will go.
+       AIRCRAFT + MISSION PICKER
+       The paintings still make the first impression, but an aircraft is not the whole decision:
+       each programme has a different verb and a different ending. Hover, focus, or select a card
+       to reveal that compact contract. The full briefing stays out of this poster rail; the player
+       gets just enough truth to know whether they are choosing continuous combat, a finite
+       recovery, an open ride, or a multi-sortie civilian programme.
        ------------------------------------------------------------------------------------ */
 
     #ready-screen[data-mode="program"] .ready-menu-header,
@@ -3039,6 +3078,20 @@
       transition: filter .22s ease, border-color .22s ease, box-shadow .22s ease;
     }
 
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]::before {
+      position: absolute;
+      z-index: 1;
+      inset: 0;
+      border-radius: inherit;
+      content: "";
+      pointer-events: none;
+      /* The lower scrim is always present because aircraft and sortie identity are always
+         present. Interaction raises it to full strength before revealing the longer contract. */
+      opacity: .72;
+      background: linear-gradient(to bottom, transparent 42%, rgba(5, 8, 12, .3) 58%, rgba(5, 8, 12, .96) 100%);
+      transition: opacity .18s ease;
+    }
+
     #ready-screen .sortie-choice[data-aircraft="f22"] {
       background-image: image-set(url("./art/jet-f22.webp") type("image/webp"));
     }
@@ -3078,8 +3131,8 @@
       filter: none;
     }
 
-    /* Announced, never drawn: the aircraft's name and programme state stay in the accessible
-       name of the button that carries the painting. */
+    /* Every card keeps its aircraft and sortie identity on screen. Only the longer
+       verb-and-endpoint contract waits for selection, hover, or keyboard focus. */
     #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > * {
       position: absolute;
       inset: 0 auto auto 0;
@@ -3091,10 +3144,66 @@
       white-space: nowrap;
     }
 
-    /* Go. A chevron, lit like the lamps. Its accessible name is still "Fly <aircraft>". */
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-number,
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > strong {
+      z-index: 2;
+      width: auto;
+      height: auto;
+      margin: 0;
+      overflow: visible;
+      clip: auto;
+      white-space: normal;
+      text-align: left;
+      pointer-events: none;
+    }
+
+    #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft]::before,
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]:hover::before,
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]:focus-visible::before { opacity: 1; }
+
+    #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft] > *,
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]:hover > *,
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft]:focus-visible > * {
+      z-index: 2;
+      width: auto;
+      height: auto;
+      margin: 0;
+      overflow: visible;
+      clip: auto;
+      white-space: normal;
+      text-align: left;
+      pointer-events: none;
+    }
+
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-number {
+      inset: auto 12px 58px;
+      color: #9bf2b9;
+      font: 750 9px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .13em;
+    }
+
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > strong {
+      inset: auto 12px 31px;
+      color: #fff9ed;
+      font: 500 20px/1 "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+      letter-spacing: .01em;
+      text-shadow: 0 2px 10px #000;
+    }
+
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-contract {
+      display: block;
+      inset: auto 12px 11px;
+      color: rgba(253, 246, 230, .76);
+      font: 650 9px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+    }
+
+    /* Go. The authored Fly label is visible: different programmes have different commitments,
+       so the final gesture names the thing it will launch instead of relying on a bare chevron. */
     #ready-screen[data-mode="program"] #ready-start {
-      display: grid;
-      width: min(200px, 46vw);
+      display: flex;
+      width: min(310px, 76vw);
       max-width: none;
       min-height: 52px;
       margin: clamp(12px, 2.4vh, 26px) auto 0;
@@ -3102,8 +3211,13 @@
       border-radius: 3px;
       background: rgba(122, 240, 165, .16);
       box-shadow: inset 0 0 0 1px rgba(122, 240, 165, .5), 0 0 30px rgba(96, 226, 146, .18);
-      font-size: 0;
-      place-items: center;
+      color: #caffdc;
+      font: 750 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
       text-shadow: none;
     }
 
@@ -3162,6 +3276,31 @@
         overscroll-behavior-x: contain;
         scroll-snap-type: x mandatory;
         touch-action: pan-x pinch-zoom;
+      }
+      #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-number {
+        inset: auto 10px 72px;
+        font-size: 8px;
+      }
+      #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > strong {
+        inset: auto 10px 46px;
+        font-size: 17px;
+      }
+      #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-contract {
+        inset: auto 10px 10px;
+        max-height: 2.5em;
+        overflow: hidden;
+        font-size: 7px;
+        letter-spacing: .035em;
+      }
+    }
+
+    @media (max-height: 500px) and (orientation: landscape) {
+      .touch-mode #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] > .sortie-contract {
+        overflow: hidden;
+        font-size: 7px;
+        letter-spacing: .025em;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
     }
 
@@ -3345,6 +3484,393 @@
     }
     #ready-screen[data-mode="pause"] .ready-secondary-actions button[hidden] { display: none; }
 
+    /* ---------------------------------------------------------------------------------------
+       SHARED MISSION-FLOW SURFACES
+       Build 349's picker, first-sortie brief, pause and result are one journey. This final layer
+       gives those modes the same type scale, spacing, action hierarchy and responsive rules.
+       It intentionally does not reach into any in-flight HUD or standalone mission route.
+       --------------------------------------------------------------------------------------- */
+    #ready-screen {
+      color: var(--flow-ink);
+      font-family: var(--flow-font-display);
+    }
+
+    #ready-screen :where(button, a, summary):focus-visible {
+      outline: 2px solid var(--flow-accent);
+      outline-offset: 3px;
+    }
+
+    #ready-screen:is([data-mode="debrief"], [data-mode="pause"]) {
+      background-color: var(--flow-bg);
+      background-image:
+        radial-gradient(circle at 50% 16%, rgba(122, 240, 165, .055), transparent 38%),
+        linear-gradient(180deg, #0d1117, var(--flow-bg));
+    }
+
+    /* Onboarding keeps the authored painted front door. The bounded panel supplies local contrast;
+       this scrim only settles the bright cloud tops instead of flattening the art into a generic
+       dark gradient shared with pause. */
+    #ready-screen[data-mode="intro"] {
+      background-color: var(--flow-bg);
+      background-image:
+        linear-gradient(105deg,
+          rgba(11, 13, 17, .84) 0%,
+          rgba(11, 13, 17, .50) 43%,
+          rgba(11, 13, 17, .22) 68%,
+          rgba(11, 13, 17, .46) 100%),
+        image-set(url("./art/menu-hangar.webp") type("image/webp"));
+    }
+
+    @media (max-width: 900px) {
+      #ready-screen[data-mode="intro"] {
+        background-image:
+          linear-gradient(to bottom,
+            rgba(11, 13, 17, .32) 0%,
+            rgba(11, 13, 17, .56) 48%,
+            rgba(11, 13, 17, .84) 100%),
+          image-set(url("./art/menu-hangar-small.webp") type("image/webp"));
+      }
+    }
+
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-card {
+      width: min(42rem, 100%);
+      height: auto;
+      max-height: 100%;
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-md);
+      background: linear-gradient(180deg, rgba(24, 31, 41, .98), rgba(18, 23, 31, .98));
+      box-shadow: var(--flow-shadow);
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      text-shadow: none;
+    }
+
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-menu-header {
+      width: 100%;
+      padding: var(--flow-space-3) clamp(var(--flow-space-4), 5vw, var(--flow-space-5));
+      border-bottom: 1px solid var(--flow-line);
+    }
+
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-menu-title {
+      color: var(--flow-ink-faint);
+      font: 750 10px/1 var(--flow-font-data);
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-briefing {
+      align-items: stretch;
+      padding: clamp(var(--flow-space-4), 5vw, 36px);
+      text-align: left;
+    }
+
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-kicker {
+      margin-bottom: var(--flow-space-2);
+      color: var(--flow-accent);
+      font: 750 10px/1.35 var(--flow-font-data);
+      letter-spacing: .14em;
+    }
+
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-title {
+      color: var(--flow-ink);
+      font: 450 clamp(30px, 5vw, 46px)/1.06 var(--flow-font-display);
+      letter-spacing: .005em;
+    }
+
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-brief {
+      max-width: var(--flow-reading-width);
+      margin: var(--flow-space-3) 0 var(--flow-space-4);
+      color: var(--flow-ink-muted);
+      font-size: clamp(14px, 1.7vw, 16px);
+      line-height: 1.55;
+    }
+
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-facts {
+      gap: 1px;
+      margin-bottom: var(--flow-space-4);
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-sm);
+      background: var(--flow-line);
+      overflow: hidden;
+    }
+
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-fact {
+      min-height: 76px;
+      padding: var(--flow-space-3);
+      border: 0;
+      background: var(--flow-panel-raised);
+    }
+
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-fact + .ready-fact {
+      padding-left: var(--flow-space-3);
+      border-left: 0;
+    }
+
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-fact small {
+      color: var(--flow-ink-faint);
+      font: 750 9px/1.2 var(--flow-font-data);
+      letter-spacing: .13em;
+    }
+
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-fact span {
+      color: var(--flow-ink);
+      font-size: 12px;
+      line-height: 1.45;
+      letter-spacing: .015em;
+    }
+
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-controls {
+      max-width: var(--flow-reading-width);
+      margin: 0 0 var(--flow-space-4);
+      padding: var(--flow-space-3) var(--flow-space-4);
+      border-left: 2px solid var(--flow-accent);
+      color: var(--flow-ink-muted);
+      background: rgba(122, 240, 165, .045);
+      font: 650 11px/1.55 var(--flow-font-data);
+      letter-spacing: .025em;
+      text-transform: none;
+    }
+
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-start,
+    #ready-screen[data-mode="pause"] #ready-start {
+      border-radius: var(--flow-radius-sm);
+      color: #2a2113;
+      background: linear-gradient(180deg, var(--flow-action-top), var(--flow-action-bottom));
+      box-shadow: 0 10px 34px rgba(0, 0, 0, .42);
+      font-family: var(--flow-font-display);
+      text-shadow: none;
+    }
+
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-replay,
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-handoff,
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-secondary-actions button,
+    #ready-screen[data-mode="pause"] .ready-secondary-actions button {
+      min-height: 46px;
+      border: 1px solid var(--flow-line);
+      border-radius: var(--flow-radius-sm);
+      color: var(--flow-ink-muted);
+      background: var(--flow-panel-raised);
+      font: 450 13px/1.2 var(--flow-font-display);
+      letter-spacing: .015em;
+      text-transform: none;
+    }
+
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-replay:hover,
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-handoff:hover,
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-secondary-actions button:hover,
+    #ready-screen[data-mode="pause"] .ready-secondary-actions button:hover {
+      border-color: rgba(253, 246, 230, .46);
+      color: var(--flow-ink);
+      background: #202833;
+    }
+
+    #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-hint {
+      color: var(--flow-ink-faint);
+      font: 700 8px/1.3 var(--flow-font-data);
+    }
+
+    #ready-screen[data-mode="debrief"] .ready-secondary-actions,
+    #ready-screen[data-mode="pause"] .ready-secondary-actions {
+      grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+    }
+
+    #ready-screen[data-mode="pause"] #ready-return:not([hidden]) {
+      grid-column: 1 / -1;
+    }
+
+    #ready-screen[data-mode="program"] {
+      background-color: var(--flow-bg);
+    }
+
+    #ready-screen[data-mode="program"] .ready-mission-groups {
+      grid-template-columns: repeat(auto-fit, minmax(170px, 240px));
+      justify-content: center;
+      gap: clamp(var(--flow-space-2), 2vw, var(--flow-space-4));
+    }
+
+    #ready-screen[data-mode="program"] .ready-domain-tabs button {
+      min-height: 44px;
+      border-color: var(--flow-line);
+      color: var(--flow-ink-faint);
+      font-family: var(--flow-font-data);
+    }
+
+    #ready-screen[data-mode="program"] .ready-domain-tabs button[aria-pressed="true"] {
+      border-color: rgba(122, 240, 165, .68);
+      color: var(--flow-accent-ink);
+    }
+
+    #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] {
+      width: 100%;
+      height: auto;
+      aspect-ratio: 4 / 5;
+      border-color: var(--flow-line);
+      border-radius: var(--flow-radius-sm);
+    }
+
+    #ready-screen[data-mode="program"] .sortie-option[data-selected="true"] .sortie-choice[data-aircraft] {
+      border-color: rgba(122, 240, 165, .72);
+      box-shadow: 0 0 0 1px rgba(122, 240, 165, .28), 0 12px 42px rgba(0, 0, 0, .36);
+    }
+
+    #ready-screen[data-mode="program"] #ready-start {
+      border-radius: var(--flow-radius-sm);
+      color: var(--flow-accent-ink);
+      font: 750 11px/1 var(--flow-font-data);
+    }
+
+    @media (max-width: 620px) and (orientation: portrait) {
+      #ready-screen[data-mode="program"] .ready-mission-groups {
+        grid-template-columns: none;
+        grid-auto-columns: clamp(136px, 42vw, 190px);
+        justify-content: start;
+      }
+
+      #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-facts {
+        grid-template-columns: 1fr;
+      }
+
+      #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-fact + .ready-fact {
+        border-top: 1px solid var(--flow-line);
+      }
+    }
+
+    /* This rule comes after the pictorial-picker override on purpose. Build 349's earlier
+       two-column rule was valid in isolation but lost the cascade to a later display:block,
+       leaving Fly below a tall poster grid on phone-shaped landscape screens. */
+    @media (max-height: 500px) and (orientation: landscape) {
+      #ready-screen {
+        padding:
+          calc(var(--safe-top) + 8px)
+          calc(var(--safe-right) + 8px)
+          calc(var(--safe-bottom) + 8px)
+          calc(var(--safe-left) + 8px);
+      }
+
+      :root #ready-screen[data-mode="program"] .ready-card {
+        width: min(1180px, 100%);
+        justify-content: center;
+        overflow: hidden;
+      }
+
+      :root #ready-screen[data-mode="program"] .ready-layout {
+        display: grid;
+        min-height: 0;
+        grid-template-columns: minmax(0, 1fr) minmax(190px, 250px);
+        gap: var(--flow-space-3);
+        align-items: center;
+      }
+
+      :root #ready-screen[data-mode="program"] .ready-selector,
+      :root #ready-screen[data-mode="program"] .ready-briefing {
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: auto;
+      }
+
+      :root #ready-screen[data-mode="program"] .ready-mission-groups {
+        grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+        gap: var(--flow-space-2);
+      }
+
+      :root #ready-screen[data-mode="program"] .sortie-choice[data-aircraft] {
+        aspect-ratio: 4 / 3;
+      }
+
+      :root #ready-screen[data-mode="program"] #ready-start {
+        width: 100%;
+        margin-top: 0;
+      }
+
+      :root #ready-screen[data-mode="program"] .ready-secondary-actions {
+        margin-top: var(--flow-space-2);
+      }
+
+      :root #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-card {
+        height: 100%;
+      }
+
+      :root #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-menu-header {
+        padding-block: var(--flow-space-1);
+      }
+
+      :root #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-briefing {
+        display: grid;
+        min-height: 0;
+        padding: var(--flow-space-1) var(--flow-space-3);
+        grid-template-columns: minmax(0, 1fr) minmax(230px, .72fr);
+        grid-auto-flow: dense;
+        gap: 4px var(--flow-space-4);
+        align-content: start;
+        overflow-y: auto;
+      }
+
+      :root #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) :is(
+        #ready-kicker, #ready-title, #ready-brief, .ready-facts
+      ) { grid-column: 1; }
+
+      :root #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) :is(
+        .ready-controls, #ready-start, #ready-replay, #ready-handoff,
+        .ready-secondary-actions, #ready-hint, #ready-build-row
+      ) {
+        width: 100%;
+        margin: 0;
+        grid-column: 2;
+      }
+
+      :root #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-title {
+        font-size: clamp(30px, 5vw, 36px);
+      }
+
+      :root #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-brief {
+        margin: 0;
+        font-size: 12.5px;
+        line-height: 1.4;
+      }
+
+      :root #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-facts {
+        margin: 0;
+      }
+
+      :root #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-fact {
+        min-height: 56px;
+        padding: 8px;
+      }
+
+      :root #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-fact span {
+        font-size: 11px;
+        line-height: 1.35;
+      }
+
+      :root #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) .ready-controls {
+        padding: var(--flow-space-2);
+        font-size: 9.5px;
+        line-height: 1.4;
+      }
+
+      /* The short landscape card has a dedicated action column, so the compact authored touch
+         grammar is useful here instead of being hidden by the general phone rule. */
+      .touch-mode #ready-screen[data-mode="intro"] .ready-controls {
+        display: block;
+      }
+
+      :root #ready-screen:is([data-mode="intro"], [data-mode="debrief"]) #ready-start {
+        min-height: 52px;
+      }
+
+      :root #ready-screen[data-mode="debrief"] .ready-secondary-actions {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: var(--flow-space-1);
+      }
+
+      :root #ready-screen[data-mode="debrief"] .ready-secondary-actions button {
+        min-height: 44px;
+        padding-inline: 4px;
+        font-size: 11px;
+      }
+    }
+
     @keyframes boot-pulse {
       0%, 100% { opacity: .34; transform: scale(.78); }
       50% { opacity: 1; transform: scale(1); }
@@ -3360,7 +3886,7 @@
   <canvas id="hud" aria-hidden="true"></canvas>
   <div id="view-status" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="multiplayer-status" role="status" aria-live="polite" data-phase="off" hidden>SOLO · ROOM NOT CONFIGURED</div>
-  <button id="pause-button" type="button" aria-label="Pause sortie (Escape)"><span class="pause-desktop" aria-hidden="true">Ⅱ</span><span class="pause-mobile" aria-hidden="true">Ⅱ</span></button>
+  <button id="pause-button" type="button" aria-label="Pause sortie (Escape)"><span class="pause-desktop" aria-hidden="true">ESC · PAUSE</span><span class="pause-mobile" aria-hidden="true">Ⅱ</span></button>
   <output id="flight-announcer" class="visually-hidden" role="status" aria-live="assertive" aria-atomic="true"></output>
   <section id="rapier-radio" aria-label="Optional radio captions" hidden>
     <output id="rapier-radio-text" role="status" aria-live="polite" aria-atomic="true"></output>
@@ -3665,42 +4191,49 @@
               <button type="button" class="sortie-choice" data-aircraft="f22" data-program-node="first-merge" aria-pressed="true">
                 <span class="sortie-number">GUNS ONLY <b data-program-status="first-merge"></b></span>
                 <strong>F-22A</strong>
+                <small class="sortie-contract">Continuous ACM · RTB on command</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="military" data-selected="false" data-program-state="preview" hidden>
               <button type="button" class="sortie-choice" data-aircraft="f22" data-program-node="multiplayer" aria-pressed="false">
                 <span class="sortie-number">MULTIPLAYER <b data-program-status="multiplayer"></b></span>
                 <strong>F-22A</strong>
+                <small class="sortie-contract">Rated arena · Match result</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="military" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-aircraft="rapier" data-program-node="rapier-intercept" aria-pressed="false">
                 <span class="sortie-number">INTERCEPT <b data-program-status="rapier-intercept"></b></span>
                 <strong>Rapier</strong>
+                <small class="sortie-contract">Three targets · Intercept + recover</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="military" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-aircraft="cobra" data-program-node="cobra-lab" aria-pressed="false">
                 <span class="sortie-number">COBRA CANYON <b data-program-status="cobra-lab"></b></span>
                 <strong>AH-1G</strong>
+                <small class="sortie-contract">Hold more points · Bleed tickets · RTB Ember</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="civilian" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-aircraft="bike" data-program-node="weekend-ride" aria-pressed="false">
                 <span class="sortie-number">WEEKEND RIDE <b data-program-status="weekend-ride"></b></span>
                 <strong>YZF-R1</strong>
+                <small class="sortie-contract">Open lapping · End ride when ready</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="civilian" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-aircraft="fireboss" data-program-node="okanagan-fireboss" aria-pressed="false">
                 <span class="sortie-number">OKANAGAN FIRE <b data-program-status="okanagan-fireboss"></b></span>
                 <strong>AT-802F Fire Boss</strong>
+                <small class="sortie-contract">Train · Attack · Coordinate · Recover</small>
               </button>
             </div>
             <div class="sortie-option" data-domain="military" data-selected="false" data-program-state="available">
               <button type="button" class="sortie-choice" data-aircraft="f14" data-program-node="top-gun" aria-pressed="false">
                 <span class="sortie-number">TOP GUN <b data-program-status="top-gun"></b></span>
                 <strong>F-14A</strong>
+                <small class="sortie-contract">Repeated DACT · Case I recovery</small>
               </button>
             </div>
             <div class="sortie-option" data-selected="false" data-program-state="available" hidden>
@@ -3742,7 +4275,7 @@
           <h2 id="ready-title">First Merge</h2>
           <p id="ready-brief">You are already at the visual merge. Survive the first pass, fight into the rear quarter, and splash one Su-27 surrogate.</p>
           <div class="ready-facts" aria-label="Mission details">
-            <div class="ready-fact"><small id="ready-sortie-label">Sortie</small><span id="ready-sortie">F-22A vs Su-27S · guns only · first pass safe</span></div>
+            <div class="ready-fact"><small id="ready-sortie-label">Sortie</small><span id="ready-sortie">F-22A vs Su-27S · guns only · opening 1v2 guns hot</span></div>
             <div class="ready-fact"><small id="ready-config-label">Configuration</small><span id="ready-config">F-22 public-data surrogate · 480 rounds · Auto-GCAS armed</span></div>
           </div>
           <div id="ready-deck-config" class="ready-deck-config" hidden>
@@ -3774,9 +4307,10 @@ Splash one bandit to qualify · H controls · R restarts</p>
           <button id="ready-replay" type="button" hidden>Replay incident again</button>
           <button id="ready-handoff" type="button" hidden disabled>CALL IT A DAY · RTB</button>
           <div class="ready-secondary-actions">
+            <button id="ready-intro-replay" type="button" hidden>Replay valley intro</button>
             <button id="ready-settings" type="button">Settings</button>
             <button id="ready-restart" type="button" hidden>Restart sortie</button>
-            <button id="ready-return" type="button" hidden>Mission program</button>
+            <button id="ready-return" type="button" hidden>Choose sortie</button>
           </div>
           <div id="ready-hint" aria-live="polite">Press Enter to fly</div>
           <!--
@@ -3798,7 +4332,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
             <span aria-hidden="true">⌨</span> Built for a laptop or desktop: flight controls, the tactical map, and the full instrument set need a keyboard and a real screen.
           </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 343 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 349 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
           <div class="ready-telemetry-disclosure">
@@ -3811,7 +4345,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
     </div>
   </div>
 
-  <section id="settings-screen" role="dialog" aria-modal="true" aria-labelledby="settings-title" aria-describedby="settings-copy" aria-hidden="true">
+  <section id="settings-screen" role="dialog" aria-modal="true" aria-labelledby="settings-title" aria-describedby="settings-copy" aria-hidden="true" inert>
     <div class="settings-card">
       <header class="settings-head">
         <h2 id="settings-title">Settings</h2>
@@ -3902,7 +4436,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     // Derive from a normal stamped URL so this comparison cannot drift from the next release:
     // tools/release/stamp-release.mjs rewrites every `?v=NNN`, and nothing else here.
-    const releaseBuild = new URL("./service-worker.js?v=343", location.href)
+    const releaseBuild = new URL("./service-worker.js?v=349", location.href)
       .searchParams.get("v");
 
     globalThis.__gunsPrebootReady = (async () => {
@@ -3998,11 +4532,11 @@ Splash one bandit to qualify · H controls · R restarts</p>
         });
         document.head.append(script);
       });
-      await loadClassicScript("./multiplayer-config.js?v=343");
-      await loadClassicScript("./_framework/blazor.webassembly.js?v=343", {
+      await loadClassicScript("./multiplayer-config.js?v=349");
+      await loadClassicScript("./_framework/blazor.webassembly.js?v=349", {
         autostart: "false",
       });
-      await import("./app.js?v=343");
+      await import("./app.js?v=349");
     } catch (error) {
       console.error(error);
       document.querySelector("#boot")?.classList.add("ready");
@@ -4015,8 +4549,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       try {
         const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
           await Promise.all([
-            import("./render/shell/inapp_browser.js?v=343"),
-            import("./render/shell/boot_fallback.js?v=343"),
+            import("./render/shell/inapp_browser.js?v=349"),
+            import("./render/shell/boot_fallback.js?v=349"),
           ]);
         const detection = detectEmbeddedBrowser({
           userAgent: navigator.userAgent,

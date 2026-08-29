@@ -307,24 +307,98 @@ public class DetentLayerTests {
         d.SetAnalogPitchControl(0.5);
         d.Tick(g, 0.0, sim.State, FlightModel.Sabre, Advice, 1.0);
         double halfPull = d.Command.GDemand;
+        Assert.False(d.PilotMaximumPullIntent);
         Assert.True(halfPull > 1.0);
         Assert.True(halfPull < Protection.MaxPerformG(
             sim.State, FlightModel.Sabre, d.AirspeedMps));
 
         d.SetAnalogPitchControl(-1.0);
         d.Tick(g, 10.0, sim.State, FlightModel.Sabre, Advice, 1.0);
+        Assert.True(d.PilotUnloadIntent);
+        Assert.False(d.PilotMaximumPullIntent);
         Assert.True(d.Command.GDemand <= 0.0);
 
         g.Feed(GKey.PullUp, true, 20.0);
         d.Tick(g, 20.0, sim.State, FlightModel.Sabre, Advice, 1.0);
+        Assert.False(d.PilotMaximumPullIntent);
         Assert.True(d.Command.GDemand > 1.0);
 
+        g.Feed(GKey.PullUp, false, 25.0);
+        d.SetAnalogPitchControl(0.90);
+        d.Tick(g, 25.0, sim.State, FlightModel.Sabre, Advice, 1.0);
+        Assert.True(d.PilotMaximumPullIntent);
+
         d.ClearAnalogPitchControl();
-        g.Feed(GKey.PullUp, false, 30.0);
         d.Tick(g, 30.0, sim.State, FlightModel.Sabre, Advice, 1.0);
+        Assert.False(d.PilotMaximumPullIntent);
         Assert.Equal(1.0, d.Command.GDemand, 10);
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             d.SetAnalogPitchControl(double.NaN));
+    }
+    [Fact] public void AnalogPitchUsesTheSameExplicitOverrideAuthorityAsKeyboardPitch() {
+        var sim = new AircraftSim(Fast, FlightModel.Sabre);
+        var d = new DetentLayer();
+        var g = new KeyGrammar();
+        g.Feed(GKey.Override, true, 0.0);
+
+        d.SetAnalogPitchControl(1.0);
+        Run(d, g, 0.0, 2_000.0, sim.State);
+        Assert.Equal(DemandTier.OverDemand, d.Tier);
+        Assert.Equal(Protection.HardMaxG(sim.State, FlightModel.Sabre),
+            d.Command.GDemand, 10);
+        Assert.Equal(FlightModel.Sabre.PostStallAlphaCommandRad,
+            d.Command.CommandedAlphaRad, 10);
+        Assert.True(d.Command.EnvelopeOverride);
+
+        d.SetAnalogPitchControl(-1.0);
+        Run(d, g, 2_000.0, 4_000.0, sim.State);
+        Assert.Equal(DemandTier.OverDemand, d.Tier);
+        Assert.True(d.Command.GDemand < -1.0);
+        Assert.Equal(-0.70 * FlightModel.Sabre.PostStallAlphaCommandRad,
+            d.Command.CommandedAlphaRad, 10);
+        Assert.True(d.Command.EnvelopeOverride);
+
+        d.SetAnalogPitchControl(0.0);
+        Run(d, g, 4_000.0, 6_000.0, sim.State);
+        Assert.False(d.Command.EnvelopeOverride);
+        Assert.False(double.IsFinite(d.Command.CommandedAlphaRad));
+    }
+    [Fact] public void AnalogPushRemainsAvailableAfterHighAlphaOverrideRelease() {
+        AircraftParams parameters = FlightModel.F22APublicDataSurrogate;
+        // Below corner, the scheduled override deliberately transitions from a G ceiling to an
+        // incidence command. Exercise that real transition before releasing into recovery; at
+        // 240 m/s the F-22 still has enough attached-flow lift and CommandedAlphaRad is NaN by
+        // design, so that fixture never actually tested an incidence-override release.
+        var state = new AircraftState(new Vec3D(0, 3000, 0), 100,
+            0, 0, 0, parameters.MassKg);
+        var d = new DetentLayer {
+            MeasuredAngleOfAttackRad = 60.0 * Math.PI / 180.0,
+            AirspeedMps = 100.0,
+        };
+        var g = new KeyGrammar();
+        g.Feed(GKey.Override, true, 0.0);
+        d.SetAnalogPitchControl(1.0);
+        d.Tick(g, 0.0, state, parameters, Advice, 1.0);
+        Assert.True(d.Command.EnvelopeOverride);
+        Assert.True(double.IsFinite(d.Command.CommandedAlphaRad));
+
+        g.Feed(GKey.Override, false, 10.0);
+        d.Tick(g, 10.0, state, parameters, Advice, 1.0);
+        Assert.True(d.HighAlphaRecoveryActive);
+        Assert.Equal(1.0, d.Command.GDemand, 10);
+
+        d.SetAnalogPitchControl(-0.5);
+        d.Tick(g, 20.0, state, parameters, Advice, 1.0);
+        Assert.True(d.HighAlphaRecoveryActive);
+        Assert.True(d.Command.GDemand < 0.95,
+            $"analog recovery push was ignored at {d.Command.GDemand:F3} G");
+        Assert.False(d.Command.EnvelopeOverride);
+        Assert.False(double.IsFinite(d.Command.CommandedAlphaRad));
+
+        d.MeasuredAngleOfAttackRad = 0.0;
+        d.SetAnalogPitchControl(0.0);
+        d.Tick(g, 30.0, state, parameters, Advice, 1.0);
+        Assert.False(d.HighAlphaRecoveryActive);
     }
     [Fact] public void CenteredAnalogPitchRetainsApproachOnSpeedTrim() {
         var sim = new AircraftSim(Fast, FlightModel.Sabre);

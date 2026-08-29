@@ -29,7 +29,11 @@ function pointsInSite(site) {
     ["pad.position", site.pad.position],
     ["capsuleStand", site.capsuleStand],
     ["windsock.position", site.windsock.position],
+    ["signal.position", site.signal.position],
+    ["responseVehicle.position", site.responseVehicle.position],
   ];
+  site.landingLights.forEach((position, index) =>
+    points.push([`landingLights[${index}]`, position]));
   for (const [collectionName, collection] of [
     ["trees", site.trees],
     ["structures", site.structures],
@@ -92,6 +96,9 @@ test("plans a stable fictional pickup and receiver course deterministically", ()
   assert.equal(first.sites.receiver.id, CASEVAC_COURSE_SITE_IDS.receiver);
   assert.equal(first.counts.pads, 2);
   assert.equal(first.counts.windsocks, 2);
+  assert.equal(first.counts.landingLights, 32);
+  assert.equal(first.counts.signalPuffs, 28);
+  assert.equal(first.counts.responseVehicles, 2);
   assert.equal(first.counts.capsules, 1);
   assert.equal(CASEVAC_CAPSULE_ID,
     "payload.evacuation-capsule.prototype.v1");
@@ -100,6 +107,23 @@ test("plans a stable fictional pickup and receiver course deterministically", ()
   assert.throws(() => {
     first.seed = 1;
   }, TypeError);
+});
+
+test("makes each landing site readable before and during contact", () => {
+  const plan = planCasevacCourseScenery({ qualityTier: "desktop" });
+  for (const site of Object.values(plan.sites)) {
+    assert.ok(site.pad.sizeM.x >= 24);
+    assert.ok(site.pad.sizeM.z >= 24);
+    assert.ok(site.signal.heightM >= 48 && site.signal.heightM <= 58);
+    assert.ok(site.signal.puffs >= 12 && site.signal.puffs <= 16);
+    assert.equal(site.landingLights.length, 16);
+    assert.ok(site.people.length >= 8);
+    assert.equal(site.responseVehicle.visualOnly, true);
+    assert.ok(Math.hypot(
+      site.responseVehicle.position.x,
+      site.responseVehicle.position.z,
+    ) >= 26, "response vehicle must stay outside the contact pad");
+  }
 });
 
 test("keeps every authored point inside a conservative per-site visual envelope", () => {

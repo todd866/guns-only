@@ -70,7 +70,7 @@ test("servicing phases outrank dry ammo, losing tickets, navigation and garrison
   for (const [turnaround, expectedLine] of phases) {
     const copy = cobraObjectiveCopy(losingDryFight, { player: PLAYER, actOverlay, turnaround });
     assert.equal(copy.line, expectedLine);
-    assert.doesNotMatch(copy.line, /FORD|GARRISON|DEPART|REARM|LOSING/,
+    assert.doesNotMatch(copy.line, /FORD|GUN PIT|DEPART|REARM|LOSING/,
       `stale mission label leaked through ${turnaround.phase}`);
   }
 });
@@ -102,7 +102,7 @@ test("rotor coast uses actual RPM when no normalized rotor fraction is published
   });
   assert.equal(copy.line, "ENGINE OFF · ROTOR COASTING · 88 RPM");
   assert.match(copy.detail, /Rotor 88 RPM/);
-  assert.match(copy.detail, /rotor coasts/i);
+  assert.match(copy.detail, /coasting to handoff/i);
   assert.doesNotMatch(copy.detail, /stop/i,
     "authority hands off at safe RPM; the copy must not promise a stopped rotor");
 });
@@ -111,7 +111,7 @@ test("unknown or ready turnaround state falls through to the live mission order"
   for (const phase of ["ready", "idle", "future-token"]) {
     assert.equal(
       cobraObjectiveCopy(conquest(), { player: PLAYER, turnaround: { phase } }).line,
-      "DESTROY GARRISON · FORD",
+      "DESTROY GUN PIT · FORD",
     );
   }
 });
@@ -132,7 +132,7 @@ test("depart and ingress navigation outrank distant garrisons, engage and hold d
       player: PLAYER,
       actOverlay: { line, detail: "Act guidance" },
     });
-    assert.equal(copy.line, "DESTROY GARRISON · FORD");
+    assert.equal(copy.line, "DESTROY GUN PIT · FORD");
   }
 });
 
@@ -154,8 +154,8 @@ test("2. friendly tickets under a fifth of the start says the valley is being lo
 
 test("3. a hostile point with a living garrison is the core instruction, with range", () => {
   const copy = cobraObjectiveCopy(conquest(), { player: PLAYER });
-  assert.equal(copy.line, "DESTROY GARRISON · FORD");
-  assert.match(copy.detail, /^400 m — kill the garrison and friendlies will take the point$/);
+  assert.equal(copy.line, "DESTROY GUN PIT · FORD");
+  assert.equal(copy.detail, "400 m · clear it for capture");
 });
 
 test("3. the first hostile point stays locked even when another garrison is nearer", () => {
@@ -166,15 +166,15 @@ test("3. the first hostile point stays locked even when another garrison is near
     ],
     units: [garrison("ford"), garrison("quarry")],
   }), { player: PLAYER });
-  assert.equal(copy.line, "DESTROY GARRISON · FORD");
-  assert.match(copy.detail, /^4\.2 km — /);
+  assert.equal(copy.line, "DESTROY GUN PIT · FORD");
+  assert.match(copy.detail, /^4\.2 km · /);
 });
 
 test("3. a dead garrison does not keep the destroy order up", () => {
   const copy = cobraObjectiveCopy(conquest({
     units: [garrison("ford", false)],
   }), { player: PLAYER });
-  assert.doesNotMatch(copy.line, /DESTROY GARRISON/);
+  assert.doesNotMatch(copy.line, /DESTROY GUN PIT/);
 });
 
 test("4. a hostile point with no living garrison becomes a hold order with progress", () => {
@@ -184,7 +184,7 @@ test("4. a hostile point with no living garrison becomes a hold order with progr
     units: [garrison("ford", false), friendlyAt(ford)],
   }), { player: PLAYER });
   assert.equal(copy.line, "HOLDING FORD · 42%");
-  assert.match(copy.detail, /keep hostiles off it/i);
+  assert.equal(copy.detail, "Keep hostiles clear");
 });
 
 test("4b. a cleared point with no friendlies in it says the lift is coming, not that it is taken", () => {
@@ -197,7 +197,7 @@ test("4b. a cleared point with no friendlies in it says the lift is coming, not 
     units: [garrison("ford", false)],
   }), { player: PLAYER });
   assert.equal(copy.line, "LIFT INBOUND · FORD");
-  assert.match(copy.detail, /cover it/i);
+  assert.equal(copy.detail, "Cover the LZ");
 });
 
 test("4c. hostiles still on a cleared-garrison point ask for the point to be cleared", () => {
@@ -212,6 +212,7 @@ test("4c. hostiles still on a cleared-garrison point ask for the point to be cle
     ],
   }), { player: PLAYER });
   assert.equal(copy.line, "CLEAR THE POINT · FORD");
+  assert.equal(copy.detail, "Clear hostiles before the lift");
 });
 
 test("5. bingo ammo shows once no hostile point is left to work", () => {
@@ -229,7 +230,7 @@ test("5b. the act overlay sits directly above the all-held default", () => {
   assert.deepEqual(cobraObjectiveCopy(held, { player: PLAYER, actOverlay: overlay }), overlay);
   // …but the fight outranks it: a garrison still standing is not an errand.
   const fighting = cobraObjectiveCopy(conquest(), { player: PLAYER, actOverlay: overlay });
-  assert.match(fighting.line, /DESTROY GARRISON/);
+  assert.match(fighting.line, /DESTROY GUN PIT/);
 });
 
 test("RTB flight coaching outranks stale battlefield work", () => {
@@ -251,15 +252,15 @@ test("6. every point friendly reports the hostile pool still to burn down", () =
 
 test("no player pose still gives an order, just without a range", () => {
   const copy = cobraObjectiveCopy(conquest());
-  assert.equal(copy.line, "DESTROY GARRISON · FORD");
+  assert.equal(copy.line, "DESTROY GUN PIT · FORD");
   assert.doesNotMatch(copy.detail, /\d+ m/);
-  assert.match(copy.detail, /kill the garrison/i);
+  assert.equal(copy.detail, "Clear it for capture");
 });
 
 test("a tickets-less, ownerless snapshot does not throw and keeps the old behaviour", () => {
   const copy = cobraObjectiveCopy({ control: 0, ammo_bingo: false, ammo_dry: false });
   assert.equal(copy.line, "TIP CONTROL FRIENDLY · HOLD 45s");
-  assert.match(copy.detail, /W collective up/);
+  assert.match(copy.detail, /W up \/ S down/);
   assert.equal(cobraObjectiveCopy(null), null);
   // Sites present but ownerless (an older sim) must not crash the strip either.
   assert.ok(cobraObjectiveCopy({ sites: [{ id: "a", label: "A", x_m: 0, z_m: 0 }], units: [] }).line.length > 0);
@@ -278,7 +279,7 @@ test("parked on the FOB while control bleeds hostile demands return to fight", (
   });
   assert.match(copy.line, /HOSTILES GAINING/);
   assert.match(copy.line, /RETURN TO FIGHT/);
-  assert.match(copy.detail, /pad will not hold/i);
+  assert.equal(copy.detail, "Get airborne and engage");
 });
 
 test("defeat hold progress outranks the tip-friendly default", () => {
@@ -290,7 +291,7 @@ test("defeat hold progress outranks the tip-friendly default", () => {
     ammo_dry: false,
   });
   assert.match(copy.line, /BRIDGE FALLING · 40%/);
-  assert.match(copy.detail, /Tab a mark/);
+  assert.equal(copy.detail, "Tab target · hold F");
 });
 
 test("losing on the pad tells the pilot to leave, not rearm", () => {
@@ -313,6 +314,36 @@ test("ammo dry still wins so a empty gun can rearm", () => {
     over_fob: false,
   });
   assert.match(copy.line, /REARM AT CAMP EMBER/);
+});
+
+test("authored flight details fit a one-glance copy budget", () => {
+  const ford = site("ford", "Ford", "hostile", { x_m: 400, capture_progress: 0.42 });
+  const copies = [
+    cobraObjectiveCopy(conquest(), { player: PLAYER }),
+    cobraObjectiveCopy(conquest({ ammo_dry: true }), { player: PLAYER }),
+    cobraObjectiveCopy(conquest({ tickets: { friendly: 44, hostile: 260 } }), { player: PLAYER }),
+    cobraObjectiveCopy(conquest({
+      sites: [site("bridge", "Bridge", "friendly"), ford],
+      units: [garrison("ford", false), friendlyAt(ford)],
+    }), { player: PLAYER }),
+    cobraObjectiveCopy(conquest({
+      sites: [site("bridge", "Bridge", "friendly"), ford],
+      units: [garrison("ford", false)],
+    }), { player: PLAYER }),
+    cobraObjectiveCopy(conquest({
+      sites: [site("bridge", "Bridge", "friendly"), site("ford", "Ford", "friendly")],
+      units: [],
+    }), { player: PLAYER }),
+    cobraObjectiveCopy({ control: 0, ammo_bingo: false, ammo_dry: false }),
+    cobraObjectiveCopy(conquest(), {
+      turnaround: { phase: "rotor-coast", rotor_fraction: 0.37, main_rotor_rpm: 119 },
+    }),
+  ];
+
+  for (const copy of copies) {
+    assert.ok(copy.detail.length <= 44, `detail is too long (${copy.detail.length}): ${copy.detail}`);
+    assert.doesNotMatch(copy.detail, /—|;/u, `detail has a clause-heavy separator: ${copy.detail}`);
+  }
 });
 
 // —— Compact conquest score — published ownership and tickets, never hidden control ——

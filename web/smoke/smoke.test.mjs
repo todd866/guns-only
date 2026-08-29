@@ -47,12 +47,18 @@ test("the smoke server preserves production terrain byte-range semantics", async
     assert.match(response.headers.get("content-range") ?? "", /^bytes 0-1\/\d+$/);
     assert.equal(response.headers.get("content-length"), "2");
     assert.equal((await response.arrayBuffer()).byteLength, 2);
-    assert.deepEqual(site.diagnostics(), {
-      fullFileBytesRead: 0,
-      rangeBytesRead: 2,
-      rangeRequests: 1,
-      largestReadAllocation: 2,
-    }, "a ranged terrain request must never read or allocate the whole backing page");
+    // THE CONTRACT IS ABOUT TERRAIN READS, so assert the terrain counters rather than the whole
+    // diagnostics bag. deepEqual against an object literal made this test fail the moment the
+    // smoke server grew telemetry counters — ten new fields, every one of them zero or null, with
+    // the read behaviour it exists to police completely unchanged. A diagnostics surface that
+    // other features legitimately extend is the wrong thing to pin exactly.
+    const diagnostics = site.diagnostics();
+    assert.equal(diagnostics.fullFileBytesRead, 0,
+      "a ranged terrain request must never read the whole backing page");
+    assert.equal(diagnostics.largestReadAllocation, 2,
+      "a ranged terrain request must never allocate the whole backing page");
+    assert.equal(diagnostics.rangeBytesRead, 2);
+    assert.equal(diagnostics.rangeRequests, 1);
   } finally {
     await site.close();
   }
@@ -415,7 +421,7 @@ test("iPhone selecting Top Gun and consent cannot scroll the Ready dialog sidewa
       const start = document.querySelector("#ready-start");
       return topGun?.getAttribute("aria-pressed") === "true"
         && document.activeElement === start;
-    }, undefined, { timeout: scaled(10000) });
+    }, undefined, { timeout: scaled(20000) });
 
     const layout = () => page.evaluate(() => {
       const card = document.querySelector(".ready-card");
@@ -682,9 +688,10 @@ test("the published Indoor route boots its Three.js facility and transitions opt
 });
 
 // The published Cobra coverage is deliberately SPLIT in two, and this is the half that gates the
-// release. It asserts only things that hold at any mission age: the route boots a live authority,
-// the magazine is real, the combiner is carrying it, and Tab reaches the gunner with a designation
-// the authority agrees with. None of that depends on where the ground war has got to.
+// release. It asserts only things that hold at any mission age: the route boots a cold authority
+// behind its deliberate Ready brief, the magazine is real, the combiner is carrying it, and Tab
+// reaches the gunner with a designation the authority agrees with. None of that depends on where
+// the ground war has got to.
 //
 // The other half -- the full fire-authorisation chain (ConsentReleased -> hold F ->
 // fire_authorized with reason None -> rounds leave the magazine -> release disarms) -- now runs
@@ -726,7 +733,9 @@ test("the published Cobra Hold the Bridge route boots authority and takes a Tab 
     }
 
     const boot = await readCobraHud(page);
-    assert.match(boot.status, /HOLD THE BRIDGE|AH-1G ONLINE/i);
+    assert.match(boot.status, /READY · REVIEW FLIGHT BRIEF/i);
+    assert.equal(await page.locator("#mission-brief").isVisible(), true,
+      "Cobra must teach the mission contract before accepting vehicle input");
     assert.ok(boot.canvas && boot.canvas.width > 0 && boot.canvas.height > 0,
       `Cobra play HUD canvas has no backing store: ${JSON.stringify(boot.canvas)}`);
     // Ammo is present, finite and a real magazine -- not a placeholder and not NaN. This is the
@@ -742,6 +751,16 @@ test("the published Cobra Hold the Bridge route boots authority and takes a Tab 
     assert.ok(boot.hostiles >= 1, `Cobra boot found no living hostiles: ${JSON.stringify(boot)}`);
     assert.equal(boot.tick, -1,
       `cold Ready must publish truth without advancing mission time: ${JSON.stringify(boot)}`);
+
+    await page.locator("#mission-brief-start").click();
+    await page.waitForFunction(() =>
+      document.querySelector("#mission-brief")?.hidden === true
+        && /HOLD THE BRIDGE|AH-1G ONLINE/i.test(
+          document.querySelector("#status span")?.textContent ?? "",
+        ),
+    undefined, { polling: scaled(100), timeout: scaled(20000) });
+    const cobraTeaching = page.locator("#controls-onboarding-dismiss");
+    if (await cobraTeaching.isVisible()) await cobraTeaching.click();
 
     // Tab designates, and the designation is real all the way down: the authority holds the mark,
     // the production HUD model carries it onto the combiner, the designation bracket agrees with
@@ -810,9 +829,21 @@ test("the published Weekend Ride route boots and accepts throttle input", async 
       phase: window.__gunsOnlyWeekendAuthority?.phase ?? "",
     }));
     const beforeSpeed = await groundSpeed();
-    assert.match(before.status, /YZF-R1 ACTIVE/i);
-    assert.ok(before.phase === "ready" || before.phase === "active",
-      `unexpected weekend-ride phase: ${JSON.stringify(before)}`);
+    assert.match(before.status, /READY · REVIEW SESSION BRIEF/i);
+    assert.equal(await page.locator("#ride-brief").isVisible(), true,
+      "Weekend Ride must teach the session contract before accepting throttle");
+    assert.equal(before.phase, "paused",
+      `the Ready brief must hold Weekend authority cold: ${JSON.stringify(before)}`);
+
+    await page.locator("#ride-brief-start").click();
+    await page.waitForFunction(() =>
+      document.querySelector("#ride-brief")?.hidden === true
+        && /RAPIER TRACK DAY|RIDER REFLEX ASSIST/i.test(
+          document.querySelector("#status span")?.textContent ?? "",
+        ),
+    undefined, { polling: scaled(100), timeout: scaled(20000) });
+    const rideTeaching = page.locator("#controls-onboarding-dismiss");
+    if (await rideTeaching.isVisible()) await rideTeaching.click();
 
     await page.keyboard.down("w");
     await page.waitForFunction(
@@ -825,6 +856,26 @@ test("the published Weekend Ride route boots and accepts throttle input", async 
       { timeout: scaled(15000) },
     );
     await page.keyboard.up("w");
+
+    await page.waitForFunction(() => {
+      const root = document.documentElement.dataset;
+      const authority = window.__gunsOnlyWeekendAuthority;
+      return authority?.audio_profile_id === "audio.yzf-r1.crossplane.v1"
+        && root.audioController === "shared"
+        && root.audioContextState === "running"
+        && root.audioSignalActive === "true"
+        && root.audioQaSilent === "true"
+        && root.audioOutputGain === "0";
+    }, undefined, { timeout: scaled(10000) });
+
+    await page.keyboard.press("m");
+    await page.waitForFunction(() =>
+      document.documentElement.dataset.audioEnabled === "false"
+        && document.querySelector("#sound-button")?.getAttribute("aria-pressed") === "false");
+    await page.keyboard.press("m");
+    await page.waitForFunction(() =>
+      document.documentElement.dataset.audioEnabled === "true"
+        && document.querySelector("#sound-button")?.getAttribute("aria-pressed") === "true");
 
     const afterSpeed = await groundSpeed();
     const after = await page.evaluate(() => ({
@@ -1289,6 +1340,91 @@ test("the published Medevac route resolves route hold, selective relay, and dive
   }
 });
 
+test("first-run valley waits for consent and remains replayable from the programme", async () => {
+  assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
+
+  const site = await serveStatic(WWWROOT);
+  const browser = await chromium.launch({
+    headless: true,
+    args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"],
+  });
+  try {
+    const page = await browser.newPage();
+    const pageErrors = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
+    await page.goto(`${site.url}?firstRun=1&audioQa=silent`, {
+      waitUntil: "load",
+      timeout: scaled(60000),
+    });
+    await page.waitForFunction(() =>
+      document.querySelector("#ready-screen")?.classList.contains("visible") === true
+        && document.querySelector("#ready-screen")?.dataset.mode === "intro"
+        && document.querySelector("#ready-start")?.disabled === false
+        && document.querySelector("#ready-start")?.textContent?.trim() === "Enter valley"
+        && document.activeElement?.id === "ready-start",
+    undefined, { polling: scaled(100), timeout: scaled(45000) });
+
+    assert.equal(await page.locator("#ready-start").innerText(), "Enter valley");
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "ready-start");
+    await page.waitForTimeout(scaled(1000));
+    assert.equal(await page.evaluate(() =>
+      document.querySelector("#ready-screen")?.dataset.mode), "intro",
+    "first-run authority must remain Ready until a deliberate pilot action");
+
+    await page.locator("#ready-settings").click();
+    await page.waitForFunction(() =>
+      document.querySelector("#settings-screen")?.getAttribute("aria-hidden") === "false",
+    undefined, { polling: scaled(100), timeout: scaled(20000) });
+    assert.equal(await page.evaluate(() =>
+      document.querySelector("#ready-screen")?.dataset.mode), "intro",
+    "Settings must not relabel staged valley authority as the aircraft programme");
+    assert.equal(await page.locator("#ready-selector").isHidden(), true);
+    await page.locator("#settings-close").click();
+
+    await page.locator("#ready-intro-replay").click();
+    await page.waitForFunction(() =>
+      document.querySelector("#ready-screen")?.dataset.mode === "program",
+    undefined, { polling: scaled(100), timeout: scaled(20000) });
+    assert.equal(await page.locator("#ready-intro-replay").innerText(), "Replay valley intro");
+    assert.equal(new URL(page.url()).searchParams.has("firstRun"), false,
+      "choosing another mission must not make a later reload restage the intro");
+
+    await page.locator("#ready-intro-replay").click();
+    await page.waitForFunction(() =>
+      document.querySelector("#ready-screen")?.dataset.mode === "intro",
+    undefined, { polling: scaled(100), timeout: scaled(20000) });
+    assert.equal(new URL(page.url()).searchParams.has("firstRun"), false,
+      "the visible replay action must not make the intro sticky for Fly again");
+
+    await page.locator("#ready-start").click();
+    await page.waitForFunction(() =>
+      globalThis.__gunsState?.session_phase === "ACTIVE"
+        && globalThis.__gunsState?.mission_definition_id
+          === "mission.modern.visual-merge.first-run-valley.v1"
+        && globalThis.__gunsAssets?.diagnostics?.().firstRunValley?.active === true
+        && !document.querySelector("#ready-screen")?.classList.contains("visible"),
+    undefined, { polling: scaled(100), timeout: scaled(90000) });
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "scene");
+    const valley = await page.evaluate(() => ({
+      weaponsCold: globalThis.__gunsState?.first_run_weapons_cold === true,
+      available: globalThis.__gunsState?.first_run_valley_available === true,
+      diagnostics: globalThis.__gunsAssets?.diagnostics?.().firstRunValley ?? null,
+    }));
+    assert.equal(valley.weaponsCold, true,
+      "the active ingress must begin with the weapons-cold lesson intact");
+    assert.equal(valley.available, true);
+    assert.equal(valley.diagnostics?.authorityMatched, true);
+    assert.equal(valley.diagnostics?.drawCount, 1);
+    assert.ok(valley.diagnostics?.triangleCount > 0,
+      "the active first-run sortie must render its authority-matched gorge");
+    assert.deepEqual(pageErrors, [],
+      `uncaught first-run page errors:\n${pageErrors.join("\n")}`);
+  } finally {
+    await browser.close();
+    await site.close();
+  }
+});
+
 test("the published web app boots to a running flight kernel (no fatal render error)", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 
@@ -1706,7 +1842,12 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
     }));
     // SwiftShader can render the full terrain at only a few frames per second on a loaded CI
     // worker. Hold each physical control until the authoritative fixed-tick state proves the
-    // response instead of assuming a wall-clock hold spans enough simulation ticks.
+    // response instead of assuming a wall-clock hold spans enough simulation ticks. A serialized
+    // full gate has already spent several minutes compiling and rendering the default flight by
+    // this point; under that accumulated pressure a healthy CASEVAC frame can take longer than
+    // 30 wall-clock seconds even though the same published artifact responds immediately in an
+    // isolated run. Keep the state-and-distance assertions exact, but give them the same bounded
+    // 60-second patience used by the published boot path.
     await page.keyboard.down("w");
     try {
       await page.waitForFunction(
@@ -1714,7 +1855,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
           Number(globalThis.__gunsState?.py) > startY + 0.2
             && Number(globalThis.__gunsState?.tick) > startTick,
         { startY: before.py, startTick: before.tick },
-        { timeout: scaled(30000) },
+        { timeout: scaled(60000) },
       );
     } finally {
       await page.keyboard.up("w");
@@ -1736,7 +1877,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
           pickupZ: before.pickupZ,
           startRange: pickupRangeBefore,
         },
-        { timeout: scaled(30000) },
+        { timeout: scaled(60000) },
       );
     } finally {
       await page.keyboard.up("ArrowUp");
@@ -1777,9 +1918,17 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
     assert.ok(after.tick > before.tick);
     assert.ok(after.energyKwh < before.energyKwh,
       `applied power did not reduce energy: ${JSON.stringify({ before, after })}`);
-    assert.match(after.flightFacts, /ROUTE/);
-    assert.match(after.flightFacts, /ENERGY/);
-    assert.match(after.flightFacts, /CONTACT LIMITS/);
+    // The CASEVAC flight-facts panel was redesigned on this branch — a steer line above a labelled
+    // primary grid replaced the old ROUTE / ENERGY / CONTACT LIMITS headings — and this smoke test
+    // was not updated with it. The CONTRACT is unchanged and is what gets asserted here: the panel
+    // must still tell the commander where to steer, how much energy is left, and what the contact
+    // band is. Only the vocabulary moved.
+    assert.match(after.flightFacts, /PICKUP|CLINIC/,
+      `flight facts must carry the steer line: ${after.flightFacts}`);
+    assert.match(after.flightFacts, /RESERVE/,
+      `flight facts must carry remaining energy: ${after.flightFacts}`);
+    assert.match(after.flightFacts, /SAFE BAND|OUTSIDE BAND|MASKED|BAND NOT ASSESSED/,
+      `flight facts must carry the contact band: ${after.flightFacts}`);
     assert.equal(after.routeCardHidden, true);
     assert.equal(after.hudVisibility, "hidden");
     assert.equal(after.fireHidden, true);

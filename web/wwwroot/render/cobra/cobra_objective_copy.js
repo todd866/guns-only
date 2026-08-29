@@ -8,12 +8,12 @@
  * owner's verdict was that it is not obvious what to do, and the strip was actively lying.
  *
  * The ladder below is the loop, in the order a pilot needs it:
- *   service the aircraft → depart/ingress → dry gun → losing the valley → break a garrison
+ *   service the aircraft → depart/ingress → dry gun → losing the valley → break a gun pit
  *   → cover a capture → bingo → engage/hold act → all held.
  *
- * The garrison entries are the core: a dug-in garrison freezes a friendly push and only the
+ * The fortified-position entries are the core: a dug-in hard point freezes a friendly push and only the
  * gunship can break it (CobraGroundWarRuntime — ground units shoot at it and achieve nothing).
- * So "destroy the garrison and the friendlies will take the point" is not flavour, it is the
+ * So "destroy the gun pit and the friendlies can secure the point" is not flavour, it is the
  * literal mechanism, and it is the one sentence that makes the mission legible.
  *
  * One engine: ownership, capture progress, tickets and unit liveness come from the snapshot.
@@ -23,7 +23,7 @@
 import {
   cobraObjectiveSiteId,
   cobraSiteHasLivingGarrison,
-} from "./cobra_objective_site.js?v=343";
+} from "./cobra_objective_site.js?v=349";
 
 // Mirrors CobraGroundWarRuntime.StartingTickets, used ONLY as a floor for the "critically low"
 // threshold when the snapshot does not publish a start value. Kept as a floor rather than a
@@ -108,7 +108,7 @@ function turnaroundObjectiveCopy(turnaround) {
     case "qualifying":
       return {
         line: "PARKED · COLLECTIVE DOWN",
-        detail: "Set collective fully down and settle the damaged bird on the pad",
+        detail: "Settle on the pad",
       };
     case "shutdown":
     case "shutdownrequired":
@@ -116,18 +116,18 @@ function turnaroundObjectiveCopy(turnaround) {
       if (releaseAction) {
         return {
           line: "PARKED · RELEASE E",
-          detail: "Release E once to arm the shutdown hold",
+          detail: "Release E once",
         };
       }
       if (lowerCollective) {
         return {
           line: "PARKED · COLLECTIVE DOWN",
-          detail: "Lower collective fully before shutting down the damaged bird",
+          detail: "Lower fully before shutdown",
         };
       }
       return {
         line: `HOLD E · SHUT DOWN${percentSuffix(holdProgress)}`,
-        detail: "Keep E held — the spare stays locked until this aircraft is shut down",
+        detail: "Hold until shutdown completes",
       };
     case "rotor-coast":
     case "rotorcoast":
@@ -140,8 +140,8 @@ function turnaroundObjectiveCopy(turnaround) {
       return {
         line: `ENGINE OFF · ROTOR COASTING${readout}`,
         detail: rotor.rpm !== null
-          ? `Rotor ${rotor.rpm} RPM — stay clear while the rotor coasts`
-          : "Stay clear while the rotor coasts to safe handoff speed",
+          ? `Rotor ${rotor.rpm} RPM · coasting to handoff`
+          : "Rotor coasting to handoff",
       };
     }
     case "await-start-release":
@@ -149,7 +149,7 @@ function turnaroundObjectiveCopy(turnaround) {
     case "awaiting-start-release":
       return {
         line: "SPARE COLD · RELEASE E",
-        detail: "Release E once to arm the spare's starter",
+        detail: "Release E once",
       };
     case "cold":
     case "coldanddark":
@@ -157,12 +157,12 @@ function turnaroundObjectiveCopy(turnaround) {
       if (lowerCollective) {
         return {
           line: "SPARE COLD · COLLECTIVE DOWN",
-          detail: "Lower collective fully before starting the spare",
+          detail: "Lower fully before start",
         };
       }
       return {
         line: `HOLD E · START${percentSuffix(holdProgress)}`,
-        detail: "One hold runs the starter, light-off and rotor engagement",
+        detail: "Hold through rotor engagement",
       };
     case "starting": {
       // Authority normally publishes action=starting for the whole assisted sequence. Use the
@@ -180,14 +180,14 @@ function turnaroundObjectiveCopy(turnaround) {
       return {
         line: `${label}${suffix}`,
         detail: rotor.rpm !== null
-          ? `Rotor ${rotor.rpm} RPM — controls stay locked until the governor settles`
-          : "Controls stay locked until the rotor and governor are ready",
+          ? `Rotor ${rotor.rpm} RPM · controls locked`
+          : "Controls locked until governor ready",
       };
     }
     case "secured":
       return {
         line: "AIRCRAFT SECURED · NO SPARE",
-        detail: "Camp Ember has no serviceable Cobra left",
+        detail: "No serviceable Cobra at Ember",
       };
     default:
       return null;
@@ -211,6 +211,25 @@ function formatBleedRate(value) {
 }
 
 /**
+ * Compact authority clock for the always-visible chart. Ceil the fractional second so the
+ * instrument never announces 0:00 while authority still has part of a second to score.
+ */
+export function cobraMissionCountdown(authoritySnapshot) {
+  const war = authoritySnapshot?.ground_war ?? authoritySnapshot;
+  const limitSeconds = finiteNumber(war?.time_limit_s);
+  const remainingSeconds = finiteNumber(war?.time_remaining_s);
+  if (!(limitSeconds > 0) || !Number.isFinite(remainingSeconds)) return null;
+
+  const outcome = normalizedToken(war?.outcome ?? war?.debrief?.outcome);
+  if (outcome === "victory" || outcome === "defeat") return "FINAL";
+
+  const wholeSeconds = Math.ceil(Math.min(limitSeconds, Math.max(0, remainingSeconds)));
+  const minutes = Math.floor(wholeSeconds / 60);
+  const seconds = wholeSeconds % 60;
+  return `T−${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+/**
  * Compact conquest truth for the always-visible chart caption. Accepts either the complete
  * authority snapshot, its ground_war block, or the projected tactical-map model. It reads only
  * published ownership and ticket pools — never the legacy hidden `control` number.
@@ -227,6 +246,11 @@ export function cobraConquestScoreLine(authoritySnapshot) {
   const friendlyPoints = sites.filter((site) => site.owner === "friendly").length;
   const hostilePoints = sites.filter((site) => site.owner === "hostile").length;
   const pointMargin = friendlyPoints - hostilePoints;
+  const outcome = normalizedToken(war?.outcome ?? war?.debrief?.outcome);
+  if (outcome === "victory" || outcome === "defeat") {
+    const state = outcome === "victory" ? "WON" : "LOST";
+    return `PTS ${friendlyPoints}–${hostilePoints} · TKT ${Math.round(friendlyTickets)}–${Math.round(hostileTickets)} · ${state}`;
+  }
   if (war.combat_live === false) {
     return `PTS ${friendlyPoints}–${hostilePoints} · TKT ${Math.round(friendlyTickets)}–${Math.round(hostileTickets)} · STAGED`;
   }
@@ -310,12 +334,12 @@ function legacyObjectiveCopy(war, options) {
     if (war.over_fob) {
       return {
         line: `BRIDGE FALLING · ${defeatPct}% · LEAVE THE PAD`,
-        detail: "Control is tipping hostile — get back over the fight and put rounds in",
+        detail: "Get airborne and engage",
       };
     }
     return {
       line: `BRIDGE FALLING · ${defeatPct}%`,
-      detail: "Hostiles own the meter — Tab a mark and hold F before the hold expires",
+      detail: "Tab target · hold F",
     };
   }
 
@@ -323,19 +347,19 @@ function legacyObjectiveCopy(war, options) {
     if (war.over_fob) {
       return {
         line: "HOSTILES GAINING · RETURN TO FIGHT",
-        detail: "The pad will not hold the bridge — fly back to the fight and engage",
+        detail: "Get airborne and engage",
       };
     }
     return {
       line: "HOSTILES GAINING · ENGAGE",
-      detail: "Tip control back toward friendly before the lose timer starts",
+      detail: "Tab target · hold F",
     };
   }
 
   if (war.ammo_bingo) {
     return {
       line: "BINGO AMMO · CAMP EMBER SOON",
-      detail: "Gun can under a fifth — break off for the pad before it runs dry",
+      detail: "RTB before the gun runs dry",
     };
   }
 
@@ -344,21 +368,21 @@ function legacyObjectiveCopy(war, options) {
   if ((war.victory_hold_progress ?? 0) > 0) {
     return {
       line: `HOLDING FRIENDLY CONTROL · ${holdPct}%`,
-      detail: "Keep tipping the fight — do not let hostiles claw it back",
+      detail: "Keep hostiles off the bridge",
     };
   }
 
   if (selectedTargetId) {
     return {
       line: "TIP CONTROL FRIENDLY · HOLD 45s",
-      detail: "Hold F when GUN ON TARGET — Tab cycles marks",
+      detail: "Hold F on target · Tab cycles",
     };
   }
 
   if (playerHasInteracted) {
     return {
       line: "TIP CONTROL FRIENDLY · HOLD 45s",
-      detail: "Tab a hostile on the nose, then hold F",
+      detail: "Tab target · hold F",
     };
   }
 
@@ -366,7 +390,7 @@ function legacyObjectiveCopy(war, options) {
     line: "TIP CONTROL FRIENDLY · HOLD 45s",
     // Owner ruling 2026-08-05: collective follows game convention — W raises, S lowers
     // (the Builds 253-264 real-lever mapping with S=pull is overruled).
-    detail: "W collective up · S down · Tab target · hold F gunner",
+    detail: "W up / S down · Tab target · hold F",
   };
 }
 
@@ -401,7 +425,7 @@ export function cobraObjectiveCopy(war, options = {}) {
   if (war.ammo_dry) {
     return {
       line: "BINGO / DRY · REARM AT CAMP EMBER",
-      detail: "Put the skids on the Camp Ember pad, then return to the fight",
+      detail: "Land at Ember to rearm",
     };
   }
 
@@ -433,8 +457,8 @@ export function cobraObjectiveCopy(war, options = {}) {
       return {
         line: "LOSING THE VALLEY",
         detail: deficit > 0
-          ? `Down ${deficit} tickets — take a hostile point back or the pool runs out`
-          : `${Math.round(friendlyTickets)} tickets left — take a hostile point back to stop the bleed`,
+          ? `Down ${deficit} tickets · take a hostile point`
+          : `${Math.round(friendlyTickets)} tickets left · take a hostile point`,
       };
     }
   }
@@ -443,17 +467,17 @@ export function cobraObjectiveCopy(war, options = {}) {
   const objectiveSiteId = cobraObjectiveSiteId({ sites: hostileSites, units, player });
   const objectiveSite = hostileSites.find((site) => site.id === objectiveSiteId) ?? null;
 
-  // 3. The core loop. A hostile point with a living garrison is the only thing on the map that
+  // 3. The core loop. A hostile point with a living fortified hard point is the only thing on the map that
   // ONLY the gunship can solve, so it is the strip's first affirmative instruction.
   if (objectiveSite && cobraSiteHasLivingGarrison(units, objectiveSite.id)) {
     const site = objectiveSite;
     const rangeM = rangeToSite(site, player);
     const range = formatRangeM(rangeM);
     return {
-      line: `DESTROY GARRISON · ${siteLabel(site)}`,
+      line: `DESTROY GUN PIT · ${siteLabel(site)}`,
       detail: range
-        ? `${range} — kill the garrison and friendlies will take the point`
-        : "Kill the garrison and friendlies will take the point",
+        ? `${range} · clear it for capture`
+        : "Clear it for capture",
     };
   }
 
@@ -470,25 +494,25 @@ export function cobraObjectiveCopy(war, options = {}) {
     if (hasHostilePresence(units, site)) {
       return {
         line: `CLEAR THE POINT · ${siteLabel(site)}`,
-        detail: "Hostiles still on it — nothing lands until the point is empty",
+        detail: "Clear hostiles before the lift",
       };
     }
     if (!hasFriendlyPresence(units, site)) {
       return {
         line: `LIFT INBOUND · ${siteLabel(site)}`,
-        detail: "Point clear — cover it until the squad is on the ground",
+        detail: "Cover the LZ",
       };
     }
     return {
       line: `HOLDING ${siteLabel(site)} · ${progressPct}%`,
-      detail: "Keep hostiles off it while friendlies take it",
+      detail: "Keep hostiles clear",
     };
   }
 
   if (war.ammo_bingo) {
     return {
       line: "BINGO AMMO · CAMP EMBER SOON",
-      detail: "Gun can under a fifth — break off for the pad before it runs dry",
+      detail: "RTB before dry",
     };
   }
 
@@ -501,7 +525,7 @@ export function cobraObjectiveCopy(war, options = {}) {
   return {
     line: hostileLeft === null ? "VALLEY HELD" : `VALLEY HELD · ${hostileLeft} LEFT`,
     detail: friendlyPoints > 0
-      ? "Every point is friendly — hold them and the hostile pool bleeds out"
-      : "Hold the valley — M opens the map",
+      ? "Hold every point"
+      : "M opens the map",
   };
 }

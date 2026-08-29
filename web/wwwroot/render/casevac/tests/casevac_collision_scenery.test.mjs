@@ -76,7 +76,7 @@ function assertVector(actual, expected, epsilon = 1e-9) {
     `${actual.toArray()} should equal ${expected.toArray()}`);
 }
 
-function assertExactOpaqueAuthorityMass(
+function assertExactHiddenAuthorityEnvelope(
   root,
   {
     kind,
@@ -86,18 +86,23 @@ function assertExactOpaqueAuthorityMass(
   },
 ) {
   const matches = byKind(root, kind);
-  assert.equal(matches.length, 1, `${obstacleId} needs one exact solid mass`);
+  assert.equal(matches.length, 1, `${obstacleId} needs one exact visual envelope`);
   const mass = matches[0];
   assert.equal(mass.userData.casevac.obstacleId, obstacleId);
   assert.equal(mass.geometry.type, "BoxGeometry");
   assert.equal(mass.visible, true);
   assert.equal(mass.material.transparent, false);
   assert.equal(mass.material.opacity, 1);
-  assert.equal(mass.material.depthWrite, true);
-  assert.equal(mass.material.colorWrite, true);
+  assert.equal(mass.material.depthTest, false);
+  assert.equal(mass.material.depthWrite, false);
+  assert.equal(mass.material.colorWrite, false);
   assert.equal(mass.material.wireframe, false);
   assert.equal(
     mass.userData.casevacGeometry.authorityBoundsExact,
+    true,
+  );
+  assert.equal(
+    mass.userData.casevacGeometry.visualEnvelopeHidden,
     true,
   );
   assert.equal(
@@ -106,7 +111,7 @@ function assertExactOpaqueAuthorityMass(
   );
   assert.equal(
     mass.userData.casevacGeometry.opaquePhysicalMass,
-    true,
+    false,
   );
   const bounds = new THREE.Box3().setFromObject(mass);
   assertVector(bounds.min, minimum, 5e-5);
@@ -119,7 +124,7 @@ function assertExactOpaqueAuthorityMass(
       actualSize.x * actualSize.y * actualSize.z
         - expectedSize.x * expectedSize.y * expectedSize.z,
     ) <= 1e-4,
-    `${obstacleId} solid mass must cover the complete AABB volume`,
+    `${obstacleId} hidden envelope must cover the complete AABB volume`,
   );
 }
 
@@ -197,7 +202,7 @@ test("keeps pole and wire centreline endpoints exact while making the wire reada
   scenery.dispose();
 });
 
-test("turns box authority into opaque physical orchard and clinic compounds", () => {
+test("turns box authority into readable compounds without opaque horizon slabs", () => {
   const scenery = createCasevacCollisionScenery(
     THREE,
     projectedObstacles,
@@ -222,21 +227,21 @@ test("turns box authority into opaque physical orchard and clinic compounds", ()
     "fortified-clinic-compound",
   );
 
-  assertExactOpaqueAuthorityMass(scenery.group, {
-    kind: "orchard-authority-solid-mass",
+  assertExactHiddenAuthorityEnvelope(scenery.group, {
+    kind: "orchard-authority-envelope",
     obstacleId: "obstacle.casevac.orchard-exclusion.v1",
     minimum: new THREE.Vector3(-650, 40, -350),
     maximum: new THREE.Vector3(-250, 68, 50),
   });
-  assertExactOpaqueAuthorityMass(scenery.group, {
-    kind: "clinic-authority-solid-mass",
+  assertExactHiddenAuthorityEnvelope(scenery.group, {
+    kind: "clinic-authority-envelope",
     obstacleId: "obstacle.casevac.clinic-exclusion.v1",
     minimum: new THREE.Vector3(3300, 40, 2280),
     maximum: new THREE.Vector3(3460, 74, 2520),
   });
 
-  // Compound bounds remain aligned too, but the named mass assertions above
-  // prove full-volume coverage rather than inferring it from scattered dressing.
+  // Compound bounds remain aligned too, but the named hidden-envelope assertions above prove
+  // the collision projection remains inspectable without drawing an opaque AABB through the view.
   const orchardBounds = new THREE.Box3().setFromObject(orchard);
   assertVector(
     orchardBounds.min,
@@ -274,6 +279,24 @@ test("turns box authority into opaque physical orchard and clinic compounds", ()
   assert.ok(byKind(scenery.group, "clinic-main-block").length > 0);
   assert.ok(byKind(scenery.group, "clinic-receiving-wing").length > 0);
   assert.ok(byKind(scenery.group, "clinic-perimeter-wall").length >= 4);
+  const receivingCrosses = byKind(
+    scenery.group,
+    "clinic-receiving-cross",
+  );
+  const receivingEntrances = byKind(
+    scenery.group,
+    "clinic-receiving-entrance",
+  );
+  const roofCrosses = byKind(scenery.group, "clinic-roof-cross");
+  assert.equal(receivingCrosses.length, 8,
+    "all four clinic facades need a two-bar receiving cross");
+  assert.equal(receivingEntrances.length, 2);
+  assert.equal(roofCrosses.length, 2);
+  assert.equal(
+    receivingCrosses.every((cross) => cross.material.emissiveIntensity >= 0.5),
+    true,
+    "receiving identity must survive a shadowed low-level approach",
+  );
   assert.equal(
     byKind(scenery.group, "orchard-exclusion-volume-visual-fill").length,
     0,
@@ -286,6 +309,11 @@ test("turns box authority into opaque physical orchard and clinic compounds", ()
   for (const compound of [orchard, clinic]) {
     compound.traverse((object) => {
       if (!object.isMesh) return;
+      if (object.userData.casevacGeometry.visualEnvelopeHidden === true) {
+        assert.equal(object.material.colorWrite, false);
+        assert.equal(object.material.depthWrite, false);
+        return;
+      }
       assert.equal(object.material.transparent, false);
       assert.equal(object.material.opacity, 1);
       assert.equal(

@@ -79,7 +79,7 @@ test("cold-spare transfer keeps authority running, then startup completion requi
   const swapSync = main.match(/function syncParkedAirframes\(\) \{[\s\S]*?\n\}/)?.[0] ?? "";
   assert.match(swapSync, /cobraTurnaroundIsActive\(authorityState\?\.turnaround\)/);
   assert.match(swapSync,
-    /if \(PLAY_MODE && !turnaroundActive\)[\s\S]{0,420}?sortieReadiness\.reset\(false, \{ requireNeutral: true \}\)/,
+    /if \(PLAY_MODE && !BATTLE_REVIEW_MODE && !turnaroundActive\)[\s\S]{0,420}?sortieReadiness\.reset\(false, \{ requireNeutral: true \}\)/,
     "an ordinary hot swap stays fail-safe, but a cold spare must keep advancing toward start");
   assert.match(swapSync, /bridge\.AcknowledgeAirframeSwap\(swaps\)/);
 

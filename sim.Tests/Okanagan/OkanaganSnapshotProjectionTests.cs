@@ -24,5 +24,7 @@ public sealed class OkanaganSnapshotProjectionTests
         Assert.True(root.GetProperty("route")[0].GetProperty("active").GetBoolean());
         Assert.True(root.GetProperty("fuel_plan").GetProperty("minimum_rtb_kg").GetDouble() > 0.0);
         Assert.Equal(0.0, root.GetProperty("water_released_this_tick_kg").GetDouble());
+        Assert.Equal(0.0, root.GetProperty("water_release_rate_kgps").GetDouble());
+        Assert.Equal(0.0, root.GetProperty("scoop_rate_kgps").GetDouble());
     }
 }

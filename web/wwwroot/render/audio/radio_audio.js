@@ -8,9 +8,27 @@ import { resolveRadioEquipment } from "./radio_equipment_profiles.js";
 const MANIFEST_URL = new URL("./samples/radio/manifest.json", import.meta.url);
 const RADIO_SCENERY_LEVEL = 0.78;
 const PROPULSION_NORMAL_MULTIPLIER = 1;
-// Preserve the established light 0.58 -> 0.52 duck, but express it as a multiplier on the one
-// shared downstream propulsion VCA. Aircraft graph trims remain free to update every frame.
-const PROPULSION_RADIO_MULTIPLIER = 0.52 / 0.58;
+const RADIO_PRIORITY_DUCK_DB = Object.freeze({
+  routine: Object.freeze({ propulsion: -2, world: -1.5 }),
+  advisory: Object.freeze({ propulsion: -5, world: -3 }),
+  urgent: Object.freeze({ propulsion: -8, world: -5 }),
+});
+
+function dbToMultiplier(decibels) {
+  return 10 ** (Number(decibels) / 20);
+}
+
+/** Published mission priority becomes an explicit, bounded mix contract. */
+export function radioPriorityMix(state = {}) {
+  const raw = Number(radioValue(state, "priority"));
+  const key = raw >= 2 ? "urgent" : raw >= 1 ? "advisory" : "routine";
+  const duck = RADIO_PRIORITY_DUCK_DB[key];
+  return Object.freeze({
+    key,
+    propulsionMultiplier: dbToMultiplier(duck.propulsion),
+    worldMultiplier: dbToMultiplier(duck.world),
+  });
+}
 
 function target(param, value, now, timeConstant = 0.02) {
   param.setTargetAtTime(value, now, timeConstant);
@@ -63,6 +81,7 @@ export async function loadRadioManifest(fetchImpl = globalThis.fetch) {
 
 export function createRadioVoice(context, destination, {
   propulsionDuck = null,
+  worldDuck = null,
   fetchImpl = globalThis.fetch,
 } = {}) {
   // The microphone/mask stage is separate from the receive-radio stage. Speech goes through
@@ -115,6 +134,7 @@ export function createRadioVoice(context, destination, {
     compressor,
     output,
     propulsionDuck,
+    worldDuck,
     fetchImpl,
     manifest: null,
     manifestPromise: null,
@@ -322,9 +342,13 @@ async function playTransmission(voice, context, state, generation, sequence) {
       context,
       equipmentFor(state, clip),
     );
+    const priorityMix = radioPriorityMix(state);
     if (voice.propulsionDuck?.gain)
       target(voice.propulsionDuck.gain,
-        PROPULSION_RADIO_MULTIPLIER, context.currentTime, 0.045);
+        priorityMix.propulsionMultiplier, context.currentTime, 0.045);
+    if (voice.worldDuck?.gain)
+      target(voice.worldDuck.gain,
+        priorityMix.worldMultiplier, context.currentTime, 0.045);
     playSquelch(voice, context, sequence);
     // Subtle station gain and rate drift keeps repeated takes alive without changing cadence.
     const level = equipment.receiveLevel
@@ -339,6 +363,7 @@ async function playTransmission(voice, context, state, generation, sequence) {
       if (voice.source !== source) return;
       voice.source = null;
       stopCarrier(voice);
+      restoreMix(voice, context);
       if (voice.enabled && generation === voice.generation)
         playUnkey(voice, context, sequence);
     };
@@ -350,9 +375,12 @@ async function playTransmission(voice, context, state, generation, sequence) {
   }
 }
 
-function restoreEngine(voice, context) {
+function restoreMix(voice, context) {
   if (voice.propulsionDuck?.gain)
     target(voice.propulsionDuck.gain,
+      PROPULSION_NORMAL_MULTIPLIER, context.currentTime, 0.11);
+  if (voice.worldDuck?.gain)
+    target(voice.worldDuck.gain,
       PROPULSION_NORMAL_MULTIPLIER, context.currentTime, 0.11);
 }
 
@@ -368,7 +396,7 @@ export function updateRadioVoice(voice, context, state, { enabled = true } = {})
       voice.enabled = false;
       voice.generation += 1;
       stopSource(voice);
-      restoreEngine(voice, context);
+      restoreMix(voice, context);
     }
     return;
   }
@@ -381,7 +409,7 @@ export function updateRadioVoice(voice, context, state, { enabled = true } = {})
   voice.generation += 1;
   const generation = voice.generation;
   stopSource(voice, context, { unkey: preempted });
-  restoreEngine(voice, context);
+  restoreMix(voice, context);
   configureRadioEquipment(voice, context, equipmentFor(state));
   void playTransmission(voice, context, state, generation, sequence);
 }

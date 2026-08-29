@@ -142,7 +142,9 @@ public sealed class CasevacFlightRuntime {
     public const int RecentEventCapacity = 64;
     public const double RecurringBaseMassKg = 5_850.0;
     public const double VehicleCollisionRadiusM = 2.6;
-    public const double MaximumForwardSpeedMps = 28.0;
+    // A 62 kt cruise keeps the authored seven-kilometre rescue inside its requested handoff
+    // window while retaining deliberate terminal deceleration and contact dwell.
+    public const double MaximumForwardSpeedMps = 32.0;
     public const double MaximumReverseSpeedMps = 8.0;
     public const double MaximumLateralSpeedMps = 11.0;
     public const double MaximumVerticalSpeedMps = 2.0;

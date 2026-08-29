@@ -25,6 +25,10 @@
 // off the world and lie about where the gate is.
 
 import { resolveGuidanceGates } from "../nav/mesh_nav_presentation.js";
+import {
+  firstRunValleyCenterEastM,
+  firstRunValleyProfileFromState,
+} from "../environment/first_run_valley.js";
 
 // World is east/up/north; the scene negates north. Matches app.js playerPosition.set(px, py, -pz).
 export function gateToScenePosition(gate) {
@@ -47,6 +51,14 @@ export const GUIDANCE_PATH_DEFAULTS = Object.freeze({
   // route survives terrain/haze until the authority's detailed recovery gates take over.
   rtbColor: 0xffad3d,
   rtbActiveColor: 0xffc26a,
+  // Outbound intercept is intentionally cooler than amber recovery. One geometry language can
+  // still communicate "go fight" versus "go home" without adding another HUD label.
+  interceptColor: 0x86b9c3,
+  interceptActiveColor: 0xc0e2e7,
+  // The first-flight route belongs to the landscape: a restrained sage cue threads the green
+  // corridor without turning it into an arcade tunnel.
+  ingressColor: 0x8fc7a8,
+  ingressActiveColor: 0xc8f0d6,
   rtbOpacity: 0.58,
   rtbActiveOpacity: 0.86,
   rtbVisualHalfM: 25,
@@ -59,6 +71,9 @@ export const GUIDANCE_PATH_DEFAULTS = Object.freeze({
   rtbGateSpacingM: 750,
   rtbMaxDrawM: 6_000,
   rtbLeadM: 350,
+  ingressGateSpacingM: 430,
+  ingressGateCount: 8,
+  ingressLeadM: 260,
   maxGates: 24,
   // Authored half-widths run hundreds of metres (tolerance volumes). Drawing that as a plane
   // scale makes a translucent UFO on the horizon — cap the *visual* radius; the kernel half
@@ -176,6 +191,48 @@ export function rtbGuidanceGates(state = {}, options = {}) {
       dirty: false,
       rtb: true,
       intercept: target.id === "rapier-balloon-intercept",
+    });
+  }
+  return gates;
+}
+
+/**
+ * Sparse conformal breadcrumbs through the authority-published first-flight valley. The centreline
+ * meanders with the same profile as terrain collision/presentation, and disappears the instant
+ * the pop-out interlock releases weapons.
+ */
+export function firstRunIngressGuidanceGates(state = {}, options = {}) {
+  if (state?.first_run_weapons_cold !== true) return [];
+  const profile = firstRunValleyProfileFromState(state);
+  const eastM = finiteNumber(state?.px);
+  const upM = finiteNumber(state?.py);
+  const northM = finiteNumber(state?.pz);
+  if (!profile || eastM === null || upM === null || northM === null) return [];
+  const remainingM = profile.popOutNorthM - northM;
+  if (!(remainingM > 20)) return [];
+  const config = { ...GUIDANCE_PATH_DEFAULTS, ...options };
+  const leadM = Math.min(config.ingressLeadM, remainingM * 0.28);
+  const drawnM = Math.max(0, remainingM - leadM);
+  if (!(drawnM > 1)) return [];
+  const densityCount = Math.floor(drawnM / Math.max(1, config.ingressGateSpacingM)) + 1;
+  const count = Math.max(3, Math.min(config.ingressGateCount, densityCount));
+  const gates = [];
+  for (let index = 0; index < count; index += 1) {
+    const along = index / Math.max(1, count - 1);
+    const gateNorthM = northM + leadM + drawnM * along;
+    const gateEastM = firstRunValleyCenterEastM(profile, gateNorthM);
+    if (!Number.isFinite(gateEastM)) continue;
+    gates.push({
+      id: `first-run-ingress-${index}`,
+      eastM: gateEastM,
+      upM: profile.routeAltitudeM,
+      northM: gateNorthM,
+      halfM: config.rtbVisualHalfM
+        + (config.rtbFarVisualHalfM - config.rtbVisualHalfM) * 0.42 * Math.sqrt(along),
+      active: index === 0,
+      dirty: false,
+      rtb: true,
+      ingress: true,
     });
   }
   return gates;
@@ -379,12 +436,15 @@ export function createGuidancePath(THREE, options = {}) {
       const approachActive = state?.approach_guidance_active === true;
       const carrierRtbRequested = state?.carrier_sortie_route_active === true
         && state?.carrier_sortie_route_rtb_requested === true;
+      const firstRunIngressIntent = state?.first_run_weapons_cold === true
+        && firstRunValleyProfileFromState(state) !== null;
       const recoveryIntent = approachActive
         || state?.player_rtb_active === true
         || (state?.rtb_steer === true && state?.recovery_point_known === true)
         || rapierRtbIntent(state)
         || rapierBalloonInterceptIntent(state)
         || carrierRtbRequested;
+      const guidanceIntent = recoveryIntent || firstRunIngressIntent;
       const samples = state?.approach_gates;
       const explicitApproachKey = state?.guidance_continuity_key;
       const sortieSequence = finiteNumber(state?.guidance_sortie_sequence);
@@ -413,7 +473,15 @@ export function createGuidancePath(THREE, options = {}) {
           && cachedApproachLadder.length > 0;
         cachedRtbKey = null;
         cachedRtbLadder = [];
-      } else if (!recoveryIntent) {
+      } else if (!guidanceIntent) {
+        cachedRaw = null;
+        cachedLadder = [];
+        cachedApproachLadder = [];
+        cachedApproachKey = null;
+        root.userData.continuityHeld = false;
+        cachedRtbKey = null;
+        cachedRtbLadder = [];
+      } else if (firstRunIngressIntent) {
         cachedRaw = null;
         cachedLadder = [];
         cachedApproachLadder = [];
@@ -439,6 +507,7 @@ export function createGuidancePath(THREE, options = {}) {
       let ladder = cachedLadder;
       let rtbMode = false;
       let interceptMode = false;
+      let ingressMode = false;
       let approachJoinMode = false;
       if (ladder.length) {
         // Procedure ownership is a lifecycle boundary. Do not replay ownship-relative transit
@@ -457,10 +526,14 @@ export function createGuidancePath(THREE, options = {}) {
           root.userData.suppressionReason = "approach-empty";
           return 0;
         }
-        const px = finiteNumber(state?.px);
-        const py = finiteNumber(state?.py);
-        const pz = finiteNumber(state?.pz);
-        const rtbKey = [
+        if (firstRunIngressIntent) {
+          ladder = firstRunIngressGuidanceGates(state ?? {}, config);
+          ingressMode = ladder.length > 0;
+        } else {
+          const px = finiteNumber(state?.px);
+          const py = finiteNumber(state?.py);
+          const pz = finiteNumber(state?.pz);
+          const rtbKey = [
           state?.player_rtb_active === true ? 1 : 0,
           state?.rtb_steer === true ? 1 : 0,
           state?.recovery_point_known === true ? 1 : 0,
@@ -484,16 +557,18 @@ export function createGuidancePath(THREE, options = {}) {
           px === null ? "" : Math.round(px / 100),
           py === null ? "" : Math.round(py / 50),
           pz === null ? "" : Math.round(pz / 100),
-        ].join("|");
-        if (rtbKey !== cachedRtbKey) {
-          cachedRtbKey = rtbKey;
-          cachedRtbLadder = rtbGuidanceGates(state ?? {}, config);
+          ].join("|");
+          if (rtbKey !== cachedRtbKey) {
+            cachedRtbKey = rtbKey;
+            cachedRtbLadder = rtbGuidanceGates(state ?? {}, config);
+          }
+          ladder = cachedRtbLadder;
+          rtbMode = ladder.length > 0;
+          interceptMode = ladder.some((gate) => gate.intercept === true);
         }
-        ladder = cachedRtbLadder;
-        rtbMode = ladder.length > 0;
-        interceptMode = ladder.some((gate) => gate.intercept === true);
       }
-      if (approachActive && ladder.length) {
+      if (approachActive && ladder.length
+          && state?.approach_join_guidance_active !== false) {
         const join = approachJoinGuidanceGates(state ?? {}, ladder, config);
         if (join.length) {
           // Authored procedure volumes always win the fixed mesh budget. Join chevrons fill only
@@ -511,7 +586,7 @@ export function createGuidancePath(THREE, options = {}) {
         root.userData.mode = null;
         root.userData.drawnGateCount = 0;
         root.userData.joinGateCount = 0;
-        root.userData.suppressionReason = recoveryIntent
+        root.userData.suppressionReason = guidanceIntent
           ? "no-valid-target" : "no-intent";
         return 0;
       }
@@ -558,9 +633,14 @@ export function createGuidancePath(THREE, options = {}) {
 
         if (gate.rtb === true) {
           mesh.material = rtbMaterial;
-          mesh.userData.guidanceStyle = gate.intercept === true
-            ? "intercept-chevron" : "rtb-chevron";
-          tint.color = gate.active ? config.rtbActiveColor : config.rtbColor;
+          mesh.userData.guidanceStyle = gate.ingress === true
+            ? "ingress-chevron"
+            : gate.intercept === true ? "intercept-chevron" : "rtb-chevron";
+          tint.color = gate.ingress === true
+            ? (gate.active ? config.ingressActiveColor : config.ingressColor)
+            : gate.intercept === true
+              ? (gate.active ? config.interceptActiveColor : config.interceptColor)
+              : (gate.active ? config.rtbActiveColor : config.rtbColor);
           tint.opacity = gate.active ? config.rtbActiveOpacity : config.rtbOpacity;
         } else if (gate.active) {
           mesh.material = procedureMaterial;
@@ -577,7 +657,8 @@ export function createGuidancePath(THREE, options = {}) {
       }
 
       root.visible = true;
-      root.userData.mode = interceptMode ? "intercept"
+      root.userData.mode = ingressMode ? "first-run-ingress"
+        : interceptMode ? "intercept"
         : rtbMode ? "rtb" : approachJoinMode ? "approach-join" : "procedure";
       root.userData.joinGateCount = approachJoinMode
         ? ladder.filter((gate) => gate.join === true).length : 0;

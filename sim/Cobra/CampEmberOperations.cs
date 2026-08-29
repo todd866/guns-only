@@ -23,6 +23,7 @@ public static class CampEmberOperations
     public const double ProtectedHalfWidthM = 120.0;
     public const double ObstacleSurfaceRisePerM = 1.0 / 8.0;
     public const double DepartureCentreClearanceM = 54.0;
+    public const double DepartureRouteClearanceM = 36.0;
 
     public const double TlofRadiusM = 12.0;
     public const double FatoRadiusM = 28.0;
@@ -81,8 +82,9 @@ public static class CampEmberOperations
     /// A visible departure join rather than a straight line that changes direction after the
     /// player has left the FOB. The first two gates remain inside the surveyed 300-degree lane;
     /// the remaining four form a quadratic turn toward the selected route's nearest safe point.
-    /// Every gate stays above the pad while Depart is active, so the cue cannot teach a descent
-    /// into the forest immediately after lift-off.
+    /// Once clear of the protected lane, the connector descends toward the route's nap-of-earth
+    /// band while retaining a rotor-safe terrain floor. Holding every later gate above the pad
+    /// datum produced a 140 m AGL climb, a 100 m handoff cliff and premature long-range gunfire.
     /// </summary>
     public static IReadOnlyList<CobraPathGate> BuildDepartureGates(
         in Vec3D routeJoinWorldM,
@@ -102,10 +104,7 @@ public static class CampEmberOperations
 
         Vec3D curveStart = positions[1];
         Vec3D curveControl = PointAlongFinal(900.0);
-        Vec3D curveFinish = new(
-            routeJoinWorldM.X,
-            Math.Max(PadElevationM + 42.0, routeJoinWorldM.Y),
-            routeJoinWorldM.Z);
+        Vec3D curveFinish = routeJoinWorldM;
         for (int index = 2; index < positions.Length; index++) {
             double t = (index - 1.0) / (positions.Length - 2.0);
             double oneMinusT = 1.0 - t;
@@ -113,9 +112,7 @@ public static class CampEmberOperations
                 oneMinusT * oneMinusT * curveStart.X
                     + 2.0 * oneMinusT * t * curveControl.X
                     + t * t * curveFinish.X,
-                Math.Max(
-                    PadElevationM + 42.0,
-                    oneMinusT * curveStart.Y + t * curveFinish.Y),
+                oneMinusT * curveStart.Y + t * curveFinish.Y,
                 oneMinusT * oneMinusT * curveStart.Z
                     + 2.0 * oneMinusT * t * curveControl.Z
                     + t * t * curveFinish.Z);
@@ -128,8 +125,11 @@ public static class CampEmberOperations
             Vec3D position = positions[index];
             if (!terrain.TrySample(position.X, position.Z, out TerrainSample surface))
                 throw new InvalidOperationException("Camp Ember departure gate has no terrain truth.");
+            double minimumClearanceM = index < DepartureDistanceM.Length
+                ? DepartureCentreClearanceM
+                : DepartureRouteClearanceM;
             positions[index] = position with {
-                Y = Math.Max(position.Y, surface.HeightM + DepartureCentreClearanceM)
+                Y = Math.Max(position.Y, surface.HeightM + minimumClearanceM)
             };
         }
 

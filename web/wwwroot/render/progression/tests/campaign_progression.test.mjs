@@ -30,6 +30,7 @@ test("one catalog names every route and exposes only accepted production experie
     { id, mission, releaseState }
   )), [
     { id: "first-merge", mission: 7, releaseState: "production" },
+    { id: "ace-duel", mission: 9, releaseState: "preview" },
     { id: "multiplayer", mission: 7, releaseState: "preview" },
     { id: "low-level-drone", mission: 8, releaseState: "quarantined" },
     { id: "medevac", mission: 13, releaseState: "quarantined" },
@@ -56,6 +57,9 @@ test("one catalog names every route and exposes only accepted production experie
     "top-gun",
     "okanagan-fireboss",
   ]);
+  const sequences = EXPERIENCE_CATALOG.map((entry) => entry.sequence);
+  assert.equal(new Set(sequences).size, sequences.length,
+    "experience ordering is product metadata and must not assign two programmes the same slot");
   // The corrected string-selector launch path was explicitly promoted for Build 326. Production
   // launchability is catalog authority; it must not depend on the retired preview query gate.
   assert.equal(experienceLaunchable("top-gun"), true);
@@ -67,14 +71,17 @@ test("one catalog names every route and exposes only accepted production experie
   assert.match(experienceById("multiplayer").blocker, /matchmaking.*player path/i);
   assert.equal(experienceLaunchable("weekend-ride"), true);
   assert.equal(experienceComingSoon("weekend-ride"), false);
+  assert.match(experienceById("weekend-ride").shortObjective, /end the ride/i,
+    "open lapping still needs an explicit player-owned ending");
   assert.equal(experienceById("okanagan-fireboss").route, "/okanagan/");
   const cobra = experienceById("cobra-lab");
-  assert.match(cobra.shortObjective, /garrison/i);
+  assert.match(cobra.shortObjective, /gun pit/i);
+  assert.doesNotMatch(cobra.shortObjective, /garrison/i);
   assert.match(cobra.shortObjective, /capture/i);
   assert.match(cobra.shortObjective, /tickets/i);
   assert.doesNotMatch(cobra.shortObjective, /45 seconds|tip .* control/i,
     "the front door must brief the live conquest objective, not the retired control threshold");
-  assert.equal(CAMPAIGN_NODES.length, 7,
+  assert.equal(CAMPAIGN_NODES.length, 8,
     "standalone research routes are not campaign beats");
 
   const fresh = createCampaignProfile();

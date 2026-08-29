@@ -140,30 +140,30 @@
       <div class="mission-copy">
         <div class="eyebrow">2030s / ATTRITABLE SURVEY SYSTEMS / EXPERIMENTAL</div>
         <h1 id="briefing-title">Indoor</h1>
-        <p id="mission-brief" class="lede">Survey tomorrow's attack site without announcing the route. Keep the fibre attached, inspect the marked rooms, then let the onboard controller retrace the quiet path home.</p>
+        <p id="mission-brief" class="lede">Map both rooms. Keep the fibre attached. Return dark.</p>
 
         <div id="survey-mission-set" class="survey-mission-set" role="radiogroup" aria-label="Survey mission">
           <button class="survey-mission selected" type="button" role="radio" aria-checked="true" data-mission-id="attack-site">
             <span><b>QUIET</b><i>0.65 KM</i></span>
             <strong>Bracken Pump House</strong>
-            <small>Tomorrow's attack site · stealth mandatory</small>
+            <small>Attack site · no emissions</small>
           </button>
           <button class="survey-mission" type="button" role="radio" aria-checked="false" data-mission-id="discretionary-site">
             <span><b>DISCRETION</b><i>1.05 KM</i></span>
             <strong>Morrow Service Block</strong>
-            <small>Uncertain contact · return quiet or defend yourself</small>
+            <small>Unknown contact · return or fight</small>
           </button>
           <button class="survey-mission" type="button" role="radio" aria-checked="false" data-mission-id="diversion-site">
             <span><b>PROVOKE</b><i>1.65 KM</i></span>
             <strong>Cinder Tram Depot</strong>
-            <small>Tomorrow's diversion · make them react</small>
+            <small>Diversion · draw a response</small>
           </button>
         </div>
 
         <div class="mission-doctrine">
-          <div><b>01</b><span><strong>Survey</strong>Follow the fibre-protected route and hold each observation point.</span></div>
-          <div><b>02</b><span><strong>Obey emission doctrine</strong>Stealth sorties keep the fibre attached; discretionary sorties may detach after the survey.</span></div>
-          <div><b>03</b><span><strong>Drone response</strong>An investigator may emerge. Firing starts the response clock.</span></div>
+          <div><b>01</b><span><strong>Survey</strong>Hold both marked rooms.</span></div>
+          <div><b>02</b><span><strong>Doctrine</strong>Stay optical, or detach only when authorised.</span></div>
+          <div><b>03</b><span><strong>Response</strong>Firing starts the reinforcement clock.</span></div>
         </div>
 
         <div class="control-summary" aria-label="Controls">
@@ -214,7 +214,7 @@
         <div><kbd>MOUSE</kbd><span>Optional mouselook</span></div>
         <div><kbd>R</kbd><span>Return after all survey observations / restart after finish</span></div>
       </div>
-      <p>On touch screens, the left pad translates and the right side looks. UP/DN control height. After the survey, use RETURN to let the drone retrace the fibre route without broadcasting.</p>
+      <p>Touch: left pad moves; right pad looks. After the survey, RETURN retraces the fibre.</p>
       <button id="help-close" class="primary" type="button">DONE · H</button>
     </div>
   </section>
@@ -223,7 +223,7 @@
     <div class="result-card">
       <div id="result-kicker" class="eyebrow">FACILITY NINE / MISSION COMPLETE</div>
       <h2 id="result-title">Control loop severed</h2>
-      <p id="result-copy">The station held long enough. The facility is blind.</p>
+      <p id="result-copy">Task complete.</p>
       <div class="result-grid">
         <div><span>TIME</span><strong id="result-time">00:00</strong></div>
         <div><span>LINK</span><strong id="result-link">OPTICAL</strong></div>
@@ -267,7 +267,7 @@
     // unversioned campaign dependency. This classic, import-free preboot runs before any module
     // graph is requested; offline clients keep their older document and never enter this path.
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=343", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=349", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -294,10 +294,10 @@
     try {
       await globalThis.__gunsPrebootReady;
       const { renderExperienceGate } = await import(
-        "../render/release/quarantine_gate.js?v=343"
+        "../render/release/quarantine_gate.js?v=349"
       );
       const access = renderExperienceGate({ experienceId: "indoor" });
-      if (access.allowed) await import("./game.js?v=343");
+      if (access.allowed) await import("./game.js?v=349");
     } catch (error) {
       console.error(error);
       const boot = document.querySelector("#boot-status");

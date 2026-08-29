@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=343";
+import { createHud } from "./hud.js?v=349";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -12,11 +12,18 @@ import {
   advanceForwardGimbal,
   advancePadlockGimbal,
   PADLOCK_LIMITS,
+  padlockVisualRollCorrectionRad,
 } from "./render/camera/padlock_controller.js";
+import {
+  advanceLowSpeedLens,
+  lowSpeedLensTarget,
+  neutralLowSpeedLens,
+} from "./render/camera/low_speed_lens.js";
 import {
   combatHandoffPresentation,
   sortieResultCopy,
-} from "./render/debrief/sortie_result.js?v=343";
+  visualMergeDebriefPresentation,
+} from "./render/debrief/sortie_result.js?v=349";
 import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
@@ -29,6 +36,7 @@ import {
   productionMissionAuthority,
   resolveInitialProgramSelection,
   sameMissionAuthority,
+  shouldRestageFirstRunValley,
   topGunOwnsFoxTwoInput as missionAuthorityOwnsFoxTwoInput,
   topGunMissionAuthority,
 } from "./render/top-gun/mission_authority.js";
@@ -37,10 +45,19 @@ import {
   markFirstRunValleySeen,
   shouldAutoStartFirstRunValley,
   touchFireAriaLabel,
-} from "./render/onboarding/first_run_valley.js?v=343";
+  touchFireVisibleLabel,
+} from "./render/onboarding/first_run_valley.js?v=349";
+import {
+  dialogTabDestination,
+  renderedDialogControl,
+} from "./render/onboarding/modal_focus.js?v=349";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
+import {
+  createFirstRunValleyPresentation,
+  FIRST_RUN_VALLEY_MESH_RECESS_M,
+} from "./render/environment/first_run_valley.js";
 import {
   terrainLaunchMissionIdentity,
   terrainLaunchMissionSelector,
@@ -76,8 +93,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=343";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=343";
+} from "./render/release/release_identity.js?v=349";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=349";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -90,7 +107,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=343";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=349";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -99,16 +116,17 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=343";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=349";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=343";
+} from "./render/nav/carrier_sortie_touch_control.js?v=349";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
   carrierRecoveryLesson,
   formatWholeLb,
   procedureLabelFromState,
+  TopGunRtbDisclosureLatch,
   topGunNavDecision,
 } from "./render/nav/mesh_nd_chrome.js";
 import {
@@ -185,7 +203,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=343";
+} from "./render/telemetry/ai_frame_pressure.js?v=349";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -195,14 +213,15 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=343";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=343";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=343";
+} from "./render/telemetry/telemetry_batch.js?v=349";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=349";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=349";
+import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=349";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=343";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=343";
+} from "./render/shell/boot_watchdog.js?v=349";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=349";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -211,7 +230,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=343";
+} from "./render/settings/player_settings.js?v=349";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -258,13 +277,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=343";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=343";
+} from "./render/scene/scene_builders.js?v=349";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=349";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=343";
+} from "./render/audio/flight_audio.js?v=349";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -526,6 +545,7 @@ const readyProgramProgress = document.querySelector("#ready-program-progress");
 const readyStart = document.querySelector("#ready-start");
 const readyReplay = document.querySelector("#ready-replay");
 const readyHandoff = document.querySelector("#ready-handoff");
+const readyIntroReplay = document.querySelector("#ready-intro-replay");
 const readySettings = document.querySelector("#ready-settings");
 const readyRestart = document.querySelector("#ready-restart");
 const readyReturn = document.querySelector("#ready-return");
@@ -584,6 +604,7 @@ let meshNavMap = null;
 let meshNdFollow = true;
 let meshNdTourArm = false;
 let topGunPostKillChoiceVisible = false;
+const topGunRtbDisclosureLatch = new TopGunRtbDisclosureLatch();
 function ensureMeshNavMap(bridgeRef) {
   if (meshNavMap || !navMeshMapCanvas) return meshNavMap;
   meshNavMap = createMeshNavMap(navMeshMapCanvas, {
@@ -696,6 +717,9 @@ function updateNavConsole(state) {
   const decision = topGunNavDecision(state);
   const recoveryLesson = carrierRecoveryLesson(state);
   const relevant = selected !== null || decision !== null || recoveryLesson !== null;
+  const openForAcceptedTopGunRtb = topGunRtbDisclosureLatch.update(state, {
+    disclosureRelevant: relevant,
+  });
   navConsole.hidden = !relevant;
   if (!relevant) {
     if (navConsole.open) navConsole.open = false;
@@ -709,6 +733,10 @@ function updateNavConsole(state) {
   };
   if (navUi.decision) navUi.decision.hidden = decision === null;
   if (navUi.recoveryLesson) navUi.recoveryLesson.hidden = recoveryLesson === null;
+  if (openForAcceptedTopGunRtb) {
+    navConsole.open = true;
+    syncNavConsoleDisclosure();
+  }
   if (recoveryLesson) {
     navUi.recoveryStep.textContent = recoveryLesson.step;
     navUi.recoveryTitle.textContent = recoveryLesson.title;
@@ -1349,6 +1377,10 @@ const VISUAL_QUALITY = Object.freeze({
     ? 512 : detectedVisualTier === "balanced" ? 1024 : 2048,
   carrierSprayCount: detectedVisualTier === "mobile"
     ? 28 : detectedVisualTier === "balanced" ? 36 : 44,
+  firstRunValleyNorthSegments: detectedVisualTier === "mobile" ? 448 : 512,
+  firstRunValleyLateralSegments: detectedVisualTier === "mobile" ? 144 : 160,
+  firstRunValleyMeshRecessM: detectedVisualTier === "mobile"
+    ? 6 : FIRST_RUN_VALLEY_MESH_RECESS_M,
 });
 
 // On touch layouts the primary action is visually ahead of the long briefing. Move that same
@@ -2965,10 +2997,11 @@ function observeArenaMatch(state) {
 let incidentReplay = null;
 let appliedMultiplayerWorldOrigin = "";
 const pauseReasons = new Set(["ready"]);
-// Every platform sees the same two-aircraft front door, except the one-shot first-run valley
-// on-ramp. `autoLaunchPending` is armed after a Fly gesture needs asynchronous terrain warmup, or
-// when that first visit skips Ready. Playwright (`navigator.webdriver`) keeps the picker unless
-// `?firstRun=1`. Catalogue clicks dismiss the on-ramp for the rest of the page lifetime.
+// Every platform sees the same aircraft front door, except the one-shot first-run valley on-ramp.
+// The on-ramp is staged behind its own Ready card: no aircraft clock moves until the pilot chooses
+// Enter valley. `autoLaunchPending` is armed only after that gesture needs asynchronous terrain
+// warmup. Playwright (`navigator.webdriver`) keeps the picker unless `?firstRun=1`. Catalogue
+// clicks dismiss the on-ramp for the rest of the page lifetime.
 let autoLaunchPending = false;
 let firstRunAutostartPending = false;
 let firstRunValleyDismissed = false;
@@ -3074,6 +3107,7 @@ function openSettings() {
   setPauseReason("settings", true);
   readyScreen.inert = true;
   sceneCanvas.inert = true;
+  settingsScreen.inert = false;
   settingsScreen.classList.add("visible");
   settingsScreen.setAttribute("aria-hidden", "false");
   settingsClose?.focus({ preventScroll: true });
@@ -3084,6 +3118,7 @@ function closeSettings() {
   bindingCaptureAction = null;
   settingsScreen.classList.remove("visible");
   settingsScreen.setAttribute("aria-hidden", "true");
+  settingsScreen.inert = true;
   readyScreen.inert = false;
   setPauseReason("settings", false);
   const focusTarget = settingsReturnFocus?.isConnected ? settingsReturnFocus
@@ -3267,6 +3302,9 @@ function syncMobileControlProfile(state) {
   syncCarrierSortieTouchRtbControl(touchCarrierRtbButton, state);
   const casevac = isCasevacState(state);
   const casevacActive = casevac && state?.session_phase === "ACTIVE";
+  const touchFireLabel = touchFireVisibleLabel(state);
+  const firstRunMissileTracking = touchFireLabel === "FOX 2"
+    && state?.aim9_in_flight === true;
   if (touchThrottleControls) {
     touchThrottleControls.hidden = casevac
       ? !casevacActive
@@ -3312,7 +3350,9 @@ function syncMobileControlProfile(state) {
   if (targetStickHelp) {
     targetStickHelp.textContent = casevac
       ? "Drag left or right to yaw. The control centres when released."
-      : "Right thumb: drag left or right to roll, down to pull, or up to push. The stick centres when released. Use the separate Fire button to fire guns.";
+      : touchFireLabel !== "FIRE"
+        ? "Right thumb: drag left or right to roll, down to pull, or up to push. The stick centres when released. Fire launches missiles until empty, then guns."
+        : "Right thumb: drag left or right to roll, down to pull, or up to push. The stick centres when released. Use the separate Fire button to fire guns.";
   }
   if (touchGearButton) touchGearButton.hidden = casevac || !profile.gear;
   if (touchFlapUpButton) touchFlapUpButton.hidden = casevac || !profile.flaps;
@@ -3328,7 +3368,13 @@ function syncMobileControlProfile(state) {
   if (touchWingSweepAuto) touchWingSweepAuto.hidden = !f14WingSweep;
   if (touchFireButton) {
     touchFireButton.hidden = casevac || !profile.fire;
-    touchFireButton.setAttribute("aria-label", touchFireAriaLabel(state));
+    touchFireButton.disabled = firstRunMissileTracking;
+    touchFireButton.setAttribute(
+      "aria-label",
+      firstRunMissileTracking ? "Missile tracking; wait for clear" : touchFireAriaLabel(state),
+    );
+    touchFireButton.textContent = touchFireVisibleLabel(state);
+    if (firstRunMissileTracking) touchFireButton.textContent = "TRACK";
   }
   if (touchGcasPaddle) {
     touchGcasPaddle.hidden = !profile.gcasOverride;
@@ -3446,7 +3492,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   "first-merge": Object.freeze({
     kicker: "2030s Ukraine · F-22A · endless",
     title: "Guns Only",
-    sortie: "F-22A vs escalating opposition · guns only · first pass safe",
+    sortie: "F-22A vs escalating opposition · guns only · opening 1v2 guns hot",
     configuration: "F-22 public-data surrogate · 480 rounds · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
     brief: "You start at the merge, and the opening wave is a pair of Aces. Survive the first pass, fight into the rear quarter, and keep going. The director watches how you actually flew and answers in kind.",
     controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO calls it a day and starts RTB · Esc → Call It A Day button · Space G limiter · H controls",
@@ -3523,24 +3569,24 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   "cobra-lab": Object.freeze({
     kicker: "Cobra Canyon · Hold the Bridge",
     title: "Hold the Bridge",
-    sortie: "AH-1G · River Gorge conquest · four points · tickets",
-    configuration: "AH-1G flight-foundation authority · four capture points · dug-in garrisons · finite M134 · Camp Ember rearm · win/lose on tickets",
-    brief: "Four points hold the valley and you start with one. Each hostile point is held by a dug-in garrison that ground fire cannot touch — breaking it open is the only thing your gun can do that nobody else can, and friendly infantry take the point once it is clear. Holding more points than they do bleeds their tickets to zero. Press M for the map.",
-    controls: "W/S collective · arrows cyclic · A/D yaw · Tab target · F gunner consent · M tactical map · Camp Ember pad to rearm",
+    sortie: "AH-1G · River Gorge conquest · ticket result · Camp Ember recovery",
+    configuration: "AH-1G flight-foundation authority · four capture points · fortified gun pits · finite M134 · Camp Ember rearm and stable recovery",
+    brief: "Four points hold the valley and you start with one. Each hostile point is locked by a fortified gun pit that friendly ground fire cannot break — destroy it, clear the remaining troops, then cover the friendly lift while it captures. Holding more points than the enemy bleeds their tickets to zero and decides the battle. Then return to Camp Ember and settle on the pad to close the sortie. Press M for the map.",
+    controls: "W/S collective · arrows cyclic · A/D yaw · Tab target · F gunner consent · M tactical map · Camp Ember pad to rearm and recover",
   }),
   "weekend-ride": Object.freeze({
     kicker: "Off duty · 10,000 ft runway",
     title: "Weekend Ride",
-    sortie: "YZF-R1 · painted circuit · free drive",
+    sortie: "YZF-R1 · painted circuit · open lapping session",
     configuration: "Yamaha YZF-R1 · helmet view · sequential gearbox · no combat",
-    brief: "Fighter pilots ride on weekends. The Rapier strip becomes a painted circuit for a liter-bike free ride—split authority for throttle, brake, steer, and rider weight. Fly opens the dedicated Weekend Ride surface.",
-    controls: "W/S throttle/brake · A/D steer · arrows rider weight · Q/E gears · C auto/manual clutch · R reset",
+    brief: "Fighter pilots ride on weekends. The Rapier strip becomes a painted circuit for an open liter-bike session—split authority for throttle, brake, steer, and rider weight. Keep lapping or end the ride from pause when you are ready to review the session.",
+    controls: "W/S throttle/brake · A/D steer · arrows rider weight · Q/E gears · C auto/manual clutch · R reset · Esc pauses / End Ride",
   }),
   "top-gun": Object.freeze({
     kicker: "1986 · training range",
     title: "Top Gun",
     sortie: "F-14A vs MiG-28 · guns and Sidewinders · DACT arena",
-     configuration: "F-14A · M61 + AIM-9 · anime-1986 presentation · preview with ?preview=1",
+     configuration: "F-14A · M61 + AIM-9 · anime-1986 presentation · production programme",
      brief: "Fly the Tomcat against MiG-28 aggressors over a Miramar-class training range—guns and heaters against an escalating stream. After a splash, stay for the next jet or choose RTB TO CARRIER, then fly the taught Case I pattern: initial, break, downwind, approach turn and groove.",
      controls: "Arrows fly · W/S power · F guns · R fox-two · V padlock · Tab target\nNavigation opens after a splash with the carrier RTB choice",
   }),
@@ -3595,6 +3641,13 @@ function shouldStageFirstRunValley() {
 function dismissFirstRunValleyAutostart() {
   firstRunValleyDismissed = true;
   firstRunAutostartPending = false;
+}
+
+function clearFirstRunValleyReplayQuery() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has("firstRun")) return;
+  url.searchParams.delete("firstRun");
+  window.history.replaceState(window.history.state, "", url);
 }
 
 function tryLaunchFoxTwo() {
@@ -4423,7 +4476,48 @@ function renderCampaignProgress() {
 function readyScreenFocusables() {
   return [...readyScreen.querySelectorAll(
     'button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
-  )].filter((element) => !element.closest("[hidden]"));
+  )].filter((element) => renderedDialogControl(element));
+}
+
+const READY_MODAL_FLIGHT_CHROME = [
+  "#scene",
+  "#hud",
+  "#view-status",
+  "#multiplayer-status",
+  "#pause-button",
+  "#flight-announcer",
+  "#rapier-radio",
+  "#pilot-physiology",
+  "#incident-replay-overlay",
+  "#test-flight-console",
+  "#nav-console",
+  "#touch-controls",
+  "#boot",
+  "[data-anca-panel]",
+].join(", ");
+const readyModalChromeRestore = new Map();
+
+function syncReadyModalOwnership(owned) {
+  if (owned) {
+    for (const element of document.querySelectorAll(READY_MODAL_FLIGHT_CHROME)) {
+      if (!readyModalChromeRestore.has(element)) {
+        readyModalChromeRestore.set(element, Object.freeze({
+          inert: element.inert,
+          ariaHidden: element.getAttribute("aria-hidden"),
+        }));
+      }
+      element.inert = true;
+      element.setAttribute("aria-hidden", "true");
+    }
+    return;
+  }
+  for (const [element, previous] of readyModalChromeRestore) {
+    if (!element.isConnected) continue;
+    element.inert = previous.inert;
+    if (previous.ariaHidden === null) element.removeAttribute("aria-hidden");
+    else element.setAttribute("aria-hidden", previous.ariaHidden);
+  }
+  readyModalChromeRestore.clear();
 }
 
 function centerReadyMissionChoice(selectedMission) {
@@ -4460,19 +4554,6 @@ function focusReadyScreen() {
     ? readyStart
     : readyRouteNotice?.querySelector("a[href]") ?? selectedMission;
   target?.focus({ preventScroll: true });
-}
-
-function droneRaidDebriefFacts(state) {
-  const score = Math.round(Number(state?.drone_raid_score) || 0);
-  const maximum = Math.round(Number(state?.drone_raid_max_score) || 100);
-  const kills = Math.max(0, Math.round(Number(state?.drone_raid_kills) || 0));
-  const leakers = Math.max(0, Math.round(Number(state?.drone_raid_leakers) || 0));
-  const roundsPerKill = Number(state?.drone_raid_rounds_per_kill);
-  const facts = [`Raid score ${score}/${maximum}`, `${kills} down`];
-  if (leakers > 0) facts.push(`${leakers} leaker${leakers === 1 ? "" : "s"}`);
-  if (kills > 0 && Number.isFinite(roundsPerKill))
-    facts.push(`${roundsPerKill.toFixed(1)} rounds/kill`);
-  return facts.join(" · ");
 }
 
 function carrierQualificationDebriefFacts(state) {
@@ -4537,6 +4618,7 @@ function isCarrierQualificationState(state) {
       "mission.carrier-qualification.v1",
       "mission.korea.panther-sortie.v1",
       "mission.modern.f35c.carrier-conversion.public-data-surrogate.v1",
+      "mission.top-gun.acm.f14a-vs-mig28.v1",
     ].includes(String(state?.mission_definition_id || "").toLowerCase());
 }
 
@@ -4559,14 +4641,11 @@ function renderPauseUi(state = latestState) {
   const sessionPaused = pauseReasons.has("session");
   const settingsPaused = pauseReasons.has("settings");
   const richCasevacDebrief = finished && isCasevacState(state);
-  const hidingFirstRunPicker = firstRunAutostartPending
-    && ready
-    && !finished
-    && !help
-    && !sessionPaused
-    && !settingsPaused
-    && !background;
-  const showScreen = !hidingFirstRunPicker && !help && !calibrating
+  // Mission authority owns the card identity. Settings, help, blur/background and a redundant
+  // session hold may cover or inert this surface, but none of them may make staged valley
+  // authority masquerade as the normal six-aircraft programme underneath.
+  const firstRunReady = firstRunAutostartPending && ready && !finished;
+  const showScreen = !help && !calibrating
     && (ready || finished || background || sessionPaused || settingsPaused);
   const brief = missionBrief();
   const handoff = combatHandoffPresentation(state);
@@ -4577,12 +4656,15 @@ function renderPauseUi(state = latestState) {
   const wasScreenVisible = readyScreen.classList.contains("visible");
   const startWasDisabled = readyStart.disabled;
 
-  readyScreen.dataset.mode = ready ? "program" : finished ? "debrief" : "pause";
+  readyScreen.dataset.mode = firstRunReady
+    ? "intro" : ready ? "program" : finished ? "debrief" : "pause";
   readyScreen.dataset.richDebrief = String(richCasevacDebrief);
+  const casevacReady = ready && selectedBeat === 13;
+  readyScreen.dataset.casevacReady = String(casevacReady);
   // This must be a semantic visibility edge, not CSS alone. readyScreenFocusables deliberately
   // ignores descendants of [hidden]; without it the invisible consent checkbox becomes the
   // computed last item in pause/debrief and lets Tab escape the aria-modal dialog.
-  if (readyTelemetryDisclosure) readyTelemetryDisclosure.hidden = !ready;
+  if (readyTelemetryDisclosure) readyTelemetryDisclosure.hidden = !ready || firstRunReady;
   const routeBlocked = ready && blockedProgramExperience !== null;
   readyScreen.dataset.routeBlocked = String(routeBlocked);
   if (readyRouteNotice) {
@@ -4615,21 +4697,23 @@ function renderPauseUi(state = latestState) {
       }
     }
   }
-  if (readySelector) readySelector.hidden = !ready;
+  if (readySelector) readySelector.hidden = !ready || firstRunReady;
   if (readyDeckConfig && !ready) readyDeckConfig.hidden = true;
   if (readyCircuitsPreflight && !ready) readyCircuitsPreflight.hidden = true;
   if (ready) renderCampaignProgress();
   readyCasevacRouteBriefing.update({
-    visible: ready && selectedBeat === 13,
+    visible: casevacReady,
     routes: state?.casevac_routes,
   });
   if (readyMenuTitle) {
-    readyMenuTitle.textContent = ready
-      ? "Pick an aircraft" : finished ? "Sortie complete" : "Flight paused";
+    readyMenuTitle.textContent = firstRunReady
+      ? "Your first sortie" : ready
+        ? "Pick an aircraft" : finished ? "Sortie complete" : "Flight paused";
   }
   if (readyMenuHelp) {
-    readyMenuHelp.textContent = (ready
-      ? "Pick the aircraft you want to fly."
+    readyMenuHelp.textContent = (firstRunReady
+      ? "A short guided intercept before the full combat programme."
+      : ready ? "Pick the aircraft you want to fly."
       : finished
         ? "Review the result, or go again."
         : "The deterministic flight clock is stopped and all controls are neutralised.");
@@ -4647,9 +4731,10 @@ function renderPauseUi(state = latestState) {
     if (runPaused) suspendFlightAudio("run-paused");
     else activeView?.hud?.armAudio?.();
   }
-  sceneCanvas.inert = showScreen;
-  touchControls.inert = showScreen;
-  if (testFlightConsole) testFlightConsole.inert = showScreen;
+  // aria-modal is a promise about the whole accessibility tree, not only the canvas. Keep every
+  // flight status region and action console out of screen-reader and keyboard order while Ready,
+  // pause, settings or debrief owns the surface, then restore each element's authored state.
+  syncReadyModalOwnership(showScreen);
   if (!showScreen && wasScreenVisible && readyScreen.contains(document.activeElement)) {
     const focusOwner = calibrating
       ? tiltPrompt?.querySelector("button:not([disabled])")
@@ -4659,19 +4744,28 @@ function renderPauseUi(state = latestState) {
   readyScreen.classList.toggle("visible", showScreen);
   // The richer four-axis CASEVAC debrief is rendered above this generic finished card. Keep the
   // card as the visual backdrop, but expose only the topmost dialog to focus and assistive tech.
-  readyScreen.inert = richCasevacDebrief;
+  readyScreen.inert = richCasevacDebrief || settingsPaused;
   readyScreen.setAttribute(
     "aria-hidden",
-    String(!showScreen || richCasevacDebrief),
+    String(!showScreen || richCasevacDebrief || settingsPaused),
   );
   if (readySettings) readySettings.hidden = !showScreen;
+  if (readyIntroReplay) {
+    readyIntroReplay.hidden = !(firstRunReady
+      || (ready && selectedProgramNodeId === "first-merge"));
+    readyIntroReplay.textContent = firstRunReady
+      ? "Choose another mission" : "Replay valley intro";
+  }
   if (readyRestart) {
     readyRestart.hidden = ready;
-    readyRestart.textContent = finished ? "Fly again" : "Restart sortie";
+    // The primary finished action may advance the programme before it launches. This utility
+    // repeats the sortie which just ended, so giving both controls the old "Fly again" label hid
+    // a real navigation decision from the pilot.
+    readyRestart.textContent = finished ? "Repeat sortie" : "Restart sortie";
   }
   if (readyReturn) {
     readyReturn.hidden = ready;
-    readyReturn.textContent = "Mission program";
+    readyReturn.textContent = "Choose sortie";
   }
   if (readyHandoff) {
     readyHandoff.hidden = !handoffActionAvailable;
@@ -4682,10 +4776,24 @@ function renderPauseUi(state = latestState) {
     const result = sortieResultCopy(state);
     const casevac = isCasevacState(state);
     const casevacFacts = casevac ? casevacFinishedFacts(state) : null;
-    const replayAnalysis = casevac ? null : incidentReplay?.clip?.analysis;
+    const visualMergeEvidence = visualMergeDebriefPresentation(state);
     const carrierQualification = isCarrierQualificationState(state);
     const carrierFacts = carrierQualification
       ? carrierQualificationDebriefFacts(state) : null;
+    const carrierHandoff = carrierQualification && result.handoff === true;
+    // Top Gun already owns two explicit result axes: combat custody and physical carrier pass.
+    // Do not let the generic visual-merge card relabel those axes as Outcome/Evidence or append a
+    // third coaching paragraph after the combined carrier debrief.
+    const visualMerge = carrierHandoff ? null : visualMergeEvidence;
+    const resultFacts = Array.isArray(result.facts)
+      ? result.facts.filter((fact) => typeof fact === "string" && fact.trim())
+      : [];
+    const appendResultFacts = (...facts) => [...facts, ...resultFacts]
+      .filter(Boolean).join(" · ");
+    const singleCorrection = result.safetyCorrection
+      || visualMerge?.correction
+      || result.correction
+      || "Review the final exchange.";
     const ledgerIsEconomicMission = state?.rapier_economy_active === true;
     const ledgerNet = Math.trunc(
       Number(state?.rapier_economy_sortie_net_credits) || 0,
@@ -4713,23 +4821,25 @@ function renderPauseUi(state = latestState) {
     }
     readyKicker.textContent = casevac ? result.kicker : ledger?.kicker || result.kicker;
     readyTitle.textContent = result.title;
-    readyBrief.textContent = replayAnalysis
-      ? `${result.brief} ${replayAnalysis.physicalOutcome}. Next pass: ${replayAnalysis.correction}`
-      : ledger
-        ? `${result.brief} ${ledger.clearanceText}.`
-        : result.brief;
+    readyBrief.textContent = ledger
+      ? `${result.brief} ${ledger.clearanceText}.`
+      : result.brief;
     if (readySortieLabel) {
       // Preserve the established carrier-debrief assignment contract, then apply the orthogonal
       // CASEVAC vocabulary. CASEVAC never inherits a combat-shaped generic "Sortie" label.
-      readySortieLabel.textContent = result.handoff
-        ? "Recovery" : carrierQualification ? "Physical outcome" : "Sortie";
+      readySortieLabel.textContent = carrierHandoff
+        ? "Carrier recovery" : result.handoff
+          ? "Recovery" : carrierQualification ? "Physical outcome" : "Sortie";
       if (casevac) readySortieLabel.textContent = "Disposition";
+      if (visualMerge) readySortieLabel.textContent = "Outcome";
     }
     if (readyConfigLabel) {
-      readyConfigLabel.textContent = result.handoff
-        ? "Combat custody" : carrierQualification
+      readyConfigLabel.textContent = carrierHandoff
+        ? "Combat + full pass" : result.handoff
+          ? "Combat custody" : carrierQualification
           ? "Full-pass assessment" : ledger ? "Allocation" : "Result";
       if (casevac) readyConfigLabel.textContent = "Independent assessment";
+      if (visualMerge) readyConfigLabel.textContent = "Evidence";
     }
     readySortie.textContent = casevac
       ? `${brief.title} · ${casevacFacts.disposition}`
@@ -4738,46 +4848,77 @@ function renderPauseUi(state = latestState) {
         : result.handoff
           ? `${brief.title} · ${String(result.handoffPhase || "handoff").replaceAll("_", " ").toLowerCase()}`
           : `${brief.title} · ${String(state?.sortie_outcome || "complete").toLowerCase()}`;
-    readyConfig.textContent = result.handoff
-      ? `Player kills ${result.playerKills} · Relief kills ${result.reliefKills} (uncredited)`
+    readyConfig.textContent = carrierHandoff
+      ? appendResultFacts(
+        carrierFacts.passGrade,
+        carrierFacts.waveOff,
+      )
+      : result.handoff
+      ? resultFacts.join(" · ")
       : state?.maintenance_scenario === true
-      ? `Procedure ${Math.round(Number(state?.maintenance_score) || 0)}/${Math.round(Number(state?.maintenance_max_score) || 100)} · ${Math.round(Number(state?.maintenance_demerits) || 0)} demerits`
+      ? resultFacts.join(" · ")
       : casevac
         ? casevacFacts.axes
       : state?.drone_raid_evaluation === true
-        ? droneRaidDebriefFacts(state)
-        : state?.visual_merge_evaluation === true
-          ? `Decision score ${Math.round(Number(state?.visual_merge_score) || 0)}/100 · rear-quarter dwell ${(Number(state?.rear_quarter_dwell_s) || 0).toFixed(1)} s · ${Math.round(Number(state?.evaluated_projectile_hits) || 0)} projectile hits`
+        ? resultFacts.join(" · ")
+        : visualMerge
+          ? appendResultFacts(visualMerge.evidence)
           : carrierQualification
-            ? [carrierFacts.passGrade, carrierFacts.waveOff, carrierFacts.phases]
-              .filter(Boolean).join(" · ")
+            ? appendResultFacts(carrierFacts.passGrade, carrierFacts.waveOff,
+              carrierFacts.phases)
             : ledger
-            ? `${ledger.netText} · ${ledger.balanceText} · ${ledger.clearanceText}`
-              : replayAnalysis
-              ? `Sim touchdown ${replayAnalysis.touchdownAssessment.grade === "NONE" ? "not graded" : replayAnalysis.touchdownAssessment.grade} · ${replayAnalysis.touchdownAssessment.profile} v${replayAnalysis.touchdownAssessment.version} · replay cached · causal review is not an LSO grade`
-              : `Airframe ${healthPercent(state?.player_health)}% · opponent ${healthPercent(state?.opponent_health)}%`;
+            ? appendResultFacts(ledger.netText, ledger.balanceText, ledger.clearanceText)
+              : resultFacts.length > 0
+                ? resultFacts.join(" · ")
+                : `Airframe ${healthPercent(state?.player_health)}% · opponent ${healthPercent(state?.opponent_health)}%`;
     readyReplay.hidden = casevac || !incidentReplay?.clip;
+    readyReplay.textContent = "Replay";
     // No qualification, so the debrief offers the only two things that make sense: go again, or
     // pick the other aircraft.
     readyStart.textContent = "Fly again";
-    if (readyControls) readyControls.textContent = result.handoff
-      ? result.reserveMarginLb === null
-        ? "Recovery reserve result unavailable · relief combat remains separately scored"
-        : `${result.reserveMarginLb < 0 ? "Below" : "Above"} protected reserve by ${Math.round(Math.abs(result.reserveMarginLb))} LB\nRelief combat remains separately scored`
+    if (readyControls) readyControls.textContent = carrierHandoff
+      ? `${result.reserveMarginLb === null
+        ? "Recovery reserve result unavailable"
+        : `${result.reserveMarginLb < 0 ? "Below" : "Above"} protected reserve by ${Math.round(Math.abs(result.reserveMarginLb))} LB`}
+Full-pass primary · ${carrierFacts.passCorrection}
+Touchdown assessment · ${carrierFacts.touchdown}
+Touchdown primary · ${carrierFacts.touchdownCorrection}`
+      : result.handoff
+      ? singleCorrection
       : casevac
         ? `${casevacFacts.axes}\nPrimary correction · ${casevacFacts.correction}`
+        : visualMerge
+          ? singleCorrection
         : carrierQualification
           ? `Full-pass primary · ${carrierFacts.passCorrection}\nTouchdown assessment · ${carrierFacts.touchdown}\nTouchdown primary · ${carrierFacts.touchdownCorrection}`
           : ledger
             ? `${ledger.lines.map((line) => `${line.label} · ${line.creditsText}`).join("\n") || "No lines"}\n${ledger.clearanceText}`
-            : "Fly again, or open the mission list to take the other aircraft up";
+            : singleCorrection;
     readyHint.textContent = background
       ? "Return to the game to restage"
       : ledger?.clearance === "GROUNDED"
         ? `Allocation exception recorded — ${mobileControls
           ? "Tap Fly to fly the next contract"
           : "Press Enter to fly the next contract"}`
-        : mobileControls ? "Tap Fly to launch again" : "Press Enter to fly again";
+        : "";
+  } else if (firstRunReady) {
+    const fireBinding = controlCodeLabel(playerSettings.bindings.fire);
+    const rtbBinding = controlCodeLabel(playerSettings.bindings.knockItOff);
+    if (readySortieLabel) readySortieLabel.textContent = "Flight path";
+    if (readyConfigLabel) readyConfigLabel.textContent = "Weapons";
+    readyReplay.hidden = true;
+    readyKicker.textContent = "Kestrel Gorge · guided first sortie";
+    readyTitle.textContent = "Enter the valley";
+    readyBrief.textContent = "Stay low and follow the valley north. At the pop-out gate, Fire launches two heat-seeking missiles one at a time; once both missiles are away, the same control becomes the gun trigger.";
+    readySortie.textContent = "Follow valley → pop out → launch two heaters → guns / RTB";
+    readyConfig.textContent = `F-22A · two AIM-9 surrogates · 480 gun rounds · ${fireBinding} changes with the mission`;
+    if (readyControls) readyControls.textContent = mobileControls
+      ? "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll · FOX 2 launches missiles, then becomes GUNS\nThe objective strip always shows the next action"
+      : `ARROWS fly · W/S power · ${fireBinding} launches two missiles, then fires guns\nThe objective strip always shows the next action · ${rtbBinding} calls RTB when you are ready`;
+    readyStart.textContent = "Enter valley";
+    readyHint.textContent = background
+      ? "Return to the game to enter the valley"
+      : mobileControls ? "Tap Enter valley when ready" : "Press Enter when ready";
   } else if (ready) {
     if (readySortieLabel) readySortieLabel.textContent = "Sortie";
     if (readyConfigLabel) readyConfigLabel.textContent = "Configuration";
@@ -4917,7 +5058,11 @@ function refreshStagedMissionSnapshot() {
   return latestState;
 }
 
-function enterReady({ resetBridge = true, focus = true } = {}) {
+function enterReady({
+  resetBridge = true,
+  focus = true,
+  forceFirstRunValley = false,
+} = {}) {
   const preserveCalibration = pauseReasons.has("calibration");
   const preserveBackground = pauseReasons.has("background");
   if (resetBridge) recorder.endSortie("restaged", latestState);
@@ -4938,11 +5083,11 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
         program: TOP_GUN_PROGRAM_ID,
         top_gun_seat: topGunSeatLabel(selectedTopGunSeat),
       });
-    } else if (shouldStageFirstRunValley()) {
+    } else if (forceFirstRunValley || shouldStageFirstRunValley()) {
       bridge.StartFirstRunValley();
       stagedMissionAuthority = firstRunValleyMissionAuthority();
       firstRunAutostartPending = true;
-      autoLaunchPending = true;
+      autoLaunchPending = false;
       recorder.event("lifecycle", "sortie_staged", {
         program: selectedProgramNodeId,
         first_run_valley: true,
@@ -4980,8 +5125,7 @@ function enterReady({ resetBridge = true, focus = true } = {}) {
   bridgePauseApplied = true; // StartBeat is an authoritative transition to Ready.
   renderPauseUi();
   resetFrameClock();
-  if (firstRunAutostartPending) queueMicrotask(tryAutoLaunch);
-  else if (focus) queueMicrotask(focusReadyScreen);
+  if (focus) queueMicrotask(focusReadyScreen);
   return latestState;
 }
 
@@ -5101,7 +5245,7 @@ function launchMission(index = selectedBeat) {
     return false;
   }
   if (standalone?.mission == null && standalone.route) {
-    window.location.assign(standalone.route);
+    window.location.assign(standaloneNavigationHref(standalone.route, window.location));
     return true;
   }
   if (isTopGunProgram()) {
@@ -5169,6 +5313,15 @@ function primeSelectedMissionAudio() {
 
 function restartMissionNow() {
   enterReady();
+  return launchMission(selectedBeat);
+}
+
+function repeatSelectedSortieNow() {
+  const forceFirstRunValley = shouldRestageFirstRunValley({
+    repeatRequested: true,
+    stagedAuthority: stagedMissionAuthority,
+  });
+  enterReady({ forceFirstRunValley });
   return launchMission(selectedBeat);
 }
 
@@ -5656,20 +5809,22 @@ readyCircuitsPreflight?.addEventListener("toggle", () => {
   saveCircuitsPreflightOpenPreference(readyCircuitsPreflight.open);
 });
 
-readyScreen.addEventListener("keydown", (event) => {
-  if (event.code !== "Tab" || !readyScreen.classList.contains("visible")) return;
+document.addEventListener("keydown", (event) => {
+  if (event.code !== "Tab"
+      || !readyScreen.classList.contains("visible")
+      || readyScreen.inert
+      || readyScreen.getAttribute("aria-hidden") === "true") return;
   const focusable = readyScreenFocusables();
   if (!focusable.length) return;
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus({ preventScroll: true });
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus({ preventScroll: true });
-  }
-});
+  const destination = dialogTabDestination({
+    focusables: focusable,
+    activeElement: document.activeElement,
+    shiftKey: event.shiftKey,
+  });
+  if (!destination) return;
+  event.preventDefault();
+  destination.focus({ preventScroll: true });
+}, true);
 
 readyReplay?.addEventListener("click", () => {
   if (!incidentReplay?.start(performance.now())) return;
@@ -5681,8 +5836,28 @@ readyReplay?.addEventListener("click", () => {
 });
 
 readySettings?.addEventListener("click", openSettings);
+readyIntroReplay?.addEventListener("click", () => {
+  if (firstRunAutostartPending) {
+    dismissFirstRunValleyAutostart();
+    autoLaunchPending = false;
+    clearFirstRunValleyReplayQuery();
+    enterReady({ resetBridge: true });
+    return;
+  }
+  if (!pauseReasons.has("ready") || selectedProgramNodeId !== "first-merge") return;
+  firstRunValleyDismissed = false;
+  const replayUrl = new URL(window.location.href);
+  replayUrl.searchParams.set("program", "first-merge");
+  replayUrl.searchParams.set("firstRun", "1");
+  replayUrl.searchParams.delete("menu");
+  window.history.replaceState(window.history.state, "", replayUrl);
+  enterReady({ resetBridge: true });
+  // The query is an explicit boot seam, not sticky campaign state. Once authority is staged,
+  // remove it so Fly again naturally hands the pilot into the full Guns Only programme.
+  clearFirstRunValleyReplayQuery();
+});
 readyHandoff?.addEventListener("click", requestCombatHandoffFromPause);
-readyRestart?.addEventListener("click", restartMissionNow);
+readyRestart?.addEventListener("click", repeatSelectedSortieNow);
 readyReturn?.addEventListener("click", returnToCatalogue);
 pauseButton?.addEventListener("click", toggleSessionPause);
 
@@ -6386,50 +6561,6 @@ function casevacFinishedFacts(state) {
   });
 }
 
-function createCasevacCommanderCockpit() {
-  const group = new THREE.Group();
-  group.name = "CASEVAC_COMMANDER_COCKPIT_PRESENTATION_ONLY";
-  group.visible = false;
-  group.userData.casevacCommanderCockpit = Object.freeze({
-    presentationOnly: true,
-    authoritative: false,
-    collisionSource: false,
-    vehicleGeometryClaim: false,
-  });
-  const dark = new THREE.MeshBasicMaterial({ color: 0x151b19 });
-  const trim = new THREE.MeshBasicMaterial({ color: 0x6b775d });
-  dark.toneMapped = false;
-  trim.toneMapped = false;
-  const addBox = (name, size, position, material = dark) => {
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(size[0], size[1], size[2]),
-      material,
-    );
-    mesh.name = name;
-    mesh.position.set(position[0], position[1], position[2]);
-    mesh.frustumCulled = false;
-    group.add(mesh);
-  };
-  // A deliberately bounded commander-eye window frame: it establishes the driving-position view
-  // without pretending to be a detailed or authoritative exterior airframe.
-  addBox("CASEVAC_COAMING", [1.55, 0.13, 0.42], [0, -0.61, -0.91]);
-  addBox("CASEVAC_LEFT_PILLAR", [0.075, 1.12, 0.08], [-0.78, -0.02, -1.02]);
-  addBox("CASEVAC_RIGHT_PILLAR", [0.075, 1.12, 0.08], [0.78, -0.02, -1.02]);
-  addBox("CASEVAC_TOP_BEAM", [1.63, 0.075, 0.08], [0, 0.55, -1.02]);
-  addBox("CASEVAC_COAMING_TRIM", [0.72, 0.025, 0.03], [0, -0.535, -1.13], trim);
-  return Object.freeze({
-    group,
-    dispose() {
-      group.removeFromParent();
-      group.traverse((object) => {
-        object.geometry?.dispose?.();
-      });
-      dark.dispose();
-      trim.dispose();
-    },
-  });
-}
-
 function createCasevacFlightFactsPresentation(documentLike, mount = documentLike.body) {
   const root = documentLike.createElement("aside");
   root.setAttribute("data-casevac-flight-facts", "");
@@ -6439,58 +6570,69 @@ function createCasevacFlightFactsPresentation(documentLike, mount = documentLike
       [data-casevac-flight-facts] {
         position: fixed;
         z-index: 9;
-        top: max(98px, calc(env(safe-area-inset-top) + 84px));
-        right: max(14px, env(safe-area-inset-right));
-        width: min(350px, calc(100vw - 28px));
+        left: max(16px, env(safe-area-inset-left));
+        bottom: max(18px, env(safe-area-inset-bottom));
+        width: min(390px, calc(100vw - 32px));
         box-sizing: border-box;
-        padding: 9px 10px;
+        padding: 10px 12px 9px;
         border: 1px solid rgba(191, 233, 228, .22);
-        border-right: 3px solid #92d5a6;
-        background: rgba(6, 15, 18, .82);
+        border-left: 3px solid #e3bc72;
+        background: linear-gradient(90deg, rgba(6, 15, 18, .9), rgba(6, 15, 18, .7));
         color: #bfe9e4;
-        font: 700 9px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font: 700 10px/1.25 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
         letter-spacing: .055em;
         text-shadow: 0 1px 4px #000;
         pointer-events: none;
-        backdrop-filter: blur(3px);
+        backdrop-filter: blur(4px);
       }
       [data-casevac-flight-facts] * { box-sizing: border-box; }
       .cvf-steer {
         display: block;
-        margin-bottom: 7px;
+        margin-bottom: 8px;
         color: #f0fbf8;
-        font-size: 15px;
+        font-size: 17px;
         letter-spacing: .1em;
       }
       .cvf-primary {
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 5px 10px;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
       }
       .cvf-label {
         color: rgba(191, 233, 228, .58);
         font-size: 7px;
         letter-spacing: .16em;
       }
-      .cvf-value { display: block; color: #eefaf7; }
+      .cvf-value {
+        display: block;
+        margin-top: 2px;
+        overflow: hidden;
+        color: #eefaf7;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
       .cvf-value[data-state="EXPOSED"],
       .cvf-value[data-state="OUTSIDE"],
       .cvf-value[data-state="LOW"] { color: #e3bc72; }
-      .cvf-limits {
+      .cvf-band,
+      .cvf-terminal {
         display: block;
-        margin-top: 7px;
-        padding-top: 6px;
+        margin-top: 8px;
+        padding-top: 7px;
         border-top: 1px solid rgba(191, 233, 228, .13);
-        color: rgba(191, 233, 228, .68);
-        font-size: 7px;
-        line-height: 1.5;
+        color: rgba(230, 247, 243, .78);
+        font-size: 8px;
+        letter-spacing: .09em;
       }
+      .cvf-terminal { color: #f2d59c; }
+      .cvf-terminal[hidden] { display: none; }
       @media (max-width: 760px) {
         [data-casevac-flight-facts] {
           top: auto;
           right: max(10px, env(safe-area-inset-right));
+          left: max(10px, env(safe-area-inset-left));
           bottom: max(86px, calc(env(safe-area-inset-bottom) + 72px));
-          width: min(330px, calc(100vw - 20px));
+          width: auto;
         }
       }
       @media (max-width: 760px) and (orientation: portrait) {
@@ -6501,19 +6643,15 @@ function createCasevacFlightFactsPresentation(documentLike, mount = documentLike
         }
       }
     </style>
-    <output class="cvf-steer" data-cvf="steering">STEERING · NOT ASSESSED</output>
+    <output class="cvf-steer" data-cvf="steering">PICKUP · —</output>
     <div class="cvf-primary">
-      <div><span class="cvf-label">ROUTE</span><output class="cvf-value" data-cvf="route">NOT ASSESSED</output></div>
-      <div><span class="cvf-label">HEIGHT</span><output class="cvf-value" data-cvf="height">NOT ASSESSED</output></div>
-      <div><span class="cvf-label">GROUND SPEED</span><output class="cvf-value" data-cvf="groundspeed">NOT ASSESSED</output></div>
-      <div><span class="cvf-label">WIND VECTOR</span><output class="cvf-value" data-cvf="wind">NOT ASSESSED</output></div>
-      <div><span class="cvf-label">POWER</span><output class="cvf-value" data-cvf="power">NOT ASSESSED</output></div>
-      <div><span class="cvf-label">ENERGY</span><output class="cvf-value" data-cvf="energy">NOT ASSESSED</output></div>
-      <div><span class="cvf-label">DEST RESERVE</span><output class="cvf-value" data-cvf="reserve">NOT ASSESSED</output></div>
-      <div><span class="cvf-label">CONTACT</span><output class="cvf-value" data-cvf="contact">NOT ASSESSED</output></div>
+      <div><span class="cvf-label">AGL</span><output class="cvf-value" data-cvf="height">—</output></div>
+      <div><span class="cvf-label">SPEED</span><output class="cvf-value" data-cvf="groundspeed">—</output></div>
+      <div><span class="cvf-label">POWER</span><output class="cvf-value" data-cvf="power">—</output></div>
+      <div><span class="cvf-label">RESERVE</span><output class="cvf-value" data-cvf="reserve">—</output></div>
     </div>
-    <output class="cvf-limits" data-cvf="limits">CONTACT LIMITS · NOT ASSESSED</output>
-    <output class="cvf-limits" data-cvf="energyplan">ENERGY PLAN · NOT ASSESSED</output>
+    <output class="cvf-band" data-cvf="route">MASKING · —</output>
+    <output class="cvf-terminal" data-cvf="terminal" hidden>LANDING GATE · —</output>
   `;
   const fields = Object.fromEntries(
     [...root.querySelectorAll("[data-cvf]")]
@@ -6526,20 +6664,25 @@ function createCasevacFlightFactsPresentation(documentLike, mount = documentLike
     value === null ? "—" : value.toFixed(digits);
   const update = (state) => {
     if (disposed) return;
+    const phase = casevacToken(state?.casevac_phase);
     const quiet = state?.casevac_quiet === true
       || state?.casevac_quiet_active === true
-      || casevacToken(state?.casevac_phase) === "QUIET";
+      || phase === "QUIET";
     root.hidden = state?.ready === true || state?.finished === true || quiet;
+    const destination = ["OUTBOUND", "DROPOFF_APPROACH", "HANDOFF"]
+      .includes(phase)
+      ? "CLINIC"
+      : phase === "ABORT_RETURN" ? "EXIT" : "PICKUP";
     const bearing = projectedFinite(state, "casevac_target_relative_bearing_deg");
     if (bearing === null) {
-      fields.steering.textContent = "STEERING · NOT ASSESSED";
+      fields.steering.textContent = `${destination} · —`;
     } else {
       const rounded = Math.round(bearing);
       fields.steering.textContent = rounded === 0
-        ? "TARGET AHEAD · 000°"
+        ? `↑ ${destination} · 000°`
         : rounded < 0
-          ? `← TARGET LEFT · ${String(Math.abs(rounded)).padStart(3, "0")}°`
-          : `TARGET RIGHT · ${String(rounded).padStart(3, "0")}° →`;
+          ? `← ${destination} · ${String(Math.abs(rounded)).padStart(3, "0")}°`
+          : `${destination} · ${String(rounded).padStart(3, "0")}° →`;
     }
 
     const masking = casevacToken(state?.casevac_masking_state);
@@ -6549,52 +6692,27 @@ function createCasevacFlightFactsPresentation(documentLike, mount = documentLike
         ? "SAFE BAND"
         : "OUTSIDE BAND"
       : "BAND NOT ASSESSED";
-    fields.route.textContent = `${readableCasevacToken(masking).toUpperCase()} · ${safeBand}`;
+    const safeMinM = projectedFinite(state, "casevac_safe_band_min_agl_m");
+    const safeMaxM = projectedFinite(state, "casevac_safe_band_max_agl_m");
+    fields.route.textContent = `${readableCasevacToken(masking).toUpperCase()} · ${safeBand} · ${shown(safeMinM, 0)}–${shown(safeMaxM, 0)} M`;
     fields.route.dataset.state = masking === "EXPOSED"
       ? "EXPOSED"
       : safeBand === "OUTSIDE BAND" ? "OUTSIDE" : masking;
 
     const aglM = projectedFinite(state, "casevac_agl_m");
-    const safeMinM = projectedFinite(state, "casevac_safe_band_min_agl_m");
-    const safeMaxM = projectedFinite(state, "casevac_safe_band_max_agl_m");
     fields.height.textContent = aglM === null
-      ? "AGL · NOT ASSESSED"
-      : `AGL ${shown(aglM)} M · BAND ${shown(safeMinM, 0)}–${shown(safeMaxM, 0)} M`;
+      ? "—"
+      : `${shown(aglM, 0)} M`;
 
     const powerMargin = projectedFinite(
       state,
       "casevac_power_margin_fraction",
       "casevac_power_margin_01",
     );
-    const powerState = readableCasevacToken(
-      state?.casevac_power_margin_state,
-    ).toUpperCase();
     fields.power.textContent = powerMargin === null
-      ? "MARGIN · NOT ASSESSED"
-      : `MARGIN ${(powerMargin * 100).toFixed(0)}% · ${powerState}`;
+      ? "—"
+      : `${(powerMargin * 100).toFixed(0)}%`;
     fields.power.dataset.state = casevacToken(state?.casevac_power_margin_state);
-
-    const remainingEnergyKwh = projectedFinite(
-      state,
-      "casevac_energy_remaining_kwh",
-    );
-    const remainingEnergyFraction = projectedFinite(
-      state,
-      "casevac_energy_remaining_fraction",
-    );
-    const planningEnduranceMin = projectedFinite(
-      state,
-      "casevac_energy_planning_endurance_min",
-    );
-    fields.energy.textContent = remainingEnergyKwh === null
-      ? "NOT ASSESSED"
-      : `${shown(remainingEnergyKwh, 0)} KWH · ${shown(
-        remainingEnergyFraction === null ? null : remainingEnergyFraction * 100,
-        0,
-      )}% · ${shown(planningEnduranceMin, 1)} MIN`;
-    fields.energy.dataset.state = state?.casevac_energy_depleted === true
-      ? "LOW"
-      : "";
 
     const destinationReserveKwh = projectedFinite(
       state,
@@ -6604,12 +6722,9 @@ function createCasevacFlightFactsPresentation(documentLike, mount = documentLike
       state,
       "casevac_destination_reserve_min",
     );
-    fields.reserve.textContent = destinationReserveKwh === null
-      ? "NOT ASSESSED"
-      : `${destinationReserveKwh >= 0 ? "+" : "−"}${shown(
-        Math.abs(destinationReserveKwh),
-        0,
-      )} KWH · ${shown(destinationReserveMin, 1)} MIN`;
+    fields.reserve.textContent = destinationReserveMin === null
+      ? "—"
+      : `${shown(destinationReserveMin, 1)} MIN`;
     fields.reserve.dataset.state = destinationReserveKwh !== null
       && destinationReserveKwh < 0
       ? "LOW"
@@ -6617,22 +6732,9 @@ function createCasevacFlightFactsPresentation(documentLike, mount = documentLike
 
     const lateral = projectedFinite(state, "casevac_lateral_speed_mps");
     fields.groundspeed.textContent = lateral === null
-      ? "NOT ASSESSED"
+      ? "—"
       : `${shown(lateral, 1)} M/S`;
-    const windEast = projectedFinite(state, "casevac_wind_x_mps");
-    const windNorth = projectedFinite(state, "casevac_wind_z_mps");
-    fields.wind.textContent = windEast === null || windNorth === null
-      ? "NOT ASSESSED"
-      : `E ${windEast >= 0 ? "+" : "−"}${shown(Math.abs(windEast), 1)} · N ${windNorth >= 0 ? "+" : "−"}${shown(Math.abs(windNorth), 1)} M/S`;
-
     const vertical = projectedFinite(state, "casevac_vertical_speed_mps");
-    const pitch = projectedFinite(state, "casevac_pitch_deg");
-    const bank = projectedFinite(state, "casevac_bank_deg");
-    fields.contact.textContent = [lateral, vertical, pitch, bank]
-      .every((value) => value === null)
-      ? "NOT ASSESSED"
-      : `GS ${shown(lateral, 2)} · V ${shown(vertical, 2)} M/S · P ${shown(pitch)}° · B ${shown(bank)}°`;
-
     const radius = projectedFinite(state, "casevac_lz_enter_radius_m");
     const lateralLimit = projectedFinite(
       state,
@@ -6642,37 +6744,14 @@ function createCasevacFlightFactsPresentation(documentLike, mount = documentLike
       state,
       "casevac_lz_max_abs_vertical_speed_mps",
     );
-    const pitchLimit = projectedFinite(state, "casevac_lz_max_abs_pitch_deg");
-    const bankLimit = projectedFinite(state, "casevac_lz_max_abs_bank_deg");
-    fields.limits.textContent = [
-      radius,
-      lateralLimit,
-      verticalLimit,
-      pitchLimit,
-      bankLimit,
-    ].every((value) => value === null)
-      ? "CONTACT LIMITS · NOT ASSESSED"
-      : `CONTACT LIMITS · R ${shown(radius)} M · GS ≤${shown(lateralLimit, 2)} · |V| ≤${shown(verticalLimit, 2)} M/S · |P| ≤${shown(pitchLimit, 0)}° · |B| ≤${shown(bankLimit, 0)}°`;
-    const planningPowerKw = projectedFinite(
-      state,
-      "casevac_energy_planning_power_kw",
-    );
-    const planningGroundSpeedMps = projectedFinite(
-      state,
-      "casevac_energy_planning_ground_speed_mps",
-    );
-    const planningArrivalAllowanceS = projectedFinite(
-      state,
-      "casevac_energy_planning_arrival_allowance_s",
-    );
-    fields.energyplan.textContent = planningPowerKw === null
-      || planningGroundSpeedMps === null
-      || planningArrivalAllowanceS === null
-      ? "ENERGY PLAN · NOT ASSESSED"
-      : `ENERGY PLAN · ${shown(planningPowerKw, 0)} KW · ${shown(
-        planningGroundSpeedMps,
-        0,
-      )} M/S · +${shown(planningArrivalAllowanceS, 0)} S ARRIVAL`;
+    const terminal = [
+      "PICKUP_APPROACH",
+      "LOADING",
+      "DROPOFF_APPROACH",
+      "HANDOFF",
+    ].includes(phase);
+    fields.terminal.hidden = !terminal;
+    fields.terminal.textContent = `LANDING · V ${shown(vertical, 2)} · R ${shown(radius, 0)} M · MAX ${shown(lateralLimit, 2)} / ${shown(verticalLimit, 2)} M/S`;
   };
   return Object.freeze({
     element: root,
@@ -7690,9 +7769,7 @@ class FlightView {
     this.camera.rotation.order = "YXZ";
 
     this.scene = new THREE.Scene();
-    this.casevacCommanderCockpit = createCasevacCommanderCockpit();
     this.scene.add(this.camera);
-    this.camera.add(this.casevacCommanderCockpit.group);
     this.casevacScenery = null;
     this.casevacCollisionScenery = null;
     this.casevacRouteLandmarks = null;
@@ -7700,6 +7777,7 @@ class FlightView {
     this.casevacFlightFacts = null;
     this.ancaPanel = createAncaPanelPresentation(document);
     this.casevacPresentationKey = "";
+    this.lowSpeedLens = neutralLowSpeedLens();
     this.environmentTarget = createLitEnvironment(this.renderer);
     this.scene.environment = this.environmentTarget.texture;
     this.fogLow = new THREE.Color(0x6f8790);
@@ -7741,11 +7819,20 @@ class FlightView {
     // through a narrow screen -- so the assistance is not a crutch, it replaces cues the airframe
     // removed by being uninhabited.
     this.guidancePath = createGuidancePath(THREE);
+    this.firstRunValley = createFirstRunValleyPresentation(THREE, {
+      // One terrain draw; the river and road share its geometry/material. The mobile grid remains
+      // conservatively recessed inside analytic collision but avoids spending desktop vertex cost
+      // on a small, fill-rate-bound screen.
+      northSegments: VISUAL_QUALITY.firstRunValleyNorthSegments,
+      lateralSegments: VISUAL_QUALITY.firstRunValleyLateralSegments,
+      meshRecessM: VISUAL_QUALITY.firstRunValleyMeshRecessM,
+    });
     this.scene.add(
       this.sky.mesh,
       this.sea.mesh,
       this.tacticalClouds.group,
       this.winterPrecipitation.points,
+      this.firstRunValley.object3d,
       this.guidancePath.object3d,
     );
     this.cloudFogColor = new THREE.Color(0xb8c6c8);
@@ -7883,8 +7970,12 @@ class FlightView {
     this.localPitchQuaternion = new THREE.Quaternion();
     this.localGimbalQuaternion = new THREE.Quaternion();
     this.inversePlayerQuaternion = new THREE.Quaternion();
+    this.padlockVisualWorldUpCamera = new THREE.Vector3();
+    this.padlockVisualInverseCameraQuaternion = new THREE.Quaternion();
+    this.padlockVisualRollQuaternion = new THREE.Quaternion();
     this.xAxis = new THREE.Vector3(1, 0, 0);
     this.yAxis = new THREE.Vector3(0, 1, 0);
+    this.zAxis = new THREE.Vector3(0, 0, 1);
     this.shadowTargetPosition = new THREE.Vector3();
     this.shadowRight = new THREE.Vector3();
     this.shadowUp = new THREE.Vector3();
@@ -7992,7 +8083,35 @@ class FlightView {
     if (ukraineTheatre) {
       const winterSurface = (Number(state?.snow_depth_m) || 0) > 0.005
         || (Number(state?.glaze_ice_thickness_m) || 0) > 0.0001;
-      if (winterSurface) {
+      const firstRunCanyon = state?.first_run_valley_available === true
+        && String(state?.mission_definition_id || "")
+          === "mission.modern.visual-merge.first-run-valley.v1";
+      if (firstRunCanyon && !winterSurface) {
+        // Grand Canyon needs warm rock against cool distance plus enough key/fill separation for
+        // its stepped walls to read. The generic Ukraine grade is intentionally flatter and
+        // brighter for open-country combat, where these red strata otherwise collapse to tan.
+        this.fogLow.set(0x9b6548);
+        this.fogHigh.set(0x667984);
+        this.cloudFogColor.set(0x9a8879);
+        this.ambient.color.set(0xd7b08a);
+        this.ambient.groundColor.set(0x21120f);
+        this.ambient.intensity = 0.58;
+        this.sun.color.set(0xffc477);
+        this.sun.intensity = 3.15;
+        this.renderer.toneMappingExposure = 0.96;
+      } else if (isCasevacState(state) && !winterSurface) {
+        // CASEVAC needs depth and site contrast at 10–40 m AGL. The generic Ukraine grade was
+        // tuned for high-speed aircraft and flattened the entire landing area into pale olive.
+        this.fogLow.set(0x6f7054);
+        this.fogHigh.set(0x3f5666);
+        this.cloudFogColor.set(0x71818a);
+        this.ambient.color.set(0xb8c8b6);
+        this.ambient.groundColor.set(0x192119);
+        this.ambient.intensity = 0.6;
+        this.sun.color.set(0xffcc82);
+        this.sun.intensity = 3.25;
+        this.renderer.toneMappingExposure = 1.01;
+      } else if (winterSurface) {
         this.fogLow.set(0xcbd3cf);
         this.fogHigh.set(0x7f9093);
         this.cloudFogColor.set(0xd7deda);
@@ -8058,16 +8177,24 @@ class FlightView {
     }
     if (this.terrainPresentation) {
       const terrainDiagnostics = this.terrainPresentation.diagnostics();
-      const needsAmbientScenery = state?.terrain_micro_required === true
+      const casevacTerrain = isCasevacState(state);
+      const needsAmbientScenery = !casevacTerrain
+        && state?.terrain_micro_required === true
         && this.terrainGovernorSuppressesAmbientScenery !== true
         && terrainDiagnostics.ambientSceneryEnabled === false;
-      if ((terrainDiagnostics.sceneryEra !== sceneryEra || needsAmbientScenery)
+      const needsCasevacScenerySuppression = casevacTerrain
+        && terrainDiagnostics.ambientSceneryEnabled === true;
+      if ((terrainDiagnostics.sceneryEra !== sceneryEra
+          || needsAmbientScenery
+          || needsCasevacScenerySuppression)
         && !this.terrainSceneryEraPromise) {
         const presentation = this.terrainPresentation;
         this.terrainSceneryEraPromise = Promise.resolve(
           terrainDiagnostics.sceneryEra !== sceneryEra
             ? presentation.setSceneryEra(sceneryEra)
-            : presentation.enableAmbientScenery?.(),
+            : needsCasevacScenerySuppression
+              ? presentation.disableAmbientScenery?.()
+              : presentation.enableAmbientScenery?.(),
         ).catch((error) => {
           if (!this.disposed) {
             this.terrainPresentationError = String(error?.message ?? error);
@@ -8934,7 +9061,6 @@ class FlightView {
     this.casevacFlightFacts?.dispose();
     this.casevacFlightFacts = null;
     this.casevacPresentationKey = "";
-    this.casevacCommanderCockpit.group.visible = false;
     hudCanvas.style.visibility = "";
   }
 
@@ -8945,8 +9071,7 @@ class FlightView {
           || this.casevacCollisionScenery
           || this.casevacRouteLandmarks
           || this.casevacMissionUi
-          || this.casevacFlightFacts
-          || this.casevacCommanderCockpit.group.visible) {
+          || this.casevacFlightFacts) {
         this.resetCasevacPresentation();
       }
       return false;
@@ -8982,7 +9107,7 @@ class FlightView {
       }
       this.casevacMissionUi = createCasevacMissionPresentation(document, {
         mount: document.body,
-        maxMessages: 4,
+        maxMessages: 2,
         onQuietSkip: () => {
           // The view may request; only an explicitly exposed bridge method can advance authority.
           if (casevacQuietSeen) bridge?.RequestCasevacQuietSkip?.();
@@ -8996,7 +9121,6 @@ class FlightView {
       if (viewStatus) viewStatus.textContent = "Medevac · commander guidance active";
     }
 
-    this.casevacCommanderCockpit.group.visible = true;
     // The legacy canvas is combat/recovery symbology. The dedicated DOM strip carries every
     // projected CASEVAC navigation, clock, gate and occupancy fact without phantom gun cues.
     hudCanvas.style.visibility = "hidden";
@@ -9006,7 +9130,10 @@ class FlightView {
     const activeCourseSite = [CASEVAC_PICKUP_SITE_ID, CASEVAC_RECEIVER_SITE_ID]
       .includes(activeSiteId)
       ? activeSiteId
-      : null;
+      : ["OUTBOUND", "DROPOFF_APPROACH", "HANDOFF", "QUIET", "COMPLETE"]
+          .includes(phase)
+        ? CASEVAC_RECEIVER_SITE_ID
+        : CASEVAC_PICKUP_SITE_ID;
     // Abort is available only before pickup custody transfers. The authoritative target becomes
     // the distinct safe-exit volume, but the authored visual escape path belongs to the pickup
     // site; keep that bounded cue visible while navigation facts continue to point at safe exit.
@@ -9078,7 +9205,14 @@ class FlightView {
     }
     const terrainDiagnostics = this.terrainPresentation?.diagnostics?.();
     const radarAltitudeFt = Number(state?.radar_alt_ft);
-    if (state?.terrain_micro_required !== true && Number.isFinite(radarAltitudeFt)) {
+    if (casevac) {
+      // The generic low-altitude scatter is tuned for fast aircraft. At a 1 m hover it turns into
+      // repeated luminous spikes through the pad, so CASEVAC uses its bounded authored sites and
+      // projected route/collision dressing instead.
+      if (terrainDiagnostics?.ambientSceneryEnabled === true)
+        void this.terrainPresentation.disableAmbientScenery?.();
+    } else if (state?.terrain_micro_required !== true
+        && Number.isFinite(radarAltitudeFt)) {
       if (radarAltitudeFt >= 12_000 && terrainDiagnostics?.ambientSceneryEnabled === true) {
         void this.terrainPresentation.disableAmbientScenery?.();
       } else if (radarAltitudeFt <= 6_000
@@ -9164,6 +9298,14 @@ class FlightView {
     // received a frame. Keep the one authority-fed instance live for all missions; it selects
     // detailed recovery gates first and the bounded RTB breadcrumb chain otherwise.
     this.guidancePath?.update(state);
+    // A far/coarse resident chunk does not make the cockpit's gorge resident. Wait for local
+    // coverage before switching away from the bounded fallback or admitting scale scenery.
+    const firstRunTerrainReady = Number(terrainDiagnostics?.localResidentChunks) >= 4;
+    this.firstRunValley?.update(
+      state,
+      this.terrainPresentation?.material ?? null,
+      firstRunTerrainReady,
+    );
     this.playerForward.copy(playerFrame.forward);
     this.playerUp.copy(playerFrame.up);
     this.playerRight.copy(playerFrame.right);
@@ -9247,7 +9389,7 @@ class FlightView {
     const playerExteriorRoot = this.presentationAssets.playerExteriorSlot.root;
     if (casevacPresentationActive) {
       // A default fighter compatibility asset is a false vehicle claim in this mission. The
-      // bounded commander-eye frame above is the only local vehicle presentation.
+      // CASEVAC view therefore stays unobstructed rather than substituting a decorative frame.
       cockpitRoot.visible = false;
       playerExteriorRoot.visible = false;
     }
@@ -9313,15 +9455,54 @@ class FlightView {
         // Pack-neutral compatibility eye point. Authored cockpits own their precise camera
         // placement through the camera.cockpit semantic anchor above.
         this.camera.position.copy(this.playerPosition)
-          .addScaledVector(this.playerUp, 0.6)
-          .addScaledVector(this.playerForward, 4.0);
+          .addScaledVector(this.playerUp, casevac ? 1.15 : 0.6)
+          .addScaledVector(this.playerForward, casevac ? 1.25 : 4.0);
       }
       // Positive sensor yaw means look right. In three.js local +Y rotation turns -Z left,
       // hence the deliberate negative sign here.
-      this.localYawQuaternion.setFromAxisAngle(this.yAxis, -sensorYaw);
-      this.localPitchQuaternion.setFromAxisAngle(this.xAxis, sensorPitch);
+      const casevacForwardView = casevac && !manualLookActive();
+      this.localYawQuaternion.setFromAxisAngle(
+        this.yAxis,
+        casevacForwardView ? 0 : -sensorYaw,
+      );
+      this.localPitchQuaternion.setFromAxisAngle(
+        this.xAxis,
+        casevacForwardView ? -7 * DEG : sensorPitch,
+      );
       this.localGimbalQuaternion.copy(this.localYawQuaternion).multiply(this.localPitchQuaternion);
       this.camera.quaternion.copy(this.playerQuaternion).multiply(this.localGimbalQuaternion);
+      const combatPadlockRollComfortActive = padlock
+        && !manualLookActive()
+        && isF22CanopyGlassAirframe(state)
+        && state.rapier_pattern_only !== true
+        && (padlockTarget === "bandit" || padlockTarget === "wingman");
+      if (combatPadlockRollComfortActive) {
+        this.padlockVisualInverseCameraQuaternion.copy(this.camera.quaternion).invert();
+        this.padlockVisualWorldUpCamera.set(0, 1, 0)
+          .applyQuaternion(this.padlockVisualInverseCameraQuaternion);
+        const visualRollCorrectionRad = padlockVisualRollCorrectionRad(
+          this.padlockVisualWorldUpCamera,
+        );
+        if (visualRollCorrectionRad !== 0) {
+          this.padlockVisualRollQuaternion.setFromAxisAngle(
+            this.zAxis,
+            visualRollCorrectionRad,
+          );
+          this.camera.quaternion.multiply(this.padlockVisualRollQuaternion);
+        }
+      }
+    }
+    const lowSpeedLensTargetState = casevac
+      ? lowSpeedLensTarget(projectedFinite(state, "casevac_lateral_speed_mps"))
+      : neutralLowSpeedLens();
+    this.lowSpeedLens = advanceLowSpeedLens(
+      this.lowSpeedLens,
+      lowSpeedLensTargetState,
+      dt,
+    );
+    if (Math.abs(this.camera.fov - this.lowSpeedLens.fovDeg) > 0.001) {
+      this.camera.fov = this.lowSpeedLens.fovDeg;
+      this.camera.updateProjectionMatrix();
     }
     // Padlock is an orientation aid, not a cinematic camera. Applying buffet/head-lag after the
     // target solve makes the contact and every view-relative cue wander by a degree or two.
@@ -9763,6 +9944,7 @@ class FlightView {
       visualRuntimeError: this.visualRuntimeError,
       terrain: this.terrainPresentation?.diagnostics() ?? null,
       terrainError: this.terrainPresentationError,
+      firstRunValley: this.firstRunValley?.diagnostics() ?? null,
       cloudBreak: this.tacticalClouds.cloudBreakDiagnostics(),
       winterPrecipitation: this.winterPrecipitation.diagnostics(),
       multiplayer: this.remoteAircraft.diagnostics(),
@@ -9787,7 +9969,6 @@ class FlightView {
     if (this.disposed) return;
     this.disposed = true;
     this.resetCasevacPresentation();
-    this.casevacCommanderCockpit.dispose();
     this.visualRuntimeEpoch += 1;
     this.terrainPresentationRequestEpoch += 1;
     this.terrainPresentationAbortController?.abort();
@@ -9809,6 +9990,7 @@ class FlightView {
     this.f22CanopyGlass.dispose();
     this.banditContact.dispose();
     this.guidancePath?.dispose();
+    this.firstRunValley?.dispose();
     await this.remoteAircraft.dispose();
     this.tacticalClouds.dispose();
     this.winterPrecipitation.dispose();
@@ -9898,6 +10080,7 @@ function installGamepadInput(view) {
 
     setDirectFlightAxes(source, state.roll, state.pitch);
     setHeld("Gamepad:RT", state.fire, 8);
+    setHeld("Gamepad:Limiter", state.limitOverride, 12);
     setHeld("Gamepad:LB", state.throttleDown, 7, false);
     setHeld("Gamepad:RB", state.throttleUp, 6, true);
     if (state.padlockPressed) {
@@ -11237,7 +11420,7 @@ function installInput(view) {
         if (tryLaunchFoxTwo()) view.hud.armAudio?.();
         return;
       }
-      restartMissionNow();
+      repeatSelectedSortieNow();
       return;
     }
 
@@ -11442,7 +11625,7 @@ async function boot() {
     bridge.StartFirstRunValley();
     stagedMissionAuthority = firstRunValleyMissionAuthority();
     firstRunAutostartPending = true;
-    autoLaunchPending = true;
+    autoLaunchPending = false;
   } else {
     bridge.StartBeat(selectedBeat);
     stagedMissionAuthority = selectedProductionMissionAuthority();
@@ -11487,7 +11670,6 @@ async function boot() {
   syncArenaClientForLane();
   if (arenaClient) void ensureArenaMatch(bridge);
   renderPauseUi();
-  if (firstRunAutostartPending) queueMicrotask(tryAutoLaunch);
   let firstFrame = true;
 
   globalThis.__gunsLifecycle = {
@@ -11767,7 +11949,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=343")
+    navigator.serviceWorker.register("service-worker.js?v=349")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

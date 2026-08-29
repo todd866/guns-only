@@ -7,7 +7,7 @@
   <base href="/">
   <title>Guns Only · Okanagan Fire Boss</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/okanagan/styles.css?v=343">
+  <link rel="stylesheet" href="/okanagan/styles.css?v=349">
 </head>
 <body class="paused">
   <main class="viewport" aria-label="Okanagan Fire Boss simulator">
@@ -35,50 +35,73 @@
     <output id="status">Loading Fire Boss runtime…</output>
   </main>
 
-  <section id="sortie-menu" class="overlay visible" role="dialog" aria-modal="true" aria-labelledby="sortie-title">
-    <div class="menu-card">
-      <header><span>CIVILIAN · AIR TRACTOR</span><h1 id="sortie-title">AT-802F Fire Boss</h1><p>Okanagan Valley, British Columbia</p></header>
+  <section id="sortie-menu" class="overlay mission-overlay mission-brief visible" role="dialog" aria-modal="true" aria-labelledby="sortie-title" aria-describedby="dispatch-objective" aria-hidden="false">
+    <div class="menu-card mission-card mission-card--brief">
+      <header><span class="mission-kicker">CIVILIAN · AIR TRACTOR</span><h1 id="sortie-title" class="mission-title">AT-802F Fire Boss</h1><p class="mission-summary">Okanagan Valley, British Columbia</p></header>
       <div class="sortie-grid" role="radiogroup" aria-label="Fire Boss sorties">
-        <button class="sortie active" type="button" data-sortie="water-circuits" role="radio" aria-checked="true">
+        <button class="sortie active" type="button" data-sortie="water-circuits" role="radio" aria-checked="true" tabindex="0">
           <small>01 · TRAINING</small><strong>Water Circuits</strong>
-          <span>Kelowna departure · live scoops · downwind training drops · fuel-planned RTB</span>
+          <span>Scoop · drop · recover</span>
         </button>
-        <button class="sortie" type="button" data-sortie="fire-attack" role="radio" aria-checked="false">
+        <button class="sortie" type="button" data-sortie="fire-attack" role="radio" aria-checked="false" tabindex="-1">
           <small>02 · SOLO</small><strong>Initial Attack</strong>
-          <span>One Fire Boss · evolving west-side fire · choose and work the line</span>
+          <span>West-side fire · choose the line</span>
         </button>
-        <button class="sortie" type="button" data-sortie="large-force-employment" role="radio" aria-checked="false">
+        <button class="sortie" type="button" data-sortie="large-force-employment" role="radio" aria-checked="false" tabindex="-1">
           <small>03 · EXTENSION</small><strong>Large Force Employment</strong>
-          <span>Air Attack · bird dog · helicopters · holds · assigned divisions and traffic</span>
+          <span>Assigned drops · sequenced traffic</span>
         </button>
       </div>
+      <section class="dispatch-directive" aria-live="polite">
+        <small>MISSION</small>
+        <strong id="dispatch-objective">Complete one water circuit.</strong>
+        <span id="dispatch-execution">Scoop · drop · recover above RTB minimum</span>
+      </section>
       <section class="fuel-plan" aria-label="Dispatch fuel plan">
         <span>BLOCK <strong id="plan-block">610 KG</strong></span>
         <span>RTB MIN <strong id="plan-minimum">—</strong></span>
         <span>WORKING <strong id="plan-working">197 KG</strong></span>
       </section>
-      <div class="menu-actions">
-        <a href="/">Back to aircraft</a>
-        <button id="start" type="button">Fly Water Circuits</button>
+      <p class="preflight-controls"><strong>CONTROL CHECK</strong> <span>ARROWS pitch/roll · A/D rudder · W/S power · E scoops · hold SPACE drop · TAB target · V padlock</span></p>
+      <div class="menu-actions mission-actions">
+        <a class="mission-action" href="/?program=okanagan-fireboss&amp;menu=1">Aircraft</a>
+        <button id="start" class="mission-action mission-action--primary" type="button" aria-label="Start Water Circuits">Start</button>
       </div>
     </div>
   </section>
 
-  <section id="pause-menu" class="overlay" role="dialog" aria-modal="true" aria-labelledby="pause-title" aria-hidden="true">
-    <div class="pause-card">
-      <small>SIMULATION PAUSED</small><h2 id="pause-title">Fire Boss</h2>
-      <button id="resume" type="button">Resume</button>
-      <button id="restart" type="button">Restart sortie</button>
-      <button id="choose-sortie" type="button">Choose sortie</button>
-      <button id="sound" type="button" aria-pressed="true">Sound · on</button>
+  <section id="pause-menu" class="overlay mission-overlay mission-pause" role="dialog" aria-modal="true" aria-labelledby="pause-title" aria-describedby="pause-summary" aria-hidden="true">
+    <div class="pause-card mission-card mission-card--pause">
+      <small class="mission-kicker">SORTIE PAUSED</small><h2 id="pause-title" class="mission-title">Water Circuits</h2>
+      <p id="pause-summary" class="mission-summary">Aircraft and clock held.</p>
+      <button id="resume" class="mission-action mission-action--primary" type="button">Resume</button>
+      <button id="restart" class="mission-action" type="button">Restart</button>
+      <button id="choose-sortie" class="mission-action" type="button">Sorties</button>
+      <button id="sound" class="mission-action" type="button" aria-pressed="true">Sound on</button>
       <p class="control-legend">ARROWS PITCH / ROLL · A/D RUDDER · W/S POWER<br>TAB TARGET · V PADLOCK · E SCOOPS · HOLD SPACE DROP · M SOUND</p>
-      <a href="/">Return to aircraft</a>
+      <a class="mission-action" href="/?program=okanagan-fireboss&amp;menu=1">Aircraft</a>
     </div>
+  </section>
+
+  <section id="mission-result" class="overlay mission-overlay mission-result" role="dialog" aria-modal="true"
+    aria-labelledby="mission-result-kicker mission-result-title" aria-describedby="mission-result-facts" aria-hidden="true">
+    <article class="mission-card mission-card--result mission-result__panel" data-outcome="complete">
+      <p id="mission-result-kicker" class="mission-kicker mission-result__kicker">WATER CIRCUITS</p>
+      <h2 id="mission-result-title" class="mission-title mission-result__title">Complete</h2>
+      <p id="mission-result-summary" class="mission-summary mission-result__summary" hidden></p>
+      <dl id="mission-result-facts" class="mission-evidence mission-result__facts" aria-label="Sortie evidence"></dl>
+      <p class="mission-correction mission-result__correction"><strong>NEXT SORTIE</strong><span id="mission-result-correction"></span></p>
+      <div class="mission-actions mission-result__actions" aria-label="Sortie result actions">
+        <button id="mission-result-restart" class="mission-action mission-action--primary" type="button">Retry</button>
+        <button id="mission-result-choose" class="mission-action" type="button">Sorties</button>
+        <a class="mission-action mission-action--link" href="/?program=okanagan-fireboss&amp;menu=1">Aircraft</a>
+      </div>
+    </article>
   </section>
 
   <script>
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=343", location.href).searchParams.get("v");
+      const releaseBuild = new URL("../service-worker.js?v=349", location.href).searchParams.get("v");
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
       const workers = registrations.flatMap((registration) => [registration.active, registration.waiting, registration.installing]).filter(Boolean);
       const stale = [navigator.serviceWorker?.controller, ...workers].filter(Boolean)
@@ -93,15 +116,15 @@
       await globalThis.__gunsPrebootReady;
       await new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        script.src = "/_framework/blazor.webassembly.js?v=343";
+        script.src = "/_framework/blazor.webassembly.js?v=349";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load Fire Boss runtime.")), { once: true });
         document.head.append(script);
       });
-      const { renderExperienceGate } = await import("/render/release/quarantine_gate.js?v=343");
+      const { renderExperienceGate } = await import("/render/release/quarantine_gate.js?v=349");
       const access = renderExperienceGate({ experienceId: "okanagan-fireboss" });
-      if (access.allowed) await import("/okanagan/main.js?v=343");
+      if (access.allowed) await import("/okanagan/main.js?v=349");
     } catch (error) {
       console.error(error);
       document.querySelector("#status").textContent = error instanceof Error ? error.message : String(error);

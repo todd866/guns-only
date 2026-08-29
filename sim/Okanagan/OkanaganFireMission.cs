@@ -66,18 +66,40 @@ public readonly record struct OkanaganMissionSnapshot(
 /// <summary>One complete scoop/drop training or incident-response sortie.</summary>
 public sealed class OkanaganFireMission
 {
-    static readonly Vec3D ScoopEntry = OkanaganGeo.ToWorld(49.815, -119.570, 520.0);
-    static readonly Vec3D ScoopTouchdown = OkanaganGeo.ToWorld(49.825, -119.565, 348.0);
-    static readonly Vec3D ScoopExit = OkanaganGeo.ToWorld(49.875, -119.515, 350.0);
+    // The training lane sits in the broad water immediately west of Kelowna. The former lane was
+    // 18 km beyond the airport turn and then sent the player another 28 km around a dead recovery
+    // dogleg. These points retain a real approach, water run, downwind drop and RTB while keeping
+    // the finite training circuit inside a normal ten-minute airborne profile.
+    internal static readonly Vec3D ScoopEntry =
+        OkanaganGeo.ToWorld(49.935, -119.492, 430.0);
+    internal static readonly Vec3D ScoopTouchdown =
+        OkanaganGeo.ToWorld(49.945, -119.486, 348.0);
+    internal static readonly Vec3D ScoopExit =
+        OkanaganGeo.ToWorld(49.970, -119.475, 350.0);
     static readonly Vec3D FireTarget = OkanaganGeo.ToWorld(49.850, -119.655, 810.0);
     static readonly Vec3D HoldingPoint = OkanaganGeo.ToWorld(49.900, -119.610, 1_180.0);
-    static readonly Vec3D AirportDeparture = OkanaganGeo.ToWorld(49.935, -119.395, 780.0);
-    static readonly Vec3D RunwayDeparture = OkanaganGeo.ToWorld(49.938, -119.3615, 590.0);
-    static readonly Vec3D CircuitCrosswind = OkanaganGeo.ToWorld(49.895, -119.600, 760.0);
-    static readonly Vec3D CircuitDownwind = OkanaganGeo.ToWorld(49.840, -119.630, 720.0);
-    static readonly Vec3D AirportInitial = OkanaganGeo.ToWorld(49.915, -119.350, 1_050.0);
-    static readonly Vec3D AirportFinal = OkanaganGeo.ToWorld(49.932, -119.358, 650.0);
-    static readonly Vec3D AirportThreshold = OkanaganGeo.ToWorld(49.9442, -119.3650, 433.0);
+    internal static readonly Vec3D AirportDeparture =
+        OkanaganGeo.ToWorld(49.935, -119.395, 780.0);
+    internal static readonly Vec3D RunwayDeparture =
+        OkanaganGeo.ToWorld(49.938, -119.3615, 590.0);
+    internal static readonly Vec3D CircuitCrosswind =
+        OkanaganGeo.ToWorld(49.960, -119.500, 720.0);
+    internal static readonly Vec3D CircuitDownwind =
+        OkanaganGeo.ToWorld(49.945, -119.482, 650.0);
+    internal static readonly Vec3D TrainingDrop =
+        CircuitDownwind + new Vec3D(0.0, 0.0, -1_800.0);
+    internal static readonly Vec3D RtbCrossing =
+        OkanaganGeo.ToWorld(49.950, -119.450, 850.0);
+    // Runway 16 runs from the north-west threshold toward the south-east. The original recovery
+    // gates sat south-east of the field and pointed back up Runway 34 while every visible cue said
+    // Runway 16. Keep the geometry named and test-visible so presentation cannot drift back onto
+    // the reciprocal approach unnoticed.
+    internal static readonly Vec3D AirportInitial =
+        OkanaganGeo.ToWorld(49.9830, -119.3865, 650.0);
+    internal static readonly Vec3D AirportFinal =
+        OkanaganGeo.ToWorld(49.9750, -119.3823, 540.0);
+    internal static readonly Vec3D AirportThreshold =
+        OkanaganGeo.ToWorld(49.9670, -119.3778, OkanaganGeo.KelownaRunwayElevationM);
 
     readonly OkanaganFireGrid _fire = new();
     readonly List<OkanaganRouteGate> _route = [];
@@ -182,8 +204,6 @@ public sealed class OkanaganFireMission
     void StepWaterCircuits(in FireBossTelemetry telemetry)
     {
         bool onWater = telemetry.SurfaceMode == FireBossSurfaceMode.Water;
-        FireBossFuelSnapshot fuel = FireBossFuelPlan.Snapshot(_blockFuelKg,
-            telemetry.FuelKg, telemetry.PositionWorldM, CompletedCycles);
         if (Phase == OkanaganMissionPhase.Depart
             && telemetry.SurfaceMode == FireBossSurfaceMode.Airborne
             && HorizontalDistance(telemetry.PositionWorldM, AirportDeparture) < 2_200.0)
@@ -203,10 +223,21 @@ public sealed class OkanaganFireMission
             CompletedCycles++;
             _hadUsefulLoad = false;
             _releasedThisPass = 0.0;
-            if (fuel.FuelAboveMinimumKg <= 55.0) SetPhase(OkanaganMissionPhase.Rtb);
-            else SetPhase(OkanaganMissionPhase.JoinScoop);
+            // Dispatch promises one complete scoop/drop/recovery circuit. Returning to the scoop
+            // lane here silently turned that finite training sortie into an endurance loop and
+            // made its success result unreachable until fuel happened to force an RTB.
+            SetPhase(NextWaterCircuitPhase(CompletedCycles));
         }
         StepReturn(telemetry);
+    }
+
+    internal static OkanaganMissionPhase NextWaterCircuitPhase(int completedCycles)
+    {
+        if (completedCycles < 0)
+            throw new ArgumentOutOfRangeException(nameof(completedCycles));
+        return completedCycles >= 1
+            ? OkanaganMissionPhase.Rtb
+            : OkanaganMissionPhase.JoinScoop;
     }
 
     void StepFireAttack(in FireBossTelemetry telemetry)
@@ -263,7 +294,7 @@ public sealed class OkanaganFireMission
         foreach (OkanaganRouteGate gate in RouteFor(phase)) _route.Add(gate);
     }
 
-    IEnumerable<OkanaganRouteGate> RouteFor(OkanaganMissionPhase phase)
+    internal IEnumerable<OkanaganRouteGate> RouteFor(OkanaganMissionPhase phase)
     {
         if (phase == OkanaganMissionPhase.Depart)
         {
@@ -285,8 +316,18 @@ public sealed class OkanaganFireMission
         else if (phase == OkanaganMissionPhase.Downwind)
         {
             yield return Gate("downwind-entry", "DOWNWIND", CircuitDownwind, 900.0, 58.0);
-            yield return Gate("training-drop", "DROP WATER", CircuitDownwind + new Vec3D(-2_700.0, 0.0, -900.0), 900.0, 58.0);
-            yield return Gate("base-turn", "TURN BASE", ScoopEntry with { Y = 610.0 }, 900.0, 55.0);
+            yield return Gate("training-drop", "DROP WATER", TrainingDrop, 900.0, 58.0);
+            if (Sortie == OkanaganSortieType.WaterCircuits)
+            {
+                // The first credited training load ends this finite circuit. Keep the last
+                // pre-release gate on the same point the RTB phase will publish, so the highway
+                // never tells the pilot to turn back for a scoop the mission will not request.
+                yield return Gate("circuit-exit", "EXIT EAST", RtbCrossing,
+                    1_000.0, 65.0);
+            }
+            else
+                yield return Gate("base-turn", "TURN BASE",
+                    ScoopEntry with { Y = 610.0 }, 900.0, 55.0);
         }
         else if (phase == OkanaganMissionPhase.Hold)
         {
@@ -305,7 +346,7 @@ public sealed class OkanaganFireMission
         }
         else if (phase == OkanaganMissionPhase.Rtb)
         {
-            yield return Gate("rtb-crossing", "RTB EAST", OkanaganGeo.ToWorld(49.890, -119.470, 1_050.0), 1_000.0, 65.0);
+            yield return Gate("rtb-crossing", "RTB EAST", RtbCrossing, 1_000.0, 65.0);
             yield return Gate("airport-initial", "JOIN RUNWAY 16", AirportInitial, 1_050.0, 58.0);
         }
         else if (phase == OkanaganMissionPhase.Approach)
@@ -341,32 +382,39 @@ public sealed class OkanaganFireMission
         _ => "Fly the assigned profile",
     };
 
-    string AirAttackCall() => Phase switch {
-        OkanaganMissionPhase.Depart when Sortie == OkanaganSortieType.LargeForceEmployment
-            => "AIR ATTACK: Boss 21, depart Runway 16. Join west of the bridge.",
-        OkanaganMissionPhase.Depart => "INSTRUCTOR: Runway heading. Turn west through the departure gates.",
-        OkanaganMissionPhase.JoinScoop when Sortie == OkanaganSortieType.LargeForceEmployment
-            => "AIR ATTACK: Boss 21, cleared onto the northbound scoop lane.",
-        OkanaganMissionPhase.JoinScoop => "INSTRUCTOR: The gates bend north onto the scoop lane. Arrive wings-level at 85 knots.",
-        OkanaganMissionPhase.Scoop => "INSTRUCTOR: Stable on the step—scoops down. The hopper fills in about thirteen seconds.",
-        OkanaganMissionPhase.Climb => "INSTRUCTOR: Scoops up, fly the water off, then follow the climbing turn.",
-        OkanaganMissionPhase.Hold => "AIR ATTACK: Boss 21 hold west, one helicopter below the target.",
-        OkanaganMissionPhase.Ingress when Sortie == OkanaganSortieType.LargeForceEmployment
-            => "AIR ATTACK: Boss 21 cleared in. Division Alpha, west flank, north to south.",
-        OkanaganMissionPhase.Ingress => "INSTRUCTOR: Recon complete. The corridor lines you up on the west flank, north to south.",
-        OkanaganMissionPhase.Drop when Sortie == OkanaganSortieType.LargeForceEmployment
-            => "DIVISION ALPHA: Continue. Start at the open grass and carry into the timber.",
-        OkanaganMissionPhase.Drop => "INSTRUCTOR: Start in the open grass and carry the load into the timber.",
-        OkanaganMissionPhase.Downwind => "INSTRUCTOR: Training drop abeam the lane, then turn base for another scoop.",
-        OkanaganMissionPhase.Egress when Sortie == OkanaganSortieType.LargeForceEmployment
-            => "AIR ATTACK: Good effect. Exit north and report ready for another load.",
-        OkanaganMissionPhase.Egress => "BOSS 21: Drop complete. Exit north and return for another load.",
-        OkanaganMissionPhase.Rtb => "OPS: Boss 21 minimum fuel. Working complete; return Kelowna with reserves intact.",
-        OkanaganMissionPhase.Approach => "KELOWNA TOWER: Boss 21 cleared to land Runway 16.",
-        OkanaganMissionPhase.Landed => "OPS: Boss 21 down safe. Record landing fuel against the plan.",
-        OkanaganMissionPhase.Complete when Sortie == OkanaganSortieType.LargeForceEmployment
-            => "AIR ATTACK: Objective met. Boss 21 released—return Kelowna.",
-        OkanaganMissionPhase.Complete => "DISPATCH: Boss 21 down safe. Objective met.",
+    string AirAttackCall() => RadioCallFor(Sortie, Phase);
+
+    internal static string RadioCallFor(OkanaganSortieType sortie,
+        OkanaganMissionPhase phase) => phase switch {
+        OkanaganMissionPhase.Depart when sortie == OkanaganSortieType.LargeForceEmployment
+            => "AIR ATTACK: Boss 21, depart 16. Join west.",
+        OkanaganMissionPhase.Depart => "INSTRUCTOR: Runway heading. Turn west.",
+        OkanaganMissionPhase.JoinScoop when sortie == OkanaganSortieType.LargeForceEmployment
+            => "AIR ATTACK: Boss 21, cleared northbound.",
+        OkanaganMissionPhase.JoinScoop => "INSTRUCTOR: Northbound lane. 85 knots, wings level.",
+        OkanaganMissionPhase.Scoop => "INSTRUCTOR: On step. Scoops down.",
+        OkanaganMissionPhase.Climb => "INSTRUCTOR: Scoops up. Climb.",
+        OkanaganMissionPhase.Hold => "AIR ATTACK: Boss 21, hold west. Traffic below.",
+        OkanaganMissionPhase.Ingress when sortie == OkanaganSortieType.LargeForceEmployment
+            => "AIR ATTACK: Boss 21, west flank, north to south.",
+        OkanaganMissionPhase.Ingress => "INSTRUCTOR: West flank, north to south.",
+        OkanaganMissionPhase.Drop when sortie == OkanaganSortieType.LargeForceEmployment
+            => "DIVISION ALPHA: Continue. Grass into timber.",
+        OkanaganMissionPhase.Drop => "INSTRUCTOR: Grass into timber.",
+        OkanaganMissionPhase.Downwind when sortie == OkanaganSortieType.WaterCircuits
+            => "INSTRUCTOR: Drop here, then RTB.",
+        OkanaganMissionPhase.Downwind => "INSTRUCTOR: Drop here. Return to scoop.",
+        OkanaganMissionPhase.Egress when sortie == OkanaganSortieType.LargeForceEmployment
+            => "AIR ATTACK: Good effect. Exit north.",
+        OkanaganMissionPhase.Egress => "BOSS 21: Off north. Returning to scoop.",
+        OkanaganMissionPhase.Rtb when sortie == OkanaganSortieType.WaterCircuits
+            => "INSTRUCTOR: Circuit complete. RTB Runway 16.",
+        OkanaganMissionPhase.Rtb => "OPS: Return Kelowna.",
+        OkanaganMissionPhase.Approach => "TOWER: Boss 21, cleared to land 16.",
+        OkanaganMissionPhase.Landed => "OPS: Boss 21 down safe.",
+        OkanaganMissionPhase.Complete when sortie == OkanaganSortieType.LargeForceEmployment
+            => "AIR ATTACK: Objective met. Boss 21 released.",
+        OkanaganMissionPhase.Complete => "DISPATCH: Objective met.",
         _ => "",
     };
 

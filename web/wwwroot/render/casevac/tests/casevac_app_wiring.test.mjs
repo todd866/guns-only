@@ -42,7 +42,7 @@ test("production app owns a bounded CASEVAC presentation lifecycle", () => {
     /presentationKey !== this\.casevacPresentationKey[\s\S]*this\.resetCasevacPresentation\(\)/);
 });
 
-test("flight-first UI exposes steering, route, power and authored contact limits", () => {
+test("flight-first UI keeps only steering and flight-critical landing facts", () => {
   for (const field of [
     "casevac_target_relative_bearing_deg",
     "casevac_masking_state",
@@ -51,31 +51,26 @@ test("flight-first UI exposes steering, route, power and authored contact limits
     "casevac_safe_band_min_agl_m",
     "casevac_safe_band_max_agl_m",
     "casevac_power_margin_01",
-    "casevac_energy_remaining_kwh",
-    "casevac_energy_remaining_fraction",
-    "casevac_energy_planning_endurance_min",
     "casevac_destination_reserve_kwh",
     "casevac_destination_reserve_min",
-    "casevac_energy_planning_power_kw",
-    "casevac_energy_planning_ground_speed_mps",
-    "casevac_energy_planning_arrival_allowance_s",
+    "casevac_lateral_speed_mps",
+    "casevac_vertical_speed_mps",
     "casevac_lz_enter_radius_m",
     "casevac_lz_max_lateral_speed_mps",
     "casevac_lz_max_abs_vertical_speed_mps",
-    "casevac_lz_max_abs_pitch_deg",
-    "casevac_lz_max_abs_bank_deg",
   ]) {
     assert.match(source, new RegExp(field), `${field} must be consumed`);
   }
-  assert.match(source, /TARGET AHEAD/);
-  assert.match(source, /TARGET LEFT/);
-  assert.match(source, /TARGET RIGHT/);
-  assert.match(source, />GROUND SPEED</);
-  assert.match(source, />WIND VECTOR</);
-  assert.match(source, />ENERGY</);
-  assert.match(source, />DEST RESERVE</);
+  assert.ok(flightFactsSource.includes("`↑ ${destination} · 000°`"));
+  assert.ok(flightFactsSource.includes("`← ${destination} · ${String(Math.abs(rounded))"));
+  assert.ok(flightFactsSource.includes("`${destination} · ${String(rounded)"));
+  assert.match(flightFactsSource, />AGL</);
+  assert.match(flightFactsSource, />SPEED</);
+  assert.match(flightFactsSource, />POWER</);
+  assert.match(flightFactsSource, />RESERVE</);
   assert.match(source, /data-cvf="groundspeed"/);
-  assert.match(source, /data-cvf="wind"/);
+  assert.doesNotMatch(flightFactsSource, /data-cvf="wind"/);
+  assert.doesNotMatch(flightFactsSource, /CONTACT LIMITS|ENERGY PLAN|WIND VECTOR/);
   assert.match(source, /hold 32–42 m AGL near its 28 m windbreak/,
     "the visible brief must clear the orchard authority rather than advertising a lethal band");
   assert.match(source, /away from the orchard the assessed masking band remains 12–42 m AGL/,
@@ -99,7 +94,7 @@ test("flight-first UI exposes steering, route, power and authored contact limits
   assert.match(source,
     /Drag up to move forward, down to reverse, or left and right to translate/);
   assert.match(source,
-    /readyCasevacRouteBriefing\.update\(\{[\s\S]*visible: ready && selectedBeat === 13,[\s\S]*routes: state\?\.casevac_routes/);
+    /const casevacReady = ready && selectedBeat === 13;[\s\S]*readyScreen\.dataset\.casevacReady = String\(casevacReady\)[\s\S]*readyCasevacRouteBriefing\.update\(\{[\s\S]*visible: casevacReady,[\s\S]*routes: state\?\.casevac_routes/);
 });
 
 test("scenery receives only projected CASEVAC environment and custody facts", () => {
@@ -129,6 +124,23 @@ test("scenery receives only projected CASEVAC environment and custody facts", ()
     /capsuleCustody: casevacCapsuleVisualState\(state\)/);
   assert.doesNotMatch(source,
     /syncCasevacPresentation\(state\)[\s\S]*windX: projectedFinite\(state, "wind_x_mps"\)/);
+});
+
+test("CASEVAC suppresses generic grass scatter while preserving normal terrain recovery", () => {
+  assert.match(source,
+    /const casevacTerrain = isCasevacState\(state\);[\s\S]*const needsAmbientScenery = !casevacTerrain[\s\S]*const needsCasevacScenerySuppression = casevacTerrain[\s\S]*presentation\.disableAmbientScenery/);
+  assert.match(source,
+    /if \(casevac\) \{[\s\S]*terrainDiagnostics\?\.ambientSceneryEnabled === true[\s\S]*disableAmbientScenery[\s\S]*\} else if \(state\?\.terrain_micro_required !== true/);
+  assert.match(source,
+    /radarAltitudeFt <= 6_000[\s\S]*terrainDiagnostics\?\.ambientSceneryEnabled === false[\s\S]*enableAmbientScenery/,
+    "leaving CASEVAC must retain the normal low-altitude scenery recovery path");
+});
+
+test("CASEVAC owns a contrasty warm-key and cool-distance grade", () => {
+  assert.match(source,
+    /isCasevacState\(state\)[\s\S]*fogLow\.set\(0x6f7054\)[\s\S]*fogHigh\.set\(0x3f5666\)[\s\S]*cloudFogColor\.set\(0x71818a\)/);
+  assert.match(source,
+    /ambient\.intensity = 0\.6;[\s\S]*sun\.color\.set\(0xffcc82\);[\s\S]*sun\.intensity = 3\.25/);
 });
 
 test("ordered observer-safe events feed the CASEVAC stream without payload copy", () => {
@@ -168,12 +180,33 @@ test("narrow QUIET gives the handoff card sole ownership of the lower safe area"
   );
   assert.match(
     flightFactsSource,
-    /const quiet = state\?\.casevac_quiet === true[\s\S]*casevac_quiet_active === true[\s\S]*casevacToken\(state\?\.casevac_phase\) === "QUIET"/,
+    /const phase = casevacToken\(state\?\.casevac_phase\)[\s\S]*const quiet = state\?\.casevac_quiet === true[\s\S]*casevac_quiet_active === true[\s\S]*phase === "QUIET"/,
   );
   assert.match(
     flightFactsSource,
     /root\.hidden = state\?\.ready === true \|\| state\?\.finished === true \|\| quiet/,
   );
+});
+
+test("CASEVAC keeps peripheral vision clear around a stable body-forward optical axis", () => {
+  assert.match(source,
+    /import \{[\s\S]*advanceLowSpeedLens,[\s\S]*lowSpeedLensTarget,[\s\S]*neutralLowSpeedLens,[\s\S]*low_speed_lens\.js/);
+  assert.doesNotMatch(source, /createCasevacCommanderCockpit|casevacCommanderCockpit/);
+  assert.doesNotMatch(source,
+    /casevacLookYaw|desiredCasevacLookYaw|autoLookActive|casevacBearingDeg \* 0\.74/,
+    "the landing target must not steer the pilot's camera");
+  assert.doesNotMatch(source,
+    /CASEVAC_(?:COAMING|LEFT_PILLAR|RIGHT_PILLAR|TOP_BEAM|WINDSHIELD)/);
+  assert.match(source,
+    /const casevacForwardView = casevac && !manualLookActive\(\)[\s\S]*casevacForwardView \? 0 : -sensorYaw[\s\S]*casevacForwardView \? -7 \* DEG : sensorPitch/);
+  assert.match(source,
+    /addScaledVector\(this\.playerUp, casevac \? 1\.15 : 0\.6\)[\s\S]*addScaledVector\(this\.playerForward, casevac \? 1\.25 : 4\.0\)/);
+  assert.match(source,
+    /casevac[\s\S]*lowSpeedLensTarget\(projectedFinite\(state, "casevac_lateral_speed_mps"\)\)[\s\S]*neutralLowSpeedLens\(\)[\s\S]*advanceLowSpeedLens/);
+  assert.match(source,
+    /this\.camera\.fov = this\.lowSpeedLens\.fovDeg;[\s\S]*this\.camera\.updateProjectionMatrix\(\)/);
+  assert.doesNotMatch(source, /setViewOffset\(/,
+    "the low-speed lens must not displace the straight-ahead optical centre");
 });
 
 test("portrait touch Medevac keeps combat chips closed and clears the movement stick", () => {
@@ -248,10 +281,11 @@ test("rich CASEVAC debrief supersedes the generic modal and restarts authority",
     source,
     /const richCasevacDebrief = finished && isCasevacState\(state\)/,
   );
-  assert.match(source, /readyScreen\.inert = richCasevacDebrief/);
+  assert.match(source, /readyScreen\.inert = richCasevacDebrief \|\| settingsPaused/,
+    "CASEVAC and settings must each own the generic Ready surface exclusively");
   assert.match(
     source,
-    /String\(!showScreen \|\| richCasevacDebrief\)/,
+    /String\(!showScreen \|\| richCasevacDebrief \|\| settingsPaused\)/,
   );
   assert.match(
     source,
@@ -295,13 +329,13 @@ test("finished Medevac screen uses disposition and four independent axes", () =>
     /if \(casevac\) readySortieLabel\.textContent = "Disposition"/);
   assert.match(source,
     /if \(casevac\) readyConfigLabel\.textContent = "Independent assessment"/);
-  // The ready chain gained combat-handoff custody ahead of CASEVAC when the slice merged into
-  // pivot-hardening; handoff and casevac never co-occur, so casevac states still land on
+  // The ready chain owns the combined Top Gun carrier pass first, then ordinary combat-handoff
+  // custody, then CASEVAC. Those authorities never co-occur, so CASEVAC states still land on
   // disposition + axes.
   assert.match(source,
-    /readyConfig\.textContent = result\.handoff[\s\S]*: state\?\.maintenance_scenario[\s\S]*: casevac[\s\S]*\? casevacFacts\.axes/);
+    /readyConfig\.textContent = carrierHandoff[\s\S]*: result\.handoff[\s\S]*: state\?\.maintenance_scenario[\s\S]*: casevac[\s\S]*\? casevacFacts\.axes/);
   assert.match(source,
-    /readyControls\.textContent = result\.handoff[\s\S]*: casevac[\s\S]*Primary correction · \$\{casevacFacts\.correction\}/);
+    /readyControls\.textContent = carrierHandoff[\s\S]*: result\.handoff[\s\S]*: casevac[\s\S]*Primary correction · \$\{casevacFacts\.correction\}/);
 });
 
 test("touch CASEVAC exposes and drives four truthful independent axes", () => {

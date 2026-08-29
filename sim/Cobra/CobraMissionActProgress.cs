@@ -9,7 +9,10 @@ namespace GunsOnly.Sim.Cobra;
 public static class CobraMissionActProgress
 {
     public const double DepartPadRadiusM = 700.0;
-    public const double EngageBridgeRadiusM = 480.0;
+    // Start the attack at a genuine IP rather than beneath the bridge. At the old 480 m handoff
+    // the low ingress cue vanished almost on top of Iron Bell and its replacement demanded an
+    // abrupt climb. This reveal gives the player time to see the fight and establish a standoff.
+    public const double EngageBridgeRadiusM = 1_100.0;
     public const double RtbPadCompleteRadiusM = 70.0;
     public const double RtbPadCompleteClearanceM = 12.0;
 
@@ -22,7 +25,8 @@ public static class CobraMissionActProgress
         HoldTheBridgeOutcome outcome,
         CobraMissionStatus status,
         double? clearanceM,
-        Vec3D? departureJoinWorldM = null)
+        Vec3D? departureJoinWorldM = null,
+        bool stableRecoveryAtFob = false)
     {
         if (current == CobraMissionAct.Complete)
             return CobraMissionAct.Complete;
@@ -31,7 +35,8 @@ public static class CobraMissionActProgress
             || outcome is HoldTheBridgeOutcome.Victory or HoldTheBridgeOutcome.Defeat) {
             if (current == CobraMissionAct.Rtb
                 && HorizontalDistanceM(positionWorldM, fobCentreWorldM) <= RtbPadCompleteRadiusM
-                && clearanceM is <= RtbPadCompleteClearanceM) {
+                && clearanceM is <= RtbPadCompleteClearanceM
+                && stableRecoveryAtFob) {
                 return CobraMissionAct.Complete;
             }
             return CobraMissionAct.Rtb;
@@ -60,6 +65,7 @@ public static class CobraMissionActProgress
             CobraMissionAct.Rtb =>
                 HorizontalDistanceM(positionWorldM, fobCentreWorldM) <= RtbPadCompleteRadiusM
                 && clearanceM is <= RtbPadCompleteClearanceM
+                && stableRecoveryAtFob
                     ? CobraMissionAct.Complete
                     : CobraMissionAct.Rtb,
             _ => current
@@ -126,9 +132,11 @@ public static class CobraMissionActProgress
     }
 
     /// <summary>
-    /// Soft-path highlight: advance past any gate the aircraft has already flown through
-    /// (inside 0.72× corridor radius), otherwise aim at the nearest still-ahead gate. Caps at
-    /// the bridge so Ingress never steals the Engage set-piece cue.
+    /// Soft-path highlight: project the aircraft onto the ingress polyline and select the next
+    /// gate ahead. A radius-only resolver advanced while the aircraft was inside a gate, then
+    /// regressed to that same gate after it flew out the far side. Polyline progress keeps passed
+    /// gates passed without adding mutable presentation state. Caps at the bridge so Ingress
+    /// never steals the Engage set-piece cue.
     /// </summary>
     static int ResolveSoftPathActiveIndex(
         IReadOnlyList<CobraCanyonRoutePoint> points,
@@ -142,13 +150,45 @@ public static class CobraMissionActProgress
         if (aircraftWorldM is not { } aircraft)
             return first;
 
-        for (int i = Math.Clamp(first, 0, last); i <= last; i++) {
-            CobraCanyonRoutePoint point = points[i];
-            double passRadiusM = Math.Max(40.0, point.CorridorRadiusM * 0.72);
-            double distanceM = HorizontalDistanceM(
-                aircraft,
-                new Vec3D(point.EastM, point.PathAltitudeM, point.NorthM));
-            if (distanceM > passRadiusM)
+        int start = Math.Clamp(first, 0, last);
+        if (start >= last)
+            return last;
+
+        double nearestDistanceSquaredM = double.MaxValue;
+        double nearestAlongM = 0.0;
+        double accumulatedM = 0.0;
+        for (int i = start; i < last; i++) {
+            CobraCanyonRoutePoint from = points[i];
+            CobraCanyonRoutePoint to = points[i + 1];
+            double eastM = to.EastM - from.EastM;
+            double northM = to.NorthM - from.NorthM;
+            double lengthSquaredM = eastM * eastM + northM * northM;
+            double lengthM = Math.Sqrt(lengthSquaredM);
+            if (lengthM <= 1e-6)
+                continue;
+            double fraction = Math.Clamp(
+                ((aircraft.X - from.EastM) * eastM
+                    + (aircraft.Z - from.NorthM) * northM) / lengthSquaredM,
+                0.0,
+                1.0);
+            double projectedEastM = from.EastM + eastM * fraction;
+            double projectedNorthM = from.NorthM + northM * fraction;
+            double offsetEastM = aircraft.X - projectedEastM;
+            double offsetNorthM = aircraft.Z - projectedNorthM;
+            double distanceSquaredM = offsetEastM * offsetEastM + offsetNorthM * offsetNorthM;
+            if (distanceSquaredM < nearestDistanceSquaredM) {
+                nearestDistanceSquaredM = distanceSquaredM;
+                nearestAlongM = accumulatedM + lengthM * fraction;
+            }
+            accumulatedM += lengthM;
+        }
+
+        accumulatedM = 0.0;
+        for (int i = start + 1; i <= last; i++) {
+            accumulatedM += HorizontalDistanceM(
+                new Vec3D(points[i - 1].EastM, 0.0, points[i - 1].NorthM),
+                new Vec3D(points[i].EastM, 0.0, points[i].NorthM));
+            if (accumulatedM > nearestAlongM + 24.0)
                 return i;
         }
         return last;

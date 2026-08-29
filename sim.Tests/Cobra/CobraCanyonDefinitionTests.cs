@@ -38,7 +38,15 @@ public class CobraCanyonDefinitionTests
             Assert.NotEmpty(route.PrimaryHazard);
         });
         Assert.Equal(11, world.Landmarks.Count);
-        Assert.Equal(14, world.Obstacles.Count);
+        Assert.Equal(18, world.Obstacles.Count);
+        Assert.Contains(world.Obstacles, obstacle =>
+            obstacle.Id == "hazard.cobra-canyon.iron-bell-west-approach.v1");
+        Assert.Contains(world.Obstacles, obstacle =>
+            obstacle.Id == "hazard.cobra-canyon.iron-bell-east-approach.v1");
+        Assert.Contains(world.Obstacles, obstacle =>
+            obstacle.Id == "hazard.cobra-canyon.iron-bell-west-approach-pier.v1");
+        Assert.Contains(world.Obstacles, obstacle =>
+            obstacle.Id == "hazard.cobra-canyon.iron-bell-east-approach-pier.v1");
         Assert.All(world.Landmarks, landmark =>
             Assert.True(world.Bounds.Contains(landmark.EastM, landmark.NorthM)));
     }

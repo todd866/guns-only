@@ -12,7 +12,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../.
 
 const [appSource, hudSource, indexSource, keyGrammarSource, detentSource,
   sessionSource, webBridgeSource, progressionSource, projectionSource,
-  playerGunTargetSource, missionAuthoritySource] = await Promise.all([
+  playerGunTargetSource, missionAuthoritySource, debriefSource] = await Promise.all([
   "web/wwwroot/app.js",
   "web/wwwroot/hud.js",
   "web/wwwroot/index.html",
@@ -24,6 +24,7 @@ const [appSource, hudSource, indexSource, keyGrammarSource, detentSource,
   "web/SnapshotProjection.cs",
   "web/wwwroot/render/input/player_gun_target.js",
   "web/wwwroot/render/top-gun/mission_authority.js",
+  "web/wwwroot/render/debrief/sortie_result.js",
 ].map((relativePath) => readFile(path.join(ROOT, relativePath), "utf8")));
 
 // The flat-snapshot projection moved from the browser-only WebBridge into the plain, linkable
@@ -252,8 +253,9 @@ test("every visible HTML button is wired through one auditable action surface", 
     ["ready-start", /readyStart\.addEventListener\("click"/],
     ["ready-replay", /readyReplay\?\.addEventListener\("click"/],
     ["ready-handoff", /readyHandoff\?\.addEventListener\("click", requestCombatHandoffFromPause\)/],
+    ["ready-intro-replay", /readyIntroReplay\?\.addEventListener\("click"/],
     ["ready-settings", /readySettings\?\.addEventListener\("click", openSettings\)/],
-    ["ready-restart", /readyRestart\?\.addEventListener\("click", restartMissionNow\)/],
+    ["ready-restart", /readyRestart\?\.addEventListener\("click", repeatSelectedSortieNow\)/],
     ["ready-return", /readyReturn\?\.addEventListener\("click", returnToCatalogue\)/],
     ["ready-build-reload", /readyBuildReload\?\.addEventListener\("click", reloadCurrentBuild\)/],
     // iOS-Safari-only Add-to-Home-Screen hint; dismissed for good on tap.
@@ -474,6 +476,12 @@ test("touch flight separates throttle/yaw, pitch/roll, target selection, and fir
   assert.match(indexSource,
     /Right thumb: drag left or right to roll, down to pull, or up to push\.[^<]*Use the separate Fire button to fire guns\./,
     "the accessible help must describe the actual flight axes and dedicated trigger");
+  assert.match(appSource,
+    /const touchFireLabel = touchFireVisibleLabel\(state\)[\s\S]*?touchFireLabel !== "FIRE"[\s\S]*?Fire launches missiles until empty, then guns\.[\s\S]*?Use the separate Fire button to fire guns\./,
+    "touch help must describe the valley's overloaded Fire action without changing generic gun help");
+  assert.match(appSource,
+    /const firstRunMissileTracking = touchFireLabel === "FOX 2"[\s\S]*?aim9_in_flight === true[\s\S]*?touchFireButton\.disabled = firstRunMissileTracking[\s\S]*?Missile tracking; wait for clear[\s\S]*?if \(firstRunMissileTracking\) touchFireButton\.textContent = "TRACK"/,
+    "an in-flight first-run heater must replace the rejected Fire action with a disabled tracking state");
   assert.match(indexSource,
     /Left thumb: drag up to increase power or down to decrease it; release holds the selected power\.[^<]*yaw, which centres when released\./,
     "the left-stick help must distinguish latched throttle from spring-loaded yaw");
@@ -689,8 +697,11 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
     /function shellProgramEntry[\s\S]*?if \(experience\s*&&\s*experience\.mission == null/,
     "a missing program query must not treat null experience as a standalone card");
   assert.match(appSource,
-    /"weekend-ride": Object\.freeze\([\s\S]*?Fly opens the dedicated Weekend Ride surface/,
-    "Weekend Ride briefing must send Fly to the owned surface");
+    /"weekend-ride": Object\.freeze\([\s\S]*?end the ride from pause[\s\S]*?Esc pauses \/ End Ride/,
+    "Weekend Ride briefing must explain both its open session and player-owned ending");
+  assert.match(appSource,
+    /"cobra-lab": Object\.freeze\([\s\S]*?ticket result · Camp Ember recovery[\s\S]*?settle on the pad to close the sortie[\s\S]*?Camp Ember pad to rearm and recover/,
+    "Cobra's Ready brief must teach that tickets decide the battle but stable Ember recovery closes the sortie");
   assert.equal(new Set(nodeIds).size, nodeIds.length, "no duplicate program nodes");
   assert.equal(buttons.filter((button) => button.attributes.id === "ready-start").length, 1);
   assert.match(indexSource, /role="dialog"[^>]*aria-modal="true"/);
@@ -713,9 +724,158 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
   assert.match(indexSource,
     /#ready-screen\[data-mode="program"\] \.sortie-choice\[data-aircraft\]\s*\{[\s\S]*?position:\s*relative[\s\S]*?\.sortie-choice\[data-aircraft\] > \*\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?inset:\s*0 auto auto 0/,
     "screen-reader-only poster labels must be contained by their card instead of widening the outer dialog");
+  const contracts = [...indexSource.matchAll(/<small class="sortie-contract">([^<]+)<\/small>/g)]
+    .map((match) => match[1]);
+  assert.equal(contracts.length, 7,
+    "every visible aircraft programme, including preview multiplayer, needs a concise mission contract");
+  assert.ok(contracts.every((contract) => contract.includes("·")),
+    "picker contracts should use the shared verb · endpoint language");
+  assert.ok(contracts.includes("Hold more points · Bleed tickets · RTB Ember"),
+    "Cobra's picker contract must describe its majority/ticket authority instead of requiring all four points");
+  assert.ok(contracts.includes("Train · Attack · Coordinate · Recover"),
+    "Fire Boss must advertise recovery as the endpoint shared by its three sortie curricula");
+  assert.match(indexSource,
+    /\.sortie-option\[data-selected="true"\] \.sortie-choice\[data-aircraft\] > \*[\s\S]*?clip:\s*auto/,
+    "the selected poster must reveal its aircraft and mission contract");
+  assert.match(indexSource,
+    /\.sortie-choice\[data-aircraft\] > \.sortie-contract\s*\{[\s\S]*?display:\s*block/,
+    "the mission contract must override the legacy phone rule that hid every small label");
+  assert.match(indexSource,
+    /@media \(max-width: 620px\) and \(orientation: portrait\)[\s\S]*?\.sortie-contract\s*\{[\s\S]*?max-height:\s*2\.5em/,
+    "portrait posters must reserve two compact lines for the contract instead of colliding with the aircraft name");
+  assert.match(indexSource,
+    /@media \(max-height: 500px\) and \(orientation: landscape\)[\s\S]*?\.sortie-contract\s*\{[\s\S]*?text-overflow:\s*ellipsis/,
+    "short landscape posters must keep a compact single-line mission contract");
+  assert.match(indexSource,
+    /#ready-screen\[data-mode="program"\] #ready-start\s*\{[\s\S]*?font:\s*750 11px/,
+    "the final launch gesture must visibly name the selected mission instead of drawing only a chevron");
   assert.match(indexSource,
     /@media \(max-height: 500px\) and \(orientation: landscape\)[\s\S]*?#ready-screen\[data-mode="program"\] \.ready-layout\s*\{[\s\S]*?grid-template-columns:/,
     "short landscape screens need independent mission and briefing columns");
+});
+
+test("the shared mission-flow shell keeps one hierarchy across ready, pause, and debrief", () => {
+  for (const token of [
+    "--flow-font-display", "--flow-font-data", "--flow-bg", "--flow-panel",
+    "--flow-ink", "--flow-ink-muted", "--flow-line", "--flow-accent",
+    "--flow-space-3", "--flow-radius-md", "--flow-reading-width",
+  ]) assert.match(indexSource, new RegExp(`${token}:`), `${token} must be defined once for shell surfaces`);
+
+  assert.match(indexSource,
+    /#ready-screen:is\(\[data-mode="intro"\], \[data-mode="debrief"\]\) \.ready-card\s*\{[\s\S]*?background:[\s\S]*?box-shadow:\s*var\(--flow-shadow\)/,
+    "first-run and result briefs must share the same bounded panel surface");
+  assert.match(indexSource,
+    /#ready-screen\[data-mode="intro"\]\s*\{[\s\S]*?menu-hangar\.webp/,
+    "the shared panel must not erase the authored first-sortie painting");
+  assert.doesNotMatch(indexSource,
+    /#ready-screen:is\(\[data-mode="intro"\], \[data-mode="debrief"\], \[data-mode="pause"\]\)/,
+    "intro must not inherit the neutral pause/result backdrop");
+  assert.match(indexSource,
+    /#ready-screen:is\(\[data-mode="intro"\], \[data-mode="debrief"\]\) #ready-brief\s*\{[\s\S]*?max-width:\s*var\(--flow-reading-width\)[\s\S]*?line-height:\s*1\.55/,
+    "brief copy needs a readable measure and line height");
+  assert.match(indexSource,
+    /#ready-screen:is\(\[data-mode="intro"\], \[data-mode="debrief"\]\) \.ready-facts\s*\{[\s\S]*?border:\s*1px solid var\(--flow-line\)/,
+    "ready and debrief evidence must read as a shared evidence grid");
+  assert.match(indexSource,
+    /#ready-screen\[data-mode="debrief"\] \.ready-secondary-actions,[\s\S]*?repeat\(auto-fit, minmax\(8\.5rem, 1fr\)\)/,
+    "secondary actions must retain readable targets when the viewport narrows");
+  assert.match(indexSource,
+    /#ready-screen\[data-mode="pause"\] #ready-return:not\(\[hidden\]\)\s*\{[\s\S]*?grid-column:\s*1 \/ -1/,
+    "the pause escape back to mission choice must not look like an orphaned half-row utility");
+
+  assert.match(appSource,
+    /readyRestart\.textContent = finished \? "Repeat sortie" : "Restart sortie"/,
+    "repeat-current must not share the primary programme-advance label");
+  assert.match(appSource,
+    /once both missiles are away, the same control becomes the gun trigger[\s\S]*?Follow valley → pop out → launch two heaters → guns \/ RTB/,
+    "first-run copy must describe the launch-count Fire transition, not make two splashes its gate");
+  assert.doesNotMatch(appSource, /after both splashes|splash two targets → guns/,
+    "a missile outcome must not be presented as the Fire authority switch");
+  assert.match(appSource, /readyReturn\.textContent = "Choose sortie"/,
+    "catalogue navigation must name the choice it opens");
+  assert.match(appSource,
+    /readyRestart\?\.addEventListener\("click", repeatSelectedSortieNow\)[\s\S]*?readyReturn\?\.addEventListener\("click", returnToCatalogue\)/,
+    "clearer labels must preserve the Build 346 action destinations");
+
+  assert.match(appSource,
+    /const READY_MODAL_FLIGHT_CHROME = \[[\s\S]*?"#view-status"[\s\S]*?"#test-flight-console"[\s\S]*?"#nav-console"[\s\S]*?"#touch-controls"[\s\S]*?"#boot"[\s\S]*?"\[data-anca-panel\]"[\s\S]*?\]\.join/,
+    "modal ownership must include live status, action-console, navigation, and touch chrome");
+  assert.match(appSource,
+    /function syncReadyModalOwnership\(owned\)[\s\S]*?element\.inert = true;[\s\S]*?element\.setAttribute\("aria-hidden", "true"\)[\s\S]*?element\.inert = previous\.inert[\s\S]*?previous\.ariaHidden === null[\s\S]*?removeAttribute\("aria-hidden"\)/,
+    "Ready must suppress the complete flight surface and restore its authored accessibility state");
+  assert.match(appSource,
+    /function readyScreenFocusables\(\)[\s\S]*?renderedDialogControl\(element\)/,
+    "CSS-hidden responsive hints must not become phantom focus-trap endpoints");
+  assert.match(appSource,
+    /document\.addEventListener\("keydown",[\s\S]*?dialogTabDestination\([\s\S]*?document\.activeElement[\s\S]*?destination\.focus\(\{ preventScroll: true \}\)[\s\S]*?true\);/,
+    "the modal trap must wrap rendered actions and recover focus that starts outside the dialog");
+  assert.match(appSource,
+    /syncReadyModalOwnership\(showScreen\)[\s\S]*?readyScreen\.classList\.toggle\("visible", showScreen\)/,
+    "programme, intro, pause and debrief visibility must drive modal ownership together");
+  assert.match(indexSource, /id="settings-screen"[^>]*aria-hidden="true"[^>]*inert/,
+    "the hidden settings dialog must not leak its binding count into the Ready accessibility tree");
+  assert.match(appSource,
+    /function openSettings\([\s\S]*?settingsScreen\.inert = false[\s\S]*?function closeSettings\([\s\S]*?settingsScreen\.inert = true/,
+    "settings must explicitly take and release modal ownership");
+  assert.match(appSource,
+    /readyScreen\.inert = richCasevacDebrief \|\| settingsPaused[\s\S]*?String\(!showScreen \|\| richCasevacDebrief \|\| settingsPaused\)/,
+    "the Settings dialog must keep its underlying Ready card inert and hidden from assistive tech");
+});
+
+test("visual-merge results show compact facts and one bounded correction", () => {
+  const visualMergeFunction = debriefSource.match(
+    /export function visualMergeDebriefPresentation\(state = \{}\) \{([\s\S]*?)\n}\n\nfunction readableToken/,
+  )?.[1] ?? "";
+  assert.match(visualMergeFunction, /visual_merge_evaluation !== true/);
+  for (const field of [
+    "minimum_merge_range_m", "minimum_energy_kias", "peak_closure_kts",
+    "rear_quarter_dwell_s", "evaluated_projectile_hits",
+  ]) assert.match(visualMergeFunction, new RegExp(field),
+    `BFM coaching must consume published ${field} evidence`);
+  assert.match(visualMergeFunction,
+    /Open first-pass spacing to 150 m\.[\s\S]*?Keep 300 KIAS through the first turn\.[\s\S]*?Settle closure below 250 KT\.[\s\S]*?Hold the rear quarter for 5\.0 s\./,
+    "corrections must use the simulation's authored merge thresholds rather than invented grades");
+  assert.doesNotMatch(`${debriefSource}\n${appSource}`,
+    /Did well ·|Fight turned ·|Next rep ·|instrumented merge|Decision evidence ·/,
+    "the visible default must not rebuild the old three-paragraph coaching essay");
+  assert.match(appSource,
+    /if \(visualMerge\) readyConfigLabel\.textContent = "Evidence"[\s\S]*?\? appendResultFacts\(visualMerge\.evidence\)[\s\S]*?: visualMerge[\s\S]*?\? singleCorrection/,
+    "raw score/dwell/hits must become labelled evidence followed by one correction");
+});
+
+test("the pictorial programme stays scannable on desktop, portrait, and short landscape", () => {
+  assert.match(indexSource,
+    /#ready-screen\[data-mode="program"\] \.ready-mission-groups\s*\{[\s\S]*?minmax\(170px, 240px\)[\s\S]*?justify-content:\s*center/,
+    "desktop posters need a stable maximum width when a domain has only two aircraft");
+  assert.match(indexSource,
+    /#ready-screen\[data-mode="program"\] \.sortie-choice\[data-aircraft\]\s*\{[\s\S]*?aspect-ratio:\s*4 \/ 5/,
+    "desktop aircraft art needs one coherent poster ratio");
+  assert.match(indexSource,
+    /@media \(max-width: 620px\) and \(orientation: portrait\)[\s\S]*?grid-auto-columns:\s*clamp\(136px, 42vw, 190px\)/,
+    "portrait must keep a bounded horizontal aircraft rail");
+
+  const coherenceLayer = indexSource.indexOf("SHARED MISSION-FLOW SURFACES");
+  const finalShortLandscape = indexSource.lastIndexOf(
+    "@media (max-height: 500px) and (orientation: landscape)",
+  );
+  assert.ok(coherenceLayer > 0 && finalShortLandscape > coherenceLayer,
+    "the effective short-landscape fix must live after the pictorial picker cascade");
+  const finalLandscapeSource = indexSource.slice(finalShortLandscape);
+  assert.match(finalLandscapeSource,
+    /:root #ready-screen\[data-mode="program"\] \.ready-layout\s*\{[\s\S]*?display:\s*grid[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) minmax\(190px, 250px\)/,
+    "short landscape must keep the aircraft chooser and launch actions independently reachable");
+  assert.match(finalLandscapeSource,
+    /:root #ready-screen\[data-mode="program"\] \.sortie-choice\[data-aircraft\]\s*\{[\s\S]*?aspect-ratio:\s*4 \/ 3/,
+    "short landscape needs compact art without changing the selected mission or launch flow");
+  assert.match(finalLandscapeSource,
+    /:root #ready-screen:is\(\[data-mode="intro"\], \[data-mode="debrief"\]\) \.ready-briefing\s*\{[\s\S]*?display:\s*grid[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\) minmax\(230px, \.72fr\)/,
+    "short-landscape briefs must put context and escape actions in independently visible columns");
+  assert.match(finalLandscapeSource,
+    /\.ready-controls, #ready-start, #ready-replay, #ready-handoff,[\s\S]*?grid-column:\s*2/,
+    "first-run and debrief actions must occupy the visible short-landscape action column");
+  assert.match(finalLandscapeSource,
+    /\.touch-mode #ready-screen\[data-mode="intro"\] \.ready-controls\s*\{[\s\S]*?display:\s*block/,
+    "short-landscape onboarding must use its open action column to expose the touch grammar");
 });
 
 test("release state gates routes while the production aircraft remain qualification-free", () => {
@@ -729,7 +889,7 @@ test("release state gates routes while the production aircraft remain qualificat
   assert.match(appSource,
     /function selectCampaignNode[\s\S]*?!experienceAccess\(node\.id, window\.location\)\.allowed[\s\S]*?selectedBeat = node\.mission/);
   assert.match(appSource,
-    /standalone\?\.mission == null[\s\S]*?window\.location\.assign\(standalone\.route\)/,
+    /standalone\?\.mission == null[\s\S]*?standaloneNavigationHref\(standalone\.route, window\.location\)/,
     "production standalone cards (Cobra) must navigate to their owned surface on Fly");
   assert.match(appSource,
     /requestedExperience = requestedProgramNode[\s\S]*?experienceById\(requestedProgramNode\.id\)[\s\S]*?requestedExperienceAccess[\s\S]*?experienceAccess\(requestedExperience\.id, window\.location\)[\s\S]*?blockedProgramExperience = initialProgramSelection\.blockedExperience/,
@@ -770,10 +930,10 @@ test("program modal behavior cannot leak into flight shortcuts", () => {
     /centerReadyMissionChoice\(selectedMission\)[\s\S]*?const target = !readyStart\.disabled[\s\S]*?readyRouteNotice\?\.querySelector\("a\[href\]"\) \?\? selectedMission/,
     "focus must expose a deep-linked mission and land on either Fly or a usable recovery action");
   assert.match(appSource,
-    /sceneCanvas\.inert = showScreen[\s\S]*?readyScreen\.contains\(document\.activeElement\)[\s\S]*?focusOwner\?\.focus[\s\S]*?readyScreen\.setAttribute\(\s*"aria-hidden"/,
+    /syncReadyModalOwnership\(showScreen\)[\s\S]*?readyScreen\.contains\(document\.activeElement\)[\s\S]*?focusOwner\?\.focus[\s\S]*?readyScreen\.setAttribute\(\s*"aria-hidden"/,
     "focus must leave the dialog before it becomes aria-hidden");
   assert.match(appSource,
-    /readyScreen\.addEventListener\("keydown"[\s\S]*?event\.code !== "Tab"[\s\S]*?last\.focus[\s\S]*?first\.focus/,
+    /document\.addEventListener\("keydown"[\s\S]*?event\.code !== "Tab"[\s\S]*?dialogTabDestination\([\s\S]*?destination\.focus/,
     "the modal must keep Tab focus inside its active controls");
 });
 
@@ -823,16 +983,19 @@ test("drone-raid coaching is mission-gated and carries live efficiency truth int
   assert.match(hudSource,
     /draw\(frame\)[\s\S]*?this\.drawSortieStatus\(frame\)/,
     "the mission-gated raid panel must be called by the live HUD render path");
-  assert.match(appSource,
-    /function droneRaidDebriefFacts\(state\)[\s\S]*?drone_raid_leakers[\s\S]*?if \(leakers > 0\)[\s\S]*?if \(kills > 0 && Number\.isFinite\(roundsPerKill\)\)[\s\S]*?rounds\/kill[\s\S]*?state\?\.drone_raid_evaluation === true[\s\S]*?droneRaidDebriefFacts\(state\)/,
+  assert.match(debriefSource,
+    /drone_raid_evaluation === true[\s\S]*?drone_raid_leakers[\s\S]*?const facts = \[`Score[\s\S]*?`Kills[\s\S]*?`Leakers[\s\S]*?if \(kills > 0 && roundsPerKill !== null\)[\s\S]*?rounds\/kill/,
     "the debrief must explain the score in operational terms");
+  assert.match(appSource,
+    /state\?\.drone_raid_evaluation === true[\s\S]*?\? resultFacts\.join\(" · "\)/,
+    "the shared result card must render the debrief module's compact raid facts");
 });
 
 test("non-bridge player actions advertised by the quicklook have observable UI handlers", () => {
   const directActions = [
     ["H HIDE", /event\.code === "KeyH"[\s\S]*?view\.hud\.toggleLegend\(\)/],
     ["M SOUND", /event\.code === "KeyM"[\s\S]*?commitPlayerSettings\(\{ \.\.\.playerSettings, audio: !playerSettings\.audio \}\)/],
-    ["R RESTART", /event\.code === "KeyR"[\s\S]*?restartMissionNow\(\)/],
+    ["R RESTART", /event\.code === "KeyR"[\s\S]*?repeatSelectedSortieNow\(\)/],
     ["DRAG LOOK", /sceneCanvas\.addEventListener\("pointermove"/],
   ];
   for (const [help, handler] of directActions) {

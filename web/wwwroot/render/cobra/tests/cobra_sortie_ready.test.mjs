@@ -179,8 +179,9 @@ test("Hold the Bridge wires Ready before every authority advance without swallow
   const main = await readFile(new URL("cobra-lab/main.js", root), "utf8");
   assert.match(main, /render\/cobra\/cobra_sortie_ready\.js\?v=\d+/);
   assert.match(main, /createCobraSortieReadyInterlock/);
-  assert.match(main, /createCobraSortieReadyInterlock\(\{ ready: !PLAY_MODE \}\)/,
-    "lab must run continuously while play waits for deliberate input");
+  assert.match(main,
+    /createCobraSortieReadyInterlock\(\{[\s\S]{0,80}?ready: !PLAY_MODE \|\| BATTLE_REVIEW_MODE,[\s\S]{0,30}?\}\)/,
+    "lab and battle proof run continuously while ordinary play waits for deliberate input");
   assert.match(main, /hasDeliberateCobraCockpitInput/);
   assert.match(main,
     /let pilotControls = PLAY_MODE[\s\S]{0,120}?createCobraGroundedPilotControlState\(\)/,
@@ -190,8 +191,8 @@ test("Hold the Bridge wires Ready before every authority advance without swallow
   assert.match(restart, /const requireNeutralEdge = PLAY_MODE && authorityState !== null/,
     "the cold boot may preserve its first input, while an established sortie requires neutral");
   assert.match(restart,
-    /sortieReadiness\.reset\(!PLAY_MODE, \{ requireNeutral: requireNeutralEdge \}\)/,
-    "play restart must preserve lab/play polarity and reject controls still held across reset");
+    /sortieReadiness\.reset\(!PLAY_MODE \|\| BATTLE_REVIEW_MODE, \{[\s\S]{0,100}?requireNeutral: BATTLE_REVIEW_MODE \? false : requireNeutralEdge,[\s\S]{0,30}?\}\)/,
+    "ordinary play restart must reject held controls while unattended battle proof stays armed");
   assert.match(restart,
     /pilotControls = PLAY_MODE[\s\S]{0,160}?createCobraGroundedPilotControlState\(\)/,
     "play restart must not mirror authority hover trim into the pilot lever");

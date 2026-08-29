@@ -36,11 +36,70 @@ export async function serveStatic(root, options = {}) {
     rangeBytesRead: 0,
     rangeRequests: 0,
     largestReadAllocation: 0,
+    telemetryRequests: 0,
+    telemetryBytes: 0,
+    telemetryRows: 0,
+    telemetryHeaderRows: 0,
+    telemetryStateRows: 0,
+    telemetryCobraStateRows: 0,
+    telemetryMinimumCobraAuthorityTick: null,
+    telemetryMaximumCobraAuthorityTick: null,
+    telemetrySessions: new Set(),
+    telemetryCobraSessions: new Set(),
   };
   const server = http.createServer(async (request, response) => {
     try {
       const url = new URL(request.url, "http://127.0.0.1");
       let pathname = decodeURIComponent(url.pathname);
+      if (request.method === "POST" && pathname === "/api/telemetry") {
+        const chunks = [];
+        let bytes = 0;
+        for await (const chunk of request) {
+          bytes += chunk.length;
+          if (bytes > 2 * 1024 * 1024) {
+            response.writeHead(413).end("telemetry batch too large");
+            return;
+          }
+          chunks.push(chunk);
+        }
+        let batch;
+        try {
+          batch = JSON.parse(Buffer.concat(chunks, bytes).toString("utf8"));
+        } catch {
+          response.writeHead(400).end("invalid telemetry JSON");
+          return;
+        }
+        if (typeof batch?.session !== "string" || !Array.isArray(batch?.rows)) {
+          response.writeHead(400).end("invalid telemetry batch");
+          return;
+        }
+        diagnostics.telemetryRequests++;
+        diagnostics.telemetryBytes += bytes;
+        diagnostics.telemetryRows += batch.rows.length;
+        diagnostics.telemetrySessions.add(batch.session);
+        for (const row of batch.rows) {
+          if (row?.k === "hdr") diagnostics.telemetryHeaderRows++;
+          if (row?.k !== "st" || !row.s || typeof row.s !== "object") continue;
+          diagnostics.telemetryStateRows++;
+          const authorityTick = Number(row.s.cobra_authority_tick);
+          if (!Number.isFinite(authorityTick)) continue;
+          diagnostics.telemetryCobraStateRows++;
+          diagnostics.telemetryCobraSessions.add(batch.session);
+          diagnostics.telemetryMinimumCobraAuthorityTick =
+            diagnostics.telemetryMinimumCobraAuthorityTick === null
+              ? authorityTick
+              : Math.min(diagnostics.telemetryMinimumCobraAuthorityTick, authorityTick);
+          diagnostics.telemetryMaximumCobraAuthorityTick =
+            diagnostics.telemetryMaximumCobraAuthorityTick === null
+              ? authorityTick
+              : Math.max(diagnostics.telemetryMaximumCobraAuthorityTick, authorityTick);
+        }
+        response.writeHead(202, {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "no-store",
+        }).end('{"accepted":true}');
+        return;
+      }
       if (pathname.endsWith("/")) pathname += "index.html";
       const filePath = normalize(join(rootNormal, pathname));
       if (filePath !== rootNormal && !filePath.startsWith(rootNormal)) {
@@ -126,6 +185,10 @@ export async function serveStatic(root, options = {}) {
   return {
     url: `http://127.0.0.1:${port}/`,
     close: () => new Promise((resolvePromise) => server.close(resolvePromise)),
-    diagnostics: () => Object.freeze({ ...diagnostics }),
+    diagnostics: () => Object.freeze({
+      ...diagnostics,
+      telemetrySessions: diagnostics.telemetrySessions.size,
+      telemetryCobraSessions: diagnostics.telemetryCobraSessions.size,
+    }),
   };
 }

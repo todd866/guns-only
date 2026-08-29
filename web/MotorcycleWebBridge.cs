@@ -95,6 +95,19 @@ public static partial class MotorcycleWebBridge
             runtime.Resume();
     }
 
+    /// <summary>
+    /// Ends the current track session without treating Escape/pause as a terminal outcome.
+    /// The browser reads the resulting immutable Finished snapshot into the ride debrief.
+    /// </summary>
+    [JSExport]
+    public static void EndRide()
+    {
+        WeekendRideMissionRuntime runtime = RequireRuntime();
+        runtime.Finish();
+        _pendingGearShift = 0;
+        _accumulatorSeconds = 0.0;
+    }
+
     [JSExport]
     public static void ResetToGrid()
     {

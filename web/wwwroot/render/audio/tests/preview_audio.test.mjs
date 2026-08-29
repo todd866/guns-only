@@ -192,11 +192,14 @@ test("preview keeps one graph and uses the production-shaped dynamics chain", as
   assert.match(source, /replaceJetSampleBeds\(voices, context, beds, \{ character \}\)/);
   assert.match(source, /generation !== bedLoadGeneration \|\| character !== bedCharacter/);
   assert.match(source, /createDynamicsCompressor\(\)/);
-  assert.match(source, /previewCompressor\.threshold\.value = -18/);
-  assert.match(source, /previewCompressor\.knee\.value = 12/);
-  assert.match(source, /previewCompressor\.ratio\.value = 4\.5/);
-  assert.match(source, /previewCompressor\.attack\.value = 0\.005/);
-  assert.match(source, /previewCompressor\.release\.value = 0\.18/);
+  assert.match(source, /previewCompressor\.threshold\.value = -8/);
+  assert.match(source, /previewCompressor\.knee\.value = 8/);
+  assert.match(source, /previewCompressor\.ratio\.value = 2\.25/);
+  assert.match(source, /previewCompressor\.attack\.value = 0\.012/);
+  assert.match(source, /previewCompressor\.release\.value = 0\.12/);
+  assert.match(source, /previewSubsonicCut\.frequency\.value = 24/);
+  assert.match(source, /previewFatigueShelf\.frequency\.value = 4200/);
+  assert.match(source, /previewFatigueShelf\.gain\.value = -1\.4/);
   assert.doesNotMatch(source, /createEngineVoices\(context, context\.destination/);
 });
 

@@ -14,12 +14,10 @@ import { isAgedF22, resolvePropulsionCharacter } from "./audio_character.js";
 
 const GUN_REPORT_NOISE_POOL_SIZE = 12;
 
-// The gun is the entire game and its beds were authored well under the shared -18 dBFS bus
-// compressor, so firing read thin against the engine. Lift the whole family by one trim rather
-// than re-authoring each level: every gun keeps its character ratios (the M3's slow mechanical
-// clatter, the GSh-30-1's heavy single report), and the shared compressor now ducks the
-// propulsion bed under fire instead of burying the guns in it. Tuning knob — raise or lower here.
-const GUN_LOUDNESS_TRIM = 1.8;
+// Gunfire now receives an explicit, bounded propulsion duck in flight_audio. Keep the weapon
+// family above its original conservative authoring level, but stop using an oversized input trim
+// to force the entire shared compressor into gain reduction. Character ratios remain unchanged.
+const GUN_LOUDNESS_TRIM = 1.35;
 
 function gunSoundProfile(profile) {
   return Object.freeze({
@@ -398,6 +396,10 @@ export function createEventVoices(audioContext, destination) {
     lastHits: 0,
     lastOpponentHits: 0,
     lastOpponentAlive: true,
+    lastAim9Remaining: null,
+    lastAim9InFlight: null,
+    lastAim9StateCode: null,
+    aim9LaunchCount: 0,
     lastRcsPulseAt: -Infinity,
     gunShotIndex: 0,
     // Lazily filled and then reused. The filter/tone envelopes still vary per report, but the
@@ -871,7 +873,11 @@ export function updateContactAcousticVoices(
       passScale,
       cockpitMode,
       variation,
-      { seconds: passSeconds, approachDoppler: voices.approachDoppler },
+      {
+        seconds: passSeconds,
+        approachDoppler: voices.approachDoppler,
+        passIndex: voices.passTransientCount,
+      },
     );
     voices.passTransientCount += 1;
   }
@@ -927,7 +933,7 @@ function scheduleContactPass(
   passScale,
   cockpit,
   variation,
-  { seconds = 0, approachDoppler = 1 } = {},
+  { seconds = 0, approachDoppler = 1, passIndex = 0 } = {},
 ) {
   const scale = passScale * (cockpit ? 0.78 : 1.15);
   // Duration now follows the geometry that produced the pass rather than a fixed constant, so a
@@ -935,7 +941,8 @@ function scheduleContactPass(
   const duration = fighter
     ? clamp(seconds || 0.68, 0.3, 1.1)
     : clamp((seconds || 1.35) * 1.5, 0.7, 2.0);
-  const character = 1 + variation * 0.06;
+  const passVariation = deterministicUnit(Math.max(0, passIndex) + 1);
+  const character = 1 + variation * 0.045 + (passVariation - 0.5) * 0.035;
   // The transient starts where the approaching bed left off and lands where the receding bed
   // arrives, so the crack is the continuation of the Doppler sweep and not a pasted-on whoosh.
   const approach = clamp(approachDoppler, 1, 1.9);
@@ -943,7 +950,8 @@ function scheduleContactPass(
   const noise = audioContext.createBufferSource();
   noise.buffer = shortNoiseBuffer(
     audioContext,
-    fighter ? 0x50415353 : 0x50524F50,
+    (fighter ? 0x50415353 : 0x50524F50)
+      ^ Math.imul(Math.max(0, passIndex) + 1, 0x45d9f3b),
     duration,
   );
   const filter = audioContext.createBiquadFilter();
@@ -1011,21 +1019,21 @@ export function updateBuffetVoice(voices, audioContext, state, { enabled = true 
   );
 }
 
-/// Speed-brake roar plus legacy generic-airframe load cues.
-/// The F-22 deliberately excludes the authored G/suit/harness/unload stack: its load state is
-/// conveyed by aerodynamic buffet and airflow, not an unreferenced cockpit effect.
+/// Speed-brake roar plus legacy fixed-wing load cues.
+/// Only aircraft profiles that explicitly use the generic/experimental fixed-wing cockpit get
+/// the authored G/suit/harness/unload stack. Rotorcraft, Fire Boss, and the motorcycle can all
+/// publish load values, but those are not evidence that their crew is wearing a fighter G-suit.
 export function updateAirframeCueVoices(voices, audioContext, state, { enabled = true } = {}) {
   if (!voices || !audioContext) return;
   const now = audioContext.currentTime;
   const propulsionCharacter = resolvePropulsionCharacter(state);
   const f22 = propulsionCharacter === "f22";
   const f22Cockpit = f22 && resolveCockpitPerspective(state);
-  // Neither modern fighter has a sourced cockpit basis for the generic suit/harness/strain stack.
-  // Their aerodynamic buffet and aircraft-specific airflow graphs remain live; pulling G alone
-  // must not manufacture the conspicuous swoosh the F-14 shipped with in Build 328.
+  // Neither modern fighter has a sourced cockpit basis for this generic stack. The experimental
+  // Rapier and legacy generic jet retain it as an authored capability; every other vehicle must
+  // opt in instead of inheriting fighter equipment from a permissive deny-list.
   const syntheticGCuesEnabled = enabled
-    && propulsionCharacter !== "f22"
-    && propulsionCharacter !== "f14";
+    && (propulsionCharacter === "jet" || propulsionCharacter === "rapier");
   const q01 = clamp01(dynamicPressureProxy(state));
   const qPa = dynamicPressurePa(state);
 
@@ -1571,7 +1579,7 @@ function scheduleTrapFail(audioContext, destination, at) {
   noise.start(at); noise.stop(at + 0.22);
 }
 
-/// Hit sparks + destroy boom from snapshot edges (hits / opponent_alive).
+/// Hit sparks, AIM-9 launch, and destroy boom from authoritative snapshot edges.
 export function updateCombatCueVoices(voices, audioContext, state, { enabled = true } = {}) {
   if (!voices || !audioContext) return;
   const now = audioContext.currentTime;
@@ -1580,6 +1588,36 @@ export function updateCombatCueVoices(voices, audioContext, state, { enabled = t
   const alive = selectedOpponentAlive(state);
   const targetRangeM = Math.max(0, finiteNumber(state?.range_m) ?? 450);
   const targetScale = Math.max(0.18, 1 / (1 + Math.max(0, targetRangeM - 80) / 720));
+  const rawAim9Remaining = finiteNumber(state?.aim9_remaining);
+  const aim9Remaining = rawAim9Remaining == null
+    ? null
+    : Math.max(0, Math.trunc(rawAim9Remaining));
+  const aim9InFlight = state?.aim9_in_flight === true;
+  const aim9StateCode = Math.max(0, Math.trunc(finiteNumber(state?.aim9_state_code) ?? 0));
+  // A decrement is the durable authority edge. Seeking covers the first audible frame after the
+  // browser unlocks its AudioContext, where no prior running frame may exist to establish a
+  // magazine baseline. Muted frames still consume all three fields below, so enabling audio later
+  // cannot replay an old launch.
+  // The false/null -> true edge is the per-flight latch. Magazine and seeker fields are written
+  // atomically by current authority, but retained/bridged frames may expose them on adjacent
+  // presentation frames; requiring a new flight prevents those two facts from double-triggering.
+  const newAim9Flight = aim9InFlight && voices.lastAim9InFlight !== true;
+  const aim9Launched = newAim9Flight && (
+    (voices.lastAim9Remaining != null
+      && aim9Remaining != null
+      && aim9Remaining < voices.lastAim9Remaining)
+    || aim9StateCode === 1
+  );
+
+  if (enabled && aim9Launched) {
+    scheduleAim9Launch(
+      audioContext,
+      voices.destination,
+      now,
+      voices.aim9LaunchCount,
+    );
+    voices.aim9LaunchCount += 1;
+  }
 
   if (enabled && hits > (voices.lastHits || 0)) {
     const n = Math.min(4, hits - voices.lastHits);
@@ -1605,6 +1643,52 @@ export function updateCombatCueVoices(voices, audioContext, state, { enabled = t
   voices.lastHits = hits;
   voices.lastOpponentHits = opponentHits;
   voices.lastOpponentAlive = alive;
+  voices.lastAim9Remaining = aim9Remaining;
+  voices.lastAim9InFlight = aim9InFlight;
+  voices.lastAim9StateCode = aim9StateCode;
+}
+
+function scheduleAim9Launch(audioContext, destination, at, launchIndex) {
+  // Three short components keep the action legible in a loud cockpit: a structure-borne rail
+  // thump, the eject/igniter crack, then a filtered motor rush. This is presentation feedback for
+  // the published launch edge, not a claim to reproduce a specific Sidewinder recording.
+  const rail = audioContext.createOscillator();
+  rail.type = "triangle";
+  rail.frequency.setValueAtTime(105, at);
+  rail.frequency.exponentialRampToValueAtTime(42, at + 0.13);
+  const railEnv = audioContext.createGain();
+  railEnv.gain.setValueAtTime(0.0001, at);
+  railEnv.gain.exponentialRampToValueAtTime(0.17, at + 0.004);
+  railEnv.gain.exponentialRampToValueAtTime(0.0001, at + 0.16);
+  rail.connect(railEnv).connect(destination);
+
+  const ignition = audioContext.createBufferSource();
+  ignition.buffer = shortNoiseBuffer(
+    audioContext,
+    0x41394c4e ^ Math.imul(launchIndex + 1, 0x45d9f3b),
+    0.48,
+  );
+  const ignitionHighpass = audioContext.createBiquadFilter();
+  ignitionHighpass.type = "highpass";
+  ignitionHighpass.frequency.value = 460;
+  ignitionHighpass.Q.value = 0.52;
+  const ignitionBandpass = audioContext.createBiquadFilter();
+  ignitionBandpass.type = "bandpass";
+  ignitionBandpass.frequency.setValueAtTime(1_050, at);
+  ignitionBandpass.frequency.exponentialRampToValueAtTime(2_450, at + 0.22);
+  ignitionBandpass.Q.value = 0.64;
+  const ignitionEnv = audioContext.createGain();
+  ignitionEnv.gain.setValueAtTime(0.0001, at);
+  ignitionEnv.gain.exponentialRampToValueAtTime(0.22, at + 0.012);
+  ignitionEnv.gain.exponentialRampToValueAtTime(0.075, at + 0.12);
+  ignitionEnv.gain.exponentialRampToValueAtTime(0.0001, at + 0.45);
+  ignition.connect(ignitionHighpass).connect(ignitionBandpass)
+    .connect(ignitionEnv).connect(destination);
+
+  rail.start(at);
+  rail.stop(at + 0.18);
+  ignition.start(at);
+  ignition.stop(at + 0.48);
 }
 
 function scheduleHitImpact(audioContext, destination, at, onOwnship, distanceScale) {

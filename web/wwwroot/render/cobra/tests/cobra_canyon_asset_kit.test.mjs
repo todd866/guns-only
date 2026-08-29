@@ -7,8 +7,15 @@ import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   COBRA_CANYON_ASSET_ROLES,
   COBRA_OBJECTIVE_CLEAR_RADIUS_M,
+  COBRA_OBJECTIVE_PADDY_CLEAR_RADIUS_M,
+  COBRA_PADDY_MAX_FOOTPRINT_SPREAD_M,
+  COBRA_PADDY_MAX_TERRAIN_GRADIENT,
+  COBRA_VILLAGE_MAX_FOOTPRINT_SPREAD_M,
+  COBRA_VILLAGE_MAX_TERRAIN_GRADIENT,
   cobraCanyonAssetRoleScaleForTests,
   cobraCanyonFinalJungleScaleForTests,
+  cobraCanyonPaddyFootprintFitsTerrainForTests,
+  cobraCanyonVillageFootprintFitsTerrainForTests,
   createCobraCanyonAssetKit,
 } from "../cobra_canyon_asset_kit.js";
 
@@ -67,11 +74,11 @@ test("builds one bounded authored batch per visual role across every tier", () =
     assert.equal(kit.roleCounts.authoredAmbientArchetypes, 11);
     assert.equal(kit.roleCounts.authoredLandmarkArchetypes, 11);
     assert.equal(kit.roleCounts.authoredSetPieceArchetypeReferences, 58);
-    // Jungle set-piece archetypes expand to three stands, except inside the Camp Ember and
-    // capture-point clear eyes. Those 135 m objective windows keep the garrison/bridge readable
-    // while preserving the authored walls beyond the fight itself.
-    assert.equal(kit.roleCounts.authoredSetPieceAssetReferences, 63);
-    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, 63);
+    // Jungle set-piece archetypes expand to three stands. Role-specific Camp Ember/objective
+    // windows remove tall visual clutter while retaining knee-high understory, then reject land
+    // assets whose complete footprint would occupy the river floor.
+    assert.equal(kit.roleCounts.authoredSetPieceAssetReferences, 50);
+    assert.equal(kit.roleCounts.renderedSetPieceAssetInstances, 50);
     assert.equal(
       kit.roleCounts.ambientBatchInstances
         + kit.roleCounts.renderedSetPieceAssetInstances
@@ -138,19 +145,97 @@ test("builds one bounded authored batch per visual role across every tier", () =
     const objectivePoints = plan.landmarks
       .filter((entry) => objectiveIds.has(entry.id))
       .map((entry) => entry.positionLocalM);
+    assert.ok(COBRA_OBJECTIVE_CLEAR_RADIUS_M >= 220,
+      "the tall-scatter clearing must expose the full authored contested cell, not only its flag");
+    assert.ok(COBRA_OBJECTIVE_PADDY_CLEAR_RADIUS_M >= 350,
+      "rigid paddy panels must stay outside the complete Iron Bell battle composition");
     for (const role of ["jungle", "plantation"]) {
       const mesh = meshes.get(role);
+      const placementByInstanceId = new Map(
+        mesh.userData.cobraCanyonInstances.map((entry) => [entry.instanceId, entry]),
+      );
       for (let index = 0; index < mesh.count; index++) {
         mesh.getMatrixAt(index, jungleMatrix);
         junglePosition.setFromMatrixPosition(jungleMatrix);
         for (const [objectiveEast, , objectiveNorth] of objectivePoints) {
           const dx = junglePosition.x - objectiveEast;
           const dz = (-junglePosition.z) - objectiveNorth;
-          assert.ok(dx * dx + dz * dz
-            >= COBRA_OBJECTIVE_CLEAR_RADIUS_M * COBRA_OBJECTIVE_CLEAR_RADIUS_M,
-          `${role} must not bury a capture-point/garrison cue`);
+          const insideObjective = dx * dx + dz * dz
+            < COBRA_OBJECTIVE_CLEAR_RADIUS_M * COBRA_OBJECTIVE_CLEAR_RADIUS_M;
+          if (!insideObjective) continue;
+          const placement = placementByInstanceId.get(index);
+          assert.equal(role, "jungle", "plantation canopy must stay outside an objective eye");
+          assert.match(placement?.archetypeId ?? "", /jungle-understory/,
+            "only authored understory may remain inside an objective eye");
+          assert.ok(placement.heightM <= 0.7,
+            "objective understory must stay below the gun-pit and infantry silhouettes");
         }
       }
+    }
+    const paddyMesh = meshes.get("paddy");
+    const [ironBellEast, , ironBellNorth] = plan.landmarks.find(
+      (entry) => entry.id === "landmark.cobra-canyon.iron-bell-bridge.v1",
+    ).positionLocalM;
+    for (let index = 0; index < paddyMesh.count; index++) {
+      paddyMesh.getMatrixAt(index, jungleMatrix);
+      junglePosition.setFromMatrixPosition(jungleMatrix);
+      const dx = junglePosition.x - ironBellEast;
+      const dz = (-junglePosition.z) - ironBellNorth;
+      assert.ok(dx * dx + dz * dz
+        >= COBRA_OBJECTIVE_PADDY_CLEAR_RADIUS_M * COBRA_OBJECTIVE_PADDY_CLEAR_RADIUS_M,
+      "paddy slabs must not masquerade as destroyed bridge pieces at Iron Bell");
+    }
+    assert.equal(COBRA_PADDY_MAX_TERRAIN_GRADIENT, 0.04);
+    assert.equal(COBRA_PADDY_MAX_FOOTPRINT_SPREAD_M, 2);
+    for (const placement of paddyMesh.userData.cobraCanyonInstances) {
+      assert.equal(cobraCanyonPaddyFootprintFitsTerrainForTests(
+        plan,
+        placement.eastM,
+        placement.northM,
+        { widthM: placement.widthM, depthM: placement.depthM },
+        placement.yaw,
+      ), true, `paddy ${placement.id} must fit its complete rigid footprint on level terrain`);
+    }
+    assert.equal(cobraCanyonPaddyFootprintFitsTerrainForTests(
+      plan,
+      -2_500,
+      -700,
+      { widthM: 60, depthM: 90 },
+      0,
+    ), false, "a paddy panel must be rejected on the Iron Bell gorge wall");
+    const villageMesh = meshes.get("village");
+    assert.equal(COBRA_VILLAGE_MAX_TERRAIN_GRADIENT, 0.12);
+    assert.equal(COBRA_VILLAGE_MAX_FOOTPRINT_SPREAD_M, 6);
+    for (const placement of villageMesh.userData.cobraCanyonInstances) {
+      assert.equal(cobraCanyonVillageFootprintFitsTerrainForTests(
+        plan,
+        placement.eastM,
+        placement.northM,
+        { widthM: placement.widthM, depthM: placement.depthM },
+        placement.yaw,
+      ), true, `village ${placement.id} must fit its complete compound footprint`);
+    }
+    assert.equal(cobraCanyonVillageFootprintFitsTerrainForTests(
+      plan,
+      -2_500,
+      -700,
+      { widthM: 44, depthM: 42 },
+      0,
+    ), false, "a village compound must be rejected on the Iron Bell gorge wall");
+    kit.update({
+      cameraPosition: { x: ironBellEast, y: 0, z: -ironBellNorth },
+    });
+    const ironBellVillages = villageMesh.userData.cobraCanyonInstances;
+    assert.ok(ironBellVillages.length > 0,
+      "the Iron Bell resident set must retain valid valley villages after rejecting gorge-wall compounds");
+    for (const placement of ironBellVillages) {
+      assert.equal(cobraCanyonVillageFootprintFitsTerrainForTests(
+        plan,
+        placement.eastM,
+        placement.northM,
+        { widthM: placement.widthM, depthM: placement.depthM },
+        placement.yaw,
+      ), true, `Iron Bell village ${placement.id} must fit its complete compound footprint`);
     }
     assert.equal(jungleMesh.material.side, THREE.DoubleSide);
     assert.ok(triangleCount(jungleGeometry) >= 10,
@@ -172,7 +257,8 @@ test("consumes descriptor scale and authored palette instead of generic legacy v
   const { kit } = create("balanced");
   const plantation = roleMeshes(kit.group).get("plantation");
   const descriptorEntry = plantation.userData.cobraCanyonInstances.find(
-    (entry) => entry.archetypeId === "archetype.cobra-canyon.plantation-row.v1",
+    (entry) => entry.archetypeId === "archetype.cobra-canyon.plantation-row.v1"
+      && Math.abs(entry.heightM - 18) < 1e-5,
   );
   assert.ok(descriptorEntry);
   const matrix = new THREE.Matrix4();

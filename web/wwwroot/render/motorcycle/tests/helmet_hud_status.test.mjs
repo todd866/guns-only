@@ -5,33 +5,58 @@ import {
   formatLapTime,
   minimapDotPlacement,
   trackDayStatusLine,
+  weekendHudLayerVisibility,
 } from "../helmet_hud.js";
 
 test("track-day status makes course validity and rider mode explicit", () => {
   assert.equal(
     trackDayStatusLine({ phase: "active", on_track: false }).text,
-    "OFF COURSE · RETURN BETWEEN CURBS",
+    "OFF COURSE · RETURN TO PAINT",
   );
-  assert.match(
+  assert.equal(
     trackDayStatusLine({
       phase: "active",
       on_track: true,
-      control_mode: "assisted",
-      lap: 2,
-      lap_time_s: 65.4,
-      off_track_s: 0,
+      lap_valid: false,
+      off_track_s: 1.25,
     }).text,
-    /^RIDER ASSIST · LAP 2 · 1:05\.40/,
+    "LAP SPOILT · 1.3s OFF",
   );
-  assert.match(
-    trackDayStatusLine({
-      phase: "active",
-      on_track: true,
-      control_mode: "raw",
-      lap: 0,
-    }).text,
-    /^RAW · LAP 0/,
-  );
+  assert.equal(trackDayStatusLine({ phase: "active", on_track: true }).text, "");
+});
+
+test("assisted HUD keeps the road clear while raw physics retains engineering instruments", () => {
+  assert.deepEqual(weekendHudLayerVisibility({
+    control_mode: "assisted",
+    clutch_mode: "auto",
+  }), {
+    inputBars: false,
+    clutchMode: false,
+    pitchBalance: false,
+    contactPatch: false,
+  });
+  assert.equal(weekendHudLayerVisibility({
+    control_mode: "assisted",
+    wheelie_balance: 0.2,
+  }).pitchBalance, true);
+  assert.equal(weekendHudLayerVisibility({
+    control_mode: "assisted",
+    pitch_reflex: 0.8,
+  }).pitchBalance, false, "ordinary reflex activity must not pin the engineering tape on-screen");
+  assert.equal(weekendHudLayerVisibility({
+    control_mode: "assisted",
+    wheelie_balance: -1,
+    stoppie_balance: -1,
+  }).pitchBalance, false, "inactive authority sentinels must not look like a balance event");
+  assert.deepEqual(weekendHudLayerVisibility({
+    control_mode: "raw",
+    clutch_mode: "manual",
+  }), {
+    inputBars: true,
+    clutchMode: true,
+    pitchBalance: true,
+    contactPatch: true,
+  });
 });
 
 test("lap time carries seconds into minutes instead of rendering 24:63", () => {

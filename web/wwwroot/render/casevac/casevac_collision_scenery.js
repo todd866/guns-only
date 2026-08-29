@@ -19,15 +19,15 @@ const PRIMITIVES = Object.freeze({
 const COLORS = Object.freeze({
   pole: 0x4f4337,
   wire: 0x252a2c,
-  orchardAuthorityMass: 0x304b2e,
   orchardTrunk: 0x5b4633,
   orchardCanopy: 0x416b3d,
-  clinicAuthorityMass: 0x898d85,
   clinicWall: 0xb9b8aa,
   clinicWing: 0x9da5a2,
   clinicRoof: 0x59666a,
   clinicConcrete: 0x777b77,
   clinicWindow: 0x34454a,
+  clinicMark: 0xe55b49,
+  clinicEntrance: 0xe7dcc2,
   genericObstacle: 0x85745b,
 });
 
@@ -199,18 +199,30 @@ function createMaterials(THREE, owner) {
       polygonOffsetUnits: surfaceDressing ? -2 : 0,
     }),
   );
+  // The projected AABB remains in the graph so bounds/debug inspection stay exact, but it must
+  // never render as a building-sized slab. Readable orchard/clinic dressing below carries the
+  // visual warning; simulation authority remains the immutable projected obstacle.
+  const authorityEnvelope = owner.material(new THREE.MeshLambertMaterial({
+    color: 0x000000,
+    transparent: false,
+    opacity: 1,
+    depthTest: false,
+    depthWrite: false,
+    colorWrite: false,
+  }));
   return Object.freeze({
     pole: lambert(COLORS.pole),
     wire: lambert(COLORS.wire),
-    orchardAuthorityMass: lambert(COLORS.orchardAuthorityMass),
+    authorityEnvelope,
     orchardTrunk: lambert(COLORS.orchardTrunk),
     orchardCanopy: lambert(COLORS.orchardCanopy, 0.08, true),
-    clinicAuthorityMass: lambert(COLORS.clinicAuthorityMass),
-    clinicWall: lambert(COLORS.clinicWall, 0.04, true),
-    clinicWing: lambert(COLORS.clinicWing, 0.04, true),
-    clinicRoof: lambert(COLORS.clinicRoof, 0.04, true),
-    clinicConcrete: lambert(COLORS.clinicConcrete, 0.04, true),
+    clinicWall: lambert(COLORS.clinicWall, 0.12, true),
+    clinicWing: lambert(COLORS.clinicWing, 0.1, true),
+    clinicRoof: lambert(COLORS.clinicRoof, 0.08, true),
+    clinicConcrete: lambert(COLORS.clinicConcrete, 0.08, true),
     clinicWindow: lambert(COLORS.clinicWindow, 0.12, true),
+    clinicMark: lambert(COLORS.clinicMark, 0.55, true),
+    clinicEntrance: lambert(COLORS.clinicEntrance, 0.18, true),
     genericObstacle: lambert(COLORS.genericObstacle),
   });
 }
@@ -298,7 +310,8 @@ function authorityGeometry(
     authorityBoundsExact: true,
     conservativeSolidCollision: true,
     fullVolumeCoverage,
-    opaquePhysicalMass: fullVolumeCoverage,
+    opaquePhysicalMass: false,
+    visualEnvelopeHidden: fullVolumeCoverage,
   });
 }
 
@@ -404,11 +417,11 @@ function createOrchardCompound(
     THREE,
     owner,
     group,
-    materials.orchardAuthorityMass,
+    materials.authorityEnvelope,
     obstacle,
     representation,
-    "orchard-authority-solid-mass",
-    "CASEVAC_ORCHARD_EXACT_AUTHORITY_SOLID_MASS",
+    "orchard-authority-envelope",
+    "CASEVAC_ORCHARD_EXACT_AUTHORITY_ENVELOPE",
     bounds,
   );
 
@@ -582,11 +595,11 @@ function createClinicCompound(
     THREE,
     owner,
     group,
-    materials.clinicAuthorityMass,
+    materials.authorityEnvelope,
     obstacle,
     representation,
-    "clinic-authority-solid-mass",
-    "CASEVAC_CLINIC_EXACT_AUTHORITY_SOLID_MASS",
+    "clinic-authority-envelope",
+    "CASEVAC_CLINIC_EXACT_AUTHORITY_ENVELOPE",
     bounds,
   );
 
@@ -722,6 +735,76 @@ function createClinicCompound(
       new THREE.Vector3(windowWidth, windowHeight, windowDepth),
     );
   }
+
+  // A low helicopter sees whichever facade the route and wind expose. Put the same large,
+  // collision-contained receiving mark on both long faces and both ends so the clinic cannot
+  // collapse back into an anonymous dark rectangle during a banked approach.
+  const markDepth = Math.min(0.34, Math.min(mainWidth, mainDepth) * 0.006);
+  const markCentreY = bounds.minimum.y + mainHeight * 0.61;
+  const markCentreX = bounds.centre.x - mainWidth * 0.2;
+  for (const [face, z] of [
+    ["FRONT", bounds.maximum.z - markDepth * 0.5],
+    ["REAR", bounds.maximum.z - mainDepth + markDepth * 0.5],
+  ]) {
+    add(
+      materials.clinicMark,
+      "clinic-receiving-cross",
+      `CASEVAC_CLINIC_${face}_CROSS_HORIZONTAL`,
+      new THREE.Vector3(markCentreX, markCentreY, z),
+      new THREE.Vector3(18, 3.4, markDepth),
+    );
+    add(
+      materials.clinicMark,
+      "clinic-receiving-cross",
+      `CASEVAC_CLINIC_${face}_CROSS_VERTICAL`,
+      new THREE.Vector3(markCentreX, markCentreY, z),
+      new THREE.Vector3(4.2, 14, markDepth),
+    );
+    add(
+      materials.clinicEntrance,
+      "clinic-receiving-entrance",
+      `CASEVAC_CLINIC_${face}_RECEIVING_ENTRANCE`,
+      new THREE.Vector3(
+        bounds.centre.x + mainWidth * 0.23,
+        bounds.minimum.y + 3.8,
+        z,
+      ),
+      new THREE.Vector3(8.5, 7.6, markDepth),
+    );
+  }
+  for (const [face, x] of [
+    ["WEST", bounds.centre.x - mainWidth * 0.5 + markDepth * 0.5],
+    ["EAST", bounds.centre.x + mainWidth * 0.5 - markDepth * 0.5],
+  ]) {
+    add(
+      materials.clinicMark,
+      "clinic-receiving-cross",
+      `CASEVAC_CLINIC_${face}_CROSS_HORIZONTAL`,
+      new THREE.Vector3(x, markCentreY, mainCentreZ),
+      new THREE.Vector3(markDepth, 3.4, 18),
+    );
+    add(
+      materials.clinicMark,
+      "clinic-receiving-cross",
+      `CASEVAC_CLINIC_${face}_CROSS_VERTICAL`,
+      new THREE.Vector3(x, markCentreY, mainCentreZ),
+      new THREE.Vector3(markDepth, 14, 4.2),
+    );
+  }
+  add(
+    materials.clinicMark,
+    "clinic-roof-cross",
+    "CASEVAC_CLINIC_ROOF_CROSS_EAST_WEST",
+    new THREE.Vector3(bounds.centre.x, bounds.maximum.y - 0.05, mainCentreZ),
+    new THREE.Vector3(22, 0.1, 5),
+  );
+  add(
+    materials.clinicMark,
+    "clinic-roof-cross",
+    "CASEVAC_CLINIC_ROOF_CROSS_NORTH_SOUTH",
+    new THREE.Vector3(bounds.centre.x, bounds.maximum.y - 0.05, mainCentreZ),
+    new THREE.Vector3(5, 0.1, 22),
+  );
   return group;
 }
 

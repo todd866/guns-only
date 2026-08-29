@@ -1,5 +1,5 @@
 /**
- * First-visit Soniachne valley on-ramp. Storage sits in the guns-only.* family; it is not the
+ * First-visit Kestrel Gorge on-ramp. Storage sits in the guns-only.* family; it is not the
  * cobra/weekend-ride controls overlay (`guns-only.onboarding.*` + first_run_controls.js).
  */
 
@@ -26,7 +26,7 @@ export function markFirstRunValleySeen(storage) {
 }
 
 /**
- * First pending visit with no other programme query auto-starts the valley. Playwright
+ * First pending visit with no other programme query stages the valley Ready card. Playwright
  * (`navigator.webdriver`) keeps the six-tile picker unless `?firstRun=1`. `?menu=1` always
  * keeps the picker, including over a QA replay query.
  */
@@ -45,7 +45,7 @@ export function shouldAutoStartFirstRunValley({
   return firstRunPending === true;
 }
 
-/** Visible touch label stays FIRE. Aria names heaters only on this beat while they remain. */
+/** Aria names heaters only on this beat while they remain. */
 export function touchFireAriaLabel(state = {}) {
   const remaining = Number(state?.aim9_remaining);
   if (state?.mission_definition_id === FIRST_RUN_MISSION_ID
@@ -54,4 +54,13 @@ export function touchFireAriaLabel(state = {}) {
     return "Fire missile";
   }
   return "Fire guns";
+}
+
+/** The visible control must teach the same overloaded Fire contract as authority. */
+export function touchFireVisibleLabel(state = {}) {
+  const remaining = Number(state?.aim9_remaining);
+  if (state?.mission_definition_id === FIRST_RUN_MISSION_ID) {
+    return Number.isInteger(remaining) && remaining > 0 ? "FOX 2" : "GUNS";
+  }
+  return "FIRE";
 }

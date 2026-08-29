@@ -90,3 +90,10 @@ tmp/
 
 # Advisory inter-agent file claims (bin/claim) -- local coordination, not history.
 .agent-claims/
+.agent-frames/
+
+# Recorded-flight datasets for pilot cloning. A person's own telemetry, and large (tens of MB).
+# Regenerate with tools/telemetry/owner_engagements.py; publishing them is a deliberate choice,
+# not a default.
+analysis/owner-pilot-frames.jsonl
+analysis/owner-pilot-rows.jsonl

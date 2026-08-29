@@ -10,8 +10,17 @@ import {
   targetClosureReadout,
   targetRangeReadout,
   verticalSpeedText,
-  visualMergeWeaponsCue,
 } from "./render/hud/hud_readouts.js";
+import {
+  FIRST_RUN_VALLEY_MISSION_ID,
+  FirstRunWeaponsActionabilityLatch,
+  firstRunCombatPresentationSuppressed,
+  flightHudIsTerminal,
+  flightMissionGuidance,
+  missionGuidanceActionText,
+  missionGuidanceLayout,
+  topGunControlQuicklookPresentation,
+} from "./render/hud/mission_guidance.js";
 import { targetDataLineOwner } from "./render/hud/target_data_line.js";
 import {
   ContactRangeTracker,
@@ -21,7 +30,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=343";
+} from "./render/hud/contact_visibility.js?v=349";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import {
   carrierAoARelevant,
@@ -59,15 +68,15 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=343";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=349";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=343";
+} from "./render/mission/rapier_high_mach_instruments.js?v=349";
 import {
   limitsPanelPresentation,
   navigationRateReadout,
-} from "./render/hud/limits_panel.js?v=343";
+} from "./render/hud/limits_panel.js?v=349";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
 import {
   cobraAccelCaretPx,
@@ -77,7 +86,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=343";
+} from "./render/audio/flight_audio.js?v=349";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -350,6 +359,10 @@ class CombatHud {
     });
     this._gunSolutionCue = new DisplayCueQualifier({ acquireSeconds: 0.05, releaseSeconds: 0.09 });
     this._gunSolutionEntityId = "";
+    // SnapshotProjection publishes the generic merge hold separately from the first-run valley
+    // interlock. Keep the explicit WEAPONS HOT transition alive after its short banner expires so
+    // the persistent directive cannot advertise FOX 2 on the opening valley frame.
+    this._firstRunWeaponsLatch = new FirstRunWeaponsActionabilityLatch();
     this._signals = new HudSignalStabilizer();
     this._leadPipperEnvelope = new VisibilityEnvelope({
       attackSeconds: 0.035,
@@ -2144,6 +2157,12 @@ class CombatHud {
 
   drawRtbCue(state) {
     if (state.rtb !== true) return;
+    // Finished/terminal presentation belongs to the debrief, and the first-run objective card
+    // owns an accepted RTB until procedure guidance takes over. Never stack a stale BINGO card on
+    // either of those higher-order states.
+    if (flightHudIsTerminal(state)) return;
+    if (state?.mission_definition_id === FIRST_RUN_VALLEY_MISSION_ID
+        && state?.player_rtb_active === true) return;
     // Continuous recovery guidance already carries destination, energy and next-path intent.
     // Drawing the generic RTB card as well consumes the only safe compact-HUD lane.
     if (state?.approach_guidance_active === true && state?.approach_valid === true) return;
@@ -2594,9 +2613,14 @@ class CombatHud {
     ctx.restore();
   }
 
-  drawMobileTacticalState(frame, display = {}) {
+  drawMobileTacticalState(frame, display = {}, {
+    combatPresentationSuppressed = false,
+  } = {}) {
     const state = frame.state;
-    const fightActive = isFightHudActive(state);
+    // The first-run valley begins as a navigation lesson. Do not let the phone-only tactical
+    // rail leak an unseen contact's range, closure, gun state or corner cue while the desktop
+    // presentation correctly keeps those combat layers cold.
+    const fightActive = !combatPresentationSuppressed && isFightHudActive(state);
     const targetNumber = targetDataLineOwner(state) === "wingman" ? 2 : 1;
     const condensed = this.width < 360;
     const tactical = mobileTacticalReadout(state, display, {
@@ -4913,31 +4937,84 @@ class CombatHud {
   }
 
   drawVisualMergeWeaponsCue(frame) {
-    const cue = visualMergeWeaponsCue(frame.state);
+    const cue = flightMissionGuidance(frame.state, {
+      firstRunWeaponsActionable: this._firstRunWeaponsLatch.update(frame.state),
+    });
     if (this.canvas) this.canvas.__weaponsCueHit = null;
     if (!cue) return;
 
     const ctx = this.ctx;
     const accent = cue.level === "warning" ? RED
       : cue.level === "caution" ? AMBER : GREEN;
-    const y = this.height - this.safeInsets.bottom - (this.touchMode ? 110 : 21);
+    const geometry = missionGuidanceLayout({
+      width: this.width,
+      height: this.height,
+      touchMode: this.touchMode,
+      safeInsets: this.safeInsets,
+      secondaryBottom: this.getLayout().secondaryBottom,
+    });
+    const actionOptions = {
+      touchMode: this.touchMode,
+      fireBinding: controlBindingLabel(this.controlBindings?.fire, "KeyF"),
+      rtbBinding: controlBindingLabel(this.controlBindings?.knockItOff, "KeyO"),
+      foxTwoBinding: "R",
+    };
+    const primaryText = missionGuidanceActionText(cue.primaryAction, actionOptions);
+    const secondaryText = missionGuidanceActionText(cue.secondaryAction, actionOptions);
+    const actionLine = `NEXT · ${primaryText}`
+      + `${secondaryText ? `   ·   OPTION · ${secondaryText}` : ""}`;
     ctx.save();
-    ctx.font = "800 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    const maximumWidth = Math.max(72,
-      this.width - this.safeInsets.left - this.safeInsets.right - 20);
-    const width = Math.min(maximumWidth,
-      Math.max(92, ctx.measureText(cue.text).width + 28));
-    this.glassPanel((this.width - width) / 2, y - 14, width, 28, accent);
-    ctx.fillStyle = accent;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(this.fitText(cue.text, width - 18), this.width / 2, y);
+    this.glassPanel(geometry.x, geometry.y, geometry.width, geometry.height, accent);
+    const centerX = geometry.x + geometry.width / 2;
+    const textWidth = geometry.width - 22;
+    if (geometry.showDetail) {
+      ctx.fillStyle = GREEN_DIM;
+      ctx.font = "750 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillText(this.fitText(`OBJECTIVE · ${cue.objective}`, textWidth),
+        centerX, geometry.y + 11);
+      ctx.fillStyle = accent;
+      ctx.shadowColor = cue.level === "warning"
+        ? "rgba(255, 70, 93, 0.48)" : "rgba(77, 255, 136, 0.28)";
+      ctx.shadowBlur = 6;
+      ctx.font = "850 12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillText(this.fitText(cue.status, textWidth), centerX, geometry.y + 29);
+      ctx.shadowBlur = 0;
+      ctx.font = "800 8.5px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+      ctx.fillText(this.fitText(actionLine, textWidth), centerX, geometry.y + 46);
+    } else {
+      ctx.fillStyle = GREEN_DIM;
+      ctx.font = `${geometry.dense ? "700 7px" : "750 7.5px"} ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      ctx.fillText(this.fitText(`OBJ · ${cue.objective} · ${cue.status}`, textWidth),
+        centerX, geometry.y + (geometry.dense ? 10 : 12));
+      ctx.fillStyle = accent;
+      ctx.font = `${geometry.dense ? "800 9px" : "850 10px"} ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`;
+      ctx.fillText(this.fitText(actionLine, textWidth),
+        centerX, geometry.y + geometry.height - (geometry.dense ? 10 : 12));
+    }
     ctx.restore();
-    // The SAFE annunciation is also the control: tapping it releases the first-pass hold.
-    // Publish the hit rect in CSS-pixel HUD coordinates for the pointer layer.
-    if (this.canvas && frame.state.weapons_inhibited === true) {
-      this.canvas.__weaponsCueHit =
-        { x: (this.width - width) / 2, y: y - 14, w: width, h: 28 };
+
+    if (this._debug) {
+      this._debug.missionGuidance = {
+        id: cue.id,
+        phase: cue.phase,
+        objective: cue.objective,
+        status: cue.status,
+        primaryAction: primaryText,
+        secondaryAction: secondaryText,
+        ...geometry,
+      };
+    }
+    // Only the generic first-pass SAFE card is an authority control. The first-run valley strip
+    // stays read-only until its own pop-out transition, avoiding a dead tap target on ingress.
+    if (this.canvas && cue.interactive === true) {
+      this.canvas.__weaponsCueHit = {
+        x: geometry.x,
+        y: geometry.y,
+        w: geometry.width,
+        h: geometry.height,
+      };
     }
   }
 
@@ -5458,22 +5535,42 @@ class CombatHud {
     ctx.fillText("CONTROL QUICKLOOK", this.width / 2, y + 23);
 
     const binding = (action, fallback) => controlBindingLabel(this.controlBindings?.[action], fallback);
+    const firstRunValley = frame.state.mission_definition_id
+      === "mission.modern.visual-merge.first-run-valley.v1";
+    const fireBinding = binding("fire", "KeyF");
+    const topGunQuicklook = topGunControlQuicklookPresentation(frame.state, {
+      fireBinding,
+      rtbBinding: binding("knockItOff", "KeyO"),
+    });
+    const fireQuicklook = topGunQuicklook?.weapons ?? (firstRunValley
+      ? `${fireBinding}  FOX TWO → GUNS`
+      : `${fireBinding}  GUNS`);
+    const restartOrRtbQuicklook = topGunQuicklook?.returnToCarrier ?? "R  RESTART";
 
     const wideLines = [
       `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL   ·   ${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
-      `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   ${binding("fire", "KeyF")}  GUNS   ·   ${binding("padlock", "KeyV")}  PADLOCK ON / OFF   ·   TAB  NEXT CONTACT   ·   DRAG LOOK`,
-      `${binding("limitOverride", "Space")}  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA · REFUSES AUTO-GCAS — CAN DEPART)   ·   R  RESTART   ·   M  SOUND   ·   \`  SYNC MARK   ·   H  HIDE`,
-      "T  TIME COMPRESSION ON / OFF",
-      "P  RAPIER MISSION AUTOMATION   ·   Z  SHORT-RANGE MISSILE",
+      `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE TO HOLD)   ·   ${fireQuicklook}   ·   ${binding("padlock", "KeyV")}  PADLOCK ON / OFF   ·   TAB  NEXT CONTACT   ·   DRAG LOOK`,
+      `${binding("limitOverride", "Space")}  LIMIT OVERRIDE (HIGH-Q G / LOW-Q AOA · REFUSES AUTO-GCAS — CAN DEPART)   ·   ${restartOrRtbQuicklook}   ·   M  SOUND   ·   \`  SYNC MARK   ·   H  HIDE`,
+      "ESC  PAUSE / MENU   ·   T  TIME COMPRESSION ON / OFF",
+      topGunQuicklook
+        ? `TOP GUN · ${topGunQuicklook.weapons} · ${topGunQuicklook.returnToCarrier}`
+        : firstRunValley
+        ? `FIRST RUN · FOLLOW VALLEY · ${fireBinding} FIRES TWO HEATERS, THEN GUNS`
+        : "P  RAPIER MISSION AUTOMATION   ·   Z  SHORT-RANGE MISSILE",
     ];
     const compactLines = [
       `${binding("pull", "ArrowDown")} / ${binding("push", "ArrowUp")}  PULL / PUSH   ·   ${binding("rollLeft", "ArrowLeft")} / ${binding("rollRight", "ArrowRight")}  ROLL`,
       `${binding("rudderLeft", "KeyA")} / ${binding("rudderRight", "KeyD")}  RUDDER   ·   ${binding("powerUp", "KeyW")} / ${binding("powerDown", "KeyS")}  THROTTLE`,
       `${binding("gearToggle", "KeyG")}  GEAR   ·   ${binding("flapUp", "BracketLeft")} / ${binding("flapDown", "BracketRight")}  FLAPS UP / DOWN (RELEASE = HOLD)`,
-      `${binding("limitOverride", "Space")}  LIMIT OVR (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   ${binding("fire", "KeyF")}  GUNS   ·   M  SOUND`,
-      `${binding("padlock", "KeyV")}  PADLOCK   ·   TAB  NEXT CONTACT   ·   R  RESTART   ·   \`  SYNC MARK   ·   H  HIDE`,
-      "T  TIME COMPRESSION ON / OFF",
+      `${binding("limitOverride", "Space")}  LIMIT OVR (HIGH-Q G / LOW-Q AOA — CAN DEPART)   ·   ${fireQuicklook}   ·   M  SOUND`,
+      `${binding("padlock", "KeyV")}  PADLOCK   ·   TAB  NEXT CONTACT   ·   ${restartOrRtbQuicklook}   ·   \`  SYNC MARK   ·   H  HIDE`,
+      "ESC  PAUSE / MENU   ·   T  TIME COMPRESSION ON / OFF",
     ];
+    if (topGunQuicklook) {
+      compactLines.push(`TOP GUN · ${topGunQuicklook.weapons} · ${topGunQuicklook.returnToCarrier}`);
+    } else if (firstRunValley) {
+      compactLines.push(`FOLLOW VALLEY · ${fireBinding}: TWO HEATERS → GUNS`);
+    }
     if (f14WingSweep) {
       wideLines.push(`${binding("wingSweepForward", "Comma")} / ${binding("wingSweepAft", "Period")}  WING SWEEP FORWARD / AFT   ·   ${binding("wingSweepAuto", "Slash")}  WING SWEEP AUTO`);
       compactLines.push(`${binding("wingSweepForward", "Comma")} / ${binding("wingSweepAft", "Period")}  WING SWEEP FORWARD / AFT   ·   ${binding("wingSweepAuto", "Slash")}  AUTO`);
@@ -5501,6 +5598,7 @@ class CombatHud {
     this.updateGcasAudio(frame);
     const display = this._signals.update(frame.state, frame.dt);
     frame.displayAirdata = display;
+    const combatPresentationSuppressed = firstRunCombatPresentationSuppressed(frame.state);
     const gunSolutionEntityId = String(frame.state.player_entity_id ?? "legacy");
     if (gunSolutionEntityId !== this._gunSolutionEntityId) {
       this._gunSolutionEntityId = gunSolutionEntityId;
@@ -5510,7 +5608,8 @@ class CombatHud {
       this._lastLeadPipperY = null;
     }
     frame.visualGunSolution = this._gunSolutionCue.update(
-      { key: hasGunSolution(frame.state) ? "solution" : "no-solution" },
+      { key: !combatPresentationSuppressed && hasGunSolution(frame.state)
+        ? "solution" : "no-solution" },
       frame.dt,
     )?.key === "solution";
 
@@ -5535,6 +5634,7 @@ class CombatHud {
         carrierSortieRoute: null,
         boatRtbCaret: null,
         rtbCue: null,
+        missionGuidance: null,
         rapierCycleTeach: null,
         rapierModeLine: null,
         recoveryGate: null,
@@ -5642,10 +5742,12 @@ class CombatHud {
       accelCaretPx,
       dt: frame.dt,
     });
-    this.drawGunSight(frame, noseAnchor);
-    this.drawAimPoint(frame, noseAnchor, directorAnchor);
-    this.drawBandit(frame);
-    this.drawWingman(frame);
+    if (!combatPresentationSuppressed) {
+      this.drawGunSight(frame, noseAnchor);
+      this.drawAimPoint(frame, noseAnchor, directorAnchor);
+      this.drawBandit(frame);
+      this.drawWingman(frame);
+    }
     this.drawCivilianTarget(frame);
     if (!mobileTactical) {
       this.drawHeadingTape(frame.state, {
@@ -5694,7 +5796,7 @@ class CombatHud {
       // The phone gets the power rail too. It was desktop-only, which left the one control the
       // pilot holds for the entire sortie with no feedback at all.
       this.drawThrottle(frame.state);
-      this.drawMobileTacticalState(frame, display);
+      this.drawMobileTacticalState(frame, display, { combatPresentationSuppressed });
       this.drawF14WingSweep(frame.state);
     } else {
       if (this._debug) this._debug.desktopFlightChrome = true;
@@ -5732,8 +5834,10 @@ class CombatHud {
       if (!mobileTactical) this.drawSystemsPanel(systems, frame.state);
       this.drawAoAIndexer(frame.state, frame.dt);
     }
-    this.drawPadlockSa(frame, systems, noseAnchor);
+    if (!combatPresentationSuppressed) this.drawPadlockSa(frame, systems, noseAnchor);
     if (!mobileTactical) this.drawSortieStatus(frame);
+    // The cold-valley gate hides combat contacts and weapon solutions, not the lesson card which
+    // tells a first-time pilot to follow the valley. flightMissionGuidance owns its safe wording.
     this.drawVisualMergeWeaponsCue(frame);
     this.drawFooter(frame);
     if (!mobileTactical) this.drawTimeCompression(frame);

@@ -62,9 +62,8 @@ test("Cobra Lab gates before loading its Build-versioned runtime", () => {
     new RegExp(`/cobra-lab/styles\\.css\\?v=${RELEASE_BUILD}`));
 });
 
-test("Cobra Lab direct runtime imports share the Build stamp", () => {
+test("Cobra Lab stamps route modules while sharing one canonical Three.js instance", () => {
   for (const modulePath of [
-    "../vendor/three.module.js",
     "../render/cobra/cobra_canyon_plan.js",
     "../render/cobra/cobra_canyon_presentation.js",
   ]) {
@@ -73,6 +72,10 @@ test("Cobra Lab direct runtime imports share the Build stamp", () => {
     assert.equal(runtime.includes(`from "${modulePath}"`), false,
       `${modulePath} must not remain as an unversioned direct import`);
   }
+  assert.equal(runtime.includes('from "../vendor/three.module.js"'), true,
+    "standalone routes must share the shell's canonical Three.js module identity");
+  assert.equal(runtime.includes(`../vendor/three.module.js?v=${RELEASE_BUILD}`), false,
+    "a query-stamped Three.js URL would instantiate a second engine copy");
   assert.equal(
     presentation.includes(`from "./cobra_canyon_plan.js?v=${RELEASE_BUILD}"`),
     true,

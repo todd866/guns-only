@@ -29,6 +29,15 @@ public class CobraMissionRuntimeTests
 
     sealed class MaskingRingTerrain : ITerrainSurface
     {
+        readonly double _centreEastM;
+        readonly double _centreNorthM;
+
+        public MaskingRingTerrain(double centreEastM = 0.0, double centreNorthM = 0.0)
+        {
+            _centreEastM = centreEastM;
+            _centreNorthM = centreNorthM;
+        }
+
         public TerrainBounds Bounds => new(-8_000.0, 8_000.0, -8_000.0, 8_000.0);
         public double HorizontalResolutionM => 20.0;
 
@@ -38,7 +47,9 @@ public class CobraMissionRuntimeTests
                 sample = default;
                 return false;
             }
-            double radiusM = Math.Sqrt(eastM * eastM + northM * northM);
+            double radiusM = Math.Sqrt(
+                Math.Pow(eastM - _centreEastM, 2.0)
+                + Math.Pow(northM - _centreNorthM, 2.0));
             double heightM = radiusM is >= 100.0 and <= 280.0 ? 220.0 : 0.0;
             sample = new TerrainSample(heightM, new Vec3D(0.0, 1.0, 0.0));
             return true;
@@ -197,6 +208,13 @@ public class CobraMissionRuntimeTests
         return Math.Sqrt(east * east + north * north);
     }
 
+    static Vec3D IronBellEngagementSpawn(CobraCanyonDefinition world, double altitudeM)
+    {
+        CobraCanyonLandmarkDefinition bridge = world.Landmarks.First(landmark =>
+            landmark.Kind == CobraCanyonLandmarkKind.Bridge);
+        return bridge.PositionLocalM with { Y = altitudeM };
+    }
+
     [Fact]
     public void DirectVerticalLiftCommandsAdvanceTheExistingAh1gAuthorityAt120Hz()
     {
@@ -275,6 +293,24 @@ public class CobraMissionRuntimeTests
             + (firstFlow.TailRotorWindVelocityMps - first.LastWindVelocityMps).Length;
         Assert.True(resolvedGradient > 1e-6,
             "terrain gust truth must not collapse every rotor station to the CG sample");
+
+        for (int tick = 1; tick < CobraMissionRuntime.TerrainWindSampleIntervalTicks; tick++)
+        {
+            first.Advance(neutral);
+            replay.Advance(neutral);
+            Assert.Equal(firstFlow, first.LastRotorcraftAirflow);
+            Assert.Equal(first.LastRotorcraftAirflow, replay.LastRotorcraftAirflow);
+            Assert.Equal(first.LastWindVelocityMps, replay.LastWindVelocityMps);
+        }
+
+        first.Advance(neutral);
+        replay.Advance(neutral);
+
+        Assert.Equal(2, first.TerrainWindSamplesTaken);
+        Assert.Equal(first.TerrainWindSamplesTaken, replay.TerrainWindSamplesTaken);
+        Assert.NotEqual(firstFlow, first.LastRotorcraftAirflow);
+        Assert.Equal(first.LastRotorcraftAirflow, replay.LastRotorcraftAirflow);
+        Assert.Equal(first.LastWindVelocityMps, replay.LastWindVelocityMps);
     }
 
     [Fact]
@@ -446,25 +482,61 @@ public class CobraMissionRuntimeTests
     }
 
     [Fact]
-    public void SustainedExposureProducesVisibleFireWhileTerrainMaskingPreventsAcquisition()
+    public void ExposedDepartAircraftCannotBeTrackedOrFiredOn()
     {
         CobraCanyonDefinition world = CobraCanyonDefinition.Create();
-        var exposed = new CobraMissionRuntime(
+        var runtime = new CobraMissionRuntime(
             world,
             new FlatTerrain(),
             CobraCanyonRouteChoice.RiverGorge,
             spawn: new CobraMissionSpawn(new Vec3D(0.0, 800.0, 0.0), Vec3D.Zero, 0.0));
+        double trim = runtime.Cobra.EstimateHoverCollective(
+            runtime.Cobra.State.GrossMassKg,
+            CobraMissionRuntime.DefaultAirDensityKgM3);
+
+        Assert.Equal(CobraMissionAct.Depart, runtime.Act);
+        Assert.Equal(CobraMaskingState.Exposed, runtime.Diagnostics.Masking.State);
+
+        for (int tick = 0; tick < 12 * PlayerVehicleContract.FixedStepHz; tick++)
+            runtime.Advance(new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0));
+
+        Assert.Equal(CobraMissionAct.Depart, runtime.Act);
+        Assert.Equal(CobraMaskingState.Exposed, runtime.Diagnostics.Masking.State);
+        Assert.False(runtime.BattleDamage.ThreatTracking);
+        Assert.False(runtime.BattleDamage.ReceivingFire);
+        Assert.Equal(0.0, runtime.BattleDamage.ContinuousExposureSeconds);
+        Assert.Equal(0, runtime.BattleDamage.BurstsFired);
+        Assert.Equal(0, runtime.BattleDamage.PendingBursts);
+        Assert.Equal(0, runtime.BattleDamage.DamagingHits);
+    }
+
+    [Fact]
+    public void SustainedExposureProducesVisibleFireWhileTerrainMaskingPreventsAcquisition()
+    {
+        CobraCanyonDefinition world = CobraCanyonDefinition.Create();
+        Vec3D postDepartSpawn = IronBellEngagementSpawn(world, altitudeM: 800.0);
+        var exposed = new CobraMissionRuntime(
+            world,
+            new FlatTerrain(),
+            CobraCanyonRouteChoice.RiverGorge,
+            spawn: new CobraMissionSpawn(postDepartSpawn, Vec3D.Zero, 0.0));
         var masked = new CobraMissionRuntime(
             world,
-            new MaskingRingTerrain(),
+            new MaskingRingTerrain(postDepartSpawn.X, postDepartSpawn.Z),
             CobraCanyonRouteChoice.RiverGorge,
-            spawn: new CobraMissionSpawn(new Vec3D(0.0, 50.0, 0.0), Vec3D.Zero, 0.0));
+            spawn: new CobraMissionSpawn(
+                postDepartSpawn with { Y = 50.0 },
+                Vec3D.Zero,
+                0.0));
         double exposedTrim = exposed.Cobra.EstimateHoverCollective(
             exposed.Cobra.State.GrossMassKg,
             CobraMissionRuntime.DefaultAirDensityKgM3);
         double maskedTrim = masked.Cobra.EstimateHoverCollective(
             masked.Cobra.State.GrossMassKg,
             CobraMissionRuntime.DefaultAirDensityKgM3);
+
+        Assert.Equal(CobraMissionAct.Engage, exposed.Act);
+        Assert.Equal(CobraMissionAct.Engage, masked.Act);
 
         for (int tick = 0; tick < 9 * PlayerVehicleContract.FixedStepHz; tick++)
         {
@@ -515,14 +587,17 @@ public class CobraMissionRuntimeTests
     public void ReachingTheEngineDamageThresholdUsesTheProviderEngineFailureSeam()
     {
         CobraCanyonDefinition world = CobraCanyonDefinition.Create();
+        Vec3D postDepartSpawn = IronBellEngagementSpawn(world, altitudeM: 800.0);
         var runtime = new CobraMissionRuntime(
             world,
             new FlatTerrain(),
             CobraCanyonRouteChoice.RiverGorge,
-            spawn: new CobraMissionSpawn(new Vec3D(0.0, 800.0, 0.0), Vec3D.Zero, 0.0));
+            spawn: new CobraMissionSpawn(postDepartSpawn, Vec3D.Zero, 0.0));
         double trim = runtime.Cobra.EstimateHoverCollective(
             runtime.Cobra.State.GrossMassKg,
             CobraMissionRuntime.DefaultAirDensityKgM3);
+
+        Assert.Equal(CobraMissionAct.Engage, runtime.Act);
 
         for (int tick = 0;
             tick < 40 * PlayerVehicleContract.FixedStepHz
@@ -790,6 +865,49 @@ public class CobraMissionRuntimeTests
         Assert.Equal(1, runtime.AirframeSwaps);
         Assert.True(runtime.Cobra.EngineOperating);
         Assert.True(runtime.Cobra.State.Flyable);
+    }
+
+    [Fact]
+    public void TerrainWindRefreshesAtTheReplacementPoseWhenAnAirframeSwaps()
+    {
+        CobraCanyonDefinition world = CobraCanyonDefinition.Create();
+        CobraCanyonTerrainSurface terrain = world.CreateTerrainSurface();
+        var runtime = new CobraMissionRuntime(
+            world,
+            terrain,
+            CobraCanyonRouteChoice.RiverGorge,
+            windVelocityMps: CobraCanyonWindField.DefaultSynopticMps,
+            enableTerrainWind: true);
+        var replayField = new CobraCanyonWindField(
+            world.CreateTerrainSurface(),
+            CobraCanyonWindField.DefaultSynopticMps);
+        var down = new VerticalLiftPilotCommand(0.0, 0.0, 0.0, 0.0);
+        runtime.Cobra.FailEngine();
+
+        for (int tick = 0;
+            tick < 15 * PlayerVehicleContract.FixedStepHz
+                && runtime.Status == CobraMissionStatus.Active
+                && runtime.AirframeSwaps == 0;
+            tick++)
+            runtime.Advance(down, turnaroundActionHeld: false);
+
+        Assert.Equal(1, runtime.AirframeSwaps);
+        double replacementSampleTimeSeconds = runtime.Diagnostics.AuthorityTicksAdvanced
+            * PlayerVehicleContract.FixedDeltaSeconds;
+        Vec3D expectedAtReplacement = replayField.Sample(
+            runtime.Cobra.State.PositionWorldM,
+            replacementSampleTimeSeconds);
+        Assert.Equal(expectedAtReplacement, runtime.LastWindVelocityMps);
+        RotorcraftAirflowSample replacementFlow = Assert.IsType<RotorcraftAirflowSample>(
+            runtime.LastRotorcraftAirflow);
+        Assert.NotEqual(
+            runtime.LastWindVelocityMps,
+            replacementFlow.TailRotorWindVelocityMps);
+
+        long samplesAtSwap = runtime.TerrainWindSamplesTaken;
+        runtime.Advance(down, turnaroundActionHeld: false);
+        Assert.Equal(samplesAtSwap, runtime.TerrainWindSamplesTaken);
+        Assert.Equal(expectedAtReplacement, runtime.LastWindVelocityMps);
     }
 
     [Fact]

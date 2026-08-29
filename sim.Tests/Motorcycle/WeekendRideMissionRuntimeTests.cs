@@ -138,7 +138,7 @@ public sealed class WeekendRideMissionRuntimeTests
     }
 
     [Fact]
-    public void ResetToGridClearsAccumulatedOffTrackTime()
+    public void ResetToGridPreservesSessionOffTrackEvidence()
     {
         var runtime = WeekendRideMissionRuntime.CreateDefault();
         runtime.Begin();
@@ -154,7 +154,10 @@ public sealed class WeekendRideMissionRuntimeTests
 
         runtime.ResetToGrid();
 
-        Assert.Equal(0.0, runtime.OffTrackSeconds);
+        Assert.True(runtime.OffTrackSeconds > 0.0);
+        double evidenceAtReset = runtime.OffTrackSeconds;
+        runtime.StepFixed(SteadyThrottle);
+        Assert.Equal(evidenceAtReset, runtime.OffTrackSeconds);
     }
 
     [Fact]
@@ -173,6 +176,25 @@ public sealed class WeekendRideMissionRuntimeTests
         runtime.Resume();
         runtime.StepFixed(SteadyThrottle);
         Assert.NotEqual(speedAfterOneStep, runtime.Bike.Telemetry.SpeedMps);
+    }
+
+    [Fact]
+    public void FinishFromPauseIsTerminalAndCannotAccidentallyResume()
+    {
+        var runtime = WeekendRideMissionRuntime.CreateDefault();
+        runtime.Begin();
+        for (int i = 0; i < 120; i++)
+            runtime.StepFixed(SteadyThrottle);
+        long terminalTick = runtime.Bike.State.Tick;
+
+        runtime.Pause();
+        runtime.Finish();
+        runtime.Resume();
+        runtime.StepFixed(SteadyThrottle);
+
+        Assert.Equal(WeekendRidePhase.Finished, runtime.Phase);
+        Assert.Equal(terminalTick, runtime.Bike.State.Tick);
+        Assert.Equal(WeekendRidePhase.Finished, runtime.Snapshot().Phase);
     }
 
     [Fact]

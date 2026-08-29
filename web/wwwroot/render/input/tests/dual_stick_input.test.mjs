@@ -30,7 +30,7 @@ test("radial stick removes drift and preserves full circular authority", () => {
 test("standard gamepad follows the two-stick phone control contract", () => {
   const state = standardGamepadState(gamepad({
     axes: [0.6, -0.8, -0.5, 0.25],
-    buttons: { 0: true, 5: true, 7: 0.7 },
+    buttons: { 0: true, 2: true, 5: true, 7: 0.7 },
   }));
   assert.equal(state.connected, true);
   assert.ok(state.roll > 0);
@@ -38,6 +38,7 @@ test("standard gamepad follows the two-stick phone control contract", () => {
   assert.ok(state.lookX < 0);
   assert.ok(state.lookY > 0);
   assert.equal(state.fire, true);
+  assert.equal(state.limitOverride, true);
   assert.equal(state.padlockPressed, true);
   assert.equal(state.throttleUp, true);
   assert.equal(state.throttleDown, false);

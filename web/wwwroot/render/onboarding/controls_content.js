@@ -20,9 +20,10 @@ export const COBRA_ONBOARDING_CONTENT = Object.freeze({
     Object.freeze({
       label: "MISSION",
       rows: Object.freeze([
-        Object.freeze(["BREAK", "Kill the garrison and clear the point"]),
+        Object.freeze(["BREAK", "Destroy the gun pit and clear the point"]),
         Object.freeze(["COVER", "Protect the inbound squad while it captures"]),
         Object.freeze(["HOLD", "A point majority drains enemy tickets"]),
+        Object.freeze(["RECOVER", "After the ticket result, land stable at Camp Ember"]),
         Object.freeze(["M · MAP", "Score and captures — the fight keeps running"]),
       ]),
     }),
@@ -48,7 +49,7 @@ export const COBRA_ONBOARDING_CONTENT = Object.freeze({
         Object.freeze(["E", "Shut down a damaged bird · start the spare"]),
         Object.freeze(["R", "Restart after the debrief"]),
         Object.freeze(["Esc", "Pause · resume from the mission menu"]),
-        Object.freeze(["Gamepad", "Sticks fly · trigger consents the gunner"]),
+        Object.freeze(["Gamepad", "Flight controls only"]),
       ]),
     }),
   ]),
@@ -56,8 +57,8 @@ export const COBRA_ONBOARDING_CONTENT = Object.freeze({
     Object.freeze({
       label: "THIS MISSION",
       rows: Object.freeze([
-        Object.freeze(["Keyboard", "Hold the Bridge flies on physical keys today"]),
-        Object.freeze(["Gamepad", "Sticks fly · trigger consents the gunner"]),
+        Object.freeze(["Keyboard", "Required for combat"]),
+        Object.freeze(["Gamepad", "Flight controls only"]),
       ]),
     }),
   ]),
@@ -87,6 +88,7 @@ export const WEEKEND_RIDE_ONBOARDING_CONTENT = Object.freeze({
       label: "SYSTEM",
       rows: Object.freeze([
         Object.freeze(["T", "Rider reflex assist / raw physics"]),
+        Object.freeze(["M", "Sound on / off"]),
         Object.freeze(["R", "Reset to grid"]),
         Object.freeze(["Esc", "Pause"]),
       ]),

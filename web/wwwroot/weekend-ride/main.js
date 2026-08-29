@@ -1,41 +1,107 @@
-import * as THREE from "../vendor/three.module.js?v=343";
-import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=343";
+import * as THREE from "../vendor/three.module.js";
+import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=349";
 import {
   loadRideBest,
   saveRideBest,
-} from "../render/ride/ride_best_lap_store.js?v=343";
+} from "../render/ride/ride_best_lap_store.js?v=349";
+import { weekendRideResult } from "../render/ride/weekend_ride_result.js?v=349";
+import { weekendRideEscapeAction } from "../render/ride/weekend_ride_lifecycle.js?v=349";
 import {
   dominantSignedAxis,
   gamepadRiderAxes,
-} from "../render/motorcycle/rider_input.js?v=343";
+} from "../render/motorcycle/rider_input.js?v=349";
 import {
   createRapierTrackDayPresentation,
-} from "../render/motorcycle/track_day_presentation.js?v=343";
-import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=343";
+} from "../render/motorcycle/track_day_presentation.js?v=349";
+import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=349";
+import {
+  advanceLowSpeedLens,
+  lowSpeedLensTarget,
+  neutralLowSpeedLens,
+} from "../render/camera/low_speed_lens.js?v=349";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=343";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=343";
-import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=343";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=343";
-import { RELEASE_BUILD } from "../render/release/release_identity.js?v=343";
+} from "../render/visual/shadow_stabilizer.js?v=349";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=349";
+import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=349";
+import {
+  armFlightAudio,
+  setFlightAudioEnabled,
+  suspendFlightAudio,
+  updateFlightAudio,
+} from "../render/audio/flight_audio.js?v=349";
+import {
+  loadPlayerSettings,
+  savePlayerSettings,
+} from "../render/settings/player_settings.js?v=349";
+import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=349";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=349";
+import { RELEASE_BUILD } from "../render/release/release_identity.js?v=349";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
 const SURFACE_ELEV_M = 192.0;
 const EYE_HEIGHT_M = 1.55;
+const WEEKEND_LOW_SPEED_LENS = Object.freeze({
+  wideFovDeg: 74,
+  cruiseFovDeg: 68,
+  wideThroughSpeedMps: 3,
+  cruiseSpeedMps: 34,
+  maxEdgeWrap01: 0.04,
+  responsePerSecond: 3.8,
+});
 
 const canvas = document.querySelector("#scene");
 const hudCanvas = document.querySelector("#hud");
 const viewport = document.querySelector(".viewport");
 const status = document.querySelector("#status");
 const statusText = status.querySelector("span");
+const pauseButton = document.querySelector("#pause-button");
+const soundButton = document.querySelector("#sound-button");
+const rideBrief = document.querySelector("#ride-brief");
+const rideBriefStart = document.querySelector("#ride-brief-start");
+const pauseMenu = document.querySelector("#pause-menu");
+const pauseResume = document.querySelector("#pause-resume");
+const pauseEnd = document.querySelector("#pause-end");
+const rideResult = document.querySelector("#ride-result");
+const resultTitle = document.querySelector("#result-title");
+const resultVerdict = document.querySelector("#result-verdict");
+const resultSummary = document.querySelector("#result-summary");
+const resultCorrection = document.querySelector("#result-correction");
+const resultRetry = document.querySelector("#result-retry");
+const resultMetricNodes = new Map([
+  ["LAPS", document.querySelector("#result-laps")],
+  ["LAST", document.querySelector("#result-last")],
+  ["RECORD", document.querySelector("#result-record")],
+  ["OPEN LAP", document.querySelector("#result-open-lap")],
+  ["OFF TRACK", document.querySelector("#result-off-track")],
+]);
+const resultSectorNodes = [1, 2, 3, 4]
+  .map((sector) => document.querySelector(`#result-sector-${sector}`));
+const standaloneReturnLinks = ["#ride-brief-return", "#pause-return", "#result-return"]
+  .map((selector) => document.querySelector(selector))
+  .filter(Boolean);
+for (const returnLink of standaloneReturnLinks) {
+  returnLink.href = standaloneNavigationHref(
+    returnLink.getAttribute("href"),
+    window.location,
+  );
+}
+const missionBackground = [
+  document.querySelector(".topbar"),
+  document.querySelector("aside"),
+  viewport,
+].filter(Boolean);
 
 // QUALITY TIER. This page had none — no budget, no tier, no shed path (render-architecture §5).
 // The three signals are the same ones app.js:1200-1227 reads, and the conservative reading is the
 // same: a coarse pointer is a phone unless BOTH memory and core count say otherwise, and missing
 // data (Safari does not publish deviceMemory) is not evidence of headroom.
 const coarsePointer = window.matchMedia?.("(pointer: coarse)")?.matches === true;
+const touchPreview = ["localhost", "127.0.0.1"].includes(window.location.hostname)
+  && new URL(window.location.href).searchParams.get("input") === "touch";
+const touchPresentation = coarsePointer || touchPreview;
+document.body.dataset.input = touchPresentation ? "touch" : "desktop";
 const deviceMemoryGiB = Number.isFinite(navigator.deviceMemory) ? navigator.deviceMemory : null;
 const logicalCores = Number.isFinite(navigator.hardwareConcurrency)
   ? navigator.hardwareConcurrency
@@ -44,7 +110,7 @@ const constrainedDevice = (deviceMemoryGiB !== null && deviceMemoryGiB <= 4)
   || (logicalCores !== null && logicalCores <= 4);
 const touchHeadroom = deviceMemoryGiB !== null && deviceMemoryGiB >= 8
   && logicalCores !== null && logicalCores >= 8;
-const QUALITY_TIER = coarsePointer
+const QUALITY_TIER = touchPresentation
   ? (touchHeadroom ? "balanced" : "mobile")
   : (constrainedDevice ? "balanced" : "desktop");
 
@@ -118,6 +184,7 @@ scene.fog = new THREE.FogExp2(HORIZON_HAZE_COLOR, 0.00016);
 // coplanar surfaces (track, shoulder, kerbs, patchwork) are within 300 m and already carry
 // explicit polygonOffset.
 const camera = new THREE.PerspectiveCamera(68, 1, 0.25, 24_000);
+let rideLens = neutralLowSpeedLens(WEEKEND_LOW_SPEED_LENS);
 scene.add(new THREE.HemisphereLight(0xe8eee2, 0x3d4632, 0.78));
 const sun = new THREE.DirectionalLight(0xffdfb0, 1.18);
 sun.position.set(-1_200, 2_400, 900);
@@ -231,6 +298,7 @@ const helmetHud = new HelmetHud(hudCanvas);
 
 let bridge = null;
 let persistedBestSeconds = null;
+let recordAtStartSeconds = null;
 /** Identity of the circuit a stored best belongs to; set once the circuit is known. */
 let rideCircuitIdentity = null;
 
@@ -259,7 +327,11 @@ function persistBestLapIfImproved(state) {
   }
 }
 let snapshot = null;
+let playerSettings = loadPlayerSettings(safeLocalStorage());
+let dispatchOpen = true;
 let paused = false;
+let terminal = false;
+let tornDown = false;
 let manualClutch = false;
 let rawPhysics = false;
 let trackDayPresentation = null;
@@ -275,6 +347,7 @@ const telemetryChannel = createCobraTelemetryChannel({
 });
 let telemetryRowRecordedAtMs = -Infinity;
 const TELEMETRY_ROW_INTERVAL_MS = 100;
+const RIDE_AGAIN_SESSION_KEY = "guns-only.weekend-ride.ride-again";
 
 function recordRideTelemetry(nowMs, state, frameMs) {
   if (!state) return;
@@ -287,7 +360,7 @@ function recordRideTelemetry(nowMs, state, frameMs) {
       ride_phase: state.phase,
       ride_speed_mps: Math.hypot(state.vx ?? 0, state.vy ?? 0, state.vz ?? 0),
       ride_gear: state.gear,
-      ride_engine_rpm: state.engine_rpm,
+      ride_engine_rpm: state.rpm,
       ride_lean_rad: state.lean_rad,
       ride_wheelie_rad: state.pitch_rad,
       ride_throttle: state.throttle,
@@ -302,7 +375,8 @@ function recordRideTelemetry(nowMs, state, frameMs) {
 
 // Standstill means the bike is stopped with the throttle untouched — sim truth, not DOM.
 function onboardingNudgeState(state) {
-  if (!state || paused || state.phase === "finished") return {};
+  if (!state || dispatchOpen || onboarding?.isOpen() === true
+    || paused || state.phase === "finished") return {};
   const speedMps = Math.hypot(state.vx ?? 0, state.vy ?? 0, state.vz ?? 0);
   return { standstill: speedMps < 0.5 && !keys.has("KeyW") };
 }
@@ -319,6 +393,187 @@ function setStatus(message, state = "loading") {
   statusText.textContent = message;
   status.dataset.ready = state === "ready" ? "true" : "false";
   status.dataset.error = state === "error" ? "true" : "false";
+  status.dataset.result = state === "result" ? "true" : "false";
+}
+
+function applyWeekendAudioIdentity(state) {
+  if (!state) return state;
+  state.audio_profile_id = "audio.yzf-r1.crossplane.v1";
+  state.player_aircraft_id = "vehicle.yzf-r1.track-day.v1";
+  return state;
+}
+
+function syncSoundControl() {
+  if (!soundButton) return;
+  soundButton.textContent = `Sound ${playerSettings.audio ? "on" : "off"}`;
+  soundButton.setAttribute("aria-pressed", String(playerSettings.audio));
+}
+
+function setWeekendAudioEnabled(nextEnabled, { arm = false } = {}) {
+  playerSettings = savePlayerSettings({
+    ...playerSettings,
+    audio: Boolean(nextEnabled),
+  }, safeLocalStorage());
+  setFlightAudioEnabled(playerSettings.audio);
+  syncSoundControl();
+  if (arm && playerSettings.audio && snapshot)
+    armFlightAudio(applyWeekendAudioIdentity(snapshot));
+  return playerSettings.audio;
+}
+
+function releaseRideControls() {
+  keys.clear();
+  bridge?.SetControls(0, 0, 0, 0, 0, 1);
+}
+
+function setMissionBackgroundInert(inert) {
+  for (const node of missionBackground) node.inert = inert === true;
+}
+
+function safeSessionStorage() {
+  try {
+    return globalThis.sessionStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function consumeRideAgainIntent() {
+  const storage = safeSessionStorage();
+  try {
+    const replay = storage?.getItem?.(RIDE_AGAIN_SESSION_KEY) === "1";
+    storage?.removeItem?.(RIDE_AGAIN_SESSION_KEY);
+    return replay;
+  } catch {
+    return false;
+  }
+}
+
+function showRideBrief({ focus = true } = {}) {
+  if (!bridge || terminal) return false;
+  dispatchOpen = true;
+  paused = false;
+  bridge.SetPaused(true);
+  refreshSnapshot();
+  document.body.dataset.dispatch = "true";
+  document.body.dataset.paused = "false";
+  rideBrief.hidden = false;
+  pauseMenu.hidden = true;
+  pauseButton.disabled = true;
+  pauseButton.setAttribute("aria-pressed", "false");
+  pauseButton.textContent = "Pause";
+  setMissionBackgroundInert(true);
+  suspendFlightAudio("weekend-ride-dispatch");
+  setStatus("READY · REVIEW SESSION BRIEF", "ready");
+  if (focus) queueMicrotask(() => rideBriefStart?.focus({ preventScroll: true }));
+  return true;
+}
+
+function startRideFromBrief({ showOnboarding = true } = {}) {
+  if (!bridge || !dispatchOpen || terminal) return false;
+  dispatchOpen = false;
+  rideBrief.hidden = true;
+  document.body.dataset.dispatch = "false";
+  setMissionBackgroundInert(false);
+  bridge.SetPaused(false);
+  refreshSnapshot();
+  pauseButton.disabled = false;
+  lastTimeMs = performance.now();
+  if (playerSettings.audio) armFlightAudio(applyWeekendAudioIdentity(snapshot));
+  canvas.focus?.({ preventScroll: true });
+  const teachingOpen = showOnboarding && onboarding?.maybeShowFirstRun() === true;
+  if (!teachingOpen) canvas.focus?.({ preventScroll: true });
+  setStatus("RAPIER TRACK DAY · RIDER REFLEX ASSIST", "ready");
+  return true;
+}
+
+function setRidePaused(next, { focus = true } = {}) {
+  if (!bridge || dispatchOpen || terminal) return false;
+  const shouldPause = next === true;
+  if (paused === shouldPause) return false;
+  paused = shouldPause;
+  bridge.SetPaused(paused);
+  refreshSnapshot();
+  document.body.dataset.paused = String(paused);
+  pauseMenu.hidden = !paused;
+  setMissionBackgroundInert(paused);
+  pauseButton.setAttribute("aria-pressed", String(paused));
+  pauseButton.textContent = paused ? "Resume" : "Pause";
+  if (paused) {
+    releaseRideControls();
+    suspendFlightAudio("weekend-ride-paused");
+    if (focus) queueMicrotask(() => pauseResume?.focus({ preventScroll: true }));
+  } else {
+    lastTimeMs = performance.now();
+    if (playerSettings.audio) armFlightAudio(applyWeekendAudioIdentity(snapshot));
+    if (focus) canvas.focus?.({ preventScroll: true });
+  }
+  return true;
+}
+
+function showRideResult(state) {
+  if (!state || terminal) return false;
+  terminal = true;
+  dispatchOpen = false;
+  paused = false;
+  releaseRideControls();
+  suspendFlightAudio("weekend-ride-result");
+  onboarding?.dismiss();
+  document.body.dataset.paused = "false";
+  document.body.dataset.dispatch = "false";
+  document.body.dataset.terminal = "true";
+  setMissionBackgroundInert(true);
+  rideBrief.hidden = true;
+  pauseMenu.hidden = true;
+  pauseButton.disabled = true;
+  pauseButton.setAttribute("aria-pressed", "false");
+  pauseButton.textContent = "Complete";
+
+  const result = weekendRideResult(state, { recordAtStartSeconds });
+  resultTitle.textContent = result.title;
+  resultVerdict.textContent = result.verdict;
+  resultSummary.textContent = result.summary;
+  resultCorrection.textContent = result.correction;
+  for (const metric of result.metrics) {
+    const node = resultMetricNodes.get(metric.label);
+    if (!node) continue;
+    node.textContent = metric.value;
+    if (metric.tone) node.dataset.tone = metric.tone;
+    else node.removeAttribute("data-tone");
+  }
+  result.sectors.forEach((value, index) => {
+    if (resultSectorNodes[index]) resultSectorNodes[index].textContent = value;
+  });
+  window.__gunsOnlyWeekendResult = result;
+  rideResult.hidden = false;
+  setStatus(result.title, "result");
+  queueMicrotask(() => resultRetry?.focus({ preventScroll: true }));
+  return true;
+}
+
+function endRide() {
+  if (!bridge || terminal) return false;
+  bridge.EndRide();
+  const state = refreshSnapshot();
+  persistBestLapIfImproved(state);
+  return showRideResult(state);
+}
+
+function trapDialogFocus(dialog, event) {
+  if (event.code !== "Tab") return;
+  const focusable = Array.from(dialog.querySelectorAll("button:not([disabled]), a[href]"));
+  if (!focusable.length) return;
+  event.stopPropagation();
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  const focusOutside = !dialog.contains(document.activeElement);
+  if (event.shiftKey && (focusOutside || document.activeElement === first)) {
+    event.preventDefault();
+    last.focus({ preventScroll: true });
+  } else if (!event.shiftKey && (focusOutside || document.activeElement === last)) {
+    event.preventDefault();
+    first.focus({ preventScroll: true });
+  }
 }
 
 function resize() {
@@ -407,7 +662,7 @@ function axisValue(positiveCode, negativeCode) {
 }
 
 function sendControls() {
-  if (!bridge || paused) return;
+  if (!bridge || dispatchOpen || onboarding?.isOpen() === true || paused || terminal) return;
   const gamepad = Array.from(navigator.getGamepads?.() ?? [])
     .find((candidate) => candidate?.connected);
   const analog = gamepadRiderAxes(gamepad);
@@ -430,15 +685,37 @@ function sendControls() {
 
 function refreshSnapshot() {
   if (!bridge) return null;
-  snapshot = JSON.parse(bridge.GetState());
+  snapshot = applyWeekendAudioIdentity(JSON.parse(bridge.GetState()));
   // QA seam: headless smoke scripts steer against authoritative truth, not DOM guesses.
   window.__gunsOnlyWeekendAuthority = snapshot;
   return snapshot;
 }
 
-function syncCamera(state) {
+function syncCamera(state, deltaSeconds) {
   simToScenePosition(state.px, state.py, state.pz, camera.position);
   applyViewAttitude(camera, state);
+  const speedMps = Math.hypot(
+    Number(state.vx) || 0,
+    Number(state.vy) || 0,
+    Number(state.vz) || 0,
+  );
+  rideLens = advanceLowSpeedLens(
+    rideLens,
+    lowSpeedLensTarget(speedMps, WEEKEND_LOW_SPEED_LENS),
+    deltaSeconds,
+    WEEKEND_LOW_SPEED_LENS,
+  );
+  if (Math.abs(camera.fov - rideLens.fovDeg) > 0.001) {
+    camera.fov = rideLens.fovDeg;
+    camera.updateProjectionMatrix();
+  }
+  // QA seam: the central projection remains rectilinear; edgeWrap01 records the deliberately
+  // bounded peripheral-wrap budget for a future post pass without pretending one exists today.
+  window.__gunsOnlyWeekendLens = Object.freeze({
+    speedMps,
+    fovDeg: rideLens.fovDeg,
+    edgeWrapBudget01: rideLens.edgeWrap01,
+  });
 }
 
 function animate(timeMs) {
@@ -449,11 +726,17 @@ function animate(timeMs) {
   if (!bridge) return;
 
   sendControls();
-  if (!paused) bridge.Advance(deltaSeconds);
+  const teachingOpen = onboarding?.isOpen() === true;
+  if (!dispatchOpen && !teachingOpen && !paused && !terminal) bridge.Advance(deltaSeconds);
   const state = refreshSnapshot();
   if (!state) return;
 
-  syncCamera(state);
+  updateFlightAudio(state, {
+    muted: dispatchOpen || teachingOpen || paused || terminal || !playerSettings.audio,
+    nowSeconds: timeMs / 1_000,
+  });
+
+  syncCamera(state, deltaSeconds);
   updateShadowFrame();
   renderer.render(scene, camera);
   helmetHud.draw(state);
@@ -462,9 +745,11 @@ function animate(timeMs) {
   recordRideTelemetry(timeMs, state, rawFrameMs);
 
   if (state.phase === "finished") {
-    setStatus("RIDE FINISHED", "error");
+    showRideResult(state);
   } else if ((state.tip_recovery_flash_s ?? 0) > 0) {
     setStatus("TIP-OVER · RECOVERED", "error");
+  } else if (dispatchOpen) {
+    setStatus("READY · REVIEW SESSION BRIEF", "ready");
   } else if (paused) {
     setStatus("PAUSED · ESC TO RESUME", "ready");
   } else {
@@ -484,14 +769,36 @@ function isControlKey(code) {
     || code.startsWith("Arrow");
 }
 
+// Bubble after the shared controls onboarding's capture listener so acknowledgement keys can
+// never double as throttle, steering, shifting, reset, or pause input.
 window.addEventListener("keydown", (event) => {
   if (event.code === "Escape") {
     event.preventDefault();
-    if (!bridge) return;
-    paused = !paused;
-    bridge.SetPaused(paused);
+    event.stopPropagation();
+    if (dispatchOpen) return;
+    const action = weekendRideEscapeAction({
+      onboardingOpen: onboarding?.isOpen() === true,
+      paused,
+      terminal,
+    });
+    if (action === "dismiss-onboarding") {
+      onboarding.dismiss();
+      return;
+    }
+    if (!bridge || action === "noop") return;
+    setRidePaused(action === "pause");
     return;
   }
+  if (dispatchOpen) return;
+  // Escape above owns dismissal. Every other key waits until the teaching card releases
+  // authority, so an acknowledgement can never also reset, shift, or change physics mode.
+  if (onboarding?.isOpen() === true) return;
+  if (event.code === "KeyM" && !event.repeat && !terminal && !paused) {
+    event.preventDefault();
+    setWeekendAudioEnabled(!playerSettings.audio, { arm: true });
+    return;
+  }
+  if (terminal || paused) return;
   if (event.code === "KeyR") {
     event.preventDefault();
     bridge?.ResetToGrid();
@@ -528,6 +835,44 @@ window.addEventListener("keydown", (event) => {
   keys.add(event.code);
 });
 
+pauseButton?.addEventListener("click", () => setRidePaused(!paused));
+soundButton?.addEventListener("click", () =>
+  setWeekendAudioEnabled(!playerSettings.audio, { arm: true }));
+pauseResume?.addEventListener("click", () => setRidePaused(false));
+pauseEnd?.addEventListener("click", endRide);
+rideBriefStart?.addEventListener("click", () => startRideFromBrief());
+rideBrief?.addEventListener("keydown", (event) => trapDialogFocus(rideBrief, event));
+pauseMenu?.addEventListener("keydown", (event) => trapDialogFocus(pauseMenu, event));
+rideResult?.addEventListener("keydown", (event) => trapDialogFocus(rideResult, event));
+
+function teardownRide(reason) {
+  if (tornDown) return;
+  tornDown = true;
+  cancelAnimationFrame(animationFrame);
+  animationFrame = 0;
+  setMissionBackgroundInert(false);
+  releaseRideControls();
+  suspendFlightAudio(reason);
+  telemetryChannel.flush({ [reason]: true });
+  onboarding?.dispose();
+  onboarding = null;
+  trackDayPresentation?.dispose();
+  trackDayPresentation = null;
+  renderer.dispose();
+}
+
+function rideAgain() {
+  try {
+    safeSessionStorage()?.setItem?.(RIDE_AGAIN_SESSION_KEY, "1");
+  } catch {
+    // A replay still works through the ordinary brief when session storage is unavailable.
+  }
+  teardownRide("ride_again");
+  window.location.reload();
+}
+
+resultRetry?.addEventListener("click", rideAgain);
+
 window.addEventListener("keyup", (event) => keys.delete(event.code));
 window.addEventListener("blur", () => keys.clear());
 window.addEventListener("resize", resize, { passive: true });
@@ -537,12 +882,7 @@ canvas.addEventListener("webglcontextlost", (event) => {
   setStatus("WebGL context lost — reload the ride", "error");
 });
 
-window.addEventListener("pagehide", () => {
-  cancelAnimationFrame(animationFrame);
-  telemetryChannel.flush({ pagehide: true });
-  trackDayPresentation?.dispose();
-  renderer.dispose();
-}, { once: true });
+window.addEventListener("pagehide", () => teardownRide("pagehide"), { once: true });
 
 async function boot() {
   resize();
@@ -576,15 +916,6 @@ async function boot() {
     const assemblyExports = await getAssemblyExports("GunsOnly.Web");
     bridge = assemblyExports.GunsOnly.Web.MotorcycleWebBridge;
     bridge.Start();
-    // Chase your real record, not just today's: a best carried over from a previous session
-    // seeds the sim so the delta compares against it. A refused seed simply means no best.
-    const storedBest = loadRideBest(safeLocalStorage(), rideCircuitIdentity);
-    if (storedBest && bridge.SeedBestLap(
-      storedBest.bestLapSeconds, storedBest.splitProfile)) {
-      // Record what is already on disk, or the first frames would rewrite the same best —
-      // and if storage is throwing, retry that write on EVERY frame forever.
-      persistedBestSeconds = storedBest.bestLapSeconds;
-    }
     snapshot = refreshSnapshot();
     // The centreline is immutable: fetch it once instead of re-marshalling ~1,700
     // points inside every per-frame GetState snapshot.
@@ -593,17 +924,39 @@ async function boot() {
       circuitId: "rapier-strip-weekend",
       circuitLengthM: Number(snapshot?.circuit_length_m) || circuitPoints.length,
     };
+    // Chase your real record, not just today's: a best carried over from a previous session
+    // seeds the sim so the delta compares against it. A refused seed simply means no best.
+    const storedBest = loadRideBest(safeLocalStorage(), rideCircuitIdentity);
+    if (storedBest && bridge.SeedBestLap(
+      storedBest.bestLapSeconds, storedBest.splitProfile)) {
+      // Record what is already on disk, or the first frames would rewrite the same best —
+      // and if storage is throwing, retry that write on EVERY frame forever.
+      persistedBestSeconds = storedBest.bestLapSeconds;
+      recordAtStartSeconds = storedBest.bestLapSeconds;
+    }
+    snapshot = refreshSnapshot();
     buildTrackDayPresentation(circuitPoints);
     manualClutch = snapshot.clutch_mode === "manual";
+    terminal = false;
+    dispatchOpen = true;
+    paused = false;
+    document.body.dataset.dispatch = "true";
+    document.body.dataset.paused = "false";
+    document.body.dataset.terminal = "false";
+    pauseButton.disabled = false;
+    soundButton.disabled = false;
+    setWeekendAudioEnabled(playerSettings.audio);
     setStatus("RAPIER TRACK DAY · RIDER REFLEX ASSIST", "ready");
     onboarding = createControlsOnboarding({
       modeId: WEEKEND_RIDE_ONBOARDING_CONTENT.modeId,
       content: WEEKEND_RIDE_ONBOARDING_CONTENT,
+      focusTarget: canvas,
       nudges: [
         { id: "ride", text: "HOLD W — THROTTLE TO RIDE", when: (s) => s.standstill === true, afterSeconds: 3 },
       ],
     });
-    onboarding.maybeShowFirstRun();
+    if (consumeRideAgainIntent()) startRideFromBrief({ showOnboarding: false });
+    else showRideBrief();
     lastTimeMs = performance.now();
     animationFrame = requestAnimationFrame(animate);
   } catch (error) {
@@ -611,5 +964,12 @@ async function boot() {
     setStatus(`Weekend ride failed: ${error.message}`, "error");
   }
 }
+
+const armAudioFromGesture = () => {
+  if (playerSettings.audio && snapshot)
+    armFlightAudio(applyWeekendAudioIdentity(snapshot));
+};
+window.addEventListener("pointerdown", armAudioFromGesture, { capture: true, passive: true });
+window.addEventListener("keydown", armAudioFromGesture, { capture: true, passive: true });
 
 boot();

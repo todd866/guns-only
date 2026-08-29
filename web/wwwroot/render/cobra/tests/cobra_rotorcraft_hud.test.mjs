@@ -199,7 +199,8 @@ test("gunner line carries the crew truth with target, ammo and FOB context", () 
   const model = cobraRotorcraftHudModel(modelFixture());
   assert.equal(model.gunner.line, "GUN ON TARGET — HOLD F");
   assert.equal(model.gunner.level, "ready");
-  assert.match(model.gunner.detail, /TGT 2\b/);
+  assert.doesNotMatch(model.gunner.detail, /TGT\b/,
+    "a stale selection must not expose its internal ID as a target label");
   assert.match(model.gunner.detail, /AMMO 410/);
   assert.match(model.gunner.detail, /FOB 1\.0 NM/);
 
@@ -230,6 +231,22 @@ test("gunner line carries the crew truth with target, ammo and FOB context", () 
   assert.equal(dryModel.gunner.line, "GUN DRY");
   assert.equal(dryModel.gunner.level, "warning");
   assert.match(dryModel.gunner.detail, /FOB PAD · REARM/);
+
+  const bingo = modelFixture();
+  bingo.ground_war = {
+    ...bingo.ground_war,
+    ammo_remaining: 140,
+    ammo_bingo: true,
+  };
+  const bingoModel = cobraRotorcraftHudModel(bingo);
+  assert.equal(bingoModel.gunner.line, "GUN ON TARGET — HOLD F",
+    "BINGO must not replace the current combat order");
+  assert.equal(bingoModel.gunner.ammoBingo, true);
+  assert.match(bingoModel.gunner.detail, /AMMO BINGO 140/);
+  const bingoCtx = recordingHudContext();
+  drawCobraRotorcraftHud(bingoCtx, bingoModel, { width: 1280, height: 720 });
+  const bingoDetail = bingoCtx.textCalls.find((call) => /AMMO BINGO 140/.test(call.text));
+  assert.equal(bingoDetail?.fillStyle, "#ffb020", "persistent BINGO context must be amber");
 });
 
 test("the gunner's mark becomes a designation the pilot can find in the world", () => {
@@ -242,32 +259,69 @@ test("the gunner's mark becomes a designation the pilot can find in the world", 
   fixture.vehicle.y_m = 120;
   fixture.vehicle.z_m = 0;
   fixture.ground_war.units = [
-    { id: "unit.hostile.recoilless.2", faction: "hostile", role: "hard-point", alive: true, x_m: 300, y_m: 40, z_m: 400, home_site_id: "site.iron-bell" },
+    { id: "unit.hostile.recoilless.2", faction: "hostile", role: "hard-point",
+      fortified: true, objective_lock: true, alive: true,
+      x_m: 300, y_m: 40, aim_y_m: 42.2, z_m: 400, home_site_id: "site.iron-bell" },
     { id: "unit.hostile.recoilless.9", faction: "hostile", alive: true, x_m: 10, y_m: 0, z_m: 10 },
   ];
   fixture.ground_war.sites = [{ id: "site.iron-bell", label: "Iron Bell" }];
   const model = cobraRotorcraftHudModel(fixture);
   assert.equal(model.designation.id, "unit.hostile.recoilless.2");
-  assert.equal(model.designation.label, "FORTIFIED GUN PIT · IRON BELL");
+  assert.equal(model.designation.label, "FORTIFIED GUN PIT");
   assert.equal(model.designation.level, "ready");
   assert.deepEqual(
     [model.designation.worldX, model.designation.worldY, model.designation.worldZ],
-    [300, 40, 400],
+    [300, 42.2, 400],
   );
-  // sqrt(300^2 + 80^2 + 400^2) = 506.36 → aviation feet on the crew line
+  // Published sight point, rather than the ground-contact point, owns bracket and slant range.
   assert.equal(Math.round(model.designation.rangeM), 506);
   assert.equal(
     model.gunner.detail.includes(formatAviationRange(model.designation.rangeM)),
     true,
     model.gunner.detail,
   );
-  assert.match(model.gunner.detail, /TGT FORTIFIED GUN PIT · IRON BELL/);
+  assert.match(model.gunner.detail, /TGT FORTIFIED GUN PIT/);
+  assert.doesNotMatch(model.gunner.detail, /IRON BELL/,
+    "the objective HUD already names the site; the target line should name only the threat");
 
   const firing = cobraRotorcraftHudModel({
     ...fixture,
     gunner: { ...fixture.gunner, fire_authorized: true },
   });
   assert.equal(firing.designation.level, "firing");
+
+  const ordinary = modelFixture();
+  ordinary.ground_war.sites = [{ id: "site.iron-bell", label: "Iron Bell" }];
+  ordinary.ground_war.units = [{
+    id: "unit.hostile.recoilless.2",
+    faction: "hostile",
+    role: "hard-point",
+    fortified: false,
+    objective_lock: false,
+    alive: true,
+    x_m: 300,
+    y_m: 40,
+    z_m: 400,
+    home_site_id: "site.iron-bell",
+  }];
+  assert.equal(cobraRotorcraftHudModel(ordinary).designation.label,
+    "GUN POSITION",
+    "an ordinary hard point must not be called the fortified objective pit");
+
+  const legacy = modelFixture();
+  legacy.ground_war.units = [{
+    id: "site.iron-bell.garrison",
+    faction: "hostile",
+    role: "garrison",
+    alive: true,
+    x_m: 300,
+    y_m: 40,
+    z_m: 400,
+  }];
+  legacy.gunner.selected_target_id = "site.iron-bell.garrison";
+  const legacyModel = cobraRotorcraftHudModel(legacy);
+  assert.equal(legacyModel.designation.label, "GROUND TARGET");
+  assert.doesNotMatch(legacyModel.gunner.detail, /garrison|iron-bell/iu);
 });
 
 test("tactical picture locks an objective and separates the garrison from AA threats", () => {
@@ -289,7 +343,7 @@ test("tactical picture locks an objective and separates the garrison from AA thr
   fixture.gunner.selected_target_id = null;
   const model = cobraRotorcraftHudModel(fixture);
   assert.equal(model.tactical.objective.label, "CAU SONG MA");
-  assert.equal(model.tactical.target.label, "GARRISON");
+  assert.equal(model.tactical.target.label, "GUN PIT");
   assert.equal(model.tactical.threats.length, 1);
   assert.equal(model.tactical.threats[0].label, "AA");
 
@@ -300,9 +354,23 @@ test("tactical picture locks an objective and separates the garrison from AA thr
     projectWorldPoint: () => ({ x: 640, y: 320, inFrame: true }),
   });
   const texts = ctx.textCalls.map((call) => call.text);
-  assert.ok(texts.some((text) => /◇ CAU SONG MA .*△ AA 1/.test(text)), texts.join(" | "));
-  assert.ok(texts.some((text) => /GARRISON/.test(text)));
+  assert.ok(!texts.some((text) => /^◇ /.test(text)),
+    `the bearing rail must not repeat itself as prose: ${texts.join(" | ")}`);
+  assert.ok(texts.some((text) => /GUN PIT/.test(text)));
   assert.ok(texts.some((text) => /^AA · /.test(text)));
+});
+
+test("formation radio stays short and outside the protected flight-path centre", () => {
+  const model = cobraRotorcraftHudModel(modelFixture(), { radio: {
+    speaker: "EMBER LEAD",
+    text: "Iron Bell ahead. Stay low.",
+  } });
+  const ctx = recordingHudContext();
+  drawCobraRotorcraftHud(ctx, model, { width: 1280, height: 720 });
+  const call = ctx.textCalls.find((candidate) => candidate.text.startsWith("LEAD ·"));
+  assert.equal(call?.text, "LEAD · Iron Bell ahead. Stay low.");
+  assert.ok(call.x < 260, `caption x ${call.x} must stay left of the centre sight lane`);
+  assert.ok(call.y < 110, `caption y ${call.y} must stay above the flight-path lane`);
 });
 
 test("AA cues survive after the final objective flips while a gun is still alive", () => {
@@ -320,6 +388,25 @@ test("AA cues survive after the final objective flips while a gun is still alive
   assert.equal(model.tactical.target, null);
   assert.equal(model.tactical.threats.length, 1);
   assert.equal(model.tactical.threats[0].label, "AA");
+});
+
+test("RTB tactical cue points to Camp Ember instead of a surviving hostile site", () => {
+  const fixture = modelFixture();
+  fixture.mission_act = "rtb";
+  Object.assign(fixture.vehicle, { x_m: 0, y_m: 100, z_m: 0, yaw_rad: 0 });
+  fixture.ground_war.fob = { x_m: -800, y_m: 100, z_m: -400 };
+  fixture.ground_war.sites = [
+    { id: "bridge", label: "Cau Song Ma", owner: "hostile", x_m: 0, y_m: 40, z_m: 2_000 },
+  ];
+  fixture.ground_war.units = [
+    { id: "bridge.garrison", faction: "hostile", role: "hard-point", alive: true,
+      home_site_id: "bridge", x_m: 0, y_m: 40, z_m: 2_000 },
+  ];
+  fixture.gunner.selected_target_id = null;
+  const model = cobraRotorcraftHudModel(fixture);
+  assert.equal(model.tactical.objective.label, "CAMP EMBER");
+  assert.equal(model.tactical.objective.kind, "recovery");
+  assert.equal(model.tactical.target, null);
 });
 
 test("a dead, absent or unselected target designates nothing at all", () => {

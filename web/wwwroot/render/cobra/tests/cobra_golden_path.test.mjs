@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
+  COBRA_BATTLE_OBJECTIVE_STANDOFF_M,
   COBRA_GOLDEN_PATH_DEFAULTS,
   COBRA_GOLDEN_PATH_SCHEMA,
-  cobraGoldenPathFlowOffset,
   cobraGoldenPathObjective,
   cobraGoldenPathState,
   createCobraGoldenPath,
@@ -270,17 +270,13 @@ test("markers cannot form a vertical light pillar", () => {
     "each separated V stays a compact flight-director cue, not a gate or pillar");
 });
 
-test("the flow offset is a pure function of nowSeconds", () => {
-  assert.equal(cobraGoldenPathFlowOffset(7.5), cobraGoldenPathFlowOffset(7.5));
-  assert.notEqual(cobraGoldenPathFlowOffset(0), cobraGoldenPathFlowOffset(1.7));
-  for (const seconds of [0, 0.25, 3, 61.4, 9_999]) {
-    const offset = cobraGoldenPathFlowOffset(seconds);
-    assert.ok(offset >= 0 && offset < 1, `offset ${offset} must wrap into [0,1)`);
-  }
-  assert.equal(cobraGoldenPathFlowOffset(Number.NaN), 0);
-  assert.equal(cobraGoldenPathFlowOffset(4, 1), 0, "whole cycles land back on phase zero");
+test("default route cues stay sparse at helicopter speed", () => {
+  assert.ok(COBRA_GOLDEN_PATH_DEFAULTS.markerSpacingM >= 110);
+  assert.ok(COBRA_GOLDEN_PATH_DEFAULTS.leadM >= 120);
+  assert.ok(COBRA_GOLDEN_PATH_DEFAULTS.markerCount <= 12);
+});
 
-  // And it reaches the shader.
+test("the chevrons have no time-driven brightness animation", () => {
   const path = createCobraGoldenPath(fakeThree());
   const material = path.group.children[0].material;
   const state = {
@@ -289,17 +285,22 @@ test("the flow offset is a pure function of nowSeconds", () => {
     groundHeightAt: FLAT_GROUND,
     nowSeconds: 3.3,
     arrivedRadiusM: 400,
+    recoveryVisual: { alert: true, colorHex: 0xff613f },
   };
   path.update(state);
-  const first = material.uniforms.uFlow.value;
-  path.update({ ...state, nowSeconds: 3.3 });
-  assert.equal(material.uniforms.uFlow.value, first, "same time in, same offset out");
-  path.update({ ...state, nowSeconds: 5.1 });
-  assert.notEqual(material.uniforms.uFlow.value, first, "time must move the flow");
+  const before = ribbonVertices(path);
+  const opacityBefore = material.uniforms.uOpacity.value;
+  path.update({ ...state, nowSeconds: 103.3 });
+  assert.deepEqual(ribbonVertices(path), before,
+    "elapsed time must not move or relight the route geometry");
+  assert.equal(material.uniforms.uFlow, undefined,
+    "the production shader must not contain a traveling highlight");
+  assert.equal(material.uniforms.uOpacity.value, opacityBefore,
+    "even an alerted RTB correction must stay fixed instead of pulsing with time");
   path.dispose();
 });
 
-test("the curve is rebuilt only on a real move or a new objective", () => {
+test("ownship motion leaves the curve fixed and only a new objective rebuilds it", () => {
   const path = createCobraGoldenPath(fakeThree());
   const objective = { siteId: "site.a", eastM: 0, northM: 5_000 };
   const base = {
@@ -312,14 +313,13 @@ test("the curve is rebuilt only on a real move or a new objective", () => {
   path.update({ ...base, player: playerAt(0, 0) });
   assert.equal(path.group.userData.rebuildCount, 1);
 
-  // 10 m along track: under the 25 m threshold, so no regeneration.
+  // Translation and time leave the fixed world geometry untouched.
   path.update({ ...base, player: playerAt(0, 10), nowSeconds: 1 });
-  assert.equal(path.group.userData.rebuildCount, 1, "a sub-25 m move must not rebuild the curve");
-  // The flow still advanced, so the ribbon is alive even when the geometry is not touched.
-  assert.ok(path.group.children[0].material.uniforms.uFlow.value > 0);
+  assert.equal(path.group.userData.rebuildCount, 1);
 
   path.update({ ...base, player: playerAt(0, 40), nowSeconds: 2 });
-  assert.equal(path.group.userData.rebuildCount, 2, "past 25 m the spine is re-sampled");
+  assert.equal(path.group.userData.rebuildCount, 1,
+    "player motion must not drag the objective path across the world");
 
   path.update({
     ...base,
@@ -327,7 +327,55 @@ test("the curve is rebuilt only on a real move or a new objective", () => {
     player: playerAt(0, 40),
     nowSeconds: 3,
   });
-  assert.equal(path.group.userData.rebuildCount, 3, "a new objective always rebuilds");
+  assert.equal(path.group.userData.rebuildCount, 2, "a new objective always rebuilds");
+  path.dispose();
+});
+
+test("route chevrons stay nailed to world space until authority advances the gate", () => {
+  const path = createCobraGoldenPath(fakeThree());
+  const objective = {
+    siteId: "ember-route-gate-2",
+    eastM: 0,
+    northM: 1_200,
+    upM: 160,
+    mode: "route",
+    routePoints: [
+      { eastM: 0, northM: 1_200, upM: 160 },
+      { eastM: 300, northM: 1_800, upM: 170 },
+    ],
+  };
+  const base = {
+    objective,
+    groundHeightAt: FLAT_GROUND,
+    nowSeconds: 0,
+    arrivedRadiusM: 24,
+  };
+
+  path.update({ ...base, player: playerAt(-600, 0, 150) });
+  const before = ribbonVertices(path);
+  assert.equal(path.group.userData.rebuildCount, 1);
+
+  path.update({ ...base, player: playerAt(350, 700, 240), nowSeconds: 3 });
+  assert.equal(path.group.userData.rebuildCount, 1,
+    "moving the aircraft must not re-sample an unchanged authority route spine");
+  assert.deepEqual(ribbonVertices(path), before,
+    "unchanged route-gate geometry must remain fixed against the terrain");
+
+  path.update({
+    ...base,
+    objective: {
+      ...objective,
+      siteId: "ember-route-gate-3",
+      eastM: 300,
+      northM: 1_800,
+      routePoints: [{ eastM: 300, northM: 1_800, upM: 170 }],
+    },
+    player: playerAt(350, 700, 240),
+    nowSeconds: 4,
+  });
+  assert.equal(path.group.userData.rebuildCount, 2,
+    "the next authority gate should deliberately replace the old route spine once");
+  assert.notDeepEqual(ribbonVertices(path), before);
   path.dispose();
 });
 
@@ -355,6 +403,36 @@ test("the objective is the same site the tactical map calls the objective", () =
   // No hostile site, no path.
   assert.equal(cobraGoldenPathObjective({ sites: [sites[0]] }, player), null);
   assert.equal(cobraGoldenPathObjective(null, player), null);
+});
+
+test("battle guidance climbs above Iron Bell instead of continuing through the underpass", () => {
+  const bridgeDeckUpM = 160;
+  const groundWar = {
+    sites: [{
+      id: "site.iron-bell",
+      label: "Iron Bell",
+      owner: "hostile",
+      x_m: 0,
+      y_m: 146,
+      z_m: 1_000,
+    }],
+  };
+  const objective = cobraGoldenPathObjective(groundWar, playerAt(0, 0, 130), "engage");
+  assert.equal(objective.upM, 146 + COBRA_BATTLE_OBJECTIVE_STANDOFF_M);
+
+  const path = createCobraGoldenPath(fakeThree());
+  path.update({
+    player: playerAt(0, 0, 130),
+    objective,
+    groundHeightAt: () => 92,
+    nowSeconds: 0,
+    arrivedRadiusM: 0,
+  });
+  const attackEnd = ribbonVertices(path).filter((vertex) => vertex.northM > 800);
+  assert.ok(attackEnd.length > 0);
+  assert.ok(Math.min(...attackEnd.map((vertex) => vertex.upM)) > bridgeDeckUpM,
+    "the final attack cues must clear the complete bridge obstacle, not hide below its deck");
+  path.dispose();
 });
 
 test("RTB path switches to Camp Ember and stays lit to pad range", () => {
@@ -386,7 +464,7 @@ test("RTB path switches to Camp Ember and stays lit to pad range", () => {
   assert.equal(state.recoveryVisual.alert, true);
 });
 
-test("RTB corridor shows approach state by funnel width, colour and pulse", () => {
+test("RTB corridor shows approach state by fixed funnel width and colour", () => {
   const path = createCobraGoldenPath(fakeThree());
   const material = path.group.children[0].material;
   const common = {
@@ -410,8 +488,8 @@ test("RTB corridor shows approach state by funnel width, colour and pulse", () =
   });
   assert.equal(path.group.userData.markerHalfWidthM, 10, "short-final gates visibly tighten");
   assert.equal(material.uniforms.uColor.value.hex, 0xff613f, "unstable energy turns the path coral");
-  assert.ok(material.opacity < COBRA_GOLDEN_PATH_DEFAULTS.peakOpacity,
-    "an unstable path pulses instead of adding another text panel");
+  assert.equal(material.opacity, COBRA_GOLDEN_PATH_DEFAULTS.peakOpacity,
+    "an unstable path changes shape and colour without making world cues pulse");
   path.dispose();
 });
 
@@ -513,8 +591,19 @@ test("short legs use a readable handful of cues instead of compressing into a st
     nowSeconds: 0,
     arrivedRadiusM: 75,
   });
-  assert.equal(path.group.userData.activeMarkerCount, 5);
+  assert.equal(path.group.userData.activeMarkerCount, 3);
   const positions = path.group.children[0].geometry.attributes.position.array;
+  const apex = [];
+  for (let marker = 0; marker < path.group.userData.activeMarkerCount; marker += 1) {
+    const offset = (marker * 8 + 3) * 3;
+    apex.push({ eastM: positions[offset], northM: -positions[offset + 2] });
+  }
+  for (let marker = 1; marker < apex.length; marker += 1) {
+    assert.ok(Math.hypot(
+      apex[marker].eastM - apex[marker - 1].eastM,
+      apex[marker].northM - apex[marker - 1].northM,
+    ) >= 65, "short-leg cues retain useful visual separation");
+  }
   const hiddenStart = path.group.userData.activeMarkerCount * 8 * 3;
   for (let index = hiddenStart + 3; index < positions.length; index += 3) {
     assert.equal(positions[index], positions[hiddenStart], "unused cue vertices are degenerate");
