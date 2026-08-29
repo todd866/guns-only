@@ -363,6 +363,43 @@ wingman fixture the same way the solo one now is, then re-apply the latch. The i
 step that turned the solo case from three blind guesses into a measured cause, and the pair case is
 currently where the solo case was this morning.
 
+### The slice latch: six measured variants, and why none of them lands — 2026-08-29
+
+`CommandOwner` is now on `IBanditDecisionTraceSource` and carried through `NeutralMergeBandit`, and
+the two-ship fixture records `LeadOwner`/`WingOwner`. That immediately paid for itself: the wingman
+failure had always read as "the primary fired 0 rounds", which sounds like a gunnery problem. With
+the pair instrumented, the last sample says **range 43,999 m**. The lead does not fail to shoot; it
+leaves the theatre. Every earlier reading of that test was of the wrong problem.
+
+Six variants of the slice latch, measured against the 6-failure baseline (full suite for the first
+three, the five-class combat filter for the rest):
+
+| # | variant | chatter | leash | pair fight |
+| --- | --- | --- | --- | --- |
+| 1 | latch side from **current bank**, hold | fixed | fixed | **breaks** — lead 44 km out, bracket rejoin, ceiling guard |
+| 2 | as 1, `Return` dive only | not fixed | not fixed | intact (79% of the pinning is in `Reengage`) |
+| 3 | as 1, exempting `Bracket`/`Extend` | fixed | fixed | bracket rejoin recovers; wingman still breaks |
+| 4 | side from **horizontal bearing**, every tick | 18 -> 14 reversals | **worse** (19 s -> 27 s nose-away) | intact |
+| 5 | bearing, reversal only past 86 deg | 14 -> **5** reversals | 21 s nose-away | breaks wingman |
+| 6 | bearing, commit and hold, support exempt | **fixed** | **fixed** | lead back in the fight at 4.2 km but still 0 rounds; ceiling guard oscillates |
+
+The trade is consistent and it is not about the support path: variant 3 exempts support roles and
+still loses the wingman, and variant 6 pulls the lead from 38 km back to 4.2 km without it firing.
+Committing the slice hard fixes the solo fight and disturbs the pair; following the bearing keeps the
+pair and reinstates the chatter. Chatter falls monotonically as the commitment tightens
+(18 -> 14 -> 5 -> 0), so the direction is right and the coupling is real.
+
+**What this says about the shape of the fix.** The slice side is being decided inside a per-aircraft
+command with no knowledge of the fight it is part of. A lead that commits a slice is also the ship
+its wingman is bracketing around, so committing changes a geometry two aircraft depend on. The side
+choice probably belongs above the individual command — at the formation/fight level, where the
+existing `FormationDirective` already coordinates — rather than being re-derived independently inside
+`ReengageCommand` and `ReturnCommand`. That is a design change, and it should be made with the pair
+fixture's owner trace in hand rather than by tuning a seventh variant.
+
+No production change retained; the reproduction stays `Skip`-ped. The instrumentation is kept and is
+behaviour-neutral (same six failures, 2,427 passing).
+
 **Do not merge this branch to main until those six are resolved.** The branch is pushed so the work
 is not confined to one machine; CI will be red, accurately.
 

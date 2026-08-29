@@ -54,7 +54,10 @@ public sealed class WingmanStaysInTheFightTests {
         bool LeadPresenting, bool WingPresenting, bool SessionActive,
         int LeadRounds, int WingRounds, bool LeadTrigger, bool WingTrigger,
         double LeadNoseErrDeg, double LeadLeadErrDeg, bool RoeHold,
-        double LeadAltitude, double LeadGammaDeg, PilotCommand LeadCommand);
+        double LeadAltitude, double LeadGammaDeg, PilotCommand LeadCommand,
+        // WHICH LAW FLEW EACH SHIP. Tactic is an intent label; the pair fight was
+        // previously legible only through its final assertion.
+        string LeadOwner, string WingOwner);
 
     /// The two-ship fixture with a player durable enough to be judged against BOTH opponents.
     /// With the production 3-hit rule the wingman kills the fixture player at t≈50 s, which ends
@@ -144,7 +147,9 @@ public sealed class WingmanStaysInTheFightTests {
                     * 180.0 / Math.PI,
                 session.WeaponsInhibited,
                 lead.Position.Y, lead.Gamma * 180.0 / Math.PI,
-                leadReactive?.AppliedCommand ?? default));
+                leadReactive?.AppliedCommand ?? default,
+                leadReactive?.CommandOwner.ToString() ?? "?",
+                reactive?.CommandOwner.ToString() ?? "?"));
         }
         return samples;
     }

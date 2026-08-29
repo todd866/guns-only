@@ -130,6 +130,10 @@ public sealed class NeutralMergeBandit :
     public PilotCommand AppliedCommand =>
         (_fight as IBanditDecisionTraceSource)?.AppliedCommand ??
         _mergeSim.LastAppliedCommand;
+    /// Before the handoff this ship is flying the authored merge, not a reactive law, so the
+    /// owner is honestly unset rather than borrowed from a fight that has not started.
+    public BanditCommandOwner CommandOwner =>
+        (_fight as IBanditDecisionTraceSource)?.CommandOwner ?? BanditCommandOwner.Unset;
     public FormationDirective FormationDirective => _fight?.FormationDirective
         ?? _formationDirective;
 

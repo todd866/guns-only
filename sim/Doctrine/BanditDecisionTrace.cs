@@ -67,4 +67,10 @@ public interface IBanditDecisionTraceSource {
     BanditDecisionTrace DecisionTrace { get; }
     BanditPolicyMemory PolicyMemory { get; }
     PilotCommand AppliedCommand { get; }
+
+    /// The law that produced <see cref="AppliedCommand"/>. <see cref="BanditPolicyMemory.Tactic"/>
+    /// is an intent label and several branches share one value of it, so a trace that carries only
+    /// the tactic cannot say what actually flew. A pair fight is otherwise legible only through its
+    /// final assertion.
+    BanditCommandOwner CommandOwner { get; }
 }

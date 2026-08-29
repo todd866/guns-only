@@ -268,9 +268,9 @@ public class BanditArenaLeashTests {
             + "away from the player — that is the stern chase this corridor exists to prevent");
     }
 
-    [Fact(Skip = "Open defect — reproduction kept. Latching the slice side fixes this AND the "
-        + "leash test, but the latch ripples into the pair fight (wingman + ceiling-denial). "
-        + "See docs/2026-08-27-autonomous-mission-harness.md.")]
+    [Fact(Skip = "Open defect — reproduction kept. Six latch variants measured; see the "
+        + "trade-off matrix in docs/2026-08-27-autonomous-mission-harness.md. Every scope that "
+        + "closes this chatter costs the pair fight, and vice versa.")]
     public void TheBankCommandMustNotChatterItsSignWhileSlicingHome() {
         // 2026-08-29, with CommandOwner published: over the 180 s leash run the bank command sits
         // pinned at its limiter for ~70% of post-merge ticks — Reengage 136/173 ticks at +/-74.5
