@@ -573,7 +573,50 @@ megabytes; `analysis/owner-pilot-frames.jsonl` and `-rows.jsonl` are gitignored 
 the tests that need them skip rather than fail so a fresh clone of this public repository reports the
 truth instead of a broken build.
 
-**Do not merge this branch to main until those six are resolved.** The branch is pushed so the work
+### Six down to five — the first net win — 2026-08-29
+
+`PlayerAboveTheFightCeilingCannotBeMadeToRunTheBanditDown` is fixed, nothing is broken, and the
+route there was tracing rather than another variant.
+
+**What landed.** `SlicedBankTo` commits a slice side when the bank solve exceeds what can be flown,
+choosing it from the HORIZONTAL BEARING — the quantity that stays well-defined exactly where
+`BankToPlaceLiftVectorOn`'s atan2 degenerates — and holding it. Support roles keep the plain clamp.
+`ReengageCommand`'s speed scrub now arms on the range being LARGE rather than OPENING. And the
+ceiling band got the hysteresis it never had.
+
+**The two things the pair trace corrected, both of which I had wrong.**
+
+The wingman failure was never the lead departing. With `CommandOwner` published on both ships the
+lead sits in `Reengage` from t=26 s to t=199 s at 4-6 km, and the decisive line is `plrAlive=False`
+from **t=150 s**: once the slice stops chattering the WINGMAN reaches its hits sooner and kills the
+fixture player while the lead is still 3.2 km out. Without the change the lead is seen firing at
+t=180 s. The contract failed for want of a measurement window, not for want of a lead that attacks —
+so the fixture's `PlayerHitsToDefeat` went 30 -> 60, which is the durability doing exactly the job
+its own comment describes. The assertions are unchanged and both ships must still fire.
+
+The ceiling-guard oscillation was a bare threshold, and the file already knew the pattern. Entering
+`Return` above `_ceilingM + 350` and falling through to `Energy` below it is a single number on
+`own.Y`; a jet holding station near the ceiling crosses it repeatedly and alternates tactic —
+measured at six flips in eleven seconds at 11.77-11.85 km after a stable 139 seconds. The
+`_ceilingDenial` latch has hysteresis for precisely this reason and this boundary was missing it.
+It only became visible once the spiral stopped carrying the aircraft out of the band entirely.
+
+**What is still open, stated precisely.** `ReengageCannotSpiralTheFightThroughTheCombatCeiling`
+remains `Skip`-ped and remains a real defect, now narrower: the sign chatter and the leash contract
+are fixed, but the ALTITUDE RATCHET survives — the scenario still reaches 15,001 m against a player
+holding 4,592 m. The leash test passes because it grades wander and nose-away, not altitude. Do not
+read its green as the spiral being solved.
+
+One assertion in that reproduction was retired deliberately rather than quietly: it required the
+pinned-bank leg to stay under 12 s, which was a proxy for "the aim solver stopped solving" written
+when a pinned bank meant chatter. A committed slice holds the limit by design, so the proxy would
+now fail the fix it was written to demand. The chattering has its own test; this one asserts the
+observable defect, and reports the pinned-bank duration without asserting on it.
+
+Remaining: the three gun-conversion contracts, `ProductionAceSustainsAHighGDefense...`, and
+`BanditDoesNotRunFromAPlayerWhoSimplyClimbs`.
+
+**Do not merge this branch to main until those five are resolved.** The branch is pushed so the work
 is not confined to one machine; CI will be red, accurately.
 
 Current validation: fixed-wing controller/harness `204/204`; camera and production-graphics

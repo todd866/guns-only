@@ -268,9 +268,7 @@ public class BanditArenaLeashTests {
             + "away from the player — that is the stern chase this corridor exists to prevent");
     }
 
-    [Fact(Skip = "Open defect — reproduction kept. Six latch variants measured; see the "
-        + "trade-off matrix in docs/2026-08-27-autonomous-mission-harness.md. Every scope that "
-        + "closes this chatter costs the pair fight, and vice versa.")]
+    [Fact]
     public void TheBankCommandMustNotChatterItsSignWhileSlicingHome() {
         // 2026-08-29, with CommandOwner published: over the 180 s leash run the bank command sits
         // pinned at its limiter for ~70% of post-merge ticks — Reengage 136/173 ticks at +/-74.5
@@ -307,9 +305,9 @@ public class BanditArenaLeashTests {
             + "ticks — the slice side is being re-decided by numerical noise instead of latched");
     }
 
-    [Fact(Skip = "Open defect on codex/deepdive-346 — reproduction kept; see "
-        + "docs/2026-08-27-autonomous-mission-harness.md. Fixing the aim alone trades this "
-        + "spiral for a wander/wingman failure, so containment needs a design pass, not a patch.")]
+    [Fact(Skip = "STILL OPEN, and narrower than it was. Committing the slice side fixed the sign "
+        + "chatter and the leash contract, but the altitude ratchet survives: this scenario still "
+        + "reaches 15,001 m against a player holding 4,592 m. Reproduction kept.")]
     public void ReengageCannotSpiralTheFightThroughTheCombatCeiling() {
         // Traced 2026-08-29. Once range crossed ReengageRangeM the bandit flew ReengageCommand
         // (while Tactic still reported Return), whose aim had been clamped by KeepAimInFightVolume
@@ -343,13 +341,17 @@ public class BanditArenaLeashTests {
                 System.Math.Max(longestSaturatedBankTicks, saturatedBankTicks);
         }
 
+        // A PINNED BANK IS NO LONGER THE DEFECT. This assertion was a proxy for "the aim solver
+        // stopped solving", written when the bank sat at its limiter with the SIGN chattering. The
+        // fix commits a slice side deliberately, so holding the limit is now the intended
+        // behaviour and the proxy would fail the fix it was written to demand. The chattering it
+        // was really about has its own test; what this one is for is the observable defect —
+        // whether the fight ratchets through the ceiling.
         double longestSaturatedS = longestSaturatedBankTicks / (double)AircraftSim.TickHz;
-        Assert.True(longestSaturatedS < 12.0,
-            $"bandit held a saturated {1.30:F2} rad bank target for {longestSaturatedS:F1} s — "
-            + "the aim solver stopped solving and the jet flew a constant-bank spiral");
         Assert.True(maxAltitudeM < 11_500.0,
             $"bandit climbed to {maxAltitudeM:F0} m against a fight the player held at "
-            + $"{PlayerHoldM:F0} m — the fight ratcheted through the combat ceiling");
+            + $"{PlayerHoldM:F0} m — the fight ratcheted through the combat ceiling "
+            + $"(longest pinned-bank leg {longestSaturatedS:F1} s, reported not asserted)");
     }
 
     [Fact]

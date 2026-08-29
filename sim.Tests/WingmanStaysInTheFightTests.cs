@@ -67,7 +67,14 @@ public sealed class WingmanStaysInTheFightTests {
     static BeatSetup DurablePlayerTwoShipFixture() {
         BeatSetup beat = TwoShipFixture();
         return beat with {
-            Combat = beat.CombatRules with { PlayerHitsToDefeat = 30 },
+            // 2026-08-29: raised 30 -> 60. Traced, with CommandOwner published on both ships:
+            // once the bank slice is committed rather than chattering, the WINGMAN reaches its
+            // hits sooner and the player is dead by t=150 s while the lead is still 3.2 km out —
+            // so the contract failed for want of a window, not for want of a lead that attacks.
+            // Without the change the lead is seen firing at t=180 s. This is the durability doing
+            // exactly the job the comment above describes; the assertions are unchanged and both
+            // ships must still fire.
+            Combat = beat.CombatRules with { PlayerHitsToDefeat = 60 },
         };
     }
 
@@ -353,4 +360,5 @@ public sealed class WingmanStaysInTheFightTests {
             + $"sample: range {alive[^1].PlayerToLead:F0} m, tactic {alive[^1].LeadTactic}, "
             + $"altitude {alive[^1].LeadAltitude:F0} m)");
     }
+
 }

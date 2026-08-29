@@ -281,6 +281,9 @@ public sealed class ReactiveBandit :
     /// Latched state of the anti-camp ceiling denial. Latched rather than recomputed per tick
     /// because entry and exit need different thresholds — see SelectTactic.
     bool _ceilingDenial;
+    /// Latched altitude return, so the ceiling band is left deliberately rather than re-decided
+    /// every time the aircraft drifts across a single number.
+    bool _ceilingReturnLatched;
     // A separate close-fight latch. The lookahead pilot may legitimately ignore Return inside
     // ReengageRangeM, but it may not alternate ceiling recovery and another climbing rollout at a
     // single gamma threshold. Entry and exit bands are deliberately far apart.
@@ -291,6 +294,8 @@ public sealed class ReactiveBandit :
     // above the fight after the bandit has already crossed its ceiling.
     bool _hardCeilingRecovery;
     int _hardCeilingRecoverySide;
+    int _slicedBankSide;
+    const double SlicedBankReversalRad = 3.2;
     // A high-energy post-pass needs hysteresis just like the ceiling recoveries: once the hard
     // reversal starts, crossing the ordinary 3.5 km leash must not hand control back to the
     // softer long-range law before the gap has actually stopped opening.
@@ -1543,7 +1548,18 @@ public sealed class ReactiveBandit :
         // rebuild energy, but it does all of that inside the arena, and crossing the leash sends
         // it home regardless of how high the player is sitting. The low-energy gate above still
         // outranks the leash, for the documented stall reason.
-        if (radius > ReturnRadiusM || own.Position.Y > _ceilingM + 350.0) {
+        // ONE THRESHOLD ON own.Y IS THE DEFECT THIS FILE ALREADY KNOWS ABOUT. Entering Return
+        // above _ceilingM + 350 and falling through to Energy below it is a bare boundary: a jet
+        // holding station near the ceiling crosses it repeatedly and alternates tactic. Traced
+        // 2026-08-29 once the bank slice stopped chattering and the aircraft stayed in the fight
+        // instead of departing — Energy <-> Reengage six times in eleven seconds at 11.77-11.85 km
+        // against an 11,500 m ceiling, after a stable 139 seconds. The _ceilingDenial latch above
+        // has hysteresis for exactly this reason; this boundary was missing it.
+        bool aboveCeilingBand = own.Position.Y > _ceilingM + 350.0;
+        bool clearOfCeilingBand = own.Position.Y < _ceilingM + 150.0;
+        if (_ceilingReturnLatched && clearOfCeilingBand) _ceilingReturnLatched = false;
+        else if (aboveCeilingBand) _ceilingReturnLatched = true;
+        if (radius > ReturnRadiusM || _ceilingReturnLatched) {
             Tactic = BanditTactic.Return;
             return;
         }
@@ -2436,8 +2452,14 @@ public sealed class ReactiveBandit :
             ? (player.VelocityVector() - own.VelocityVector())
                 .Dot(playerLine * (1.0 / playerRangeM))
             : 0.0;
+        // ORBITING IS NOT RE-ENGAGING. Keyed on the range OPENING, this never armed for a jet
+        // holding a stable standoff — and the 2026-08-29 pair trace shows exactly that: with
+        // CommandOwner published, the cold pair's LEAD sits in Reengage from t=26 s to t=199 s at
+        // 4-6 km, firing nothing, while its wingman takes 127 rounds of the fight. At 350+ m/s a
+        // 57-degree bank is an 8.5 km turn radius, which cannot convert. Outside gun range, being
+        // fast and NOT CLOSING is the problem. A genuine conversion still keeps full power.
         bool openingBeyondFightRange = playerRangeM > ReengageRangeM
-            && openingMps > 5.0;
+            && openingMps > -20.0;
         // A training opponent has no reason to preserve an energy advantage while it is already
         // opening outside the fight. The hardware pass after ceiling containment exposed three
         // identical 5.5-6.2 km ovals: ReengageCommand selected correctly, then full afterburner
@@ -2610,7 +2632,11 @@ public sealed class ReactiveBandit :
             ? availableG
             : System.Math.Min(1.4 + angle * 2.6, availableG);
         double throttle = speedBrakeForRecommit ? 0.0 : _maximumThrottle;
-        return new PilotCommand(g, LimitedBankTo(aim, 1.30), throttle, 0.0);
+        bool supportRole = EffectiveFormationRole is FormationTacticalRole.Bracket
+            or FormationTacticalRole.Extend;
+        return new PilotCommand(g,
+            supportRole ? LimitedBankTo(aim, 1.30) : SlicedBankTo(aim, 1.30),
+            throttle, 0.0);
     }
 
     PilotCommand ReturnCommand() {
@@ -2632,7 +2658,7 @@ public sealed class ReactiveBandit :
         // into the fight, never fly away from it.
         double altExcessM = State.Position.Y - target.Y;
         if (altExcessM > 400.0) {
-            double diveBank = LimitedBankTo(target, 1.35);
+            double diveBank = SlicedBankTo(target, 1.35);
             double diveG = System.Math.Clamp(2.0 + angle * 1.2, 2.0, 3.8);
             return new PilotCommand(diveG, diveBank, _maximumThrottle, 0.0);
         }
@@ -2685,6 +2711,27 @@ public sealed class ReactiveBandit :
 
     double LimitedBankTo(in Vec3D target, double limit) =>
         System.Math.Clamp(Geometry.BankToPlaceLiftVectorOn(State, target), -limit, limit);
+
+    double SlicedBankTo(in Vec3D target, double limit) {
+        double solved = Geometry.BankToPlaceLiftVectorOn(State, target);
+        if (System.Math.Abs(solved) <= limit) {
+            if (System.Math.Abs(solved) <= limit * 0.9) _slicedBankSide = 0;
+            return solved;
+        }
+        var toTarget = target - State.Position;
+        double bearing = System.Math.Atan2(toTarget.X, toTarget.Z);
+        double bearingErrorRad = System.Math.Atan2(
+            System.Math.Sin(bearing - State.Chi), System.Math.Cos(bearing - State.Chi));
+        int bearingSide = System.Math.Sign(bearingErrorRad);
+        if (_slicedBankSide == 0) {
+            _slicedBankSide = bearingSide != 0 ? bearingSide : System.Math.Sign(solved);
+            if (_slicedBankSide == 0) _slicedBankSide = 1;
+        } else if (bearingSide != 0 && bearingSide != _slicedBankSide
+            && System.Math.Abs(bearingErrorRad) > SlicedBankReversalRad) {
+            _slicedBankSide = bearingSide;
+        }
+        return _slicedBankSide * limit;
+    }
 
     double AngleTo(in Vec3D target) {
         var line = (target - State.Position).Normalized();
