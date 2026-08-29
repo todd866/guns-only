@@ -21,7 +21,14 @@ if (IS_NODE_RUNTIME) {
     runtimeProcess.env.GUNS_SMOKE_PACKAGE
       ?? new URL("../../web/smoke/package.json", import.meta.url),
   );
-  ({ chromium } = requireFromSmoke("playwright"));
+  // Lazily, for the same reason as the other drivers: this module and mission_ai_suite are
+  // imported by unit tests that never open a browser, and CI's deterministic job does not install
+  // Playwright. Only `launch` is used.
+  let playwrightChromium;
+  chromium = {
+    launch: (...args) =>
+      (playwrightChromium ??= requireFromSmoke("playwright").chromium).launch(...args),
+  };
 }
 
 const valleyModule = await import(IS_NODE_RUNTIME

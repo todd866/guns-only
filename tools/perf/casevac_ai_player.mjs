@@ -11,7 +11,16 @@ const requireFromSmoke = createRequire(
   process.env.GUNS_SMOKE_PACKAGE
     ?? new URL("../../web/smoke/package.json", import.meta.url),
 );
-const { chromium } = requireFromSmoke("playwright");
+// RESOLVED ON FIRST LAUNCH, NOT AT IMPORT. This module is imported by its own unit tests, which
+// exercise scoring and assessment logic and never open a browser, and by mission_ai_suite. CI's
+// deterministic job deliberately does not install Playwright — it belongs to the browser stage —
+// so importing it eagerly failed those tests with "Cannot find module 'playwright'" on a machine
+// that was never going to need one. Only `launch` is used, so a lazy shim keeps every call site.
+let playwrightChromium;
+const chromium = {
+  launch: (...args) =>
+    (playwrightChromium ??= requireFromSmoke("playwright").chromium).launch(...args),
+};
 
 export const CASEVAC_AI_MISSION_ID =
   "mission.ukraine-2030s.casevac-low-level.prototype.v1";
