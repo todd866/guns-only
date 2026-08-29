@@ -213,6 +213,42 @@ cause (a fight spending 85 s high and slow would depress Ace conversion and infl
 tier's on-solution ratio) is untested — the aim change above did not move them, which is evidence
 against it being the whole story.
 
+### Attempted fixes and why they failed — 2026-08-29
+
+Three attempts, three different failures. Recording them so the next pass does not repeat them.
+
+1. **Take the horizontal aim from the real contact, keep only the vertical clamp.** Fixes the spiral
+   outright: traced outbound leg 19.1 s -> 0.0 s, nose holds 1.00, range stabilises near 4 km, the
+   jet descends instead of climbing. But the leash test then fails later on `maxRadiusM` (18,798 m
+   of wander), and it breaks
+   `WingmanStaysInTheFightTests.BothColdOpponentsFireWhileThePlayerIsAlive` — the clamp is
+   load-bearing for wingman containment.
+2. **The same, but keep the full clamp for `Bracket`/`Extend` roles.** Does not recover the wingman
+   test either; the primary in that fixture reports role `Bracket` and still fires zero rounds.
+3. **Also arm the `ReengageCommand` speed scrub on range being LARGE rather than OPENING**, to
+   attack the 8.5 km turn radius (the bandit holds 4 km at 359 m/s in a 57-degree bank, and
+   `openingMps` sits near zero at a stable range so the scrub never fired). Wander came back
+   **18,798 m — identical to the metre**, and the trace shows throttle still pinned at 1.61
+   throughout.
+
+That last result is the important one: **the wander phase is not flown by `ReengageCommand` at
+all.** Its arming conditions were met (range 4,163 m > `ReengageRangeM`, speed 346 > the 290 m/s
+ceiling) and `speedBrakeForRecommit` feeds throttle on both its return paths, yet throttle never
+moved. So the earlier attribution of the wander to `ReengageCommand` was wrong. `Tactic = Return`
+is set by at least three different branches, including the `lowTarget` branch that dispatches
+`LowBlockPerchCommand` — and `IsLowTarget` keys on the contact's clearance above terrain, which a
+player holding 4,592 m over flat ground can satisfy. `LowBlockPerchCommand` clamps its horizontal
+aim to 1,800 m and flies a perch, which is a plausible shape for a 4 km standoff that drifts.
+
+**The first task is therefore instrumentation, not a fix.** `Tactic` is not a command owner and
+cannot be used as one — the codebase has roughly eight command owners reachable per tick and no way
+to tell from a tape which one flew. Publish the owner alongside `Tactic` (an enum set at each
+`LastCommand = ...` site), re-run the leash trace, and only then decide where containment belongs.
+Every attempt above failed because it guessed the owner instead of measuring it — the same mistake
+the standing "trace, don't reason" instruction on this file already warns about, made three times.
+
+The spiral attribution in the previous section stands: that one was confirmed by fixing it.
+
 **Do not merge this branch to main until those six are resolved.** The branch is pushed so the work
 is not confined to one machine; CI will be red, accurately.
 
