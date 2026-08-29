@@ -47,12 +47,18 @@ test("the smoke server preserves production terrain byte-range semantics", async
     assert.match(response.headers.get("content-range") ?? "", /^bytes 0-1\/\d+$/);
     assert.equal(response.headers.get("content-length"), "2");
     assert.equal((await response.arrayBuffer()).byteLength, 2);
-    assert.deepEqual(site.diagnostics(), {
-      fullFileBytesRead: 0,
-      rangeBytesRead: 2,
-      rangeRequests: 1,
-      largestReadAllocation: 2,
-    }, "a ranged terrain request must never read or allocate the whole backing page");
+    // THE CONTRACT IS ABOUT TERRAIN READS, so assert the terrain counters rather than the whole
+    // diagnostics bag. deepEqual against an object literal made this test fail the moment the
+    // smoke server grew telemetry counters — ten new fields, every one of them zero or null, with
+    // the read behaviour it exists to police completely unchanged. A diagnostics surface that
+    // other features legitimately extend is the wrong thing to pin exactly.
+    const diagnostics = site.diagnostics();
+    assert.equal(diagnostics.fullFileBytesRead, 0,
+      "a ranged terrain request must never read the whole backing page");
+    assert.equal(diagnostics.largestReadAllocation, 2,
+      "a ranged terrain request must never allocate the whole backing page");
+    assert.equal(diagnostics.rangeBytesRead, 2);
+    assert.equal(diagnostics.rangeRequests, 1);
   } finally {
     await site.close();
   }
@@ -1912,9 +1918,17 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
     assert.ok(after.tick > before.tick);
     assert.ok(after.energyKwh < before.energyKwh,
       `applied power did not reduce energy: ${JSON.stringify({ before, after })}`);
-    assert.match(after.flightFacts, /ROUTE/);
-    assert.match(after.flightFacts, /ENERGY/);
-    assert.match(after.flightFacts, /CONTACT LIMITS/);
+    // The CASEVAC flight-facts panel was redesigned on this branch — a steer line above a labelled
+    // primary grid replaced the old ROUTE / ENERGY / CONTACT LIMITS headings — and this smoke test
+    // was not updated with it. The CONTRACT is unchanged and is what gets asserted here: the panel
+    // must still tell the commander where to steer, how much energy is left, and what the contact
+    // band is. Only the vocabulary moved.
+    assert.match(after.flightFacts, /PICKUP|CLINIC/,
+      `flight facts must carry the steer line: ${after.flightFacts}`);
+    assert.match(after.flightFacts, /RESERVE/,
+      `flight facts must carry remaining energy: ${after.flightFacts}`);
+    assert.match(after.flightFacts, /SAFE BAND|OUTSIDE BAND|MASKED|BAND NOT ASSESSED/,
+      `flight facts must carry the contact band: ${after.flightFacts}`);
     assert.equal(after.routeCardHidden, true);
     assert.equal(after.hudVisibility, "hidden");
     assert.equal(after.fireHidden, true);
