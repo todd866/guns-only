@@ -249,6 +249,39 @@ the standing "trace, don't reason" instruction on this file already warns about,
 
 The spiral attribution in the previous section stands: that one was confirmed by fixing it.
 
+### The contracts are not measuring the opponent that matters — 2026-08-29
+
+Owner telemetry, 80 dev-Mac sessions over 30 days, 96 sorties carrying real flight data
+(`tools/telemetry/opponent_pressure.py`, billed):
+
+| | |
+| --- | --- |
+| sorties where it landed any hit on the owner | **5 of 96 (5%)** |
+| sorties where it shot the owner down | **5** |
+| sorties where the owner flew into the ground | 6 (not its doing) |
+| sorties where the owner killed it | **32** |
+| rounds it hit the owner with | 16 |
+| rounds the owner hit it with | 127 |
+
+Skill flown was `ACE` in 71 of those sorties. So roughly **6:1 against a nominal Ace**, and it
+reaches a firing solution in about one sortie in twenty. Its lethality is fine — 16 rounds produced
+5 kills — it simply almost never arrives at a shot.
+
+**This telemetry is from the SHIPPED opponent, i.e. main's, not this branch's regressed one.** That
+is the uncomfortable part: a bandit that *passes* every gun-conversion contract still only touches
+the owner in 5% of sorties. The contracts grade the Ace against a synthetic scripted probe; the
+owner is a former fast-jet pilot. Passing them is not evidence of a credible opponent, and they
+should not be cited as though it were.
+
+So there is a measurement gap sitting underneath the six regressions, and it is the more important
+of the two. Fixing the regressions restores a contract that was already grading the wrong thing.
+
+**Next instrument, before any tuning or learning:** an owner-flight benchmark. There are 96 real
+sorties in Blob including 32 the owner won. Replay those geometries, ask what the bandit did at each
+merge and what it should have done, and calibrate the contract against that instead of the scripted
+probe. Without it there is no metric that would distinguish a better opponent from a worse one —
+which is also why reaching for a learned policy now would optimise against the wrong target.
+
 **Do not merge this branch to main until those six are resolved.** The branch is pushed so the work
 is not confined to one machine; CI will be red, accurately.
 
