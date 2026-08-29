@@ -19,7 +19,7 @@ public class OwnerEngagementBenchmarkTests {
     readonly ITestOutputHelper _out;
     public OwnerEngagementBenchmarkTests(ITestOutputHelper o) { _out = o; }
 
-    [Fact]
+    [FactIfData(EngagementsPath)]
     public void TheOwnerEngagementSetStagesRealGeometries() {
         var scenarios = OwnerEngagementScenarios.Load(EngagementsPath);
         Assert.True(scenarios.Count >= 100,

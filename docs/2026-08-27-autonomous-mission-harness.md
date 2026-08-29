@@ -534,6 +534,45 @@ decreasingly so afterwards. Read 9 kills in 158 as evidence about the opening of
 Closing that properly means a behaviour-cloned pilot rather than a replay, and the 158 engagements
 with inputs are exactly the dataset for it.
 
+### Learning from the pilot — the clone — 2026-08-29
+
+The loop the owner asked for is *he flies, then something learns from him flying*. The pieces now
+exist end to end, and the honest summary is that the plumbing is right and the clone is weak.
+
+`HumanPilotFeatures` is the single feature definition — 14 values, all in the ownship body frame,
+world position deliberately absent so a clone cannot memorise map locations instead of learning to
+fight, and bank carried as a sin/cos pair so it does not tear at the seam. Both invariants are
+pinned by tests. The exporter and the flying policy both go through it; computing features twice
+would let the clone learn one function and fly another with nothing reporting it, so the manifest
+carries reference cases and `ClonedPilotPolicy` refuses to load one it cannot reproduce to 1e-6.
+
+Pipeline: 93,016 frames of real flying across 55 sorties -> feature rows -> `train_pilot_clone.py`
+(a small tanh MLP in numpy) -> a 40 KB manifest -> `ClonedPilotPolicy` flying inside the ordinary
+seam. **Split by sortie**, never by row: frames within one engagement are near-duplicates at 20 Hz
+and a random split would report a score the clone had not earned.
+
+**Two data defects the metrics found, and both were real:**
+
+- `bank_target_deg` is an UNWRAPPED accumulator — measured range −737 to +1341 degrees, 53% of
+  samples beyond ±180 — because the controller needs continuity across the seam. Read as a bank
+  angle it produced a label with a 7.7 rad standard deviation and a bank head scoring **1.60 times
+  worse than predicting a constant**. `requested_bank_target_deg` is the pilot's actual ask, wrapped.
+  Fixed: bank went to **0.52**, comfortably better than a constant.
+- The firing head reported **99.4% accuracy** and precision and recall of exactly **zero**. The pilot
+  fires on 0.6% of ticks, so "never fire" is 99.4% correct. Accuracy is the wrong metric for a rare
+  event and it hid a completely degenerate head. With the positives weighted back to parity it
+  reaches recall 0.34 at precision 0.05 — over-firing, but no longer a constant.
+
+**Where the clone actually is** (held-out sorties): bank 0.52 and G 0.72 against a constant baseline,
+throttle detent agreement 0.78, firing recall 0.34 at precision 0.05. It flies plausibly and shoots
+badly. That is a starting point, not a pilot: usable as a training adversary that reacts, which a
+replay cannot be, and not yet a faithful model of him.
+
+**The datasets are not committed.** They are a person's own flight telemetry and run to tens of
+megabytes; `analysis/owner-pilot-frames.jsonl` and `-rows.jsonl` are gitignored and regenerable, and
+the tests that need them skip rather than fail so a fresh clone of this public repository reports the
+truth instead of a broken build.
+
 **Do not merge this branch to main until those six are resolved.** The branch is pushed so the work
 is not confined to one machine; CI will be red, accurately.
 

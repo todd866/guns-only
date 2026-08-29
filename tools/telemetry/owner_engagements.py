@@ -77,11 +77,27 @@ def rounds_of(state):
 
 
 def command_at(state):
-    """The owner's actual stick and throttle on this tick, as a PilotCommand would carry it."""
-    g = finite(state.get("g_cmd"))
-    bank = finite(state.get("bank_target_deg"))
-    throttle = finite(state.get("throttle"))
-    if None in (g, bank, throttle):
+    """The owner's actual stick and throttle on this tick, as a PilotCommand would carry it.
+
+    THE REQUESTED FIELDS ARE THE PILOT'S ASK. `bank_target_deg` is an UNWRAPPED accumulator —
+    measured range -737 to +1341 degrees, with 53% of samples beyond +/-180 — because the
+    controller needs continuity across the seam. Reading it as a bank angle produced a
+    behaviour-cloning label with a 7.7 rad standard deviation and a bank head that scored WORSE
+    than predicting a constant. `requested_bank_target_deg` is the same quantity wrapped to
+    +/-180, which is what the pilot actually asked for.
+    """
+    g = finite(state.get("requested_g_cmd"))
+    if g is None:
+        g = finite(state.get("g_cmd"))
+    bank = finite(state.get("requested_bank_target_deg"))
+    if bank is None:
+        bank = finite(state.get("bank_target_deg"))
+        if bank is not None:
+            bank = (bank + 180.0) % 360.0 - 180.0
+    throttle = finite(state.get("requested_throttle"))
+    if throttle is None:
+        throttle = finite(state.get("throttle"))
+    if None in (g, bank, throttle) or abs(bank) > 180.0:
         return None
     return {"g_cmd": g, "bank_target_deg": bank, "throttle": throttle}
 
@@ -154,6 +170,48 @@ def extract(days, refresh, allow_download):
                     and roundsNow > roundsBefore)
                 inputs.append(command)
 
+            # Per-tick frames for behaviour cloning: the state the pilot saw and the controls he
+            # used on that tick. Features are NOT computed here — HumanPilotFeatures owns that, in
+            # one place, so the exporter and the flying clone cannot diverge.
+            frames = []
+            for follow in range(index, len(samples)):
+                t = (follow - index) * SAMPLE_PERIOD_S
+                if t > REPLAY_WINDOW_S:
+                    break
+                frame = samples[follow]
+                framePlayer = vec(frame, "px", "py", "pz")
+                frameBandit = vec(frame, "bx", "by", "bz")
+                framePrevious = vec(samples[follow - 1], "bx", "by", "bz") if follow > 0 else None
+                command = command_at(frame)
+                if None in (framePlayer, frameBandit) or framePrevious is None or command is None:
+                    continue
+                frameRange = finite(frame.get("range_m"))
+                if frameRange is None or abs(math.dist(framePlayer, frameBandit) - frameRange) \
+                        > POSITION_RANGE_TOLERANCE_M:
+                    continue
+                speed = finite(frame.get("true_airspeed_kts"))
+                heading = finite(frame.get("heading_deg"))
+                gamma = finite(frame.get("gamma_deg"))
+                bank = finite(frame.get("bank_deg"))
+                if None in (speed, heading, gamma, bank):
+                    continue
+                roundsNow = rounds_of(frame)
+                roundsBefore = rounds_of(samples[follow - 1]) if follow > 0 else None
+                frames.append({
+                    "t": t,
+                    "player": {"x": framePlayer[0], "y": framePlayer[1], "z": framePlayer[2],
+                               "true_airspeed_kts": speed, "heading_deg": heading,
+                               "gamma_deg": gamma, "bank_deg": bank},
+                    "bandit": {"x": frameBandit[0], "y": frameBandit[1], "z": frameBandit[2],
+                               "velocity_mps": [(frameBandit[i] - framePrevious[i]) * 20.0
+                                                for i in range(3)]},
+                    "action": {"g_cmd": command["g_cmd"],
+                               "bank_target_deg": command["bank_target_deg"],
+                               "throttle": command["throttle"],
+                               "firing": bool(roundsNow is not None and roundsBefore is not None
+                                              and roundsNow > roundsBefore)},
+                })
+
             engagements.append({
                 "session": record["session"],
                 "sortie": sortie,
@@ -174,6 +232,7 @@ def extract(days, refresh, allow_download):
                     "health": finite(state.get("bandit_health")),
                 },
                 "owner_inputs": inputs,
+                "frames": frames,
             })
     return engagements
 
@@ -183,14 +242,32 @@ def main():
     parser.add_argument("--days", type=int, default=30)
     parser.add_argument("--out", default="analysis/owner-engagements.jsonl")
     parser.add_argument("--refresh", action="store_true")
+    parser.add_argument("--frames", default=None,
+                        help="also write per-tick behaviour-cloning frames here")
     parser.add_argument("--i-know-this-is-billed", action="store_true")
     args = parser.parse_args()
 
     engagements = extract(args.days, args.refresh, args.i_know_this_is_billed)
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
+    # Frames live beside the engagement file, not inside it, so the committed geometry set stays
+    # small and reviewable while the behaviour-cloning dataset can be large.
+    frameCount = 0
+    framesByEngagement = [e.pop("frames", []) for e in engagements]
     with open(args.out, "w") as fh:
         for e in engagements:
             fh.write(json.dumps(e, sort_keys=True) + "\n")
+    if args.frames:
+        os.makedirs(os.path.dirname(args.frames) or ".", exist_ok=True)
+        with open(args.frames, "w") as fh:
+            for engagement, frames in zip(engagements, framesByEngagement):
+                for frame in frames:
+                    # The SORTIE is the split unit. Frames from one engagement are wildly
+                    # correlated, so a random row split would put near-duplicates on both sides
+                    # and report a validation score the clone has not earned.
+                    frame["sortie"] = engagement["sortie"]
+                    frameCount += 1
+                    fh.write(json.dumps(frame, sort_keys=True) + "\n")
+        print(f"frames written          {frameCount} -> {args.frames}")
     skills = {}
     for e in engagements:
         skills[e["bandit"]["skill"]] = skills.get(e["bandit"]["skill"], 0) + 1
