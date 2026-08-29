@@ -400,6 +400,48 @@ fixture's owner trace in hand rather than by tuning a seventh variant.
 No production change retained; the reproduction stays `Skip`-ped. The instrumentation is kept and is
 behaviour-neutral (same six failures, 2,427 passing).
 
+### The learned-policy seam, and the throughput that decides it — 2026-08-29
+
+`SeededCombatBatchRunner` already owned seeded scenarios, the observation/action/reward contracts,
+an append-only transition recorder and dataset JSONL — most of a training environment. Its own
+summary named the gap: *"a later policy adapter can replace that actor while retaining this
+scenario, physics, weapon, reward, recorder, and dataset contract."* That adapter now exists.
+
+`ICombatLearningPolicy` takes a `CombatPolicyObservation` and returns a `CombatPolicyDecision`
+(a `PilotCommand` plus fire INTENT, not authorization — the production ammunition, first-pass and
+target-alive gates still apply on top, so a learned fighter cannot acquire weapons freedom the
+opponent it replaces does not have). `CombatPolicyActor` flies it on an ordinary `AircraftSim`,
+supplying pilot controls only, so it is bound by the same aerodynamics and structural limits.
+
+The default path is unchanged **by construction**, not by argument: with no policy supplied the
+learning fighter is the same `ReactiveBandit` object it always was, reached through
+`ReactiveBanditActor`. `CombatPolicySeamTests` pins both halves — an injected policy is consulted
+once per transition and its commanded bank appears in the recorded action, and the default path
+stays bit-identical.
+
+**Measured throughput** (`CombatPolicyThroughputBenchmark`, kept `Skip`-ped; Release, 10 workers,
+256 episodes of 30 s):
+
+| | |
+| --- | --- |
+| env steps / second | **150,325** |
+| episodes / second | 41.8 |
+| realtime factor | **1,253x** |
+| 1M steps | 0.1 min |
+| 10M steps | 1.1 min |
+| 100M steps | 0.2 h |
+
+**The environment is not the bottleneck, and that is worth stating plainly because it contradicts
+an earlier assessment in this session.** The claim that the kernel would need rebuilding for
+training throughput was wrong by three orders of magnitude. AlphaDogfight-class experience budgets
+are minutes of environment time here; the policy forward/backward pass will dominate, not the sim.
+
+What remains before training is worth starting is the reward, and that is a real gap rather than a
+delay: `CombatRewardWeights` scalarizes against the same contracts that grade the Ace on a scripted
+probe, and a bandit which *passes* those touches the owner in 5% of his sorties (see the opponent
+pressure section). Training on that reward converges faster onto the opponent that already exists.
+The owner-flight benchmark is the reward function, and it is the same work either way.
+
 **Do not merge this branch to main until those six are resolved.** The branch is pushed so the work
 is not confined to one machine; CI will be red, accurately.
 

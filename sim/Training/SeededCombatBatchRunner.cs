@@ -365,7 +365,8 @@ public static class SeededCombatBatchRunner {
         double maximumSeconds,
         CombatRewardWeights? rewardWeights = null,
         CancellationToken cancellationToken = default,
-        int engagementNumber = 1) =>
+        int engagementNumber = 1,
+        ICombatLearningPolicy? learningPolicy = null) =>
         RunEpisodeCore(
             episodeIndex,
             scenario,
@@ -375,7 +376,8 @@ public static class SeededCombatBatchRunner {
             rewardWeights,
             cancellationToken,
             engagementNumber,
-            plannerTeacherSamples: null);
+            plannerTeacherSamples: null,
+            learningPolicy: learningPolicy);
 
     /// <summary>
     /// Run one ordinary episode and retain the full decision trace and recurrent memory at every
@@ -418,7 +420,8 @@ public static class SeededCombatBatchRunner {
         CombatRewardWeights? rewardWeights,
         CancellationToken cancellationToken,
         int engagementNumber,
-        List<PlannerTeacherSample>? plannerTeacherSamples) {
+        List<PlannerTeacherSample>? plannerTeacherSamples,
+        ICombatLearningPolicy? learningPolicy = null) {
         if (episodeIndex < 0) throw new ArgumentOutOfRangeException(nameof(episodeIndex));
         if (engagementNumber < 1)
             throw new ArgumentOutOfRangeException(nameof(engagementNumber));
@@ -449,12 +452,25 @@ public static class SeededCombatBatchRunner {
             engagementNumber: engagementNumber);
         // Scenario factories stage skill-agnostic states; a machine episode restages the
         // learning fighter at UCAV mass so the airframe it flies is the airframe it weighs.
-        var learning = new ReactiveBandit(
-            behaviorSkill == PilotSkill.Machine
-                ? scenario.LearningFighterStart with { Mass = learningAir.MassKg }
-                : scenario.LearningFighterStart,
-            learningAir, behaviorSkill,
-            engagementNumber: engagementNumber);
+        AircraftState learningStart = behaviorSkill == PilotSkill.Machine
+            ? scenario.LearningFighterStart with { Mass = learningAir.MassKg }
+            : scenario.LearningFighterStart;
+        // The default path keeps flying the SAME ReactiveBandit object it always did, so behaviour
+        // data recorded before this seam existed cannot drift. A supplied policy replaces only the
+        // controller; scenario, physics, weapon, reward, recorder and dataset are untouched, and
+        // the production ammunition / first-pass / target-alive gates below still apply to it.
+        var learningBandit = learningPolicy is null
+            ? new ReactiveBandit(learningStart, learningAir, behaviorSkill,
+                engagementNumber: engagementNumber)
+            : null;
+        var learningActor = learningPolicy is null
+            ? new ReactiveBanditActor(learningBandit!)
+            : (ICombatLearningActor)new CombatPolicyActor(
+                learningStart, learningAir, learningPolicy, CombatConfig.ModernVisualMerge.OpponentAmmo);
+        if (learningPolicy is not null && plannerTeacherSamples is not null)
+            throw new ArgumentException(
+                "Planner-teacher samples distil the hand-written planner; a learned policy has no "
+                + "planner to distil.", nameof(plannerTeacherSamples));
         CombatConfig combat = CombatConfig.ModernVisualMerge;
         var referenceGun = new GunKill(
             combat.PlayerAmmo,
@@ -469,7 +485,7 @@ public static class SeededCombatBatchRunner {
         var recorder = new CombatTransitionRecorder(
             episodeIndex, scenario.Id, scenario.Seed, rewardWeights);
 
-        double minimumRangeM = Geometry.Range(reference.State, learning.State);
+        double minimumRangeM = Geometry.Range(reference.State, learningActor.State);
         double previousRangeM = minimumRangeM;
         double openingSeconds = 0.0;
         bool firstPassOpened = !scenario.FirstPassSafe;
@@ -477,7 +493,7 @@ public static class SeededCombatBatchRunner {
             cancellationToken.ThrowIfCancellationRequested();
             double elapsedSeconds = tick * Dt;
             AircraftState referenceState = reference.State;
-            AircraftState learningState = learning.State;
+            AircraftState learningState = learningActor.State;
 
             ActorObservation referenceContact = ActorObservation.Capture(referenceState, tick);
             ActorObservation learningContact = ActorObservation.Capture(learningState, tick);
@@ -494,6 +510,10 @@ public static class SeededCombatBatchRunner {
             bool learningInEnvelope =
                 CombatRewardModel.InAuthorizedFiringEnvelope(observation);
 
+            // One decision per tick, taken on the observation both answers come from: a policy
+            // cannot see a different world for shooting than for flying.
+            (learningActor as CombatPolicyActor)?.Decide(observation);
+
             bool referenceFireIntentEvaluated = firstPassOpened && combat.PlayerAmmo > 0;
             bool referenceFireIntentConsumed = referenceFireIntentEvaluated
                 && reference.WantsToFire(learningContact);
@@ -502,19 +522,19 @@ public static class SeededCombatBatchRunner {
                 && referenceGun.TargetAlive;
             bool learningFireIntentEvaluated = firstPassOpened && combat.OpponentAmmo > 0;
             bool learningFireIntentConsumed = learningFireIntentEvaluated
-                && learning.WantsToFire(referenceContact);
+                && learningActor.WantsToFire(referenceContact);
             bool learningFireAuthorized = learningFireIntentConsumed
                 && learningGun.AmmoRemaining > 0
                 && learningGun.TargetAlive;
-            long learningSelectionBefore = learning.DecisionTrace.SelectionSequence;
+            long learningSelectionBefore = learningBandit?.DecisionTrace.SelectionSequence ?? 0L;
             BanditPolicyMemory learningPolicyMemoryBefore =
                 plannerTeacherSamples is null
                     ? default
-                    : learning.PolicyMemory;
+                    : learningBandit!.PolicyMemory;
             double learningEnginePowerBefore =
                 plannerTeacherSamples is null
                     ? 0.0
-                    : learning.ThrustFraction;
+                    : learningActor.ThrustFraction;
             int learningRoundsBefore = learningGun.RoundsFired;
             int learningHitsBefore = learningGun.HitCount;
             int referenceHitsBefore = referenceGun.HitCount;
@@ -526,18 +546,18 @@ public static class SeededCombatBatchRunner {
             referenceGun.Step(referenceFireAuthorized, referenceState, learningState, Dt);
             learningGun.Step(learningFireAuthorized, learningState, referenceState, Dt);
             reference.Step(learningContact, Dt);
-            learning.Step(referenceContact, Dt);
+            learningActor.Step(referenceContact, Dt);
             EnsureSupportedFlightVolume(reference.State, scenario.Id, "reference");
-            EnsureSupportedFlightVolume(learning.State, scenario.Id, "learning");
+            EnsureSupportedFlightVolume(learningActor.State, scenario.Id, "learning");
             bool maneuverSelected =
-                learning.DecisionTrace.SelectionSequence > learningSelectionBefore;
+                (learningBandit?.DecisionTrace.SelectionSequence ?? 0L) > learningSelectionBefore;
             if (maneuverSelected && plannerTeacherSamples is not null) {
                 plannerTeacherSamples.Add(new PlannerTeacherSample(
                     recorder.Count,
                     observation,
                     learningPolicyMemoryBefore,
-                    learning.PolicyMemory,
-                    learning.DecisionTrace,
+                    learningBandit!.PolicyMemory,
+                    learningBandit!.DecisionTrace,
                     behaviorSkill,
                     learningEnginePowerBefore));
             }
@@ -557,7 +577,7 @@ public static class SeededCombatBatchRunner {
             // Advance scenario authority at the completed-tick boundary. Doing this before
             // materialising o(t+1) guarantees that the next tuple begins with the exact same
             // observation, including the first-pass weapons gate.
-            double nextRangeM = Geometry.Range(reference.State, learning.State);
+            double nextRangeM = Geometry.Range(reference.State, learningActor.State);
             minimumRangeM = System.Math.Min(minimumRangeM, nextRangeM);
             if (!firstPassOpened && minimumRangeM <= MergeGateM) {
                 bool opening = nextRangeM > previousRangeM
@@ -574,7 +594,7 @@ public static class SeededCombatBatchRunner {
             CombatPolicyObservation nextObservation = CombatPolicyObservation.Capture(
                 tick + 1L,
                 (tick + 1L) * Dt,
-                learning.State,
+                learningActor.State,
                 nextReferenceContact,
                 learningGun.AmmoRemaining,
                 nextWeaponsAuthorized);
@@ -589,7 +609,9 @@ public static class SeededCombatBatchRunner {
                 OpponentDestroyed: referenceDestroyed,
                 OwnshipDestroyed: learningDestroyed);
             CombatAction action = CombatAction.Capture(
-                learning.AppliedCommand,
+                learningBandit is not null
+                    ? learningBandit.AppliedCommand
+                    : ((CombatPolicyActor)learningActor).LastCommand,
                 maneuverSelected,
                 maneuverApplied: true,
                 learningFireIntentEvaluated,
@@ -608,7 +630,7 @@ public static class SeededCombatBatchRunner {
                     && threatGun.Outcome == FightOutcome.Flying
                     && threatGun.RoundsInFlight.Count > 0; settle++) {
                     AircraftState referenceSettleState = reference.State;
-                    AircraftState learningSettleState = learning.State;
+                    AircraftState learningSettleState = learningActor.State;
                     long settleTick = tick + 1L + settle;
                     referenceGun.Step(false, referenceSettleState,
                         learningSettleState, Dt);
@@ -616,7 +638,7 @@ public static class SeededCombatBatchRunner {
                         referenceSettleState, Dt);
                     reference.Step(ActorObservation.Capture(
                         learningSettleState, settleTick), Dt);
-                    learning.Step(ActorObservation.Capture(
+                    learningActor.Step(ActorObservation.Capture(
                         referenceSettleState, settleTick), Dt);
                 }
                 learningDestroyed = referenceGun.Outcome == FightOutcome.Splash;
