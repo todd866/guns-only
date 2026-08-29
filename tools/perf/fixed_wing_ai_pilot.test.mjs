@@ -11471,3 +11471,174 @@ test("Top Gun acceptance requires pilot RTB and a stopped winning wire", () => {
     /not a stopped, wire-engaged trap/,
   );
 });
+
+test("an F-22 sortie the opponent never contested is not a defensive result", () => {
+  // Tapes 495 and 498 both "survived 180 s untouched" — and in both the Ace fired zero rounds.
+  // Survival there measures whether the bandit engaged, not whether ownship defended, so a
+  // quiet sortie must never be creditable as defensive evidence.
+  const quiet = [
+    commonSample({ wallS: 0 }),
+    commonSample({ wallS: 90, tick: 10_800, rangeM: 600, sortieOpponentRoundsFired: 0 }),
+    commonSample({ wallS: 180, tick: 21_600, rangeM: 800, sortieOpponentRoundsFired: 0 }),
+  ];
+  const quietAssessment = assessFixedWingAiFlight(quiet, { mission: "f22" });
+  assert.equal(quietAssessment.metrics.defensiveSampleValid, false);
+  assert.ok(quietAssessment.failures.some((failure) =>
+    failure.includes("opponent never fired")),
+    `expected an uncontested-sortie failure, got:\n${quietAssessment.failures.join("\n")}`);
+
+  // A contested sortie keeps its ordinary grading; the gate must not add noise there.
+  const contested = quiet.map((sample) => ({ ...sample, sortieOpponentRoundsFired: 9 }));
+  const contestedAssessment = assessFixedWingAiFlight(contested, { mission: "f22" });
+  assert.equal(contestedAssessment.metrics.defensiveSampleValid, true);
+  assert.ok(!contestedAssessment.failures.some((failure) =>
+    failure.includes("opponent never fired")));
+
+  // Killing the Ace before it ever shoots is a win, not an invalid sample.
+  const quickKill = quiet.map((sample) => ({
+    ...sample, killCount: sample.wallS > 0 ? 1 : 0, opponentHealth: sample.wallS > 0 ? 0 : 1,
+  }));
+  const quickKillAssessment = assessFixedWingAiFlight(quickKill, { mission: "f22" });
+  assert.ok(!quickKillAssessment.failures.some((failure) =>
+    failure.includes("opponent never fired")),
+    "a kill before the opponent fires must not be graded as an uncontested sortie");
+});
+
+test("the ordinary 68-degree pursuit cap is forward-quarter only", () => {
+  // Tape 498 converted its first post-merge turn about 1.1 deg/s slower than Tape 495 because the
+  // 68-degree cap was applied globally. Forward of the 3/9 line 68 degrees is the deliberate
+  // sustainable plane; behind it the fight needs the existing 72-degree aft-turn authority, which
+  // until now only appeared once the dedicated hold armed at 150 degrees of heading error.
+  const bankCommandAtBearing = (bearingDeg) => {
+    const radians = bearingDeg * Math.PI / 180;
+    return fixedWingAiCommand({
+      px: 0, py: 3_500, pz: 0,
+      bx: Math.sin(radians) * 1_500,
+      by: 3_500,
+      bz: Math.cos(radians) * 1_500,
+      heading_deg: 0,
+      bank_deg: 0,
+      roll_rate_dps: 0,
+      gamma_deg: 0,
+      true_airspeed_kts: 450,
+      g_actual: 1,
+      aoa_deg: 5,
+      lead_valid: false,
+    }, "f22", createFixedWingAiControllerState()).target;
+  };
+
+  const forwardQuarter = bankCommandAtBearing(60);
+  assert.equal(forwardQuarter.combatAftPursuitBankHoldActive, false);
+  assert.equal(forwardQuarter.desiredBankDeg, 68,
+    "forward of the 3/9 line the sustainable 68-degree plane still governs");
+
+  const aftQuarter = bankCommandAtBearing(120);
+  assert.equal(aftQuarter.combatAftPursuitBankHoldActive, false,
+    "120 degrees is below the 150-degree hold arming threshold, so this is the ordinary clamp");
+  assert.equal(aftQuarter.desiredBankDeg, 72,
+    "an aft-quarter turn keeps the full 72-degree pursuit authority");
+});
+
+test("Tape 498 keeps a same-side magnitude-reducing finisher trim off the unload interlock", () => {
+  // At 67.942 s the finisher wanted +32.7 -> +19.7 degrees of bank: same side, smaller, and the
+  // rate-damped command was only about -0.218 — under the 0.25 materiality boundary. The static
+  // 12.5-degree gate saw 13.0 degrees of error, dumped to 0.8 G, and let lateral error grow while
+  // ballistic lead was still improving to 4.80. Ordinary maintenance of a captured plane is not a
+  // tactical plane change and must not unload.
+  const reducingState = f22LeadPlaneState({
+    bankDeg: 32.7,
+    rollRateDps: -6,
+    planeErrorDeg: -13,
+    offBoresightDeg: 6,
+    altitudeM: 4_500,
+    gammaDeg: 0,
+  });
+  const reducing = fixedWingAiCommand({
+    ...reducingState, range_m: 520, closure_kts: 40, g_actual: 4.1, aoa_deg: 9.4,
+  }, "f22", createFixedWingAiControllerState());
+  assert.equal(reducing.target.gunLeadFinisherActive, true);
+  assert.equal(reducing.target.combatLoadedRollUnloadActive, false,
+    "a same-side, magnitude-reducing, sub-material trim must stay loaded");
+  assert.ok(reducing.target.desiredLoadFactorG > 2.5,
+    `finisher maintenance must keep its pull, got ${reducing.target.desiredLoadFactorG}`);
+
+  // Everything the interlock exists for must still unload. Increasing the bank magnitude by the
+  // same 13 degrees is a real plane change, not maintenance.
+  const increasing = fixedWingAiCommand({
+    ...f22LeadPlaneState({
+      bankDeg: 32.7,
+      rollRateDps: 6,
+      planeErrorDeg: 13,
+      offBoresightDeg: 6,
+      altitudeM: 4_500,
+      gammaDeg: 0,
+    }), range_m: 520, closure_kts: 40, g_actual: 4.1, aoa_deg: 9.4,
+  }, "f22", createFixedWingAiControllerState());
+  assert.equal(increasing.target.gunLeadFinisherActive, true);
+  assert.equal(increasing.target.combatLoadedRollUnloadActive, true,
+    "an increasing-magnitude finisher plane change still unloads");
+
+  // A cross-side correction through wings level is a transfer, not maintenance.
+  const crossSide = fixedWingAiCommand({
+    ...f22LeadPlaneState({
+      bankDeg: 6,
+      rollRateDps: -6,
+      planeErrorDeg: -19,
+      offBoresightDeg: 6,
+      altitudeM: 4_500,
+      gammaDeg: 0,
+    }), range_m: 520, closure_kts: 40, g_actual: 4.1, aoa_deg: 9.4,
+  }, "f22", createFixedWingAiControllerState());
+  assert.equal(crossSide.target.gunLeadFinisherActive, true);
+  assert.equal(crossSide.target.combatLoadedRollUnloadActive, true,
+    "a cross-side finisher correction still unloads");
+});
+
+test("the pursuit handoff trim holds 68 degrees until the live side is physically captured", () => {
+  const controllerState = createFixedWingAiControllerState();
+  const aftQuarterPursuit = ({ bankDeg, rollRateDps }) => {
+    const bearingRad = 120 * Math.PI / 180;
+    return fixedWingAiCommand({
+      px: 0, py: 3_500, pz: 0,
+      bx: Math.sin(bearingRad) * 1_500,
+      by: 3_500,
+      bz: Math.cos(bearingRad) * 1_500,
+      heading_deg: 0,
+      bank_deg: bankDeg,
+      roll_rate_dps: rollRateDps,
+      gamma_deg: 0,
+      true_airspeed_kts: 450,
+      g_actual: 1,
+      aoa_deg: 5,
+      lead_valid: false,
+    }, "f22", controllerState).target;
+  };
+
+  // Hand off out of the aft seam hold at a wall-lane bank.
+  controllerState.combatAftPursuitBankHoldActive = true;
+  controllerState.combatAftPursuitBankHoldSign = 1;
+  const handoff = aftQuarterPursuit({ bankDeg: 74.7, rollRateDps: -2 });
+  assert.equal(handoff.combatAftPursuitBankHoldActive, false);
+  assert.equal(handoff.desiredBankDeg, 68,
+    "the handoff frame must trim away from the 75-degree wall lane, not re-widen to 72");
+
+  // Still above the aft authority: one tick at 68 is a number, not a physical trim.
+  const stillHigh = aftQuarterPursuit({ bankDeg: 73.4, rollRateDps: -4 });
+  assert.equal(stillHigh.desiredBankDeg, 68,
+    "the trim stays latched while bank is still outside the 72-degree aft authority");
+
+  // Rolling fast through the authority is not capture either.
+  const rollingThrough = aftQuarterPursuit({ bankDeg: 70, rollRateDps: -40 });
+  assert.equal(rollingThrough.desiredBankDeg, 68,
+    "a fast roll rate through the authority is not a captured pursuit side");
+
+  // Same side, inside 72, settled: captured. Ordinary aft geometry governs again.
+  const captured = aftQuarterPursuit({ bankDeg: 69.5, rollRateDps: -3 });
+  assert.equal(captured.desiredBankDeg, 72,
+    "once the live side is captured the aft quarter regains its 72-degree authority");
+
+  // One-way: bank rising again must not re-arm the trim without a new owner handoff.
+  const rebuilt = aftQuarterPursuit({ bankDeg: 71.8, rollRateDps: 5 });
+  assert.equal(rebuilt.desiredBankDeg, 72,
+    "the trim is one-way per handoff and does not re-arm on a rising bank");
+});

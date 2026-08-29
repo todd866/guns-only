@@ -559,6 +559,7 @@ export function createFixedWingAiControllerState() {
     combatLoadedPursuitBankHoldActive: false,
     combatAftPursuitBankHoldActive: false,
     combatAftPursuitBankHoldSign: 1,
+    pursuitHandoffTrimActive: false,
     combatDefensivePrimaryTargetKey: null,
     combatDefensiveLastPrimaryNoseErrorDeg: null,
     combatDefensivePrimaryAimSamples: 0,
@@ -1298,14 +1299,28 @@ export function fixedWingAiCommand(
   const topGunRecoveryBankLimitDeg = target.mode === "carrier-final" ? 18
     : target.gateCount <= 3 && target.gateCount > 0 ? 30
       : target.dirty ? 42 : 60;
+  // The 68-degree cap buys a sustainable lift plane for a forward-quarter chase, where the nose
+  // only has to lead a target it can already see. Behind the 3/9 line the jet is closing an angle
+  // it is losing, and the existing 72-degree aft authority is what pays for it. Tape 498 applied
+  // 68 everywhere and converted its first post-merge turn about 1.1 deg/s slower than Tape 495.
+  //
+  // Geometry alone is not enough. When the aft seam hold or an inverted recovery hands control
+  // back to ordinary pursuit the jet is still at a wall-lane bank -- Tape 494 released at 74.69
+  // degrees against a 75-degree sustained lane, and the inverted recovery releases at 101.3
+  // degrees of heading error, aft of the 3/9 line. Re-widening to 72 on the handoff frame would
+  // park the jet three degrees under the wall instead of trimming away from it. Hold the narrower
+  // plane until the live pursuit side is physically captured (below), then let geometry govern.
+  const f22PursuitBankLimitDeg = Math.abs(headingErrorDeg) > 90
+    ? F22_AFT_PURSUIT_BANK_LIMIT_DEG
+    : F22_ORDINARY_PURSUIT_BANK_LIMIT_DEG;
   let desiredBankDeg = clamp(
     headingErrorDeg * bankGain + valleyBankFeedForwardDeg,
     topGunRecoveryFlight
       ? -topGunRecoveryBankLimitDeg
-      : mission === "f22" ? -F22_ORDINARY_PURSUIT_BANK_LIMIT_DEG : -78,
+      : mission === "f22" ? -f22PursuitBankLimitDeg : -78,
     topGunRecoveryFlight
       ? topGunRecoveryBankLimitDeg
-      : mission === "f22" ? F22_ORDINARY_PURSUIT_BANK_LIMIT_DEG : 78,
+      : mission === "f22" ? f22PursuitBankLimitDeg : 78,
   );
   const currentBankDeg = wrapAngleDeg(finite(state?.bank_deg));
   const reportedRollRateDps = state?.roll_rate_dps;
@@ -1314,6 +1329,32 @@ export function fixedWingAiCommand(
   const currentRollRateDps = rollRateTelemetryValid
     ? reportedRollRateDps
     : finite(controllerState.lastValidRollRateDps);
+  // Geometry alone cannot decide the handoff frame. When the aft seam hold or an inverted
+  // recovery gives ordinary pursuit back, the jet is still at a wall-lane bank -- Tape 494
+  // released at 74.69 degrees against a 75-degree sustained lane, and the inverted recovery
+  // releases at 101.3 degrees of heading error, aft of the 3/9 line. Re-widening straight to 72
+  // would park the jet three degrees under the wall instead of trimming away from it. Hold the
+  // narrower plane across the whole physical trim -- one tick at 68 degrees is a number, not a
+  // manoeuvre -- and release one-way on evidence that the live pursuit side is actually captured:
+  // same side, inside the aft authority, and no longer rolling. The trim never latches a pursuit
+  // side of its own, so Tape 450's negative seam sign cannot survive into a positive pursuit turn.
+  const pursuitHandoffTrimHandedOff = mission === "f22"
+    && (controllerState.pursuitHandoffTrimActive === true
+      || controllerState.combatAftPursuitBankHoldActive === true
+      || controllerState.invertedRecoveryActive === true);
+  const pursuitHandoffTrimCaptured =
+    Math.sign(currentBankDeg) === Math.sign(headingErrorDeg)
+    && Math.abs(currentBankDeg) <= F22_AFT_PURSUIT_BANK_LIMIT_DEG
+    && Math.abs(currentRollRateDps) <= COMBAT_INVERTED_RECOVERY_RELEASE_ROLL_RATE_DPS;
+  const pursuitHandoffTrimActive = pursuitHandoffTrimHandedOff && !pursuitHandoffTrimCaptured;
+  controllerState.pursuitHandoffTrimActive = pursuitHandoffTrimActive;
+  if (pursuitHandoffTrimActive) {
+    desiredBankDeg = clamp(
+      desiredBankDeg,
+      -F22_ORDINARY_PURSUIT_BANK_LIMIT_DEG,
+      F22_ORDINARY_PURSUIT_BANK_LIMIT_DEG,
+    );
+  }
   const measuredActualG = state?.g_actual;
   const measuredAoaDeg = state?.aoa_deg;
   // Every large recovery-plane change is authorized by measured unloading, not by absent
@@ -3833,6 +3874,19 @@ export function fixedWingAiCommand(
     && !combatAftPursuitReleaseUnloadActive
     && !combatDownhillSliceActive
     && !combatDownhillRecoveryActive;
+  // Tape 498 at 67.942 s asked for +32.7 -> +19.7 degrees of bank: the same side, a smaller
+  // magnitude, a rate-damped command of about -0.218 under the shared 0.25 materiality boundary,
+  // and the jet already rolling that way. The static 12.5-degree gate still called that a tactical
+  // plane change, dumped to 0.8 G, and let lateral error grow while ballistic lead was improving
+  // to 4.80 degrees. Maintaining a captured plane is not a plane change. Cross-side, increasing,
+  // wrong-way, overbank and material commands fall through to the interlock unchanged.
+  const gunLeadFinisherMaintenanceTrim = gunLeadFinisherActive
+    && Math.abs(preliminaryRawRoll) < 0.25
+    && Math.sign(desiredBankDeg) === Math.sign(currentBankDeg)
+    && Math.abs(desiredBankDeg) < Math.abs(currentBankDeg)
+    && Math.abs(currentBankDeg) <= F22_GUN_LEAD_FINISHER_OVERBANK_LIMIT_DEG
+    && (currentRollRateDps === 0
+      || Math.sign(currentRollRateDps) === Math.sign(preliminaryBankErrorDeg));
   const materialTacticalPlaneChangeRequested =
     (Math.abs(preliminaryDesiredRollRateDps / 120) >= 0.25
       // The sustainable 82-degree high break can be only a few degrees from an existing 78-degree
@@ -3847,7 +3901,8 @@ export function fixedWingAiCommand(
         && !gunLeadCapturedPitchLoadedTrimActive
         && Math.abs(preliminaryBankErrorDeg)
           > F22_GUN_LEAD_FINISHER_MATERIAL_BANK_ERROR_DEG))
-    && !combatDefensiveLowPlaneMaintenance;
+    && !combatDefensiveLowPlaneMaintenance
+    && !gunLeadFinisherMaintenanceTrim;
   const materialUnsafeRollRequested = materialTacticalPlaneChangeRequested
     || (rollRateTelemetryValid
       ? Math.abs(preliminaryRawRoll) >= 0.25
@@ -6892,6 +6947,10 @@ export function assessFixedWingAiFlight(samples, {
     .map((sample) => finite(sample.opponentRoundsFired)));
   const maximumSortieOpponentRounds = Math.max(...(samples ?? [])
     .map((sample) => finite(sample.sortieOpponentRoundsFired)));
+  const maximumKillsForDefensiveSample = Math.max(...(samples ?? [])
+    .map((sample) => finite(sample.killCount)));
+  const defensiveSampleValid = maximumSortieOpponentRounds > 0
+    || maximumKillsForDefensiveSample > finite((samples ?? [])[0]?.killCount);
   const maximumWingmanHits = Math.max(...(samples ?? []).map((sample) =>
     (sample?.wingmen ?? []).reduce(
       (sum, wingman) => sum + finite(wingman?.hits),
@@ -7339,6 +7398,17 @@ export function assessFixedWingAiFlight(samples, {
     }
   }
 
+  // A sortie the opponent never contested cannot certify defensive behaviour. Tapes 495 and 498
+  // both ran the full 180 s "untouched" with `sortieOpponentRoundsFired` at zero — 495 before the
+  // defensive-power repair and 498 after it — so survival there measured whether the Ace engaged,
+  // not whether ownship defended. Killing the Ace before it shoots is still a real result.
+  if (mission === "f22" && !defensiveSampleValid) {
+    failures.push(
+      "opponent never fired and was never killed: uncontested sortie, "
+        + "survival is not a defensive result",
+    );
+  }
+
   if (mission === "first-run") {
     const coldSamples = (samples ?? []).filter((sample) => sample?.weaponsCold === true);
     let harnessRockerSeen = false;
@@ -7770,6 +7840,7 @@ export function assessFixedWingAiFlight(samples, {
       hits: maximumHits,
       opponentRoundsFired: maximumOpponentRounds,
       sortieOpponentRoundsFired: maximumSortieOpponentRounds,
+      defensiveSampleValid,
       wingmanHits: maximumWingmanHits,
       playerHitsTaken: maximumPlayerHitsTaken,
       minimumPlayerHealth,

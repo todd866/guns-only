@@ -92,6 +92,42 @@ Exact remaining work, in order:
    production fire, damage and kill, plus no hits, no missed-pass failure and no new visual-wall
    evidence.
 
+## Claude follow-up — 2026-08-29
+
+Three changes on top of the F-22 wrap handoff above, each test-first.
+
+**Tape survival was not a defensive result.** The handoff credited Tape 498's "survived 180 s with
+no hits" to the defensive-power override. It cannot: `sortieOpponentRoundsFired` is `0` in that
+tape, and `0` in Tape 495 as well — *before* the override existed. Both fatal tapes (496, 497) show
+`9` opponent rounds and three hits. Survival tracked whether the Ace engaged at all, not how
+ownship defended, so the override remains **untested rather than proven**.
+
+The assessor now publishes `defensiveSampleValid` and fails an F-22 sortie in which the opponent
+never fired and was never killed. A kill before the opponent shoots stays a real result. Replayed
+against the recorded tapes: 495 invalid, 496 valid, 497 valid, 498 invalid — the gate separates
+"we defended" from "nobody shot at us" on real data, not just fixtures.
+
+**Item 2 (finisher interlock) is done.** `gunLeadFinisherMaintenanceTrim` exempts a same-side,
+magnitude-reducing, sub-material trim on a captured plane from the tactical-plane-change unload.
+Cross-side, increasing-magnitude, wrong-way, overbank and material commands are untouched.
+
+**Item 5 (pursuit cap) is done, but not as written.** "68 forward-quarter only, restore 72 aft"
+cannot be a pure angular threshold: the inverted-recovery handoff releases at 101.3 degrees of
+heading error — aft of the 3/9 line — and deliberately expects 68, and Tape 494's release at 144.3
+degrees expects a trim away from the 75-degree wall lane. Any single angle satisfies at most two of
+the three pinned semantics. Implemented instead as ordinary geometry (68 forward, 72 aft) plus a
+stateful `pursuitHandoffTrimActive` latch: armed when the aft seam hold or an inverted recovery
+hands control back to ordinary pursuit, holding 68 until the live pursuit side is physically
+captured (same side, inside 72 degrees, roll rate settled), released one-way, never latching a
+pursuit sign. The 150/145 seam hold is unchanged — widening it would have latched a wrong-side
+residual bank in the 100-140 degree band.
+
+Validation: `tools/perf` node suites `310/310` (fixed-wing `208/208`, four new tests). Note that
+`git diff --check` proves nothing here — `tools/perf/fixed_wing_ai_pilot.mjs` is still untracked, so
+it has no tracked diff to check. **Not flown.** No Metal sortie, no republish, so items 1, 3, 4, 6 and 7
+are untouched and the release gate is unchanged. The next run should be a fresh silent Metal
+sortie whose tape is now required to be a contested one.
+
 Current validation: fixed-wing controller/harness `204/204`; camera and production-graphics
 `30/30`; focused inhibited physical-lead snapshot regression `1/1`; `git diff --check` clean.
 Evidence tapes are `/private/tmp/f22-ai-disciplined-495` through `-498`.
