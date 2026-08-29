@@ -54,10 +54,7 @@ public sealed class WingmanStaysInTheFightTests {
         bool LeadPresenting, bool WingPresenting, bool SessionActive,
         int LeadRounds, int WingRounds, bool LeadTrigger, bool WingTrigger,
         double LeadNoseErrDeg, double LeadLeadErrDeg, bool RoeHold,
-        double LeadAltitude, double LeadGammaDeg, PilotCommand LeadCommand,
-        // WHICH LAW FLEW EACH SHIP. Tactic is an intent label; the pair fight was
-        // previously legible only through its final assertion.
-        string LeadOwner, string WingOwner);
+        double LeadAltitude, double LeadGammaDeg, PilotCommand LeadCommand);
 
     /// The two-ship fixture with a player durable enough to be judged against BOTH opponents.
     /// With the production 3-hit rule the wingman kills the fixture player at t≈50 s, which ends
@@ -67,14 +64,7 @@ public sealed class WingmanStaysInTheFightTests {
     static BeatSetup DurablePlayerTwoShipFixture() {
         BeatSetup beat = TwoShipFixture();
         return beat with {
-            // 2026-08-29: raised 30 -> 60. Traced, with CommandOwner published on both ships:
-            // once the bank slice is committed rather than chattering, the WINGMAN reaches its
-            // hits sooner and the player is dead by t=150 s while the lead is still 3.2 km out —
-            // so the contract failed for want of a window, not for want of a lead that attacks.
-            // Without the change the lead is seen firing at t=180 s. This is the durability doing
-            // exactly the job the comment above describes; the assertions are unchanged and both
-            // ships must still fire.
-            Combat = beat.CombatRules with { PlayerHitsToDefeat = 60 },
+            Combat = beat.CombatRules with { PlayerHitsToDefeat = 30 },
         };
     }
 
@@ -154,9 +144,7 @@ public sealed class WingmanStaysInTheFightTests {
                     * 180.0 / Math.PI,
                 session.WeaponsInhibited,
                 lead.Position.Y, lead.Gamma * 180.0 / Math.PI,
-                leadReactive?.AppliedCommand ?? default,
-                leadReactive?.CommandOwner.ToString() ?? "?",
-                reactive?.CommandOwner.ToString() ?? "?"));
+                leadReactive?.AppliedCommand ?? default));
         }
         return samples;
     }
@@ -360,5 +348,4 @@ public sealed class WingmanStaysInTheFightTests {
             + $"sample: range {alive[^1].PlayerToLead:F0} m, tactic {alive[^1].LeadTactic}, "
             + $"altitude {alive[^1].LeadAltitude:F0} m)");
     }
-
 }
