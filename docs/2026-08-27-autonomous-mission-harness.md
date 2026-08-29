@@ -616,6 +616,50 @@ observable defect, and reports the pinned-bank duration without asserting on it.
 Remaining: the three gun-conversion contracts, `ProductionAceSustainsAHighGDefense...`, and
 `BanditDoesNotRunFromAPlayerWhoSimplyClimbs`.
 
+### The gun-conversion cluster: cause found, fix not yet safe — 2026-08-29
+
+**The branch cannot merge to main while these fail, and that is by design.** `main` is protected
+with `enforce_admins: true` and two required checks, and `bin/deploy-web` re-runs the whole gate and
+requires CI green on protected main for the exact commit. Landing and fixing are the same task. The
+one consolation: pushing to main runs CI, it does not deploy — production is a separate deliberate
+step that would also refuse.
+
+**Cause.** The three gun-conversion numbers were byte-identical from the first run of this session to
+the last, through every change made to containment — so they are an independent defect. The Ace's own
+tier comment records what it was tuned to: *"39 rounds / 11 hits / 36% on-solution, ballistic lead
+error at the trigger falling from a median 17.30 deg to 0.87 deg."* It now scores 25 rounds, 6 hits,
+15.5% on-solution. It has regressed against its own documented baseline.
+
+Tracing the funnel with `CommandOwner` published, inside 1,200 m: `Lookahead` owns 10,997 ticks with
+18 inside a 1.25-degree lead, `GunTrack` owns 5,556 with 137. That looked like a missing handoff, and
+it is not — the Ace deliberately keeps its planner, because *"every variant tried against the Ace
+scores worse than its own 150-tick planner alone"*. So the regression is IN the planner, and the
+change set adds exactly one thing to the planner's scorer: `LookaheadVerticalExcursionPenalty`.
+
+A/B on the funnel, six engagements:
+
+| | with the penalty | without |
+| --- | --- | --- |
+| rounds | 25 | 35 |
+| hits | **6** | **15** |
+| hit rate | 24% | 43% |
+| conversion | **5%** | **33%** |
+
+33% against the 36% the ladder was tuned to. The penalty prices the vertical the Ace needs to HOLD a
+solution, and the Ace is the one tier that tracks with its planner rather than handing off.
+
+**Why it is not simply removed.** Full removal takes the suite 5 -> 4 and passes all three
+gun-conversion contracts and the ladder and the duel — but it breaks
+`ClosedLoopFightDoesNotBecomeRepeatedVerticalLoops`, which is the tape 418 yo-yo the penalty exists
+to prevent, and regresses the leash and wingman tests. That is trading a measurable gameplay defect
+for a test count, so it is not landed.
+
+An attempt to scope the exemption to candidates already tracking a shot (probe terminal inside
+1,500 m and 12 degrees of boresight) changed nothing: the lookahead terminal is rarely inside gun
+parameters, so the gate almost never armed. The exemption needs to key on something evaluated along
+the probe path rather than at its terminal — the same distinction `maxY` already makes for the
+ceiling term a few lines above.
+
 **Do not merge this branch to main until those five are resolved.** The branch is pushed so the work
 is not confined to one machine; CI will be red, accurately.
 
