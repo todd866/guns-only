@@ -322,6 +322,47 @@ actually be flown, then re-measure containment. `ReengageCannotSpiralTheFightThr
 stays `Skip`-ped as the reproduction; the trace method is a scratch xunit driver printing
 `range / nose-dot / Tactic / CommandOwner / speed / alt / gamma / GDemand / BankTarget` per tick.
 
+### The bank solver: three measured attempts — 2026-08-29
+
+The pinning has a precise cause. `BankToPlaceLiftVectorOn` returns +/-pi for an aim below and nearly
+coplanar with the flight path, which is the *honest* answer — roll inverted and pull. `LimitedBankTo`
+then clamps that to the flyable limit, keeping a sensible magnitude (a 77-degree slice is exactly how
+`ReturnCommand` puts the nose down) while inheriting a **sign decided by numerical noise**. A jet that
+rolls left, then right, then left never establishes the slice. Measured on the leash run: the pinned
+bank command reverses sign 18 times across 17,080 pinned ticks.
+
+So the magnitude is deliberate and only the sign is the defect. `SlicedBankTo` commits a side on
+entry — preferring the side the aircraft is already banked toward, the same idiom as
+`_closeCeilingRecoverySide` and `combatAftPursuitBankHoldSign` — and holds it until the solve is
+comfortably flyable again. Three scopes were measured, full suite each time (baseline: 6 failures):
+
+| scope | result |
+| --- | --- |
+| `ReturnCommand` dive + `ReengageCommand` | **8 failures.** Fixes the leash and the chatter; breaks `CeilingDenialDoesNotChatterAgainstItsOwnThreshold`, `FreshBracketSupportCrossesItsSpawnLeashToRejoinTheSharedFight`, `BothColdOpponentsFireWhileThePlayerIsAlive` |
+| `ReturnCommand` dive only | Leash and chatter fail again — 79% of the pinning is in `Reengage`, so `Return`-only cannot fix it |
+| both, but exempting `Bracket`/`Extend` roles | Leash, chatter and the bracket rejoin all pass; `BothColdOpponentsFireWhileThePlayerIsAlive` and the ceiling guard still fail |
+
+**The finding is that the latch works and its blast radius is the problem.** It fixes the defect it
+targets every time it is applied to `Reengage`, and every scope that fixes the leash also perturbs
+the pair fight — not through the support path (exempting support roles does not save the wingman
+test) but because changing the *solo* bandit's roll behaviour changes the fight the pair is in.
+
+Two further things the attempts exposed, both worth fixing on their own terms:
+
+- **The ceiling guard oscillates at its own threshold.** With the spiral removed the jet stops
+  departing and lingers near the ceiling, and the guard then flips `Energy <-> Reengage` **six times
+  in eleven seconds** at 11.77-11.85 km against an 11,500 m ceiling — after a stable 139-second
+  stretch. That is a real latent defect the spiral was hiding, not a threshold that wants relaxing.
+- `TheBankCommandMustNotChatterItsSignWhileSlicingHome` is kept `Skip`-ped beside the spiral
+  reproduction.
+
+**What this needs next** is not another scope of the same latch. The pair fight has no equivalent of
+`CommandOwner` — there is no way to see *why* the cold pair's lead stops attacking when the solo roll
+behaviour changes, so that failure is being read only through its final assertion. Instrument the
+wingman fixture the same way the solo one now is, then re-apply the latch. The instrumentation is the
+step that turned the solo case from three blind guesses into a measured cause, and the pair case is
+currently where the solo case was this morning.
+
 **Do not merge this branch to main until those six are resolved.** The branch is pushed so the work
 is not confined to one machine; CI will be red, accurately.
 

@@ -268,6 +268,45 @@ public class BanditArenaLeashTests {
             + "away from the player — that is the stern chase this corridor exists to prevent");
     }
 
+    [Fact(Skip = "Open defect — reproduction kept. Latching the slice side fixes this AND the "
+        + "leash test, but the latch ripples into the pair fight (wingman + ceiling-denial). "
+        + "See docs/2026-08-27-autonomous-mission-harness.md.")]
+    public void TheBankCommandMustNotChatterItsSignWhileSlicingHome() {
+        // 2026-08-29, with CommandOwner published: over the 180 s leash run the bank command sits
+        // pinned at its limiter for ~70% of post-merge ticks — Reengage 136/173 ticks at +/-74.5
+        // deg (the 1.30 rad cap), Return 72/79 at +/-77.3 deg (the 1.35 rad cap) with the SIGN
+        // ALTERNATING. The magnitude is deliberate: a 77-degree slice is how ReturnCommand puts the
+        // nose down. The sign is not. BankToPlaceLiftVectorOn's atan2 approaches +/-pi for an aim
+        // nearly coplanar with the flight path, so its sign is decided by numerical noise, and a
+        // jet that rolls left then right then left never establishes the slice — which is why the
+        // "NEVER CLIMB HOME" dive runs at max dive G and the aircraft climbs anyway.
+        const double PlayerHoldM = 4592.0;
+        var bandit = StagedBandit();
+        var player = new AircraftSim(
+            new AircraftState(new Vec3D(0.0, PlayerHoldM, -2000.0), 300.0, 0.0, 0.0, 0.0,
+                PlayerAir.MassKg),
+            PlayerAir);
+
+        int reversals = 0, previousSign = 0, pinnedTicks = 0;
+        for (int tick = 0; tick <= 180 * AircraftSim.TickHz; tick++) {
+            bandit.Step(ActorObservation.Capture(player.State, tick), Dt);
+            player.Step(LevelChase(player.State, bandit.State.Position, PlayerHoldM), Dt);
+            double bank = bandit.LastCommand.BankTarget;
+            // Only the pinned commands are in scope: a well-conditioned solve may legitimately
+            // cross zero as often as the fight demands.
+            if (System.Math.Abs(bank) < 1.25) { previousSign = 0; continue; }
+            pinnedTicks++;
+            int sign = System.Math.Sign(bank);
+            if (previousSign != 0 && sign != previousSign) reversals++;
+            previousSign = sign;
+        }
+
+        Assert.True(pinnedTicks > 0, "fixture never drove the bank command to its limiter");
+        Assert.True(reversals <= 4,
+            $"the pinned bank command reversed sign {reversals} times across {pinnedTicks} pinned "
+            + "ticks — the slice side is being re-decided by numerical noise instead of latched");
+    }
+
     [Fact(Skip = "Open defect on codex/deepdive-346 — reproduction kept; see "
         + "docs/2026-08-27-autonomous-mission-harness.md. Fixing the aim alone trades this "
         + "spiral for a wander/wingman failure, so containment needs a design pass, not a patch.")]
