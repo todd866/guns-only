@@ -61,16 +61,37 @@ public sealed class CobraCrewChainFlightTests
             runtime.Advance(hover);
 
         Assert.Equal(CobraMissionAct.Engage, runtime.Act);
+        Vec3D aimPoint = CobraGunTargeting.AimPoint(target.PositionWorldM);
         var assessment = CobraGunTargeting.Assess(
             runtime.Cobra.State.PositionWorldM,
             runtime.Cobra.Observation.YawRad,
-            target.PositionWorldM);
+            aimPoint);
         Assert.True(
             assessment.WithinTurretEnvelope,
             $"Iron Bell outside envelope: az={assessment.AzimuthErrorRad * 180 / Math.PI:F1}° "
             + $"el={assessment.ElevationRad * 180 / Math.PI:F1}° range={assessment.RangeM:F0}m "
             + $"(aircraft Y={runtime.Cobra.State.PositionWorldM.Y:F0}, target Y={target.PositionWorldM.Y:F0}).");
         Assert.True(assessment.HasBallisticSolution, $"range {assessment.RangeM:F0}m");
+        bool initialLineOfSight = CobraGunTargeting.EvaluateLineOfSight(
+            runtime.Terrain,
+            runtime.ResolvedObstacles,
+            runtime.Cobra.State.PositionWorldM,
+            aimPoint);
+        string[] blockingObstacles = runtime.ResolvedObstacles
+            .Where(obstacle => !obstacle.IntersectsSphere(
+                    runtime.Cobra.State.PositionWorldM, 0.01)
+                && !obstacle.IntersectsSphere(aimPoint, 0.01)
+                && obstacle.IntersectsSegment(
+                    runtime.Cobra.State.PositionWorldM,
+                    aimPoint))
+            .Select(obstacle => obstacle.Id)
+            .ToArray();
+        Assert.True(initialLineOfSight,
+            $"Iron Bell attack hover is masked before acquisition; blockers="
+            + $"{string.Join(',', blockingObstacles)} aircraft={runtime.Cobra.State.PositionWorldM} "
+            + $"aim={aimPoint} target={target.PositionWorldM}.");
+        Assert.True(runtime.CanAcquireVisualLockTarget(target.Id),
+            "visual lock and the gunner must accept the same visible Iron Bell target");
 
         int ammoBefore = runtime.GroundWar.Magazine.RoundsRemaining;
         double healthBefore = target.Health;

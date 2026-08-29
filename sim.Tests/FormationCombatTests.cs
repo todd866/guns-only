@@ -119,6 +119,8 @@ public class FormationCombatTests {
         Assert.Equal(1, session.EngagementNumber);
         IBandit leader = session.Bandit;
         IBandit wingman = session.Wingmen[0].Bandit;
+        Assert.True(wingman.Presenting,
+            "the opening survivor must begin in the sparring presentation for this regression");
 
         // Take the leader out of the fight the way a gun result does.
         session.ForceOpponentDefeatForTest();
@@ -128,6 +130,8 @@ public class FormationCombatTests {
 
         Assert.Same(wingman, session.Bandit);
         Assert.Empty(session.Wingmen);
+        Assert.False(session.Bandit.Presenting,
+            "a promoted survivor must fight, not keep flying the presentation orbit");
         // Still ONE fight: a 1v2 is a single engagement and a single entry in the record.
         Assert.Equal(1, session.EngagementNumber);
         Assert.Equal(1, session.LiveOpponentCount);

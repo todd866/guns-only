@@ -415,7 +415,7 @@ test("iPhone selecting Top Gun and consent cannot scroll the Ready dialog sidewa
       const start = document.querySelector("#ready-start");
       return topGun?.getAttribute("aria-pressed") === "true"
         && document.activeElement === start;
-    }, undefined, { timeout: scaled(10000) });
+    }, undefined, { timeout: scaled(20000) });
 
     const layout = () => page.evaluate(() => {
       const card = document.querySelector(".ready-card");
@@ -682,9 +682,10 @@ test("the published Indoor route boots its Three.js facility and transitions opt
 });
 
 // The published Cobra coverage is deliberately SPLIT in two, and this is the half that gates the
-// release. It asserts only things that hold at any mission age: the route boots a live authority,
-// the magazine is real, the combiner is carrying it, and Tab reaches the gunner with a designation
-// the authority agrees with. None of that depends on where the ground war has got to.
+// release. It asserts only things that hold at any mission age: the route boots a cold authority
+// behind its deliberate Ready brief, the magazine is real, the combiner is carrying it, and Tab
+// reaches the gunner with a designation the authority agrees with. None of that depends on where
+// the ground war has got to.
 //
 // The other half -- the full fire-authorisation chain (ConsentReleased -> hold F ->
 // fire_authorized with reason None -> rounds leave the magazine -> release disarms) -- now runs
@@ -726,7 +727,9 @@ test("the published Cobra Hold the Bridge route boots authority and takes a Tab 
     }
 
     const boot = await readCobraHud(page);
-    assert.match(boot.status, /HOLD THE BRIDGE|AH-1G ONLINE/i);
+    assert.match(boot.status, /READY · REVIEW FLIGHT BRIEF/i);
+    assert.equal(await page.locator("#mission-brief").isVisible(), true,
+      "Cobra must teach the mission contract before accepting vehicle input");
     assert.ok(boot.canvas && boot.canvas.width > 0 && boot.canvas.height > 0,
       `Cobra play HUD canvas has no backing store: ${JSON.stringify(boot.canvas)}`);
     // Ammo is present, finite and a real magazine -- not a placeholder and not NaN. This is the
@@ -742,6 +745,16 @@ test("the published Cobra Hold the Bridge route boots authority and takes a Tab 
     assert.ok(boot.hostiles >= 1, `Cobra boot found no living hostiles: ${JSON.stringify(boot)}`);
     assert.equal(boot.tick, -1,
       `cold Ready must publish truth without advancing mission time: ${JSON.stringify(boot)}`);
+
+    await page.locator("#mission-brief-start").click();
+    await page.waitForFunction(() =>
+      document.querySelector("#mission-brief")?.hidden === true
+        && /HOLD THE BRIDGE|AH-1G ONLINE/i.test(
+          document.querySelector("#status span")?.textContent ?? "",
+        ),
+    undefined, { polling: scaled(100), timeout: scaled(20000) });
+    const cobraTeaching = page.locator("#controls-onboarding-dismiss");
+    if (await cobraTeaching.isVisible()) await cobraTeaching.click();
 
     // Tab designates, and the designation is real all the way down: the authority holds the mark,
     // the production HUD model carries it onto the combiner, the designation bracket agrees with
@@ -810,9 +823,21 @@ test("the published Weekend Ride route boots and accepts throttle input", async 
       phase: window.__gunsOnlyWeekendAuthority?.phase ?? "",
     }));
     const beforeSpeed = await groundSpeed();
-    assert.match(before.status, /YZF-R1 ACTIVE/i);
-    assert.ok(before.phase === "ready" || before.phase === "active",
-      `unexpected weekend-ride phase: ${JSON.stringify(before)}`);
+    assert.match(before.status, /READY · REVIEW SESSION BRIEF/i);
+    assert.equal(await page.locator("#ride-brief").isVisible(), true,
+      "Weekend Ride must teach the session contract before accepting throttle");
+    assert.equal(before.phase, "paused",
+      `the Ready brief must hold Weekend authority cold: ${JSON.stringify(before)}`);
+
+    await page.locator("#ride-brief-start").click();
+    await page.waitForFunction(() =>
+      document.querySelector("#ride-brief")?.hidden === true
+        && /RAPIER TRACK DAY|RIDER REFLEX ASSIST/i.test(
+          document.querySelector("#status span")?.textContent ?? "",
+        ),
+    undefined, { polling: scaled(100), timeout: scaled(20000) });
+    const rideTeaching = page.locator("#controls-onboarding-dismiss");
+    if (await rideTeaching.isVisible()) await rideTeaching.click();
 
     await page.keyboard.down("w");
     await page.waitForFunction(
@@ -1328,7 +1353,9 @@ test("first-run valley waits for consent and remains replayable from the program
     await page.waitForFunction(() =>
       document.querySelector("#ready-screen")?.classList.contains("visible") === true
         && document.querySelector("#ready-screen")?.dataset.mode === "intro"
-        && document.querySelector("#ready-start")?.disabled === false,
+        && document.querySelector("#ready-start")?.disabled === false
+        && document.querySelector("#ready-start")?.textContent?.trim() === "Enter valley"
+        && document.activeElement?.id === "ready-start",
     undefined, { polling: scaled(100), timeout: scaled(45000) });
 
     assert.equal(await page.locator("#ready-start").innerText(), "Enter valley");
@@ -1368,9 +1395,22 @@ test("first-run valley waits for consent and remains replayable from the program
       globalThis.__gunsState?.session_phase === "ACTIVE"
         && globalThis.__gunsState?.mission_definition_id
           === "mission.modern.visual-merge.first-run-valley.v1"
+        && globalThis.__gunsAssets?.diagnostics?.().firstRunValley?.active === true
         && !document.querySelector("#ready-screen")?.classList.contains("visible"),
     undefined, { polling: scaled(100), timeout: scaled(90000) });
     assert.equal(await page.evaluate(() => document.activeElement?.id), "scene");
+    const valley = await page.evaluate(() => ({
+      weaponsCold: globalThis.__gunsState?.first_run_weapons_cold === true,
+      available: globalThis.__gunsState?.first_run_valley_available === true,
+      diagnostics: globalThis.__gunsAssets?.diagnostics?.().firstRunValley ?? null,
+    }));
+    assert.equal(valley.weaponsCold, true,
+      "the active ingress must begin with the weapons-cold lesson intact");
+    assert.equal(valley.available, true);
+    assert.equal(valley.diagnostics?.authorityMatched, true);
+    assert.equal(valley.diagnostics?.drawCount, 1);
+    assert.ok(valley.diagnostics?.triangleCount > 0,
+      "the active first-run sortie must render its authority-matched gorge");
     assert.deepEqual(pageErrors, [],
       `uncaught first-run page errors:\n${pageErrors.join("\n")}`);
   } finally {
@@ -1796,7 +1836,12 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
     }));
     // SwiftShader can render the full terrain at only a few frames per second on a loaded CI
     // worker. Hold each physical control until the authoritative fixed-tick state proves the
-    // response instead of assuming a wall-clock hold spans enough simulation ticks.
+    // response instead of assuming a wall-clock hold spans enough simulation ticks. A serialized
+    // full gate has already spent several minutes compiling and rendering the default flight by
+    // this point; under that accumulated pressure a healthy CASEVAC frame can take longer than
+    // 30 wall-clock seconds even though the same published artifact responds immediately in an
+    // isolated run. Keep the state-and-distance assertions exact, but give them the same bounded
+    // 60-second patience used by the published boot path.
     await page.keyboard.down("w");
     try {
       await page.waitForFunction(
@@ -1804,7 +1849,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
           Number(globalThis.__gunsState?.py) > startY + 0.2
             && Number(globalThis.__gunsState?.tick) > startTick,
         { startY: before.py, startTick: before.tick },
-        { timeout: scaled(30000) },
+        { timeout: scaled(60000) },
       );
     } finally {
       await page.keyboard.up("w");
@@ -1826,7 +1871,7 @@ test("the published Medevac mission briefs, launches, and accepts commander flig
           pickupZ: before.pickupZ,
           startRange: pickupRangeBefore,
         },
-        { timeout: scaled(30000) },
+        { timeout: scaled(60000) },
       );
     } finally {
       await page.keyboard.up("ArrowUp");

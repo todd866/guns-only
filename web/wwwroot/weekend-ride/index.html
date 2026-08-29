@@ -8,7 +8,7 @@
   <base href="/">
   <title>Guns Only · YZF-R1 Weekend Ride</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/weekend-ride/styles.css?v=345">
+  <link rel="stylesheet" href="/weekend-ride/styles.css?v=348">
 </head>
 <body>
   <header class="topbar">
@@ -19,7 +19,7 @@
     <div class="top-actions">
       <p id="status" aria-live="polite"><i></i><span>Loading YZF-R1 runtime…</span></p>
       <button id="sound-button" class="mission-control" type="button" aria-pressed="true"
-        disabled>Sound · on</button>
+        disabled>Sound on</button>
       <button id="pause-button" class="mission-control" type="button" aria-pressed="false"
         aria-controls="pause-menu" disabled>Pause</button>
     </div>
@@ -39,6 +39,29 @@
     <section class="viewport" aria-label="Helmet-mounted weekend ride">
       <canvas id="scene" tabindex="-1"></canvas>
       <canvas id="hud" aria-hidden="true"></canvas>
+      <p class="device-advisory device-advisory--play" role="status">Keyboard or gamepad required · rotate to landscape</p>
+    </section>
+
+    <section id="ride-brief" class="mission-overlay mission-brief" role="dialog"
+      aria-modal="true" aria-labelledby="ride-brief-title"
+      aria-describedby="ride-brief-summary" hidden>
+      <div class="mission-card mission-card--brief">
+        <span class="mission-kicker">RAPIER AIRFIELD · TRACK-DAY BRIEF</span>
+        <h2 id="ride-brief-title">Bank a clean lap</h2>
+        <p id="ride-brief-summary" class="mission-summary">Complete one clean lap inside the paint.</p>
+        <p class="device-advisory device-advisory--brief">This ride requires a keyboard or gamepad. Rotate to landscape before launch.</p>
+        <dl class="mission-brief-facts" aria-label="Ride assignment">
+          <div><dt>Objective</dt><dd>One clean lap</dd></div>
+          <div><dt>Timing</dt><dd>Four sectors</dd></div>
+          <div><dt>Finish</dt><dd>Pause · End ride</dd></div>
+        </dl>
+        <p class="mission-correction"><strong>FIRST REP</strong><span>Bank a clean reference before chasing time.</span></p>
+        <div class="mission-actions">
+          <button id="ride-brief-start" class="mission-action mission-action--primary" type="button">Start</button>
+          <a id="ride-brief-return" class="mission-action" href="/?program=weekend-ride&amp;menu=1">Aircraft</a>
+        </div>
+        <span class="mission-hint">Enter · start ride</span>
+      </div>
     </section>
 
     <section id="pause-menu" class="mission-overlay mission-pause" role="dialog"
@@ -46,11 +69,11 @@
       <div class="mission-card mission-card--pause">
         <span class="mission-kicker">RAPIER TRACK DAY · SESSION PAUSED</span>
         <h2 id="pause-title">Ride held</h2>
-        <p id="pause-detail">The bike, lap clock, and circuit authority are stopped.</p>
-        <button id="pause-resume" class="mission-action mission-action--primary" type="button">Resume ride</button>
+        <p id="pause-detail" class="mission-summary">Bike and clock held.</p>
+        <button id="pause-resume" class="mission-action mission-action--primary" type="button">Resume</button>
         <div class="mission-actions mission-actions--stacked">
-          <button id="pause-end" class="mission-action" type="button">End ride · debrief</button>
-          <a id="pause-return" class="mission-action" href="/?program=weekend-ride&amp;menu=1">Return to aircraft</a>
+          <button id="pause-end" class="mission-action" type="button">Debrief</button>
+          <a id="pause-return" class="mission-action" href="/?program=weekend-ride&amp;menu=1">Aircraft</a>
         </div>
         <span class="mission-hint">Esc · resume</span>
       </div>
@@ -61,7 +84,7 @@
       <div class="mission-card mission-card--result">
         <span id="result-verdict" class="mission-kicker mission-verdict">SESSION BANKED</span>
         <h2 id="result-title">Ride complete</h2>
-        <p id="result-summary"></p>
+        <p id="result-summary" class="mission-summary"></p>
         <dl class="mission-metrics" aria-label="Ride evidence">
           <div><dt>Laps</dt><dd id="result-laps">0</dd></div>
           <div><dt>Last</dt><dd id="result-last">—:——</dd></div>
@@ -80,8 +103,8 @@
         </div>
         <p id="result-correction" class="mission-correction">Next rep · complete one measured lap before chasing speed.</p>
         <div class="mission-actions">
-          <button id="result-retry" class="mission-action mission-action--primary" type="button">Ride again</button>
-          <a id="result-return" class="mission-action" href="/?program=weekend-ride&amp;menu=1">Return to aircraft</a>
+          <button id="result-retry" class="mission-action mission-action--primary" type="button">Retry</button>
+          <a id="result-return" class="mission-action" href="/?program=weekend-ride&amp;menu=1">Aircraft</a>
         </div>
       </div>
     </section>
@@ -89,7 +112,7 @@
 
   <script>
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=345", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=348", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -119,7 +142,7 @@
         const script = document.createElement("script");
         // Loader from site root + <base href="/"> so boot resources resolve to /_framework/*,
         // not /weekend-ride/_framework/* (Medevac pattern).
-        script.src = "/_framework/blazor.webassembly.js?v=345";
+        script.src = "/_framework/blazor.webassembly.js?v=348";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load motorcycle runtime.")), {
@@ -128,10 +151,10 @@
         document.head.append(script);
       });
       const { renderExperienceGate } = await import(
-        "/render/release/quarantine_gate.js?v=345"
+        "/render/release/quarantine_gate.js?v=348"
       );
       const access = renderExperienceGate({ experienceId: "weekend-ride" });
-      if (access.allowed) await import("/weekend-ride/main.js?v=345");
+      if (access.allowed) await import("/weekend-ride/main.js?v=348");
     } catch (error) {
       console.error(error);
       const status = document.querySelector("#status");

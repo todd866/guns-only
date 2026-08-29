@@ -30,7 +30,7 @@ import {
   F14_COCKPIT_SAMPLE_BED,
   FIRE_BOSS_COCKPIT_SAMPLE_BED,
   ensureLoopingSampleBed,
-} from "./sample_bed.js?v=345";
+} from "./sample_bed.js?v=348";
 import { resolvePropulsionCharacter } from "./audio_character.js";
 import { standardAtmosphereState } from "./atmosphere_audio.js";
 import {

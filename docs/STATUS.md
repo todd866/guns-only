@@ -1,13 +1,74 @@
 # Current product and verification status
 
-Updated: 2026-08-21
-Next candidate: Build 345. The first-run Soniachne valley mission now stages behind a dedicated
-Ready interlock: the F-22 remains paused until the pilot deliberately chooses Enter valley, the card
-teaches the complete valley → two Fox Twos → guns contract using the live remapped Fire binding,
-and Choose another mission safely returns to the aircraft programme. Returning pilots get a visible
-Replay valley intro action on Guns Only; it restages the same authority once, clears the replay query,
-and leaves Fly again to hand off naturally into the full combat programme. Settings, help and
-background holds preserve the intro's semantic/modal identity instead of exposing the wrong picker.
+Updated: 2026-08-27
+Next candidate: Build 348. The first sortie now takes place in Kestrel Gorge, a dedicated mountain
+cell with one authority-matched, collidable valley surface: steep asymmetric walls, a winding river
+and service road, a low-level ingress, and a visible opening into the missile arena. The same
+simulation-owned surface drives collision and presentation; it is not a decorative canyon placed
+around flat physics. A fixed world-space chevron route and persistent action ladder teach Follow
+valley → Fox Two → track → Fox Two → guns / RTB without promoting weapons before the pop-out gate.
+
+The intro stages behind a deliberate Ready interlock. The card explains that the single Fire action
+launches the two missiles one at a time and becomes the gun trigger only when they are gone. Choose
+another mission safely returns to the aircraft programme. Returning pilots get a visible Replay
+valley intro action in the normal picker; it restages the authority once, clears the replay query,
+and leaves the next flight to hand off naturally into the full Guns Only programme.
+
+Build 347 closes the connective player journey across the production routes. Shared and standalone
+briefs, pause screens and result cards use the same semantic hierarchy, modal ownership, focus
+behavior, primary/secondary action language and return-to-aircraft route. Production route smoke
+now enumerates every public entry, verifies the correct mission authority behind each brief, and
+requires the executable player contract rather than a boot-only canvas check.
+
+Build 347 also closes two mission-result seams. Top Gun no longer treats a bolter as the end of the
+sortie: it keeps the carrier recovery active, uses a Top Gun-only Mk 7 Mod 3 public-data arrestment
+surrogate, completes a stopped trap before the result, and combines combat custody with the full
+carrier pass in one debrief. Cobra preserves VALLEY HELD / VALLEY LOST even when the aircraft is
+lost on recovery, then reports the recovery failure separately with rounds, friendly kills and a
+specific next-sortie correction.
+
+Build 347's Cobra pass now covers the full ingress → destroy → clear/cover → hold → RTB loop.
+The locking gun pit, ten-minute verdict and BINGO remain explicit. Iron Bell has dry bridgeheads,
+Plantation follows terrain, Camp Ember's ground surfaces render, and reciprocal fire uses authority
+events. Long Fang keeps navigation truth without the fake waterfall slab.
+
+The owner's 42.4-second recording showed dense close guidance, a persistent centred Lead caption
+and little visible sense of battle; the result screenshot was dominated by zero rows and repeated
+instructions. The file had no audio stream, so it could not prove the reported silence. Guidance is
+now 12 cues at 120 m spacing with 160 m lookahead. The recording also exposed the main amber ladder
+rebasing from ownship every 25 m—about every 0.37 seconds at the recorded speed. Both Cobra guidance
+layers now keep authored world coordinates until authority advances the route, and the amber shader
+has no time-driven highlight. Lead calls move upper-left and expire after 3.2
+seconds; brief and pause expose Sound; debriefs suppress raw IDs, empty facts and repeated retry copy.
+
+The old performance harness stopped behind the brief and measured a paused card. A pre-fix Apple M5
+hardware run took 9.92 s to Ready and delivered 7.36 fps with 184 ms p95 frames while terrain-shaped
+wind performed 720 field evaluations per second. Wind now refreshes deterministically at 10 Hz—60
+evaluations per second. The corrected gate crosses Start and measures departure plus live battle;
+the same machine now reaches Ready in 1.996 s, acknowledges input in 16.6 ms and runs at about 60 fps.
+A closed-loop AI pilot now flies the production gamepad path through active authority gates, then
+uses the real Tab/F combat inputs. It rejects a slow or covered boot, paused/frozen authority,
+invalid gate progress, moving combat guidance, protected-departure fire, missed visible battle,
+friendly kills, a gunner that never authorizes, ammunition that never drains, selected-target
+damage that never occurs, or telemetry without advancing Cobra rows. The Build 348 full engagement
+run reached Ready in 1.283 s, crossed Depart → Ingress → Engage, travelled 3,546 m through five real
+gate-volume entries at 119.978 Hz with no stall, and produced the selected target's authority
+`gun-hit` at 190.30 seconds. One round dealt the authored 0.55 damage; both factions' fire was visible,
+and 162 combat-guidance samples recorded zero rebuilds. A raised shared target
+aim point also removes the Iron Bell bridge-surface self-mask that previously left the gunner stuck
+on MASKED; visual lock, LOS cache, servo, HUD bracket and padlock now share that point.
+
+The same consolidation retains aircraft identity on picker cards, preserves explicit silent QA and
+saved audio across routes, and removes duplicate Three.js instances. Standalone copy has executable
+density limits. F-22 promotion now ends the surviving wingman's presentation orbit so combat AI
+recommits instead of flying away.
+
+The first-run HUD now keeps weapons and contact presentation cold until the Kestrel Gorge pop-out,
+including the compact mobile tactical rail, while retaining the essential FOLLOW THE VALLEY lesson.
+Weekend Ride gives the active road view the full canvas after Start, and Okanagan's dispatch,
+objective, reserve and result states are asserted as one continuous player flow. The full gate now
+tests the visual scorers, while `bin/look` remains the explicit real-frame capture and scenery veto;
+a gate that captured no pictures reports NOT RUN instead of silently counting as green.
 
 Build 344 established one explicit player lifecycle across the six production programmes. The
 aircraft picker names each programme's verb and endpoint; Cobra resolves the ground war into a
@@ -22,8 +83,8 @@ drop voices follow published water rates; and AIM-9 launch, radio-priority ducki
 safety-warning arbiter make the important event audible without relying on limiter overload.
 All candidate audio acceptance is silent (`?audioQa=silent`).
 
-Production: Build 340, revision `8546ce89` (verified live via
-`/api/build-info` 2026-08-16, with the protected release pipeline complete). Builds 312 (Cobra
+Production: Build 343, revision `50a2d02210339cf6156c7147f29a77850f1e29fc` (verified live via
+`/api/build-info` 2026-08-24). Builds 312 (Cobra
 contact envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap
 timing), 318 (authored structure materials), 320 (Top Gun 404 + cockpit depth near-plane), 321
 (Camp Ember depth recess), 322 (Cobra scenery pass) and 323 (the Cobra conquest mission: owned
@@ -213,7 +274,8 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 | Experience | State | Public surface | Current evidence | Promotion blocker |
 | --- | --- | --- | --- | --- |
-| F-22A · Guns Only (`first-merge`) | **production** | Aircraft picker; first visit auto-starts the Soniachne valley | Build 238 automation plus a recorded 2026-08-02 human acceptance flight (session `web-1785627445839-631596`). Build 264 graduated the sparring pair together; Build 265 aimed Ace fire at the ballistic solution. Build 308 bounds pathological terrain marches, reduces Auto-GCAS terrain work, and restores physical flyby acoustics and cast shadows. Builds 328-329 add current-position Call It A Day/Bingo RTB, remove the unsourced G-only canopy/seal voice and close conventional runway recovery. Build 343 adds the one-shot valley → two heaters → guns on-ramp; the picker tile remains beat 7 guns-only. | Fresh human first-visit and return-visit flights on Build 343; corridor/ceasefire/sound/airfield picture from Build 330 remain open |
+| F-22A · Guns Only (`first-merge`) | **production** | Aircraft picker; first visit opens the Kestrel Gorge guided sortie; returning pilots can replay it from the picker | Build 238 automation plus a recorded 2026-08-02 human acceptance flight (session `web-1785627445839-631596`). Build 264 graduated the sparring pair together; Build 265 aimed Ace fire at the ballistic solution. Build 308 bounds pathological terrain marches, reduces Auto-GCAS terrain work, and restores physical flyby acoustics and cast shadows. Builds 328-329 add current-position Call It A Day/Bingo RTB, remove the unsourced G-only canopy/seal voice and close conventional runway recovery. Build 343 adds the one-shot valley → two heaters → guns on-ramp; Build 347 adds the deliberate Ready state, authority-matched Kestrel Gorge, cold contact/weapons presentation and replay entry. A promoted surviving wingman now leaves its presentation orbit and recommits under combat AI. | Fresh human first-visit, return-visit and promoted-wingman flights on the candidate; corridor/ceasefire/sound/airfield picture from Build 330 remains open |
+| F-22A · Ace Duel (`ace-duel`) | **preview** | Hidden deliberate-testing route; requires `?preview=1` | Same F-22/Su-27 physics, one Ace. Metal tape 375 killed in 57.4 s with 3 hits, zero physical roll rocking and zero runaway chase. | Complete representative human capstone flight before any public promotion |
 | Rated arena (`multiplayer`) | **preview** | Preview acknowledgement only | Build 310 candidate adds same-origin matchmaking, shared human/bot Elo, bounded bot-only handicap profiles, outcome/fun reporting, and fail-closed launch/storage gates | Complete green gate; configured durable ladder storage; representative match, retry, abandon, and fly-again acceptance; multiplayer product acceptance before promotion |
 | Rapier · Intercept (`rapier-intercept`) | **production** | Aircraft picker | Build 333 stages three lethal-drone balloon mines 35 NM away at FL450, provides a visible outbound intercept path and 45-second reaction clock, disables time compression, then hands off to the shared amber RTB corridor and midpoint-arrestor recovery after all three kills. The measured automated handoff is 3:18 at M1.33/FL432 with 29 seconds left on the mine clock. | Fresh representative human launch/intercept/recovery flight on Build 333 |
 | Low-level drone intercept (`low-level-drone`) | **quarantined** | Preview acknowledgement only | Runtime and automated contracts exist | Ground-target/player-purpose closure and complete human flight |
@@ -222,10 +284,10 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | F9F-2 Panther off Essex (`korea-panther`) | **quarantined** | Preview acknowledgement only | Build 238 ownship-only kernel flies the production terrain catapult/route/return/groove to a physical W2 trap (100/100 focused); packaged route, touch-RTB, HUD, and barrier contracts passed silent-browser acceptance | Complete representative human desktop/touch flights and historical/presentation acceptance before any promotion |
 | MIDGE-03 Facility Nine (`indoor`) | **quarantined** | `/indoor/` preview acknowledgement | Candidate UI now enforces doctrine-safe controls and blocks premature return | Re-drive the default stealth route and representative touch/keyboard paths |
 | Parked Medevac command prototype (`medevac-command`, `/medevac/`) | **quarantined** | Standalone preview acknowledgement | Deterministic command/logistics prototype | It is research, not the canonical CASEVAC course; move out of production publish closure or explicitly graduate it |
-| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned four-point conquest, dug-in garrisons, tickets, M134 + Camp Ember rearm, Tab/F gunner, north-up minimap/full map and golden path. Build 326 adds grounded Ready/swap safety, warned ground fire and subsystem damage, cold-spare turnaround, sky/target graphics and procedural AH-1G audio. Build 328 responds to the recorded owner flight with denser/clearer scenery, corrected HUD/range/ticket staging, an improved golden route, LOS-owned V selection with an F firing chain, fortified-garrison collision and a provenance-recorded UH-1H/T53 surrogate bed. Build 333 rebuilt Camp Ember operations, rearm/turnaround authority and ground-war integration. Build 334 candidate adds a broken monsoon sky, more readable jungle depth and a more detailed one-draw Camp Ember firebase. | Fresh owner flight on Build 334. Known open: ground-fire lethality and turnaround timing are provisional gameplay closures, not production-combat fidelity. Longer arc: DCS-BS1-grade flight dynamics. |
-| Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load, lappable circuit from Build 264+. Build 267 adds ride telemetry (speed/gear/lean/lap/frame). Build 308 adds tiered shadows, sky-derived IBL, and horizon/far-plane corrections. Build 315 candidate makes it a game: lap/last/best on the helmet HUD, four sector splits, a live delta to your best, an off-track lap refused as a record, and a best that persists across sessions | Owner ride on Build 315: is beating your own best worth trying for? Ghost bike deliberately cut from v1 |
-| Top Gun (`top-gun`) | **production** | Aircraft picker / main shell | Build 309 automation covers Tomcat AIM-9, MiG-28 boot and gun fire. Build 326 repairs the programme-selector launch stall and promotes the mission. The owner flew Builds 327 and 328 on 2026-08-14. Build 328 fixed the 13.8 G overshoot and added authoritative indicated AUTO/MAN sweep. Build 329 adds ceasefire/RTB authority, navigation-rate awareness, sweep-stop annunciation and removes the remaining G-driven sounds. Build 331 candidate makes the player F-14A-only, keeps successive MiG-28 aggressors spawning, exposes RTB TO CARRIER after a splash, and teaches a fixed conventional Case I recovery to the moving carrier. | Owner ruling remains deploy first, then fly the exact public artifact; re-fly Build 331 for continued combat, RTB selection, Case I leg guidance, arrestment, fuel awareness, sweep-limit and audible acceptance. |
-| Okanagan Fire Boss (`okanagan-fireboss`, `/okanagan/`) | **production** | Civilian aircraft picker + standalone route | Build 337 candidate adds an NRCan CDEM Okanagan world, Kelowna departure and recovery, live lake scooping, partial loads and water drops, fuel-protected RTB, a deterministic evolving exercise fire, and three shared-system sorties: Water Circuits, Solo Initial Attack and Large Force Employment. | Fresh owner flight of the deployed artifact; flight/fire models are declared training surrogates, not OEM or operational wildfire forecasts. |
+| Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned four-point conquest, objective-locking gun pit, tickets, M134 + Camp Ember rearm, Tab/F gunner, tactical maps and guided ingress. Builds 326-334 added grounded safety, ground fire/damage, turnaround, audio, corrected targeting, denser scenery and rebuilt Camp Ember. Build 347 closes the brief-to-RTB flow, battlefield readability and owner-reported load failure. The corrected hardware gate reaches Ready in 1.996 s, accepts input in 16.6 ms and runs at about 60 fps; a closed-loop production-input pilot checks active gates and advancing telemetry. | Gamepad flies the aircraft, but targeting/fire still require Tab/F. Complete a human brief-to-RTB sortie; authored Long Fang/unit/structure art and insertion ETA remain open. |
+| Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load, lappable circuit from Build 264+. Build 267 adds ride telemetry (speed/gear/lean/lap/frame). Build 308 adds tiered shadows, sky-derived IBL, and horizon/far-plane corrections. Build 315 makes it a game: lap/last/best on the helmet HUD, four sector splits, a live delta to your best, an off-track lap refused as a record, and a best that persists across sessions. Builds 344-347 add the authored brief → ride → pause/end → result/replay loop and collapse the briefing sidebar after Start so the road owns the full canvas. | Owner ride on Build 347: is beating your own best worth trying for? Ghost bike deliberately cut from v1 |
+| Top Gun (`top-gun`) | **production** | Aircraft picker / main shell | Build 309 automation covers Tomcat AIM-9, MiG-28 boot and gun fire. Build 326 repairs the programme-selector launch stall and promotes the mission. The owner flew Builds 327 and 328 on 2026-08-14. Build 328 fixed the 13.8 G overshoot and added authoritative indicated AUTO/MAN sweep. Build 329 adds ceasefire/RTB authority, navigation-rate awareness, sweep-stop annunciation and removes the remaining G-driven sounds. Build 331 makes the player F-14A-only, keeps successive MiG-28 aggressors spawning, exposes RTB TO CARRIER after a splash, and teaches a fixed conventional Case I recovery to the moving carrier. Build 347 keeps recovery active after a bolter, completes a stopped trap, adds persistent RTB/Fox Two guidance and combines combat plus carrier-pass evidence in the debrief. | Owner ruling remains deploy first, then fly the exact public artifact; re-fly Build 347 for continued combat, bolter retry, RTB selection, Case I leg guidance, arrestment, fuel awareness, sweep-limit and audible acceptance. |
+| Okanagan Fire Boss (`okanagan-fireboss`, `/okanagan/`) | **production** | Civilian aircraft picker + standalone route | Build 337 adds an NRCan CDEM Okanagan world, Kelowna departure and recovery, live lake scooping, partial loads and water drops, fuel-protected RTB, a deterministic evolving exercise fire, and three shared-system sorties: Water Circuits, Solo Initial Attack and Large Force Employment. Builds 344-347 connect dispatch, live objective, reserve truth, pause/end, outcome, correction, replay and return-to-aircraft across all three sorties, with route smoke asserting the exact authority behind each brief. | Fresh owner flight of the Build 347 artifact; flight/fire models are declared training surrogates, not OEM or operational wildfire forecasts. |
 
 ## Research-only packages
 
@@ -235,8 +297,8 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Live production is Build 333, revision `f2c37d51e9735baf5f8164bd8fe2949117ac2d46`, shipped from
-  PR #77 with both required Verify contexts green. Local gate
+- Live production is Build 343, revision `50a2d02210339cf6156c7147f29a77850f1e29fc`, verified from
+  the public `/api/build-info` endpoint on 2026-08-24. Local gate
   runs on a loaded workstation produce false browser-smoke timeouts (2026-08-12: four smokes
   timed out under an unrelated 200%+ CPU load and all passed in isolation and on CI); CI on
   clean runners is the authoritative check.

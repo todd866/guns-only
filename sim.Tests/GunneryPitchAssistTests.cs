@@ -13,6 +13,14 @@ public class GunneryPitchAssistTests {
             0.0, 0.0, 0.0, parameters.MassKg), parameters);
     }
 
+    static AircraftParams ModernAircraftWithLateralAssist() =>
+        FlightModel.F22APublicDataSurrogate with {
+            GunneryLateralAssistRollGain = 2.0,
+            GunneryLateralAssistMaxRoll = 0.6,
+            GunneryLateralAssistYawGain = 0.3,
+            GunneryLateralAssistMaxYaw = 0.08,
+        };
+
     static Vec3D PitchLead(AircraftSim aircraft, double degrees) {
         double radians = degrees * DegreesToRadians;
         return (aircraft.BodyForward * Math.Cos(radians)
@@ -35,11 +43,14 @@ public class GunneryPitchAssistTests {
     static GunneryPitchAssistResult Apply(AircraftSim aircraft,
         in PilotCommand command, in Vec3D lead, double rangeM = 600.0,
         bool enabled = true, bool hasLead = true, AircraftParams? parameters = null,
-        double closureMps = 0.0) =>
+        double closureMps = 0.0, bool pilotUnloadIntent = false,
+        bool pilotMaximumPullIntent = false) =>
         GunneryPitchAssist.Apply(command, aircraft.State,
             parameters ?? FlightModel.F22APublicDataSurrogate,
             aircraft.AirspeedMps, aircraft.AtmosphereModel,
-            lead, hasLead, rangeM, enabled, closureMps: closureMps);
+            lead, hasLead, rangeM, enabled, closureMps: closureMps,
+            pilotUnloadIntent: pilotUnloadIntent,
+            pilotMaximumPullIntent: pilotMaximumPullIntent);
 
     /// <summary>
     /// The aid must be able to say "ease" once the nose is PAST the lead line, even while the
@@ -196,8 +207,8 @@ public class GunneryPitchAssistTests {
     }
 
     [Fact]
-    public void LateralLeadErrorWalksTheNoseWithBoundedRollAndYawTowardTheSolution() {
-        AircraftParams parameters = FlightModel.F22APublicDataSurrogate;
+    public void OptionalLateralAssistIsBoundedAndSymmetricWhenEnabled() {
+        AircraftParams parameters = ModernAircraftWithLateralAssist();
         AircraftSim aircraft = ModernAircraft();
         // Neutral pilot lateral inputs so the assist contribution is measured in isolation.
         var pilot = new PilotCommand(1.0, 0.0, 1.0, 0.0,
@@ -208,7 +219,8 @@ public class GunneryPitchAssistTests {
         Vec3D lateralLead = (aircraft.BodyForward * Math.Cos(radians)
             + aircraft.BodyRight * Math.Sin(radians)).Normalized();
 
-        GunneryPitchAssistResult result = Apply(aircraft, pilot, lateralLead);
+        GunneryPitchAssistResult result = Apply(aircraft, pilot, lateralLead,
+            parameters: parameters);
 
         Assert.True(result.State.Active);
         // A purely lateral miss leaves the pitch load-factor request untouched ...
@@ -232,16 +244,22 @@ public class GunneryPitchAssistTests {
         // A mirror-image lead to the LEFT drives the assist the other way (sign symmetry, no bias).
         Vec3D leftLead = (aircraft.BodyForward * Math.Cos(radians)
             - aircraft.BodyRight * Math.Sin(radians)).Normalized();
-        GunneryPitchAssistResult left = Apply(aircraft, pilot, leftLead);
+        GunneryPitchAssistResult left = Apply(aircraft, pilot, leftLead,
+            parameters: parameters);
         Assert.True(left.Command.RollControl < 0.0);
         Assert.True(left.Command.Rudder < 0.0);
     }
 
     [Fact]
-    public void PadlockMayOwnRollWithoutDisablingPitchOrRudderConvergence() {
+    public void F22GunDirectorNeverAddsHiddenLateralControl() {
         AircraftParams parameters = FlightModel.F22APublicDataSurrogate;
+        Assert.Equal(0.0, parameters.GunneryLateralAssistRollGain, 12);
+        Assert.Equal(0.0, parameters.GunneryLateralAssistMaxRoll, 12);
+        Assert.Equal(0.0, parameters.GunneryLateralAssistYawGain, 12);
+        Assert.Equal(0.0, parameters.GunneryLateralAssistMaxYaw, 12);
+
         AircraftSim aircraft = ModernAircraft();
-        var pilot = new PilotCommand(1.0, 0.0, 1.0, 0.0,
+        var pilot = new PilotCommand(1.0, 0.0, 1.0, 0.04,
             RollControl: 0.13, DirectLateralControl: true);
         double radians = 5.0 * DegreesToRadians;
         Vec3D lateralLead = (aircraft.BodyForward * Math.Cos(radians)
@@ -250,17 +268,19 @@ public class GunneryPitchAssistTests {
         GunneryPitchAssistResult result = GunneryPitchAssist.Apply(
             pilot, aircraft.State, parameters, aircraft.AirspeedMps,
             aircraft.AtmosphereModel, lateralLead, hasBallisticLead: true,
-            rangeM: 600.0, enabled: true, lateralRollEnabled: false);
+            rangeM: 600.0, enabled: true, lateralRollEnabled: true);
 
         Assert.True(result.State.Active);
         Assert.Equal(pilot.RollControl, result.Command.RollControl, 12);
-        Assert.True(result.Command.Rudder > pilot.Rudder,
-            "terminal yaw walk remains available while padlock owns the roll plane");
+        Assert.Equal(pilot.Rudder, result.Command.Rudder, 12);
+        Assert.Equal(0.0, result.State.RollCorrection, 12);
+        Assert.Equal(0.0, result.State.YawCorrection, 12);
         Assert.Equal(pilot.GDemand, result.Command.GDemand, 12);
     }
 
     [Fact]
     public void StablePursuitShoulderAcquiresBeforeKeyboardFineTuningRange() {
+        AircraftParams parameters = ModernAircraftWithLateralAssist();
         AircraftSim aircraft = ModernAircraft();
         var pilot = new PilotCommand(1.0, 0.0, 1.0, 0.0,
             RollControl: 0.0, DirectLateralControl: true);
@@ -270,9 +290,9 @@ public class GunneryPitchAssistTests {
         // seconds to pass. The old 1,000 m gate stayed dark while the pilot made twelve manual
         // corrections. This geometry must now get a bounded, partial acquisition pull.
         GunneryPitchAssistResult outer = Apply(aircraft, pilot, lead,
-            rangeM: 1370.0, closureMps: 15.0);
+            rangeM: 1370.0, closureMps: 15.0, parameters: parameters);
         GunneryPitchAssistResult nearer = Apply(aircraft, pilot, lead,
-            rangeM: 900.0, closureMps: 15.0);
+            rangeM: 900.0, closureMps: 15.0, parameters: parameters);
 
         Assert.True(outer.State.Active);
         Assert.True(outer.Command.RollControl > pilot.RollControl);
@@ -284,6 +304,7 @@ public class GunneryPitchAssistTests {
 
     [Fact]
     public void HighClosurePassDoesNotAcquireTheSafePursuitShoulder() {
+        AircraftParams parameters = ModernAircraftWithLateralAssist();
         AircraftSim aircraft = ModernAircraft();
         var pilot = new PilotCommand(1.0, 0.0, 1.0, 0.0,
             RollControl: 0.0, DirectLateralControl: true);
@@ -291,12 +312,14 @@ public class GunneryPitchAssistTests {
         // The same trace crossed 636 m at 484 m/s closure with a 22.3-degree miss. Chasing that
         // 1.3-second fly-by would wrench the aircraft, so new shoulder geometry stays inactive.
         AssertInactiveUnchanged(Apply(aircraft, pilot,
-            LateralLead(aircraft, 22.3), rangeM: 636.0, closureMps: 484.0), pilot);
+            LateralLead(aircraft, 22.3), rangeM: 636.0, closureMps: 484.0,
+            parameters: parameters), pilot);
 
-        // Existing <=14-degree/<=1 km behaviour remains available during a pass. Its historical
-        // roll time-to-pass fade still applies, while yaw keeps the legacy full-authority law.
+        // Existing <=14-degree/<=1.05 km behaviour remains available during a pass. Its historical
+        // lateral time-to-pass fade still applies for airframes that opt into it.
         GunneryPitchAssistResult legacy = Apply(aircraft, pilot,
-            LateralLead(aircraft, 13.0), rangeM: 636.0, closureMps: 484.0);
+            LateralLead(aircraft, 13.0), rangeM: 636.0, closureMps: 484.0,
+            parameters: parameters);
         Assert.True(legacy.State.Active);
         Assert.True(legacy.Command.RollControl > 0.0);
         Assert.True(legacy.Command.Rudder > 0.0);
@@ -304,15 +327,16 @@ public class GunneryPitchAssistTests {
 
     [Fact]
     public void SafePursuitRangeShoulderFadesPitchRollAndYawTogether() {
+        AircraftParams parameters = ModernAircraftWithLateralAssist();
         AircraftSim aircraft = ModernAircraft();
         var pilot = new PilotCommand(1.0, 0.0, 1.0, 0.0,
             RollControl: 0.0, DirectLateralControl: true);
         Vec3D lead = TwoAxisLead(aircraft, pitchDegrees: 5.0, lateralDegrees: 5.0);
 
         GunneryPitchAssistResult full = Apply(aircraft, pilot, lead,
-            rangeM: 900.0, closureMps: 100.0);
+            rangeM: 900.0, closureMps: 100.0, parameters: parameters);
         GunneryPitchAssistResult shoulder = Apply(aircraft, pilot, lead,
-            rangeM: 1250.0, closureMps: 100.0);
+            rangeM: 1250.0, closureMps: 100.0, parameters: parameters);
 
         Assert.True(full.State.Active);
         Assert.True(shoulder.State.Active);
@@ -324,11 +348,11 @@ public class GunneryPitchAssistTests {
             0.0, full.Command.Rudder);
         Assert.InRange(
             shoulder.State.LoadFactorCorrectionG / full.State.LoadFactorCorrectionG,
-            0.70, 0.72);
+            0.78, 0.80);
         Assert.InRange(shoulder.Command.RollControl / full.Command.RollControl,
-            0.70, 0.72);
+            0.78, 0.80);
         Assert.InRange(shoulder.Command.Rudder / full.Command.Rudder,
-            0.70, 0.72);
+            0.78, 0.80);
     }
 
     [Fact]
@@ -347,7 +371,7 @@ public class GunneryPitchAssistTests {
         AssertInactiveUnchanged(noLead, pilot);
         Assert.Equal("NO_LEAD", noLead.State.Status);
         GunneryPitchAssistResult range = Apply(aircraft, pilot, validLead,
-            rangeM: 1500.01);
+            rangeM: 1575.01);
         AssertInactiveUnchanged(range, pilot);
         Assert.Equal("OUT_OF_RANGE", range.State.Status);
         GunneryPitchAssistResult cone = Apply(aircraft, pilot,
@@ -360,6 +384,29 @@ public class GunneryPitchAssistTests {
         AssertInactiveUnchanged(Apply(aircraft,
             pilot with { CommandedAlphaRad = 0.8 }, validLead),
             pilot with { CommandedAlphaRad = 0.8 });
+        PilotCommand unloading = pilot with { GDemand = 0.72 };
+        GunneryPitchAssistResult unload = Apply(aircraft, unloading, validLead);
+        AssertInactiveUnchanged(unload, unloading);
+        Assert.Equal("PILOT_UNLOAD", unload.State.Status);
+        Assert.Equal(12, unload.State.StatusCode);
+        PilotCommand filteringUnload = pilot with { GDemand = 3.2 };
+        GunneryPitchAssistResult rawUnload = Apply(
+            aircraft,
+            filteringUnload,
+            validLead,
+            pilotUnloadIntent: true);
+        AssertInactiveUnchanged(rawUnload, filteringUnload);
+        Assert.Equal("PILOT_UNLOAD", rawUnload.State.Status);
+        Assert.Equal(12, rawUnload.State.StatusCode);
+        PilotCommand filteringMaximumPull = pilot with { GDemand = 2.1 };
+        GunneryPitchAssistResult rawMaximumPull = Apply(
+            aircraft,
+            filteringMaximumPull,
+            validLead,
+            pilotMaximumPullIntent: true);
+        AssertInactiveUnchanged(rawMaximumPull, filteringMaximumPull);
+        Assert.Equal("PILOT_MAXIMUM_PULL", rawMaximumPull.State.Status);
+        Assert.Equal(13, rawMaximumPull.State.StatusCode);
         AssertInactiveUnchanged(Apply(aircraft, pilot, validLead,
             parameters: FlightModel.Sabre), pilot);
     }
@@ -415,6 +462,42 @@ public class GunneryPitchAssistTests {
         Assert.False(session.GunneryPitchAssist.Active);
         Assert.True(session.Player.LastAppliedCommand.EnvelopeOverride);
         Assert.Equal(0, session.PlayerGun.RoundsFired);
+
+        // The browser and hardware harnesses fly through the production analog gamepad path.
+        // Release the limiter/Auto-GCAS paddle first: a raw stick-forward sample must yield the
+        // gun aid immediately even while the 70 ms G filter still carries the prior pull. It must
+        // not enter alpha-command override or inhibit Auto-GCAS to do so.
+        session.FeedKey(GKey.PullUp, false);
+        session.FeedKey(GKey.Override, false);
+        session.SetAnalogPitchControl(-0.14);
+        session.StepFixed();
+
+        Assert.False(session.GunneryPitchAssist.Active);
+        Assert.False(session.Player.LastAppliedCommand.EnvelopeOverride);
+        Assert.False(double.IsFinite(
+            session.Player.LastAppliedCommand.CommandedAlphaRad));
+        Assert.Equal("PILOT_UNLOAD", session.GunneryPitchAssist.Status);
+        Assert.False(session.AutoGcasOverrideHeld);
+        Assert.NotEqual(AutoGcasInhibitReason.PilotOverride,
+            session.AutoGcas.InhibitReason);
+        Assert.Equal(0, session.PlayerGun.RoundsFired);
+
+        // The other side of that ownership boundary is just as immediate. Tape 430 entered a
+        // full-pull recovery at 0.92 raw stick while filtered GDemand still read 2.10 G; the aid
+        // added 0.48 G for one frame. Raw near-stop pull must stand it down without the limiter.
+        session.SetAnalogPitchControl(0.92);
+        session.StepFixed();
+
+        Assert.False(session.GunneryPitchAssist.Active);
+        Assert.False(session.Player.LastAppliedCommand.EnvelopeOverride);
+        Assert.Equal("PILOT_MAXIMUM_PULL", session.GunneryPitchAssist.Status);
+        Assert.False(session.AutoGcasOverrideHeld);
+        Assert.NotEqual(AutoGcasInhibitReason.PilotOverride,
+            session.AutoGcas.InhibitReason);
+        Assert.Equal(session.Controls.Command.GDemand,
+            session.Player.LastAppliedCommand.GDemand, 10);
+        Assert.Equal(0, session.PlayerGun.RoundsFired);
+
     }
 
     static void AssertInactiveUnchanged(in GunneryPitchAssistResult result,
@@ -439,6 +522,27 @@ public class GunneryPitchAssistTests {
             rangeM: 600.0, enabled: true);
         Assert.True(result.Command.GDemand >= 8.0 - 1e-9,
             $"assist reduced a deliberate 8 G pull to {result.Command.GDemand:F2}");
+    }
+
+    [Fact]
+    public void AssistNeverEasesAProtectedCeilingPullDuringRecovery() {
+        AircraftSim aircraft = ModernAircraft();
+        AircraftParams parameters = FlightModel.F22APublicDataSurrogate;
+        double protectedMaximum = Protection.MaxPerformG(
+            aircraft.State,
+            parameters,
+            aircraft.AirspeedMps,
+            aircraft.AtmosphereModel);
+        var ceilingPull = new PilotCommand(
+            protectedMaximum, 0.0, 1.0, 0.0);
+
+        GunneryPitchAssistResult result = Apply(
+            aircraft,
+            ceilingPull,
+            PitchLead(aircraft, -4.0));
+
+        Assert.Equal(protectedMaximum, result.Command.GDemand, 10);
+        Assert.Equal(0.0, result.State.LoadFactorCorrectionG, 10);
     }
 
 }

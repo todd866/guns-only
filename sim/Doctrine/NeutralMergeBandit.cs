@@ -17,6 +17,7 @@ public sealed class NeutralMergeBandit :
     const double OpeningConfirmationSeconds = 0.20;
     readonly AircraftParams _parameters;
     readonly AircraftSim _mergeSim;
+    readonly double _stagedFightSpeedMps;
     /// Carried across the merge gate so the opening pair keeps setting the player up after the
     /// neutral pass ends, instead of snapping straight into a fight they cannot win. Mutable for
     /// exactly one transition: EndPresentation latches it false when the pair graduates.
@@ -62,6 +63,7 @@ public sealed class NeutralMergeBandit :
             throw new System.ArgumentOutOfRangeException(nameof(doctrineIndex));
         _doctrineIndex = doctrineIndex;
         _terrain = terrain;
+        _stagedFightSpeedMps = initial.Speed;
         _mergeSim = new AircraftSim(initial, parameters);
         _atmosphere = _mergeSim.AtmosphereModel;
     }
@@ -108,6 +110,8 @@ public sealed class NeutralMergeBandit :
     public AircraftParams? FightAircraftParameters => _fight?.AircraftParameters;
     internal int? LookaheadCadencePhase => _fight?.LookaheadCadencePhase
         ?? _lookaheadCadencePhase;
+    internal double? FightEnergyReferenceSpeedMpsForTest =>
+        _fight?.EnergyReferenceSpeedMpsForTest;
     public AiComputeLevel ComputeLevel => _fight?.ComputeLevel ?? _computeLevel;
     public AiWorkloadCounters AiWorkload => _fight?.AiWorkload ?? default;
     /// The tier this actor fields across both phases: the scripted merge is briefed at the same
@@ -216,7 +220,8 @@ public sealed class NeutralMergeBandit :
         var fight = new ReactiveBandit(
             _mergeSim.State, _parameters, _skill, _terrain,
             profile: _profile, doctrineIndex: _doctrineIndex,
-            presenting: _presenting) {
+            presenting: _presenting,
+            energyReferenceSpeedMps: _stagedFightSpeedMps) {
             Wind = _wind,
             Atmosphere = _atmosphere
         };

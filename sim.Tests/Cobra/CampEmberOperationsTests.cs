@@ -58,8 +58,10 @@ public class CampEmberOperationsTests
         Assert.Single(gates, gate => gate.Active);
         Assert.Equal(join.X, gates[^1].EastM, 9);
         Assert.Equal(join.Z, gates[^1].NorthM, 9);
-        Assert.All(gates, gate =>
+        Assert.All(gates.Take(2), gate =>
             Assert.True(gate.UpM >= CampEmberOperations.PadElevationM + 42.0));
+        Assert.True(gates[^1].UpM < CampEmberOperations.PadElevationM + 42.0,
+            "the connector must join the low-level route instead of holding the pad datum");
 
         double previousRangeM = 0.0;
         foreach (CobraPathGate gate in gates) {
@@ -102,10 +104,14 @@ public class CampEmberOperationsTests
             IReadOnlyList<CobraPathGate> gates = CampEmberOperations.BuildDepartureGates(
                 join,
                 terrain);
-            foreach (CobraPathGate gate in gates) {
+            for (int index = 0; index < gates.Count; index++) {
+                CobraPathGate gate = gates[index];
                 Assert.True(terrain.TrySample(gate.EastM, gate.NorthM, out TerrainSample surface));
+                double minimumClearanceM = index < 2
+                    ? CampEmberOperations.DepartureCentreClearanceM
+                    : CampEmberOperations.DepartureRouteClearanceM;
                 Assert.True(
-                    gate.UpM - surface.HeightM >= CampEmberOperations.DepartureCentreClearanceM - 1e-6,
+                    gate.UpM - surface.HeightM >= minimumClearanceM - 1e-6,
                     $"{route.Label} gate clearance was {gate.UpM - surface.HeightM:F1} m");
             }
         }

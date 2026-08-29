@@ -106,6 +106,87 @@ public class CobraGroundWarRuntimeTests
     }
 
     [Fact]
+    public void IronBellBattleStartsOnOpposingRaisedApproachesNotUnderTheBridge()
+    {
+        CobraCanyonDefinition definition = CobraCanyonDefinition.Create();
+        CobraCanyonTerrainSurface terrain = definition.CreateTerrainSurface();
+        var war = new CobraGroundWarRuntime(definition, terrain, seed: 42);
+        ContestedSite bridge = war.Sites.Single(site =>
+            site.Id == CobraGroundWarRuntime.IronBellSiteId);
+        GroundUnit[] combatants = war.LivingUnits()
+            .Where(unit => unit.HomeSiteId == bridge.Id && unit.ParticipatesInGroundCombat)
+            .ToArray();
+
+        Assert.Equal(CobraGroundWarRuntime.IronBellDeckRoadElevationM, bridge.PositionWorldM.Y, 9);
+        Assert.Equal(CobraGroundWarRuntime.IronBellCaptureRadiusM, bridge.CaptureRadiusM, 9);
+        Assert.Equal(10, combatants.Length);
+        Assert.All(combatants, unit => {
+            Assert.True(
+                HorizontalDistance(unit.PositionWorldM, bridge.PositionWorldM)
+                    <= bridge.CaptureRadiusM + 1e-6,
+                $"{unit.Id} opened outside the Iron Bell capture area");
+            Assert.True(unit.PositionWorldM.Y > 130.0,
+                $"{unit.Id} opened at river-floor height {unit.PositionWorldM.Y:F1} m");
+            bool underCentralSpan = unit.PositionWorldM.X
+                    is >= CobraGroundWarRuntime.IronBellDeckMinimumEastM
+                    and <= CobraGroundWarRuntime.IronBellDeckMaximumEastM
+                && unit.PositionWorldM.Z
+                    is >= CobraGroundWarRuntime.IronBellRoadMinimumNorthM
+                    and <= CobraGroundWarRuntime.IronBellRoadMaximumNorthM;
+            Assert.False(underCentralSpan, $"{unit.Id} opened under/in the central truss span");
+        });
+
+        GroundUnit garrison = Assert.Single(combatants, unit =>
+            unit.Id == CobraGroundWarRuntime.GarrisonUnitId(bridge.Id));
+        Assert.Equal(CobraGroundWarRuntime.IronBellHostileBridgeheadEastM,
+            garrison.PositionWorldM.X, 9);
+        Assert.Equal(CobraGroundWarRuntime.IronBellBridgeheadNorthM,
+            garrison.PositionWorldM.Z, 9);
+        Assert.True(garrison.IsFortified);
+
+        GroundUnit friendlyHardPoint = Assert.Single(combatants, unit =>
+            unit.Faction == GroundFaction.Friendly
+            && unit.Role == GroundUnitRole.HardPoint);
+        Assert.Equal(CobraGroundWarRuntime.IronBellFriendlyBridgeheadEastM,
+            friendlyHardPoint.PositionWorldM.X, 9);
+        Assert.InRange(
+            HorizontalDistance(friendlyHardPoint.PositionWorldM, garrison.PositionWorldM),
+            499.9,
+            Math.Min(friendlyHardPoint.EngagementRangeM, garrison.EngagementRangeM));
+
+        GroundUnit friendlyVehicle = combatants.Single(unit =>
+            unit.Faction == GroundFaction.Friendly
+            && unit.Role == GroundUnitRole.SoftVehicle);
+        GroundUnit hostileVehicle = combatants.Single(unit =>
+            unit.Faction == GroundFaction.Hostile
+            && unit.Role == GroundUnitRole.SoftVehicle
+            && unit.PositionWorldM.X < -2_500.0);
+        Assert.True(
+            HorizontalDistance(friendlyVehicle.PositionWorldM, hostileVehicle.PositionWorldM)
+                <= Math.Min(friendlyVehicle.EngagementRangeM, hostileVehicle.EngagementRangeM),
+            "opposing approach vehicles must visibly exchange fire at mission start");
+
+        // Movers may cross on the authored roadway, but never descend into the water below it.
+        for (int step = 0; step < 100; step++) war.Advance(0.1);
+        foreach (GroundUnit unit in war.LivingUnits().Where(unit =>
+            unit.HomeSiteId == bridge.Id && unit.ParticipatesInGroundCombat)) {
+            bool onCrossing = unit.PositionWorldM.X
+                    is >= CobraGroundWarRuntime.IronBellRoadMinimumEastM
+                    and <= CobraGroundWarRuntime.IronBellRoadMaximumEastM
+                && unit.PositionWorldM.Z
+                    is >= CobraGroundWarRuntime.IronBellRoadMinimumNorthM
+                    and <= CobraGroundWarRuntime.IronBellRoadMaximumNorthM;
+            if (!onCrossing) {
+                Assert.True(terrain.TrySample(
+                    unit.PositionWorldM.X, unit.PositionWorldM.Z, out TerrainSample sample));
+                Assert.Equal(TerrainSurfaceKind.Land, sample.Kind);
+            }
+            Assert.True(unit.PositionWorldM.Y > 130.0,
+                $"{unit.Id} left the roadway for river-floor height {unit.PositionWorldM.Y:F1} m");
+        }
+    }
+
+    [Fact]
     public void SmallArmsEvidenceNamesBothEndsOfTheActualGroundEngagement()
     {
         CobraMissionRuntime runtime = CreateEngagedMission(seed: 5);
@@ -855,6 +936,22 @@ public class CobraGroundWarRuntimeTests
     /// the one outcome a conquest mission must not have. The clock scores the board instead.
     /// </summary>
     [Fact]
+    public void AuthorityMissionClockCountsDownFromThePublishedLimit()
+    {
+        CobraGroundWarRuntime war = CreateWar();
+
+        Assert.Equal(0.0, war.ElapsedSeconds, 6);
+        Assert.Equal(CobraGroundWarRuntime.MissionTimeLimitSeconds,
+            war.TimeRemainingSeconds, 6);
+
+        war.Advance(1.25);
+
+        Assert.Equal(1.25, war.ElapsedSeconds, 6);
+        Assert.Equal(CobraGroundWarRuntime.MissionTimeLimitSeconds - 1.25,
+            war.TimeRemainingSeconds, 6);
+    }
+
+    [Fact]
     public void AnEvenSplitStillEndsOnTheClock()
     {
         CobraGroundWarRuntime war = CreateWar();
@@ -876,6 +973,8 @@ public class CobraGroundWarRuntimeTests
 
         Assert.NotEqual(HoldTheBridgeOutcome.Pending, war.MissionOutcome);
         Assert.Equal("time-limit", war.MissionOutcomeReason);
+        Assert.True(war.ElapsedSeconds >= CobraGroundWarRuntime.MissionTimeLimitSeconds);
+        Assert.Equal(0.0, war.TimeRemainingSeconds, 6);
         // Neither pool ever drained: this ended on the clock, not on attrition.
         Assert.True(war.FriendlyTickets > 0.0);
         Assert.True(war.HostileTickets > 0.0);

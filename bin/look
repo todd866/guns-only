@@ -108,7 +108,7 @@ run_cobra() {
             record cobra emptiness NOT_RUN "no stills to score"
             return
         fi
-        if ! COBRA_SCENERY_STILLS="$dir" node tools/cobra-scenery-gate/shot.mjs >/dev/null 2>&1; then
+        if ! COBRA_SCENERY_SHOT_DIR="$dir" node tools/cobra-scenery-gate/shot.mjs >/dev/null 2>&1; then
             record cobra capture NOT_RUN "cobra shot.mjs failed against $COBRA_SCENERY_WWWROOT"
             record cobra emptiness NOT_RUN "no stills to score"
             return
@@ -122,8 +122,8 @@ run_cobra() {
         record cobra emptiness NOT_RUN "no stills directory at $dir"
         return
     fi
-    if ! ls "$dir"/camp-ember.png "$dir"/mid-gorge.png "$dir"/iron-bell.png >/dev/null 2>&1; then
-        record cobra emptiness NOT_RUN "no camp-ember/mid-gorge/iron-bell stills in $dir"
+    if ! ls "$dir"/camp-ember.png "$dir"/cockpit-battle.png "$dir"/mid-gorge.png "$dir"/iron-bell.png "$dir"/plantation-fight.png >/dev/null 2>&1; then
+        record cobra emptiness NOT_RUN "no cockpit/camp-ember/mid-gorge/iron-bell/plantation-fight stills in $dir"
         return
     fi
     if node tools/cobra-scenery-gate/score.mjs --shots "$dir" --mode "$mode" >/dev/null 2>&1; then

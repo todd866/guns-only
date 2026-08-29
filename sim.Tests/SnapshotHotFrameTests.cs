@@ -87,7 +87,7 @@ public class SnapshotHotFrameTests {
     static void AssertHotFrameMatchesJson(JsonElement root, double[] buffer) {
         using JsonDocument layoutDocument = JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
         JsonElement layout = layoutDocument.RootElement;
-        Assert.Equal(27, layout.GetProperty("layout_version").GetInt32());
+        Assert.Equal(33, layout.GetProperty("layout_version").GetInt32());
         Assert.Equal(SnapshotHotFrame.SlotCount, layout.GetProperty("slot_count").GetInt32());
         string[] names = layout.GetProperty("blocks")
             .EnumerateArray()
@@ -102,11 +102,31 @@ public class SnapshotHotFrameTests {
         Assert.Contains("gunnery_roll_assist", names);
         Assert.Contains("gunnery_yaw_assist", names);
         Assert.Contains("gunnery_time_to_pass_s", names);
+        Assert.Contains("lead_solution_valid", names);
+        Assert.Contains("applied_rudder", names);
+        Assert.Contains("f22_ari_gain", names);
+        Assert.Contains("f22_ari_rudder", names);
+        Assert.Contains("effective_rudder_command", names);
+        Assert.Contains("stability_yaw_rate_dps", names);
         Assert.Contains("rapier_target_gamma_deg", names);
         Assert.Contains("rapier_relight_dynamic_pressure_kpa", names);
         Assert.Contains("opponent_wing_sweep_deg", names);
+        Assert.Contains("selected_opponent_tactic_code", names);
+        Assert.Contains("selected_opponent_last_command_load_factor_g", names);
+        Assert.Contains("selected_opponent_last_command_bank_target_deg", names);
+        Assert.Contains("selected_opponent_last_command_throttle", names);
+        Assert.Contains("selected_opponent_last_command_rudder", names);
         Assert.Contains("wing_sweep_mode_code", names);
         Assert.Contains("f14_structural_fatigue_01", names);
+        Assert.Contains("first_run_valley_available", names);
+        Assert.Contains("first_run_valley_geometry_version", names);
+        Assert.Contains("first_run_valley_center_east_m", names);
+        Assert.Contains("first_run_valley_popout_north_m", names);
+        Assert.Contains("first_run_valley_centerline_component_count", names);
+        Assert.Contains("first_run_valley_side_cut_depth_01", names);
+        Assert.Contains("first_run_valley_butte_count", names);
+        Assert.Contains("first_run_valley_strata_step_height_m", names);
+        Assert.Contains("first_run_valley_north_extent_north_m", names);
         Assert.Contains("aim9_state_code", names);
         Assert.Contains("aim9_vz", names);
 
@@ -252,6 +272,39 @@ public class SnapshotHotFrameTests {
     }
 
     [Fact]
+    public void FirstRunPopOutInterlockMatchesFullAndHotSnapshotsOnBothSidesOfTheGate() {
+        var before = new SimulationSession();
+        before.StartBeatWithEnvironment(Beats.ModernVisualMergeFirstRun, null,
+            new FlatTerrain());
+        before.Begin();
+        var (coldRoot, coldBuffer, coldDocument) = Project(before);
+        using (coldDocument) {
+            Assert.True(coldRoot.GetProperty("first_run_weapons_cold").GetBoolean());
+            Assert.True(coldRoot.GetProperty("first_run_valley_available").GetBoolean());
+            AssertHotFrameMatchesJson(coldRoot, coldBuffer);
+        }
+
+        BeatSetup armedBeat = Beats.ModernVisualMergeFirstRun();
+        armedBeat = armedBeat with {
+            Player = armedBeat.Player with {
+                Position = armedBeat.Player.Position with {
+                    Z = FirstRunValleyRuntime.PopOutNorthM + 10.0
+                }
+            }
+        };
+        var after = new SimulationSession();
+        after.StartBeatWithEnvironment(() => armedBeat, null, new FlatTerrain());
+        after.Begin();
+        after.StepFixed();
+        var (armedRoot, armedBuffer, armedDocument) = Project(after);
+        using (armedDocument) {
+            Assert.False(armedRoot.GetProperty("first_run_weapons_cold").GetBoolean());
+            Assert.True(armedRoot.GetProperty("first_run_valley_available").GetBoolean());
+            AssertHotFrameMatchesJson(armedRoot, armedBuffer);
+        }
+    }
+
+    [Fact]
     public void PantherRouteEdgesInvalidateColdLabelsAndPublishHotGuidanceImmediately() {
         SimulationSession session = StartSession(14, null);
         var buffer = new double[SnapshotHotFrame.SlotCount];
@@ -318,6 +371,39 @@ public class SnapshotHotFrameTests {
                 root.GetProperty("bandit_entity_id").ValueKind);
             Assert.Equal(0.0, root.GetProperty("range_m").GetDouble());
             Assert.False(root.GetProperty("gun_solution").GetBoolean());
+            Assert.False(root.GetProperty("lead_solution_valid").GetBoolean());
+            AssertHotFrameMatchesJson(root, buffer);
+        }
+    }
+
+    [Fact]
+    public void PhysicalLeadValidityRemainsVisibleWhileFirstPassSafetyInhibitsWeapons() {
+        BeatSetup beat = Beats.ModernAceDuel();
+        const double altitudeM = 3048.0;
+        beat = beat with {
+            Player = beat.Player with {
+                Position = new Vec3D(0.0, altitudeM, 0.0)
+            },
+            Bandit = beat.Bandit with {
+                Position = new Vec3D(0.0, altitudeM, 400.0)
+            }
+        };
+        var session = new SimulationSession();
+        session.StartBeat(() => beat);
+        session.Begin();
+        session.StepFixed();
+
+        Assert.True(session.OpponentPresent);
+        Assert.True(session.WeaponsInhibited);
+        Assert.True(session.PlayerGun.HasLeadSolution);
+
+        var (root, buffer, document) = Project(session);
+        using (document) {
+            // `lead_valid` remains the weapons-authorized HUD contract. The parallel field is
+            // deliberately physical so autonomous pilots can assess intercept geometry while
+            // ROE, first-pass discipline, or another weapons interlock is active.
+            Assert.False(root.GetProperty("lead_valid").GetBoolean());
+            Assert.True(root.GetProperty("lead_solution_valid").GetBoolean());
             AssertHotFrameMatchesJson(root, buffer);
         }
     }
@@ -575,6 +661,9 @@ public class SnapshotHotFrameTests {
         Assert.Empty(session.OpponentGun.RoundsInFlight);
         session.RecordPlayerHitsForTest(1);
 
+        Assert.True(session.SelectedOpponentPilotTelemetry.HasValue);
+        OpponentPilotTelemetry selectedPilot =
+            session.SelectedOpponentPilotTelemetry.Value;
         var (root, buffer, document) = Project(session);
         using (document) {
             Assert.Equal(1,
@@ -587,11 +676,30 @@ public class SnapshotHotFrameTests {
                 Geometry.Range(session.Player.State, wingman.Bandit.State),
                 root.GetProperty("range_m").GetDouble(),
                 1);
+            if (selectedPilot.Tactic is { } tactic) {
+                Assert.Equal((int)tactic,
+                    root.GetProperty("selected_opponent_tactic_code").GetInt32());
+            } else {
+                Assert.Equal(JsonValueKind.Null,
+                    root.GetProperty("selected_opponent_tactic_code").ValueKind);
+            }
+            Assert.Equal(selectedPilot.LastCommand.GDemand,
+                root.GetProperty(
+                    "selected_opponent_last_command_load_factor_g").GetDouble(), 3);
+            Assert.Equal(selectedPilot.LastCommand.BankTarget * 180.0 / Math.PI,
+                root.GetProperty(
+                    "selected_opponent_last_command_bank_target_deg").GetDouble(), 3);
+            Assert.Equal(selectedPilot.LastCommand.Throttle,
+                root.GetProperty(
+                    "selected_opponent_last_command_throttle").GetDouble(), 3);
+            Assert.Equal(selectedPilot.LastCommand.Rudder,
+                root.GetProperty(
+                    "selected_opponent_last_command_rudder").GetDouble(), 3);
 
             using JsonDocument layoutDocument =
                 JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
             JsonElement layout = layoutDocument.RootElement;
-            Assert.Equal(27, layout.GetProperty("layout_version").GetInt32());
+            Assert.Equal(33, layout.GetProperty("layout_version").GetInt32());
             JsonElement[] slots = layout.GetProperty("blocks")
                 .EnumerateArray()
                 .SelectMany(block => block.GetProperty("slots").EnumerateArray())
@@ -991,6 +1099,47 @@ public class SnapshotHotFrameTests {
         SnapshotHotFrame.Fill(buffer, session, 100.0, 0.0, true);
         Assert.True(buffer[SnapshotHotFrame.ColdVersionIndex] > afterPause + 1,
             "world-origin change did not bump cold_version");
+    }
+
+    [Fact]
+    public void GunneryAssistStatusEdgeRefreshesColdTokenBesideHotCode() {
+        SimulationSession session = StartSession(8, null);
+        var buffer = new double[SnapshotHotFrame.SlotCount];
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        double settledVersion = buffer[SnapshotHotFrame.ColdVersionIndex];
+
+        FieldInfo assistField = typeof(SimulationSession).GetField(
+            "_gunneryPitchAssistState",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        assistField.SetValue(session,
+            GunneryPitchAssistState.Inactive(1.0, "PILOT_UNLOAD"));
+
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        Assert.True(buffer[SnapshotHotFrame.ColdVersionIndex] > settledVersion,
+            "PILOT_UNLOAD did not refresh the cold gunnery-assist status token");
+
+        using JsonDocument layoutDocument = JsonDocument.Parse(
+            SnapshotHotFrame.LayoutJson());
+        int statusCodeIndex = layoutDocument.RootElement.GetProperty("blocks")
+            .EnumerateArray()
+            .SelectMany(block => block.GetProperty("slots").EnumerateArray())
+            .Single(slot => slot.GetProperty("name").GetString()
+                == "gunnery_assist_status_code")
+            .GetProperty("index").GetInt32();
+        Assert.Equal(12.0, buffer[statusCodeIndex]);
+
+        using JsonDocument stateDocument = JsonDocument.Parse(
+            SnapshotProjection.BuildState(session, Carrier.DeckConfiguration.Angled,
+                0.0, 0.0, false, null));
+        Assert.Equal("PILOT_UNLOAD", stateDocument.RootElement
+            .GetProperty("gunnery_assist_status").GetString());
+        Assert.Equal(12, stateDocument.RootElement
+            .GetProperty("gunnery_assist_status_code").GetInt32());
+
+        double refreshedVersion = buffer[SnapshotHotFrame.ColdVersionIndex];
+        SnapshotHotFrame.Fill(buffer, session, 0.0, 0.0, false);
+        Assert.Equal(refreshedVersion, buffer[SnapshotHotFrame.ColdVersionIndex]);
     }
 
     [Fact]

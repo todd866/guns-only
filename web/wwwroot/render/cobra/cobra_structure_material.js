@@ -20,6 +20,7 @@ import { COBRA_NOISE_CHUNK } from "./cobra_canyon_terrain_material.js";
  */
 export const COBRA_STRUCTURE_SURFACES = Object.freeze({
   "bridge-deck": Object.freeze({ grainMetres: 1.6, wear: 0.30, streak: 0.55 }),
+  "bridge-approach": Object.freeze({ grainMetres: 2.8, wear: 0.30, streak: 0.35 }),
   "bridge-pier": Object.freeze({ grainMetres: 2.4, wear: 0.26, streak: 0.20 }),
   roads: Object.freeze({ grainMetres: 3.2, wear: 0.34, streak: 0.45 }),
   heroCells: Object.freeze({ grainMetres: 6.0, wear: 0.22, streak: 0.10 }),

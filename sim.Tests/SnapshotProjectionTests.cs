@@ -74,9 +74,19 @@ public class SnapshotProjectionTests {
                 onDeck.GetProperty("bandit_entity_id").ValueKind);
             Assert.Equal(JsonValueKind.Null,
                 onDeck.GetProperty("bandit_aircraft_id").ValueKind);
+            foreach (string pilotField in new[] {
+                "selected_opponent_tactic_code",
+                "selected_opponent_last_command_load_factor_g",
+                "selected_opponent_last_command_bank_target_deg",
+                "selected_opponent_last_command_throttle",
+                "selected_opponent_last_command_rudder",
+            })
+                Assert.Equal(JsonValueKind.Null,
+                    onDeck.GetProperty(pilotField).ValueKind);
             Assert.Equal(0.0, onDeck.GetProperty("range_m").GetDouble());
             Assert.Equal(0, onDeck.GetProperty("opponent_rounds_fired").GetInt32());
             Assert.False(onDeck.GetProperty("gun_solution").GetBoolean());
+            Assert.False(onDeck.GetProperty("lead_solution_valid").GetBoolean());
             Assert.True(onDeck.GetProperty("carrier_sortie_route_active").GetBoolean());
             Assert.Equal("PROVISIONAL_KOREA_CARRIER_DAY_V1",
                 onDeck.GetProperty("carrier_sortie_route_profile_id").GetString());
@@ -619,6 +629,24 @@ public class SnapshotProjectionTests {
         using JsonDocument reactive = JsonDocument.Parse(reactiveJson);
         Assert.Equal("VETERAN",
             reactive.RootElement.GetProperty("bandit_skill").GetString());
+        OpponentPilotTelemetry reactivePilot =
+            Assert.IsType<OpponentPilotTelemetry>(
+                session.SelectedOpponentPilotTelemetry);
+        Assert.Equal((int)reactivePilot.Tactic!.Value,
+            reactive.RootElement.GetProperty(
+                "selected_opponent_tactic_code").GetInt32());
+        Assert.Equal(reactivePilot.LastCommand.GDemand,
+            reactive.RootElement.GetProperty(
+                "selected_opponent_last_command_load_factor_g").GetDouble(), 3);
+        Assert.Equal(reactivePilot.LastCommand.BankTarget * 180.0 / Math.PI,
+            reactive.RootElement.GetProperty(
+                "selected_opponent_last_command_bank_target_deg").GetDouble(), 3);
+        Assert.Equal(reactivePilot.LastCommand.Throttle,
+            reactive.RootElement.GetProperty(
+                "selected_opponent_last_command_throttle").GetDouble(), 3);
+        Assert.Equal(reactivePilot.LastCommand.Rudder,
+            reactive.RootElement.GetProperty(
+                "selected_opponent_last_command_rudder").GetDouble(), 3);
 
         // NeutralMergeBandit path at a non-default tier: the climactic Ace duel beat.
         string aceJson = ProjectAfterSteps(9, 8, null);

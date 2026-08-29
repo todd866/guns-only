@@ -6,8 +6,9 @@
  * cost beyond a transform.
  */
 
-const OLIVE = 0x39412c;
+const OLIVE = 0x4b5534;
 const OLIVE_DARK = 0x2c3222;
+const CANOPY = 0x264b55;
 const BLADE = 0x23291f;
 const SKID = 0x4a4f43;
 
@@ -22,16 +23,22 @@ export function createParkedCobra(THREE) {
   group.name = "AH1G_PARKED";
   const body = new THREE.MeshLambertMaterial({ color: OLIVE });
   const dark = new THREE.MeshLambertMaterial({ color: OLIVE_DARK });
+  const canopy = new THREE.MeshLambertMaterial({ color: CANOPY });
   const blade = new THREE.MeshLambertMaterial({ color: BLADE });
   const skid = new THREE.MeshLambertMaterial({ color: SKID });
 
   // +z is nose-forward; y is up from the skid plane.
   group.add(box(THREE, body, 0, 1.55, 1.2, 0.99, 1.5, 7.4));    // fuselage
-  group.add(box(THREE, dark, 0, 1.95, 4.6, 0.9, 1.0, 1.9));     // canopy mass
+  const canopyMass = box(THREE, canopy, 0, 1.95, 4.6, 0.9, 1.0, 1.9);
+  canopyMass.name = "AH1G_PARKED_CANOPY";
+  group.add(canopyMass);
   group.add(box(THREE, dark, 0, 1.75, -3.9, 0.5, 0.75, 5.4));   // tail boom
   group.add(box(THREE, body, 0, 2.75, -6.35, 0.22, 1.9, 1.15)); // fin
   group.add(box(THREE, blade, 0.9, 2.3, -6.55, 1.9, 0.18, 0.24)); // tail rotor bar
-  group.add(box(THREE, blade, 0, 3.32, 0.9, 0.6, 0.12, 13.4));  // main rotor bar (static)
+  const mainRotor = box(THREE, blade, 0, 3.32, 0.9, 0.6, 0.12, 13.4);
+  mainRotor.name = "AH1G_PARKED_MAIN_ROTOR";
+  mainRotor.rotation.y = Math.PI / 4;
+  group.add(mainRotor);                                          // static, off-axis silhouette
   group.add(box(THREE, dark, 0, 3.05, 0.9, 0.5, 0.5, 0.6));     // rotor mast
   group.add(box(THREE, body, 0, 2.3, 1.4, 3.4, 0.3, 0.9));      // stub wings
   for (const side of [-1, 1]) {

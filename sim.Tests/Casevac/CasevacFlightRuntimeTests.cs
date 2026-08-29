@@ -148,6 +148,31 @@ public class CasevacFlightRuntimeTests {
     }
 
     [Fact]
+    public void ThirtyTwoMetrePerSecondAuthoritySustainsMoreThanThirtyInFlight() {
+        CasevacFlightRuntime runtime = CreateRuntime(out _);
+        runtime.Begin(0);
+
+        for (long sourceTick = 1;
+            sourceTick <= 30 * AircraftSim.TickHz;
+            sourceTick++) {
+            runtime.Advance(
+                sourceTick,
+                new CasevacFlightControlIntent(
+                    Forward: 1.0,
+                    Right: 0.0,
+                    Vertical: 0.0,
+                    Yaw: 0.0));
+        }
+
+        Vec3D velocity = runtime.VehicleObservation.GroundVelocityMps;
+        double horizontalSpeedMps = Math.Sqrt(
+            velocity.X * velocity.X + velocity.Z * velocity.Z);
+        Assert.Equal(32.0, CasevacFlightRuntime.MaximumForwardSpeedMps);
+        Assert.InRange(horizontalSpeedMps, 30.0, 32.1);
+        Assert.True(runtime.VehicleFlyable);
+    }
+
+    [Fact]
     public void InitialPickupGuidanceAndHeadingUseTheAuthoredOrchardGapRoute() {
         CasevacFlightRuntime runtime = CreateRuntime(out _);
         runtime.Begin(20);

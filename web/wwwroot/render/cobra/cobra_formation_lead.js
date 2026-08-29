@@ -1,10 +1,11 @@
 import {
   createAh1gPresence,
   updateAh1gPresence,
-} from "./ah1g_presence.js?v=345";
+} from "./ah1g_presence.js?v=348";
 
 export const COBRA_FORMATION_LEAD_SCHEMA = "guns-only.cobra-formation-lead.v1";
 export const COBRA_FORMATION_SPACING_M = 150;
+export const COBRA_FORMATION_RADIO_HOLD_SECONDS = 3.2;
 
 function finite(value) {
   const number = Number(value);
@@ -18,7 +19,10 @@ function finite(value) {
  */
 export function cobraFormationLeadPose(authorityState, playerPose, spacingM = COBRA_FORMATION_SPACING_M) {
   const act = String(authorityState?.mission_act ?? "").toLowerCase();
-  if (act === "rtb" || act === "complete") return null;
+  // Lead owns the ingress handoff only. Once ENGAGE begins, keeping the aircraft on the old
+  // under-bridge gate line contradicts the player's gun-pit attack and visually reads as a new
+  // follow order. Lead breaks away at that transition and the elevated attack path takes over.
+  if (act !== "depart" && act !== "ingress") return null;
   const gates = Array.isArray(authorityState?.path_gates) ? authorityState.path_gates : [];
   const fob = authorityState?.ground_war?.fob;
   const startEastM = finite(fob?.x_m);
@@ -98,6 +102,11 @@ export function cobraFormationLeadPose(authorityState, playerPose, spacingM = CO
 /** A concise R/T call tied to what the pilot is physically doing, not a timed tutorial card. */
 export function cobraFormationRadio(authorityState, playerPose) {
   const act = String(authorityState?.mission_act ?? "").toLowerCase();
+  if (act === "engage") return {
+    sequence: 6,
+    speaker: "EMBER LEAD",
+    text: "Bridge fight. Lead breaking.",
+  };
   if (act !== "depart" && act !== "ingress") return null;
   const fob = authorityState?.ground_war?.fob;
   const rangeM = Math.hypot(
@@ -107,28 +116,63 @@ export function cobraFormationRadio(authorityState, playerPose) {
   if (act === "ingress") return {
     sequence: 5,
     speaker: "EMBER LEAD",
-    text: "Dash 2, settled on route. Stay low; Iron Bell is the objective.",
+    text: "Iron Bell ahead. Stay low.",
   };
   if (rangeM < 90) return {
     sequence: 1,
     speaker: "EMBER LEAD",
-    text: "Dash 2, lift and tuck in. Follow me through the amber gates.",
+    text: "Dash 2, lift. Follow Lead.",
   };
   if (rangeM < 260) return {
     sequence: 2,
     speaker: "EMBER LEAD",
-    text: "Dash 2, turning now. Keep Lead in sight and fly the gate centres.",
+    text: "Turning. Stay with me.",
   };
   if (rangeM < 520) return {
     sequence: 3,
     speaker: "EMBER LEAD",
-    text: "DShK ahead. This dogleg keeps the ridge between us and his gun.",
+    text: "DShK ahead. Ridge masks us.",
   };
   return {
     sequence: 4,
     speaker: "EMBER LEAD",
-    text: "Threat abeam. Roll onto the attack route; stay below the skyline.",
+    text: "Threat abeam. Stay low.",
   };
+}
+
+/**
+ * Turn state-shaped R/T into a short transmission. A sequence is shown once per sortie, then
+ * expires; polling the same authority state cannot pin a caption over the windscreen forever.
+ */
+export function createCobraFormationRadioPresenter({
+  holdSeconds = COBRA_FORMATION_RADIO_HOLD_SECONDS,
+} = {}) {
+  const duration = Number.isFinite(Number(holdSeconds))
+    ? Math.max(0, Number(holdSeconds))
+    : COBRA_FORMATION_RADIO_HOLD_SECONDS;
+  const seen = new Set();
+  let active = null;
+  let hideAtSeconds = -Infinity;
+
+  return Object.freeze({
+    update(candidate, nowSeconds) {
+      const now = Number(nowSeconds);
+      if (!Number.isFinite(now)) return null;
+      const sequence = Number(candidate?.sequence);
+      if (candidate?.text && Number.isFinite(sequence) && !seen.has(sequence)) {
+        seen.add(sequence);
+        active = candidate;
+        hideAtSeconds = now + duration;
+      }
+      if (!active || now >= hideAtSeconds) active = null;
+      return active;
+    },
+    reset() {
+      seen.clear();
+      active = null;
+      hideAtSeconds = -Infinity;
+    },
+  });
 }
 
 export function createCobraFormationLead(THREE) {

@@ -89,7 +89,8 @@ public readonly record struct SeededSkillTierMeasurement(
     int EngagementsWithPlayerDamage,
     int BanditRoundsFired,
     int PlayerDamageHits,
-    double PlayerRearQuarterSeconds) {
+    double PlayerRearQuarterSeconds,
+    double MaximumAbsoluteBanditFiringGammaDeg) {
 
     public double BanditRoundsPerEngagement =>
         Engagements > 0 ? (double)BanditRoundsFired / Engagements : 0.0;
@@ -186,6 +187,7 @@ public static class SeededCombatBatchRunner {
             int engagementsWithFire = 0;
             int engagementsWithDamage = 0;
             double rearQuarterSeconds = 0.0;
+            double maximumAbsoluteBanditFiringGammaDeg = 0.0;
             for (int engagementIndex = 0;
                 engagementIndex < selected.EngagementsPerTier;
                 engagementIndex++) {
@@ -222,6 +224,16 @@ public static class SeededCombatBatchRunner {
                 rearQuarterSeconds += episode.Transitions.Count(
                     transition => PlayerInBanditRearQuarter(
                         transition.Observation)) * Dt;
+                // GunKill consumes the beginning-of-tick observation before either aircraft
+                // advances, so this is the physical launch attitude rather than a proxy sampled
+                // after the shot.
+                foreach (CombatTransition firingTransition in episode.Transitions.Where(
+                    transition => transition.RewardComponents.RoundsFired > 0)) {
+                    maximumAbsoluteBanditFiringGammaDeg = System.Math.Max(
+                        maximumAbsoluteBanditFiringGammaDeg,
+                        System.Math.Abs(firingTransition.Observation.Ownship.Gamma)
+                            * 180.0 / System.Math.PI);
+                }
             }
 
             measurements[tierIndex] = new SeededSkillTierMeasurement(
@@ -231,7 +243,8 @@ public static class SeededCombatBatchRunner {
                 engagementsWithDamage,
                 rounds,
                 damageHits,
-                rearQuarterSeconds);
+                rearQuarterSeconds,
+                maximumAbsoluteBanditFiringGammaDeg);
         }
         return Array.AsReadOnly(measurements);
     }
@@ -243,14 +256,15 @@ public static class SeededCombatBatchRunner {
         double side = seedGeometry.ReferenceStart.Position.X < 0.0 ? -1.0 : 1.0;
         double altitudeM = seedGeometry.ReferenceStart.Position.Y;
         // An earned but not mathematically perfect offensive perch: the bandit begins inside gun
-        // range with small seeded lateral/vertical errors and modest closure. The player is already
-        // free to break; the opponent still has to press and track the fleeting opportunity.
+        // range with a small seeded lateral error, gravity-compensated vertical
+        // placement, and modest closure. The player is already free to break; the opponent still
+        // has to press and track the fleeting opportunity.
         var player = new AircraftState(
             new Vec3D(
-                side * (22.0 + System.Math.Abs(
-                    seedGeometry.ReferenceStart.Position.X) * 0.03),
-                altitudeM + 12.0,
-                620.0),
+                side * (2.0 + System.Math.Abs(
+                    seedGeometry.ReferenceStart.Position.X) * 0.005),
+                altitudeM - 0.7,
+                320.0),
             258.0 + (seedGeometry.ReferenceStart.Speed - 300.0) * 0.10,
             0.0, 0.0, 0.0, playerAir.MassKg);
         var bandit = new AircraftState(

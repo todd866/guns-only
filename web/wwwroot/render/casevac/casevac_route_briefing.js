@@ -7,13 +7,39 @@ const MAXIMUM_ROUTES = 16;
 const MAXIMUM_POINTS_PER_ROUTE = 32;
 
 const STYLE_TEXT = `
+#ready-screen[data-casevac-ready="true"] {
+  opacity: 1;
+  transition: none;
+  background: #080d0c;
+}
+#ready-screen[data-casevac-ready="true"] ~ #boot.ready {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: none;
+}
+#ready-screen[data-casevac-ready="true"] #ready-start:not(:disabled),
+#ready-screen[data-casevac-ready="true"] #ready-start:hover:not(:disabled),
+#ready-screen[data-casevac-ready="true"] #ready-start:focus-visible:not(:disabled) {
+  border: 2px solid #e4ffec;
+  color: #07110b;
+  background: #bff2ce;
+  box-shadow: 0 10px 36px rgba(0, 0, 0, .58), 0 0 0 3px rgba(122, 240, 165, .2);
+  text-shadow: none;
+}
+#ready-screen[data-casevac-ready="true"] #ready-start:not(:disabled)::after,
+#ready-screen[data-casevac-ready="true"] #ready-start:hover:not(:disabled)::after,
+#ready-screen[data-casevac-ready="true"] #ready-start:focus-visible:not(:disabled)::after {
+  border-color: #07110b;
+}
 .cvr-board {
   margin: -6px 0 20px;
-  border: 1px solid rgba(77, 255, 136, .2);
+  border: 1px solid rgba(151, 229, 175, .76);
   border-radius: 6px;
   overflow: hidden;
-  color: rgba(229, 255, 237, .84);
-  background: rgba(2, 12, 8, .58);
+  color: rgba(240, 255, 244, .96);
+  background: #07100d;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, .38);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 .cvr-board[hidden] { display: none !important; }
@@ -22,36 +48,36 @@ const STYLE_TEXT = `
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-  padding: 9px 11px;
-  border-bottom: 1px solid rgba(77, 255, 136, .14);
+  padding: 11px 13px;
+  border-bottom: 1px solid rgba(126, 255, 170, .28);
 }
 .cvr-head strong {
-  color: #b8ffce;
-  font-size: 9px;
+  color: #d1ffdf;
+  font-size: 13px;
   letter-spacing: .16em;
 }
 .cvr-head span {
-  color: rgba(217, 255, 229, .42);
-  font-size: 7px;
+  color: rgba(225, 255, 234, .82);
+  font-size: 9px;
   letter-spacing: .1em;
 }
 .cvr-layout {
   display: grid;
   grid-template-columns: minmax(138px, .85fr) minmax(170px, 1.15fr);
-  min-height: 146px;
+  min-height: 174px;
 }
 .cvr-options {
   display: grid;
   align-content: center;
-  gap: 9px;
-  padding: 10px 11px;
-  border-right: 1px solid rgba(77, 255, 136, .12);
+  gap: 12px;
+  padding: 13px;
+  border-right: 1px solid rgba(77, 255, 136, .22);
 }
 .cvr-leg strong {
   display: block;
   margin-bottom: 4px;
-  color: rgba(217, 255, 229, .46);
-  font-size: 7px;
+  color: rgba(229, 255, 237, .72);
+  font-size: 9px;
   letter-spacing: .15em;
 }
 .cvr-option {
@@ -59,24 +85,24 @@ const STYLE_TEXT = `
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   margin-top: 3px;
-  font-size: 8px;
+  font-size: 11px;
   line-height: 1.35;
   letter-spacing: .06em;
 }
 .cvr-option[data-kind="DIRECT"] span:first-child { color: #ffc76a; }
 .cvr-option[data-kind="MASKED"] span:first-child { color: #7dffad; }
-.cvr-option span:last-child { color: rgba(217, 255, 229, .56); }
+.cvr-option span:last-child { color: rgba(231, 255, 239, .9); }
 .cvr-landmarks {
   margin: 1px 0 4px;
-  color: rgba(217, 255, 229, .38);
-  font-size: 7px;
-  line-height: 1.35;
+  color: rgba(225, 255, 234, .78);
+  font-size: 9px;
+  line-height: 1.4;
   letter-spacing: .035em;
 }
 .cvr-map {
   width: 100%;
   height: 100%;
-  min-height: 146px;
+  min-height: 174px;
 }
 .cvr-grid { stroke: rgba(217, 255, 229, .055); stroke-width: 1; }
 .cvr-path {
@@ -87,22 +113,22 @@ const STYLE_TEXT = `
 }
 .cvr-path[data-kind="DIRECT"] {
   stroke: rgba(255, 199, 106, .88);
-  stroke-width: 2.2;
+  stroke-width: 3;
 }
 .cvr-path[data-kind="MASKED"] {
   stroke: rgba(125, 255, 173, .86);
-  stroke-width: 2;
+  stroke-width: 2.6;
   stroke-dasharray: 5 4;
 }
 .cvr-point {
   fill: #e5ffed;
   stroke: rgba(2, 12, 8, .9);
-  stroke-width: 1.2;
+  stroke-width: 1.6;
   vector-effect: non-scaling-stroke;
 }
 .cvr-site-label {
-  fill: rgba(229, 255, 237, .72);
-  font: 700 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  fill: rgba(240, 255, 244, .94);
+  font: 700 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   letter-spacing: .08em;
 }
 @media (max-width: 650px) {
@@ -281,10 +307,13 @@ function drawMap(document, svg, model) {
     const point = project(site.point);
     svg.append(
       svgElement(document, "circle", {
-        class: "cvr-point", cx: point.x, cy: point.y, r: 3.2,
+        class: "cvr-point", cx: point.x, cy: point.y, r: 4.2,
       }),
       svgElement(document, "text", {
-        class: "cvr-site-label", x: point.x + 6, y: point.y - 5,
+        class: "cvr-site-label",
+        x: point.x > width - 72 ? point.x - 7 : point.x + 7,
+        y: point.y - 6,
+        "text-anchor": point.x > width - 72 ? "end" : "start",
       }),
     );
     svg.lastChild.textContent = site.label;

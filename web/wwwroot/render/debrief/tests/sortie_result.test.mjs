@@ -5,8 +5,14 @@ import test from "node:test";
 import {
   combatHandoffPresentation,
   sortieResultCopy,
+  topGunCarrierDebriefCopy,
+  visualMergeDebriefPresentation,
 } from "../sortie_result.js";
 import { RELEASE_BUILD } from "../../release/release_identity.js";
+
+function wordCount(value) {
+  return String(value || "").trim().split(/\s+/).filter(Boolean).length;
+}
 
 test("handoff presentation fails closed before the first simulation snapshot", () => {
   for (const state of [undefined, null, false, 0, ""]) {
@@ -101,7 +107,7 @@ test("medevac terminal dispositions preserve capsule custody and never invent a 
   }
 });
 
-test("carrier water loss teaches from the recorded physical cause", () => {
+test("carrier water loss keeps the physical cause and one correction distinct", () => {
   const result = sortieResultCopy({
     sortie_outcome: "DEFEAT",
     carrier: true,
@@ -110,8 +116,8 @@ test("carrier water loss teaches from the recorded physical cause", () => {
   });
 
   assert.equal(result.title, "Aircraft Lost");
-  assert.match(result.brief, /approach ended in the water/i);
-  assert.match(result.brief, /marked decision/i);
+  assert.equal(result.brief, "Water impact.");
+  assert.equal(result.correction, "Fix energy and flight path before recommitting.");
   assert.doesNotMatch(result.brief, /opponent/i);
 });
 
@@ -127,10 +133,10 @@ test("deck and carrier-structure losses remain physically distinct", () => {
     player_impact_surface: "CARRIER_STRUCTURE",
   });
 
-  assert.match(deck.brief, /flight deck/i);
-  assert.match(deck.brief, /touchdown assessment/i);
-  assert.match(structure.brief, /carrier structure/i);
-  assert.match(structure.brief, /approach geometry/i);
+  assert.equal(deck.brief, "Flight deck impact.");
+  assert.equal(deck.correction, "Correct the first approach deviation.");
+  assert.equal(structure.brief, "Carrier structure impact.");
+  assert.equal(structure.correction, "Recheck approach geometry.");
 });
 
 test("carrier qualification makes trap evidence authoritative instead of combat victory copy", () => {
@@ -205,25 +211,26 @@ test("an explicit opponent destruction event retains the combat-loss diagnosis",
     recent_events: [{ type: "DESTROYED", source: "OPPONENT", target: "PLAYER" }],
   });
 
-  assert.match(result.brief, /opponent's gun solution was decisive/i);
-  assert.match(result.brief, /physical impact and wreck settling/i);
+  assert.equal(result.brief, "Bandit gunfire destroyed the aircraft.");
+  assert.equal(result.correction, "Break the gun solution earlier.");
 });
 
-test("a numerical terminal guard is not mislabeled as physical settlement", () => {
+test("an unresolved terminal guard stays honest without simulation metadata", () => {
   const result = sortieResultCopy({
     sortie_outcome: "DEFEAT",
     player_impact_surface: "SIMULATION_BOUNDARY",
   });
 
-  assert.match(result.brief, /numerical guard/i);
-  assert.match(result.brief, /unresolved/i);
-  assert.doesNotMatch(result.brief, /settled|settling/i);
+  assert.equal(result.brief, "Outcome unresolved.");
+  assert.equal(result.correction, "Review the final flight path.");
+  assert.doesNotMatch(result.brief, /numerical|recorded|simulat|settled|settling/i);
 });
 
 test("unknown defeat cause fails honest instead of inventing combat", () => {
   const result = sortieResultCopy({ sortie_outcome: "DEFEAT" });
 
-  assert.match(result.brief, /recorded causal chain/i);
+  assert.equal(result.brief, "Aircraft lost.");
+  assert.equal(result.correction, "Review the first controllable deviation.");
   assert.doesNotMatch(result.brief, /opponent/i);
 });
 
@@ -243,9 +250,12 @@ test("maintenance score copy preserves recovered and incomplete outcomes", () =>
   });
 
   assert.equal(recovered.title, "Procedure Incomplete");
-  assert.match(recovered.brief, /82\/100/);
+  assert.equal(recovered.brief, "Aircraft recovered aboard.");
+  assert.deepEqual(recovered.facts, ["Procedure 82/100", "Demerits 0"]);
+  assert.equal(recovered.correction, "Complete the procedure before recovery.");
   assert.equal(lost.title, "Aircraft Lost");
-  assert.match(lost.brief, /40\/100/);
+  assert.equal(lost.brief, "Aircraft not recovered.");
+  assert.deepEqual(lost.facts, ["Procedure 40/100", "Demerits 0"]);
 });
 
 test("drone raid debrief distinguishes containment, penetration, and ownship loss", () => {
@@ -281,12 +291,20 @@ test("drone raid debrief distinguishes containment, penetration, and ownship los
   });
 
   assert.equal(defeated.title, "Raid Defeated");
-  assert.match(defeated.brief, /physical gunfire/i);
-  assert.doesNotMatch(defeated.brief, /wreck|impact|settling/i);
+  assert.equal(defeated.brief, "All raiders destroyed.");
+  assert.deepEqual(defeated.facts, ["Score 94/100", "Kills 4/4", "Leakers 0"]);
+  assert.equal(defeated.correction, "Repeat the clean intercept.");
   assert.equal(penetrated.title, "Raid Penetrated");
-  assert.match(penetrated.brief, /crossed the defended ring/i);
+  assert.equal(penetrated.brief, "1 raider penetrated.");
+  assert.deepEqual(penetrated.facts, ["Score 61/100", "Kills 3/4", "Leakers 1"]);
   assert.equal(lost.title, "Ownship Lost");
-  assert.match(lost.brief, /unresolved raider.*penetration/i);
+  assert.equal(lost.brief, "Ownship lost.");
+  assert.deepEqual(lost.facts, [
+    "Score 32/100",
+    "Kills 1/4",
+    "Leakers 3",
+    "Unresolved raiders score as leakers",
+  ]);
 });
 
 test("sorties without G-LOC preserve their established copy exactly", () => {
@@ -302,7 +320,7 @@ test("sorties without G-LOC preserve their established copy exactly", () => {
   assert.deepEqual(withZeroCount, expected);
 });
 
-test("G-LOC teaching decorates combat, carrier, maintenance, and drone results once", () => {
+test("G-LOC evidence decorates combat, carrier, maintenance, and drone results once", () => {
   const physiology = {
     pilot_g_loc_count: 2,
     pilot_peak_positive_g: 9.24,
@@ -335,11 +353,12 @@ test("G-LOC teaching decorates combat, carrier, maintenance, and drone results o
   ];
 
   for (const result of results) {
-    assert.match(result.brief, /Pilot G-LOC: 2 episodes \(sortie peak \+9\.2 G/);
-    assert.match(result.brief, /modeled push-pull penalty 0\.8 G after a −1\.4 G push/);
-    assert.match(result.brief, /review unload timing, G-onset rate, and cumulative exposure/i);
-    assert.equal(result.brief.match(/Pilot G-LOC:/g)?.length, 1);
-    assert.doesNotMatch(result.brief, /injur|safe|good G|low G/i);
+    const facts = result.facts.join(" · ");
+    assert.match(facts, /G-LOC ×2 · peak \+9\.2 G/);
+    assert.match(facts, /push-pull 0\.8 G after −1\.4 G/);
+    assert.equal(facts.match(/G-LOC/g)?.length, 1);
+    assert.equal(result.safetyCorrection, "Ease G onset and unload earlier.");
+    assert.doesNotMatch(facts, /injur|safe|good G|low G/i);
   }
 });
 
@@ -352,8 +371,8 @@ test("sub-threshold push-pull state stays out of the concise G-LOC lesson", () =
     pilot_push_pull_penalty_g: 0.5,
   });
 
-  assert.match(result.brief, /Pilot G-LOC: 1 episode \(sortie peak \+7\.5 G\)/);
-  assert.doesNotMatch(result.brief, /push-pull|negative|penalty/i);
+  assert.deepEqual(result.facts, ["G-LOC ×1 · peak +7.5 G"]);
+  assert.doesNotMatch(result.facts.join(" "), /push-pull|negative|penalty/i);
 });
 
 test("sorties without an Auto-GCAS fly-up preserve established copy exactly", () => {
@@ -368,18 +387,16 @@ test("sorties without an Auto-GCAS fly-up preserve established copy exactly", ()
   assert.deepEqual(withInactiveSystem, expected);
 });
 
-test("an Auto-GCAS intervention teaches the procedural response without guessing cause", () => {
+test("an Auto-GCAS intervention keeps evidence and response terse without guessing cause", () => {
   const result = sortieResultCopy({
     sortie_outcome: "VICTORY",
     auto_gcas_activation_count: 2,
     auto_gcas_override_count: 1,
   });
 
-  assert.match(result.brief, /Auto-GCAS: 2 fly-ups; 1 pilot paddle override\./);
-  assert.match(result.brief, /valid or uncertain fly-up as a discontinue\/RTB event/i);
-  assert.match(result.brief,
-    /review terrain prediction, recovery G, system status, and control state/i);
-  assert.doesNotMatch(result.brief, /distracted|unconscious|pilot error|saved/i,
+  assert.deepEqual(result.facts, ["Auto-GCAS ×2 · overrides 1"]);
+  assert.equal(result.safetyCorrection, "Discontinue after an Auto-GCAS fly-up.");
+  assert.doesNotMatch(result.facts.join(" "), /distracted|unconscious|pilot error|saved/i,
     "a counter alone cannot diagnose why the intervention occurred");
 });
 
@@ -392,8 +409,10 @@ test("G-LOC and Auto-GCAS lessons coexist exactly once", () => {
     auto_gcas_activation_count: 1,
   });
 
-  assert.equal(result.brief.match(/Pilot G-LOC:/g)?.length, 1);
-  assert.equal(result.brief.match(/Auto-GCAS:/g)?.length, 1);
+  const facts = result.facts.join(" · ");
+  assert.equal(facts.match(/G-LOC/g)?.length, 1);
+  assert.equal(facts.match(/Auto-GCAS/g)?.length, 1);
+  assert.equal(result.safetyCorrection, "Discontinue after an Auto-GCAS fly-up.");
 });
 
 test("Rapier exceedance evidence queues review without inventing damage or cost", () => {
@@ -409,11 +428,11 @@ test("Rapier exceedance evidence queues review without inventing damage or cost"
   });
 
   assert.equal(result.serviceLifeReviewRequired, true);
-  assert.match(result.brief, /9\.2 s above the structural limit, peak 15\.0 G/);
-  assert.match(result.brief, /58\.2 s above the q placard/);
-  assert.match(result.brief, /Maintenance assessment pending/);
-  assert.match(result.brief, /no damage or repair cost has been inferred/);
-  assert.doesNotMatch(result.brief, /\$|grounded|condemned/i);
+  assert.deepEqual(result.facts, [
+    "Airframe review · structural +9.2 s · peak 15.0 G · q +58.2 s · damage/cost not inferred",
+  ]);
+  assert.equal(result.safetyCorrection, "Hold the aircraft for maintenance review.");
+  assert.doesNotMatch(result.facts.join(" "), /\$|grounded|condemned/i);
 });
 
 test("a clean or unfinished lifecycle record adds no debrief clutter", () => {
@@ -428,6 +447,111 @@ test("a clean or unfinished lifecycle record adds no debrief clutter", () => {
     service_life_record_available: true,
     service_life_exceedance_review_required: false,
   }), expected);
+});
+
+test("visual-merge presentation routes measured evidence to one terse correction", () => {
+  const baseline = {
+    visual_merge_evaluation: true,
+    visual_merge_score: 72,
+    minimum_merge_range_m: 180,
+    minimum_energy_kias: 320,
+    peak_closure_kts: 220,
+    rear_quarter_dwell_s: 5.4,
+    evaluated_projectile_hits: 2,
+    head_on_trigger_violations: 0,
+    high_aspect_trigger_violations: 0,
+    overshoot_count: 0,
+  };
+  const cases = [
+    [{ head_on_trigger_violations: 1 }, "Hold fire through the first pass."],
+    [{ high_aspect_trigger_violations: 1 }, "Wait for rear-quarter geometry."],
+    [{ minimum_merge_range_m: 140 }, "Open first-pass spacing to 150 m."],
+    [{ minimum_energy_kias: 285 }, "Keep 300 KIAS through the first turn."],
+    [{ peak_closure_kts: 310 }, "Settle closure below 250 KT."],
+    [{ rear_quarter_dwell_s: 3.8 }, "Hold the rear quarter for 5.0 s."],
+    [{ evaluated_projectile_hits: 1 }, "Turn the stable solution into two hits."],
+    [{}, "Repeat the stable rear-quarter pass."],
+  ];
+
+  for (const [override, expected] of cases) {
+    const result = visualMergeDebriefPresentation({ ...baseline, ...override });
+    assert.equal(result.correction, expected);
+    assert.equal(result.evidence, result.facts.join(" · "));
+    assert.ok(result.facts.length <= 7);
+    assert.ok(wordCount(result.evidence) <= 24, result.evidence);
+    assert.ok(wordCount(result.correction) <= 8, result.correction);
+  }
+});
+
+test("F-22 default debrief copy stays below the combat-card density budget", () => {
+  const states = [
+    { sortie_outcome: "VICTORY" },
+    { sortie_outcome: "DRAW" },
+    { sortie_outcome: "DEFEAT", player_impact_surface: "GROUND" },
+    { sortie_outcome: "DEFEAT", player_impact_surface: "SIMULATION_BOUNDARY" },
+    { sortie_outcome: "DISCONTINUED" },
+    {
+      drone_raid_evaluation: true,
+      drone_raid_zero_leakers: false,
+      drone_raid_kills: 3,
+      drone_raid_targets_total: 4,
+      drone_raid_leakers: 1,
+      drone_raid_score: 61,
+    },
+    {
+      maintenance_scenario: true,
+      maintenance_recovered: true,
+      maintenance_procedure_complete: false,
+      maintenance_score: 82,
+    },
+    {
+      sortie_outcome: "VICTORY",
+      combat_handoff_phase: "RECOVERED",
+      combat_handoff_requested: true,
+      kill_count: 2,
+      relief_kills: 1,
+      fuel_lb: 4650,
+      fuel_reserve_target_lb: 4000,
+      fuel_reserve_margin_lb: 650,
+    },
+    {
+      sortie_outcome: "VICTORY",
+      pilot_g_loc_count: 1,
+      pilot_peak_positive_g: 8.7,
+      auto_gcas_activation_count: 1,
+      service_life_record_available: true,
+      service_life_exceedance_review_required: true,
+      service_life_over_structural_limit_s: 2.4,
+      service_life_max_g: 10.2,
+    },
+  ];
+  const banned = /did well|fight turned|next rep|deterministic|instrumented|recorded|simulat|physical terminal|decision record/i;
+
+  for (const state of states) {
+    const result = sortieResultCopy(state);
+    const correction = result.safetyCorrection || result.correction;
+    const visible = [result.title, result.brief, ...(result.facts || []), correction].join(" ");
+    assert.ok(wordCount(result.title) <= 6, result.title);
+    assert.ok(wordCount(result.brief) <= 6, result.brief);
+    assert.ok(wordCount(correction) <= 8, correction);
+    for (const fact of result.facts || []) assert.ok(wordCount(fact) <= 16, fact);
+    assert.doesNotMatch(visible, banned);
+  }
+
+  const merge = visualMergeDebriefPresentation({
+    visual_merge_evaluation: true,
+    visual_merge_score: 72,
+    minimum_merge_range_m: 140,
+    minimum_energy_kias: 285,
+    peak_closure_kts: 310,
+    rear_quarter_dwell_s: 3.8,
+    evaluated_projectile_hits: 1,
+    overshoot_count: 1,
+  });
+  const victory = sortieResultCopy({ sortie_outcome: "VICTORY" });
+  assert.ok(wordCount([
+    victory.title, victory.brief, merge.evidence, merge.correction,
+  ].join(" ")) <= 36);
 });
 
 test("combat handoff presentation preserves every authoritative phase flag", () => {
@@ -474,10 +598,14 @@ test("recovered handoff debrief keeps player and relief kills separate", () => {
   assert.equal(result.handoff, true);
   assert.equal(result.playerKills, 2);
   assert.equal(result.reliefKills, 4);
-  assert.match(result.brief, /Your credited kills: 2\./);
-  assert.match(result.brief, /Relief kills: 4 \(tracked separately and not credited to you\)/);
-  assert.match(result.brief, /650 LB above reserve/);
-  assert.doesNotMatch(result.brief, /6 kills|total kills/i);
+  assert.equal(result.brief, "Combat passed to relief.");
+  assert.deepEqual(result.facts, [
+    "Kills 2",
+    "Relief 4 uncredited",
+    "Fuel 4650 LB · reserve +650 LB",
+  ]);
+  assert.equal(result.correction, "Repeat the clean handoff and recovery.");
+  assert.doesNotMatch(result.facts.join(" "), /6 kills|total kills/i);
 });
 
 test("handoff does not hide a subsequent ownship loss or invent reserve evidence", () => {
@@ -494,15 +622,73 @@ test("handoff does not hide a subsequent ownship loss or invent reserve evidence
   });
 
   assert.equal(result.title, "Aircraft Lost After Handoff");
-  assert.match(result.brief, /Recovery reserve result was unavailable/);
+  assert.equal(result.brief, "Ownship lost after handoff.");
+  assert.deepEqual(result.facts, ["Kills 1", "Relief 0 uncredited", "Reserve unavailable"]);
+  assert.equal(result.correction, "Review the first controllable deviation.");
+});
+
+test("Top Gun debrief preserves combat custody and the physical carrier pass", () => {
+  const state = {
+    mission_definition_id: "mission.top-gun.acm.f14a-vs-mig28.v1",
+    carrier: true,
+    sortie_outcome: "VICTORY",
+    recovery: "TRAP",
+    arrest_phase: "STOPPED",
+    wire: 3,
+    touchdown_grade: "OK_UNDERLINE",
+    touchdown_deviations: "HIGH_START|SETTLED",
+    touchdown_primary_correction: "HOLD_MIDDLE",
+    combat_handoff_phase: "RECOVERED",
+    combat_handoff_requested: true,
+    combat_handoff_active: false,
+    player_rtb_active: false,
+    kill_count: 2,
+    relief_kills: 1,
+    fuel_lb: 2650,
+    fuel_reserve_target_lb: 2000,
+    fuel_reserve_margin_lb: 650,
+  };
+
+  const result = sortieResultCopy(state);
+  assert.deepEqual(result, topGunCarrierDebriefCopy(state));
+  assert.equal(result.kicker, "Top Gun combat + carrier debrief");
+  assert.equal(result.title, "Trapped · Wire 3");
+  assert.equal(result.handoff, true);
+  assert.equal(result.carrierRecovery, true);
+  assert.equal(result.playerKills, 2);
+  assert.equal(result.reliefKills, 1);
+  assert.deepEqual(result.facts, [
+    "Kills 2",
+    "Relief 1 uncredited",
+    "Fuel 2650 LB · reserve +650 LB",
+  ]);
+  assert.match(result.brief, /Carrier recovery: Trapped · Wire 3/);
+  assert.match(result.brief, /OK UNDERLINE/);
+  assert.match(result.brief, /Primary correction: HOLD MIDDLE/);
+});
+
+test("Top Gun carrier assessment remains useful without a handoff record", () => {
+  const result = sortieResultCopy({
+    mission_definition_id: "mission.top-gun.acm.f14a-vs-mig28.v1",
+    carrier: true,
+    recovery: "TRAP",
+    wire: 2,
+    touchdown_grade: "FAIR",
+  });
+
+  assert.equal(result.title, "Trapped · Wire 2");
+  assert.equal(result.carrierRecovery, true);
+  assert.equal(result.handoff, undefined);
+  assert.doesNotMatch(result.brief, /Your credited kills|Relief kills/);
 });
 
 test("app consumes the pure evidence-based debrief module", async () => {
   const app = await readFile(new URL("../../../app.js", import.meta.url), "utf8");
 
   assert.match(app,
-    new RegExp(`import \\{[\\s\\S]*?combatHandoffPresentation,[\\s\\S]*?sortieResultCopy,[\\s\\S]*?} from "\\.\\/render\\/debrief\\/sortie_result\\.js\\?v=${RELEASE_BUILD}";`));
+    new RegExp(`import \\{[\\s\\S]*?combatHandoffPresentation,[\\s\\S]*?sortieResultCopy,[\\s\\S]*?visualMergeDebriefPresentation,[\\s\\S]*?} from "\\.\\/render\\/debrief\\/sortie_result\\.js\\?v=${RELEASE_BUILD}";`));
   assert.doesNotMatch(app, /function sortieResultCopy\(/);
+  assert.doesNotMatch(app, /function visualMergeDebriefPresentation\(/);
   assert.doesNotMatch(app, /The opponent's gun solution was decisive\. The loss was/);
 });
 
@@ -518,6 +704,18 @@ test("carrier debrief keeps physical outcome, full-pass trend, and touchdown fac
     /Full-pass primary · \$\{carrierFacts\.passCorrection\}[\s\S]*?Touchdown assessment · \$\{carrierFacts\.touchdown\}[\s\S]*?Touchdown primary · \$\{carrierFacts\.touchdownCorrection\}/,
     "pass correction and touchdown assessment must not overwrite one another");
   assert.match(app,
-    /readySortieLabel\.textContent = result\.handoff[\s\S]*?carrierQualification \? "Physical outcome"[\s\S]*?readyConfigLabel\.textContent = result\.handoff[\s\S]*?carrierQualification[\s\S]*?"Full-pass assessment"/,
-    "handoff may add a branch, but carrier labels must retain their distinct physical/pass meanings");
+    /const carrierHandoff = carrierQualification && result\.handoff === true;/,
+    "a combined carrier/handoff result needs an explicit two-axis presentation branch");
+  assert.match(app,
+    /const visualMerge = carrierHandoff \? null : visualMergeEvidence;/,
+    "generic merge coaching must not overwrite Top Gun's combat and carrier axes");
+  assert.match(app,
+    /readySortieLabel\.textContent = carrierHandoff[\s\S]*?"Carrier recovery"[\s\S]*?carrierQualification \? "Physical outcome"[\s\S]*?readyConfigLabel\.textContent = carrierHandoff[\s\S]*?"Combat \+ full pass"[\s\S]*?"Full-pass assessment"/,
+    "carrier recovery and combat custody must retain distinct labels");
+  assert.match(app,
+    /const resultFacts = Array\.isArray\(result\.facts\)[\s\S]*?readyConfig\.textContent = carrierHandoff[\s\S]*?appendResultFacts\([\s\S]*?carrierFacts\.passGrade[\s\S]*?carrierFacts\.waveOff/,
+    "Top Gun summary must combine credited/uncredited kills with the full-pass assessment");
+  assert.match(app,
+    /readyControls\.textContent = carrierHandoff[\s\S]*?Full-pass primary · \$\{carrierFacts\.passCorrection\}[\s\S]*?Touchdown assessment · \$\{carrierFacts\.touchdown\}[\s\S]*?Touchdown primary · \$\{carrierFacts\.touchdownCorrection\}/,
+    "Top Gun controls must expose reserve, pass correction and touchdown correction together");
 });

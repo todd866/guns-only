@@ -27,9 +27,33 @@ try {
   } else {
     await page.goto(`${BASE}weekend-ride/?audioQa=silent`, { waitUntil: "load", timeout: 120_000 });
     await page.waitForFunction(() => document.querySelector("#status")?.dataset.ready === "true"
-      && !!window.__gunsOnlyWeekendAuthority, undefined, { timeout: 120_000 });
+      && document.querySelector("#ride-brief")?.hidden === false
+      && window.__gunsOnlyWeekendAuthority?.phase === "paused", undefined, { timeout: 120_000 });
+    await page.locator("#ride-brief-start").click();
+    await page.waitForFunction(() => document.querySelector("#ride-brief")?.hidden === true
+      && window.__gunsOnlyWeekendAuthority?.phase === "active", undefined, { timeout: 20_000 });
+    const teaching = page.locator("#controls-onboarding-dismiss");
+    if (await teaching.isVisible()) await teaching.click();
   }
   await page.bringToFront();
+  await page.locator("#scene").focus().catch(() => {});
+  if (MODE === "ride") {
+    const before = await page.evaluate(() => ({
+      x: Number(window.__gunsOnlyWeekendAuthority?.px) || 0,
+      z: Number(window.__gunsOnlyWeekendAuthority?.pz) || 0,
+    }));
+    await page.keyboard.down("w");
+    await page.waitForFunction((start) => {
+      const state = window.__gunsOnlyWeekendAuthority;
+      return state?.phase === "active"
+        && Math.hypot(Number(state?.vx) || 0, Number(state?.vz) || 0) > 0.5
+        && Math.hypot(
+          (Number(state?.px) || 0) - start.x,
+          (Number(state?.pz) || 0) - start.z,
+        ) > 0.5;
+    }, before, { timeout: 15_000 });
+    await page.keyboard.up("w");
+  }
   await page.waitForTimeout(8000);
 
   const out = await page.evaluate(async (mode) => {
@@ -38,6 +62,21 @@ try {
     const cls = mode === "f22" ? exports.GunsOnly.Web.WebBridge
       : mode === "cobra" ? exports.GunsOnly.Web.CobraWebBridge
         : exports.GunsOnly.Web.MotorcycleWebBridge;
+    if (mode === "ride") {
+      const before = JSON.parse(cls.GetState());
+      if (before.phase !== "active") {
+        throw new Error(`Weekend Ride tick probe is not active: ${before.phase ?? "missing"}`);
+      }
+      const initialTick = cls.Advance(0);
+      cls.SetControls(1, 0, 0, 0, 0, 1);
+      let finalTick = initialTick;
+      for (let tick = 0; tick < 240; tick++) finalTick = cls.Advance(1 / 120);
+      cls.SetControls(0, 0, 0, 0, 0, 1);
+      const after = JSON.parse(cls.GetState());
+      const travelM = Math.hypot(after.px - before.px, after.pz - before.pz);
+      if (!(finalTick > initialTick)) throw new Error("Weekend Ride authority tick did not advance");
+      if (!(travelM > 0.05)) throw new Error("Weekend Ride authority did not move the bike");
+    }
     const rows = [];
     // Warm the JIT/AOT paths first.
     for (let i = 0; i < 60; i++) cls.Advance(1 / 120, ...(mode === "f22" ? [1] : []));

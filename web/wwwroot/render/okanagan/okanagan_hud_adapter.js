@@ -148,3 +148,10 @@ export function compactOkanaganCue(current = {}) {
   const gate = current.route?.[current.active_gate];
   return String(gate?.label ?? "").trim();
 }
+
+/** Keep transient radio readable without parking a subtitle over the outside view. */
+export function okanaganRadioHoldMs(transmission) {
+  const words = String(transmission ?? "").trim().split(/\s+/u).filter(Boolean).length;
+  if (words === 0) return 0;
+  return clamp(1_900 + words * 240, 2_200, 4_200);
+}

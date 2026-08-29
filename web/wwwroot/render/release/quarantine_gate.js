@@ -2,6 +2,10 @@ import {
   EXPERIENCE_RELEASE_STATE,
   experienceById,
 } from "../progression/campaign_progression.js";
+import {
+  standaloneNavigationHref,
+  syncStandaloneReturnLinks,
+} from "../shell/standalone_navigation.js";
 
 function previewRequested(locationLike) {
   try {
@@ -49,12 +53,7 @@ export function releaseStateAccess(releaseState, previewAcknowledged = false) {
 }
 
 export function releaseHomeHref(locationLike = globalThis.location) {
-  const current = new URL(locationLike?.href || "https://invalid.local/");
-  const home = new URL("/", current);
-  if (current.searchParams.get("audioQa") === "silent") {
-    home.searchParams.set("audioQa", "silent");
-  }
-  return home.href;
+  return standaloneNavigationHref("/", locationLike);
 }
 
 function link(documentLike, href, label, primary = false) {
@@ -86,6 +85,9 @@ export function renderExperienceGate({
   locationLike = globalThis.location,
 } = {}) {
   const access = experienceAccess(experienceId, locationLike);
+  // This module runs before an accepted standalone's heavier main graph. Establish the audio-QA
+  // navigation boundary now, so even an immediately clicked catalogue link cannot drop silence.
+  syncStandaloneReturnLinks(documentLike, locationLike);
   if (access.allowed) return access;
   if (!documentLike?.body || !access.experience) return access;
 

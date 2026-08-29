@@ -32,6 +32,8 @@ public readonly record struct GunneryPitchAssistState(
         "UNSAFE_CLOSURE" => 9,
         "ACTIVE_SHOULDER" => 10,
         "ACTIVE_FULL" => 11,
+        "PILOT_UNLOAD" => 12,
+        "PILOT_MAXIMUM_PULL" => 13,
         _ => 0,
     };
     public static GunneryPitchAssistState Inactive(
@@ -54,6 +56,7 @@ public readonly record struct GunneryPitchAssistResult(
 /// begins helping a stable pursuit before coarse keyboard corrections carry it through that gate.
 /// </summary>
 public static class GunneryPitchAssist {
+    internal const double PilotUnloadOverrideThresholdG = 0.95;
     // Build-237 owner telemetry (web-1785563337923): during one stable pursuit the pilot made
     // twelve corrections in 4.47 s while closing 1,371 -> 1,003 m with >=10 s to pass. The lead
     // sat mostly 3.9-15.6 deg off, but the 1,000 m range gate kept the assist inactive. The earlier
@@ -84,7 +87,9 @@ public static class GunneryPitchAssist {
         double closureMps = 0.0,
         GunneryLeadRateEstimator? leadRate = null,
         PilotLateralCommitmentState? lateralCommitment = null,
-        double deltaSeconds = 0.0) {
+        double deltaSeconds = 0.0,
+        bool pilotUnloadIntent = false,
+        bool pilotMaximumPullIntent = false) {
         ArgumentNullException.ThrowIfNull(atmosphere);
         PilotCommand unchangedCommand = pilotCommand;
         GunneryPitchAssistResult Inactive(string status) => new(unchangedCommand,
@@ -111,6 +116,21 @@ public static class GunneryPitchAssist {
             || double.IsFinite(pilotCommand.CommandedPitchRad)) {
             leadRate?.Reset();
             return Inactive("PILOT_OVERRIDE");
+        }
+        // A deliberate unload is escape/recovery intent, not hands-off tracking. The director
+        // used to add its full 3.5 G while the playerbot asked for 0.72 G in a vertical recovery,
+        // effectively pulling the aircraft back into the loop it was trying to leave.
+        if (pilotUnloadIntent || pilotCommand.GDemand < PilotUnloadOverrideThresholdG) {
+            leadRate?.Reset();
+            return Inactive("PILOT_UNLOAD");
+        }
+        // Raw near-stop back-stick is manoeuvre/recovery ownership. The filtered G demand can lag
+        // it by several frames; waiting for that filtered value let the director add 0.48 G during
+        // tape 430's vertical recovery even though the pilot was already asking for maximum pull.
+        // Yield on physical intent so the aid can neither add nor subtract G on that transition.
+        if (pilotMaximumPullIntent) {
+            leadRate?.Reset();
+            return Inactive("PILOT_MAXIMUM_PULL");
         }
         if (!double.IsFinite(rangeM) || rangeM <= 0.0
             || rangeM > parameters.GunneryPitchAssistMaxRangeM
@@ -230,12 +250,21 @@ public static class GunneryPitchAssist {
         // solution. `pitchError < 0` means the nose has gone PAST the lead line, which is the
         // only case where easing is what the pilot is actually asking for. Hands-off (below the
         // same 2 G) keeps the full two-sided damping that gives the smooth capture.
-        double easeAuthorityG = pilotCommand.GDemand < 2.0
-            ? parameters.GunneryPitchAssistMaxCorrectionG
-            : (pitchError < 0.0
-                ? System.Math.Min(
-                    parameters.GunneryPitchAssistMaxCorrectionG, PastLineEaseAuthorityG)
-                : 0.0);
+        // A stick-on-the-stop protected pull is manoeuvre ownership, not a fine-tracking request.
+        // Tape 427's vertical recovery commanded 8.36 G; the director saw the lead below the nose
+        // and subtracted a full G for twelve samples. Preserve two-sided damping through ordinary
+        // tracking pulls, but never ease a demand already at the live protected ceiling.
+        bool pilotAtProtectedPull = pilotCommand.GDemand
+            >= protectedMaximum - 0.25;
+        double easeAuthorityG = pilotAtProtectedPull
+            ? 0.0
+            : pilotCommand.GDemand < 2.0
+                ? parameters.GunneryPitchAssistMaxCorrectionG
+                : (pitchError < 0.0
+                    ? System.Math.Min(
+                        parameters.GunneryPitchAssistMaxCorrectionG,
+                        PastLineEaseAuthorityG)
+                    : 0.0);
         double negativeAuthority = -easeAuthorityG;
         double correction = shoulderAuthority * System.Math.Clamp(rateCorrectionG,
             negativeAuthority,
@@ -256,9 +285,8 @@ public static class GunneryPitchAssist {
         // Do not fight the merge (pilot report, desktop, Build 77): inside ~2.5 seconds of a
         // high-closure pass the line of sight swings faster than any capture is worth, and full
         // lateral authority just wrenches the roll axis. Fade the lateral assist with
-        // time-to-pass. The legacy full-authority pitch/yaw law remains exact inside its declared
-        // gate; newly admitted shoulder geometry uses shoulderAuthority, whose 2.5-6 s fade keeps
-        // all three axes out of the unsafe fly-by observed in Build 237.
+        // time-to-pass. Pitch remains at full authority inside its declared gate; newly admitted
+        // shoulder geometry uses shoulderAuthority to stay out of unsafe fly-bys.
         double rollAuthority = insideFullAuthorityGate
             ? mergeFade : shoulderAuthority;
         double pitchAndYawAuthority = insideFullAuthorityGate

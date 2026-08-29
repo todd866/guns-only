@@ -351,6 +351,10 @@
       ],
       "hazardIds": [
         "hazard.cobra-canyon.iron-bell-deck.v1",
+        "hazard.cobra-canyon.iron-bell-west-approach.v1",
+        "hazard.cobra-canyon.iron-bell-east-approach.v1",
+        "hazard.cobra-canyon.iron-bell-west-approach-pier.v1",
+        "hazard.cobra-canyon.iron-bell-east-approach-pier.v1",
         "hazard.cobra-canyon.iron-bell-west-pier.v1",
         "hazard.cobra-canyon.iron-bell-east-pier.v1",
         "hazard.cobra-canyon.gorge-wire-low.v1",
@@ -824,8 +828,104 @@
         ],
         "maximumLocalM": [
           -2645,
-          150,
+          160,
           -484
+        ]
+      },
+      "authority": {
+        "role": "collision-authority",
+        "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"
+      },
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "hazard.cobra-canyon.iron-bell-west-approach.v1",
+      "kind": "bridge-approach-west",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {
+        "shape": "aabb",
+        "minimumLocalM": [
+          -2960,
+          136,
+          -516
+        ],
+        "maximumLocalM": [
+          -2775,
+          148,
+          -484
+        ]
+      },
+      "authority": {
+        "role": "collision-authority",
+        "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"
+      },
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "hazard.cobra-canyon.iron-bell-east-approach.v1",
+      "kind": "bridge-approach-east",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {
+        "shape": "aabb",
+        "minimumLocalM": [
+          -2645,
+          136,
+          -516
+        ],
+        "maximumLocalM": [
+          -2460,
+          148,
+          -484
+        ]
+      },
+      "authority": {
+        "role": "collision-authority",
+        "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"
+      },
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "hazard.cobra-canyon.iron-bell-west-approach-pier.v1",
+      "kind": "bridge-pier",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {
+        "shape": "aabb",
+        "minimumLocalM": [
+          -2874,
+          92,
+          -515
+        ],
+        "maximumLocalM": [
+          -2860,
+          142,
+          -485
+        ]
+      },
+      "authority": {
+        "role": "collision-authority",
+        "sourceId": "authority.cobra-vietnam.cobra-canyon.v1"
+      },
+      "presentationOnly": false,
+      "targetable": false
+    },
+    {
+      "id": "hazard.cobra-canyon.iron-bell-east-approach-pier.v1",
+      "kind": "bridge-pier",
+      "visualBandId": "band.cobra-canyon.critical.v1",
+      "collision": {
+        "shape": "aabb",
+        "minimumLocalM": [
+          -2560,
+          92,
+          -515
+        ],
+        "maximumLocalM": [
+          -2546,
+          142,
+          -485
         ]
       },
       "authority": {
@@ -843,7 +943,7 @@
         "shape": "aabb",
         "minimumLocalM": [
           -2771,
-          96,
+          92,
           -515
         ],
         "maximumLocalM": [
@@ -867,7 +967,7 @@
         "shape": "aabb",
         "minimumLocalM": [
           -2663,
-          96,
+          92,
           -515
         ],
         "maximumLocalM": [
@@ -2137,6 +2237,10 @@
       ],
       "hazardIds": [
         "hazard.cobra-canyon.iron-bell-deck.v1",
+        "hazard.cobra-canyon.iron-bell-west-approach.v1",
+        "hazard.cobra-canyon.iron-bell-east-approach.v1",
+        "hazard.cobra-canyon.iron-bell-west-approach-pier.v1",
+        "hazard.cobra-canyon.iron-bell-east-approach-pier.v1",
         "hazard.cobra-canyon.iron-bell-west-pier.v1",
         "hazard.cobra-canyon.iron-bell-east-pier.v1"
       ],
@@ -2453,7 +2557,7 @@
       "maxTerrainRibbons": 3,
       "maxCells": 3,
       "maxLandmarks": 11,
-      "maxHazards": 14,
+      "maxHazards": 18,
       "maxAmbientArchetypes": 11,
       "maxLandmarkArchetypes": 11,
       "maxSetPieceCells": 10,
@@ -2466,7 +2570,7 @@
       "maxTerrainRibbons": 3,
       "maxCells": 3,
       "maxLandmarks": 11,
-      "maxHazards": 14,
+      "maxHazards": 18,
       "maxAmbientArchetypes": 11,
       "maxLandmarkArchetypes": 11,
       "maxSetPieceCells": 10,
@@ -2479,7 +2583,7 @@
       "maxTerrainRibbons": 3,
       "maxCells": 3,
       "maxLandmarks": 11,
-      "maxHazards": 14,
+      "maxHazards": 18,
       "maxAmbientArchetypes": 11,
       "maxLandmarkArchetypes": 11,
       "maxSetPieceCells": 10,

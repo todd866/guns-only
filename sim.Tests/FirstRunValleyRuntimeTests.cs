@@ -10,7 +10,9 @@ public sealed class FirstRunValleyRuntimeTests {
         var runtime = new FirstRunValleyRuntime(new FirstRunValleyConfig(
             FirstRunValleyRuntime.PopOutNorthM));
         var stillInDraw = new AircraftState(
-            new Vec3D(FirstRunValleyRuntime.ValleyEastM, 190.0, -2_500.0),
+            new Vec3D(FirstRunValleyRuntime.ValleyEastM,
+                FirstRunValleyRuntime.SpawnAltitudeM,
+                FirstRunValleyRuntime.PopOutNorthM - 500.0),
             200.0, 0.0, 0.0, 0.0, FlightModel.F22APublicDataSurrogate.MassKg);
         Assert.False(runtime.ObservePlayer(stillInDraw));
         Assert.True(runtime.WeaponsCold);
@@ -18,7 +20,9 @@ public sealed class FirstRunValleyRuntimeTests {
 
         var shooter = new Aim9Pose(stillInDraw.Position, new Vec3D(0, 0, 200));
         var target = new Aim9Pose(
-            new Vec3D(FirstRunValleyRuntime.ValleyEastM, 190.0, -600.0),
+            new Vec3D(FirstRunValleyRuntime.ValleyEastM,
+                FirstRunValleyRuntime.SpawnAltitudeM,
+                FirstRunValleyRuntime.BanditNorthM),
             new Vec3D(0, 0, 180));
         Assert.False(runtime.TryLaunchFoxTwo(shooter, target, nowMs: 0));
     }
@@ -28,7 +32,9 @@ public sealed class FirstRunValleyRuntimeTests {
         var runtime = new FirstRunValleyRuntime(new FirstRunValleyConfig(
             FirstRunValleyRuntime.PopOutNorthM));
         var popped = new AircraftState(
-            new Vec3D(FirstRunValleyRuntime.ValleyEastM, 190.0, -1_990.0),
+            new Vec3D(FirstRunValleyRuntime.ValleyEastM,
+                FirstRunValleyRuntime.SpawnAltitudeM,
+                FirstRunValleyRuntime.PopOutNorthM + 10.0),
             200.0, 0.0, 0.0, 0.0, FlightModel.F22APublicDataSurrogate.MassKg);
         Assert.True(runtime.ObservePlayer(popped));
         Assert.False(runtime.WeaponsCold);
@@ -37,7 +43,9 @@ public sealed class FirstRunValleyRuntimeTests {
 
         var shooter = new Aim9Pose(popped.Position, new Vec3D(0, 0, 200));
         var target = new Aim9Pose(
-            new Vec3D(FirstRunValleyRuntime.ValleyEastM, 190.0, -600.0),
+            new Vec3D(FirstRunValleyRuntime.ValleyEastM,
+                FirstRunValleyRuntime.SpawnAltitudeM,
+                FirstRunValleyRuntime.BanditNorthM),
             new Vec3D(0, 0, 180));
         Assert.True(runtime.TryLaunchFoxTwo(shooter, target, nowMs: 0));
         Assert.Equal(1, runtime.Aim9Remaining);
@@ -94,7 +102,9 @@ public sealed class FirstRunValleySessionTests {
         BeatSetup armed = Beats.ModernVisualMergeFirstRun();
         armed = armed with {
             Player = armed.Player with {
-                Position = armed.Player.Position with { Z = -1_990.0 }
+                Position = armed.Player.Position with {
+                    Z = FirstRunValleyRuntime.PopOutNorthM + 10.0
+                }
             }
         };
         var session = Stage(armed);

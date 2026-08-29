@@ -115,6 +115,18 @@ internal static class SnapshotProjection {
         DetentLayer _detents = Session.Controls;
         PilotCommand requestedCommand = _detents.Command;
         PilotCommand appliedCommand = _player.LastAppliedCommand;
+        double playerAlphaRad = _player.AngleOfAttackRad;
+        bool f22LateralAllocation = _beat.PlayerAir.HighAlphaModel
+            == HighAlphaModelKind.F22PublicDataSurrogate;
+        double f22AriGain = f22LateralAllocation
+            ? FlightModel.F22AileronRudderInterconnect(playerAlphaRad) : 0.0;
+        double f22AriRudder = f22AriGain * Math.Clamp(
+            appliedCommand.RollControl + appliedCommand.SasRollControl, -1.0, 1.0);
+        double effectiveRudderCommand = f22LateralAllocation
+            ? FlightModel.F22EffectiveRudderCommand(playerAlphaRad, appliedCommand)
+            : appliedCommand.Rudder;
+        double stabilityYawRateDps = (_player.State.BodyRates.R * Math.Cos(playerAlphaRad)
+            - _player.State.BodyRates.P * Math.Sin(playerAlphaRad)) * 57.29577951308232;
         string requestedAlphaDegreesJson = double.IsFinite(requestedCommand.CommandedAlphaRad)
             ? (requestedCommand.CommandedAlphaRad * 57.29577951308232).ToString(
                 "F3", System.Globalization.CultureInfo.InvariantCulture)
@@ -181,6 +193,10 @@ internal static class SnapshotProjection {
         AircraftState gunTarget = opponentPresent
             ? Session.SelectedOpponentState
             : default;
+        OpponentPilotTelemetry? selectedOpponentPilot =
+            Session.SelectedOpponentPilotTelemetry;
+        PilotCommand? selectedOpponentLastCommand =
+            selectedOpponentPilot?.LastCommand;
         string formationCoordinationAgeJson =
             Session.FormationCoordinationAgeSeconds is { } coordinationAgeSeconds
             && double.IsFinite(coordinationAgeSeconds)
@@ -620,6 +636,13 @@ internal static class SnapshotProjection {
             + $"\"bx\":{b.Position.X:F3},\"by\":{b.Position.Y:F3},\"bz\":{b.Position.Z:F3},"
             + $"\"bfx\":{bf.X:F5},\"bfy\":{bf.Y:F5},\"bfz\":{bf.Z:F5},"
             + $"\"blx\":{bl.X:F5},\"bly\":{bl.Y:F5},\"blz\":{bl.Z:F5},"
+            // Selected-target scope is deliberate: in a formation fight, these values follow the
+            // same aircraft as range_m and the gun solution instead of silently staying on lead.
+            + $"\"selected_opponent_tactic_code\":{NullableDiagnosticIntegerJson(selectedOpponentPilot?.Tactic is { } selectedTactic ? (int)selectedTactic : null)},"
+            + $"\"selected_opponent_last_command_load_factor_g\":{NullableDiagnosticNumberJson(selectedOpponentLastCommand?.GDemand)},"
+            + $"\"selected_opponent_last_command_bank_target_deg\":{NullableDiagnosticNumberJson(selectedOpponentLastCommand?.BankTarget * 57.29577951308232)},"
+            + $"\"selected_opponent_last_command_throttle\":{NullableDiagnosticNumberJson(selectedOpponentLastCommand?.Throttle)},"
+            + $"\"selected_opponent_last_command_rudder\":{NullableDiagnosticNumberJson(selectedOpponentLastCommand?.Rudder)},"
             + WingmanJson(0, "w1")
             + WingmanJson(1, "w2")
             + WingmanJson(2, "w3")
@@ -748,6 +771,11 @@ internal static class SnapshotProjection {
             + $"\"auto_gcas_pilot_recovery_credited\":{(autoGcasPrediction.PilotRecoveryCredited ? "true" : "false")},"
             + $"\"bank_target_deg\":{appliedCommand.BankTarget * 57.29577951308232:F3},"
             + $"\"roll_control\":{appliedCommand.RollControl:F3},"
+            + $"\"applied_rudder\":{appliedCommand.Rudder:F4},"
+            + $"\"f22_ari_gain\":{f22AriGain:F4},"
+            + $"\"f22_ari_rudder\":{f22AriRudder:F4},"
+            + $"\"effective_rudder_command\":{effectiveRudderCommand:F4},"
+            + $"\"stability_yaw_rate_dps\":{stabilityYawRateDps:F3},"
             + $"\"pilot_aileron\":{appliedCommand.RollControl:F3},"
             + $"\"sas_aileron\":{appliedCommand.SasRollControl:F3},"
             + $"\"aileron_command_deg\":{appliedCommand.RollControl * _beat.PlayerAir.MaxAileronDeflectionRad * 57.29577951308232:F3},"
@@ -802,7 +830,10 @@ internal static class SnapshotProjection {
             + $"\"padlock_preferred_plane_deg\":{padlockRollAssist.PreferredPlaneRad * 57.29577951308232:F3},"
             + $"\"high_alpha_recovery\":{(_detents.HighAlphaRecoveryActive ? "true" : "false")},"
             + $"\"g_valley\":{_detents.ValleyG:F3},"
-            + $"\"g_maxperform\":{Protection.MaxPerformG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
+            // Publish the same configuration-aware endpoint used by DetentLayer's analog stick.
+            // Clean-wing MaxPerform can diverge once the F-22's automatic leading-edge surfaces
+            // schedule lift, which made a desired-G controller's inverse mapping subtly wrong.
+            + $"\"g_maxperform\":{Protection.MaxPerformG(s, _beat.PlayerAir, trueAirspeedMps, Session.PlayerEffectiveAerodynamicConfiguration, atmosphere):F3},"
             + $"\"g_hardmax\":{Protection.HardMaxG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
             + $"\"g_override_max\":{Protection.OverrideMaxG(s, _beat.PlayerAir, trueAirspeedMps, atmosphere):F3},"
             + $"\"dynamic_pressure_kpa\":{_player.DynamicPressurePa / 1000.0:F2},"
@@ -824,6 +855,7 @@ internal static class SnapshotProjection {
             + $"\"gun_solution_raw\":{(opponentPresent && _gunKill!.InstantaneousGunSolution ? "true" : "false")},"
             + $"\"gun_solution\":{(opponentPresent && !Session.WeaponsInhibited && _gunKill!.GunSolution ? "true" : "false")},"
             + $"\"lead_valid\":{(opponentPresent && !Session.WeaponsInhibited && _gunKill!.HasLeadSolution ? "true" : "false")},"
+            + $"\"lead_solution_valid\":{(opponentPresent && _gunKill!.HasLeadSolution ? "true" : "false")},"
             + $"\"lead_x\":{(opponentPresent ? _gunKill!.LeadPipper.X : 0.0):F3},\"lead_y\":{(opponentPresent ? _gunKill!.LeadPipper.Y : 0.0):F3},\"lead_z\":{(opponentPresent ? _gunKill!.LeadPipper.Z : 0.0):F3},"
             + $"\"lead_tof\":{(opponentPresent ? _gunKill!.LeadTimeOfFlight : 0.0):F4},\"ammo\":{(_gunKill?.AmmoRemaining ?? 0)},"
             + $"\"gun_heat\":{(_gunKill?.BarrelHeat ?? 0.0):F3},"
@@ -995,6 +1027,12 @@ internal static class SnapshotProjection {
     // (sim.Tests links and exercises it). These thin delegates keep every existing call site
     // unchanged while removing the duplicate implementation.
     static string NullableNumberJson(double? value) => SnapshotJson.NullableNumberJson(value);
+    static string NullableDiagnosticNumberJson(double? value) => value is { } number
+        && double.IsFinite(number)
+            ? number.ToString("F3", System.Globalization.CultureInfo.InvariantCulture)
+            : "null";
+    static string NullableDiagnosticIntegerJson(int? value) =>
+        value?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "null";
 
     static string MeshNavJson(
         in Vec3D simulationPosition,
@@ -1359,6 +1397,8 @@ internal static class SnapshotProjection {
         if (!TopGunFightRuntime.IsTopGunMission(Session.Beat.MissionIdentity.Id)) {
             bool firstRun = FirstRunValleyRuntime.IsFirstRunValleyMission(
                 Session.Beat.MissionIdentity.Id);
+            bool firstRunTerrainAvailable = firstRun
+                && Session.Terrain is FirstRunValleyTerrainSurface;
             Aim9Telemetry firstRunMissile = Session.Aim9Telemetry;
             bool firstRunPoseValid = firstRun
                 && firstRunMissile.State != Aim9FlightState.Safe;
@@ -1396,6 +1436,8 @@ internal static class SnapshotProjection {
                 + "\"f14_over_g_seconds\":0.000,"
                 + "\"f14_structural_fatigue_01\":0.0000,"
                 + "\"f14_structural_failed\":false,"
+                + $"\"first_run_weapons_cold\":{(Session.FirstRunWeaponsCold ? "true" : "false")},"
+                + FirstRunValleyGeometryJson(firstRunTerrainAvailable)
                 + aim9Json
                 + "\"opponent_callsign\":null,"
                 + "\"presentation_theme\":null,";
@@ -1443,6 +1485,8 @@ internal static class SnapshotProjection {
             + $"\"f14_over_g_seconds\":{(playerIsTomcat ? Session.PlayerF14OverLimitSeconds : 0.0):F3},"
             + $"\"f14_structural_fatigue_01\":{(playerIsTomcat ? Session.PlayerF14StructuralFatigue01 : 0.0):F4},"
             + $"\"f14_structural_failed\":{(playerIsTomcat && Session.PlayerF14StructuralFailed ? "true" : "false")},"
+            + "\"first_run_weapons_cold\":false,"
+            + FirstRunValleyGeometryJson(false)
             + $"\"aim9_remaining\":{Session.Aim9Remaining},"
             + $"\"aim9_in_flight\":{(Session.Aim9InFlight ? "true" : "false")},"
             + $"\"aim9_pose_valid\":{(poseValid ? "true" : "false")},"
@@ -1456,6 +1500,65 @@ internal static class SnapshotProjection {
             + $"\"aim9_seeker_state\":{Aim9SeekerStateJson(Session.Aim9SeekerState)},"
             + $"\"opponent_callsign\":{opponentJson},"
             + "\"presentation_theme\":\"top-gun-anime-1986\",";
+    }
+
+    static string FirstRunValleyGeometryJson(bool available) {
+        if (!available) {
+            return "\"first_run_valley_available\":false,"
+                + "\"first_run_valley_geometry_version\":null,"
+                + "\"first_run_valley_center_east_m\":null,"
+                + "\"first_run_valley_entry_north_m\":null,"
+                + "\"first_run_valley_popout_north_m\":null,"
+                + "\"first_run_valley_route_alt_m\":null,"
+                + "\"first_run_valley_floor_height_m\":null,"
+                + "\"first_run_valley_floor_blend_drop_m\":null,"
+                + "\"first_run_valley_floor_half_width_m\":null,"
+                + "\"first_run_valley_crest_offset_m\":null,"
+                + "\"first_run_valley_outer_offset_m\":null,"
+                + "\"first_run_valley_west_ridge_rise_m\":null,"
+                + "\"first_run_valley_east_ridge_rise_m\":null,"
+                + "\"first_run_valley_curve_amplitude_m\":null,"
+                + "\"first_run_valley_curve_wavelength_m\":null,"
+                + "\"first_run_valley_centerline_component_count\":null,"
+                + "\"first_run_valley_side_cut_count\":null,"
+                + "\"first_run_valley_butte_count\":null,"
+                + "\"first_run_valley_side_cut_depth_01\":null,"
+                + "\"first_run_valley_strata_step_height_m\":null,"
+                + "\"first_run_valley_strata_bench_fraction\":null,"
+                + "\"first_run_valley_south_extent_north_m\":null,"
+                + "\"first_run_valley_south_full_north_m\":null,"
+                + "\"first_run_valley_popout_fade_start_north_m\":null,"
+                + "\"first_run_valley_north_extent_north_m\":null,";
+        }
+        string Number(double value) => value.ToString("F1",
+            System.Globalization.CultureInfo.InvariantCulture);
+        string Fraction(double value) => value.ToString("F3",
+            System.Globalization.CultureInfo.InvariantCulture);
+        return "\"first_run_valley_available\":true,"
+            + $"\"first_run_valley_geometry_version\":{FirstRunValleyTerrainSurface.GeometryVersion},"
+            + $"\"first_run_valley_center_east_m\":{Number(FirstRunValleyRuntime.ValleyEastM)},"
+            + $"\"first_run_valley_entry_north_m\":{Number(FirstRunValleyRuntime.PlayerNorthM)},"
+            + $"\"first_run_valley_popout_north_m\":{Number(FirstRunValleyRuntime.PopOutNorthM)},"
+            + $"\"first_run_valley_route_alt_m\":{Number(FirstRunValleyRuntime.SpawnAltitudeM)},"
+            + $"\"first_run_valley_floor_height_m\":{Number(FirstRunValleyTerrainSurface.FloorHeightM)},"
+            + $"\"first_run_valley_floor_blend_drop_m\":{Number(FirstRunValleyTerrainSurface.FloorBlendDropM)},"
+            + $"\"first_run_valley_floor_half_width_m\":{Number(FirstRunValleyTerrainSurface.FloorHalfWidthM)},"
+            + $"\"first_run_valley_crest_offset_m\":{Number(FirstRunValleyTerrainSurface.CrestOffsetM)},"
+            + $"\"first_run_valley_outer_offset_m\":{Number(FirstRunValleyTerrainSurface.OuterOffsetM)},"
+            + $"\"first_run_valley_west_ridge_rise_m\":{Number(FirstRunValleyTerrainSurface.WestRidgeRiseM)},"
+            + $"\"first_run_valley_east_ridge_rise_m\":{Number(FirstRunValleyTerrainSurface.EastRidgeRiseM)},"
+            + $"\"first_run_valley_curve_amplitude_m\":{Number(FirstRunValleyTerrainSurface.CentreCurveAmplitudeM)},"
+            + $"\"first_run_valley_curve_wavelength_m\":{Number(FirstRunValleyTerrainSurface.CentreCurveWavelengthM)},"
+            + $"\"first_run_valley_centerline_component_count\":{FirstRunValleyTerrainSurface.CentrelineComponentCount},"
+            + $"\"first_run_valley_side_cut_count\":{FirstRunValleyTerrainSurface.SideCutCount},"
+            + $"\"first_run_valley_butte_count\":{FirstRunValleyTerrainSurface.ButteCount},"
+            + $"\"first_run_valley_side_cut_depth_01\":{Fraction(FirstRunValleyTerrainSurface.SideCutDepth01)},"
+            + $"\"first_run_valley_strata_step_height_m\":{Number(FirstRunValleyTerrainSurface.StrataStepHeightM)},"
+            + $"\"first_run_valley_strata_bench_fraction\":{Fraction(FirstRunValleyTerrainSurface.StrataBenchFraction)},"
+            + $"\"first_run_valley_south_extent_north_m\":{Number(FirstRunValleyTerrainSurface.SouthExtentNorthM)},"
+            + $"\"first_run_valley_south_full_north_m\":{Number(FirstRunValleyTerrainSurface.SouthFullNorthM)},"
+            + $"\"first_run_valley_popout_fade_start_north_m\":{Number(FirstRunValleyTerrainSurface.PopOutFadeStartNorthM)},"
+            + $"\"first_run_valley_north_extent_north_m\":{Number(FirstRunValleyTerrainSurface.NorthExtentNorthM)},";
     }
 
     static string Aim9SeekerStateJson(Aim9FlightState state) => state switch {

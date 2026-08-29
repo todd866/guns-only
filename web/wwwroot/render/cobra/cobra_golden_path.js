@@ -7,7 +7,7 @@
  * guide wisp, but the useful aviation/game pattern is a previewed sequence of open cues: enough
  * path to read the next turn and altitude, not a solid tunnel painted over the world.
  *
- *   1. IT MOVES. One brighter leader travels away from the ship through the sequence.
+ *   1. IT IS FIXED. Geometry and brightness stay nailed to terrain until authority advances.
  *   2. IT IS OPEN. Small crow's-foot chevrons communicate direction while leaving almost all of
  *      the terrain untouched. No rectangles, filled road, tunnel, or vertical light stack.
  *   3. IT IS WORLD-REGISTERED. Every cue rides just below eye line and clears sampled terrain.
@@ -19,20 +19,23 @@
  * is no path.
  *
  * COST. One Mesh, one ShaderMaterial, one static index buffer: 32 triangles, one draw call, no
- * shadow submission, no per-frame allocation. Geometry is re-sampled only on a meaningful move.
+ * shadow submission, no per-frame allocation. Geometry changes only when authority changes the
+ * objective/gate; ownship motion never drags the cues across the landscape.
  */
 
 /** Presentation contract id, in the house `guns-only.<thing>.vN` form. */
-import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=345";
-import { emberRtbVisualState } from "./cobra_ember_path.js?v=345";
+import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=348";
+import { emberRtbVisualState } from "./cobra_ember_path.js?v=348";
 
 export const COBRA_GOLDEN_PATH_SCHEMA = "guns-only.cobra-golden-path.v2";
+/** Keep the attack cue and the aircraft above the bridge deck / gun-pit elevation. */
+export const COBRA_BATTLE_OBJECTIVE_STANDOFF_M = 42;
 
 export const COBRA_GOLDEN_PATH_DEFAULTS = Object.freeze({
   /** Sparse preview: enough future information to read the route without forming a tunnel. */
-  markerCount: 18,
-  markerSpacingM: 50,
-  markerHalfWidthM: 10,
+  markerCount: 12,
+  markerSpacingM: 120,
+  markerHalfWidthM: 8,
   markerHeightM: 5,
   markerThicknessM: 1.35,
   /** Fallback and eye-following clearance limits (m AGL). */
@@ -44,13 +47,9 @@ export const COBRA_GOLDEN_PATH_DEFAULTS = Object.freeze({
   eyeLineOffsetM: -4,
   /** Long enough for turn preview, short enough that cues do not carpet the valley. */
   maxLengthM: 1_600,
-  leadM: 55,
+  leadM: 160,
   /** Normal alpha keeps the amber legible without additive white bloom. */
   peakOpacity: 0.89,
-  /** One leader traverses the marker sequence roughly every four seconds. */
-  flowCyclesPerSecond: 0.24,
-  /** Ship must move this far before the spine is re-sampled. */
-  rebuildDistanceM: 25,
   /** Fully transparent inside this range; it has finished its job. */
   arrivedRadiusM: 260,
   rtbArrivedRadiusM: 75,
@@ -75,44 +74,28 @@ void main() {
 `;
 
 // UV.x is a marker's fixed route phase. UV.y runs across the thin arm/tick, softly trimming its
-// outer pixels. Distant cues recede gently and one traveling emphasis provides direction without
-// moving world geometry.
+// outer pixels. Distant cues recede gently; direction comes from the open-chevron silhouette,
+// never a scrolling brightness effect that can make fixed world geometry look like a conveyor.
 const FRAGMENT_SHADER = `
 uniform vec3 uColor;
 uniform float uOpacity;
-uniform float uFlow;
 varying vec2 vMarkerUv;
 
 void main() {
   float edge = smoothstep(0.0, 0.22, vMarkerUv.y)
     * (1.0 - smoothstep(0.78, 1.0, vMarkerUv.y));
-  float delta = abs(fract(vMarkerUv.x - uFlow + 0.5) - 0.5);
-  float leader = 1.0 - smoothstep(0.02, 0.14, delta);
   float distanceFade = mix(1.0, 0.74, vMarkerUv.x);
-  float alpha = uOpacity * edge * distanceFade * (0.58 + 0.38 * leader);
+  float alpha = uOpacity * edge * distanceFade;
   if (alpha < 0.004) discard;
   gl_FragColor = vec4(uColor, alpha);
 }
 `;
 
 /**
- * Scroll phase of the haze bands. A PURE function of time — no Math.random, no Date.now — so a
- * replay, a headless still and a live frame at the same mission time all show the same picture.
- * @returns {number} phase in [0, 1)
- */
-export function cobraGoldenPathFlowOffset(nowSeconds, cyclesPerSecond = COBRA_GOLDEN_PATH_DEFAULTS.flowCyclesPerSecond) {
-  const seconds = Number(nowSeconds);
-  const rate = Number(cyclesPerSecond);
-  if (!Number.isFinite(seconds) || !Number.isFinite(rate)) return 0;
-  const raw = seconds * rate;
-  return raw - Math.floor(raw);
-}
-
-/**
  * The destination, resolved from authority alone. Combat uses the shared objective-site resolver;
  * RTB uses the published Camp Ember FOB. The ribbon and tactical map therefore cannot disagree,
  * and the return path cannot keep pointing at an enemy after the order says RTB.
- * @returns {{ siteId: string, eastM: number, northM: number } | null}
+ * @returns {{ siteId: string, eastM: number, northM: number, upM?: number } | null}
  */
 export function cobraGoldenPathObjective(groundWar, player, missionAct = "") {
   if (String(missionAct).toLowerCase() === "rtb") {
@@ -133,8 +116,17 @@ export function cobraGoldenPathObjective(groundWar, player, missionAct = "") {
   const site = sites.find((candidate) => candidate?.id === siteId) ?? null;
   const eastM = Number(site?.x_m);
   const northM = Number(site?.z_m);
+  const siteUpM = Number(site?.y_m);
   return siteId && Number.isFinite(eastM) && Number.isFinite(northM)
-    ? { siteId, eastM, northM, mode: "objective" }
+    ? {
+      siteId,
+      eastM,
+      northM,
+      mode: "objective",
+      ...(Number.isFinite(siteUpM)
+        ? { upM: siteUpM + COBRA_BATTLE_OBJECTIVE_STANDOFF_M }
+        : {}),
+    }
     : null;
 }
 
@@ -284,7 +276,6 @@ export function createCobraGoldenPath(THREE, options = {}) {
     uniforms: {
       uColor: { value: new THREE.Color(config.color) },
       uOpacity: { value: 0 },
-      uFlow: { value: 0 },
     },
     vertexShader: VERTEX_SHADER,
     fragmentShader: FRAGMENT_SHADER,
@@ -326,9 +317,6 @@ export function createCobraGoldenPath(THREE, options = {}) {
   let lastObjectiveId = null;
   let lastObjectiveEastM = Number.NaN;
   let lastObjectiveNorthM = Number.NaN;
-  let lastPlayerEastM = Number.NaN;
-  let lastPlayerNorthM = Number.NaN;
-  let lastPlayerAltitudeM = Number.NaN;
   let lastRecoveryPhase = null;
 
   function setVertex(index, x, y, z) {
@@ -369,13 +357,11 @@ export function createCobraGoldenPath(THREE, options = {}) {
     if (objective.siteId !== lastObjectiveId) return true;
     if (!(Math.abs(objective.eastM - lastObjectiveEastM) < 1)) return true;
     if (!(Math.abs(objective.northM - lastObjectiveNorthM) < 1)) return true;
-    if (!Number.isFinite(lastPlayerEastM)) return true;
     if ((recoveryVisual?.phase ?? null) !== lastRecoveryPhase) return true;
-    const movedM = Math.hypot(playerEastM - lastPlayerEastM, playerNorthM - lastPlayerNorthM);
-    if (movedM >= config.rebuildDistanceM) return true;
-    return Number.isFinite(playerAltitudeM)
-      && (!Number.isFinite(lastPlayerAltitudeM)
-        || Math.abs(playerAltitudeM - lastPlayerAltitudeM) >= 12);
+    // Every golden-path cue is world geometry. Neither ordinary translation nor altitude change
+    // may rebase the mesh from live ownship and create the sawtooth/conveyor motion seen in the
+    // owner's recording.
+    return false;
   }
 
   function rebuild(objective, playerEastM, playerNorthM, playerAltitudeM, groundHeightAt, recoveryVisual) {
@@ -558,9 +544,6 @@ export function createCobraGoldenPath(THREE, options = {}) {
     lastObjectiveId = objective.siteId;
     lastObjectiveEastM = objective.eastM;
     lastObjectiveNorthM = objective.northM;
-    lastPlayerEastM = playerEastM;
-    lastPlayerNorthM = playerNorthM;
-    lastPlayerAltitudeM = playerAltitudeM;
     lastRecoveryPhase = recoveryVisual?.phase ?? null;
     return true;
   }
@@ -615,19 +598,12 @@ export function createCobraGoldenPath(THREE, options = {}) {
 
     const arrivalFade = Math.min(1, (rangeM - arrivedRadiusM) / Math.max(1, arrivedRadiusM));
     group.visible = true;
-    const correctionPulse = recoveryVisual?.alert
-      ? 0.72 + 0.28 * (0.5 + 0.5 * Math.sin((Number(state.nowSeconds) || 0) * Math.PI * 3))
-      : 1;
     material.uniforms.uColor.value.setHex?.(
       Number.isFinite(Number(recoveryVisual?.colorHex))
         ? Number(recoveryVisual.colorHex)
         : config.color,
     );
-    setOpacity(config.peakOpacity * arrivalFade * correctionPulse);
-    material.uniforms.uFlow.value = cobraGoldenPathFlowOffset(
-      state.nowSeconds,
-      config.flowCyclesPerSecond,
-    );
+    setOpacity(config.peakOpacity * arrivalFade);
   }
 
   function dispose() {

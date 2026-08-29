@@ -1,5 +1,5 @@
 /**
- * First-visit Soniachne valley on-ramp. Storage sits in the guns-only.* family; it is not the
+ * First-visit Kestrel Gorge on-ramp. Storage sits in the guns-only.* family; it is not the
  * cobra/weekend-ride controls overlay (`guns-only.onboarding.*` + first_run_controls.js).
  */
 

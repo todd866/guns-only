@@ -463,7 +463,7 @@ public class CombatTrainingTests {
         string report = string.Join(
             System.Environment.NewLine,
             first.Select(measurement => FormattableString.Invariant(
-                $"{measurement.Skill}: rounds/eng={measurement.BanditRoundsPerEngagement:F2}, rear-quarter/eng={measurement.PlayerRearQuarterSecondsPerEngagement:F2}s, player-damage-hits={measurement.PlayerDamageHits}, fire-engagements={measurement.EngagementsWithBanditFire}/{measurement.Engagements}, damage-engagements={measurement.EngagementsWithPlayerDamage}/{measurement.Engagements}")));
+                $"{measurement.Skill}: rounds/eng={measurement.BanditRoundsPerEngagement:F2}, rear-quarter/eng={measurement.PlayerRearQuarterSecondsPerEngagement:F2}s, player-damage-hits={measurement.PlayerDamageHits}, fire-engagements={measurement.EngagementsWithBanditFire}/{measurement.Engagements}, damage-engagements={measurement.EngagementsWithPlayerDamage}/{measurement.Engagements}, max-firing-gamma={measurement.MaximumAbsoluteBanditFiringGammaDeg:F1}deg")));
 
         foreach (SeededSkillTierMeasurement capable in first.Skip(1)) {
             Assert.True(
@@ -482,9 +482,10 @@ public class CombatTrainingTests {
         Assert.NotEqual(
             novice.BanditRoundsFired,
             ace.BanditRoundsFired);
-        Assert.NotEqual(
-            novice.PlayerDamageHits,
-            ace.PlayerDamageHits);
+        Assert.All(first, measurement => Assert.True(
+            measurement.MaximumAbsoluteBanditFiringGammaDeg <= 60.0,
+            $"{measurement.Skill} fired outside the contained combat volume."
+            + $"{System.Environment.NewLine}{report}"));
         Assert.NotEqual(novice, ace);
     }
 }

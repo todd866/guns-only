@@ -26,6 +26,20 @@ export function firstRunValleyMissionAuthority() {
   });
 }
 
+/**
+ * The debrief has two deliberately different destinations: the primary Fly again advances into
+ * the normal programme, while the secondary Repeat sortie must preserve the authority that just
+ * ended. Keep that distinction executable instead of inferring it from the seen-storage flag,
+ * which is already stamped as soon as the guided sortie launches.
+ */
+export function shouldRestageFirstRunValley({
+  repeatRequested = false,
+  stagedAuthority = null,
+} = {}) {
+  return repeatRequested === true
+    && stagedAuthority?.kind === MISSION_AUTHORITY_KIND.FIRST_RUN_VALLEY;
+}
+
 export function sameMissionAuthority(left, right) {
   if (!left || !right || left.kind !== right.kind) return false;
   if (left.kind === MISSION_AUTHORITY_KIND.TOP_GUN) return left.seat === right.seat;

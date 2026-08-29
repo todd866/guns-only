@@ -40,19 +40,27 @@ export function weekendRideResult(state, { recordAtStartSeconds = null } = {}) {
   }
 
   const lapWord = laps === 1 ? "lap" : "laps";
-  const currentLapCopy = currentLapSeconds === null
-    ? "No open timed lap."
-    : `Open lap ${currentLapClean ? "clean" : "invalid"} at ${formatLapTime(currentLapSeconds)}.`;
-  const recordCopy = recordSeconds === null
-    ? "Set a clean lap next ride to establish a record."
-    : `${improvedRecord ? "New record" : "Standing record"} ${formatLapTime(recordSeconds)}.`;
-  let correction = "Next rep · complete one measured lap before chasing speed.";
-  if ((currentLapSeconds !== null && !currentLapClean) || offTrackSeconds > 0)
-    correction = "Next rep · brake before turn-in and keep both wheels inside the paint.";
+  let summary = "No timed lap.";
+  if (improvedRecord)
+    summary = `New record · ${formatLapTime(recordSeconds)}.`;
+  else if (laps > 0 && recordSeconds !== null)
+    summary = `${laps} ${lapWord} · record ${formatLapTime(recordSeconds)}.`;
+  else if (offTrackSeconds > 0)
+    summary = `No clean lap · ${offTrackSeconds.toFixed(1)} s off track.`;
+  else if (currentLapSeconds !== null && !currentLapClean)
+    summary = "No clean lap · open lap invalid.";
+  else if (currentLapSeconds !== null)
+    summary = `Open lap · ${formatLapTime(currentLapSeconds)}.`;
+
+  let correction = "Next · bank one clean lap.";
+  if (offTrackSeconds > 0)
+    correction = "Next · brake earlier. Stay inside the paint.";
+  else if (currentLapSeconds !== null && !currentLapClean)
+    correction = "Next · reset and bank a clean lap.";
   else if (improvedRecord)
-    correction = "Next rep · repeat the clean line before adding raw-physics workload.";
+    correction = "Next · repeat it clean.";
   else if (laps > 0)
-    correction = "Next rep · protect the open lap first, then chase the standing record.";
+    correction = "Next · protect the line, then chase time.";
 
   const sectorValues = Array.isArray(state?.best_sector_s)
     ? state.best_sector_s.slice(0, 4).map((value) => formatLapTime(value))
@@ -62,7 +70,7 @@ export function weekendRideResult(state, { recordAtStartSeconds = null } = {}) {
   return Object.freeze({
     title,
     verdict,
-    summary: `${laps} completed ${lapWord}. ${currentLapCopy} ${recordCopy}`,
+    summary,
     correction,
     metrics: Object.freeze([
       Object.freeze({ label: "LAPS", value: String(laps) }),

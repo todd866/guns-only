@@ -1,10 +1,10 @@
-import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=345";
+import { sampleCobraCanyonTerrain } from "./cobra_canyon_plan.js?v=348";
 import {
   FOLIAGE_UV_PALM,
   FOLIAGE_UV_UNDERSTORY,
   createCobraSoftFalloffTexture,
   createSyntheticFoliageAtlasTexture,
-} from "./cobra_canyon_foliage.js?v=345";
+} from "./cobra_canyon_foliage.js?v=348";
 
 export const COBRA_CANYON_ASSET_KIT_SCHEMA = "guns-only.cobra-canyon-asset-kit.v1";
 
@@ -52,7 +52,27 @@ export const COBRA_CANYON_AMBIENT_BUDGETS = Object.freeze({
 /** Keep the Camp Ember rear-seat eye clear of green mass / mist (Build 302). */
 export const CAMP_EMBER_LANDMARK_ID = "landmark.cobra-canyon.camp-ember.v1";
 export const CAMP_EMBER_CLEAR_RADIUS_M = 230;
-export const COBRA_OBJECTIVE_CLEAR_RADIUS_M = 135;
+// Garrison seed rings reach roughly 220 m from their site centre. A 135 m clearing left the exact
+// hostile shooters behind full-height plantation crowns, so the player saw tracers emerge from an
+// empty forest. Clear the complete contested cell of TALL scatter; terrain, low role silhouettes,
+// authored structures and every authoritative unit remain present.
+export const COBRA_OBJECTIVE_CLEAR_RADIUS_M = 235;
+export const COBRA_OBJECTIVE_FEATHER_RADIUS_M = 305;
+// Paddy geometry is a broad, rigid water panel. On Iron Bell's gorge walls it clips into cyan
+// triangles while its raised perimeter boxes resemble detached bridge members. Keep that flat
+// lowland vocabulary outside the complete photographed battle bowl.
+export const COBRA_OBJECTIVE_PADDY_CLEAR_RADIUS_M = 360;
+// A paddy mirror is a rigid, level water/earthwork panel. It is not vegetation that can be sunk
+// into a slope. These limits are therefore placement validity, not an aesthetic preference: past
+// either one, a 45–75 x 72–120 m panel becomes the cyan triangular shard / raised brown wreckage
+// the bridge review exposed.
+export const COBRA_PADDY_MAX_TERRAIN_GRADIENT = 0.04;
+export const COBRA_PADDY_MAX_FOOTPRINT_SPREAD_M = 2;
+// Compounds can terrace and cut into more ground than a flooded paddy, but a 30–44 m cluster
+// still cannot stand across a gorge wall. These looser limits reject the hillside "coffin piles"
+// without excluding plausible village benches or small fence/cart clutter.
+export const COBRA_VILLAGE_MAX_TERRAIN_GRADIENT = 0.12;
+export const COBRA_VILLAGE_MAX_FOOTPRINT_SPREAD_M = 6;
 const COBRA_OBJECTIVE_LANDMARK_IDS = new Set([
   "landmark.cobra-canyon.iron-bell-bridge.v1",
   "landmark.cobra-canyon.plantation-water-tower.v1",
@@ -143,19 +163,59 @@ function insideCampEmberClearEye(plan, role, eastM, northM) {
   return dx * dx + dz * dz < CAMP_EMBER_CLEAR_RADIUS_M * CAMP_EMBER_CLEAR_RADIUS_M;
 }
 
-function insideObjectiveClearEye(plan, role, eastM, northM) {
-  if (role !== "jungle" && role !== "plantation" && role !== "mist") return false;
+function insideObjectiveClearEye(plan, role, eastM, northM, descriptor = null) {
+  if (role !== "jungle" && role !== "plantation" && role !== "mist" && role !== "paddy") {
+    return false;
+  }
+  // `jungle` carries both 20–30 m canopy and grass/scrub descriptors. Clear the former so the
+  // exact formations and gun lines stay visible; retain the latter and let objectiveEdgeScale
+  // press it down to sub-metre cover. Removing both made every fight a conspicuous bald lawn.
+  if (role === "jungle" && isJungleUnderstory(descriptor)) return false;
+  const clearRadiusM = role === "paddy"
+    ? COBRA_OBJECTIVE_PADDY_CLEAR_RADIUS_M
+    : COBRA_OBJECTIVE_CLEAR_RADIUS_M;
   for (const landmark of plan?.landmarks ?? []) {
     if (!COBRA_OBJECTIVE_LANDMARK_IDS.has(landmark?.id)) continue;
+    // The reported wreckage illusion is specific to Iron Bell's steep gorge. Plantation/Quarry
+    // retain their authored lowland paddies until the systemic footprint-slope qualifier lands.
+    if (role === "paddy"
+      && landmark.id !== "landmark.cobra-canyon.iron-bell-bridge.v1") continue;
     const point = landmark.positionLocalM;
     if (!Array.isArray(point) || point.length < 3) continue;
     const dx = eastM - Number(point[0]);
     const dz = northM - Number(point[2]);
     if (!Number.isFinite(dx) || !Number.isFinite(dz)) continue;
-    if (dx * dx + dz * dz
-      < COBRA_OBJECTIVE_CLEAR_RADIUS_M * COBRA_OBJECTIVE_CLEAR_RADIUS_M) return true;
+    if (dx * dx + dz * dz < clearRadiusM * clearRadiusM) return true;
   }
   return false;
+}
+
+function objectiveEdgeScale(plan, role, eastM, northM) {
+  if (role !== "jungle" && role !== "plantation") return 1;
+  let factor = 1;
+  for (const landmark of plan?.landmarks ?? []) {
+    if (!COBRA_OBJECTIVE_LANDMARK_IDS.has(landmark?.id)) continue;
+    const point = landmark.positionLocalM;
+    if (!Array.isArray(point) || point.length < 3) continue;
+    const distanceM = Math.hypot(eastM - Number(point[0]), northM - Number(point[2]));
+    if (!Number.isFinite(distanceM) || distanceM >= COBRA_OBJECTIVE_FEATHER_RADIUS_M) continue;
+    const t = Math.max(0, Math.min(1,
+      (distanceM - COBRA_OBJECTIVE_CLEAR_RADIUS_M)
+        / (COBRA_OBJECTIVE_FEATHER_RADIUS_M - COBRA_OBJECTIVE_CLEAR_RADIUS_M)));
+    factor = Math.min(factor, t * t * (3 - 2 * t));
+  }
+  return factor;
+}
+
+function featherObjectiveScale(plan, role, eastM, northM, scale) {
+  const factor = objectiveEdgeScale(plan, role, eastM, northM);
+  if (factor >= 1) return;
+  // The outer edge grows from scrub to full canopy instead of switching on a wall of 20–30 m
+  // cards at one radius. The true 235 m inner eye remains empty, so exact seed-ring shooters stay
+  // readable; only the previously hard boundary is softened.
+  scale.widthM *= 0.48 + factor * 0.52;
+  scale.depthM *= 0.48 + factor * 0.52;
+  scale.heightM *= 0.16 + factor * 0.84;
 }
 
 const DEFAULT_ROLE_BY_KIND = Object.freeze({
@@ -371,6 +431,30 @@ function nearestPointOnRibbon(ribbon, eastM, northM) {
     };
   }
   return nearest;
+}
+
+/**
+ * Keeps every complete object-space land-asset footprint off each authored river's flat floor.
+ *
+ * This must run after the role's final scale is known: the centre alone can sit outside the water
+ * while a wide, rotated compound, paddy panel or canopy card still spans the channel. Half the
+ * footprint diagonal is deliberately conservative for every yaw. Mist and water accents are
+ * features of the channel; every other asset-kit role is land. Generated candidates are rejected
+ * rather than pushed sideways, so their seeded world positions stay stable and the outward tile
+ * collector can replenish the role.
+ */
+function landAssetClearsRiverFlatFloor(plan, role, eastM, northM, scale) {
+  if (role === "mist" || role === "waterAccent") return true;
+  const footprintRadiusM = Math.hypot(scale.widthM, scale.depthM) * 0.5;
+  for (const ribbon of plan.terrainRibbons ?? []) {
+    if (!token(ribbon.kind).includes("river")) continue;
+    const nearest = nearestPointOnRibbon(ribbon, eastM, northM);
+    if (!nearest) continue;
+    const floorHalfWidthM = finite(ribbon.halfWidthM, 0)
+      * clamp(finite(ribbon.floorFraction, 0), 0, 1);
+    if (nearest.distanceM < floorHalfWidthM + footprintRadiusM) return false;
+  }
+  return true;
 }
 
 /**
@@ -651,6 +735,90 @@ function terrainGradient(plan, eastM, northM, memo = null) {
 }
 
 /**
+ * Whether one complete, yawed structural footprint can sit within role-specific terrain limits.
+ *
+ * The centre gradient rejects a prop already sitting on a hillside. The four corners reject a
+ * locally-flat centre whose large footprint reaches across a shoulder or gorge wall. Paddies pass
+ * strict level-field limits; village compounds pass looser cut-and-fill limits. Both checks read
+ * the same analytic terrain used by rendering and collision; no visual-only height field exists.
+ */
+function footprintFitsTerrain(
+  plan,
+  eastM,
+  northM,
+  scale,
+  yaw,
+  maximumGradient,
+  maximumSpreadM,
+  memo = null,
+) {
+  if (terrainGradient(plan, eastM, northM, memo) > maximumGradient) {
+    return false;
+  }
+  const halfWidthM = Math.max(0, Number(scale?.widthM) || 0) * 0.5;
+  const halfDepthM = Math.max(0, Number(scale?.depthM) || 0) * 0.5;
+  const rotation = Number.isFinite(Number(yaw)) ? Number(yaw) : 0;
+  const cos = Math.cos(rotation);
+  const sin = Math.sin(rotation);
+  let lowestM = sampleCobraCanyonTerrain(plan, eastM, northM);
+  let highestM = lowestM;
+  for (const [localEastM, localDepthM] of [
+    [-halfWidthM, -halfDepthM],
+    [-halfWidthM, halfDepthM],
+    [halfWidthM, -halfDepthM],
+    [halfWidthM, halfDepthM],
+  ]) {
+    // Mirrors createRoleMesh's upright yaw matrix after converting render -Z back to north.
+    const sampleEastM = eastM + localEastM * cos + localDepthM * sin;
+    const sampleNorthM = northM + localEastM * sin - localDepthM * cos;
+    const heightM = sampleCobraCanyonTerrain(plan, sampleEastM, sampleNorthM);
+    lowestM = Math.min(lowestM, heightM);
+    highestM = Math.max(highestM, heightM);
+  }
+  return highestM - lowestM <= maximumSpreadM;
+}
+
+function paddyFootprintFitsTerrain(plan, eastM, northM, scale, yaw = 0, memo = null) {
+  return footprintFitsTerrain(
+    plan,
+    eastM,
+    northM,
+    scale,
+    yaw,
+    COBRA_PADDY_MAX_TERRAIN_GRADIENT,
+    COBRA_PADDY_MAX_FOOTPRINT_SPREAD_M,
+    memo,
+  );
+}
+
+function villageFootprintFitsTerrain(plan, eastM, northM, scale, yaw = 0, memo = null) {
+  return footprintFitsTerrain(
+    plan,
+    eastM,
+    northM,
+    scale,
+    yaw,
+    COBRA_VILLAGE_MAX_TERRAIN_GRADIENT,
+    COBRA_VILLAGE_MAX_FOOTPRINT_SPREAD_M,
+    memo,
+  );
+}
+
+/** Test/read-only QA seam for the systemic flat-field invariant. */
+export function cobraCanyonPaddyFootprintFitsTerrainForTests(
+  plan, eastM, northM, scale, yaw = 0,
+) {
+  return paddyFootprintFitsTerrain(plan, eastM, northM, scale, yaw);
+}
+
+/** Test/read-only QA seam for the village-compound footprint invariant. */
+export function cobraCanyonVillageFootprintFitsTerrainForTests(
+  plan, eastM, northM, scale, yaw = 0,
+) {
+  return villageFootprintFitsTerrain(plan, eastM, northM, scale, yaw);
+}
+
+/**
  * Scores a candidate point for a role against the ground it would stand on.
  *
  * Vegetation in this world used to be placed by seeded grid jitter alone, so canopy landed on
@@ -819,9 +987,18 @@ function setPiecePlacements(plan, descriptors) {
           ? clamp(candidate.northM, cellBounds.minimumNorthM, cellBounds.maximumNorthM)
           : candidate.northM;
         if (insideCampEmberClearEye(plan, role, eastM, northM)
-          || insideObjectiveClearEye(plan, role, eastM, northM)) continue;
+          || insideObjectiveClearEye(plan, role, eastM, northM, descriptor)) continue;
+        featherObjectiveScale(plan, role, eastM, northM, scale);
+        if (!landAssetClearsRiverFlatFloor(plan, role, eastM, northM, scale)) continue;
         const nearest = nearestRoutePoint(plan, cell.routeId, eastM, northM);
         const routeAligned = role === "plantation" || role === "paddy";
+        const yaw = routeAligned && nearest
+          ? Math.atan2(nearest.tangentEastM, nearest.tangentNorthM)
+          : seededUnit(seed, 0xa511e9b3) * Math.PI * 2;
+        if (role === "paddy"
+          && !paddyFootprintFitsTerrain(plan, eastM, northM, scale, yaw)) continue;
+        if (role === "village"
+          && !villageFootprintFitsTerrain(plan, eastM, northM, scale, yaw)) continue;
         placements.push({
           id: `${cell.id}.${archetypeId}.${stand}`,
           role,
@@ -829,9 +1006,7 @@ function setPiecePlacements(plan, descriptors) {
           y: sampleCobraCanyonTerrain(plan, eastM, northM)
             - seatDrop(plan, role, eastM, northM, scale),
           z: -northM,
-          yaw: routeAligned && nearest
-            ? Math.atan2(nearest.tangentEastM, nearest.tangentNorthM)
-            : seededUnit(seed, 0xa511e9b3) * Math.PI * 2,
+          yaw,
           variation,
           rank: 0,
           batchId: cell.id,
@@ -1044,7 +1219,9 @@ function createScatterField(plan, entries, capacities, options) {
       const eastM = clamp(point.eastM, minimumEastM, maximumEastM);
       const northM = clamp(point.northM, minimumNorthM, maximumNorthM);
       if (insideCampEmberClearEye(plan, entry.role, eastM, northM)
-        || insideObjectiveClearEye(plan, entry.role, eastM, northM)) continue;
+        || insideObjectiveClearEye(
+          plan, entry.role, eastM, northM, entry.descriptor,
+        )) continue;
       const variation = seededUnit(seed, 0xc2b2ae35);
       const scale = roleScale(entry.role, entry.descriptor, variation);
       // One jungle instance represents a stand of canopy, not one isolated tree. The spread is
@@ -1056,6 +1233,13 @@ function createScatterField(plan, entries, capacities, options) {
         seededUnit(seed, 0x8f51a67b),
         seededUnit(seed, 0x39aa5c11),
       );
+      featherObjectiveScale(plan, entry.role, eastM, northM, scale);
+      if (!landAssetClearsRiverFlatFloor(plan, entry.role, eastM, northM, scale)) continue;
+      const yaw = point.yaw ?? seededUnit(seed, 0x27d4eb2f) * Math.PI * 2;
+      if (entry.role === "paddy"
+        && !paddyFootprintFitsTerrain(plan, eastM, northM, scale, yaw, gradientMemo)) continue;
+      if (entry.role === "village"
+        && !villageFootprintFitsTerrain(plan, eastM, northM, scale, yaw, gradientMemo)) continue;
       // BED THE STAND INTO THE SLOPE. Placement deliberately seeks steep ground, and a footprint
       // anchored at the centre sample cantilevers off a gorge wall — the stand visibly floats in
       // mid-air on the downhill side. Sinking it by the drop across its own half-width buries the
@@ -1067,7 +1251,7 @@ function createScatterField(plan, entries, capacities, options) {
         x: eastM,
         y: sampleCobraCanyonTerrain(plan, eastM, northM) - seatDropM,
         z: -northM,
-        yaw: point.yaw ?? seededUnit(seed, 0x27d4eb2f) * Math.PI * 2,
+        yaw,
         eastM,
         northM,
         variation,
@@ -1674,6 +1858,12 @@ function createRoleMesh(
     setPieceId: null,
     archetypeId: null,
     role,
+    eastM: null,
+    northM: null,
+    yaw: null,
+    widthM: null,
+    heightM: null,
+    depthM: null,
   }));
   // Live view of the occupied slots only: an unfilled slot describes nothing and must not appear.
   const live = [];
@@ -1753,6 +1943,15 @@ function createRoleMesh(
         record.batchId = placement.batchId ?? null;
         record.setPieceId = placement.setPieceId ?? null;
         record.archetypeId = placement.archetypeId ?? null;
+        // Read-only placement evidence. Keeping this beside the stable ids lets tests and visual
+        // tooling certify footprint/terrain contracts without reverse-engineering a matrix whose
+        // edge-fade scale may legitimately change at the resident-set boundary.
+        record.eastM = placement.eastM ?? placement.x;
+        record.northM = placement.northM ?? -placement.z;
+        record.yaw = placement.yaw;
+        record.widthM = placement.widthM;
+        record.heightM = placement.heightM;
+        record.depthM = placement.depthM;
       }
       // Retired slots collapse to a degenerate scale so a stale matrix can never draw. Only the
       // slots that WERE occupied need clearing; the rest were cleared when they were retired.

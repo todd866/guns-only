@@ -99,6 +99,10 @@ test("the firebase reads as a real FSB: scar, berm ring, rosettes, tracks, burns
     assert.ok(pit && pit.surface === true, `${rosette} needs its pit disc`);
     const lobes = parts.filter((part) => part.id.startsWith(`${rosette}-lobe-`));
     assert.ok(lobes.length >= 6, `${rosette} needs radiating sandbag lobes`);
+    assert.ok(byId.has(`${rosette}-gun-mount`)
+      && byId.has(`${rosette}-gun-shield`)
+      && byId.has(`${rosette}-gun-tube`),
+    `${rosette} must read as an armed fire-support position, not an empty pattern`);
   }
 
   // Radial tracks were REMOVED: bright laterite rectangles running out of the camp and stopping
@@ -138,6 +142,10 @@ test("the firebase reads as a real FSB: scar, berm ring, rosettes, tracks, burns
     assert.ok(Math.abs(northM - expected.northM) < 1e-9);
   }
   assert.ok(byId.has("maintenance-hangar"));
+  assert.ok(byId.has("ops-headquarters"));
+  assert.ok(parts.filter((part) => ["tent", "hooch"].includes(part.family)
+    && part.heightM >= 5).length >= 8,
+  "stabilized final needs clustered vertical shelter mass above the flat PSP texture");
   assert.ok(byId.has("psp-medevac-bed"));
   assert.ok(byId.get("laterite-main").widthM >= CAMP_EMBER_OPERATIONS.fatoRadiusM * 2 + 4,
     "the FATO ring and edge tabs need stabilized earth beneath them");
@@ -145,6 +153,8 @@ test("the firebase reads as a real FSB: scar, berm ring, rosettes, tracks, burns
     "maintenance and POL areas need support vehicles for human scale");
   assert.ok(parts.filter((part) => part.id.startsWith("tower-brace-")).length >= 4,
     "the watchtower needs a readable braced silhouette");
+  assert.ok(parts.filter((part) => /^deadtree-\d+$/.test(part.id)).length >= 18,
+    "the firebase perimeter needs a ragged defoliated fringe, not six isolated poles");
 });
 
 test("Camp Ember reads as a helicopter landing facility on stabilized final", () => {
@@ -162,7 +172,12 @@ test("Camp Ember reads as a helicopter landing facility on stabilized final", ()
   assert.ok(byId.get("windsock-mast").heightM >= 10);
   assert.ok(Math.abs(byId.get("windsock-mast").x) > CAMP_EMBER_OPERATIONS.safetyAreaRadiusM,
     "windsock must be visible without entering the rotor safety area");
-  assert.ok(byId.has("final-ident-panel"));
+  const finalIdent = byId.get("final-ident-panel");
+  assert.ok(finalIdent);
+  assert.ok(finalIdent.heightM <= 1.5,
+    "the approach board must not return to a freestanding building-sized slab");
+  assert.ok(finalIdent.centreY <= finalIdent.heightM * 0.5,
+    "the low approach board must be visibly seated instead of floating like a building");
   assert.equal(parts.filter((part) => part.id.startsWith("tlof-wash-")).length, 20,
     "rotor-wash wear must break up the flat central PSP bed");
   assert.equal(parts.filter((part) => part.id.startsWith("fato-edge-tab-")).length, 12,
@@ -280,6 +295,7 @@ test("merged firebase geometry keeps centre-authored pads, berms and mast on the
   const firebase = createCampEmberFirebase(THREE, plan);
   const parts = campEmberFirebaseParts();
   const positions = firebase.mesh.geometry.getAttribute("position");
+  const normals = firebase.mesh.geometry.getAttribute("normal");
   assert.equal(firebase.partVertexRanges.length, parts.length);
   const yBoundsFor = (partId) => {
     const range = firebase.partVertexRanges.find((entry) => entry.id === partId);
@@ -309,6 +325,14 @@ test("merged firebase geometry keeps centre-authored pads, berms and mast on the
   const mast = yBoundsFor("radio-mast");
   assert.ok(Math.abs(mast.minimum) < 1e-6);
   assert.ok(Math.abs(mast.maximum - 18) < 1e-6);
+  for (const surfaceId of ["scar-apron", "rosette-0-pit", "rosette-1-pit", "burn-0", "burn-1"]) {
+    const range = firebase.partVertexRanges.find((entry) => entry.id === surfaceId);
+    assert.ok(range, `missing surface vertex range for ${surfaceId}`);
+    for (let vertex = range.start; vertex < range.start + range.count; vertex++) {
+      assert.ok(normals.getY(vertex) > 0.99,
+        `${surfaceId} must face the final-approach aircraft instead of being back-face culled`);
+    }
+  }
 });
 
 test("Camp Ember ground sites are suppressed for the control disc", () => {

@@ -17,7 +17,8 @@ test("a first clean record is credited to this ride", () => {
   assert.equal(result.title, "PERSONAL BEST");
   assert.equal(result.verdict, "CLEAN LAP BANKED");
   assert.equal(result.improvedRecord, true);
-  assert.match(result.correction, /repeat the clean line/i);
+  assert.equal(result.summary, "New record · 1:22.45.");
+  assert.equal(result.correction, "Next · repeat it clean.");
   assert.deepEqual(result.metrics.slice(0, 3).map(({ value }) => value), [
     "2", "1:24.21", "1:22.45",
   ]);
@@ -37,7 +38,7 @@ test("a carried record is not falsely claimed as a personal best", () => {
   assert.equal(result.title, "RIDE COMPLETE");
   assert.equal(result.verdict, "LAPS RECORDED");
   assert.equal(result.improvedRecord, false);
-  assert.match(result.summary, /Standing record 1:22\.00/);
+  assert.equal(result.summary, "1 lap · record 1:22.00.");
 });
 
 test("an invalid open lap and off-track evidence remain explicit", () => {
@@ -52,8 +53,8 @@ test("an invalid open lap and off-track evidence remain explicit", () => {
   });
 
   assert.equal(result.verdict, "NO CLEAN LAP");
-  assert.match(result.summary, /Open lap invalid at 0:43\.50/);
-  assert.match(result.correction, /brake before turn-in/i);
+  assert.equal(result.summary, "No clean lap · 7.3 s off track.");
+  assert.equal(result.correction, "Next · brake earlier. Stay inside the paint.");
   assert.deepEqual(result.metrics.find(({ label }) => label === "OPEN LAP"), {
     label: "OPEN LAP", value: "INVALID", tone: "warning",
   });
@@ -66,8 +67,21 @@ test("ending before motion degrades to an honest empty session", () => {
 
   assert.equal(result.title, "RIDE COMPLETE");
   assert.equal(result.verdict, "SESSION BANKED");
-  assert.match(result.summary, /0 completed laps\. No open timed lap\./);
-  assert.match(result.correction, /complete one measured lap/i);
+  assert.equal(result.summary, "No timed lap.");
+  assert.equal(result.correction, "Next · bank one clean lap.");
+});
+
+test("an invalid lap with zero off-track time is not mislabeled as leaving the paint", () => {
+  const result = weekendRideResult({
+    lap: 0,
+    lap_time_s: 21,
+    lap_valid: false,
+    off_track_s: 0,
+  });
+
+  assert.equal(result.summary, "No clean lap · open lap invalid.");
+  assert.equal(result.correction, "Next · reset and bank a clean lap.");
+  assert.doesNotMatch(`${result.summary} ${result.correction}`, /off track|inside the paint/i);
 });
 
 test("a grid reset cannot turn retained off-track evidence into a clean debrief", () => {
@@ -80,5 +94,20 @@ test("a grid reset cannot turn retained off-track evidence into a clean debrief"
 
   assert.equal(result.verdict, "NO CLEAN LAP");
   assert.equal(result.metrics.find(({ label }) => label === "OFF TRACK").value, "4.5 s");
-  assert.match(result.correction, /keep both wheels inside the paint/i);
+  assert.equal(result.summary, "No clean lap · 4.5 s off track.");
+  assert.equal(result.correction, "Next · brake earlier. Stay inside the paint.");
+});
+
+test("debrief prose stays compact beside authoritative metrics", () => {
+  const result = weekendRideResult({
+    lap: 12,
+    last_lap_s: 82,
+    best_lap_s: 80,
+    lap_time_s: 15,
+    lap_valid: true,
+  }, { recordAtStartSeconds: 80 });
+
+  assert.ok(result.summary.length <= 40);
+  assert.ok(result.correction.length <= 48);
+  assert.doesNotMatch(result.summary, /completed|standing|open lap clean/i);
 });

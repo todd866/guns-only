@@ -380,6 +380,14 @@ test("first-run valley owns a persistent truthful objective ladder", () => {
   };
   assert.deepEqual(visualMergeWeaponsCue({
     ...firstRun,
+    weapons_inhibited: false,
+    aim9_remaining: 2,
+  }), {
+    text: "FOLLOW VALLEY · WEAPONS SAFE",
+    level: "caution",
+  }, "a loaded magazine alone cannot promote the Enter-valley cue before the pop-out");
+  assert.deepEqual(visualMergeWeaponsCue({
+    ...firstRun,
     weapons_inhibited: true,
     aim9_remaining: 2,
   }), {
@@ -390,7 +398,7 @@ test("first-run valley owns a persistent truthful objective ladder", () => {
     ...firstRun,
     weapons_inhibited: false,
     aim9_remaining: 2,
-  }), {
+  }, { firstRunWeaponsActionable: true }), {
     text: "FOX TWO ×2 · FIRE",
     level: "normal",
   });
@@ -399,7 +407,7 @@ test("first-run valley owns a persistent truthful objective ladder", () => {
     weapons_inhibited: false,
     aim9_remaining: 1,
     aim9_in_flight: true,
-  }), {
+  }, { firstRunWeaponsActionable: true }), {
     text: "FOX TWO IN FLIGHT · TRACK",
     level: "normal",
   });
@@ -407,7 +415,7 @@ test("first-run valley owns a persistent truthful objective ladder", () => {
     ...firstRun,
     weapons_inhibited: false,
     aim9_remaining: 0,
-  }), {
+  }, { firstRunWeaponsActionable: true }), {
     text: "GUNS · FIRE · SPLASH TARGET",
     level: "normal",
   });
@@ -416,7 +424,7 @@ test("first-run valley owns a persistent truthful objective ladder", () => {
     weapons_inhibited: false,
     aim9_remaining: 0,
     rtb_available: true,
-  }), {
+  }, { firstRunWeaponsActionable: true }), {
     text: "GUNS · FIRE / RTB · O",
     level: "normal",
   });
@@ -948,7 +956,9 @@ test("production HUD consumes stabilized KIAS plus physical corner and limits pa
   assert.match(source, /systemsReadout\(frame\.state\)/);
   assert.match(source, /speedBrakeReadout\(state\)/,
     "the idle-commanded speed brake annunciates on the unconditionally drawn PWR rail");
-  assert.match(source, /visualMergeWeaponsCue\(frame\.state\)/);
+  assert.match(source, /flightMissionGuidance\(frame\.state/);
+  assert.match(source, /missionGuidanceLayout\(\{/);
+  assert.match(source, /missionGuidanceActionText\(cue\.primaryAction/);
   assert.match(source, /this\.drawVisualMergeWeaponsCue\(frame\)/);
   assert.match(source, /state\.has_engine === false \|\| state\.fuel_consumes === false/);
   assert.match(source, /state\.engine_spool_fraction \?\? state\.engine/);

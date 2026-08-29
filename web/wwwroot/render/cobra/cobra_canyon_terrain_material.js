@@ -13,7 +13,8 @@
 // interpolates away. The Build 264 monotone and the sand-coloured river of the parked WIP are
 // both that limit, not a palette mistake. Albedo and light therefore run per fragment; the only
 // baked attributes are the ones a fragment genuinely cannot derive: enclosure concavity (needs
-// the height neighbourhood) and river lateral offset (needs the authored centreline).
+// the height neighbourhood), authored battle-cell influence (needs the world plan), and river
+// lateral offset (needs the authored centreline).
 //
 // Every constant lives in `cobra_canyon_visual_profile.js`, which is also what the lab scene
 // reads for sun direction, sky and fog — one sun for glow, props, haze and terrain relief.
@@ -33,20 +34,23 @@ import {
   TERRAIN_SHADOW_VERTEX_BODY,
   TERRAIN_SHADOW_VERTEX_PARS,
   withTerrainShadowUniforms,
-} from "../environment/terrain_shadow_receive.js?v=345";
+} from "../environment/terrain_shadow_receive.js?v=348";
 
 const BASIN_VERTEX_SHADER = /* glsl */ `
 #include <common>
 ${TERRAIN_SHADOW_VERTEX_PARS}
 attribute float concavity;
+attribute float battleInfluence;
 varying vec3 vWorldPosition;
 varying vec3 vTerrainNormal;
 varying float vConcavity;
+varying float vBattleInfluence;
 void main() {
   vec4 worldPosition = modelMatrix * vec4(position, 1.0);
   vWorldPosition = worldPosition.xyz;
   vTerrainNormal = normalize(mat3(modelMatrix) * normal);
   vConcavity = concavity;
+  vBattleInfluence = battleInfluence;
   // View-space normal: the shadow chunk offsets the lookup along it (normalBias) to keep a
   // 105 m basin quad from shadowing itself, and rotates it back to world space itself.
   vec3 transformedNormal = normalMatrix * normal;
@@ -82,17 +86,44 @@ float cobraFbm(vec2 p) {
 }
 `;
 
-/** Aerial perspective, banded. Shared so basin and river recede into exactly the same air. */
+/**
+ * Layered aerial perspective. Shared so basin and river recede through exactly the same air.
+ *
+ * The previous distance-only curve put the near gorge wall, the next ridge and the theatre rim
+ * into one grey-green value family. A short clear-air pocket now protects foreground contrast;
+ * low warm ground carries more humid optical depth than the high rim; and broad deterministic
+ * moisture variation prevents every range plane dissolving at the same contour. It is still one
+ * bounded fog mix and costs no draw call or geometry.
+ */
 const HAZE_CHUNK = /* glsl */ `
 vec3 cobraAerial(vec3 lit, vec3 worldPosition, vec3 fogColor, float fogDensity,
     float bands, float bandBlend) {
   float distanceToCamera = length(cameraPosition - worldPosition);
-  float aerial = 1.0 - exp(-fogDensity * fogDensity * distanceToCamera * distanceToCamera);
+  float opticalDistance = max(0.0, distanceToCamera - 190.0);
+  float lowlandHumidity = 1.0 - smoothstep(190.0, 590.0, worldPosition.y);
+  float moistureBreakup = mix(
+    0.86,
+    1.16,
+    cobraNoise(worldPosition.xz * 0.00047 + vec2(21.7, -8.4)));
+  float opticalDepth = fogDensity * fogDensity * opticalDistance * opticalDistance
+    * mix(0.88, 1.34, lowlandHumidity) * moistureBreakup;
+  float aerial = 1.0 - exp(-opticalDepth);
+
+  // A shallow monsoon shelf lives in the playable valley rather than coating the whole screen.
+  // It separates the second/third ridge planes while keeping the first 700 m crisp enough to fly.
+  float valleyShelf = lowlandHumidity
+    * smoothstep(950.0, 2400.0, distanceToCamera)
+    * (1.0 - smoothstep(3900.0, 6100.0, distanceToCamera));
+  aerial += (1.0 - aerial) * valleyShelf * 0.085;
   if (bands > 0.5) {
-    float banded = floor(aerial * bands) / bands;
+    float scaled = aerial * bands;
+    float banded = (floor(scaled) + smoothstep(0.24, 0.82, fract(scaled))) / bands;
     aerial = mix(aerial, banded, bandBlend);
   }
-  return mix(lit, fogColor, clamp(aerial, 0.0, 1.0));
+  // Low suspended moisture is a touch lighter/cooler than the high, dry rim air. This is a
+  // colour separation between depth planes, not a global exposure lift.
+  vec3 airColor = fogColor * mix(0.90, 1.055, lowlandHumidity);
+  return mix(lit, airColor, clamp(aerial, 0.0, 1.0));
 }
 `;
 
@@ -123,6 +154,7 @@ uniform vec4 uElevationBands;
 varying vec3 vWorldPosition;
 varying vec3 vTerrainNormal;
 varying float vConcavity;
+varying float vBattleInfluence;
 #include <common>
 ${TERRAIN_SHADOW_FRAGMENT_PARS}
 ${COBRA_NOISE_CHUNK}
@@ -160,11 +192,21 @@ void main() {
   // noise field: fields cluster near the valley the way settlement actually does, and the ground
   // between clusters stays wild.
   vec2 parcelUv = mat2(0.94, 0.34, -0.34, 0.94) * groundUv;
-  vec2 parcelCell = floor(parcelUv / uParcelPitchM);
+  vec2 parcelGrid = parcelUv / uParcelPitchM;
+  vec2 parcelCell = floor(parcelGrid);
+  vec2 parcelLocal = fract(parcelGrid);
+  float parcelEdgeDistance = min(
+    min(parcelLocal.x, 1.0 - parcelLocal.x),
+    min(parcelLocal.y, 1.0 - parcelLocal.y));
+  // Irrigated plots still read as authored rectangles, but the soft earthen boundary stops each
+  // cell from printing as a hard shader tile in a low battle camera.
+  float parcelInterior = smoothstep(0.025, 0.12, parcelEdgeDistance);
   float parcelSeed = cobraHash(parcelCell);
   float parcelShade = cobraHash(parcelCell + vec2(37.1, 11.7));
   float farmland = smoothstep(0.28, 0.54, macro * 0.7 + meso * 0.3);
-  float cultivation = lowland * flatGround * farmland * step(0.42, parcelSeed);
+  float battleZone = clamp(vBattleInfluence, 0.0, 1.0);
+  float cultivation = lowland * flatGround * farmland * step(0.42, parcelSeed)
+    * parcelInterior * mix(1.0, 0.22, battleZone);
 
   vec3 albedo = mix(uValleyFloor, uRidgeSage, upland);
   albedo = mix(albedo, uJungleMid, canopy * (0.78 - 0.30 * cultivation));
@@ -173,19 +215,39 @@ void main() {
   albedo = mix(albedo, uRimRock, rimBand * 0.78);
   // Drainage: the concave half of the enclosure term stays wet and dark green all year.
   albedo = mix(albedo, uJungleMid * 0.82, (1.0 - smoothstep(0.30, 0.52, vConcavity)) * 0.42);
-  // Scrub clumps: the near-field octave has to change HUE, not just value. A symmetric value
-  // jitter averages out to the same smooth panel at any distance; discrete darker-green clumps
-  // are what the eye reads as vegetation on the ground under the skids.
-  // Scrub clumps + metre grit: near-field must change hue AND value or 30 m AGL reads painted.
-  albedo = mix(albedo, uJungleMid, smoothstep(0.42, 0.72, grain) * 0.62 * (1.0 - cultivation));
-  albedo = mix(albedo, uLateriteSlope * 0.78, smoothstep(0.48, 0.82, grit) * 0.36 * flatGround);
-  // LARGE scrub islands (8–25 m). Micro flecks average out under humid haze and fail the
-  // emptiness spat/hetero floors; discrete dark/light patches are what a mid-gorge still needs.
+  // Existing authored hero-cell positions also describe where repeated fighting has disturbed
+  // the valley. Interpolated influence opens warm laterite in broad irregular patches; the dark
+  // soot centres themselves remain in the dedicated heroCells overlay. This makes a contested
+  // plantation or bridge approach read as battle ground without inventing a target or changing
+  // any world position, mesh topology, collision, or draw budget.
+  float tornEarth = cobraFbm(groundUv * 0.021 + vec2(17.0, -29.0));
+  float disturbedGround = battleZone * smoothstep(0.48, 0.70, tornEarth);
+  // Exposed wet laterite is the warm counterweight that lets dark vehicles and infantry read.
+  // Keep it materially bright enough to survive the same shadow/cloud stack as the jungle.
+  albedo = mix(albedo, uLateriteSlope * 1.56, disturbedGround * 0.58);
+  float blastSoot = battleZone
+    * smoothstep(0.76, 0.91, cobraNoise(groundUv * 0.082 + vec2(5.0, 41.0)));
+  albedo = mix(albedo, uJungleMid * 0.62, blastSoot * 0.16);
+  // Scrub clumps: near-field has to change HUE, not just value, but hard threshold islands painted
+  // the valley in near-black camouflage amoebas. Smooth bounded cover keeps individual clumps
+  // visible under the skids without erasing the larger valley/upland/cut-bank hierarchy.
+  float battleCalm = 1.0 - battleZone * 0.52;
+  float scrubClump = smoothstep(0.46, 0.78, grain) * (1.0 - cultivation) * battleCalm;
+  albedo = mix(albedo, uJungleMid * 0.88, scrubClump * 0.34);
+  float earthBreak = smoothstep(0.61, 0.88, grit) * flatGround * (1.0 - cultivation);
+  albedo = mix(albedo, uLateriteSlope * 0.82, earthBreak * 0.20);
+
+  // LARGE scrub islands (8–25 m). They remain broad enough for the mid-gorge still, but their
+  // values stay inside the same painted-light family instead of punching black holes in it.
   float scrub = cobraFbm(groundUv * 0.055);
   float scrubB = cobraNoise(groundUv * 0.11 + 4.7);
-  albedo = mix(albedo, uJungleMid * 0.42, step(0.52, scrub) * 0.58 * (1.0 - cultivation));
-  albedo = mix(albedo, uValleyFloor * 1.35, step(0.68, scrubB) * 0.32 * flatGround * (1.0 - cultivation));
-  albedo = mix(albedo, uLateriteSlope, step(0.74, scrubB) * 0.22 * flatGround);
+  float scrubIsland = smoothstep(0.53, 0.76, scrub) * (1.0 - cultivation) * battleCalm;
+  float grassIsland = smoothstep(0.67, 0.86, scrubB) * flatGround
+    * (1.0 - cultivation) * mix(1.0, 0.66, battleZone);
+  albedo = mix(albedo, uJungleMid * 0.68, scrubIsland * 0.40);
+  albedo = mix(albedo, uValleyFloor * 1.22, grassIsland * 0.24);
+  albedo = mix(albedo, uLateriteSlope * 0.90,
+    smoothstep(0.78, 0.94, scrubB) * 0.12 * flatGround);
   // CANOPY CROWNS FROM ALTITUDE. BF Vietnam's distant hills are a dark green carpet of rounded
   // tree tops, not mottled camouflage. Paint discrete crown discs on a 22–36 m lattice — free
   // density the triangle budget cannot buy with mesh palms.
@@ -197,13 +259,20 @@ void main() {
   float crownRadius = 0.22 + crownSeed * 0.22;
   float crownMask = (1.0 - cultivation) * (0.55 + 0.45 * flatGround)
     * step(0.28, crownSeed) * (1.0 - smoothstep(crownRadius * 0.55, crownRadius, length(crownLocal)));
-  albedo = mix(albedo, uJungleMid * (0.48 + 0.22 * crownSeedB), crownMask * 0.82);
+  albedo = mix(albedo, uJungleMid * (0.68 + 0.20 * crownSeedB), crownMask * 0.58);
   // Darker between crowns so the carpet reads as trees, not a green tarp.
-  albedo = mix(albedo, uJungleMid * 0.62, (1.0 - cultivation) * canopy * 0.22 * (1.0 - crownMask));
+  albedo = mix(albedo, uJungleMid * 0.78,
+    (1.0 - cultivation) * canopy * 0.15 * (1.0 - crownMask));
   float fleck = cobraNoise(groundUv * 1.35);
-  albedo = mix(albedo, uJungleMid * 0.55, step(0.62, fleck) * 0.28 * (1.0 - cultivation));
-  albedo *= 0.46 + 0.26 * micro + 0.30 * grain + 0.24 * grit + 0.18 * scrub
-    + 0.14 * scrubB + 0.12 * fleck + 0.10 * crownMask;
+  albedo = mix(albedo, uJungleMid * 0.72,
+    smoothstep(0.66, 0.88, fleck) * 0.16 * (1.0 - cultivation));
+  // Detail is centred around one and bounded. The old seven-term multiplier ranged far enough
+  // to fight the light model; a terrain texel could become a black void before sun/shadow was
+  // even evaluated. Texture now describes surface character while the tone ramp describes form.
+  float surfaceValue = 0.68 + 0.16 * micro + 0.14 * grain + 0.12 * grit
+    + 0.08 * scrub + 0.07 * scrubB + 0.06 * fleck + 0.05 * crownMask;
+  surfaceValue = mix(surfaceValue, 1.0, battleZone * 0.32);
+  albedo *= clamp(surfaceValue, 0.76, 1.20);
 
   // PAINTED LIGHT IS COLOURED LIGHT, NOT DIMMED LIGHT (korea_terrain). A scalar tone cannot
   // shift hue, so every shadow comes out as a darker copy of the lit colour — the clearest tell
@@ -222,7 +291,15 @@ void main() {
   // 1 - dot(normal, view) saturates over the ENTIRE visible ground and the rim colour becomes a
   // flat pale-blue wash laid over everything — measured at roughly double the surface value.
   // Aerial perspective below does the same job honestly, by distance.
-  vec3 lit = albedo * mix(uSkyFill, uSunKey, toneRamp) * toneRamp;
+  vec3 directLight = albedo * mix(uSkyFill, uSunKey, toneRamp) * toneRamp;
+  // Humid tropical shade retains coloured sky bounce. Multiplying the already-dark jungle
+  // albedo by the 0.20 tone floor a second time made both near gorge walls read as black corridor
+  // cut-outs. A bounded normal/enclosure-aware bounce lifts only surfaces that can see the sky;
+  // the direct ramp and cast-shadow mask still carry the sun-facing composition.
+  float skyVisibility = smoothstep(-0.05, 0.82, normal.y)
+    * mix(0.72, 1.0, clamp(vConcavity, 0.0, 1.0));
+  vec3 skyBounce = albedo * uSkyFill * (0.075 + 0.105 * skyVisibility);
+  vec3 lit = directLight + skyBounce;
 
   // The Cobra basin is a broad shallow bowl, not a Korean ridge system: half its area sits under
   // 0.1 gradient, where a pure Lambert term separates almost nothing. A bounded planform cue
@@ -238,7 +315,8 @@ void main() {
   // this low-relief bowl cannot get from terrain shape alone.
   float cloudNoise = cobraNoise(groundUv * 0.00042) * 0.66
     + cobraNoise(groundUv * 0.00131 + vec2(13.7, 41.3)) * 0.34;
-  lit *= 1.0 - uCloudShadowStrength * smoothstep(0.48, 0.78, cloudNoise);
+  lit *= 1.0 - uCloudShadowStrength * mix(1.0, 0.48, battleZone)
+    * smoothstep(0.48, 0.78, cloudNoise);
 
   vec3 color = cobraAerial(lit, vWorldPosition, uFogColor, uFogDensity,
     uHazeBands, uHazeBandBlend);
@@ -288,39 +366,59 @@ void main() {
   // Per-fragment is the whole point: the ribbon carries four vertices across its width and all
   // four sit at the outer edge, so any baked per-vertex bank term paints the entire river the
   // colour of its own gravel bar. World z is -north, hence the sign on the second term.
+  vec2 riverPosition = vec2(vWorldPosition.x, -vWorldPosition.z);
+  vec2 crossChannel = normalize(vRiverFrame.zw + vec2(0.000001, 0.0));
+  vec2 downChannel = vec2(crossChannel.y, -crossChannel.x);
   float lateral = abs((vWorldPosition.x - vRiverFrame.x) * vRiverFrame.z
     + (-vWorldPosition.z - vRiverFrame.y) * vRiverFrame.w);
-  float shore = smoothstep(uShoreWindow.x, uShoreWindow.y, lateral);
-  float depth = 1.0 - clamp(lateral, 0.0, 1.0);
+  // The old uniform-width gravel transition occupied almost as much screen as the water and read
+  // as a concrete motorway through the gorge. Push the waterline outward inside the SAME ribbon,
+  // then break it with metre-scale deterministic bank erosion. No geometry or clearance changes.
+  float bankBreakup = cobraNoise(riverPosition * 0.035) * 0.62
+    + cobraNoise(riverPosition * 0.12 + vec2(7.3, 19.1)) * 0.38;
+  float shoreCoordinate = lateral + (bankBreakup - 0.5) * 0.085;
+  float shoreStart = uShoreWindow.x + 0.10;
+  float shoreEnd = uShoreWindow.y + 0.18;
+  float shore = smoothstep(shoreStart, shoreEnd, shoreCoordinate);
+  float outerBank = smoothstep(shoreEnd - 0.04, shoreEnd + 0.22, shoreCoordinate);
+  float depth = 1.0 - clamp(lateral / 1.04, 0.0, 1.0);
 
   vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
-  // A RIPPLE-PERTURBED NORMAL, not the flat plane normal. With a constant up-vector the specular
-  // lobe is identical everywhere the geometry is flat, so a low sun paints one straight white
-  // stripe down the middle of the river and the water reads as polished plastic. Perturbing by
-  // the analytic ripple slope breaks that single lobe into glitter, which is what a metre-scale
-  // wind chop actually does to a sun reflection.
-  float rippleA = sin(vWorldPosition.x * 0.041 + vWorldPosition.z * 0.023);
-  float rippleB = sin(vWorldPosition.x * -0.017 + vWorldPosition.z * 0.058 + 1.7);
-  float ripple = rippleA + 0.55 * rippleB;
-  float slopeA = cos(vWorldPosition.x * 0.041 + vWorldPosition.z * 0.023);
-  float slopeB = cos(vWorldPosition.x * -0.017 + vWorldPosition.z * 0.058 + 1.7);
-  vec3 normal = normalize(vec3(
-    -(0.041 * slopeA - 0.0094 * slopeB) * 2.6,
-    1.0,
-    -(0.023 * slopeA + 0.032 * slopeB) * 2.6));
+  // Flow-aligned chop. World-axis sine waves projected as full-width turquoise zebra bars in the
+  // actual mid-gorge frame. These two warped waves run DOWN and ACROSS the authored channel; the
+  // analytic slopes perturb the normal while a separate noise mask breaks the glint into flecks.
+  float alongM = dot(riverPosition, downChannel);
+  float acrossM = dot(riverPosition, crossChannel);
+  float phaseWarp = (cobraNoise(riverPosition * 0.026) - 0.5) * 2.4;
+  float phaseA = alongM * 0.103 + acrossM * 0.031 + phaseWarp;
+  float phaseB = alongM * 0.047 - acrossM * 0.149 + 2.1 - phaseWarp * 0.43;
+  float waveA = sin(phaseA);
+  float waveB = sin(phaseB);
+  float ripple = waveA * 0.62 + waveB * 0.38;
+  float slopeAlong = cos(phaseA) * 0.103 * 0.62 + cos(phaseB) * 0.047 * 0.38;
+  float slopeAcross = cos(phaseA) * 0.031 * 0.62 - cos(phaseB) * 0.149 * 0.38;
+  vec2 rippleSlope = downChannel * slopeAlong + crossChannel * slopeAcross;
+  vec3 normal = normalize(vec3(-rippleSlope.x * 0.58, 1.0, rippleSlope.y * 0.58));
   float fresnel = pow(1.0 - clamp(dot(normal, viewDirection), 0.0, 1.0), 3.0);
   vec3 water = mix(uShallowWater, uDeepWater, smoothstep(0.08, 0.78, depth));
-  water = mix(water, uShallowWater * 1.18, fresnel * 0.35);
-  water *= 0.95 + ripple * 0.045;
+  // Reflect the same humid air the terrain recedes into. Deep albedo still owns the nadir view;
+  // sky colour opens the grazing view so the river becomes a readable route through the battle.
+  vec3 reflectedSky = uFogColor * mix(0.42, 0.66, fresnel);
+  water = mix(water, reflectedSky, 0.18 + fresnel * 0.46);
+  float flowVariation = cobraFbm(riverPosition * 0.016 + vec2(31.0, -11.0));
+  water *= 0.91 + flowVariation * 0.13 + ripple * 0.018;
   // A gorge wall standing between the river and a 16-degree sun is the single most legible
   // shadow in this scene, because water is the brightest thing in the frame. Water keeps most of
   // its value in shade — the bulk of it is reflected SKY, not reflected sun — so the body dims to
-  // 0.66 rather than to the ground's 0.20 floor, and only the glint goes fully dark.
+  // 0.80 rather than to the ground's 0.20 floor, and only the glint goes fully dark.
   float riverShadow = getShadowMask();
   vec3 half3 = normalize(viewDirection + normalize(uSunDirection));
+  float glitter = smoothstep(0.56, 0.91,
+    cobraNoise(riverPosition * 0.37 + vec2(5.7, 23.4)));
   water += vec3(0.78, 0.76, 0.64)
-    * pow(max(dot(normal, half3), 0.0), 128.0) * 0.055 * riverShadow;
-  water *= mix(0.66, 1.0, riverShadow);
+    * pow(max(dot(normal, half3), 0.0), 96.0)
+    * (0.008 + 0.024 * glitter) * riverShadow;
+  water *= mix(0.80, 1.0, riverShadow);
 
   float gravelGrain = cobraNoise(vWorldPosition.xz * 0.09) * 0.5
     + cobraNoise(vWorldPosition.xz * 0.34) * 0.5;
@@ -330,10 +428,15 @@ void main() {
   // key/fill tint, computed from the profile — one sun, one value, no second light model.
   // The bar is LAND, so it takes the ground's shadow, not the water's: both endpoints come from
   // the same profile expression, evaluated at the lit tone and at the shadow floor.
-  vec3 gravel = uBankGravel * mix(uBankShadowLight, uBankLight, riverShadow)
-    * (0.80 + 0.40 * gravelGrain);
+  vec3 wetBank = uBankGravel * vec3(0.48, 0.68, 0.52);
+  vec3 dryBank = uBankGravel * vec3(1.12, 0.94, 0.70);
+  vec3 gravel = mix(wetBank, dryBank, outerBank)
+    * mix(uBankShadowLight, uBankLight, riverShadow)
+    * (0.76 + 0.38 * gravelGrain);
 
   vec3 lit = mix(water, gravel, shore);
+  float wetEdge = 1.0 - smoothstep(0.018, 0.075, abs(shoreCoordinate - shoreStart));
+  lit = mix(lit, uShallowWater * 1.28, wetEdge * 0.18 * riverShadow);
   vec3 color = cobraAerial(lit, vWorldPosition, uFogColor, uFogDensity,
     uHazeBands, uHazeBandBlend);
   gl_FragColor = vec4(color, 1.0);
@@ -384,7 +487,8 @@ function vector2(THREE, pair) {
 }
 
 /**
- * Painted basin surface. Consumes `position`, `normal` and the baked `concavity` attribute;
+ * Painted basin surface. Consumes `position`, `normal`, baked `concavity`, and authored
+ * `battleInfluence` attributes;
  * scene lights deliberately do not touch it — the light model IS the tone ramp, exactly as the
  * F-22 terrain shader does it.
  */

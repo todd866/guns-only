@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
   CASEVAC_ROUTE_BRIEFING_SCHEMA,
   casevacRouteBriefingModel,
 } from "../casevac_route_briefing.js";
+
+const source = await readFile(
+  new URL("../casevac_route_briefing.js", import.meta.url),
+  "utf8",
+);
 
 function route({
   id,
@@ -143,4 +149,20 @@ test("retains only server-projected landmark copy for the Ready sketch", () => {
     model.routes[0].points.map((point) => point.landmarkLabel),
     ["Departure", "Rail cut", "Pickup"],
   );
+});
+
+test("Ready route card is opaque, legible, and keeps edge labels inside the map", () => {
+  assert.match(source, /background: #07100d/);
+  assert.match(source,
+    /#ready-screen\[data-casevac-ready="true"\] \{[\s\S]*opacity: 1;[\s\S]*transition: none;[\s\S]*background: #080d0c/);
+  assert.match(source,
+    /#ready-screen\[data-casevac-ready="true"\] ~ #boot\.ready \{[\s\S]*opacity: 0;[\s\S]*visibility: hidden;[\s\S]*pointer-events: none;[\s\S]*transition: none/,
+    "the opaque card must not be photographed through the outgoing boot cover");
+  assert.match(source,
+    /#ready-screen\[data-casevac-ready="true"\] #ready-start:not\(:disabled\),[\s\S]*#ready-start:focus-visible:not\(:disabled\)[\s\S]*border: 2px solid #e4ffec[\s\S]*background: #bff2ce/);
+  assert.match(source, /\.cvr-head strong \{[\s\S]*font-size: 13px/);
+  assert.match(source, /\.cvr-option \{[\s\S]*font-size: 11px/);
+  assert.match(source, /\.cvr-site-label \{[\s\S]*700 11px/);
+  assert.match(source,
+    /point\.x > width - 72 \? point\.x - 7 : point\.x \+ 7[\s\S]*"text-anchor": point\.x > width - 72 \? "end" : "start"/);
 });

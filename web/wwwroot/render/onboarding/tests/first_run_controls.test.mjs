@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  controlsOnboardingKeyAction,
+  createControlsOnboarding,
   createNudgeScheduler,
   firstRunPending,
   markFirstRunSeen,
@@ -22,6 +24,137 @@ function memoryStorage(initial = {}) {
   };
 }
 
+class FakeElement {
+  constructor(doc, tagName) {
+    this.ownerDocument = doc;
+    this.tagName = String(tagName).toUpperCase();
+    this.parentNode = null;
+    this.children = [];
+    this.attributes = new Map();
+    this.hidden = false;
+    this.inert = false;
+    this.disabled = false;
+    this.isConnected = false;
+    this.id = "";
+    this.className = "";
+    this.textContent = "";
+    this._listeners = new Map();
+  }
+
+  append(...children) {
+    for (const child of children) {
+      child.remove();
+      child.parentNode = this;
+      child.setConnected(this.isConnected);
+      this.children.push(child);
+    }
+  }
+
+  setConnected(connected) {
+    this.isConnected = connected;
+    for (const child of this.children) child.setConnected(connected);
+  }
+
+  setAttribute(name, value) {
+    this.attributes.set(String(name), String(value));
+  }
+
+  addEventListener(type, handler) {
+    const handlers = this._listeners.get(type) ?? new Set();
+    handlers.add(handler);
+    this._listeners.set(type, handlers);
+  }
+
+  dispatchEvent(event) {
+    for (const handler of this._listeners.get(event?.type) ?? []) {
+      handler.call(this, event);
+    }
+    return true;
+  }
+
+  click() {
+    this.dispatchEvent({ type: "click", target: this, stopPropagation() {} });
+  }
+
+  focus() {
+    this.ownerDocument.activeElement = this;
+  }
+
+  remove() {
+    if (!this.parentNode) return;
+    const index = this.parentNode.children.indexOf(this);
+    if (index >= 0) this.parentNode.children.splice(index, 1);
+    this.parentNode = null;
+    this.setConnected(false);
+  }
+
+  closest(selector) {
+    if (selector !== "[hidden], [inert]") return null;
+    for (let node = this; node; node = node.parentNode) {
+      if (node.hidden || node.inert) return node;
+    }
+    return null;
+  }
+}
+
+class FakeDocument {
+  constructor() {
+    this._listeners = new Map();
+    this.head = new FakeElement(this, "head");
+    this.body = new FakeElement(this, "body");
+    this.head.setConnected(true);
+    this.body.setConnected(true);
+    this.activeElement = this.body;
+  }
+
+  createElement(tagName) {
+    return new FakeElement(this, tagName);
+  }
+
+  getElementById(id) {
+    const visit = (node) => {
+      if (node.id === id) return node;
+      for (const child of node.children) {
+        const found = visit(child);
+        if (found) return found;
+      }
+      return null;
+    };
+    return visit(this.head) ?? visit(this.body);
+  }
+
+  addEventListener(type, handler) {
+    const handlers = this._listeners.get(type) ?? new Set();
+    handlers.add(handler);
+    this._listeners.set(type, handlers);
+  }
+
+  removeEventListener(type, handler) {
+    this._listeners.get(type)?.delete(handler);
+  }
+
+  dispatchEvent(event) {
+    for (const handler of this._listeners.get(event?.type) ?? []) {
+      handler.call(this, event);
+    }
+    return true;
+  }
+}
+
+function createTestOnboarding(storage, doc = new FakeDocument(), overrides = {}) {
+  return {
+    doc,
+    onboarding: createControlsOnboarding({
+      modeId: WEEKEND_RIDE_ONBOARDING_CONTENT.modeId,
+      content: WEEKEND_RIDE_ONBOARDING_CONTENT,
+      storage,
+      doc,
+      touch: false,
+      ...overrides,
+    }),
+  };
+}
+
 test("first run is pending exactly until the mode is marked seen", () => {
   const storage = memoryStorage();
   assert.equal(firstRunPending(storage, "cobra-hold-the-bridge"), true);
@@ -29,6 +162,36 @@ test("first run is pending exactly until the mode is marked seen", () => {
   assert.equal(firstRunPending(storage, "cobra-hold-the-bridge"), false);
   // Another mode keeps its own flag: seeing the Cobra overlay must not eat the bike's.
   assert.equal(firstRunPending(storage, "weekend-ride"), true);
+});
+
+test("show then abort or reload leaves the controls lesson pending", () => {
+  const storage = memoryStorage();
+  const first = createTestOnboarding(storage);
+
+  assert.equal(first.onboarding.maybeShowFirstRun(), true);
+  assert.equal(first.onboarding.isOpen(), true);
+  assert.equal(firstRunPending(storage, WEEKEND_RIDE_ONBOARDING_CONTENT.modeId), true);
+  first.onboarding.dispose();
+
+  const reload = createTestOnboarding(storage);
+  assert.equal(reload.onboarding.maybeShowFirstRun(), true);
+  assert.equal(reload.onboarding.isOpen(), true);
+  reload.onboarding.dispose();
+});
+
+test("intentional acknowledgement suppresses the lesson on the next launch", () => {
+  const storage = memoryStorage();
+  const first = createTestOnboarding(storage);
+
+  assert.equal(first.onboarding.maybeShowFirstRun(), true);
+  first.doc.getElementById("controls-onboarding-dismiss").click();
+  assert.equal(firstRunPending(storage, WEEKEND_RIDE_ONBOARDING_CONTENT.modeId), false);
+  first.onboarding.dispose();
+
+  const reload = createTestOnboarding(storage);
+  assert.equal(reload.onboarding.maybeShowFirstRun(), false);
+  assert.equal(reload.onboarding.isOpen(), false);
+  reload.onboarding.dispose();
 });
 
 test("storage keys are namespaced per mode", () => {
@@ -77,6 +240,74 @@ test("touch resolution follows the F-22 shell contract", () => {
   }), false);
 });
 
+test("the controls dialog owns keys until an explicit acknowledgement", () => {
+  assert.equal(controlsOnboardingKeyAction({ open: false, code: "KeyW" }), "ignore");
+  assert.equal(controlsOnboardingKeyAction({ open: false, code: "KeyH" }), "toggle");
+  assert.equal(controlsOnboardingKeyAction({
+    open: false,
+    code: "KeyH",
+    reopenKeyCode: "KeyQ",
+  }), "ignore");
+  assert.equal(controlsOnboardingKeyAction({
+    open: false,
+    code: "KeyQ",
+    reopenKeyCode: "KeyQ",
+  }), "toggle");
+  assert.equal(controlsOnboardingKeyAction({ open: true, code: "KeyH" }), "toggle");
+  assert.equal(controlsOnboardingKeyAction({ open: true, code: "Escape" }), "dismiss");
+  assert.equal(controlsOnboardingKeyAction({ open: true, code: "Tab" }), "trap-focus");
+  assert.equal(controlsOnboardingKeyAction({ open: true, code: "KeyW" }), "block");
+  assert.equal(controlsOnboardingKeyAction({ open: true, code: "Space" }), "block");
+  assert.equal(controlsOnboardingKeyAction({
+    open: true,
+    code: "Space",
+    onDismissAction: true,
+  }), "acknowledge");
+  assert.equal(controlsOnboardingKeyAction({
+    open: true,
+    code: "Enter",
+    onDismissAction: true,
+  }), "acknowledge");
+});
+
+test("a route-owned modal blocks both H and the controls chip until it releases ownership", () => {
+  const storage = memoryStorage();
+  const lock = { active: true };
+  const fixture = createTestOnboarding(storage, new FakeDocument(), {
+    canOpen: () => !lock.active,
+  });
+  let prevented = 0;
+  let stopped = 0;
+  const h = {
+    type: "keydown",
+    code: "KeyH",
+    target: fixture.doc.body,
+    preventDefault() { prevented += 1; },
+    stopImmediatePropagation() { stopped += 1; },
+  };
+
+  fixture.doc.dispatchEvent(h);
+  assert.equal(fixture.onboarding.isOpen(), false,
+    "H must not stack controls over a route-owned modal");
+  assert.deepEqual([prevented, stopped], [0, 0],
+    "a refused controls shortcut must leave input ownership with the route modal");
+  fixture.doc.getElementById("controls-onboarding-reopen").click();
+  assert.equal(fixture.onboarding.isOpen(), false,
+    "the persistent chip must obey the same modal lock");
+  assert.equal(fixture.onboarding.maybeShowFirstRun(), false,
+    "first-run wiring must not report a card that the route lock refused to show");
+  assert.equal(firstRunPending(storage, WEEKEND_RIDE_ONBOARDING_CONTENT.modeId), true,
+    "a refused first-run card must remain pending for a later deliberate acknowledgement");
+
+  lock.active = false;
+  fixture.doc.dispatchEvent(h);
+  assert.equal(fixture.onboarding.isOpen(), true,
+    "the controls reference must reopen once the route releases ownership");
+  assert.deepEqual([prevented, stopped], [1, 1],
+    "an accepted controls shortcut must own the input event");
+  fixture.onboarding.dispose();
+});
+
 test("content selection returns the touch variant only for touch", () => {
   for (const content of [COBRA_ONBOARDING_CONTENT, WEEKEND_RIDE_ONBOARDING_CONTENT]) {
     const desktop = selectControlsContent(content, { touch: false });
@@ -103,7 +334,7 @@ test("cobra desktop content teaches the mission loop before the controls", () =>
   const labels = groups.map((group) => group.label);
   assert.deepEqual(labels, ["MISSION", "FLY", "FIGHT", "SYSTEM"]);
   assert.deepEqual(groups[0].rows, [
-    ["BREAK", "Kill the garrison and clear the point"],
+    ["BREAK", "Destroy the gun pit and clear the point"],
     ["COVER", "Protect the inbound squad while it captures"],
     ["HOLD", "A point majority drains enemy tickets"],
     ["RECOVER", "After the ticket result, land stable at Camp Ember"],

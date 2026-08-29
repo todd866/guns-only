@@ -25,6 +25,10 @@ import {
   COBRA_CHROMIUM_ARGS,
   waitForCobraAuthority,
 } from "../../web/smoke/cobra_authority.mjs";
+import {
+  COBRA_SCENERY_SCREENSHOT_TIMEOUT_MS,
+  COBRA_SCENERY_VIEWS,
+} from "./views.mjs";
 
 const require = createRequire(new URL("../../web/smoke/package.json", import.meta.url));
 const { chromium } = require("playwright");
@@ -36,12 +40,6 @@ const REPO_DIR = resolve(SCRIPT_DIR, "../..");
 // haze animate smoothly; a z-fighting plate flips entire regions. Generous by design.
 const HARD_DELTA = 14;
 const CEILING_FRACTION = 0.06;
-
-const VIEWS = [
-  { name: "camp-ember-overhead", eastM: -6_775, northM: -6_200, aglM: 150, yawRad: 0.0, pitchRad: -1.35 },
-  { name: "camp-ember-pad", eastM: -6_800, northM: -6_200, aglM: 8, yawRad: 1.35, pitchRad: -0.15 },
-  { name: "mid-gorge", eastM: -4_557, northM: -3_661, aglM: 50, yawRad: -0.5, pitchRad: -0.2 },
-];
 
 function resolveWwwroot() {
   const explicit = process.env.COBRA_SCENERY_WWWROOT || process.env.SMOKE_WWWROOT;
@@ -100,6 +98,8 @@ async function main() {
   let worst = 0;
   try {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    // Deliberately cold/static: live tracers, flashes and smoke are honest animation and must not
+    // be misclassified as z-fighting. shot.mjs owns the separate battleQa truth/effect proof.
     await page.goto(`${site.url}/cobra-lab/index.html?audioQa=silent`, {
       waitUntil: "load",
       timeout: 180_000,
@@ -110,14 +110,19 @@ async function main() {
       undefined,
       { timeout: 60_000 },
     );
-    for (const view of VIEWS) {
+    for (const view of COBRA_SCENERY_VIEWS) {
       await page.evaluate((v) => {
-        window.__gunsOnlyCobraLabCamera.park(v.eastM, v.northM, v.aglM, v.yawRad, v.pitchRad);
+        window.__gunsOnlyCobraLabCamera.park(
+          v.eastM, v.northM, v.aglM, v.yawRad, v.pitchRad, v.fovDeg,
+        );
       }, view);
       await page.waitForTimeout(2000);
       const frames = [];
       for (let i = 0; i < 4; i++) {
-        frames.push(await page.screenshot({ type: "png" }));
+        frames.push(await page.screenshot({
+          type: "png",
+          timeout: COBRA_SCENERY_SCREENSHOT_TIMEOUT_MS,
+        }));
         await page.waitForTimeout(180);
       }
       let viewWorst = 0;

@@ -1,55 +1,59 @@
-import * as THREE from "../vendor/three.module.js?v=345";
+import * as THREE from "../vendor/three.module.js";
 import {
   loadCobraCanyonWorld,
   planCobraCanyonWorld,
   sampleCobraCanyonTerrain,
-} from "../render/cobra/cobra_canyon_plan.js?v=345";
-import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=345";
-import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=345";
+} from "../render/cobra/cobra_canyon_plan.js?v=348";
+import { createCobraCanyonPresentation } from "../render/cobra/cobra_canyon_presentation.js?v=348";
+import { resolveCobraVietnamFoliageTextures } from "../render/cobra/cobra_canyon_foliage.js?v=348";
 import {
   COBRA_CANYON_TOUR_BASE_AGL_M,
   createCobraCanyonRouteSampler,
   sampleCobraCanyonTour,
-} from "../render/cobra/cobra_canyon_tour.js?v=345";
-import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=345";
+} from "../render/cobra/cobra_canyon_tour.js?v=348";
+import { createCobraGroundWarPresentation } from "../render/cobra/cobra_ground_war.js?v=348";
 import {
   cobraGoldenPathState,
   createCobraGoldenPath,
-} from "../render/cobra/cobra_golden_path.js?v=345";
-import { createHud } from "../hud.js?v=345";
+} from "../render/cobra/cobra_golden_path.js?v=348";
+import { createHud } from "../hud.js?v=348";
 import {
   cobraHudState,
   createCobraHudFrame,
-} from "../render/cobra/cobra_hud_adapter.js?v=345";
+} from "../render/cobra/cobra_hud_adapter.js?v=348";
 import {
   cobraRotorcraftHudModel,
   drawCobraRotorcraftHud,
   formatAviationAgl,
   formatAviationRange,
-} from "../render/cobra/cobra_rotorcraft_hud.js?v=345";
-import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=345";
+} from "../render/cobra/cobra_rotorcraft_hud.js?v=348";
+import { cobraObjectiveCopy } from "../render/cobra/cobra_objective_copy.js?v=348";
+import {
+  cobraObjectiveSiteId,
+  cobraPrioritizedHostileTargetIds,
+} from "../render/cobra/cobra_objective_site.js?v=348";
 import {
   cobraTacticalMapBounds,
   cobraTacticalMapModel,
-} from "../render/cobra/cobra_tactical_map.js?v=345";
+} from "../render/cobra/cobra_tactical_map.js?v=348";
 import {
   COBRA_MAP_CAPTION_PX,
   drawCobraTacticalMap,
-} from "../render/cobra/cobra_tactical_map_draw.js?v=345";
-import { bakeCobraTacticalRelief } from "../render/cobra/cobra_tactical_map_relief.js?v=345";
+} from "../render/cobra/cobra_tactical_map_draw.js?v=348";
+import { bakeCobraTacticalRelief } from "../render/cobra/cobra_tactical_map_relief.js?v=348";
 import {
   emberActObjectiveOverlay,
   emberActRemainingM,
   emberPathGuidanceState,
-} from "../render/cobra/cobra_ember_path.js?v=345";
-import { createGuidancePath } from "../render/scene/guidance_path.js?v=345";
+} from "../render/cobra/cobra_ember_path.js?v=348";
+import { createGuidancePath } from "../render/scene/guidance_path.js?v=348";
 import {
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=345";
+} from "../render/audio/flight_audio.js?v=348";
 import {
   cobraKeyboardControlIntent,
   resolveCobraControlProfile,
-} from "../render/cobra/cobra_control_profile.js?v=345";
+} from "../render/cobra/cobra_control_profile.js?v=348";
 import {
   advanceCobraPilotControls,
   cobraCyclicCommand,
@@ -57,53 +61,73 @@ import {
   createCobraGroundedPilotControlState,
   createCobraPilotControlState,
   releaseCobraPilotControls,
-} from "../render/cobra/cobra_pilot_input.js?v=345";
+} from "../render/cobra/cobra_pilot_input.js?v=348";
 import {
   createCobraSortieReadyInterlock,
   hasDeliberateCobraCockpitInput,
-} from "../render/cobra/cobra_sortie_ready.js?v=345";
+} from "../render/cobra/cobra_sortie_ready.js?v=348";
 import {
   COBRA_TURNAROUND_ACTION_CODE,
   cobraTurnaroundActionHeld,
   cobraTurnaroundIsActive,
   cobraTurnaroundLocksFlightControls,
-} from "../render/cobra/cobra_turnaround.js?v=345";
+} from "../render/cobra/cobra_turnaround.js?v=348";
 import {
   createAh1gPresence,
   eyeWorldFromVehicle,
   updateAh1gPresence,
-} from "../render/cobra/ah1g_presence.js?v=345";
+} from "../render/cobra/ah1g_presence.js?v=348";
 import {
   acquireAuthorityVisualLockTarget,
   advancePadlockLosGrace,
   lookOffsetFromAngles,
   nextHostileTargetId,
   resolveAuthorityLookAtPoint,
-} from "../render/cobra/cobra_camera_bias.js?v=345";
+} from "../render/cobra/cobra_camera_bias.js?v=348";
 import {
   cobraMissionStatusCopy,
   cobraTerminalCauseCopy,
-} from "../render/cobra/cobra_terminal_causes.js?v=345";
-import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=345";
+} from "../render/cobra/cobra_terminal_causes.js?v=348";
+import {
+  cobraDebriefPresentation,
+  cobraNextSortieCorrection,
+  cobraObstacleStrikeDetail,
+} from "../render/cobra/cobra_debrief.js?v=348";
+import { loadCobraVietnamPalmGeometry } from "../render/cobra/cobra_canyon_foliage_models.js?v=348";
 import {
   createParkedCobra,
   placeParkedCobra,
-} from "../render/cobra/cobra_parked_airframe.js?v=345";
+} from "../render/cobra/cobra_parked_airframe.js?v=348";
 import {
   cobraFormationRadio,
   cobraFormationLeadPose,
+  createCobraFormationRadioPresenter,
   createCobraFormationLead,
-} from "../render/cobra/cobra_formation_lead.js?v=345";
+} from "../render/cobra/cobra_formation_lead.js?v=348";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=345";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=345";
+} from "../render/visual/shadow_stabilizer.js?v=348";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=348";
 import {
   MAIN_MENU_HREF,
   resolveEscapeAction,
-} from "../render/cobra/cobra_mission_exit.js?v=345";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=345";
-import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=345";
+} from "../render/cobra/cobra_mission_exit.js?v=348";
+import {
+  advanceLowSpeedLens,
+  lowSpeedLensTarget,
+  neutralLowSpeedLens,
+} from "../render/camera/low_speed_lens.js?v=349";
+import {
+  createControlsOnboarding,
+  detectTouchEnvironment,
+  markFirstRunSeen,
+} from "../render/onboarding/first_run_controls.js?v=348";
+import { COBRA_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=348";
+import {
+  loadPlayerSettings,
+  savePlayerSettings,
+} from "../render/settings/player_settings.js?v=348";
+import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=348";
 
 const ROUTE_NOTES = Object.freeze({
   "route.cobra-canyon.river-gorge.v1": Object.freeze({
@@ -121,6 +145,15 @@ const ROUTE_NOTES = Object.freeze({
 });
 
 const QUALITY_PIXEL_RATIOS = Object.freeze({ mobile: 1, balanced: 1.35, desktop: 1.75 });
+
+/** localStorage access itself can throw in locked-down browsing; audio preference is non-fatal. */
+function safeLocalStorage() {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
 
 // CAST-SHADOW CASCADE, sized from this scene's geometry rather than copied from the F-22's.
 //
@@ -254,30 +287,67 @@ const debriefTitle = document.querySelector("#debrief-title");
 const debriefBody = document.querySelector("#debrief-body");
 const debriefPoints = document.querySelector("#debrief-points");
 const debriefKills = document.querySelector("#debrief-kills");
+const debriefRounds = document.querySelector("#debrief-rounds");
+const debriefFriendlyKills = document.querySelector("#debrief-friendly-kills");
 const debriefRearms = document.querySelector("#debrief-rearms");
 const debriefSwaps = document.querySelector("#debrief-swaps");
 const debriefBattleTime = document.querySelector("#debrief-battle-time");
 const debriefCorrection = document.querySelector("#debrief-correction");
 const debriefRestart = document.querySelector("#debrief-restart");
 const debriefExit = document.querySelector("#debrief-exit");
+const missionBrief = document.querySelector("#mission-brief");
+const missionBriefStart = document.querySelector("#mission-brief-start");
+const missionBriefSound = document.querySelector("#mission-brief-sound");
+const missionBriefExit = document.querySelector("#mission-brief-exit");
+if (missionBriefExit) {
+  missionBriefExit.href = standaloneNavigationHref(
+    missionBriefExit.getAttribute("href"),
+    window.location,
+  );
+}
 const pauseMenu = document.querySelector("#pause-menu");
 const pauseResume = document.querySelector("#pause-resume");
+const pauseSound = document.querySelector("#pause-sound");
 const pauseRestart = document.querySelector("#pause-restart");
 const pauseExit = document.querySelector("#pause-exit");
 const PLAY_MODE = document.body?.dataset?.shell !== "lab";
+// Opt-in, silent visual acceptance mode. It keeps the production play shell and the complete
+// mission/ground-war authority, but stages the existing explicit runtime spawn at Iron Bell so
+// the proof camera grades a battle instead of a frozen Depart snapshot behind the flight brief.
+const BATTLE_REVIEW_MODE = new URLSearchParams(window.location.search)
+  .get("battleQa") === "1";
+let battleProofHold = false;
+const TOUCH_PRESENTATION = detectTouchEnvironment(window);
+document.body.dataset.input = TOUCH_PRESENTATION ? "touch" : "desktop";
+const missionBackground = [
+  document.querySelector(".skip-link"),
+  canvas,
+  document.querySelector("#hud-canvas"),
+  minimapCanvas,
+  tacticalMapCanvas,
+  document.querySelector(".device-advisory--play"),
+  document.querySelector(".legend"),
+  document.querySelector("#play-chrome"),
+].filter(Boolean);
+const missionBackgroundInertState = new Map();
 // The lab remains a continuously running visualisation. A real sortie waits at Ready so the
-// first-run card cannot spend the pilot's survival window before they touch the cockpit.
-const sortieReadiness = createCobraSortieReadyInterlock({ ready: !PLAY_MODE });
+// flight brief cannot spend the pilot's survival window before they touch the cockpit.
+const sortieReadiness = createCobraSortieReadyInterlock({
+  ready: !PLAY_MODE || BATTLE_REVIEW_MODE,
+});
 let bridge = null;
 let missionTerminal = false;
 let missionPaused = false;
+// Production HTML paints the useful brief immediately while WASM and scenery load behind it.
+// Start remains disabled until boot owns both authority and presentation.
+let missionBriefOpen = PLAY_MODE && !BATTLE_REVIEW_MODE && missionBrief?.hidden === false;
 let authorityState = null;
 // Presentation remembers only the last published phase so it can put a newly started spare back
 // behind the neutral Ready edge. Phase completion itself remains mission authority.
 let lastTurnaroundPhase = null;
 // Play opens at the physical full-down stop. The lab intentionally keeps its old neutral lever
 // only until bridge authority supplies the route's authored command below.
-let pilotControls = PLAY_MODE
+let pilotControls = PLAY_MODE && !BATTLE_REVIEW_MODE
   ? createCobraGroundedPilotControlState()
   : createCobraPilotControlState(0.5);
 let windowFocused = typeof document === "undefined" ? true : document.hasFocus();
@@ -288,6 +358,7 @@ let goldenPath = null;
 let formationLead = null;
 let formationLeadPose = null;
 let formationRadio = null;
+const formationRadioPresenter = createCobraFormationRadioPresenter();
 let ah1gPresence = null;
 let presenceDeltaSeconds = 0;
 let hostileTargetIds = [];
@@ -300,28 +371,20 @@ let padlockMaskedSinceMs = null;
 // No target is cued before the pilot's first input: a cold-boot auto-selection used to swing
 // the camera toward a hostile before the player had touched anything.
 let playerHasInteracted = false;
-// Shared first-run controls overlay + contextual nudges (play shell only; created in boot).
+// Shared H-opened controls reference + contextual nudges (play shell only; created in boot).
 let onboarding = null;
 
-// Sim-derived nudge flags: authority truth, not DOM guesses. Grounded-idle means the ship is
-// on or near the deck with the collective untouched; hostile-idle means a hostile sits inside
-// the gun's 2 km solution envelope (CobraGunTargeting.MaximumSolutionRangeM) with no target cued.
-const NUDGE_HOSTILE_RANGE_M = 2_000;
+// Sim-derived lift teaching: authority truth, not a DOM guess. Grounded-idle means the ship is
+// on or near the deck with the collective untouched.
 function onboardingNudgeState() {
-  if (!bridge || missionTerminal || tourInput?.checked) return {};
+  if (!bridge || missionBriefOpen || missionTerminal || tourInput?.checked) return {};
   const clearanceM = authorityState?.route_guidance?.current_clearance_m;
-  const vehicle = authorityState?.vehicle;
-  const hostileInRange = vehicle != null
-    && (authorityState?.ground_war?.units ?? []).some((unit) => unit.alive
-      && unit.faction === "hostile"
-      && Math.hypot(unit.x_m - vehicle.x_m, unit.z_m - vehicle.z_m) <= NUDGE_HOSTILE_RANGE_M);
   const servicing = cobraTurnaroundIsActive(authorityState?.turnaround);
   return {
     groundedIdle: Number.isFinite(clearanceM)
       && clearanceM <= 3
       && !servicing
       && !keys.has(cobraControlProfile.collective.pull.code),
-    hostileIdle: !servicing && hostileInRange && !authorityState?.gunner?.selected_target_id,
   };
 }
 const telemetrySession = `web-cobra-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -350,7 +413,7 @@ const renderer = new THREE.WebGLRenderer({
 });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.06;
+renderer.toneMappingExposure = COBRA_CANYON_VISUAL_PROFILE.toneMappingExposure;
 
 // One combiner: the shared flight HUD paints first, then the authority-backed AH-1G flight /
 // gunner strip paints into that same canvas. Build 302's literal jet-only layout hid Nr, torque,
@@ -358,7 +421,8 @@ renderer.toneMappingExposure = 1.06;
 // sortie; those are flight instruments in a helicopter, not decorative lab chrome.
 const hudCanvas = document.querySelector("#hud-canvas");
 const hud = createHud(hudCanvas);
-hud.setAudioEnabled(true);
+let playerSettings = loadPlayerSettings(safeLocalStorage());
+hud.setAudioEnabled(playerSettings.audio);
 const hudPresentationCtx = hudCanvas.getContext("2d", { alpha: true });
 const hudFrameKit = createCobraHudFrame(THREE);
 const hudStateScratch = {};
@@ -366,23 +430,56 @@ const HUD_SAFE_INSETS = Object.freeze({ top: 10, right: 0, bottom: 0, left: 0 })
 const hudViewport = { width: 1, height: 1, pixelRatio: 1 };
 const projectionScratch = new THREE.Vector3();
 
-const armAudioFromGesture = () => hud.armAudio();
+const armAudioFromGesture = () => {
+  if (hud.audioEnabled) hud.armAudio();
+};
 window.addEventListener("pointerdown", armAudioFromGesture, { capture: true, passive: true });
 window.addEventListener("keydown", armAudioFromGesture, { capture: true });
+
+function syncCobraSoundControls() {
+  const label = playerSettings.audio ? "Sound on" : "Sound off";
+  for (const button of [missionBriefSound, pauseSound]) {
+    if (!button) continue;
+    button.textContent = label;
+    button.setAttribute("aria-pressed", String(playerSettings.audio));
+  }
+}
+
+function setCobraAudioEnabled(enabled, { arm = false } = {}) {
+  playerSettings = savePlayerSettings({
+    ...playerSettings,
+    audio: Boolean(enabled),
+  }, safeLocalStorage());
+  hud.setAudioEnabled(playerSettings.audio);
+  syncCobraSoundControls();
+  if (arm && playerSettings.audio) hud.armAudio();
+  return playerSettings.audio;
+}
+
+syncCobraSoundControls();
 
 // One-sun doctrine for the canyon scene: the sky shader, the scene light rig, the fog and the
 // basin's baked hillshade all read COBRA_CANYON_VISUAL_PROFILE, so glow, prop shading, haze and
 // terrain relief agree about the light. Import lives here to keep the whole scene-constants
 // block contiguous (top-level imports are hoisted regardless of position).
-import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=345";
+import { COBRA_CANYON_VISUAL_PROFILE } from "../render/cobra/cobra_canyon_visual_profile.js?v=348";
 
 const sceneProfile = COBRA_CANYON_VISUAL_PROFILE;
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(sceneProfile.fog.color);
 scene.fog = new THREE.FogExp2(sceneProfile.fog.color, sceneProfile.fog.density);
 
-const camera = new THREE.PerspectiveCamera(58, 1, 0.5, 32_000);
+const DEFAULT_CAMERA_FOV_DEG = 58;
+const COBRA_LOW_SPEED_LENS = Object.freeze({
+  wideFovDeg: 70,
+  cruiseFovDeg: DEFAULT_CAMERA_FOV_DEG,
+  wideThroughSpeedMps: 2,
+  cruiseSpeedMps: 26,
+  responsePerSecond: 3.8,
+});
+const camera = new THREE.PerspectiveCamera(DEFAULT_CAMERA_FOV_DEG, 1, 0.5, 32_000);
 camera.rotation.order = "YXZ";
+let cobraLowSpeedLens = neutralLowSpeedLens(COBRA_LOW_SPEED_LENS);
 scene.add(new THREE.HemisphereLight(
   sceneProfile.lighting.hemisphereSkyColor,
   sceneProfile.lighting.hemisphereGroundColor,
@@ -530,8 +627,11 @@ const skyMaterial = new THREE.ShaderMaterial({
         vec3 cloudPoint = vec3(direction.x * 5.4, direction.y * 13.0, direction.z * 5.4);
         float broadCloud = cobraSkyNoise(cloudPoint);
         float cloudBreaks = cobraSkyNoise(cloudPoint * 2.15 + vec3(8.2, 2.7, -4.6));
-        float sculptedCloud = broadCloud * 0.70 + cloudBreaks * 0.30;
-        float cloudMass = smoothstep(0.51, 0.66, sculptedCloud) * shelfWindow;
+        float cloudFray = cobraSkyNoise(cloudPoint * 4.65 + vec3(-3.4, 7.1, 12.8));
+        float sculptedCloud = broadCloud * 0.58 + cloudBreaks * 0.28 + cloudFray * 0.14;
+        // Wider threshold plus the fine octave breaks the old giant rounded rectangles into a
+        // humid shelf with feathered edges, without adding a texture or another draw submission.
+        float cloudMass = smoothstep(0.49, 0.69, sculptedCloud) * shelfWindow;
         float cloudTop = smoothstep(cloudShelf.x, cloudShelf.y, direction.y);
         vec3 paintedCloud = mix(cloudColor * 0.72, cloudColor * 1.12, cloudTop);
         colour = mix(colour, paintedCloud, cloudMass * 0.64);
@@ -539,10 +639,10 @@ const skyMaterial = new THREE.ShaderMaterial({
 
       // The same shared sun that lights the basin gives the dome a restrained warm aureole.
       float sunFacing = max(dot(direction, normalize(sunDirection)), 0.0);
-      float sunHalo = smoothstep(0.86, 1.0, sunFacing);
-      float sunDisc = smoothstep(0.996, 0.9994, sunFacing);
-      colour += vec3(1.0, 0.72, 0.42) * sunHalo * sunHalo * 0.055;
-      colour += vec3(1.0, 0.86, 0.62) * sunDisc * 0.42;
+      float sunHalo = smoothstep(0.96, 1.0, sunFacing);
+      float sunDisc = smoothstep(0.999975, 0.999996, sunFacing);
+      colour += vec3(1.0, 0.72, 0.42) * sunHalo * sunHalo * 0.042;
+      colour += vec3(1.0, 0.86, 0.62) * sunDisc * 0.34;
       if (direction.y < 0.0) {
         colour = mix(belowHorizonColor, horizonColor, exp(direction.y * 16.0));
       }
@@ -828,7 +928,7 @@ function syncTurnaroundLifecycle() {
   const turnaroundActive = cobraTurnaroundIsActive(authorityState?.turnaround);
   const previousTurnaroundActive = lastTurnaroundPhase !== null
     && cobraTurnaroundIsActive({ phase: lastTurnaroundPhase });
-  if (PLAY_MODE && previousTurnaroundActive && !turnaroundActive) {
+  if (PLAY_MODE && !BATTLE_REVIEW_MODE && previousTurnaroundActive && !turnaroundActive) {
     sortieReadiness.reset(false, { requireNeutral: true });
     pilotControls = createCobraGroundedPilotControlState();
     bridge?.SetTurnaroundAction(false);
@@ -952,7 +1052,12 @@ function tacticalMapModelFor(widthPx, heightPx, showUnits) {
   const war = authorityState?.ground_war;
   const sites = war?.sites ?? [];
   if (!sites.length) return null;
-  if (!tacticalMapBounds) tacticalMapBounds = cobraTacticalMapBounds(sites);
+  if (!tacticalMapBounds) {
+    const fobBoundsPoint = [war?.fob?.x_m, war?.fob?.z_m].map(Number).every(Number.isFinite)
+      ? [{ x_m: Number(war.fob.x_m), z_m: Number(war.fob.z_m) }]
+      : [];
+    tacticalMapBounds = cobraTacticalMapBounds([...sites, ...fobBoundsPoint]);
+  }
   if (!tacticalMapBackdrop) tacticalMapBackdrop = bakeTacticalMapBackdrop(tacticalMapBounds);
   if (!tacticalMapRiver) tacticalMapRiver = tacticalMapRiverCourse();
   return cobraTacticalMapModel({
@@ -961,6 +1066,11 @@ function tacticalMapModelFor(widthPx, heightPx, showUnits) {
     units: war.units ?? [],
     tickets: war.tickets,
     combatLive: war.combat_live,
+    timeLimitSeconds: war.time_limit_s,
+    timeRemainingSeconds: war.time_remaining_s,
+    outcome: war.outcome,
+    missionAct: authorityState?.mission_act,
+    fob: war.fob,
     // Sim frame: x is east, z is north, yaw is the compass heading (0 = north), which is exactly
     // the north-up chart convention — no flip, no offset.
     player: {
@@ -985,7 +1095,7 @@ function drawTacticalMaps(timeMs) {
   // The pose is not optional garnish: without it cobraObjectiveCopy falls back to snapshot
   // order rather than range, so the caption can order the pilot to the FAR garrison while a
   // nearer one is the actual job. In play this caption is the only order the pilot ever sees.
-  const caption = cobraObjectiveCopy(authorityState?.ground_war, {
+  const objectiveCaption = cobraObjectiveCopy(authorityState?.ground_war, {
     selectedTargetId: targetSelect?.value || authorityState?.gunner?.selected_target_id || "",
     playerHasInteracted,
     player: { eastM: vehiclePose.x_m, northM: vehiclePose.z_m },
@@ -996,6 +1106,7 @@ function drawTacticalMaps(timeMs) {
     }),
     turnaround: authorityState?.turnaround,
   });
+  const caption = objectiveCaption;
   if (tacticalMapOpen) {
     const box = sizeMapCanvas(tacticalMapCanvas, tacticalMapCtx);
     const headerPx = COBRA_MAP_CAPTION_PX.full;
@@ -1147,19 +1258,33 @@ function lockPlayRoute() {
 
 function restartRoute() {
   if (!plan) return;
+  formationRadioPresenter.reset();
+  formationRadio = null;
   setMissionPaused(false, { focus: false });
+  missionBriefOpen = false;
+  if (missionBrief) missionBrief.hidden = true;
+  document.body.dataset.brief = "false";
+  setCobraMissionBackgroundInert(false);
+  if (PLAY_MODE) setPlayCursorHidden(true);
   lockPlayRoute();
   const requireNeutralEdge = PLAY_MODE && authorityState !== null;
-  sortieReadiness.reset(!PLAY_MODE, { requireNeutral: requireNeutralEdge });
+  sortieReadiness.reset(!PLAY_MODE || BATTLE_REVIEW_MODE, {
+    requireNeutral: BATTLE_REVIEW_MODE ? false : requireNeutralEdge,
+  });
   missionTerminal = false;
+  document.body.dataset.terminal = "false";
   padlockActive = false;
   padlockMaskedSinceMs = null;
   if (debrief) debrief.hidden = true;
   activeRoute = routeById(routeSelect.value);
-  bridge?.StartRoute(routeSelect.selectedIndex, !PLAY_MODE);
+  bridge?.StartRoute(
+    routeSelect.selectedIndex,
+    !PLAY_MODE || BATTLE_REVIEW_MODE,
+    BATTLE_REVIEW_MODE,
+  );
   authorityState = bridge ? JSON.parse(bridge.GetState()) : null;
   lastTurnaroundPhase = authorityState?.turnaround?.phase ?? null;
-  pilotControls = PLAY_MODE
+  pilotControls = PLAY_MODE && !BATTLE_REVIEW_MODE
     ? createCobraGroundedPilotControlState()
     : createCobraPilotControlState(bridge?.GetHoverCollective() ?? 0.5);
   // Keep the browser and authority copies aligned synchronously, before a single Advance can run,
@@ -1222,12 +1347,12 @@ function syncParkedAirframes() {
   const swaps = authorityState?.airframe_swaps ?? 0;
   if (swaps > lastAirframeSwaps && bridge) {
     const turnaroundActive = cobraTurnaroundIsActive(authorityState?.turnaround);
-    if (PLAY_MODE && !turnaroundActive) {
+    if (PLAY_MODE && !BATTLE_REVIEW_MODE && !turnaroundActive) {
       // A turnaround spare must keep authority advancing so its real turbine/rotor state can
       // start. Ordinary/non-turnaround generation changes retain the old neutral Ready defence.
       sortieReadiness.reset(false, { requireNeutral: true });
     }
-    if (PLAY_MODE) {
+    if (PLAY_MODE && !BATTLE_REVIEW_MODE) {
       pilotControls = createCobraGroundedPilotControlState();
     } else {
       // The lab intentionally remains a continuously-running visualization. Its explicit command
@@ -1318,24 +1443,28 @@ function rebuildPresentation() {
 }
 
 function refreshGroundTargets() {
-  const units = authorityState?.ground_war?.units ?? [];
+  const war = authorityState?.ground_war;
+  const units = war?.units ?? [];
+  const vehicle = authorityState?.vehicle;
+  const player = {
+    eastM: Number(vehicle?.x_m),
+    northM: Number(vehicle?.z_m),
+  };
+  const objectiveSiteId = cobraObjectiveSiteId({ sites: war?.sites, units, player });
   // Rebuild only when the living set changes: per-frame DOM churn reset focus and the
   // ever-shuffling order made Tab cycling unpredictable.
-  const aliveKey = units
+  const aliveKey = `${objectiveSiteId ?? "none"}|${units
     .filter((unit) => unit.alive)
     .map((unit) => unit.id)
     .sort()
-    .join("|");
+    .join("|")}`;
   if (aliveKey === lastTargetKey) return;
   lastTargetKey = aliveKey;
-  const vehicle = authorityState?.vehicle;
-  const distanceToPlayer = (unit) => vehicle
-    ? Math.hypot(unit.x_m - vehicle.x_m, unit.z_m - vehicle.z_m)
-    : 0;
-  hostileTargetIds = units
-    .filter((unit) => unit.alive && unit.faction === "hostile")
-    .sort((a, b) => distanceToPlayer(a) - distanceToPlayer(b))
-    .map((unit) => unit.id);
+  hostileTargetIds = cobraPrioritizedHostileTargetIds({
+    sites: war?.sites,
+    units,
+    player,
+  });
   const previous = targetSelect.value;
   targetSelect.replaceChildren();
   const none = document.createElement("option");
@@ -1423,7 +1552,11 @@ function updateTour(deltaSeconds) {
 function updateManual(deltaSeconds) {
   // Cobra pause is a browser-owned lifecycle hold: without an Advance call, deterministic
   // authority time cannot move. Keep rendering the frozen sight picture but admit no controls.
-  if (missionPaused) return;
+  if (missionBriefOpen || missionPaused || onboarding?.isOpen() === true) return;
+  // The proof gate advances real authority explicitly in fixed 0.05 s steps, then holds the exact
+  // rendered frame. This QA-only latch prevents a slow software renderer from tying mission time
+  // to wall-clock RAF throughput; ordinary play still uses the production 0.1 s spiral brake.
+  if (BATTLE_REVIEW_MODE && battleProofHold) return;
   // Visual-review park owns the camera: keep the sim alive, but do not overwrite the eye
   // with the vehicle pose (that is what made overnight stills look like Camp Ember everywhere).
   if (parkedCamera) {
@@ -1592,6 +1725,25 @@ function syncAuthorityCamera() {
   // tilted the horizon the wrong way and a left cyclic input read as a roll to the right.
   // Padlock still inherits body roll so the horizon stays aircraft-honest while the eye tracks.
   camera.rotation.z = -(Number(vehicle.roll_rad) || 0);
+
+  // A helicopter spends its useful work below fixed-wing speeds. Open the peripheral picture in
+  // the hover and close it gradually through translational flight; the principal point never
+  // moves, so the waterline and nose-forward sight line remain honest at the centre of the glass.
+  // Ordinary perspective supplies the restrained edge expansion without a fisheye/post warp.
+  const targetLens = lowSpeedLensTarget(
+    Number(authorityState?.vehicle?.ground_speed_mps),
+    COBRA_LOW_SPEED_LENS,
+  );
+  cobraLowSpeedLens = advanceLowSpeedLens(
+    cobraLowSpeedLens,
+    targetLens,
+    presenceDeltaSeconds,
+    COBRA_LOW_SPEED_LENS,
+  );
+  if (Math.abs(camera.fov - cobraLowSpeedLens.fovDeg) > 0.001) {
+    camera.fov = cobraLowSpeedLens.fovDeg;
+    camera.updateProjectionMatrix();
+  }
 }
 
 function recordFrameDuration(durationMs) {
@@ -1622,101 +1774,101 @@ function groundFireDebriefDetail(battleDamage) {
   const systems = [];
   if (battleDamage?.scas_damaged === true) systems.push("SCAS OUT");
   if (battleDamage?.engine_damaged === true) systems.push("ENGINE OUT");
-  const recentBursts = Array.isArray(battleDamage?.recent_bursts)
-    ? battleDamage.recent_bursts
-    : [];
-  const latestDamage = [...recentBursts].reverse().find((burst) =>
-    burst?.has_impacted === true && burst?.will_hit === true);
-  const observerId = latestDamage?.observer_id ?? battleDamage?.active_observer_id ?? null;
-  const subsystemSummary = systems.length ? systems.join(" + ") : "NO SUBSYSTEM LOSS";
-  return `Ground fire: ${subsystemSummary} · ${hits} damaging ${hits === 1 ? "hit" : "hits"} / ${bursts} ${bursts === 1 ? "burst" : "bursts"}${observerId ? ` · source ${observerId}` : ""}.`;
+  if (!systems.length && hits === 0 && bursts === 0) return "";
+  const facts = [];
+  if (systems.length) facts.push(systems.join(" + "));
+  if (hits > 0 || bursts > 0) facts.push(`${hits} hits / ${bursts} bursts`);
+  return `Ground fire · ${facts.join(" · ")}.`;
 }
 
-function cobraNextSortieCorrection({ victory, defeat, status, friendlyPoints, heldPoints }) {
-  if (defeat) {
-    return `Contest the majority earlier; friendly tickets expired at ${friendlyPoints} of ${heldPoints} points.`;
-  }
-  if (victory) {
-    return "Repeat the majority hold, preserve the aircraft, then recover cleanly to Camp Ember.";
-  }
-  if (status === "obstacle-collision")
-    return "Use the map and valley sightlines to keep a deliberate clearance margin.";
-  if (status === "vehicle-authority-lost")
-    return "Recover control and terrain clearance before recommitting to the ground fight.";
-  return "Review the terminal cause, then fly the same route with more clearance and reserve.";
+function setOptionalDebriefFact(node, value, visible) {
+  setText(node, value);
+  if (node?.parentElement) node.parentElement.hidden = visible !== true;
 }
 
 function showMissionDebrief(war, status) {
   if (!debrief || missionTerminal) return;
   missionTerminal = true;
-  const victory = status === "victory";
-  const defeat = status === "defeat";
+  document.body.dataset.terminal = "true";
+  missionBriefOpen = false;
+  if (missionBrief) missionBrief.hidden = true;
+  document.body.dataset.brief = "false";
+  keys.clear();
+  pilotControls = releaseCobraPilotControls(pilotControls);
+  bridge?.SetControls(pilotControls.collective, 0, 0, 0);
+  bridge?.SetTurnaroundAction(false);
+  bridge?.SetEngagementConsent(false);
+  onboarding?.dismiss();
+  setCobraMissionBackgroundInert(true);
+  setPlayCursorHidden(false);
   // Every terminal state gets an explicit outcome + cause: the sim halts here, and a frozen
   // HUD with no card reads as a crash of the game rather than of the helicopter.
-  let title;
-  let reason;
-  // Conquest outcomes. The sim decides both ends the same way — one side's ticket pool hits
-  // zero ("tickets-exhausted", CobraGroundWarRuntime.BleedTickets) — so the copy names the
-  // points that did the bleeding rather than the old control meter. The previous branch tested
-  // for "lost-basin", a reason the sim has not emitted since tickets landed, so every defeat
-  // fell through to the bare "The ground war is lost."
-  const friendlyPoints = (war?.sites ?? []).filter((site) => site?.owner === "friendly").length;
-  const heldPoints = (war?.sites ?? [])
-    .filter((site) => site?.owner === "friendly" || site?.owner === "hostile").length;
-  if (victory) {
-    title = "VALLEY HELD";
-    reason = war?.outcome_reason === "tickets-exhausted"
-      ? `Hostile reinforcements ran out — you held ${friendlyPoints} of ${heldPoints} points long enough to bleed them dry.`
-      : "The hostile push is finished.";
-  } else if (defeat) {
-    title = "VALLEY LOST";
-    reason = war?.outcome_reason === "tickets-exhausted"
-      ? `Friendly reinforcements ran out while hostiles held the points — you finished on ${friendlyPoints} of ${heldPoints}.`
-      : "The ground war is lost.";
-  } else if (status === "obstacle-collision") {
-    title = "OBSTACLE STRIKE";
-    const obstacle = authorityState?.collision_obstacle_id;
-    reason = obstacle
-      ? `Flew into ${String(obstacle).split(".").slice(-2).join(" ")}.`
-      : "Flew into a canyon obstacle.";
+  let terminalTitle;
+  let terminalDetail;
+  const contactCause = authorityState?.vehicle?.contact_failure_cause;
+  if (status === "obstacle-collision") {
+    terminalTitle = "OBSTACLE STRIKE";
+    terminalDetail = cobraObstacleStrikeDetail(
+      authorityState?.collision_obstacle_id,
+      war?.sites,
+    );
   } else if (status === "vehicle-authority-lost") {
     // The sim names WHICH envelope violation ended the airframe; fall back to the generic
     // terrain-strike copy only when no specific cause was latched.
-    const cause = cobraTerminalCauseCopy(authorityState?.vehicle?.contact_failure_cause);
-    title = cause ? cause.title : "AIRFRAME LOST";
-    reason = cause
+    const cause = cobraTerminalCauseCopy(contactCause);
+    terminalTitle = cause ? cause.title : "AIRFRAME LOST";
+    terminalDetail = cause
       ? cause.detail
       : "Terrain strike — the impact took the rotor and the airframe with it.";
   } else if (status === "terrain-unavailable") {
-    title = "OFF THE MAP";
-    reason = "You left surveyed terrain; the sortie cannot continue.";
+    terminalTitle = "OFF THE MAP";
+    terminalDetail = "You left surveyed terrain; the sortie cannot continue.";
   } else if (cobraMissionStatusCopy(status)) {
     const missionCopy = cobraMissionStatusCopy(status);
-    title = missionCopy.title;
-    reason = missionCopy.detail;
+    terminalTitle = missionCopy.title;
+    terminalDetail = missionCopy.detail;
   } else {
-    title = "SORTIE ENDED";
-    reason = `Sortie ended: ${status.replaceAll("-", " ")}.`;
+    terminalTitle = "SORTIE ENDED";
+    terminalDetail = `Sortie ended: ${status.replaceAll("-", " ")}.`;
   }
-  debrief.dataset.outcome = victory ? "victory" : defeat ? "defeat" : "failure";
-  setText(debriefKicker, victory || defeat ? "RECORDED MISSION RESULT" : "RECORDED SORTIE FAILURE");
+  // Ground-war outcome and aircraft recovery are independent axes. The pure model preserves a
+  // published valley result when a later RTB crash supplies the terminal cause.
+  const presentation = cobraDebriefPresentation({
+    war,
+    authorityState,
+    status,
+    terminalTitle,
+    terminalDetail,
+  });
+  const { evidence, title, detail: reason } = presentation;
+  debrief.dataset.outcome = presentation.tone;
+  setText(debriefKicker, presentation.kicker);
   setText(debriefTitle, title);
   const groundFireDetail = groundFireDebriefDetail(authorityState?.battle_damage);
-  setText(debriefBody, `${reason} ${groundFireDetail}`);
-  setText(debriefPoints, `${friendlyPoints} / ${heldPoints}`);
-  setText(debriefKills, String(war?.debrief?.hostile_kills ?? 0));
-  setText(debriefRearms, String(war?.debrief?.fob_rearms ?? 0));
-  setText(debriefSwaps, String(authorityState?.airframe_swaps ?? 0));
-  setText(debriefBattleTime, `${(war?.debrief?.elapsed_s ?? 0).toFixed(0)} s`);
-  setText(debriefCorrection, cobraNextSortieCorrection({
-    victory, defeat, status, friendlyPoints, heldPoints,
-  }));
+  setText(debriefBody, [reason, groundFireDetail].filter(Boolean).join(" "));
+  setText(debriefPoints, `${evidence.friendlyPoints} / ${evidence.heldPoints}`);
+  setOptionalDebriefFact(debriefKills, String(evidence.hostileKills), evidence.hostileKills > 0);
+  setOptionalDebriefFact(
+    debriefRounds,
+    String(evidence.roundsExpended),
+    evidence.roundsExpended > 0,
+  );
+  setOptionalDebriefFact(
+    debriefFriendlyKills,
+    String(evidence.friendlyKills),
+    evidence.friendlyKills > 0,
+  );
+  setOptionalDebriefFact(debriefRearms, String(evidence.fobRearms), evidence.fobRearms > 0);
+  setOptionalDebriefFact(debriefSwaps, String(evidence.airframeSwaps), evidence.airframeSwaps > 0);
+  setOptionalDebriefFact(
+    debriefBattleTime,
+    `${evidence.battleSeconds.toFixed(0)} s`,
+    evidence.battleSeconds > 0,
+  );
+  setText(debriefCorrection, cobraNextSortieCorrection({ presentation, status, contactCause }));
   debrief.hidden = false;
   queueMicrotask(() => debriefRestart?.focus({ preventScroll: true }));
-  setStatus(
-    victory ? "MISSION COMPLETE · VALLEY HELD" : `MISSION ${status.replaceAll("-", " ").toUpperCase()} · R RESTARTS`,
-    victory ? "ready" : "error",
-  );
+  setStatus(presentation.statusText, presentation.statusLevel);
 }
 
 function updateObjectiveHud(war) {
@@ -1855,9 +2007,13 @@ function animate(timeMs) {
   formationLeadPose = formationLead?.update(
     authorityState,
     currentPose,
-    missionPaused ? 0 : deltaSeconds,
+    missionBriefOpen || missionPaused || missionTerminal || onboarding?.isOpen() === true
+      ? 0 : deltaSeconds,
   ) ?? null;
-  formationRadio = cobraFormationRadio(authorityState, currentPose);
+  formationRadio = formationRadioPresenter.update(
+    cobraFormationRadio(authorityState, currentPose),
+    timeMs / 1_000,
+  );
   recordPhase("presentation", presentationStartedAtMs);
   if (tourInput.checked && bridge && !missionTerminal) {
     // A guided scenery camera has no pilot. Advancing the aircraft here used to relax the
@@ -1884,8 +2040,9 @@ function animate(timeMs) {
   recordPhase("hud", hudStartedAtMs);
   recordFrameDuration(rawDeltaMs);
   updateMetrics(aglM);
-  onboarding?.advanceNudges(missionPaused ? {} : onboardingNudgeState(),
-    missionPaused ? 0 : deltaSeconds);
+  onboarding?.advanceNudges(missionBriefOpen || missionPaused || onboarding?.isOpen() === true
+    ? {} : onboardingNudgeState(),
+    missionBriefOpen || missionPaused || onboarding?.isOpen() === true ? 0 : deltaSeconds);
   recordPhase("total", frameStartedAtMs);
   framePhaseSamples += 1;
 }
@@ -1896,7 +2053,7 @@ function animate(timeMs) {
  */
 function drawHud(timeMs, deltaSeconds) {
   const pose = readVehiclePose();
-  const firstPerson = Boolean(bridge) && !tourInput.checked && !missionTerminal
+  const firstPerson = Boolean(bridge) && !missionBriefOpen && !tourInput.checked && !missionTerminal
     && !parkedCamera
     && pose && authorityState;
   if (!firstPerson) {
@@ -1942,7 +2099,8 @@ function drawHud(timeMs, deltaSeconds) {
   );
   // Jet gun reports stay off — Cobra tip fire is not the F-22 M61 voice.
   updateFlightAudio(hudStateScratch, {
-    muted: missionPaused || missionTerminal || hud.audioEnabled === false,
+    muted: missionBriefOpen || missionPaused || missionTerminal
+      || onboarding?.isOpen() === true || hud.audioEnabled === false,
     triggerHeld: false,
     nowSeconds: timeMs / 1000,
   });
@@ -1977,19 +2135,18 @@ function applyParkedCamera() {
   const groundM = groundAt(parkedCamera.eastM, parkedCamera.northM);
   camera.position.set(parkedCamera.eastM, groundM + parkedCamera.aglM, -parkedCamera.northM);
   camera.rotation.set(parkedCamera.pitchRad, parkedCamera.yawRad, 0);
-  if (camera.near !== 0.5) {
+  if (camera.near !== 0.5 || camera.fov !== parkedCamera.fovDeg) {
     camera.near = 0.5;
+    camera.fov = parkedCamera.fovDeg;
     camera.updateProjectionMatrix();
   }
 }
 window.__gunsOnlyCobraLabCamera = Object.freeze({
-  park(eastM, northM, aglM, yawRad, pitchRad = 0) {
+  park(eastM, northM, aglM, yawRad, pitchRad = 0, fovDeg = DEFAULT_CAMERA_FOV_DEG) {
     // Review stills are exterior scenery shots — leave first-person / tour rails.
     if (tourInput) tourInput.checked = false;
-    if (qualitySelect && qualitySelect.value !== "desktop") {
-      qualitySelect.value = "desktop";
-      qualitySelect.dispatchEvent(new Event("change"));
-    }
+    // Preserve the selected production quality tier. A proof-camera pose must not rebuild the
+    // world, restart mission authority, or turn a balanced-player frame into a desktop-only claim.
     onboarding?.dismiss?.();
     // Strip mission chrome so park stills score the gorge, not the objective card.
     document.querySelector("#play-chrome")?.setAttribute("data-parked", "true");
@@ -2003,15 +2160,120 @@ window.__gunsOnlyCobraLabCamera = Object.freeze({
       aglM: Number(aglM),
       yawRad: Number(yawRad),
       pitchRad: Number(pitchRad),
+      fovDeg: THREE.MathUtils.clamp(
+        Number.isFinite(Number(fovDeg)) ? Number(fovDeg) : DEFAULT_CAMERA_FOV_DEG,
+        38,
+        70,
+      ),
     };
     applyParkedCamera();
+    camera.updateMatrixWorld(true);
     return parkedCamera;
   },
   release() {
     parkedCamera = null;
+    if (camera.fov !== DEFAULT_CAMERA_FOV_DEG) {
+      camera.fov = DEFAULT_CAMERA_FOV_DEG;
+      camera.updateProjectionMatrix();
+    }
+    cobraLowSpeedLens = neutralLowSpeedLens(COBRA_LOW_SPEED_LENS);
     document.querySelector("#play-chrome")?.removeAttribute("data-parked");
     document.querySelector("#objective-hud")?.removeAttribute("hidden");
     minimapCanvas?.removeAttribute("hidden");
+  },
+  // Read-only QA seam: acceptance can prove that the exact authority exchange it records is
+  // actually inside the photographed production camera. Returning pixels does not move the eye,
+  // alter authority, or create a presentation cue.
+  projectSimPointToScreen(xM, yM, zM) {
+    return projectSimPointToScreen(xM, yM, zM);
+  },
+  // Read-only companion to projection: returns only effects which are alive in the production
+  // ground-war scene right now. The scenery gate can therefore prove a muzzle flash and the
+  // exact moving dash packet it photographs instead of grading an undrawn authority line.
+  renderedBattleEvidence(siteId, authorityTick = null, authorityUnitId = null) {
+    return groundWarPresentation?.renderedBattleEvidence(
+      siteId,
+      authorityTick,
+      authorityUnitId,
+    ) ?? null;
+  },
+  // Read-only route-registration proof. Acceptance samples only lifecycle counters and shader
+  // capabilities; it cannot move, rebuild or recolour the production guidance mesh.
+  fixedGuidanceEvidence() {
+    const group = goldenPath?.group;
+    const material = group?.children?.[0]?.material;
+    return {
+      visible: group?.visible === true,
+      rebuildCount: Number(group?.userData?.rebuildCount) || 0,
+      activeMarkerCount: Number(group?.userData?.activeMarkerCount) || 0,
+      timeDriven: material?.uniforms?.uFlow !== undefined,
+    };
+  },
+  // Read-only optical proof for the autonomous pilot. This makes the live gate certify the
+  // rendered camera projection instead of inferring a wider view from source wiring.
+  cockpitLensEvidence() {
+    return {
+      active: Boolean(bridge) && !tourInput?.checked && !parkedCamera,
+      fovDeg: camera.fov,
+      opticalCenterX01: cobraLowSpeedLens.opticalCenterX01,
+      opticalCenterY01: cobraLowSpeedLens.opticalCenterY01,
+      groundSpeedMps: Number(authorityState?.vehicle?.ground_speed_mps),
+    };
+  },
+  restartBattleReview() {
+    if (!BATTLE_REVIEW_MODE || !bridge) return { supported: false };
+    battleProofHold = true;
+    restartRoute();
+    sampleAuthorityState(performance.now(), { force: true });
+    if (!parkedCamera) {
+      syncAuthorityCamera();
+      camera.updateMatrixWorld(true);
+    }
+    return {
+      supported: true,
+      missionAct: authorityState?.mission_act ?? null,
+      elapsedS: authorityState?.ground_war?.debrief?.elapsed_s ?? null,
+      status: authorityState?.status ?? null,
+    };
+  },
+  stepBattleReview(seconds = 0.5) {
+    if (!BATTLE_REVIEW_MODE || !bridge) return { supported: false };
+    battleProofHold = true;
+    const requestedSeconds = THREE.MathUtils.clamp(Number(seconds) || 0, 0, 5);
+    let remainingSeconds = requestedSeconds;
+    let steps = 0;
+    while (remainingSeconds > 1e-6 && authorityState?.status === "active") {
+      const stepSeconds = Math.min(0.05, remainingSeconds);
+      bridge.Advance(stepSeconds);
+      remainingSeconds -= stepSeconds;
+      steps += 1;
+      // Publish every fixed step in proof mode. Ground-war event snapshots are intentionally
+      // short-lived; sampling only after a multi-second batch skips real volleys between endpoints
+      // and leaves the renderer with nothing honest to photograph.
+      sampleAuthorityState(performance.now(), { force: true });
+    }
+    if (steps === 0) sampleAuthorityState(performance.now(), { force: true });
+    if (!parkedCamera) {
+      syncAuthorityCamera();
+      camera.updateMatrixWorld(true);
+    }
+    return {
+      supported: true,
+      steps,
+      missionAct: authorityState?.mission_act ?? null,
+      elapsedS: authorityState?.ground_war?.debrief?.elapsed_s ?? null,
+      status: authorityState?.status ?? null,
+      eventCount: authorityState?.ground_war?.events?.length ?? 0,
+    };
+  },
+  renderStats() {
+    return {
+      frame: frameCounter,
+      calls: renderer.info.render.calls,
+      triangles: renderer.info.render.triangles,
+      points: renderer.info.render.points,
+      lines: renderer.info.render.lines,
+    };
   },
 });
 
@@ -2022,32 +2284,91 @@ function isManualControl(code) {
 }
 
 function pauseMenuFocusables() {
-  return [pauseResume, pauseRestart, pauseExit].filter((node) => node && !node.disabled);
+  return [pauseResume, pauseSound, pauseRestart, pauseExit]
+    .filter((node) => node && !node.disabled);
 }
 
 function debriefFocusables() {
   return [debriefRestart, debriefExit].filter((node) => node && !node.disabled);
 }
 
+function missionBriefFocusables() {
+  return Array.from(missionBrief?.querySelectorAll("button:not([disabled]), a[href]") ?? []);
+}
+
+function setCobraMissionBackgroundInert(inert) {
+  if (inert === true) {
+    for (const node of missionBackground) {
+      if (!missionBackgroundInertState.has(node))
+        missionBackgroundInertState.set(node, node.inert === true);
+      node.inert = true;
+    }
+    return;
+  }
+  for (const [node, wasInert] of missionBackgroundInertState) node.inert = wasInert;
+  missionBackgroundInertState.clear();
+}
+
 function containDialogFocus(event, focusable) {
   if (event.code !== "Tab" || !focusable.length) return;
+  event.stopPropagation();
   const first = focusable[0];
   const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
+  const focusOutside = !focusable.includes(document.activeElement);
+  if (event.shiftKey && (focusOutside || document.activeElement === first)) {
     event.preventDefault();
     last.focus({ preventScroll: true });
-  } else if (!event.shiftKey && document.activeElement === last) {
+  } else if (!event.shiftKey && (focusOutside || document.activeElement === last)) {
     event.preventDefault();
     first.focus({ preventScroll: true });
   }
 }
 
+function showMissionBrief() {
+  if (!PLAY_MODE || !bridge || missionTerminal || !missionBrief) return false;
+  missionBriefOpen = true;
+  missionBrief.hidden = false;
+  if (missionBriefStart) {
+    missionBriefStart.disabled = false;
+    missionBriefStart.textContent = "Start";
+  }
+  document.body.dataset.brief = "true";
+  setCobraMissionBackgroundInert(true);
+  setPlayCursorHidden(false);
+  setStatus("READY · REVIEW FLIGHT BRIEF", "ready");
+  queueMicrotask(() => missionBriefStart?.focus({ preventScroll: true }));
+  return true;
+}
+
+function startMissionFromBrief() {
+  if (!missionBriefOpen || missionTerminal || !bridge || missionBriefStart?.disabled) return false;
+  // Start is the most reliable trusted gesture on this route. Retry the shared Web Audio unlock
+  // here even though the capture listener also arms it, so a missed pointerdown cannot yield a
+  // silent sortie with no recovery affordance.
+  if (hud.audioEnabled) hud.armAudio();
+  // The brief now teaches the first-ten-seconds controls. Its explicit Start action therefore
+  // acknowledges this mode's lesson without forcing a second modal before the cockpit responds.
+  markFirstRunSeen(safeLocalStorage(), COBRA_ONBOARDING_CONTENT.modeId);
+  missionBriefOpen = false;
+  missionBrief.hidden = true;
+  document.body.dataset.brief = "false";
+  setCobraMissionBackgroundInert(false);
+  sortieReadiness.start();
+  lastTimeMs = performance.now();
+  setPlayCursorHidden(true);
+  canvas?.focus?.({ preventScroll: true });
+  setStatus("HOLD THE BRIDGE · AH-1G ONLINE", "ready");
+  return true;
+}
+
 function setMissionPaused(paused, { focus = true } = {}) {
+  if (missionBriefOpen || missionTerminal) return false;
   const next = paused === true;
   if (missionPaused === next) return false;
   missionPaused = next;
   document.body.dataset.paused = String(next);
   if (pauseMenu) pauseMenu.hidden = !next;
+  setCobraMissionBackgroundInert(next);
   if (next) {
     keys.clear();
     pilotControls = releaseCobraPilotControls(pilotControls);
@@ -2061,17 +2382,19 @@ function setMissionPaused(paused, { focus = true } = {}) {
   } else {
     // Do not feed the paused wall-clock gap into the first resumed fixed-step frame.
     lastTimeMs = performance.now();
+    if (PLAY_MODE) setPlayCursorHidden(true);
     if (focus) canvas?.focus?.({ preventScroll: true });
   }
   return true;
 }
 
-// Escape peels the topmost layer, then toggles an in-mission pause. Capture ordering matters:
-// the onboarding card also listens during capture and must not dismiss and pause on one press.
+// Escape peels the topmost route-owned layer, then toggles an in-mission pause. The shared
+// controls onboarding owns capture first, so its acknowledgement can never leak into flight.
 window.addEventListener("keydown", (event) => {
   if (event.code !== "Escape") return;
   event.preventDefault();
   event.stopPropagation();
+  if (missionBriefOpen) return;
   const action = resolveEscapeAction({
     onboardingOpen: onboarding?.isOpen() === true,
     tacticalMapOpen,
@@ -2088,7 +2411,7 @@ window.addEventListener("keydown", (event) => {
   }
   if (action === "noop") return;
   setMissionPaused(action === "pause");
-}, true);
+});
 
 pauseMenu?.addEventListener("keydown", (event) => {
   containDialogFocus(event, pauseMenuFocusables());
@@ -2096,11 +2419,22 @@ pauseMenu?.addEventListener("keydown", (event) => {
 debrief?.addEventListener("keydown", (event) => {
   containDialogFocus(event, debriefFocusables());
 });
+missionBrief?.addEventListener("keydown", (event) => {
+  containDialogFocus(event, missionBriefFocusables());
+});
+missionBriefStart?.addEventListener("click", startMissionFromBrief);
+missionBriefSound?.addEventListener("click", () => {
+  setCobraAudioEnabled(!playerSettings.audio, { arm: true });
+});
 pauseResume?.addEventListener("click", () => setMissionPaused(false));
+pauseSound?.addEventListener("click", () => {
+  setCobraAudioEnabled(!playerSettings.audio, { arm: true });
+});
 pauseRestart?.addEventListener("click", restartRoute);
 pauseExit?.addEventListener("click", leaveMissionForMenu);
 
 window.addEventListener("keydown", (event) => {
+  if (missionBriefOpen) return;
   if (missionPaused) return;
   // Terminal states freeze the sim; R is the keyboard path back into the fight (the debrief
   // card announces it). Guarded by missionTerminal so mid-sortie R keeps its freelook meaning.
@@ -2253,7 +2587,7 @@ function teardownMission(reason) {
 /** Escape's exit: tear the mission down first, then hand the browser back to the sortie list. */
 function leaveMissionForMenu() {
   teardownMission("exit");
-  window.location.href = MAIN_MENU_HREF;
+  window.location.href = standaloneNavigationHref(MAIN_MENU_HREF, window.location);
 }
 
 window.addEventListener("pagehide", () => teardownMission("pagehide"), { once: true });
@@ -2262,39 +2596,52 @@ async function boot() {
   resize();
   try {
     await (globalThis.__gunsPrebootReady ?? Promise.resolve());
-    const blazor = await new Promise((resolve, reject) => {
-      const deadline = performance.now() + 15_000;
-      const poll = () => {
-        if (globalThis.Blazor) return resolve(globalThis.Blazor);
-        if (performance.now() >= deadline) return reject(new Error("Flight runtime unavailable."));
-        window.setTimeout(poll, 25);
-      };
-      poll();
-    });
-    await blazor.start({
-      // Subroute pages must never fetch framework assets under /cobra-lab/_framework/.
-      loadBootResource(_type, name) {
-        return `/_framework/${name}`;
-      },
-    });
-    const runtimeAccessor = await new Promise((resolve, reject) => {
-      const deadline = performance.now() + 15_000;
-      const poll = () => {
-        if (globalThis.getDotnetRuntime) return resolve(globalThis.getDotnetRuntime);
-        if (performance.now() >= deadline) return reject(new Error("Cobra authority unavailable."));
-        window.setTimeout(poll, 25);
-      };
-      poll();
-    });
-    const { getAssemblyExports } = await runtimeAccessor(0);
-    const assemblyExports = await getAssemblyExports("GunsOnly.Web");
-    bridge = assemblyExports.GunsOnly.Web.CobraWebBridge;
+    // Fetch the world and authored foliage while WASM boots. These resources are independent;
+    // serial waits made the first useful screen take roughly eleven seconds on a warm machine.
+    const presentationAssets = Promise.all([
+      loadCobraCanyonWorld(),
+      resolveCobraVietnamFoliageTextures(THREE),
+      loadCobraVietnamPalmGeometry(THREE),
+    ]);
+    const runtimeBridge = (async () => {
+      const blazor = await new Promise((resolve, reject) => {
+        const deadline = performance.now() + 15_000;
+        const poll = () => {
+          if (globalThis.Blazor) return resolve(globalThis.Blazor);
+          if (performance.now() >= deadline) return reject(new Error("Flight runtime unavailable."));
+          window.setTimeout(poll, 25);
+        };
+        poll();
+      });
+      await blazor.start({
+        // Subroute pages must never fetch framework assets under /cobra-lab/_framework/.
+        loadBootResource(_type, name) {
+          return `/_framework/${name}`;
+        },
+      });
+      const runtimeAccessor = await new Promise((resolve, reject) => {
+        const deadline = performance.now() + 15_000;
+        const poll = () => {
+          if (globalThis.getDotnetRuntime) return resolve(globalThis.getDotnetRuntime);
+          if (performance.now() >= deadline) return reject(new Error("Cobra authority unavailable."));
+          window.setTimeout(poll, 25);
+        };
+        poll();
+      });
+      const { getAssemblyExports } = await runtimeAccessor(0);
+      const assemblyExports = await getAssemblyExports("GunsOnly.Web");
+      return assemblyExports.GunsOnly.Web.CobraWebBridge;
+    })();
+    const [[loadedWorld, loadedFoliageTextures, palm], loadedBridge] = await Promise.all([
+      presentationAssets,
+      runtimeBridge,
+    ]);
+    bridge = loadedBridge;
     // QA steering seam for crew-chain / headless lift-off (see web/smoke/cobra-crew-chain.test.mjs).
     window.__gunsOnlyCobraBridge = bridge;
-    world = await loadCobraCanyonWorld();
-    foliageTextures = await resolveCobraVietnamFoliageTextures(THREE);
+    world = loadedWorld;
+    foliageTextures = loadedFoliageTextures;
     // Authored CC0 palms for the jungle role; null keeps the procedural cards.
-    const palm = await loadCobraVietnamPalmGeometry(THREE);
     roleGeometries = palm ? { jungle: palm.geometry } : null;
     lockPlayRoute();
     if (tourInput && PLAY_MODE) tourInput.checked = false;
@@ -2307,7 +2654,7 @@ async function boot() {
     // authoritative. Publish it now so diagnostics and smoke can inspect the cold ramp without
     // requiring a fake pilot input to start mission time.
     window.__gunsOnlyCobraAuthority = authorityState;
-    pilotControls = PLAY_MODE
+    pilotControls = PLAY_MODE && !BATTLE_REVIEW_MODE
       ? createCobraGroundedPilotControlState()
       : createCobraPilotControlState(bridge.GetHoverCollective());
     bridge.SetControls(
@@ -2327,17 +2674,27 @@ async function boot() {
     setStatus(PLAY_MODE
       ? "HOLD THE BRIDGE · AH-1G ONLINE"
       : "AH-1G AUTHORITY ONLINE · LAB", "ready");
-    if (PLAY_MODE) {
+    if (PLAY_MODE && !BATTLE_REVIEW_MODE) {
       setPlayCursorHidden(true);
       onboarding = createControlsOnboarding({
         modeId: COBRA_ONBOARDING_CONTENT.modeId,
         content: COBRA_ONBOARDING_CONTENT,
+        storage: safeLocalStorage(),
+        touch: TOUCH_PRESENTATION,
+        focusTarget: canvas,
+        // Route-owned layers are mutually exclusive. In particular, H must not stack the full
+        // controls dialog over the flight brief that already teaches the launch controls.
+        canOpen: () => !missionBriefOpen && !missionPaused && !missionTerminal
+          && !tacticalMapOpen,
         nudges: [
           { id: "lift", text: "HOLD W — COLLECTIVE UP", when: (s) => s.groundedIdle === true, afterSeconds: 3 },
-          { id: "engage", text: "TAB TO TARGET · HOLD F TO ENGAGE", when: (s) => s.hostileIdle === true, afterSeconds: 1.5 },
         ],
       });
-      onboarding.maybeShowFirstRun();
+      for (const id of ["controls-onboarding-reopen", "controls-onboarding-nudge"]) {
+        const node = document.getElementById(id);
+        if (node) missionBackground.push(node);
+      }
+      showMissionBrief();
     }
     lastTimeMs = performance.now();
     animationFrame = requestAnimationFrame(animate);

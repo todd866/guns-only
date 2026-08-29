@@ -100,6 +100,51 @@ public class CasevacSimulationSessionTests {
     }
 
     [Fact]
+    public void StandardGamepadPitchAxisProvidesContinuousForwardAndReverseAuthority() {
+        var forward = new SimulationSession(13);
+        forward.Begin();
+        CasevacResolvedLocation pickup = forward.CasevacFlight!.PickupLocation;
+        double initialRange = HorizontalRange(
+            forward.CasevacFlight.VehicleState,
+            pickup);
+
+        // Browser standard mapping reports stick-forward as negative Y. The CASEVAC boundary
+        // translates that physical pitch convention into its positive driving-style forward axis.
+        forward.SetAnalogPitchControl(-1.0);
+        forward.StepFixed(360);
+        forward.SetAnalogPitchControl(0.0);
+
+        var reverse = new SimulationSession(13);
+        reverse.Begin();
+        reverse.SetAnalogPitchControl(1.0);
+        reverse.StepFixed(360);
+        reverse.SetAnalogPitchControl(0.0);
+
+        Assert.True(
+            HorizontalRange(forward.CasevacFlight.VehicleState, pickup)
+                < initialRange - 5.0);
+        Assert.True(
+            HorizontalRange(reverse.CasevacFlight!.VehicleState, pickup)
+                > initialRange + 5.0);
+    }
+
+    [Fact]
+    public void StandardGamepadPitchAxisSustainsProductionMissionCruise() {
+        var session = new SimulationSession(13);
+        session.Begin();
+
+        session.SetAnalogPitchControl(-1.0);
+        session.StepFixed((int)(30 * AircraftSim.TickHz));
+        session.SetAnalogPitchControl(0.0);
+
+        Vec3D velocity = session.CasevacFlight!.VehicleObservation.GroundVelocityMps;
+        double horizontalSpeedMps = Math.Sqrt(
+            velocity.X * velocity.X + velocity.Z * velocity.Z);
+        Assert.InRange(horizontalSpeedMps, 30.0, 32.1);
+        Assert.True(session.CasevacFlight.VehicleFlyable);
+    }
+
+    [Fact]
     public void QuietSkipFinishesOnlyTheBuiltInMedevacAndIsIdempotent() {
         var combat = new SimulationSession(1);
         Assert.False(combat.RequestCasevacQuietSkip());

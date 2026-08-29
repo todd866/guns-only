@@ -1,27 +1,27 @@
 import {
   COBRA_STRUCTURE_SURFACES,
   createCobraStructureMaterial,
-} from "./cobra_structure_material.js?v=345";
+} from "./cobra_structure_material.js?v=348";
 import {
   applyCobraCanyonCampEmberApron,
   COBRA_CANYON_CAMP_EMBER_APRON,
   smoothstep,
   sampleCobraCanyonTerrain,
   sampleCobraCanyonTerrainBeforeCampEmberApron,
-} from "./cobra_canyon_plan.js?v=345";
+} from "./cobra_canyon_plan.js?v=348";
 import {
   COBRA_CANYON_AMBIENT_BUDGETS,
   createCobraCanyonAssetKit,
-} from "./cobra_canyon_asset_kit.js?v=345";
-import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=345";
+} from "./cobra_canyon_asset_kit.js?v=348";
+import { COBRA_CANYON_VISUAL_PROFILE } from "./cobra_canyon_visual_profile.js?v=348";
 import {
   createCobraCanyonBasinMaterial,
   createCobraCanyonRiverMaterial,
-} from "./cobra_canyon_terrain_material.js?v=345";
+} from "./cobra_canyon_terrain_material.js?v=348";
 import {
   CAMP_EMBER_DRAWN_RECESS_M,
   createCampEmberFirebase,
-} from "./cobra_camp_ember_firebase.js?v=345";
+} from "./cobra_camp_ember_firebase.js?v=348";
 
 export { COBRA_CANYON_AMBIENT_BUDGETS };
 
@@ -38,25 +38,27 @@ export const COBRA_CANYON_TERRAIN_SEGMENTS = Object.freeze({
   desktop: 152,
 });
 
-// The core analytical terrain and authority cues occupy eight submissions (basin, river, roads,
-// hero cells, landmarks, non-bridge hazards, bridge decks, bridge piers). Camp Ember firebase is
-// one merged vertex-colored mesh (+1). The asset kit adds at most one instanced submission for
-// each of its seven roles; none cast a second shadow pass.
+// The core analytical terrain and authority cues occupy eleven submissions (basin, river, roads,
+// hero cells, landmarks, Plantation worked rows, non-bridge hazards, its water tower, bridge
+// decks, approaches and piers). Camp Ember is one merged vertex-coloured mesh (+1). Long Fang
+// remains navigation authority but deliberately has no fake freestanding geometry: a real falls
+// needs a terrain cut, not another procedural obelisk.
+// The asset kit adds at most one instanced submission for each of its seven roles.
 export const COBRA_CANYON_RENDER_BUDGETS = Object.freeze({
   // maxAuthoredTriangles is the slice of maxTriangles that authored glTF meshes may spend.
   // An authored palm costs ~470 triangles against a crossed card's dozen, so without a
   // ceiling the jungle role alone runs to millions and the budget check throws at boot. Mobile
-  // gets none: its whole scene fits in 45,000 triangles, which one hero batch would eat.
+  // gets none: its whole scene fits in 46,200 triangles, which one hero batch would eat.
   mobile: Object.freeze({
-    maxDrawCalls: 17,
+    maxDrawCalls: 19,
     maxInstances: 640,
-    maxTriangles: 45_000,
+    maxTriangles: 46_200,
     maxAssetInstances: 580,
     maxAuthoredTriangles: 0,
     nearRingMaximumAglM: 180,
   }),
   balanced: Object.freeze({
-    maxDrawCalls: 17,
+    maxDrawCalls: 19,
     maxInstances: 4_200,
     maxTriangles: 380_000,
     maxAssetInstances: 3_900,
@@ -70,7 +72,7 @@ export const COBRA_CANYON_RENDER_BUDGETS = Object.freeze({
   // Build 312 production telemetry measured a locked 60 fps with view_ms ~1.2 and sim_ms ~3.4,
   // i.e. a whole frame of headroom on desktop. Spend it on canopy.
   desktop: Object.freeze({
-    maxDrawCalls: 17,
+    maxDrawCalls: 19,
     maxInstances: 9_600,
     maxTriangles: 900_000,
     maxAssetInstances: 9_000,
@@ -317,11 +319,17 @@ function yawRadians(record) {
   return degrees * Math.PI / 180;
 }
 
-function appendTriangle(positions, a, b, c) {
+function appendTriangle(positions, a, b, c, colors = null, color = null) {
   positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+  if (colors && color) colors.push(...color, ...color, ...color);
 }
 
-function appendBoxPrism(positions, minimum, maximum) {
+function appendColoredTriangle(positions, colors, a, b, c, colorA, colorB, colorC) {
+  appendTriangle(positions, a, b, c);
+  colors.push(...colorA, ...colorB, ...colorC);
+}
+
+function appendBoxPrism(positions, minimum, maximum, colors = null, color = null) {
   const [x0, y0, z0] = minimum;
   const [x1, y1, z1] = maximum;
   const corners = [
@@ -335,7 +343,170 @@ function appendBoxPrism(positions, minimum, maximum) {
     [0, 4, 7], [0, 7, 3], [1, 2, 6], [1, 6, 5],
     [3, 7, 6], [3, 6, 2], [0, 1, 5], [0, 5, 4],
   ]) {
-    appendTriangle(positions, corners[a], corners[b], corners[c]);
+    appendTriangle(positions, corners[a], corners[b], corners[c], colors, color);
+  }
+}
+
+/** Add a rectangular beam in the XY plane, extruded between two Z faces. */
+function appendOrientedBeamPrism(
+  positions,
+  from,
+  to,
+  width,
+  minimumZ,
+  maximumZ,
+  colors = null,
+  color = null,
+) {
+  const deltaX = to.x - from.x;
+  const deltaY = to.y - from.y;
+  const length = Math.hypot(deltaX, deltaY);
+  if (length <= 1e-6 || width <= 0 || maximumZ <= minimumZ) return;
+  const halfWidth = width * 0.5;
+  const normalX = -deltaY / length * halfWidth;
+  const normalY = deltaX / length * halfWidth;
+  // Clockwise around the beam as seen from -Z; this matches appendBoxPrism's corner order.
+  const face = [
+    { x: from.x - normalX, y: from.y - normalY },
+    { x: to.x - normalX, y: to.y - normalY },
+    { x: to.x + normalX, y: to.y + normalY },
+    { x: from.x + normalX, y: from.y + normalY },
+  ];
+  const corners = [
+    ...face.map((point) => ({ ...point, z: minimumZ })),
+    ...face.map((point) => ({ ...point, z: maximumZ })),
+  ];
+  for (const [a, b, c] of [
+    [0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7],
+    [0, 4, 7], [0, 7, 3], [1, 2, 6], [1, 6, 5],
+    [3, 7, 6], [3, 6, 2], [0, 1, 5], [0, 5, 4],
+  ]) {
+    appendTriangle(positions, corners[a], corners[b], corners[c], colors, color);
+  }
+}
+
+/**
+ * Add an XY beam whose thickness is expressed in world metres before the normalized bridge
+ * geometry is stretched into its authored collision span. A single normalized width made a
+ * diagonal on the 185 x 12 m approach several metres thick in X while remaining thin in Y,
+ * which is the slab/shard silhouette visible from the cockpit.
+ */
+function appendWorldMetricBeamPrism(
+  positions,
+  from,
+  to,
+  thicknessM,
+  spanWidthM,
+  spanHeightM,
+  minimumZ,
+  maximumZ,
+  colors = null,
+  color = null,
+) {
+  const deltaXM = (to.x - from.x) * spanWidthM;
+  const deltaYM = (to.y - from.y) * spanHeightM;
+  const lengthM = Math.hypot(deltaXM, deltaYM);
+  if (lengthM <= 1e-6 || thicknessM <= 0 || maximumZ <= minimumZ) return;
+  const halfThicknessM = thicknessM * 0.5;
+  const normalX = (-deltaYM / lengthM * halfThicknessM) / spanWidthM;
+  const normalY = (deltaXM / lengthM * halfThicknessM) / spanHeightM;
+  const face = [
+    { x: from.x - normalX, y: from.y - normalY },
+    { x: to.x - normalX, y: to.y - normalY },
+    { x: to.x + normalX, y: to.y + normalY },
+    { x: from.x + normalX, y: from.y + normalY },
+  ];
+  const corners = [
+    ...face.map((point) => ({ ...point, z: minimumZ })),
+    ...face.map((point) => ({ ...point, z: maximumZ })),
+  ];
+  for (const [a, b, c] of [
+    [0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7],
+    [0, 4, 7], [0, 7, 3], [1, 2, 6], [1, 6, 5],
+    [3, 7, 6], [3, 6, 2], [0, 1, 5], [0, 5, 4],
+  ]) {
+    appendTriangle(positions, corners[a], corners[b], corners[c], colors, color);
+  }
+}
+
+/** Add a rectangular beam in the ZY plane, extruded between two X faces. */
+function appendCrossBeamPrism(
+  positions,
+  from,
+  to,
+  width,
+  minimumX,
+  maximumX,
+  colors = null,
+  color = null,
+) {
+  const deltaZ = to.z - from.z;
+  const deltaY = to.y - from.y;
+  const length = Math.hypot(deltaZ, deltaY);
+  if (length <= 1e-6 || width <= 0 || maximumX <= minimumX) return;
+  const halfWidth = width * 0.5;
+  const normalZ = -deltaY / length * halfWidth;
+  const normalY = deltaZ / length * halfWidth;
+  const face = [
+    { z: from.z - normalZ, y: from.y - normalY },
+    { z: to.z - normalZ, y: to.y - normalY },
+    { z: to.z + normalZ, y: to.y + normalY },
+    { z: from.z + normalZ, y: from.y + normalY },
+  ];
+  const corners = [
+    ...face.map((point) => ({ x: minimumX, ...point })),
+    ...face.map((point) => ({ x: maximumX, ...point })),
+  ];
+  for (const [a, b, c] of [
+    [0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7],
+    [0, 4, 7], [0, 7, 3], [1, 2, 6], [1, 6, 5],
+    [3, 7, 6], [3, 6, 2], [0, 1, 5], [0, 5, 4],
+  ]) {
+    appendTriangle(positions, corners[a], corners[b], corners[c], colors, color);
+  }
+}
+
+/** Add a closed, faceted cylinder/frustum around the Y axis. */
+function appendCylinderFrustum(
+  positions,
+  colors,
+  minimumY,
+  maximumY,
+  lowerRadius,
+  upperRadius,
+  segments,
+  sideColor,
+  capColor = sideColor,
+) {
+  const bottomCentre = { x: 0, y: minimumY, z: 0 };
+  const topCentre = { x: 0, y: maximumY, z: 0 };
+  for (let segment = 0; segment < segments; segment++) {
+    const angle0 = segment / segments * Math.PI * 2;
+    const angle1 = (segment + 1) / segments * Math.PI * 2;
+    const lower0 = {
+      x: Math.cos(angle0) * lowerRadius,
+      y: minimumY,
+      z: Math.sin(angle0) * lowerRadius,
+    };
+    const lower1 = {
+      x: Math.cos(angle1) * lowerRadius,
+      y: minimumY,
+      z: Math.sin(angle1) * lowerRadius,
+    };
+    const upper0 = {
+      x: Math.cos(angle0) * upperRadius,
+      y: maximumY,
+      z: Math.sin(angle0) * upperRadius,
+    };
+    const upper1 = {
+      x: Math.cos(angle1) * upperRadius,
+      y: maximumY,
+      z: Math.sin(angle1) * upperRadius,
+    };
+    appendTriangle(positions, lower0, upper0, upper1, colors, sideColor);
+    appendTriangle(positions, lower0, upper1, lower1, colors, sideColor);
+    appendTriangle(positions, bottomCentre, lower0, lower1, colors, capColor);
+    appendTriangle(positions, topCentre, upper1, upper0, colors, capColor);
   }
 }
 
@@ -345,33 +516,526 @@ function appendBoxPrism(positions, minimum, maximum) {
  */
 function bridgeDeckTrussGeometry(THREE) {
   const positions = [];
-  appendBoxPrism(positions, [-0.5, -0.5, -0.42], [0.5, -0.28, 0.42]);
-  appendBoxPrism(positions, [-0.5, -0.5, -0.5], [0.5, 0.5, -0.42]);
-  appendBoxPrism(positions, [-0.5, -0.5, 0.42], [0.5, 0.5, 0.5]);
+  const colors = [];
+  // The collision span is 142–160 m. Keep the physical roadway joined to the ground-war road
+  // datum at 144.56 m, leaving a truthful 15.44 m through-truss silhouette above traffic.
+  const roadSurfaceY = -0.35777777777777775;
+  const lowerChordTopY = -0.285;
+  // Vertex colour does the compositional work a second material batch would normally do. A dark
+  // traffic deck anchors the crossing while sun-catching ochre chords and rust-red diagonals
+  // keep the OPEN truss legible against both jungle and humid sky. Length/height placement and
+  // draw-call count stay collision-backed; visible width is deliberately narrower than authority.
+  appendBoxPrism(
+    positions,
+    [-0.5, -0.5, -0.30],
+    [0.5, -0.405, 0.30],
+    colors,
+    [0.12, 0.14, 0.14],
+  );
   // Cross-deck roadway lip so the span reads as a crossing, not two parallel walls.
-  appendBoxPrism(positions, [-0.5, -0.28, -0.42], [0.5, -0.18, 0.42]);
-  for (const z of [-0.42, 0.42]) {
-    appendBoxPrism(positions, [-0.5, 0.38, z - 0.04], [0.5, 0.5, z + 0.04]);
-    appendBoxPrism(positions, [-0.5, -0.1, z - 0.03], [0.5, 0.02, z + 0.03]);
-    for (const x of [-0.45, -0.15, 0.15, 0.45]) {
-      appendBoxPrism(positions, [x - 0.03, -0.28, z - 0.04], [x + 0.03, 0.5, z + 0.04]);
+  appendBoxPrism(
+    positions,
+    [-0.5, -0.405, -0.30],
+    [0.5, roadSurfaceY, 0.30],
+    colors,
+    [0.22, 0.24, 0.23],
+  );
+  appendBoxPrism(
+    positions,
+    [-0.48, roadSurfaceY + 0.002, -0.014],
+    [0.48, roadSurfaceY + 0.012, 0.014],
+    colors,
+    [0.58, 0.52, 0.36],
+  );
+
+  // Two genuinely open Warren-truss faces. Chords touch the authored side envelope; posts and
+  // diagonals are narrow structural members rather than full-height slabs. The inset panel nodes
+  // leave enough room for a rotated beam's corners to remain inside the normalized X envelope.
+  const panelX = [-0.475, -0.2375, 0, 0.2375, 0.475];
+  for (const side of [-1, 1]) {
+    const minimumZ = side < 0 ? -0.5 : 0.42;
+    const maximumZ = side < 0 ? -0.42 : 0.5;
+    appendBoxPrism(
+      positions,
+      [-0.5, roadSurfaceY, minimumZ],
+      [0.5, lowerChordTopY, maximumZ],
+      colors,
+      [0.28, 0.30, 0.29],
+    );
+    appendBoxPrism(
+      positions,
+      [-0.5, 0.42, minimumZ],
+      [0.5, 0.5, maximumZ],
+      colors,
+      [0.48, 0.35, 0.24],
+    );
+    for (const x of panelX.slice(1, -1)) {
+      appendBoxPrism(
+        positions,
+        [x - 0.0036, lowerChordTopY, minimumZ],
+        [x + 0.0036, 0.42, maximumZ],
+        colors,
+        [0.24, 0.27, 0.27],
+      );
+    }
+    for (let panel = 0; panel < panelX.length - 1; panel++) {
+      const rises = panel % 2 === 0;
+      appendWorldMetricBeamPrism(
+        positions,
+        { x: panelX[panel], y: rises ? lowerChordTopY : 0.42 },
+        { x: panelX[panel + 1], y: rises ? 0.42 : lowerChordTopY },
+        0.82,
+        130,
+        18,
+        minimumZ,
+        maximumZ,
+        colors,
+        panel % 2 === 0 ? [0.42, 0.31, 0.22] : [0.34, 0.30, 0.26],
+      );
     }
   }
-  // Diagonal X-bracing on each face — cheap triangles, big silhouette change from a mile out.
-  for (const z of [-0.46, 0.46]) {
-    appendBoxPrism(positions, [-0.42, -0.22, z - 0.02], [-0.08, 0.36, z + 0.02]);
-    appendBoxPrism(positions, [0.08, -0.22, z - 0.02], [0.42, 0.36, z + 0.02]);
+  // Portal beams join both truss faces at every panel node. Without them the two Warren faces
+  // read as unrelated broken fences in a broadside view; these make the central span visibly
+  // continuous and load-bearing while remaining inside the authored collision envelope.
+  for (const x of panelX) {
+    appendBoxPrism(
+      positions,
+      [x - 0.0036, 0.42, -0.42],
+      [x + 0.0036, 0.49, 0.42],
+      colors,
+      [0.46, 0.34, 0.25],
+    );
   }
-  return geometryFromPositions(THREE, positions, "COBRA_CANYON_BRIDGE_DECK_TRUSS_GEOMETRY");
+  return geometryFromPositions(
+    THREE,
+    positions,
+    "COBRA_CANYON_BRIDGE_DECK_TRUSS_GEOMETRY",
+    { name: "color", itemSize: 3, values: colors },
+  );
 }
 
-/** Unit-normalized pier: footing, shaft, and cap that still fill the collision AABB envelope. */
+/**
+ * Unit-normalized raised approach. The outer end sits on the high bank and the inner end meets
+ * the truss roadway. A thin sloped deck, open support bents and joined guard girders preserve the
+ * collision-backed length/height without drawing its entire 185 m length as a concrete retaining
+ * wall. East uses the same geometry rotated 180°; composition supplies a narrower visual width.
+ */
+function bridgeApproachGeometry(THREE) {
+  const positions = [];
+  const colors = [];
+  const bottomY = -0.5;
+  const outerRoadY = -0.23333333333333334;
+  const innerRoadY = 0.21333333333333337;
+  const deckBottomOffset = 0.065;
+  const roadHalfWidth = 0.30;
+  const roadColor = [0.13, 0.15, 0.15];
+  const edgeColor = [0.25, 0.28, 0.28];
+  const supportColor = [0.38, 0.37, 0.33];
+  const railColor = [0.40, 0.34, 0.26];
+  const roadYAt = (x) => outerRoadY + (innerRoadY - outerRoadY) * (x + 0.5);
+
+  // Thin, closed sloped road deck. It joins the bank and central span but leaves the valley and
+  // fighting positions visible beneath and around it.
+  const roadCorners = {
+    outerLeftTop: { x: -0.5, y: outerRoadY, z: -roadHalfWidth },
+    outerRightTop: { x: -0.5, y: outerRoadY, z: roadHalfWidth },
+    innerLeftTop: { x: 0.5, y: innerRoadY, z: -roadHalfWidth },
+    innerRightTop: { x: 0.5, y: innerRoadY, z: roadHalfWidth },
+    outerLeftBottom: { x: -0.5, y: outerRoadY - deckBottomOffset, z: -roadHalfWidth },
+    outerRightBottom: { x: -0.5, y: outerRoadY - deckBottomOffset, z: roadHalfWidth },
+    innerLeftBottom: { x: 0.5, y: innerRoadY - deckBottomOffset, z: -roadHalfWidth },
+    innerRightBottom: { x: 0.5, y: innerRoadY - deckBottomOffset, z: roadHalfWidth },
+  };
+  const appendQuad = (a, b, c, d, color) => {
+    appendTriangle(positions, a, b, c, colors, color);
+    appendTriangle(positions, a, c, d, colors, color);
+  };
+  appendQuad(
+    roadCorners.outerLeftTop,
+    roadCorners.innerLeftTop,
+    roadCorners.innerRightTop,
+    roadCorners.outerRightTop,
+    roadColor,
+  );
+  appendQuad(
+    roadCorners.outerLeftBottom,
+    roadCorners.outerRightBottom,
+    roadCorners.innerRightBottom,
+    roadCorners.innerLeftBottom,
+    edgeColor,
+  );
+  appendQuad(
+    roadCorners.outerLeftBottom,
+    roadCorners.innerLeftBottom,
+    roadCorners.innerLeftTop,
+    roadCorners.outerLeftTop,
+    edgeColor,
+  );
+  appendQuad(
+    roadCorners.outerRightBottom,
+    roadCorners.outerRightTop,
+    roadCorners.innerRightTop,
+    roadCorners.innerRightBottom,
+    edgeColor,
+  );
+  appendQuad(
+    roadCorners.outerLeftBottom,
+    roadCorners.outerLeftTop,
+    roadCorners.outerRightTop,
+    roadCorners.outerRightBottom,
+    edgeColor,
+  );
+  appendQuad(
+    roadCorners.innerLeftBottom,
+    roadCorners.innerRightBottom,
+    roadCorners.innerRightTop,
+    roadCorners.innerLeftTop,
+    edgeColor,
+  );
+  appendQuad(
+    { x: -0.48, y: roadYAt(-0.48) + 0.006, z: -0.012 },
+    { x: 0.48, y: roadYAt(0.48) + 0.006, z: -0.012 },
+    { x: 0.48, y: roadYAt(0.48) + 0.006, z: 0.012 },
+    { x: -0.48, y: roadYAt(-0.48) + 0.006, z: 0.012 },
+    [0.58, 0.52, 0.36],
+  );
+
+  // Continuous open side trusses make both approaches visibly join the central span. Ground-to-
+  // deck load paths belong to separate collision-backed pier instances below; nothing here hangs
+  // a presentation-only support forty metres above the river floor.
+  for (const side of [-1, 1]) {
+    const minimumZ = side < 0 ? -0.5 : 0.43;
+    const maximumZ = side < 0 ? -0.43 : 0.5;
+    const lowerYAt = (x) => roadYAt(x) - (0.19 + (x + 0.5) * 0.055);
+    appendWorldMetricBeamPrism(
+      positions,
+      { x: -0.47, y: outerRoadY - 0.005 },
+      { x: 0.47, y: innerRoadY - 0.005 },
+      0.72,
+      185,
+      12,
+      minimumZ,
+      maximumZ,
+      colors,
+      edgeColor,
+    );
+    appendWorldMetricBeamPrism(
+      positions,
+      { x: -0.47, y: lowerYAt(-0.47) },
+      { x: 0.47, y: lowerYAt(0.47) },
+      0.72,
+      185,
+      12,
+      minimumZ,
+      maximumZ,
+      colors,
+      supportColor,
+    );
+    appendWorldMetricBeamPrism(
+      positions,
+      { x: -0.47, y: outerRoadY + 0.24 },
+      { x: 0.47, y: innerRoadY + 0.24 },
+      0.46,
+      185,
+      12,
+      minimumZ,
+      maximumZ,
+      colors,
+      railColor,
+    );
+    const panelXs = [-0.45, -0.27, -0.09, 0.09, 0.27, 0.45];
+    for (const x of panelXs) {
+      const baseY = roadYAt(x);
+      appendBoxPrism(
+        positions,
+        [x - 0.0028, baseY, minimumZ],
+        [x + 0.0028, Math.min(0.5, baseY + 0.25), maximumZ],
+        colors,
+        railColor,
+      );
+      appendBoxPrism(
+        positions,
+        [x - 0.0028, lowerYAt(x), minimumZ],
+        [x + 0.0028, baseY, maximumZ],
+        colors,
+        supportColor,
+      );
+    }
+    for (let panel = 0; panel < panelXs.length - 1; panel++) {
+      const fromX = panelXs[panel];
+      const toX = panelXs[panel + 1];
+      const rises = panel % 2 === 0;
+      appendWorldMetricBeamPrism(
+        positions,
+        {
+          x: fromX,
+          y: rises ? lowerYAt(fromX) : roadYAt(fromX),
+        },
+        {
+          x: toX,
+          y: rises ? roadYAt(toX) : lowerYAt(toX),
+        },
+        0.58,
+        185,
+        12,
+        minimumZ,
+        maximumZ,
+        colors,
+        railColor,
+      );
+    }
+  }
+
+  // Compact bank and truss abutments visually close the load path and retain the exact AABB
+  // envelope without resurrecting the full-length wall.
+  appendBoxPrism(
+    positions,
+    [-0.5, bottomY, -0.40],
+    [-0.455, outerRoadY - deckBottomOffset, 0.40],
+    colors,
+    supportColor,
+  );
+  appendBoxPrism(
+    positions,
+    [0.455, bottomY, -0.40],
+    [0.5, 0.5, 0.40],
+    colors,
+    supportColor,
+  );
+  return geometryFromPositions(
+    THREE,
+    positions,
+    "COBRA_CANYON_BRIDGE_APPROACH_GEOMETRY",
+    { name: "color", itemSize: 3, values: colors },
+  );
+}
+
+/** Unit-normalized pier: faceted footing, tapered shaft and cap fill the collision envelope. */
 function bridgePierGeometry(THREE) {
   const positions = [];
-  appendBoxPrism(positions, [-0.5, -0.5, -0.5], [0.5, -0.38, 0.5]);
-  appendBoxPrism(positions, [-0.5, 0.38, -0.5], [0.5, 0.5, 0.5]);
-  appendBoxPrism(positions, [-0.32, -0.38, -0.36], [0.32, 0.38, 0.36]);
-  return geometryFromPositions(THREE, positions, "COBRA_CANYON_BRIDGE_PIER_GEOMETRY");
+  const colors = [];
+  appendCylinderFrustum(
+    positions,
+    colors,
+    -0.5,
+    -0.39,
+    0.5,
+    0.42,
+    8,
+    [0.25, 0.27, 0.27],
+    [0.21, 0.23, 0.23],
+  );
+  appendCylinderFrustum(
+    positions,
+    colors,
+    -0.39,
+    0.37,
+    0.31,
+    0.24,
+    8,
+    [0.37, 0.37, 0.34],
+    [0.43, 0.41, 0.36],
+  );
+  appendBoxPrism(
+    positions,
+    [-0.48, 0.37, -0.5],
+    [0.48, 0.5, 0.5],
+    colors,
+    [0.48, 0.46, 0.40],
+  );
+  return geometryFromPositions(
+    THREE,
+    positions,
+    "COBRA_CANYON_BRIDGE_PIER_GEOMETRY",
+    { name: "color", itemSize: 3, values: colors },
+  );
+}
+
+/**
+ * Unit-normalized plantation water tower. The authored collision remains one AABB, but its
+ * presentation is a four-legged, open-frame tower whose tank, rim and cap touch the exact unit
+ * envelope. composeBox therefore preserves collision identity without drawing a 18 × 48 × 18 m
+ * warning-coloured wall through the battle cell.
+ */
+function waterTowerGeometry(THREE) {
+  const positions = [];
+  const colors = [];
+  const legColor = [0.24, 0.27, 0.23];
+  const braceColor = [0.48, 0.34, 0.22];
+  const tankColor = [0.42, 0.47, 0.37];
+  const rimColor = [0.70, 0.49, 0.29];
+  const capColor = [0.56, 0.43, 0.28];
+
+  // Four independent legs leave the lower 70% of the collision envelope optically open.
+  const legCentre = 0.34;
+  const legHalfWidth = 0.04;
+  for (const xSign of [-1, 1]) {
+    for (const zSign of [-1, 1]) {
+      const x = xSign * legCentre;
+      const z = zSign * legCentre;
+      appendBoxPrism(
+        positions,
+        [x - legHalfWidth, -0.5, z - legHalfWidth],
+        [x + legHalfWidth, 0.22, z + legHalfWidth],
+        colors,
+        legColor,
+      );
+    }
+  }
+
+  // X-bracing on all four faces keeps the tower unmistakably structural from any approach.
+  const braceInset = 0.34;
+  const braceThickness = 0.045;
+  const braceDepth = 0.024;
+  for (const zSign of [-1, 1]) {
+    const z = zSign * braceInset;
+    appendOrientedBeamPrism(
+      positions,
+      { x: -braceInset, y: -0.42 },
+      { x: braceInset, y: 0.14 },
+      braceThickness,
+      z - braceDepth,
+      z + braceDepth,
+      colors,
+      braceColor,
+    );
+    appendOrientedBeamPrism(
+      positions,
+      { x: braceInset, y: -0.42 },
+      { x: -braceInset, y: 0.14 },
+      braceThickness,
+      z - braceDepth,
+      z + braceDepth,
+      colors,
+      braceColor,
+    );
+  }
+  for (const xSign of [-1, 1]) {
+    const x = xSign * braceInset;
+    appendCrossBeamPrism(
+      positions,
+      { z: -braceInset, y: -0.42 },
+      { z: braceInset, y: 0.14 },
+      braceThickness,
+      x - braceDepth,
+      x + braceDepth,
+      colors,
+      braceColor,
+    );
+    appendCrossBeamPrism(
+      positions,
+      { z: braceInset, y: -0.42 },
+      { z: -braceInset, y: 0.14 },
+      braceThickness,
+      x - braceDepth,
+      x + braceDepth,
+      colors,
+      braceColor,
+    );
+  }
+
+  // Sixteen facets read cylindrical at combat-view distance without spending a second material
+  // batch. The projecting rim reaches ±0.5 in X/Z; the roof reaches +0.5 in Y, while leg feet
+  // reach -0.5, so the visible normalized bounds remain identical to the authored AABB.
+  const segments = 16;
+  appendCylinderFrustum(
+    positions, colors, 0.18, 0.25, 0.32, 0.44, segments, capColor, legColor,
+  );
+  appendCylinderFrustum(
+    positions, colors, 0.25, 0.42, 0.44, 0.44, segments, tankColor, tankColor,
+  );
+  appendCylinderFrustum(
+    positions, colors, 0.42, 0.5, 0.44, 0.10, segments, capColor, capColor,
+  );
+  appendCylinderFrustum(
+    positions, colors, 0.225, 0.275, 0.5, 0.5, segments, rimColor, rimColor,
+  );
+
+  return geometryFromPositions(
+    THREE,
+    positions,
+    "COBRA_CANYON_WATER_TOWER_GEOMETRY",
+    { name: "color", itemSize: 3, values: colors },
+  );
+}
+
+/**
+ * Low, terrain-seated worked rows inside the Plantation objective clearing. Full plantation-tree
+ * instances stay outside the 235 m battle eye so authority-backed formations remain visible;
+ * these flat furrow/crop strips restore the identity of cultivated ground without becoming
+ * cover, floating leaf cards, or another live-combat claim.
+ */
+function plantationGroundGeometry(THREE, plan) {
+  const landmark = (plan?.landmarks ?? []).find((record) =>
+    recordId(record, "") === "landmark.cobra-canyon.plantation-water-tower.v1");
+  const point = pointFrom(landmark);
+  if (!point) return null;
+  const positions = [];
+  const colors = [];
+  const routePoint = nearestRoutePoint(plan, landmark.id, point.x, point.z);
+  const tangentLengthM = Math.hypot(routePoint?.tangentX ?? 0, routePoint?.tangentZ ?? 0);
+  if (tangentLengthM < 0.001) return null;
+  const tangentX = routePoint.tangentX / tangentLengthM;
+  const tangentZ = routePoint.tangentZ / tangentLengthM;
+  const normalX = -tangentZ;
+  const normalZ = tangentX;
+  const darkFurrow = [0.115, 0.055, 0.022];
+  const laterite = [0.34, 0.16, 0.052];
+  const clippedStubble = [0.29, 0.37, 0.085];
+  const heightOffsetM = 0.18;
+  const worldPoint = (alongM, acrossM) => ({
+    x: point.x + tangentX * alongM + normalX * acrossM,
+    z: point.z + tangentZ * alongM + normalZ * acrossM,
+  });
+  const appendBand = (along0M, along1M, across0M, across1M, color) => {
+    const p0 = worldPoint(along0M, across0M);
+    const p1 = worldPoint(along1M, across0M);
+    const p2 = worldPoint(along1M, across1M);
+    const p3 = worldPoint(along0M, across1M);
+    const yAt = (x, z) => sampleCobraCanyonTerrain(plan, x, -z) + heightOffsetM;
+    const a = { ...p0, y: yAt(p0.x, p0.z) };
+    const b = { ...p1, y: yAt(p1.x, p1.z) };
+    const c = { ...p2, y: yAt(p2.x, p2.z) };
+    const d = { ...p3, y: yAt(p3.x, p3.z) };
+    // The material is intentionally FrontSide. Keep the tessellation counter-clockwise from the
+    // player-above-ground view so the cultivated surface is rendered instead of back-face culled.
+    appendTriangle(positions, a, c, b, colors, color);
+    appendTriangle(positions, a, d, c, colors, color);
+  };
+  const halfRowWidthM = 2.6;
+  const halfParcelLengthM = 170;
+  const yardHalfLengthM = 60;
+  const yardHalfWidthM = 50;
+  for (let row = -145, rowIndex = 0; row <= 145; row += 10, rowIndex++) {
+    const spans = Math.abs(row) <= yardHalfWidthM + halfRowWidthM
+      ? [[-halfParcelLengthM, -yardHalfLengthM], [yardHalfLengthM, halfParcelLengthM]]
+      : [[-halfParcelLengthM, halfParcelLengthM]];
+    const color = rowIndex % 7 === 0
+      ? clippedStubble
+      : rowIndex % 3 === 0 ? laterite : darkFurrow;
+    for (const [spanStartM, spanEndM] of spans) {
+      const segmentCount = Math.ceil((spanEndM - spanStartM) / 20);
+      for (let segment = 0; segment < segmentCount; segment++) {
+        const along0M = spanStartM
+          + (spanEndM - spanStartM) * segment / segmentCount;
+        const along1M = spanStartM
+          + (spanEndM - spanStartM) * (segment + 1) / segmentCount;
+        appendBand(
+          along0M,
+          along1M,
+          row - halfRowWidthM,
+          row + halfRowWidthM,
+          color,
+        );
+      }
+    }
+  }
+  return geometryFromPositions(
+    THREE,
+    positions,
+    "COBRA_CANYON_PLANTATION_WORKED_ROWS_GEOMETRY",
+    { name: "color", itemSize: 3, values: colors },
+  );
 }
 
 function appendRibbon(positions, points, widthM, yOffsetM) {
@@ -431,7 +1095,9 @@ const SHADOW_CASTING_ROLES = Object.freeze(new Set([
   "basin",
   "landmarks",
   "hazards",
+  "water-tower",
   "bridge-deck",
+  "bridge-approach",
   "bridge-pier",
   "vegetation",
 ]));
@@ -464,13 +1130,44 @@ function materialFor(THREE, role) {
     // does not glow. The full width/texture/soft-edge treatment is the corridor-scenery
     // slice; this keeps the ribbon honest until then.
     roads: { color: 0x7d5638, roughness: 1 },
-    heroCells: { color: 0x6a5030, roughness: 1 },
+    // Authored combat cells are scorched earth, not a nearly invisible brown selection decal.
+    // Their geometry carries a soot-centre / laterite-rim gradient; white here preserves it.
+    heroCells: { color: 0xffffff, roughness: 1, vertexColors: true },
     landmarks: { color: 0xffffff, roughness: 0.95 },
+    "plantation-ground": {
+      color: 0xffffff,
+      roughness: 1,
+      vertexColors: true,
+    },
     hazards: { color: 0xe96a43, emissive: 0x411006, roughness: 0.8 },
+    // Authored sage tank, weathered ochre rim and dark steel frame all share one vertex-coloured
+    // batch. This remains an AABB-backed hazard cue, but no longer reads as a warning-red wall.
+    "water-tower": {
+      color: 0xffffff,
+      emissive: 0x10140e,
+      roughness: 0.94,
+      vertexColors: true,
+    },
     // Weathered steel over jungle green — Iron Bell should read as the fight site, not an
     // orange hazard box that matches every other collision marker.
-    "bridge-deck": { color: 0xc9b89a, emissive: 0x2a2214, roughness: 0.9 },
-    "bridge-pier": { color: 0x8f806c, emissive: 0x1a1610, roughness: 0.94 },
+    "bridge-deck": {
+      color: 0xffffff,
+      emissive: 0x211307,
+      roughness: 0.9,
+      vertexColors: true,
+    },
+    "bridge-approach": {
+      color: 0xffffff,
+      emissive: 0x11110f,
+      roughness: 0.96,
+      vertexColors: true,
+    },
+    "bridge-pier": {
+      color: 0xffffff,
+      emissive: 0x12110e,
+      roughness: 0.94,
+      vertexColors: true,
+    },
     vegetation: { color: 0xffffff, roughness: 1 },
   }[role];
   // Soft normals on landmarks/bridges/vegetation — flat boxes read as crystal shards at nap AGL.
@@ -478,28 +1175,34 @@ function materialFor(THREE, role) {
   const flatShading = role !== "heroCells"
     && role !== "landmarks"
     && role !== "vegetation"
+    && role !== "water-tower"
     && role !== "bridge-deck"
+    && role !== "bridge-approach"
     && role !== "bridge-pier";
   const side = role === "roads" ? THREE.DoubleSide : THREE.FrontSide;
   // Authored structures get procedural surface detail. Without it the bridge deck — most of
   // the screen on a nap-of-the-earth pass — is one flat fill sitting on a five-octave
   // terrain, which is the whole reason the corridor read as cardboard.
   const material = role in COBRA_STRUCTURE_SURFACES
+      || role === "water-tower"
+      || role === "bridge-approach"
     ? createCobraStructureMaterial(THREE, role, {
       color: parameters.color,
       emissive: parameters.emissive ?? 0x000000,
       flatShading,
       side,
+      vertexColors: parameters.vertexColors === true,
     })
     : new THREE.MeshLambertMaterial({
       color: parameters.color,
       emissive: parameters.emissive ?? 0x000000,
       flatShading,
       side,
+      vertexColors: parameters.vertexColors === true,
     });
   if (role === "heroCells") {
     material.transparent = true;
-    material.opacity = 0.16;
+    material.opacity = 0.30;
     material.depthWrite = false;
     material.polygonOffset = true;
     material.polygonOffsetFactor = -1;
@@ -509,6 +1212,11 @@ function materialFor(THREE, role) {
     material.polygonOffset = true;
     material.polygonOffsetFactor = -1;
     material.polygonOffsetUnits = -2;
+  }
+  if (role === "plantation-ground") {
+    material.polygonOffset = true;
+    material.polygonOffsetFactor = -1;
+    material.polygonOffsetUnits = -1;
   }
   material.name = `COBRA_CANYON_${String(role).toUpperCase().replaceAll("-", "_")}_MATERIAL`;
   return material;
@@ -600,6 +1308,33 @@ function composeBox(mesh, index, placement, work) {
   mesh.setMatrixAt(index, work.matrix);
 }
 
+// Collision owns a conservative 32 m-wide crossing envelope. Rendering that envelope literally
+// turned a two-lane bridge into a motorway and stretched every side member/pier across the gorge.
+// Keep the same authoritative centre/length/height while using credible visible widths.
+function composeBridgeDeck(mesh, index, placement, work) {
+  work.position.set(placement.x, placement.y, placement.z);
+  work.quaternion.setFromAxisAngle(work.yAxis, placement.yaw);
+  work.scale.set(placement.widthM, placement.heightM, Math.min(12, placement.depthM));
+  work.matrix.compose(work.position, work.quaternion, work.scale);
+  mesh.setMatrixAt(index, work.matrix);
+}
+
+function composeBridgeApproach(mesh, index, placement, work) {
+  composeBridgeDeck(mesh, index, placement, work);
+}
+
+function composeBridgePier(mesh, index, placement, work) {
+  work.position.set(placement.x, placement.y, placement.z);
+  work.quaternion.setFromAxisAngle(work.yAxis, placement.yaw);
+  work.scale.set(
+    Math.min(8, placement.widthM),
+    placement.heightM,
+    Math.min(8, placement.depthM),
+  );
+  work.matrix.compose(work.position, work.quaternion, work.scale);
+  mesh.setMatrixAt(index, work.matrix);
+}
+
 function composeSegment(mesh, index, placement, work) {
   work.direction.set(
     placement.to.x - placement.from.x,
@@ -668,17 +1403,67 @@ const CAMP_EMBER_GRID_OFFSETS_M = Object.freeze([
   260,
   COBRA_CANYON_CAMP_EMBER_APRON.blendRadiusM,
 ]);
+// The global balanced mesh is intentionally sparse over the 16 km theatre, but the player fights
+// on three much smaller authored cells. Refining only those axes removes the 133 m triangular
+// facets visible behind units without turning the whole basin into a uniform high-resolution
+// grid. These are presentation samples; collision remains the analytic terrain authority.
+const BATTLE_CELL_GRID_OFFSETS_M = Object.freeze({
+  mobile: Object.freeze([-180, 0, 180]),
+  balanced: Object.freeze([-240, -180, -120, -80, -40, 0, 40, 80, 120, 180, 240]),
+  desktop: Object.freeze([-240, -180, -120, -90, -60, -30, 0, 30, 60, 90, 120, 180, 240]),
+});
+const BATTLE_OBJECTIVE_LANDMARK_IDS = new Set([
+  "landmark.cobra-canyon.iron-bell-bridge.v1",
+  "landmark.cobra-canyon.plantation-water-tower.v1",
+  "landmark.cobra-canyon.red-earth-quarry.v1",
+]);
+const BATTLE_OBJECTIVE_TERRAIN_RADIUS_M = 260;
 const BASIN_GRID_CACHE = new WeakMap();
 
-function refinedBasinAxis(minimumM, maximumM, segments, focusM) {
+function battleTerrainFoci(plan) {
+  const cellFoci = sortedRecords(plan.cells ?? plan.heroCells ?? [], "hero-cell")
+    .map((cell) => ({
+      center: pointFrom(cell.terrainPatch?.centerLocalM ?? cell),
+      radiusM: Math.max(1, finite(cell.terrainPatch?.radiusM, 1)),
+      kind: "battle-cell",
+    }))
+    .filter((focus) => focus.center);
+  const objectiveFoci = sortedRecords(plan.landmarks ?? [], "landmark")
+    .filter((landmark) => BATTLE_OBJECTIVE_LANDMARK_IDS.has(recordId(landmark, "")))
+    .map((landmark) => ({
+      center: pointFrom(landmark),
+      radiusM: BATTLE_OBJECTIVE_TERRAIN_RADIUS_M,
+      kind: "objective",
+    }))
+    .filter((focus) => focus.center);
+  return [...cellFoci, ...objectiveFoci];
+}
+
+function refinedBasinAxis(
+  minimumM,
+  maximumM,
+  segments,
+  campFocusM,
+  battleFocusM,
+  battleOffsetsM,
+) {
   const stepM = (maximumM - minimumM) / segments;
   const values = Array.from(
     { length: segments + 1 },
     (_, index) => minimumM + index * stepM,
   );
   for (const offsetM of CAMP_EMBER_GRID_OFFSETS_M) {
-    const valueM = focusM + offsetM;
+    const valueM = campFocusM + offsetM;
     if (valueM > minimumM && valueM < maximumM) values.push(valueM);
+  }
+  for (const focus of battleFocusM) {
+    const focusM = typeof focus === "number" ? focus : Number(focus?.valueM);
+    const offsetsM = Array.isArray(focus?.offsetsM) ? focus.offsetsM : battleOffsetsM;
+    if (!Number.isFinite(focusM)) continue;
+    for (const offsetM of offsetsM) {
+      const valueM = focusM + offsetM;
+      if (valueM > minimumM && valueM < maximumM) values.push(valueM);
+    }
   }
   values.sort((left, right) => left - right);
   return Object.freeze(values.filter(
@@ -698,6 +1483,23 @@ function basinGrid(plan, qualityTier) {
   if (!bounds || !segments) throw new TypeError(`Unknown Cobra Canyon quality tier: ${qualityTier}.`);
   const eastStepM = (bounds.maximumEastM - bounds.minimumEastM) / segments;
   const northStepM = (bounds.maximumNorthM - bounds.minimumNorthM) / segments;
+  const battleFoci = battleTerrainFoci(plan);
+  // Refine each real east/north focus on its matching axis. The Cartesian grid still intersects
+  // every battle point, while avoiding the old wasteful practice of treating northings as eastings.
+  // That recovered topology budget funds the exact gun-pit/point centres, not unrelated strips.
+  const battleOffsetsM = BATTLE_CELL_GRID_OFFSETS_M[qualityTier] ?? [];
+  // Hero cells own their local refinement. Objective landmarks need one exact crossing only;
+  // applying every ring offset to each global east and north axis forms a Cartesian grid far
+  // beyond the objective and roughly doubles synchronous basin construction.
+  const focusOffsets = (focus) => focus.kind === "objective" ? [0] : battleOffsetsM;
+  const battleFocusEastM = battleFoci.map((focus) => ({
+    valueM: focus.center.x,
+    offsetsM: focusOffsets(focus),
+  }));
+  const battleFocusNorthM = battleFoci.map((focus) => ({
+    valueM: -focus.center.z,
+    offsetsM: focusOffsets(focus),
+  }));
   const grid = Object.freeze({
     bounds,
     segments,
@@ -708,12 +1510,16 @@ function basinGrid(plan, qualityTier) {
       bounds.maximumEastM,
       segments,
       COBRA_CANYON_CAMP_EMBER_APRON.eastM,
+      battleFocusEastM,
+      battleOffsetsM,
     ),
     northAxis: refinedBasinAxis(
       bounds.minimumNorthM,
       bounds.maximumNorthM,
       segments,
       COBRA_CANYON_CAMP_EMBER_APRON.northM,
+      battleFocusNorthM,
+      battleOffsetsM,
     ),
   });
   byTier.set(qualityTier, grid);
@@ -781,6 +1587,7 @@ function basinVertexHeight(
 function basinGeometry(THREE, plan, qualityTier) {
   const positions = [];
   const concavity = [];
+  const battleInfluence = [];
   const indices = [];
   const grid = basinGrid(plan, qualityTier);
   const columnCount = grid.eastAxis.length;
@@ -803,6 +1610,7 @@ function basinGeometry(THREE, plan, qualityTier) {
       + clamp(eastIndex, 0, columnCount - 1)
   ];
   const paint = COBRA_CANYON_VISUAL_PROFILE.terrainPaint;
+  const battleCells = battleTerrainFoci(plan);
   for (let northIndex = 0; northIndex < rowCount; northIndex++) {
     const northM = grid.northAxis[northIndex];
     for (let eastIndex = 0; eastIndex < columnCount; eastIndex++) {
@@ -811,9 +1619,9 @@ function basinGeometry(THREE, plan, qualityTier) {
       positions.push(eastM, elevationM, -northM);
       // Enclosure term (korea_terrain's baked `concavity` attribute): a two-cell ring mean says
       // whether this vertex sits below its neighbourhood — a valley to darken — or above it — a
-      // crest to let catch light. This is the one shading input a fragment cannot re-derive,
-      // because it needs the height field, not the surface point; everything else is per-pixel
-      // in cobra_canyon_terrain_material.js.
+      // crest to let catch light. This is one of two basin inputs a fragment cannot re-derive:
+      // concavity needs the height field, while battle influence below needs the authored plan.
+      // Landcover, surface grain and light remain per-pixel in cobra_canyon_terrain_material.js.
       const ringMeanM = (
         heightAt(eastIndex - 2, northIndex)
         + heightAt(eastIndex + 2, northIndex)
@@ -825,6 +1633,15 @@ function basinGeometry(THREE, plan, qualityTier) {
         0,
         1,
       ));
+      let authoredBattleInfluence = 0;
+      for (const cell of battleCells) {
+        const distanceM = Math.hypot(eastM - cell.center.x, -northM - cell.center.z);
+        authoredBattleInfluence = Math.max(
+          authoredBattleInfluence,
+          1 - smoothstep(cell.radiusM * 0.12, cell.radiusM * 0.82, distanceM),
+        );
+      }
+      battleInfluence.push(authoredBattleInfluence);
     }
   }
   for (let northIndex = 0; northIndex < rowCount - 1; northIndex++) {
@@ -838,8 +1655,13 @@ function basinGeometry(THREE, plan, qualityTier) {
   }
   const geometry = new THREE.BufferGeometry();
   geometry.name = "COBRA_CANYON_BASIN_GEOMETRY";
+  geometry.userData.cobraBasinGrid = Object.freeze({ columnCount, rowCount });
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.setAttribute("concavity", new THREE.Float32BufferAttribute(concavity, 1));
+  geometry.setAttribute(
+    "battleInfluence",
+    new THREE.Float32BufferAttribute(battleInfluence, 1),
+  );
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
@@ -849,50 +1671,103 @@ function basinGeometry(THREE, plan, qualityTier) {
 
 function heroCellGeometry(THREE, plan) {
   const positions = [];
+  const colors = [];
   for (const cell of sortedRecords(plan.cells ?? plan.heroCells ?? [], "hero-cell")) {
     const patch = cell.terrainPatch;
     const center = pointFrom(patch?.centerLocalM);
     if (!patch || !center) continue;
     const seed = hashString(cell.id);
-    for (let scar = 0; scar < 3; scar++) {
+    // Compact irregular scorch marks give each AUTHORED battle cell history without cutting a
+    // black tabletop crater into the current fight. They remain terrain-hugging and subdued; live
+    // authority events, not these static marks, must own the battle read.
+    for (let scar = 0; scar < 4; scar++) {
       const scarSeed = mixedUint32(seed ^ Math.imul(scar + 1, 0x9e3779b1));
       const bearing = seededUnit(scarSeed, 0xa511e9b3) * Math.PI * 2;
-      const offsetM = patch.radiusM * (0.08 + seededUnit(scarSeed, 0x63d83595) * 0.24);
+      const offsetM = patch.radiusM * (0.07 + seededUnit(scarSeed, 0x63d83595) * 0.27);
       const scarEastM = center.x + Math.cos(bearing) * offsetM;
       const scarNorthM = -center.z + Math.sin(bearing) * offsetM;
-      const radiusEastM = patch.radiusM * (0.10 + seededUnit(scarSeed, 0xc2b2ae35) * 0.10);
-      const radiusNorthM = patch.radiusM * (0.06 + seededUnit(scarSeed, 0x27d4eb2f) * 0.08);
+      const radiusEastM = patch.radiusM * (0.012 + seededUnit(scarSeed, 0xc2b2ae35) * 0.016);
+      const radiusNorthM = patch.radiusM * (0.010 + seededUnit(scarSeed, 0x27d4eb2f) * 0.014);
+      const scarYaw = seededUnit(scarSeed, 0x85ebca6b) * Math.PI;
+      const cosYaw = Math.cos(scarYaw);
+      const sinYaw = Math.sin(scarYaw);
       const scarCenter = {
         x: scarEastM,
-        y: sampleCobraCanyonTerrain(plan, scarEastM, scarNorthM) + 0.34,
+        y: sampleCobraCanyonTerrain(plan, scarEastM, scarNorthM) + 0.38,
         z: -scarNorthM,
       };
-      const sides = 12;
+      const sides = 14;
+      const outer = [];
+      const inner = [];
       for (let side = 0; side < sides; side++) {
         const angle = side / sides * Math.PI * 2;
-        const nextAngle = (side + 1) / sides * Math.PI * 2;
-        const eastM = scarEastM + Math.cos(angle) * radiusEastM;
-        const northM = scarNorthM + Math.sin(angle) * radiusNorthM;
-        const nextEastM = scarEastM + Math.cos(nextAngle) * radiusEastM;
-        const nextNorthM = scarNorthM + Math.sin(nextAngle) * radiusNorthM;
-        appendTriangle(
+        const irregularity = 0.83 + seededUnit(scarSeed, 0x165667b1 ^ side) * 0.30;
+        const ellipseEastM = Math.cos(angle) * radiusEastM * irregularity;
+        const ellipseNorthM = Math.sin(angle) * radiusNorthM * irregularity;
+        const eastOffsetM = ellipseEastM * cosYaw - ellipseNorthM * sinYaw;
+        const northOffsetM = ellipseEastM * sinYaw + ellipseNorthM * cosYaw;
+        const outerEastM = scarEastM + eastOffsetM;
+        const outerNorthM = scarNorthM + northOffsetM;
+        const innerEastM = scarEastM + eastOffsetM * 0.54;
+        const innerNorthM = scarNorthM + northOffsetM * 0.54;
+        outer.push({
+          x: outerEastM,
+          y: sampleCobraCanyonTerrain(plan, outerEastM, outerNorthM) + 0.38,
+          z: -outerNorthM,
+        });
+        inner.push({
+          x: innerEastM,
+          y: sampleCobraCanyonTerrain(plan, innerEastM, innerNorthM) + 0.39,
+          z: -innerNorthM,
+        });
+      }
+      const rimVariation = seededUnit(scarSeed, 0xd3a2646c);
+      // Wet laterite and charcoal, not emissive orange decals. The scars must survive foliage
+      // grain while remaining part of the ground plane when a low battle camera passes nearby.
+      const rimColor = [0.18 + rimVariation * 0.08, 0.070 + rimVariation * 0.035, 0.030];
+      const sootEdge = [0.060, 0.042, 0.028];
+      const sootCenter = [0.038, 0.028, 0.020];
+      for (let side = 0; side < sides; side++) {
+        const next = (side + 1) % sides;
+        appendColoredTriangle(
           positions,
+          colors,
+          outer[side],
+          outer[next],
+          inner[next],
+          rimColor,
+          rimColor,
+          sootEdge,
+        );
+        appendColoredTriangle(
+          positions,
+          colors,
+          outer[side],
+          inner[next],
+          inner[side],
+          rimColor,
+          sootEdge,
+          sootEdge,
+        );
+        appendColoredTriangle(
+          positions,
+          colors,
           scarCenter,
-          {
-            x: eastM,
-            y: sampleCobraCanyonTerrain(plan, eastM, northM) + 0.34,
-            z: -northM,
-          },
-          {
-            x: nextEastM,
-            y: sampleCobraCanyonTerrain(plan, nextEastM, nextNorthM) + 0.34,
-            z: -nextNorthM,
-          },
+          inner[side],
+          inner[next],
+          sootCenter,
+          sootEdge,
+          sootEdge,
         );
       }
     }
   }
-  return geometryFromPositions(THREE, positions, "COBRA_CANYON_HERO_CELLS_GEOMETRY");
+  return geometryFromPositions(
+    THREE,
+    positions,
+    "COBRA_CANYON_HERO_CELLS_GEOMETRY",
+    { name: "color", itemSize: 3, values: colors },
+  );
 }
 
 /**
@@ -1411,7 +2286,8 @@ function landmarkPlacements(plan) {
       64,
       Math.max(4, point.y - groundY),
     );
-    if (kind === "steel-truss-bridge" || kind === "radio-mast" || kind === "water-tower") {
+    if (kind === "steel-truss-bridge" || kind === "radio-mast" || kind === "water-tower"
+      || kind === "waterfall") {
       continue;
     }
     if (kind === "forward-operating-base") {
@@ -1419,9 +2295,7 @@ function landmarkPlacements(plan) {
       // also emit stretched cylinder AABBs that read as debug placeholders.
       continue;
     }
-    if (kind === "waterfall") {
-      add(record, point, "water-ribbon", [0, 0, 0], [14, Math.min(48, Math.max(24, authoredHeightM * 0.4)), 3]);
-    } else if (kind === "rock-spires") {
+    if (kind === "rock-spires") {
       const spireH = Math.min(52, authoredHeightM);
       add(record, point, "spire-one", [-18, 0, 6], [14, spireH * 0.72, 16]);
       add(record, point, "spire-two", [4, 0, -8], [17, spireH, 19]);
@@ -1506,7 +2380,9 @@ function aabbPlacement(record) {
 
 function hazardPlacements(plan) {
   const placements = [];
+  const waterTowers = [];
   const bridgeDecks = [];
+  const bridgeApproaches = [];
   const bridgePiers = [];
   const wireSpans = [];
   const poleKeys = new Set();
@@ -1518,7 +2394,12 @@ function hazardPlacements(plan) {
     if (shape === "aabb") {
       const placement = aabbPlacement(record);
       if (!placement) continue;
-      if (kind.includes("bridge-pier") || kind === "bridgepier") bridgePiers.push(placement);
+      if (kind === "water-tower" || kind === "watertower") waterTowers.push(placement);
+      else if (kind.includes("bridge-approach")) bridgeApproaches.push({
+        ...placement,
+        yaw: kind.includes("east") ? Math.PI : 0,
+      });
+      else if (kind.includes("bridge-pier") || kind === "bridgepier") bridgePiers.push(placement);
       else if (kind.includes("bridge")) bridgeDecks.push(placement);
       else placements.push(placement);
       continue;
@@ -1562,9 +2443,11 @@ function hazardPlacements(plan) {
   }
   return {
     placements,
+    waterTowers,
     bridgeDecks,
+    bridgeApproaches,
     bridgePiers,
-    bridges: [...bridgeDecks, ...bridgePiers],
+    bridges: [...bridgeDecks, ...bridgeApproaches, ...bridgePiers],
     wireSpans,
     authoredCount: authored.length,
     suppressedPresentationPoles,
@@ -1726,6 +2609,19 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
     metrics.roleTriangles["camp-ember-firebase"] = campEmber.triangles;
   }
 
+  const plantationGroundMesh = addStaticMesh(
+    THREE,
+    group,
+    "plantation-ground",
+    plantationGroundGeometry(THREE, plan),
+    resources,
+    metrics,
+  );
+  if (plantationGroundMesh) {
+    plantationGroundMesh.userData.cobraCanyonLandmarkId =
+      "landmark.cobra-canyon.plantation-water-tower.v1";
+  }
+
 
   const landmarkMesh = addInstancedMesh(
     THREE,
@@ -1748,6 +2644,17 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
     composeHazard,
     { hazardCue: true },
   );
+  const waterTowerMesh = addInstancedMesh(
+    THREE,
+    group,
+    "water-tower",
+    waterTowerGeometry(THREE),
+    hazards.waterTowers,
+    resources,
+    metrics,
+    composeBox,
+    { hazardCue: true },
+  );
   const bridgeDeckMesh = addInstancedMesh(
     THREE,
     group,
@@ -1756,7 +2663,18 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
     hazards.bridgeDecks,
     resources,
     metrics,
-    composeBox,
+    composeBridgeDeck,
+    { hazardCue: true },
+  );
+  const bridgeApproachMesh = addInstancedMesh(
+    THREE,
+    group,
+    "bridge-approach",
+    bridgeApproachGeometry(THREE),
+    hazards.bridgeApproaches,
+    resources,
+    metrics,
+    composeBridgeApproach,
     { hazardCue: true },
   );
   const bridgePierMesh = addInstancedMesh(
@@ -1767,7 +2685,7 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
     hazards.bridgePiers,
     resources,
     metrics,
-    composeBox,
+    composeBridgePier,
     { hazardCue: true },
   );
   if (landmarkMesh) {
@@ -1803,9 +2721,29 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
       })),
     );
   }
+  if (waterTowerMesh) {
+    waterTowerMesh.userData.cobraCanyonInstances = Object.freeze(
+      hazards.waterTowers.map((placement, instanceId) => Object.freeze({
+        instanceId,
+        id: placement.id,
+        kind: placement.kind,
+        authoredHazard: true,
+      })),
+    );
+  }
   if (bridgeDeckMesh) {
     bridgeDeckMesh.userData.cobraCanyonInstances = Object.freeze(
       hazards.bridgeDecks.map((placement, instanceId) => Object.freeze({
+        instanceId,
+        id: placement.id,
+        kind: placement.kind,
+        authoredHazard: true,
+      })),
+    );
+  }
+  if (bridgeApproachMesh) {
+    bridgeApproachMesh.userData.cobraCanyonInstances = Object.freeze(
+      hazards.bridgeApproaches.map((placement, instanceId) => Object.freeze({
         instanceId,
         id: placement.id,
         kind: placement.kind,
@@ -1871,12 +2809,16 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
     wireSpans: hazards.wireSpans.length,
     suppressedPresentationPoles: hazards.suppressedPresentationPoles,
     hazards: hazards.authoredCount,
-    hazardInstances: hazards.placements.length + hazards.bridges.length,
+    hazardInstances:
+      hazards.placements.length + hazards.waterTowers.length + hazards.bridges.length,
+    waterTowers: hazards.waterTowers.length,
     bridges: hazards.bridges.length,
     bridgeDecks: hazards.bridgeDecks.length,
+    bridgeApproaches: hazards.bridgeApproaches.length,
     bridgePiers: hazards.bridgePiers.length,
     campEmberFirebaseParts: campEmber?.partCount ?? 0,
     campEmberFirebaseTriangles: campEmber?.triangles ?? 0,
+    plantationGroundTriangles: metrics.roleTriangles["plantation-ground"] ?? 0,
     routeEnvelopeAdjustedInstances: routeEnvelopePlacements.filter(
       (placement) => placement.routeEnvelopeAdjusted,
     ).length,
@@ -1916,7 +2858,8 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
         visibleAssetInstances: assetSnapshot.instances,
         visibleAssetDrawCalls: assetSnapshot.drawCalls,
         hazards: hazards.authoredCount,
-        hazardInstances: hazards.placements.length + hazards.bridges.length,
+        hazardInstances:
+          hazards.placements.length + hazards.waterTowers.length + hazards.bridges.length,
         hazardsVisible: true,
         presentationOnly: true,
         authoritative: false,
@@ -1955,9 +2898,17 @@ export function createCobraCanyonPresentation(THREE, plan, options = {}) {
       hazardMesh.visible = true;
       hazardMesh.count = hazards.placements.length;
     }
+    if (waterTowerMesh) {
+      waterTowerMesh.visible = true;
+      waterTowerMesh.count = hazards.waterTowers.length;
+    }
     if (bridgeDeckMesh) {
       bridgeDeckMesh.visible = true;
       bridgeDeckMesh.count = hazards.bridgeDecks.length;
+    }
+    if (bridgeApproachMesh) {
+      bridgeApproachMesh.visible = true;
+      bridgeApproachMesh.count = hazards.bridgeApproaches.length;
     }
     if (bridgePierMesh) {
       bridgePierMesh.visible = true;

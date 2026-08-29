@@ -188,21 +188,41 @@ public sealed class CobraCanyonWindFieldTests
             CobraMissionRuntime.DefaultAirDensityKgM3);
         var command = new VerticalLiftPilotCommand(trim, 0.0, 0.0, 0.0);
 
-        for (int tick = 0; tick < 8; tick++)
-        {
-            Vec3D positionAtSample = runtime.Cobra.State.PositionWorldM;
-            Vec3D expected = replayField.Sample(
-                positionAtSample,
-                tick * PlayerVehicleContract.FixedDeltaSeconds);
-            runtime.Advance(command);
+        Vec3D initialPosition = runtime.Cobra.State.PositionWorldM;
+        Vec3D expectedInitial = replayField.Sample(initialPosition, simulationTimeSeconds: 0.0);
 
-            Assert.Equal(expected, runtime.LastWindVelocityMps);
+        runtime.Advance(command);
+
+        Assert.Equal(10.0, CobraMissionRuntime.TerrainWindSampleHz);
+        Assert.Equal(1, runtime.TerrainWindSamplesTaken);
+        Assert.Equal(expectedInitial, runtime.LastWindVelocityMps);
+        Assert.Equal(
+            runtime.LastWindVelocityMps.X,
+            runtime.Cobra.Observation.WindVelocityMps.X,
+            6);
+
+        for (int tick = 1; tick < CobraMissionRuntime.TerrainWindSampleIntervalTicks; tick++)
+        {
+            runtime.Advance(command);
+            Assert.Equal(1, runtime.TerrainWindSamplesTaken);
+            Assert.Equal(expectedInitial, runtime.LastWindVelocityMps);
             Assert.Equal(
                 runtime.LastWindVelocityMps.X,
                 runtime.Cobra.Observation.WindVelocityMps.X,
                 6);
         }
 
+        Vec3D refreshPosition = runtime.Cobra.State.PositionWorldM;
+        Vec3D expectedRefresh = replayField.Sample(
+            refreshPosition,
+            CobraMissionRuntime.TerrainWindSampleIntervalTicks
+                * PlayerVehicleContract.FixedDeltaSeconds);
+
+        runtime.Advance(command);
+
+        Assert.Equal(2, runtime.TerrainWindSamplesTaken);
+        Assert.Equal(expectedRefresh, runtime.LastWindVelocityMps);
+        Assert.NotEqual(expectedInitial, runtime.LastWindVelocityMps);
         Assert.True(runtime.LastWindVelocityMps.Length > 0.5);
     }
 

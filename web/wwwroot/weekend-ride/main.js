@@ -1,41 +1,55 @@
-import * as THREE from "../vendor/three.module.js?v=345";
-import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=345";
+import * as THREE from "../vendor/three.module.js";
+import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=348";
 import {
   loadRideBest,
   saveRideBest,
-} from "../render/ride/ride_best_lap_store.js?v=345";
-import { weekendRideResult } from "../render/ride/weekend_ride_result.js?v=345";
-import { weekendRideEscapeAction } from "../render/ride/weekend_ride_lifecycle.js?v=345";
+} from "../render/ride/ride_best_lap_store.js?v=348";
+import { weekendRideResult } from "../render/ride/weekend_ride_result.js?v=348";
+import { weekendRideEscapeAction } from "../render/ride/weekend_ride_lifecycle.js?v=348";
 import {
   dominantSignedAxis,
   gamepadRiderAxes,
-} from "../render/motorcycle/rider_input.js?v=345";
+} from "../render/motorcycle/rider_input.js?v=348";
 import {
   createRapierTrackDayPresentation,
-} from "../render/motorcycle/track_day_presentation.js?v=345";
-import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=345";
+} from "../render/motorcycle/track_day_presentation.js?v=348";
+import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=348";
+import {
+  advanceLowSpeedLens,
+  lowSpeedLensTarget,
+  neutralLowSpeedLens,
+} from "../render/camera/low_speed_lens.js?v=348";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=345";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=345";
-import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=345";
+} from "../render/visual/shadow_stabilizer.js?v=348";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=348";
+import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=348";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=345";
+} from "../render/audio/flight_audio.js?v=348";
 import {
   loadPlayerSettings,
   savePlayerSettings,
-} from "../render/settings/player_settings.js?v=345";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=345";
-import { RELEASE_BUILD } from "../render/release/release_identity.js?v=345";
+} from "../render/settings/player_settings.js?v=348";
+import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=348";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=348";
+import { RELEASE_BUILD } from "../render/release/release_identity.js?v=348";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;
 const SURFACE_ELEV_M = 192.0;
 const EYE_HEIGHT_M = 1.55;
+const WEEKEND_LOW_SPEED_LENS = Object.freeze({
+  wideFovDeg: 74,
+  cruiseFovDeg: 68,
+  wideThroughSpeedMps: 3,
+  cruiseSpeedMps: 34,
+  maxEdgeWrap01: 0.04,
+  responsePerSecond: 3.8,
+});
 
 const canvas = document.querySelector("#scene");
 const hudCanvas = document.querySelector("#hud");
@@ -44,6 +58,8 @@ const status = document.querySelector("#status");
 const statusText = status.querySelector("span");
 const pauseButton = document.querySelector("#pause-button");
 const soundButton = document.querySelector("#sound-button");
+const rideBrief = document.querySelector("#ride-brief");
+const rideBriefStart = document.querySelector("#ride-brief-start");
 const pauseMenu = document.querySelector("#pause-menu");
 const pauseResume = document.querySelector("#pause-resume");
 const pauseEnd = document.querySelector("#pause-end");
@@ -62,6 +78,15 @@ const resultMetricNodes = new Map([
 ]);
 const resultSectorNodes = [1, 2, 3, 4]
   .map((sector) => document.querySelector(`#result-sector-${sector}`));
+const standaloneReturnLinks = ["#ride-brief-return", "#pause-return", "#result-return"]
+  .map((selector) => document.querySelector(selector))
+  .filter(Boolean);
+for (const returnLink of standaloneReturnLinks) {
+  returnLink.href = standaloneNavigationHref(
+    returnLink.getAttribute("href"),
+    window.location,
+  );
+}
 const missionBackground = [
   document.querySelector(".topbar"),
   document.querySelector("aside"),
@@ -73,6 +98,10 @@ const missionBackground = [
 // same: a coarse pointer is a phone unless BOTH memory and core count say otherwise, and missing
 // data (Safari does not publish deviceMemory) is not evidence of headroom.
 const coarsePointer = window.matchMedia?.("(pointer: coarse)")?.matches === true;
+const touchPreview = ["localhost", "127.0.0.1"].includes(window.location.hostname)
+  && new URL(window.location.href).searchParams.get("input") === "touch";
+const touchPresentation = coarsePointer || touchPreview;
+document.body.dataset.input = touchPresentation ? "touch" : "desktop";
 const deviceMemoryGiB = Number.isFinite(navigator.deviceMemory) ? navigator.deviceMemory : null;
 const logicalCores = Number.isFinite(navigator.hardwareConcurrency)
   ? navigator.hardwareConcurrency
@@ -81,7 +110,7 @@ const constrainedDevice = (deviceMemoryGiB !== null && deviceMemoryGiB <= 4)
   || (logicalCores !== null && logicalCores <= 4);
 const touchHeadroom = deviceMemoryGiB !== null && deviceMemoryGiB >= 8
   && logicalCores !== null && logicalCores >= 8;
-const QUALITY_TIER = coarsePointer
+const QUALITY_TIER = touchPresentation
   ? (touchHeadroom ? "balanced" : "mobile")
   : (constrainedDevice ? "balanced" : "desktop");
 
@@ -155,6 +184,7 @@ scene.fog = new THREE.FogExp2(HORIZON_HAZE_COLOR, 0.00016);
 // coplanar surfaces (track, shoulder, kerbs, patchwork) are within 300 m and already carry
 // explicit polygonOffset.
 const camera = new THREE.PerspectiveCamera(68, 1, 0.25, 24_000);
+let rideLens = neutralLowSpeedLens(WEEKEND_LOW_SPEED_LENS);
 scene.add(new THREE.HemisphereLight(0xe8eee2, 0x3d4632, 0.78));
 const sun = new THREE.DirectionalLight(0xffdfb0, 1.18);
 sun.position.set(-1_200, 2_400, 900);
@@ -298,6 +328,7 @@ function persistBestLapIfImproved(state) {
 }
 let snapshot = null;
 let playerSettings = loadPlayerSettings(safeLocalStorage());
+let dispatchOpen = true;
 let paused = false;
 let terminal = false;
 let tornDown = false;
@@ -316,6 +347,7 @@ const telemetryChannel = createCobraTelemetryChannel({
 });
 let telemetryRowRecordedAtMs = -Infinity;
 const TELEMETRY_ROW_INTERVAL_MS = 100;
+const RIDE_AGAIN_SESSION_KEY = "guns-only.weekend-ride.ride-again";
 
 function recordRideTelemetry(nowMs, state, frameMs) {
   if (!state) return;
@@ -343,7 +375,8 @@ function recordRideTelemetry(nowMs, state, frameMs) {
 
 // Standstill means the bike is stopped with the throttle untouched — sim truth, not DOM.
 function onboardingNudgeState(state) {
-  if (!state || paused || state.phase === "finished") return {};
+  if (!state || dispatchOpen || onboarding?.isOpen() === true
+    || paused || state.phase === "finished") return {};
   const speedMps = Math.hypot(state.vx ?? 0, state.vy ?? 0, state.vz ?? 0);
   return { standstill: speedMps < 0.5 && !keys.has("KeyW") };
 }
@@ -372,7 +405,7 @@ function applyWeekendAudioIdentity(state) {
 
 function syncSoundControl() {
   if (!soundButton) return;
-  soundButton.textContent = `Sound · ${playerSettings.audio ? "on" : "off"}`;
+  soundButton.textContent = `Sound ${playerSettings.audio ? "on" : "off"}`;
   soundButton.setAttribute("aria-pressed", String(playerSettings.audio));
 }
 
@@ -397,8 +430,65 @@ function setMissionBackgroundInert(inert) {
   for (const node of missionBackground) node.inert = inert === true;
 }
 
-function setRidePaused(next, { focus = true } = {}) {
+function safeSessionStorage() {
+  try {
+    return globalThis.sessionStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function consumeRideAgainIntent() {
+  const storage = safeSessionStorage();
+  try {
+    const replay = storage?.getItem?.(RIDE_AGAIN_SESSION_KEY) === "1";
+    storage?.removeItem?.(RIDE_AGAIN_SESSION_KEY);
+    return replay;
+  } catch {
+    return false;
+  }
+}
+
+function showRideBrief({ focus = true } = {}) {
   if (!bridge || terminal) return false;
+  dispatchOpen = true;
+  paused = false;
+  bridge.SetPaused(true);
+  refreshSnapshot();
+  document.body.dataset.dispatch = "true";
+  document.body.dataset.paused = "false";
+  rideBrief.hidden = false;
+  pauseMenu.hidden = true;
+  pauseButton.disabled = true;
+  pauseButton.setAttribute("aria-pressed", "false");
+  pauseButton.textContent = "Pause";
+  setMissionBackgroundInert(true);
+  suspendFlightAudio("weekend-ride-dispatch");
+  setStatus("READY · REVIEW SESSION BRIEF", "ready");
+  if (focus) queueMicrotask(() => rideBriefStart?.focus({ preventScroll: true }));
+  return true;
+}
+
+function startRideFromBrief({ showOnboarding = true } = {}) {
+  if (!bridge || !dispatchOpen || terminal) return false;
+  dispatchOpen = false;
+  rideBrief.hidden = true;
+  document.body.dataset.dispatch = "false";
+  setMissionBackgroundInert(false);
+  bridge.SetPaused(false);
+  refreshSnapshot();
+  pauseButton.disabled = false;
+  lastTimeMs = performance.now();
+  if (playerSettings.audio) armFlightAudio(applyWeekendAudioIdentity(snapshot));
+  canvas.focus?.({ preventScroll: true });
+  const teachingOpen = showOnboarding && onboarding?.maybeShowFirstRun() === true;
+  if (!teachingOpen) canvas.focus?.({ preventScroll: true });
+  setStatus("RAPIER TRACK DAY · RIDER REFLEX ASSIST", "ready");
+  return true;
+}
+
+function setRidePaused(next, { focus = true } = {}) {
+  if (!bridge || dispatchOpen || terminal) return false;
   const shouldPause = next === true;
   if (paused === shouldPause) return false;
   paused = shouldPause;
@@ -424,13 +514,16 @@ function setRidePaused(next, { focus = true } = {}) {
 function showRideResult(state) {
   if (!state || terminal) return false;
   terminal = true;
+  dispatchOpen = false;
   paused = false;
   releaseRideControls();
   suspendFlightAudio("weekend-ride-result");
   onboarding?.dismiss();
   document.body.dataset.paused = "false";
+  document.body.dataset.dispatch = "false";
   document.body.dataset.terminal = "true";
   setMissionBackgroundInert(true);
+  rideBrief.hidden = true;
   pauseMenu.hidden = true;
   pauseButton.disabled = true;
   pauseButton.setAttribute("aria-pressed", "false");
@@ -470,12 +563,14 @@ function trapDialogFocus(dialog, event) {
   if (event.code !== "Tab") return;
   const focusable = Array.from(dialog.querySelectorAll("button:not([disabled]), a[href]"));
   if (!focusable.length) return;
+  event.stopPropagation();
   const first = focusable[0];
   const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
+  const focusOutside = !dialog.contains(document.activeElement);
+  if (event.shiftKey && (focusOutside || document.activeElement === first)) {
     event.preventDefault();
     last.focus({ preventScroll: true });
-  } else if (!event.shiftKey && document.activeElement === last) {
+  } else if (!event.shiftKey && (focusOutside || document.activeElement === last)) {
     event.preventDefault();
     first.focus({ preventScroll: true });
   }
@@ -567,7 +662,7 @@ function axisValue(positiveCode, negativeCode) {
 }
 
 function sendControls() {
-  if (!bridge || paused || terminal) return;
+  if (!bridge || dispatchOpen || onboarding?.isOpen() === true || paused || terminal) return;
   const gamepad = Array.from(navigator.getGamepads?.() ?? [])
     .find((candidate) => candidate?.connected);
   const analog = gamepadRiderAxes(gamepad);
@@ -596,9 +691,31 @@ function refreshSnapshot() {
   return snapshot;
 }
 
-function syncCamera(state) {
+function syncCamera(state, deltaSeconds) {
   simToScenePosition(state.px, state.py, state.pz, camera.position);
   applyViewAttitude(camera, state);
+  const speedMps = Math.hypot(
+    Number(state.vx) || 0,
+    Number(state.vy) || 0,
+    Number(state.vz) || 0,
+  );
+  rideLens = advanceLowSpeedLens(
+    rideLens,
+    lowSpeedLensTarget(speedMps, WEEKEND_LOW_SPEED_LENS),
+    deltaSeconds,
+    WEEKEND_LOW_SPEED_LENS,
+  );
+  if (Math.abs(camera.fov - rideLens.fovDeg) > 0.001) {
+    camera.fov = rideLens.fovDeg;
+    camera.updateProjectionMatrix();
+  }
+  // QA seam: the central projection remains rectilinear; edgeWrap01 records the deliberately
+  // bounded peripheral-wrap budget for a future post pass without pretending one exists today.
+  window.__gunsOnlyWeekendLens = Object.freeze({
+    speedMps,
+    fovDeg: rideLens.fovDeg,
+    edgeWrapBudget01: rideLens.edgeWrap01,
+  });
 }
 
 function animate(timeMs) {
@@ -609,16 +726,17 @@ function animate(timeMs) {
   if (!bridge) return;
 
   sendControls();
-  if (!paused && !terminal) bridge.Advance(deltaSeconds);
+  const teachingOpen = onboarding?.isOpen() === true;
+  if (!dispatchOpen && !teachingOpen && !paused && !terminal) bridge.Advance(deltaSeconds);
   const state = refreshSnapshot();
   if (!state) return;
 
   updateFlightAudio(state, {
-    muted: paused || terminal || !playerSettings.audio,
+    muted: dispatchOpen || teachingOpen || paused || terminal || !playerSettings.audio,
     nowSeconds: timeMs / 1_000,
   });
 
-  syncCamera(state);
+  syncCamera(state, deltaSeconds);
   updateShadowFrame();
   renderer.render(scene, camera);
   helmetHud.draw(state);
@@ -630,6 +748,8 @@ function animate(timeMs) {
     showRideResult(state);
   } else if ((state.tip_recovery_flash_s ?? 0) > 0) {
     setStatus("TIP-OVER · RECOVERED", "error");
+  } else if (dispatchOpen) {
+    setStatus("READY · REVIEW SESSION BRIEF", "ready");
   } else if (paused) {
     setStatus("PAUSED · ESC TO RESUME", "ready");
   } else {
@@ -649,10 +769,13 @@ function isControlKey(code) {
     || code.startsWith("Arrow");
 }
 
+// Bubble after the shared controls onboarding's capture listener so acknowledgement keys can
+// never double as throttle, steering, shifting, reset, or pause input.
 window.addEventListener("keydown", (event) => {
   if (event.code === "Escape") {
     event.preventDefault();
     event.stopPropagation();
+    if (dispatchOpen) return;
     const action = weekendRideEscapeAction({
       onboardingOpen: onboarding?.isOpen() === true,
       paused,
@@ -666,6 +789,10 @@ window.addEventListener("keydown", (event) => {
     setRidePaused(action === "pause");
     return;
   }
+  if (dispatchOpen) return;
+  // Escape above owns dismissal. Every other key waits until the teaching card releases
+  // authority, so an acknowledgement can never also reset, shift, or change physics mode.
+  if (onboarding?.isOpen() === true) return;
   if (event.code === "KeyM" && !event.repeat && !terminal && !paused) {
     event.preventDefault();
     setWeekendAudioEnabled(!playerSettings.audio, { arm: true });
@@ -706,13 +833,15 @@ window.addEventListener("keydown", (event) => {
   if (!isControlKey(event.code)) return;
   event.preventDefault();
   keys.add(event.code);
-}, true);
+});
 
 pauseButton?.addEventListener("click", () => setRidePaused(!paused));
 soundButton?.addEventListener("click", () =>
   setWeekendAudioEnabled(!playerSettings.audio, { arm: true }));
 pauseResume?.addEventListener("click", () => setRidePaused(false));
 pauseEnd?.addEventListener("click", endRide);
+rideBriefStart?.addEventListener("click", () => startRideFromBrief());
+rideBrief?.addEventListener("keydown", (event) => trapDialogFocus(rideBrief, event));
 pauseMenu?.addEventListener("keydown", (event) => trapDialogFocus(pauseMenu, event));
 rideResult?.addEventListener("keydown", (event) => trapDialogFocus(rideResult, event));
 
@@ -733,6 +862,11 @@ function teardownRide(reason) {
 }
 
 function rideAgain() {
+  try {
+    safeSessionStorage()?.setItem?.(RIDE_AGAIN_SESSION_KEY, "1");
+  } catch {
+    // A replay still works through the ordinary brief when session storage is unavailable.
+  }
   teardownRide("ride_again");
   window.location.reload();
 }
@@ -804,7 +938,9 @@ async function boot() {
     buildTrackDayPresentation(circuitPoints);
     manualClutch = snapshot.clutch_mode === "manual";
     terminal = false;
+    dispatchOpen = true;
     paused = false;
+    document.body.dataset.dispatch = "true";
     document.body.dataset.paused = "false";
     document.body.dataset.terminal = "false";
     pauseButton.disabled = false;
@@ -814,11 +950,13 @@ async function boot() {
     onboarding = createControlsOnboarding({
       modeId: WEEKEND_RIDE_ONBOARDING_CONTENT.modeId,
       content: WEEKEND_RIDE_ONBOARDING_CONTENT,
+      focusTarget: canvas,
       nudges: [
         { id: "ride", text: "HOLD W — THROTTLE TO RIDE", when: (s) => s.standstill === true, afterSeconds: 3 },
       ],
     });
-    onboarding.maybeShowFirstRun();
+    if (consumeRideAgainIntent()) startRideFromBrief({ showOnboarding: false });
+    else showRideBrief();
     lastTimeMs = performance.now();
     animationFrame = requestAnimationFrame(animate);
   } catch (error) {

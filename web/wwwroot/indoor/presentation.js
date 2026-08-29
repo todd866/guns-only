@@ -295,6 +295,22 @@ function hostileIsPresent(hostile) {
     && hostile.present === true;
 }
 
+export function indoorRouteCueState({
+  pathIndex,
+  routeProgress = 0,
+  linkMode = "fiber",
+  direction = "ingress",
+} = {}) {
+  const offset = direction === "return"
+    ? Number(routeProgress) - Number(pathIndex)
+    : Number(pathIndex) - Number(routeProgress);
+  const visible = linkMode === "fiber" && offset >= 1 && offset <= 2;
+  return Object.freeze({
+    visible,
+    opacity: visible ? (offset === 1 ? 0.68 : 0.2) : 0,
+  });
+}
+
 function createDroneFrame(materials) {
   const group = new THREE.Group();
   group.name = "camera-airframe";
@@ -451,6 +467,9 @@ export class IndoorPresentation {
     this.visibleHostileIds = new Set();
     this.projectileModels = new Map();
     this.routeRings = [];
+    this.routeProgress = 0;
+    this.lastRouteTick = -1;
+    this.lastRouteDirection = "ingress";
     this.sparks = [];
     this.lastProjectilePositions = new Map();
     this.aimMeshes = [];
@@ -786,13 +805,17 @@ export class IndoorPresentation {
         : 1 + Math.sin(elapsed * (current ? 2.1 : 1.1) + model.userData.phase)
           * (current ? 0.035 : 0.016);
 
-      model.visible = true;
+      // A captured room stays captured in the objective list and on the minimap. Keeping its
+      // full-size 3D hoops in the corridor made the next leg harder to see and could stack two
+      // markers over one doorway.
+      model.visible = !point.complete;
       model.position.copy(vector(point.position));
       model.scale.setScalar(radiusScale * pulse);
       model.rotation.y = this.reducedMotion
         ? 0
         : elapsed * (current ? 0.42 : 0.12) + model.userData.phase;
       model.userData.label = point.label;
+      model.userData.complete = point.complete;
 
       const outer = model.getObjectByName("scan-ring");
       const hoop = model.getObjectByName("scan-hoop");
@@ -908,11 +931,26 @@ export class IndoorPresentation {
         nearest = index;
       }
     }
+    const tick = Number(snapshot.tick) || 0;
+    if (tick < this.lastRouteTick) this.routeProgress = 0;
+    this.lastRouteTick = tick;
+    // Nearest-node transitions occur at the authored segment midpoint. Ratcheting that index
+    // keeps a passed cue from reappearing without requiring the pilot to hit a 1 m 3D sphere.
+    this.routeProgress = Math.max(this.routeProgress, nearest);
+    const returning = snapshot.survey?.returnRequested === true;
+    this.lastRouteDirection = returning ? "return" : "ingress";
+    const cueProgress = returning ? nearest : this.routeProgress;
+    this.lastRouteCueAnchor = cueProgress;
+
     for (const ring of this.routeRings) {
-      const behind = ring.userData.pathIndex < nearest;
-      const future = ring.userData.pathIndex > nearest + 2;
-      ring.visible = snapshot.link.mode === "fiber" && !behind;
-      ring.material.opacity = future ? 0.2 : 0.68;
+      const cue = indoorRouteCueState({
+        pathIndex: ring.userData.pathIndex,
+        routeProgress: cueProgress,
+        linkMode: snapshot.link.mode,
+        direction: returning ? "return" : "ingress",
+      });
+      ring.visible = cue.visible;
+      ring.material.opacity = cue.opacity;
       ring.material.transparent = true;
       const pulse = ring.userData.baseScale * (1 + Math.sin(elapsed * 2.4 + ring.userData.pathIndex) * 0.045);
       ring.scale.setScalar(pulse);
@@ -1012,6 +1050,34 @@ export class IndoorPresentation {
 
   render() {
     this.renderer.render(this.scene, this.camera);
+  }
+
+  diagnostics() {
+    const visibleSurveyMarkerIds = [...this.surveyModels]
+      .filter(([, model]) => model.visible)
+      .map(([id]) => id);
+    const visibleCompletedSurveyMarkerIds = [...this.surveyModels]
+      .filter(([, model]) => model.visible && model.userData.complete === true)
+      .map(([id]) => id);
+    return Object.freeze({
+      rendererReady: this.canvas.width > 0
+        && this.canvas.height > 0
+        && this.renderer.getContext().isContextLost() === false,
+      framebufferWidth: this.canvas.width,
+      framebufferHeight: this.canvas.height,
+      visibleRouteCueCount: this.routeRings.filter((ring) => ring.visible).length,
+      visibleRouteCueIndices: Object.freeze(this.routeRings
+        .filter((ring) => ring.visible)
+        .map((ring) => ring.userData.pathIndex)),
+      routeProgress: this.routeProgress,
+      routeDirection: this.lastRouteDirection ?? "ingress",
+      routeCueAnchor: this.lastRouteCueAnchor ?? 0,
+      renderFrameCount: this.renderer.info.render.frame,
+      renderTriangleCount: this.renderer.info.render.triangles,
+      webglContextLost: this.renderer.getContext().isContextLost(),
+      visibleSurveyMarkerIds: Object.freeze(visibleSurveyMarkerIds),
+      visibleCompletedSurveyMarkerIds: Object.freeze(visibleCompletedSurveyMarkerIds),
+    });
   }
 
   dispose() {

@@ -9,7 +9,7 @@
 
 export const COBRA_TURNAROUND_ACTION_CODE = "KeyE";
 // Standard Gamepad mapping: button 3 is the north/Y face button. It does not collide with the
-// triggers used for collective or the gunner's trigger contract.
+// triggers used for collective.
 export const COBRA_TURNAROUND_GAMEPAD_BUTTON = 3;
 
 function gamepadButtonHeld(gamepad, index) {

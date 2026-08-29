@@ -128,6 +128,30 @@ export function topGunNavDecision(state = {}) {
   });
 }
 
+/**
+ * Edge latch for the accepted Top Gun RTB transition. It waits until the navigation console has
+ * useful content, opens once, then stays consumed while RTB remains active so a pilot's manual
+ * close is respected. Returning to combat arms the next accepted-RTB edge.
+ */
+export class TopGunRtbDisclosureLatch {
+  constructor() {
+    this.active = false;
+  }
+
+  update(state = {}, { disclosureRelevant = true } = {}) {
+    const topGun = state?.presentation_theme === "top-gun-anime-1986"
+      || String(state?.mission_definition_id || "").includes("top-gun");
+    const active = topGun && state?.player_rtb_active === true;
+    if (!active) {
+      this.active = false;
+      return false;
+    }
+    if (this.active || disclosureRelevant !== true) return false;
+    this.active = true;
+    return true;
+  }
+}
+
 export function formatWholeLb(value) {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return "—";
   return `${Math.round(Number(value)).toLocaleString("en-US")} LB`;

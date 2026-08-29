@@ -339,6 +339,19 @@ public static class Ukraine2030sTheatre {
         MissionFeaturePackRequired = true
     };
 
+    // Dedicated first-flight mountain cell. It is deliberately separate from the Soniachne
+    // clinic/steppe hero cell: the onboarding contract asks for a memorable enclosed valley, and
+    // staging it behind a clinic on low-relief farmland made the world contradict the brief. The
+    // source anchor sits in the regional product's strongest natural drainage basin; the bounded
+    // FirstRunValleyTerrainSurface supplies the higher-fidelity gorge collision/presentation.
+    public static MissionEnvironmentContract FirstRunMountainValley { get; } = Shared with {
+        LocationId = "location.ukraine.kestrel-gorge.v1",
+        FrameKind = MissionEnvironmentFrameKind.LocalRegionalCorridor,
+        TerrainSourceAnchorEastM = -90_112.0,
+        TerrainSourceAnchorNorthM = 155_648.0,
+        PreferredTerrainStreamingRadiusM = 32_000.0,
+    };
+
     // Legacy shared recovery-cell origin. The current embedded atlas resolves this source point
     // to land, so callers must not treat the name as proof of a water launch surface. It remains
     // fixed because CarrierApproach is a shared fixture; whole sorties that need verified sea own
@@ -505,6 +518,12 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     DroneRaidScenarioDefinition? DroneRaid = null,
     PilotPhysiologyProfile? PlayerPhysiologyProfile = null,
     bool RecoveryCompletesSortie = false,
+    /// <summary>
+    /// Whether clearing the deck after a bolter closes a finite recovery sortie. The default
+    /// preserves qualification and one-attempt mission behavior; continuous carrier recoveries
+    /// can keep the sortie active so the pilot may fly another pass.
+    /// </summary>
+    bool BolterCompletesSortie = true,
     ContinuousCombatConfig? ContinuousCombat = null,
     PilotSkill BanditSkill = PilotSkill.Competent,
     MissionEnvironmentContract? Environment = null,
@@ -1567,19 +1586,20 @@ public static class Beats {
     }
 
     /// <summary>
-    /// First-visit on-ramp onto the guns-only gauntlet: Soniachne draw, pop-out onto a parked
+    /// First-visit on-ramp onto the guns-only gauntlet: Kestrel Gorge, pop-out onto a parked
     /// opening pair, two AIM-9s on Fire, then the same Fire button is guns. Beat 7 stays the
     /// high merge with no heaters.
     /// </summary>
     public static BeatSetup ModernVisualMergeFirstRun() {
         BeatSetup merge = ModernVisualMerge();
         const double altitudeM = FirstRunValleyRuntime.SpawnAltitudeM;
-        double playerTas = BeatSetup.CornerTrueAirspeedMps(
-            FlightModel.F22APublicDataSurrogate, altitudeM);
+        double playerTas = AirData.TrueAirspeedForCalibratedAirspeedMps(
+            FirstRunValleyRuntime.RouteCalibratedAirspeedKts / AirData.MpsToKnots,
+            altitudeM);
         double banditTas = BeatSetup.CornerTrueAirspeedMps(
             FlightModel.Su27SPublicDataSurrogate, altitudeM);
         return merge with {
-            Name = "First-run valley — F-22A surrogate vs opening pair",
+            Name = "First-run Kestrel Gorge — F-22A surrogate vs opening pair",
             Player = merge.Player with {
                 Position = new Vec3D(
                     FirstRunValleyRuntime.ValleyEastM,
@@ -1596,7 +1616,7 @@ public static class Beats {
                 Speed = banditTas,
                 Chi = 0.0
             },
-            Environment = Ukraine2030sTheatre.HeroCell,
+            Environment = Ukraine2030sTheatre.FirstRunMountainValley,
             FirstRunValley = new FirstRunValleyConfig(
                 FirstRunValleyRuntime.PopOutNorthM,
                 FirstRunValleyRuntime.DefaultAim9Rounds),
@@ -1695,6 +1715,7 @@ public static class Beats {
             VisualMergeEvaluation: new VisualMergeEvaluationConfig(HoldFireThroughFirstPass: false),
             PlayerPhysiologyProfile: PilotPhysiologyProfile.ModernFastJetReference,
             RecoveryCompletesSortie: true,
+            BolterCompletesSortie: false,
             ContinuousCombat: new ContinuousCombatConfig(
                 ReplacementDelaySeconds: 3.5,
                 MaximumFormationSize: 1),

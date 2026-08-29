@@ -49,8 +49,8 @@ public sealed class PlayerGunAssistTests {
         }
     }
 
-    /// (a) The assist does not act during a commanded reversal — and the Build-264 law demonstrably
-    /// did, or this test would prove nothing.
+    /// (a) The assist does not act during a commanded reversal. Padlock's Build-264 law
+    /// demonstrably did; ordinary gunnery now deliberately owns no F-22 roll authority at all.
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -64,9 +64,15 @@ public sealed class PlayerGunAssistTests {
 
         Assert.True(after.ReversalSeconds > 60.0,
             $"the scenario must actually contain reversals (got {after.ReversalSeconds:F1} s)");
-        Assert.True(before.ReversalEngagement01 > 0.10,
-            $"the Build-264 law engaged in only {before.ReversalEngagement01:P1} of the reversal "
-            + "window, so this scenario does not reproduce the owner's complaint");
+        if (padlockSelected) {
+            Assert.True(before.ReversalEngagement01 > 0.10,
+                $"the Build-264 law engaged in only {before.ReversalEngagement01:P1} of the "
+                + "reversal window, so this scenario does not reproduce the owner's complaint");
+        } else {
+            Assert.Equal(0.0, before.ReversalAssistSeconds);
+            Assert.Equal(0.0, before.ReversalOpposingSeconds);
+            Assert.Equal(0.0, before.ReversalPeakAssistRoll);
+        }
         Assert.Equal(0.0, after.ReversalAssistSeconds);
         Assert.Equal(0.0, after.ReversalOpposingSeconds);
         Assert.Equal(0.0, after.ReversalPeakAssistRoll);
@@ -186,9 +192,16 @@ public sealed class PlayerGunAssistTests {
         PlayerGunAssistHarness.Result after = PlayerGunAssistHarness.RunEnsemble(
             gunneryAssistEnabled: true, padlockSelected: padlockSelected);
 
-        Assert.InRange(after.DutyCycle01, 0.01, 0.35);
-        Assert.True(after.DutyCycle01 < before.DutyCycle01,
-            $"roll-axis duty {after.DutyCycle01:P1} vs Build-264 {before.DutyCycle01:P1}");
+        if (padlockSelected) {
+            Assert.InRange(after.DutyCycle01, 0.01, 0.35);
+            Assert.True(after.DutyCycle01 < before.DutyCycle01,
+                $"roll-axis duty {after.DutyCycle01:P1} vs Build-264 {before.DutyCycle01:P1}");
+        } else {
+            // Tape 415 retired the hidden F-22 gunnery roll correction. Pitch assist can remain
+            // active, but both historical timing variants must now stay completely off roll.
+            Assert.Equal(0.0, before.DutyCycle01);
+            Assert.Equal(0.0, after.DutyCycle01);
+        }
     }
 
     /// The mechanism behind the effectiveness half, isolated from the closed loop: inside a tracking

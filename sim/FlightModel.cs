@@ -928,20 +928,25 @@ public static class FlightModel {
         // not an exact production nozzle transient. It is explicit so the allocator cannot
         // teleport the resultant through its full range in one 120 Hz tick.
         PitchThrustVectorNozzleRateRadPerSecond: 1.047197551196598, // 60 deg/s
-        // Gameplay assist, not an F-22 performance claim. Inside a fourteen-degree/1 km ballistic-
+        // Gameplay assist, not an F-22 performance claim. Inside a fourteen-degree/1.05 km ballistic-
         // lead gate it walks the nose onto the lead solution in BOTH axes: up to 17 deg/s of pitch
-        // convergence contributing at most 3.5 protected G, plus a bounded roll+rudder lateral pull
-        // toward the target's side. The player still has to solve closure, range, and trigger, and
-        // the rounds fly the real ballistic arc -- this magnetises the nose, it does not teleport hits.
+        // convergence contributing at most 3.5 protected G. Keep lateral control with the pilot:
+        // tape 415 caught the old hidden roll assist opposing the commanded bank and rocking.
+        // The player still has to solve closure, range, and trigger, and the rounds fly the real
+        // ballistic arc -- this magnetises the nose, it does not teleport hits.
         GunneryPitchAssistMaxRateRad: 0.30,
         GunneryPitchAssistCaptureAngleRad: 0.244346095279206, // 14 deg
-        GunneryPitchAssistMaxRangeM: 1000.0,
+        // Tape 452 held a settled 1.65-degree captured lift-axis miss for five seconds at
+        // 1.50-1.57 km, but the 1.50 km acquisition shoulder dropped the director before the
+        // harness could finish the conversion. A five-percent range increase moves that existing
+        // 1.5x shoulder to 1.575 km; it does not widen the ballistic cone or authorize firing.
+        GunneryPitchAssistMaxRangeM: 1050.0,
         GunneryPitchAssistGainPerSecond: 2.4,
         GunneryPitchAssistMaxCorrectionG: 3.5,
-        GunneryLateralAssistRollGain: 2.0,
-        GunneryLateralAssistMaxRoll: 0.6,
-        GunneryLateralAssistYawGain: 2.0,
-        GunneryLateralAssistMaxYaw: 0.5,
+        GunneryLateralAssistRollGain: 0.0,
+        GunneryLateralAssistMaxRoll: 0.0,
+        GunneryLateralAssistYawGain: 0.0,
+        GunneryLateralAssistMaxYaw: 0.0,
         HighLiftDragOnsetFraction: 0.90, HighLiftDragK: 2.8,
         WingSpanM: 13.56, PostStallAlphaCommandRad: 1.10,
         // F-22 HIGH-ALPHA CONTAINMENT (docs/f22-high-alpha-review.md). These explicit provisional
@@ -1500,11 +1505,13 @@ public static class FlightModel {
         System.Math.Abs(alpha), at18: 1.00, at36: 0.85, at45: 0.75,
         at60: 0.60, at90: 0.20);
 
-    static double F22AileronRudderInterconnect(double alpha) => InterpolateAlphaSchedule(
+    /// <summary>Reduced-order F-22 lateral-stick-to-rudder interconnect gain.</summary>
+    public static double F22AileronRudderInterconnect(double alpha) => InterpolateAlphaSchedule(
         System.Math.Abs(alpha), at18: 0.00, at36: 0.45, at45: 0.65,
         at60: 0.80, at90: 0.40);
 
-    static double F22EffectiveRudderCommand(double alpha, in PilotCommand c) {
+    /// <summary>Final normalized F-22 rudder demand after the explicit ARI allocation.</summary>
+    public static double F22EffectiveRudderCommand(double alpha, in PilotCommand c) {
         double lateralStick = System.Math.Clamp(c.RollControl + c.SasRollControl, -1.0, 1.0);
         return System.Math.Clamp(c.Rudder
             + F22AileronRudderInterconnect(alpha) * lateralStick, -1.0, 1.0);

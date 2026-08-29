@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import * as THREE from "../../../vendor/three.module.js";
 
 import {
   RAPIER_TRACK_DAY_SCHEMA,
+  createRapierTrackDayPresentation,
   planRapierTrackDay,
 } from "../track_day_presentation.js";
 
@@ -24,6 +26,21 @@ const circuit = [
   { x: 1_300, y: 192, z: -14 },
 ];
 
+function presentationMetrics(root) {
+  const metrics = { drawCalls: 0, instances: 0, triangles: 0 };
+  root.traverse((object) => {
+    if (!object.isMesh) return;
+    const geometryTriangles = Math.floor(
+      (object.geometry.index?.count ?? object.geometry.attributes.position.count) / 3,
+    );
+    const count = object.isInstancedMesh ? object.count : 1;
+    metrics.drawCalls++;
+    metrics.instances += count;
+    metrics.triangles += geometryTriangles * count;
+  });
+  return metrics;
+}
+
 test("track-day plan carries unmistakable circuit and paddock cues", () => {
   const plan = planRapierTrackDay(circuit);
 
@@ -34,6 +51,68 @@ test("track-day plan carries unmistakable circuit and paddock cues", () => {
   assert.ok(plan.cones.length >= 16);
   assert.ok(plan.tyreWalls.length >= 20);
   assert.ok(plan.paddock.length >= 6);
+});
+
+test("measured-lap gates have paired sector identity and sparse forward navigation", () => {
+  const plan = planRapierTrackDay(circuit);
+
+  assert.deepEqual(plan.sectorGates.map((gate) => gate.fraction), [0.25, 0.5, 0.75]);
+  assert.deepEqual(plan.sectorGates.map((gate) => gate.sector), [1, 2, 3]);
+  for (const gate of plan.sectorGates) {
+    assert.equal(gate.boards.length, 2);
+    assert.deepEqual(gate.boards.map((board) => board.side), [-1, 1]);
+    for (const board of gate.boards) {
+      const dx = board.center.x - gate.center.x;
+      const dz = board.center.z - gate.center.z;
+      const lateralDistanceM = Math.abs(-gate.tangent.z * dx + gate.tangent.x * dz);
+      const longitudinalDistanceM = gate.tangent.x * dx + gate.tangent.z * dz;
+      assert.ok(
+        lateralDistanceM > plan.trackWidthM * 0.5,
+        "timing boards stay outside the racing surface",
+      );
+      assert.ok(
+        lateralDistanceM <= plan.apronHalfWidthM,
+        "timing boards remain on the visible paved shoulder",
+      );
+      assert.ok(Math.abs(longitudinalDistanceM + 3) < 1e-6,
+        "timing boards lead the marshal post without drifting from the gate");
+    }
+  }
+
+  assert.deepEqual(
+    plan.courseDirectionMarks.map((mark) => mark.checkpoint),
+    ["start-finish", "sector-1", "sector-2", "sector-3"],
+  );
+  assert.equal(plan.courseDirectionMarks.length, 4, "direction paint stays sparse");
+  for (const mark of plan.courseDirectionMarks) {
+    assert.ok(Number.isFinite(mark.headingRad));
+    assert.ok(Math.abs(mark.center.z) <= plan.pavedHalfWidthM);
+  }
+});
+
+test("batched start and sector identity stays below the pre-polish render bill", () => {
+  const presentation = createRapierTrackDayPresentation(THREE, circuit);
+  const metrics = presentationMetrics(presentation.object3d);
+
+  const start = presentation.object3d.getObjectByName("rapier-start-finish");
+  const identity = presentation.object3d.getObjectByName("rapier-course-identity");
+  assert.ok(start);
+  assert.ok(identity);
+  assert.equal(start.getObjectByName("start-finish-checker").count, 20);
+  assert.equal(start.getObjectByName("start-finish-pylons").count, 2);
+  assert.equal(start.getObjectByName("start-finish-overhead-checker").count, 18);
+  assert.equal(identity.getObjectByName("sector-timing-boards").count, 6);
+  assert.equal(identity.getObjectByName("sector-number-bars").count, 12);
+  assert.equal(
+    identity.getObjectByName("course-direction-paint").geometry.index.count / 3,
+    32,
+  );
+
+  // Measured against this same fixture before the polish: 110 submissions / 13,180 triangles.
+  assert.deepEqual(metrics, { drawCalls: 85, instances: 400, triangles: 13_156 });
+  assert.ok(metrics.drawCalls <= 110);
+  assert.ok(metrics.triangles <= 13_180);
+  presentation.dispose();
 });
 
 test("all authored cues stay inside the paved extents, hairpin aprons included", () => {

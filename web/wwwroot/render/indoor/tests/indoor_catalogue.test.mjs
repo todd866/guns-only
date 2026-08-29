@@ -98,3 +98,14 @@ test("Indoor makes downlink loss visible while keeping simulation cadence indepe
   assert.match(styles, /body\[data-video="lost"\] #video-tear/);
   assert.match(styles, /body\[data-autonomy="active"\] #relay-block/);
 });
+
+test("Indoor keeps the active survey leg concise and visible on both world and map", () => {
+  assert.match(indoor, /Map both rooms\. Keep the fibre attached\. Return dark\./);
+  assert.doesNotMatch(indoor, /Survey tomorrow's attack site without announcing the route/);
+  assert.match(game, /snapshot\.survey\.scanPoints/,
+    "the local map must render authoritative survey points");
+  assert.match(game, /get visualDiagnostics\(\)/,
+    "the real-player harness needs renderer state rather than screenshot byte counts alone");
+  assert.match(game, /Scan two rooms\. Then X, hold B, engage the investigator\./,
+    "the provocation branch should name its next actions without a paragraph");
+});

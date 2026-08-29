@@ -1,4 +1,4 @@
-import * as THREE from "../../vendor/three.module.js?v=345";
+import * as THREE from "../../vendor/three.module.js";
 
 const DEG_LAT_M = 111_320;
 const ANCHOR_LAT = 49.88;

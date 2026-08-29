@@ -41,15 +41,35 @@ export function trackDayStatusLine(state = {}) {
   }
   if (state.on_track === false) {
     return Object.freeze({
-      text: "OFF COURSE · RETURN BETWEEN CURBS",
+      text: "OFF COURSE · RETURN TO PAINT",
       tone: "danger",
     });
   }
-  const mode = state.control_mode === "raw" ? "RAW" : "RIDER ASSIST";
-  const lap = state.lap ?? 0;
+  if (state.lap_valid === false || (Number(state.off_track_s) || 0) > 0) {
+    return Object.freeze({
+      text: `LAP SPOILT · ${(Number(state.off_track_s) || 0).toFixed(1)}s OFF`,
+      tone: "danger",
+    });
+  }
+  // Mode and timing already have dedicated readouts. Repeating them across the top edge made the
+  // helmet view look like an engineering dashboard instead of a road, so the strip is warning-only.
+  return Object.freeze({ text: "", tone: "normal" });
+}
+
+/**
+ * Keep the first ride focused on the road. The detailed force/balance instruments are still
+ * available in raw physics, and the balance tape returns contextually when the assist is active.
+ */
+export function weekendHudLayerVisibility(state = {}) {
+  const rawPhysics = state.control_mode === "raw";
+  // Authority uses -1 as "not in this balance regime"; only a positive proximity is active.
+  const balanceActive = (Number(state.wheelie_balance) || 0) >= 0.04
+    || (Number(state.stoppie_balance) || 0) >= 0.04;
   return Object.freeze({
-    text: `${mode} · LAP ${lap} · ${formatLapTime(state.lap_time_s)} · OFF ${(state.off_track_s ?? 0).toFixed(0)}s`,
-    tone: "normal",
+    inputBars: rawPhysics,
+    clutchMode: rawPhysics || state.clutch_mode === "manual",
+    pitchBalance: rawPhysics || balanceActive,
+    contactPatch: rawPhysics,
   });
 }
 
@@ -111,15 +131,16 @@ export class HelmetHud {
     const h = this.height;
     ctx.clearRect(0, 0, w, h);
 
+    const layers = weekendHudLayerVisibility(state);
     this.drawHorizonReticle(ctx, w, h);
     this.drawSpeedBlock(ctx, w, h, state);
     this.drawRpmGear(ctx, w, h, state);
     this.drawLeanBlock(ctx, w, h, state);
-    this.drawInputBars(ctx, w, h, state);
-    this.drawClutchMode(ctx, w, h, state);
+    if (layers.inputBars) this.drawInputBars(ctx, w, h, state);
+    if (layers.clutchMode) this.drawClutchMode(ctx, w, h, state);
     this.drawMinimap(ctx, w, h, state);
-    this.drawPitchBalanceTape(ctx, w, h, state);
-    this.drawContactPatchInstrument(ctx, w, h, state);
+    if (layers.pitchBalance) this.drawPitchBalanceTape(ctx, w, h, state);
+    if (layers.contactPatch) this.drawContactPatchInstrument(ctx, w, h, state);
     this.drawKneeCue(ctx, w, h, state);
     this.drawLapTiming(ctx, w, h, state);
     this.drawStatusStrip(ctx, w, h, state);
@@ -620,6 +641,7 @@ export class HelmetHud {
 
   drawStatusStrip(ctx, w, h, state) {
     const status = trackDayStatusLine(state);
+    if (!status.text) return;
     const x = w * 0.5;
     const y = 14;
     ctx.save();

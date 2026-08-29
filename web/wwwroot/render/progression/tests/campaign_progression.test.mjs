@@ -30,6 +30,7 @@ test("one catalog names every route and exposes only accepted production experie
     { id, mission, releaseState }
   )), [
     { id: "first-merge", mission: 7, releaseState: "production" },
+    { id: "ace-duel", mission: 9, releaseState: "preview" },
     { id: "multiplayer", mission: 7, releaseState: "preview" },
     { id: "low-level-drone", mission: 8, releaseState: "quarantined" },
     { id: "medevac", mission: 13, releaseState: "quarantined" },
@@ -74,12 +75,13 @@ test("one catalog names every route and exposes only accepted production experie
     "open lapping still needs an explicit player-owned ending");
   assert.equal(experienceById("okanagan-fireboss").route, "/okanagan/");
   const cobra = experienceById("cobra-lab");
-  assert.match(cobra.shortObjective, /garrison/i);
+  assert.match(cobra.shortObjective, /gun pit/i);
+  assert.doesNotMatch(cobra.shortObjective, /garrison/i);
   assert.match(cobra.shortObjective, /capture/i);
   assert.match(cobra.shortObjective, /tickets/i);
   assert.doesNotMatch(cobra.shortObjective, /45 seconds|tip .* control/i,
     "the front door must brief the live conquest objective, not the retired control threshold");
-  assert.equal(CAMPAIGN_NODES.length, 7,
+  assert.equal(CAMPAIGN_NODES.length, 8,
     "standalone research routes are not campaign beats");
 
   const fresh = createCampaignProfile();

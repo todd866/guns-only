@@ -92,6 +92,7 @@ node --check web/smoke/remote-route-smoke.mjs
 node --check web/smoke/production-routes.mjs
 node --check web/smoke/prewarm-origin.mjs
 node --check web/smoke/cobra_authority.mjs
+run_node_tests web/smoke/production-routes.test.mjs
 # The AH-1G crew chain (designation -> consent -> rounds away) is syntax-checked here but NOT
 # executed by the gate: it needs a hostile the turret can physically reach, which Hold the Bridge
 # only offers for the first ~20 s of mission time. Run it by hand against a published wwwroot --

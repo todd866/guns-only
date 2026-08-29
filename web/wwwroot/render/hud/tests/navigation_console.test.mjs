@@ -69,6 +69,14 @@ test("navigation disclosure mirrors native and KeyN state for assistive technolo
     /id="nav-console"[\s\S]*?<summary[^>]*aria-expanded="false"[^>]*aria-keyshortcuts="N"/);
 });
 
+test("accepted Top Gun RTB auto-opens once through an edge latch", () => {
+  assert.match(appSource,
+    /const topGunRtbDisclosureLatch = new TopGunRtbDisclosureLatch\(\);/);
+  assert.match(updateNavSource,
+    /const openForAcceptedTopGunRtb = topGunRtbDisclosureLatch\.update\(state, \{\s*disclosureRelevant: relevant,[\s\S]*?if \(openForAcceptedTopGunRtb\) \{\s*navConsole\.open = true;\s*syncNavConsoleDisclosure\(\);\s*\}/,
+    "accepted RTB should disclose the useful nav surface without fighting a later manual close");
+});
+
 test("Mesh ND solution strip exposes destination fuel and procedure chrome", () => {
   for (const id of [
     "nav-destination",

@@ -7,11 +7,11 @@ import {
 } from "./sim.js";
 import { IndoorPresentation } from "./presentation.js";
 import { IndoorAudio, loadIndoorPreferences } from "./audio.js";
-import { RELEASE_BUILD } from "../render/release/release_identity.js?v=345";
+import { RELEASE_BUILD } from "../render/release/release_identity.js?v=348";
 import {
   indoorActionPolicy,
   indoorBlockedActionMessage,
-} from "../render/indoor/control_policy.js?v=345";
+} from "../render/indoor/control_policy.js?v=348";
 
 const FIXED_STEP = 1 / 60;
 const MAX_FRAME_SECONDS = 0.12;
@@ -258,18 +258,21 @@ function phaseState() {
 const PROFILE_BRIEFING = Object.freeze({
   "attack-site": {
     doctrine: "STEALTH MANDATORY",
-    copy: "Survey tomorrow's attack site without announcing the route. Keep the fibre attached, inspect the marked rooms, then let the onboard controller retrace the quiet path home.",
+    copy: "Map both rooms. Keep the fibre attached. Return dark.",
     begin: "LAUNCH QUIET SURVEY",
+    launchCue: "Scan two rooms. Keep the fibre. R returns dark.",
   },
   "discretionary-site": {
     doctrine: "DISCRETION",
-    copy: "Inspect the abandoned service block and decide in the air: return silently if the site stays quiet, or break away and defend the drone if an investigator appears.",
+    copy: "Map both rooms. Return dark or break away if challenged.",
     begin: "LAUNCH DISCRETIONARY SURVEY",
+    launchCue: "Scan two rooms. Then R returns dark or X goes radio.",
   },
   "diversion-site": {
     doctrine: "PROVOCATION REQUIRED",
-    copy: "Survey tomorrow's diversion site, then broadcast deliberately. Draw out the investigator drone, open the gunfight, and make the response force look the wrong way.",
+    copy: "Map both rooms. Broadcast. Draw the response force in.",
     begin: "LAUNCH DIVERSION SURVEY",
+    launchCue: "Scan two rooms. Then X, hold B, engage the investigator.",
   },
 });
 
@@ -611,20 +614,20 @@ function updateHud() {
       ui.detachKicker.textContent = scansComplete
         ? "SILENT RETURN READY" : "STEALTH PROFILE";
       ui.detachCopy.textContent = scansComplete
-        ? "R starts the dark autonomous retrace. Fibre and weapons remain safe."
-        : "Keep fibre attached and weapons safe. Survey every marked room first.";
+        ? "R starts the dark retrace."
+        : "Fibre attached. Weapons safe. Scan both rooms.";
     }
     if (returning) {
       ui.detachKicker.textContent = snapshot.survey.silentReturn
         ? "SILENT AUTONOMOUS RETURN" : "AUTONOMOUS RETURN";
-      ui.detachCopy.textContent = "Onboard navigation owns the retrace.";
+      ui.detachCopy.textContent = "Onboard retrace active.";
     } else if (scansComplete) {
       ui.detachKicker.textContent = snapshot.survey.doctrine === "noisy-provocation"
         ? "PROVOCATION PHASE" : "SURVEY CAPTURED";
       ui.detachCopy.textContent = snapshot.survey.doctrine === "noisy-provocation"
         ? "Detach, then hold B to broadcast."
         : policy.stealthMandatory
-          ? "R returns dark. Fibre, radio and weapons remain safe."
+          ? "R returns dark."
           : "R returns dark; X exposes the radio.";
     }
   }
@@ -694,6 +697,33 @@ function drawMinimap() {
     });
     context.lineTo(x(snapshot.drone.position.x), y(snapshot.drone.position.z));
     context.stroke();
+  }
+
+  if (snapshot.survey) {
+    for (const point of snapshot.survey.scanPoints) {
+      const current = snapshot.survey.currentScanId === point.id;
+      context.beginPath();
+      context.arc(
+        x(point.position.x),
+        y(point.position.z),
+        current ? 6 : 4.5,
+        0,
+        Math.PI * 2,
+      );
+      context.fillStyle = point.complete ? "rgba(120, 255, 195, .38)" : "#62eaff";
+      context.fill();
+      if (current) {
+        context.strokeStyle = "rgba(98, 234, 255, .9)";
+        context.lineWidth = 1.5;
+        context.stroke();
+      }
+    }
+    if (snapshot.survey.returnRequested) {
+      const extraction = snapshot.survey.extractionPosition;
+      context.strokeStyle = "#78ffc3";
+      context.lineWidth = 2;
+      context.strokeRect(x(extraction.x) - 5, y(extraction.z) - 5, 10, 10);
+    }
   }
 
   for (const objective of snapshot.objectives) {
@@ -846,20 +876,20 @@ function processEvent(event) {
     case "survey-scan-complete": {
       const scan = snapshot.survey?.scanPoints.find((point) => point.id === event.scanId);
       showEventCue("SURVEY CAPTURED");
-      showSubtitle(`${scan?.label ?? "Observation"} recorded. Continue the route.`, 2300);
+      showSubtitle(`${scan?.label ?? "Observation"} recorded.`, 1900);
       audio.objective();
       announce(`${scan?.label ?? "Observation"} recorded.`);
       break;
     }
     case "survey-broadcast-started":
       showEventCue("EW SIGNATURE OPEN");
-      showSubtitle("The site can hear you now. Hold B to make the provocation unmistakable.", 3200);
+      showSubtitle("Hold B. Make the signature clear.", 2400);
       audio.handoff();
       announce("Deliberate radio signature transmitting.");
       break;
     case "survey-broadcast-complete":
       showEventCue("SIGNATURE CONFIRMED");
-      showSubtitle("They have the transmission. Expect an investigator.", 2500);
+      showSubtitle("Signature received. Expect contact.", 2200);
       audio.objective();
       break;
     case "investigator-summoned":
@@ -869,19 +899,19 @@ function processEvent(event) {
       break;
     case "investigator-arrived":
       showEventCue("INVESTIGATOR ON SITE");
-      showSubtitle("Contact is checking the transmission. Engage only if doctrine permits.", 3300);
+      showSubtitle("Investigator on site. Weapons clear by doctrine.", 2600);
       announce("Investigator drone on site.");
       audio.tone(230, 0.18, 0.05, "sawtooth");
       break;
     case "survey-combat-started":
       showEventCue("RESPONSE CLOCK LIVE", 2200);
-      showSubtitle(`The first shot started the clock. Reinforcements in ${event.reinforcementSeconds?.toFixed?.(1) ?? "seconds"}.`, 3500);
+      showSubtitle(`First shot. Reinforcements in ${event.reinforcementSeconds?.toFixed?.(1) ?? "seconds"}.`, 2800);
       announce("Drone combat started. Reinforcement clock is live.");
       audio.handoff();
       break;
     case "reinforcement-arrived":
       showEventCue("SECOND DRONE ARRIVED", 2200);
-      showSubtitle("The response force is here. Finish the fight or get the airframe home.", 3200);
+      showSubtitle("Second drone in. Fight or return.", 2500);
       announce("Reinforcement drone has entered the facility.");
       audio.failure();
       break;
@@ -889,9 +919,9 @@ function processEvent(event) {
       showEventCue(event.silent ? "SILENT RETURN" : "AUTONOMOUS RETURN");
       showSubtitle(
         event.silent
-          ? "No emissions. MIDGE-03 is retracing the fibre path on onboard navigation."
-          : "Return route committed. The onboard controller has the aircraft.",
-        3500,
+          ? "No emissions. MIDGE-03 is retracing the fibre."
+          : "Return committed. Onboard control has the aircraft.",
+        2800,
       );
       announce(event.silent ? "Silent autonomous return started." : "Autonomous return started.");
       audio.objective();
@@ -932,17 +962,17 @@ function processEvents() {
 
 function outcomeCopy(reason) {
   const copy = {
-    "drone-disabled": ["MIDGE-03 disabled", "The drone could not hold the corridor. The control loop remains live."],
-    "battery-depleted": ["Battery exhausted", "The airframe settled before the control loop was severed."],
-    "relay-disabled": ["Relay station lost", "The local radio station was overrun before the terminal action finished."],
-    "rf-window-expired": ["Radio window expired", "The station could not hold the command channel any longer."],
-    "stealth-rf-breach": ["Optical route exposed", "The fibre was detached on a zero-emission task, exposing the return route to radio detection."],
-    "stealth-broadcast-breach": ["Emission discipline broken", "A deliberate transmission revealed a mission whose doctrine required radio silence."],
-    "stealth-fire-breach": ["Weapons discipline broken", "Firing announced the survey before the drone could return with its observations."],
-    "stealth-detection-breach": ["Survey detected", "The investigator acquired MIDGE-03 before the silent route was complete."],
-    "stealth-doctrine-breach": ["Stealth contract broken", "The mission ended after an action contradicted the zero-emission brief."],
+    "drone-disabled": ["MIDGE-03 disabled", "The corridor remains live."],
+    "battery-depleted": ["Battery exhausted", "The airframe stopped short."],
+    "relay-disabled": ["Relay station lost", "The radio task was unfinished."],
+    "rf-window-expired": ["Radio window expired", "Command authority collapsed."],
+    "stealth-rf-breach": ["Optical route exposed", "Detaching the fibre broke radio silence."],
+    "stealth-broadcast-breach": ["Emission discipline broken", "The broadcast exposed the route."],
+    "stealth-fire-breach": ["Weapons discipline broken", "The first shot exposed the survey."],
+    "stealth-detection-breach": ["Survey detected", "The investigator found MIDGE-03."],
+    "stealth-doctrine-breach": ["Stealth contract broken", "The zero-emission brief was violated."],
   };
-  return copy[reason] ?? ["Mission incomplete", "The facility control loop remains live."];
+  return copy[reason] ?? ["Mission incomplete", "The task remains open."];
 }
 
 function showResult() {
@@ -961,8 +991,8 @@ function showResult() {
       ui.resultKicker.textContent = `${snapshot.survey.label.toUpperCase()} / SURVEY COMPLETE`;
       ui.resultTitle.textContent = quiet ? "Route stayed dark" : "Provocation complete";
       ui.resultCopy.textContent = quiet
-        ? "MIDGE-03 recorded the site and retraced the optical ingress without exposing the relay."
-        : `The site reacted, the drone fight drew attention, and the airframe made it home with ${Math.round(snapshot.drone.integrity)}% integrity.`;
+        ? "Site mapped. Optical route secure."
+        : `Response force drawn. MIDGE-03 home at ${Math.round(snapshot.drone.integrity)}%.`;
     } else {
       ui.resultKicker.textContent = "FACILITY NINE / MISSION COMPLETE";
       ui.resultTitle.textContent = "Control loop severed";
@@ -1122,7 +1152,8 @@ function beginMission() {
   ui.briefing.setAttribute("aria-hidden", "true");
   ui.canvas.focus({ preventScroll: true });
   void audio.start();
-  showSubtitle("Follow the cyan survey markers. Hold each observation point; the fibre keeps the route quiet.", 4200);
+  showSubtitle(PROFILE_BRIEFING[selectedMissionId]?.launchCue
+    ?? "Follow the fixed route cues.", 3200);
   announce("Indoor mission started. Optical link clean.");
   lastFrameAt = performance.now();
   lastVideoFrameAt = lastFrameAt;
@@ -1415,6 +1446,7 @@ function exposeDiagnostics() {
     get selectedMissionId() { return selectedMissionId; },
     get profiles() { return Object.keys(SURVEY_PROFILES); },
     get audioDiagnostics() { return audio.diagnostics(); },
+    get visualDiagnostics() { return presentation?.diagnostics?.() ?? null; },
     begin: beginMission,
     restart: () => resetMission({ start: true }),
     detach: queueDetach,

@@ -78,6 +78,15 @@ public readonly record struct SessionEvent(
     Vec3D Velocity = default);
 
 /// <summary>
+/// Read-only diagnostics for the opponent currently selected by the player's gun sight. The
+/// command is the controller's last physical pilot demand; Tactic is null while an actor is on a
+/// scripted rail which does not yet have a reactive tactical owner.
+/// </summary>
+public readonly record struct OpponentPilotTelemetry(
+    BanditTactic? Tactic,
+    PilotCommand LastCommand);
+
+/// <summary>
 /// An opponent which no longer owns combat targeting but remains physically integrated. A flying
 /// raid leaker continues its ordinary egress; a mission-killed opponent continues through the same
 /// failed-flight, impact, and settlement physics as any terminal aircraft.
@@ -231,6 +240,7 @@ public sealed class SimulationSession {
     WeatherProfile? _weatherProfile;
     ITerrainSurface? _terrainSurface;
     CasevacFlightRuntime? _casevacFlight;
+    double _casevacAnalogForward;
     double _casevacAnalogRight;
     bool _casevacAbortRequested;
 
@@ -456,6 +466,10 @@ public sealed class SimulationSession {
     public int RapierMissilesRemaining => _rapierMissilesRemaining;
     public int Aim9Remaining => _firstRunValleyRuntime?.Aim9Remaining
         ?? _topGunFightRuntime?.Aim9Remaining ?? 0;
+    /// Stable first-run interlock truth for presentation and reconnects. The generic visual-merge
+    /// evaluation owns a different first-pass rule, so renderers must not infer this valley gate
+    /// from WeaponsInhibited or from a short-lived transition cue.
+    public bool FirstRunWeaponsCold => _firstRunValleyRuntime?.WeaponsCold ?? false;
     public bool Aim9InFlight => _firstRunValleyRuntime?.Aim9InFlight
         ?? _topGunFightRuntime?.Aim9InFlight ?? false;
     public Missiles.Aim9FlightState Aim9SeekerState =>
@@ -718,6 +732,32 @@ public sealed class SimulationSession {
             Wingman? wingman = _wingmen.FirstOrDefault(wingman =>
                 wingman.PlayerGunTargetId == _selectedPlayerGunTargetId);
             return wingman?.Bandit.State ?? _bandit.State;
+        }
+    }
+    /// <summary>
+    /// Tactical owner and last command for the aircraft selected by the player's gun sight. This
+    /// intentionally follows slot retargeting, so a hardware tape cannot attribute a wingman's
+    /// motion to the primary opponent. Rail-only actors return null; a NeutralMergeBandit still
+    /// exposes its applied merge command, with no tactic until its reactive handoff begins.
+    /// </summary>
+    public OpponentPilotTelemetry? SelectedOpponentPilotTelemetry {
+        get {
+            if (!OpponentPresent) return null;
+
+            IBandit selected = _bandit;
+            foreach (Wingman wingman in _wingmen) {
+                if (wingman.PlayerGunTargetId != _selectedPlayerGunTargetId) continue;
+                selected = wingman.Bandit;
+                break;
+            }
+            if (selected is not IBanditDecisionTraceSource trace) return null;
+
+            BanditTactic? tactic = selected is NeutralMergeBandit {
+                FirstPassComplete: false
+            } merge
+                ? merge.Presenting ? BanditTactic.Present : null
+                : trace.PolicyMemory.Tactic;
+            return new OpponentPilotTelemetry(tactic, trace.AppliedCommand);
         }
     }
     public bool SelectedOpponentAlive => OpponentPresent
@@ -1112,6 +1152,10 @@ public sealed class SimulationSession {
     /// translated surface. Scenario authors should still prefer StartBeatWithTerrain at staging.
     /// </summary>
     public void SetTerrainSurface(ITerrainSurface? terrain) {
+        if (_beat.FirstRunValley is not null
+            && terrain is not null
+            && terrain is not FirstRunValleyTerrainSurface)
+            terrain = new FirstRunValleyTerrainSurface(terrain);
         _terrainSurface = terrain;
         if (_casevacFlight is not null
             && Lifecycle == LifecycleState.Ready) {
@@ -1179,6 +1223,8 @@ public sealed class SimulationSession {
     public void StartBeat(int index,
         Carrier.DeckConfiguration deckConfiguration = Carrier.DeckConfiguration.Axial) {
         if (!Beats.IsBuiltInIndex(index)) index = Beats.FirstBuiltInIndex;
+        if (_terrainSurface is FirstRunValleyTerrainSurface firstRunTerrain)
+            _terrainSurface = firstRunTerrain.Source;
         _prechargeSystemsOnStage = true;
         _beatIndex = index;
         _deckConfiguration = deckConfiguration;
@@ -1233,6 +1279,13 @@ public sealed class SimulationSession {
         _beatFactory = beatFactory;
         _fightDirector.Reset();
         BeatSetup setup = beatFactory();
+        if (setup.FirstRunValley is not null
+            && _terrainSurface is not null
+            && _terrainSurface is not FirstRunValleyTerrainSurface)
+            _terrainSurface = new FirstRunValleyTerrainSurface(_terrainSurface);
+        else if (setup.FirstRunValley is null
+            && _terrainSurface is FirstRunValleyTerrainSurface firstRunTerrain)
+            _terrainSurface = firstRunTerrain.Source;
         _deckConfiguration = setup.Carrier?.Configuration ?? _deckConfiguration;
         StageBeat(setup);
     }
@@ -1633,9 +1686,9 @@ public sealed class SimulationSession {
     }
 
     /// <summary>
-    /// Narrow integration hook for the future conventional-runway authority. It records only the
-    /// already-validated recovery transition; runway contact and sortie completion remain owned by
-    /// that physical recovery model. Repeated completion is idempotently successful.
+    /// Records the already-validated physical recovery transition for combat-handoff missions.
+    /// Contact and sortie completion remain owned by the active recovery model. Repeated
+    /// completion is idempotently successful.
     /// </summary>
     public bool CompletePlayerRecovery() {
         if (_combatHandoffPhase == CombatHandoffPhase.Recovered) return true;
@@ -2002,6 +2055,16 @@ public sealed class SimulationSession {
     public void SetAnalogPitchControl(double value) {
         if (!double.IsFinite(value))
             throw new ArgumentOutOfRangeException(nameof(value));
+        if (_casevacFlight is not null) {
+            // Standard gamepad Y is positive when the pilot pulls back. CASEVAC's driving-style
+            // longitudinal axis is positive forward, matching the default Push/ArrowUp binding,
+            // so invert the physical pitch convention at this mission boundary.
+            _casevacAnalogForward =
+                Lifecycle == LifecycleState.Active
+                    ? Math.Clamp(-value, -1.0, 1.0)
+                    : 0.0;
+            return;
+        }
         if (Lifecycle != LifecycleState.Active
             || _playerTerminalState != AircraftTerminalState.Flying
             || _pilotControlInterlocked) {
@@ -2145,9 +2208,13 @@ public sealed class SimulationSession {
             positive == negative
                 ? 0.0
                 : positive ? 1.0 : -1.0;
-        double forward = Axis(
-            KeyActive(GKey.PushDown),
-            KeyActive(GKey.PullUp));
+        double forward = Math.Clamp(
+            Axis(
+                KeyActive(GKey.PushDown),
+                KeyActive(GKey.PullUp))
+            + _casevacAnalogForward,
+            -1.0,
+            1.0);
         double right = Math.Clamp(
             Axis(
                 KeyActive(GKey.RollRight),
@@ -3588,7 +3655,10 @@ public sealed class SimulationSession {
         ArrestmentCapabilityProfile arrestmentCapability =
             _beat.ScriptedIntercept is not null
                 ? ArrestmentCapabilityProfile.ProvisionalRapierLandStrip
-                : ArrestmentCapabilityProfile.ProvisionalKoreaJet;
+                : _carrier is { IsMaritime: true }
+                    && TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)
+                        ? ArrestmentCapabilityProfile.Mk7Mod3PublicDataSurrogate
+                        : ArrestmentCapabilityProfile.ProvisionalKoreaJet;
         if (_arrestment.Capability.Id != arrestmentCapability.Id)
             _arrestment = new ArrestmentModel(arrestmentCapability);
         _difficulty = DifficultyModel.ForLevel(0);
@@ -3952,6 +4022,7 @@ public sealed class SimulationSession {
             _terrainSurface,
             _weatherProfile,
             () => ++_eventSequence);
+        _casevacAnalogForward = 0.0;
         _casevacAnalogRight = 0.0;
         _casevacAbortRequested = false;
 
@@ -5245,6 +5316,9 @@ public sealed class SimulationSession {
         // The retiring primary keeps falling as a detached wreck exactly as it would in a duel.
         DetachCurrentOpponent(_opponentTerminalState, _opponentImpactSurface);
         _bandit = next.Bandit;
+        // Promotion is an irreversible combat event. A sparring wingman left in presentation
+        // mode ignores every tactical command and flies its 15-degree setup turn indefinitely.
+        _bandit.EndPresentation();
         _opponentGun = next.Gun;
         _primaryOpponentGunTargetId = next.PlayerGunTargetId;
         _opponentTerminalState = AircraftTerminalState.Flying;
@@ -6391,7 +6465,10 @@ public sealed class SimulationSession {
 
     void FinishCarrierQualificationSortie(bool recovered) {
         if (!_beat.RecoveryCompletesSortie || Lifecycle != LifecycleState.Active) return;
-        if (recovered) RecordStoppedTrap();
+        if (recovered) {
+            RecordStoppedTrap();
+            _ = CompletePlayerRecovery();
+        }
         ScriptedInterceptConfig? intercept = _beat.ScriptedIntercept;
         bool balloonKillRequired = intercept is {
             RecoveryRequired: true,
@@ -6853,7 +6930,9 @@ public sealed class SimulationSession {
             closureMps: _closureKts / 1.94384,
             leadRate: _gunneryLeadRate,
             lateralCommitment: _pilotLateralCommitmentState,
-            deltaSeconds: FixedDeltaSeconds);
+            deltaSeconds: FixedDeltaSeconds,
+            pilotUnloadIntent: _detents.PilotUnloadIntent,
+            pilotMaximumPullIntent: _detents.PilotMaximumPullIntent);
         _gunneryPitchAssistState = result.State;
         return result.Command;
     }
@@ -6919,6 +6998,10 @@ public sealed class SimulationSession {
             && SelectedOpponentAlive
             && !_detents.ApproachMode
             && !_detents.HighAlphaRecoveryActive
+            && !_detents.PilotMaximumPullIntent
+            && !_detents.PilotUnloadIntent
+            && _detents.Command.GDemand
+                >= GunsOnly.Sim.GunneryPitchAssist.PilotUnloadOverrideThresholdG
             && !_pilotControlInterlocked
             && !effectiveCommand.EnvelopeOverride
             && !double.IsFinite(effectiveCommand.CommandedAlphaRad)
@@ -7394,7 +7477,7 @@ public sealed class SimulationSession {
                 _carrier.AircraftSupportFrame(_player.State.Position);
             if (height > 8.0 || along > _carrier.DeckLengthM * 0.5 + 5.0
                 || Math.Abs(cross) > _carrier.DeckHalfWidthM + 10.0) {
-                if (_beat.RecoveryCompletesSortie) {
+                if (_beat.RecoveryCompletesSortie && _beat.BolterCompletesSortie) {
                     FinishCarrierQualificationSortie(recovered: false);
                 } else {
                     _recovery = Carrier.Recovery.Flying;

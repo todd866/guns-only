@@ -112,7 +112,7 @@ test("keeps authority content invariant and sheds only ambient presentation by t
     assert.equal(plan.terrainRibbons.length, 3);
     assert.equal(plan.cells.length, 3);
     assert.equal(plan.landmarks.length, 11);
-    assert.equal(plan.hazards.length, 14);
+    assert.equal(plan.hazards.length, 18);
     assert.equal(plan.presentationKit.ambientArchetypes.length, 11);
     assert.equal(plan.presentationKit.landmarkArchetypes.length, 11);
     assert.equal(plan.setPieceCells.length, 10);
@@ -245,9 +245,9 @@ test("preserves route XYZ, terrain shaping, landmark anchors, and hazard authori
   assert.equal(contentHash(
     world.landmarks.map(({ id, positionLocalM }) => ({ id, positionLocalM })),
   ), "97a2ef5755a140b45e6f1522d3137b6399a455b1490ff505a23f8db052835819");
-  assert.equal(world.hazards.length, 14);
+  assert.equal(world.hazards.length, 18);
   assert.equal(contentHash(world.hazards),
-    "c4a0eb80e25575135def5a892bce61db27ebd64cd5ba1176877c64437370e640");
+    "02a23b1a450b86a33a1aae8e5f0f67d87fd17390d211b828ca32b5ae01363439");
 });
 
 test("copies exact collision-authority shapes without generating hazards", async () => {

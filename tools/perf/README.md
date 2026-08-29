@@ -91,3 +91,78 @@ node tools/perf/flight_frame_harness.mjs
 
 `tools/perf/terrain_frame_probe.mjs` is the older short SwiftShader-only diagnostic. Treat all of
 its timings as CPU-hitch evidence only, never as a frame rate.
+
+## Cobra player-path gate
+
+The generic attribution driver has a hardware-qualified Cobra gate. It crosses the visible flight
+brief, dismisses the optional controls lesson, proves the first pilot input advances authority,
+then uses the provider's explicit Iron Bell review spawn to measure a sustained window of the normal
+live conquest loop. The spawn changes only initial position/wind; authority, events, casualties,
+presentation, frame loop and workload remain production-owned. This distinction is essential:
+waiting at `#status[data-ready=true]` alone leaves the route paused behind its brief and can make an
+unplayable battle look cheap. The gate also discards the QA-only teleport's scene-streaming warmup;
+players reach Iron Bell through continuous ingress, so that synthetic rebuild is not battle cost.
+
+Serve a published tree on the attribution port, then run the gate in a second terminal:
+
+```sh
+GUNS_WWWROOT=/tmp/guns-only-web/wwwroot node tools/perf/serve_fixed.mjs
+node tools/perf/run_attribution.mjs --mode cobra --dpr 1 --gate
+```
+
+The gate writes `/tmp/frame-attribution/cobra-dpr1.json` even on failure. It measures both the
+ordinary Camp Ember/departure loop and a separate live-battle window. Its contract is defined
+and unit-tested in `cobra_acceptance.mjs`: local Ready ≤ 8 s, the next painted frame ≤ 250 ms,
+input-to-authority ≤ 250 ms, each sustained sample ≥ 10 s, simulation rate ≥ 0.90×,
+authority ≥ 108 Hz, the shared foreground delivery contract (≥ 59 fps, p95 ≤ 18.5 ms, p99 ≤
+22 ms, ≤ 3% over 18.5 ms), no frame over 100 ms, and the battle gate's existing 260-call / 500k
+triangle ceilings. A software renderer is rejected rather than misrepresented as player FPS.
+
+## Cobra AI flight gate
+
+The frame gate stages workload; it does not prove the helicopter can fly. The AI pilot uses a
+synthetic standard gamepad through Cobra's production input path. Closed-loop collective, cyclic
+and pedal commands follow the active authority gate, track its altitude and keep the airframe
+flyable.
+
+```sh
+GUNS_WWWROOT=/tmp/guns-only-web/wwwroot \
+OUT=/tmp/cobra-ai-flight \
+node tools/perf/cobra_ai_pilot.mjs --goal engage --hardware
+```
+
+Goals are `flight` (short departure), `ingress` (route handoff) and `engage` (full production fight).
+The engagement goal flies Depart → Ingress → Engage, presses production Tab/F, and requires a
+visible fire from both factions, a stable non-animated world-space combat ladder, gunner
+authorization, ammunition expenditure, an authority `gun-hit` on the currently selected target,
+matching target damage, zero friendly kills and no hostile air fire during the protected departure.
+It writes phase, first-battle and final screenshots alongside the JSON report.
+
+All goals fail on a crash, contact failure, slow Ready/Start, a paused or hidden cockpit, authority below
+90 Hz, an authority stall over 0.6 seconds, inadequate lift/progress, fewer than three ordered gate
+advances, excessive bank or missed gate altitude. The local server accepts bounded
+`/api/telemetry` POSTs and requires a production Cobra header plus at least ten state rows whose
+authority tick advances. Results and the final flight frame are written to
+`$OUT/cobra-ai-flight.{json,png}`. `--seconds` can override a goal's default deadline.
+
+## Autonomous mission suite
+
+`mission_ai_suite.mjs` is the single real-input coverage ledger. It runs one headed browser at a
+time so WebGL and audio ownership cannot overlap, and writes each mission's tape and screenshots to
+its own output directory.
+
+```sh
+node tools/perf/mission_ai_suite.mjs --list
+GUNS_WWWROOT=/tmp/guns-only-web/wwwroot \
+OUT=/tmp/guns-mission-ai \
+node tools/perf/mission_ai_suite.mjs --hardware \
+  --missions=cobra,f22,first-run,top-gun,rapier,indoor,weekend,okanagan,casevac
+```
+
+Every listed driver must cross the visible start flow, use production keyboard/gamepad input,
+advance real mission authority, and grade terminal or objective evidence. A screenshot-only smoke,
+direct state mutation, QA teleport, software-renderer timing, or a moving camera with a stalled
+simulation is not a pass. Use `?audioQa=silent` for unattended browser runs.
+
+The F-22 controller gate uses the hidden single-contact `ace-duel` preview. It isolates pursuit,
+roll and gun-lead control; it does not qualify the public `first-merge` 2-v-1 formation fight.

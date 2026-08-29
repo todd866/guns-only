@@ -44,7 +44,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 27;
+    public const int LayoutVersion = 33;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -235,6 +235,11 @@ internal static class SnapshotHotFrame {
         Num("bx", 3); Num("by", 3); Num("bz", 3);
         Num("bfx", 5); Num("bfy", 5); Num("bfz", 5);
         Num("blx", 5); Num("bly", 5); Num("blz", 5);
+        Nul("selected_opponent_tactic_code", RawInteger);
+        Nul("selected_opponent_last_command_load_factor_g", 3);
+        Nul("selected_opponent_last_command_bank_target_deg", 3);
+        Nul("selected_opponent_last_command_throttle", 3);
+        Nul("selected_opponent_last_command_rudder", 3);
         // Top Gun's missile pose is fixed-tick authority and therefore belongs on the hot path;
         // leaving it in the five-second JSON fallback made a launched round appear stationary.
         Nul("wing_sweep_deg", 1);
@@ -247,6 +252,34 @@ internal static class SnapshotHotFrame {
         Num("f14_over_g_seconds", 3);
         Num("f14_structural_fatigue_01", 4);
         Bool("f14_structural_failed");
+        Bool("first_run_weapons_cold");
+        // The gorge mesh and conformal ingress line consume hot state. If these fields live only
+        // in cold JSON, the first hot frame erases the landscape while the jet is already moving.
+        Bool("first_run_valley_available");
+        Nul("first_run_valley_geometry_version", RawInteger);
+        Nul("first_run_valley_center_east_m", 1);
+        Nul("first_run_valley_entry_north_m", 1);
+        Nul("first_run_valley_popout_north_m", 1);
+        Nul("first_run_valley_route_alt_m", 1);
+        Nul("first_run_valley_floor_height_m", 1);
+        Nul("first_run_valley_floor_blend_drop_m", 1);
+        Nul("first_run_valley_floor_half_width_m", 1);
+        Nul("first_run_valley_crest_offset_m", 1);
+        Nul("first_run_valley_outer_offset_m", 1);
+        Nul("first_run_valley_west_ridge_rise_m", 1);
+        Nul("first_run_valley_east_ridge_rise_m", 1);
+        Nul("first_run_valley_curve_amplitude_m", 1);
+        Nul("first_run_valley_curve_wavelength_m", 1);
+        Nul("first_run_valley_centerline_component_count", RawInteger);
+        Nul("first_run_valley_side_cut_count", RawInteger);
+        Nul("first_run_valley_butte_count", RawInteger);
+        Nul("first_run_valley_side_cut_depth_01", 3);
+        Nul("first_run_valley_strata_step_height_m", 1);
+        Nul("first_run_valley_strata_bench_fraction", 3);
+        Nul("first_run_valley_south_extent_north_m", 1);
+        Nul("first_run_valley_south_full_north_m", 1);
+        Nul("first_run_valley_popout_fade_start_north_m", 1);
+        Nul("first_run_valley_north_extent_north_m", 1);
         Nul("aim9_remaining", RawInteger);
         Bool("aim9_in_flight");
         Bool("aim9_pose_valid");
@@ -383,6 +416,11 @@ internal static class SnapshotHotFrame {
         Bool("auto_gcas_pilot_recovery_credited");
         Num("bank_target_deg", 3);
         Num("roll_control", 3);
+        Num("applied_rudder", 4);
+        Num("f22_ari_gain", 4);
+        Num("f22_ari_rudder", 4);
+        Num("effective_rudder_command", 4);
+        Num("stability_yaw_rate_dps", 3);
         Num("pilot_aileron", 3);
         Num("sas_aileron", 3);
         Num("aileron_command_deg", 3);
@@ -452,6 +490,7 @@ internal static class SnapshotHotFrame {
         Bool("gun_solution_raw");
         Bool("gun_solution");
         Bool("lead_valid");
+        Bool("lead_solution_valid");
         Num("lead_x", 3); Num("lead_y", 3); Num("lead_z", 3);
         Num("lead_tof", 4);
         Num("ammo", RawInteger);
@@ -837,6 +876,18 @@ internal static class SnapshotHotFrame {
         DetentLayer detents = session.Controls;
         PilotCommand requestedCommand = detents.Command;
         PilotCommand appliedCommand = player.LastAppliedCommand;
+        double playerAlphaRad = player.AngleOfAttackRad;
+        bool f22LateralAllocation = beat.PlayerAir.HighAlphaModel
+            == HighAlphaModelKind.F22PublicDataSurrogate;
+        double f22AriGain = f22LateralAllocation
+            ? FlightModel.F22AileronRudderInterconnect(playerAlphaRad) : 0.0;
+        double f22AriRudder = f22AriGain * Math.Clamp(
+            appliedCommand.RollControl + appliedCommand.SasRollControl, -1.0, 1.0);
+        double effectiveRudderCommand = f22LateralAllocation
+            ? FlightModel.F22EffectiveRudderCommand(playerAlphaRad, appliedCommand)
+            : appliedCommand.Rudder;
+        double stabilityYawRateDps = (player.State.BodyRates.R * Math.Cos(playerAlphaRad)
+            - player.State.BodyRates.P * Math.Sin(playerAlphaRad)) * 57.29577951308232;
         bool lateralControlApplied = player.HasAppliedFlightCommand;
         GunKill? gunKill = opponentPresent ? session.PlayerGun : null;
         GunKill? opponentGun = opponentPresent ? session.OpponentGun : null;
@@ -864,6 +915,10 @@ internal static class SnapshotHotFrame {
         AircraftState gunTarget = opponentPresent
             ? session.SelectedOpponentState
             : default;
+        OpponentPilotTelemetry? selectedOpponentPilot =
+            session.SelectedOpponentPilotTelemetry;
+        PilotCommand? selectedOpponentLastCommand =
+            selectedOpponentPilot?.LastCommand;
         bool arrested = arrestment.IsActive && !catapulting;
         Vec3D simulationPosition = arrested ? arrestment.Position : s.Position;
         Vec3D playerPosition = simulationPosition;
@@ -1212,6 +1267,18 @@ internal static class SnapshotHotFrame {
         w.Num("bx", b.Position.X, 3); w.Num("by", b.Position.Y, 3); w.Num("bz", b.Position.Z, 3);
         w.Num("bfx", bf.X, 5); w.Num("bfy", bf.Y, 5); w.Num("bfz", bf.Z, 5);
         w.Num("blx", bl.X, 5); w.Num("bly", bl.Y, 5); w.Num("blz", bl.Z, 5);
+        w.Nul("selected_opponent_tactic_code",
+            selectedOpponentPilot?.Tactic is { } selectedTactic
+                ? (int)selectedTactic : null,
+            RawInteger);
+        w.Nul("selected_opponent_last_command_load_factor_g",
+            selectedOpponentLastCommand?.GDemand, 3);
+        w.Nul("selected_opponent_last_command_bank_target_deg",
+            selectedOpponentLastCommand?.BankTarget * RadiansToDegrees, 3);
+        w.Nul("selected_opponent_last_command_throttle",
+            selectedOpponentLastCommand?.Throttle, 3);
+        w.Nul("selected_opponent_last_command_rudder",
+            selectedOpponentLastCommand?.Rudder, 3);
         bool topGun = TopGunFightRuntime.IsTopGunMission(session.Beat.MissionIdentity.Id);
         bool aim9Mission = topGun
             || FirstRunValleyRuntime.IsFirstRunValleyMission(session.Beat.MissionIdentity.Id);
@@ -1236,6 +1303,63 @@ internal static class SnapshotHotFrame {
             playerTomcat ? session.PlayerF14StructuralFatigue01 : 0.0, 4);
         w.Bool("f14_structural_failed",
             playerTomcat && session.PlayerF14StructuralFailed);
+        w.Bool("first_run_weapons_cold", session.FirstRunWeaponsCold);
+        bool firstRunValleyAvailable = FirstRunValleyRuntime.IsFirstRunValleyMission(
+                session.Beat.MissionIdentity.Id)
+            && session.Terrain is FirstRunValleyTerrainSurface;
+        w.Bool("first_run_valley_available", firstRunValleyAvailable);
+        w.Nul("first_run_valley_geometry_version",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.GeometryVersion : null,
+            RawInteger);
+        w.Nul("first_run_valley_center_east_m",
+            firstRunValleyAvailable ? FirstRunValleyRuntime.ValleyEastM : null, 1);
+        w.Nul("first_run_valley_entry_north_m",
+            firstRunValleyAvailable ? FirstRunValleyRuntime.PlayerNorthM : null, 1);
+        w.Nul("first_run_valley_popout_north_m",
+            firstRunValleyAvailable ? FirstRunValleyRuntime.PopOutNorthM : null, 1);
+        w.Nul("first_run_valley_route_alt_m",
+            firstRunValleyAvailable ? FirstRunValleyRuntime.SpawnAltitudeM : null, 1);
+        w.Nul("first_run_valley_floor_height_m",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.FloorHeightM : null, 1);
+        w.Nul("first_run_valley_floor_blend_drop_m",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.FloorBlendDropM : null, 1);
+        w.Nul("first_run_valley_floor_half_width_m",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.FloorHalfWidthM : null, 1);
+        w.Nul("first_run_valley_crest_offset_m",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.CrestOffsetM : null, 1);
+        w.Nul("first_run_valley_outer_offset_m",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.OuterOffsetM : null, 1);
+        w.Nul("first_run_valley_west_ridge_rise_m",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.WestRidgeRiseM : null, 1);
+        w.Nul("first_run_valley_east_ridge_rise_m",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.EastRidgeRiseM : null, 1);
+        w.Nul("first_run_valley_curve_amplitude_m",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.CentreCurveAmplitudeM : null, 1);
+        w.Nul("first_run_valley_curve_wavelength_m",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.CentreCurveWavelengthM : null, 1);
+        w.Nul("first_run_valley_centerline_component_count",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.CentrelineComponentCount : null,
+            RawInteger);
+        w.Nul("first_run_valley_side_cut_count",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.SideCutCount : null,
+            RawInteger);
+        w.Nul("first_run_valley_butte_count",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.ButteCount : null,
+            RawInteger);
+        w.Nul("first_run_valley_side_cut_depth_01",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.SideCutDepth01 : null, 3);
+        w.Nul("first_run_valley_strata_step_height_m",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.StrataStepHeightM : null, 1);
+        w.Nul("first_run_valley_strata_bench_fraction",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.StrataBenchFraction : null, 3);
+        w.Nul("first_run_valley_south_extent_north_m",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.SouthExtentNorthM : null, 1);
+        w.Nul("first_run_valley_south_full_north_m",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.SouthFullNorthM : null, 1);
+        w.Nul("first_run_valley_popout_fade_start_north_m",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.PopOutFadeStartNorthM : null, 1);
+        w.Nul("first_run_valley_north_extent_north_m",
+            firstRunValleyAvailable ? FirstRunValleyTerrainSurface.NorthExtentNorthM : null, 1);
         w.Nul("aim9_remaining", aim9Mission ? session.Aim9Remaining : null, RawInteger);
         w.Bool("aim9_in_flight", session.Aim9InFlight);
         w.Bool("aim9_pose_valid", aim9PoseValid);
@@ -1388,6 +1512,11 @@ internal static class SnapshotHotFrame {
         w.Bool("auto_gcas_pilot_recovery_credited", gcasPrediction.PilotRecoveryCredited);
         w.Num("bank_target_deg", appliedCommand.BankTarget * 57.29577951308232, 3);
         w.Num("roll_control", appliedCommand.RollControl, 3);
+        w.Num("applied_rudder", appliedCommand.Rudder, 4);
+        w.Num("f22_ari_gain", f22AriGain, 4);
+        w.Num("f22_ari_rudder", f22AriRudder, 4);
+        w.Num("effective_rudder_command", effectiveRudderCommand, 4);
+        w.Num("stability_yaw_rate_dps", stabilityYawRateDps, 3);
         w.Num("pilot_aileron", appliedCommand.RollControl, 3);
         w.Num("sas_aileron", appliedCommand.SasRollControl, 3);
         w.Num("aileron_command_deg",
@@ -1454,7 +1583,12 @@ internal static class SnapshotHotFrame {
             padlockRollAssist.PreferredPlaneRad * 57.29577951308232, 3);
         w.Bool("high_alpha_recovery", detents.HighAlphaRecoveryActive);
         w.Num("g_valley", detents.ValleyG, 3);
-        w.Num("g_maxperform", Protection.MaxPerformG(s, beat.PlayerAir, trueAirspeedMps, atmosphere), 3);
+        w.Num("g_maxperform", Protection.MaxPerformG(
+            s,
+            beat.PlayerAir,
+            trueAirspeedMps,
+            session.PlayerEffectiveAerodynamicConfiguration,
+            atmosphere), 3);
         w.Num("g_hardmax", Protection.HardMaxG(s, beat.PlayerAir, trueAirspeedMps, atmosphere), 3);
         w.Num("g_override_max", Protection.OverrideMaxG(s, beat.PlayerAir, trueAirspeedMps, atmosphere), 3);
         w.Num("dynamic_pressure_kpa", player.DynamicPressurePa / 1000.0, 2);
@@ -1488,6 +1622,8 @@ internal static class SnapshotHotFrame {
             opponentPresent && !session.WeaponsInhibited && gunKill!.GunSolution);
         w.Bool("lead_valid",
             opponentPresent && !session.WeaponsInhibited && gunKill!.HasLeadSolution);
+        w.Bool("lead_solution_valid",
+            opponentPresent && gunKill!.HasLeadSolution);
         w.Num("lead_x", opponentPresent ? gunKill!.LeadPipper.X : 0.0, 3);
         w.Num("lead_y", opponentPresent ? gunKill!.LeadPipper.Y : 0.0, 3);
         w.Num("lead_z", opponentPresent ? gunKill!.LeadPipper.Z : 0.0, 3);
@@ -2618,6 +2754,7 @@ internal static class SnapshotHotFrame {
         AutoGcasPhase GcasPhase,
         AutoGcasInhibitReason GcasInhibit,
         string? GcasCue,
+        string GunneryAssistStatus,
         TimeCompressionInhibitReason TimeCompressionInhibit,
         RapierMissionPhase RapierPhase,
         string RapierPhaseReason,
@@ -2675,6 +2812,7 @@ internal static class SnapshotHotFrame {
             double worldOriginEastM, double worldOriginNorthM, bool worldOriginConfigured) {
             IReadOnlyList<SessionEvent> events = session.RecentEvents;
             AutoGcasState gcas = session.AutoGcas;
+            GunneryPitchAssistState gunneryPitchAssist = session.GunneryPitchAssist;
             AirframeSystems systems = session.PlayerSystems;
             F86EmergencyGearRecoveryScenario? maintenance = session.MaintenanceScenario;
             VisualMergeEvaluation? merge = session.VisualMergeEvaluation;
@@ -2744,6 +2882,10 @@ internal static class SnapshotHotFrame {
                 gcas.Phase,
                 gcas.InhibitReason,
                 gcas.Cue,
+                // The numeric status code rides the hot buffer, but the human-readable token is
+                // part of the cold JSON base. Refresh that base on the same frame as every status
+                // edge so diagnostics can never combine a current code with a stale label.
+                gunneryPitchAssist.Status,
                 session.TimeCompressionInhibitReason,
                 session.RapierPhase,
                 session.RapierPhaseReason,

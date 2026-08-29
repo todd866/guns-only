@@ -43,7 +43,8 @@ OWNER_UA_MARKERS = (
     "Macintosh; Intel Mac OS X 10_15_7",
 )
 
-SESSION_RE = re.compile(r"telemetry/((?:web|shell)-(\d{13})-\d+)/(.+)\.jsonl\.gz$")
+SESSION_RE = re.compile(
+    r"telemetry/((?:web-cobra|web|shell)-(\d{13})-\d+)/(.+)\.jsonl\.gz$")
 
 
 # ---------------------------------------------------------------- transport
@@ -99,6 +100,7 @@ def window_prefixes(days):
     for ms in (cutoff, now):
         stamp = str(ms)[:4]
         prefixes.add(f"telemetry/web-{stamp}")
+        prefixes.add(f"telemetry/web-cobra-{stamp}")
         prefixes.add(f"telemetry/shell-{stamp}")
     return sorted(prefixes), cutoff
 

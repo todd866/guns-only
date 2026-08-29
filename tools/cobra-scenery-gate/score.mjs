@@ -8,9 +8,21 @@
  * Exit 0 = pass (or warn-only); 1 = fail; 2 = usage.
  */
 
-import { readdir } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import {
+  COBRA_BATTLE_PROOF_VIEWS,
+  validateCobraBattleEvidence,
+} from "./battle_evidence.mjs";
 import { scorePngFile, verdict } from "./emptiness.mjs";
+
+const EXPECTED_STILLS = Object.freeze([
+  "camp-ember.png",
+  "cockpit-battle.png",
+  "iron-bell.png",
+  "mid-gorge.png",
+  "plantation-fight.png",
+]);
 
 function usage() {
   console.error("Usage: node tools/cobra-scenery-gate/score.mjs --shots <dir> [--mode warn|fail]");
@@ -40,11 +52,15 @@ async function main() {
     return;
   }
   const dir = resolve(args.shots);
-  const names = (await readdir(dir))
-    .filter((n) => /^(camp-ember|mid-gorge|iron-bell)\.png$/.test(n))
+  const availableNames = await readdir(dir);
+  const names = availableNames
+    .filter((name) => EXPECTED_STILLS.includes(name))
     .sort();
-  if (names.length === 0) {
-    console.error(`no expected stills (camp-ember|mid-gorge|iron-bell).png in ${dir}`);
+  const missingStills = EXPECTED_STILLS.filter((name) => !availableNames.includes(name));
+  if (missingStills.length > 0) {
+    console.error(
+      `missing expected stills in ${dir}: ${missingStills.join(", ")}`,
+    );
     process.exitCode = 1;
     return;
   }
@@ -59,7 +75,22 @@ async function main() {
   }
   const result = verdict(scores);
   console.log(result.message);
-  if (!result.pass && args.mode === "fail") process.exitCode = 1;
+  let battle;
+  try {
+    battle = validateCobraBattleEvidence(
+      JSON.parse(await readFile(join(dir, "views.json"), "utf8")),
+    );
+  } catch (error) {
+    battle = { pass: false, failures: [`views.json unreadable: ${error.message}`] };
+  }
+  if (battle.pass) {
+    console.log(
+      `cobra battle evidence PASS (${Object.keys(COBRA_BATTLE_PROOF_VIEWS).join(", ")})`,
+    );
+  } else {
+    console.error(`cobra battle evidence FAIL:\n- ${battle.failures.join("\n- ")}`);
+  }
+  if ((!result.pass || !battle.pass) && args.mode === "fail") process.exitCode = 1;
 }
 
 main().catch((error) => {

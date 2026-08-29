@@ -16,19 +16,49 @@ import {
  */
 
 const COLORS = Object.freeze({
-  orchardGround: 0x7c7356,
-  receiverGround: 0x777b76,
-  padEdge: 0xd4c99d,
+  orchardGround: 0x615b42,
+  receiverGround: 0x5e6460,
+  padEdge: 0xf2e3aa,
+  padMarking: 0xece6c8,
+  landingLight: 0xffcf68,
+  pickupSignal: 0xd97b32,
+  receiverSignal: 0x54a86c,
   pole: 0x5b5650,
-  staff: 0x65716c,
+  staff: 0xe3a94f,
   staffHead: 0xc7a681,
+  staffLegs: 0x303536,
+  pickupVehicle: 0xb84c35,
+  receiverVehicle: 0xe5e0d0,
+  vehicleCab: 0x26383d,
+  pickupVehicleMarking: 0xf3eee0,
+  receiverVehicleMarking: 0xc84d3e,
+  vehicleWheel: 0x242728,
+  vehicleBeacon: 0xff9c36,
   capsule: 0xb8b59f,
   capsuleBand: 0xe2a94f,
   cueApproach: 0xa9d8c0,
   cueEscape: 0xe5bd69,
   rain: 0xb9d3d8,
-  rotorWash: 0xcdd6b5,
+  rotorWash: 0xd8c48d,
 });
+
+// The site needs a few grounded silhouettes, not a shadow-map copy of every
+// emissive bulb, painted marking, smoke puff, and thin cue. Keep this list
+// deliberately small so the low-level approach is readable before the frame
+// governor has to intervene.
+const SHADOW_CASTER_KINDS = new Set([
+  "staff-bodies",
+  "staff-heads",
+  "staff-arms",
+  "staff-legs",
+  "response-vehicle-body",
+  "response-vehicle-cab",
+  "response-vehicle-wheels",
+]);
+const SHADOW_RECEIVER_KINDS = new Set([
+  "pad-surface-visual",
+  ...SHADOW_CASTER_KINDS,
+]);
 
 function clamp(value, minimum, maximum) {
   return Math.min(maximum, Math.max(minimum, value));
@@ -179,7 +209,127 @@ function createPad(THREE, owner, pad, siteId, materials) {
   edge.position.set(pad.position.x, pad.position.y + pad.sizeM.y + 0.012,
     pad.position.z);
   group.add(slab, edge);
+  const markGeometry = owner.geometry(new THREE.BoxGeometry(1, 1, 1));
+  for (const part of [
+    { name: "LEFT", size: [1.1, 0.025, 8], x: -3.2, z: 0 },
+    { name: "RIGHT", size: [1.1, 0.025, 8], x: 3.2, z: 0 },
+    { name: "BAR", size: [6.4, 0.025, 1.1], x: 0, z: 0 },
+  ]) {
+    const marking = tagPresentationOnly(
+      new THREE.Mesh(markGeometry, materials.padMarking),
+      "pad-marking-visual",
+      siteId,
+    );
+    marking.name = `CASEVAC_PAD_H_${part.name}`;
+    marking.position.set(
+      pad.position.x + part.x,
+      pad.position.y + pad.sizeM.y + 0.035,
+      pad.position.z + part.z,
+    );
+    marking.scale.set(...part.size);
+    group.add(marking);
+  }
   return group;
+}
+
+function createLandingLights(
+  THREE,
+  owner,
+  positions,
+  siteId,
+  material,
+  work,
+) {
+  const geometry = owner.geometry(new THREE.SphereGeometry(0.22, 7, 5));
+  const lights = tagPresentationOnly(
+    new THREE.InstancedMesh(geometry, material, positions.length),
+    "landing-zone-lights",
+    siteId,
+  );
+  lights.name = "CASEVAC_LANDING_ZONE_LIGHTS";
+  for (let index = 0; index < positions.length; index++) {
+    const position = positions[index];
+    work.position.set(position.x, position.y, position.z);
+    work.quaternion.identity();
+    work.scale.set(1, 1, 1);
+    setInstance(
+      THREE,
+      lights,
+      index,
+      work.position,
+      work.quaternion,
+      work.scale,
+      work,
+    );
+  }
+  return finishInstances(lights);
+}
+
+function createSignalSmoke(
+  THREE,
+  owner,
+  definition,
+  siteId,
+  material,
+  work,
+) {
+  const group = tagPresentationOnly(
+    new THREE.Group(),
+    "site-signal-smoke",
+    siteId,
+  );
+  group.name = "CASEVAC_SITE_SIGNAL_SMOKE";
+  group.position.set(
+    definition.position.x,
+    definition.position.y,
+    definition.position.z,
+  );
+  group.visible = false;
+  const geometry = owner.geometry(new THREE.SphereGeometry(1, 12, 8));
+  const puffs = tagPresentationOnly(
+    new THREE.InstancedMesh(geometry, material, definition.puffs),
+    "site-signal-smoke-puffs",
+    siteId,
+  );
+  puffs.name = "CASEVAC_SITE_SIGNAL_SMOKE_PUFFS";
+  const instances = [];
+  for (let index = 0; index < definition.puffs; index++) {
+    const progress = index / Math.max(1, definition.puffs - 1);
+    const angle = index * 2.17;
+    const drift = 0.14 + progress * 0.72;
+    const radius = 0.44 + progress * 1.32;
+    const verticalRadius = 0.7 + progress * 1.65;
+    instances.push(Object.freeze({
+      progress,
+      angle,
+      drift,
+      radius,
+      verticalRadius,
+      baseY: 2.2 + progress * definition.heightM,
+    }));
+    work.position.set(
+      Math.cos(angle) * drift,
+      2.2 + progress * definition.heightM,
+      Math.sin(angle) * drift * 0.55,
+    );
+    work.quaternion.identity();
+    work.scale.set(radius, verticalRadius, radius);
+    setInstance(
+      THREE,
+      puffs,
+      index,
+      work.position,
+      work.quaternion,
+      work.scale,
+      work,
+    );
+  }
+  finishInstances(puffs);
+  // The plume bends inside this bounded authored envelope. Avoid a stale instance bound popping
+  // it out while wind changes; fourteen small puffs are cheaper than a per-frame bounds rebuild.
+  puffs.frustumCulled = false;
+  group.add(puffs);
+  return { group, puffs, instances: Object.freeze(instances) };
 }
 
 function createStaff(
@@ -196,11 +346,11 @@ function createStaff(
     siteId,
   );
   group.name = "CASEVAC_ANONYMOUS_STAFF";
-  const bodyGeometry = owner.geometry(new THREE.CylinderGeometry(
-    0.22, 0.32, 1, 7, 1,
-  ));
+  const bodyGeometry = owner.geometry(new THREE.BoxGeometry(0.58, 1, 0.36));
   bodyGeometry.translate(0, 0.5, 0);
   const headGeometry = owner.geometry(new THREE.SphereGeometry(0.22, 7, 5));
+  const armGeometry = owner.geometry(new THREE.BoxGeometry(1, 1, 1));
+  const legGeometry = owner.geometry(new THREE.BoxGeometry(0.17, 0.78, 0.19));
   const bodies = tagPresentationOnly(
     new THREE.InstancedMesh(bodyGeometry, materials.staff, people.length),
     "staff-bodies",
@@ -211,8 +361,20 @@ function createStaff(
     "staff-heads",
     siteId,
   );
+  const arms = tagPresentationOnly(
+    new THREE.InstancedMesh(armGeometry, materials.staff, people.length),
+    "staff-arms",
+    siteId,
+  );
+  const legs = tagPresentationOnly(
+    new THREE.InstancedMesh(legGeometry, materials.staffLegs, people.length * 2),
+    "staff-legs",
+    siteId,
+  );
   bodies.name = "CASEVAC_STAFF_BODIES";
   heads.name = "CASEVAC_STAFF_HEADS";
+  arms.name = "CASEVAC_STAFF_ARMS";
+  legs.name = "CASEVAC_STAFF_LEGS";
   for (let index = 0; index < people.length; index++) {
     const person = people[index];
     work.quaternion.setFromAxisAngle(work.yAxis, person.yaw);
@@ -220,16 +382,153 @@ function createStaff(
       work.tiltQuaternion.setFromAxisAngle(work.zAxis, -0.18);
       work.quaternion.multiply(work.tiltQuaternion);
     }
-    work.position.set(person.position.x, person.position.y, person.position.z);
-    work.scale.set(1, 1.45, 1);
+    work.position.set(
+      person.position.x,
+      person.position.y + 0.76,
+      person.position.z,
+    );
+    work.scale.set(1, 1.18, 1);
     setInstance(THREE, bodies, index, work.position, work.quaternion, work.scale, work);
-    work.position.y += 1.72;
+    const cosine = Math.cos(person.yaw);
+    const sine = Math.sin(person.yaw);
+    for (let leg = 0; leg < 2; leg++) {
+      const side = leg === 0 ? -0.15 : 0.15;
+      work.position.set(
+        person.position.x + cosine * side,
+        person.position.y + 0.39,
+        person.position.z - sine * side,
+      );
+      work.scale.set(1, 1, 1);
+      setInstance(
+        THREE,
+        legs,
+        index * 2 + leg,
+        work.position,
+        work.quaternion,
+        work.scale,
+        work,
+      );
+    }
+    work.position.set(person.position.x, person.position.y + 1.5, person.position.z);
+    work.scale.set(person.pose === "ready" ? 0.82 : 0.68, 0.12, 0.14);
+    setInstance(THREE, arms, index, work.position, work.quaternion, work.scale, work);
+    work.position.set(person.position.x, person.position.y + 2.12, person.position.z);
     work.scale.set(1, 1, 1);
     setInstance(THREE, heads, index, work.position, work.quaternion, work.scale, work);
   }
   finishInstances(bodies);
   finishInstances(heads);
-  group.add(bodies, heads);
+  finishInstances(arms);
+  finishInstances(legs);
+  group.add(bodies, heads, arms, legs);
+  return group;
+}
+
+function createResponseVehicle(
+  THREE,
+  owner,
+  definition,
+  siteId,
+  materials,
+  work,
+) {
+  const group = tagPresentationOnly(
+    new THREE.Group(),
+    "response-vehicle-silhouette",
+    siteId,
+  );
+  group.name = "CASEVAC_RESPONSE_VEHICLE";
+  group.position.set(
+    definition.position.x,
+    definition.position.y,
+    definition.position.z,
+  );
+  group.rotation.y = definition.yaw;
+
+  const body = tagPresentationOnly(
+    new THREE.Mesh(
+      owner.geometry(new THREE.BoxGeometry(5.4, 0.9, 2.25)),
+      materials.vehicleBody,
+    ),
+    "response-vehicle-body",
+    siteId,
+  );
+  body.name = "CASEVAC_RESPONSE_VEHICLE_BODY";
+  body.position.y = 0.82;
+  const cab = tagPresentationOnly(
+    new THREE.Mesh(
+      owner.geometry(new THREE.BoxGeometry(2.35, 1.18, 2.02)),
+      materials.vehicleCab,
+    ),
+    "response-vehicle-cab",
+    siteId,
+  );
+  cab.name = "CASEVAC_RESPONSE_VEHICLE_CAB";
+  cab.position.set(1.05, 1.72, 0);
+
+  const markGeometry = owner.geometry(new THREE.BoxGeometry(1, 1, 1));
+  const roofMarks = tagPresentationOnly(
+    new THREE.InstancedMesh(markGeometry, materials.vehicleMarking, 2),
+    "response-vehicle-roof-mark",
+    siteId,
+  );
+  roofMarks.name = "CASEVAC_RESPONSE_VEHICLE_ROOF_MARK";
+  for (const [index, scale] of [
+    [0, [1.35, 0.07, 0.32]],
+    [1, [0.32, 0.07, 1.35]],
+  ]) {
+    work.position.set(0.98, 2.34, 0);
+    work.quaternion.identity();
+    work.scale.set(...scale);
+    setInstance(
+      THREE,
+      roofMarks,
+      index,
+      work.position,
+      work.quaternion,
+      work.scale,
+      work,
+    );
+  }
+  finishInstances(roofMarks);
+
+  const wheelGeometry = owner.geometry(new THREE.SphereGeometry(1, 8, 6));
+  const wheels = tagPresentationOnly(
+    new THREE.InstancedMesh(wheelGeometry, materials.vehicleWheel, 4),
+    "response-vehicle-wheels",
+    siteId,
+  );
+  wheels.name = "CASEVAC_RESPONSE_VEHICLE_WHEELS";
+  let wheelIndex = 0;
+  for (const x of [-1.75, 1.72]) {
+    for (const z of [-1.08, 1.08]) {
+      work.position.set(x, 0.45, z);
+      work.quaternion.identity();
+      work.scale.set(0.48, 0.48, 0.22);
+      setInstance(
+        THREE,
+        wheels,
+        wheelIndex++,
+        work.position,
+        work.quaternion,
+        work.scale,
+        work,
+      );
+    }
+  }
+  finishInstances(wheels);
+
+  const beacon = tagPresentationOnly(
+    new THREE.Mesh(
+      owner.geometry(new THREE.SphereGeometry(0.16, 8, 5)),
+      materials.vehicleBeacon,
+    ),
+    "response-vehicle-beacon",
+    siteId,
+  );
+  beacon.name = "CASEVAC_RESPONSE_VEHICLE_BEACON";
+  beacon.position.set(-0.2, 1.42, 0);
+  group.add(body, cab, roofMarks, wheels, beacon);
   return group;
 }
 
@@ -384,6 +683,7 @@ function createCapsule(THREE, owner, materials) {
     band.position.x = x;
     group.add(band);
   }
+  body.castShadow = true;
   group.add(body);
   return group;
 }
@@ -419,9 +719,29 @@ function createMaterials(THREE, owner) {
     padEdge: basic(COLORS.padEdge, {
       side: THREE.DoubleSide,
     }),
+    padMarking: basic(COLORS.padMarking),
+    landingLight: lambert(COLORS.landingLight, {
+      emissive: COLORS.landingLight,
+      emissiveIntensity: 1.8,
+    }),
     pole: lambert(COLORS.pole),
     staff: lambert(COLORS.staff),
     staffHead: lambert(COLORS.staffHead),
+    staffLegs: lambert(COLORS.staffLegs),
+    pickupVehicle: lambert(COLORS.pickupVehicle, {
+      emissiveIntensity: 0.12,
+    }),
+    receiverVehicle: lambert(COLORS.receiverVehicle, {
+      emissiveIntensity: 0.1,
+    }),
+    vehicleCab: lambert(COLORS.vehicleCab),
+    pickupVehicleMarking: basic(COLORS.pickupVehicleMarking),
+    receiverVehicleMarking: basic(COLORS.receiverVehicleMarking),
+    vehicleWheel: lambert(COLORS.vehicleWheel),
+    vehicleBeacon: lambert(COLORS.vehicleBeacon, {
+      emissive: COLORS.vehicleBeacon,
+      emissiveIntensity: 1.45,
+    }),
     windsock: lambert(COLORS.capsuleBand, {
       side: THREE.DoubleSide,
     }),
@@ -466,6 +786,22 @@ function createMaterials(THREE, owner) {
         transparent: true,
         opacity: 0,
         side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    ],
+    signalSmoke: [
+      lambert(COLORS.pickupSignal, {
+        emissive: COLORS.pickupSignal,
+        emissiveIntensity: 0.1,
+        transparent: true,
+        opacity: 0.34,
+        depthWrite: false,
+      }),
+      lambert(COLORS.receiverSignal, {
+        emissive: COLORS.receiverSignal,
+        emissiveIntensity: 0.1,
+        transparent: true,
+        opacity: 0.34,
         depthWrite: false,
       }),
     ],
@@ -525,9 +861,20 @@ function createSite(
   const siteMaterials = {
     pad: key === "pickup" ? materials.pad : materials.receiverPad,
     padEdge: materials.padEdge,
+    padMarking: materials.padMarking,
     pole: materials.pole,
     staff: materials.staff,
     staffHead: materials.staffHead,
+    staffLegs: materials.staffLegs,
+    vehicleBody: key === "pickup"
+      ? materials.pickupVehicle
+      : materials.receiverVehicle,
+    vehicleCab: materials.vehicleCab,
+    vehicleMarking: key === "pickup"
+      ? materials.pickupVehicleMarking
+      : materials.receiverVehicleMarking,
+    vehicleWheel: materials.vehicleWheel,
+    vehicleBeacon: materials.vehicleBeacon,
     windsock: materials.windsock,
   };
   group.add(
@@ -536,6 +883,22 @@ function createSite(
       THREE,
       owner,
       definition.people,
+      definition.id,
+      siteMaterials,
+      work,
+    ),
+    createLandingLights(
+      THREE,
+      owner,
+      definition.landingLights,
+      definition.id,
+      materials.landingLight,
+      work,
+    ),
+    createResponseVehicle(
+      THREE,
+      owner,
+      definition.responseVehicle,
       definition.id,
       siteMaterials,
       work,
@@ -581,7 +944,21 @@ function createSite(
     definition.id,
     materials.rotorWash[key === "pickup" ? 0 : 1],
   );
-  group.add(windsock.group, approach, escape, rain, rotorWash);
+  const signal = createSignalSmoke(
+    THREE,
+    owner,
+    definition.signal,
+    definition.id,
+    materials.signalSmoke[key === "pickup" ? 0 : 1],
+    work,
+  );
+  group.add(windsock.group, approach, escape, rain, rotorWash, signal.group);
+  group.traverse((object) => {
+    if (!object.isMesh || object.material?.transparent === true) return;
+    const kind = object.userData.casevac?.kind;
+    object.castShadow = SHADOW_CASTER_KINDS.has(kind);
+    object.receiveShadow = SHADOW_RECEIVER_KINDS.has(kind);
+  });
   group.userData.casevacSite = Object.freeze({
     id: definition.id,
     role: definition.role,
@@ -600,7 +977,47 @@ function createSite(
     escape,
     rain,
     rotorWash,
+    signal,
   };
+}
+
+function updateSignalSmoke(THREE, controller, elapsedSeconds, windX, windZ, work) {
+  const cosine = Math.cos(controller.anchor.yaw);
+  const sine = Math.sin(controller.anchor.yaw);
+  const localWindX = cosine * windX + sine * windZ;
+  const localWindZ = -sine * windX + cosine * windZ;
+  for (let index = 0; index < controller.signal.instances.length; index++) {
+    const puff = controller.signal.instances[index];
+    const windProgress = Math.pow(puff.progress, 1.32) * 0.58;
+    const breathing = 0.97
+      + Math.sin(elapsedSeconds * 0.72 + puff.angle) * 0.035;
+    const sway = Math.sin(elapsedSeconds * 0.38 + puff.angle * 0.7)
+      * (0.08 + puff.progress * 0.28);
+    work.position.set(
+      Math.cos(puff.angle) * puff.drift
+        + localWindX * windProgress + sway,
+      puff.baseY
+        + Math.sin(elapsedSeconds * 0.44 + puff.angle) * 0.12,
+      Math.sin(puff.angle) * puff.drift * 0.55
+        + localWindZ * windProgress + sway * 0.45,
+    );
+    work.quaternion.identity();
+    work.scale.set(
+      puff.radius * breathing,
+      puff.verticalRadius * breathing,
+      puff.radius * breathing,
+    );
+    setInstance(
+      THREE,
+      controller.signal.puffs,
+      index,
+      work.position,
+      work.quaternion,
+      work.scale,
+      work,
+    );
+  }
+  controller.signal.puffs.instanceMatrix.needsUpdate = true;
 }
 
 function activeSiteKey(value) {
@@ -758,9 +1175,32 @@ export function createCasevacCourseScenery(THREE, options = {}) {
           && activeKey === controller.key;
         controller.escape.visible = frame.showEscapeCue === true
           && activeKey === controller.key;
+        // A target ID is navigation truth for the whole leg, not permission to invent a ground
+        // signal kilometres early. The explicit terminal cue is the bounded presentation edge.
+        const signalActive = frame.showApproachCue === true
+          && activeKey === controller.key;
+        controller.signal.group.visible = signalActive;
+        if (signalActive) {
+          updateSignalSmoke(
+            THREE,
+            controller,
+            elapsedSeconds,
+            windX,
+            windZ,
+            work,
+          );
+        }
         const wash = rotorWashAtSite(frame, controller);
         controller.rotorWash.visible = wash > 0.005;
-        controller.rotorWash.material.opacity = wash * 0.34;
+        controller.rotorWash.material.opacity = wash * 0.5;
+        if (wash > 0.005 && frame.rotorWash?.position) {
+          const worldDx = finite(frame.rotorWash.position.x) - controller.anchor.x;
+          const worldDz = finite(frame.rotorWash.position.z) - controller.anchor.z;
+          const cosine = Math.cos(controller.anchor.yaw);
+          const sine = Math.sin(controller.anchor.yaw);
+          controller.rotorWash.position.x = cosine * worldDx + sine * worldDz;
+          controller.rotorWash.position.z = -sine * worldDx + cosine * worldDz;
+        }
         const pulse = 1 + wash * (0.18
           + 0.05 * Math.sin(elapsedSeconds * 7.5));
         controller.rotorWash.scale.set(pulse, pulse, pulse);

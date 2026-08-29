@@ -32,7 +32,14 @@ function compiled(material) {
 
 test("every authored structure surface is named with a plausible wear scale", () => {
   const roles = Object.keys(COBRA_STRUCTURE_SURFACES);
-  for (const role of ["bridge-deck", "bridge-pier", "roads", "heroCells", "landmarks"]) {
+  for (const role of [
+    "bridge-deck",
+    "bridge-approach",
+    "bridge-pier",
+    "roads",
+    "heroCells",
+    "landmarks",
+  ]) {
     assert.ok(roles.includes(role), `${role} must get surface detail`);
     const surface = COBRA_STRUCTURE_SURFACES[role];
     // Metre-scale grain: a 30 m AGL pass must see change across the deck, not one flat fill.

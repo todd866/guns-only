@@ -149,6 +149,45 @@ public class PadlockRollAssistSessionTests {
         Assert.InRange(System.Math.Abs(applied.SasRollControl), 0.0, 0.002);
     }
 
+    [Theory]
+    [InlineData(0.92)]
+    [InlineData(-0.14)]
+    public void DeliberateRawPitchOwnsTheAircraftWithoutPadlockRollSas(
+        double pitchControl) {
+        SimulationSession session = SessionWithPlaneError(8.0);
+        session.SetBanditPadlockRollAssist(true);
+        for (int tick = 0; tick < 24; tick++) session.StepFixed();
+        Assert.True(session.BanditPadlockRollAssist.Active);
+
+        session.SetAnalogPitchControl(pitchControl);
+        session.StepFixed();
+
+        Assert.False(session.BanditPadlockRollAssist.Active);
+        Assert.Equal(0.0, session.BanditPadlockRollAssist.SasRollControl, 12);
+        Assert.Equal(0.0, session.Player.LastAppliedCommand.SasRollControl, 12);
+    }
+
+    [Fact]
+    public void FilteredBuntRecoveryKeepsPadlockOffAfterRawStickReturnsNeutral() {
+        SimulationSession session = SessionWithPlaneError(8.0);
+        session.SetBanditPadlockRollAssist(true);
+        for (int tick = 0; tick < 24; tick++) session.StepFixed();
+        Assert.True(session.BanditPadlockRollAssist.Active);
+
+        session.SetAnalogPitchControl(-0.14);
+        for (int tick = 0; tick < 5; tick++) session.StepFixed();
+        Assert.True(session.Controls.Command.GDemand
+            < GunneryPitchAssist.PilotUnloadOverrideThresholdG);
+
+        session.SetAnalogPitchControl(0.0);
+        session.StepFixed();
+
+        Assert.True(session.Controls.Command.GDemand
+            < GunneryPitchAssist.PilotUnloadOverrideThresholdG);
+        Assert.False(session.BanditPadlockRollAssist.Active);
+        Assert.Equal(0.0, session.Player.LastAppliedCommand.SasRollControl, 12);
+    }
+
     [Fact]
     public void AutoGcasFlyUpPreemptsAndClearsCapturedAssist() {
         SimulationSession session = SessionWithPlaneError(8.0);

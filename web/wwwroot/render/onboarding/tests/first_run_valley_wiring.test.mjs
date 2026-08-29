@@ -59,9 +59,27 @@ test("the first successful beginFlight stamps seen so Fly again is guns-only fir
     "boot must not stamp seen before the valley actually launched");
 });
 
+test("Repeat sortie restages a finished valley while Fly again keeps the programme handoff", async () => {
+  const app = await source("app.js");
+  assert.match(app,
+    /function repeatSelectedSortieNow\(\)[\s\S]*?shouldRestageFirstRunValley\([\s\S]*?repeatRequested: true[\s\S]*?stagedMissionAuthority[\s\S]*?enterReady\(\{ forceFirstRunValley \}\)[\s\S]*?launchMission/,
+    "Restart and Repeat must preserve guided authority even after its seen flag is stamped");
+  assert.match(app,
+    /readyRestart\?\.addEventListener\("click", repeatSelectedSortieNow\)/,
+    "the secondary debrief action must own the repeat destination");
+  assert.match(app,
+    /if \(event\.code === "KeyR"\)[\s\S]*?if \(topGunOwnsFoxTwoInput\(\)\)[\s\S]*?return;[\s\S]*?repeatSelectedSortieNow\(\)/,
+    "the live restart shortcut must not swap Kestrel for the ordinary beat after launch");
+  const primary = app.match(/function activateReadyAction\(\)[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(primary, /pauseReasons\.has\("finished"\)[\s\S]*?restartMissionNow\(\)/,
+    "the primary Fly again action must continue into the normal programme");
+  assert.doesNotMatch(primary, /repeatSelectedSortieNow/);
+});
+
 test("first run is a deliberate Ready interlock and Fire visibly names its live weapon", async () => {
-  const [app, index, hud, readouts] = await Promise.all([
-    source("app.js"), source("index.html"), source("hud.js"), source("render/hud/hud_readouts.js"),
+  const [app, index, hud, guidance] = await Promise.all([
+    source("app.js"), source("index.html"), source("hud.js"),
+    source("render/hud/mission_guidance.js"),
   ]);
   assert.match(app,
     /const firstRunReady = firstRunAutostartPending[\s\S]*readyScreen\.dataset\.mode = firstRunReady[\s\S]*?"intro"/,
@@ -83,8 +101,17 @@ test("first run is a deliberate Ready interlock and Fire visibly names its live 
   assert.match(app,
     /if \(firstRunAutostartPending\)[\s\S]*dismissFirstRunValleyAutostart\(\);[\s\S]*clearFirstRunValleyReplayQuery\(\);[\s\S]*enterReady/,
     "choosing the programme must remove an explicit replay query before a future reload");
-  assert.match(app,
-    /"first-merge": Object\.freeze\(\{[\s\S]*?sortie: "F-22A vs escalating opposition · guns only · first pass safe"/);
+  const firstMergeBrief = app.match(
+    /"first-merge": Object\.freeze\(\{[\s\S]*?\n  \}\),/,
+  )?.[0] ?? "";
+  assert.match(firstMergeBrief,
+    /sortie: "F-22A vs escalating opposition · guns only · opening 1v2 guns hot"/,
+    "the programme brief must disclose that the opening pair is already guns hot");
+  assert.doesNotMatch(firstMergeBrief, /first pass safe/i,
+    "the production 1v2 opens guns-free and must not advertise a safe pass");
+  assert.match(index,
+    /id="ready-sortie">F-22A vs Su-27S · guns only · opening 1v2 guns hot</,
+    "the static Ready fallback must match the live guns-hot 1v2 contract");
   assert.match(app, /touchFireAriaLabel/);
   assert.match(app, /touchFireButton\.textContent = touchFireVisibleLabel\(state\)/,
     "the same F control must visibly transition from FOX 2 to GUNS with authority");
@@ -93,9 +120,14 @@ test("first run is a deliberate Ready interlock and Fire visibly names its live 
   assert.match(hud,
     /firstRunValley[\s\S]*?FOX TWO → GUNS[\s\S]*?FOLLOW VALLEY · \$\{fireBinding\} FIRES TWO HEATERS, THEN GUNS/,
     "desktop Quicklook must replace generic missile fiction with the remappable first-run Fire contract");
-  assert.match(readouts,
-    /FOLLOW VALLEY · WEAPONS SAFE[\s\S]*?FOX TWO ×\$\{aim9Remaining\} · FIRE[\s\S]*?GUNS · FIRE/,
-    "the live HUD must carry the complete first-run objective ladder after transient cues expire");
+  assert.match(guidance,
+    /FOLLOW VALLEY NORTH[\s\S]*?FIRE MISSILE \$\{missileNumber\} OF 2[\s\S]*?FIRE GUNS/,
+    "the live HUD must carry one ordered valley → missile → guns action ladder");
+  assert.match(guidance,
+    /transition\.includes\("WEAPONS HOT"\)[\s\S]*?this\.actionable = true/,
+    "a loaded magazine must not displace FOLLOW VALLEY before authority announces the pop-out");
+  assert.match(hud, /this\._firstRunWeaponsLatch\.update\(frame\.state\)/,
+    "the shared HUD must retain the short authority release edge for the persistent strip");
 });
 
 test("first-run Quicklook reuses the remappable Fire binding in every teaching line", async () => {

@@ -169,8 +169,10 @@ public class CobraMissionActTests
         CobraCanyonRoutePoint routeJoin = route.Points[3];
         Assert.Equal(routeJoin.EastM, gates[^1].EastM, 6);
         Assert.Equal(routeJoin.NorthM, gates[^1].NorthM, 6);
-        Assert.All(gates, gate =>
+        Assert.All(gates.Take(2), gate =>
             Assert.True(gate.UpM >= CampEmberOperations.PadElevationM + 42.0));
+        Assert.True(gates[^1].UpM < CampEmberOperations.PadElevationM + 42.0,
+            "the connector must descend into the nap-of-earth route instead of preserving pad altitude");
     }
 
     [Fact]
@@ -193,6 +195,31 @@ public class CobraMissionActTests
         CobraPathGate active = gates.Single(g => g.Active);
         Assert.Equal(second.EastM, active.EastM);
         Assert.Equal(second.NorthM, active.NorthM);
+    }
+
+    [Fact]
+    public void IngressPathDoesNotRegressAfterPassingAFlownWaypoint()
+    {
+        CobraCanyonRouteDefinition route = CobraCanyonDefinition.Create()
+            .Route(CobraCanyonRouteChoice.RiverGorge);
+        int joinIndex = 3;
+        CobraCanyonRoutePoint second = route.Points[joinIndex + 1];
+        CobraCanyonRoutePoint third = route.Points[joinIndex + 2];
+        Vec3D seventyFivePercentAlong = new(
+            second.EastM + (third.EastM - second.EastM) * 0.75,
+            second.PathAltitudeM,
+            second.NorthM + (third.NorthM - second.NorthM) * 0.75);
+
+        IReadOnlyList<CobraPathGate> gates = CobraMissionActProgress.BuildPathGates(
+            CobraMissionAct.Ingress,
+            route,
+            Fob,
+            fobPathAltitudeM: 232.0,
+            aircraftWorldM: seventyFivePercentAlong);
+
+        CobraPathGate active = gates.Single(gate => gate.Active);
+        Assert.Equal(third.EastM, active.EastM);
+        Assert.Equal(third.NorthM, active.NorthM);
     }
 
     [Fact]

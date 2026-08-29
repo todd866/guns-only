@@ -1,0 +1,111 @@
+# Autonomous mission harness status — 2026-08-27
+
+## Why this exists
+
+The old browser checks could report green while a route was paused behind Ready, authority crawled,
+or a QA shortcut skipped the part a player actually flies. The new gates control the production
+input path and keep an authority tape. Visual review remains a separate acceptance gate; completing
+a mission does not mean it looks good.
+
+## Coverage
+
+| Mission family | Driver | Required proof |
+| --- | --- | --- |
+| Cobra | `cobra_ai_pilot.mjs` | depart, ingress, live two-sided battle, real gun hit, no friendly kill |
+| F-22 | `fixed_wing_ai_pilot.mjs` | single-Ace merge, stable roll capture, held gun solution, kill, no runaway chase |
+| First run | `fixed_wing_ai_pilot.mjs` | full canyon, weapon release, both opening splashes |
+| Top Gun | `fixed_wing_ai_pilot.mjs` | live intercept and terminal combat evidence |
+| Rapier | `fixed_wing_ai_pilot.mjs` | launch-to-climb authority transition |
+| Indoor | `indoor_ai_player.mjs` | two optical scans, raised atrium crossing, intact return, no shortcuts |
+| Weekend | `weekend_ai_rider.mjs` | full clean lap, all sectors, pause authority hold, visible debrief |
+| Okanagan | `okanagan_ai_player.mjs` | runway, scoop, drop, credited circuit, RTB landing and debrief |
+| CASEVAC | `casevac_ai_player.mjs` | pickup, stable contact, patient onboard, clinic handoff, result |
+
+`mission_ai_suite.mjs` dispatches these sequentially and fails unknown mission names. Source and
+unit coverage are not substitutes for the fresh hardware runs recorded below.
+
+## Acceptance rules
+
+- Hardware runs use the real Metal renderer. SwiftShader may diagnose CPU starvation but cannot
+  qualify frame rate or playability.
+- The page must stay visible and authority must advance near wall time.
+- Input goes through the same keyboard/gamepad handlers as a player.
+- Crashes, hidden pages, timeouts, skipped phases and missing terminal evidence fail closed.
+- Screenshots are inspected independently for composition, readability and action. Telemetry cannot
+  certify graphics.
+- Unattended audio runs use `?audioQa=silent` and close the browser before releasing the GPU slot.
+
+## Next gaps
+
+1. Add a visual-scene rubric to the artifact bundle without pretending it can replace human review.
+2. Qualify the public `first-merge` 2-v-1 separately; the Ace gate isolates controller behaviour.
+3. Run the complete suite on fresh published assets before release; never reuse a stale publish.
+
+## F-22 wrap handoff — 2026-08-29
+
+Status: materially safer and more diagnosable, but **not release-qualified**. Tape 498 survived the
+full 180 seconds with no hits taken after the defensive-power repair, then failed acceptance with
+12 unconverted passes inside 500 m and no shot. Do not describe survival as a completed fight.
+
+Verified changes in the current worktree:
+
+- The AI requests and applies zero rudder. Tape 498 recorded maximum ARI/effective rudder `0.0007`,
+  rolling sideslip `1.82 deg`, no material loaded roll and no settled loaded overbank. The apparent
+  top-rudder motion is bank/load geometry plus an aft padlock projection, not hidden rudder input.
+- Combat padlock now compresses only the loaded-turn roll shoulder; physical HUD/ADI attitude and
+  the solved look direction remain truthful.
+- A close-rear defensive reacquisition preserves the nearer physical bank side instead of making a
+  lethal cross-horizon reversal.
+- The predictable `0.8 G` gunfire unload jink was removed. Live fire and airborne rounds retain the
+  maximum available defensive pull.
+- A narrow high-closure cone-retention lane can preserve an already captured final-axis solution;
+  it does not widen the production gun cone or trigger.
+- Active defense now overrides inherited recovery idle and rocks toward bounded `1.05` combat
+  power. Tape 497 died at `52.8 s` after power sat at zero for `5.9 s`; Tape 498 exercised the
+  override throughout the comparable threat and survived 180 seconds untouched.
+- Full and hot snapshots now publish ungated `lead_solution_valid` beside the unchanged,
+  weapons-authorized `lead_valid`. This field is tested but is not yet consumed by the AI pilot.
+
+Exact remaining work, in order:
+
+1. Consume `lead_solution_valid` only for F-22 manoeuvring while leaving HUD, trigger and
+   `lead_valid` weapons-gated. Tape 498's first merge withheld physical lead until the target was
+   already `161 deg` aft.
+2. Permit only same-side, magnitude-reducing finisher maintenance when the rate-damped roll command
+   is below `0.25` and already moving toward target. At `67.942 s`, a safe `+32.7 -> +19.7 deg`
+   correction (`~ -0.218` roll) tripped the static `12.5 deg` interlock, dumped to `0.8 G`, and let
+   lateral error grow while lead improved to `4.80 deg`. Cross-side, increasing-bank, wrong-way,
+   overbank and material commands must still unload.
+3. End the low-plane nose-high trap. Tape 498 held about `3 G` near `60 deg` bank while gamma rose
+   `41 -> 47.5 deg` and the shooter sat `34 -> 45.6 deg` below. Lateralize the lift vector or bound
+   load until gamma stops rising; retain the combat-power override.
+4. Extend the harness with a stable steep/low-load failure (`|bank| >= 65 deg`,
+   `|roll rate| <= 12 deg/s`, over `2.5 s`) and a low-plane/below-shooter rising-gamma failure.
+   The current `G >= 2.5`, `bank >= 75 deg` wall metric missed Tape 498's `9.28 s` at about
+   `70 deg` bank and `1.8-2.5 G`.
+5. Make the ordinary `68 deg` pursuit cap forward-quarter only and restore the existing `72 deg`
+   aft-turn authority. The global reduction slowed the first post-merge conversion by roughly
+   `1.1 deg/s` versus Tape 495.
+6. Publish camera yaw/pitch and raw/corrected optical roll, capture settled `TRACK` frames, and add
+   a subtle body-fixed rail/wing reference. Do not flatten the aft-view horizon further.
+7. Republish and require a fresh silent Metal sortie with a real qualified two-sample gun solution,
+   production fire, damage and kill, plus no hits, no missed-pass failure and no new visual-wall
+   evidence.
+
+Current validation: fixed-wing controller/harness `204/204`; camera and production-graphics
+`30/30`; focused inhibited physical-lead snapshot regression `1/1`; `git diff --check` clean.
+Evidence tapes are `/private/tmp/f22-ai-disciplined-495` through `-498`.
+
+## Latest F-22 proof
+
+Tape 424 passed on Metal after fixing a harness-only control-mode error: the synthetic limiter
+button had been held during positive recovery pull, which changed analog pitch from protected G to
+commanded alpha. Limiter ownership is now restricted to the deliberate negative-alpha unload;
+positive recovery pull stays on the ordinary protected-G path.
+
+The sortie killed in 114.6 s with 99 rounds, 3 hits and a 19-sample shootable qualified solution.
+It reached 8.57 actual G, held maximum AoA to 18.88°, reduced ARI/effective rudder from tape 423's
+0.787 to 0.0018, reduced maximum sideslip from 16.8° to 7.3°, and recorded zero recovery gun-assist
+G, zero physical rocking and zero runaway chase. The assessor now excludes solutions coincident
+with recovery, defensive breaks, RTB, cold weapons or pilot interlock; tape 423's recovery-only
+solution can no longer masquerade as a firing opportunity.

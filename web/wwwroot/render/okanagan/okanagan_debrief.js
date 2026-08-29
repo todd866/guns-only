@@ -49,18 +49,15 @@ function reserveEvidence(state) {
 
 function nextSortieCorrection({ failed, aircraftNotFlyable, fireMission, drops, cycles, reserve }) {
   if (!reserve.protectedReserve)
-    return "Leave the working leg earlier and recover before fuel falls below the RTB minimum.";
+    return "Leave the line earlier.";
   if (aircraftNotFlyable)
-    return "Review the final recorded aircraft state before relaunch.";
-  if (failed)
-    return "Review the final recorded flight path and aircraft state before relaunch.";
+    return "Use a serviceable aircraft.";
+  if (failed) return "";
   if (fireMission && drops === 0)
-    return "Hold the next drop on the marked line until the authority credits effective water.";
-  if (fireMission)
-    return "Repeat the credited drop profile while protecting the RTB reserve.";
+    return "Release on the marked line.";
   if (cycles === 0)
-    return "Complete one full scoop, drop, and recovery circuit.";
-  return "Repeat the circuit and protect the recorded RTB reserve through landing.";
+    return "Complete one circuit.";
+  return "";
 }
 
 export function okanaganMissionTerminal(state = {}) {
@@ -89,34 +86,54 @@ export function okanaganDebriefModel(state = {}) {
     : state?.flyable === true ? "FLYABLE" : "NOT REPORTED";
 
   const summary = failed
-    ? `The mission authority recorded the sortie as failed; final fuel was ${integerText(reserve.fuelKg)} KG, ${reserve.copy}.`
+    ? ""
     : fireMission
-      ? `${drops} effective ${drops === 1 ? "drop" : "drops"} credited with ${integerText(effectiveWaterKg)} KG effective water; final fuel was ${integerText(reserve.fuelKg)} KG, ${reserve.copy}.`
-      : `${cycles} water ${cycles === 1 ? "circuit" : "circuits"} recorded; final fuel was ${integerText(reserve.fuelKg)} KG, ${reserve.copy}.`;
+      ? drops > 0
+        ? `${drops} ${drops === 1 ? "drop" : "drops"} · ${integerText(effectiveWaterKg)} KG water`
+        : "No effective drops"
+      : cycles > 0
+        ? `${cycles} ${cycles === 1 ? "circuit" : "circuits"}`
+        : "No complete circuits";
 
   const correction = nextSortieCorrection({
     failed, aircraftNotFlyable, fireMission, drops, cycles, reserve,
   });
 
-  const facts = [
-    fact("aircraft", "AIRCRAFT", aircraftState,
-      aircraftNotFlyable || aircraftState === "NOT REPORTED" ? "caution" : "normal"),
-    fact("score", "SCORE", integerText(state?.score)),
-    fact("cycles", "CYCLES", String(cycles)),
-    fact("drops", "EFFECTIVE DROPS", String(drops)),
-    fact("effective-water", "EFFECTIVE WATER", `${integerText(effectiveWaterKg)} KG`),
-    fact("fire-intensity", "FIRE INTENSITY", decimal(state?.fire_intensity, 1)),
-    fact("burned-area", "BURNED AREA", `${decimal(state?.burned_area_ha, 2)} HA`),
-    fact("population", "POPULATION EXPOSED", integerText(state?.population_exposed)),
-    fact("fuel-reserve", "FUEL / RTB MIN", `${whole(reserve.fuelKg)} / ${whole(reserve.minimumKg)} KG`,
-      reserve.protectedReserve ? "normal" : "caution"),
-  ];
+  const facts = [];
+  if (aircraftNotFlyable || aircraftState === "NOT REPORTED") {
+    facts.push(fact("aircraft", "AIRCRAFT", aircraftState, "caution"));
+  }
+  if (!failed && whole(state?.score) > 0)
+    facts.push(fact("score", "SCORE", integerText(state?.score)));
+
+  // A successful sortie puts its primary accomplishment in the summary. Failed sorties have no
+  // summary narration, so retain only non-zero work completed before the failure.
+  if (failed && !fireMission && cycles > 0)
+    facts.push(fact("cycles", "CYCLES", String(cycles)));
+  if (failed && fireMission && drops > 0)
+    facts.push(fact("drops", "DROPS", String(drops)));
+  if (failed && fireMission && effectiveWaterKg > 0)
+    facts.push(fact("effective-water", "WATER", `${integerText(effectiveWaterKg)} KG`));
+
+  if (fireMission) {
+    facts.push(fact("fire-intensity", "FIRE INTENSITY", decimal(state?.fire_intensity, 1)));
+    if (finite(state?.burned_area_ha) > 0)
+      facts.push(fact("burned-area", "BURNED AREA", `${decimal(state?.burned_area_ha, 2)} HA`));
+    if (whole(state?.population_exposed) > 0)
+      facts.push(fact("population", "POPULATION EXPOSED", integerText(state?.population_exposed)));
+  }
+  facts.push(fact(
+    "fuel-reserve",
+    "FUEL / RTB MIN",
+    `${whole(reserve.fuelKg)} / ${whole(reserve.minimumKg)} KG`,
+    reserve.protectedReserve ? "normal" : "caution",
+  ));
 
   return Object.freeze({
     failed,
     outcome: failed ? "failed" : "complete",
-    kicker: failed ? "RECORDED SORTIE FAILURE" : "RECORDED SORTIE RESULT",
-    title: failed ? "Sortie Failed" : `${sortieTitle} Complete`,
+    kicker: sortieTitle.toUpperCase(),
+    title: failed ? "Failed" : "Complete",
     summary,
     correction,
     reserve,

@@ -9,6 +9,7 @@ import {
   productionMissionAuthority,
   resolveInitialProgramSelection,
   sameMissionAuthority,
+  shouldRestageFirstRunValley,
   topGunOwnsFoxTwoInput,
   topGunMissionAuthority,
 } from "../mission_authority.js";
@@ -122,4 +123,20 @@ test("first-run valley is its own staging so Fly later cannot RestartSortie into
   assert.equal(sameMissionAuthority(valley, firstRunValleyMissionAuthority()), true);
   assert.equal(sameMissionAuthority(valley, productionMissionAuthority(7, 1)), false);
   assert.equal(sameMissionAuthority(valley, topGunMissionAuthority(0)), false);
+});
+
+test("Repeat sortie preserves Kestrel authority while Fly again advances to the programme", () => {
+  const valley = firstRunValleyMissionAuthority();
+  assert.equal(shouldRestageFirstRunValley({
+    repeatRequested: true,
+    stagedAuthority: valley,
+  }), true, "the secondary debrief action must retry the guided valley after failure");
+  assert.equal(shouldRestageFirstRunValley({
+    repeatRequested: false,
+    stagedAuthority: valley,
+  }), false, "the primary Fly again action must retain its normal-programme handoff");
+  assert.equal(shouldRestageFirstRunValley({
+    repeatRequested: true,
+    stagedAuthority: productionMissionAuthority(7, 0),
+  }), false, "ordinary programme repeats must not be turned into the guided valley");
 });

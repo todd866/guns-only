@@ -124,7 +124,7 @@ public sealed class F22HighAlphaCorridorTests {
         Assert.Equal(PullLimitReason.TvcSaturated, sim.PullLimit.Reason);
 
         double previous = firstStep;
-        for (int tick = 0; tick < AircraftSim.TickHz; tick++) {
+        for (int tick = 0; tick < 2 * AircraftSim.TickHz; tick++) {
             sim.Step(command, Dt);
             double current = Math.Abs(sim.LastPitchThrustVectorAngleRad);
             Assert.True(current - previous
@@ -230,6 +230,31 @@ public sealed class F22HighAlphaCorridorTests {
         Assert.InRange(minAlpha, 28.0, 36.0);
         Assert.InRange(maxAlpha, 30.0, 40.0);
         Assert.True(maxBeta < 12.0, $"loaded roll departed to {maxBeta:F1} deg beta");
+    }
+
+    [Fact]
+    public void CombatLoadedRollStaysInsideTheVisibleSideslipCorridor() {
+        // Tape 434: a normal 5-6 G pursuit reversal at roughly 10 degrees alpha and 90 deg/s roll
+        // reached 10.1 degrees beta even though neither pilot nor ARI commanded rudder. That is
+        // contained, but visibly skidding. Pin the ordinary attached-flow coordination corridor
+        // separately from the much wider post-stall departure corridor above.
+        AircraftSim sim = AtAlpha(alphaDegrees: 10.0, casKnots: 400.0);
+        var command = new PilotCommand(
+            GDemand: 5.5,
+            BankTarget: 0.0,
+            Throttle: 1.0,
+            Rudder: 0.0,
+            RollControl: -0.63,
+            DirectLateralControl: true);
+        double maxBeta = 0.0;
+
+        for (int tick = 0; tick < AircraftSim.TickHz; tick++) {
+            sim.Step(command, Dt);
+            maxBeta = Math.Max(maxBeta, Math.Abs(sim.SideslipRad) * Degrees);
+        }
+
+        Assert.True(maxBeta < 8.0,
+            $"combat loaded roll visibly skidded to {maxBeta:F1} deg beta");
     }
 
     [Fact]

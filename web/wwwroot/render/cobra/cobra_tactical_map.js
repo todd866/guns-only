@@ -7,7 +7,7 @@
  * progress or unit positions, it only reprojects what the sim already published.
  */
 
-import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=345";
+import { cobraObjectiveSiteId } from "./cobra_objective_site.js?v=348";
 
 export const COBRA_TACTICAL_MAP_SCHEMA = "guns-only.cobra-tactical-map.v1";
 
@@ -31,6 +31,12 @@ function assertBounds(bounds) {
   if (!(bounds.maxNorthM - bounds.minNorthM > 0)) {
     throw new TypeError("cobraTacticalMapModel: bounds north span must be positive");
   }
+}
+
+function nonNegativeFiniteOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, number) : null;
 }
 
 /**
@@ -59,6 +65,11 @@ function project(eastM, northM, bounds, widthPx, heightPx) {
  *   units?: Array<object>,
  *   tickets?: { friendly?: number, hostile?: number },
  *   combatLive?: boolean,
+ *   timeLimitSeconds?: number,
+ *   timeRemainingSeconds?: number,
+ *   outcome?: string,
+ *   missionAct?: string,
+ *   fob?: { x_m?: number, y_m?: number, z_m?: number, label?: string },
  *   player?: { eastM?: number, northM?: number, headingRad?: number },
  *   bounds: { minEastM: number, maxEastM: number, minNorthM: number, maxNorthM: number },
  *   widthPx: number,
@@ -71,6 +82,9 @@ export function cobraTacticalMapModel({
   units = [],
   tickets = { friendly: 0, hostile: 0 },
   combatLive = true,
+  timeLimitSeconds = null,
+  timeRemainingSeconds = null,
+  outcome = "pending",
   player = { eastM: 0, northM: 0, headingRad: 0 },
   // The river course, as [{ eastM, northM }]. It is the strongest landmark a pilot actually
   // has out of the windscreen, so a chart that omits it gives them nothing to match against.
@@ -79,6 +93,8 @@ export function cobraTacticalMapModel({
   widthPx,
   heightPx,
   showUnits = true,
+  missionAct = "",
+  fob = null,
 } = {}) {
   assertBounds(bounds);
   assertFiniteNumber(widthPx, "cobraTacticalMapModel: widthPx is required and must be finite");
@@ -107,9 +123,31 @@ export function cobraTacticalMapModel({
     });
   }
 
+  const act = String(missionAct).toLowerCase();
+  const returningToBase = act === "rtb";
+  const missionComplete = act === "complete";
+  const fobEastM = Number(fob?.x_m);
+  const fobNorthM = Number(fob?.z_m);
+  if (returningToBase && Number.isFinite(fobEastM) && Number.isFinite(fobNorthM)) {
+    const { x, y, offMap } = project(fobEastM, fobNorthM, bounds, widthPx, heightPx);
+    projectedSites.push({
+      id: "camp-ember-rtb",
+      label: String(fob?.label ?? "Camp Ember"),
+      x,
+      y,
+      owner: "friendly",
+      progress: 1,
+      contested: false,
+      offMap,
+      recovery: true,
+    });
+  }
+
   const projectedUnits = [];
   const tacticalSymbols = [];
-  const objectiveSiteId = cobraObjectiveSiteId({ sites, units, player });
+  const objectiveSiteId = returningToBase || missionComplete
+    ? null
+    : cobraObjectiveSiteId({ sites, units, player });
   if (showUnits) {
     for (const unit of units) {
       if (!unit) continue;
@@ -129,7 +167,7 @@ export function cobraTacticalMapModel({
   }
 
   // The minimap suppresses ordinary infantry clutter, but never suppresses the things a pilot
-  // must know before takeoff: the objective garrison and every gun that can shoot the aircraft.
+  // must know before takeoff: the objective gun pit and every gun that can shoot the aircraft.
   // These are role-shaped symbols, not another set of identical red dots.
   for (const unit of units) {
     if (!unit?.alive || unit.faction !== "hostile") continue;
@@ -175,7 +213,14 @@ export function cobraTacticalMapModel({
   }
 
   let objective = null;
-  const objectiveSite = sites.find((site) => site?.id === objectiveSiteId) ?? null;
+  const objectiveSite = returningToBase
+    ? (Number.isFinite(fobEastM) && Number.isFinite(fobNorthM)
+      ? { id: "camp-ember-rtb", label: String(fob?.label ?? "Camp Ember"),
+        x_m: fobEastM, z_m: fobNorthM }
+      : null)
+    : missionComplete
+      ? null
+      : sites.find((site) => site?.id === objectiveSiteId) ?? null;
   if (objectiveSite
     && Number.isFinite(objectiveSite.x_m)
     && Number.isFinite(objectiveSite.z_m)) {
@@ -188,6 +233,7 @@ export function cobraTacticalMapModel({
       label: site.label,
       bearingRad: Math.atan2(deltaEast, deltaNorth),
       rangeM,
+      mode: returningToBase ? "rtb" : "objective",
     };
   }
 
@@ -201,6 +247,9 @@ export function cobraTacticalMapModel({
     player: projectedPlayer,
     tickets: { friendly: tickets?.friendly ?? 0, hostile: tickets?.hostile ?? 0 },
     combat_live: combatLive !== false,
+    time_limit_s: nonNegativeFiniteOrNull(timeLimitSeconds),
+    time_remaining_s: nonNegativeFiniteOrNull(timeRemainingSeconds),
+    outcome: String(outcome ?? "pending").toLowerCase(),
     objective,
   };
 }

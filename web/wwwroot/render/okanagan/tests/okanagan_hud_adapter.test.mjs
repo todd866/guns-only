@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { compactOkanaganCue, okanaganFlightState } from "../okanagan_hud_adapter.js";
+import {
+  compactOkanaganCue,
+  okanaganFlightState,
+  okanaganRadioHoldMs,
+} from "../okanagan_hud_adapter.js";
 
 test("Fire Boss projects into the shared fixed-wing HUD and audio contract", () => {
   const state = okanaganFlightState({
@@ -99,4 +103,12 @@ test("the one-line cue prefers an actionable scoop fault", () => {
   assert.equal(compactOkanaganCue({ cue: "SCOOP", scoop_fault: "WINGS LEVEL" }), "WINGS LEVEL");
   assert.equal(compactOkanaganCue({ cue: "TURN WEST" }), "TURN WEST");
   assert.equal(compactOkanaganCue({ route: [{ label: "LAKE ENTRY" }], active_gate: 0 }), "LAKE ENTRY");
+});
+
+test("transient radio dwell scales with terse copy and clears the outside view promptly", () => {
+  assert.equal(okanaganRadioHoldMs(""), 0);
+  assert.equal(okanaganRadioHoldMs("OPS: Return Kelowna."), 2_620);
+  assert.equal(okanaganRadioHoldMs(
+    "AIR ATTACK: Boss 21, west flank, north to south."), 4_060);
+  assert.equal(okanaganRadioHoldMs(Array(30).fill("word").join(" ")), 4_200);
 });
