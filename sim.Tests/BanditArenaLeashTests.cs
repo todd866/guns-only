@@ -268,6 +268,51 @@ public class BanditArenaLeashTests {
             + "away from the player — that is the stern chase this corridor exists to prevent");
     }
 
+    [Fact(Skip = "Open defect on codex/deepdive-346 — reproduction kept; see "
+        + "docs/2026-08-27-autonomous-mission-harness.md. Fixing the aim alone trades this "
+        + "spiral for a wander/wingman failure, so containment needs a design pass, not a patch.")]
+    public void ReengageCannotSpiralTheFightThroughTheCombatCeiling() {
+        // Traced 2026-08-29. Once range crossed ReengageRangeM the bandit flew ReengageCommand
+        // (while Tactic still reported Return), whose aim had been clamped by KeepAimInFightVolume
+        // into a phantom near the fight centre. BankToPlaceLiftVectorOn against a phantom below and
+        // behind SATURATES: the bank target pinned to -74.5 deg — exactly the 1.30 rad cap — and
+        // held there for 85 s at 5-7 G and full afterburner. That is a constant-bank climbing
+        // spiral, and it carried the fight from 4,918 m to 15,823 m (51,900 ft) and 20 km of range
+        // while speed decayed 320 -> 100 m/s. The nose signature was +1.00 -> -0.97, the same
+        // phantom pathology ReengageCommand's own comment describes.
+        //
+        // The player never leaves 4,592 m. Nothing about this fight justifies the stratosphere.
+        const double PlayerHoldM = 4592.0;
+        var bandit = StagedBandit();
+        var player = new AircraftSim(
+            new AircraftState(new Vec3D(0.0, PlayerHoldM, -2000.0), 300.0, 0.0, 0.0, 0.0,
+                PlayerAir.MassKg),
+            PlayerAir);
+
+        double maxAltitudeM = 0.0;
+        int saturatedBankTicks = 0, longestSaturatedBankTicks = 0;
+        for (int tick = 0; tick <= 180 * AircraftSim.TickHz; tick++) {
+            bandit.Step(ActorObservation.Capture(player.State, tick), Dt);
+            player.Step(LevelChase(player.State, bandit.State.Position, PlayerHoldM), Dt);
+            maxAltitudeM = System.Math.Max(maxAltitudeM, bandit.State.Position.Y);
+            // A saturated bank target is a solver that has stopped solving. A real max-performance
+            // turn saturates briefly; only a SUSTAINED pin is the defect.
+            bool saturated = System.Math.Abs(System.Math.Abs(bandit.LastCommand.BankTarget) - 1.30)
+                < 0.01;
+            saturatedBankTicks = saturated ? saturatedBankTicks + 1 : 0;
+            longestSaturatedBankTicks =
+                System.Math.Max(longestSaturatedBankTicks, saturatedBankTicks);
+        }
+
+        double longestSaturatedS = longestSaturatedBankTicks / (double)AircraftSim.TickHz;
+        Assert.True(longestSaturatedS < 12.0,
+            $"bandit held a saturated {1.30:F2} rad bank target for {longestSaturatedS:F1} s — "
+            + "the aim solver stopped solving and the jet flew a constant-bank spiral");
+        Assert.True(maxAltitudeM < 11_500.0,
+            $"bandit climbed to {maxAltitudeM:F0} m against a fight the player held at "
+            + $"{PlayerHoldM:F0} m — the fight ratcheted through the combat ceiling");
+    }
+
     [Fact]
     public void ClosePlayerCannotDragTheLookaheadBanditIntoTheStratosphere() {
         // Browser-player regression: the fight stayed inside 3.5 km, so the lookahead path treated

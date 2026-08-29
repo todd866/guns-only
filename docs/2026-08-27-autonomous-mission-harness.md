@@ -160,6 +160,59 @@ bandit must never flee nose-cold, and `TheLadderKeepsItsTiersDistinct` reports a
 58 rounds for no hits — the difficulty ladder has collapsed. Diagnose against the sim, not by
 reasoning about the change set: trace a single engagement per tier.
 
+### Root cause of the leash/run failures — traced 2026-08-29
+
+Traced, not reasoned about, per the standing instruction on this file. `ReactiveBandit.Tactic` is a
+misleading label here: between `ReengageRangeM` (3.5 km) and `AbandonChaseRangeM` (15 km) the jet
+flies `ReengageCommand` while `Tactic` is set to `Return`, so `ReturnCommand`'s "NEVER CLIMB HOME"
+dive branch never runs. My first hypothesis — that `Return` was unreachable, the documented trap in
+this file — was wrong: `Return` is selected on 252 of 361 sampled ticks.
+
+The leash scenario (player pinned at 4,592 m) traces as:
+
+    t= 27  rng= 3322m  nose= 1.00  spd=225  alt= 4956  cmdG=1.05  bank= -25.8
+    t= 30  rng= 3635m  nose= 1.00  spd=249  alt= 4918  cmdG=3.97  bank= -74.5
+    t= 45  rng= 8096m  nose=-0.97  spd=316  alt= 5370  cmdG=6.64  bank= -74.5
+    t= 63  rng=13407m  nose= 0.64  spd=305  alt= 7900  cmdG=5.07  bank= -74.5
+    t=100  rng=19231m  nose=-0.91  spd=131  alt=14912            bank= -74.5
+
+At t=30 the bank target pins to -74.5 degrees and never moves again for 85 s at 5-7 G and full
+afterburner. -74.5 degrees is exactly `LimitedBankTo(aim, 1.30)` saturating at its cap. The chain:
+`KeepAimInFightVolume` clamps the aim to within `ReturnRadiusM - 500` of the fight centre, so once
+the fight drifts past that the command whose whole purpose is re-engagement is handed a phantom near
+the centre; `BankToPlaceLiftVectorOn` against a phantom below and behind saturates; a constant-bank,
+constant-G pull is a climbing spiral. It carries the fight to 15,823 m (51,900 ft) and 20 km while
+speed decays 320 -> 100 m/s. The nose signature is +1.00 -> -0.97 — the same pathology
+`ReengageCommand`'s own comment describes as "+1.00 to -0.98". The `aimIsThePlayer` guard correctly
+identifies the phantom and disarms the slice, but the fall-through still turns onto it.
+
+`ReengageCannotSpiralTheFightThroughTheCombatCeiling` in `BanditArenaLeashTests` is the reproduction,
+kept `Skip`-ped. It fails on the unmodified branch with a 46.3 s saturated-bank leg.
+
+**Why this is not yet fixed.** Taking the horizontal aim from the real contact and keeping only the
+vertical clamp does fix the spiral outright — the traced outbound leg goes 19.1 s -> 0.0 s, the nose
+holds 1.00, range stabilises near 4 km and the jet descends. But it is not sufficient and not free:
+
+- The leash test then fails later instead, on `maxRadiusM` — the pair drifts 18.8 km from the fight
+  centre, because the bandit holds ~4 km at 359 m/s in a 57-degree bank, an 8.5 km turn radius. The
+  speed-scrub in `ReengageCommand` does not arm, because it keys on the range *opening* and here the
+  range is stable.
+- It breaks `WingmanStaysInTheFightTests.BothColdOpponentsFireWhileThePlayerIsAlive`: the clamp is
+  load-bearing for wingman containment. Restoring the clamp for `Bracket`/`Extend` roles only does
+  not recover that test either.
+
+**The architectural finding.** Containment is currently expressed *through the aim point*, which
+couples it to a bank solver that is singular exactly when the aim goes behind the aircraft. That is
+why every local patch trades one containment failure for another. Containment wants to be a
+constraint on the flown command — bank/vertical authority and a speed scrub that keys on range being
+*large*, not on range *opening* — rather than a lie told to the aim. That is a design pass with a
+flight-verification loop, not a patch, so I stopped rather than keep guessing.
+
+The three gunnery/tier failures are still unattributed. The hypothesis that they share this root
+cause (a fight spending 85 s high and slow would depress Ace conversion and inflate a low-volume
+tier's on-solution ratio) is untested — the aim change above did not move them, which is evidence
+against it being the whole story.
+
 **Do not merge this branch to main until those six are resolved.** The branch is pushed so the work
 is not confined to one machine; CI will be red, accurately.
 
