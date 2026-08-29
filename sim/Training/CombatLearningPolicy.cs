@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using GunsOnly.Sim.Doctrine;
 
 namespace GunsOnly.Sim.Training;
@@ -90,4 +91,47 @@ public sealed class ReactiveBanditActor : ICombatLearningActor {
     public double ThrustFraction => _bandit.ThrustFraction;
     public bool WantsToFire(in ActorObservation contact) => _bandit.WantsToFire(contact);
     public void Step(in ActorObservation contact, double dt) => _bandit.Step(contact, dt);
+}
+
+/// <summary>A staged real engagement: the geometry, and the pilot's own inputs through it.</summary>
+public readonly record struct OwnerEngagement(
+    CombatTrainingScenario Scenario, IReadOnlyList<TimedPilotCommand> OwnerInputs);
+
+/// <summary>One recorded stick-and-throttle sample, at its offset from the engagement entry.</summary>
+public readonly record struct TimedPilotCommand(
+    double TimeSeconds, PilotCommand Command, bool Firing);
+
+/// <summary>
+/// Replays a pilot's ACTUAL recorded inputs, so an engagement can be graded against the human who
+/// flew it rather than against a scripted stand-in.
+/// </summary>
+/// <remarks>
+/// OPEN LOOP, AND THAT IS THE WHOLE CAVEAT. These are the controls the pilot used against the
+/// opponent he actually met. The moment the opponent under test does something the tape did not
+/// contain, the replay is flying a fight that is no longer happening — faithful at the merge and
+/// decreasingly so afterwards. It is a strictly better defender than a script for the opening
+/// geometry and it is not the pilot. Treat a long replay as evidence about the first seconds.
+/// </remarks>
+public sealed class RecordedInputPolicy : ICombatLearningPolicy {
+    readonly IReadOnlyList<TimedPilotCommand> _inputs;
+    int _cursor;
+
+    public RecordedInputPolicy(IReadOnlyList<TimedPilotCommand> inputs) {
+        if (inputs is null || inputs.Count == 0)
+            throw new System.ArgumentException("A replay needs at least one recorded command.",
+                nameof(inputs));
+        _inputs = inputs;
+    }
+
+    /// <summary>Seconds of recorded input available; beyond this the last command is held.</summary>
+    public double SpanSeconds => _inputs[^1].TimeSeconds;
+
+    public CombatPolicyDecision Decide(in CombatPolicyObservation observation) {
+        // The runner steps monotonically, so a cursor walk is enough and keeps replay O(1)/tick.
+        while (_cursor + 1 < _inputs.Count
+            && _inputs[_cursor + 1].TimeSeconds <= observation.ElapsedSeconds)
+            _cursor++;
+        TimedPilotCommand sample = _inputs[_cursor];
+        return new CombatPolicyDecision(sample.Command, sample.Firing);
+    }
 }

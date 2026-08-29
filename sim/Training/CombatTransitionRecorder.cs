@@ -69,7 +69,8 @@ public sealed class CombatTransitionRecorder {
         bool terminal = terminalReason != CombatTerminalReason.None;
         bool terminalFactsMatch = terminalReason switch {
             CombatTerminalReason.None => !rewardComponents.OpponentDestroyed
-                && !rewardComponents.OwnshipDestroyed,
+                && !rewardComponents.OwnshipDestroyed
+                && !rewardComponents.OwnshipOutOfBounds,
             CombatTerminalReason.OpponentDestroyed =>
                 rewardComponents.OpponentDestroyed
                 && !rewardComponents.OwnshipDestroyed,
@@ -81,6 +82,15 @@ public sealed class CombatTransitionRecorder {
                 && rewardComponents.OwnshipDestroyed,
             CombatTerminalReason.TimeLimit => !rewardComponents.OpponentDestroyed
                 && !rewardComponents.OwnshipDestroyed,
+            // Leaving the volume is its own fact. It is not destruction — nobody shot anybody —
+            // so the destruction flags must stay clear, and the out-of-bounds flag must be set on
+            // exactly the terminal that claims it.
+            CombatTerminalReason.OwnshipOutOfBounds => !rewardComponents.OpponentDestroyed
+                && !rewardComponents.OwnshipDestroyed
+                && rewardComponents.OwnshipOutOfBounds,
+            CombatTerminalReason.ReferenceOutOfBounds => !rewardComponents.OpponentDestroyed
+                && !rewardComponents.OwnshipDestroyed
+                && !rewardComponents.OwnshipOutOfBounds,
             _ => false
         };
         if (!terminalFactsMatch)

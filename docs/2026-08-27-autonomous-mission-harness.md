@@ -490,6 +490,50 @@ Two things that baseline exposes, and neither should be smoothed over:
 So the reward is no longer purely synthetic, and it is not yet the owner either. Treat 11 splashes
 in 145 as the number a learned policy has to beat, with both caveats attached.
 
+### Both benchmark caveats closed — 2026-08-29
+
+**Out-of-bounds is now an outcome, not an exception.** The runner threw when either aircraft left
+its supported volume, which made real geometries unusable and — worse — meant a policy that flew
+into the ground had its episode *discarded* rather than penalised. `OwnshipOutOfBounds` is a
+terminal scored with the destruction penalty, so the floor cannot become a cheap way to end a losing
+engagement; `ReferenceOutOfBounds` stops the episode neutrally, because the learning fighter did not
+cause it. Destruction still outranks both: a splashed aircraft leaves the volume on its way down and
+that is a kill, not an out-of-bounds.
+
+**The defender is now the owner.** The reference side takes the same policy seam as the learning
+side, and `RecordedInputPolicy` replays the pilot's actual `g_cmd` / `bank_target_deg` / `throttle`
+from the tape, with the trigger taken from the round ledger advancing. All 158 staged engagements
+carry his inputs; none fall back to a script.
+
+One bug worth recording, because it failed silently in exactly the way this document keeps warning
+about: the trigger first read `sortie_rounds_fired`, the monotone ledger. **These tapes do not carry
+that field** — only the engagement-local `rounds_fired` — so the extractor cheerfully reported that
+the owner fires in 1 engagement out of 204. With the fallback (and a decrease read as the
+engagement-local counter resetting rather than as a shot) it is **77 of 204, 769 firing ticks**. A
+missing field returning a plausible answer is the failure mode to keep checking for.
+
+**Baseline, the shipped Ace against the owner's own inputs over 158 real engagements:**
+
+| | scripted stand-in | owner's actual inputs |
+| --- | --- | --- |
+| graded | 145 (13 discarded) | **158 (none discarded)** |
+| opponent rounds fired | 180 | 210 |
+| opponent hits | 50 | **35** |
+| opponent kills | 11 | **9** |
+| opponent flew out of bounds | n/a | 3 |
+| owner flew out of bounds | n/a | 7 |
+
+Against the owner's real flying the opponent lands fewer hits and fewer kills than against a
+scripted Veteran, which is the direction the live telemetry already implied and is the first
+independent corroboration of it inside the sim.
+
+**The remaining caveat, which does not close:** a replay is OPEN LOOP. These are the controls the
+owner used against the opponent he actually met, so the moment the opponent under test diverges from
+the tape the replay is flying a fight that is no longer happening — faithful at the merge and
+decreasingly so afterwards. Read 9 kills in 158 as evidence about the opening of a real engagement.
+Closing that properly means a behaviour-cloned pilot rather than a replay, and the 158 engagements
+with inputs are exactly the dataset for it.
+
 **Do not merge this branch to main until those six are resolved.** The branch is pushed so the work
 is not confined to one machine; CI will be red, accurately.
 

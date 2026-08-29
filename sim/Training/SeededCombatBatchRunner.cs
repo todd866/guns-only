@@ -366,7 +366,8 @@ public static class SeededCombatBatchRunner {
         CombatRewardWeights? rewardWeights = null,
         CancellationToken cancellationToken = default,
         int engagementNumber = 1,
-        ICombatLearningPolicy? learningPolicy = null) =>
+        ICombatLearningPolicy? learningPolicy = null,
+        ICombatLearningPolicy? referencePolicy = null) =>
         RunEpisodeCore(
             episodeIndex,
             scenario,
@@ -377,7 +378,8 @@ public static class SeededCombatBatchRunner {
             cancellationToken,
             engagementNumber,
             plannerTeacherSamples: null,
-            learningPolicy: learningPolicy);
+            learningPolicy: learningPolicy,
+            referencePolicy: referencePolicy);
 
     /// <summary>
     /// Run one ordinary episode and retain the full decision trace and recurrent memory at every
@@ -421,7 +423,8 @@ public static class SeededCombatBatchRunner {
         CancellationToken cancellationToken,
         int engagementNumber,
         List<PlannerTeacherSample>? plannerTeacherSamples,
-        ICombatLearningPolicy? learningPolicy = null) {
+        ICombatLearningPolicy? learningPolicy = null,
+        ICombatLearningPolicy? referencePolicy = null) {
         if (episodeIndex < 0) throw new ArgumentOutOfRangeException(nameof(episodeIndex));
         if (engagementNumber < 1)
             throw new ArgumentOutOfRangeException(nameof(engagementNumber));
@@ -447,9 +450,16 @@ public static class SeededCombatBatchRunner {
         AircraftParams learningAir = behaviorSkill == PilotSkill.Machine
             ? FlightModel.UcavInterceptorSurrogate
             : FlightModel.Su27SPublicDataSurrogate;
-        var reference = new ReactiveBandit(
-            scenario.ReferenceStart, referenceAir, referenceSkill,
-            engagementNumber: engagementNumber);
+        // The reference side takes the same seam as the learning side, so an engagement can be
+        // graded against a recorded human rather than a scripted stand-in.
+        var referenceBandit = referencePolicy is null
+            ? new ReactiveBandit(scenario.ReferenceStart, referenceAir, referenceSkill,
+                engagementNumber: engagementNumber)
+            : null;
+        var reference = referencePolicy is null
+            ? (ICombatLearningActor)new ReactiveBanditActor(referenceBandit!)
+            : new CombatPolicyActor(scenario.ReferenceStart, referenceAir, referencePolicy,
+                CombatConfig.ModernVisualMerge.PlayerAmmo);
         // Scenario factories stage skill-agnostic states; a machine episode restages the
         // learning fighter at UCAV mass so the airframe it flies is the airframe it weighs.
         AircraftState learningStart = behaviorSkill == PilotSkill.Machine
@@ -513,6 +523,12 @@ public static class SeededCombatBatchRunner {
             // One decision per tick, taken on the observation both answers come from: a policy
             // cannot see a different world for shooting than for flying.
             (learningActor as CombatPolicyActor)?.Decide(observation);
+            if (reference is CombatPolicyActor referenceActor) {
+                referenceActor.Decide(CombatPolicyObservation.Capture(
+                    tick, elapsedSeconds, referenceState, learningContact,
+                    referenceGun.AmmoRemaining,
+                    WeaponsAuthorized(firstPassOpened, combat.PlayerAmmo, referenceGun)));
+            }
 
             bool referenceFireIntentEvaluated = firstPassOpened && combat.PlayerAmmo > 0;
             bool referenceFireIntentConsumed = referenceFireIntentEvaluated
@@ -547,8 +563,13 @@ public static class SeededCombatBatchRunner {
             learningGun.Step(learningFireAuthorized, learningState, referenceState, Dt);
             reference.Step(learningContact, Dt);
             learningActor.Step(referenceContact, Dt);
-            EnsureSupportedFlightVolume(reference.State, scenario.Id, "reference");
-            EnsureSupportedFlightVolume(learningActor.State, scenario.Id, "learning");
+            // A FIGHT THAT HITS THE GROUND IS AN OUTCOME, NOT AN ERROR. This used to throw, which
+            // made real geometries unusable — the owner fights lower than any scripted probe, and
+            // 13 of 158 of his engagements leave this volume — and an exception cannot be learned
+            // from: the episode is discarded rather than penalised, so a policy that flies into
+            // the ground is graded as though the engagement never happened.
+            bool learningOutOfBounds = !InSupportedFlightVolume(learningActor.State);
+            bool referenceOutOfBounds = !InSupportedFlightVolume(reference.State);
             bool maneuverSelected =
                 (learningBandit?.DecisionTrace.SelectionSequence ?? 0L) > learningSelectionBefore;
             if (maneuverSelected && plannerTeacherSamples is not null) {
@@ -564,15 +585,21 @@ public static class SeededCombatBatchRunner {
 
             bool learningDestroyed = referenceGun.Outcome == FightOutcome.Splash;
             bool referenceDestroyed = learningGun.Outcome == FightOutcome.Splash;
+            // Destruction outranks leaving the volume: a splashed aircraft departs the volume on
+            // its way down, and that is a kill, not an out-of-bounds.
             CombatTerminalReason terminalReason = learningDestroyed && referenceDestroyed
                 ? CombatTerminalReason.MutualDestruction
                 : referenceDestroyed
                     ? CombatTerminalReason.OpponentDestroyed
                     : learningDestroyed
                         ? CombatTerminalReason.OwnshipDestroyed
-                        : tick == maximumTicks - 1
-                            ? CombatTerminalReason.TimeLimit
-                            : CombatTerminalReason.None;
+                        : learningOutOfBounds
+                            ? CombatTerminalReason.OwnshipOutOfBounds
+                            : referenceOutOfBounds
+                                ? CombatTerminalReason.ReferenceOutOfBounds
+                                : tick == maximumTicks - 1
+                                    ? CombatTerminalReason.TimeLimit
+                                    : CombatTerminalReason.None;
 
             // Advance scenario authority at the completed-tick boundary. Doing this before
             // materialising o(t+1) guarantees that the next tuple begins with the exact same
@@ -607,7 +634,11 @@ public static class SeededCombatBatchRunner {
                 HitsScored: learningGun.HitCount - learningHitsBefore,
                 HitsReceived: referenceGun.HitCount - referenceHitsBefore,
                 OpponentDestroyed: referenceDestroyed,
-                OwnshipDestroyed: learningDestroyed);
+                OwnshipDestroyed: learningDestroyed,
+                // Only when it is the terminal being claimed: destruction outranks it, and the
+                // reference leaving the volume is not the learning fighter's doing.
+                OwnshipOutOfBounds:
+                    terminalReason == CombatTerminalReason.OwnshipOutOfBounds);
             CombatAction action = CombatAction.Capture(
                 learningBandit is not null
                     ? learningBandit.AppliedCommand
@@ -715,6 +746,11 @@ public static class SeededCombatBatchRunner {
             throw new ArgumentOutOfRangeException(parameterName,
                 "Training starts must be finite, airborne, and inside the supported altitude volume.");
     }
+
+    static bool InSupportedFlightVolume(in AircraftState state) =>
+        state.Position.IsFinite
+        && state.Position.Y >= MinimumSupportedAltitudeM
+        && state.Position.Y <= MaximumSupportedAltitudeM;
 
     static void EnsureSupportedFlightVolume(in AircraftState state,
         string scenarioId, string actor) {

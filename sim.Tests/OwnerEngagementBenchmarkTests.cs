@@ -39,41 +39,48 @@ public class OwnerEngagementBenchmarkTests {
 
     /// The baseline this exists to establish. Not a contract — a measurement, so it is reported
     /// rather than asserted, and it is what a learned policy has to beat.
-    [Fact(Skip = "Benchmark, not a contract. Un-skip to re-measure. 2026-08-29 baseline: "
-        + "158 staged, 145 graded, 13 left the supported volume; opponent fired 180 rounds, "
-        + "scored 50 hits and 11 splashes — 1.24 rounds per engagement.")]
+    /// The baseline a learned policy has to beat. Not a contract — a measurement, reported rather
+    /// than asserted.
+    [Fact(Skip = "Benchmark, not a contract. Un-skip to re-measure. 2026-08-29 baseline, owner "
+        + "inputs replayed on all 158: opponent fired 210 rounds, 35 hits, KILLED HIM 9 times; "
+        + "3 opponent and 7 owner out-of-bounds; 1.33 rounds per engagement.")]
     public void MeasureTheOpponentAgainstTheOwnersOwnFights() {
-        var scenarios = OwnerEngagementScenarios.Load(EngagementsPath);
-        int engagements = 0, roundsFired = 0, hits = 0, splashes = 0, outOfVolume = 0;
-        foreach (var scenario in scenarios) {
-            CombatEpisode episode;
-            try {
-                episode = SeededCombatBatchRunner.RunEpisode(
-                    episodeIndex: 0, scenario: scenario,
-                    referenceSkill: PilotSkill.Veteran,   // stand-in for the owner
-                    behaviorSkill: PilotSkill.Ace,        // the shipped opponent
-                    maximumSeconds: 30.0);
-            } catch (System.InvalidOperationException) {
-                // The runner has a 200 m floor and no out-of-bounds terminal — its own summary
-                // says so. The owner fights lower than the scripted probe ever does, so a real
-                // geometry can leave the supported volume. Counted, never hidden: a benchmark that
-                // silently dropped these would flatter the opponent by grading it only on the
-                // engagements it stayed high in.
-                outOfVolume++;
-                continue;
-            }
-            engagements++;
+        var engagements = OwnerEngagementScenarios.LoadEngagements(EngagementsPath);
+        int graded = 0, roundsFired = 0, hits = 0, splashes = 0;
+        int outOfBounds = 0, ownerLost = 0, replayed = 0, noInputs = 0;
+        foreach (OwnerEngagement engagement in engagements) {
+            // The owner's OWN controls fly his aircraft where the tape recorded them. Open loop:
+            // faithful at the merge, decreasingly so as the opponent diverges from the fight the
+            // tape contains — so this grades the opening of a real engagement, not a whole one.
+            ICombatLearningPolicy? owner = engagement.OwnerInputs.Count > 0
+                ? new RecordedInputPolicy(engagement.OwnerInputs)
+                : null;
+            if (owner is null) noInputs++; else replayed++;
+
+            var episode = SeededCombatBatchRunner.RunEpisode(
+                episodeIndex: 0, scenario: engagement.Scenario,
+                referenceSkill: PilotSkill.Veteran,   // used only when no inputs were recorded
+                behaviorSkill: PilotSkill.Ace,        // the shipped opponent, under test
+                maximumSeconds: 25.0,
+                referencePolicy: owner);
+            graded++;
             roundsFired += episode.RoundsFired;
             hits += episode.Transitions.Sum(t => t.RewardComponents.HitsScored);
-            if (episode.TerminalReason == CombatTerminalReason.OpponentDestroyed) splashes++;
+            switch (episode.TerminalReason) {
+                case CombatTerminalReason.OpponentDestroyed: splashes++; break;
+                case CombatTerminalReason.OwnshipOutOfBounds: outOfBounds++; break;
+                case CombatTerminalReason.ReferenceOutOfBounds: ownerLost++; break;
+            }
         }
-        _out.WriteLine($"staged                 {scenarios.Count}");
-        _out.WriteLine($"graded                 {engagements}");
-        _out.WriteLine($"left supported volume  {outOfVolume}  (runner has no out-of-bounds terminal)");
+        _out.WriteLine($"engagements            {engagements.Count}");
+        _out.WriteLine($"graded                 {graded}   (none discarded)");
+        _out.WriteLine($"owner inputs replayed  {replayed}   (scripted stand-in: {noInputs})");
         _out.WriteLine($"opponent rounds fired  {roundsFired}");
         _out.WriteLine($"opponent hits          {hits}");
-        _out.WriteLine($"opponent splashes      {splashes}");
+        _out.WriteLine($"opponent KILLED him    {splashes}");
+        _out.WriteLine($"opponent flew out      {outOfBounds}");
+        _out.WriteLine($"owner flew out         {ownerLost}");
         _out.WriteLine($"rounds per engagement  "
-            + $"{(engagements == 0 ? 0.0 : (double)roundsFired / engagements):F2}");
+            + $"{(graded == 0 ? 0.0 : (double)roundsFired / graded):F2}");
     }
 }

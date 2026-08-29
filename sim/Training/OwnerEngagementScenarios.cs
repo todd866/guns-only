@@ -33,16 +33,45 @@ public static class OwnerEngagementScenarios {
 
     public static IReadOnlyList<CombatTrainingScenario> Load(string path) {
         var scenarios = new List<CombatTrainingScenario>();
+        foreach (OwnerEngagement engagement in LoadEngagements(path))
+            scenarios.Add(engagement.Scenario);
+        return scenarios;
+    }
+
+    /// <summary>The staged geometry together with the pilot's own inputs from that engagement.</summary>
+    public static IReadOnlyList<OwnerEngagement> LoadEngagements(string path) {
+        var engagements = new List<OwnerEngagement>();
         ulong index = 0;
         foreach (string line in System.IO.File.ReadLines(path)) {
             if (string.IsNullOrWhiteSpace(line)) continue;
             using JsonDocument document = JsonDocument.Parse(line);
             JsonElement root = document.RootElement;
             index++;
-            if (TryScenario(root, index, out CombatTrainingScenario scenario))
-                scenarios.Add(scenario);
+            if (!TryScenario(root, index, out CombatTrainingScenario scenario)) continue;
+            engagements.Add(new OwnerEngagement(scenario, ReadInputs(root)));
         }
-        return scenarios;
+        return engagements;
+    }
+
+    static IReadOnlyList<TimedPilotCommand> ReadInputs(JsonElement root) {
+        var inputs = new List<TimedPilotCommand>();
+        if (!root.TryGetProperty("owner_inputs", out JsonElement recorded)
+            || recorded.ValueKind != JsonValueKind.Array)
+            return inputs;
+        foreach (JsonElement sample in recorded.EnumerateArray()) {
+            double t = Number(sample, "t");
+            double g = Number(sample, "g_cmd");
+            double bankDeg = Number(sample, "bank_target_deg");
+            double throttle = Number(sample, "throttle");
+            if (!double.IsFinite(t) || !double.IsFinite(g)
+                || !double.IsFinite(bankDeg) || !double.IsFinite(throttle))
+                continue;
+            bool firing = sample.TryGetProperty("firing", out JsonElement f)
+                && f.ValueKind == JsonValueKind.True;
+            inputs.Add(new TimedPilotCommand(t,
+                new PilotCommand(g, Radians(bankDeg), throttle, 0.0), firing));
+        }
+        return inputs;
     }
 
     static bool TryScenario(JsonElement root, ulong index, out CombatTrainingScenario scenario) {
