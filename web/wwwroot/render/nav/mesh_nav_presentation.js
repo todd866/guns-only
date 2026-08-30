@@ -113,15 +113,32 @@ export function parseMeshTour(state = {}) {
   }
 }
 
+const APPROACH_PATTERN_LEG = Object.freeze({
+  1: "PATTERN_ENTRY",
+  2: "DOWNWIND",
+  3: "BASE",
+  4: "FINAL",
+  5: "THRESHOLD",
+});
+
 function mapGateEntry(entry, index = 0) {
+  const patternLegCode = Math.max(0,
+    Math.floor(Number(entry?.pattern_leg_code ?? entry?.patternLegCode) || 0));
+  const patternLeg = String(entry?.pattern_leg ?? entry?.patternLeg
+    ?? APPROACH_PATTERN_LEG[patternLegCode] ?? "NONE");
   return Object.freeze({
     id: String(entry?.id ?? `gate_${index}`),
-    label: String(entry?.label ?? ""),
+    // Hot sample arrays deliberately carry codes rather than repeating strings every frame.
+    // Preserve a non-colour semantic label even when the cold JSON has not refreshed yet.
+    label: String(entry?.label ?? (patternLeg === "NONE" ? "" : patternLeg.replaceAll("_", " "))),
     eastM: Number(entry?.east_m ?? entry?.eastM),
     northM: Number(entry?.north_m ?? entry?.northM),
     upM: Number(entry?.up_m ?? entry?.upM),
     halfM: Number(entry?.half_m ?? entry?.halfM),
     targetKtas: Number(entry?.target_ktas ?? entry?.targetKtas),
+    speedToleranceKtas: Number(entry?.speed_tolerance_ktas ?? entry?.speedToleranceKtas),
+    patternLeg,
+    patternLegCode,
     dirty: entry?.dirty === true || entry?.dirty === 1,
     active: entry?.active === true || entry?.active === 1,
   });

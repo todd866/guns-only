@@ -33,6 +33,28 @@ public sealed class SortieScheduleTests {
     }
 
     [Fact]
+    public void CleanIngressPolarDoesNotPretendLandingGearDragIsAvailable() {
+        AircraftParams air = FlightModel.F22APublicDataSurrogate;
+        AirframeSystemsProfile systems =
+            AirframeSystemsProfile.ModernConventionalGearSurrogate;
+        double approachCalibratedMps = SortieSchedule.ApproachCalibratedAirspeedMps(
+            air.MassKg, air, systems);
+        const double entryAltitudeM = 1_200.0 * 0.3048;
+        double entryTrueAirspeedMps = AirData.TrueAirspeedForCalibratedAirspeedMps(
+            Math.Min(250.0 / AirData.MpsToKnots, approachCalibratedMps * 1.30),
+            entryAltitudeM);
+
+        double clean = SortieSchedule.CleanLevelDragToWeight(
+            air.MassKg, air, entryTrueAirspeedMps, entryAltitudeM);
+        double landing = SortieSchedule.RecoveryDragToWeight(
+            air.MassKg, air, systems, entryAltitudeM);
+
+        Assert.True(clean > 0.0);
+        Assert.True(clean < landing,
+            $"clean ingress D/W {clean:F3} must stay below landing D/W {landing:F3}");
+    }
+
+    [Fact]
     public void ApproachReferenceUsesTheSameFlapLiftAsTheForceModel() {
         AircraftParams rapier = FlightModel.RapierPublicDataSurrogate;
         AirframeSystemsProfile systems = AirframeSystemsProfile.RapierSurrogate;

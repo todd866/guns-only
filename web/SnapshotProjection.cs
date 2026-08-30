@@ -373,6 +373,7 @@ internal static class SnapshotProjection {
         RecoveryPlan? recoveryPlan = _beat.RecoveryPlan;
         ConventionalRunwayGeometry? conventionalRunway =
             recoveryPlan?.ConventionalRunway;
+        RunwayTouchdownResult runwayTouchdown = Session.RunwayTouchdown;
         Vec3D? recoveryPoint = recoveryPlan?.Position
             ?? (_carrier is null ? null : _carrier.Position);
         bool playerRtbActive = Session.PlayerRtbActive;
@@ -985,7 +986,16 @@ internal static class SnapshotProjection {
             + $"\"runway_recovery_phase\":{(int)Session.ConventionalRunwayPhase},"
             + $"\"runway_recovery_phase_name\":\"{Session.ConventionalRunwayPhase.ToString().ToUpperInvariant()}\","
             + $"\"runway_weight_on_wheels\":{(Session.RunwayWeightOnWheels ? "true" : "false")},"
-            + $"\"runway_touchdown_deviations\":{(int)Session.RunwayTouchdown.Deviations},"
+            + $"\"runway_recovery_complete\":{(Session.ConventionalRtbRecoveryCompleted ? "true" : "false")},"
+            + $"\"runway_touchdown_contact\":{(runwayTouchdown.Contact ? "true" : "false")},"
+            + $"\"runway_touchdown_survivable\":{(runwayTouchdown.Survivable ? "true" : "false")},"
+            + $"\"runway_touchdown_deviations\":{(int)runwayTouchdown.Deviations},"
+            + $"\"runway_touchdown_along_m\":{NullableNumberJson(runwayTouchdown.Contact ? runwayTouchdown.AlongM : null)},"
+            + $"\"runway_touchdown_cross_m\":{NullableNumberJson(runwayTouchdown.Contact ? runwayTouchdown.CrossM : null)},"
+            + $"\"runway_touchdown_sink_mps\":{NullableNumberJson(runwayTouchdown.Contact ? runwayTouchdown.SinkRateMps : null)},"
+            + $"\"runway_touchdown_forward_mps\":{NullableNumberJson(runwayTouchdown.Contact ? runwayTouchdown.ForwardSpeedMps : null)},"
+            + $"\"runway_touchdown_lateral_mps\":{NullableNumberJson(runwayTouchdown.Contact ? runwayTouchdown.LateralSpeedMps : null)},"
+            + $"\"runway_touchdown_airspeed_mps\":{NullableNumberJson(runwayTouchdown.Contact ? runwayTouchdown.AirspeedMps : null)},"
             + $"\"player_rtb_active\":{(playerRtbActive ? "true" : "false")},"
             + $"\"rtb_closure_kts\":{NullableNumberJson(recoveryNavigation.ClosureKts)},"
             + $"\"rtb_eta_min\":{NullableNumberJson(recoveryNavigation.EtaMinutes)},"
@@ -1126,6 +1136,13 @@ internal static class SnapshotProjection {
             + $"\"approach_extension\":{SnapshotJson.JsonString(GunsOnly.Sim.Recovery.ApproachGuidance.ExtensionToken(Session.ApproachGuidancePlan.Extension))},"
             + $"\"approach_extension_code\":{(int)Session.ApproachGuidancePlan.Extension},"
             + $"\"approach_in_groove\":{(Session.ApproachGuidancePlan.InGroove ? "true" : "false")},"
+            + $"\"conventional_rtb_pattern_active\":{(Session.ConventionalRtbPatternGuidanceActive ? "true" : "false")},"
+            + $"\"approach_pattern_leg\":{SnapshotJson.JsonString(GunsOnly.Sim.Recovery.ApproachGuidance.PatternLegToken(Session.ApproachGuidancePlan.ActivePatternLeg))},"
+            + $"\"approach_pattern_leg_code\":{(int)Session.ApproachGuidancePlan.ActivePatternLeg},"
+            + $"\"approach_energy_state\":{SnapshotJson.JsonString(GunsOnly.Sim.Recovery.ApproachGuidance.EnergyStateToken(Session.ApproachGuidancePlan.EnergyState))},"
+            + $"\"approach_energy_state_code\":{(int)Session.ApproachGuidancePlan.EnergyState},"
+            + $"\"approach_energy_target_ktas\":{(Session.ApproachGuidancePlan.NextTrueAirspeedMps * AirData.MpsToKnots):F1},"
+            + $"\"approach_energy_tolerance_ktas\":{Session.ApproachGuidancePlan.TargetSpeedToleranceKtas:F1},"
             + $"\"approach_next_label\":{SnapshotJson.JsonString(Session.ApproachGuidancePlan.NextLabel)},"
             + $"\"approach_next_alt_m\":{Session.ApproachGuidancePlan.NextAltitudeM:F1},"
             + $"\"approach_next_tas_mps\":{Session.ApproachGuidancePlan.NextTrueAirspeedMps:F1},"
@@ -1137,10 +1154,10 @@ internal static class SnapshotProjection {
             + $"\"approach_gates_json\":{SnapshotJson.JsonString(GunsOnly.Sim.Recovery.ApproachGuidance.GatesJson(Session.ApproachGuidancePlan))},";
     }
 
-    /// Fixed-length sample array matching SnapshotHotFrame.approach_gates (8 samples).
+    /// Fixed-length sample array matching SnapshotHotFrame.approach_gates (12 samples).
     static string ApproachGatesSampleArrayJson(
         in GunsOnly.Sim.Recovery.ApproachGuidanceState approach) {
-        const int SampleCount = 8;
+        const int SampleCount = 12;
         var sb = new System.Text.StringBuilder(512);
         sb.Append("\"approach_gates\":[");
         for (int i = 0; i < SampleCount; i++) {
@@ -1154,12 +1171,15 @@ internal static class SnapshotProjection {
                     .Append("\"half_m\":").Append(gate.HalfM.ToString("F1")).Append(',')
                     .Append("\"target_alt_m\":").Append(gate.TargetAltitudeM.ToString("F1")).Append(',')
                     .Append("\"target_ktas\":").Append(gate.TargetKtas.ToString("F0")).Append(',')
+                    .Append("\"speed_tolerance_ktas\":").Append(gate.TargetSpeedToleranceKtas.ToString("F0")).Append(',')
+                    .Append("\"pattern_leg_code\":").Append((int)gate.PatternLeg).Append(',')
                     .Append("\"dirty\":").Append(gate.DirtyConfig ? "1" : "0").Append(',')
                     .Append("\"active\":").Append(gate.Active ? "1" : "0")
                     .Append('}');
             } else {
                 sb.Append("{\"east_m\":0.0,\"north_m\":0.0,\"up_m\":0.0,\"half_m\":0.0,"
-                    + "\"target_alt_m\":0.0,\"target_ktas\":0,\"dirty\":0,\"active\":0}");
+                    + "\"target_alt_m\":0.0,\"target_ktas\":0,\"speed_tolerance_ktas\":0,"
+                    + "\"pattern_leg_code\":0,\"dirty\":0,\"active\":0}");
             }
         }
         sb.Append("],");

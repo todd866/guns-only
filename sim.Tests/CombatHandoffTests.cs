@@ -132,6 +132,7 @@ public sealed class CombatHandoffTests {
         Assert.Equal(
             CombatHandoffPhase.Unavailable, unsupported.CombatHandoffPhase);
         Assert.False(unsupported.CombatHandoffRequested);
+        Assert.False(unsupported.TryRequestReturnToBase());
 
         SimulationSession session = StartHandoffFight();
         string learnerBefore = session.ExportDirectorState();
@@ -154,6 +155,34 @@ public sealed class CombatHandoffTests {
         Assert.Single(session.EngagementReports);
         Assert.Equal(shotsAtHandoff, session.ShotsTotal);
         Assert.False(session.TriggerDown);
+    }
+
+    [Fact]
+    public void TypedRtbRequestImmediatelySafesTheWholeFormationAndReportsAcceptance() {
+        SimulationSession session = StartHandoffFight(
+            opponentAmmo: 10,
+            maximumFormationSize: 2);
+        Wingman wingman = Assert.Single(session.Wingmen);
+        session.FeedKey(GKey.Trigger, true);
+        wingman.TriggerDown = true;
+
+        Assert.True(session.TriggerDown);
+        Assert.True(session.FormationOpponentGunFiring);
+
+        Assert.True(session.TryRequestReturnToBase());
+
+        Assert.Equal(MissionRtbReason.PilotKnockItOff,
+            session.ReturnToBaseReason);
+        Assert.Equal(CombatHandoffPhase.Requested,
+            session.CombatHandoffPhase);
+        Assert.False(session.TriggerDown);
+        Assert.False(session.OpponentTriggerDown);
+        Assert.False(wingman.TriggerDown);
+        Assert.False(session.FormationOpponentGunFiring);
+        Assert.False(session.PlayerWeaponsAuthorized);
+        Assert.True(session.PlayerRtbActive);
+        Assert.False(session.TryRequestReturnToBase(),
+            "an accepted return is latched and cannot be requested twice");
     }
 
     [Theory]
@@ -528,10 +557,10 @@ public sealed class CombatHandoffTests {
         Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
         Assert.Equal(SortieOutcome.None, session.Outcome);
         Assert.True(session.PlayerRtbActive);
-        Assert.True(session.CompletePlayerRecovery());
-        Assert.True(session.CompletePlayerRecovery());
-        Assert.Equal(CombatHandoffPhase.Recovered, session.CombatHandoffPhase);
-        Assert.False(session.PlayerRtbActive);
+        Assert.False(session.CompletePlayerRecovery(),
+            "handoff state alone must not manufacture a physical runway recovery");
+        Assert.Equal(CombatHandoffPhase.ReliefComplete, session.CombatHandoffPhase);
+        Assert.True(session.PlayerRtbActive);
         Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
     }
 

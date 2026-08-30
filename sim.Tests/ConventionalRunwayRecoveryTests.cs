@@ -1,6 +1,8 @@
 using GunsOnly.Sim;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
+using GunsOnly.Web;
+using System.Text.Json;
 
 namespace GunsOnly.Sim.Tests;
 
@@ -232,6 +234,8 @@ public sealed class ConventionalRunwayRecoveryTests {
         for (int tick = 0; tick < 8 && !session.PlayerRtbActive; tick++)
             session.StepFixed();
         Assert.True(session.PlayerRtbActive);
+        session.StepFixed();
+        Assert.True(session.ConventionalRtbPatternGuidanceActive);
 
         session.Player.AdoptExternalKinematics(ApproachStateFor(
             recovery.Runway,
@@ -242,6 +246,11 @@ public sealed class ConventionalRunwayRecoveryTests {
             lateralMps: 0.2,
             sinkMps: 2.2,
             session.Player.State.Mass));
+        session.StepFixed();
+        Assert.Equal(RunwayRecoveryPhase.Rollout, session.ConventionalRunwayPhase);
+        Assert.False(session.ConventionalRtbPatternGuidanceActive);
+        Assert.False(session.ApproachGuidancePlan.GuidanceActive);
+        Assert.Empty(session.ApproachGuidancePlan.Gates);
         double fuelAtFinalLb = session.PlayerFuel.FuelLb;
 
         for (int tick = 0;
@@ -262,6 +271,40 @@ public sealed class ConventionalRunwayRecoveryTests {
         Assert.Contains(session.RecentEvents, item =>
             item.Type == SessionEventType.SortieFinished
             && item.Outcome == SortieOutcome.Discontinued);
+
+        using JsonDocument document = JsonDocument.Parse(
+            SnapshotProjection.BuildState(session,
+                Carrier.DeckConfiguration.Angled,
+                worldOriginEastM: 0.0,
+                worldOriginNorthM: 0.0,
+                worldOriginConfigured: false,
+                terrain: null));
+        JsonElement snapshot = document.RootElement;
+        Assert.True(snapshot.GetProperty("finished").GetBoolean());
+        Assert.Equal("DISCONTINUED",
+            snapshot.GetProperty("sortie_outcome").GetString());
+        Assert.Equal("PILOT_KNOCK_IT_OFF",
+            snapshot.GetProperty("rtb_reason").GetString());
+        Assert.Equal("RECOVERED",
+            snapshot.GetProperty("combat_handoff_phase_name").GetString());
+        Assert.False(snapshot.GetProperty("player_rtb_active").GetBoolean());
+        Assert.True(snapshot.GetProperty("runway_recovery_complete").GetBoolean());
+        Assert.True(snapshot.GetProperty("runway_touchdown_contact").GetBoolean());
+        Assert.True(snapshot.GetProperty("runway_touchdown_survivable").GetBoolean());
+        Assert.Equal(0,
+            snapshot.GetProperty("runway_touchdown_deviations").GetInt32());
+        Assert.InRange(
+            snapshot.GetProperty("runway_touchdown_along_m").GetDouble(),
+            429.0, 435.0);
+        Assert.InRange(Math.Abs(
+                snapshot.GetProperty("runway_touchdown_cross_m").GetDouble()),
+            0.0, 1.0);
+        Assert.InRange(
+            snapshot.GetProperty("runway_touchdown_sink_mps").GetDouble(),
+            0.1, 4.0);
+        Assert.InRange(
+            snapshot.GetProperty("runway_touchdown_airspeed_mps").GetDouble(),
+            55.0, 95.0);
     }
 
     [Fact]
@@ -410,6 +453,7 @@ public sealed class ConventionalRunwayRecoveryTests {
         Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
         Assert.Equal(SortieOutcome.None, session.Outcome);
         Assert.Equal(CombatHandoffPhase.Available, session.CombatHandoffPhase);
+        Assert.False(session.ConventionalRtbRecoveryCompleted);
         Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
 
         double stoppedFuelLb = session.PlayerFuel.FuelLb;

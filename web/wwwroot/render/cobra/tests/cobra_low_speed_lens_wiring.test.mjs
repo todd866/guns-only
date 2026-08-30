@@ -8,7 +8,7 @@ const main = await readFile(
 );
 
 test("Cobra widens only the low-speed cockpit while retaining a fixed optical centre", () => {
-  assert.match(main, /from "\.\.\/render\/camera\/low_speed_lens\.js\?v=349"/);
+  assert.match(main, /from "\.\.\/render\/camera\/low_speed_lens\.js\?v=350"/);
   assert.match(main, /wideFovDeg:\s*70/);
   assert.match(main, /cruiseFovDeg:\s*DEFAULT_CAMERA_FOV_DEG/);
   assert.match(main, /ground_speed_mps/);

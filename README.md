@@ -11,7 +11,8 @@ renderer.
 The production catalogue exposes six accepted experiences, split into military and civilian aircraft:
 
 - **F-22A surrogate — Guns Only:** an endless visual dogfight with ballistic guns, a real flight
-  envelope, Auto-GCAS, padlock/target management, and a deterministic opponent.
+  envelope, Auto-GCAS, padlock/target management, a deterministic opponent, and a voluntary
+  Call It A Day/Bingo return through an energy-coded left-hand pattern to the runway.
 - **Rapier — Intercept:** fly a visible high-speed path to three balloon mines at 45,000 ft,
   destroy their lethal drone payloads before deployment, then follow the RTB corridor and trap at
   the midpoint arrestor.

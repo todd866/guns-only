@@ -218,6 +218,42 @@ public static class SortieSchedule {
         return dynamicPressurePa * air.WingAreaM2 * cd / weightN;
     }
 
+    /// <summary>
+    /// Clean, level-flight drag-to-weight at a stated local true airspeed. Recovery ingress uses
+    /// this rather than the landing-configuration polar: gear is not expected until downwind, and
+    /// pretending its drag is already available would draw an energy path that is too short.
+    /// </summary>
+    public static double CleanLevelDragToWeight(
+        double massKg,
+        AircraftParams air,
+        double trueAirspeedMps,
+        double altitudeM = 0.0,
+        IAtmosphereModel? atmosphere = null) {
+        if (!double.IsFinite(massKg) || massKg <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(massKg));
+        ArgumentNullException.ThrowIfNull(air);
+        if (!double.IsFinite(trueAirspeedMps) || trueAirspeedMps <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(trueAirspeedMps));
+        if (!double.IsFinite(altitudeM))
+            throw new ArgumentOutOfRangeException(nameof(altitudeM));
+
+        IAtmosphereModel atmosphereModel = atmosphere ?? StandardAtmosphere1976.Instance;
+        AtmosphericState atmosphericState = atmosphereModel.Sample(altitudeM);
+        double dynamicPressurePa = 0.5 * atmosphericState.DensityKgM3
+            * trueAirspeedMps * trueAirspeedMps;
+        double weightN = massKg * FlightModel.G0;
+        double requiredCl = weightN
+            / Math.Max(dynamicPressurePa * air.WingAreaM2, 1e-9);
+        double alphaRad = requiredCl / Math.Max(air.CLAlpha, 1e-9);
+        alphaRad = Math.Clamp(alphaRad,
+            air.CLMin / Math.Max(air.CLAlpha, 1e-9),
+            air.CLMax / Math.Max(air.CLAlpha, 1e-9));
+        double mach = trueAirspeedMps
+            / Math.Max(atmosphericState.SpeedOfSoundMps, 1e-9);
+        double cd = FlightModel.ProfileDragCoefficient(alphaRad, mach, air);
+        return dynamicPressurePa * air.WingAreaM2 * cd / weightN;
+    }
+
     /// <summary>Specific energy: the height the aircraft would reach trading all its speed.</summary>
     public static double SpecificEnergyM(double heightM, double trueAirspeedMps) =>
         heightM + trueAirspeedMps * trueAirspeedMps / (2.0 * FlightModel.G0);

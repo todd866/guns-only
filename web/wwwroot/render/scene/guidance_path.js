@@ -74,6 +74,14 @@ export const GUIDANCE_PATH_DEFAULTS = Object.freeze({
   ingressGateSpacingM: 430,
   ingressGateCount: 8,
   ingressLeadM: 260,
+  // The sim owns conventional-pattern geometry and energy classification. Presentation only
+  // chooses the restrained chevron palette and physical draw size.
+  patternOnSpeedColor: 0x45e06f,
+  patternFastColor: 0xffd54f,
+  patternSlowColor: 0xff4f55,
+  patternOpacity: 0.64,
+  patternActiveOpacity: 0.92,
+  patternVisualHalfM: 42,
   maxGates: 24,
   // Authored half-widths run hundreds of metres (tolerance volumes). Drawing that as a plane
   // scale makes a translucent UFO on the horizon — cap the *visual* radius; the kernel half
@@ -85,6 +93,66 @@ function finiteNumber(value) {
   if (value === null || value === undefined || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+const PATTERN_ENERGY = Object.freeze({
+  1: "TOO_SLOW",
+  2: "ON_SPEED",
+  3: "TOO_FAST",
+});
+
+/** Decode the sim's active-gate energy state; the renderer never reclassifies airspeed. */
+export function conventionalPatternEnergy(state = {}, options = {}) {
+  if (state?.conventional_rtb_pattern_active !== true) return null;
+  const config = { ...GUIDANCE_PATH_DEFAULTS, ...options };
+  const code = Math.floor(Number(state?.approach_energy_state_code) || 0);
+  const status = PATTERN_ENERGY[code]
+    ?? String(state?.approach_energy_state ?? "").trim().toUpperCase();
+  const targetKtas = finiteNumber(state?.approach_energy_target_ktas);
+  const toleranceKtas = finiteNumber(state?.approach_energy_tolerance_ktas);
+  if (!Object.values(PATTERN_ENERGY).includes(status)
+      || targetKtas === null || !(toleranceKtas >= 0)) return null;
+  const color = status === "ON_SPEED" ? config.patternOnSpeedColor
+    : status === "TOO_FAST" ? config.patternFastColor : config.patternSlowColor;
+  const patternLeg = String(state?.approach_pattern_leg ?? "NONE").trim().toUpperCase();
+  const label = String(state?.approach_next_label || patternLeg.replaceAll("_", " "))
+    .trim().toUpperCase();
+  return Object.freeze({ status, color, targetKtas, toleranceKtas, patternLeg, label });
+}
+
+function midpointGate(from, to, index) {
+  return {
+    id: `pattern-mid-${from.id ?? index}-${to.id ?? index + 1}`,
+    label: from.label || to.label || "",
+    eastM: (from.eastM + to.eastM) * 0.5,
+    northM: (from.northM + to.northM) * 0.5,
+    upM: (from.upM + to.upM) * 0.5,
+    halfM: (Number(from.halfM) + Number(to.halfM)) * 0.5,
+    targetKtas: Number(from.targetKtas),
+    speedToleranceKtas: Number(from.speedToleranceKtas),
+    patternLeg: from.patternLeg,
+    patternLegCode: from.patternLegCode,
+    active: from.active === true,
+    dirty: false,
+    pattern: true,
+  };
+}
+
+/**
+ * Keep every sim-authored waypoint and add only one visual midpoint per leg. In particular, the
+ * browser does not invent an ownship-to-entry join for the conventional pattern.
+ */
+export function conventionalPatternGuidanceGates(state = {}, authoredGates = [], options = {}) {
+  if (state?.conventional_rtb_pattern_active !== true || !Array.isArray(authoredGates)
+      || !authoredGates.length) return [];
+  const config = { ...GUIDANCE_PATH_DEFAULTS, ...options };
+  const route = [];
+  for (let i = 0; i < authoredGates.length; i += 1) {
+    const gate = authoredGates[i];
+    if (i > 0) route.push(midpointGate(authoredGates[i - 1], gate, i - 1));
+    route.push({ ...gate, pattern: true });
+  }
+  return route.slice(0, config.maxGates);
 }
 
 function carrierRtbTarget(state) {
@@ -434,6 +502,8 @@ export function createGuidancePath(THREE, options = {}) {
     update(state) {
       if (disposed) return 0;
       const approachActive = state?.approach_guidance_active === true;
+      const conventionalPattern = approachActive
+        && state?.conventional_rtb_pattern_active === true;
       const carrierRtbRequested = state?.carrier_sortie_route_active === true
         && state?.carrier_sortie_route_rtb_requested === true;
       const firstRunIngressIntent = state?.first_run_weapons_cold === true
@@ -567,7 +637,22 @@ export function createGuidancePath(THREE, options = {}) {
           interceptMode = ladder.some((gate) => gate.intercept === true);
         }
       }
-      if (approachActive && ladder.length
+      const patternEnergy = conventionalPattern
+        ? conventionalPatternEnergy(state ?? {}, config)
+        : null;
+      if (conventionalPattern && ladder.length) {
+        // Missing authority must hide, not silently choose a plausible-looking colour.
+        if (!patternEnergy) {
+          root.visible = false;
+          root.userData.mode = null;
+          root.userData.drawnGateCount = 0;
+          root.userData.joinGateCount = 0;
+          root.userData.suppressionReason = "pattern-energy-missing";
+          return 0;
+        }
+        ladder = conventionalPatternGuidanceGates(state ?? {}, ladder, config);
+      }
+      if (approachActive && !conventionalPattern && ladder.length
           && state?.approach_join_guidance_active !== false) {
         const join = approachJoinGuidanceGates(state ?? {}, ladder, config);
         if (join.length) {
@@ -612,7 +697,9 @@ export function createGuidancePath(THREE, options = {}) {
         if (i >= drawn) { mesh.visible = false; continue; }
         const gate = ladder[i];
         const half = Math.max(1, Number(gate.halfM) || 1);
-        const visualHalf = Math.min(half, Math.max(1, Number(config.maxVisualHalfM) || half));
+        const visualHalf = conventionalPattern
+          ? Math.max(1, Number(config.patternVisualHalfM) || 1)
+          : Math.min(half, Math.max(1, Number(config.maxVisualHalfM) || half));
         mesh.position.copy(points[i]);
         // The quad is 4 units wide for 2 units of radius, so the visual half-width maps to
         // 1.0 in shader space. Visual radius is capped so a 155 m tolerance does not paint a
@@ -631,7 +718,15 @@ export function createGuidancePath(THREE, options = {}) {
           }
         }
 
-        if (gate.rtb === true) {
+        if (conventionalPattern && gate.pattern === true) {
+          mesh.material = rtbMaterial;
+          mesh.userData.guidanceStyle = "pattern-chevron";
+          mesh.userData.guidanceLabel = gate.label || patternEnergy.label;
+          mesh.userData.guidancePatternLeg = gate.patternLeg || patternEnergy.patternLeg;
+          mesh.userData.guidanceEnergyStatus = patternEnergy.status;
+          tint.color = patternEnergy.color;
+          tint.opacity = gate.active ? config.patternActiveOpacity : config.patternOpacity;
+        } else if (gate.rtb === true) {
           mesh.material = rtbMaterial;
           mesh.userData.guidanceStyle = gate.ingress === true
             ? "ingress-chevron"
@@ -642,24 +737,39 @@ export function createGuidancePath(THREE, options = {}) {
               ? (gate.active ? config.interceptActiveColor : config.interceptColor)
               : (gate.active ? config.rtbActiveColor : config.rtbColor);
           tint.opacity = gate.active ? config.rtbActiveOpacity : config.rtbOpacity;
+          mesh.userData.guidanceLabel = null;
+          mesh.userData.guidancePatternLeg = null;
+          mesh.userData.guidanceEnergyStatus = null;
         } else if (gate.active) {
           mesh.material = procedureMaterial;
           mesh.userData.guidanceStyle = "procedure-volume";
           tint.color = config.activeColor;
           tint.opacity = config.activeOpacity;
+          mesh.userData.guidanceLabel = null;
+          mesh.userData.guidancePatternLeg = null;
+          mesh.userData.guidanceEnergyStatus = null;
         } else {
           mesh.material = procedureMaterial;
           mesh.userData.guidanceStyle = "procedure-volume";
           tint.color = gate.dirty ? config.dirtyColor : config.gateColor;
           tint.opacity = config.gateOpacity;
+          mesh.userData.guidanceLabel = null;
+          mesh.userData.guidancePatternLeg = null;
+          mesh.userData.guidanceEnergyStatus = null;
         }
         mesh.visible = true;
       }
 
       root.visible = true;
-      root.userData.mode = ingressMode ? "first-run-ingress"
+      root.userData.mode = conventionalPattern ? "conventional-pattern"
+        : ingressMode ? "first-run-ingress"
         : interceptMode ? "intercept"
         : rtbMode ? "rtb" : approachJoinMode ? "approach-join" : "procedure";
+      root.userData.guidanceLabel = patternEnergy?.label ?? null;
+      root.userData.guidancePatternLeg = patternEnergy?.patternLeg ?? null;
+      root.userData.guidanceEnergyStatus = patternEnergy?.status ?? null;
+      root.userData.guidanceEnergyTargetKtas = patternEnergy?.targetKtas ?? null;
+      root.userData.guidanceEnergyToleranceKtas = patternEnergy?.toleranceKtas ?? null;
       root.userData.joinGateCount = approachJoinMode
         ? ladder.filter((gate) => gate.join === true).length : 0;
       root.userData.drawnGateCount = drawn;
