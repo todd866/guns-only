@@ -134,10 +134,12 @@ export const PRODUCTION_ROUTES = Object.freeze([
     id: "cobra-lab",
     path: "/cobra-lab/index.html",
     search: "?audioQa=silent",
+    // The aggregate snapshot is initialized at authority_tick 0 before the deliberate brief.
+    // Vehicle.tick is the physical mission clock and remains -1 until Start accepts pilot consent.
     isReady: () => document.querySelector("#status")?.dataset.ready === "true"
       && document.querySelector("#mission-brief")?.hidden === false
       && !!window.__gunsOnlyCobraAuthority?.vehicle
-      && window.__gunsOnlyCobraAuthority?.authority_tick === -1,
+      && window.__gunsOnlyCobraAuthority?.vehicle?.tick === -1,
     verify: async (page) => {
       const route = await page.evaluate(() => ({
         status: document.querySelector("#status span")?.textContent?.trim() ?? "",
@@ -145,7 +147,7 @@ export const PRODUCTION_ROUTES = Object.freeze([
         title: document.querySelector("#mission-brief-title")?.textContent?.trim() ?? "",
         worldId: window.__gunsOnlyCobraAuthority?.world_id ?? "",
         routeId: window.__gunsOnlyCobraAuthority?.route_id ?? "",
-        authorityTick: window.__gunsOnlyCobraAuthority?.authority_tick ?? null,
+        authorityTick: window.__gunsOnlyCobraAuthority?.vehicle?.tick ?? null,
         vehiclePresent: !!window.__gunsOnlyCobraAuthority?.vehicle,
       }));
       assert.equal(route.status, "READY · REVIEW FLIGHT BRIEF");

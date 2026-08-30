@@ -44,6 +44,35 @@ function pageReturning(result) {
   return { evaluate: async () => result };
 }
 
+test("Cobra Ready observes the cold vehicle tick, not the initialized aggregate tick", () => {
+  const cobra = route("cobra-lab");
+  const previousDocument = globalThis.document;
+  const previousWindow = globalThis.window;
+  const status = { dataset: { ready: "true" } };
+  const brief = { hidden: false };
+  globalThis.document = {
+    querySelector: (selector) => selector === "#status" ? status : brief,
+  };
+  globalThis.window = {
+    __gunsOnlyCobraAuthority: {
+      authority_tick: 0,
+      vehicle: { tick: -1 },
+    },
+  };
+  try {
+    assert.equal(cobra.isReady(), true,
+      "the aggregate snapshot initializes at zero while the paused vehicle remains cold");
+    globalThis.window.__gunsOnlyCobraAuthority.vehicle.tick = 0;
+    assert.equal(cobra.isReady(), false,
+      "Ready must still fail if physical vehicle authority has advanced");
+  } finally {
+    if (previousDocument === undefined) delete globalThis.document;
+    else globalThis.document = previousDocument;
+    if (previousWindow === undefined) delete globalThis.window;
+    else globalThis.window = previousWindow;
+  }
+});
+
 test("root programme routes require selected UI and exact staged authority", async () => {
   const f22 = route("f22");
   const rapier = route("rapier-intercept");
