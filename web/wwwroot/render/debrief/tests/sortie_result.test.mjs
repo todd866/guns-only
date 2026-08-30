@@ -592,6 +592,9 @@ test("recovered handoff debrief keeps player and relief kills separate", () => {
     fuel_lb: 4650,
     fuel_reserve_target_lb: 4000,
     fuel_reserve_margin_lb: 650,
+    runway_recovery_complete: true,
+    runway_touchdown_contact: true,
+    runway_touchdown_survivable: true,
   });
 
   assert.equal(result.title, "Handoff Complete · Home");
@@ -606,6 +609,35 @@ test("recovered handoff debrief keeps player and relief kills separate", () => {
   ]);
   assert.equal(result.correction, "Repeat the clean handoff and recovery.");
   assert.doesNotMatch(result.facts.join(" "), /6 kills|total kills/i);
+});
+
+test("a recovered handoff phase cannot invent a physical runway recovery", () => {
+  const recovered = {
+    sortie_outcome: "VICTORY",
+    combat_handoff_phase: "RECOVERED",
+    combat_handoff_requested: true,
+    combat_handoff_active: true,
+    runway_recovery_complete: true,
+    runway_touchdown_contact: true,
+    runway_touchdown_survivable: true,
+  };
+
+  for (const field of [
+    "runway_recovery_complete",
+    "runway_touchdown_contact",
+    "runway_touchdown_survivable",
+  ]) {
+    const result = sortieResultCopy({ ...recovered, [field]: false });
+    assert.notEqual(result.title, "Handoff Complete · Home", `${field} must be required`);
+    assert.equal(result.correction, "Complete RTB and recovery.");
+  }
+
+  const phaseStillOpen = sortieResultCopy({
+    ...recovered,
+    combat_handoff_phase: "RELIEF_COMPLETE",
+  });
+  assert.notEqual(phaseStillOpen.title, "Handoff Complete · Home");
+  assert.equal(phaseStillOpen.correction, "Complete RTB and recovery.");
 });
 
 test("handoff does not hide a subsequent ownship loss or invent reserve evidence", () => {
@@ -665,6 +697,7 @@ test("Top Gun debrief preserves combat custody and the physical carrier pass", (
   assert.match(result.brief, /Carrier recovery: Trapped · Wire 3/);
   assert.match(result.brief, /OK UNDERLINE/);
   assert.match(result.brief, /Primary correction: HOLD MIDDLE/);
+  assert.equal(result.correction, "Repeat the clean handoff and recovery.");
 });
 
 test("Top Gun carrier assessment remains useful without a handoff record", () => {

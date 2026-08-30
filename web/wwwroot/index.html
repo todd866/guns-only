@@ -3486,7 +3486,7 @@
 
     /* ---------------------------------------------------------------------------------------
        SHARED MISSION-FLOW SURFACES
-       Build 349's picker, first-sortie brief, pause and result are one journey. This final layer
+       Build 350's picker, first-sortie brief, pause and result are one journey. This final layer
        gives those modes the same type scale, spacing, action hierarchy and responsive rules.
        It intentionally does not reach into any in-flight HUD or standalone mission route.
        --------------------------------------------------------------------------------------- */
@@ -3736,7 +3736,7 @@
       }
     }
 
-    /* This rule comes after the pictorial-picker override on purpose. Build 349's earlier
+    /* This rule comes after the pictorial-picker override on purpose. Build 350's earlier
        two-column rule was valid in isolation but lost the cascade to a later display:block,
        leaving Fly below a tall poster grid on phone-shaped landscape screens. */
     @media (max-height: 500px) and (orientation: landscape) {
@@ -4332,7 +4332,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
             <span aria-hidden="true">⌨</span> Built for a laptop or desktop: flight controls, the tactical map, and the full instrument set need a keyboard and a real screen.
           </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 349 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 350 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
           <div class="ready-telemetry-disclosure">
@@ -4436,7 +4436,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     // Derive from a normal stamped URL so this comparison cannot drift from the next release:
     // tools/release/stamp-release.mjs rewrites every `?v=NNN`, and nothing else here.
-    const releaseBuild = new URL("./service-worker.js?v=349", location.href)
+    const releaseBuild = new URL("./service-worker.js?v=350", location.href)
       .searchParams.get("v");
 
     globalThis.__gunsPrebootReady = (async () => {
@@ -4532,11 +4532,11 @@ Splash one bandit to qualify · H controls · R restarts</p>
         });
         document.head.append(script);
       });
-      await loadClassicScript("./multiplayer-config.js?v=349");
-      await loadClassicScript("./_framework/blazor.webassembly.js?v=349", {
+      await loadClassicScript("./multiplayer-config.js?v=350");
+      await loadClassicScript("./_framework/blazor.webassembly.js?v=350", {
         autostart: "false",
       });
-      await import("./app.js?v=349");
+      await import("./app.js?v=350");
     } catch (error) {
       console.error(error);
       document.querySelector("#boot")?.classList.add("ready");
@@ -4549,8 +4549,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       try {
         const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
           await Promise.all([
-            import("./render/shell/inapp_browser.js?v=349"),
-            import("./render/shell/boot_fallback.js?v=349"),
+            import("./render/shell/inapp_browser.js?v=350"),
+            import("./render/shell/boot_fallback.js?v=350"),
           ]);
         const detection = detectEmbeddedBrowser({
           userAgent: navigator.userAgent,

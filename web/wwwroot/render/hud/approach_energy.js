@@ -5,6 +5,10 @@
  * @returns {{ label: string, targetAltM: number, targetTasMps: number, altErrorM: number, tasErrorMps: number }|null}
  */
 export function approachEnergyCue(state) {
+  // The F-22 conventional recovery teaches with world-space pattern shape and chevron colour.
+  // Keep its observable authority fields available to instruments and renderers without also
+  // filling the HUD with the generic gate's prose-and-numbers panel.
+  if (state?.conventional_rtb_pattern_active === true) return null;
   if (state?.approach_guidance_active !== true || state?.approach_valid !== true) return null;
   const targetAltM = Number(state.approach_next_alt_m);
   const targetTasMps = Number(state.approach_next_tas_mps);

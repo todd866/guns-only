@@ -67,6 +67,8 @@ public sealed class ConventionalCarrierRecoveryDirector {
                 gate.Position.Y,
                 gate.TargetSpeedMps * AirData.MpsToKnots,
                 remainingM,
+                ApproachGuidance.DefaultSpeedToleranceKtas,
+                PatternLegFor(i),
                 gate.Dirty,
                 Active: i == _activeIndex));
             if (i < schedule.Count - 1)
@@ -95,6 +97,12 @@ public sealed class ConventionalCarrierRecoveryDirector {
             AltitudeErrorM: altitudeErrorM,
             TrueAirspeedErrorMps: speedErrorMps,
             Power01: power,
+            ConventionalPattern: false,
+            ActivePatternLeg: PatternLegFor(_activeIndex),
+            TargetSpeedToleranceKtas: ApproachGuidance.DefaultSpeedToleranceKtas,
+            EnergyState: ApproachGuidance.ClassifyEnergy(
+                trueAirspeedMps * AirData.MpsToKnots,
+                current.TargetSpeedMps * AirData.MpsToKnots),
             Gates: gates);
     }
 
@@ -141,6 +149,14 @@ public sealed class ConventionalCarrierRecoveryDirector {
         double north = a.Z - b.Z;
         return Math.Sqrt(east * east + north * north);
     }
+
+    static ApproachPatternLeg PatternLegFor(int index) => index switch {
+        <= 1 => ApproachPatternLeg.PatternEntry,
+        <= 3 => ApproachPatternLeg.Downwind,
+        <= 5 => ApproachPatternLeg.Base,
+        6 => ApproachPatternLeg.Final,
+        _ => ApproachPatternLeg.Threshold,
+    };
 
     public readonly record struct PatternGate(
         string Id,

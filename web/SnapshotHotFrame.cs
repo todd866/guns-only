@@ -44,7 +44,7 @@ internal static class SnapshotHotFrame {
 
     internal sealed record SampleArrayDef(string Field, int Start, int Samples, string[] Keys);
 
-    public const int LayoutVersion = 33;
+    public const int LayoutVersion = 34;
     public const int ColdVersionIndex = 0;
     // Mirrors SnapshotProjection.TracerJson's MaxRenderedTracers window (last N rounds in flight).
     const int MaxTracerRounds = 48;
@@ -52,12 +52,16 @@ internal static class SnapshotHotFrame {
     // the bullets-in-the-air locus. Slot order per sample is x,y,z,r (r = range from shooter).
     const int TrajectorySampleCount = 9;
     static readonly string[] TrajectoryKeys = { "x", "y", "z", "r" };
-    const int ApproachGateSampleCount = 8;
+    // The conventional pattern publishes eight short ingress look-ahead gates, while the fixed
+    // pattern itself has nine authored gates through the physical touchdown aim. Keep spare room
+    // so the terminal aim never falls off the hot transport as the route transitions.
+    const int ApproachGateSampleCount = 12;
     static readonly string[] ApproachGateKeys = {
         "east_m", "north_m", "up_m", "half_m",
-        "target_alt_m", "target_ktas", "dirty", "active",
+        "target_alt_m", "target_ktas", "speed_tolerance_ktas", "pattern_leg_code",
+        "dirty", "active",
     };
-    static readonly int[] ApproachGateDecimals = { 1, 1, 1, 1, 1, 0, 0, 0 };
+    static readonly int[] ApproachGateDecimals = { 1, 1, 1, 1, 1, 0, 0, 0, 0, 0 };
     static readonly int[] TrajectoryDecimals = { 2, 2, 2, 1 };
     const int RawInteger = -1;
     const double RadiansToDegrees = 180.0 / Math.PI;
@@ -593,6 +597,11 @@ internal static class SnapshotHotFrame {
         Num("approach_track_available_m", 0);
         Num("approach_extension_code", RawInteger);
         Bool("approach_in_groove");
+        Bool("conventional_rtb_pattern_active");
+        Num("approach_pattern_leg_code", RawInteger);
+        Num("approach_energy_state_code", RawInteger);
+        Num("approach_energy_target_ktas", 1);
+        Num("approach_energy_tolerance_ktas", 1);
         Num("approach_next_alt_m", 1);
         Num("approach_next_tas_mps", 1);
         Num("approach_alt_error_m", 1);
@@ -612,6 +621,9 @@ internal static class SnapshotHotFrame {
         Nul("runway_touchdown_z", 2);
         Num("runway_recovery_phase", RawInteger);
         Bool("runway_weight_on_wheels");
+        Bool("runway_recovery_complete");
+        Bool("runway_touchdown_contact");
+        Bool("runway_touchdown_survivable");
         Num("runway_touchdown_deviations", RawInteger);
         Bool("player_rtb_active");
         Nul("rtb_closure_kts", 2);
@@ -1736,6 +1748,12 @@ internal static class SnapshotHotFrame {
         w.Num("approach_track_available_m", approach.TrackAvailableM, 0);
         w.Num("approach_extension_code", (int)approach.Extension, RawInteger);
         w.Bool("approach_in_groove", approach.InGroove);
+        w.Bool("conventional_rtb_pattern_active", session.ConventionalRtbPatternGuidanceActive);
+        w.Num("approach_pattern_leg_code", (int)approach.ActivePatternLeg, RawInteger);
+        w.Num("approach_energy_state_code", (int)approach.EnergyState, RawInteger);
+        w.Num("approach_energy_target_ktas",
+            approach.NextTrueAirspeedMps * AirData.MpsToKnots, 1);
+        w.Num("approach_energy_tolerance_ktas", approach.TargetSpeedToleranceKtas, 1);
         w.Num("approach_next_alt_m", approach.NextAltitudeM, 1);
         w.Num("approach_next_tas_mps", approach.NextTrueAirspeedMps, 1);
         w.Num("approach_alt_error_m", approach.AltitudeErrorM, 1);
@@ -1760,6 +1778,9 @@ internal static class SnapshotHotFrame {
         w.Num("runway_recovery_phase",
             (int)session.ConventionalRunwayPhase, RawInteger);
         w.Bool("runway_weight_on_wheels", session.RunwayWeightOnWheels);
+        w.Bool("runway_recovery_complete", session.ConventionalRtbRecoveryCompleted);
+        w.Bool("runway_touchdown_contact", session.RunwayTouchdown.Contact);
+        w.Bool("runway_touchdown_survivable", session.RunwayTouchdown.Survivable);
         w.Num("runway_touchdown_deviations",
             (int)session.RunwayTouchdown.Deviations, RawInteger);
         w.Bool("player_rtb_active", playerRtbActive);
@@ -2275,7 +2296,27 @@ internal static class SnapshotHotFrame {
         if (decimals == RawInteger || !double.IsFinite(value)) return value;
         double away = Math.Round(value, decimals, MidpointRounding.AwayFromZero);
         double even = Math.Round(value, decimals, MidpointRounding.ToEven);
-        if (away.Equals(even)) return away;
+        if (away.Equals(even)) {
+            // Scaling can itself round a value just below a decimal midpoint onto x.5, causing
+            // both Math.Round modes to agree while fixed-point formatting correctly chooses the
+            // other neighbour (for example the pattern's 259.15-ish binary altitude). Escalate
+            // only values within a couple of scaled ulps of a midpoint to the exact formatter.
+            double scale = decimals switch {
+                0 => 1.0,
+                1 => 10.0,
+                2 => 100.0,
+                3 => 1_000.0,
+                4 => 10_000.0,
+                5 => 100_000.0,
+                6 => 1_000_000.0,
+                _ => Math.Pow(10.0, decimals),
+            };
+            double scaled = Math.Abs(value) * scale;
+            double fraction = scaled - Math.Floor(scaled);
+            double scaledUlp = Math.Abs(Math.BitIncrement(scaled) - scaled);
+            if (Math.Abs(fraction - 0.5) > Math.Max(2.0 * scaledUlp, 1e-12))
+                return away;
+        }
 
         // Fixed-point formatting resolves exact decimal midpoints from the original binary value;
         // Math.Round first scales and can lose that distinction (for example 0.025 versus 2.1205).
@@ -2511,6 +2552,8 @@ internal static class SnapshotHotFrame {
                     _buffer[_index++] = Quantize(gate.HalfM, 1);
                     _buffer[_index++] = Quantize(gate.TargetAltitudeM, 1);
                     _buffer[_index++] = Quantize(gate.TargetKtas, 0);
+                    _buffer[_index++] = Quantize(gate.TargetSpeedToleranceKtas, 0);
+                    _buffer[_index++] = (int)gate.PatternLeg;
                     _buffer[_index++] = gate.DirtyConfig ? 1.0 : 0.0;
                     _buffer[_index++] = gate.Active ? 1.0 : 0.0;
                 } else {

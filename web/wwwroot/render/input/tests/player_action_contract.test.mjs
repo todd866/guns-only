@@ -338,7 +338,7 @@ test("every visible HTML button is wired through one auditable action surface", 
   }
 });
 
-test("pause-menu call-it-a-day is authoritative, deliberate, and shares the remappable GKey path", () => {
+test("pause-menu call-it-a-day is authoritative, deliberate, and observes acceptance", () => {
   assert.match(appSource,
     /const handoffActionAvailable = sessionPaused[\s\S]*?pauseReasons\.size === 1[\s\S]*?handoff\.available/,
     "the pause action must remain hidden unless the current authoritative phase is AVAILABLE");
@@ -346,11 +346,17 @@ test("pause-menu call-it-a-day is authoritative, deliberate, and shares the rema
     /readyHandoff\.hidden = !handoffActionAvailable[\s\S]*?readyHandoff\.disabled = !handoffActionAvailable/,
     "visibility and enabled state must share the same authority gate");
   assert.match(appSource,
-    /function requestCombatHandoffFromPause\(\)[\s\S]*?setPauseReason\("session", false\)[\s\S]*?pressMappedKey\(code, "pause-handoff", knockItOffControl\.gkey\)[\s\S]*?releaseMappedKey\(code, "pause-handoff"\)/,
-    "a deliberate pause-menu request must resume authority, issue one down/up pulse, and use GKey 10");
+    /function requestCombatHandoffFromPause\(\)[\s\S]*?setPauseReason\("session", false\)[\s\S]*?const accepted = typedRequest\s*\? bridge\.RequestReturnToBase\(\) === true\s*: pressMappedKey\(code, "pause-handoff", knockItOffControl\.gkey\)[\s\S]*?if \(!accepted\)[\s\S]*?setPauseReason\("session", true\)[\s\S]*?if \(!typedRequest\) releaseMappedKey\(code, "pause-handoff"\)/,
+    "the pause request must resume authority, observe typed acceptance, keep the key pulse on the legacy branch, restore pause on rejection, and release only a legacy press");
+  assert.match(appSource,
+    /function requestCombatHandoffFromNav\(\)[\s\S]*?const accepted = typedRequest\s*\? bridge\.RequestReturnToBase\(\) === true\s*: pressMappedKey\(code, "nav-rtb", knockItOffControl\.gkey\)[\s\S]*?if \(!accepted\)[\s\S]*?source: "navigation-button"[\s\S]*?return false[\s\S]*?if \(!typedRequest\) releaseMappedKey\(code, "nav-rtb"\)/,
+    "the navigation action must observe typed acceptance, report rejection, and keep press/release on the bounded legacy branch");
   assert.match(indexSource,
     /<button id="ready-handoff"[^>]*hidden[^>]*disabled[^>]*>CALL IT A DAY · RTB<\/button>/,
     "the mobile-safe pause action must start unavailable before authoritative state arrives");
+  assert.match(appSource,
+    /title: "F-22A vs Su-27S"[\s\S]*?controls: "Arrows fly[^\n]*\\nO calls it a day and starts RTB · G gear/,
+    "the F-22 briefing must name gear extension alongside the RTB action");
 });
 
 test("touch pilots retain system commands but the live surface makes them contextual", () => {

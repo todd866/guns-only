@@ -371,7 +371,14 @@ function combatHandoffCoreCopy(state) {
   const recoveryFuelLb = finiteNumber(state?.fuel_lb)
     ?? finiteNumber(state?.fuel_on_arrival_estimate_lb);
   const lost = token(state?.sortie_outcome) === "DEFEAT";
-  const recovered = handoff.phase === "RECOVERED";
+  const recoveryPhaseClosed = handoff.phase === "RECOVERED";
+  const runwayRecoveryComplete = state?.runway_recovery_complete === true
+    && state?.runway_touchdown_contact === true
+    && state?.runway_touchdown_survivable === true;
+  // Runway handoff recovery is physical truth, not a phase label. Carrier recovery has its own
+  // trap/bolter authority and is composed separately below.
+  const recovered = recoveryPhaseClosed
+    && (state?.carrier === true || runwayRecoveryComplete);
 
   const facts = [
     `Kills ${playerKills}`,

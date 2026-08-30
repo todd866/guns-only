@@ -5,6 +5,22 @@ using System.Text;
 
 namespace GunsOnly.Sim.Recovery;
 
+public enum ApproachPatternLeg : byte {
+    None = 0,
+    PatternEntry = 1,
+    Downwind = 2,
+    Base = 3,
+    Final = 4,
+    Threshold = 5,
+}
+
+public enum ApproachEnergyState : byte {
+    Unavailable = 0,
+    TooSlow = 1,
+    OnSpeed = 2,
+    TooFast = 3,
+}
+
 /// Published approach-guidance state for the snapshot / HUD / world path.
 public readonly record struct ApproachGuidanceState(
     bool GuidanceActive,
@@ -20,10 +36,15 @@ public readonly record struct ApproachGuidanceState(
     double AltitudeErrorM,
     double TrueAirspeedErrorMps,
     double Power01,
+    bool ConventionalPattern,
+    ApproachPatternLeg ActivePatternLeg,
+    double TargetSpeedToleranceKtas,
+    ApproachEnergyState EnergyState,
     IReadOnlyList<WorldApproachGate> Gates) {
     public static ApproachGuidanceState Inactive { get; } = new(
         false, false, 0, 0, 0, ApproachExtensionKind.None, false,
-        "", 0, 0, 0, 0, 0.5, Array.Empty<WorldApproachGate>());
+        "", 0, 0, 0, 0, 0.5, false, ApproachPatternLeg.None, 0,
+        ApproachEnergyState.Unavailable, Array.Empty<WorldApproachGate>());
 }
 
 /// A gate with world coordinates the renderer can place without inventing geometry.
@@ -37,6 +58,8 @@ public readonly record struct WorldApproachGate(
     double TargetAltitudeM,
     double TargetKtas,
     double DistanceToGoM,
+    double TargetSpeedToleranceKtas,
+    ApproachPatternLeg PatternLeg,
     bool DirtyConfig,
     bool Active);
 
@@ -45,6 +68,9 @@ public static class ApproachGuidance {
     public const double DefaultStabiliseHeightAboveSurfaceM = 152.0;
     public const double DefaultGlideslopeRad = 3.5 * Math.PI / 180.0;
     public const double DefaultGrooveEntryTrackM = 1_200.0;
+    /// The existing recovery-procedure energy window, now carried by every approach gate so world
+    /// guidance and the HUD use the same authority rather than inventing renderer thresholds.
+    public const double DefaultSpeedToleranceKtas = RecoveryProcedureDirector.EnergyBandKtas;
     /// Gate half-widths scale with distance-to-go so close gates stay flyable volumes.
     public const double GateHalfMinM = 250.0;
     public const double GateHalfMaxM = 700.0;
@@ -102,7 +128,8 @@ public static class ApproachGuidance {
         if (!solution.Valid || solution.Gates.Count == 0)
             return new ApproachGuidanceState(
                 true, false, 0, 0, 0, ApproachExtensionKind.None, false,
-                "", 0, 0, 0, 0, 0.5, Array.Empty<WorldApproachGate>());
+                "", 0, 0, 0, 0, 0.5, false, ApproachPatternLeg.None, 0,
+                ApproachEnergyState.Unavailable, Array.Empty<WorldApproachGate>());
 
         IReadOnlyList<WorldApproachGate> worldGates = MaterializeGates(
             solution);
@@ -126,6 +153,13 @@ public static class ApproachGuidance {
             AltitudeErrorM: altError,
             TrueAirspeedErrorMps: tasError,
             Power01: solution.CommandedPower01,
+            ConventionalPattern: false,
+            ActivePatternLeg: ApproachPatternLeg.None,
+            TargetSpeedToleranceKtas: DefaultSpeedToleranceKtas,
+            EnergyState: ClassifyEnergy(
+                trueAirspeedMps * AirData.MpsToKnots,
+                next.TargetKtas,
+                DefaultSpeedToleranceKtas),
             Gates: worldGates);
     }
 
@@ -144,6 +178,9 @@ public static class ApproachGuidance {
                 .Append("\"half_m\":").Append(F(gate.HalfM)).Append(',')
                 .Append("\"target_alt_m\":").Append(F(gate.TargetAltitudeM)).Append(',')
                 .Append("\"target_ktas\":").Append(F(gate.TargetKtas, 0)).Append(',')
+                .Append("\"speed_tolerance_ktas\":").Append(F(gate.TargetSpeedToleranceKtas, 0)).Append(',')
+                .Append("\"pattern_leg\":\"").Append(PatternLegToken(gate.PatternLeg)).Append("\",")
+                .Append("\"pattern_leg_code\":").Append((int)gate.PatternLeg).Append(',')
                 .Append("\"dirty\":").Append(gate.DirtyConfig ? "true" : "false").Append(',')
                 .Append("\"active\":").Append(gate.Active ? "true" : "false")
                 .Append('}');
@@ -155,6 +192,37 @@ public static class ApproachGuidance {
     public static string ExtensionToken(ApproachExtensionKind kind) => kind switch {
         ApproachExtensionKind.ExtendDownwind => "EXTEND_DOWNWIND",
         ApproachExtensionKind.Orbit360 => "ORBIT_360",
+        _ => "NONE",
+    };
+
+    public static ApproachEnergyState ClassifyEnergy(
+        double currentKtas,
+        double targetKtas,
+        double toleranceKtas = DefaultSpeedToleranceKtas) {
+        if (!double.IsFinite(currentKtas) || !double.IsFinite(targetKtas)
+            || !double.IsFinite(toleranceKtas) || targetKtas <= 0.0
+            || toleranceKtas < 0.0)
+            return ApproachEnergyState.Unavailable;
+        if (currentKtas < targetKtas - toleranceKtas)
+            return ApproachEnergyState.TooSlow;
+        if (currentKtas > targetKtas + toleranceKtas)
+            return ApproachEnergyState.TooFast;
+        return ApproachEnergyState.OnSpeed;
+    }
+
+    public static string EnergyStateToken(ApproachEnergyState state) => state switch {
+        ApproachEnergyState.TooSlow => "TOO_SLOW",
+        ApproachEnergyState.OnSpeed => "ON_SPEED",
+        ApproachEnergyState.TooFast => "TOO_FAST",
+        _ => "UNAVAILABLE",
+    };
+
+    public static string PatternLegToken(ApproachPatternLeg leg) => leg switch {
+        ApproachPatternLeg.PatternEntry => "PATTERN_ENTRY",
+        ApproachPatternLeg.Downwind => "DOWNWIND",
+        ApproachPatternLeg.Base => "BASE",
+        ApproachPatternLeg.Final => "FINAL",
+        ApproachPatternLeg.Threshold => "THRESHOLD",
         _ => "NONE",
     };
 
@@ -177,6 +245,8 @@ public static class ApproachGuidance {
                 gate.TargetAltitudeM,
                 gate.TargetSpeedMps * AirData.MpsToKnots,
                 gate.DistanceToGoM,
+                DefaultSpeedToleranceKtas,
+                ApproachPatternLeg.None,
                 gate.DirtyConfig,
                 Active: i == 0));
         }

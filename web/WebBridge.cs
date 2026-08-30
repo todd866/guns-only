@@ -188,6 +188,13 @@ public static partial class WebBridge {
     [JSExport]
     public static void FeedKey(int gkey, bool pressed) => Session.FeedKey((GKey)gkey, pressed);
 
+    /// <summary>
+    /// Typed RTB action for hosts which need authoritative acceptance instead of inferring it from
+    /// the void key-feed ABI. Existing keyboard input continues to use the same session transition.
+    /// </summary>
+    [JSExport]
+    public static bool RequestReturnToBase() => Session.TryRequestReturnToBase();
+
     [JSExport]
     public static void SuppressPendingThrottleTap(bool increase) =>
         Session.SuppressPendingThrottleTap(increase);

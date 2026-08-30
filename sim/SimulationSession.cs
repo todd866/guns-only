@@ -269,6 +269,8 @@ public sealed class SimulationSession {
     readonly CarrierSortieRouteDirector _carrierSortieRoute = new();
     readonly GunsOnly.Sim.Recovery.ConventionalCarrierRecoveryDirector
         _conventionalCarrierRecovery = new();
+    readonly GunsOnly.Sim.Recovery.ConventionalRunwayPatternRecoveryDirector
+        _conventionalRunwayPatternRecovery = new();
     // Pattern school starts with a serviceable aircraft. Attrition faults remain available from
     // the systems panel, but silently failing the utility hydraulics 90 seconds into every first
     // circuit left the gear at 91% and made the taught wire pass unrecoverable.
@@ -847,6 +849,21 @@ public sealed class SimulationSession {
         _conventionalRunwayRecovery?.Phase ?? RunwayRecoveryPhase.Airborne;
     public RunwayTouchdownResult RunwayTouchdown =>
         _conventionalRunwayRecovery?.Touchdown ?? RunwayTouchdownResult.None;
+    /// <summary>
+    /// True only when an accepted combat RTB has ended in a survivable physical runway contact,
+    /// full stop, and the authoritative discontinued-sortie terminal transition. This deliberately
+    /// excludes an unrequested runway stop and cannot be manufactured by navigation proximity.
+    /// </summary>
+    public bool ConventionalRtbRecoveryCompleted =>
+        _returnToBaseReason != MissionRtbReason.None
+        && _combatHandoffPhase == CombatHandoffPhase.Recovered
+        && _conventionalRunwayRecovery is {
+            Phase: RunwayRecoveryPhase.Recovered,
+            Touchdown.Contact: true,
+            Touchdown.Survivable: true
+        }
+        && Lifecycle == LifecycleState.Finished
+        && _outcome == SortieOutcome.Discontinued;
     public bool RunwayWeightOnWheels =>
         _conventionalRunwayRecovery?.WeightOnWheels ?? false;
     public RecoveryProgress RecoveryProgress => _recoveryProgress;
@@ -1473,6 +1490,12 @@ public sealed class SimulationSession {
         // observe an expired replacement timer.
         _nextOpponentSpawnAtMs = double.NegativeInfinity;
         Trigger(false);
+        // KNOCK IT OFF is also an immediate ceasefire boundary. Do not leave the previous fixed
+        // tick's trigger latches visible (or firing in a host snapshot) until the next StepCore.
+        // Already-airborne rounds remain physical and are drained by the handoff state machine.
+        _opponentTriggerDown = false;
+        foreach (Wingman wingman in _wingmen)
+            wingman.TriggerDown = false;
         _gunneryPitchAssistState = GunneryPitchAssistState.Inactive();
         _playerGunTargetPadlockRollAssistSelected = false;
         _playerGunTargetPadlockRollAssistTargetId = 0;
@@ -1519,7 +1542,14 @@ public sealed class SimulationSession {
         return true;
     }
 
-    bool TryRequestMissionRtb(MissionRtbReason reason) {
+    /// <summary>
+    /// Authoritative mission-level RTB request seam for input hosts. A successful return means the
+    /// reason, ceasefire, successor suppression, and recovery navigation intent were latched as one
+    /// transition; callers do not need to infer acceptance from a void key event.
+    /// </summary>
+    public bool TryRequestReturnToBase(
+        MissionRtbReason reason = MissionRtbReason.PilotKnockItOff) {
+        if (reason == MissionRtbReason.None) return false;
         // Keep the action contract identical to the published availability flag. In particular,
         // an already-latched Rapier/Bingo return must not fall through to a second carrier route
         // and overwrite the original reason, and pattern work must remain unavailable.
@@ -1537,7 +1567,7 @@ public sealed class SimulationSession {
             || PlayerRtbActive
             || _returnToBaseReason != MissionRtbReason.None)
             return;
-        TryRequestMissionRtb(MissionRtbReason.BingoFuel);
+        TryRequestReturnToBase(MissionRtbReason.BingoFuel);
     }
 
     /// <summary>
@@ -1686,12 +1716,22 @@ public sealed class SimulationSession {
     }
 
     /// <summary>
-    /// Records the already-validated physical recovery transition for combat-handoff missions.
-    /// Contact and sortie completion remain owned by the active recovery model. Repeated
-    /// completion is idempotently successful.
+    /// Close the combat handoff only after an authoritative recovery model has recorded a physical
+    /// full stop: either a survivable conventional-runway touchdown or a stopped carrier trap.
+    /// Navigation/gate proximity can never manufacture this transition. Repeated completion after
+    /// the same physical recovery is idempotently successful.
     /// </summary>
     public bool CompletePlayerRecovery() {
         if (_combatHandoffPhase == CombatHandoffPhase.Recovered) return true;
+        bool conventionalFullStop = _conventionalRunwayRecovery is {
+            Phase: RunwayRecoveryPhase.Recovered,
+            Touchdown.Contact: true,
+            Touchdown.Survivable: true
+        };
+        bool stoppedCarrierTrap = _carrier is not null
+            && _recovery == Carrier.Recovery.Trap
+            && _arrestment.Phase == ArrestmentModel.ArrestmentPhase.Stopped;
+        if (!conventionalFullStop && !stoppedCarrierTrap) return false;
         bool combatHandoffRtb = _combatHandoffPhase
                 >= CombatHandoffPhase.Requested
             && _combatHandoffPhase < CombatHandoffPhase.Recovered;
@@ -1956,7 +1996,7 @@ public sealed class SimulationSession {
             _playerF14WingSweepAutoLatch = true;
         }
         if (key == GKey.KnockItOff && newPress)
-            TryRequestMissionRtb(MissionRtbReason.PilotKnockItOff);
+            TryRequestReturnToBase(MissionRtbReason.PilotKnockItOff);
         // Weapon release is an edge-triggered cockpit action. Latch a deliberate Rapier F tap so
         // a very short browser key-down/key-up pair cannot fall entirely between fixed ticks.
         if (key == GKey.Trigger && newPress && RapierPhase == RapierMissionPhase.Attack)
@@ -3931,6 +3971,7 @@ public sealed class SimulationSession {
         _missionChecklist = MissionChecklistStatus.None;
         _recoveryProcedure.Reset();
         _conventionalCarrierRecovery.Reset();
+        _conventionalRunwayPatternRecovery.Reset();
         ConfigureMeshNavFromBeat();
         _rapierAutomationEnabled =
             _beat.ScriptedIntercept?.AutomationDefaultEnabled ?? false;
@@ -4251,6 +4292,16 @@ public sealed class SimulationSession {
     /// </summary>
     public GunsOnly.Sim.Recovery.ApproachGuidanceState ApproachGuidancePlan => _approachGuidance;
 
+    /// <summary>Presentation authority for the F-22's named conventional traffic pattern.</summary>
+    public bool ConventionalRtbPatternGuidanceActive =>
+        PlayerRtbActive
+        && ConventionalRunwayPhase == RunwayRecoveryPhase.Airborne
+        && _approachGuidance is {
+            GuidanceActive: true,
+            Valid: true,
+            ConventionalPattern: true
+        };
+
     /// <summary>Total approach-solver invocations; instrumentation pinning the solve decimation.</summary>
     public long ApproachSolveCount => _approachSolveCount;
 
@@ -4435,6 +4486,22 @@ public sealed class SimulationSession {
             _carrierSortieRoute.State.Phase,
             circuitsActive,
             _recoveryProcedure.Kind != RecoveryProcedureKind.None);
+        bool f22ConventionalRtb = intent
+            && PlayerRtbActive
+            && _beat.PlayerAircraft.Id == AircraftCapability.F22ASurrogate.Id
+            && _conventionalRunwayRecovery?.Runway is not null;
+
+        // Touchdown is a presentation boundary, not an eight-Hz guidance event. Clear the
+        // airborne pattern before solve decimation can reuse stale gates as generic volumes or
+        // briefly re-enable the generic approach-energy text during rollout.
+        if (f22ConventionalRtb
+            && ConventionalRunwayPhase != RunwayRecoveryPhase.Airborne) {
+            if (_conventionalCarrierRecovery.Active)
+                _conventionalCarrierRecovery.Reset();
+            _conventionalRunwayPatternRecovery.Reset();
+            _approachGuidance = GunsOnly.Sim.Recovery.ApproachGuidanceState.Inactive;
+            return;
+        }
 
         // Decimate the solve: the solver is pure in sim state, so re-solving every tick only
         // burns the descent/RTB frame budget. Re-solve on the tick grid or the instant intent
@@ -4444,7 +4511,57 @@ public sealed class SimulationSession {
             return;
         if (intent) _approachSolveCount++;
 
-        double carrierApproachMps = GunsOnly.Sim.Recovery.SortieSchedule.ApproachSpeedMps(
+        if (f22ConventionalRtb) {
+            if (_conventionalCarrierRecovery.Active)
+                _conventionalCarrierRecovery.Reset();
+            ConventionalRunway conventionalRunway =
+                _conventionalRunwayRecovery!.Runway;
+            double approachCalibratedMps =
+                GunsOnly.Sim.Recovery.SortieSchedule.ApproachCalibratedAirspeedMps(
+                    Player.State.Mass,
+                    _beat.PlayerAir,
+                    PlayerSystemsProfile);
+            // Ingress is flown clean. Use the more conservative of the clean level-flight polar
+            // at ownship and at pattern entry, so a high-drag combat instant cannot make the
+            // drawn energy route implausibly short. Once downwind, the authored gate schedule
+            // takes over and explicitly calls for gear.
+            double entryAltitudeM = conventionalRunway.Threshold.Y
+                + 1_200.0 * 0.3048;
+            double entryCalibratedMps = System.Math.Min(
+                250.0 / AirData.MpsToKnots,
+                approachCalibratedMps * 1.30);
+            double entryTrueAirspeedMps = AirData.TrueAirspeedForCalibratedAirspeedMps(
+                entryCalibratedMps,
+                entryAltitudeM,
+                RecoveryAtmosphere);
+            double cleanDragToWeight = System.Math.Min(
+                GunsOnly.Sim.Recovery.SortieSchedule.CleanLevelDragToWeight(
+                    Player.State.Mass,
+                    _beat.PlayerAir,
+                    System.Math.Max(_player.AirspeedMps, 1.0),
+                    Player.State.Position.Y,
+                    RecoveryAtmosphere),
+                GunsOnly.Sim.Recovery.SortieSchedule.CleanLevelDragToWeight(
+                    Player.State.Mass,
+                    _beat.PlayerAir,
+                    entryTrueAirspeedMps,
+                    entryAltitudeM,
+                    RecoveryAtmosphere));
+            _approachGuidance = _conventionalRunwayPatternRecovery.Step(
+                active: true,
+                runway: conventionalRunway,
+                player: Player.State,
+                trueAirspeedMps: _player.AirspeedMps,
+                approachCalibratedAirspeedMps: approachCalibratedMps,
+                cleanDragToWeight: cleanDragToWeight,
+                touchdownReferenceHeightM: _conventionalRunwayRecovery.ReferenceHeightM,
+                atmosphere: RecoveryAtmosphere,
+                terrain: _terrainSurface);
+            return;
+        }
+        if (_conventionalRunwayPatternRecovery.Active)
+            _conventionalRunwayPatternRecovery.Reset();
+        double scheduledApproachMps = GunsOnly.Sim.Recovery.SortieSchedule.ApproachSpeedMps(
              Player.State.Mass, _beat.PlayerAir);
         if (intent
             && _carrier is { } patternCarrier
@@ -4454,7 +4571,7 @@ public sealed class SimulationSession {
                  patternCarrier,
                  Player.State,
                  Player.State.Speed,
-                 carrierApproachMps);
+                 scheduledApproachMps);
             return;
         }
         if (_conventionalCarrierRecovery.Active)

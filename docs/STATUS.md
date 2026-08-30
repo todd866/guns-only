@@ -1,7 +1,14 @@
 # Current product and verification status
 
-Updated: 2026-08-29
-Next candidate: Build 349. Every mission family is now driven by an autonomous pilot that controls
+Updated: 2026-08-30
+Next candidate: Build 350. F-22 Guns Only remains an open-ended fight rather than a scored mission.
+Call It A Day or Bingo enters one typed, immediate ceasefire/RTB transition and publishes a
+terrain-aware left-hand runway pattern. Floating chevrons carry the energy lesson without another
+panel: green is on-speed, yellow is too fast and red is too slow. The browser cannot invent a
+moving join route or declare success; only a survivable runway touchdown and physical full stop
+complete recovery, while a missed final recycles the pattern.
+
+Build 349 made every mission family driven by an autonomous pilot that controls
 the production keyboard and gamepad path and keeps an authority tape. The old browser checks could
 report green while a route sat paused behind Ready, authority crawled, or a QA shortcut skipped the
 part a player actually flies; the new drivers fail closed on crashes, hidden pages, timeouts,

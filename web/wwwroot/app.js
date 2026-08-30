@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=349";
+import { createHud } from "./hud.js?v=350";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -23,7 +23,7 @@ import {
   combatHandoffPresentation,
   sortieResultCopy,
   visualMergeDebriefPresentation,
-} from "./render/debrief/sortie_result.js?v=349";
+} from "./render/debrief/sortie_result.js?v=350";
 import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
@@ -46,11 +46,11 @@ import {
   shouldAutoStartFirstRunValley,
   touchFireAriaLabel,
   touchFireVisibleLabel,
-} from "./render/onboarding/first_run_valley.js?v=349";
+} from "./render/onboarding/first_run_valley.js?v=350";
 import {
   dialogTabDestination,
   renderedDialogControl,
-} from "./render/onboarding/modal_focus.js?v=349";
+} from "./render/onboarding/modal_focus.js?v=350";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -93,8 +93,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=349";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=349";
+} from "./render/release/release_identity.js?v=350";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=350";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -107,7 +107,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=349";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=350";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -116,10 +116,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=349";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=350";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=349";
+} from "./render/nav/carrier_sortie_touch_control.js?v=350";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -203,7 +203,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=349";
+} from "./render/telemetry/ai_frame_pressure.js?v=350";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -213,15 +213,15 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=349";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=349";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=349";
-import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=349";
+} from "./render/telemetry/telemetry_batch.js?v=350";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=350";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=350";
+import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=350";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=349";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=349";
+} from "./render/shell/boot_watchdog.js?v=350";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=350";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -230,7 +230,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=349";
+} from "./render/settings/player_settings.js?v=350";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -277,13 +277,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=349";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=349";
+} from "./render/scene/scene_builders.js?v=350";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=350";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=349";
+} from "./render/audio/flight_audio.js?v=350";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -932,8 +932,20 @@ function requestCombatHandoffFromNav() {
   const decision = topGunNavDecision(latestState);
   if (!bridge || !knockItOffControl || !decision || pauseReasons.size > 0) return false;
   const code = playerSettings.bindings.knockItOff || knockItOffControl.defaultCode;
-  if (!pressMappedKey(code, "nav-rtb", knockItOffControl.gkey)) return false;
-  releaseMappedKey(code, "nav-rtb");
+  const typedRequest = typeof bridge.RequestReturnToBase === "function";
+  const accepted = typedRequest
+    ? bridge.RequestReturnToBase() === true
+    : pressMappedKey(code, "nav-rtb", knockItOffControl.gkey);
+  if (!accepted) {
+    if (viewStatus) viewStatus.textContent = "Call It A Day unavailable in this phase";
+    recorder.event("combat-handoff", "rejected", {
+      source: "navigation-button",
+      code,
+      typed_request: typedRequest,
+    });
+    return false;
+  }
+  if (!typedRequest) releaseMappedKey(code, "nav-rtb");
   if (navUi?.rtbAction) navUi.rtbAction.disabled = true;
   if (viewStatus) viewStatus.textContent = decision.action.includes("CARRIER")
     ? decision.mode === "post-kill"
@@ -942,7 +954,10 @@ function requestCombatHandoffFromNav() {
     : decision.mode === "return"
       ? "RTB selected · runway corridor loading"
       : "RTB selected · relief inbound · runway corridor loading";
-  recorder.event("combat-handoff", "requested", { source: "navigation-button" });
+  recorder.event("combat-handoff", "requested", {
+    source: "navigation-button",
+    typed_request: typedRequest,
+  });
   sceneCanvas.focus({ preventScroll: true });
   return true;
 }
@@ -3456,7 +3471,7 @@ const MISSION_BRIEFS = Object.freeze({
     configuration: "F-22 public-data surrogate · 480 rounds across all fights · Joker 6,000 LB · Bingo 4,000 LB · Auto-GCAS armed",
     card: "Splash successive Su-27 surrogates; each replacement enters through a fresh neutral merge.",
     brief: "Every splash stages another offset merge. Fuel, ammunition, ownship damage, and kill count persist, so mind your bursts. Fight for the rear quarter and keep your energy \u2014 9 G is there, but so is your vision.",
-    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO calls it a day and starts RTB · Esc → Call It A Day button · Space G limiter · K Auto-GCAS paddle",
+    controls: "Arrows fly · W/S power · F guns · V padlock · Tab target\nO calls it a day and starts RTB · G gear · Esc → Call It A Day button · Space G limiter · K Auto-GCAS paddle",
   },
   8: {
     activity: "defence",
@@ -5641,20 +5656,32 @@ function requestCombatHandoffFromPause() {
     || !pauseReasons.has("session") || pauseReasons.size !== 1) return false;
 
   // This is a deliberate phase-change command, not a background action against a paused kernel.
-  // Resume first so the authoritative lifecycle can accept the rising edge, then issue one bounded
-  // down/up pulse. The mobile pause menu therefore shares the same GKey path as remappable KeyO.
+  // Resume first so the authoritative lifecycle can accept it, then prefer the typed bridge seam:
+  // the UI must know whether ceasefire/RTB actually latched instead of inferring success from a
+  // void key pulse. Older hosts retain the bounded remappable-key fallback.
   setPauseReason("session", false);
   const code = playerSettings.bindings.knockItOff
     || knockItOffControl.defaultCode;
-  if (!pressMappedKey(code, "pause-handoff", knockItOffControl.gkey)) {
+  const typedRequest = typeof bridge.RequestReturnToBase === "function";
+  const accepted = typedRequest
+    ? bridge.RequestReturnToBase() === true
+    : pressMappedKey(code, "pause-handoff", knockItOffControl.gkey);
+  if (!accepted) {
     setPauseReason("session", true);
+    if (viewStatus) viewStatus.textContent = "Call It A Day unavailable in this phase";
+    recorder.event("combat-handoff", "rejected", {
+      source: "pause-menu",
+      code,
+      typed_request: typedRequest,
+    });
     return false;
   }
-  releaseMappedKey(code, "pause-handoff");
+  if (!typedRequest) releaseMappedKey(code, "pause-handoff");
   if (viewStatus) viewStatus.textContent = "Knock it off · weapons safe · fly the home corridor";
   recorder.event("combat-handoff", "requested", {
     source: "pause-menu",
     code,
+    typed_request: typedRequest,
   });
   sceneCanvas.focus({ preventScroll: true });
   return true;
@@ -11949,7 +11976,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=349")
+    navigator.serviceWorker.register("service-worker.js?v=350")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

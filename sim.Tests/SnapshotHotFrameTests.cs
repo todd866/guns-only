@@ -4,6 +4,7 @@ using GunsOnly.Sim.Casevac;
 using GunsOnly.Sim.Doctrine;
 using GunsOnly.Sim.Environment;
 using GunsOnly.Sim.Missiles;
+using GunsOnly.Sim.Recovery;
 using GunsOnly.Web;
 
 namespace GunsOnly.Sim.Tests;
@@ -87,7 +88,7 @@ public class SnapshotHotFrameTests {
     static void AssertHotFrameMatchesJson(JsonElement root, double[] buffer) {
         using JsonDocument layoutDocument = JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
         JsonElement layout = layoutDocument.RootElement;
-        Assert.Equal(33, layout.GetProperty("layout_version").GetInt32());
+        Assert.Equal(34, layout.GetProperty("layout_version").GetInt32());
         Assert.Equal(SnapshotHotFrame.SlotCount, layout.GetProperty("slot_count").GetInt32());
         string[] names = layout.GetProperty("blocks")
             .EnumerateArray()
@@ -699,7 +700,7 @@ public class SnapshotHotFrameTests {
             using JsonDocument layoutDocument =
                 JsonDocument.Parse(SnapshotHotFrame.LayoutJson());
             JsonElement layout = layoutDocument.RootElement;
-            Assert.Equal(33, layout.GetProperty("layout_version").GetInt32());
+            Assert.Equal(34, layout.GetProperty("layout_version").GetInt32());
             JsonElement[] slots = layout.GetProperty("blocks")
                 .EnumerateArray()
                 .SelectMany(block => block.GetProperty("slots").EnumerateArray())
@@ -1370,6 +1371,127 @@ public class SnapshotHotFrameTests {
                 0.0, 0.0, false, null));
         Assert.Equal("ROLLOUT",
             document.RootElement.GetProperty("runway_recovery_phase_name").GetString());
+    }
+
+    [Fact]
+    public void HotApproachArrayCarriesTwelveSamplesAndPreservesTouchdownAim() {
+        BeatSetup beat = Beats.ModernVisualMerge();
+        ConventionalRunway runway = ConventionalRunway.FromRecoveryPlan(
+            Assert.IsType<RecoveryPlan>(beat.RecoveryPlan));
+        double approachCalibratedMps = SortieSchedule.ApproachCalibratedAirspeedMps(
+            beat.Player.Mass,
+            beat.PlayerAir,
+            Assert.IsType<AirframeSystemsProfile>(beat.SystemsProfile));
+        IReadOnlyList<ConventionalRunwayPatternRecoveryDirector.PatternGate> schedule =
+            ConventionalRunwayPatternRecoveryDirector.BuildSchedule(
+                runway, approachCalibratedMps);
+        WorldApproachGate[] worldGates = schedule
+            .Select((gate, index) => new WorldApproachGate(
+                gate.Id,
+                gate.Label,
+                gate.Position.X,
+                gate.Position.Z,
+                gate.Position.Y,
+                gate.CaptureM,
+                gate.Position.Y,
+                gate.TargetSpeedMps * AirData.MpsToKnots,
+                gate.DistanceToGoM,
+                ApproachGuidance.DefaultSpeedToleranceKtas,
+                gate.Leg,
+                gate.Dirty,
+                Active: index == 0))
+            .ToArray();
+        var guidance = new ApproachGuidanceState(
+            GuidanceActive: true,
+            Valid: true,
+            ExcessEnergyM: 0.0,
+            TrackRequiredM: schedule[0].DistanceToGoM,
+            TrackAvailableM: schedule[0].DistanceToGoM,
+            Extension: ApproachExtensionKind.None,
+            InGroove: false,
+            NextLabel: worldGates[0].Label,
+            NextAltitudeM: worldGates[0].TargetAltitudeM,
+            NextTrueAirspeedMps: schedule[0].TargetSpeedMps,
+            AltitudeErrorM: 0.0,
+            TrueAirspeedErrorMps: 0.0,
+            Power01: 0.5,
+            ConventionalPattern: true,
+            ActivePatternLeg: ApproachPatternLeg.PatternEntry,
+            TargetSpeedToleranceKtas: ApproachGuidance.DefaultSpeedToleranceKtas,
+            EnergyState: ApproachEnergyState.OnSpeed,
+            Gates: worldGates);
+
+        SimulationSession session = StartSession(7, null);
+        Assert.True(session.TryRequestReturnToBase());
+        FieldInfo guidanceField = typeof(SimulationSession).GetField(
+            "_approachGuidance",
+            BindingFlags.Instance | BindingFlags.NonPublic)!;
+        guidanceField.SetValue(session, guidance);
+
+        var (root, buffer, document) = Project(session);
+        using (document)
+        using (JsonDocument layoutDocument = JsonDocument.Parse(
+            SnapshotHotFrame.LayoutJson())) {
+            JsonElement approachSamples = layoutDocument.RootElement
+                .GetProperty("sample_arrays")
+                .EnumerateArray()
+                .Single(sample => sample.GetProperty("field").GetString()
+                    == "approach_gates");
+            Assert.Equal(12, approachSamples.GetProperty("samples").GetInt32());
+            Assert.Equal(new[] {
+                "east_m",
+                "north_m",
+                "up_m",
+                "half_m",
+                "target_alt_m",
+                "target_ktas",
+                "speed_tolerance_ktas",
+                "pattern_leg_code",
+                "dirty",
+                "active",
+            }, approachSamples.GetProperty("keys")
+                .EnumerateArray()
+                .Select(key => key.GetString())
+                .ToArray());
+            Assert.Equal(9, root.GetProperty("approach_gate_count").GetInt32());
+            Assert.True(root.GetProperty(
+                "conventional_rtb_pattern_active").GetBoolean());
+            Assert.Equal((int)ApproachPatternLeg.PatternEntry,
+                root.GetProperty("approach_pattern_leg_code").GetInt32());
+            Assert.Equal((int)ApproachEnergyState.OnSpeed,
+                root.GetProperty("approach_energy_state_code").GetInt32());
+            Assert.Equal(
+                guidance.NextTrueAirspeedMps * AirData.MpsToKnots,
+                root.GetProperty("approach_energy_target_ktas").GetDouble(),
+                precision: 1);
+            Assert.Equal(ApproachGuidance.DefaultSpeedToleranceKtas,
+                root.GetProperty("approach_energy_tolerance_ktas").GetDouble());
+            Assert.False(root.GetProperty("runway_recovery_complete").GetBoolean());
+            Assert.False(root.GetProperty("runway_touchdown_contact").GetBoolean());
+            Assert.False(root.GetProperty("runway_touchdown_survivable").GetBoolean());
+            JsonElement jsonGates = root.GetProperty("approach_gates");
+            Assert.Equal(12, jsonGates.GetArrayLength());
+            AssertHotFrameMatchesJson(root, buffer);
+
+            int touchdownIndex = schedule.Count - 1;
+            int start = approachSamples.GetProperty("start").GetInt32();
+            int stride = approachSamples.GetProperty("keys").GetArrayLength();
+            JsonElement touchdown = jsonGates[touchdownIndex];
+            Assert.InRange(Math.Abs(
+                schedule[^1].Position.X
+                    - touchdown.GetProperty("east_m").GetDouble()),
+                0.0, 0.051);
+            Assert.InRange(Math.Abs(
+                schedule[^1].Position.Z
+                    - touchdown.GetProperty("north_m").GetDouble()),
+                0.0, 0.051);
+            Assert.Equal(touchdown.GetProperty("east_m").GetDouble(),
+                buffer[start + touchdownIndex * stride]);
+            Assert.Equal(touchdown.GetProperty("north_m").GetDouble(),
+                buffer[start + touchdownIndex * stride + 1]);
+            Assert.Equal((double)ApproachPatternLeg.Threshold,
+                buffer[start + touchdownIndex * stride + 7]);
+        }
     }
 
     [Fact]

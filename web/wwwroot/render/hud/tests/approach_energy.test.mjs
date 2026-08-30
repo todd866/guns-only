@@ -33,6 +33,18 @@ test("energy cue projects next-gate targets and errors", () => {
   assert.equal(cue.tasErrorMps, -8);
 });
 
+test("conventional F-22 pattern keeps the prose-and-numbers panel hidden", () => {
+  assert.equal(approachEnergyCue({
+    approach_guidance_active: true,
+    approach_valid: true,
+    conventional_rtb_pattern_active: true,
+    approach_next_alt_m: 365.8,
+    approach_next_tas_mps: 110,
+    approach_alt_error_m: 20,
+    approach_tas_error_mps: 3,
+  }), null);
+});
+
 test("power fallback yields to sortie schedule", () => {
   assert.equal(sortiePowerCommand({
     sortie_valid: true,

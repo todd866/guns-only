@@ -48,6 +48,50 @@ public class ApproachGuidanceSessionTests {
     }
 
     [Fact]
+    public void F22CallItADayPublishesSimOwnedIngressWithoutCompletingTheSortie() {
+        var session = new SimulationSession(beatIndex: 7);
+        session.Begin();
+        session.StepFixed(30);
+
+        Assert.False(session.ConventionalRtbPatternGuidanceActive);
+        Assert.True(session.TryRequestReturnToBase());
+        session.StepFixed();
+
+        ApproachGuidanceState guidance = session.ApproachGuidancePlan;
+        Assert.True(session.ConventionalRtbPatternGuidanceActive);
+        Assert.True(guidance.ConventionalPattern);
+        Assert.Equal(ApproachPatternLeg.PatternEntry, guidance.ActivePatternLeg);
+        Assert.Equal(ApproachGuidance.DefaultSpeedToleranceKtas,
+            guidance.TargetSpeedToleranceKtas);
+        Assert.Equal(
+            session.Player.AirspeedMps - guidance.NextTrueAirspeedMps,
+            guidance.TrueAirspeedErrorMps,
+            precision: 10);
+        Assert.InRange(guidance.Gates.Count, 1, 8);
+        Assert.All(guidance.Gates, gate => {
+            Assert.Equal(ApproachPatternLeg.PatternEntry, gate.PatternLeg);
+            Assert.StartsWith("pattern_ingress_", gate.Id, StringComparison.Ordinal);
+        });
+        Assert.False(session.ConventionalRtbRecoveryCompleted);
+        Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
+
+        using JsonDocument snapshot = JsonDocument.Parse(SnapshotProjection.BuildState(
+            session, Carrier.DeckConfiguration.Angled, 0.0, 0.0, false, null));
+        JsonElement root = snapshot.RootElement;
+        Assert.True(root.GetProperty("conventional_rtb_pattern_active").GetBoolean());
+        Assert.Equal("PATTERN_ENTRY", root.GetProperty("approach_pattern_leg").GetString());
+        Assert.Equal(25.0,
+            root.GetProperty("approach_energy_tolerance_ktas").GetDouble());
+        Assert.NotEqual("UNAVAILABLE",
+            root.GetProperty("approach_energy_state").GetString());
+        Assert.Equal(guidance.Gates.Count,
+            root.GetProperty("approach_gate_count").GetInt32());
+        Assert.DoesNotContain("WIRE",
+            root.GetProperty("approach_gates_json").GetString() ?? "",
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async System.Threading.Tasks.Task ConcurrentColdSnapshotsKeepApproachStateBoundToTheirOwnSession() {
         var active = new SimulationSession(beatIndex: 11);
         active.Begin();

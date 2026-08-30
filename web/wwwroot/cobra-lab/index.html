@@ -8,7 +8,7 @@
   <base href="/">
   <title>Guns Only · Hold the Bridge</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/cobra-lab/styles.css?v=349">
+  <link rel="stylesheet" href="/cobra-lab/styles.css?v=350">
 </head>
 <body data-shell="play" data-brief="true">
   <a class="skip-link" href="#scene">Skip to flight</a>
@@ -208,7 +208,7 @@
       if (earlyBrief) earlyBrief.hidden = !showEarlyBrief;
       document.body.dataset.brief = String(showEarlyBrief);
 
-      const releaseBuild = new URL("../service-worker.js?v=349", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=350", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -236,7 +236,7 @@
       await globalThis.__gunsPrebootReady;
       await new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        script.src = "/_framework/blazor.webassembly.js?v=349";
+        script.src = "/_framework/blazor.webassembly.js?v=350";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load Cobra flight runtime.")), {
@@ -245,10 +245,10 @@
         document.head.append(script);
       });
       const { renderExperienceGate } = await import(
-        "/render/release/quarantine_gate.js?v=349"
+        "/render/release/quarantine_gate.js?v=350"
       );
       const access = renderExperienceGate({ experienceId: "cobra-lab" });
-      if (access.allowed) await import("/cobra-lab/main.js?v=349");
+      if (access.allowed) await import("/cobra-lab/main.js?v=350");
     } catch (error) {
       console.error(error);
       const status = document.querySelector("#status");

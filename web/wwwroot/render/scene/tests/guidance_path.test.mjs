@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import {
   approachJoinGuidanceGates,
   createGuidancePath,
+  conventionalPatternEnergy,
+  conventionalPatternGuidanceGates,
   firstRunIngressGuidanceGates,
   gateToScenePosition,
   GUIDANCE_PATH_DEFAULTS,
@@ -14,6 +16,46 @@ const approachGates = [
   { east_m: 100, north_m: 200, up_m: 300, half_m: 400, target_ktas: 250, dirty: 0, active: 0 },
   { east_m: 500, north_m: 600, up_m: 700, half_m: 800, target_ktas: 200, dirty: 1, active: 1 },
 ];
+
+const conventionalPatternGates = [
+  { east_m: 5000, north_m: -6000, up_m: 366, half_m: 800, target_ktas: 220,
+    speed_tolerance_ktas: 25, pattern_leg_code: 1, dirty: 0, active: 1 },
+  { east_m: 3000, north_m: -3000, up_m: 305, half_m: 650, target_ktas: 200,
+    speed_tolerance_ktas: 25, pattern_leg_code: 2, dirty: 0, active: 0 },
+  { east_m: 700, north_m: -3000, up_m: 305, half_m: 550, target_ktas: 200,
+    speed_tolerance_ktas: 25, pattern_leg_code: 2, dirty: 1, active: 0 },
+  { east_m: -500, north_m: -3000, up_m: 274, half_m: 500, target_ktas: 200,
+    speed_tolerance_ktas: 25, pattern_leg_code: 2, dirty: 1, active: 0 },
+  { east_m: -3500, north_m: -2200, up_m: 213, half_m: 500, target_ktas: 185,
+    speed_tolerance_ktas: 25, pattern_leg_code: 3, dirty: 1, active: 0 },
+  { east_m: -4000, north_m: -800, up_m: 152, half_m: 450, target_ktas: 185,
+    speed_tolerance_ktas: 25, pattern_leg_code: 3, dirty: 1, active: 0 },
+  { east_m: -3000, north_m: 0, up_m: 157, half_m: 400, target_ktas: 170,
+    speed_tolerance_ktas: 25, pattern_leg_code: 4, dirty: 1, active: 0 },
+  { east_m: -500, north_m: 0, up_m: 26, half_m: 250, target_ktas: 170,
+    speed_tolerance_ktas: 25, pattern_leg_code: 5, dirty: 1, active: 0 },
+  { east_m: 400, north_m: 0, up_m: 2, half_m: 220, target_ktas: 170,
+    speed_tolerance_ktas: 25, pattern_leg_code: 5, dirty: 1, active: 0 },
+];
+
+const conventionalPatternState = Object.freeze({
+  px: -10_000,
+  py: 1_000,
+  pz: -10_000,
+  player_rtb_active: true,
+  approach_guidance_active: true,
+  approach_valid: true,
+  conventional_rtb_pattern_active: true,
+  approach_gate_count: conventionalPatternGates.length,
+  approach_gates: conventionalPatternGates,
+  approach_pattern_leg: "PATTERN_ENTRY",
+  approach_next_label: "PATTERN ENTRY · 45",
+  approach_energy_state: "ON_SPEED",
+  approach_energy_state_code: 2,
+  approach_energy_target_ktas: 220,
+  approach_energy_tolerance_ktas: 25,
+  runway_recovery_complete: false,
+});
 
 // Minimal THREE stand-in: the module must not need a GL context to be testable.
 class V3 {
@@ -466,6 +508,129 @@ test("active approach guidance prefers hot sample gates over the PROC ladder", (
   assert.equal(meshes[1].scale.x, 800);
   assert.equal(path.object3d.userData.mode, "procedure",
     "authored approach gates replace the coarse RTB breadcrumb chain");
+});
+
+test("conventional pattern preserves entry-downwind-base-final-threshold geometry", () => {
+  const path = createGuidancePath(THREE);
+  const drawn = path.update(conventionalPatternState);
+
+  assert.ok(drawn >= conventionalPatternGates.length);
+  assert.ok(drawn <= GUIDANCE_PATH_DEFAULTS.maxGates);
+  assert.equal(path.object3d.userData.mode, "conventional-pattern");
+  assert.equal(path.object3d.userData.guidancePatternLeg, "PATTERN_ENTRY");
+  assert.equal(path.object3d.userData.guidanceEnergyStatus, "ON_SPEED");
+  assert.equal(path.object3d.userData.guidanceEnergyTargetKtas, 220);
+  assert.equal(path.object3d.userData.guidanceEnergyToleranceKtas, 25);
+  const meshes = path.object3d.children.filter((mesh) => mesh.visible);
+  assert.equal(meshes.every((mesh) => mesh.userData.guidanceStyle === "pattern-chevron"), true);
+  assert.equal(meshes.every((mesh) => mesh.scale.x === GUIDANCE_PATH_DEFAULTS.patternVisualHalfM), true,
+    "the pattern is floating chevrons, not runway-sized tolerance discs");
+  const labels = new Set(meshes.map((mesh) => mesh.userData.guidancePatternLeg));
+  for (const leg of ["PATTERN_ENTRY", "DOWNWIND", "BASE", "FINAL", "THRESHOLD"])
+    assert.ok(labels.has(leg), `${leg} must remain visible in the fixed traffic-pattern path`);
+  assert.equal(conventionalPatternState.runway_recovery_complete, false,
+    "drawing guidance must not manufacture landing completion");
+});
+
+test("conventional pattern preserves sim-authored ingress and skips browser join chevrons", () => {
+  const authored = conventionalPatternGates.map((gate, index) => ({
+    id: `gate_${index}`,
+    eastM: gate.east_m,
+    northM: gate.north_m,
+    upM: gate.up_m,
+    halfM: gate.half_m,
+    targetKtas: gate.target_ktas,
+    speedToleranceKtas: gate.speed_tolerance_ktas,
+    patternLegCode: gate.pattern_leg_code,
+    patternLeg: ["NONE", "PATTERN_ENTRY", "DOWNWIND", "BASE", "FINAL", "THRESHOLD"]
+      [gate.pattern_leg_code],
+    active: gate.active === 1,
+    dirty: gate.dirty === 1,
+  }));
+  const gates = conventionalPatternGuidanceGates(conventionalPatternState, authored);
+  const movedOwnshipGates = conventionalPatternGuidanceGates({
+    ...conventionalPatternState,
+    px: 90_000,
+    py: 12_000,
+    pz: 75_000,
+  }, authored);
+  assert.deepEqual(movedOwnshipGates, gates,
+    "browser geometry must be independent of ownship once the sim publishes a pattern path");
+  assert.equal(gates.some((gate) => String(gate.id).startsWith("join-")), false,
+    "the browser must not draw an ownship-to-entry route that the sim did not publish");
+  for (const authoritative of authored) {
+    const rendered = gates.find((gate) => gate.id === authoritative.id);
+    assert.ok(rendered, `${authoritative.id} must remain in the rendered path`);
+    assert.deepEqual(
+      [rendered.eastM, rendered.northM, rendered.upM],
+      [authoritative.eastM, authoritative.northM, authoritative.upM],
+      `${authoritative.id} coordinates must remain authoritative`,
+    );
+  }
+  assert.equal(gates.at(-1).id, "gate_8",
+    "presentation-only midpoints must preserve the ninth physical touchdown-aim sample");
+  assert.equal(gates.at(-1).patternLeg, "THRESHOLD");
+
+  const path = createGuidancePath(THREE);
+  path.update(conventionalPatternState);
+  assert.equal(path.object3d.userData.joinGateCount, 0,
+    "the generic approach join must stay disabled for the sim-authored pattern");
+});
+
+test("authoritative pattern energy state drives green, yellow, red and a non-colour token", () => {
+  const cases = [
+    [2, "ON_SPEED", GUIDANCE_PATH_DEFAULTS.patternOnSpeedColor],
+    [3, "TOO_FAST", GUIDANCE_PATH_DEFAULTS.patternFastColor],
+    [1, "TOO_SLOW", GUIDANCE_PATH_DEFAULTS.patternSlowColor],
+  ];
+  for (const [code, status, color] of cases) {
+    const state = {
+      ...conventionalPatternState,
+      approach_energy_state_code: code,
+      approach_energy_state: status,
+    };
+    const energy = conventionalPatternEnergy(state);
+    assert.equal(energy.status, status);
+    assert.equal(energy.color, color);
+    assert.equal(energy.targetKtas, 220);
+    assert.equal(energy.toleranceKtas, 25);
+
+    const path = createGuidancePath(THREE);
+    assert.ok(path.update(state) > 0);
+    const first = path.object3d.children.find((mesh) => mesh.visible);
+    first.onBeforeRender();
+    assert.equal(first.material.uniforms.uColor.value.value, color);
+    assert.equal(first.userData.guidanceEnergyStatus, status,
+      "status remains observable without relying on colour perception");
+  }
+});
+
+test("pattern chevrons fail closed outside conventional RTB or without authority energy", () => {
+  assert.equal(conventionalPatternEnergy({
+    ...conventionalPatternState,
+    conventional_rtb_pattern_active: false,
+  }), null);
+  assert.equal(conventionalPatternEnergy({
+    ...conventionalPatternState,
+    approach_energy_state_code: 0,
+    approach_energy_state: "UNAVAILABLE",
+  }), null);
+
+  const generic = createGuidancePath(THREE);
+  generic.update({
+    ...conventionalPatternState,
+    conventional_rtb_pattern_active: false,
+  });
+  assert.equal(generic.object3d.userData.mode, "approach-join");
+  assert.equal(generic.object3d.children[0].userData.guidanceStyle, "rtb-chevron");
+
+  const missing = createGuidancePath(THREE);
+  assert.equal(missing.update({
+    ...conventionalPatternState,
+    approach_energy_state_code: 0,
+    approach_energy_state: "UNAVAILABLE",
+  }), 0);
+  assert.equal(missing.object3d.visible, false);
 });
 
 test("an active approach with an empty frame hides instead of flashing coarse RTB crumbs", () => {
