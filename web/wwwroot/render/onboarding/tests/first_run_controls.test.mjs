@@ -346,9 +346,11 @@ test("cobra desktop content teaches the mission loop before the controls", () =>
   assert.match(flat, /[Cc]ollective up/);
   assert.match(flat, /[Cc]yclic/);
   assert.match(flat, /[Pp]edals/);
-  assert.match(flat, /Tab/);
-  assert.match(flat, /F/);
+  assert.match(flat, /Tab \/ LB/);
+  assert.match(flat, /hold F \/ RB/);
   assert.match(flat, /E Shut down a damaged bird · start the spare/);
+  assert.match(flat, /LB target · hold RB gunner/);
+  assert.doesNotMatch(flat, /Flight controls only/);
 });
 
 test("weekend ride desktop content covers ride, gearbox and system", () => {

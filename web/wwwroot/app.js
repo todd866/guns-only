@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=350";
+import { createHud } from "./hud.js?v=351";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -23,7 +23,7 @@ import {
   combatHandoffPresentation,
   sortieResultCopy,
   visualMergeDebriefPresentation,
-} from "./render/debrief/sortie_result.js?v=350";
+} from "./render/debrief/sortie_result.js?v=351";
 import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
@@ -46,11 +46,11 @@ import {
   shouldAutoStartFirstRunValley,
   touchFireAriaLabel,
   touchFireVisibleLabel,
-} from "./render/onboarding/first_run_valley.js?v=350";
+} from "./render/onboarding/first_run_valley.js?v=351";
 import {
   dialogTabDestination,
   renderedDialogControl,
-} from "./render/onboarding/modal_focus.js?v=350";
+} from "./render/onboarding/modal_focus.js?v=351";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -93,8 +93,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=350";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=350";
+} from "./render/release/release_identity.js?v=351";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=351";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -107,7 +107,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=350";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=351";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -116,10 +116,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=350";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=351";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=350";
+} from "./render/nav/carrier_sortie_touch_control.js?v=351";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -203,7 +203,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=350";
+} from "./render/telemetry/ai_frame_pressure.js?v=351";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -213,15 +213,15 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=350";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=350";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=350";
-import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=350";
+} from "./render/telemetry/telemetry_batch.js?v=351";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=351";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=351";
+import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=351";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=350";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=350";
+} from "./render/shell/boot_watchdog.js?v=351";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=351";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -230,7 +230,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=350";
+} from "./render/settings/player_settings.js?v=351";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -277,13 +277,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=350";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=350";
+} from "./render/scene/scene_builders.js?v=351";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=351";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=350";
+} from "./render/audio/flight_audio.js?v=351";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -3587,7 +3587,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     sortie: "AH-1G · River Gorge conquest · ticket result · Camp Ember recovery",
     configuration: "AH-1G flight-foundation authority · four capture points · fortified gun pits · finite M134 · Camp Ember rearm and stable recovery",
     brief: "Four points hold the valley and you start with one. Each hostile point is locked by a fortified gun pit that friendly ground fire cannot break — destroy it, clear the remaining troops, then cover the friendly lift while it captures. Holding more points than the enemy bleeds their tickets to zero and decides the battle. Then return to Camp Ember and settle on the pad to close the sortie. Press M for the map.",
-    controls: "W/S collective · arrows cyclic · A/D yaw · Tab target · F gunner consent · M tactical map · Camp Ember pad to rearm and recover",
+    controls: "W/S collective · arrows cyclic · A/D yaw · Tab / LB target · F / RB gunner · M tactical map · Camp Ember pad to rearm and recover",
   }),
   "weekend-ride": Object.freeze({
     kicker: "Off duty · 10,000 ft runway",
@@ -3600,9 +3600,9 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   "top-gun": Object.freeze({
     kicker: "1986 · training range",
     title: "Top Gun",
-    sortie: "F-14A vs MiG-28 · guns and Sidewinders · DACT arena",
+    sortie: "Two MiG-28s · guns and Sidewinders · Case I trap",
      configuration: "F-14A · M61 + AIM-9 · anime-1986 presentation · production programme",
-     brief: "Fly the Tomcat against MiG-28 aggressors over a Miramar-class training range—guns and heaters against an escalating stream. After a splash, stay for the next jet or choose RTB TO CARRIER, then fly the taught Case I pattern: initial, break, downwind, approach turn and groove.",
+     brief: "Two Ace merges against MiG-28 aggressors, then the boat. Guns and heaters, then the taught Case I pattern: initial, break, downwind, approach turn and groove. Knock it off early if you need the trap before the second jet.",
      controls: "Arrows fly · W/S power · F guns · R fox-two · V padlock · Tab target\nNavigation opens after a splash with the carrier RTB choice",
   }),
   "ace-duel": Object.freeze({
@@ -4924,8 +4924,8 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     readyReplay.hidden = true;
     readyKicker.textContent = "Kestrel Gorge · guided first sortie";
     readyTitle.textContent = "Enter the valley";
-    readyBrief.textContent = "Stay low and follow the valley north. At the pop-out gate, Fire launches two heat-seeking missiles one at a time; once both missiles are away, the same control becomes the gun trigger.";
-    readySortie.textContent = "Follow valley → pop out → launch two heaters → guns / RTB";
+    readyBrief.textContent = "Stay low and follow the valley north. At the pop-out gate, Fire launches two heat-seeking missiles one at a time; once both are away, the same control becomes the gun. Splash the pair, then recover to the runway.";
+    readySortie.textContent = "Follow valley → pop out → two heaters → guns → splash the pair → recover";
     readyConfig.textContent = `F-22A · two AIM-9 surrogates · 480 gun rounds · ${fireBinding} changes with the mission`;
     if (readyControls) readyControls.textContent = mobileControls
       ? "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll · FOX 2 launches missiles, then becomes GUNS\nThe objective strip always shows the next action"
@@ -11976,7 +11976,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=350")
+    navigator.serviceWorker.register("service-worker.js?v=351")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

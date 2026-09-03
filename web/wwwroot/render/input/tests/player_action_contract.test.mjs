@@ -706,7 +706,7 @@ test("every platform sees the aircraft picker and Fly remains a real gesture", (
     /"weekend-ride": Object\.freeze\([\s\S]*?end the ride from pause[\s\S]*?Esc pauses \/ End Ride/,
     "Weekend Ride briefing must explain both its open session and player-owned ending");
   assert.match(appSource,
-    /"cobra-lab": Object\.freeze\([\s\S]*?ticket result · Camp Ember recovery[\s\S]*?settle on the pad to close the sortie[\s\S]*?Camp Ember pad to rearm and recover/,
+    /"cobra-lab": Object\.freeze\([\s\S]*?ticket result · Camp Ember recovery[\s\S]*?settle on the pad to close the sortie[\s\S]*?Tab \/ LB target · F \/ RB gunner[\s\S]*?Camp Ember pad to rearm and recover/,
     "Cobra's Ready brief must teach that tickets decide the battle but stable Ember recovery closes the sortie");
   assert.equal(new Set(nodeIds).size, nodeIds.length, "no duplicate program nodes");
   assert.equal(buttons.filter((button) => button.attributes.id === "ready-start").length, 1);
@@ -793,8 +793,8 @@ test("the shared mission-flow shell keeps one hierarchy across ready, pause, and
     /readyRestart\.textContent = finished \? "Repeat sortie" : "Restart sortie"/,
     "repeat-current must not share the primary programme-advance label");
   assert.match(appSource,
-    /once both missiles are away, the same control becomes the gun trigger[\s\S]*?Follow valley → pop out → launch two heaters → guns \/ RTB/,
-    "first-run copy must describe the launch-count Fire transition, not make two splashes its gate");
+    /once both are away, the same control becomes the gun[\s\S]*?Follow valley → pop out → two heaters → guns → splash the pair → recover/,
+    "first-run copy must describe the Fire transition and end the sortie after the pair");
   assert.doesNotMatch(appSource, /after both splashes|splash two targets → guns/,
     "a missile outcome must not be presented as the Fire authority switch");
   assert.match(appSource, /readyReturn\.textContent = "Choose sortie"/,

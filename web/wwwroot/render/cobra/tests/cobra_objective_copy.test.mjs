@@ -291,7 +291,7 @@ test("defeat hold progress outranks the tip-friendly default", () => {
     ammo_dry: false,
   });
   assert.match(copy.line, /BRIDGE FALLING · 40%/);
-  assert.equal(copy.detail, "Tab target · hold F");
+  assert.equal(copy.detail, "Tab / LB · hold F / RB");
 });
 
 test("losing on the pad tells the pilot to leave, not rearm", () => {

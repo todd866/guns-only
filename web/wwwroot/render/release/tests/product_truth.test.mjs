@@ -137,11 +137,16 @@ test("legacy Rapier v1 documents cannot claim production authority over v2", asy
 
 test("the evergreen status matrix covers the executable experience catalog", async () => {
   const status = await readFile(path.join(ROOT, "docs/STATUS.md"), "utf8");
-  // Live production identity must name the currently shipped build; the candidate line names
-  // the next stamp or explicitly says none is queued. Do not pin an old Build N forever.
-  assert.match(status, /Production: Build \d+, revision `[0-9a-f]{7}/);
+  // Live production identity must name the currently shipped build. A candidate line that
+  // merely mentions the live number while Production: still pins an ancestor is how Build 350
+  // shipped with STATUS still swearing 343. The Production pin must equal RELEASE_BUILD; the
+  // next candidate is either none or a different number.
+  assert.match(status, new RegExp(
+    `Production: Build ${RELEASE_BUILD}, revision \`[0-9a-f]{40}\``,
+  ));
   assert.match(status, /Next candidate: (?:none queued|Build \d+)/);
-  assert.match(status, new RegExp(`RELEASE_BUILD|"${RELEASE_BUILD}"|Build ${RELEASE_BUILD}`));
+  assert.doesNotMatch(status, new RegExp(`Next candidate: Build ${RELEASE_BUILD}\\b`));
+  assert.match(status, new RegExp(`Live production is Build ${RELEASE_BUILD}, revision \`[0-9a-f]{40}\``));
   for (const experience of EXPERIENCE_CATALOG) {
     assert.equal(status.includes(`\`${experience.id}\``), true,
       `${experience.id} needs a row in docs/STATUS.md`);

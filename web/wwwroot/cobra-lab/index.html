@@ -8,7 +8,7 @@
   <base href="/">
   <title>Guns Only · Hold the Bridge</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/cobra-lab/styles.css?v=350">
+  <link rel="stylesheet" href="/cobra-lab/styles.css?v=351">
 </head>
 <body data-shell="play" data-brief="true">
   <a class="skip-link" href="#scene">Skip to flight</a>
@@ -26,7 +26,7 @@
     <div class="objective-hud" id="objective-hud" aria-label="Mission objective">
       <div class="objective-copy">
         <span id="objective-line">TIP CONTROL FRIENDLY · HOLD 45s</span>
-        <span id="objective-detail">W collective up · S down · Tab target · hold F gunner</span>
+        <span id="objective-detail">W collective up · S down · Tab / LB target · hold F / RB gunner</span>
       </div>
       <!-- The mission is decided by points held and tickets, so those are the two tracks.
            Ids are unchanged: #balance-fill / #hold-fill are queried by main.js and pinned by
@@ -100,7 +100,7 @@
            render/cobra/cobra_tactical_map_draw.js from the authority snapshot's ground_war. -->
       <canvas id="minimap" aria-hidden="true"></canvas>
       <canvas id="tactical-map" aria-hidden="true" hidden></canvas>
-      <p class="device-advisory device-advisory--play" role="status">Keyboard for combat · landscape</p>
+      <p class="device-advisory device-advisory--play" role="status">Keyboard or gamepad · landscape</p>
       <div class="legend" aria-hidden="true">
         <span><i class="friendly-key"></i> friendly</span>
         <span><i class="hostile-key"></i> hostile</span>
@@ -116,20 +116,20 @@
           </div>
           <h1 id="mission-brief-title">Hold the Bridge</h1>
           <p id="mission-brief-summary" class="mission-summary">Take three of four points, drain hostile tickets, then land at Camp Ember. At 10:00, points decide; tickets break ties. A tie loses.</p>
-          <p class="device-advisory device-advisory--brief">Keyboard required for combat.</p>
+          <p class="device-advisory device-advisory--brief">Keyboard or gamepad for combat.</p>
           <dl class="mission-brief-facts" aria-label="Sortie assignment">
             <div><dt>Aircraft</dt><dd>AH-1G Cobra</dd></div>
             <div><dt>Score</dt><dd>10:00 · points, then tickets</dd></div>
-            <div><dt>Crew contract</dt><dd>Tip gun · hold F</dd></div>
+            <div><dt>Crew contract</dt><dd>Tip gun · hold F / RB</dd></div>
           </dl>
           <dl class="mission-brief-controls mission-brief-controls--desktop" aria-label="Essential keyboard controls">
             <div><dt>Fly</dt><dd>W / S collective · arrows cyclic · A / D pedals</dd></div>
-            <div><dt>Fight</dt><dd>Tab selects · hold F engages</dd></div>
+            <div><dt>Fight</dt><dd>Tab / LB selects · hold F / RB engages</dd></div>
             <div><dt>Reference</dt><dd>M map · H full controls · Esc pause</dd></div>
           </dl>
           <dl class="mission-brief-controls mission-brief-controls--touch" aria-label="Essential physical controls">
-            <div><dt>Keyboard</dt><dd>Required for combat · no touch controls</dd></div>
-            <div><dt>Gamepad</dt><dd>Flight controls only</dd></div>
+            <div><dt>Keyboard</dt><dd>Tab / F for combat · no touch controls</dd></div>
+            <div><dt>Gamepad</dt><dd>LB target · hold RB gunner</dd></div>
             <div><dt>Reference</dt><dd>H full controls · Esc pause</dd></div>
           </dl>
           <ol class="mission-flow" aria-label="Mission phases">
@@ -208,7 +208,7 @@
       if (earlyBrief) earlyBrief.hidden = !showEarlyBrief;
       document.body.dataset.brief = String(showEarlyBrief);
 
-      const releaseBuild = new URL("../service-worker.js?v=350", location.href)
+      const releaseBuild = new URL("../service-worker.js?v=351", location.href)
         .searchParams.get("v");
       const controller = navigator.serviceWorker?.controller;
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
@@ -236,7 +236,7 @@
       await globalThis.__gunsPrebootReady;
       await new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        script.src = "/_framework/blazor.webassembly.js?v=350";
+        script.src = "/_framework/blazor.webassembly.js?v=351";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load Cobra flight runtime.")), {
@@ -245,10 +245,10 @@
         document.head.append(script);
       });
       const { renderExperienceGate } = await import(
-        "/render/release/quarantine_gate.js?v=350"
+        "/render/release/quarantine_gate.js?v=351"
       );
       const access = renderExperienceGate({ experienceId: "cobra-lab" });
-      if (access.allowed) await import("/cobra-lab/main.js?v=350");
+      if (access.allowed) await import("/cobra-lab/main.js?v=351");
     } catch (error) {
       console.error(error);
       const status = document.querySelector("#status");

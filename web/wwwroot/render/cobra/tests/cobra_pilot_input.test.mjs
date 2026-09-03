@@ -9,9 +9,12 @@ import {
 } from "../cobra_control_profile.js";
 import {
   COBRA_GROUNDED_COLLECTIVE,
+  COBRA_GAMEPAD_CYCLE_TARGET_BUTTON,
+  COBRA_GAMEPAD_FIRE_BUTTON,
   advanceCobraPilotControls,
   cobraCyclicCommand,
   cobraAnalogControlAxes,
+  cobraGamepadCombatState,
   createCobraGroundedPilotControlState,
   createCobraPilotControlState,
   releaseCobraPilotControls,
@@ -255,12 +258,57 @@ test("opposed digital inputs cancel before the slew integrator runs", () => {
   assert.equal(after.yaw, 0);
 });
 
+test("gamepad bumpers own targeting and gunner consent without stealing collective triggers", () => {
+  assert.equal(COBRA_GAMEPAD_CYCLE_TARGET_BUTTON, 4, "LB cycles the gunner mark");
+  assert.equal(COBRA_GAMEPAD_FIRE_BUTTON, 5, "RB holds gunner consent");
+  assert.notEqual(COBRA_GAMEPAD_FIRE_BUTTON, 7,
+    "RT remains collective; combat cannot steal the lever");
+
+  function pad({ lb = 0, rb = 0, lt = 0, rt = 0 } = {}) {
+    return {
+      connected: true,
+      buttons: {
+        4: { pressed: lb > 0.5, value: lb },
+        5: { pressed: rb > 0.5, value: rb },
+        6: { pressed: lt > 0.5, value: lt },
+        7: { pressed: rt > 0.5, value: rt },
+      },
+    };
+  }
+
+  assert.deepEqual(cobraGamepadCombatState(null), {
+    fire: false,
+    cycleTarget: false,
+    cycleTargetPressed: false,
+  });
+  const firing = cobraGamepadCombatState(pad({ rb: 1, rt: 1 }));
+  assert.equal(firing.fire, true);
+  assert.equal(firing.cycleTargetPressed, false);
+  const firstCycle = cobraGamepadCombatState(pad({ lb: 1 }));
+  assert.equal(firstCycle.cycleTargetPressed, true);
+  const heldCycle = cobraGamepadCombatState(pad({ lb: 1 }), firstCycle);
+  assert.equal(heldCycle.cycleTargetPressed, false,
+    "a held bumper must not spin through every mark");
+  const released = cobraGamepadCombatState(pad({ lb: 0 }), heldCycle);
+  assert.equal(released.cycleTargetPressed, false);
+  const secondCycle = cobraGamepadCombatState(pad({ lb: 1 }), released);
+  assert.equal(secondCycle.cycleTargetPressed, true);
+});
+
 test("Hold the Bridge consumes the production pilot input module", async () => {
   const main = await readFile(new URL("../../../cobra-lab/main.js", import.meta.url), "utf8");
   assert.match(main, /cobra_pilot_input\.js/);
   assert.match(main, /advanceCobraPilotControls/);
   assert.match(main, /releaseCobraPilotControls/);
-  assert.match(main, /cobraKeyboardControlIntent/);
+  assert.match(main, /cobraGamepadCombatState/);
+  assert.match(main, /combatState\.fire/);
+  assert.match(main, /combatState\.cycleTargetPressed/);
+  assert.match(main, /cycleHostileTarget\(\)/);
+  assert.doesNotMatch(
+    main,
+    /SetEngagementConsent\(!turnaroundLocksControls\s*\n\s*&& keys\.has\(cobraControlProfile\.fire\.code\)\)/,
+    "gunner consent must accept the gamepad bumper, not only KeyF",
+  );
   assert.doesNotMatch(
     main,
     /keys\.has\("KeyS"\) \? 1 : keys\.has\("KeyW"\) \? -1/,

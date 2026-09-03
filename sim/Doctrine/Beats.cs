@@ -480,7 +480,10 @@ public sealed record ContinuousCombatConfig(
     /// formations at all; the director decides how many WITHIN that ceiling, on the same evidence
     /// it uses for tier and airframe. A fixture that wants to exercise the replacement contract
     /// rather than formation behaviour sets this to 1.
-    int MaximumFormationSize = 2);
+    int MaximumFormationSize = 2,
+    /// 0 means the gym never ends. A positive cap is the last engagement the director may
+    /// stage: splash it and the sortie hands you to recovery instead of another merge.
+    int MaximumEngagements = 0);
 
 public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit, IExecutionLaw Law,
     List<(double T, PilotCommand Cmd)> BanditTimeline,
@@ -1579,16 +1582,16 @@ public static class Beats {
                     landingHeadingRad: Math.PI / 2.0,
                     lengthM: 3_000.0,
                     widthM: 45.0)),
-            // The opening neutral-merge dogfight is engagement 1: a gentle Novice warm-up under the
-            // interim ForEngagement ramp (1 Novice, 2 Competent, 3 Veteran, 4+ Ace). Continuous
-            // successors escalate via ForEngagement at CreateNextBandit.
+            // The opening fight is Ace (ForEngagement is the ceiling from engagement 1). Continuous
+            // successors stay on that same function at CreateNextBandit; easing is the director's
+            // job on evidence, not a scripted Novice→Ace ramp.
             BanditSkill: BanditSkillProfile.ForEngagement(1));
     }
 
     /// <summary>
-    /// First-visit on-ramp onto the guns-only gauntlet: Kestrel Gorge, pop-out onto a parked
-    /// opening pair, two AIM-9s on Fire, then the same Fire button is guns. Beat 7 stays the
-    /// high merge with no heaters.
+    /// First-visit Kestrel Gorge: a finite first sortie. Pop-out onto a parked opening pair,
+    /// two AIM-9s on Fire, then guns. Splashing the pair ends the fight and hands the aircraft
+    /// to recovery. Returning visits keep beat 7's endless gym.
     /// </summary>
     public static BeatSetup ModernVisualMergeFirstRun() {
         BeatSetup merge = ModernVisualMerge();
@@ -1630,10 +1633,9 @@ public static class Beats {
     }
 
     /// <summary>
-    /// TOP GUN ACM — Tomcat vs MiG-28 (F-5E-class fiction) visual merge. Successive opponents keep
-    /// the range alive until the pilot knocks it off, at which point relief takes the fight and a
-    /// moving angled-deck carrier plus conformal approach gates provide a complete RTB objective.
-    /// Seat selects ownship; opponent is the other jet.
+    /// TOP GUN ACM — Tomcat vs MiG-28 (F-5E-class fiction) visual merge. Two Ace merges, then the
+    /// boat: the Case I pattern is the ending, not CONTINUE OR RECOVER forever. Knock-it-off still
+    /// hands a live fight to relief if the pilot leaves early.
     /// </summary>
     public static BeatSetup TopGunAcm(TopGunSeat playerSeat) {
         // 10,000 ft co-altitude staging — same band as ModernVisualMerge, suitable for guns ACM.
@@ -1718,7 +1720,8 @@ public static class Beats {
             BolterCompletesSortie: false,
             ContinuousCombat: new ContinuousCombatConfig(
                 ReplacementDelaySeconds: 3.5,
-                MaximumFormationSize: 1),
+                MaximumFormationSize: 1,
+                MaximumEngagements: 2),
             BanditSkill: PilotSkill.Ace,
             Environment: TopGunEnvironment.Contract,
             RecoveryPlan: new RecoveryPlan(

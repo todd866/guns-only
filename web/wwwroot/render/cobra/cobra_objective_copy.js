@@ -23,7 +23,7 @@
 import {
   cobraObjectiveSiteId,
   cobraSiteHasLivingGarrison,
-} from "./cobra_objective_site.js?v=350";
+} from "./cobra_objective_site.js?v=351";
 
 // Mirrors CobraGroundWarRuntime.StartingTickets, used ONLY as a floor for the "critically low"
 // threshold when the snapshot does not publish a start value. Kept as a floor rather than a
@@ -339,7 +339,7 @@ function legacyObjectiveCopy(war, options) {
     }
     return {
       line: `BRIDGE FALLING · ${defeatPct}%`,
-      detail: "Tab target · hold F",
+      detail: "Tab / LB · hold F / RB",
     };
   }
 
@@ -352,7 +352,7 @@ function legacyObjectiveCopy(war, options) {
     }
     return {
       line: "HOSTILES GAINING · ENGAGE",
-      detail: "Tab target · hold F",
+      detail: "Tab / LB · hold F / RB",
     };
   }
 
@@ -382,7 +382,7 @@ function legacyObjectiveCopy(war, options) {
   if (playerHasInteracted) {
     return {
       line: "TIP CONTROL FRIENDLY · HOLD 45s",
-      detail: "Tab target · hold F",
+      detail: "Tab / LB · hold F / RB",
     };
   }
 
@@ -390,7 +390,7 @@ function legacyObjectiveCopy(war, options) {
     line: "TIP CONTROL FRIENDLY · HOLD 45s",
     // Owner ruling 2026-08-05: collective follows game convention — W raises, S lowers
     // (the Builds 253-264 real-lever mapping with S=pull is overruled).
-    detail: "W up / S down · Tab target · hold F",
+    detail: "W up / S down · Tab / LB · hold F / RB",
   };
 }
 

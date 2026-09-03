@@ -37,13 +37,15 @@ test("play opens on a deliberate mission brief before authority time can move", 
     "the brief must disclose the authority clock and tie-break without a rules essay");
   assert.match(html, /<dt>Score<\/dt><dd>10:00 · points, then tickets<\/dd>/u);
   assert.match(html,
-    /mission-brief-controls mission-brief-controls--desktop[\s\S]*W \/ S collective · arrows cyclic · A \/ D pedals[\s\S]*Tab selects · hold F engages[\s\S]*M map · H full controls · Esc pause/u,
-    "the flight brief must teach enough keyboard controls to launch without a second modal");
+    /mission-brief-controls mission-brief-controls--desktop[\s\S]*W \/ S collective · arrows cyclic · A \/ D pedals[\s\S]*Tab \/ LB selects · hold F \/ RB engages[\s\S]*M map · H full controls · Esc pause/u,
+    "the flight brief must teach enough keyboard and gamepad combat controls to launch without a second modal");
   assert.match(html,
-    /mission-brief-controls mission-brief-controls--touch[\s\S]*Required for combat · no touch controls[\s\S]*Flight controls only[\s\S]*H full controls · Esc pause/u,
+    /mission-brief-controls mission-brief-controls--touch[\s\S]*Tab \/ F for combat · no touch controls[\s\S]*LB target · hold RB gunner[\s\S]*H full controls · Esc pause/u,
     "touch presentation must remain honest about the required physical controls");
-  assert.doesNotMatch(html, /trigger consents/iu,
-    "the brief must not claim gamepad combat controls that do not exist");
+  assert.match(html, /LB target · hold RB gunner/u,
+    "the brief must teach the bumper combat mapping that actually exists");
+  assert.doesNotMatch(html, /Flight controls only/u,
+    "the brief must not claim the pad cannot fight");
   assert.match(main, /function showMissionBrief\(\)[\s\S]*missionBriefOpen = true[\s\S]*setCobraMissionBackgroundInert\(true\)/u);
   const startFromBrief = main.match(/function startMissionFromBrief\(\) \{[\s\S]*?\n\}/u)?.[0] ?? "";
   assert.match(startFromBrief,
@@ -157,8 +159,8 @@ test("compact touch presentation is explicit about its input and orientation lim
   ]);
 
   assert.match(main, /const TOUCH_PRESENTATION = detectTouchEnvironment\(window\)/u);
-  assert.match(html, /device-advisory--brief[^>]*>Keyboard required for combat\./u);
-  assert.match(html, /device-advisory--play[^>]*>Keyboard for combat · landscape/u);
+  assert.match(html, /device-advisory--brief[^>]*>Keyboard or gamepad for combat\./u);
+  assert.match(html, /device-advisory--play[^>]*>Keyboard or gamepad · landscape/u);
   assert.match(styles,
     /@media \(max-width: 620px\) and \(orientation: portrait\)[\s\S]*body\[data-input="touch"\] #minimap \{ display: none; \}/u);
   assert.match(styles, /@media \(max-height: 520px\)[\s\S]*max-height: calc\(100dvh - 20px\)/u);

@@ -20,8 +20,8 @@ The production catalogue exposes six accepted experiences, split into military a
   war, work the AI gunner, rearm at Camp Ember, and hold Iron Bell.
 - **Weekend Ride:** take the YZF-R1 around the Rapier-strip circuit with authored motorcycle
   dynamics, rider assists, lap timing, and a helmet HUD.
-- **Top Gun:** fly the F-14A in an escalating ACM fight with guns and two Sidewinders, then recover
-  conventionally to the carrier in the anime-1986 presentation.
+- **Top Gun:** fly the F-14A against two MiG-28s with guns and two Sidewinders, then recover
+  aboard the carrier in the anime-1986 presentation.
 - **Okanagan Fire Boss:** take an AT-802F from Kelowna to Okanagan Lake for water circuits, a solo
   initial attack, or a coordinated large-force extension with Air Attack and helicopter traffic.
 

@@ -889,7 +889,8 @@ public sealed class SimulationSession {
         && (LiveOpponentCount > 0
             || OpponentReplacementPending
             || (TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)
-                && _beat.RecoveryPlan is not null));
+                && _beat.RecoveryPlan is not null)
+            || (_beat.FirstRunValley is not null && _beat.RecoveryPlan is not null));
     /// Latched from the accepted rising edge through recovery.
     public bool CombatHandoffRequested =>
         _combatHandoffPhase >= CombatHandoffPhase.Requested;
@@ -1483,9 +1484,9 @@ public sealed class SimulationSession {
 
         _returnToBaseReason = reason;
         _combatHandoffPhase = CombatHandoffPhase.Requested;
-        bool topGunArenaAlreadyClear =
-            TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)
-            && LiveOpponentCount == 0;
+        bool finiteArenaAlreadyClear = LiveOpponentCount == 0
+            && (TopGunFightRuntime.IsTopGunMission(_beat.MissionIdentity.Id)
+                || _beat.FirstRunValley is not null);
         // Successor suppression is authoritative on the input edge, before another fixed tick can
         // observe an expired replacement timer.
         _nextOpponentSpawnAtMs = double.NegativeInfinity;
@@ -1502,9 +1503,13 @@ public sealed class SimulationSession {
         _padlockRollAssist.Reset();
         ClearFormationCoordination();
         CompleteInterruptedEngagementForHandoff();
-        if (topGunArenaAlreadyClear) {
+        if (finiteArenaAlreadyClear) {
             _combatHandoffPhase = CombatHandoffPhase.PlayerRtb;
-            ShowTransition("KNOCK IT OFF · RTB CARRIER", 2800.0);
+            ShowTransition(_beat.FirstRunValley is not null
+                ? "PAIR DOWN · FLY THE HOME CORRIDOR"
+                : ReplacementBudgetExhausted
+                    ? "FIGHT COMPLETE · RTB CARRIER"
+                    : "KNOCK IT OFF · RTB CARRIER", 2800.0);
             return true;
         }
         bool reliefRequired = LiveOpponentCount > 0 || OpponentReplacementPending;
@@ -2612,6 +2617,9 @@ public sealed class SimulationSession {
             || _playerTerminalState != AircraftTerminalState.Flying)
             return;
         if (!_firstRunValleyRuntime.ObservePlayer(_player.State)) return;
+        _bandit.EndPresentation();
+        foreach (Wingman wingman in _wingmen)
+            wingman.Bandit.EndPresentation();
         if (_firstRunValleyRuntime.ConsumePopOutAnnouncement())
             ShowTransition("WEAPONS HOT · FOX TWO", 2200.0);
     }
@@ -3230,6 +3238,7 @@ public sealed class SimulationSession {
         // A sortie staged exactly at Bingo must safe the fight before this tick's weapon/AI
         // decisions. The second check after StepCore catches an in-tick fuel crossing.
         MaybeRequestBingoRtb();
+        MaybeRequestFirstRunRecovery();
         ConfigureAdaptiveAiPlanning();
         // Formation radio traffic is sampled and delivered at the beginning-of-tick boundary.
         // Decision traces therefore capture the exact held assignment that can affect this tick,
@@ -5754,10 +5763,16 @@ public sealed class SimulationSession {
             ClearFormationCoordination();
         } else if (target == CombatRole.Opponent) {
             if (_opponentTerminalState != AircraftTerminalState.Flying) return;
-            bool replacementExpected = !CombatHandoffRequested
-                && (_beat.ContinuousCombat is not null
-                    || _wingmen.Any(static wingman => wingman.StillFighting))
+            bool formationSurvivorRemains =
+                _wingmen.Any(static wingman => wingman.StillFighting);
+            // Kestrel is a finite first sortie: the mouth pair is the job. A replacement wave
+            // here is how live 350 turned "guns / RTB" into the endless gym.
+            bool nextWaveExpected = !CombatHandoffRequested
+                && _beat.ContinuousCombat is not null
+                && !ReplacementBudgetExhausted
+                && !formationSurvivorRemains
                 && _playerTerminalState == AircraftTerminalState.Flying;
+            bool replacementExpected = formationSurvivorRemains || nextWaveExpected;
             BeginTerminalClock(
                 clearHeldInput: !replacementExpected && !CombatHandoffRequested);
             _opponentTerminalState = AircraftTerminalState.DestroyedAirborne;
@@ -5781,7 +5796,27 @@ public sealed class SimulationSession {
             && promoteFormationSurvivor
             && _playerTerminalState == AircraftTerminalState.Flying)
             TryPromoteWingmanToPrimary();
+        if (target == CombatRole.Opponent)
+            MaybeRequestFirstRunRecovery();
     }
+
+    /// The Ready card already sells valley → heaters → guns → RTB. Once the mouth pair is down
+    /// the first sortie is over; waiting for the pilot to discover O is how it became a gym.
+    /// Top Gun uses the same latch after its last billed engagement.
+    void MaybeRequestFirstRunRecovery() {
+        if (CombatHandoffRequested
+            || _playerTerminalState != AircraftTerminalState.Flying
+            || LiveOpponentCount > 0)
+            return;
+        if (_beat.FirstRunValley is null && !ReplacementBudgetExhausted)
+            return;
+        TryRequestReturnToBase(MissionRtbReason.PilotKnockItOff);
+    }
+
+    bool ReplacementBudgetExhausted =>
+        _beat.FirstRunValley is not null
+        || (_beat.ContinuousCombat is { MaximumEngagements: > 0 } combat
+            && _engagementNumber >= combat.MaximumEngagements);
 
     void ObserveDroneRaidTarget(double completedTimeSeconds) {
         DroneRaidEvaluation? evaluation = _droneRaidEvaluation;
@@ -6181,6 +6216,12 @@ public sealed class SimulationSession {
             && _playerTerminalState == AircraftTerminalState.Flying
             && _opponentTerminalState != AircraftTerminalState.Flying)
             return false;
+        // Kestrel's mouth pair is the job, not a combat terminal. Keep the surviving aircraft
+        // flyable through RTB; the runway model owns the finish.
+        if (_beat.FirstRunValley is not null
+            && _playerTerminalState == AircraftTerminalState.Flying
+            && _opponentTerminalState != AircraftTerminalState.Flying)
+            return false;
         // A finite carrier-day route is itself the mission contract. No combat outcome may author
         // victory while ownship is still returning: only the physical stopped trap or explicit
         // straight-deck barrier path may finish the card. A later ownship loss still resolves
@@ -6239,7 +6280,9 @@ public sealed class SimulationSession {
                 return true;
             }
         }
-        if (_beat.ContinuousCombat is null) {
+        if (_beat.ContinuousCombat is null
+            || _beat.FirstRunValley is not null
+            || ReplacementBudgetExhausted) {
             _nextOpponentSpawnAtMs = double.NegativeInfinity;
             return false;
         }
@@ -7824,11 +7867,13 @@ public sealed class SimulationSession {
         // physically stopped and vulnerable on the runway while the combat session remains live.
         if (!CompletePlayerRecovery()) return;
 
-        // A guns-only handoff is a deliberate discontinue, not a combat victory. The relief's
-        // result remains separately attributed; the player's own mission ends only after physical
-        // recovery and with the live fuel quantity still available to the debrief.
-        _pendingOutcome = SortieOutcome.Discontinued;
-        _outcome = SortieOutcome.Discontinued;
+        // A guns-only gym handoff is a deliberate discontinue. The Kestrel first sortie is a
+        // finite job: splash the pair and recover, which is victory, not knocking it off.
+        SortieOutcome recovered = _beat.FirstRunValley is not null && _killCount >= 2
+            ? SortieOutcome.Victory
+            : SortieOutcome.Discontinued;
+        _pendingOutcome = recovered;
+        _outcome = recovered;
         EmitEvent(
             SessionEventType.SortieFinished,
             CombatRole.None,

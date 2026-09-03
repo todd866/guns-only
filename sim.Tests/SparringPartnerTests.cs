@@ -55,6 +55,24 @@ public class SparringPartnerTests {
     }
 
     [Fact]
+    public void HangingInsideTheFightWithoutAGunSolutionStillGraduatesThePartner() {
+        // Visitors find the bandit and never hold the 12-degree gun funnel, so a purely
+        // tracking-gated present lasted the whole sortie and the Ace never fired. Four seconds
+        // inside 1.5 km is "you are in the fight"; the pair must turn, gun hold or not.
+        var bandit = SparringPartner();
+        // HoldingAGunPosition uses 3 s against a 2 s hold for the same reason: 120 Hz
+        // accumulation of 1/120 undershoots the integer second (480 ticks → 3.999… < 4).
+        int ticks = (int)((ReactiveBandit.PresentProximitySeconds + 0.25) * AircraftSim.TickHz);
+        for (int i = 0; i < ticks; i++) {
+            // Abeam, co-speed: range stays ~1.2 km while the player's nose is 90 deg off the
+            // bandit, so the tracking gate never fires and only proximity can graduate.
+            var player = State(1200.0, 1000.0, bandit.State.Position.Z, 180.0);
+            bandit.Step(player, Dt);
+        }
+        Assert.False(bandit.Presenting);
+    }
+
+    [Fact]
     public void BriefTrackingIsNotEnough() {
         var bandit = SparringPartner();
         var close = PlayerAstern(500.0);
