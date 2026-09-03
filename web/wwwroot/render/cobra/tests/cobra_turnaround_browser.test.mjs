@@ -59,7 +59,7 @@ test("production page transports action, locks controls and safes weapons during
   assert.match(main, /if \(sortieReadiness\.ready && !turnaroundLocksControls\)/,
     "browser levers may not integrate while authority says the aircraft is being serviced");
   assert.match(main,
-    /bridge\.SetEngagementConsent\(!turnaroundLocksControls[\s\S]{0,120}?keys\.has\(cobraControlProfile\.fire\.code\)\)/,
+    /bridge\.SetEngagementConsent\(!turnaroundLocksControls[\s\S]{0,200}?\(keys\.has\(cobraControlProfile\.fire\.code\) \|\| combatState\.fire\)\)/,
     "the gunner must fail safe throughout shutdown, transfer and startup");
   assert.match(main, /bridge\?\.SetTurnaroundAction\(false\)/,
     "restart/focus-loss paths must release a stuck procedure action");
