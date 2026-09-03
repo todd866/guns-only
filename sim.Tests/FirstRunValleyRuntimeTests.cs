@@ -81,6 +81,32 @@ public sealed class FirstRunValleySessionTests {
     }
 
     [Fact]
+    public void ValleyPairPresentsUntilThePopOutGate() {
+        var session = Stage(Beats.ModernVisualMergeFirstRun());
+        Assert.True(session.FirstRunWeaponsCold);
+        Assert.True(session.Bandit.Presenting);
+        Assert.True(session.Wingmen[0].Bandit.Presenting);
+    }
+
+    [Fact]
+    public void PopOutEndsTheCooperativePresentSoThePairCanFight() {
+        BeatSetup armed = Beats.ModernVisualMergeFirstRun();
+        armed = armed with {
+            Player = armed.Player with {
+                Position = armed.Player.Position with {
+                    Z = FirstRunValleyRuntime.PopOutNorthM + 10.0
+                }
+            }
+        };
+        var session = Stage(armed);
+        session.StepFixed();
+        Assert.False(session.FirstRunWeaponsCold);
+        Assert.False(session.Bandit.Presenting,
+            "weapons-hot still left the mouth pair presenting, so they would not fire");
+        Assert.False(session.Wingmen[0].Bandit.Presenting);
+    }
+
+    [Fact]
     public void ValleyHoldsFireAndParksTheOpeningPair() {
         var session = Stage(Beats.ModernVisualMergeFirstRun());
         Vec3D banditAtStart = session.Bandit.State.Position;
@@ -129,6 +155,49 @@ public sealed class FirstRunValleySessionTests {
         session.StepFixed(12);
         session.FeedKey(GKey.Trigger, false);
         Assert.True(session.PlayerGun.RoundsFired > roundsBeforeGuns);
+    }
+
+    static void SplashTheMouthPair(SimulationSession session) {
+        Assert.Equal(2, session.LiveOpponentCount);
+        session.ForceOpponentDefeatForTest();
+        Assert.Equal(1, session.LiveOpponentCount);
+        session.ForceOpponentDefeatForTest();
+        Assert.Equal(0, session.LiveOpponentCount);
+    }
+
+    [Fact]
+    public void SplashingTheMouthPairDoesNotStageAReplacementWave() {
+        // The Ready card already sells a finite first sortie (valley → heaters → guns / RTB).
+        // Live 350 then stages the endless gauntlet anyway, so the opening never ends.
+        var session = Stage(Beats.ModernVisualMergeFirstRun());
+        SplashTheMouthPair(session);
+        long spawnAfterPair = session.BanditSpawnSequence;
+        session.StepFixed((int)(5.0 * AircraftSim.TickHz));
+        Assert.Equal(spawnAfterPair, session.BanditSpawnSequence);
+        Assert.Equal(1, session.EngagementNumber);
+        Assert.Equal(0, session.LiveOpponentCount);
+        Assert.False(session.OpponentReplacementPending);
+        Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
+    }
+
+    [Fact]
+    public void SplashingTheMouthPairHandsTheSortieToRecovery() {
+        var session = Stage(Beats.ModernVisualMergeFirstRun());
+        SplashTheMouthPair(session);
+        session.StepFixed();
+        Assert.True(session.PlayerRtbActive,
+            "the first sortie must send you home after the mouth pair, not wait for O");
+        Assert.Equal(CombatHandoffPhase.PlayerRtb, session.CombatHandoffPhase);
+        Assert.Equal(AircraftTerminalState.Flying, session.PlayerTerminalState);
+        Assert.Equal(SimulationSession.LifecycleState.Active, session.Lifecycle);
+    }
+
+    [Fact]
+    public void ReturningGunsOnlyStillStagesTheNextMergeAfterThePair() {
+        var session = Stage(Beats.ModernVisualMerge());
+        SplashTheMouthPair(session);
+        Assert.True(session.OpponentReplacementPending);
+        Assert.False(session.PlayerRtbActive);
     }
 
     [Fact]

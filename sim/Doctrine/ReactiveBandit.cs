@@ -710,12 +710,18 @@ public sealed class ReactiveBandit :
     /// the bandit's own gun with WalkoverSolutionSecondsConceded = 0.75; this is the player-side
     /// equivalent with margin. It is the primary tuning knob for the whole introduction.
     public const double PresentHoldSeconds = 2.0;
+    /// Visitors often find the bandit and never hold the 12-degree gun funnel, so a purely
+    /// tracking-gated present lasted the whole sortie and the Ace never fired. Four seconds
+    /// inside this range is "you are in the fight"; the pair turns even without a gun solution.
+    public const double PresentProximitySeconds = 4.0;
     const double PresentFunnelRangeM = 900.0;      // gun_funnel.js EFFECTIVE_CEILING_M
     const double PresentFunnelAngleRad = 0.2094;   // 12 deg, matching CameraSolver.GunWindow
+    const double PresentProximityRangeM = 1500.0;
 
     /// True while this bandit is deliberately setting the player up rather than fighting them.
     public bool Presenting { get; private set; }
     double _presentHeldSeconds;
+    double _presentProximitySeconds;
     public PilotCommand LastCommand { get; private set; } = new(1.0, 0.0, 0.85, 0.0);
     public PilotCommand AppliedCommand => LastCommand;
     public BanditDecisionTrace DecisionTrace { get; private set; }
@@ -1856,7 +1862,13 @@ public sealed class ReactiveBandit :
         double angleOff = Geometry.AngleOff(player, State);
         bool tracking = range <= PresentFunnelRangeM && angleOff <= PresentFunnelAngleRad;
         _presentHeldSeconds = tracking ? _presentHeldSeconds + dt : 0.0;
-        if (_presentHeldSeconds >= PresentHoldSeconds) Presenting = false;
+        if (_presentHeldSeconds >= PresentHoldSeconds) {
+            Presenting = false;
+            return;
+        }
+        bool near = range <= PresentProximityRangeM;
+        _presentProximitySeconds = near ? _presentProximitySeconds + dt : 0.0;
+        if (_presentProximitySeconds >= PresentProximitySeconds) Presenting = false;
     }
 
     /// A shallow, constant, predictable turn the newcomer can join up on. It does not react to the

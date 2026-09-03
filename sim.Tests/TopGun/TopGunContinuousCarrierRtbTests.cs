@@ -131,6 +131,28 @@ public sealed class TopGunContinuousCarrierRtbTests
     }
 
     [Fact]
+    public void TwoSplashesEndTheFightAndSendYouToTheBoat()
+    {
+        // The brief sells a 1986 ACM sortie. Live 350 then offers CONTINUE OR RECOVER forever.
+        // Two kills is the job; the boat is the ending.
+        SimulationSession session = Start();
+        session.ForceOpponentDefeatForTest();
+        long firstSequence = session.BanditSpawnSequence;
+        for (int tick = 0; tick < 5 * (int)AircraftSim.TickHz
+            && session.BanditSpawnSequence == firstSequence; tick++)
+            session.StepFixed();
+        Assert.Equal(2, session.EngagementNumber);
+
+        session.ForceOpponentDefeatForTest();
+        session.StepFixed();
+        Assert.False(session.OpponentReplacementPending);
+        Assert.True(session.PlayerRtbActive,
+            "the second splash must send you to the boat, not stage a third jet");
+        Assert.Equal(CombatHandoffPhase.PlayerRtb, session.CombatHandoffPhase);
+        Assert.Equal(2, session.EngagementNumber);
+    }
+
+    [Fact]
     public void KnockItOffAfterSplashSelectsCarrierRtbAndBuildsSkyway()
     {
         SimulationSession session = Start();
