@@ -130,6 +130,29 @@ function buttonValue(gamepad, index) {
   return finiteUnit(typeof button === "number" ? button : button?.value, 0, 1);
 }
 
+function buttonHeld(gamepad, index) {
+  if (!gamepad || gamepad.connected === false) return false;
+  const button = gamepad.buttons?.[index];
+  if (typeof button === "number") return button > 0.5;
+  return button?.pressed === true || Number(button?.value) > 0.5;
+}
+
+/**
+ * Standard mapping: LB cycles the gunner mark, RB holds gunner consent. Triggers stay collective.
+ * A held bumper must not spin through every mark — only the rising edge cycles.
+ */
+export const COBRA_GAMEPAD_CYCLE_TARGET_BUTTON = 4;
+export const COBRA_GAMEPAD_FIRE_BUTTON = 5;
+
+export function cobraGamepadCombatState(gamepad, previous = null) {
+  const cycleTarget = buttonHeld(gamepad, COBRA_GAMEPAD_CYCLE_TARGET_BUTTON);
+  return Object.freeze({
+    fire: buttonHeld(gamepad, COBRA_GAMEPAD_FIRE_BUTTON),
+    cycleTarget,
+    cycleTargetPressed: cycleTarget && previous?.cycleTarget !== true,
+  });
+}
+
 /**
  * Standard-mapping gamepad projection for the Cobra: left stick cyclic, right-stick X pedals,
  * right trigger pulls collective and left trigger pushes it. Missing pads fail neutral.

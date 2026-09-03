@@ -38,9 +38,9 @@ export const COBRA_ONBOARDING_CONTENT = Object.freeze({
     Object.freeze({
       label: "FIGHT",
       rows: Object.freeze([
-        Object.freeze(["Tab", "Cycle hostile target"]),
+        Object.freeze(["Tab / LB", "Cycle hostile target"]),
         Object.freeze(["V", "Padlock on / off the selected mark"]),
-        Object.freeze(["hold F", "Gunner engages the cued target"]),
+        Object.freeze(["hold F / RB", "Gunner engages the cued target"]),
       ]),
     }),
     Object.freeze({
@@ -49,7 +49,7 @@ export const COBRA_ONBOARDING_CONTENT = Object.freeze({
         Object.freeze(["E", "Shut down a damaged bird · start the spare"]),
         Object.freeze(["R", "Restart after the debrief"]),
         Object.freeze(["Esc", "Pause · resume from the mission menu"]),
-        Object.freeze(["Gamepad", "Flight controls only"]),
+        Object.freeze(["Gamepad", "LB target · hold RB gunner"]),
       ]),
     }),
   ]),
@@ -57,8 +57,8 @@ export const COBRA_ONBOARDING_CONTENT = Object.freeze({
     Object.freeze({
       label: "THIS MISSION",
       rows: Object.freeze([
-        Object.freeze(["Keyboard", "Required for combat"]),
-        Object.freeze(["Gamepad", "Flight controls only"]),
+        Object.freeze(["Keyboard", "Tab / F for combat"]),
+        Object.freeze(["Gamepad", "LB target · hold RB gunner"]),
       ]),
     }),
   ]),

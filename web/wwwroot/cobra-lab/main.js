@@ -57,6 +57,7 @@ import {
 import {
   advanceCobraPilotControls,
   cobraCyclicCommand,
+  cobraGamepadCombatState,
   cobraGamepadControlAxes,
   createCobraGroundedPilotControlState,
   createCobraPilotControlState,
@@ -659,6 +660,7 @@ sky.renderOrder = -1_000;
 scene.add(sky);
 
 const keys = new Set();
+let gamepadCombatPrevious = null;
 const forward = new THREE.Vector3();
 const right = new THREE.Vector3();
 const movement = new THREE.Vector3();
@@ -1601,6 +1603,8 @@ function updateManual(deltaSeconds) {
     const gamepad = Array.from(navigator.getGamepads?.() ?? []).find(Boolean);
     const keyboardIntent = cobraKeyboardControlIntent(keys, cobraControlProfile);
     const analogAxes = cobraGamepadControlAxes(gamepad);
+    const combatState = cobraGamepadCombatState(gamepad, gamepadCombatPrevious);
+    gamepadCombatPrevious = combatState;
     // A connected controller can continue reporting held buttons after the page loses focus.
     // Authority procedure holds count only while this cockpit owns focus, matching keyboard input.
     const turnaroundActionHeld = windowFocused
@@ -1646,9 +1650,17 @@ function updateManual(deltaSeconds) {
         pilotControls.yaw,
       );
       bridge.SetTurnaroundAction(turnaroundActionHeld);
+      if (windowFocused && combatState.cycleTargetPressed
+        && sortieReadiness.observeInput(true)) {
+        playerHasInteracted = true;
+        onboarding?.dismiss();
+        if (tourInput) tourInput.checked = false;
+        cycleHostileTarget();
+      }
       bridge.SetGunnerTarget(targetSelect.value || null);
       bridge.SetEngagementConsent(!turnaroundLocksControls
-        && keys.has(cobraControlProfile.fire.code));
+        && windowFocused
+        && (keys.has(cobraControlProfile.fire.code) || combatState.fire));
       // Rendering stays live at Ready, but authority time starts only after deliberate input.
       const simStartedAtMs = performance.now();
       if (sortieReadiness.advance(deltaSeconds, (step) => bridge.Advance(step))) {

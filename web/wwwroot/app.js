@@ -3587,7 +3587,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     sortie: "AH-1G · River Gorge conquest · ticket result · Camp Ember recovery",
     configuration: "AH-1G flight-foundation authority · four capture points · fortified gun pits · finite M134 · Camp Ember rearm and stable recovery",
     brief: "Four points hold the valley and you start with one. Each hostile point is locked by a fortified gun pit that friendly ground fire cannot break — destroy it, clear the remaining troops, then cover the friendly lift while it captures. Holding more points than the enemy bleeds their tickets to zero and decides the battle. Then return to Camp Ember and settle on the pad to close the sortie. Press M for the map.",
-    controls: "W/S collective · arrows cyclic · A/D yaw · Tab target · F gunner consent · M tactical map · Camp Ember pad to rearm and recover",
+    controls: "W/S collective · arrows cyclic · A/D yaw · Tab / LB target · F / RB gunner · M tactical map · Camp Ember pad to rearm and recover",
   }),
   "weekend-ride": Object.freeze({
     kicker: "Off duty · 10,000 ft runway",
@@ -3600,9 +3600,9 @@ const CAMPAIGN_BRIEFS = Object.freeze({
   "top-gun": Object.freeze({
     kicker: "1986 · training range",
     title: "Top Gun",
-    sortie: "F-14A vs MiG-28 · guns and Sidewinders · DACT arena",
+    sortie: "Two MiG-28s · guns and Sidewinders · Case I trap",
      configuration: "F-14A · M61 + AIM-9 · anime-1986 presentation · production programme",
-     brief: "Fly the Tomcat against MiG-28 aggressors over a Miramar-class training range—guns and heaters against an escalating stream. After a splash, stay for the next jet or choose RTB TO CARRIER, then fly the taught Case I pattern: initial, break, downwind, approach turn and groove.",
+     brief: "Two Ace merges against MiG-28 aggressors, then the boat. Guns and heaters, then the taught Case I pattern: initial, break, downwind, approach turn and groove. Knock it off early if you need the trap before the second jet.",
      controls: "Arrows fly · W/S power · F guns · R fox-two · V padlock · Tab target\nNavigation opens after a splash with the carrier RTB choice",
   }),
   "ace-duel": Object.freeze({
@@ -4924,8 +4924,8 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
     readyReplay.hidden = true;
     readyKicker.textContent = "Kestrel Gorge · guided first sortie";
     readyTitle.textContent = "Enter the valley";
-    readyBrief.textContent = "Stay low and follow the valley north. At the pop-out gate, Fire launches two heat-seeking missiles one at a time; once both missiles are away, the same control becomes the gun trigger.";
-    readySortie.textContent = "Follow valley → pop out → launch two heaters → guns / RTB";
+    readyBrief.textContent = "Stay low and follow the valley north. At the pop-out gate, Fire launches two heat-seeking missiles one at a time; once both are away, the same control becomes the gun. Splash the pair, then recover to the runway.";
+    readySortie.textContent = "Follow valley → pop out → two heaters → guns → splash the pair → recover";
     readyConfig.textContent = `F-22A · two AIM-9 surrogates · 480 gun rounds · ${fireBinding} changes with the mission`;
     if (readyControls) readyControls.textContent = mobileControls
       ? "LEFT STICK throttle/yaw · RIGHT STICK pitch/roll · FOX 2 launches missiles, then becomes GUNS\nThe objective strip always shows the next action"
