@@ -1,7 +1,7 @@
 # Current product and verification status
 
 Updated: 2026-09-04
-Production: Build 351, revision `d1b2c88d6edd0370f65a40edc745cce88e6b9736`.
+Production: Build 352, revision `b3cb52f56e0e054992a8a84940b289a138281304`.
 Next candidate: none queued.
 F-22 Guns Only remains an open-ended fight rather than a scored mission.
 Call It A Day or Bingo enters one typed, immediate ceasefire/RTB transition and publishes a
@@ -36,6 +36,11 @@ Splashing the mouth pair hands the first sortie to recovery instead of staging t
 returning Guns Only visits are unchanged. Top Gun ends after two splashes and sends you to the
 boat. Cobra combat works on a standard pad: LB cycles the mark, RB holds gunner consent, and the
 triggers stay collective. The player-AI tape still does not consume `lead_solution_valid`.
+
+Build 352 lets Fire Boss fly the billed sorties. Remaining procedure is a sky chevron chain,
+hopper and cue live on the HUD with joker kept above bingo, and the west-side column reads from
+the lake join. Water Circuits dumps on a marked lake target; Large Force holds for Air Attack
+before Division Alpha.
 
 Build 348 put the first sortie in Kestrel Gorge, a dedicated mountain
 cell with one authority-matched, collidable valley surface: steep asymmetric walls, a winding river
@@ -119,9 +124,10 @@ drop voices follow published water rates; and AIM-9 launch, radio-priority ducki
 safety-warning arbiter make the important event audible without relying on limiter overload.
 All candidate audio acceptance is silent (`?audioQa=silent`).
 
-Production: Build 351, revision `d1b2c88d6edd0370f65a40edc745cce88e6b9736`. Builds 343 (Soniachne first-visit on-ramp), 347 (shared
+Production: Build 352, revision `b3cb52f56e0e054992a8a84940b289a138281304`. Builds 343 (Soniachne first-visit on-ramp), 347 (shared
 player journey and Top Gun bolter retry), 349 (mission-AI suite honesty), 350
-(conventional F-22 recovery) and 351 (finite billed sorties, presenting Ace, Cobra pad combat)
+(conventional F-22 recovery), 351 (finite billed sorties, presenting Ace, Cobra pad combat)
+and 352 (Fire Boss sky chevrons, HUD hopper/cue, readable west-side fire)
 shipped after the 2026-08-24 pin; treat that date as historical.
 Builds 312 (Cobra
 contact envelope), 313 (Camp Ember firebase, ramp Cobras, bird swap), 315 (Weekend Ride lap
@@ -330,7 +336,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 | Cobra Canyon (`cobra-lab`, `/cobra-lab/`) | **production** | Standalone route | Hold the Bridge / Ember Run: AH-1G, sim-owned four-point conquest, objective-locking gun pit, tickets, M134 + Camp Ember rearm, Tab/F or LB/RB gunner, tactical maps and guided ingress. Builds 326-334 added grounded safety, ground fire/damage, turnaround, audio, corrected targeting, denser scenery and rebuilt Camp Ember. Build 347 closes the brief-to-RTB flow, battlefield readability and owner-reported load failure. The corrected hardware gate reaches Ready in 1.996 s, accepts input in 16.6 ms and runs at about 60 fps; a closed-loop production-input pilot checks active gates and advancing telemetry. Build 351 lets a standard-mapping pad cycle with LB and hold gunner consent on RB without stealing collective triggers. | Complete a human brief-to-RTB sortie; authored Long Fang/unit/structure art and insertion ETA remain open. |
 | Weekend Ride (`weekend-ride`, `/weekend-ride/`) | **production** | Aircraft picker + standalone route | YZF-R1 dynamics/powertrain/lean/load, lappable circuit from Build 264+. Build 267 adds ride telemetry (speed/gear/lean/lap/frame). Build 308 adds tiered shadows, sky-derived IBL, and horizon/far-plane corrections. Build 315 makes it a game: lap/last/best on the helmet HUD, four sector splits, a live delta to your best, an off-track lap refused as a record, and a best that persists across sessions. Builds 344-347 add the authored brief → ride → pause/end → result/replay loop and collapse the briefing sidebar after Start so the road owns the full canvas. | Owner ride on Build 347: is beating your own best worth trying for? Ghost bike deliberately cut from v1 |
 | Top Gun (`top-gun`) | **production** | Aircraft picker / main shell | Build 309 automation covers Tomcat AIM-9, MiG-28 boot and gun fire. Build 326 repairs the programme-selector launch stall and promotes the mission. The owner flew Builds 327 and 328 on 2026-08-14. Build 328 fixed the 13.8 G overshoot and added authoritative indicated AUTO/MAN sweep. Build 329 adds ceasefire/RTB authority, navigation-rate awareness, sweep-stop annunciation and removes the remaining G-driven sounds. Build 331 made the player F-14A-only with successive MiG-28s and Case I recovery. Build 347 keeps recovery active after a bolter and combines combat plus carrier-pass evidence in the debrief. Build 351 ends the fight after two splashes and sends you to the boat; knock-it-off still recovers early. | Owner ruling remains deploy first, then fly the exact public artifact; re-fly two-kill-then-trap, bolter retry, Case I, arrestment, fuel, sweep-limit and audible acceptance. |
-| Okanagan Fire Boss (`okanagan-fireboss`, `/okanagan/`) | **production** | Civilian aircraft picker + standalone route | Build 337 adds an NRCan CDEM Okanagan world, Kelowna departure and recovery, live lake scooping, partial loads and water drops, fuel-protected RTB, a deterministic evolving exercise fire, and three shared-system sorties: Water Circuits, Solo Initial Attack and Large Force Employment. Builds 344-347 connect dispatch, live objective, reserve truth, pause/end, outcome, correction, replay and return-to-aircraft across all three sorties, with route smoke asserting the exact authority behind each brief. | Fresh owner flight of the Build 347 artifact; flight/fire models are declared training surrogates, not OEM or operational wildfire forecasts. |
+| Okanagan Fire Boss (`okanagan-fireboss`, `/okanagan/`) | **production** | Civilian aircraft picker + standalone route | Build 337 adds an NRCan CDEM Okanagan world, Kelowna departure and recovery, live lake scooping, partial loads and water drops, fuel-protected RTB, a deterministic evolving exercise fire, and three shared-system sorties: Water Circuits, Solo Initial Attack and Large Force Employment. Builds 344-347 connect dispatch, live objective, reserve truth, pause/end, outcome, correction, replay and return-to-aircraft across all three sorties, with route smoke asserting the exact authority behind each brief. Build 352 puts remaining procedure in the sky as chevrons, hopper and cue on the HUD with joker kept above bingo, and a west-side column you can read from the lake join. | Fresh owner flight of the Build 352 artifact; flight/fire models are declared training surrogates, not OEM or operational wildfire forecasts. |
 
 ## Research-only packages
 
@@ -340,7 +346,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Live production is Build 351, revision `d1b2c88d6edd0370f65a40edc745cce88e6b9736`. Local gate
+- Live production is Build 352, revision `b3cb52f56e0e054992a8a84940b289a138281304`. Local gate
   runs on a loaded workstation produce false browser-smoke timeouts (2026-08-12: four smokes
   timed out under an unrelated 200%+ CPU load and all passed in isolation and on CI); CI on
   clean runners is the authoritative check.

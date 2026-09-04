@@ -1,5 +1,5 @@
 import * as THREE from "../../vendor/three.module.js";
-import { createGuidancePath } from "../scene/guidance_path.js?v=351";
+import { createGuidancePath } from "../scene/guidance_path.js?v=352";
 
 /** Nominal spacing between sky chevrons along the remaining procedure. */
 export const OKANAGAN_CHEVRON_SPACING_M = 380;

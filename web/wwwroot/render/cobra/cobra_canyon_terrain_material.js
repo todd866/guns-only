@@ -34,7 +34,7 @@ import {
   TERRAIN_SHADOW_VERTEX_BODY,
   TERRAIN_SHADOW_VERTEX_PARS,
   withTerrainShadowUniforms,
-} from "../environment/terrain_shadow_receive.js?v=351";
+} from "../environment/terrain_shadow_receive.js?v=352";
 
 const BASIN_VERTEX_SHADER = /* glsl */ `
 #include <common>
