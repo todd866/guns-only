@@ -203,6 +203,9 @@ public sealed class FireBossDynamicsTests
         Assert.Equal(plan.ReturnTripKg + plan.OperationalReserveKg
             + plan.FinalReserveKg + plan.TaxiInKg, plan.MinimumRtbFuelKg, precision: 6);
         Assert.DoesNotContain("PERCENT", plan.State);
+        Assert.Equal(plan.MinimumRtbFuelKg + FireBossFuelPlan.OneMoreCircuitProhibitedKg,
+            plan.JokerFuelKg, precision: 6);
+        Assert.True(plan.JokerFuelKg > plan.MinimumRtbFuelKg);
     }
 
     [Fact]

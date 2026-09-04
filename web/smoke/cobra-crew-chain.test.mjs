@@ -191,7 +191,7 @@ test.skip("the published Cobra route flies to Iron Bell before running the AH-1G
         );
         held = await page.evaluate(async () => {
           const { cobraRotorcraftHudModel } =
-            await import("/render/cobra/cobra_rotorcraft_hud.js?v=351");
+            await import("/render/cobra/cobra_rotorcraft_hud.js?v=352");
           const state = window.__smokeFiringSnapshot;
           return {
             model: cobraRotorcraftHudModel(state),

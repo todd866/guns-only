@@ -13,6 +13,46 @@ export function geographicToWorld(latitude, longitude, altitude = 0) {
   );
 }
 
+const FIRE_BENCH = geographicToWorld(49.850, -119.655);
+const BUNCHGRASS = new THREE.Color(0xa88d55);
+const DRY_PONDEROSA = new THREE.Color(0x796f43);
+const DOUGLAS_FIR = new THREE.Color(0x3f5236);
+const ROCK_HIGH = new THREE.Color(0x77746a);
+const INCIDENT_TIMBER = new THREE.Color(0x2a3a28);
+
+/** Vertex shade for the CDEM mesh. The fire bench is forced onto darker fir so the flank
+ *  reads as timber from the lake, not dry bunchgrass. */
+export function okanaganGroundCoverShade(x, z, elevationM, extras = {}) {
+  const minimum = Number.isFinite(extras.minimum) ? extras.minimum : 342;
+  const maximum = Number.isFinite(extras.maximum) ? extras.maximum : 2_000;
+  const elevationT = (elevationM - minimum) / Math.max(1, maximum - minimum);
+  const lowT = THREE.MathUtils.smoothstep(elevationM, 380, 930);
+  const highT = THREE.MathUtils.smoothstep(elevationM, 1_250, 1_850);
+  const color = BUNCHGRASS.clone().lerp(DRY_PONDEROSA, lowT)
+    .lerp(DOUGLAS_FIR, THREE.MathUtils.clamp(lowT * 0.82 + elevationT * 0.28, 0, 1))
+    .lerp(ROCK_HIGH, highT);
+  const fireRangeM = Math.hypot(x - FIRE_BENCH.x, z - FIRE_BENCH.z);
+  if (fireRangeM < 2_800) color.lerp(INCIDENT_TIMBER, 0.72 * (1 - fireRangeM / 2_800));
+  return color;
+}
+
+/** Dedicated west-bench stems. Valley sampling is too thin to make the published flank read. */
+export function okanaganIncidentTimberPoints(count = 80) {
+  const bounded = Math.max(0, Math.trunc(count));
+  const points = [];
+  for (let attempt = 0; attempt < bounded * 8 && points.length < bounded; attempt += 1) {
+    const angle = hash01(attempt * 19 + 3) * Math.PI * 2;
+    const radius = 90 + Math.sqrt(hash01(attempt * 41 + 7)) * 2_280;
+    if (radius > 2_400) continue;
+    points.push(Object.freeze({
+      x: FIRE_BENCH.x + Math.cos(angle) * radius,
+      z: FIRE_BENCH.z + Math.sin(angle) * radius,
+      radius,
+    }));
+  }
+  return points;
+}
+
 export function createOkanaganWorld(scene, terrainData, worldData, quality = "desktop") {
   const group = new THREE.Group();
   group.name = "okanagan-central-world";
@@ -25,6 +65,8 @@ export function createOkanaganWorld(scene, terrainData, worldData, quality = "de
   group.add(createRunway(worldData, terrain.sampleHeight));
   group.add(createSettlements(worldData, terrain.sampleHeight, quality, terrain.isOperationalSurface));
   group.add(createForest(terrainData, worldData, terrain.sampleHeight, quality,
+    terrain.isOperationalSurface));
+  group.add(createIncidentTimber(worldData, terrain.sampleHeight, quality,
     terrain.isOperationalSurface));
 
   return Object.freeze({
@@ -52,10 +94,6 @@ function createTerrain(data, world) {
   const colors = new Float32Array(meshRows * meshColumns * 3);
   const minimum = Math.min(...elevationsM.flat());
   const maximum = Math.max(...elevationsM.flat());
-  const bunchgrass = new THREE.Color(0xa88d55);
-  const dryPonderosa = new THREE.Color(0x796f43);
-  const douglasFir = new THREE.Color(0x3f5236);
-  const rockHigh = new THREE.Color(0x77746a);
   const fieldColors = [0x9b8244, 0x6f7c3f, 0xb09a57, 0x596b37]
     .map((color) => new THREE.Color(color));
   const sampleHeight = createOkanaganSurfaceSampler(data, world);
@@ -74,13 +112,8 @@ function createTerrain(data, world) {
       positions[cursor * 3] = point.x;
       positions[cursor * 3 + 1] = point.y;
       positions[cursor * 3 + 2] = point.z;
-      const elevationT = (point.y - minimum) / Math.max(1, maximum - minimum);
-      const lowT = THREE.MathUtils.smoothstep(point.y, 380, 930);
-      const highT = THREE.MathUtils.smoothstep(point.y, 1_250, 1_850);
       const variation = (hash01(point.x * 0.00017 + point.z * 0.00031) - 0.5) * 0.13;
-      const color = bunchgrass.clone().lerp(dryPonderosa, lowT)
-        .lerp(douglasFir, THREE.MathUtils.clamp(lowT * 0.82 + elevationT * 0.28, 0, 1))
-        .lerp(rockHigh, highT);
+      const color = okanaganGroundCoverShade(point.x, point.z, point.y, { minimum, maximum });
       if (isAgriculturePoint(world, point.x, point.z)) {
         const fieldBand = Math.floor((point.x + point.z * 0.37) / 420) & 3;
         color.lerp(fieldColors[fieldBand], 0.64);
@@ -397,6 +430,63 @@ export function isAgriculturePoint(world, x, z, scale = 1) {
   });
 }
 
+export function okanaganForestStandChance(x, z, elevationM, world) {
+  if (isAgriculturePoint(world, x, z, 0.94)) return 0.13;
+  const elevation = THREE.MathUtils.clamp(0.18 + (finiteElevation(elevationM) - 420) / 1_050, 0.16, 0.92);
+  const fire = geographicToWorld(49.850, -119.655);
+  const fireRangeM = Math.hypot(x - fire.x, z - fire.z);
+  if (fireRangeM < 3_800) return Math.max(elevation, 0.78);
+  return elevation;
+}
+
+function finiteElevation(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function createIncidentTimber(world, sampleHeight, quality, isOperationalSurface) {
+  const count = quality === "mobile" ? 280 : quality === "balanced" ? 700 : 1_400;
+  const group = new THREE.Group();
+  group.name = "incident-timber-stand";
+  const trunks = new THREE.InstancedMesh(
+    new THREE.CylinderGeometry(0.9, 1.3, 12, 6),
+    new THREE.MeshStandardMaterial({ color: 0x4f3525, roughness: 1 }),
+    count,
+  );
+  const crowns = new THREE.InstancedMesh(
+    new THREE.ConeGeometry(8.4, 26, 7),
+    new THREE.MeshStandardMaterial({ color: 0x2c432c, roughness: 0.96 }),
+    count,
+  );
+  const dummy = new THREE.Object3D();
+  const crownColor = new THREE.Color();
+  let placed = 0;
+  const candidates = okanaganIncidentTimberPoints(count * 2);
+  for (let index = 0; index < candidates.length && placed < count; index += 1) {
+    const point = candidates[index];
+    if (isOperationalSurface(point.x, point.z)) continue;
+    const y = sampleHeight(point.x, point.z);
+    const heightScale = 1.15 + hash01(index * 47) * 1.15;
+    dummy.position.set(point.x, y + 6 * heightScale, point.z);
+    dummy.rotation.y = hash01(index * 59) * Math.PI * 2;
+    dummy.scale.set(heightScale, heightScale, heightScale);
+    dummy.updateMatrix();
+    trunks.setMatrixAt(placed, dummy.matrix);
+    dummy.position.y = y + 18 * heightScale;
+    dummy.updateMatrix();
+    crowns.setMatrixAt(placed, dummy.matrix);
+    crownColor.setHex(y < 780 ? 0x4a5534 : 0x2c432c);
+    crownColor.offsetHSL(0, 0, (hash01(index * 67) - 0.5) * 0.06);
+    crowns.setColorAt(placed, crownColor);
+    placed += 1;
+  }
+  trunks.count = crowns.count = placed;
+  trunks.castShadow = crowns.castShadow = quality === "desktop";
+  trunks.receiveShadow = crowns.receiveShadow = true;
+  group.add(trunks, crowns);
+  return group;
+}
+
 function createForest(terrainData, world, sampleHeight, quality, isOperationalSurface) {
   const count = quality === "mobile" ? 900 : quality === "balanced" ? 3_000 : 7_000;
   const group = new THREE.Group();
@@ -420,10 +510,7 @@ function createForest(terrainData, world, sampleHeight, quality, isOperationalSu
       return ((point.x - centre.x) / radiusX) ** 2 + ((point.z - centre.z) / radiusZ) ** 2 < 0.72;
     })) continue;
     const y = sampleHeight(point.x, point.z);
-    const agriculture = isAgriculturePoint(world, point.x, point.z, 0.94);
-    if (agriculture && hash01(attempt * 83) < 0.87) continue;
-    const density = THREE.MathUtils.clamp(0.18 + (y - 420) / 1_050, 0.16, 0.92);
-    if (hash01(attempt * 79 + 5) > density) continue;
+    if (hash01(attempt * 79 + 5) > okanaganForestStandChance(point.x, point.z, y, world)) continue;
     const heightScale = 0.65 + hash01(attempt * 47) * 0.8;
     dummy.position.set(point.x, y + 4.5 * heightScale, point.z);
     dummy.rotation.y = hash01(attempt * 59) * Math.PI * 2;

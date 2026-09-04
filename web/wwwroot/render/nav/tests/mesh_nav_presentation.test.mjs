@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { meshNavPresentation, parseMeshPlaceCatalog } from "../mesh_nav_presentation.js";
+import {
+  meshNavPresentation,
+  parseMeshPlaceCatalog,
+  resolveGuidanceGates,
+} from "../mesh_nav_presentation.js";
 import {
   canvasToWorld,
   hitTestPlace,
@@ -75,4 +79,24 @@ test("hitTestPlace prefers nearest selectable place", () => {
   const point = worldToCanvas(0, 0, 0, 0, 200, 200, 20_000);
   const hit = hitTestPlace(places, point.x, point.y, 0, 0, 200, 200, 20_000, 12);
   assert.equal(hit.id, "a");
+});
+
+test("approach gates keep directional chevron flags", () => {
+  const gates = resolveGuidanceGates({
+    approach_guidance_active: true,
+    approach_gate_count: 1,
+    approach_gates: [{
+      id: "follow",
+      east_m: 10,
+      north_m: 20,
+      up_m: 30,
+      half_m: 24,
+      rtb: true,
+      active: true,
+    }],
+  });
+  assert.equal(gates.length, 1);
+  assert.equal(gates[0].rtb, true);
+  assert.equal(gates[0].ingress, false);
+  assert.equal(gates[0].join, false);
 });

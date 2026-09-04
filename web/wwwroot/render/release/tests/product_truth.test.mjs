@@ -75,12 +75,13 @@ test("the browser and installed-app descriptions match the six production experi
 });
 
 test("every production flight route uses the shared HUD/input/audio language instead of permanent prose cards", async () => {
-  const [main, cobra, cobraCss, okanagan, okanaganHtml] = await Promise.all([
+  const [main, cobra, cobraCss, okanagan, okanaganHtml, okanaganStyles] = await Promise.all([
     readFile(path.join(ROOT, "web/wwwroot/app.js"), "utf8"),
     readFile(path.join(ROOT, "web/wwwroot/cobra-lab/main.js"), "utf8"),
     readFile(path.join(ROOT, "web/wwwroot/cobra-lab/styles.css"), "utf8"),
     readFile(path.join(ROOT, "web/wwwroot/okanagan/main.js"), "utf8"),
     readFile(path.join(ROOT, "web/wwwroot/okanagan/index.html"), "utf8"),
+    readFile(path.join(ROOT, "web/wwwroot/okanagan/styles.css"), "utf8"),
   ]);
   for (const [label, source] of [["main", main], ["cobra", cobra], ["okanagan", okanagan]]) {
     assert.match(source, /createHud/, `${label} must use the shared HUD renderer`);
@@ -100,6 +101,17 @@ test("every production flight route uses the shared HUD/input/audio language ins
     "coarse-pointer pilots need target and padlock controls without a keyboard");
   assert.doesNotMatch(okanaganHtml, /id="mission-strip"|id="objective"|class="instrument-panel"/,
     "Fire Boss must not regress to a stack of text-only mission cards");
+  const missionDataBlock = okanaganStyles.match(/#mission-data\s*\{[^}]+\}/)?.[0] ?? "";
+  assert.match(missionDataBlock, /clip:\s*rect\(0 0 0 0\)/,
+    "hopper quantity lives on the HUD; the DOM cluster must not sit on the glass");
+  const cueBlock = okanaganStyles.match(/#cue\s*\{[^}]+\}/)?.[0] ?? "";
+  assert.match(cueBlock, /clip:\s*rect\(0 0 0 0\)/,
+    "the next action lives on the HUD; the DOM cue must not sit on the glass as a second card");
+  const controlsBlock = okanaganStyles.match(/#controls\s*\{[^}]+\}/)?.[0] ?? "";
+  assert.match(controlsBlock, /display:\s*none/,
+    "desktop Fire Boss is a HUD, not a fake cockpit pedestal");
+  assert.match(okanaganStyles, /@media \(pointer:\s*coarse\)[\s\S]*?#controls\s*\{[^}]*display:\s*flex/,
+    "touch still needs scoop and drop targets");
 });
 
 test("production Rapier copy describes the deterministic finite-ammo balloon sortie", async () => {

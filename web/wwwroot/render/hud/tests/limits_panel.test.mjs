@@ -29,6 +29,21 @@ test("dogfight with no recovery point uses the fuel profile", () => {
   assert.equal(panel.accent, "normal");
 });
 
+test("the fuel profile always keeps Joker and Bingo as separate decisions", () => {
+  const panel = limitsPanelPresentation({
+    fuel_lb: 1675,
+    fuel_capacity_lb: 1675,
+    fuel_bingo_lb: 684,
+    fuel_flow_pph: 847,
+    fuel_minutes_to_bingo: 70,
+  });
+  assert.equal(panel.profile, "fuel");
+  assert.deepEqual(panel.rows.map((row) => row.label), ["FUEL", "FF", "JOKER", "BINGO"]);
+  assert.equal(panel.rows[2].value, "--");
+  assert.equal(panel.rows[3].value, "70");
+  assert.equal(panel.heroIndex, 3);
+});
+
 test("Rapier nav panel is FUEL · triad · ARR→next physical state", () => {
   const panel = limitsPanelPresentation({
     recovery_point_known: true,

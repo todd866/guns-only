@@ -7,7 +7,7 @@
   <base href="/">
   <title>Guns Only · Okanagan Fire Boss</title>
   <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="/okanagan/styles.css?v=351">
+  <link rel="stylesheet" href="/okanagan/styles.css?v=352">
 </head>
 <body class="paused">
   <main class="viewport" aria-label="Okanagan Fire Boss simulator">
@@ -41,21 +41,21 @@
       <div class="sortie-grid" role="radiogroup" aria-label="Fire Boss sorties">
         <button class="sortie active" type="button" data-sortie="water-circuits" role="radio" aria-checked="true" tabindex="0">
           <small>01 · TRAINING</small><strong>Water Circuits</strong>
-          <span>Scoop · drop · recover</span>
+          <span>Scoop · drop on the lake target · recover</span>
         </button>
         <button class="sortie" type="button" data-sortie="fire-attack" role="radio" aria-checked="false" tabindex="-1">
           <small>02 · SOLO</small><strong>Initial Attack</strong>
-          <span>West-side fire · choose the line</span>
+          <span>West-side fire · hit the visible flank</span>
         </button>
         <button class="sortie" type="button" data-sortie="large-force-employment" role="radio" aria-checked="false" tabindex="-1">
           <small>03 · EXTENSION</small><strong>Large Force Employment</strong>
-          <span>Assigned drops · sequenced traffic</span>
+          <span>Hold for Air Attack · Division Alpha</span>
         </button>
       </div>
       <section class="dispatch-directive" aria-live="polite">
         <small>MISSION</small>
         <strong id="dispatch-objective">Complete one water circuit.</strong>
-        <span id="dispatch-execution">Scoop · drop · recover above RTB minimum</span>
+        <span id="dispatch-execution">Scoop · drop on the lake target · recover above RTB minimum</span>
       </section>
       <section class="fuel-plan" aria-label="Dispatch fuel plan">
         <span>BLOCK <strong id="plan-block">610 KG</strong></span>
@@ -101,7 +101,7 @@
 
   <script>
     globalThis.__gunsPrebootReady = (async () => {
-      const releaseBuild = new URL("../service-worker.js?v=351", location.href).searchParams.get("v");
+      const releaseBuild = new URL("../service-worker.js?v=352", location.href).searchParams.get("v");
       const registrations = await navigator.serviceWorker?.getRegistrations?.() ?? [];
       const workers = registrations.flatMap((registration) => [registration.active, registration.waiting, registration.installing]).filter(Boolean);
       const stale = [navigator.serviceWorker?.controller, ...workers].filter(Boolean)
@@ -116,15 +116,15 @@
       await globalThis.__gunsPrebootReady;
       await new Promise((resolve, reject) => {
         const script = document.createElement("script");
-        script.src = "/_framework/blazor.webassembly.js?v=351";
+        script.src = "/_framework/blazor.webassembly.js?v=352";
         script.setAttribute("autostart", "false");
         script.addEventListener("load", resolve, { once: true });
         script.addEventListener("error", () => reject(new Error("Failed to load Fire Boss runtime.")), { once: true });
         document.head.append(script);
       });
-      const { renderExperienceGate } = await import("/render/release/quarantine_gate.js?v=351");
+      const { renderExperienceGate } = await import("/render/release/quarantine_gate.js?v=352");
       const access = renderExperienceGate({ experienceId: "okanagan-fireboss" });
-      if (access.allowed) await import("/okanagan/main.js?v=351");
+      if (access.allowed) await import("/okanagan/main.js?v=352");
     } catch (error) {
       console.error(error);
       document.querySelector("#status").textContent = error instanceof Error ? error.message : String(error);

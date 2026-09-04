@@ -2,6 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { cycleOkanaganTarget, okanaganTargets, retainOkanaganTarget } from "../okanagan_targets.js";
 
+test("water circuits offer the lake practice drop as a target", () => {
+  const targets = okanaganTargets({
+    sortie: "water-circuits",
+    active_gate: 0,
+    route: [
+      { id: "departure", label: "DEPART 16", position: { x: 1, y: 2, z: 3 } },
+    ],
+    drop_aim: { x: 40, y: 342, z: -80 },
+  });
+  assert.equal(targets.at(-1).id, "practice:drop");
+  assert.equal(targets.at(-1).label, "PRACTICE DROP");
+  assert.deepEqual(targets.at(-1).position, { x: 40, y: 342, z: -80 });
+});
+
 test("target cycle contains current procedure fixes, the incident, then traffic", () => {
   const targets = okanaganTargets({
     sortie: "fire-attack",
@@ -18,7 +32,7 @@ test("target cycle contains current procedure fixes, the incident, then traffic"
     "fix:target-entry", "fix:drop-start", "incident:fire", "traffic:BIRD DOG",
   ]);
   assert.equal(targets[2].label, "FIRE");
-  assert.equal(targets[2].position.y, 890);
+  assert.equal(targets[2].position.y, 1_220);
 });
 
 test("Tab wraps and phase changes retain a still-relevant target", () => {

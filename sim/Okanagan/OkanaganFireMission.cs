@@ -60,6 +60,9 @@ public readonly record struct OkanaganMissionSnapshot(
     int PopulationExposed,
     double Score,
     FireBossFuelSnapshot FuelPlan,
+    Vec3D DropAimWorldM,
+    double DropCreditKg,
+    Vec3D DropCreditWorldM,
     IReadOnlyList<OkanaganFireCellSnapshot> FireCells,
     IReadOnlyList<OkanaganTrafficTrack> Traffic);
 
@@ -107,6 +110,8 @@ public sealed class OkanaganFireMission
     OkanaganMissionPhase _phaseBeforePause;
     double _dropCreditThisPass;
     double _releasedThisPass;
+    double _holdDwellSeconds;
+    double _dropCreditThisTick;
     bool _hadUsefulLoad;
     readonly double _blockFuelKg;
 
@@ -148,6 +153,7 @@ public sealed class OkanaganFireMission
     {
         if (Phase is OkanaganMissionPhase.Paused or OkanaganMissionPhase.Complete
             or OkanaganMissionPhase.Failed) return;
+        _dropCreditThisTick = 0.0;
         FireBossTelemetry telemetry = Aircraft.Step(command);
         _ticks++;
         _fire.Step(FireBossDynamics.FixedDeltaSeconds);
@@ -161,8 +167,11 @@ public sealed class OkanaganFireMission
         {
             _releasedThisPass += telemetry.WaterReleasedThisTickKg;
             if (Sortie is OkanaganSortieType.FireAttack or OkanaganSortieType.LargeForceEmployment)
-                _dropCreditThisPass += _fire.ApplyWater(telemetry.PositionWorldM,
+            {
+                _dropCreditThisTick = _fire.ApplyWater(telemetry.PositionWorldM,
                     telemetry.WaterReleasedThisTickKg);
+                _dropCreditThisPass += _dropCreditThisTick;
+            }
         }
 
         AdvanceGate(telemetry.PositionWorldM);
@@ -198,6 +207,9 @@ public sealed class OkanaganFireMission
         Score,
         FireBossFuelPlan.Snapshot(_blockFuelKg, Aircraft.Telemetry.FuelKg,
             Aircraft.Telemetry.PositionWorldM, CompletedCycles),
+        DropAim(),
+        _dropCreditThisTick,
+        Aircraft.Telemetry.PositionWorldM,
         _fire.ActiveCells(),
         BuildTraffic());
 
@@ -259,9 +271,16 @@ public sealed class OkanaganFireMission
         if (Phase == OkanaganMissionPhase.Climb && telemetry.PositionWorldM.Y >= 700.0)
             SetPhase(Sortie == OkanaganSortieType.LargeForceEmployment
                 ? OkanaganMissionPhase.Hold : OkanaganMissionPhase.Ingress);
-        if (Phase == OkanaganMissionPhase.Hold
-            && HorizontalDistance(telemetry.PositionWorldM, HoldingPoint) < 1_350.0)
-            SetPhase(OkanaganMissionPhase.Ingress);
+        if (Phase == OkanaganMissionPhase.Hold)
+        {
+            double rangeM = HorizontalDistance(telemetry.PositionWorldM, HoldingPoint);
+            if (rangeM < AirAttackHoldRadiusM)
+                _holdDwellSeconds += FireBossDynamics.FixedDeltaSeconds;
+            else
+                _holdDwellSeconds = 0.0;
+            if (AirAttackHoldClears(_holdDwellSeconds, rangeM))
+                SetPhase(OkanaganMissionPhase.Ingress);
+        }
         if (Phase == OkanaganMissionPhase.Ingress
             && HorizontalDistance(telemetry.PositionWorldM, FireTarget) < 1_900.0)
             SetPhase(OkanaganMissionPhase.Drop);
@@ -288,11 +307,28 @@ public sealed class OkanaganFireMission
 
     void SetPhase(OkanaganMissionPhase phase)
     {
+        if (phase != OkanaganMissionPhase.Hold) _holdDwellSeconds = 0.0;
         Phase = phase;
         ActiveGateIndex = 0;
         _route.Clear();
         foreach (OkanaganRouteGate gate in RouteFor(phase)) _route.Add(gate);
     }
+
+    internal const double AirAttackHoldRadiusM = 1_350.0;
+    internal const double AirAttackHoldDwellSeconds = 12.0;
+
+    internal static bool AirAttackHoldClears(double dwellSeconds, double rangeM)
+    {
+        if (!double.IsFinite(dwellSeconds) || dwellSeconds < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(dwellSeconds));
+        if (!double.IsFinite(rangeM) || rangeM < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(rangeM));
+        return rangeM < AirAttackHoldRadiusM && dwellSeconds >= AirAttackHoldDwellSeconds;
+    }
+
+    Vec3D DropAim() => Sortie == OkanaganSortieType.WaterCircuits
+        ? TrainingDrop with { Y = OkanaganGeo.LakeSurfaceElevationM }
+        : FireTarget;
 
     internal IEnumerable<OkanaganRouteGate> RouteFor(OkanaganMissionPhase phase)
     {
@@ -428,6 +464,9 @@ public sealed class OkanaganFireMission
         if (Phase == OkanaganMissionPhase.Scoop) return $"FILL {telemetry.WaterLoadKg / FireBossDynamics.MaximumWaterKg:P0}";
         if ((Phase is OkanaganMissionPhase.Drop or OkanaganMissionPhase.Downwind)
             && telemetry.WaterLoadKg > 300.0) return "HOLD DROP ON THE LINE";
+        if (Phase == OkanaganMissionPhase.Hold
+            && _holdDwellSeconds < AirAttackHoldDwellSeconds)
+            return "HOLD WEST · WAIT FOR AIR ATTACK";
         if (ActiveGateIndex < _route.Count) return $"FLY {_route[ActiveGateIndex].Label}";
         return Objective().ToUpperInvariant();
     }
@@ -441,9 +480,9 @@ public sealed class OkanaganFireMission
             240.0,
             Math.Cos(t * 0.035) * 1_600.0);
         Vec3D helicopterHorizontal = FireTarget + new Vec3D(
-            Math.Sin(t * 0.08) * 950.0,
+            Math.Sin(t * 0.11) * 90.0,
             0.0,
-            Math.Cos(t * 0.08) * 950.0);
+            Math.Cos(t * 0.11) * 280.0);
         Vec3D helicopter = helicopterHorizontal with {
             Y = OkanaganGeo.RepresentativeTerrainHeightM(helicopterHorizontal) + 165.0
         };
@@ -451,7 +490,7 @@ public sealed class OkanaganFireMission
             new OkanaganTrafficTrack("BIRD DOG 4", "AIR ATTACK", lead,
                 t * 0.035 + Math.PI / 2.0, lead.Y, "ORBIT / SEQUENCE"),
             new OkanaganTrafficTrack("HELCO 7", "HELICOPTER", helicopter,
-                t * 0.08 + Math.PI / 2.0, helicopter.Y, "BUCKET · DIVISION ALPHA"),
+                t * 0.11 + Math.PI / 2.0, helicopter.Y, "BUCKET · DIVISION ALPHA"),
         ];
     }
 

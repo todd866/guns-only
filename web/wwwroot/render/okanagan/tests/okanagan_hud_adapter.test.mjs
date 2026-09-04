@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   compactOkanaganCue,
   okanaganFlightState,
+  okanaganRadioCaption,
   okanaganRadioHoldMs,
 } from "../okanagan_hud_adapter.js";
 
@@ -25,7 +26,7 @@ test("Fire Boss projects into the shared fixed-wing HUD and audio contract", () 
     scoop_rate_kgps: 117.5,
     water_released_this_tick_kg: 18,
     water_release_rate_kgps: 1_450,
-    fuel_plan: { block_kg: 925, minimum_rtb_kg: 310 },
+    fuel_plan: { block_kg: 925, minimum_rtb_kg: 310, joker_kg: 365 },
   });
 
   assert.equal(state.player_aircraft_id, "aircraft.at-802f-fireboss");
@@ -35,7 +36,11 @@ test("Fire Boss projects into the shared fixed-wing HUD and audio contract", () 
   assert.equal(state.pz, -20);
   assert.equal(state.vz, -40);
   assert.equal(state.heading_deg, 90);
-  assert.ok(state.calibrated_airspeed_kts > 79 && state.calibrated_airspeed_kts < 80);
+  assert.equal(state.calibrated_airspeed_kts, undefined);
+  assert.equal(state.indicated_airspeed_kts, undefined);
+  assert.ok(state.true_airspeed_kts > 79 && state.true_airspeed_kts < 80);
+  assert.equal(state.mach, null);
+  assert.equal(state.fireboss_cue, "");
   assert.equal(state.engine, 0.66);
   assert.equal(state.engine_spool_fraction, 0.66);
   assert.ok(state.engine_rpm_pct > 84 && state.engine_rpm_pct < 85);
@@ -45,9 +50,48 @@ test("Fire Boss projects into the shared fixed-wing HUD and audio contract", () 
   assert.ok(state.engine_ng_pct > 84 && state.engine_ng_pct < 85);
   assert.ok(state.stall_speed_kcas > 60);
   assert.equal(state.fireboss_scoop_rate_kgps, 117.5);
+  assert.equal(state.scoop_fault, "");
   assert.equal(state.fireboss_water_release_kg, 18);
   assert.equal(state.fireboss_water_release_rate_kgps, 1_450);
   assert.equal(state.fireboss_drop_active, true);
+});
+
+test("Fire Boss joker is the advisory above bingo, not a second name for the floor", () => {
+  const working = okanaganFlightState({
+    fuel_kg: 500,
+    throttle: 0.5,
+    fuel_plan: { minimum_rtb_kg: 310, joker_kg: 365 },
+  });
+  const kgToLb = 2.20462262185;
+  assert.ok(working.fuel_joker_lb > working.fuel_bingo_lb);
+  assert.equal(Math.round(working.fuel_bingo_lb), Math.round(310 * kgToLb));
+  assert.equal(Math.round(working.fuel_joker_lb), Math.round(365 * kgToLb));
+  assert.equal(working.fuel_joker, false);
+  assert.equal(working.fuel_bingo, false);
+  assert.ok(working.fuel_minutes_to_joker > 0);
+  assert.ok(working.fuel_minutes_to_bingo > working.fuel_minutes_to_joker);
+
+  const atJoker = okanaganFlightState({
+    fuel_kg: 360,
+    fuel_plan: { minimum_rtb_kg: 310, joker_kg: 365 },
+  });
+  assert.equal(atJoker.fuel_joker, true);
+  assert.equal(atJoker.fuel_bingo, false);
+
+  const atBingo = okanaganFlightState({
+    fuel_kg: 300,
+    fuel_plan: { minimum_rtb_kg: 310, joker_kg: 365 },
+  });
+  assert.equal(atBingo.fuel_bingo, true);
+  assert.equal(atBingo.fuel_joker, true);
+});
+
+test("Fire Boss still separates joker from bingo when the snapshot omits joker_kg", () => {
+  const state = okanaganFlightState({
+    fuel_kg: 500,
+    fuel_plan: { minimum_rtb_kg: 310 },
+  });
+  assert.ok(state.fuel_joker_lb > state.fuel_bingo_lb);
 });
 
 test("drop audio truth ignores an unproductive drop command", () => {
@@ -103,6 +147,16 @@ test("the one-line cue prefers an actionable scoop fault", () => {
   assert.equal(compactOkanaganCue({ cue: "SCOOP", scoop_fault: "WINGS LEVEL" }), "WINGS LEVEL");
   assert.equal(compactOkanaganCue({ cue: "TURN WEST" }), "TURN WEST");
   assert.equal(compactOkanaganCue({ route: [{ label: "LAKE ENTRY" }], active_gate: 0 }), "LAKE ENTRY");
+  assert.equal(okanaganFlightState({ cue: "FLY DEPART 16" }).fireboss_cue, "FLY DEPART 16");
+});
+
+test("instructor radio does not occupy the outside view; agency calls still do", () => {
+  assert.equal(okanaganRadioCaption("INSTRUCTOR: Runway heading. Turn west."), "");
+  assert.equal(okanaganRadioCaption("AIR ATTACK: Boss 21, hold west. Traffic below."),
+    "AIR ATTACK: Boss 21, hold west. Traffic below.");
+  assert.equal(okanaganRadioCaption("TOWER: Boss 21, cleared to land 16."),
+    "TOWER: Boss 21, cleared to land 16.");
+  assert.equal(okanaganRadioCaption(""), "");
 });
 
 test("transient radio dwell scales with terse copy and clears the outside view promptly", () => {

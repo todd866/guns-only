@@ -1,5 +1,5 @@
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=351";
+import { createHud } from "./hud.js?v=352";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -23,7 +23,7 @@ import {
   combatHandoffPresentation,
   sortieResultCopy,
   visualMergeDebriefPresentation,
-} from "./render/debrief/sortie_result.js?v=351";
+} from "./render/debrief/sortie_result.js?v=352";
 import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
@@ -46,11 +46,11 @@ import {
   shouldAutoStartFirstRunValley,
   touchFireAriaLabel,
   touchFireVisibleLabel,
-} from "./render/onboarding/first_run_valley.js?v=351";
+} from "./render/onboarding/first_run_valley.js?v=352";
 import {
   dialogTabDestination,
   renderedDialogControl,
-} from "./render/onboarding/modal_focus.js?v=351";
+} from "./render/onboarding/modal_focus.js?v=352";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -93,8 +93,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=351";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=351";
+} from "./render/release/release_identity.js?v=352";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=352";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -107,7 +107,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=351";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=352";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -116,10 +116,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=351";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=352";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=351";
+} from "./render/nav/carrier_sortie_touch_control.js?v=352";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -203,7 +203,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=351";
+} from "./render/telemetry/ai_frame_pressure.js?v=352";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -213,15 +213,15 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=351";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=351";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=351";
-import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=351";
+} from "./render/telemetry/telemetry_batch.js?v=352";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=352";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=352";
+import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=352";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=351";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=351";
+} from "./render/shell/boot_watchdog.js?v=352";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=352";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -230,7 +230,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=351";
+} from "./render/settings/player_settings.js?v=352";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -277,13 +277,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=351";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=351";
+} from "./render/scene/scene_builders.js?v=352";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=352";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=351";
+} from "./render/audio/flight_audio.js?v=352";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -3517,7 +3517,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Okanagan Fire Boss",
     sortie: "Water circuits · solo initial attack · large-force extension",
     configuration: "Kelowna departure · Okanagan Lake scoop lane · 3,104 L hopper · fuel-protected RTB",
-    brief: "Take one Fire Boss from Kelowna to the lake. Learn the scoop circuit first, work the exercise fire alone, then add Air Attack, bird dog and helicopter traffic in the extension exercise.",
+    brief: "Kelowna to the lake. Water Circuits dumps on a marked target. Initial Attack is the west-side column you can see from join. Large Force makes you hold until Air Attack sends you into Division Alpha.",
     controls: "Arrows fly · W/S power · E scoops · hold Space to drop · Esc pauses",
   }),
   "multiplayer": Object.freeze({
@@ -11976,7 +11976,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=351")
+    navigator.serviceWorker.register("service-worker.js?v=352")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

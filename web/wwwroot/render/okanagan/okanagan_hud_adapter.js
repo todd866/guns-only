@@ -2,6 +2,8 @@ const MPS_TO_KNOTS = 1.9438444924406;
 const M_TO_FEET = 3.2808398950131;
 const MPS_TO_FPM = 196.8503937008;
 const KG_TO_LB = 2.20462262185;
+/** Same advisory band as FireBossFuelPlan.OneMoreCircuitProhibitedKg. */
+const FIRE_BOSS_JOKER_ABOVE_BINGO_KG = 55;
 
 function finite(value, fallback = 0) {
   const number = Number(value);
@@ -16,6 +18,30 @@ function optionalFinite(value) {
 
 function clamp(value, minimum, maximum) {
   return Math.max(minimum, Math.min(maximum, value));
+}
+
+export function compactOkanaganCue(current = {}) {
+  const fault = String(current.scoop_fault ?? "").trim();
+  if (fault) return fault;
+  const cue = String(current.cue ?? "").trim();
+  if (cue) return cue;
+  const gate = current.route?.[current.active_gate];
+  return String(gate?.label ?? "").trim();
+}
+
+/** Instructor copy restates the HUD cue. Agency calls still earn the subtitle. */
+export function okanaganRadioCaption(transmission) {
+  const text = String(transmission ?? "").trim();
+  if (!text) return "";
+  if (/^INSTRUCTOR:/iu.test(text)) return "";
+  return text;
+}
+
+/** Keep transient radio readable without parking a subtitle over the outside view. */
+export function okanaganRadioHoldMs(transmission) {
+  const words = String(transmission ?? "").trim().split(/\s+/u).filter(Boolean).length;
+  if (words === 0) return 0;
+  return clamp(1_900 + words * 240, 2_200, 4_200);
 }
 
 /**
@@ -53,14 +79,18 @@ export function okanaganFlightState(current = {}) {
   const burnKgPerSecond = 0.032 + 0.115 * throttle;
   const minutesToMinimum = Math.max(0, fuelKg - minimumFuelKg)
     / Math.max(0.001, burnKgPerSecond) / 60;
+  const jokerKg = optionalFinite(current.fuel_plan?.joker_kg)
+    ?? (minimumFuelKg > 0 ? minimumFuelKg + FIRE_BOSS_JOKER_ABOVE_BINGO_KG : null);
+  const minutesToJoker = jokerKg == null || fuelKg <= jokerKg
+    ? undefined
+    : (fuelKg - jokerKg) / Math.max(0.001, burnKgPerSecond) / 60;
 
   return {
     player_aircraft_id: "aircraft.at-802f-fireboss",
     audio_profile_id: "audio.fireboss.pt6a-67f.v1",
     audio_perspective: "cockpit",
     camera_perspective: "cockpit",
-    calibrated_airspeed_kts: speedKts,
-    indicated_airspeed_kts: speedKts,
+    // TAS is the published speed. Inventing a pitot chain so the tape can say KCAS would lie.
     true_airspeed_kts: speedKts,
     true_airspeed_mps: speedMps,
     ground_speed_kts: Math.hypot(finite(velocity.x), finite(velocity.z)) * MPS_TO_KNOTS,
@@ -75,7 +105,7 @@ export function okanaganFlightState(current = {}) {
       finite(current.pitch_rad) - flightPathRad) * 180 / Math.PI,
     pitch_rate_dps: finite(current.pitch_rate_radps) * 180 / Math.PI,
     roll_rate_dps: finite(current.roll_rate_radps) * 180 / Math.PI,
-    mach: speedMps / 340.3,
+    mach: null,
     throttle,
     applied_throttle: throttle,
     engine: enginePower,
@@ -98,11 +128,15 @@ export function okanaganFlightState(current = {}) {
     fuel_lb: fuelKg * KG_TO_LB,
     fuel_capacity_lb: blockFuelKg * KG_TO_LB,
     fuel_bingo_lb: minimumFuelKg * KG_TO_LB,
+    fuel_joker_lb: jokerKg == null ? undefined : jokerKg * KG_TO_LB,
     fuel_minimum_lb: minimumFuelKg * KG_TO_LB,
     fuel_reserve_target_lb: minimumFuelKg * KG_TO_LB,
     fuel_minutes_to_bingo: minutesToMinimum,
+    fuel_minutes_to_joker: minutesToJoker,
     fuel_endurance_minutes: fuelKg / Math.max(0.001, burnKgPerSecond) / 60,
     fuel_minimum: minimumFuelKg > 0 && fuelKg <= minimumFuelKg,
+    fuel_bingo: minimumFuelKg > 0 && fuelKg <= minimumFuelKg,
+    fuel_joker: jokerKg != null && fuelKg <= jokerKg,
     fuel_flow_pph: burnKgPerSecond * 3_600 * KG_TO_LB,
     has_retractable_gear: false,
     has_flaps: false,
@@ -131,27 +165,13 @@ export function okanaganFlightState(current = {}) {
     fireboss_surface: String(current.surface ?? ""),
     fireboss_scoop_valid: current.scoop_valid === true,
     fireboss_scoops_commanded: current.scoops_commanded === true,
+    scoop_fault: String(current.scoop_fault ?? "").trim(),
     fireboss_scoop_rate_kgps: scoopRateKgps,
     fireboss_water_release_kg: waterReleasedKg,
     fireboss_water_release_rate_kgps: waterReleaseRateKgps,
     fireboss_drop_active: waterReleaseRateKgps == null
       ? waterReleasedKg > 0
       : waterReleaseRateKgps > 0,
+    fireboss_cue: compactOkanaganCue(current),
   };
-}
-
-export function compactOkanaganCue(current = {}) {
-  const fault = String(current.scoop_fault ?? "").trim();
-  if (fault) return fault;
-  const cue = String(current.cue ?? "").trim();
-  if (cue) return cue;
-  const gate = current.route?.[current.active_gate];
-  return String(gate?.label ?? "").trim();
-}
-
-/** Keep transient radio readable without parking a subtitle over the outside view. */
-export function okanaganRadioHoldMs(transmission) {
-  const words = String(transmission ?? "").trim().split(/\s+/u).filter(Boolean).length;
-  if (words === 0) return 0;
-  return clamp(1_900 + words * 240, 2_200, 4_200);
 }

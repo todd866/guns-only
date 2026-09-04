@@ -697,3 +697,31 @@ export function systemsReadout(state = {}) {
     warnings,
   };
 }
+
+/** Next action for the Fire Boss HUD. Other airframes return null. */
+export function fireBossProcedureCue(state = {}) {
+  if (state.player_aircraft_id !== "aircraft.at-802f-fireboss") return null;
+  const text = String(state.fireboss_cue ?? "").trim();
+  return text || null;
+}
+
+/** Fire Boss hopper and scoop state for the shared HUD. Other airframes return null. */
+export function fireBossHopperReadout(state = {}) {
+  if (state.player_aircraft_id !== "aircraft.at-802f-fireboss") return null;
+  const waterKg = Math.max(0, finiteNumber(state.water_load_kg) ?? 0);
+  const capacityKg = Math.max(1, finiteNumber(state.water_capacity_kg) ?? 3_104);
+  const fault = String(state.scoop_fault ?? "").trim();
+  const scoopRate = finiteNumber(state.fireboss_scoop_rate_kgps);
+  let scoopText = "SCOOPS UP";
+  if (fault) scoopText = fault;
+  else if (state.fireboss_scoop_valid === true) {
+    scoopText = `FILLING · ${Math.round(scoopRate ?? 0)} L/S`;
+  } else if (state.fireboss_scoops_commanded === true) scoopText = "SCOOPS DOWN";
+  return {
+    waterText: `WATER ${Math.round(waterKg).toLocaleString("en-US")} L`,
+    scoopText,
+    dropping: state.fireboss_drop_active === true,
+    caution: Boolean(fault),
+    fillFraction: waterKg / capacityKg,
+  };
+}
