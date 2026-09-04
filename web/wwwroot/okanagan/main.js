@@ -2,6 +2,12 @@ import * as THREE from "../vendor/three.module.js";
 import { createOkanaganWorld } from "../render/okanagan/okanagan_world.js?v=351";
 import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=351";
 import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=351";
+import { createOkanaganDropCurtain } from "../render/okanagan/okanagan_drop_curtain.js?v=351";
+import { createOkanaganPracticeTarget } from "../render/okanagan/okanagan_practice_target.js?v=351";
+import {
+  createOkanaganTrafficCraft,
+  poseOkanaganTrafficCraft,
+} from "../render/okanagan/okanagan_traffic.js?v=351";
 import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=351";
 import { createHud } from "../hud.js?v=351";
 import {
@@ -21,6 +27,7 @@ import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js
 import {
   compactOkanaganCue,
   okanaganFlightState,
+  okanaganRadioCaption,
   okanaganRadioHoldMs,
 } from "../render/okanagan/okanagan_hud_adapter.js?v=351";
 import {
@@ -44,23 +51,23 @@ const SORTIES = Object.freeze({
     block: 610,
     working: "197 KG",
     objective: "Complete one water circuit.",
-    execution: "Scoop · drop · recover above RTB minimum",
+    execution: "Scoop · drop on the lake target · recover above RTB minimum",
   },
   "fire-attack": {
     index: 1,
-    title: "Solo Initial Attack",
+    title: "Initial Attack",
     block: 760,
     working: "347 KG",
-    objective: "Attack the west-side fire.",
-    execution: "Choose a line · drop · recover above RTB minimum",
+    objective: "Knock down the west-side flank.",
+    execution: "See the column · hit the line · two loads · recover",
   },
   "large-force-employment": {
     index: 2,
     title: "Large Force Employment",
     block: 760,
     working: "347 KG",
-    objective: "Fly assigned drops.",
-    execution: "Follow Air Attack · respect holds · recover",
+    objective: "Hold, then fly the assigned west-flank drops.",
+    execution: "Wait for Air Attack · hit Division Alpha · recover",
   },
 });
 
@@ -74,6 +81,7 @@ function safeLocalStorage() {
 }
 
 const canvas = document.querySelector("#scene");
+const preview = new URLSearchParams(location.search).get("preview");
 const hudCanvas = document.querySelector("#hud");
 const mapCanvas = document.querySelector("#map");
 const map = mapCanvas.getContext("2d");
@@ -224,8 +232,8 @@ const fireEffects = createOkanaganFireEffects(scene, quality === "mobile" ? 80 :
 const trafficGroup = new THREE.Group();
 const trafficModels = new Map();
 scene.add(trafficGroup);
-const dropTrail = createDropTrail();
-scene.add(dropTrail.group);
+const dropCurtain = createOkanaganDropCurtain(scene);
+const practiceTarget = createOkanaganPracticeTarget(scene);
 
 window.__gunsOnlyOkanagan = Object.freeze({
   getState: () => state,
@@ -236,50 +244,29 @@ window.__gunsOnlyOkanagan = Object.freeze({
   getAudioDiagnostics: () => flightAudioDiagnostics(),
   getSelectedTarget: () => selectedTarget(),
   getDebrief: () => missionResultModel,
+  getGuidance: () => ({
+    visible: highway.group.visible === true,
+    marks: highway.group.children.filter((child) => child.visible).map((child) => ({
+      style: child.userData.guidanceStyle ?? null,
+      x: child.position.x,
+      y: child.position.y,
+      z: child.position.z,
+    })),
+  }),
   start: (sortie = currentSortie) => startSortie(sortie),
 });
 
-function createDropTrail() {
-  const geometry = new THREE.BufferGeometry();
-  const positions = new Float32Array(36 * 3);
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  geometry.setDrawRange(0, 0);
-  const points = new THREE.Points(geometry, new THREE.PointsMaterial({ color: 0x9de9f3, size: 16, transparent: true, opacity: 0.72, depthWrite: false }));
-  const samples = [];
-  function update(current, active) {
-    if (active && current) {
-      samples.unshift({ x: current.position.x, y: current.position.y - 2.5, z: current.position.z, age: 0 });
-      if (samples.length > 36) samples.length = 36;
-    }
-    for (const sample of samples) { sample.age += 1 / 60; sample.y -= 3.5; }
-    const alive = samples.filter((sample) => sample.age < 2.2);
-    samples.length = 0; samples.push(...alive);
-    const array = geometry.attributes.position.array;
-    samples.forEach((sample, index) => { array[index * 3] = sample.x; array[index * 3 + 1] = sample.y; array[index * 3 + 2] = sample.z; });
-    geometry.setDrawRange(0, samples.length);
-    geometry.attributes.position.needsUpdate = true;
-  }
-  return { group: points, update };
-}
-
-function buildTraffic(tracks = []) {
+function buildTraffic(tracks = [], timeSeconds = 0) {
   const live = new Set();
   for (const track of tracks) {
     live.add(track.callsign);
-    const helicopter = track.kind === "HELICOPTER";
     let craft = trafficModels.get(track.callsign);
     if (!craft) {
-      craft = new THREE.Group();
-      const material = new THREE.MeshBasicMaterial({ color: helicopter ? 0xffd157 : 0xf4f5ed });
-      const body = new THREE.Mesh(new THREE.BoxGeometry(helicopter ? 22 : 9, 5, helicopter ? 8 : 28), material);
-      craft.add(body);
-      const wing = new THREE.Mesh(new THREE.BoxGeometry(34, 1, helicopter ? 1.5 : 5), material);
-      wing.position.y = 2; craft.add(wing);
+      craft = createOkanaganTrafficCraft(track.kind);
       trafficModels.set(track.callsign, craft);
       trafficGroup.add(craft);
     }
-    craft.position.set(track.position.x, track.position.y, track.position.z);
-    craft.rotation.y = track.heading_rad;
+    poseOkanaganTrafficCraft(craft, track, timeSeconds);
   }
   for (const [callsign, craft] of trafficModels) {
     if (live.has(callsign)) continue;
@@ -549,25 +536,102 @@ function togglePadlock() {
   return padlock;
 }
 
-function updateView(current) {
-  camera.position.set(current.position.x, current.position.y + 2.25, current.position.z);
-  camera.rotation.set(current.pitch_rad, Math.PI + current.heading_rad, -current.roll_rad, "YXZ");
-  const bodyQuaternion = camera.quaternion.clone();
-  const target = selectedTarget();
-  if (padlock && target) {
-    camera.lookAt(target.position.x, target.position.y, target.position.z);
-    cockpit.group.quaternion.copy(camera.quaternion).invert().multiply(bodyQuaternion);
-  } else {
-    cockpit.group.quaternion.identity();
+function previewCamera(current) {
+  if (preview === "incident") {
+    const cells = current.fire_cells ?? [];
+    let x = 0;
+    let y = 0;
+    let z = 0;
+    let weight = 0;
+    for (const cell of cells) {
+      const intensity = Number(cell?.intensity) || 0;
+      if (intensity < 0.08) continue;
+      x += cell.x * intensity;
+      y += cell.y * intensity;
+      z += cell.z * intensity;
+      weight += intensity;
+    }
+    if (weight < 0.1) return false;
+    x /= weight;
+    y /= weight;
+    z /= weight;
+    camera.position.set(x + 620, y + 95, z + 1_050);
+    camera.lookAt(x, y + 28, z);
+    return true;
+  }
+  if (preview === "practice" && current.drop_aim) {
+    const aim = current.drop_aim;
+    camera.position.set(aim.x + 180, aim.y + 55, aim.z + 220);
+    camera.lookAt(aim.x, aim.y + 8, aim.z);
+    return true;
+  }
+  if (preview === "traffic") {
+    const track = (current.traffic ?? []).find((item) => item.kind === "HELICOPTER")
+      ?? current.traffic?.[0];
+    if (!track?.position) return false;
+    const cells = current.fire_cells ?? [];
+    let x = 0;
+    let y = 0;
+    let z = 0;
+    let weight = 0;
+    for (const cell of cells) {
+      const intensity = Number(cell?.intensity) || 0;
+      if (intensity < 0.08) continue;
+      x += cell.x * intensity;
+      y += cell.y * intensity;
+      z += cell.z * intensity;
+      weight += intensity;
+    }
+    if (weight < 0.1) {
+      camera.position.set(track.position.x - 220, track.position.y + 48, track.position.z + 160);
+    } else {
+      x /= weight;
+      y /= weight;
+      z /= weight;
+      camera.position.set(x + 1_350, y + 180, z + 420);
+    }
+    camera.lookAt(track.position.x, track.position.y + 4, track.position.z);
+    return true;
+  }
+  return false;
+}
+
+function updateView(current, deltaSeconds) {
+  if (!previewCamera(current)) {
+    camera.position.set(current.position.x, current.position.y + 2.25, current.position.z);
+    camera.rotation.set(current.pitch_rad, Math.PI + current.heading_rad, -current.roll_rad, "YXZ");
+    const bodyQuaternion = camera.quaternion.clone();
+    const target = selectedTarget();
+    if (padlock && target) {
+      camera.lookAt(target.position.x, target.position.y, target.position.z);
+      cockpit.group.quaternion.copy(camera.quaternion).invert().multiply(bodyQuaternion);
+    } else {
+      cockpit.group.quaternion.identity();
+    }
   }
   camera.updateMatrixWorld(true);
   sky.position.copy(camera.position);
   cockpit.update(current.mission_s, current.throttle);
   highway.update(current.route, current.active_gate, current.position);
   fireEffects.group.visible = current.sortie !== "water-circuits";
-  fireEffects.update(current.fire_cells, current.mission_s);
-  buildTraffic(current.traffic);
-  dropTrail.update(current, current.water_released_this_tick_kg > 0);
+  fireEffects.update(current.fire_cells, current.mission_s, undefined, {
+    kg: current.drop_credit_kg,
+    x: current.drop_credit?.x ?? current.position?.x,
+    y: current.drop_credit?.y ?? current.position?.y,
+    z: current.drop_credit?.z ?? current.position?.z,
+    dtSeconds: deltaSeconds,
+  });
+  practiceTarget.update(current.drop_aim, current.sortie === "water-circuits");
+  const surfaceY = world
+    ? world.sampleHeight(current.position.x, current.position.z)
+    : Number(current.drop_aim?.y) || 342;
+  dropCurtain.update(
+    current,
+    current.water_released_this_tick_kg > 0,
+    deltaSeconds,
+    surfaceY,
+  );
+  buildTraffic(current.traffic, current.mission_s);
   if (sun.castShadow) {
     sun.position.set(current.position.x - 12_000, current.position.y + 18_000, current.position.z + 9_000);
     sun.target.position.set(current.position.x, 500, current.position.z);
@@ -579,7 +643,7 @@ function updateDom(current) {
   const now = performance.now();
   document.querySelector("#cue").textContent = compactOkanaganCue(current);
   const radio = document.querySelector("#radio");
-  const transmission = String(current.radio ?? "").trim();
+  const transmission = okanaganRadioCaption(current.radio);
   if (transmission && transmission !== lastRadio) {
     lastRadio = transmission;
     radio.textContent = transmission;
@@ -689,7 +753,19 @@ function drawMap(current) {
   }
   map.strokeStyle = "#ffb84d"; map.lineWidth = 2; map.beginPath();
   current.route.forEach((gate, index) => { const p = project(gate.position); index === 0 ? map.moveTo(...p) : map.lineTo(...p); }); map.stroke();
-  for (const cell of current.fire_cells ?? []) { const p = project(cell); map.fillStyle = `rgba(255,90,20,${Math.min(1, cell.intensity)})`; map.fillRect(p[0] - 2, p[1] - 2, 4, 4); }
+  for (const cell of current.fire_cells ?? []) {
+    const p = project(cell);
+    const size = 3 + Math.round(Math.min(1, cell.intensity) * 5);
+    map.fillStyle = `rgba(255,90,20,${Math.min(1, 0.35 + cell.intensity)})`;
+    map.fillRect(p[0] - size / 2, p[1] - size / 2, size, size);
+  }
+  if (current.drop_aim) {
+    const aim = project(current.drop_aim);
+    map.strokeStyle = "#ff6a2a";
+    map.beginPath();
+    map.arc(aim[0], aim[1], 6, 0, Math.PI * 2);
+    map.stroke();
+  }
   for (const track of current.traffic ?? []) { const p = project(track.position); map.fillStyle = "#ffd157"; map.fillRect(p[0] - 3, p[1] - 3, 6, 6); map.fillText(track.callsign, p[0] + 5, p[1]); }
   const own = project(current.position); map.fillStyle = "#8ff6e8"; map.beginPath(); map.arc(own[0], own[1], 4, 0, Math.PI * 2); map.fill();
   map.fillStyle = "#d5ece8"; map.font = "10px ui-monospace"; map.fillText("N ↑  OKANAGAN", 10, 15);
@@ -713,7 +789,7 @@ function animate(now) {
   if (running && !paused) {
     controls(delta); bridge.Advance(delta); state = JSON.parse(bridge.GetState());
     recordTelemetry(state, delta);
-    updateView(state); updateDom(state); drawHud(state, delta, state.mission_s);
+    updateView(state, delta); updateDom(state); drawHud(state, delta, state.mission_s);
     if (!mapCanvas.hidden) drawMap(state);
     if (okanaganMissionTerminal(state)) showMissionResult(state);
   }

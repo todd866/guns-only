@@ -48,6 +48,63 @@ public sealed class OkanaganFireMissionTests
             "HELCO must orbit above the rendered incident terrain");
     }
 
+    [Theory]
+    [InlineData(0.0, 400.0, false)]
+    [InlineData(11.9, 400.0, false)]
+    [InlineData(12.0, 1_400.0, false)]
+    [InlineData(12.0, 400.0, true)]
+    public void LargeForceHoldWaitsForAirAttackClearance(
+        double dwellSeconds, double rangeM, bool cleared)
+    {
+        Assert.Equal(cleared, OkanaganFireMission.AirAttackHoldClears(dwellSeconds, rangeM));
+    }
+
+    [Fact]
+    public void LargeForceHelicopterWorksTheWestFlank()
+    {
+        OkanaganFireMission mission = OkanaganFireMission.Create(
+            OkanaganSortieType.LargeForceEmployment);
+        Vec3D fire = OkanaganGeo.ToWorld(49.850, -119.655, 810.0);
+        var idle = new FireBossPilotCommand(0, 0, 0, 0, false, false);
+        double nearestM = double.PositiveInfinity;
+        for (int tick = 0; tick < 120 * 40; tick++)
+        {
+            mission.Step(idle);
+            OkanaganTrafficTrack helicopter = Assert.Single(
+                mission.Snapshot().Traffic,
+                track => track.Kind == "HELICOPTER");
+            nearestM = Math.Min(nearestM, HorizontalDistance(helicopter.PositionWorldM, fire));
+        }
+
+        Assert.True(nearestM < 400.0,
+            $"HELCO stayed {nearestM:F0} m off the west flank");
+    }
+
+    [Fact]
+    public void WaterCircuitsPublishTheLakePracticeDrop()
+    {
+        OkanaganMissionSnapshot circuits = OkanaganFireMission
+            .Create(OkanaganSortieType.WaterCircuits).Snapshot();
+        OkanaganMissionSnapshot attack = OkanaganFireMission
+            .Create(OkanaganSortieType.FireAttack).Snapshot();
+
+        Assert.Equal(OkanaganFireMission.TrainingDrop.X, circuits.DropAimWorldM.X);
+        Assert.Equal(OkanaganFireMission.TrainingDrop.Z, circuits.DropAimWorldM.Z);
+        Assert.Equal(OkanaganGeo.LakeSurfaceElevationM, circuits.DropAimWorldM.Y);
+        Assert.True(OkanaganGeo.IsOverCentralLake(circuits.DropAimWorldM));
+        Assert.Equal(OkanaganGeo.ToWorld(49.850, -119.655, 810.0), attack.DropAimWorldM);
+        Assert.False(OkanaganGeo.IsOverCentralLake(attack.DropAimWorldM));
+    }
+
+    [Fact]
+    public void AttackSortiesStartWithNoCreditedDropThisTick()
+    {
+        Assert.Equal(0.0, OkanaganFireMission.Create(OkanaganSortieType.FireAttack)
+            .Snapshot().DropCreditKg);
+        Assert.Equal(0.0, OkanaganFireMission.Create(OkanaganSortieType.WaterCircuits)
+            .Snapshot().DropCreditKg);
+    }
+
     [Fact]
     public void WaterAppliedOnTheFictionalWestFlankReducesFireIntensity()
     {

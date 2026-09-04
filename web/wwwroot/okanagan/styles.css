@@ -13,16 +13,12 @@ button, a { font:inherit; touch-action:manipulation; }
 .viewport, #scene, #hud { position:fixed; inset:0; width:100%; height:100%; }
 #scene { background:#8295a0; outline:0; touch-action:none; }
 #hud { pointer-events:none; z-index:2; }
-#cue, #radio, #mission-data, #controls, #pause-button, #nav-button, #map, #touch-flight-controls { position:fixed; z-index:4; }
+#cue, #radio, #pause-button, #nav-button, #map, #touch-flight-controls { position:fixed; z-index:4; }
 
-/* One directive, not a briefing card. The green conformal HUD and sky gates do the teaching. */
+/* Next action lives on the HUD. Keep the live region for assistive tech. */
 #cue {
-  top:calc(env(safe-area-inset-top,0px) + 104px); left:50%; transform:translateX(-50%);
-  max-width:min(460px,72vw); padding:5px 9px; border:1px solid rgba(255,176,32,.48);
-  border-radius:3px; color:var(--amber); background:rgba(2,9,15,.58);
-  font-size:10px; font-weight:800; letter-spacing:.08em; text-align:center; text-shadow:0 1px 4px #000;
+  position:fixed; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap;
 }
-#cue:empty { display:none; }
 #radio {
   left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 58px); transform:translateX(-50%) translateY(5px);
   max-width:min(620px,76vw); padding:5px 8px; border-radius:3px; color:rgba(235,255,242,.88);
@@ -32,16 +28,9 @@ button, a { font:inherit; touch-action:manipulation; }
 }
 #radio[data-visible="true"] { opacity:1; transform:translateX(-50%) translateY(0); }
 #mission-data {
-  right:calc(env(safe-area-inset-right,0px) + 12px); top:calc(env(safe-area-inset-top,0px) + 52px);
-  display:grid; grid-template-columns:1fr; gap:3px; min-width:126px; padding:7px 9px;
-  border:1px solid rgba(77,255,136,.24); border-radius:4px; color:var(--green);
-  background:rgba(2,10,16,.62); font:750 9px/1.2 ui-monospace,monospace;
+  position:fixed; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap;
 }
-#mission-data span { display:flex; justify-content:space-between; gap:9px; }
-#mission-data b { color:rgba(217,255,229,.58); font-size:8px; letter-spacing:.08em; }
-#mission-data #scoop-state { color:var(--green-dim); }
-#mission-data #scoop-state[data-level="caution"] { color:var(--amber); }
-#controls { left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 12px); transform:translateX(-50%); display:flex; gap:6px; }
+#controls { display:none; position:fixed; z-index:4; left:50%; bottom:calc(env(safe-area-inset-bottom,0px) + 12px); transform:translateX(-50%); gap:6px; }
 #controls button, #pause-button, #nav-button {
   min-width:58px; min-height:34px; padding:5px 8px; border:1px solid rgba(77,255,136,.28);
   border-radius:3px; color:rgba(217,255,229,.82); background:rgba(2,10,16,.66);
@@ -144,15 +133,13 @@ body.paused .viewport > :not(#scene):not(#hud):not(.overlay) { filter:saturate(.
 
 @media (pointer:coarse) {
   #touch-flight-controls { display:block; }
-  #controls { bottom:calc(env(safe-area-inset-bottom,0px) + 126px); }
+  #controls { display:flex; bottom:calc(env(safe-area-inset-bottom,0px) + 126px); }
   #controls .touch-target-control { display:block; }
-  #mission-data { top:calc(env(safe-area-inset-top,0px) + 52px); }
   #radio { bottom:calc(env(safe-area-inset-bottom,0px) + 183px); }
 }
 body[data-input="touch"] #touch-flight-controls { display:block; }
-body[data-input="touch"] #controls { bottom:calc(env(safe-area-inset-bottom,0px) + 126px); }
+body[data-input="touch"] #controls { display:flex; bottom:calc(env(safe-area-inset-bottom,0px) + 126px); }
 body[data-input="touch"] #controls .touch-target-control { display:block; }
-body[data-input="touch"] #mission-data { top:calc(env(safe-area-inset-top,0px) + 52px); }
 body[data-input="touch"] #radio { bottom:calc(env(safe-area-inset-bottom,0px) + 183px); }
 @media (max-width:760px) {
   .sortie-grid { grid-template-columns:1fr; }

@@ -141,6 +141,9 @@ function mapGateEntry(entry, index = 0) {
     patternLegCode,
     dirty: entry?.dirty === true || entry?.dirty === 1,
     active: entry?.active === true || entry?.active === 1,
+    rtb: entry?.rtb === true || entry?.rtb === 1,
+    ingress: entry?.ingress === true || entry?.ingress === 1,
+    join: entry?.join === true || entry?.join === 1,
   });
 }
 

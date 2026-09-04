@@ -196,7 +196,7 @@ export const EXPERIENCE_CATALOG = Object.freeze([
     sequence: 13,
     aircraft: "AT-802F Fire Boss",
     title: "Okanagan Fire Boss",
-    shortObjective: "Train water circuits, fly a solo initial attack, then add coordinated incident traffic in the large-force extension.",
+    shortObjective: "Learn the lake scoop, put water on a fire you can see, then hold for Air Attack on the large-force hop.",
     qualification: "",
     releaseState: EXPERIENCE_RELEASE_STATE.PRODUCTION,
     visible: true,

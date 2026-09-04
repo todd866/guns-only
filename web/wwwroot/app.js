@@ -3517,7 +3517,7 @@ const CAMPAIGN_BRIEFS = Object.freeze({
     title: "Okanagan Fire Boss",
     sortie: "Water circuits · solo initial attack · large-force extension",
     configuration: "Kelowna departure · Okanagan Lake scoop lane · 3,104 L hopper · fuel-protected RTB",
-    brief: "Take one Fire Boss from Kelowna to the lake. Learn the scoop circuit first, work the exercise fire alone, then add Air Attack, bird dog and helicopter traffic in the extension exercise.",
+    brief: "Kelowna to the lake. Water Circuits dumps on a marked target. Initial Attack is the west-side column you can see from join. Large Force makes you hold until Air Attack sends you into Division Alpha.",
     controls: "Arrows fly · W/S power · E scoops · hold Space to drop · Esc pauses",
   }),
   "multiplayer": Object.freeze({

@@ -2,6 +2,8 @@ import * as THREE from "./vendor/three.module.js";
 import {
   airdataReadout,
   fuelReadout,
+  fireBossHopperReadout,
+  fireBossProcedureCue,
   mobileTacticalReadout,
   speedBrakeReadout,
   speedTapeMarkers,
@@ -1875,6 +1877,52 @@ class CombatHud {
     ctx.fillText(this.fitText(label, 130), x, y + 23);
     ctx.restore();
     if (this._debug) this._debug.civilianTarget = { label, x, y, onScreen, padlocked };
+  }
+
+  drawFireBossHopper(frame) {
+    const hopper = fireBossHopperReadout(frame.state);
+    if (!hopper) return;
+    const ctx = this.ctx;
+    const width = 132;
+    const height = hopper.dropping ? 52 : 40;
+    const x = this.width - this.safeInsets.right - width - 12;
+    const y = this.safeInsets.top + 48;
+    const accent = hopper.caution || hopper.dropping ? AMBER : GREEN;
+    ctx.save();
+    this.glassPanel(x, y, width, height, accent);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = accent;
+    ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillText(this.fitText(hopper.waterText, width - 16), x + 8, y + 12);
+    ctx.fillStyle = hopper.caution ? AMBER : GREEN_DIM;
+    ctx.font = "750 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    ctx.fillText(this.fitText(hopper.scoopText, width - 16), x + 8, y + 28);
+    if (hopper.dropping) {
+      ctx.fillStyle = AMBER;
+      ctx.fillText("DROPPING", x + 8, y + 42);
+    }
+    ctx.restore();
+  }
+
+  drawFireBossCue(frame) {
+    const text = fireBossProcedureCue(frame.state);
+    if (!text) return;
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+    const width = Math.min(this.width - 48, Math.max(132, ctx.measureText(text).width + 22));
+    const height = 22;
+    const x = (this.width - width) / 2;
+    const y = this.usesMobileTacticalProfile()
+      ? this.safeInsets.top + 36
+      : this.annunciationTop();
+    this.glassPanel(x, y, width, height, AMBER);
+    ctx.fillStyle = AMBER;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(this.fitText(text, width - 16), this.width / 2, y + height / 2);
+    ctx.restore();
   }
 
   banditAngles(frame) {
@@ -5749,6 +5797,8 @@ class CombatHud {
       this.drawWingman(frame);
     }
     this.drawCivilianTarget(frame);
+    this.drawFireBossHopper(frame);
+    this.drawFireBossCue(frame);
     if (!mobileTactical) {
       this.drawHeadingTape(frame.state, {
         headingDeg: display.headingDeg,

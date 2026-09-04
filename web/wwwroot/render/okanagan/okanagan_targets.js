@@ -11,7 +11,7 @@ function fireTarget(cells = []) {
     if (!point || intensity <= 0.01) continue;
     x += point.x * intensity; y += point.y * intensity; z += point.z * intensity; weight += intensity;
   }
-  return weight > 0 ? { x: x / weight, y: y / weight + 90, z: z / weight } : null;
+  return weight > 0 ? { x: x / weight, y: y / weight + 420, z: z / weight } : null;
 }
 
 /** Relevant procedure points only: the list advances with the sortie instead of becoming a POI catalogue. */
@@ -27,6 +27,16 @@ export function okanaganTargets(current = {}) {
   if (current.sortie !== "water-circuits") {
     const position = fireTarget(current.fire_cells);
     if (position) targets.push({ id: "incident:fire", label: "FIRE", kind: "incident", position });
+  } else {
+    const practice = finitePoint(current.drop_aim);
+    if (practice) {
+      targets.push({
+        id: "practice:drop",
+        label: "PRACTICE DROP",
+        kind: "incident",
+        position: practice,
+      });
+    }
   }
   for (const track of current.traffic ?? []) {
     const position = finitePoint(track?.position);

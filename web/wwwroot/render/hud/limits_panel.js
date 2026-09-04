@@ -235,14 +235,16 @@ function fuelPresentation(state, fuelLb, flowPph, capacityLb, bingoThresholdLb) 
     ? (endurance !== null ? String(Math.max(0, Math.round(endurance))) : "--")
     : (minutesToBingo !== null ? String(Math.max(0, Math.round(minutesToBingo))) : "--");
 
+  const rows = [
+    row("FUEL", String(Math.round(fuelLb)), "LB"),
+    row("FF", flowPph !== null ? String(Math.round(flowPph)) : "--", "PPH"),
+    row("JOKER", jokerMin, "MIN"),
+    row("BINGO", bingoMin, "MIN"),
+  ];
+
   return Object.freeze({
     profile: "fuel",
-    rows: Object.freeze([
-      row("FUEL", String(Math.round(fuelLb)), "LB"),
-      row("FF", flowPph !== null ? String(Math.round(flowPph)) : "--", "PPH"),
-      row("JOKER", jokerMin, "MIN"),
-      row("BINGO", bingoMin, "MIN"),
-    ]),
+    rows: Object.freeze(rows),
     accent,
     heroIndex: 3,
     fuelRatio: capacityLb > 0 ? Math.min(1, Math.max(0, fuelLb / capacityLb)) : 0,

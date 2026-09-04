@@ -4,6 +4,8 @@ import test from "node:test";
 
 import {
   airdataReadout,
+  fireBossHopperReadout,
+  fireBossProcedureCue,
   fuelReadout,
   mobileTacticalReadout,
   speedBrakeReadout,
@@ -913,6 +915,50 @@ test("engine-less vehicles do not inherit fighter warnings or systems relevance"
   assert.deepEqual(readout.warnings, []);
 });
 
+test("Fire Boss procedure cue is one HUD line, not a second briefing card", () => {
+  assert.equal(fireBossProcedureCue({ fireboss_cue: "FLY DEPART 16" }), null);
+  assert.equal(fireBossProcedureCue({
+    player_aircraft_id: "aircraft.at-802f-fireboss",
+    fireboss_cue: "  HOLD DROP ON THE LINE  ",
+  }), "HOLD DROP ON THE LINE");
+  assert.equal(fireBossProcedureCue({
+    player_aircraft_id: "aircraft.at-802f-fireboss",
+    fireboss_cue: "",
+  }), null);
+});
+
+test("Fire Boss hopper and scoops are a HUD readout, not a cockpit panel", () => {
+  assert.equal(fireBossHopperReadout({ water_load_kg: 2_100 }), null);
+  const filling = fireBossHopperReadout({
+    player_aircraft_id: "aircraft.at-802f-fireboss",
+    water_load_kg: 2_100,
+    water_capacity_kg: 3_104,
+    fireboss_scoop_valid: true,
+    fireboss_scoop_rate_kgps: 117.5,
+    fireboss_scoops_commanded: true,
+  });
+  assert.equal(filling.waterText, "WATER 2,100 L");
+  assert.equal(filling.scoopText, "FILLING · 118 L/S");
+  assert.equal(filling.caution, false);
+  assert.ok(filling.fillFraction > 0.6 && filling.fillFraction < 0.7);
+
+  const dropping = fireBossHopperReadout({
+    player_aircraft_id: "aircraft.at-802f-fireboss",
+    water_load_kg: 800,
+    fireboss_drop_active: true,
+  });
+  assert.equal(dropping.dropping, true);
+  assert.equal(dropping.scoopText, "SCOOPS UP");
+
+  const fault = fireBossHopperReadout({
+    player_aircraft_id: "aircraft.at-802f-fireboss",
+    scoop_fault: "WINGS LEVEL",
+    fireboss_scoops_commanded: true,
+  });
+  assert.equal(fault.scoopText, "WINGS LEVEL");
+  assert.equal(fault.caution, true);
+});
+
 test("systems mode allowlist retains an explicit barrier engagement", async () => {
   const source = await readFile(new URL("../hud_readouts.js", import.meta.url), "utf8");
   const declaration = source.match(
@@ -984,6 +1030,12 @@ test("production HUD consumes stabilized KIAS plus physical corner and limits pa
     "abstract health must not masquerade as an airframe condition indication");
   assert.doesNotMatch(source, /this\.drawFrameWash\(\)/,
     "scanlines and vignette have no decision-support role");
+  assert.match(source, /fireBossHopperReadout\(frame\.state\)/,
+    "Fire Boss hopper and scoops belong on the HUD, not a fake cockpit panel");
+  assert.match(source, /this\.drawFireBossHopper\(frame\)/);
+  assert.match(source, /fireBossProcedureCue\(frame\.state\)/,
+    "Fire Boss next action belongs under the heading tape, not a DOM briefing card");
+  assert.match(source, /this\.drawFireBossCue\(frame\)/);
 });
 
 test("production HUD gates recovery guidance on the shared platform contract", async () => {
