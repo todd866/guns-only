@@ -131,6 +131,23 @@ body.nav-open #mission-data { display:none; }
 .mission-action:focus-visible { outline:2px solid var(--amber); outline-offset:2px; }
 body.paused .viewport > :not(#scene):not(#hud):not(.overlay) { filter:saturate(.7); }
 
+/* Shared briefing/debrief typography; cockpit instruments keep their flight font. */
+.overlay .menu-card, .overlay .pause-card, .mission-result__panel {
+  color:#f4eddf; background:#151817; border-color:#8f8061;
+  font-family:system-ui,sans-serif;
+}
+.menu-card h1, .pause-card h2, .sortie strong, .mission-result__title {
+  font-family:Georgia,serif; color:#f6dfac;
+}
+.menu-card header p, .sortie span, .mission-result__summary { color:#c5cabb; font-size:13px; }
+.sortie { background:#20251f; border-color:#51564c; }
+.sortie:hover, .sortie.active { background:#30372b; border-color:#e4c990; }
+.menu-actions button, .pause-card .mission-action--primary {
+  background:#ead7ae; color:#191c16; border-color:#f6dfac; min-height:44px;
+}
+.mission-result__kicker { color:#e4c990; }
+.control-legend { color:#bdc9bd; font-size:10px; }
+
 @media (pointer:coarse) {
   #touch-flight-controls { display:block; }
   #controls { display:flex; bottom:calc(env(safe-area-inset-bottom,0px) + 126px); }

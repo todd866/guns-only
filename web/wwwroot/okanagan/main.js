@@ -1,48 +1,53 @@
+import { createBrowserPilotLogbook } from "../render/progression/pilot_logbook.js";
+import { installDisposedPageRestore } from "../render/onboarding/disposed_page_restore.js";
+const pilotLogbook = createBrowserPilotLogbook();
+installDisposedPageRestore();
+window.addEventListener("pagehide", () => pilotLogbook.finish({ outcome: "Left before completion" }));
 import * as THREE from "../vendor/three.module.js";
-import { createOkanaganWorld } from "../render/okanagan/okanagan_world.js?v=352";
-import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=352";
-import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=352";
-import { createOkanaganDropCurtain } from "../render/okanagan/okanagan_drop_curtain.js?v=352";
-import { createOkanaganPracticeTarget } from "../render/okanagan/okanagan_practice_target.js?v=352";
+import { createOkanaganWorld } from "../render/okanagan/okanagan_world.js?v=353";
+import { createOkanaganHighway } from "../render/okanagan/okanagan_highway.js?v=353";
+import { createOkanaganFireEffects } from "../render/okanagan/okanagan_fire_effects.js?v=353";
+import { createOkanaganDropCurtain } from "../render/okanagan/okanagan_drop_curtain.js?v=353";
+import { createOkanaganPracticeTarget } from "../render/okanagan/okanagan_practice_target.js?v=353";
 import {
   createOkanaganTrafficCraft,
   poseOkanaganTrafficCraft,
-} from "../render/okanagan/okanagan_traffic.js?v=352";
-import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=352";
-import { createHud } from "../hud.js?v=352";
+} from "../render/okanagan/okanagan_traffic.js?v=353";
+import { createFireBossCockpit } from "../render/okanagan/fireboss_cockpit.js?v=353";
+import { createHud } from "../hud.js?v=353";
 import {
   armFlightAudio,
   flightAudioDiagnostics,
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=352";
+} from "../render/audio/flight_audio.js?v=353";
 import {
   loadPlayerSettings,
   savePlayerSettings,
-} from "../render/settings/player_settings.js?v=352";
-import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=352";
-import { standardGamepadState } from "../render/input/dual_stick_input.js?v=352";
-import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=352";
+} from "../render/settings/player_settings.js?v=353";
+import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=353";
+import { standardGamepadState } from "../render/input/dual_stick_input.js?v=353";
+import { mobileVirtualStickState } from "../render/input/mobile_virtual_stick.js?v=353";
 import {
   compactOkanaganCue,
   okanaganFlightState,
   okanaganRadioCaption,
   okanaganRadioHoldMs,
-} from "../render/okanagan/okanagan_hud_adapter.js?v=352";
+} from "../render/okanagan/okanagan_hud_adapter.js?v=353";
 import {
   cycleOkanaganTarget,
   okanaganTargets,
   retainOkanaganTarget,
-} from "../render/okanagan/okanagan_targets.js?v=352";
+} from "../render/okanagan/okanagan_targets.js?v=353";
 import {
   okanaganDebriefModel,
   okanaganMissionTerminal,
-} from "../render/okanagan/okanagan_debrief.js?v=352";
+} from "../render/okanagan/okanagan_debrief.js?v=353";
 import {
   okanaganDialogFocusables,
   okanaganDialogTabTarget,
-} from "../render/okanagan/okanagan_dialog_focus.js?v=352";
+} from "../render/okanagan/okanagan_dialog_focus.js?v=353";
 
 const SORTIES = Object.freeze({
   "water-circuits": {
@@ -395,6 +400,9 @@ function showMissionResult(current) {
   const model = okanaganDebriefModel(current);
   if (!model || missionTerminal) return false;
   missionTerminal = true;
+  pilotLogbook.finish({ outcome: model.title, correction: model.correction,
+    durationSeconds: current.mission_s, effectiveDrops: current.effective_drops,
+    waterKg: current.effective_water_kg, cycles: current.completed_cycles });
   missionResultModel = model;
   paused = true;
   running = false;
@@ -451,7 +459,9 @@ function startSortie(id) {
   menu.classList.remove("visible");
   menu.setAttribute("aria-hidden", "true");
   setMissionSurfaceInert(false);
+  pilotLogbook.finish({ outcome: "Left before completion" });
   bridge.Start(SORTIES[id].index);
+  pilotLogbook.begin({ activity: `Okanagan · ${SORTIES[id].title || id}` });
   state = JSON.parse(bridge.GetState());
   throttle = 0.65;
   scoops = false;

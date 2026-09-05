@@ -1,5 +1,6 @@
 export const MISSION_AUTHORITY_KIND = Object.freeze({
   PRODUCTION: "production",
+  PRACTICE: "practice",
   TOP_GUN: "top-gun",
   FIRST_RUN_VALLEY: "first-run-valley",
 });
@@ -42,6 +43,7 @@ export function shouldRestageFirstRunValley({
 
 export function sameMissionAuthority(left, right) {
   if (!left || !right || left.kind !== right.kind) return false;
+  if (left.kind === MISSION_AUTHORITY_KIND.PRACTICE) return left.exercise === right.exercise;
   if (left.kind === MISSION_AUTHORITY_KIND.TOP_GUN) return left.seat === right.seat;
   if (left.kind === MISSION_AUTHORITY_KIND.FIRST_RUN_VALLEY) return true;
   return left.beat === right.beat

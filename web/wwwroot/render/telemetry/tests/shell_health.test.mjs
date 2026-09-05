@@ -82,6 +82,55 @@ test("beacon posts shell-health rows on milestone and fatal without opt-in gate"
   assert.match(fatal.message, /WebGL/i);
 });
 
+test("repeated flushes retain first-occurrence timestamps for milestones and fatals", async () => {
+  let clock = 100;
+  const posts = [];
+  const beacon = createShellHealthBeacon({
+    build: "261",
+    now: () => clock,
+    epochMs: () => 1_700_000_000_000,
+    fetchImpl: async (_url, init) => {
+      posts.push(JSON.parse(init.body));
+      return { ok: true, status: 204 };
+    },
+  });
+
+  beacon.mark("script_load");
+  clock = 250;
+  beacon.mark("bridge_ready");
+  await beacon.flush({ force: true });
+
+  const firstFlush = posts.at(-1);
+  assert.equal(firstFlush.rows.find((row) => row.milestone === "script_load").t, 100);
+  assert.equal(firstFlush.rows.find((row) => row.milestone === "bridge_ready").t, 250);
+
+  clock = 900;
+  assert.equal(beacon.mark("bridge_ready"), false);
+  await beacon.flush({ force: true });
+  const secondFlush = posts.at(-1);
+  assert.equal(
+    secondFlush.rows.find((row) => row.milestone === "script_load").t,
+    100,
+    "milestone timestamps must not advance on later flushes",
+  );
+  assert.equal(secondFlush.rows.find((row) => row.milestone === "bridge_ready").t, 250);
+
+  clock = 500;
+  beacon.fatal(new Error("WebGL context lost"));
+  await beacon.flush({ force: true });
+  const fatalFlush = posts.at(-1);
+  assert.equal(fatalFlush.rows.find((row) => row.code === "fatal").t, 500);
+
+  clock = 2000;
+  await beacon.flush({ force: true });
+  const laterFatalFlush = posts.at(-1);
+  assert.equal(
+    laterFatalFlush.rows.find((row) => row.code === "fatal").t,
+    500,
+    "fatal timestamps must not advance on later flushes",
+  );
+});
+
 test("fatal(err) records the fatal and lastFatal returns the record", () => {
   const beacon = createShellHealthBeacon({
     build: "261",

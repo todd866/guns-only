@@ -3486,7 +3486,7 @@
 
     /* ---------------------------------------------------------------------------------------
        SHARED MISSION-FLOW SURFACES
-       Build 352's picker, first-sortie brief, pause and result are one journey. This final layer
+       Build 353's picker, first-sortie brief, pause and result are one journey. This final layer
        gives those modes the same type scale, spacing, action hierarchy and responsive rules.
        It intentionally does not reach into any in-flight HUD or standalone mission route.
        --------------------------------------------------------------------------------------- */
@@ -3736,7 +3736,7 @@
       }
     }
 
-    /* This rule comes after the pictorial-picker override on purpose. Build 352's earlier
+    /* This rule comes after the pictorial-picker override on purpose. Build 353's earlier
        two-column rule was valid in isolation but lost the cascade to a later display:block,
        leaving Fly below a tall poster grid on phone-shaped landscape screens. */
     @media (max-height: 500px) and (orientation: landscape) {
@@ -3880,6 +3880,7 @@
       .boot-pulse { animation: none; }
     }
   </style>
+  <link rel="stylesheet" href="./render/onboarding/pilot_notebook.css">
 </head>
 <body>
   <canvas id="scene" tabindex="0" aria-label="Air combat simulation view"></canvas>
@@ -4307,6 +4308,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
           <button id="ready-replay" type="button" hidden>Replay incident again</button>
           <button id="ready-handoff" type="button" hidden disabled>CALL IT A DAY · RTB</button>
           <div class="ready-secondary-actions">
+            <button id="ready-practice" type="button">Practice</button>
+            <button id="ready-logbook" type="button">Logbook</button>
             <button id="ready-intro-replay" type="button" hidden>Replay valley intro</button>
             <button id="ready-settings" type="button">Settings</button>
             <button id="ready-restart" type="button" hidden>Restart sortie</button>
@@ -4332,7 +4335,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
             <span aria-hidden="true">⌨</span> Built for a laptop or desktop: flight controls, the tactical map, and the full instrument set need a keyboard and a real screen.
           </button>
           <div id="ready-build-row">
-            <output id="ready-build" data-state="checking">Build 352 · verifying</output>
+            <output id="ready-build" data-state="checking">Build 353 · verifying</output>
             <button id="ready-build-reload" type="button" hidden>Reload current build</button>
           </div>
           <div class="ready-telemetry-disclosure">
@@ -4436,7 +4439,7 @@ Splash one bandit to qualify · H controls · R restarts</p>
     // network navigation succeeds, so the gate cannot destroy the only usable offline release.
     // Derive from a normal stamped URL so this comparison cannot drift from the next release:
     // tools/release/stamp-release.mjs rewrites every `?v=NNN`, and nothing else here.
-    const releaseBuild = new URL("./service-worker.js?v=352", location.href)
+    const releaseBuild = new URL("./service-worker.js?v=353", location.href)
       .searchParams.get("v");
 
     globalThis.__gunsPrebootReady = (async () => {
@@ -4532,11 +4535,11 @@ Splash one bandit to qualify · H controls · R restarts</p>
         });
         document.head.append(script);
       });
-      await loadClassicScript("./multiplayer-config.js?v=352");
-      await loadClassicScript("./_framework/blazor.webassembly.js?v=352", {
+      await loadClassicScript("./multiplayer-config.js?v=353");
+      await loadClassicScript("./_framework/blazor.webassembly.js?v=353", {
         autostart: "false",
       });
-      await import("./app.js?v=352");
+      await import("./app.js?v=353");
     } catch (error) {
       console.error(error);
       document.querySelector("#boot")?.classList.add("ready");
@@ -4549,8 +4552,8 @@ Splash one bandit to qualify · H controls · R restarts</p>
       try {
         const [{ detectEmbeddedBrowser }, { bootFallbackModel, mountBootFallback }] =
           await Promise.all([
-            import("./render/shell/inapp_browser.js?v=352"),
-            import("./render/shell/boot_fallback.js?v=352"),
+            import("./render/shell/inapp_browser.js?v=353"),
+            import("./render/shell/boot_fallback.js?v=353"),
           ]);
         const detection = detectEmbeddedBrowser({
           userAgent: navigator.userAgent,
@@ -4572,5 +4575,6 @@ Splash one bandit to qualify · H controls · R restarts</p>
       }
     }
   </script>
+<div id="practice-cue" hidden></div>
 </body>
 </html>

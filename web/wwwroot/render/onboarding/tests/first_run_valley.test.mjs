@@ -70,16 +70,16 @@ test("return visits and explicit menu keep the six-tile picker", () => {
   }), false);
 });
 
-test("Playwright keeps the picker unless firstRun=1", () => {
+test("automated and human first visits use the same onboarding rule", () => {
   assert.equal(shouldAutoStartFirstRunValley({
     firstRunPending: true,
     webdriver: true,
-  }), false);
+  }), true);
   assert.equal(shouldAutoStartFirstRunValley({
     firstRunPending: false,
     firstRunQuery: "1",
     webdriver: true,
-  }), true, "QA replay must still skip Ready even when already seen");
+  }), true, "explicit replay stages Ready even when already seen");
   assert.equal(shouldAutoStartFirstRunValley({
     firstRunPending: false,
     firstRunQuery: "1",
@@ -97,7 +97,7 @@ test("other programme deep links never steal the first-run valley", () => {
   }
 });
 
-test("menu=1 wins over an unseen first visit, but firstRun=1 wins over menu", () => {
+test("menu=1 wins over an unseen first visit and explicit replay", () => {
   assert.equal(shouldAutoStartFirstRunValley({
     firstRunPending: true,
     menuQuery: "1",

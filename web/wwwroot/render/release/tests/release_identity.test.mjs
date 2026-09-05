@@ -266,7 +266,10 @@ test("shell, browser module, service worker, and deployment endpoint share one r
   assert.match(app,
     /!runningBuildInfo[\s\S]*?runningUrl === currentUrl[\s\S]*?runningBuildInfo = current/,
     "a preview must never borrow canonical production metadata as its running provenance");
-  assert.match(app, /event\.persisted\) void resolveBuildIdentity\(\{ force: true \}\)/);
+  assert.match(app, /installDisposedPageRestore\(\)/,
+    "BFCache restore must reload the disposed runtime before flying again");
+  assert.match(app, /showScreen && ready && !wasScreenVisible/,
+    "only an actually visible Ready boundary may revalidate the release");
   assert.match(app, /!document\.hidden\) void resolveBuildIdentity\(\)/);
   assert.match(app, /window\.addEventListener\("focus", \(\) => void resolveBuildIdentity\(\)\)/);
   assert.doesNotMatch(app, /setInterval\([^)]*resolveBuildIdentity/);

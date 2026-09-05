@@ -39,7 +39,7 @@ test("the whole-repository gate keeps Node memory and test fan-out bounded", () 
     directNodeTestCalls,
     [
       'node --test --test-concurrency="$node_test_concurrency" "$@"',
-      'node --test --test-concurrency="$node_test_concurrency" web/smoke/smoke.test.mjs',
+      'node --test --test-concurrency="$node_test_concurrency" web/smoke/smoke.test.mjs web/smoke/player-quality.test.mjs',
     ],
     "every direct Node test-runner call must carry the bounded concurrency flag",
   );

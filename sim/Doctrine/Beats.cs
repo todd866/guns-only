@@ -540,7 +540,8 @@ public record BeatSetup(string Name, AircraftState Player, AircraftState Bandit,
     OpponentPresence OpponentPresence = OpponentPresence.Present,
     AircraftState? OpponentInitialState = null,
     GunsOnly.Sim.Casevac.CasevacScenarioDefinition? Casevac = null,
-    FirstRunValleyConfig? FirstRunValley = null) {
+    FirstRunValleyConfig? FirstRunValley = null,
+    GunsOnly.Sim.Training.PracticeExercise Practice = GunsOnly.Sim.Training.PracticeExercise.None) {
     public AircraftParams PlayerAir => PlayerParams ?? FlightModel.Sabre;
     public AircraftParams BanditAir => BanditParams ?? FlightModel.Sabre;
     public CombatConfig CombatRules => Combat ?? CombatConfig.Fighter;

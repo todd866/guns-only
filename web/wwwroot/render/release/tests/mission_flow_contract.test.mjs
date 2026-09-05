@@ -93,9 +93,9 @@ test("the root shell uses the same explicit lifecycle and action vocabulary", as
   assert.match(ready, /role="dialog"/);
   assert.match(ready, /aria-modal="true"/);
   assert.match(ready, /aria-labelledby="ready-menu-title"/);
-  assert.match(app, /readyScreen\.dataset\.mode = firstRunReady[\s\S]*?"intro"[\s\S]*?"program"[\s\S]*?"debrief"[\s\S]*?"pause"/);
-  assert.match(app, /readyRestart\.textContent = finished \? "Repeat sortie" : "Restart sortie"/);
-  assert.match(app, /readyReturn\.textContent = "Choose sortie"/);
+  assert.match(app, /readyScreen\.dataset\.mode = \(firstRunReady \|\| practiceReady\)[\s\S]*?"intro"[\s\S]*?"program"[\s\S]*?"debrief"[\s\S]*?"pause"/);
+  assert.match(app, /readyRestart\.textContent = selectedPracticeExercise \? "Restart practice" : finished \? "Repeat sortie" : "Restart sortie"/);
+  assert.match(app, /readyReturn\.textContent = "Aircraft"/);
   assert.match(app, /syncReadyModalOwnership\(showScreen\)/);
   assert.match(app, /readyReplay\.textContent = "Replay"/);
   assert.match(app, /const singleCorrection = result\.safetyCorrection[\s\S]*?visualMerge\?\.correction[\s\S]*?result\.correction/);

@@ -1,5 +1,9 @@
+import { createPilotLogbook, snapshotAttemptResult } from "./render/progression/pilot_logbook.js";
+import { practiceExercise, practiceResult } from "./render/onboarding/practice.js";
+import { installDisposedPageRestore } from "./render/onboarding/disposed_page_restore.js";
+import { createPilotNotebook } from "./render/onboarding/pilot_notebook.js";
 import * as THREE from "./vendor/three.module.js";
-import { createHud } from "./hud.js?v=352";
+import { createHud } from "./hud.js?v=353";
 import {
   boundingSphereDiameterFromSize,
   disposeSceneResources,
@@ -23,7 +27,7 @@ import {
   combatHandoffPresentation,
   sortieResultCopy,
   visualMergeDebriefPresentation,
-} from "./render/debrief/sortie_result.js?v=352";
+} from "./render/debrief/sortie_result.js?v=353";
 import {
   applyTopGunAnime1986,
   topGunAnime1986ThemeActive,
@@ -46,11 +50,11 @@ import {
   shouldAutoStartFirstRunValley,
   touchFireAriaLabel,
   touchFireVisibleLabel,
-} from "./render/onboarding/first_run_valley.js?v=352";
+} from "./render/onboarding/first_run_valley.js?v=353";
 import {
   dialogTabDestination,
   renderedDialogControl,
-} from "./render/onboarding/modal_focus.js?v=352";
+} from "./render/onboarding/modal_focus.js?v=353";
 import { rapierEconomyPresentation } from "./render/debrief/points_ledger.js";
 import { createDamageSmokeTrail } from "./render/effects/damage_smoke_trail.js";
 import { createTacticalCloudField } from "./render/environment/tactical_clouds.js";
@@ -93,8 +97,8 @@ import {
   createReleaseIdentity,
   normalizeBuildInfo,
   runningBuildInfoUrl,
-} from "./render/release/release_identity.js?v=352";
-import { experienceAccess } from "./render/release/quarantine_gate.js?v=352";
+} from "./render/release/release_identity.js?v=353";
+import { experienceAccess } from "./render/release/quarantine_gate.js?v=353";
 import {
   createPilotActionController,
   projectTestFlightState,
@@ -107,7 +111,7 @@ import {
   circuitsPadlockTargets,
   padlockTargetValid,
 } from "./render/hud/carrier_sa.js";
-import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=352";
+import { recoveryNavigationPresentation } from "./render/hud/limits_panel.js?v=353";
 import {
   meshNavPresentation,
   parseMeshPlaceCatalog,
@@ -116,10 +120,10 @@ import {
 } from "./render/nav/mesh_nav_presentation.js";
 import {
   selectCarrierSortieNavigationPresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=352";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=353";
 import {
   syncCarrierSortieTouchRtbControl,
-} from "./render/nav/carrier_sortie_touch_control.js?v=352";
+} from "./render/nav/carrier_sortie_touch_control.js?v=353";
 import { createMeshNavMap } from "./render/nav/mesh_nav_map.js";
 import {
   bindNavNdChrome,
@@ -203,7 +207,7 @@ import { createFramePerfAggregator } from "./render/telemetry/frame_perf.js";
 import {
   AdaptiveAiWorkBudget,
   AI_COMPUTE_LEVEL,
-} from "./render/telemetry/ai_frame_pressure.js?v=352";
+} from "./render/telemetry/ai_frame_pressure.js?v=353";
 import {
   FRAME_GOVERNOR_ACTION,
   formatFrameGovernorStatus,
@@ -213,15 +217,15 @@ import { MeasuredTimeCompressionBudget } from "./render/telemetry/time_compressi
 import {
   buildTelemetryBatch,
   retainTelemetryRowsUnderBackpressure,
-} from "./render/telemetry/telemetry_batch.js?v=352";
-import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=352";
-import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=352";
-import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=352";
+} from "./render/telemetry/telemetry_batch.js?v=353";
+import { createShellHealthBeacon } from "./render/telemetry/shell_health.js?v=353";
+import { detectEmbeddedBrowser } from "./render/shell/inapp_browser.js?v=353";
+import { standaloneNavigationHref } from "./render/shell/standalone_navigation.js?v=353";
 import {
   createBootWatchdog,
   resourceProgressCounter,
-} from "./render/shell/boot_watchdog.js?v=352";
-import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=352";
+} from "./render/shell/boot_watchdog.js?v=353";
+import { bootFallbackModel, mountBootFallback } from "./render/shell/boot_fallback.js?v=353";
 import {
   CONTROL_BINDINGS,
   controlCodeLabel,
@@ -230,7 +234,7 @@ import {
   rebindControl,
   resetControlBindings,
   savePlayerSettings,
-} from "./render/settings/player_settings.js?v=352";
+} from "./render/settings/player_settings.js?v=353";
 import {
   AUTHORITY_TICK_HZ,
   DEFAULT_TELEMETRY_TICK_STRIDE,
@@ -277,13 +281,13 @@ import {
   createRapierGunDrone,
   createTransport,
   updateConventionalRunwayPresentation,
-} from "./render/scene/scene_builders.js?v=352";
-import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=352";
+} from "./render/scene/scene_builders.js?v=353";
+import { createHighAltitudeBalloon } from "./render/scene/high_altitude_balloon.js?v=353";
 import {
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "./render/audio/flight_audio.js?v=352";
+} from "./render/audio/flight_audio.js?v=353";
 import {
   primeCasevacAudio,
   setCasevacAudioEnabled,
@@ -2691,6 +2695,7 @@ window.addEventListener("pagehide", () => {
   if (arenaClient?.activeMatch) {
     void arenaClient.completeFromState(latestState || {}, { earlyAbandon: true });
   }
+  finishLogbookAttempt(latestState, true);
   recorder.endSortie("pagehide", latestState);
   recorder.flush({ force: true });
 });
@@ -2702,9 +2707,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) recorder.flush({ force: true });
   else if (!document.hidden) void resolveBuildIdentity();
 });
-window.addEventListener("pageshow", (event) => {
-  if (event.persisted) void resolveBuildIdentity({ force: true });
-});
+installDisposedPageRestore();
 window.addEventListener("focus", () => void resolveBuildIdentity());
 
 let bridge = null;
@@ -2797,6 +2800,19 @@ function releaseDirectFlightAxes(source) {
 let setMobileFrozen = () => {};
 let activeView = null;
 let latestState = null;
+let selectedPracticeExercise = null;
+let pilotNotebook = null;
+let logbookStorage;
+try { logbookStorage = window.localStorage; } catch { /* memory-only logbook */ }
+const pilotLogbook = createPilotLogbook({ storage: logbookStorage });
+const practiceCue = document.querySelector("#practice-cue");
+function finishLogbookAttempt(state = latestState, abandoned = false) {
+  if (!pilotLogbook.pending) return null;
+  const correction = practiceResult(state)?.correction
+    || visualMergeDebriefPresentation(state)?.correction
+    || sortieResultCopy(state)?.correction || "Review the final exchange before your next attempt.";
+  return pilotLogbook.finish(snapshotAttemptResult(state, { abandoned, correction }));
+}
 let campaignProfile = loadCampaignProfile();
 const requestedProgramId = new URLSearchParams(window.location.search).get("program");
 // Mission-hosted entries use campaignNode. Production-visible standalone routes (Cobra Canyon)
@@ -3015,7 +3031,7 @@ const pauseReasons = new Set(["ready"]);
 // Every platform sees the same aircraft front door, except the one-shot first-run valley on-ramp.
 // The on-ramp is staged behind its own Ready card: no aircraft clock moves until the pilot chooses
 // Enter valley. `autoLaunchPending` is armed only after that gesture needs asynchronous terrain
-// warmup. Playwright (`navigator.webdriver`) keeps the picker unless `?firstRun=1`. Catalogue
+// warmup. Automated and human visits share the same entry rule. Catalogue
 // clicks dismiss the on-ramp for the rest of the page lifetime.
 let autoLaunchPending = false;
 let firstRunAutostartPending = false;
@@ -3643,7 +3659,6 @@ function firstRunValleyQueryContext() {
     programQuery: searchParams.get("program"),
     menuQuery: searchParams.get("menu"),
     firstRunQuery: searchParams.get("firstRun"),
-    webdriver: navigator.webdriver === true,
   };
 }
 
@@ -4660,7 +4675,7 @@ function renderPauseUi(state = latestState) {
   // session hold may cover or inert this surface, but none of them may make staged valley
   // authority masquerade as the normal six-aircraft programme underneath.
   const firstRunReady = firstRunAutostartPending && ready && !finished;
-  const showScreen = !help && !calibrating
+  const showScreen = !help && !calibrating && !pauseReasons.has("notebook")
     && (ready || finished || background || sessionPaused || settingsPaused);
   const brief = missionBrief();
   const handoff = combatHandoffPresentation(state);
@@ -4671,7 +4686,8 @@ function renderPauseUi(state = latestState) {
   const wasScreenVisible = readyScreen.classList.contains("visible");
   const startWasDisabled = readyStart.disabled;
 
-  readyScreen.dataset.mode = firstRunReady
+  const practiceReady = ready && !!selectedPracticeExercise;
+  readyScreen.dataset.mode = (firstRunReady || practiceReady)
     ? "intro" : ready ? "program" : finished ? "debrief" : "pause";
   readyScreen.dataset.richDebrief = String(richCasevacDebrief);
   const casevacReady = ready && selectedBeat === 13;
@@ -4679,7 +4695,7 @@ function renderPauseUi(state = latestState) {
   // This must be a semantic visibility edge, not CSS alone. readyScreenFocusables deliberately
   // ignores descendants of [hidden]; without it the invisible consent checkbox becomes the
   // computed last item in pause/debrief and lets Tab escape the aria-modal dialog.
-  if (readyTelemetryDisclosure) readyTelemetryDisclosure.hidden = !ready || firstRunReady;
+  if (readyTelemetryDisclosure) readyTelemetryDisclosure.hidden = !ready || firstRunReady || practiceReady;
   const routeBlocked = ready && blockedProgramExperience !== null;
   readyScreen.dataset.routeBlocked = String(routeBlocked);
   if (readyRouteNotice) {
@@ -4712,7 +4728,7 @@ function renderPauseUi(state = latestState) {
       }
     }
   }
-  if (readySelector) readySelector.hidden = !ready || firstRunReady;
+  if (readySelector) readySelector.hidden = !ready || firstRunReady || practiceReady;
   if (readyDeckConfig && !ready) readyDeckConfig.hidden = true;
   if (readyCircuitsPreflight && !ready) readyCircuitsPreflight.hidden = true;
   if (ready) renderCampaignProgress();
@@ -4721,12 +4737,12 @@ function renderPauseUi(state = latestState) {
     routes: state?.casevac_routes,
   });
   if (readyMenuTitle) {
-    readyMenuTitle.textContent = firstRunReady
+    readyMenuTitle.textContent = selectedPracticeExercise && finished ? "Practice result" : practiceReady ? "Practice one skill" : firstRunReady
       ? "Your first sortie" : ready
         ? "Pick an aircraft" : finished ? "Sortie complete" : "Flight paused";
   }
   if (readyMenuHelp) {
-    readyMenuHelp.textContent = (firstRunReady
+    readyMenuHelp.textContent = (practiceReady ? "One objective, then review and repeat." : firstRunReady
       ? "A short guided intercept before the full combat programme."
       : ready ? "Pick the aircraft you want to fly."
       : finished
@@ -4759,14 +4775,14 @@ function renderPauseUi(state = latestState) {
   readyScreen.classList.toggle("visible", showScreen);
   // The richer four-axis CASEVAC debrief is rendered above this generic finished card. Keep the
   // card as the visual backdrop, but expose only the topmost dialog to focus and assistive tech.
-  readyScreen.inert = richCasevacDebrief || settingsPaused;
+  readyScreen.inert = richCasevacDebrief || settingsPaused || !!pilotNotebook?.open;
   readyScreen.setAttribute(
     "aria-hidden",
     String(!showScreen || richCasevacDebrief || settingsPaused),
   );
   if (readySettings) readySettings.hidden = !showScreen;
   if (readyIntroReplay) {
-    readyIntroReplay.hidden = !(firstRunReady
+    readyIntroReplay.hidden = !!selectedPracticeExercise || !(firstRunReady
       || (ready && selectedProgramNodeId === "first-merge"));
     readyIntroReplay.textContent = firstRunReady
       ? "Choose another mission" : "Replay valley intro";
@@ -4776,18 +4792,39 @@ function renderPauseUi(state = latestState) {
     // The primary finished action may advance the programme before it launches. This utility
     // repeats the sortie which just ended, so giving both controls the old "Fly again" label hid
     // a real navigation decision from the pilot.
-    readyRestart.textContent = finished ? "Repeat sortie" : "Restart sortie";
+    readyRestart.textContent = selectedPracticeExercise ? "Restart practice" : finished ? "Repeat sortie" : "Restart sortie";
   }
   if (readyReturn) {
-    readyReturn.hidden = ready;
-    readyReturn.textContent = "Choose sortie";
+    readyReturn.hidden = ready && !selectedPracticeExercise;
+    readyReturn.textContent = "Aircraft";
   }
   if (readyHandoff) {
     readyHandoff.hidden = !handoffActionAvailable;
     readyHandoff.disabled = !handoffActionAvailable;
   }
 
-  if (finished) {
+  if ((practiceReady || finished) && selectedPracticeExercise) {
+    const exercise = practiceExercise(selectedPracticeExercise);
+    const result = practiceResult(state);
+    readyReplay.hidden = true;
+    readyKicker.textContent = `F-22 practice · ${exercise.limit}`;
+    readyTitle.textContent = finished ? result?.title || "Exercise ended" : exercise.title;
+    readyBrief.textContent = finished ? result?.brief || exercise.brief : exercise.brief;
+    if (readySortieLabel) readySortieLabel.textContent = "Objective";
+    if (readyConfigLabel) readyConfigLabel.textContent = finished ? "Evidence" : "Aircraft";
+    readySortie.textContent = exercise.title;
+    readyConfig.textContent = finished
+      ? `${Math.round(Number(state?.simulation_time_s) || 0)} seconds · ${Number(state?.sortie_hits) || 0} hits · ${Number(state?.sortie_rounds_fired) || 0} rounds`
+      : "F-22A public-data surrogate · full flight and landing physics";
+    const key = (action) => controlCodeLabel(playerSettings.bindings[action]);
+    const practiceControls = mobileControls
+      ? "Left stick power/yaw · right stick pitch/roll · GUNS fires · Pause opens controls"
+      : `${key("pull")}/${key("push")} pitch · ${key("rollLeft")}/${key("rollRight")} roll · ${key("powerUp")}/${key("powerDown")} power · ${key("fire")} fire · ${key("gearToggle")} gear · H controls · Esc pause`;
+    if (readyControls) readyControls.textContent = finished ? result?.correction || exercise.correction
+      : `${exercise.cue}\n${practiceControls}`;
+    readyStart.textContent = finished ? "Repeat practice" : "Start practice";
+    readyHint.textContent = "Practice results are saved locally and do not count as a full sortie.";
+  } else if (finished) {
     const result = sortieResultCopy(state);
     const casevac = isCasevacState(state);
     const casevacFacts = casevac ? casevacFinishedFacts(state) : null;
@@ -4989,7 +5026,7 @@ Touchdown primary · ${carrierFacts.touchdownCorrection}`
   // Force a fresh build check the moment the MENU appears, so a deploy that landed while the pilot
   // was flying is noticed as soon as they are back at a safe point rather than up to a minute
   // later on the revalidate timer.
-  if (ready && !wasScreenVisible) void resolveBuildIdentity({ force: true });
+  if (showScreen && ready && !wasScreenVisible) void resolveBuildIdentity({ force: true });
   if (buildIdentity.stale) {
     // A newer build is live. At the menu it is safe to take it AUTOMATICALLY -- no sortie is in
     // progress -- instead of hoping the pilot notices a hint and taps reload. reloadCurrentBuild
@@ -5080,7 +5117,7 @@ function enterReady({
 } = {}) {
   const preserveCalibration = pauseReasons.has("calibration");
   const preserveBackground = pauseReasons.has("background");
-  if (resetBridge) recorder.endSortie("restaged", latestState);
+  if (resetBridge) { finishLogbookAttempt(latestState, true); recorder.endSortie("restaged", latestState); }
   resetMissionPresentation();
   pauseReasons.clear();
   pauseReasons.add("ready");
@@ -5093,7 +5130,13 @@ function enterReady({
     }
     const topGunAllowed = isTopGunProgram()
       && experienceAccess(TOP_GUN_PROGRAM_ID, window.location).allowed;
-    if (topGunAllowed && stageTopGunOnBridge()) {
+    if (selectedPracticeExercise) {
+      const exercise = practiceExercise(selectedPracticeExercise);
+      if (!bridge.StartPractice(exercise.code)) throw new Error("Practice staging failed");
+      stagedMissionAuthority = Object.freeze({ kind: MISSION_AUTHORITY_KIND.PRACTICE, exercise: exercise.id });
+      firstRunAutostartPending = false;
+      autoLaunchPending = false;
+    } else if (topGunAllowed && stageTopGunOnBridge()) {
       recorder.event("lifecycle", "sortie_staged", {
         program: TOP_GUN_PROGRAM_ID,
         top_gun_seat: topGunSeatLabel(selectedTopGunSeat),
@@ -5145,6 +5188,7 @@ function enterReady({
 }
 
 function selectCampaignNode(nodeId, { focus = true } = {}) {
+  selectedPracticeExercise = null;
   const standalone = experienceById(nodeId);
   if (standalone?.id === TOP_GUN_PROGRAM_ID) {
     if (!experienceAccess(standalone.id, window.location).allowed) return false;
@@ -5246,6 +5290,12 @@ function selectCampaignNode(nodeId, { focus = true } = {}) {
 function launchMission(index = selectedBeat) {
   if (blockedProgramExperience
     || !experienceAccess(selectedProgramNodeId, window.location).allowed) return false;
+  if (selectedPracticeExercise) {
+    const staged = !pauseReasons.has("ready") || stagedMissionAuthority?.kind !== MISSION_AUTHORITY_KIND.PRACTICE
+      ? enterReady({ resetBridge: true, focus: false }) : refreshStagedMissionSnapshot();
+    if (prepareMissionTerrain(index, staged)) { autoLaunchPending = true; return false; }
+    return beginFlight();
+  }
   const standalone = experienceById(selectedProgramNodeId);
   if (experienceComingSoon(selectedProgramNodeId)) return false;
   if (!arenaMatchReady()) {
@@ -5341,6 +5391,8 @@ function repeatSelectedSortieNow() {
 }
 
 function returnToCatalogue() {
+  selectedPracticeExercise = null;
+  dismissFirstRunValleyAutostart();
   enterReady();
   return true;
 }
@@ -5735,6 +5787,8 @@ function beginFlight() {
   // covers missions with no asynchronous terrain warmup and hosts which preserve activation.
   requestMobileFullscreenFromGesture();
   bridge.Begin();
+  pilotLogbook.begin({ activity: practiceExercise(selectedPracticeExercise)?.title || missionBrief().title,
+    exercise: selectedPracticeExercise || "" });
   // Ready/warmup frames are deliberately excluded from the performance sample, and every sortie
   // starts from its mission-authored terrain radius and restored shadow/scenery policy.
   frameGovernor.reset(activeView);
@@ -5756,6 +5810,7 @@ function beginFlight() {
 function activateReadyAction() {
   if (buildIdentityBlocksSortie()) return false;
   if (pauseReasons.has("finished")) {
+    if (selectedPracticeExercise) return restartMissionNow();
     if (!isMultiplayerLane()) {
       const nextNode = nextCampaignNode(campaignProfile, selectedProgramNodeId);
       if (nextNode) selectCampaignNode(nextNode.id, { focus: false });
@@ -5862,6 +5917,19 @@ readyReplay?.addEventListener("click", () => {
   resetFrameClock();
 });
 
+pilotNotebook = createPilotNotebook({
+  logbook: pilotLogbook,
+  onOpen() { clearFlightInput(); setPauseReason("notebook", true); },
+  onClose() { setPauseReason("notebook", false); },
+  onPractice(id) {
+    dismissFirstRunValleyAutostart();
+    selectCampaignNode("first-merge", { focus: false });
+    selectedPracticeExercise = id;
+    enterReady({ resetBridge: true });
+  },
+});
+document.querySelector("#ready-practice")?.addEventListener("click", () => pilotNotebook.show("practice"));
+document.querySelector("#ready-logbook")?.addEventListener("click", () => pilotNotebook.show());
 readySettings?.addEventListener("click", openSettings);
 readyIntroReplay?.addEventListener("click", () => {
   if (firstRunAutostartPending) {
@@ -11846,6 +11914,15 @@ async function boot() {
       });
       recorder.observeFramePhase("snap", performance.now() - afterSim);
       latestState = state;
+      if (state.session_phase === "FINISHED") finishLogbookAttempt(state);
+      if (practiceCue) {
+        const exercise = practiceExercise(state.practice_exercise);
+        practiceCue.hidden = !exercise || pauseReasons.size > 0 || state.session_phase !== "ACTIVE";
+        if (exercise) {
+          const cue = `${exercise.title} · ${exercise.cue}`;
+          if (practiceCue.textContent !== cue) practiceCue.textContent = cue;
+        }
+      }
       observeArenaMatch(state);
       observePilotControlInterlock(state);
       // The kernel can retarget after a kill or promotion without a browser input edge. Reconcile
@@ -11976,7 +12053,7 @@ async function primeOfflineRuntime(registration) {
 // during this boot as well as intercepting every subsequent mission request.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js?v=352")
+    navigator.serviceWorker.register("service-worker.js?v=353")
       .then(async (registration) => {
         await navigator.serviceWorker.ready;
         // Ask for the worker script to be re-checked now, and again whenever the player returns to

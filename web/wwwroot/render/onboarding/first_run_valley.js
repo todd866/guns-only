@@ -26,20 +26,18 @@ export function markFirstRunValleySeen(storage) {
 }
 
 /**
- * First pending visit with no other programme query stages the valley Ready card. Playwright
- * (`navigator.webdriver`) keeps the six-tile picker unless `?firstRun=1`. `?menu=1` always
- * keeps the picker, including over a QA replay query.
+ * First pending visit stages the valley Ready card for both humans and browser tests.
+ * Tests that need the catalogue use the same explicit ?menu=1 door as players.
+ * ?menu=1 keeps the picker, including over a QA replay query.
  */
 export function shouldAutoStartFirstRunValley({
   firstRunPending,
   programQuery = null,
   menuQuery = null,
   firstRunQuery = null,
-  webdriver = false,
 } = {}) {
   if (String(menuQuery ?? "") === "1") return false;
   if (String(firstRunQuery ?? "") === "1") return true;
-  if (webdriver === true) return false;
   const program = String(programQuery ?? "").trim();
   if (program !== "" && program !== "first-merge") return false;
   return firstRunPending === true;

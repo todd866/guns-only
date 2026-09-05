@@ -1,8 +1,8 @@
 # Current product and verification status
 
-Updated: 2026-09-04
-Production: Build 352, revision `b3cb52f56e0e054992a8a84940b289a138281304`.
-Next candidate: none queued.
+Updated: 2026-09-05
+Production: Build 352, revision `1ed5488d0271aad87118fa8c64eb9dcbd0d50c79`.
+Next candidate: Build 353 — local practice/logbook, HUD contrast, honest acceptance evidence and shell-health corrections; not deployed.
 F-22 Guns Only remains an open-ended fight rather than a scored mission.
 Call It A Day or Bingo enters one typed, immediate ceasefire/RTB transition and publishes a
 terrain-aware left-hand runway pattern. Floating chevrons carry the energy lesson without another
@@ -124,7 +124,7 @@ drop voices follow published water rates; and AIM-9 launch, radio-priority ducki
 safety-warning arbiter make the important event audible without relying on limiter overload.
 All candidate audio acceptance is silent (`?audioQa=silent`).
 
-Production: Build 352, revision `b3cb52f56e0e054992a8a84940b289a138281304`. Builds 343 (Soniachne first-visit on-ramp), 347 (shared
+Production: Build 352, revision `1ed5488d0271aad87118fa8c64eb9dcbd0d50c79`. Builds 343 (Soniachne first-visit on-ramp), 347 (shared
 player journey and Top Gun bolter retry), 349 (mission-AI suite honesty), 350
 (conventional F-22 recovery), 351 (finite billed sorties, presenting Ace, Cobra pad combat)
 and 352 (Fire Boss sky chevrons, HUD hopper/cue, readable west-side fire)
@@ -346,7 +346,7 @@ states, while `?preview=1` provides a deliberate testing acknowledgement without
 
 ## Release health
 
-- Live production is Build 352, revision `b3cb52f56e0e054992a8a84940b289a138281304`. Local gate
+- Live production is Build 352, revision `1ed5488d0271aad87118fa8c64eb9dcbd0d50c79`. Local gate
   runs on a loaded workstation produce false browser-smoke timeouts (2026-08-12: four smokes
   timed out under an unrelated 200%+ CPU load and all passed in isolation and on CI); CI on
   clean runners is the authoritative check.

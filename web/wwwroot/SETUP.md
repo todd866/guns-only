@@ -1,12 +1,18 @@
 # Deployed telemetry setup
 
 The function in `api/telemetry.js` uses Vercel Blob's HTTP API directly, so this static deployment
-does not need a `package.json`, an npm install, or a build step. Hosted flight diagnostics are off
-by default; only after a pilot explicitly opts in does the browser sample the 120 Hz authority at
-20 Hz and losslessly omit unchanged retained snapshot fields between two-second keyframes. It
-uploads one immutable chunk every 30 seconds and keeps only one upload in flight. Failed uploads
-retain a bounded recent trace and back off exponentially, up to five minutes, rather than
-hammering a broken endpoint.
+does not need a `package.json`, an npm install, or a build step. The browser posts two separate
+telemetry channels to the same `/telemetry` endpoint:
+
+- **Shell-health (always on).** Minimal boot milestones, fatals, and coarse device class under
+  session prefix `shell-…`. No stick inputs, aircraft state, or multiplayer identifiers. This
+  channel is independent of pilot consent so broken boots remain visible.
+- **Flight diagnostics (opt-in).** Detailed gameplay telemetry under session prefix `web-…`.
+  Hosted flight diagnostics are off by default; only after a pilot explicitly opts in does the browser sample the 120 Hz authority at
+  20 Hz and losslessly omit unchanged retained snapshot fields between two-second keyframes. It
+  uploads one immutable chunk every 30 seconds and keeps only one upload in flight. Failed uploads
+  retain a bounded recent trace and back off exponentially, up to five minutes, rather than
+  hammering a broken endpoint.
 Each successful flush is byte-bounded in the browser, gzip-compressed, and stored as an immutable
 private chunk at `telemetry/<session>/<batch-id>.jsonl.gz`; the browser retains that batch ID and
 exact request body across transport/storage retries. An already-existing path is therefore a

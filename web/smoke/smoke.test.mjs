@@ -394,7 +394,7 @@ test("iPhone selecting Top Gun and consent cannot scroll the Ready dialog sidewa
     const page = await context.newPage();
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-    await page.goto(`${site.url}?audioQa=silent`, {
+    await page.goto(`${site.url}?menu=1&audioQa=silent`, {
       waitUntil: "load",
       timeout: scaled(30000),
     });
@@ -1340,7 +1340,7 @@ test("the published Medevac route resolves route hold, selective relay, and dive
   }
 });
 
-test("first-run valley waits for consent and remains replayable from the programme", async () => {
+test("a fresh human or automated visit briefs the valley and remains replayable", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
 
   const site = await serveStatic(WWWROOT);
@@ -1352,7 +1352,7 @@ test("first-run valley waits for consent and remains replayable from the program
     const page = await browser.newPage();
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-    await page.goto(`${site.url}?firstRun=1&audioQa=silent`, {
+    await page.goto(`${site.url}?audioQa=silent`, {
       waitUntil: "load",
       timeout: scaled(60000),
     });
@@ -1442,7 +1442,7 @@ test("the published web app boots to a running flight kernel (no fatal render er
     // The real graph must activate, update and expose diagnostics, but release validation must
     // never put aircraft audio onto a developer's speakers. `audioQa=silent` leaves Web Audio
     // running while clamping only the destination master.
-    await page.goto(`${site.url}?audioQa=silent`, { waitUntil: "load", timeout: scaled(60000) });
+    await page.goto(`${site.url}?menu=1&audioQa=silent`, { waitUntil: "load", timeout: scaled(60000) });
 
     // #boot gains the "ready" class when boot settles — on success (boot()) AND on a fatal error
     // (showFatal()). Waiting for it makes the assertion below deterministic instead of timing-based.
@@ -2272,7 +2272,7 @@ test("phone combat HUD stays contextual, separated, and scroll-safe", async () =
         const page = await context.newPage();
         const pageErrors = [];
         page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-        await page.goto(`${site.url}?audioQa=silent`,
+        await page.goto(`${site.url}?menu=1&audioQa=silent`,
           { waitUntil: "load", timeout: scaled(60000) });
         await page.waitForFunction(
           () => document.querySelector("#boot")?.classList.contains("ready") === true,
@@ -2963,7 +2963,7 @@ test("portrait touch: both virtual sticks reach the flight kernel through real t
     const page = await context.newPage();
     const pageErrors = [];
     page.on("pageerror", (error) => pageErrors.push(error.message ?? String(error)));
-    await page.goto(`${site.url}?input=touch&audioQa=silent`, {
+    await page.goto(`${site.url}?menu=1&input=touch&audioQa=silent`, {
       waitUntil: "load",
       timeout: scaled(60000),
     });
@@ -3227,7 +3227,7 @@ test("boot does not stutter: no application task is a wild frame outlier", async
       observer.observe({ type: "longtask", buffered: true });
       record.observer = observer;
     });
-    await page.goto(`${site.url}?server=off&audioQa=silent`, {
+    await page.goto(`${site.url}?menu=1&server=off&audioQa=silent`, {
       waitUntil: "load",
       timeout: scaled(60000),
     });
@@ -3335,7 +3335,7 @@ test("rotating to landscape actually resizes the drawn surface", async () => {
   try {
     const context = await browser.newContext({ ...devices["iPhone 13"] });
     const page = await context.newPage();
-    await page.goto(`${site.url}?audioQa=silent`, { waitUntil: "load", timeout: scaled(90000) });
+    await page.goto(`${site.url}?menu=1&audioQa=silent`, { waitUntil: "load", timeout: scaled(90000) });
     await page.waitForFunction(
       () => {
         const start = document.querySelector("#ready-start");

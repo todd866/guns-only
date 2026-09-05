@@ -149,16 +149,21 @@ test("legacy Rapier v1 documents cannot claim production authority over v2", asy
 
 test("the evergreen status matrix covers the executable experience catalog", async () => {
   const status = await readFile(path.join(ROOT, "docs/STATUS.md"), "utf8");
-  // Live production identity must name the currently shipped build. A candidate line that
-  // merely mentions the live number while Production: still pins an ancestor is how Build 350
-  // shipped with STATUS still swearing 343. The Production pin must equal RELEASE_BUILD; the
-  // next candidate is either none or a different number.
-  assert.match(status, new RegExp(
-    `Production: Build ${RELEASE_BUILD}, revision \`[0-9a-f]{40}\``,
-  ));
-  assert.match(status, /Next candidate: (?:none queued|Build \d+)/);
-  assert.doesNotMatch(status, new RegExp(`Next candidate: Build ${RELEASE_BUILD}\\b`));
-  assert.match(status, new RegExp(`Live production is Build ${RELEASE_BUILD}, revision \`[0-9a-f]{40}\``));
+  // A local candidate must not claim it has shipped. Pin the observed live revision and
+  // require this checkout's build to be either that release or its explicit next candidate.
+  const live = status.match(/Production: Build (\d+), revision `([0-9a-f]{40})`/);
+  assert.ok(live, "production needs a build and full source revision");
+  const candidate = status.match(/Next candidate: (none queued|Build (\d+)[^\n]*)/);
+  assert.ok(candidate, "candidate state must be explicit");
+  if (Number(live[1]) !== Number(RELEASE_BUILD)) {
+    assert.equal(Number(candidate[2]), Number(RELEASE_BUILD));
+    assert.match(candidate[1], /not deployed/);
+    assert.ok(RELEASE_BUILD > Number(live[1]));
+  } else {
+    assert.notEqual(Number(candidate[2]), Number(RELEASE_BUILD));
+  }
+  assert.ok(status.includes(`Live production is Build ${live[1]}, revision \`${live[2]}\``),
+    "the detailed provenance must agree with the production heading");
   for (const experience of EXPERIENCE_CATALOG) {
     assert.equal(status.includes(`\`${experience.id}\``), true,
       `${experience.id} needs a row in docs/STATUS.md`);

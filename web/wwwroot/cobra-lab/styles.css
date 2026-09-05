@@ -730,3 +730,6 @@ button.primary {
   }
   .objective-hud { max-width: none; }
 }
+
+#flight-pause { position:fixed; top:calc(env(safe-area-inset-top,0px) + 10px); left:calc(env(safe-area-inset-left,0px) + 10px); z-index:12; pointer-events:auto; min-height:44px; margin-left:12px; align-self:center; }
+body[data-brief="true"] #flight-pause, body[data-paused="true"] #flight-pause, body[data-terminal="true"] #flight-pause { visibility:hidden; }

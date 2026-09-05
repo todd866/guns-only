@@ -32,7 +32,7 @@ import {
 import {
   BANDIT_TALLY_RANGE_M,
   contactPositionCue,
-} from "./render/hud/contact_visibility.js?v=352";
+} from "./render/hud/contact_visibility.js?v=353";
 import { sortiePowerCommand } from "./render/hud/sortie_power.js";
 import {
   carrierAoARelevant,
@@ -70,16 +70,20 @@ import {
 } from "./render/mission/rapier_guidance.js";
 import {
   carrierSortieRoutePresentation,
-} from "./render/nav/carrier_sortie_route_presentation.js?v=352";
+} from "./render/nav/carrier_sortie_route_presentation.js?v=353";
 import {
   advanceRapierHighMachInstruments,
   createRapierHighMachHistory,
-} from "./render/mission/rapier_high_mach_instruments.js?v=352";
+} from "./render/mission/rapier_high_mach_instruments.js?v=353";
 import {
   limitsPanelPresentation,
   navigationRateReadout,
-} from "./render/hud/limits_panel.js?v=352";
+} from "./render/hud/limits_panel.js?v=353";
 import { hudPhasePresentation } from "./render/hud/hud_phase.js";
+import {
+  fillLegibleHudText,
+  isEssentialHudGreenFill,
+} from "./render/hud/hud_legibility.js";
 import {
   cobraAccelCaretPx,
   cobraHoverStubPixels,
@@ -88,7 +92,7 @@ import {
 import {
   armFlightAudio,
   setFlightAudioEnabled,
-} from "./render/audio/flight_audio.js?v=352";
+} from "./render/audio/flight_audio.js?v=353";
 
 const GREEN = "#4dff88";
 const GREEN_DIM = "rgba(77, 255, 136, 0.68)";
@@ -724,7 +728,7 @@ class CombatHud {
         const labelEnds = compactMobile ? [1] : [-1, 1];
         for (const end of labelEnds) {
           const label = rotatePoint(end * (halfWidth + 15), localY);
-          ctx.fillText(text, label.x, label.y + 0.5);
+          this.fillEssentialHudText(text, label.x, label.y + 0.5);
         }
       }
       ctx.restore();
@@ -954,7 +958,7 @@ class CombatHud {
       ctx.fillStyle = cueColor;
       ctx.font = "800 10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = "center";
-      ctx.fillText(cue, this.width / 2, this.getLayout().weaponCueY);
+      this.fillEssentialHudText(cue, this.width / 2, this.getLayout().weaponCueY);
     }
     ctx.restore();
     if (this._debug) {
@@ -1197,7 +1201,7 @@ class CombatHud {
       ctx.font = "700 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = "left";
       ctx.textBaseline = "middle";
-      ctx.fillText("WL", directorAnchor.x + 23, directorAnchor.y);
+      this.fillEssentialHudText("WL", directorAnchor.x + 23, directorAnchor.y);
     }
     ctx.shadowBlur = 0;
     ctx.restore();
@@ -1452,7 +1456,7 @@ class CombatHud {
       ctx.fillStyle = color;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      ctx.fillText("TRAFFIC", projection.x, projection.y + size + 6);
+      this.fillEssentialHudText("TRAFFIC", projection.x, projection.y + size + 6);
     }
   }
 
@@ -1974,7 +1978,7 @@ class CombatHud {
         ctx.lineTo(x, y + (major ? 7 : 4));
         ctx.stroke();
         if (major) {
-          ctx.fillText(String(Math.round(wrap360(mark) / 10)).padStart(2, "0"), x, y - 12);
+          this.fillEssentialHudText(String(Math.round(wrap360(mark) / 10)).padStart(2, "0"), x, y - 12);
         }
       }
     }
@@ -2005,7 +2009,7 @@ class CombatHud {
     if (padlock) {
       ctx.fillStyle = GREEN_DIM;
       ctx.font = "750 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-      ctx.fillText("OWN HDG", this.width / 2, y - 25);
+      this.fillEssentialHudText("OWN HDG", this.width / 2, y - 25);
     }
 
     // A finite carrier-day route owns the heading caret before generic fuel/home steering. The
@@ -2029,7 +2033,11 @@ class CombatHud {
       ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       const routeLabel = Math.abs(routeTurn) > 48
         ? (routeTurn < 0 ? "◀ RTE" : "RTE ▶") : "RTE";
-      ctx.fillText(routeLabel, routeX, y - 28);
+      if (routeAccent === GREEN) {
+        this.fillEssentialHudText(routeLabel, routeX, y - 28);
+      } else {
+        ctx.fillText(routeLabel, routeX, y - 28);
+      }
       if (this._debug) {
         this._debug.carrierRouteCaret = {
           drawn: true,
@@ -2365,7 +2373,7 @@ class CombatHud {
     ctx.font = "700 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(`α ${aoa.toFixed(1)}`, x, y - 34);
+    this.fillEssentialHudText(`α ${aoa.toFixed(1)}`, x, y - 34);
 
     const row = (label, rowY, active) => {
       ctx.fillStyle = active ? accent : "rgba(77, 255, 136, 0.22)";
@@ -2374,7 +2382,11 @@ class CombatHud {
         ctx.shadowColor = accent;
         ctx.shadowBlur = 5;
       }
-      ctx.fillText(label, x, rowY);
+      if (active && accent === GREEN) {
+        this.fillEssentialHudText(label, x, rowY);
+      } else {
+        ctx.fillText(label, x, rowY);
+      }
       ctx.shadowBlur = 0;
     };
     row("▽", y - 17, fast);
@@ -2605,8 +2617,8 @@ class CombatHud {
     ctx.textBaseline = "middle";
     ctx.fillStyle = GREEN_DIM;
     ctx.font = "800 8px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-    ctx.fillText(data.unitText, speedX, centerY - tapeHeight / 2 - 12);
-    ctx.fillText("ALT FT", altitudeX, centerY - tapeHeight / 2 - 12);
+    this.fillEssentialHudText(data.unitText, speedX, centerY - tapeHeight / 2 - 12);
+    this.fillEssentialHudText("ALT FT", altitudeX, centerY - tapeHeight / 2 - 12);
 
     // Earth-relative speed stays with airspeed; vertical motion stays with altitude. Both remain
     // numeric rather than adding two more analogue instruments to the transparent world view.
@@ -2847,7 +2859,7 @@ class CombatHud {
     ctx.font = "600 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(overrideSelected ? "G · OVR" : "G", x, y - 20);
+    this.fillEssentialHudText(overrideSelected ? "G · OVR" : "G", x, y - 20);
     ctx.textAlign = "right";
     ctx.fillStyle = tierColor;
     ctx.fillText((Number(state.g_actual) || 0).toFixed(1), x + width, y - 20);
@@ -3315,6 +3327,15 @@ class CombatHud {
     let value = text;
     while (value.length > 3 && ctx.measureText(`${value}…`).width > maxWidth) value = value.slice(0, -1);
     return `${value}…`;
+  }
+
+  fillEssentialHudText(text, x, y, maxWidth, ctx = this.ctx) {
+    if (isEssentialHudGreenFill(ctx.fillStyle)) {
+      fillLegibleHudText(ctx, text, x, y, { fillStyle: ctx.fillStyle, maxWidth });
+      return;
+    }
+    if (maxWidth === undefined) ctx.fillText(text, x, y);
+    else ctx.fillText(text, x, y, maxWidth);
   }
 
   drawThrottle(state) {
@@ -4633,7 +4654,7 @@ class CombatHud {
       ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText("PULL", cx, cy + ballRadius * 0.52);
+      this.fillEssentialHudText("PULL", cx, cy + ballRadius * 0.52);
       gateAngleFromUpRad = 0;
     } else if (steering?.valid === true && rollErrorRad !== null) {
       gateAngleFromUpRad = captured ? 0 : rollErrorRad;
@@ -4706,7 +4727,7 @@ class CombatHud {
         ctx.font = "800 9px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("PULL", cx, cy + ballRadius * 0.52);
+        this.fillEssentialHudText("PULL", cx, cy + ballRadius * 0.52);
         const phase = (now * 0.7) % 1;
         for (let index = 0; index < 3; index += 1) {
           const fraction = ((index / 3) + phase) % 1;
@@ -4736,15 +4757,15 @@ class CombatHud {
       ? `R ${Math.round(radarAltFt).toLocaleString("en-US")} FT` : "R ---";
     const vsText = Number.isFinite(sinkFpm) && Math.abs(sinkFpm) >= 100
       ? `${sinkFpm >= 0 ? "\u2191" : "\u2193"} ${(Math.abs(sinkFpm) / 1000).toFixed(1)}K` : "";
-    ctx.fillText(vsText ? `${raglText}   ${vsText}` : raglText, cx, readoutY);
+    this.fillEssentialHudText(vsText ? `${raglText}   ${vsText}` : raglText, cx, readoutY);
     // Compact digital cross-checks flank the ball; they verify, rather than substitute for, the
     // now fully readable attitude picture.
     ctx.textAlign = "left";
-    ctx.fillText(`P ${pitchDeg >= 0 ? "+" : ""}${Math.round(pitchDeg)}\u00B0`,
+    this.fillEssentialHudText(`P ${pitchDeg >= 0 ? "+" : ""}${Math.round(pitchDeg)}\u00B0`,
       cx + radius + 8, cy);
     const bankDeg = Number(state.bank_deg) || 0;
     ctx.textAlign = "right";
-    ctx.fillText(
+    this.fillEssentialHudText(
       Math.abs(bankDeg) < 0.5
         ? "B 0\u00B0"
         : `B ${bankDeg > 0 ? "R" : "L"}${Math.round(Math.abs(bankDeg))}\u00B0`,
@@ -4913,12 +4934,12 @@ class CombatHud {
     ctx.font = "650 7px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(maritime ? "DECK UP" : "STRIP UP", mapLeft + 5, mapTop + 7);
-    ctx.fillText("INITIAL", clamp(initial.x + 4, mapLeft + 3, mapRight - 38),
+    this.fillEssentialHudText(maritime ? "DECK UP" : "STRIP UP", mapLeft + 5, mapTop + 7);
+    this.fillEssentialHudText("INITIAL", clamp(initial.x + 4, mapLeft + 3, mapRight - 38),
       clamp(initial.y, mapTop + 6, mapBottom - 6));
-    ctx.fillText("180", clamp(downwind180.x - 17, mapLeft + 3, mapRight - 18),
+    this.fillEssentialHudText("180", clamp(downwind180.x - 17, mapLeft + 3, mapRight - 18),
       clamp(downwind180.y, mapTop + 6, mapBottom - 6));
-    ctx.fillText("FINAL", clamp(finalTurn.x + 4, mapLeft + 3, mapRight - 31),
+    this.fillEssentialHudText("FINAL", clamp(finalTurn.x + 4, mapLeft + 3, mapRight - 31),
       clamp(finalTurn.y - 6, mapTop + 6, mapBottom - 6));
     if (maritime) {
       ctx.fillStyle = AMBER;
@@ -5094,7 +5115,7 @@ class CombatHud {
     ctx.fillStyle = accent;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(cue.call, this.width / 2, y);
+    this.fillEssentialHudText(cue.call, this.width / 2, y);
   }
 
   // A quiet persistent chip teaching that the legend exists — the single highest-value control
@@ -5504,7 +5525,7 @@ class CombatHud {
     );
     const placedY = this.reserveContactLabelRow(
       y, clampedX - half, clampedX + half, CombatHud.CONTACT_LABEL_ROW);
-    ctx.fillText(text, clampedX, placedY);
+    this.fillEssentialHudText(text, clampedX, placedY);
   }
 
   /// Claim a row in this frame's contact-label registry and return the y to draw at. Shared by the

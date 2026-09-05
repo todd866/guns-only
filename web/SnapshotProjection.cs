@@ -442,6 +442,7 @@ internal static class SnapshotProjection {
 
         // Hand-built JSON: no serializer, no reflection, trim-safe, allocation-cheap.
         return "{"
+            + PracticeSnapshotProjection.Json(Session)
             + PresentationContractJson(_carrier is not null)
             + $"\"theatre_id\":\"{Environment.TheatreId}\","
             + $"\"location_id\":\"{Environment.LocationId}\","

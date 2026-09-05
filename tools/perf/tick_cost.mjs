@@ -14,7 +14,7 @@ const { browser, page } = await launch({
 });
 try {
   if (MODE === "f22") {
-    await page.goto(`${BASE}?program=first-merge&audioQa=silent`, { waitUntil: "load", timeout: 120_000 });
+    await page.goto(`${BASE}?program=first-merge&menu=1&server=off&audioQa=silent`, { waitUntil: "load", timeout: 120_000 });
     await page.waitForFunction(() => document.querySelector("#boot")?.classList.contains("ready") === true, undefined, { timeout: 180_000 });
     await page.waitForFunction(() => globalThis.__gunsBridge && globalThis.__gunsLifecycle, undefined, { timeout: 90_000 });
     await page.evaluate(() => { if (globalThis.__gunsState?.session_phase !== "ACTIVE") globalThis.__gunsLifecycle.begin(); });

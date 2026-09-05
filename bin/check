@@ -139,6 +139,8 @@ run_node_tests $runtime_tests
 run_node_tests web/wwwroot/*.test.js
 run_node_tests web/wwwroot/api/*.test.js
 run_node_tests world-worker/tests/*.test.mjs
+run_node_tests arena-worker/tests/*.test.mjs
+python3 -m unittest discover -s tools/telemetry -p "test_report_shell_health.py"
 
 scratch_dir=$(mktemp -d)
 publish_dir="$scratch_dir/publish"
@@ -229,11 +231,15 @@ if [ "${GUNS_TEST_IN_PROCESS:-0}" = "1" ]; then
   # same test failures without asking for network authority.
   GUNS_TEST_CONFIGURATION=Release "$repo_dir/bin/test-in-process"
   GUNS_TEST_CONFIGURATION=Release "$repo_dir/bin/test-in-process" --server
+  GUNS_TEST_CONFIGURATION=Release "$repo_dir/bin/test-in-process" --arena
 else
   GUNS_REPO_ROOT="$repo_dir" "$dotnet_cli" test sim.Tests/GunsOnly.Sim.Tests.csproj \
     --configuration Release --no-build --nologo \
     --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
   GUNS_REPO_ROOT="$repo_dir" "$dotnet_cli" test server.Tests/GunsOnly.Server.Tests.csproj \
+    --configuration Release --no-build --nologo \
+    --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
+  GUNS_REPO_ROOT="$repo_dir" "$dotnet_cli" test arena-server.Tests/GunsOnly.ArenaServer.Tests.csproj \
     --configuration Release --no-build --nologo \
     --artifacts-path "$dotnet_artifacts_dir" -m:1 /nodeReuse:false
 fi
@@ -302,7 +308,7 @@ if [ -z "${GUNS_SKIP_SMOKE:-}" ]; then
     (cd web/smoke && ./node_modules/.bin/playwright install chromium webkit)
   fi
   SMOKE_WWWROOT="$publish_dir/wwwroot" \
-    node --test --test-concurrency="$node_test_concurrency" web/smoke/smoke.test.mjs
+    node --test --test-concurrency="$node_test_concurrency" web/smoke/smoke.test.mjs web/smoke/player-quality.test.mjs
   # HUD geometry contract: numeric assertions through the real hud.js in headless Chromium
   # (waterline/FPV alpha gap, ladder tan-projection spacing, funnel-on-trajectory, bandit
   # marker). Lives with the browser gates because it shares the web/smoke Playwright install.
