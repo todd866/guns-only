@@ -21,7 +21,8 @@ public sealed class OkanaganFireGrid
     public const int Rows = 44;
     public const double CellSizeM = 140.0;
     readonly Cell[,] _cells = new Cell[Columns, Rows];
-    readonly Vec3D _centre = OkanaganGeo.ToWorld(49.850, -119.655, 0.0);
+    readonly Vec3D _centre;
+    readonly OkanaganIncident? _incident;
     readonly Vec3D _windTo = new(Math.Sin(25.0 * Math.PI / 180.0), 0.0,
         Math.Cos(25.0 * Math.PI / 180.0));
     double _accumulator;
@@ -33,10 +34,13 @@ public sealed class OkanaganFireGrid
         public double Wetness;
         public double ElevationM;
         public string FuelType;
+        public bool Burnable;
     }
 
-    public OkanaganFireGrid()
+    public OkanaganFireGrid(OkanaganIncident? incident = null)
     {
+        _incident = incident;
+        _centre = incident?.Ignition ?? OkanaganGeo.ToWorld(49.850, -119.655, 0.0);
         for (int column = 0; column < Columns; column++)
         for (int row = 0; row < Rows; row++)
         {
@@ -44,13 +48,16 @@ public sealed class OkanaganFireGrid
             uint hash = Hash((uint)(column * 73856093 ^ row * 19349663));
             double noise = (hash & 0xffff) / 65535.0;
             string fuelType = noise < 0.58 ? "C7" : noise < 0.82 ? "O1" : "M1";
+            if (incident != null) fuelType = incident.IsRun(position) ? "O1" : "C3";
             double fuel = fuelType switch { "C7" => 0.92, "O1" => 0.72, _ => 0.82 };
+            if (OkanaganGeo.IsOverCentralLake(position)) fuel = 0;
             _cells[column, row] = new Cell {
                 Fuel = fuel * (0.86 + noise * 0.14),
                 Heat = 0.0,
                 Wetness = 0.19,
                 ElevationM = OkanaganGeo.RepresentativeTerrainHeightM(position),
                 FuelType = fuelType,
+                Burnable = fuel > 0,
             };
         }
 
@@ -70,6 +77,19 @@ public sealed class OkanaganFireGrid
     public double EffectiveWaterKg { get; private set; }
     public double BurnedAreaHa { get; private set; }
     public int PopulationExposed { get; private set; }
+
+    public double ExposureAt(in Vec3D position)
+    {
+        int column = (int)Math.Round((position.X - _centre.X) / CellSizeM + (Columns - 1) / 2.0);
+        int row = (int)Math.Round((position.Z - _centre.Z) / CellSizeM + (Rows - 1) / 2.0);
+        double exposure = 0;
+        for (int x = Math.Max(0, column - 2); x <= Math.Min(Columns - 1, column + 2); x++)
+        for (int z = Math.Max(0, row - 2); z <= Math.Min(Rows - 1, row + 2); z++) {
+            double distance = HorizontalDistance(position, CellPosition(x,z));
+            exposure = Math.Max(exposure, Intensity(_cells[x,z]) * Math.Max(0, 1 - distance / 310));
+        }
+        return exposure;
+    }
 
     public void Step(double deltaSeconds)
     {
@@ -119,6 +139,7 @@ public sealed class OkanaganFireGrid
         for (int row = 0; row < Rows; row++)
         {
             Cell cell = _cells[column, row];
+            if (!cell.Burnable) continue;
             double intensity = Intensity(cell);
             if (intensity < 0.035 && cell.Fuel > 0.10) continue;
             Vec3D position = CellPosition(column, row);
@@ -143,7 +164,7 @@ public sealed class OkanaganFireGrid
             cell.Wetness = Math.Max(0.12, cell.Wetness - 0.0012);
             double intensity = Intensity(cell);
             TotalIntensity += intensity;
-            if (cell.Fuel < 0.10) burnedCells += 1.0;
+            if (cell.Burnable && cell.Fuel < 0.10) burnedCells += 1.0;
             if (intensity < 0.08) continue;
             cell.Fuel = Math.Max(0.0, cell.Fuel - intensity * 0.0017);
             cell.Heat = Math.Max(0.0, cell.Heat - 0.0025 - cell.Wetness * 0.0020);
@@ -176,7 +197,7 @@ public sealed class OkanaganFireGrid
             _cells[column, row].Heat = Math.Clamp(_cells[column, row].Heat + additions[column, row], 0.0, 1.0);
 
         BurnedAreaHa = burnedCells * CellSizeM * CellSizeM / 10_000.0;
-        PopulationExposed = double.IsFinite(nearestCommunityFire)
+        PopulationExposed = _incident == null && double.IsFinite(nearestCommunityFire)
             ? (int)Math.Round(36_078.0 * Math.Clamp((4_800.0 - nearestCommunityFire) / 3_800.0, 0.0, 1.0))
             : 0;
     }

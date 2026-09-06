@@ -70,6 +70,14 @@ public static class OkanaganSnapshotProjection
             burned_area_ha = state.BurnedAreaHa,
             population_exposed = state.PopulationExposed,
             score = state.Score,
+            incident_name = state.IncidentName,
+            incident_active = state.IncidentActive,
+            incident_handed_off = state.IncidentHandedOff,
+            sites = state.Sites.Select(site => new {
+                id = site.Id, name = site.Name, kind = site.Kind, position = Point(site.Position),
+                integrity = site.Integrity, wetness = site.Wetness, threat = site.Threat,
+                ever_threatened = site.EverThreatened, status = site.Status,
+            }),
             fuel_plan = new {
                 block_kg = state.FuelPlan.BlockFuelKg,
                 taxi_out_kg = state.FuelPlan.TaxiOutKg,

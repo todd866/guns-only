@@ -2,6 +2,11 @@ const TERMINAL_PHASES = new Set(["complete", "failed"]);
 
 const SORTIE_TITLES = Object.freeze({
   "water-circuits": "Water Circuits",
+  "peachland-defence": "Peachland Defence",
+  "big-white-defence": "Big White Defence",
+  "silver-star-defence": "SilverStar Defence",
+  "apex-defence": "Apex Defence",
+
   "fire-attack": "Initial Attack",
   "large-force-employment": "Large Force Employment",
 });
@@ -100,6 +105,17 @@ export function okanaganDebriefModel(state = {}) {
   });
 
   const facts = [];
+  const sites = Array.isArray(state.sites) ? state.sites : [];
+  if (sites.length) {
+    for (const [kind,label] of [["housing","HOMES"],["building","BUILDINGS"],["lift","LIFT TERMINALS"]]) {
+      const category=sites.filter(s=>s.kind===kind);if(!category.length)continue;
+      const intact=category.filter(s=>s.status==="intact").length;
+      const lost=category.filter(s=>s.status==="lost").length;
+      const damaged=category.length-intact-lost;
+      facts.push(fact(`sites-${kind}`,label,`${intact} intact · ${damaged} damaged · ${lost} lost`,lost||damaged?"caution":"normal"));
+    }
+    facts.push(fact("site-scope","SECTOR CONDITION",state.incident_handed_off ? "AT GROUND-CREW HANDOFF" : "AT SORTIE END"));
+  }
   if (aircraftNotFlyable || aircraftState === "NOT REPORTED") {
     facts.push(fact("aircraft", "AIRCRAFT", aircraftState, "caution"));
   }
@@ -133,7 +149,7 @@ export function okanaganDebriefModel(state = {}) {
     failed,
     outcome: failed ? "failed" : "complete",
     kicker: sortieTitle.toUpperCase(),
-    title: failed ? "Failed" : "Complete",
+    title: failed ? "Failed" : sites.length ? "Aircraft recovered" : "Complete",
     summary,
     correction,
     reserve,

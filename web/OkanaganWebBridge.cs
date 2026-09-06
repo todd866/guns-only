@@ -31,6 +31,10 @@ public static partial class OkanaganWebBridge
             0 => OkanaganSortieType.WaterCircuits,
             1 => OkanaganSortieType.FireAttack,
             2 => OkanaganSortieType.LargeForceEmployment,
+            3 => OkanaganSortieType.PeachlandDefence,
+            4 => OkanaganSortieType.BigWhiteDefence,
+            5 => OkanaganSortieType.SilverStarDefence,
+            6 => OkanaganSortieType.ApexDefence,
             _ => throw new ArgumentOutOfRangeException(nameof(sortie)),
         };
 

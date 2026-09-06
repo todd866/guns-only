@@ -38,6 +38,11 @@ export function okanaganTargets(current = {}) {
       });
     }
   }
+  for (const site of (current.sites ?? []).filter(s=>s.status!=="lost")
+    .sort((a,b)=>b.threat-a.threat).slice(0,5)) {
+    const position=finitePoint(site.position);
+    if(position)targets.push({id:`site:${site.id}`,label:`${site.name} · ${site.status}`.toUpperCase(),kind:"incident",position});
+  }
   for (const track of current.traffic ?? []) {
     const position = finitePoint(track?.position);
     if (!position) continue;

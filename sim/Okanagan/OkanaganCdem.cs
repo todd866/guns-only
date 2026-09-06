@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace GunsOnly.Sim.Okanagan;
 
 /// <summary>
-/// Simulation-side reader for the exact 33×33 Natural Resources Canada CDEM grid rendered by the
+/// Simulation-side reader for the regional CDEM and detailed municipal LiDAR grids rendered by the
 /// Okanagan page. The lake and airport cut/fill live in <see cref="OkanaganGeo"/> so every user of
 /// the raw grid applies the same operational-surface rules.
 /// </summary>
@@ -16,16 +16,38 @@ public static class OkanaganCdem
     public static double SampleRawHeightM(in Vec3D position)
     {
         (double latitude, double longitude) = OkanaganGeo.ToGeographic(position);
-        double columnF = (longitude - Data.West) / (Data.East - Data.West) * (Data.Columns - 1);
-        double rowF = (latitude - Data.South) / (Data.North - Data.South) * (Data.Rows - 1);
-        int column0 = Math.Clamp((int)Math.Floor(columnF), 0, Data.Columns - 1);
-        int row0 = Math.Clamp((int)Math.Floor(rowF), 0, Data.Rows - 1);
-        int column1 = Math.Min(Data.Columns - 1, column0 + 1);
-        int row1 = Math.Min(Data.Rows - 1, row0 + 1);
+        return SampleHierarchy(Data, latitude, longitude);
+    }
+
+    static double SampleHierarchy(Grid grid, double latitude, double longitude)
+    {
+        double height = SampleGrid(grid, latitude, longitude);
+        double stepX = (grid.East - grid.West) / (grid.Columns - 1);
+        double stepZ = (grid.North - grid.South) / (grid.Rows - 1);
+        foreach (Grid detail in grid.Details) {
+            double edge = Math.Min(Math.Min((longitude - detail.West) / stepX,
+                    (detail.East - longitude) / stepX),
+                Math.Min((latitude - detail.South) / stepZ, (detail.North - latitude) / stepZ));
+            if (edge <= 0) continue;
+            double t = Math.Clamp(edge / detail.BlendCells, 0, 1);
+            double blend = t * t * (3 - 2 * t);
+            height = Lerp(height, SampleHierarchy(detail, latitude, longitude), blend);
+        }
+        return height;
+    }
+
+    static double SampleGrid(Grid grid, double latitude, double longitude)
+    {
+        double columnF = (longitude - grid.West) / (grid.East - grid.West) * (grid.Columns - 1);
+        double rowF = (latitude - grid.South) / (grid.North - grid.South) * (grid.Rows - 1);
+        int column0 = Math.Clamp((int)Math.Floor(columnF), 0, grid.Columns - 1);
+        int row0 = Math.Clamp((int)Math.Floor(rowF), 0, grid.Rows - 1);
+        int column1 = Math.Min(grid.Columns - 1, column0 + 1);
+        int row1 = Math.Min(grid.Rows - 1, row0 + 1);
         double tx = Math.Clamp(columnF - column0, 0.0, 1.0);
         double tz = Math.Clamp(rowF - row0, 0.0, 1.0);
-        double south = Lerp(Data.Height(column0, row0), Data.Height(column1, row0), tx);
-        double north = Lerp(Data.Height(column0, row1), Data.Height(column1, row1), tx);
+        double south = Lerp(grid.Height(column0, row0), grid.Height(column1, row0), tx);
+        double north = Lerp(grid.Height(column0, row1), grid.Height(column1, row1), tx);
         return Lerp(south, north, tz);
     }
 
@@ -44,7 +66,11 @@ public static class OkanaganCdem
             .GetManifestResourceStream(ResourceName)
             ?? throw new InvalidOperationException($"Missing embedded Okanagan CDEM {ResourceName}.");
         using JsonDocument document = JsonDocument.Parse(stream);
-        JsonElement root = document.RootElement;
+        return ReadGrid(document.RootElement);
+    }
+
+    static Grid ReadGrid(JsonElement root)
+    {
         int rows = root.GetProperty("rows").GetInt32();
         int columns = root.GetProperty("columns").GetInt32();
         JsonElement bounds = root.GetProperty("bounds");
@@ -66,7 +92,10 @@ public static class OkanaganCdem
             bounds.GetProperty("north").GetDouble(),
             bounds.GetProperty("west").GetDouble(),
             bounds.GetProperty("east").GetDouble(),
-            heights);
+            heights,
+            root.TryGetProperty("blendCells", out JsonElement blend) ? blend.GetDouble() : 1,
+            root.TryGetProperty("details", out JsonElement details)
+                ? details.EnumerateArray().Select(ReadGrid).ToArray() : []);
     }
 
     static double Lerp(double from, double to, double t) => from + (to - from) * t;
@@ -78,7 +107,9 @@ public static class OkanaganCdem
         double North,
         double West,
         double East,
-        double[] Heights)
+        double[] Heights,
+        double BlendCells,
+        Grid[] Details)
     {
         public double Height(int column, int row) => Heights[row * Columns + column];
     }

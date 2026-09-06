@@ -131,6 +131,7 @@ fi
 python3 tools/audio/cockpit_palette.py self-test
 python3 -m unittest discover -s tools/audio -p 'test_*.py'
 python3 tools/terrain/test_hydrate_rapier_atlas.py
+python3 tools/terrain/test_okanagan_scenery.py
 run_node_tests tools/audio/*.test.mjs
 # Format/unit smoke only — the live scenario matrix (--self-test) is still hardening.
 run_node_tests tools/anca-audit/*.test.mjs

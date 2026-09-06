@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Peachland scenery review · Guns Only</title>
+<style>
+  *{box-sizing:border-box}body{margin:0;background:#b6cbd0;color:#f9f1dd;font:14px system-ui}canvas{display:block;width:100vw;height:100vh}
+  header{position:fixed;top:20px;left:24px;right:24px;display:flex;justify-content:space-between;align-items:flex-start;gap:20px;pointer-events:none}
+  h1{margin:0;font:32px Georgia,serif;text-shadow:0 2px 6px #24342f}p{margin:6px 0;text-shadow:0 1px 5px #24342f}
+  nav{display:flex;gap:6px;flex-wrap:wrap;pointer-events:auto}button{min-height:42px;border:1px solid #e0ded35e;border-radius:5px;color:#eee9dc;background:#263830e8;padding:8px 14px;cursor:pointer}
+  button[aria-pressed=true]{background:#e6cd95;color:#202a23}footer{position:fixed;bottom:0;padding:12px 24px;background:#23352eef;width:100%;font-size:12px;display:flex;justify-content:space-between;gap:20px}
+  a{color:#f1d9a1}#error{position:fixed;top:35%;left:10%;background:#442e26;padding:20px;white-space:pre-wrap}
+  @media(max-width:700px){header{left:14px;right:14px;display:block}h1{font-size:24px}nav{margin-top:12px}footer{padding:10px;display:block}}
+</style>
+<script type="importmap">{"imports":{"three":"/vendor/three.module.js"}}</script>
+<canvas id="scene" aria-label="Interactive Peachland terrain and buildings"></canvas>
+<header><div><h1 id="place">Peachland</h1><p>Drag to orbit · scroll to approach</p></div><nav aria-label="Scenery viewpoints">
+<button data-view="lake" aria-pressed="true">From the lake</button><button data-view="beach" aria-pressed="false">Beach Avenue</button><button data-view="hillside" aria-pressed="false">Hillside streets</button><button data-view="valley" aria-pressed="false">Valley overview</button><button data-view="big-white" aria-pressed="false">Big White</button><button data-view="silverstar" aria-pressed="false">SilverStar</button><button data-view="apex" aria-pressed="false">Apex</button><button data-view="baldy" aria-pressed="false">Baldy</button></nav></header>
+<footer><span id="source">Loading mapped scenery…</span><span id="stats"></span></footer>
+<script type="module">
+import * as THREE from '/vendor/three.module.js';
+import {OrbitControls} from '/vendor/three/addons/controls/OrbitControls.js';
+import {createOkanaganWorld, geographicToWorld, loadOkanaganSceneryTextures} from '/render/okanagan/okanagan_world.js';
+try {
+  const [terrain, data, resortData] = await Promise.all(['okanagan-central.cdem.json','okanagan-central.world.json','okanagan-resorts.osm.json'].map(name => fetch('/content/packs/okanagan-fire/environment/'+name).then(r=>r.json())));
+  data.resorts = resortData.resorts;
+  const renderer = new THREE.WebGLRenderer({canvas:document.querySelector('#scene'),antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.setSize(innerWidth,innerHeight);
+  renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.12;
+  const scene=new THREE.Scene();scene.background=new THREE.Color(0xa8c4d0);scene.fog=new THREE.FogExp2(0xb6c7c6,0.000035);
+  scene.add(new THREE.HemisphereLight(0xcbe2ed,0x695b3c,2));
+  const sun=new THREE.DirectionalLight(0xffedc3,3);sun.position.set(-7000,12000,-8000);scene.add(sun);
+  const camera=new THREE.PerspectiveCamera(52,innerWidth/innerHeight,1,140000);
+  const controls=new OrbitControls(camera,renderer.domElement);controls.maxPolarAngle=Math.PI*.49;controls.minDistance=70;controls.maxDistance=55000;controls.enableDamping=true;
+  const quality=new URLSearchParams(location.search).get('quality')??'desktop';
+  const textures=await loadOkanaganSceneryTextures(terrain,quality);
+  const start=performance.now();const world=createOkanaganWorld(scene,terrain,data,quality,textures);
+  const constructionMs=Math.round(performance.now()-start);
+  const views={'big-white':[[49.700,-118.931,2600],[49.726,-118.930,1910]],silverstar:[[50.346,-119.085,2500],[50.36,-119.058,1740]],apex:[[49.377,-119.882,2700],[49.389,-119.907,1870]],baldy:[[49.15,-119.231,2600],[49.17,-119.235,2000]],lake:[[49.758,-119.695,1450],[49.770,-119.751,540]],beach:[[49.771,-119.721,610],[49.772,-119.738,360]],hillside:[[49.76,-119.738,1090],[49.765,-119.77,620]],valley:[[49.825,-119.64,7800],[49.79,-119.72,650]]};
+  function view(id){const v=views[id]??views.lake;document.querySelector('#place').textContent=data.resorts.find(r=>r.id===id)?.name??'Peachland';camera.position.copy(geographicToWorld(...v[0]));controls.target.copy(geographicToWorld(...v[1]));controls.update();document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.view===id)));}
+  document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>view(b.dataset.view)));
+  view(new URLSearchParams(location.search).get('view')??'lake');
+  document.querySelector('#source').innerHTML='Peachland: RDCO mapped footprints, heights and roads · Roof forms approximate · <a href="https://gis-rdco.hub.arcgis.com/pages/open-data-license" target="_blank">RDCO open data</a> · Resorts: <a href="https://www.openstreetmap.org/copyright" target="_blank">© OpenStreetMap contributors</a>';
+  let frame=0;function animate(){frame=requestAnimationFrame(animate);controls.update();world.update(camera.position);renderer.render(scene,camera);document.querySelector('#stats').textContent=`${renderer.info.render.calls} draws · ${renderer.info.render.triangles.toLocaleString()} triangles · built ${constructionMs} ms`;}
+  animate();
+  addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+  addEventListener('pagehide',()=>{cancelAnimationFrame(frame);controls.dispose();world.dispose();renderer.dispose()},{once:true});
+} catch(error){const p=document.createElement('pre');p.id='error';p.textContent=error.stack;document.body.append(p);console.error(error);}
+</script>
+</html>

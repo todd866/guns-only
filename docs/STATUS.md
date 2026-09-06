@@ -2,7 +2,7 @@
 
 Updated: 2026-09-05
 Production: Build 352, revision `1ed5488d0271aad87118fa8c64eb9dcbd0d50c79`.
-Next candidate: Build 353 — local practice/logbook, HUD contrast, honest acceptance evidence and shell-health corrections; not deployed.
+Next candidate: Build 354 — includes Build 353 practice/logbook and audit fixes, plus mapped Peachland, ski mountains and four site-defence exercises; not deployed. See [scenery and defence audit](audits/2026-09-05-peachland-scenery.md).
 F-22 Guns Only remains an open-ended fight rather than a scored mission.
 Call It A Day or Bingo enters one typed, immediate ceasefire/RTB transition and publishes a
 terrain-aware left-hand runway pattern. Floating chevrons carry the energy lesson without another

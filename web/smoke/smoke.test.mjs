@@ -893,7 +893,7 @@ test("the published Weekend Ride route boots and accepts throttle input", async 
   }
 });
 
-test("the published Okanagan route exposes three sorties, a continuous path and a real pause menu", async () => {
+test("the published Okanagan route exposes training and mapped defence sorties with a real pause menu", async () => {
   assert.ok(WWWROOT, "SMOKE_WWWROOT must point at the published wwwroot");
   const site = await serveStatic(WWWROOT);
   const browser = await chromium.launch({
@@ -911,7 +911,7 @@ test("the published Okanagan route exposes three sorties, a continuous path and 
       undefined,
       { timeout: scaled(60000) },
     );
-    assert.equal(await page.locator(".sortie").count(), 3);
+    assert.equal(await page.locator(".sortie").count(), 7);
     await page.locator('[data-sortie="large-force-employment"]').click();
     await page.locator("#start").click();
     await page.waitForFunction(() => window.__gunsOnlyOkanagan.getState()?.sortie === "large-force-employment"
@@ -925,6 +925,23 @@ test("the published Okanagan route exposes three sorties, a continuous path and 
     assert.ok(Number.isFinite(telemetry.terrain_clearance_m));
     await page.keyboard.press("Escape");
     await page.waitForFunction(() => document.querySelector("#pause-menu")?.classList.contains("visible"));
+    for (const sortie of ["peachland-defence", "big-white-defence", "silver-star-defence", "apex-defence"]) {
+      await page.locator("#choose-sortie").click();
+      await page.locator(`[data-sortie="${sortie}"]`).click();
+      assert.match(await page.locator("#plan-working").innerText(), /^\d+ KG$/);
+      await page.locator("#start").click();
+      await page.waitForFunction(token => window.__gunsOnlyOkanagan.getState()?.sortie === token, sortie);
+      const defence = await page.evaluate(() => window.__gunsOnlyOkanagan.getState());
+      assert.ok(defence.sites.length >= 20);
+      assert.equal(defence.incident_active, false);
+      assert.ok(await page.locator("#site-condition").isVisible());
+      assert.ok(await page.locator("#site-condition").evaluate(node => !node.closest("#mission-data")),
+        "site condition must not be inside the accessibility-only instrument mirror");
+      await page.keyboard.press("Escape");
+    }
+    await page.locator("#choose-sortie").click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.ok(await page.locator("#sortie-menu").evaluate(node => node.scrollWidth <= node.clientWidth + 1));
     assert.deepEqual(pageErrors, [], `uncaught Okanagan page errors:\n${pageErrors.join("\n")}`);
   } finally {
     await browser.close();

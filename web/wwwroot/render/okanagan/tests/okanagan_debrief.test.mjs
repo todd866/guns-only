@@ -301,7 +301,7 @@ test("dispatch selection publishes one objective and supports radio-group naviga
   assert.match(index,
     /class="dispatch-directive"[\s\S]*id="dispatch-objective"[\s\S]*id="dispatch-execution"/u);
   assert.match(index, /data-sortie="water-circuits"[^>]*role="radio"[^>]*tabindex="0"/u);
-  assert.equal([...index.matchAll(/role="radio"/g)].length, 3);
+  assert.equal([...index.matchAll(/role="radio"/g)].length, 7);
   assert.match(main,
     /dispatchObjective\.textContent = SORTIES\[id\]\.objective[\s\S]*dispatchExecution\.textContent = SORTIES\[id\]\.execution/u);
   assert.match(main,
@@ -349,4 +349,16 @@ test("touch preview activates real dual sticks and short landscape keeps dispatc
   assert.match(styles,
     /\.pause-card > small,[\s\S]*\.pause-card > a \{ grid-column:1 \/ -1; \}/u,
     "pause context and the terminal return action must retain full-width reading order");
+});
+
+
+test("defence debrief reports site condition at handoff without inventing houses saved", () => {
+  const model=okanaganDebriefModel({phase:"complete",sortie:"big-white-defence",flyable:true,incident_handed_off:true,
+    sites:[{kind:"housing",status:"intact"},{kind:"housing",status:"lost"},{kind:"lift",status:"damaged"}],
+    fuel_kg:350,fuel_plan:{minimum_rtb_kg:300,above_minimum_kg:50}});
+  assert.equal(model.title,"Aircraft recovered");
+  assert.equal(fact(model,"sites-housing").value,"1 intact · 0 damaged · 1 lost");
+  assert.equal(fact(model,"sites-lift").value,"0 intact · 1 damaged · 0 lost");
+  assert.equal(fact(model,"site-scope").value,"AT GROUND-CREW HANDOFF");
+  assert.doesNotMatch(JSON.stringify(model),/saved|objective met/i);
 });

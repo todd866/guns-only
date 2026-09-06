@@ -3,6 +3,7 @@
 Prepared 5 September 2026 on `fix/player-quality-353`, from production revision
 `1ed5488d0271aad87118fa8c64eb9dcbd0d50c79` (Build 352). This is a local candidate;
 production remains Build 352 until an explicitly approved push and deployment.
+The subsequent [Build 354 scenery and defence pass](2026-09-05-peachland-scenery.md) extends this candidate; the verification record below belongs to the original Build 353 stage.
 The [baseline audit](2026-09-05-holistic-audit-build-352.md) explains the priorities.
 
 **The change makes the first successful exercise and the next attempt easier to reach.**
