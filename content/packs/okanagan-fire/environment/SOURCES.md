@@ -49,7 +49,7 @@ No endorsement by RDCO, NRCan or the resort operators is implied.
 
 ## Ski mountains
 
-The separate `okanagan-resorts.osm.json` database is derived from **© OpenStreetMap contributors**,
+The separate `okanagan-resorts.osm.json` database is derived from **© OpenStreetMap contributors** and **Microsoft Canadian Building Footprints**,
 under the [Open Database License](https://opendatacommons.org/licenses/odbl/1-0/).
 See [OSM attribution and copyright](https://www.openstreetmap.org/copyright).
 The same derived database is provided with the game for download. It is not relicensed as RDCO data.
@@ -60,15 +60,14 @@ Each resort records its extract timestamp, response hash and operator map refere
 | Big White | 423 | 16 | [Operator alpine map](https://www.bigwhite.com/sites/default/files/inline-files/BWSR-Alpine-Trail-Map-2025-WEB.pdf), [village map](https://www.bigwhite.com/sites/default/files/inline-files/BW-25-RS-452-Village-Map-Full-Web.pdf) |
 | SilverStar | 370 | 11 | [Operator mountain maps](https://www.skisilverstar.com/the-mountain/mountain-maps/) |
 | Apex | 267 | 4 | [Operator trail map](https://apexresort.com/wp-content/uploads/2023/11/Trail-Map.pdf) |
-| Baldy | 1 | 4 | [Operator site](https://baldyresort.com/) |
+| Baldy | 63 (1 OSM + 62 Microsoft) | 4 | [Operator site](https://baldyresort.com/) |
 
 Counts are mapped ways, not a claim about the number of operating lifts or official named trails.
 Building footprints, roads, run alignments and lift paths come from the mapped data. Heights without
 source tags, roof forms, building colours, centreline run widths and intermediate lift tower spacing
 are surrogates. Tower positions are not a pylon survey. Mapped buildings and lift termini are not
 invented from resort marketing statistics. OSM way extracts omit relation-only features and can be
-incomplete. Baldy's village is especially incomplete: its terrain, runs and lifts are scenery, but
-it has no defence mission until adequate building coverage is available.
+incomplete. Baldy adds 62 automatically extracted footprints from [Microsoft Canadian Building Footprints](https://github.com/microsoft/CanadianBuildingFootprints), also under ODbL. The pinned British Columbia archive has SHA-256 `d8be8263b66971f9fe461134fdd3c5a9f77dfca0f49fd8316a8c7e966ff3b722`. The authoring tool filters the resort extent, rejects invalid geometry and preserves existing OSM roofs on overlap. Added footprints retain a geometry hash and source label. Microsoft does not supply building use, height or a precise imagery date: each added building has unknown use and a 6 m surrogate height. The village remains partial and has no defence mission yet. The NRCan optimized footprint dataset was also checked, but returned only one poor-quality ridge feature in this extent; it was not used.
 
 Summer grass remains on cleared ski runs. The surrounding subalpine stands are procedural,
 not tree-by-tree mapped. The tree line transition and stand density are artistic/ecological

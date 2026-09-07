@@ -80,19 +80,21 @@ public sealed class OkanaganFireMission
     // The training lane sits in the broad water immediately west of Kelowna. The former lane was
     // 18 km beyond the airport turn and then sent the player another 28 km around a dead recovery
     // dogleg. These points retain a real approach, water run, downwind drop and RTB while keeping
-    // the finite training circuit inside a normal ten-minute airborne profile.
+    // a finite training circuit. The measured hills require a level crossing and an over-water descent.
     internal static readonly Vec3D ScoopEntry =
-        OkanaganGeo.ToWorld(49.935, -119.492, 430.0);
+        OkanaganGeo.ToWorld(49.910, -119.515, 430.0);
     internal static readonly Vec3D ScoopTouchdown =
-        OkanaganGeo.ToWorld(49.945, -119.486, 348.0);
+        OkanaganGeo.ToWorld(49.920, -119.510, 348.0);
     internal static readonly Vec3D ScoopExit =
-        OkanaganGeo.ToWorld(49.970, -119.475, 350.0);
+        OkanaganGeo.ToWorld(49.945, -119.483, 350.0);
+    internal static readonly Vec3D LakeArrival = OkanaganGeo.ToWorld(49.865, -119.515, 780);
+    internal static readonly Vec3D LoadedLiftoff = OkanaganGeo.ToWorld(49.966, -119.472, 640);
     static readonly Vec3D FireTarget = OkanaganGeo.ToWorld(49.850, -119.655, 810.0);
     static readonly Vec3D HoldingPoint = OkanaganGeo.ToWorld(49.900, -119.610, 1_180.0);
     internal static readonly Vec3D AirportDeparture =
         OkanaganGeo.ToWorld(49.935, -119.395, 780.0);
     internal static readonly Vec3D RunwayDeparture =
-        OkanaganGeo.ToWorld(49.938, -119.3615, 590.0);
+        OkanaganGeo.ToWorld(49.938, -119.3615, 780.0);
     internal static readonly Vec3D CircuitCrosswind =
         OkanaganGeo.ToWorld(49.960, -119.500, 720.0);
     internal static readonly Vec3D CircuitDownwind =
@@ -105,12 +107,11 @@ public sealed class OkanaganFireMission
     // gates sat south-east of the field and pointed back up Runway 34 while every visible cue said
     // Runway 16. Keep the geometry named and test-visible so presentation cannot drift back onto
     // the reciprocal approach unnoticed.
-    internal static readonly Vec3D AirportInitial =
-        OkanaganGeo.ToWorld(49.9830, -119.3865, 650.0);
-    internal static readonly Vec3D AirportFinal =
-        OkanaganGeo.ToWorld(49.9750, -119.3823, 540.0);
     internal static readonly Vec3D AirportThreshold =
         OkanaganGeo.ToWorld(49.9670, -119.3778, OkanaganGeo.KelownaRunwayElevationM);
+    static readonly Vec3D RunwayDirection = new(Math.Sin(160 * Math.PI / 180), 0, Math.Cos(160 * Math.PI / 180));
+    internal static readonly Vec3D AirportInitial = (AirportThreshold - RunwayDirection * 7_500) with {Y=750};
+    internal static readonly Vec3D AirportFinal = (AirportThreshold - RunwayDirection * 2_600) with {Y=570};
 
     readonly OkanaganFireGrid _fire;
     readonly OkanaganIncident? _incident;
@@ -119,14 +120,17 @@ public sealed class OkanaganFireMission
     bool _incidentHandedOff;
     double _protectionAccumulator;
     readonly double _cruiseAltitude;
+    readonly Vec3D _incidentUphill;
     readonly double _plannedOutboundFuel;
     readonly double _plannedMinimumRtb;
     FireBossTelemetry _latestTelemetry;
-    Vec3D IncidentTarget => _incident is null ? FireTarget : Ground(_incident.Ignition + new Vec3D(200,0,160), 0);
+    readonly Vec3D _incidentTarget;
+    Vec3D IncidentTarget => _incident is null ? FireTarget : _incidentTarget;
     readonly List<OkanaganRouteGate> _route = [];
     long _ticks;
     OkanaganMissionPhase _phaseBeforePause;
     double _dropCreditThisPass;
+    int _sitesProtectedThisPass;
     double _releasedThisPass;
     double _holdDwellSeconds;
     double _dropCreditThisTick;
@@ -141,7 +145,18 @@ public sealed class OkanaganFireMission
         _fire = new OkanaganFireGrid(_incident);
         _protection = _incident == null ? null : new OkanaganProtection(_incident.Sites);
         _incidentActive = _incident == null;
-        _cruiseAltitude = _incident == null ? 700 : CorridorAltitude(ScoopEntry, IncidentTarget, 400);
+        // The run direction comes from the fire's slope, as before; only the aim moves to the
+        // buildings. Sampling the gradient at the aim instead swung SilverStar's run 86 degrees and
+        // put the whole ingress corridor over different relief.
+        _incidentUphill = UphillDirection(_incident == null ? FireTarget : _incident.Ignition + new Vec3D(200,0,160));
+        _incidentTarget = _incident == null ? FireTarget : DefenceLineAnchor(_incident, _incidentUphill);
+        // The cruise must also clear the relief under the descending approach itself. Otherwise the
+        // straight descent from the ridge entry cuts a secondary summit, the lifted terrain gates
+        // demand a climb a loaded Fire Boss cannot fly, and the aircraft crosses the ridge low
+        // (Big White, 2026-09-07: 23 m). The approach then descends monotonically from the entry.
+        _cruiseAltitude = _incident == null ? 700 : Math.Max(Math.Max(CorridorAltitude(ScoopEntry, IncidentTarget, 400),
+            CorridorAltitude(ScoopEntry, IncidentTarget + _incidentUphill * 6_000, 400)),
+            CorridorAltitude(IncidentTarget + _incidentUphill * 4_500, IncidentTarget + _incidentUphill * 300, 160));
         // Exercise planning allowance: measured ferry distance plus a conservative loaded climb.
         _plannedOutboundFuel = _incident == null ? FireBossFuelPlan.PlannedOutboundTripKg
             : 35 + HorizontalDistance(ScoopEntry, IncidentTarget) / 58 * .15
@@ -197,7 +212,8 @@ public sealed class OkanaganFireMission
         _latestTelemetry = telemetry;
         _ticks++;
         if (!_incidentActive && _incident != null
-            && HorizontalDistance(telemetry.PositionWorldM, IncidentTarget) < 7_000) _incidentActive = true;
+            && Phase is OkanaganMissionPhase.Ingress or OkanaganMissionPhase.Drop
+            && HorizontalDistance(telemetry.PositionWorldM, IncidentTarget) < 1_800) _incidentActive = true;
         if (_incident != null && _incidentActive && Phase == OkanaganMissionPhase.Rtb
             && HorizontalDistance(telemetry.PositionWorldM, IncidentTarget) > 4_000) _incidentHandedOff = true;
         if (_incidentActive && !_incidentHandedOff) {
@@ -222,7 +238,7 @@ public sealed class OkanaganFireMission
                 double dose = telemetry.WaterReleasedThisTickKg * (_incident == null ? 1 :
                     DropDeliveryFraction(telemetry.PositionWorldM.Y - OkanaganCdem.SampleSurfaceHeightM(telemetry.PositionWorldM)));
                 _dropCreditThisTick = _fire.ApplyWater(telemetry.PositionWorldM, dose);
-                _protection?.ApplyWater(telemetry.PositionWorldM, dose);
+                _sitesProtectedThisPass += _protection?.ApplyWater(telemetry.PositionWorldM, dose) ?? 0;
                 _dropCreditThisPass += _dropCreditThisTick;
             }
         }
@@ -273,6 +289,8 @@ public sealed class OkanaganFireMission
         bool onWater = telemetry.SurfaceMode == FireBossSurfaceMode.Water;
         if (Phase == OkanaganMissionPhase.Depart
             && telemetry.SurfaceMode == FireBossSurfaceMode.Airborne
+            && telemetry.PositionWorldM.Y >= 730.0
+            && ActiveGateIndex >= 1
             && HorizontalDistance(telemetry.PositionWorldM, AirportDeparture) < 2_200.0)
             SetPhase(OkanaganMissionPhase.JoinScoop);
         if (Phase == OkanaganMissionPhase.JoinScoop && onWater)
@@ -313,6 +331,8 @@ public sealed class OkanaganFireMission
         FireBossFuelSnapshot fuel = FuelPlanFor(telemetry);
         if (Phase == OkanaganMissionPhase.Depart
             && telemetry.SurfaceMode == FireBossSurfaceMode.Airborne
+            && telemetry.PositionWorldM.Y >= 730.0
+            && ActiveGateIndex >= 1
             && HorizontalDistance(telemetry.PositionWorldM, AirportDeparture) < 2_200.0)
             SetPhase(OkanaganMissionPhase.JoinScoop);
         if (Phase == OkanaganMissionPhase.JoinScoop && onWater)
@@ -342,10 +362,13 @@ public sealed class OkanaganFireMission
         if (Phase == OkanaganMissionPhase.Drop && _hadUsefulLoad
             && _releasedThisPass >= 2_400.0)
         {
-            if (_dropCreditThisPass >= 420.0) EffectiveDrops++;
+            // A defence load is laid on the buildings, not the fire's centre, so it earns its
+            // drop by reaching structures as well as by cooling cells.
+            if (_dropCreditThisPass >= 420.0 || _sitesProtectedThisPass >= 3) EffectiveDrops++;
             _hadUsefulLoad = false;
             _releasedThisPass = 0.0;
             _dropCreditThisPass = 0.0;
+            _sitesProtectedThisPass = 0;
             CompletedCycles++;
             if (fuel.FuelAboveMinimumKg <= 55.0 || _incident != null) SetPhase(OkanaganMissionPhase.Rtb);
             else if (Sortie == OkanaganSortieType.FireAttack && EffectiveDrops >= 2)
@@ -403,13 +426,14 @@ public sealed class OkanaganFireMission
         }
         else if (phase is OkanaganMissionPhase.JoinScoop or OkanaganMissionPhase.Scoop)
         {
-            yield return Gate("scoop-entry", "SCOOP ENTRY", ScoopEntry, 650.0, 47.0);
+            yield return Gate("lake-arrival", "CROSS HILLS · HOLD ALTITUDE", LakeArrival, 450, 58);
+            yield return Gate("scoop-entry", "DESCEND OVER LAKE", ScoopEntry, 650.0, 47.0);
             yield return Gate("scoop-touch", "TOUCH · STEP", ScoopTouchdown, 420.0, 42.0);
             yield return Gate("scoop-lane", "SCOOPS", ScoopExit, 650.0, 43.0);
         }
         else if (phase == OkanaganMissionPhase.Climb)
         {
-            yield return Gate("lift-off", "LIFT OFF", ScoopExit with { Y = 430.0 }, 650.0, 50.0);
+            yield return Gate("lift-off", "LIFT OFF", LoadedLiftoff, 650.0, 54.0);
             yield return Gate("crosswind", "CLIMB", CircuitCrosswind, 850.0, 61.0);
         }
         else if (phase == OkanaganMissionPhase.Downwind)
@@ -448,6 +472,10 @@ public sealed class OkanaganFireMission
             yield return Gate("rtb-crossing", "RTB EAST", RtbCrossing, 1_000.0, 65.0);
             yield return Gate("airport-initial", "JOIN RUNWAY 16", AirportInitial, 1_050.0, 58.0);
         }
+        else if (phase == OkanaganMissionPhase.Landed)
+        {
+            yield return Gate("rollout", "CLOSE POWER · STOP ON RUNWAY", AirportThreshold + RunwayDirection * 2_550, 50, 0);
+        }
         else if (phase == OkanaganMissionPhase.Approach)
         {
             yield return Gate("final", "FINAL 16", AirportFinal, 720.0, 50.0);
@@ -459,6 +487,7 @@ public sealed class OkanaganFireMission
     {
         if (ActiveGateIndex >= _route.Count) return;
         OkanaganRouteGate gate = _route[ActiveGateIndex];
+        if (gate.Id == "lift-off" && (_latestTelemetry.SurfaceMode != FireBossSurfaceMode.Airborne || position.Y < 500)) return;
         bool altitudeGate = gate.Id is "escape-climb" or "lake-climb";
         if (altitudeGate ? position.Y >= gate.PositionWorldM.Y - 60
             : Distance(position, gate.PositionWorldM) <= gate.RadiusM) ActiveGateIndex++;
@@ -478,7 +507,7 @@ public sealed class OkanaganFireMission
         OkanaganMissionPhase.Egress => "Exit north, remain clear of helicopters, return to scoop",
         OkanaganMissionPhase.Rtb => "Protect the reserves and follow the RTB corridor to Kelowna",
         OkanaganMissionPhase.Approach => "Fly Runway 16 final and land",
-        OkanaganMissionPhase.Landed => "Clear the runway and taxi in",
+        OkanaganMissionPhase.Landed => "Close power and stop on the runway",
         OkanaganMissionPhase.Complete => Sortie == OkanaganSortieType.WaterCircuits
             ? $"{CompletedCycles} water circuits complete" : _incident != null
                 ? "Aircraft recovered — review sector condition" : "Sortie complete — reserves protected",
@@ -490,7 +519,7 @@ public sealed class OkanaganFireMission
         OkanaganMissionPhase.Climb => $"AIR ATTACK: Climb over the lake to {_cruiseAltitude * 3.28084:F0} feet before crossing the ridge.",
         OkanaganMissionPhase.Ingress => $"AIR ATTACK: {_incident.Name}. One load on the defence line, then recover.",
         OkanaganMissionPhase.Drop => "AIR ATTACK: Protect the downwind buildings. Keep the escape route open.",
-        OkanaganMissionPhase.Rtb => "OPS: Return Kelowna. Site condition remains under observation until landing.",
+        OkanaganMissionPhase.Rtb => "OPS: Climb clear, then return Kelowna. Ground crews take over when you leave the sector.",
         OkanaganMissionPhase.Complete => "OPS: Aircraft recovered. Review the recorded site condition.",
         _ => RadioCallFor(Sortie, Phase),
     } : RadioCallFor(Sortie, Phase);
@@ -572,8 +601,9 @@ public sealed class OkanaganFireMission
     void StepReturn(in FireBossTelemetry telemetry)
     {
         if (Phase == OkanaganMissionPhase.Rtb
-            && (_incident == null || ActiveGateIndex >= _route.Count - 1)
-            && HorizontalDistance(telemetry.PositionWorldM, AirportInitial) < 1_300.0)
+            && ActiveGateIndex >= _route.Count - 1
+            && telemetry.PositionWorldM.Y <= AirportInitial.Y + 60
+            && HorizontalDistance(telemetry.PositionWorldM, AirportInitial) < 800.0)
             SetPhase(OkanaganMissionPhase.Approach);
         if (Phase == OkanaganMissionPhase.Approach
             && telemetry.SurfaceMode == FireBossSurfaceMode.Runway)
@@ -616,37 +646,95 @@ public sealed class OkanaganFireMission
         return Math.Ceiling(altitude / 50) * 50;
     }
 
+    // The load has to reach buildings. Protection wets sites within 185 m of the release track and
+    // a salvo lands within about 100 m of track, so a run aimed at the fire's geometric centre can
+    // put the whole load on empty slope: at Apex the nearest mapped building to that centre is
+    // 300 m away, and a 2026-09-07 flown drop there wetted nothing. Aim the defence run through
+    // the exposed buildings nearest the fire, at the site where one load along the downhill run
+    // reaches the most of them. The rule is deterministic and reads directly off the mapped sites.
+    internal static Vec3D DefenceLineAnchor(OkanaganIncident incident, Vec3D uphill)
+    {
+        if (incident.Sites.Count == 0) return Ground(incident.Ignition + new Vec3D(200,0,160), 0);
+        OkanaganSite best = incident.Sites[0];
+        double bestScore = double.NegativeInfinity;
+        foreach (OkanaganSite candidate in incident.Sites
+            .OrderBy(s => HorizontalDistance(s.Position, incident.Ignition)).Take(24)) {
+            // A salvo opened about two seconds short of the aim lands from roughly 100 m short of
+            // it to just past it along the downhill run. Score the candidate by how much of that
+            // footprint reaches buildings, with the same 185 m falloff the wetting model applies.
+            Vec3D a = candidate.Position + uphill * 100, b = candidate.Position - uphill * 10;
+            double score = incident.Sites.Sum(s => Math.Max(0, 1 - SegmentDistance(s.Position, a, b) / 185));
+            if (score > bestScore + 1e-9) { best = candidate; bestScore = score; }
+        }
+        return Ground(best.Position, 0);
+    }
+
+    static double SegmentDistance(Vec3D p, Vec3D a, Vec3D b)
+    {
+        double dx = b.X - a.X, dz = b.Z - a.Z, length = dx * dx + dz * dz;
+        double t = length > 0 ? Math.Clamp(((p.X - a.X) * dx + (p.Z - a.Z) * dz) / length, 0, 1) : 0;
+        return Math.Sqrt(Math.Pow(p.X - (a.X + dx * t), 2) + Math.Pow(p.Z - (a.Z + dz * t), 2));
+    }
+
+    static Vec3D UphillDirection(Vec3D target)
+    {
+        Vec3D gradient = new(OkanaganCdem.SampleSurfaceHeightM(target + new Vec3D(100,0,0)) - OkanaganCdem.SampleSurfaceHeightM(target - new Vec3D(100,0,0)), 0,
+            OkanaganCdem.SampleSurfaceHeightM(target + new Vec3D(0,0,100)) - OkanaganCdem.SampleSurfaceHeightM(target - new Vec3D(0,0,100)));
+        return gradient.Length > 1 ? gradient.Normalized() : new Vec3D(0,0,1);
+    }
+
     IEnumerable<OkanaganRouteGate> DefenceRoute(OkanaganMissionPhase phase)
     {
         Vec3D target = IncidentTarget;
         if (phase == OkanaganMissionPhase.Climb) {
-            yield return Gate("lift-off", "LIFT OFF", ScoopExit with { Y = 430 }, 650, 50);
-            yield return Gate("lake-climb", "CLIMB OVER LAKE", ScoopEntry with { Y = _cruiseAltitude + 60 }, 800, 58);
+            yield return Gate("lift-off", "LIFT OFF", LoadedLiftoff, 650, 54);
+            yield return Gate("lake-climb", "CLIMB OVER LAKE", OkanaganGeo.ToWorld(49.917, -119.510, _cruiseAltitude + 60), 800, 58);
         } else if (phase is OkanaganMissionPhase.Ingress or OkanaganMissionPhase.Drop) {
             // Enter from the valley side at terrain-clear cruise altitude, then work downhill.
-            Vec3D gradient = new(OkanaganCdem.SampleSurfaceHeightM(target+new Vec3D(100,0,0))-OkanaganCdem.SampleSurfaceHeightM(target-new Vec3D(100,0,0)),0,
-                OkanaganCdem.SampleSurfaceHeightM(target+new Vec3D(0,0,100))-OkanaganCdem.SampleSurfaceHeightM(target-new Vec3D(0,0,100)));
-            Vec3D uphill = gradient.Length > 1 ? gradient.Normalized() : new Vec3D(0,0,1);
+            Vec3D uphill = _incidentUphill;
+            yield return Gate("ridge-join", "ALIGN WITH DEFENCE RUN", (target + uphill * 6_000) with {Y = _cruiseAltitude}, 350, 58);
             Vec3D entry = target + uphill * 4_500;
-            entry = entry with { Y = Math.Max(_cruiseAltitude, CorridorAltitude(ScoopEntry, entry, 400)) };
-            Vec3D dropStart = Ground(target + uphill * 300, 110);
+            entry = entry with { Y = _cruiseAltitude };
+            double dropClearance = _incident?.Id == "apex" ? 160 : 110;
+            Vec3D dropStart = Ground(target + uphill * 300, dropClearance);
             yield return Gate("ridge-entry", "RIDGE ENTRY", entry, 450, 62);
             // A straight descent chord can pass through a secondary summit (notably at Apex).
-            // Sample the approach relief too, instead of checking only the two endpoint gates.
+            // Sample the approach relief too, instead of checking only the two endpoint gates,
+            // and never ask for a climb on the way down: a gate lifted over relief also lifts
+            // every gate before it, so the profile holds altitude until the relief is behind.
+            var approach = new Vec3D[20];
             for (int i = 1; i < 21; i++) {
                 Vec3D point = entry + (dropStart - entry) * (i / 21.0);
-                yield return Gate($"terrain-approach-{i}", "TERRAIN CLEARANCE", point with {
-                    Y = Math.Max(point.Y, OkanaganCdem.SampleSurfaceHeightM(point) + 160)
-                }, 160, 58);
+                approach[i - 1] = point with { Y = Math.Max(point.Y, OkanaganCdem.SampleSurfaceHeightM(point) + 160) };
             }
+            for (int i = approach.Length - 2; i >= 0; i--)
+                approach[i] = approach[i] with { Y = Math.Max(approach[i].Y, approach[i + 1].Y) };
+            for (int i = 0; i < approach.Length; i++)
+                yield return Gate($"terrain-approach-{i + 1}", "TERRAIN CLEARANCE", approach[i], 160, 58);
             yield return Gate("drop-start", "DEFENCE LINE", dropStart, 180, 58);
-            yield return Gate("drop-line", "DROP · DOWNHILL", Ground(target - uphill * 350, 100), 220, 58);
+            yield return Gate("drop-line", "DROP · DOWNHILL", Ground(target - uphill * 350, dropClearance - 10), 220, 58);
             yield return Gate("escape", "CLIMB TO ESCAPE", Ground(target - uphill * 1_400, 450), 650, 62);
         } else {
-            double safeAltitude = CorridorAltitude(_latestTelemetry.PositionWorldM, RtbCrossing, 400);
-            yield return Gate("escape-climb", "CLIMB BEFORE CROSSING", _latestTelemetry.PositionWorldM with {Y=safeAltitude+80}, 400, 60);
-            yield return Gate("rtb-crossing", "RTB · OVER LAKE", RtbCrossing with {Y=safeAltitude}, 900, 65);
-            yield return Gate("lake-descent", "DESCEND OVER LAKE", RtbCrossing, 600, 58);
+            Vec3D exit = Ground(IncidentTarget - _incidentUphill * 1_800, 350);
+            yield return Gate("sector-exit", "CONTINUE DOWNHILL · CLIMB", exit, 450, 60);
+            Vec3D returnOrigin = exit;
+            Vec3D lakeArrival = OkanaganGeo.ToWorld(49.950, -119.482, 850);
+            double safeAltitude = CorridorAltitude(returnOrigin, lakeArrival, 400);
+            yield return Gate("escape-climb", "CLIMB BEFORE CROSSING", (returnOrigin - _incidentUphill * 1_800) with {Y=safeAltitude+80}, 400, 60);
+            // Remain above every ridge still ahead, then descend at no more than 4% along the
+            // return. A vertical stack over the airport hills was neither a lake hold nor a
+            // usable descent. These intermediate gates keep the gradual descent in the route.
+            int steps = Math.Max(1, (int)Math.Ceiling(HorizontalDistance(returnOrigin, lakeArrival) / 2_000));
+            double altitude = safeAltitude;
+            double leg = HorizontalDistance(returnOrigin, lakeArrival) / steps;
+            for (int i = 1; i <= steps; i++) {
+                Vec3D p = returnOrigin + (lakeArrival - returnOrigin) * (i / (double)steps);
+                altitude = Math.Max(850, Math.Max(altitude - leg * .04, CorridorAltitude(p, lakeArrival, 300)));
+                yield return Gate(i == steps ? "lake-return" : $"return-descent-{i}",
+                    "RETURN · TERRAIN CLEARANCE", p with {Y=altitude}, 500, 62);
+            }
+            yield return Gate("lake-descent", "DESCEND OVER LAKE", lakeArrival, 350, 58);
+            yield return Gate("rtb-crossing", "CROSS TO AIRPORT", RtbCrossing, 450, 58);
             yield return Gate("airport-initial", "JOIN RUNWAY 16", AirportInitial, 800, 58);
         }
     }

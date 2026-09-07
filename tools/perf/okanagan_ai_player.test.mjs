@@ -56,7 +56,7 @@ test("angle wrap and inverse gamepad deadzone preserve short direction", () => {
 });
 
 test("long authored transit legs receive explicit watchdog budgets", () => {
-  assert.equal(okanaganPhaseTimeoutSeconds("join-scoop"), 210);
+  assert.equal(okanaganPhaseTimeoutSeconds("join-scoop"), 480);
   assert.equal(okanaganPhaseTimeoutSeconds("rtb"), 240);
   assert.equal(okanaganPhaseTimeoutSeconds("scoop"), 60);
   assert.equal(okanaganPhaseTimeoutSeconds("unknown"), 180);
@@ -84,7 +84,7 @@ test("airborne pilot banks toward a published gate and commands climb energy", (
     phase: "rtb",
     route: [gate("rtb-crossing", 1_000, 850, 1_000, 900, 65)],
     position: { x: 0, y: 600, z: 0 },
-    tas_mps: 50,
+    tas_mps: 55,
     throttle: 0.4,
   }));
   assert.ok(command.roll > 0);
@@ -128,7 +128,7 @@ test("landing controller holds shallow sink and tight bank close to contact", ()
     route: [gate("threshold", 80, 433, 600, 420, 42)],
   }));
   assert.equal(command.target.landingSurfaceM, 433);
-  assert.equal(command.target.desiredVerticalSpeedMps, -0.65);
+  assert.equal(command.target.desiredVerticalSpeedMps, -1.25);
   assert.ok(Math.abs(command.target.desiredBankRad) <= 9 * Math.PI / 180 + 1e-9);
   assert.ok(command.pitch > 0, "pilot should arrest the excessive sink before contact");
   assert.ok(command.target.guidanceRangeM > command.target.rangeM,
@@ -358,4 +358,28 @@ test("ordered phase evidence cannot satisfy the contract out of order", () => {
     { phase: "depart" }, { phase: "scoop" }, { phase: "join-scoop" },
   ], "phase", ["depart", "join-scoop", "scoop"]);
   assert.equal(evidence.pass, false);
+});
+
+
+test("rollout closes power even after authority clears the route", () => {
+  const command=okanaganAiCommand(state({phase:"landed",surface:"runway",route:[],throttle:.4}));
+  assert.equal(command.throttleTarget,0);
+  assert.equal(command.throttleDown,true);
+  assert.equal(command.yaw,0);
+});
+
+test("loaded climb trades climb demand for airspeed before stalling", () => {
+  const command=okanaganAiCommand(state({phase:"climb",water_kg:2800,tas_mps:46,
+    route:[gate("lake-climb",0,2400,1000)]}));
+  assert.equal(command.throttleTarget,1);
+  assert.ok(command.target.desiredVerticalSpeedMps<0);
+  assert.ok(command.pitch<0);
+});
+
+test("runway steering keeps its direction beyond the original aiming point", () => {
+  const heading=160*Math.PI/180;
+  const command=okanaganAiCommand(state({phase:"approach",heading_rad:heading,
+    position:{x:Math.sin(heading)*1600,y:438,z:Math.cos(heading)*1600},
+    route:[gate("threshold",0,433,0)]}));
+  assert.ok(Math.abs(command.target.headingErrorRad)<1e-9);
 });

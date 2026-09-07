@@ -360,5 +360,21 @@ test("defence debrief reports site condition at handoff without inventing houses
   assert.equal(fact(model,"sites-housing").value,"1 intact · 0 damaged · 1 lost");
   assert.equal(fact(model,"sites-lift").value,"0 intact · 1 damaged · 0 lost");
   assert.equal(fact(model,"site-scope").value,"AT GROUND-CREW HANDOFF");
+  assert.equal(fact(model,"sites-reached").value,"0 of 3");
+  assert.equal(fact(model,"sites-reached").tone,"caution");
   assert.doesNotMatch(JSON.stringify(model),/saved|objective met/i);
+});
+
+test("defence debrief names the sites the load reached instead of claiming houses saved", () => {
+  const model=okanaganDebriefModel({phase:"complete",sortie:"apex-defence",flyable:true,incident_handed_off:true,
+    effective_drops:1,completed_cycles:1,effective_water_kg:311,
+    sites:[{kind:"housing",status:"damaged",protected_by_drop:true},{kind:"housing",status:"damaged",protected_by_drop:true},
+      {kind:"housing",status:"damaged"},{kind:"lift",status:"damaged",protected_by_drop:false}],
+    fuel_kg:350,fuel_plan:{minimum_rtb_kg:300,above_minimum_kg:50}});
+  assert.equal(model.summary,"1 drop · 2 sites reached");
+  assert.equal(fact(model,"sites-reached").value,"2 of 4");
+  assert.equal(fact(model,"sites-reached").tone,"normal");
+  assert.equal(fact(model,"sites-housing").value,"0 intact · 3 damaged · 0 lost");
+  assert.equal(model.correction,"");
+  assert.doesNotMatch(model.summary+JSON.stringify(model.facts),/saved|protected|objective met/i);
 });

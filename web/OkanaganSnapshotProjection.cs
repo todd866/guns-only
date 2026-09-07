@@ -77,6 +77,7 @@ public static class OkanaganSnapshotProjection
                 id = site.Id, name = site.Name, kind = site.Kind, position = Point(site.Position),
                 integrity = site.Integrity, wetness = site.Wetness, threat = site.Threat,
                 ever_threatened = site.EverThreatened, status = site.Status,
+                protected_by_drop = site.ProtectedByDrop,
             }),
             fuel_plan = new {
                 block_kg = state.FuelPlan.BlockFuelKg,

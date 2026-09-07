@@ -90,11 +90,15 @@ export function okanaganDebriefModel(state = {}) {
     ? "NOT FLYABLE"
     : state?.flyable === true ? "FLYABLE" : "NOT REPORTED";
 
+  const siteList = Array.isArray(state.sites) ? state.sites : [];
+  const protectedSites = siteList.filter((site) => site?.protected_by_drop === true).length;
   const summary = failed
     ? ""
     : fireMission
       ? drops > 0
-        ? `${drops} ${drops === 1 ? "drop" : "drops"} · ${integerText(effectiveWaterKg)} KG water`
+        ? protectedSites > 0
+          ? `${drops} ${drops === 1 ? "drop" : "drops"} · ${protectedSites} ${protectedSites === 1 ? "site" : "sites"} reached`
+          : `${drops} ${drops === 1 ? "drop" : "drops"} · ${integerText(effectiveWaterKg)} KG water`
         : "No effective drops"
       : cycles > 0
         ? `${cycles} ${cycles === 1 ? "circuit" : "circuits"}`
@@ -114,6 +118,10 @@ export function okanaganDebriefModel(state = {}) {
       const damaged=category.length-intact-lost;
       facts.push(fact(`sites-${kind}`,label,`${intact} intact · ${damaged} damaged · ${lost} lost`,lost||damaged?"caution":"normal"));
     }
+    // Wetness has decayed by landing, so this is the authority's record of which standing sites
+    // the load actually reached, not a claim about what would have burned without it.
+    facts.push(fact("sites-reached","REACHED BY YOUR DROP",`${protectedSites} of ${sites.length}`,
+      protectedSites > 0 ? "normal" : "caution"));
     facts.push(fact("site-scope","SECTOR CONDITION",state.incident_handed_off ? "AT GROUND-CREW HANDOFF" : "AT SORTIE END"));
   }
   if (aircraftNotFlyable || aircraftState === "NOT REPORTED") {

@@ -410,7 +410,8 @@ function showMissionResult(current) {
   if (!model || missionTerminal) return false;
   missionTerminal = true;
   const sites = current.sites ?? [];
-  const condition = sites.length ? ` · ${sites.filter(s => s.status === "intact").length} intact / ${sites.filter(s => s.status === "damaged").length} damaged / ${sites.filter(s => s.status === "lost").length} lost` : "";
+  const reached = sites.filter(s => s.protected_by_drop === true).length;
+  const condition = sites.length ? ` · ${sites.filter(s => s.status === "intact").length} intact / ${sites.filter(s => s.status === "damaged").length} damaged / ${sites.filter(s => s.status === "lost").length} lost · ${reached} reached by drop` : "";
   pilotLogbook.finish({ outcome: model.title + condition, correction: model.correction,
     durationSeconds: current.mission_s, effectiveDrops: current.effective_drops,
     waterKg: current.effective_water_kg, cycles: current.completed_cycles });
@@ -668,7 +669,10 @@ function updateDom(current) {
   const lost = sites.filter(s => s.status === "lost").length;
   const damaged = sites.filter(s => s.status === "damaged").length;
   const threatened = sites.filter(s => s.threat > .08 && s.status !== "lost").length;
-  condition.textContent = sites.length ? `${sites.length-lost-damaged} INTACT · ${damaged} DAMAGED · ${lost} LOST · ${threatened} AT RISK` : "";
+  const reached = sites.filter(s => s.protected_by_drop === true).length;
+  condition.textContent = sites.length
+    ? `${sites.length-lost-damaged} INTACT · ${damaged} DAMAGED · ${lost} LOST · ${threatened} AT RISK${reached ? ` · ${reached} WET` : ""}`
+    : "";
   const now = performance.now();
   document.querySelector("#cue").textContent = compactOkanaganCue(current);
   const radio = document.querySelector("#radio");

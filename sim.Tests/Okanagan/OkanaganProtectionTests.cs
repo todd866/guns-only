@@ -19,6 +19,7 @@ public sealed class OkanaganProtectionTests
                 WaterReleasedThisTickKg = released, TrueAirspeedMps = speed };
             mission.ObserveFlight(flight);
         }
+        Observe(OkanaganFireMission.RunwayDeparture, load:0);
         Observe(OkanaganFireMission.AirportDeparture, load:0);
         Assert.Equal(OkanaganMissionPhase.JoinScoop,mission.Phase);
         Observe(OkanaganFireMission.ScoopTouchdown,FireBossSurfaceMode.Water);
@@ -35,9 +36,10 @@ public sealed class OkanaganProtectionTests
         Assert.Equal(1,mission.CompletedCycles);
         var recovery=mission.Snapshot().Route;
         // A pilot may climb in the safe sector without revisiting the exact release coordinates.
-        Observe(recovery[0].PositionWorldM+new Vec3D(1800,0,0),load:400);
-        Assert.Equal(1,mission.ActiveGateIndex);
-        foreach(var gate in recovery.Skip(1)) Observe(gate.PositionWorldM,load:400);
+        Observe(recovery[0].PositionWorldM,load:400);
+        Observe(recovery[1].PositionWorldM+new Vec3D(1800,0,0),load:400);
+        Assert.Equal(2,mission.ActiveGateIndex);
+        foreach(var gate in recovery.Skip(2)) Observe(gate.PositionWorldM,load:400);
         Assert.True(mission.Snapshot().IncidentHandedOff);
         Assert.Equal(OkanaganMissionPhase.Approach,mission.Phase);
         Observe(OkanaganFireMission.AirportFinal,load:400);
@@ -99,6 +101,8 @@ public sealed class OkanaganProtectionTests
         Assert.Contains(control,s=>s.EverThreatened);
         Assert.Contains(control,s=>s.Status is "damaged" or "lost");
         Assert.True(result.Sum(s=>s.Integrity)>control.Sum(s=>s.Integrity)+.01,"A finite drop must improve the actual sector condition.");
+        Assert.Contains(result,s=>s.ProtectedByDrop);
+        Assert.DoesNotContain(control,s=>s.ProtectedByDrop);
     }
 
     [Fact]

@@ -278,6 +278,26 @@ public sealed class FireBossDynamicsTests
             $"surface {aircraft.Telemetry.SurfaceMode}, altitude {aircraft.Telemetry.PositionWorldM.Y:F1} m, sink {aircraft.Telemetry.VerticalSpeedMps:F1} m/s");
     }
 
+    [Fact]
+    public void RunwayContactDoesNotContinueBeyondTheMappedPavement()
+    {
+        var aircraft = FireBossDynamics.AtKelownaDeparture();
+        var stayOnGround = new FireBossPilotCommand(0, 0, 0, 1, false, false);
+        StepFor(aircraft, 120, stayOnGround);
+        Assert.False(aircraft.Flyable);
+        Assert.Equal(FireBossSurfaceMode.Destroyed, aircraft.Telemetry.SurfaceMode);
+    }
+
+    [Fact]
+    public void FloatContactCannotDriveThroughTheShoreline()
+    {
+        var aircraft = FireBossDynamics.OnScoopLane();
+        var stayOnWater = new FireBossPilotCommand(0, 0, 0, 1, false, false);
+        StepFor(aircraft, 600, stayOnWater);
+        Assert.False(aircraft.Flyable);
+        Assert.Equal(FireBossSurfaceMode.Destroyed, aircraft.Telemetry.SurfaceMode);
+    }
+
     static void StepFor(FireBossDynamics aircraft, double seconds,
         FireBossPilotCommand command)
     {

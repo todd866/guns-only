@@ -20,7 +20,7 @@ import numpy as np
 from pyproj import Transformer
 from scipy.ndimage import map_coordinates
 import tifffile
-from shapely.geometry import Polygon, LineString, box
+from shapely.geometry import Polygon, LineString, box, shape
 
 import fetch_okanagan_scenery as scenery
 
@@ -95,6 +95,50 @@ def resort_bounds(r):
                 west=round(b["west"] + r["columnStart"] * dx, 9), east=round(b["west"] + r["columnEnd"] * dx, 9))
 
 
+def supplement_baldy_buildings(result):
+    """Keep mapped OSM footprints; fill gaps from the separate ODbL extraction source."""
+    url = "https://minedbuildings.z5.web.core.windows.net/legacy/canadian-buildings-v2/BritishColumbia.zip"
+    expected_hash = "d8be8263b66971f9fe461134fdd3c5a9f77dfca0f49fd8316a8c7e966ff3b722"
+    cache = TILE_CACHE / "okanagan-microsoft-bc-buildings.zip"
+    if not cache.exists():
+        with urllib.request.urlopen(url, timeout=120) as response:
+            raw = response.read(100 * 1024 * 1024 + 1)
+        if len(raw) > 100 * 1024 * 1024:
+            raise ValueError("Building archive exceeded the authoring download limit")
+        cache.write_bytes(raw)
+    if hashlib.sha256(cache.read_bytes()).hexdigest() != expected_hash:
+        raise ValueError("Microsoft building source changed; inspect before updating the pinned archive")
+    with zipfile.ZipFile(cache) as archive:
+        features = json.load(archive.open("BritishColumbia.geojson"))["features"]
+    b = result["bounds"]
+    extent = box(b["west"], b["south"], b["east"], b["north"])
+    existing = [Polygon(poly[0], poly[1:]) for building in result["buildings"] for poly in building["polygons"]]
+    added = 0
+    for feature in features:
+        ring = feature["geometry"]["coordinates"][0]
+        if not any(b["west"] <= p[0] <= b["east"] and b["south"] <= p[1] <= b["north"] for p in ring):
+            continue
+        polygon = shape(feature["geometry"])
+        if not polygon.is_valid or polygon.geom_type != "Polygon" or not extent.covers(polygon):
+            raise ValueError("Baldy building extraction contains invalid or boundary-crossing geometry")
+        # A footprint touching an existing mapped roof is not a second building.
+        if any(polygon.intersects(mapped) for mapped in existing):
+            continue
+        geometry_hash = hashlib.sha256(json.dumps(feature["geometry"], sort_keys=True).encode()).hexdigest()
+        result["buildings"].append(dict(id=f"microsoft:{geometry_hash[:16]}", name="", kind="yes",
+            polygons=[[scenery.rounded(list(map(list, polygon.exterior.coords)))]], heightM=6,
+            heightEpistemic="surrogate", footprintEpistemic="automatically-extracted",
+            footprintSource="Microsoft Canadian Building Footprints", sourceGeometrySha256=geometry_hash))
+        existing.append(polygon)
+        added += 1
+    result["additionalBuildingSource"] = dict(authority="Microsoft Canadian Building Footprints", url=url,
+        license="https://opendatacommons.org/licenses/odbl/1-0/", archiveSha256=expected_hash,
+        documentation="https://github.com/microsoft/CanadianBuildingFootprints", addedFootprints=added,
+        imageryDate="Unknown per footprint; Bing imagery composite", horizontalCrs="EPSG:4326",
+        processing="Baldy extent filter; reject invalid geometry; retain existing OSM footprints on overlap; unchanged extracted rings rounded to seven decimals. Heights and use are not supplied.")
+    result["limitations"] += " Baldy adds automatically extracted Microsoft footprints of unknown imagery date; building use is unknown and all added heights are 6 m surrogates. Coverage remains incomplete."
+
+
 def osm_data(resort, bounds):
     cache = Path(os.environ.get("OKANAGAN_OSM_CACHE", "/tmp")) / f"okanagan-{resort['id']}-osm.json"
     if not cache.exists():
@@ -155,6 +199,8 @@ def osm_data(resort, bounds):
                       for run in result["runs"]
                       for index, part in enumerate([run["points"]] if run["area"] else clip_line(run["points"]))]
     result["source"]["processing"] = "Cached Overpass way geometry; access-road and run lines clipped to the authored bounds. Bounds describe the rendered patch, not a claim of complete mapping coverage."
+    if resort["id"] == "baldy":
+        supplement_baldy_buildings(result)
     print(resort["name"], {key:len(result[key]) for key in ["buildings", "roads", "runs", "lifts"]}, flush=True)
     return result
 
@@ -192,7 +238,7 @@ def author():
         terrain["details"].append(detail)
         resorts.append(osm_data(r, bounds))
     database = dict(schema="guns-only.okanagan-resorts.v1", license="https://opendatacommons.org/licenses/odbl/1-0/",
-                    attribution="© OpenStreetMap contributors", resorts=resorts)
+                    attribution="© OpenStreetMap contributors; Microsoft Canadian Building Footprints", resorts=resorts)
     world["sources"]["valleyTerrain"] = terrain["source"]
     world["sources"]["resorts"] = dict(url="okanagan-resorts.osm.json", license=database["license"], attribution=database["attribution"])
     for prefix in ["content", "web/wwwroot/content"]:

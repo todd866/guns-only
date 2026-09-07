@@ -45,3 +45,21 @@ test("Rattlesnake Island remains land in the lake polygon",async()=>{
   assert.equal(isOkanaganLake(world,-119.71709,49.747988),false);
   assert.equal(isOkanaganLake(world,-119.71,49.773),true);
 });
+
+
+test("Baldy extraction keeps attribution and unknown use rather than inventing houses",async()=>{
+  const data=await read("okanagan-resorts.osm.json"), baldy=data.resorts.find(r=>r.id==="baldy");
+  assert.match(data.attribution,/Microsoft/);
+  assert.equal(baldy.additionalBuildingSource.addedFootprints,62);
+  assert.equal(new Set(baldy.buildings.map(b=>b.id)).size,baldy.buildings.length);
+  for(const building of baldy.buildings.filter(b=>String(b.id).startsWith("microsoft:"))) {
+    assert.equal(building.kind,"yes");
+    assert.equal(building.heightEpistemic,"surrogate");
+    assert.equal(building.footprintEpistemic,"automatically-extracted");
+    assert.match(building.sourceGeometrySha256,/^[a-f0-9]{64}$/);
+    for(const polygon of building.polygons)for(const ring of polygon) {
+      assert.deepEqual(ring[0],ring.at(-1));
+      for(const [lon,lat] of ring) assert.ok(lon>=baldy.bounds.west&&lon<=baldy.bounds.east&&lat>=baldy.bounds.south&&lat<=baldy.bounds.north);
+    }
+  }
+});
