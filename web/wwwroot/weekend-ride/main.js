@@ -4,44 +4,44 @@ const pilotLogbook = createBrowserPilotLogbook();
 installDisposedPageRestore();
 window.addEventListener("pagehide", () => pilotLogbook.finish({ outcome: "Left before completion" }));
 import * as THREE from "../vendor/three.module.js";
-import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=354";
+import { HelmetHud } from "../render/motorcycle/helmet_hud.js?v=355";
 import {
   loadRideBest,
   saveRideBest,
-} from "../render/ride/ride_best_lap_store.js?v=354";
-import { weekendRideResult } from "../render/ride/weekend_ride_result.js?v=354";
-import { weekendRideEscapeAction } from "../render/ride/weekend_ride_lifecycle.js?v=354";
+} from "../render/ride/ride_best_lap_store.js?v=355";
+import { weekendRideResult } from "../render/ride/weekend_ride_result.js?v=355";
+import { weekendRideEscapeAction } from "../render/ride/weekend_ride_lifecycle.js?v=355";
 import {
   dominantSignedAxis,
   gamepadRiderAxes,
-} from "../render/motorcycle/rider_input.js?v=354";
+} from "../render/motorcycle/rider_input.js?v=355";
 import {
   createRapierTrackDayPresentation,
-} from "../render/motorcycle/track_day_presentation.js?v=354";
-import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=354";
+} from "../render/motorcycle/track_day_presentation.js?v=355";
+import { viewPitchRad } from "../render/motorcycle/view_attitude.js?v=355";
 import {
   advanceLowSpeedLens,
   lowSpeedLensTarget,
   neutralLowSpeedLens,
-} from "../render/camera/low_speed_lens.js?v=354";
+} from "../render/camera/low_speed_lens.js?v=355";
 import {
   applyTexelStabilizedDirectionalShadow,
-} from "../render/visual/shadow_stabilizer.js?v=354";
-import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=354";
-import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=354";
+} from "../render/visual/shadow_stabilizer.js?v=355";
+import { createControlsOnboarding } from "../render/onboarding/first_run_controls.js?v=355";
+import { WEEKEND_RIDE_ONBOARDING_CONTENT } from "../render/onboarding/controls_content.js?v=355";
 import {
   armFlightAudio,
   setFlightAudioEnabled,
   suspendFlightAudio,
   updateFlightAudio,
-} from "../render/audio/flight_audio.js?v=354";
+} from "../render/audio/flight_audio.js?v=355";
 import {
   loadPlayerSettings,
   savePlayerSettings,
-} from "../render/settings/player_settings.js?v=354";
-import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=354";
-import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=354";
-import { RELEASE_BUILD } from "../render/release/release_identity.js?v=354";
+} from "../render/settings/player_settings.js?v=355";
+import { standaloneNavigationHref } from "../render/shell/standalone_navigation.js?v=355";
+import { createCobraTelemetryChannel } from "../render/cobra/cobra_telemetry.js?v=355";
+import { RELEASE_BUILD } from "../render/release/release_identity.js?v=355";
 
 const RUNWAY_LENGTH_M = 3_048;
 const RUNWAY_WIDTH_M = 48;

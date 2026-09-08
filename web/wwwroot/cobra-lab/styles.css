@@ -378,6 +378,19 @@ body[data-input="touch"] .mission-brief-controls--touch { display: grid; }
   gap: 8px;
   margin-top: 18px;
 }
+
+/* A phone held sideways leaves this brief taller than the screen. At 844x390 the card scrolls to
+   553 px and Start sat 87 px below the fold, so the one action that begins the mission was
+   off-screen at rest with nothing saying to scroll. Okanagan's dispatch already sticks its action
+   row to the bottom of its scrolling card; the flight brief now does the same. Scoped to the brief
+   so the pause and debrief cards, which are laid out to fit, are untouched. */
+.mission-card--brief > .mission-actions {
+  position: sticky;
+  bottom: -1px;
+  z-index: 2;
+  padding-bottom: 6px;
+  background: linear-gradient(to bottom, rgba(9, 15, 12, 0), rgba(9, 15, 12, .97) 10px);
+}
 .mission-action {
   display: grid;
   min-height: 46px;
