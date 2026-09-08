@@ -3751,8 +3751,16 @@
 
       :root #ready-screen[data-mode="program"] .ready-card {
         width: min(1180px, 100%);
+        /* Centring an overflowing column cuts BOTH ends, and this card clips rather than scrolls:
+           at 667x375 the picker's content is 771 px inside a 359 px box, so the top of it -- Fly
+           included -- was unreachable by any gesture. `safe` centres only while the content fits
+           and falls back to the start edge once it does not; the plain value stays first so a
+           browser without `safe` keeps today's behaviour, and scrolling makes the rest reachable. */
         justify-content: center;
-        overflow: hidden;
+        justify-content: safe center;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
       }
 
       :root #ready-screen[data-mode="program"] .ready-layout {
@@ -3760,7 +3768,12 @@
         min-height: 0;
         grid-template-columns: minmax(0, 1fr) minmax(190px, 250px);
         gap: var(--flow-space-3);
+        /* Centring a column taller than its row pushes the top of it off the card, and the card
+           can only scroll toward positive overflow -- so at 667x375 the actions column stood 20 px
+           above the card and Fly could not be reached by any gesture. `safe` centres while it fits
+           and starts at the top once it does not; the plain value stays first as the fallback. */
         align-items: center;
+        align-items: safe center;
       }
 
       :root #ready-screen[data-mode="program"] .ready-selector,

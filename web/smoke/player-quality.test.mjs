@@ -122,9 +122,12 @@ test("every production brief keeps its primary action on screen when a phone is 
     { id: "Weekend Ride", url: "weekend-ride/?audioQa=silent&server=off", action: "#ride-brief-start" },
     { id: "Fire Boss", url: "okanagan/?audioQa=silent", action: "#start" },
   ];
+  // 844x390 is a large phone on its side; 667x375 is a small one, and the tighter height is where
+  // a centred column first grows taller than its row.
   try {
+    for (const { width, height } of [{ width: 844, height: 390 }, { width: 667, height: 375 }])
     for (const route of ROUTES) {
-      const page = await browser.newPage({ viewport: { width: 844, height: 390 }, hasTouch: true, isMobile: true });
+      const page = await browser.newPage({ viewport: { width, height }, screen: { width, height }, hasTouch: true, isMobile: true });
       try {
         await page.goto(`${site.url}${route.url}`, { waitUntil: "load" });
         const action = page.locator(route.action);
@@ -143,10 +146,11 @@ test("every production brief keeps its primary action on screen when a phone is 
           return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right,
             text: node.textContent.trim().slice(0, 24) };
         });
-        assert.ok(box.bottom <= 390 + 1 && box.top >= -1,
-          `${route.id}: "${box.text}" is off screen at rest (top ${Math.round(box.top)}, bottom ${Math.round(box.bottom)} in a 390 px viewport)`);
-        assert.ok(box.left >= -1 && box.right <= 844 + 1,
-          `${route.id}: "${box.text}" is clipped horizontally`);
+        assert.ok(box.bottom <= height + 1 && box.top >= -1,
+          `${route.id} at ${width}x${height}: "${box.text}" is off screen at rest `
+          + `(top ${Math.round(box.top)}, bottom ${Math.round(box.bottom)} in a ${height} px viewport)`);
+        assert.ok(box.left >= -1 && box.right <= width + 1,
+          `${route.id} at ${width}x${height}: "${box.text}" is clipped horizontally`);
       } finally { await page.close(); }
     }
   } finally { await browser.close(); await site.close(); }
